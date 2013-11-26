@@ -33,3 +33,4 @@ lib*dll.def
 
 src/test/regress/regression.diffs
 src/test/regress/regression.out
+.*project
