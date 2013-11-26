@@ -30,3 +30,6 @@ lib*dll.def
 /pgsql.sln.cache
 /Debug/
 /Release/
+
+src/test/regress/regression.diffs
+src/test/regress/regression.out
