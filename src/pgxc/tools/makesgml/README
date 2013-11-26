@@ -1,0 +1,63 @@
+README for SGML construction tool.
+
+Aug.2, 2011, Koichi Suzuki
+
+============================================
+This directory contains SGML source file build tool "makesgml".
+Please simply compile and place the binary to the directory of your
+choice.
+
+As you see, all the document "source" files are not ".sgml", but are
+".sgmlin".  This change was made to preserve all the original
+PostgreSQL document, select, modify and add common and Postgres-XC
+specific descriptions.
+
+Background and practice are as follows:
+
+We should be careful to make it easier to merge with later version of
+PostgreSQL SGML files. To do this, we can embed special "TAG" to
+distinguish what is common, what is PostgreSQL-specific and what is
+Postgres-XC specific. Also, we may want to distinguish translation to
+different languages.
+
+To make it easier to handle as an external tool, we can build
+dedicated (but somewhat general) tool to select what tags to be
+included. At present, the format is <!## tag> ... <!## end>. These
+tags can appear just itself as separate lines. Lines not enclosed with
+any such tags are common to all.
+
+So SGML file may look like... 
+
+---------------------
+   ...
+   <para>
+   <!## PG>
+   ...
+   <!## end>
+   <!## XC>
+   ...
+   <!## end>
+   </para>
+--------------------
+
+You can nest this tag. With the nest, you can include multiple
+translations in a single file.
+
+This can be handled by a command makesgml, which will be placed at
+postgres-xc/doc/tools.
+
+Makesgml can be invoked like 
+
+------------------
+makesgml -i inf -o outf -I include_tag ... -E exclude_tag ...
+------------------
+
+Each argument is optional and order of the argument is arbitrary. If
+you omit -i option, it will read from stdin. If -o is omitted, it will
+write to stdout. If input file include unspecified tags in the
+arguments, it will be treated as specified -E.
+
+All the sgml files from original PostgreSQL tarball will be renamed to
+sgmlin. Then it will be filtered by makesgml and fed to original
+document build scripts.
+

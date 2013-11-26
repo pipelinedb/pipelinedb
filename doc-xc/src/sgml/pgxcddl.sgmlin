@@ -1,0 +1,196 @@
+<!-- doc/src/sgml/pgxcddl.sgml -->
+
+<sect1 id="pgxcddl" xreflabel="pgxcddl">
+
+<title>pgxc_ddl</title>
+
+ <indexterm zone="pgxcddl">
+  <primary>pgxc_ddl</primary>
+ </indexterm>
+
+ <sect2>
+  <title>
+   Overview
+  </title>
+&xconly
+
+  <para>
+   pgxc_ddl is a module for Coordinator catalog table synchronization and DDL treatment module.
+   It has the following synopsis.
+
+<programlisting>
+pgxc_ddl <optional> <replaceable>option</> </optional>
+</programlisting>
+  </para>
+
+  <para>
+   pgxc_ddl is used to synchronize all Coordinator catalog tables from
+   one chosen by a user. It is also possible to launch a DDL on one
+   Coordinator, and then to synchronize all the Coordinator catalog
+   tables from the catalog table of the Coordinator having received the
+   DDL. Copy method is cold. All the Coordinators are stopped,
+   catalog files are copied, then all the Coordinators are restarted.
+  </para>
+
+  <para>
+   Since <productname>Postgres-XC</productname> 0.9.3, DDL are
+   synchronized automatically on all the nodes of the
+   cluster, <command>pgxc_ddl</command> is let on purpose of future
+   feature development.
+  </para>
+
+  <para>
+   Since <productname>Postgres-XC</productname> 0.9.4, pgxc_ddl and
+   pgxc.conf are not anymore installed by default.  Scripts are saved
+   in the folder <filename>contrib/pgxc_ddl</filename>.
+  </para>
+
+ </sect2>
+
+ <sect2>
+  <title>Options</title>
+
+  <para>
+   Options are specified with preceding '<literal>-</literal>', each
+   option may be associated with a value.
+  </para>
+
+  <para>
+   Options are as follows:
+  </para>
+
+  <para>
+   <variablelist>
+    <varlistentry>
+     <term><option>-D</option></term>
+     <listitem>
+      <para>
+       Specify <filename>pgxc.conf</filename> folder, for
+       characteristics of all the Coordinators.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-l</option></term>
+     <listitem>
+      <para>
+       Specify application folder, in case <varname>PATH</varname> is not defined.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-f</option></term>
+     <listitem>
+      <para>
+       Specify DDL file location.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-d</option></term>
+     <listitem>
+      <para>
+       Database name.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-n</option></term>
+     <listitem>
+      <para>
+       Coordinator number. Coordinator chosen corresponds to the one
+       defined in <filename>pgxc.conf</filename> at the nth place.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-t</option></term>
+     <listitem>
+      <para>
+       Specify temporary folder where to copy the configuration files
+       <filename>postgresql.conf</filename> and <filename>pg_hba.conf</filename>
+       for each Coordinator.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+
+  <para>
+   Because <command>pgxc_ddl</command> requires access to Coordinator
+   configuration file and data folders, the following parameters have
+   to be set in <filename>pgxc.conf</filename>:
+  </para>
+
+  <table>
+   <title><filename>pgxc.conf</filename> entries</title>
+
+   <tgroup cols="3">
+    <thead>
+     <row>
+      <entry>Name</entry>
+      <entry>Type</entry>
+      <entry>Description</entry>
+     </row>
+    </thead>
+
+    <tbody>
+     <row>
+      <entry><varname>coordinator_ports</varname></entry>
+      <entry>string</entry>
+      <entry>
+       Specify the port number of all the Coordinators. Maintain the
+       order of the value same as those in coordinator_hosts. It is
+       necessary to specify a number of ports equal to the number of
+       hosts. A comma separator is also necessary.
+      </entry>
+     </row>
+
+     <row>
+      <entry><varname>coordinator_folders</varname></entry>
+      <entry>string</entry>
+      <entry>
+       Specify the data folders of all the Coordinators. Maintain the
+       order of the value same as those in coordinator_hosts. It is
+       necessary to specify a number of data folders equal to the
+       number of hosts. A comma separator is also necessary.
+      </entry>
+     </row>
+
+     <row>
+      <entry><varname>coordinator_hosts</varname></entry>
+      <entry>string</entry>
+      <entry>
+       Specify the host name or IP address of Coordinator. Separate
+       each value with comma.
+      </entry>
+     </row>
+    </tbody>
+   </tgroup>
+  </table>
+
+  <note>
+   <para>
+    About the temporary folder, this one has the name chosen by the
+    user. As an extension name, the PID of the shell script is
+    added. This folder is by default in <filename>/tmp</filename>. The user can choose
+    the name freely.
+   </para>
+  </note>
+
+  <note>
+   <para>
+    Configuration files of Coordinators that have their catalog files
+    changed are defined with an extension name postgresql.conf.number,
+    "number" being the number of t Coordinator in the order defined
+    in <filename>pgxc.conf</filename>.
+   </para>
+  </note>
+ </sect2>
+</sect1>

@@ -1,0 +1,256 @@
+<!-- doc/src/sgml/add-node.sgml -->
+
+<chapter id="add-node">
+ <title>Adding a New Node</title>
+
+ <indexterm zone="add-node">
+  <primary>Add a new node</primary>
+ </indexterm>
+
+&xconly;
+
+ <para>
+  This chapter outlines steps to add a new coordinator or a datanode to a running cluster.
+ </para>
+
+  <para>
+
+  </para>
+
+ <sect1 id="add-node-coordinator">
+  <title>Adding a New Coordinator</title>
+
+  <indexterm zone="add-node-coordinator">
+   <primary>Add a new coordinator</primary>
+  </indexterm>
+
+  <para>
+    Following steps should be performed to add a new coordinator to a running cluster:
+  </para>
+
+  <para>
+    <orderedlist>
+      <listitem>
+        <para>Initialize the new coordinator. The following example initilizes a coordinator named coord_3.</para>
+        <programlisting>
+          /usr/local/pgsql/bin/initdb -D /usr/local/pgsql/data_cord3 --nodename coord_3
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Make necessary changes in postgresql.conf of the new coordinator,
+          in particular specify new coordinator name and pooler port.
+        </para>
+      </listitem>
+
+      <listitem>
+        <para>
+          Connect to any of the existing coordinators and lock the cluster for backup, do not close this session.
+          The following example assumes a coordinator is running on port 5432. Make sure the function call returns true.
+          The detailed description of the function <function>pgxc_lock_for_backup</> can be found 
+          in <xref linkend="functions-pgxc-add-new-node">
+        </para>
+        <programlisting>
+          ./psql postgres -p 5432
+          select pgxc_lock_for_backup();
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Connect to any of the existing coordinators and take backup of the database.
+          Please note that only schema (i.e. no data) is to be dumped.
+          Also note the use of <option>--include-nodes</>, so that the <command>CREATE TABLE</> contains <command>TO NODE</> clause.
+          Similarly <option>--dump-nodes</> ensures that the dump does contain existing nodes and node groups.
+        </para>
+        <programlisting>
+          ./pg_dumpall -p 5432 -s --include-nodes --dump-nodes --file=/some/valid/path/some_file_name.sql
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Start the new coordinator specifying <option>--restoremode</> while starting.
+          The following example starts the new coordinator on port 5455
+        </para>
+        <programlisting>
+          ./postgres --restoremode -D ../data_cord3 -p 5455
+        </programlisting>
+	    <para>
+	     You can use <literal>pg_ctl</literal> with <option>-Z restoremode</option> option.
+	    </para>
+	    <programlisting>
+	     ./pg_ctl start -Z restoremode -D ../data_coord3 -p 5455
+	    </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Restore the backup (taken in step 4) by connecting to the new coordinator directly.
+        </para>
+        <programlisting>
+          ./psql -d postgres -f /some/valid/path/some_file_name.sql -p 5455
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Quit the new coordinator.
+        </para>
+      </listitem>
+
+      <listitem>
+        <para>
+          Start the new coordinator specifying <option>--coordinator</> while starting.
+          The following example starts the new coordinator on port 5455
+        </para>
+        <programlisting>
+          ./postgres --coordinator -D ../data_cord3 -p 5455
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Create the new coordinator on rest of the coordinators and reload configuration.
+          The following example creates coord_3, with host localhost and port 5455.
+        </para>
+        <programlisting>
+          CREATE NODE COORD_3 WITH (HOST = 'localhost', type = 'coordinator', PORT = 5455);
+          SELECT pgxc_pool_reload();
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Quit the session of step 3, this will unlock the cluster. The new coordinator is now ready.
+        </para>
+      </listitem>
+
+    </orderedlist>
+  </para>
+
+ </sect1>
+
+ <sect1 id="add-node-datanode">
+  <title>Adding a New Datanode</title>
+
+  <indexterm zone="add-node-datanode">
+   <primary>Add a new Datanode</primary>
+  </indexterm>
+
+  <para>
+    Following steps should be performed to add a new datanode to a running cluster:
+  </para>
+
+  <para>
+    <orderedlist>
+
+      <listitem>
+        <para>
+          Initialize the new datanode. The following example initializes a new datanode named data_node_3.
+        </para>
+        <programlisting>
+          /usr/local/pgsql/bin/initdb -D /usr/local/pgsql/data3 --nodename data_node_3
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Make the necessary changes in postgresql.conf of the new datanode, in particular specify new datanode name
+        </para>
+      </listitem>
+
+      <listitem>
+        <para>
+          Connect to any of the existing coordinators and lock the cluster for backup, do not close this session.
+          The following example assumes a coordinator is running on port 5432. Make sure the function call returns true.
+          The detailed description of the function <function>pgxc_lock_for_backup</> can be found 
+          in <xref linkend="functions-pgxc-add-new-node">
+        </para>
+        <programlisting>
+          ./psql postgres -p 5432
+          select pgxc_lock_for_backup();
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Connect to any of the existing datanodes and take backup of the database.
+          Please note that only schema (i.e. no data) is to be dumped.
+          The following example assumes that a datanode is running on port 15432.
+        </para>
+        <programlisting>
+          ./pg_dumpall -p 15432 -s --file=/some/valid/path/some_file_name.sql
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Start the new datanode specifying <option>--restoremode</> while starting the it.
+          The following example starts the new datanode on port 35432.
+        </para>
+        <programlisting>
+          ./postgres --restoremode -D ../data3 -p 35432
+        </programlisting>
+	    <para>
+	     You can use <literal>pg_ctl</literal> with <option>-Z restoremode</option> option.
+	    </para>
+	    <programlisting>
+	     ./pg_ctl start -Z restoremode -D ../data3 -p 5455
+	    </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Restore the backup (taken in step 4) by connecting to the new datanode directly.
+        </para>
+        <programlisting>
+          ./psql -d postgres -f /some/valid/path/some_file_name.sql -p 35432
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Quit the new datanode.
+        </para>
+      </listitem>
+
+      <listitem>
+        <para>
+          Start the new datanode specifying --datanode while starting.
+        </para>
+        <programlisting>
+          ./postgres --datanode -D ../data3 -p 35432
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Create the new datanode on all the coordinators and reload configuration.
+          The following example creates data_node_3, with host localhost and port 35432.
+        </para>
+        <programlisting>
+          CREATE NODE DATA_NODE_3 WITH (HOST = 'localhost', type = 'datanode', PORT = 35432);
+          SELECT pgxc_pool_reload();
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Quit the session of step 3, this will unlock the cluster.
+        </para>
+      </listitem>
+
+      <listitem>
+        <para>
+          Redistribute existing data by using <command>ALTER TABLE REDISTRIBUTE</>. The new datanode is now ready.
+        </para>
+      </listitem>
+
+    </orderedlist>
+  </para>
+
+ </sect1>
+
+</chapter>

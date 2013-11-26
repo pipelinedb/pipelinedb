@@ -1,0 +1,86 @@
+<!--
+$PostgreSQL: pgsql/doc/src/sgml/ref/drop_node.sgml,v 1.54 2010/04/03 07:22:58 petere Exp $
+PostgreSQL documentation
+-->
+<!## XC>
+<refentry id="SQL-DROPNODE">
+ <refmeta>
+  <refentrytitle>DROP NODE</refentrytitle>
+  <manvolnum>7</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>DROP NODE</refname>
+  <refpurpose>drop a cluster node</refpurpose>
+ </refnamediv>
+
+ <indexterm zone="sql-dropnode">
+  <primary>DROP NODE</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+<synopsis>
+DROP NODE <replaceable class="parameter">nodename</replaceable>
+
+</synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+&xconly;
+
+  <para>
+   <command>DROP NODE</command> is new SQL query specific
+   to <productname>Postgres-XC</productname> since 0.9.7 that deletes
+   cluster node information in catalog pgxc_node.
+  </para>
+  <para>
+   Node connection that has been deleted does not guarranty that connection
+   information cached in pooler is updated accordingly.
+  </para>
+  <para>
+   <command>DROP NODE</command> only runs on the local node where it is launched.
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Parameters</title>
+
+    <variablelist>
+     <varlistentry>
+      <term><replaceable class="parameter">nodename</replaceable></term>
+      <listitem>
+       <para>
+        The name of the selected cluster node.
+       </para>
+      </listitem>
+     </varlistentry>
+    </variablelist>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Examples</title>
+
+  <para>
+   Drop a cluster node.
+<programlisting>
+DROP NODE cluster_node;
+</programlisting>
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Compatibility</title>
+  <para>
+   <command>DROP NODE</command> does not conform to the <acronym>
+   SQL</acronym> standards, it is a Postgres-XC specific command.
+  </para>
+ </refsect1>
+
+</refentry>
+<!## end>

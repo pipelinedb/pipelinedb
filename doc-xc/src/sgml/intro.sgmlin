@@ -1,0 +1,491 @@
+<!-- doc/src/sgml/intro.sgml -->
+
+<preface id="preface">
+ <title>Preface</title>
+
+ <para>
+<!## PG>
+  This book is the official documentation of
+  <productname>PostgreSQL</productname>.  It has been written by the
+  <productname>PostgreSQL</productname> developers and other
+  volunteers in parallel to the development of the
+  <productname>PostgreSQL</productname> software.  It describes all
+  the functionality that the current version of
+  <productname>PostgreSQL</productname> officially supports.
+<!## end>
+<!## XC>
+  This book is the official documentation of
+  <productname>Postgres-XC</productname>.  It has been written by the
+  <productname>Postgres-XC</productname> developers and other
+  volunteers in parallel to the development of the
+  <productname>Postgres-XC</productname> software.  It describes all
+  the functionality that the current version of
+  <productname>Postgres-XC</productname> officially supports.
+  </para>
+  <para>
+   <productname>Postgres-XC</> is essentially a collection of multiple
+   <productname>PostgreSQL</> database to provide both read and write
+   performance scalability. It also provides full-featured transaction
+   consistency as <productname>PostgreSQL</> provides, at the exception
+   of SSI which is incomplete.
+  </para>
+  <para>
+   <productname>Postgres-XC</> inherits almost all major features from <productname>PostgreSQL</>.
+   This document is also based upon <productname>PostgreSQL</> reference manual.
+<!## end>
+ </para>
+
+ <para>
+<!## PG>
+  To make the large amount of information about
+  <productname>PostgreSQL</productname> manageable, this book has been
+  organized in several parts.  Each part is targeted at a different
+  class of users, or at users in different stages of their
+  <productname>PostgreSQL</productname> experience:
+<!## end>
+<!## XC>
+  To make the large amount of information about
+  <productname>Postgres-XC</productname> manageable, this book has been
+  organized in several parts.  Each part is targeted at a different
+  class of users, or at users in different stages of their
+  <productname>Postgres-XC</productname> experience:
+<!## end>
+
+  <itemizedlist>
+   <listitem>
+    <para>
+     <xref linkend="tutorial"> is an informal introduction for new users.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <xref linkend="sql"> documents the <acronym>SQL</acronym> query
+     language environment, including data types and functions, as well
+     as user-level performance tuning.  Every
+     <productname>PostgreSQL</> user should read this.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+<!## PG>
+     <xref linkend="admin"> describes the installation and
+     administration of the server.  Everyone who runs a
+     <productname>PostgreSQL</productname> server, be it for private
+     use or for others, should read this part.
+<!## end>
+<!## XC>
+     <xref linkend="admin"> describes the installation and
+     administration of the server.  Everyone who runs
+     <productname>Postgres-XC</productname> servers, be it for private
+     use or for others, should read this part.
+<!## end>
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+<!## PG>
+     <xref linkend="client-interfaces"> describes the programming
+     interfaces for <productname>PostgreSQL</productname> client
+     programs.
+<!## end>
+<!## XC>
+     <xref linkend="client-interfaces"> describes the programming
+     interfaces for <productname>Postgres-XC</productname> client
+     programs.
+<!## end>
+    </para>
+   </listitem>
+
+
+   <listitem>
+    <para>
+     <xref linkend="server-programming"> contains information for
+     advanced users about the extensibility capabilities of the
+     server.  Topics include user-defined data types and
+     functions.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+     <xref linkend="reference"> contains reference information about
+     SQL commands, client and server programs.  This part supports the
+     other parts with structured information sorted by command or
+     program.
+    </para>
+   </listitem>
+
+   <listitem>
+    <para>
+<!## PG>
+     <xref linkend="internals"> contains assorted information that might be of
+     use to <productname>PostgreSQL</> developers.
+<!## end>
+<!## XC>
+     <xref linkend="internals"> contains assorted information that might be of
+     use to <productname>Postgres-XC</> developers.
+<!## end>
+    </para>
+   </listitem>
+  </itemizedlist>
+ </para>
+
+ <sect1 id="intro-whatis">
+<!## PG>
+  <title> What is <productname>PostgreSQL</productname>?</title>
+<!## end>
+<!## XC>
+  <title> What is <productname>Postgres-XC</productname>?</title>
+
+  <sect2 id="whatis-in-short">
+   <title>In short</title>
+
+   <para>
+    Postgres-XC is an open source project to provide write-scalable,
+    synchronous symmetric, transparent PostgreSQL cluster
+    solution. It is a collection if tightly coupled database
+    components which can be installed in more than one hardware or
+    virtual machines.
+   </para>
+
+   <para>
+    Write-scalable means Postgres-XC can be configured with as many
+    database servers as you want and handle much more writes (updating
+    SQL statements) which single database server cannot
+    do. Symmetric means you can have more than one data base
+    servers which provide single database view. Synchronous means any
+    database update from any database server is immediately visible to
+    any other transactions running in different masters.  Transparent
+    means you don't have to worry about how your data is stored in
+    more than one database servers internally.
+    <footnote>
+     <para>
+      Of course, you should use the information how tables are stored
+      internally when you design the database physically to get most
+      from Postgres-XC.
+     </para>
+    </footnote>
+   </para>
+
+   <para>
+    You can configure Postgres-XC to run on more than one machines. They
+    store your data in a distributed way, that is, partitioned or
+    replicated way at your choice for each table.  
+    <footnote>
+     <para>
+      To distinguish from PostgreSQL's partitioning, we call this as
+      "distributed".  In distributed database textbooks, this is often
+      referred to as "horizontal fragment").
+     </para>
+    </footnote>
+    When you issue queries, Postgres-XC determines where the target
+    data is stored and issue corresponding queries to servers with the
+    target data.
+   </para>
+
+   <para>
+    In typical web systems, you can have as many web servers or
+    application servers to handle your transactions. However, you
+    cannot do this for a database server in general because all the
+    changing data have to be visible to all the transactions. Unlike
+    other database cluster solution, Postgres-XC provides this
+    capability. You can install as many database servers as you
+    like. Each database server provides uniform data view to your
+    applications.  Any database update from any server is immediately
+    visible to applications connecting the database from other
+    servers. This feature is called "synchronous multi master"
+    capability and this is the most significant feature of
+    Postgres-XC.
+   </para>
+  </sect2>
+
+  <sect2 id="whatis-xc-goal">
+   <title>Postgres-XC's Goal</title>
+
+   <para>
+    Ultimate goal of Postgres-XC is to provide synchronous
+    multi-master PostgreSQL cluster with read/write scalability. That
+    is, Postgres-XC should provide the following features:
+    <itemizedlist spacing="compact">
+     <listitem>
+      <para>
+       Postgres-XC should provide multiple servers to accept transactions and statements
+from applications, which is known as "master" server in general. In Postgres-XC, this is called "Coordinator".
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Postgres-XC should provide more than one masters.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Any "master" should provide consistent database view to
+       applications. Any updates from any master must be visible in
+       real time manner as if such updates are done in single
+       PostgreSQL server.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Tables should be able to be stored in the database in
+       replicated or distributed way (known as fragment or
+       partition). Replication and distribution should be transparent
+       to applications, that is, such replicated and distributed table
+       are seen as single table and location or number of copies of
+       each record/tuple is managed by Postgres-XC and is not visible
+       to applications.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Postgres-XC provides compatible PostgreSQL API to applications.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Postgres-XC should provide single and unified view of
+       underlying PostgreSQL database servers so that SQL statements
+       does not depend on how tables are stored in distributed way.
+      </para>
+     </listitem>
+    </itemizedlist>
+   </para>
+  </sect2>
+
+  <sect2 id="whatis-xc-key-components">
+   <title>Postgres-XC Key Components</title>
+
+   <para>
+    In this section, we will show main components of Postgres-XC.
+   </para>
+
+   <para>
+    Postgres-XC is composed of three major components, called GTM
+    (Global Transaction Manager), Coordinator and Datanode. Their
+    features are given in the following sections.
+   </para>
+
+   <sect3>
+    <title>GTM (Global Transaction Manager)</title>
+
+    <para>
+     GTM is a key component of Postgres-XC to provide consistent
+     transaction management and tuple visibility control.
+    </para>
+
+    <para>
+     As described later in this
+     manual, <productname>PostgreSQL</productname>'s transaction
+     management is based upon MVCC (Multi-Version Concurrency Control)
+     technology.  <productname>Postgres-XC</productname> extracts this
+     technology into separate component as GTM so that
+     any <productname>Postgres-XC</productname> component's
+     transaction management is based upon single global status.
+     Details will be described in <xref linkend="overview">.
+    </para>
+   </sect3>
+
+   <sect3>
+    <title>Coordinator</title>
+
+    <para>
+     Coordinator is an interface to applications. It acts like
+     conventional PostgreSQL backend process. However, Coordinator
+     does not store any actual data. Actual data is stored by Datanode
+     as described below. Coordinator receives SQL statements, get Global
+     Transaction Id and Global Snapshot as needed, determine which
+     Datanode is involved and ask them to execute (a part of)
+     statement.  When issuing statement to Datanodes, it is
+     associated with GXID and Global Snapshot so that Datanode is not
+     confused if it receives another statement from another
+     transaction originated by another Coordinator.
+    </para>
+   </sect3>
+
+   <sect3>
+    <title>Datanode</title>
+
+    <para>
+     Datanode actually stores your data. Tables may be distributed
+     among Datanodes, or replicated to all the Datanodes.
+     Datanode does not have global view of the whole database, it
+     just takes care of locally stored data. Incoming statement is
+     examined by the Coordinator as described next, and rebuilt to
+     execute at each Datanode involved. It is then transferred to
+     each Datanodes involved together with GXID and Global Snapshot
+     as needed. Datanode may receive request from various
+     Coordinators. However, because each the transaction is identified
+     uniquely and associated with consistent (global) snapshot, data
+     node doesn't have to worry what Coordinator each transaction or
+     statement came from.
+    </para>
+
+   </sect3>
+
+  </sect2>
+
+  <sect2 id="whatis-xc-inherits-postgresql">
+   <title><productname>Postgres-XC</productname> Inherits <productname>PostgreSQL</productname></title>
+
+   <para>
+    <productname>Postgres-XC</productname> is an extension
+    to <productname>PostgreSQL</productname> and inherits most of its
+    features.
+   </para>
+
+   <para>
+    It is an open-source descendant of
+    <productname>PostgreSQL</productname> and its
+    original Berkeley code.  It supports a large part of the SQL
+    standard and offers many modern features:
+
+    <itemizedlist spacing="compact">
+     <listitem>
+      <simpara>complex queries</simpara>
+     </listitem>
+     <listitem>
+      <simpara>
+       foreign keys
+       <footnote>
+        <para>
+         <productname>Postgres-XC</productname>'s foreign key usage has some restrictions.  For details, see <xref linkend="SQL-CREATETABLE">.
+        </para>
+       </footnote>
+      </simpara>
+     </listitem>
+     <listitem>
+      <simpara>views</simpara>
+     </listitem>
+<!## PG>
+     <listitem>
+      <simpara>transactional integrity</simpara>
+     </listitem>
+<!## end>
+<!## XC>
+     <listitem>
+      <simpara>transactional integrity, at the exception of SSI whose support is incomplete</simpara>
+     </listitem>
+<!## end>
+     <listitem>
+      <simpara>multiversion concurrency control</simpara>
+     </listitem>
+    </itemizedlist>
+
+    Also, similar to <productname>PostgreSQL</productname>, <productname>Postgres-XC</productname> can be extended by the
+    user in many ways, for example by adding new
+
+    <itemizedlist spacing="compact">
+     <listitem>
+      <simpara>data types</simpara>
+     </listitem>
+     <listitem>
+      <simpara>functions</simpara>
+     </listitem>
+     <listitem>
+      <simpara>operators</simpara>
+     </listitem>
+     <listitem>
+      <simpara>aggregate functions</simpara>
+     </listitem>
+     <listitem>
+      <simpara>index methods</simpara>
+     </listitem>
+     <listitem>
+      <simpara>procedural languages</simpara>
+     </listitem>
+    </itemizedlist>
+   </para>
+
+   <para>
+    And because of the liberal license same as
+    <productname>PostgreSQL</productname>, <productname>Postgres-XC</productname>
+    can be used, modified, and distributed by anyone free of charge
+    for any purpose, be it private, commercial, or academic.
+   </para>
+
+  </sect2>
+
+<!## end>
+
+
+<!## PG>
+  <para>
+   <productname>PostgreSQL</productname> is an object-relational
+   database management system (<acronym>ORDBMS</acronym>) based on
+   <ulink url="http://db.cs.berkeley.edu/postgres.html">
+   <productname>POSTGRES, Version 4.2</productname></ulink>,
+   developed at the University of California at Berkeley Computer Science
+   Department.  POSTGRES pioneered many concepts that only became
+   available in some commercial database systems much later.
+  </para>
+
+  <para>
+   <productname>PostgreSQL</productname> is an open-source descendant
+   of this original Berkeley code.  It supports a large part of the SQL
+   standard and offers many modern features:
+
+   <itemizedlist spacing="compact">
+    <listitem>
+     <simpara>complex queries</simpara>
+    </listitem>
+    <listitem>
+     <simpara>foreign keys</simpara>
+    </listitem>
+    <listitem>
+     <simpara>triggers</simpara>
+    </listitem>
+    <listitem>
+     <simpara>views</simpara>
+    </listitem>
+    <listitem>
+     <simpara>transactional integrity</simpara>
+    </listitem>
+    <listitem>
+     <simpara>multiversion concurrency control</simpara>
+    </listitem>
+   </itemizedlist>
+
+   Also, <productname>PostgreSQL</productname> can be extended by the
+   user in many ways, for example by adding new
+
+   <itemizedlist spacing="compact">
+    <listitem>
+     <simpara>data types</simpara>
+    </listitem>
+    <listitem>
+     <simpara>functions</simpara>
+    </listitem>
+    <listitem>
+     <simpara>operators</simpara>
+    </listitem>
+    <listitem>
+     <simpara>aggregate functions</simpara>
+    </listitem>
+    <listitem>
+     <simpara>index methods</simpara>
+    </listitem>
+    <listitem>
+     <simpara>procedural languages</simpara>
+    </listitem>
+   </itemizedlist>
+  </para>
+
+  <para>
+   And because of the liberal license,
+   <productname>PostgreSQL</productname> can be used, modified, and
+   distributed by anyone free of charge for any purpose, be it
+   private, commercial, or academic.
+  </para>
+<!## end>
+ </sect1>
+
+ &history;
+ &notation;
+ &info;
+ &problems;
+
+</preface>

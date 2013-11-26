@@ -1,0 +1,443 @@
+#!/bin/bash
+# Copyright (c) 2010-2012 Postgres-XC Development Group
+
+#Scripts to launch DDL in PGXC cluster using a cold_backup method
+#Be sure to have set a correct ssl environment in all the servers of the cluster
+
+#This script uses pgxc.conf as a base to find the settings of all the coordinators
+
+#Options possible to use for this script
+# -D to locate the data folder, necessary to find pgxc.conf, containing the characteristics of all the coordinators
+# -l to locate the folder where applications are
+# -f for a DDL file
+# -d for a Database name
+# -n coordinator number where to launch DDl, number based on the one written in pgxc.conf
+# -t base name of folder where to save configuration files, by default /tmp/pgxc_config, completed by $$
+
+count=0
+
+#Default options
+#local folder used to save temporary the configuration files of coordinator's data folder being erased
+CONFIG_FOLDER=/tmp/pgxc_config_files.$$
+PGXC_BASE=
+#options to launch the coordinator
+#don't forget to add -i as we are in a cluster :)
+COORD_OPTIONS="-C -i"
+
+#-----------------------------------------------------------------------
+# Option Management
+#-----------------------------------------------------------------------
+while getopts 'f:d:D:l:hn:t:' OPTION
+do
+	count=$((count +2))
+	case $OPTION in
+	d)	#for a database name
+		DB_NAME="$OPTARG"
+		;;
+
+	D)	#for a data folder, to find pgxc.conf
+		DATA_FOLDER="$OPTARG"
+		;;
+
+	f)	#for a DDL file
+		DDL_FILE_NAME="$OPTARG"
+		;;
+
+	l)	#To define folder where applications are if necessary
+		PGXC_BASE="$OPTARG"/
+		;;
+
+	n)	#for a coordinator number
+		COORD_NUM_ORIGIN="$OPTARG"
+		;;
+
+	h)	printf "Usage: %s: [-d dbname] [-l bin folder] [-D data folder] [-n coord number] [-f ddl file] [-t save folder name in /tmp/]\n" $(basename $0) >&2
+		exit 0
+		;;
+	t)	#to set the name of the folder where to save conf files. All is mandatory saved in /tmp 
+		CONFIG_FOLDER=/tmp/"$OPTARG"
+		;;
+
+	?)	printf "Usage: %s: [-d dbname] [-l bin folder] [-D data folder] [-n coord number] [-f ddl file] [-t save folder name in /tmp/]\n" $(basename $0) >&2
+		exit 0
+		;;
+	esac
+done
+
+if [ $# -lt "1" ]
+then
+	echo "No arguments defined, you should try help -h"
+	exit 2
+fi
+
+#A couple of option checks
+if [ "$count" -ne "$#" ]
+then
+	echo "Arguments not correctly set, try -h for help"
+	exit 2
+fi
+
+if [ -z $COORD_NUM_ORIGIN ]
+then
+	echo "Coordinator number not defined, mandatory -n argument missing"
+	exit 2
+fi
+if [ -z $DATA_FOLDER ]
+then
+	echo "Data folder not defined, mandatory -D argument missing"
+	exit 2
+fi
+
+#Check if Argument of -n is an integer
+if [ ! $(echo "$COORD_NUM_ORIGIN" | grep -E "^[0-9]+$") ]
+	then
+	echo "Argument -n is not a valid integer"
+	exit 2
+fi
+
+#Check if DDL file exists
+if [ "$DDL_FILE_NAME" != "" ]
+then
+	if [ ! -e $DDL_FILE_NAME ]
+	then
+		echo "DDL file not defined"
+		exit 2
+	fi
+	if [ -z $DB_NAME ]
+	then
+		echo "Dbname not defined, mandatory -d argument missing when using a ddl file"
+		exit 2
+	fi
+fi
+
+#-----------------------------------------------------------------------
+# Begin to read the pgxc.conf to get coordinator characteristics
+#-----------------------------------------------------------------------
+PGXC_CONF=$DATA_FOLDER/pgxc.conf
+
+if [ ! -e $PGXC_CONF ]
+then
+	echo "pgxc.conf not defined in the directory defined by -D"
+	exit 2
+fi
+
+#Find parameters
+hosts=`cat $PGXC_CONF | grep coordinator_hosts | cut -d "'" -f 2`
+ports=`cat $PGXC_CONF | grep coordinator_ports | cut -d "'" -f 2`
+folders=`cat $PGXC_CONF | grep coordinator_folders | cut -d "'" -f 2`
+if [ "$hosts" = "" ]
+then
+	echo "coordinator_hosts not defined in pgxc.conf"
+	exit 2
+fi
+if [ "$ports" = "" ]
+then
+	echo "coordinator_ports not defined in pgxc.conf"
+	exit 2
+fi
+if [ "$folders" = "" ]
+then
+	echo "coordinator_folders not defined in pgxc.conf"
+	exit 2
+fi
+
+#Check if the strings are using commas as separators
+hosts_sep="${hosts//[^,]/}"
+ports_sep="${ports//[^,]/}"
+folders_sep="${folders//[^,]/}"
+if [ "$hosts_sep" = "" ]
+then
+	echo "coordinator_hosts should use commas as a separator"
+	exit 2
+fi
+if [ "$ports_sep" = "" ]
+then
+	echo "coordinator_ports should use commas as a separator"
+	exit 2
+fi
+if [ "$folders_sep" = "" ]
+then
+	echo "coordinator_folders should use commas as a separator"
+	exit 2
+fi
+
+
+#-----------------------------------------------------------------------
+# Fill in Arrays that are used for the process from pgxc configuration file
+#-----------------------------------------------------------------------
+
+count=1
+#Coordinator list
+host_local=`echo $hosts |  cut -d "," -f $count`
+while [ "$host_local" != "" ]
+do
+	COORD_HOSTNAMES[$((count -1))]=`echo $host_local`
+	count=$((count +1))
+	host_local=`echo $hosts | cut -d "," -f $count`
+done
+COORD_COUNT=${#COORD_HOSTNAMES[*]}
+
+#Port list corresponding to the coordinators
+#If all the coordinators use the same port on different servers,
+#it is possible to define that with a unique element array.
+count=1
+port_local=`echo $ports |  cut -d "," -f $count`
+while [ "$port_local" != "" ]
+do
+	COORD_PORTS[$((count -1))]=$port_local
+	count=$((count +1))
+	port_local=`echo $ports |  cut -d "," -f $count`
+done
+COORD_PORTS_COUNT=${#COORD_PORTS[*]}
+
+#Data folder list corresponding to the coordinators
+#If all the coordinators use the same data folder name on different servers,
+#it is possible to define that with a unique element array.
+count=1
+folder_local=`echo $folders | cut -d "," -f $count`
+
+while [ "$folder_local" != "" ]
+do
+	COORD_PGDATA[$((count -1))]=$folder_local
+	count=$((count +1))
+	folder_local=`echo $folders | cut -d "," -f $count`
+done
+COORD_PGDATA_COUNT=${#COORD_PGDATA[*]}
+
+
+#-----------------------------------------------------------------------
+# Start DDL process
+#-----------------------------------------------------------------------
+
+#It is supposed that the same bin folders are used among the servers
+#to call postgres processes
+#This can be customized by the user with option -l
+COORD_SERVER_PROCESS=postgres
+PGCTL_SERVER_PROCESS=pg_ctl
+PSQL_CLIENT_PROCESS=psql
+
+COORD_SERVER=$PGXC_BASE$COORD_SERVER_PROCESS
+PGCTL_SERVER=$PGXC_BASE$PGCTL_SERVER_PROCESS
+PSQL_CLIENT=$PGXC_BASE$PSQL_CLIENT_PROCESS
+
+#reajust coord number with index number
+COORD_NUM_ORIGIN=$((COORD_NUM_ORIGIN -1))
+
+#check data validity
+#Note: Add other checks here
+
+if [ $COORD_COUNT -eq "1" ]
+then
+	echo "Are you sure you want to use this utility with one only coordinator??"
+	exit 2
+fi
+
+if [ $COORD_PGDATA_COUNT -ne $COORD_COUNT ]
+then
+	echo "Number of pgdata folders must be the same as coordinator server number"
+	exit 2
+fi
+
+if [ $COORD_PORTS_COUNT -ne $COORD_COUNT ]
+then
+	echo "Number of coordinator ports defined must be the same as coordinator server number"
+	exit 2
+fi
+
+#Check if coordinator number is not outbounds
+if [ $COORD_NUM_ORIGIN -gt $((COORD_COUNT -1)) ]
+then
+	echo "coordinator number is out of bounds"
+	exit 2
+fi
+COORD_ORIG_INDEX=$COORD_NUM_ORIGIN
+
+#Check if the data folders are defined
+for index in ${!COORD_HOSTNAMES[*]}
+do
+	targethost=${COORD_HOSTNAMES[$index]}
+	targetdata=${COORD_PGDATA[$index]}
+	if [[ `ssh $targethost test -d $targetdata && echo exists` ]]
+	then
+		echo "defined directory exists for "$targethost
+	else
+		echo "defined directory does not exist for "$targethost
+		exit 2
+	fi
+done
+
+#Origin Coordinator Index has been found?
+if [ -z $COORD_ORIG_INDEX ]
+then
+	echo "origin coordinator is not in the coordinator list"
+	exit 2
+fi
+
+#Main process begins
+
+#Check if the database is defined, This could lead to coordinator being stopped uselessly
+if [ "$DB_NAME" != "" ]
+then
+	#Simply launch a fake SQL on the Database wanted
+	$PSQL_CLIENT -h ${COORD_HOSTNAMES[$COORD_ORIG_INDEX]} -p ${COORD_PORTS[$COORD_ORIG_INDEX]} -c 'select now()' -d $DB_NAME; err=$?
+	if [ $err -gt "0" ]
+	then
+		echo "Database not defined"
+		exit 2
+	fi
+fi
+
+#1) stop all the coordinators
+echo "Stopping all the coordinators"
+for index in ${!COORD_HOSTNAMES[*]}
+do
+	targethost=${COORD_HOSTNAMES[$index]}
+	targetdata=${COORD_PGDATA[$index]}
+	echo ssh $targethost $PGCTL_SERVER stop -D $targetdata
+	ssh $targethost $PGCTL_SERVER stop -D $targetdata; err=$?
+	if [ $err -gt "0" ]
+	then
+		"pg_ctl couldn't stop server"
+		exit 2
+	fi
+done
+
+#If a DDL file is not set by the user, just synchronize the catalogs with the catalog of the chosen coordinator
+if [ "$DDL_FILE_NAME" != "" ]
+then
+	echo "-f activated, DDL being launched"
+
+	#2) restart the one we want to launch DDL to...
+	echo ssh ${COORD_HOSTNAMES[$COORD_ORIG_INDEX]} $COORD_SERVER $COORD_OPTIONS -p ${COORD_PORTS[$COORD_ORIG_INDEX]} -D ${COORD_PGDATA[$COORD_ORIG_INDEX]}
+	ssh ${COORD_HOSTNAMES[$COORD_ORIG_INDEX]} $COORD_SERVER $COORD_OPTIONS -p ${COORD_PORTS[$COORD_ORIG_INDEX]} -D ${COORD_PGDATA[$COORD_ORIG_INDEX]} &
+
+	#wait a little bit to be sure it switched on
+	sleep 3
+
+	#3) launch the DDL
+	#This has to be done depending on if the user has defined a file or a command
+	echo $PSQL_CLIENT -h ${COORD_HOSTNAMES[$COORD_ORIG_INDEX]} -p ${COORD_PORTS[$COORD_ORIG_INDEX]} -f $DDL_FILE_NAME -d $DB_NAME
+	$PSQL_CLIENT -h ${COORD_HOSTNAMES[$COORD_ORIG_INDEX]} -p ${COORD_PORTS[$COORD_ORIG_INDEX]} -f $DDL_FILE_NAME -d $DB_NAME; err=$?
+	if [ $err -gt "0" ]
+	then
+		echo "psql error, is Database defined?"
+		exit 2
+	fi
+
+	#4) Stop again the origin coordinator as we cannot copy the lock files to other coordinators
+	echo ssh ${COORD_HOSTNAMES[$COORD_ORIG_INDEX]} $PGCTL_SERVER stop -D ${COORD_PGDATA[$COORD_ORIG_INDEX]}
+	ssh ${COORD_HOSTNAMES[$COORD_ORIG_INDEX]} $PGCTL_SERVER stop -D ${COORD_PGDATA[$COORD_ORIG_INDEX]}; err=$?
+	if [ $err -gt "0" ]
+	then
+		"pg_ctl couldn't stop server"
+		exit 2
+	fi
+fi
+
+#5) before copying the catalogs, save the configuration files or they are erased by the catalog copy
+#make a copy of them in a folder in /tmp/pgxc_conf (default folder)
+if [ -d $CONFIG_FOLDER ]
+then
+	rm -rf $CONFIG_FOLDER
+fi
+mkdir $CONFIG_FOLDER
+
+for index in ${!COORD_HOSTNAMES[*]}
+do
+	if [ $index -ne $COORD_ORIG_INDEX ]
+	then
+		targethost=${COORD_HOSTNAMES[$index]}
+		targetdata=${COORD_PGDATA[$index]}
+		echo scp -pr $targethost:$targetdata/postgresql.conf $CONFIG_FOLDER/postgresql.conf.$index
+		echo scp -pr $targethost:$targetdata/pg_hba.conf $CONFIG_FOLDER/pg_hba.conf.$index
+		scp -pr $targethost:$targetdata/postgresql.conf $CONFIG_FOLDER/postgresql.conf.$index; err=$?
+		if [ $err -gt "0" ]
+		then
+			echo "deleting saved configuration files"
+			rm -rf $CONFIG_FOLDER
+			echo "scp failed with "$targethost
+			exit 2
+		fi
+		scp -pr $targethost:$targetdata/pg_hba.conf $CONFIG_FOLDER/pg_hba.conf.$index; err=$?
+		if [ $err -gt "0" ]
+		then
+			echo "deleting saved configuration files"
+			rm -rf $CONFIG_FOLDER
+			echo "scp failed with "$targethost
+			exit 2
+		fi
+	fi
+done
+
+#6) copy catalog files to all coordinators but not to the origin one
+for index in ${!COORD_HOSTNAMES[*]}
+do
+	if [ $index -ne $COORD_ORIG_INDEX ]
+	then
+		srchost=${COORD_HOSTNAMES[$COORD_ORIG_INDEX]}
+		srcdata=${COORD_PGDATA[$COORD_ORIG_INDEX]}
+		targethost=${COORD_HOSTNAMES[$index]}
+		targetdata=${COORD_PGDATA[$index]}
+		#First erase the data to have a nice cleanup
+		echo ssh $targethost rm -rf $targetdata
+		ssh $targethost rm -rf $targetdata
+
+		#Just to be sure that catalog files of origin coordinator are copied well
+		echo scp -pr $srchost:$srcdata $targethost:$targetdata
+		scp -pr $srchost:$srcdata $targethost:$targetdata; err=$?
+		if [ $err -gt "0" ]
+		then
+			echo "deleting saved configuration files"
+			rm -rf $CONFIG_FOLDER
+			echo "scp failed with "$targethost
+			exit 2
+		fi
+	fi
+done
+
+#7) copy back the configuration files to the corresponding fresh folders
+#but not the configuration files of the origin coordinator
+for index in ${!COORD_HOSTNAMES[*]}
+do
+	if [ $index -ne $COORD_ORIG_INDEX ]
+	then
+		targethost=${COORD_HOSTNAMES[$index]}
+		targetdata=${COORD_PGDATA[$index]}
+		echo scp -pr $CONFIG_FOLDER/postgresql.conf.$index $targethost:$targetdata/postgresql.conf
+		echo scp -pr $CONFIG_FOLDER/pg_hba.conf.$index $targethost:$targetdata/pg_hba.conf
+		scp -pr $CONFIG_FOLDER/postgresql.conf.$index $targethost:$targetdata/postgresql.conf; err=$?
+		if [ $err -gt "0" ]
+		then
+			echo "deleting saved configuration files"
+			rm -rf $CONFIG_FOLDER
+			echo "scp failed with "$targethost
+			exit 2
+		fi
+		scp -pr $CONFIG_FOLDER/pg_hba.conf.$index $targethost:$targetdata/pg_hba.conf; err=$?
+		if [ $err -gt "0" ]
+		then
+			echo "deleting saved configuration files"
+			rm -rf $CONFIG_FOLDER
+			echo "scp failed with "$targethost
+			exit 2
+		fi
+	fi
+done
+
+#8) wait a little bit...
+sleep 1
+
+#9) restart all the other coordinators, origin coordinator has been stopped after DDL run
+for index in ${!COORD_HOSTNAMES[*]}
+do
+	echo ssh ${COORD_HOSTNAMES[$index]} $COORD_SERVER $COORD_OPTIONS -p ${COORD_PORTS[$index]} -D ${COORD_PGDATA[$index]} &
+	ssh ${COORD_HOSTNAMES[$index]} $COORD_SERVER $COORD_OPTIONS -p ${COORD_PORTS[$index]} -D ${COORD_PGDATA[$index]} &
+done
+
+sleep 2
+
+#Clean also the folder in tmp keeping the configuration files
+rm -rf $CONFIG_FOLDER
+
+#10) finished :p
+exit

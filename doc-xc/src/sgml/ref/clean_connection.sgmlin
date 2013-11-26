@@ -1,0 +1,153 @@
+<!--
+$PostgreSQL: pgsql/doc/src/sgml/ref/clean_connection.sgml,v 1.50 2010/04/03 07:22:59 petere Exp $
+PostgreSQL documentation
+-->
+
+<refentry id="SQL-CLEANCONNECTION">
+ <refmeta>
+  <refentrytitle>CLEAN CONNECTION</refentrytitle>
+  <manvolnum>7</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>CLEAN CONNECTION</refname>
+  <refpurpose>Clean up pooler connections in a cluster</refpurpose>
+ </refnamediv>
+
+ <indexterm zone="sql-cleanconnection">
+  <primary>CLEAN CONNECTION</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+<synopsis>
+CLEAN CONNECTION TO { COORDINATOR ( <replaceable class="parameter">nodename</replaceable> [, ... ] ) | NODE ( <replaceable class="parameter">nodename</replaceable> [, ... ] ) | ALL {FORCE} }
+    [ FOR DATABASE <replaceable class="parameter">dbname</replaceable> ]
+    [ TO USER <replaceable class="parameter">username</replaceable> ]
+</synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+&xconly;
+  <para>
+   <command>CLEAN CONNECTION</command> cleans pooler connection in
+   a Postgres-XC cluster.  This can be done for a give database or
+   role. This command usage is restricted to superusers.  It is
+   possible to clean connections to a list of Postgres-XC Coordinators
+   or Datanodes.  If TO ALL is specified, connections to all the nodes
+   are cleaned.  A <replaceable class="parameter">username</replaceable>
+   or a <replaceable class="parameter">dbname</replaceable> has to be
+   specified to perform <command>CLEAN CONNECTION</command>.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Parameters</title>
+
+  <variablelist>
+   <varlistentry>
+    <term><literal>FORCE</literal></term>
+    <listitem>
+     <para>
+      It can only be specified with the clause <literal>TO ALL</literal>.
+      If specified, all the backends connected to the specified node(s)
+      are closed by sending to them a signal SIGTERM.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><replaceable class="parameter">dbname</replaceable></term>
+    <listitem>
+     <para>
+      If specified in the optional clause <literal>FOR DATABASE</literal>,
+      pooler connections are cleaned for given database.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><replaceable class="parameter">username</replaceable></term>
+    <listitem>
+     <para>
+      If specified in the optional clause <literal>TO USER</literal>,
+      pooler connections are cleaned for given role.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><replaceable class="parameter">nodename</replaceable></term>
+    <listitem>
+     <para>
+      In the case of cleaning connections to a given list of
+      Coordinator, <replaceable class="parameter">nodename</replaceable>
+      has to be specified with the clause <literal>TO COORDINATOR
+      </literal>.
+     </para>
+     <para>
+       In the case of cleaning connections to a given list of
+       Datanodes, <replaceable class="parameter">nodename</replaceable>
+       has to be specified with the clause <literal>TO NODE
+       </literal>.
+     </para>
+     <para>
+       <replaceable class="parameter">num</replaceable> can contain
+       a list of nodes like in the query:
+
+<programlisting>
+CLEAN CONNECTION TO COORDINATOR coord1,coord2 FOR DATABASE<replaceable>name</replaceable>;
+</programlisting>
+       to clean connections to Coordinators coord1 and coord2.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
+ </refsect1>
+
+ <refsect1>
+  <title>Notes</title>
+
+  <para>
+   <command>CLEAN CONNECTION</command> is implemented since Postgres-XC
+   0.9.3.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Examples</title>
+
+  <para>
+   Cleaning connection to Datanodes dn1 and dn2 for database template1:
+<programlisting>
+CLEAN CONNECTION TO NODE dn1,dn2 FOR DATABASE template1;
+</programlisting>
+  </para>
+
+  <para>
+   Cleaning connection to Datanode dn3 for role postgres:
+<programlisting>
+CLEAN CONNECTION TO NODE dn3 TO USER postgres;
+</programlisting>
+  </para>
+
+  <para>
+   Cleaning connection to all nodes on database postgres for
+   role admin and cut connections to backends.
+<programlisting>
+CLEAN CONNECTION TO ALL FORCE FOR DATABASE postgres TO USER admin;
+</programlisting>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Compatibility</title>
+  <para>
+   <command>CLEAN CONNECTION</command> does not conform to the <acronym>
+   SQL</acronym> standards, it is a Postgres-XC specific command.
+  </para>
+ </refsect1>
+
+</refentry>

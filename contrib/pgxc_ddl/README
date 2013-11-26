@@ -1,0 +1,47 @@
+Postgres-XC - pgxc_ddl
+=====================================
+
+This directory contains pgxc_ddl, an application used to make a cold synchronization of DDL
+in a Postgres-XC cluster by launching DDL and then copy Coordinator catalog file
+data from a remote Coordinator (where DDL has been launched) to other Coordinators.
+
+pgxc_ddl can also be used to synchronize catalog files.
+
+pgxc_ddl was put in the default install repository before DDL synchronizing was implemented
+(prior to version Postgres-XC 0.9.3).
+
+pgxc_ddl can be used with a configuration file called pgxc.conf.
+This file is kept with the name pgxc.conf.sample to stick with PostgreSQL format.
+Up to v0.9.3, pgxc.conf was by default installed by initdb in a data folder,
+but this is not really necessary since DDL Synchronization is implemented in Postgres-XC.
+
+So it is kept in a separate repository src/pgxc/bin/pgxc_ddl/.
+
+=====================================
+pgxc_ddl
+=====================================
+This script uses the following options:
+- D to locate the data folder, necessary to find pgxc.conf,
+  containing the characteristics of all the coordinators
+- l to locate the folder where applications are
+- f for a DDL file used as input
+- d for a Database name on which to launch DDL
+- n coordinator number where to launch DDL,
+  number based on the one written in pgxc.conf
+- t base name of folder where to save configuration files,
+  by default /tmp/pgxc_config, completed by $$ (process number for folder name uniqueness)
+
+=====================================
+pgxc.conf.sample
+=====================================
+Same format as for GUC files is used.
+
+This configuration file contains the list of following parameters:
+- coordinator_hosts, list of Coordinator hosts
+  This is an array and format is 'host_name_1,host_name_2'.
+- coordinator_ports, list of Coordinator ports
+  This is an array and format is 'port_1,port_2'
+- coordinator_folders
+  This is an array and format is 'data_folder_1,data_folder_2'
+
+All the arrays need to have the same size equal to the number of Coordinators.

@@ -1,0 +1,413 @@
+<!--
+$PostgreSQL: pgsql/doc/src/sgml/ref/initdb.sgml,v 1.47 2010/04/03 07:23:01 petere Exp $
+PostgreSQL documentation
+-->
+
+<refentry id="APP-GTM">
+ <refmeta>
+  <refentrytitle>gtm</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Application</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>gtm</refname>
+  <refpurpose>
+   provides global transaction management feature to <productname>Postgres-XC</productname>.
+  </refpurpose>
+ </refnamediv>
+
+ <indexterm zone="app-gtm">
+  <primary>gtm</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>gtm</command>
+   <arg rep="repeat"><replaceable>option</></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-APP-GTM-1">
+  <title>
+   Description
+  </title>
+&xconly
+  <para>
+   gtm provides consistent transaction manager fully compatible with
+   vanilla PostgreSQL. It is highly advised to start and stop gtm
+   using gtm_ctl(8).
+  </para>
+
+  <para>
+   You must provide gtm configuration
+   file <filename>gtm.conf</filename> placed at gtm working directory
+   as specified by <literal>-D</literal> command line option. The
+   configuration file specifies gtm running environment and resources.
+  </para>
+
+  <para>
+   Some of the parameters specified in the control file can be overridden by 
+   command line options.
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Configuration File</title>
+
+&xconly
+  <para>
+   <literal>GTM</literal> configuration parameters are specified in the configuration file 
+   <filename>gtm.conf</filename><indexterm><primary>gtm.conf</></> placed in the working directory
+   specified as <literal>-D</literal> option
+   of <application>gtm</application> command line option as described
+   in the next section.
+  </para>
+  <para>
+   Format of the configuration file is the same as <filename>postgresql.conf</filename>.
+   Options are as follows.
+  </para>
+
+<!-- Add description of each gtm.conf entry -->
+<!-- Notice
+   The following options are found in the source code (gtm_opt.c) but is only for
+   internal use and will not be presented in the following list.
+
+    1. data_di
+    2. config_file
+
+   Also the following options are for high-availability hook.  This will be
+   documented later.
+
+   1. error_reporter
+   2. status_reader
+-->
+  <variablelist>
+
+   <varlistentry id="gtm-opt-active-host" xreflabel="gtm_opt_active_host">
+    <term><varname>active_host</varname> (<type>string</type>)</term>
+    <indexterm>
+     <primary><varname>active_host</varname> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Specifies listen addresses (host name or IP address) of active <application>gtm</application>.  This
+      parameter is effective only when this <application>gtm</application>
+      is specified as a standby.  There is no default value for this parameter.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="gtm-opt-active-port" xreflabel="gtm_opt_active_port">
+    <term><varname>active_port</varname> (<type>integer</type>)</term>
+    <indexterm>
+     <primary><varname>active_port</varname> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Specifies the port number of active <application>gtm</application>.  This
+      parameter is effective only when this <application>gtm</application>
+      is specified as a standby.
+      There is no default value for this parameter.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="gtm-opt-keepalives-count" xreflabel="gtm_opt_keepalives_count">
+    <term><varname>keepalives_count</varname> (<type>integer</type>)</term>
+    <indexterm>
+     <primary><varname>keepalives_count</varname> (<type>integer</type>)</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Specifies <literal>keepalives_count</literal> option for the
+      connection to <application>gtm</application>.  This option is
+      effective only when it runs as GTM-Standby.
+      Default value is zero and keepalives feature is disabled.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="gtm-opt-keepalives-idle" xreflabel="gtm_opt_keepalives_idle">
+    <term><varname>keepalives_idle</varname> (<type>integer</type>)</term>
+    <indexterm>
+     <primary><varname>keepalives_idle</varname> (<type>integer</type>)</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Specifies <literal>keepalives_idle</literal> option for the
+      connection to <application>gtm</application>.  This option is
+      effective only when it runs as GTM-Standby.
+      Default value is zero and keepalives feature is disabled.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="gtm-opt-keepalives-interval" xreflabel="gtm_opt_keepalives_interval">
+    <term><varname>keepalives_interval</varname> (<type>integer</type>)</term>
+    <indexterm>
+     <primary><varname>keepalives_interval</varname> (<type>integer</type>)</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Specifies <literal>keepalives_interval</literal> option for the
+      connection to <application>gtm</application>.  This option is
+      effective only when it runs as GTM-Standby.
+      Default value is zero and keepalives feature is disabled.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="gtm-opt-listen-addresses" xreflabel="gtm_opt_listen_addresses">
+    <term><varname>listen_addresses</varname> (<type>string</type>)</term>
+    <indexterm>
+     <primary><varname>listen_addresses</varname> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Specifies listen addresses (host name or IP address) of
+      this <application>gtm</application>
+      or <application>gtm</application> standby.
+      Default value is '*'.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="gtm-opt-log-file" xreflabel="gtm_opt_log_file">
+    <term><varname>log_file</varname> (<type>string</type>)</term>
+    <indexterm>
+     <primary><varname>log_file</varname> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Specifies <filename>log</filename> file name.  This file will be
+      created at the working directory of
+      this <application>gtm</application> as specified
+      by <literal>-D</literal> command line option.
+      The default is <filename>gtm.log</filename>.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="gtm-opt-log-min-messages" xreflabel="gtm_opt_log_min_messages">
+    <term><varname>log_min_messages</varname> (<type>enum</type>)</term>
+    <indexterm>
+     <primary><varname>log_min_messages</varname> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Controls which message levels are written to the log. 
+      Valid values are <literal>DEBUG</literal>, <literal>DEBUG5</literal>, 
+      <literal>DEBUG4</literal>, <literal>DEBUG3</literal>, <literal>DEBUG2</literal>, 
+      <literal>DEBUG1</literal>, <literal>INFO</literal>, <literal>NOTICE</literal>, 
+      <literal>WARNING</literal>, <literal>ERROR</literal>, <literal>LOG</literal>, 
+      <literal>FATAL</literal> and <literal>PANIC</literal>.  
+      Each level includes all the levels that follow it.   
+      The later the level, the fewer messages are sent.   
+      The default is <literal>WARNING</literal>.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="gtm-opt-nodename" xreflabel="gtm_opt_nodename">
+    <term><varname>nodename</varname> (<type>string</type>)</term>
+    <indexterm>
+     <primary><varname>nodename</varname> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Specifies the name of this <application>gtm</application> or <application>gtm</application> standby.
+      There is no default value for this parameter.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="gtm-opt-port" xreflabel="gtm_opt_port">
+    <term><varname>port</varname> (<type>integer</type>)</term>
+    <indexterm>
+     <primary><varname>port</varname> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Specifies the port number of <application>gtm</application> or <application>gtm</application> standby.
+      Default value is 6666.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="gtm-opt-startup" xreflabel="gtm_opt_startup">
+    <term><varname>startup</varname> (<type>enum</type>)</term>
+    <indexterm>
+     <primary><varname>startup</varname> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Specifies the startup mode of this <application>gtm</application>.
+      Valied values are <literal>act</literal> or <literal>standby</literal>.
+      <literal>act</literal> means to start up
+      this <application>gtm</application> as usual so
+      that <application>gtm</application> clients (Coordinators, data
+      nodes or gtm-proxies) can connect for transaction
+      management.  <literal>standby</literal> means
+      this <application>gtm</application> starts up as a backup
+      of <literal>act</literal>
+      gtm.  <literal>standby</literal> <literal>gtm</literal> can be
+      promoted to <literal>act</literal> when <literal>act</literal>
+      fails.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry id="gtm-opt-synchronous-backup" xreflabel="gtm_opt_synchronous_backup">
+    <term><varname>synchronous-backup</varname> (<type>boolean</type>)</term>
+    <indexterm>
+     <primary><varname>synchronous-backup</varname> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      Specifies if backup to GTM-Standby is taken synchronously.   If this is turned on,
+      GTM will send and receive synchronize message to make sure that all the backups
+      reached to the standby.
+     </para>
+     <para>
+      If it is turned off, all the backup information will be sent without checking they
+      reached to GTM-Standby.
+     </para>
+     <para>
+      Default value is off.
+     </para>
+    </listitem>
+   </varlistentry>
+
+
+  </variablelist>
+
+ </refsect1>
+
+
+ <refsect1>
+  <title>Options</title>
+
+  <para>
+   Options are specified with preceding '<literal>-</literal>', each
+   option may be associated with a value. They can be specified
+   in <literal>-o</literal> option of gtm_ctl(8).
+  </para>
+
+  <para>
+   Parameters specified as command line options override these specified in the configuration file described
+   in the previous section.
+  </para>
+
+  <para>
+   Options are as follows:
+  </para>
+
+  <para>
+   <variablelist>
+    <varlistentry>
+     <term><option>D</option></term>
+     <listitem>
+      <para>
+       Specify a directory which holds data for gtm or gtm_proxy
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>l</option></term>
+     <listitem>
+      <para>
+       Specify a log file for gtm_ctl.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>x</option></term>
+     <listitem>
+      <para>
+       Specify global transaction ID to start with. This is needed
+       when you start gtm for the first time
+       because <command>initdb</command> consumes XID locally and gtm
+       should start to give GXID greater than the last one
+       each <command>initdb</command> consumed locally. If gtm has
+       been shut down gracefully, then this value will be taken from
+       the last run.
+      </para>
+      <para>
+       If <literal>-x</literal> option is not specified at the first
+       run, initial global transaction ID value will be set to a
+       default initial value which is considered to be safe enough (in
+       version &version;, it is 10000).  If many statements are
+       involved in initdb, you should consider to specify larger
+       value.
+      </para>
+      <para>
+       To find the precise value to start with, you should
+       run <application>pg_controldata</application> to
+       find <literal>Latest checkpoint's NextXID</literal> of all the
+       Coordinators and Datanodes and choose the value larger than or
+       equals to the maximum value found.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>h</option></term>
+     <listitem>
+      <para>
+       Specify host name or IP address used.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>p</option></term>
+     <listitem>
+      <para>
+       Specify port number to listen.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+
+  <para>
+    When starting GTM as a standby instance, following options can also be provided.
+  </para>
+
+  <para>
+   <variablelist>
+    <varlistentry>
+     <term><option>s</option></term>
+     <listitem>
+      <para>
+       Specify if GTM starts as a standby
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>i</option></term>
+     <listitem>
+      <para>
+       Specify host name or IP address of active GTM instance to connect to
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>q</option></term>
+     <listitem>
+      <para>
+       Specify port number of active GTM instance to connect to
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+ </refsect1>
+</refentry>

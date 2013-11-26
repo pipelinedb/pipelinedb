@@ -1,0 +1,437 @@
+-- Strings.
+SELECT '""'::json;				-- OK.
+ json 
+------
+ ""
+(1 row)
+
+SELECT $$''$$::json;			-- ERROR, single quotes are not allowed
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT $$''$$::json;
+               ^
+DETAIL:  Token "'" is invalid.
+CONTEXT:  JSON data, line 1: '...
+SELECT '"abc"'::json;			-- OK
+ json  
+-------
+ "abc"
+(1 row)
+
+SELECT '"abc'::json;			-- ERROR, quotes not closed
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '"abc'::json;
+               ^
+DETAIL:  Token ""abc" is invalid.
+CONTEXT:  JSON data, line 1: "abc
+SELECT '"abc
+def"'::json;					-- ERROR, unescaped newline in string constant
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '"abc
+               ^
+DETAIL:  Character with value 0x0a must be escaped.
+CONTEXT:  JSON data, line 1: "abc
+SELECT '"\n\"\\"'::json;		-- OK, legal escapes
+   json   
+----------
+ "\n\"\\"
+(1 row)
+
+SELECT '"\v"'::json;			-- ERROR, not a valid JSON escape
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '"\v"'::json;
+               ^
+DETAIL:  Escape sequence "\v" is invalid.
+CONTEXT:  JSON data, line 1: "\v...
+SELECT '"\u"'::json;			-- ERROR, incomplete escape
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '"\u"'::json;
+               ^
+DETAIL:  "\u" must be followed by four hexadecimal digits.
+CONTEXT:  JSON data, line 1: "\u"
+SELECT '"\u00"'::json;			-- ERROR, incomplete escape
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '"\u00"'::json;
+               ^
+DETAIL:  "\u" must be followed by four hexadecimal digits.
+CONTEXT:  JSON data, line 1: "\u00"
+SELECT '"\u000g"'::json;		-- ERROR, g is not a hex digit
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '"\u000g"'::json;
+               ^
+DETAIL:  "\u" must be followed by four hexadecimal digits.
+CONTEXT:  JSON data, line 1: "\u000g...
+SELECT '"\u0000"'::json;		-- OK, legal escape
+   json   
+----------
+ "\u0000"
+(1 row)
+
+SELECT '"\uaBcD"'::json;		-- OK, uppercase and lower case both OK
+   json   
+----------
+ "\uaBcD"
+(1 row)
+
+-- Numbers.
+SELECT '1'::json;				-- OK
+ json 
+------
+ 1
+(1 row)
+
+SELECT '0'::json;				-- OK
+ json 
+------
+ 0
+(1 row)
+
+SELECT '01'::json;				-- ERROR, not valid according to JSON spec
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '01'::json;
+               ^
+DETAIL:  Token "01" is invalid.
+CONTEXT:  JSON data, line 1: 01
+SELECT '0.1'::json;				-- OK
+ json 
+------
+ 0.1
+(1 row)
+
+SELECT '9223372036854775808'::json;	-- OK, even though it's too large for int8
+        json         
+---------------------
+ 9223372036854775808
+(1 row)
+
+SELECT '1e100'::json;			-- OK
+ json  
+-------
+ 1e100
+(1 row)
+
+SELECT '1.3e100'::json;			-- OK
+  json   
+---------
+ 1.3e100
+(1 row)
+
+SELECT '1f2'::json;				-- ERROR
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '1f2'::json;
+               ^
+DETAIL:  Token "1f2" is invalid.
+CONTEXT:  JSON data, line 1: 1f2
+SELECT '0.x1'::json;			-- ERROR
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '0.x1'::json;
+               ^
+DETAIL:  Token "0.x1" is invalid.
+CONTEXT:  JSON data, line 1: 0.x1
+SELECT '1.3ex100'::json;		-- ERROR
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '1.3ex100'::json;
+               ^
+DETAIL:  Token "1.3ex100" is invalid.
+CONTEXT:  JSON data, line 1: 1.3ex100
+-- Arrays.
+SELECT '[]'::json;				-- OK
+ json 
+------
+ []
+(1 row)
+
+SELECT '[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]'::json;  -- OK
+                                                                                                   json                                                                                                   
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+(1 row)
+
+SELECT '[1,2]'::json;			-- OK
+ json  
+-------
+ [1,2]
+(1 row)
+
+SELECT '[1,2,]'::json;			-- ERROR, trailing comma
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '[1,2,]'::json;
+               ^
+DETAIL:  Expected JSON value, but found "]".
+CONTEXT:  JSON data, line 1: [1,2,]
+SELECT '[1,2'::json;			-- ERROR, no closing bracket
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '[1,2'::json;
+               ^
+DETAIL:  The input string ended unexpectedly.
+CONTEXT:  JSON data, line 1: [1,2
+SELECT '[1,[2]'::json;			-- ERROR, no closing bracket
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '[1,[2]'::json;
+               ^
+DETAIL:  The input string ended unexpectedly.
+CONTEXT:  JSON data, line 1: [1,[2]
+-- Objects.
+SELECT '{}'::json;				-- OK
+ json 
+------
+ {}
+(1 row)
+
+SELECT '{"abc"}'::json;			-- ERROR, no value
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '{"abc"}'::json;
+               ^
+DETAIL:  Expected ":", but found "}".
+CONTEXT:  JSON data, line 1: {"abc"}
+SELECT '{"abc":1}'::json;		-- OK
+   json    
+-----------
+ {"abc":1}
+(1 row)
+
+SELECT '{1:"abc"}'::json;		-- ERROR, keys must be strings
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '{1:"abc"}'::json;
+               ^
+DETAIL:  Expected string or "}", but found "1".
+CONTEXT:  JSON data, line 1: {1...
+SELECT '{"abc",1}'::json;		-- ERROR, wrong separator
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '{"abc",1}'::json;
+               ^
+DETAIL:  Expected ":", but found ",".
+CONTEXT:  JSON data, line 1: {"abc",...
+SELECT '{"abc"=1}'::json;		-- ERROR, totally wrong separator
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '{"abc"=1}'::json;
+               ^
+DETAIL:  Token "=" is invalid.
+CONTEXT:  JSON data, line 1: {"abc"=...
+SELECT '{"abc"::1}'::json;		-- ERROR, another wrong separator
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '{"abc"::1}'::json;
+               ^
+DETAIL:  Expected JSON value, but found ":".
+CONTEXT:  JSON data, line 1: {"abc"::...
+SELECT '{"abc":1,"def":2,"ghi":[3,4],"hij":{"klm":5,"nop":[6]}}'::json; -- OK
+                          json                           
+---------------------------------------------------------
+ {"abc":1,"def":2,"ghi":[3,4],"hij":{"klm":5,"nop":[6]}}
+(1 row)
+
+SELECT '{"abc":1:2}'::json;		-- ERROR, colon in wrong spot
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '{"abc":1:2}'::json;
+               ^
+DETAIL:  Expected "," or "}", but found ":".
+CONTEXT:  JSON data, line 1: {"abc":1:...
+SELECT '{"abc":1,3}'::json;		-- ERROR, no value
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '{"abc":1,3}'::json;
+               ^
+DETAIL:  Expected string, but found "3".
+CONTEXT:  JSON data, line 1: {"abc":1,3...
+-- Miscellaneous stuff.
+SELECT 'true'::json;			-- OK
+ json 
+------
+ true
+(1 row)
+
+SELECT 'false'::json;			-- OK
+ json  
+-------
+ false
+(1 row)
+
+SELECT 'null'::json;			-- OK
+ json 
+------
+ null
+(1 row)
+
+SELECT ' true '::json;			-- OK, even with extra whitespace
+  json  
+--------
+  true 
+(1 row)
+
+SELECT 'true false'::json;		-- ERROR, too many values
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT 'true false'::json;
+               ^
+DETAIL:  Expected end of input, but found "false".
+CONTEXT:  JSON data, line 1: true false
+SELECT 'true, false'::json;		-- ERROR, too many values
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT 'true, false'::json;
+               ^
+DETAIL:  Expected end of input, but found ",".
+CONTEXT:  JSON data, line 1: true,...
+SELECT 'truf'::json;			-- ERROR, not a keyword
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT 'truf'::json;
+               ^
+DETAIL:  Token "truf" is invalid.
+CONTEXT:  JSON data, line 1: truf
+SELECT 'trues'::json;			-- ERROR, not a keyword
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT 'trues'::json;
+               ^
+DETAIL:  Token "trues" is invalid.
+CONTEXT:  JSON data, line 1: trues
+SELECT ''::json;				-- ERROR, no value
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT ''::json;
+               ^
+DETAIL:  The input string ended unexpectedly.
+CONTEXT:  JSON data, line 1: 
+SELECT '    '::json;			-- ERROR, no value
+ERROR:  invalid input syntax for type json
+LINE 1: SELECT '    '::json;
+               ^
+DETAIL:  The input string ended unexpectedly.
+CONTEXT:  JSON data, line 1:     
+--constructors
+-- array_to_json
+SELECT array_to_json(array(select 1 as a));
+ array_to_json 
+---------------
+ [1]
+(1 row)
+
+SELECT array_to_json(array_agg(q),false) from (select x as b, x * 2 as c from generate_series(1,3) x) q;
+                array_to_json                
+---------------------------------------------
+ [{"b":1,"c":2},{"b":2,"c":4},{"b":3,"c":6}]
+(1 row)
+
+SELECT array_to_json(array_agg(q),true) from (select x as b, x * 2 as c from generate_series(1,3) x) q;
+  array_to_json  
+-----------------
+ [{"b":1,"c":2},+
+  {"b":2,"c":4},+
+  {"b":3,"c":6}]
+(1 row)
+
+SELECT array_to_json(array_agg(q),false)
+  FROM ( SELECT $$a$$ || x AS b, y AS c,
+               ARRAY[ROW(x.*,ARRAY[1,2,3]),
+               ROW(y.*,ARRAY[4,5,6])] AS z
+         FROM generate_series(1,2) x,
+              generate_series(4,5) y) q;
+                                                                                                                                 array_to_json                                                                                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"b":"a1","c":4,"z":[{"f1":1,"f2":[1,2,3]},{"f1":4,"f2":[4,5,6]}]},{"b":"a1","c":5,"z":[{"f1":1,"f2":[1,2,3]},{"f1":5,"f2":[4,5,6]}]},{"b":"a2","c":4,"z":[{"f1":2,"f2":[1,2,3]},{"f1":4,"f2":[4,5,6]}]},{"b":"a2","c":5,"z":[{"f1":2,"f2":[1,2,3]},{"f1":5,"f2":[4,5,6]}]}]
+(1 row)
+
+SELECT array_to_json(array_agg(x),false) from generate_series(5,10) x;
+ array_to_json  
+----------------
+ [5,6,7,8,9,10]
+(1 row)
+
+SELECT array_to_json('{{1,5},{99,100}}'::int[]);
+  array_to_json   
+------------------
+ [[1,5],[99,100]]
+(1 row)
+
+-- row_to_json
+SELECT row_to_json(row(1,'foo'));
+     row_to_json     
+---------------------
+ {"f1":1,"f2":"foo"}
+(1 row)
+
+SELECT row_to_json(q)
+FROM (SELECT $$a$$ || x AS b,
+         y AS c,
+         ARRAY[ROW(x.*,ARRAY[1,2,3]),
+               ROW(y.*,ARRAY[4,5,6])] AS z
+      FROM generate_series(1,2) x,
+           generate_series(4,5) y) q;
+                            row_to_json                             
+--------------------------------------------------------------------
+ {"b":"a1","c":4,"z":[{"f1":1,"f2":[1,2,3]},{"f1":4,"f2":[4,5,6]}]}
+ {"b":"a1","c":5,"z":[{"f1":1,"f2":[1,2,3]},{"f1":5,"f2":[4,5,6]}]}
+ {"b":"a2","c":4,"z":[{"f1":2,"f2":[1,2,3]},{"f1":4,"f2":[4,5,6]}]}
+ {"b":"a2","c":5,"z":[{"f1":2,"f2":[1,2,3]},{"f1":5,"f2":[4,5,6]}]}
+(4 rows)
+
+SELECT row_to_json(q,true)
+FROM (SELECT $$a$$ || x AS b,
+         y AS c,
+         ARRAY[ROW(x.*,ARRAY[1,2,3]),
+               ROW(y.*,ARRAY[4,5,6])] AS z
+      FROM generate_series(1,2) x,
+           generate_series(4,5) y) q;
+                     row_to_json                     
+-----------------------------------------------------
+ {"b":"a1",                                         +
+  "c":4,                                            +
+  "z":[{"f1":1,"f2":[1,2,3]},{"f1":4,"f2":[4,5,6]}]}
+ {"b":"a1",                                         +
+  "c":5,                                            +
+  "z":[{"f1":1,"f2":[1,2,3]},{"f1":5,"f2":[4,5,6]}]}
+ {"b":"a2",                                         +
+  "c":4,                                            +
+  "z":[{"f1":2,"f2":[1,2,3]},{"f1":4,"f2":[4,5,6]}]}
+ {"b":"a2",                                         +
+  "c":5,                                            +
+  "z":[{"f1":2,"f2":[1,2,3]},{"f1":5,"f2":[4,5,6]}]}
+(4 rows)
+
+-- Enforce use of COMMIT instead of 2PC for temporary objects
+SET enforce_two_phase_commit TO off;
+CREATE TEMP TABLE rows AS
+SELECT x, 'txt' || x as y
+FROM generate_series(1,3) AS x;
+SELECT row_to_json(q,true)
+FROM rows q order by x;
+ row_to_json  
+--------------
+ {"x":1,     +
+  "y":"txt1"}
+ {"x":2,     +
+  "y":"txt2"}
+ {"x":3,     +
+  "y":"txt3"}
+(3 rows)
+
+SELECT row_to_json(row((select array_agg(x) as d from generate_series(5,10) x)),false);
+      row_to_json      
+-----------------------
+ {"f1":[5,6,7,8,9,10]}
+(1 row)
+
+-- non-numeric output
+SELECT row_to_json(q)
+FROM (SELECT 'NaN'::float8 AS "float8field") q;
+      row_to_json      
+-----------------------
+ {"float8field":"NaN"}
+(1 row)
+
+SELECT row_to_json(q)
+FROM (SELECT 'Infinity'::float8 AS "float8field") q;
+        row_to_json         
+----------------------------
+ {"float8field":"Infinity"}
+(1 row)
+
+SELECT row_to_json(q)
+FROM (SELECT '-Infinity'::float8 AS "float8field") q;
+         row_to_json         
+-----------------------------
+ {"float8field":"-Infinity"}
+(1 row)
+
+-- json input
+SELECT row_to_json(q)
+FROM (SELECT '{"a":1,"b": [2,3,4,"d","e","f"],"c":{"p":1,"q":2}}'::json AS "jsonfield") q;
+                           row_to_json                            
+------------------------------------------------------------------
+ {"jsonfield":{"a":1,"b": [2,3,4,"d","e","f"],"c":{"p":1,"q":2}}}
+(1 row)
+

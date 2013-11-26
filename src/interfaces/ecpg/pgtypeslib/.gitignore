@@ -1,0 +1,5 @@
+/pgtypeslib.def
+/blibpgtypesdll.def
+/exports.list
+
+/pgstrcasecmp.c

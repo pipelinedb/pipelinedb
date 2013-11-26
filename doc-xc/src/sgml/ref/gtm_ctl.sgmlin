@@ -1,0 +1,252 @@
+<!--
+$PostgreSQL: pgsql/doc/src/sgml/ref/initdb.sgml,v 1.47 2010/04/03 07:23:01 petere Exp $
+PostgreSQL documentation
+-->
+
+<refentry id="APP-GTM-CTL">
+ <refmeta>
+  <refentrytitle>gtm_ctl</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Application</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>gtm_ctl</refname>
+  <refpurpose>
+   <productname>Postgres-XC</productname> GTM operation module
+  </refpurpose>
+ </refnamediv>
+
+ <indexterm zone="app-gtm-ctl">
+  <primary>gtm_proxy</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>gtm_proxy</command>
+   <arg rep="repeat"><replaceable>option</></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1 id="R1-APP-GTM-CTL-1">
+  <title>
+   Description
+  </title>
+&xconly
+  <para>
+   <command>gtm_ctl</command> starts/stops <command>gtm</command>
+   or <command>gtm_proxy</command>. The options specify the GTM
+   configuration.
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+
+  <para>
+   Options are specified with preceding '<literal>-</literal>', each
+   option may be associated with a value.
+  </para>
+
+  <para>
+   Options are as follows:
+  </para>
+
+  <para>
+   <variablelist>
+    <varlistentry>
+     <term><option>D</option></term>
+     <listitem>
+      <para>
+       Specify a directory which holds data
+       for <command>gtm</command> or <command>gtm_proxy</command>
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>l</option></term>
+     <listitem>
+      <para>
+       Specify a log file for <command>gtm_ctl</command>.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>m</option></term>
+     <listitem>
+      <para>
+       Set mode.  Value can
+       be <literal>smart</literal>, <literal>fast</literal>
+       or <literal>immediate</literal>.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>C</option></term>
+     <listitem>
+      <para>
+       Specify alternte <literal>gtm.control</literal> file used to setup
+	   the initial status of gtm.  Specify the file name as the value.
+	   File path is relative to the working directory of gtm.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>o</option></term>
+     <listitem>
+      <para>
+       Option method. This parameter will be passed down
+       to <command>gtm</command> or <command>gtm_proxy</command>.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>p</option></term>
+     <listitem>
+      <para>
+       Set up postgres bin repository.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>S</option></term>
+     <listitem>
+      <para>
+       Specify which to start, gtm or gtm_proxy. The value can be
+       specified as <literal>gtm</literal>
+       or <literal>gtm_proxy</literal>.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>t</option></term>
+     <listitem>
+      <para>
+       Specify the wait time in seconds.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>W</option> or <option>w</option></term>
+     <listitem>
+      <para>
+       Wait option.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+
+  <para>
+   <command>gtm_ctl</command> issues the following keywords to select
+   operations on <command>gtm</command>
+   and <command>gtm_proxy</command>.
+  </para>
+
+  <para>
+   <variablelist>
+
+    <varlistentry>
+     <term><option>start</option></term>
+     <listitem>
+      <para>
+       Start a GTM/GTM proxy instance.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>restart</option></term>
+     <listitem>
+      <para>
+       Restart a GTM/GTM proxy instance.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>stop</option></term>
+     <listitem>
+      <para>
+       Stop a GTM/GTM proxy instance.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>status</option></term>
+     <listitem>
+      <para>
+       Look at the status of GTM instance. If active, 1 is printed. If
+       standby, 0 is printed.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>promote</option></term>
+     <listitem>
+      <para>
+       Promote a GTM instance as active.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>reconnect</option></term>
+     <listitem>
+      <para>
+       Reconnect a GTM Proxy to another GTM instance.
+      </para>
+     </listitem>
+    </varlistentry>
+
+   </variablelist>
+  </para>
+
+  <para>
+   Typically, you can issue the following command to start <command>gtm</command>/
+<programlisting>
+gtm_ctl start -Z gtm -D datafolder
+</programlisting>
+  </para>
+
+  <para>
+   Or <command>gtm_proxy</command>:
+<programlisting>
+gtm_ctl start -Z gtm_proxy -D datafolder_proxy
+</programlisting>
+  </para>
+
+  <para>
+   Promote a GTM as active:
+<programlisting>
+gtm_ctl promote -Z gtm -D datafolder
+</programlisting>
+  </para>
+
+  <para>
+   Reconnect a GTM proxy to another GTM instance:
+<programlisting>
+gtm_ctl reconnect -Z gtm_proxy -D datafolder_proxy -o '-s hostname -t port_number'
+</programlisting>
+  </para>
+
+  <para>
+   Look at the status of a GTM server:
+<programlisting>
+gtm_ctl status -Z gtm -D datafolder
+</programlisting>
+  </para>
+ </refsect1>
+
+</refentry>

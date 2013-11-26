@@ -1,0 +1,628 @@
+-- XC Test cases to verify that all supported data types are working as distribution key
+-- Also verifies that the comaparison with a constant for equality is optimized.
+create table ch_tab(a char) distribute by modulo(a);
+insert into ch_tab values('a');
+select hashchar('a');
+ hashchar  
+-----------
+ 463612535
+(1 row)
+
+create table nm_tab(a name) distribute by modulo(a);
+insert into nm_tab values('abbas');
+select hashname('abbas');
+ hashname  
+-----------
+ 605752656
+(1 row)
+
+create table nu_tab(a numeric(10,5)) distribute by modulo(a);
+insert into nu_tab values(123.456);
+insert into nu_tab values(789.412);
+select * from nu_tab order by a;
+     a     
+-----------
+ 123.45600
+ 789.41200
+(2 rows)
+
+select * from nu_tab where a = 123.456;
+     a     
+-----------
+ 123.45600
+(1 row)
+
+select * from nu_tab where 789.412 = a;
+     a     
+-----------
+ 789.41200
+(1 row)
+
+explain (costs false, num_nodes true, nodes false) select * from nu_tab where a = 123.456;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
+(1 row)
+
+explain (costs false, num_nodes true, nodes false) select * from nu_tab where 789.412 = a;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
+(1 row)
+
+create table tx_tab(a text) distribute by modulo(a);
+insert into tx_tab values('hello world');
+insert into tx_tab values('Did the quick brown fox jump over the lazy dog?');
+select * from tx_tab order by a;
+                        a                        
+-------------------------------------------------
+ Did the quick brown fox jump over the lazy dog?
+ hello world
+(2 rows)
+
+select * from tx_tab where a = 'hello world';
+      a      
+-------------
+ hello world
+(1 row)
+
+select * from tx_tab where a = 'Did the quick brown fox jump over the lazy dog?';
+                        a                        
+-------------------------------------------------
+ Did the quick brown fox jump over the lazy dog?
+(1 row)
+
+select * from tx_tab where 'hello world' = a;
+      a      
+-------------
+ hello world
+(1 row)
+
+select * from tx_tab where 'Did the quick brown fox jump over the lazy dog?' = a;
+                        a                        
+-------------------------------------------------
+ Did the quick brown fox jump over the lazy dog?
+(1 row)
+
+explain (costs false, num_nodes true, nodes false) select * from tx_tab where a = 'hello world';
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
+(1 row)
+
+explain (costs false, num_nodes true, nodes false) select * from tx_tab where a = 'Did the quick brown fox jump over the lazy dog?';
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
+(1 row)
+
+create table vc_tab(a varchar(255)) distribute by modulo(a);
+insert into vc_tab values('abcdefghijklmnopqrstuvwxyz');
+insert into vc_tab values('A quick brown fox');
+insert into vc_tab values(NULL);
+select * from vc_tab order by a;
+             a              
+----------------------------
+ A quick brown fox
+ abcdefghijklmnopqrstuvwxyz
+ 
+(3 rows)
+
+select * from vc_tab where a = 'abcdefghijklmnopqrstuvwxyz';
+             a              
+----------------------------
+ abcdefghijklmnopqrstuvwxyz
+(1 row)
+
+select * from vc_tab where a = 'A quick brown fox';
+         a         
+-------------------
+ A quick brown fox
+(1 row)
+
+-- This test a bug in examine_conditions_walker where a = constant is optimized but constant = a was not
+select * from vc_tab where 'A quick brown fox' = a;
+         a         
+-------------------
+ A quick brown fox
+(1 row)
+
+explain (costs false, num_nodes true, nodes false) select * from vc_tab where a = 'abcdefghijklmnopqrstuvwxyz';
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
+(1 row)
+
+explain (costs false, num_nodes true, nodes false) select * from vc_tab where a = 'A quick brown fox';
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
+(1 row)
+
+-- This test a bug in examine_conditions_walker where a = constant is optimized but constant = a was not
+explain (costs false, num_nodes true, nodes false) select * from vc_tab where 'A quick brown fox' = a;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
+(1 row)
+
+create table f8_tab(a float8) distribute by modulo(a);
+insert into f8_tab values(123.456);
+insert into f8_tab values(10.987654);
+select * from f8_tab order by a;
+     a     
+-----------
+ 10.987654
+   123.456
+(2 rows)
+
+select * from f8_tab where a = 123.456;
+    a    
+---------
+ 123.456
+(1 row)
+
+select * from f8_tab where a = 10.987654;
+     a     
+-----------
+ 10.987654
+(1 row)
+
+select * from f8_tab where a = 123.456::float8;
+    a    
+---------
+ 123.456
+(1 row)
+
+select * from f8_tab where a = 10.987654::float8;
+     a     
+-----------
+ 10.987654
+(1 row)
+
+create table f4_tab(a float4) distribute by modulo(a);
+insert into f4_tab values(123.456);
+insert into f4_tab values(10.987654);
+insert into f4_tab values(NULL);
+select * from f4_tab order by a;
+    a    
+---------
+ 10.9877
+ 123.456
+        
+(3 rows)
+
+select * from f4_tab where a = 123.456;
+ a 
+---
+(0 rows)
+
+select * from f4_tab where a = 10.987654;
+ a 
+---
+(0 rows)
+
+select * from f4_tab where a = 123.456::float4;
+    a    
+---------
+ 123.456
+(1 row)
+
+select * from f4_tab where a = 10.987654::float4;
+    a    
+---------
+ 10.9877
+(1 row)
+
+create table i8_tab(a int8) distribute by modulo(a);
+insert into i8_tab values(8446744073709551359);
+insert into i8_tab values(78902);
+insert into i8_tab values(NULL);
+select * from i8_tab order by a;
+          a          
+---------------------
+               78902
+ 8446744073709551359
+                    
+(3 rows)
+
+select * from i8_tab where a = 8446744073709551359::int8;
+          a          
+---------------------
+ 8446744073709551359
+(1 row)
+
+select * from i8_tab where a = 8446744073709551359;
+          a          
+---------------------
+ 8446744073709551359
+(1 row)
+
+select * from i8_tab where a = 78902::int8;
+   a   
+-------
+ 78902
+(1 row)
+
+select * from i8_tab where a = 78902;
+   a   
+-------
+ 78902
+(1 row)
+
+create table i2_tab(a int2) distribute by modulo(a);
+insert into i2_tab values(123);
+insert into i2_tab values(456);
+select * from i2_tab order by a;
+  a  
+-----
+ 123
+ 456
+(2 rows)
+
+select * from i2_tab where a = 123;
+  a  
+-----
+ 123
+(1 row)
+
+select * from i2_tab where a = 456;
+  a  
+-----
+ 456
+(1 row)
+
+create table oid_tab(a oid) distribute by modulo(a);
+insert into oid_tab values(23445);
+insert into oid_tab values(45662);
+select * from oid_tab order by a;
+   a   
+-------
+ 23445
+ 45662
+(2 rows)
+
+select * from oid_tab where a = 23445;
+   a   
+-------
+ 23445
+(1 row)
+
+select * from oid_tab where a = 45662;
+   a   
+-------
+ 45662
+(1 row)
+
+create table i4_tab(a int4) distribute by modulo(a);
+insert into i4_tab values(65530);
+insert into i4_tab values(2147483647);
+select * from i4_tab order by a;
+     a      
+------------
+      65530
+ 2147483647
+(2 rows)
+
+select * from i4_tab where a = 65530;
+   a   
+-------
+ 65530
+(1 row)
+
+select * from i4_tab where a = 2147483647;
+     a      
+------------
+ 2147483647
+(1 row)
+
+select * from i4_tab where 65530 = a;
+   a   
+-------
+ 65530
+(1 row)
+
+select * from i4_tab where 2147483647 = a;
+     a      
+------------
+ 2147483647
+(1 row)
+
+explain (costs false, num_nodes true, nodes false) select * from i4_tab where 65530 = a;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
+(1 row)
+
+explain (costs false, num_nodes true, nodes false) select * from i4_tab where a = 2147483647;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
+(1 row)
+
+create table bo_tab(a bool) distribute by modulo(a);
+insert into bo_tab values(true);
+insert into bo_tab values(false);
+select * from bo_tab order by a;
+ a 
+---
+ f
+ t
+(2 rows)
+
+select * from bo_tab where a = true;
+ a 
+---
+ t
+(1 row)
+
+select * from bo_tab where a = false;
+ a 
+---
+ f
+(1 row)
+
+create table bpc_tab(a char(35)) distribute by modulo(a);
+insert into bpc_tab values('Hello World');
+insert into bpc_tab values('The quick brown fox');
+select * from bpc_tab order by a;
+                  a                  
+-------------------------------------
+ Hello World                        
+ The quick brown fox                
+(2 rows)
+
+select * from bpc_tab where a = 'Hello World';
+                  a                  
+-------------------------------------
+ Hello World                        
+(1 row)
+
+select * from bpc_tab where a = 'The quick brown fox';
+                  a                  
+-------------------------------------
+ The quick brown fox                
+(1 row)
+
+create table byta_tab(a bytea) distribute by modulo(a);
+insert into byta_tab values(E'\\000\\001\\002\\003\\004\\005\\006\\007\\010');
+insert into byta_tab values(E'\\010\\011\\012\\013\\014\\015\\016\\017\\020');
+select * from byta_tab order by a;
+          a           
+----------------------
+ \x000102030405060708
+ \x08090a0b0c0d0e0f10
+(2 rows)
+
+select * from byta_tab where a = E'\\000\\001\\002\\003\\004\\005\\006\\007\\010';
+          a           
+----------------------
+ \x000102030405060708
+(1 row)
+
+select * from byta_tab where a = E'\\010\\011\\012\\013\\014\\015\\016\\017\\020';
+          a           
+----------------------
+ \x08090a0b0c0d0e0f10
+(1 row)
+
+create table tim_tab(a time) distribute by modulo(a);
+insert into tim_tab values('00:01:02.03');
+insert into tim_tab values('23:59:59.99');
+select * from tim_tab order by a;
+      a      
+-------------
+ 00:01:02.03
+ 23:59:59.99
+(2 rows)
+
+delete from tim_tab where a = '00:01:02.03';
+delete from tim_tab where a = '23:59:59.99';
+create table timtz_tab(a time with time zone) distribute by modulo(a);
+insert into timtz_tab values('00:01:02.03 PST');
+insert into timtz_tab values('23:59:59.99 PST');
+select * from timtz_tab order by a;
+       a        
+----------------
+ 00:01:02.03-08
+ 23:59:59.99-08
+(2 rows)
+
+select * from timtz_tab where a = '00:01:02.03 PST';
+       a        
+----------------
+ 00:01:02.03-08
+(1 row)
+
+select * from timtz_tab where a = '23:59:59.99 PST';
+       a        
+----------------
+ 23:59:59.99-08
+(1 row)
+
+create table ts_tab(a timestamp) distribute by modulo(a);
+insert into ts_tab values('May 10, 2011 00:01:02.03');
+insert into ts_tab values('August 14, 2001 23:59:59.99');
+select * from ts_tab order by a;
+              a              
+-----------------------------
+ Tue Aug 14 23:59:59.99 2001
+ Tue May 10 00:01:02.03 2011
+(2 rows)
+
+select * from ts_tab where a = 'May 10, 2011 00:01:02.03';
+              a              
+-----------------------------
+ Tue May 10 00:01:02.03 2011
+(1 row)
+
+select * from ts_tab where a = 'August 14, 2001 23:59:59.99';
+              a              
+-----------------------------
+ Tue Aug 14 23:59:59.99 2001
+(1 row)
+
+create table in_tab(a interval) distribute by modulo(a);
+insert into in_tab values('1 day 12 hours 59 min 10 sec');
+insert into in_tab values('0 day 4 hours 32 min 23 sec');
+select * from in_tab order by a;
+                a                 
+----------------------------------
+ @ 4 hours 32 mins 23 secs
+ @ 1 day 12 hours 59 mins 10 secs
+(2 rows)
+
+select * from in_tab where a = '1 day 12 hours 59 min 10 sec';
+                a                 
+----------------------------------
+ @ 1 day 12 hours 59 mins 10 secs
+(1 row)
+
+select * from in_tab where a = '0 day 4 hours 32 min 23 sec';
+             a             
+---------------------------
+ @ 4 hours 32 mins 23 secs
+(1 row)
+
+create table cash_tab(a money) distribute by modulo(a);
+insert into cash_tab values('231.54');
+insert into cash_tab values('14011.50');
+select * from cash_tab order by a;
+     a      
+------------
+    $231.54
+ $14,011.50
+(2 rows)
+
+select * from cash_tab where a = '231.54';
+    a    
+---------
+ $231.54
+(1 row)
+
+select * from cash_tab where a = '14011.50';
+     a      
+------------
+ $14,011.50
+(1 row)
+
+create table atim_tab(a abstime) distribute by modulo(a);
+insert into atim_tab values(abstime('May 10, 2011 00:01:02.03'));
+insert into atim_tab values(abstime('Jun 23, 2001 23:59:59.99'));
+select * from atim_tab order by a;
+              a               
+------------------------------
+ Sat Jun 23 23:59:59 2001 PDT
+ Tue May 10 00:01:02 2011 PDT
+(2 rows)
+
+select * from atim_tab where a = abstime('May 10, 2011 00:01:02.03');
+              a               
+------------------------------
+ Tue May 10 00:01:02 2011 PDT
+(1 row)
+
+select * from atim_tab where a = abstime('Jun 23, 2001 23:59:59.99');
+              a               
+------------------------------
+ Sat Jun 23 23:59:59 2001 PDT
+(1 row)
+
+create table rtim_tab(a reltime) distribute by modulo(a);
+insert into rtim_tab values(reltime('1 day 12 hours 59 min 10 sec'));
+insert into rtim_tab values(reltime('0 day 5 hours 32 min 23 sec'));
+select * from rtim_tab order by a;
+                a                 
+----------------------------------
+ @ 5 hours 32 mins 23 secs
+ @ 1 day 12 hours 59 mins 10 secs
+(2 rows)
+
+select * from rtim_tab where a = reltime('1 day 12 hours 59 min 10 sec');
+                a                 
+----------------------------------
+ @ 1 day 12 hours 59 mins 10 secs
+(1 row)
+
+select * from rtim_tab where a = reltime('0 day 5 hours 32 min 23 sec');
+             a             
+---------------------------
+ @ 5 hours 32 mins 23 secs
+(1 row)
+
+create table date_tab(a date) distribute by modulo(a);
+insert into date_tab values('May 10, 2011');
+insert into date_tab values('August 23, 2001');
+select * from date_tab order by a;
+     a      
+------------
+ 08-23-2001
+ 05-10-2011
+(2 rows)
+
+select * from date_tab where a = 'May 10, 2011';
+     a      
+------------
+ 05-10-2011
+(1 row)
+
+select * from date_tab where a = 'August 23, 2001';
+     a      
+------------
+ 08-23-2001
+(1 row)
+
+create table tstz_tab(a timestamp with time zone) distribute by modulo(a);
+insert into tstz_tab values('May 10, 2011 00:01:02.03 PST');
+insert into tstz_tab values('Jun 23, 2001 23:59:59.99 PST');
+select * from tstz_tab order by a;
+                a                
+---------------------------------
+ Sun Jun 24 00:59:59.99 2001 PDT
+ Tue May 10 01:01:02.03 2011 PDT
+(2 rows)
+
+select * from tstz_tab where a = 'May 10, 2011 00:01:02.03 PST';
+                a                
+---------------------------------
+ Tue May 10 01:01:02.03 2011 PDT
+(1 row)
+
+select * from tstz_tab where a = 'Jun 23, 2001 23:59:59.99 PST';
+                a                
+---------------------------------
+ Sun Jun 24 00:59:59.99 2001 PDT
+(1 row)
+
+create table tstz_tab_h(a timestamp with time zone) distribute by hash(a);
+insert into tstz_tab_h values('May 10, 2011 00:01:02.03 PST');
+insert into tstz_tab_h values('Jun 23, 2001 23:59:59.99 PST');
+select * from tstz_tab_h order by a;
+                a                
+---------------------------------
+ Sun Jun 24 00:59:59.99 2001 PDT
+ Tue May 10 01:01:02.03 2011 PDT
+(2 rows)
+
+select * from tstz_tab_h where a = 'May 10, 2011 00:01:02.03 PST';
+                a                
+---------------------------------
+ Tue May 10 01:01:02.03 2011 PDT
+(1 row)
+
+select * from tstz_tab_h where a = 'Jun 23, 2001 23:59:59.99 PST';
+                a                
+---------------------------------
+ Sun Jun 24 00:59:59.99 2001 PDT
+(1 row)
+
+create table my_rr_tab(a integer, b varchar(100)) distribute by roundrobin;
+insert into my_rr_tab values(1 , 'One');
+insert into my_rr_tab values(2, 'Two');
+select * from my_rr_tab order by a;
+ a |  b  
+---+-----
+ 1 | One
+ 2 | Two
+(2 rows)
+

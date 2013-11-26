@@ -1,0 +1,6 @@
+<!## XC>
+<para>
+<productname>Postgres-XC</> supports constraints only enforceable locally.
+You should not specify any constraint which need to refer to rows at remote node.
+</para>
+<!## end>

@@ -1,0 +1,113 @@
+<!-- doc/src/sgml/info.sgml -->
+
+<sect1 id="resources">
+ <title>Further Information</title>
+
+&xconly;
+ <para>
+  Besides the documentation, that is, this book, there are other
+<!## PG>
+  resources about <productname>PostgreSQL</productname>:
+<!## end>
+<!## XC>
+  resources about <productname>Postgres-XC</productname>:
+<!## end>
+
+  <variablelist>
+
+   <varlistentry>
+    <term>Wiki</term>
+    <listitem>
+     <para>
+<!## PG>
+      The <productname>PostgreSQL</productname> <ulink
+      url="http://wiki.postgresql.org">wiki</ulink> contains the project's <ulink
+      url="http://wiki.postgresql.org/wiki/Frequently_Asked_Questions">FAQ</>
+      (Frequently Asked Questions) list, <ulink
+      url="http://wiki.postgresql.org/wiki/Todo">TODO</> list, and
+      detailed information about many more topics.
+<!## end>
+<!## XC>
+      The <productname>Postgres-XC</productname> <ulink
+      url="https://sourceforge.net/apps/mediawiki/postgres-xc/">wiki</ulink> contains the project's 
+	  information, links to related pages and <ulink
+      url="https://sourceforge.net/apps/mediawiki/postgres-xc/index.php?title=Developers"> various development information</>.
+<!## end>
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Web Site</term>
+    <listitem>
+     <para>
+<!## PG>
+      The <productname>PostgreSQL</productname>
+      <ulink url="http://www.postgresql.org">web site</ulink>
+      carries details on the latest release and other
+      information to make your work or play with
+      <productname>PostgreSQL</productname> more productive.
+<!## end>
+<!## XC>
+      The <productname>Postgres-XC</productname> 
+      <ulink url="http://postgres-xc.sourceforge.net/">web site</ulink>
+      carries details on the latest release and other
+      information to make your work or play with
+      <productname>Postgres-XC</productname> more productive.
+<!## end>
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Mailing Lists</term>
+    <listitem>
+     <para>
+<!## PG>
+      The mailing lists are a good place to have your questions
+      answered, to share experiences with other users, and to contact
+      the developers.  Consult the <productname>PostgreSQL</> web site
+      for details.
+<!## end>
+<!## XC>
+      The mailing lists are a good place to have your questions
+      answered, to share experiences with other users, and to contact
+      the developers.  Consult the <productname>Postgres-XC</> web site
+      for details.
+<!## end>
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>Yourself!</term>
+    <listitem>
+     <para>
+<!## PG>
+      <productname>PostgreSQL</productname> is an open-source project.
+      As such, it depends on the user community for ongoing support.
+      As you begin to use <productname>PostgreSQL</productname>, you
+      will rely on others for help, either through the documentation
+      or through the mailing lists.  Consider contributing your
+      knowledge back. Read the mailing lists and answer questions.  If
+      you learn something which is not in the documentation, write it
+      up and contribute it.  If you add features to the code,
+      contribute them.
+<!## end>
+<!## XC>
+      <productname>Postgres-XC</productname> is an open-source project.
+      As such, it depends on the user community for ongoing support.
+      As you begin to use <productname>Postgres-XC</productname>, you
+      will rely on others for help, either through the documentation
+      or through the mailing lists.  Consider contributing your
+      knowledge back. Read the mailing lists and answer questions.  If
+      you learn something which is not in the documentation, write it
+      up and contribute it.  If you add features to the code,
+      contribute them.
+<!## end>
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </para>
+</sect1>
