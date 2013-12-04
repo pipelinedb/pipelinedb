@@ -121,6 +121,10 @@ def main(options, action):
 			print ' '.join(cmd)
 			subprocess.call(cmd)
 			print 'Started Coordinator, logging to %s' % log_path
+			
+			# Wait for daemons to settle
+			time.sleep(5)		
+			_create_datanode(pgxc_root)				
 	if options.datanode:
 		log_path = os.path.join(pgxc_root, 'datanode.log')
 		datanode_path = os.path.join(pgxc_root, DATANODE_DIR)
@@ -138,12 +142,7 @@ def main(options, action):
 			print ' '.join(cmd)
 			subprocess.call(cmd)
 			print 'Started Datanode, logging to %s' % log_path
-
-	if action == 'start':
-		# Wait for daemons to settle
-		time.sleep(5)		
-		_create_datanode(pgxc_root)
-
+			
 	
 if __name__ == '__main__':
 	parser = OptionParser()
