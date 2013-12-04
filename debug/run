@@ -3,6 +3,7 @@
 from optparse import OptionParser
 import subprocess
 import os
+import time
 
 
 DATANODE_DIR = 'datanode'
@@ -82,7 +83,7 @@ def _create_datanode(pgxc_root):
 		raise Exception('Could not create Datanode in database')
 
 
-def main(options):
+def main(options, action):
 	
 	if options.bootstrap or _needs_bootstrap(options.pgxc_root):
 		_bootstrap(options.pgxc_root)
@@ -91,31 +92,36 @@ def main(options):
 	pg_ctl = os.path.join(pgxc_root, 'bin', 'pg_ctl')
 	gtm_ctl = os.path.join(options.pgxc_root, 'bin', 'gtm_ctl')
 	if options.gtm:
-		print 'Starting GTM...'
 		gtm_path = os.path.join(pgxc_root, GTM_DIR)
 		log_path = os.path.join(pgxc_root, 'gtm.log')
 		base_cmd = [gtm_ctl, '-D', gtm_path,
 						'-Z', 'gtm',
 						'-l', log_path]
-		_cleanup(gtm_path, base_cmd)
-		cmd = base_cmd + ['start']
-		print ' '.join(cmd)
-		subprocess.call(cmd)
-		print 'Started GTM, logging to %s' % log_path
+		if action == 'stop':
+			print 'Stopping GTM...'
+			_cleanup(gtm_path, base_cmd)
+		elif action == 'start':
+			print 'Starting GTM...'
+			cmd = base_cmd + ['start']
+			print ' '.join(cmd)
+			subprocess.call(cmd)
+			print 'Started GTM, logging to %s' % log_path
 	if options.coordinator:
-		print 'Starting Coordinator...'
 		log_path = os.path.join(pgxc_root, 'coordinator.log')
 		coordinator_path = os.path.join(pgxc_root, COORDINATOR_DIR)
 		base_cmd = [pg_ctl, '-D', coordinator_path,
 						'-Z', 'coordinator',
 						'-l', log_path]
-		_cleanup(coordinator_path, base_cmd)
-		cmd = base_cmd + ['start']
-		print ' '.join(cmd)
-		subprocess.call(cmd)
-		print 'Started Coordinator, logging to %s' % log_path
+		if action == 'stop':
+			print 'Stopping Coordinator...'
+			_cleanup(coordinator_path, base_cmd)
+		elif action == 'start':
+			print 'Starting Coordinator...'
+			cmd = base_cmd + ['start']
+			print ' '.join(cmd)
+			subprocess.call(cmd)
+			print 'Started Coordinator, logging to %s' % log_path
 	if options.datanode:
-		print 'Starting Datanode...'
 		log_path = os.path.join(pgxc_root, 'datanode.log')
 		datanode_path = os.path.join(pgxc_root, DATANODE_DIR)
 		base_cmd = [pg_ctl, '-D', datanode_path,
@@ -123,13 +129,20 @@ def main(options):
 						'datanode',
 						'-l', log_path,
 						'-o', '"-p 5431"']
-		_cleanup(datanode_path, base_cmd)
-		cmd = base_cmd + ['start']
-		print ' '.join(cmd)
-		subprocess.call(cmd)
-		print 'Started Datanode, logging to %s' % log_path
+		if action == 'stop':
+			print 'Stopping Datanode...'
+			_cleanup(datanode_path, base_cmd)
+		elif action == 'start':
+			print 'Starting Datanode...'
+			cmd = base_cmd + ['start']
+			print ' '.join(cmd)
+			subprocess.call(cmd)
+			print 'Started Datanode, logging to %s' % log_path
 
-	_create_datanode(pgxc_root)
+	if action == 'start':
+		# Wait for daemons to settle
+		time.sleep(5)		
+		_create_datanode(pgxc_root)
 
 	
 if __name__ == '__main__':
@@ -141,5 +154,6 @@ if __name__ == '__main__':
 	parser.add_option('--pgxc_root', dest='pgxc_root', default='~/tmp/pgxc', help='root directory for PGXC daemon data')
 	options, args = parser.parse_args()
 	options.pgxc_root = os.path.expanduser(options.pgxc_root)
-	
-	main(options)
+
+	action = args[0]
+	main(options, action)
