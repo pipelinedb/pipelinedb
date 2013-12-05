@@ -4,6 +4,7 @@ from optparse import OptionParser
 import subprocess
 import os
 import time
+import re
 
 
 DATANODE_DIR = 'datanode'
@@ -89,6 +90,18 @@ def main(options, action):
 		_bootstrap(options.pgxc_root)
 
 	pgxc_root = options.pgxc_root
+
+	if action == 'ls':
+		proc = subprocess.Popen(['ps', 'aux'], stdout=subprocess.PIPE)
+		procs = proc.stdout.read().split('\n')
+		for p in procs:
+			if pgxc_root in p:
+				tup = re.split('\s+', p)
+				pid = tup[1]
+				cmd = ' '.join(tup[10:])
+				print pid, cmd
+		return
+		
 	pg_ctl = os.path.join(pgxc_root, 'bin', 'pg_ctl')
 	gtm_ctl = os.path.join(options.pgxc_root, 'bin', 'gtm_ctl')
 	if options.gtm:
