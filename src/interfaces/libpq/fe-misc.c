@@ -75,6 +75,21 @@ PQlibVersion(void)
 	return PG_VERSION_NUM;
 }
 
+
+/*
+ * PQsendEvent: send an arbitrary event
+ */
+int
+PQsendEvent(const char *data, PGconn *conn)
+{
+	pqPutMsgStart('V', false, conn);
+	pqPuts(data, conn);
+	pqPutMsgEnd(conn);
+	pqFlush(conn);
+
+	return 1;
+}
+
 /*
  * fputnbytes: print exactly N bytes to a file
  *

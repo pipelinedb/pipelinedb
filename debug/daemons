@@ -60,6 +60,7 @@ def _cleanup(data_dir, base_cmd):
 	for p in paths:
 		if '.pid' in p:
 			print '%s found, stopping process...' % p
+			os.remove(os.path.join(data_dir, p))
 			subprocess.call(base_cmd + ['stop'])
 
 def _datanode_exists(psql):
@@ -128,6 +129,10 @@ def main(options, action):
 		if action == 'stop':
 			print 'Stopping Coordinator...'
 			_cleanup(coordinator_path, base_cmd)
+			try:
+				os.remove('/tmp/.s.PGPOOL.6667.lock')
+			except Exception as e:
+				pass
 		elif action == 'start':
 			print 'Starting Coordinator...'
 			cmd = base_cmd + ['start']

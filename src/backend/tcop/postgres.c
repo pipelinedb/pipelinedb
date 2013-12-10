@@ -454,6 +454,7 @@ SocketBackend(StringInfo inBuf)
 		case 'E':				/* execute */
 		case 'H':				/* flush */
 		case 'P':				/* parse */
+		case 'V':
 			doing_extended_query_message = true;
 			/* these are only legal in protocol 3 */
 			if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)
@@ -4526,6 +4527,9 @@ PostgresMain(int argc, char *argv[], const char *username)
 									 errmsg("Invalid command received")));
 					}
 				}
+				break;
+			case 'V': /* Incoming event */
+				elog(ERROR, "data is \"%c\"", firstchar);
 				break;
 #endif /* PGXC */
 
