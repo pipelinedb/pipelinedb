@@ -4528,15 +4528,15 @@ PostgresMain(int argc, char *argv[], const char *username)
 					}
 				}
 				break;
-			case 'V': /* Incoming event */
-			{
-				int len = pq_getmsgint(&input_message, 4);
-				const char *msgbytes = pq_getmsgbytes(&input_message, len);
-				pq_getmsgend(&input_message);
-			}
-				break;
 #endif /* PGXC */
-
+			case 'V': /* Incoming event */
+				{
+					const char *decoder = pq_getmsgbytes(&input_message, 2);
+					int len = pq_getmsgint(&input_message, 4);
+					const char *msgbytes = pq_getmsgbytes(&input_message, len);
+					pq_getmsgend(&input_message);
+				}
+				break;
 			default:
 				ereport(FATAL,
 						(errcode(ERRCODE_PROTOCOL_VIOLATION),

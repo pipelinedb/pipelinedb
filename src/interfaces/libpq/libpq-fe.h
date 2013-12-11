@@ -384,7 +384,7 @@ extern PGresult *PQexecPrepared(PGconn *conn,
 			   int resultFormat);
 
 /* Pipeline functions */
-extern int PQsendEvent(const char *data, size_t len, PGconn *conn);
+extern int PQsendEvent(const char *decoder, const char *data, size_t len, PGconn *conn);
 
 /* Interface for multiple-result or asynchronous queries */
 extern int	PQsendQuery(PGconn *conn, const char *query);
