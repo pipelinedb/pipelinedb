@@ -4529,7 +4529,11 @@ PostgresMain(int argc, char *argv[], const char *username)
 				}
 				break;
 			case 'V': /* Incoming event */
-				elog(ERROR, "data is \"%c\"", firstchar);
+			{
+				int len = pq_getmsgint(&input_message, 4);
+				const char *msgbytes = pq_getmsgbytes(&input_message, len);
+				pq_getmsgend(&input_message);
+			}
 				break;
 #endif /* PGXC */
 

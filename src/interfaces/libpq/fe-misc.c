@@ -78,16 +78,22 @@ PQlibVersion(void)
 
 /*
  * PQsendEvent: send an arbitrary event
+ *
+ * Returns 0 on success, EOF on error
  */
 int
-PQsendEvent(const char *data, PGconn *conn)
+PQsendEvent(const char *data, size_t len, PGconn *conn)
 {
-	pqPutMsgStart('V', false, conn);
-	pqPuts(data, conn);
-	pqPutMsgEnd(conn);
-	pqFlush(conn);
+	if (pqPutMsgStart('V', false, conn) != 0 ||
+			pqPutInt(len, 4, conn) != 0 ||
+			pqPutMsgBytes(data, len, conn) != 0 ||
+			pqPutMsgEnd(conn) != 0 ||
+			pqFlush(conn) != 0)
+	{
+		return 1;
+	}
 
-	return 1;
+	return 0;
 }
 
 /*
