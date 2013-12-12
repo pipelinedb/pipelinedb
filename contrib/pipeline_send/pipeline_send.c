@@ -18,8 +18,6 @@ usage(void)
  * Event (F)
  *   Byte1('V')
  *       Identifies the message as an event.
- *   Byte2
- *       Specifies the decoder to decode the payload with
  *   Int32
  *       Specifies the number of bytes in the raw payload
  *   ByteN
@@ -66,7 +64,7 @@ int main(int argc, char* argv[])
 	{
 		/* Trim \n */
 		line[strlen(line) - 1] = '\0';
-		if (PQsendEvent("jn", line, (int)strlen(line), conn) != 0)
+		if (PQsendEvent(line, (int)strlen(line), conn) != 0)
 		{
 			printf("Error sending %s\n", line);
 		}
