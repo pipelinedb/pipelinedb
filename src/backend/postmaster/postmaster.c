@@ -3484,7 +3484,7 @@ BackendStartup(Port *port)
 		/* Perform additional initialization and collect startup packet */
 		BackendInitialize(port);
 
-		elog(LOG, "Backend PID is %d", MyProcPid);
+		elog(LOG, "backend pid is %d", MyProcPid);
 
 		/* And run the backend */
 		proc_exit(BackendRun(port));
