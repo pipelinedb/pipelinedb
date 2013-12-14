@@ -91,6 +91,7 @@
 #include "pgxc/barrier.h"
 #include "optimizer/pgxcplan.h"
 #include "nodes/nodes.h"
+#include "nodes/makefuncs.h"
 #include "pgxc/poolmgr.h"
 #include "pgxc/pgxcnode.h"
 #include "commands/copy.h"
@@ -4531,7 +4532,6 @@ PostgresMain(int argc, char *argv[], const char *username)
 #endif /* PGXC */
 			case 'V': /* Incoming event */
 				{
-					const char *decoder = pq_getmsgbytes(&input_message, 2);
 					int len = pq_getmsgint(&input_message, 4);
 					const char *msgbytes = pq_getmsgbytes(&input_message, len);
 					pq_getmsgend(&input_message);
