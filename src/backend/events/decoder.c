@@ -11,8 +11,12 @@
 
 
 
-Query *decode()
+List *decode()
 {
+	ResTarget *resId = makeNode(ResTarget);
+	resId->name = "id";
+	resId->location = -1;
+
 	ResTarget *resData = makeNode(ResTarget);
 	resData->name = "data";
 	resData->location = -1;
@@ -21,12 +25,18 @@ Query *decode()
 	resValue->name = "value";
 	resValue->location = -1;
 
-	List *fields = lcons(resData, NULL);
+	List *fields = lcons(resId, NULL);
+	fields = lcons(resData, fields);
 	fields = lcons(resValue, fields);
 
 	ColumnRef *crefs = makeNode(ColumnRef);
 	crefs->fields = fields;
 	List *cols = lcons(crefs, NULL);
+
+	A_Const *i = makeNode(A_Const);
+	i->val.type = T_Integer;
+	i->val.val.ival = 12312321313;
+	i->location = -1;
 
 	A_Const *d = makeNode(A_Const);
 	d->val.type = T_String;
@@ -38,7 +48,8 @@ Query *decode()
 	v->val.val.str = "value!";
 	v->location = -1;
 
-	List *values =lcons(d, NULL);
+	List *values =lcons(i, NULL);
+	values = lcons(d, values);
 	values = lcons(v, values);
 
 	InsertStmt *stmt = makeNode(InsertStmt);
@@ -54,7 +65,7 @@ Query *decode()
 
 	Query *q = parse_analyze((Node *)stmt, "", NULL, 0);
 
-	return q;
+	return lcons(q, NULL);
 }
 
 /*
@@ -69,10 +80,9 @@ Query *decode()
 
 		return tuple
 
-
  */
 int
-maidn(int argc, char *argv[])
+mai(int argc, char *argv[])
 {
 	char *tuple = strdup("1,'derek'");
 	char *token;
