@@ -1,17 +1,24 @@
 #include <stdio.h>
 #include <string.h>
-#include "postgres.h"
 
-#include "parser/analyze.h"
-#include "parser/parser.h"
-#include "parser/parse_type.h"
+#include "events/decoder.h"
 
-#include "nodes/nodes.h"
-#include "nodes/makefuncs.h"
+/*
+
+	# Tuple tup = decode(decoder, raw)
+
+	def decode(decoder, raw):
+		conversions = get_schema(table)
+		for each field, data in raw:
+		  transform = conversions[field]
+			tuple.add(field, transform(data))
+
+		return tuple
+
+ */
 
 
-
-List *decode()
+List *decode(const char *raw)
 {
 	ResTarget *resId = makeNode(ResTarget);
 	resId->name = "id";
@@ -35,7 +42,7 @@ List *decode()
 
 	A_Const *i = makeNode(A_Const);
 	i->val.type = T_Integer;
-	i->val.val.ival = 12312321313;
+	i->val.val.ival = 12321313;
 	i->location = -1;
 
 	A_Const *d = makeNode(A_Const);
@@ -68,21 +75,9 @@ List *decode()
 	return lcons(q, NULL);
 }
 
-/*
 
-	# Tuple tup = decode(decoder, raw)
-
-	def decode(decoder, raw):
-		conversions = get_schema(table)
-		for each field, data in raw:
-		  transform = conversions[field]
-			tuple.add(field, transform(data))
-
-		return tuple
-
- */
 int
-mai(int argc, char *argv[])
+xmain(int argc, char *argv[])
 {
 	char *tuple = strdup("1,'derek'");
 	char *token;
