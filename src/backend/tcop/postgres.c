@@ -1341,7 +1341,16 @@ exec_emit_event(const char *raw)
 	 */
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
+	// List *events = decode(raw);
+	// ListCell *lc;
+	// foreach(lc, events)
+	// {
+	//   Event *event = (Event *)lc;
+	//   Query q = to_query(event);
+	//	 querytree_list = lcons(q, querytree_list);
+	//  }
 	querytree_list = decode(raw);
+
 	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
 
 	/* If we got a cancel signal in analysis or planning, quit */

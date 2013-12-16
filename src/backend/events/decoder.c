@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
-
+#include "postgres.h"
+#include "rewrite/rewriteHandler.h"
 #include "events/decoder.h"
 
 /*
@@ -16,8 +17,6 @@
 		return tuple
 
  */
-
-
 List *decode(const char *raw)
 {
 	ResTarget *resId = makeNode(ResTarget);
@@ -32,7 +31,7 @@ List *decode(const char *raw)
 	resValue->name = "value";
 	resValue->location = -1;
 
-	List *fields = lcons(resId, NULL);
+	List *fields = NULL;//lcons(resId, NULL);
 	fields = lcons(resData, fields);
 	fields = lcons(resValue, fields);
 
@@ -55,7 +54,7 @@ List *decode(const char *raw)
 	v->val.val.str = "value!";
 	v->location = -1;
 
-	List *values =lcons(i, NULL);
+	List *values = NULL;//lcons(i, NULL);
 	values = lcons(d, values);
 	values = lcons(v, values);
 
@@ -68,27 +67,9 @@ List *decode(const char *raw)
 
 	SelectStmt *select = makeNode(SelectStmt);
 	select->valuesLists = lcons(values, NULL);
-	stmt->selectStmt = select;
+	stmt->selectStmt = (Node *)select;
 
 	Query *q = parse_analyze((Node *)stmt, "", NULL, 0);
 
-	return lcons(q, NULL);
-}
-
-
-int
-xmain(int argc, char *argv[])
-{
-	char *tuple = strdup("1,'derek'");
-	char *token;
-
-	token = strtok(tuple, ",");
-	while (token)
-	{
-		printf("%s\n", token);
-		token = strtok(NULL, ",");
-	}
-	// Split it
-	// Transform each field to a Postgres type
-	return 0;
+	return QueryRewrite(q);
 }
