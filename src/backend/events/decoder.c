@@ -17,7 +17,7 @@
 		return tuple
 
  */
-List *decode(const char *raw)
+List *decode_event(const char *raw)
 {
 	ResTarget *resId = makeNode(ResTarget);
 	resId->name = "id";

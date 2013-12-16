@@ -18,4 +18,4 @@
 #include "nodes/nodes.h"
 #include "nodes/makefuncs.h"
 
-List *decode(const char *raw);
+List *decode_event(const char *raw);

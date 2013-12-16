@@ -1273,7 +1273,7 @@ exec_emit_event(const char *raw)
 	 */
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
-	querytree_list = decode(raw);
+	querytree_list = decode_event(raw);
 
 	/*
 	 * Switch back to transaction context to enter the loop.
@@ -1349,7 +1349,7 @@ exec_emit_event(const char *raw)
 	//   Query q = to_query(event);
 	//	 querytree_list = lcons(q, querytree_list);
 	//  }
-	querytree_list = decode(raw);
+	querytree_list = decode_event(raw);
 
 	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
 
