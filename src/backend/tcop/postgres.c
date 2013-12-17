@@ -1275,6 +1275,8 @@ exec_emit_event(const char *stream, const char *raw)
 	Portal		portal;
 	DestReceiver *receiver;
 	int16		format;
+	RangeVar *streamrv;
+
 #ifdef PGXC
 
 	/*
@@ -1320,7 +1322,10 @@ exec_emit_event(const char *stream, const char *raw)
 	 */
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
-	querytree_list = decode_event(stream, raw);
+	/* The decoder needs to know about the stream's schema */
+	streamrv = makeRangeVar(NULL, strdup(stream), -1);
+
+	querytree_list = decode_event(streamrv, raw);
 
 	/*
 	 * We'll tell PortalRun it's a top-level command iff there's exactly one

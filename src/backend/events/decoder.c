@@ -4,49 +4,58 @@
 #include "rewrite/rewriteHandler.h"
 #include "events/decoder.h"
 #include "parser/parser.h"
+#include "utils/rel.h"
+#include "storage/lock.h"
+#include "access/heapam.h"
 
 
-const char *COLUMNS[3] = {
-		"data", "value", "number"
-};
-
-List *decode_event(char *stream, const char *raw)
+List *decode_event(RangeVar *stream, const char *raw)
 {
-	char *tok = strtok(strdup(raw), ",");
+	Relation streamrel = heap_openrv(stream, NoLock);
+	InsertStmt *stmt;
+	SelectStmt *select;
+	Query *q;
+
+	ResTarget *colname;
+	A_Const *colvalue;
+	ColumnRef *crefs;
 	List *values = NULL;
 	List *columns = NULL;
 	int i = 0;
+	char *tok = strtok(strdup(raw), ",");
+
 	while (tok != NULL)
 	{
-		ResTarget *col = makeNode(ResTarget);
-		col->name = COLUMNS[i++];
-		columns = lcons(col, columns);
+		if (i >= streamrel->rd_att->natts)
+		{
+			/* Ignore any extra fields in the tuple */
+			break;
+		}
+		colname = makeNode(ResTarget);
+		colname->name = streamrel->rd_att->attrs[i++]->attname.data;
+		columns = lcons(colname, columns);
 
-		A_Const *v = makeNode(A_Const);
-		v->val.type = T_String;
-		v->val.val.str = strdup(tok);
-		values = lcons(v, values);
+		colvalue = makeNode(A_Const);
+		colvalue->val.type = T_String;
+		colvalue->val.val.str = strdup(tok);
+		values = lcons(colvalue, values);
 		tok = strtok(NULL, ",");
 	}
 
-	ColumnRef *crefs;
+	relation_close(streamrel, NoLock);
 
 	crefs = makeNode(ColumnRef);
 	crefs->fields = columns;
-	List *cols = lcons(crefs, NULL);
 
-	InsertStmt *stmt = makeNode(InsertStmt);
-	stmt->relation = makeRangeVar(NULL, stream, -1);
-	stmt->cols = columns;
+	stmt = makeNode(InsertStmt);
+	stmt->relation = stream;
+	stmt->cols = lcons(crefs, NULL);
 
-	ListCell *lc;
-	ListCell *icols = list_head(stmt->cols);
-
-	SelectStmt *select = makeNode(SelectStmt);
+	select = makeNode(SelectStmt);
 	select->valuesLists = lcons(values, NULL);
 	stmt->selectStmt = (Node *)select;
 
-	Query *q = parse_analyze((Node *)stmt, "", NULL, 0);
+	q = parse_analyze((Node *)stmt, "", NULL, 0);
 
 	return QueryRewrite(q);
 }

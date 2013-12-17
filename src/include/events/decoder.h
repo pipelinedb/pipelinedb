@@ -19,4 +19,4 @@
 #include "nodes/makefuncs.h"
 
 // decoder struct with function pointer to decode
-List *decode_event(const char *stream, const char *raw);
+List *decode_event(RangeVar *stream, const char *raw);
