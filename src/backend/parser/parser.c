@@ -34,7 +34,6 @@
 List *
 raw_parser(const char *str)
 {
-	elog(LOG, "str=%s", str);
 	core_yyscan_t yyscanner;
 	base_yy_extra_type yyextra;
 	int			yyresult;
