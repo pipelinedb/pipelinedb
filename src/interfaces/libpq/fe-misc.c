@@ -82,9 +82,10 @@ PQlibVersion(void)
  * Returns 0 on success, EOF on error
  */
 int
-PQsendEvent(const char *data, size_t len, PGconn *conn)
+PQsendEvent(const char *stream, const char *data, size_t len, PGconn *conn)
 {
 	if (pqPutMsgStart('V', false, conn) != 0 ||
+			pqPuts(stream, conn) ||
 			pqPutInt(len, 4, conn) != 0 ||
 			pqPutMsgBytes(data, len, conn) != 0 ||
 			pqPutMsgEnd(conn) != 0 ||

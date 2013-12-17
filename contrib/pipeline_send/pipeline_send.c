@@ -8,7 +8,7 @@ static void
 usage(void)
 {
 	printf("Usage:\n\
-  pipeline_send <host> <database name> <user>\n");
+  pipeline_send <host> <database name> <user> <stream>\n");
 }
 
 
@@ -28,12 +28,13 @@ int main(int argc, char* argv[])
 	char *host;
 	char *dbname;
 	char *user;
+	char *stream;
 	char connectstr[64];
 	char *line = NULL;
 	PGconn *conn;
 	size_t size;
 
-	if (argc < 4)
+	if (argc < 5)
 	{
 		usage();
 		exit(1);
@@ -42,6 +43,7 @@ int main(int argc, char* argv[])
 	host = argv[1];
 	dbname = argv[2];
 	user = argv[3];
+	stream = argv[4];
 	sprintf(connectstr, "host='%s' dbname='%s' user='%s'", host, dbname, user);
 	conn = PQconnectdb(connectstr);
 	if (conn == NULL)
@@ -64,7 +66,7 @@ int main(int argc, char* argv[])
 	{
 		/* Trim \n */
 		line[strlen(line) - 1] = '\0';
-		if (PQsendEvent(line, (int)strlen(line), conn) != 0)
+		if (PQsendEvent(stream, line, (int)strlen(line), conn) != 0)
 		{
 			printf("Error sending %s\n", line);
 		}

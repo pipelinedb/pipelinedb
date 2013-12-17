@@ -1238,7 +1238,7 @@ exec_simple_query(const char *query_string)
  * transformed into a query resembling an INSERT, and inserted into the target stream.
  */
 static void
-exec_emit_event(const char *raw)
+exec_emit_event(const char *stream, const char *raw)
 {
 	CommandDest dest = whereToSendOutput;
 	MemoryContext oldcontext;
@@ -1267,27 +1267,6 @@ exec_emit_event(const char *raw)
 	 * will normally change current memory context.)
 	 */
 	start_xact_command();
-
-	/*
-	 * Switch to appropriate context for constructing parsetrees.
-	 */
-	oldcontext = MemoryContextSwitchTo(MessageContext);
-
-	querytree_list = decode_event(raw);
-
-	/*
-	 * Switch back to transaction context to enter the loop.
-	 */
-	MemoryContextSwitchTo(oldcontext);
-
-	/*
-	 * We'll tell PortalRun it's a top-level command iff there's exactly one
-	 * raw parsetree.  If more than one, it's effectively a transaction block
-	 * and we want PreventTransactionChain to reject unsafe commands. (Note:
-	 * we're assuming that query rewrite cannot add commands that are
-	 * significant to PreventTransactionChain.)
-	 */
-	isTopLevel = (list_length(querytree_list) == 1);
 
 	bool		snapshot_set = false;
 	const char *commandTag;
@@ -1341,15 +1320,16 @@ exec_emit_event(const char *raw)
 	 */
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
-	// List *events = decode(raw);
-	// ListCell *lc;
-	// foreach(lc, events)
-	// {
-	//   Event *event = (Event *)lc;
-	//   Query q = to_query(event);
-	//	 querytree_list = lcons(q, querytree_list);
-	//  }
-	querytree_list = decode_event(raw);
+	querytree_list = decode_event(stream, raw);
+
+	/*
+	 * We'll tell PortalRun it's a top-level command iff there's exactly one
+	 * raw parsetree.  If more than one, it's effectively a transaction block
+	 * and we want PreventTransactionChain to reject unsafe commands. (Note:
+	 * we're assuming that query rewrite cannot add commands that are
+	 * significant to PreventTransactionChain.)
+	 */
+	isTopLevel = (list_length(querytree_list) == 1);
 
 	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
 
@@ -4773,13 +4753,14 @@ PostgresMain(int argc, char *argv[], const char *username)
 #endif /* PGXC */
 			case 'V': /* Incoming event */
 				{
+					const char *stream = pq_getmsgstring(&input_message);
 					int len = pq_getmsgint(&input_message, 4);
 					const char *msgbytes = pq_getmsgbytes(&input_message, len);
 					pq_getmsgend(&input_message);
 
 					SetCurrentStatementStartTimestamp();
 
-					exec_emit_event(msgbytes);
+					exec_emit_event(stream, msgbytes);
 
 					send_ready_for_query = true;
 				}

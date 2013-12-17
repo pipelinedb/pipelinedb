@@ -3,64 +3,41 @@
 #include "postgres.h"
 #include "rewrite/rewriteHandler.h"
 #include "events/decoder.h"
+#include "parser/parser.h"
 
-/*
 
-	# Tuple tup = decode(decoder, raw)
+const char *COLUMNS[3] = {
+		"data", "value", "number"
+};
 
-	def decode(decoder, raw):
-		conversions = get_schema(table)
-		for each field, data in raw:
-		  transform = conversions[field]
-			tuple.add(field, transform(data))
-
-		return tuple
-
- */
-List *decode_event(const char *raw)
+List *decode_event(char *stream, const char *raw)
 {
-	ResTarget *resId = makeNode(ResTarget);
-	resId->name = "id";
-	resId->location = -1;
+	char *tok = strtok(strdup(raw), ",");
+	List *values = NULL;
+	List *columns = NULL;
+	int i = 0;
+	while (tok != NULL)
+	{
+		ResTarget *col = makeNode(ResTarget);
+		col->name = COLUMNS[i++];
+		columns = lcons(col, columns);
 
-	ResTarget *resData = makeNode(ResTarget);
-	resData->name = "data";
-	resData->location = -1;
+		A_Const *v = makeNode(A_Const);
+		v->val.type = T_String;
+		v->val.val.str = strdup(tok);
+		values = lcons(v, values);
+		tok = strtok(NULL, ",");
+	}
 
-	ResTarget *resValue = makeNode(ResTarget);
-	resValue->name = "value";
-	resValue->location = -1;
+	ColumnRef *crefs;
 
-	List *fields = NULL;//lcons(resId, NULL);
-	fields = lcons(resData, fields);
-	fields = lcons(resValue, fields);
-
-	ColumnRef *crefs = makeNode(ColumnRef);
-	crefs->fields = fields;
+	crefs = makeNode(ColumnRef);
+	crefs->fields = columns;
 	List *cols = lcons(crefs, NULL);
 
-	A_Const *i = makeNode(A_Const);
-	i->val.type = T_Integer;
-	i->val.val.ival = 12321313;
-	i->location = -1;
-
-	A_Const *d = makeNode(A_Const);
-	d->val.type = T_String;
-	d->val.val.str = "data!";
-	d->location = -1;
-
-	A_Const *v = makeNode(A_Const);
-	v->val.type = T_String;
-	v->val.val.str = "value!";
-	v->location = -1;
-
-	List *values = NULL;//lcons(i, NULL);
-	values = lcons(d, values);
-	values = lcons(v, values);
-
 	InsertStmt *stmt = makeNode(InsertStmt);
-	stmt->relation = makeRangeVar(NULL, "test", -1);
-	stmt->cols = fields;
+	stmt->relation = makeRangeVar(NULL, stream, -1);
+	stmt->cols = columns;
 
 	ListCell *lc;
 	ListCell *icols = list_head(stmt->cols);
