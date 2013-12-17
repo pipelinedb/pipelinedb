@@ -18,7 +18,6 @@ List *decode_event(RangeVar *stream, const char *raw)
 
 	ResTarget *colname;
 	A_Const *colvalue;
-	ColumnRef *crefs;
 	List *values = NULL;
 	List *columns = NULL;
 	int i = 0;
@@ -44,12 +43,9 @@ List *decode_event(RangeVar *stream, const char *raw)
 
 	relation_close(streamrel, NoLock);
 
-	crefs = makeNode(ColumnRef);
-	crefs->fields = columns;
-
 	stmt = makeNode(InsertStmt);
 	stmt->relation = stream;
-	stmt->cols = lcons(crefs, NULL);
+	stmt->cols = columns;
 
 	select = makeNode(SelectStmt);
 	select->valuesLists = lcons(values, NULL);
