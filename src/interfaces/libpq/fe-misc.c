@@ -93,7 +93,15 @@ PQsendEvent(const char *stream, const char *data, size_t len, PGconn *conn)
 	{
 		return 1;
 	}
+
 	conn->asyncStatus = PGASYNC_BUSY;
+
+	PGresult   *result;
+	while ((result = PQgetResult(conn)) != NULL)
+	{
+		if (conn->status == CONNECTION_BAD)
+			break;
+	}
 
 	return 0;
 }

@@ -1,5 +1,6 @@
 #include "postgres_fe.h"
 #include "libpq-fe.h"
+#include "libpq-int.h"
 
 
 static void usage(void);
@@ -31,7 +32,9 @@ int main(int argc, char* argv[])
 	char *stream;
 	char connectstr[64];
 	char *line = NULL;
+  int status = 0;
 	PGconn *conn;
+	PGresult *res;
 	size_t size;
 
 	if (argc < 5)
@@ -48,7 +51,7 @@ int main(int argc, char* argv[])
 	conn = PQconnectdb(connectstr);
 	if (conn == NULL)
 	{
-		printf("Could not connect\n");
+		printf("could not connect\n");
 		exit(1);
 	}
 	switch (PQstatus(conn))
@@ -56,25 +59,39 @@ int main(int argc, char* argv[])
 		case CONNECTION_OK:
 			break;
 		default:
-			printf("Error connecting to database\n");
+			printf("error connecting to database\n");
 			PQfinish(conn);
 			exit(1);
 	}
 
+  res = PQexec(conn, "BEGIN");
+  if (PQresultStatus(res) != PGRES_COMMAND_OK)
+  {
+  	printf("error beginning transaction\n");
+  	PQfinish(conn);
+  	PQclear(res);
+  	exit(1);
+  }
+
 	/* Read in event data from stdin. Each line is a separate event */
 	while (getline(&line, &size, stdin) > 0)
 	{
-		PQexec(conn, "BEGIN");
 		/* Trim \n */
 		line[strlen(line) - 1] = '\0';
 		if (PQsendEvent(stream, line, (int)strlen(line), conn) != 0)
 		{
-			printf("Error sending %s\n", line);
+			printf("error sending %s\n", line);
 		}
-		PQexec(conn, "COMMIT");
 	}
-	free(line);
-	PQfinish(conn);
+	res = PQexec(conn, "COMMIT");
+	if (PQresultStatus(res) != PGRES_COMMAND_OK)
+	{
+		printf("error committing transaction\n");
+		status = 1;
+	}
 
-	return 0;
+	PQfinish(conn);
+	free(line);
+
+	return status;
 }
