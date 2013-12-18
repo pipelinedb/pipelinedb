@@ -64,16 +64,16 @@ int main(int argc, char* argv[])
 	/* Read in event data from stdin. Each line is a separate event */
 	while (getline(&line, &size, stdin) > 0)
 	{
+		PQexec(conn, "BEGIN");
 		/* Trim \n */
 		line[strlen(line) - 1] = '\0';
 		if (PQsendEvent(stream, line, (int)strlen(line), conn) != 0)
 		{
 			printf("Error sending %s\n", line);
 		}
-
+		PQexec(conn, "COMMIT");
 	}
 	free(line);
-
 	PQfinish(conn);
 
 	return 0;
