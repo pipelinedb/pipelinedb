@@ -21,25 +21,27 @@ List *decode_event(RangeVar *stream, const char *raw)
 	List *values = NULL;
 	List *columns = NULL;
 	int i = 0;
-	char *tok = strtok(strdup(raw), ",");
+	char *tok;
+	char *str = strdup(raw);
 
-	while (tok != NULL)
+	while ((tok = strsep(&str, ",")) != NULL &&
+			i < streamrel->rd_att->natts)
 	{
-		if (i >= streamrel->rd_att->natts)
+		/* Ignore empty fields */
+		if (strlen(tok) > 0)
 		{
-			/* Ignore any extra fields in the tuple */
-			break;
-		}
-		colname = makeNode(ResTarget);
-		colname->name = streamrel->rd_att->attrs[i++]->attname.data;
-		columns = lcons(colname, columns);
+			colname = makeNode(ResTarget);
+			colname->name = streamrel->rd_att->attrs[i]->attname.data;
+			columns = lcons(colname, columns);
 
-		colvalue = makeNode(A_Const);
-		colvalue->val.type = T_String;
-		colvalue->val.val.str = strdup(tok);
-		values = lcons(colvalue, values);
-		tok = strtok(NULL, ",");
+			colvalue = makeNode(A_Const);
+			colvalue->val.type = T_String;
+			colvalue->val.val.str = strdup(tok);
+			values = lcons(colvalue, values);
+		}
+		i++;
 	}
+	free(str);
 
 	relation_close(streamrel, NoLock);
 
