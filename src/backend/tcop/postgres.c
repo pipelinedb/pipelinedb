@@ -1314,7 +1314,7 @@ exec_emit_event(const char *stream, const char *raw)
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
 	/* The decoder needs to know about the stream's schema */
-	streamrv = makeRangeVar(NULL, stream, -1);
+	streamrv = makeRangeVar(NULL, (char *)stream, -1);
 
 	querytree_list = decode_event(streamrv, raw);
 
