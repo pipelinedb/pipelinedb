@@ -24,6 +24,9 @@
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.424320842" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.c.compiler.base.2112967291" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.base">
+								<option id="gnu.c.compiler.option.preprocessor.def.symbols.2039299107" superClass="gnu.c.compiler.option.preprocessor.def.symbols" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="PGXC"/>
+								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1262281741" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.c.linker.base.73847380" name="GCC C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.base"/>
