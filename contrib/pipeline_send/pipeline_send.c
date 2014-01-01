@@ -47,7 +47,7 @@ int main(int argc, char* argv[])
 	dbname = argv[2];
 	user = argv[3];
 	stream = argv[4];
-	sprintf(connectstr, "host='%s' dbname='%s' user='%s'", host, dbname, user);
+	sprintf(connectstr, "host='%s' dbname='%s' user='%s' port=5431", host, dbname, user);
 	conn = PQconnectdb(connectstr);
 	if (conn == NULL)
 	{

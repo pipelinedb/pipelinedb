@@ -18,4 +18,4 @@
 #include "nodes/nodes.h"
 #include "nodes/makefuncs.h"
 
-List *decode_event(RangeVar *stream, const char *raw);
+void decode_event(Relation stream, const char *raw, HeapTuple *tuple);

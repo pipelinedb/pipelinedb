@@ -108,6 +108,11 @@ extern int	optreset;			/* might not be declared by system headers */
 #endif
 
 #include "events/decoder.h"
+#include "utils/rel.h"
+#include "storage/lock.h"
+#include "access/heapam.h"
+#include "utils/builtins.h"
+
 
 /* ----------------
  *		global variables
@@ -1240,36 +1245,14 @@ exec_simple_query(const char *query_string)
 static void
 exec_emit_event(const char *stream, const char *raw)
 {
-	CommandDest dest = whereToSendOutput;
-	MemoryContext oldcontext;
-	List	   *querytree_list;
-	bool		save_log_statement_stats = log_statement_stats;
-	bool		was_logged = false;
-	bool		isTopLevel;
-	char		msec_str[32];
+	HeapTuple tuple;
+	Relation streamrel;
 
 	pgstat_report_activity(STATE_RUNNING, raw);
 
 	TRACE_POSTGRESQL_QUERY_START(raw);
 
-	/*
-	 * We use save_log_statement_stats so ShowUsage doesn't report incorrect
-	 * results because ResetUsage wasn't called.
-	 */
-	if (save_log_statement_stats)
-		ResetUsage();
-
-	bool		snapshot_set = false;
-	const char *commandTag;
-	char		completionTag[COMPLETION_TAG_BUFSIZE];
-	List			 *plantree_list;
-	Portal		portal;
-	DestReceiver *receiver;
-	int16		format;
-	RangeVar *streamrv;
-
 #ifdef PGXC
-
 	/*
 	 * By default we do not want Datanodes or client Coordinators to contact GTM directly,
 	 * it should get this information passed down to it.
@@ -1278,173 +1261,17 @@ exec_emit_event(const char *stream, const char *raw)
 		SetForceXidFromGTM(false);
 #endif
 
-	commandTag = "EMIT";
-
-	set_ps_display(commandTag, false);
-
-	BeginCommand(commandTag, dest);
-
-	/*
-	 * If we are in an aborted transaction, reject all commands except
-	 * COMMIT/ABORT.  It is important that this test occur before we try
-	 * to do parse analysis, rewrite, or planning, since all those phases
-	 * try to do database accesses, which may fail in abort state. (It
-	 * might be safe to allow some additional utility commands in this
-	 * state, but not many...)
-	 */
-	if (IsAbortedTransactionBlockState())
-		ereport(ERROR,
-				(errcode(ERRCODE_IN_FAILED_SQL_TRANSACTION),
-				 errmsg("current transaction is aborted, "
-						"commands ignored until end of transaction block"),
-				 errdetail_abort()));
-
-	/* Make sure we are in a transaction command */
 	start_xact_command();
 
-	/* If we got a cancel signal in parsing or prior command, quit */
-	CHECK_FOR_INTERRUPTS();
+	streamrel = heap_openrv(makeRangeVar(NULL, (char *)stream, -1), NoLock);
+	decode_event(streamrel, raw, &tuple);
 
-	/*
-	 * OK to analyze, rewrite, and plan this query.
-	 *
-	 * Switch to appropriate context for constructing querytrees (again,
-	 * these must outlive the execution context).
-	 */
-	oldcontext = MemoryContextSwitchTo(MessageContext);
+	simple_heap_insert(streamrel, tuple);
+	heap_close(streamrel, NoLock);
 
-	/* The decoder needs to know about the stream's schema */
-	streamrv = makeRangeVar(NULL, (char *)stream, -1);
-
-	querytree_list = decode_event(streamrv, raw);
-
-	/*
-	 * We'll tell PortalRun it's a top-level command iff there's exactly one
-	 * raw parsetree.  If more than one, it's effectively a transaction block
-	 * and we want PreventTransactionChain to reject unsafe commands. (Note:
-	 * we're assuming that query rewrite cannot add commands that are
-	 * significant to PreventTransactionChain.)
-	 */
-	isTopLevel = (list_length(querytree_list) == 1);
-
-	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
-
-	/* If we got a cancel signal in analysis or planning, quit */
-	CHECK_FOR_INTERRUPTS();
-
-	/*
-	 * Create unnamed portal to run the query or queries in. If there
-	 * already is one, silently drop it.
-	 */
-	portal = CreatePortal("", true, true);
-	/* Don't display the portal in pg_cursors */
-	portal->visible = false;
-
-	/*
-	 * We don't have to copy anything into the portal, because everything
-	 * we are passing here is in MessageContext, which will outlive the
-	 * portal anyway.
-	 */
-	PortalDefineQuery(portal,
-						NULL,
-						raw,
-						commandTag,
-						plantree_list,
-						NULL);
-
-	/*
-	 * Start the portal.
-	 *
-	 * If we took a snapshot for parsing/planning, the portal may be able
-	 * to reuse it for the execution phase.  Currently, this will only
-	 * happen in PORTAL_ONE_SELECT mode.  But even if PortalStart doesn't
-	 * end up being able to do this, keeping the parse/plan snapshot
-	 * around until after we start the portal doesn't cost much.
-	 */
-	PortalStart(portal, NULL, 0, snapshot_set);
-
-	/* Done with the snapshot used for parsing/planning */
-	if (snapshot_set)
-		PopActiveSnapshot();
-
-	/*
-	 * Select the appropriate output format: text unless we are doing a
-	 * FETCH from a binary cursor.	(Pretty grotty to have to do this here
-	 * --- but it avoids grottiness in other places.  Ah, the joys of
-	 * backward compatibility...)
-	 */
-	format = 0;				/* TEXT is default */
-	PortalSetResultFormat(portal, 1, &format);
-
-	/*
-	 * Now we can create the destination receiver object.
-	 */
-	receiver = CreateDestReceiver(dest);
-	if (dest == DestRemote)
-		SetRemoteDestReceiverParams(receiver, portal);
-
-	/*
-	 * Switch back to transaction context for execution.
-	 */
-	MemoryContextSwitchTo(oldcontext);
-
-	/*
-	 * Run the portal to completion, and then drop it (and the receiver).
-	 */
-	(void) PortalRun(portal,
-					 FETCH_ALL,
-					 isTopLevel,
-					 receiver,
-					 receiver,
-					 completionTag);
-
-	(*receiver->rDestroy) (receiver);
-
-	PortalDrop(portal, false);
-
-	/*
-	 * We need a CommandCounterIncrement after every query, except
-	 * those that start or end a transaction block.
-	 */
-	CommandCounterIncrement();
-
-	/*
-	 * Tell client that we're done with this query.  Note we emit exactly
-	 * one EndCommand report for each raw parsetree, thus one for each SQL
-	 * command the client sent, regardless of rewriting. (But a command
-	 * aborted by error will not send an EndCommand report at all.)
-	 */
-	EndCommand(completionTag, dest);
-
-	/*
-	 * Close down transaction statement, if one is open.
-	 */
 	finish_xact_command();
 
-	/*
-	 * Emit duration logging if appropriate.
-	 */
-	switch (check_log_duration(msec_str, was_logged))
-	{
-		case 1:
-			ereport(LOG,
-					(errmsg("duration: %s ms", msec_str),
-					 errhidestmt(true)));
-			break;
-		case 2:
-			ereport(LOG,
-					(errmsg("duration: %s ms  statement: %s",
-							msec_str, raw),
-					 errhidestmt(true)));
-			break;
-	}
-
-	if (save_log_statement_stats)
-		ShowUsage("QUERY STATISTICS");
-
-	TRACE_POSTGRESQL_QUERY_DONE(query_string);
-
-	debug_query_string = NULL;
+	TRACE_POSTGRESQL_QUERY_DONE(raw);
 }
 
 /*
@@ -4429,7 +4256,6 @@ PostgresMain(int argc, char *argv[], const char *username)
 					pq_getmsgend(&input_message);
 
 					exec_simple_query(query_string);
-
 					send_ready_for_query = true;
 				}
 				break;
