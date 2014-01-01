@@ -1261,15 +1261,11 @@ exec_emit_event(const char *stream, const char *raw)
 		SetForceXidFromGTM(false);
 #endif
 
-	start_xact_command();
-
 	streamrel = heap_openrv(makeRangeVar(NULL, (char *)stream, -1), NoLock);
 	decode_event(streamrel, raw, &tuple);
 
 	simple_heap_insert(streamrel, tuple);
 	heap_close(streamrel, NoLock);
-
-	finish_xact_command();
 
 	TRACE_POSTGRESQL_QUERY_DONE(raw);
 }
