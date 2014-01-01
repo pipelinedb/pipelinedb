@@ -1,3 +1,4 @@
+#include <time.h>
 #include "postgres_fe.h"
 #include "libpq-fe.h"
 #include "libpq-int.h"
@@ -9,7 +10,7 @@ static void
 usage(void)
 {
 	printf("Usage:\n\
-  pipeline_send <host> <database name> <user> <stream>\n");
+  pipeline_send <host> <port> <database name> <user> <stream>\n");
 }
 
 
@@ -30,24 +31,33 @@ int main(int argc, char* argv[])
 	char *dbname;
 	char *user;
 	char *stream;
+	char *port;
 	char connectstr[64];
 	char *line = NULL;
   int status = 0;
+	int bytes = 0;
+	int len = 0;
+	int events = 0;
+	float eps;
+	float bps;
+	float elapsed;
 	PGconn *conn;
 	PGresult *res;
 	size_t size;
+	clock_t start;
 
-	if (argc < 5)
+	if (argc < 6)
 	{
 		usage();
 		exit(1);
 	}
 
 	host = argv[1];
-	dbname = argv[2];
-	user = argv[3];
-	stream = argv[4];
-	sprintf(connectstr, "host='%s' dbname='%s' user='%s' port=5431", host, dbname, user);
+	port = argv[2];
+	dbname = argv[3];
+	user = argv[4];
+	stream = argv[5];
+	sprintf(connectstr, "host='%s' dbname='%s' user='%s' port=%s", host, dbname, user, port);
 	conn = PQconnectdb(connectstr);
 	if (conn == NULL)
 	{
@@ -74,21 +84,33 @@ int main(int argc, char* argv[])
   }
 
 	/* Read in event data from stdin. Each line is a separate event */
+  start = clock();
 	while (getline(&line, &size, stdin) > 0)
 	{
+		len = strlen(line);
+		bytes += len;
+		events++;
+
 		/* Trim \n */
-		line[strlen(line) - 1] = '\0';
-		if (PQsendEvent(stream, line, (int)strlen(line), conn) != 0)
+		line[len - 1] = '\0';
+		if (PQsendEvent(stream, line, len, conn) != 0)
 		{
 			printf("error sending %s\n", line);
 		}
 	}
+	elapsed = (clock() - start) / (float)CLOCKS_PER_SEC;
 	res = PQexec(conn, "COMMIT");
 	if (PQresultStatus(res) != PGRES_COMMAND_OK)
 	{
 		printf("error committing transaction\n");
 		status = 1;
 	}
+	eps = events / elapsed;
+	bps = bytes / elapsed;
+
+	printf("%d events, %d bytes in %.2f ms\n", events, bytes, elapsed);
+	printf("%.2f events/s\n", eps);
+	printf("%.2f bytes/s\n", bps);
 
 	PQfinish(conn);
 	free(line);
