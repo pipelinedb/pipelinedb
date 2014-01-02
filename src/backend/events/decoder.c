@@ -24,14 +24,8 @@ void decode_event(Relation stream, const char *raw, HeapTuple *tuple)
 	while ((tok = strsep(&str, ",")) != NULL &&
 			i < stream->rd_att->natts)
 	{
-		/* Ignore empty fields */
-		if (strlen(tok) > 0)
-		{
-			values[i] = strdup(tok);
-		} else {
-			values[i] = NULL;
-		}
-		i++;
+		/* Consider empty fields NULL */
+		values[i++] = strlen(tok) > 0 ? strdup(tok) : NULL;
 	}
 	free(str);
 
