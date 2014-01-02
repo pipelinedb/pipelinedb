@@ -9,13 +9,8 @@
  * src/events/decoder.h
  *-----------------------------------------------------------------------------
 */
-#include "postgres.h"
+#include "access/htup.h"
+#include "utils/rel.h"
 
-#include "parser/analyze.h"
-#include "parser/parser.h"
-#include "parser/parse_type.h"
-
-#include "nodes/nodes.h"
-#include "nodes/makefuncs.h"
 
 void decode_event(Relation stream, const char *raw, HeapTuple *tuple);
