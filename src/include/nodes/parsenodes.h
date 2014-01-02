@@ -1484,7 +1484,6 @@ typedef struct CreateStmt
 	OnCommitAction oncommit;	/* what do we do at COMMIT? */
 	char	   *tablespacename; /* table space to use, or NULL */
 	bool		if_not_exists;	/* just do nothing if it already exists? */
-	bool		is_stream; /* is it a stream relation? */
 #ifdef PGXC
 	DistributeBy *distributeby; 	/* distribution to use, or NULL */
 	PGXCSubCluster *subcluster;		/* subcluster of table */
