@@ -606,6 +606,7 @@ GetNewRelFileNode(Oid reltablespace, Relation pg_class, char relpersistence)
 			break;
 		case RELPERSISTENCE_UNLOGGED:
 		case RELPERSISTENCE_PERMANENT:
+		case RELPERSISTENCE_STREAMING:
 			backend = InvalidBackendId;
 			break;
 		default:

@@ -113,6 +113,7 @@ RelationCreateStorage(RelFileNode rnode, char relpersistence)
 			backend = InvalidBackendId;
 			needs_wal = false;
 			break;
+		case RELPERSISTENCE_STREAMING:
 		case RELPERSISTENCE_PERMANENT:
 			backend = InvalidBackendId;
 			needs_wal = true;

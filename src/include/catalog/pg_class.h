@@ -151,6 +151,7 @@ DESCR("");
 
 #define		  RELPERSISTENCE_PERMANENT	'p'		/* regular table */
 #define		  RELPERSISTENCE_UNLOGGED	'u'		/* unlogged permanent table */
+#define		  RELPERSISTENCE_STREAMING	's'		/* streaming table */
 #define		  RELPERSISTENCE_TEMP		't'		/* temporary table */
 
 #endif   /* PG_CLASS_H */

@@ -574,7 +574,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 	SAVEPOINT SCHEMA SCROLL SEARCH SECOND_P SECURITY SELECT SEQUENCE SEQUENCES
 	SERIALIZABLE SERVER SESSION SESSION_USER SET SETOF SHARE
 	SHOW SIMILAR SIMPLE SMALLINT SNAPSHOT SOME STABLE STANDALONE_P START
-	STATEMENT STATISTICS STDIN STDOUT STORAGE STRICT_P STRIP_P SUBSTRING
+	STATEMENT STATISTICS STDIN STDOUT STORAGE STREAMING STRICT_P STRIP_P SUBSTRING
 	SYMMETRIC SYSID SYSTEM_P
 
 	TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TEXT_P THEN TIME TIMESTAMP
@@ -2498,7 +2498,7 @@ copy_generic_opt_arg_list_item:
 /*****************************************************************************
  *
  *		QUERY :
- *				CREATE TABLE relname
+ *				CREATE [ STREAMING ] TABLE relname
  *
  *		PGXC-related extensions:
  *		1) Distribution type of a table:
@@ -2506,6 +2506,11 @@ copy_generic_opt_arg_list_item:
  *							REPLICATION | ROUNDROBIN )
  *		2) Subcluster for table
  *			TO ( GROUP groupname | NODE nodename1,...,nodenameN )
+ *
+ *		PipelineDB-related extensions:
+ *		1) CREATE STREAMING TABLE streamname - This essentially creates a regular 
+ *      table, but marks it as a stream relation. This allows us to enforce
+ *		  append-only mechanics and more aggresive buffer caching.
  *
  *****************************************************************************/
 
@@ -2646,6 +2651,7 @@ OptTemp:	TEMPORARY					{ $$ = RELPERSISTENCE_TEMP; }
 							 parser_errposition(@1)));
 					$$ = RELPERSISTENCE_TEMP;
 				}
+			| STREAMING					{ $$ = RELPERSISTENCE_STREAMING; }
 			| UNLOGGED					{ $$ = RELPERSISTENCE_UNLOGGED; }
 			| /*EMPTY*/					{ $$ = RELPERSISTENCE_PERMANENT; }
 		;
@@ -9365,6 +9371,11 @@ OptTempTableName:
 					$$ = $4;
 					$$->relpersistence = RELPERSISTENCE_TEMP;
 				}
+			| STREAMING qualified_name
+				{
+					$$ = $2;
+					$$->relpersistence = RELPERSISTENCE_STREAMING;
+				}
 			| UNLOGGED opt_table qualified_name
 				{
 					$$ = $3;
@@ -12852,6 +12863,7 @@ unreserved_keyword:
 			| STDIN
 			| STDOUT
 			| STORAGE
+			| STREAMING
 			| STRICT_P
 			| STRIP_P
 			| SYSID

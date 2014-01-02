@@ -635,6 +635,7 @@ RangeVarAdjustRelationPersistence(RangeVar *newRelation, Oid nspid)
 			}
 			break;
 		case RELPERSISTENCE_PERMANENT:
+		case RELPERSISTENCE_STREAMING:
 			if (isTempOrToastNamespace(nspid))
 				newRelation->relpersistence = RELPERSISTENCE_TEMP;
 			else if (isAnyTempNamespace(nspid))
