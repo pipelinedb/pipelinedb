@@ -8,21 +8,18 @@
 #include "storage/lock.h"
 #include "access/heapam.h"
 #include "utils/builtins.h"
+#include "funcapi.h"
 
 
 void decode_event(Relation stream, const char *raw, HeapTuple *tuple)
 {
 	TupleDesc	streamdesc = RelationGetDescr(stream);
-
-	Datum record[streamdesc->natts];
-	bool nulls[streamdesc->natts];
+	AttInMetadata *meta = TupleDescGetAttInMetadata(streamdesc);
 
 	int i = 0;
 	char *tok;
 	char *str = strdup(raw);
-
-	MemSet(record, 0, sizeof(record));
-	MemSet(nulls, false, sizeof(nulls));
+	char *values[streamdesc->natts];
 
 	while ((tok = strsep(&str, ",")) != NULL &&
 			i < stream->rd_att->natts)
@@ -30,13 +27,13 @@ void decode_event(Relation stream, const char *raw, HeapTuple *tuple)
 		/* Ignore empty fields */
 		if (strlen(tok) > 0)
 		{
-			record[i] = CStringGetTextDatum(strdup(tok));
+			values[i] = strdup(tok);
 		} else {
-			record[i] = Int32GetDatum(42);
+			values[i] = NULL;
 		}
 		i++;
 	}
 	free(str);
 
-	*tuple = heap_form_tuple(streamdesc, record, nulls);
+	*tuple = BuildTupleFromCStrings(meta, values);
 }
