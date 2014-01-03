@@ -108,7 +108,7 @@ int main(int argc, char* argv[])
 	eps = events / elapsed;
 	bps = bytes / elapsed;
 
-	printf("%d events, %d bytes in %.2f ms\n", events, bytes, elapsed);
+	printf("%d events, %d bytes in %.2f s\n", events, bytes, elapsed);
 	printf("%.2f events/s\n", eps);
 	printf("%.2f bytes/s\n", bps);
 

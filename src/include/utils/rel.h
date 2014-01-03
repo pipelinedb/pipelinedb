@@ -360,7 +360,8 @@ typedef struct StdRdOptions
  *		True if relation needs WAL.
  */
 #define RelationNeedsWAL(relation) \
-	((relation)->rd_rel->relpersistence == RELPERSISTENCE_PERMANENT)
+	((relation)->rd_rel->relpersistence == RELPERSISTENCE_PERMANENT || \
+			(relation)->rd_rel->relpersistence == RELPERSISTENCE_STREAMING)
 
 /*
  * RelationUsesLocalBuffers
