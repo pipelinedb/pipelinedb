@@ -15,15 +15,7 @@ usage(void)
 
 
 /*
- * Sends raw events to the backend. Message format is:
- *
- * Event (F)
- *   Byte1('V')
- *       Identifies the message as an event.
- *   Int32
- *       Specifies the number of bytes in the raw payload
- *   ByteN
- *       Raw payload
+ * Sends raw events to the backend
  */
 int main(int argc, char* argv[])
 {
