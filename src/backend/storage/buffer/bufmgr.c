@@ -92,7 +92,7 @@ static bool PinBuffer(volatile BufferDesc *buf, BufferAccessStrategy strategy);
 static void PinBuffer_Locked(volatile BufferDesc *buf);
 static void UnpinBuffer(volatile BufferDesc *buf, bool fixOwner);
 static void BufferSync(int flags);
-static int	SyncOneBuffer(int buf_id, bool skip_recently_used);
+static int	SyncOneBuffer(int buf_id, bool skip_recently_used, bool skip_streams);
 static void WaitIO(volatile BufferDesc *buf);
 static bool StartBufferIO(volatile BufferDesc *buf, bool forInput);
 static void TerminateBufferIO(volatile BufferDesc *buf, bool clear_dirty,
@@ -105,7 +105,7 @@ static volatile BufferDesc *BufferAlloc(SMgrRelation smgr,
 			BlockNumber blockNum,
 			BufferAccessStrategy strategy,
 			bool *foundPtr);
-static void FlushBuffer(volatile BufferDesc *buf, SMgrRelation reln);
+static void FlushBuffer(volatile BufferDesc *buf, SMgrRelation reln, bool skip_streams);
 static void AtProcExit_Buffers(int code, Datum arg);
 
 
@@ -666,7 +666,7 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 												smgr->smgr_rnode.node.dbNode,
 											  smgr->smgr_rnode.node.relNode);
 
-				FlushBuffer(buf, NULL);
+				FlushBuffer(buf, NULL, false);
 				LWLockRelease(buf->content_lock);
 
 				TRACE_POSTGRESQL_BUFFER_WRITE_DIRTY_DONE(forkNum, blockNum,
@@ -1200,6 +1200,7 @@ BufferSync(int flags)
 	int			num_to_write;
 	int			num_written;
 	int			mask = BM_DIRTY;
+	bool 		skip_streams = !(flags & CHECKPOINT_IS_SHUTDOWN);
 
 	/* Make sure we can handle the pin inside SyncOneBuffer */
 	ResourceOwnerEnlargeBuffers(CurrentResourceOwner);
@@ -1281,7 +1282,7 @@ BufferSync(int flags)
 		 */
 		if (bufHdr->flags & BM_CHECKPOINT_NEEDED)
 		{
-			if (SyncOneBuffer(buf_id, false) & BUF_WRITTEN)
+			if (SyncOneBuffer(buf_id, false, skip_streams) & BUF_WRITTEN)
 			{
 				TRACE_POSTGRESQL_BUFFER_SYNC_WRITTEN(buf_id);
 				BgWriterStats.m_buf_written_checkpoints++;
@@ -1558,7 +1559,7 @@ BgBufferSync(void)
 	/* Execute the LRU scan */
 	while (num_to_scan > 0 && reusable_buffers < upcoming_alloc_est)
 	{
-		int			buffer_state = SyncOneBuffer(next_to_clean, true);
+		int			buffer_state = SyncOneBuffer(next_to_clean, true, true);
 
 		if (++next_to_clean >= NBuffers)
 		{
@@ -1635,11 +1636,10 @@ BgBufferSync(void)
  * Note: caller must have done ResourceOwnerEnlargeBuffers.
  */
 static int
-SyncOneBuffer(int buf_id, bool skip_recently_used)
+SyncOneBuffer(int buf_id, bool skip_recently_used, bool skip_streams)
 {
 	volatile BufferDesc *bufHdr = &BufferDescriptors[buf_id];
 	int			result = 0;
-
 	/*
 	 * Check whether buffer needs writing.
 	 *
@@ -1650,6 +1650,17 @@ SyncOneBuffer(int buf_id, bool skip_recently_used)
 	 * upcoming changes and so we are not required to write such dirty buffer.
 	 */
 	LockBufHdr(bufHdr);
+
+	/*
+	 * Never write stream buffers to disk here. If the total stream buffer size
+	 * is ever exceeded, some of its buffers will be flushed
+	 * by BgBufferSync() very soon
+	 */
+	if ((bufHdr->flags & BM_STREAMING) && skip_streams)
+	{
+		UnlockBufHdr(bufHdr);
+		return result;
+	}
 
 	if (bufHdr->refcount == 0 && bufHdr->usage_count == 0)
 		result |= BUF_REUSABLE;
@@ -1667,6 +1678,7 @@ SyncOneBuffer(int buf_id, bool skip_recently_used)
 		return result;
 	}
 
+
 	/*
 	 * Pin it, share-lock it, write it.  (FlushBuffer will do nothing if the
 	 * buffer is clean by the time we've locked it.)
@@ -1674,7 +1686,7 @@ SyncOneBuffer(int buf_id, bool skip_recently_used)
 	PinBuffer_Locked(bufHdr);
 	LWLockAcquire(bufHdr->content_lock, LW_SHARED);
 
-	FlushBuffer(bufHdr, NULL);
+	FlushBuffer(bufHdr, NULL, false);
 
 	LWLockRelease(bufHdr->content_lock);
 	UnpinBuffer(bufHdr, true);
@@ -1888,7 +1900,7 @@ BufferGetTag(Buffer buffer, RelFileNode *rnode, ForkNumber *forknum,
  * if any.
  */
 static void
-FlushBuffer(volatile BufferDesc *buf, SMgrRelation reln)
+FlushBuffer(volatile BufferDesc *buf, SMgrRelation reln, bool skip_streams)
 {
 	XLogRecPtr	recptr;
 	ErrorContextCallback errcontext;
@@ -2303,7 +2315,7 @@ FlushRelationBuffers(Relation rel)
 		{
 			PinBuffer_Locked(bufHdr);
 			LWLockAcquire(bufHdr->content_lock, LW_SHARED);
-			FlushBuffer(bufHdr, rel->rd_smgr);
+			FlushBuffer(bufHdr, rel->rd_smgr, false);
 			LWLockRelease(bufHdr->content_lock);
 			UnpinBuffer(bufHdr, true);
 		}
@@ -2353,7 +2365,7 @@ FlushDatabaseBuffers(Oid dbid)
 		{
 			PinBuffer_Locked(bufHdr);
 			LWLockAcquire(bufHdr->content_lock, LW_SHARED);
-			FlushBuffer(bufHdr, NULL);
+			FlushBuffer(bufHdr, NULL, false);
 			LWLockRelease(bufHdr->content_lock);
 			UnpinBuffer(bufHdr, true);
 		}
