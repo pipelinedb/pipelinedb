@@ -819,9 +819,11 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 	 * 1 so that the buffer can survive one clock-sweep pass.)
 	 */
 	buf->tag = newTag;
-	buf->flags &= ~(BM_VALID | BM_DIRTY | BM_JUST_DIRTIED | BM_CHECKPOINT_NEEDED | BM_IO_ERROR | BM_PERMANENT);
+	buf->flags &= ~(BM_VALID | BM_DIRTY | BM_JUST_DIRTIED | BM_CHECKPOINT_NEEDED | BM_IO_ERROR | BM_PERMANENT | BM_STREAMING);
 	if (relpersistence == RELPERSISTENCE_PERMANENT)
 		buf->flags |= BM_TAG_VALID | BM_PERMANENT;
+	else if (relpersistence == RELPERSISTENCE_STREAMING)
+		buf->flags |= BM_TAG_VALID | BM_STREAMING;
 	else
 		buf->flags |= BM_TAG_VALID;
 	buf->usage_count = 1;
