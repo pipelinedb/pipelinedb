@@ -61,7 +61,7 @@
 /* Bits in SyncOneBuffer's return value */
 #define BUF_WRITTEN				0x01
 #define BUF_REUSABLE			0x02
-#define BUF_STREAMING			0x03
+#define BUF_STREAMING			0x04
 
 
 /* GUC variables */
@@ -76,11 +76,6 @@ bool		track_io_timing = false;
  * effective_io_concurrency.  Zero means "never prefetch".
  */
 int			target_prefetch_pages = 0;
-
-/*
- * How many buffers are currently stream buffers
- */
-int 		stream_buffers = 0;
 
 /* local state for StartBufferIO and related functions */
 static volatile BufferDesc *InProgressBuf = NULL;
@@ -113,7 +108,7 @@ static volatile BufferDesc *BufferAlloc(SMgrRelation smgr,
 			bool *foundPtr);
 static void FlushBuffer(volatile BufferDesc *buf, SMgrRelation reln, bool skip_streams);
 static void AtProcExit_Buffers(int code, Datum arg);
-
+static int GetNumStreamBuffers(void);
 
 /*
  * PrefetchBuffer -- initiate asynchronous read of a block of a relation
@@ -829,10 +824,7 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 	if (relpersistence == RELPERSISTENCE_PERMANENT)
 		buf->flags |= BM_TAG_VALID | BM_PERMANENT;
 	else if (relpersistence == RELPERSISTENCE_STREAMING)
-	{
 		buf->flags |= BM_TAG_VALID | BM_STREAMING;
-		stream_buffers++;
-	}
 	else
 		buf->flags |= BM_TAG_VALID;
 	buf->usage_count = 1;
@@ -1568,9 +1560,16 @@ BgBufferSync(void)
 	/* Execute the LRU scan */
 	while (num_to_scan > 0 && reusable_buffers < upcoming_alloc_est)
 	{
-		/* Free stream buffers only if the stream buffer is too full */
-		bool skip_streams = (double)stream_buffers / NBuffers >= StreamBufferMaxFill;
+		/*
+		 * We only start flushing stream buffers if we're over StreamBufferMaxFill
+		 * Note that this doesn't mean we'll get down below the threshold, it just
+		 * means that stream buffers become flushable at this point. We still want
+		 * to keep them in memory if possible.
+		 * */
+		double stream_fill = (double)GetNumStreamBuffers() / NBuffers;
+		bool skip_streams = stream_fill < StreamBufferMaxFill;
 		int	buffer_state = SyncOneBuffer(next_to_clean, true, skip_streams);
+
 		if (++next_to_clean >= NBuffers)
 		{
 			next_to_clean = 0;
@@ -1581,10 +1580,6 @@ BgBufferSync(void)
 		if (buffer_state & BUF_WRITTEN)
 		{
 			reusable_buffers++;
-			if (buffer_state & BUF_STREAMING)
-			{
-				stream_buffers--;
-			}
 			if (++num_written >= bgwriter_lru_maxpages)
 			{
 				BgWriterStats.m_maxwritten_clean++;
@@ -1632,6 +1627,35 @@ BgBufferSync(void)
 	/* Return true if OK to hibernate */
 	return (bufs_to_lap == 0 && recent_alloc == 0);
 }
+
+/*
+ * GetNumStreamBuffers
+ *
+ * Returns the current number of stream buffers being used.
+ * This is useful for determining if the stream buffer pool
+ * is at StreamBufferMaxFill.
+ *
+ * Iterating over all buffers is a braindead way to do this,
+ * but keeping a running count is significantly more complicated
+ * since multiple processes can affect the number of stream buffers
+ * being used.
+ */
+static int
+GetNumStreamBuffers(void)
+{
+	int i;
+	int total = 0;
+	for (i=0; i<NBuffers; i++)
+	{
+		BufferDesc *bufHdr = &BufferDescriptors[i];
+		if (bufHdr->flags & BM_STREAMING)
+		{
+			total++;
+		}
+	}
+	return total;
+}
+
 
 /*
  * SyncOneBuffer -- process a single buffer during syncing.
