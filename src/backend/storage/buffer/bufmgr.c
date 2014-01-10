@@ -1565,7 +1565,7 @@ BgBufferSync(void)
 		 * Note that this doesn't mean we'll get down below the threshold, it just
 		 * means that stream buffers become flushable at this point. We still want
 		 * to keep them in memory if possible.
-		 * */
+		 */
 		double stream_fill = (double)GetNumStreamBuffers() / NBuffers;
 		bool skip_streams = stream_fill < StreamBufferMaxFill;
 		int	buffer_state = SyncOneBuffer(next_to_clean, true, skip_streams);
