@@ -273,12 +273,14 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	/*
 	 * Postprocess constraints that give rise to index definitions.
 	 */
-	transformIndexConstraints(&cxt);
+	if (stmt->relation->relpersistence != RELPERSISTENCE_STREAMING)
+		transformIndexConstraints(&cxt);
 
 	/*
 	 * Postprocess foreign-key constraints.
 	 */
-	transformFKConstraints(&cxt, true, false);
+	if (stmt->relation->relpersistence != RELPERSISTENCE_STREAMING)
+		transformFKConstraints(&cxt, true, false);
 
 	/*
 	 * Output results.
