@@ -1561,7 +1561,7 @@ BgBufferSync(void)
 	while (num_to_scan > 0 && reusable_buffers < upcoming_alloc_est)
 	{
 		/*
-		 * We only start flushing stream buffers if we're over StreamBufferMaxFill
+		 * We only start flushing stream buffers if we're over StreamBufferMaxFill.
 		 * Note that this doesn't mean we'll get down below the threshold, it just
 		 * means that stream buffers become flushable at this point. We still want
 		 * to keep them in memory if possible.
