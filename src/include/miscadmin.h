@@ -155,6 +155,8 @@ extern char pkglib_path[];
 extern char postgres_exec_path[];
 #endif
 
+extern double StreamBufferMaxFill;
+
 /*
  * done in storage/backendid.h for now.
  *

@@ -125,6 +125,8 @@ bool		VacuumCostActive = false;
 
 int			GinFuzzySearchLimit = 0;
 
+double 	StreamBufferMaxFill = 0.0;
+
 /*
  * Hook on object accesses.  This is intended as infrastructure for security
  * and logging plugins.

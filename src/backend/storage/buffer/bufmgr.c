@@ -61,6 +61,7 @@
 /* Bits in SyncOneBuffer's return value */
 #define BUF_WRITTEN				0x01
 #define BUF_REUSABLE			0x02
+#define BUF_STREAMING			0x03
 
 
 /* GUC variables */
@@ -75,6 +76,11 @@ bool		track_io_timing = false;
  * effective_io_concurrency.  Zero means "never prefetch".
  */
 int			target_prefetch_pages = 0;
+
+/*
+ * How many buffers are currently stream buffers
+ */
+int 		stream_buffers = 0;
 
 /* local state for StartBufferIO and related functions */
 static volatile BufferDesc *InProgressBuf = NULL;
@@ -823,7 +829,10 @@ BufferAlloc(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 	if (relpersistence == RELPERSISTENCE_PERMANENT)
 		buf->flags |= BM_TAG_VALID | BM_PERMANENT;
 	else if (relpersistence == RELPERSISTENCE_STREAMING)
+	{
 		buf->flags |= BM_TAG_VALID | BM_STREAMING;
+		stream_buffers++;
+	}
 	else
 		buf->flags |= BM_TAG_VALID;
 	buf->usage_count = 1;
@@ -1559,8 +1568,9 @@ BgBufferSync(void)
 	/* Execute the LRU scan */
 	while (num_to_scan > 0 && reusable_buffers < upcoming_alloc_est)
 	{
-		int			buffer_state = SyncOneBuffer(next_to_clean, true, true);
-
+		/* Free stream buffers only if the stream buffer is too full */
+		bool skip_streams = (double)stream_buffers / NBuffers >= StreamBufferMaxFill;
+		int	buffer_state = SyncOneBuffer(next_to_clean, true, skip_streams);
 		if (++next_to_clean >= NBuffers)
 		{
 			next_to_clean = 0;
@@ -1571,6 +1581,10 @@ BgBufferSync(void)
 		if (buffer_state & BUF_WRITTEN)
 		{
 			reusable_buffers++;
+			if (buffer_state & BUF_STREAMING)
+			{
+				stream_buffers--;
+			}
 			if (++num_written >= bgwriter_lru_maxpages)
 			{
 				BgWriterStats.m_maxwritten_clean++;
@@ -1651,17 +1665,6 @@ SyncOneBuffer(int buf_id, bool skip_recently_used, bool skip_streams)
 	 */
 	LockBufHdr(bufHdr);
 
-	/*
-	 * Never write stream buffers to disk here. If the total stream buffer size
-	 * is ever exceeded, some of its buffers will be flushed
-	 * by BgBufferSync() very soon
-	 */
-	if ((bufHdr->flags & BM_STREAMING) && skip_streams)
-	{
-		UnlockBufHdr(bufHdr);
-		return result;
-	}
-
 	if (bufHdr->refcount == 0 && bufHdr->usage_count == 0)
 		result |= BUF_REUSABLE;
 	else if (skip_recently_used)
@@ -1671,13 +1674,29 @@ SyncOneBuffer(int buf_id, bool skip_recently_used, bool skip_streams)
 		return result;
 	}
 
+	/*
+	 * Never write stream buffers to disk here. If the total stream buffer size
+	 * is ever exceeded, some of its buffers will be flushed
+	 * by BgBufferSync() very soon. It's important that this check comes
+	 * after the above check because we want to re-use stream buffers if they
+	 * aren't being used anymore.
+	 */
+	if (bufHdr->flags & BM_STREAMING)
+	{
+		result |= BUF_STREAMING;
+		if (skip_streams)
+		{
+			UnlockBufHdr(bufHdr);
+			return result;
+		}
+	}
+
 	if (!(bufHdr->flags & BM_VALID) || !(bufHdr->flags & BM_DIRTY))
 	{
 		/* It's clean, so nothing to do */
 		UnlockBufHdr(bufHdr);
 		return result;
 	}
-
 
 	/*
 	 * Pin it, share-lock it, write it.  (FlushBuffer will do nothing if the

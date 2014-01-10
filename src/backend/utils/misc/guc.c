@@ -2718,7 +2718,15 @@ static struct config_real ConfigureNamesReal[] =
 		0.5, 0.0, 1.0,
 		NULL, NULL, NULL
 	},
-
+	{
+		{"stream_buffer_max_fill", PGC_USERSET, DATA_NODES,
+			gettext_noop("Maximum per-datanode amount of memory stream tuples can occupy, as a percentage of shared_buffers"),
+			NULL
+		},
+		&StreamBufferMaxFill,
+		0.5, 0, 1.0,
+		NULL, NULL, NULL
+	},
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, 0.0, 0.0, 0.0, NULL, NULL, NULL
@@ -3286,7 +3294,6 @@ static struct config_string ConfigureNamesString[] =
 		"",
 		check_application_name, assign_application_name, NULL
 	},
-
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, NULL, NULL, NULL, NULL
