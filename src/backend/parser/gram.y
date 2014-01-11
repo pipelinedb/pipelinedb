@@ -269,6 +269,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 %type <str>		foreign_server_version opt_foreign_server_version
 %type <str>		auth_ident
 %type <str>		opt_in_database
+%type <str>		registered_query_name
 
 %type <str>		OptSchemaName
 %type <list>	OptSchemaEltList
@@ -2497,7 +2498,7 @@ copy_generic_opt_arg_list_item:
 
 /*****************************************************************************
  *
- * REGISTER query
+ * REGISTER query AS registered_query_name
  *
  * PipelineDB
  *
@@ -2505,10 +2506,11 @@ copy_generic_opt_arg_list_item:
  *
  *****************************************************************************/
 
- RegisterStmt: REGISTER RegisterableStmt
+ RegisterStmt: REGISTER registered_query_name AS RegisterableStmt 
 				{
 					RegisterStmt *r = makeNode(RegisterStmt);
-					r->query = $2;
+					r->name = $2;
+					r->query = $4;
 					$$ = (Node *)r;
 				}
 
@@ -2518,6 +2520,11 @@ copy_generic_opt_arg_list_item:
 			| UpdateStmt
 			| DeleteStmt
 		;
+
+registered_query_name:
+			name { $$ = $1; }
+		;
+
 /*****************************************************************************
  *
  *		QUERY :

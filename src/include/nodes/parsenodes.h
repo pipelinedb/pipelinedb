@@ -2727,7 +2727,8 @@ typedef struct CleanConnStmt
 typedef struct RegisterStmt
 {
 	NodeTag		type;
-	Node	   *query;		/* query to register */
+	char		 *name; /* unique name to associate with the query */
+	Node	   *query; /* query to register */
 } RegisterStmt;
 
 #endif   /* PARSENODES_H */
