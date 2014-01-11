@@ -2044,6 +2044,9 @@ standard_ProcessUtility(Node *parsetree,
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true, EXEC_ON_COORDS, false);
 			break;
 #endif
+		case T_RegisterStmt:
+			elog(LOG, "REGISTERING");
+			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d",
 				 (int) nodeTag(parsetree));
@@ -3318,7 +3321,9 @@ CreateCommandTag(Node *parsetree)
 				}
 			}
 			break;
-
+		case T_RegisterStmt:
+			tag = "REGISTER";
+			break;
 		case T_ExecDirectStmt:
 			tag = "EXECUTE DIRECT";
 			break;

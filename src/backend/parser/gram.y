@@ -224,7 +224,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 		DropForeignServerStmt DropUserMappingStmt ExplainStmt ExecDirectStmt FetchStmt
 		GrantStmt GrantRoleStmt IndexStmt InsertStmt ListenStmt LoadStmt
 		LockStmt NotifyStmt ExplainableStmt PreparableStmt
-		CreateFunctionStmt AlterFunctionStmt ReindexStmt RemoveAggrStmt
+		CreateFunctionStmt AlterFunctionStmt RegisterStmt RegisterableStmt ReindexStmt RemoveAggrStmt
 		RemoveFuncStmt RemoveOperStmt RenameStmt RevokeStmt RevokeRoleStmt
 		RuleActionStmt RuleActionStmtOrEmpty RuleStmt
 		SecLabelStmt SelectStmt TransactionStmt TruncateStmt
@@ -566,7 +566,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 
 	QUOTE
 
-	RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REINDEX
+	RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REGISTER REINDEX
 	RELATIVE_P RELEASE RENAME REPEATABLE REPLACE REPLICA
 	RESET RESTART RESTRICT RETURNING RETURNS REVOKE RIGHT ROLE ROLLBACK
 	ROW ROWS RULE
@@ -795,6 +795,7 @@ stmt :
 			| NotifyStmt
 			| PrepareStmt
 			| ReassignOwnedStmt
+			| RegisterStmt
 			| ReindexStmt
 			| RemoveAggrStmt
 			| RemoveFuncStmt
@@ -2494,7 +2495,29 @@ copy_generic_opt_arg_list_item:
 			opt_boolean_or_string	{ $$ = (Node *) makeString($1); }
 		;
 
+/*****************************************************************************
+ *
+ * REGISTER query
+ *
+ * PipelineDB
+ *
+ * Registers a continuous query
+ *
+ *****************************************************************************/
 
+ RegisterStmt: REGISTER RegisterableStmt
+				{
+					RegisterStmt *r = makeNode(RegisterStmt);
+					r->query = $2;
+					$$ = (Node *)r;
+				}
+
+ RegisterableStmt:
+			SelectStmt
+			| InsertStmt
+			| UpdateStmt
+			| DeleteStmt
+		;
 /*****************************************************************************
  *
  *		QUERY :
@@ -12823,6 +12846,7 @@ unreserved_keyword:
 			| RECHECK
 			| RECURSIVE
 			| REF
+			| REGISTER
 			| REINDEX
 			| RELATIVE_P
 			| RELEASE
