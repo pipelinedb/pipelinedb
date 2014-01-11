@@ -14,6 +14,7 @@ OBJS = catalog.o dependency.o heap.o index.o indexing.o namespace.o aclchk.o \
        objectaddress.o pg_aggregate.o pg_collation.o pg_constraint.o pg_conversion.o \
        pg_depend.o pg_enum.o pg_inherits.o pg_largeobject.o pg_namespace.o \
        pg_operator.o pg_proc.o pg_range.o pg_db_role_setting.o pg_shdepend.o \
+       pipeline_queries.o \
        pg_type.o pgxc_class.o storage.o toasting.o
 
 BKIFILES = postgres.bki postgres.description postgres.shdescription

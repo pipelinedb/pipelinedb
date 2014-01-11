@@ -23,12 +23,13 @@
  *		cpp turns this into typedef struct FormData_pipeline_queries
  * ----------------------------------------------------------------
  */
-#define QueriesRelationId  4242
+#define PipelineQueriesRelationId  4242
 
-CATALOG(pipeline_queries,4242)
+CATALOG(pipeline_queries,4242) BKI_WITHOUT_OIDS
 {
-	Oid				id;
+	text			name;
 	text			query;
+	char			state;
 } FormData_pipeline_queries;
 
 /* ----------------
@@ -42,9 +43,16 @@ typedef FormData_pipeline_queries *Form_pipeline_queries;
  *		compiler constants for pipeline_queries
  * ----------------
  */
-#define Natts_pipeline_queries				2
-#define Anum_pipeline_queries_id			1
+#define Natts_pipeline_queries				3
+#define Anum_pipeline_queries_name		1
 #define Anum_pipeline_queries_query 	2
+#define Anum_pipeline_queries_state 	3
 
+/* ----------------
+ *		query states
+ * ----------------
+ */
+#define PIPELINE_QUERY_STATE_ACTIVE 		'a'
+#define PIPELINE_QUERY_STATE_INACTIVE 	'i'
 
 #endif   /* PIPELINE_QUERIES_H */
