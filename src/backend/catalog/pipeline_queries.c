@@ -86,6 +86,4 @@ SetQueryState(const char *name, char state)
 		ereport(ERROR,
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("invalid state: '%c'", state)));
-
-	elog(LOG, "setting %s to %c", name, state);
 }
