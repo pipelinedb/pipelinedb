@@ -43,20 +43,23 @@ RegisterQuery(RangeVar *name, const char *rawquery)
 	 * wildcards will have already been expanded, and thus the original
 	 * query may not work as intended over time.
 	 */
-	char *upper = strdup(rawquery);
+	char *upperquery = strdup(rawquery);
+	char *uppername = strdup(name->relname);
 	int offset = 0;
 	int i;
 	char *query_to_register;
-	for (i=0; upper[i] != '\0'; i++) upper[i] = toupper(upper[i]);
+	for (i=0; upperquery[i] != '\0'; i++) upperquery[i] = toupper(upperquery[i]);
+	for (i=0; uppername[i] != '\0'; i++) uppername[i] = toupper(uppername[i]);
 
 	/* Move past the query name part of the query before we look for AS */
-	query_to_register = strstr(upper, name->relname) + strlen(name->relname);
+	query_to_register = strstr(upperquery, uppername) + strlen(uppername);
 	query_to_register = strstr(query_to_register, QUERY_BEGINS_HERE) + strlen(QUERY_BEGINS_HERE);
 
 	/* We want to take the substring from the original string */
-	offset = query_to_register - upper;
+	offset = query_to_register - upperquery;
 
 	AddQuery(name->relname, rawquery + offset, PIPELINE_QUERY_STATE_INACTIVE);
 
-	free(upper);
+	free(upperquery);
+	free(uppername);
 }
