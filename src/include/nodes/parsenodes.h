@@ -2723,4 +2723,12 @@ typedef struct CleanConnStmt
 } CleanConnStmt;
 /* PGXC_END */
 
+
+typedef struct RegisterStmt
+{
+	NodeTag		type;
+	char		 *name; /* unique name to associate with the query */
+	List	   *query; /* query to register */
+} RegisterStmt;
+
 #endif   /* PARSENODES_H */

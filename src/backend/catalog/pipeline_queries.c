@@ -41,10 +41,10 @@ AddQuery(const char *name, const char *query, char state)
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("query is null")));
 
-	if (!state)
+	if (!(state == PIPELINE_QUERY_STATE_ACTIVE || state == PIPELINE_QUERY_STATE_INACTIVE))
 		ereport(ERROR,
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-						errmsg("state is null")));
+						errmsg("invalid state: '%c'", state)));
 
 	nulls[0] = false;
 	nulls[1] = false;

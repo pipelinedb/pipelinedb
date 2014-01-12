@@ -224,7 +224,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 		DropForeignServerStmt DropUserMappingStmt ExplainStmt ExecDirectStmt FetchStmt
 		GrantStmt GrantRoleStmt IndexStmt InsertStmt ListenStmt LoadStmt
 		LockStmt NotifyStmt ExplainableStmt PreparableStmt
-		CreateFunctionStmt AlterFunctionStmt ReindexStmt RemoveAggrStmt
+		CreateFunctionStmt AlterFunctionStmt RegisterStmt RegisterableStmt ReindexStmt RemoveAggrStmt
 		RemoveFuncStmt RemoveOperStmt RenameStmt RevokeStmt RevokeRoleStmt
 		RuleActionStmt RuleActionStmtOrEmpty RuleStmt
 		SecLabelStmt SelectStmt TransactionStmt TruncateStmt
@@ -269,6 +269,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 %type <str>		foreign_server_version opt_foreign_server_version
 %type <str>		auth_ident
 %type <str>		opt_in_database
+%type <str>		registered_query_name
 
 %type <str>		OptSchemaName
 %type <list>	OptSchemaEltList
@@ -566,7 +567,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 
 	QUOTE
 
-	RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REINDEX
+	RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REGISTER REINDEX
 	RELATIVE_P RELEASE RENAME REPEATABLE REPLACE REPLICA
 	RESET RESTART RESTRICT RETURNING RETURNS REVOKE RIGHT ROLE ROLLBACK
 	ROW ROWS RULE
@@ -795,6 +796,7 @@ stmt :
 			| NotifyStmt
 			| PrepareStmt
 			| ReassignOwnedStmt
+			| RegisterStmt
 			| ReindexStmt
 			| RemoveAggrStmt
 			| RemoveFuncStmt
@@ -2494,6 +2496,34 @@ copy_generic_opt_arg_list_item:
 			opt_boolean_or_string	{ $$ = (Node *) makeString($1); }
 		;
 
+/*****************************************************************************
+ *
+ * REGISTER registered_query_name AS query
+ *
+ * PipelineDB
+ *
+ * Registers a continuous query
+ *
+ *****************************************************************************/
+
+ RegisterStmt: REGISTER registered_query_name AS RegisterableStmt 
+				{
+					RegisterStmt *r = makeNode(RegisterStmt);
+					r->name = $2;
+					r->query = (List *)$4;
+					$$ = (Node *)r;
+				}
+
+ RegisterableStmt:
+			SelectStmt
+			| InsertStmt
+			| UpdateStmt
+			| DeleteStmt
+		;
+
+registered_query_name:
+			name { $$ = $1; }
+		;
 
 /*****************************************************************************
  *
@@ -12823,6 +12853,7 @@ unreserved_keyword:
 			| RECHECK
 			| RECURSIVE
 			| REF
+			| REGISTER
 			| REINDEX
 			| RELATIVE_P
 			| RELEASE
