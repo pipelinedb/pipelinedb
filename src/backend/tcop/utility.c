@@ -2048,7 +2048,10 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 #endif
 		case T_RegisterStmt:
-			RegisterQuery(((RegisterStmt *) parsetree)->name, queryString);
+			{
+				RegisterStmt *stmt = (RegisterStmt *) parsetree;
+				RegisterQuery(stmt->name, queryString);
+			}
 			break;
 		case T_SetQueryStateStmt:
 			{

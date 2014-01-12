@@ -2727,7 +2727,7 @@ typedef struct CleanConnStmt
 typedef struct RegisterStmt
 {
 	NodeTag		type;
-	char		 *name; /* unique name to associate with the query */
+	RangeVar   *name; /* unique name to associate with the query */
 	List	   *query; /* query to register */
 } RegisterStmt;
 
@@ -2735,7 +2735,7 @@ typedef struct RegisterStmt
 typedef struct SetQueryStateStmt
 {
 	NodeTag		type;
-	char		 *name; /* name of query to activate/deactivate */
+	RangeVar   *name; /* name of query to activate/deactivate */
 	char	   state; /* activate/deactivate */
 } SetQueryStateStmt;
 

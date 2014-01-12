@@ -270,7 +270,6 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 %type <str>		foreign_server_version opt_foreign_server_version
 %type <str>		auth_ident
 %type <str>		opt_in_database
-%type <str>		registered_query_name
 
 %type <str>		OptSchemaName
 %type <list>	OptSchemaEltList
@@ -2508,7 +2507,7 @@ copy_generic_opt_arg_list_item:
  *
  *****************************************************************************/
 
- RegisterStmt: REGISTER registered_query_name AS RegisterableStmt 
+ RegisterStmt: REGISTER qualified_name AS RegisterableStmt
 				{
 					RegisterStmt *r = makeNode(RegisterStmt);
 					r->name = $2;
@@ -2523,10 +2522,6 @@ copy_generic_opt_arg_list_item:
 			| DeleteStmt
 		;
 
-registered_query_name:
-			name { $$ = $1; }
-		;
-
 
 /*****************************************************************************
  *
@@ -2538,7 +2533,7 @@ registered_query_name:
  *
  *****************************************************************************/
 
- SetQueryStateStmt: SetQueryStateAction registered_query_name
+ SetQueryStateStmt: SetQueryStateAction qualified_name
 				{
 					SetQueryStateStmt *s = makeNode(SetQueryStateStmt);
 					s->state = $1;

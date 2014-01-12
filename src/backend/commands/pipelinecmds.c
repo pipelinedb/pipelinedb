@@ -26,7 +26,7 @@
  * it in the pipeline_queries catalog table and marking it as inactive.
  */
 extern void
-RegisterQuery(const char *name, const char *source)
+RegisterQuery(RangeVar *name, const char *rawquery)
 {
 	/*
 	 * This is a hacky way to extract the original registered query,
@@ -34,18 +34,30 @@ RegisterQuery(const char *name, const char *source)
 	 *
 	 * REGISTER <name> AS ( ... )
 	 *
-	 * We don't just blindly include the ( ... ) because we want that part
-	 * to be parsed for correctness as early as possible. The alternative
-	 * would be to parse the ( ... ) on the backend, and send an error
-	 * to the client if anything is wrong, but that seems overly complex
-	 * considering this approach will always work.
+	 * We don't just blindly include the ( ... ) component as part of the
+	 * RegisterStmt, because we want it to be parsed for correctness.
+	 * However, we still want to store the original ( ... ) in the catalog,
+	 * assuming it's correct.
 	 *
-	 * Also, deparsing is tricky because wildcards will have already been expanded,
-	 * and thus the original query may not work as intended over time.
+	 * Deparsing isn't sufficient for recovering the original query, because
+	 * wildcards will have already been expanded, and thus the original
+	 * query may not work as intended over time.
 	 */
+	char *upper = strdup(rawquery);
+	int offset = 0;
+	int i;
+	char *query_to_register;
+	for (i=0; upper[i] != '\0'; i++) upper[i] = toupper(upper[i]);
 
-	char *query_to_register = strstr(source, QUERY_BEGINS_HERE);
-	query_to_register += strlen(QUERY_BEGINS_HERE); /* Exclude this */
+	/* Move past the query name part of the query before we look for AS */
+	query_to_register = strstr(upper, name->relname) + strlen(name->relname);
+	query_to_register = strstr(query_to_register, QUERY_BEGINS_HERE) + strlen(QUERY_BEGINS_HERE);
 
-	AddQuery(name, query_to_register, PIPELINE_QUERY_STATE_INACTIVE);
+	/* We want to take the substring from the original string */
+	offset = query_to_register - upper;
+	query_to_register += offset;
+
+	AddQuery(name->relname, rawquery + offset, PIPELINE_QUERY_STATE_INACTIVE);
+
+	free(upper);
 }

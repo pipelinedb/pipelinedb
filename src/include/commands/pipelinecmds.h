@@ -13,6 +13,6 @@
 
 #include "nodes/parsenodes.h"
 
-extern void RegisterQuery(const char *name, const char *source);
+extern void RegisterQuery(RangeVar *name, const char *rawquery);
 
 #endif   /* PIPELINECMDS_H */

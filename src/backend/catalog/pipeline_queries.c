@@ -75,9 +75,9 @@ AddQuery(const char *name, const char *query, char state)
  * Sets a querie's state
  */
 void
-SetQueryState(const char *name, char state)
+SetQueryState(RangeVar *name, char state)
 {
-	if (!name)
+	if (!name->relname)
 		ereport(ERROR,
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("name is null")));

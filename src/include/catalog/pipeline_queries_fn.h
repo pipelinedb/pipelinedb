@@ -9,4 +9,4 @@
  *-------------------------------------------------------------------------
  */
 void AddQuery(const char *name, const char *query, char state);
-void SetQueryState(const char *name, char state);
+void SetQueryState(RangeVar *name, char state);
