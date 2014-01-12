@@ -22,6 +22,8 @@
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "catalog/namespace.h"
+#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "catalog/toasting.h"
 #include "commands/alter.h"
 #include "commands/async.h"
@@ -2048,6 +2050,12 @@ standard_ProcessUtility(Node *parsetree,
 		case T_RegisterStmt:
 			RegisterQuery(((RegisterStmt *) parsetree)->name, queryString);
 			break;
+		case T_SetQueryStateStmt:
+			{
+				SetQueryStateStmt * stmt = (SetQueryStateStmt *) parsetree;
+				SetQueryState(stmt->name, stmt->state);
+			}
+			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d",
 				 (int) nodeTag(parsetree));
@@ -3324,6 +3332,19 @@ CreateCommandTag(Node *parsetree)
 			break;
 		case T_RegisterStmt:
 			tag = "REGISTER";
+			break;
+		case T_SetQueryStateStmt:
+			{
+				SetQueryStateStmt *stmt = (SetQueryStateStmt *) parsetree;
+				if (stmt->state == PIPELINE_QUERY_STATE_ACTIVE)
+				{
+					tag = "ACTIVATE";
+				}
+				else if (stmt->state == PIPELINE_QUERY_STATE_INACTIVE)
+				{
+					tag = "DEACTIVATE";
+				}
+			}
 			break;
 		case T_ExecDirectStmt:
 			tag = "EXECUTE DIRECT";

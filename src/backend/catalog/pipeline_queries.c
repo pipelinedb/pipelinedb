@@ -67,3 +67,23 @@ AddQuery(const char *name, const char *query, char state)
 	heap_freetuple(tup);
 	heap_close(pipeline_queries, RowExclusiveLock);
 }
+
+
+/*
+ * SetQueryState
+ *
+ * Sets a querie's state
+ */
+void
+SetQueryState(const char *name, char state)
+{
+	if (!name)
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+						errmsg("name is null")));
+
+	if (!(state == PIPELINE_QUERY_STATE_ACTIVE || state == PIPELINE_QUERY_STATE_INACTIVE))
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+						errmsg("invalid state: '%c'", state)));
+}
