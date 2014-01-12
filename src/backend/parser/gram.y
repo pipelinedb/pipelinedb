@@ -55,6 +55,7 @@
 #include "catalog/index.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_trigger.h"
+#include "catalog/pipeline_queries.h"
 #include "commands/defrem.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -227,7 +228,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 		CreateFunctionStmt AlterFunctionStmt RegisterStmt RegisterableStmt ReindexStmt RemoveAggrStmt
 		RemoveFuncStmt RemoveOperStmt RenameStmt RevokeStmt RevokeRoleStmt
 		RuleActionStmt RuleActionStmtOrEmpty RuleStmt
-		SecLabelStmt SelectStmt TransactionStmt TruncateStmt
+		SecLabelStmt SelectStmt SetQueryStateStmt TransactionStmt TruncateStmt
 		UnlistenStmt UpdateStmt VacuumStmt
 		VariableResetStmt VariableSetStmt VariableShowStmt
 		ViewStmt CheckPointStmt CreateConversionStmt
@@ -346,7 +347,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 %type <typnam>	func_return func_type
 
 %type <boolean>  opt_trusted opt_restart_seqs
-%type <ival>	 OptTemp
+%type <ival>	 OptTemp SetQueryStateAction
 %type <oncommit> OnCommitOption
 
 %type <node>	for_locking_item
@@ -506,7 +507,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 
 /* ordinary key words in alphabetical order */
 /* PGXC - added DISTRIBUTE, DIRECT, COORDINATOR, CLEAN,  NODE, BARRIER */
-%token <keyword> ABORT_P ABSOLUTE_P ACCESS ACTION ADD_P ADMIN AFTER
+%token <keyword> ABORT_P ABSOLUTE_P ACCESS ACTION ACTIVATE ADD_P ADMIN AFTER
 	AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
 	ASSERTION ASSIGNMENT ASYMMETRIC AT ATTRIBUTE AUTHORIZATION
 
@@ -522,7 +523,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 	CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE CURRENT_SCHEMA
 	CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER CURSOR CYCLE
 
-	DATA_P DATABASE DAY_P DEALLOCATE DEC DECIMAL_P DECLARE DEFAULT DEFAULTS
+	DATA_P DATABASE DAY_P DEACTIVATE DEALLOCATE DEC DECIMAL_P DECLARE DEFAULT DEFAULTS
 	DEFERRABLE DEFERRED DEFINER DELETE_P DELIMITER DELIMITERS DESC
 /* PGXC_BEGIN */
 	DICTIONARY DIRECT DISABLE_P DISCARD DISTINCT DISTRIBUTE DO DOCUMENT_P DOMAIN_P DOUBLE_P
@@ -807,6 +808,7 @@ stmt :
 			| RuleStmt
 			| SecLabelStmt
 			| SelectStmt
+			| SetQueryStateStmt
 			| TransactionStmt
 			| TruncateStmt
 			| UnlistenStmt
@@ -2523,6 +2525,29 @@ copy_generic_opt_arg_list_item:
 
 registered_query_name:
 			name { $$ = $1; }
+		;
+
+
+/*****************************************************************************
+ *
+ * ( ACTIVATE | DEACTIVATE ) registered_query_name
+ *
+ * PipelineDB
+ *
+ * Activates/deactivates a continuous query
+ *
+ *****************************************************************************/
+
+ SetQueryStateStmt: SetQueryStateAction registered_query_name
+				{
+					SetQueryStateStmt *s = makeNode(SetQueryStateStmt);
+					s->state = $1;
+					s->name = $2;
+					$$ = (Node *)s;
+				}
+
+ SetQueryStateAction: ACTIVATE { $$ = PIPELINE_QUERY_STATE_ACTIVE; }
+			| DEACTIVATE { $$ = PIPELINE_QUERY_STATE_INACTIVE; }
 		;
 
 /*****************************************************************************

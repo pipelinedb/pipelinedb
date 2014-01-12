@@ -2731,4 +2731,12 @@ typedef struct RegisterStmt
 	List	   *query; /* query to register */
 } RegisterStmt;
 
+
+typedef struct SetQueryStateStmt
+{
+	NodeTag		type;
+	char		 *name; /* name of query to activate/deactivate */
+	char	   state; /* activate/deactivate */
+} SetQueryStateStmt;
+
 #endif   /* PARSENODES_H */

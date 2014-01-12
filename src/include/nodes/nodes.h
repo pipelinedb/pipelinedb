@@ -318,6 +318,7 @@ typedef enum NodeTag
 	T_AlterFunctionStmt,
 	T_DoStmt,
 	T_RegisterStmt,
+	T_SetQueryStateStmt,
 	T_RenameStmt,
 	T_RuleStmt,
 	T_NotifyStmt,
