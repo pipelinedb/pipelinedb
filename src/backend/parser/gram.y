@@ -2498,7 +2498,7 @@ copy_generic_opt_arg_list_item:
 
 /*****************************************************************************
  *
- * REGISTER query AS registered_query_name
+ * REGISTER registered_query_name AS query
  *
  * PipelineDB
  *
@@ -2510,7 +2510,7 @@ copy_generic_opt_arg_list_item:
 				{
 					RegisterStmt *r = makeNode(RegisterStmt);
 					r->name = $2;
-					r->query = $4;
+					r->query = (List *)$4;
 					$$ = (Node *)r;
 				}
 

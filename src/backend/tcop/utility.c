@@ -37,6 +37,7 @@
 #include "commands/explain.h"
 #include "commands/extension.h"
 #include "commands/lockcmds.h"
+#include "commands/pipelinecmds.h"
 #include "commands/portalcmds.h"
 #include "commands/prepare.h"
 #include "commands/proclang.h"
@@ -2045,7 +2046,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 #endif
 		case T_RegisterStmt:
-			elog(LOG, "REGISTERING");
+			RegisterQuery(((RegisterStmt *) parsetree)->name, queryString);
 			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d",
