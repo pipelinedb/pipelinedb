@@ -55,7 +55,6 @@ RegisterQuery(RangeVar *name, const char *rawquery)
 
 	/* We want to take the substring from the original string */
 	offset = query_to_register - upper;
-	query_to_register += offset;
 
 	AddQuery(name->relname, rawquery + offset, PIPELINE_QUERY_STATE_INACTIVE);
 
