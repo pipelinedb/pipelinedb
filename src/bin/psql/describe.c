@@ -1334,6 +1334,9 @@ describeOneTableDetails(const char *schemaname,
 			if (tableinfo.relpersistence == 'u')
 				printfPQExpBuffer(&title, _("Unlogged table \"%s.%s\""),
 								  schemaname, relationname);
+			else if (tableinfo.relpersistence == 's')
+				printfPQExpBuffer(&title, _("Streaming table \"%s.%s\""),
+												  schemaname, relationname);
 			else
 				printfPQExpBuffer(&title, _("Table \"%s.%s\""),
 								  schemaname, relationname);
