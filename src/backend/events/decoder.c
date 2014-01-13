@@ -12,7 +12,7 @@ void decode_event(Relation stream, const char *raw, HeapTuple *tuple)
 
 	int i = 0;
 	char *tok;
-	char *str = strdup(raw);
+	char *str = pstrdup(raw);
 	char *values[streamdesc->natts];
 
 	while ((tok = strsep(&str, ",")) != NULL &&

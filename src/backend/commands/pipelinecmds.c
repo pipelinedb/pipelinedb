@@ -43,8 +43,8 @@ RegisterQuery(RangeVar *name, const char *rawquery)
 	 * wildcards will have already been expanded, and thus the original
 	 * query may not work as intended over time.
 	 */
-	char *upperquery = strdup(rawquery);
-	char *uppername = strdup(name->relname);
+	char *upperquery = pstrdup(rawquery);
+	char *uppername = pstrdup(name->relname);
 	int offset = 0;
 	int i;
 	char *query_to_register;
@@ -59,7 +59,4 @@ RegisterQuery(RangeVar *name, const char *rawquery)
 	offset = query_to_register - upperquery;
 
 	AddQuery(name->relname, rawquery + offset, PIPELINE_QUERY_STATE_INACTIVE);
-
-	free(upperquery);
-	free(uppername);
 }
