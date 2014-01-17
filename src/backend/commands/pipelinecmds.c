@@ -60,3 +60,30 @@ RegisterQuery(RangeVar *name, const char *rawquery)
 
 	AddQuery(name->relname, rawquery + offset, PIPELINE_QUERY_STATE_INACTIVE);
 }
+
+
+/*
+ * ActivateQuery
+ *
+ * Activates a continuous query. This will cause all relevant stream tuples
+ * to begin being flushed through the query immediately.
+ */
+extern void
+ActivateQuery(RangeVar *name)
+{
+	SetQueryState(name, PIPELINE_QUERY_STATE_ACTIVE);
+}
+
+
+/*
+ * DeactivateQuery
+ *
+ * Deactivates a continuous query. This will cause all relevant stream tuples
+ * to stop being flushed through the query. Instead, they'll remain in memory
+ * or be flushed to disk until the query becomes active again.
+ */
+extern void
+DeactivateQuery(RangeVar *name)
+{
+	SetQueryState(name, PIPELINE_QUERY_STATE_INACTIVE);
+}

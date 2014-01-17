@@ -2056,7 +2056,19 @@ standard_ProcessUtility(Node *parsetree,
 		case T_SetQueryStateStmt:
 			{
 				SetQueryStateStmt * stmt = (SetQueryStateStmt *) parsetree;
-				SetQueryState(stmt->name, stmt->state);
+				switch (stmt->state)
+				{
+				case PIPELINE_QUERY_STATE_ACTIVE:
+					ActivateQuery(stmt->name);
+					break;
+				case PIPELINE_QUERY_STATE_INACTIVE:
+					DeactivateQuery(stmt->name);
+					break;
+				default:
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("invalid query state: '%c'", stmt->state)));
+				}
 			}
 			break;
 		default:

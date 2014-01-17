@@ -14,5 +14,7 @@
 #include "nodes/parsenodes.h"
 
 extern void RegisterQuery(RangeVar *name, const char *rawquery);
+extern void ActivateQuery(RangeVar *name);
+extern void DeactivateQuery(RangeVar *name);
 
 #endif   /* PIPELINECMDS_H */
