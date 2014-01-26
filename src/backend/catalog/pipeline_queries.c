@@ -16,6 +16,7 @@
 #include "catalog/pipeline_queries_fn.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
+#include "utils/syscache.h"
 
 
 /*
@@ -66,6 +67,28 @@ AddQuery(const char *name, const char *query, char state)
 
 	heap_freetuple(tup);
 	heap_close(pipeline_queries, RowExclusiveLock);
+}
+
+
+/*
+ * Retrieves a REGISTERed query from the pipeline_queries catalog table
+ */
+char *
+GetQueryString(RangeVar *name)
+{
+	HeapTuple	tuple;
+	Form_pipeline_queries row;
+	char *result;
+
+//	tuple = SearchSysCache1(PIPELINEQUERIES, CStringGetTextDatum(name->relname));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", PipelineQueriesRelationId);
+
+	row = (Form_pipeline_queries) GETSTRUCT(tuple);
+
+	result = TextDatumGetCString(&(row->query));
+
+	return result;
 }
 
 
