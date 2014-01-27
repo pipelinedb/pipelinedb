@@ -69,7 +69,7 @@ RegisterQuery(RangeVar *name, const char *rawquery)
  * query payload is.
  */
 extern void
-ActivateQuery(RangeVar name)
+ActivateQuery(RangeVar *name)
 {
 
 }
@@ -82,7 +82,7 @@ ActivateQuery(RangeVar name)
  * ACTIVE, this is a noop.
  */
 extern void
-DeactivateQuery(RangeVar name)
+DeactivateQuery(RangeVar *name)
 {
 
 }
