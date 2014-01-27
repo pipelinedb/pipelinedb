@@ -413,39 +413,6 @@ typedef struct EState
 	HeapTuple  *es_epqTuple;	/* array of EPQ substitute tuples */
 	bool	   *es_epqTupleSet; /* true if EPQ tuple is provided */
 	bool	   *es_epqScanDone; /* true if EPQ tuple has been fetched */
-
-	/*
-	 * Continuous query state
-	 */
-
-	/*
-	 * true if this is an active continuous query. When the query is deactivated,
-	 * this will be set to false and the continuous executor will return.
-	 */
-	bool		es_cq_active;
-
-	/* maximum number of tuples to process per continuous query microbatch */
-	int			es_cq_batch_size;
-
-	/* Number of tuples actually processed in the last execution of a
-	 * continuous query. This can sometimes be less than the maximum because
-	 * we don't want to wait forever for the batch to fill up, so we'll finish
-	 * an execution after es_cq_batch_timeout.
-	 */
-	int			es_cq_batch_processed;
-
-	/*
-	 * How long to wait for new tuples to arrive before forcing the execution
-	 * of the current batch to finish
-	 */
-	int			es_cq_batch_timeout;	/* ms */
-
-	/*
-	 * How long to sleep when the last execution of a continuous query didn't
-	 * process any new tuples. We sleep to avoid spin waiting when no tuples are
-	 * arriving.
-	 */
-	int			es_cq_pause; /* ms */
 } EState;
 
 

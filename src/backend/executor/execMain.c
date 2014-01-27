@@ -262,7 +262,69 @@ void
 ExecutorRunContinuous(QueryDesc *queryDesc,
 		ScanDirection direction, long count)
 {
-	standard_ExecutorRun(queryDesc, direction, count);
+	EState	   *estate;
+	CmdType		operation;
+	DestReceiver *dest;
+	bool		sendTuples;
+	MemoryContext oldcontext;
+
+	/* sanity checks */
+	Assert(queryDesc != NULL);
+
+	estate = queryDesc->estate;
+
+	Assert(estate != NULL);
+	Assert(!(estate->es_top_eflags & EXEC_FLAG_EXPLAIN_ONLY));
+
+	/*
+	 * Switch into per-query memory context
+	 */
+	oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+
+	/* Allow instrumentation of Executor overall runtime */
+	if (queryDesc->totaltime)
+		InstrStartNode(queryDesc->totaltime);
+
+	/*
+	 * extract information from the query descriptor and the query feature.
+	 */
+	operation = queryDesc->operation;
+	dest = queryDesc->dest;
+
+	/*
+	 * startup tuple receiver, if we will be emitting tuples
+	 */
+	estate->es_processed = 0;
+	estate->es_lastoid = InvalidOid;
+
+	sendTuples = (operation == CMD_SELECT ||
+				  queryDesc->plannedstmt->hasReturning);
+
+	if (sendTuples)
+		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
+
+	for (;;)
+	{
+		/*
+		 * run plan on a microbatch
+		 */
+		ExecutePlan(estate, queryDesc->planstate, operation,
+				sendTuples, count, direction, dest);
+
+//		estate->es_processed;
+	}
+
+
+	/*
+	 * shutdown tuple receiver, if we started it
+	 */
+	if (sendTuples)
+		(*dest->rShutdown) (dest);
+
+	if (queryDesc->totaltime)
+		InstrStopNode(queryDesc->totaltime, estate->es_processed);
+
+	MemoryContextSwitchTo(oldcontext);
 }
 
 void
