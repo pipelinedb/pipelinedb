@@ -252,6 +252,16 @@ ExecutorRun(QueryDesc *queryDesc,
 		standard_ExecutorRun(queryDesc, direction, count);
 }
 
+/*
+ * ExecutorRunContinuous
+ */
+void
+ExecutorRunContinuous(QueryDesc *queryDesc,
+		ScanDirection direction, long count)
+{
+	standard_ExecutorRun(queryDesc, direction, count);
+}
+
 void
 standard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, long count)

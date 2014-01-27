@@ -177,6 +177,8 @@ extern void ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void standard_ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void ExecutorRun(QueryDesc *queryDesc,
 			ScanDirection direction, long count);
+extern void ExecutorRunContinuous(QueryDesc *queryDesc,
+		ScanDirection direction, long count);
 extern void standard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, long count);
 extern void ExecutorFinish(QueryDesc *queryDesc);

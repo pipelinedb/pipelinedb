@@ -256,6 +256,7 @@ standard_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	result->relationOids = glob->relationOids;
 	result->invalItems = glob->invalItems;
 	result->nParamExec = list_length(glob->paramlist);
+	result->is_continuous = parse->is_continuous;
 
 	return result;
 }
