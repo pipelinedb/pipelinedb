@@ -2585,7 +2585,8 @@ transformExecDirectStmt(ParseState *pstate, ExecDirectStmt *stmt)
 }
 
 /*
- * Mark the query as continuous so it runs in the continuous executor
+ * Retrieve the registered continuous query, parse and analyze it,
+ * and mark it as as continuous so that it runs in the continuous executor
  */
 static Query *
 transformActivateContinuousQueryStmt(ParseState *pstate, ActivateContinuousQueryStmt *stmt)
@@ -2598,7 +2599,10 @@ transformActivateContinuousQueryStmt(ParseState *pstate, ActivateContinuousQuery
 	/* TODO: enforce single queries here, since we */
 	Node *parsetree = (Node *) lfirst(parsetree_list->head);
 
-	return parse_analyze(parsetree, query_string, NULL, 0);
+	Query *q = parse_analyze(parsetree, query_string, NULL, 0);
+	q->is_continuous = true;
+
+	return q;
 }
 
 /*
