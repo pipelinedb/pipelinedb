@@ -27,7 +27,7 @@
 
 CATALOG(pipeline_queries,4242) BKI_WITHOUT_OIDS
 {
-	text			name;
+	NameData	name;
 	text			query;
 	char			state;
 } FormData_pipeline_queries;
