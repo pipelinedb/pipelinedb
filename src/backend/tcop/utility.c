@@ -2053,24 +2053,6 @@ standard_ProcessUtility(Node *parsetree,
 				RegisterQuery(stmt->name, queryString);
 			}
 			break;
-		case T_SetQueryStateStmt:
-			{
-				SetQueryStateStmt * stmt = (SetQueryStateStmt *) parsetree;
-				switch (stmt->state)
-				{
-				case PIPELINE_QUERY_STATE_ACTIVE:
-					ActivateQuery(stmt->name);
-					break;
-				case PIPELINE_QUERY_STATE_INACTIVE:
-					DeactivateQuery(stmt->name);
-					break;
-				default:
-					ereport(ERROR,
-							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-							 errmsg("invalid query state: '%c'", stmt->state)));
-				}
-			}
-			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d",
 				 (int) nodeTag(parsetree));
@@ -3348,18 +3330,8 @@ CreateCommandTag(Node *parsetree)
 		case T_RegisterStmt:
 			tag = "REGISTER";
 			break;
-		case T_SetQueryStateStmt:
-			{
-				SetQueryStateStmt *stmt = (SetQueryStateStmt *) parsetree;
-				if (stmt->state == PIPELINE_QUERY_STATE_ACTIVE)
-				{
-					tag = "ACTIVATE";
-				}
-				else if (stmt->state == PIPELINE_QUERY_STATE_INACTIVE)
-				{
-					tag = "DEACTIVATE";
-				}
-			}
+		case T_ActivateContinuousQueryStmt:
+			tag = "ACTIVATE";
 			break;
 		case T_ExecDirectStmt:
 			tag = "EXECUTE DIRECT";

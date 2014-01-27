@@ -262,7 +262,8 @@ ChoosePortalStrategy(List *stmts)
 		if (IsA(stmt, Query))
 		{
 			Query	   *query = (Query *) stmt;
-
+			if (query->is_continuous)
+				return PORTAL_CONTINUOUS_QUERY;
 			if (query->canSetTag)
 			{
 				if (query->commandType == CMD_SELECT &&
@@ -382,7 +383,8 @@ ChoosePortalStrategy(List *stmts)
 		if (IsA(stmt, Query))
 		{
 			Query	   *query = (Query *) stmt;
-
+			if (query->is_continuous)
+				return PORTAL_CONTINUOUS_QUERY;
 			if (query->canSetTag)
 			{
 				if (++nSetTag > 1)

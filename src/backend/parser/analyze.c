@@ -28,6 +28,7 @@
 #ifdef PGXC
 #include "catalog/pg_inherits.h"
 #include "catalog/pg_inherits_fn.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "catalog/indexing.h"
 #include "utils/fmgroids.h"
 #include "utils/tqual.h"
@@ -90,6 +91,7 @@ static Query *transformCreateTableAsStmt(ParseState *pstate,
 						   CreateTableAsStmt *stmt);
 #ifdef PGXC
 static Query *transformExecDirectStmt(ParseState *pstate, ExecDirectStmt *stmt);
+static Query *transformActivateContinuousQueryStmt(ParseState *pstate, ActivateContinuousQueryStmt *stmt);
 static bool IsExecDirectUtilityStmt(Node *node);
 static bool is_relation_child(RangeTblEntry *child_rte, List *rtable);
 static bool is_rel_child_of_rel(RangeTblEntry *child_rte, RangeTblEntry *parent_rte);
@@ -291,7 +293,10 @@ transformStmt(ParseState *pstate, Node *parseTree)
 											 (ExecDirectStmt *) parseTree);
 			break;
 #endif
-
+		case T_ActivateContinuousQueryStmt:
+			result = transformActivateContinuousQueryStmt(pstate,
+											(ActivateContinuousQueryStmt *) parseTree);
+			break;
 		case T_CreateTableAsStmt:
 			result = transformCreateTableAsStmt(pstate,
 											(CreateTableAsStmt *) parseTree);
@@ -2577,6 +2582,23 @@ transformExecDirectStmt(ParseState *pstate, ExecDirectStmt *stmt)
 		result->utilityStmt = (Node *) step;
 
 	return result;
+}
+
+/*
+ * Mark the query as continuous so it runs in the continuous executor
+ */
+static Query *
+transformActivateContinuousQueryStmt(ParseState *pstate, ActivateContinuousQueryStmt *stmt)
+{
+	/* TODO: if it's already running, throw an error */
+	const char *query_string = GetQueryString(stmt->name);
+
+	List *parsetree_list = pg_parse_query(query_string);
+
+	/* TODO: enforce single queries here, since we */
+	Node *parsetree = (Node *) lfirst(parsetree_list->head);
+
+	return parse_analyze(parsetree, query_string, NULL, 0);
 }
 
 /*
