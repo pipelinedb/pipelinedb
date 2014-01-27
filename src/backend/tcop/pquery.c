@@ -556,7 +556,10 @@ PortalStart(Portal portal, ParamListInfo params,
 		/*
 		 * Determine the portal execution strategy
 		 */
-		portal->strategy = ChoosePortalStrategy(portal->stmts);
+		if (eflags & EXEC_CONTINUOUS)
+			portal->strategy = PORTAL_CONTINUOUS_QUERY;
+		else
+			portal->strategy = ChoosePortalStrategy(portal->stmts);
 
 		/*
 		 * Fire her up according to the strategy
@@ -668,6 +671,7 @@ PortalStart(Portal portal, ParamListInfo params,
 				break;
 
 			case PORTAL_MULTI_QUERY:
+			case PORTAL_CONTINUOUS_QUERY:
 				/* Need do nothing now */
 				portal->tupDesc = NULL;
 				break;

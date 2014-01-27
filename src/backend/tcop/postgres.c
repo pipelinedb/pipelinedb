@@ -899,6 +899,17 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 	return stmt_list;
 }
 
+/*
+ * exec_continuous_query
+ *
+ * Execute a continuous query protocol message.
+ */
+static void
+exec_continuous_query(const char *query_name)
+{
+	// get query string from name
+	// exec_simple_query(name, EXEC_CONTINUOUS);
+}
 
 /*
  * exec_simple_query
@@ -906,7 +917,7 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
  * Execute a "simple Query" protocol message.
  */
 static void
-exec_simple_query(const char *query_string)
+exec_simple_query(const char *query_string, int flags)
 {
 	CommandDest dest = whereToSendOutput;
 	MemoryContext oldcontext;
@@ -1104,7 +1115,7 @@ exec_simple_query(const char *query_string)
 		 * end up being able to do this, keeping the parse/plan snapshot
 		 * around until after we start the portal doesn't cost much.
 		 */
-		PortalStart(portal, NULL, 0, snapshot_set);
+		PortalStart(portal, NULL, flags, snapshot_set);
 
 		/* Done with the snapshot used for parsing/planning */
 		if (snapshot_set)
@@ -4251,11 +4262,28 @@ PostgresMain(int argc, char *argv[], const char *username)
 					query_string = pq_getmsgstring(&input_message);
 					pq_getmsgend(&input_message);
 
-					exec_simple_query(query_string);
+					exec_simple_query(query_string, 0);
 					send_ready_for_query = true;
 				}
 				break;
+			case '$':			/* activate a continuous query */
+				{
+					const char *activate_name;
 
+					/* Set statement_timestamp() */
+					SetCurrentStatementStartTimestamp();
+					activate_name = pq_getmsgstring(&input_message);
+					pq_getmsgend(&input_message);
+
+					exec_continuous_query(activate_name);
+					send_ready_for_query = true;
+				}
+				break;
+			case '!':			/* deactivate a continuous query */
+				{
+
+				}
+				break;
 			case 'P':			/* parse */
 				{
 					const char *stmt_name;
