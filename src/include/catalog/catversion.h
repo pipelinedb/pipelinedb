@@ -54,9 +54,9 @@
 
 /*							yyyymmddN */
 #ifdef PGXC
-#define CATALOG_VERSION_NO	201204301
+#define CATALOG_VERSION_NO	201401011
 #else
-#define CATALOG_VERSION_NO	201204301
+#define CATALOG_VERSION_NO	201401011
 #endif
 
 #endif

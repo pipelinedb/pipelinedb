@@ -16,6 +16,7 @@
 #include "catalog/pipeline_queries_fn.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
+#include "utils/syscache.h"
 
 
 /*
@@ -24,14 +25,15 @@
  * Adds a REGISTERed query to the pipeline_queries catalog table
  */
 void
-AddQuery(const char *name, const char *query, char state)
+AddQuery(const char *rawname, const char *query, char state)
 {
 	Relation	pipeline_queries;
 	HeapTuple	tup;
 	bool nulls[Natts_pipeline_queries];
 	Datum values[Natts_pipeline_queries];
+	NameData name;
 
-	if (!name)
+	if (!rawname)
 		ereport(ERROR,
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("name is null")));
@@ -54,7 +56,8 @@ AddQuery(const char *name, const char *query, char state)
 	values[1] = (Datum) NULL;
 	values[2] = (Datum) NULL;
 
-	values[Anum_pipeline_queries_name - 1] = CStringGetTextDatum(name);
+	namestrcpy(&name, rawname);
+	values[Anum_pipeline_queries_name - 1] = NameGetDatum(&name);
 	values[Anum_pipeline_queries_query - 1] = CStringGetTextDatum(query);
 	values[Anum_pipeline_queries_state - 1] = CharGetDatum(state);
 
@@ -66,6 +69,33 @@ AddQuery(const char *name, const char *query, char state)
 
 	heap_freetuple(tup);
 	heap_close(pipeline_queries, RowExclusiveLock);
+}
+
+
+/*
+ * Retrieves a REGISTERed query from the pipeline_queries catalog table
+ */
+char *
+GetQueryString(RangeVar *rvname)
+{
+	HeapTuple	tuple;
+	Form_pipeline_queries row;
+	NameData name;
+
+	char *result;
+
+	namestrcpy(&name, rvname->relname);
+	tuple = SearchSysCache1(PIPELINEQUERIES, NameGetDatum(&name));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "no registered queries found with name '%s'", rvname->relname);
+
+	row = (Form_pipeline_queries) GETSTRUCT(tuple);
+
+	result = TextDatumGetCString(&(row->query));
+	ReleaseSysCache(tuple);
+
+	return result;
 }
 
 

@@ -65,25 +65,26 @@ RegisterQuery(RangeVar *name, const char *rawquery)
 /*
  * ActivateQuery
  *
- * Activates a continuous query. This will cause all relevant stream tuples
- * to begin being flushed through the query immediately.
+ * Activates a REGISTERed continuous query. If the query with the given name
+ * is already active, it will be re-activated with whatever the current
+ * query payload is.
  */
 extern void
 ActivateQuery(RangeVar *name)
 {
-	SetQueryState(name, PIPELINE_QUERY_STATE_ACTIVE);
+//	SetQueryState(name, PIPELINE_QUERY_STATE_ACTIVE);
 }
 
 
 /*
  * DeactivateQuery
  *
- * Deactivates a continuous query. This will cause all relevant stream tuples
- * to stop being flushed through the query. Instead, they'll remain in memory
- * or be flushed to disk until the query becomes active again.
+ * Deactivates a REGISTERed and ACTIVE continuous query. If the query isn't
+ * ACTIVE, this is a noop.
+>>>>>>> master
  */
 extern void
 DeactivateQuery(RangeVar *name)
 {
-	SetQueryState(name, PIPELINE_QUERY_STATE_INACTIVE);
+//	SetQueryState(name, PIPELINE_QUERY_STATE_INACTIVE);
 }

@@ -60,6 +60,7 @@
 #include "catalog/pgxc_node.h"
 #include "catalog/pgxc_group.h"
 #endif
+#include "catalog/pipeline_queries.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
@@ -607,6 +608,17 @@ static const struct cachedesc cacheinfo[] = {
 		256
 	},
 #endif
+	{PipelineQueriesRelationId,	/* PIPELINEQUERIES */
+		PipelineQueriesNameIndexId,
+		1,
+		{
+			Anum_pipeline_queries_name,
+			0,
+			0,
+			0
+		},
+		2048
+	},
 	{ProcedureRelationId,		/* PROCNAMEARGSNSP */
 		ProcedureNameArgsNspIndexId,
 		3,
