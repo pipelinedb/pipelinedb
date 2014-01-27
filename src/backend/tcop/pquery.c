@@ -1323,6 +1323,9 @@ PortalRunUtility(Portal portal, Node *utilityStmt, bool isTopLevel,
 
 /*
  * PortalRunContinuous
+ *
+ * Runs a query continuously on microbatches of newly-materialized data, until
+ * a deactivate message is received
  */
 static void
 PortalRunContinuous(Portal portal, bool isTopLevel,

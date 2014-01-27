@@ -254,6 +254,9 @@ ExecutorRun(QueryDesc *queryDesc,
 
 /*
  * ExecutorRunContinuous
+ *
+ * Runs a query continuously on microbatches of newly-materialized data, until
+ * a deactivate message is received
  */
 void
 ExecutorRunContinuous(QueryDesc *queryDesc,
