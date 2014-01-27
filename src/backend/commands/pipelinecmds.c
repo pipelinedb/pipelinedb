@@ -61,6 +61,7 @@ RegisterQuery(RangeVar *name, const char *rawquery)
 	AddQuery(name->relname, rawquery + offset, PIPELINE_QUERY_STATE_INACTIVE);
 }
 
+
 /*
  * ActivateQuery
  *
@@ -71,7 +72,7 @@ RegisterQuery(RangeVar *name, const char *rawquery)
 extern void
 ActivateQuery(RangeVar *name)
 {
-
+//	SetQueryState(name, PIPELINE_QUERY_STATE_ACTIVE);
 }
 
 
@@ -80,9 +81,10 @@ ActivateQuery(RangeVar *name)
  *
  * Deactivates a REGISTERed and ACTIVE continuous query. If the query isn't
  * ACTIVE, this is a noop.
+>>>>>>> master
  */
 extern void
 DeactivateQuery(RangeVar *name)
 {
-
+//	SetQueryState(name, PIPELINE_QUERY_STATE_INACTIVE);
 }

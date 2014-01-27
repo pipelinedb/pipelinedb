@@ -203,7 +203,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 }
 
 %type <node>	stmt schema_stmt
-		AlterDatabaseStmt AlterDatabaseSetStmt AlterDomainStmt AlterEnumStmt
+		ActivateContinuousQueryStmt AlterDatabaseStmt AlterDatabaseSetStmt AlterDomainStmt AlterEnumStmt
 		AlterFdwStmt AlterForeignServerStmt AlterGroupStmt
 		AlterObjectSchemaStmt AlterOwnerStmt AlterSeqStmt AlterTableStmt
 		AlterExtensionStmt AlterExtensionContentsStmt AlterForeignTableStmt
@@ -218,7 +218,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 		CreateFdwStmt CreateForeignServerStmt CreateForeignTableStmt
 		CreateAssertStmt CreateTrigStmt
 		CreateUserStmt CreateUserMappingStmt CreateRoleStmt
-		CreatedbStmt DeclareCursorStmt DefineStmt DeleteStmt DiscardStmt DoStmt
+		CreatedbStmt DeactivateContinuousQueryStmt DeclareCursorStmt DefineStmt DeleteStmt DiscardStmt DoStmt
 		DropGroupStmt DropOpClassStmt DropOpFamilyStmt DropPLangStmt DropStmt
 		DropAssertStmt DropTrigStmt DropRuleStmt DropCastStmt DropRoleStmt
 		DropUserStmt DropdbStmt DropTableSpaceStmt DropFdwStmt
@@ -228,7 +228,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 		CreateFunctionStmt AlterFunctionStmt RegisterStmt RegisterableStmt ReindexStmt RemoveAggrStmt
 		RemoveFuncStmt RemoveOperStmt RenameStmt RevokeStmt RevokeRoleStmt
 		RuleActionStmt RuleActionStmtOrEmpty RuleStmt
-		SecLabelStmt SelectStmt SetQueryStateStmt TransactionStmt TruncateStmt
+		SecLabelStmt SelectStmt TransactionStmt TruncateStmt
 		UnlistenStmt UpdateStmt VacuumStmt
 		VariableResetStmt VariableSetStmt VariableShowStmt
 		ViewStmt CheckPointStmt CreateConversionStmt
@@ -346,7 +346,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 %type <typnam>	func_return func_type
 
 %type <boolean>  opt_trusted opt_restart_seqs
-%type <ival>	 OptTemp SetQueryStateAction
+%type <ival>	 OptTemp
 %type <oncommit> OnCommitOption
 
 %type <node>	for_locking_item
@@ -697,7 +697,8 @@ stmtmulti:	stmtmulti ';' stmt
 		;
 
 stmt :
-			AlterDatabaseStmt
+			ActivateContinuousQueryStmt
+			| AlterDatabaseStmt
 			| AlterDatabaseSetStmt
 			| AlterDefaultPrivilegesStmt
 			| AlterDomainStmt
@@ -757,6 +758,7 @@ stmt :
 			| CreateUserStmt
 			| CreateUserMappingStmt
 			| CreatedbStmt
+			| DeactivateContinuousQueryStmt
 			| DeallocateStmt
 			| DeclareCursorStmt
 			| DefineStmt
@@ -807,7 +809,6 @@ stmt :
 			| RuleStmt
 			| SecLabelStmt
 			| SelectStmt
-			| SetQueryStateStmt
 			| TransactionStmt
 			| TruncateStmt
 			| UnlistenStmt
@@ -2533,17 +2534,19 @@ copy_generic_opt_arg_list_item:
  *
  *****************************************************************************/
 
- SetQueryStateStmt: SetQueryStateAction qualified_name
+ ActivateContinuousQueryStmt: ACTIVATE qualified_name
 				{
-					SetQueryStateStmt *s = makeNode(SetQueryStateStmt);
-					s->state = $1;
+					ActivateContinuousQueryStmt *s = makeNode(ActivateContinuousQueryStmt);
 					s->name = $2;
 					$$ = (Node *)s;
 				}
 
- SetQueryStateAction: ACTIVATE { $$ = PIPELINE_QUERY_STATE_ACTIVE; }
-			| DEACTIVATE { $$ = PIPELINE_QUERY_STATE_INACTIVE; }
-		;
+ DeactivateContinuousQueryStmt: DEACTIVATE qualified_name
+				{
+					DeactivateContinuousQueryStmt *s = makeNode(DeactivateContinuousQueryStmt);
+					s->name = $2;
+					$$ = (Node *)s;
+				}
 
 /*****************************************************************************
  *

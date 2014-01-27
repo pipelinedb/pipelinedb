@@ -165,6 +165,8 @@ typedef struct Query
 									 * from its parent OR a WITH query that
 									 * updates a table in main query and inserts
 									 * a row to the same table in WITH query*/
+	/* Is this a continuous query? */
+	bool		is_continuous;
 #endif
 } Query;
 
@@ -1069,7 +1071,6 @@ typedef struct SelectStmt
 	struct SelectStmt *rarg;	/* right child */
 	/* Eventually add fields for CORRESPONDING spec here */
 } SelectStmt;
-
 
 /* ----------------------
  *		Set Operation node for post-analysis query trees
@@ -2731,12 +2732,16 @@ typedef struct RegisterStmt
 	List	   *query; /* query to register */
 } RegisterStmt;
 
-
-typedef struct SetQueryStateStmt
+typedef struct ActivateContinuousQueryStmt
 {
 	NodeTag		type;
-	RangeVar   *name; /* name of query to activate/deactivate */
-	char	   state; /* activate/deactivate */
-} SetQueryStateStmt;
+	RangeVar   *name; /* name of query to activate */
+} ActivateContinuousQueryStmt;
+
+typedef struct DeactivateContinuousQueryStmt
+{
+	NodeTag		type;
+	RangeVar   *name; /* name of query to deactivate */
+} DeactivateContinuousQueryStmt;
 
 #endif   /* PARSENODES_H */

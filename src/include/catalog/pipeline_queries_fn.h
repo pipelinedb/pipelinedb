@@ -8,6 +8,9 @@
  *
  *-------------------------------------------------------------------------
  */
+
+#include "nodes/primnodes.h"
+
 void AddQuery(const char *name, const char *query, char state);
 char *GetQueryString(RangeVar *name);
 void SetQueryState(RangeVar *name, char state);

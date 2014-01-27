@@ -3157,11 +3157,15 @@ do_query(RemoteQueryState *node)
 
 /*
  * ExecRemoteQuery
+ *
  * Wrapper around the main RemoteQueryNext() function. This
  * wrapper provides materialization of the result returned by
- * RemoteQueryNext
+ * RemoteQueryNext.
+ *
+ * It works by sending the query to remote datanodes, which actually
+ * execute the query on their subsets of the input. Partial results from
+ * the datanodes are then combined into a single unified result.
  */
-
 TupleTableSlot *
 ExecRemoteQuery(RemoteQueryState *node)
 {

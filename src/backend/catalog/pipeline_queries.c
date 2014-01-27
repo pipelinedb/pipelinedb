@@ -102,7 +102,7 @@ GetQueryString(RangeVar *rvname)
 /*
  * SetQueryState
  *
- * Sets a querie's state
+ * Sets a query's state
  */
 void
 SetQueryState(RangeVar *name, char state)
@@ -116,4 +116,6 @@ SetQueryState(RangeVar *name, char state)
 		ereport(ERROR,
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("invalid state: '%c'", state)));
+
+	elog(LOG, "Set state for %s to '%c'", name->relname, state);
 }

@@ -899,7 +899,6 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 	return stmt_list;
 }
 
-
 /*
  * exec_simple_query
  *
@@ -4255,7 +4254,11 @@ PostgresMain(int argc, char *argv[], const char *username)
 					send_ready_for_query = true;
 				}
 				break;
+			case '!':			/* deactivate a continuous query */
+				{
 
+				}
+				break;
 			case 'P':			/* parse */
 				{
 					const char *stmt_name;
