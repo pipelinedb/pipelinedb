@@ -2057,7 +2057,6 @@ standard_ProcessUtility(Node *parsetree,
 			{
 				SetQueryStateStmt * stmt = (SetQueryStateStmt *) parsetree;
 				SetQueryState(stmt->name, stmt->state);
-				elog(LOG, "string is %s", GetQueryString(stmt->name));
 			}
 			break;
 		default:
