@@ -2601,6 +2601,7 @@ transformActivateContinuousQueryStmt(ParseState *pstate, ActivateContinuousQuery
 
 	Query *q = parse_analyze(parsetree, query_string, NULL, 0);
 	q->is_continuous = true;
+	q->cq_activate_stmt = pstate->p_sourcetext;
 
 	return q;
 }

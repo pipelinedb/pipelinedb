@@ -532,6 +532,10 @@ pgxc_build_shippable_query_recurse(PlannerInfo *root, RemoteQueryPath *rqpath,
 			elog(ERROR, "Creating remote query plan for relations of type %d is not supported",
 							parent_rel->reloptkind);
 	}
+
+	result_query->is_continuous = root->parse->is_continuous;
+	result_query->cq_activate_stmt = root->parse->cq_activate_stmt;
+
 	return result_query;
 }
 
@@ -576,7 +580,18 @@ pgxc_rqplan_adjust_vars(RemoteQuery *rqplan, Node *node)
 static void
 pgxc_rqplan_build_statement(RemoteQuery *rqplan)
 {
-	StringInfo sql = makeStringInfo();
+	StringInfo sql;
+	if (rqplan->remote_query->is_continuous)
+	{
+		/*
+		 * If it's a CQ, we want the datanodes to get the original ACTIVATE statement,
+		 * not the rewritten target query. This way they'll know it should be executed
+		 * as a CQ. We should probably do this more elegantly...
+		 */
+		rqplan->sql_statement = rqplan->remote_query->cq_activate_stmt;
+		return;
+	}
+	sql = makeStringInfo();
 	deparse_query(rqplan->remote_query, sql, NULL, rqplan->rq_finalise_aggs,
 					rqplan->rq_sortgroup_colno);
 	if (rqplan->sql_statement)

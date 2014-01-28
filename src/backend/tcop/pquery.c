@@ -1332,7 +1332,6 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 			   DestReceiver *dest, DestReceiver *altdest,
 			   char *completionTag)
 {
-	bool		active_snapshot_set = false;
 	PlannedStmt * stmt;
 	QueryDesc  *queryDesc;
 
@@ -1359,6 +1358,8 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	/* if we got a cancel signal in prior command, quit */
 	CHECK_FOR_INTERRUPTS();
 
+	PushActiveSnapshot(GetTransactionSnapshot());
+
 	queryDesc = CreateQueryDesc(stmt, portal->sourceText,
 								GetActiveSnapshot(), InvalidSnapshot,
 								dest, portal->portalParams, 0);
@@ -1369,9 +1370,8 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	/* run the plan fo-eva */
 	ExecutorRunContinuous(queryDesc, ForwardScanDirection, 0L);
 
-	/* Pop the snapshot if we pushed one. */
-	if (active_snapshot_set)
-		PopActiveSnapshot();
+	/* pop the snapshot if we pushed one */
+	PopActiveSnapshot();
 
 	/* cleanup */
 	ExecutorFinish(queryDesc);

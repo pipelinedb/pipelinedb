@@ -303,6 +303,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc,
 	if (sendTuples)
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
+
 	for (;;)
 	{
 		/*
@@ -311,6 +312,8 @@ ExecutorRunContinuous(QueryDesc *queryDesc,
 		ExecutePlan(estate, queryDesc->planstate, operation,
 				sendTuples, count, direction, dest);
 
+		elog(LOG, "processed=%d", estate->es_processed);
+		break;
 //		estate->es_processed;
 	}
 

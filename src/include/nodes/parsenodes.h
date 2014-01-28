@@ -186,6 +186,15 @@ typedef struct Query
 	 * arriving.
 	 */
 	int			cq_pause_ms; /* ms */
+
+	/*
+	 * The original ACTIVATE statement that activated this query. It's useful to
+	 * keep this around because an ACTIVATE query gets rewritten as the target CQ,
+	 * and then flagged as continuous. However, we don't want to send this rewritten
+	 * query to the datanodes when running a RemoteQuery, because we want them to
+	 * know that it's a CQ. So for CQs, we send the original ACTIVATE to the datanodes.
+	 */
+	char		*cq_activate_stmt;
 #endif
 } Query;
 

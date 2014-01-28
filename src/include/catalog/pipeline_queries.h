@@ -25,7 +25,7 @@
  */
 #define PipelineQueriesRelationId  4242
 
-CATALOG(pipeline_queries,4242) BKI_WITHOUT_OIDS
+CATALOG(pipeline_queries,4242) BKI_SHARED_RELATION BKI_WITHOUT_OIDS
 {
 	NameData	name;
 	text			query;
