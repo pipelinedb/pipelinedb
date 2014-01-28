@@ -1228,7 +1228,6 @@ pgxc_build_dml_statement(PlannerInfo *root, CmdType cmdtype,
 		query_to_deparse->returningList = list_copy(rqplan->base_tlist);
 
 	rqplan->remote_query = query_to_deparse;
-
 	pgxc_rqplan_build_statement(rqplan);
 }
 
@@ -2596,6 +2595,7 @@ pgxc_FQS_create_remote_plan(Query *query, ExecNodes *exec_nodes, bool is_exec_di
 
 	/* Finally save a handle to this Query structure */
 	query_step->remote_query = copyObject(query);
+	pgxc_rqplan_build_statement(query_step);
 
 	return query_step;
 }
