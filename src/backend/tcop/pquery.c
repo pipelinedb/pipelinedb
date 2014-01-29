@@ -1368,7 +1368,7 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	ExecutorStart(queryDesc, 0);
 
 	/* run the plan fo-eva */
-	ExecutorRunContinuous(queryDesc, ForwardScanDirection, 0L);
+	ExecutorRunContinuous(queryDesc, ForwardScanDirection);
 
 	/* pop the snapshot if we pushed one */
 	PopActiveSnapshot();
