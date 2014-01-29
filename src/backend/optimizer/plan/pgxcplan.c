@@ -2595,7 +2595,15 @@ pgxc_FQS_create_remote_plan(Query *query, ExecNodes *exec_nodes, bool is_exec_di
 
 	/* Finally save a handle to this Query structure */
 	query_step->remote_query = copyObject(query);
-	pgxc_rqplan_build_statement(query_step);
+	if (query_step->remote_query->is_continuous)
+	{
+		/*
+		 * If it's a CQ, we want the datanodes to get the original ACTIVATE statement,
+		 * not the rewritten target query. This way they'll know it should be executed
+		 * as a CQ. We should probably do this more elegantly...
+		 */
+		query_step->sql_statement = query_step->remote_query->cq_activate_stmt;
+	}
 
 	return query_step;
 }
