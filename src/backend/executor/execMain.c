@@ -314,7 +314,6 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 		ExecutePlan(estate, queryDesc->planstate, operation,
 				sendTuples, PIPELINE_BATCH_SIZE, 1000, direction, dest);
 
-		total += estate->es_processed;
 		/*
 		 * If we didn't see any new tuples, sleep briefly to save cycles
 		 */
