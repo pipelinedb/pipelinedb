@@ -2278,7 +2278,7 @@ pgxc_planner(Query *query, int cursorOptions, ParamListInfo boundParams)
 
 	/* see if can ship the query completely */
 	result = pgxc_FQS_planner(query, cursorOptions, boundParams);
-	if (result)
+	if (result && !query->is_continuous) /* never ship CQs */
 		return result;
 
 	/* we need Coordinator for evaluation, invoke standard planner */
@@ -2464,6 +2464,11 @@ pgxc_FQS_planner(Query *query, int cursorOptions, ParamListInfo boundParams)
 	result->rtable = query->rtable;
 	result->relationOids = glob->relationOids;
 	result->invalItems = glob->invalItems;
+
+	result->is_continuous = query->is_continuous;
+	result->cq_batch_size = query->cq_batch_size;
+	result->cq_batch_timeout_ms = query->cq_batch_timeout_ms;
+	result->cq_pause_ms = query->cq_pause_ms;
 
 	/*
 	 * If query is DECLARE CURSOR fetch CTIDs and node names from the remote node

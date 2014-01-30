@@ -322,7 +322,6 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 		estate->es_processed = 0;
 	}
 
-
 	/*
 	 * shutdown tuple receiver, if we started it
 	 */
