@@ -165,8 +165,36 @@ typedef struct Query
 									 * from its parent OR a WITH query that
 									 * updates a table in main query and inserts
 									 * a row to the same table in WITH query*/
-	/* Is this a continuous query? */
-	bool		is_continuous;
+
+	/*
+	 * Continuous query fields
+	 */
+	bool		is_continuous; /* should this be executed continuously? */
+
+	/* maximum number of tuples to process per continuous query microbatch */
+	int			cq_batch_size;
+
+	/*
+	 * How long to wait for new tuples to arrive before forcing the execution
+	 * of the current batch to finish
+	 */
+	int			cq_batch_timeout_ms;	/* ms */
+
+	/*
+	 * How long to sleep when the last execution of a continuous query didn't
+	 * process any new tuples. We sleep to avoid spin waiting when no tuples are
+	 * arriving.
+	 */
+	int			cq_pause_ms; /* ms */
+
+	/*
+	 * The original ACTIVATE statement that activated this query. It's useful to
+	 * keep this around because an ACTIVATE query gets rewritten as the target CQ,
+	 * and then flagged as continuous. However, we don't want to send this rewritten
+	 * query to the datanodes when running a RemoteQuery, because we want them to
+	 * know that it's a CQ. So for CQs, we send the original ACTIVATE to the datanodes.
+	 */
+	char		*cq_activate_stmt;
 #endif
 } Query;
 

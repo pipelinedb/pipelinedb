@@ -35,12 +35,15 @@
  *
  *-------------------------------------------------------------------------
  */
+#include <sys/time.h>
+
 #include "postgres.h"
 
 #include "access/sysattr.h"
 #include "access/transam.h"
 #include "access/xact.h"
 #include "catalog/namespace.h"
+#include "catalog/pipeline_queries.h"
 #include "commands/trigger.h"
 #include "executor/execdebug.h"
 #include "mb/pg_wchar.h"
@@ -78,6 +81,7 @@ static void ExecutePlan(EState *estate, PlanState *planstate,
 			CmdType operation,
 			bool sendTuples,
 			long numberTuples,
+			int timeoutms,
 			ScanDirection direction,
 			DestReceiver *dest);
 static bool ExecCheckRTEPerms(RangeTblEntry *rte);
@@ -252,6 +256,84 @@ ExecutorRun(QueryDesc *queryDesc,
 		standard_ExecutorRun(queryDesc, direction, count);
 }
 
+/*
+ * ExecutorRunContinuous
+ *
+ * Runs a query continuously on microbatches of newly-materialized data, until
+ * a deactivate message is received
+ */
+void
+ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
+{
+	EState	   *estate;
+	CmdType		operation;
+	DestReceiver *dest;
+	bool		sendTuples;
+	MemoryContext oldcontext;
+
+	/* sanity checks */
+	Assert(queryDesc != NULL);
+
+	estate = queryDesc->estate;
+
+	Assert(estate != NULL);
+	Assert(!(estate->es_top_eflags & EXEC_FLAG_EXPLAIN_ONLY));
+
+	/*
+	 * Switch into per-query memory context
+	 */
+	oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+
+	/* Allow instrumentation of Executor overall runtime */
+	if (queryDesc->totaltime)
+		InstrStartNode(queryDesc->totaltime);
+
+	/*
+	 * extract information from the query descriptor and the query feature.
+	 */
+	operation = queryDesc->operation;
+	dest = queryDesc->dest;
+
+	/*
+	 * startup tuple receiver, if we will be emitting tuples
+	 */
+	estate->es_processed = 0;
+	estate->es_lastoid = InvalidOid;
+
+	sendTuples = (operation == CMD_SELECT ||
+				  queryDesc->plannedstmt->hasReturning);
+
+	if (sendTuples)
+		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
+
+	for (;;)
+	{
+		/*
+		 * run plan on a microbatch
+		 */
+		ExecutePlan(estate, queryDesc->planstate, operation,
+				sendTuples, PIPELINE_BATCH_SIZE, 1000, direction, dest);
+
+		/*
+		 * If we didn't see any new tuples, sleep briefly to save cycles
+		 */
+		if (estate->es_processed == 0)
+			pg_usleep(PIPELINE_SLEEP_MS * 1000);
+		estate->es_processed = 0;
+	}
+
+	/*
+	 * shutdown tuple receiver, if we started it
+	 */
+	if (sendTuples)
+		(*dest->rShutdown) (dest);
+
+	if (queryDesc->totaltime)
+		InstrStopNode(queryDesc->totaltime, estate->es_processed);
+
+	MemoryContextSwitchTo(oldcontext);
+}
+
 void
 standard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, long count)
@@ -306,6 +388,7 @@ standard_ExecutorRun(QueryDesc *queryDesc,
 					operation,
 					sendTuples,
 					count,
+					0,
 					direction,
 					dest);
 
@@ -1372,11 +1455,18 @@ ExecutePlan(EState *estate,
 			CmdType operation,
 			bool sendTuples,
 			long numberTuples,
+			int timeoutms,
 			ScanDirection direction,
 			DestReceiver *dest)
 {
 	TupleTableSlot *slot;
 	long		current_tuple_count;
+
+	struct timeval scanstart;
+	struct timeval current;
+
+	long 		startms;
+	long		currentms;
 
 	/*
 	 * initialize local variables
@@ -1387,6 +1477,9 @@ ExecutePlan(EState *estate,
 	 * Set the direction.
 	 */
 	estate->es_direction = direction;
+
+	gettimeofday(&scanstart, NULL);
+	startms = (scanstart.tv_sec * 1000) + (scanstart.tv_usec / 1000.0);
 
 	/*
 	 * Loop until we've processed the proper number of tuples from the plan.
@@ -1403,10 +1496,28 @@ ExecutePlan(EState *estate,
 
 		/*
 		 * if the tuple is null, then we assume there is nothing more to
-		 * process so we just end the loop...
+		 * process so we just end the loop or potentially wait a while longer
 		 */
 		if (TupIsNull(slot))
-			break;
+		{
+			if (timeoutms > 0)
+			{
+				/*
+				 * If we're using a timeout, only break if we've exceeded
+				 * it during this scan. This is primarily so we don't have
+				 * to wait for microbatches to fill to capacity if no new
+				 * tuples are arriving.
+				 */
+				gettimeofday(&current, NULL);
+				currentms = (current.tv_sec * 1000) + (current.tv_usec / 1000.0);
+				if (currentms - startms > timeoutms)
+					break;	/* timeout reached, return */
+				else
+					continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
+			}
+			else
+				break; /* no timeout, return as soon as we encounter a null tuple */
+		}
 
 		/*
 		 * If we have a junk filter, then project a new tuple with the junk

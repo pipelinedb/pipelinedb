@@ -22,7 +22,7 @@
 #include "libpq/pqcomm.h"
 #include "miscadmin.h"
 #include "storage/backendid.h"
-
+#include "miscadmin.h"
 
 ProtocolVersion FrontendProtocol;
 

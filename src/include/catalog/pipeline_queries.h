@@ -25,7 +25,7 @@
  */
 #define PipelineQueriesRelationId  4242
 
-CATALOG(pipeline_queries,4242) BKI_WITHOUT_OIDS
+CATALOG(pipeline_queries,4242) BKI_SHARED_RELATION BKI_WITHOUT_OIDS
 {
 	NameData	name;
 	text			query;
@@ -54,5 +54,13 @@ typedef FormData_pipeline_queries *Form_pipeline_queries;
  */
 #define PIPELINE_QUERY_STATE_ACTIVE 		'a'
 #define PIPELINE_QUERY_STATE_INACTIVE 	'i'
+
+/* ----------------
+ *		microbatching tuning params
+ * ----------------
+ */
+#define PIPELINE_BATCH_SIZE 1000
+#define PIPELINE_SLEEP_MS 10
+#define PIPELINE_BATCH_TIMEOUT_MS 1000
 
 #endif   /* PIPELINE_QUERIES_H */

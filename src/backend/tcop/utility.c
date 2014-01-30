@@ -2051,6 +2051,9 @@ standard_ProcessUtility(Node *parsetree,
 			{
 				RegisterStmt *stmt = (RegisterStmt *) parsetree;
 				RegisterQuery(stmt->name, queryString);
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true, EXEC_ON_ALL_NODES, false);
+				break;
 			}
 			break;
 		default:

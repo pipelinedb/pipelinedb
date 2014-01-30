@@ -2596,11 +2596,12 @@ transformActivateContinuousQueryStmt(ParseState *pstate, ActivateContinuousQuery
 
 	List *parsetree_list = pg_parse_query(query_string);
 
-	/* TODO: enforce single queries here, since we */
+	/* TODO: enforce single queries here */
 	Node *parsetree = (Node *) lfirst(parsetree_list->head);
 
 	Query *q = parse_analyze(parsetree, query_string, NULL, 0);
 	q->is_continuous = true;
+	q->cq_activate_stmt = pstate->p_sourcetext;
 
 	return q;
 }

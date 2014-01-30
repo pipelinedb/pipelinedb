@@ -823,7 +823,12 @@ heapgettup_pagemode(HeapScanDesc scan,
 			scan->rs_cbuf = InvalidBuffer;
 			scan->rs_cblock = InvalidBlockNumber;
 			tuple->t_data = NULL;
-			scan->rs_inited = false;
+
+			/*
+			 * XXX PipelineDB: setting this to false causes CQs to keep re-initializing
+			 * scanners when it's not really necessary
+			 */
+			// scan->rs_inited = false;
 			return;
 		}
 
@@ -1320,7 +1325,6 @@ heap_endscan(HeapScanDesc scan)
 #define HEAPDEBUG_2
 #define HEAPDEBUG_3
 #endif   /* !defined(HEAPDEBUGALL) */
-
 
 HeapTuple
 heap_getnext(HeapScanDesc scan, ScanDirection direction)

@@ -15,6 +15,7 @@
 
 #include "postgres.h"
 
+
 #include "access/xact.h"
 #include "commands/prepare.h"
 #include "executor/tstoreReceiver.h"
@@ -52,6 +53,9 @@ static long PortalRunSelect(Portal portal, bool forward, long count,
 static void PortalRunUtility(Portal portal, Node *utilityStmt, bool isTopLevel,
 				 DestReceiver *dest, char *completionTag);
 static void PortalRunMulti(Portal portal, bool isTopLevel,
+			   DestReceiver *dest, DestReceiver *altdest,
+			   char *completionTag);
+static void PortalRunContinuous(Portal portal, bool isTopLevel,
 			   DestReceiver *dest, DestReceiver *altdest,
 			   char *completionTag);
 static long DoPortalRunFetch(Portal portal,
@@ -347,7 +351,8 @@ ChoosePortalStrategy(List *stmts)
 		else if (IsA(stmt, PlannedStmt))
 		{
 			PlannedStmt *pstmt = (PlannedStmt *) stmt;
-
+			if (pstmt->is_continuous)
+				return PORTAL_CONTINUOUS_QUERY;
 			if (pstmt->canSetTag)
 			{
 				if (pstmt->commandType == CMD_SELECT &&
@@ -890,7 +895,15 @@ PortalRun(Portal portal, long count, bool isTopLevel,
 				/* Always complete at end of RunMulti */
 				result = true;
 				break;
+			case PORTAL_CONTINUOUS_QUERY:
+				PortalRunContinuous(portal, isTopLevel,
+							   dest, altdest, completionTag);
 
+				/* Prevent portal's commands from being re-executed */
+				MarkPortalDone(portal);
+
+				result = true;
+				break;
 			default:
 				elog(ERROR, "unrecognized portal strategy: %d",
 					 (int) portal->strategy);
@@ -1307,6 +1320,68 @@ PortalRunUtility(Portal portal, Node *utilityStmt, bool isTopLevel,
 	if (active_snapshot_set && ActiveSnapshotSet())
 		PopActiveSnapshot();
 }
+
+/*
+ * PortalRunContinuous
+ *
+ * Runs a query continuously on microbatches of newly-materialized data, until
+ * a deactivate message is received
+ */
+static void
+PortalRunContinuous(Portal portal, bool isTopLevel,
+			   DestReceiver *dest, DestReceiver *altdest,
+			   char *completionTag)
+{
+	PlannedStmt * stmt;
+	QueryDesc  *queryDesc;
+
+	/*
+	 * If the destination is DestRemoteExecute, change to DestNone.  The
+	 * reason is that the client won't be expecting any tuples, and indeed has
+	 * no way to know what they are, since there is no provision for Describe
+	 * to send a RowDescription message when this portal execution strategy is
+	 * in effect.  This presently will only affect SELECT commands added to
+	 * non-SELECT queries by rewrite rules: such commands will be executed,
+	 * but the results will be discarded unless you use "simple Query"
+	 * protocol.
+	 */
+	if (dest->mydest == DestRemoteExecute)
+		dest = None_Receiver;
+	if (altdest->mydest == DestRemoteExecute)
+		altdest = None_Receiver;
+
+	/* continuous queries are run individually */
+	Assert(portal->stmts->length == 1);
+
+	stmt = (PlannedStmt *) lfirst(portal->stmts->head);
+
+	/* if we got a cancel signal in prior command, quit */
+	CHECK_FOR_INTERRUPTS();
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	queryDesc = CreateQueryDesc(stmt, portal->sourceText,
+								GetActiveSnapshot(), InvalidSnapshot,
+								dest, portal->portalParams, 0);
+
+	/* prepare the plan for execution */
+	ExecutorStart(queryDesc, 0);
+
+	/* run the plan fo-eva */
+	ExecutorRunContinuous(queryDesc, ForwardScanDirection);
+
+	/* pop the snapshot if we pushed one */
+	PopActiveSnapshot();
+
+	/* cleanup */
+	ExecutorFinish(queryDesc);
+	ExecutorEnd(queryDesc);
+	FreeQueryDesc(queryDesc);
+
+	Assert(PortalGetHeapMemory(portal) == CurrentMemoryContext);
+	MemoryContextDeleteChildren(PortalGetHeapMemory(portal));
+}
+
 
 /*
  * PortalRunMulti

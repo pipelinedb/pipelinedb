@@ -257,6 +257,11 @@ standard_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	result->invalItems = glob->invalItems;
 	result->nParamExec = list_length(glob->paramlist);
 
+	result->is_continuous = parse->is_continuous;
+	result->cq_batch_size = parse->cq_batch_size;
+	result->cq_batch_timeout_ms = parse->cq_batch_timeout_ms;
+	result->cq_pause_ms = parse->cq_pause_ms;
+
 	return result;
 }
 

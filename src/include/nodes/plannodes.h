@@ -67,6 +67,28 @@ typedef struct PlannedStmt
 	List	   *invalItems;		/* other dependencies, as PlanInvalItems */
 
 	int			nParamExec;		/* number of PARAM_EXEC Params used */
+
+	/*
+	 * Continuous query fields
+	 */
+	bool		is_continuous; /* should this be executed continuously? */
+
+	/* maximum number of tuples to process per continuous query microbatch */
+	int			cq_batch_size;
+
+	/*
+	 * How long to wait for new tuples to arrive before forcing the execution
+	 * of the current batch to finish
+	 */
+	int			cq_batch_timeout_ms;	/* ms */
+
+	/*
+	 * How long to sleep when the last execution of a continuous query didn't
+	 * process any new tuples. We sleep to avoid spin waiting when no tuples are
+	 * arriving.
+	 */
+	int			cq_pause_ms; /* ms */
+
 } PlannedStmt;
 
 /* macro for fetching the Plan associated with a SubPlan node */
