@@ -46,6 +46,7 @@
 #include "input.h"
 #include "large_obj.h"
 #include "mainloop.h"
+#include "pipeline.h"
 #include "print.h"
 #include "psqlscan.h"
 #include "settings.h"
@@ -1408,6 +1409,12 @@ exec_command(const char *cmd,
 		success = permissionsList(pattern);
 		if (pattern)
 			free(pattern);
+	}
+
+	/* \| -- PipelineDB */
+	else if (strcmp(cmd, "|") == 0)
+	{
+		success = listPipelineQueries();
 	}
 
 	/* \! -- shell escape */
