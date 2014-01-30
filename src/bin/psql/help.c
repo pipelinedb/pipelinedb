@@ -279,6 +279,9 @@ slashUsage(unsigned short int pager)
 					  "  \\lo_list\n"
 					  "  \\lo_unlink LOBOID      large object operations\n"));
 
+	fprintf(output, _("PipelineDB\n"));
+	fprintf(output, _("  \\|                     list registered continuous queries\n"));
+
 	ClosePager(output);
 }
 
