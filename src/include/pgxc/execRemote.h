@@ -38,6 +38,8 @@ extern bool EnforceTwoPhaseCommit;
 #define RESPONSE_DATAROW 3
 #define RESPONSE_COPY 4
 #define RESPONSE_BARRIER_OK 5
+#define RESPONSE_COMPLETE_BATCH 6
+#define RESPONSE_BEGIN_BATCH 7
 
 typedef enum
 {
@@ -129,6 +131,7 @@ typedef struct RemoteQueryState
 	Tuplestorestate *tuplestorestate;
 	CommandId	rqs_cmd_id;			/* Cmd id to use in some special cases */
 	uint32		rqs_processed;			/* Number of rows processed (only for DMLs) */
+
 }	RemoteQueryState;
 
 typedef void (*xact_callback) (bool isCommit, void *args);

@@ -36,7 +36,7 @@ typedef enum
 	DN_CONNECTION_STATE_QUERY,			/* query is sent, response expected */
 	DN_CONNECTION_STATE_ERROR_FATAL,	/* fatal error */
 	DN_CONNECTION_STATE_COPY_IN,
-	DN_CONNECTION_STATE_COPY_OUT
+	DN_CONNECTION_STATE_COPY_OUT,
 }	DNConnectionState;
 
 typedef enum
@@ -106,6 +106,11 @@ struct pgxc_node_handle
 	 * For details see comments of RESP_ROLLBACK
 	 */
 	RESP_ROLLBACK	ck_resp_rollback;
+
+	/*
+	 * true if this connection has begun but not completed a CQ batch
+	 */
+	bool			in_cq_batch;
 };
 typedef struct pgxc_node_handle PGXCNodeHandle;
 
