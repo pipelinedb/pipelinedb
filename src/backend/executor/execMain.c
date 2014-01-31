@@ -63,9 +63,6 @@
 #include "commands/copy.h"
 #endif
 
-#include "libpq/pqformat.h"
-#include "libpq/libpq.h"
-
 /* Hooks for plugins to get control in ExecutorStart/Run/Finish/End */
 ExecutorStart_hook_type ExecutorStart_hook = NULL;
 ExecutorRun_hook_type ExecutorRun_hook = NULL;
@@ -259,21 +256,6 @@ ExecutorRun(QueryDesc *queryDesc,
 		standard_ExecutorRun(queryDesc, direction, count);
 }
 
-
-static void
-CompleteBatch(void)
-{
-	pq_putemptymessage('!');
-	pq_flush();
-}
-
-static void
-BeginBatch()
-{
-	pq_putemptymessage('@');
-	pq_flush();
-}
-
 /*
  * ExecutorRunContinuous
  *
@@ -288,7 +270,6 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	DestReceiver *dest;
 	bool		sendTuples;
 	MemoryContext oldcontext;
-	int batchsize = 1000;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
@@ -325,28 +306,25 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	if (sendTuples)
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
+	int i = 0;
+	int batch = 2;
 	for (;;)
 	{
 		/*
-		 * Run plan on a microbatch. BeginBatch() will be called within
-		 * ExecutePlan() as soon as it sees a tuple.
+		 * run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
-				sendTuples, batchsize, 10, direction, dest);
+				sendTuples, batch, 10, direction, dest);
 
-		if (queryDesc->plannedstmt->is_continuous && estate->in_cq_batch)
-		{
-			CompleteBatch();
-			estate->in_cq_batch = false;
-		}
-
+		if (i++ > 2)
+			break;
 		/*
 		 * If we didn't see any new tuples, sleep briefly to save cycles
 		 */
 		if (estate->es_processed == 0)
 			pg_usleep(PIPELINE_SLEEP_MS * 1000);
 		else
-			elog(LOG, "processed %d tuples, batch size is %d", estate->es_processed, batchsize);
+			elog(LOG, "processed=%d, batch size=%d", estate->es_processed, batch);
 		estate->es_processed = 0;
 	}
 
@@ -1546,12 +1524,8 @@ ExecutePlan(EState *estate,
 			else
 				break; /* no timeout, return as soon as we encounter a null tuple */
 		}
-
-		if (estate->es_plannedstmt->is_continuous && !estate->in_cq_batch)
-		{
-			BeginBatch();
-			estate->in_cq_batch = true;
-		}
+		else
+			print_slot(slot);
 
 		/*
 		 * If we have a junk filter, then project a new tuple with the junk
