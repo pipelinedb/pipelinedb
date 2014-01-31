@@ -422,6 +422,7 @@ pgxc_node_receive(const int conn_count,
 	}
 
 retry:
+	// This hangs on the coordinator when waiting for data from DNs, even if they've send()ed it...
 	res_select = select(nfds + 1, &readfds, NULL, NULL, timeout);
 	if (res_select < 0)
 	{

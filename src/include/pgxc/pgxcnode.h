@@ -36,7 +36,7 @@ typedef enum
 	DN_CONNECTION_STATE_QUERY,			/* query is sent, response expected */
 	DN_CONNECTION_STATE_ERROR_FATAL,	/* fatal error */
 	DN_CONNECTION_STATE_COPY_IN,
-	DN_CONNECTION_STATE_COPY_OUT
+	DN_CONNECTION_STATE_COPY_OUT,
 }	DNConnectionState;
 
 typedef enum

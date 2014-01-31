@@ -63,6 +63,9 @@
 #include "commands/copy.h"
 #endif
 
+#include "libpq/pqformat.h"
+#include "libpq/libpq.h"
+
 /* Hooks for plugins to get control in ExecutorStart/Run/Finish/End */
 ExecutorStart_hook_type ExecutorStart_hook = NULL;
 ExecutorRun_hook_type ExecutorRun_hook = NULL;
@@ -256,6 +259,21 @@ ExecutorRun(QueryDesc *queryDesc,
 		standard_ExecutorRun(queryDesc, direction, count);
 }
 
+
+static void
+CompleteBatch(void)
+{
+	pq_putemptymessage('!');
+	pq_flush();
+}
+
+static void
+BeginBatch()
+{
+	pq_putemptymessage('@');
+	pq_flush();
+}
+
 /*
  * ExecutorRunContinuous
  *
@@ -270,6 +288,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	DestReceiver *dest;
 	bool		sendTuples;
 	MemoryContext oldcontext;
+	int batchsize = IS_PGXC_COORDINATOR ? 0 : 1000;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
@@ -311,14 +330,30 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 		/*
 		 * run plan on a microbatch
 		 */
+
+
+		/*
+		 * RemoteQueryNext blocks here until tuples are received. We need to force
+		 * a return somehow so that we can periodically update results
+		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
-				sendTuples, PIPELINE_BATCH_SIZE, 1000, direction, dest);
+				sendTuples, batchsize, 10, direction, dest);
+
+		// kinda works if we only run this on the DNs
+		// only seems to send up to batch size though
+		if (IS_PGXC_DATANODE && estate->in_cq_batch)
+		{
+			CompleteBatch();
+			estate->in_cq_batch = false;
+		}
 
 		/*
 		 * If we didn't see any new tuples, sleep briefly to save cycles
 		 */
 		if (estate->es_processed == 0)
 			pg_usleep(PIPELINE_SLEEP_MS * 1000);
+		else
+			elog(LOG, "processed %d tuples, batch size is %d", estate->es_processed, batchsize);
 		estate->es_processed = 0;
 	}
 
@@ -1518,6 +1553,14 @@ ExecutePlan(EState *estate,
 			else
 				break; /* no timeout, return as soon as we encounter a null tuple */
 		}
+
+		if (IS_PGXC_DATANODE && !estate->in_cq_batch)
+		{
+			BeginBatch();
+			estate->in_cq_batch = true;
+		}
+
+		print_slot(slot);
 
 		/*
 		 * If we have a junk filter, then project a new tuple with the junk

@@ -1071,6 +1071,10 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 
 	while (combiner->conn_count > 0)
 	{
+		// If CQ:
+			// Only try to fetch if THIS CONN is in a batch
+		  // return false
+
 		int res;
 		PGXCNodeHandle *conn = combiner->connections[combiner->current_conn];
 
@@ -1116,6 +1120,8 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 		if (res == RESPONSE_EOF)
 		{
 			/* incomplete message, read more */
+
+			// This blocks while we're waiting for next batch
 			if (pgxc_node_receive(1, &conn, NULL))
 				ereport(ERROR,
 						(errcode(ERRCODE_INTERNAL_ERROR),
@@ -1135,6 +1141,16 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 				combiner->connections[combiner->current_conn] = combiner->connections[combiner->conn_count];
 			else
 				combiner->current_conn = 0;
+		}
+		else if (res == RESPONSE_BEGIN_BATCH)
+		{
+			combiner->in_cq_batch = true;
+			return true;
+		}
+		else if (res == RESPONSE_COMPLETE_BATCH)
+		{
+			combiner->in_cq_batch = false;
+			return false;
 		}
 		else if (res == RESPONSE_DATAROW && have_tuple)
 		{
@@ -1343,6 +1359,14 @@ handle_response(PGXCNodeHandle * conn, RemoteQueryState *combiner)
 #endif
 				return result;
 			}
+			case '@':
+				combiner->in_cq_batch = true;
+				return RESPONSE_BEGIN_BATCH;
+			case '!':
+				combiner->in_cq_batch = false;
+//				conn->state = DN_CONNECTION_STATE_IDLE;
+//				conn->combiner = NULL;
+				return RESPONSE_COMPLETE_BATCH;
 			case 'M':			/* Command Id */
 				HandleDatanodeCommandId(combiner, msg, msg_len);
 				break;
@@ -3128,7 +3152,7 @@ do_query(RemoteQueryState *node)
 				node->tuplestorestate = tuplestore_begin_heap(false, false, work_mem);
 				tuplestore_set_eflags(node->tuplestorestate, node->eflags);
 			}
-			else if (res == RESPONSE_DATAROW)
+			else if (res == RESPONSE_DATAROW || res == RESPONSE_BEGIN_BATCH)
 			{
 				/*
 				 * Got first data row, quit the loop
@@ -3299,6 +3323,12 @@ RemoteQueryNext(ScanState *scan_node)
 			 * If tuplestore has reached its end but the underlying RemoteQueryNext() hasn't
 			 * finished yet, try to fetch another row.
 			 */
+
+			// Needs to work by conn
+			if (!node->in_cq_batch)
+				return NULL;
+
+			// For a CQ, this should block until another tuple comes through
 			if (FetchTuple(node, scanslot))
 			{
 				/* See comments a couple of lines above */
@@ -3312,7 +3342,11 @@ RemoteQueryNext(ScanState *scan_node)
 					tuplestore_puttupleslot(tuplestorestate, scanslot);
 			}
 			else
-				node->eof_underlying = true;
+			{
+				// This is where we end up, so we never return for CQ
+				// We need to return at the end of a batch though
+				node->eof_underlying = !rq->remote_query->is_continuous; /* CQs are never done! */
+			}
 		}
 
 		if (eof_tuplestore && node->eof_underlying)
@@ -3346,6 +3380,7 @@ RemoteQueryNext(ScanState *scan_node)
 		 rq->remote_query->commandType == CMD_DELETE))
 		estate->es_processed += node->rqs_processed;
 
+//	print_slot(scanslot);
 	return scanslot;
 }
 
@@ -3865,13 +3900,13 @@ ExecRemoteUtility(RemoteQuery *node)
 				{
 					ereport(ERROR,
 							(errcode(ERRCODE_INTERNAL_ERROR),
-							 errmsg("Unexpected response from Datanode")));
+							 errmsg("3Unexpected response from Datanode")));
 				}
 				else if (res == RESPONSE_DATAROW)
 				{
 					ereport(ERROR,
 							(errcode(ERRCODE_INTERNAL_ERROR),
-							 errmsg("Unexpected response from Datanode")));
+							 errmsg("4Unexpected response from Datanode")));
 				}
 			}
 		}
