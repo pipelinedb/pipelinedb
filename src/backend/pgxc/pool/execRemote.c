@@ -1039,6 +1039,7 @@ bool
 FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 {
 	bool have_tuple = false;
+	RemoteQuery *rq = (RemoteQuery*) combiner->ss.ps.plan;
 
 	/* If we have message in the buffer, consume it */
 	if (combiner->currentRow.msg)
@@ -1071,10 +1072,6 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 
 	while (combiner->conn_count > 0)
 	{
-		// If CQ:
-			// Only try to fetch if THIS CONN is in a batch
-		  // return false
-
 		int res;
 		PGXCNodeHandle *conn = combiner->connections[combiner->current_conn];
 
@@ -1117,11 +1114,24 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 
 		/* read messages */
 		res = handle_response(conn, combiner);
+
+		/*
+		 * If this is a CQ, we only want to look for tuples if we know a batch
+		 * is currently in progress. Otherwise we just wait for RESPONSE_BEGIN_BATCH
+		 */
+		if (rq->remote_query->is_continuous && !conn->in_cq_batch)
+		{
+			/* Remove current connection, move last in-place, adjust current_conn */
+			if (combiner->current_conn < --combiner->conn_count)
+				combiner->connections[combiner->current_conn] = combiner->connections[combiner->conn_count];
+			else
+				combiner->current_conn = 0;
+			continue;
+		}
+
 		if (res == RESPONSE_EOF)
 		{
 			/* incomplete message, read more */
-
-			// This blocks while we're waiting for next batch
 			if (pgxc_node_receive(1, &conn, NULL))
 				ereport(ERROR,
 						(errcode(ERRCODE_INTERNAL_ERROR),
@@ -1360,12 +1370,12 @@ handle_response(PGXCNodeHandle * conn, RemoteQueryState *combiner)
 				return result;
 			}
 			case '@':
+				conn->in_cq_batch = true;
 				combiner->in_cq_batch = true;
 				return RESPONSE_BEGIN_BATCH;
 			case '!':
+				conn->in_cq_batch = false;
 				combiner->in_cq_batch = false;
-//				conn->state = DN_CONNECTION_STATE_IDLE;
-//				conn->combiner = NULL;
 				return RESPONSE_COMPLETE_BATCH;
 			case 'M':			/* Command Id */
 				HandleDatanodeCommandId(combiner, msg, msg_len);
@@ -3319,16 +3329,11 @@ RemoteQueryNext(ScanState *scan_node)
 			(!node->eof_underlying ||
 			(node->currentRow.msg != NULL)))
 		{
+
 			/*
 			 * If tuplestore has reached its end but the underlying RemoteQueryNext() hasn't
 			 * finished yet, try to fetch another row.
 			 */
-
-			// Needs to work by conn
-			if (!node->in_cq_batch)
-				return NULL;
-
-			// For a CQ, this should block until another tuple comes through
 			if (FetchTuple(node, scanslot))
 			{
 				/* See comments a couple of lines above */
@@ -3343,8 +3348,6 @@ RemoteQueryNext(ScanState *scan_node)
 			}
 			else
 			{
-				// This is where we end up, so we never return for CQ
-				// We need to return at the end of a batch though
 				node->eof_underlying = !rq->remote_query->is_continuous; /* CQs are never done! */
 			}
 		}
@@ -3380,7 +3383,6 @@ RemoteQueryNext(ScanState *scan_node)
 		 rq->remote_query->commandType == CMD_DELETE))
 		estate->es_processed += node->rqs_processed;
 
-//	print_slot(scanslot);
 	return scanslot;
 }
 

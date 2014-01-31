@@ -328,19 +328,12 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	for (;;)
 	{
 		/*
-		 * run plan on a microbatch
-		 */
-
-
-		/*
-		 * RemoteQueryNext blocks here until tuples are received. We need to force
-		 * a return somehow so that we can periodically update results
+		 * Run plan on a microbatch. BeginBatch() will be called within
+		 * ExecutePlan() as soon as it sees a tuple.
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
 				sendTuples, batchsize, 10, direction, dest);
 
-		// kinda works if we only run this on the DNs
-		// only seems to send up to batch size though
 		if (IS_PGXC_DATANODE && estate->in_cq_batch)
 		{
 			CompleteBatch();
@@ -1559,8 +1552,6 @@ ExecutePlan(EState *estate,
 			BeginBatch();
 			estate->in_cq_batch = true;
 		}
-
-		print_slot(slot);
 
 		/*
 		 * If we have a junk filter, then project a new tuple with the junk
