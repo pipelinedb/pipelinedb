@@ -1114,29 +1114,18 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 
 		/* read messages */
 		res = handle_response(conn, combiner);
-
-		/*
-		 * If this is a CQ, we only want to look for tuples if we know a batch
-		 * is currently in progress. Otherwise we just wait for RESPONSE_BEGIN_BATCH
-		 */
-		if (rq->remote_query->is_continuous && !conn->in_cq_batch)
+		if (res == RESPONSE_BEGIN_BATCH)
 		{
-			/* Remove current connection, move last in-place, adjust current_conn */
-			if (combiner->current_conn < --combiner->conn_count)
-				combiner->connections[combiner->current_conn] = combiner->connections[combiner->conn_count];
-			else
-				combiner->current_conn = 0;
+			/* try to read from the new batch */
+			conn->in_cq_batch = true;
 			continue;
 		}
-
-		if (res == RESPONSE_EOF)
+		else if (res == RESPONSE_COMPLETE_BATCH)
 		{
-			/* incomplete message, read more */
-			if (pgxc_node_receive(1, &conn, NULL))
-				ereport(ERROR,
-						(errcode(ERRCODE_INTERNAL_ERROR),
-						 errmsg("Failed to fetch from Datanode")));
-			continue;
+			/* this connection will get skipped later on */
+			conn->in_cq_batch = false;
+			if (have_tuple)
+				return true;
 		}
 		else if (res == RESPONSE_SUSPENDED)
 		{
@@ -1152,16 +1141,6 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 			else
 				combiner->current_conn = 0;
 		}
-		else if (res == RESPONSE_BEGIN_BATCH)
-		{
-			combiner->in_cq_batch = true;
-			return true;
-		}
-		else if (res == RESPONSE_COMPLETE_BATCH)
-		{
-			combiner->in_cq_batch = false;
-			return false;
-		}
 		else if (res == RESPONSE_DATAROW && have_tuple)
 		{
 			/*
@@ -1169,6 +1148,28 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 			 * next fetch
 			 */
 			return true;
+		}
+
+		/*
+		 * If this is a CQ, we only want to look for tuples if we know a batch
+		 * is currently in progress. Otherwise we just wait for RESPONSE_BEGIN_BATCH
+		 */
+		if (rq->remote_query->is_continuous && !conn->in_cq_batch)
+		{
+			/* Remove current connection, move last in-place, adjust current_conn */
+			if (combiner->current_conn < --combiner->conn_count)
+				combiner->connections[combiner->current_conn] = combiner->connections[combiner->conn_count];
+			else
+				combiner->current_conn = 0;
+		}
+		else if (res == RESPONSE_EOF)
+		{
+			/* incomplete message, read more */
+			if (pgxc_node_receive(1, &conn, NULL))
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("Failed to fetch from Datanode")));
+			continue;
 		}
 
 		/* If we have message in the buffer, consume it */
@@ -1371,11 +1372,9 @@ handle_response(PGXCNodeHandle * conn, RemoteQueryState *combiner)
 			}
 			case '@':
 				conn->in_cq_batch = true;
-				combiner->in_cq_batch = true;
 				return RESPONSE_BEGIN_BATCH;
 			case '!':
 				conn->in_cq_batch = false;
-				combiner->in_cq_batch = false;
 				return RESPONSE_COMPLETE_BATCH;
 			case 'M':			/* Command Id */
 				HandleDatanodeCommandId(combiner, msg, msg_len);
@@ -3162,7 +3161,7 @@ do_query(RemoteQueryState *node)
 				node->tuplestorestate = tuplestore_begin_heap(false, false, work_mem);
 				tuplestore_set_eflags(node->tuplestorestate, node->eflags);
 			}
-			else if (res == RESPONSE_DATAROW || res == RESPONSE_BEGIN_BATCH)
+			else if (res == RESPONSE_DATAROW)
 			{
 				/*
 				 * Got first data row, quit the loop
@@ -3171,6 +3170,14 @@ do_query(RemoteQueryState *node)
 				node->conn_count = regular_conn_count;
 				node->current_conn = i;
 				break;
+			}
+			else if (res == RESPONSE_BEGIN_BATCH)
+			{
+				connections[i]->in_cq_batch = true;
+			}
+			else if (res == RESPONSE_COMPLETE_BATCH)
+			{
+				connections[i]->in_cq_batch = false;
 			}
 			else
 				ereport(ERROR,
@@ -3334,6 +3341,8 @@ RemoteQueryNext(ScanState *scan_node)
 			 * If tuplestore has reached its end but the underlying RemoteQueryNext() hasn't
 			 * finished yet, try to fetch another row.
 			 */
+
+			// returning false here means eof
 			if (FetchTuple(node, scanslot))
 			{
 				/* See comments a couple of lines above */
@@ -3348,7 +3357,7 @@ RemoteQueryNext(ScanState *scan_node)
 			}
 			else
 			{
-				node->eof_underlying = !rq->remote_query->is_continuous; /* CQs are never done! */
+				node->eof_underlying = true;//!rq->remote_query->is_continuous; /* CQs are never done */
 			}
 		}
 

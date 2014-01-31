@@ -132,7 +132,6 @@ typedef struct RemoteQueryState
 	CommandId	rqs_cmd_id;			/* Cmd id to use in some special cases */
 	uint32		rqs_processed;			/* Number of rows processed (only for DMLs) */
 
-	bool		in_cq_batch;	/* are we in a CQ batch? */
 }	RemoteQueryState;
 
 typedef void (*xact_callback) (bool isCommit, void *args);

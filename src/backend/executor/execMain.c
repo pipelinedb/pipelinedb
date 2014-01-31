@@ -288,7 +288,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	DestReceiver *dest;
 	bool		sendTuples;
 	MemoryContext oldcontext;
-	int batchsize = IS_PGXC_COORDINATOR ? 0 : 1000;
+	int batchsize = 1000;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
@@ -334,7 +334,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 		ExecutePlan(estate, queryDesc->planstate, operation,
 				sendTuples, batchsize, 10, direction, dest);
 
-		if (IS_PGXC_DATANODE && estate->in_cq_batch)
+		if (queryDesc->plannedstmt->is_continuous && estate->in_cq_batch)
 		{
 			CompleteBatch();
 			estate->in_cq_batch = false;
@@ -1547,7 +1547,7 @@ ExecutePlan(EState *estate,
 				break; /* no timeout, return as soon as we encounter a null tuple */
 		}
 
-		if (IS_PGXC_DATANODE && !estate->in_cq_batch)
+		if (estate->es_plannedstmt->is_continuous && !estate->in_cq_batch)
 		{
 			BeginBatch();
 			estate->in_cq_batch = true;
