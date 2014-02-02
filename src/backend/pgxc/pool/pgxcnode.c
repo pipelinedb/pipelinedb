@@ -422,12 +422,7 @@ pgxc_node_receive(const int conn_count,
 	}
 
 retry:
-	elog(LOG, "selecting");
-//	struct timeval tv;
-//	tv.tv_sec = 0;
-//	tv.tv_usec = 1000 * 10;
 	res_select = select(nfds + 1, &readfds, NULL, NULL, timeout);
-	elog(LOG, "selected");
 	if (res_select < 0)
 	{
 		/* error - retry if EINTR or EAGAIN */
