@@ -46,6 +46,7 @@
 #include "catalog/pipeline_queries.h"
 #include "commands/trigger.h"
 #include "executor/execdebug.h"
+#include "libpq/libpq.h"
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "optimizer/clauses.h"
@@ -314,6 +315,8 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
 				sendTuples, batchsize, 10, direction, dest);
+
+		pq_flush();
 
 		if (IS_PGXC_DATANODE && !estate->es_processed)
 			ReadyForQuery(dest->mydest);
