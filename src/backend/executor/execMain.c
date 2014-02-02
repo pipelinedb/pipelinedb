@@ -270,6 +270,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	DestReceiver *dest;
 	bool		sendTuples;
 	MemoryContext oldcontext;
+	int batchsize = 1000;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
@@ -306,25 +307,24 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	if (sendTuples)
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
-	int i = 0;
-	int batch = 2;
 	for (;;)
 	{
 		/*
 		 * run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
-				sendTuples, batch, 10, direction, dest);
+				sendTuples, batchsize, 10, direction, dest);
 
-		if (i++ > 2)
-			break;
+		if (IS_PGXC_DATANODE && !estate->es_processed)
+			ReadyForQuery(dest->mydest);
+
 		/*
 		 * If we didn't see any new tuples, sleep briefly to save cycles
 		 */
 		if (estate->es_processed == 0)
 			pg_usleep(PIPELINE_SLEEP_MS * 1000);
 		else
-			elog(LOG, "processed=%d, batch size=%d", estate->es_processed, batch);
+			elog(LOG, "processed=%d, batch size=%d", estate->es_processed, batchsize);
 		estate->es_processed = 0;
 	}
 
@@ -1524,8 +1524,7 @@ ExecutePlan(EState *estate,
 			else
 				break; /* no timeout, return as soon as we encounter a null tuple */
 		}
-		else
-			print_slot(slot);
+		print_slot(slot);
 
 		/*
 		 * If we have a junk filter, then project a new tuple with the junk
