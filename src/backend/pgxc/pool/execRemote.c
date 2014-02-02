@@ -1069,7 +1069,7 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 		return true;
 	}
 
-	while (combiner->conn_count > 0)
+	while (combiner->current_conn < combiner->conn_count)
 	{
 		int res;
 		PGXCNodeHandle *conn = combiner->connections[combiner->current_conn];
@@ -1124,17 +1124,29 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 		}
 		else if (res == RESPONSE_SUSPENDED)
 		{
-			/* Make next connection current */
-			if (++combiner->current_conn >= combiner->conn_count)
-				combiner->current_conn = 0;
+			RemoteQuery *rq = (RemoteQuery*) combiner->ss.ps.plan;
+			if (rq->remote_query->is_continuous)
+				combiner->current_conn++;
+			else
+			{
+				/* Make next connection current */
+				if (++combiner->current_conn >= combiner->conn_count)
+					combiner->current_conn = 0;
+			}
 		}
 		else if (res == RESPONSE_COMPLETE)
 		{
-			/* Remove current connection, move last in-place, adjust current_conn */
-			if (combiner->current_conn < --combiner->conn_count)
-				combiner->connections[combiner->current_conn] = combiner->connections[combiner->conn_count];
+			RemoteQuery *rq = (RemoteQuery*) combiner->ss.ps.plan;
+			if (rq->remote_query->is_continuous)
+				combiner->current_conn++;
 			else
-				combiner->current_conn = 0;
+			{
+				/* Remove current connection, move last in-place, adjust current_conn */
+				if (combiner->current_conn < --combiner->conn_count)
+					combiner->connections[combiner->current_conn] = combiner->connections[combiner->conn_count];
+				else
+					combiner->current_conn = 0;
+			}
 		}
 		else if (res == RESPONSE_DATAROW && have_tuple)
 		{
