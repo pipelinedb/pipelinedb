@@ -46,6 +46,7 @@
 #include "catalog/pipeline_queries.h"
 #include "commands/trigger.h"
 #include "executor/execdebug.h"
+#include "libpq/libpq.h"
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "optimizer/clauses.h"
@@ -62,9 +63,6 @@
 #include "pgxc/pgxc.h"
 #include "commands/copy.h"
 #endif
-
-#include "libpq/pqformat.h"
-#include "libpq/libpq.h"
 
 /* Hooks for plugins to get control in ExecutorStart/Run/Finish/End */
 ExecutorStart_hook_type ExecutorStart_hook = NULL;
@@ -259,21 +257,6 @@ ExecutorRun(QueryDesc *queryDesc,
 		standard_ExecutorRun(queryDesc, direction, count);
 }
 
-
-static void
-CompleteBatch(void)
-{
-	pq_putemptymessage('!');
-	pq_flush();
-}
-
-static void
-BeginBatch()
-{
-	pq_putemptymessage('@');
-	pq_flush();
-}
-
 /*
  * ExecutorRunContinuous
  *
@@ -328,17 +311,15 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	for (;;)
 	{
 		/*
-		 * Run plan on a microbatch. BeginBatch() will be called within
-		 * ExecutePlan() as soon as it sees a tuple.
+		 * run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
 				sendTuples, batchsize, 10, direction, dest);
 
-		if (queryDesc->plannedstmt->is_continuous && estate->in_cq_batch)
-		{
-			CompleteBatch();
-			estate->in_cq_batch = false;
-		}
+		pq_flush();
+
+		if (IS_PGXC_DATANODE && !estate->es_processed)
+			ReadyForQuery(dest->mydest);
 
 		/*
 		 * If we didn't see any new tuples, sleep briefly to save cycles
@@ -346,7 +327,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 		if (estate->es_processed == 0)
 			pg_usleep(PIPELINE_SLEEP_MS * 1000);
 		else
-			elog(LOG, "processed %d tuples, batch size is %d", estate->es_processed, batchsize);
+			elog(LOG, "processed=%d, batch size=%d", estate->es_processed, batchsize);
 		estate->es_processed = 0;
 	}
 
@@ -1546,12 +1527,7 @@ ExecutePlan(EState *estate,
 			else
 				break; /* no timeout, return as soon as we encounter a null tuple */
 		}
-
-		if (estate->es_plannedstmt->is_continuous && !estate->in_cq_batch)
-		{
-			BeginBatch();
-			estate->in_cq_batch = true;
-		}
+		print_slot(slot);
 
 		/*
 		 * If we have a junk filter, then project a new tuple with the junk
