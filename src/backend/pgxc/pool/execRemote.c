@@ -1069,6 +1069,9 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 		return true;
 	}
 
+	if (combiner->current_conn >= combiner->conn_count)
+		combiner->current_conn = 0;
+
 	while (combiner->current_conn < combiner->conn_count)
 	{
 		int res;

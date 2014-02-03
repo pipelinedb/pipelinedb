@@ -311,14 +311,17 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	for (;;)
 	{
 		/*
-		 * run plan on a microbatch
+		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
 				sendTuples, batchsize, 10, direction, dest);
 
 		pq_flush();
 
-		if (IS_PGXC_DATANODE && !estate->es_processed)
+		/*
+		 * Tell the coordinator that this batch is done
+		 */
+		if (IS_PGXC_DATANODE)
 			ReadyForQuery(dest->mydest);
 
 		/*
