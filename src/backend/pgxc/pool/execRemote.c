@@ -1126,7 +1126,9 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 		{
 			RemoteQuery *rq = (RemoteQuery*) combiner->ss.ps.plan;
 			if (rq->remote_query->is_continuous)
+			{
 				combiner->current_conn++;
+			}
 			else
 			{
 				/* Make next connection current */
@@ -1138,7 +1140,9 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 		{
 			RemoteQuery *rq = (RemoteQuery*) combiner->ss.ps.plan;
 			if (rq->remote_query->is_continuous)
+			{
 				combiner->current_conn++;
+			}
 			else
 			{
 				/* Remove current connection, move last in-place, adjust current_conn */
@@ -3117,7 +3121,10 @@ do_query(RemoteQueryState *node)
 			int res = handle_response(connections[i], node);
 			if (res == RESPONSE_EOF)
 			{
-				i++;
+				if (pgxc_node_receive(1, &connections[i], NULL))
+					ereport(ERROR,
+							(errcode(ERRCODE_INTERNAL_ERROR),
+							 errmsg("Failed to fetch from Datanode")));
 			}
 			else if (res == RESPONSE_COMPLETE)
 			{
