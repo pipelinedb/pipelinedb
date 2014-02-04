@@ -3334,7 +3334,7 @@ RemoteQueryNext(ScanState *scan_node)
 					tuplestore_puttupleslot(tuplestorestate, scanslot);
 			}
 			else
-				node->eof_underlying = true;
+				node->eof_underlying = !rq->remote_query->is_continuous;
 		}
 
 		if (eof_tuplestore && node->eof_underlying)
