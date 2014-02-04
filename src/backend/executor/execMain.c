@@ -271,7 +271,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	DestReceiver *dest;
 	bool		sendTuples;
 	MemoryContext oldcontext;
-	int batchsize = 1000;
+	int batchsize = 0;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);

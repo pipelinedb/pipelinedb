@@ -355,6 +355,29 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 	return result;
 }
 
+/* ----------------------------------------------------------------
+ *		ExecBeginBatch
+ *
+ *		Prepare a node for a new batch
+ * ----------------------------------------------------------------
+ */
+void
+ExecBeginBatch(PlanState *node)
+{
+
+}
+
+/* ----------------------------------------------------------------
+ *		ExecEndBatch
+ *
+ *		Clean up node after finishing a batch
+ * ----------------------------------------------------------------
+ */
+void
+ExecEndBatch(PlanState *node)
+{
+
+}
 
 /* ----------------------------------------------------------------
  *		ExecProcNode
@@ -377,6 +400,7 @@ ExecProcNode(PlanState *node)
 
 	if (node->cq_batch_size && node->cq_batch_progress == node->cq_batch_size)
 	{
+		elog(LOG, "[node %d] batch full!", node->type);
 		node->cq_batch_progress = 0;
 		return NULL;
 	}
@@ -532,7 +556,8 @@ ExecProcNode(PlanState *node)
 	if (node->instrument)
 		InstrStopNode(node->instrument, TupIsNull(result) ? 0.0 : 1.0);
 
-	node->cq_batch_progress++;
+	if (!TupIsNull(result))
+		node->cq_batch_progress++;
 
 	return result;
 }
