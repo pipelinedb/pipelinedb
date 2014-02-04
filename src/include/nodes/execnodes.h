@@ -1012,6 +1012,10 @@ typedef struct PlanState
 	ProjectionInfo *ps_ProjInfo;	/* info for doing tuple projection */
 	bool		ps_TupFromTlist;/* state flag for processing set-valued
 								 * functions in targetlist */
+
+	int cq_batch_progress;
+	int cq_batch_size;
+
 } PlanState;
 
 /* ----------------

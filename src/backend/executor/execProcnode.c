@@ -349,6 +349,9 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 	if (estate->es_instrument)
 		result->instrument = InstrAlloc(1, estate->es_instrument);
 
+	result->cq_batch_progress = 0;
+	result->cq_batch_size = 1;
+
 	return result;
 }
 
@@ -371,6 +374,12 @@ ExecProcNode(PlanState *node)
 
 	if (node->instrument)
 		InstrStartNode(node->instrument);
+
+	if (node->cq_batch_size && node->cq_batch_progress == node->cq_batch_size)
+	{
+		node->cq_batch_progress = 0;
+		return NULL;
+	}
 
 	switch (nodeTag(node))
 	{
@@ -522,6 +531,8 @@ ExecProcNode(PlanState *node)
 
 	if (node->instrument)
 		InstrStopNode(node->instrument, TupIsNull(result) ? 0.0 : 1.0);
+
+	node->cq_batch_progress++;
 
 	return result;
 }
