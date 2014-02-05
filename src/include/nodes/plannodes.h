@@ -73,7 +73,7 @@ typedef struct PlannedStmt
 	 */
 	bool		is_continuous; /* should this be executed continuously? */
 
-	bool cq_batch_size;
+	int cq_batch_size;
 } PlannedStmt;
 
 /* macro for fetching the Plan associated with a SubPlan node */
