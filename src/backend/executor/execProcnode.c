@@ -412,7 +412,7 @@ ExecProcNode(PlanState *node)
 	if (node->instrument)
 		InstrStartNode(node->instrument);
 
-	if (IsBatchNode(node) && node->cq_batch_progress == BatchSize(node))
+	if (IsContinuous(node) && node->cq_batch_progress == BatchSize(node))
 		return ExecEndBatch(node);
 
 	switch (nodeTag(node))
