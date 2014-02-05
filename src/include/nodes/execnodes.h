@@ -1016,6 +1016,13 @@ typedef struct PlanState
 	int cq_batch_progress;
 } PlanState;
 
+/*
+ * CQ helper macros
+ */
+#define BatchSize(node)				(((PlanState *)(node))->state->cq_batch_size)
+#define IsContinuous(node)			(BatchSize(node) > 0)
+
+
 /* ----------------
  *	these are defined to avoid confusion problems with "left"
  *	and "right" and "inner" and "outer".  The convention is that
