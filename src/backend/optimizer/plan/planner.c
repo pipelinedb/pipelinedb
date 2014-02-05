@@ -17,6 +17,7 @@
 
 #include <limits.h>
 
+#include "catalog/pipeline_queries.h"
 #include "executor/executor.h"
 #include "executor/nodeAgg.h"
 #include "miscadmin.h"
@@ -139,6 +140,9 @@ planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		else
 #endif
 			result = standard_planner(parse, cursorOptions, boundParams);
+
+	result->planTree->cq_batch_size = PIPELINE_BATCH_SIZE;
+
 	return result;
 }
 

@@ -131,6 +131,8 @@ typedef struct Plan
 	 */
 	Bitmapset  *extParam;
 	Bitmapset  *allParam;
+
+	int cq_batch_size;
 } Plan;
 
 /* ----------------
