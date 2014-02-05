@@ -1012,8 +1012,6 @@ typedef struct PlanState
 								 * functions in targetlist */
 
 	int cq_batch_progress;
-	int cq_batch_size;
-
 } PlanState;
 
 /* ----------------
