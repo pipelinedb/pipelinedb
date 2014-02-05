@@ -115,6 +115,7 @@ CopyPlanFields(const Plan *from, Plan *newnode)
 	COPY_SCALAR_FIELD(total_cost);
 	COPY_SCALAR_FIELD(plan_rows);
 	COPY_SCALAR_FIELD(plan_width);
+	COPY_SCALAR_FIELD(cq_batch_size);
 	COPY_NODE_FIELD(targetlist);
 	COPY_NODE_FIELD(qual);
 	COPY_NODE_FIELD(lefttree);
@@ -2562,9 +2563,6 @@ _copyQuery(const Query *from)
 	COPY_SCALAR_FIELD(has_to_save_cmd_id);
 #endif
 	COPY_SCALAR_FIELD(is_continuous);
-	COPY_SCALAR_FIELD(cq_batch_size);
-	COPY_SCALAR_FIELD(cq_batch_timeout_ms);
-	COPY_SCALAR_FIELD(cq_pause_ms);
 	COPY_SCALAR_FIELD(cq_activate_stmt);
 
 	return newnode;
