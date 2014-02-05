@@ -401,7 +401,6 @@ ChoosePortalStrategy(List *stmts)
 		else if (IsA(stmt, PlannedStmt))
 		{
 			PlannedStmt *pstmt = (PlannedStmt *) stmt;
-
 			if (pstmt->canSetTag)
 			{
 				if (++nSetTag > 1)

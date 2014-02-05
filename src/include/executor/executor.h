@@ -224,7 +224,7 @@ extern TupleTableSlot *ExecProcNode(PlanState *node);
 extern Node *MultiExecProcNode(PlanState *node);
 extern void ExecEndNode(PlanState *node);
 extern void ExecBeginBatch(PlanState *node);
-extern void ExecEndBatch(PlanState *node);
+extern TupleTableSlot *ExecEndBatch(PlanState *node);
 
 /*
  * prototypes from functions in execQual.c

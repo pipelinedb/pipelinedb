@@ -350,7 +350,6 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 		result->instrument = InstrAlloc(1, estate->es_instrument);
 
 	result->cq_batch_progress = 0;
-	result->cq_batch_size = 0;
 
 	return result;
 }
@@ -370,29 +369,29 @@ ExecBeginBatch(PlanState *node)
 /* ----------------------------------------------------------------
  *		ExecEndBatch
  *
- *		Clean up node after finishing a batch
+ *		Clean up a node after finishing a batch
  * ----------------------------------------------------------------
  */
-void
+TupleTableSlot *
 ExecEndBatch(PlanState *node)
 {
 	switch (nodeTag(node))
 	{
 		case T_AggState:
 			{
-				/*
-				 * We really just need to cleanly recreate the hashtable
-				 */
 				AggState *agg = (AggState *) node;
 				agg->agg_done = false;
 				agg->table_filled = false;
-
-				elog(LOG, "Ending agg batch");
+				agg->grp_firstTuple = NULL;
 			}
 			break;
 		default:
 			break;
 	}
+
+	node->cq_batch_progress = 0;
+
+	return NULL;
 }
 
 /* ----------------------------------------------------------------
@@ -414,12 +413,8 @@ ExecProcNode(PlanState *node)
 	if (node->instrument)
 		InstrStartNode(node->instrument);
 
-	if (node->cq_batch_size && node->cq_batch_progress == node->cq_batch_size)
-	{
-		node->cq_batch_progress = 0;
-		ExecEndBatch(node);
-		return NULL;
-	}
+	if (node->state->cq_batch_size && node->cq_batch_progress == node->state->cq_batch_size)
+		return ExecEndBatch(node);
 
 	switch (nodeTag(node))
 	{

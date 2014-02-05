@@ -141,7 +141,8 @@ planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 #endif
 			result = standard_planner(parse, cursorOptions, boundParams);
 
-	result->planTree->cq_batch_size = PIPELINE_BATCH_SIZE;
+	if (result->is_continuous)
+		result->cq_batch_size = PIPELINE_BATCH_SIZE;
 
 	return result;
 }
