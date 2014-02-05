@@ -382,7 +382,6 @@ ExecEndBatch(PlanState *node)
 				AggState *agg = (AggState *) node;
 				agg->agg_done = false;
 				agg->table_filled = false;
-				agg->grp_firstTuple = NULL;
 			}
 			break;
 		default:
@@ -413,7 +412,7 @@ ExecProcNode(PlanState *node)
 	if (node->instrument)
 		InstrStartNode(node->instrument);
 
-	if (node->state->cq_batch_size && node->cq_batch_progress == node->state->cq_batch_size)
+	if (IsBatchNode(node) && node->cq_batch_progress == BatchSize(node))
 		return ExecEndBatch(node);
 
 	switch (nodeTag(node))
