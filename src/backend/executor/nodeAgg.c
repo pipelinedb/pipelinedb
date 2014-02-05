@@ -1189,7 +1189,13 @@ ExecAgg(AggState *node)
 	if (((Agg *) node->ss.ps.plan)->aggstrategy == AGG_HASHED)
 	{
 		if (!node->table_filled)
+		{
+			build_hash_table(node);
+			node->table_filled = false;
+			/* Compute the columns we actually need to hash on */
+			node->hash_needed = find_hash_columns(node);
 			agg_fill_hash_table(node);
+		}
 		return agg_retrieve_hash_table(node);
 	}
 	else
@@ -1707,7 +1713,6 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 	if (node->aggstrategy == AGG_HASHED)
 	{
-		build_hash_table(aggstate);
 		aggstate->table_filled = false;
 		/* Compute the columns we actually need to hash on */
 		aggstate->hash_needed = find_hash_columns(aggstate);
@@ -2234,7 +2239,6 @@ ExecReScanAgg(AggState *node)
 	if (((Agg *) node->ss.ps.plan)->aggstrategy == AGG_HASHED)
 	{
 		/* Rebuild an empty hash table */
-		build_hash_table(node);
 		node->table_filled = false;
 	}
 	else

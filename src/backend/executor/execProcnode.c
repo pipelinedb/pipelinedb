@@ -350,7 +350,7 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 		result->instrument = InstrAlloc(1, estate->es_instrument);
 
 	result->cq_batch_progress = 0;
-	result->cq_batch_size = 1;
+	result->cq_batch_size = 0;
 
 	return result;
 }
@@ -376,7 +376,23 @@ ExecBeginBatch(PlanState *node)
 void
 ExecEndBatch(PlanState *node)
 {
+	switch (nodeTag(node))
+	{
+		case T_AggState:
+			{
+				/*
+				 * We really just need to cleanly recreate the hashtable
+				 */
+				AggState *agg = (AggState *) node;
+				agg->agg_done = false;
+				agg->table_filled = false;
 
+				elog(LOG, "Ending agg batch");
+			}
+			break;
+		default:
+			break;
+	}
 }
 
 /* ----------------------------------------------------------------
@@ -400,8 +416,8 @@ ExecProcNode(PlanState *node)
 
 	if (node->cq_batch_size && node->cq_batch_progress == node->cq_batch_size)
 	{
-		elog(LOG, "[node %d] batch full!", node->type);
 		node->cq_batch_progress = 0;
+		ExecEndBatch(node);
 		return NULL;
 	}
 
