@@ -106,11 +106,6 @@ struct pgxc_node_handle
 	 * For details see comments of RESP_ROLLBACK
 	 */
 	RESP_ROLLBACK	ck_resp_rollback;
-
-	/*
-	 * true if this connection has begun but not completed a CQ batch
-	 */
-	bool			in_cq_batch;
 };
 typedef struct pgxc_node_handle PGXCNodeHandle;
 
