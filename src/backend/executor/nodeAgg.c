@@ -1193,14 +1193,13 @@ ExecAgg(AggState *node)
 			build_hash_table(node);
 			if (!node->reuse_hashtable)
 			{
+				/*
+				 * We're not updating aggregations across CQ batches, so freeze it
+				 */
 				agg_fill_hash_table(node);
 				hash_freeze(node->hashtable->hashtab);
 			}
 			hash_seq_init(&node->hashiter, node->hashtable->hashtab);
-
-			/* Compute the columns we actually need to hash on */
-			node->hash_needed = find_hash_columns(node);
-			node->table_filled = true;
 		}
 		if (node->reuse_hashtable)
 			agg_fill_hash_table(node);
