@@ -1719,6 +1719,9 @@ typedef struct AggState
 #ifdef PGXC
 	bool		skip_trans;		/* skip the transition step for aggregates */
 #endif /* PGXC */
+
+	bool		reuse_hashtable;
+	long		last_hashtable_scan;
 } AggState;
 
 /* ----------------

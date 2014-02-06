@@ -1191,11 +1191,19 @@ ExecAgg(AggState *node)
 		if (!node->table_filled)
 		{
 			build_hash_table(node);
-			node->table_filled = false;
+			if (!node->reuse_hashtable)
+			{
+				agg_fill_hash_table(node);
+				hash_freeze(node->hashtable->hashtab);
+			}
+			hash_seq_init(&node->hashiter, node->hashtable->hashtab);
+
 			/* Compute the columns we actually need to hash on */
 			node->hash_needed = find_hash_columns(node);
-			agg_fill_hash_table(node);
+			node->table_filled = true;
 		}
+		if (node->reuse_hashtable)
+			agg_fill_hash_table(node);
 		return agg_retrieve_hash_table(node);
 	}
 	else
@@ -1430,6 +1438,7 @@ agg_fill_hash_table(AggState *aggstate)
 		outerslot = ExecProcNode(outerPlan);
 		if (TupIsNull(outerslot))
 			break;
+
 		/* set up for advance_aggregates call */
 		tmpcontext->ecxt_outertuple = outerslot;
 
@@ -1444,8 +1453,6 @@ agg_fill_hash_table(AggState *aggstate)
 	}
 
 	aggstate->table_filled = true;
-	/* Initialize to walk the hash table */
-	ResetTupleHashIterator(aggstate->hashtable, &aggstate->hashiter);
 }
 
 /*
