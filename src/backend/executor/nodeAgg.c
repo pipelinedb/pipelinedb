@@ -1601,6 +1601,16 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 	aggstate->skip_trans = node->skip_trans;
 
 	/*
+	 * Since the Coordinator will be collecting aggregations from Datanodes,
+	 * we want to advance aggregates even across CQ batches. We do this by
+	 * reusing the aggregation hashtable on Coordinators. On Datanodes, it's
+	 * cleared before every new batch because we only want to send aggregation
+	 * deltas to the Coordinator, since a single aggregation group may be spread
+	 * across multiple Datanodes.
+	 */
+	aggstate->reuse_hashtable = IS_PGXC_COORDINATOR && IsContinuous(aggstate);
+
+	/*
 	 * Create expression contexts.	We need two, one for per-input-tuple
 	 * processing and one for per-output-tuple processing.	We cheat a little
 	 * by using ExecAssignExprContext() to build both.
