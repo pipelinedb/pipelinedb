@@ -568,6 +568,8 @@ ExecProcNode(PlanState *node)
 
 	if (!TupIsNull(result))
 		node->cq_batch_progress++;
+	else if (node->cq_batch_progress)
+		return ExecEndBatch(node);
 
 	return result;
 }
