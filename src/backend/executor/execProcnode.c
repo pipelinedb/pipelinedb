@@ -381,7 +381,7 @@ ExecEndBatch(PlanState *node)
 			{
 				AggState *agg = (AggState *) node;
 				agg->agg_done = false;
-				agg->table_filled = false;
+				agg->table_filled = agg->reuse_hashtable;
 			}
 			break;
 		default:

@@ -256,6 +256,8 @@ typedef struct AggStatePerGroupData
 	bool		collectValueIsNull;
 	bool		noCollectValue;		/* true if the collectValue not set yet */
 #endif /* PGXC */
+
+	long		version;	/* this version is incremented every time the entry changes */
 } AggStatePerGroupData;
 
 /*
@@ -413,6 +415,7 @@ initialize_aggregates(AggState *aggstate,
 		 */
 		pergroupstate->noCollectValue = peraggstate->initCollectValueIsNull;
 #endif /* PGXC */
+		pergroupstate->version = aggstate->last_hashtable_scan;
 	}
 }
 
@@ -711,6 +714,12 @@ advance_aggregates(AggState *aggstate, AggStatePerGroup pergroup)
 			advance_transition_function(aggstate, peraggstate, pergroupstate,
 											&fcinfo);
 		}
+
+		/*
+		 * This ensures that this entry will be seen by the next scan of a
+		 * reused hashtable
+		 */
+		pergroupstate->version++;
 	}
 }
 
@@ -1609,6 +1618,13 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 	 * across multiple Datanodes.
 	 */
 	aggstate->reuse_hashtable = IS_PGXC_COORDINATOR && IsContinuous(aggstate);
+
+	/*
+	 * Each hashtable entry has a version associated with it, so that when we're
+	 * iterating over a hashtable that's being reused across batches, we only
+	 * return entries that have changed since the last scan
+	 */
+	aggstate->last_hashtable_scan = 0;
 
 	/*
 	 * Create expression contexts.	We need two, one for per-input-tuple
