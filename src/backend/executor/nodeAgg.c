@@ -256,6 +256,7 @@ typedef struct AggStatePerGroupData
 	bool		collectValueIsNull;
 	bool		noCollectValue;		/* true if the collectValue not set yet */
 #endif /* PGXC */
+
 } AggStatePerGroupData;
 
 /*
@@ -298,6 +299,7 @@ static void build_hash_table(AggState *aggstate);
 static AggHashEntry lookup_hash_entry(AggState *aggstate,
 				  TupleTableSlot *inputslot);
 static TupleTableSlot *agg_retrieve_direct(AggState *aggstate);
+static TupleTableSlot *agg_retrieve_incremental(AggState *aggstate);
 static void agg_fill_hash_table(AggState *aggstate);
 static TupleTableSlot *agg_retrieve_hash_table(AggState *aggstate);
 static Datum GetAggInitVal(Datum textInitVal, Oid transtype);
@@ -1189,11 +1191,128 @@ ExecAgg(AggState *node)
 	if (((Agg *) node->ss.ps.plan)->aggstrategy == AGG_HASHED)
 	{
 		if (!node->table_filled)
-			agg_fill_hash_table(node);
-		return agg_retrieve_hash_table(node);
+		{
+			build_hash_table(node);
+			if (!node->incremental_agg)
+			{
+				/*
+				 * We're not updating aggregations across CQ batches, so freeze it
+				 */
+				agg_fill_hash_table(node);
+				hash_freeze(node->hashtable->hashtab);
+			}
+			else	/* We're going to be filling it incrementally with agg_retreive_incremental */
+				node->table_filled = true;
+
+			hash_seq_init(&node->hashiter, node->hashtable->hashtab);
+		}
+
+		if (node->incremental_agg)
+			return agg_retrieve_incremental(node);
+		else
+			return agg_retrieve_hash_table(node);
 	}
 	else
 		return agg_retrieve_direct(node);
+}
+
+/*
+ * ExecAgg for incremental aggregation
+ *
+ * For this case, we advance aggregates one input tuple at a time.
+ * This is useful for Coordinators collecting aggregates from multiple Datanodes.
+ */
+static TupleTableSlot *
+agg_retrieve_incremental(AggState *aggstate)
+{
+	ExprContext *econtext;
+	PlanState  *outerPlan;
+	ExprContext *tmpcontext;
+	AggHashEntry entry;
+	TupleTableSlot *outerslot;
+	TupleTableSlot *result;
+	Datum	   *aggvalues;
+	bool	   *aggnulls;
+	AggStatePerAgg peragg;
+	AggStatePerGroup pergroup;
+
+	int aggno;
+
+	/*
+	 * get state info from node
+	 */
+	outerPlan = outerPlanState(aggstate);
+	/* tmpcontext is the per-input-tuple expression context */
+	tmpcontext = aggstate->tmpcontext;
+
+	outerslot = ExecProcNode(outerPlan);
+	if (TupIsNull(outerslot))
+		return NULL;
+
+	econtext = aggstate->ss.ps.ps_ExprContext;
+	aggvalues = econtext->ecxt_aggvalues;
+	aggnulls = econtext->ecxt_aggnulls;
+	peragg = aggstate->peragg;
+	result = aggstate->ss.ss_ScanTupleSlot;
+
+	/* set up for advance_aggregates call */
+	tmpcontext->ecxt_outertuple = outerslot;
+
+	/* Find or build hashtable entry for this tuple's group */
+	entry = lookup_hash_entry(aggstate, outerslot);
+
+	/* Advance the aggregates */
+	advance_aggregates(aggstate, entry->pergroup);
+
+	/* Reset per-input-tuple context after each tuple */
+	ResetExprContext(tmpcontext);
+
+	ExecStoreMinimalTuple(entry->shared.firstTuple, result, false);
+	pergroup = entry->pergroup;
+
+	/*
+	 * Finalize each aggregate calculation, and stash results in the
+	 * per-output-tuple context.
+	 */
+	for (aggno = 0; aggno < aggstate->numaggs; aggno++)
+	{
+		AggStatePerAgg peraggstate = &peragg[aggno];
+		AggStatePerGroup pergroupstate = &pergroup[aggno];
+
+		Assert(peraggstate->numSortCols == 0);
+		finalize_aggregate(aggstate, peraggstate, pergroupstate,
+						   &aggvalues[aggno], &aggnulls[aggno]);
+	}
+
+	/*
+	 * Use the representative input tuple for any references to
+	 * non-aggregated input columns in the qual and tlist.
+	 */
+	econtext->ecxt_outertuple = result;
+
+	/*
+	 * Check the qual (HAVING clause); if the group does not match, ignore
+	 * it and loop back to try to process another group.
+	 */
+	if (ExecQual(aggstate->ss.ps.qual, econtext, false))
+	{
+		/*
+		 * Form and return a projection tuple using the aggregate results
+		 * and the representative input tuple.
+		 */
+		TupleTableSlot *result;
+		ExprDoneCond isDone;
+
+		result = ExecProject(aggstate->ss.ps.ps_ProjInfo, &isDone);
+
+		if (isDone != ExprEndResult)
+		{
+			aggstate->ss.ps.ps_TupFromTlist = (isDone == ExprMultipleResult);
+			return result;
+		}
+	}
+
+	return NULL;
 }
 
 /*
@@ -1424,6 +1543,7 @@ agg_fill_hash_table(AggState *aggstate)
 		outerslot = ExecProcNode(outerPlan);
 		if (TupIsNull(outerslot))
 			break;
+
 		/* set up for advance_aggregates call */
 		tmpcontext->ecxt_outertuple = outerslot;
 
@@ -1438,8 +1558,6 @@ agg_fill_hash_table(AggState *aggstate)
 	}
 
 	aggstate->table_filled = true;
-	/* Initialize to walk the hash table */
-	ResetTupleHashIterator(aggstate->hashtable, &aggstate->hashiter);
 }
 
 /*
@@ -1589,6 +1707,16 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 	aggstate->skip_trans = node->skip_trans;
 
 	/*
+	 * Since the Coordinator will be collecting aggregations from Datanodes,
+	 * we want to advance aggregates even across CQ batches. We do this by
+	 * reusing the aggregation hashtable on Coordinators. On Datanodes, it's
+	 * cleared before every new batch because we only want to send aggregation
+	 * deltas to the Coordinator, since a single aggregation group may be spread
+	 * across multiple Datanodes.
+	 */
+	aggstate->incremental_agg = IS_PGXC_COORDINATOR && IsContinuous(aggstate);
+
+	/*
 	 * Create expression contexts.	We need two, one for per-input-tuple
 	 * processing and one for per-output-tuple processing.	We cheat a little
 	 * by using ExecAssignExprContext() to build both.
@@ -1707,7 +1835,6 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 	if (node->aggstrategy == AGG_HASHED)
 	{
-		build_hash_table(aggstate);
 		aggstate->table_filled = false;
 		/* Compute the columns we actually need to hash on */
 		aggstate->hash_needed = find_hash_columns(aggstate);
@@ -2234,7 +2361,6 @@ ExecReScanAgg(AggState *node)
 	if (((Agg *) node->ss.ps.plan)->aggstrategy == AGG_HASHED)
 	{
 		/* Rebuild an empty hash table */
-		build_hash_table(node);
 		node->table_filled = false;
 	}
 	else

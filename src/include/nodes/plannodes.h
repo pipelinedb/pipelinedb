@@ -73,6 +73,7 @@ typedef struct PlannedStmt
 	 */
 	bool		is_continuous; /* should this be executed continuously? */
 
+	int cq_batch_size;
 } PlannedStmt;
 
 /* macro for fetching the Plan associated with a SubPlan node */
@@ -131,8 +132,6 @@ typedef struct Plan
 	 */
 	Bitmapset  *extParam;
 	Bitmapset  *allParam;
-
-	int cq_batch_size;
 } Plan;
 
 /* ----------------

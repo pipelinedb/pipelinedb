@@ -111,7 +111,7 @@ typedef enum NodeTag
 	T_BitmapAndState,
 	T_BitmapOrState,
 	T_ScanState,
-	T_SeqScanState,
+	T_SeqScanState,	// 209
 	T_IndexScanState,
 	T_IndexOnlyScanState,
 	T_BitmapIndexScanState,
@@ -130,7 +130,7 @@ typedef enum NodeTag
 	T_MaterialState,
 	T_SortState,
 	T_GroupState,
-	T_AggState,
+	T_AggState,	// 228
 	T_WindowAggState,
 	T_UniqueState,
 	T_HashState,
@@ -138,7 +138,7 @@ typedef enum NodeTag
 	T_LockRowsState,
 	T_LimitState,
 #ifdef PGXC
-	T_RemoteQueryState,
+	T_RemoteQueryState,	// 235
 #endif
 
 	/*

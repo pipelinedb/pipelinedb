@@ -271,7 +271,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	DestReceiver *dest;
 	bool		sendTuples;
 	MemoryContext oldcontext;
-	int batchsize = 1000;
+	int batchsize = queryDesc->plannedstmt->cq_batch_size;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
@@ -942,6 +942,8 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	estate->es_epqTuple = NULL;
 	estate->es_epqTupleSet = NULL;
 	estate->es_epqScanDone = NULL;
+
+	estate->cq_batch_size = plannedstmt->cq_batch_size;
 
 	/*
 	 * Initialize private state information for each SubPlan.  We must do this

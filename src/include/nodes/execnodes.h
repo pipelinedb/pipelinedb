@@ -413,6 +413,8 @@ typedef struct EState
 	HeapTuple  *es_epqTuple;	/* array of EPQ substitute tuples */
 	bool	   *es_epqTupleSet; /* true if EPQ tuple is provided */
 	bool	   *es_epqScanDone; /* true if EPQ tuple has been fetched */
+
+	int cq_batch_size;
 } EState;
 
 
@@ -1010,7 +1012,16 @@ typedef struct PlanState
 	ProjectionInfo *ps_ProjInfo;	/* info for doing tuple projection */
 	bool		ps_TupFromTlist;/* state flag for processing set-valued
 								 * functions in targetlist */
+
+	int cq_batch_progress;
 } PlanState;
+
+/*
+ * CQ helper macros
+ */
+#define BatchSize(node)				(((PlanState *)(node))->state->cq_batch_size)
+#define IsContinuous(node)			(BatchSize(node) > 0)
+
 
 /* ----------------
  *	these are defined to avoid confusion problems with "left"
@@ -1708,6 +1719,8 @@ typedef struct AggState
 #ifdef PGXC
 	bool		skip_trans;		/* skip the transition step for aggregates */
 #endif /* PGXC */
+
+	bool		incremental_agg;
 } AggState;
 
 /* ----------------
