@@ -1717,13 +1717,6 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 	aggstate->incremental_agg = IS_PGXC_COORDINATOR && IsContinuous(aggstate);
 
 	/*
-	 * Each hashtable entry has a version associated with it, so that when we're
-	 * iterating over a hashtable that's being reused across batches, we only
-	 * return entries that have changed since the last scan
-	 */
-	aggstate->last_hashtable_scan = 0;
-
-	/*
 	 * Create expression contexts.	We need two, one for per-input-tuple
 	 * processing and one for per-output-tuple processing.	We cheat a little
 	 * by using ExecAssignExprContext() to build both.

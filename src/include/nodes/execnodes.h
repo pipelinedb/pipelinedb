@@ -1721,7 +1721,6 @@ typedef struct AggState
 #endif /* PGXC */
 
 	bool		incremental_agg;
-	long		last_hashtable_scan;
 } AggState;
 
 /* ----------------
