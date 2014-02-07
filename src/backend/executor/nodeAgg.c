@@ -1200,11 +1200,10 @@ ExecAgg(AggState *node)
 				 */
 				agg_fill_hash_table(node);
 				hash_freeze(node->hashtable->hashtab);
+				hash_seq_init(&node->hashiter, node->hashtable->hashtab);
 			}
 			else	/* We're going to be filling it incrementally with agg_retreive_incremental */
 				node->table_filled = true;
-
-			hash_seq_init(&node->hashiter, node->hashtable->hashtab);
 		}
 
 		if (node->incremental_agg)
