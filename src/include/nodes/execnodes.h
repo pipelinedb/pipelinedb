@@ -1720,7 +1720,7 @@ typedef struct AggState
 	bool		skip_trans;		/* skip the transition step for aggregates */
 #endif /* PGXC */
 
-	bool		reuse_hashtable;
+	bool		incremental_agg;
 	long		last_hashtable_scan;
 } AggState;
 
