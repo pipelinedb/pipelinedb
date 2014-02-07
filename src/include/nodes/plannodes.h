@@ -73,7 +73,9 @@ typedef struct PlannedStmt
 	 */
 	bool		is_continuous; /* should this be executed continuously? */
 
-	int cq_batch_size;
+	int cq_batch_size;	/* how many tuples each node should process at a time */
+
+	int cq_batch_timeout_ms;	/* finish the batch if no new tuples are seen for this many ms */
 } PlannedStmt;
 
 /* macro for fetching the Plan associated with a SubPlan node */

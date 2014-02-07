@@ -272,6 +272,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 	bool		sendTuples;
 	MemoryContext oldcontext;
 	int batchsize = queryDesc->plannedstmt->cq_batch_size;
+	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
@@ -314,7 +315,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
-				sendTuples, batchsize, 10, direction, dest);
+				sendTuples, batchsize, timeoutms, direction, dest);
 
 		pq_flush();
 
