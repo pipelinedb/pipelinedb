@@ -568,7 +568,7 @@ ExecProcNode(PlanState *node)
 
 	if (!TupIsNull(result))
 		node->cq_batch_progress++;
-	else
+	else if (IsContinuous(node))
 		return ExecEndBatch(node);
 
 	return result;
