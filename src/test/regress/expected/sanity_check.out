@@ -136,6 +136,7 @@ SELECT relname, relhasindex
  pgxc_class              | t
  pgxc_group              | t
  pgxc_node               | t
+ pipeline_queries        | t
  point_tbl               | t
  polygon_tbl             | t
  quad_point_tbl          | t
