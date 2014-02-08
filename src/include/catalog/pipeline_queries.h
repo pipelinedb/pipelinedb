@@ -61,6 +61,6 @@ typedef FormData_pipeline_queries *Form_pipeline_queries;
  */
 #define PIPELINE_BATCH_SIZE 1000
 #define PIPELINE_SLEEP_MS 10
-#define PIPELINE_BATCH_TIMEOUT_MS 1000
+#define PIPELINE_BATCH_TIMEOUT_MS 0
 
 #endif   /* PIPELINE_QUERIES_H */

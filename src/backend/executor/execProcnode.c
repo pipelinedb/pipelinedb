@@ -381,7 +381,7 @@ ExecEndBatch(PlanState *node)
 			{
 				AggState *agg = (AggState *) node;
 				agg->agg_done = false;
-				agg->table_filled = agg->incremental_agg;
+				agg->table_filled = false;
 			}
 			break;
 		default:
@@ -568,7 +568,7 @@ ExecProcNode(PlanState *node)
 
 	if (!TupIsNull(result))
 		node->cq_batch_progress++;
-	else if (node->cq_batch_progress)
+	else if (IsContinuous(node))
 		return ExecEndBatch(node);
 
 	return result;
