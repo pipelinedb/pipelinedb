@@ -299,7 +299,6 @@ static void build_hash_table(AggState *aggstate);
 static AggHashEntry lookup_hash_entry(AggState *aggstate,
 				  TupleTableSlot *inputslot);
 static TupleTableSlot *agg_retrieve_direct(AggState *aggstate);
-static TupleTableSlot *agg_retrieve_incremental(AggState *aggstate);
 static void agg_fill_hash_table(AggState *aggstate);
 static TupleTableSlot *agg_retrieve_hash_table(AggState *aggstate);
 static Datum GetAggInitVal(Datum textInitVal, Oid transtype);
@@ -1192,126 +1191,14 @@ ExecAgg(AggState *node)
 	{
 		if (!node->table_filled)
 		{
-			build_hash_table(node);
 			if (!node->incremental_agg)
-			{
-				/*
-				 * We're not updating aggregations across CQ batches, so freeze it
-				 */
-				agg_fill_hash_table(node);
-				hash_freeze(node->hashtable->hashtab);
-				hash_seq_init(&node->hashiter, node->hashtable->hashtab);
-			}
-			else	/* We're going to be filling it incrementally with agg_retreive_incremental */
-				node->table_filled = true;
+				build_hash_table(node);
+			agg_fill_hash_table(node);
 		}
-
-		if (node->incremental_agg)
-			return agg_retrieve_incremental(node);
-		else
-			return agg_retrieve_hash_table(node);
+		return agg_retrieve_hash_table(node);
 	}
 	else
 		return agg_retrieve_direct(node);
-}
-
-/*
- * ExecAgg for incremental aggregation
- *
- * For this case, we advance aggregates one input tuple at a time.
- * This is useful for Coordinators collecting aggregates from multiple Datanodes.
- */
-static TupleTableSlot *
-agg_retrieve_incremental(AggState *aggstate)
-{
-	ExprContext *econtext;
-	PlanState  *outerPlan;
-	ExprContext *tmpcontext;
-	AggHashEntry entry;
-	TupleTableSlot *outerslot;
-	TupleTableSlot *result;
-	Datum	   *aggvalues;
-	bool	   *aggnulls;
-	AggStatePerAgg peragg;
-	AggStatePerGroup pergroup;
-
-	int aggno;
-
-	/*
-	 * get state info from node
-	 */
-	outerPlan = outerPlanState(aggstate);
-	/* tmpcontext is the per-input-tuple expression context */
-	tmpcontext = aggstate->tmpcontext;
-
-	outerslot = ExecProcNode(outerPlan);
-	if (TupIsNull(outerslot))
-		return NULL;
-
-	econtext = aggstate->ss.ps.ps_ExprContext;
-	aggvalues = econtext->ecxt_aggvalues;
-	aggnulls = econtext->ecxt_aggnulls;
-	peragg = aggstate->peragg;
-	result = aggstate->ss.ss_ScanTupleSlot;
-
-	/* set up for advance_aggregates call */
-	tmpcontext->ecxt_outertuple = outerslot;
-
-	/* Find or build hashtable entry for this tuple's group */
-	entry = lookup_hash_entry(aggstate, outerslot);
-
-	/* Advance the aggregates */
-	advance_aggregates(aggstate, entry->pergroup);
-
-	/* Reset per-input-tuple context after each tuple */
-	ResetExprContext(tmpcontext);
-
-	ExecStoreMinimalTuple(entry->shared.firstTuple, result, false);
-	pergroup = entry->pergroup;
-
-	/*
-	 * Finalize each aggregate calculation, and stash results in the
-	 * per-output-tuple context.
-	 */
-	for (aggno = 0; aggno < aggstate->numaggs; aggno++)
-	{
-		AggStatePerAgg peraggstate = &peragg[aggno];
-		AggStatePerGroup pergroupstate = &pergroup[aggno];
-
-		Assert(peraggstate->numSortCols == 0);
-		finalize_aggregate(aggstate, peraggstate, pergroupstate,
-						   &aggvalues[aggno], &aggnulls[aggno]);
-	}
-
-	/*
-	 * Use the representative input tuple for any references to
-	 * non-aggregated input columns in the qual and tlist.
-	 */
-	econtext->ecxt_outertuple = result;
-
-	/*
-	 * Check the qual (HAVING clause); if the group does not match, ignore
-	 * it and loop back to try to process another group.
-	 */
-	if (ExecQual(aggstate->ss.ps.qual, econtext, false))
-	{
-		/*
-		 * Form and return a projection tuple using the aggregate results
-		 * and the representative input tuple.
-		 */
-		TupleTableSlot *result;
-		ExprDoneCond isDone;
-
-		result = ExecProject(aggstate->ss.ps.ps_ProjInfo, &isDone);
-
-		if (isDone != ExprEndResult)
-		{
-			aggstate->ss.ps.ps_TupFromTlist = (isDone == ExprMultipleResult);
-			return result;
-		}
-	}
-
-	return NULL;
 }
 
 /*
@@ -1551,11 +1438,14 @@ agg_fill_hash_table(AggState *aggstate)
 
 		/* Advance the aggregates */
 		advance_aggregates(aggstate, entry->pergroup);
+		aggstate->dirty_aggs = lappend(aggstate->dirty_aggs, entry);
 
 		/* Reset per-input-tuple context after each tuple */
 		ResetExprContext(tmpcontext);
 	}
 
+	/* XXX PERF: just use a regular set to avoid this O(n^2) union operation */
+	aggstate->dirty_aggs = list_union_ptr(NIL, aggstate->dirty_aggs);
 	aggstate->table_filled = true;
 }
 
@@ -1583,23 +1473,22 @@ agg_retrieve_hash_table(AggState *aggstate)
 	aggnulls = econtext->ecxt_aggnulls;
 	peragg = aggstate->peragg;
 	firstSlot = aggstate->ss.ss_ScanTupleSlot;
-
 	/*
 	 * We loop retrieving groups until we find one satisfying
 	 * aggstate->ss.ps.qual
 	 */
-	while (!aggstate->agg_done)
+	while (aggstate->dirty_aggs)
 	{
 		/*
 		 * Find the next entry in the hash table
 		 */
-		entry = (AggHashEntry) ScanTupleHashTable(&aggstate->hashiter);
-		if (entry == NULL)
-		{
-			/* No more entries in hashtable, so done */
-			aggstate->agg_done = TRUE;
-			return NULL;
-		}
+		entry = list_nth(aggstate->dirty_aggs, 0);
+
+		/*
+		 * This will eventually set aggstate->dirty_aggs to NIL,
+		 * which will terminate the loop
+		 */
+		aggstate->dirty_aggs = list_delete_first(aggstate->dirty_aggs);
 
 		/*
 		 * Clear the per-output-tuple context for each group
@@ -1661,6 +1550,8 @@ agg_retrieve_hash_table(AggState *aggstate)
 		else
 			InstrCountFiltered1(aggstate, 1);
 	}
+
+	aggstate->agg_done = true;
 
 	/* No more groups */
 	return NULL;
@@ -2243,6 +2134,9 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 	/* Update numaggs to match number of unique aggregates found */
 	aggstate->numaggs = aggno + 1;
+
+	if (aggstate->incremental_agg)
+		build_hash_table(aggstate);
 
 	return aggstate;
 }
