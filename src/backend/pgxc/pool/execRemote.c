@@ -4261,7 +4261,7 @@ ExecProcNodeDMLInXC(EState *estate,
 		else
 		{
 			/* Null tuple received, so break the loop */
-			ExecClearTuple(temp_slot);
+//			ExecClearTuple(temp_slot);
 			break;
 		}
 	} while (dml_returning_on_replicated);
