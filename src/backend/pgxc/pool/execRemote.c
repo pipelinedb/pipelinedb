@@ -2809,7 +2809,14 @@ pgxc_start_command_on_connection(PGXCNodeHandle *connection,
 
 	if (snapshot && pgxc_node_send_snapshot(connection, snapshot))
 		return false;
-	if (step->statement || step->cursor || remotestate->rqs_num_params)
+
+	/*
+	 * If this is a CQ, we're actually going to be sending the
+	 * ACTIVATE statement here, not the target query represented by step,
+	 * so it's always safe to send it through pgxc_node_send_query
+	 */
+	if (!step->remote_query->is_continuous &&
+			(step->statement || step->cursor || remotestate->rqs_num_params))
 	{
 		/* need to use Extended Query Protocol */
 		int	fetch = 0;
