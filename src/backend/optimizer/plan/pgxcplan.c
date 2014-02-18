@@ -1229,6 +1229,9 @@ pgxc_build_dml_statement(PlannerInfo *root, CmdType cmdtype,
 		query_to_deparse->returningList = list_copy(rqplan->base_tlist);
 
 	rqplan->remote_query = query_to_deparse;
+	rqplan->remote_query->is_continuous = root->parse->is_continuous;
+	rqplan->remote_query->cq_activate_stmt = root->parse->cq_activate_stmt;
+
 	pgxc_rqplan_build_statement(rqplan);
 }
 
