@@ -1026,6 +1026,7 @@ pgxc_build_dml_statement(PlannerInfo *root, CmdType cmdtype,
 	query_to_deparse = makeNode(Query);
 	query_to_deparse->commandType = cmdtype;
 	query_to_deparse->resultRelation = resultRelationIndex;
+	query_to_deparse->is_continuous = root->parse->is_continuous;
 
 	/* We will modify the RTE, so make a copy */
 	query_to_deparse->rtable = list_copy(root->parse->rtable);
