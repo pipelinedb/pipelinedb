@@ -16,9 +16,13 @@ initgtm -Z gtm -D /path/to/gtm/dir
 initdb --nodename=<datanode nodename> -D /path/to/datanode/dir
 initdb --nodename=<coordinator nodename> -D /path/to/coordinator/dir
 
+# Start daemons
+gtm -D /path/to/gtm/dir &
+postgres --coordinator -D /path/to/coordinator/dir &
+postgres --datanode -D /path/to/datanode/dir -p 5431 &
+
 # Create cluster topology in the XC catalog
-psql -c "CREATE DATABASE <database name>"
 psql -c "CREATE NODE <datanode nodename> WITH (TYPE = 'coordinator', HOST = 'localhost', PORT = 5431)"
-psql -c "CREATE NODE <coordinator nodename> WITH (TYPE = 'datanode', HOST = 'localhost', PORT = 5432)"
+psql -c "CREATE DATABASE <database name>"
 
 
