@@ -517,7 +517,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 	CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLEAN CLOSE
 	CLUSTER COALESCE COLLATE COLLATION COLUMN COMMENT COMMENTS COMMIT
 	COMMITTED CONCURRENTLY CONFIGURATION CONNECTION CONSTRAINT CONSTRAINTS
-	CONTENT_P CONTINUE_P CONVERSION_P COORDINATOR COPY COST CREATE
+	CONTENT_P CONTINUE_P CONTINUOUS CONVERSION_P COORDINATOR COPY COST CREATE
 	CROSS CSV CURRENT_P
 	CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE CURRENT_SCHEMA
 	CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER CURSOR CYCLE
@@ -7876,7 +7876,7 @@ transaction_mode_list_or_empty:
 /*****************************************************************************
  *
  *	QUERY:
- *		CREATE [ OR REPLACE ] [ TEMP ] VIEW <viewname> '('target-list ')'
+ *		CREATE [ OR REPLACE ] [ TEMP ] [ CONTINUOUS ] VIEW <viewname> '('target-list ')'
  *			AS <query> [ WITH [ CASCADED | LOCAL ] CHECK OPTION ]
  *
  *****************************************************************************/
@@ -7891,6 +7891,7 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 					n->query = $8;
 					n->replace = false;
 					n->options = $6;
+					n->relkind = RELKIND_VIEW;
 					$$ = (Node *) n;
 				}
 		| CREATE OR REPLACE OptTemp VIEW qualified_name opt_column_list opt_reloptions
@@ -7903,6 +7904,20 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 					n->query = $10;
 					n->replace = true;
 					n->options = $8;
+					n->relkind = RELKIND_VIEW;
+					$$ = (Node *) n;
+				}
+			| CREATE CONTINUOUS VIEW qualified_name opt_column_list opt_reloptions
+				AS SelectStmt opt_check_option
+				{
+					ViewStmt *n = makeNode(ViewStmt);
+					n->view = $4;
+					n->view->relpersistence = RELPERSISTENCE_PERMANENT;
+					n->aliases = $5;
+					n->query = $8;
+					n->replace = true;
+					n->options = $9;
+					n->relkind = RELKIND_CONTINUOUS_VIEW;
 					$$ = (Node *) n;
 				}
 		;

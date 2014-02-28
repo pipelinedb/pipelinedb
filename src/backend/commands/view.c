@@ -101,7 +101,7 @@ isViewOnTempTable_walker(Node *node, void *context)
  *---------------------------------------------------------------------
  */
 static Oid
-DefineVirtualRelation(RangeVar *relation, List *tlist, bool replace,
+DefineVirtualRelation(RangeVar *relation, char relkind, List *tlist, bool replace,
 					  List *options)
 {
 	Oid			viewOid;
@@ -272,7 +272,7 @@ DefineVirtualRelation(RangeVar *relation, List *tlist, bool replace,
 		 * existing view, so we don't need more code to complain if "replace"
 		 * is false).
 		 */
-		relid = DefineRelation(createStmt, RELKIND_VIEW, InvalidOid);
+		relid = DefineRelation(createStmt, relkind, InvalidOid);
 		Assert(relid != InvalidOid);
 		return relid;
 	}
@@ -529,8 +529,8 @@ DefineView(ViewStmt *stmt, const char *queryString)
 	 * NOTE: if it already exists and replace is false, the xact will be
 	 * aborted.
 	 */
-	viewOid = DefineVirtualRelation(view, viewParse->targetList,
-									stmt->replace, stmt->options);
+	viewOid = DefineVirtualRelation(view, stmt->relkind, viewParse->targetList,
+			stmt->replace, stmt->options);
 
 	/*
 	 * The relation we have just created is not visible to any other commands
