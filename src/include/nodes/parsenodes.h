@@ -1145,6 +1145,7 @@ typedef enum ObjectType
 	OBJECT_CAST,
 	OBJECT_COLUMN,
 	OBJECT_CONSTRAINT,
+	OBJECT_CONTINUOUS_VIEW,
 	OBJECT_COLLATION,
 	OBJECT_CONVERSION,
 	OBJECT_DATABASE,
@@ -2532,6 +2533,7 @@ typedef struct CreateTableAsStmt
 	Node	   *query;			/* the query (see comments above) */
 	IntoClause *into;			/* destination table */
 	bool		is_select_into; /* it was written as SELECT INTO */
+	char		relkind; /* type of relation */
 } CreateTableAsStmt;
 
 /* ----------------------
