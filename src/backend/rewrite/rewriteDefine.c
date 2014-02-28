@@ -250,13 +250,6 @@ DefineQueryRewrite(char *rulename,
 	 */
 	event_relation = heap_open(event_relid, AccessExclusiveLock);
 
-	/* Continuous views are table-backed, not rewrites */
-	if (event_relation->rd_rel->relkind == RELKIND_CONTINUOUS_VIEW)
-	{
-		heap_close(event_relation, NoLock);
-		return;
-	}
-
 	/*
 	 * Verify relation is of a type that rules can sensibly be applied to.
 	 */
