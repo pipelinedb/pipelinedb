@@ -338,7 +338,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 %type <defelt>	fdw_option
 
 %type <range>	OptTempTableName
-%type <into>	into_clause create_as_target
+%type <into>	into_clause create_as_target create_cv_target
 
 %type <defelt>	createfunc_opt_item common_func_opt_item dostmt_opt_item
 %type <fun_param> func_arg func_arg_with_default table_func_column
@@ -5116,6 +5116,7 @@ DropStmt:	DROP drop_type IF_P EXISTS any_name_list opt_drop_behavior
 
 drop_type:	TABLE									{ $$ = OBJECT_TABLE; }
 			| SEQUENCE								{ $$ = OBJECT_SEQUENCE; }
+			| CONTINUOUS VIEW				{ $$ = OBJECT_CONTINUOUS_VIEW; }
 			| VIEW									{ $$ = OBJECT_VIEW; }
 			| INDEX									{ $$ = OBJECT_INDEX; }
 			| FOREIGN TABLE							{ $$ = OBJECT_FOREIGN_TABLE; }
@@ -7891,7 +7892,6 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 					n->query = $8;
 					n->replace = false;
 					n->options = $6;
-					n->relkind = RELKIND_VIEW;
 					$$ = (Node *) n;
 				}
 		| CREATE OR REPLACE OptTemp VIEW qualified_name opt_column_list opt_reloptions
@@ -7904,23 +7904,28 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 					n->query = $10;
 					n->replace = true;
 					n->options = $8;
-					n->relkind = RELKIND_VIEW;
 					$$ = (Node *) n;
 				}
-			| CREATE CONTINUOUS VIEW qualified_name opt_column_list opt_reloptions
-				AS SelectStmt opt_check_option
+			| CREATE CONTINUOUS VIEW create_cv_target AS SelectStmt opt_check_option
 				{
-					ViewStmt *n = makeNode(ViewStmt);
-					n->view = $4;
-					n->view->relpersistence = RELPERSISTENCE_PERMANENT;
-					n->aliases = $5;
-					n->query = $8;
-					n->replace = true;
-					n->options = $9;
-					n->relkind = RELKIND_CONTINUOUS_VIEW;
+					CreateTableAsStmt *n = makeNode(CreateTableAsStmt);
+					n->is_select_into = false;
+					n->into = $4;
+					n->query = $6;
+					n->relkind = OBJECT_CONTINUOUS_VIEW;
 					$$ = (Node *) n;
 				}
 		;
+
+create_cv_target:
+		qualified_name OptDistributeBy OptSubCluster
+				{
+					$$ = makeNode(IntoClause);
+					$$->rel = $1;
+					$$->skipData = false;
+					$$->distributeby = $2;
+					$$->subcluster = $3;
+				}
 
 opt_check_option:
 		WITH CHECK OPTION

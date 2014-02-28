@@ -2808,6 +2808,9 @@ CreateCommandTag(Node *parsetree)
 				case OBJECT_VIEW:
 					tag = "DROP VIEW";
 					break;
+				case OBJECT_CONTINUOUS_VIEW:
+					tag = "DROP CONTINUOUS VIEW";
+					break;
 				case OBJECT_INDEX:
 					tag = "DROP INDEX";
 					break;
