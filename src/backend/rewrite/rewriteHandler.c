@@ -2718,6 +2718,12 @@ QueryRewriteCTAS(Query *parsetree)
 					NULL);
 
 	/*
+	 * If this is a continuous view, we don't need to insert anything
+	 */
+	if (stmt->relkind == OBJECT_CONTINUOUS_VIEW)
+		return NIL;
+
+	/*
 	 * Now fold the CTAS statement into an INSERT INTO statement. The
 	 * utility is no more required.
 	 */

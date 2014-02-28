@@ -3071,6 +3071,8 @@ CreateCommandTag(Node *parsetree)
 		case T_CreateTableAsStmt:
 			if (((CreateTableAsStmt *) parsetree)->is_select_into)
 				tag = "SELECT INTO";
+			else if  (((CreateTableAsStmt *) parsetree)->relkind == OBJECT_CONTINUOUS_VIEW)
+				tag = "CREATE CONTINUOUS VIEW";
 			else
 				tag = "CREATE TABLE AS";
 			break;
