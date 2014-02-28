@@ -2341,7 +2341,6 @@ typedef struct ViewStmt
 	Node	   *query;			/* the SELECT query */
 	bool		replace;		/* replace an existing view? */
 	List	   *options;		/* options from WITH clause */
-	char		relkind;	/* type of view */
 } ViewStmt;
 
 /* ----------------------
