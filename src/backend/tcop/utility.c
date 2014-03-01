@@ -2749,7 +2749,10 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_CreateStmt:
-			tag = "CREATE TABLE";
+			if ((((CreateStmt *) parsetree)->relation->relpersistence == RELPERSISTENCE_STREAMING))
+				tag = "CREATE STREAMING TABLE";
+			else
+				tag = "CREATE TABLE";
 			break;
 
 		case T_CreateTableSpaceStmt:
