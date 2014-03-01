@@ -636,9 +636,16 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_CreateContinuousViewStmt:
-			CreateContinuousView((CreateContinuousViewStmt *) parsetree);
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+			{
+				List *remote;
+				CreateContinuousView((CreateContinuousViewStmt *) parsetree);
+				remote = AddRemoteQueryNode(NIL, queryString, EXEC_ON_ALL_NODES, false);
+				if (remote)
+				{
+					Node *stmt = lfirst(remote->head);
+					ProcessUtility(stmt, queryString, params, false, None_Receiver, true, NULL);
+				}
+			}
 			break;
 		case T_CreateStmt:
 		case T_CreateForeignTableStmt:
