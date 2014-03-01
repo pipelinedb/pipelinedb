@@ -2738,6 +2738,13 @@ typedef struct CleanConnStmt
 } CleanConnStmt;
 /* PGXC_END */
 
+typedef struct CreateContinuousViewStmt
+{
+	NodeTag			type;
+	IntoClause 	*into;
+	Node 			*query;
+
+} CreateContinuousViewStmt;
 
 typedef struct RegisterStmt
 {

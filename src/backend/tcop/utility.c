@@ -635,6 +635,9 @@ standard_ProcessUtility(Node *parsetree,
 #endif
 			break;
 
+		case T_CreateContinuousViewStmt:
+			CreateContinuousView((CreateContinuousViewStmt *) parsetree);
+			break;
 		case T_CreateStmt:
 		case T_CreateForeignTableStmt:
 			{
@@ -3068,11 +3071,13 @@ CreateCommandTag(Node *parsetree)
 			tag = "EXPLAIN";
 			break;
 
+		case T_CreateContinuousViewStmt:
+			tag = "CREATE CONTINUOUS VIEW";
+			break;
+
 		case T_CreateTableAsStmt:
 			if (((CreateTableAsStmt *) parsetree)->is_select_into)
 				tag = "SELECT INTO";
-			else if  (((CreateTableAsStmt *) parsetree)->relkind == OBJECT_CONTINUOUS_VIEW)
-				tag = "CREATE CONTINUOUS VIEW";
 			else
 				tag = "CREATE TABLE AS";
 			break;
