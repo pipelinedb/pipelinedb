@@ -635,6 +635,11 @@ standard_ProcessUtility(Node *parsetree,
 #endif
 			break;
 
+		case T_CreateContinuousViewStmt:
+			CreateContinuousView((CreateContinuousViewStmt *) parsetree);
+			if (IS_PGXC_COORDINATOR)
+				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+			break;
 		case T_CreateStmt:
 		case T_CreateForeignTableStmt:
 			{
@@ -3068,11 +3073,13 @@ CreateCommandTag(Node *parsetree)
 			tag = "EXPLAIN";
 			break;
 
+		case T_CreateContinuousViewStmt:
+			tag = "CREATE CONTINUOUS VIEW";
+			break;
+
 		case T_CreateTableAsStmt:
 			if (((CreateTableAsStmt *) parsetree)->is_select_into)
 				tag = "SELECT INTO";
-			else if  (((CreateTableAsStmt *) parsetree)->relkind == OBJECT_CONTINUOUS_VIEW)
-				tag = "CREATE CONTINUOUS VIEW";
 			else
 				tag = "CREATE TABLE AS";
 			break;

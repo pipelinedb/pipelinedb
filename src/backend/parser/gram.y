@@ -7906,13 +7906,11 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 					n->options = $8;
 					$$ = (Node *) n;
 				}
-			| CREATE CONTINUOUS VIEW create_cv_target AS SelectStmt opt_check_option
+			| CREATE CONTINUOUS VIEW create_cv_target AS SelectStmt
 				{
-					CreateTableAsStmt *n = makeNode(CreateTableAsStmt);
-					n->is_select_into = false;
+					CreateContinuousViewStmt *n = makeNode(CreateContinuousViewStmt);
 					n->into = $4;
 					n->query = $6;
-					n->relkind = OBJECT_CONTINUOUS_VIEW;
 					$$ = (Node *) n;
 				}
 		;
