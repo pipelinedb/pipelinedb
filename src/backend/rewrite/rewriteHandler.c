@@ -2731,7 +2731,7 @@ QueryRewriteCTAS(Query *parsetree)
 		newrel = heap_openrv(relation, NoLock);
 
 		InsertRule(ViewSelectRuleName, 1, newrel->rd_id, -1,
-				false, NULL, list_make1(stmt->query), false);
+				true, NULL, list_make1(stmt->query), false);
 
 		heap_close(newrel, NoLock);
 
