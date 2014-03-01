@@ -637,6 +637,8 @@ standard_ProcessUtility(Node *parsetree,
 
 		case T_CreateContinuousViewStmt:
 			CreateContinuousView((CreateContinuousViewStmt *) parsetree);
+			if (IS_PGXC_COORDINATOR)
+				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
 			break;
 		case T_CreateStmt:
 		case T_CreateForeignTableStmt:
