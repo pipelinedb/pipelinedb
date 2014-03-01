@@ -40,4 +40,7 @@ extern void setRuleCheckAsUser(Node *node, Oid userid);
 extern void EnableDisableRule(Relation rel, const char *rulename,
 				  char fires_when);
 
+extern Oid InsertRule(char *rulname, int evtype, Oid eventrel_oid, AttrNumber evslot_index,
+		   bool evinstead, Node *event_qual, List *action, bool replace);
+
 #endif   /* REWRITEDEFINE_H */
