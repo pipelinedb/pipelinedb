@@ -3185,6 +3185,21 @@ do_query(RemoteQueryState *node)
 }
 
 /*
+ * DoRemoteMerge
+ *
+ * Sends a batch of tuples down to datanodes for final merging
+ */
+void
+DoRemoteMerge(Tuplestorestate *store, TupleTableSlot *slot)
+{
+	while (tuplestore_gettupleslot(store, true, false, slot))
+	{
+		print_slot(slot);
+	}
+	tuplestore_clear(store);
+}
+
+/*
  * ExecRemoteQuery
  *
  * Wrapper around the main RemoteQueryNext() function. This

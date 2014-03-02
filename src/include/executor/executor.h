@@ -177,7 +177,6 @@ extern void ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void standard_ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void ExecutorRun(QueryDesc *queryDesc,
 			ScanDirection direction, long count);
-extern void DoRemoteMerge(Tuplestorestate *store, TupleTableSlot *slot);
 extern void ExecutorRunContinuous(QueryDesc *queryDesc, Tuplestorestate *store, ScanDirection direction);
 extern void standard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, long count);

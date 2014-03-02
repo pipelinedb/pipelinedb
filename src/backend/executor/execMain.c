@@ -61,6 +61,7 @@
 #include "utils/tqual.h"
 #ifdef PGXC
 #include "pgxc/pgxc.h"
+#include "pgxc/execRemote.h"
 #include "commands/copy.h"
 #endif
 
@@ -255,17 +256,6 @@ ExecutorRun(QueryDesc *queryDesc,
 		(*ExecutorRun_hook) (queryDesc, direction, count);
 	else
 		standard_ExecutorRun(queryDesc, direction, count);
-}
-
-/*
- * DoRemoteMerge
- *
- * Sends current batch of tuples down to datanodes for final merging
- */
-void
-DoRemoteMerge(Tuplestorestate *store, TupleTableSlot *slot)
-{
-
 }
 
 /*
