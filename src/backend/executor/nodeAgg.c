@@ -1258,6 +1258,9 @@ agg_retrieve_direct(AggState *aggstate)
 			{
 				/* outer plan produced no tuples at all */
 				aggstate->agg_done = true;
+				if (IsContinuous(outerPlan))
+					return NULL;
+
 				/* If we are grouping, we should produce no tuples too */
 				if (node->aggstrategy != AGG_PLAIN)
 					return NULL;
