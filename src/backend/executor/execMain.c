@@ -264,7 +264,7 @@ ExecutorRun(QueryDesc *queryDesc,
  * a deactivate message is received
  */
 void
-ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
+ExecutorRunContinuous(QueryDesc *queryDesc, Tuplestorestate *store, ScanDirection direction)
 {
 	EState	   *estate;
 	CmdType		operation;

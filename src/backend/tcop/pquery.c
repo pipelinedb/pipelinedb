@@ -1333,6 +1333,7 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 {
 	PlannedStmt * stmt;
 	QueryDesc  *queryDesc;
+	Tuplestorestate *store;
 
 	/*
 	 * If the destination is DestRemoteExecute, change to DestNone.  The
@@ -1348,6 +1349,15 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 		dest = None_Receiver;
 	if (altdest->mydest == DestRemoteExecute)
 		altdest = None_Receiver;
+
+	/*
+	 * Create a tuplestore if that's where we're sending tuples
+	 */
+	if (dest->mydest == DestTuplestore)
+	{
+		store = tuplestore_begin_heap(true, true, work_mem * 1024);
+		SetTuplestoreDestReceiverParams(dest, store, PortalGetHeapMemory(portal), true);
+	}
 
 	/* continuous queries are run individually */
 	Assert(portal->stmts->length == 1);
@@ -1367,7 +1377,7 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	ExecutorStart(queryDesc, 0);
 
 	/* run the plan fo-eva */
-	ExecutorRunContinuous(queryDesc, ForwardScanDirection);
+	ExecutorRunContinuous(queryDesc, store, ForwardScanDirection);
 
 	/* pop the snapshot if we pushed one */
 	PopActiveSnapshot();
