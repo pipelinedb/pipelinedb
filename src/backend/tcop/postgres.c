@@ -1134,6 +1134,9 @@ exec_simple_query(const char *query_string)
 		/*
 		 * Now we can create the destination receiver object.
 		 */
+		if (IS_PGXC_COORDINATOR && portal->queryDesc->plannedstmt->is_continuous)
+			dest = DestContinuousView;
+
 		receiver = CreateDestReceiver(dest);
 		if (dest == DestRemote)
 			SetRemoteDestReceiverParams(receiver, portal);
