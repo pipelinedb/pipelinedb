@@ -1355,7 +1355,7 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	 */
 	if (dest->mydest == DestTuplestore)
 	{
-		store = tuplestore_begin_heap(true, true, work_mem * 1024);
+		store = tuplestore_begin_heap(true, true, work_mem * queryDesc->plannedstmt->cq_batch_size);
 		SetTuplestoreDestReceiverParams(dest, store, PortalGetHeapMemory(portal), true);
 	}
 
