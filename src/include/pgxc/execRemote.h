@@ -156,7 +156,7 @@ extern int DataNodeCopyInBinaryForAll(char *msg_buf, int len, PGXCNodeHandle** c
 
 extern int ExecCountSlotsRemoteQuery(RemoteQuery *node);
 extern RemoteQueryState *ExecInitRemoteQuery(RemoteQuery *node, EState *estate, int eflags);
-extern void DoRemoteMerge(Tuplestorestate *store, TupleTableSlot *slot);
+extern void DoRemoteMerge(RangeVar *target, Tuplestorestate *store, TupleTableSlot *slot);
 extern TupleTableSlot* ExecRemoteQuery(RemoteQueryState *step);
 extern void ExecEndRemoteQuery(RemoteQueryState *step);
 extern void ExecRemoteUtility(RemoteQuery *node);

@@ -179,6 +179,8 @@ typedef struct Query
 	 * know that it's a CQ. So for CQs, we send the original ACTIVATE to the datanodes.
 	 */
 	char		*cq_activate_stmt;
+
+	RangeVar *cq_target; /* output relation of this CQ, if any */
 #endif
 } Query;
 
