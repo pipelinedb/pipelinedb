@@ -34,6 +34,7 @@
 #include "commands/createas.h"
 #include "executor/functions.h"
 #include "executor/tstoreReceiver.h"
+#include "executor/cvReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "utils/portal.h"
@@ -125,6 +126,9 @@ CreateDestReceiver(CommandDest dest)
 
 		case DestSQLFunction:
 			return CreateSQLFunctionDestReceiver();
+
+		case DestContinuousView:
+			return CreateContinuousViewReceiver();
 	}
 
 	/* should never get here */
@@ -157,6 +161,7 @@ EndCommand(const char *commandTag, CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
+		case DestContinuousView:
 			break;
 	}
 }
@@ -198,6 +203,7 @@ NullCommand(CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
+		case DestContinuousView:
 			break;
 	}
 }
@@ -241,6 +247,7 @@ ReadyForQuery(CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
+		case DestContinuousView:
 			break;
 	}
 }

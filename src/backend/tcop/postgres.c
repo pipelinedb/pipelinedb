@@ -1129,6 +1129,16 @@ exec_simple_query(const char *query_string)
 					format = 1; /* BINARY */
 			}
 		}
+		else if (IS_PGXC_COORDINATOR && IsA(parsetree, ActivateContinuousViewStmt))
+		{
+			/*
+			 * If this is a continuous view and we're on a coordinator, that means
+			 * that this coordinator is responsible for merging partial results
+			 * into the view's underlying table
+			 */
+			dest = DestContinuousView;
+		}
+
 		PortalSetResultFormat(portal, 1, &format);
 
 		/*

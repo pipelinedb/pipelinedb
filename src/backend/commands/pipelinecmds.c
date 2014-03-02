@@ -210,7 +210,6 @@ ActivateQuery(RangeVar *name)
  *
  * Deactivates a REGISTERed and ACTIVE continuous query. If the query isn't
  * ACTIVE, this is a noop.
->>>>>>> master
  */
 extern void
 DeactivateQuery(RangeVar *name)

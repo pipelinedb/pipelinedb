@@ -1,0 +1,20 @@
+/*-------------------------------------------------------------------------
+ *
+ * cqreceive.c
+ *	  Tuple-receiving functionality for continuous queries
+ *
+ * IDENTIFICATION
+ *	  src/backend/executor/cqreceive.c
+ *
+ *-------------------------------------------------------------------------
+ */
+#include "postgres.h"
+
+#include "executor/cvReceiver.h"
+
+
+extern DestReceiver *
+CreateContinuousViewReceiver(void)
+{
+	return NULL;
+}
