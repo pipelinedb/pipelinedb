@@ -34,7 +34,7 @@
 #include "commands/createas.h"
 #include "executor/functions.h"
 #include "executor/tstoreReceiver.h"
-#include "pipeline/cvreceive.h"
+#include "executor/cvReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "utils/portal.h"

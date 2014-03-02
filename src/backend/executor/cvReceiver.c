@@ -10,7 +10,7 @@
  */
 #include "postgres.h"
 
-#include "executor/cvreceive.h"
+#include "executor/cvReceiver.h"
 
 
 extern DestReceiver *
