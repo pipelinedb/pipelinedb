@@ -258,6 +258,17 @@ ExecutorRun(QueryDesc *queryDesc,
 }
 
 /*
+ * DoRemoteMerge
+ *
+ * Sends current batch of tuples down to datanodes for final merging
+ */
+void
+DoRemoteMerge(Tuplestorestate *store, TupleTableSlot *slot)
+{
+
+}
+
+/*
  * ExecutorRunContinuous
  *
  * Runs a query continuously on microbatches of newly-materialized data, until
@@ -271,6 +282,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, Tuplestorestate *store, ScanDirectio
 	DestReceiver *dest;
 	bool		sendTuples;
 	MemoryContext oldcontext;
+	TupleTableSlot *slot = NULL;
 	int batchsize = queryDesc->plannedstmt->cq_batch_size;
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
 
@@ -309,6 +321,9 @@ ExecutorRunContinuous(QueryDesc *queryDesc, Tuplestorestate *store, ScanDirectio
 	if (sendTuples)
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
+	if (store)
+		slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
+
 	for (;;)
 	{
 		/*
@@ -324,6 +339,8 @@ ExecutorRunContinuous(QueryDesc *queryDesc, Tuplestorestate *store, ScanDirectio
 		 */
 		if (IS_PGXC_DATANODE)
 			ReadyForQuery(dest->mydest);
+		else if (IS_PGXC_COORDINATOR && estate->es_processed)
+			DoRemoteMerge(store, slot);
 
 		/*
 		 * If we didn't see any new tuples, sleep briefly to save cycles
