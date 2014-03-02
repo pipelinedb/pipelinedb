@@ -203,7 +203,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 }
 
 %type <node>	stmt schema_stmt
-		ActivateContinuousQueryStmt AlterDatabaseStmt AlterDatabaseSetStmt AlterDomainStmt AlterEnumStmt
+		ActivateContinuousViewStmt AlterDatabaseStmt AlterDatabaseSetStmt AlterDomainStmt AlterEnumStmt
 		AlterFdwStmt AlterForeignServerStmt AlterGroupStmt
 		AlterObjectSchemaStmt AlterOwnerStmt AlterSeqStmt AlterTableStmt
 		AlterExtensionStmt AlterExtensionContentsStmt AlterForeignTableStmt
@@ -218,14 +218,14 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 		CreateFdwStmt CreateForeignServerStmt CreateForeignTableStmt
 		CreateAssertStmt CreateTrigStmt
 		CreateUserStmt CreateUserMappingStmt CreateRoleStmt
-		CreatedbStmt DeactivateContinuousQueryStmt DeclareCursorStmt DefineStmt DeleteStmt DiscardStmt DoStmt
+		CreatedbStmt DeactivateContinuousViewStmt DeclareCursorStmt DefineStmt DeleteStmt DiscardStmt DoStmt
 		DropGroupStmt DropOpClassStmt DropOpFamilyStmt DropPLangStmt DropStmt
 		DropAssertStmt DropTrigStmt DropRuleStmt DropCastStmt DropRoleStmt
 		DropUserStmt DropdbStmt DropTableSpaceStmt DropFdwStmt
 		DropForeignServerStmt DropUserMappingStmt ExplainStmt ExecDirectStmt FetchStmt
 		GrantStmt GrantRoleStmt IndexStmt InsertStmt ListenStmt LoadStmt
 		LockStmt NotifyStmt ExplainableStmt PreparableStmt
-		CreateFunctionStmt AlterFunctionStmt RegisterStmt RegisterableStmt ReindexStmt RemoveAggrStmt
+		CreateFunctionStmt AlterFunctionStmt ReindexStmt RemoveAggrStmt
 		RemoveFuncStmt RemoveOperStmt RenameStmt RevokeStmt RevokeRoleStmt
 		RuleActionStmt RuleActionStmtOrEmpty RuleStmt
 		SecLabelStmt SelectStmt TransactionStmt TruncateStmt
@@ -567,7 +567,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 
 	QUOTE
 
-	RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REGISTER REINDEX
+	RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REINDEX
 	RELATIVE_P RELEASE RENAME REPEATABLE REPLACE REPLICA
 	RESET RESTART RESTRICT RETURNING RETURNS REVOKE RIGHT ROLE ROLLBACK
 	ROW ROWS RULE
@@ -697,7 +697,7 @@ stmtmulti:	stmtmulti ';' stmt
 		;
 
 stmt :
-			ActivateContinuousQueryStmt
+			ActivateContinuousViewStmt
 			| AlterDatabaseStmt
 			| AlterDatabaseSetStmt
 			| AlterDefaultPrivilegesStmt
@@ -758,7 +758,7 @@ stmt :
 			| CreateUserStmt
 			| CreateUserMappingStmt
 			| CreatedbStmt
-			| DeactivateContinuousQueryStmt
+			| DeactivateContinuousViewStmt
 			| DeallocateStmt
 			| DeclareCursorStmt
 			| DefineStmt
@@ -798,7 +798,6 @@ stmt :
 			| NotifyStmt
 			| PrepareStmt
 			| ReassignOwnedStmt
-			| RegisterStmt
 			| ReindexStmt
 			| RemoveAggrStmt
 			| RemoveFuncStmt
@@ -2498,55 +2497,44 @@ copy_generic_opt_arg_list_item:
 			opt_boolean_or_string	{ $$ = (Node *) makeString($1); }
 		;
 
+
 /*****************************************************************************
  *
- * REGISTER registered_query_name AS query
+ * ( ACTIVATE | DEACTIVATE )  [ CONTINUOUS VIEW ] continuous_view_name
  *
  * PipelineDB
  *
- * Registers a continuous query
+ * Activates/deactivates a continuous view
  *
  *****************************************************************************/
 
- RegisterStmt: REGISTER qualified_name AS RegisterableStmt
+ ActivateContinuousViewStmt: ACTIVATE qualified_name
 				{
-					RegisterStmt *r = makeNode(RegisterStmt);
-					r->name = $2;
-					r->query = (List *)$4;
-					$$ = (Node *)r;
+					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
+					s->name = $2;
+					$$ = (Node *)s;
 				}
-
- RegisterableStmt:
-			SelectStmt
-			| InsertStmt
-			| UpdateStmt
-			| DeleteStmt
+			| ACTIVATE CONTINUOUS VIEW qualified_name
+			  {
+					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
+					s->name = $4;
+					$$ = (Node *)s;
+			  }
 		;
 
-
-/*****************************************************************************
- *
- * ( ACTIVATE | DEACTIVATE ) registered_query_name
- *
- * PipelineDB
- *
- * Activates/deactivates a continuous query
- *
- *****************************************************************************/
-
- ActivateContinuousQueryStmt: ACTIVATE qualified_name
+ DeactivateContinuousViewStmt: DEACTIVATE qualified_name
 				{
-					ActivateContinuousQueryStmt *s = makeNode(ActivateContinuousQueryStmt);
+					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
 					s->name = $2;
 					$$ = (Node *)s;
 				}
-
- DeactivateContinuousQueryStmt: DEACTIVATE qualified_name
-				{
-					DeactivateContinuousQueryStmt *s = makeNode(DeactivateContinuousQueryStmt);
-					s->name = $2;
+			| DEACTIVATE CONTINUOUS VIEW qualified_name
+			  {
+					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
+					s->name = $4;
 					$$ = (Node *)s;
-				}
+			  }
+		;
 
 /*****************************************************************************
  *
@@ -12894,7 +12882,6 @@ unreserved_keyword:
 			| RECHECK
 			| RECURSIVE
 			| REF
-			| REGISTER
 			| REINDEX
 			| RELATIVE_P
 			| RELEASE

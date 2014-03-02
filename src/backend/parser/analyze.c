@@ -91,7 +91,7 @@ static Query *transformCreateTableAsStmt(ParseState *pstate,
 						   CreateTableAsStmt *stmt);
 #ifdef PGXC
 static Query *transformExecDirectStmt(ParseState *pstate, ExecDirectStmt *stmt);
-static Query *transformActivateContinuousQueryStmt(ParseState *pstate, ActivateContinuousQueryStmt *stmt);
+static Query *transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt);
 static bool IsExecDirectUtilityStmt(Node *node);
 static bool is_relation_child(RangeTblEntry *child_rte, List *rtable);
 static bool is_rel_child_of_rel(RangeTblEntry *child_rte, RangeTblEntry *parent_rte);
@@ -293,9 +293,9 @@ transformStmt(ParseState *pstate, Node *parseTree)
 											 (ExecDirectStmt *) parseTree);
 			break;
 #endif
-		case T_ActivateContinuousQueryStmt:
-			result = transformActivateContinuousQueryStmt(pstate,
-											(ActivateContinuousQueryStmt *) parseTree);
+		case T_ActivateContinuousViewStmt:
+			result = transformActivateContinuousViewStmt(pstate,
+											(ActivateContinuousViewStmt *) parseTree);
 			break;
 		case T_CreateTableAsStmt:
 			result = transformCreateTableAsStmt(pstate,
@@ -2589,7 +2589,7 @@ transformExecDirectStmt(ParseState *pstate, ExecDirectStmt *stmt)
  * and mark it as as continuous so that it runs in the continuous executor
  */
 static Query *
-transformActivateContinuousQueryStmt(ParseState *pstate, ActivateContinuousQueryStmt *stmt)
+transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt)
 {
 	/* TODO: if it's already running, throw an error */
 	const char *query_string = GetQueryString(stmt->name);

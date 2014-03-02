@@ -2746,23 +2746,16 @@ typedef struct CreateContinuousViewStmt
 
 } CreateContinuousViewStmt;
 
-typedef struct RegisterStmt
-{
-	NodeTag		type;
-	RangeVar   *name; /* unique name to associate with the query */
-	List	   *query; /* query to register */
-} RegisterStmt;
-
-typedef struct ActivateContinuousQueryStmt
+typedef struct ActivateContinuousViewStmt
 {
 	NodeTag		type;
 	RangeVar   *name; /* name of query to activate */
-} ActivateContinuousQueryStmt;
+} ActivateContinuousViewStmt;
 
-typedef struct DeactivateContinuousQueryStmt
+typedef struct DeactivateContinuousViewStmt
 {
 	NodeTag		type;
 	RangeVar   *name; /* name of query to deactivate */
-} DeactivateContinuousQueryStmt;
+} DeactivateContinuousViewStmt;
 
 #endif   /* PARSENODES_H */
