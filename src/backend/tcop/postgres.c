@@ -1136,7 +1136,7 @@ exec_simple_query(const char *query_string)
 			 * that this coordinator is responsible for merging partial results
 			 * into the view's underlying table
 			 */
-			dest = DestContinuousView;
+//			dest = DestContinuousView;
 		}
 
 		PortalSetResultFormat(portal, 1, &format);
