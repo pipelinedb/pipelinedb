@@ -1133,10 +1133,10 @@ exec_simple_query(const char *query_string)
 		{
 			/*
 			 * If this is a continuous view and we're on a coordinator, that means
-			 * that this coordinator is responsible for merging partial results
-			 * into the view's underlying table
+			 * that this coordinator is responsible for buffering partial results
+			 * in a tuplestore and then sending them out for final merging by DNs.
 			 */
-			dest = DestContinuousView;
+			dest = DestTuplestore;
 		}
 
 		PortalSetResultFormat(portal, 1, &format);
