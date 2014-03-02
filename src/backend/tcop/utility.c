@@ -2059,15 +2059,6 @@ standard_ProcessUtility(Node *parsetree,
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true, EXEC_ON_COORDS, false);
 			break;
 #endif
-		case T_RegisterStmt:
-			{
-				RegisterStmt *stmt = (RegisterStmt *) parsetree;
-				RegisterQuery(stmt->name, queryString);
-				if (IS_PGXC_COORDINATOR)
-					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true, EXEC_ON_ALL_NODES, false);
-				break;
-			}
-			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d",
 				 (int) nodeTag(parsetree));
@@ -3352,11 +3343,8 @@ CreateCommandTag(Node *parsetree)
 				}
 			}
 			break;
-		case T_RegisterStmt:
-			tag = "REGISTER";
-			break;
-		case T_ActivateContinuousQueryStmt:
-			tag = "ACTIVATE";
+		case T_ActivateContinuousViewStmt:
+			tag = "ACTIVATE CONTINUOUS VIEW";
 			break;
 		case T_ExecDirectStmt:
 			tag = "EXECUTE DIRECT";
