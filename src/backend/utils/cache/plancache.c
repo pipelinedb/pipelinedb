@@ -1554,6 +1554,7 @@ PlanCacheComputeResultDesc(List *stmt_list)
 			Assert(query->utilityStmt);
 			return UtilityTupleDescriptor(query->utilityStmt);
 
+		case PORTAL_CONTINUOUS_QUERY:
 		case PORTAL_MULTI_QUERY:
 			/* will not return tuples */
 			break;
