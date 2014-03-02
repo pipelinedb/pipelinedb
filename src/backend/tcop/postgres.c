@@ -1129,14 +1129,21 @@ exec_simple_query(const char *query_string)
 					format = 1; /* BINARY */
 			}
 		}
+		else if (IS_PGXC_COORDINATOR && IsA(parsetree, ActivateContinuousViewStmt))
+		{
+			/*
+			 * If this is a continuous view and we're on a coordinator, that means
+			 * that this coordinator is responsible for merging partial results
+			 * into the view's underlying table
+			 */
+			dest = DestContinuousView;
+		}
+
 		PortalSetResultFormat(portal, 1, &format);
 
 		/*
 		 * Now we can create the destination receiver object.
 		 */
-		if (IS_PGXC_COORDINATOR && portal->queryDesc->plannedstmt->is_continuous)
-			dest = DestContinuousView;
-
 		receiver = CreateDestReceiver(dest);
 		if (dest == DestRemote)
 			SetRemoteDestReceiverParams(receiver, portal);
