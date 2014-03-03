@@ -157,7 +157,6 @@ EndCommand(const char *commandTag, CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
-		case DestContinuousView:
 			break;
 	}
 }
@@ -199,7 +198,6 @@ NullCommand(CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
-		case DestContinuousView:
 			break;
 	}
 }
@@ -243,7 +241,6 @@ ReadyForQuery(CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
-		case DestContinuousView:
 			break;
 	}
 }
