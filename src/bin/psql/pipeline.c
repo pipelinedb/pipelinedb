@@ -36,7 +36,7 @@ listPipelineQueries(void)
 		return false;
 
 	myopt.nullPrint = NULL;
-	myopt.title = _("List of registered queries");
+	myopt.title = _("List of continuous views");
 	myopt.translate_header = true;
 
 	printQuery(res, &myopt, pset.queryFout, pset.logfile);
