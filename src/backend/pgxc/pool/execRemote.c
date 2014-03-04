@@ -44,8 +44,10 @@
 #include "utils/datum.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
-#include "utils/tuplesort.h"
+#include "utils/rel.h"
+#include "utils/relcache.h"
 #include "utils/snapmgr.h"
+#include "utils/tuplesort.h"
 #include "utils/builtins.h"
 #include "pgxc/locator.h"
 #include "pgxc/pgxc.h"
@@ -2116,7 +2118,7 @@ DataNodeCopyBegin(const char *query, List *nodelist, Snapshot snapshot)
 		return NULL;
 
 	/* Get needed Datanode connections */
-	pgxc_handles = get_handles(nodelist, NULL, false);
+	pgxc_handles = get_handles(nodelist, NULL, false, false);
 	connections = pgxc_handles->datanode_handles;
 
 	if (!connections)
@@ -2731,7 +2733,7 @@ get_exec_connections(RemoteQueryState *planstate,
 	}
 
 	/* Get other connections (non-primary) */
-	pgxc_handles = get_handles(nodelist, coordlist, is_query_coord_only);
+	pgxc_handles = get_handles(nodelist, coordlist, is_query_coord_only, false);
 	if (!pgxc_handles)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -2742,7 +2744,7 @@ get_exec_connections(RemoteQueryState *planstate,
 	{
 		/* Let's assume primary connection is always a Datanode connection for the moment */
 		PGXCNodeAllHandles *pgxc_conn_res;
-		pgxc_conn_res = get_handles(primarynode, NULL, false);
+		pgxc_conn_res = get_handles(primarynode, NULL, false, false);
 
 		/* primary connection is unique */
 		primaryconnection = pgxc_conn_res->datanode_handles[0];
@@ -3190,13 +3192,31 @@ do_query(RemoteQueryState *node)
  * Sends a batch of tuples down to datanodes for final merging
  */
 void
-DoRemoteMerge(Tuplestorestate *store, TupleTableSlot *slot)
+DoRemoteMerge(RangeVar *target, Tuplestorestate *store, TupleTableSlot *slot)
 {
+	Relation rel = heap_openrv(target, NoLock);
+	ExecNodes *nodes;
+	RelationLocInfo *locinfo = rel->rd_locator_info;
+	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, true);
+
 	while (tuplestore_gettupleslot(store, true, false, slot))
 	{
-		print_slot(slot);
+		AttrNumber distCol 			= locinfo->partAttrNum;
+		Oid type 								= slot->tts_tupleDescriptor->attrs[distCol]->atttypid;
+		Datum distValue 				= slot->tts_values[distCol];
+		bool isnull 						= slot->tts_isnull[distCol];
+		PGXCNodeHandle *handle 	= handles->datanode_handles[0];
+
+		nodes = GetRelationNodes(rel->rd_locator_info,
+				distValue, isnull, type, RELATION_ACCESS_INSERT);
+
+		handle->outBuffer[handle->outEnd++] = '+';
+		pgxc_node_flush(handle);
+//		elog(LOG, "[handle %p ]buf=%s, outEnd=%d", handle, handle->outBuffer, (int)handle->outEnd);
 	}
+
 	tuplestore_clear(store);
+	relation_close(rel, NoLock);
 }
 
 /*
@@ -4026,7 +4046,7 @@ ExecCloseRemoteStatement(const char *stmt_name, List *nodelist)
 		return;
 
 	/* get needed Datanode connections */
-	all_handles = get_handles(nodelist, NIL, false);
+	all_handles = get_handles(nodelist, NIL, false, false);
 	conn_count = all_handles->dn_conn_count;
 	connections = all_handles->datanode_handles;
 
@@ -4758,7 +4778,7 @@ FinishRemotePreparedTransaction(char *prepareGID, bool commit)
 	/*
 	 * Now get handles for all the involved Datanodes and the Coordinators
 	 */
-	pgxc_handles = get_handles(nodelist, coordlist, false);
+	pgxc_handles = get_handles(nodelist, coordlist, false, false);
 
 	/*
 	 * Send GXID (as received above) to the remote nodes.

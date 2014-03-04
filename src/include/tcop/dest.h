@@ -94,7 +94,6 @@ typedef enum
 	DestIntoRel,				/* results sent to relation (SELECT INTO) */
 	DestCopyOut,				/* results sent to COPY TO code */
 	DestSQLFunction,				/* results sent to SQL-language func mgr */
-	DestContinuousView		/* results are continuously merged into a continuous view */
 } CommandDest;
 
 /* ----------------

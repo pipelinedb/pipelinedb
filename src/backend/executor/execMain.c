@@ -327,11 +327,16 @@ ExecutorRunContinuous(QueryDesc *queryDesc,
 		pq_flush();
 
 		/*
-		 * Tell the coordinator that this batch is done
+		 * If we're a datanode, tell the coordinator that this batch is done
 		 */
 		if (IS_PGXC_DATANODE)
 			ReadyForQuery(dest->mydest);
-		else if (IS_PGXC_COORDINATOR && estate->es_processed)
+
+		/*
+		 * If we're a coordinator, send the partial result back to the datanodes
+		 * for final merging
+		 */
+		if (IS_PGXC_COORDINATOR && estate->es_processed)
 			DoRemoteMerge(target, store, slot);
 
 		/*

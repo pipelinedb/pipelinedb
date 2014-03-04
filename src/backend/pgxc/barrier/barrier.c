@@ -166,7 +166,7 @@ SendBarrierPrepareRequest(List *coords, const char *id)
 	int msglen;
 	int barrier_idlen;
 
-	coord_handles = get_handles(NIL, coords, true);
+	coord_handles = get_handles(NIL, coords, true, false);
 
 	for (conn = 0; conn < coord_handles->co_conn_count; conn++)
 	{
@@ -354,7 +354,7 @@ ExecuteBarrier(const char *id)
 	int msglen;
 	int barrier_idlen;
 
-	conn_handles = get_handles(barrierDataNodeList, barrierCoordList, false);
+	conn_handles = get_handles(barrierDataNodeList, barrierCoordList, false, false);
 
 	elog(DEBUG1, "Sending CREATE BARRIER <%s> EXECUTE message to "
 				 "Datanodes and Coordinator", id);

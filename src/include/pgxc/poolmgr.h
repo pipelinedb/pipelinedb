@@ -182,7 +182,7 @@ extern void PoolManagerReconnect(void);
 extern int PoolManagerSetCommand(PoolCommandType command_type, const char *set_command);
 
 /* Get pooled connections */
-extern int *PoolManagerGetConnections(List *datanodelist, List *coordlist);
+extern int *PoolManagerGetConnections(List *datanodelist, List *coordlist, int offset);
 
 /* Clean pool connections */
 extern void PoolManagerCleanConnection(List *datanodelist, List *coordlist, char *dbname, char *username);

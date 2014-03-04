@@ -467,7 +467,7 @@ SocketBackend(StringInfo inBuf)
 			if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)
 				ereport(FATAL,
 						(errcode(ERRCODE_PROTOCOL_VIOLATION),
-						 errmsg("invalid frontend message type %d", qtype)));
+						 errmsg("xinvalid frontend message type %d", qtype)));
 			break;
 
 		case 'S':				/* sync */
@@ -500,7 +500,8 @@ SocketBackend(StringInfo inBuf)
 		case 'b':				/* Barrier */
 			break;
 #endif
-
+		case '+':				/* Merge */
+			break;
 		default:
 
 			/*
@@ -522,7 +523,9 @@ SocketBackend(StringInfo inBuf)
 	if (PG_PROTOCOL_MAJOR(FrontendProtocol) >= 3)
 	{
 		if (pq_getmessage(inBuf, 0))
+		{
 			return EOF;			/* suitable message already logged */
+		}
 	}
 
 	return qtype;
@@ -897,6 +900,12 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 	}
 
 	return stmt_list;
+}
+
+static void
+exec_merge()
+{
+
 }
 
 /*
@@ -4264,9 +4273,9 @@ PostgresMain(int argc, char *argv[], const char *username)
 					send_ready_for_query = true;
 				}
 				break;
-			case '!':			/* deactivate a continuous query */
+			case '+':			/* merge partial continuous query result */
 				{
-
+					elog(LOG, "[pid %d] received +", MyProcPid);
 				}
 				break;
 			case 'P':			/* parse */
