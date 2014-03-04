@@ -93,7 +93,7 @@ typedef enum
 	DestTuplestore,				/* results sent to Tuplestore */
 	DestIntoRel,				/* results sent to relation (SELECT INTO) */
 	DestCopyOut,				/* results sent to COPY TO code */
-	DestSQLFunction,				/* results sent to SQL-language func mgr */
+	DestSQLFunction				/* results sent to SQL-language func mgr */
 } CommandDest;
 
 /* ----------------
