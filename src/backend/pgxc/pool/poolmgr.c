@@ -860,12 +860,13 @@ PoolManagerGetConnections(List *datanodelist, List *coordlist, int offset)
 			 * datanodes, 0 and 1. If we want two connections per node, we'd just need to
 			 * pass the pooler the following list: [0, 1, 2, 3].
 			 *
-			 * So the pool manager thinks 2 and 3 are separate nodes, so it doesn't
+			 * The pool manager thinks 2 and 3 are separate nodes, so it doesn't
 			 * have a problem with allocating a datanode backend for each, even though
 			 * they actually correspond to 0 and 1. Sweet!
 			 *
 			 * We need to refactor the pool manager to support multiple pool managers
-			 * from the same process.
+			 * from the same process, or add support for having multiple pool managers
+			 * in the same process.
 			 *
 			 * Did I say, XXX?
 			 */

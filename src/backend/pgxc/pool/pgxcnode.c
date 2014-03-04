@@ -1952,7 +1952,8 @@ get_handles(List *datanodelist, List *coordlist, bool is_coord_only_query, bool 
 	if (dn_allocate || co_allocate)
 	{
 		int	j = 0;
-		int	*fds = PoolManagerGetConnections(dn_allocate, co_allocate, 2);
+		int offset = use_aux ? list_length(dn_allocate) : 0;
+		int	*fds = PoolManagerGetConnections(dn_allocate, co_allocate, offset);
 		if (!fds)
 		{
 			if (coordlist)
