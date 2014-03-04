@@ -7,7 +7,7 @@
 ========================================================================
 
 # Build from source
-./configure
+./configure --prefix=/path/to/dev/installation
 make
 sudo make install
 
