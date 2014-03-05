@@ -902,11 +902,24 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 	return stmt_list;
 }
 
-static void
-exec_merge()
-{
 
+static void
+exec_merge(StringInfo message)
+{
+	/* name of the continuous view we're merging into */
+	const char *cvname = pq_getmsgstring(message);
+	int msglen = pq_getmsgint(message, 4);
+	char *raw = (char *)pq_getmsgbytes(message, msglen);
+
+	start_xact_command();
+
+	TupleDesc desc = create_tuple_desc(raw, msglen);
+
+	pq_getmsgend(message);
+
+	finish_xact_command();
 }
+
 
 /*
  * exec_simple_query
@@ -4274,10 +4287,9 @@ PostgresMain(int argc, char *argv[], const char *username)
 				}
 				break;
 			case '+':			/* merge partial continuous query result */
-				{
-					elog(LOG, "[pid %d] received +", MyProcPid);
-				}
-				break;
+					exec_merge(&input_message);
+					break;
+
 			case 'P':			/* parse */
 				{
 					const char *stmt_name;
