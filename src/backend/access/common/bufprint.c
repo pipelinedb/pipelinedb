@@ -23,42 +23,102 @@
 #include "libpq/pqformat.h"
 #include "pgxc/pgxc.h"
 
-static void bufprint_startup(BufferPrinterState *self, int operation, TupleDesc typeinfo);
-static void bufprint(BufferPrinterState *self, TupleTableSlot *slot, char *buf);
-static void bufprint_shutdown(BufferPrinterState *self);
-static void bufprint_destroy(BufferPrinterState *self);
+static void SendTupDesc(BufferPrinterState *self, StringInfo buf);
 
-extern BufferPrinterState *CreateBufferPrinter(void)
+/*
+ * CreateBufferPrinter
+ *
+ * Create a new BufferPrinterState to use for printing tuples to a buffer
+ */
+BufferPrinterState *
+CreateBufferPrinter(TupleDesc attrinfo, List *targetlist, int16 *formats)
 {
 	BufferPrinterState *self = (BufferPrinterState *) palloc0(sizeof(BufferPrinterState));
-	self->attrinfo = NULL;
-	self->nattrs = 0;
-	self->myinfo = NULL;
+	int			i;
+	int numAttrs;
 
-	// need target list and formats
+	self->attrinfo = attrinfo;
+	self->typeinfo = NULL;
+	self->targetlist = targetlist;
+	self->formats = formats;
+
+	/* get rid of any old data */
+	if (self->typeinfo)
+		pfree(self->typeinfo);
+	self->typeinfo = NULL;
+
+	numAttrs = self->attrinfo->natts;
+	if (numAttrs <= 0)
+		return NULL;
+
+	self->typeinfo = (BufferPrinterAttrInfo *)
+		palloc0(numAttrs * sizeof(BufferPrinterAttrInfo));
+
+	for (i = 0; i < numAttrs; i++)
+	{
+		BufferPrinterAttrInfo *thisState = self->typeinfo + i;
+		int16		format = (formats ? formats[i] : 0);
+
+		thisState->format = format;
+		if (format == 0)
+		{
+			getTypeOutputInfo(attrinfo->attrs[i]->atttypid,
+							  &thisState->typoutput,
+							  &thisState->typisvarlena);
+			fmgr_info(thisState->typoutput, &thisState->finfo);
+		}
+		else if (format == 1)
+		{
+			getTypeBinaryOutputInfo(attrinfo->attrs[i]->atttypid,
+									&thisState->typsend,
+									&thisState->typisvarlena);
+			fmgr_info(thisState->typsend, &thisState->finfo);
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("unsupported format code: %d", format)));
+	}
 
 	return self;
 }
 
-
-static void
-SendTupDesc(TupleDesc typeinfo, List *targetlist, int16 *formats)
+/*
+ * PrintTuple
+ *
+ * Serialize a tuple to a buffer
+ */
+void
+PrintTuple(BufferPrinterState *self, TupleTableSlot *slot, StringInfo buf)
 {
-	Form_pg_attribute *attrs = typeinfo->attrs;
-	int			natts = typeinfo->natts;
-	int			i;
-	StringInfoData buf;
-	ListCell   *tlist_item = list_head(targetlist);
+	if (!self->tupdescSent)
+		SendTupDesc(self, buf);
 
-	pq_beginmessage(&buf, 'T'); /* tuple descriptor message type */
-	pq_sendint(&buf, natts, 2); /* # of attrs in tuples */
+
+}
+
+/*
+ * SendTupDesc
+ *
+ * Serialize a tuple description message to a buffer
+ */
+static void
+SendTupDesc(BufferPrinterState *self, StringInfo buf)
+{
+	Form_pg_attribute *attrs = self->attrinfo->attrs;
+	int			natts = self->attrinfo->natts;
+	int			i;
+	ListCell   *tlist_item = list_head(self->targetlist);
+
+	pq_beginmessage(buf, 'T'); /* tuple descriptor message type */
+	pq_sendint(buf, natts, 2); /* # of attrs in tuples */
 
 	for (i = 0; i < natts; ++i)
 	{
 		Oid			atttypid = attrs[i]->atttypid;
 		int32		atttypmod = attrs[i]->atttypmod;
 
-		pq_sendstring(&buf, NameStr(attrs[i]->attname));
+		pq_sendstring(buf, NameStr(attrs[i]->attname));
 
 		/*
 		 * Send the type name from a Postgres-XC backend node.
@@ -68,7 +128,7 @@ SendTupDesc(TupleDesc typeinfo, List *targetlist, int16 *formats)
 		{
 			char	   *typename;
 			typename = get_typename(atttypid);
-			pq_sendstring(&buf, typename);
+			pq_sendstring(buf, typename);
 		}
 
 		/* Do we have a non-resjunk tlist item? */
@@ -78,58 +138,25 @@ SendTupDesc(TupleDesc typeinfo, List *targetlist, int16 *formats)
 		if (tlist_item)
 		{
 			TargetEntry *tle = (TargetEntry *) lfirst(tlist_item);
-			pq_sendint(&buf, tle->resorigtbl, 4);
-			pq_sendint(&buf, tle->resorigcol, 2);
+			pq_sendint(buf, tle->resorigtbl, 4);
+			pq_sendint(buf, tle->resorigcol, 2);
 			tlist_item = lnext(tlist_item);
 		}
 		else
 		{
 			/* No info available, so send zeroes */
-			pq_sendint(&buf, 0, 4);
-			pq_sendint(&buf, 0, 2);
+			pq_sendint(buf, 0, 4);
+			pq_sendint(buf, 0, 2);
 		}
 		/* If column is a domain, send the base type and typmod instead */
 		atttypid = getBaseTypeAndTypmod(atttypid, &atttypmod);
-		pq_sendint(&buf, (int) atttypid, sizeof(atttypid));
-		pq_sendint(&buf, attrs[i]->attlen, sizeof(attrs[i]->attlen));
+		pq_sendint(buf, (int) atttypid, sizeof(atttypid));
+		pq_sendint(buf, attrs[i]->attlen, sizeof(attrs[i]->attlen));
 
-		if (formats)
-			pq_sendint(&buf, formats[i], 2);
+		if (self->formats)
+			pq_sendint(buf, self->formats[i], 2);
 		else
-			pq_sendint(&buf, 0, 2);
+			pq_sendint(buf, 0, 2);
 	}
-	pq_endmessage(&buf);
-}
-
-static void
-bufprint_startup(BufferPrinterState *self, int operation, TupleDesc typeinfo)
-{
-//	SendRowDescriptionMessage(typeinfo,
-//							  FetchPortalTargetList(portal),
-//							  portal->formats);
-	SendTupDesc(typeinfo, NULL, NULL);
-}
-
-static void
-bufprint_prepare_info(BufferPrinterState *myState, TupleDesc typeinfo, int numAttrs)
-{
-
-}
-
-static void
-bufprint(BufferPrinterState *self, TupleTableSlot *slot, char *buf)
-{
-
-}
-
-static void
-bufprint_shutdown(BufferPrinterState *self)
-{
-
-}
-
-static void
-bufprint_destroy(BufferPrinterState *self)
-{
-
+	self->tupdescSent = true;
 }

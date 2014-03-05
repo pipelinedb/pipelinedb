@@ -2,7 +2,7 @@
  *
  * printbuffer.h
  *
- * DestReciever for printing tuples to a raw char buffer
+ * Functionality for printing tuples to a raw buffer
  *
  * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
@@ -27,13 +27,14 @@ typedef struct
 
 typedef struct BufferPrinterState
 {
-	bool		sendDescrip;	/* send RowDescription at startup? */
-	TupleDesc	attrinfo;		/* The attr info we are set up for */
-	int			nattrs;
-	TupleTableSlot tupdesc;
-	BufferPrinterAttrInfo *myinfo;	/* Cached info about each attr */
+	BufferPrinterAttrInfo *typeinfo;	/* cached info about each attr */
+	TupleDesc	attrinfo;		/* the attr info we are set up for */
+	List *targetlist; /* List of TargetEntries */
+	int16 *formats; /* array of formats */
+	bool		tupdescSent;	/* have we sent the tupdesc yet? */
 } BufferPrinterState;
 
-extern BufferPrinterState *CreateBufferPrinter(void);
+BufferPrinterState *CreateBufferPrinter(TupleDesc attrinfo, List *targetList, int16 *formats);
+void PrintTuple(BufferPrinterState *self, TupleTableSlot *slot, StringInfo buf);
 
 #endif   /* PRINTBUFFER_H */

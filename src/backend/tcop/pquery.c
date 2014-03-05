@@ -1375,11 +1375,10 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	/* prepare the plan for execution */
 	ExecutorStart(queryDesc, 0);
 
-	mergeState.formats = portal->formats;
-	mergeState.targetList = FetchPortalTargetList(portal);
 	mergeState.store = store;
 	mergeState.targetRelation = queryDesc->plannedstmt->cq_target;
 	mergeState.slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
+	mergeState.bufprint = CreateBufferPrinter(queryDesc->tupDesc, FetchPortalTargetList(portal), portal->formats);
 
 	/* run the plan fo-eva */
 	ExecutorRunContinuous(queryDesc, mergeState);

@@ -18,6 +18,7 @@
 #include "locator.h"
 #include "nodes/nodes.h"
 #include "pgxcnode.h"
+#include "access/bufprint.h"
 #include "access/tupdesc.h"
 #include "executor/tuptable.h"
 #include "nodes/execnodes.h"
@@ -136,11 +137,10 @@ typedef struct RemoteQueryState
 
 typedef struct RemoteMergeState
 {
-	RangeVar 				*targetRelation; /* output relation of a continuous query */
-	Tuplestorestate *store;	/* tuple store to hold partial results before sending out for merging */
-	List 						*targetList; /* List of TargetEntries for the continuous query's output */
-	int16 					*formats; /* List of formats for the continuous query's output */
-	TupleTableSlot 	*slot;	/* slot to hold a single tuple before it is sent out for merging */
+	RangeVar 						*targetRelation; /* output relation of a continuous query */
+	Tuplestorestate 		*store;	/* tuple store to hold partial results before sending out for merging */
+	TupleTableSlot 			*slot;	/* slot to hold a single tuple before it is sent out for merging */
+	BufferPrinterState 	*bufprint; /* buffer printer to serialize DN-bound tuples with */
 } RemoteMergeState;
 
 typedef void (*xact_callback) (bool isCommit, void *args);
