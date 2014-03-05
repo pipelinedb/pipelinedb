@@ -6,8 +6,8 @@
        /_/                                       
 ========================================================================
 
-# Build from source
-./configure --prefix=/path/to/dev/installation
+# Build from source (with debug symbols)
+./configure CFLAGS="-g -O0" --prefix=/path/to/dev/installation
 make
 sudo make install
 
