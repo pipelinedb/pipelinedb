@@ -16,6 +16,7 @@
 
 #include "executor/execdesc.h"
 #include "nodes/parsenodes.h"
+#include "pgxc/execRemote.h"
 
 
 /*
@@ -177,7 +178,7 @@ extern void ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void standard_ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void ExecutorRun(QueryDesc *queryDesc,
 			ScanDirection direction, long count);
-extern void ExecutorRunContinuous(QueryDesc *queryDesc, Tuplestorestate *store, ScanDirection direction);
+extern void ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState);
 extern void standard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, long count);
 extern void ExecutorFinish(QueryDesc *queryDesc);

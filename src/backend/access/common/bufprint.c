@@ -16,53 +16,120 @@
  */
 
 #include "postgres.h"
+
 #include "access/bufprint.h"
+#include "libpq/libpq.h"
+#include "utils/lsyscache.h"
+#include "libpq/pqformat.h"
+#include "pgxc/pgxc.h"
 
-typedef struct
-{								/* Per-attribute information */
-	Oid			typoutput;		/* Oid for the type's text output fn */
-	Oid			typsend;		/* Oid for the type's binary output fn */
-	bool		typisvarlena;	/* is it varlena (ie possibly toastable)? */
-	int16		format;			/* format code for this column */
-	FmgrInfo	finfo;			/* Precomputed call info for output fn */
-} BufprintAttrInfo;
+static void bufprint_startup(BufferPrinterState *self, int operation, TupleDesc typeinfo);
+static void bufprint(BufferPrinterState *self, TupleTableSlot *slot, char *buf);
+static void bufprint_shutdown(BufferPrinterState *self);
+static void bufprint_destroy(BufferPrinterState *self);
 
-typedef struct
+extern BufferPrinterState *CreateBufferPrinter(void)
 {
-	DestReceiver pub;			/* publicly-known function pointers */
-	Portal		portal;			/* the Portal we are printing from */
-	bool		sendDescrip;	/* send RowDescription at startup? */
-	TupleDesc	attrinfo;		/* The attr info we are set up for */
-	int			nattrs;
-	BufprintAttrInfo *myinfo;	/* Cached info about each attr */
-} DR_bufprint;
+	BufferPrinterState *self = (BufferPrinterState *) palloc0(sizeof(BufferPrinterState));
+	self->attrinfo = NULL;
+	self->nattrs = 0;
+	self->myinfo = NULL;
 
-extern DestReceiver *create_printbuffer(CommandDest dest)
-{
-	return NULL;
+	// need target list and formats
+
+	return self;
 }
 
 
 static void
-bufprint_prepare_info(DR_bufprint *myState, TupleDesc typeinfo, int numAttrs)
+SendTupDesc(TupleDesc typeinfo, List *targetlist, int16 *formats)
+{
+	Form_pg_attribute *attrs = typeinfo->attrs;
+	int			natts = typeinfo->natts;
+	int			i;
+	StringInfoData buf;
+	ListCell   *tlist_item = list_head(targetlist);
+
+	pq_beginmessage(&buf, 'T'); /* tuple descriptor message type */
+	pq_sendint(&buf, natts, 2); /* # of attrs in tuples */
+
+	for (i = 0; i < natts; ++i)
+	{
+		Oid			atttypid = attrs[i]->atttypid;
+		int32		atttypmod = attrs[i]->atttypmod;
+
+		pq_sendstring(&buf, NameStr(attrs[i]->attname));
+
+		/*
+		 * Send the type name from a Postgres-XC backend node.
+		 * This preserves from OID inconsistencies as architecture is shared nothing.
+		 */
+		if (IsConnFromCoord())
+		{
+			char	   *typename;
+			typename = get_typename(atttypid);
+			pq_sendstring(&buf, typename);
+		}
+
+		/* Do we have a non-resjunk tlist item? */
+		while (tlist_item &&
+				 ((TargetEntry *) lfirst(tlist_item))->resjunk)
+			tlist_item = lnext(tlist_item);
+		if (tlist_item)
+		{
+			TargetEntry *tle = (TargetEntry *) lfirst(tlist_item);
+			pq_sendint(&buf, tle->resorigtbl, 4);
+			pq_sendint(&buf, tle->resorigcol, 2);
+			tlist_item = lnext(tlist_item);
+		}
+		else
+		{
+			/* No info available, so send zeroes */
+			pq_sendint(&buf, 0, 4);
+			pq_sendint(&buf, 0, 2);
+		}
+		/* If column is a domain, send the base type and typmod instead */
+		atttypid = getBaseTypeAndTypmod(atttypid, &atttypmod);
+		pq_sendint(&buf, (int) atttypid, sizeof(atttypid));
+		pq_sendint(&buf, attrs[i]->attlen, sizeof(attrs[i]->attlen));
+
+		if (formats)
+			pq_sendint(&buf, formats[i], 2);
+		else
+			pq_sendint(&buf, 0, 2);
+	}
+	pq_endmessage(&buf);
+}
+
+static void
+bufprint_startup(BufferPrinterState *self, int operation, TupleDesc typeinfo)
+{
+//	SendRowDescriptionMessage(typeinfo,
+//							  FetchPortalTargetList(portal),
+//							  portal->formats);
+	SendTupDesc(typeinfo, NULL, NULL);
+}
+
+static void
+bufprint_prepare_info(BufferPrinterState *myState, TupleDesc typeinfo, int numAttrs)
 {
 
 }
 
 static void
-bufprint(TupleTableSlot *slot, DestReceiver *self)
+bufprint(BufferPrinterState *self, TupleTableSlot *slot, char *buf)
 {
 
 }
 
 static void
-bufprint_shutdown(DestReceiver *self)
+bufprint_shutdown(BufferPrinterState *self)
 {
 
 }
 
 static void
-bufprint_destroy(DestReceiver *self)
+bufprint_destroy(BufferPrinterState *self)
 {
 
 }

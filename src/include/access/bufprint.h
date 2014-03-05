@@ -16,9 +16,24 @@
 
 #include "utils/portal.h"
 
-extern DestReceiver *create_printbuffer(CommandDest dest);
+typedef struct
+{								/* Per-attribute information */
+	Oid			typoutput;		/* Oid for the type's text output fn */
+	Oid			typsend;		/* Oid for the type's binary output fn */
+	bool		typisvarlena;	/* is it varlena (ie possibly toastable)? */
+	int16		format;			/* format code for this column */
+	FmgrInfo	finfo;			/* Precomputed call info for output fn */
+} BufferPrinterAttrInfo;
 
-extern void SendRowDescriptionMessage(TupleDesc typeinfo, List *targetlist,
-						  int16 *formats);
+typedef struct BufferPrinterState
+{
+	bool		sendDescrip;	/* send RowDescription at startup? */
+	TupleDesc	attrinfo;		/* The attr info we are set up for */
+	int			nattrs;
+	TupleTableSlot tupdesc;
+	BufferPrinterAttrInfo *myinfo;	/* Cached info about each attr */
+} BufferPrinterState;
+
+extern BufferPrinterState *CreateBufferPrinter(void);
 
 #endif   /* PRINTBUFFER_H */

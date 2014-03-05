@@ -265,8 +265,7 @@ ExecutorRun(QueryDesc *queryDesc,
  * a deactivate message is received
  */
 void
-ExecutorRunContinuous(QueryDesc *queryDesc,
-		Tuplestorestate *store, ScanDirection direction)
+ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 {
 	EState	   *estate;
 	CmdType		operation;
@@ -274,7 +273,6 @@ ExecutorRunContinuous(QueryDesc *queryDesc,
 	bool		sendTuples;
 	MemoryContext oldcontext;
 	TupleTableSlot *slot = NULL;
-	RangeVar *target = queryDesc->plannedstmt->cq_target;
 	int batchsize = queryDesc->plannedstmt->cq_batch_size;
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
 
@@ -313,16 +311,13 @@ ExecutorRunContinuous(QueryDesc *queryDesc,
 	if (sendTuples)
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
-	if (store)
-		slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
-
 	for (;;)
 	{
 		/*
 		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
-				sendTuples, batchsize, timeoutms, direction, dest);
+				sendTuples, batchsize, timeoutms, ForwardScanDirection, dest);
 
 		pq_flush();
 
@@ -337,7 +332,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc,
 		 * for final merging
 		 */
 		if (IS_PGXC_COORDINATOR && estate->es_processed)
-			DoRemoteMerge(target, store, slot);
+			DoRemoteMerge(mergeState);
 
 		/*
 		 * If we didn't see any new tuples, sleep briefly to save cycles

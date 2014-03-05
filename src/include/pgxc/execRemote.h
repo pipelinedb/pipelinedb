@@ -134,6 +134,15 @@ typedef struct RemoteQueryState
 
 }	RemoteQueryState;
 
+typedef struct RemoteMergeState
+{
+	RangeVar 				*targetRelation; /* output relation of a continuous query */
+	Tuplestorestate *store;	/* tuple store to hold partial results before sending out for merging */
+	List 						*targetList; /* List of TargetEntries for the continuous query's output */
+	int16 					*formats; /* List of formats for the continuous query's output */
+	TupleTableSlot 	*slot;	/* slot to hold a single tuple before it is sent out for merging */
+} RemoteMergeState;
+
 typedef void (*xact_callback) (bool isCommit, void *args);
 
 /* Multinode Executor */
@@ -156,7 +165,7 @@ extern int DataNodeCopyInBinaryForAll(char *msg_buf, int len, PGXCNodeHandle** c
 
 extern int ExecCountSlotsRemoteQuery(RemoteQuery *node);
 extern RemoteQueryState *ExecInitRemoteQuery(RemoteQuery *node, EState *estate, int eflags);
-extern void DoRemoteMerge(RangeVar *target, Tuplestorestate *store, TupleTableSlot *slot);
+extern void DoRemoteMerge(RemoteMergeState mergeState);
 extern TupleTableSlot* ExecRemoteQuery(RemoteQueryState *step);
 extern void ExecEndRemoteQuery(RemoteQueryState *step);
 extern void ExecRemoteUtility(RemoteQuery *node);

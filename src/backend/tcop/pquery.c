@@ -1334,6 +1334,7 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	PlannedStmt * stmt;
 	QueryDesc  *queryDesc;
 	Tuplestorestate *store = NULL;
+	RemoteMergeState mergeState;
 
 	/*
 	 * If the destination is DestRemoteExecute, change to DestNone.  The
@@ -1374,8 +1375,14 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	/* prepare the plan for execution */
 	ExecutorStart(queryDesc, 0);
 
+	mergeState.formats = portal->formats;
+	mergeState.targetList = FetchPortalTargetList(portal);
+	mergeState.store = store;
+	mergeState.targetRelation = queryDesc->plannedstmt->cq_target;
+	mergeState.slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
+
 	/* run the plan fo-eva */
-	ExecutorRunContinuous(queryDesc, store, ForwardScanDirection);
+	ExecutorRunContinuous(queryDesc, mergeState);
 
 	/* pop the snapshot if we pushed one */
 	PopActiveSnapshot();
