@@ -93,8 +93,6 @@ PrintTuple(BufferPrinterState *self, TupleTableSlot *slot, StringInfo buf)
 {
 	if (!self->tupdescSent)
 		SendTupDesc(self, buf);
-
-
 }
 
 /*
@@ -108,6 +106,7 @@ SendTupDesc(BufferPrinterState *self, StringInfo buf)
 	Form_pg_attribute *attrs = self->attrinfo->attrs;
 	int			natts = self->attrinfo->natts;
 	int			i;
+	char	   *typename;
 	ListCell   *tlist_item = list_head(self->targetlist);
 
 	pq_beginmessage(buf, 'T'); /* tuple descriptor message type */
@@ -124,12 +123,8 @@ SendTupDesc(BufferPrinterState *self, StringInfo buf)
 		 * Send the type name from a Postgres-XC backend node.
 		 * This preserves from OID inconsistencies as architecture is shared nothing.
 		 */
-		if (IsConnFromCoord())
-		{
-			char	   *typename;
-			typename = get_typename(atttypid);
-			pq_sendstring(buf, typename);
-		}
+		typename = get_typename(atttypid);
+		pq_sendstring(buf, typename);
 
 		/* Do we have a non-resjunk tlist item? */
 		while (tlist_item &&
@@ -154,9 +149,12 @@ SendTupDesc(BufferPrinterState *self, StringInfo buf)
 		pq_sendint(buf, attrs[i]->attlen, sizeof(attrs[i]->attlen));
 
 		if (self->formats)
-			pq_sendint(buf, self->formats[i], 2);
+			pq_sendint(buf, self->formats[i], 4);
 		else
-			pq_sendint(buf, 0, 2);
+			pq_sendint(buf, 0, 4);
+
+		/* text/binary flag */
+		pq_sendint(buf, 1, 2);
 	}
 	self->tupdescSent = true;
 }
