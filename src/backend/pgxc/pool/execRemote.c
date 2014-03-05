@@ -257,7 +257,7 @@ parse_row_count(const char *message, size_t len, uint64 *rowcount)
 /*
  * Convert RowDescription message to a TupleDesc
  */
-static TupleDesc
+TupleDesc
 create_tuple_desc(char *msg_body, size_t len)
 {
 	TupleDesc 	result;
@@ -3187,35 +3187,74 @@ do_query(RemoteQueryState *node)
 }
 
 /*
+ * BeginRemoteMerge
+ *
+ * Sends metadata necessary to begin merge request
+ */
+PGXCNodeAllHandles *
+BeginRemoteMerge(RemoteMergeState mergeState)
+{
+	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, true);
+	StringInfoData buf;
+	const char *target = mergeState.targetRelation->relname;
+	int targetLen = strlen(target) + 1; /* we want to send the \0 */
+	int nLen;
+	int nBuflen;
+	int i;
+
+	for (i=0; i<handles->dn_conn_count; i++)
+	{
+		PGXCNodeHandle *handle 	= handles->datanode_handles[i];
+
+		SendTupDesc(mergeState.bufprint, &buf);
+
+		handle->outBuffer[handle->outEnd++] = '+';
+		nLen = htonl(4 + 4 + buf.len + targetLen);
+
+		memcpy(handle->outBuffer + handle->outEnd, &nLen, 4);
+		handle->outEnd += 4;
+
+		memcpy(handle->outBuffer + handle->outEnd, target, targetLen);
+		handle->outEnd += targetLen;
+
+		nBuflen = htonl(buf.len);
+		memcpy(handle->outBuffer + handle->outEnd, &nBuflen, 4);
+		handle->outEnd += 4;
+
+		memcpy(handle->outBuffer + handle->outEnd, buf.data, buf.len);
+		handle->outEnd += buf.len;
+
+		pgxc_node_flush(handle);
+	}
+
+	return handles;
+}
+
+/*
  * DoRemoteMerge
  *
  * Sends a batch of tuples down to datanodes for final merging
  */
 void
-DoRemoteMerge(RangeVar *target, Tuplestorestate *store, TupleTableSlot *slot)
+DoRemoteMerge(RemoteMergeState mergeState)
 {
-	Relation rel = heap_openrv(target, NoLock);
-	ExecNodes *nodes;
+	PGXCNodeAllHandles *handles;
+	Relation rel = heap_openrv(mergeState.targetRelation, NoLock);
 	RelationLocInfo *locinfo = rel->rd_locator_info;
-	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, true);
+	TupleTableSlot *slot = mergeState.slot;
+	StringInfoData buf;
+	int nLen;
+	int nBuflen;
 
-	while (tuplestore_gettupleslot(store, true, false, slot))
+	/* send merge output table and tuple description */
+	handles = BeginRemoteMerge(mergeState);
+
+	while (tuplestore_gettupleslot(mergeState.store, true, false, slot))
 	{
-		AttrNumber distCol 			= locinfo->partAttrNum;
-		Oid type 								= slot->tts_tupleDescriptor->attrs[distCol]->atttypid;
-		Datum distValue 				= slot->tts_values[distCol];
-		bool isnull 						= slot->tts_isnull[distCol];
-		PGXCNodeHandle *handle 	= handles->datanode_handles[0];
 
-		nodes = GetRelationNodes(rel->rd_locator_info,
-				distValue, isnull, type, RELATION_ACCESS_INSERT);
-
-		handle->outBuffer[handle->outEnd++] = '+';
-		pgxc_node_flush(handle);
-//		elog(LOG, "[handle %p ]buf=%s, outEnd=%d", handle, handle->outBuffer, (int)handle->outEnd);
 	}
 
-	tuplestore_clear(store);
+	tuplestore_clear(mergeState.store);
 	relation_close(rel, NoLock);
 }
 

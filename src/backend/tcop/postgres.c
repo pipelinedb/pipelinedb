@@ -910,10 +910,13 @@ exec_merge(StringInfo message)
 	const char *cvname = pq_getmsgstring(message);
 	int msglen = pq_getmsgint(message, 4);
 	char *raw = (char *)pq_getmsgbytes(message, msglen);
+	TupleDesc desc;
 
 	start_xact_command();
 
-	TupleDesc desc = create_tuple_desc(raw, msglen);
+	desc = create_tuple_desc(raw, msglen);
+
+	elog(LOG, "table=%s, natts=%d", cvname, desc->natts);
 
 	pq_getmsgend(message);
 

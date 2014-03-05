@@ -23,7 +23,6 @@
 #include "libpq/pqformat.h"
 #include "pgxc/pgxc.h"
 
-static void SendTupDesc(BufferPrinterState *self, StringInfo buf);
 
 /*
  * CreateBufferPrinter
@@ -91,8 +90,7 @@ CreateBufferPrinter(TupleDesc attrinfo, List *targetlist, int16 *formats)
 void
 PrintTuple(BufferPrinterState *self, TupleTableSlot *slot, StringInfo buf)
 {
-	if (!self->tupdescSent)
-		SendTupDesc(self, buf);
+
 }
 
 /*
@@ -100,7 +98,7 @@ PrintTuple(BufferPrinterState *self, TupleTableSlot *slot, StringInfo buf)
  *
  * Serialize a tuple description message to a buffer
  */
-static void
+void
 SendTupDesc(BufferPrinterState *self, StringInfo buf)
 {
 	Form_pg_attribute *attrs = self->attrinfo->attrs;

@@ -165,11 +165,13 @@ extern int DataNodeCopyInBinaryForAll(char *msg_buf, int len, PGXCNodeHandle** c
 
 extern int ExecCountSlotsRemoteQuery(RemoteQuery *node);
 extern RemoteQueryState *ExecInitRemoteQuery(RemoteQuery *node, EState *estate, int eflags);
+extern PGXCNodeAllHandles *BeginRemoteMerge(RemoteMergeState mergeState);
 extern void DoRemoteMerge(RemoteMergeState mergeState);
 extern TupleTableSlot* ExecRemoteQuery(RemoteQueryState *step);
 extern void ExecEndRemoteQuery(RemoteQueryState *step);
 extern void ExecRemoteUtility(RemoteQuery *node);
 
+extern TupleDesc create_tuple_desc(char *msg_body, size_t len);
 extern int handle_response(PGXCNodeHandle * conn, RemoteQueryState *combiner);
 extern bool	is_data_node_ready(PGXCNodeHandle * conn);
 extern void HandleCmdComplete(CmdType commandType, CombineTag *combine, const char *msg_body, size_t len);

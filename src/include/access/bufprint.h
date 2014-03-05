@@ -36,5 +36,6 @@ typedef struct BufferPrinterState
 
 BufferPrinterState *CreateBufferPrinter(TupleDesc attrinfo, List *targetList, int16 *formats);
 void PrintTuple(BufferPrinterState *self, TupleTableSlot *slot, StringInfo buf);
+void SendTupDesc(BufferPrinterState *self, StringInfo buf);
 
 #endif   /* PRINTBUFFER_H */
