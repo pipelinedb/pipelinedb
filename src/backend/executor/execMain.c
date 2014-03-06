@@ -61,6 +61,7 @@
 #include "utils/tqual.h"
 #ifdef PGXC
 #include "pgxc/pgxc.h"
+#include "pgxc/execRemote.h"
 #include "commands/copy.h"
 #endif
 
@@ -264,13 +265,14 @@ ExecutorRun(QueryDesc *queryDesc,
  * a deactivate message is received
  */
 void
-ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
+ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 {
 	EState	   *estate;
 	CmdType		operation;
 	DestReceiver *dest;
 	bool		sendTuples;
 	MemoryContext oldcontext;
+	TupleTableSlot *slot = NULL;
 	int batchsize = queryDesc->plannedstmt->cq_batch_size;
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
 
@@ -315,15 +317,22 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ScanDirection direction)
 		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
-				sendTuples, batchsize, timeoutms, direction, dest);
+				sendTuples, batchsize, timeoutms, ForwardScanDirection, dest);
 
 		pq_flush();
 
 		/*
-		 * Tell the coordinator that this batch is done
+		 * If we're a datanode, tell the coordinator that this batch is done
 		 */
 		if (IS_PGXC_DATANODE)
 			ReadyForQuery(dest->mydest);
+
+		/*
+		 * If we're a coordinator, send the partial result back to the datanodes
+		 * for final merging
+		 */
+		if (IS_PGXC_COORDINATOR && estate->es_processed)
+			DoRemoteMerge(mergeState);
 
 		/*
 		 * If we didn't see any new tuples, sleep briefly to save cycles

@@ -35,3 +35,4 @@ src/test/regress/regression.diffs
 src/test/regress/regression.out
 
 .pydevproject
+.settings

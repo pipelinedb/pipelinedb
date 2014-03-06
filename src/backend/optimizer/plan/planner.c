@@ -145,6 +145,7 @@ planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	{
 		result->cq_batch_size = PIPELINE_BATCH_SIZE;
 		result->cq_batch_timeout_ms = PIPELINE_BATCH_TIMEOUT_MS;
+		result->cq_target = parse->cq_target;
 	}
 
 	return result;

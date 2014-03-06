@@ -30,6 +30,7 @@
 #include "tcop/pquery.h"
 #include "tcop/utility.h"
 #include "utils/memutils.h"
+#include "utils/rel.h"
 #include "utils/snapmgr.h"
 
 
@@ -1333,6 +1334,9 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 {
 	PlannedStmt * stmt;
 	QueryDesc  *queryDesc;
+	Tuplestorestate *store = NULL;
+	RemoteMergeState mergeState;
+	Relation rel;
 
 	/*
 	 * If the destination is DestRemoteExecute, change to DestNone.  The
@@ -1363,11 +1367,29 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 								GetActiveSnapshot(), InvalidSnapshot,
 								dest, portal->portalParams, 0);
 
+	/* create a tuplestore if that's where we're sending tuples */
+	if (dest->mydest == DestTuplestore)
+	{
+		store = tuplestore_begin_heap(true, true, queryDesc->plannedstmt->cq_batch_size);
+		SetTuplestoreDestReceiverParams(dest, store, PortalGetHeapMemory(portal), true);
+	}
+
 	/* prepare the plan for execution */
 	ExecutorStart(queryDesc, 0);
 
+	mergeState.store = store;
+	mergeState.targetRelation = queryDesc->plannedstmt->cq_target;
+	mergeState.slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
+	mergeState.bufprint = CreateBufferPrinter(queryDesc->tupDesc, FetchPortalTargetList(portal), portal->formats);
+
+	rel = heap_openrv(mergeState.targetRelation, NoLock);
+	RelationBuildLocator(rel);
+	relation_close(rel, NoLock);
+
+	mergeState.locinfo = rel->rd_locator_info;
+
 	/* run the plan fo-eva */
-	ExecutorRunContinuous(queryDesc, ForwardScanDirection);
+	ExecutorRunContinuous(queryDesc, mergeState);
 
 	/* pop the snapshot if we pushed one */
 	PopActiveSnapshot();

@@ -467,7 +467,7 @@ SocketBackend(StringInfo inBuf)
 			if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)
 				ereport(FATAL,
 						(errcode(ERRCODE_PROTOCOL_VIOLATION),
-						 errmsg("invalid frontend message type %d", qtype)));
+						 errmsg("xinvalid frontend message type %d", qtype)));
 			break;
 
 		case 'S':				/* sync */
@@ -500,7 +500,8 @@ SocketBackend(StringInfo inBuf)
 		case 'b':				/* Barrier */
 			break;
 #endif
-
+		case '+':				/* Merge */
+			break;
 		default:
 
 			/*
@@ -522,7 +523,9 @@ SocketBackend(StringInfo inBuf)
 	if (PG_PROTOCOL_MAJOR(FrontendProtocol) >= 3)
 	{
 		if (pq_getmessage(inBuf, 0))
+		{
 			return EOF;			/* suitable message already logged */
+		}
 	}
 
 	return qtype;
@@ -899,6 +902,45 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 	return stmt_list;
 }
 
+
+/*
+ * exec_merge
+ *
+ * Merges partial results of a continuous query with this datanode's rows
+ */
+static void
+exec_merge(StringInfo message)
+{
+	/* name of the continuous view we're merging into */
+	const char *cvname = pq_getmsgstring(message);
+	int tupdesclen = pq_getmsgint(message, 4);
+	char *raw = (char *) pq_getmsgbytes(message, tupdesclen);
+	char *datarow;
+	int rowlen;
+	TupleDesc desc;
+	TupleTableSlot *slot;
+
+	start_xact_command();
+
+	desc = create_tuple_desc(raw, tupdesclen);
+	slot = MakeSingleTupleTableSlot(desc);
+
+	while (message->cursor < message->len)
+	{
+		rowlen = pq_getmsgint(message, 4);
+		datarow = (char *) pq_getmsgbytes(message, rowlen);
+		ExecStoreDataRowTuple(datarow, rowlen, 0, slot, false);
+		slot_getallattrs(slot);
+
+		print_slot(slot);
+	}
+
+	pq_getmsgend(message);
+
+	finish_xact_command();
+}
+
+
 /*
  * exec_simple_query
  *
@@ -1133,10 +1175,10 @@ exec_simple_query(const char *query_string)
 		{
 			/*
 			 * If this is a continuous view and we're on a coordinator, that means
-			 * that this coordinator is responsible for merging partial results
-			 * into the view's underlying table
+			 * that this coordinator is responsible for buffering partial results
+			 * in a tuplestore and then sending them out for final merging by DNs.
 			 */
-//			dest = DestContinuousView;
+			dest = DestTuplestore;
 		}
 
 		PortalSetResultFormat(portal, 1, &format);
@@ -4264,11 +4306,10 @@ PostgresMain(int argc, char *argv[], const char *username)
 					send_ready_for_query = true;
 				}
 				break;
-			case '!':			/* deactivate a continuous query */
-				{
+			case '+':			/* merge partial continuous query result */
+					exec_merge(&input_message);
+					break;
 
-				}
-				break;
 			case 'P':			/* parse */
 				{
 					const char *stmt_name;

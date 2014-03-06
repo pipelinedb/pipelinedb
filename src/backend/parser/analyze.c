@@ -2602,6 +2602,7 @@ transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewSt
 	Query *q = parse_analyze(parsetree, query_string, NULL, 0);
 	q->is_continuous = true;
 	q->cq_activate_stmt = pstrdup(pstate->p_sourcetext);
+	q->cq_target = stmt->name;
 
 	return q;
 }

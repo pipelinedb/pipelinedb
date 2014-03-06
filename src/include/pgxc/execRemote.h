@@ -18,6 +18,7 @@
 #include "locator.h"
 #include "nodes/nodes.h"
 #include "pgxcnode.h"
+#include "access/bufprint.h"
 #include "access/tupdesc.h"
 #include "executor/tuptable.h"
 #include "nodes/execnodes.h"
@@ -134,6 +135,15 @@ typedef struct RemoteQueryState
 
 }	RemoteQueryState;
 
+typedef struct RemoteMergeState
+{
+	RangeVar 						*targetRelation; /* output relation of a continuous query */
+	Tuplestorestate 		*store;	/* tuple store to hold partial results before sending out for merging */
+	TupleTableSlot 			*slot;	/* slot to hold a single tuple before it is sent out for merging */
+	BufferPrinterState 	*bufprint; /* buffer printer to serialize DN-bound tuples with */
+	RelationLocInfo			*locinfo; /* determines which node(s) a given tuple belongs to */
+} RemoteMergeState;
+
 typedef void (*xact_callback) (bool isCommit, void *args);
 
 /* Multinode Executor */
@@ -156,10 +166,12 @@ extern int DataNodeCopyInBinaryForAll(char *msg_buf, int len, PGXCNodeHandle** c
 
 extern int ExecCountSlotsRemoteQuery(RemoteQuery *node);
 extern RemoteQueryState *ExecInitRemoteQuery(RemoteQuery *node, EState *estate, int eflags);
+extern void DoRemoteMerge(RemoteMergeState mergeState);
 extern TupleTableSlot* ExecRemoteQuery(RemoteQueryState *step);
 extern void ExecEndRemoteQuery(RemoteQueryState *step);
 extern void ExecRemoteUtility(RemoteQuery *node);
 
+extern TupleDesc create_tuple_desc(char *msg_body, size_t len);
 extern int handle_response(PGXCNodeHandle * conn, RemoteQueryState *combiner);
 extern bool	is_data_node_ready(PGXCNodeHandle * conn);
 extern void HandleCmdComplete(CmdType commandType, CombineTag *combine, const char *msg_body, size_t len);

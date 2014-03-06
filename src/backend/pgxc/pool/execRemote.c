@@ -44,8 +44,10 @@
 #include "utils/datum.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
-#include "utils/tuplesort.h"
+#include "utils/rel.h"
+#include "utils/relcache.h"
 #include "utils/snapmgr.h"
+#include "utils/tuplesort.h"
 #include "utils/builtins.h"
 #include "pgxc/locator.h"
 #include "pgxc/pgxc.h"
@@ -255,7 +257,7 @@ parse_row_count(const char *message, size_t len, uint64 *rowcount)
 /*
  * Convert RowDescription message to a TupleDesc
  */
-static TupleDesc
+TupleDesc
 create_tuple_desc(char *msg_body, size_t len)
 {
 	TupleDesc 	result;
@@ -2116,7 +2118,7 @@ DataNodeCopyBegin(const char *query, List *nodelist, Snapshot snapshot)
 		return NULL;
 
 	/* Get needed Datanode connections */
-	pgxc_handles = get_handles(nodelist, NULL, false);
+	pgxc_handles = get_handles(nodelist, NULL, false, false);
 	connections = pgxc_handles->datanode_handles;
 
 	if (!connections)
@@ -2731,7 +2733,7 @@ get_exec_connections(RemoteQueryState *planstate,
 	}
 
 	/* Get other connections (non-primary) */
-	pgxc_handles = get_handles(nodelist, coordlist, is_query_coord_only);
+	pgxc_handles = get_handles(nodelist, coordlist, is_query_coord_only, false);
 	if (!pgxc_handles)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -2742,7 +2744,7 @@ get_exec_connections(RemoteQueryState *planstate,
 	{
 		/* Let's assume primary connection is always a Datanode connection for the moment */
 		PGXCNodeAllHandles *pgxc_conn_res;
-		pgxc_conn_res = get_handles(primarynode, NULL, false);
+		pgxc_conn_res = get_handles(primarynode, NULL, false, false);
 
 		/* primary connection is unique */
 		primaryconnection = pgxc_conn_res->datanode_handles[0];
@@ -3182,6 +3184,128 @@ do_query(RemoteQueryState *node)
 		memcpy(connections, node->cursor_connections, node->cursor_count * sizeof(PGXCNodeHandle *));
 		node->connections = connections;
 	}
+}
+
+/*
+ * DoRemoteMerge
+ *
+ * Sends a batch of partial result tuples down to the datanodes for final merging
+ */
+void
+DoRemoteMerge(RemoteMergeState mergeState)
+{
+	AttrNumber distCol = mergeState.locinfo->partAttrNum;
+	TupleTableSlot *slot = mergeState.slot;
+	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, true);
+	const char *target = mergeState.targetRelation->relname;
+	int targetLen = strlen(target) + 1; /* we want to send the \0 */
+	int msglen = 4; /* length of this field is included */
+	int msglens[handles->dn_conn_count];
+	int tupdesclen;
+	int i;
+	List *tuplesByNode[handles->dn_conn_count];
+	StringInfo rawTupDesc = TupleDescToBytes(mergeState.bufprint);
+
+	/* tuple description comes with a 4-byte length prefix */
+	msglen += rawTupDesc->len + 4;
+
+	/* we want to include the '\0' */
+	msglen += strlen(target) + 1;
+
+	for (i=0; i<handles->dn_conn_count; i++)
+	{
+		/* Total message length. Length of this field is included */
+		msglens[i] = 4;
+
+		/* tuple description comes with a 4-byte length prefix */
+		msglens[i] += rawTupDesc->len + 4;
+
+		/* we want to include the '\0' */
+		msglens[i] += strlen(target) + 1;
+
+		tuplesByNode[i] = NIL;
+	}
+
+	/*
+	 * Serialize all of the tuples in the store to raw messages. We do this
+	 * all at once before flushing because message lengths are variable, so we
+	 * don't know their lengths (which we'll need for deserialization) until
+	 * after they're serialized.
+	 */
+	while (tuplestore_gettupleslot(mergeState.store, true, false, slot))
+	{
+		Oid type = slot->tts_tupleDescriptor->attrs[distCol]->atttypid;
+		Datum distValue = slot->tts_values[distCol];
+		bool isnull = slot->tts_isnull[distCol];
+		ListCell *nlc;
+		ExecNodes *nodes = GetRelationNodes(mergeState.locinfo,
+						distValue, isnull, type, RELATION_ACCESS_INSERT);
+
+		/*
+		 * Put each tuple in a queue bound for one or more datanodes
+		 */
+		foreach(nlc, nodes->nodeList)
+		{
+			int node = lfirst_int(nlc);
+			StringInfo raw = TupleToBytes(mergeState.bufprint, slot);
+
+			/* each tuple will have a 4-byte length prefix */
+			msglens[node] += raw->len + 4;
+			tuplesByNode[node] = lcons(raw, tuplesByNode[node]);
+		}
+	}
+
+	/*
+	 * Now that we have all of our raw messages with lengths, we can flush
+	 * flush each datanode's entire buffer (one message per conn).
+	 */
+	for (i=0; i<handles->dn_conn_count; i++)
+	{
+		int msglen = msglens[i];
+		PGXCNodeHandle *handle = handles->datanode_handles[i];
+		List *rawtups = tuplesByNode[i];
+		ListCell *lc;
+		StringInfoData result;
+
+		initStringInfo(&result);
+
+		/* message prefix */
+		appendStringInfoChar(&result, '+');
+
+		/* total message length */
+		msglen = htonl(msglen);
+		appendBinaryStringInfo(&result, (char *) &msglen, 4);
+
+		/* target output relation */
+		appendBinaryStringInfo(&result, target, targetLen);
+
+		/* tuple description length */
+		tupdesclen = htonl(rawTupDesc->len);
+		appendBinaryStringInfo(&result, (char *) &tupdesclen, 4);
+
+		/* tuple description */
+		appendBinaryStringInfo(&result, rawTupDesc->data, rawTupDesc->len);
+
+		foreach(lc, rawtups)
+		{
+			int rowlen;
+			StringInfo bytes = (StringInfo) lfirst(lc);
+
+			/* length of DataRow message (this uses memcpy so pointing to rowlen is safe here) */
+			rowlen = htonl(bytes->len);
+			appendBinaryStringInfo(&result, (char *) &rowlen, 4);
+
+			/* DataRow message */
+			appendBinaryStringInfo(&result, bytes->data, bytes->len);
+		}
+
+		memcpy(handle->outBuffer + handle->outEnd, result.data, result.len);
+		handle->outEnd += result.len;
+
+		pgxc_node_flush(handle);
+	}
+
+	tuplestore_clear(mergeState.store);
 }
 
 /*
@@ -4011,7 +4135,7 @@ ExecCloseRemoteStatement(const char *stmt_name, List *nodelist)
 		return;
 
 	/* get needed Datanode connections */
-	all_handles = get_handles(nodelist, NIL, false);
+	all_handles = get_handles(nodelist, NIL, false, false);
 	conn_count = all_handles->dn_conn_count;
 	connections = all_handles->datanode_handles;
 
@@ -4743,7 +4867,7 @@ FinishRemotePreparedTransaction(char *prepareGID, bool commit)
 	/*
 	 * Now get handles for all the involved Datanodes and the Coordinators
 	 */
-	pgxc_handles = get_handles(nodelist, coordlist, false);
+	pgxc_handles = get_handles(nodelist, coordlist, false, false);
 
 	/*
 	 * Send GXID (as received above) to the remote nodes.
