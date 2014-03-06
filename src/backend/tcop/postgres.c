@@ -467,7 +467,7 @@ SocketBackend(StringInfo inBuf)
 			if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)
 				ereport(FATAL,
 						(errcode(ERRCODE_PROTOCOL_VIOLATION),
-						 errmsg("xinvalid frontend message type %d", qtype)));
+						 errmsg("invalid frontend message type %d", qtype)));
 			break;
 
 		case 'S':				/* sync */

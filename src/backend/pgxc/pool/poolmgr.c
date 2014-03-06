@@ -1511,7 +1511,7 @@ agent_acquire_connections(PoolAgent *agent, List *datanodelist, List *coordlist)
 				return NULL;
 			}
 
-			/* Store in the descriptor unless it's dedicated */
+			/* Store in the descriptor unless */
 			agent->dn_connections[node] = slot;
 
 			/*
