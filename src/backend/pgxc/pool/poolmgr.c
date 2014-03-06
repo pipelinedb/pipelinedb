@@ -1513,7 +1513,6 @@ agent_acquire_connections(PoolAgent *agent, List *datanodelist, List *coordlist)
 
 			/* Store in the descriptor unless it's dedicated */
 			agent->dn_connections[node] = slot;
-			// agent->dn_connections[node] = slot;
 
 			/*
 			 * Update newly-acquired slot with session parameters.
