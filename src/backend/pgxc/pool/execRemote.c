@@ -3194,7 +3194,7 @@ do_query(RemoteQueryState *node)
 void
 DoRemoteMerge(RemoteMergeState mergeState)
 {
-	AttrNumber distCol = mergeState.locinfo->partAttrNum;
+	AttrNumber distCol = mergeState.locinfo->partAttrNum - 1;
 	TupleTableSlot *slot = mergeState.slot;
 	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, true);
 	const char *target = mergeState.targetRelation->relname;
@@ -3228,9 +3228,10 @@ DoRemoteMerge(RemoteMergeState mergeState)
 	while (tuplestore_gettupleslot(mergeState.store, true, false, slot))
 	{
 		Oid type = slot->tts_tupleDescriptor->attrs[distCol]->atttypid;
-		Datum distValue = slot->tts_values[distCol];
-		bool isnull = slot->tts_isnull[distCol];
+		bool isnull;
+		Datum distValue = slot_getattr(slot, distCol + 1, &isnull);
 		ListCell *nlc;
+
 		ExecNodes *nodes = GetRelationNodes(mergeState.locinfo,
 						distValue, isnull, type, RELATION_ACCESS_INSERT);
 
