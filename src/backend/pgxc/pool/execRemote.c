@@ -3198,19 +3198,12 @@ DoRemoteMerge(RemoteMergeState mergeState)
 	TupleTableSlot *slot = mergeState.slot;
 	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, true);
 	const char *target = mergeState.targetRelation->relname;
-	int targetLen = strlen(target) + 1; /* we want to send the \0 */
-	int msglen = 4; /* length of this field is included */
+	int targetLen = strlen(target) + 1; /* we want to send the '\0' */
 	int msglens[handles->dn_conn_count];
 	int tupdesclen;
 	int i;
 	List *tuplesByNode[handles->dn_conn_count];
 	StringInfo rawTupDesc = TupleDescToBytes(mergeState.bufprint);
-
-	/* tuple description comes with a 4-byte length prefix */
-	msglen += rawTupDesc->len + 4;
-
-	/* we want to include the '\0' */
-	msglen += strlen(target) + 1;
 
 	for (i=0; i<handles->dn_conn_count; i++)
 	{
