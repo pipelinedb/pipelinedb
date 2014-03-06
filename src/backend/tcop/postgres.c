@@ -44,6 +44,7 @@
 #include "access/printtup.h"
 #include "access/xact.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "commands/async.h"
 #include "commands/prepare.h"
 #ifdef PGXC
@@ -902,6 +903,58 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 	return stmt_list;
 }
 
+/*
+ * get_cached_merge_plan
+ *
+ * Retrieves a the cached merge plan for a continuous view, creating it if necessary
+ */
+static CachedPlan *
+get_cached_merge_plan(char *cvname)
+{
+	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
+	char *query_string;
+	CachedPlanSource *psrc;
+	Node	   *raw_parse_tree;
+	List	   *parsetree_list;
+	List		 *query_list;
+	ListCell   *lc;
+	PreparedStatement *pstmt = FetchPreparedStatement(cvname, false);
+
+	if (pstmt)
+	{
+		psrc = pstmt->plansource;
+	}
+	else
+	{
+		/*
+		 * It doesn't exist, so create and cache it
+		 */
+		query_string = GetQueryString(rel);
+		parsetree_list = pg_parse_query(query_string);
+
+		/* CVs should only have a single query */
+		Assert(parsetree_list->length == 1);
+
+		raw_parse_tree = (Node *) linitial(parsetree_list);
+		query_list = pg_analyze_and_rewrite(raw_parse_tree, query_string, NULL, 0);
+
+		/* CVs should only have a single query */
+		Assert(querytree_list->length == 1);
+		foreach(lc, query_list)
+		{
+			Query *query = (Query *) lfirst(lc);
+
+			if (query->sql_statement == NULL)
+				query->sql_statement = pstrdup(query_string);
+		}
+
+		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
+		CompleteCachedPlan(psrc, query_list, NULL, 0, 0, NULL,  NULL, 0, true);
+		StorePreparedStatement(cvname, psrc, false);
+	}
+
+	return GetCachedPlan(psrc, 0, false);
+}
 
 /*
  * exec_merge
@@ -912,13 +965,14 @@ static void
 exec_merge(StringInfo message)
 {
 	/* name of the continuous view we're merging into */
-	const char *cvname = pq_getmsgstring(message);
+	char *cvname = (char *) pq_getmsgstring(message);
 	int tupdesclen = pq_getmsgint(message, 4);
 	char *raw = (char *) pq_getmsgbytes(message, tupdesclen);
 	char *datarow;
 	int rowlen;
 	TupleDesc desc;
 	TupleTableSlot *slot;
+	CachedPlan *cplan;
 
 	start_xact_command();
 
@@ -936,6 +990,8 @@ exec_merge(StringInfo message)
 	}
 
 	pq_getmsgend(message);
+
+	cplan = get_cached_merge_plan(cvname);
 
 	finish_xact_command();
 }
