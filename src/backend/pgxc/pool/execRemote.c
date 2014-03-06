@@ -3204,9 +3204,12 @@ DoRemoteMerge(RemoteMergeState mergeState)
 	int i;
 	List *tuplesByNode[handles->dn_conn_count];
 	StringInfo rawTupDesc = TupleDescToBytes(mergeState.bufprint);
+	TransactionId gxid = GetCurrentTransactionId();
 
 	for (i=0; i<handles->dn_conn_count; i++)
 	{
+		PGXCNodeHandle *handle = handles->datanode_handles[i];
+
 		/* Total message length. Length of this field is included */
 		msglens[i] = 4;
 
@@ -3217,6 +3220,10 @@ DoRemoteMerge(RemoteMergeState mergeState)
 		msglens[i] += strlen(target) + 1;
 
 		tuplesByNode[i] = NIL;
+
+		pgxc_node_send_gxid(handle, gxid);
+		pgxc_node_send_timestamp(handle, GetCurrentGTMStartTimestamp());
+		pgxc_node_send_snapshot(handle, GetActiveSnapshot());
 	}
 
 	/*
