@@ -917,7 +917,7 @@ get_cached_merge_plan(char *cvname)
 	Node	   *raw_parse_tree;
 	List	   *parsetree_list;
 	List		 *query_list;
-	ListCell   *lc;
+	Query 	 *query;
 	PreparedStatement *pstmt = FetchPreparedStatement(cvname, false);
 
 	if (pstmt)
@@ -939,16 +939,16 @@ get_cached_merge_plan(char *cvname)
 		query_list = pg_analyze_and_rewrite(raw_parse_tree, query_string, NULL, 0);
 
 		/* CVs should only have a single query */
-		Assert(querytree_list->length == 1);
-		foreach(lc, query_list)
-		{
-			Query *query = (Query *) lfirst(lc);
+		Assert(query_list->length == 1);
+		query = (Query *) linitial(query_list);
 
-			if (query->sql_statement == NULL)
-				query->sql_statement = pstrdup(query_string);
-		}
+		if (query->sql_statement == NULL)
+			query->sql_statement = pstrdup(query_string);
 
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
+
+		psrc->store = (Tuplestorestate *) 42;
+
 		CompleteCachedPlan(psrc, query_list, NULL, 0, 0, NULL,  NULL, 0, true);
 		StorePreparedStatement(cvname, psrc, false);
 	}
@@ -985,8 +985,6 @@ exec_merge(StringInfo message)
 		datarow = (char *) pq_getmsgbytes(message, rowlen);
 		ExecStoreDataRowTuple(datarow, rowlen, 0, slot, false);
 		slot_getallattrs(slot);
-
-		print_slot(slot);
 	}
 
 	pq_getmsgend(message);

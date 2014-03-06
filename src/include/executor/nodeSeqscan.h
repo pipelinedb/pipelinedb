@@ -1,7 +1,7 @@
 /*-------------------------------------------------------------------------
  *
  * nodeSeqscan.h
- *
+ *		Support routines for sequential scans of tuple stores.
  *
  *
  * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
@@ -11,8 +11,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef NODESEQSCAN_H
-#define NODESEQSCAN_H
+#ifndef NODETUPLESTORESCAN_H
+#define NODETUPLESTORESCAN_H
 
 #include "nodes/execnodes.h"
 
@@ -23,4 +23,4 @@ extern void ExecSeqMarkPos(SeqScanState *node);
 extern void ExecSeqRestrPos(SeqScanState *node);
 extern void ExecReScanSeqScan(SeqScanState *node);
 
-#endif   /* NODESEQSCAN_H */
+#endif   /* NODETUPLESTORESCAN_H */

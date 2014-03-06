@@ -17,6 +17,7 @@
 #include "access/sdir.h"
 #include "nodes/bitmapset.h"
 #include "nodes/primnodes.h"
+#include "utils/tuplestore.h"
 
 
 /* ----------------------------------------------------------------
@@ -493,6 +494,23 @@ typedef struct ForeignScan
 	List	   *fdw_private;	/* private data for FDW */
 	bool		fsSystemCol;	/* true if any "system column" is needed */
 } ForeignScan;
+
+/*
+ * ----------------
+ * 		TuplestoreScan
+ *
+ * 	TuplestoreScans simply scan a tuplestore as input. In the context of
+ * 	continuous queries, this is useful for merging partial query results
+ * 	received on the datanodes from a coordinator. In such cases, we want
+ * 	to run the continuous query plan one final time on a tuplestore containing
+ * 	the partial results as well as any existing tuples that the partial results
+ * 	need to be merged with.
+ */
+typedef struct TuplestoreScan
+{
+	Scan		scan;
+	Tuplestorestate *store; /* tuplestore to scan from */
+} TuplestoreScan;
 
 
 /*

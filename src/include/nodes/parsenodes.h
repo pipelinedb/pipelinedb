@@ -24,6 +24,7 @@
 #include "nodes/bitmapset.h"
 #include "nodes/primnodes.h"
 #include "nodes/value.h"
+#include "utils/tuplestore.h"
 #ifdef PGXC
 #include "access/tupdesc.h"
 #include "pgxc/locator.h"
@@ -181,6 +182,8 @@ typedef struct Query
 	char		*cq_activate_stmt;
 
 	RangeVar *cq_target; /* output relation of this CQ, if any */
+
+	Tuplestorestate *sourcestore;
 #endif
 } Query;
 

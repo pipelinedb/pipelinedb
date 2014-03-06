@@ -17,6 +17,7 @@
 
 #include "access/tupdesc.h"
 #include "nodes/params.h"
+#include "utils/tuplestore.h"
 
 #define CACHEDPLANSOURCE_MAGIC		195726186
 #define CACHEDPLAN_MAGIC			953717834
@@ -101,6 +102,7 @@ typedef struct CachedPlanSource
 #ifdef PGXC
 	char	   *stmt_name;		/* If set, this is a copy of prepared stmt name */
 #endif
+	Tuplestorestate *store; /* tuplestore to read from, if any */
 } CachedPlanSource;
 
 /*

@@ -141,6 +141,7 @@ InitPlanCache(void)
  */
 CachedPlanSource *
 CreateCachedPlan(Node *raw_parse_tree,
+
 				 const char *query_string,
 #ifdef PGXC
 				 const char *stmt_name,
@@ -754,6 +755,7 @@ BuildCachedPlan(CachedPlanSource *plansource, List *qlist,
 	bool		spi_pushed;
 	MemoryContext plan_context;
 	MemoryContext oldcxt;
+	ListCell *lc;
 
 	/*
 	 * Normally the querytree should be valid already, but if it's not,
@@ -811,6 +813,16 @@ BuildCachedPlan(CachedPlanSource *plansource, List *qlist,
 	 * of the case here.
 	 */
 	spi_pushed = SPI_push_conditional();
+
+	/*
+	 * If this plan is supposed to read from a tuplestore, attach the source
+	 * tuplestore to the query so we can properly plan it
+	 */
+	foreach(lc, qlist)
+	{
+		Query *q = (Query *) lfirst(lc);
+		q->sourcestore = plansource->store;
+	}
 
 	/*
 	 * Generate the plan.

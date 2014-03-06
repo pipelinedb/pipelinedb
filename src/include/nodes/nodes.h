@@ -63,6 +63,7 @@ typedef enum NodeTag
 	T_CteScan,
 	T_WorkTableScan,
 	T_ForeignScan,
+	T_TuplestoreScan,
 	T_Join,
 	T_NestLoop,
 	T_MergeJoin,
