@@ -3249,7 +3249,7 @@ DoRemoteMerge(RemoteMergeState mergeState)
 	}
 
 	/*
-	 * Now that we have all of our raw messages with lengths, we can flush
+	 * Now that we have all of our raw messages with lengths, we can
 	 * flush each datanode's entire buffer (one message per conn).
 	 */
 	for (i=0; i<handles->dn_conn_count; i++)
