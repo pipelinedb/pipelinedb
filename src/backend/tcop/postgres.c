@@ -989,6 +989,8 @@ exec_merge(StringInfo message)
 		print_slot(slot);
 	}
 
+	pq_getmsgend(message);
+
 	cplan = get_cached_merge_plan(cvname);
 
 	finish_xact_command();
