@@ -83,14 +83,88 @@ CreateBufferPrinter(TupleDesc attrinfo, List *targetlist, int16 *formats)
 }
 
 /*
- * PrintTuple
+ * TupleToBytes
  *
- * Serialize a tuple to a buffer
+ * Serialize a tuple to bytes
  */
-void
-PrintTuple(BufferPrinterState *self, TupleTableSlot *slot, StringInfo buf)
+StringInfo
+TupleToBytes(BufferPrinterState *self, TupleTableSlot *slot)
 {
+	StringInfo buf = makeStringInfo();
+	TupleDesc	typeinfo = slot->tts_tupleDescriptor;
+	int			natts = typeinfo->natts;
+	int			i;
+	int			len = 0;
 
+	/* Make sure the tuple is fully deconstructed */
+	slot_getallattrs(slot);
+
+	/*
+	 * Prepare a DataRow message
+	 */
+	pq_beginmessage(buf, 'D');
+	len += 1;
+
+	pq_sendint(buf, natts, 2);
+	len+= 2;
+
+	/*
+	 * send the attributes of this tuple
+	 */
+	for (i = 0; i < natts; ++i)
+	{
+		BufferPrinterAttrInfo *thisState = self->typeinfo + i;
+		Datum		origattr = slot->tts_values[i],
+					attr;
+
+		if (slot->tts_isnull[i])
+		{
+			pq_sendint(buf, -1, 4);
+			len += 4;
+			continue;
+		}
+
+		/*
+		 * If we have a toasted datum, forcibly detoast it here to avoid
+		 * memory leakage inside the type's output routine.
+		 */
+		if (thisState->typisvarlena)
+			attr = PointerGetDatum(PG_DETOAST_DATUM(origattr));
+		else
+			attr = origattr;
+
+		if (thisState->format == 0)
+		{
+			/* Text output */
+			char	   *outputstr;
+
+			outputstr = OutputFunctionCall(&thisState->finfo, attr);
+			pq_sendcountedtext(buf, outputstr, strlen(outputstr), false);
+			len += strlen(outputstr);
+			pfree(outputstr);
+		}
+		else
+		{
+			/* Binary output */
+			bytea	   *outputbytes;
+			int size;
+			outputbytes = SendFunctionCall(&thisState->finfo, attr);
+			pq_sendint(buf, VARSIZE(outputbytes) - VARHDRSZ, 4);
+			len += 4;
+
+			size = VARSIZE(outputbytes) - VARHDRSZ;
+			pq_sendbytes(buf, VARDATA(outputbytes), size);
+			len += size;
+
+			pfree(outputbytes);
+		}
+
+		/* Clean up detoasted copy, if any */
+		if (DatumGetPointer(attr) != DatumGetPointer(origattr))
+			pfree(DatumGetPointer(attr));
+	}
+
+	return buf;
 }
 
 /*
@@ -98,9 +172,10 @@ PrintTuple(BufferPrinterState *self, TupleTableSlot *slot, StringInfo buf)
  *
  * Serialize a tuple description message to a buffer
  */
-void
-SendTupDesc(BufferPrinterState *self, StringInfo buf)
+StringInfo
+TupleDescToBytes(BufferPrinterState *self)
 {
+	StringInfo buf = makeStringInfo();
 	Form_pg_attribute *attrs = self->attrinfo->attrs;
 	int			natts = self->attrinfo->natts;
 	int			i;
@@ -154,5 +229,6 @@ SendTupDesc(BufferPrinterState *self, StringInfo buf)
 		/* text/binary flag */
 		pq_sendint(buf, 1, 2);
 	}
-	self->tupdescSent = true;
+
+	return buf;
 }

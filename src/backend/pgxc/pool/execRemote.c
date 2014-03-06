@@ -3187,75 +3187,125 @@ do_query(RemoteQueryState *node)
 }
 
 /*
- * BeginRemoteMerge
- *
- * Sends metadata necessary to begin merge request
- */
-PGXCNodeAllHandles *
-BeginRemoteMerge(RemoteMergeState mergeState)
-{
-	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, true);
-	StringInfoData buf;
-	const char *target = mergeState.targetRelation->relname;
-	int targetLen = strlen(target) + 1; /* we want to send the \0 */
-	int nLen;
-	int nBuflen;
-	int i;
-
-	for (i=0; i<handles->dn_conn_count; i++)
-	{
-		PGXCNodeHandle *handle 	= handles->datanode_handles[i];
-
-		SendTupDesc(mergeState.bufprint, &buf);
-
-		handle->outBuffer[handle->outEnd++] = '+';
-		nLen = htonl(4 + 4 + buf.len + targetLen);
-
-		memcpy(handle->outBuffer + handle->outEnd, &nLen, 4);
-		handle->outEnd += 4;
-
-		memcpy(handle->outBuffer + handle->outEnd, target, targetLen);
-		handle->outEnd += targetLen;
-
-		nBuflen = htonl(buf.len);
-		memcpy(handle->outBuffer + handle->outEnd, &nBuflen, 4);
-		handle->outEnd += 4;
-
-		memcpy(handle->outBuffer + handle->outEnd, buf.data, buf.len);
-		handle->outEnd += buf.len;
-
-		pgxc_node_flush(handle);
-	}
-
-	return handles;
-}
-
-/*
  * DoRemoteMerge
  *
- * Sends a batch of tuples down to datanodes for final merging
+ * Sends a batch of partial result tuples down to the datanodes for final merging
  */
 void
 DoRemoteMerge(RemoteMergeState mergeState)
 {
-	PGXCNodeAllHandles *handles;
-	Relation rel = heap_openrv(mergeState.targetRelation, NoLock);
-	RelationLocInfo *locinfo = rel->rd_locator_info;
+	AttrNumber distCol = mergeState.locinfo->partAttrNum;
 	TupleTableSlot *slot = mergeState.slot;
-	StringInfoData buf;
-	int nLen;
-	int nBuflen;
+	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, true);
+	const char *target = mergeState.targetRelation->relname;
+	int targetLen = strlen(target) + 1; /* we want to send the \0 */
+	int msglen = 4; /* length of this field is included */
+	int msglens[handles->dn_conn_count];
+	int tupdesclen;
+	int i;
+	List *tuplesByNode[handles->dn_conn_count];
+	StringInfo rawTupDesc = TupleDescToBytes(mergeState.bufprint);
 
-	/* send merge output table and tuple description */
-	handles = BeginRemoteMerge(mergeState);
+	/* tuple description comes with a 4-byte length prefix */
+	msglen += rawTupDesc->len + 4;
 
+	/* we want to include the '\0' */
+	msglen += strlen(target) + 1;
+
+	for (i=0; i<handles->dn_conn_count; i++)
+	{
+		/* Total message length. Length of this field is included */
+		msglens[i] = 4;
+
+		/* tuple description comes with a 4-byte length prefix */
+		msglens[i] += rawTupDesc->len + 4;
+
+		/* we want to include the '\0' */
+		msglens[i] += strlen(target) + 1;
+
+		tuplesByNode[i] = NIL;
+	}
+
+	/*
+	 * Serialize all of the tuples in the store to raw messages. We do this
+	 * all at once before flushing because message lengths are variable, so we
+	 * don't know their lengths (which we'll need for deserialization) until
+	 * after they're serialized.
+	 */
 	while (tuplestore_gettupleslot(mergeState.store, true, false, slot))
 	{
+		Oid type = slot->tts_tupleDescriptor->attrs[distCol]->atttypid;
+		Datum distValue = slot->tts_values[distCol];
+		bool isnull = slot->tts_isnull[distCol];
+		ListCell *nlc;
+		ExecNodes *nodes = GetRelationNodes(mergeState.locinfo,
+						distValue, isnull, type, RELATION_ACCESS_INSERT);
 
+		/*
+		 * Put each tuple in a queue bound for one or more datanodes
+		 */
+		foreach(nlc, nodes->nodeList)
+		{
+			int node = lfirst_int(nlc);
+			StringInfo raw = TupleToBytes(mergeState.bufprint, slot);
+
+			/* each tuple will have a 4-byte length prefix */
+			msglens[node] += raw->len + 4;
+			tuplesByNode[node] = lcons(raw, tuplesByNode[node]);
+		}
+	}
+
+	/*
+	 * Now that we have all of our raw messages with lengths, we can flush
+	 * flush each datanode's entire buffer (one message per conn).
+	 */
+	for (i=0; i<handles->dn_conn_count; i++)
+	{
+		int msglen = msglens[i];
+		PGXCNodeHandle *handle = handles->datanode_handles[i];
+		List *rawtups = tuplesByNode[i];
+		ListCell *lc;
+		StringInfoData result;
+
+		initStringInfo(&result);
+
+		/* message prefix */
+		appendStringInfoChar(&result, '+');
+
+		/* total message length */
+		msglen = htonl(msglen);
+		appendBinaryStringInfo(&result, (char *) &msglen, 4);
+
+		/* target output relation */
+		appendBinaryStringInfo(&result, target, targetLen);
+
+		/* tuple description length */
+		tupdesclen = htonl(rawTupDesc->len);
+		appendBinaryStringInfo(&result, (char *) &tupdesclen, 4);
+
+		/* tuple description */
+		appendBinaryStringInfo(&result, rawTupDesc->data, rawTupDesc->len);
+
+		foreach(lc, rawtups)
+		{
+			int rowlen;
+			StringInfo bytes = (StringInfo) lfirst(lc);
+
+			/* length of DataRow message (this uses memcpy so pointing to rowlen is safe here) */
+			rowlen = htonl(bytes->len);
+			appendBinaryStringInfo(&result, (char *) &rowlen, 4);
+
+			/* DataRow message */
+			appendBinaryStringInfo(&result, bytes->data, bytes->len);
+		}
+
+		memcpy(handle->outBuffer + handle->outEnd, result.data, result.len);
+		handle->outEnd += result.len;
+
+		pgxc_node_flush(handle);
 	}
 
 	tuplestore_clear(mergeState.store);
-	relation_close(rel, NoLock);
 }
 
 /*

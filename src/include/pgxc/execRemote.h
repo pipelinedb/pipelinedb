@@ -141,6 +141,7 @@ typedef struct RemoteMergeState
 	Tuplestorestate 		*store;	/* tuple store to hold partial results before sending out for merging */
 	TupleTableSlot 			*slot;	/* slot to hold a single tuple before it is sent out for merging */
 	BufferPrinterState 	*bufprint; /* buffer printer to serialize DN-bound tuples with */
+	RelationLocInfo			*locinfo; /* determines which node(s) a given tuple belongs to */
 } RemoteMergeState;
 
 typedef void (*xact_callback) (bool isCommit, void *args);
@@ -165,7 +166,6 @@ extern int DataNodeCopyInBinaryForAll(char *msg_buf, int len, PGXCNodeHandle** c
 
 extern int ExecCountSlotsRemoteQuery(RemoteQuery *node);
 extern RemoteQueryState *ExecInitRemoteQuery(RemoteQuery *node, EState *estate, int eflags);
-extern PGXCNodeAllHandles *BeginRemoteMerge(RemoteMergeState mergeState);
 extern void DoRemoteMerge(RemoteMergeState mergeState);
 extern TupleTableSlot* ExecRemoteQuery(RemoteQueryState *step);
 extern void ExecEndRemoteQuery(RemoteQueryState *step);

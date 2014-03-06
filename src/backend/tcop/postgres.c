@@ -903,20 +903,37 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 }
 
 
+/*
+ * exec_merge
+ *
+ * Merges partial results of a continuous query with this datanode's rows
+ */
 static void
 exec_merge(StringInfo message)
 {
 	/* name of the continuous view we're merging into */
 	const char *cvname = pq_getmsgstring(message);
-	int msglen = pq_getmsgint(message, 4);
-	char *raw = (char *)pq_getmsgbytes(message, msglen);
+	int tupdesclen = pq_getmsgint(message, 4);
+	char *raw = (char *) pq_getmsgbytes(message, tupdesclen);
+	char *datarow;
+	int rowlen;
 	TupleDesc desc;
+	TupleTableSlot *slot;
 
 	start_xact_command();
 
-	desc = create_tuple_desc(raw, msglen);
+	desc = create_tuple_desc(raw, tupdesclen);
+	slot = MakeSingleTupleTableSlot(desc);
 
-	elog(LOG, "table=%s, natts=%d", cvname, desc->natts);
+	while (message->cursor < message->len)
+	{
+		rowlen = pq_getmsgint(message, 4);
+		datarow = (char *) pq_getmsgbytes(message, rowlen);
+		ExecStoreDataRowTuple(datarow, rowlen, 0, slot, false);
+		slot_getallattrs(slot);
+
+		print_slot(slot);
+	}
 
 	pq_getmsgend(message);
 
