@@ -909,7 +909,7 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
  * Retrieves a the cached merge plan for a continuous view, creating it if necessary
  */
 static CachedPlan *
-get_cached_merge_plan(char *cvname)
+get_cached_merge_plan(char *cvname, CachedPlanSource **src)
 {
 	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
 	char *query_string;
@@ -953,6 +953,8 @@ get_cached_merge_plan(char *cvname)
 		StorePreparedStatement(cvname, psrc, false);
 	}
 
+	*src = psrc;
+
 	return GetCachedPlan(psrc, 0, false);
 }
 
@@ -973,6 +975,7 @@ exec_merge(StringInfo message)
 	TupleDesc desc;
 	TupleTableSlot *slot;
 	CachedPlan *cplan;
+	CachedPlanSource *psrc;
 
 	start_xact_command();
 
@@ -989,7 +992,7 @@ exec_merge(StringInfo message)
 
 	pq_getmsgend(message);
 
-	cplan = get_cached_merge_plan(cvname);
+	cplan = get_cached_merge_plan(cvname, &psrc);
 
 	finish_xact_command();
 }

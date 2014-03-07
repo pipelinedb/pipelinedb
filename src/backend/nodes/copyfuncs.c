@@ -613,7 +613,6 @@ _copyTuplestoreScan(const TuplestoreScan *from)
 	TuplestoreScan *newnode = makeNode(TuplestoreScan);
 
 	CopyScanFields((const Scan *) from, (Scan *) newnode);
-	COPY_NODE_FIELD(store);
 
 	return newnode;
 }

@@ -284,33 +284,18 @@ create_tupstorescan_plan(PlannerInfo *root, Path *best_path)
 	List	   *tlist;
 	Plan	   *plan = &scan->scan.plan;
 
-	/*
-	 * For table scans, rather than using the relation targetlist (which is
-	 * only those Vars actually needed by the query), we prefer to generate a
-	 * tlist containing all Vars in order.	This will allow the executor to
-	 * optimize away projection of the table tuples, if possible.  (Note that
-	 * planner.c may replace the tlist we generate here, forcing projection to
-	 * occur.)
-	 */
 	if (use_physical_tlist(root, rel))
 	{
-		if (best_path->pathtype == T_IndexOnlyScan)
-		{
-			/* For index-only scan, the preferred tlist is the index's */
-			tlist = copyObject(((IndexPath *) best_path)->indexinfo->indextlist);
-		}
-		else
-		{
-			tlist = build_physical_tlist(root, rel);
-			/* if fail because of dropped cols, use regular method */
-			if (tlist == NIL)
-				tlist = build_relation_tlist(rel);
-		}
+		tlist = build_physical_tlist(root, rel);
+		/* if fail because of dropped cols, use regular method */
+		if (tlist == NIL)
+			tlist = build_relation_tlist(rel);
 	}
 	else
 		tlist = build_relation_tlist(rel);
 
 	plan->targetlist = tlist;
+	scan->store = root->parse->sourcestore;
 
 	return (Plan *) scan;
 }
