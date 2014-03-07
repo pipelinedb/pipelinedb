@@ -44,6 +44,7 @@
 
 
 static Plan *create_plan_recurse(PlannerInfo *root, Path *best_path);
+static Plan *create_tupstorescan_plan(PlannerInfo *root, Path *best_path);
 static Plan *create_scan_plan(PlannerInfo *root, Path *best_path);
 static List *build_relation_tlist(RelOptInfo *rel);
 static bool use_physical_tlist(PlannerInfo *root, RelOptInfo *rel);
@@ -224,7 +225,10 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_CteScan:
 		case T_WorkTableScan:
 		case T_ForeignScan:
-			plan = create_scan_plan(root, best_path);
+			if (root->parse->sourcestore)
+				plan = create_tupstorescan_plan(root, best_path);
+			else
+				plan = create_scan_plan(root, best_path);
 			break;
 		case T_HashJoin:
 		case T_MergeJoin:
@@ -266,6 +270,34 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 	}
 
 	return plan;
+}
+
+/*
+ *  create_tupstorescan_plan
+ *  	Create a plan that simply scans a tuplestore
+ */
+static Plan *
+create_tupstorescan_plan(PlannerInfo *root, Path *best_path)
+{
+	TuplestoreScan *scan = makeNode(TuplestoreScan);
+	RelOptInfo *rel = best_path->parent;
+	List	   *tlist;
+	Plan	   *plan = &scan->scan.plan;
+
+	if (use_physical_tlist(root, rel))
+	{
+		tlist = build_physical_tlist(root, rel);
+		/* if fail because of dropped cols, use regular method */
+		if (tlist == NIL)
+			tlist = build_relation_tlist(rel);
+	}
+	else
+		tlist = build_relation_tlist(rel);
+
+	plan->targetlist = tlist;
+	scan->store = root->parse->sourcestore;
+
+	return (Plan *) scan;
 }
 
 /*

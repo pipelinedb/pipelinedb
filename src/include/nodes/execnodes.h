@@ -1498,6 +1498,18 @@ typedef struct ForeignScanState
 	void	   *fdw_state;		/* foreign-data wrapper can keep state here */
 } ForeignScanState;
 
+/* ----------------
+ *	 TuplestoreScanState information
+ *
+ *		TuplestoreScan nodes are used to scan tuplestores
+ * ----------------
+ */
+typedef struct TuplestoreScanState
+{
+	ScanState	ss;				/* its first field is NodeTag */
+} TuplestoreScanState;
+
+
 /* ----------------------------------------------------------------
  *				 Join State Information
  * ----------------------------------------------------------------

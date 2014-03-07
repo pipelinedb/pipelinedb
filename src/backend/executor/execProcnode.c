@@ -106,6 +106,7 @@
 #include "executor/nodeSubplan.h"
 #include "executor/nodeSubqueryscan.h"
 #include "executor/nodeTidscan.h"
+#include "executor/nodeTuplestoreScan.h"
 #include "executor/nodeUnique.h"
 #include "executor/nodeValuesscan.h"
 #include "executor/nodeWindowAgg.h"
@@ -243,6 +244,10 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 		case T_ForeignScan:
 			result = (PlanState *) ExecInitForeignScan((ForeignScan *) node,
 													   estate, eflags);
+			break;
+		case T_TuplestoreScan:
+			result = (PlanState *) ExecInitTuplestoreScan((TuplestoreScan *) node,
+														 estate, eflags);
 			break;
 
 			/*

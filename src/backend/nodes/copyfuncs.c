@@ -607,6 +607,17 @@ _copyForeignScan(const ForeignScan *from)
 	return newnode;
 }
 
+static TuplestoreScan *
+_copyTuplestoreScan(const TuplestoreScan *from)
+{
+	TuplestoreScan *newnode = makeNode(TuplestoreScan);
+
+	CopyScanFields((const Scan *) from, (Scan *) newnode);
+	COPY_SCALAR_FIELD(store);
+
+	return newnode;
+}
+
 /*
  * CopyJoinFields
  *
@@ -4100,6 +4111,9 @@ copyObject(const void *from)
 			break;
 		case T_ForeignScan:
 			retval = _copyForeignScan(from);
+			break;
+		case T_TuplestoreScan:
+			retval = _copyTuplestoreScan(from);
 			break;
 		case T_Join:
 			retval = _copyJoin(from);
