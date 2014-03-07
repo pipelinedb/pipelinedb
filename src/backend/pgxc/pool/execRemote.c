@@ -3268,6 +3268,9 @@ DoRemoteMerge(RemoteMergeState mergeState)
 		ListCell *lc;
 		StringInfoData result;
 
+		if (list_length(rawtups) == 0)
+			continue;
+
 		initStringInfo(&result);
 
 		/* message prefix */
@@ -3286,9 +3289,6 @@ DoRemoteMerge(RemoteMergeState mergeState)
 
 		/* tuple description */
 		appendBinaryStringInfo(&result, rawTupDesc->data, rawTupDesc->len);
-
-		if (list_length(rawtups) == 0)
-			continue;
 
 		foreach(lc, rawtups)
 		{
