@@ -1,6 +1,7 @@
 /*-------------------------------------------------------------------------
  *
  * nodeTuplestoreScan.h
+ *		Support routines for sequential scans of tuple stores.
  *
  * src/include/executor/nodeTuplestoreScan.h
  *
