@@ -946,8 +946,7 @@ get_cached_merge_plan(char *cvname, CachedPlanSource **src)
 			query->sql_statement = pstrdup(query_string);
 
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
-
-		psrc->store = (Tuplestorestate *) 42;
+		psrc->store = tuplestore_begin_heap(true, true, 1000);
 
 		CompleteCachedPlan(psrc, query_list, NULL, 0, 0, NULL,  NULL, 0, true);
 		StorePreparedStatement(cvname, psrc, false);
@@ -976,23 +975,29 @@ exec_merge(StringInfo message)
 	TupleTableSlot *slot;
 	CachedPlan *cplan;
 	CachedPlanSource *psrc;
+	Tuplestorestate *store;
 
 	start_xact_command();
 
+	cplan = get_cached_merge_plan(cvname, &psrc);
 	desc = create_tuple_desc(raw, tupdesclen);
 	slot = MakeSingleTupleTableSlot(desc);
+	store = psrc->store;
+	tuplestore_clear(store);
 
+	/*
+	 * Store each datarow in the merge store
+	 */
 	while (message->cursor < message->len)
 	{
 		rowlen = pq_getmsgint(message, 4);
 		datarow = (char *) pq_getmsgbytes(message, rowlen);
 		ExecStoreDataRowTuple(datarow, rowlen, 0, slot, false);
 		slot_getallattrs(slot);
+		tuplestore_puttupleslot(store, slot);
 	}
 
 	pq_getmsgend(message);
-
-	cplan = get_cached_merge_plan(cvname, &psrc);
 
 	finish_xact_command();
 }
