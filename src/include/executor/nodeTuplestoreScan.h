@@ -6,8 +6,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef NODESEQSCAN_H
-#define NODESEQSCAN_H
+#ifndef NODETUPLESTORESCAN_H
+#define NODETUPLESTORESCAN_H
 
 #include "nodes/execnodes.h"
 
@@ -15,4 +15,4 @@ extern TuplestoreScanState *ExecInitTuplestoreScan(TuplestoreScan *node, EState 
 extern TupleTableSlot *ExecTuplestoreScan(TuplestoreScan *node);
 extern void ExecEndTuplestoreScan(TuplestoreScan *node);
 
-#endif   /* NODESEQSCAN_H */
+#endif   /* NODETUPLESTORESCAN_HH */

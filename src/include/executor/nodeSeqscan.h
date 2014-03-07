@@ -11,8 +11,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef NODETUPLESTORESCAN_H
-#define NODETUPLESTORESCAN_H
+#ifndef NODESEQSCAN_H
+#define NODESEQSCAN_H
 
 #include "nodes/execnodes.h"
 
@@ -23,4 +23,4 @@ extern void ExecSeqMarkPos(SeqScanState *node);
 extern void ExecSeqRestrPos(SeqScanState *node);
 extern void ExecReScanSeqScan(SeqScanState *node);
 
-#endif   /* NODETUPLESTORESCAN_H */
+#endif   /* NODESEQSCAN_H */
