@@ -44,7 +44,7 @@
 
 
 static Plan *create_plan_recurse(PlannerInfo *root, Path *best_path);
-static Plan *create_tupstorescan_plan(Tuplestorestate *store);
+static Plan *create_tupstorescan_plan(PlannerInfo *root, Path *best_path);
 static Plan *create_scan_plan(PlannerInfo *root, Path *best_path);
 static List *build_relation_tlist(RelOptInfo *rel);
 static bool use_physical_tlist(PlannerInfo *root, RelOptInfo *rel);
@@ -226,7 +226,7 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_WorkTableScan:
 		case T_ForeignScan:
 			if (root->parse->sourcestore)
-				plan = create_tupstorescan_plan(root->parse->sourcestore);
+				plan = create_tupstorescan_plan(root, best_path);
 			else
 				plan = create_scan_plan(root, best_path);
 			break;
@@ -277,9 +277,40 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
  *  	Create a plan that simply scans a tuplestore
  */
 static Plan *
-create_tupstorescan_plan(Tuplestorestate *store)
+create_tupstorescan_plan(PlannerInfo *root, Path *best_path)
 {
 	TuplestoreScan *scan = makeNode(TuplestoreScan);
+	RelOptInfo *rel = best_path->parent;
+	List	   *tlist;
+	Plan	   *plan = &scan->scan.plan;
+
+	/*
+	 * For table scans, rather than using the relation targetlist (which is
+	 * only those Vars actually needed by the query), we prefer to generate a
+	 * tlist containing all Vars in order.	This will allow the executor to
+	 * optimize away projection of the table tuples, if possible.  (Note that
+	 * planner.c may replace the tlist we generate here, forcing projection to
+	 * occur.)
+	 */
+	if (use_physical_tlist(root, rel))
+	{
+		if (best_path->pathtype == T_IndexOnlyScan)
+		{
+			/* For index-only scan, the preferred tlist is the index's */
+			tlist = copyObject(((IndexPath *) best_path)->indexinfo->indextlist);
+		}
+		else
+		{
+			tlist = build_physical_tlist(root, rel);
+			/* if fail because of dropped cols, use regular method */
+			if (tlist == NIL)
+				tlist = build_relation_tlist(rel);
+		}
+	}
+	else
+		tlist = build_relation_tlist(rel);
+
+	plan->targetlist = tlist;
 
 	return (Plan *) scan;
 }
