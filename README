@@ -9,7 +9,7 @@
 # Build from source (with debug symbols)
 ./configure CFLAGS="-g -O0" --prefix=/path/to/dev/installation
 make
-sudo make install
+make install
 
 # Initialize database directories
 initgtm -Z gtm -D /path/to/gtm/dir
