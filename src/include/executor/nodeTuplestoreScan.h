@@ -11,7 +11,7 @@
 
 #include "nodes/execnodes.h"
 
-extern SeqScanState *ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags);
+extern TuplestoreScanState *ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags);
 extern TupleTableSlot *ExecTuplestoreScan(TuplestoreScan *node);
 extern void ExecEndTuplestoreScan(TuplestoreScan *node);
 

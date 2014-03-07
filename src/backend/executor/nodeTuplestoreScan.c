@@ -16,27 +16,47 @@
  */
 #include "postgres.h"
 
+#include "executor/executor.h"
 #include "executor/nodeTuplestoreScan.h"
+#include "utils/tuplestore.h"
 
-static TupleTableSlot *TupleStoreNext(TuplestoreScanState * node);
+static TupleTableSlot *TuplestoreNext(TuplestoreScanState * node);
+static bool TuplestoreRecheck(TuplestoreScanState * node, TupleTableSlot *slot);
 
-static TupleTableSlot *
-TupleStoreNext(TuplestoreScanState * node)
-{
-	return NULL;
-}
-
-extern SeqScanState *
+extern TuplestoreScanState *
 ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 {
+	TuplestoreScanState *tss = makeNode(TuplestoreScanState);
+	tss->ss.ps.plan = (Plan *) node;
+	tss->ss.ps.state = estate;
 
-	return NULL;
+	return tss;
+}
+
+static TupleTableSlot *
+TuplestoreNext(TuplestoreScanState * node)
+{
+	TuplestoreScan *scan = (TuplestoreScan *) node->ss.ps.plan;
+	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
+
+	if (!tuplestore_gettupleslot(scan->store, true, false, slot))
+		return NULL;
+
+	return slot;
+}
+
+static bool
+TuplestoreRecheck(TuplestoreScanState * node, TupleTableSlot *slot)
+{
+	return true;
 }
 
 extern TupleTableSlot *
 ExecTuplestoreScan(TuplestoreScan *node)
 {
-	return NULL;
+	return ExecScan((ScanState *) node,
+					(ExecScanAccessMtd) TuplestoreNext,
+					(ExecScanRecheckMtd) TuplestoreRecheck);
 }
 
 extern void
