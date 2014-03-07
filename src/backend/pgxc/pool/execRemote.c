@@ -3287,6 +3287,9 @@ DoRemoteMerge(RemoteMergeState mergeState)
 		/* tuple description */
 		appendBinaryStringInfo(&result, rawTupDesc->data, rawTupDesc->len);
 
+		if (list_length(rawtups) == 0)
+			continue;
+
 		foreach(lc, rawtups)
 		{
 			int rowlen;
