@@ -83,6 +83,7 @@
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
 #include "utils/snapmgr.h"
+#include "utils/syscache.h"
 #include "utils/timestamp.h"
 #include "utils/tuplestore.h"
 #include "mb/pg_wchar.h"
@@ -995,6 +996,8 @@ exec_merge_retrieval(char *cvname, TupleDesc desc, int incoming_size,
 	Form_pg_attribute attr = desc->attrs[merge_attr - 1];
 	List *name = list_make1(makeString("="));
 	ParseState *ps = make_parsestate(NULL);
+	Type typeinfo;
+	int length;
 
 	strcpy(stmt_name, cvname);
 	sprintf(base_select, "SELECT * FROM %s", cvname);
@@ -1014,6 +1017,10 @@ exec_merge_retrieval(char *cvname, TupleDesc desc, int incoming_size,
 	Assert(query_list->length == 1);
 	query = (Query *) linitial(query_list);
 
+	typeinfo = typeidType(attr->atttypid);
+	length = typeLen(typeinfo);
+	ReleaseSysCache((HeapTuple) typeinfo);
+
 	/*
 	 * We need to extract all of the merge column values from our incoming merge
 	 * tuples so we can use them in an IN clause when retrieving existing tuples
@@ -1023,8 +1030,6 @@ exec_merge_retrieval(char *cvname, TupleDesc desc, int incoming_size,
 	{
 		bool isnull;
 		Datum d = slot_getattr(slot, merge_attr, &isnull);
-		Type type = typeidType(attr->atttypid);
-		int length = typeLen(type);
 		Const *c = makeConst(attr->atttypid, attr->atttypmod,
 				0, length, d, isnull, true);
 		constants = lcons(c, constants);
