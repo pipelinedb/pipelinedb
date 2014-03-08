@@ -909,7 +909,7 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
  * Retrieves a the cached merge plan for a continuous view, creating it if necessary
  */
 static CachedPlan *
-get_cached_merge_plan(char *cvname, CachedPlanSource **src)
+get_cached_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
 {
 	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
 	char *query_string;
@@ -950,6 +950,7 @@ get_cached_merge_plan(char *cvname, CachedPlanSource **src)
 
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
 		psrc->store = tuplestore_begin_heap(true, true, 1000);
+		psrc->desc = desc;
 
 		CompleteCachedPlan(psrc, query_list, NULL, 0, 0, NULL,  NULL, 0, true);
 		StorePreparedStatement(cvname, psrc, false);
@@ -981,11 +982,14 @@ exec_merge(StringInfo message)
 	CachedPlan *cplan;
 	CachedPlanSource *psrc;
 	Tuplestorestate *store;
+	Portal portal;
+	MemoryContext oldcontext;
+	DestReceiver *none = CreateDestReceiver(DestNone);
 
 	start_xact_command();
 
-	cplan = get_cached_merge_plan(cvname, &psrc);
 	desc = create_tuple_desc(raw, tupdesclen);
+	cplan = get_cached_merge_plan(cvname, desc, &psrc);
 	slot = MakeSingleTupleTableSlot(desc);
 	store = psrc->store;
 	tuplestore_clear(store);
@@ -1003,6 +1007,33 @@ exec_merge(StringInfo message)
 	}
 
 	pq_getmsgend(message);
+
+	oldcontext = MemoryContextSwitchTo(MessageContext);
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	portal = CreatePortal("", true, true);
+	portal->visible = false;
+
+	PortalDefineQuery(portal,
+					  NULL,
+					  NULL,
+					  "SELECT",
+					  cplan->stmt_list,
+					  NULL);
+
+	PortalStart(portal, NULL, 0, true);
+
+	MemoryContextSwitchTo(oldcontext);
+
+	(void) PortalRun(portal,
+					 FETCH_ALL,
+					 true,
+					 none,
+					 none,
+					 NULL);
+
+	PopActiveSnapshot();
 
 	finish_xact_command();
 }

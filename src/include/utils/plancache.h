@@ -103,6 +103,7 @@ typedef struct CachedPlanSource
 	char	   *stmt_name;		/* If set, this is a copy of prepared stmt name */
 #endif
 	Tuplestorestate *store; /* tuplestore to read from, if any */
+	TupleDesc	desc; /* description of the tuplestore, if any */
 } CachedPlanSource;
 
 /*

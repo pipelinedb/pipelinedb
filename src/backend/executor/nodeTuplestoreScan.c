@@ -29,6 +29,13 @@ ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 	TuplestoreScanState *tss = makeNode(TuplestoreScanState);
 	tss->ss.ps.plan = (Plan *) node;
 	tss->ss.ps.state = estate;
+	tss->ss.ps.ps_ExprContext = CreateExprContext(estate);
+
+	ExecInitResultTupleSlot(estate, &tss->ss.ps);
+	ExecInitScanTupleSlot(estate, &tss->ss);
+
+	ExecSetSlotDescriptor(tss->ss.ss_ScanTupleSlot, node->desc);
+	ExecSetSlotDescriptor(tss->ss.ps.ps_ResultTupleSlot, node->desc);
 
 	return tss;
 }
@@ -52,7 +59,7 @@ TuplestoreRecheck(TuplestoreScanState * node, TupleTableSlot *slot)
 }
 
 extern TupleTableSlot *
-ExecTuplestoreScan(TuplestoreScan *node)
+ExecTuplestoreScan(TuplestoreScanState *node)
 {
 	return ExecScan((ScanState *) node,
 					(ExecScanAccessMtd) TuplestoreNext,
@@ -60,7 +67,7 @@ ExecTuplestoreScan(TuplestoreScan *node)
 }
 
 extern void
-ExecEndTuplestoreScan(TuplestoreScan *node)
+ExecEndTuplestoreScan(TuplestoreScanState *node)
 {
 
 }

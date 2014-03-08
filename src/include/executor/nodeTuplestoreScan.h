@@ -13,7 +13,7 @@
 #include "nodes/execnodes.h"
 
 extern TuplestoreScanState *ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags);
-extern TupleTableSlot *ExecTuplestoreScan(TuplestoreScan *node);
-extern void ExecEndTuplestoreScan(TuplestoreScan *node);
+extern TupleTableSlot *ExecTuplestoreScan(TuplestoreScanState *node);
+extern void ExecEndTuplestoreScan(TuplestoreScanState *node);
 
 #endif   /* NODETUPLESTORESCAN_HH */

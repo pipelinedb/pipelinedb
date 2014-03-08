@@ -510,6 +510,7 @@ typedef struct TuplestoreScan
 {
 	Scan		scan;
 	Tuplestorestate *store; /* tuplestore to scan from */
+	TupleDesc	desc; /* tuple descriptor of store to scan */
 } TuplestoreScan;
 
 

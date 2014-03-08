@@ -498,6 +498,10 @@ ExecProcNode(PlanState *node)
 			result = ExecForeignScan((ForeignScanState *) node);
 			break;
 
+		case T_TuplestoreScanState:
+			result = ExecTuplestoreScan((TuplestoreScanState *) node);
+			break;
+
 			/*
 			 * join nodes
 			 */
@@ -743,6 +747,10 @@ ExecEndNode(PlanState *node)
 
 		case T_ForeignScanState:
 			ExecEndForeignScan((ForeignScanState *) node);
+			break;
+
+		case T_TuplestoreScanState:
+			ExecEndTuplestoreScan((TuplestoreScanState *) node);
 			break;
 
 			/*
