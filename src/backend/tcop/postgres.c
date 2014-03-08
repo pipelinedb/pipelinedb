@@ -914,6 +914,7 @@ get_cached_merge_plan(char *cvname, CachedPlanSource **src)
 	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
 	char *query_string;
 	CachedPlanSource *psrc;
+	MemoryContext oldContext;
 	Node	   *raw_parse_tree;
 	List	   *parsetree_list;
 	List		 *query_list;
@@ -945,11 +946,15 @@ get_cached_merge_plan(char *cvname, CachedPlanSource **src)
 		if (query->sql_statement == NULL)
 			query->sql_statement = pstrdup(query_string);
 
+		oldContext = MemoryContextSwitchTo(CacheMemoryContext);
+
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
 		psrc->store = tuplestore_begin_heap(true, true, 1000);
 
 		CompleteCachedPlan(psrc, query_list, NULL, 0, 0, NULL,  NULL, 0, true);
 		StorePreparedStatement(cvname, psrc, false);
+
+		MemoryContextSwitchTo(oldContext);
 	}
 
 	*src = psrc;
@@ -976,11 +981,8 @@ exec_merge(StringInfo message)
 	CachedPlan *cplan;
 	CachedPlanSource *psrc;
 	Tuplestorestate *store;
-	MemoryContext oldContext;
 
 	start_xact_command();
-
-	oldContext = MemoryContextSwitchTo(CacheMemoryContext);
 
 	cplan = get_cached_merge_plan(cvname, &psrc);
 	desc = create_tuple_desc(raw, tupdesclen);
@@ -1001,8 +1003,6 @@ exec_merge(StringInfo message)
 	}
 
 	pq_getmsgend(message);
-
-	MemoryContextSwitchTo(oldContext);
 
 	finish_xact_command();
 }
