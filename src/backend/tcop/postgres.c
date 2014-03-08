@@ -976,8 +976,11 @@ exec_merge(StringInfo message)
 	CachedPlan *cplan;
 	CachedPlanSource *psrc;
 	Tuplestorestate *store;
+	MemoryContext oldContext;
 
 	start_xact_command();
+
+	oldContext = MemoryContextSwitchTo(CacheMemoryContext);
 
 	cplan = get_cached_merge_plan(cvname, &psrc);
 	desc = create_tuple_desc(raw, tupdesclen);
@@ -998,6 +1001,8 @@ exec_merge(StringInfo message)
 	}
 
 	pq_getmsgend(message);
+
+	MemoryContextSwitchTo(oldContext);
 
 	finish_xact_command();
 }
