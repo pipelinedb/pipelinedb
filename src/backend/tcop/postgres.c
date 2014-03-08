@@ -43,6 +43,7 @@
 
 #include "access/printtup.h"
 #include "access/xact.h"
+#include "catalog/pg_attribute.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "commands/async.h"
@@ -60,6 +61,8 @@
 #include "pg_trace.h"
 #include "parser/analyze.h"
 #include "parser/parser.h"
+#include "parser/parse_clause.h"
+#include "parser/parse_expr.h"
 #ifdef PGXC
 #include "parser/parse_type.h"
 #endif /* PGXC */
@@ -81,6 +84,7 @@
 #include "utils/ps_status.h"
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
+#include "utils/tuplestore.h"
 #include "mb/pg_wchar.h"
 
 #ifdef PGXC
@@ -909,7 +913,7 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
  * Retrieves a the cached merge plan for a continuous view, creating it if necessary
  */
 static CachedPlan *
-get_cached_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
+get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
 {
 	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
 	char *query_string;
@@ -949,6 +953,7 @@ get_cached_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
 		oldContext = MemoryContextSwitchTo(CacheMemoryContext);
 
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
+		/* TODO: size this appropriately */
 		psrc->store = tuplestore_begin_heap(true, true, 1000);
 		psrc->desc = desc;
 
@@ -964,6 +969,91 @@ get_cached_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
 }
 
 /*
+ * exec_merge_retrieval
+ *
+ * Gets the plan for retrieving all of the existing tuples that
+ * this merge request will merge with
+ */
+static void
+exec_merge_retrieval(char *cvname, TupleDesc desc, int incoming_size,
+		Tuplestorestate *incoming_merges, AttrNumber merge_attr)
+{
+	Node *raw_parse_tree;
+	List *parsetree_list;
+	List *query_list;
+	PlannedStmt		 *plan;
+	Query 	 *query;
+	A_Expr *in_expr;
+	Node *where;
+	ColumnRef *cref;
+	List *constants = NIL;
+	SelectStmt *stmt;
+	Portal portal;
+	TupleTableSlot 	*slot = MakeSingleTupleTableSlot(desc);
+	char stmt_name[strlen(cvname) + 9 + 1];
+	char base_select[14 + strlen(cvname) + 1];
+	Form_pg_attribute attr = desc->attrs[merge_attr - 1];
+	List *name = list_make1(makeString("="));
+	ParseState *ps = make_parsestate(NULL);
+
+	strcpy(stmt_name, cvname);
+	sprintf(base_select, "SELECT * FROM %s", cvname);
+
+	parsetree_list = pg_parse_query(base_select);
+	Assert(parsetree_list->length == 1);
+
+	/*
+	 * We need to do this to populate the ParseState's p_varnamespace member
+	 */
+	stmt = (SelectStmt *) linitial(parsetree_list);
+	transformFromClause(ps, stmt->fromClause);
+
+	raw_parse_tree = (Node *) linitial(parsetree_list);
+	query_list = pg_analyze_and_rewrite(raw_parse_tree, base_select, NULL, 0);
+
+	Assert(query_list->length == 1);
+	query = (Query *) linitial(query_list);
+
+	/*
+	 * We need to extract all of the merge column values from our incoming merge
+	 * tuples so we can use them in an IN clause when retrieving existing tuples
+	 * from the continuous view
+	 */
+	while (tuplestore_gettupleslot(incoming_merges, true, false, slot))
+	{
+		bool isnull;
+		Datum d = slot_getattr(slot, merge_attr, &isnull);
+		Type type = typeidType(attr->atttypid);
+		int length = typeLen(type);
+		Const *c = makeConst(attr->atttypid, attr->atttypmod,
+				0, length, d, isnull, true);
+		constants = lcons(c, constants);
+	}
+	tuplestore_rescan(incoming_merges);
+
+	/*
+	 * Now construct an IN clause from the List of merge column values we just built
+	 */
+	cref = makeNode(ColumnRef);
+	cref->fields = list_make1(makeString(attr->attname.data));
+	cref->location = -1;
+
+	in_expr = makeA_Expr(AEXPR_IN, name,
+			   (Node *) cref, (Node *) constants, -1);
+
+	/*
+	 * This query is now of the form:
+	 *
+	 * SELECT * FROM <continuous view> WHERE <merge column> IN (incoming merge column values)
+	 */
+	where = transformAExprIn(ps, in_expr);
+	query->jointree = makeFromExpr(query->jointree->fromlist, where);
+
+	plan = pg_plan_query(query, 0, NULL);
+}
+
+
+/*
  * exec_merge
  *
  * Merges partial results of a continuous query with this datanode's rows
@@ -977,6 +1067,7 @@ exec_merge(StringInfo message)
 	char *raw = (char *) pq_getmsgbytes(message, tupdesclen);
 	char *datarow;
 	int rowlen;
+	int count = 0;
 	TupleDesc desc;
 	TupleTableSlot *slot;
 	CachedPlan *cplan;
@@ -989,7 +1080,7 @@ exec_merge(StringInfo message)
 	start_xact_command();
 
 	desc = create_tuple_desc(raw, tupdesclen);
-	cplan = get_cached_merge_plan(cvname, desc, &psrc);
+	cplan = get_merge_plan(cvname, desc, &psrc);
 	slot = MakeSingleTupleTableSlot(desc);
 	store = psrc->store;
 	tuplestore_clear(store);
@@ -1004,9 +1095,12 @@ exec_merge(StringInfo message)
 		ExecStoreDataRowTuple(datarow, rowlen, 0, slot, false);
 		slot_getallattrs(slot);
 		tuplestore_puttupleslot(store, slot);
+		count++;
 	}
 
 	pq_getmsgend(message);
+
+	exec_merge_retrieval(cvname, desc, count, store, 1);
 
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
@@ -1020,7 +1114,7 @@ exec_merge(StringInfo message)
 					  NULL,
 					  "SELECT",
 					  cplan->stmt_list,
-					  NULL);
+					  cplan);
 
 	PortalStart(portal, NULL, 0, true);
 

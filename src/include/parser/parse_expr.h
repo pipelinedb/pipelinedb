@@ -19,4 +19,6 @@
 extern bool Transform_null_equals;
 
 extern Node *transformExpr(ParseState *pstate, Node *expr);
+extern Node *transformAExprIn(ParseState *pstate, A_Expr *a);
+
 #endif   /* PARSE_EXPR_H */
