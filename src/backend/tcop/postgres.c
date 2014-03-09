@@ -51,6 +51,7 @@
 #ifdef PGXC
 #include "commands/trigger.h"
 #endif
+#include "executor/tstoreReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "libpq/pqsignal.h"
@@ -982,25 +983,32 @@ exec_merge_retrieval(char *cvname, TupleDesc desc, int incoming_size,
 	Node *raw_parse_tree;
 	List *parsetree_list;
 	List *query_list;
-	PlannedStmt		 *plan;
-	Query 	 *query;
+	PlannedStmt *plan;
+	Query *query;
 	A_Expr *in_expr;
 	Node *where;
 	ColumnRef *cref;
 	List *constants = NIL;
 	SelectStmt *stmt;
 	Portal portal;
-	TupleTableSlot 	*slot = MakeSingleTupleTableSlot(desc);
+	TupleTableSlot 	*slot;
+	ParseState *ps;
+	DestReceiver *dest;
+	Type typeinfo;
+	MemoryContext oldcontext;
+	int length;
 	char stmt_name[strlen(cvname) + 9 + 1];
 	char base_select[14 + strlen(cvname) + 1];
 	Form_pg_attribute attr = desc->attrs[merge_attr - 1];
 	List *name = list_make1(makeString("="));
-	ParseState *ps = make_parsestate(NULL);
-	Type typeinfo;
-	int length;
 
 	strcpy(stmt_name, cvname);
 	sprintf(base_select, "SELECT * FROM %s", cvname);
+
+	slot = MakeSingleTupleTableSlot(desc);
+	name = list_make1(makeString("="));
+	ps = make_parsestate(NULL);
+	dest = CreateDestReceiver(DestTuplestore);
 
 	parsetree_list = pg_parse_query(base_select);
 	Assert(parsetree_list->length == 1);
@@ -1030,8 +1038,7 @@ exec_merge_retrieval(char *cvname, TupleDesc desc, int incoming_size,
 	{
 		bool isnull;
 		Datum d = slot_getattr(slot, merge_attr, &isnull);
-		Const *c = makeConst(attr->atttypid, attr->atttypmod,
-				0, length, d, isnull, true);
+		Const *c = makeConst(attr->atttypid, attr->atttypmod, 0, length, d, isnull, true);
 		constants = lcons(c, constants);
 	}
 	tuplestore_rescan(incoming_merges);
@@ -1055,6 +1062,35 @@ exec_merge_retrieval(char *cvname, TupleDesc desc, int incoming_size,
 	query->jointree = makeFromExpr(query->jointree->fromlist, where);
 
 	plan = pg_plan_query(query, 0, NULL);
+
+	oldcontext = MemoryContextSwitchTo(MessageContext);
+
+	/*
+	 * Now run the query that retrieves existing tuples to merge this merge request with.
+	 * This query outputs to the tuplestore currently holding the incoming merge tuples.
+	 */
+	portal = CreatePortal("", true, true);
+	portal->visible = false;
+
+	PortalDefineQuery(portal,
+					  NULL,
+					  NULL,
+					  "SELECT",
+					  list_make1(plan),
+					  NULL);
+
+	SetTuplestoreDestReceiverParams(dest, incoming_merges, PortalGetHeapMemory(portal), true);
+
+	PortalStart(portal, NULL, 0, true);
+
+	MemoryContextSwitchTo(oldcontext);
+
+	(void) PortalRun(portal,
+					 FETCH_ALL,
+					 true,
+					 dest,
+					 dest,
+					 NULL);
 }
 
 
@@ -1105,11 +1141,11 @@ exec_merge(StringInfo message)
 
 	pq_getmsgend(message);
 
+	PushActiveSnapshot(GetTransactionSnapshot());
+
 	exec_merge_retrieval(cvname, desc, count, store, 1);
 
 	oldcontext = MemoryContextSwitchTo(MessageContext);
-
-	PushActiveSnapshot(GetTransactionSnapshot());
 
 	portal = CreatePortal("", true, true);
 	portal->visible = false;

@@ -1,7 +1,7 @@
 /*-------------------------------------------------------------------------
  *
  * merge.h
- *	  Receiver for merging partial results in continuous queries
+ *	  Functionality to support merging partial results in continuous queries
  *
  *	  src/include/executor/merge.h
  *
