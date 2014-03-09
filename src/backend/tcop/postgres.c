@@ -977,7 +977,7 @@ get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
  * this merge request will merge with
  */
 static void
-exec_merge_retrieval(char *cvname, TupleDesc desc, int incoming_size,
+exec_merge_retrieval(char *cvname, TupleDesc desc,
 		Tuplestorestate *incoming_merges, AttrNumber merge_attr)
 {
 	Node *raw_parse_tree;
@@ -1108,7 +1108,6 @@ exec_merge(StringInfo message)
 	char *raw = (char *) pq_getmsgbytes(message, tupdesclen);
 	char *datarow;
 	int rowlen;
-	int count = 0;
 	TupleDesc desc;
 	TupleTableSlot *slot;
 	CachedPlan *cplan;
@@ -1136,14 +1135,13 @@ exec_merge(StringInfo message)
 		ExecStoreDataRowTuple(datarow, rowlen, 0, slot, false);
 		slot_getallattrs(slot);
 		tuplestore_puttupleslot(store, slot);
-		count++;
 	}
 
 	pq_getmsgend(message);
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	exec_merge_retrieval(cvname, desc, count, store, 1);
+	exec_merge_retrieval(cvname, desc, store, 2);
 
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
