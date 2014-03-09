@@ -80,6 +80,7 @@
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "tcop/utility.h"
+#include "utils/hsearch.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
@@ -978,7 +979,7 @@ get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
  */
 static void
 exec_merge_retrieval(char *cvname, TupleDesc desc,
-		Tuplestorestate *incoming_merges, AttrNumber merge_attr)
+		Tuplestorestate *incoming_merges, AttrNumber merge_attr, HTAB *inserts)
 {
 	Node *raw_parse_tree;
 	List *parsetree_list;
@@ -996,11 +997,14 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 	DestReceiver *dest;
 	Type typeinfo;
 	MemoryContext oldcontext;
+	Oid outputtype;
 	int length;
 	char stmt_name[strlen(cvname) + 9 + 1];
 	char base_select[14 + strlen(cvname) + 1];
 	Form_pg_attribute attr = desc->attrs[merge_attr - 1];
 	List *name = list_make1(makeString("="));
+	int incoming_size = 0;
+	int i = 0;
 
 	strcpy(stmt_name, cvname);
 	sprintf(base_select, "SELECT * FROM %s", cvname);
@@ -1027,6 +1031,7 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 
 	typeinfo = typeidType(attr->atttypid);
 	length = typeLen(typeinfo);
+	outputtype = typeOutputId(typeinfo);
 	ReleaseSysCache((HeapTuple) typeinfo);
 
 	/*
@@ -1039,9 +1044,12 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 		bool isnull;
 		Datum d = slot_getattr(slot, merge_attr, &isnull);
 		Const *c = makeConst(attr->atttypid, attr->atttypmod, 0, length, d, isnull, true);
+		const char *key = OidOutputFunctionCall(outputtype, d);
+
 		constants = lcons(c, constants);
+		hash_search(inserts, key, HASH_ENTER, NULL);
+		incoming_size++;
 	}
-	tuplestore_rescan(incoming_merges);
 
 	/*
 	 * Now construct an IN clause from the List of merge column values we just built
@@ -1091,6 +1099,26 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 					 dest,
 					 dest,
 					 NULL);
+
+	/*
+	 * Move the read pointer to the last of the original incoming merge tuples. All tuples
+	 * beyond this point will have just been added by our SELECT statement.
+	 */
+	tuplestore_rescan(incoming_merges);
+	while (i++ < incoming_size)
+		tuplestore_advance(incoming_merges, true);
+
+	while (tuplestore_gettupleslot(incoming_merges, true, false, slot))
+	{
+		bool isnull;
+		Datum d = slot_getattr(slot, merge_attr, &isnull);
+		const char *key = OidOutputFunctionCall(outputtype, d);
+
+		/* Since the SELECT statement found this tuple in the table, we need
+		 * to merge via UPDATE, not INSERT, so remove it from the inserts hashtable
+		 */
+		hash_search(inserts, key, HASH_REMOVE, NULL);
+	}
 }
 
 
@@ -1116,6 +1144,8 @@ exec_merge(StringInfo message)
 	Portal portal;
 	MemoryContext oldcontext;
 	DestReceiver *none = CreateDestReceiver(DestNone);
+	HTAB *inserts;
+	HASHCTL ctl;
 
 	start_xact_command();
 
@@ -1141,7 +1171,14 @@ exec_merge(StringInfo message)
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	exec_merge_retrieval(cvname, desc, store, 2);
+	MemSet(&ctl, 0, sizeof(ctl));
+	ctl.keysize = sizeof(Datum);
+	ctl.entrysize = sizeof(Datum);
+	ctl.hash = string_hash;
+
+	inserts = hash_create("MergeInserts", 1000, &ctl, HASH_ELEM);
+
+	exec_merge_retrieval(cvname, desc, store, 2, inserts);
 
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
