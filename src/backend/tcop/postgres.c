@@ -43,6 +43,7 @@
 
 #include "access/printtup.h"
 #include "access/xact.h"
+#include "access/htup.h"
 #include "catalog/pg_attribute.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_queries_fn.h"
@@ -52,12 +53,14 @@
 #include "commands/trigger.h"
 #endif
 #include "executor/tstoreReceiver.h"
+#include "executor/tupletableReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "optimizer/planner.h"
+#include "optimizer/tlist.h"
 #include "pgstat.h"
 #include "pg_trace.h"
 #include "parser/analyze.h"
@@ -218,6 +221,12 @@ static int	UseNewLine = 0;		/* Use EOF as query delimiters */
 static bool RecoveryConflictPending = false;
 static bool RecoveryConflictRetryable = true;
 static ProcSignalReason RecoveryConflictReason;
+
+/* tuplestore that MERGE requests output to */
+static Tuplestorestate *merge_output_store;
+
+/* output type of the merge column */
+static Oid merge_output_type;
 
 /* ----------------------------------------------------------------
  *		decls for routines only used in this file
@@ -916,7 +925,7 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
  * Retrieves a the cached merge plan for a continuous view, creating it if necessary
  */
 static CachedPlan *
-get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
+get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src, List **group_clause)
 {
 	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
 	char *query_string;
@@ -949,6 +958,7 @@ get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
 		/* CVs should only have a single query */
 		Assert(query_list->length == 1);
 		query = (Query *) linitial(query_list);
+		*group_clause = query->groupClause;
 
 		if (query->sql_statement == NULL)
 			query->sql_statement = pstrdup(query_string);
@@ -971,6 +981,25 @@ get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
 	return GetCachedPlan(psrc, 0, false);
 }
 
+static Tuplestorestate *
+get_merge_output_store(bool clear)
+{
+	if (!merge_output_store)
+	{
+		MemoryContext oldContext = MemoryContextSwitchTo(CacheMemoryContext);
+
+		merge_output_store = tuplestore_begin_heap(true, true, 1000);
+
+		MemoryContextSwitchTo(oldContext);
+	}
+
+	if (clear)
+		tuplestore_clear(merge_output_store);
+
+	return merge_output_store;
+}
+
+
 /*
  * exec_merge_retrieval
  *
@@ -979,7 +1008,8 @@ get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
  */
 static void
 exec_merge_retrieval(char *cvname, TupleDesc desc,
-		Tuplestorestate *incoming_merges, AttrNumber merge_attr, HTAB *inserts)
+		Tuplestorestate *incoming_merges, AttrNumber merge_attr,
+		List *group_clause, TupleHashTable merge_targets)
 {
 	Node *raw_parse_tree;
 	List *parsetree_list;
@@ -997,14 +1027,14 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 	DestReceiver *dest;
 	Type typeinfo;
 	MemoryContext oldcontext;
-	Oid outputtype;
 	int length;
 	char stmt_name[strlen(cvname) + 9 + 1];
 	char base_select[14 + strlen(cvname) + 1];
 	Form_pg_attribute attr = desc->attrs[merge_attr - 1];
 	List *name = list_make1(makeString("="));
 	int incoming_size = 0;
-	int i = 0;
+	HASH_SEQ_STATUS status;
+	HeapTupleEntry entry;
 
 	strcpy(stmt_name, cvname);
 	sprintf(base_select, "SELECT * FROM %s", cvname);
@@ -1012,7 +1042,8 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 	slot = MakeSingleTupleTableSlot(desc);
 	name = list_make1(makeString("="));
 	ps = make_parsestate(NULL);
-	dest = CreateDestReceiver(DestTuplestore);
+
+	dest = CreateDestReceiver(DestTupleTable);
 
 	parsetree_list = pg_parse_query(base_select);
 	Assert(parsetree_list->length == 1);
@@ -1031,7 +1062,7 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 
 	typeinfo = typeidType(attr->atttypid);
 	length = typeLen(typeinfo);
-	outputtype = typeOutputId(typeinfo);
+	merge_output_type = typeOutputId(typeinfo);
 	ReleaseSysCache((HeapTuple) typeinfo);
 
 	/*
@@ -1039,15 +1070,13 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 	 * tuples so we can use them in an IN clause when retrieving existing tuples
 	 * from the continuous view
 	 */
-	while (tuplestore_gettupleslot(incoming_merges, true, false, slot))
+	foreach_tuple(slot, incoming_merges)
 	{
 		bool isnull;
 		Datum d = slot_getattr(slot, merge_attr, &isnull);
 		Const *c = makeConst(attr->atttypid, attr->atttypmod, 0, length, d, isnull, true);
-		const char *key = OidOutputFunctionCall(outputtype, d);
 
 		constants = lcons(c, constants);
-		hash_search(inserts, key, HASH_ENTER, NULL);
 		incoming_size++;
 	}
 
@@ -1087,7 +1116,7 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 					  list_make1(plan),
 					  NULL);
 
-	SetTuplestoreDestReceiverParams(dest, incoming_merges, PortalGetHeapMemory(portal), true);
+	SetTupleTableDestReceiverParams(dest, merge_targets, PortalGetHeapMemory(portal), true);
 
 	PortalStart(portal, NULL, 0, true);
 
@@ -1101,26 +1130,50 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 					 NULL);
 
 	/*
-	 * Move the read pointer to the last of the original incoming merge tuples. All tuples
-	 * beyond this point will have just been added by our SELECT statement.
+	 * Now add the merge targets that already exist in the continuous view's table
+	 * to the input of the final merge query
 	 */
-	tuplestore_rescan(incoming_merges);
-	while (i++ < incoming_size)
-		tuplestore_advance(incoming_merges, true);
-
-	while (tuplestore_gettupleslot(incoming_merges, true, false, slot))
-	{
-		bool isnull;
-		Datum d = slot_getattr(slot, merge_attr, &isnull);
-		const char *key = OidOutputFunctionCall(outputtype, d);
-
-		/* Since the SELECT statement found this tuple in the table, we need
-		 * to merge via UPDATE, not INSERT, so remove it from the inserts hashtable
-		 */
-		hash_search(inserts, key, HASH_REMOVE, NULL);
-	}
+	hash_seq_init(&status, merge_targets->hashtab);
+	while ((entry = (HeapTupleEntry) hash_seq_search(&status)) != NULL)
+		tuplestore_puttuple(incoming_merges, entry->tuple);
 }
 
+/*
+ * sync_merge_results
+ *
+ * Writes the merge results to a continuous view's table, performing
+ * UPDATES or INSERTS as necessary
+ */
+static void
+sync_merge_results(char *cvname, Tuplestorestate *results,
+		TupleTableSlot *slot, AttrNumber merge_attr, TupleHashTable merge_targets)
+{
+	Relation rel = heap_openrv(makeRangeVar(NULL, cvname, -1), RowExclusiveLock);
+	bool *replace_all = palloc(sizeof(bool) * slot->tts_tupleDescriptor->natts);
+	MemSet(replace_all, true, sizeof(replace_all));
+
+	foreach_tuple(slot, results)
+	{
+		HeapTupleEntry update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
+		print_slot(slot);
+		if (update)
+		{
+			/*
+			 * The slot has the updated values, so store them in the updatable physical tuple
+			 */
+			HeapTuple updated = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
+					slot->tts_values, slot->tts_isnull, replace_all);
+
+			simple_heap_update(rel, &updated->t_self, updated);
+		}
+		else
+		{
+			/* No existing tuple found, so it's an INSERT */
+			heap_insert(rel, slot->tts_tuple, GetCurrentCommandId(true), 0, NULL);
+		}
+	}
+	relation_close(rel, RowExclusiveLock);
+}
 
 /*
  * exec_merge
@@ -1143,14 +1196,19 @@ exec_merge(StringInfo message)
 	Tuplestorestate *store;
 	Portal portal;
 	MemoryContext oldcontext;
-	DestReceiver *none = CreateDestReceiver(DestNone);
-	HTAB *inserts;
-	HASHCTL ctl;
+	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
+	Tuplestorestate *merge_output = get_merge_output_store(true);
+	AttrNumber merge_attr = 1;
+	List *group_clause;
+	TupleHashTable merge_targets;
+	AttrNumber *cols;
+	FmgrInfo *eq_funcs;
+	FmgrInfo *hash_funcs;
 
 	start_xact_command();
 
 	desc = create_tuple_desc(raw, tupdesclen);
-	cplan = get_merge_plan(cvname, desc, &psrc);
+	cplan = get_merge_plan(cvname, desc, &psrc, &group_clause);
 	slot = MakeSingleTupleTableSlot(desc);
 	store = psrc->store;
 	tuplestore_clear(store);
@@ -1169,16 +1227,16 @@ exec_merge(StringInfo message)
 
 	pq_getmsgend(message);
 
+	cols = (AttrNumber *) palloc(sizeof(AttrNumber) * 1);
+	cols[0] = merge_attr;
+
+	execTuplesHashPrepare(1, extract_grouping_ops(group_clause),  &eq_funcs, &hash_funcs);
+	merge_targets = BuildTupleHashTable(1, cols, eq_funcs, hash_funcs, 1000,
+			sizeof(HeapTupleEntryData), CacheMemoryContext, MessageContext);
+
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	MemSet(&ctl, 0, sizeof(ctl));
-	ctl.keysize = sizeof(Datum);
-	ctl.entrysize = sizeof(Datum);
-	ctl.hash = string_hash;
-
-	inserts = hash_create("MergeInserts", 1000, &ctl, HASH_ELEM);
-
-	exec_merge_retrieval(cvname, desc, store, 2, inserts);
+	exec_merge_retrieval(cvname, desc, store, merge_attr, group_clause, merge_targets);
 
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
@@ -1192,6 +1250,9 @@ exec_merge(StringInfo message)
 					  cplan->stmt_list,
 					  cplan);
 
+	merge_output = get_merge_output_store(true);
+	SetTuplestoreDestReceiverParams(dest, merge_output, PortalGetHeapMemory(portal), true);
+
 	PortalStart(portal, NULL, 0, true);
 
 	MemoryContextSwitchTo(oldcontext);
@@ -1199,11 +1260,15 @@ exec_merge(StringInfo message)
 	(void) PortalRun(portal,
 					 FETCH_ALL,
 					 true,
-					 none,
-					 none,
+					 dest,
+					 dest,
 					 NULL);
 
 	PopActiveSnapshot();
+
+	sync_merge_results(cvname, merge_output, slot, merge_attr, merge_targets);
+
+	hash_destroy(merge_targets->hashtab);
 
 	finish_xact_command();
 }
