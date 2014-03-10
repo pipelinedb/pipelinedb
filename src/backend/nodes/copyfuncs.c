@@ -614,6 +614,7 @@ _copyTuplestoreScan(const TuplestoreScan *from)
 
 	CopyScanFields((const Scan *) from, (Scan *) newnode);
 	COPY_SCALAR_FIELD(store);
+	COPY_SCALAR_FIELD(desc);
 
 	return newnode;
 }

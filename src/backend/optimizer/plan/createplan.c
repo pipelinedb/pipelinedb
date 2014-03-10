@@ -296,6 +296,7 @@ create_tupstorescan_plan(PlannerInfo *root, Path *best_path)
 
 	plan->targetlist = tlist;
 	scan->store = root->parse->sourcestore;
+	scan->desc = root->parse->sourcedesc;
 
 	return (Plan *) scan;
 }

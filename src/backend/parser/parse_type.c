@@ -524,6 +524,16 @@ typeTypeId(Type tp)
 	return HeapTupleGetOid(tp);
 }
 
+/* given type (as type struct), return the type output OID */
+Oid
+typeOutputId(Type t)
+{
+	Form_pg_type typ;
+
+	typ = (Form_pg_type) GETSTRUCT(t);
+	return typ->typoutput;
+}
+
 /* given type (as type struct), return the length of type */
 int16
 typeLen(Type t)

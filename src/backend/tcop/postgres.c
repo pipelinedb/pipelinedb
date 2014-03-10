@@ -43,6 +43,8 @@
 
 #include "access/printtup.h"
 #include "access/xact.h"
+#include "access/htup.h"
+#include "catalog/pg_attribute.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "commands/async.h"
@@ -50,16 +52,21 @@
 #ifdef PGXC
 #include "commands/trigger.h"
 #endif
+#include "executor/tstoreReceiver.h"
+#include "executor/tupletableReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "optimizer/planner.h"
+#include "optimizer/tlist.h"
 #include "pgstat.h"
 #include "pg_trace.h"
 #include "parser/analyze.h"
 #include "parser/parser.h"
+#include "parser/parse_clause.h"
+#include "parser/parse_expr.h"
 #ifdef PGXC
 #include "parser/parse_type.h"
 #endif /* PGXC */
@@ -76,11 +83,14 @@
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "tcop/utility.h"
+#include "utils/hsearch.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
 #include "utils/snapmgr.h"
+#include "utils/syscache.h"
 #include "utils/timestamp.h"
+#include "utils/tuplestore.h"
 #include "mb/pg_wchar.h"
 
 #ifdef PGXC
@@ -211,6 +221,12 @@ static int	UseNewLine = 0;		/* Use EOF as query delimiters */
 static bool RecoveryConflictPending = false;
 static bool RecoveryConflictRetryable = true;
 static ProcSignalReason RecoveryConflictReason;
+
+/* tuplestore that MERGE requests output to */
+static Tuplestorestate *merge_output_store;
+
+/* output type of the merge column */
+static Oid merge_output_type;
 
 /* ----------------------------------------------------------------
  *		decls for routines only used in this file
@@ -909,7 +925,7 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
  * Retrieves a the cached merge plan for a continuous view, creating it if necessary
  */
 static CachedPlan *
-get_cached_merge_plan(char *cvname, CachedPlanSource **src)
+get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src, List **group_clause)
 {
 	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
 	char *query_string;
@@ -942,6 +958,7 @@ get_cached_merge_plan(char *cvname, CachedPlanSource **src)
 		/* CVs should only have a single query */
 		Assert(query_list->length == 1);
 		query = (Query *) linitial(query_list);
+		*group_clause = query->groupClause;
 
 		if (query->sql_statement == NULL)
 			query->sql_statement = pstrdup(query_string);
@@ -949,7 +966,9 @@ get_cached_merge_plan(char *cvname, CachedPlanSource **src)
 		oldContext = MemoryContextSwitchTo(CacheMemoryContext);
 
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
+		/* TODO: size this appropriately */
 		psrc->store = tuplestore_begin_heap(true, true, 1000);
+		psrc->desc = desc;
 
 		CompleteCachedPlan(psrc, query_list, NULL, 0, 0, NULL,  NULL, 0, true);
 		StorePreparedStatement(cvname, psrc, false);
@@ -960,6 +979,200 @@ get_cached_merge_plan(char *cvname, CachedPlanSource **src)
 	*src = psrc;
 
 	return GetCachedPlan(psrc, 0, false);
+}
+
+static Tuplestorestate *
+get_merge_output_store(bool clear)
+{
+	if (!merge_output_store)
+	{
+		MemoryContext oldContext = MemoryContextSwitchTo(CacheMemoryContext);
+
+		merge_output_store = tuplestore_begin_heap(true, true, 1000);
+
+		MemoryContextSwitchTo(oldContext);
+	}
+
+	if (clear)
+		tuplestore_clear(merge_output_store);
+
+	return merge_output_store;
+}
+
+
+/*
+ * exec_merge_retrieval
+ *
+ * Gets the plan for retrieving all of the existing tuples that
+ * this merge request will merge with
+ */
+static void
+exec_merge_retrieval(char *cvname, TupleDesc desc,
+		Tuplestorestate *incoming_merges, AttrNumber merge_attr,
+		List *group_clause, TupleHashTable merge_targets)
+{
+	Node *raw_parse_tree;
+	List *parsetree_list;
+	List *query_list;
+	PlannedStmt *plan;
+	Query *query;
+	A_Expr *in_expr;
+	Node *where;
+	ColumnRef *cref;
+	List *constants = NIL;
+	SelectStmt *stmt;
+	Portal portal;
+	TupleTableSlot 	*slot;
+	ParseState *ps;
+	DestReceiver *dest;
+	Type typeinfo;
+	MemoryContext oldcontext;
+	int length;
+	char stmt_name[strlen(cvname) + 9 + 1];
+	char base_select[14 + strlen(cvname) + 1];
+	Form_pg_attribute attr = desc->attrs[merge_attr - 1];
+	List *name = list_make1(makeString("="));
+	int incoming_size = 0;
+	HASH_SEQ_STATUS status;
+	HeapTupleEntry entry;
+
+	strcpy(stmt_name, cvname);
+	sprintf(base_select, "SELECT * FROM %s", cvname);
+
+	slot = MakeSingleTupleTableSlot(desc);
+	name = list_make1(makeString("="));
+	ps = make_parsestate(NULL);
+
+	dest = CreateDestReceiver(DestTupleTable);
+
+	parsetree_list = pg_parse_query(base_select);
+	Assert(parsetree_list->length == 1);
+
+	/*
+	 * We need to do this to populate the ParseState's p_varnamespace member
+	 */
+	stmt = (SelectStmt *) linitial(parsetree_list);
+	transformFromClause(ps, stmt->fromClause);
+
+	raw_parse_tree = (Node *) linitial(parsetree_list);
+	query_list = pg_analyze_and_rewrite(raw_parse_tree, base_select, NULL, 0);
+
+	Assert(query_list->length == 1);
+	query = (Query *) linitial(query_list);
+
+	typeinfo = typeidType(attr->atttypid);
+	length = typeLen(typeinfo);
+	merge_output_type = typeOutputId(typeinfo);
+	ReleaseSysCache((HeapTuple) typeinfo);
+
+	/*
+	 * We need to extract all of the merge column values from our incoming merge
+	 * tuples so we can use them in an IN clause when retrieving existing tuples
+	 * from the continuous view
+	 */
+	foreach_tuple(slot, incoming_merges)
+	{
+		bool isnull;
+		Datum d = slot_getattr(slot, merge_attr, &isnull);
+		Const *c = makeConst(attr->atttypid, attr->atttypmod, 0, length, d, isnull, true);
+
+		constants = lcons(c, constants);
+		incoming_size++;
+	}
+
+	/*
+	 * Now construct an IN clause from the List of merge column values we just built
+	 */
+	cref = makeNode(ColumnRef);
+	cref->fields = list_make1(makeString(attr->attname.data));
+	cref->location = -1;
+
+	in_expr = makeA_Expr(AEXPR_IN, name,
+			   (Node *) cref, (Node *) constants, -1);
+
+	/*
+	 * This query is now of the form:
+	 *
+	 * SELECT * FROM <continuous view> WHERE <merge column> IN (incoming merge column values)
+	 */
+	where = transformAExprIn(ps, in_expr);
+	query->jointree = makeFromExpr(query->jointree->fromlist, where);
+
+	plan = pg_plan_query(query, 0, NULL);
+
+	oldcontext = MemoryContextSwitchTo(MessageContext);
+
+	/*
+	 * Now run the query that retrieves existing tuples to merge this merge request with.
+	 * This query outputs to the tuplestore currently holding the incoming merge tuples.
+	 */
+	portal = CreatePortal("", true, true);
+	portal->visible = false;
+
+	PortalDefineQuery(portal,
+					  NULL,
+					  NULL,
+					  "SELECT",
+					  list_make1(plan),
+					  NULL);
+
+	SetTupleTableDestReceiverParams(dest, merge_targets, PortalGetHeapMemory(portal), true);
+
+	PortalStart(portal, NULL, 0, true);
+
+	MemoryContextSwitchTo(oldcontext);
+
+	(void) PortalRun(portal,
+					 FETCH_ALL,
+					 true,
+					 dest,
+					 dest,
+					 NULL);
+
+	/*
+	 * Now add the merge targets that already exist in the continuous view's table
+	 * to the input of the final merge query
+	 */
+	hash_seq_init(&status, merge_targets->hashtab);
+	while ((entry = (HeapTupleEntry) hash_seq_search(&status)) != NULL)
+		tuplestore_puttuple(incoming_merges, entry->tuple);
+}
+
+/*
+ * sync_merge_results
+ *
+ * Writes the merge results to a continuous view's table, performing
+ * UPDATES or INSERTS as necessary
+ */
+static void
+sync_merge_results(char *cvname, Tuplestorestate *results,
+		TupleTableSlot *slot, AttrNumber merge_attr, TupleHashTable merge_targets)
+{
+	Relation rel = heap_openrv(makeRangeVar(NULL, cvname, -1), RowExclusiveLock);
+	bool *replace_all = palloc(sizeof(bool) * slot->tts_tupleDescriptor->natts);
+	MemSet(replace_all, true, sizeof(replace_all));
+
+	foreach_tuple(slot, results)
+	{
+		HeapTupleEntry update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
+		print_slot(slot);
+		if (update)
+		{
+			/*
+			 * The slot has the updated values, so store them in the updatable physical tuple
+			 */
+			HeapTuple updated = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
+					slot->tts_values, slot->tts_isnull, replace_all);
+
+			simple_heap_update(rel, &updated->t_self, updated);
+		}
+		else
+		{
+			/* No existing tuple found, so it's an INSERT */
+			heap_insert(rel, slot->tts_tuple, GetCurrentCommandId(true), 0, NULL);
+		}
+	}
+	relation_close(rel, RowExclusiveLock);
 }
 
 /*
@@ -981,11 +1194,21 @@ exec_merge(StringInfo message)
 	CachedPlan *cplan;
 	CachedPlanSource *psrc;
 	Tuplestorestate *store;
+	Portal portal;
+	MemoryContext oldcontext;
+	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
+	Tuplestorestate *merge_output = get_merge_output_store(true);
+	AttrNumber merge_attr = 1;
+	List *group_clause;
+	TupleHashTable merge_targets;
+	AttrNumber *cols;
+	FmgrInfo *eq_funcs;
+	FmgrInfo *hash_funcs;
 
 	start_xact_command();
 
-	cplan = get_cached_merge_plan(cvname, &psrc);
 	desc = create_tuple_desc(raw, tupdesclen);
+	cplan = get_merge_plan(cvname, desc, &psrc, &group_clause);
 	slot = MakeSingleTupleTableSlot(desc);
 	store = psrc->store;
 	tuplestore_clear(store);
@@ -1000,10 +1223,52 @@ exec_merge(StringInfo message)
 		ExecStoreDataRowTuple(datarow, rowlen, 0, slot, false);
 		slot_getallattrs(slot);
 		tuplestore_puttupleslot(store, slot);
-		print_slot(slot);
 	}
 
 	pq_getmsgend(message);
+
+	cols = (AttrNumber *) palloc(sizeof(AttrNumber) * 1);
+	cols[0] = merge_attr;
+
+	execTuplesHashPrepare(1, extract_grouping_ops(group_clause),  &eq_funcs, &hash_funcs);
+	merge_targets = BuildTupleHashTable(1, cols, eq_funcs, hash_funcs, 1000,
+			sizeof(HeapTupleEntryData), CacheMemoryContext, MessageContext);
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	exec_merge_retrieval(cvname, desc, store, merge_attr, group_clause, merge_targets);
+
+	oldcontext = MemoryContextSwitchTo(MessageContext);
+
+	portal = CreatePortal("", true, true);
+	portal->visible = false;
+
+	PortalDefineQuery(portal,
+					  NULL,
+					  NULL,
+					  "SELECT",
+					  cplan->stmt_list,
+					  cplan);
+
+	merge_output = get_merge_output_store(true);
+	SetTuplestoreDestReceiverParams(dest, merge_output, PortalGetHeapMemory(portal), true);
+
+	PortalStart(portal, NULL, 0, true);
+
+	MemoryContextSwitchTo(oldcontext);
+
+	(void) PortalRun(portal,
+					 FETCH_ALL,
+					 true,
+					 dest,
+					 dest,
+					 NULL);
+
+	PopActiveSnapshot();
+
+	sync_merge_results(cvname, merge_output, slot, merge_attr, merge_targets);
+
+	hash_destroy(merge_targets->hashtab);
 
 	finish_xact_command();
 }

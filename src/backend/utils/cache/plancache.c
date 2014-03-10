@@ -822,6 +822,7 @@ BuildCachedPlan(CachedPlanSource *plansource, List *qlist,
 	{
 		Query *q = (Query *) lfirst(lc);
 		q->sourcestore = plansource->store;
+		q->sourcedesc = plansource->desc;
 	}
 
 	/*

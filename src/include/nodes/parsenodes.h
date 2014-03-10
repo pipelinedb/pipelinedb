@@ -184,6 +184,7 @@ typedef struct Query
 	RangeVar *cq_target; /* output relation of this CQ, if any */
 
 	Tuplestorestate *sourcestore;
+	TupleDesc sourcedesc;
 #endif
 } Query;
 
