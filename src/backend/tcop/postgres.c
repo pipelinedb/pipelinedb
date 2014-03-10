@@ -1095,8 +1095,11 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 	 *
 	 * SELECT * FROM <continuous view> WHERE <merge column> IN (incoming merge column values)
 	 */
-	where = transformAExprIn(ps, in_expr);
-	query->jointree = makeFromExpr(query->jointree->fromlist, where);
+	if (merge_targets->numCols > 0)
+	{
+		where = transformAExprIn(ps, in_expr);
+		query->jointree = makeFromExpr(query->jointree->fromlist, where);
+	}
 
 	plan = pg_plan_query(query, 0, NULL);
 
@@ -1155,7 +1158,6 @@ sync_merge_results(char *cvname, Tuplestorestate *results,
 	foreach_tuple(slot, results)
 	{
 		HeapTupleEntry update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
-		print_slot(slot);
 		if (update)
 		{
 			/*
@@ -1204,6 +1206,8 @@ exec_merge(StringInfo message)
 	AttrNumber *cols;
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
+	int num_cols = 0;
+	int num_buckets = 1;
 
 	start_xact_command();
 
@@ -1227,11 +1231,18 @@ exec_merge(StringInfo message)
 
 	pq_getmsgend(message);
 
-	cols = (AttrNumber *) palloc(sizeof(AttrNumber) * 1);
-	cols[0] = merge_attr;
+	if (group_clause)
+	{
+		num_cols = list_length(group_clause);
+		if (num_cols > 1)
+			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", num_cols);
+		cols = (AttrNumber *) palloc(sizeof(AttrNumber) * num_cols);
+		cols[0] = merge_attr;
+		execTuplesHashPrepare(num_cols, extract_grouping_ops(group_clause), &eq_funcs, &hash_funcs);
+		num_buckets = 1000;
+	}
 
-	execTuplesHashPrepare(1, extract_grouping_ops(group_clause),  &eq_funcs, &hash_funcs);
-	merge_targets = BuildTupleHashTable(1, cols, eq_funcs, hash_funcs, 1000,
+	merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
 			sizeof(HeapTupleEntryData), CacheMemoryContext, MessageContext);
 
 	PushActiveSnapshot(GetTransactionSnapshot());
