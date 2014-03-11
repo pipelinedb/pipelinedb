@@ -962,6 +962,7 @@ get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src, List **grou
 
 		if (query->sql_statement == NULL)
 			query->sql_statement = pstrdup(query_string);
+		query->cq_is_merge = true;
 
 		oldContext = MemoryContextSwitchTo(CacheMemoryContext);
 

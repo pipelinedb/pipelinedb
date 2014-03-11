@@ -1902,6 +1902,12 @@ grouping_planner(PlannerInfo *root, double tuple_fraction)
 	 */
 	root->query_pathkeys = current_pathkeys;
 
+	/* indicate that we should apply collection function directly */
+	if (root->parse->cq_is_merge)
+	{
+		((Agg *) result_plan)->skip_trans = true;
+	}
+
 	return result_plan;
 }
 

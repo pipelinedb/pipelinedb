@@ -185,6 +185,8 @@ typedef struct Query
 
 	Tuplestorestate *sourcestore;
 	TupleDesc sourcedesc;
+
+	bool 		cq_is_merge; /* is this query being run as a merge query? */
 #endif
 } Query;
 
