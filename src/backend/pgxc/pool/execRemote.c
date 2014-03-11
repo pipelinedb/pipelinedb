@@ -3205,7 +3205,7 @@ DoRemoteMerge(RemoteMergeState mergeState)
 	List *tuplesByNode[handles->dn_conn_count];
 	StringInfo rawTupDesc = TupleDescToBytes(mergeState.bufprint);
 	TransactionId gxid = GetCurrentTransactionId();
-	List *nodes;
+	List *nodeslist;
 
 	for (i=0; i<handles->dn_conn_count; i++)
 	{
@@ -3237,7 +3237,7 @@ DoRemoteMerge(RemoteMergeState mergeState)
 	{
 		ListCell *nlc;
 
-		if (distCol > 0)
+		if (distCol >= 0)
 		{
 			Oid type = slot->tts_tupleDescriptor->attrs[distCol]->atttypid;
 			bool isnull;
@@ -3246,18 +3246,18 @@ DoRemoteMerge(RemoteMergeState mergeState)
 			ExecNodes *nodes = GetRelationNodes(mergeState.locinfo,
 							distValue, isnull, type, RELATION_ACCESS_INSERT);
 
-			nodes = nodes->nodeList;
+			nodeslist = nodes->nodeList;
 		}
 		else
 		{
 			/* replicated */
-			nodes = GetAllDataNodes();
+			nodeslist = GetAllDataNodes();
 		}
 
 		/*
 		 * Put each tuple in a queue bound for one or more datanodes
 		 */
-		foreach(nlc, nodes)
+		foreach(nlc, nodeslist)
 		{
 			int node = lfirst_int(nlc);
 			StringInfo raw = TupleToBytes(mergeState.bufprint, slot);
