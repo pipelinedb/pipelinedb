@@ -1157,7 +1157,11 @@ sync_merge_results(char *cvname, Tuplestorestate *results,
 
 	foreach_tuple(slot, results)
 	{
-		HeapTupleEntry update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
+		HeapTupleEntry update;
+
+		slot_getallattrs(slot);
+
+		update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
 		if (update)
 		{
 			/*
