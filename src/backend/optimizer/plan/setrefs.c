@@ -563,7 +563,9 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 			/* Fall through */
 #endif /* PGXC */
 		case T_Group:
-			set_upper_references(root, plan, rtoffset);
+			/* references are updated in the planner for merge queries */
+			if (!root->parse->cq_is_merge)
+				set_upper_references(root, plan, rtoffset);
 			break;
 		case T_WindowAgg:
 			{
