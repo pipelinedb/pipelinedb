@@ -1098,6 +1098,13 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 			 */
 			if (have_tuple)
 				return true;
+			else if (IsContinuous(combiner))
+			{
+				conn->state = DN_CONNECTION_STATE_QUERY;
+				/* TODO: we should be smarter about just blindly trying to read from the connection here */
+				pgxc_node_receive(1, &conn, NULL);
+				conn->combiner = combiner;
+			}
 			else
 			{
 				if (pgxc_node_send_execute(conn, combiner->cursor, 1) != 0)

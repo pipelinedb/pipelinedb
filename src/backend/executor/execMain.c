@@ -272,7 +272,6 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 	DestReceiver *dest;
 	bool		sendTuples;
 	MemoryContext oldcontext;
-	TupleTableSlot *slot = NULL;
 	int batchsize = queryDesc->plannedstmt->cq_batch_size;
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
 
@@ -311,15 +310,21 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 	if (sendTuples)
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
+
+	/* matches the StartTransaction in PostgresMain() */
+	PopActiveSnapshot();
+	CommitTransactionCommand();
+
 	for (;;)
 	{
+		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
+
 		/*
 		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
 				sendTuples, batchsize, timeoutms, ForwardScanDirection, dest);
-
-		pq_flush();
 
 		/*
 		 * If we're a datanode, tell the coordinator that this batch is done
@@ -342,7 +347,14 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 		else
 			elog(LOG, "processed=%d, batch size=%d", estate->es_processed, batchsize);
 		estate->es_processed = 0;
+
+		PopActiveSnapshot();
+		CommitTransactionCommand();
 	}
+
+	/* matches the CommitTransaction in PostgresMain */
+	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
 
 	/*
 	 * shutdown tuple receiver, if we started it
