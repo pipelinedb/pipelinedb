@@ -318,6 +318,8 @@ transformStmt(ParseState *pstate, Node *parseTree)
 	result->querySource = QSRC_ORIGINAL;
 	result->canSetTag = true;
 
+	result->cq_is_merge = false;
+
 	return result;
 }
 

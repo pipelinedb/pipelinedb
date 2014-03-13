@@ -2576,6 +2576,7 @@ _copyQuery(const Query *from)
 #endif
 	COPY_SCALAR_FIELD(is_continuous);
 	COPY_SCALAR_FIELD(cq_activate_stmt);
+	COPY_SCALAR_FIELD(cq_is_merge);
 
 	return newnode;
 }

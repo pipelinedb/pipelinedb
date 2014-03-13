@@ -563,7 +563,31 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 			/* Fall through */
 #endif /* PGXC */
 		case T_Group:
-			set_upper_references(root, plan, rtoffset);
+			{
+				set_upper_references(root, plan, rtoffset);
+
+				/* indicate that we should apply collection function directly */
+				if (root->parse->cq_is_merge && IsA(plan, Agg))
+				{
+					ListCell *lc;
+					foreach(lc, plan->targetlist)
+					{
+						TargetEntry *te = (TargetEntry *) lfirst(lc);
+						Aggref *aggref = (Aggref *) te->expr;
+
+						Var		   *newvar;
+
+						newvar = makeVarFromTargetEntry(OUTER_VAR, te);
+						newvar->varnoold = 0;
+						newvar->varoattno = 0;
+						te->expr = (Expr *) aggref;
+
+						aggref->args = list_make1(makeTargetEntry((Expr *) newvar, 1, NULL,
+								false));
+					}
+					((Agg *) plan)->skip_trans = true;
+				}
+			}
 			break;
 		case T_WindowAgg:
 			{

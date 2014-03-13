@@ -1837,18 +1837,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 		peraggstate->transfn_oid = transfn_oid = aggform->aggtransfn;
 		peraggstate->finalfn_oid = finalfn_oid = aggform->aggfinalfn;
-#ifdef PGXC
 		peraggstate->collectfn_oid = collectfn_oid = aggform->aggcollectfn;
-		/*
-		 * For PGXC final and collection functions are used to combine results at Coordinator,
-		 * disable those for Datanode
-		 */
-		if (IS_PGXC_DATANODE)
-		{
-			peraggstate->finalfn_oid = finalfn_oid = InvalidOid;
-			peraggstate->collectfn_oid = collectfn_oid = InvalidOid;
-		}
-#endif /* PGXC */
 		/* Check that aggregate owner has permission to call component fns */
 		{
 			HeapTuple	procTuple;
