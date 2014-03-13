@@ -1902,28 +1902,6 @@ grouping_planner(PlannerInfo *root, double tuple_fraction)
 	 */
 	root->query_pathkeys = current_pathkeys;
 
-	/* indicate that we should apply collection function directly */
-	if (root->parse->cq_is_merge && IsA(result_plan, Agg))
-	{
-		ListCell *lc;
-		foreach(lc, result_plan->targetlist)
-		{
-			TargetEntry *te = (TargetEntry *) lfirst(lc);
-			Aggref *aggref = (Aggref *) te->expr;
-
-			Var		   *newvar;
-
-			newvar = makeVarFromTargetEntry(OUTER_VAR, te);
-			newvar->varnoold = 0;
-			newvar->varoattno = 0;
-			te->expr = (Expr *) aggref;
-
-			aggref->args = list_make1(makeTargetEntry((Expr *) newvar, 1, NULL,
-					false));
-		}
-		((Agg *) result_plan)->skip_trans = true;
-	}
-
 	return result_plan;
 }
 
