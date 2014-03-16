@@ -925,7 +925,7 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
  * Retrieves a the cached merge plan for a continuous view, creating it if necessary
  */
 static CachedPlan *
-get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src, List **group_clause)
+get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
 {
 	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
 	char *query_string;
@@ -946,6 +946,8 @@ get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src, List **grou
 		/*
 		 * It doesn't exist, so create and cache it
 		 */
+		oldContext = MemoryContextSwitchTo(CacheMemoryContext);
+
 		query_string = GetQueryString(rel);
 		parsetree_list = pg_parse_query(query_string);
 
@@ -958,18 +960,16 @@ get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src, List **grou
 		/* CVs should only have a single query */
 		Assert(query_list->length == 1);
 		query = (Query *) linitial(query_list);
-		*group_clause = query->groupClause;
 
 		if (query->sql_statement == NULL)
 			query->sql_statement = pstrdup(query_string);
 		query->cq_is_merge = true;
 
-		oldContext = MemoryContextSwitchTo(CacheMemoryContext);
-
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
 		/* TODO: size this appropriately */
 		psrc->store = tuplestore_begin_heap(true, true, 1000);
 		psrc->desc = desc;
+		psrc->query = query;
 
 		CompleteCachedPlan(psrc, query_list, NULL, 0, 0, NULL,  NULL, 0, true);
 		StorePreparedStatement(cvname, psrc, false);
@@ -1216,10 +1216,14 @@ exec_merge(StringInfo message)
 
 	start_xact_command();
 
+	oldcontext = MemoryContextSwitchTo(MessageContext);
+
 	desc = create_tuple_desc(raw, tupdesclen);
-	cplan = get_merge_plan(cvname, desc, &psrc, &group_clause);
+	cplan = get_merge_plan(cvname, desc, &psrc);
 	slot = MakeSingleTupleTableSlot(desc);
 	store = psrc->store;
+	group_clause = psrc->query->groupClause;
+
 	tuplestore_clear(store);
 
 	/*
@@ -1253,8 +1257,6 @@ exec_merge(StringInfo message)
 	PushActiveSnapshot(GetTransactionSnapshot());
 
 	exec_merge_retrieval(cvname, desc, store, merge_attr, group_clause, merge_targets);
-
-	oldcontext = MemoryContextSwitchTo(MessageContext);
 
 	portal = CreatePortal("", true, true);
 	portal->visible = false;

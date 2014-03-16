@@ -17,6 +17,7 @@
 
 #include "access/tupdesc.h"
 #include "nodes/params.h"
+#include "nodes/parsenodes.h"
 #include "utils/tuplestore.h"
 
 #define CACHEDPLANSOURCE_MAGIC		195726186
@@ -104,6 +105,7 @@ typedef struct CachedPlanSource
 #endif
 	Tuplestorestate *store; /* tuplestore to read from, if any */
 	TupleDesc	desc; /* description of the tuplestore, if any */
+	Query *query; /* query associated with this cached plan */
 } CachedPlanSource;
 
 /*
