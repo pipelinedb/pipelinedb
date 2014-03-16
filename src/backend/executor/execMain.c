@@ -280,14 +280,6 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 
 	estate = queryDesc->estate;
 
-	Assert(estate != NULL);
-	Assert(!(estate->es_top_eflags & EXEC_FLAG_EXPLAIN_ONLY));
-
-	/*
-	 * Switch into per-query memory context
-	 */
-	oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
-
 	/* Allow instrumentation of Executor overall runtime */
 	if (queryDesc->totaltime)
 		InstrStartNode(queryDesc->totaltime);
@@ -320,11 +312,15 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 		StartTransactionCommand();
 		PushActiveSnapshot(GetTransactionSnapshot());
 
+		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+
 		/*
 		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
 				sendTuples, batchsize, timeoutms, ForwardScanDirection, dest);
+
+		MemoryContextSwitchTo(oldcontext);
 
 		/*
 		 * If we're a datanode, tell the coordinator that this batch is done

@@ -23,6 +23,7 @@
 #include "pg_trace.h"
 #ifdef PGXC
 #include "pgxc/pgxc.h"
+#include "pgxc/poolmgr.h"
 #include "optimizer/pgxcplan.h"
 #include "pgxc/execRemote.h"
 #include "access/relscan.h"
@@ -1387,6 +1388,8 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	relation_close(rel, NoLock);
 
 	mergeState.locinfo = rel->rd_locator_info;
+
+	PersistentConnections = true;
 
 	/* run the plan fo-eva */
 	ExecutorRunContinuous(queryDesc, mergeState);
