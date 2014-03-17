@@ -1337,6 +1337,8 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	QueryDesc  *queryDesc;
 	Tuplestorestate *store = NULL;
 	RemoteMergeState mergeState;
+	ResourceOwner resowner;
+	ResourceOwner saveowner;
 	Relation rel;
 
 	/*
@@ -1361,6 +1363,10 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 
 	/* if we got a cancel signal in prior command, quit */
 	CHECK_FOR_INTERRUPTS();
+
+	resowner = ResourceOwnerCreate(NULL, stmt->cq_target->relname);
+	saveowner = CurrentResourceOwner;
+	CurrentResourceOwner = resowner;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
@@ -1391,8 +1397,10 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 
 	PersistentConnections = true;
 
+	CurrentResourceOwner = saveowner;
+
 	/* run the plan fo-eva */
-	ExecutorRunContinuous(queryDesc, mergeState);
+	ExecutorRunContinuous(queryDesc, mergeState, resowner);
 
 	/* pop the snapshot if we pushed one */
 	PopActiveSnapshot();
