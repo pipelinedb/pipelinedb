@@ -303,7 +303,9 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	if (sendTuples)
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
-	/* matches the StartTransaction in PostgresMain() */
+	/* Finish the transaction started in PostgresMain() */
+	UnregisterSnapshotFromOwner(queryDesc->snapshot, owner);
+	UnregisterSnapshotFromOwner(estate->es_snapshot, owner);
 	PopActiveSnapshot();
 	CommitTransactionCommand();
 
@@ -314,6 +316,8 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 
 		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 		CurrentResourceOwner = owner;
+
+		estate->es_snapshot = GetTransactionSnapshot();
 
 		/*
 		 * Run plan on a microbatch
@@ -351,7 +355,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 		CommitTransactionCommand();
 	}
 
-	/* matches the CommitTransaction in PostgresMain */
+	/* Start a new transaction before committing in PostgresMain */
 	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());
 
