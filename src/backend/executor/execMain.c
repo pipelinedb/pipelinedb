@@ -265,13 +265,14 @@ ExecutorRun(QueryDesc *queryDesc,
  * a deactivate message is received
  */
 void
-ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
+ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, ResourceOwner owner)
 {
 	EState	   *estate;
 	CmdType		operation;
 	DestReceiver *dest;
 	bool		sendTuples;
 	MemoryContext oldcontext;
+	ResourceOwner save = CurrentResourceOwner;
 	int batchsize = queryDesc->plannedstmt->cq_batch_size;
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
 
@@ -279,14 +280,6 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 	Assert(queryDesc != NULL);
 
 	estate = queryDesc->estate;
-
-	Assert(estate != NULL);
-	Assert(!(estate->es_top_eflags & EXEC_FLAG_EXPLAIN_ONLY));
-
-	/*
-	 * Switch into per-query memory context
-	 */
-	oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 
 	/* Allow instrumentation of Executor overall runtime */
 	if (queryDesc->totaltime)
@@ -310,8 +303,9 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 	if (sendTuples)
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
-
-	/* matches the StartTransaction in PostgresMain() */
+	/* Finish the transaction started in PostgresMain() */
+	UnregisterSnapshotFromOwner(queryDesc->snapshot, owner);
+	UnregisterSnapshotFromOwner(estate->es_snapshot, owner);
 	PopActiveSnapshot();
 	CommitTransactionCommand();
 
@@ -320,11 +314,18 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 		StartTransactionCommand();
 		PushActiveSnapshot(GetTransactionSnapshot());
 
+		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+		CurrentResourceOwner = owner;
+
+		estate->es_snapshot = GetTransactionSnapshot();
+
 		/*
 		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
 				sendTuples, batchsize, timeoutms, ForwardScanDirection, dest);
+
+		MemoryContextSwitchTo(oldcontext);
 
 		/*
 		 * If we're a datanode, tell the coordinator that this batch is done
@@ -339,6 +340,8 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 		if (IS_PGXC_COORDINATOR && estate->es_processed)
 			DoRemoteMerge(mergeState);
 
+		CurrentResourceOwner = save;
+
 		/*
 		 * If we didn't see any new tuples, sleep briefly to save cycles
 		 */
@@ -352,7 +355,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState)
 		CommitTransactionCommand();
 	}
 
-	/* matches the CommitTransaction in PostgresMain */
+	/* Start a new transaction before committing in PostgresMain */
 	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());
 
