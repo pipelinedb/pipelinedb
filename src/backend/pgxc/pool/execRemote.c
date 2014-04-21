@@ -3207,10 +3207,8 @@ DoRemoteMerge(RemoteMergeState mergeState)
 	const char *target = mergeState.targetRelation->relname;
 	int targetLen = strlen(target) + 1; /* we want to send the '\0' */
 	int msglens[handles->dn_conn_count];
-	int tupdesclen;
 	int i;
 	List *tuplesByNode[handles->dn_conn_count];
-	StringInfo rawTupDesc = TupleDescToBytes(mergeState.bufprint);
 	TransactionId gxid = GetCurrentTransactionId();
 	List *nodeslist;
 
@@ -3220,9 +3218,6 @@ DoRemoteMerge(RemoteMergeState mergeState)
 
 		/* Total message length. Length of this field is included */
 		msglens[i] = 4;
-
-		/* tuple description comes with a 4-byte length prefix */
-		msglens[i] += rawTupDesc->len + 4;
 
 		/* we want to include the '\0' */
 		msglens[i] += strlen(target) + 1;
@@ -3301,13 +3296,6 @@ DoRemoteMerge(RemoteMergeState mergeState)
 
 		/* target output relation */
 		appendBinaryStringInfo(&result, target, targetLen);
-
-		/* tuple description length */
-		tupdesclen = htonl(rawTupDesc->len);
-		appendBinaryStringInfo(&result, (char *) &tupdesclen, 4);
-
-		/* tuple description */
-		appendBinaryStringInfo(&result, rawTupDesc->data, rawTupDesc->len);
 
 		foreach(lc, rawtups)
 		{

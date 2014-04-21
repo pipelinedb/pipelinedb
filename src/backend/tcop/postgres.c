@@ -1193,8 +1193,6 @@ exec_merge(StringInfo message)
 {
 	/* name of the continuous view we're merging into */
 	char *cvname = (char *) pq_getmsgstring(message);
-	int tupdesclen = pq_getmsgint(message, 4);
-	char *raw = (char *) pq_getmsgbytes(message, tupdesclen);
 	char *datarow;
 	int rowlen;
 	TupleDesc desc;
@@ -1219,7 +1217,7 @@ exec_merge(StringInfo message)
 
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
-	desc = create_tuple_desc(raw, tupdesclen);
+	desc = RelationNameGetTupleDesc(cvname);
 	cplan = get_merge_plan(cvname, desc, &psrc);
 	slot = MakeSingleTupleTableSlot(desc);
 	store = psrc->store;
