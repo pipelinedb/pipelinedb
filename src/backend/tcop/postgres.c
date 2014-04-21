@@ -54,6 +54,7 @@
 #endif
 #include "executor/tstoreReceiver.h"
 #include "executor/tupletableReceiver.h"
+#include "funcapi.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "libpq/pqsignal.h"
@@ -1110,7 +1111,7 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 	 * Now run the query that retrieves existing tuples to merge this merge request with.
 	 * This query outputs to the tuplestore currently holding the incoming merge tuples.
 	 */
-	portal = CreatePortal("", true, true);
+	portal = CreatePortal("__merge_retrieval__", true, true);
 	portal->visible = false;
 
 	PortalDefineQuery(portal,
@@ -1142,6 +1143,7 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 		tuplestore_puttuple(incoming_merges, entry->tuple);
 }
 
+
 /*
  * sync_merge_results
  *
@@ -1159,7 +1161,6 @@ sync_merge_results(char *cvname, Tuplestorestate *results,
 	foreach_tuple(slot, results)
 	{
 		HeapTupleEntry update;
-
 		slot_getallattrs(slot);
 
 		update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
@@ -1171,7 +1172,7 @@ sync_merge_results(char *cvname, Tuplestorestate *results,
 			HeapTuple updated = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
 					slot->tts_values, slot->tts_isnull, replace_all);
 
-			simple_heap_update(rel, &updated->t_self, updated);
+			simple_heap_update(rel, &update->tuple->t_self, updated);
 		}
 		else
 		{
@@ -1258,7 +1259,7 @@ exec_merge(StringInfo message)
 
 	exec_merge_retrieval(cvname, desc, store, merge_attr, group_clause, merge_targets);
 
-	portal = CreatePortal("", true, true);
+	portal = CreatePortal("__merge__", true, true);
 	portal->visible = false;
 
 	PortalDefineQuery(portal,

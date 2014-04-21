@@ -93,6 +93,8 @@ put_heap_tuple(TupleTableSlot *slot, TupleTableReceiverState *self)
 
 	MemoryContextSwitchTo(oldcxt);
 }
+
+
 /*
  * Receive a tuple from the executor and store it in the tuplestore.
  * This is for the easy case where we don't have to detoast.
@@ -141,6 +143,7 @@ tupletable_receive_detoast(TupleTableSlot *slot, DestReceiver *self)
 				val = PointerGetDatum(heap_tuple_fetch_attr((struct varlena *)
 													  DatumGetPointer(val)));
 				myState->tofree[nfree++] = val;
+				slot->tts_values[i] = val;
 			}
 		}
 
@@ -150,6 +153,7 @@ tupletable_receive_detoast(TupleTableSlot *slot, DestReceiver *self)
 	/*
 	 * Store the physical tuple in a TupleHashTable
 	 */
+
 	put_heap_tuple(slot, myState);
 
 	/* And release any temporary detoasted values */
