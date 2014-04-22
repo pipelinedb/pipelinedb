@@ -500,6 +500,13 @@ bool isPGXCCoordinator = false;
 bool isPGXCDataNode = false;
 
 /*
+ * PipelineDB XXX: merge procs don't behave exactly like a datanode,
+ * or exactly like a coordinator, so we need some way to know globally
+ * if this is a merge proc. This is an ugly way to do it, but it's simple
+ */
+bool isMergeNode = false;
+
+/*
  * While adding a new node to the cluster we need to restore the schema of
  * an existing database to the new node.
  * If the new node is a datanode and we connect directly to it,

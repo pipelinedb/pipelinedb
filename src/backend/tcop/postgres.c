@@ -4657,7 +4657,15 @@ PostgresMain(int argc, char *argv[], const char *username)
 				}
 				break;
 			case '+':			/* merge partial continuous query result */
+					isMergeNode = true;
 					exec_merge(&input_message);
+
+					/*
+					 * Merge nodes should only receive merge requests, so this
+					 * shouldn't matter but technically if we're not executing a
+					 * merge, then we aren't a merge node
+					 */
+					isMergeNode = false;
 					break;
 
 			case 'P':			/* parse */
