@@ -1160,10 +1160,11 @@ sync_merge_results(char *cvname, Tuplestorestate *results,
 
 	foreach_tuple(slot, results)
 	{
-		HeapTupleEntry update;
+		HeapTupleEntry update = NULL;
 		slot_getallattrs(slot);
 
-		update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
+		if (merge_targets)
+			update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
 		if (update)
 		{
 			/*
@@ -1206,7 +1207,7 @@ exec_merge(StringInfo message)
 	Tuplestorestate *merge_output = get_merge_output_store(true);
 	AttrNumber merge_attr = 1;
 	List *group_clause;
-	TupleHashTable merge_targets;
+	TupleHashTable merge_targets = NULL;
 	AttrNumber *cols;
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
@@ -1214,6 +1215,7 @@ exec_merge(StringInfo message)
 	int num_buckets = 1;
 
 	start_xact_command();
+	PushActiveSnapshot(GetTransactionSnapshot());
 
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
@@ -1246,16 +1248,15 @@ exec_merge(StringInfo message)
 			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", num_cols);
 		cols = (AttrNumber *) palloc(sizeof(AttrNumber) * num_cols);
 		cols[0] = merge_attr;
+
 		execTuplesHashPrepare(num_cols, extract_grouping_ops(group_clause), &eq_funcs, &hash_funcs);
 		num_buckets = 1000;
+
+		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
+				sizeof(HeapTupleEntryData), CacheMemoryContext, MessageContext);
+
+		exec_merge_retrieval(cvname, desc, store, merge_attr, group_clause, merge_targets);
 	}
-
-	merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
-			sizeof(HeapTupleEntryData), CacheMemoryContext, MessageContext);
-
-	PushActiveSnapshot(GetTransactionSnapshot());
-
-	exec_merge_retrieval(cvname, desc, store, merge_attr, group_clause, merge_targets);
 
 	portal = CreatePortal("__merge__", true, true);
 	portal->visible = false;
@@ -1285,7 +1286,8 @@ exec_merge(StringInfo message)
 
 	sync_merge_results(cvname, merge_output, slot, merge_attr, merge_targets);
 
-	hash_destroy(merge_targets->hashtab);
+	if (merge_targets)
+		hash_destroy(merge_targets->hashtab);
 
 	finish_xact_command();
 }
