@@ -41,4 +41,6 @@ extern Expr *expression_planner(Expr *expr);
 
 extern bool plan_cluster_use_sort(Oid tableOid, Oid indexOid);
 
+extern int	get_grouping_column_index(Query *parse, TargetEntry *tle);
+
 #endif   /* PLANNER_H */

@@ -85,7 +85,6 @@ static bool choose_hashed_distinct(PlannerInfo *root,
 					   double dNumDistinctRows);
 static List *make_subplanTargetList(PlannerInfo *root, List *tlist,
 					   AttrNumber **groupColIdx, bool *need_tlist_eval);
-static int	get_grouping_column_index(Query *parse, TargetEntry *tle);
 static void locate_grouping_columns(PlannerInfo *root,
 						List *tlist,
 						List *sub_tlist,
@@ -2884,7 +2883,7 @@ make_subplanTargetList(PlannerInfo *root,
  * if it's not a grouping column.  Note: the result is unique because the
  * parser won't make multiple groupClause entries for the same TLE.
  */
-static int
+int
 get_grouping_column_index(Query *parse, TargetEntry *tle)
 {
 	int			colno = 0;
