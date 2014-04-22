@@ -1001,6 +1001,27 @@ get_merge_output_store(bool clear)
 	return merge_output_store;
 }
 
+/*
+ * get_merge_columns
+ *
+ * Given a continuous query, determine the columns in the underlying table
+ * that correspond to the GROUP BY clause of the query
+ */
+static List *
+get_merge_columns(Query *query)
+{
+	List *result = NIL;
+	ListCell *tl;
+	AttrNumber col = 0;
+	foreach(tl, query->targetList)
+	{
+		TargetEntry *tle = (TargetEntry *) lfirst(tl);
+		col++;
+		if (get_grouping_column_index(query, tle) >= 0)
+			result = lcons_int(col, result);
+	}
+	return result;
+}
 
 /*
  * exec_merge_retrieval
@@ -1206,6 +1227,7 @@ exec_merge(StringInfo message)
 	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
 	Tuplestorestate *merge_output = get_merge_output_store(true);
 	AttrNumber merge_attr = 1;
+	List *merge_attrs;
 	List *group_clause;
 	TupleHashTable merge_targets = NULL;
 	AttrNumber *cols;
@@ -1224,6 +1246,9 @@ exec_merge(StringInfo message)
 	slot = MakeSingleTupleTableSlot(desc);
 	store = psrc->store;
 	group_clause = psrc->query->groupClause;
+
+	merge_attrs = get_merge_columns(psrc->query);
+	merge_attr = (AttrNumber) lfirst_int(merge_attrs->head);
 
 	tuplestore_clear(store);
 
