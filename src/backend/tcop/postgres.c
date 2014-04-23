@@ -52,6 +52,7 @@
 #ifdef PGXC
 #include "commands/trigger.h"
 #endif
+#include "events/stream.h"
 #include "executor/tstoreReceiver.h"
 #include "executor/tupletableReceiver.h"
 #include "funcapi.h"
@@ -118,12 +119,6 @@ extern int	optind;
 #ifdef HAVE_INT_OPTRESET
 extern int	optreset;			/* might not be declared by system headers */
 #endif
-
-#include "events/decoder.h"
-#include "utils/rel.h"
-#include "storage/lock.h"
-#include "access/heapam.h"
-#include "utils/builtins.h"
 
 
 /* ----------------
@@ -228,6 +223,9 @@ static Tuplestorestate *merge_output_store;
 
 /* output type of the merge column */
 static Oid merge_output_type;
+
+/* stream connection */
+static EventStream stream;
 
 /* ----------------------------------------------------------------
  *		decls for routines only used in this file
@@ -479,7 +477,8 @@ SocketBackend(StringInfo inBuf)
 		case 'E':				/* execute */
 		case 'H':				/* flush */
 		case 'P':				/* parse */
-		case 'V':
+		case '>':
+		case ']':
 			doing_extended_query_message = true;
 			/* these are only legal in protocol 3 */
 			if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)
@@ -1665,37 +1664,24 @@ exec_simple_query(const char *query_string)
 }
 
 /*
- * exec_emit_event
+ * exec_proxy_events
  *
- * Emit a raw event into a stream. Raw events are decoded from a raw byte array,
- * transformed into a query resembling an INSERT, and inserted into the target stream.
+ * Send events to the appropriate datanodes, where they will be emitted
+ * into the event stream for consumption
+ *
  */
 static void
-exec_emit_event(const char *stream, const char *raw)
+exec_proxy_events(const char *channel, const char *raw)
 {
-	HeapTuple tuple;
-	Relation streamrel;
+	if (!stream || EventStreamNeedsOpen(stream))
+		stream = open_stream();
 
-	pgstat_report_activity(STATE_RUNNING, raw);
+	if (!stream)
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+		errmsg("could not connect to stream")));
 
-	TRACE_POSTGRESQL_QUERY_START(raw);
-
-#ifdef PGXC
-	/*
-	 * By default we do not want Datanodes or client Coordinators to contact GTM directly,
-	 * it should get this information passed down to it.
-	 */
-	if (IS_PGXC_DATANODE || IsConnFromCoord())
-		SetForceXidFromGTM(false);
-#endif
-
-	streamrel = heap_openrv(makeRangeVar(NULL, (char *)stream, -1), NoLock);
-	decode_event(streamrel, raw, &tuple);
-
-	simple_heap_insert(streamrel, tuple);
-	heap_close(streamrel, NoLock);
-
-	TRACE_POSTGRESQL_QUERY_DONE(raw);
+	send_events(stream, NULL);
 }
 
 /*
@@ -5008,18 +4994,23 @@ PostgresMain(int argc, char *argv[], const char *username)
 				}
 				break;
 #endif /* PGXC */
-			case 'V': /* Incoming event */
+			case '>': /* send events to remote nodes */
 				{
-					const char *stream = pq_getmsgstring(&input_message);
+					const char *channel = pq_getmsgstring(&input_message);
 					int len = pq_getmsgint(&input_message, 4);
 					const char *msgbytes = pq_getmsgbytes(&input_message, len);
 					pq_getmsgend(&input_message);
 
 					SetCurrentStatementStartTimestamp();
 
-					exec_emit_event(stream, msgbytes);
+					exec_proxy_events(channel, msgbytes);
 
 					send_ready_for_query = true;
+				}
+				break;
+			case ']': /* receive events */
+				{
+
 				}
 				break;
 			default:
