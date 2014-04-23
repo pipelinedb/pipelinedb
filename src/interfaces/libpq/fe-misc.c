@@ -84,7 +84,7 @@ PQlibVersion(void)
 int
 PQsendEvent(const char *stream, const char *data, size_t len, PGconn *conn)
 {
-	if (pqPutMsgStart('V', false, conn) != 0 ||
+	if (pqPutMsgStart('>', false, conn) != 0 ||
 			pqPuts(stream, conn) ||
 			pqPutInt(len, 4, conn) != 0 ||
 			pqPutMsgBytes(data, len, conn) != 0 ||
