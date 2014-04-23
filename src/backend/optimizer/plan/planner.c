@@ -2431,6 +2431,13 @@ choose_hashed_grouping(PlannerInfo *root,
 	Path		sorted_p;
 
 	/*
+	 * XXX PipelineDB: this is a hack to make aggref handling simpler
+	 * for MERGE requests. See setrefs.c:pgxc_set_agg_references.
+	 */
+	if (parse->cq_is_merge)
+		return TRUE;
+
+	/*
 	 * Executor doesn't support hashed aggregation with DISTINCT or ORDER BY
 	 * aggregates.	(Doing so would imply storing *all* the input values in
 	 * the hash table, and/or running many sorts in parallel, either of which
@@ -2601,6 +2608,13 @@ choose_hashed_distinct(PlannerInfo *root,
 	List	   *needed_pathkeys;
 	Path		hashed_p;
 	Path		sorted_p;
+
+	/*
+	 * XXX PipelineDB: this is a hack to make aggref handling simpler
+	 * for MERGE requests. See setrefs.c:pgxc_set_agg_references.
+	 */
+	if (parse->cq_is_merge)
+		return TRUE;
 
 	/*
 	 * If we have a sortable DISTINCT ON clause, we always use sorting. This
