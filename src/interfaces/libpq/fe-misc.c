@@ -82,11 +82,11 @@ PQlibVersion(void)
  * Returns 0 on success, EOF on error
  */
 int
-PQsendEvent(const char *stream, const char *data, size_t len, PGconn *conn)
+PQsendEvents(const char *stream, const char *data, size_t len, PGconn *conn)
 {
+	PGresult   *result;
 	if (pqPutMsgStart('>', false, conn) != 0 ||
 			pqPuts(stream, conn) ||
-			pqPutInt(len, 4, conn) != 0 ||
 			pqPutMsgBytes(data, len, conn) != 0 ||
 			pqPutMsgEnd(conn) != 0 ||
 			pqFlush(conn) != 0)
@@ -96,7 +96,6 @@ PQsendEvent(const char *stream, const char *data, size_t len, PGconn *conn)
 
 	conn->asyncStatus = PGASYNC_BUSY;
 
-	PGresult   *result;
 	while ((result = PQgetResult(conn)) != NULL)
 	{
 		if (conn->status == CONNECTION_BAD)

@@ -36,11 +36,14 @@ send_events(EventStream stream, List *events)
 	int msglen = 4;
 	foreach(lc, events)
 	{
+		StreamEvent ev = (StreamEvent) lfirst(lc);
 		PGXCNodeHandle *handle = stream->handles[i % stream->handle_count];
 		handle->outBuffer[handle->outEnd++] = ']';
-		msglen = htonl(msglen);
+		msglen = htonl(ev->len + 4);
 		memcpy(handle->outBuffer + handle->outEnd, &msglen, 4);
 		handle->outEnd += 4;
+		memcpy(handle->outBuffer + handle->outEnd, ev->raw, ev->len);
+		handle->outEnd += ev->len;
 
 		pgxc_node_flush(handle);
 	}

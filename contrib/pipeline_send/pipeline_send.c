@@ -3,6 +3,7 @@
 #include "libpq-fe.h"
 #include "libpq-int.h"
 
+#define MAX_BUF_SIZE 1024 * 1024
 
 static void usage(void);
 
@@ -27,16 +28,13 @@ int main(int argc, char* argv[])
 	char connectstr[64];
 	char *line = NULL;
   int status = 0;
-	int bytes = 0;
 	int len = 0;
-	int events = 0;
-	float eps;
-	float bps;
-	float elapsed;
+	char buf[MAX_BUF_SIZE];
+	int pos;
+	size_t buf_size;
 	PGconn *conn;
 	PGresult *res;
 	size_t size;
-	clock_t start;
 
 	if (argc < 6)
 	{
@@ -75,34 +73,43 @@ int main(int argc, char* argv[])
   	exit(1);
   }
 
+  pos = 0;
+  buf_size = 0;
+
 	/* Read in event data from stdin. Each line is a separate event */
-  start = clock();
 	while (getline(&line, &size, stdin) > 0)
 	{
+		int nlen;
 		len = strlen(line);
-		bytes += len;
-		events++;
-
-		/* Trim \n */
-		line[len - 1] = '\0';
-		if (PQsendEvent(stream, line, len, conn) != 0)
+		if (buf_size + len > MAX_BUF_SIZE)
 		{
-			printf("error sending %s\n", line);
+			/* flush buffer to server */
+			if (PQsendEvents(stream, buf, buf_size, conn) != 0)
+				printf("error sending %s\n", line);
+
+			/* reset buffer */
+			memset(buf, 0, MAX_BUF_SIZE);
+			pos = 0;
+			buf_size = 0;
 		}
+
+		nlen = htonl(len);
+		memcpy(buf + pos, &nlen, 4);
+		pos += 4;
+		memcpy(buf + pos, line, len);
+		pos += len;
+		buf_size += 4 + len;
 	}
-	elapsed = (clock() - start) / (float)CLOCKS_PER_SEC;
+
+	if (PQsendEvents(stream, buf, buf_size, conn) != 0)
+		printf("error sending %s\n", line);
+
 	res = PQexec(conn, "COMMIT");
 	if (PQresultStatus(res) != PGRES_COMMAND_OK)
 	{
 		printf("error committing transaction\n");
 		status = 1;
 	}
-	eps = events / elapsed;
-	bps = bytes / elapsed;
-
-	printf("%d events, %d bytes in %.2f s\n", events, bytes, elapsed);
-	printf("%.2f events/s\n", eps);
-	printf("%.2f bytes/s\n", bps);
 
 	PQfinish(conn);
 	free(line);
