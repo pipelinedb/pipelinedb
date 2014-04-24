@@ -1667,14 +1667,18 @@ exec_simple_query(const char *query_string)
  * exec_proxy_events
  *
  * Send events to the appropriate datanodes, where they will be emitted
- * into the event stream for consumption
+ * into the event stream for consumption (only run from a coordinator)
  *
  */
 static void
 exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
 	List *events = NIL;
-	MemoryContext oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+	MemoryContext proxycontext = AllocSetContextCreate(TopMemoryContext,
+			"ProxyEventsContext", ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE, ALLOCSET_DEFAULT_MAXSIZE);
+
+	MemoryContext oldcontext = MemoryContextSwitchTo(proxycontext);
 
 	if (!stream || EventStreamNeedsOpen(stream))
 		stream = open_stream();
@@ -1695,7 +1699,27 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 	pq_getmsgend(message);
 
 	send_events(stream, encoding, channel, events);
+
 	MemoryContextSwitchTo(oldcontext);
+	MemoryContextDelete(proxycontext);
+}
+
+/*
+ * exec_receive_events
+ *
+ * Emit received events into the events stream (only run on datanodes)
+ */
+static void
+exec_receive_events(const char *encoding, const char *channel, StringInfo message)
+{
+	while (message->cursor < message->len)
+	{
+		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
+		ev->len = pq_getmsgint(message, 4);
+		ev->raw = (char *) palloc(ev->len);
+		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
+	}
+	pq_getmsgend(message);
 }
 
 /*
@@ -5037,6 +5061,8 @@ PostgresMain(int argc, char *argv[], const char *username)
 
 					encoding = pq_getmsgstring(&input_message);
 					channel = pq_getmsgstring(&input_message);
+
+					exec_receive_events(encoding, channel, &input_message);
 				}
 				break;
 			default:
