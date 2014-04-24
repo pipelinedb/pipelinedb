@@ -1671,8 +1671,10 @@ exec_simple_query(const char *query_string)
  *
  */
 static void
-exec_proxy_events(const char *channel, const char *raw)
+exec_proxy_events(const char *channel, StringInfo message)
 {
+	List *events = NIL;
+
 	if (!stream || EventStreamNeedsOpen(stream))
 		stream = open_stream();
 
@@ -1681,7 +1683,16 @@ exec_proxy_events(const char *channel, const char *raw)
 				(errcode(ERRCODE_CONNECTION_EXCEPTION),
 		errmsg("could not connect to stream")));
 
-	send_events(stream, NULL);
+	while (message->cursor < message->len)
+	{
+		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
+		ev->len = pq_getmsgint(message, 4);
+		ev->raw = (char *) pq_getmsgbytes(message, ev->len);
+		events = lcons(ev, events);
+	}
+	pq_getmsgend(message);
+
+	send_events(stream, events);
 }
 
 /*
@@ -4997,14 +5008,7 @@ PostgresMain(int argc, char *argv[], const char *username)
 			case '>': /* send events to remote nodes */
 				{
 					const char *channel = pq_getmsgstring(&input_message);
-					int len = pq_getmsgint(&input_message, 4);
-					const char *msgbytes = pq_getmsgbytes(&input_message, len);
-					pq_getmsgend(&input_message);
-
-					SetCurrentStatementStartTimestamp();
-
-					exec_proxy_events(channel, msgbytes);
-
+					exec_proxy_events(channel, &input_message);
 					send_ready_for_query = true;
 				}
 				break;

@@ -160,7 +160,7 @@ PQconnectStartParams      157
 PQping                    158
 PQpingParams              159
 PQlibVersion              160
-PQsendEvent								161
+PQsendEvents							161
 PQsetRowProcessor         162
 PQgetRowProcessor         163
 PQskipResult              164

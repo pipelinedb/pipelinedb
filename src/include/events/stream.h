@@ -36,7 +36,10 @@ typedef EventStreamData *EventStream;
 
 typedef struct EventData
 {
-
+	/* length of raw event */
+	int len;
+	/* raw encoded event data */
+	char *raw;
 } StreamEventData;
 
 typedef StreamEventData *StreamEvent;
