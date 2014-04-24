@@ -23,6 +23,7 @@ open_stream(void)
 
 	stream->handles = handles->datanode_handles;
 	stream->state = STREAM_STATE_OPEN;
+	stream->handle_count = handles->dn_conn_count;
 
 	return stream;
 }
@@ -37,7 +38,7 @@ send_events(EventStream stream, List *events)
 	foreach(lc, events)
 	{
 		StreamEvent ev = (StreamEvent) lfirst(lc);
-		PGXCNodeHandle *handle = stream->handles[i % stream->handle_count];
+		PGXCNodeHandle *handle = stream->handles[i++ % stream->handle_count];
 		handle->outBuffer[handle->outEnd++] = ']';
 		msglen = htonl(ev->len + 4);
 		memcpy(handle->outBuffer + handle->outEnd, &msglen, 4);
