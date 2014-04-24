@@ -11,7 +11,7 @@ static void
 usage(void)
 {
 	printf("Usage:\n\
-  pipeline_send <host> <port> <database name> <user> <stream>\n");
+  pipeline_send <host> <port> <database name> <user> <encoding> <stream>\n");
 }
 
 
@@ -23,6 +23,7 @@ int main(int argc, char* argv[])
 	char *host;
 	char *dbname;
 	char *user;
+	char *encoding;
 	char *stream;
 	char *port;
 	char connectstr[64];
@@ -36,7 +37,7 @@ int main(int argc, char* argv[])
 	PGresult *res;
 	size_t size;
 
-	if (argc < 6)
+	if (argc < 7)
 	{
 		usage();
 		exit(1);
@@ -46,7 +47,8 @@ int main(int argc, char* argv[])
 	port = argv[2];
 	dbname = argv[3];
 	user = argv[4];
-	stream = argv[5];
+	encoding = argv[5];
+	stream = argv[6];
 	sprintf(connectstr, "host='%s' dbname='%s' user='%s' port=%s", host, dbname, user, port);
 	conn = PQconnectdb(connectstr);
 	if (conn == NULL)
@@ -84,7 +86,7 @@ int main(int argc, char* argv[])
 		if (buf_size + len > MAX_BUF_SIZE)
 		{
 			/* flush buffer to server */
-			if (PQsendEvents(stream, buf, buf_size, conn) != 0)
+			if (PQsendEvents(encoding, stream, buf, buf_size, conn) != 0)
 				printf("error sending %s\n", line);
 
 			/* reset buffer */
@@ -101,7 +103,7 @@ int main(int argc, char* argv[])
 		buf_size += 4 + len;
 	}
 
-	if (PQsendEvents(stream, buf, buf_size, conn) != 0)
+	if (PQsendEvents(encoding, stream, buf, buf_size, conn) != 0)
 		printf("error sending %s\n", line);
 
 	res = PQexec(conn, "COMMIT");

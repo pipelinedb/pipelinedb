@@ -1671,7 +1671,7 @@ exec_simple_query(const char *query_string)
  *
  */
 static void
-exec_proxy_events(const char *channel, StringInfo message)
+exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
 	List *events = NIL;
 	MemoryContext oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
@@ -1694,7 +1694,7 @@ exec_proxy_events(const char *channel, StringInfo message)
 	}
 	pq_getmsgend(message);
 
-	send_events(stream, events);
+	send_events(stream, encoding, channel, events);
 	MemoryContextSwitchTo(oldcontext);
 }
 
@@ -5010,6 +5010,7 @@ PostgresMain(int argc, char *argv[], const char *username)
 #endif /* PGXC */
 			case '>': /* send events to remote nodes */
 				{
+					const char *encoding;
 					const char *channel;
 
 					if (!IS_PGXC_COORDINATOR)
@@ -5017,17 +5018,25 @@ PostgresMain(int argc, char *argv[], const char *username)
 								(errcode(ERRCODE_PROTOCOL_VIOLATION),
 								 errmsg("events must be sent through coordinator nodes")));
 
+					encoding = pq_getmsgstring(&input_message);
 					channel = pq_getmsgstring(&input_message);
-					exec_proxy_events(channel, &input_message);
+
+					exec_proxy_events(encoding, channel, &input_message);
 					send_ready_for_query = true;
 				}
 				break;
 			case ']': /* receive events on remote node */
 				{
+					const char *encoding;
+					const char *channel;
+
 					if (!IS_PGXC_DATANODE)
 						ereport(FATAL,
 								(errcode(ERRCODE_PROTOCOL_VIOLATION),
 								 errmsg("events can only be received by datanodes")));
+
+					encoding = pq_getmsgstring(&input_message);
+					channel = pq_getmsgstring(&input_message);
 				}
 				break;
 			default:

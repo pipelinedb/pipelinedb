@@ -31,17 +31,20 @@ open_stream(void)
 
 
 void
-send_events(EventStream stream, List *events)
+send_events(EventStream stream, const char *encoding,
+		const char *channel, List *events)
 {
+	List *events_by_node[stream->handle_count];
 	ListCell *lc;
 	int i = 0;
-
-	List *events_by_node[stream->handle_count];
 	int lengths[stream->handle_count];
+	int encodinglen = strlen(encoding) + 1;
+	int channellen = strlen(channel) + 1;
+
 	for (i=0; i<stream->handle_count; i++)
 	{
 		events_by_node[i] = NIL;
-		lengths[i] = 0;
+		lengths[i] = 4 + encodinglen + channellen;
 	}
 
 	foreach(lc, events)
@@ -56,10 +59,17 @@ send_events(EventStream stream, List *events)
 	{
 		PGXCNodeHandle *handle = stream->handles[i];
 		int msglen;
+
 		handle->outBuffer[handle->outEnd++] = ']';
 		msglen = htonl(lengths[i]);
 		memcpy(handle->outBuffer + handle->outEnd, &msglen, 4);
 		handle->outEnd += 4;
+
+		memcpy(handle->outBuffer + handle->outEnd, encoding, encodinglen);
+		handle->outEnd += encodinglen;
+
+		memcpy(handle->outBuffer + handle->outEnd, channel, channellen);
+		handle->outEnd += channellen;
 	}
 
 	for (i=0; i<stream->handle_count; i++)
@@ -82,6 +92,10 @@ send_events(EventStream stream, List *events)
 
 		pgxc_node_flush(handle);
 	}
+
+	// foreach events_by_datanode
+		// wait for responses
+		// responses come from writing to the datanode procs' global conn
 }
 
 void

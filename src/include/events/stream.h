@@ -45,7 +45,8 @@ typedef struct EventData
 typedef StreamEventData *StreamEvent;
 
 extern EventStream open_stream(void);
-extern void send_events(EventStream stream, List *events);
+extern void send_events(EventStream stream, const char *encoding,
+		const char *channel, List *events);
 extern void close_stream(EventStream stream);
 
 #endif
