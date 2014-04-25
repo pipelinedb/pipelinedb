@@ -39,8 +39,6 @@ extern bool EnforceTwoPhaseCommit;
 #define RESPONSE_DATAROW 3
 #define RESPONSE_COPY 4
 #define RESPONSE_BARRIER_OK 5
-#define RESPONSE_COMPLETE_BATCH 6
-#define RESPONSE_BEGIN_BATCH 7
 
 typedef enum
 {
