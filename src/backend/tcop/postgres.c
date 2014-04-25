@@ -227,6 +227,9 @@ static Oid merge_output_type;
 /* stream connection */
 static EventStream stream;
 
+/* memory context for event processing */
+static MemoryContext EventContext;
+
 /* ----------------------------------------------------------------
  *		decls for routines only used in this file
  * ----------------------------------------------------------------
@@ -1674,14 +1677,13 @@ static void
 exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
 	List *events = NIL;
-	MemoryContext proxycontext = AllocSetContextCreate(TopMemoryContext,
-			"ProxyEventsContext", ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE, ALLOCSET_DEFAULT_MAXSIZE);
+	MemoryContext oldcontext;
 
-	MemoryContext oldcontext = MemoryContextSwitchTo(proxycontext);
-
+	/* this needs to be opened outside of the EventContext because it's reused */
 	if (!stream || EventStreamNeedsOpen(stream))
 		stream = open_stream();
+
+	oldcontext = MemoryContextSwitchTo(EventContext);
 
 	if (!stream)
 		ereport(ERROR,
@@ -1701,7 +1703,7 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 	send_events(stream, encoding, channel, events);
 
 	MemoryContextSwitchTo(oldcontext);
-	MemoryContextDelete(proxycontext);
+	MemoryContextReset(EventContext);
 }
 
 /*
@@ -4447,6 +4449,17 @@ PostgresMain(int argc, char *argv[], const char *username)
 										   ALLOCSET_DEFAULT_MINSIZE,
 										   ALLOCSET_DEFAULT_INITSIZE,
 										   ALLOCSET_DEFAULT_MAXSIZE);
+
+	/*
+	 * Create the memory context that is used for event processing
+	 *
+	 * EventContext is reset after each request that uses it
+	 */
+	EventContext = AllocSetContextCreate(TopMemoryContext,
+											"EventContext",
+											ALLOCSET_DEFAULT_MINSIZE,
+											ALLOCSET_DEFAULT_INITSIZE,
+											ALLOCSET_DEFAULT_MAXSIZE);
 
 	/*
 	 * Remember stand-alone backend startup time

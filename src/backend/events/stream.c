@@ -62,7 +62,7 @@ send_events(EventStream stream, const char *encoding,
 	/*
 	 * Here we partition the events by datanode.
 	 * We also need to know the total message length for each message we're
-	 * going to send to each datanodes
+	 * going to send to each datanode
 	 */
 	foreach(lc, events)
 	{
