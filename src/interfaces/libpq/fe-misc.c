@@ -82,10 +82,12 @@ PQlibVersion(void)
  * Returns 0 on success, EOF on error
  */
 int
-PQsendEvents(const char *stream, const char *data, size_t len, PGconn *conn)
+PQsendEvents(const char *encoding, const char *stream, const char *data,
+		size_t len, PGconn *conn)
 {
 	PGresult   *result;
 	if (pqPutMsgStart('>', false, conn) != 0 ||
+			pqPuts(encoding, conn) ||
 			pqPuts(stream, conn) ||
 			pqPutMsgBytes(data, len, conn) != 0 ||
 			pqPutMsgEnd(conn) != 0 ||

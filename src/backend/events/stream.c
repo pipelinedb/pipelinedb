@@ -15,6 +15,13 @@
 #include "pgxc/pgxcnode.h"
 #include "pgxc/locator.h"
 
+
+/*
+ * open_stream
+ *
+ * Opens the necessary connections to interact with a
+ * stream across all datanodes
+ */
 EventStream
 open_stream(void)
 {
@@ -29,27 +36,92 @@ open_stream(void)
 }
 
 
+/*
+ * send_events
+ *
+ * Partitions raw events by datanode and sends each batch of partitioned
+ * events to their respective datanodes
+ */
 void
-send_events(EventStream stream, List *events)
+send_events(EventStream stream, const char *encoding,
+		const char *channel, List *events)
 {
+	List *events_by_node[stream->handle_count];
 	ListCell *lc;
 	int i = 0;
-	int msglen = 4;
+	int lengths[stream->handle_count];
+	int encodinglen = strlen(encoding) + 1;
+	int channellen = strlen(channel) + 1;
+
+	for (i=0; i<stream->handle_count; i++)
+	{
+		events_by_node[i] = NIL;
+		lengths[i] = 4 + encodinglen + channellen;
+	}
+
+	/*
+	 * Here we partition the events by datanode.
+	 * We also need to know the total message length for each message we're
+	 * going to send to each datanode
+	 */
 	foreach(lc, events)
 	{
+		int node = i++ % stream->handle_count;
 		StreamEvent ev = (StreamEvent) lfirst(lc);
-		PGXCNodeHandle *handle = stream->handles[i++ % stream->handle_count];
+		events_by_node[node] = lcons(ev, events_by_node[node]);
+		lengths[node] += ev->len + 4;
+	}
+
+	/* build each message prefix  */
+	for (i=0; i<stream->handle_count; i++)
+	{
+		PGXCNodeHandle *handle = stream->handles[i];
+		int msglen;
+
 		handle->outBuffer[handle->outEnd++] = ']';
-		msglen = htonl(ev->len + 4);
+		msglen = htonl(lengths[i]);
 		memcpy(handle->outBuffer + handle->outEnd, &msglen, 4);
 		handle->outEnd += 4;
-		memcpy(handle->outBuffer + handle->outEnd, ev->raw, ev->len);
-		handle->outEnd += ev->len;
+
+		memcpy(handle->outBuffer + handle->outEnd, encoding, encodinglen);
+		handle->outEnd += encodinglen;
+
+		memcpy(handle->outBuffer + handle->outEnd, channel, channellen);
+		handle->outEnd += channellen;
+	}
+
+	/* now serialize each event to each datanode's message buffer, and flush */
+	for (i=0; i<stream->handle_count; i++)
+	{
+		List *evs = events_by_node[i];
+		PGXCNodeHandle *handle = stream->handles[i];
+		foreach(lc, evs)
+		{
+			int msglen;
+			StreamEvent ev = (StreamEvent) lfirst(lc);
+
+			ensure_out_buffer_capacity(handle->outEnd + ev->len + 4, handle);
+
+			msglen = htonl(ev->len);
+			memcpy(handle->outBuffer + handle->outEnd, &msglen, 4);
+			handle->outEnd += 4;
+			memcpy(handle->outBuffer + handle->outEnd, ev->raw, ev->len);
+			handle->outEnd += ev->len;
+		}
 
 		pgxc_node_flush(handle);
 	}
+
+	// foreach events_by_datanode
+		// wait for responses
+		// responses come from writing to the datanode procs' global conn
 }
 
+/*
+ * close_stream
+ *
+ * Closes datanode connections and cleans up stream state
+ */
 void
 close_stream(EventStream stream)
 {
