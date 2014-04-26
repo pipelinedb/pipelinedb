@@ -45,6 +45,8 @@ typedef struct EventData
 typedef StreamEventData *StreamEvent;
 
 extern EventStream open_stream(void);
+extern int handle_send_events_response(PGXCNodeHandle *conn, int expected);
+extern int respond_send_events(int numevents);
 extern void send_events(EventStream stream, const char *encoding,
 		const char *channel, List *events);
 extern void close_stream(EventStream stream);
