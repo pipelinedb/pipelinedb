@@ -19,6 +19,11 @@
 #include "pgxc/execRemote.h"
 #include "storage/ipc.h"
 
+#define SEND_EVENTS_RESPONSE_COMPLETE 0
+#define SEND_EVENTS_RESPONSE_MISMATCH 1
+#define SEND_EVENTS_RESPONSE_FAILED	2
+
+
 /*
  * open_stream
  *
@@ -65,7 +70,7 @@ respond_send_events(int numevents)
  *
  * Waits for a response from a datanode after sending it events
  */
-int
+static int
 handle_send_events_response(PGXCNodeHandle *conn, int expected)
 {
 	int msg_len;
@@ -102,12 +107,22 @@ handle_send_events_response(PGXCNodeHandle *conn, int expected)
 			case '#':
 				{
 					int numreceived = pq_getmsgint(&buf, 4);
-					return 0;
+					if (numreceived == expected)
+					{
+						return SEND_EVENTS_RESPONSE_COMPLETE;
+					}
+					else
+					{
+						ereport(WARNING,
+								(errcode(ERRCODE_WARNING),
+										errmsg("datanode expected %d events but received %d events", expected, numreceived)));
+						return SEND_EVENTS_RESPONSE_MISMATCH;
+					}
 				}
 		}
 	}
 
-	return 0;
+	return SEND_EVENTS_RESPONSE_FAILED;
 }
 
 /*
@@ -116,7 +131,7 @@ handle_send_events_response(PGXCNodeHandle *conn, int expected)
  * Partitions raw events by datanode and sends each batch of partitioned
  * events to their respective datanodes
  */
-void
+int
 send_events(EventStream stream, const char *encoding,
 		const char *channel, List *events)
 {
@@ -126,6 +141,7 @@ send_events(EventStream stream, const char *encoding,
 	int lengths[stream->handle_count];
 	int encodinglen = strlen(encoding) + 1;
 	int channellen = strlen(channel) + 1;
+	int result = 0;
 
 	for (i=0; i<stream->handle_count; i++)
 	{
@@ -205,8 +221,10 @@ send_events(EventStream stream, const char *encoding,
 	{
 		PGXCNodeHandle *conn = stream->handles[i];
 		pgxc_node_receive(1, &conn, NULL);
-		handle_send_events_response(conn, list_length(events_by_node[i]));
+		result |= handle_send_events_response(conn, list_length(events_by_node[i]));
 	}
+
+	return result;
 }
 
 /*
