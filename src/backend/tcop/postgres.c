@@ -1685,11 +1685,6 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 
 	oldcontext = MemoryContextSwitchTo(EventContext);
 
-	if (!stream)
-		ereport(ERROR,
-				(errcode(ERRCODE_CONNECTION_EXCEPTION),
-		errmsg("could not connect to stream")));
-
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
@@ -1700,7 +1695,15 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 	}
 	pq_getmsgend(message);
 
-	send_events(stream, encoding, channel, events);
+	if (send_events(stream, encoding, channel, events))
+	{
+		MemoryContextSwitchTo(oldcontext);
+		MemoryContextReset(EventContext);
+
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+						errmsg("failed to proxy events to datanodes")));
+	}
 
 	MemoryContextSwitchTo(oldcontext);
 	MemoryContextReset(EventContext);
@@ -1714,14 +1717,23 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 static void
 exec_receive_events(const char *encoding, const char *channel, StringInfo message)
 {
+	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
+	List *events = NIL;
+
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
+		events = lcons(ev, events);
 	}
 	pq_getmsgend(message);
+
+	respond_send_events(list_length(events));
+
+	MemoryContextSwitchTo(oldcontext);
+	MemoryContextReset(EventContext);
 }
 
 /*
