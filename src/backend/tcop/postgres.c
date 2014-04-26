@@ -1677,13 +1677,7 @@ static void
 exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
 	List *events = NIL;
-	MemoryContext oldcontext;
-
-	/* this needs to be opened outside of the EventContext because it's reused */
-	if (!stream || EventStreamNeedsOpen(stream))
-		stream = open_stream();
-
-	oldcontext = MemoryContextSwitchTo(EventContext);
+	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
 
 	while (message->cursor < message->len)
 	{
@@ -5069,6 +5063,9 @@ PostgresMain(int argc, char *argv[], const char *username)
 
 					encoding = pq_getmsgstring(&input_message);
 					channel = pq_getmsgstring(&input_message);
+
+					if (!stream || EventStreamNeedsOpen(stream))
+						stream = open_stream();
 
 					exec_proxy_events(encoding, channel, &input_message);
 					send_ready_for_query = true;
