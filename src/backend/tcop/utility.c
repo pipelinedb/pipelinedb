@@ -647,6 +647,11 @@ standard_ProcessUtility(Node *parsetree,
 				}
 			}
 			break;
+		case T_CreateEncodingStmt:
+			{
+				elog(LOG, "CREATE ENCODING");
+			}
+			break;
 		case T_CreateStmt:
 		case T_CreateForeignTableStmt:
 			{
@@ -3077,7 +3082,9 @@ CreateCommandTag(Node *parsetree)
 		case T_CreateContinuousViewStmt:
 			tag = "CREATE CONTINUOUS VIEW";
 			break;
-
+		case T_CreateEncodingStmt:
+			tag = "CREATE ENCODING";
+			break;
 		case T_CreateTableAsStmt:
 			if (((CreateTableAsStmt *) parsetree)->is_select_into)
 				tag = "SELECT INTO";

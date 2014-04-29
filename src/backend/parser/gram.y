@@ -212,8 +212,8 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 		AlterDefaultPrivilegesStmt DefACLAction
 		AnalyzeStmt CleanConnStmt ClosePortalStmt ClusterStmt CommentStmt
 		ConstraintsSetStmt CopyStmt CreateAsStmt CreateCastStmt
-		CreateDomainStmt CreateExtensionStmt CreateGroupStmt CreateOpClassStmt
-		CreateOpFamilyStmt AlterOpFamilyStmt CreatePLangStmt
+		CreateDomainStmt CreateEncodingStmt CreateExtensionStmt CreateGroupStmt
+		CreateOpClassStmt CreateOpFamilyStmt AlterOpFamilyStmt CreatePLangStmt
 		CreateSchemaStmt CreateSeqStmt CreateStmt CreateTableSpaceStmt
 		CreateFdwStmt CreateForeignServerStmt CreateForeignTableStmt
 		CreateAssertStmt CreateTrigStmt
@@ -529,7 +529,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 /* PGXC_END */
 	DROP
 
-	EACH ELSE ENABLE_P ENCODING ENCRYPTED END_P ENUM_P ESCAPE EXCEPT
+	EACH ELSE ENABLE_P ENCODING ENCRYPTED END_P ENUM_P ESCAPE EVENT EXCEPT
 	EXCLUDE EXCLUDING EXCLUSIVE EXECUTE EXISTS EXPLAIN
 	EXTENSION EXTERNAL EXTRACT
 
@@ -737,6 +737,7 @@ stmt :
 			| CreateCastStmt
 			| CreateConversionStmt
 			| CreateDomainStmt
+			| CreateEncodingStmt
 			| CreateExtensionStmt
 			| CreateFdwStmt
 			| CreateForeignServerStmt
@@ -2535,6 +2536,25 @@ copy_generic_opt_arg_list_item:
 					$$ = (Node *)s;
 			  }
 		;
+
+/*****************************************************************************
+ *
+ * CREATE EVENT ENCODING encoding_name
+ *
+ * PipelineDB
+ *
+ * Creates an encoding that can be used to figure out how to decode raw events
+ *
+ *****************************************************************************/
+ CreateEncodingStmt: CREATE ENCODING qualified_name '(' OptTableElementList ')'
+				OptWith
+					{
+						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
+						n->name = $3;
+						n->args = $7;
+						$$ = (Node *)n;
+					}
+			;	
 
 /*****************************************************************************
  *
@@ -12779,6 +12799,7 @@ unreserved_keyword:
 			| ENCODING
 			| ENCRYPTED
 			| ENUM_P
+			| EVENT
 			| ESCAPE
 			| EXCLUDE
 			| EXCLUDING

@@ -2766,4 +2766,11 @@ typedef struct DeactivateContinuousViewStmt
 	RangeVar   *name; /* name of query to deactivate */
 } DeactivateContinuousViewStmt;
 
+typedef struct CreateEncodingStmt
+{
+	NodeTag		type;
+	RangeVar	*name;
+	List			*args;
+} CreateEncodingStmt;
+
 #endif   /* PARSENODES_H */

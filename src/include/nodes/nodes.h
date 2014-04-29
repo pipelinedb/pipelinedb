@@ -304,6 +304,7 @@ typedef enum NodeTag
 	T_AlterTableCmd,
 	T_AlterDomainStmt,
 	T_CreateContinuousViewStmt,
+	T_CreateEncodingStmt,
 	T_SetOperationStmt,
 	T_GrantStmt,
 	T_GrantRoleStmt,
