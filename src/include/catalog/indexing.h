@@ -331,6 +331,9 @@ DECLARE_UNIQUE_INDEX(pg_range_rngtypid_index, 3542, on pg_range using btree(rngt
 DECLARE_UNIQUE_INDEX(pipeline_queries_name_index, 4243, on pipeline_queries using btree(name name_ops));
 #define PipelineQueriesNameIndexId					4243
 
+DECLARE_UNIQUE_INDEX(pipeline_encoding_name_index, 4245, on pipeline_encoding using btree(name name_ops));
+#define PipelineEncodingNameIndexId					4245
+
 /* last step of initialization script: build the indexes declared above */
 BUILD_INDICES
 

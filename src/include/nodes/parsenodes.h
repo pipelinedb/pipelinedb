@@ -2770,6 +2770,7 @@ typedef struct CreateEncodingStmt
 {
 	NodeTag		type;
 	RangeVar	*name;
+	RangeVar 	*decodedby;
 	List			*args;
 } CreateEncodingStmt;
 

@@ -22,6 +22,7 @@
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "catalog/namespace.h"
+#include "catalog/pipeline_encoding_fn.h"
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "catalog/toasting.h"
@@ -649,7 +650,14 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 		case T_CreateEncodingStmt:
 			{
-				elog(LOG, "CREATE ENCODING");
+				List *remote;
+				CreateEncoding((CreateEncodingStmt *) parsetree);
+				remote = AddRemoteQueryNode(NIL, queryString, EXEC_ON_ALL_NODES, false);
+				if (remote)
+				{
+					Node *stmt = lfirst(remote->head);
+					ProcessUtility(stmt, queryString, params, false, None_Receiver, true, NULL);
+				}
 			}
 			break;
 		case T_CreateStmt:

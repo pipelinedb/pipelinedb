@@ -31,7 +31,7 @@
  * Creates a table for backing the result of the continuous query,
  * and stores the query in a catalog table.
  */
-extern void
+void
 CreateContinuousView(CreateContinuousViewStmt *stmt)
 {
 	CreateStmt *create_stmt;
@@ -142,7 +142,7 @@ CreateContinuousView(CreateContinuousViewStmt *stmt)
  * Drops the continuous view's underlying table and query row in
  * the pipeline_queries catalog table.
  */
-extern void
+void
 DropContinuousView(DropStmt *stmt)
 {
 
@@ -154,7 +154,7 @@ DropContinuousView(DropStmt *stmt)
  * Registers a continuous query. This is essentially a matter of putting
  * it in the pipeline_queries catalog table and marking it as inactive.
  */
-extern void
+void
 RegisterQuery(RangeVar *name, const char *rawquery)
 {
 	/*
@@ -198,7 +198,7 @@ RegisterQuery(RangeVar *name, const char *rawquery)
  * is already active, it will be re-activated with whatever the current
  * query payload is.
  */
-extern void
+void
 ActivateQuery(RangeVar *name)
 {
 //	SetQueryState(name, PIPELINE_QUERY_STATE_ACTIVE);
@@ -211,7 +211,7 @@ ActivateQuery(RangeVar *name)
  * Deactivates a REGISTERed and ACTIVE continuous query. If the query isn't
  * ACTIVE, this is a noop.
  */
-extern void
+void
 DeactivateQuery(RangeVar *name)
 {
 //	SetQueryState(name, PIPELINE_QUERY_STATE_INACTIVE);

@@ -522,7 +522,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 	CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE CURRENT_SCHEMA
 	CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER CURSOR CYCLE
 
-	DATA_P DATABASE DAY_P DEACTIVATE DEALLOCATE DEC DECIMAL_P DECLARE DEFAULT DEFAULTS
+	DATA_P DATABASE DAY_P DEACTIVATE DEALLOCATE DEC DECIMAL_P DECLARE DECODED DEFAULT DEFAULTS
 	DEFERRABLE DEFERRED DEFINER DELETE_P DELIMITER DELIMITERS DESC
 /* PGXC_BEGIN */
 	DICTIONARY DIRECT DISABLE_P DISCARD DISTINCT DISTRIBUTE DO DOCUMENT_P DOMAIN_P DOUBLE_P
@@ -2547,11 +2547,18 @@ copy_generic_opt_arg_list_item:
  *
  *****************************************************************************/
  CreateEncodingStmt: CREATE ENCODING qualified_name '(' OptTableElementList ')'
-				OptWith
 					{
 						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
 						n->name = $3;
-						n->args = $7;
+						$$ = (Node *)n;
+					}
+				| CREATE ENCODING qualified_name '(' OptTableElementList ')'
+				DECODED BY qualified_name OptWith
+					{
+						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
+						n->name = $3;
+						n->decodedby = $9;
+						n->args = $10;
 						$$ = (Node *)n;
 					}
 			;	
@@ -12777,6 +12784,7 @@ unreserved_keyword:
 			| DAY_P
 			| DEALLOCATE
 			| DECLARE
+			| DECODED
 			| DEFAULTS
 			| DEFERRED
 			| DEFINER
@@ -12799,7 +12807,6 @@ unreserved_keyword:
 			| ENCODING
 			| ENCRYPTED
 			| ENUM_P
-			| EVENT
 			| ESCAPE
 			| EXCLUDE
 			| EXCLUDING
