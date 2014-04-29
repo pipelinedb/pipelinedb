@@ -12,6 +12,7 @@
 
 #include "access/heapam.h"
 #include "catalog/indexing.h"
+#include "catalog/namespace.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_encoding.h"
 #include "catalog/pipeline_encoding_fn.h"
@@ -55,15 +56,10 @@ CreateEncoding(CreateEncodingStmt *stmt)
 	values[Anum_pipeline_encoding_name - 1] = NameGetDatum(&name);
 	nulls[Anum_pipeline_encoding_name - 1] = false;
 
-	if (stmt->decodedby)
-	{
-		// need to lookup oid of fn
-		Oid decodeoid = 42;
-
-		values[Anum_pipeline_encoding_decodedby - 1] = decodeoid;
-		nulls[Anum_pipeline_encoding_decodedby - 1] = false;
-	}
-
+	/*
+	 * Here we save two parallel arrays of argument names and values
+	 * that will be passed to the decode function on each invocation
+	 */
 	if (stmt->args)
 	{
 		int numargs = list_length(stmt->args);
@@ -81,15 +77,38 @@ CreateEncoding(CreateEncodingStmt *stmt)
 			i++;
 		}
 
+		/* {arg,names,go,here} */
 		namearr = construct_array(argnames, numargs, TEXTOID, -1, false, 'i');
 		values[Anum_pipeline_encoding_decodedbyargnames - 1] = PointerGetDatum(namearr);
 		nulls[Anum_pipeline_encoding_decodedbyargnames - 1] = false;
 
+		/* {"arg","values","go","here"} */
 		valarr = construct_array(argvalues, numargs, TEXTOID, -1, false, 'i');
 		values[Anum_pipeline_encoding_decodedbyargvalues - 1] = PointerGetDatum(valarr);
 		nulls[Anum_pipeline_encoding_decodedbyargvalues - 1] = false;
 	}
 
+	/*
+	 * Verify that a function with the given name actually exists. We don't match
+	 * against argument types here because they aren't known until runtime, so this
+	 * is just an initial sanity check.
+	 */
+	if (stmt->decodedby)
+	{
+		char *procname = stmt->decodedby->relname;
+		List *names = list_make1(makeString(procname));
+		FuncCandidateList clist = FuncnameGetCandidates(names, -1, NIL, false, false);
+		if (clist == NULL)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_FUNCTION),
+							errmsg("no function named \"%s\"", procname)));
+		}
+		values[Anum_pipeline_encoding_decodedby - 1] = CStringGetTextDatum(procname);
+		nulls[Anum_pipeline_encoding_decodedby - 1] = false;
+	}
+
+	/* now actually add it to the catalog and update the index */
 	pipeline_encoding = heap_open(PipelineEncodingRelationId, RowExclusiveLock);
 	tup = heap_form_tuple(pipeline_encoding->rd_att, values, nulls);
 

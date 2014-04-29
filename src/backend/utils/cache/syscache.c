@@ -61,6 +61,7 @@
 #include "catalog/pgxc_group.h"
 #endif
 #include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_encoding.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
@@ -613,6 +614,17 @@ static const struct cachedesc cacheinfo[] = {
 		1,
 		{
 			Anum_pipeline_queries_name,
+			0,
+			0,
+			0
+		},
+		2048
+	},
+	{PipelineEncodingRelationId,	/* PIPELINEENCODING */
+		PipelineEncodingNameIndexId,
+		1,
+		{
+			Anum_pipeline_encoding_name,
 			0,
 			0,
 			0
