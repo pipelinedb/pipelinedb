@@ -11,6 +11,7 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "access/transam.h"
 #include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_type.h"
@@ -39,6 +40,8 @@ CreateEncoding(CreateEncodingStmt *stmt)
 	ListCell *lc;
 	Datum *argnames;
 	Datum *argvalues;
+	bool collides = true;
+	Oid oid = InvalidOid;
 	int i;
 
 	if (!stmt->name || !stmt->name->relname)
@@ -55,6 +58,18 @@ CreateEncoding(CreateEncodingStmt *stmt)
 	namestrcpy(&name, stmt->name->relname);
 	values[Anum_pipeline_encoding_name - 1] = NameGetDatum(&name);
 	nulls[Anum_pipeline_encoding_name - 1] = false;
+
+	while (collides)
+	{
+		HeapTuple existing;
+		oid = GetNewObjectId();
+		existing = SearchSysCache1(PIPELINEENCODINGOID, ObjectIdGetDatum(oid));
+		if (!HeapTupleIsValid(existing))
+			collides = false;
+	}
+
+	values[Anum_pipeline_encoding_oid - 1] = oid;
+	nulls[Anum_pipeline_encoding_oid - 1] = false;
 
 	/*
 	 * Here we save two parallel arrays of argument names and values

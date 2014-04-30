@@ -22,6 +22,7 @@
 CATALOG(pipeline_encoding,4244) BKI_WITHOUT_OIDS
 {
 	NameData	name;
+	Oid				oid;
 	text 			decodedby;
 	text 			decodedbyargnames[1];
 	text			decodedbyargvalues[1];
@@ -38,10 +39,11 @@ typedef FormData_pipeline_encoding *Form_pipeline_encoding;
  *		compiler constants for pipeline_encoding
  * ----------------
  */
-#define Natts_pipeline_encoding											4
+#define Natts_pipeline_encoding											5
 #define Anum_pipeline_encoding_name 								1
-#define Anum_pipeline_encoding_decodedby						2
-#define Anum_pipeline_encoding_decodedbyargnames		3
-#define Anum_pipeline_encoding_decodedbyargvalues		4
+#define Anum_pipeline_encoding_oid 									2
+#define Anum_pipeline_encoding_decodedby						3
+#define Anum_pipeline_encoding_decodedbyargnames		4
+#define Anum_pipeline_encoding_decodedbyargvalues		5
 
 #endif   /* PIPELINE_ENCODING_H */

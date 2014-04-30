@@ -620,11 +620,22 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		2048
 	},
-	{PipelineEncodingRelationId,	/* PIPELINEENCODING */
+	{PipelineEncodingRelationId,	/* PIPELINEENCODINGNAME */
 		PipelineEncodingNameIndexId,
 		1,
 		{
 			Anum_pipeline_encoding_name,
+			0,
+			0,
+			0
+		},
+		2048
+	},
+	{PipelineEncodingRelationId,	/* PIPELINEENCODINGOID */
+		PipelineEncodingOidIndexId,
+		1,
+		{
+			Anum_pipeline_encoding_oid,
 			0,
 			0,
 			0
