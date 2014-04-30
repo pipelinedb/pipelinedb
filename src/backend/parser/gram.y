@@ -2550,6 +2550,7 @@ copy_generic_opt_arg_list_item:
 					{
 						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
 						n->name = $3;
+						n->coldefs = $5;
 						$$ = (Node *)n;
 					}
 				| CREATE ENCODING qualified_name '(' OptTableElementList ')'
@@ -2557,6 +2558,7 @@ copy_generic_opt_arg_list_item:
 					{
 						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
 						n->name = $3;
+						n->coldefs = $5;
 						n->decodedby = $9;
 						n->args = $10;
 						$$ = (Node *)n;
