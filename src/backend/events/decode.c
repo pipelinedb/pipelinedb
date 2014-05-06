@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "postgres.h"
-#include "events/decoder.h"
+#include "events/decode.h"
 #include "funcapi.h"
 
 
