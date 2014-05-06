@@ -88,7 +88,7 @@ GetQueryString(RangeVar *rvname)
 	tuple = SearchSysCache1(PIPELINEQUERIES, NameGetDatum(&name));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "Continuous view \"%s\" does not exist", rvname->relname);
+		elog(ERROR, "continuous view \"%s\" does not exist", rvname->relname);
 
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
 

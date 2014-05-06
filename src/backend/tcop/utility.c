@@ -22,6 +22,7 @@
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "catalog/namespace.h"
+#include "catalog/pipeline_encoding_fn.h"
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "catalog/toasting.h"
@@ -639,6 +640,18 @@ standard_ProcessUtility(Node *parsetree,
 			{
 				List *remote;
 				CreateContinuousView((CreateContinuousViewStmt *) parsetree);
+				remote = AddRemoteQueryNode(NIL, queryString, EXEC_ON_ALL_NODES, false);
+				if (remote)
+				{
+					Node *stmt = lfirst(remote->head);
+					ProcessUtility(stmt, queryString, params, false, None_Receiver, true, NULL);
+				}
+			}
+			break;
+		case T_CreateEncodingStmt:
+			{
+				List *remote;
+				CreateEncoding((CreateEncodingStmt *) parsetree);
 				remote = AddRemoteQueryNode(NIL, queryString, EXEC_ON_ALL_NODES, false);
 				if (remote)
 				{
@@ -3077,7 +3090,9 @@ CreateCommandTag(Node *parsetree)
 		case T_CreateContinuousViewStmt:
 			tag = "CREATE CONTINUOUS VIEW";
 			break;
-
+		case T_CreateEncodingStmt:
+			tag = "CREATE ENCODING";
+			break;
 		case T_CreateTableAsStmt:
 			if (((CreateTableAsStmt *) parsetree)->is_select_into)
 				tag = "SELECT INTO";

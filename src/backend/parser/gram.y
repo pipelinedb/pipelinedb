@@ -212,8 +212,8 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 		AlterDefaultPrivilegesStmt DefACLAction
 		AnalyzeStmt CleanConnStmt ClosePortalStmt ClusterStmt CommentStmt
 		ConstraintsSetStmt CopyStmt CreateAsStmt CreateCastStmt
-		CreateDomainStmt CreateExtensionStmt CreateGroupStmt CreateOpClassStmt
-		CreateOpFamilyStmt AlterOpFamilyStmt CreatePLangStmt
+		CreateDomainStmt CreateEncodingStmt CreateExtensionStmt CreateGroupStmt
+		CreateOpClassStmt CreateOpFamilyStmt AlterOpFamilyStmt CreatePLangStmt
 		CreateSchemaStmt CreateSeqStmt CreateStmt CreateTableSpaceStmt
 		CreateFdwStmt CreateForeignServerStmt CreateForeignTableStmt
 		CreateAssertStmt CreateTrigStmt
@@ -522,14 +522,14 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 	CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE CURRENT_SCHEMA
 	CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER CURSOR CYCLE
 
-	DATA_P DATABASE DAY_P DEACTIVATE DEALLOCATE DEC DECIMAL_P DECLARE DEFAULT DEFAULTS
+	DATA_P DATABASE DAY_P DEACTIVATE DEALLOCATE DEC DECIMAL_P DECLARE DECODED DEFAULT DEFAULTS
 	DEFERRABLE DEFERRED DEFINER DELETE_P DELIMITER DELIMITERS DESC
 /* PGXC_BEGIN */
 	DICTIONARY DIRECT DISABLE_P DISCARD DISTINCT DISTRIBUTE DO DOCUMENT_P DOMAIN_P DOUBLE_P
 /* PGXC_END */
 	DROP
 
-	EACH ELSE ENABLE_P ENCODING ENCRYPTED END_P ENUM_P ESCAPE EXCEPT
+	EACH ELSE ENABLE_P ENCODING ENCRYPTED END_P ENUM_P ESCAPE EVENT EXCEPT
 	EXCLUDE EXCLUDING EXCLUSIVE EXECUTE EXISTS EXPLAIN
 	EXTENSION EXTERNAL EXTRACT
 
@@ -737,6 +737,7 @@ stmt :
 			| CreateCastStmt
 			| CreateConversionStmt
 			| CreateDomainStmt
+			| CreateEncodingStmt
 			| CreateExtensionStmt
 			| CreateFdwStmt
 			| CreateForeignServerStmt
@@ -2535,6 +2536,34 @@ copy_generic_opt_arg_list_item:
 					$$ = (Node *)s;
 			  }
 		;
+
+/*****************************************************************************
+ *
+ * CREATE EVENT ENCODING encoding_name
+ *
+ * PipelineDB
+ *
+ * Creates an encoding that can be used to figure out how to decode raw events
+ *
+ *****************************************************************************/
+ CreateEncodingStmt: CREATE ENCODING qualified_name '(' OptTableElementList ')'
+					{
+						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
+						n->name = $3;
+						n->coldefs = $5;
+						$$ = (Node *)n;
+					}
+				| CREATE ENCODING qualified_name '(' OptTableElementList ')'
+				DECODED BY qualified_name OptWith
+					{
+						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
+						n->name = $3;
+						n->coldefs = $5;
+						n->decodedby = $9;
+						n->args = $10;
+						$$ = (Node *)n;
+					}
+			;	
 
 /*****************************************************************************
  *
@@ -12757,6 +12786,7 @@ unreserved_keyword:
 			| DAY_P
 			| DEALLOCATE
 			| DECLARE
+			| DECODED
 			| DEFAULTS
 			| DEFERRED
 			| DEFINER

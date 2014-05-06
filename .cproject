@@ -28,6 +28,7 @@
 							<tool id="cdt.managedbuild.tool.gnu.c.compiler.base.2112967291" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.base">
 								<option id="gnu.c.compiler.option.preprocessor.def.symbols.2039299107" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="PGXC"/>
+									<listOptionValue builtIn="false" value="CATALOG_VARLEN"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1262281741" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
