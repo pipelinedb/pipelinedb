@@ -52,6 +52,7 @@
 #ifdef PGXC
 #include "commands/trigger.h"
 #endif
+#include "events/decode.h"
 #include "events/stream.h"
 #include "executor/tstoreReceiver.h"
 #include "executor/tupletableReceiver.h"
@@ -1678,6 +1679,8 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
 	List *events = NIL;
 	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
+
+	GetStreamEventDecoder(encoding);
 
 	while (message->cursor < message->len)
 	{

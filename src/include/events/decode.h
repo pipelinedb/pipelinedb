@@ -6,11 +6,22 @@
  * This package implements decoding functionality for raw events
  *
  *
- * src/events/decoder.h
+ * src/events/decode.h
  *-----------------------------------------------------------------------------
 */
 #include "access/htup.h"
+#include "events/stream.h"
 #include "utils/rel.h"
 
 
-void decode_event(Relation stream, const char *raw, HeapTuple *tuple);
+typedef struct StreamEventDecoder
+{
+	char *name;
+	FunctionCallInfoData fcinfo_data;
+} StreamEventDecoder;
+
+
+extern StreamEventDecoder *GetStreamEventDecoder(const char *channel);
+extern void InitDecoderCache(void);
+extern HeapTuple DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder);
+extern void decode_event(Relation stream, const char *raw, HeapTuple *tuple);
