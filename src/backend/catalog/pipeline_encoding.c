@@ -37,6 +37,7 @@ CreateEncoding(CreateEncodingStmt *stmt)
 	bool nulls[Natts_pipeline_encoding];
 	Datum values[Natts_pipeline_encoding];
 	NameData name;
+	NameData decodedby;
 	ListCell *lc;
 	Datum *argnames;
 	Datum *argvalues;
@@ -119,7 +120,9 @@ CreateEncoding(CreateEncodingStmt *stmt)
 					(errcode(ERRCODE_UNDEFINED_FUNCTION),
 							errmsg("no function named \"%s\"", procname)));
 		}
-		values[Anum_pipeline_encoding_decodedby - 1] = CStringGetTextDatum(procname);
+
+		namestrcpy(&decodedby, procname);
+		values[Anum_pipeline_encoding_decodedby - 1] = NameGetDatum(&decodedby);
 		nulls[Anum_pipeline_encoding_decodedby - 1] = false;
 	}
 
