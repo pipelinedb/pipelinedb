@@ -23,7 +23,7 @@ CATALOG(pipeline_encoding,4244) BKI_WITHOUT_OIDS
 {
 	NameData	name;
 	Oid				oid;
-	text 			decodedby;
+	NameData 	decodedby;
 	text 			decodedbyargnames[1];
 	text			decodedbyargvalues[1];
 } FormData_pipeline_encoding;
