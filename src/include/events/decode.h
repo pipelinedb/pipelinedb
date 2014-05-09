@@ -17,6 +17,7 @@
 typedef struct StreamEventDecoder
 {
 	char *name;
+	int rawpos;
 	FunctionCallInfoData fcinfo_data;
 } StreamEventDecoder;
 

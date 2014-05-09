@@ -7,8 +7,11 @@
 #include "catalog/pipeline_encoding.h"
 #include "events/decode.h"
 #include "funcapi.h"
+#include "parser/parse_node.h"
+#include "parser/parse_coerce.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
+#include "utils/memutils.h"
 #include "utils/syscache.h"
 
 
@@ -49,13 +52,17 @@ GetStreamEventDecoder(const char *encoding)
 	Datum rawarr;
 	StreamEventDecoder *decoder = check_decoder_cache(encoding);
 	bool isNull;
-	Datum *argnames;
+	Datum *textargnames;
 	Datum *argvals;
 	Value *decodedbyname;
 	FuncCandidateList clist;
 	FunctionCallInfoData fcinfo;
+	List *argnames = NIL;
+	Datum *typedargs;
+	ParseState *ps;
 	int nargnames;
 	int nargvals;
+	int i;
 
 	if (false && decoder != NULL)
 		return decoder;
@@ -70,17 +77,41 @@ GetStreamEventDecoder(const char *encoding)
 	}
 
 	row = (Form_pipeline_encoding) GETSTRUCT(tup);
-	rawarr = SysCacheGetAttr(PIPELINEENCODINGNAME, tup, Anum_pipeline_encoding_decodedbyargnames, &isNull);
-	if (!isNull)
-		deconstruct_array(DatumGetArrayTypeP(rawarr), TEXTOID, -1, false, 'i', &argnames, NULL, &nargnames);
+	rawarr = SysCacheGetAttr(PIPELINEENCODINGNAME, tup,
+			Anum_pipeline_encoding_decodedbyargnames, &isNull);
 
-	rawarr = SysCacheGetAttr(PIPELINEENCODINGNAME, tup, Anum_pipeline_encoding_decodedbyargvalues, &isNull);
 	if (!isNull)
-		deconstruct_array(DatumGetArrayTypeP(rawarr), TEXTOID, -1, false, 'i', &argvals, NULL, &nargvals);
+		deconstruct_array(DatumGetArrayTypeP(rawarr), TEXTOID, -1,
+				false, 'i', &textargnames, NULL, &nargnames);
 
-	decodedbyname = makeString(TextDatumGetCString(&row->decodedby));
-	clist = FuncnameGetCandidates(list_make1(decodedbyname), -1, NIL, false, false);
-	if (false && clist->next)
+	rawarr = SysCacheGetAttr(PIPELINEENCODINGNAME, tup,
+			Anum_pipeline_encoding_decodedbyargvalues, &isNull);
+
+	if (!isNull)
+		deconstruct_array(DatumGetArrayTypeP(rawarr), TEXTOID, -1,
+				false, 'i', &argvals, NULL, &nargvals);
+
+	/* we need to coerce the arguments into the specific types that the function expects */
+	typedargs = palloc(nargvals * sizeof(Datum));
+	ps = make_parsestate(NULL);
+	for (i=0; i<nargvals; i++)
+	{
+		Value *v = (Value *) stringToNode(TextDatumGetCString(argvals[i]));
+		Const *c = make_const(ps, v, 0);
+		c = (Const *) coerce_to_common_type(ps, (Node *) c, TEXTOID, "decoder argument");
+		typedargs[i] = c->constvalue;
+	}
+
+	for (i=0; i<nargnames; i++)
+	{
+		argnames = lappend(argnames, TextDatumGetCString(textargnames[i]));
+	}
+
+	decodedbyname = makeString(row->decodedby.data);
+	clist = FuncnameGetCandidates(list_make1(decodedbyname),
+			list_length(argnames) + 1, argnames, false, false);
+
+	if (clist->next)
 	{
 		/* XXX: we need to actually find the right function based on arguments here */
 		ereport(ERROR,
