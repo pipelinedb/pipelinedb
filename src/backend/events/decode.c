@@ -15,16 +15,31 @@
 #include "utils/syscache.h"
 
 
+/* Cache for initialized decoders */
+static HTAB *DecoderCache = NULL;
+
+typedef struct DecoderCacheEntry
+{
+	StreamEventDecoder *decoder;
+} DecoderCacheEntry;
+
+
 static StreamEventDecoder *
 check_decoder_cache(const char *encoding)
 {
-	return NULL;
+	DecoderCacheEntry *entry =
+			(DecoderCacheEntry *) hash_search(DecoderCache, (void *) encoding, HASH_FIND, NULL);
+
+	if (entry == NULL)
+		return NULL;
+
+	return entry->decoder;
 }
 
 static void
 cache_decoder(const char *encoding, StreamEventDecoder *decoder)
 {
-
+	hash_search(DecoderCache, (void *) encoding, HASH_ENTER, NULL);
 }
 
 /*
@@ -36,9 +51,18 @@ void
 InitDecoderCache(void)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+	HASHCTL ctl;
 
+	MemSet(&ctl, 0, sizeof(ctl));
 
+	/* Keyed by the name field of the pipeline_encoding catalog table */
+	ctl.keysize = NAMEDATALEN;
+	ctl.entrysize = sizeof(DecoderCacheEntry);
+	ctl.hash = string_hash;
 
+	DecoderCache = hash_create("DecoderCache", 32, &ctl, HASH_ELEM);
+
+	/* XXX TODO: we need to listen for invalidation events via CacheRegisterSyscacheCallback */
 	MemoryContextSwitchTo(oldcontext);
 }
 
@@ -54,7 +78,6 @@ GetStreamEventDecoder(const char *encoding)
 	HeapTuple tup;
 	Form_pipeline_encoding row;
 	Datum rawarr;
-	StreamEventDecoder *decoder = check_decoder_cache(encoding);
 	bool isNull;
 	Datum *textargnames;
 	Datum *argvals;
@@ -64,11 +87,12 @@ GetStreamEventDecoder(const char *encoding)
 	List *argnames = NIL;
 	Datum *typedargs;
 	ParseState *ps;
+	StreamEventDecoder *decoder = check_decoder_cache(encoding);
 	int nargnames;
 	int nargvals;
 	int i;
 
-	if (false && decoder != NULL)
+	if (decoder != NULL)
 		return decoder;
 
 	namestrcpy(&name, encoding);
@@ -145,6 +169,13 @@ GetStreamEventDecoder(const char *encoding)
 	cache_decoder(encoding, decoder);
 
 	ReleaseSysCache(tup);
+
+	pfree(textargnames);
+	pfree(argvals);
+	pfree(decodedbyname);
+	pfree(argnames);
+	pfree(typedargs);
+	pfree(ps);
 
 	return decoder;
 }

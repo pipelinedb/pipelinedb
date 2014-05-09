@@ -4468,6 +4468,8 @@ PostgresMain(int argc, char *argv[], const char *username)
 											ALLOCSET_DEFAULT_INITSIZE,
 											ALLOCSET_DEFAULT_MAXSIZE);
 
+	InitDecoderCache();
+
 	/*
 	 * Remember stand-alone backend startup time
 	 */
