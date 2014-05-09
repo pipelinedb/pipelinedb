@@ -35,7 +35,11 @@ cache_decoder(const char *encoding, StreamEventDecoder *decoder)
 void
 InitDecoderCache(void)
 {
+	MemoryContext oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 
+
+
+	MemoryContextSwitchTo(oldcontext);
 }
 
 /*
@@ -119,11 +123,30 @@ GetStreamEventDecoder(const char *encoding)
 						errmsg("multiple decoder functions named \"%s\"", TextDatumGetCString(&row->decodedby))));
 	}
 
+	decoder = palloc(sizeof(StreamEventDecoder));
+	/*
+	 *  XXX TODO: it may not be the best idea to assume that the raw event is the first argument,
+	 *  although we do need to be able to rely on some assumptions to avoid ambiguity
+	 */
+	decoder->rawpos = 0;
+	decoder->fcinfo_data.flinfo = palloc(sizeof(fcinfo.flinfo));
+	decoder->fcinfo_data.flinfo->fn_mcxt = MemoryContextAllocZero(CurrentMemoryContext, ALLOCSET_SMALL_MAXSIZE);
+	decoder->fcinfo_data.nargs = list_length(argnames) + 1;
+	fmgr_info(clist->oid, decoder->fcinfo_data.flinfo);
+
+	/* assign the arguments that will be passed on every call */
+	for (i=0; i<decoder->fcinfo_data.nargs; i++)
+	{
+		if (i == decoder->rawpos)
+			continue;
+		decoder->fcinfo_data.arg[i] = typedargs[i];
+	}
+
 	cache_decoder(encoding, decoder);
 
 	ReleaseSysCache(tup);
 
-	return NULL;
+	return decoder;
 }
 
 /*
@@ -134,6 +157,16 @@ GetStreamEventDecoder(const char *encoding)
 HeapTuple
 DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 {
+	Datum result;
+
+	/* we can treat the raw bytes as text because texts are identical in structure to a byteas */
+	decoder->fcinfo_data.arg[decoder->rawpos] = CStringGetTextDatum(event->raw);
+
+	InitFunctionCallInfoData(decoder->fcinfo_data, decoder->fcinfo_data.flinfo,
+			decoder->fcinfo_data.nargs, InvalidOid, NULL, NULL);
+
+	result = FunctionCallInvoke(&decoder->fcinfo_data);
+
 	return NULL;
 }
 

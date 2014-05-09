@@ -1680,8 +1680,6 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 	List *events = NIL;
 	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
 
-	GetStreamEventDecoder(encoding);
-
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
