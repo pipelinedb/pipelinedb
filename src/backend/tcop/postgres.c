@@ -52,6 +52,7 @@
 #ifdef PGXC
 #include "commands/trigger.h"
 #endif
+#include "events/decode.h"
 #include "events/stream.h"
 #include "executor/tstoreReceiver.h"
 #include "executor/tupletableReceiver.h"
@@ -4466,6 +4467,8 @@ PostgresMain(int argc, char *argv[], const char *username)
 											ALLOCSET_DEFAULT_MINSIZE,
 											ALLOCSET_DEFAULT_INITSIZE,
 											ALLOCSET_DEFAULT_MAXSIZE);
+
+	InitDecoderCache();
 
 	/*
 	 * Remember stand-alone backend startup time

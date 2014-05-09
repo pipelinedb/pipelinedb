@@ -12,6 +12,6 @@ subdir = src/backend/events
 top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
-OBJS = decoder.o delimited.o stream.o
+OBJS = decode.o delimited.o stream.o
 
 include $(top_srcdir)/src/backend/common.mk
