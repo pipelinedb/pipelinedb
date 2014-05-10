@@ -4674,6 +4674,8 @@ DATA(insert OID = 3204 ( pgxc_lock_for_backup	PGNSP PGUID 12 1 0 0 0 f f f f t f
 DESCR("lock the cluster for taking backup");
 #endif
 
+DATA(insert OID = 4300 (  decode_delimited   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1009 "17 25" _null_ _null_ "{$,delimiter}" _null_ text_to_array _null_ _null_ _null_ ));
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

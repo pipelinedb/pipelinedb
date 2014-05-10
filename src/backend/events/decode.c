@@ -159,11 +159,12 @@ GetStreamEventDecoder(const char *encoding)
 	fmgr_info(clist->oid, decoder->fcinfo_data.flinfo);
 
 	/* assign the arguments that will be passed on every call */
-	for (i=0; i<decoder->fcinfo_data.nargs; i++)
+	for (i=1; i<decoder->fcinfo_data.nargs; i++)
 	{
 		if (i == decoder->rawpos)
 			continue;
-		decoder->fcinfo_data.arg[i] = typedargs[i];
+		/* XXX we're assuming that the raw arg is always 0--clean up positioning logic */
+		decoder->fcinfo_data.arg[i] = typedargs[i - 1];
 	}
 
 	cache_decoder(encoding, decoder);
@@ -189,6 +190,8 @@ HeapTuple
 DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 {
 	Datum result;
+	Datum *fields;
+	int nfields;
 
 	/* we can treat the raw bytes as text because texts are identical in structure to a byteas */
 	decoder->fcinfo_data.arg[decoder->rawpos] = CStringGetTextDatum(event->raw);
@@ -197,6 +200,11 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 			decoder->fcinfo_data.nargs, InvalidOid, NULL, NULL);
 
 	result = FunctionCallInvoke(&decoder->fcinfo_data);
+
+	deconstruct_array(DatumGetArrayTypeP(result), TEXTOID, -1,
+			false, 'i', &fields, NULL, &nfields);
+
+
 
 	return NULL;
 }
