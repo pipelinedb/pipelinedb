@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "postgres.h"
+#include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_encoding.h"
@@ -11,8 +12,10 @@
 #include "parser/parse_coerce.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
+#include "utils/fmgroids.h"
 #include "utils/memutils.h"
 #include "utils/syscache.h"
+#include "utils/tqual.h"
 
 
 /* Cache for initialized decoders */
@@ -40,6 +43,55 @@ static void
 cache_decoder(const char *encoding, StreamEventDecoder *decoder)
 {
 	hash_search(DecoderCache, (void *) encoding, HASH_ENTER, NULL);
+}
+
+/*
+ * get_schema
+ *
+ * Given an encoding OID, retrieve the corresponding attributes from pg_attribute
+ */
+static TupleDesc
+get_schema(Oid encoding)
+{
+	HeapTuple	pg_attribute_tuple;
+	Relation	pg_attribute_desc;
+	SysScanDesc pg_attribute_scan;
+	ScanKeyData skey[2];
+	TupleDesc schema;
+	List *lattrs = NIL;
+	Form_pg_attribute *attrs;
+
+	ScanKeyInit(&skey[0],
+				Anum_pg_attribute_attrelid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(encoding));
+
+	ScanKeyInit(&skey[1],
+				Anum_pg_attribute_attnum,
+				BTGreaterStrategyNumber, F_INT2GT,
+				Int16GetDatum(0));
+
+	pg_attribute_desc = heap_open(AttributeRelationId, AccessShareLock);
+	pg_attribute_scan = systable_beginscan(pg_attribute_desc,
+										   AttributeRelidNumIndexId,
+										   criticalRelcachesBuilt,
+										   SnapshotNow,
+										   2, skey);
+
+	while (HeapTupleIsValid(pg_attribute_tuple = systable_getnext(pg_attribute_scan)))
+	{
+		Form_pg_attribute attp;
+		attp = (Form_pg_attribute) GETSTRUCT(pg_attribute_tuple);
+		lattrs = lappend(lattrs, attp);
+	}
+
+	systable_endscan(pg_attribute_scan);
+	heap_close(pg_attribute_desc, AccessShareLock);
+
+	attrs = palloc(list_length(lattrs) * sizeof(Form_pg_attribute));
+	schema = CreateTupleDesc(list_length(lattrs), false, attrs);
+
+	return schema;
 }
 
 /*
@@ -152,6 +204,7 @@ GetStreamEventDecoder(const char *encoding)
 	 *  XXX TODO: it may not be the best idea to assume that the raw event is the first argument,
 	 *  although we do need to be able to rely on some assumptions to avoid ambiguity
 	 */
+	decoder->schema = get_schema(row->oid);
 	decoder->rawpos = 0;
 	decoder->fcinfo_data.flinfo = palloc(sizeof(fcinfo.flinfo));
 	decoder->fcinfo_data.flinfo->fn_mcxt = MemoryContextAllocZero(CurrentMemoryContext, ALLOCSET_SMALL_MAXSIZE);
