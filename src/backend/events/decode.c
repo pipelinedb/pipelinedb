@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "postgres.h"
+#include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_encoding.h"
@@ -11,8 +12,10 @@
 #include "parser/parse_coerce.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
+#include "utils/fmgroids.h"
 #include "utils/memutils.h"
 #include "utils/syscache.h"
+#include "utils/tqual.h"
 
 
 /* Cache for initialized decoders */
@@ -40,6 +43,64 @@ static void
 cache_decoder(const char *encoding, StreamEventDecoder *decoder)
 {
 	hash_search(DecoderCache, (void *) encoding, HASH_ENTER, NULL);
+}
+
+/*
+ * get_schema
+ *
+ * Given an encoding OID, retrieve the corresponding attributes from pg_attribute
+ */
+static TupleDesc
+get_schema(Oid encoding)
+{
+	HeapTuple	pg_attribute_tuple;
+	Relation	pg_attribute_desc;
+	SysScanDesc pg_attribute_scan;
+	ScanKeyData skey[2];
+	TupleDesc schema;
+	List *lattrs = NIL;
+	Form_pg_attribute *attrs;
+	ListCell *lc;
+	int i = 0;
+
+	ScanKeyInit(&skey[0],
+				Anum_pg_attribute_attrelid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(encoding));
+
+	ScanKeyInit(&skey[1],
+				Anum_pg_attribute_attnum,
+				BTGreaterStrategyNumber, F_INT2GT,
+				Int16GetDatum(0));
+
+	pg_attribute_desc = heap_open(AttributeRelationId, AccessShareLock);
+	pg_attribute_scan = systable_beginscan(pg_attribute_desc,
+										   AttributeRelidNumIndexId,
+										   criticalRelcachesBuilt,
+										   SnapshotNow,
+										   2, skey);
+
+	while (HeapTupleIsValid(pg_attribute_tuple = systable_getnext(pg_attribute_scan)))
+	{
+		Form_pg_attribute attp;
+		attp = (Form_pg_attribute) GETSTRUCT(pg_attribute_tuple);
+		lattrs = lappend(lattrs, attp);
+	}
+
+	systable_endscan(pg_attribute_scan);
+	heap_close(pg_attribute_desc, AccessShareLock);
+
+	attrs = palloc(list_length(lattrs) * sizeof(Form_pg_attribute));
+	foreach(lc, lattrs)
+	{
+		attrs[i++] = (Form_pg_attribute) lfirst(lc);
+	}
+
+	schema = CreateTupleDesc(list_length(lattrs), false, attrs);
+
+	pfree(lattrs);
+
+	return schema;
 }
 
 /*
@@ -152,6 +213,7 @@ GetStreamEventDecoder(const char *encoding)
 	 *  XXX TODO: it may not be the best idea to assume that the raw event is the first argument,
 	 *  although we do need to be able to rely on some assumptions to avoid ambiguity
 	 */
+	decoder->schema = get_schema(row->oid);
 	decoder->rawpos = 0;
 	decoder->fcinfo_data.flinfo = palloc(sizeof(fcinfo.flinfo));
 	decoder->fcinfo_data.flinfo->fn_mcxt = MemoryContextAllocZero(CurrentMemoryContext, ALLOCSET_SMALL_MAXSIZE);
@@ -191,6 +253,8 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 {
 	Datum result;
 	Datum *fields;
+	bool *isnull;
+	HeapTuple decoded;
 	int nfields;
 
 	/* we can treat the raw bytes as text because texts are identical in structure to a byteas */
@@ -204,28 +268,8 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 	deconstruct_array(DatumGetArrayTypeP(result), TEXTOID, -1,
 			false, 'i', &fields, NULL, &nfields);
 
+	isnull = palloc0(nfields * sizeof(bool));
+	decoded = heap_form_tuple(decoder->schema, fields, isnull);
 
-
-	return NULL;
-}
-
-void decode_event(Relation stream, const char *raw, HeapTuple *tuple)
-{
-	TupleDesc	streamdesc = RelationGetDescr(stream);
-	AttInMetadata *meta = TupleDescGetAttInMetadata(streamdesc);
-
-	int i = 0;
-	char *tok;
-	char *str = pstrdup(raw);
-	char *values[streamdesc->natts];
-
-	while ((tok = strsep(&str, ",")) != NULL &&
-			i < stream->rd_att->natts)
-	{
-		/* Consider empty fields NULL */
-		values[i++] = strlen(tok) > 0 ? strdup(tok) : NULL;
-	}
-	free(str);
-
-	*tuple = BuildTupleFromCStrings(meta, values);
+	return decoded;
 }
