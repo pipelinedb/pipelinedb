@@ -164,7 +164,7 @@ GetStreamEventDecoder(const char *encoding)
 		if (i == decoder->rawpos)
 			continue;
 		/* XXX we're assuming that the raw arg is always 0--clean up positioning logic */
-		decoder->fcinfo_data.arg[i] = typedargs[i - 1];
+		decoder->fcinfo_data.arg[clist->argnumbers[i]] = typedargs[i - 1];
 	}
 
 	cache_decoder(encoding, decoder);
