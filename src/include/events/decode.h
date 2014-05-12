@@ -20,6 +20,7 @@ typedef struct StreamEventDecoder
 	int rawpos;
 	FunctionCallInfoData fcinfo_data;
 	TupleDesc schema;
+	Oid rettype;
 } StreamEventDecoder;
 
 

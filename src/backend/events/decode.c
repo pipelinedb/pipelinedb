@@ -4,6 +4,7 @@
 #include "postgres.h"
 #include "catalog/indexing.h"
 #include "catalog/namespace.h"
+#include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_encoding.h"
 #include "events/decode.h"
@@ -149,6 +150,8 @@ GetStreamEventDecoder(const char *encoding)
 	Datum *typedargs;
 	ParseState *ps;
 	StreamEventDecoder *decoder = check_decoder_cache(encoding);
+	HeapTuple	proctup;
+	Form_pg_proc procform;
 	int nargnames;
 	int nargvals;
 	int i;
@@ -208,12 +211,17 @@ GetStreamEventDecoder(const char *encoding)
 						errmsg("multiple decoder functions named \"%s\"", TextDatumGetCString(&row->decodedby))));
 	}
 
+	/* figure out the return type to to use when decoding events */
+	proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
+	procform = (Form_pg_proc) GETSTRUCT(proctup);
+
 	decoder = palloc(sizeof(StreamEventDecoder));
 	/*
 	 *  XXX TODO: it may not be the best idea to assume that the raw event is the first argument,
 	 *  although we do need to be able to rely on some assumptions to avoid ambiguity
 	 */
 	decoder->schema = get_schema(row->oid);
+	decoder->rettype = procform->prorettype;
 	decoder->rawpos = 0;
 	decoder->fcinfo_data.flinfo = palloc(sizeof(fcinfo.flinfo));
 	decoder->fcinfo_data.flinfo->fn_mcxt = MemoryContextAllocZero(CurrentMemoryContext, ALLOCSET_SMALL_MAXSIZE);
@@ -232,6 +240,7 @@ GetStreamEventDecoder(const char *encoding)
 	cache_decoder(encoding, decoder);
 
 	ReleaseSysCache(tup);
+	ReleaseSysCache(proctup);
 
 	pfree(textargnames);
 	pfree(argvals);
@@ -265,8 +274,22 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 
 	result = FunctionCallInvoke(&decoder->fcinfo_data);
 
-	deconstruct_array(DatumGetArrayTypeP(result), TEXTOID, -1,
-			false, 'i', &fields, NULL, &nfields);
+	switch(decoder->rettype)
+	{
+		case TEXTARRAYOID:
+			deconstruct_array(DatumGetArrayTypeP(result), TEXTOID, -1,
+					false, 'i', &fields, NULL, &nfields);
+			break;
+		case JSONOID:
+			break;
+//		case RECORDOID:
+//			break;
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_EXTERNAL_ROUTINE_INVOCATION_EXCEPTION),
+							errmsg("decode for encoding \"%s\" returned unknown type: %d",
+									decoder->name, decoder->rettype)));
+	}
 
 	isnull = palloc0(nfields * sizeof(bool));
 	decoded = heap_form_tuple(decoder->schema, fields, isnull);
