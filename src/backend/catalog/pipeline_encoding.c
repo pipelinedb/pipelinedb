@@ -12,8 +12,10 @@
 
 #include "access/heapam.h"
 #include "access/transam.h"
+#include "catalog/heap.h"
 #include "catalog/indexing.h"
 #include "catalog/namespace.h"
+#include "catalog/pg_attribute.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_encoding.h"
 #include "catalog/pipeline_encoding_fn.h"
@@ -43,6 +45,9 @@ CreateEncoding(CreateEncodingStmt *stmt)
 	Datum *argvalues;
 	bool collides = true;
 	Oid oid = InvalidOid;
+	TupleDesc desc;
+	CatalogIndexState indstate;
+	Relation pgattr;
 	int i;
 
 	if (!stmt->name || !stmt->name->relname)
@@ -68,6 +73,24 @@ CreateEncoding(CreateEncodingStmt *stmt)
 		if (!HeapTupleIsValid(existing))
 			collides = false;
 	}
+
+	/*
+	 * We need to add the attributes to pg_attribute
+	 */
+	desc = BuildDescForRelation(stmt->coldefs);
+	pgattr = heap_open(AttributeRelationId, RowExclusiveLock);
+	indstate = CatalogOpenIndexes(pgattr);
+
+	for (i=0; i<desc->natts; i++)
+	{
+		/* XXX: this is kind of a hack, as an encoding isn't really a relation, but it probably should be */
+		desc->attrs[i]->attrelid = oid;
+
+		InsertPgAttributeTuple(pgattr, desc->attrs[i], indstate);
+	}
+
+	CatalogCloseIndexes(indstate);
+	heap_close(pgattr, RowExclusiveLock);
 
 	values[Anum_pipeline_encoding_oid - 1] = oid;
 	nulls[Anum_pipeline_encoding_oid - 1] = false;
