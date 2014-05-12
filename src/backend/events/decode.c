@@ -270,6 +270,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 
 	isnull = palloc0(nfields * sizeof(bool));
 	decoded = heap_form_tuple(decoder->schema, fields, isnull);
+	pfree(isnull);
 
 	return decoded;
 }
