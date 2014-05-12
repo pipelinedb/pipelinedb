@@ -26,4 +26,3 @@ typedef struct StreamEventDecoder
 extern StreamEventDecoder *GetStreamEventDecoder(const char *channel);
 extern void InitDecoderCache(void);
 extern HeapTuple DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder);
-extern void decode_event(Relation stream, const char *raw, HeapTuple *tuple);

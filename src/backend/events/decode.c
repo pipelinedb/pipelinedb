@@ -60,6 +60,8 @@ get_schema(Oid encoding)
 	TupleDesc schema;
 	List *lattrs = NIL;
 	Form_pg_attribute *attrs;
+	ListCell *lc;
+	int i = 0;
 
 	ScanKeyInit(&skey[0],
 				Anum_pg_attribute_attrelid,
@@ -89,7 +91,14 @@ get_schema(Oid encoding)
 	heap_close(pg_attribute_desc, AccessShareLock);
 
 	attrs = palloc(list_length(lattrs) * sizeof(Form_pg_attribute));
+	foreach(lc, lattrs)
+	{
+		attrs[i++] = (Form_pg_attribute) lfirst(lc);
+	}
+
 	schema = CreateTupleDesc(list_length(lattrs), false, attrs);
+
+	pfree(lattrs);
 
 	return schema;
 }
@@ -244,6 +253,8 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 {
 	Datum result;
 	Datum *fields;
+	bool *isnull;
+	HeapTuple decoded;
 	int nfields;
 
 	/* we can treat the raw bytes as text because texts are identical in structure to a byteas */
@@ -257,28 +268,8 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 	deconstruct_array(DatumGetArrayTypeP(result), TEXTOID, -1,
 			false, 'i', &fields, NULL, &nfields);
 
+	isnull = palloc0(nfields * sizeof(bool));
+	decoded = heap_form_tuple(decoder->schema, fields, isnull);
 
-
-	return NULL;
-}
-
-void decode_event(Relation stream, const char *raw, HeapTuple *tuple)
-{
-	TupleDesc	streamdesc = RelationGetDescr(stream);
-	AttInMetadata *meta = TupleDescGetAttInMetadata(streamdesc);
-
-	int i = 0;
-	char *tok;
-	char *str = pstrdup(raw);
-	char *values[streamdesc->natts];
-
-	while ((tok = strsep(&str, ",")) != NULL &&
-			i < stream->rd_att->natts)
-	{
-		/* Consider empty fields NULL */
-		values[i++] = strlen(tok) > 0 ? strdup(tok) : NULL;
-	}
-	free(str);
-
-	*tuple = BuildTupleFromCStrings(meta, values);
+	return decoded;
 }
