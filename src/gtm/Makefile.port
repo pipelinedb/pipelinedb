@@ -1,0 +1,23 @@
+#----------------------------------------------------------------------------
+#
+# Postgres-XC port makefile
+#
+# Copyright(c) 2010-2012 Postgres-XC Development Group
+#
+# src/pgxc/tools/makesgml/Makefile.port
+#
+#-----------------------------------------------------------------------------
+AROPT = crs
+export_dynamic = -Wl,-E
+rpath = -Wl,-rpath,'$(rpathdir)'
+allow_nonpic_in_shlib = yes
+DLSUFFIX = .so
+
+ifeq "$(findstring sparc,$(host_cpu))" "sparc"
+CFLAGS_SL = -fPIC
+else
+CFLAGS_SL = -fpic
+endif
+
+%.so: %.o
+	$(CC) $(CFLAGS) -shared -o $@ $<

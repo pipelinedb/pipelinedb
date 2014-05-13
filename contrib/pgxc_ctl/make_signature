@@ -1,0 +1,136 @@
+#!/bin/bash
+#--------------------------------------------------------------------
+#
+# make_signature
+#
+#    Bash script building module of pgxc_ctl.
+#
+# Copyright (c) 2012 Postgres-XC Development Group
+#
+#---------------------------------------------------------------------
+#
+# This module is used to create signature.h and pgxc_ctl_bash.c files.
+#
+# pgxc_ctl_bash.c files contains two information,
+# 1. Bash script to read pgxc_ctl configuration information and write
+#    it back to pgxc_ctl.  This way, users can use their familiar bash
+#    script to configure postgres-xc cluster.
+#    This includes typical (test) configuration so that pgxc_ctl
+#    can run even with incomplete configuration.
+# 2. Template postgres-xc cluster configuration used by pgxc_ctl.
+#    You can get this template by typing "prepare configu" command.
+#
+# signature.h contains signature information which is useful in 
+# checking the bash script and pgxc_ctl binary build.
+#
+# At present, the bash script is installed each time pgxc_ctl is invoked
+# and uninstalled, this has no significant role.   In the future,
+# when we need to maintain this bash script, it will work to enforce
+# the integrity between the two.
+#------------------------------------------------------------------------
+
+sig=`date +%y%m%d_%H%M_%N`
+cat > signature.h <<EOF
+/*-------------------------------------------------------------------------
+ *
+ * signature.h
+ *
+ *    Signature of module of Postgres-XC configuration and operation tool.
+ *
+ * Copyright (c) 2013 Postgres-XC Development Group
+ *
+ *-------------------------------------------------------------------------
+ */
+#ifndef SIGNATURE_H
+#define SIGNATURE_H
+/* Signature file to identify the make */
+EOF
+echo '#'define signature \"$sig\" >> signature.h
+cat >> signature.h <<EOF
+#endif /* SIGNATURE_H */
+EOF
+
+
+
+cp pgxc_ctl_bash_2  pgxc_ctl_bash.c.wk
+ex pgxc_ctl_bash.c.wk <<EOF
+%s/"/\\\"/g
+w
+%s/^\(.*\)$/"\1",/
+wq
+EOF
+
+cat > pgxc_ctl_bash.c <<EOF 
+/*
+ *-----------------------------------------------------------------------
+ *
+ * pgxc_ctl_bash.c
+ *
+ *    Bash script body for Postrgres-XC configuration and operation tool.
+ *
+ * Copyright (c) 2013 Postgres-XC Development Group
+ *
+ *------------------------------------------------------------------------
+ *
+ * This file was created by make_signature utility when pgxc_ctl was built.
+ *
+ * pgxc_ctl uses this bash script to configure postgres-xc and read
+ * configuration.
+ *
+ * This provides users very flexible way to configure their own
+ * postgres-xc cluster.  For example, by using extra variables and script,
+ * you can save most of your specific hours typing same (or similar)
+ * variable values again and again.
+ */
+
+#include <stddef.h>
+
+/*
+ * Bash script to read pgxc_ctl configuration parameters and write
+ * back to itself.
+ *
+ * This part is written to pgxc_ctl work directory and reads
+ * configuration file, which is also written in bash script.
+ */
+
+char *pgxc_ctl_bash_script[] = {
+EOF
+
+cat pgxc_ctl_bash.c.wk >> pgxc_ctl_bash.c
+
+cat >> pgxc_ctl_bash.c <<EOF
+NULL
+};
+
+EOF
+
+rm pgxc_ctl_bash.c.wk
+
+cp pgxc_ctl_conf_part pgxc_ctl_conf_part.wk
+
+ex pgxc_ctl_conf_part.wk <<EOF
+%s/"/\\\"/g
+w
+%s/^\(.*\)$/"\1",/
+wq
+EOF
+
+cat >> pgxc_ctl_bash.c <<EOF
+/*
+ * Prototype of pgxc_ctl configuration file.
+ *
+ * It should be self descripting.   Can be extracted to your pgxc_ctl
+ * work directory with 'prepare config' command.
+ */
+
+char *pgxc_ctl_conf_prototype[] = {
+EOF
+
+cat pgxc_ctl_conf_part.wk >> pgxc_ctl_bash.c
+
+cat >> pgxc_ctl_bash.c <<EOF
+NULL
+};
+EOF
+
+rm pgxc_ctl_conf_part.wk

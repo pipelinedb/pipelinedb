@@ -1,0 +1,209 @@
+--
+-- XC_SEQUENCE
+--
+-- Check of callback mechanisms on GTM
+-- Sequence DROP and CREATE
+-- Rollback a creation
+BEGIN;
+CREATE SEQUENCE xc_sequence_1;
+SELECT nextval('xc_sequence_1'); -- ok
+ nextval 
+---------
+       1
+(1 row)
+
+ROLLBACK;
+SELECT nextval('xc_sequence_1'); -- fail
+ERROR:  relation "xc_sequence_1" does not exist
+LINE 1: SELECT nextval('xc_sequence_1');
+                       ^
+-- Commit a creation
+BEGIN;
+CREATE SEQUENCE xc_sequence_1;
+SELECT nextval('xc_sequence_1'); -- ok
+ nextval 
+---------
+       1
+(1 row)
+
+COMMIT;
+SELECT nextval('xc_sequence_1'); -- ok
+ nextval 
+---------
+       2
+(1 row)
+
+-- Rollback a drop
+BEGIN;
+DROP SEQUENCE xc_sequence_1;
+SELECT nextval('xc_sequence_1'); -- fail
+ERROR:  relation "xc_sequence_1" does not exist
+LINE 1: SELECT nextval('xc_sequence_1');
+                       ^
+ROLLBACK;
+SELECT nextval('xc_sequence_1'); -- ok, previous transaction failed
+ nextval 
+---------
+       3
+(1 row)
+
+-- Commit a drop
+BEGIN;
+DROP SEQUENCE xc_sequence_1;
+COMMIT;
+SELECT nextval('xc_sequence_1'); -- fail
+ERROR:  relation "xc_sequence_1" does not exist
+LINE 1: SELECT nextval('xc_sequence_1');
+                       ^
+-- SEQUENCE RENAME TO
+-- Rollback a renaming
+CREATE SEQUENCE xc_sequence_1;
+SELECT nextval('xc_sequence_1'); -- ok
+ nextval 
+---------
+       1
+(1 row)
+
+BEGIN;
+ALTER SEQUENCE xc_sequence_1 RENAME TO xc_sequence_2;
+SELECT nextval('xc_sequence_2'); -- ok
+ nextval 
+---------
+       2
+(1 row)
+
+ROLLBACK;
+SELECT nextval('xc_sequence_1'); -- ok
+ nextval 
+---------
+       3
+(1 row)
+
+-- Commit a renaming
+BEGIN;
+ALTER SEQUENCE xc_sequence_1 RENAME TO xc_sequence_2;
+SELECT nextval('xc_sequence_2'); -- ok
+ nextval 
+---------
+       4
+(1 row)
+
+COMMIT;
+SELECT nextval('xc_sequence_2'); -- ok
+ nextval 
+---------
+       5
+(1 row)
+
+DROP SEQUENCE xc_sequence_2;
+-- Columns with SERIAL
+-- Serial sequence is named xc_sequence_tab1_col2_seq
+CREATE TABLE xc_sequence_tab1 (col1 int, col2 serial) DISTRIBUTE BY ROUNDROBIN;
+-- Some data
+INSERT INTO xc_sequence_tab1 VALUES (1, DEFAULT);
+INSERT INTO xc_sequence_tab1 VALUES (2, DEFAULT);
+SELECT col1, col2 FROM xc_sequence_tab1 ORDER BY 1;
+ col1 | col2 
+------+------
+    1 |    1
+    2 |    2
+(2 rows)
+
+-- Rollback a SERIAL column drop
+BEGIN;
+ALTER TABLE xc_sequence_tab1 DROP COLUMN col2;
+INSERT INTO xc_sequence_tab1 VALUES (3);
+SELECT col1 FROM xc_sequence_tab1 ORDER BY 1;
+ col1 
+------
+    1
+    2
+    3
+(3 rows)
+
+ROLLBACK;
+SELECT nextval('xc_sequence_tab1_col2_seq'); -- ok
+ nextval 
+---------
+       3
+(1 row)
+
+-- Commit a SERIAL column drop
+BEGIN;
+ALTER TABLE xc_sequence_tab1 DROP COLUMN col2;
+INSERT INTO xc_sequence_tab1 VALUES (3);
+SELECT col1 FROM xc_sequence_tab1 ORDER BY 1;
+ col1 
+------
+    1
+    2
+    3
+(3 rows)
+
+COMMIT;
+DROP TABLE xc_sequence_tab1;
+-- Need to recreate here, serial column is no more
+CREATE TABLE xc_sequence_tab1 (col1 int, col2 serial) DISTRIBUTE BY ROUNDROBIN;
+INSERT INTO xc_sequence_tab1 VALUES (1234, DEFAULT);
+SELECT col1, col2 FROM xc_sequence_tab1 ORDER BY 1;
+ col1 | col2 
+------+------
+ 1234 |    1
+(1 row)
+
+-- Rollback of a table with SERIAL
+BEGIN;
+DROP TABLE xc_sequence_tab1;
+ROLLBACK;
+SELECT nextval('xc_sequence_tab1_col2_seq'); -- ok
+ nextval 
+---------
+       2
+(1 row)
+
+-- Commit of a table with SERIAL
+BEGIN;
+DROP TABLE xc_sequence_tab1;
+COMMIT;
+-- Recreate a sequence with the same name as previous SERIAL one
+CREATE SEQUENCE xc_sequence_tab1_col2_seq START 2344;
+SELECT nextval('xc_sequence_tab1_col2_seq'); -- ok
+ nextval 
+---------
+    2344
+(1 row)
+
+DROP SEQUENCE xc_sequence_tab1_col2_seq;
+-- Create a sequence with negative INCREMENT
+CREATE SEQUENCE xc_sequence_neg_set INCREMENT BY -2;
+SELECT nextval('xc_sequence_neg_set'); -- ok
+ nextval 
+---------
+      -1
+(1 row)
+
+SELECT currval('xc_sequence_neg_set'); -- ok
+ currval 
+---------
+      -1
+(1 row)
+
+SELECT setval('xc_sequence_neg_set', -99); -- ok
+ setval 
+--------
+    -99
+(1 row)
+
+SELECT nextval('xc_sequence_neg_set'); -- ok
+ nextval 
+---------
+    -101
+(1 row)
+
+SELECT currval('xc_sequence_neg_set'); -- ok
+ currval 
+---------
+    -101
+(1 row)
+
+DROP SEQUENCE xc_sequence_neg_set;

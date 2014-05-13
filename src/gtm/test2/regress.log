@@ -1,0 +1,415 @@
+make: Nothing to be done for `all'.
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+stopping standby...
+waiting for server to shut down... done
+server stopped
+stopping active...
+gtm_ctl: could not send stop signal (PID: 24704): No such process
+gtm: no process killed
+gtm_standby: no process killed
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24750 24744  0 16:50 pts/2    00:00:00 grep gtm
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+cleaning standby...
+/tmp/pgxc/data/gtm_standby ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+cleaning active...
+/tmp/pgxc/data/gtm ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+starting active...
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+server starting
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24763     1  0 16:50 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+gxid=3
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+starting standby...
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+server starting
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24763     1  1 16:50 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    24775     1  0 16:50 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+=== test_startup_01 in ===
+=== test_startup_01 out ===
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+stopping standby...
+waiting for server to shut down.... done
+server stopped
+stopping active...
+waiting for server to shut down.... done
+server stopped
+gtm: no process killed
+gtm_standby: no process killed
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+cleaning standby...
+/tmp/pgxc/data/gtm_standby ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+cleaning active...
+/tmp/pgxc/data/gtm ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+starting active...
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+server starting
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24808     1  0 16:50 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    24810 24802  0 16:50 pts/2    00:00:00 grep gtm
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+sleeping 3 seconds...
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+starting standby...
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+server starting
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24808     1  0 16:50 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    24818     1  0 16:50 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+stopping standby...
+waiting for server to shut down.... done
+server stopped
+stopping active...
+waiting for server to shut down.... done
+server stopped
+gtm: no process killed
+gtm_standby: no process killed
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+cleaning standby...
+/tmp/pgxc/data/gtm_standby ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+cleaning active...
+/tmp/pgxc/data/gtm ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+starting active...
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+server starting
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24846     1  0 16:50 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    24848 24840  0 16:50 pts/2    00:00:00 grep gtm
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+sleeping 3 seconds...
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+starting standby...
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+server starting
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24846     1  0 16:50 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    24856     1  0 16:50 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+=== test_node5_01 in ===
+PGconnectGTM() ok.
+PGconnectGTM() ok.
+=== test_node5_01 out ===
+=== test_node5_02 in ===
+PGconnectGTM() ok.
+PGconnectGTM() ok.
+=== test_node5_02 out ===
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+stopping standby...
+waiting for server to shut down... done
+server stopped
+stopping active...
+waiting for server to shut down... done
+server stopped
+gtm: no process killed
+gtm_standby: no process killed
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24870 24864  0 16:50 pts/2    00:00:00 grep gtm
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+cleaning standby...
+/tmp/pgxc/data/gtm_standby ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+cleaning active...
+/tmp/pgxc/data/gtm ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+starting active...
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+server starting
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24885     1  0 16:50 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    24887 24879  0 16:50 pts/2    00:00:00 grep gtm
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+sleeping 3 seconds...
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+starting standby...
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+server starting
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24885     1  0 16:50 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    24895     1  0 16:50 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+=== test_txn4_01 in ===
+PGconnectGTM() ok.
+=== test_txn4_01 out ===
+=== test_txn4_02 in ===
+PGconnectGTM() ok.
+=== test_txn4_02 out ===
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+stopping standby...
+waiting for server to shut down.... done
+server stopped
+stopping active...
+waiting for server to shut down.... done
+server stopped
+gtm: no process killed
+gtm_standby: no process killed
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24917 24910  0 16:50 pts/2    00:00:00 grep gtm
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+cleaning standby...
+/tmp/pgxc/data/gtm_standby ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+cleaning active...
+/tmp/pgxc/data/gtm ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+starting active...
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+server starting
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24932     1  0 16:50 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    24934 24926  0 16:50 pts/2    00:00:00 grep gtm
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+sleeping 3 seconds...
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+starting standby...
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+server starting
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    24932     1  0 16:50 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    24942     1  0 16:51 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+=== test_seq4_01 in ===
+PGconnectGTM() ok.
+=== test_seq4_01 out ===
+=== test_seq4_02 in ===
+PGconnectGTM() ok.
+=== test_seq4_02 out ===
+=== test_seq4_03 in ===
+PGconnectGTM() ok.
+=== test_seq4_03 out ===
+gtm: no process killed
+gtm_standby: no process killed
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+gtm_ctl: could not send stop signal (PID: 25019): No such process
+gtm: no process killed
+gtm_standby: no process killed
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+gtm_ctl: could not send stop signal (PID: 25061): No such process
+gtm: no process killed
+gtm_standby: no process killed
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+gtm: no process killed
+gtm_standby: no process killed
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+promoting standby...
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+snaga    25158     1  0 16:51 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+=== test_standby_01 in ===
+=== test_standby_01 out ===
+=== test_standby_02 in ===
+PGconnectGTM() ok.
+=== test_standby_02 out ===
+=== test_standby_03 in ===
+PGconnectGTM() ok.
+=== test_standby_03 out ===
+=== test_standby_04 in ===
+PGconnectGTM() ok.
+PGconnectGTM() ok.
+=== test_standby_04 out ===
+gtm_ctl: could not send stop signal (PID: 25147): No such process
+gtm: no process killed
+gtm_standby: no process killed
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+promoting standby...
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+snaga    25208     1  0 16:51 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    25218     1  0 16:51 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+snaga    25228 25224  0 16:51 pts/2    00:00:00 grep gtm
+gtm: no process killed
+gtm_standby: no process killed
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+promoting standby...
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+snaga    25254     1  0 16:51 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    25264     1  0 16:51 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+snaga    25274 25270  0 16:51 pts/2    00:00:00 grep gtm
+gtm: no process killed
+gtm_standby: no process killed
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+promoting standby...
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+snaga    25300     1  0 16:51 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    25310     1  0 16:51 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+snaga    25320 25316  0 16:51 pts/2    00:00:00 grep gtm
+gtm: no process killed
+gtm_standby: no process killed
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+promoting standby...
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+snaga    25346     1  0 16:51 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    25356     1  0 16:51 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+snaga    25366 25362  0 16:51 pts/2    00:00:00 grep gtm
+gtm: no process killed
+gtm_standby: no process killed
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+promoting standby...
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+snaga    25392     1  0 16:51 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    25402     1  0 16:51 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+snaga    25412 25408  0 16:51 pts/2    00:00:00 grep gtm
+gtm: no process killed
+gtm_standby: no process killed
+gtm_ctl: PID file "/tmp/pgxc/data/gtm/gtm.pid" does not exist
+Is server running?
+gtm_ctl: PID file "/tmp/pgxc/data/gtm_standby/gtm.pid" does not exist
+Is server running?
+/tmp/pgxc/bin ~/pgxc/postgres-xc/src/gtm/test
+~/pgxc/postgres-xc/src/gtm/test
+promoting standby...
+checking process...
+snaga    18449 18384  0 Mar22 pts/3    00:00:00 tail -f /tmp/pgxc/data/gtm/gtm.log
+snaga    25124 18416  0 Mar22 pts/4    00:00:00 tail -f /tmp/pgxc/data/gtm_standby/gtm.log
+snaga    25438     1  0 16:51 pts/2    00:00:00 gtm -D /tmp/pgxc/data/gtm -n 101
+snaga    25448     1  0 16:51 pts/2    00:00:00 gtm_standby -D /tmp/pgxc/data/gtm_standby -n 102 -s -p 6667 -i 127.0.0.1 -q 6666
+snaga    25458 25454  0 16:51 pts/2    00:00:00 grep gtm
+=== test_txn5_01 in ===
+PGconnectGTM() ok.
+PGconnectGTM() ok.
+=== test_txn5_01 out ===
+=== test_txn5_02 in ===
+PGconnectGTM() ok.
+PGconnectGTM() ok.
+=== test_txn5_02 out ===
+=== test_txn5_03 in ===
+PGconnectGTM() ok.
+PGconnectGTM() ok.
+=== test_txn5_03 out ===
+=== test_txn5_04 in ===
+PGconnectGTM() ok.
+PGconnectGTM() ok.
+=== test_txn5_04 out ===
+=== test_txn5_05 in ===
+PGconnectGTM() ok.
+PGconnectGTM() ok.
+=== test_txn5_05 out ===
+=== test_txn5_06 in ===
+PGconnectGTM() ok.
+PGconnectGTM() ok.
+=== test_txn5_06 out ===

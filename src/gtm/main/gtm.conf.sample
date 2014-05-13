@@ -1,0 +1,59 @@
+# ----------------------
+# GTM configuration file
+# ----------------------
+#
+# This file must be placed on gtm working directory 
+# specified by -D command line option of gtm or gtm_ctl.  The
+# configuration file name must be "gtm.conf"
+#
+#
+# This file consists of lines of the form
+#
+#  name = value
+#
+# (The "=" is optional.) Whitespace may be used.   Comments are
+# introduced with "#" anywhere on a line.  The complete list of
+# parameter names and allowed values can be found in the
+# Postgres-XC documentation.
+#
+# The commented-out settings shown in this file represent the default
+# values.
+#
+# Re-commenting a setting is NOT sufficient to revert it to the default
+# value.
+#
+# You need to restart the server.
+
+#------------------------------------------------------------------------------
+# GENERAL PARAMETERS
+#------------------------------------------------------------------------------
+#nodename = ''				# Specifies the node name.
+					# (changes requires restart)
+#listen_addresses = '*'			# Listen addresses of this GTM.
+					# (changes requires restart)
+#port = 6666				# Port number of this GTM.
+					# (changes requires restart)
+
+#startup = ACT				# Start mode. ACT/STANDBY.
+
+#------------------------------------------------------------------------------
+# GTM STANDBY PARAMETERS
+#------------------------------------------------------------------------------
+#Those parameters are effective when GTM is activated as a standby server
+#active_host = ''			# Listen address of active GTM.
+					# (changes requires restart)
+#active_port =				# Port number of active GTM.
+					# (changes requires restart)
+
+#---------------------------------------
+# OTHER OPTIONS
+#---------------------------------------
+#keepalives_idle = 0			# Keepalives_idle parameter.
+#keepalives_interval = 0		# Keepalives_interval parameter.
+#keepalives_count = 0			# Keepalives_count internal parameter.
+#log_file = 'gtm.log'			# Log file name
+#log_min_messages = WARNING		# log_min_messages.  Default WARNING.
+				  	# Valid value: DEBUG, DEBUG5, DEBUG4, DEBUG3,
+					# DEBUG2, DEBUG1, INFO, NOTICE, WARNING,
+					# ERROR, LOG, FATAL, PANIC
+#synchronous_backup = off	# If backup to standby is synchronous

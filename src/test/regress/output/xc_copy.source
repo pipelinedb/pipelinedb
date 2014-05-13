@@ -1,0 +1,235 @@
+--
+-- XC_COPY
+--
+-- COPY tests for a Postgres-XC cluster
+create or replace function pgxc_nodetype() returns varchar as 
+$$
+declare
+	pgxc_class_entries int;        
+begin
+	select into pgxc_class_entries count(*) from pgxc_class ;             
+	if pgxc_class_entries > 0 then
+		return ' Node type: C';
+	else
+		return ' Node type: D';
+	end if;
+end $$ language plpgsql;
+create function deffunc() returns bytea as
+$$
+begin
+	return E'\\023\\000\\\\''!|''';
+end $$ language plpgsql;
+create or replace function deffunc_bytea() returns bytea as 
+$$
+begin
+	return E'\0123';
+end $$ language plpgsql;
+create or replace function deffunc_str() returns varchar as 
+$$
+begin
+	return E'\\.\\000"\\''!|''\\N' || pgxc_nodetype();
+end $$ language plpgsql;
+create or replace function deffunc_str_i() returns varchar immutable as 
+$$
+begin
+	return E'\\.\\000"\\''!|''' || pgxc_nodetype();
+end $$ language plpgsql;
+create or replace function deffunc_nullstring() returns varchar as 
+$$
+begin
+	return E'\\N';
+end $$ language plpgsql;
+create table xccopydef(idseq serial, id1 int,
+                       def1 bytea default deffunc(),
+					   def2 bytea default E'\\000'::bytea,
+					   def3 varchar default deffunc_str(),
+					   def4 varchar default deffunc_str_i(),
+					   def5 varchar default deffunc_nullstring(),
+					   def6 bytea default deffunc_bytea(),
+					   id2 varchar,
+					   def7 float default length(deffunc_str()) + 0.433);
+copy xccopydef (id1, id2) from stdin (delimiter '|');
+copy xccopydef (id1, id2) from stdin (format 'csv');
+insert into xccopydef (id1, id2) values (NULL, NULL);
+insert into xccopydef (id1) values (4567);
+select * from xccopydef order by idseq;
+ idseq | id1  |       def1       | def2 |            def3             |           def4            | def5 |  def6  |    id2    |  def7  
+-------+------+------------------+------+-----------------------------+---------------------------+------+--------+-----------+--------
+     1 |    3 | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: D | \N   | \x0a33 |  \\x135   | 27.433
+     2 |      | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: D | \N   | \x0a33 |  abcd     | 27.433
+     3 |    3 | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: D | \N   | \x0a33 |  \\\\x135 | 27.433
+     4 |      | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: D | \N   | \x0a33 |  abcd     | 27.433
+     5 |      | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: C | \N   | \x0a33 |           | 27.433
+     6 | 4567 | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: C | \N   | \x0a33 |           | 27.433
+(6 rows)
+
+copy xccopydef (id1, id2) to '@abs_builddir@/results/copydefout.data' (format 'binary');
+truncate xccopydef;
+copy xccopydef (id1, id2) from '@abs_builddir@/results/copydefout.data' (format 'binary');
+select * from xccopydef order by idseq;
+ idseq | id1  |       def1       | def2 |            def3             |           def4            | def5 |  def6  |    id2    |  def7  
+-------+------+------------------+------+-----------------------------+---------------------------+------+--------+-----------+--------
+     7 |    3 | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: D | \N   | \x0a33 |  \\x135   | 27.433
+     8 |      | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: D | \N   | \x0a33 |  abcd     | 27.433
+     9 |    3 | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: D | \N   | \x0a33 |  \\\\x135 | 27.433
+    10 |      | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: D | \N   | \x0a33 |  abcd     | 27.433
+    11 |      | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: D | \N   | \x0a33 |           | 27.433
+    12 | 4567 | \x13005c27217c27 | \x00 | \.\000"\'!|'\N Node type: C | \.\000"\'!|' Node type: D | \N   | \x0a33 |           | 27.433
+(6 rows)
+
+drop table xccopydef;
+drop function pgxc_nodetype();
+drop function deffunc();
+drop function deffunc_bytea();
+drop function deffunc_str();
+drop function deffunc_str_i();
+drop function deffunc_nullstring();
+-- Tests related to COPY for a Postgres-XC cluster
+-- Create a table not using the first node of cluster
+SELECT create_table_nodes('xc_copy_1(a int, b int)', '{2}'::int[], 'replication', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+INSERT INTO xc_copy_1 VALUES (1,23),(34,5),(9,11);
+-- Extract its data
+COPY xc_copy_1 TO STDOUT;
+1	23
+34	5
+9	11
+DROP TABLE xc_copy_1;
+-- Quoted table name
+-- check for correct remote query generation
+CREATE TABLE "Xc_copy_2" (a int, b int);
+COPY "Xc_copy_2" FROM STDIN DELIMITER ',';
+COPY "Xc_copy_2" TO STDOUT;
+1	2
+DROP TABLE "Xc_copy_2";
+-- Quoted column name
+-- check for correct remote query generation
+CREATE TABLE xc_copy_3(a int, "user" int);
+COPY xc_copy_3 (a, "user") FROM STDIN (DELIMITER ',');
+COPY xc_copy_3 TO STDOUT;
+1	2
+DROP TABLE xc_copy_3;
+-- Table with no locator data
+CREATE TABLE xc_copy_4 (c1 int) DISTRIBUTE BY HASH(c1);
+COPY (SELECT pclocatortype,pcattnum,pchashalgorithm,pchashbuckets FROM pgxc_class WHERE pgxc_class.pcrelid = 'xc_copy_4'::regclass) TO stdout;
+H	1	1	4096
+DROP TABLE xc_copy_4;
+-- ///////////////////////////
+-- Test COPY TO and FROM from various types of tables
+-- ///////////////////////////
+-- create some tables
+select create_table_nodes('tbl_r_n12(a int, b int)', '{1, 2}'::int[], 'replication', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_r_n2(a int, b int)', '{2}'::int[], 'replication', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_rr_n12(a int, b int)', '{1, 2}'::int[], 'roundrobin', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_rr_n2(a int, b int)', '{2}'::int[], 'roundrobin', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_h_n12(a int, b int)', '{1, 2}'::int[], 'hash(a)', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_h_n2(a int, b int)', '{2}'::int[], 'hash(a)', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+-- try copy from replicated table
+copy tbl_r_n12(a,b) from stdin;
+copy tbl_r_n2(a,b) from stdin;
+-- try copy from round robin table
+copy tbl_rr_n12(a,b) from stdin;
+copy tbl_rr_n2(a,b) from stdin;
+-- try copy from hash distributed table
+copy tbl_h_n12(a,b) from stdin;
+copy tbl_h_n2(a,b) from stdin;
+-- confirm copy from
+select * from tbl_r_n12;
+ a | b  
+---+----
+   | 11
+(1 row)
+
+select * from tbl_r_n2;
+ a | b  
+---+----
+   | 11
+(1 row)
+
+select * from tbl_rr_n12;
+ a | b  
+---+----
+   | 11
+(1 row)
+
+select * from tbl_rr_n2;
+ a | b  
+---+----
+   | 11
+(1 row)
+
+select * from tbl_h_n12;
+ a | b  
+---+----
+   | 11
+(1 row)
+
+select * from tbl_h_n2;
+ a | b  
+---+----
+   | 11
+(1 row)
+
+-- change some data
+update tbl_r_n12 set b = 999 where a is null;
+update tbl_r_n2 set b = 999 where a is null;
+update tbl_rr_n12 set b = 999 where a is null;
+update tbl_rr_n2 set b = 999 where a is null;
+update tbl_h_n12 set b = 999 where a is null;
+update tbl_h_n2 set b = 999 where a is null;
+-- try copy to a replicated table
+copy tbl_r_n12 (a,b) to stdout;
+\N	999
+copy tbl_r_n2 (a,b) to stdout;
+\N	999
+-- try copy to a round robin table
+copy tbl_rr_n12 (a,b) to stdout;
+\N	999
+copy tbl_rr_n2 (a,b) to stdout;
+\N	999
+-- try copy to a hash distributed table
+copy tbl_h_n12 (a,b) to stdout;
+\N	999
+copy tbl_h_n2 (a,b) to stdout;
+\N	999
+-- clean up
+drop table if exists tbl_r_n12;
+drop table if exists tbl_r_n2;
+drop table if exists tbl_rr_n12;
+drop table if exists tbl_rr_n2;
+drop table if exists tbl_h_n12;
+drop table if exists tbl_h_n2;

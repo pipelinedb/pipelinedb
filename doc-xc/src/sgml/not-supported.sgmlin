@@ -1,0 +1,7 @@
+<!## XC>
+<note>
+ <para>
+  This feature is not supported in the current release of <productname>Postgres-XC</productname>.
+ </para>
+</note>
+<!## end>

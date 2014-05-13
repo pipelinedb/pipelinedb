@@ -1,0 +1,138 @@
+# ----------
+# src/test/regress/parallel_schedule
+#
+# By convention, we put no more than twenty tests in any one parallel group;
+# this limits the number of connections needed to run the tests.
+# ----------
+
+# run tablespace by itself, and first, because it forces a checkpoint;
+# we'd prefer not to have checkpoints later in the tests because that
+# interferes with crash-recovery testing.
+test: tablespace
+
+# ----------
+# The first group of parallel tests
+# ----------
+test: boolean char name varchar text int2 int4 int8 oid float4 float8 bit numeric txid uuid enum money rangetypes
+
+# Depends on things setup during char, varchar and text
+test: strings
+# Depends on int2, int4, int8, float4, float8
+test: numerology
+
+# ----------
+# The second group of parallel tests
+# ----------
+test: point lseg box path polygon circle date time timetz timestamp timestamptz interval abstime reltime tinterval inet macaddr tstypes comments
+
+# ----------
+# Another group of parallel tests
+# geometry depends on point, lseg, box, path, polygon and circle
+# horology depends on interval, timetz, timestamp, timestamptz, reltime and abstime
+# ----------
+test: geometry horology regex oidjoins type_sanity opr_sanity
+
+# ----------
+# These four each depend on the previous one
+# ----------
+test: insert
+test: create_function_1
+test: create_type
+test: create_table
+test: create_function_2
+
+# ----------
+# Load huge amounts of data
+# We should split the data files into single files and then
+# execute two copy tests parallel, to check that copy itself
+# is concurrent safe.
+# ----------
+test: copy copyselect
+
+# ----------
+# More groups of parallel tests
+# ----------
+test: create_misc create_operator
+# These depend on the above two
+test: create_index create_view
+
+# Postgres-XC : Removed this test from the parallel group of tests since it used to give inconsistent plan outputs.
+test: inherit
+# ----------
+# Another group of parallel tests
+# ----------
+test: create_aggregate create_function_3 create_cast constraints triggers create_table_like typed_table vacuum drop_if_exists updatable_views
+
+# ----------
+# sanity_check does a vacuum, affecting the sort order of SELECT *
+# results. So it should not run parallel to other tests.
+# ----------
+test: sanity_check
+
+# ----------
+# Believe it or not, select creates a table, subsequent
+# tests need.
+# ----------
+test: errors
+test: select
+ignore: random
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: select_into select_distinct select_distinct_on select_implicit select_having subselect union case join aggregates transactions random portals arrays btree_index hash_index update namespace delete
+
+# prepared_xacts cannot run in parallel of other tests involving 2PC
+test: prepared_xacts
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: privileges security_label collate matview
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: alter_generic misc psql
+
+# rules cannot run concurrently with any test that creates a view
+test: rules
+# event triggers cannot run concurrently with any test that runs DDL
+test: event_trigger
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: select_views portals_p2 foreign_key cluster dependency guc bitmapops combocid tsearch tsdicts foreign_data window xmlmap functional_deps json
+
+# ----------
+# Advisory lock need to be tested in series in Postgres-XC
+# ---------
+test: advisory_lock
+# ----------
+# Another group of parallel tests
+# NB: temp.sql does a reconnect which transiently uses 2 connections,
+# so keep this parallel group to at most 19 tests
+# ----------
+test: plancache limit plpgsql copy2 temp domain rangefuncs prepare without_oid conversion truncate alter_table sequence polymorphism rowtypes returning largeobject with xml
+
+# run stats by itself because its delay may be insufficient under heavy load
+test: stats
+
+# ----------
+# Postgres-XC additional tests
+# ----------
+# This creates functions used by tests xc_misc, xc_FQS and xc_FQS_join
+test: xc_create_function
+# xc_misc used by xc_returning
+test: xc_misc
+# Those ones can be run in parallel
+test: xc_groupby xc_distkey xc_having xc_temp xc_remote xc_FQS xc_FQS_join xc_copy xc_alter_table xc_sequence xc_triggers xc_trigship xc_constraints xc_limit xc_sort xc_returning xc_params
+# Cluster setting related test is independant
+test: xc_node
+
+# Additional tests for prepared xacts
+test: xc_prepared_xacts
+
+# This runs statements that are not allowed in a transaction block
+test: xc_notrans_block

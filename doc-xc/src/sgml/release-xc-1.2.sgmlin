@@ -1,0 +1,667 @@
+<!-- doc/src/sgml/release-xc-1.2.1.sgml -->
+<!-- See header comment in release.sgml about typical markup -->
+
+ <sect1 id="release-xc-1-2-1">
+  <title>Release 1.2.1</title>
+
+  <note>
+   <title>Release Date</title>
+   <simpara>2014-03-28</simpara>
+  </note>
+
+  <para>
+   This release contains new feature in and a variety of fixes in 1.2.1.
+  </para>
+  <para>
+   Because of several important fixes are applied just after 1.2.0 material was prepared, 
+   the first available GA of version 1.2 of <application>Postgres-XC</application> is 1.2.1.
+  </para>
+
+  <sect2>
+   <title>Migration to Version 1.2.1</title>
+
+   <para>
+    A dump/restore is required for those running 1.1.X or 1.0.x.
+   </para>
+
+  </sect2>
+
+  <sect2>
+   <title>Overview</title>
+
+   <para>
+    Postgres-XC is a symmetric (multi-master, read and write-scalable) shared-nothing cluster 
+    based on <productname>PostgreSQL</productname>. 
+    This release version is based on <productname>PostgreSQL</productname> 9.3.
+   </para>
+   <para>
+    Currently the only architectures supported are 64 bit Linux operating systems.
+   </para>
+   <para>
+    This release of <productname>Postgres-XC</productname> is the third major release and 
+    contains the following features, characteristics and enhancements.
+   </para>
+
+   <itemizedlist>
+
+    <listitem>
+     <para>
+      Support and extensions for existing features of PostgreSQL in a cluster-wide environment.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      SQL extensions and functionalities exclusive to Postgres-XC for management and operations 
+      related to a cluster, which add a node-level granularity for cluster operations.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Creation of Global Transaction Manager (GTM), which is a centralized component 
+      providing cluster-wide Multi-version Concurrency Control (MVCC).
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Creation of mechanisms exclusive to Postgres-XC and enhancements of existing 
+      internal mechanisms of PostgreSQL, which are related to connection pooling, 
+      global transaction management, query planning, rewriting, analyzing and execution.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Add/remove nodes while Postgres-XC cluster is in operation.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Basic Postgres-XC configuration and operation tool.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Restrictions related to existing features in PostgreSQL and currently 
+      not supported by Postgres-XC.
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+   <para>
+    The above items are explained in more detail in the sections below.
+   </para>
+   <para>
+    The original overall architecture and design of Postgres-XC is by Koichi Suzuki, 
+    Mason Sharp, Pavan Deolasee, Andrei Martsinchyk and Michael Paquier. 
+    Koichi Suzuki is the original project lead.
+   </para>
+   <para>
+    Core member at the time of Version 1.2.1 released is Koichi Suzuki, Ashutosh Bapat, 
+    Ababs Butt, Ahsan Hadi, Masataka Saito, Tetsuo Sakata, 
+    Masaki Hisada and Hitoshi Hemmi.
+   </para>
+
+  </sect2>
+
+  <sect2>
+   <title>New Features</title>
+
+   <itemizedlist>
+
+    <listitem>
+     <para>
+      New planner feature to handle sub-queries, by Ashutosh Bapat.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Materialized view was ported to XC, done by Ashutosh Bapat
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+	  Event Trigger was ported to XC, done by Koichi Suzuki
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+	  Automatic updatable views was ported to XC, done by Abbas But
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+	  LATERAL was ported to XC, done by Ashutosh Bapat
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+  </sect2>
+
+  <sect2>
+   <title>Improvements</title>
+
+   <itemizedlist>
+
+    <listitem>
+     <para>
+      Additonal tests in xc_FQL regression. by Ashutosh Bapat.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Enabled TEMP objects in implicit 2PC transactions, by K.Suzuki.
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+  </sect2>
+
+  <sect2>
+   <title>Interface changes</title>
+
+	<para>
+	 There are no interface changes except for new features.
+	</para>
+
+  </sect2>
+
+  <sect2>
+   <title>Fixes</title>
+
+   <itemizedlist>
+    
+    <listitem>
+     <para>
+      Fix false report of partition column updation. By Abbas But.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for alias problem in returning list of INSERT statements. By Abbas But.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix a problem in RETURNING support when all the items of the list and ont shipable. By Abbas But.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+       Change the way UPDATEs are handeled, 
+	   by updating all the columns of the result relation instead of
+	   updating only the columns that were in the target list.
+	   Needed to support automatic updatable views.
+	   By Abbas But.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for all problems emerging because the query deparsing system now generates
+	  unique rtable names by appending digits. By Abbas But.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      apn issue that GTM Proxy doesn't send status in response of COMMIT and ROLLBACK.
+	  By Masataka Saito.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix an issue that a GTM Proxy sends MSG_BACKEND_DISCONNECT command with
+	  wrong proxy connection ID. by Masataka Saito.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix the issue that a GTM Proxy sends error responses via unrelated connection.  
+	  By Masataka Saito.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix the bug 440, gtmProxySpecificExtraConfig does not work with pgxc_ctl, 
+	  by Koichi Suzuki
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix makesgml to run at Solaris 10, by Michael Paquier.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Correct GTM-Proxy code to build at Solaris 10, by Matt Warner.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Correct pgxc_ctl to build and run on more platforms including Mas OS-X,
+	  by Koichi Suzuki.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Change the level of some mesasge from GTM standby, by Koichi Suzuki.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix potential memory leak at GTM, by Nikhil Sontakke.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Allow GTM to create more than 1024 sequences, by Koichi Suzuki.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix initdb usage and error message bug, by Masataka Saito.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix GTM issue associated with multiple GXID request frm GTM Proxy,
+	  by Nikhil Sontakke.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix GTM proxy disconnect handling, by Andrei Martinchyk.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix of GTM proxy potential memory leak, by Andrei Martinchyk.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix of message level for BARRIER, by Koichi Suzuki.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      GTM Slave configuration printout fix, by Mason Sharp.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix pgxc_ctl to elminate extra character generated by datanode_cmd.c (pgxc_ctl),
+	  by Mason Sharp.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix invalid gtm_ctl option generaged by gtm_cmd.c (pgxc_ctl),
+	  by Mason Sharp.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix incorrect gtm_proxy selection by datanode_cmd.c (pgxc_ctl),
+	  by Mason Sharp.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix of fast query shipping at pgxc_is_join_shippable(), by Ashutosh Bapat.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix GTM to close the control file, by Stefan Himpich.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix int4 regression by removing int4_1.out and add ORDER BY to some statements,
+	  by Koichi Suzuki.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix copy command buffere overflow, by Koichi Suzuki.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix incorrect statment with -k option in pgbench, by Tetsuo Sakata.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix master/slave configuretion in the coordinator, by Koichi Suzuki.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix data inconsistency caused by updating/deleting replicated tables, by Abbas But.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix incorrect query generation to datanodes where "AND" tokens are replaced by ",", by Masataka Saito.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix VPATH compilation failure, by Masataka Saito.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix GTM and GTM Proxy failure, by Masataka Saito.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Improve statement cancellation behavir consistent.   Reduce the chance of random failures in the regression test, by Masataka Saito.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix incorrect datanode statement creation with a case of subquery. By Abbas But.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed internal node type identifier to be compatible with PostgreSQL 9.3.2 to provide better binary compatibility to
+	  <application>PostgreSQL</application> extensions.
+      Suggestion by Krzysztof Nienartowicz.
+     </para>
+    </listitem> 
+
+    <listitem>
+     <para>
+      <application>pgxc_ctl</application> improvement to add <literal>-w</literal> option to <literal>pg_ctl start</literal> command
+	  for better synchronization.  By Koichi Suzuki.  Reported by Masataka Saito.
+     </para>
+    </listitem> 
+
+    <listitem>
+     <para>
+	  <command>ALTER NODE</command> improvement while a coordinator is down or changed it's connection point by slave promotion.
+	  By Koichi Suzuki.   Analyzed by Masataka Saito.
+     </para>
+    </listitem> 
+
+    <listitem>
+     <para>
+	  <command>pg_xlogdump</command> now handles <literal>BARRIER</literal> record correctly.
+	  By Wang Diancheng.
+     </para>
+    </listitem> 
+
+    <listitem>
+     <para>
+	  Now <command>CREATE NODE</command>, <command>ALTER NODE</command> and <command>DROP NODE</command> can be issued
+	  in a same session to change primary node configuration.
+	  By Koichi Suzui.
+     </para>
+    </listitem> 
+
+   </itemizedlist>
+
+  </sect2>
+
+  <sect2>
+   <title>Restrictions</title>
+
+   <itemizedlist>
+
+    <listitem>
+     <para>
+  	  <literal>UPDATE</literal> is performed based on CTID of each tuple.  This may affect replicated tables.
+	  This should be fixed by GA.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <productname>PostgreSQL</productname> 9.3 fixed a bug to check row update during firing of BEFORE ROW triggers.
+	  This bug is still open in <productname>Postgres-XC</productname>.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <literal>SERIALIZABLE</literal> and <literal>REPEATABLE READ</literal> transaction isolation modes are not supported.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Only constraints which can be enforced only locally to a datanode are supported.
+      For example, UNIQUE constraints for non-distribute column is not supported in distributed tables.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Using complicated statement in <command>PREPARE</command> steatement may not 
+      be supported (depends upon specific statement). 
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Row triggers do not work with <command>COPY</command>.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Privilege to views may not work correctly.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <command>COPY TO</command> from replicated table does not work.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Quoted cast may not work.  For example, <literal>select "my table".*::"my table" from "my table";</literal> 
+      does not work. Use <literal>select row("my table".*) from "my table";</literal> instead.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      SQL functions containing utility statement may not work.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      DML cannot be used in plpgsql functions.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <command>CREATE TABLE AS EXECUTE</command> is not supported.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <command>WHERE CURRENT OF</command> is not supported.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      In cursors, <command>MOVE BACKWARD</command> works only if <literal>SCROLL</literal> is used in the cursor.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <literal>WITH HOLD</literal> cursors are not supported.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Foreign Data Wrapper is not supported.  Following related SQL statements are not supported.  
+     </para>
+     <para>
+      <command>CREATE FOREIGN DATA WRAPPER</command>, <command>ALTER FOREIGN DATA WRAPPER</command>, 
+      <command>DROP FOREIGN DATA WRAPPER</command>, 
+      <command>CREATE FOREIGN TABLE</command>, <command>ALTER FOREIGN TABLE</command>, 
+      <command>DROP FOREING TABLE</command>, 
+      <command>CREATE SERVER</command>, <command>ALTER SERVER</command>, <command>DROP SERVER</command>, 
+      <command>CREATE USER MAPPING</command>, <command>ALTER USER MAPPING</command>, 
+      <command>DROP USER MAPPING</command>.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Savepoint is not supported.  Following related SQL statements are not supported.
+     </para>
+     <para>
+      <command>SAVEPOINT</command>, <command>RELEASE SAVEPOINT</command> 
+      and <command>ROLLBACK TO SAVEPOINT</command>.
+     </para>
+    </listitem>
+
+
+    <listitem>
+     <para>
+      <command>LISTEN</command>, <command>UNLISTEN</command> and <command>NOTIFY</command> work only locally at a coordinator.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      SECURITY LABEL is not supported.
+     </para>
+    </listitem>
+
+<!## xxx>
+<!-- Some extension modules do work but not all -->
+    <listitem>
+     <para>
+      CREATE EXTENSION, ALTER EXTENSDION, DROP EXTENSION may not work.
+     </para>
+    </listitem>
+<!## end>
+
+    <listitem>
+     <para>
+      Exception block in plpgsql is not available because SAVEPOINT is not supported.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Distribution key of a table cannot be updated.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Statistics are not collected globally.   These statistic data are maintained locally to each node.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      BARRIERs do not have timeout, meaning if a 2PC transaction is stuck forever, barrier will be stuck too.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <command>CREATE TABLE SELECT</command> statement will cause error 
+      if <command>SELECT</command> statement involves aggregate functions 
+      such that its transition function returns different type of row from the final row.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      When a replication table does not have a primary key and the plan has no key other than CTID, the statement will fail.
+	  To fix this, add a primary key.
+     </para>
+    </listitem>
+
+
+   </itemizedlist>
+
+  </sect2>
+
+  <sect2>
+   <title>Issues</title>
+
+   <itemizedlist>
+
+    <listitem>
+     <para>
+      Regression test may have random failure. 
+	  This happens when statment cancelation takes longer than the next statment reaches
+	  the backend.
+      You can run the regression again to see if the test is successful.
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+  </sect2>
+
+ </sect1>

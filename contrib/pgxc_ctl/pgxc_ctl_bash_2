@@ -1,0 +1,302 @@
+#!/bin/bash
+# Common variables ######################################################################
+xc_prompt='PGXC$ '
+interactive=n
+verbose=n
+progname=$0
+
+bin=pgxc_ctl		# Just in case.  Never touch this
+logfile=none
+
+#===========================================================
+#
+# Extract parsed configuration values
+#
+#===========================================================
+
+# $1 is variable name of the array to print
+function print_array
+{
+	echo -n $1 " "
+	eval echo '$'{$1[@]}
+}
+
+
+function print_values
+{
+	local i
+	declare -i i
+	local el
+
+	# Install Directory
+	echo pgxcInstallDir $pgxcInstallDir
+
+	# Overall
+	echo pgxcOwner $pgxcOwner
+	echo pgxcUser $pgxcUser
+	echo tmpDir $tmpDir
+	echo localTmpDir $localTmpDir
+	echo configBackup $configBackup
+	echo configBackupHost $configBackupHost
+	echo configBackupDir $configBackupDir
+	echo configBackupFile $configBackupFile
+
+	# GTM overall
+	echo gtmName $gtmName
+
+	# GTM master
+	echo gtmMasterServer $gtmMasterServer
+	echo gtmMasterPort $gtmMasterPort
+	echo gtmMasterDir $gtmMasterDir
+	echo gtmExtraConfig $gtmExtraConfig
+	echo gtmMasterSpecificExtraConfig $gtmMasterSpecificExtraConfig
+
+	# GTM slave
+	echo gtmSlave $gtmSlave
+	echo gtmSlaveServer $gtmSlaveServer
+	echo gtmSlavePort $gtmSlavePort
+	echo gtmSlaveDir $gtmSlaveDir
+	echo gtmSlaveSpecificExtraConfig $gtmSlaveSpecificExtraConfig
+
+	# GTM Proxy
+	echo gtmProxy $gtmProxy
+	print_array gtmProxyNames
+	print_array gtmProxyServers
+	print_array gtmProxyPorts
+	print_array gtmProxyDirs
+	echo gtmPxyExtraConfig $gtmPxyExtraConfig
+	print_array gtmPxySpecificExtraConfig
+
+	# Coordinators overall
+	print_array coordNames
+	print_array coordPorts
+	print_array poolerPorts
+	print_array coordPgHbaEntries
+
+	# Coordinators master
+	print_array coordMasterServers
+	print_array coordMasterDirs
+	print_array coordMaxWALSenders
+
+	# Coordinators slave
+	echo coordSlave $coordSlave
+	echo coordSlaveSync $coordSlaveSync
+	print_array coordSlaveServers
+	print_array coordSlaveDirs
+	print_array coordArchLogDirs
+
+	# Coordinator Configuration files
+	echo coordExtraConfig $coordExtraConfig
+	print_array coordSpecificExtraConfig
+	echo coordExtraPgHba $coordExtraPgHba
+	print_array coordSpecificExtraPgHba
+
+	# Coordinator Additional Slaves
+	echo coordAdditionalSlaves $coordAdditionalSlaves
+	if [ "$coordAdditionalSlaves" == "y" ]; then
+		print_array coordAdditionalSlaveSet
+		for ((i=0; i<${#coordAdditionalSlaveSet[@]}; i++)); do
+			el=${coordAdditionalSlaveSet[$i]}
+			echo -n ${el}_Sync " "
+			eval echo '$'"$el"_Sync
+			print_array ${el}_Servers
+			print_array ${el}_Dirs
+			print_array ${el}_ArchLogDirs
+		done
+	fi
+
+	# Datanodes overall
+	echo primaryDatanode $primaryDatanode
+	print_array datanodeNames
+	print_array datanodePorts
+	print_array datanodePgHbaEntries
+	
+	# Datanodes masters
+	print_array datanodeMasterServers
+	print_array datanodeMasterDirs
+	print_array datanodeMaxWALSenders
+	
+	# Datanodes slaves
+	echo datanodeSlave $datanodeSlave
+	echo datanodeSlaveSync $datanodeSlaveSync
+	print_array datanodeSlaveServers
+	print_array datanodeSlaveDirs
+	print_array datanodeArchLogDirs
+
+	# Datanode configuration files
+	echo datanodeExtraConfig $datanodeExtraConfig
+	print_array datanodeSpecificExtraConfig
+	echo datanodeExtraPgHba $datanodeExtraPgHba
+	print_array datanodeSpecificExtraPgHba
+
+	# Datanodes additional slaves
+	echo datanodeAdditionalSlaves $datanodeAdditionalSlaves
+	if [ "$datanodeAdditionalSlaves" == "y" ]; then
+		print_array datanodeAdditionalSlaveSet
+		for ((i=0; i<${#datanodeAdditionalSlaveSet[@]}; i++)); do
+			el=${datanodeAdditionalSlaveSet[$i]}
+			echo -n ${el}_Sync " "
+			eval echo '$'"$el"_Sync
+			print_array ${el}_Servers
+			print_array ${el}_Dirs
+			print_array ${el}_ArchLogDirs
+		done
+	fi
+	
+	# WAL Archives
+	echo walArchive $walArchive
+	print_array walArchiveSet
+	if [ "$walArchive" == "y" ]; then
+		for ((i=0; i<${#walArchvieSet[@]}; i++)); do
+			print_array ${el}_source
+			echo -n ${el}_host
+			eval echo '$'"$el"_host
+			echo -n ${el}_backupdir
+			eval echo '$'"$el"_backupdir
+		done
+	fi
+}
+
+
+
+#============================================================
+#
+# Common functions
+#
+#============================================================
+
+# Optionally $1 will be $PGXC_CTL_HOME settings.
+function set_home
+{
+	if [ $# > 1 ]; then
+		echo "Invalid set_home function call"
+		return 1
+	fi
+	if [ $# == 1 ]; then
+		if [ -d $1 ]; then
+			pgxc_ctl_home=$1
+		else
+			eecho "set_home: $1 is not a directory."
+			return 1
+		fi
+	elif [ $PGXC_CTL_HOME != "" ]; then
+		if [ -d $PGXC_CTL_HOME ]; then
+			pgxc_ctl_home=$PGXC_CTL_HOME
+		else
+			eecho "set_home: env PGXC_CTL_HOME($PGXC_CTL_HOME) is not a directory."
+			return 1;
+		fi
+	fi
+	cd $pgxc_ctl_home;
+}
+
+###############################################################################
+#
+#   EXECUTING SECTION
+#
+###############################################################################
+
+#=======================================================
+# Things to be done at first
+#=======================================================
+
+# Handle options
+progname=$0
+moretodo=y
+cmd_with_log=null
+#set_home
+if [ -f $pgxc_ctl_home/.pgxc_ctl_rc ]; then
+	source $pgxc_ctl_home/.pgxc_ctl_rc
+fi
+
+configFile=""
+
+while [ $moretodo == y ]; do
+	if [ $# -gt 0 ]; then
+		case $1 in
+			-v )
+				shift;
+				verbose=y;
+				continue;;
+			--verbose )
+				shift;
+				verbose=y;
+				continue;;
+			--silent )
+				verbose=n;
+				continue;;
+			-d ) # debug option
+				shift;
+				DEBUG=y;
+				continue;;
+			--debug )
+				shift;
+				DEBUG=y;
+				continue;;
+			-c ) # Configuraton file
+				shift;
+				if [ $# -le 0 ]; then
+					echo ERROR: no -c option value found
+					exit 1
+				else
+					configFile=$1
+					shift
+				fi;
+				continue;;
+			--configuration ) # Configuraion file
+				shift;
+				if [ $# -le 0 ]; then
+					echo ERROR: no --configuration option value found
+					exit 1
+				else
+					configFile=$1
+					shift
+				fi;
+				continue;;
+			--home ) # PGXC_CTL_HOME
+				shift;
+				if [ $# -le 0 ]; then
+					echo ERROR: no pgxc_ctl_home specified
+					exit 1
+				else
+					pgxc_ctl_home=$1
+					cd $pgxc_ctl_home
+					shift
+				fi;
+				continue;;
+			--signature ) # Check signature
+				shift;
+				if [ $# -le 0 ]; then
+					echo ERROR: Signature does not match
+					exit 1
+				fi
+				if [ "$1" != "$signature" ]; then
+					echo ERROR: Signature does not match
+					exit 1
+				fi
+				shift
+				continue;;
+			* )
+				moretodo=n
+				continue;;
+		esac
+	else
+		moretodo=n
+	fi
+done
+
+echo $signature
+# Read configuration file --> Should be activated only when debug option is off
+
+if [ -f $pgxc_ctl_home/pgxc_ctl_rc ]; then
+	source $pgxc_ctl_home/pgxc_ctl_rc
+fi
+
+if [ "$configFile" != "" ] && [ -f "$configFile" ]; then
+	source $configFile
+fi
+# Log option can be overriden by command-line option
+
+print_values
+
+

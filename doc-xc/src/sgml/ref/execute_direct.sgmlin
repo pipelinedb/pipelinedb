@@ -1,0 +1,123 @@
+<!--
+doc/src/sgml/ref/execute_direct.sgml
+PostgreSQL documentation
+-->
+
+<refentry id="SQL-EXECUTEDIRECT">
+ <refmeta>
+  <refentrytitle>EXECUTE DIRECT</refentrytitle>
+  <manvolnum>7</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>EXECUTE DIRECT</refname>
+  <refpurpose>Launch queries directly to dedicated nodes</refpurpose>
+ </refnamediv>
+
+ <indexterm zone="sql-executedirect">
+  <primary>EXECUTE DIRECT</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+<synopsis>
+EXECUTE DIRECT ON ( <replaceable class="parameter">nodename</replaceable> [, ... ] )
+    <replaceable class="parameter">query</replaceable>
+</synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+&xconly;
+  <para>
+   <command>EXECUTE DIRECT</command> is a SQL query specially created
+   for Postgres-XC to allow to launch queries directly to dedicated
+   nodes determined by a list of nodes <replaceable class="parameter">
+   nodelist</replaceable>. 
+  </para>
+
+  <para>
+   Since Postgres-XC 0.9.3, EXECUTE DIRECT is limited to used on 1 node
+   only. Besides, the query sent to remote nodes designed by a list of
+   <replaceable class="parameter">nodename</replaceable> is limited to
+   <literal>SELECT</literal> queries. The usage of transaction queries
+   (<literal>BEGIN</literal>, <literal>COMMIT</literal>...), DDL, and DML
+   (<literal>INSERT</literal>, <literal>UPDATE</literal>, <literal>DELETE
+   </literal>) is forbidden to avoid data inconsistency among nodes
+   in the cluster. EXECUTE DIRECT usage is also limited to superusers.
+  </para>
+
+  <para>
+    Either Coordinator or Datanode can be selected by its node name.
+  </para>
+
+  <para>
+   <command>EXECUTE DIRECT</> allows the usage of the following utility commands
+   on remote nodes: <command>CREATE TABLESPACE</>, <command>DROP TABLESPACE</>.
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Parameters</title>
+
+  <variablelist>
+   <varlistentry>
+    <term><replaceable class="parameter">nodename</replaceable></term>
+    <listitem>
+     <para>
+      This mandatory clause specifies the node name on where to launch
+      <replaceable class="parameter">query</replaceable>. When specifying
+      multiple nodes, node names have to be separated by a comma.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><replaceable class="parameter">query</replaceable></term>
+    <listitem>
+     <para>
+      This mandatory clause specifies the raw query to launch
+      on specified node list <replaceable class="parameter">nodelist</replaceable>.
+      This must be specified as a string literal.
+     </para>
+    </listitem>
+   </varlistentry>
+  </variablelist>
+ </refsect1>
+
+ <refsect1>
+  <title>Examples</title>
+
+  <para>
+   Select some data in a given table tenk1 on remote Datanode named dn1:
+<programlisting>
+EXECUTE DIRECT ON NODE dn1 'SELECT * FROM tenk1 WHERE col_char = ''foo''';
+</programlisting>
+  </para>
+
+  <para>
+   Select local timestamp of a remote node named coord2:
+<programlisting>
+EXECUTE DIRECT ON coord2 'select clock_timestamp()';
+</programlisting>
+  </para>
+
+  <para>
+   Select list of tables of a remote node named dn50:
+<programlisting>
+EXECUTE DIRECT ON dn50 'select tablename from pg_tables';
+</programlisting>
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Compatibility</title>
+  <para>
+   <command>EXECUTE DIRECT</command> does not conform to the <acronym>
+   SQL</acronym> standards, it is a Postgres-XC specific command.
+  </para>
+ </refsect1>
+
+</refentry>

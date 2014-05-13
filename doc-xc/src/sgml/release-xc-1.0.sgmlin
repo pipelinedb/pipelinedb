@@ -1,0 +1,1562 @@
+<!-- doc/src/sgml/release-xc-1.0.sgml -->
+<!-- See header comment in release.sgml about typical markup -->
+
+ <sect1 id="release-xc-1-0-3">
+  <title>Release 1.0.3</title>
+
+  <note>
+   <title>Release Date</title>
+   <simpara>2013-04-27</simpara>
+  </note>
+
+  <para>
+   This release contains fixes in PostgreSQL 9.1.8 and PostgreSQL 9.1.19, as well as a couple
+   of fixes in Postgres-XC.
+   For informations about new feature in the 1.0 major release, see
+   <xref linkend="release-xc-1-0">.
+   For information about fixes in the 1.0.1 and 1.0.2 minor releases, see
+   <xref linkend="release-xc-1-0-1"> and <xref linkend="release-xc-1-0-2">
+   respectively.
+  </para>
+
+ <sect2>
+  <title>Migrations to Version 1.0.3</title>
+
+  <para>
+   A dump/restore is not required for those running 1.0.x.
+  </para>
+
+ </sect2>
+
+ <sect2>
+  <title>Changes</title>
+
+  <itemizedlist>
+
+  <listitem>
+   <para>
+    Fixed behavior of <literal>gtm_ctl -w start</literal> command behavior to be
+    the same as those of <literal>pg_ctl</literal>.  Nikhil Sontakke provided the
+    original fix.
+   </para>
+  </listitem>
+
+  <listitem>
+   <para>
+    Fixed typo in <literal>max_coordinators</literal> and <literal>max_datanodes</literal>
+    description in the document, by Michael Paquier.
+   </para>
+  </listitem>
+
+  <listitem>
+   <para>
+    Fixed gtm slave crash.   Nikhil Sontakke reported this possiblity and provided
+    the fix.
+   </para>
+  </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+ </sect1>
+
+ <sect1 id="release-xc-1-0-2">
+  <title>Release 1.0.2</title>
+
+  <note>
+   <title>Release Date</title>
+   <simpara>2013-02-05</simpara>
+  </note>
+
+  <para>
+   This release contains a variety of fixes from 1.0.1.
+   For information about new features in the 1.0 major release, see
+   <xref linkend="release-xc-1-0">.
+  </para>
+
+  <sect2>
+   <title>Migration to Version 1.0.2</title>
+
+   <para>
+    A dump/restore is not required for those running 1.0.X.
+   </para>
+
+  </sect2>
+
+  <sect2>
+   <title>Changes</title>
+
+   <itemizedlist>
+
+    <listitem>
+     <para>
+      Fix for bug 3602944: Fixed <command>gtm_ctl</command> to solve
+      the PATH dependency. (Nikhil Sontakke)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for bug 3601255: Fixed the planner to disable FQS for all
+      the <literal>OUTER</literal> joins.
+      (Ashutosh Bapat)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for bug 3600220: Fixed coordinator/datanode to unregister
+      themselves from GTM while restarting after
+      "<literal>-m immediate</literal>" shutdown.
+      (Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed <command>gtm_ctl</command> for "<literal>status</literal>"
+      command with "<literal>-Z gtm</literal>" to show the status correctly.
+      (Koichi Suzuki)
+     </para>
+
+     <para>
+      Now for <literal>-Z gtm</literal> option,
+      <literal>gtm_ctl status</literal> displays if it runs as
+      <literal>master</literal> or <literal>slave</literal>.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Rebased from PostgreSQL 9.1.6 to 9.1.7, and fixed several regression
+      test failures, which had been newly introduced during the rebase.
+      (Satoshi Nagayasu)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for bug 3597414: Fixed the planner for JOIN between two distributed
+      tables to be pushable when on only one node.
+      (Ashutosh Bapat)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for bug 3598637: Fixed GTM standby to avoid occasional crash.
+      (Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed GTM to deal with a promoted master correctly while restarting.
+      (Nikhil Sontakke, Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for bug 3583921: Fixed coordinator slave (and possibly datanode too)
+      to avoid crash due to "<literal>too many KnownAssignedXids</literal>".
+      (Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for bug 3598030: Fixed to allow commit/abort transactions while
+      connecting to the datanode directly.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for bug 3591285: Fixed autovacuum crash in datanode.
+      (Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for bug 3571154: Fixed GTM proxy error while reconnecting.
+      (Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed <literal>libgtmclient.a</literal> to surpress debug messages.
+      (Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed GTM proxy to have appropriate default values (retry count and
+      retry interval) for GTM proxy HA.
+      (Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for bug 3588869: Fixed GTM proxy to avoid stall while reconnecting.
+      (Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed to enforce autocommit when running <command>ALTER DATABASE SET
+      TABLESPACE</command>.
+      (Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed <command>pgxc_clean</command> for <literal>-s</literal>,
+      <literal>--status</literal> option working correctly.
+      (Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed "<command>SET XC_MAINTENANCE_MODE = ON</command>" to ignore
+      "<literal>template0</literal>" database.
+      (Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed GTM and GTM proxy for inaccurate default values of the port number.
+      (Koichi Suzuki)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Added GTM header files in installation to allow compiling server modules.
+      (Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Added support to create cached plans for XC-specific DDL commands.
+      (Michael Paquier)
+     </para>
+
+     <para>
+      This allows to use cached plans or prepared queries for following
+      commands: <command>CREATE NODE</command>, <command>ALTER NODE</command>,
+      <command>DROP NODE</command>, <command>CREATE NODE GROUP</command>,
+      <command>DROP NODE GROUP</command>, <command>CLEAN CONNECTION</command>.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed <command>CREATE NODE GROUP</command>/<command>DROP NODE
+      GROUP</command> commands to stop query pushdown to remote nodes.
+      (Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed memory allocation issues pointed by ElectricFence (libefence).
+      (Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed memory corruption in GTM/backend buffer for snapshots and
+      transaction IDs.
+      (Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed <command>COPY</command> command to deal with quoted column names.
+      (Nikhil Sontakke, Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed to ignore automatically generated regression outputs specific
+      to Postgres-XC.
+      (Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed <command>COPY</command> command to avoid crash when involving
+      relation with no locator data.
+      (Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed <command>ALTER NODE</command> to allow modifying primary node data.
+      (Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed compilation error in <command>pg_dump</command>.
+      (Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Changed current value management of sequences to make it consistent
+      with vanilla.
+      (Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed <command>pg_dump</command> to get consistent sequence dump value.
+      (Nikkhil Sontakke, Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fixed and improved docs for several XC-specific commands, options and
+      parameters.
+      (Koichi Suzuki, Michael Paquier)
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+  </sect2>
+
+ </sect1>
+
+ <sect1 id="release-xc-1-0-1">
+  <title>Release 1.0.1</title>
+
+  <note>
+   <title>Release Date</title>
+   <simpara>2012-09-??</simpara>
+  </note>
+
+  <para>
+   This release contains a variety of fixes from 1.0.0.
+   For information about new features in the 1.0 major release, see
+   <xref linkend="release-xc-1-0">.
+  </para>
+
+  <sect2>
+   <title>Migration to Version 1.0.1</title>
+
+   <para>
+    A dump/restore is not required for those running 1.0.X.
+   </para>
+
+  </sect2>
+
+  <sect2>
+   <title>Changes</title>
+
+   <itemizedlist>
+
+    <listitem>
+     <para>
+      Make data ordering consistent in query for test <filename>join.sql</> (Michael Paquier)
+     </para>
+
+     <para>
+      Regression test join failed occasionally depending on the cluster
+      configuration.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for sequence removal on GTM when related database is dropped
+      (Michael Paquier, Dimitrije Radojevic)
+     </para>
+
+     <para>
+      There was an error on GTM side when comparing sequence key strings
+      related to key size when sequence drop is based on a sequence key type
+      GTM_SEQ_DB_NAME.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for <literal>INSERT SELECT</> for partially replicated tables.
+      Remote DML planning was not taking into account the node list
+      to be used on a relation when modifying data on it. (Michael Paquier)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Push -l option of <command>gtm_ctl</> to gtm (Michael Meskes).
+     </para>
+
+     <para>
+      This avoids to have an empty output file when <command>gtm_ctl</> has a log file defined
+      and change log file name of GTM according to what is given by <command>gtm_ctl</>
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for crash at gtm_proxy startup in 32b-linux machines (Koichi Suzuki, Plexo Rama)
+     </para>
+
+     <para>
+      This fix adds an additional boolean flag in GTM-Proxy thread info
+      to make it similar to the one used in GTM. The problem which was
+      happening was that GTM-Proxy tried to use the memory structure of
+      the thread info of GTM.
+      Crash problems are solved but we should find in the future a smarter
+      way to manage GTM and GTM-Proxy memory allocation APIs as they are
+      now strongly dependant on each other and we may find similar issues
+      if some new developments are done on GTM and/or GTM-Proxy.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Activate <command>gtm_ctl</> status (Koichi Suzuki, Michael Paquier)
+     </para>
+
+     <para>
+      <command>gtm_ctl</> can control the status of a GTM server like <command>
+      pg_ctl</> does with <productname>PostgreSQL</> instances (in the case of <productname>
+      Postgres-XC</> Coordinator and Datanode).
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for incorrect <literal>COPY</> for partially distributed tables (Michael Paquier)
+     </para>
+
+     <para>
+      When a table was distributed on a portion of nodes. <literal>COPY</> process
+      was not correctly choosing the output node during a <literal>COPY TO</>. This
+      problem has been put into light by a case where table was replicated
+      without using the first datanode of the cluster. It happened that
+      there was the same problem for hash/modulo tables as well.
+      A test case in xc_copy has been added to cover this problem, and
+      a small portion managing <literal>COPY TO</> in <filename>execRemote.c</> has been cleaned.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Correct whitespaces, format and message format in <filename>gtm_client.c</> (Andrei Martsinchyk)
+     </para>
+
+     <para>
+      This had consequences on the data types of the values sent by
+      GTM which was not matching those GTM Standby was trying to read.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Solve SEGENV for GTM-Standby (Andrei Martsinchyk)
+     </para>
+
+     <para>
+      Wrong variable was referenced when writing terminating null at the
+      end of a string. It caused seg faults, because the referenced variable
+      was not initialized yet.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Introduce new GTM thread status managing thread backup (Andrei Martsinchyk)
+     </para>
+
+     <para>
+      In the case of a GTM standby crash during the initial backup, the
+      master GTM remained locked. The origin of this problem was during
+      GTM backup process, where GTM locks all its threads one by one,
+      performs a backup and then releases everything.
+      This commit adds an additional control layer able to detect the
+      thread status during backup. The new status GTM_THREAD_BACKUP is
+      introduced for this purpose. Once backup is performed, the thread
+      status is changed to GTM_THREAD_RUNNING.
+      Hence, if the handler (GTM) is invoked upon sudden disconnection for
+      backend (here GTM-Standby) disconnect of its connection and it sees
+      that the current thread has status GTM_THREAD_BACKUP it goes ahead
+      and releases the locks.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Release GTM thread lock before exit (Andrei Martsinchyk)
+     </para>
+
+     <para>
+      This avoid to have another thread waiting for it, as it is possible
+      it waits for it.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Block GXID generation on standbys (Andrei Martsinchyk)
+     </para>
+
+     <para>
+      If a node accidentally connects to the Standby and reconnects to the
+      Master afterwards, it will get an inconsistent GXID value since GTM
+      Master is not aware of GXIDs generated by GTM Standby.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      validate_part_col_updatable was falsely assuming that the table with no
+      location info is as good as non-existent table. This assumption is not true for
+      catalogs or coordinator only tables. In such cases, this function should not look for any
+      distribution column, since one can not exist for a table local to the
+      coordinator (Ashutosh Bapat)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for bug 3556031: pgadmin3 connection error (Michael Paquier)
+     </para>
+
+     <para>
+      pgadmin3 parses the output of <literal>SELECT version()</> to determine
+      the server version it is connecting to. For Postgres-XC, this
+      output result was changed and completed with Postgres-XC and
+      PostgreSQL version. pgadmin thought that the version of server
+      was the one of <productname>Postgres-XC</>, meaning 1.0 for 1.0 stable
+      and 1.1 for master branch. In consequence to that, SQL queries with
+      very old catalog were run to server, and of course errors were reported
+      to client and pgadmin could not work correctly.
+      This is solved with changing back version() to its former output.
+      An additional function <function>pgxc_version()</> is added to provide a way
+      for application to inform about <productname>Postgres-XC</> version and
+      the <productname>PostgreSQL</> version it is based on.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Refactoring of <filename>pg_regress.c</> due to bugs with O2 compilation (Michael Paquier)
+     </para>
+
+     <para>
+      When code was being compiled with O2, initialization and start-up
+      of GTM was done twice, creating errors in log files.
+      In consequence, functions related to start and initialization of
+      PGXC nodes and GTM are unified to clarify code and additional checks
+      are added to verify that nodes have been correctly started.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix compilation flag O2 not set in CFLAGS at configure step by default (Michael Paquier)
+     </para>
+
+     <para>
+      The flag -DPGXC is mandatory for correct compilation and is set once
+      all the compilation flags have been determined.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Block <literal>EXECUTE DIRECT</> when used from a Datanode (Michael Paquier)
+     </para>
+
+     <para>
+      This caused the Datanode to crash, and it is however a functionality
+      only usable by Coordinators.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix snapshot management on slave nodes and on Datanodes accessed directly by
+      applications (Michael Paquier)
+     </para>
+
+     <para>
+      A slave node session acquires its snapshot directly from WAL like <productname>
+      PostgreSQL</> does. Also, a Datanode is now able to get a global snapshot directly
+      from GTM, avoiding WARNING messages that a snapshot is not available.
+     </para>
+
+     <para>
+      Queries interacting with remote nodes running on slave nodes are blocked.
+      Such queries need a global snapshot and a new transaction ID, but sessions
+      on slave nodes cannot acquire that.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Correct query generation of <literal>COPY</> with quoted table names (Nikhil Sontakke)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix race condition in GXID generation for autovacuum wraparound (Michael Paquier)
+     </para>
+
+     <para>
+      When an autovacuum wraparound begins, a global snapshot with a
+      global GXID is obtained from GTM. After getting this snapshot,
+      the code checks for wraparound conditions. Before this check, the
+      lock on GXID generation is released and then taken back. Just after
+      taking back the lock the GXID is updated to the latest value in cache.
+      However, during this time it is possible that ShmemVariableCache->nextXid
+      is updated by another local session that obtained a transaction ID
+      from GTM. GXID generation concurrency is managed globally at GTM, so we
+      cannot rely here on the local ShmemVariableCache->nextXid to update the
+      GXID of autovacuum. Updating it to a wrong value makes is async with GTM
+      information and such autovacuum is not able to gather a global snapshot
+      correctly, making the autovacuum session inconsistent with the other global
+      sessions. This could fatally crash a node under certain conditions like
+      GXID being updated concurrently by multiple sessions at the same time
+      during the wraparound condition checks.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix for <literal>DDL ALTER ROLE ... REPLICATION</> not recognized (Nikhil Sontakke)
+     </para>
+
+     <para>
+      <productname>PostgreSQL</> 9.1 code uses the word <literal>REPLICATION</> in
+      <literal>ALTER TABLE</> as a portion of <literal>IDENT</>. However it is a
+      reserved keyword in Postgres-XC due to its use in clause <literal>DISTRIBUTE BY</>,
+      extension of <literal>CREATE TABLE</> and <literal>ALTER TABLE</>.
+      So here what is done is completing deparsing of <literal>ALTER ROLE</> to use
+      <literal>REPLICATION</> as a normal reserved keyword.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix GTM startup with "*" set as <varname>listen_addresses</> on OSX (Michael Paquier)
+     </para>
+
+     <para>
+      On OSX, GTM was not able to start with default parameter values.
+      This had side effects on regressions with make check, making impossible
+      to run a simple default regression test.
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+  </sect2>
+
+ </sect1>
+
+ <sect1 id="release-xc-1-0">
+  <title>Release 1.0</title>
+
+  <note>
+   <title>Release Date</title>
+   <simpara>2012-06-07</simpara>
+  </note>
+
+  <sect2>
+   <title>Overview</title>
+
+   <para>
+    <productname>Postgres-XC</> 1.0 is a symetric (multi-master, read and write-scalable)
+    shared-nothing cluster based on PostgreSQL. This release version is based on
+    PostgreSQL 9.1. 
+   </para>
+
+   <para>
+    Currently the only architectures supported are 64 bit Linux operating systems.
+   </para>
+
+   <para>
+    This release of <productname>Postgres-XC</> is the first major release and
+    contains the following features, characteristics and enhancements:
+   </para>
+
+   <itemizedlist>
+    <!-- This list is a summary of each item detailed below, without authors -->
+    <listitem>
+     <para>
+      Support and extensions for existing features of PostgreSQL in a cluster-wide environment.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      SQL extensions and functionalities exclusive to <productname>Postgres-XC</> for management
+      and operations related to a cluster, which add a node-level granularity for
+      cluster operations.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Creation of Global Transaction Manager (GTM), which is a centralized component
+      providing cluster-wide Multi-version Concurrency Control (MVCC).
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Creation of mechanisms exclusive to <productname>Postgres-XC</> and enhancements of existing
+      internal mechanisms of <productname>PostgreSQL</>, which are related to connection pooling,
+      global transaction management, query planning, rewriting, analyzing and execution.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Restrictions related to existing features in <productname>PostgreSQL</> and currently not supported by
+      <productname>Postgres-XC</>.
+     </para>
+    </listitem>
+   </itemizedlist>
+
+   <para>
+    The above items are explained in more detail in the sections below.
+   </para>
+
+  <para>
+   The original overall architecture and design of <productname>Postgres-XC</> is by Koichi Suzuki, Mason Sharp, 
+   Pavan Deolasee, Andrei Martsinchyk and Michael Paquier. Koichi Suzuki is the original project lead.
+  </para>
+
+  </sect2>
+
+  <sect2>
+
+  <title>Details</title>
+
+   <para>
+    This section is divided into the following parts:
+   </para>
+
+   <itemizedlist>
+    <listitem>
+     <para>
+      Existing standard features supported and related extensions
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      SQL extensions exclusive to <productname>Postgres-XC</>
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Internal mechanisms exclusive to <productname>Postgres-XC</>
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Global transaction management features
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Restrictions
+     </para>
+    </listitem>
+   </itemizedlist>
+
+   <sect3>
+    <title>Existing standard features supported and related extensions</title>
+
+     <para>
+      This is an exhaustive list of all the features included in <productname>PostgreSQL</>
+      and currently supported in <productname>Postgres-XC</>. Some features have needed extensions.
+      In this case, the contributors are specified. If not listed in the restrictions,
+      all the <productname>PostgreSQL</> standard functionalities are supported and are expected to work.
+     </para>
+     <!-- complete list of existing features of Postgres supported -->
+
+     <itemizedlist>
+      <listitem>
+       <para>
+        List of all the CREATE/ALTER/DROP SQL commands supported. All the features listed
+        here work like native PostgreSQL. Extensions may have been added to make them usable
+        in a cluster environment.
+       </para>
+       <para>
+        <link linkend="SQL-CREATEUSER"><command>CREATE USER</></link>,
+        <link linkend="SQL-ALTERUSER"><command>ALTER USER</></link>,
+        <link linkend="SQL-DROPUSER"><command>DROP USER</></link>,
+        <link linkend="SQL-CREATEAGGREGATE"><command>CREATE AGGREGATE</></link>,
+        <link linkend="SQL-ALTERAGGREGATE"><command>ALTER AGGREGATE</></link>,
+        <link linkend="SQL-DROPAGGREGATE"><command>DROP AGGREGATE</></link>,
+        <link linkend="SQL-CREATECOLLATION"><command>CREATE COLLATION</></link>,
+        <link linkend="SQL-ALTERCOLLATION"><command>ALTER COLLATION</></link>,
+        <link linkend="SQL-DROPCOLLATION"><command>DROP COLLATION</></link>,
+        <link linkend="SQL-CREATECONVERSION"><command>CREATE CONVERSION</></link>,
+        <link linkend="SQL-ALTERCONVERSION"><command>ALTER CONVERSION</></link>,
+        <link linkend="SQL-DROPCONVERSION"><command>DROP CONVERSION</></link>,
+        <link linkend="SQL-CREATEDATABASE"><command>CREATE DATABASE</></link>,
+        <link linkend="SQL-ALTERDATABASE"><command>ALTER DATABASE</></link>,
+        <link linkend="SQL-DROPDATABASE"><command>DROP DATABASE</></link>,
+        <link linkend="SQL-ALTERDEFAULTPRIVILEGES"><command>ALTER DEFAULT PRIVILEGES</></link>,
+        <link linkend="SQL-CREATEDOMAIN"><command>CREATE DOMAIN</></link>,
+        <link linkend="SQL-ALTERDOMAIN"><command>ALTER DOMAIN</></link>,
+        <link linkend="SQL-DROPDOMAIN"><command>DROP DOMAIN</></link>,
+        <link linkend="SQL-CREATEFUNCTION"><command>CREATE FUNCTION</></link>,
+        <link linkend="SQL-ALTERFUNCTION"><command>ALTER FUNCTION</></link>,
+        <link linkend="SQL-DROPFUNCTION"><command>DROP FUNCTION</></link>,
+        <link linkend="SQL-CREATEGROUP"><command>CREATE GROUP</></link>,
+        <link linkend="SQL-ALTERGROUP"><command>ALTER GROUP</></link>,
+        <link linkend="SQL-DROPGROUP"><command>DROP GROUP</></link>,
+        <link linkend="SQL-CREATEINDEX"><command>CREATE INDEX</></link>,
+        <link linkend="SQL-ALTERINDEX"><command>ALTER INDEX</></link>,
+        <link linkend="SQL-DROPINDEX"><command>DROP INDEX</></link>,
+        <link linkend="SQL-CREATELANGUAGE"><command>CREATE LANGUAGE</></link>,
+        <link linkend="SQL-ALTERLANGUAGE"><command>ALTER LANGUAGE</></link>,
+        <link linkend="SQL-DROPLANGUAGE"><command>DROP LANGUAGE</></link>,
+        <link linkend="SQL-CREATEOPCLASS"><command>CREATE OPERATOR CLASS</></link>,
+        <link linkend="SQL-ALTEROPCLASS"><command>ALTER OPERATOR CLASS</></link>,
+        <link linkend="SQL-DROPOPCLASS"><command>DROP OPERATOR CLASS</></link>,
+        <link linkend="SQL-CREATEOPFAMILY"><command>CREATE OPERATOR FAMILY</></link>,
+        <link linkend="SQL-ALTEROPFAMILY"><command>ALTER OPERATOR FAMILY</></link>,
+        <link linkend="SQL-DROPOPFAMILY"><command>DROP OPERATOR FAMILY</></link>,
+        <link linkend="SQL-CREATEROLE"><command>CREATE ROLE</></link>,
+        <link linkend="SQL-ALTERROLE"><command>ALTER ROLE</></link>,
+        <link linkend="SQL-DROPROLE"><command>DROP ROLE</></link>,
+        <link linkend="SQL-CREATESCHEMA"><command>CREATE SCHEMA</></link>,
+        <link linkend="SQL-ALTERSCHEMA"><command>ALTER SCHEMA</></link>,
+        <link linkend="SQL-DROPSCHEMA"><command>DROP SCHEMA</></link>,
+        <link linkend="SQL-CREATESEQUENCE"><command>CREATE SEQUENCE</></link>,
+        <link linkend="SQL-ALTERSEQUENCE"><command>ALTER SEQUENCE</></link>,
+        <link linkend="SQL-DROPSEQUENCE"><command>DROP SEQUENCE</></link>,
+        <link linkend="SQL-CREATETABLE"><command>CREATE TABLE</></link>,
+        <link linkend="SQL-ALTERTABLE"><command>ALTER TABLE</></link>,
+        <link linkend="SQL-DROPTABLE"><command>DROP TABLE</></link>,
+        <link linkend="SQL-CREATETABLESPACE"><command>CREATE TABLESPACE</></link>,
+        <link linkend="SQL-ALTERTABLESPACE"><command>ALTER TABLESPACE</></link>,
+        <link linkend="SQL-DROPTABLESPACE"><command>DROP TABLESPACE</></link>,
+        <link linkend="SQL-CREATETSCONFIG"><command>CREATE TEXT SEARCH CONFIGURATION</></link>,
+        <link linkend="SQL-ALTERTSCONFIG"><command>ALTER TEXT SEARCH CONFIGURATION</></link>,
+        <link linkend="SQL-DROPTSCONFIG"><command>DROP TEXT SEARCH CONFIGURATION</></link>,
+        <link linkend="SQL-CREATETSDICTIONARY"><command>CREATE TEXT SEARCH DICTIONARY</></link>,
+        <link linkend="SQL-ALTERTSDICTIONARY"><command>ALTER TEXT SEARCH DICTIONARY</></link>,
+        <link linkend="SQL-DROPTSDICTIONARY"><command>DROP TEXT SEARCH DICTIONARY</></link>,
+        <link linkend="SQL-CREATETSPARSER"><command>CREATE TEXT SEARCH PARSER</></link>,
+        <link linkend="SQL-ALTERTSPARSER"><command>ALTER TEXT SEARCH PARSER</></link>,
+        <link linkend="SQL-DROPTSPARSER"><command>DROP TEXT SEARCH PARSER</></link>,
+        <link linkend="SQL-CREATETSTEMPLATE"><command>CREATE TEXT SEARCH TEMPLATE</></link>,
+        <link linkend="SQL-ALTERTSTEMPLATE"><command>ALTER TEXT SEARCH TEMPLATE</></link>,
+        <link linkend="SQL-DROPTSTEMPLATE"><command>DROP TEXT SEARCH TEMPLATE</></link>,
+        <link linkend="SQL-CREATETYPE"><command>CREATE TYPE</></link>,
+        <link linkend="SQL-ALTERTYPE"><command>ALTER TYPE</></link>,
+        <link linkend="SQL-DROPTYPE"><command>DROP TYPE</></link>, 
+        <link linkend="SQL-CREATEUSER"><command>CREATE USER</></link>,
+        <link linkend="SQL-ALTERUSER"><command>ALTER USER</></link>,
+        <link linkend="SQL-DROPUSER"><command>DROP USER</></link>, 
+        <link linkend="SQL-CREATEVIEW"><command>CREATE VIEW</></link>,
+        <link linkend="SQL-ALTERVIEW"><command>ALTER VIEW</></link>,
+        <link linkend="SQL-DROPVIEW"><command>DROP VIEW</></link>,
+        <link linkend="SQL-CREATECAST"><command>CREATE CAST</></link>,
+        <link linkend="SQL-DROPCAST"><command>DROP CAST</></link>,
+        <link linkend="SQL-CREATERULE"><command>CREATE RULE</></link>,
+        <link linkend="SQL-DROPRULE"><command>DROP RULE</></link>,
+        <link linkend="SQL-CREATETABLEAS"><command>CREATE TABLE AS</></link>,
+       </para>
+      </listitem>
+      <listitem>
+       <para>List of other supported SQL</para>
+       <para>
+        <link linkend="SQL-ANALYZE"><command>ANALYZE</></link>,
+        <link linkend="SQL-BEGIN"><command>BEGIN</></link>,
+        <link linkend="SQL-CHECKPOINT"><command>CHECKPOINT</></link>, 
+        <link linkend="SQL-CLOSE"><command>CLOSE</></link>,
+        <link linkend="SQL-CLUSTER"><command>CLUSTER</></link>,
+        <link linkend="SQL-COMMENT"><command>COMMENT</></link>,
+        <link linkend="SQL-COMMIT"><command>COMMIT</></link>,
+        <link linkend="SQL-COMMIT-PREPARED"><command>COMMIT PREPARED</></link>,
+        <link linkend="SQL-COPY"><command>COPY</></link>,
+        <link linkend="SQL-DEALLOCATE"><command>DEALLOCATE</></link>,
+        <link linkend="SQL-DECLARE"><command>DECLARE</></link>,
+        <link linkend="SQL-DELETE"><command>DELETE</></link>,
+        <link linkend="SQL-DISCARD"><command>DISCARD</></link>,
+        <link linkend="SQL-DO"><command>DO</></link>,
+        <link linkend="SQL-END"><command>END</></link>,
+        <link linkend="SQL-EXECUTE"><command>EXECUTE</></link>,
+        <link linkend="SQL-EXPLAIN"><command>EXPLAIN</></link>,
+        <link linkend="SQL-FETCH"><command>FETCH</></link>,
+        <link linkend="SQL-GRANT"><command>GRANT</></link>,
+        <link linkend="SQL-INSERT"><command>INSERT</></link>,
+        <link linkend="SQL-LOAD"><command>LOAD</></link>,
+        <link linkend="SQL-LOCK"><command>LOCK</></link>,
+        <link linkend="SQL-MOVE"><command>MOVE</></link>,
+        <link linkend="SQL-PREPARE"><command>PREPARE</></link>,
+        <link linkend="SQL-PREPARE-TRANSACTION"><command>PREPARE TRANSACTION</></link>,
+        <link linkend="SQL-REASSIGN-OWNED"><command>REASSIGN OWNED</></link>,
+        <link linkend="SQL-REINDEX"><command>REINDEX</></link>,
+        <link linkend="SQL-RESET"><command>RESET</></link>,
+        <link linkend="SQL-REVOKE"><command>REVOKE</></link>,
+        <link linkend="SQL-ROLLBACK"><command>ROLLBACK</></link>,
+        <link linkend="SQL-ROLLBACK-PREPARED"><command>ROLLBACK PREPARED</></link>,
+        <link linkend="SQL-SELECT"><command>SELECT</></link>,
+        <link linkend="SQL-SELECTINTO"><command>SELECT INTO</></link>,
+        <link linkend="SQL-SET"><command>SET</></link>,
+        <link linkend="SQL-SET-CONSTRAINTS"><command>SET CONSTRAINTS</></link>,
+        <link linkend="SQL-SET-ROLE"><command>SET ROLE</></link>,
+        <link linkend="SQL-SET-SESSION-AUTHORIZATION"><command>SET SESSION AUTHORIZATION</></link>,
+        <link linkend="SQL-SHOW"><command>SHOW</></link>,
+        <link linkend="SQL-START-TRANSACTION"><command>START TRANSACTION</></link>,
+        <link linkend="SQL-TRUNCATE"><command>TRUNCATE</></link>,
+        <link linkend="SQL-UPDATE"><command>UPDATE</></link>,
+        <link linkend="SQL-VACUUM"><command>VACUUM</></link>,
+        <link linkend="SQL-VALUES"><command>VALUES</></link>
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        HOT-Standby and streaming replication, working as in native <productname>PostgreSQL</>, 
+        at the Coordinator and Datanode level.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <application>pg_dump</> (Michael Paquier): extension to manage table distribution type
+        in a dump.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <application>initdb</> (Michael Paquier): addition of a new mandatory option <option>
+        --nodename=<replaceable class="parameter">nodename</replaceable></option> to specify
+        a node name when initializing it. This adds a parameter (pgxc_node_name) to the 
+        node's postgresql.conf file that the node uses to identify itself.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>ORDER BY</command>, <command>LIMIT</command>, <command>OFFSET</command> clauses:
+        those clauses can be evaluated directly on Datanodes or on Coordinators depending on how
+        query is shippable or not to remote nodes (Andrei Martsinchyk).
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        Table distribution definition (Mason Sharp, Abbas Butt, Michael Paquier): <link linkend="SQL-CREATETABLE">
+        <command>CREATE TABLE</></link> has been extended with <command>DISTRIBUTE BY</command>
+        to be able to specify the table distribution at table creation. Distribution is tuple-based.
+        Four types are supported: replication, hash-distribution, modulo-distribution and round
+        robin.
+       </para>
+       <para>
+        The node list where table data is stored can also be defined with the extension <command>TO NODE</command>
+        or <command>TO GROUP</command>.
+       </para>
+       <para>
+        All the distribution data is stored in catalog <link linkend="catalog-pgxc-node"><structname>pgxc_node
+        </structname></link>.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>JOIN</command> clauses (Mason Sharp, Andrei Martsinchyk): extension to generate a remote join plan
+        depending on the quals used in queries and table distribution types. This remote join plan
+        can be reduced depending on distribution types or nodes where table data is located.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>GROUP BY</command> clause (Ashutosh Bapat): some optimizations have been added in planner to evaluate if a clause
+        can be shipped to remote nodes or not.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        Window functions (Ashutosh Bapat): such functions are not shipped to remote nodes and are exclusively
+        evaluated on Coordinator
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>INSERT</command> with multiple values (Wang Diancheng, Pavan Deolasee): this feature
+        has been extended to manage the case of distributed tables by hash, modulo or round robin.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        Aggregate functions (Andrei Martsinchyk, Ashutosh Bapat): a collection function is determined on Coordinator to collect
+        correctly the results from Datanodes.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>SELECT FOR UPDATE</command> (Abbas Butt). The implementation is not the most performant
+        as in the case of a join on native <productname>PostgreSQL</>, where locks are taken on the tuples where join
+        condition is achieved, but instead locks are taken on all the tuples used to evaluate the join condition.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>SERIAL</command> types (Michael Paquier): they behave like native <productname>PostgreSQL</>, but an extension has been
+        added to create the table having <command>SERIAL</command> columns in cluster correctly.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>TABLESPACE</command> (Michael Paquier): an extension has been made to allow nodes to share
+        the same tablespace repository even if those nodes are on the same server. It is
+        possible to use <link linkend="SQL-EXECUTEDIRECT"><command>EXECUTE DIRECT</></link>
+        with <link linkend="SQL-CREATETABLESPACE"><command>CREATE TABLESPACE</></link>
+        and <link linkend="SQL-DROPTABLESPACE"><command>DROP TABLESPACE</></link> to
+        choose the tablespace folder for each node.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>INSERT SELECT</command> (Pavan Deolasee): extensions have 
+        been done to manage that for all the table distribution types.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>PREPARE</command> and <command>EXECUTE</command> (Andrei Martsinchyk, Ashutosh Bapat):
+        extensions have been done to send parse and bind parameters to remote Datanodes. Those functions
+        behave like in vanilla.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>EXPLAIN</command> (Andrei Martsinchyk, Ashutosh Bapat, Michael Paquier): Addition of options to 
+        print the nodes involved in query, as well as extensions to print remote queries for remote node plans.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>COPY</command> (Andrei Martsinchyk, Amit Khandekar): some extension has been
+        added to copy data to remote nodes depending on table distribution. Support for
+        <command>BINARY</command> and <command>DEFAULT</command> columns using non-shippable
+        expressions as default expressions are also supported.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>CREATE TABLE AS</command> and <command>SELECT INTO</command> (Pavan Deolasee):
+        Support is extended with remote node planning and table distributions. Table distribution
+        can be specified for <command>CREATE TABLE AS</command>. <command>SELECT INTO</command>
+        uses the default distribution type, i.e distribution by hash on the first
+        column found as hashable or round robin if nothing can be used as a distribution key.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        Session parameters (Michael Paquier): session and local parameters are all supported.
+        Those parameters are managed with connection pooling. Connections with user-customized session
+        parameters are locked in session and not pulled back to pool. When a session finishes, session
+        parameter reset is made on each connection that was used by session and then pulled back to
+        connection pool.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        Sequence consistency in transaction blocks (Michael Paquier): As sequence values
+        are evaluated in Global Transaction Manager, a callback mechanism for the following
+        cases has been created.
+       </para>
+       <para>
+        <itemizedlist>
+         <listitem>
+          <para>
+            Drop a sequence on GTM when the transaction that created this sequence aborts.
+          </para>
+         </listitem>
+         <listitem>
+          <para>
+            Drop a sequence on GTM when the transaction that dropped this sequence commits.
+          </para>
+         </listitem>
+         <listitem>
+          <para>
+            Fallback to its former name a sequence whose name has been modified in a transaction
+            that aborts.
+          </para>
+         </listitem>
+        </itemizedlist>
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        System functions (Amit Khandekar and Koichi Suzuki): most of them are working like native but some extensions have been
+        added for relation-size functions (<function>pg_relation_size()</>, <function>pg_tablespace_size()
+        </>, <function>pg_database_size()</>) and locking functions.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        New configuration parameters in <filename>postgresql.conf</>
+       </para>
+       <para>
+        <itemizedlist>
+         <listitem>
+          <para><varname>pooler_port</></para>
+          <para>Port opened by pooler to which backends can connect to communicate with</para>
+         </listitem>
+         <listitem>
+          <para><varname>min_pool_size</></para>
+          <para>Minimum number of connections in pool</para>
+         </listitem>
+         <listitem>
+          <para><varname>max_pool_size</></para>
+          <para>Maximum number of connections in pool</para>
+         </listitem>
+         <listitem>
+          <para><varname>persistent_Datanode_connections</></para>
+          <para>On/off switch to make sessions keep the same connections when used.
+          This may be useful in lower concurrency environments with many session
+          parameters set.
+          </para>
+         </listitem>
+         <listitem>
+          <para><varname>max_coordinators</></para>
+          <para>Maximum number of Coordinators that can be defined in local node</para>
+         </listitem>
+         <listitem>
+          <para><varname>max_datanodes</></para>
+          <para>Maximum number of Datanodes that can be defined in local node</para>
+         </listitem>
+         <listitem>
+          <para><varname>gtm_host</></para>
+          <para>Host to connect to GTM</para>
+         </listitem>
+         <listitem>
+          <para><varname>gtm_port</></para>
+          <para>Port to connect to GTM</para>
+         </listitem>
+         <listitem>
+          <para><varname>pgxc_node_name</></para>
+          <para>Name of the local node. This is currently set by initdb.</para>
+         </listitem>
+         <listitem>
+          <para><varname>strict_statement_checking</></para>
+          <para>Forbid unsafe SQL</para>
+         </listitem>
+         <listitem>
+          <para><varname>enforce_two_phase_commit</></para>
+          <para>Control parameter used for temporary objects to enforce the use of autocommit on transactions
+                that used temporary objects if disabled.</para>
+         </listitem>
+        </itemizedlist>
+       </para>
+      </listitem>
+     </itemizedlist>
+   </sect3>
+
+   <sect3>
+    <title>SQL extensions exclusive to <productname>Postgres-XC</></title>
+
+    <para>
+     This section lists all the new SQL functionalities and system functions that are exclusive to <productname>Postgres-XC</>
+     and can be used to manage a cluster environment.
+    </para>
+
+    <itemizedlist>
+     <listitem>
+      <para>
+       <link linkend="SQL-CREATENODE"><command>CREATE NODE</></link>,
+       <link linkend="SQL-ALTERNODE"><command>ALTER NODE</></link>,
+       <link linkend="SQL-DROPNODE"><command>DROP NODE</></link> (Michael Paquier, Abbas Butt)
+      </para>
+      <para>
+       These SQL commands are used to manage cluster node information in catalog
+       <link linkend="catalog-pgxc-node"><structname>pgxc_node</structname></link>.
+      </para>
+      <para>
+       These commands run only on the local node where they are run, and running them on Datanodes
+       make no sense as this catalog data is used only by Coordinator to identify remote nodes
+       and by connection pooling to get necessary remote connection information.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       <link linkend="SQL-CREATENODEGROUP"><command>CREATE NODE GROUP</></link>,
+       <link linkend="SQL-DROPNODEGROUP"><command>DROP NODE GROUP</></link> (Michael Paquier, Abbas Butt)
+      </para>
+      <para>
+       <command>CREATE NODE GROUP</> and <command>DROP NODE GROUP</> manage the node groups that
+       can be used when creating a table with the extension <command>TO GROUP</> of <command>CREATE TABLE</>.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       <link linkend="SQL-CREATEBARRIER"><command>CREATE BARRIER</></link> (Pavan Deolasee)
+      </para>
+      <para>
+       When specified with an ID, this command allows to register in all of the nodes of the cluster
+       a common and consistent time point to be able to recover all the nodes consistently back to
+       this point. Internally, a barrier is written in the WAL file of all of the nodes.
+      </para>
+      <para>
+       <varname>recovery_target_barrier</varname> in <filename>recovery.conf</> can be used to recover
+        a node to a given barrier ID.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       <link linkend="SQL-CLEANCONNECTION"><command>CLEAN CONNECTION</></link> (Michael Paquier)
+      </para>
+      <para>
+       <command>CLEAN CONNECTION</command> is a connection pooling utility able to drop connections on chosen node(s)
+       for a given database or/and user.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       <function>pgxc_pool_check()</>, <function>pgxc_pool_reload()</> (Michael Paquier, Abbas Butt)
+      </para>
+      <para>
+       Those system functions can be used to check or update the data cached in pooler with
+       <link linkend="catalog-pgxc-node"><structname>pgxc_node</structname></link>. <function>pgxc_pool_check()</>
+       checks if the connection information is consistent between pooler cache and catalogs.
+       <function>pgxc_pool_reload()</> updates the connection information cached in pool.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       <link linkend="SQL-EXECUTEDIRECT"><command>EXECUTE DIRECT</></link> (Andrei Martsinchyk, Michael Paquier)
+      </para>
+      <para>
+       <command>EXECUTE DIRECT</> can be used to launch a query directly to a given node. Only a single node
+       can be targetted at the same time.
+      </para>
+      <para>
+       <command>INSERT</command>, <command>UPDATE</command> and <command>DELETE</command> are not authorized.
+      </para>
+      <para>
+       Utilities are basically forbidden but some are authorized for cluster management purposes.
+      </para>
+     </listitem>
+
+    </itemizedlist>
+
+   </sect3>
+
+   <sect3>
+    <title>Internal mechanisms exclusive to <productname>Postgres-XC</></title>
+
+    <itemizedlist>
+     <listitem>
+      <para>
+       Connection pooling (Andrei Martsinchyk, Michael Paquier)
+      </para>
+
+      <para>
+       Connection pooling is added on Coordinator to dynamically manage
+       and with a minimum cost connections to remote nodes. This pooler
+       uses data of catalog <link linkend="catalog-pgxc-node"><structname>pgxc_node
+        </structname></link>. It is a separate process that is forked off of the postmaster.
+      </para>
+
+      <para>
+       Connection pools are divided per both user and database for security reasons.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       Fast-query shipping (Mason Sharp, Ashutosh Bapat, Andrei Martsinchyk)
+      </para>
+
+      <para>
+       Fast-query shipping (FQS) is an additional planner exclusive to <productname>
+       Postgres-XC</> designed to determine as fast as possible if a query can be
+       completely shipped to Datanodes depending on its parsed content. A fallback
+       to standard planner is made if query cannot be shipped as-is.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       Remote query planning, standard and remote join (Mason Sharp, Andrei Martsinchyk, Pavan Deolasee, Ashutosh Bapat)
+      </para>
+
+      <para>
+       This additional planner can build a plan to replace the <productname>PostgreSQL</>
+       scan plan by a RemoteQuery plan able to scan remote nodes in executor. This includes
+       plans to be able to build remote joins, reducible join functionalities are also included.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       Remote INSERT, UPDATE, DELETE planning (Pavan Deolasee, Michael Paquier)
+      </para>
+      <para>
+       This additional planner can be used by <productname>PostgreSQL</> standard planner
+       to generate plans for DML queries to remote nodes. Those plans are placed on top
+       of an inner scan plan.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       Remode node location identification and data (Michael Paquier, Abbas Butt)
+      </para>
+      <para>
+       Nodes use their names as unique identifiers in the cluster and use the information
+       stored in <link linkend="catalog-pgxc-node"><structname>pgxc_node
+       </structname></link> to define the location of remote node to be used. Cluster nodes
+       can also be defined as groups stored in <link linkend="catalog-pgxc-group"><structname>pgxc_group
+       </structname></link>.
+      </para>
+     </listitem>
+
+    </itemizedlist>
+
+   </sect3>
+
+   <sect3>
+    <title>Global Transaction Manager (Pavan Deolasee, with input from Koichi Suzuki and Mason Sharp)</title>
+
+    <para>
+     Global Transaction manager (GTM) is a module exclusive to <productname>Postgres-XC</>
+     able to maintain the same level of MVCC as vanilla <productname>PostgreSQL</> by
+     distributing global transaction ID and global snapshot. GTM is also used to store global
+     information about two-phase commit transactions when external application requested
+     it. Sequence information (name, values) is managed directly in GTM.
+    </para>
+
+    <para>
+     This section lists all the modules and extensions related to GTM.
+    </para>
+
+    <para>
+     <link linkend="APP-GTM-PROXY">GTM-Proxy</link> can be used between <command>Postgres-XC</>
+     nodes and GTM to control the number of messages by grouping them.
+    </para>
+
+    <para>
+     <link linkend="APP-GTM">GTM-Standby</link> is a solution that prevents GTM single point
+     of failure. (Koichi Suzuki) 
+    </para>
+
+    <itemizedlist>
+     <listitem>
+      <para>
+       <link linkend="APP-INITGTM"><command>initgtm</command></link> (Michael Paquier)
+      </para>
+      <para>
+       Module that can initialize GTM data folder. Can be used to initialize GTM or GTM-Proxy.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       <filename>gtm.conf</> (Koichi Suzuki)
+      </para>
+      <para>
+       Configuration file of GTM. More details about configuration parameters <link linkend="APP-GTM">here</link>.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       <filename>gtm_proxy.conf</> (Koichi Suzuki)
+      </para>
+      <para>
+       Configuration file of GTM Proxy. More details about configuration parameters <link linkend="APP-GTM-PROXY">here</link>.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       <link linkend="APP-GTM-CTL"><command>gtm_ctl</></link>
+      </para>
+      <para>
+       Module similar to <command>pg_ctl</> able to control GTM, GTM-Standby and GTM-Proxy in similar ways.
+       <command>pg_ctl</> can be used to reconnect GTM-Proxy to a new GTM and to failover a GTM-Standy to become
+       a primary GTM.
+      </para>
+     </listitem>
+
+    </itemizedlist>
+
+   </sect3>
+
+   <sect3>
+    <title>Restrictions</title>
+
+     <itemizedlist>
+      <listitem>
+       <para>List of all the unsupported SQL commands</para>
+       <para>
+        <link linkend="SQL-CREATEEXTENSION"><command>CREATE EXTENSION</></link>,
+        <link linkend="SQL-ALTEREXTENSION"><command>ALTER EXTENSION</></link>,
+        <link linkend="SQL-DROPEXTENSION"><command>DROP EXTENSION</></link>,
+        <link linkend="SQL-CREATEFOREIGNDATAWRAPPER"><command>CREATE FOREIGN DATA WRAPPER</></link>,
+        <link linkend="SQL-ALTERFOREIGNDATAWRAPPER"><command>ALTER FOREIGN DATA WRAPPER</></link>,
+        <link linkend="SQL-DROPFOREIGNDATAWRAPPER"><command>DROP FOREIGN DATA WRAPPER</></link>,
+        <link linkend="SQL-CREATEFOREIGNTABLE"><command>CREATE FOREIGN TABLE</></link>,
+        <link linkend="SQL-ALTERFOREIGNTABLE"><command>ALTER FOREIGN TABLE</></link>,
+        <link linkend="SQL-DROPFOREIGNTABLE"><command>DROP FOREIGN TABLE</></link>,
+        <link linkend="SQL-ALTERLARGEOBJECT"><command>ALTER LARGE OBJECT</></link>,
+        <link linkend="SQL-CREATESERVER"><command>CREATE SERVER</></link>,
+        <link linkend="SQL-ALTERSERVER"><command>ALTER SERVER</></link>,
+        <link linkend="SQL-DROPSERVER"><command>DROP SERVER</></link>,
+        <link linkend="SQL-CREATETRIGGER"><command>CREATE TRIGGER</></link>,
+        <link linkend="SQL-ALTERTRIGGER"><command>ALTER TRIGGER</></link>,
+        <link linkend="SQL-DROPTRIGGER"><command>DROP TRIGGER</></link>,
+        <link linkend="SQL-CREATEUSERMAPPING"><command>CREATE USER MAPPING</></link>,
+        <link linkend="SQL-ALTERUSERMAPPING"><command>ALTER USER MAPPING</></link>,
+        <link linkend="SQL-DROPUSERMAPPING"><command>DROP USER MAPPING</></link>,
+        <link linkend="SQL-LISTEN"><command>LISTEN</></link>,
+        <link linkend="SQL-NOTIFY"><command>NOTIFY</></link>,
+        <link linkend="SQL-RELEASE-SAVEPOINT"><command>RELEASE SAVEPOINT</></link>,
+        <link linkend="SQL-ROLLBACK-TO"><command>ROLLBACK TO SAVEPOINT</></link>,
+        <link linkend="SQL-SAVEPOINT"><command>SAVEPOINT</></link>,
+        <link linkend="SQL-SECURITY-LABEL"><command>SECURITY LABEL</></link>,
+        <link linkend="SQL-UNLISTEN"><command>UNLISTEN</></link>,
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        Table distribution definition cannot be changed.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        Distribution key of a table cannot be updated.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        Utilities cannot be used in SQL functions.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        DML cannot be used in plpgsql functions.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>CREATE TABLE AS EXECUTE</command> is not supported.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>WHERE CURRENT OF</command> is not supported.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>RETURNING</command> is not supported.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        In cursors, <command>MOVE BACKWARD</command> works only if <command>SCROLL</command>
+        is used in <command>CURSOR</command>
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <command>WITH HOLD</command> cursors are not supported.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        Statictics are not managed globally. When requesting statistics
+        only the data related to node directly connected to is taken into account.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        Barriers have no timeout functionalities, meaning that if a 2PC transaction is
+        stuck forever, barrier will be stuck too.
+       </para>
+      </listitem>
+
+     </itemizedlist>
+
+   </sect3>
+   </sect2>
+
+   <sect2>
+
+    <title>Acknowledgement</title>
+
+    <itemizedlist>
+     <listitem>
+      <para>NTT Open Source Software Center</para>
+     </listitem>
+     <listitem>
+      <para>EnterpriseDB</para>
+     </listitem>
+    </itemizedlist>
+
+   </sect2>
+ </sect1>

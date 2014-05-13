@@ -1,0 +1,20 @@
+# -----------------------------
+# Postgres-XC configuration file
+# -----------------------------
+#
+# This file consists of lines of the form:
+#
+#   name = value
+#
+# It describes the list of coordinators used in the cluster
+
+#------------------------------------------------------------------------------
+# POSTGRES-XC COORDINATORS
+#------------------------------------------------------------------------------
+
+#coordinator_hosts = 'localhost'	# Host names or addresses of data nodes
+					# (change requires restart)
+#coordinator_ports = '5451,5452'	# Port numbers of coordinators
+					# (change requires restart)
+#coordinator_folders = '/pgxc/data'	# List of Data folders of coordinators
+					# (change require restart)

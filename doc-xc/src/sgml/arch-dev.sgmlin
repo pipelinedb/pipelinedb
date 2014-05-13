@@ -1,0 +1,1097 @@
+<!-- doc/src/sgml/arch-dev.sgml -->
+
+ <chapter id="overview">
+  <title>Overview of PostgreSQL Internals</title>
+
+  <note>
+   <title>Author</title>
+   <para>
+    This chapter originated as part of
+    <xref linkend="SIM98">, Stefan Simkovics'
+    Master's Thesis prepared at Vienna University of Technology under the direction
+    of O.Univ.Prof.Dr. Georg Gottlob and Univ.Ass. Mag. Katrin Seyr.
+   </para>
+  </note>
+
+<!## XC>
+  <para>
+   This chapter describes internals
+   of <productname>PostgreSQL</productname>
+   which <productname>Postgres-XC</productname> inherited most of
+   features.
+  </para>
+&common;
+
+  <para>
+   This chapter gives an overview of the internal structure of the
+   backend of <productname>PostgreSQL</productname>.  After having
+   read the following sections you should have an idea of how a query
+   is processed. This chapter does not aim to provide a detailed
+   description of the internal operation of
+   <productname>PostgreSQL</productname>, as such a document would be
+   very extensive. Rather, this chapter is intended to help the reader
+   understand the general sequence of operations that occur within the
+   backend from the point at which a query is received, to the point
+   at which the results are returned to the client.
+  </para>
+
+  <sect1 id="query-path">
+   <title>The Path of a Query</title>
+
+&common;
+   <para>
+    Here we give a short overview of the stages a query has to pass in
+    order to obtain a result.
+   </para>
+
+   <procedure>
+    <step>
+     <para>
+      A connection from an application program to the <productname>PostgreSQL</productname>
+      server has to be established. The application program transmits a
+      query to the server and waits to receive the results sent back by the
+      server.
+     </para>
+    </step>
+
+    <step>
+     <para>
+      The <firstterm>parser stage</firstterm> checks the query
+      transmitted by the application
+      program for correct syntax and creates
+      a <firstterm>query tree</firstterm>.
+     </para>
+    </step>
+
+    <step>
+     <para>
+      The <firstterm>rewrite system</firstterm> takes
+      the query tree created by the parser stage and looks for
+      any <firstterm>rules</firstterm> (stored in the
+      <firstterm>system catalogs</firstterm>) to apply to
+      the query tree.  It performs the
+      transformations given in the <firstterm>rule bodies</firstterm>.
+     </para>
+
+     <para>
+      One application of the rewrite system is in the realization of
+      <firstterm>views</firstterm>.
+      Whenever a query against a view
+      (i.e., a <firstterm>virtual table</firstterm>) is made,
+      the rewrite system rewrites the user's query to
+      a query that accesses the <firstterm>base tables</firstterm> given in
+      the <firstterm>view definition</firstterm> instead.
+     </para>
+    </step>
+
+    <step>
+     <para>
+      The <firstterm>planner/optimizer</firstterm> takes
+      the (rewritten) query tree and creates a
+      <firstterm>query plan</firstterm> that will be the input to the
+      <firstterm>executor</firstterm>.
+     </para>
+
+     <para>
+      It does so by first creating all possible <firstterm>paths</firstterm>
+      leading to the same result. For example if there is an index on a
+      relation to be scanned, there are two paths for the
+      scan. One possibility is a simple sequential scan and the other
+      possibility is to use the index. Next the cost for the execution of
+      each path is estimated and the cheapest path is chosen.  The cheapest
+      path is expanded into a complete plan that the executor can use.
+     </para>
+    </step>
+
+    <step>
+     <para>
+      The executor recursively steps through
+      the <firstterm>plan tree</firstterm> and
+      retrieves rows in the way represented by the plan.
+      The executor makes use of the
+      <firstterm>storage system</firstterm> while scanning
+      relations, performs <firstterm>sorts</firstterm> and <firstterm>joins</firstterm>,
+      evaluates <firstterm>qualifications</firstterm> and finally hands back the rows derived.
+     </para>
+    </step>
+   </procedure>
+
+   <para>
+    In the following sections we will cover each of the above listed items
+    in more detail to give a better understanding of <productname>PostgreSQL</productname>'s internal
+    control and data structures.
+   </para>
+  </sect1>
+
+  <sect1 id="connect-estab">
+   <title>How Connections are Established</title>
+
+&common;
+   <para>
+    <productname>PostgreSQL</productname> is implemented using a
+    simple <quote>process per user</> client/server model.  In this model
+    there is one <firstterm>client process</firstterm> connected to
+    exactly one <firstterm>server process</firstterm>.  As we do not
+    know ahead of time how many connections will be made, we have to
+    use a <firstterm>master process</firstterm> that spawns a new
+    server process every time a connection is requested. This master
+    process is called <literal>postgres</literal> and listens at a
+    specified TCP/IP port for incoming connections. Whenever a request
+    for a connection is detected the <literal>postgres</literal>
+    process spawns a new server process. The server tasks
+    communicate with each other using <firstterm>semaphores</firstterm> and
+    <firstterm>shared memory</firstterm> to ensure data integrity
+    throughout concurrent data access.
+   </para>
+
+   <para>
+    The client process can be any program that understands the
+    <productname>PostgreSQL</productname> protocol described in
+    <xref linkend="protocol">.  Many clients are based on the
+    C-language library <application>libpq</>, but several independent
+    implementations of the protocol exist, such as the Java
+    <application>JDBC</> driver.
+   </para>
+
+   <para>
+    Once a connection is established the client process can send a query
+    to the <firstterm>backend</firstterm> (server). The query is transmitted using plain text,
+    i.e., there is no parsing done in the <firstterm>frontend</firstterm> (client). The
+    server parses the query, creates an <firstterm>execution plan</firstterm>,
+    executes the plan and returns the retrieved rows to the client
+    by transmitting them over the established connection.
+   </para>
+  </sect1>
+
+  <sect1 id="parser-stage">
+   <title>The Parser Stage</title>
+
+&common;
+   <para>
+    The <firstterm>parser stage</firstterm> consists of two parts:
+
+    <itemizedlist>
+     <listitem>
+      <para>
+       The <firstterm>parser</firstterm> defined in
+       <filename>gram.y</filename> and <filename>scan.l</filename> is
+       built using the Unix tools <application>bison</application>
+       and <application>flex</application>.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       The <firstterm>transformation process</firstterm> does
+       modifications and augmentations to the data structures returned by the parser.
+      </para>
+     </listitem>
+    </itemizedlist>
+   </para>
+
+   <sect2>
+    <title>Parser</title>
+
+&common;
+    <para>
+     The parser has to check the query string (which arrives as plain
+     text) for valid syntax. If the syntax is correct a
+     <firstterm>parse tree</firstterm> is built up and handed back;
+     otherwise an error is returned. The parser and lexer are
+     implemented using the well-known Unix tools <application>bison</>
+     and <application>flex</>.
+    </para>
+
+    <para>
+     The <firstterm>lexer</firstterm> is defined in the file
+     <filename>scan.l</filename> and is responsible
+     for recognizing <firstterm>identifiers</firstterm>,
+     the <firstterm>SQL key words</firstterm> etc. For
+     every key word or identifier that is found, a <firstterm>token</firstterm>
+     is generated and handed to the parser.
+    </para>
+
+    <para>
+     The parser is defined in the file <filename>gram.y</filename> and
+     consists of a set of <firstterm>grammar rules</firstterm> and
+     <firstterm>actions</firstterm> that are executed whenever a rule
+     is fired. The code of the actions (which is actually C code) is
+     used to build up the parse tree.
+    </para>
+
+    <para>
+     The file <filename>scan.l</filename> is transformed to the C
+     source file <filename>scan.c</filename> using the program
+     <application>flex</application> and <filename>gram.y</filename> is
+     transformed to <filename>gram.c</filename> using
+     <application>bison</application>.  After these transformations
+     have taken place a normal C compiler can be used to create the
+     parser. Never make any changes to the generated C files as they
+     will be overwritten the next time <application>flex</application>
+     or <application>bison</application> is called.
+
+     <note>
+      <para>
+       The mentioned transformations and compilations are normally done
+       automatically using the <firstterm>makefiles</firstterm>
+       shipped with the <productname>PostgreSQL</productname>
+       source distribution.
+      </para>
+     </note>
+    </para>
+
+    <para>
+     A detailed description of <application>bison</application> or
+     the grammar rules given in <filename>gram.y</filename> would be
+     beyond the scope of this paper. There are many books and
+     documents dealing with <application>flex</application> and
+     <application>bison</application>. You should be familiar with
+     <application>bison</application> before you start to study the
+     grammar given in <filename>gram.y</filename> otherwise you won't
+     understand what happens there.
+    </para>
+
+   </sect2>
+
+   <sect2>
+     <title>Transformation Process</title>
+
+&common;
+    <para>
+     The parser stage creates a parse tree using only fixed rules about
+     the syntactic structure of SQL.  It does not make any lookups in the
+     system catalogs, so there is no possibility to understand the detailed
+     semantics of the requested operations.  After the parser completes,
+     the <firstterm>transformation process</firstterm> takes the tree handed
+     back by the parser as input and does the semantic interpretation needed
+     to understand which tables, functions, and operators are referenced by
+     the query.  The data structure that is built to represent this
+     information is called the <firstterm>query tree</>.
+    </para>
+
+    <para>
+     The reason for separating raw parsing from semantic analysis is that
+     system catalog lookups can only be done within a transaction, and we
+     do not wish to start a transaction immediately upon receiving a query
+     string.  The raw parsing stage is sufficient to identify the transaction
+     control commands (<command>BEGIN</>, <command>ROLLBACK</>, etc), and
+     these can then be correctly executed without any further analysis.
+     Once we know that we are dealing with an actual query (such as
+     <command>SELECT</> or <command>UPDATE</>), it is okay to
+     start a transaction if we're not already in one.  Only then can the
+     transformation process be invoked.
+    </para>
+
+    <para>
+     The query tree created by the transformation process is structurally
+     similar to the raw parse tree in most places, but it has many differences
+     in detail.  For example, a <structname>FuncCall</> node in the
+     parse tree represents something that looks syntactically like a function
+     call.  This might be transformed to either a <structname>FuncExpr</>
+     or <structname>Aggref</> node depending on whether the referenced
+     name turns out to be an ordinary function or an aggregate function.
+     Also, information about the actual data types of columns and expression
+     results is added to the query tree.
+    </para>
+   </sect2>
+  </sect1>
+
+  <sect1 id="rule-system">
+   <title>The <productname>PostgreSQL</productname> Rule System</title>
+
+&common;
+   <para>
+    <productname>PostgreSQL</productname> supports a powerful
+    <firstterm>rule system</firstterm> for the specification
+    of <firstterm>views</firstterm> and ambiguous <firstterm>view updates</firstterm>.
+    Originally the <productname>PostgreSQL</productname>
+    rule system consisted of two implementations:
+
+    <itemizedlist>
+     <listitem>
+      <para>
+       The first one worked using <firstterm>row level</firstterm> processing and was
+       implemented deep in the <firstterm>executor</firstterm>. The rule system was
+       called whenever an individual row had been accessed. This
+       implementation was removed in 1995 when the last official release
+       of the <productname>Berkeley Postgres</productname> project was
+       transformed into <productname>Postgres95</productname>.
+      </para>
+     </listitem>
+
+     <listitem>
+      <para>
+       The second implementation of the rule system is a technique
+       called <firstterm>query rewriting</firstterm>.
+       The <firstterm>rewrite system</firstterm> is a module
+       that exists between the <firstterm>parser stage</firstterm> and the
+       <firstterm>planner/optimizer</firstterm>. This technique is still implemented.
+      </para>
+     </listitem>
+    </itemizedlist>
+   </para>
+
+   <para>
+    The query rewriter is discussed in some detail in
+    <xref linkend="rules">, so there is no need to cover it here.
+    We will only point out that both the input and the output of the
+    rewriter are query trees, that is, there is no change in the
+    representation or level of semantic detail in the trees.  Rewriting
+    can be thought of as a form of macro expansion.
+   </para>
+
+  </sect1>
+
+  <sect1 id="planner-optimizer">
+   <title>Planner/Optimizer</title>
+
+&common;
+   <para>
+    The task of the <firstterm>planner/optimizer</firstterm> is to
+    create an optimal execution plan. A given SQL query (and hence, a
+    query tree) can be actually executed in a wide variety of
+    different ways, each of which will produce the same set of
+    results.  If it is computationally feasible, the query optimizer
+    will examine each of these possible execution plans, ultimately
+    selecting the execution plan that is expected to run the fastest.
+   </para>
+
+   <note>
+    <para>
+     In some situations, examining each possible way in which a query
+     can be executed would take an excessive amount of time and memory
+     space. In particular, this occurs when executing queries
+     involving large numbers of join operations. In order to determine
+     a reasonable (not necessarily optimal) query plan in a reasonable amount
+     of time, <productname>PostgreSQL</productname> uses a <firstterm>Genetic
+     Query Optimizer</firstterm> (see <xref linkend="geqo">) when the number of joins
+     exceeds a threshold (see <xref linkend="guc-geqo-threshold">).
+    </para>
+   </note>
+
+   <para>
+    The planner's search procedure actually works with data structures
+    called <firstterm>paths</>, which are simply cut-down representations of
+    plans containing only as much information as the planner needs to make
+    its decisions. After the cheapest path is determined, a full-fledged
+    <firstterm>plan tree</> is built to pass to the executor.  This represents
+    the desired execution plan in sufficient detail for the executor to run it.
+    In the rest of this section we'll ignore the distinction between paths
+    and plans.
+   </para>
+
+   <sect2>
+    <title>Generating Possible Plans</title>
+
+&common;
+    <para>
+     The planner/optimizer starts by generating plans for scanning each
+     individual relation (table) used in the query.  The possible plans
+     are determined by the available indexes on each relation.
+     There is always the possibility of performing a
+     sequential scan on a relation, so a sequential scan plan is always
+     created. Assume an index is defined on a
+     relation (for example a B-tree index) and a query contains the
+     restriction
+     <literal>relation.attribute OPR constant</literal>. If
+     <literal>relation.attribute</literal> happens to match the key of the B-tree
+     index and <literal>OPR</literal> is one of the operators listed in
+     the index's <firstterm>operator class</>, another plan is created using
+     the B-tree index to scan the relation. If there are further indexes
+     present and the restrictions in the query happen to match a key of an
+     index, further plans will be considered.  Index scan plans are also
+     generated for indexes that have a sort ordering that can match the
+     query's <literal>ORDER BY</> clause (if any), or a sort ordering that
+     might be useful for merge joining (see below).
+    </para>
+
+    <para>
+     If the query requires joining two or more relations,
+     plans for joining relations are considered
+     after all feasible plans have been found for scanning single relations.
+     The three available join strategies are:
+
+     <itemizedlist>
+      <listitem>
+       <para>
+        <firstterm>nested loop join</firstterm>: The right relation is scanned
+        once for every row found in the left relation. This strategy
+        is easy to implement but can be very time consuming.  (However,
+        if the right relation can be scanned with an index scan, this can
+        be a good strategy.  It is possible to use values from the current
+        row of the left relation as keys for the index scan of the right.)
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <firstterm>merge join</firstterm>: Each relation is sorted on the join
+        attributes before the join starts. Then the two relations are
+        scanned in parallel, and matching rows are combined to form
+        join rows. This kind of join is more
+        attractive because each relation has to be scanned only once.
+        The required sorting might be achieved either by an explicit sort
+        step, or by scanning the relation in the proper order using an
+        index on the join key.
+       </para>
+      </listitem>
+
+      <listitem>
+       <para>
+        <firstterm>hash join</firstterm>: the right relation is first scanned
+        and loaded into a hash table, using its join attributes as hash keys.
+        Next the left relation is scanned and the
+        appropriate values of every row found are used as hash keys to
+        locate the matching rows in the table.
+       </para>
+      </listitem>
+     </itemizedlist>
+    </para>
+
+    <para>
+     When the query involves more than two relations, the final result
+     must be built up by a tree of join steps, each with two inputs.
+     The planner examines different possible join sequences to find the
+     cheapest one.
+    </para>
+
+    <para>
+     If the query uses fewer than <xref linkend="guc-geqo-threshold">
+     relations, a near-exhaustive search is conducted to find the best
+     join sequence.  The planner preferentially considers joins between any
+     two relations for which there exist a corresponding join clause in the
+     <literal>WHERE</literal> qualification (i.e., for
+     which a restriction like <literal>where rel1.attr1=rel2.attr2</literal>
+     exists). Join pairs with no join clause are considered only when there
+     is no other choice, that is, a particular relation has no available
+     join clauses to any other relation. All possible plans are generated for
+     every join pair considered by the planner, and the one that is
+     (estimated to be) the cheapest is chosen.
+    </para>
+
+    <para>
+     When <varname>geqo_threshold</varname> is exceeded, the join
+     sequences considered are determined by heuristics, as described
+     in <xref linkend="geqo">.  Otherwise the process is the same.
+    </para>
+
+    <para>
+     The finished plan tree consists of sequential or index scans of
+     the base relations, plus nested-loop, merge, or hash join nodes as
+     needed, plus any auxiliary steps needed, such as sort nodes or
+     aggregate-function calculation nodes.  Most of these plan node
+     types have the additional ability to do <firstterm>selection</>
+     (discarding rows that do not meet a specified Boolean condition)
+     and <firstterm>projection</> (computation of a derived column set
+     based on given column values, that is, evaluation of scalar
+     expressions where needed).  One of the responsibilities of the
+     planner is to attach selection conditions from the
+     <literal>WHERE</literal> clause and computation of required
+     output expressions to the most appropriate nodes of the plan
+     tree.
+    </para>
+   </sect2>
+  </sect1>
+
+  <sect1 id="executor">
+   <title>Executor</title>
+
+&common;
+   <para>
+    The <firstterm>executor</firstterm> takes the plan created by the
+    planner/optimizer and recursively processes it to extract the required set
+    of rows.  This is essentially a demand-pull pipeline mechanism.
+    Each time a plan node is called, it must deliver one more row, or
+    report that it is done delivering rows.
+   </para>
+
+   <para>
+    To provide a concrete example, assume that the top
+    node is a <literal>MergeJoin</literal> node.
+    Before any merge can be done two rows have to be fetched (one from
+    each subplan). So the executor recursively calls itself to
+    process the subplans (it starts with the subplan attached to
+    <literal>lefttree</literal>). The new top node (the top node of the left
+    subplan) is, let's say, a
+    <literal>Sort</literal> node and again recursion is needed to obtain
+    an input row.  The child node of the <literal>Sort</literal> might
+    be a <literal>SeqScan</> node, representing actual reading of a table.
+    Execution of this node causes the executor to fetch a row from the
+    table and return it up to the calling node.  The <literal>Sort</literal>
+    node will repeatedly call its child to obtain all the rows to be sorted.
+    When the input is exhausted (as indicated by the child node returning
+    a NULL instead of a row), the <literal>Sort</literal> code performs
+    the sort, and finally is able to return its first output row, namely
+    the first one in sorted order.  It keeps the remaining rows stored so
+    that it can deliver them in sorted order in response to later demands.
+   </para>
+
+   <para>
+    The <literal>MergeJoin</literal> node similarly demands the first row
+    from its right subplan.  Then it compares the two rows to see if they
+    can be joined; if so, it returns a join row to its caller.  On the next
+    call, or immediately if it cannot join the current pair of inputs,
+    it advances to the next row of one table
+    or the other (depending on how the comparison came out), and again
+    checks for a match.  Eventually, one subplan or the other is exhausted,
+    and the <literal>MergeJoin</literal> node returns NULL to indicate that
+    no more join rows can be formed.
+   </para>
+
+   <para>
+    Complex queries can involve many levels of plan nodes, but the general
+    approach is the same: each node computes and returns its next output
+    row each time it is called.  Each node is also responsible for applying
+    any selection or projection expressions that were assigned to it by
+    the planner.
+   </para>
+
+   <para>
+    The executor mechanism is used to evaluate all four basic SQL query types:
+    <command>SELECT</>, <command>INSERT</>, <command>UPDATE</>, and
+    <command>DELETE</>.  For <command>SELECT</>, the top-level executor
+    code only needs to send each row returned by the query plan tree off
+    to the client.  For <command>INSERT</>, each returned row is inserted
+    into the target table specified for the <command>INSERT</>.  This is
+    done in a special top-level plan node called <literal>ModifyTable</>.
+    (A simple
+    <command>INSERT ... VALUES</> command creates a trivial plan tree
+    consisting of a single <literal>Result</> node, which computes just one
+    result row, and <literal>ModifyTable</> above it to perform the insertion.
+    But <command>INSERT ... SELECT</> can demand the full power
+    of the executor mechanism.)  For <command>UPDATE</>, the planner arranges
+    that each computed row includes all the updated column values, plus
+    the <firstterm>TID</> (tuple ID, or row ID) of the original target row;
+    this data is fed into a <literal>ModifyTable</> node, which uses the
+    information to create a new updated row and mark the old row deleted.
+    For <command>DELETE</>, the only column that is actually returned by the
+    plan is the TID, and the <literal>ModifyTable</> node simply uses the TID
+    to visit each target row and mark it deleted.
+   </para>
+
+  </sect1>
+
+ </chapter>
+
+
+<!## XC>
+ <chapter id="xc-overview">
+  <title>Overview of <productname>Postgres-XC</productname> Internals</title>
+
+&xconly;
+  <para>
+   This chapter gives an overview of the internal structure
+   of <productname>Postgres-XC</productname>.
+  </para>
+
+  <sect1 id="xc-overview-components">
+   <title><productname>Postgres-XC</productname> Components</title>
+&xconly;
+   <para>
+    As described
+    in <xref linkend="intro-whatis">, <productname>Postgres-XC</productname>
+    is a database cluster which consists of multiple database servers
+    based
+    upon <productname>PostgreSQL</productname>.  <productname>Postgres-XC</productname>
+    provides global transparent transaction management to all the
+    database servers involved and provide both read and write
+    scalability.
+   </para>
+
+   <para>
+    To achieve these features, <productname>Postgres-XC</productname>
+    is composed of three major components as follows:
+
+    <variablelist>
+     <varlistentry>
+      <term>GTM</term>
+      <listitem>
+       <para>
+        GTM stands for global transaction manager.  It provides global
+        transaction ID and snapshot to each transaction
+        in <productname>Postgres-XC</productname> database cluster.
+        It also provide several global value such as sequence and
+        global timestamp.
+       </para>
+       <para>
+        To improve scalability itself, each server hardware or virtual
+        machine may have GTM-Proxy.  GTM-Proxy groups commands and
+        response from/to GTM to reduce number of interaction and the
+        amount of data which GTM reads and writes.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term>Coordinator</term>
+      <listitem>
+       <para>
+        Coordinator is an entry point
+        to <productname>Postgres-XC</productname> from applications.
+        You can configure more than one Coordinators in the
+        same <productname>Postgres-XC</productname>.  With the help
+        of GTM, they provide transparent concurrency and integrity of
+        transactions globally.  Application can choose any
+        Coordinator to connect with.  Any Coordinator provides the
+        same view of the database.
+       </para>
+      </listitem>
+     </varlistentry>
+     <varlistentry>
+      <term>Datanode</term>
+      <listitem>
+       <para>
+        Datanode stores user data.  As described
+        in <xref linkend="whatis-in-short">
+        and <xref linkend="SQL-CREATETABLE">, more than one Datanodes
+        can be configured.  Each table can be replicated or
+          distributed among Datanodes.  A table is distributed, you can
+         choose a column as the distribute key, whose value is used to
+         determine which Datanode each row should be stored.
+        </para>
+       </listitem>
+      </varlistentry>
+    </variablelist>
+   </para>
+  </sect1>
+
+  <sect1 id="xc-overview-gtm">
+   <title>GTM and Global Transaction Management</title>
+&xconly;
+   <sect2 id="xc-overview-gtm-pgreview">
+    <title>Review of <productname>PostgreSQL</productname> Transaction Management Internals</title>
+&common;
+    <para>
+     In PostgreSQL, each transaction is given unique ID called
+     transaction ID (or XID). XID is given in ascending order to
+     distinguish which transaction is older/newer.
+     <footnote>
+      <para>
+       More precisely, XID is 32bit integer. When XID reaches the max
+       value, it wraps around to the lowest value (3, as to the latest
+       definition). PostgreSQL has a means to handle this, as well as
+       Postgres-XC. For simplicity, it will not be described in this
+       document.
+      </para>
+     </footnote>
+     When a transaction tries to read a tuple, 
+     <footnote>
+      <para>
+       This description is somewhat simplified for explanation. You
+       will find the precise rule in <filename>tqual.c</filename> file
+       in PostgreSQL's source code.
+      </para>
+     </footnote>
+     each tuple has a set of XIDs to indicate transactions which
+     created and deleted the tuple. So if the target tuple is created
+     by an active transaction, it is not committed or aborted and the
+     transaction should ignore such tuple. In such way (in practice,
+     this is done by versup module in PostgreSQL core), if we give
+     each transaction a unique transaction Id throughout the system
+     and maintain snapshot what transaction is active, not only in a
+     single server but transaction in all the servers, we can maintain
+     global consistent visibility of each tuple even when a server
+     accepts new statement from other transactions running on the
+     other server.
+    </para>
+    <para>
+     These information is stored in "<varname>xmin</varname>" and
+     "<varname>xmax</varname>" fields of each row of table. When
+     we <command>INSERT</command> rows, <varname>XID</varname> of
+     inserting transaction is recorded at xmin field. When we update
+     rows of tables (with <command>UPDATE</command>
+     or <command>DELETE</command> statement), PostgreSQL does not
+     simply overwrite the old rows. Instead, PostgreSQL
+     "<emphasis>marks</emphasis>" the old rows as
+     "<emphasis>deleted</emphasis>" by writing updating
+     transaction's <varname>XID</varname> to xmax field. In the case
+     of <command>UPDATE</command> (just
+     like <command>INSERT</command>), new rows are created whose xmin
+     field is "<emphasis>marked</emphasis>"
+     with <varname>XID</varname>s of the creating transaction.
+    </para>
+    <para>
+     These "<varname>xmin</varname>" and "<varname>xmax</varname>" are
+     used to determine which row is visible to a transaction. To do
+     this, PostgreSQL needs a data to indicate what transactions are
+     running, which is called the "<emphasis>snapshot</emphasis>".
+    </para>
+    <para>
+     If the creating transaction is not running, visibility of each
+     row depends upon the fact if the creating transaction was
+     committed or aborted. Suppose a row of a table which was created
+     by some transaction and is not deleted yet. If the creating
+     transaction is running, such row is visible to the transaction
+     which created the row, but not visible to other transactions.  If
+     the creating transaction is not running and was committed the row
+     is visible. If the transaction was aborted, this row is not
+     visible.
+    </para>
+    <para>
+     Therefore, PostgreSQL needs two kinds of information to determine
+     "which transaction is running" and "if an old transaction was
+     committed or aborted."
+    </para>
+    <para>
+     The former information is obtained as
+     "<emphasis>snapshot</emphasis>."  PostgreSQL maintains the latter
+     information as "<filename>CLOG</filename>."
+    </para>
+    <para>
+     PostgreSQL uses all these information to determine which row is
+     visible to a given transaction.
+    </para>
+   </sect2>
+
+   <sect2 id="xc-overview-global-mvcc">
+    <title>Making Transaction Management Global</title>
+&xconly;
+    <para>
+     In Postgres-XC, the following features of transaction management
+     and visibility checking were picked up:
+    </para>
+    <itemizedlist>
+     <listitem>
+      <para>
+       Assigning XID globally to transactions (GXID, Global
+       Transaction ID). This can be done globally to identify each
+       Transactions in the system.
+      </para>
+     </listitem>
+     <listitem>
+      <para>
+       Providing snapshot. GTM collects all the transaction's status
+       (running, committed, aborted etc.) to provide snapshot globally
+       (global snapshot). Please note that global snapshot
+       includes <varname>GXID</varname> initiated by other
+       Coordinators or Datanodes.  This is needed because some older
+       transaction may visit new server after a while. In this case,
+       if <varname>GXID</varname> of such a transaction is not
+       included in the snapshot, this transaction may be regarded as
+       "old enough" and uncommitted rows may be
+       read. If <varname>GXID</varname> of such transaction is
+       included in the snapshot from the beginning, such inconsistency
+       does not take place.
+      </para>
+     </listitem>
+    </itemizedlist>
+    <para>
+     To do this, <productname>Postgres-XC</productname> introduced a dedicated component called
+     GTM (Global Transaction Manager). GTM runs on one of the servers
+     and provide unique and ordered transaction id to each transaction
+     running on <productname>Postgres-XC</productname> servers. Because this is globally unique
+     ID, we call this <varname>GXID</varname> (Global Transaction Id).
+    </para>
+    <para>
+     GTM receives <varname>GXID</varname> request from transactions
+     and provide <varname>GXID</varname>. It also keep track of all
+     the transactions when it started and finished to generate
+     snapshot used to control each tuple visibility. Because snapshot
+     here is also global property, it is called <emphasis>Global
+     Snapshot</emphasis>.
+    </para>
+    <para>
+     As long as each transaction runs with <varname>GXID</varname> and
+     Global Snapshot, it can maintain consistent visibility throughout
+     the system and it is safe to run transactions in parallel in any
+     servers.  On the other hand, a transaction, composed of multiple
+     statements, can be executed using multiple servers maintaining
+     database consistency.
+    </para>
+    <para>
+     GTM provides Global Transaction Id to each transaction and keeps
+     track of the status of all the transactions, whether it is
+     running, committed or aborted, to calculate global snapshot to
+     maintain tuple visibility.
+    </para>
+    <para>
+     For this purpose, each transaction reports when it starts and
+     ends, as well as when it issues <command>PREPARE</command>
+     command in two-phase commit protocol.
+    </para>
+    <para>
+     Each transaction requests snapshot according to the transaction
+     isolation level as done in PostgreSQL. If the transaction
+     isolation level is "<emphasis>read committed</emphasis>", then
+     transaction will request a snapshot for each statement. If it is
+     "<emphasis>serializable</emphasis>" transaction will request a
+     snapshot at the beginning of transaction and reuse it thought the
+     transaction.
+    </para>
+   </sect2>
+
+   <sect2 id="xc-overview-gtm-proxy">
+    <title>Improving GTM Performance</title>
+&xconly;
+    <para>
+     Because GTM can be regarded as "serializing" all the transaction
+     processing, people may think that GTM can be a performance
+     bottleneck.
+    </para>
+
+    <para>
+     In fact, GTM can limit the whole scalability. GTM should not be
+     used in very slow network environment such as wide area
+     network. GTM architecture is intended to be used with Gigabit
+     local network.  We encourage to install Postgres-XC with local
+     Gigabit network with minimum latency, that is, use as fewer
+     switches involved in the connection among GTM, Coordinator and
+     Datanodes.
+    </para>
+
+    <sect3>
+     <title>Primitive GTM Implementation</title>
+
+     <para>
+      Primitive GTM implementation can be done as follows:
+     </para>
+
+    <procedure>
+     <step>
+      <para>
+       Coordinator backend is provided with GTM client library to
+       obtain GXID and snapshot and to report the transaction status.
+      </para>
+     </step>
+
+     <step>
+      <para>
+       GTM opens a port to accept connection from each Coordinator and
+       Datanode backend. When GTM accepts a connection, it creates a
+       thread (GTM Thread) to handle request to GTM from the connected
+       Coordinator backend.
+      </para>
+     </step>
+
+     <step>
+      <para>
+       GTM Thread receives each request, record it and
+       sends <varname>GXID</varname>, <emphasis>snapshot</emphasis>
+       and other response to the Coordinator backend.
+      </para>
+     </step>
+
+     <step>
+      <para>
+       They are repeated until the Coordinator backend requests
+       disconnect.
+      </para>
+     </step>
+    </procedure>
+
+    </sect3>
+
+    <sect3>
+     <title>GTM Proxy Implementation</title>
+
+     <para>
+      You may have been noticed that each transaction is issuing
+      request to GTM so frequently and we can collect them into single
+      block of requests in each Coordinator to reduce the amount of
+      interaction, as <emphasis>GTM-Proxy</emphasis>.
+     </para>
+
+     <para>
+      In this configuration, each Coordinator and Datanode backend
+      does not connect to GTM directly. Instead, we have GTM Proxy
+      between GTM and Coordinator backend to group multiple requests
+      and responses. GTM Proxy, like GTM explained in the previous
+      sections, accepts connection from the Coordinator
+      backend. However, it does not create new thread. The following
+      paragraphs explains how GTM Proxy is initialized and how it
+      handles requests from Coordinator backends.
+     </para>
+
+     <para>
+      GTM Proxy, as well as GTM, is initialized as follows:
+     </para>
+
+     <procedure>
+      <step>
+       <para>
+        GTM starts up normally, but now can accept connections from
+        GTM proxies.
+       </para>
+      </step>
+
+      <step>
+       <para>
+        GTM Proxy starts up. GTM Proxy creates GTM Proxy Threads. Each
+        GTM Proxy Threads connect to the GTM in advance. The number of
+        GTM Proxy Threads can be specified at the startup. Typical
+        number of threads is one or two so it can save the number of
+        connections between GTM and Coordinators.
+       </para>
+      </step>
+
+      <step>
+       <para>
+        GTM Main Thread waits for the request connection from each
+        backend.
+       </para>
+      </step>
+
+     </procedure>
+
+     <para>
+      When each Coordinator backend requests for connection, Proxy
+      Main Thread assigns a GTM Proxy Thread to handle
+      request. Therefore, one GTM Proxy Thread handles multiple
+      Coordinator backends. If a Coordinator has one hundred
+      Coordinator backends and one GTM Proxy Thread, this thread takes
+      care of one hundred Coordinator backend.
+     </para>
+
+     <para>
+      Then GTM Proxy Thread scans all the requests from Coordinator
+      backend. If Coordinator is more busy, it is expected to capture
+      more requests in a single scan. Therefore, the proxy can group
+      many requests into single block of requests, to reduce the
+      number of interaction between GTM and the Coordinator.
+     </para>
+
+     <para>
+      Furthermore, in a single scan, we may have multiple request for
+      snapshots. Because these requests can be regarded as received at
+      the same time, we can represent multiple snapshots with single
+      one. This will reduce the amount of data which GTM provides.
+     </para>
+
+    </sect3>
+   </sect2>
+
+   <sect2 id="xc-overview-Coordinator">
+    <title>Coordinator</title>
+&xconly;
+    <para>
+     Coordinator handles SQL statements from applications and
+     determine which Datanode should be involved and generates local
+     SQL statements for each Datanode.  In the most simplest case, if
+     single Datanode is involved, the Coordinator simply proxies
+     incoming statement to the Datanode.  In more complicated case,
+     for example, if the target Datanode cannot be determined, then
+     the Coordinator generates local statements for each Datanode,
+     collects the result to materialize at the Coordinator for further
+     handling.  In this case, the Coordinator will try to optimize the
+     plan by
+     <itemizedlist>
+      <listitem>
+       <para>
+        Pushdown <command>WHERE</command> clause to Datanodes,
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+        Pushdown <emphasis>joins</emphasis> to Datanodes,
+       </para>
+      </listitem>
+      <listitem>
+       <para>
+        Pushdown <emphasis>projection</emphasis> (column list in <command>SELECT</command> clause),
+        </para>
+      </listitem>
+      <listitem>
+       <para>
+        Pushdown <command>ORDER BY</command> clause, as well as other clauses.
+       </para>
+      </listitem>
+     </itemizedlist>
+
+     If a transaction is involved by more than one Datanodes and/or
+     Coordinators, the Coordinator will handle the transaction with
+     two-phase commit protocol internally.
+    </para>
+
+    <para>
+     In the case of aggregate
+     functions, <productname>Postgres-XC</productname> introduced new
+     function collection function between existing transition function
+     and finalize function.  Collection function runs on the
+     Coordinator to collect all the intermediate results from involved
+     Datanodes.  For details, see <xref linkend="xaggr">
+     and <xref linkend="SQL-CREATEAGGREGATE">.
+    </para>
+
+    <para>
+     In the case of reading replicated tables, Coordinator can choose
+     any Datanode to read.  The most efficient way is to select one
+     running in the same hardware or virtual machine.  This is
+     called <emphasis>preferred Datanode</emphasis> and can be
+     specified by a GUC local to each Coordinator.
+    </para>
+
+    <para>
+     On the other hand, in the case of writing replicated tables, all
+     the Coordinators choose the same Datanode to begin with to avoid
+     update conflicts.  This is called <emphasis>primary
+     Datanode</emphasis>.
+    </para>
+
+    <para>
+     Coordinators also take care of DDL statements.  Because DDL
+     statements handles system catalogs, which are replicated in all
+     the Coordinators and Datanodes, they are proxied to all the
+     Coordinators and Datanodes.  To synchronize the catalog update in
+     all the nodes, the Coordinator handles DDL with two-phase commit
+     protocol internally.
+    </para>
+
+   </sect2>
+
+   <sect2 id="xc-overview-Datanode">
+    <title>Datanode</title>
+&xconly;
+    <para>
+     While Coordinators handle cluster-wide SQL statements, Datanodes
+     take care of just local issues.  In this sense, Datanodes are
+     essentially <productname>PostgreSQL</productname> servers except
+     that transaction management information is obtained from GTM, as
+     well as other global value.
+    </para>
+
+   </sect2>
+
+
+   <sect2 id="xc-overview-pooler">
+    <title>Coordinator And Datanode Connection</title>
+
+    <para>
+     The number of connection between Coordinator and Datanode may
+     increase from time to time. This may leave unused connection and
+     waste system resources. Repeating real connect and disconnect
+     requires Datanode backend initialization which increases latency
+     and also wastes system resources.
+    </para>
+
+    <para>
+     For example, as in the case of GTM, if each Coordinator has one
+     hundred connections to applications and we have ten Coordinators,
+     after a while, each Coordinator may have connection to each data
+     node. It means that each Coordinator backend has ten connections
+     to Coordinators and each Coordinator has one thousand (10 x 10)
+     connections to Coordinators.
+    </para>
+
+    <para>
+     Because we consume much more resources for locks and other
+     control information per backend and only a few of such connection
+     is active at a given time, it is not a good idea to hold such
+     unused connection between Coordinator and Datanode.
+    </para>
+
+    <para>
+     To improve this, Postgres-XC is equipped with connection pooler
+     between Coordinator and Datanode. When a Coordinator backend
+     requires connection to a Datanode, the pooler looks for
+     appropriate connection from the pool. If there's an available
+     one, the pooler assigns it to the Coordinator backend. When the
+     connection is no longer needed, the Coordinator backend returns
+     the connection to the pooler. Pooler does not disconnect the
+     connection.  It keeps the connection to the pool for later reuse,
+     keeping Datanode backend running.
+    </para>
+
+   </sect2>
+
+  </sect1>
+ </chapter>
+<!## end>
+  

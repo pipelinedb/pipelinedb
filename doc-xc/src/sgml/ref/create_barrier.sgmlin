@@ -1,0 +1,61 @@
+<!--
+$PostgreSQL: pgsql/doc/src/sgml/ref/create_barrier.sgml,v 1.54 2010/04/03 07:22:58 petere Exp $
+PostgreSQL documentation
+-->
+<!## XC>
+<refentry id="SQL-CREATEBARRIER">
+ <refmeta>
+  <refentrytitle>CREATE BARRIER</refentrytitle>
+  <manvolnum>7</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>CREATE BARRIER</refname>
+  <refpurpose>create a new barrier</refpurpose>
+ </refnamediv>
+
+ <indexterm zone="sql-createbarrier">
+  <primary>CREATE BARRIER</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+<synopsis>
+CREATE BARRIER <replaceable class="PARAMETER">barrier_name</replaceable>
+</synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+&xconly;
+
+  <para>
+   <command>CREATE BARRIER</command> is new SQL query specific
+   to <productname>Postgres-XC</productname> since 0.9.5 that creates
+   a new XLOG record on each node of the cluster consistently. Barrier
+   is created via a 2PC like mechanism from a remote Coordinator in 3
+   phases with a prepare, execute and ending phases.  A new recovery
+   parameter called recovery_target_barrier has been added in
+   recovery.conf. In order to perform a complete PITR recovery, it is
+   necessary to set recovery_target_barrier to the value of a barrier
+   already created. Then distribute recovery.conf to each data folder
+   of each node, and then to restart the nodes one by one.
+  </para>
+
+  <para>
+   Default barrier name is <literal>dummy_barrier_id</literal>. It is
+   used when no barrier name is specified when using <command>CREATE
+   BARRIER</command>.
+  </para>
+
+  <para>
+   GTM restart port for this barrier can be backed up at GTM and GTM standby.
+   To activate this, set the variable <literal>gtm_backup_barrier</literal>
+   to <literal>on</literal>.
+  </para>
+  
+ </refsect1>
+
+</refentry>
+<!## end>

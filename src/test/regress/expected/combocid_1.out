@@ -1,0 +1,103 @@
+--
+-- Tests for some likely failure cases with combo cmin/cmax mechanism
+--
+CREATE TEMP TABLE combocidtest (foobar int) distribute by replication;
+BEGIN;
+-- a few dummy ops to push up the CommandId counter
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest VALUES (1);
+INSERT INTO combocidtest VALUES (2);
+SELECT ctid,cmin,* FROM combocidtest ORDER BY ctid;
+ ctid  | cmin | foobar 
+-------+------+--------
+ (0,1) |   10 |      1
+ (0,2) |   11 |      2
+(2 rows)
+
+SAVEPOINT s1;
+ERROR:  SAVEPOINT is not yet supported.
+UPDATE combocidtest SET foobar = foobar + 10;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+-- here we should see only updated tuples
+SELECT ctid,cmin,* FROM combocidtest ORDER BY ctid;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK TO s1;
+ERROR:  no such savepoint
+-- now we should see old tuples, but with combo CIDs starting at 0
+SELECT ctid,cmin,* FROM combocidtest ORDER BY ctid;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+COMMIT;
+-- combo data is not there anymore, but should still see tuples
+SELECT ctid,cmin,* FROM combocidtest;
+ ctid | cmin | foobar 
+------+------+--------
+(0 rows)
+
+-- Test combo cids with portals
+BEGIN;
+INSERT INTO combocidtest VALUES (333);
+DECLARE c CURSOR FOR SELECT ctid,cmin,* FROM combocidtest ORDER BY ctid;
+DELETE FROM combocidtest;
+FETCH ALL FROM c;
+ ctid  | cmin | foobar 
+-------+------+--------
+ (0,3) |    0 |    333
+(1 row)
+
+ROLLBACK;
+SELECT ctid,cmin,* FROM combocidtest ORDER BY ctid;
+ ctid | cmin | foobar 
+------+------+--------
+(0 rows)
+
+-- check behavior with locked tuples
+BEGIN;
+-- a few dummy ops to push up the CommandId counter
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest SELECT 1 LIMIT 0;
+INSERT INTO combocidtest VALUES (444);
+SELECT ctid,cmin,* FROM combocidtest ORDER BY ctid;
+ ctid  | cmin | foobar 
+-------+------+--------
+ (0,4) |   10 |    444
+(1 row)
+
+SAVEPOINT s1;
+ERROR:  SAVEPOINT is not yet supported.
+-- this doesn't affect cmin
+SELECT ctid,cmin,* FROM combocidtest FOR UPDATE;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SELECT ctid,cmin,* FROM combocidtest ORDER BY ctid;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+-- but this does
+UPDATE combocidtest SET foobar = foobar + 10;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SELECT ctid,cmin,* FROM combocidtest ORDER BY ctid;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK TO s1;
+ERROR:  no such savepoint
+SELECT ctid,cmin,* FROM combocidtest ORDER BY ctid;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+COMMIT;
+SELECT ctid,cmin,* FROM combocidtest ORDER BY ctid;
+ ctid | cmin | foobar 
+------+------+--------
+(0 rows)
+

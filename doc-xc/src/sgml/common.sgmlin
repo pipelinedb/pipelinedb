@@ -1,0 +1,10 @@
+<!## XC>
+<note>
+<para>
+ The following description applies both to <productname>Postgres-XC</>
+ and <productname>PostgreSQL</> if not described explicitly.  You can
+ read <productname>PostgreSQL</> as <productname>Postgres-XC</> except
+ for version number, which is specific to each product.
+</para>
+</note>
+<!## end>

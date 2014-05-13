@@ -1,0 +1,180 @@
+<!-- doc/src/sgml/pgxcmonitor.sgml -->
+
+<refentry id="pgxcmonitor" xreflabel="pgxcmonitor">
+ <refmeta>
+  <refentrytitle><application>pgxc_monitor</application></refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Application</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgxc_monitor</refname>
+  <refpurpose>test if a <productname>Postgres-XC</productname> node is running</refpurpose>
+ </refnamediv>
+
+ <indexterm zone="pgarchivecleanup">
+  <primary>pgxc_monitor</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pgxc_monitor</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Overview</title>
+
+&xconly;
+    <para>
+      pgxc_monitor has the following synopsis.
+<programlisting>
+pgxc_monitor <optional> <replaceable>option</> </optional>
+</programlisting>
+    </para>
+
+    <para>
+     <application>pgxc_monitor</application> is a <productname>Postgres-XC</> utility to test if
+     the target node is running.
+    </para>
+
+    <para>
+     The target node is specified by option.
+    </para>
+
+    <para>
+     If the target node is running, it exits with exit code zero.
+     If not, it exits with non-zero exit code.
+    </para>
+
+    <para>
+     If invalid options are specified, it exits with exit code 3.
+    </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+
+  <variablelist>
+
+    <varlistentry>
+      <term><option>-Z <replaceable class="parameter">nodetype</replaceable></option></term>
+      <listitem>
+      <para>
+       Type of node type to test. Specify <literal>gtm</> as <replaceable>nodetype</replaceable>
+       for gtm and gtm_proxy and <literal>node</> as <replaceable>nodetype</replaceable> for a
+       Coordinator or a Datanode.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-h <replaceable class="parameter">hostname</replaceable></></term>
+      <listitem>
+      <para>
+      Hostname of the test target.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-n <replaceable class="parameter">nodename</replaceable></></term>
+      <listitem>
+      <para>
+      Node name to use when testing gtm or gtm_proxy.
+      Default value is <literal>pgxc_monitor</literal>.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-p <replaceable class="parameter">port_number</replaceable></></term>
+      <listitem>
+      <para>
+       Specifies the port number to test target.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-U <replaceable class="parameter">username</replaceable></></term>
+      <listitem>
+      <para>
+       Specifies the database username to connect as.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-d <replaceable class="parameter">database</replaceable></></term>
+      <listitem>
+      <para>
+       Specifies the database name to connect to. Default is "postgres".
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-q</></term>
+      <listitem>
+      <para>
+       Quiet mode. Supress messages as much as possible.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-v</></term>
+      <listitem>
+      <para>
+       Verbose mode. Prints as many messages as possible.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>--help</></term>
+      <listitem>
+      <para>
+      Show help about <application>pgxc_monitor</application> command line
+      arguments, and exit.
+      </para>
+      </listitem>
+    </varlistentry>
+
+  </variablelist>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+
+  <para>
+   When monitoring Coordinator or Datanode, <option>-p</option> and
+   <option>-h</option> options can be supplied using
+   <literal>.pgpass</literal> file.
+   If you use non-default target database name, and username, as well as
+   password, 
+   they must also be supplied using <option>.pgpass</option> file.
+  </para>
+  <para>
+   If password is needed, it must also be supplied using 
+   <option>.pgpass</option> file too.
+  </para>
+  <para>
+   Monitoring Coordinator and Datanode uses system(3) function.  
+   Therefore,you should not use set-userid bit or set-groupid bit.
+   Also, because this uses psql command, psql must be in your PATH.
+  </para>
+  <para>
+   The username and database name can be specified via command line
+   options too. If password is needed, it must be supplied via
+   <option>.pgpass</option> file though.
+  </para>
+  <para>
+   If invalid parameters are given, 
+   error message will be printed even if <option>-q</option> is specified.
+  </para>
+ </refsect1>
+
+</refentry>

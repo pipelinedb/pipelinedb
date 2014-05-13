@@ -1,0 +1,50 @@
+<!--
+doc/src/sgml/ref/postmaster.sgml
+PostgreSQL documentation
+-->
+
+<refentry id="app-postmaster">
+ <refmeta>
+  <refentrytitle><application>postmaster</application></refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Application</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname id="postmaster-ref">postmaster</refname>
+<!## PG>
+  <refpurpose><productname>PostgreSQL</productname> database server</refpurpose>
+<!## end>
+<!## XC>
+  <refpurpose><productname>Postgres-XC</productname> database server for Coordinator or Datanode</refpurpose>
+<!## end>
+ </refnamediv>
+
+ <indexterm zone="app-postmaster">
+  <primary>postmaster</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>postmaster</command>
+   <arg rep="repeat"><replaceable>option</></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+&common;
+  <para>
+   <command>postmaster</command> is a deprecated alias of <command>postgres</command>.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>See Also</title>
+
+  <para>
+   <xref linkend="app-postgres">
+  </para>
+ </refsect1>
+</refentry>

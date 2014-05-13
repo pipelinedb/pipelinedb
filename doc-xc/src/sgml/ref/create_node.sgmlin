@@ -1,0 +1,198 @@
+<!--
+$PostgreSQL: pgsql/doc/src/sgml/ref/create_node.sgml,v 1.54 2010/04/03 07:22:58 petere Exp $
+PostgreSQL documentation
+-->
+<!## XC>
+<refentry id="SQL-CREATENODE">
+ <refmeta>
+  <refentrytitle>CREATE NODE</refentrytitle>
+  <manvolnum>7</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>CREATE NODE</refname>
+  <refpurpose>create a new cluster node</refpurpose>
+ </refnamediv>
+
+ <indexterm zone="sql-createnode">
+  <primary>CREATE NODE</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+<synopsis>
+CREATE NODE <replaceable class="parameter">nodename</replaceable> WITH
+  (
+    [ TYPE = <replaceable class="parameter">nodetype</replaceable>,]
+    [ HOST = <replaceable class="parameter">hostname</replaceable>,]
+    [ PORT = <replaceable class="parameter">portnum</replaceable>,]
+    [ PRIMARY [ = <replaceable class="parameter">boolean</replaceable> ],]
+    [ PREFERRED [ = <replaceable class="parameter">boolean</replaceable> ] ]
+  )
+
+</synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+&xconly;
+
+  <para>
+   <command>CREATE NODE</command> is new SQL query specific
+   to <productname>Postgres-XC</productname> since 0.9.7 that creates
+   a new entry in catalog table pgxc_node with node data.
+  </para>
+  <para>
+   This node data is directly used by a Coordinator session when connecting
+   to build connection data to cluster nodes through <productname>Postgres-XC
+   </productname> pooler.
+  </para>
+  <para>
+   Node connection information is created on pooler only if it has not been
+   the case yet on Coordinator connected at the moment of connection.
+  </para>
+  <para>
+   <command>CREATE NODE</command> only runs on the local node where it is launched.
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Parameters</title>
+
+    <variablelist>
+     <varlistentry>
+      <term><replaceable class="parameter">nodename</replaceable></term>
+      <listitem>
+       <para>
+        The name of the selected cluster node.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><literal>TYPE</literal></term>
+      <listitem>
+       <para>
+        The type of the cluster node. It is possible to specify
+        a Coordinator node or a Datanode node.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><literal>PRIMARY</literal></term>
+      <listitem>
+       <para>
+        Defines if the cluster node is used as a primary node for replicated
+        write operations. A <replaceable class="parameter">boolean</replaceable>
+        value can be specified. In case no value is specified, <literal>PRIMARY</literal>
+        acts like <literal>false</>.
+       </para>
+	   <para>
+        To avoid deadlock and make update consistetnt, you should specify the same <literal>PRIMARY</literal>
+        node at all the nodes.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><literal>PREFERRED</literal></term>
+      <listitem>
+       <para>
+        Defines if the cluster node is used as a preferred node for replicated
+        read operations if no node is determined. A <replaceable class="parameter">boolean</replaceable>
+        value can be specified. In case no value is specified, <literal>PREFERRED</literal>
+        acts like <literal>false</>.
+       </para>
+	   <para>
+        You can specify different <literal>PREFERRED</literal> node at different coordinator.
+        This parameter affects performance of your <literal>Postgres-XC</literal> cluster.
+        If you configure a datanode where you configure a coordinator, 
+        you should specify <literal>PREFERRED</literal> for the coordinator to such a local datanode.
+        This will save network communication and improve cluster-wide performance.
+       </para>
+        
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><replaceable class="parameter">nodetype</replaceable></term>
+      <listitem>
+       <para>
+        The node type for given cluster node. Possible values are:
+        'coordinator' for a Coordinator node and 'datanode' for a
+        Datanode node.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><replaceable class="parameter">hostname</replaceable></term>
+      <listitem>
+       <para>
+        The hostname or IP used to connect to the cluster node.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><replaceable class="parameter">portnum</replaceable></term>
+      <listitem>
+       <para>
+        The port number used to connect to the cluster node.
+       </para>
+      </listitem>
+     </varlistentry>
+
+    </variablelist>
+ </refsect1>
+
+ <refsect1>
+  <title>Notes</title>
+  <para>
+    <replaceable class="parameter">nodename</replaceable> remains constant
+    as long as it is in use.
+  </para>
+
+  <para>
+    When using a cluster with 1 Coordinator and 1 Datanode on each server,
+    Defining the local Datanode as <literal>PREFERRED</literal> can greatly
+    improve the performance of a system by avoiding any network overhead for
+    replicated reads, as in this case a local socket is used for communication
+    between nodes. This has even more effects when the application uses heavily
+    replicated table for remote join operations and that those operations can
+    be operated on the local <literal>PREFERRED</literal> node.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Examples</title>
+  <para>
+   Create a Coordinator node located on local machine using port 6543
+<programlisting>
+CREATE NODE node2 WITH (TYPE = 'coordinator', HOST = 'localhost', PORT = 6543);
+</programlisting>
+  </para>
+
+  <para>
+   Create a Datanode which is a preferred and primary node
+   located on remote machine with IP '192.168.0.3' on port 8888.
+<programlisting>
+CREATE NODE node2 WITH (TYPE = 'datanode', HOST = '192.168.0.3', PORT = 8888, PRIMARY, PREFERRED);
+</programlisting>
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Compatibility</title>
+  <para>
+   <command>CREATE NODE</command> does not conform to the <acronym>
+   SQL</acronym> standards, it is a Postgres-XC specific command.
+  </para>
+ </refsect1>
+
+</refentry>
+<!## end>

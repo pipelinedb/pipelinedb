@@ -1,0 +1,101 @@
+
+Global Transaction Manager (GTM)
+--------------------------------
+
+1. Source code layout:
+----------------------
+
+The server side code is located in the "include", "common" and
+"main" directories. The "include" directory hosts all the header
+files some of which are also shared by the client.
+
+The "common" directory contains the infrastructure pieces for the
+server such as error reporting, memory management, locking etc.
+Most of the server side logic including message processing,
+transaction management, thread and connection management is hosted
+in the "main" directory.
+
+The client side code is put in the "client" directory including all
+client side infrastructure and test programs.
+
+
+2. Building GTM Server and Clients:
+-----------------------------------
+
+Go to the top level directory (where this README is located) and run
+the make command to build the sources.
+
+$ make
+
+This would build the GTM server in the "main" directory and client
+libraries in the "client" directory.
+
+You may want to change the following two defines in main/main.c 
+
+#define GTM_DEFAULT_HOSTNAME    "localhost"
+#define GTM_DEFAULT_PORT        6666
+
+
+3. Running the GTM Server:
+---------------------------
+
+You can run the GTM server by running the following command from the
+top level directory.
+
+$ ./main/gtm
+
+The server will start listening on port 6666 for incoming connections.
+
+
+4. Building test clients:
+-------------------------
+
+Go to the "client/test" directory and run make to build the test clients.
+
+$ cd client/test
+$ make
+
+This would build various test clients, statically linking to the libgtmclient.a
+library in the client directory. You may need to change the connect string
+appropriately connect to the GTM server.
+
+============================================================
+Additional Information for NODE_NAME, GTM_CONFIGURATION and GTM-Standby
+
+Nov. 25, 2011
+============================================================
+
+1. NODE_NAME project
+
+Now XC changed its naming convention of each component from number to string
+name.   According to this, all the "id" is now changed to "name".
+
+2. GTM_CONFIGURATION
+
+Because GTM and GTM-Proxy has more options, it is not convenient to specify all
+of these in command line options.   Instaead, as in PostgreSQL, GTM/GTM-Proxy
+now need their configuration file placed on their working directries.
+
+Details will be available in the documentation, gtm.conf.sample and gtm_proxy.conf.sample.
+Sample files will be installed in the "share" directory at the installation directory.
+
+3. GTM-Standby
+
+To prevent GTM from SPOF, GTM-Standby feature is now under the development.
+At present, only a basic feature is available.   GTM-Standby can backup GTM.
+When GTM fails, GTM-Standby can fail-over.   GTM-Proxy can reconnect to the
+new GTM without sacrificing running transactions.   However, please note that
+GTM-Standby has to connect to GTM before any GTM-Proxy connects to it.
+
+Peple who modify GTM code should be careful to test this feature works.
+The test will be:
+
+1) Start GTM in ACT mode, and the another GTM as Standby mode.
+2) Start more than one GTM-Proxies.
+3) Start datanode/coordinator
+4) Run psql
+5) While psql is in a transaction block, promote GTM-Standby and then
+   reconnect GTM-Proxy to the promoted GTM.
+6) See if transaction keeps running.
+
+The test sequence will be expanded as GTM-Standby feature improves.

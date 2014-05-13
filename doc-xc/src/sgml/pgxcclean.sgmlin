@@ -1,0 +1,226 @@
+<!-- doc/src/sgml/pgxcclean.sgml -->
+
+<refentry id="pgxcclean" xreflabel="pgxcclean">
+ <refmeta>
+  <refentrytitle><application>pgxc_clean</application></refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Application</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgxc_clean</refname>
+  <refpurpose>clean up outstanding 2PC status among <productname>Postgres-XC</productname> nodes</refpurpose>
+ </refnamediv>
+
+ <indexterm zone="pgarchivecleanup">
+  <primary>pgxc_clean</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pgxc_clean</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+&xconly;
+    <para>
+      pgxc_clean has the following synopsis.
+<programlisting>
+pgxc_clean <optional> <replaceable>option</> </optional> <optional><replaceable>dbname</><optional><replaceable>username</></optional></optional>
+</programlisting>
+    </para>
+
+    <para>
+     <application>pgxc_clean</application> is Postgres-XC utility to maintain transaction status after a crash.
+     When some Postgres-XC node crashes and recovers or fails over, commit status of such node may be inconsistent
+     with other nodes.   <application>pgxc_clean</application> checks transaction commit status and corrects them.
+    </para>
+
+    <para>
+     You should run this utility against one of the available Coordinators. The tool cleans up transaction status
+     of all the nodes automatically.
+    </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
+
+  <variablelist>
+    <varlistentry>
+      <term><option>-a</></term>
+      <term><option>--all</></term>
+      <listitem>
+      <para>
+       Cleanup all the database available.
+      <literal>all</literal>.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-d<replaceable class="parameter">databasename</replaceable></option></term>
+      <term><option>--dbname=<replaceable class="parameter">databasename</replaceable></option></term>
+      <listitem>
+      <para>
+       Database name to clean up.  This option can be specified multiple times for more than one database.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-h<replaceable class="parameter">hostname</replaceable></></term>
+      <term><option>--command=<replaceable class="parameter">hostname</replaceable></></term>
+      <listitem>
+      <para>
+      Hostname of the Coordinator to connect to.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-N</></term>
+      <term><option>--no-clean</></term>
+      <listitem>
+      <para>
+       If this option is specified, <application>pgxc_clean</> will
+       not perform the cleanup.  It just investigates transaction status.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-o <replaceable class="parameter">filename</replaceable></></term>
+      <term><option>--output=<replaceable class="parameter">filename</replaceable></></term>
+      <listitem>
+      <para>
+       Name of the file where <application>pgxc_clean</> output will
+       be written.  If not specified, stdout and stderr will be used.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-p <replaceable class="parameter">port_number</replaceable></></term>
+      <term><option>--port=<replaceable class="parameter">port_number</replaceable></></term>
+      <listitem>
+      <para>
+       Specifies the port number of the Coordinator.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-q</></term>
+      <term><option>--quiet</></term>
+      <listitem>
+      <para>
+       Surpress messages as much as possible.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-s</></term>
+      <term><option>--status</></term>
+      <listitem>
+      <para>
+       Prints investigated two phase commit status.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-U <replaceable class="parameter">username</replaceable></></term>
+      <term><option>--username=<replaceable class="parameter">username</replaceable></></term>
+      <listitem>
+      <para>
+       User name to use.   You must be a superuser of the database.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-v</></term>
+      <term><option>--verbose</></term>
+      <listitem>
+      <para>
+       Write as much information as possible.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-V</></term>
+      <term><option>--version</></term>
+      <listitem>
+      <para>
+       Writes the version of the utility and exits.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-w</></term>
+     <term><option>--no-password</></term>
+     <listitem>
+      <para>
+       Never issue a password prompt.  If the server requires password
+       authentication and a password is not available by other means
+       such as a <filename>.pgpass</filename> file, the connection
+       attempt will fail.  This option can be useful in batch jobs and
+       scripts where no user is present to enter a password.
+      </para>
+
+      <para>
+       Note that this option will remain set for the entire session,
+       and so it affects uses of the meta-command
+       <command>\connect</command> as well as the initial connection attempt.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-W</></term>
+      <term><option>--password</></term>
+      <listitem>
+      <para>
+       Force <application>psql</application> to prompt for a
+       password before connecting to a database.
+      </para>
+
+      <para>
+       This option is never essential, since <application>psql</application>
+       will automatically prompt for a password if the server demands
+       password authentication.  However, <application>psql</application>
+       will waste a connection attempt finding out that the server wants a
+       password.  In some cases it is worth typing <option>-W</> to avoid
+       the extra connection attempt.
+      </para>
+
+      <para>
+       Note that this option will remain set for the entire session,
+       and so it affects uses of the meta-command
+       <command>\connect</command> as well as the initial connection attempt.
+      </para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-?</></term>
+      <term><option>--help</></term>
+      <listitem>
+      <para>
+      Show help about <application>psql</application> command line
+      arguments, and exit.
+      </para>
+      </listitem>
+    </varlistentry>
+
+  </variablelist>
+ </refsect1>
+
+</refentry>

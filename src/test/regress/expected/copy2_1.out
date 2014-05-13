@@ -1,0 +1,408 @@
+CREATE TEMP TABLE x (
+	a serial,
+	b int,
+	c text not null default 'stuff',
+	d text,
+	e text
+) WITH OIDS;
+CREATE FUNCTION fn_x_before () RETURNS TRIGGER AS '
+  BEGIN
+		NEW.e := ''before trigger fired''::text;
+		return NEW;
+	END;
+' LANGUAGE plpgsql;
+CREATE FUNCTION fn_x_after () RETURNS TRIGGER AS '
+  BEGIN
+		UPDATE x set e=''after trigger fired'' where c=''stuff'';
+		return NULL;
+	END;
+' LANGUAGE plpgsql;
+CREATE TRIGGER trg_x_after AFTER INSERT ON x
+FOR EACH ROW EXECUTE PROCEDURE fn_x_after();
+CREATE TRIGGER trg_x_before BEFORE INSERT ON x
+FOR EACH ROW EXECUTE PROCEDURE fn_x_before();
+COPY x (a, b, c, d, e) from stdin;
+ERROR:  Non-shippable ROW triggers not supported with COPY
+9999	\N	\\N	\NN	\N
+invalid command \N
+10000	21	31	41	51
+\.
+invalid command \.
+COPY x (b, d) from stdin;
+ERROR:  syntax error at or near "9999"
+LINE 1: 9999 
+        ^
+1	test_1
+\.
+invalid command \.
+COPY x (b, d) from stdin;
+ERROR:  syntax error at or near "1"
+LINE 1: 1 test_1
+        ^
+2	test_2
+3	test_3
+4	test_4
+5	test_5
+\.
+invalid command \.
+COPY x (a, b, c, d, e) from stdin;
+ERROR:  syntax error at or near "2"
+LINE 1: 2 test_2
+        ^
+10001	22	32	42	52
+10002	23	33	43	53
+10003	24	34	44	54
+10004	25	35	45	55
+10005	26	36	46	56
+\.
+invalid command \.
+-- non-existent column in column list: should fail
+COPY x (xyz) from stdin;
+ERROR:  syntax error at or near "10001"
+LINE 1: 10001 22 32 42 52
+        ^
+-- too many columns in column list: should fail
+COPY x (a, b, c, d, e, d, c) from stdin;
+ERROR:  column "d" specified more than once
+-- missing data: should fail
+COPY x from stdin;
+ERROR:  Non-shippable ROW triggers not supported with COPY
+\.
+invalid command \.
+COPY x from stdin;
+ERROR:  Non-shippable ROW triggers not supported with COPY
+2000	230	23	23
+\.
+invalid command \.
+COPY x from stdin;
+ERROR:  syntax error at or near "2000"
+LINE 1: 2000 230 23 23
+        ^
+2001	231	\N	\N
+invalid command \N
+\.
+invalid command \.
+-- extra data: should fail
+COPY x from stdin;
+ERROR:  syntax error at or near "2001"
+LINE 1: 2001 231 
+        ^
+2002	232	40	50	60	70	80
+\.
+invalid command \.
+-- various COPY options: delimiters, oids, NULL string, encoding
+COPY x (b, c, d, e) from stdin with oids delimiter ',' null 'x';
+ERROR:  syntax error at or near "2002"
+LINE 1: 2002 232 40 50 60 70 80
+        ^
+500000,x,45,80,90
+500001,x,\x,\\x,\\\x
+invalid command \x,
+500002,x,\,,\\\,,\\
+invalid command \,,
+\.
+invalid command \.
+COPY x from stdin WITH DELIMITER AS ';' NULL AS '';
+ERROR:  syntax error at or near "500000"
+LINE 1: 500000,x,45,80,90
+        ^
+3000;;c;;
+ERROR:  syntax error at or near "3000"
+LINE 1: 3000;
+        ^
+ERROR:  syntax error at or near "c"
+LINE 1: c;
+        ^
+\.
+invalid command \.
+COPY x from stdin WITH DELIMITER AS ':' NULL AS E'\\X' ENCODING 'sql_ascii';
+ERROR:  Non-shippable ROW triggers not supported with COPY
+4000:\X:C:\X:\X
+invalid command \X:C:
+4001:1:empty::
+4002:2:null:\X:\X
+invalid command \X:
+4003:3:Backslash:\\:\\
+invalid command \
+4004:4:BackslashX:\\X:\\X
+invalid command \
+4005:5:N:\N:\N
+invalid command \N:
+4006:6:BackslashN:\\N:\\N
+invalid command \
+4007:7:XX:\XX:\XX
+invalid command \XX:
+4008:8:Delimiter:\::\:
+\.
+invalid command \.
+-- check results of copy in
+SELECT * FROM x ORDER BY a, b;
+ERROR:  syntax error at or near "4000"
+LINE 1: 4000:
+        ^
+-- COPY w/ oids on a table w/o oids should fail
+CREATE TABLE no_oids (
+	a	int,
+	b	int
+) WITHOUT OIDS;
+INSERT INTO no_oids (a, b) VALUES (5, 10);
+INSERT INTO no_oids (a, b) VALUES (20, 30);
+-- should fail
+COPY no_oids FROM stdin WITH OIDS;
+ERROR:  table "no_oids" does not have OIDs
+COPY no_oids TO stdout WITH OIDS;
+ERROR:  table "no_oids" does not have OIDs
+-- check copy out
+COPY (select * from x order by 1,2,3,4,5) TO stdout;
+COPY (select c,e from x order by 1,2) TO stdout;
+COPY (select b,e from x order by 1,2) TO stdout WITH NULL 'I''m null';
+CREATE TEMP TABLE y (
+	col1 text,
+	col2 text
+);
+INSERT INTO y VALUES ('Jackson, Sam', E'\\h');
+INSERT INTO y VALUES ('It is "perfect".',E'\t');
+INSERT INTO y VALUES ('', NULL);
+COPY y TO stdout WITH CSV;
+"Jackson, Sam",\h
+"It is ""perfect"".",	
+"",
+COPY y TO stdout WITH CSV QUOTE '''' DELIMITER '|';
+Jackson, Sam|\h
+It is "perfect".|	
+''|
+COPY y TO stdout WITH CSV FORCE QUOTE col2 ESCAPE E'\\' ENCODING 'sql_ascii';
+"Jackson, Sam","\\h"
+"It is \"perfect\".","	"
+"",
+COPY y TO stdout WITH CSV FORCE QUOTE *;
+"Jackson, Sam",\h
+"It is ""perfect"".",	
+"",
+-- Repeat above tests with new 9.0 option syntax
+COPY y TO stdout (FORMAT CSV);
+"Jackson, Sam",\h
+"It is ""perfect"".",	
+"",
+COPY y TO stdout (FORMAT CSV, QUOTE '''', DELIMITER '|');
+Jackson, Sam|\h
+It is "perfect".|	
+''|
+COPY y TO stdout (FORMAT CSV, FORCE_QUOTE (col2), ESCAPE E'\\');
+"Jackson, Sam","\\h"
+"It is \"perfect\".","	"
+"",
+COPY y TO stdout (FORMAT CSV, FORCE_QUOTE *);
+"Jackson, Sam",\h
+"It is ""perfect"".",	
+"",
+\copy y TO stdout (FORMAT CSV)
+"Jackson, Sam",\h
+"It is ""perfect"".",	
+"",
+\copy y TO stdout (FORMAT CSV, QUOTE '''', DELIMITER '|')
+Jackson, Sam|\h
+It is "perfect".|	
+''|
+\copy y TO stdout (FORMAT CSV, FORCE_QUOTE (col2), ESCAPE E'\\')
+"Jackson, Sam","\\h"
+"It is \"perfect\".","	"
+"",
+\copy y TO stdout (FORMAT CSV, FORCE_QUOTE *)
+"Jackson, Sam",\h
+"It is ""perfect"".",	
+"",
+--test that we read consecutive LFs properly
+CREATE TEMP TABLE testnl (a int, b text, c int);
+COPY testnl FROM stdin CSV;
+-- test end of copy marker
+CREATE TEMP TABLE testeoc (a text);
+COPY testeoc FROM stdin CSV;
+COPY (select * from testeoc order by a using ~<~) TO stdout CSV;
+"\."
+\.b
+a\.
+c\.d
+-- test handling of nonstandard null marker that violates escaping rules
+CREATE TEMP TABLE testnull(a int, b text);
+INSERT INTO testnull VALUES (1, E'\\0'), (NULL, NULL);
+COPY (select * from testnull order by 1,2) TO stdout WITH NULL AS E'\\0';
+1	\\0
+\0	\0
+COPY testnull FROM stdin WITH NULL AS E'\\0';
+SELECT * FROM testnull ORDER BY 1,2;
+ a  | b  
+----+----
+  1 | \0
+ 42 | \0
+    | 
+    | 
+(4 rows)
+
+-- The following block fails in Postgres-XC because it does not suport
+-- Savepoint yet.
+-- Leave the test as is.
+BEGIN;
+CREATE TABLE vistest (LIKE testeoc);
+COPY vistest FROM stdin CSV;
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a0
+ b
+(2 rows)
+
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a1
+ b
+(2 rows)
+
+SAVEPOINT s1;
+ERROR:  SAVEPOINT is not yet supported.
+TRUNCATE vistest;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+COPY vistest FROM stdin CSV;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+d1
+e
+\.
+invalid command \.
+SELECT * FROM vistest ORDER BY 1;
+ERROR:  syntax error at or near "d1"
+LINE 1: d1
+        ^
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a0
+ b
+(2 rows)
+
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a2
+ b
+(2 rows)
+
+SAVEPOINT s1;
+ERROR:  SAVEPOINT is not yet supported.
+TRUNCATE vistest;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+d2
+e
+\.
+invalid command \.
+SELECT * FROM vistest ORDER BY 1;
+ERROR:  syntax error at or near "d2"
+LINE 1: d2
+        ^
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a0
+ b
+(2 rows)
+
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+SELECT * FROM vistest ORDER BY 1;
+ a 
+---
+ x
+ y
+(2 rows)
+
+COMMIT;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  cannot perform FREEZE because the table was not created or truncated in the current subtransaction
+BEGIN;
+TRUNCATE vistest;
+SAVEPOINT s1;
+ERROR:  SAVEPOINT is not yet supported.
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+m
+k
+\.
+invalid command \.
+COMMIT;
+ERROR:  syntax error at or near "m"
+LINE 1: m
+        ^
+BEGIN;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+INSERT INTO vistest VALUES ('z');
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SAVEPOINT s1;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+TRUNCATE vistest;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK TO SAVEPOINT s1;
+ERROR:  no such savepoint
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+d3
+e
+\.
+invalid command \.
+COMMIT;
+ERROR:  syntax error at or near "d3"
+LINE 1: d3
+        ^
+CREATE FUNCTION truncate_in_subxact() RETURNS VOID AS
+$$
+BEGIN
+	TRUNCATE vistest;
+EXCEPTION
+  WHEN OTHERS THEN
+	INSERT INTO vistest VALUES ('subxact failure');
+END;
+$$ language plpgsql;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+BEGIN;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+INSERT INTO vistest VALUES ('z');
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SELECT truncate_in_subxact();
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+d4
+e
+\.
+invalid command \.
+SELECT * FROM vistest ORDER BY 1;
+ERROR:  syntax error at or near "d4"
+LINE 1: d4
+        ^
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a 
+---
+(0 rows)
+
+DROP TABLE vistest;
+DROP FUNCTION truncate_in_subxact();
+ERROR:  function truncate_in_subxact() does not exist
+--
+-- End of unsupported savepoint block
+--
+DROP TABLE x, y;
+DROP FUNCTION fn_x_before();
+DROP FUNCTION fn_x_after();

@@ -1,0 +1,155 @@
+<!-- doc/src/sgml/remove-node.sgml -->
+
+<chapter id="remove-node">
+ <title>Removing an Existing Node</title>
+
+ <indexterm zone="remove-node">
+  <primary>Remove an existing node</primary>
+ </indexterm>
+
+&xconly;
+
+ <para>
+  This chapter outlines steps to remove an existing coordinator or a datanode from a running cluster.
+ </para>
+
+  <para>
+  </para>
+
+ <sect1 id="remove-node-coordinator">
+  <title>Removing an Existing Coordinator</title>
+
+  <indexterm zone="remove-node-coordinator">
+   <primary>Remove an existing coordinator</primary>
+  </indexterm>
+
+  <para>
+    Assume a two coordinator cluster, COORD_1 and COORD_2. Suppose we want to remove COORD_2 for any reason. Following steps should be performed to remove an existing coordinator from a running cluster:
+  </para>
+
+  <para>
+    <orderedlist>
+      <listitem>
+        <para>
+          Stop the coordinator to be removed. In our example we need to stop COORD_2.
+        </para>
+      </listitem>
+
+      <listitem>
+        <para>
+          Connect to any of the coordinators except the one to be removed. In our example assuming COORD_1 is running on port 5432, the following command would connect to COORD_1
+        </para>
+        <programlisting>
+          psql postgres -p 5432
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Drop the coordinator to be removed. For example to drop coordinator COORD_2
+        </para>
+        <programlisting>
+          DROP NODE COORD_2;
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Update the connection information cached in pooler.
+        </para>
+        <programlisting>
+          SELECT pgxc_pool_reload();
+        </programlisting>
+      </listitem>
+
+    </orderedlist>
+  </para>
+  <para>
+    COORD_2 is now removed from the cluster and COORD_1 would work as if COORD_2 never existed.
+  </para>
+  <para>
+    CAUTION : If COORD_2 is still running and clients are connected to it, any queries issued would create inconsistencies in the cluster.
+  </para>
+
+ </sect1>
+
+ <sect1 id="remove-node-datanode">
+  <title>Removing an Existing Datanode</title>
+
+  <indexterm zone="remove-node-datanode">
+   <primary>Remove an existing Datanode</primary>
+  </indexterm>
+
+  <para>
+    Assume a two coordinator cluster, COORD_1 and COORD_2 with three datanodes DATA_NODE_1, DATA_NODE_2 and DATA_NODE_3. Suppose we want to remove DATA_NODE_3 for any reason. Further assume there is a table named rr_tab_foo distributed in round robin fashion and has rows on all the three datanodes. Following steps should be performed to remove an existing datanode from a running cluster:
+  </para>
+
+  <para>
+    <orderedlist>
+
+      <listitem>
+        <para>
+          Transfer the data from the datanode to be removed to the rest of the datanodes for all the tables in all the databases. For example to shift data of the table rr_tab_foo to the rest of the nodes we can use command:
+        </para>
+        <programlisting>
+          ALTER TABLE rr_tab_foo DELETE NODE (DATA_NODE_3);
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Confirm that there is no data left on the datanode to be removed. For example to confirm that there is no data left on DATA_NODE_3, we can use the following command, it should return ZERO rows. In case of non-zero rows it returns the OIDs of the relations whose data still exists on DATA_NODE_3.
+        </para>
+        <programlisting>
+          SELECT c.pcrelid FROM pgxc_class c, pgxc_node n WHERE n.node_name = 'DATA_NODE_3' AND n.oid = ANY (c.nodeoids);
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Stop the datanode server to be removed. Now any SELECTs or DMLs that involve the datanode to be removed would start failing.
+        </para>
+      </listitem>
+
+      <listitem>
+        <para>
+          Connect to any of the coordinators. In our example assuming COORD_1 is running on port 5432, the following command would connect to COORD_1.
+        </para>
+        <programlisting>
+          psql postgres -p 5432
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Drop the datanode to be removed. For example to drop datanode DATA_NODE_3 use command.
+        </para>
+        <programlisting>
+          DROP NODE DATA_NODE_3;
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Update the connection information cached in pooler.
+        </para>
+        <programlisting>
+          SELECT pgxc_pool_reload();
+        </programlisting>
+      </listitem>
+
+      <listitem>
+        <para>
+          Repeat the above three steps (4,5,6) for all the coordinators in the cluster. In our example we would need to repeat the above steps by connecting to COORD_2.
+        </para>
+      </listitem>
+
+    </orderedlist>
+  </para>
+  <para>
+    DATA_NODE_3 is now removed from the cluster.
+  </para>
+
+ </sect1>
+
+</chapter>

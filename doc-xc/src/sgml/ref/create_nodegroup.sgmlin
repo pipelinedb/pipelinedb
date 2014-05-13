@@ -1,0 +1,100 @@
+<!--
+$PostgreSQL: pgsql/doc/src/sgml/ref/create_nodegroup.sgml,v 1.54 2010/04/03 07:22:58 petere Exp $
+PostgreSQL documentation
+-->
+<!## XC>
+<refentry id="SQL-CREATENODEGROUP">
+ <refmeta>
+  <refentrytitle>CREATE NODE GROUP</refentrytitle>
+  <manvolnum>7</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>CREATE NODE GROUP</refname>
+  <refpurpose>create a group of cluster nodes</refpurpose>
+ </refnamediv>
+
+ <indexterm zone="sql-createnodegroup">
+  <primary>CREATE NODE GROUP</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+<synopsis>
+CREATE NODE GROUP <replaceable class="parameter">groupname</replaceable>
+WITH ( <replaceable class="parameter">nodename</replaceable> [, ... ] )
+
+</synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+&xconly;
+
+  <para>
+   <command>CREATE NODE GROUP</command> is new SQL query specific
+   to <productname>Postgres-XC</productname> since 0.9.7 that creates
+   node group information in catalog pgxc_group.
+  </para>
+
+  <para>
+   <command>CREATE NODE</command> only runs on the local node where it is launched.
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Parameters</title>
+
+    <variablelist>
+     <varlistentry>
+      <term><replaceable class="parameter">groupname</replaceable></term>
+      <listitem>
+       <para>
+        The name of the selected cluster node group.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><replaceable class="parameter">nodename</replaceable></term>
+      <listitem>
+       <para>
+        The name of a cluster node.
+       </para>
+      </listitem>
+     </varlistentry>
+    </variablelist>
+ </refsect1>
+
+ <refsect1>
+  <title>Notes</title>
+  <para>
+   A group of nodes works as an alias for node lists when defining tables
+   on sub-clusters. Only Datanode can be included in node groups.
+  </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Examples</title>
+
+  <para>
+   Create a cluster node group made of nodes called Datanode1, Datanode2.
+<programlisting>
+CREATE NODE GROUP cluster_group WITH Datanode1, Datanode2;
+</programlisting>
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Compatibility</title>
+  <para>
+   <command>CREATE NODE GROUP</command> does not conform to the <acronym>
+   SQL</acronym> standards, it is a Postgres-XC specific command.
+  </para>
+ </refsect1>
+
+</refentry>
+<!## end>

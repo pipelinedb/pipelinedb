@@ -1,0 +1,1281 @@
+--
+-- XC_ALTER_TABLE
+--
+-- Check on dropped columns
+CREATE TABLE xc_alter_table_1 (id serial, name varchar(80), code varchar(80)) DISTRIBUTE BY HASH(id);
+EXPLAIN (VERBOSE true, COSTS false, NODES false) INSERT INTO xc_alter_table_1(name) VALUES ('aaa'),('bbb'),('ccc');
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Insert on public.xc_alter_table_1
+   Node expr: xc_alter_table_1.id
+   Remote query: INSERT INTO public.xc_alter_table_1 (id, name, code) VALUES ($1, $2, $3)
+   ->  Values Scan on "*VALUES*"
+         Output: nextval('xc_alter_table_1_id_seq'::regclass), "*VALUES*".column1, NULL::character varying
+(5 rows)
+
+INSERT INTO xc_alter_table_1(name) VALUES ('aaa'),('bbb'),('ccc');
+SELECT id, name, code FROM xc_alter_table_1 ORDER BY 1;
+ id | name | code 
+----+------+------
+  1 | aaa  | 
+  2 | bbb  | 
+  3 | ccc  | 
+(3 rows)
+
+-- Cannot drop distribution column
+ALTER TABLE xc_alter_table_1 DROP COLUMN id;
+ERROR:  Distribution column cannot be dropped
+-- Drop 1st column
+ALTER TABLE xc_alter_table_1 DROP COLUMN code;
+-- Check for query generation of remote INSERT
+INSERT INTO xc_alter_table_1(name) VALUES('ddd'),('eee'),('fff');
+EXPLAIN (VERBOSE true, COSTS false, NODES false) INSERT INTO xc_alter_table_1(name) VALUES('ddd'),('eee'),('fff');
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Insert on public.xc_alter_table_1
+   Node expr: xc_alter_table_1.id
+   Remote query: INSERT INTO public.xc_alter_table_1 (id, name) VALUES ($1, $2)
+   ->  Values Scan on "*VALUES*"
+         Output: nextval('xc_alter_table_1_id_seq'::regclass), "*VALUES*".column1, NULL::integer
+(5 rows)
+
+SELECT id, name FROM xc_alter_table_1 ORDER BY 1;
+ id | name 
+----+------
+  1 | aaa
+  2 | bbb
+  3 | ccc
+  4 | ddd
+  5 | eee
+  6 | fff
+(6 rows)
+
+-- Check for query generation of remote INSERT SELECT
+INSERT INTO xc_alter_table_1(name) SELECT 'ggg';
+EXPLAIN (VERBOSE true, COSTS false, NODES false) INSERT INTO xc_alter_table_1(name) SELECT 'ggg';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Insert on public.xc_alter_table_1
+   Node expr: xc_alter_table_1.id
+   Remote query: INSERT INTO public.xc_alter_table_1 (id, name) VALUES ($1, $2)
+   ->  Subquery Scan on "*SELECT*"
+         Output: nextval('xc_alter_table_1_id_seq'::regclass), 'ggg'::character varying(80), NULL::integer
+         ->  Result
+               Output: 'ggg'
+(7 rows)
+
+SELECT id, name FROM xc_alter_table_1 ORDER BY 1;
+ id | name 
+----+------
+  1 | aaa
+  2 | bbb
+  3 | ccc
+  4 | ddd
+  5 | eee
+  6 | fff
+  7 | ggg
+(7 rows)
+
+-- Check for query generation of remote UPDATE
+EXPLAIN (VERBOSE true, COSTS false, NODES false) UPDATE xc_alter_table_1 SET name = 'zzz' WHERE id = currval('xc_alter_table_1_id_seq');
+                                                                        QUERY PLAN                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Update on public.xc_alter_table_1
+   Node expr: xc_alter_table_1.id
+   Remote query: UPDATE ONLY public.xc_alter_table_1 SET id = $1, name = $2 WHERE ((xc_alter_table_1.ctid = $4) AND (xc_alter_table_1.xc_node_id = $5))
+   ->  Data Node Scan on xc_alter_table_1 "_REMOTE_TABLE_QUERY_"
+         Output: xc_alter_table_1.id, 'zzz'::character varying(80), NULL::integer, xc_alter_table_1.id, xc_alter_table_1.ctid, xc_alter_table_1.xc_node_id
+         Remote query: SELECT id, ctid, xc_node_id FROM ONLY public.xc_alter_table_1 WHERE true
+         Coordinator quals: (xc_alter_table_1.id = currval('xc_alter_table_1_id_seq'::regclass))
+(7 rows)
+
+UPDATE xc_alter_table_1 SET name = 'zzz' WHERE id = currval('xc_alter_table_1_id_seq');
+SELECT id, name FROM xc_alter_table_1 ORDER BY 1;
+ id | name 
+----+------
+  1 | aaa
+  2 | bbb
+  3 | ccc
+  4 | ddd
+  5 | eee
+  6 | fff
+  7 | zzz
+(7 rows)
+
+DROP TABLE xc_alter_table_1;
+-- Check for multiple columns dropped and created
+CREATE TABLE xc_alter_table_2 (a int, b varchar(20), c boolean, d text, e interval) distribute by replication;
+INSERT INTO xc_alter_table_2 VALUES (1, 'John', true, 'Master', '01:00:10');
+INSERT INTO xc_alter_table_2 VALUES (2, 'Neo', true, 'Slave', '02:34:00');
+INSERT INTO xc_alter_table_2 VALUES (3, 'James', false, 'Cascading slave', '00:12:05');
+SELECT a, b, c, d, e FROM xc_alter_table_2 ORDER BY a;
+ a |   b   | c |        d        |         e         
+---+-------+---+-----------------+-------------------
+ 1 | John  | t | Master          | @ 1 hour 10 secs
+ 2 | Neo   | t | Slave           | @ 2 hours 34 mins
+ 3 | James | f | Cascading slave | @ 12 mins 5 secs
+(3 rows)
+
+-- Go through standard planner
+SET enable_fast_query_shipping TO false;
+-- Drop a couple of columns
+ALTER TABLE xc_alter_table_2 DROP COLUMN a;
+ALTER TABLE xc_alter_table_2 DROP COLUMN d;
+ALTER TABLE xc_alter_table_2 DROP COLUMN e;
+-- Check for query generation of remote INSERT
+EXPLAIN (VERBOSE true, COSTS false, NODES false) INSERT INTO xc_alter_table_2 VALUES ('Kodek', false);
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
+ Insert on public.xc_alter_table_2
+   Remote query: INSERT INTO public.xc_alter_table_2 (b, c) VALUES ($2, $3)
+   ->  Result
+         Output: NULL::integer, 'Kodek'::character varying(20), false, NULL::integer, NULL::integer
+(4 rows)
+
+INSERT INTO xc_alter_table_2 VALUES ('Kodek', false);
+SELECT b, c FROM xc_alter_table_2 ORDER BY b;
+   b   | c 
+-------+---
+ James | f
+ John  | t
+ Kodek | f
+ Neo   | t
+(4 rows)
+
+-- Check for query generation of remote UPDATE
+EXPLAIN (VERBOSE true, COSTS false, NODES false) UPDATE xc_alter_table_2 SET b = 'Morphee', c = false WHERE b = 'Neo';
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ Update on public.xc_alter_table_2
+   Remote query: UPDATE ONLY public.xc_alter_table_2 SET b = $2, c = $3 WHERE ((xc_alter_table_2.ctid = $6))
+   ->  Data Node Scan on xc_alter_table_2 "_REMOTE_TABLE_QUERY_"
+         Output: NULL::integer, 'Morphee'::character varying(20), false, NULL::integer, NULL::integer, xc_alter_table_2.b, xc_alter_table_2.ctid
+         Remote query: SELECT b, ctid FROM ONLY public.xc_alter_table_2 WHERE ((b)::text = 'Neo'::text)
+(5 rows)
+
+UPDATE xc_alter_table_2 SET b = 'Morphee', c = false WHERE b = 'Neo';
+SELECT b, c FROM xc_alter_table_2 ORDER BY b;
+    b    | c 
+---------+---
+ James   | f
+ John    | t
+ Kodek   | f
+ Morphee | f
+(4 rows)
+
+-- Add some new columns
+ALTER TABLE xc_alter_table_2 ADD COLUMN a int;
+ALTER TABLE xc_alter_table_2 ADD COLUMN a2 varchar(20);
+-- Check for query generation of remote INSERT
+EXPLAIN (VERBOSE true, COSTS false, NODES false) INSERT INTO xc_alter_table_2 (a, a2, b, c) VALUES (100, 'CEO', 'Gordon', true);
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ Insert on public.xc_alter_table_2
+   Remote query: INSERT INTO public.xc_alter_table_2 (b, c, a, a2) VALUES ($2, $3, $6, $7)
+   ->  Result
+         Output: NULL::integer, 'Gordon'::character varying(20), true, NULL::integer, NULL::integer, 100, 'CEO'::character varying(20)
+(4 rows)
+
+INSERT INTO xc_alter_table_2 (a, a2, b, c) VALUES (100, 'CEO', 'Gordon', true);
+SELECT a, a2, b, c FROM xc_alter_table_2 ORDER BY b;
+  a  | a2  |    b    | c 
+-----+-----+---------+---
+ 100 | CEO | Gordon  | t
+     |     | James   | f
+     |     | John    | t
+     |     | Kodek   | f
+     |     | Morphee | f
+(5 rows)
+
+-- Check for query generation of remote UPDATE
+EXPLAIN (VERBOSE true, COSTS false, NODES false) UPDATE xc_alter_table_2 SET a = 200, a2 = 'CTO' WHERE b = 'John';
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Update on public.xc_alter_table_2
+   Remote query: UPDATE ONLY public.xc_alter_table_2 SET b = $2, c = $3, a = $6, a2 = $7 WHERE ((xc_alter_table_2.ctid = $8))
+   ->  Data Node Scan on xc_alter_table_2 "_REMOTE_TABLE_QUERY_"
+         Output: NULL::integer, xc_alter_table_2.b, xc_alter_table_2.c, NULL::integer, NULL::integer, 200, 'CTO'::character varying(20), xc_alter_table_2.b, xc_alter_table_2.ctid
+         Remote query: SELECT b, c, ctid FROM ONLY public.xc_alter_table_2 WHERE ((b)::text = 'John'::text)
+(5 rows)
+
+UPDATE xc_alter_table_2 SET a = 200, a2 = 'CTO' WHERE b = 'John';
+SELECT a, a2, b, c FROM xc_alter_table_2 ORDER BY b;
+  a  | a2  |    b    | c 
+-----+-----+---------+---
+ 100 | CEO | Gordon  | t
+     |     | James   | f
+ 200 | CTO | John    | t
+     |     | Kodek   | f
+     |     | Morphee | f
+(5 rows)
+
+DROP TABLE xc_alter_table_2;
+-- Tests for ALTER TABLE redistribution
+-- In the following test, a table is redistributed in all the ways possible
+-- and effects of redistribution is checked on all the dependent objects
+-- Table with integers
+CREATE TABLE xc_alter_table_3 (a int, b varchar(10)) DISTRIBUTE BY HASH(a);
+INSERT INTO xc_alter_table_3 VALUES (0, NULL);
+INSERT INTO xc_alter_table_3 VALUES (1, 'a');
+INSERT INTO xc_alter_table_3 VALUES (2, 'aa');
+INSERT INTO xc_alter_table_3 VALUES (3, 'aaa');
+INSERT INTO xc_alter_table_3 VALUES (4, 'aaaa');
+INSERT INTO xc_alter_table_3 VALUES (5, 'aaaaa');
+INSERT INTO xc_alter_table_3 VALUES (6, 'aaaaaa');
+INSERT INTO xc_alter_table_3 VALUES (7, 'aaaaaaa');
+INSERT INTO xc_alter_table_3 VALUES (8, 'aaaaaaaa');
+INSERT INTO xc_alter_table_3 VALUES (9, 'aaaaaaaaa');
+INSERT INTO xc_alter_table_3 VALUES (10, 'aaaaaaaaaa');
+-- Create some objects to check the effect of redistribution
+CREATE VIEW xc_alter_table_3_v AS SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3;
+CREATE RULE xc_alter_table_3_insert AS ON UPDATE TO xc_alter_table_3 WHERE OLD.a = 11 DO INSERT INTO xc_alter_table_3 VALUES (OLD.a + 1, 'nnn');
+PREPARE xc_alter_table_insert AS INSERT INTO xc_alter_table_3 VALUES ($1, $2);
+PREPARE xc_alter_table_delete AS DELETE FROM xc_alter_table_3 WHERE a = $1;
+PREPARE xc_alter_table_update AS UPDATE xc_alter_table_3 SET b = $2 WHERE a = $1;
+-- Now begin the tests
+ALTER TABLE xc_alter_table_3 DISTRIBUTE BY HASH(a);
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+EXECUTE xc_alter_table_insert(11, 'b');
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b 
+---
+ b
+(1 row)
+
+EXECUTE xc_alter_table_update(11, 'bb');
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b  
+----
+ bb
+(1 row)
+
+EXECUTE xc_alter_table_delete(11);
+SELECT b FROM xc_alter_table_3 WHERE a = 11 or a = 12;
+  b  
+-----
+ nnn
+(1 row)
+
+EXECUTE xc_alter_table_delete(12);
+ALTER TABLE xc_alter_table_3 DISTRIBUTE BY HASH(b);
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+EXECUTE xc_alter_table_insert(11, 'b');
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b 
+---
+ b
+(1 row)
+
+EXECUTE xc_alter_table_update(11, 'bb');
+ERROR:  Partition column can't be updated in current version
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b 
+---
+ b
+(1 row)
+
+EXECUTE xc_alter_table_delete(11);
+SELECT b FROM xc_alter_table_3 WHERE a = 11 or a = 12;
+ b 
+---
+(0 rows)
+
+EXECUTE xc_alter_table_delete(12);
+ALTER TABLE xc_alter_table_3 DISTRIBUTE BY ROUNDROBIN;
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+EXECUTE xc_alter_table_insert(11, 'b');
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b 
+---
+ b
+(1 row)
+
+EXECUTE xc_alter_table_update(11, 'bb');
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b  
+----
+ bb
+(1 row)
+
+EXECUTE xc_alter_table_delete(11);
+SELECT b FROM xc_alter_table_3 WHERE a = 11 or a = 12;
+  b  
+-----
+ nnn
+(1 row)
+
+EXECUTE xc_alter_table_delete(12);
+ALTER TABLE xc_alter_table_3 DISTRIBUTE BY MODULO(a);
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+EXECUTE xc_alter_table_insert(11, 'b');
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b 
+---
+ b
+(1 row)
+
+EXECUTE xc_alter_table_update(11, 'bb');
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b  
+----
+ bb
+(1 row)
+
+EXECUTE xc_alter_table_delete(11);
+SELECT b FROM xc_alter_table_3 WHERE a = 11 or a = 12;
+  b  
+-----
+ nnn
+(1 row)
+
+EXECUTE xc_alter_table_delete(12);
+ALTER TABLE xc_alter_table_3 DISTRIBUTE BY MODULO(b);
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+EXECUTE xc_alter_table_insert(11, 'b');
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b 
+---
+ b
+(1 row)
+
+EXECUTE xc_alter_table_update(11, 'bb');
+ERROR:  Partition column can't be updated in current version
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b 
+---
+ b
+(1 row)
+
+EXECUTE xc_alter_table_delete(11);
+SELECT b FROM xc_alter_table_3 WHERE a = 11 or a = 12;
+ b 
+---
+(0 rows)
+
+EXECUTE xc_alter_table_delete(12);
+-- Index and redistribution
+CREATE INDEX xc_alter_table_3_index ON xc_alter_table_3(a);
+ALTER TABLE xc_alter_table_3 DISTRIBUTE BY HASH(a);
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+EXECUTE xc_alter_table_insert(11, 'b');
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b 
+---
+ b
+(1 row)
+
+EXECUTE xc_alter_table_update(11, 'bb');
+SELECT b FROM xc_alter_table_3 WHERE a = 11;
+ b  
+----
+ bb
+(1 row)
+
+EXECUTE xc_alter_table_delete(11);
+SELECT b FROM xc_alter_table_3 WHERE a = 11 or a = 12;
+  b  
+-----
+ nnn
+(1 row)
+
+EXECUTE xc_alter_table_delete(12);
+-- Add column on table
+ALTER TABLE xc_alter_table_3 ADD COLUMN c int DEFAULT 4;
+ALTER TABLE xc_alter_table_3 DISTRIBUTE BY REPLICATION;
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+-- Drop column on table
+ALTER TABLE xc_alter_table_3 DROP COLUMN b CASCADE;
+NOTICE:  drop cascades to rule xc_alter_table_3_insert on table xc_alter_table_3
+ALTER TABLE xc_alter_table_3 DISTRIBUTE BY HASH(a);
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+-- Remanipulate table once again and distribute on old column
+ALTER TABLE xc_alter_table_3 DROP COLUMN c;
+ALTER TABLE xc_alter_table_3 ADD COLUMN b varchar(3) default 'aaa';
+ALTER TABLE xc_alter_table_3 DISTRIBUTE BY HASH(a);
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+-- Change the node list
+SELECT alter_table_change_nodes('xc_alter_table_3', '{1}', 'to', NULL);
+ alter_table_change_nodes 
+--------------------------
+ t
+(1 row)
+
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+-- Add some nodes on it
+SELECT alter_table_change_nodes('xc_alter_table_3', '{2,4,5}', 'add', NULL);
+ alter_table_change_nodes 
+--------------------------
+ t
+(1 row)
+
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check in tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+-- Remove some nodes on it
+SELECT alter_table_change_nodes('xc_alter_table_3', '{3}', 'add', NULL);
+ alter_table_change_nodes 
+--------------------------
+ t
+(1 row)
+
+SELECT alter_table_change_nodes('xc_alter_table_3', '{2,3,5}', 'delete', NULL);
+ alter_table_change_nodes 
+--------------------------
+ t
+(1 row)
+
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+-- Multiple operations with replication
+SELECT alter_table_change_nodes('xc_alter_table_3', '{1,3,4,5}', 'to', 'replication');
+ alter_table_change_nodes 
+--------------------------
+ t
+(1 row)
+
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+-- Manipulate number of nodes to include and remove nodes on a replicated table
+-- On removed nodes data is deleted and on new nodes data is added
+SELECT alter_table_change_nodes('xc_alter_table_3', '{2,3,5}', 'to', NULL);
+ alter_table_change_nodes 
+--------------------------
+ t
+(1 row)
+
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+-- Re-do a double operation with hash this time
+SELECT alter_table_change_nodes('xc_alter_table_3', '{2}', 'delete', 'hash(a)');
+ alter_table_change_nodes 
+--------------------------
+ t
+(1 row)
+
+SELECT count(*), sum(a), avg(a) FROM xc_alter_table_3; -- Check on tuple presence
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+SELECT * FROM xc_alter_table_3_v;
+ count | sum |        avg         
+-------+-----+--------------------
+    11 |  55 | 5.0000000000000000
+(1 row)
+
+-- Error checks
+ALTER TABLE xc_alter_table_3 ADD COLUMN b int, DISTRIBUTE BY HASH(a);
+ERROR:  Incompatible operation with data redistribution
+-- Clean up
+DROP TABLE xc_alter_table_3 CASCADE;
+NOTICE:  drop cascades to view xc_alter_table_3_v
+-- ////////////////////////////////////////
+-- ///////// Test many variations of alter table
+-- ////////////////////////////////////////
+select create_table_nodes('tbl_r_n12(a int, b int)', '{1, 2}'::int[], 'replication', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_r_n1(a int, b int)', '{1}'::int[], 'replication', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_r_n2(a int, b int)', '{2}'::int[], 'replication', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_rr_n12(a int, b int)', '{1, 2}'::int[], 'roundrobin', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_rr_n1(a int, b int)', '{1}'::int[], 'roundrobin', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_rr_n2(a int, b int)', '{2}'::int[], 'roundrobin', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_h_n12(a int, b int)', '{1, 2}'::int[], 'hash(a)', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_h_n1(a int, b int)', '{1}'::int[], 'hash(a)', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+select create_table_nodes('tbl_h_n2(a int, b int)', '{2}'::int[], 'hash(a)', NULL);
+ create_table_nodes 
+--------------------
+ 
+(1 row)
+
+insert into tbl_r_n12 VALUES(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+insert into tbl_r_n1 VALUES(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+insert into tbl_r_n2 VALUES(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+insert into tbl_rr_n12 VALUES(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+insert into tbl_rr_n1 VALUES(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+insert into tbl_rr_n2 VALUES(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+insert into tbl_h_n12 VALUES(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+insert into tbl_h_n1 VALUES(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+insert into tbl_h_n2 VALUES(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+select * from tbl_r_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+select * from tbl_r_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+select * from tbl_r_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+select * from tbl_rr_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+select * from tbl_rr_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+select * from tbl_rr_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+select * from tbl_h_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+select * from tbl_h_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+select * from tbl_h_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+-- ////////////////////////////////////////
+-- rep to rep
+ALTER TABLE tbl_r_n12 distribute by replication;
+SELECT * FROM tbl_r_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_r_n12;
+insert into tbl_r_n12 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_r_n12 distribute by replication;
+-- rep to rr
+ALTER TABLE tbl_r_n12 distribute by roundrobin;
+SELECT * FROM tbl_r_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_r_n12;
+insert into tbl_r_n12 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_r_n12 distribute by replication;
+-- rep to hash
+ALTER TABLE tbl_r_n12 distribute by hash(a);
+SELECT * FROM tbl_r_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_r_n12;
+insert into tbl_r_n12 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_r_n12 distribute by replication;
+-- ////////////////////////////////////////
+-- rep to rep
+ALTER TABLE tbl_r_n1 distribute by replication;
+SELECT * FROM tbl_r_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_r_n1;
+insert into tbl_r_n1 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_r_n1 distribute by replication;
+-- rep to rr
+ALTER TABLE tbl_r_n1 distribute by roundrobin;
+SELECT * FROM tbl_r_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_r_n1;
+insert into tbl_r_n1 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_r_n1 distribute by replication;
+-- rep to hash
+ALTER TABLE tbl_r_n1 distribute by hash(a);
+SELECT * FROM tbl_r_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_r_n1;
+insert into tbl_r_n1 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_r_n1 distribute by replication;
+-- ////////////////////////////////////////
+-- rep to rep
+ALTER TABLE tbl_r_n2 distribute by replication;
+SELECT * FROM tbl_r_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_r_n2;
+insert into tbl_r_n2 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_r_n2 distribute by replication;
+-- rep to rr
+ALTER TABLE tbl_r_n2 distribute by roundrobin;
+SELECT * FROM tbl_r_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_r_n2;
+insert into tbl_r_n2 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_r_n2 distribute by replication;
+-- rep to hash
+ALTER TABLE tbl_r_n2 distribute by hash(a);
+SELECT * FROM tbl_r_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_r_n2;
+insert into tbl_r_n2 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_r_n2 distribute by replication;
+-- ////////////////////////////////////////
+-- rr to rep
+ALTER TABLE tbl_rr_n12 distribute by replication;
+SELECT * FROM tbl_rr_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_rr_n12;
+insert into tbl_rr_n12 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_rr_n12 distribute by roundrobin;
+-- rr to rr
+ALTER TABLE tbl_rr_n12 distribute by roundrobin;
+SELECT * FROM tbl_rr_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_rr_n12;
+insert into tbl_rr_n12 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_rr_n12 distribute by roundrobin;
+-- rr to hash
+ALTER TABLE tbl_rr_n12 distribute by hash(a);
+SELECT * FROM tbl_rr_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_rr_n12;
+insert into tbl_rr_n12 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_rr_n12 distribute by roundrobin;
+-- ////////////////////////////////////////
+-- rr to rep
+ALTER TABLE tbl_rr_n1 distribute by replication;
+SELECT * FROM tbl_rr_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_rr_n1;
+insert into tbl_rr_n1 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_rr_n1 distribute by roundrobin;
+-- rr to rr
+ALTER TABLE tbl_rr_n1 distribute by roundrobin;
+SELECT * FROM tbl_rr_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_rr_n1;
+insert into tbl_rr_n1 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_rr_n1 distribute by roundrobin;
+-- rr to hash
+ALTER TABLE tbl_rr_n1 distribute by hash(a);
+SELECT * FROM tbl_rr_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_rr_n1;
+insert into tbl_rr_n1 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_rr_n1 distribute by roundrobin;
+-- ////////////////////////////////////////
+-- rr to rep
+ALTER TABLE tbl_rr_n2 distribute by replication;
+SELECT * FROM tbl_rr_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_rr_n2;
+insert into tbl_rr_n2 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_rr_n2 distribute by roundrobin;
+-- rr to rr
+ALTER TABLE tbl_rr_n2 distribute by roundrobin;
+SELECT * FROM tbl_rr_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_rr_n2;
+insert into tbl_rr_n2 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_rr_n2 distribute by roundrobin;
+-- rr to hash
+ALTER TABLE tbl_rr_n2 distribute by hash(a);
+SELECT * FROM tbl_rr_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_rr_n2;
+insert into tbl_rr_n2 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_rr_n2 distribute by roundrobin;
+-- ////////////////////////////////////////
+-- hash to rep
+ALTER TABLE tbl_h_n12 distribute by replication;
+SELECT * FROM tbl_h_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n12;
+insert into tbl_h_n12 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n12 distribute by hash(a);
+-- hash to rr
+ALTER TABLE tbl_h_n12 distribute by roundrobin;
+SELECT * FROM tbl_h_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n12;
+insert into tbl_h_n12 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n12 distribute by hash(a);
+-- hash to hash
+ALTER TABLE tbl_h_n12 distribute by hash(a);
+SELECT * FROM tbl_h_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n12;
+insert into tbl_h_n12 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n12 distribute by hash(a);
+ALTER TABLE tbl_h_n12 distribute by hash(b);
+SELECT * FROM tbl_h_n12 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n12;
+insert into tbl_h_n12 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n12 distribute by hash(a);
+-- ////////////////////////////////////////
+-- hash to rep
+ALTER TABLE tbl_h_n1 distribute by replication;
+SELECT * FROM tbl_h_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n1;
+insert into tbl_h_n1 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n1 distribute by hash(a);
+-- hash to rr
+ALTER TABLE tbl_h_n1 distribute by roundrobin;
+SELECT * FROM tbl_h_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n1;
+insert into tbl_h_n1 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n1 distribute by hash(a);
+-- hash to hash
+ALTER TABLE tbl_h_n1 distribute by hash(a);
+SELECT * FROM tbl_h_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n1;
+insert into tbl_h_n1 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n1 distribute by hash(a);
+ALTER TABLE tbl_h_n1 distribute by hash(b);
+SELECT * FROM tbl_h_n1 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n1;
+insert into tbl_h_n1 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n1 distribute by hash(a);
+-- ////////////////////////////////////////
+-- hash to rep
+ALTER TABLE tbl_h_n2 distribute by replication;
+SELECT * FROM tbl_h_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n2;
+insert into tbl_h_n2 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n2 distribute by hash(a);
+-- hash to rr
+ALTER TABLE tbl_h_n2 distribute by roundrobin;
+SELECT * FROM tbl_h_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n2;
+insert into tbl_h_n2 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n2 distribute by hash(a);
+-- hash to hash
+ALTER TABLE tbl_h_n2 distribute by hash(a);
+SELECT * FROM tbl_h_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n2;
+insert into tbl_h_n2 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n2 distribute by hash(a);
+ALTER TABLE tbl_h_n2 distribute by hash(b);
+SELECT * FROM tbl_h_n2 order by 1;
+ a  |  b  
+----+-----
+  1 | 777
+  3 |   4
+  5 |   6
+ 20 |  30
+    | 999
+    | 999
+(6 rows)
+
+delete from tbl_h_n2;
+insert into tbl_h_n2 values(1,777),(3,4),(5,6),(20,30),(NULL,999), (NULL, 999);
+ALTER TABLE tbl_h_n2 distribute by hash(a);
+drop table if exists tbl_r_n12;
+drop table if exists tbl_r_n1;
+drop table if exists tbl_r_n2;
+drop table if exists tbl_rr_n12;
+drop table if exists tbl_rr_n1;
+drop table if exists tbl_rr_n2;
+drop table if exists tbl_h_n12;
+drop table if exists tbl_h_n1;
+drop table if exists tbl_h_n2;

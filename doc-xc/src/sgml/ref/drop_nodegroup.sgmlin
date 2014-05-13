@@ -1,0 +1,83 @@
+<!--
+$PostgreSQL: pgsql/doc/src/sgml/ref/drop_nodegroup.sgml,v 1.54 2010/04/03 07:22:58 petere Exp $
+PostgreSQL documentation
+-->
+<!## XC>
+<refentry id="SQL-DROPNODEGROUP">
+ <refmeta>
+  <refentrytitle>DROP NODE GROUP</refentrytitle>
+  <manvolnum>7</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>DROP NODE GROUP</refname>
+  <refpurpose>drop a group of cluster nodes</refpurpose>
+ </refnamediv>
+
+ <indexterm zone="sql-dropnodegroup">
+  <primary>DROP NODE GROUP</primary>
+ </indexterm>
+
+ <refsynopsisdiv>
+<synopsis>
+DROP NODE GROUP <replaceable class="parameter">groupname</replaceable>
+
+</synopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
+
+&xconly;
+
+  <para>
+   <command>DROP NODE GROUP</command> is new SQL query specific
+   to <productname>Postgres-XC</productname> since 0.9.7 that deletes
+   node group information in catalog pgxc_group.
+  </para>
+  <para>
+   A group of nodes works as an alias for node lists when defining tables
+   on sub-clusters.
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Parameters</title>
+
+    <variablelist>
+     <varlistentry>
+      <term><replaceable class="parameter">groupname</replaceable></term>
+      <listitem>
+       <para>
+        The name of the selected cluster node group.
+       </para>
+      </listitem>
+     </varlistentry>
+    </variablelist>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Examples</title>
+
+  <para>
+   Drop a cluster node group.
+<programlisting>
+DROP NODE GROUP cluster_group;
+</programlisting>
+  </para>
+
+ </refsect1>
+
+ <refsect1>
+  <title>Compatibility</title>
+  <para>
+   <command>DROP NODE GROUP</command> does not conform to the <acronym>
+   SQL</acronym> standards, it is a Postgres-XC specific command.
+  </para>
+ </refsect1>
+
+</refentry>
+<!## end>

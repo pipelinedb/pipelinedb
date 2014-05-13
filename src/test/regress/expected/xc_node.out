@@ -1,0 +1,75 @@
+--
+-- XC_NODE
+--
+-- Tests involving node DDLs related to Postgres-XC settings
+-- Default values
+CREATE NODE dummy_node_coordinator WITH (TYPE = 'coordinator');
+NOTICE:  PGXC node dummy_node_coordinator: Applying default port value: 5432
+NOTICE:  PGXC node dummy_node_coordinator: Applying default host value: localhost
+CREATE NODE dummy_node_datanode WITH (TYPE = 'datanode');
+NOTICE:  PGXC node dummy_node_datanode: Applying default port value: 5432
+NOTICE:  PGXC node dummy_node_datanode: Applying default host value: localhost
+SELECT node_name, node_type, node_port, node_host FROM pgxc_node
+WHERE node_name IN ('dummy_node_coordinator',  'dummy_node_datanode')
+ORDER BY 1;
+       node_name        | node_type | node_port | node_host 
+------------------------+-----------+-----------+-----------
+ dummy_node_coordinator | C         |      5432 | localhost
+ dummy_node_datanode    | D         |      5432 | localhost
+(2 rows)
+
+-- test to make sure that node_id is generated correctly for the added nodes
+select hashname(node_name) = node_id from pgxc_node
+WHERE node_name IN ('dummy_node_coordinator',  'dummy_node_datanode');
+ ?column? 
+----------
+ t
+ t
+(2 rows)
+
+-- Some modifications
+ALTER NODE dummy_node_coordinator WITH (PORT = 5466, HOST = 'target_host_1');
+ALTER NODE dummy_node_datanode WITH (PORT = 5689, HOST = 'target_host_2', PREFERRED);
+SELECT node_name, node_type, node_port, node_host, nodeis_preferred FROM pgxc_node
+WHERE node_name IN ('dummy_node_coordinator',  'dummy_node_datanode')
+ORDER BY 1;
+       node_name        | node_type | node_port |   node_host   | nodeis_preferred 
+------------------------+-----------+-----------+---------------+------------------
+ dummy_node_coordinator | C         |      5466 | target_host_1 | f
+ dummy_node_datanode    | D         |      5689 | target_host_2 | t
+(2 rows)
+
+DROP NODE dummy_node_coordinator;
+DROP NODE dummy_node_datanode;
+-- Check for error messages
+CREATE NODE dummy_node WITH (TYPE = 'dummy'); -- fail
+ERROR:  type value is incorrect, specify 'coordinator or 'datanode'
+CREATE NODE dummy_node WITH (PORT = 6543, HOST = 'dummyhost'); -- type not specified
+ERROR:  PGXC node dummy_node: Node type not specified
+CREATE NODE dummy_node WITH (PORT = 99999, TYPE = 'datanode'); -- port value error
+ERROR:  port value is out of range
+CREATE NODE dummy_node WITH (PORT = -1, TYPE = 'datanode'); -- port value error
+ERROR:  port value is out of range
+CREATE NODE dummy_node WITH (TYPE = 'coordinator', PREFERRED = true); -- fail
+ERROR:  PGXC node dummy_node: cannot be a preferred node, it has to be a Datanode
+ALTER NODE dummy_node WITH (PREFERRED = false); -- does not exist
+ERROR:  PGXC Node dummy_node: object not defined
+DROP NODE dummy_node; -- does not exist
+ERROR:  PGXC Node dummy_node: object not defined
+-- Additinal checks on type and properties
+CREATE NODE dummy_node WITH (TYPE = 'datanode');
+NOTICE:  PGXC node dummy_node: Applying default port value: 5432
+NOTICE:  PGXC node dummy_node: Applying default host value: localhost
+ALTER NODE dummy_node WITH (TYPE = 'coordinator');
+ERROR:  PGXC node dummy_node: cannot alter Datanode to Coordinator
+DROP NODE dummy_node;
+CREATE NODE dummy_node WITH (TYPE = 'coordinator');
+NOTICE:  PGXC node dummy_node: Applying default port value: 5432
+NOTICE:  PGXC node dummy_node: Applying default host value: localhost
+ALTER NODE dummy_node WITH (PREFERRED);
+ERROR:  PGXC node dummy_node: cannot be a preferred node, it has to be a Datanode
+ALTER NODE dummy_node WITH (PRIMARY);
+ERROR:  PGXC node dummy_node: cannot be a primary node, it has to be a Datanode
+ALTER NODE dummy_node WITH (TYPE = 'datanode');
+ERROR:  PGXC node dummy_node: cannot alter Coordinator to Datanode
+DROP NODE dummy_node;
