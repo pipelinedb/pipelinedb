@@ -216,8 +216,8 @@ pgstat_relation(Relation rel, FunctionCallInfo fcinfo)
 	switch (rel->rd_rel->relkind)
 	{
 		case RELKIND_RELATION:
-		case RELKIND_MATVIEW:
 		case RELKIND_TOASTVALUE:
+		case RELKIND_UNCATALOGED:
 		case RELKIND_SEQUENCE:
 			return pgstat_heap(rel, fcinfo);
 		case RELKIND_INDEX:

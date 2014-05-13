@@ -70,7 +70,7 @@ ltree_compress(PG_FUNCTION_ARGS)
 	{							/* ltree */
 		ltree_gist *key;
 		ltree	   *val = (ltree *) DatumGetPointer(PG_DETOAST_DATUM(entry->key));
-		int32		len = LTG_HDRSIZE + VARSIZE(val);
+		int4		len = LTG_HDRSIZE + VARSIZE(val);
 
 		key = (ltree_gist *) palloc(len);
 		SET_VARSIZE(key, len);
@@ -118,7 +118,7 @@ ltree_same(PG_FUNCTION_ARGS)
 		*result = (ISEQ(LTG_NODE(a), LTG_NODE(b))) ? true : false;
 	else
 	{
-		int32		i;
+		int4		i;
 		BITVECP		sa = LTG_SIGN(a),
 					sb = LTG_SIGN(b);
 
@@ -169,7 +169,7 @@ ltree_union(PG_FUNCTION_ARGS)
 	GistEntryVector *entryvec = (GistEntryVector *) PG_GETARG_POINTER(0);
 	int		   *size = (int *) PG_GETARG_POINTER(1);
 	BITVEC		base;
-	int32		i,
+	int4		i,
 				j;
 	ltree_gist *result,
 			   *cur;
@@ -253,7 +253,7 @@ ltree_penalty(PG_FUNCTION_ARGS)
 	ltree_gist *origval = (ltree_gist *) DatumGetPointer(((GISTENTRY *) PG_GETARG_POINTER(0))->key);
 	ltree_gist *newval = (ltree_gist *) DatumGetPointer(((GISTENTRY *) PG_GETARG_POINTER(1))->key);
 	float	   *penalty = (float *) PG_GETARG_POINTER(2);
-	int32		cmpr,
+	int4		cmpr,
 				cmpl;
 
 	cmpl = ltree_compare(LTG_GETLNODE(origval), LTG_GETLNODE(newval));
@@ -287,7 +287,7 @@ ltree_picksplit(PG_FUNCTION_ARGS)
 	GistEntryVector *entryvec = (GistEntryVector *) PG_GETARG_POINTER(0);
 	GIST_SPLITVEC *v = (GIST_SPLITVEC *) PG_GETARG_POINTER(1);
 	OffsetNumber j;
-	int32		i;
+	int4		i;
 	RIX		   *array;
 	OffsetNumber maxoff;
 	int			nbytes;
@@ -441,7 +441,7 @@ ltree_picksplit(PG_FUNCTION_ARGS)
 static bool
 gist_isparent(ltree_gist *key, ltree *query)
 {
-	int32		numlevel = query->numlevel;
+	int4		numlevel = query->numlevel;
 	int			i;
 
 	for (i = query->numlevel; i >= 0; i--)

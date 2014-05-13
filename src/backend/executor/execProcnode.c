@@ -107,11 +107,13 @@
 #include "executor/nodeSubplan.h"
 #include "executor/nodeSubqueryscan.h"
 #include "executor/nodeTidscan.h"
+#include "executor/nodeTuplestoreScan.h"
 #include "executor/nodeUnique.h"
 #include "executor/nodeValuesscan.h"
 #include "executor/nodeWindowAgg.h"
 #include "executor/nodeWorktablescan.h"
 #include "miscadmin.h"
+#include "nodes/execnodes.h"
 #ifdef PGXC
 #include "pgxc/execRemote.h"
 #endif
@@ -246,6 +248,11 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 													   estate, eflags);
 			break;
 
+		case T_TuplestoreScan:
+			result = (PlanState *) ExecInitTuplestoreScan((TuplestoreScan *) node,
+														 estate, eflags);
+			break;
+
 			/*
 			 * join nodes
 			 */
@@ -350,9 +357,49 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 	if (estate->es_instrument)
 		result->instrument = InstrAlloc(1, estate->es_instrument);
 
+	result->cq_batch_progress = 0;
+
 	return result;
 }
 
+ /* ----------------------------------------------------------------
+  *		ExecBeginBatch
+  *
+  *		Prepare a node for a new batch
+  * ----------------------------------------------------------------
+  */
+ void
+ ExecBeginBatch(PlanState *node)
+ {
+
+ }
+
+ /* ----------------------------------------------------------------
+  *		ExecEndBatch
+  *
+  *		Clean up a node after finishing a batch
+  * ----------------------------------------------------------------
+  */
+ TupleTableSlot *
+ ExecEndBatch(PlanState *node)
+ {
+ 	switch (nodeTag(node))
+ 	{
+ 		case T_AggState:
+ 			{
+ 				AggState *agg = (AggState *) node;
+ 				agg->agg_done = false;
+ 				agg->table_filled = false;
+ 			}
+ 			break;
+ 		default:
+ 			break;
+ 	}
+
+ 	node->cq_batch_progress = 0;
+
+ 	return NULL;
+ }
 
 /* ----------------------------------------------------------------
  *		ExecProcNode
@@ -372,6 +419,9 @@ ExecProcNode(PlanState *node)
 
 	if (node->instrument)
 		InstrStartNode(node->instrument);
+
+	if (IsContinuous(node) && node->cq_batch_progress == BatchSize(node))
+		return ExecEndBatch(node);
 
 	switch (nodeTag(node))
 	{
@@ -451,6 +501,10 @@ ExecProcNode(PlanState *node)
 			result = ExecForeignScan((ForeignScanState *) node);
 			break;
 
+		case T_TuplestoreScanState:
+			result = ExecTuplestoreScan((TuplestoreScanState *) node);
+			break;
+
 			/*
 			 * join nodes
 			 */
@@ -523,6 +577,11 @@ ExecProcNode(PlanState *node)
 
 	if (node->instrument)
 		InstrStopNode(node->instrument, TupIsNull(result) ? 0.0 : 1.0);
+
+	if (!TupIsNull(result))
+		node->cq_batch_progress++;
+	else if (IsContinuous(node))
+		return ExecEndBatch(node);
 
 	return result;
 }
@@ -691,6 +750,10 @@ ExecEndNode(PlanState *node)
 
 		case T_ForeignScanState:
 			ExecEndForeignScan((ForeignScanState *) node);
+			break;
+
+		case T_TuplestoreScanState:
+			ExecEndTuplestoreScan((TuplestoreScanState *) node);
 			break;
 
 			/*

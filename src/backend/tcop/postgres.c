@@ -43,22 +43,33 @@
 
 #include "access/printtup.h"
 #include "access/xact.h"
+#include "access/htup_details.h"
+#include "catalog/pg_attribute.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "commands/async.h"
 #include "commands/prepare.h"
 #ifdef PGXC
 #include "commands/trigger.h"
 #endif
+#include "events/decode.h"
+#include "events/stream.h"
+#include "executor/tstoreReceiver.h"
+#include "executor/tupletableReceiver.h"
+#include "funcapi.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "optimizer/planner.h"
+#include "optimizer/tlist.h"
 #include "pgstat.h"
 #include "pg_trace.h"
 #include "parser/analyze.h"
 #include "parser/parser.h"
+#include "parser/parse_clause.h"
+#include "parser/parse_expr.h"
 #ifdef PGXC
 #include "parser/parse_type.h"
 #endif /* PGXC */
@@ -75,12 +86,15 @@
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "tcop/utility.h"
+#include "utils/hsearch.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
 #include "utils/snapmgr.h"
+#include "utils/syscache.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
+#include "utils/tuplestore.h"
 #include "mb/pg_wchar.h"
 
 #ifdef PGXC
@@ -92,6 +106,7 @@
 #include "pgxc/barrier.h"
 #include "optimizer/pgxcplan.h"
 #include "nodes/nodes.h"
+#include "nodes/makefuncs.h"
 #include "pgxc/poolmgr.h"
 #include "pgxc/pgxcnode.h"
 #include "commands/copy.h"
@@ -204,6 +219,18 @@ static int	UseNewLine = 0;		/* Use EOF as query delimiters */
 static bool RecoveryConflictPending = false;
 static bool RecoveryConflictRetryable = true;
 static ProcSignalReason RecoveryConflictReason;
+
+/* tuplestore that MERGE requests output to */
+static Tuplestorestate *merge_output_store;
+
+/* output type of the merge column */
+static Oid merge_output_type;
+
+/* stream connection */
+static EventStream stream;
+
+/* memory context for event processing */
+static MemoryContext EventContext;
 
 /* ----------------------------------------------------------------
  *		decls for routines only used in this file
@@ -456,6 +483,8 @@ SocketBackend(StringInfo inBuf)
 		case 'E':				/* execute */
 		case 'H':				/* flush */
 		case 'P':				/* parse */
+		case '>':
+		case ']':
 			doing_extended_query_message = true;
 			/* these are only legal in protocol 3 */
 			if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)
@@ -494,7 +523,8 @@ SocketBackend(StringInfo inBuf)
 		case 'b':				/* Barrier */
 			break;
 #endif
-
+		case '+':				/* Merge */
+			break;
 		default:
 
 			/*
@@ -895,6 +925,402 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 	return stmt_list;
 }
 
+/*
+ * get_cached_merge_plan
+ *
+ * Retrieves a the cached merge plan for a continuous view, creating it if necessary
+ */
+static CachedPlan *
+get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
+{
+	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
+	char *query_string;
+	CachedPlanSource *psrc;
+	MemoryContext oldContext;
+	Node	   *raw_parse_tree;
+	List	   *parsetree_list;
+	List		 *query_list;
+	Query 	 *query;
+	PreparedStatement *pstmt = FetchPreparedStatement(cvname, false);
+
+	if (pstmt)
+	{
+		psrc = pstmt->plansource;
+	}
+	else
+	{
+		/*
+		 * It doesn't exist, so create and cache it
+		 */
+		oldContext = MemoryContextSwitchTo(CacheMemoryContext);
+
+		query_string = GetQueryString(rel);
+		parsetree_list = pg_parse_query(query_string);
+
+		/* CVs should only have a single query */
+		Assert(parsetree_list->length == 1);
+
+		raw_parse_tree = (Node *) linitial(parsetree_list);
+		query_list = pg_analyze_and_rewrite(raw_parse_tree, query_string, NULL, 0);
+
+		/* CVs should only have a single query */
+		Assert(query_list->length == 1);
+		query = (Query *) linitial(query_list);
+
+		if (query->sql_statement == NULL)
+			query->sql_statement = pstrdup(query_string);
+		query->cq_is_merge = true;
+
+		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
+		/* TODO: size this appropriately */
+		psrc->store = tuplestore_begin_heap(true, true, 1000);
+		psrc->desc = desc;
+		psrc->query = query;
+
+		CompleteCachedPlan(psrc, query_list, NULL, 0, 0, NULL,  NULL, 0, true);
+		StorePreparedStatement(cvname, psrc, false);
+
+		MemoryContextSwitchTo(oldContext);
+	}
+
+	*src = psrc;
+
+	return GetCachedPlan(psrc, 0, false);
+}
+
+static Tuplestorestate *
+get_merge_output_store(bool clear)
+{
+	if (!merge_output_store)
+	{
+		MemoryContext oldContext = MemoryContextSwitchTo(CacheMemoryContext);
+
+		merge_output_store = tuplestore_begin_heap(true, true, 1000);
+
+		MemoryContextSwitchTo(oldContext);
+	}
+
+	if (clear)
+		tuplestore_clear(merge_output_store);
+
+	return merge_output_store;
+}
+
+/*
+ * get_merge_columns
+ *
+ * Given a continuous query, determine the columns in the underlying table
+ * that correspond to the GROUP BY clause of the query
+ */
+static List *
+get_merge_columns(Query *query)
+{
+	List *result = NIL;
+	ListCell *tl;
+	AttrNumber col = 0;
+	foreach(tl, query->targetList)
+	{
+		TargetEntry *tle = (TargetEntry *) lfirst(tl);
+		col++;
+		if (get_grouping_column_index(query, tle) >= 0)
+			result = lcons_int(col, result);
+	}
+	return result;
+}
+
+/*
+ * exec_merge_retrieval
+ *
+ * Gets the plan for retrieving all of the existing tuples that
+ * this merge request will merge with
+ */
+static void
+exec_merge_retrieval(char *cvname, TupleDesc desc,
+		Tuplestorestate *incoming_merges, AttrNumber merge_attr,
+		List *group_clause, TupleHashTable merge_targets)
+{
+	Node *raw_parse_tree;
+	List *parsetree_list;
+	List *query_list;
+	PlannedStmt *plan;
+	Query *query;
+	A_Expr *in_expr;
+	Node *where;
+	ColumnRef *cref;
+	List *constants = NIL;
+	SelectStmt *stmt;
+	Portal portal;
+	TupleTableSlot 	*slot;
+	ParseState *ps;
+	DestReceiver *dest;
+	Type typeinfo;
+	MemoryContext oldcontext;
+	int length;
+	char stmt_name[strlen(cvname) + 9 + 1];
+	char base_select[14 + strlen(cvname) + 1];
+	Form_pg_attribute attr = desc->attrs[merge_attr - 1];
+	List *name = list_make1(makeString("="));
+	int incoming_size = 0;
+	HASH_SEQ_STATUS status;
+	HeapTupleEntry entry;
+
+	strcpy(stmt_name, cvname);
+	sprintf(base_select, "SELECT * FROM %s", cvname);
+
+	slot = MakeSingleTupleTableSlot(desc);
+	name = list_make1(makeString("="));
+	ps = make_parsestate(NULL);
+
+	dest = CreateDestReceiver(DestTupleTable);
+
+	parsetree_list = pg_parse_query(base_select);
+	Assert(parsetree_list->length == 1);
+
+	/*
+	 * We need to do this to populate the ParseState's p_varnamespace member
+	 */
+	stmt = (SelectStmt *) linitial(parsetree_list);
+	transformFromClause(ps, stmt->fromClause);
+
+	raw_parse_tree = (Node *) linitial(parsetree_list);
+	query_list = pg_analyze_and_rewrite(raw_parse_tree, base_select, NULL, 0);
+
+	Assert(query_list->length == 1);
+	query = (Query *) linitial(query_list);
+
+	typeinfo = typeidType(attr->atttypid);
+	length = typeLen(typeinfo);
+	merge_output_type = typeOutputId(typeinfo);
+	ReleaseSysCache((HeapTuple) typeinfo);
+
+	/*
+	 * We need to extract all of the merge column values from our incoming merge
+	 * tuples so we can use them in an IN clause when retrieving existing tuples
+	 * from the continuous view
+	 */
+	foreach_tuple(slot, incoming_merges)
+	{
+		bool isnull;
+		Datum d = slot_getattr(slot, merge_attr, &isnull);
+		Const *c = makeConst(attr->atttypid, attr->atttypmod, 0, length, d, isnull, true);
+
+		constants = lcons(c, constants);
+		incoming_size++;
+	}
+
+	/*
+	 * Now construct an IN clause from the List of merge column values we just built
+	 */
+	cref = makeNode(ColumnRef);
+	cref->fields = list_make1(makeString(attr->attname.data));
+	cref->location = -1;
+
+	in_expr = makeA_Expr(AEXPR_IN, name,
+			   (Node *) cref, (Node *) constants, -1);
+
+	/*
+	 * This query is now of the form:
+	 *
+	 * SELECT * FROM <continuous view> WHERE <merge column> IN (incoming merge column values)
+	 */
+	if (merge_targets->numCols > 0)
+	{
+		where = transformAExprIn(ps, in_expr);
+		query->jointree = makeFromExpr(query->jointree->fromlist, where);
+	}
+
+	plan = pg_plan_query(query, 0, NULL);
+
+	oldcontext = MemoryContextSwitchTo(MessageContext);
+
+	/*
+	 * Now run the query that retrieves existing tuples to merge this merge request with.
+	 * This query outputs to the tuplestore currently holding the incoming merge tuples.
+	 */
+	portal = CreatePortal("__merge_retrieval__", true, true);
+	portal->visible = false;
+
+	PortalDefineQuery(portal,
+					  NULL,
+					  NULL,
+					  "SELECT",
+					  list_make1(plan),
+					  NULL);
+
+	SetTupleTableDestReceiverParams(dest, merge_targets, PortalGetHeapMemory(portal), true);
+
+	PortalStart(portal, NULL, 0, GetActiveSnapshot());
+
+	MemoryContextSwitchTo(oldcontext);
+
+	(void) PortalRun(portal,
+					 FETCH_ALL,
+					 true,
+					 dest,
+					 dest,
+					 NULL);
+
+	/*
+	 * Now add the merge targets that already exist in the continuous view's table
+	 * to the input of the final merge query
+	 */
+	hash_seq_init(&status, merge_targets->hashtab);
+	while ((entry = (HeapTupleEntry) hash_seq_search(&status)) != NULL)
+		tuplestore_puttuple(incoming_merges, entry->tuple);
+}
+
+
+/*
+ * sync_merge_results
+ *
+ * Writes the merge results to a continuous view's table, performing
+ * UPDATES or INSERTS as necessary
+ */
+static void
+sync_merge_results(char *cvname, Tuplestorestate *results,
+		TupleTableSlot *slot, AttrNumber merge_attr, TupleHashTable merge_targets)
+{
+	Relation rel = heap_openrv(makeRangeVar(NULL, cvname, -1), RowExclusiveLock);
+	bool *replace_all = palloc(sizeof(bool) * slot->tts_tupleDescriptor->natts);
+	MemSet(replace_all, true, sizeof(replace_all));
+
+	foreach_tuple(slot, results)
+	{
+		HeapTupleEntry update = NULL;
+		slot_getallattrs(slot);
+
+		if (merge_targets)
+			update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
+		if (update)
+		{
+			/*
+			 * The slot has the updated values, so store them in the updatable physical tuple
+			 */
+			HeapTuple updated = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
+					slot->tts_values, slot->tts_isnull, replace_all);
+
+			simple_heap_update(rel, &update->tuple->t_self, updated);
+		}
+		else
+		{
+			/* No existing tuple found, so it's an INSERT */
+			heap_insert(rel, slot->tts_tuple, GetCurrentCommandId(true), 0, NULL);
+		}
+	}
+	relation_close(rel, RowExclusiveLock);
+}
+
+/*
+ * exec_merge
+ *
+ * Merges partial results of a continuous query with this datanode's rows
+ */
+static void
+exec_merge(StringInfo message)
+{
+	/* name of the continuous view we're merging into */
+	char *cvname = (char *) pq_getmsgstring(message);
+	char *datarow;
+	int rowlen;
+	TupleDesc desc;
+	TupleTableSlot *slot;
+	CachedPlan *cplan;
+	CachedPlanSource *psrc;
+	Tuplestorestate *store;
+	Portal portal;
+	MemoryContext oldcontext;
+	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
+	Tuplestorestate *merge_output = get_merge_output_store(true);
+	AttrNumber merge_attr = 1;
+	List *merge_attrs;
+	List *group_clause;
+	TupleHashTable merge_targets = NULL;
+	AttrNumber *cols;
+	FmgrInfo *eq_funcs;
+	FmgrInfo *hash_funcs;
+	int num_cols = 0;
+	int num_buckets = 1;
+
+	start_xact_command();
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	oldcontext = MemoryContextSwitchTo(MessageContext);
+
+	desc = RelationNameGetTupleDesc(cvname);
+	cplan = get_merge_plan(cvname, desc, &psrc);
+	slot = MakeSingleTupleTableSlot(desc);
+	store = psrc->store;
+	group_clause = psrc->query->groupClause;
+
+	merge_attrs = get_merge_columns(psrc->query);
+	merge_attr = (AttrNumber) lfirst_int(merge_attrs->head);
+
+	tuplestore_clear(store);
+
+	/*
+	 * Store each datarow in the merge store
+	 */
+	while (message->cursor < message->len)
+	{
+		rowlen = pq_getmsgint(message, 4);
+		datarow = (char *) pq_getmsgbytes(message, rowlen);
+		ExecStoreDataRowTuple(datarow, rowlen, 0, slot, false);
+		slot_getallattrs(slot);
+		tuplestore_puttupleslot(store, slot);
+	}
+
+	pq_getmsgend(message);
+
+	if (group_clause)
+	{
+		num_cols = list_length(group_clause);
+		if (num_cols > 1)
+			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", num_cols);
+		cols = (AttrNumber *) palloc(sizeof(AttrNumber) * num_cols);
+		cols[0] = merge_attr;
+
+		execTuplesHashPrepare(num_cols, extract_grouping_ops(group_clause), &eq_funcs, &hash_funcs);
+		num_buckets = 1000;
+
+		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
+				sizeof(HeapTupleEntryData), CacheMemoryContext, MessageContext);
+
+		exec_merge_retrieval(cvname, desc, store, merge_attr, group_clause, merge_targets);
+	}
+
+	portal = CreatePortal("__merge__", true, true);
+	portal->visible = false;
+
+	PortalDefineQuery(portal,
+					  NULL,
+					  NULL,
+					  "SELECT",
+					  cplan->stmt_list,
+					  cplan);
+
+	merge_output = get_merge_output_store(true);
+	SetTuplestoreDestReceiverParams(dest, merge_output, PortalGetHeapMemory(portal), true);
+
+	PortalStart(portal, NULL, 0, GetActiveSnapshot());
+
+	MemoryContextSwitchTo(oldcontext);
+
+	(void) PortalRun(portal,
+					 FETCH_ALL,
+					 true,
+					 dest,
+					 dest,
+					 NULL);
+
+	PopActiveSnapshot();
+
+	sync_merge_results(cvname, merge_output, slot, merge_attr, merge_targets);
+
+	if (merge_targets)
+		hash_destroy(merge_targets->hashtab);
+
+	finish_xact_command();
+}
 
 /*
  * exec_simple_query
@@ -1120,6 +1546,16 @@ exec_simple_query(const char *query_string)
 					format = 1; /* BINARY */
 			}
 		}
+		else if (IS_PGXC_COORDINATOR && IsA(parsetree, ActivateContinuousViewStmt))
+		{
+			/*
+			 * If this is a continuous view and we're on a coordinator, that means
+			 * that this coordinator is responsible for buffering partial results
+			 * in a tuplestore and then sending them out for final merging by DNs.
+			 */
+			dest = DestTuplestore;
+		}
+
 		PortalSetResultFormat(portal, 1, &format);
 
 		/*
@@ -1224,6 +1660,78 @@ exec_simple_query(const char *query_string)
 	TRACE_POSTGRESQL_QUERY_DONE(query_string);
 
 	debug_query_string = NULL;
+}
+
+/*
+ * exec_proxy_events
+ *
+ * Send events to the appropriate datanodes, where they will be emitted
+ * into the event stream for consumption (only run from a coordinator)
+ *
+ */
+static void
+exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
+{
+	List *events = NIL;
+	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
+
+	StreamEventDecoder *decoder = GetStreamEventDecoder(encoding);
+
+	TupleTableSlot *slot = MakeTupleTableSlot();
+	ExecSetSlotDescriptor(slot, decoder->schema);
+
+	while (message->cursor < message->len)
+	{
+		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
+		ev->len = pq_getmsgint(message, 4);
+		ev->raw = (char *) palloc(ev->len);
+		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
+		events = lcons(ev, events);
+		HeapTuple tup = DecodeStreamEvent(ev, decoder);
+
+		ExecStoreTuple(tup, slot, InvalidBuffer, false);
+	}
+	pq_getmsgend(message);
+
+	if (send_events(stream, encoding, channel, events))
+	{
+		MemoryContextSwitchTo(oldcontext);
+		MemoryContextReset(EventContext);
+
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+						errmsg("failed to proxy events to datanodes")));
+	}
+
+	MemoryContextSwitchTo(oldcontext);
+	MemoryContextReset(EventContext);
+}
+
+/*
+ * exec_receive_events
+ *
+ * Emit received events into the events stream (only run on datanodes)
+ */
+static void
+exec_receive_events(const char *encoding, const char *channel, StringInfo message)
+{
+	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
+	List *events = NIL;
+
+	while (message->cursor < message->len)
+	{
+		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
+		ev->len = pq_getmsgint(message, 4);
+		ev->raw = (char *) palloc(ev->len);
+		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
+		events = lcons(ev, events);
+	}
+	pq_getmsgend(message);
+
+	respond_send_events(list_length(events));
+
+	MemoryContextSwitchTo(oldcontext);
+	MemoryContextReset(EventContext);
 }
 
 /*
@@ -3975,6 +4483,19 @@ PostgresMain(int argc, char *argv[],
 										   ALLOCSET_DEFAULT_MAXSIZE);
 
 	/*
+	 * Create the memory context that is used for event processing
+	 *
+	 * EventContext is reset after each request that uses it
+	 */
+	EventContext = AllocSetContextCreate(TopMemoryContext,
+											"EventContext",
+											ALLOCSET_DEFAULT_MINSIZE,
+											ALLOCSET_DEFAULT_INITSIZE,
+											ALLOCSET_DEFAULT_MAXSIZE);
+
+	InitDecoderCache();
+
+	/*
 	 * Remember stand-alone backend startup time
 	 */
 	if (!IsUnderPostmaster)
@@ -4001,7 +4522,6 @@ PostgresMain(int argc, char *argv[],
 			ereport(ERROR,
 				(errcode(ERRCODE_IO_ERROR),
 				 errmsg("Can not connect to pool manager")));
-			return STATUS_ERROR;
 		}
 		/* Pooler initialization has to be made before ressource is released */
 		PoolManagerConnect(pool_handle, dbname, username, session_options());
@@ -4253,6 +4773,17 @@ PostgresMain(int argc, char *argv[],
 					send_ready_for_query = true;
 				}
 				break;
+			case '+':			/* merge partial continuous query result */
+					isMergeNode = true;
+					exec_merge(&input_message);
+
+					/*
+					 * Merge nodes should only receive merge requests, so this
+					 * shouldn't matter but technically if we're not executing a
+					 * merge, then we aren't a merge node
+					 */
+					isMergeNode = false;
+					break;
 
 			case 'P':			/* parse */
 				{
@@ -4579,7 +5110,42 @@ PostgresMain(int argc, char *argv[],
 				}
 				break;
 #endif /* PGXC */
+			case '>': /* send events to remote nodes */
+				{
+					const char *encoding;
+					const char *channel;
 
+					if (!IS_PGXC_COORDINATOR)
+						ereport(FATAL,
+								(errcode(ERRCODE_PROTOCOL_VIOLATION),
+								 errmsg("events must be sent through coordinator nodes")));
+
+					encoding = pq_getmsgstring(&input_message);
+					channel = pq_getmsgstring(&input_message);
+
+					if (!stream || EventStreamNeedsOpen(stream))
+						stream = open_stream();
+
+					exec_proxy_events(encoding, channel, &input_message);
+					send_ready_for_query = true;
+				}
+				break;
+			case ']': /* receive events on remote node */
+				{
+					const char *encoding;
+					const char *channel;
+
+					if (!IS_PGXC_DATANODE)
+						ereport(FATAL,
+								(errcode(ERRCODE_PROTOCOL_VIOLATION),
+								 errmsg("events can only be received by datanodes")));
+
+					encoding = pq_getmsgstring(&input_message);
+					channel = pq_getmsgstring(&input_message);
+
+					exec_receive_events(encoding, channel, &input_message);
+				}
+				break;
 			default:
 				ereport(FATAL,
 						(errcode(ERRCODE_PROTOCOL_VIOLATION),

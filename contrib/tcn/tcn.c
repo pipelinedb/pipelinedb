@@ -3,7 +3,7 @@
  * tcn.c
  *	  triggered change notification support for PostgreSQL
  *
- * Portions Copyright (c) 2011-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2011-2012, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -15,7 +15,6 @@
 
 #include "postgres.h"
 
-#include "access/htup_details.h"
 #include "executor/spi.h"
 #include "commands/async.h"
 #include "commands/trigger.h"
@@ -141,8 +140,8 @@ triggered_change_notification(PG_FUNCTION_ARGS)
 		if (!HeapTupleIsValid(indexTuple))		/* should not happen */
 			elog(ERROR, "cache lookup failed for index %u", indexoid);
 		index = (Form_pg_index) GETSTRUCT(indexTuple);
-		/* we're only interested if it is the primary key and valid */
-		if (index->indisprimary && IndexIsValid(index))
+		/* we're only interested if it is the primary key */
+		if (index->indisprimary)
 		{
 			int			numatts = index->indnatts;
 

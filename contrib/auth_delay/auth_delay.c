@@ -59,7 +59,7 @@ _PG_init(void)
 							NULL,
 							&auth_delay_milliseconds,
 							0,
-							0, INT_MAX / 1000,
+							0, INT_MAX,
 							PGC_SIGHUP,
 							GUC_UNIT_MS,
 							NULL,

@@ -71,14 +71,10 @@ SECURITY LABEL ON TABLE var_tbl
 CREATE TABLE t3 (s int, t text);
 INSERT INTO t3 VALUES (1, 'sss'), (2, 'ttt'), (3, 'uuu');
 
--- @SECURITY-CONTEXT=unconfined_u:unconfined_r:sepgsql_regtest_dba_t:s0
-CREATE TABLE t4 (m int, n text);
-INSERT INTO t4 VALUES (1,'mmm'), (2,'nnn'), (3,'ooo');
-
 SELECT objtype, objname, label FROM pg_seclabels
-    WHERE provider = 'selinux' AND objtype = 'table' AND objname in ('t1', 't2', 't3');
-SELECT objtype, objname, label FROM pg_seclabels
-    WHERE provider = 'selinux' AND objtype = 'column' AND (objname like 't3.%' OR objname like 't4.%');
+    WHERE provider = 'selinux'
+     AND  objtype in ('table', 'column')
+     AND  objname in ('t1', 't2', 't3');
 
 --
 -- Tests for SECURITY LABEL
@@ -97,8 +93,6 @@ SECURITY LABEL ON COLUMN t2.b
 -- Tests for Trusted Procedures
 --
 -- @SECURITY-CONTEXT=unconfined_u:unconfined_r:sepgsql_regtest_user_t:s0
-SET sepgsql.debug_audit = true;
-SET client_min_messages = log;
 SELECT f1();			-- normal procedure
 SELECT f2();			-- trusted procedure
 SELECT f3();			-- trusted procedure that raises an error
@@ -235,7 +229,6 @@ SELECT sepgsql_getcon();
 DROP TABLE IF EXISTS t1 CASCADE;
 DROP TABLE IF EXISTS t2 CASCADE;
 DROP TABLE IF EXISTS t3 CASCADE;
-DROP TABLE IF EXISTS t4 CASCADE;
 DROP FUNCTION IF EXISTS f1() CASCADE;
 DROP FUNCTION IF EXISTS f2() CASCADE;
 DROP FUNCTION IF EXISTS f3() CASCADE;

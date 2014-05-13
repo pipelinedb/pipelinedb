@@ -9,7 +9,7 @@
  * Shridhar Daithankar <shridhar_daithankar@persistent.co.in>
  *
  * contrib/dblink/dblink.h
- * Copyright (c) 2001-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2012, PostgreSQL Global Development Group
  * ALL RIGHTS RESERVED;
  *
  * Permission to use, copy, modify, and distribute this software and its
@@ -58,6 +58,5 @@ extern Datum dblink_build_sql_delete(PG_FUNCTION_ARGS);
 extern Datum dblink_build_sql_update(PG_FUNCTION_ARGS);
 extern Datum dblink_current_query(PG_FUNCTION_ARGS);
 extern Datum dblink_get_notify(PG_FUNCTION_ARGS);
-extern Datum dblink_fdw_validator(PG_FUNCTION_ARGS);
 
 #endif   /* DBLINK_H */

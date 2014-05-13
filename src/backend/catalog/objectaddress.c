@@ -489,6 +489,7 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 			case OBJECT_INDEX:
 			case OBJECT_SEQUENCE:
 			case OBJECT_TABLE:
+			case OBJECT_CONTINUOUS_VIEW:
 			case OBJECT_VIEW:
 			case OBJECT_MATVIEW:
 			case OBJECT_FOREIGN_TABLE:
@@ -856,6 +857,13 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 						 errmsg("\"%s\" is not a table",
 								RelationGetRelationName(relation))));
 			break;
+		case OBJECT_CONTINUOUS_VIEW:
+					 if (relation->rd_rel->relkind != RELKIND_RELATION)
+						 ereport(ERROR,
+								 (errcode(ERRCODE_WRONG_OBJECT_TYPE),
+										 errmsg("\"%s\" is not a continuous view",
+												 RelationGetRelationName(relation))));
+			break;
 		case OBJECT_VIEW:
 			if (relation->rd_rel->relkind != RELKIND_VIEW)
 				ereport(ERROR,
@@ -1126,6 +1134,7 @@ check_object_ownership(Oid roleid, ObjectType objtype, ObjectAddress address,
 		case OBJECT_INDEX:
 		case OBJECT_SEQUENCE:
 		case OBJECT_TABLE:
+		case OBJECT_CONTINUOUS_VIEW:
 		case OBJECT_VIEW:
 		case OBJECT_MATVIEW:
 		case OBJECT_FOREIGN_TABLE:

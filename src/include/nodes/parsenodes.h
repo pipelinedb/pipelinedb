@@ -24,6 +24,7 @@
 #include "nodes/bitmapset.h"
 #include "nodes/primnodes.h"
 #include "nodes/value.h"
+#include "utils/tuplestore.h"
 #ifdef PGXC
 #include "access/tupdesc.h"
 #include "pgxc/locator.h"
@@ -165,6 +166,27 @@ typedef struct Query
 									 * from its parent OR a WITH query that
 									 * updates a table in main query and inserts
 									 * a row to the same table in WITH query*/
+
+	/*
+	 * Continuous query fields
+	 */
+	bool		is_continuous; /* should this be executed continuously? */
+
+	/*
+	 * The original ACTIVATE statement that activated this query. It's useful to
+	 * keep this around because an ACTIVATE query gets rewritten as the target CQ,
+	 * and then flagged as continuous. However, we don't want to send this rewritten
+	 * query to the datanodes when running a RemoteQuery, because we want them to
+	 * know that it's a CQ. So for CQs, we send the original ACTIVATE to the datanodes.
+	 */
+	char		*cq_activate_stmt;
+
+	RangeVar *cq_target; /* output relation of this CQ, if any */
+
+	Tuplestorestate *sourcestore;
+	TupleDesc sourcedesc;
+
+	bool 		cq_is_merge; /* is this query being run as a merge query? */
 #endif
 } Query;
 
@@ -1153,6 +1175,7 @@ typedef enum ObjectType
 	OBJECT_CONSTRAINT,
 	OBJECT_COLLATION,
 	OBJECT_CONVERSION,
+	OBJECT_CONTINUOUS_VIEW,
 	OBJECT_DATABASE,
 	OBJECT_DOMAIN,
 	OBJECT_EVENT_TRIGGER,
@@ -2788,5 +2811,34 @@ typedef struct CleanConnStmt
 	bool		is_force;	/* option force  */
 } CleanConnStmt;
 /* PGXC_END */
+
+typedef struct CreateContinuousViewStmt
+{
+	NodeTag			type;
+	IntoClause 	*into;
+	Node 			*query;
+
+} CreateContinuousViewStmt;
+
+typedef struct ActivateContinuousViewStmt
+{
+	NodeTag		type;
+	RangeVar   *name; /* name of query to activate */
+} ActivateContinuousViewStmt;
+
+typedef struct DeactivateContinuousViewStmt
+{
+	NodeTag		type;
+	RangeVar   *name; /* name of query to deactivate */
+} DeactivateContinuousViewStmt;
+
+typedef struct CreateEncodingStmt
+{
+	NodeTag		type;
+	RangeVar	*name;
+	List	   	*coldefs;
+	RangeVar 	*decodedby;
+	List			*args;
+} CreateEncodingStmt;
 
 #endif   /* PARSENODES_H */

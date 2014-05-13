@@ -44,6 +44,9 @@
 #include "utils/datum.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/rel.h"
+#include "utils/relcache.h"
+#include "utils/snapmgr.h"
 #include "utils/tuplesort.h"
 #include "utils/snapmgr.h"
 #include "utils/builtins.h"
@@ -269,7 +272,7 @@ parse_row_count(const char *message, size_t len, uint64 *rowcount)
 /*
  * Convert RowDescription message to a TupleDesc
  */
-static TupleDesc
+TupleDesc
 create_tuple_desc(char *msg_body, size_t len)
 {
 	TupleDesc 	result;
@@ -1083,7 +1086,10 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 		return true;
 	}
 
-	while (combiner->conn_count > 0)
+	if (combiner->current_conn >= combiner->conn_count)
+		combiner->current_conn = 0;
+
+	while (combiner->current_conn < combiner->conn_count)
 	{
 		int res;
 		PGXCNodeHandle *conn = combiner->connections[combiner->current_conn];
@@ -1107,6 +1113,13 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 			 */
 			if (have_tuple)
 				return true;
+			else if (IsContinuous(combiner))
+			{
+				conn->state = DN_CONNECTION_STATE_QUERY;
+				/* TODO: we should be smarter about just blindly trying to read from the connection here */
+				pgxc_node_receive(1, &conn, NULL);
+				conn->combiner = combiner;
+			}
 			else
 			{
 				if (pgxc_node_send_execute(conn, combiner->cursor, 1) != 0)
@@ -1138,17 +1151,33 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 		}
 		else if (res == RESPONSE_SUSPENDED)
 		{
-			/* Make next connection current */
-			if (++combiner->current_conn >= combiner->conn_count)
-				combiner->current_conn = 0;
+			RemoteQuery *rq = (RemoteQuery*) combiner->ss.ps.plan;
+			if (rq->remote_query->is_continuous)
+			{
+				combiner->current_conn++;
+			}
+			else
+			{
+				/* Make next connection current */
+				if (++combiner->current_conn >= combiner->conn_count)
+					combiner->current_conn = 0;
+			}
 		}
 		else if (res == RESPONSE_COMPLETE)
 		{
-			/* Remove current connection, move last in-place, adjust current_conn */
-			if (combiner->current_conn < --combiner->conn_count)
-				combiner->connections[combiner->current_conn] = combiner->connections[combiner->conn_count];
+			RemoteQuery *rq = (RemoteQuery*) combiner->ss.ps.plan;
+			if (rq->remote_query->is_continuous)
+			{
+				combiner->current_conn++;
+			}
 			else
-				combiner->current_conn = 0;
+			{
+				/* Remove current connection, move last in-place, adjust current_conn */
+				if (combiner->current_conn < --combiner->conn_count)
+					combiner->connections[combiner->current_conn] = combiner->connections[combiner->conn_count];
+				else
+					combiner->current_conn = 0;
+			}
 		}
 		else if (res == RESPONSE_DATAROW && have_tuple)
 		{
@@ -2118,12 +2147,12 @@ pgxcNodeCopyBegin(const char *query, List *nodelist, Snapshot snapshot, char nod
 	/* Get needed Datanode connections */
 	if (node_type == PGXC_NODE_DATANODE)
 	{
-		pgxc_handles = get_handles(nodelist, NULL, false);
+		pgxc_handles = get_handles(nodelist, NULL, false, false);
 		connections = pgxc_handles->datanode_handles;
 	}
 	else
 	{
-		pgxc_handles = get_handles(NULL, nodelist, true);
+		pgxc_handles = get_handles(NULL, nodelist, true, false);
 		connections = pgxc_handles->coord_handles;
 	}
 
@@ -2757,7 +2786,7 @@ get_exec_connections(RemoteQueryState *planstate,
 	}
 
 	/* Get other connections (non-primary) */
-	pgxc_handles = get_handles(nodelist, coordlist, is_query_coord_only);
+	pgxc_handles = get_handles(nodelist, coordlist, is_query_coord_only, false);
 	if (!pgxc_handles)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -2768,7 +2797,7 @@ get_exec_connections(RemoteQueryState *planstate,
 	{
 		/* Let's assume primary connection is always a Datanode connection for the moment */
 		PGXCNodeAllHandles *pgxc_conn_res;
-		pgxc_conn_res = get_handles(primarynode, NULL, false);
+		pgxc_conn_res = get_handles(primarynode, NULL, false, false);
 
 		/* primary connection is unique */
 		primaryconnection = pgxc_conn_res->datanode_handles[0];
@@ -2835,7 +2864,14 @@ pgxc_start_command_on_connection(PGXCNodeHandle *connection,
 
 	if (snapshot && pgxc_node_send_snapshot(connection, snapshot))
 		return false;
-	if (step->statement || step->cursor || remotestate->rqs_num_params)
+
+	/*
+	 * If this is a CQ, we're actually going to be sending the
+	 * ACTIVATE statement here, not the target query represented by step,
+	 * so it's always safe to send it through pgxc_node_send_query
+	 */
+	if (!step->remote_query->is_continuous &&
+			(step->statement || step->cursor || remotestate->rqs_num_params))
 	{
 		/* need to use Extended Query Protocol */
 		int	fetch = 0;
@@ -3150,7 +3186,10 @@ do_query(RemoteQueryState *node)
 			int res = handle_response(connections[i], node);
 			if (res == RESPONSE_EOF)
 			{
-				i++;
+				if (pgxc_node_receive(1, &connections[i], NULL))
+					ereport(ERROR,
+							(errcode(ERRCODE_INTERNAL_ERROR),
+							 errmsg("Failed to fetch from Datanode")));
 			}
 			else if (res == RESPONSE_COMPLETE)
 			{
@@ -3198,6 +3237,132 @@ do_query(RemoteQueryState *node)
 		memcpy(connections, node->cursor_connections, node->cursor_count * sizeof(PGXCNodeHandle *));
 		node->connections = connections;
 	}
+}
+
+/*
+ * DoRemoteMerge
+ *
+ * Sends a batch of partial result tuples down to the datanodes for final merging
+ */
+void
+DoRemoteMerge(RemoteMergeState mergeState)
+{
+	AttrNumber distCol = mergeState.locinfo->partAttrNum - 1;
+	TupleTableSlot *slot = mergeState.slot;
+	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, true);
+	const char *target = mergeState.targetRelation->relname;
+	int targetLen = strlen(target) + 1; /* we want to send the '\0' */
+	int msglens[handles->dn_conn_count];
+	int i;
+	List *tuplesByNode[handles->dn_conn_count];
+	TransactionId gxid = GetCurrentTransactionId();
+	List *nodeslist;
+
+	for (i=0; i<handles->dn_conn_count; i++)
+	{
+		PGXCNodeHandle *handle = handles->datanode_handles[i];
+
+		/* Total message length. Length of this field is included */
+		msglens[i] = 4;
+
+		/* we want to include the '\0' */
+		msglens[i] += strlen(target) + 1;
+
+		tuplesByNode[i] = NIL;
+
+		pgxc_node_send_gxid(handle, gxid);
+		pgxc_node_send_timestamp(handle, GetCurrentGTMStartTimestamp());
+		pgxc_node_send_snapshot(handle, GetActiveSnapshot());
+	}
+
+	/*
+	 * Serialize all of the tuples in the store to raw messages. We do this
+	 * all at once before flushing because message lengths are variable, so we
+	 * don't know their lengths (which we'll need for deserialization) until
+	 * after they're serialized.
+	 */
+	while (tuplestore_gettupleslot(mergeState.store, true, false, slot))
+	{
+		ListCell *nlc;
+
+		if (distCol >= 0)
+		{
+			Oid type = slot->tts_tupleDescriptor->attrs[distCol]->atttypid;
+			bool isnull;
+			Datum distValue = slot_getattr(slot, distCol + 1, &isnull);
+
+			ExecNodes *nodes = GetRelationNodes(mergeState.locinfo,
+							distValue, isnull, type, RELATION_ACCESS_INSERT);
+
+			nodeslist = nodes->nodeList;
+		}
+		else
+		{
+			/* replicated */
+			nodeslist = GetAllDataNodes();
+		}
+
+		/*
+		 * Put each tuple in a queue bound for one or more datanodes
+		 */
+		foreach(nlc, nodeslist)
+		{
+			int node = lfirst_int(nlc);
+			StringInfo raw = TupleToBytes(mergeState.bufprint, slot);
+
+			/* each tuple will have a 4-byte length prefix */
+			msglens[node] += raw->len + 4;
+			tuplesByNode[node] = lcons(raw, tuplesByNode[node]);
+		}
+	}
+
+	/*
+	 * Now that we have all of our raw messages with lengths, we can
+	 * flush each datanode's entire buffer (one message per conn).
+	 */
+	for (i=0; i<handles->dn_conn_count; i++)
+	{
+		int msglen = msglens[i];
+		PGXCNodeHandle *handle = handles->datanode_handles[i];
+		List *rawtups = tuplesByNode[i];
+		ListCell *lc;
+		StringInfoData result;
+
+		if (list_length(rawtups) == 0)
+			continue;
+
+		initStringInfo(&result);
+
+		/* message prefix */
+		appendStringInfoChar(&result, '+');
+
+		/* total message length */
+		msglen = htonl(msglen);
+		appendBinaryStringInfo(&result, (char *) &msglen, 4);
+
+		/* target output relation */
+		appendBinaryStringInfo(&result, target, targetLen);
+
+		foreach(lc, rawtups)
+		{
+			int rowlen;
+			StringInfo bytes = (StringInfo) lfirst(lc);
+
+			/* length of DataRow message (this uses memcpy so pointing to rowlen is safe here) */
+			rowlen = htonl(bytes->len);
+			appendBinaryStringInfo(&result, (char *) &rowlen, 4);
+
+			/* DataRow message */
+			appendBinaryStringInfo(&result, bytes->data, bytes->len);
+		}
+
+		memcpy(handle->outBuffer + handle->outEnd, result.data, result.len);
+		handle->outEnd += result.len;
+
+		pgxc_node_flush(handle);
+	}
+
+	tuplestore_clear(mergeState.store);
 }
 
 /*
@@ -3353,7 +3518,7 @@ RemoteQueryNext(ScanState *scan_node)
 					tuplestore_puttupleslot(tuplestorestate, scanslot);
 			}
 			else
-				node->eof_underlying = true;
+				node->eof_underlying = !rq->remote_query->is_continuous;
 		}
 
 		if (eof_tuplestore && node->eof_underlying)
@@ -4023,7 +4188,7 @@ ExecCloseRemoteStatement(const char *stmt_name, List *nodelist)
 		return;
 
 	/* get needed Datanode connections */
-	all_handles = get_handles(nodelist, NIL, false);
+	all_handles = get_handles(nodelist, NIL, false, false);
 	conn_count = all_handles->dn_conn_count;
 	connections = all_handles->datanode_handles;
 
@@ -4280,7 +4445,7 @@ ExecProcNodeDMLInXC(EState *estate,
 		else
 		{
 			/* Null tuple received, so break the loop */
-			ExecClearTuple(temp_slot);
+//			ExecClearTuple(temp_slot);
 			break;
 		}
 	} while (dml_returning_on_replicated);
@@ -4755,7 +4920,7 @@ FinishRemotePreparedTransaction(char *prepareGID, bool commit)
 	/*
 	 * Now get handles for all the involved Datanodes and the Coordinators
 	 */
-	pgxc_handles = get_handles(nodelist, coordlist, false);
+	pgxc_handles = get_handles(nodelist, coordlist, false, false);
 
 	/*
 	 * Send GXID (as received above) to the remote nodes.

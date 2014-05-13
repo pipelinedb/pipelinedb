@@ -25,8 +25,7 @@
 
 #define LABEL_FORMAT		"        %-32s"
 #define NA_FORMAT			"%18s"
-#define OPS_FORMAT			"%9.3f ops/sec  %6.0f usecs/op"
-#define USECS_SEC			1000000
+#define OPS_FORMAT			"%9.3f ops/sec"
 
 /* These are macros to avoid timing the function call overhead. */
 #ifndef WIN32
@@ -60,7 +59,7 @@ do { \
 
 static const char *progname;
 
-static int	secs_per_test = 5;
+static int	secs_per_test = 2;
 static int	needs_unlink = 0;
 static char full_buf[XLOG_SEG_SIZE],
 		   *buf,
@@ -101,14 +100,14 @@ main(int argc, char *argv[])
 	handle_args(argc, argv);
 
 	/* Prevent leaving behind the test file */
-	pqsignal(SIGINT, signal_cleanup);
-	pqsignal(SIGTERM, signal_cleanup);
+	signal(SIGINT, signal_cleanup);
+	signal(SIGTERM, signal_cleanup);
 #ifndef WIN32
-	pqsignal(SIGALRM, process_alarm);
+	signal(SIGALRM, process_alarm);
 #endif
 #ifdef SIGHUP
 	/* Not defined on win32 */
-	pqsignal(SIGHUP, signal_cleanup);
+	signal(SIGHUP, signal_cleanup);
 #endif
 
 	prepare_buf();
@@ -140,7 +139,6 @@ handle_args(int argc, char *argv[])
 		{"secs-per-test", required_argument, NULL, 's'},
 		{NULL, 0, NULL, 0}
 	};
-
 	int			option;			/* Command line option */
 	int			optindex = 0;	/* used by getopt_long */
 
@@ -570,9 +568,8 @@ print_elapse(struct timeval start_t, struct timeval stop_t, int ops)
 	double		total_time = (stop_t.tv_sec - start_t.tv_sec) +
 	(stop_t.tv_usec - start_t.tv_usec) * 0.000001;
 	double		per_second = ops / total_time;
-	double		avg_op_time_us = (total_time / ops) * USECS_SEC;
 
-	printf(OPS_FORMAT "\n", per_second, avg_op_time_us);
+	printf(OPS_FORMAT "\n", per_second);
 }
 
 #ifndef WIN32

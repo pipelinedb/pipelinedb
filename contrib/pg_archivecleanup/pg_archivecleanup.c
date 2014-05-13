@@ -249,11 +249,11 @@ usage(void)
 	printf("Usage:\n");
 	printf("  %s [OPTION]... ARCHIVELOCATION OLDESTKEPTWALFILE\n", progname);
 	printf("\nOptions:\n");
-	printf("  -d             generate debug output (verbose mode)\n");
-	printf("  -n             dry run, show the names of the files that would be removed\n");
-	printf("  -V, --version  output version information, then exit\n");
-	printf("  -x EXT         clean up files if they have this extension\n");
-	printf("  -?, --help     show this help, then exit\n");
+	printf("  -d         generate debug output (verbose mode)\n");
+	printf("  -n         dry run, show the names of the files that would be removed\n");
+	printf("  -x EXT     clean up files if they have this extension\n");
+	printf("  --help     show this help, then exit\n");
+	printf("  --version  output version information, then exit\n");
 	printf("\n"
 		   "For use as archive_cleanup_command in recovery.conf when standby_mode = on:\n"
 		   "  archive_cleanup_command = 'pg_archivecleanup [OPTION]... ARCHIVELOCATION %%r'\n"
@@ -299,8 +299,8 @@ main(int argc, char **argv)
 				dryrun = true;
 				break;
 			case 'x':
-				additional_ext = strdup(optarg);		/* Extension to remove
-														 * from xlogfile names */
+				additional_ext = optarg;		/* Extension to remove from
+												 * xlogfile names */
 				break;
 			default:
 				fprintf(stderr, "Try \"%s --help\" for more information.\n", progname);

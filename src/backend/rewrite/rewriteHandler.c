@@ -26,6 +26,7 @@
 #include "rewrite/rewriteDefine.h"
 #include "rewrite/rewriteHandler.h"
 #include "rewrite/rewriteManip.h"
+#include "rewrite/rewriteSupport.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
@@ -3440,6 +3441,7 @@ List *
 QueryRewriteCTAS(Query *parsetree)
 {
 	RangeVar *relation;
+	Relation newrel;
 	CreateStmt *create_stmt;
 	List *tableElts = NIL;
 	StringInfoData cquery;
@@ -3561,6 +3563,26 @@ QueryRewriteCTAS(Query *parsetree)
 	ProcessUtility(cparsetree->utilityStmt, cquery.data, PROCESS_UTILITY_TOPLEVEL, NULL, NULL,  /* Tentative fix.  Nedd a review.  K.Suzuki */
 					false,
 					NULL);
+
+	/*
+	 * If it's a continuous view, we need to add a rewrite rule that
+	 * represents the continuous view's underlying query. We don't actually
+	 * rewrite queries against continuous view tables, but it's convenient
+	 * to reuse the existing view catalog and they're logically equivalent
+	 * to regular views anyways, so this makes sense.
+	 */
+	if (stmt->relkind == OBJECT_CONTINUOUS_VIEW)
+	{
+		newrel = heap_openrv(relation, NoLock);
+
+		InsertRule(ViewSelectRuleName, 1, newrel->rd_id, -1,
+				true, NULL, list_make1(stmt->query), false);
+
+		heap_close(newrel, NoLock);
+
+		/* We don't need to insert anything when creating CVs, so just bail now */
+		return NIL;
+	}
 
 	/*
 	 * Now fold the CTAS statement into an INSERT INTO statement. The

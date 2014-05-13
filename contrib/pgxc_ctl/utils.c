@@ -28,15 +28,12 @@
 #include "config.h"
 #include "variables.h"
 #include "varnames.h"
-#include "sys/time.h"
 
 static int Malloc_ed = 0;
 static int Strdup_ed = 0;
 static int Freed = 0;
-static void myUsleep(long microsec);
 
-void
-*Malloc(size_t size)
+void *Malloc(size_t size)
 {
 	void *rv = malloc(size);
 
@@ -49,8 +46,7 @@ void
 	return(rv);
 }
 
-char **
-addToList(char **List, char *val)
+char **addToList(char **List, char *val)
 {
 	char **rv;
 	int ii;
@@ -61,8 +57,7 @@ addToList(char **List, char *val)
 	return rv;
 }
 
-void *
-Malloc0(size_t size)
+void *Malloc0(size_t size)
 {
 	void *rv = malloc(size);
 
@@ -76,8 +71,7 @@ Malloc0(size_t size)
 	return(rv);
 }
 
-void *
-Realloc(void *ptr, size_t size)
+void *Realloc(void *ptr, size_t size)
 {
 	void *rv = realloc(ptr, size);
 
@@ -89,8 +83,7 @@ Realloc(void *ptr, size_t size)
 	return(rv);
 }
 
-void
-Free(void *ptr)
+void Free(void *ptr)
 {
 	Freed++;
 	if (ptr)
@@ -100,8 +93,7 @@ Free(void *ptr)
 /*
  * If flag is TRUE and chdir fails, then exit(1)
  */
-int
-Chdir(char *path, int flag)
+int Chdir(char *path, int flag)
 {
 	if (chdir(path))
 	{
@@ -117,8 +109,7 @@ Chdir(char *path, int flag)
 	return 0;
 }
 
-FILE *
-Fopen(char *path, char *mode)
+FILE *Fopen(char *path, char *mode)
 {
 	FILE *rv;
 
@@ -128,8 +119,7 @@ Fopen(char *path, char *mode)
 }
 
 
-char *
-Strdup(const char *s)
+char *Strdup(const char *s)
 {
 	char *rv;
 
@@ -143,8 +133,7 @@ Strdup(const char *s)
 	return(rv);
 }
 
-void
-appendFiles(FILE *f, char **fileList)
+void appendFiles(FILE *f, char **fileList)
 {
 	FILE *src;
 	int ii;
@@ -167,8 +156,7 @@ appendFiles(FILE *f, char **fileList)
 		}
 }
 
-FILE *
-prepareLocalStdin(char *buf, int len, char **fileList)
+FILE *prepareLocalStdin(char *buf, int len, char **fileList)
 {
 	FILE *f;
 	if ((f = fopen(createLocalFileName(STDIN, buf, len), "w")) == NULL)
@@ -180,8 +168,7 @@ prepareLocalStdin(char *buf, int len, char **fileList)
 	return(f);
 }
 
-char *
-timeStampString(char *buf, int len)
+char *timeStampString(char *buf, int len)
 {
 	time_t nowTime;
 	struct tm nowTm;
@@ -195,8 +182,7 @@ timeStampString(char *buf, int len)
 	return(buf);
 }
 
-char **
-makeActualNodeList(char **nodeList)
+char **makeActualNodeList(char **nodeList)
 {
 	char **actualNodeList;
 	int ii, jj;
@@ -218,8 +204,7 @@ makeActualNodeList(char **nodeList)
 	return actualNodeList;
 }
 
-int
-gtmProxyIdx(char *gtmProxyName)
+int gtmProxyIdx(char *gtmProxyName)
 {
 	int ii;
 
@@ -283,8 +268,7 @@ int getEffectiveGtmProxyIdxFromServerName(char *serverName)
  * may need another tweak for other operation systems
  * such as Solaris, FreeBSD, MacOS.
  */
-pid_t
-get_prog_pid(char *host, char *progname, char *dir)
+pid_t get_prog_pid(char *host, char *progname, char *dir)
 {
 	char cmd[MAXLINE+1];
 	char pid_s[MAXLINE+1];
@@ -319,15 +303,11 @@ get_prog_pid(char *host, char *progname, char *dir)
 	return(atoi(token));
 }
 
-int
-pingNode(char *host, char *port)
+int pingNode(char *host, char *port)
 {
 	PGPing status;
 	char conninfo[MAXLINE+1];
 	char editBuf[MAXPATH+1];
-#define RETRY 3
-#define sleepMicro 100*1000	/* 100 millisec */
-	int retry;
 
 	conninfo[0] = 0;
 	if (host)
@@ -342,33 +322,23 @@ pingNode(char *host, char *port)
 	}
 	if (conninfo[0])
 	{
-		for (retry = RETRY; retry; retry--){
-			status = PQping(conninfo);
-			if (status == PQPING_OK)
-				return 0;
-			else
-			{
-				myUsleep(sleepMicro);
-				continue;
-			}
-		}
-		return 1;
+		status = PQping(conninfo);
+		if (status == PQPING_OK)
+			return 0;
+		else
+			return 1;
 	}
 	else
 		return -1;
-#undef RETRY
-#undef sleepMicro
 }
 
-void
-trimNl(char *s)
+void trimNl(char *s)
 {
 	for (;*s && *s != '\n'; s++);
 	*s = 0;
 }
 
-char *
-getChPidList(char *host, pid_t ppid)
+char *getChPidList(char *host, pid_t ppid)
 {
 	FILE *wkf;
 	char cmd[MAXLINE+1];
@@ -390,8 +360,7 @@ getChPidList(char *host, pid_t ppid)
 	return rv;
 }
 	
-char *
-getIpAddress(char *hostName)
+char *getIpAddress(char *hostName)
 {
 	char command[MAXLINE+1];
 	char *ipAddr;
@@ -409,16 +378,4 @@ getIpAddress(char *hostName)
 	trimNl(ipAddr);
 	return ipAddr;
 }
-
-static void
-myUsleep(long microsec)
-{
-	struct timeval delay;
-
-	if (microsec <= 0)
-		return;
-
-	delay.tv_sec = microsec / 1000000L;
-	delay.tv_usec = microsec % 1000000L;
-	(void) select(0, NULL, NULL, NULL, &delay);
-}
+	

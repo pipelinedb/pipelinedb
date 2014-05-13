@@ -1,9 +1,10 @@
 %{
-/* contrib/cube/cubeparse.y */
-
 /* NdBox = [(lowerleft),(upperright)] */
 /* [(xLL(1)...xLL(N)),(xUR(1)...xUR(n))] */
 
+/* contrib/cube/cubeparse.y */
+
+#define YYPARSE_PARAM result  /* need this to pass a pointer (void *) to yyparse */
 #define YYSTYPE char *
 #define YYDEBUG 1
 
@@ -27,8 +28,8 @@ extern int cube_yylex(void);
 static char *scanbuf;
 static int	scanbuflen;
 
-extern int	cube_yyparse(NDBOX **result);
-extern void cube_yyerror(NDBOX **result, const char *message);
+void cube_yyerror(const char *message);
+int cube_yyparse(void *result);
 
 static int delim_count(char *s, char delim);
 static NDBOX * write_box(unsigned int dim, char *str1, char *str2);
@@ -37,7 +38,6 @@ static NDBOX * write_point_as_box(char *s, int dim);
 %}
 
 /* BISON Declarations */
-%parse-param {NDBOX **result}
 %expect 0
 %name-prefix="cube_yy"
 
@@ -70,7 +70,7 @@ box: O_BRACKET paren_list COMMA paren_list C_BRACKET
 			YYABORT;
 		}
 
-		*result = write_box( dim, $2, $4 );
+		*((void **)result) = write_box( dim, $2, $4 );
 
 	}
 
@@ -97,7 +97,7 @@ box: O_BRACKET paren_list COMMA paren_list C_BRACKET
 			YYABORT;
 		}
 
-		*result = write_box( dim, $1, $3 );
+		*((void **)result) = write_box( dim, $1, $3 );
 	}
 
 	| paren_list
@@ -114,7 +114,7 @@ box: O_BRACKET paren_list COMMA paren_list C_BRACKET
 			YYABORT;
 		}
 
-		*result = write_point_as_box($1, dim);
+		*((void **)result) = write_point_as_box($1, dim);
 	}
 
 	| list
@@ -130,7 +130,7 @@ box: O_BRACKET paren_list COMMA paren_list C_BRACKET
 							   CUBE_MAX_DIM)));
 			YYABORT;
 		}
-		*result = write_point_as_box($1, dim);
+		*((void **)result) = write_point_as_box($1, dim);
 	}
 	;
 

@@ -853,6 +853,10 @@ RemoveRelations(DropStmt *drop)
 			relkind = RELKIND_FOREIGN_TABLE;
 			break;
 
+		case OBJECT_CONTINUOUS_VIEW:
+			relkind = RELKIND_CONTINUOUS_VIEW;
+			break;
+
 		default:
 			elog(ERROR, "unrecognized drop object type: %d",
 				 (int) drop->removeType);
@@ -11433,6 +11437,10 @@ DropTableThrowErrorExternal(RangeVar *relation, ObjectType removeType, bool miss
 
 		case OBJECT_FOREIGN_TABLE:
 			relkind = RELKIND_FOREIGN_TABLE;
+			break;
+
+		case OBJECT_CONTINUOUS_VIEW:
+			relkind = RELKIND_CONTINUOUS_VIEW;
 			break;
 
 		default:

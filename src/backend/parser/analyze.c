@@ -28,6 +28,7 @@
 #ifdef PGXC
 #include "catalog/pg_inherits.h"
 #include "catalog/pg_inherits_fn.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "catalog/indexing.h"
 #include "utils/fmgroids.h"
 #include "utils/tqual.h"
@@ -96,6 +97,7 @@ static Query *transformCreateTableAsStmt(ParseState *pstate,
 						   CreateTableAsStmt *stmt);
 #ifdef PGXC
 static Query *transformExecDirectStmt(ParseState *pstate, ExecDirectStmt *stmt);
+static Query *transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt);
 static bool IsExecDirectUtilityStmt(Node *node);
 static bool is_relation_child(RangeTblEntry *child_rte, List *rtable);
 static bool is_rel_child_of_rel(RangeTblEntry *child_rte, RangeTblEntry *parent_rte);
@@ -298,7 +300,10 @@ transformStmt(ParseState *pstate, Node *parseTree)
 											 (ExecDirectStmt *) parseTree);
 			break;
 #endif
-
+		case T_ActivateContinuousViewStmt:
+			result = transformActivateContinuousViewStmt(pstate,
+											(ActivateContinuousViewStmt *) parseTree);
+			break;
 		case T_CreateTableAsStmt:
 			result = transformCreateTableAsStmt(pstate,
 											(CreateTableAsStmt *) parseTree);
@@ -319,6 +324,7 @@ transformStmt(ParseState *pstate, Node *parseTree)
 	/* Mark as original query until we learn differently */
 	result->querySource = QSRC_ORIGINAL;
 	result->canSetTag = true;
+	result->cq_is_merge = false;
 
 	return result;
 }
@@ -2538,6 +2544,29 @@ transformExecDirectStmt(ParseState *pstate, ExecDirectStmt *stmt)
 		result->utilityStmt = (Node *) step;
 
 	return result;
+}
+
+/*
+ * Retrieve the registered continuous query, parse and analyze it,
+ * and mark it as as continuous so that it runs in the continuous executor
+ */
+static Query *
+transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt)
+{
+	/* TODO: if it's already running, throw an error */
+	const char *query_string = GetQueryString(stmt->name);
+
+	List *parsetree_list = pg_parse_query(query_string);
+
+	/* TODO: enforce single queries here */
+	Node *parsetree = (Node *) lfirst(parsetree_list->head);
+
+	Query *q = parse_analyze(parsetree, query_string, NULL, 0);
+	q->is_continuous = true;
+	q->cq_activate_stmt = pstrdup(pstate->p_sourcetext);
+	q->cq_target = stmt->name;
+
+	return q;
 }
 
 /*

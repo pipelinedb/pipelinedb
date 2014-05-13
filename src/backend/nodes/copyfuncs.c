@@ -88,6 +88,7 @@ _copyPlannedStmt(const PlannedStmt *from)
 	COPY_SCALAR_FIELD(hasModifyingCTE);
 	COPY_SCALAR_FIELD(canSetTag);
 	COPY_SCALAR_FIELD(transientPlan);
+	COPY_SCALAR_FIELD(cq_batch_size);
 	COPY_NODE_FIELD(planTree);
 	COPY_NODE_FIELD(rtable);
 	COPY_NODE_FIELD(resultRelations);
@@ -603,6 +604,18 @@ _copyForeignScan(const ForeignScan *from)
 	COPY_NODE_FIELD(fdw_exprs);
 	COPY_NODE_FIELD(fdw_private);
 	COPY_SCALAR_FIELD(fsSystemCol);
+
+	return newnode;
+}
+
+static TuplestoreScan *
+_copyTuplestoreScan(const TuplestoreScan *from)
+{
+	TuplestoreScan *newnode = makeNode(TuplestoreScan);
+
+	CopyScanFields((const Scan *) from, (Scan *) newnode);
+	COPY_SCALAR_FIELD(store);
+	COPY_SCALAR_FIELD(desc);
 
 	return newnode;
 }
@@ -2583,6 +2596,9 @@ _copyQuery(const Query *from)
 	COPY_STRING_FIELD(sql_statement);
 	COPY_SCALAR_FIELD(has_to_save_cmd_id);
 #endif
+	COPY_SCALAR_FIELD(is_continuous);
+	COPY_SCALAR_FIELD(cq_activate_stmt);
+	COPY_SCALAR_FIELD(cq_is_merge);
 
 	return newnode;
 }
@@ -4157,6 +4173,9 @@ copyObject(const void *from)
 			break;
 		case T_ForeignScan:
 			retval = _copyForeignScan(from);
+			break;
+		case T_TuplestoreScan:
+			retval = _copyTuplestoreScan(from);
 			break;
 		case T_Join:
 			retval = _copyJoin(from);

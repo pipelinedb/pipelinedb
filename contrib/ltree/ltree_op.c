@@ -7,7 +7,6 @@
 
 #include <ctype.h>
 
-#include "access/htup_details.h"
 #include "catalog/pg_statistic.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
@@ -201,7 +200,7 @@ ltree_risparent(PG_FUNCTION_ARGS)
 
 
 static ltree *
-inner_subltree(ltree *t, int32 startpos, int32 endpos)
+inner_subltree(ltree *t, int4 startpos, int4 endpos)
 {
 	char	   *start = NULL,
 			   *end = NULL;
@@ -253,9 +252,9 @@ Datum
 subpath(PG_FUNCTION_ARGS)
 {
 	ltree	   *t = PG_GETARG_LTREE(0);
-	int32		start = PG_GETARG_INT32(1);
-	int32		len = (fcinfo->nargs == 3) ? PG_GETARG_INT32(2) : 0;
-	int32		end;
+	int4		start = PG_GETARG_INT32(1);
+	int4		len = (fcinfo->nargs == 3) ? PG_GETARG_INT32(2) : 0;
+	int4		end;
 	ltree	   *res;
 
 	end = start + len;

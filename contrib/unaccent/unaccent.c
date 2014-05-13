@@ -3,7 +3,7 @@
  * unaccent.c
  *	  Text search unaccent dictionary
  *
- * Copyright (c) 2009-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2009-2012, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  contrib/unaccent/unaccent.c
@@ -23,29 +23,30 @@
 PG_MODULE_MAGIC;
 
 /*
- * Unaccent dictionary uses a trie to find a character to replace. Each node of
- * the trie is an array of 256 TrieChar structs (n-th element of array
+ * Unaccent dictionary uses uncompressed suffix tree to find a
+ * character to replace. Each node of tree is an array of
+ * SuffixChar struct with length = 256 (n-th element of array
  * corresponds to byte)
  */
-typedef struct TrieChar
+typedef struct SuffixChar
 {
-	struct TrieChar *nextChar;
+	struct SuffixChar *nextChar;
 	char	   *replaceTo;
 	int			replacelen;
-} TrieChar;
+} SuffixChar;
 
 /*
- * placeChar - put str into trie's structure, byte by byte.
+ * placeChar - put str into tree's structure, byte by byte.
  */
-static TrieChar *
-placeChar(TrieChar *node, unsigned char *str, int lenstr, char *replaceTo, int replacelen)
+static SuffixChar *
+placeChar(SuffixChar *node, unsigned char *str, int lenstr, char *replaceTo, int replacelen)
 {
-	TrieChar   *curnode;
+	SuffixChar *curnode;
 
 	if (!node)
 	{
-		node = palloc(sizeof(TrieChar) * 256);
-		memset(node, 0, sizeof(TrieChar) * 256);
+		node = palloc(sizeof(SuffixChar) * 256);
+		memset(node, 0, sizeof(SuffixChar) * 256);
 	}
 
 	curnode = node + *str;
@@ -70,14 +71,13 @@ placeChar(TrieChar *node, unsigned char *str, int lenstr, char *replaceTo, int r
 }
 
 /*
- * initTrie  - create trie from file.
- *
- * Function converts UTF8-encoded file into current encoding.
+ * initSuffixTree  - create suffix tree from file. Function converts
+ * UTF8-encoded file into current encoding.
  */
-static TrieChar *
-initTrie(char *filename)
+static SuffixChar *
+initSuffixTree(char *filename)
 {
-	TrieChar   *volatile rootTrie = NULL;
+	SuffixChar *volatile rootSuffixTree = NULL;
 	MemoryContext ccxt = CurrentMemoryContext;
 	tsearch_readline_state trst;
 	volatile bool skip;
@@ -161,9 +161,9 @@ initTrie(char *filename)
 				}
 
 				if (state >= 3)
-					rootTrie = placeChar(rootTrie,
-										 (unsigned char *) src, srclen,
-										 trg, trglen);
+					rootSuffixTree = placeChar(rootSuffixTree,
+											   (unsigned char *) src, srclen,
+											   trg, trglen);
 
 				pfree(line);
 			}
@@ -192,14 +192,14 @@ initTrie(char *filename)
 
 	tsearch_readline_end(&trst);
 
-	return rootTrie;
+	return rootSuffixTree;
 }
 
 /*
- * findReplaceTo - find multibyte character in trie
+ * findReplaceTo - find multibyte character in tree
  */
-static TrieChar *
-findReplaceTo(TrieChar *node, unsigned char *src, int srclen)
+static SuffixChar *
+findReplaceTo(SuffixChar *node, unsigned char *src, int srclen)
 {
 	while (node)
 	{
@@ -221,7 +221,7 @@ Datum
 unaccent_init(PG_FUNCTION_ARGS)
 {
 	List	   *dictoptions = (List *) PG_GETARG_POINTER(0);
-	TrieChar   *rootTrie = NULL;
+	SuffixChar *rootSuffixTree = NULL;
 	bool		fileloaded = false;
 	ListCell   *l;
 
@@ -235,7 +235,7 @@ unaccent_init(PG_FUNCTION_ARGS)
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("multiple Rules parameters")));
-			rootTrie = initTrie(defGetString(defel));
+			rootSuffixTree = initSuffixTree(defGetString(defel));
 			fileloaded = true;
 		}
 		else
@@ -254,7 +254,7 @@ unaccent_init(PG_FUNCTION_ARGS)
 				 errmsg("missing Rules parameter")));
 	}
 
-	PG_RETURN_POINTER(rootTrie);
+	PG_RETURN_POINTER(rootSuffixTree);
 }
 
 PG_FUNCTION_INFO_V1(unaccent_lexize);
@@ -262,21 +262,21 @@ Datum		unaccent_lexize(PG_FUNCTION_ARGS);
 Datum
 unaccent_lexize(PG_FUNCTION_ARGS)
 {
-	TrieChar   *rootTrie = (TrieChar *) PG_GETARG_POINTER(0);
+	SuffixChar *rootSuffixTree = (SuffixChar *) PG_GETARG_POINTER(0);
 	char	   *srcchar = (char *) PG_GETARG_POINTER(1);
 	int32		len = PG_GETARG_INT32(2);
 	char	   *srcstart,
 			   *trgchar = NULL;
 	int			charlen;
 	TSLexeme   *res = NULL;
-	TrieChar   *node;
+	SuffixChar *node;
 
 	srcstart = srcchar;
 	while (srcchar - srcstart < len)
 	{
 		charlen = pg_mblen(srcchar);
 
-		node = findReplaceTo(rootTrie, (unsigned char *) srcchar, charlen);
+		node = findReplaceTo(rootSuffixTree, (unsigned char *) srcchar, charlen);
 		if (node && node->replaceTo)
 		{
 			if (!res)

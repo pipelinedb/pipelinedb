@@ -33,20 +33,6 @@
 #include "coord_cmd.h"
 #include "gtm_util.h"
 
-/* Tune-up base-backup and ALTER NODE usage for slave and failover */
-#define USE_PG_BASEBACKUP
-#define USE_ALTER_NODE
-
-/* Static functions */
-static cmd_t *prepare_initCoordinatorMaster(char *nodeName);
-static cmd_t *prepare_initCoordinatorSlave(char *nodeName);
-static cmd_t *prepare_configureNode(char *nodeName);
-static cmd_t *prepare_killCoordinatorMaster(char *nodeName);
-static cmd_t *prepare_killCoordinatorSlave(char *nodeName);
-static cmd_t *prepare_startCoordinatorMaster(char *nodeName);
-static cmd_t *prepare_startCoordinatorSlave(char *nodeName);
-static cmd_t *prepare_stopCoordinatorMaster(char *nodeName, char *immediate);
-static cmd_t *prepare_stopCoordinatorSlave(char *nodeName, char *immediate);
 
 static int failover_oneCoordinator(int coordIdx);
 
@@ -62,15 +48,13 @@ static char date[MAXTOKEN+1];
 /*
  * Initialize coordinator masters -----------------------------------------------------------
  */
-int
-init_coordinator_master_all(void)
+int init_coordinator_master_all(void)
 {
 	elog(NOTICE, "Initialize all the coordinator masters.\n");
 	return(init_coordinator_master(aval(VAR_coordNames)));
 }
 
-static cmd_t *
-prepare_initCoordinatorMaster(char *nodeName)
+cmd_t *prepare_initCoordinatorMaster(char *nodeName)
 {
 	cmd_t *cmd, *cmdInitdb, *cmdPgConf, *cmdWalArchDir, *cmdWalArch, *cmdPgHba;
 	int jj, kk, gtmPxyIdx;
@@ -209,8 +193,7 @@ prepare_initCoordinatorMaster(char *nodeName)
 	return(cmd);
 }
 
-int
-init_coordinator_master(char **nodeList)
+int init_coordinator_master(char **nodeList)
 {
 	char **actualNodeList;
 	int ii;
@@ -239,35 +222,15 @@ init_coordinator_master(char **nodeList)
 /*
  * Initialize coordinator slaves ---------------------------------------------------------------
  */
-int
-init_coordinator_slave_all(void)
+int init_coordinator_slave_all(void)
 {
 	elog(NOTICE, "Initialize all the coordinator slaves.\n");
 	return(init_coordinator_slave(aval(VAR_coordNames)));
 }
 
-static cmd_t *
-prepare_initCoordinatorSlave(char *nodeName)
+cmd_t *prepare_initCoordinatorSlave(char *nodeName)
 {
-	cmd_t *cmd,
-		  *cmdBuildDir,
-		  *cmdStartMaster,
-#ifdef USE_PG_BASEBACKUP
-		  *cmdBaseBkup,
-#else
-		  /*
-		   * As of PostgreSQL 9.3 or later, pg_basebackup does now work with coordinator,
-		   * because each coordinator backend needs dbname to read pgxc_node info into
-		   * cache and pg_basebackup does not specify the database name.
-		   * The following uses more primitive means to use pg_start_backup() and pg_stop_backup().
-		   */
-		  *cmdStartBkup,
-		  *cmdBuildAndSendTar,
-		  *cmdUntar,
-		  *cmdStopBkup,
-#endif
-		  *cmdRecoveryConf,
-		  *cmdPgConf;
+	cmd_t *cmd, *cmdBuildDir, *cmdStartMaster, *cmdBaseBkup, *cmdRecoveryConf, *cmdPgConf;
 	int idx;
 	FILE *f;
 	char localStdin[MAXPATH+1];
@@ -299,73 +262,17 @@ prepare_initCoordinatorSlave(char *nodeName)
 		/* Master is not running. Must start it first */
 		appendCmdEl(cmdBuildDir, (cmdStartMaster = initCmd(aval(VAR_coordMasterServers)[idx])));
 		snprintf(newCommand(cmdStartMaster), MAXLINE,
-				 "pg_ctl start -Z coordinator -D %s -o -i -w",
+				 "pg_ctl start -Z coordinator -D %s -o -i",
 				 aval(VAR_coordMasterDirs)[idx]);
 	}
 	/*
 	 * Obtain base backup of the master
 	 */
-#ifdef USE_PG_BASEBACKUP
 	appendCmdEl(cmdBuildDir, (cmdBaseBkup = initCmd(aval(VAR_coordSlaveServers)[idx])));
 	snprintf(newCommand(cmdBaseBkup), MAXLINE,
 			 "pg_basebackup -p %s -h %s -D %s -x",
 			 aval(VAR_coordPorts)[idx], aval(VAR_coordMasterServers)[idx], aval(VAR_coordSlaveDirs)[idx]);
-#else
-	/*
-	 * As of PostgreSQL-9.3 or later, pg_basebackup does not run with coordinators, beacuse each coordinator
-	 * needs database name to read pgxc_node info into the cache and pg_basebackup does not specify this.
-	 * Current workaround is to use more primitive pg_start_backup() and pg_stop_backup().
-	 */
-	/* Start backup */
-	appendCmdEl(cmdBuildDir, (cmdStartBkup = initCmd(aval(VAR_coordMasterServers)[idx])));
-	/*
-	 * Here, we specify "quick and spike" CHECKPOINT because it is coordinator and we do not expect
-	 * much updating transactions against coordinators.
-	 */
-	snprintf(newCommand(cmdStartBkup), MAXLINE,
-			"psql -h localhost -p %s postgres",
-			aval(VAR_coordPorts)[idx]);
-	if ((f = prepareLocalStdin((cmdStartBkup->localStdin = Malloc(MAXPATH+1)), MAXPATH, NULL)) == NULL)
-	{
-		cleanCmd(cmd);
-		return(NULL);
-	}
-	fprintf(f,
-			"select pg_start_backup('%s', true);\n\\q\n",
-			nodeName);
-	fclose(f);
-	/* Build tar and send it */
-	appendCmdEl(cmdBuildDir, (cmdBuildAndSendTar = initCmd(aval(VAR_coordMasterServers)[idx])));
-	snprintf(newCommand(cmdBuildAndSendTar), MAXLINE,
-			"rm -f %s/%s.tgz;"		/* We remove this just in case the file does not have write privilege */
-			"cd %s;"
-			"tar czf %s/%s.tgz . ;"
-			"scp %s/%s.tgz %s@%s:%s;"
-			"rm -f %s/%s.tgz",
-			sval(VAR_tmpDir), nodeName,
-			aval(VAR_coordMasterDirs)[idx],
-			sval(VAR_tmpDir), nodeName,
-			sval(VAR_tmpDir), nodeName, sval(VAR_pgxcUser), aval(VAR_coordSlaveServers)[idx], sval(VAR_tmpDir),
-			sval(VAR_tmpDir), nodeName);
-	/* Stop backup */
-	appendCmdEl(cmdBuildDir, (cmdStopBkup = initCmd(aval(VAR_coordMasterServers)[idx])));
-	snprintf(newCommand(cmdStopBkup), MAXLINE,
-			"psql -h localhost -p %s postgres -c 'select pg_stop_backup()'",
-			aval(VAR_coordPorts)[idx]);
-	/* Untar */
-	appendCmdEl(cmdBuildDir, (cmdUntar = initCmd(aval(VAR_coordSlaveServers)[idx])));
-	snprintf(newCommand(cmdUntar), MAXLINE,
-			"rm -rf %s;"
-			"mkdir -p %s;"
-			"cd %s;"
-			"tar xzf %s/%s.tgz;"
-			"rm -rf %s/%s.tgz",
-			aval(VAR_coordSlaveDirs)[idx],
-			aval(VAR_coordSlaveDirs)[idx],
-			aval(VAR_coordSlaveDirs)[idx],
-			sval(VAR_tmpDir), nodeName,
-			sval(VAR_tmpDir), nodeName);
-#endif
+
 	/* Configure recovery.conf file at the slave */
 	appendCmdEl(cmdBuildDir, (cmdRecoveryConf = initCmd(aval(VAR_coordSlaveServers)[idx])));
 	if ((f = prepareLocalStdin(localStdin, MAXPATH, NULL)) == NULL)
@@ -402,7 +309,10 @@ prepare_initCoordinatorSlave(char *nodeName)
 			"# Added to initialize the slave, %s\n"
 			"hot_standby = on\n"
 			"port = %s\n"
+			"wal_level = minimal\n"
+			"archive_mode = off\n"
 			"archive_command = ''\n"
+			"max_wal_senders = 0\n"
 			"# End of Addition\n",
 			timeStampString(timestamp, MAXTOKEN), aval(VAR_coordPorts)[idx]);
 	fclose(f);
@@ -413,8 +323,7 @@ prepare_initCoordinatorSlave(char *nodeName)
 }
 
 		
-int
-init_coordinator_slave(char **nodeList)
+int init_coordinator_slave(char **nodeList)
 {
 	char **actualNodeList;
 	int ii;
@@ -453,14 +362,12 @@ init_coordinator_slave(char **nodeList)
  * Please note that CREATE/ALTER/DROP NODE are handled only locally.  You have to
  * visit all the coordinators.
  */
-int
-configure_nodes_all(void)
+int configure_nodes_all(void)
 {
 	return configure_nodes(aval(VAR_coordNames));
 }
 
-int
-configure_nodes(char **nodeList)
+int configure_nodes(char **nodeList)
 {
 	char **actualNodeList;
 	int ii;
@@ -482,8 +389,7 @@ configure_nodes(char **nodeList)
 	return(rc);
 }
 
-static cmd_t *
-prepare_configureNode(char *nodeName)
+cmd_t *prepare_configureNode(char *nodeName)
 {
 	cmd_t *cmd;
 	int ii;
@@ -591,15 +497,13 @@ prepare_configureNode(char *nodeName)
  * You should try to stop component by "stop" command.
  */
 
-int
-kill_coordinator_master_all(void)
+int kill_coordinator_master_all(void)
 {
 	elog(INFO, "Killing all the coordinator masters.\n");
 	return(kill_coordinator_master(aval(VAR_coordNames)));
 }
 
-static cmd_t *
-prepare_killCoordinatorMaster(char *nodeName)
+cmd_t * prepare_killCoordinatorMaster(char *nodeName)
 {
 	int idx;
 	pid_t pmPid;
@@ -610,8 +514,6 @@ prepare_killCoordinatorMaster(char *nodeName)
 		elog(WARNING, "WARNING: node %s is not a coordinator.\n", nodeName);
 		return(NULL);
 	}
-	if (is_none(aval(VAR_coordMasterServers)[idx]))
-		return(NULL);
 	cmd = cmdKill = initCmd(aval(VAR_coordMasterServers)[idx]);
 	if ((pmPid = get_postmaster_pid(aval(VAR_coordMasterServers)[idx], aval(VAR_coordMasterDirs)[idx])) > 0)
 	{
@@ -631,8 +533,7 @@ prepare_killCoordinatorMaster(char *nodeName)
 	return cmd;
 }
 
-int
-kill_coordinator_master(char **nodeList)
+int kill_coordinator_master(char **nodeList)
 {
 	char **actualNodeList;
 	int ii;
@@ -655,20 +556,18 @@ kill_coordinator_master(char **nodeList)
 }
 
 /*
- * Kill coordinator slaves -------------------------------------------------------------
+ * Kill coordinator masters -------------------------------------------------------------
  *
  * It is not recommended to kill them in such a manner.   This is just for emergence.
  * You should try to stop component by "stop" command.
  */
-int
-kill_coordinator_slave_all(void)
+int kill_coordinator_slave_all(void)
 {
 	elog(INFO, "Killing all the cooridinator slaves.\n");
 	return(kill_coordinator_slave(aval(VAR_coordNames)));
 }
 
-static cmd_t *
-prepare_killCoordinatorSlave(char *nodeName)
+cmd_t *prepare_killCoordinatorSlave(char *nodeName)
 {
 	int idx;
 	pid_t pmPid;
@@ -679,8 +578,6 @@ prepare_killCoordinatorSlave(char *nodeName)
 		elog(WARNING, "WARNING: %s is not a coordinator.\n", nodeName);
 		return(NULL);
 	}
-	if (is_none(aval(VAR_coordSlaveServers)[idx]))
-		return(NULL);
 	if ((pmPid = get_postmaster_pid(aval(VAR_coordSlaveServers)[idx], aval(VAR_coordSlaveDirs)[idx])) > 0)
 	{
 		char *pidList = getChPidList(aval(VAR_coordSlaveServers)[idx], pmPid);
@@ -700,8 +597,7 @@ prepare_killCoordinatorSlave(char *nodeName)
 	return(cmd);
 }
 
-int
-kill_coordinator_slave(char **nodeList)
+int kill_coordinator_slave(char **nodeList)
 {
 	char **actualNodeList;
 	int ii;
@@ -729,8 +625,7 @@ kill_coordinator_slave(char **nodeList)
 	return (rc);
 }
 
-cmd_t *
-prepare_cleanCoordinatorMaster(char *nodeName)
+cmd_t *prepare_cleanCoordinatorMaster(char *nodeName)
 {
 	cmd_t *cmd;
 	int idx;
@@ -750,8 +645,7 @@ prepare_cleanCoordinatorMaster(char *nodeName)
 /*
  * Cleanup coordinator master resources -- directory and socket.
  */
-int
-clean_coordinator_master(char **nodeList)
+int clean_coordinator_master(char **nodeList)
 {
 	char **actualNodeList;
 	cmdList_t *cmdList;
@@ -776,8 +670,7 @@ clean_coordinator_master(char **nodeList)
 	return (rc);
 }
 
-int
-clean_coordinator_master_all(void)
+int clean_coordinator_master_all(void)
 {
 	elog(INFO, "Cleaning all the coordinator masters resources.\n");
 	return(clean_coordinator_master(aval(VAR_coordNames)));
@@ -786,8 +679,7 @@ clean_coordinator_master_all(void)
 /*
  * Cleanup coordinator slave resources -- directory and the socket.
  */
-cmd_t *
-prepare_cleanCoordinatorSlave(char *nodeName)
+cmd_t *prepare_cleanCoordinatorSlave(char *nodeName)
 {
 	cmd_t *cmd;
 	int idx;
@@ -807,8 +699,7 @@ prepare_cleanCoordinatorSlave(char *nodeName)
 	return cmd;
 }
 
-int
-clean_coordinator_slave(char **nodeList)
+int clean_coordinator_slave(char **nodeList)
 {
 	char **actualNodeList;
 	cmdList_t *cmdList;
@@ -833,8 +724,7 @@ clean_coordinator_slave(char **nodeList)
 	return (rc);
 }
 
-int
-clean_coordinator_slave_all(void)
+int clean_coordinator_slave_all(void)
 {
 	elog(INFO, "Cleaning all the cooridnator slaves resources.\n");
 	return(clean_coordinator_slave(aval(VAR_coordNames)));
@@ -845,8 +735,7 @@ clean_coordinator_slave_all(void)
  * Add command
  *
  *-----------------------------------------------------------------------*/
-int
-add_coordinatorMaster(char *name, char *host, int port, int pooler, char *dir)
+int add_coordinatorMaster(char *name, char *host, int port, int pooler, char *dir)
 {
 	FILE *f, *lockf;
 	int size, idx;
@@ -1014,7 +903,7 @@ add_coordinatorMaster(char *name, char *host, int port, int pooler, char *dir)
 				   aval(VAR_coordPorts)[0], aval(VAR_coordMasterServers)[0], pgdumpall_out);
 
 	/* Start the new coordinator */
-	doImmediate(host, NULL, "pg_ctl start -Z restoremode -D %s -o -i -w", dir);
+	doImmediate(host, NULL, "pg_ctl start -Z restoremode -D %s -o -i", dir);
 
 	/* Restore the backup */
 	doImmediateRaw("psql -h %s -p %d -d %s -f %s", host, port, sval(VAR_defaultDatabase), pgdumpall_out);
@@ -1051,15 +940,13 @@ add_coordinatorMaster(char *name, char *host, int port, int pooler, char *dir)
 	else
 	{
 		fprintf(f, "ALTER NODE %s WITH (host='%s', PORT=%d);\n", name, host, port);
-		fprintf(f, "select pgxc_pool_reload();\n");
 		fprintf(f, "\\q\n");
 		fclose(f);
 	}
 	return 0;
 }
 
-int
-add_coordinatorSlave(char *name, char *host, char *dir, char *archDir)
+int add_coordinatorSlave(char *name, char *host, char *dir, char *archDir)
 {
 	int idx;
 	FILE *f;
@@ -1189,55 +1076,10 @@ add_coordinatorSlave(char *name, char *host, char *dir, char *archDir)
 	doImmediate(aval(VAR_coordMasterServers)[idx], NULL, 
 				"pg_ctl stop -Z coordinator -D %s -m fast", aval(VAR_coordMasterDirs)[idx]);
 	doImmediate(aval(VAR_coordMasterServers)[idx], NULL, 
-				"pg_ctl start -Z coordinator -D %s -w", aval(VAR_coordMasterDirs)[idx]);
-#ifdef USE_PG_BASEBACKUP
+				"pg_ctl start -Z coordinator -D %s", aval(VAR_coordMasterDirs)[idx]);
 	/* pg_basebackup */
 	doImmediate(host, NULL, "pg_basebackup -p %s -h %s -D %s -x",
 				aval(VAR_coordPorts)[idx], aval(VAR_coordMasterServers)[idx], dir);
-#else
-	/* 
-	 * As of PostgreSQL-9.3 or later, pg_basebackup does not run with coordinators.
-	 * Now pg_basebackup runs without specifying database name.   In each coordinator,
-	 * we need (at present) database name to load node information into chache.
-	 * More primitive means (pg_start_backup and pg_stop_backup) works as a work around.
-	 */ 
-	/*
-	 * Stop backup
-	 * we specify quick and spike checkpoint here because this is just after the restart
-	 * and we expect coordinator is static so there should not be much updates
-	 */
-	doImmediate(aval(VAR_coordMasterServers)[idx], NULL,
-				"psql -h localhost -p %s postgres \"select pg_start_backup\\('%s', true\\)\"",
-				aval(VAR_coordPorts)[idx], name);
-	/* Build and send it */
-	doImmediate(aval(VAR_coordMasterServers)[idx], NULL,
-				"rm -f %s/%s.tgz;"		/* We remove this just in case the file does not have write privilege */
-				"cd %s;"
-				"tar czf %s/%s.tgz . ;"
-				"scp %s/%s.tgz %s@%s:%s;"
-				"rm -f %s/%s.tgz",
-				sval(VAR_tmpDir), name,
-				aval(VAR_coordMasterDirs)[idx],
-				sval(VAR_tmpDir), name,
-				sval(VAR_tmpDir), name, sval(VAR_pgxcUser), host, sval(VAR_tmpDir),
-				sval(VAR_tmpDir), name);
-	/* Stop Backup */
-	doImmediate(aval(VAR_coordMasterServers)[idx], NULL,
-				"psql -h localhost -p %s postgres -c 'select pg_stop_backup()'",
-				aval(VAR_coordPorts)[idx]);
-	/* Untar */
-	doImmediate(aval(VAR_coordSlaveServers)[idx], NULL,
-				"rm -rf %s;"
-				"mkdir -p %s;"
-				"cd %s;"
-				"tar xzf %s/%s.tgz;"
-				"rm -rf %s/%s.tgz",
-				dir,
-				dir,
-				dir,
-				sval(VAR_tmpDir), name,
-				sval(VAR_tmpDir), name);
-#endif
 	/* Update the slave configuration with hot standby and port */
 	if ((f = pgxc_popen_w(host, "cat >> %s/postgresql.conf", dir)) == NULL)
 	{
@@ -1249,12 +1091,10 @@ add_coordinatorSlave(char *name, char *host, char *dir, char *archDir)
 			"# Added to initialize the slave, %s\n"
 			"hot_standby = on\n"
 			"port = %d\n"
-			"wal_level = hot_standby\n"	/* WAL level --- to be ready to failover */
-			"archive_mode = on\n"		/* To be ready to be a master */
+			"wal_level = minimal\n"		/* WAL level --- minimal.   No cascade slave so far. */
+			"archive_mode = off\n"		/* No archive mode */
 			"archive_command = ''\n"	/* No archive mode */
-			"max_wal_senders = 5\n"		/* To be ready to be a master: Tentatively 5. */
-										/* Next major version will allow common */
-										/* max_wal_senders to be taken here. */
+			"max_wal_senders = 0\n"		/* Minimum WAL senders */
 			"# End of Addition\n",
 			timeStampString(date, MAXTOKEN), atoi(aval(VAR_coordPorts)[idx]));
 	fclose(f);
@@ -1279,7 +1119,7 @@ add_coordinatorSlave(char *name, char *host, char *dir, char *archDir)
 	fclose(f);
 
 	/* Start the slave */
-	doImmediate(host, NULL, "pg_ctl start -Z coordinator -D %s -w", dir);
+	doImmediate(host, NULL, "pg_ctl start -Z coordinator -D %s", dir);
 	return 0;
 }
 
@@ -1289,8 +1129,7 @@ add_coordinatorSlave(char *name, char *host, char *dir, char *archDir)
  * Remove command
  *
  *-----------------------------------------------------------------------*/
-int
-remove_coordinatorMaster(char *name, int clean_opt)
+int remove_coordinatorMaster(char *name, int clean_opt)
 {
 	/*
 
@@ -1432,8 +1271,7 @@ remove_coordinatorMaster(char *name, int clean_opt)
 	return 0;
 }
 
-int
-remove_coordinatorSlave(char *name, int clean_opt)
+int remove_coordinatorSlave(char *name, int clean_opt)
 {
 	int idx;
 	char **nodelist = NULL;
@@ -1468,8 +1306,11 @@ remove_coordinatorSlave(char *name, int clean_opt)
 		fprintf(f,
 				"#=======================================\n"
 				"# Updated to remove the slave %s\n"
+				"archive_mode = off\n"
 				"synchronous_standby_names = ''\n"
 				"archive_command = ''\n"
+				"max_wal_senders = 0\n"
+				"wal_level = minimal\n"
 				"# End of the update\n",
 				timeStampString(date, MAXTOKEN));
 		fclose(f);
@@ -1514,15 +1355,13 @@ remove_coordinatorSlave(char *name, int clean_opt)
 /*
  * Start coordinator master ---------------------------------------------
  */
-int
-start_coordinator_master_all(void)
+int start_coordinator_master_all(void)
 {
 	elog(INFO, "Starting coordinator master.\n");
 	return(start_coordinator_master(aval(VAR_coordNames)));
 }
 
-static cmd_t *
-prepare_startCoordinatorMaster(char *nodeName)
+cmd_t *prepare_startCoordinatorMaster(char *nodeName)
 {
 	cmd_t *cmd = NULL, *cmdPgCtl;
 	int idx;
@@ -1543,13 +1382,12 @@ prepare_startCoordinatorMaster(char *nodeName)
 	}
 	cmd = cmdPgCtl = initCmd(aval(VAR_coordMasterServers)[idx]);
 	snprintf(newCommand(cmdPgCtl), MAXLINE,
-			 "pg_ctl start -Z coordinator -D %s -o -i -w",
+			 "pg_ctl start -Z coordinator -D %s -o -i",
 			 aval(VAR_coordMasterDirs)[idx]);
 	return(cmd);
 }
 
-int
-start_coordinator_master(char **nodeList)
+int start_coordinator_master(char **nodeList)
 {
 	char **actualNodeList;
 	int ii;
@@ -1575,15 +1413,13 @@ start_coordinator_master(char **nodeList)
 /*
  * Start coordinator slaves ----------------------------------------
  */
-int
-start_coordinator_slave_all(void)
+int start_coordinator_slave_all(void)
 {
 	elog(INFO, "Starting all the coordinator slaves.\n");
 	return(start_coordinator_slave(aval(VAR_coordNames)));
 }
 
-static cmd_t *
-prepare_startCoordinatorSlave(char *nodeName)
+cmd_t *prepare_startCoordinatorSlave(char *nodeName)
 {
 	int idx;
 	FILE *f;
@@ -1606,7 +1442,7 @@ prepare_startCoordinatorSlave(char *nodeName)
 	}
 	cmd = cmdPgCtlStart = initCmd(aval(VAR_coordSlaveServers)[idx]);
 	snprintf(newCommand(cmdPgCtlStart), MAXLINE,
-			 "pg_ctl start -Z coordinator -D %s -o -i -w",
+			 "pg_ctl start -Z coordinator -D %s -o -i",
 			 aval(VAR_coordSlaveDirs)[idx]);
 
 	/* Postgresql.conf at the Master */
@@ -1637,8 +1473,7 @@ prepare_startCoordinatorSlave(char *nodeName)
 	return(cmd);
 }
 
-int
-start_coordinator_slave(char **nodeList)
+int start_coordinator_slave(char **nodeList)
 {
 	char **actualNodeList;
 	int ii;
@@ -1670,15 +1505,13 @@ start_coordinator_slave(char **nodeList)
  * Stop coordinator masters ---------------------------------------------------
  */
 /* Does not check if immediate is valid here */
-int
-stop_coordinator_master_all(char *immediate)
+int stop_coordinator_master_all(char *immediate)
 {
 	elog(INFO, "Stopping all the coordinator masters.\n");
 	return(stop_coordinator_master(aval(VAR_coordNames), immediate));
 }
 
-static cmd_t *
-prepare_stopCoordinatorMaster(char *nodeName, char *immediate)
+cmd_t *prepare_stopCoordinatorMaster(char *nodeName, char *immediate)
 {
 	int idx;
 	cmd_t *cmd;
@@ -1702,8 +1535,7 @@ prepare_stopCoordinatorMaster(char *nodeName, char *immediate)
 			 
 
 /* Does not check if immediate is valid here. */
-int
-stop_coordinator_master(char **nodeList, char *immediate)
+int stop_coordinator_master(char **nodeList, char *immediate)
 {
 	char **actualNodeList;
 	int ii;
@@ -1732,15 +1564,13 @@ stop_coordinator_master(char **nodeList, char *immediate)
 /*
  * Stop coordinator slaves ----------------------------------------------------
  */
-int
-stop_coordinator_slave_all(char *immediate)
+int stop_coordinator_slave_all(char *immediate)
 {
 	elog(INFO, "Stopping all the coordinator slaves.\n");
 	return(stop_coordinator_slave(aval(VAR_coordNames), immediate));
 }
 
-static cmd_t *
-prepare_stopCoordinatorSlave(char *nodeName, char *immediate)
+cmd_t *prepare_stopCoordinatorSlave(char *nodeName, char *immediate)
 {
 	int idx;
 	cmd_t *cmd = NULL, *cmdMasterReload, *cmdPgCtlStop;
@@ -1790,8 +1620,7 @@ prepare_stopCoordinatorSlave(char *nodeName, char *immediate)
 }
 
 
-int
-stop_coordinator_slave(char **nodeList, char *immediate)
+int stop_coordinator_slave(char **nodeList, char *immediate)
 {
 	char **actualNodeList;
 	int ii;
@@ -1823,8 +1652,7 @@ stop_coordinator_slave(char **nodeList, char *immediate)
 /*
  * Failover coordinator ---------------------------------------------------------
  */
-int
-failover_coordinator(char **nodeList)
+int failover_coordinator(char **nodeList)
 {
 	char **actualNodeList;
 	int ii;
@@ -1865,8 +1693,7 @@ failover_coordinator(char **nodeList)
 	return(rc);
 }
 
-static int
-failover_oneCoordinator(int coordIdx)
+static int failover_oneCoordinator(int coordIdx)
 {
 	int	rc = 0;
 	int rc_local;
@@ -1973,52 +1800,23 @@ failover_oneCoordinator(int coordIdx)
 				 aval(VAR_coordNames)[jj]);
 			continue;
 		}
-		if (jj != coordIdx)
+		if ((f = pgxc_popen_wRaw("psql -p %s -h %s %s %s",
+								 aval(VAR_coordPorts)[jj],
+								 aval(VAR_coordMasterServers)[jj],
+								 sval(VAR_defaultDatabase),
+								 sval(VAR_pgxcOwner)))
+			== NULL)
 		{
-			if ((f = pgxc_popen_wRaw("psql -p %s -h %s %s %s",
-									 aval(VAR_coordPorts)[jj],
-									 aval(VAR_coordMasterServers)[jj],
-									 sval(VAR_defaultDatabase),
-									 sval(VAR_pgxcOwner)))
-				== NULL)
-			{
-				elog(ERROR, "ERROR: failed to start psql for coordinator %s, %s\n", aval(VAR_coordNames)[jj], strerror(errno));
-				continue;
-			}
-#ifdef USE_ALTER_NODE /* Now alter node dies not work well in this context. */
-			fprintf(f,
-					"ALTER NODE %s WITH (HOST='%s', PORT=%s);\n"
-					"select pgxc_pool_reload();\n"
-					"\\q\n",
-					aval(VAR_coordNames)[coordIdx], aval(VAR_coordMasterServers)[coordIdx], aval(VAR_coordPorts)[coordIdx]);
-#else
-			fprintf(f,
-					"DROP NODE %s;\n"
-					"CREATE NODE %s WITH (type = coordinator, HOST='%s', PORT=%s);\n"
-					"select pgxc_pool_reload();\n"
-					"\\q\n",
-					aval(VAR_coordNames)[coordIdx],
-					aval(VAR_coordNames)[coordIdx], aval(VAR_coordMasterServers)[coordIdx], aval(VAR_coordPorts)[coordIdx]);
-#endif
-			fclose(f);
+			elog(ERROR, "ERROR: failed to start psql for coordinator %s, %s\n", aval(VAR_coordNames)[jj], strerror(errno));
+			continue;
 		}
+		fprintf(f,
+				"ALTER NODE %s WITH (HOST='%s', PORT=%s);\n"
+				"select pgxc_pool_reload();\n"
+				"\\q\n",
+				aval(VAR_coordNames)[coordIdx], aval(VAR_coordMasterServers)[coordIdx], aval(VAR_coordPorts)[coordIdx]);
+		fclose(f);
 	}
-	/* Now update myself */
-	if ((f = pgxc_popen_wRaw("psql -p %s -h %s %s %s",
-							 aval(VAR_coordPorts)[coordIdx],
-							 aval(VAR_coordMasterServers)[coordIdx],
-							 sval(VAR_defaultDatabase),
-							 sval(VAR_pgxcOwner)))
-		== NULL)
-	{
-		elog(ERROR, "ERROR: failed to start psql for coordinator %s, %s\n", aval(VAR_coordNames)[coordIdx], strerror(errno));
-	}
-	fprintf(f,
-			"ALTER NODE %s WITH (HOST='%s', PORT=%s);\n"
-			"select pgxc_pool_reload();\n"
-			"\\q\n",
-			aval(VAR_coordNames)[coordIdx], aval(VAR_coordMasterServers)[coordIdx], aval(VAR_coordPorts)[coordIdx]);
-	fclose(f);
 	return(rc);
 
 #	undef checkRc
@@ -2027,8 +1825,7 @@ failover_oneCoordinator(int coordIdx)
 /*
  * Show coordinator configuration
  */
-int
-show_config_coordMasterSlaveMulti(char **nodeList)
+int show_config_coordMasterSlaveMulti(char **nodeList)
 {
 	int ii;
 	int idx;
@@ -2049,8 +1846,7 @@ show_config_coordMasterSlaveMulti(char **nodeList)
 	return 0;
 }
 
-int
-show_config_coordMasterMulti(char **nodeList)
+int show_config_coordMasterMulti(char **nodeList)
 {
 	int ii;
 	int idx;
@@ -2067,8 +1863,7 @@ show_config_coordMasterMulti(char **nodeList)
 	return 0;
 }
 
-int
-show_config_coordSlaveMulti(char **nodeList)
+int show_config_coordSlaveMulti(char **nodeList)
 {
 	int ii;
 	int idx;
@@ -2087,8 +1882,7 @@ show_config_coordSlaveMulti(char **nodeList)
 	return 0;
 }
 
-int
-show_config_coordMaster(int flag, int idx, char *hostname)
+int show_config_coordMaster(int flag, int idx, char *hostname)
 {
 	int ii;
 	char outBuf[MAXLINE+1];
@@ -2126,8 +1920,7 @@ show_config_coordMaster(int flag, int idx, char *hostname)
 	return 0;
 }
 
-int
-show_config_coordSlave(int flag, int idx, char *hostname)
+int show_config_coordSlave(int flag, int idx, char *hostname)
 {
 	char outBuf[MAXLINE+1];
 	char editBuf[MAXPATH+1];
@@ -2159,8 +1952,7 @@ show_config_coordSlave(int flag, int idx, char *hostname)
  *
  * Returns FALSE if any of them are not running.
  */
-int
-check_AllCoordRunning(void)
+int check_AllCoordRunning(void)
 {
 	int ii;
 

@@ -61,8 +61,7 @@ enum Quote { UNQUOTED, SINGLEQUOTED, DOUBLEQUOTED };
 /*
  * Get a token from the line
  */
-char *
-get_word(char *line, char **token)
+char *get_word(char *line, char **token)
 {
 	enum Quote quoted = UNQUOTED;
 
@@ -130,8 +129,7 @@ get_word(char *line, char **token)
 /*
  * Parse line and create/update a variable.
  */
-static void
-parse_line(char *line)
+static void parse_line(char *line)
 {
 	char *varname;
 	char *val;
@@ -157,8 +155,7 @@ parse_line(char *line)
  *
  * This blocks any unknow variables to be build within pgxc_ctl structure.
  */
-static void
-parse_line_select(char *line, char *selectThis[])
+static void parse_line_select(char *line, char *selectThis[])
 {
 	char *varname;
 	char *val;
@@ -186,8 +183,7 @@ parse_line_select(char *line, char *selectThis[])
 /*
  * Configuration file I/F
  */
-void
-read_vars(FILE *conf)
+void read_vars(FILE *conf)
 {
 	char line[MAXLINE+1];
 
@@ -198,8 +194,7 @@ read_vars(FILE *conf)
 /*
  * Configuration file I/F
  */
-void
-read_selected_vars(FILE *conf, char *selectThis[])
+void read_selected_vars(FILE *conf, char *selectThis[])
 {
 	char line[MAXLINE+1];
 
@@ -210,8 +205,7 @@ read_selected_vars(FILE *conf, char *selectThis[])
 /*
  * Build the configuraiton file prototype.
  */
-void
-install_conf_prototype(char *path)
+void install_conf_prototype(char *path)
 {
 	char cmd[MAXPATH+1];
 	FILE *pgxc_config_proto = fopen(path, "w");
@@ -232,8 +226,7 @@ install_conf_prototype(char *path)
 /*
  * Get all the servers --> VAR_allServers
  */
-static void
-addServer(char **name)
+static void addServer(char **name)
 {
 	int ii, jj;
 	int flag;
@@ -261,8 +254,7 @@ addServer(char **name)
 /*
  * Test each node and build target server list
  */
-void
-makeServerList(void)
+void makeServerList(void)
 {
 	/* Initialize */
 	reset_var(VAR_allServers);
@@ -298,8 +290,7 @@ makeServerList(void)
  *
  * Log archive backup will be implemented in the future.
  */
-int
-is_none(char *s)
+int is_none(char *s)
 {
 	if (strcmp(s, "none") == 0)
 		return TRUE;
@@ -311,8 +302,7 @@ is_none(char *s)
 /*
  * Remove gtm slave.  Used at failover.
  */
-static void
-emptyGtmSlave()
+static void emptyGtmSlave()
 {
 	reset_var_val(VAR_gtmSlaveServer, "none");
 	reset_var_val(VAR_gtmSlavePort, "0");
@@ -326,8 +316,7 @@ emptyGtmSlave()
  * We can just initialize gtm_proy using gtminit, configure and
  * run it.
  */
-static void
-emptyGtmProxies()
+static void emptyGtmProxies()
 {
 	int ii;
 
@@ -353,8 +342,7 @@ emptyGtmProxies()
  * This is needed when a slave promotes and becomes a new
  * master.
  */
-static void
-emptyCoordSlaves()
+static void emptyCoordSlaves()
 {
 	int ii;
 
@@ -373,8 +361,7 @@ emptyCoordSlaves()
 /*
  * Removes datanode slave from pgxc_ctl configuration.
  */
-static void
-emptyDatanodeSlaves()
+static void emptyDatanodeSlaves()
 {
 	int ii;
 
@@ -402,8 +389,7 @@ emptyDatanodeSlaves()
  * Similar handling will be done for gtm slave, coordinator slaves
  * and datanode slaves.
  */
-void
-handle_no_slaves()
+void handle_no_slaves()
 {
 	int is_empty;
 	int ii;
@@ -518,16 +504,14 @@ handle_no_slaves()
 /*
  * Check if there's no overlap in the resource --> Port, host and directory.
  */
-static void
-reportMissingVar(char *name)
+static void reportMissingVar(char *name)
 {
 	elog(ERROR, "ERROR: %s is not configured.\n", name);
 }
 
 static int anyConfigErrors = FALSE;
 
-static void
-checkIfVarIsConfigured(char *name)
+static void checkIfVarIsConfigured(char *name)
 {
 	if (!find_var(name) || !sval(name))
 	{
@@ -536,16 +520,14 @@ checkIfVarIsConfigured(char *name)
 	}
 }
 
-static void
-checkIfConfigured(char *names[])
+static void checkIfConfigured(char *names[])
 {
 	int ii;
 	for(ii = 0; names[ii]; ii++)
 		checkIfVarIsConfigured(names[ii]);
 }
 
-static void
-checkConfiguredAndSize(char *names[], char *msg)
+static void checkConfiguredAndSize(char *names[], char *msg)
 {
 	int ii;
 	int sz0;
@@ -566,8 +548,7 @@ checkConfiguredAndSize(char *names[], char *msg)
 	}
 }
 
-int
-checkSpecificResourceConflict(char *name, char *host, int port, char *dir, int is_gtm)
+int checkSpecificResourceConflict(char *name, char *host, int port, char *dir, int is_gtm)
 {
 	if (checkNameConflict(name, is_gtm))
 		return 1;
@@ -580,8 +561,7 @@ checkSpecificResourceConflict(char *name, char *host, int port, char *dir, int i
 /*
  * Note that 1 will be returned when a conflict is found
  */
-int
-checkNameConflict(char *name, int is_gtm)
+int checkNameConflict(char *name, int is_gtm)
 {
 	int ii;
 
@@ -615,8 +595,7 @@ checkNameConflict(char *name, int is_gtm)
 /*
  * Note that 1 will be returned when a conflict is found.
  */
-int
-checkPortConflict(char *host, int port)
+int checkPortConflict(char *host, int port)
 {
 	int ii;
 
@@ -655,8 +634,7 @@ checkPortConflict(char *host, int port)
 	return 0;
 }
 
-int
-checkDirConflict(char *host, char *dir)
+int checkDirConflict(char *host, char *dir)
 {
 	int ii;
 
@@ -703,10 +681,9 @@ checkDirConflict(char *host, char *dir)
  *
  * 3) A directory, in a given host, must be owned (used) only by single node.
  */
-static void
-checkResourceConflict(char *srcNames, char *srcServers, char *srcPorts, char *srcPoolers, char *srcDirs,
-					  char *destNames, char *destServers, char *destPorts, char *destPoolers, char *destDirs, 
-					  int destOnly, int checkName)
+static void checkResourceConflict(char *srcNames, char *srcServers, char *srcPorts, char *srcPoolers, char *srcDirs,
+								  char *destNames, char *destServers, char *destPorts, char *destPoolers, char *destDirs, 
+								  int destOnly, int checkName)
 {
 	int ii, jj;
 
@@ -832,8 +809,7 @@ checkResourceConflict(char *srcNames, char *srcServers, char *srcPorts, char *sr
  * Check if each node resource is configured properly
  * Again, finding an error will not make the program stop.
  */
-static void
-verifyResource(void)
+static void verifyResource(void)
 {
 	char *GtmVars[] = {VAR_gtmName, 
 					   VAR_gtmMasterServer, 
@@ -1060,8 +1036,7 @@ verifyResource(void)
 /*
  * Check if the minimum components are configured --- gtm master, coordinator master and datanode master.
  */
-void
-check_configuration(void)
+void check_configuration(void)
 {
 	/*
 	 * See if mandatory configuration is defined.  Will continue if error is detected
@@ -1086,8 +1061,7 @@ check_configuration(void)
 /*
  * Backup configuration files to a remote site as specified.
  */
-int
-backup_configuration(void)
+int backup_configuration(void)
 {
 	if ((strcasecmp(sval(VAR_configBackup), "y") != 0) || is_none(sval(VAR_configBackupHost)) || 
 		is_none(sval(VAR_configBackupDir)) || is_none(sval(VAR_configBackupFile)))
@@ -1098,8 +1072,7 @@ backup_configuration(void)
 					   sval(VAR_configBackupDir), sval(VAR_configBackupFile)));
 }
 
-NodeType
-getNodeType(char *nodeName)
+NodeType getNodeType(char *nodeName)
 {
 	int ii;
 
@@ -1126,8 +1099,7 @@ getNodeType(char *nodeName)
 
 }
 
-int
-getDefaultWalSender(int isCoord)
+int getDefaultWalSender(int isCoord)
 {
 	int ii;
 

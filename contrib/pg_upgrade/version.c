@@ -3,11 +3,11 @@
  *
  *	Postgres-version-specific routines
  *
- *	Copyright (c) 2010-2013, PostgreSQL Global Development Group
+ *	Copyright (c) 2010-2012, PostgreSQL Global Development Group
  *	contrib/pg_upgrade/version.c
  */
 
-#include "postgres_fe.h"
+#include "postgres.h"
 
 #include "pg_upgrade.h"
 

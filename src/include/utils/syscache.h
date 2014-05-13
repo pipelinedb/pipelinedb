@@ -17,6 +17,7 @@
 #ifndef SYSCACHE_H
 #define SYSCACHE_H
 
+#include "utils/catcache.h"
 #include "access/attnum.h"
 #include "access/htup.h"
 /* we purposedly do not include utils/catcache.h here */
@@ -81,6 +82,9 @@ enum SysCacheIdentifier
 	PGXCNODEOID,
 	PGXCNODEIDENTIFIER,
 #endif
+	PIPELINEQUERIES,
+	PIPELINEENCODINGNAME,
+	PIPELINEENCODINGOID,
 	PROCNAMEARGSNSP,
 	PROCOID,
 	RANGETYPE,

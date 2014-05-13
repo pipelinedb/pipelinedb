@@ -40,12 +40,7 @@ lo_manage(PG_FUNCTION_ARGS)
 	HeapTuple	trigtuple;		/* The original value of tuple	*/
 
 	if (!CALLED_AS_TRIGGER(fcinfo))		/* internal error */
-		elog(ERROR, "%s: not fired by trigger manager",
-			 trigdata->tg_trigger->tgname);
-
-	if (!TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))		/* internal error */
-		elog(ERROR, "%s: must be fired for row",
-			 trigdata->tg_trigger->tgname);
+		elog(ERROR, "not fired by trigger manager");
 
 	/*
 	 * Fetch some values from trigdata
@@ -54,10 +49,6 @@ lo_manage(PG_FUNCTION_ARGS)
 	trigtuple = trigdata->tg_trigtuple;
 	tupdesc = trigdata->tg_relation->rd_att;
 	args = trigdata->tg_trigger->tgargs;
-
-	if (args == NULL)			/* internal error */
-		elog(ERROR, "%s: no column name provided in the trigger definition",
-			 trigdata->tg_trigger->tgname);
 
 	/* tuple to return to Executor */
 	if (TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
@@ -72,8 +63,7 @@ lo_manage(PG_FUNCTION_ARGS)
 	attnum = SPI_fnumber(tupdesc, args[0]);
 
 	if (attnum <= 0)
-		elog(ERROR, "%s: column \"%s\" does not exist",
-			 trigdata->tg_trigger->tgname, args[0]);
+		elog(ERROR, "column \"%s\" does not exist", args[0]);
 
 	/*
 	 * Handle updates

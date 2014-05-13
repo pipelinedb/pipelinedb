@@ -4,14 +4,13 @@
  *
  * Routines to support SELinux labels (security context)
  *
- * Copyright (c) 2010-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2010-2012, PostgreSQL Global Development Group
  *
  * -------------------------------------------------------------------------
  */
 #include "postgres.h"
 
 #include "access/heapam.h"
-#include "access/htup_details.h"
 #include "access/genam.h"
 #include "access/xact.h"
 #include "catalog/catalog.h"
@@ -303,8 +302,7 @@ sepgsql_needs_fmgr_hook(Oid functionId)
 	object.objectSubId = 0;
 	if (!sepgsql_avc_check_perms(&object,
 								 SEPG_CLASS_DB_PROCEDURE,
-								 SEPG_DB_PROCEDURE__EXECUTE |
-								 SEPG_DB_PROCEDURE__ENTRYPOINT,
+								 SEPG_DB_PROCEDURE__EXECUTE,
 								 SEPGSQL_AVC_NOAUDIT, false))
 		return true;
 
@@ -348,30 +346,13 @@ sepgsql_fmgr_hook(FmgrHookEventType event,
 				 * process:transition permission between old and new label,
 				 * when user tries to switch security label of the client on
 				 * execution of trusted procedure.
-				 *
-				 * Also, db_procedure:entrypoint permission should be checked
-				 * whether this procedure can perform as an entrypoint of the
-				 * trusted procedure, or not. Note that db_procedure:execute
-				 * permission shall be checked individually.
 				 */
 				if (stack->new_label)
-				{
-					ObjectAddress object;
-
-					object.classId = ProcedureRelationId;
-					object.objectId = flinfo->fn_oid;
-					object.objectSubId = 0;
-					sepgsql_avc_check_perms(&object,
-											SEPG_CLASS_DB_PROCEDURE,
-											SEPG_DB_PROCEDURE__ENTRYPOINT,
-											getObjectDescription(&object),
-											true);
-
 					sepgsql_avc_check_perms_label(stack->new_label,
 												  SEPG_CLASS_PROCESS,
 												  SEPG_PROCESS__TRANSITION,
 												  NULL, true);
-				}
+
 				*private = PointerGetDatum(stack);
 			}
 			Assert(!stack->old_label);

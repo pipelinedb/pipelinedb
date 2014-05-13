@@ -5,7 +5,7 @@
  * Originally written by Tatsuo Ishii and enhanced by many contributors.
  *
  * contrib/pgbench/pgbench.c
- * Copyright (c) 2000-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2012, PostgreSQL Global Development Group
  * ALL RIGHTS RESERVED;
  *
  * Permission to use, copy, modify, and distribute this software and its
@@ -35,11 +35,10 @@
 
 #include "getopt_long.h"
 #include "libpq-fe.h"
+#include "libpq/pqsignal.h"
 #include "portability/instr_time.h"
 
 #include <ctype.h>
-#include <math.h>
-#include <signal.h>
 
 #ifndef WIN32
 #include <sys/time.h>
@@ -103,7 +102,6 @@ extern int	optind;
 #define MAXCLIENTS	1024
 #endif
 
-#define LOG_STEP_SECONDS	5	/* seconds between log messages */
 #define DEFAULT_NXACTS	10		/* default nxacts */
 
 int			nxacts = 0;			/* number of transactions per client */
@@ -122,19 +120,9 @@ int			scale = 1;
 int			fillfactor = 100;
 
 /*
- * create foreign key constraints on the tables?
- */
-int			foreign_keys = 0;
-
-/*
  * use unlogged tables?
  */
 int			unlogged_tables = 0;
-
-/*
- * log sampling rate (1.0 = log everything, 0.0 = option not given)
- */
-double		sample_rate = 0.0;
 
 /*
  * tablespace selection
@@ -154,28 +142,17 @@ char	   *index_tablespace = NULL;
 #ifdef PGXC
 bool		use_branch = false;	/* use branch id in DDL and DML */
 #endif
-/*
- * The scale factor at/beyond which 32bit integers are incapable of storing
- * 64bit values.
- *
- * Although the actual threshold is 21474, we use 20000 because it is easier to
- * document and remember, and isn't that far away from the real threshold.
- */
-#define SCALE_32BIT_THRESHOLD 20000
-
 bool		use_log;			/* log transaction latencies to a file */
-bool		use_quiet;			/* quiet logging onto stderr */
-int			agg_interval;		/* log aggregates instead of individual
-								 * transactions */
 bool		is_connect;			/* establish connection for each transaction */
 bool		is_latencies;		/* report per-command latencies */
 int			main_pid;			/* main process id used in log filename */
 
 char	   *pghost = "";
 char	   *pgport = "";
+char	   *pgoptions = NULL;
+char	   *pgtty = NULL;
 char	   *login = NULL;
 char	   *dbName;
-const char *progname;
 
 volatile bool timer_exceeded = false;	/* flag from signal handler */
 
@@ -262,19 +239,6 @@ typedef struct
 	char	   *argv[MAX_ARGS]; /* command word list */
 } Command;
 
-typedef struct
-{
-
-	long		start_time;		/* when does the interval start */
-	int			cnt;			/* number of transactions */
-	double		min_duration;	/* min/max durations */
-	double		max_duration;
-	double		sum;			/* sum(duration), sum(duration^2) - for
-								 * estimates */
-	double		sum2;
-
-} AggVals;
-
 static Command **sql_files[MAX_FILES];	/* SQL script files */
 static int	num_files;			/* number of script files */
 static int	num_commands = 0;	/* total number of Command structs */
@@ -308,9 +272,9 @@ static char *tpc_b_bid = {
 	"\\setrandom tid 1 :ntellers\n"
 	"\\setrandom delta -5000 5000\n"
 	"BEGIN;\n"
-	"UPDATE pgbench_accounts SET abalance = abalance + :delta WHERE aid = :aid;\n"
-	"SELECT abalance FROM pgbench_accounts WHERE aid = :aid;\n"
-	"UPDATE pgbench_tellers SET tbalance = tbalance + :delta WHERE tid = :tid;\n"
+	"UPDATE pgbench_accounts SET abalance = abalance + :delta WHERE aid = :aid AND bid = :bid;\n"
+	"SELECT abalance FROM pgbench_accounts WHERE aid = :aid AND bid = :bid\n"
+	"UPDATE pgbench_tellers SET tbalance = tbalance + :delta WHERE tid = :tid AND bid = :bid;\n"
 	"UPDATE pgbench_branches SET bbalance = bbalance + :delta WHERE bid = :bid;\n"
 	"INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (:tid, :bid, :aid, :delta, CURRENT_TIMESTAMP);\n"
 	"END;\n"
@@ -344,8 +308,8 @@ static char *simple_update_bid = {
 	"\\setrandom tid 1 :ntellers\n"
 	"\\setrandom delta -5000 5000\n"
 	"BEGIN;\n"
-	"UPDATE pgbench_accounts SET abalance = abalance + :delta WHERE aid = :aid;\n"
-	"SELECT abalance FROM pgbench_accounts WHERE aid = :aid;\n"
+	"UPDATE pgbench_accounts SET abalance = abalance + :delta WHERE aid = :aid AND bid = :bid;\n"
+	"SELECT abalance FROM pgbench_accounts WHERE aid = :aid AND bid = :bid;\n"
 	"INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (:tid, :bid, :aid, :delta, CURRENT_TIMESTAMP);\n"
 	"END;\n"
 };
@@ -362,8 +326,55 @@ static char *select_only = {
 static void setalarm(int seconds);
 static void *threadRun(void *arg);
 
+
+/*
+ * routines to check mem allocations and fail noisily.
+ */
+static void *
+xmalloc(size_t size)
+{
+	void	   *result;
+
+	result = malloc(size);
+	if (!result)
+	{
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+	return result;
+}
+
+static void *
+xrealloc(void *ptr, size_t size)
+{
+	void	   *result;
+
+	result = realloc(ptr, size);
+	if (!result)
+	{
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+	return result;
+}
+
+static char *
+xstrdup(const char *s)
+{
+	char	   *result;
+
+	result = strdup(s);
+	if (!result)
+	{
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+	return result;
+}
+
+
 static void
-usage(void)
+usage(const char *progname)
 {
 	printf("%s is a benchmarking tool for PostgreSQL.\n\n"
 		   "Usage:\n"
@@ -372,13 +383,9 @@ usage(void)
 		   "  -i           invokes initialization mode\n"
 		   "  -F NUM       fill factor\n"
 #ifdef PGXC
-		   "  -k           distribute each table by primary key\n"
+		   "  -k           distribute by primary key branch id - bid\n"
 #endif
-		   "  -n           do not run VACUUM after initialization\n"
-		   "  -q           quiet logging (one message each 5 seconds)\n"
 		   "  -s NUM       scaling factor\n"
-		   "  --foreign-keys\n"
-		   "               create foreign key constraints between tables\n"
 		   "  --index-tablespace=TABLESPACE\n"
 		   "               create indexes in the specified tablespace\n"
 		   "  --tablespace=TABLESPACE\n"
@@ -392,7 +399,7 @@ usage(void)
 		   "               define variable for use by custom script\n"
 		   "  -f FILENAME  read transaction script from FILENAME\n"
 #ifdef PGXC
-		   "  -k           query with primary key that is used for distribution\n"
+		   "  -k           query with default key and additional key branch id (bid)\n"
 #endif
 		   "  -j NUM       number of threads (default: 1)\n"
 		   "  -l           write transaction times to log file\n"
@@ -406,93 +413,21 @@ usage(void)
 	 "  -t NUM       number of transactions each client runs (default: 10)\n"
 		   "  -T NUM       duration of benchmark test in seconds\n"
 		   "  -v           vacuum all four standard tables before tests\n"
-		   "  --aggregate-interval=NUM\n"
-		   "               aggregate data over NUM seconds\n"
-		   "  --sampling-rate=NUM\n"
-		   "               fraction of transactions to log (e.g. 0.01 for 1%% sample)\n"
 		   "\nCommon options:\n"
-		   "  -d             print debugging output\n"
-		   "  -h HOSTNAME    database server host or socket directory\n"
-		   "  -p PORT        database server port number\n"
-		   "  -U USERNAME    connect as specified database user\n"
-		   "  -V, --version  output version information, then exit\n"
-		   "  -?, --help     show this help, then exit\n"
+		   "  -d           print debugging output\n"
+		   "  -h HOSTNAME  database server host or socket directory\n"
+		   "  -p PORT      database server port number\n"
+		   "  -U USERNAME  connect as specified database user\n"
+		   "  --help       show this help, then exit\n"
+		   "  --version    output version information, then exit\n"
 		   "\n"
 		   "Report bugs to <pgsql-bugs@postgresql.org>.\n",
 		   progname, progname);
 }
 
-/*
- * strtoint64 -- convert a string to 64-bit integer
- *
- * This function is a modified version of scanint8() from
- * src/backend/utils/adt/int8.c.
- */
-static int64
-strtoint64(const char *str)
-{
-	const char *ptr = str;
-	int64		result = 0;
-	int			sign = 1;
-
-	/*
-	 * Do our own scan, rather than relying on sscanf which might be broken
-	 * for long long.
-	 */
-
-	/* skip leading spaces */
-	while (*ptr && isspace((unsigned char) *ptr))
-		ptr++;
-
-	/* handle sign */
-	if (*ptr == '-')
-	{
-		ptr++;
-
-		/*
-		 * Do an explicit check for INT64_MIN.	Ugly though this is, it's
-		 * cleaner than trying to get the loop below to handle it portably.
-		 */
-		if (strncmp(ptr, "9223372036854775808", 19) == 0)
-		{
-			result = -INT64CONST(0x7fffffffffffffff) - 1;
-			ptr += 19;
-			goto gotdigits;
-		}
-		sign = -1;
-	}
-	else if (*ptr == '+')
-		ptr++;
-
-	/* require at least one digit */
-	if (!isdigit((unsigned char) *ptr))
-		fprintf(stderr, "invalid input syntax for integer: \"%s\"\n", str);
-
-	/* process digits */
-	while (*ptr && isdigit((unsigned char) *ptr))
-	{
-		int64		tmp = result * 10 + (*ptr++ - '0');
-
-		if ((tmp / 10) != result)		/* overflow? */
-			fprintf(stderr, "value \"%s\" is out of range for type bigint\n", str);
-		result = tmp;
-	}
-
-gotdigits:
-
-	/* allow trailing whitespace, but not other trailing chars */
-	while (*ptr != '\0' && isspace((unsigned char) *ptr))
-		ptr++;
-
-	if (*ptr != '\0')
-		fprintf(stderr, "invalid input syntax for integer: \"%s\"\n", str);
-
-	return ((sign < 0) ? -result : result);
-}
-
 /* random number generator: uniform distribution from min to max inclusive */
-static int64
-getrand(TState *thread, int64 min, int64 max)
+static int
+getrand(TState *thread, int min, int max)
 {
 	/*
 	 * Odd coding is so that min and max have approximately the same chance of
@@ -503,7 +438,7 @@ getrand(TState *thread, int64 min, int64 max)
 	 * protected by a mutex, and therefore a bottleneck on machines with many
 	 * CPUs.
 	 */
-	return min + (int64) ((max - min + 1) * pg_erand48(thread->random_state));
+	return min + (int) ((max - min + 1) * pg_erand48(thread->random_state));
 }
 
 /* call PQexec() and exit() on failure */
@@ -535,30 +470,10 @@ doConnect(void)
 	 */
 	do
 	{
-#define PARAMS_ARRAY_SIZE	7
-
-		const char *keywords[PARAMS_ARRAY_SIZE];
-		const char *values[PARAMS_ARRAY_SIZE];
-
-		keywords[0] = "host";
-		values[0] = pghost;
-		keywords[1] = "port";
-		values[1] = pgport;
-		keywords[2] = "user";
-		values[2] = login;
-		keywords[3] = "password";
-		values[3] = password;
-		keywords[4] = "dbname";
-		values[4] = dbName;
-		keywords[5] = "fallback_application_name";
-		values[5] = progname;
-		keywords[6] = NULL;
-		values[6] = NULL;
-
 		new_pass = false;
 
-		conn = PQconnectdbParams(keywords, values, true);
-
+		conn = PQsetdbLogin(pghost, pgport, pgoptions, pgtty, dbName,
+							login, password);
 		if (!conn)
 		{
 			fprintf(stderr, "Connection to database \"%s\" failed\n",
@@ -678,17 +593,17 @@ putVariable(CState *st, const char *context, char *name, char *value)
 		}
 
 		if (st->variables)
-			newvars = (Variable *) pg_realloc(st->variables,
+			newvars = (Variable *) xrealloc(st->variables,
 									(st->nvariables + 1) * sizeof(Variable));
 		else
-			newvars = (Variable *) pg_malloc(sizeof(Variable));
+			newvars = (Variable *) xmalloc(sizeof(Variable));
 
 		st->variables = newvars;
 
 		var = &newvars[st->nvariables];
 
-		var->name = pg_strdup(name);
-		var->value = pg_strdup(value);
+		var->name = xstrdup(name);
+		var->value = xstrdup(value);
 
 		st->nvariables++;
 
@@ -700,7 +615,7 @@ putVariable(CState *st, const char *context, char *name, char *value)
 		char	   *val;
 
 		/* dup then free, in case value is pointing at this variable */
-		val = pg_strdup(value);
+		val = xstrdup(value);
 
 		free(var->value);
 		var->value = val;
@@ -722,7 +637,7 @@ parseVariable(const char *sql, int *eaten)
 	if (i == 1)
 		return NULL;
 
-	name = pg_malloc(i);
+	name = xmalloc(i);
 	memcpy(name, &sql[1], i - 1);
 	name[i - 1] = '\0';
 
@@ -739,7 +654,7 @@ replaceVariable(char **sql, char *param, int len, char *value)
 	{
 		size_t		offset = param - *sql;
 
-		*sql = pg_realloc(*sql, strlen(*sql) - len + valueln + 1);
+		*sql = xrealloc(*sql, strlen(*sql) - len + valueln + 1);
 		param = *sql + offset;
 	}
 
@@ -921,26 +836,9 @@ clientDone(CState *st, bool ok)
 	return false;				/* always false */
 }
 
-static
-void
-agg_vals_init(AggVals *aggs, instr_time start)
-{
-	/* basic counters */
-	aggs->cnt = 0;				/* number of transactions */
-	aggs->sum = 0;				/* SUM(duration) */
-	aggs->sum2 = 0;				/* SUM(duration*duration) */
-
-	/* min and max transaction duration */
-	aggs->min_duration = 0;
-	aggs->max_duration = 0;
-
-	/* start of the current interval */
-	aggs->start_time = INSTR_TIME_GET_DOUBLE(start);
-}
-
 /* return false iff client should be disconnected */
 static bool
-doCustom(TState *thread, CState *st, instr_time *conn_time, FILE *logfile, AggVals *agg)
+doCustom(TState *thread, CState *st, instr_time *conn_time, FILE *logfile)
 {
 	PGresult   *res;
 	Command   **commands;
@@ -998,105 +896,21 @@ top:
 			instr_time	diff;
 			double		usec;
 
-			/*
-			 * write the log entry if this row belongs to the random sample,
-			 * or no sampling rate was given which means log everything.
-			 */
-			if (sample_rate == 0.0 ||
-				pg_erand48(thread->random_state) <= sample_rate)
-			{
-				INSTR_TIME_SET_CURRENT(now);
-				diff = now;
-				INSTR_TIME_SUBTRACT(diff, st->txn_begin);
-				usec = (double) INSTR_TIME_GET_MICROSEC(diff);
+			INSTR_TIME_SET_CURRENT(now);
+			diff = now;
+			INSTR_TIME_SUBTRACT(diff, st->txn_begin);
+			usec = (double) INSTR_TIME_GET_MICROSEC(diff);
 
-				/* should we aggregate the results or not? */
-				if (agg_interval > 0)
-				{
-					/*
-					 * are we still in the same interval? if yes, accumulate
-					 * the values (print them otherwise)
-					 */
-					if (agg->start_time + agg_interval >= INSTR_TIME_GET_DOUBLE(now))
-					{
-						agg->cnt += 1;
-						agg->sum += usec;
-						agg->sum2 += usec * usec;
-
-						/* first in this aggregation interval */
-						if ((agg->cnt == 1) || (usec < agg->min_duration))
-							agg->min_duration = usec;
-
-						if ((agg->cnt == 1) || (usec > agg->max_duration))
-							agg->max_duration = usec;
-					}
-					else
-					{
-						/*
-						 * Loop until we reach the interval of the current
-						 * transaction (and print all the empty intervals in
-						 * between).
-						 */
-						while (agg->start_time + agg_interval < INSTR_TIME_GET_DOUBLE(now))
-						{
-							/*
-							 * This is a non-Windows branch (thanks to the
-							 * ifdef in usage), so we don't need to handle
-							 * this in a special way (see below).
-							 */
-							fprintf(logfile, "%ld %d %.0f %.0f %.0f %.0f\n",
-									agg->start_time,
-									agg->cnt,
-									agg->sum,
-									agg->sum2,
-									agg->min_duration,
-									agg->max_duration);
-
-							/* move to the next inteval */
-							agg->start_time = agg->start_time + agg_interval;
-
-							/* reset for "no transaction" intervals */
-							agg->cnt = 0;
-							agg->min_duration = 0;
-							agg->max_duration = 0;
-							agg->sum = 0;
-							agg->sum2 = 0;
-						}
-
-						/*
-						 * and now update the reset values (include the
-						 * current)
-						 */
-						agg->cnt = 1;
-						agg->min_duration = usec;
-						agg->max_duration = usec;
-						agg->sum = usec;
-						agg->sum2 = usec * usec;
-					}
-				}
-				else
-				{
-					/* no, print raw transactions */
 #ifndef WIN32
-
-					/*
-					 * This is more than we really ought to know about
-					 * instr_time
-					 */
-					fprintf(logfile, "%d %d %.0f %d %ld %ld\n",
-							st->id, st->cnt, usec, st->use_file,
-							(long) now.tv_sec, (long) now.tv_usec);
+			/* This is more than we really ought to know about instr_time */
+			fprintf(logfile, "%d %d %.0f %d %ld %ld\n",
+					st->id, st->cnt, usec, st->use_file,
+					(long) now.tv_sec, (long) now.tv_usec);
 #else
-
-					/*
-					 * On Windows, instr_time doesn't provide a timestamp
-					 * anyway
-					 */
-					fprintf(logfile, "%d %d %.0f %d 0 0\n",
-							st->id, st->cnt, usec, st->use_file);
+			/* On Windows, instr_time doesn't provide a timestamp anyway */
+			fprintf(logfile, "%d %d %.0f %d 0 0\n",
+					st->id, st->cnt, usec, st->use_file);
 #endif
-				}
-			}
 		}
 
 		if (commands[st->state]->type == SQL_COMMAND)
@@ -1139,7 +953,7 @@ top:
 		if (commands[st->state] == NULL)
 		{
 			st->state = 0;
-			st->use_file = (int) getrand(thread, 0, num_files - 1);
+			st->use_file = getrand(thread, 0, num_files - 1);
 			commands = sql_files[st->use_file];
 		}
 	}
@@ -1176,7 +990,7 @@ top:
 		{
 			char	   *sql;
 
-			sql = pg_strdup(command->argv[0]);
+			sql = xstrdup(command->argv[0]);
 			sql = assignVariables(st, sql);
 
 			if (debug)
@@ -1259,7 +1073,7 @@ top:
 		if (pg_strcasecmp(argv[0], "setrandom") == 0)
 		{
 			char	   *var;
-			int64		min,
+			int			min,
 						max;
 			char		res[64];
 
@@ -1271,10 +1085,10 @@ top:
 					st->ecnt++;
 					return true;
 				}
-				min = strtoint64(var);
+				min = atoi(var);
 			}
 			else
-				min = strtoint64(argv[2]);
+				min = atoi(argv[2]);
 
 #ifdef NOT_USED
 			if (min < 0)
@@ -1293,10 +1107,10 @@ top:
 					st->ecnt++;
 					return true;
 				}
-				max = strtoint64(var);
+				max = atoi(var);
 			}
 			else
-				max = strtoint64(argv[3]);
+				max = atoi(argv[3]);
 
 			if (max < min)
 			{
@@ -1306,11 +1120,11 @@ top:
 			}
 
 			/*
-			 * getrand() needs to be able to subtract max from min and add one
-			 * to the result without overflowing.  Since we know max > min, we
-			 * can detect overflow just by checking for a negative result. But
-			 * we must check both that the subtraction doesn't overflow, and
-			 * that adding one to the result doesn't overflow either.
+			 * getrand() neeeds to be able to subtract max from min and add
+			 * one the result without overflowing.	Since we know max > min,
+			 * we can detect overflow just by checking for a negative result.
+			 * But we must check both that the subtraction doesn't overflow,
+			 * and that adding one to the result doesn't overflow either.
 			 */
 			if (max - min < 0 || (max - min) + 1 < 0)
 			{
@@ -1320,9 +1134,9 @@ top:
 			}
 
 #ifdef DEBUG
-			printf("min: " INT64_FORMAT " max: " INT64_FORMAT " random: " INT64_FORMAT "\n", min, max, getrand(thread, min, max));
+			printf("min: %d max: %d random: %d\n", min, max, getrand(thread, min, max));
 #endif
-			snprintf(res, sizeof(res), INT64_FORMAT, getrand(thread, min, max));
+			snprintf(res, sizeof(res), "%d", getrand(thread, min, max));
 
 			if (!putVariable(st, argv[0], argv[1], res))
 			{
@@ -1335,7 +1149,7 @@ top:
 		else if (pg_strcasecmp(argv[0], "set") == 0)
 		{
 			char	   *var;
-			int64		ope1,
+			int			ope1,
 						ope2;
 			char		res[64];
 
@@ -1347,13 +1161,13 @@ top:
 					st->ecnt++;
 					return true;
 				}
-				ope1 = strtoint64(var);
+				ope1 = atoi(var);
 			}
 			else
-				ope1 = strtoint64(argv[2]);
+				ope1 = atoi(argv[2]);
 
 			if (argc < 5)
-				snprintf(res, sizeof(res), INT64_FORMAT, ope1);
+				snprintf(res, sizeof(res), "%d", ope1);
 			else
 			{
 				if (*argv[4] == ':')
@@ -1364,17 +1178,17 @@ top:
 						st->ecnt++;
 						return true;
 					}
-					ope2 = strtoint64(var);
+					ope2 = atoi(var);
 				}
 				else
-					ope2 = strtoint64(argv[4]);
+					ope2 = atoi(argv[4]);
 
 				if (strcmp(argv[3], "+") == 0)
-					snprintf(res, sizeof(res), INT64_FORMAT, ope1 + ope2);
+					snprintf(res, sizeof(res), "%d", ope1 + ope2);
 				else if (strcmp(argv[3], "-") == 0)
-					snprintf(res, sizeof(res), INT64_FORMAT, ope1 - ope2);
+					snprintf(res, sizeof(res), "%d", ope1 - ope2);
 				else if (strcmp(argv[3], "*") == 0)
-					snprintf(res, sizeof(res), INT64_FORMAT, ope1 * ope2);
+					snprintf(res, sizeof(res), "%d", ope1 * ope2);
 				else if (strcmp(argv[3], "/") == 0)
 				{
 					if (ope2 == 0)
@@ -1383,7 +1197,7 @@ top:
 						st->ecnt++;
 						return true;
 					}
-					snprintf(res, sizeof(res), INT64_FORMAT, ope1 / ope2);
+					snprintf(res, sizeof(res), "%d", ope1 / ope2);
 				}
 				else
 				{
@@ -1488,16 +1302,8 @@ disconnect_all(CState *state, int length)
 
 /* create tables and setup data */
 static void
-init(bool is_no_vacuum)
+init(void)
 {
-/* The scale factor at/beyond which 32bit integers are incapable of storing
- * 64bit values.
- *
- * Although the actual threshold is 21474, we use 20000 because it is easier to
- * document and remember, and isn't that far away from the real threshold.
- */
-#define SCALE_32BIT_THRESHOLD 20000
-
 	/*
 	 * Note: TPC-B requires at least 100 bytes per row, and the "filler"
 	 * fields in these table declarations were intended to comply with that.
@@ -1516,7 +1322,7 @@ init(bool is_no_vacuum)
 		char	   *distribute_by;
 #endif
 	};
-    struct ddlinfo DDLs[] = {
+	struct ddlinfo DDLs[] = {
 		{
 			"pgbench_branches",
 			"bid int not null,bbalance int,filler char(88)",
@@ -1556,19 +1362,12 @@ init(bool is_no_vacuum)
 		"alter table pgbench_tellers add primary key (tid)",
 		"alter table pgbench_accounts add primary key (aid)"
 	};
-	static char *DDLKEYs[] = {
-		"alter table pgbench_tellers add foreign key (bid) references pgbench_branches",
-		"alter table pgbench_accounts add foreign key (bid) references pgbench_branches",
-		"alter table pgbench_history add foreign key (bid) references pgbench_branches",
-		"alter table pgbench_history add foreign key (tid) references pgbench_tellers",
-		"alter table pgbench_history add foreign key (aid) references pgbench_accounts"
-	};
 
 #ifdef PGXC
 	static char *DDLAFTERs_bid[] = {
 		"alter table pgbench_branches add primary key (bid)",
-		"alter table pgbench_tellers add primary key (tid)",
-		"alter table pgbench_accounts add primary key (aid)"
+		"alter table pgbench_tellers add primary key (tid,bid)",
+		"alter table pgbench_accounts add primary key (aid,bid)"
 	};
 #endif
 
@@ -1576,14 +1375,6 @@ init(bool is_no_vacuum)
 	PGresult   *res;
 	char		sql[256];
 	int			i;
-	int64		k;
-
-	/* used to track elapsed time and estimate of the remaining time */
-	instr_time	start,
-				diff;
-	double		elapsed_sec,
-				remaining_sec;
-	int			log_interval = 1;
 
 	if ((con = doConnect()) == NULL)
 		exit(1);
@@ -1661,57 +1452,19 @@ init(bool is_no_vacuum)
 	}
 	PQclear(res);
 
-	INSTR_TIME_SET_CURRENT(start);
-
-	for (k = 0; k < (int64) naccounts * scale; k++)
+	for (i = 0; i < naccounts * scale; i++)
 	{
-		int64		j = k + 1;
+		int			j = i + 1;
 
-		snprintf(sql, 256, INT64_FORMAT "\t" INT64_FORMAT "\t%d\t\n", j, k / naccounts + 1, 0);
+		snprintf(sql, 256, "%d\t%d\t%d\t\n", j, i / naccounts + 1, 0);
 		if (PQputline(con, sql))
 		{
 			fprintf(stderr, "PQputline failed\n");
 			exit(1);
 		}
 
-		/*
-		 * If we want to stick with the original logging, print a message each
-		 * 100k inserted rows.
-		 */
-		if ((!use_quiet) && (j % 100000 == 0))
-		{
-			INSTR_TIME_SET_CURRENT(diff);
-			INSTR_TIME_SUBTRACT(diff, start);
-
-			elapsed_sec = INSTR_TIME_GET_DOUBLE(diff);
-			remaining_sec = (scale * naccounts - j) * elapsed_sec / j;
-
-			fprintf(stderr, INT64_FORMAT " of " INT64_FORMAT " tuples (%d%%) done (elapsed %.2f s, remaining %.2f s).\n",
-					j, (int64) naccounts * scale,
-					(int) (((int64) j * 100) / (naccounts * scale)),
-					elapsed_sec, remaining_sec);
-		}
-		/* let's not call the timing for each row, but only each 100 rows */
-		else if (use_quiet && (j % 100 == 0))
-		{
-			INSTR_TIME_SET_CURRENT(diff);
-			INSTR_TIME_SUBTRACT(diff, start);
-
-			elapsed_sec = INSTR_TIME_GET_DOUBLE(diff);
-			remaining_sec = (scale * naccounts - j) * elapsed_sec / j;
-
-			/* have we reached the next interval (or end)? */
-			if ((j == scale * naccounts) || (elapsed_sec >= log_interval * LOG_STEP_SECONDS))
-			{
-				fprintf(stderr, INT64_FORMAT " of " INT64_FORMAT " tuples (%d%%) done (elapsed %.2f s, remaining %.2f s).\n",
-						j, (int64) naccounts * scale,
-						(int) (((int64) j * 100) / (naccounts * scale)), elapsed_sec, remaining_sec);
-
-				/* skip to the next interval */
-				log_interval = (int) ceil(elapsed_sec / LOG_STEP_SECONDS);
-			}
-		}
-
+		if (j % 10000 == 0)
+			fprintf(stderr, "%d tuples done.\n", j);
 	}
 	if (PQputline(con, "\\.\n"))
 	{
@@ -1725,20 +1478,10 @@ init(bool is_no_vacuum)
 	}
 	executeStatement(con, "commit");
 
-	/* vacuum */
-	if (!is_no_vacuum)
-	{
-		fprintf(stderr, "vacuum...\n");
-		executeStatement(con, "vacuum analyze pgbench_branches");
-		executeStatement(con, "vacuum analyze pgbench_tellers");
-		executeStatement(con, "vacuum analyze pgbench_accounts");
-		executeStatement(con, "vacuum analyze pgbench_history");
-	}
-
 	/*
 	 * create indexes
 	 */
-	fprintf(stderr, "set primary keys...\n");
+	fprintf(stderr, "set primary key...\n");
 #ifdef PGXC
 	/*
 	 * If all the tables are distributed according to bid, create an index on it
@@ -1788,18 +1531,12 @@ init(bool is_no_vacuum)
 		executeStatement(con, buffer);
 	}
 
-	/*
-	 * create foreign keys
-	 */
-	if (foreign_keys)
-	{
-		fprintf(stderr, "set foreign keys...\n");
-		for (i = 0; i < lengthof(DDLKEYs); i++)
-		{
-			executeStatement(con, DDLKEYs[i]);
-		}
-	}
-
+	/* vacuum */
+	fprintf(stderr, "vacuum...");
+	executeStatement(con, "vacuum analyze pgbench_branches");
+	executeStatement(con, "vacuum analyze pgbench_tellers");
+	executeStatement(con, "vacuum analyze pgbench_accounts");
+	executeStatement(con, "vacuum analyze pgbench_history");
 
 	fprintf(stderr, "done.\n");
 	PQfinish(con);
@@ -1814,7 +1551,7 @@ parseQuery(Command *cmd, const char *raw_sql)
 	char	   *sql,
 			   *p;
 
-	sql = pg_strdup(raw_sql);
+	sql = xstrdup(raw_sql);
 	cmd->argc = 1;
 
 	p = sql;
@@ -1876,8 +1613,8 @@ process_commands(char *buf)
 		return NULL;
 
 	/* Allocate and initialize Command structure */
-	my_commands = (Command *) pg_malloc(sizeof(Command));
-	my_commands->line = pg_strdup(buf);
+	my_commands = (Command *) xmalloc(sizeof(Command));
+	my_commands->line = xstrdup(buf);
 	my_commands->command_num = num_commands++;
 	my_commands->type = 0;		/* until set */
 	my_commands->argc = 0;
@@ -1891,7 +1628,7 @@ process_commands(char *buf)
 
 		while (tok != NULL)
 		{
-			my_commands->argv[j++] = pg_strdup(tok);
+			my_commands->argv[j++] = xstrdup(tok);
 			my_commands->argc++;
 			tok = strtok(NULL, delim);
 		}
@@ -1993,7 +1730,7 @@ process_commands(char *buf)
 		switch (querymode)
 		{
 			case QUERY_SIMPLE:
-				my_commands->argv[0] = pg_strdup(p);
+				my_commands->argv[0] = xstrdup(p);
 				my_commands->argc++;
 				break;
 			case QUERY_EXTENDED:
@@ -2027,7 +1764,7 @@ process_file(char *filename)
 	}
 
 	alloc_num = COMMANDS_ALLOC_NUM;
-	my_commands = (Command **) pg_malloc(sizeof(Command *) * alloc_num);
+	my_commands = (Command **) xmalloc(sizeof(Command *) * alloc_num);
 
 	if (strcmp(filename, "-") == 0)
 		fd = stdin;
@@ -2053,7 +1790,7 @@ process_file(char *filename)
 		if (lineno >= alloc_num)
 		{
 			alloc_num += COMMANDS_ALLOC_NUM;
-			my_commands = pg_realloc(my_commands, sizeof(Command *) * alloc_num);
+			my_commands = xrealloc(my_commands, sizeof(Command *) * alloc_num);
 		}
 	}
 	fclose(fd);
@@ -2076,7 +1813,7 @@ process_builtin(char *tb)
 	int			alloc_num;
 
 	alloc_num = COMMANDS_ALLOC_NUM;
-	my_commands = (Command **) pg_malloc(sizeof(Command *) * alloc_num);
+	my_commands = (Command **) xmalloc(sizeof(Command *) * alloc_num);
 
 	lineno = 0;
 
@@ -2107,7 +1844,7 @@ process_builtin(char *tb)
 		if (lineno >= alloc_num)
 		{
 			alloc_num += COMMANDS_ALLOC_NUM;
-			my_commands = pg_realloc(my_commands, sizeof(Command *) * alloc_num);
+			my_commands = xrealloc(my_commands, sizeof(Command *) * alloc_num);
 		}
 	}
 
@@ -2211,16 +1948,6 @@ printResults(int ttype, int normal_xacts, int nclients,
 int
 main(int argc, char **argv)
 {
-	static struct option long_options[] = {
-		{"foreign-keys", no_argument, &foreign_keys, 1},
-		{"index-tablespace", required_argument, NULL, 3},
-		{"tablespace", required_argument, NULL, 2},
-		{"unlogged-tables", no_argument, &unlogged_tables, 1},
-		{"sampling-rate", required_argument, NULL, 4},
-		{"aggregate-interval", required_argument, NULL, 5},
-		{NULL, 0, NULL, 0}
-	};
-
 	int			c;
 	int			nclients = 1;	/* default number of simulated clients */
 	int			nthreads = 1;	/* default number of threads */
@@ -2243,6 +1970,13 @@ main(int argc, char **argv)
 
 	int			i;
 
+	static struct option long_options[] = {
+		{"index-tablespace", required_argument, NULL, 3},
+		{"tablespace", required_argument, NULL, 2},
+		{"unlogged-tables", no_argument, &unlogged_tables, 1},
+		{NULL, 0, NULL, 0}
+	};
+
 #ifdef HAVE_GETRLIMIT
 	struct rlimit rlim;
 #endif
@@ -2253,13 +1987,15 @@ main(int argc, char **argv)
 
 	char		val[64];
 
+	const char *progname;
+
 	progname = get_progname(argv[0]);
 
 	if (argc > 1)
 	{
 		if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-?") == 0)
 		{
-			usage();
+			usage(progname);
 			exit(0);
 		}
 		if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0)
@@ -2281,13 +2017,13 @@ main(int argc, char **argv)
 	else if ((env = getenv("PGUSER")) != NULL && *env != '\0')
 		login = env;
 
-	state = (CState *) pg_malloc(sizeof(CState));
+	state = (CState *) xmalloc(sizeof(CState));
 	memset(state, 0, sizeof(CState));
 
 #ifdef PGXC
 	while ((c = getopt_long(argc, argv, "ih:knvp:dSNc:j:Crs:t:T:U:lf:D:F:M:", long_options, &optindex)) != -1)
 #else
-	while ((c = getopt_long(argc, argv, "ih:nvp:dqSNc:j:Crs:t:T:U:lf:D:F:M:", long_options, &optindex)) != -1)
+	while ((c = getopt_long(argc, argv, "ih:nvp:dSNc:j:Crs:t:T:U:lf:D:F:M:", long_options, &optindex)) != -1)
 #endif
 	{
 		switch (c)
@@ -2301,7 +2037,7 @@ main(int argc, char **argv)
 				break;
 #endif
 			case 'h':
-				pghost = pg_strdup(optarg);
+				pghost = optarg;
 				break;
 			case 'n':
 				is_no_vacuum++;
@@ -2310,7 +2046,7 @@ main(int argc, char **argv)
 				do_vacuum_accounts++;
 				break;
 			case 'p':
-				pgport = pg_strdup(optarg);
+				pgport = optarg;
 				break;
 			case 'd':
 				debug++;
@@ -2396,17 +2132,14 @@ main(int argc, char **argv)
 				}
 				break;
 			case 'U':
-				login = pg_strdup(optarg);
+				login = optarg;
 				break;
 			case 'l':
 				use_log = true;
 				break;
-			case 'q':
-				use_quiet = true;
-				break;
 			case 'f':
 				ttype = 3;
-				filename = pg_strdup(optarg);
+				filename = optarg;
 				if (process_file(filename) == false || *sql_files[num_files - 1] == NULL)
 					exit(1);
 				break;
@@ -2452,31 +2185,10 @@ main(int argc, char **argv)
 				/* This covers long options which take no argument. */
 				break;
 			case 2:				/* tablespace */
-				tablespace = pg_strdup(optarg);
+				tablespace = optarg;
 				break;
 			case 3:				/* index-tablespace */
-				index_tablespace = pg_strdup(optarg);
-				break;
-			case 4:
-				sample_rate = atof(optarg);
-				if (sample_rate <= 0.0 || sample_rate > 1.0)
-				{
-					fprintf(stderr, "invalid sampling rate: %f\n", sample_rate);
-					exit(1);
-				}
-				break;
-			case 5:
-#ifdef WIN32
-				fprintf(stderr, "--aggregate-interval is not currently supported on Windows");
-				exit(1);
-#else
-				agg_interval = atoi(optarg);
-				if (agg_interval <= 0)
-				{
-					fprintf(stderr, "invalid number of seconds for aggregation: %d\n", agg_interval);
-					exit(1);
-				}
-#endif
+				index_tablespace = optarg;
 				break;
 			default:
 				fprintf(stderr, _("Try \"%s --help\" for more information.\n"), progname);
@@ -2499,7 +2211,7 @@ main(int argc, char **argv)
 
 	if (is_init_mode)
 	{
-		init(is_no_vacuum);
+		init();
 		exit(0);
 	}
 
@@ -2510,45 +2222,6 @@ main(int argc, char **argv)
 	if (nclients % nthreads != 0)
 	{
 		fprintf(stderr, "number of clients (%d) must be a multiple of number of threads (%d)\n", nclients, nthreads);
-		exit(1);
-	}
-
-	/* --sampling-rate may be used only with -l */
-	if (sample_rate > 0.0 && !use_log)
-	{
-		fprintf(stderr, "log sampling rate is allowed only when logging transactions (-l) \n");
-		exit(1);
-	}
-
-	/* -q may be used only with -i */
-	if (use_quiet && !is_init_mode)
-	{
-		fprintf(stderr, "quiet-logging is allowed only in initialization mode (-i)\n");
-		exit(1);
-	}
-
-	/* --sampling-rate may must not be used with --aggregate-interval */
-	if (sample_rate > 0.0 && agg_interval > 0)
-	{
-		fprintf(stderr, "log sampling (--sampling-rate) and aggregation (--aggregate-interval) can't be used at the same time\n");
-		exit(1);
-	}
-
-	if (agg_interval > 0 && (!use_log))
-	{
-		fprintf(stderr, "log aggregation is allowed only when actually logging transactions\n");
-		exit(1);
-	}
-
-	if ((duration > 0) && (agg_interval > duration))
-	{
-		fprintf(stderr, "number of seconds for aggregation (%d) must not be higher that test duration (%d)\n", agg_interval, duration);
-		exit(1);
-	}
-
-	if ((duration > 0) && (agg_interval > 0) && (duration % agg_interval != 0))
-	{
-		fprintf(stderr, "duration (%d) must be a multiple of aggregation interval (%d)\n", duration, agg_interval);
 		exit(1);
 	}
 
@@ -2576,7 +2249,7 @@ main(int argc, char **argv)
 
 	if (nclients > 1)
 	{
-		state = (CState *) pg_realloc(state, sizeof(CState) * nclients);
+		state = (CState *) xrealloc(state, sizeof(CState) * nclients);
 		memset(state + 1, 0, sizeof(CState) * (nclients - 1));
 
 		/* copy any -D switch values to all clients */
@@ -2710,7 +2383,7 @@ main(int argc, char **argv)
 	}
 
 	/* set up thread data structures */
-	threads = (TState *) pg_malloc(sizeof(TState) * nthreads);
+	threads = (TState *) xmalloc(sizeof(TState) * nthreads);
 	for (i = 0; i < nthreads; i++)
 	{
 		TState	   *thread = &threads[i];
@@ -2728,9 +2401,9 @@ main(int argc, char **argv)
 			int			t;
 
 			thread->exec_elapsed = (instr_time *)
-				pg_malloc(sizeof(instr_time) * num_commands);
+				xmalloc(sizeof(instr_time) * num_commands);
 			thread->exec_count = (int *)
-				pg_malloc(sizeof(int) * num_commands);
+				xmalloc(sizeof(int) * num_commands);
 
 			for (t = 0; t < num_commands; t++)
 			{
@@ -2821,10 +2494,7 @@ threadRun(void *arg)
 	int			remains = nstate;		/* number of remaining clients */
 	int			i;
 
-	AggVals		aggs;
-
-	result = pg_malloc(sizeof(TResult));
-
+	result = xmalloc(sizeof(TResult));
 	INSTR_TIME_SET_ZERO(result->conn_time);
 
 	/* open log file if requested */
@@ -2859,8 +2529,6 @@ threadRun(void *arg)
 	INSTR_TIME_SET_CURRENT(result->conn_time);
 	INSTR_TIME_SUBTRACT(result->conn_time, thread->start_time);
 
-	agg_vals_init(&aggs, thread->start_time);
-
 	/* send start up queries in async manner */
 	for (i = 0; i < nstate; i++)
 	{
@@ -2869,7 +2537,7 @@ threadRun(void *arg)
 		int			prev_ecnt = st->ecnt;
 
 		st->use_file = getrand(thread, 0, num_files - 1);
-		if (!doCustom(thread, st, &result->conn_time, logfile, &aggs))
+		if (!doCustom(thread, st, &result->conn_time, logfile))
 			remains--;			/* I've aborted */
 
 		if (st->ecnt > prev_ecnt && commands[st->state]->type == META_COMMAND)
@@ -2971,7 +2639,7 @@ threadRun(void *arg)
 			if (st->con && (FD_ISSET(PQsocket(st->con), &input_mask)
 							|| commands[st->state]->type == META_COMMAND))
 			{
-				if (!doCustom(thread, st, &result->conn_time, logfile, &aggs))
+				if (!doCustom(thread, st, &result->conn_time, logfile))
 					remains--;	/* I've aborted */
 			}
 
@@ -2997,6 +2665,7 @@ done:
 		fclose(logfile);
 	return result;
 }
+
 
 /*
  * Support for duration option: set timer_exceeded after so many seconds.
@@ -3038,7 +2707,7 @@ pthread_create(pthread_t *thread,
 	fork_pthread *th;
 	void	   *ret;
 
-	th = (fork_pthread *) pg_malloc(sizeof(fork_pthread));
+	th = (fork_pthread *) xmalloc(sizeof(fork_pthread));
 	if (pipe(th->pipes) < 0)
 	{
 		free(th);
@@ -3086,7 +2755,7 @@ pthread_join(pthread_t th, void **thread_return)
 	if (thread_return != NULL)
 	{
 		/* assume result is TResult */
-		*thread_return = pg_malloc(sizeof(TResult));
+		*thread_return = xmalloc(sizeof(TResult));
 		if (read(th->pipes[0], *thread_return, sizeof(TResult)) != sizeof(TResult))
 		{
 			free(*thread_return);
@@ -3154,7 +2823,7 @@ pthread_create(pthread_t *thread,
 	int			save_errno;
 	win32_pthread *th;
 
-	th = (win32_pthread *) pg_malloc(sizeof(win32_pthread));
+	th = (win32_pthread *) xmalloc(sizeof(win32_pthread));
 	th->routine = start_routine;
 	th->arg = arg;
 	th->result = NULL;

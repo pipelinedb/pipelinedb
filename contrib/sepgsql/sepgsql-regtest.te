@@ -1,4 +1,4 @@
-policy_module(sepgsql-regtest, 1.07)
+policy_module(sepgsql-regtest, 1.04)
 
 gen_require(`
 	all_userspace_class_perms
@@ -19,9 +19,6 @@ type sepgsql_regtest_trusted_proc_exec_t;
 postgresql_procedure_object(sepgsql_regtest_trusted_proc_exec_t)
 type sepgsql_nosuch_trusted_proc_exec_t;
 postgresql_procedure_object(sepgsql_nosuch_trusted_proc_exec_t)
-
-type sepgsql_regtest_invisible_schema_t;
-postgresql_schema_object(sepgsql_regtest_invisible_schema_t);
 
 #
 # Test domains for database administrators
@@ -45,21 +42,6 @@ allow sepgsql_regtest_dba_t self : process { setcurrent };
 allow sepgsql_regtest_dba_t sepgsql_regtest_user_t : process { dyntransition };
 allow sepgsql_regtest_dba_t sepgsql_regtest_foo_t : process { dyntransition };
 allow sepgsql_regtest_dba_t sepgsql_regtest_var_t : process { dyntransition };
-
-# special rule for system columns
-optional_policy(`
-	gen_require(`
-		attribute	sepgsql_table_type;
-		type		sepgsql_sysobj_t;
-	')
-	type_transition sepgsql_regtest_dba_t sepgsql_table_type:db_column sepgsql_sysobj_t "ctid";
-	type_transition sepgsql_regtest_dba_t sepgsql_table_type:db_column sepgsql_sysobj_t "oid";
-	type_transition sepgsql_regtest_dba_t sepgsql_table_type:db_column sepgsql_sysobj_t "xmin";
-	type_transition sepgsql_regtest_dba_t sepgsql_table_type:db_column sepgsql_sysobj_t "xmax";
-	type_transition sepgsql_regtest_dba_t sepgsql_table_type:db_column sepgsql_sysobj_t "cmin";
-	type_transition sepgsql_regtest_dba_t sepgsql_table_type:db_column sepgsql_sysobj_t "cmax";
-	type_transition sepgsql_regtest_dba_t sepgsql_table_type:db_column sepgsql_sysobj_t "tableoid";
-')
 
 #
 # Dummy domain for unpriv users
@@ -172,14 +154,25 @@ optional_policy(`
 #
 # Rule to execute original trusted procedures
 #
-# These rules intends to allow any valid client types to launch trusted-
-# procedures (including ones causes domain transition to invalid domain)
-# being labeled as sepgsql_regtest_trusted_proc_exec_t and
-# sepgsql_nosuch_trusted_proc_exec_t.
+# XXX - sepgsql_client_type contains any valid client types, so we allow
+# them to execute the original trusted procedure at once.
 #
 optional_policy(`
 	gen_require(`
 		attribute sepgsql_client_type;
 	')
-	allow sepgsql_client_type { sepgsql_regtest_trusted_proc_exec_t sepgsql_nosuch_trusted_proc_exec_t }:db_procedure { getattr execute entrypoint };
+	allow sepgsql_client_type { sepgsql_regtest_trusted_proc_exec_t sepgsql_nosuch_trusted_proc_exec_t }:db_procedure { getattr execute };
+
+	# These rules intends sepgsql_regtest_user_t domain to translate
+	# sepgsql_regtest_dba_t on execution of procedures labeled as
+	# sepgsql_regtest_trusted_proc_exec_t.
+	#
+#	allow sepgsql_client_type sepgsql_regtest_trusted_proc_exec_t:db_procedure { getattr execute };
+
+	# These rules intends sepgsql_regtest_user_t domain to translate
+	# sepgsql_regtest_nosuch_t on execution of procedures labeled as
+	# sepgsql_nosuch_trusted_proc_exec_t, without permissions to
+	# translate to sepgsql_nosuch_trusted_proc_exec_t.
+	#
+#	allow sepgsql_client_type sepgsql_nosuch_trusted_proc_exec_t:db_procedure { getattr execute install };
 ')

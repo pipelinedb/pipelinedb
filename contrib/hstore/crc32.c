@@ -13,7 +13,7 @@
  * This code implements the AUTODIN II polynomial
  * The variable corresponding to the macro argument "crc" should
  * be an unsigned long.
- * Original code  by Spencer Garrett <srg@quick.com>
+ * Oroginal code  by Spencer Garrett <srg@quick.com>
  */
 
 #define _CRC32_(crc, ch)	 (crc = (crc >> 8) ^ crc32tab[(crc ^ (ch)) & 0xff])

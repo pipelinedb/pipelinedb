@@ -6,7 +6,7 @@ CREATE EXTENSION pgstattuple;
 -- indexes should be that.
 --
 
-create table test (a int primary key, b int[]);
+create table test (a int primary key);
 
 select * from pgstattuple('test'::text);
 select * from pgstattuple('test'::regclass);
@@ -15,7 +15,3 @@ select * from pgstatindex('test_pkey');
 
 select pg_relpages('test');
 select pg_relpages('test_pkey');
-
-create index test_ginidx on test using gin (b);
-
-select * from pgstatginindex('test_ginidx');

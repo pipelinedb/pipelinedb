@@ -4,7 +4,7 @@
  *
  * Routines corresponding to procedure objects
  *
- * Copyright (c) 2010-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2010-2012, PostgreSQL Global Development Group
  *
  * -------------------------------------------------------------------------
  */
@@ -12,19 +12,15 @@
 
 #include "access/genam.h"
 #include "access/heapam.h"
-#include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
 #include "catalog/pg_namespace.h"
 #include "catalog/pg_proc.h"
-#include "catalog/pg_type.h"
 #include "commands/seclabel.h"
-#include "lib/stringinfo.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
-#include "utils/syscache.h"
 #include "utils/tqual.h"
 
 #include "sepgsql.h"
@@ -42,11 +38,9 @@ sepgsql_proc_post_create(Oid functionId)
 	ScanKeyData skey;
 	SysScanDesc sscan;
 	HeapTuple	tuple;
-	char	   *nsp_name;
 	char	   *scontext;
 	char	   *tcontext;
 	char	   *ncontext;
-	uint32		required;
 	int			i;
 	StringInfoData audit_name;
 	ObjectAddress object;
@@ -81,7 +75,7 @@ sepgsql_proc_post_create(Oid functionId)
 	sepgsql_avc_check_perms(&object,
 							SEPG_CLASS_DB_SCHEMA,
 							SEPG_DB_SCHEMA__ADD_NAME,
-							getObjectIdentity(&object),
+							getObjectDescription(&object),
 							true);
 
 	/*
@@ -97,35 +91,26 @@ sepgsql_proc_post_create(Oid functionId)
 	tcontext = sepgsql_get_label(NamespaceRelationId,
 								 proForm->pronamespace, 0);
 	ncontext = sepgsql_compute_create(scontext, tcontext,
-									  SEPG_CLASS_DB_PROCEDURE,
-									  NameStr(proForm->proname));
+									  SEPG_CLASS_DB_PROCEDURE);
 
 	/*
-	 * check db_procedure:{create (install)} permission
+	 * check db_procedure:{create} permission
 	 */
 	initStringInfo(&audit_name);
-	nsp_name = get_namespace_name(proForm->pronamespace);
-	appendStringInfo(&audit_name, "%s(",
-			quote_qualified_identifier(nsp_name, NameStr(proForm->proname)));
+	appendStringInfo(&audit_name, "function %s(", NameStr(proForm->proname));
 	for (i = 0; i < proForm->pronargs; i++)
 	{
+		Oid			typeoid = proForm->proargtypes.values[i];
+
 		if (i > 0)
 			appendStringInfoChar(&audit_name, ',');
-
-		object.classId = TypeRelationId;
-		object.objectId = proForm->proargtypes.values[i];
-		object.objectSubId = 0;
-		appendStringInfoString(&audit_name, getObjectIdentity(&object));
+		appendStringInfoString(&audit_name, format_type_be(typeoid));
 	}
 	appendStringInfoChar(&audit_name, ')');
 
-	required = SEPG_DB_PROCEDURE__CREATE;
-	if (proForm->proleakproof)
-		required |= SEPG_DB_PROCEDURE__INSTALL;
-
 	sepgsql_avc_check_perms_label(ncontext,
 								  SEPG_CLASS_DB_PROCEDURE,
-								  required,
+								  SEPG_DB_PROCEDURE__CREATE,
 								  audit_name.data,
 								  true);
 
@@ -165,7 +150,7 @@ sepgsql_proc_drop(Oid functionId)
 	object.classId = NamespaceRelationId;
 	object.objectId = get_func_namespace(functionId);
 	object.objectSubId = 0;
-	audit_name = getObjectIdentity(&object);
+	audit_name = getObjectDescription(&object);
 
 	sepgsql_avc_check_perms(&object,
 							SEPG_CLASS_DB_SCHEMA,
@@ -180,7 +165,7 @@ sepgsql_proc_drop(Oid functionId)
 	object.classId = ProcedureRelationId;
 	object.objectId = functionId;
 	object.objectSubId = 0;
-	audit_name = getObjectIdentity(&object);
+	audit_name = getObjectDescription(&object);
 
 	sepgsql_avc_check_perms(&object,
 							SEPG_CLASS_DB_PROCEDURE,
@@ -205,7 +190,7 @@ sepgsql_proc_relabel(Oid functionId, const char *seclabel)
 	object.classId = ProcedureRelationId;
 	object.objectId = functionId;
 	object.objectSubId = 0;
-	audit_name = getObjectIdentity(&object);
+	audit_name = getObjectDescription(&object);
 
 	/*
 	 * check db_procedure:{setattr relabelfrom} permission
@@ -225,111 +210,5 @@ sepgsql_proc_relabel(Oid functionId, const char *seclabel)
 								  SEPG_DB_PROCEDURE__RELABELTO,
 								  audit_name,
 								  true);
-	pfree(audit_name);
-}
-
-/*
- * sepgsql_proc_setattr
- *
- * It checks privileges to alter the supplied function.
- */
-void
-sepgsql_proc_setattr(Oid functionId)
-{
-	Relation	rel;
-	ScanKeyData skey;
-	SysScanDesc sscan;
-	HeapTuple	oldtup;
-	HeapTuple	newtup;
-	Form_pg_proc oldform;
-	Form_pg_proc newform;
-	uint32		required;
-	ObjectAddress object;
-	char	   *audit_name;
-
-	/*
-	 * Fetch newer catalog
-	 */
-	rel = heap_open(ProcedureRelationId, AccessShareLock);
-
-	ScanKeyInit(&skey,
-				ObjectIdAttributeNumber,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(functionId));
-
-	sscan = systable_beginscan(rel, ProcedureOidIndexId, true,
-							   SnapshotSelf, 1, &skey);
-	newtup = systable_getnext(sscan);
-	if (!HeapTupleIsValid(newtup))
-		elog(ERROR, "catalog lookup failed for function %u", functionId);
-	newform = (Form_pg_proc) GETSTRUCT(newtup);
-
-	/*
-	 * Fetch older catalog
-	 */
-	oldtup = SearchSysCache1(PROCOID, ObjectIdGetDatum(functionId));
-	if (!HeapTupleIsValid(oldtup))
-		elog(ERROR, "cache lookup failed for function %u", functionId);
-	oldform = (Form_pg_proc) GETSTRUCT(oldtup);
-
-	/*
-	 * Does this ALTER command takes operation to namespace?
-	 */
-	if (newform->pronamespace != oldform->pronamespace)
-	{
-		sepgsql_schema_remove_name(oldform->pronamespace);
-		sepgsql_schema_add_name(oldform->pronamespace);
-	}
-	if (strcmp(NameStr(newform->proname), NameStr(oldform->proname)) != 0)
-		sepgsql_schema_rename(oldform->pronamespace);
-
-	/*
-	 * check db_procedure:{setattr (install)} permission
-	 */
-	required = SEPG_DB_PROCEDURE__SETATTR;
-	if (!oldform->proleakproof && newform->proleakproof)
-		required |= SEPG_DB_PROCEDURE__INSTALL;
-
-	object.classId = ProcedureRelationId;
-	object.objectId = functionId;
-	object.objectSubId = 0;
-	audit_name = getObjectIdentity(&object);
-
-	sepgsql_avc_check_perms(&object,
-							SEPG_CLASS_DB_PROCEDURE,
-							required,
-							audit_name,
-							true);
-	/* cleanups */
-	pfree(audit_name);
-
-	ReleaseSysCache(oldtup);
-	systable_endscan(sscan);
-	heap_close(rel, AccessShareLock);
-}
-
-/*
- * sepgsql_proc_execute
- *
- * It checks privileges to execute the supplied function
- */
-void
-sepgsql_proc_execute(Oid functionId)
-{
-	ObjectAddress object;
-	char	   *audit_name;
-
-	/*
-	 * check db_procedure:{execute} permission
-	 */
-	object.classId = ProcedureRelationId;
-	object.objectId = functionId;
-	object.objectSubId = 0;
-	audit_name = getObjectIdentity(&object);
-	sepgsql_avc_check_perms(&object,
-							SEPG_CLASS_DB_PROCEDURE,
-							SEPG_DB_PROCEDURE__EXECUTE,
-							audit_name,
-							true);
 	pfree(audit_name);
 }

@@ -4,7 +4,7 @@
  *
  * Routines corresponding to schema objects
  *
- * Copyright (c) 2010-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2010-2012, PostgreSQL Global Development Group
  *
  * -------------------------------------------------------------------------
  */
@@ -12,16 +12,13 @@
 
 #include "access/genam.h"
 #include "access/heapam.h"
-#include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
 #include "catalog/pg_database.h"
 #include "catalog/pg_namespace.h"
 #include "commands/seclabel.h"
-#include "lib/stringinfo.h"
 #include "miscadmin.h"
-#include "utils/builtins.h"
 #include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
 #include "utils/tqual.h"
@@ -43,10 +40,9 @@ sepgsql_schema_post_create(Oid namespaceId)
 	HeapTuple	tuple;
 	char	   *tcontext;
 	char	   *ncontext;
-	const char *nsp_name;
+	char		audit_name[NAMEDATALEN + 20];
 	ObjectAddress object;
 	Form_pg_namespace nspForm;
-	StringInfoData audit_name;
 
 	/*
 	 * Compute a default security label when we create a new schema object
@@ -70,27 +66,21 @@ sepgsql_schema_post_create(Oid namespaceId)
 		elog(ERROR, "catalog lookup failed for namespace %u", namespaceId);
 
 	nspForm = (Form_pg_namespace) GETSTRUCT(tuple);
-	nsp_name = NameStr(nspForm->nspname);
-	if (strncmp(nsp_name, "pg_temp_", 8) == 0)
-		nsp_name = "pg_temp";
-	else if (strncmp(nsp_name, "pg_toast_temp_", 14) == 0)
-		nsp_name = "pg_toast_temp";
 
 	tcontext = sepgsql_get_label(DatabaseRelationId, MyDatabaseId, 0);
 	ncontext = sepgsql_compute_create(sepgsql_get_client_label(),
 									  tcontext,
-									  SEPG_CLASS_DB_SCHEMA,
-									  nsp_name);
+									  SEPG_CLASS_DB_SCHEMA);
 
 	/*
 	 * check db_schema:{create}
 	 */
-	initStringInfo(&audit_name);
-	appendStringInfo(&audit_name, "%s", quote_identifier(nsp_name));
+	snprintf(audit_name, sizeof(audit_name),
+			 "schema %s", NameStr(nspForm->nspname));
 	sepgsql_avc_check_perms_label(ncontext,
 								  SEPG_CLASS_DB_SCHEMA,
 								  SEPG_DB_SCHEMA__CREATE,
-								  audit_name.data,
+								  audit_name,
 								  true);
 	systable_endscan(sscan);
 	heap_close(rel, AccessShareLock);
@@ -124,7 +114,7 @@ sepgsql_schema_drop(Oid namespaceId)
 	object.classId = NamespaceRelationId;
 	object.objectId = namespaceId;
 	object.objectSubId = 0;
-	audit_name = getObjectIdentity(&object);
+	audit_name = getObjectDescription(&object);
 
 	sepgsql_avc_check_perms(&object,
 							SEPG_CLASS_DB_SCHEMA,
@@ -149,7 +139,7 @@ sepgsql_schema_relabel(Oid namespaceId, const char *seclabel)
 	object.classId = NamespaceRelationId;
 	object.objectId = namespaceId;
 	object.objectSubId = 0;
-	audit_name = getObjectIdentity(&object);
+	audit_name = getObjectDescription(&object);
 
 	/*
 	 * check db_schema:{setattr relabelfrom} permission
@@ -170,68 +160,4 @@ sepgsql_schema_relabel(Oid namespaceId, const char *seclabel)
 								  audit_name,
 								  true);
 	pfree(audit_name);
-}
-
-/*
- * sepgsql_schema_check_perms
- *
- * utility routine to check db_schema:{xxx} permissions
- */
-static bool
-check_schema_perms(Oid namespaceId, uint32 required, bool abort_on_violation)
-{
-	ObjectAddress object;
-	char	   *audit_name;
-	bool		result;
-
-	object.classId = NamespaceRelationId;
-	object.objectId = namespaceId;
-	object.objectSubId = 0;
-	audit_name = getObjectIdentity(&object);
-
-	result = sepgsql_avc_check_perms(&object,
-									 SEPG_CLASS_DB_SCHEMA,
-									 required,
-									 audit_name,
-									 abort_on_violation);
-	pfree(audit_name);
-
-	return result;
-}
-
-/* db_schema:{setattr} permission */
-void
-sepgsql_schema_setattr(Oid namespaceId)
-{
-	check_schema_perms(namespaceId, SEPG_DB_SCHEMA__SETATTR, true);
-}
-
-/* db_schema:{search} permission */
-bool
-sepgsql_schema_search(Oid namespaceId, bool abort_on_violation)
-{
-	return check_schema_perms(namespaceId,
-							  SEPG_DB_SCHEMA__SEARCH,
-							  abort_on_violation);
-}
-
-void
-sepgsql_schema_add_name(Oid namespaceId)
-{
-	check_schema_perms(namespaceId, SEPG_DB_SCHEMA__ADD_NAME, true);
-}
-
-void
-sepgsql_schema_remove_name(Oid namespaceId)
-{
-	check_schema_perms(namespaceId, SEPG_DB_SCHEMA__REMOVE_NAME, true);
-}
-
-void
-sepgsql_schema_rename(Oid namespaceId)
-{
-	check_schema_perms(namespaceId,
-					   SEPG_DB_SCHEMA__ADD_NAME |
-					   SEPG_DB_SCHEMA__REMOVE_NAME,
-					   true);
 }

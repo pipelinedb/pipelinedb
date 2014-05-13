@@ -106,7 +106,7 @@ g_int_union(PG_FUNCTION_ARGS)
 {
 	GistEntryVector *entryvec = (GistEntryVector *) PG_GETARG_POINTER(0);
 	int		   *size = (int *) PG_GETARG_POINTER(1);
-	int32		i,
+	int4		i,
 			   *ptr;
 	ArrayType  *res;
 	int			totlen = 0;
@@ -128,7 +128,7 @@ g_int_union(PG_FUNCTION_ARGS)
 		int			nel;
 
 		nel = ARRNELEMS(ent);
-		memcpy(ptr, ARRPTR(ent), nel * sizeof(int32));
+		memcpy(ptr, ARRPTR(ent), nel * sizeof(int4));
 		ptr += nel;
 	}
 
@@ -217,6 +217,8 @@ g_int_compress(PG_FUNCTION_ARGS)
 	}
 	else
 		PG_RETURN_POINTER(entry);
+
+	PG_RETURN_POINTER(entry);
 }
 
 Datum
@@ -315,8 +317,8 @@ g_int_same(PG_FUNCTION_ARGS)
 	ArrayType  *a = PG_GETARG_ARRAYTYPE_P(0);
 	ArrayType  *b = PG_GETARG_ARRAYTYPE_P(1);
 	bool	   *result = (bool *) PG_GETARG_POINTER(2);
-	int32		n = ARRNELEMS(a);
-	int32	   *da,
+	int4		n = ARRNELEMS(a);
+	int4	   *da,
 			   *db;
 
 	CHECKARRVALID(a);

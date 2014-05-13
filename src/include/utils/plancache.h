@@ -17,6 +17,8 @@
 
 #include "access/tupdesc.h"
 #include "nodes/params.h"
+#include "nodes/parsenodes.h"
+#include "utils/tuplestore.h"
 
 #define CACHEDPLANSOURCE_MAGIC		195726186
 #define CACHEDPLAN_MAGIC			953717834
@@ -110,6 +112,9 @@ typedef struct CachedPlanSource
 	int			num_custom_plans;		/* number of plans included in total */
 #ifdef PGXC
 	char	   *stmt_name;		/* If set, this is a copy of prepared stmt name */
+	Tuplestorestate *store; /* tuplestore to read from, if any */
+	TupleDesc	desc; /* description of the tuplestore, if any */
+	Query *query; /* query associated with this cached plan */
 #endif
 } CachedPlanSource;
 

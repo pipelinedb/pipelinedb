@@ -121,6 +121,7 @@ gbt_text_compress(PG_FUNCTION_ARGS)
 Datum
 gbt_bpchar_compress(PG_FUNCTION_ARGS)
 {
+
 	GISTENTRY  *entry = (GISTENTRY *) PG_GETARG_POINTER(0);
 	GISTENTRY  *retval;
 

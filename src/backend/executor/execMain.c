@@ -42,8 +42,10 @@
 #include "access/transam.h"
 #include "access/xact.h"
 #include "catalog/namespace.h"
+#include "catalog/pipeline_queries.h"
 #include "commands/trigger.h"
 #include "executor/execdebug.h"
+#include "libpq/libpq.h"
 #include "foreign/fdwapi.h"
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
@@ -59,6 +61,7 @@
 #include "utils/tqual.h"
 #ifdef PGXC
 #include "pgxc/pgxc.h"
+#include "pgxc/execRemote.h"
 #include "commands/copy.h"
 #endif
 
@@ -80,6 +83,7 @@ static void ExecutePlan(EState *estate, PlanState *planstate,
 			CmdType operation,
 			bool sendTuples,
 			long numberTuples,
+			int timeoutms,
 			ScanDirection direction,
 			DestReceiver *dest);
 static bool ExecCheckRTEPerms(RangeTblEntry *rte);
@@ -312,8 +316,122 @@ standard_ExecutorRun(QueryDesc *queryDesc,
 					operation,
 					sendTuples,
 					count,
+					0,
 					direction,
 					dest);
+
+	/*
+	 * shutdown tuple receiver, if we started it
+	 */
+	if (sendTuples)
+		(*dest->rShutdown) (dest);
+
+	if (queryDesc->totaltime)
+		InstrStopNode(queryDesc->totaltime, estate->es_processed);
+
+	MemoryContextSwitchTo(oldcontext);
+}
+
+/*
+ * ExecutorRunContinuous
+ *
+ * Runs a query continuously on microbatches of newlymaterialized data, until
+ * a deactivate message is received
+ */
+void
+ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, ResourceOwner owner)
+{
+	EState	   *estate;
+	CmdType		operation;
+	DestReceiver *dest;
+	bool		sendTuples;
+	MemoryContext oldcontext;
+	ResourceOwner save = CurrentResourceOwner;
+	int batchsize = queryDesc->plannedstmt->cq_batch_size;
+	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
+
+	/* sanity checks */
+	Assert(queryDesc != NULL);
+
+	estate = queryDesc->estate;
+
+	/* Allow instrumentation of Executor overall runtime */
+	if (queryDesc->totaltime)
+		InstrStartNode(queryDesc->totaltime);
+
+	/*
+	 * extract information from the query descriptor and the query feature.
+	 */
+	operation = queryDesc->operation;
+	dest = queryDesc->dest;
+
+	/*
+	 * startup tuple receiver, if we will be emitting tuples
+	 */
+	estate->es_processed = 0;
+	estate->es_lastoid = InvalidOid;
+
+	sendTuples = (operation == CMD_SELECT ||
+				  queryDesc->plannedstmt->hasReturning);
+
+	if (sendTuples)
+		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
+
+	/* Finish the transaction started in PostgresMain() */
+	UnregisterSnapshotFromOwner(queryDesc->snapshot, owner);
+	UnregisterSnapshotFromOwner(estate->es_snapshot, owner);
+	PopActiveSnapshot();
+	CommitTransactionCommand();
+
+	for (;;)
+	{
+		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
+
+		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+		CurrentResourceOwner = owner;
+
+		estate->es_snapshot = GetTransactionSnapshot();
+
+		/*
+		 * Run plan on a microbatch
+		 */
+		ExecutePlan(estate, queryDesc->planstate, operation,
+				sendTuples, batchsize, timeoutms, ForwardScanDirection, dest);
+
+		MemoryContextSwitchTo(oldcontext);
+
+		/*
+		 * If we're a datanode, tell the coordinator that this batch is done
+		 */
+		if (IS_PGXC_DATANODE)
+			ReadyForQuery(dest->mydest);
+
+		/*
+		 * If we're a coordinator, send the partial result back to the datanodes
+		 * for final merging
+		 */
+		if (IS_PGXC_COORDINATOR && estate->es_processed)
+			DoRemoteMerge(mergeState);
+
+		CurrentResourceOwner = save;
+
+		/*
+		 * If we didn't see any new tuples, sleep briefly to save cycles
+		 */
+		if (estate->es_processed == 0)
+			pg_usleep(PIPELINE_SLEEP_MS * 1000);
+		else
+			elog(LOG, "processed=%d, batch size=%d", estate->es_processed, batchsize);
+		estate->es_processed = 0;
+
+		PopActiveSnapshot();
+		CommitTransactionCommand();
+	}
+
+	/* Start a new transaction before committing in PostgresMain */
+	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
 
 	/*
 	 * shutdown tuple receiver, if we started it
@@ -855,6 +973,8 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	estate->es_epqTuple = NULL;
 	estate->es_epqTupleSet = NULL;
 	estate->es_epqScanDone = NULL;
+
+	estate->cq_batch_size = plannedstmt->cq_batch_size;
 
 	/*
 	 * Initialize private state information for each SubPlan.  We must do this
@@ -1451,11 +1571,16 @@ ExecutePlan(EState *estate,
 			CmdType operation,
 			bool sendTuples,
 			long numberTuples,
+			int timeoutms,
 			ScanDirection direction,
 			DestReceiver *dest)
 {
 	TupleTableSlot *slot;
 	long		current_tuple_count;
+	struct timeval scanstart;
+	struct timeval current;
+	long 		startms;
+	long		currentms;
 
 	/*
 	 * initialize local variables
@@ -1466,6 +1591,9 @@ ExecutePlan(EState *estate,
 	 * Set the direction.
 	 */
 	estate->es_direction = direction;
+
+	gettimeofday(&scanstart, NULL);
+	startms = (scanstart.tv_sec * 1000) + (scanstart.tv_usec / 1000.0);
 
 	/*
 	 * Loop until we've processed the proper number of tuples from the plan.
@@ -1482,10 +1610,29 @@ ExecutePlan(EState *estate,
 
 		/*
 		 * if the tuple is null, then we assume there is nothing more to
-		 * process so we just end the loop...
+		 * process so we just end the loop or potentially wait a while longer
 		 */
 		if (TupIsNull(slot))
-			break;
+		{
+			if (timeoutms > 0)
+			{
+				/*
+				 * If we're using a timeout, only break if we've exceeded
+				 * it during this scan. This is primarily so we don't have
+				 * to wait for microbatches to fill to capacity if no new
+				 * tuples are arriving.
+				 */
+				gettimeofday(&current, NULL);
+				currentms = (current.tv_sec * 1000) + (current.tv_usec / 1000.0);
+				if (currentms - startms > timeoutms)
+					break;	/* timeout reached, return */
+				else
+					continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
+			}
+			else
+				break; /* no timeout, return as soon as we encounter a null tuple */
+		}
+		print_slot(slot);
 
 		/*
 		 * If we have a junk filter, then project a new tuple with the junk

@@ -77,6 +77,12 @@ unique_array(trgm *a, int len)
 	return curend + 1 - a;
 }
 
+#ifdef KEEPONLYALNUM
+#define iswordchr(c)	(t_isalpha(c) || t_isdigit(c))
+#else
+#define iswordchr(c)	(!t_isspace(c))
+#endif
+
 /*
  * Finds first word in string, returns pointer to the word,
  * endword points to the character after word
@@ -86,7 +92,7 @@ find_word(char *str, int lenstr, char **endword, int *charlen)
 {
 	char	   *beginword = str;
 
-	while (beginword - str < lenstr && !ISWORDCHR(beginword))
+	while (beginword - str < lenstr && !iswordchr(beginword))
 		beginword += pg_mblen(beginword);
 
 	if (beginword - str >= lenstr)
@@ -94,7 +100,7 @@ find_word(char *str, int lenstr, char **endword, int *charlen)
 
 	*endword = beginword;
 	*charlen = 0;
-	while (*endword - str < lenstr && ISWORDCHR(*endword))
+	while (*endword - str < lenstr && iswordchr(*endword))
 	{
 		*endword += pg_mblen(*endword);
 		(*charlen)++;
@@ -103,13 +109,9 @@ find_word(char *str, int lenstr, char **endword, int *charlen)
 	return beginword;
 }
 
-/*
- * Reduce a trigram (three possibly multi-byte characters) to a trgm,
- * which is always exactly three bytes.  If we have three single-byte
- * characters, we just use them as-is; otherwise we form a hash value.
- */
-void
-compact_trigram(trgm *tptr, char *str, int bytelen)
+#ifdef USE_WIDE_UPPER_LOWER
+static void
+cnt_trigram(trgm *tptr, char *str, int bytelen)
 {
 	if (bytelen == 3)
 	{
@@ -129,6 +131,7 @@ compact_trigram(trgm *tptr, char *str, int bytelen)
 		CPTRGM(tptr, &crc);
 	}
 }
+#endif
 
 /*
  * Adds trigrams from words (already padded).
@@ -141,16 +144,16 @@ make_trigrams(trgm *tptr, char *str, int bytelen, int charlen)
 	if (charlen < 3)
 		return tptr;
 
-	if (bytelen > charlen)
+#ifdef USE_WIDE_UPPER_LOWER
+	if (pg_database_encoding_max_length() > 1)
 	{
-		/* Find multibyte character boundaries and apply compact_trigram */
 		int			lenfirst = pg_mblen(str),
 					lenmiddle = pg_mblen(str + lenfirst),
 					lenlast = pg_mblen(str + lenfirst + lenmiddle);
 
 		while ((ptr - str) + lenfirst + lenmiddle + lenlast <= bytelen)
 		{
-			compact_trigram(tptr, ptr, lenfirst + lenmiddle + lenlast);
+			cnt_trigram(tptr, ptr, lenfirst + lenmiddle + lenlast);
 
 			ptr += lenfirst;
 			tptr++;
@@ -161,8 +164,8 @@ make_trigrams(trgm *tptr, char *str, int bytelen, int charlen)
 		}
 	}
 	else
+#endif
 	{
-		/* Fast path when there are no multibyte characters */
 		Assert(bytelen == charlen);
 
 		while (ptr - str < bytelen - 2 /* number of trigrams = strlen - 2 */ )
@@ -269,36 +272,33 @@ get_wildcard_part(const char *str, int lenstr,
 	const char *beginword = str;
 	const char *endword;
 	char	   *s = buf;
-	bool		in_leading_wildcard_meta = false;
-	bool		in_trailing_wildcard_meta = false;
+	bool		in_wildcard_meta = false;
 	bool		in_escape = false;
 	int			clen;
 
 	/*
-	 * Find the first word character, remembering whether preceding character
-	 * was wildcard meta-character.  Note that the in_escape state persists
-	 * from this loop to the next one, since we may exit at a word character
-	 * that is in_escape.
+	 * Find the first word character remembering whether last character was
+	 * wildcard meta-character.
 	 */
 	while (beginword - str < lenstr)
 	{
 		if (in_escape)
 		{
-			if (ISWORDCHR(beginword))
-				break;
 			in_escape = false;
-			in_leading_wildcard_meta = false;
+			in_wildcard_meta = false;
+			if (iswordchr(beginword))
+				break;
 		}
 		else
 		{
 			if (ISESCAPECHAR(beginword))
 				in_escape = true;
 			else if (ISWILDCARDCHAR(beginword))
-				in_leading_wildcard_meta = true;
-			else if (ISWORDCHR(beginword))
+				in_wildcard_meta = true;
+			else if (iswordchr(beginword))
 				break;
 			else
-				in_leading_wildcard_meta = false;
+				in_wildcard_meta = false;
 		}
 		beginword += pg_mblen(beginword);
 	}
@@ -310,11 +310,11 @@ get_wildcard_part(const char *str, int lenstr,
 		return NULL;
 
 	/*
-	 * Add left padding spaces if preceding character wasn't wildcard
+	 * Add left padding spaces if last character wasn't wildcard
 	 * meta-character.
 	 */
 	*charlen = 0;
-	if (!in_leading_wildcard_meta)
+	if (!in_wildcard_meta)
 	{
 		if (LPADDING > 0)
 		{
@@ -333,29 +333,23 @@ get_wildcard_part(const char *str, int lenstr,
 	 * string boundary.  Strip escapes during copy.
 	 */
 	endword = beginword;
+	in_wildcard_meta = false;
+	in_escape = false;
 	while (endword - str < lenstr)
 	{
 		clen = pg_mblen(endword);
 		if (in_escape)
 		{
-			if (ISWORDCHR(endword))
+			in_escape = false;
+			in_wildcard_meta = false;
+			if (iswordchr(endword))
 			{
 				memcpy(s, endword, clen);
 				(*charlen)++;
 				s += clen;
 			}
 			else
-			{
-				/*
-				 * Back up endword to the escape character when stopping at an
-				 * escaped char, so that subsequent get_wildcard_part will
-				 * restart from the escape character.  We assume here that
-				 * escape chars are single-byte.
-				 */
-				endword--;
 				break;
-			}
-			in_escape = false;
 		}
 		else
 		{
@@ -363,26 +357,29 @@ get_wildcard_part(const char *str, int lenstr,
 				in_escape = true;
 			else if (ISWILDCARDCHAR(endword))
 			{
-				in_trailing_wildcard_meta = true;
+				in_wildcard_meta = true;
 				break;
 			}
-			else if (ISWORDCHR(endword))
+			else if (iswordchr(endword))
 			{
 				memcpy(s, endword, clen);
 				(*charlen)++;
 				s += clen;
 			}
 			else
+			{
+				in_wildcard_meta = false;
 				break;
+			}
 		}
 		endword += clen;
 	}
 
 	/*
-	 * Add right padding spaces if next character isn't wildcard
+	 * Add right padding spaces if last character wasn't wildcard
 	 * meta-character.
 	 */
-	if (!in_trailing_wildcard_meta)
+	if (!in_wildcard_meta)
 	{
 		if (RPADDING > 0)
 		{
@@ -550,10 +547,6 @@ cnt_sml(TRGM *trg1, TRGM *trg2)
 	len1 = ARRNELEM(trg1);
 	len2 = ARRNELEM(trg2);
 
-	/* explicit test is needed to avoid 0/0 division when both lengths are 0 */
-	if (len1 <= 0 || len2 <= 0)
-		return (float4) 0.0;
-
 	while (ptr1 - GETARR(trg1) < len1 && ptr2 - GETARR(trg2) < len2)
 	{
 		int			res = CMPTRGM(ptr1, ptr2);
@@ -571,9 +564,9 @@ cnt_sml(TRGM *trg1, TRGM *trg2)
 	}
 
 #ifdef DIVUNION
-	return ((float4) count) / ((float4) (len1 + len2 - count));
+	return ((((float4) count) / ((float4) (len1 + len2 - count))));
 #else
-	return ((float4) count) / ((float4) ((len1 > len2) ? len1 : len2));
+	return (((float) count) / ((float) ((len1 > len2) ? len1 : len2)));
 #endif
 
 }
@@ -614,50 +607,6 @@ trgm_contained_by(TRGM *trg1, TRGM *trg2)
 		return false;
 	else
 		return true;
-}
-
-/*
- * Return a palloc'd boolean array showing, for each trigram in "query",
- * whether it is present in the trigram array "key".
- * This relies on the "key" array being sorted, but "query" need not be.
- */
-bool *
-trgm_presence_map(TRGM *query, TRGM *key)
-{
-	bool	   *result;
-	trgm	   *ptrq = GETARR(query),
-			   *ptrk = GETARR(key);
-	int			lenq = ARRNELEM(query),
-				lenk = ARRNELEM(key),
-				i;
-
-	result = (bool *) palloc0(lenq * sizeof(bool));
-
-	/* for each query trigram, do a binary search in the key array */
-	for (i = 0; i < lenq; i++)
-	{
-		int			lo = 0;
-		int			hi = lenk;
-
-		while (lo < hi)
-		{
-			int			mid = (lo + hi) / 2;
-			int			res = CMPTRGM(ptrq, ptrk + mid);
-
-			if (res < 0)
-				hi = mid;
-			else if (res > 0)
-				lo = mid + 1;
-			else
-			{
-				result[i] = true;
-				break;
-			}
-		}
-		ptrq++;
-	}
-
-	return result;
 }
 
 Datum

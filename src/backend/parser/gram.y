@@ -54,7 +54,9 @@
 #include "catalog/namespace.h"
 #include "catalog/pg_trigger.h"
 #include "commands/defrem.h"
+#include "miscadmin.h"
 #include "commands/trigger.h"
+#include "catalog/pipeline_queries.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/gramparse.h"
@@ -220,7 +222,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 }
 
 %type <node>	stmt schema_stmt
-		AlterEventTrigStmt
+		ActivateContinuousViewStmt AlterEventTrigStmt
 		AlterDatabaseStmt AlterDatabaseSetStmt AlterDomainStmt AlterEnumStmt
 		AlterFdwStmt AlterForeignServerStmt AlterGroupStmt
 		AlterObjectSchemaStmt AlterOwnerStmt AlterSeqStmt AlterTableStmt
@@ -230,13 +232,13 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 		AlterDefaultPrivilegesStmt DefACLAction
 		AnalyzeStmt CleanConnStmt ClosePortalStmt ClusterStmt CommentStmt
 		ConstraintsSetStmt CopyStmt CreateAsStmt CreateCastStmt
-		CreateDomainStmt CreateExtensionStmt CreateGroupStmt CreateOpClassStmt
+		CreateDomainStmt CreateEncodingStmt CreateExtensionStmt CreateGroupStmt CreateOpClassStmt
 		CreateOpFamilyStmt AlterOpFamilyStmt CreatePLangStmt
 		CreateSchemaStmt CreateSeqStmt CreateStmt CreateTableSpaceStmt
 		CreateFdwStmt CreateForeignServerStmt CreateForeignTableStmt
 		CreateAssertStmt CreateTrigStmt CreateEventTrigStmt
 		CreateUserStmt CreateUserMappingStmt CreateRoleStmt
-		CreatedbStmt DeclareCursorStmt DefineStmt DeleteStmt DiscardStmt DoStmt
+		CreatedbStmt DeactivateContinuousViewStmt DeclareCursorStmt DefineStmt DeleteStmt DiscardStmt DoStmt
 		DropGroupStmt DropOpClassStmt DropOpFamilyStmt DropPLangStmt DropStmt
 		DropAssertStmt DropTrigStmt DropRuleStmt DropCastStmt DropRoleStmt
 		DropUserStmt DropdbStmt DropTableSpaceStmt DropFdwStmt
@@ -360,7 +362,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <defelt>	fdw_option
 
 %type <range>	OptTempTableName
-%type <into>	into_clause create_as_target create_mv_target
+%type <into>	into_clause create_as_target create_cv_target create_mv_target
 
 %type <defelt>	createfunc_opt_item common_func_opt_item dostmt_opt_item
 %type <fun_param> func_arg func_arg_with_default table_func_column
@@ -534,7 +536,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 
 /* ordinary key words in alphabetical order */
 /* PGXC - added DISTRIBUTE, DIRECT, COORDINATOR, CLEAN,  NODE, BARRIER */
-%token <keyword> ABORT_P ABSOLUTE_P ACCESS ACTION ADD_P ADMIN AFTER
+%token <keyword> ABORT_P ABSOLUTE_P ACCESS ACTION ACTIVATE ADD_P ADMIN AFTER
 	AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
 	ASSERTION ASSIGNMENT ASYMMETRIC AT ATTRIBUTE AUTHORIZATION
 
@@ -545,12 +547,12 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLEAN CLOSE
 	CLUSTER COALESCE COLLATE COLLATION COLUMN COMMENT COMMENTS COMMIT
 	COMMITTED CONCURRENTLY CONFIGURATION CONNECTION CONSTRAINT CONSTRAINTS
-	CONTENT_P CONTINUE_P CONVERSION_P COORDINATOR COPY COST CREATE
+	CONTENT_P CONTINUE_P CONTINUOUS CONVERSION_P COORDINATOR COPY COST CREATE
 	CROSS CSV CURRENT_P
 	CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE CURRENT_SCHEMA
 	CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER CURSOR CYCLE
 
-	DATA_P DATABASE DAY_P DEALLOCATE DEC DECIMAL_P DECLARE DEFAULT DEFAULTS
+	DATA_P DATABASE DAY_P DEACTIVATE DEALLOCATE DEC DECIMAL_P DECLARE DECODED DEFAULT DEFAULTS
 	DEFERRABLE DEFERRED DEFINER DELETE_P DELIMITER DELIMITERS DESC
 /* PGXC_BEGIN */
 	DICTIONARY DIRECT DISABLE_P DISCARD DISTINCT DISTRIBUTE DO DOCUMENT_P DOMAIN_P DOUBLE_P
@@ -731,7 +733,8 @@ stmtmulti:	stmtmulti ';' stmt
 		;
 
 stmt :
-			AlterEventTrigStmt
+			ActivateContinuousViewStmt
+			| AlterEventTrigStmt
 			| AlterDatabaseStmt
 			| AlterDatabaseSetStmt
 			| AlterDefaultPrivilegesStmt
@@ -771,6 +774,7 @@ stmt :
 			| CreateCastStmt
 			| CreateConversionStmt
 			| CreateDomainStmt
+			| CreateEncodingStmt
 			| CreateExtensionStmt
 			| CreateFdwStmt
 			| CreateForeignServerStmt
@@ -794,6 +798,7 @@ stmt :
 			| CreateUserStmt
 			| CreateUserMappingStmt
 			| CreatedbStmt
+			| DeactivateContinuousViewStmt
 			| DeallocateStmt
 			| DeclareCursorStmt
 			| DefineStmt
@@ -2627,6 +2632,71 @@ copy_generic_opt_arg_list_item:
 			opt_boolean_or_string	{ $$ = (Node *) makeString($1); }
 		;
 
+/*****************************************************************************
+ *
+ * ( ACTIVATE | DEACTIVATE )  [ CONTINUOUS VIEW ] continuous_view_name
+ *
+ * PipelineDB
+ *
+ * Activates/deactivates a continuous view
+ *
+ *****************************************************************************/
+
+ ActivateContinuousViewStmt: ACTIVATE qualified_name
+				{
+					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
+					s->name = $2;
+					$$ = (Node *)s;
+				}
+			| ACTIVATE CONTINUOUS VIEW qualified_name
+			  {
+					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
+					s->name = $4;
+					$$ = (Node *)s;
+			  }
+		;
+
+ DeactivateContinuousViewStmt: DEACTIVATE qualified_name
+				{
+					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
+					s->name = $2;
+					$$ = (Node *)s;
+				}
+			| DEACTIVATE CONTINUOUS VIEW qualified_name
+			  {
+					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
+					s->name = $4;
+					$$ = (Node *)s;
+			  }
+		;
+	
+/*****************************************************************************
+ *
+ * CREATE EVENT ENCODING encoding_name
+ *
+ * PipelineDB
+ *
+ * Creates an encoding that can be used to figure out how to decode raw events
+ *
+ *****************************************************************************/
+ CreateEncodingStmt: CREATE ENCODING qualified_name '(' OptTableElementList ')'
+					{
+						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
+						n->name = $3;
+						n->coldefs = $5;
+						$$ = (Node *)n;
+					}
+				| CREATE ENCODING qualified_name '(' OptTableElementList ')'
+				DECODED BY qualified_name OptWith
+					{
+						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
+						n->name = $3;
+						n->coldefs = $5;
+						n->decodedby = $9;
+						n->args = $10;
+						$$ = (Node *)n;
+					}
+			;	
 
 /*****************************************************************************
  *
@@ -8214,7 +8284,24 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 					n->options = $11;
 					$$ = (Node *) n;
 				}
+ 		| CREATE CONTINUOUS VIEW create_cv_target AS SelectStmt
+				{
+					CreateContinuousViewStmt *n = makeNode(CreateContinuousViewStmt);
+					n->into = $4;
+					n->query = $6;
+					$$ = (Node *) n;
+				}
 		;
+
+create_cv_target:
+		qualified_name OptDistributeBy OptSubCluster
+				{
+					$$ = makeNode(IntoClause);
+					$$->rel = $1;
+					$$->skipData = false;
+					$$->distributeby = $2;
+					$$->subcluster = $3;
+				}
 
 opt_check_option:
 		WITH CHECK OPTION
@@ -13065,6 +13152,7 @@ unreserved_keyword:
 			| ABSOLUTE_P
 			| ACCESS
 			| ACTION
+			| ACTIVATE
 			| ADD_P
 			| ADMIN
 			| AFTER
@@ -13104,6 +13192,7 @@ unreserved_keyword:
 			| CONSTRAINTS
 			| CONTENT_P
 			| CONTINUE_P
+			| CONTINUOUS
 			| CONVERSION_P
 			| COORDINATOR
 			| COPY
@@ -13115,8 +13204,10 @@ unreserved_keyword:
 			| DATA_P
 			| DATABASE
 			| DAY_P
+			| DEACTIVATE
 			| DEALLOCATE
 			| DECLARE
+			| DECODED
 			| DEFAULTS
 			| DEFERRED
 			| DEFINER

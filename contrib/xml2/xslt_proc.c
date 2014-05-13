@@ -26,7 +26,6 @@
 
 #include <libxslt/xslt.h>
 #include <libxslt/xsltInternals.h>
-#include <libxslt/security.h>
 #include <libxslt/transform.h>
 #include <libxslt/xsltutils.h>
 #endif   /* USE_LIBXSLT */
@@ -62,8 +61,7 @@ xslt_process(PG_FUNCTION_ARGS)
 	volatile xsltStylesheetPtr stylesheet = NULL;
 	volatile xmlDocPtr doctree = NULL;
 	volatile xmlDocPtr restree = NULL;
-	volatile xsltSecurityPrefsPtr xslt_sec_prefs = NULL;
-	volatile xsltTransformContextPtr xslt_ctxt = NULL;
+	volatile xmlDocPtr ssdoc = NULL;
 	volatile int resstat = -1;
 	xmlChar    *resstr = NULL;
 	int			reslen = 0;
@@ -85,62 +83,36 @@ xslt_process(PG_FUNCTION_ARGS)
 
 	PG_TRY();
 	{
-		xmlDocPtr	ssdoc;
-		bool		xslt_sec_prefs_error;
+		/* Check to see if document is a file or a literal */
 
-		/* Parse document */
-		doctree = xmlParseMemory((char *) VARDATA(doct),
-								 VARSIZE(doct) - VARHDRSZ);
+		if (VARDATA(doct)[0] == '<')
+			doctree = xmlParseMemory((char *) VARDATA(doct), VARSIZE(doct) - VARHDRSZ);
+		else
+			doctree = xmlParseFile(text_to_cstring(doct));
 
 		if (doctree == NULL)
 			xml_ereport(xmlerrcxt, ERROR, ERRCODE_EXTERNAL_ROUTINE_EXCEPTION,
 						"error parsing XML document");
 
 		/* Same for stylesheet */
-		ssdoc = xmlParseMemory((char *) VARDATA(ssheet),
-							   VARSIZE(ssheet) - VARHDRSZ);
+		if (VARDATA(ssheet)[0] == '<')
+		{
+			ssdoc = xmlParseMemory((char *) VARDATA(ssheet),
+								   VARSIZE(ssheet) - VARHDRSZ);
+			if (ssdoc == NULL)
+				xml_ereport(xmlerrcxt, ERROR, ERRCODE_EXTERNAL_ROUTINE_EXCEPTION,
+							"error parsing stylesheet as XML document");
 
-		if (ssdoc == NULL)
-			xml_ereport(xmlerrcxt, ERROR, ERRCODE_EXTERNAL_ROUTINE_EXCEPTION,
-						"error parsing stylesheet as XML document");
-
-		/* After this call we need not free ssdoc separately */
-		stylesheet = xsltParseStylesheetDoc(ssdoc);
+			stylesheet = xsltParseStylesheetDoc(ssdoc);
+		}
+		else
+			stylesheet = xsltParseStylesheetFile((xmlChar *) text_to_cstring(ssheet));
 
 		if (stylesheet == NULL)
 			xml_ereport(xmlerrcxt, ERROR, ERRCODE_EXTERNAL_ROUTINE_EXCEPTION,
 						"failed to parse stylesheet");
 
-		xslt_ctxt = xsltNewTransformContext(stylesheet, doctree);
-
-		xslt_sec_prefs_error = false;
-		if ((xslt_sec_prefs = xsltNewSecurityPrefs()) == NULL)
-			xslt_sec_prefs_error = true;
-
-		if (xsltSetSecurityPrefs(xslt_sec_prefs, XSLT_SECPREF_READ_FILE,
-								 xsltSecurityForbid) != 0)
-			xslt_sec_prefs_error = true;
-		if (xsltSetSecurityPrefs(xslt_sec_prefs, XSLT_SECPREF_WRITE_FILE,
-								 xsltSecurityForbid) != 0)
-			xslt_sec_prefs_error = true;
-		if (xsltSetSecurityPrefs(xslt_sec_prefs, XSLT_SECPREF_CREATE_DIRECTORY,
-								 xsltSecurityForbid) != 0)
-			xslt_sec_prefs_error = true;
-		if (xsltSetSecurityPrefs(xslt_sec_prefs, XSLT_SECPREF_READ_NETWORK,
-								 xsltSecurityForbid) != 0)
-			xslt_sec_prefs_error = true;
-		if (xsltSetSecurityPrefs(xslt_sec_prefs, XSLT_SECPREF_WRITE_NETWORK,
-								 xsltSecurityForbid) != 0)
-			xslt_sec_prefs_error = true;
-		if (xsltSetCtxtSecurityPrefs(xslt_sec_prefs, xslt_ctxt) != 0)
-			xslt_sec_prefs_error = true;
-
-		if (xslt_sec_prefs_error)
-			ereport(ERROR,
-					(errmsg("could not set libxslt security preferences")));
-
-		restree = xsltApplyStylesheetUser(stylesheet, doctree, params,
-										  NULL, NULL, xslt_ctxt);
+		restree = xsltApplyStylesheet(stylesheet, doctree, params);
 
 		if (restree == NULL)
 			xml_ereport(xmlerrcxt, ERROR, ERRCODE_EXTERNAL_ROUTINE_EXCEPTION,
@@ -156,10 +128,6 @@ xslt_process(PG_FUNCTION_ARGS)
 			xmlFreeDoc(restree);
 		if (doctree != NULL)
 			xmlFreeDoc(doctree);
-		if (xslt_sec_prefs != NULL)
-			xsltFreeSecurityPrefs(xslt_sec_prefs);
-		if (xslt_ctxt != NULL)
-			xsltFreeTransformContext(xslt_ctxt);
 		xsltCleanupGlobals();
 
 		pg_xml_done(xmlerrcxt, true);
@@ -171,8 +139,6 @@ xslt_process(PG_FUNCTION_ARGS)
 	xsltFreeStylesheet(stylesheet);
 	xmlFreeDoc(restree);
 	xmlFreeDoc(doctree);
-	xsltFreeSecurityPrefs(xslt_sec_prefs);
-	xsltFreeTransformContext(xslt_ctxt);
 	xsltCleanupGlobals();
 
 	pg_xml_done(xmlerrcxt, false);

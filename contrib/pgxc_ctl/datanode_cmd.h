@@ -17,17 +17,23 @@ extern int init_datanode_master(char **nodeList);
 extern int init_datanode_master_all(void);
 extern int init_datanode_slave(char **nodeList);
 extern int init_datanode_slave_all(void);
+extern cmd_t *prepare_initDatanodeMaster(char *nodeName);
+extern cmd_t *prepare_initDatanodeSlave(char *nodeName);
 
 
 extern int start_datanode_master(char **nodeList);
 extern int start_datanode_master_all(void);
 extern int start_datanode_slave(char **nodeList);
 extern int start_datanode_slave_all(void);
+extern cmd_t *prepare_startDatanodeMaster(char *nodeName);
+extern cmd_t *prepare_startDatanodeSlave(char *nodeName);
 
 extern int stop_datanode_master(char **nodeList, char *immediate);
 extern int stop_datanode_master_all(char *immediate);
 extern int stop_datanode_slave(char **nodeList, char *immediate);
 extern int stop_datanode_slave_all(char *immediate);
+extern cmd_t *prepare_stopDatanodeSlave(char *nodeName, char *immediate);
+extern cmd_t *prepare_stopDatanodeMaster(char *nodeName, char *immediate);
 
 extern int failover_datanode(char **nodeList);
 
@@ -35,6 +41,8 @@ extern int kill_datanode_master(char **nodeList);
 extern int kill_datanode_master_all(void);
 extern int kill_datanode_slave(char **nodeList);
 extern int kill_datanode_slave_all(void);
+extern cmd_t *prepare_killDatanodeMaster(char *nodeName);
+extern cmd_t *prepare_killDatanodeSlave(char *nodeName);
 
 extern int clean_datanode_master(char **nodeList);
 extern int clean_datanode_master_all(void);

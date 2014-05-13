@@ -17,14 +17,19 @@ extern int init_coordinator_master(char **nodeList);
 extern int init_coordinator_slave(char **nodeList);
 extern int init_coordinator_master_all(void);
 extern int init_coordinator_slave_all(void);
+extern cmd_t *prepare_initCoordinatorMaster(char *nodeName);
+extern cmd_t *prepare_initCoordinatorSlave(char *nodeName);
 
 extern int configure_nodes(char **nodeList);
 extern int configure_nodes_all(void);
+extern cmd_t *prepare_configureNode(char *nodeName);
 
 extern int kill_coordinator_master(char **nodeList);
 extern int kill_coordinator_master_all(void);
 extern int kill_coordinator_slave(char **nodeList);
 extern int kill_coordinator_slave_all(void);
+extern cmd_t *prepare_killCoordinatorMaster(char *nodeName);
+extern cmd_t *prepare_killCoordinatorSlave(char *nodeName);
 
 extern int clean_coordinator_master(char **nodeList);
 extern int clean_coordinator_master_all(void);
@@ -37,11 +42,15 @@ extern int start_coordinator_master(char **nodeList);
 extern int start_coordinator_master_all(void);
 extern int start_coordinator_slave(char **nodeList);
 extern int start_coordinator_slave_all(void);
+extern cmd_t *prepare_startCoordinatorMaster(char *nodeName);
+extern cmd_t *prepare_startCoordinatorSlave(char *nodeName);
 
 extern int stop_coordinator_master(char **nodeList, char *immediate);
 extern int stop_coordinator_master_all(char *immediate);
 extern int stop_coordinator_slave(char **nodeList, char *immediate);
 extern int stop_coordinator_slave_all(char *immediate);
+extern cmd_t *prepare_stopCoordinatorMaster(char *nodeName, char *immediate);
+extern cmd_t *prepare_stopCoordinatorSlave(char *nodeName, char *immediate);
 
 extern int add_coordinatorMaster(char *name, char *host, int port, int pooler, char *dir);
 extern int add_coordinatorSlave(char *name, char *host, char *dir, char *archDir);

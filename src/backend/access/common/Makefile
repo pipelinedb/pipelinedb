@@ -13,6 +13,6 @@ top_builddir = ../../../..
 include $(top_builddir)/src/Makefile.global
 
 OBJS = heaptuple.o indextuple.o printtup.o reloptions.o scankey.o \
-	tupconvert.o tupdesc.o
+	tupconvert.o tupdesc.o bufprint.o
 
 include $(top_srcdir)/src/backend/common.mk

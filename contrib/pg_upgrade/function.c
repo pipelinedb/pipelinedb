@@ -3,11 +3,11 @@
  *
  *	server-side function support
  *
- *	Copyright (c) 2010-2013, PostgreSQL Global Development Group
+ *	Copyright (c) 2010-2012, PostgreSQL Global Development Group
  *	contrib/pg_upgrade/function.c
  */
 
-#include "postgres_fe.h"
+#include "postgres.h"
 
 #include "pg_upgrade.h"
 
@@ -193,7 +193,7 @@ get_loadable_libraries(void)
 						   "in the \"pg_catalog\" schema.  You can confirm this by executing\n"
 						   "in psql:\n"
 						   "\n"
-						   "    \\df *.plpython_call_handler\n"
+						   "	\\df *.plpython_call_handler\n"
 						   "\n"
 						   "The \"public\" schema version of this function was created by a\n"
 						   "pre-8.1 install of plpython, and must be removed for pg_upgrade\n"
@@ -201,12 +201,12 @@ get_loadable_libraries(void)
 						   "shared object file.  You can remove the \"public\" schema version\n"
 					   "of this function by running the following command:\n"
 						   "\n"
-						 "    DROP FUNCTION public.plpython_call_handler()\n"
+						 "	DROP FUNCTION public.plpython_call_handler()\n"
 						   "\n"
 						   "in each affected database:\n"
 						   "\n");
 				}
-				pg_log(PG_WARNING, "    %s\n", active_db->db_name);
+				pg_log(PG_WARNING, "	%s\n", active_db->db_name);
 				found_public_plpython_handler = true;
 			}
 			PQclear(res);

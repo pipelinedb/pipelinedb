@@ -9,7 +9,7 @@
  * Shridhar Daithankar <shridhar_daithankar@persistent.co.in>
  *
  * contrib/dblink/dblink.c
- * Copyright (c) 2001-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2012, PostgreSQL Global Development Group
  * ALL RIGHTS RESERVED;
  *
  * Permission to use, copy, modify, and distribute this software and its
@@ -35,25 +35,18 @@
 #include <limits.h>
 
 #include "libpq-fe.h"
-
-#include "access/htup_details.h"
-#include "access/reloptions.h"
+#include "funcapi.h"
 #include "catalog/indexing.h"
 #include "catalog/namespace.h"
-#include "catalog/pg_foreign_server.h"
 #include "catalog/pg_type.h"
-#include "catalog/pg_user_mapping.h"
 #include "executor/spi.h"
 #include "foreign/foreign.h"
-#include "funcapi.h"
-#include "lib/stringinfo.h"
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "parser/scansup.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
-#include "utils/guc.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
@@ -77,9 +70,6 @@ typedef struct storeInfo
 	AttInMetadata *attinmeta;
 	MemoryContext tmpcontext;
 	char	  **cstrs;
-	/* temp storage for results to avoid leaks on exception */
-	PGresult   *last_res;
-	PGresult   *cur_res;
 } storeInfo;
 
 /*
@@ -87,15 +77,14 @@ typedef struct storeInfo
  */
 static Datum dblink_record_internal(FunctionCallInfo fcinfo, bool is_async);
 static void prepTuplestoreResult(FunctionCallInfo fcinfo);
-static void materializeResult(FunctionCallInfo fcinfo, PGconn *conn,
-				  PGresult *res);
+static void materializeResult(FunctionCallInfo fcinfo, PGresult *res);
 static void materializeQueryResult(FunctionCallInfo fcinfo,
 					   PGconn *conn,
 					   const char *conname,
 					   const char *sql,
 					   bool fail);
-static PGresult *storeQueryResult(storeInfo *sinfo, PGconn *conn, const char *sql);
-static void storeRow(storeInfo *sinfo, PGresult *res, bool first);
+static int storeHandler(PGresult *res, const PGdataValue *columns,
+			 const char **errmsgp, void *param);
 static remoteConn *getConnectionByName(const char *name);
 static HTAB *createConnHash(void);
 static void createNewConnection(const char *name, remoteConn *rconn);
@@ -118,10 +107,6 @@ static char *escape_param_str(const char *from);
 static void validate_pkattnums(Relation rel,
 				   int2vector *pkattnums_arg, int32 pknumatts_arg,
 				   int **pkattnums, int *pknumatts);
-static bool is_valid_dblink_option(const PQconninfoOption *options,
-					   const char *option, Oid context);
-static int	applyRemoteGucs(PGconn *conn);
-static void restoreLocalGucs(int nestlevel);
 
 /* Global */
 static remoteConn *pconn = NULL;
@@ -609,7 +594,7 @@ dblink_fetch(PG_FUNCTION_ARGS)
 				 errmsg("cursor \"%s\" does not exist", curname)));
 	}
 
-	materializeResult(fcinfo, conn, res);
+	materializeResult(fcinfo, res);
 	return (Datum) 0;
 }
 
@@ -645,7 +630,7 @@ dblink_send_query(PG_FUNCTION_ARGS)
 	/* async query send */
 	retval = PQsendQuery(conn, sql);
 	if (retval != 1)
-		elog(NOTICE, "could not send query: %s", PQerrorMessage(conn));
+		elog(NOTICE, "%s", PQerrorMessage(conn));
 
 	PG_RETURN_INT32(retval);
 }
@@ -754,7 +739,7 @@ dblink_record_internal(FunctionCallInfo fcinfo, bool is_async)
 				}
 				else
 				{
-					materializeResult(fcinfo, conn, res);
+					materializeResult(fcinfo, res);
 				}
 			}
 		}
@@ -810,7 +795,7 @@ prepTuplestoreResult(FunctionCallInfo fcinfo)
  * The PGresult will be released in this function.
  */
 static void
-materializeResult(FunctionCallInfo fcinfo, PGconn *conn, PGresult *res)
+materializeResult(FunctionCallInfo fcinfo, PGresult *res)
 {
 	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
 
@@ -820,7 +805,7 @@ materializeResult(FunctionCallInfo fcinfo, PGconn *conn, PGresult *res)
 	PG_TRY();
 	{
 		TupleDesc	tupdesc;
-		bool		is_sql_cmd;
+		bool		is_sql_cmd = false;
 		int			ntuples;
 		int			nfields;
 
@@ -881,17 +866,12 @@ materializeResult(FunctionCallInfo fcinfo, PGconn *conn, PGresult *res)
 		if (ntuples > 0)
 		{
 			AttInMetadata *attinmeta;
-			int			nestlevel = -1;
 			Tuplestorestate *tupstore;
 			MemoryContext oldcontext;
 			int			row;
 			char	  **values;
 
 			attinmeta = TupleDescGetAttInMetadata(tupdesc);
-
-			/* Set GUCs to ensure we read GUC-sensitive data types correctly */
-			if (!is_sql_cmd)
-				nestlevel = applyRemoteGucs(conn);
 
 			oldcontext = MemoryContextSwitchTo(
 									rsinfo->econtext->ecxt_per_query_memory);
@@ -929,9 +909,6 @@ materializeResult(FunctionCallInfo fcinfo, PGconn *conn, PGresult *res)
 				tuplestore_puttuple(tupstore, tuple);
 			}
 
-			/* clean up GUC settings, if we changed any */
-			restoreLocalGucs(nestlevel);
-
 			/* clean up and return the tuplestore */
 			tuplestore_donestoring(tupstore);
 		}
@@ -950,10 +927,8 @@ materializeResult(FunctionCallInfo fcinfo, PGconn *conn, PGresult *res)
 /*
  * Execute the given SQL command and store its results into a tuplestore
  * to be returned as the result of the current function.
- *
  * This is equivalent to PQexec followed by materializeResult, but we make
- * use of libpq's single-row mode to avoid accumulating the whole result
- * inside libpq before it gets transferred to the tuplestore.
+ * use of libpq's "row processor" API to reduce per-row overhead.
  */
 static void
 materializeQueryResult(FunctionCallInfo fcinfo,
@@ -969,14 +944,19 @@ materializeQueryResult(FunctionCallInfo fcinfo,
 	/* prepTuplestoreResult must have been called previously */
 	Assert(rsinfo->returnMode == SFRM_Materialize);
 
-	/* initialize storeInfo to empty */
-	memset(&sinfo, 0, sizeof(sinfo));
-	sinfo.fcinfo = fcinfo;
-
 	PG_TRY();
 	{
-		/* execute query, collecting any tuples into the tuplestore */
-		res = storeQueryResult(&sinfo, conn, sql);
+		/* initialize storeInfo to empty */
+		memset(&sinfo, 0, sizeof(sinfo));
+		sinfo.fcinfo = fcinfo;
+
+		/* We'll collect tuples using storeHandler */
+		PQsetRowProcessor(conn, storeHandler, &sinfo);
+
+		res = PQexec(conn, sql);
+
+		/* We don't keep the custom row processor installed permanently */
+		PQsetRowProcessor(conn, NULL, NULL);
 
 		if (!res ||
 			(PQresultStatus(res) != PGRES_COMMAND_OK &&
@@ -995,8 +975,8 @@ materializeQueryResult(FunctionCallInfo fcinfo,
 		else if (PQresultStatus(res) == PGRES_COMMAND_OK)
 		{
 			/*
-			 * storeRow didn't get called, so we need to convert the command
-			 * status string to a tuple manually
+			 * storeHandler didn't get called, so we need to convert the
+			 * command status string to a tuple manually
 			 */
 			TupleDesc	tupdesc;
 			AttInMetadata *attinmeta;
@@ -1028,30 +1008,25 @@ materializeQueryResult(FunctionCallInfo fcinfo,
 			tuplestore_puttuple(tupstore, tuple);
 
 			PQclear(res);
-			res = NULL;
 		}
 		else
 		{
 			Assert(PQresultStatus(res) == PGRES_TUPLES_OK);
-			/* storeRow should have created a tuplestore */
+			/* storeHandler should have created a tuplestore */
 			Assert(rsinfo->setResult != NULL);
 
 			PQclear(res);
-			res = NULL;
 		}
-		PQclear(sinfo.last_res);
-		sinfo.last_res = NULL;
-		PQclear(sinfo.cur_res);
-		sinfo.cur_res = NULL;
 	}
 	PG_CATCH();
 	{
+		/* be sure to unset the custom row processor */
+		PQsetRowProcessor(conn, NULL, NULL);
 		/* be sure to release any libpq result we collected */
-		PQclear(res);
-		PQclear(sinfo.last_res);
-		PQclear(sinfo.cur_res);
+		if (res)
+			PQclear(res);
 		/* and clear out any pending data in libpq */
-		while ((res = PQgetResult(conn)) != NULL)
+		while ((res = PQskipResult(conn)) != NULL)
 			PQclear(res);
 		PG_RE_THROW();
 	}
@@ -1059,85 +1034,23 @@ materializeQueryResult(FunctionCallInfo fcinfo,
 }
 
 /*
- * Execute query, and send any result rows to sinfo->tuplestore.
+ * Custom row processor for materializeQueryResult.
+ * Prototype of this function must match PQrowProcessor.
  */
-static PGresult *
-storeQueryResult(storeInfo *sinfo, PGconn *conn, const char *sql)
+static int
+storeHandler(PGresult *res, const PGdataValue *columns,
+			 const char **errmsgp, void *param)
 {
-	bool		first = true;
-	int			nestlevel = -1;
-	PGresult   *res;
-
-	if (!PQsendQuery(conn, sql))
-		elog(ERROR, "could not send query: %s", PQerrorMessage(conn));
-
-	if (!PQsetSingleRowMode(conn))		/* shouldn't fail */
-		elog(ERROR, "failed to set single-row mode for dblink query");
-
-	for (;;)
-	{
-		CHECK_FOR_INTERRUPTS();
-
-		sinfo->cur_res = PQgetResult(conn);
-		if (!sinfo->cur_res)
-			break;
-
-		if (PQresultStatus(sinfo->cur_res) == PGRES_SINGLE_TUPLE)
-		{
-			/* got one row from possibly-bigger resultset */
-
-			/*
-			 * Set GUCs to ensure we read GUC-sensitive data types correctly.
-			 * We shouldn't do this until we have a row in hand, to ensure
-			 * libpq has seen any earlier ParameterStatus protocol messages.
-			 */
-			if (first && nestlevel < 0)
-				nestlevel = applyRemoteGucs(conn);
-
-			storeRow(sinfo, sinfo->cur_res, first);
-
-			PQclear(sinfo->cur_res);
-			sinfo->cur_res = NULL;
-			first = false;
-		}
-		else
-		{
-			/* if empty resultset, fill tuplestore header */
-			if (first && PQresultStatus(sinfo->cur_res) == PGRES_TUPLES_OK)
-				storeRow(sinfo, sinfo->cur_res, first);
-
-			/* store completed result at last_res */
-			PQclear(sinfo->last_res);
-			sinfo->last_res = sinfo->cur_res;
-			sinfo->cur_res = NULL;
-			first = true;
-		}
-	}
-
-	/* clean up GUC settings, if we changed any */
-	restoreLocalGucs(nestlevel);
-
-	/* return last_res */
-	res = sinfo->last_res;
-	sinfo->last_res = NULL;
-	return res;
-}
-
-/*
- * Send single row to sinfo->tuplestore.
- *
- * If "first" is true, create the tuplestore using PGresult's metadata
- * (in this case the PGresult might contain either zero or one row).
- */
-static void
-storeRow(storeInfo *sinfo, PGresult *res, bool first)
-{
+	storeInfo  *sinfo = (storeInfo *) param;
 	int			nfields = PQnfields(res);
+	char	  **cstrs = sinfo->cstrs;
 	HeapTuple	tuple;
+	char	   *pbuf;
+	int			pbuflen;
 	int			i;
 	MemoryContext oldcontext;
 
-	if (first)
+	if (columns == NULL)
 	{
 		/* Prepare for new result set */
 		ReturnSetInfo *rsinfo = (ReturnSetInfo *) sinfo->fcinfo->resultinfo;
@@ -1185,15 +1098,12 @@ storeRow(storeInfo *sinfo, PGresult *res, bool first)
 		sinfo->attinmeta = TupleDescGetAttInMetadata(tupdesc);
 
 		/* Create a new, empty tuplestore */
-		oldcontext = MemoryContextSwitchTo(rsinfo->econtext->ecxt_per_query_memory);
+		oldcontext = MemoryContextSwitchTo(
+									rsinfo->econtext->ecxt_per_query_memory);
 		sinfo->tuplestore = tuplestore_begin_heap(true, false, work_mem);
 		rsinfo->setResult = sinfo->tuplestore;
 		rsinfo->setDesc = tupdesc;
 		MemoryContextSwitchTo(oldcontext);
-
-		/* Done if empty resultset */
-		if (PQntuples(res) == 0)
-			return;
 
 		/*
 		 * Set up sufficiently-wide string pointers array; this won't change
@@ -1211,10 +1121,11 @@ storeRow(storeInfo *sinfo, PGresult *res, bool first)
 									  ALLOCSET_DEFAULT_MINSIZE,
 									  ALLOCSET_DEFAULT_INITSIZE,
 									  ALLOCSET_DEFAULT_MAXSIZE);
+
+		return 1;
 	}
 
-	/* Should have a single-row result if we get here */
-	Assert(PQntuples(res) == 1);
+	CHECK_FOR_INTERRUPTS();
 
 	/*
 	 * Do the following work in a temp context that we reset after each tuple.
@@ -1224,24 +1135,46 @@ storeRow(storeInfo *sinfo, PGresult *res, bool first)
 	oldcontext = MemoryContextSwitchTo(sinfo->tmpcontext);
 
 	/*
-	 * Fill cstrs with null-terminated strings of column values.
+	 * The strings passed to us are not null-terminated, but the datatype
+	 * input functions we're about to call require null termination.  Copy the
+	 * strings and add null termination.  As a micro-optimization, allocate
+	 * all the strings with one palloc.
 	 */
+	pbuflen = nfields;			/* count the null terminators themselves */
 	for (i = 0; i < nfields; i++)
 	{
-		if (PQgetisnull(res, 0, i))
-			sinfo->cstrs[i] = NULL;
+		int			len = columns[i].len;
+
+		if (len > 0)
+			pbuflen += len;
+	}
+	pbuf = (char *) palloc(pbuflen);
+
+	for (i = 0; i < nfields; i++)
+	{
+		int			len = columns[i].len;
+
+		if (len < 0)
+			cstrs[i] = NULL;
 		else
-			sinfo->cstrs[i] = PQgetvalue(res, 0, i);
+		{
+			cstrs[i] = pbuf;
+			memcpy(pbuf, columns[i].value, len);
+			pbuf += len;
+			*pbuf++ = '\0';
+		}
 	}
 
 	/* Convert row to a tuple, and add it to the tuplestore */
-	tuple = BuildTupleFromCStrings(sinfo->attinmeta, sinfo->cstrs);
+	tuple = BuildTupleFromCStrings(sinfo->attinmeta, cstrs);
 
 	tuplestore_puttuple(sinfo->tuplestore, tuple);
 
 	/* Clean up */
 	MemoryContextSwitchTo(oldcontext);
 	MemoryContextReset(sinfo->tmpcontext);
+
+	return 1;
 }
 
 /*
@@ -1941,75 +1874,6 @@ dblink_get_notify(PG_FUNCTION_ARGS)
 
 	return (Datum) 0;
 }
-
-/*
- * Validate the options given to a dblink foreign server or user mapping.
- * Raise an error if any option is invalid.
- *
- * We just check the names of options here, so semantic errors in options,
- * such as invalid numeric format, will be detected at the attempt to connect.
- */
-PG_FUNCTION_INFO_V1(dblink_fdw_validator);
-Datum
-dblink_fdw_validator(PG_FUNCTION_ARGS)
-{
-	List	   *options_list = untransformRelOptions(PG_GETARG_DATUM(0));
-	Oid			context = PG_GETARG_OID(1);
-	ListCell   *cell;
-
-	static const PQconninfoOption *options = NULL;
-
-	/*
-	 * Get list of valid libpq options.
-	 *
-	 * To avoid unnecessary work, we get the list once and use it throughout
-	 * the lifetime of this backend process.  We don't need to care about
-	 * memory context issues, because PQconndefaults allocates with malloc.
-	 */
-	if (!options)
-	{
-		options = PQconndefaults();
-		if (!options)			/* assume reason for failure is OOM */
-			ereport(ERROR,
-					(errcode(ERRCODE_FDW_OUT_OF_MEMORY),
-					 errmsg("out of memory"),
-			 errdetail("could not get libpq's default connection options")));
-	}
-
-	/* Validate each supplied option. */
-	foreach(cell, options_list)
-	{
-		DefElem    *def = (DefElem *) lfirst(cell);
-
-		if (!is_valid_dblink_option(options, def->defname, context))
-		{
-			/*
-			 * Unknown option, or invalid option for the context specified, so
-			 * complain about it.  Provide a hint with list of valid options
-			 * for the context.
-			 */
-			StringInfoData buf;
-			const PQconninfoOption *opt;
-
-			initStringInfo(&buf);
-			for (opt = options; opt->keyword; opt++)
-			{
-				if (is_valid_dblink_option(options, opt->keyword, context))
-					appendStringInfo(&buf, "%s%s",
-									 (buf.len > 0) ? ", " : "",
-									 opt->keyword);
-			}
-			ereport(ERROR,
-					(errcode(ERRCODE_FDW_OPTION_NAME_NOT_FOUND),
-					 errmsg("invalid option \"%s\"", def->defname),
-					 errhint("Valid options in this context are: %s",
-							 buf.data)));
-		}
-	}
-
-	PG_RETURN_VOID();
-}
-
 
 /*************************************************************
  * internal functions
@@ -2866,130 +2730,4 @@ validate_pkattnums(Relation rel,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid attribute number %d", pkattnum)));
 	}
-}
-
-/*
- * Check if the specified connection option is valid.
- *
- * We basically allow whatever libpq thinks is an option, with these
- * restrictions:
- *		debug options: disallowed
- *		"client_encoding": disallowed
- *		"user": valid only in USER MAPPING options
- *		secure options (eg password): valid only in USER MAPPING options
- *		others: valid only in FOREIGN SERVER options
- *
- * We disallow client_encoding because it would be overridden anyway via
- * PQclientEncoding; allowing it to be specified would merely promote
- * confusion.
- */
-static bool
-is_valid_dblink_option(const PQconninfoOption *options, const char *option,
-					   Oid context)
-{
-	const PQconninfoOption *opt;
-
-	/* Look up the option in libpq result */
-	for (opt = options; opt->keyword; opt++)
-	{
-		if (strcmp(opt->keyword, option) == 0)
-			break;
-	}
-	if (opt->keyword == NULL)
-		return false;
-
-	/* Disallow debug options (particularly "replication") */
-	if (strchr(opt->dispchar, 'D'))
-		return false;
-
-	/* Disallow "client_encoding" */
-	if (strcmp(opt->keyword, "client_encoding") == 0)
-		return false;
-
-	/*
-	 * If the option is "user" or marked secure, it should be specified only
-	 * in USER MAPPING.  Others should be specified only in SERVER.
-	 */
-	if (strcmp(opt->keyword, "user") == 0 || strchr(opt->dispchar, '*'))
-	{
-		if (context != UserMappingRelationId)
-			return false;
-	}
-	else
-	{
-		if (context != ForeignServerRelationId)
-			return false;
-	}
-
-	return true;
-}
-
-/*
- * Copy the remote session's values of GUCs that affect datatype I/O
- * and apply them locally in a new GUC nesting level.  Returns the new
- * nestlevel (which is needed by restoreLocalGucs to undo the settings),
- * or -1 if no new nestlevel was needed.
- *
- * We use the equivalent of a function SET option to allow the settings to
- * persist only until the caller calls restoreLocalGucs.  If an error is
- * thrown in between, guc.c will take care of undoing the settings.
- */
-static int
-applyRemoteGucs(PGconn *conn)
-{
-	static const char *const GUCsAffectingIO[] = {
-		"DateStyle",
-		"IntervalStyle"
-	};
-
-	int			nestlevel = -1;
-	int			i;
-
-	for (i = 0; i < lengthof(GUCsAffectingIO); i++)
-	{
-		const char *gucName = GUCsAffectingIO[i];
-		const char *remoteVal = PQparameterStatus(conn, gucName);
-		const char *localVal;
-
-		/*
-		 * If the remote server is pre-8.4, it won't have IntervalStyle, but
-		 * that's okay because its output format won't be ambiguous.  So just
-		 * skip the GUC if we don't get a value for it.  (We might eventually
-		 * need more complicated logic with remote-version checks here.)
-		 */
-		if (remoteVal == NULL)
-			continue;
-
-		/*
-		 * Avoid GUC-setting overhead if the remote and local GUCs already
-		 * have the same value.
-		 */
-		localVal = GetConfigOption(gucName, false, false);
-		Assert(localVal != NULL);
-
-		if (strcmp(remoteVal, localVal) == 0)
-			continue;
-
-		/* Create new GUC nest level if we didn't already */
-		if (nestlevel < 0)
-			nestlevel = NewGUCNestLevel();
-
-		/* Apply the option (this will throw error on failure) */
-		(void) set_config_option(gucName, remoteVal,
-								 PGC_USERSET, PGC_S_SESSION,
-								 GUC_ACTION_SAVE, true, 0);
-	}
-
-	return nestlevel;
-}
-
-/*
- * Restore local GUCs after they have been overlaid with remote settings.
- */
-static void
-restoreLocalGucs(int nestlevel)
-{
-	/* Do nothing if no new nestlevel was created */
-	if (nestlevel > 0)
-		AtEOXact_GUC(true, nestlevel);
 }

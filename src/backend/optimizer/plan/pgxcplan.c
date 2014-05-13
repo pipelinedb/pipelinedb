@@ -586,6 +586,10 @@ pgxc_build_shippable_query_recurse(PlannerInfo *root, RemoteQueryPath *rqpath,
 			elog(ERROR, "Creating remote query plan for relations of type %d is not supported",
 							parent_rel->reloptkind);
 	}
+
+	result_query->is_continuous = root->parse->is_continuous;
+	result_query->cq_activate_stmt = root->parse->cq_activate_stmt;
+
 	return result_query;
 }
 
@@ -630,7 +634,18 @@ pgxc_rqplan_adjust_vars(RemoteQuery *rqplan, Node *node)
 static void
 pgxc_rqplan_build_statement(RemoteQuery *rqplan)
 {
-	StringInfo sql = makeStringInfo();
+	StringInfo sql;
+	if (rqplan->remote_query->is_continuous)
+	{
+		/*
+		 * If it's a CQ, we want the datanodes to get the original ACTIVATE statement,
+		 * not the rewritten target query. This way they'll know it should be executed
+		 * as a CQ. We should probably do this more elegantly...
+		 */
+		rqplan->sql_statement = rqplan->remote_query->cq_activate_stmt;
+		return;
+	}
+	sql = makeStringInfo();
 	deparse_query(rqplan->remote_query, sql, NULL, rqplan->rq_finalise_aggs,
 					rqplan->rq_sortgroup_colno);
 	if (rqplan->sql_statement)
@@ -1087,6 +1102,7 @@ pgxc_build_dml_statement(PlannerInfo *root, CmdType cmdtype,
 	query_to_deparse = makeNode(Query);
 	query_to_deparse->commandType = cmdtype;
 	query_to_deparse->resultRelation = resultRelationIndex;
+	query_to_deparse->is_continuous = root->parse->is_continuous;
 
 	/*
 	 * While copying the range table to the query to deparse make sure we do
@@ -1359,6 +1375,8 @@ pgxc_build_dml_statement(PlannerInfo *root, CmdType cmdtype,
 		query_to_deparse->returningList = list_copy(rqplan->base_tlist);
 
 	rqplan->remote_query = query_to_deparse;
+	rqplan->remote_query->is_continuous = root->parse->is_continuous;
+	rqplan->remote_query->cq_activate_stmt = root->parse->cq_activate_stmt;
 
 	pgxc_rqplan_build_statement(rqplan);
 }
@@ -2412,7 +2430,7 @@ pgxc_planner(Query *query, int cursorOptions, ParamListInfo boundParams)
 
 	/* see if can ship the query completely */
 	result = pgxc_FQS_planner(query, cursorOptions, boundParams);
-	if (result)
+	if (result && !query->is_continuous) /* never ship CQs */
 		return result;
 
 	/* we need Coordinator for evaluation, invoke standard planner */
@@ -2620,6 +2638,7 @@ pgxc_FQS_planner(Query *query, int cursorOptions, ParamListInfo boundParams)
 	result->rtable = query->rtable;
 	result->relationOids = glob->relationOids;
 	result->invalItems = glob->invalItems;
+	result->is_continuous = query->is_continuous;
 
 	/*
 	 * If query is DECLARE CURSOR fetch CTIDs and node names from the remote node
@@ -2751,6 +2770,15 @@ pgxc_FQS_create_remote_plan(Query *query, ExecNodes *exec_nodes, bool is_exec_di
 
 	/* Finally save a handle to this Query structure */
 	query_step->remote_query = copyObject(query);
+	if (query_step->remote_query->is_continuous)
+	{
+		/*
+		 * If it's a CQ, we want the datanodes to get the original ACTIVATE statement,
+		 * not the rewritten target query. This way they'll know it should be executed
+		 * as a CQ. We should probably do this more elegantly...
+		 */
+		query_step->sql_statement = query_step->remote_query->cq_activate_stmt;
+	}
 
 	return query_step;
 }

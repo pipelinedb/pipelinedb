@@ -13,7 +13,7 @@
 
 extern void dcSigHandler(int signum);
 typedef enum FileType { STDIN, STDOUT, STDERR, GENERAL } FileType;
-typedef void (*pgxcsigfunc) (int signo);
+typedef void (*pqsigfunc) (int);
 extern char *createLocalFileName(FileType type, char *buf, int len);
 extern char *createRemoteFileName(FileType type, char *buf, int len);
 extern int doImmediate(char *host, char *stdIn, const char *cmd_fmt, ...) __attribute__((format(printf, 3, 4)));

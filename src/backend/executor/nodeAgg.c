@@ -87,6 +87,7 @@
 #include "executor/nodeAgg.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/execnodes.h"
 #include "optimizer/clauses.h"
 #include "optimizer/tlist.h"
 #include "parser/parse_agg.h"
@@ -1191,7 +1192,11 @@ ExecAgg(AggState *node)
 	if (((Agg *) node->ss.ps.plan)->aggstrategy == AGG_HASHED)
 	{
 		if (!node->table_filled)
+		{
+			if (!node->incremental_agg)
+				build_hash_table(node);
 			agg_fill_hash_table(node);
+		}
 		return agg_retrieve_hash_table(node);
 	}
 	else
@@ -1255,6 +1260,9 @@ agg_retrieve_direct(AggState *aggstate)
 			{
 				/* outer plan produced no tuples at all */
 				aggstate->agg_done = true;
+				if (IsContinuous(outerPlan))
+					return NULL;
+
 				/* If we are grouping, we should produce no tuples too */
 				if (node->aggstrategy != AGG_PLAIN)
 					return NULL;
@@ -1434,12 +1442,16 @@ agg_fill_hash_table(AggState *aggstate)
 
 		/* Advance the aggregates */
 		advance_aggregates(aggstate, entry->pergroup);
+		aggstate->dirty_aggs = lappend(aggstate->dirty_aggs, entry);
 
 		/* Reset per-input-tuple context after each tuple */
 		ResetExprContext(tmpcontext);
 	}
 
+	/* XXX PERF: just use a regular set to avoid this O(n^2) union operation */
+	aggstate->dirty_aggs = list_union_ptr(NIL, aggstate->dirty_aggs);
 	aggstate->table_filled = true;
+
 	/* Initialize to walk the hash table */
 	ResetTupleHashIterator(aggstate->hashtable, &aggstate->hashiter);
 }
@@ -1473,18 +1485,18 @@ agg_retrieve_hash_table(AggState *aggstate)
 	 * We loop retrieving groups until we find one satisfying
 	 * aggstate->ss.ps.qual
 	 */
-	while (!aggstate->agg_done)
+	while (aggstate->dirty_aggs)
 	{
 		/*
 		 * Find the next entry in the hash table
 		 */
-		entry = (AggHashEntry) ScanTupleHashTable(&aggstate->hashiter);
-		if (entry == NULL)
-		{
-			/* No more entries in hashtable, so done */
-			aggstate->agg_done = TRUE;
-			return NULL;
-		}
+		entry = list_nth(aggstate->dirty_aggs, 0);
+
+		/*
+		 * This will eventually set aggstate->dirty_aggs to NIL,
+		 * which will terminate the loop
+		 */
+		aggstate->dirty_aggs = list_delete_first(aggstate->dirty_aggs);
 
 		/*
 		 * Clear the per-output-tuple context for each group
@@ -1547,6 +1559,8 @@ agg_retrieve_hash_table(AggState *aggstate)
 			InstrCountFiltered1(aggstate, 1);
 	}
 
+	aggstate->agg_done = true;
+
 	/* No more groups */
 	return NULL;
 }
@@ -1589,6 +1603,16 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 	aggstate->grp_firstTuple = NULL;
 	aggstate->hashtable = NULL;
 	aggstate->skip_trans = node->skip_trans;
+
+	/*
+	 * Since the Coordinator will be collecting aggregations from Datanodes,
+	 * we want to advance aggregates even across CQ batches. We do this by
+	 * reusing the aggregation hashtable on Coordinators. On Datanodes, it's
+	 * cleared before every new batch because we only want to send aggregation
+	 * deltas to the Coordinator, since a single aggregation group may be spread
+	 * across multiple Datanodes.
+	 */
+	aggstate->incremental_agg = IS_PGXC_COORDINATOR && IsContinuous(aggstate);
 
 	/*
 	 * Create expression contexts.	We need two, one for per-input-tuple
@@ -1826,7 +1850,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		 * For PGXC final and collection functions are used to combine results at Coordinator,
 		 * disable those for Datanode
 		 */
-		if (IS_PGXC_DATANODE)
+		if (IS_PGXC_DATANODE && !IS_MERGE_NODE)
 		{
 			peraggstate->finalfn_oid = finalfn_oid = InvalidOid;
 			peraggstate->collectfn_oid = collectfn_oid = InvalidOid;
@@ -2122,6 +2146,9 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 	/* Update numaggs to match number of unique aggregates found */
 	aggstate->numaggs = aggno + 1;
+
+	if (aggstate->incremental_agg)
+		build_hash_table(aggstate);
 
 	return aggstate;
 }

@@ -19,6 +19,7 @@
 
 extern bool isPGXCCoordinator;
 extern bool isPGXCDataNode;
+extern bool isMergeNode;
 extern bool isRestoreMode;
 
 typedef enum
@@ -43,6 +44,7 @@ extern Datum xc_lockForBackupKey2;
 
 #define IS_PGXC_COORDINATOR isPGXCCoordinator
 #define IS_PGXC_DATANODE isPGXCDataNode
+#define IS_MERGE_NODE isMergeNode
 #define REMOTE_CONN_TYPE remoteConnType
 
 #define IsConnFromApp() (remoteConnType == REMOTE_CONN_APP)

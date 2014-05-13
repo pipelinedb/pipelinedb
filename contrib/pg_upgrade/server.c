@@ -3,11 +3,11 @@
  *
  *	database server functions
  *
- *	Copyright (c) 2010-2013, PostgreSQL Global Development Group
+ *	Copyright (c) 2010-2012, PostgreSQL Global Development Group
  *	contrib/pg_upgrade/server.c
  */
 
-#include "postgres_fe.h"
+#include "postgres.h"
 
 #include "pg_upgrade.h"
 
@@ -46,51 +46,18 @@ connectToServer(ClusterInfo *cluster, const char *db_name)
 /*
  * get_db_conn()
  *
- * get database connection, using named database + standard params for cluster
+ * get database connection
  */
 static PGconn *
 get_db_conn(ClusterInfo *cluster, const char *db_name)
 {
-	char		conn_opts[2 * NAMEDATALEN + MAXPGPATH + 100];
+	char		conn_opts[MAXPGPATH];
 
-	if (cluster->sockdir)
-		snprintf(conn_opts, sizeof(conn_opts),
-				 "dbname = '%s' user = '%s' host = '%s' port = %d",
-				 db_name, os_info.user, cluster->sockdir, cluster->port);
-	else
-		snprintf(conn_opts, sizeof(conn_opts),
-				 "dbname = '%s' user = '%s' port = %d",
-				 db_name, os_info.user, cluster->port);
+	snprintf(conn_opts, sizeof(conn_opts),
+			 "dbname = '%s' user = '%s' port = %d", db_name, os_info.user,
+			 cluster->port);
 
 	return PQconnectdb(conn_opts);
-}
-
-
-/*
- * cluster_conn_opts()
- *
- * Return standard command-line options for connecting to this cluster when
- * using psql, pg_dump, etc.  Ideally this would match what get_db_conn()
- * sets, but the utilities we need aren't very consistent about the treatment
- * of database name options, so we leave that out.
- *
- * Note result is in static storage, so use it right away.
- */
-char *
-cluster_conn_opts(ClusterInfo *cluster)
-{
-	static char conn_opts[MAXPGPATH + NAMEDATALEN + 100];
-
-	if (cluster->sockdir)
-		snprintf(conn_opts, sizeof(conn_opts),
-				 "--host \"%s\" --port %d --username \"%s\"",
-				 cluster->sockdir, cluster->port, os_info.user);
-	else
-		snprintf(conn_opts, sizeof(conn_opts),
-				 "--port %d --username \"%s\"",
-				 cluster->port, os_info.user);
-
-	return conn_opts;
 }
 
 
@@ -149,7 +116,7 @@ get_major_server_version(ClusterInfo *cluster)
 	snprintf(ver_filename, sizeof(ver_filename), "%s/PG_VERSION",
 			 cluster->pgdata);
 	if ((version_fd = fopen(ver_filename, "r")) == NULL)
-		pg_log(PG_FATAL, "could not open version file: %s\n", ver_filename);
+		return 0;
 
 	if (fscanf(version_fd, "%63s", cluster->major_version_str) == 0 ||
 		sscanf(cluster->major_version_str, "%d.%d", &integer_version,
@@ -166,17 +133,17 @@ static void
 stop_postmaster_atexit(void)
 {
 	stop_postmaster(true);
+
 }
 
 
-bool
-start_postmaster(ClusterInfo *cluster, bool throw_error)
+void
+start_postmaster(ClusterInfo *cluster)
 {
-	char		cmd[MAXPGPATH * 4 + 1000];
+	char		cmd[MAXPGPATH];
 	PGconn	   *conn;
 	bool		exit_hook_registered = false;
-	bool		pg_ctl_return = false;
-	char		socket_string[MAXPGPATH + 200];
+	int			pg_ctl_return = 0;
 
 	if (!exit_hook_registered)
 	{
@@ -184,85 +151,34 @@ start_postmaster(ClusterInfo *cluster, bool throw_error)
 		exit_hook_registered = true;
 	}
 
-	socket_string[0] = '\0';
-
-#ifdef HAVE_UNIX_SOCKETS
-	/* prevent TCP/IP connections, restrict socket access */
-	strcat(socket_string,
-		   " -c listen_addresses='' -c unix_socket_permissions=0700");
-
-	/* Have a sockdir?	Tell the postmaster. */
-	if (cluster->sockdir)
-		snprintf(socket_string + strlen(socket_string),
-				 sizeof(socket_string) - strlen(socket_string),
-				 " -c %s='%s'",
-				 (GET_MAJOR_VERSION(cluster->major_version) < 903) ?
-				 "unix_socket_directory" : "unix_socket_directories",
-				 cluster->sockdir);
-#endif
-
 	/*
 	 * Using autovacuum=off disables cleanup vacuum and analyze, but freeze
 	 * vacuums can still happen, so we set autovacuum_freeze_max_age to its
 	 * maximum.  We assume all datfrozenxid and relfrozen values are less than
 	 * a gap of 2000000000 from the current xid counter, so autovacuum will
 	 * not touch them.
-	 *
-	 * Turn off durability requirements to improve object creation speed, and
-	 * we only modify the new cluster, so only use it there.  If there is a
-	 * crash, the new cluster has to be recreated anyway.  fsync=off is a big
-	 * win on ext4.
 	 */
 	snprintf(cmd, sizeof(cmd),
-		  "\"%s/pg_ctl\" -w -l \"%s\" -D \"%s\" -o \"-p %d%s%s %s%s\" start",
+			 SYSTEMQUOTE "\"%s/pg_ctl\" -w -l \"%s\" -D \"%s\" "
+			 "-o \"-p %d %s %s\" start >> \"%s\" 2>&1" SYSTEMQUOTE,
 		  cluster->bindir, SERVER_LOG_FILE, cluster->pgconfig, cluster->port,
 			 (cluster->controldata.cat_ver >=
-			  BINARY_UPGRADE_SERVER_FLAG_CAT_VER) ? " -b" :
-			 " -c autovacuum=off -c autovacuum_freeze_max_age=2000000000",
-			 (cluster == &new_cluster) ?
-	  " -c synchronous_commit=off -c fsync=off -c full_page_writes=off" : "",
-			 cluster->pgopts ? cluster->pgopts : "", socket_string);
+			  BINARY_UPGRADE_SERVER_FLAG_CAT_VER) ? "-b" :
+			 "-c autovacuum=off -c autovacuum_freeze_max_age=2000000000",
+			 cluster->pgopts ? cluster->pgopts : "", SERVER_START_LOG_FILE);
 
 	/*
 	 * Don't throw an error right away, let connecting throw the error because
 	 * it might supply a reason for the failure.
 	 */
-	pg_ctl_return = exec_prog(SERVER_START_LOG_FILE,
-	/* pass both file names if they differ */
-							  (strcmp(SERVER_LOG_FILE,
-									  SERVER_START_LOG_FILE) != 0) ?
-							  SERVER_LOG_FILE : NULL,
-							  false,
+	pg_ctl_return = exec_prog(false, true,
+	/* pass both file names if the differ */
+					  (strcmp(SERVER_LOG_FILE, SERVER_START_LOG_FILE) == 0) ?
+							  SERVER_LOG_FILE :
+							  SERVER_LOG_FILE " or " SERVER_START_LOG_FILE,
 							  "%s", cmd);
 
-	/* Did it fail and we are just testing if the server could be started? */
-	if (!pg_ctl_return && !throw_error)
-		return false;
-
-	/*
-	 * We set this here to make sure atexit() shuts down the server,
-	 * but only if we started the server successfully.  We do it
-	 * before checking for connectivity in case the server started but
-	 * there is a connectivity failure.  If pg_ctl did not return success,
-	 * we will exit below.
-	 *
-	 * Pre-9.1 servers do not have PQping(), so we could be leaving the server
-	 * running if authentication was misconfigured, so someday we might went to
-	 * be more aggressive about doing server shutdowns even if pg_ctl fails,
-	 * but now (2013-08-14) it seems prudent to be cautious.  We don't want to
-	 * shutdown a server that might have been accidentally started during the
-	 * upgrade.
-	 */
-	if (pg_ctl_return)
-		os_info.running_cluster = cluster;
-
-	/*
-	 * pg_ctl -w might have failed because the server couldn't be started,
-	 * or there might have been a connection problem in _checking_ if the
-	 * server has started.  Therefore, even if pg_ctl failed, we continue
-	 * and test for connectivity in case we get a connection reason for the
-	 * failure.
-	 */
+	/* Check to see if we can connect to the server; if not, report it. */
 	if ((conn = get_db_conn(cluster, "template1")) == NULL ||
 		PQstatus(conn) != CONNECTION_OK)
 	{
@@ -270,27 +186,24 @@ start_postmaster(ClusterInfo *cluster, bool throw_error)
 			   PQerrorMessage(conn));
 		if (conn)
 			PQfinish(conn);
-		pg_log(PG_FATAL, "could not connect to %s postmaster started with the command:\n"
-			   "%s\n",
+		pg_log(PG_FATAL, "could not connect to %s postmaster started with the command: %s\n",
 			   CLUSTER_NAME(cluster), cmd);
 	}
 	PQfinish(conn);
 
-	/*
-	 * If pg_ctl failed, and the connection didn't fail, and throw_error is
-	 * enabled, fail now.  This could happen if the server was already running.
-	 */
-	if (!pg_ctl_return)
-		pg_log(PG_FATAL, "pg_ctl failed to start the %s server, or connection failed\n",
+	/* If the connection didn't fail, fail now */
+	if (pg_ctl_return != 0)
+		pg_log(PG_FATAL, "pg_ctl failed to start the %s server\n",
 			   CLUSTER_NAME(cluster));
 
-	return true;
+	os_info.running_cluster = cluster;
 }
 
 
 void
 stop_postmaster(bool fast)
 {
+	char		cmd[MAXPGPATH];
 	ClusterInfo *cluster;
 
 	if (os_info.running_cluster == &old_cluster)
@@ -300,11 +213,14 @@ stop_postmaster(bool fast)
 	else
 		return;					/* no cluster running */
 
-	exec_prog(SERVER_STOP_LOG_FILE, NULL, !fast,
-			  "\"%s/pg_ctl\" -w -D \"%s\" -o \"%s\" %s stop",
-			  cluster->bindir, cluster->pgconfig,
-			  cluster->pgopts ? cluster->pgopts : "",
-			  fast ? "-m fast" : "");
+	snprintf(cmd, sizeof(cmd),
+			 SYSTEMQUOTE "\"%s/pg_ctl\" -w -D \"%s\" -o \"%s\" "
+			 "%s stop >> \"%s\" 2>&1" SYSTEMQUOTE,
+			 cluster->bindir, cluster->pgconfig,
+			 cluster->pgopts ? cluster->pgopts : "",
+			 fast ? "-m fast" : "", SERVER_STOP_LOG_FILE);
+
+	exec_prog(fast ? false : true, true, SERVER_STOP_LOG_FILE, "%s", cmd);
 
 	os_info.running_cluster = NULL;
 }

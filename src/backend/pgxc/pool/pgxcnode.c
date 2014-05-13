@@ -65,6 +65,12 @@ static int	coord_count = 0;
 static PGXCNodeHandle *dn_handles = NULL;
 
 /*
+ * Extra handles to use when a Coordinator needs to communicate with
+ * multiple Datanodes
+ */
+static PGXCNodeHandle *aux_dn_handles = NULL;
+
+/*
  * Coordinator handles saved in Transaction memory context
  * when PostgresMain is launched.
  * Those handles are used inside a transaction by Coordinator to Coordinators
@@ -142,8 +148,12 @@ InitMultinodeExecutor(bool is_force)
 
 	/* Do proper initialization of handles */
 	if (NumDataNodes > 0)
+	{
 		dn_handles = (PGXCNodeHandle *)
 			palloc(NumDataNodes * sizeof(PGXCNodeHandle));
+		aux_dn_handles = (PGXCNodeHandle *)
+					palloc(NumDataNodes * sizeof(PGXCNodeHandle));
+	}
 	if (NumCoords > 0)
 		co_handles = (PGXCNodeHandle *)
 			palloc(NumCoords * sizeof(PGXCNodeHandle));
@@ -163,7 +173,9 @@ InitMultinodeExecutor(bool is_force)
 	for (count = 0; count < NumCoords; count++)
 	{
 		init_pgxc_handle(&co_handles[count]);
+		init_pgxc_handle(&aux_dn_handles[count]);
 		co_handles[count].nodeoid = coOids[count];
+		aux_dn_handles[count].nodeoid = dnOids[count];
 	}
 
 	datanode_count = 0;
@@ -1783,13 +1795,14 @@ add_error_message(PGXCNodeHandle *handle, const char *message)
  * Coordinator fds is returned only if transaction uses a DDL
  */
 PGXCNodeAllHandles *
-get_handles(List *datanodelist, List *coordlist, bool is_coord_only_query)
+get_handles(List *datanodelist, List *coordlist, bool is_coord_only_query, bool use_aux)
 {
 	PGXCNodeAllHandles	*result;
 	ListCell		*node_list_item;
 	List			*dn_allocate = NIL;
 	List			*co_allocate = NIL;
 	PGXCNodeHandle		*node_handle;
+	PGXCNodeHandle *datanode_handles = use_aux ? aux_dn_handles : dn_handles;
 
 	/* index of the result array */
 	int			i = 0;
@@ -1832,7 +1845,7 @@ get_handles(List *datanodelist, List *coordlist, bool is_coord_only_query)
 
 			for (i = 0; i < NumDataNodes; i++)
 			{
-				node_handle = &dn_handles[i];
+				node_handle = &datanode_handles[i];
 				result->datanode_handles[i] = node_handle;
 				if (node_handle->sock == NO_SOCKET)
 					dn_allocate = lappend_int(dn_allocate, i);
@@ -1866,7 +1879,7 @@ get_handles(List *datanodelist, List *coordlist, bool is_coord_only_query)
 							errmsg("Invalid Datanode number")));
 				}
 
-				node_handle = &dn_handles[node];
+				node_handle = &datanode_handles[node];
 				result->datanode_handles[i++] = node_handle;
 				if (node_handle->sock == NO_SOCKET)
 					dn_allocate = lappend_int(dn_allocate, node);
@@ -1948,7 +1961,8 @@ get_handles(List *datanodelist, List *coordlist, bool is_coord_only_query)
 	if (dn_allocate || co_allocate)
 	{
 		int	j = 0;
-		int	*fds = PoolManagerGetConnections(dn_allocate, co_allocate);
+		int offset = use_aux ? list_length(dn_allocate) : 0;
+		int	*fds = PoolManagerGetConnections(dn_allocate, co_allocate, offset);
 
 		if (!fds)
 		{
@@ -1983,9 +1997,9 @@ get_handles(List *datanodelist, List *coordlist, bool is_coord_only_query)
 							errmsg("Invalid Datanode number")));
 				}
 
-				node_handle = &dn_handles[node];
+				node_handle = &datanode_handles[node];
 				pgxc_node_init(node_handle, fdsock);
-				dn_handles[node] = *node_handle;
+				datanode_handles[node] = *node_handle;
 				datanode_count++;
 			}
 		}

@@ -60,14 +60,13 @@ static void prepareStdout(cmdList_t *cmdList);
  */
 jmp_buf *whereToJumpDoShell = NULL;
 jmp_buf dcJmpBufDoShell;
-pgxcsigfunc old_HandlerDoShell = NULL;
+pqsigfunc old_HandlerDoShell = NULL;
 void do_shell_SigHandler(int signum);
 
 /*
  * Signal handler (SIGINT only)
  */
-void
-do_shell_SigHandler(int signum)
+void do_shell_SigHandler(int signum)
 {
 	if (whereToJumpDoShell)
 		longjmp(*whereToJumpDoShell, 1);
@@ -79,8 +78,7 @@ do_shell_SigHandler(int signum)
  * Stdout/stderr/stdin will be created at $LocalTmpDir.
  * 
  */
-char
-*createLocalFileName(FileType type, char *buf, int len)
+char *createLocalFileName(FileType type, char *buf, int len)
 {
 	/* 
 	 * Filename is $LocalTmpDir/type_pid_serno.
@@ -108,8 +106,7 @@ char
  * Please note that remote stdout is not in pgxc_ctl so far.  It will directly be written
  * to local stdout.
  */
-char
-*createRemoteFileName(FileType type, char *buf, int len)
+char *createRemoteFileName(FileType type, char *buf, int len)
 {
 	char hostname[MAXPATH+1];
 	/* 
@@ -152,8 +149,7 @@ char
  */
 
 /* Does not handle stdin/stdout.  If needed, they should be included in the cmd. */
-int
-doImmediateRaw(const char *cmd_fmt, ...)
+int doImmediateRaw(const char *cmd_fmt, ...)
 {
 	char actualCmd[MAXLINE+1];
 	va_list arg;
@@ -163,8 +159,7 @@ doImmediateRaw(const char *cmd_fmt, ...)
 	return(system(actualCmd));
 }
 
-FILE *
-pgxc_popen_wRaw(const char *cmd_fmt, ...)
+FILE *pgxc_popen_wRaw(const char *cmd_fmt, ...)
 {
 	va_list arg;
 	char actualCmd[MAXLINE+1];
@@ -175,8 +170,7 @@ pgxc_popen_wRaw(const char *cmd_fmt, ...)
 	return(popen(actualCmd, "w"));
 }
 
-FILE *
-pgxc_popen_w(char *host, const char *cmd_fmt, ...)
+FILE *pgxc_popen_w(char *host, const char *cmd_fmt, ...)
 {
 	FILE *f;
 	va_list arg;
@@ -192,8 +186,7 @@ pgxc_popen_w(char *host, const char *cmd_fmt, ...)
 	return f;
 }
 	
-int
-doImmediate(char *host, char *stdIn, const char *cmd_fmt, ...)
+int doImmediate(char *host, char *stdIn, const char *cmd_fmt, ...)
 {
 	char cmd_wk[MAXLINE+1];
 	char actualCmd[MAXLINE+1];
@@ -250,8 +243,7 @@ doImmediate(char *host, char *stdIn, const char *cmd_fmt, ...)
  *
  * =======================================================================================
  */
-cmdList_t *
-initCmdList(void)
+cmdList_t *initCmdList(void)
 {
 	cmdList_t *rv = (cmdList_t *)Malloc0(sizeof(cmdList_t));
 
@@ -259,8 +251,7 @@ initCmdList(void)
 	return(rv);
 }
 
-cmd_t *
-initCmd(char *host)
+cmd_t *initCmd(char *host)
 {
 	cmd_t *rv = (cmd_t *)Malloc0(sizeof(cmd_t));
 	if (host)
@@ -268,15 +259,13 @@ initCmd(char *host)
 	return rv;
 }
 
-static void
-clearStdin(cmd_t *cmd)
+static void clearStdin(cmd_t *cmd)
 {
 	unlink(cmd->localStdin);
 	freeAndReset(cmd->localStdin);
 }
 
-static void
-touchStdout(cmd_t *cmd)
+static void touchStdout(cmd_t *cmd)
 {
 	if (cmd->remoteStdout)
 		if (cmd->remoteStdout)
@@ -303,8 +292,7 @@ static void setStdout(cmd_t *cmd)
 }
 #endif
 	
-int
-doCmd(cmd_t *cmd)
+int doCmd(cmd_t *cmd)
 {
 	int rc = 0;
 
@@ -317,15 +305,13 @@ doCmd(cmd_t *cmd)
 	return rc;
 }
 
-static char *
-allocActualCmd(cmd_t *cmd)
+static char *allocActualCmd(cmd_t *cmd)
 {
 		return (cmd->actualCmd) ? cmd->actualCmd : (cmd->actualCmd = Malloc(MAXLINE+1));
 }
 
 /* localStdout has to be set by the caller */
-int
-doCmdEl(cmd_t *cmd)
+int doCmdEl(cmd_t *cmd)
 {
 	if (cmd->isInternal)
 	{
@@ -389,8 +375,7 @@ doCmdEl(cmd_t *cmd)
  * EC_STOPSIG to SIGINT.  In this case, EC_IFSTOPPED will be set and EC_SIGNAL will be
  * set to SIGKILL as well.  Exit status will be set to 2.
  */
-int
-doCmdList(cmdList_t *cmds)
+int doCmdList(cmdList_t *cmds)
 {
 	int ii, jj;
 	xc_status rc = 0;
@@ -523,8 +508,7 @@ doCmdList(cmdList_t *cmds)
 	return(rc);
 }
 
-void
-appendCmdEl(cmd_t *src, cmd_t *new)
+void appendCmdEl(cmd_t *src, cmd_t *new)
 {
 	cmd_t *curr;
 
@@ -532,8 +516,7 @@ appendCmdEl(cmd_t *src, cmd_t *new)
 	src->next = new;
 }
 
-void
-do_cleanCmdEl(cmd_t *cmd)
+void do_cleanCmdEl(cmd_t *cmd)
 {
 	if (cmd)
 	{
@@ -553,8 +536,7 @@ do_cleanCmdEl(cmd_t *cmd)
 	}
 }
 
-void
-do_cleanCmd(cmd_t *cmd)
+void do_cleanCmd(cmd_t *cmd)
 {
 	if (cmd == NULL)
 		return;
@@ -567,8 +549,7 @@ do_cleanCmd(cmd_t *cmd)
 	}
 }
 	
-void
-do_cleanCmdList(cmdList_t *cmdList)
+void do_cleanCmdList(cmdList_t *cmdList)
 {
 	int ii;
 	
@@ -583,8 +564,7 @@ do_cleanCmdList(cmdList_t *cmdList)
 	Free(cmdList);
 }
 
-void
-addCmd(cmdList_t *cmds, cmd_t *cmd)
+void addCmd(cmdList_t *cmds, cmd_t *cmd)
 {
 	cmd->pid = 0;
 	cmd->actualCmd = cmd->remoteStdout = cmd->msg = cmd->localStdout = NULL;
@@ -598,8 +578,7 @@ addCmd(cmdList_t *cmds, cmd_t *cmd)
 	cmds->cmds[cmds->used] = NULL;
 }
 
-void
-cleanLastCmd(cmdList_t *cmdList)
+void cleanLastCmd(cmdList_t *cmdList)
 {
 	int ii;
 
@@ -616,8 +595,7 @@ cleanLastCmd(cmdList_t *cmdList)
  *
  * ====================================================================================
  */
-static int
-nextSize(int size)
+static int nextSize(int size)
 {
 	if (size == 0)
 		return 1;
@@ -631,8 +609,7 @@ nextSize(int size)
  * Take only the first part of the hostname and ignore
  * domain part
  */
-static char *
-getCleanHostname(char *buf, int len)
+static char *getCleanHostname(char *buf, int len)
 {
 	char hostname[MAXPATH+1];
 	int ii;
@@ -666,8 +643,7 @@ static void echoPid(pid_t pid)
 }
 #endif
 
-static void
-prepareStdout(cmdList_t *cmdList)
+static void prepareStdout(cmdList_t *cmdList)
 {
 	int ii;
 
@@ -693,8 +669,7 @@ prepareStdout(cmdList_t *cmdList)
 	}
 }
 
-cmd_t *
-makeConfigBackupCmd(void)
+cmd_t *makeConfigBackupCmd(void)
 {
 	cmd_t *rv = Malloc0(sizeof(cmd_t));
 	snprintf((rv->command = Malloc(MAXLINE+1)), MAXLINE,
@@ -705,8 +680,7 @@ makeConfigBackupCmd(void)
 	return(rv);
 }
 
-int
-doConfigBackup(void)
+int doConfigBackup(void)
 {
 	int rc;
 
@@ -717,8 +691,7 @@ doConfigBackup(void)
 	return(rc);
 }
 
-void
-dump_cmdList(cmdList_t *cmdList)
+void dump_cmdList(cmdList_t *cmdList)
 {
 	int ii, jj;
 	cmd_t *cur;

@@ -53,8 +53,7 @@ static int inputError(char *msg)
 	return -1;
 }
 
-int
-unregisterFromGtm(char *line)
+int unregisterFromGtm(char *line)
 {
 	char *token;
 	int rc;
@@ -133,8 +132,7 @@ unregisterFromGtm(char *line)
 	return(rc);
 }
 
-static
-GTM_Conn *connectGTM()
+static GTM_Conn *connectGTM()
 {
 	char connect_str[MAXLINE+1];
 
@@ -143,8 +141,7 @@ GTM_Conn *connectGTM()
 	return(PQconnectGTM(connect_str));
 }
 
-int
-process_unregister_command(GTM_PGXCNodeType type, char *nodename)
+int process_unregister_command(GTM_PGXCNodeType type, char *nodename)
 {
 	GTM_Conn *conn;
 	int res;

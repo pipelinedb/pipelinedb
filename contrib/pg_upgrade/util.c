@@ -3,11 +3,11 @@
  *
  *	utility functions
  *
- *	Copyright (c) 2010-2013, PostgreSQL Global Development Group
+ *	Copyright (c) 2010-2012, PostgreSQL Global Development Group
  *	contrib/pg_upgrade/util.c
  */
 
-#include "postgres_fe.h"
+#include "postgres.h"
 
 #include "pg_upgrade.h"
 
@@ -32,18 +32,6 @@ report_status(eLogType type, const char *fmt,...)
 	va_end(args);
 
 	pg_log(type, "%s\n", message);
-}
-
-
-/* force blank output for progress display */
-void
-end_progress_output(void)
-{
-	/*
-	 * In case nothing printed; pass a space so gcc doesn't complain about
-	 * empty format string.
-	 */
-	prep_status(" ");
 }
 
 
@@ -75,8 +63,7 @@ prep_status(const char *fmt,...)
 	if (strlen(message) > 0 && message[strlen(message) - 1] == '\n')
 		pg_log(PG_REPORT, "%s", message);
 	else
-		/* trim strings that don't end in a newline */
-		pg_log(PG_REPORT, "%-*s", MESSAGE_WIDTH, message);
+		pg_log(PG_REPORT, "%-" MESSAGE_WIDTH "s", message);
 }
 
 
@@ -90,16 +77,13 @@ pg_log(eLogType type, char *fmt,...)
 	vsnprintf(message, sizeof(message), fmt, args);
 	va_end(args);
 
-	/* PG_VERBOSE and PG_STATUS are only output in verbose mode */
-	/* fopen() on log_opts.internal might have failed, so check it */
-	if (((type != PG_VERBOSE && type != PG_STATUS) || log_opts.verbose) &&
-		log_opts.internal != NULL)
+	/* PG_VERBOSE is only output in verbose mode */
+	if (type != PG_VERBOSE || log_opts.verbose)
 	{
-		if (type == PG_STATUS)
-			/* status messages need two leading spaces and a newline */
-			fprintf(log_opts.internal, "  %s\n", message);
-		else
-			fprintf(log_opts.internal, "%s", message);
+		fwrite(message, strlen(message), 1, log_opts.internal);
+		/* if we are using OVERWRITE_MESSAGE, add newline */
+		if (strchr(message, '\r') != NULL)
+			fwrite("\n", 1, 1, log_opts.internal);
 		fflush(log_opts.internal);
 	}
 
@@ -108,21 +92,6 @@ pg_log(eLogType type, char *fmt,...)
 		case PG_VERBOSE:
 			if (log_opts.verbose)
 				printf("%s", _(message));
-			break;
-
-		case PG_STATUS:
-			/* for output to a display, do leading truncation and append \r */
-			if (isatty(fileno(stdout)))
-				/* -2 because we use a 2-space indent */
-				printf("  %s%-*.*s\r",
-				/* prefix with "..." if we do leading truncation */
-					   strlen(message) <= MESSAGE_WIDTH - 2 ? "" : "...",
-					   MESSAGE_WIDTH - 2, MESSAGE_WIDTH - 2,
-				/* optional leading truncation */
-					   strlen(message) <= MESSAGE_WIDTH - 2 ? message :
-					   message + strlen(message) - MESSAGE_WIDTH + 3 + 2);
-			else
-				printf("  %s\n", _(message));
 			break;
 
 		case PG_REPORT:
@@ -210,6 +179,38 @@ get_user_info(char **user_name)
 	*user_name = pg_strdup(pw->pw_name);
 
 	return user_id;
+}
+
+
+void *
+pg_malloc(int n)
+{
+	void	   *p = malloc(n);
+
+	if (p == NULL)
+		pg_log(PG_FATAL, "%s: out of memory\n", os_info.progname);
+
+	return p;
+}
+
+
+void
+pg_free(void *p)
+{
+	if (p != NULL)
+		free(p);
+}
+
+
+char *
+pg_strdup(const char *s)
+{
+	char	   *result = strdup(s);
+
+	if (result == NULL)
+		pg_log(PG_FATAL, "%s: out of memory\n", os_info.progname);
+
+	return result;
 }
 
 

@@ -3,7 +3,7 @@
  * vacuumlo.c
  *	  This removes orphaned large objects from a database.
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -44,7 +44,6 @@ struct _param
 	enum trivalue pg_prompt;
 	char	   *pg_port;
 	char	   *pg_host;
-	const char *progname;
 	int			verbose;
 	int			dry_run;
 	long		transaction_limit;
@@ -82,28 +81,15 @@ vacuumlo(const char *database, const struct _param * param)
 	 */
 	do
 	{
-#define PARAMS_ARRAY_SIZE	   7
-
-		const char *keywords[PARAMS_ARRAY_SIZE];
-		const char *values[PARAMS_ARRAY_SIZE];
-
-		keywords[0] = "host";
-		values[0] = param->pg_host;
-		keywords[1] = "port";
-		values[1] = param->pg_port;
-		keywords[2] = "user";
-		values[2] = param->pg_user;
-		keywords[3] = "password";
-		values[3] = password;
-		keywords[4] = "dbname";
-		values[4] = database;
-		keywords[5] = "fallback_application_name";
-		values[5] = param->progname;
-		keywords[6] = NULL;
-		values[6] = NULL;
-
 		new_pass = false;
-		conn = PQconnectdbParams(keywords, values, true);
+
+		conn = PQsetdbLogin(param->pg_host,
+							param->pg_port,
+							NULL,
+							NULL,
+							database,
+							param->pg_user,
+							password);
 		if (!conn)
 		{
 			fprintf(stderr, "Connection to database \"%s\" failed\n",
@@ -209,7 +195,7 @@ vacuumlo(const char *database, const struct _param * param)
 	strcat(buf, "      AND a.atttypid = t.oid ");
 	strcat(buf, "      AND c.relnamespace = s.oid ");
 	strcat(buf, "      AND t.typname in ('oid', 'lo') ");
-	strcat(buf, "      AND c.relkind in ('r', 'm')");
+	strcat(buf, "      AND c.relkind = 'r'");
 	strcat(buf, "      AND s.nspname !~ '^pg_'");
 	res = PQexec(conn, buf);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
@@ -398,17 +384,16 @@ usage(const char *progname)
 	printf("%s removes unreferenced large objects from databases.\n\n", progname);
 	printf("Usage:\n  %s [OPTION]... DBNAME...\n\n", progname);
 	printf("Options:\n");
-	printf("  -l LIMIT       commit after removing each LIMIT large objects\n");
-	printf("  -n             don't remove large objects, just show what would be done\n");
-	printf("  -v             write a lot of progress messages\n");
-	printf("  -V, --version  output version information, then exit\n");
-	printf("  -?, --help     show this help, then exit\n");
-	printf("\nConnection options:\n");
-	printf("  -h HOSTNAME    database server host or socket directory\n");
-	printf("  -p PORT        database server port\n");
-	printf("  -U USERNAME    user name to connect as\n");
-	printf("  -w             never prompt for password\n");
-	printf("  -W             force password prompt\n");
+	printf("  -h HOSTNAME  database server host or socket directory\n");
+	printf("  -l LIMIT     commit after removing each LIMIT large objects\n");
+	printf("  -n           don't remove large objects, just show what would be done\n");
+	printf("  -p PORT      database server port\n");
+	printf("  -U USERNAME  user name to connect as\n");
+	printf("  -w           never prompt for password\n");
+	printf("  -W           force password prompt\n");
+	printf("  -v           write a lot of progress messages\n");
+	printf("  --help       show this help, then exit\n");
+	printf("  --version    output version information, then exit\n");
 	printf("\n");
 	printf("Report bugs to <pgsql-bugs@postgresql.org>.\n");
 }
@@ -430,7 +415,6 @@ main(int argc, char **argv)
 	param.pg_prompt = TRI_DEFAULT;
 	param.pg_host = NULL;
 	param.pg_port = NULL;
-	param.progname = progname;
 	param.verbose = 0;
 	param.dry_run = 0;
 	param.transaction_limit = 1000;

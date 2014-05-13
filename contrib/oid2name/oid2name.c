@@ -44,12 +44,13 @@ struct options
 	char	   *hostname;
 	char	   *port;
 	char	   *username;
-	const char *progname;
 };
 
 /* function prototypes */
 static void help(const char *progname);
 void		get_opts(int, char **, struct options *);
+void	   *myalloc(size_t size);
+char	   *mystrdup(const char *str);
 void		add_one_elt(char *eltname, eary *eary);
 char	   *get_comma_elts(eary *eary);
 PGconn	   *sql_conn(struct options *);
@@ -79,7 +80,6 @@ get_opts(int argc, char **argv, struct options * my_opts)
 	my_opts->hostname = NULL;
 	my_opts->port = NULL;
 	my_opts->username = NULL;
-	my_opts->progname = progname;
 
 	if (argc > 1)
 	{
@@ -102,7 +102,7 @@ get_opts(int argc, char **argv, struct options * my_opts)
 		{
 				/* specify the database */
 			case 'd':
-				my_opts->dbname = pg_strdup(optarg);
+				my_opts->dbname = mystrdup(optarg);
 				break;
 
 				/* specify one tablename to show */
@@ -127,17 +127,17 @@ get_opts(int argc, char **argv, struct options * my_opts)
 
 				/* host to connect to */
 			case 'H':
-				my_opts->hostname = pg_strdup(optarg);
+				my_opts->hostname = mystrdup(optarg);
 				break;
 
 				/* port to connect to on remote host */
 			case 'p':
-				my_opts->port = pg_strdup(optarg);
+				my_opts->port = mystrdup(optarg);
 				break;
 
 				/* username */
 			case 'U':
-				my_opts->username = pg_strdup(optarg);
+				my_opts->username = mystrdup(optarg);
 				break;
 
 				/* display system tables */
@@ -179,23 +179,49 @@ help(const char *progname)
 		   "Usage:\n"
 		   "  %s [OPTION]...\n"
 		   "\nOptions:\n"
-		   "  -d DBNAME      database to connect to\n"
-		   "  -f FILENODE    show info for table with given file node\n"
-		   "  -H HOSTNAME    database server host or socket directory\n"
-		   "  -i             show indexes and sequences too\n"
-		   "  -o OID         show info for table with given OID\n"
-		   "  -p PORT        database server port number\n"
-		   "  -q             quiet (don't show headers)\n"
-		   "  -s             show all tablespaces\n"
-		   "  -S             show system objects too\n"
-		   "  -t TABLE       show info for named table\n"
-		   "  -U NAME        connect as specified database user\n"
-		   "  -V, --version  output version information, then exit\n"
-		   "  -x             extended (show additional columns)\n"
-		   "  -?, --help     show this help, then exit\n"
+		   "  -d DBNAME    database to connect to\n"
+		   "  -f FILENODE  show info for table with given file node\n"
+		   "  -H HOSTNAME  database server host or socket directory\n"
+		   "  -i           show indexes and sequences too\n"
+		   "  -o OID       show info for table with given OID\n"
+		   "  -p PORT      database server port number\n"
+		   "  -q           quiet (don't show headers)\n"
+		   "  -s           show all tablespaces\n"
+		   "  -S           show system objects too\n"
+		   "  -t TABLE     show info for named table\n"
+		   "  -U NAME      connect as specified database user\n"
+		   "  -x           extended (show additional columns)\n"
+		   "  --help       show this help, then exit\n"
+		   "  --version    output version information, then exit\n"
 		   "\nThe default action is to show all database OIDs.\n\n"
 		   "Report bugs to <pgsql-bugs@postgresql.org>.\n",
 		   progname, progname);
+}
+
+void *
+myalloc(size_t size)
+{
+	void	   *ptr = malloc(size);
+
+	if (!ptr)
+	{
+		fprintf(stderr, "out of memory");
+		exit(1);
+	}
+	return ptr;
+}
+
+char *
+mystrdup(const char *str)
+{
+	char	   *result = strdup(str);
+
+	if (!result)
+	{
+		fprintf(stderr, "out of memory");
+		exit(1);
+	}
+	return result;
 }
 
 /*
@@ -209,16 +235,22 @@ add_one_elt(char *eltname, eary *eary)
 	if (eary->alloc == 0)
 	{
 		eary	  ->alloc = 8;
-		eary	  ->array = (char **) pg_malloc(8 * sizeof(char *));
+		eary	  ->array = (char **) myalloc(8 * sizeof(char *));
 	}
 	else if (eary->num >= eary->alloc)
 	{
 		eary	  ->alloc *= 2;
-		eary	  ->array = (char **) pg_realloc(eary->array,
-											   eary->alloc * sizeof(char *));
+		eary	  ->array = (char **)
+		realloc(eary->array, eary->alloc * sizeof(char *));
+
+		if (!eary->array)
+		{
+			fprintf(stderr, "out of memory");
+			exit(1);
+		}
 	}
 
-	eary	  ->array[eary->num] = pg_strdup(eltname);
+	eary	  ->array[eary->num] = mystrdup(eltname);
 	eary	  ->num++;
 }
 
@@ -238,7 +270,7 @@ get_comma_elts(eary *eary)
 				length = 0;
 
 	if (eary->num == 0)
-		return pg_strdup("");
+		return mystrdup("");
 
 	/*
 	 * PQescapeString wants 2 * length + 1 bytes of breath space.  Add two
@@ -247,7 +279,7 @@ get_comma_elts(eary *eary)
 	for (i = 0; i < eary->num; i++)
 		length += strlen(eary->array[i]);
 
-	ret = (char *) pg_malloc(length * 2 + 4 * eary->num);
+	ret = (char *) myalloc(length * 2 + 4 * eary->num);
 	ptr = ret;
 
 	for (i = 0; i < eary->num; i++)
@@ -276,29 +308,14 @@ sql_conn(struct options * my_opts)
 	 */
 	do
 	{
-#define PARAMS_ARRAY_SIZE	7
-
-		const char *keywords[PARAMS_ARRAY_SIZE];
-		const char *values[PARAMS_ARRAY_SIZE];
-
-		keywords[0] = "host";
-		values[0] = my_opts->hostname;
-		keywords[1] = "port";
-		values[1] = my_opts->port;
-		keywords[2] = "user";
-		values[2] = my_opts->username;
-		keywords[3] = "password";
-		values[3] = password;
-		keywords[4] = "dbname";
-		values[4] = my_opts->dbname;
-		keywords[5] = "fallback_application_name";
-		values[5] = my_opts->progname;
-		keywords[6] = NULL;
-		values[6] = NULL;
-
 		new_pass = false;
-		conn = PQconnectdbParams(keywords, values, true);
-
+		conn = PQsetdbLogin(my_opts->hostname,
+							my_opts->port,
+							NULL,		/* options */
+							NULL,		/* tty */
+							my_opts->dbname,
+							my_opts->username,
+							password);
 		if (!conn)
 		{
 			fprintf(stderr, "%s: could not connect to database %s\n",
@@ -367,7 +384,7 @@ sql_exec(PGconn *conn, const char *todo, bool quiet)
 	nfields = PQnfields(res);
 
 	/* for each field, get the needed width */
-	length = (int *) pg_malloc(sizeof(int) * nfields);
+	length = (int *) myalloc(sizeof(int) * nfields);
 	for (j = 0; j < nfields; j++)
 		length[j] = strlen(PQfname(res, j));
 
@@ -390,7 +407,7 @@ sql_exec(PGconn *conn, const char *todo, bool quiet)
 			l += length[j] + 2;
 		}
 		fprintf(stdout, "\n");
-		pad = (char *) pg_malloc(l + 1);
+		pad = (char *) myalloc(l + 1);
 		MemSet(pad, '-', l);
 		pad[l] = '\0';
 		fprintf(stdout, "%s\n", pad);
@@ -444,7 +461,7 @@ sql_exec_dumpalltables(PGconn *conn, struct options * opts)
 		   "	LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
 			 "	LEFT JOIN pg_catalog.pg_database d ON d.datname = pg_catalog.current_database(),"
 			 "	pg_catalog.pg_tablespace t "
-			 "WHERE relkind IN ('r', 'm'%s%s) AND "
+			 "WHERE relkind IN ('r'%s%s) AND "
 			 "	%s"
 			 "		t.oid = CASE"
 			 "			WHEN reltablespace <> 0 THEN reltablespace"
@@ -481,8 +498,8 @@ sql_exec_searchtables(PGconn *conn, struct options * opts)
 	comma_filenodes = get_comma_elts(opts->filenodes);
 
 	/* 80 extra chars for SQL expression */
-	qualifiers = (char *) pg_malloc(strlen(comma_oids) + strlen(comma_tables) +
-									strlen(comma_filenodes) + 80);
+	qualifiers = (char *) myalloc(strlen(comma_oids) + strlen(comma_tables) +
+								  strlen(comma_filenodes) + 80);
 	ptr = qualifiers;
 
 	if (opts->oids->num > 0)
@@ -508,14 +525,14 @@ sql_exec_searchtables(PGconn *conn, struct options * opts)
 	free(comma_filenodes);
 
 	/* now build the query */
-	todo = (char *) pg_malloc(650 + strlen(qualifiers));
+	todo = (char *) myalloc(650 + strlen(qualifiers));
 	snprintf(todo, 650 + strlen(qualifiers),
 			 "SELECT pg_catalog.pg_relation_filenode(c.oid) as \"Filenode\", relname as \"Table Name\" %s\n"
 			 "FROM pg_catalog.pg_class c \n"
 		 "	LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace \n"
 			 "	LEFT JOIN pg_catalog.pg_database d ON d.datname = pg_catalog.current_database(),\n"
 			 "	pg_catalog.pg_tablespace t \n"
-			 "WHERE relkind IN ('r', 'm', 'i', 'S', 't') AND \n"
+			 "WHERE relkind IN ('r', 'i', 'S', 't') AND \n"
 			 "		t.oid = CASE\n"
 			 "			WHEN reltablespace <> 0 THEN reltablespace\n"
 			 "			ELSE dattablespace\n"
@@ -548,11 +565,11 @@ main(int argc, char **argv)
 	struct options *my_opts;
 	PGconn	   *pgconn;
 
-	my_opts = (struct options *) pg_malloc(sizeof(struct options));
+	my_opts = (struct options *) myalloc(sizeof(struct options));
 
-	my_opts->oids = (eary *) pg_malloc(sizeof(eary));
-	my_opts->tables = (eary *) pg_malloc(sizeof(eary));
-	my_opts->filenodes = (eary *) pg_malloc(sizeof(eary));
+	my_opts->oids = (eary *) myalloc(sizeof(eary));
+	my_opts->tables = (eary *) myalloc(sizeof(eary));
+	my_opts->filenodes = (eary *) myalloc(sizeof(eary));
 
 	my_opts->oids->num = my_opts->oids->alloc = 0;
 	my_opts->tables->num = my_opts->tables->alloc = 0;

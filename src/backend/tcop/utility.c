@@ -23,6 +23,9 @@
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "catalog/namespace.h"
+#include "catalog/pipeline_encoding_fn.h"
+#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "catalog/toasting.h"
 #ifdef PGXC
 #include "catalog/index.h"
@@ -43,6 +46,7 @@
 #include "commands/extension.h"
 #include "commands/matview.h"
 #include "commands/lockcmds.h"
+#include "commands/pipelinecmds.h"
 #include "commands/portalcmds.h"
 #include "commands/prepare.h"
 #include "commands/proclang.h"
@@ -674,6 +678,33 @@ standard_ProcessUtility(Node *parsetree,
 			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
 				ExecUtilityWithMessage(queryString, sentToRemote, false);
 #endif
+			break;
+
+		case T_CreateContinuousViewStmt:
+			{
+				List *remote;
+				CreateContinuousView((CreateContinuousViewStmt *) parsetree);
+				remote = AddRemoteQueryNode(NIL, queryString, EXEC_ON_ALL_NODES, false);
+				if (remote)
+				{
+					Node *stmt = lfirst(remote->head);
+					ProcessUtility(stmt, queryString, PROCESS_UTILITY_TOPLEVEL,
+							params, None_Receiver, true, NULL);
+				}
+			}
+			break;
+		case T_CreateEncodingStmt:
+			{
+				List *remote;
+				CreateEncoding((CreateEncodingStmt *) parsetree);
+				remote = AddRemoteQueryNode(NIL, queryString, EXEC_ON_ALL_NODES, false);
+				if (remote)
+				{
+					Node *stmt = lfirst(remote->head);
+					ProcessUtility(stmt, queryString, PROCESS_UTILITY_TOPLEVEL,
+							params, None_Receiver, true, NULL);
+				}
+			}
 			break;
 
 		case T_DropTableSpaceStmt:
@@ -3200,6 +3231,9 @@ CreateCommandTag(Node *parsetree)
 				case OBJECT_VIEW:
 					tag = "DROP VIEW";
 					break;
+				case OBJECT_CONTINUOUS_VIEW:
+					tag = "DROP CONTINUOUS VIEW";
+					break;
 				case OBJECT_MATVIEW:
 					tag = "DROP MATERIALIZED VIEW";
 					break;
@@ -3461,6 +3495,13 @@ CreateCommandTag(Node *parsetree)
 
 		case T_ExplainStmt:
 			tag = "EXPLAIN";
+			break;
+
+		case T_CreateContinuousViewStmt:
+			tag = "CREATE CONTINUOUS VIEW";
+			break;
+		case T_CreateEncodingStmt:
+			tag = "CREATE ENCODING";
 			break;
 
 		case T_CreateTableAsStmt:
@@ -3782,7 +3823,9 @@ CreateCommandTag(Node *parsetree)
 				}
 			}
 			break;
-
+		case T_ActivateContinuousViewStmt:
+			tag = "ACTIVATE CONTINUOUS VIEW";
+			break;
 		case T_ExecDirectStmt:
 			tag = "EXECUTE DIRECT";
 			break;

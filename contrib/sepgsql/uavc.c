@@ -6,7 +6,7 @@
  * access control decisions recently used, and reduce number of kernel
  * invocations to avoid unnecessary performance hit.
  *
- * Copyright (c) 2011-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2011-2012, PostgreSQL Global Development Group
  *
  * -------------------------------------------------------------------------
  */
@@ -250,10 +250,10 @@ sepgsql_avc_compute(const char *scontext, const char *tcontext, uint16 tclass)
 	{
 		if (!ucontext)
 			ncontext = sepgsql_compute_create(scontext, tcontext,
-											  SEPG_CLASS_PROCESS, NULL);
+											  SEPG_CLASS_PROCESS);
 		else
 			ncontext = sepgsql_compute_create(scontext, ucontext,
-											  SEPG_CLASS_PROCESS, NULL);
+											  SEPG_CLASS_PROCESS);
 		if (strcmp(scontext, ncontext) == 0)
 		{
 			pfree(ncontext);
@@ -335,7 +335,7 @@ sepgsql_avc_lookup(const char *scontext, const char *tcontext, uint16 tclass)
  *
  * It returns 'true', if the security policy suggested to allow the required
  * permissions. Otherwise, it returns 'false' or raises an error according
- * to the 'abort_on_violation' argument.
+ * to the 'abort' argument.
  * The 'tobject' and 'tclass' identify the target object being referenced,
  * and 'required' is a bitmask of permissions (SEPG_*__*) defined for each
  * object classes.
@@ -345,8 +345,7 @@ sepgsql_avc_lookup(const char *scontext, const char *tcontext, uint16 tclass)
 bool
 sepgsql_avc_check_perms_label(const char *tcontext,
 							  uint16 tclass, uint32 required,
-							  const char *audit_name,
-							  bool abort_on_violation)
+							  const char *audit_name, bool abort)
 {
 	char	   *scontext = sepgsql_get_client_label();
 	avc_cache  *cache;
@@ -416,7 +415,7 @@ sepgsql_avc_check_perms_label(const char *tcontext,
 						  audit_name);
 	}
 
-	if (abort_on_violation && !result)
+	if (abort && !result)
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("SELinux: security policy violation")));
@@ -427,15 +426,14 @@ sepgsql_avc_check_perms_label(const char *tcontext,
 bool
 sepgsql_avc_check_perms(const ObjectAddress *tobject,
 						uint16 tclass, uint32 required,
-						const char *audit_name,
-						bool abort_on_violation)
+						const char *audit_name, bool abort)
 {
 	char	   *tcontext = GetSecurityLabel(tobject, SEPGSQL_LABEL_TAG);
 	bool		rc;
 
 	rc = sepgsql_avc_check_perms_label(tcontext,
 									   tclass, required,
-									   audit_name, abort_on_violation);
+									   audit_name, abort);
 	if (tcontext)
 		pfree(tcontext);
 

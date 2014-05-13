@@ -1215,7 +1215,7 @@ ResourceOwnerForgetFile(ResourceOwner owner, File file)
 			return;
 		}
 	}
-	elog(ERROR, "temporery file %d is not owned by resource owner %s",
+	elog(ERROR, "temporary file %d is not owned by resource owner %s",
 		 file, owner->name);
 }
 

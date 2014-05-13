@@ -78,8 +78,7 @@ static void startLog(char *path, char *logFileNam);
 static void print_version(void);
 static void print_help(void);
 
-static void
-trim_trailing_slash(char *path)
+static void trim_trailing_slash(char *path)
 {
 	char *curr = path;
 	char *last = path;
@@ -103,8 +102,7 @@ trim_trailing_slash(char *path)
 }
 	
 
-static void
-build_pgxc_ctl_home(char *home)
+static void build_pgxc_ctl_home(char *home)
 {
 	char *env_pgxc_ctl_home = getenv(PGXC_CTL_HOME);
 	char *env_home = getenv(HOME);		/* We assume this is always available */
@@ -189,8 +187,7 @@ set_bash:
 }
 
 
-static void
-build_configuration_path(char *path)
+static void build_configuration_path(char *path)
 {
 	struct stat statbuf;
 	int rr;
@@ -235,8 +232,7 @@ build_configuration_path(char *path)
 }
 
 
-static void
-read_configuration(void)
+static void read_configuration(void)
 {
 	FILE *conf;
 	char cmd[MAXPATH+1];
@@ -260,8 +256,7 @@ read_configuration(void)
 	elog(INFO, "Finished to read configuration.\n");
 }
 
-static void
-prepare_pgxc_ctl_bash(char *path)
+static void prepare_pgxc_ctl_bash(char *path)
 {
 	struct stat buf;
 	int rc;
@@ -279,8 +274,7 @@ prepare_pgxc_ctl_bash(char *path)
 	exit(1);
 }
 
-static void
-pgxcCtlMkdir(char *path)
+static void pgxcCtlMkdir(char *path)
 {
 	char cmd[MAXPATH+1];
 
@@ -288,8 +282,7 @@ pgxcCtlMkdir(char *path)
 	system(cmd);
 }
 
-static void
-startLog(char *path, char *logFileNam)
+static void startLog(char *path, char *logFileNam)
 {
 	char logFilePath[MAXPATH+1];
 
@@ -339,8 +332,7 @@ startLog(char *path, char *logFileNam)
 	return;
 }
 
-static void
-setDefaultIfNeeded(char *name, char *val)
+static void setDefaultIfNeeded(char *name, char *val)
 {
 	if (!find_var(name) || !sval(name))
 	{
@@ -351,8 +343,7 @@ setDefaultIfNeeded(char *name, char *val)
 	}
 }
 
-static void
-setup_my_env(void)
+static void setup_my_env(void)
 {
 	char path[MAXPATH+1];
 	char *home;
@@ -417,8 +408,7 @@ setup_my_env(void)
 	setDefaultIfNeeded(VAR_logLocation, "n");
 }
 
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	char *configuration = NULL;
 	char *infile = NULL;
@@ -587,14 +577,12 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-static void
-print_version(void)
+static void print_version(void)
 {
 	printf("Pgxc_ctl %s\n", versionString);
 }
 
-static void
-print_help(void)
+static void print_help(void)
 {
 	printf(
 	"pgxc_ctl [option ...] [command]\n"

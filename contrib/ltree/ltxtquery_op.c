@@ -20,13 +20,13 @@ ltree_execute(ITEM *curitem, void *checkval, bool calcnot, bool (*chkcond) (void
 {
 	if (curitem->type == VAL)
 		return (*chkcond) (checkval, curitem);
-	else if (curitem->val == (int32) '!')
+	else if (curitem->val == (int4) '!')
 	{
 		return (calcnot) ?
 			((ltree_execute(curitem + 1, checkval, calcnot, chkcond)) ? false : true)
 			: true;
 	}
-	else if (curitem->val == (int32) '&')
+	else if (curitem->val == (int4) '&')
 	{
 		if (ltree_execute(curitem + curitem->left, checkval, calcnot, chkcond))
 			return ltree_execute(curitem + 1, checkval, calcnot, chkcond);
@@ -40,6 +40,7 @@ ltree_execute(ITEM *curitem, void *checkval, bool calcnot, bool (*chkcond) (void
 		else
 			return ltree_execute(curitem + 1, checkval, calcnot, chkcond);
 	}
+	return false;
 }
 
 typedef struct

@@ -34,7 +34,7 @@
  * disappear!) and also take the entry's mutex spinlock.
  *
  *
- * Copyright (c) 2008-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2008-2012, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  contrib/pg_stat_statements/pg_stat_statements.c
@@ -239,8 +239,8 @@ static void pgss_ExecutorRun(QueryDesc *queryDesc,
 				 long count);
 static void pgss_ExecutorFinish(QueryDesc *queryDesc);
 static void pgss_ExecutorEnd(QueryDesc *queryDesc);
-static void pgss_ProcessUtility(Node *parsetree, const char *queryString,
-					ProcessUtilityContext context, ParamListInfo params,
+static void pgss_ProcessUtility(Node *parsetree,
+			  const char *queryString, ParamListInfo params, bool isTopLevel,
 					DestReceiver *dest,
 #ifdef PGXC
 					bool sentToRemote,
@@ -789,7 +789,7 @@ pgss_ExecutorEnd(QueryDesc *queryDesc)
  */
 static void
 pgss_ProcessUtility(Node *parsetree, const char *queryString,
-					ProcessUtilityContext context, ParamListInfo params,
+					ParamListInfo params, bool isTopLevel,
 					DestReceiver *dest,
 #ifdef PGXC
 					bool sentToRemote,
@@ -826,17 +826,15 @@ pgss_ProcessUtility(Node *parsetree, const char *queryString,
 		PG_TRY();
 		{
 			if (prev_ProcessUtility)
-				prev_ProcessUtility(parsetree, queryString,
-									context, params,
-									dest,
+				prev_ProcessUtility(parsetree, queryString, params,
+									isTopLevel, dest,
 #ifdef PGXC
 									sentToRemote,
 #endif /* PGXC */
 									completionTag);
 			else
-				standard_ProcessUtility(parsetree, queryString,
-										context, params,
-										dest, 
+				standard_ProcessUtility(parsetree, queryString, params,
+										isTopLevel, dest,
 #ifdef PGXC
 										sentToRemote,
 #endif /* PGXC */
@@ -897,17 +895,15 @@ pgss_ProcessUtility(Node *parsetree, const char *queryString,
 	else
 	{
 		if (prev_ProcessUtility)
-			prev_ProcessUtility(parsetree, queryString,
-								context, params,
-								dest,
+			prev_ProcessUtility(parsetree, queryString, params,
+								isTopLevel, dest,
 #ifdef PGXC
 								sentToRemote,
 #endif /* PGXC */
 								completionTag);
 		else
-			standard_ProcessUtility(parsetree, queryString,
-									context, params,
-									dest,
+			standard_ProcessUtility(parsetree, queryString, params,
+									isTopLevel, dest,
 #ifdef PGXC
 									sentToRemote,
 #endif /* PGXC */

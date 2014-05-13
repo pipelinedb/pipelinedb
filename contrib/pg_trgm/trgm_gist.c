@@ -8,25 +8,6 @@
 #include "access/skey.h"
 
 
-typedef struct
-{
-	/* most recent inputs to gtrgm_consistent */
-	StrategyNumber strategy;
-	text	   *query;
-	/* extracted trigrams for query */
-	TRGM	   *trigrams;
-	/* if a regex operator, the extracted graph */
-	TrgmPackedGraph *graph;
-
-	/*
-	 * The "query" and "trigrams" are stored in the same palloc block as this
-	 * cache struct, at MAXALIGN'ed offsets.  The graph however isn't.
-	 */
-} gtrgm_consistent_cache;
-
-#define GETENTRY(vec,pos) ((TRGM *) DatumGetPointer((vec)->vector[(pos)].key))
-
-
 PG_FUNCTION_INFO_V1(gtrgm_in);
 Datum		gtrgm_in(PG_FUNCTION_ARGS);
 
@@ -56,6 +37,8 @@ Datum		gtrgm_penalty(PG_FUNCTION_ARGS);
 
 PG_FUNCTION_INFO_V1(gtrgm_picksplit);
 Datum		gtrgm_picksplit(PG_FUNCTION_ARGS);
+
+#define GETENTRY(vec,pos) ((TRGM *) DatumGetPointer((vec)->vector[(pos)].key))
 
 /* Number of one-bits in an unsigned byte */
 static const uint8 number_of_ones[256] = {
@@ -95,10 +78,10 @@ gtrgm_out(PG_FUNCTION_ARGS)
 static void
 makesign(BITVECP sign, TRGM *a)
 {
-	int32		k,
+	int4		k,
 				len = ARRNELEM(a);
 	trgm	   *ptr = GETARR(a);
-	int32		tmp = 0;
+	int4		tmp = 0;
 
 	MemSet((void *) sign, 0, sizeof(BITVEC));
 	SETBIT(sign, SIGLENBIT);	/* set last unused bit */
@@ -129,7 +112,7 @@ gtrgm_compress(PG_FUNCTION_ARGS)
 	else if (ISSIGNKEY(DatumGetPointer(entry->key)) &&
 			 !ISALLTRUE(DatumGetPointer(entry->key)))
 	{
-		int32		i,
+		int4		i,
 					len;
 		TRGM	   *res;
 		BITVECP		sign = GETSIGN(DatumGetPointer(entry->key));
@@ -177,14 +160,14 @@ gtrgm_decompress(PG_FUNCTION_ARGS)
 	}
 }
 
-static int32
+static int4
 cnt_sml_sign_common(TRGM *qtrg, BITVECP sign)
 {
-	int32		count = 0;
-	int32		k,
+	int4		count = 0;
+	int4		k,
 				len = ARRNELEM(qtrg);
 	trgm	   *ptr = GETARR(qtrg);
-	int32		tmp = 0;
+	int4		tmp = 0;
 
 	for (k = 0; k < len; k++)
 	{
@@ -208,30 +191,24 @@ gtrgm_consistent(PG_FUNCTION_ARGS)
 	TRGM	   *qtrg;
 	bool		res;
 	Size		querysize = VARSIZE(query);
-	gtrgm_consistent_cache *cache;
+	char	   *cache = (char *) fcinfo->flinfo->fn_extra,
+			   *cachedQuery = cache + MAXALIGN(sizeof(StrategyNumber));
 
 	/*
-	 * We keep the extracted trigrams in cache, because trigram extraction is
-	 * relatively CPU-expensive.  When trying to reuse a cached value, check
-	 * strategy number not just query itself, because trigram extraction
-	 * depends on strategy.
+	 * Store both the strategy number and extracted trigrams in cache, because
+	 * trigram extraction is relatively CPU-expensive.	We must include
+	 * strategy number because trigram extraction depends on strategy.
 	 *
-	 * The cached structure is a single palloc chunk containing the
-	 * gtrgm_consistent_cache header, then the input query (starting at a
-	 * MAXALIGN boundary), then the TRGM value (also starting at a MAXALIGN
-	 * boundary).  However we don't try to include the regex graph (if any) in
-	 * that struct.  (XXX currently, this approach can leak regex graphs
-	 * across index rescans.  Not clear if that's worth fixing.)
+	 * The cached structure contains the strategy number, then the input query
+	 * (starting at a MAXALIGN boundary), then the TRGM value (also starting
+	 * at a MAXALIGN boundary).
 	 */
-	cache = (gtrgm_consistent_cache *) fcinfo->flinfo->fn_extra;
 	if (cache == NULL ||
-		cache->strategy != strategy ||
-		VARSIZE(cache->query) != querysize ||
-		memcmp((char *) cache->query, (char *) query, querysize) != 0)
+		strategy != *((StrategyNumber *) cache) ||
+		VARSIZE(cachedQuery) != querysize ||
+		memcmp(cachedQuery, query, querysize) != 0)
 	{
-		gtrgm_consistent_cache *newcache;
-		TrgmPackedGraph *graph = NULL;
-		Size		qtrgsize;
+		char	   *newcache;
 
 		switch (strategy)
 		{
@@ -248,58 +225,28 @@ gtrgm_consistent(PG_FUNCTION_ARGS)
 				qtrg = generate_wildcard_trgm(VARDATA(query),
 											  querysize - VARHDRSZ);
 				break;
-			case RegExpICaseStrategyNumber:
-#ifndef IGNORECASE
-				elog(ERROR, "cannot handle ~* with case-sensitive trigrams");
-#endif
-				/* FALL THRU */
-			case RegExpStrategyNumber:
-				qtrg = createTrgmNFA(query, PG_GET_COLLATION(),
-									 &graph, fcinfo->flinfo->fn_mcxt);
-				/* just in case an empty array is returned ... */
-				if (qtrg && ARRNELEM(qtrg) <= 0)
-				{
-					pfree(qtrg);
-					qtrg = NULL;
-				}
-				break;
 			default:
 				elog(ERROR, "unrecognized strategy number: %d", strategy);
 				qtrg = NULL;	/* keep compiler quiet */
 				break;
 		}
 
-		qtrgsize = qtrg ? VARSIZE(qtrg) : 0;
+		newcache = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
+									  MAXALIGN(sizeof(StrategyNumber)) +
+									  MAXALIGN(querysize) +
+									  VARSIZE(qtrg));
+		cachedQuery = newcache + MAXALIGN(sizeof(StrategyNumber));
 
-		newcache = (gtrgm_consistent_cache *)
-			MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
-							   MAXALIGN(sizeof(gtrgm_consistent_cache)) +
-							   MAXALIGN(querysize) +
-							   qtrgsize);
-
-		newcache->strategy = strategy;
-		newcache->query = (text *)
-			((char *) newcache + MAXALIGN(sizeof(gtrgm_consistent_cache)));
-		memcpy((char *) newcache->query, (char *) query, querysize);
-		if (qtrg)
-		{
-			newcache->trigrams = (TRGM *)
-				((char *) newcache->query + MAXALIGN(querysize));
-			memcpy((char *) newcache->trigrams, (char *) qtrg, qtrgsize);
-			/* release qtrg in case it was made in fn_mcxt */
-			pfree(qtrg);
-		}
-		else
-			newcache->trigrams = NULL;
-		newcache->graph = graph;
+		*((StrategyNumber *) newcache) = strategy;
+		memcpy(cachedQuery, query, querysize);
+		memcpy(cachedQuery + MAXALIGN(querysize), qtrg, VARSIZE(qtrg));
 
 		if (cache)
 			pfree(cache);
-		fcinfo->flinfo->fn_extra = (void *) newcache;
-		cache = newcache;
+		fcinfo->flinfo->fn_extra = newcache;
 	}
 
-	qtrg = cache->trigrams;
+	qtrg = (TRGM *) (cachedQuery + MAXALIGN(querysize));
 
 	switch (strategy)
 	{
@@ -320,8 +267,8 @@ gtrgm_consistent(PG_FUNCTION_ARGS)
 			}
 			else
 			{					/* non-leaf contains signature */
-				int32		count = cnt_sml_sign_common(qtrg, GETSIGN(key));
-				int32		len = ARRNELEM(qtrg);
+				int4		count = cnt_sml_sign_common(qtrg, GETSIGN(key));
+				int4		len = ARRNELEM(qtrg);
 
 				if (len == 0)
 					res = false;
@@ -368,63 +315,6 @@ gtrgm_consistent(PG_FUNCTION_ARGS)
 						break;
 					}
 				}
-			}
-			break;
-		case RegExpICaseStrategyNumber:
-#ifndef IGNORECASE
-			elog(ERROR, "cannot handle ~* with case-sensitive trigrams");
-#endif
-			/* FALL THRU */
-		case RegExpStrategyNumber:
-			/* Regexp search is inexact */
-			*recheck = true;
-
-			/* Check regex match as much as we can with available info */
-			if (qtrg)
-			{
-				if (GIST_LEAF(entry))
-				{				/* all leafs contains orig trgm */
-					bool	   *check;
-
-					check = trgm_presence_map(qtrg, key);
-					res = trigramsMatchGraph(cache->graph, check);
-					pfree(check);
-				}
-				else if (ISALLTRUE(key))
-				{				/* non-leaf contains signature */
-					res = true;
-				}
-				else
-				{				/* non-leaf contains signature */
-					int32		k,
-								tmp = 0,
-								len = ARRNELEM(qtrg);
-					trgm	   *ptr = GETARR(qtrg);
-					BITVECP		sign = GETSIGN(key);
-					bool	   *check;
-
-					/*
-					 * GETBIT() tests may give false positives, due to limited
-					 * size of the sign array.	But since trigramsMatchGraph()
-					 * implements a monotone boolean function, false positives
-					 * in the check array can't lead to false negative answer.
-					 * So we can apply trigramsMatchGraph despite uncertainty,
-					 * and that usefully improves the quality of the search.
-					 */
-					check = (bool *) palloc(len * sizeof(bool));
-					for (k = 0; k < len; k++)
-					{
-						CPTRGM(((char *) &tmp), ptr + k);
-						check[k] = GETBIT(sign, HASHVAL(tmp));
-					}
-					res = trigramsMatchGraph(cache->graph, check);
-					pfree(check);
-				}
-			}
-			else
-			{
-				/* trigram-free query must be rechecked everywhere */
-				res = true;
 			}
 			break;
 		default:
@@ -489,8 +379,8 @@ gtrgm_distance(PG_FUNCTION_ARGS)
 			}
 			else
 			{					/* non-leaf contains signature */
-				int32		count = cnt_sml_sign_common(qtrg, GETSIGN(key));
-				int32		len = ARRNELEM(qtrg);
+				int4		count = cnt_sml_sign_common(qtrg, GETSIGN(key));
+				int4		len = ARRNELEM(qtrg);
 
 				res = (len == 0) ? -1.0 : 1.0 - ((float8) count) / ((float8) len);
 			}
@@ -504,10 +394,10 @@ gtrgm_distance(PG_FUNCTION_ARGS)
 	PG_RETURN_FLOAT8(res);
 }
 
-static int32
+static int4
 unionkey(BITVECP sbase, TRGM *add)
 {
-	int32		i;
+	int4		i;
 
 	if (ISSIGNKEY(add))
 	{
@@ -522,7 +412,7 @@ unionkey(BITVECP sbase, TRGM *add)
 	else
 	{
 		trgm	   *ptr = GETARR(add);
-		int32		tmp = 0;
+		int4		tmp = 0;
 
 		for (i = 0; i < ARRNELEM(add); i++)
 		{
@@ -538,11 +428,11 @@ Datum
 gtrgm_union(PG_FUNCTION_ARGS)
 {
 	GistEntryVector *entryvec = (GistEntryVector *) PG_GETARG_POINTER(0);
-	int32		len = entryvec->n;
+	int4		len = entryvec->n;
 	int		   *size = (int *) PG_GETARG_POINTER(1);
 	BITVEC		base;
-	int32		i;
-	int32		flag = 0;
+	int4		i;
+	int4		flag = 0;
 	TRGM	   *result;
 
 	MemSet((void *) base, 0, sizeof(BITVEC));
@@ -584,7 +474,7 @@ gtrgm_same(PG_FUNCTION_ARGS)
 			*result = false;
 		else
 		{
-			int32		i;
+			int4		i;
 			BITVECP		sa = GETSIGN(a),
 						sb = GETSIGN(b);
 
@@ -601,7 +491,7 @@ gtrgm_same(PG_FUNCTION_ARGS)
 	}
 	else
 	{							/* a and b ISARRKEY */
-		int32		lena = ARRNELEM(a),
+		int4		lena = ARRNELEM(a),
 					lenb = ARRNELEM(b);
 
 		if (lena != lenb)
@@ -610,7 +500,7 @@ gtrgm_same(PG_FUNCTION_ARGS)
 		{
 			trgm	   *ptra = GETARR(a),
 					   *ptrb = GETARR(b);
-			int32		i;
+			int4		i;
 
 			*result = true;
 			for (i = 0; i < lena; i++)
@@ -625,10 +515,10 @@ gtrgm_same(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(result);
 }
 
-static int32
+static int4
 sizebitvec(BITVECP sign)
 {
-	int32		size = 0,
+	int4		size = 0,
 				i;
 
 	LOOPBYTE
@@ -744,7 +634,7 @@ fillcache(CACHESIGN *item, TRGM *key)
 typedef struct
 {
 	OffsetNumber pos;
-	int32		cost;
+	int4		cost;
 } SPLITCOST;
 
 static int
@@ -785,11 +675,11 @@ gtrgm_picksplit(PG_FUNCTION_ARGS)
 			   *datum_r;
 	BITVECP		union_l,
 				union_r;
-	int32		size_alpha,
+	int4		size_alpha,
 				size_beta;
-	int32		size_waste,
+	int4		size_waste,
 				waste = -1;
-	int32		nbytes;
+	int4		nbytes;
 	OffsetNumber seed_1 = 0,
 				seed_2 = 0;
 	OffsetNumber *left,

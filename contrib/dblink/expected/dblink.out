@@ -1,5 +1,6 @@
 CREATE EXTENSION dblink;
 CREATE TABLE foo(f1 int, f2 text, f3 text[], primary key (f1,f2));
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "foo_pkey" for table "foo"
 INSERT INTO foo VALUES (0,'a','{"a0","b0","c0"}');
 INSERT INTO foo VALUES (1,'b','{"a1","b1","c1"}');
 INSERT INTO foo VALUES (2,'c','{"a2","b2","c2"}');
@@ -55,6 +56,7 @@ ERROR:  invalid attribute number 4
 -- retest using a quoted and schema qualified table
 CREATE SCHEMA "MySchema";
 CREATE TABLE "MySchema"."Foo"(f1 int, f2 text, f3 text[], primary key (f1,f2));
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "Foo_pkey" for table "Foo"
 INSERT INTO "MySchema"."Foo" VALUES (0,'a','{"a0","b0","c0"}');
 -- list the primary key fields
 SELECT *
@@ -783,12 +785,8 @@ SELECT dblink_disconnect('dtest1');
 
 -- test foreign data wrapper functionality
 CREATE USER dblink_regression_test;
-CREATE SERVER fdtest FOREIGN DATA WRAPPER dblink_fdw
-  OPTIONS (dbname 'contrib_regression');
-CREATE USER MAPPING FOR public SERVER fdtest
-  OPTIONS (server 'localhost');  -- fail, can't specify server here
-ERROR:  invalid option "server"
-HINT:  Valid options in this context are: user, password
+CREATE FOREIGN DATA WRAPPER postgresql;
+CREATE SERVER fdtest FOREIGN DATA WRAPPER postgresql OPTIONS (dbname 'contrib_regression');
 CREATE USER MAPPING FOR public SERVER fdtest;
 GRANT USAGE ON FOREIGN SERVER fdtest TO dblink_regression_test;
 GRANT EXECUTE ON FUNCTION dblink_connect_u(text, text) TO dblink_regression_test;
@@ -827,6 +825,7 @@ REVOKE EXECUTE ON FUNCTION dblink_connect_u(text, text) FROM dblink_regression_t
 DROP USER dblink_regression_test;
 DROP USER MAPPING FOR public SERVER fdtest;
 DROP SERVER fdtest;
+DROP FOREIGN DATA WRAPPER postgresql;
 -- test asynchronous notifications
 SELECT dblink_connect('dbname=contrib_regression');
  dblink_connect 
@@ -886,6 +885,8 @@ CREATE TEMP TABLE test_dropped
 	col2 INT NOT NULL DEFAULT 112,
 	col2b INT NOT NULL DEFAULT 113
 );
+NOTICE:  CREATE TABLE will create implicit sequence "test_dropped_id_seq" for serial column "test_dropped.id"
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "test_dropped_pkey" for table "test_dropped"
 INSERT INTO test_dropped VALUES(default);
 ALTER TABLE test_dropped
 	DROP COLUMN col1,
@@ -913,179 +914,3 @@ SELECT dblink_build_sql_delete('test_dropped', '1', 1,
  DELETE FROM test_dropped WHERE id = '2'
 (1 row)
 
--- test local mimicry of remote GUC values that affect datatype I/O
-SET datestyle = ISO, MDY;
-SET intervalstyle = postgres;
-SET timezone = UTC;
-SELECT dblink_connect('myconn','dbname=contrib_regression');
- dblink_connect 
-----------------
- OK
-(1 row)
-
-SELECT dblink_exec('myconn', 'SET datestyle = GERMAN, DMY;');
- dblink_exec 
--------------
- SET
-(1 row)
-
--- single row synchronous case
-SELECT *
-FROM dblink('myconn',
-    'SELECT * FROM (VALUES (''12.03.2013 00:00:00+00'')) t')
-  AS t(a timestamptz);
-           a            
-------------------------
- 2013-03-12 00:00:00+00
-(1 row)
-
--- multi-row synchronous case
-SELECT *
-FROM dblink('myconn',
-    'SELECT * FROM
-     (VALUES (''12.03.2013 00:00:00+00''),
-             (''12.03.2013 00:00:00+00'')) t')
-  AS t(a timestamptz);
-           a            
-------------------------
- 2013-03-12 00:00:00+00
- 2013-03-12 00:00:00+00
-(2 rows)
-
--- single-row asynchronous case
-SELECT *
-FROM dblink_send_query('myconn',
-    'SELECT * FROM
-     (VALUES (''12.03.2013 00:00:00+00'')) t');
- dblink_send_query 
--------------------
-                 1
-(1 row)
-
-CREATE TEMPORARY TABLE result AS
-(SELECT * from dblink_get_result('myconn') as t(t timestamptz))
-UNION ALL
-(SELECT * from dblink_get_result('myconn') as t(t timestamptz));
-SELECT * FROM result;
-           t            
-------------------------
- 2013-03-12 00:00:00+00
-(1 row)
-
-DROP TABLE result;
--- multi-row asynchronous case
-SELECT *
-FROM dblink_send_query('myconn',
-    'SELECT * FROM
-     (VALUES (''12.03.2013 00:00:00+00''),
-             (''12.03.2013 00:00:00+00'')) t');
- dblink_send_query 
--------------------
-                 1
-(1 row)
-
-CREATE TEMPORARY TABLE result AS
-(SELECT * from dblink_get_result('myconn') as t(t timestamptz))
-UNION ALL
-(SELECT * from dblink_get_result('myconn') as t(t timestamptz))
-UNION ALL
-(SELECT * from dblink_get_result('myconn') as t(t timestamptz));
-SELECT * FROM result;
-           t            
-------------------------
- 2013-03-12 00:00:00+00
- 2013-03-12 00:00:00+00
-(2 rows)
-
-DROP TABLE result;
--- Try an ambiguous interval
-SELECT dblink_exec('myconn', 'SET intervalstyle = sql_standard;');
- dblink_exec 
--------------
- SET
-(1 row)
-
-SELECT *
-FROM dblink('myconn',
-    'SELECT * FROM (VALUES (''-1 2:03:04'')) i')
-  AS i(i interval);
-         i         
--------------------
- -1 days -02:03:04
-(1 row)
-
--- Try swapping to another format to ensure the GUCs are tracked
--- properly through a change.
-CREATE TEMPORARY TABLE result (t timestamptz);
-SELECT dblink_exec('myconn', 'SET datestyle = ISO, MDY;');
- dblink_exec 
--------------
- SET
-(1 row)
-
-INSERT INTO result
-  SELECT *
-  FROM dblink('myconn',
-              'SELECT * FROM (VALUES (''03.12.2013 00:00:00+00'')) t')
-    AS t(a timestamptz);
-SELECT dblink_exec('myconn', 'SET datestyle = GERMAN, DMY;');
- dblink_exec 
--------------
- SET
-(1 row)
-
-INSERT INTO result
-  SELECT *
-  FROM dblink('myconn',
-              'SELECT * FROM (VALUES (''12.03.2013 00:00:00+00'')) t')
-    AS t(a timestamptz);
-SELECT * FROM result;
-           t            
-------------------------
- 2013-03-12 00:00:00+00
- 2013-03-12 00:00:00+00
-(2 rows)
-
-DROP TABLE result;
--- Check error throwing in dblink_fetch
-SELECT dblink_open('myconn','error_cursor',
-       'SELECT * FROM (VALUES (''1''), (''not an int'')) AS t(text);');
- dblink_open 
--------------
- OK
-(1 row)
-
-SELECT *
-FROM dblink_fetch('myconn','error_cursor', 1) AS t(i int);
- i 
----
- 1
-(1 row)
-
-SELECT *
-FROM dblink_fetch('myconn','error_cursor', 1) AS t(i int);
-ERROR:  invalid input syntax for integer: "not an int"
--- Make sure that the local settings have retained their values in spite
--- of shenanigans on the connection.
-SHOW datestyle;
- DateStyle 
------------
- ISO, MDY
-(1 row)
-
-SHOW intervalstyle;
- IntervalStyle 
----------------
- postgres
-(1 row)
-
--- Clean up GUC-setting tests
-SELECT dblink_disconnect('myconn');
- dblink_disconnect 
--------------------
- OK
-(1 row)
-
-RESET datestyle;
-RESET intervalstyle;
-RESET timezone;

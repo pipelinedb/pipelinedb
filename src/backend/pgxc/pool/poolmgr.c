@@ -747,7 +747,7 @@ agent_init(PoolAgent *agent, const char *database, const char *user_name,
 	agent->coord_connections = (PGXCNodePoolSlot **)
 			palloc0(agent->num_coord_connections * sizeof(PGXCNodePoolSlot *));
 	agent->dn_connections = (PGXCNodePoolSlot **)
-			palloc0(agent->num_dn_connections * sizeof(PGXCNodePoolSlot *));
+			palloc0(2 * agent->num_dn_connections * sizeof(PGXCNodePoolSlot *));
 	/* find database */
 	agent->pool = find_database_pool(database, user_name, pgoptions);
 
@@ -827,7 +827,7 @@ PoolManagerDisconnect(void)
  * Get pooled connections
  */
 int *
-PoolManagerGetConnections(List *datanodelist, List *coordlist)
+PoolManagerGetConnections(List *datanodelist, List *coordlist, int offset)
 {
 	int			i;
 	ListCell   *nodelist_item;
@@ -849,7 +849,27 @@ PoolManagerGetConnections(List *datanodelist, List *coordlist)
 	{
 		foreach(nodelist_item, datanodelist)
 		{
-			nodes[i++] = htonl(lfirst_int(nodelist_item));
+			/*
+			 * XXX Using an offset here is an epic hack to make the pool manager give
+			 * us multiple datanode backends per coordinator connection.
+			 *
+			 * We signify the second backend by adding an offset to it. Then, in the
+			 * pool manager code, indexes greater than the datanodes list size are modded
+			 * to get the actual datanode they represent. Consider a scenario with two
+			 * datanodes, 0 and 1. If we want two connections per node, we'd just need to
+			 * pass the pooler the following list: [0, 1, 2, 3].
+			 *
+			 * The pool manager thinks 2 and 3 are separate nodes, so it doesn't
+			 * have a problem with allocating a datanode backend for each, even though
+			 * they actually correspond to 0 and 1. Sweet!
+			 *
+			 * We need to refactor the pool manager to support multiple pool managers
+			 * from the same process, or add support for having multiple pool managers
+			 * in the same process.
+			 *
+			 * Did I say, XXX?
+			 */
+			nodes[i++] = htonl(lfirst_int(nodelist_item) + offset);
 		}
 	}
 	/* Then with Coordinator list (can be nul) */
@@ -1466,9 +1486,18 @@ agent_acquire_connections(PoolAgent *agent, List *datanodelist, List *coordlist)
 	foreach(nodelist_item, datanodelist)
 	{
 		int			node = lfirst_int(nodelist_item);
+		/*
+		 * XXX: this is a hack for supporting multiple backend connections
+		 * on the same node from a single connection.
+		 *
+		 * See comments above execRemote.c:get_moddable_datanodes for a full description.
+		 */
+		int rawnode = node;
+		if (node >= agent->num_dn_connections)
+			node = node % agent->num_dn_connections;
 
 		/* Acquire from the pool if none */
-		if (agent->dn_connections[node] == NULL)
+		if (agent->dn_connections[rawnode] == NULL)
 		{
 			PGXCNodePoolSlot *slot = acquire_connection(agent->pool,
 														agent->dn_conn_oids[node]);

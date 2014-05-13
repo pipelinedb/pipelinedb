@@ -25,6 +25,20 @@ endif
 # segscan is compiled as part of segparse
 segparse.o: segscan.c
 
+segparse.c: segparse.y
+ifdef BISON
+	$(BISON) $(BISONFLAGS) -o $@ $<
+else
+	@$(missing) bison $< $@
+endif
+
+segscan.c: segscan.l
+ifdef FLEX
+	$(FLEX) $(FLEXFLAGS) -o'$@' $<
+else
+	@$(missing) flex $< $@
+endif
+
 distprep: segparse.c segscan.c
 
 maintainer-clean:

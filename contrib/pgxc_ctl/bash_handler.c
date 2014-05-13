@@ -24,8 +24,7 @@ extern char *pgxc_ctl_conf_prototype[];
 /*
  * Install bash script.
  */
-void
-install_pgxc_ctl_bash(char *path)
+void install_pgxc_ctl_bash(char *path)
 {
 	char cmd[1024];
 	FILE *pgxc_ctl_bash = fopen(path, "w");
@@ -62,8 +61,7 @@ void uninstall_pgxc_ctl_bash(char *path)
  * typically $HOME/pgxc_ctl, which can be changed with pgxc_ctl options.
  * See pgxc_ctl.c or pgxc_ctl document for details.
  */
-void
-read_config_file(char *path, char *conf)
+void read_config_file(char *path, char *conf)
 {
 	FILE *vars;
 	char cmd[1024];

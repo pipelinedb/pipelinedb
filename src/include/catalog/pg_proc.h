@@ -4743,6 +4743,8 @@ DATA(insert OID = 3204 ( pgxc_lock_for_backup	PGNSP PGUID 12 1 0 0 0 f f f f t f
 DESCR("lock the cluster for taking backup");
 #endif
 
+DATA(insert OID = 4300 (  decode_delimited   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1009 "17 25" _null_ _null_ "{$,delimiter}" _null_ text_to_array _null_ _null_ _null_ ));
+
 DATA(insert OID = 3469 (  spg_range_quad_config PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2278 "2281 2281" _null_ _null_ _null_ _null_  spg_range_quad_config _null_ _null_ _null_ ));
 DESCR("SP-GiST support for quad tree over range");
 DATA(insert OID = 3470 (  spg_range_quad_choose PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2278 "2281 2281" _null_ _null_ _null_ _null_  spg_range_quad_choose _null_ _null_ _null_ ));

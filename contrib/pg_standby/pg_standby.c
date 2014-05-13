@@ -527,9 +527,9 @@ usage(void)
 	printf("  -s SLEEPTIME       seconds to wait between file checks (min=1, max=60,\n"
 		   "                     default=5)\n");
 	printf("  -t TRIGGERFILE     trigger file to initiate failover (no default)\n");
-	printf("  -V, --version      output version information, then exit\n");
 	printf("  -w MAXWAITTIME     max seconds to wait for a file (0=no limit) (default=0)\n");
-	printf("  -?, --help         show this help, then exit\n");
+	printf("  --help             show this help, then exit\n");
+	printf("  --version          output version information, then exit\n");
 	printf("\n"
 		   "Main intended use as restore_command in recovery.conf:\n"
 		   "  restore_command = 'pg_standby [OPTION]... ARCHIVELOCATION %%f %%p %%r'\n"
@@ -549,7 +549,7 @@ sighandler(int sig)
 static void
 sigquit_handler(int sig)
 {
-	pqsignal(SIGINT, SIG_DFL);
+	signal(SIGINT, SIG_DFL);
 	kill(getpid(), SIGINT);
 }
 #endif
@@ -592,9 +592,9 @@ main(int argc, char **argv)
 	 *
 	 * There's no way to trigger failover via signal on Windows.
 	 */
-	(void) pqsignal(SIGUSR1, sighandler);
-	(void) pqsignal(SIGINT, sighandler);		/* deprecated, use SIGUSR1 */
-	(void) pqsignal(SIGQUIT, sigquit_handler);
+	(void) signal(SIGUSR1, sighandler);
+	(void) signal(SIGINT, sighandler);	/* deprecated, use SIGUSR1 */
+	(void) signal(SIGQUIT, sigquit_handler);
 #endif
 
 	while ((c = getopt(argc, argv, "cdk:lr:s:t:w:")) != -1)
@@ -643,7 +643,7 @@ main(int argc, char **argv)
 				}
 				break;
 			case 't':			/* Trigger file */
-				triggerPath = strdup(optarg);
+				triggerPath = optarg;
 				break;
 			case 'w':			/* Max wait time */
 				maxwaittime = atoi(optarg);

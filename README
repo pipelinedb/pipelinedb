@@ -1,32 +1,26 @@
-Postgres-XC Database Management System
-=====================================
+    ____  _            ___            ____  ____ 
+   / __ \(_)___  ___  / (_)___  ___  / __ \/ __ )
+  / /_/ / / __ \/ _ \/ / / __ \/ _ \/ / / / __  |
+ / ____/ / /_/ /  __/ / / / / /  __/ /_/ / /_/ / 
+/_/   /_/ .___/\___/_/_/_/ /_/\___/_____/_____/  
+       /_/                                       
+========================================================================
 
-This directory contains the source code distribution of the Postgres-XC
-database management system.
+# Build from source (with debug symbols)
+./configure CFLAGS="-g -O0" --prefix=/path/to/dev/installation
+make
+make install
 
-Postgres-XC is an advanced object-relational cluster database management
- system that supports an extended subset of the SQL standard, including
-transactions, foreign keys, user-defined types and functions.  This
-distribution also contains C language bindings.
+# Initialize database directories
+initgtm -Z gtm -D /path/to/gtm/dir
+initdb --nodename=<datanode nodename> -D /path/to/datanode/dir
+initdb --nodename=<coordinator nodename> -D /path/to/coordinator/dir
 
-Postgres-XC has many language interfaces similar to PostgreSQL, many of
-which are listed here:
+# Start daemons
+gtm -D /path/to/gtm/dir &
+postgres --coordinator -D /path/to/coordinator/dir &
+postgres --datanode -D /path/to/datanode/dir -p 5431 &
 
-	http://www.postgresql.org/download
-
-See the file INSTALL for instructions on how to build and install
-Postgres-XC.  That file also lists supported operating systems and
-hardware platforms and contains information regarding any other
-software packages that are required to build or run the Postgres-XC
-system.  Changes between all Postgres-XC releases are recorded in the
-file HISTORY.  Copyright and license information can be found in the
-file COPYRIGHT.  A comprehensive documentation set is included in this
-distribution; it can be read as described in the installation
-instructions.
-
-The latest version of this software may be obtained at
-http://sourceforge.net/projects/postgres-xc/.  For more information look at our
-web site located at http://postgres-xc.sourceforge.net/.
-
-More information about Postgres-XC Development Group is available at
-http://sourceforge.net/apps/mediawiki/postgres-xc/index.php?title=Charter.
+# Create cluster topology in the XC catalog
+psql -c "CREATE NODE <datanode nodename> WITH (TYPE = 'datanode', HOST = 'localhost', PORT = 5431)" postgres
+psql -c "CREATE DATABASE <database name>" postgres

@@ -567,6 +567,13 @@ bool isPGXCCoordinator = false;
 bool isPGXCDataNode = false;
 
 /*
+ * PipelineDB XXX: merge procs don't behave exactly like a datanode,
+ * or exactly like a coordinator, so we need some way to know globally
+ * if this is a merge proc. This is an ugly way to do it, but it's simple
+ */
+bool isMergeNode = false;
+
+/*
  * While adding a new node to the cluster we need to restore the schema of
  * an existing database to the new node.
  * If the new node is a datanode and we connect directly to it,
@@ -3827,6 +3834,8 @@ BackendStartup(Port *port)
 {
 	Backend    *bn;				/* for backend cleanup */
 	pid_t		pid;
+	char msg[64];
+	char remote[32];
 
 	/*
 	 * Create backend data structure.  Better before the fork() so we can
@@ -3889,6 +3898,14 @@ BackendStartup(Port *port)
 
 		/* Perform additional initialization and collect startup packet */
 		BackendInitialize(port);
+
+		sprintf(msg, "backend pid is %d", MyProcPid);
+		if (strcmp("[local]", port->remote_host))
+		{
+			sprintf(remote, " (from %s:%s)", port->remote_host, port->remote_port);
+			strcat(msg, remote);
+		}
+		elog(LOG, "%s", msg);
 
 		/* And run the backend */
 		BackendRun(port);

@@ -3,7 +3,7 @@
  * auto_explain.c
  *
  *
- * Copyright (c) 2008-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2008-2012, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  contrib/auto_explain/auto_explain.c
@@ -11,8 +11,6 @@
  *-------------------------------------------------------------------------
  */
 #include "postgres.h"
-
-#include <limits.h>
 
 #include "commands/explain.h"
 #include "executor/instrument.h"

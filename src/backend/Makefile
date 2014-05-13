@@ -21,7 +21,7 @@ ifneq ($(PORTNAME), win32)
 override CFLAGS += $(PTHREAD_CFLAGS)
 endif
 
-SUBDIRS = access bootstrap catalog parser commands executor foreign lib libpq \
+SUBDIRS = access bootstrap catalog parser commands executor events foreign lib libpq \
 	pgxc main nodes optimizer port postmaster regex replication rewrite \
 	storage tcop tsearch utils $(top_builddir)/src/timezone $(top_builddir)/src/interfaces/libpq
 

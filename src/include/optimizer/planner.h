@@ -42,7 +42,11 @@ extern bool is_dummy_plan(Plan *plan);
 
 extern Expr *expression_planner(Expr *expr);
 
+extern bool plan_cluster_use_sort(Oid tableOid, Oid indexOid);
+
 extern Expr *preprocess_phv_expression(PlannerInfo *root, Expr *expr);
+
+extern int	get_grouping_column_index(Query *parse, TargetEntry *tle);
 
 extern bool plan_cluster_use_sort(Oid tableOid, Oid indexOid);
 
