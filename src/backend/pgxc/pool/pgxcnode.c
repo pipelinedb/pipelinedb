@@ -168,14 +168,14 @@ InitMultinodeExecutor(bool is_force)
 	for (count = 0; count < NumDataNodes; count++)
 	{
 		init_pgxc_handle(&dn_handles[count]);
+		init_pgxc_handle(&aux_dn_handles[count]);
 		dn_handles[count].nodeoid = dnOids[count];
+		aux_dn_handles[count].nodeoid = dnOids[count];
 	}
 	for (count = 0; count < NumCoords; count++)
 	{
 		init_pgxc_handle(&co_handles[count]);
-		init_pgxc_handle(&aux_dn_handles[count]);
 		co_handles[count].nodeoid = coOids[count];
-		aux_dn_handles[count].nodeoid = dnOids[count];
 	}
 
 	datanode_count = 0;

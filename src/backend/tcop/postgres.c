@@ -1253,7 +1253,8 @@ exec_merge(StringInfo message)
 	group_clause = psrc->query->groupClause;
 
 	merge_attrs = get_merge_columns(psrc->query);
-	merge_attr = (AttrNumber) lfirst_int(merge_attrs->head);
+	if (merge_attrs)
+		merge_attr = (AttrNumber) lfirst_int(merge_attrs->head);
 
 	tuplestore_clear(store);
 
@@ -1278,7 +1279,6 @@ exec_merge(StringInfo message)
 			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", num_cols);
 		cols = (AttrNumber *) palloc(sizeof(AttrNumber) * num_cols);
 		cols[0] = merge_attr;
-
 		execTuplesHashPrepare(num_cols, extract_grouping_ops(group_clause), &eq_funcs, &hash_funcs);
 		num_buckets = 1000;
 

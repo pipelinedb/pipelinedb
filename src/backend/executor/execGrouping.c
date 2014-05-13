@@ -291,17 +291,17 @@ BuildTupleHashTable(int numCols, AttrNumber *keyColIdx,
 	hashtable = (TupleHashTable) MemoryContextAlloc(tablecxt,
 												 sizeof(TupleHashTableData));
 
-	 /*
-		* Sometimes it's actually useful to use this thing even
-		* when there are no hash columns. This allows us to avoid
-		* handling special cases in surrounding code where numCols
-		* may sometimes be 0. This effectively means that this hashtable
-		* will only ever store a single tuple, but it works transparently
-		* which is cleaner than implementing a special non-TupleHashTable
-		* case in these scenarios.
-		*/
-	 if (numCols == 0)
-					 nbuckets = 1;
+  /*
+	 * Sometimes it's actually useful to use this thing even
+	 * when there are no hash columns. This allows us to avoid
+	 * handling special cases in surrounding code where numCols
+	 * may sometimes be 0. This effectively means that this hashtable
+	 * will only ever store a single tuple, but it works transparently
+	 * which is cleaner than implementing a special non-TupleHashTable
+	 * case in these scenarios.
+	 */
+	if (numCols == 0)
+	 nbuckets = 1;
 
 	hashtable->numCols = numCols;
 	hashtable->keyColIdx = keyColIdx;

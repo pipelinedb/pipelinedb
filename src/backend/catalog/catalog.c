@@ -40,6 +40,7 @@
 #ifdef PGXC
 #include "catalog/pgxc_node.h"
 #include "catalog/pgxc_group.h"
+#include "catalog/pipeline_queries.h"
 #endif
 #include "common/relpath.h"
 #include "miscadmin.h"
@@ -265,6 +266,7 @@ IsSharedRelation(Oid relationId)
 		relationId == PgxcGroupRelationId ||
 		relationId == PgxcNodeRelationId ||
 #endif
+		relationId == PipelineQueriesRelationId ||
 		relationId == DbRoleSettingRelationId)
 		return true;
 	/* These are their indexes (see indexing.h) */
@@ -288,6 +290,7 @@ IsSharedRelation(Oid relationId)
 		relationId == PgxcGroupGroupNameIndexId ||
 		relationId == PgxcGroupOidIndexId ||
 #endif
+		relationId == PipelineQueriesNameIndexId ||
 		relationId == DbRoleSettingDatidRolidIndexId)
 		return true;
 	/* These are their toast tables and toast indexes (see toasting.h) */
