@@ -1428,6 +1428,8 @@ standard_ProcessUtility(Node *parsetree,
 			if (IS_PGXC_COORDINATOR)
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true, EXEC_ON_COORDS, false);
 			break;
+		case T_DeactivateContinuousViewStmt:
+			break;
 #endif
 
 		default:
@@ -3825,6 +3827,9 @@ CreateCommandTag(Node *parsetree)
 			break;
 		case T_ActivateContinuousViewStmt:
 			tag = "ACTIVATE CONTINUOUS VIEW";
+			break;
+		case T_DeactivateContinuousViewStmt:
+			tag = "DEACTIVATE CONTINUOUS VIEW";
 			break;
 		case T_ExecDirectStmt:
 			tag = "EXECUTE DIRECT";
