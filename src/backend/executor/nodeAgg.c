@@ -1451,9 +1451,6 @@ agg_fill_hash_table(AggState *aggstate)
 	/* XXX PERF: just use a regular set to avoid this O(n^2) union operation */
 	aggstate->dirty_aggs = list_union_ptr(NIL, aggstate->dirty_aggs);
 	aggstate->table_filled = true;
-
-	/* Initialize to walk the hash table */
-	ResetTupleHashIterator(aggstate->hashtable, &aggstate->hashiter);
 }
 
 /*
