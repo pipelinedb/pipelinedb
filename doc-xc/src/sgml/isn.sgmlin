@@ -8,7 +8,6 @@
  </indexterm>
 
 &common;
-
  <para>
   The <filename>isn</filename> module provides data types for the following
   international product numbering standards: EAN13, UPC, ISBN (books), ISMN
@@ -26,7 +25,7 @@
  <sect2>
   <title>Data Types</title>
 
-&pgnotice;
+&common;
   <para>
    <xref linkend="isn-datatypes"> shows the data types provided by
    the <filename>isn</filename> module.
@@ -245,7 +244,7 @@
 
     <tbody>
      <row>
-      <entry><function>isn_weak(boolean)</function></entry>
+      <entry><function>isn_weak(boolean)</function><indexterm><primary>isn_weak</primary></indexterm></entry>
       <entry><type>boolean</type></entry>
       <entry>Sets the weak input mode (returns new setting)</entry>
      </row>
@@ -255,12 +254,12 @@
       <entry>Gets the current status of the weak mode</entry>
      </row>
      <row>
-      <entry><function>make_valid(isn)</function></entry>
+      <entry><function>make_valid(isn)</function><indexterm><primary>make_valid</primary></indexterm></entry>
       <entry><type>isn</type></entry>
       <entry>Validates an invalid number (clears the invalid flag)</entry>
      </row>
      <row>
-      <entry><function>is_valid(isn)</function></entry>
+      <entry><function>is_valid(isn)</function><indexterm><primary>is_valid</primary></indexterm></entry>
       <entry><type>boolean</type></entry>
       <entry>Checks for the presence of the invalid flag</entry>
      </row>

@@ -3,7 +3,7 @@
  * rowtypes.c
  *	  I/O and comparison functions for generic composite types.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -16,6 +16,7 @@
 
 #include <ctype.h>
 
+#include "access/htup_details.h"
 #include "catalog/pg_type.h"
 #include "libpq/pqformat.h"
 #include "utils/builtins.h"
@@ -31,6 +32,7 @@ typedef struct ColumnIOData
 	Oid			column_type;
 	Oid			typiofunc;
 	Oid			typioparam;
+	bool		typisvarlena;
 	FmgrInfo	proc;
 } ColumnIOData;
 
@@ -366,6 +368,7 @@ record_out(PG_FUNCTION_ARGS)
 	{
 		ColumnIOData *column_info = &my_extra->columns[i];
 		Oid			column_type = tupdesc->attrs[i]->atttypid;
+		Datum		attr;
 		char	   *value;
 		char	   *tmp;
 		bool		nq;
@@ -389,17 +392,16 @@ record_out(PG_FUNCTION_ARGS)
 		 */
 		if (column_info->column_type != column_type)
 		{
-			bool		typIsVarlena;
-
 			getTypeOutputInfo(column_type,
 							  &column_info->typiofunc,
-							  &typIsVarlena);
+							  &column_info->typisvarlena);
 			fmgr_info_cxt(column_info->typiofunc, &column_info->proc,
 						  fcinfo->flinfo->fn_mcxt);
 			column_info->column_type = column_type;
 		}
 
-		value = OutputFunctionCall(&column_info->proc, values[i]);
+		attr = values[i];
+		value = OutputFunctionCall(&column_info->proc, attr);
 
 		/* Detect whether we need double quotes for this value */
 		nq = (value[0] == '\0');	/* force quotes for empty string */
@@ -418,17 +420,17 @@ record_out(PG_FUNCTION_ARGS)
 
 		/* And emit the string */
 		if (nq)
-			appendStringInfoChar(&buf, '"');
+			appendStringInfoCharMacro(&buf, '"');
 		for (tmp = value; *tmp; tmp++)
 		{
 			char		ch = *tmp;
 
 			if (ch == '"' || ch == '\\')
-				appendStringInfoChar(&buf, ch);
-			appendStringInfoChar(&buf, ch);
+				appendStringInfoCharMacro(&buf, ch);
+			appendStringInfoCharMacro(&buf, ch);
 		}
 		if (nq)
-			appendStringInfoChar(&buf, '"');
+			appendStringInfoCharMacro(&buf, '"');
 	}
 
 	appendStringInfoChar(&buf, ')');
@@ -719,6 +721,7 @@ record_send(PG_FUNCTION_ARGS)
 	{
 		ColumnIOData *column_info = &my_extra->columns[i];
 		Oid			column_type = tupdesc->attrs[i]->atttypid;
+		Datum		attr;
 		bytea	   *outputbytes;
 
 		/* Ignore dropped columns in datatype */
@@ -739,23 +742,19 @@ record_send(PG_FUNCTION_ARGS)
 		 */
 		if (column_info->column_type != column_type)
 		{
-			bool		typIsVarlena;
-
 			getTypeBinaryOutputInfo(column_type,
 									&column_info->typiofunc,
-									&typIsVarlena);
+									&column_info->typisvarlena);
 			fmgr_info_cxt(column_info->typiofunc, &column_info->proc,
 						  fcinfo->flinfo->fn_mcxt);
 			column_info->column_type = column_type;
 		}
 
-		outputbytes = SendFunctionCall(&column_info->proc, values[i]);
-
-		/* We assume the result will not have been toasted */
+		attr = values[i];
+		outputbytes = SendFunctionCall(&column_info->proc, attr);
 		pq_sendint(&buf, VARSIZE(outputbytes) - VARHDRSZ, 4);
 		pq_sendbytes(&buf, VARDATA(outputbytes),
 					 VARSIZE(outputbytes) - VARHDRSZ);
-		pfree(outputbytes);
 	}
 
 	pfree(values);

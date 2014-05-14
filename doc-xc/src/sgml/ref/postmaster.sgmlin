@@ -35,7 +35,6 @@ PostgreSQL documentation
   <title>Description</title>
 
 &common;
-
   <para>
    <command>postmaster</command> is a deprecated alias of <command>postgres</command>.
   </para>

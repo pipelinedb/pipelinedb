@@ -3,7 +3,7 @@
  * geqo_eval.c
  *	  Routines to evaluate query trees
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/optimizer/geqo/geqo_eval.c
@@ -56,6 +56,7 @@ geqo_eval(PlannerInfo *root, Gene *tour, int num_gene)
 	MemoryContext mycontext;
 	MemoryContext oldcxt;
 	RelOptInfo *joinrel;
+	Path	   *best_path;
 	Cost		fitness;
 	int			savelength;
 	struct HTAB *savehash;
@@ -99,14 +100,16 @@ geqo_eval(PlannerInfo *root, Gene *tour, int num_gene)
 
 	/* construct the best path for the given combination of relations */
 	joinrel = gimme_tree(root, tour, num_gene);
+	best_path = joinrel->cheapest_total_path;
 
 	/*
 	 * compute fitness
 	 *
 	 * XXX geqo does not currently support optimization for partial result
-	 * retrieval --- how to fix?
+	 * retrieval, nor do we take any cognizance of possible use of
+	 * parameterized paths --- how to fix?
 	 */
-	fitness = joinrel->cheapest_total_path->total_cost;
+	fitness = best_path->total_cost;
 
 	/*
 	 * Restore join_rel_list to its former state, and put back original

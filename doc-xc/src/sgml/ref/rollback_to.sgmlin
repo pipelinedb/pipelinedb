@@ -73,9 +73,9 @@ ROLLBACK [ WORK | TRANSACTION ] TO [ SAVEPOINT ] <replaceable>savepoint_name</re
   <title>Notes</title>
 
   <para>
-   Use <xref linkend="SQL-RELEASE-SAVEPOINT"
-  > to destroy a savepoint without
-   discarding the effects of commands executed after it was established.
+   Use <xref linkend="SQL-RELEASE-SAVEPOINT"> to destroy a savepoint
+   without discarding the effects of commands executed after it was
+   established.
   </para>
 
   <para>
@@ -133,9 +133,9 @@ FETCH 1 FROM foo;
         2
 
 COMMIT;
-</programlisting>
-   </para>
+</programlisting></para>
 
+<!## end>
 
  </refsect1>
 
@@ -152,7 +152,6 @@ COMMIT;
    <productname>PostgreSQL</>.  Otherwise, this command conforms to
    the SQL standard.
   </para>
-<!## end>
  </refsect1>
 
  <refsect1>

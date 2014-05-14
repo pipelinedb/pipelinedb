@@ -16,7 +16,7 @@
  *	   the parallel regression tests for a more complete test.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -113,7 +113,7 @@ ProcessInterrupts(void)
 {
 }
 
-int
+void
 ExceptionalCondition(const char *conditionName,
 					 const char *errorType,
 					 const char *fileName,
@@ -123,7 +123,6 @@ ExceptionalCondition(const char *conditionName,
 			errorType, conditionName,
 			fileName, lineNumber);
 	abort();
-	return 0;
 }
 
 

@@ -3,7 +3,7 @@
  * nbtutils.c
  *	  Utility code for Postgres btree implementation.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -593,6 +593,65 @@ _bt_advance_array_keys(IndexScanDesc scan, ScanDirection dir)
 	}
 
 	return found;
+}
+
+/*
+ * _bt_mark_array_keys() -- Handle array keys during btmarkpos
+ *
+ * Save the current state of the array keys as the "mark" position.
+ */
+void
+_bt_mark_array_keys(IndexScanDesc scan)
+{
+	BTScanOpaque so = (BTScanOpaque) scan->opaque;
+	int			i;
+
+	for (i = 0; i < so->numArrayKeys; i++)
+	{
+		BTArrayKeyInfo *curArrayKey = &so->arrayKeys[i];
+
+		curArrayKey->mark_elem = curArrayKey->cur_elem;
+	}
+}
+
+/*
+ * _bt_restore_array_keys() -- Handle array keys during btrestrpos
+ *
+ * Restore the array keys to where they were when the mark was set.
+ */
+void
+_bt_restore_array_keys(IndexScanDesc scan)
+{
+	BTScanOpaque so = (BTScanOpaque) scan->opaque;
+	bool		changed = false;
+	int			i;
+
+	/* Restore each array key to its position when the mark was set */
+	for (i = 0; i < so->numArrayKeys; i++)
+	{
+		BTArrayKeyInfo *curArrayKey = &so->arrayKeys[i];
+		ScanKey		skey = &so->arrayKeyData[curArrayKey->scan_key];
+		int			mark_elem = curArrayKey->mark_elem;
+
+		if (curArrayKey->cur_elem != mark_elem)
+		{
+			curArrayKey->cur_elem = mark_elem;
+			skey->sk_argument = curArrayKey->elem_values[mark_elem];
+			changed = true;
+		}
+	}
+
+	/*
+	 * If we changed any keys, we must redo _bt_preprocess_keys.  That might
+	 * sound like overkill, but in cases with multiple keys per index column
+	 * it seems necessary to do the full set of pushups.
+	 */
+	if (changed)
+	{
+		_bt_preprocess_keys(scan);
+		/* The mark should have been set on a consistent set of keys... */
+		Assert(so->qual_ok);
+	}
 }
 
 
@@ -1722,9 +1781,7 @@ _bt_killitems(IndexScanDesc scan, bool haveLock)
 	}
 
 	/*
-	 * Since this can be redone later if needed, it's treated the same as a
-	 * commit-hint-bit status update for heap tuples: we mark the buffer dirty
-	 * but don't make a WAL log entry.
+	 * Since this can be redone later if needed, mark as dirty hint.
 	 *
 	 * Whenever we mark anything LP_DEAD, we also set the page's
 	 * BTP_HAS_GARBAGE flag, which is likewise just a hint.
@@ -1732,7 +1789,7 @@ _bt_killitems(IndexScanDesc scan, bool haveLock)
 	if (killedsomething)
 	{
 		opaque->btpo_flags |= BTP_HAS_GARBAGE;
-		SetBufferCommitInfoNeedsSave(so->currPos.buf);
+		MarkBufferDirtyHint(so->currPos.buf, true);
 	}
 
 	if (!haveLock)

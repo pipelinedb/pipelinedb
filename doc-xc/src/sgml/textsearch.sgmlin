@@ -12,10 +12,10 @@
   </indexterm>
 
 &common;
-
  <sect1 id="textsearch-intro">
   <title>Introduction</title>
 
+&common;
   <para>
    Full Text Searching (or just <firstterm>text search</firstterm>) provides
    the capability to identify natural-language <firstterm>documents</> that
@@ -32,12 +32,7 @@
 
   <para>
    Textual search operators have existed in databases for years.
-<!## PG>
    <productname>PostgreSQL</productname> has
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> has
-<!## end>
    <literal>~</literal>, <literal>~*</literal>, <literal>LIKE</literal>, and
    <literal>ILIKE</literal> operators for textual data types, but they lack
    many essential properties required by modern information systems:
@@ -86,12 +81,7 @@
      differently.  In principle token classes depend on the specific
      application, but for most purposes it is adequate to use a predefined
      set of classes.
-<!## PG>
      <productname>PostgreSQL</productname> uses a <firstterm>parser</> to
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> uses a <firstterm>parser</> to
-<!## end>
      perform this step.  A standard parser is provided, and custom parsers
      can be created for specific needs.
     </para>
@@ -111,12 +101,7 @@
      are words that are so common that they are useless for searching.
      (In short, then, tokens are raw fragments of the document text, while
      lexemes are words that are believed useful for indexing and searching.)
-<!## PG>
      <productname>PostgreSQL</productname> uses <firstterm>dictionaries</> to
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> uses <firstterm>dictionaries</> to
-<!## end>
      perform this step.  Various standard dictionaries are provided, and
      custom ones can be created for specific needs.
     </para>
@@ -194,6 +179,7 @@
     <secondary>text search</secondary>
    </indexterm>
 
+&common;
    <para>
     A <firstterm>document</> is the unit of searching in a full text search
     system; for example, a magazine article or email message.  The text search
@@ -203,12 +189,7 @@
    </para>
 
    <para>
-<!## PG>
     For searches within <productname>PostgreSQL</productname>,
-<!## end>
-<!## XC>
-    For searches within <productname>Postgres-XC</productname>,
-<!## end>
     a document is normally a textual field within a row of a database table,
     or possibly a combination (concatenation) of such fields, perhaps stored
     in several tables or obtained dynamically. In other words, a document can
@@ -241,12 +222,7 @@ WHERE mid = did AND mid = 12;
     retrieve the document from the file system.  However, retrieving files
     from outside the database requires superuser permissions or special
     function support, so this is usually less convenient than keeping all
-<!## PG>
     the data inside <productname>PostgreSQL</productname>.  Also, keeping
-<!## end>
-<!## XC>
-    the data inside <productname>Postgres-XC</productname>.  Also, keeping
-<!## end>
     everything inside the database allows easy access
     to document metadata to assist in indexing and display.
    </para>
@@ -266,13 +242,9 @@ WHERE mid = did AND mid = 12;
   <sect2 id="textsearch-matching">
    <title>Basic Text Matching</title>
 
+&common;
    <para>
-<!## PG>
     Full text searching in <productname>PostgreSQL</productname> is based on
-<!## end>
-<!## XC>
-    Full text searching in <productname>Postgres-XC</productname> is based on
-<!## end>
     the match operator <literal>@@</literal>, which returns
     <literal>true</literal> if a <type>tsvector</type>
     (document) matches a <type>tsquery</type> (query).
@@ -351,18 +323,14 @@ text @@ text
   <sect2 id="textsearch-intro-configurations">
    <title>Configurations</title>
 
+&common;
    <para>
     The above are all simple text search examples.  As mentioned before, full
     text search functionality includes the ability to do many more things:
     skip indexing certain words (stop words), process synonyms, and use
     sophisticated parsing, e.g., parse based on more than just white space.
     This functionality is controlled by <firstterm>text search
-<!## PG>
     configurations</>.  <productname>PostgreSQL</> comes with predefined
-<!## end>
-<!## XC>
-    configurations</>.  <productname>Postgres-XC</> comes with predefined
-<!## end>
     configurations for many languages, and you can easily create your own
     configurations.  (<application>psql</>'s <command>\dF</> command
     shows all available configurations.)
@@ -389,12 +357,7 @@ text @@ text
    <para>
     To make it easier to build custom text search configurations, a
     configuration is built up from simpler database objects.
-<!## PG>
     <productname>PostgreSQL</>'s text search facility provides
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</>'s text search facility provides
-<!## end>
     four types of configuration-related database objects:
    </para>
 
@@ -434,12 +397,7 @@ text @@ text
     therefore it requires C programming ability to develop new ones, and
     superuser privileges to install one into a database.  (There are examples
     of add-on parsers and templates in the <filename>contrib/</> area of the
-<!## PG>
     <productname>PostgreSQL</> distribution.)  Since dictionaries and
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> distribution.)  Since dictionaries and
-<!## end>
     configurations just parameterize and connect together some underlying
     parsers and templates, no special privilege is needed to create a new
     dictionary or configuration.  Examples of creating custom dictionaries and
@@ -453,6 +411,7 @@ text @@ text
  <sect1 id="textsearch-tables">
   <title>Tables and Indexes</title>
 
+&common;
   <para>
    The examples in the previous section illustrated full text matching using
    simple constant strings.  This section shows how to search table data,
@@ -462,6 +421,7 @@ text @@ text
   <sect2 id="textsearch-tables-search">
    <title>Searching a Table</title>
 
+&common;
    <para>
     It is possible to do a full text search without an index.  A simple query
     to print the <structname>title</> of each row that contains the word
@@ -523,6 +483,7 @@ LIMIT 10;
   <sect2 id="textsearch-tables-index">
    <title>Creating Indexes</title>
 
+&common;
    <para>
     We can create a <acronym>GIN</acronym> index (<xref
     linkend="textsearch-indexes">) to speed up text searches:
@@ -637,31 +598,23 @@ LIMIT 10;
  <sect1 id="textsearch-controls">
   <title>Controlling Text Search</title>
 
+&common;
   <para>
    To implement full text searching there must be a function to create a
    <type>tsvector</type> from a document and a <type>tsquery</type> from a
    user query. Also, we need to return results in a useful order, so we need
    a function that compares documents with respect to their relevance to
    the query. It's also important to be able to display the results nicely.
-<!## PG>
    <productname>PostgreSQL</productname> provides support for all of these
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> provides support for all of these
-<!## end>
    functions.
   </para>
 
   <sect2 id="textsearch-parsing-documents">
    <title>Parsing Documents</title>
 
+&common;
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> provides the
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> provides the
-<!## end>
     function <function>to_tsvector</function> for converting a document to
     the <type>tsvector</type> data type.
    </para>
@@ -764,13 +717,9 @@ UPDATE tt SET ti =
   <sect2 id="textsearch-parsing-queries">
    <title>Parsing Queries</title>
 
+&common;
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> provides the
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> provides the
-<!## end>
     functions <function>to_tsquery</function> and
     <function>plainto_tsquery</function> for converting a query to
     the <type>tsquery</type> data type.  <function>to_tsquery</function>
@@ -894,15 +843,11 @@ SELECT plainto_tsquery('english', 'The Fat &amp; Rats:C');
   <sect2 id="textsearch-ranking">
    <title>Ranking Search Results</title>
 
+&common;
    <para>
     Ranking attempts to measure how relevant documents are to a particular
     query, so that when there are many matches the most relevant ones can be
-<!## PG>
     shown first.  <productname>PostgreSQL</productname> provides two
-<!## end>
-<!## XC>
-    shown first.  <productname>Postgres-XC</productname> provides two
-<!## end>
     predefined ranking functions, which take into account lexical, proximity,
     and structural information; that is, they consider how often the query
     terms appear in the document, how close together the terms are in the
@@ -926,15 +871,12 @@ SELECT plainto_tsquery('english', 'The Fat &amp; Rats:C');
       </indexterm>
 
       <term>
-<synopsis>
-ts_rank(<optional> <replaceable class="PARAMETER">weights</replaceable> <type>float4[]</>, </optional> <replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>,
-        <replaceable class="PARAMETER">query</replaceable> <type>tsquery</> <optional>, <replaceable class="PARAMETER">normalization</replaceable> <type>integer</> </optional>) returns <type>float4</>
-</synopsis>
+       <literal>ts_rank(<optional> <replaceable class="PARAMETER">weights</replaceable> <type>float4[]</>, </optional> <replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>, <replaceable class="PARAMETER">query</replaceable> <type>tsquery</> <optional>, <replaceable class="PARAMETER">normalization</replaceable> <type>integer</> </optional>) returns <type>float4</></literal>
       </term>
 
       <listitem>
        <para>
-        Standard ranking function.<!-- TODO document this better -->
+        Ranks vectors based on the frequency of their matching lexemes.
        </para>
       </listitem>
      </varlistentry>
@@ -946,10 +888,7 @@ ts_rank(<optional> <replaceable class="PARAMETER">weights</replaceable> <type>fl
       </indexterm>
 
       <term>
-<synopsis>
-ts_rank_cd(<optional> <replaceable class="PARAMETER">weights</replaceable> <type>float4[]</>, </optional> <replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>,
-           <replaceable class="PARAMETER">query</replaceable> <type>tsquery</> <optional>, <replaceable class="PARAMETER">normalization</replaceable> <type>integer</> </optional>) returns <type>float4</>
-</synopsis>
+       <literal>ts_rank_cd(<optional> <replaceable class="PARAMETER">weights</replaceable> <type>float4[]</>, </optional> <replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>, <replaceable class="PARAMETER">query</replaceable> <type>tsquery</> <optional>, <replaceable class="PARAMETER">normalization</replaceable> <type>integer</> </optional>) returns <type>float4</></literal>
       </term>
 
       <listitem>
@@ -1118,15 +1057,11 @@ LIMIT 10;
   <sect2 id="textsearch-headline">
    <title>Highlighting Results</title>
 
+&common;
    <para>
     To present search results it is ideal to show a part of each document and
     how it is related to the query. Usually, search engines show fragments of
-<!## PG>
     the document with marked search terms.  <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-    the document with marked search terms.  <productname>Postgres-XC</>
-<!## end>
     provides a function <function>ts_headline</function> that
     implements this functionality.
    </para>
@@ -1164,7 +1099,7 @@ ts_headline(<optional> <replaceable class="PARAMETER">config</replaceable> <type
        if they contain spaces or commas.
       </para>
      </listitem>
-     <listitem >
+     <listitem>
       <para>
        <literal>MaxWords</>, <literal>MinWords</literal>: these numbers
        determine the longest and shortest headlines to output.
@@ -1273,6 +1208,7 @@ FROM (SELECT id, body, q, ts_rank_cd(ti, q) AS rank
  <sect1 id="textsearch-features">
   <title>Additional Features</title>
 
+&common;
   <para>
    This section describes additional functions and operators that are
    useful in connection with text search.
@@ -1281,15 +1217,11 @@ FROM (SELECT id, body, q, ts_rank_cd(ti, q) AS rank
   <sect2 id="textsearch-manipulate-tsvector">
    <title>Manipulating Documents</title>
 
+&common;
    <para>
     <xref linkend="textsearch-parsing-documents"> showed how raw textual
     documents can be converted into <type>tsvector</> values.
-<!## PG>
     <productname>PostgreSQL</productname> also provides functions and
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> also provides functions and
-<!## end>
     operators that can be used to manipulate documents that are already
     in <type>tsvector</> form.
    </para>
@@ -1303,9 +1235,7 @@ FROM (SELECT id, body, q, ts_rank_cd(ti, q) AS rank
      </indexterm>
 
      <term>
-<synopsis>
-<type>tsvector</> || <type>tsvector</>
-</synopsis>
+      <literal><type>tsvector</> || <type>tsvector</></literal>
      </term>
 
      <listitem>
@@ -1344,9 +1274,7 @@ FROM (SELECT id, body, q, ts_rank_cd(ti, q) AS rank
      </indexterm>
 
      <term>
-<synopsis>
-setweight(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>, <replaceable class="PARAMETER">weight</replaceable> <type>"char"</>) returns <type>tsvector</>
-</synopsis>
+      <literal>setweight(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>, <replaceable class="PARAMETER">weight</replaceable> <type>"char"</>) returns <type>tsvector</></literal>
      </term>
 
      <listitem>
@@ -1374,9 +1302,7 @@ setweight(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>,
      </indexterm>
 
      <term>
-<synopsis>
-length(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>) returns <type>integer</>
-</synopsis>
+      <literal>length(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>) returns <type>integer</></literal>
      </term>
 
      <listitem>
@@ -1393,9 +1319,7 @@ length(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>) re
      </indexterm>
 
      <term>
-<synopsis>
-strip(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>) returns <type>tsvector</>
-</synopsis>
+      <literal>strip(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>) returns <type>tsvector</></literal>
      </term>
 
      <listitem>
@@ -1416,15 +1340,11 @@ strip(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>) ret
   <sect2 id="textsearch-manipulate-tsquery">
    <title>Manipulating Queries</title>
 
+&common;
    <para>
     <xref linkend="textsearch-parsing-queries"> showed how raw textual
     queries can be converted into <type>tsquery</> values.
-<!## PG>
     <productname>PostgreSQL</productname> also provides functions and
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> also provides functions and
-<!## end>
     operators that can be used to manipulate queries that are already
     in <type>tsquery</> form.
    </para>
@@ -1434,9 +1354,7 @@ strip(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>) ret
     <varlistentry>
 
      <term>
-<synopsis>
-<type>tsquery</> &amp;&amp; <type>tsquery</>
-</synopsis>
+      <literal><type>tsquery</> &amp;&amp; <type>tsquery</></literal>
      </term>
 
      <listitem>
@@ -1450,9 +1368,7 @@ strip(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>) ret
     <varlistentry>
 
      <term>
-<synopsis>
-<type>tsquery</> || <type>tsquery</>
-</synopsis>
+      <literal><type>tsquery</> || <type>tsquery</></literal>
      </term>
 
      <listitem>
@@ -1466,9 +1382,7 @@ strip(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>) ret
     <varlistentry>
 
      <term>
-<synopsis>
-!! <type>tsquery</>
-</synopsis>
+      <literal>!! <type>tsquery</></literal>
      </term>
 
      <listitem>
@@ -1486,9 +1400,7 @@ strip(<replaceable class="PARAMETER">vector</replaceable> <type>tsvector</>) ret
      </indexterm>
 
      <term>
-<synopsis>
-numnode(<replaceable class="PARAMETER">query</replaceable> <type>tsquery</>) returns <type>integer</>
-</synopsis>
+      <literal>numnode(<replaceable class="PARAMETER">query</replaceable> <type>tsquery</>) returns <type>integer</></literal>
      </term>
 
      <listitem>
@@ -1522,9 +1434,7 @@ SELECT numnode('foo &amp; bar'::tsquery);
      </indexterm>
 
      <term>
-<synopsis>
-querytree(<replaceable class="PARAMETER">query</replaceable> <type>tsquery</>) returns <type>text</>
-</synopsis>
+      <literal>querytree(<replaceable class="PARAMETER">query</replaceable> <type>tsquery</>) returns <type>text</></literal>
      </term>
 
      <listitem>
@@ -1553,6 +1463,7 @@ SELECT querytree(to_tsquery('!defined'));
      <primary>ts_rewrite</primary>
     </indexterm>
 
+&common;
     <para>
      The <function>ts_rewrite</function> family of functions search a
      given <type>tsquery</> for occurrences of a target
@@ -1577,9 +1488,7 @@ SELECT querytree(to_tsquery('!defined'));
      <varlistentry>
 
       <term>
-<synopsis>
-ts_rewrite (<replaceable class="PARAMETER">query</replaceable> <type>tsquery</>, <replaceable class="PARAMETER">target</replaceable> <type>tsquery</>, <replaceable class="PARAMETER">substitute</replaceable> <type>tsquery</>) returns <type>tsquery</>
-</synopsis>
+       <literal>ts_rewrite (<replaceable class="PARAMETER">query</replaceable> <type>tsquery</>, <replaceable class="PARAMETER">target</replaceable> <type>tsquery</>, <replaceable class="PARAMETER">substitute</replaceable> <type>tsquery</>) returns <type>tsquery</></literal>
       </term>
 
       <listitem>
@@ -1603,9 +1512,7 @@ SELECT ts_rewrite('a &amp; b'::tsquery, 'a'::tsquery, 'c'::tsquery);
      <varlistentry>
 
       <term>
-<synopsis>
-ts_rewrite (<replaceable class="PARAMETER">query</> <type>tsquery</>, <replaceable class="PARAMETER">select</> <type>text</>) returns <type>tsquery</>
-</synopsis>
+       <literal>ts_rewrite (<replaceable class="PARAMETER">query</> <type>tsquery</>, <replaceable class="PARAMETER">select</> <type>text</>) returns <type>tsquery</></literal>
       </term>
 
       <listitem>
@@ -1695,6 +1602,7 @@ SELECT ts_rewrite('a &amp; b'::tsquery,
     <secondary>for updating a derived tsvector column</secondary>
    </indexterm>
 
+&common;
    <para>
     When using a separate column to store the <type>tsvector</> representation
     of your documents, it is necessary to create a trigger to update the
@@ -1799,6 +1707,7 @@ CREATE TRIGGER tsvectorupdate BEFORE INSERT OR UPDATE
     <primary>ts_stat</primary>
    </indexterm>
 
+&common;
    <para>
     The function <function>ts_stat</> is useful for checking your
     configuration and for finding stop-word candidates.
@@ -1867,6 +1776,7 @@ LIMIT 10;
  <sect1 id="textsearch-parsers">
   <title>Parsers</title>
 
+&common;
   <para>
    Text search parsers are responsible for splitting raw document text
    into <firstterm>tokens</> and identifying each token's type, where
@@ -1874,12 +1784,7 @@ LIMIT 10;
    Note that a parser does not modify the text at all &mdash; it simply
    identifies plausible word boundaries.  Because of this limited scope,
    there is less need for application-specific custom parsers than there is
-<!## PG>
    for custom dictionaries.  At present <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-   for custom dictionaries.  At present <productname>Postgres-XC</productname>
-<!## end>
    provides just one built-in parser, which has been found to be useful for a
    wide range of applications.
   </para>
@@ -1933,12 +1838,7 @@ LIMIT 10;
      <row>
       <entry><literal>hword_asciipart</></entry>
       <entry>Hyphenated word part, all ASCII</entry>
-<!## PG>
       <entry><literal>postgresql</literal> in the context <literal>postgresql-beta1</literal></entry>
-<!## end>
-<!## XC>
-      <entry><literal>postgres-XC</literal> in the context <literal>postgresql-beta1</literal></entry>
-<!## end>
      </row>
      <row>
       <entry><literal>hword_part</></entry>
@@ -1950,12 +1850,7 @@ LIMIT 10;
       <entry><literal>hword_numpart</></entry>
       <entry>Hyphenated word part, letters and digits</entry>
       <entry><literal>beta1</literal> in the context
-<!## PG>
        <literal>postgresql-beta1</literal></entry>
-<!## end>
-<!## XC>
-       <literal>postgres-XC-beta1</literal></entry>
-<!## end>
      </row>
      <row>
       <entry><literal>email</></entry>
@@ -2086,6 +1981,7 @@ SELECT alias, description, token FROM ts_debug('http://example.com/stuff/index.h
  <sect1 id="textsearch-dictionaries">
   <title>Dictionaries</title>
 
+&common;
   <para>
    Dictionaries are used to eliminate words that should not be considered in a
    search (<firstterm>stop words</>), and to <firstterm>normalize</> words so
@@ -2183,22 +2079,12 @@ SELECT alias, description, token FROM ts_debug('http://example.com/stuff/index.h
   </para>
 
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> provides predefined dictionaries for
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> provides predefined dictionaries for
-<!## end>
    many languages.  There are also several predefined templates that can be
    used to create new dictionaries with custom parameters.  Each predefined
    dictionary template is described below.  If no existing
    template is suitable, it is possible to create new ones; see the
-<!## PG>
    <filename>contrib/</> area of the <productname>PostgreSQL</> distribution
-<!## end>
-<!## XC>
-   <filename>contrib/</> area of the <productname>Postgres-XC</> distribution
-<!## end>
    for examples.
   </para>
 
@@ -2245,6 +2131,7 @@ ALTER TEXT SEARCH CONFIGURATION astro_en
   <sect2 id="textsearch-stopwords">
    <title>Stop Words</title>
 
+&common;
    <para>
     Stop words are words that are very common, appear in almost every
     document, and have no discrimination value. Therefore, they can be ignored
@@ -2290,6 +2177,7 @@ SELECT ts_rank_cd (to_tsvector('english','list stop words'), to_tsquery('list &a
   <sect2 id="textsearch-simple-dictionary">
    <title>Simple Dictionary</title>
 
+&common;
    <para>
     The <literal>simple</> dictionary template operates by converting the
     input token to lower case and checking it against a file of stop words.
@@ -2315,18 +2203,8 @@ CREATE TEXT SEARCH DICTIONARY public.simple_dict (
     The file's full name will be
     <filename>$SHAREDIR/tsearch_data/english.stop</>,
     where <literal>$SHAREDIR</> means the
-<!## PG>
     <productname>PostgreSQL</productname> installation's shared-data directory,
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> installation's shared-data directory,
-<!## end>
-<!## PG>
     often <filename>/usr/local/share/postgresql</> (use <command>pg_config
-<!## end>
-<!## XC>
-    often <filename>/usr/local/share/postgres-XC</> (use <command>pg_config
-<!## end>
     --sharedir</> to determine it if you're not sure).
     The file format is simply a list
     of words, one per line.  Blank lines and trailing spaces are ignored,
@@ -2404,13 +2282,14 @@ SELECT ts_lexize('public.simple_dict','The');
   <sect2 id="textsearch-synonym-dictionary">
    <title>Synonym Dictionary</title>
 
+&common;
    <para>
     This dictionary template is used to create dictionaries that replace a
     word with a synonym. Phrases are not supported (use the thesaurus
     template (<xref linkend="textsearch-thesaurus">) for that).  A synonym
     dictionary can be used to overcome linguistic problems, for example, to
-    prevent an English stemmer dictionary from reducing the word 'Paris' to
-    'pari'.  It is enough to have a <literal>Paris paris</literal> line in the
+    prevent an English stemmer dictionary from reducing the word <quote>Paris</quote> to
+    <quote>pari</quote>.  It is enough to have a <literal>Paris paris</literal> line in the
     synonym dictionary and put it before the <literal>english_stem</>
     dictionary.  For example:
 
@@ -2443,12 +2322,7 @@ SELECT * FROM ts_debug('english', 'Paris');
     The file's full name will be
     <filename>$SHAREDIR/tsearch_data/my_synonyms.syn</>
     (where <literal>$SHAREDIR</> means the
-<!## PG>
     <productname>PostgreSQL</> installation's shared-data directory).
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> installation's shared-data directory).
-<!## end>
     The file format is just one line
     per word to be substituted, with the word followed by its synonym,
     separated by white space.  Blank lines and trailing spaces are ignored.
@@ -2521,6 +2395,7 @@ mydb=# SELECT 'indexes are very useful'::tsvector @@ to_tsquery('tst','indices')
   <sect2 id="textsearch-thesaurus">
    <title>Thesaurus Dictionary</title>
 
+&common;
    <para>
     A thesaurus dictionary (sometimes abbreviated as <acronym>TZ</acronym>) is
     a collection of words that includes information about the relationships
@@ -2532,12 +2407,7 @@ mydb=# SELECT 'indexes are very useful'::tsvector @@ to_tsquery('tst','indices')
    <para>
     Basically a thesaurus dictionary replaces all non-preferred terms by one
     preferred term and, optionally, preserves the original terms for indexing
-<!## PG>
     as well.  <productname>PostgreSQL</>'s current implementation of the
-<!## end>
-<!## XC>
-    as well.  <productname>Postgres-XC</>'s current implementation of the
-<!## end>
     thesaurus dictionary is an extension of the synonym dictionary with added
     <firstterm>phrase</firstterm> support.  A thesaurus dictionary requires
     a configuration file of the following format:
@@ -2608,6 +2478,7 @@ more sample word(s) : more indexed word(s)
   <sect3 id="textsearch-thesaurus-config">
    <title>Thesaurus Configuration</title>
 
+&common;
    <para>
     To define a new thesaurus dictionary, use the <literal>thesaurus</>
     template.  For example:
@@ -2661,6 +2532,7 @@ ALTER TEXT SEARCH CONFIGURATION russian
   <sect3 id="textsearch-thesaurus-examples">
    <title>Thesaurus Example</title>
 
+&common;
    <para>
     Consider a simple astronomical thesaurus <literal>thesaurus_astro</literal>,
     which contains some astronomical word combinations:
@@ -2740,6 +2612,7 @@ SELECT plainto_tsquery('supernova star');
   <sect2 id="textsearch-ispell-dictionary">
    <title><application>Ispell</> Dictionary</title>
 
+&common;
    <para>
     The <application>Ispell</> dictionary template supports
     <firstterm>morphological dictionaries</>, which can normalize many
@@ -2751,12 +2624,7 @@ SELECT plainto_tsquery('supernova star');
    </para>
 
    <para>
-<!## PG>
     The standard <productname>PostgreSQL</productname> distribution does
-<!## end>
-<!## XC>
-    The standard <productname>Postgres-XC</productname> distribution does
-<!## end>
     not include any <application>Ispell</> configuration files.
     Dictionaries for a large number of languages are available from <ulink
     url="http://ficus-www.cs.ucla.edu/geoff/ispell.html">Ispell</ulink>.
@@ -2821,12 +2689,7 @@ SELECT ts_lexize('norwegian_ispell', 'sjokoladefabrikk');
     <para>
      <application>MySpell</> does not support compound words.
      <application>Hunspell</> has sophisticated support for compound words. At
-<!## PG>
      present, <productname>PostgreSQL</productname> implements only the basic
-<!## end>
-<!## XC>
-     present, <productname>Postgres-XC</productname> implements only the basic
-<!## end>
      compound word operations of Hunspell.
     </para>
    </note>
@@ -2836,6 +2699,7 @@ SELECT ts_lexize('norwegian_ispell', 'sjokoladefabrikk');
   <sect2 id="textsearch-snowball-dictionary">
    <title><application>Snowball</> Dictionary</title>
 
+&common;
    <para>
     The <application>Snowball</> dictionary template is based on a project
     by Martin Porter, inventor of the popular Porter's stemming algorithm
@@ -2846,12 +2710,7 @@ SELECT ts_lexize('norwegian_ispell', 'sjokoladefabrikk');
     its language.  A Snowball dictionary requires a <literal>language</>
     parameter to identify which stemmer to use, and optionally can specify a
     <literal>stopword</> file name that gives a list of words to eliminate.
-<!## PG>
     (<productname>PostgreSQL</productname>'s standard stopword lists are also
-<!## end>
-<!## XC>
-    (<productname>Postgres-XC</productname>'s standard stopword lists are also
-<!## end>
     provided by the Snowball project.)
     For example, there is a built-in definition equivalent to
 
@@ -2881,6 +2740,7 @@ CREATE TEXT SEARCH DICTIONARY english_stem (
  <sect1 id="textsearch-configuration">
   <title>Configuration Example</title>
 
+&common;
    <para>
     A text search configuration specifies all options necessary to transform a
     document into a <type>tsvector</type>: the parser to use to break text
@@ -2916,12 +2776,7 @@ CREATE TEXT SEARCH CONFIGURATION public.pg ( COPY = pg_catalog.english );
    </para>
 
    <para>
-<!## PG>
     We will use a PostgreSQL-specific synonym list
-<!## end>
-<!## XC>
-    We will use a Postgres-XC-specific synonym list
-<!## end>
     and store it in <filename>$SHAREDIR/tsearch_data/pg_dict.syn</filename>.
     The file contents look like:
 
@@ -2976,12 +2831,7 @@ ALTER TEXT SEARCH CONFIGURATION pg
 
 <programlisting>
 SELECT * FROM ts_debug('public.pg', '
-<!## PG>
 PostgreSQL, the highly scalable, SQL compliant, open source object-relational
-<!## end>
-<!## XC>
-Postgres-XC, the highly scalable, SQL compliant, open source object-relational
-<!## end>
 database management system, is now undergoing beta testing of the next
 version of our software.
 ');
@@ -3014,6 +2864,7 @@ SHOW default_text_search_config;
  <sect1 id="textsearch-debugging">
   <title>Testing and Debugging Text Search</title>
 
+&common;
   <para>
    The behavior of a custom text search configuration can easily become
    confusing.  The functions described
@@ -3024,6 +2875,7 @@ SHOW default_text_search_config;
   <sect2 id="textsearch-configuration-testing">
    <title>Configuration Testing</title>
 
+&common;
   <para>
    The function <function>ts_debug</function> allows easy testing of a
    text search configuration.
@@ -3208,6 +3060,7 @@ FROM ts_debug('public.english','The Brightest supernovaes');
   <sect2 id="textsearch-parser-testing">
    <title>Parser Testing</title>
 
+&common;
   <para>
    The following functions allow direct testing of a text search parser.
   </para>
@@ -3297,6 +3150,7 @@ SELECT * FROM ts_token_type('default');
   <sect2 id="textsearch-dictionary-testing">
    <title>Dictionary Testing</title>
 
+&common;
    <para>
     The <function>ts_lexize</> function facilitates dictionary testing.
    </para>
@@ -3373,6 +3227,7 @@ SELECT plainto_tsquery('supernovae stars');
    <secondary>indexes</secondary>
   </indexterm>
 
+&common;
   <para>
    There are two kinds of indexes that can be used to speed up full text
    searches.
@@ -3391,9 +3246,7 @@ SELECT plainto_tsquery('supernovae stars');
      </indexterm>
 
      <term>
-<synopsis>
-CREATE INDEX <replaceable>name</replaceable> ON <replaceable>table</replaceable> USING gist(<replaceable>column</replaceable>);
-</synopsis>
+      <literal>CREATE INDEX <replaceable>name</replaceable> ON <replaceable>table</replaceable> USING gist(<replaceable>column</replaceable>);</literal>
      </term>
 
      <listitem>
@@ -3414,9 +3267,7 @@ CREATE INDEX <replaceable>name</replaceable> ON <replaceable>table</replaceable>
      </indexterm>
 
      <term>
-<synopsis>
-CREATE INDEX <replaceable>name</replaceable> ON <replaceable>table</replaceable> USING gin(<replaceable>column</replaceable>);
-</synopsis>
+      <literal>CREATE INDEX <replaceable>name</replaceable> ON <replaceable>table</replaceable> USING gin(<replaceable>column</replaceable>);</literal>
      </term>
 
      <listitem>
@@ -3439,12 +3290,7 @@ CREATE INDEX <replaceable>name</replaceable> ON <replaceable>table</replaceable>
    A GiST index is <firstterm>lossy</firstterm>, meaning that the index
    may produce false matches, and it is necessary
    to check the actual table row to eliminate such false matches.
-<!## PG>
    (<productname>PostgreSQL</productname> does this automatically when needed.)
-<!## end>
-<!## XC>
-   (<productname>Postgres-XC</productname> does this automatically when needed.)
-<!## end>
    GiST indexes are lossy because each document is represented in the
    index by a fixed-length signature. The signature is generated by hashing
    each word into a single bit in an n-bit string, with all these bits OR-ed
@@ -3532,6 +3378,7 @@ CREATE INDEX <replaceable>name</replaceable> ON <replaceable>table</replaceable>
  <sect1 id="textsearch-psql">
   <title><application>psql</> Support</title>
 
+&common;
   <para>
    Information about text search configuration objects can be obtained
    in <application>psql</application> using a set of commands:
@@ -3571,7 +3418,7 @@ CREATE INDEX <replaceable>name</replaceable> ON <replaceable>table</replaceable>
 
   <variablelist>
    <varlistentry>
-    <term><synopsis>\dF<optional>+</optional> <optional>PATTERN</optional></synopsis></term>
+    <term><literal>\dF<optional>+</optional> <optional>PATTERN</optional></literal></term>
     <listitem>
      <para>
       List text search configurations (add <literal>+</> for more detail).
@@ -3612,7 +3459,7 @@ Parser: "pg_catalog.default"
    </varlistentry>
 
    <varlistentry>
-    <term><synopsis>\dFd<optional>+</optional> <optional>PATTERN</optional></synopsis></term>
+    <term><literal>\dFd<optional>+</optional> <optional>PATTERN</optional></literal></term>
     <listitem>
      <para>
       List text search dictionaries (add <literal>+</> for more detail).
@@ -3643,7 +3490,7 @@ Parser: "pg_catalog.default"
    </varlistentry>
 
    <varlistentry>
-   <term><synopsis>\dFp<optional>+</optional> <optional>PATTERN</optional></synopsis></term>
+   <term><literal>\dFp<optional>+</optional> <optional>PATTERN</optional></literal></term>
     <listitem>
      <para>
       List text search parsers (add <literal>+</> for more detail).
@@ -3696,7 +3543,7 @@ Parser: "pg_catalog.default"
    </varlistentry>
 
    <varlistentry>
-   <term><synopsis>\dFt<optional>+</optional> <optional>PATTERN</optional></synopsis></term>
+   <term><literal>\dFt<optional>+</optional> <optional>PATTERN</optional></literal></term>
     <listitem>
      <para>
       List text search templates (add <literal>+</> for more detail).
@@ -3721,13 +3568,9 @@ Parser: "pg_catalog.default"
  <sect1 id="textsearch-limitations">
   <title>Limitations</title>
 
+&common;
   <para>
-<!## PG>
    The current limitations of <productname>PostgreSQL</productname>'s
-<!## end>
-<!## XC>
-   The current limitations of <productname>Postgres-XC</productname>'s
-<!## end>
    text search features are:
    <itemizedlist  spacing="compact" mark="bullet">
     <listitem>
@@ -3765,12 +3608,7 @@ Parser: "pg_catalog.default"
 
    <!-- TODO we need to put a date on these numbers? -->
   <para>
-<!## PG>
    Another example &mdash; the <productname>PostgreSQL</productname> mailing
-<!## end>
-<!## XC>
-   Another example &mdash; the <productname>Postgres-XC</productname> mailing
-<!## end>
    list archives contained 910,989 unique words with 57,491,343 lexemes in
    461,020 messages.
   </para>
@@ -3780,6 +3618,7 @@ Parser: "pg_catalog.default"
  <sect1 id="textsearch-migration">
   <title>Migration from Pre-8.3 Text Search</title>
 
+&common;
   <para>
    Applications that use the <xref linkend="tsearch2">
    module for text searching will need some adjustments to work

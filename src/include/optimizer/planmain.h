@@ -4,7 +4,7 @@
  *	  prototypes for various files in optimizer/plan
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/optimizer/planmain.h
@@ -21,11 +21,15 @@
 #define DEFAULT_CURSOR_TUPLE_FRACTION 0.1
 extern double cursor_tuple_fraction;
 
+/* query_planner callback to compute query_pathkeys */
+typedef void (*query_pathkeys_callback) (PlannerInfo *root, void *extra);
+
 /*
  * prototypes for plan/planmain.c
  */
 extern void query_planner(PlannerInfo *root, List *tlist,
 			  double tuple_fraction, double limit_tuples,
+			  query_pathkeys_callback qp_callback, void *qp_extra,
 			  Path **cheapest_path, Path **sorted_path,
 			  double *num_groups);
 
@@ -79,7 +83,8 @@ extern SetOp *make_setop(SetOpCmd cmd, SetOpStrategy strategy, Plan *lefttree,
 		   long numGroups, double outputRows);
 extern Result *make_result(PlannerInfo *root, List *tlist,
 			Node *resconstantqual, Plan *subplan);
-extern ModifyTable *make_modifytable(CmdType operation, bool canSetTag,
+extern ModifyTable *make_modifytable(PlannerInfo *root,
+				 CmdType operation, bool canSetTag,
 				 List *resultRelations, List *subplans, List *returningLists,
 				 List *rowMarks, int epqParam);
 extern bool is_projection_capable_plan(Plan *plan);
@@ -94,6 +99,8 @@ extern void add_base_rels_to_query(PlannerInfo *root, Node *jtnode);
 extern void build_base_rel_tlists(PlannerInfo *root, List *final_tlist);
 extern void add_vars_to_targetlist(PlannerInfo *root, List *vars,
 					   Relids where_needed, bool create_new_ph);
+extern void find_lateral_references(PlannerInfo *root);
+extern void create_lateral_join_info(PlannerInfo *root);
 extern List *deconstruct_jointree(PlannerInfo *root);
 extern void distribute_restrictinfo_to_rels(PlannerInfo *root,
 								RestrictInfo *restrictinfo);
@@ -103,13 +110,15 @@ extern void process_implied_equality(PlannerInfo *root,
 						 Expr *item1,
 						 Expr *item2,
 						 Relids qualscope,
+						 Relids nullable_relids,
 						 bool below_outer_join,
 						 bool both_const);
 extern RestrictInfo *build_implied_join_equality(Oid opno,
 							Oid collation,
 							Expr *item1,
 							Expr *item2,
-							Relids qualscope);
+							Relids qualscope,
+							Relids nullable_relids);
 
 /*
  * prototypes for plan/analyzejoins.c
@@ -139,9 +148,10 @@ extern Plan *create_remotequery_plan(PlannerInfo *root, RemoteQueryPath *best_pa
 extern Plan *create_remotesort_plan(PlannerInfo *root, Plan *local_plan);
 extern Plan *create_remotelimit_plan(PlannerInfo *root, Plan *local_plan);
 extern List *pgxc_order_qual_clauses(PlannerInfo *root, List *clauses);
-extern List *pgxc_build_relation_tlist(RelOptInfo *rel);
+extern List *pgxc_build_path_tlist(PlannerInfo *root, Path *path);
 extern void pgxc_copy_path_costsize(Plan *dest, Path *src);
 extern Plan *pgxc_create_gating_plan(PlannerInfo *root, Plan *plan, List *quals);
+extern Node *pgxc_replace_nestloop_params(PlannerInfo *root, Node *expr);
 #endif
 
 #endif   /* PLANMAIN_H */

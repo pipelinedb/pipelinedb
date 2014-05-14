@@ -3,7 +3,7 @@
  * walsender_private.h
  *	  Private definitions from replication/walsender.c.
  *
- * Portions Copyright (c) 2010-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2013, PostgreSQL Global Development Group
  *
  * src/include/replication/walsender_private.h
  *
@@ -95,7 +95,6 @@ extern WalSndCtlData *WalSndCtl;
 
 
 extern void WalSndSetState(WalSndState state);
-extern void XLogRead(char *buf, XLogRecPtr startptr, Size count);
 
 /*
  * Internal functions for parsing the replication grammar, in repl_gram.y and

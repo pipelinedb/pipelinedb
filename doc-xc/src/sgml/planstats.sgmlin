@@ -4,7 +4,6 @@
  <title>How the Planner Uses Statistics</title>
 
 &pgnotice;
-
   <para>
    This chapter builds on the material covered in <xref
    linkend="using-explain"> and <xref linkend="planner-stats"> to show some
@@ -70,9 +69,9 @@ SELECT relpages, reltuples FROM pg_class WHERE relname = 'tenk1';
     not requiring a table scan).  If that is different from
     <structfield>relpages</structfield> then
     <structfield>reltuples</structfield> is scaled accordingly to
-    arrive at a current number-of-rows estimate.  In this case the values
-    are correct so the rows estimate is the same as
-    <structfield>reltuples</structfield>.
+    arrive at a current number-of-rows estimate.  In this case the value of
+    <structfield>relpages</structfield> is up-to-date so the rows estimate is
+    the same as <structfield>reltuples</structfield>.
   </para>
 
   <para>
@@ -435,7 +434,7 @@ rows = (outer_cardinality * inner_cardinality) * selectivity
    <structname>tenk2</>.  But this is not the case: the join relation size
    is estimated before any particular join plan has been considered.  If
    everything is working well then the two ways of estimating the join
-   size will produce about the same answer, but due to roundoff error and
+   size will produce about the same answer, but due to round-off error and
    other factors they sometimes diverge significantly.
   </para>
 

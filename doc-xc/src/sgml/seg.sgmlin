@@ -8,7 +8,6 @@
  </indexterm>
 
 &common;
-
  <para>
   This module implements a data type <type>seg</> for
   representing line segments, or floating point intervals.

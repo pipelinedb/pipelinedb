@@ -44,6 +44,14 @@ select i, left('ahoj', i), right('ahoj', i) from generate_series(-5, 5) t(i) ord
 select quote_literal('');
 select quote_literal('abc''');
 select quote_literal(e'\\');
+-- check variadic labeled argument
+select concat(variadic array[1,2,3]);
+select concat_ws(',', variadic array[1,2,3]);
+select concat_ws(',', variadic NULL);
+select concat(variadic NULL) is NULL;
+select concat(variadic '{}'::int[]) = '';
+--should fail
+select concat_ws(',', variadic 10);
 
 /*
  * format
@@ -70,9 +78,41 @@ select format('%1$s %12$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
 -- should fail
 select format('%1$s %4$s', 1, 2, 3);
 select format('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
-select format('%1s', 1);
+select format('%0$s', 'Hello');
+select format('%*0$s', 'Hello');
 select format('%1$', 1);
 select format('%1$1', 1);
---checkk mix of positional and ordered placeholders
+-- check mix of positional and ordered placeholders
 select format('Hello %s %1$s %s', 'World', 'Hello again');
 select format('Hello %s %s, %2$s %2$s', 'World', 'Hello again');
+-- check variadic labeled arguments
+select format('%s, %s', variadic array['Hello','World']);
+select format('%s, %s', variadic array[1, 2]);
+select format('%s, %s', variadic array[true, false]);
+select format('%s, %s', variadic array[true, false]::text[]);
+-- check variadic with positional placeholders
+select format('%2$s, %1$s', variadic array['first', 'second']);
+select format('%2$s, %1$s', variadic array[1, 2]);
+-- variadic argument can be NULL, but should not be referenced
+select format('Hello', variadic NULL);
+-- variadic argument allows simulating more than FUNC_MAX_ARGS parameters
+select format(string_agg('%s',','), variadic array_agg(i))
+from generate_series(1,200) g(i);
+-- check field widths and left, right alignment
+select format('>>%10s<<', 'Hello');
+select format('>>%10s<<', NULL);
+select format('>>%10s<<', '');
+select format('>>%-10s<<', '');
+select format('>>%-10s<<', 'Hello');
+select format('>>%-10s<<', NULL);
+select format('>>%1$10s<<', 'Hello');
+select format('>>%1$-10I<<', 'Hello');
+select format('>>%2$*1$L<<', 10, 'Hello');
+select format('>>%2$*1$L<<', 10, NULL);
+select format('>>%2$*1$L<<', -10, NULL);
+select format('>>%*s<<', 10, 'Hello');
+select format('>>%*1$s<<', 10, 'Hello');
+select format('>>%-s<<', 'Hello');
+select format('>>%10L<<', NULL);
+select format('>>%2$*1$L<<', NULL, 'Hello');
+select format('>>%2$*1$L<<', 0, 'Hello');

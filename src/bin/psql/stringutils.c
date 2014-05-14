@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  *
  * src/bin/psql/stringutils.c
  */
@@ -11,9 +11,6 @@
 
 #include "common.h"
 #include "stringutils.h"
-
-
-static void strip_quotes(char *source, char quote, char escape, int encoding);
 
 
 /*
@@ -239,14 +236,14 @@ strtokx(const char *s,
  *
  * Note that the source string is overwritten in-place.
  */
-static void
+void
 strip_quotes(char *source, char quote, char escape, int encoding)
 {
 	char	   *src;
 	char	   *dst;
 
-	psql_assert(source);
-	psql_assert(quote);
+	Assert(source != NULL);
+	Assert(quote != '\0');
 
 	src = dst = source;
 
@@ -299,8 +296,8 @@ quote_if_needed(const char *source, const char *entails_quote,
 	char	   *dst;
 	bool		need_quotes = false;
 
-	psql_assert(source);
-	psql_assert(quote);
+	Assert(source != NULL);
+	Assert(quote != '\0');
 
 	src = source;
 	dst = ret = pg_malloc(2 * strlen(src) + 3); /* excess */

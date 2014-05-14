@@ -3,7 +3,7 @@
  * pg_namespace.c
  *	  routines to support manipulation of the pg_namespace relation
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -15,6 +15,7 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
 #include "catalog/objectaccess.h"
@@ -95,8 +96,7 @@ NamespaceCreate(const char *nspName, Oid ownerId, bool isTemp)
 		recordDependencyOnCurrentExtension(&myself, false);
 
 	/* Post creation hook for new schema */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   NamespaceRelationId, nspoid, 0, NULL);
+	InvokeObjectPostCreateHook(NamespaceRelationId, nspoid, 0);
 
 	return nspoid;
 }

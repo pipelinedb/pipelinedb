@@ -3,7 +3,7 @@
  * fe-lobj.c
  *	  Front-end large object interface
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -31,7 +31,10 @@
 #endif
 
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/stat.h>
+#include <netinet/in.h>			/* for ntohl/htonl */
+#include <arpa/inet.h>
 
 #include "libpq-fe.h"
 #include "libpq-int.h"
@@ -41,6 +44,8 @@
 
 static int	lo_initialize(PGconn *conn);
 static Oid	lo_import_internal(PGconn *conn, const char *filename, Oid oid);
+static pg_int64 lo_hton64(pg_int64 host64);
+static pg_int64 lo_ntoh64(pg_int64 net64);
 
 /*
  * lo_open
@@ -151,13 +156,29 @@ lo_truncate(PGconn *conn, int fd, size_t len)
 		return -1;
 	}
 
+	/*
+	 * Long ago, somebody thought it'd be a good idea to declare this function
+	 * as taking size_t ... but the underlying backend function only accepts a
+	 * signed int32 length.  So throw error if the given value overflows
+	 * int32.  (A possible alternative is to automatically redirect the call
+	 * to lo_truncate64; but if the caller wanted to rely on that backend
+	 * function being available, he could have called lo_truncate64 for
+	 * himself.)
+	 */
+	if (len > (size_t) INT_MAX)
+	{
+		printfPQExpBuffer(&conn->errorMessage,
+		   libpq_gettext("argument of lo_truncate exceeds integer range\n"));
+		return -1;
+	}
+
 	argv[0].isint = 1;
 	argv[0].len = 4;
 	argv[0].u.integer = fd;
 
 	argv[1].isint = 1;
 	argv[1].len = 4;
-	argv[1].u.integer = len;
+	argv[1].u.integer = (int) len;
 
 	res = PQfn(conn, conn->lobjfuncs->fn_lo_truncate,
 			   &retval, &result_len, 1, argv, 2);
@@ -174,6 +195,57 @@ lo_truncate(PGconn *conn, int fd, size_t len)
 	}
 }
 
+/*
+ * lo_truncate64
+ *	  truncates an existing large object to the given size
+ *
+ * returns 0 upon success
+ * returns -1 upon failure
+ */
+int
+lo_truncate64(PGconn *conn, int fd, pg_int64 len)
+{
+	PQArgBlock	argv[2];
+	PGresult   *res;
+	int			retval;
+	int			result_len;
+
+	if (conn == NULL || conn->lobjfuncs == NULL)
+	{
+		if (lo_initialize(conn) < 0)
+			return -1;
+	}
+
+	if (conn->lobjfuncs->fn_lo_truncate64 == 0)
+	{
+		printfPQExpBuffer(&conn->errorMessage,
+		  libpq_gettext("cannot determine OID of function lo_truncate64\n"));
+		return -1;
+	}
+
+	argv[0].isint = 1;
+	argv[0].len = 4;
+	argv[0].u.integer = fd;
+
+	len = lo_hton64(len);
+	argv[1].isint = 0;
+	argv[1].len = 8;
+	argv[1].u.ptr = (int *) &len;
+
+	res = PQfn(conn, conn->lobjfuncs->fn_lo_truncate64,
+			   &retval, &result_len, 1, argv, 2);
+
+	if (PQresultStatus(res) == PGRES_COMMAND_OK)
+	{
+		PQclear(res);
+		return retval;
+	}
+	else
+	{
+		PQclear(res);
+		return -1;
+	}
+}
 
 /*
  * lo_read
@@ -196,13 +268,26 @@ lo_read(PGconn *conn, int fd, char *buf, size_t len)
 			return -1;
 	}
 
+	/*
+	 * Long ago, somebody thought it'd be a good idea to declare this function
+	 * as taking size_t ... but the underlying backend function only accepts a
+	 * signed int32 length.  So throw error if the given value overflows
+	 * int32.
+	 */
+	if (len > (size_t) INT_MAX)
+	{
+		printfPQExpBuffer(&conn->errorMessage,
+			   libpq_gettext("argument of lo_read exceeds integer range\n"));
+		return -1;
+	}
+
 	argv[0].isint = 1;
 	argv[0].len = 4;
 	argv[0].u.integer = fd;
 
 	argv[1].isint = 1;
 	argv[1].len = 4;
-	argv[1].u.integer = len;
+	argv[1].u.integer = (int) len;
 
 	res = PQfn(conn, conn->lobjfuncs->fn_lo_read,
 			   (int *) buf, &result_len, 0, argv, 2);
@@ -238,15 +323,25 @@ lo_write(PGconn *conn, int fd, const char *buf, size_t len)
 			return -1;
 	}
 
-	if (len <= 0)
-		return 0;
+	/*
+	 * Long ago, somebody thought it'd be a good idea to declare this function
+	 * as taking size_t ... but the underlying backend function only accepts a
+	 * signed int32 length.  So throw error if the given value overflows
+	 * int32.
+	 */
+	if (len > (size_t) INT_MAX)
+	{
+		printfPQExpBuffer(&conn->errorMessage,
+			  libpq_gettext("argument of lo_write exceeds integer range\n"));
+		return -1;
+	}
 
 	argv[0].isint = 1;
 	argv[0].len = 4;
 	argv[0].u.integer = fd;
 
 	argv[1].isint = 0;
-	argv[1].len = len;
+	argv[1].len = (int) len;
 	argv[1].u.ptr = (int *) buf;
 
 	res = PQfn(conn, conn->lobjfuncs->fn_lo_write,
@@ -266,10 +361,7 @@ lo_write(PGconn *conn, int fd, const char *buf, size_t len)
 /*
  * lo_lseek
  *	  change the current read or write location on a large object
- * currently, only L_SET is a legal value for whence
- *
  */
-
 int
 lo_lseek(PGconn *conn, int fd, int offset, int whence)
 {
@@ -302,6 +394,58 @@ lo_lseek(PGconn *conn, int fd, int offset, int whence)
 	{
 		PQclear(res);
 		return retval;
+	}
+	else
+	{
+		PQclear(res);
+		return -1;
+	}
+}
+
+/*
+ * lo_lseek64
+ *	  change the current read or write location on a large object
+ */
+pg_int64
+lo_lseek64(PGconn *conn, int fd, pg_int64 offset, int whence)
+{
+	PQArgBlock	argv[3];
+	PGresult   *res;
+	pg_int64	retval;
+	int			result_len;
+
+	if (conn == NULL || conn->lobjfuncs == NULL)
+	{
+		if (lo_initialize(conn) < 0)
+			return -1;
+	}
+
+	if (conn->lobjfuncs->fn_lo_lseek64 == 0)
+	{
+		printfPQExpBuffer(&conn->errorMessage,
+			 libpq_gettext("cannot determine OID of function lo_lseek64\n"));
+		return -1;
+	}
+
+	argv[0].isint = 1;
+	argv[0].len = 4;
+	argv[0].u.integer = fd;
+
+	offset = lo_hton64(offset);
+	argv[1].isint = 0;
+	argv[1].len = 8;
+	argv[1].u.ptr = (int *) &offset;
+
+	argv[2].isint = 1;
+	argv[2].len = 4;
+	argv[2].u.integer = whence;
+
+	res = PQfn(conn, conn->lobjfuncs->fn_lo_lseek64,
+			   (int *) &retval, &result_len, 0, argv, 3);
+	if (PQresultStatus(res) == PGRES_COMMAND_OK)
+	{
+		PQclear(res);
+		return lo_ntoh64(retval);
 	}
 	else
 	{
@@ -400,9 +544,7 @@ lo_create(PGconn *conn, Oid lobjId)
 /*
  * lo_tell
  *	  returns the current seek location of the large object
- *
  */
-
 int
 lo_tell(PGconn *conn, int fd)
 {
@@ -436,9 +578,51 @@ lo_tell(PGconn *conn, int fd)
 }
 
 /*
+ * lo_tell64
+ *	  returns the current seek location of the large object
+ */
+pg_int64
+lo_tell64(PGconn *conn, int fd)
+{
+	pg_int64	retval;
+	PQArgBlock	argv[1];
+	PGresult   *res;
+	int			result_len;
+
+	if (conn == NULL || conn->lobjfuncs == NULL)
+	{
+		if (lo_initialize(conn) < 0)
+			return -1;
+	}
+
+	if (conn->lobjfuncs->fn_lo_tell64 == 0)
+	{
+		printfPQExpBuffer(&conn->errorMessage,
+			  libpq_gettext("cannot determine OID of function lo_tell64\n"));
+		return -1;
+	}
+
+	argv[0].isint = 1;
+	argv[0].len = 4;
+	argv[0].u.integer = fd;
+
+	res = PQfn(conn, conn->lobjfuncs->fn_lo_tell64,
+			   (int *) &retval, &result_len, 0, argv, 1);
+	if (PQresultStatus(res) == PGRES_COMMAND_OK)
+	{
+		PQclear(res);
+		return lo_ntoh64(retval);
+	}
+	else
+	{
+		PQclear(res);
+		return -1;
+	}
+}
+
+/*
  * lo_unlink
  *	  delete a file
- *
  */
 
 int
@@ -569,10 +753,16 @@ lo_import_internal(PGconn *conn, const char *filename, Oid oid)
 
 	if (nbytes < 0)
 	{
+		/* We must do lo_close before setting the errorMessage */
+		int			save_errno = errno;
+
+		(void) lo_close(conn, lobj);
+		(void) close(fd);
 		printfPQExpBuffer(&conn->errorMessage,
 					  libpq_gettext("could not read from file \"%s\": %s\n"),
-						  filename, pqStrerror(errno, sebuf, sizeof(sebuf)));
-		lobjOid = InvalidOid;
+						  filename,
+						  pqStrerror(save_errno, sebuf, sizeof(sebuf)));
+		return InvalidOid;
 	}
 
 	(void) close(fd);
@@ -617,11 +807,15 @@ lo_export(PGconn *conn, Oid lobjId, const char *filename)
 	 */
 	fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC | PG_BINARY, 0666);
 	if (fd < 0)
-	{							/* error */
+	{
+		/* We must do lo_close before setting the errorMessage */
+		int			save_errno = errno;
+
+		(void) lo_close(conn, lobj);
 		printfPQExpBuffer(&conn->errorMessage,
 						  libpq_gettext("could not open file \"%s\": %s\n"),
-						  filename, pqStrerror(errno, sebuf, sizeof(sebuf)));
-		(void) lo_close(conn, lobj);
+						  filename,
+						  pqStrerror(save_errno, sebuf, sizeof(sebuf)));
 		return -1;
 	}
 
@@ -633,11 +827,15 @@ lo_export(PGconn *conn, Oid lobjId, const char *filename)
 		tmp = write(fd, buf, nbytes);
 		if (tmp != nbytes)
 		{
-			printfPQExpBuffer(&conn->errorMessage,
-					   libpq_gettext("could not write to file \"%s\": %s\n"),
-						  filename, pqStrerror(errno, sebuf, sizeof(sebuf)));
+			/* We must do lo_close before setting the errorMessage */
+			int			save_errno = errno;
+
 			(void) lo_close(conn, lobj);
 			(void) close(fd);
+			printfPQExpBuffer(&conn->errorMessage,
+					   libpq_gettext("could not write to file \"%s\": %s\n"),
+							  filename,
+							  pqStrerror(save_errno, sebuf, sizeof(sebuf)));
 			return -1;
 		}
 	}
@@ -655,7 +853,8 @@ lo_export(PGconn *conn, Oid lobjId, const char *filename)
 		result = -1;
 	}
 
-	if (close(fd))
+	/* if we already failed, don't overwrite that msg with a close error */
+	if (close(fd) && result >= 0)
 	{
 		printfPQExpBuffer(&conn->errorMessage,
 					   libpq_gettext("could not write to file \"%s\": %s\n"),
@@ -682,8 +881,6 @@ lo_initialize(PGconn *conn)
 	int			n;
 	const char *query;
 	const char *fname;
-	PQrowProcessor savedRowProcessor;
-	void	   *savedRowProcessorParam;
 	Oid			foid;
 
 	if (!conn)
@@ -715,8 +912,11 @@ lo_initialize(PGconn *conn)
 			"'lo_create', "
 			"'lo_unlink', "
 			"'lo_lseek', "
+			"'lo_lseek64', "
 			"'lo_tell', "
+			"'lo_tell64', "
 			"'lo_truncate', "
+			"'lo_truncate64', "
 			"'loread', "
 			"'lowrite') "
 			"and pronamespace = (select oid from pg_catalog.pg_namespace "
@@ -732,16 +932,7 @@ lo_initialize(PGconn *conn)
 			"or proname = 'loread' "
 			"or proname = 'lowrite'";
 
-	/* Ensure the standard row processor is used to collect the result */
-	savedRowProcessor = conn->rowProcessor;
-	savedRowProcessorParam = conn->rowProcessorParam;
-	PQsetRowProcessor(conn, NULL, NULL);
-
 	res = PQexec(conn, query);
-
-	conn->rowProcessor = savedRowProcessor;
-	conn->rowProcessorParam = savedRowProcessorParam;
-
 	if (res == NULL)
 	{
 		free(lobjfuncs);
@@ -776,10 +967,16 @@ lo_initialize(PGconn *conn)
 			lobjfuncs->fn_lo_unlink = foid;
 		else if (strcmp(fname, "lo_lseek") == 0)
 			lobjfuncs->fn_lo_lseek = foid;
+		else if (strcmp(fname, "lo_lseek64") == 0)
+			lobjfuncs->fn_lo_lseek64 = foid;
 		else if (strcmp(fname, "lo_tell") == 0)
 			lobjfuncs->fn_lo_tell = foid;
+		else if (strcmp(fname, "lo_tell64") == 0)
+			lobjfuncs->fn_lo_tell64 = foid;
 		else if (strcmp(fname, "lo_truncate") == 0)
 			lobjfuncs->fn_lo_truncate = foid;
+		else if (strcmp(fname, "lo_truncate64") == 0)
+			lobjfuncs->fn_lo_truncate64 = foid;
 		else if (strcmp(fname, "loread") == 0)
 			lobjfuncs->fn_lo_read = foid;
 		else if (strcmp(fname, "lowrite") == 0)
@@ -789,7 +986,9 @@ lo_initialize(PGconn *conn)
 	PQclear(res);
 
 	/*
-	 * Finally check that we really got all large object interface functions
+	 * Finally check that we got all required large object interface functions
+	 * (ones that have been added later than the stone age are instead checked
+	 * only if used)
 	 */
 	if (lobjfuncs->fn_lo_open == 0)
 	{
@@ -853,4 +1052,52 @@ lo_initialize(PGconn *conn)
 	 */
 	conn->lobjfuncs = lobjfuncs;
 	return 0;
+}
+
+/*
+ * lo_hton64
+ *	  converts a 64-bit integer from host byte order to network byte order
+ */
+static pg_int64
+lo_hton64(pg_int64 host64)
+{
+	union
+	{
+		pg_int64	i64;
+		uint32		i32[2];
+	}			swap;
+	uint32		t;
+
+	/* High order half first, since we're doing MSB-first */
+	t = (uint32) (host64 >> 32);
+	swap.i32[0] = htonl(t);
+
+	/* Now the low order half */
+	t = (uint32) host64;
+	swap.i32[1] = htonl(t);
+
+	return swap.i64;
+}
+
+/*
+ * lo_ntoh64
+ *	  converts a 64-bit integer from network byte order to host byte order
+ */
+static pg_int64
+lo_ntoh64(pg_int64 net64)
+{
+	union
+	{
+		pg_int64	i64;
+		uint32		i32[2];
+	}			swap;
+	pg_int64	result;
+
+	swap.i64 = net64;
+
+	result = (uint32) ntohl(swap.i32[0]);
+	result <<= 32;
+	result |= (uint32) ntohl(swap.i32[1]);
+
+	return result;
 }

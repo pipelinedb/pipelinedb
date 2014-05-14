@@ -860,6 +860,24 @@ drop rule "_RETURN" on fooview;
 drop view fooview;
 
 --
+-- test conversion of table to view (needed to load some pg_dump files)
+--
+
+create table fooview (x int, y text);
+select xmin, * from fooview;
+
+create rule "_RETURN" as on select to fooview do instead
+  select 1 as x, 'aaa'::text as y;
+
+select * from fooview;
+select xmin, * from fooview;  -- fail, views don't have such a column
+
+select reltoastrelid, reltoastidxid, relkind, relfrozenxid
+  from pg_class where oid = 'fooview'::regclass;
+
+drop view fooview;
+
+--
 -- check for planner problems with complex inherited UPDATES
 --
 
@@ -895,8 +913,6 @@ reset client_min_messages;
 -- check corner case where an entirely-dummy subplan is created by
 -- constraint exclusion
 --
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 
 create temp table t1 (a integer primary key) distribute by replication;
 
@@ -935,3 +951,52 @@ select * from only t1_2 order by 1;
 select pg_get_viewdef('shoe'::regclass) as unpretty;
 select pg_get_viewdef('shoe'::regclass,true) as pretty;
 select pg_get_viewdef('shoe'::regclass,0) as prettier;
+
+--
+-- check multi-row VALUES in rules
+--
+
+create table rules_src(f1 int, f2 int);
+create table rules_log(f1 int, f2 int, tag text);
+insert into rules_src values(1,2), (11,12);
+create rule r1 as on update to rules_src do also
+  insert into rules_log values(old.*, 'old'), (new.*, 'new');
+update rules_src set f2 = f2 + 1;
+update rules_src set f2 = f2 * 10;
+select * from rules_src order by 1,2;
+select * from rules_log order by 1,2,3;
+create rule r2 as on update to rules_src do also
+  values(old.*, 'old'), (new.*, 'new') order by 1,2,3;
+update rules_src set f2 = f2 / 10;
+select * from rules_src order by 1,2;
+select * from rules_log order by 1,2,3;
+create rule r3 as on delete to rules_src do notify rules_src_deletion;
+\d+ rules_src
+
+--
+-- check alter rename rule
+--
+CREATE TABLE rule_t1 (a INT);
+CREATE VIEW rule_v1 AS SELECT * FROM rule_t1;
+
+CREATE RULE InsertRule AS
+    ON INSERT TO rule_v1
+    DO INSTEAD
+        INSERT INTO rule_t1 VALUES(new.a);
+
+ALTER RULE InsertRule ON rule_v1 RENAME to NewInsertRule;
+
+INSERT INTO rule_v1 VALUES(1);
+SELECT * FROM rule_v1;
+
+\d+ rule_v1
+
+--
+-- error conditions for alter rename rule
+--
+ALTER RULE InsertRule ON rule_v1 RENAME TO NewInsertRule; -- doesn't exist
+ALTER RULE NewInsertRule ON rule_v1 RENAME TO "_RETURN"; -- already exists
+ALTER RULE "_RETURN" ON rule_v1 RENAME TO abc; -- ON SELECT rule cannot be renamed
+
+DROP VIEW rule_v1;
+DROP TABLE rule_t1;

@@ -30,7 +30,6 @@ ALTER [ PROCEDURAL ] LANGUAGE <replaceable>name</replaceable> OWNER TO <replacea
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER LANGUAGE</command> changes the definition of a
    procedural language.  The only functionality is to rename the language or
@@ -42,6 +41,7 @@ ALTER [ PROCEDURAL ] LANGUAGE <replaceable>name</replaceable> OWNER TO <replacea
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable>name</replaceable></term>
@@ -75,6 +75,7 @@ ALTER [ PROCEDURAL ] LANGUAGE <replaceable>name</replaceable> OWNER TO <replacea
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>ALTER LANGUAGE</command> statement in the SQL
    standard.

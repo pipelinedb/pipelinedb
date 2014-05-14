@@ -115,6 +115,9 @@ COMMIT;
 </programlisting>
    The above transaction will insert both 3 and 4.
   </para>
+
+<!## end>
+
  </refsect1>
 
  <refsect1>
@@ -130,7 +133,6 @@ COMMIT;
    <command>RELEASE SAVEPOINT</>.) Otherwise, <command>SAVEPOINT</command> is
    fully SQL conforming.
   </para>
-<!## end>
  </refsect1>
 
  <refsect1>

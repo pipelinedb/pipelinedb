@@ -2,7 +2,7 @@
 
  <bibliography id="biblio">
   <title>Bibliography</title>
-
+&common;
   <para>
    Selected references and readings for <acronym>SQL</acronym>
    and <productname>PostgreSQL</productname>.
@@ -538,10 +538,10 @@ ssimkovi@ag.or.at
    </biblioentry>
 
 <!## XC>
-   <biblioentry id="OZS91">
+   <biblioentry id="OZS11">
     <title>Principles of Distributed Database Systems</title>
-    <titleabbrev>Ozsu and Valduriez, 1991</titleabbrev>
-    <edition>Second Edition</edition>
+    <titleabbrev>Ozsu and Valduriez, 2011</titleabbrev>
+    <edition>Third Edition</edition>
     <authorgroup>
      <author>
       <firstname>M. Tamer</firstname>
@@ -552,14 +552,14 @@ ssimkovi@ag.or.at
       <surname>Valduriez</surname>
      </author>
     </authorgroup>
-    <isbn>0-13-659707-6</isbn>
-    <pubdate>1991</pubdate>
+    <isbn>978-1-4419-8834-8</isbn>
+    <pubdate>2011</pubdate>
     <publisher>
-     <publishername>Prentice Hall</publishername>
+     <publishername>Springer Science+Business Media, LLC</publishername>
     </publisher>
     <copyright>
-     <year>1991, 1999</year>
-     <holder>Prentice-Hall, Inc.</holder>
+     <year>2011</year>
+     <holder>Springer Science+Business Media, LLC</holder>
     </copyright>
    </biblioentry>
 <!## end>

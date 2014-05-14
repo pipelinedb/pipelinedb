@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  *
  * src/bin/psql/settings.h
  */
@@ -73,6 +73,7 @@ typedef struct _psqlSettings
 	printQueryOpt popt;
 
 	char	   *gfname;			/* one-shot file output argument for \g */
+	char	   *gset_prefix;	/* one-shot prefix argument for \gset */
 
 	bool		notty;			/* stdin or stdout is not a tty (as determined
 								 * on startup) */

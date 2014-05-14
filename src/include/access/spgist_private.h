@@ -4,7 +4,7 @@
  *	  Private declarations for SP-GiST access method.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/spgist_private.h
@@ -17,7 +17,8 @@
 #include "access/itup.h"
 #include "access/spgist.h"
 #include "nodes/tidbitmap.h"
-#include "utils/rel.h"
+#include "storage/relfilenode.h"
+#include "utils/relcache.h"
 
 
 /* Page numbers of fixed-location pages */
@@ -591,6 +592,7 @@ typedef struct spgxlogVacuumRedirect
 	BlockNumber blkno;			/* block number to clean */
 	uint16		nToPlaceholder; /* number of redirects to make placeholders */
 	OffsetNumber firstPlaceholder;		/* first placeholder tuple to remove */
+	TransactionId newestRedirectXid;	/* newest XID of removed redirects */
 
 	/* offsets of redirect tuples to make placeholders follow */
 } spgxlogVacuumRedirect;
@@ -650,7 +652,7 @@ extern void spgPageIndexMultiDelete(SpGistState *state, Page page,
 						OffsetNumber *itemnos, int nitems,
 						int firststate, int reststate,
 						BlockNumber blkno, OffsetNumber offnum);
-extern void spgdoinsert(Relation index, SpGistState *state,
+extern bool spgdoinsert(Relation index, SpGistState *state,
 			ItemPointer heapPtr, Datum datum, bool isnull);
 
 #endif   /* SPGIST_PRIVATE_H */

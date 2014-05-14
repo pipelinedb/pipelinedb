@@ -4,7 +4,7 @@
  *	  support for the POSTGRES executor module
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/executor/executor.h
@@ -17,7 +17,6 @@
 #include "executor/execdesc.h"
 #include "nodes/parsenodes.h"
 #include "pgxc/execRemote.h"
-
 
 /*
  * The "eflags" argument to ExecutorStart and the various ExecInitNode
@@ -62,6 +61,7 @@
 #define EXEC_FLAG_SKIP_TRIGGERS 0x0010	/* skip AfterTrigger calls */
 #define EXEC_FLAG_WITH_OIDS		0x0020	/* force OIDs in returned tuples */
 #define EXEC_FLAG_WITHOUT_OIDS	0x0040	/* force no OIDs in returned tuples */
+#define EXEC_FLAG_WITH_NO_DATA	0x0080	/* rel scannability doesn't matter */
 
 
 /*
@@ -199,7 +199,7 @@ extern void ExecConstraints(ResultRelInfo *resultRelInfo,
 extern ExecRowMark *ExecFindRowMark(EState *estate, Index rti);
 extern ExecAuxRowMark *ExecBuildAuxRowMark(ExecRowMark *erm, List *targetlist);
 extern TupleTableSlot *EvalPlanQual(EState *estate, EPQState *epqstate,
-			 Relation relation, Index rti,
+			 Relation relation, Index rti, int lockmode,
 			 ItemPointer tid, TransactionId priorXmax);
 extern HeapTuple EvalPlanQualFetch(EState *estate, Relation relation,
 				  int lockmode, ItemPointer tid, TransactionId priorXmax);
@@ -348,7 +348,7 @@ extern void ExecAssignScanTypeFromOuterPlan(ScanState *scanstate);
 
 extern bool ExecRelationIsTargetRelation(EState *estate, Index scanrelid);
 
-extern Relation ExecOpenScanRelation(EState *estate, Index scanrelid);
+extern Relation ExecOpenScanRelation(EState *estate, Index scanrelid, int eflags);
 extern void ExecCloseScanRelation(Relation scanrel);
 
 extern void ExecOpenIndices(ResultRelInfo *resultRelInfo);

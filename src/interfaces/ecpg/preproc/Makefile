@@ -2,7 +2,7 @@
 #
 # Makefile for src/interfaces/ecpg/preproc
 #
-# Copyright (c) 1998-2012, PostgreSQL Global Development Group
+# Copyright (c) 1998-2013, PostgreSQL Global Development Group
 #
 # src/interfaces/ecpg/preproc/Makefile
 #
@@ -16,7 +16,7 @@ top_builddir = ../../../..
 include $(top_builddir)/src/Makefile.global
 
 MAJOR_VERSION= 4
-MINOR_VERSION= 8
+MINOR_VERSION= 9
 PATCHLEVEL=0
 
 override CPPFLAGS := -I../include -I$(top_srcdir)/src/interfaces/ecpg/include \
@@ -30,6 +30,12 @@ OBJS=	preproc.o type.o ecpg.o output.o parser.o \
 	keywords.o c_keywords.o ecpg_keywords.o kwlookup.o ../ecpglib/typename.o descriptor.o variable.o \
 	$(WIN32RES)
 
+# Suppress parallel build to avoid a bug in gmake 3.82
+# (see comments in ../Makefile)
+ifeq ($(MAKE_VERSION),3.82)
+.NOTPARALLEL:
+endif
+
 all: ecpg
 
 ecpg: $(OBJS) | submake-libpgport
@@ -42,20 +48,7 @@ ecpg: $(OBJS) | submake-libpgport
 preproc.o: pgc.c
 
 preproc.h: preproc.c ;
-
-preproc.c: preproc.y
-ifdef BISON
-	$(BISON) -d $(BISONFLAGS) -o $@ $<
-else
-	@$(missing) bison $< $@
-endif
-
-pgc.c: pgc.l
-ifdef FLEX
-	$(FLEX) $(FLEXFLAGS) -o'$@' $<
-else
-	@$(missing) flex $< $@
-endif
+preproc.c: BISONFLAGS += -d
 
 preproc.y: ../../../backend/parser/gram.y parse.pl ecpg.addons ecpg.header ecpg.tokens ecpg.trailer ecpg.type
 	$(PERL) $(srcdir)/parse.pl $(srcdir) < $< > $@

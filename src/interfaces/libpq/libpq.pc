@@ -1,0 +1,9 @@
+Name: libpq
+Description: PostgreSQL libpq library
+Url: http://www.postgresql.org/
+Version: 9.3.2
+Requires: 
+Requires.private: 
+Cflags: -I/home/derek/tmp/pgxc/include
+Libs: -L/home/derek/tmp/pgxc/lib -lpq
+Libs.private:  -lcrypt -lpthread

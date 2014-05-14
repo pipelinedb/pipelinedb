@@ -451,8 +451,6 @@ select 'yz23'::dtop; -- fail
 ERROR:  value for domain dtop violates check constraint "dinter_check"
 select 'xz23'::dtop; -- fail
 ERROR:  value for domain dtop violates check constraint "dtop_check"
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 create temp table dtest(f1 dtop);
 insert into dtest values('x123');
 insert into dtest values('x1234'); -- fail, implicit coercion

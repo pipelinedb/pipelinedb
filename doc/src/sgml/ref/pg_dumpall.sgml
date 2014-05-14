@@ -190,7 +190,7 @@ PostgreSQL documentation
       <listitem>
        <para>
         Specify the superuser user name to use when disabling triggers.
-        This is only relevant if <option>--disable-triggers</> is used.
+        This is relevant only if <option>--disable-triggers</> is used.
         (Usually, it's better to leave this out, and instead start the
         resulting script as superuser.)
        </para>
@@ -283,7 +283,7 @@ PostgreSQL documentation
       <term><option>--disable-triggers</></term>
       <listitem>
        <para>
-        This option is only relevant when creating a data-only dump.
+        This option is relevant only when creating a data-only dump.
         It instructs <application>pg_dumpall</application> to include commands
         to temporarily disable triggers on the target tables while
         the data is reloaded.  Use this if you have referential
@@ -405,6 +405,25 @@ PostgreSQL documentation
    The following command-line options control the database connection parameters.
 
    <variablelist>
+     <varlistentry>
+      <term><option>-d <replaceable class="parameter">connstr</replaceable></option></term>
+      <term><option>--dbname=<replaceable class="parameter">connstr</replaceable></option></term>
+      <listitem>
+       <para>
+        Specifies parameters used to connect to the server, as a connection
+        string. See <xref linkend="libpq-connstring"> for more information.
+       </para>
+       <para>
+        The option is called <literal>--dbname</> for consistency with other
+        client applications, but because <application>pg_dumpall</application>
+        needs to connect to many databases, database name in the connection
+        string will be ignored. Use <literal>-l</literal> option to specify
+        the name of the database used to dump global objects and to discover
+        what other databases should be dumped.
+       </para>
+      </listitem>
+     </varlistentry>
+
      <varlistentry>
       <term><option>-h <replaceable>host</replaceable></option></term>
       <term><option>--host=<replaceable>host</replaceable></option></term>

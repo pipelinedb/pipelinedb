@@ -121,6 +121,23 @@ typedef struct
 	bool			has_row_marks;		/* Did SELECT had FOR UPDATE/SHARE? */
 	bool			rq_save_command_id;	/* Save the command ID to be used in
 										 * some special cases */
+	bool			rq_use_pk_for_rep_change;	/* Are we using primary key or
+												 * unique index defined on
+												 * the replicated table to
+												 * perform update/delete?
+												 */
+	int				rq_max_param_num;	/* Upto which number are parameters
+										 * added in an delete on a replicated
+										 * tablke. This is required to make
+										 * sure that extra parameters are not
+										 * sent to the datanode while
+										 * executing. The problem in sending
+										 * extra parameters is that those extra
+										 * parameters may contain a composite
+										 * type which makes the query fail
+										 * because input of annon. composite
+										 * types is not implemented.
+										 */
 } RemoteQuery;
 
 extern PlannedStmt *pgxc_planner(Query *query, int cursorOptions,

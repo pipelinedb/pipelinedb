@@ -492,17 +492,3 @@ RequestBarrier(const char *id, char *completionTag)
 	if (completionTag)
 		snprintf(completionTag, COMPLETION_TAG_BUFSIZE, "BARRIER %s", barrier_id);
 }
-
-void
-barrier_redo(XLogRecPtr lsn, XLogRecord *record)
-{
-	/* Nothing to do */
-	return;
-}
-
-void
-barrier_desc(StringInfo buf, uint8 xl_info, char *rec)
-{
-	Assert(xl_info == XLOG_BARRIER_CREATE);
-	appendStringInfo(buf, "BARRIER %s", rec);
-}

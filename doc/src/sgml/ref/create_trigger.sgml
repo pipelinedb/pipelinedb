@@ -22,7 +22,7 @@ PostgreSQL documentation
  <refsynopsisdiv>
 <synopsis>
 CREATE [ CONSTRAINT ] TRIGGER <replaceable class="PARAMETER">name</replaceable> { BEFORE | AFTER | INSTEAD OF } { <replaceable class="PARAMETER">event</replaceable> [ OR ... ] }
-    ON <replaceable class="PARAMETER">table</replaceable>
+    ON <replaceable class="PARAMETER">table_name</replaceable>
     [ FROM <replaceable class="parameter">referenced_table_name</replaceable> ]
     { NOT DEFERRABLE | [ DEFERRABLE ] { INITIALLY IMMEDIATE | INITIALLY DEFERRED } }
     [ FOR [ EACH ] { ROW | STATEMENT } ]
@@ -241,7 +241,7 @@ UPDATE OF <replaceable>column_name1</replaceable> [, <replaceable>column_name2</
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="parameter">table</replaceable></term>
+    <term><replaceable class="parameter">table_name</replaceable></term>
     <listitem>
      <para>
       The name (optionally schema-qualified) of the table or view the trigger
@@ -484,7 +484,8 @@ CREATE TRIGGER view_insert
   <para>
    The <command>CREATE TRIGGER</command> statement in
    <productname>PostgreSQL</productname> implements a subset of the
-   <acronym>SQL</> standard. The following functionality is currently missing:
+   <acronym>SQL</> standard. The following functionalities are currently
+   missing:
 
    <itemizedlist>
     <listitem>
@@ -497,6 +498,16 @@ CREATE TRIGGER view_insert
       allows trigger procedures to be written in any number of
       user-defined languages, access to the data is handled in a
       language-specific way.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      <productname>PostgreSQL</productname> does not allow the old and new
+      tables to be referenced in statement-level triggers, i.e., the tables
+      that contain all the old and/or new rows, which are referred to by the
+      <literal>OLD TABLE</literal> and <literal>NEW TABLE</literal> clauses in
+      the <acronym>SQL</> standard.
      </para>
     </listitem>
 
@@ -555,9 +566,9 @@ CREATE TRIGGER view_insert
   <title>See Also</title>
 
   <simplelist type="inline">
-   <member><xref linkend="sql-createfunction"></member>
    <member><xref linkend="sql-altertrigger"></member>
    <member><xref linkend="sql-droptrigger"></member>
+   <member><xref linkend="sql-createfunction"></member>
    <member><xref linkend="sql-set-constraints"></member>
   </simplelist>
  </refsect1>

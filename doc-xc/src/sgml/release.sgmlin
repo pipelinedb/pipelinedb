@@ -7,15 +7,17 @@ Typical markup:
 PostgreSQL                      <productname>
 postgresql.conf, pg_hba.conf,
         recovery.conf           <filename>
-[A-Z][A-Z_ ]+[A-Z_]             <command>, <literal>, <envar>
+[A-Z][A-Z_ ]+[A-Z_]             <command>, <literal>, <envar>, <acronym>
 [A-Za-z_][A-Za-z0-9_]+()        <function>
 -[-A-Za-z_]+                    <option>
 [A-Za-z_]/[A-Za-z_]+            <filename>
 psql                            <application>
 pg_[A-Za-z0-9_]+                <application>, <structname>
-[A-Z][A-Z][A-Z_ ]*              <type>, <varname>
+[A-Z][A-Z][A-Z_ ]*              <type>
+[a-z]+_[a-z_]+                  <varname>
 
-non-ASCII characters            convert to HTML4 entity (&) escapes
+non-ASCII characters            find using grep -P '[\x80-\xFF]'
+                                convert to HTML4 named entity (&) escapes
 
         official:      http://www.w3.org/TR/html4/sgml/entities.html
         one page:      http://www.zipcon.net/~swhite/docs/computers/browsers/entities_page.html
@@ -23,9 +25,12 @@ non-ASCII characters            convert to HTML4 entity (&) escapes
                        http://www.zipcon.net/~swhite/docs/computers/browsers/entities_page.html
                        http://en.wikipedia.org/wiki/List_of_XML_and_HTML_character_entity_references
 
-        we cannot use UTF8 because SGML Docbook
-        does not support it
-          http://www.pemberley.com/janeinfo/latin1.html#latexta
+        we cannot use UTF8 because SGML Docbook does not support it
+
+        do not use numeric _UTF_ numeric character escapes (&#nnn;),
+        we can only use Latin1
+
+        Example: Alvaro Herrera is &Aacute;lvaro Herrera
 
 wrap long lines
 
@@ -41,7 +46,7 @@ can be created without links to the main documentation.  Don't use <xref>.
   <para>
    The release notes contain the significant changes in each
 <!## XC>
-   <productname>Postgres-XC</> release, with major features and migration
+   <productname>PostgreSQL</> release, with major features and migration
 <!## end>
 <!## PG>
    <productname>PostgreSQL</> release, with major features and migration
@@ -91,9 +96,13 @@ can be created without links to the main documentation.  Don't use <xref>.
   subsets can easily be copied into back branches.
 -->
 <!## XC>
+&release-xc-1.2;
+&release-xc-1.1;
 &release-xc-1.0;
 <!## end>
 <!## PG>
+&release-9.3;
+&release-9.2;
 &release-9.1;
 &release-9.0;
 &release-8.4;

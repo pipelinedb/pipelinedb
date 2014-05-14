@@ -4,7 +4,7 @@
  *	  prototypes for pathnode.c, relnode.c.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/optimizer/pathnode.h
@@ -55,7 +55,7 @@ extern BitmapOrPath *create_bitmap_or_path(PlannerInfo *root,
 					  RelOptInfo *rel,
 					  List *bitmapquals);
 extern TidPath *create_tidscan_path(PlannerInfo *root, RelOptInfo *rel,
-					List *tidquals);
+					List *tidquals, Relids required_outer);
 extern AppendPath *create_append_path(RelOptInfo *rel, List *subpaths,
 				   Relids required_outer);
 extern MergeAppendPath *create_merge_append_path(PlannerInfo *root,
@@ -69,10 +69,14 @@ extern UniquePath *create_unique_path(PlannerInfo *root, RelOptInfo *rel,
 				   Path *subpath, SpecialJoinInfo *sjinfo);
 extern Path *create_subqueryscan_path(PlannerInfo *root, RelOptInfo *rel,
 						 List *pathkeys, Relids required_outer);
-extern Path *create_functionscan_path(PlannerInfo *root, RelOptInfo *rel);
-extern Path *create_valuesscan_path(PlannerInfo *root, RelOptInfo *rel);
-extern Path *create_ctescan_path(PlannerInfo *root, RelOptInfo *rel);
-extern Path *create_worktablescan_path(PlannerInfo *root, RelOptInfo *rel);
+extern Path *create_functionscan_path(PlannerInfo *root, RelOptInfo *rel,
+						 Relids required_outer);
+extern Path *create_valuesscan_path(PlannerInfo *root, RelOptInfo *rel,
+					   Relids required_outer);
+extern Path *create_ctescan_path(PlannerInfo *root, RelOptInfo *rel,
+					Relids required_outer);
+extern Path *create_worktablescan_path(PlannerInfo *root, RelOptInfo *rel,
+						  Relids required_outer);
 extern ForeignPath *create_foreignscan_path(PlannerInfo *root, RelOptInfo *rel,
 						double rows, Cost startup_cost, Cost total_cost,
 						List *pathkeys,

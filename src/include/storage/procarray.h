@@ -4,7 +4,7 @@
  *	  POSTGRES process array definitions.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2010-2012 Postgres-XC Development Group
  *
@@ -32,6 +32,7 @@ extern void SetGlobalSnapshotData(int xmin, int xmax, int xcnt, int *xip);
 extern void UnsetGlobalSnapshotData(void);
 extern void ReloadConnInfoOnBackends(void);
 #endif /* PGXC */
+extern void ProcArrayInitRecovery(TransactionId initializedUptoXID);
 extern void ProcArrayApplyRecoveryInfo(RunningTransactions running);
 extern void ProcArrayApplyXidAssignment(TransactionId topxid,
 							int nsubxids, TransactionId *subxids);
@@ -58,8 +59,8 @@ extern bool TransactionIdIsActive(TransactionId xid);
 extern TransactionId GetOldestXmin(bool allDbs, bool ignoreVacuum);
 extern TransactionId GetOldestActiveTransactionId(void);
 
-extern int	GetTransactionsInCommit(TransactionId **xids_p);
-extern bool HaveTransactionsInCommit(TransactionId *xids, int nxids);
+extern VirtualTransactionId *GetVirtualXIDsDelayingChkpt(int *nvxids);
+extern bool HaveVirtualXIDsDelayingChkpt(VirtualTransactionId *vxids, int nvxids);
 
 extern PGPROC *BackendPidGetProc(int pid);
 extern int	BackendXidGetPid(TransactionId xid);

@@ -18,7 +18,7 @@
  * everything that should be freed.  See utils/mmgr/README for more info.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/palloc.h
@@ -35,6 +35,8 @@
  */
 typedef struct MemoryContextData *MemoryContext;
 
+#ifndef FRONTEND
+
 /*
  * CurrentMemoryContext is the default allocation context for palloc().
  * We declare it here so that palloc() can be a macro.	Avoid accessing it
@@ -49,10 +51,6 @@ extern void *MemoryContextAlloc(MemoryContext context, Size size);
 extern void *MemoryContextAllocZero(MemoryContext context, Size size);
 extern void *MemoryContextAllocZeroAligned(MemoryContext context, Size size);
 
-#define palloc(sz)	MemoryContextAlloc(CurrentMemoryContext, (sz))
-
-#define palloc0(sz) MemoryContextAllocZero(CurrentMemoryContext, (sz))
-
 /*
  * The result of palloc() is always word-aligned, so we can skip testing
  * alignment of the pointer when deciding which MemSet variant to use.
@@ -66,21 +64,17 @@ extern void *MemoryContextAllocZeroAligned(MemoryContext context, Size size);
 		MemoryContextAllocZeroAligned(CurrentMemoryContext, sz) : \
 		MemoryContextAllocZero(CurrentMemoryContext, sz) )
 
-extern void pfree(void *pointer);
-
-extern void *repalloc(void *pointer, Size size);
-
 /*
  * MemoryContextSwitchTo can't be a macro in standard C compilers.
  * But we can make it an inline function if the compiler supports it.
- *
- * This file has to be includable by some non-backend code such as
- * pg_resetxlog, so don't expose the CurrentMemoryContext reference
- * if FRONTEND is defined.
+ * See STATIC_IF_INLINE in c.h.
  */
-#if defined(USE_INLINE) && !defined(FRONTEND)
 
-static inline MemoryContext
+#ifndef PG_USE_INLINE
+extern MemoryContext MemoryContextSwitchTo(MemoryContext context);
+#endif   /* !PG_USE_INLINE */
+#if defined(PG_USE_INLINE) || defined(MCXT_INCLUDE_DEFINITIONS)
+STATIC_IF_INLINE MemoryContext
 MemoryContextSwitchTo(MemoryContext context)
 {
 	MemoryContext old = CurrentMemoryContext;
@@ -88,25 +82,20 @@ MemoryContextSwitchTo(MemoryContext context)
 	CurrentMemoryContext = context;
 	return old;
 }
-#else
-
-extern MemoryContext MemoryContextSwitchTo(MemoryContext context);
-#endif   /* USE_INLINE && !FRONTEND */
+#endif   /* PG_USE_INLINE || MCXT_INCLUDE_DEFINITIONS */
 
 /*
  * These are like standard strdup() except the copied string is
  * allocated in a context, not with malloc().
  */
 extern char *MemoryContextStrdup(MemoryContext context, const char *string);
+#endif   /* !FRONTEND */
 
-#define pstrdup(str)  MemoryContextStrdup(CurrentMemoryContext, (str))
-
+extern char *pstrdup(const char *in);
 extern char *pnstrdup(const char *in, Size len);
-
-#if defined(WIN32) || defined(__CYGWIN__)
-extern void *pgport_palloc(Size sz);
-extern char *pgport_pstrdup(const char *str);
-extern void pgport_pfree(void *pointer);
-#endif
+extern void *palloc(Size size);
+extern void *palloc0(Size size);
+extern void pfree(void *pointer);
+extern void *repalloc(void *pointer, Size size);
 
 #endif   /* PALLOC_H */

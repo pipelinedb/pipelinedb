@@ -3,7 +3,7 @@
  * analyze.c
  *	  the Postgres statistics generator
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -16,6 +16,7 @@
 
 #include <math.h>
 
+#include "access/multixact.h"
 #include "access/transam.h"
 #include "access/tupconvert.h"
 #include "access/tuptoaster.h"
@@ -205,11 +206,12 @@ analyze_rel(Oid relid, VacuumStmt *vacstmt, BufferAccessStrategy bstrategy)
 	}
 
 	/*
-	 * Check that it's a plain table or foreign table; we used to do this in
-	 * get_rel_oids() but seems safer to check after we've locked the
-	 * relation.
+	 * Check that it's a plain table, materialized view, or foreign table; we
+	 * used to do this in get_rel_oids() but seems safer to check after we've
+	 * locked the relation.
 	 */
-	if (onerel->rd_rel->relkind == RELKIND_RELATION)
+	if (onerel->rd_rel->relkind == RELKIND_RELATION ||
+		onerel->rd_rel->relkind == RELKIND_MATVIEW)
 	{
 		/* Regular table, so we'll use the regular row acquisition function */
 		acquirefunc = acquire_sample_rows;
@@ -225,7 +227,7 @@ analyze_rel(Oid relid, VacuumStmt *vacstmt, BufferAccessStrategy bstrategy)
 		FdwRoutine *fdwroutine;
 		bool		ok = false;
 
-		fdwroutine = GetFdwRoutineByRelId(RelationGetRelid(onerel));
+		fdwroutine = GetFdwRoutineForRelation(onerel, false);
 
 		if (fdwroutine->AnalyzeForeignTable != NULL)
 			ok = fdwroutine->AnalyzeForeignTable(onerel,
@@ -580,7 +582,8 @@ do_analyze_rel(Relation onerel, VacuumStmt *vacstmt,
 							totalrows,
 							visibilitymap_count(onerel),
 							hasindex,
-							InvalidTransactionId);
+							InvalidTransactionId,
+							InvalidMultiXactId);
 
 	/*
 	 * Same for indexes. Vacuum always scans all indexes, so if we're part of
@@ -600,7 +603,8 @@ do_analyze_rel(Relation onerel, VacuumStmt *vacstmt,
 								totalindexrows,
 								0,
 								false,
-								InvalidTransactionId);
+								InvalidTransactionId,
+								InvalidMultiXactId);
 		}
 	}
 
@@ -1193,7 +1197,7 @@ acquire_sample_rows(Relation onerel, int elevel,
 					 * right.  (Note: this works out properly when the row was
 					 * both inserted and deleted in our xact.)
 					 */
-					if (TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmax(targtuple.t_data)))
+					if (TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetUpdateXid(targtuple.t_data)))
 						deadrows += 1;
 					else
 						liverows += 1;

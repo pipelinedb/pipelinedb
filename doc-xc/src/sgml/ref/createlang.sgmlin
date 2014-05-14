@@ -29,14 +29,14 @@ PostgreSQL documentation
    <command>createlang</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
    <arg choice="plain"><replaceable>langname</replaceable></arg>
-   <arg><replaceable>dbname</replaceable></arg>
+   <arg choice="opt"><replaceable>dbname</replaceable></arg>
   </cmdsynopsis>
 
   <cmdsynopsis>
    <command>createlang</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
-   <group choice="plain"><arg>--list</arg><arg>-l</arg></group>
-   <arg choice="plain"><replaceable>dbname</replaceable></arg>
+   <group choice="plain"><arg choice="plain"><option>--list</option></arg><arg choice="plain"><option>-l</option></arg></group>
+   <arg choice="opt"><replaceable>dbname</replaceable></arg>
   </cmdsynopsis>
  </refsynopsisdiv>
 
@@ -44,14 +44,10 @@ PostgreSQL documentation
  <refsect1>
   <title>Description</title>
 
+&common;
   <para>
    <application>createlang</application> is a utility for adding a
-<!## PG>
    procedural language to a <productname>PostgreSQL</productname> database.
-<!## end>
-<!## XC>
-   procedural language to a <productname>Postgres-XC</productname> database.
-<!## end>
   </para>
 
   <para>
@@ -62,12 +58,7 @@ PostgreSQL documentation
   <caution>
    <para>
     <application>createlang</application> is deprecated and may be removed
-<!## PG>
     in a future <productname>PostgreSQL</productname> release.  Direct use
-<!## end>
-<!## XC>
-    in a future <productname>Postgres-XC</productname> release.  Direct use
-<!## end>
     of the <command>CREATE EXTENSION</> command is recommended instead.
    </para>
   </caution>
@@ -77,6 +68,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Options</title>
 
+&common;
    <para>
     <application>createlang</application> accepts the following command-line arguments:
 
@@ -85,7 +77,8 @@ PostgreSQL documentation
       <term><replaceable class="parameter">langname</replaceable></term>
       <listitem>
        <para>
-        Specifies the name of the procedural language to be installed.
+        Specifies the name of the procedural language to be
+        installed.  (This name is lower-cased.)
        </para>
       </listitem>
      </varlistentry>
@@ -230,6 +223,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Environment</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><envar>PGDATABASE</envar></term>
@@ -246,12 +240,7 @@ PostgreSQL documentation
   </variablelist>
 
   <para>
-<!## PG>
    This utility, like most other <productname>PostgreSQL</> utilities,
-<!## end>
-<!## XC>
-   This utility, like most other <productname>Postgres-XC</> utilities,
-<!## end>
    also uses the environment variables supported by <application>libpq</>
    (see <xref linkend="libpq-envars">).
   </para>
@@ -262,6 +251,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Diagnostics</title>
 
+&common;
    <para>
     Most error messages are self-explanatory. If not, run
     <application>createlang</application> with the <option>--echo</option>
@@ -276,6 +266,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    Use <xref linkend="app-droplang"> to remove a language.
   </para>

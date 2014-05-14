@@ -70,6 +70,8 @@ exit_nicely(void)
 
 	for (i = 0; i < nconns; i++)
 		PQfinish(conns[i]);
+	fflush(stderr);
+	fflush(stdout);
 	exit(1);
 }
 
@@ -283,6 +285,8 @@ main(int argc, char **argv)
 	/* Clean up and exit */
 	for (i = 0; i < nconns; i++)
 		PQfinish(conns[i]);
+	fflush(stderr);
+	fflush(stdout);
 	return 0;
 }
 
@@ -512,10 +516,14 @@ run_permutation(TestSpec * testspec, int nsteps, Step ** steps)
 	printf("\n");
 
 	/* Perform setup */
-	if (testspec->setupsql)
+	for (i = 0; i < testspec->nsetupsqls; i++)
 	{
-		res = PQexec(conns[0], testspec->setupsql);
-		if (PQresultStatus(res) != PGRES_COMMAND_OK)
+		res = PQexec(conns[0], testspec->setupsqls[i]);
+		if (PQresultStatus(res) == PGRES_TUPLES_OK)
+		{
+			printResultSet(res);
+		}
+		else if (PQresultStatus(res) != PGRES_COMMAND_OK)
 		{
 			fprintf(stderr, "setup failed: %s", PQerrorMessage(conns[0]));
 			exit_nicely();
@@ -564,7 +572,9 @@ run_permutation(TestSpec * testspec, int nsteps, Step ** steps)
 			 * but it can only be unblocked by running steps from other
 			 * sessions.
 			 */
+			fflush(stdout);
 			fprintf(stderr, "invalid permutation detected\n");
+			fflush(stderr);
 
 			/* Cancel the waiting statement from this session. */
 			cancel = PQgetCancel(conn);
@@ -572,7 +582,8 @@ run_permutation(TestSpec * testspec, int nsteps, Step ** steps)
 			{
 				char		buf[256];
 
-				PQcancel(cancel, buf, sizeof(buf));
+				if (!PQcancel(cancel, buf, sizeof(buf)))
+					fprintf(stderr, "PQcancel failed: %s\n", buf);
 
 				/* Be sure to consume the error message. */
 				while ((res = PQgetResult(conn)) != NULL)
@@ -641,12 +652,17 @@ teardown:
 		if (testspec->sessions[i]->teardownsql)
 		{
 			res = PQexec(conns[i + 1], testspec->sessions[i]->teardownsql);
-			if (PQresultStatus(res) != PGRES_COMMAND_OK)
+			if (PQresultStatus(res) == PGRES_TUPLES_OK)
+			{
+				printResultSet(res);
+			}
+			else if (PQresultStatus(res) != PGRES_COMMAND_OK)
 			{
 				fprintf(stderr, "teardown of session %s failed: %s",
 						testspec->sessions[i]->name,
 						PQerrorMessage(conns[i + 1]));
 				/* don't exit on teardown failure */
+				fflush(stderr);
 			}
 			PQclear(res);
 		}
@@ -665,7 +681,7 @@ teardown:
 			fprintf(stderr, "teardown failed: %s",
 					PQerrorMessage(conns[0]));
 			/* don't exit on teardown failure */
-
+			fflush(stderr);
 		}
 		PQclear(res);
 	}
@@ -708,6 +724,8 @@ try_complete_step(Step * step, int flags)
 		ret = select(sock + 1, &read_set, NULL, NULL, &timeout);
 		if (ret < 0)			/* error in select() */
 		{
+			if (errno == EINTR)
+				continue;
 			fprintf(stderr, "select failed: %s\n", strerror(errno));
 			exit_nicely();
 		}
@@ -764,14 +782,26 @@ try_complete_step(Step * step, int flags)
 					printf("WARNING: this step had a leftover error message\n");
 					printf("%s\n", step->errormsg);
 				}
-				/* Detail may contain xid values, so just show primary. */
-				step->errormsg = malloc(5 +
-						  strlen(PQresultErrorField(res, PG_DIAG_SEVERITY)) +
-										strlen(PQresultErrorField(res,
-												  PG_DIAG_MESSAGE_PRIMARY)));
-				sprintf(step->errormsg, "%s:  %s",
-						PQresultErrorField(res, PG_DIAG_SEVERITY),
-						PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+
+				/*
+				 * Detail may contain XID values, so we want to just show
+				 * primary.  Beware however that libpq-generated error results
+				 * may not contain subfields, only an old-style message.
+				 */
+				{
+					const char *sev = PQresultErrorField(res,
+														 PG_DIAG_SEVERITY);
+					const char *msg = PQresultErrorField(res,
+													PG_DIAG_MESSAGE_PRIMARY);
+
+					if (sev && msg)
+					{
+						step->errormsg = malloc(5 + strlen(sev) + strlen(msg));
+						sprintf(step->errormsg, "%s:  %s", sev, msg);
+					}
+					else
+						step->errormsg = strdup(PQresultErrorMessage(res));
+				}
 				break;
 			default:
 				printf("unexpected result status: %s\n",

@@ -5,6 +5,7 @@
 
   <sect1 id="tutorial-sql-intro">
    <title>Introduction</title>
+
 &common;
    <para>
     This chapter provides an overview of how to use
@@ -13,14 +14,8 @@
     way a complete tutorial on <acronym>SQL</acronym>.  Numerous books
     have been written on <acronym>SQL</acronym>, including <xref
     linkend="MELT93"> and <xref linkend="DATE97">.
-<!## PG>
     You should be aware that some <productname>PostgreSQL</productname>
     language features are extensions to the standard.
-<!## end>
-<!## XC>
-    You should be aware that some <productname>Postgres-XC</productname>
-    language features are extensions to the standard.
-<!## end>
    </para>
 
    <para>
@@ -30,22 +25,12 @@
    </para>
 
    <para>
-<!## PG>
     Examples in this manual can also be found in the
     <productname>PostgreSQL</productname> source distribution
     in the directory <filename>src/tutorial/</filename>.  (Binary
     distributions of <productname>PostgreSQL</productname> might not
     compile these files.)  To use those
     files, first change to that directory and run <application>make</>:
-<!## end>
-<!## XC>
-    Examples in this manual can also be found in the
-    <productname>Postgres-XC</productname> source distribution
-    in the directory <filename>src/tutorial/</filename>.  (Binary
-    distributions of <productname>Postgres-XC</productname> might not
-    compile these files.)  To use those
-    files, first change to that directory and run <application>make</>:
-<!## end>
 
 <screen>
 <prompt>$</prompt> <userinput>cd <replaceable>....</replaceable>/src/tutorial</userinput>
@@ -62,11 +47,6 @@
 ...
 </computeroutput>
 
-<!-- 
-  TODO:  K.Suzuki, 13th June, 2011.
-    basics.sql is named basics.source in the original.  Rename it.
--->
-
 <prompt>mydb=&gt;</prompt> <userinput>\i basics.sql</userinput>
 </screen>
 
@@ -82,6 +62,7 @@
   <sect1 id="tutorial-concepts">
    <title>Concepts</title>
 
+&common;
    <para>
     <indexterm><primary>relational database</primary></indexterm>
     <indexterm><primary>hierarchical database</primary></indexterm>
@@ -89,13 +70,7 @@
     <indexterm><primary>relation</primary></indexterm>
     <indexterm><primary>table</primary></indexterm>
 
-&common;
-<!## PG>
     <productname>PostgreSQL</productname> is a <firstterm>relational
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> is a <firstterm>relational
-<!## end>
     database management system</firstterm> (<acronym>RDBMS</acronym>).
     That means it is a system for managing data stored in
     <firstterm>relations</firstterm>.  Relation is essentially a
@@ -124,19 +99,13 @@
     <indexterm><primary>database cluster</primary></indexterm>
     <indexterm><primary>cluster</primary><secondary>of databases</secondary><see>database cluster</see></indexterm>
 
-<!## PG>
     Tables are grouped into databases, and a collection of databases
     managed by a single <productname>PostgreSQL</productname> server
     instance constitutes a database <firstterm>cluster</firstterm>.
-<!## end>
-
-<!## XC>
-    Tables are grouped into databases, and a collection of databases
-    managed by a single <productname>Postgres-XC</productname> server
-    instance constitutes a database <firstterm>cluster</firstterm>.
    </para>
-   <para>
+<!## XC>
 &xconly;
+   <para>
     In <productname>Postgres-XC</> these databases can be distributed into more than one Datanodes.
     This will not affect how tables and rows are seen from applications point of view, but will be
     important for Database Administrator (DBA).
@@ -199,12 +168,7 @@ CREATE TABLE weather (
    </para>
 
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> supports the standard
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> supports the standard
-<!## end>
     <acronym>SQL</acronym> types <type>int</type>,
     <type>smallint</type>, <type>real</type>, <type>double
     precision</type>, <type>char(<replaceable>N</>)</type>,
@@ -212,12 +176,7 @@ CREATE TABLE weather (
     <type>time</type>, <type>timestamp</type>, and
     <type>interval</type>, as well as other types of general utility
     and a rich set of geometric types.
-<!## PG>
     <productname>PostgreSQL</productname> can be customized with an
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> can be customized with an
-<!## end>
     arbitrary number of user-defined data types.  Consequently, type
     names are not key words in the syntax, except where required to
     support special cases in the <acronym>SQL</acronym> standard.
@@ -233,12 +192,7 @@ CREATE TABLE cities (
 );
 </programlisting>
     The <type>point</type> type is an example of a
-<!## PG>
     <productname>PostgreSQL</productname>-specific data type.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname>-specific data type.
-<!## end>
    </para>
 
    <para>
@@ -262,6 +216,7 @@ DROP TABLE <replaceable>tablename</replaceable>;
    <indexterm zone="tutorial-populate">
     <primary>INSERT</primary>
    </indexterm>
+
 &common;
    <para>
     The <command>INSERT</command> statement is used to populate a table  with
@@ -315,7 +270,7 @@ INSERT INTO weather (date, city, temp_hi, temp_lo)
     <indexterm>
      <primary>COPY</primary>
     </indexterm>
-&common;
+
     You could also have used <command>COPY</command> to load large
     amounts of data from flat-text files.  This is usually faster
     because the <command>COPY</command> command is optimized for this
@@ -337,10 +292,11 @@ COPY weather FROM '/home/user/weather.txt';
   <sect1 id="tutorial-select">
    <title>Querying a Table</title>
 
+&common;
    <para>
     <indexterm><primary>query</primary></indexterm>
     <indexterm><primary>SELECT</primary></indexterm>
-&common;
+
     To retrieve data from a table, the table is
     <firstterm>queried</firstterm>.  An <acronym>SQL</acronym>
     <command>SELECT</command> statement is used to do this.  The
@@ -475,21 +431,11 @@ SELECT DISTINCT city
      <footnote>
       <para>
        In some database systems, including older versions of
-<!## PG>
        <productname>PostgreSQL</productname>, the implementation of
-<!## end>
-<!## XC>
-       <productname>Postgres-XC</productname>, the implementation of
-<!## end>
        <literal>DISTINCT</literal> automatically orders the rows and
        so <literal>ORDER BY</literal> is unnecessary.  But this is not
        required by the SQL standard, and current
-<!## PG>
        <productname>PostgreSQL</productname> does not guarantee that
-<!## end>
-<!## XC>
-       <productname>Postgres-XC</productname> does not guarantee that
-<!## end>
        <literal>DISTINCT</literal> causes the rows to be ordered.
       </para>
      </footnote>
@@ -509,6 +455,7 @@ SELECT DISTINCT city
    <indexterm zone="tutorial-join">
     <primary>join</primary>
    </indexterm>
+
 &common;
    <para>
     Thus far, our queries have only accessed one table at a time.
@@ -712,15 +659,11 @@ SELECT *
    <indexterm zone="tutorial-agg">
     <primary>aggregate function</primary>
    </indexterm>
+
 &common;
    <para>
     Like  most  other relational database products,
-<!## PG>
     <productname>PostgreSQL</productname> supports
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> supports
-<!## end>
     <firstterm>aggregate functions</>.
     An aggregate function computes a single result from multiple input rows.
     For example, there are aggregates to compute the
@@ -745,10 +688,6 @@ SELECT max(temp_lo) FROM weather;
 </screen>
    </para>
 
-<!## PG>
-<!-- NOTE:
-     XC does not support subquery correctly yet.
--->
    <para>
     <indexterm><primary>subquery</primary></indexterm>
 
@@ -786,8 +725,6 @@ SELECT city FROM weather
     in the outer query.
    </para>
 
-<!## end>
-
    <para>
     <indexterm><primary>GROUP BY</primary></indexterm>
     <indexterm><primary>HAVING</primary></indexterm>
@@ -812,12 +749,6 @@ SELECT city, max(temp_lo)
 
     which gives us one output row per city.  Each aggregate result is
     computed over the table rows matching that city.
-
-<!## PG>
-<!-- NOTE
-     We don't have HAVING yet.
--->
-
     We can filter these grouped
     rows using <literal>HAVING</literal>:
 
@@ -882,9 +813,7 @@ SELECT city, max(temp_lo)
     more efficient than adding the restriction to <literal>HAVING</literal>,
     because we avoid doing the grouping and aggregate calculations
     for all rows that fail the <literal>WHERE</literal> check.
-<!## end>
    </para>
-
   </sect1>
 
 
@@ -894,6 +823,7 @@ SELECT city, max(temp_lo)
    <indexterm zone="tutorial-update">
     <primary>UPDATE</primary>
    </indexterm>
+
 &common;
    <para>
     You can update existing rows using the
@@ -930,6 +860,7 @@ SELECT * FROM weather;
    <indexterm zone="tutorial-delete">
     <primary>DELETE</primary>
    </indexterm>
+
 &common;
    <para>
     Rows can be removed from a table using the <command>DELETE</command>

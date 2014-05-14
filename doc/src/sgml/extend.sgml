@@ -145,7 +145,7 @@
     </para>
    </sect2>
 
-   <sect2>
+   <sect2 id="extend-type-system-domains">
     <title>Domains</title>
 
     <para>
@@ -359,6 +359,12 @@
     extension.)  Also notice that while a table can be a member of an
     extension, its subsidiary objects such as indexes are not directly
     considered members of the extension.
+    Another important point is that schemas can belong to extensions, but not
+    vice versa: an extension as such has an unqualified name and does not
+    exist <quote>within</> any schema.  The extension's member objects,
+    however, will belong to schemas whenever appropriate for their object
+    types.  It may or may not be appropriate for an extension to own the
+    schema(s) its member objects are within.
    </para>
 
    <sect2>
@@ -665,6 +671,10 @@ SET LOCAL search_path TO @extschema@;
      and reload.
     </para>
 
+   <indexterm>
+    <primary>pg_extension_config_dump</primary>
+   </indexterm>
+
     <para>
      To solve this problem, an extension's script file can mark a table
      it has created as a configuration table, which will cause
@@ -702,6 +712,14 @@ SELECT pg_catalog.pg_extension_config_dump('my_config', 'WHERE NOT standard_entr
      More complicated situations, such as initially-provided rows that might
      be modified by users, can be handled by creating triggers on the
      configuration table to ensure that modified rows are marked correctly.
+    </para>
+
+    <para>
+     You can alter the filter condition associated with a configuration table
+     by calling <function>pg_extension_config_dump</> again.  (This would
+     typically be useful in an extension update script.)  The only way to mark
+     a table as no longer a configuration table is to dissociate it from the
+     extension with <command>ALTER EXTENSION ... DROP TABLE</>.
     </para>
    </sect2>
 

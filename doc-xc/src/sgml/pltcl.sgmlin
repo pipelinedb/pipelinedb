@@ -11,33 +11,20 @@
    <primary>Tcl</primary>
   </indexterm>
 
-&common;
-
   <para>
    PL/Tcl is a loadable procedural language for the
-<!## PG>
    <productname>PostgreSQL</productname> database system
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> database system inherited from <productname>PostgreSQL</>
-<!## end>
    that enables the <ulink url="http://www.tcl.tk/">
    Tcl language</ulink> to be used to write functions and
    trigger procedures.
   </para>
-
-<!## XC>
-  <para>
-   You can use PL/Tcl in <productname>Postgres-XC</> too.
-  </para>
-<!## end>
 
   <!-- **** PL/Tcl overview **** -->
 
   <sect1 id="pltcl-overview">
    <title>Overview</title>
 
-&common;
+&pgnotice;
    <para>
     PL/Tcl offers most of the capabilities a function writer has in
     the C language, with a few restrictions, and with the addition of
@@ -52,12 +39,7 @@
     SPI and to raise messages via <function>elog()</>.  PL/Tcl
     provides no way to access internals of the database server or to
     gain OS-level access under the permissions of the
-<!## PG>
     <productname>PostgreSQL</productname> server process, as a C
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> server process, as a C
-<!## end>
     function can do.  Thus, unprivileged database users can be trusted
     to use this language; it does not give them unlimited authority.
    </para>
@@ -81,12 +63,7 @@
    <para>
     The shared object code for the <application>PL/Tcl</> and
     <application>PL/TclU</> call handlers is automatically built and
-<!## PG>
     installed in the <productname>PostgreSQL</productname> library
-<!## end>
-<!## XC>
-    installed in the <productname>Postgres-XC</productname> library
-<!## end>
     directory if Tcl support is specified in the configuration step of
     the installation procedure.  To install <application>PL/Tcl</>
     and/or <application>PL/TclU</> in a particular database, use the
@@ -102,7 +79,7 @@
    <sect1 id="pltcl-functions">
     <title>PL/Tcl Functions and Arguments</title>
 
-&common;
+&pgnotice;
     <para>
      To create a function in the <application>PL/Tcl</> language, use
      the standard <xref linkend="sql-createfunction"> syntax:
@@ -216,7 +193,7 @@ $$ LANGUAGE pltcl;
    <sect1 id="pltcl-data">
     <title>Data Values in PL/Tcl</title>
 
-&common;
+&pgnotice;
     <para>
      The argument values supplied to a PL/Tcl function's code are simply
      the input arguments converted to text form (just as if they had been
@@ -237,7 +214,7 @@ $$ LANGUAGE pltcl;
      <secondary>in PL/Tcl</secondary>
     </indexterm>
 
-&common;
+&pgnotice;
     <para>
      Sometimes it
      is useful to have some global data that is held between two
@@ -295,7 +272,7 @@ $$ LANGUAGE pltcl;
    <sect1 id="pltcl-dbaccess">
     <title>Database Access from PL/Tcl</title>
 
-&common;
+&pgnotice;
     <para>
      The following commands are available to access the database from
      the body of a PL/Tcl function:
@@ -368,10 +345,6 @@ spi_exec -array C "SELECT * FROM pg_class" {
 
      <varlistentry>
       <term><function>spi_prepare</function> <replaceable>query</replaceable> <replaceable>typelist</replaceable></term>
-<!## PG>
-<!-- NOTICE:
-     PREPARE not supported yet
--->
       <listitem>
        <para>
         Prepares and saves a query plan for later execution.  The
@@ -394,24 +367,10 @@ spi_exec -array C "SELECT * FROM pg_class" {
         <function>spi_execp</function> for an example.
        </para>
       </listitem>
-<!## end>
-<!## XC>
-      <listitem>
-       <para>
-        <productname>Postgres-XC</> does not
-        support <command>PREPARE</> reature yet.  This will be
-        supported in the future releases.
-       </para>
-      </listitem>
-<!## end>
      </varlistentry>
 
      <varlistentry>
       <term><literal><function>spi_execp</> <optional role="tcl">-count <replaceable>n</replaceable></optional> <optional role="tcl">-array <replaceable>name</replaceable></optional> <optional role="tcl">-nulls <replaceable>string</replaceable></optional> <replaceable>queryid</replaceable> <optional role="tcl"><replaceable>value-list</replaceable></optional> <optional role="tcl"><replaceable>loop-body</replaceable></optional></literal></term>
-<!## PG>
-<!-- NOTICE:
-     Prepare not supported yet.
--->
       <listitem>
        <para>
         Executes a query previously prepared with <function>spi_prepare</>.
@@ -461,17 +420,6 @@ $$ LANGUAGE pltcl;
 
        </para>
       </listitem>
-<!## end>
-<!## XC>
-      <listitem>
-&xconly;
-       <para>
-        <productname>Postgres-XC</> does not
-        support <command>PREPARE</> in the current release.  This may
-        be supported in the future releases.
-       </para>
-      </listitem>
-<!## end>
      </varlistentry>
 
      <varlistentry>
@@ -486,13 +434,6 @@ $$ LANGUAGE pltcl;
         command was a single-row <command>INSERT</> and the modified
         table contained OIDs.  (If not, you get zero.)
        </para>
-<!## XC>
-&xconly;
-       <para>
-        Please note that OID is maintained locally at each Datanode
-        and Coordinator.
-       </para>
-<!## end>
       </listitem>
      </varlistentry>
 
@@ -555,7 +496,12 @@ SELECT 'doesn''t' AS ret
         <literal>FATAL</>. <literal>ERROR</>
         raises an error condition; if this is not trapped by the surrounding
         Tcl code, the error propagates out to the calling query, causing
+<!## PG>
         the current transaction or subtransaction to be aborted.  This
+<!## end>
+<!## XC>
+        the current transaction to be aborted.  This
+<!## end>
         is effectively the same as the Tcl <literal>error</> command.
         <literal>FATAL</> aborts the transaction and causes the current
         session to shut down.  (There is probably no good reason to use
@@ -584,18 +530,11 @@ SELECT 'doesn''t' AS ret
      <primary>trigger</primary>
      <secondary>in PL/Tcl</secondary>
     </indexterm>
-<!## PG>
-<!-- NOTICE:
-     No Trigger yet!
--->
+
+&pgnotice;
     <para>
      Trigger procedures can be written in PL/Tcl.
-<!## PG>
      <productname>PostgreSQL</productname> requires that a procedure that is to be called
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> requires that a procedure that is to be called
-<!## end>
      as a trigger must be declared as a function with no arguments
      and a return type of <literal>trigger</>.
     </para>
@@ -652,12 +591,7 @@ SELECT 'doesn''t' AS ret
          element. So looking up a column name in the list with <application>Tcl</>'s
          <function>lsearch</> command returns the element's number starting
          with 1 for the first column, the same way the columns are customarily
-<!## PG>
          numbered in <productname>PostgreSQL</productname>.  (Empty list
-<!## end>
-<!## XC>
-         numbered in <productname>Postgres-XC</productname>.  (Empty list
-<!## end>
          elements also appear in the positions of columns that have been
          dropped, so that the attribute numbering is correct for columns
          to their right.)
@@ -786,20 +720,11 @@ CREATE TRIGGER trig_mytab_modcount BEFORE INSERT OR UPDATE ON mytab
      name; that's supplied from the trigger arguments.  This lets the
      trigger procedure be reused with different tables.
     </para>
-<!## end>
-<!## XC>
-&xconly;
-    <para>
-     Trigger is not supported in the current release
-     of <productname>Postgres-XC</>.  This may be supported in the
-     future releases.
-    </para>
-<!## end>
    </sect1>
 
    <sect1 id="pltcl-unknown">
        <title>Modules and the <function>unknown</> Command</title>
-&common;
+&pgnotice;
        <para>
         PL/Tcl has support for autoloading Tcl code when used.
         It recognizes a special table, <literal>pltcl_modules</>, which
@@ -824,12 +749,7 @@ CREATE TRIGGER trig_mytab_modcount BEFORE INSERT OR UPDATE ON mytab
         is reasonably quick.
        </para>
        <para>
-<!## PG>
         The <productname>PostgreSQL</productname> distribution includes
-<!## end>
-<!## XC>
-        The <productname>Postgres-XC</productname> distribution includes
-<!## end>
         support scripts to maintain these tables:
         <command>pltcl_loadmod</>, <command>pltcl_listmod</>,
         <command>pltcl_delmod</>, as well as source for the standard
@@ -851,25 +771,15 @@ CREATE TRIGGER trig_mytab_modcount BEFORE INSERT OR UPDATE ON mytab
    <sect1 id="pltcl-procnames">
     <title>Tcl Procedure Names</title>
 
-&common;
+&pgnotice;
     <para>
-<!## PG>
      In <productname>PostgreSQL</productname>, the same function name can be used for
-<!## end>
-<!## XC>
-     In <productname>Postgres-XC</productname>, the same function name can be used for
-<!## end>
      different function definitions as long as the number of arguments or their types
      differ. Tcl, however, requires all procedure names to be distinct.
      PL/Tcl deals with this by making the internal Tcl procedure names contain
      the object
      ID of the function from the system table <structname>pg_proc</> as part of their name. Thus,
-<!## PG>
      <productname>PostgreSQL</productname> functions with the same name
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> functions with the same name
-<!## end>
      and different argument types will be different Tcl procedures, too.  This
      is not normally a concern for a PL/Tcl programmer, but it might be visible
      when debugging.

@@ -333,6 +333,9 @@
 /* Define to 1 if `long long int' works and is 64 bits. */
 #undef HAVE_LONG_LONG_INT_64
 
+/* Define to 1 if you have the `mbstowcs_l' function. */
+#undef HAVE_MBSTOWCS_L
+
 /* Define to 1 if you have the `memmove' function. */
 #undef HAVE_MEMMOVE
 
@@ -511,6 +514,9 @@
 /* Define to 1 if you have the `symlink' function. */
 #undef HAVE_SYMLINK
 
+/* Define to 1 if you have the `sync_file_range' function. */
+#undef HAVE_SYNC_FILE_RANGE
+
 /* Define to 1 if you have the syslog interface. */
 #undef HAVE_SYSLOG
 
@@ -614,9 +620,6 @@
 /* Define to 1 if you have the `vsnprintf' function. */
 #undef HAVE_VSNPRINTF
 
-/* Define to 1 if you have the `waitpid' function. */
-#undef HAVE_WAITPID
-
 /* Define to 1 if you have the <wchar.h> header file. */
 #undef HAVE_WCHAR_H
 
@@ -632,8 +635,20 @@
 /* Define to 1 if you have the <winldap.h> header file. */
 #undef HAVE_WINLDAP_H
 
-/* Define to 1 if your libxml has xmlStructuredErrorContext. */
-#undef HAVE_XMLSTRUCTUREDERRORCONTEXT
+/* Define to 1 if your compiler understands __builtin_constant_p. */
+#undef HAVE__BUILTIN_CONSTANT_P
+
+/* Define to 1 if your compiler understands __builtin_types_compatible_p. */
+#undef HAVE__BUILTIN_TYPES_COMPATIBLE_P
+
+/* Define to 1 if your compiler understands __builtin_unreachable. */
+#undef HAVE__BUILTIN_UNREACHABLE
+
+/* Define to 1 if your compiler understands _Static_assert. */
+#undef HAVE__STATIC_ASSERT
+
+/* Define to 1 if your compiler understands __VA_ARGS__ in macros. */
+#undef HAVE__VA_ARGS
 
 /* Define to the appropriate snprintf format for 64-bit ints. */
 #undef INT64_FORMAT
@@ -665,12 +680,19 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
+/* Define to the name of a signed 64-bit integer type. */
+#undef PG_INT64_TYPE
+
 /* Define to the name of the default PostgreSQL service principal in Kerberos.
    (--with-krb-srvnam=NAME) */
 #undef PG_KRB_SRVNAM
 
 /* PostgreSQL major version as a string */
 #undef PG_MAJORVERSION
+
+/* Define to 1 if "static inline" works without unwanted warnings from
+   compilations where static inline functions are defined but not called. */
+#undef PG_USE_INLINE
 
 /* PostgreSQL version as a string */
 #undef PG_VERSION
@@ -751,10 +773,6 @@
 /* Define to 1 if you want float8, int8, etc values to be passed by value.
    (--enable-float8-byval) */
 #undef USE_FLOAT8_BYVAL
-
-/* Define to 1 if "static inline" works without unwanted warnings from
-   compilations where static inline functions are defined but not called. */
-#undef USE_INLINE
 
 /* Define to 1 if you want 64-bit integer timestamp and interval support.
    (--enable-integer-datetimes) */

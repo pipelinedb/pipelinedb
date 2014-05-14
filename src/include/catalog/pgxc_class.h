@@ -15,9 +15,9 @@ CATALOG(pgxc_class,9001) BKI_WITHOUT_OIDS
 {
 	Oid		pcrelid;		/* Table Oid */
 	char		pclocatortype;		/* Type of distribution */
-	int2		pcattnum;		/* Column number of distribution */
-	int2 		pchashalgorithm;	/* Hashing algorithm */
-	int2 		pchashbuckets;		/* Number of buckets */
+	int16		pcattnum;		/* Column number of distribution */
+	int16		pchashalgorithm;	/* Hashing algorithm */
+	int16		pchashbuckets;		/* Number of buckets */
 
 	/* VARIABLE LENGTH FIELDS: */
 	oidvector	nodeoids;		/* List of nodes used by table */

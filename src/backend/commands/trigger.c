@@ -3,7 +3,7 @@
  * trigger.c
  *	  PostgreSQL TRIGGERs support code.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -16,6 +16,7 @@
 #include "access/genam.h"
 #include "access/heapam.h"
 #include "access/sysattr.h"
+#include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "catalog/dependency.h"
@@ -80,6 +81,7 @@ static HeapTuple GetTupleForTrigger(EState *estate,
 				   EPQState *epqstate,
 				   ResultRelInfo *relinfo,
 				   ItemPointer tid,
+				   LockTupleMode lockmode,
 				   TupleTableSlot **newSlot);
 static bool TriggerEnabled(EState *estate, ResultRelInfo *relinfo,
 			   Trigger *trigger, TriggerEvent event,
@@ -139,7 +141,7 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 {
 	int16		tgtype;
 	int			ncolumns;
-	int2	   *columns;
+	int16	   *columns;
 	int2vector *tgattr;
 	Node	   *whenClause;
 	List	   *whenRtable;
@@ -304,25 +306,10 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 		/* Transform expression.  Copy to be sure we don't modify original */
 		whenClause = transformWhereClause(pstate,
 										  copyObject(stmt->whenClause),
+										  EXPR_KIND_TRIGGER_WHEN,
 										  "WHEN");
 		/* we have to fix its collations too */
 		assign_expr_collations(pstate, whenClause);
-
-		/*
-		 * No subplans or aggregates, please
-		 */
-		if (pstate->p_hasSubLinks)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				   errmsg("cannot use subquery in trigger WHEN condition")));
-		if (pstate->p_hasAggs)
-			ereport(ERROR,
-					(errcode(ERRCODE_GROUPING_ERROR),
-					 errmsg("cannot use aggregate function in trigger WHEN condition")));
-		if (pstate->p_hasWindowFuncs)
-			ereport(ERROR,
-					(errcode(ERRCODE_WINDOWING_ERROR),
-			errmsg("cannot use window function in trigger WHEN condition")));
 
 		/*
 		 * Check for disallowed references to OLD/NEW.
@@ -477,7 +464,8 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 											  NULL,
 											  true,		/* islocal */
 											  0,		/* inhcount */
-											  false);	/* isnoinherit */
+											  true,		/* isnoinherit */
+											  isInternal);		/* is_internal */
 	}
 
 	/*
@@ -607,11 +595,11 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 		ListCell   *cell;
 		int			i = 0;
 
-		columns = (int2 *) palloc(ncolumns * sizeof(int2));
+		columns = (int16 *) palloc(ncolumns * sizeof(int16));
 		foreach(cell, stmt->columns)
 		{
 			char	   *name = strVal(lfirst(cell));
-			int2		attnum;
+			int16		attnum;
 			int			j;
 
 			/* Lookup column name.	System columns are not allowed */
@@ -773,8 +761,8 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 							   DEPENDENCY_NORMAL);
 
 	/* Post creation hook for new trigger */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   TriggerRelationId, trigoid, 0, NULL);
+	InvokeObjectPostCreateHookArg(TriggerRelationId, trigoid, 0,
+								  isInternal);
 
 	/* Keep lock on target rel until end of xact */
 	heap_close(rel, NoLock);
@@ -823,7 +811,7 @@ ConvertTriggerToFK(CreateTrigStmt *stmt, Oid funcoid)
 	char	   *constr_name;
 	char	   *fk_table_name;
 	char	   *pk_table_name;
-	char		fk_matchtype = FKCONSTR_MATCH_UNSPECIFIED;
+	char		fk_matchtype = FKCONSTR_MATCH_SIMPLE;
 	List	   *fk_attrs = NIL;
 	List	   *pk_attrs = NIL;
 	StringInfoData buf;
@@ -849,7 +837,7 @@ ConvertTriggerToFK(CreateTrigStmt *stmt, Oid funcoid)
 			if (strcmp(strVal(arg), "FULL") == 0)
 				fk_matchtype = FKCONSTR_MATCH_FULL;
 			else
-				fk_matchtype = FKCONSTR_MATCH_UNSPECIFIED;
+				fk_matchtype = FKCONSTR_MATCH_SIMPLE;
 			continue;
 		}
 		if (i % 2)
@@ -1044,7 +1032,8 @@ ConvertTriggerToFK(CreateTrigStmt *stmt, Oid funcoid)
 		/* ... and execute it */
 		ProcessUtility((Node *) atstmt,
 					   "(generated ALTER TABLE ADD FOREIGN KEY command)",
-					   NULL, false, None_Receiver,
+					   PROCESS_UTILITY_SUBCOMMAND, NULL,
+					   None_Receiver,
 #ifdef PGXC
 					   false,
 #endif /* PGXC */
@@ -1229,9 +1218,10 @@ RangeVarCallbackForRenameTrigger(const RangeVar *rv, Oid relid, Oid oldrelid,
  *		modify tgname in trigger tuple
  *		update row in catalog
  */
-void
+Oid
 renametrig(RenameStmt *stmt)
 {
+	Oid			tgoid;
 	Relation	targetrel;
 	Relation	tgrel;
 	HeapTuple	tuple;
@@ -1297,6 +1287,8 @@ renametrig(RenameStmt *stmt)
 								SnapshotNow, 2, key);
 	if (HeapTupleIsValid(tuple = systable_getnext(tgscan)))
 	{
+		tgoid = HeapTupleGetOid(tuple);
+
 		/*
 		 * Update pg_trigger tuple with new tgname.
 		 */
@@ -1309,6 +1301,9 @@ renametrig(RenameStmt *stmt)
 
 		/* keep system catalog indexes current */
 		CatalogUpdateIndexes(tgrel, tuple);
+
+		InvokeObjectPostAlterHook(TriggerRelationId,
+								  HeapTupleGetOid(tuple), 0);
 
 		/*
 		 * Invalidate relation's relcache entry so that other backends (and
@@ -1333,6 +1328,8 @@ renametrig(RenameStmt *stmt)
 	 * Close rel, but keep exclusive lock!
 	 */
 	relation_close(targetrel, NoLock);
+
+	return tgoid;
 }
 
 
@@ -1423,6 +1420,9 @@ EnableDisableTrigger(Relation rel, const char *tgname,
 
 			changed = true;
 		}
+
+		InvokeObjectPostAlterHook(TriggerRelationId,
+								  HeapTupleGetOid(tuple), 0);
 	}
 
 	systable_endscan(tgscan);
@@ -1523,9 +1523,9 @@ RelationBuildTriggers(Relation relation)
 		build->tgnattr = pg_trigger->tgattr.dim1;
 		if (build->tgnattr > 0)
 		{
-			build->tgattr = (int2 *) palloc(build->tgnattr * sizeof(int2));
+			build->tgattr = (int16 *) palloc(build->tgnattr * sizeof(int16));
 			memcpy(build->tgattr, &(pg_trigger->tgattr.values),
-				   build->tgnattr * sizeof(int2));
+				   build->tgnattr * sizeof(int16));
 		}
 		else
 			build->tgattr = NULL;
@@ -1676,11 +1676,11 @@ CopyTriggerDesc(TriggerDesc *trigdesc)
 		trigger->tgname = pstrdup(trigger->tgname);
 		if (trigger->tgnattr > 0)
 		{
-			int2	   *newattr;
+			int16	   *newattr;
 
-			newattr = (int2 *) palloc(trigger->tgnattr * sizeof(int2));
+			newattr = (int16 *) palloc(trigger->tgnattr * sizeof(int16));
 			memcpy(newattr, trigger->tgattr,
-				   trigger->tgnattr * sizeof(int2));
+				   trigger->tgnattr * sizeof(int16));
 			trigger->tgattr = newattr;
 		}
 		if (trigger->tgnargs > 0)
@@ -1794,7 +1794,7 @@ equalTriggerDescs(TriggerDesc *trigdesc1, TriggerDesc *trigdesc2)
 				return false;
 			if (trig1->tgnattr > 0 &&
 				memcmp(trig1->tgattr, trig2->tgattr,
-					   trig1->tgnattr * sizeof(int2)) != 0)
+					   trig1->tgnattr * sizeof(int16)) != 0)
 				return false;
 			for (j = 0; j < trig1->tgnargs; j++)
 				if (strcmp(trig1->tgargs[j], trig2->tgargs[j]) != 0)
@@ -2266,7 +2266,7 @@ ExecBRDeleteTriggers(EState *estate, EPQState *epqstate,
 	{
 #endif
 	trigtuple = GetTupleForTrigger(estate, epqstate, relinfo, tupleid,
-								   &newSlot);
+								   LockTupleExclusive, &newSlot);
 #ifdef PGXC
 	}
 #endif
@@ -2332,9 +2332,9 @@ ExecARDeleteTriggers(EState *estate, ResultRelInfo *relinfo,
 
 	if (trigdesc && trigdesc->trig_delete_after_row)
 	{
-#ifdef PGXC
 		HeapTuple	trigtuple;
 
+#ifdef PGXC
 		if (IS_PGXC_COORDINATOR && RelationGetLocInfo(relinfo->ri_RelationDesc))
 		{
 			/* No OLD tuple means triggers are to be run on datanode */
@@ -2345,12 +2345,22 @@ ExecARDeleteTriggers(EState *estate, ResultRelInfo *relinfo,
 		else /* Do the usual PG-way for datanode */
 		{
 #endif
-			trigtuple = GetTupleForTrigger(estate, NULL, relinfo,
-												   tupleid, NULL);
+		/* 
+		 * Memo, K.Suzuki, Sep.2nd, 2013
+		 *
+		 * GetTuplleForTrigger() added 5th argument to specify the lock, which is not
+		 * considered in pgxc_get_trigger_tuple().
+		 * Don't we need to consider this?
+		 */
+		trigtuple = GetTupleForTrigger(estate,
+									   NULL,
+									   relinfo,
+									   tupleid,
+									   LockTupleExclusive,
+									   NULL);
 #ifdef PGXC
 		}
 #endif
-
 		AfterTriggerSaveEvent(estate, relinfo, TRIGGER_EVENT_DELETE,
 							  true, trigtuple, NULL, NIL, NULL);
 		heap_freetuple(trigtuple);
@@ -2507,11 +2517,26 @@ ExecBRUpdateTriggers(EState *estate, EPQState *epqstate,
 	TupleTableSlot *newSlot;
 	int			i;
 	Bitmapset  *modifiedCols;
-
+	Bitmapset  *keyCols;
+	LockTupleMode lockmode;
 #ifdef PGXC
 	bool			exec_all_triggers;
 	RelationLocInfo	*rel_locinfo = RelationGetLocInfo(relinfo->ri_RelationDesc);
+#endif
 
+	/*
+	 * Compute lock mode to use.  If columns that are part of the key have not
+	 * been modified, then we can use a weaker lock, allowing for better
+	 * concurrency.
+	 */
+	modifiedCols = GetModifiedColumns(relinfo, estate);
+	keyCols = RelationGetIndexAttrBitmap(relinfo->ri_RelationDesc, true);
+	if (bms_overlap(keyCols, modifiedCols))
+		lockmode = LockTupleExclusive;
+	else
+		lockmode = LockTupleNoKeyExclusive;
+
+#ifdef PGXC
 	/*
 	 * Know whether we should fire triggers on this node. But since internal
 	 * triggers are an exception, we cannot bail out here.
@@ -2544,7 +2569,7 @@ ExecBRUpdateTriggers(EState *estate, EPQState *epqstate,
 #endif
 	/* get a copy of the on-disk tuple we are planning to update */
 	trigtuple = GetTupleForTrigger(estate, epqstate, relinfo, tupleid,
-								   &newSlot);
+								   lockmode, &newSlot);
 	if (trigtuple == NULL)
 		return NULL;			/* cancel the update action */
 
@@ -2569,7 +2594,6 @@ ExecBRUpdateTriggers(EState *estate, EPQState *epqstate,
 	}
 #endif
 
-	modifiedCols = GetModifiedColumns(relinfo, estate);
 
 	LocTriggerData.type = T_TriggerData;
 	LocTriggerData.tg_event = TRIGGER_EVENT_UPDATE |
@@ -2651,8 +2675,8 @@ ExecARUpdateTriggers(EState *estate, ResultRelInfo *relinfo,
 
 	if (trigdesc && trigdesc->trig_update_after_row)
 	{
-#ifdef PGXC
 		HeapTuple trigtuple;
+#ifdef PGXC
 		if (IS_PGXC_COORDINATOR && RelationGetLocInfo(relinfo->ri_RelationDesc))
 		{
 			/* No OLD tuple means triggers are to be run on datanode */
@@ -2664,8 +2688,20 @@ ExecARUpdateTriggers(EState *estate, ResultRelInfo *relinfo,
 		{
 			/* Do the usual PG-way for datanode */
 #endif
-		trigtuple = GetTupleForTrigger(estate, NULL, relinfo,
-									   tupleid, NULL);
+		/* 
+		 * Memo, K.Suzuki, Sep.2nd, 2013
+		 *
+		 * GetTuplleForTrigger() added 5th argument to specify the lock, which is not
+		 * considered in pgxc_get_trigger_tuple().
+		 * Don't we need to consider this?
+		 */
+		trigtuple = GetTupleForTrigger(estate,
+									   NULL,
+									   relinfo,
+									   tupleid,
+									   LockTupleExclusive,
+									   NULL);
+
 #ifdef PGXC
 		}
 #endif
@@ -2830,6 +2866,7 @@ GetTupleForTrigger(EState *estate,
 				   EPQState *epqstate,
 				   ResultRelInfo *relinfo,
 				   ItemPointer tid,
+				   LockTupleMode lockmode,
 				   TupleTableSlot **newSlot)
 {
 	Relation	relation = relinfo->ri_RelationDesc;
@@ -2840,8 +2877,7 @@ GetTupleForTrigger(EState *estate,
 	if (newSlot != NULL)
 	{
 		HTSU_Result test;
-		ItemPointerData update_ctid;
-		TransactionId update_xmax;
+		HeapUpdateFailureData hufd;
 
 		*newSlot = NULL;
 
@@ -2853,13 +2889,28 @@ GetTupleForTrigger(EState *estate,
 		 */
 ltrmark:;
 		tuple.t_self = *tid;
-		test = heap_lock_tuple(relation, &tuple, &buffer,
-							   &update_ctid, &update_xmax,
+		test = heap_lock_tuple(relation, &tuple,
 							   estate->es_output_cid,
-							   LockTupleExclusive, false);
+							   lockmode, false /* wait */ ,
+							   false, &buffer, &hufd);
 		switch (test)
 		{
 			case HeapTupleSelfUpdated:
+
+				/*
+				 * The target tuple was already updated or deleted by the
+				 * current command, or by a later command in the current
+				 * transaction.  We ignore the tuple in the former case, and
+				 * throw error in the latter case, for the same reasons
+				 * enumerated in ExecUpdate and ExecDelete in
+				 * nodeModifyTable.c.
+				 */
+				if (hufd.cmax != estate->es_output_cid)
+					ereport(ERROR,
+							(errcode(ERRCODE_TRIGGERED_DATA_CHANGE_VIOLATION),
+							 errmsg("tuple to be updated was already modified by an operation triggered by the current command"),
+							 errhint("Consider using an AFTER trigger instead of a BEFORE trigger to propagate changes to other rows.")));
+
 				/* treat it as deleted; do not process */
 				ReleaseBuffer(buffer);
 				return NULL;
@@ -2873,7 +2924,7 @@ ltrmark:;
 					ereport(ERROR,
 							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 							 errmsg("could not serialize access due to concurrent update")));
-				if (!ItemPointerEquals(&update_ctid, &tuple.t_self))
+				if (!ItemPointerEquals(&hufd.ctid, &tuple.t_self))
 				{
 					/* it was updated, so look at the updated version */
 					TupleTableSlot *epqslot;
@@ -2882,11 +2933,12 @@ ltrmark:;
 										   epqstate,
 										   relation,
 										   relinfo->ri_RangeTableIndex,
-										   &update_ctid,
-										   update_xmax);
+										   lockmode,
+										   &hufd.ctid,
+										   hufd.xmax);
 					if (!TupIsNull(epqslot))
 					{
-						*tid = update_ctid;
+						*tid = hufd.ctid;
 						*newSlot = epqslot;
 
 						/*
@@ -2918,6 +2970,16 @@ ltrmark:;
 
 		buffer = ReadBuffer(relation, ItemPointerGetBlockNumber(tid));
 
+		/*
+		 * Although we already know this tuple is valid, we must lock the
+		 * buffer to ensure that no one has a buffer cleanup lock; otherwise
+		 * they might move the tuple while we try to copy it.  But we can
+		 * release the lock before actually doing the heap_copytuple call,
+		 * since holding pin is sufficient to prevent anyone from getting a
+		 * cleanup lock they don't already hold.
+		 */
+		LockBuffer(buffer, BUFFER_LOCK_SHARE);
+
 		page = BufferGetPage(buffer);
 		lp = PageGetItemId(page, ItemPointerGetOffsetNumber(tid));
 
@@ -2930,6 +2992,7 @@ ltrmark:;
 #ifdef PGXC
 		tuple.t_xc_node_id = PGXCNodeIdentifier;
 #endif
+		LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
 	}
 
 	result = heap_copytuple(&tuple);
@@ -4692,7 +4755,8 @@ AfterTriggerSetState(ConstraintsSetStmt *stmt)
 			 */
 			if (constraint->schemaname)
 			{
-				Oid			namespaceId = LookupExplicitNamespace(constraint->schemaname);
+				Oid			namespaceId = LookupExplicitNamespace(constraint->schemaname,
+																  false);
 
 				namespacelist = list_make1_oid(namespaceId);
 			}
@@ -5136,39 +5200,30 @@ AfterTriggerSaveEvent(EState *estate, ResultRelInfo *relinfo,
 			continue;
 
 		/*
-		 * If this is an UPDATE of a PK table or FK table that does not change
-		 * the PK or FK respectively, we can skip queuing the event: there is
-		 * no need to fire the trigger.
+		 * If the trigger is a foreign key enforcement trigger, there are
+		 * certain cases where we can skip queueing the event because we can
+		 * tell by inspection that the FK constraint will still pass.
 		 */
 		if (TRIGGER_FIRED_BY_UPDATE(event))
 		{
 			switch (RI_FKey_trigger_type(trigger->tgfoid))
 			{
 				case RI_TRIGGER_PK:
-					/* Update on PK table */
-					if (RI_FKey_keyequal_upd_pk(trigger, rel, oldtup, newtup))
+					/* Update on trigger's PK table */
+					if (!RI_FKey_pk_upd_check_required(trigger, rel,
+													   oldtup, newtup))
 					{
-						/* key unchanged, so skip queuing this event */
+						/* skip queuing this event */
 						continue;
 					}
 					break;
 
 				case RI_TRIGGER_FK:
-
-					/*
-					 * Update on FK table
-					 *
-					 * There is one exception when updating FK tables: if the
-					 * updated row was inserted by our own transaction and the
-					 * FK is deferred, we still need to fire the trigger. This
-					 * is because our UPDATE will invalidate the INSERT so the
-					 * end-of-transaction INSERT RI trigger will not do
-					 * anything, so we have to do the check for the UPDATE
-					 * anyway.
-					 */
-					if (!TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmin(oldtup->t_data)) &&
-						RI_FKey_keyequal_upd_fk(trigger, rel, oldtup, newtup))
+					/* Update on trigger's FK table */
+					if (!RI_FKey_fk_upd_check_required(trigger, rel,
+													   oldtup, newtup))
 					{
+						/* skip queuing this event */
 						continue;
 					}
 					break;
@@ -5944,6 +5999,16 @@ pgxc_is_internal_trig_firable(Relation rel, Trigger *trigger)
 	return !RelationGetLocInfo(rel);
 }
 
+/*
+ * Memo, K.Suzuki, Sep.2nd, 2013
+ *
+ * This function is called from ExecARDeleteTriggers(), ExecBRUpdateTriggers(),
+ * and ExecARUpdateTriggers(), as replacement of GetTupleForTrigger() where
+ * the lock mode for the tuple is specified, which this function does not
+ * take care of.
+ *
+ * Should we take care of it?
+ */
 /*
  * Convenience function to form a heaptuple out of a heaptuple header.
  * PGXCTO: Though this is a convenience function now, it would possibly serve the

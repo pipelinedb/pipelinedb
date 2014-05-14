@@ -1260,7 +1260,6 @@ CREATE TABLE customer (
        tel      text,
        passwd	text
 );
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "customer_pkey" for table "customer"
 CREATE TABLE credit_card (
        cid      int references customer(cid),
        cnum     text,
@@ -1352,7 +1351,7 @@ EXPLAIN (COSTS OFF, NODES OFF) SELECT * FROM my_credit_card_normal WHERE f_leak(
    ->  Data Node Scan on credit_card "_REMOTE_TABLE_QUERY_"
          Coordinator quals: f_leak(cnum)
    ->  Hash
-         ->  Data Node Scan on customer "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on customer "_REMOTE_TABLE_QUERY__1"
                Coordinator quals: (name = ("current_user"())::text)
 (7 rows)
 
@@ -1364,7 +1363,7 @@ EXPLAIN (COSTS OFF, NODES OFF) SELECT * FROM my_credit_card_secure WHERE f_leak(
  Subquery Scan on my_credit_card_secure
    Filter: f_leak(my_credit_card_secure.cnum)
    ->  Hash Join
-         Hash Cond: (r.cid = l.cid)
+         Hash Cond: (cid = cid)
          ->  Data Node Scan on credit_card "_REMOTE_TABLE_QUERY_"
          ->  Hash
                ->  Data Node Scan on customer "_REMOTE_TABLE_QUERY_"
@@ -1384,11 +1383,11 @@ EXPLAIN (COSTS OFF, NODES OFF) SELECT * FROM my_credit_card_usage_normal
                                    QUERY PLAN                                   
 --------------------------------------------------------------------------------
  Nested Loop
-   Join Filter: (l.cid = r.cid)
+   Join Filter: (l.cid = cid)
    ->  Subquery Scan on l
          Filter: f_leak(l.cnum)
          ->  Hash Join
-               Hash Cond: (r.cid = l.cid)
+               Hash Cond: (cid = cid)
                ->  Data Node Scan on credit_card "_REMOTE_TABLE_QUERY_"
                ->  Hash
                      ->  Data Node Scan on customer "_REMOTE_TABLE_QUERY_"
@@ -1406,9 +1405,9 @@ EXPLAIN (COSTS OFF, NODES OFF) SELECT * FROM my_credit_card_usage_secure
  Subquery Scan on my_credit_card_usage_secure
    Filter: f_leak(my_credit_card_usage_secure.cnum)
    ->  Nested Loop
-         Join Filter: (l.cid = r.cid)
+         Join Filter: (cid = cid)
          ->  Hash Join
-               Hash Cond: (r.cid = l.cid)
+               Hash Cond: (cid = cid)
                ->  Data Node Scan on credit_card "_REMOTE_TABLE_QUERY_"
                ->  Hash
                      ->  Data Node Scan on customer "_REMOTE_TABLE_QUERY_"

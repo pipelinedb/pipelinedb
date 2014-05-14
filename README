@@ -24,5 +24,3 @@ postgres --datanode -D /path/to/datanode/dir -p 5431 &
 # Create cluster topology in the XC catalog
 psql -c "CREATE NODE <datanode nodename> WITH (TYPE = 'datanode', HOST = 'localhost', PORT = 5431)" postgres
 psql -c "CREATE DATABASE <database name>" postgres
-
-

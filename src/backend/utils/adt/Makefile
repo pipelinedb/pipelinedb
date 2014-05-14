@@ -19,8 +19,8 @@ OBJS = acl.o arrayfuncs.o array_selfuncs.o array_typanalyze.o \
 	array_userfuncs.o arrayutils.o bool.o \
 	cash.o char.o date.o datetime.o datum.o domains.o \
 	enum.o float.o format_type.o \
-	geo_ops.o geo_selfuncs.o int.o int8.o json.o like.o lockfuncs.o \
-	misc.o nabstime.o name.o numeric.o numutils.o \
+	geo_ops.o geo_selfuncs.o int.o int8.o json.o jsonfuncs.o like.o \
+	lockfuncs.o misc.o nabstime.o name.o numeric.o numutils.o \
 	oid.o oracle_compat.o pseudotypes.o rangetypes.o rangetypes_gist.o \
 	rowtypes.o regexp.o regproc.o ruleutils.o selfuncs.o \
 	tid.o timestamp.o varbit.o varchar.o varlena.o version.o xid.o \
@@ -30,7 +30,8 @@ OBJS = acl.o arrayfuncs.o array_selfuncs.o array_typanalyze.o \
 	tsginidx.o tsgistidx.o tsquery.o tsquery_cleanup.o tsquery_gist.o \
 	tsquery_op.o tsquery_rewrite.o tsquery_util.o tsrank.o \
 	tsvector.o tsvector_op.o tsvector_parser.o \
-	txid.o uuid.o windowfuncs.o xml.o
+	txid.o uuid.o windowfuncs.o xml.o rangetypes_spgist.o \
+	rangetypes_typanalyze.o rangetypes_selfuncs.o
 
 like.o: like.c like_match.c
 

@@ -2,24 +2,19 @@
 <!--
 
 Use </link> not just </> so INSTALL.html can be created without links
-to the main documentation.  Don't use <xref>.
+to the main documentation.  Don't use <xref>; or if you must, wrap it
+in a standalone-ignore clause.
 
 -->
 
 <chapter id="installation">
-<!## PG>
  <title><![%standalone-include[<productname>PostgreSQL</>]]>
-<!## end>
-<!## XC>
- <title><![%standalone-include[<productname>Postgres-XC</>]]>
-<!## end>
   Installation from Source Code</title>
 
  <indexterm zone="installation">
   <primary>installation</primary>
  </indexterm>
 
-<!## PG>
  <para>
   This <![%standalone-include;[document]]>
   <![%standalone-ignore;[chapter]]> describes the installation of
@@ -30,26 +25,12 @@ to the main documentation.  Don't use <xref>.
   <![%standalone-ignore;[chapter]]>
   and read the packager's instructions instead.)
  </para>
-<!## end>
-<!## XC>
-&xconly;
- <para>
-  This <![%standalone-include;[document]]>
-  <![%standalone-ignore;[chapter]]> describes the installation of
-  <productname>Postgres-XC</productname> using the source code
-  distribution.  (If you are installing a pre-packaged distribution,
-  such as an RPM or Debian package, ignore this
-  <![%standalone-include;[document]]>
-  <![%standalone-ignore;[chapter]]>
-  and read the packager's instructions instead.)
- </para>
-<!## end>
 
  <sect1 id="install-short">
   <title>Short Version</title>
 
-<!## PG>
   <para>
+<!## PG>
 <synopsis>
 ./configure
 gmake
@@ -64,15 +45,15 @@ su - postgres
 /usr/local/pgsql/bin/createdb test
 /usr/local/pgsql/bin/psql test
 </synopsis>
-  </para>
 <!## end>
 <!## XC>
-  <para>
+&xconly;
     The following short installation allows to install a simple cluster on a local machine with
     1 Coordinator, 2 Datanodes and 1 GTM. When installing a more complex cluster, you might
     change the number of Coordinators and Datanodes, and might have to start nodes on different
     servers.
   </para>
+  <para>
 <synopsis>
 ./configure
 gmake
@@ -103,8 +84,6 @@ su - postgres
 /usr/local/pgsql/bin/psql test
 </synopsis>
 <!## end>
-<para>
-
    The long version is the rest of this
    <![%standalone-include;[document.]]>
    <![%standalone-ignore;[chapter.]]>
@@ -141,7 +120,6 @@ su - postgres
 <!## XC>
    <productname>Postgres-XC</>:
 <!## end>
-
    <itemizedlist>
     <listitem>
      <para>
@@ -167,12 +145,12 @@ su - postgres
      <para>
       You need an <acronym>ISO</>/<acronym>ANSI</> C compiler (at least
       C89-compliant). Recent
-      versions of <productname>GCC</> are recommendable, but
+      versions of <productname>GCC</> are recommended, but
 <!## PG>
       <productname>PostgreSQL</> is known to build using a wide variety
 <!## end>
 <!## XC>
-      <productname>Postgres-XC</> is known to build using a wide variety
+      <productname>Postgres-XC</> can be built using a wide viety
 <!## end>
       of compilers from different vendors.
      </para>
@@ -195,30 +173,14 @@ su - postgres
        <primary>libedit</primary>
       </indexterm>
 
-<!## PG>
       The <acronym>GNU</> <productname>Readline</> library is used by
       default.  It allows <application>psql</application> (the
+<!## PG>
       PostgreSQL command line SQL interpreter) to remember each
-      command you type, and allows you to use arrow keys to recall and
-      edit previous commands.  This is very helpful and is strongly
-      recommended.  If you don't want to use it then you must specify
-      the <option>--without-readline</option> option to
-      <filename>configure</>. As an alternative, you can often use the
-      BSD-licensed <filename>libedit</filename> library, originally
-      developed on <productname>NetBSD</productname>. The
-      <filename>libedit</filename> library is
-      GNU <productname>Readline</productname>-compatible and is used if
-      <filename>libreadline</filename> is not found, or if
-      <option>--with-libedit-preferred</option> is used as an
-      option to <filename>configure</>. If you are using a package-based
-      Linux distribution, be aware that you need both the
-      <literal>readline</> and <literal>readline-devel</> packages, if
-      those are separate in your distribution.
 <!## end>
 <!## XC>
-      The <acronym>GNU</> <productname>Readline</> library is used by
-      default.  It allows <application>psql</application> (the
-      Postgres-XC command line SQL interpreter) to remember each
+      PostgreSQL command line SQL interpreter) to remember each
+<!## end>
       command you type, and allows you to use arrow keys to recall and
       edit previous commands.  This is very helpful and is strongly
       recommended.  If you don't want to use it then you must specify
@@ -234,7 +196,6 @@ su - postgres
       Linux distribution, be aware that you need both the
       <literal>readline</> and <literal>readline-devel</> packages, if
       those are separate in your distribution.
-<!## end>
      </para>
     </listitem>
 
@@ -282,17 +243,14 @@ su - postgres
      </para>
 
      <para>
-<!## PG>
       If you don't have the shared library but you need one, a message
+<!## PG>
       like this will appear during the <productname>PostgreSQL</>
-      build to point out this fact:
 <!## end>
 <!## XC>
-      If you don't have the shared library but you need one, a message
       like this will appear during the <productname>Postgres-XC</>
-      build to point out this fact:
 <!## end>
-
+      build to point out this fact:
 <screen>
 *** Cannot build PL/Perl because libperl is not a shared library.
 *** You might have to rebuild your Perl installation.  Refer to
@@ -316,7 +274,7 @@ su - postgres
       installation with the header files and
       the <application>distutils</application> module.  The minimum
       required version is <productname>Python</productname>
-      2.2.  <productname>Python 3</productname> is supported if it's
+      2.3.  <productname>Python 3</productname> is supported if it's
       version 3.1 or later; but see
       <![%standalone-include[the <application>PL/Python</> documentation]]>
       <![%standalone-ignore[<xref linkend="plpython-python23">]]>
@@ -329,7 +287,12 @@ su - postgres
       <filename>libpython</filename> library must be a shared library
       also on most platforms.  This is not the case in a default
       <productname>Python</productname> installation.  If after
+<!## PG>
       building and installing <productname>PostgreSQL</> you have a file called
+<!## end>
+<!## XC>
+      building and installing <productname>Postgres-XC</> you have a file called
+<!## end>
       <filename>plpython.so</filename> (possibly a different
       extension), then everything went well.  Otherwise you should
       have seen a notice like this flying by:
@@ -344,23 +307,17 @@ su - postgres
      </para>
 
      <para>
-<!## PG>
       If you have problems, run <productname>Python</> 2.3 or later's
       configure using the <literal>--enable-shared</> flag.  On some
       operating systems you don't have to build a shared library, but
+<!## PG>
       you will have to convince the <productname>PostgreSQL</> build
-      system of this.  Consult the <filename>Makefile</filename> in
-      the <filename>src/pl/plpython</filename> directory for details.
 <!## end>
 <!## XC>
-      If you have problems, run <productname>Python</> 2.3 or later's
-      configure using the <literal>--enable-shared</> flag.  On some
-      operating systems you don't have to build a shared library, but
       you will have to convince the <productname>Postgres-XC</> build
+<!## end>
       system of this.  Consult the <filename>Makefile</filename> in
       the <filename>src/pl/plpython</filename> directory for details.
-<!## end>
-
      </para>
     </listitem>
 
@@ -399,6 +356,21 @@ su - postgres
       <productname>OpenLDAP</>, and/or
       <application>PAM</>, if you want to support authentication or
       encryption using those services.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+<!## PG>
+      To build the <productname>PostgreSQL</productname> documentation,
+<!## end>
+<!## XC>
+      To build the <productname>Postgres-XC</productname> documentation,
+<!## end>
+      there is a separate set of requirements; see
+      <![%standalone-ignore;[<xref linkend="docguide-toolsets">.]]>
+      <![%standalone-include;[the main documentation's appendix on
+      documentation.]]>
      </para>
     </listitem>
    </itemizedlist>
@@ -474,16 +446,18 @@ su - postgres
 
 <!## PG>
   <para>
-   The <productname>PostgreSQL</> &version; sources can be obtained by
-   anonymous FTP from <ulink
-   url="ftp://ftp.postgresql.org/pub/source/v&version;/postgresql-&version;.tar.gz"></ulink>.
-   Other download options can be found on our website:
-   <ulink url="http://www.postgresql.org/download/"></ulink>. After you
-   have obtained the file, unpack it:
+   The <productname>PostgreSQL</> &version; sources can be obtained from the
+   download section of our
+   website: <ulink url="http://www.postgresql.org/download/"></ulink>.  You
+   should get a file named <filename>postgresql-&version;.tar.gz</filename>
+   or <filename>postgresql-&version;.tar.bz2</filename>. After
+   you have obtained the file, unpack it:
 <screen>
 <userinput>gunzip postgresql-&version;.tar.gz</userinput>
 <userinput>tar xf postgresql-&version;.tar</userinput>
 </screen>
+   (Use <command>bunzip2</command> instead of <command>gunzip</command> if you
+   have the <filename>.bz2</filename> file.)
    This will create a directory
    <filename>postgresql-&version;</filename> under the current directory
    with the <productname>PostgreSQL</> sources.
@@ -520,7 +494,7 @@ su - postgres
  <sect1 id="install-procedure">
   <title>Installation Procedure</title>
 
-&xconly;
+&common;
   <procedure>
 
   <step id="configure">
@@ -529,7 +503,6 @@ su - postgres
    <indexterm zone="configure">
     <primary>configure</primary>
    </indexterm>
-
    <para>
     The first step of the installation procedure is to configure the
     source tree for your system and choose the options you would like.
@@ -694,12 +667,7 @@ su - postgres
        <term><option>--mandir=<replaceable>DIRECTORY</></option></term>
        <listitem>
         <para>
-<!## PG>
          The man pages that come with <productname>PostgreSQL</> will be installed under
-<!## end>
-<!## XC>
-         The man pages that come with <productname>Postgres-XC</> will be installed under
-<!## end>
          this directory, in their respective
          <filename>man<replaceable>x</></> subdirectories.
          The default is <filename><replaceable>DATAROOTDIR</>/man</>.
@@ -724,12 +692,7 @@ su - postgres
        <listitem>
         <para>
          The HTML-formatted documentation for
-<!## PG>
          <productname>PostgreSQL</productname> will be installed under
-<!## end>
-<!## XC>
-         <productname>Postgres-XC</productname> will be installed under
-<!## end>
          this directory.  The default is
          <filename><replaceable>DATAROOTDIR</></>.
         </para>
@@ -740,12 +703,7 @@ su - postgres
      <note>
       <para>
        Care has been taken to make it possible to install
-<!## PG>
        <productname>PostgreSQL</> into shared installation locations
-<!## end>
-<!## XC>
-       <productname>Postgres-XC</> into shared installation locations
-<!## end>
        (such as <filename>/usr/local/include</filename>) without
        interfering with the namespace of the rest of the system. First,
        the string <quote><literal>/postgresql</literal></quote> is
@@ -839,12 +797,7 @@ su - postgres
          server and clients will have the same default compiled in,
          which can be very convenient.  Usually the only good reason
          to select a non-default value is if you intend to run multiple
-<!## PG>
          <productname>PostgreSQL</> servers on the same machine.
-<!## end>
-<!## XC>
-         <productname>Postgres-XC</> servers on the same machine.
-<!## end>
         </para>
        </listitem>
       </varlistentry>
@@ -1045,12 +998,7 @@ su - postgres
         <para>
          Libxml installs a program <command>xml2-config</command> that
          can be used to detect the required compiler and linker
-<!## PG>
          options.  PostgreSQL will use it automatically if found.  To
-<!## end>
-<!## XC>
-         options.  Postgres-XC will use it automatically if found.  To
-<!## end>
          specify a libxml installation at an unusual location, you can
          either set the environment variable
          <envar>XML2_CONFIG</envar> to point to the
@@ -1082,24 +1030,14 @@ su - postgres
          Disable support for 64-bit integer storage for timestamps and
          intervals, and store datetime values as floating-point
          numbers instead. Floating-point datetime storage was the
-<!## PG>
          default in <productname>PostgreSQL</productname> releases
-<!## end>
-<!## XC>
-         default in <productname>Postgres-XC</productname> releases
-<!## end>
          prior to 8.4, but it is now deprecated, because it does not
          support microsecond precision for the full range of
          <type>timestamp</type> values. However, integer-based
          datetime storage requires a 64-bit integer type. Therefore,
          this option can be used when no such type is available, or
          for compatibility with applications written for prior
-<!## PG>
          versions of <productname>PostgreSQL</productname>. See
-<!## end>
-<!## XC>
-         versions of <productname>Postgres-XC</productname>. See
-<!## end>
          <![%standalone-include[the documentation about datetime datatypes]]>
          <![%standalone-ignore[<xref linkend="datatype-datetime">]]>
          for more information.
@@ -1210,29 +1148,14 @@ su - postgres
        <term><option>--disable-spinlocks</option></term>
        <listitem>
         <para>
-<!## PG>
          Allow the build to succeed even if <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-         Allow the build to succeed even if <productname>Postgres-XC</>
-<!## end>
          has no CPU spinlock support for the platform.  The lack of
          spinlock support will result in poor performance; therefore,
          this option should only be used if the build aborts and
          informs you that the platform lacks spinlock support. If this
-<!## PG>
          option is required to build <productname>PostgreSQL</> on
-<!## end>
-<!## XC>
-         option is required to build <productname>Postgres-XC</> on
-<!## end>
          your platform, please report the problem to the
-<!## PG>
          <productname>PostgreSQL</> developers.
-<!## end>
-<!## XC>
-         <productname>Postgres-XC</> developers.
-<!## end>
         </para>
        </listitem>
       </varlistentry>
@@ -1256,12 +1179,7 @@ su - postgres
        </indexterm>
        <listitem>
         <para>
-<!## PG>
          <productname>PostgreSQL</> includes its own time zone database,
-<!## end>
-<!## XC>
-         <productname>Postgres-XC</> includes its own time zone database,
-<!## end>
          which it requires for date and time operations.  This time zone
          database is in fact compatible with the <quote>zoneinfo</> time zone
          database provided by many operating systems such as FreeBSD,
@@ -1275,12 +1193,7 @@ su - postgres
          installation routine will not detect mismatching or erroneous time
          zone data.  If you use this option, you are advised to run the
          regression tests to verify that the time zone data you have
-<!## PG>
          pointed to works correctly with <productname>PostgreSQL</>.
-<!## end>
-<!## XC>
-         pointed to works correctly with <productname>Postgres-XC</>.
-<!## end>
         </para>
 
         <indexterm><primary>cross compilation</primary></indexterm>
@@ -1288,20 +1201,10 @@ su - postgres
         <para>
          This option is mainly aimed at binary package distributors
          who know their target operating system well.  The main
-<!## PG>
          advantage of using this option is that the PostgreSQL package
-<!## end>
-<!## XC>
-         advantage of using this option is that the Postgres-XC package
-<!## end>
          won't need to be upgraded whenever any of the many local
          daylight-saving time rules change.  Another advantage is that
-<!## PG>
          PostgreSQL can be cross-compiled more straightforwardly if the
-<!## end>
-<!## XC>
-         Postgres-XC can be cross-compiled more straightforwardly if the
-<!## end>
          time zone database files do not need to be built during the
          installation.
         </para>
@@ -1346,7 +1249,6 @@ su - postgres
        <term><option>--enable-coverage</option></term>
        <listitem>
         <para>
-<!## PG>
          If using GCC, all programs and libraries are compiled with
          code coverage testing instrumentation.  When run, they
          generate files in the build directory with code coverage
@@ -1354,16 +1256,6 @@ su - postgres
          <![%standalone-ignore[See <xref linkend="regress-coverage">
          for more information.]]> This option is for use only with GCC
          and when doing development work.
-<!## end>
-<!## XC>
-         <!-- regress-coverage is not included in XC reference -->
-         If using GCC, all programs and libraries are compiled with
-         code coverage testing instrumentation.  When run, they
-         generate files in the build directory with code coverage
-         metrics.
-         This option is for use only with GCC
-         and when doing development work.
-<!## end>
         </para>
        </listitem>
       </varlistentry>
@@ -1420,12 +1312,7 @@ su - postgres
          <indexterm>
           <primary>DTrace</primary>
          </indexterm>
-<!## PG>
          Compiles <productname>PostgreSQL</productname> with support for the
-<!## end>
-<!## XC>
-         Compiles <productname>Postgres-XC</productname> with support for the
-<!## end>
          dynamic tracing tool DTrace.
          <![%standalone-ignore[See <xref linkend="dynamic-trace">
          for more information.]]>
@@ -1473,18 +1360,9 @@ su - postgres
     <para>
      You can specify environment variables on the
      <filename>configure</filename> command line, for example:
-<!## PG>
 <screen>
 <userinput>./configure CC=/opt/bin/gcc CFLAGS='-O2 -pipe'</>
 </screen>
-<!## end>
-<!## XC>
-<screen>
-<userinput>./configure CC=/opt/bin/gcc CFLAGS='-O2 -pipe -DPGXC'</>
-</screen>
-     Please note that you need to specify <filename>-DPGXC</>
-     explicitly to specify <filename>CFLAGS</> option.
-<!## end>
     </para>
 
     <para>
@@ -1649,6 +1527,28 @@ su - postgres
       </varlistentry>
      </variablelist>
     </para>
+
+    <note>
+     <para>
+      When developing code inside the server, it is recommended to
+      use the configure options <option>--enable-cassert</> (which
+      turns on many run-time error checks) and <option>--enable-debug</>
+      (which improves the usefulness of debugging tools).
+     </para>
+
+     <para>
+      If using GCC, it is best to build with an optimization level of
+      at least <option>-O1</>, because using no optimization
+      (<option>-O0</>) disables some important compiler warnings (such
+      as the use of uninitialized variables).  However, non-zero
+      optimization levels can complicate debugging because stepping
+      through compiled code will usually not match up one-to-one with
+      source code lines.  If you get confused while trying to debug
+      optimized code, recompile the specific files of interest with
+      <option>-O0</>.  An easy way to do this is by passing an option
+      to <application>make</>: <command>gmake PROFILE=-O0 file.o</>.
+     </para>
+    </note>
    </step>
 
   <step id="build">
@@ -1663,12 +1563,7 @@ su - postgres
     will take a few minutes depending on your
     hardware. The last line displayed should be:
 <screen>
-<!## PG>
 All of PostgreSQL is successfully made. Ready to install.
-<!## end>
-<!## XC>
-All of Postgres-XC is successfully made. Ready to install.
-<!## end>
 </screen>
    </para>
 
@@ -1680,20 +1575,11 @@ All of Postgres-XC is successfully made. Ready to install.
 <userinput>gmake world</userinput>
 </screen>
    The last line displayed should be:
-<!## PG>
 <screen>
 PostgreSQL, contrib and HTML documentation successfully made. Ready to install.
 </screen>
-<!## end>
-<!## XC>
-<screen>
-Postgres-XC, contrib and HTML documentation successfully made. Ready to install.
-</screen>
-<!## end>
    </para>
   </step>
-
-<!## PG>
 
   <step>
    <title>Regression Tests</title>
@@ -1720,7 +1606,6 @@ Postgres-XC, contrib and HTML documentation successfully made. Ready to install.
     repeat this test at any later time by issuing the same command.
    </para>
   </step>
-<!## end>
 
   <step id="install">
    <title>Installing the Files</title>
@@ -1734,91 +1619,9 @@ Postgres-XC, contrib and HTML documentation successfully made. Ready to install.
      cluster.
     </para>
    </note>
-<!## XC>
-   <para>
-    Before learning how to install <productname>Postgres-XC</>, you should learn
-    what you are going to install to what server.  The following lists
-    <productname>Postgres-XC</> components you've built and you're going to install.
-
-    <variablelist>
-     <varlistentry>
-      <term><envar>GTM</envar></term>
-      <listitem>
-       <para>
-        GTM stands for global transaction manager.  It provides global transaction ID
-        and snapshot to each transaction in <productname>Postgres-XC</> database cluster.
-        It also provide several global value such as sequence and global timestamp.
-       </para>
-       <para>
-        GTM itself can be configured as a backup of other GTM as
-        GTM-Standby so that GTM can continue to run even if main GTM
-        fails.  You may want to install GTM-Standby to separate
-        server.
-       </para>
-      </listitem>
-     </varlistentry>
-
-     <varlistentry>
-      <term><envar>GTM-Proxy</envar></term>
-      <listitem>
-      <para>
-       Because GTM has to take care of each transaction, it has to
-       read and write enormous amount of messages which may
-       restrict <productname>Postgres-XC</> scalability.  GTM-Proxy is
-       a proxy of GTM feature which groups requests and response to
-       reduce network read/write by GTM.  Distributing one snapshot to
-       multiple transactions also contributes to reduce GTM network
-       workload.
-      </para>
-      </listitem>
-     </varlistentry>
-
-     <varlistentry>
-      <term><envar>Coordinator</envar></term>
-      <listitem>
-       <para>
-        Coordinator is an entry point to <productname>Postgres-XC</> from applications.
-        You can run more than one Coordinator in parallel.   Each Coordinator behaves
-        as just <productname>PostgreSQL</> database server, while all the Coordinators
-        handles transactions in harmonized way so that any transaction coming into one
-        Coordinator is protected against any other transactions coming into others.
-        Updates by a transaction is visible immediately to others running in other
-        Coordinators.
-        To simplify the load balance of Coordinators and Datanodes, as mentioned
-        below, it is highly advised to install same number of Coordinator and Datanode
-        in a server.
-       </para>
-      </listitem>
-     </varlistentry>
-     <varlistentry>
-      <term><envar>Datanode</envar></term>
-      <listitem>
-       <para>
-        Datanode 
-       </para>
-       <para>
-        Coordinator and Datanode shares the same binary but their behavior is a little
-        different.   Coordinator decomposes incoming statements into those handled by
-        Datanodes.   If necessary, Coordinator materializes response from Datanodes
-        to calculate final response to applications.
-       </para>
-       <para>
-        Datanode is very close to PostgreSQL itself because it just handles incoming
-        statements locally.
-       </para>
-      </listitem>
-     </varlistentry>
-    </variablelist>
-   </para>
-<!## end>
 
    <para>
-<!## PG>
     To install <productname>PostgreSQL</> enter:
-<!## end>
-<!## XC>
-    To install <productname>Postgres-XC</> enter:
-<!## end>
 <screen>
 <userinput>gmake install</userinput>
 </screen>
@@ -1831,12 +1634,7 @@ Postgres-XC, contrib and HTML documentation successfully made. Ready to install.
    </para>
 
    <para>
-<!## PG>
     To install the documentation (HTML and man pages), enter:
-<!## end>
-<!## XC>
-    To install the documentation (HTML and man pages), enter:
-<!## end>
 <screen>
 <userinput>gmake install-docs</userinput>
 </screen>
@@ -1890,21 +1688,6 @@ Postgres-XC, contrib and HTML documentation successfully made. Ready to install.
   </step>
   </procedure>
 
-<!## PG>
-  <formalpara>
-   <title>Registering <application>eventlog</> on <systemitem
-   class="osname">Windows</>:</title>
-   <para>
-    To register a <systemitem class="osname">Windows</> <application>eventlog</>
-    library with the operating system, issue this command after installation:
-<screen>
-<userinput>regsvr32 <replaceable>pgsql_library_directory</>/pgevent.dll</>
-</screen>
-    This creates registry entries used by the event viewer.
-   </para>
-  </formalpara>
-<!## end>
-
   <formalpara>
    <title>Uninstallation:</title>
    <para>
@@ -1950,27 +1733,29 @@ Postgres-XC, contrib and HTML documentation successfully made. Ready to install.
     <primary>shared library</primary>
    </indexterm>
 &xconly;
-   <para>
 <!## PG>
+   <para>
     On some systems with shared libraries
     you need to tell the system how to find the newly installed
     shared libraries.  The systems on which this is
-    <emphasis>not</emphasis> necessary include <systemitem
-    class="osname">BSD/OS</>, <systemitem class="osname">FreeBSD</>,
+    <emphasis>not</emphasis> necessary include
+    <systemitem class="osname">FreeBSD</>,
     <systemitem class="osname">HP-UX</>, <systemitem
     class="osname">IRIX</>, <systemitem class="osname">Linux</>,
     <systemitem class="osname">NetBSD</>, <systemitem
     class="osname">OpenBSD</>, <systemitem class="osname">Tru64
     UNIX</> (formerly <systemitem class="osname">Digital UNIX</>), and
     <systemitem class="osname">Solaris</>.
+   </para>
 <!## end>
 <!## XC>
+   <para>
     On some systems with shared libraries
     you need to tell the system how to find the newly installed
     shared libraries.
-    However, <systemitem class="osname">Linux</> does <emphasis>not</> need this.
-<!## end>
+    However, <systemitem class="osname">Linux</systemitem> does <emphasis>not</emphasis> need this.
    </para>
+<!## end>
 
    <para>
     The method to set the shared library search path varies between
@@ -2022,20 +1807,11 @@ libpq.so.2.1: cannot open shared object file: No such file or directory
     <indexterm>
      <primary>ldconfig</primary>
     </indexterm>
-<!## PG>
-    If you are on <systemitem class="osname">BSD/OS</>, <systemitem
-    class="osname">Linux</>, or <systemitem class="osname">SunOS 4</>
-    and you have root access you can run:
-<!## end>
-<!## XC>
-    Because you are <systemitem
-    class="osname">Linux</>, 
-    you have root access and you can run:
-<!## end>
+    If you are on <systemitem class="osname">Linux</> and you have root
+    access, you can run:
 <programlisting>
 /sbin/ldconfig /usr/local/pgsql/lib
 </programlisting>
-<!## PG>
     (or equivalent directory) after installation to enable the
     run-time linker to find the shared libraries faster.  Refer to the
     manual page of <command>ldconfig</> for more information.  On
@@ -2047,7 +1823,6 @@ libpq.so.2.1: cannot open shared object file: No such file or directory
 </programlisting>
     instead.  Other systems are not known to have an equivalent
     command.
-<!## end>
    </para>
   </sect2>
 
@@ -2144,28 +1919,21 @@ export MANPATH
     <para>
 <!## PG>
      Create a user account for the <productname>PostgreSQL</>
+<!## end>
+<!## XC>
+     Create a user account for the <productname>Postgres-XC</>
+<!## end>
      server. This is the user the server will run as. For production
      use you should create a separate, unprivileged account
      (<quote>postgres</> is commonly used). If you do not have root
      access or just want to play around, your own user account is
      enough, but running the server as root is a security risk and
      will not work.
-<!## end>
-<!## XC>
-     Create a user account on all the servers where at least one
-     of <productname>Postgres-XC</> component runs. This is the user
-     the components will run as. For production use you should create a
-     separate, unprivileged account (<quote>postgres</> is commonly
-     used). If you do not have root access or just want to play
-     around, your own user account is enough, but running the server
-     as root is a security risk and will not work.
-<!## end>
 <screen>
 <userinput>adduser postgres</>
 </screen>
     </para>
    </step>
-
 <!## XC>
 
    <step>
@@ -2226,9 +1994,7 @@ bin/  include/  lib/  share/
 
 <!## end>
 
-
    <step>
-&common;
     <para>
      Create a database installation with the <command>initdb</>
      command. To run <command>initdb</> you must be logged in to your
@@ -2255,6 +2021,8 @@ postgres$ <userinput>/usr/local/pgsql/bin/initdb -D /usr/local/pgsql/data</>
      doesn't already exist) before starting <command>initdb</>, as
      illustrated here.
     </para>
+   </step>
+
 <!## XC>
     <para>
      If you're configuring both Datanode and Coordinator on the same
@@ -2262,10 +2030,8 @@ postgres$ <userinput>/usr/local/pgsql/bin/initdb -D /usr/local/pgsql/data</>
      each of them.
     </para>
 <!## end>
-   </step>
 
    <step>
-&common;
     <para>
      At this point, if you did not use the <command>initdb</> <literal>-A</>
      option, you might want to modify <filename>pg_hba.conf</> to control
@@ -2575,9 +2341,8 @@ postgres --coordinator -D /usr/local/pgsql/Coordinator
    </para>
 <!## end>
 
-   <step>
-
 <!## PG>
+   <step>
     <para>
      The previous <command>initdb</> step should have told you how to
      start up the database server. Do so now. The command should look
@@ -2599,8 +2364,10 @@ nohup /usr/local/pgsql/bin/postgres -D /usr/local/pgsql/data \
 kill `cat /usr/local/pgsql/data/postmaster.pid`
 </programlisting>
     </para>
+   </step>
 <!## end>
 <!## XC>
+   <step>
 &xconly;
     <para>
      The previous step should have told you how to
@@ -2638,16 +2405,22 @@ kill `cat /usr/local/pgsql/gtm/gtm.pid`
 kill `cat /usr/local/pgsql/gtm-proxy/gtm_proxy.pid
 </programlisting>
     </para>
-<!## end>
-
    </step>
+<!## end>
 
    <step>
     <para>
      Create a database:
+<!## PG>
 <screen>
 <userinput>createdb testdb</>
 </screen>
+<!## end>
+<!## XC>
+<screen>
+<userinput>createdb -p 20004 testdb</>
+</screen>
+<!## end>
      Then enter:
 <!## PG>
 <screen>
@@ -2655,19 +2428,18 @@ kill `cat /usr/local/pgsql/gtm-proxy/gtm_proxy.pid
 </screen>
 <!## end>
 <!## XC>
-&xconly;
 <screen>
 <userinput>psql -p 20004 testdb</>
 </screen>
+<!## end>
+<!## PG>
+     to connect to that database. At the prompt you can enter SQL
+     commands and start experimenting.
 <!## end>
 <!## XC>
      Please do not forget to give the port number of one of the
      Coordinators.   Then you are connected to a Coordinator listening
      to the port you specified.
-<!## end>
-<!## PG>
-     to connect to that database. At the prompt you can enter SQL
-     commands and start experimenting.
 <!## end>
     </para>
    </step>
@@ -2712,6 +2484,7 @@ kill `cat /usr/local/pgsql/gtm-proxy/gtm_proxy.pid
       suggestions for this are in the documentation.
      </para>
     </listitem>
+<!## end>
 
     <listitem>
      <para>
@@ -2721,7 +2494,6 @@ kill `cat /usr/local/pgsql/gtm-proxy/gtm_proxy.pid
       is also explained in the documentation.
      </para>
     </listitem>
-<!## end>
 
     <listitem>
      <para>
@@ -2764,9 +2536,7 @@ kill `cat /usr/local/pgsql/gtm-proxy/gtm_proxy.pid
    or can be made to work, you are strongly encouraged to set up a build
    farm member machine so that continued compatibility can be assured.
   </para>
-<!## end>
 
-<!## PG>
   <para>
    In general, <productname>PostgreSQL</> can be expected to work on
    these CPU architectures: x86, x86_64, IA64, PowerPC,
@@ -2777,7 +2547,6 @@ kill `cat /usr/local/pgsql/gtm-proxy/gtm_proxy.pid
    <option>--disable-spinlocks</option>, but performance will be poor.
   </para>
 <!## end>
-
 <!## XC>
 &xconly;
   <para>
@@ -2807,35 +2576,37 @@ kill `cat /usr/local/pgsql/gtm-proxy/gtm_proxy.pid
    also work but are not currently being tested.
   </para>
 <!## end>
-&xconly;
 
-  <para>
 <!## PG>
+  <para>
    If you have installation problems on a platform that is known
    to be supported according to recent build farm results, please report
    it to <email>pgsql-bugs@postgresql.org</email>.  If you are interested
    in porting <productname>PostgreSQL</> to a new platform,
    <email>pgsql-hackers@postgresql.org</email> is the appropriate place
    to discuss that.
+  </para>
 <!## end>
 <!## XC>
+  <para>
    If you have installation problems on a platform that is known
    to be supported according to recent build farm results, please report
    it to <email>postgres-xc-bugs@lists.sourceforge.net</email>.  If you are interested
-   in porting <productname>Postgres-XC</> to a new platform,
+   in porting <productname>Postgres-XC</productname> to a new platform,
    <email>postgres-xc-developers@lists.sourceforge.net</email> is the appropriate place
    to discuss that.
+  </para>
 <!## end>
 
-  </para>
+
  </sect1>
 
  <sect1 id="installation-platform-notes">
   <title>Platform-specific Notes</title>
 
 &xconly;
-  <para>
 <!## PG>
+  <para>
    This section documents additional platform-specific issues
    regarding the installation and setup of PostgreSQL.  Be sure to
    read the installation instructions, and in
@@ -2844,13 +2615,15 @@ kill `cat /usr/local/pgsql/gtm-proxy/gtm_proxy.pid
    file <filename>src/test/regress/README</> and the documentation]]>
    <![%standalone-ignore[<xref linkend="regress">]]> regarding the
    interpretation of regression test results.
+  </para>
 <!## end>
 <!## XC>
+  <para>
    This section documents additional platform-specific issues
    regarding the installation and setup of Postgres-XC.  Be sure to
    read the installation instructions.
-<!## end>
   </para>
+<!## end>
 
   <para>
    Platforms that are not covered here have no known platform-specific
@@ -2865,7 +2638,6 @@ kill `cat /usr/local/pgsql/gtm-proxy/gtm_proxy.pid
     <primary>AIX</primary>
     <secondary>installation on</secondary>
    </indexterm>
-
    <para>
     PostgreSQL works on AIX, but getting it installed properly can be
     challenging.  AIX versions from 4.3.3 to 6.1 are considered supported.
@@ -3180,7 +2952,7 @@ createlang: language installation failed: ERROR:  could not load library "/opt/d
      </biblioentry>
 
      <biblioentry>
-       <title><ulink url="  http://www.redbooks.ibm.com/abstracts/sg245674.html?Open">Developing and Porting C and C++ Applications on AIX</ulink></title>
+       <title><ulink url="http://www.redbooks.ibm.com/abstracts/sg245674.html?Open">Developing and Porting C and C++ Applications on AIX</ulink></title>
        <publisher>
         <publishername>IBM Redbook</publishername>
        </publisher>
@@ -3325,7 +3097,7 @@ make MAX_CONNECTIONS=5 check
     distribution tarball, you will also need Flex (GNU lex) and Bison
     (GNU yacc).  We also recommend making sure you are fairly
     up-to-date on HP patches.  At a minimum, if you are building 64
-    bit binaries on on HP-UX 11.11 you may need PHSS_30966 (11.11) or a
+    bit binaries on HP-UX 11.11 you may need PHSS_30966 (11.11) or a
     successor patch otherwise <command>initdb</command> may hang:
 <literallayout>
 PHSS_30966  s700_800 ld(1) and linker tools cumulative patch
@@ -3580,7 +3352,7 @@ cc-1020 cc: ERROR File = pqcomm.c, Line = 427
     </para>
 
     <para>
-     As of UnixWare 7.1.3 and above, the GNU Make program is is the
+     As of UnixWare 7.1.3 and above, the GNU Make program is the
      OSTK portion of the UDK CD, and is
      in <filename>/usr/gnu/bin/gmake</filename>.
     </para>
@@ -3693,15 +3465,6 @@ MANPATH=/usr/lib/scohelp/%L/man:/usr/dt/man:/usr/man:/usr/share/man:scohelp:/usr
     below.
    </para>
 
-   <para>
-    Note that PostgreSQL is bundled with Solaris 10 (from update 2).
-    Official packages are also available on
-    <ulink url="http://pgfoundry.org/projects/solarispackages/"></ulink>.
-    Packages for older Solaris versions (8, 9) you can be obtained
-    from <ulink url="http://www.sunfreeware.com/"></ulink> or
-    <ulink url="http://www.blastwave.org/"></ulink>.
-   </para>
-
    <sect3>
     <title>Required Tools</title>
 
@@ -3717,12 +3480,12 @@ MANPATH=/usr/lib/scohelp/%L/man:/usr/dt/man:/usr/man:/usr/share/man:scohelp:/usr
 
     <para>
      You can download Sun Studio
-     from <ulink url="http://developers.sun.com/sunstudio/downloads/"></ulink>.
+     from <ulink url="http://www.oracle.com/technetwork/server-storage/solarisstudio/downloads/"></ulink>.
      Many of GNU tools are integrated into Solaris 10, or they are
      present on the Solaris companion CD.  If you like packages for
      older version of Solaris, you can find these tools
-     at <ulink url="http://www.sunfreeware.com"></ulink>
-     or <ulink url="http://www.blastwave.org"></ulink>.  If you prefer
+     at <ulink url="http://www.sunfreeware.com"></ulink>.
+     If you prefer
      sources, look
      at <ulink url="http://www.gnu.org/order/ftp.html"></ulink>.
     </para>
@@ -3817,15 +3580,6 @@ LIBOBJS = snprintf.o
      and that is why 32-bit code is significant slower on this CPU
      family.
     </para>
-
-    <para>
-     Some tricks for tuning PostgreSQL and Solaris for performance can
-     be found
-     at <ulink url="http://www.sun.com/servers/coolthreads/tnb/applications_postgresql.jsp"></ulink>.
-     This article is primary focused on T2000 platform, but many of
-     the recommendations are also useful on other hardware with
-     Solaris.
-    </para>
    </sect3>
 
    <sect3>
@@ -3836,7 +3590,7 @@ LIBOBJS = snprintf.o
      documentation]]>
      <![%standalone-ignore[<xref linkend="dynamic-trace">]]> for further
      information.  You can also find more information in this
-     article: <ulink url="http://blogs.sun.com/robertlor/entry/user_level_dtrace_probes_in"></ulink>.
+     article: <ulink url="https://blogs.oracle.com/robertlor/entry/user_level_dtrace_probes_in"></ulink>.
     </para>
 
     <para>

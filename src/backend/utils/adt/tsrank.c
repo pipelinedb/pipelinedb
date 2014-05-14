@@ -3,7 +3,7 @@
  * tsrank.c
  *		rank tsvector by tsquery
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -40,7 +40,7 @@ static float calc_rank_and(float *w, TSVector t, TSQuery q);
  * Returns a weight of a word collocation
  */
 static float4
-word_distance(int4 w)
+word_distance(int32 w)
 {
 	if (w > 100)
 		return 1e-30f;
@@ -213,7 +213,7 @@ calc_rank_and(float *w, TSVector t, TSQuery q)
 			   *firstentry;
 	WordEntryPos *post,
 			   *ct;
-	int4		dimt,
+	int32		dimt,
 				lenct,
 				dist,
 				nitem;
@@ -283,7 +283,7 @@ calc_rank_or(float *w, TSVector t, TSQuery q)
 	WordEntry  *entry,
 			   *firstentry;
 	WordEntryPos *post;
-	int4		dimt,
+	int32		dimt,
 				j,
 				i,
 				nitem;
@@ -297,7 +297,7 @@ calc_rank_or(float *w, TSVector t, TSQuery q)
 	{
 		float		resj,
 					wjm;
-		int4		jm;
+		int32		jm;
 
 		firstentry = entry = find_wordentry(t, q, item[i], &nitem);
 		if (!entry)
@@ -347,7 +347,7 @@ calc_rank_or(float *w, TSVector t, TSQuery q)
 }
 
 static float
-calc_rank(float *w, TSVector t, TSQuery q, int4 method)
+calc_rank(float *w, TSVector t, TSQuery q, int32 method)
 {
 	QueryItem  *item = GETQUERY(q);
 	float		res = 0.0;
@@ -530,11 +530,11 @@ typedef struct
 	int			q;
 	DocRepresentation *begin;
 	DocRepresentation *end;
-} Extention;
+} CoverExt;
 
 
 static bool
-Cover(DocRepresentation *doc, int len, QueryRepresentation *qr, Extention *ext)
+Cover(DocRepresentation *doc, int len, QueryRepresentation *qr, CoverExt *ext)
 {
 	DocRepresentation *ptr;
 	int			lastpos = ext->pos;
@@ -621,7 +621,7 @@ get_docrep(TSVector txt, QueryRepresentation *qr, int *doclen)
 	WordEntry  *entry,
 			   *firstentry;
 	WordEntryPos *post;
-	int4		dimt,
+	int32		dimt,
 				j,
 				i,
 				nitem;
@@ -729,7 +729,7 @@ calc_rank_cd(float4 *arrdata, TSVector txt, TSQuery query, int method)
 	int			len,
 				i,
 				doclen = 0;
-	Extention	ext;
+	CoverExt	ext;
 	double		Wdoc = 0.0;
 	double		invws[lengthof(weights)];
 	double		SumDist = 0.0,
@@ -759,7 +759,7 @@ calc_rank_cd(float4 *arrdata, TSVector txt, TSQuery query, int method)
 		return 0.0;
 	}
 
-	MemSet(&ext, 0, sizeof(Extention));
+	MemSet(&ext, 0, sizeof(CoverExt));
 	while (Cover(doc, doclen, &qr, &ext))
 	{
 		double		Cpos = 0.0;

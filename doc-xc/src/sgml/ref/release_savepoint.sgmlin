@@ -39,7 +39,6 @@ RELEASE [ SAVEPOINT ] <replaceable>savepoint_name</replaceable>
    <command>RELEASE SAVEPOINT</command> is not supported by the
    current release of <productname>Postgres-XC</productname>.
   </para>
- </refsect1>
 <!## end>
 
 <!## PG>
@@ -113,6 +112,9 @@ COMMIT;
 </programlisting>
    The above transaction will insert both 3 and 4.
   </para>
+
+<!## end>
+
  </refsect1>
 
  <refsect1>
@@ -125,7 +127,6 @@ COMMIT;
    be omitted.
   </para>
  </refsect1>
-<!## end>
 
  <refsect1>
   <title>See Also</title>

@@ -3,7 +3,7 @@
  * tsginidx.c
  *	 GIN support functions for tsvector_ops
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -109,7 +109,7 @@ gin_extract_tsquery(PG_FUNCTION_ARGS)
 	if (query->size > 0)
 	{
 		QueryItem  *item = GETQUERY(query);
-		int4		i,
+		int32		i,
 					j;
 		bool	   *partialmatch;
 		int		   *map_item_operand;

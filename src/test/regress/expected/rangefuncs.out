@@ -1,31 +1,38 @@
-SELECT name, setting FROM pg_settings WHERE name LIKE 'enable%';
-         name         | setting 
-----------------------+---------
- enable_bitmapscan    | on
- enable_hashagg       | on
- enable_hashjoin      | on
- enable_indexonlyscan | on
- enable_indexscan     | on
- enable_material      | on
- enable_mergejoin     | on
- enable_nestloop      | on
- enable_remotelimit   | on
- enable_remotesort    | on
- enable_seqscan       | on
- enable_sort          | on
- enable_tidscan       | on
-(12 rows)
+SELECT name, setting FROM pg_settings WHERE name LIKE 'enable%' ORDER BY name;
+            name            | setting 
+----------------------------+---------
+ enable_bitmapscan          | on
+ enable_fast_query_shipping | on
+ enable_hashagg             | on
+ enable_hashjoin            | on
+ enable_indexonlyscan       | on
+ enable_indexscan           | on
+ enable_material            | on
+ enable_mergejoin           | on
+ enable_nestloop            | on
+ enable_remotegroup         | on
+ enable_remotejoin          | on
+ enable_remotelimit         | on
+ enable_remotesort          | on
+ enable_seqscan             | on
+ enable_sort                | on
+ enable_tidscan             | on
+(16 rows)
 
 CREATE TABLE foo2(fooid int, f2 int);
 INSERT INTO foo2 VALUES(1, 11);
 INSERT INTO foo2 VALUES(2, 22);
 INSERT INTO foo2 VALUES(1, 111);
 CREATE FUNCTION foot(int) returns setof foo2 as 'SELECT * FROM foo2 WHERE fooid = $1;' LANGUAGE SQL;
--- supposed to fail with ERROR
+-- function with implicit LATERAL
 select * from foo2, foot(foo2.fooid) z where foo2.f2 = z.f2;
-ERROR:  function expression in FROM cannot refer to other relations of same query level
-LINE 1: select * from foo2, foot(foo2.fooid) z where foo2.f2 = z.f2;
-                                 ^
+ fooid | f2  | fooid | f2  
+-------+-----+-------+-----
+     1 |  11 |     1 |  11
+     2 |  22 |     2 |  22
+     1 | 111 |     1 | 111
+(3 rows)
+
 -- function in subselect
 select * from foo2 where f2 in (select f2 from foot(foo2.fooid) z where z.fooid = foo2.fooid) ORDER BY 1,2;
  fooid | f2  
@@ -60,7 +67,6 @@ select foot.fooid, foot.f2 from foot(sin(pi()/2)::int) ORDER BY 1,2;
 (2 rows)
 
 CREATE TABLE foo (fooid int, foosubid int, fooname text, primary key(fooid,foosubid));
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "foo_pkey" for table "foo"
 INSERT INTO foo VALUES(1,1,'Joe');
 INSERT INTO foo VALUES(1,2,'Ed');
 INSERT INTO foo VALUES(2,1,'Mary');
@@ -232,7 +238,6 @@ DROP TABLE foo2;
 DROP TABLE foo;
 -- Rescan tests --
 CREATE TABLE foorescan (fooid int, foosubid int, fooname text, primary key(fooid,foosubid));
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "foorescan_pkey" for table "foorescan"
 INSERT INTO foorescan values(5000,1,'abc.5000.1');
 INSERT INTO foorescan values(5001,1,'abc.5001.1');
 INSERT INTO foorescan values(5002,1,'abc.5002.1');
@@ -318,7 +323,6 @@ SELECT * FROM foorescan f WHERE f.fooid IN (SELECT fooid FROM vw_foorescan) ORDE
 (10 rows)
 
 CREATE TABLE barrescan (fooid int primary key);
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "barrescan_pkey" for table "barrescan"
 INSERT INTO barrescan values(5003);
 INSERT INTO barrescan values(5004);
 INSERT INTO barrescan values(5005);
@@ -441,7 +445,7 @@ CREATE OR REPLACE FUNCTION foo(in f1 int, out f2 int, out f3 text)
 RETURNS record
 AS 'select $1+1' LANGUAGE sql;
 ERROR:  cannot change return type of existing function
-HINT:  Use DROP FUNCTION first.
+HINT:  Use DROP FUNCTION foo(integer) first.
 CREATE OR REPLACE FUNCTION foor(in f1 int, out f2 int, out text)
 AS $$select $1-1, $1::text || 'z'$$ LANGUAGE sql;
 SELECT f1, foor(f1) FROM int4_tbl ORDER BY 1, 2;
@@ -523,7 +527,7 @@ SELECT * FROM dup('xyz'::text);
 CREATE OR REPLACE FUNCTION dup (inout f2 anyelement, out f3 anyarray)
 AS 'select $1, array[$1,$1]' LANGUAGE sql;
 ERROR:  cannot change name of input parameter "f1"
-HINT:  Use DROP FUNCTION first.
+HINT:  Use DROP FUNCTION dup(anyelement) first.
 DROP FUNCTION dup(anyelement);
 -- equivalent behavior, though different name exposed for input arg
 CREATE OR REPLACE FUNCTION dup (inout f2 anyelement, out f3 anyarray)
@@ -577,11 +581,21 @@ SELECT * FROM foo(3) ORDER BY 1, 2;
 (9 rows)
 
 DROP FUNCTION foo(int);
+-- case that causes change of typmod knowledge during inlining
+CREATE OR REPLACE FUNCTION foo()
+RETURNS TABLE(a varchar(5))
+AS $$ SELECT 'hello'::varchar(5) $$ LANGUAGE sql STABLE;
+SELECT * FROM foo() GROUP BY 1;
+   a   
+-------
+ hello
+(1 row)
+
+DROP FUNCTION foo();
 --
 -- some tests on SQL functions with RETURNING
 --
 create temp table tt(f1 serial, data text);
-NOTICE:  CREATE TABLE will create implicit sequence "tt_f1_seq" for serial column "tt.f1"
 create function insert_tt(text) returns int as
 $$ insert into tt(data) values($1) returning f1 $$
 language sql;

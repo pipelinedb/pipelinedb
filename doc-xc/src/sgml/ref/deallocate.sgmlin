@@ -49,6 +49,7 @@ DEALLOCATE [ PREPARE ] { <replaceable class="parameter">name</replaceable> | ALL
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>PREPARE</literal></term>
@@ -82,6 +83,7 @@ DEALLOCATE [ PREPARE ] { <replaceable class="parameter">name</replaceable> | ALL
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The SQL standard includes a <command>DEALLOCATE</command>
    statement, but it is only for use in embedded SQL.

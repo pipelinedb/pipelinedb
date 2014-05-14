@@ -8,7 +8,7 @@
  *
  * This code is released under the terms of the PostgreSQL License.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/test/regress/pg_regress.c
@@ -846,6 +846,15 @@ set_node_config_file(PGXCNodeTypeNum node)
 	 */
 	fputs("max_prepared_transactions = 50\n", pg_conf);
 
+	/*
+	 * By default non-FQS update and delete to a replicated table without
+	 * any primary key or unique index is an error, but regression tests
+	 * have many examples where updates and deletes are non-FQS but table
+	 * is replicated, so let those DMLs run without error during regression
+	 * tests
+	 */
+	fputs("require_replicated_table_pkey = false\n", pg_conf);
+
 	/* Set GTM connection information */
 	fputs("gtm_host = 'localhost'\n", pg_conf);
 	snprintf(buf, sizeof(buf), "gtm_port = %d\n", get_port_number(PGXC_GTM));
@@ -1502,6 +1511,19 @@ initialize_environment(void)
 			sprintf(s, "%d", port);
 			doputenv("PGPORT", s);
 		}
+
+		/*
+		 * GNU make stores some flags in the MAKEFLAGS environment variable to
+		 * pass arguments to its own children.	If we are invoked by make,
+		 * that causes the make invoked by us to think its part of the make
+		 * task invoking us, and so it tries to communicate with the toplevel
+		 * make.  Which fails.
+		 *
+		 * Unset the variable to protect against such problems.  We also reset
+		 * MAKELEVEL to be certain the child doesn't notice the make above us.
+		 */
+		unsetenv("MAKEFLAGS");
+		unsetenv("MAKELEVEL");
 
 		/*
 		 * Adjust path variables to point into the temp-install tree
@@ -2627,15 +2649,6 @@ help(void)
 int
 regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc)
 {
-	_stringlist *sl;
-	int			c;
-	int			i;
-	int			option_index;
-	char		buf[MAXPGPATH * 4];
-#ifndef PGXC
-	char		buf2[MAXPGPATH * 4];
-#endif
-
 	static struct option long_options[] = {
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'V'},
@@ -2664,6 +2677,15 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		{NULL, 0, NULL, 0}
 	};
 
+	_stringlist *sl;
+	int			c;
+	int			i;
+	int			option_index;
+	char		buf[MAXPGPATH * 4];
+#ifndef PGXC
+	char		buf2[MAXPGPATH * 4];
+#endif
+
 	progname = get_progname(argv[0]);
 	set_pglocale_pgservice(argv[0], PG_TEXTDOMAIN("pg_regress"));
 
@@ -2679,6 +2701,9 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 	 * default parameters and let them be overwritten by the commandline.
 	 */
 	ifunc();
+
+	if (getenv("PG_REGRESS_DIFF_OPTS"))
+		pretty_diff_opts = getenv("PG_REGRESS_DIFF_OPTS");
 
 	while ((c = getopt_long(argc, argv, "hV", long_options, &option_index)) != -1)
 	{
@@ -2893,7 +2918,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		initdb_node(PGXC_DATANODE_2);
 #else
 		snprintf(buf, sizeof(buf),
-				 SYSTEMQUOTE "\"%s/initdb\" -D \"%s/data\" -L \"%s\" --noclean%s%s > \"%s/log/initdb.log\" 2>&1" SYSTEMQUOTE,
+				 SYSTEMQUOTE "\"%s/initdb\" -D \"%s/data\" -L \"%s\" --noclean --nosync%s%s > \"%s/log/initdb.log\" 2>&1" SYSTEMQUOTE,
 				 bindir, temp_install, datadir,
 				 debug ? " --debug" : "",
 				 nolocale ? " --no-locale" : "",
@@ -2934,6 +2959,15 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		}
 		fputs("\n# Configuration added by pg_regress\n\n", pg_conf);
 		fputs("max_prepared_transactions = 2\n", pg_conf);
+
+		/*
+		 * By default non-FQS update and delete to a replicated table without
+		 * any primary key or unique index is an error, but regression tests
+		 * have many examples where updates and deletes are non-FQS but table
+		 * is replicated, so let those DMLs run without error during regression
+		 * tests
+		 */
+		fputs("require_replicated_table_pkey = false\n", pg_conf);
 
 		if (temp_config != NULL)
 		{

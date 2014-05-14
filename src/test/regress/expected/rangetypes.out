@@ -821,9 +821,239 @@ select count(*) from test_range_gist where ir -|- int4range(100,500);
      5
 (1 row)
 
+-- test SP-GiST index that's been built incrementally
+create table test_range_spgist(ir int4range);
+create index test_range_spgist_idx on test_range_spgist using spgist (ir);
+insert into test_range_spgist select int4range(g, g+10) from generate_series(1,2000) g;
+insert into test_range_spgist select 'empty'::int4range from generate_series(1,500) g;
+insert into test_range_spgist select int4range(g, g+10000) from generate_series(1,1000) g;
+insert into test_range_spgist select 'empty'::int4range from generate_series(1,500) g;
+insert into test_range_spgist select int4range(NULL,g*10,'(]') from generate_series(1,100) g;
+insert into test_range_spgist select int4range(g*10,NULL,'(]') from generate_series(1,100) g;
+insert into test_range_spgist select int4range(g, g+10) from generate_series(1,2000) g;
+-- first, verify non-indexed results
+SET enable_seqscan    = t;
+SET enable_indexscan  = f;
+SET enable_bitmapscan = f;
+select count(*) from test_range_spgist where ir @> 'empty'::int4range;
+ count 
+-------
+  6200
+(1 row)
+
+select count(*) from test_range_spgist where ir = int4range(10,20);
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from test_range_spgist where ir @> 10;
+ count 
+-------
+   130
+(1 row)
+
+select count(*) from test_range_spgist where ir @> int4range(10,20);
+ count 
+-------
+   111
+(1 row)
+
+select count(*) from test_range_spgist where ir && int4range(10,20);
+ count 
+-------
+   158
+(1 row)
+
+select count(*) from test_range_spgist where ir <@ int4range(10,50);
+ count 
+-------
+  1062
+(1 row)
+
+select count(*) from test_range_spgist where ir << int4range(100,500);
+ count 
+-------
+   189
+(1 row)
+
+select count(*) from test_range_spgist where ir >> int4range(100,500);
+ count 
+-------
+  3554
+(1 row)
+
+select count(*) from test_range_spgist where ir &< int4range(100,500);
+ count 
+-------
+  1029
+(1 row)
+
+select count(*) from test_range_spgist where ir &> int4range(100,500);
+ count 
+-------
+  4794
+(1 row)
+
+select count(*) from test_range_spgist where ir -|- int4range(100,500);
+ count 
+-------
+     5
+(1 row)
+
+-- now check same queries using index
+SET enable_seqscan    = f;
+SET enable_indexscan  = t;
+SET enable_bitmapscan = f;
+select count(*) from test_range_spgist where ir @> 'empty'::int4range;
+ count 
+-------
+  6200
+(1 row)
+
+select count(*) from test_range_spgist where ir = int4range(10,20);
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from test_range_spgist where ir @> 10;
+ count 
+-------
+   130
+(1 row)
+
+select count(*) from test_range_spgist where ir @> int4range(10,20);
+ count 
+-------
+   111
+(1 row)
+
+select count(*) from test_range_spgist where ir && int4range(10,20);
+ count 
+-------
+   158
+(1 row)
+
+select count(*) from test_range_spgist where ir <@ int4range(10,50);
+ count 
+-------
+  1062
+(1 row)
+
+select count(*) from test_range_spgist where ir << int4range(100,500);
+ count 
+-------
+   189
+(1 row)
+
+select count(*) from test_range_spgist where ir >> int4range(100,500);
+ count 
+-------
+  3554
+(1 row)
+
+select count(*) from test_range_spgist where ir &< int4range(100,500);
+ count 
+-------
+  1029
+(1 row)
+
+select count(*) from test_range_spgist where ir &> int4range(100,500);
+ count 
+-------
+  4794
+(1 row)
+
+select count(*) from test_range_spgist where ir -|- int4range(100,500);
+ count 
+-------
+     5
+(1 row)
+
+-- now check same queries using a bulk-loaded index
+drop index test_range_spgist_idx;
+create index test_range_spgist_idx on test_range_spgist using spgist (ir);
+select count(*) from test_range_spgist where ir @> 'empty'::int4range;
+ count 
+-------
+  6200
+(1 row)
+
+select count(*) from test_range_spgist where ir = int4range(10,20);
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from test_range_spgist where ir @> 10;
+ count 
+-------
+   130
+(1 row)
+
+select count(*) from test_range_spgist where ir @> int4range(10,20);
+ count 
+-------
+   111
+(1 row)
+
+select count(*) from test_range_spgist where ir && int4range(10,20);
+ count 
+-------
+   158
+(1 row)
+
+select count(*) from test_range_spgist where ir <@ int4range(10,50);
+ count 
+-------
+  1062
+(1 row)
+
+select count(*) from test_range_spgist where ir << int4range(100,500);
+ count 
+-------
+   189
+(1 row)
+
+select count(*) from test_range_spgist where ir >> int4range(100,500);
+ count 
+-------
+  3554
+(1 row)
+
+select count(*) from test_range_spgist where ir &< int4range(100,500);
+ count 
+-------
+  1029
+(1 row)
+
+select count(*) from test_range_spgist where ir &> int4range(100,500);
+ count 
+-------
+  4794
+(1 row)
+
+select count(*) from test_range_spgist where ir -|- int4range(100,500);
+ count 
+-------
+     5
+(1 row)
+
 RESET enable_seqscan;
 RESET enable_indexscan;
 RESET enable_bitmapscan;
+-- test elem <@ range operator
+create table test_range_elem(i int4);
+create index test_range_elem_idx on test_range_elem (i);
+insert into test_range_elem select i from generate_series(1,100) i;
+select count(*) from test_range_elem where i <@ int4range(10,50);
+ count 
+-------
+    40
+(1 row)
+
+drop table test_range_elem;
 --
 -- Btree_gist is not included by default, so to test exclusion
 -- constraints with range types, use singleton int ranges for the "="
@@ -836,8 +1066,6 @@ create table test_range_excl(
   exclude using gist (room with =, during with &&),
   exclude using gist (speaker with =, during with &&)
 ) distribute by replication;
-NOTICE:  CREATE TABLE / EXCLUDE will create implicit index "test_range_excl_room_during_excl" for table "test_range_excl"
-NOTICE:  CREATE TABLE / EXCLUDE will create implicit index "test_range_excl_speaker_during_excl" for table "test_range_excl"
 insert into test_range_excl
   values(int4range(123, 123, '[]'), int4range(1, 1, '[]'), '[2010-01-02 10:00, 2010-01-02 11:00)');
 insert into test_range_excl
@@ -963,7 +1191,7 @@ drop function anyarray_anyrange_func(anyarray, anyrange);
 create function bogus_func(anyelement)
   returns anyrange as 'select int4range(1,10)' language sql;
 ERROR:  cannot determine result data type
-DETAIL:  A function returning ANYRANGE must have at least one ANYRANGE argument.
+DETAIL:  A function returning "anyrange" must have at least one "anyrange" argument.
 -- should fail
 create function bogus_func(int)
   returns anyrange as 'select int4range(1,10)' language sql;
@@ -1070,14 +1298,14 @@ select * from table_succeed(123, int4range(1,11));
 create function outparam_fail(i anyelement, out r anyrange, out t text)
   as $$ select '[1,10]', 'foo' $$ language sql;
 ERROR:  cannot determine result data type
-DETAIL:  A function returning ANYRANGE must have at least one ANYRANGE argument.
+DETAIL:  A function returning "anyrange" must have at least one "anyrange" argument.
 --should fail
 create function inoutparam_fail(inout i anyelement, out r anyrange)
   as $$ select $1, '[1,10]' $$ language sql;
 ERROR:  cannot determine result data type
-DETAIL:  A function returning ANYRANGE must have at least one ANYRANGE argument.
+DETAIL:  A function returning "anyrange" must have at least one "anyrange" argument.
 --should fail
 create function table_fail(i anyelement) returns table(i anyelement, r anyrange)
   as $$ select $1, '[1,10]' $$ language sql;
 ERROR:  cannot determine result data type
-DETAIL:  A function returning ANYRANGE must have at least one ANYRANGE argument.
+DETAIL:  A function returning "anyrange" must have at least one "anyrange" argument.

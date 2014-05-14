@@ -4,7 +4,7 @@
  *	  prototypes for utility.c.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/tcop/utility.h
@@ -16,31 +16,38 @@
 
 #include "tcop/tcopprot.h"
 
+typedef enum
+{
+	PROCESS_UTILITY_TOPLEVEL,	/* toplevel interactive command */
+	PROCESS_UTILITY_QUERY,		/* a complete query, but not toplevel */
+	PROCESS_UTILITY_SUBCOMMAND	/* a portion of a query */
+} ProcessUtilityContext;
 
 /* Hook for plugins to get control in ProcessUtility() */
 typedef void (*ProcessUtility_hook_type) (Node *parsetree,
-			  const char *queryString, ParamListInfo params, bool isTopLevel,
+										  const char *queryString, ProcessUtilityContext context,
+										  ParamListInfo params,
+										  DestReceiver *dest, 
+#ifdef PGXC
+										  bool sentToRemote,
+#endif /* PGXC */
+										  char *completionTag);
+extern PGDLLIMPORT ProcessUtility_hook_type ProcessUtility_hook;
+
+extern void ProcessUtility(Node *parsetree, const char *queryString,
+						   ProcessUtilityContext context, ParamListInfo params,
+						   DestReceiver *dest, 
+#ifdef PGXC
+									bool sentToRemote,
+#endif /* PGXC */
+						   char *completionTag);
+extern void standard_ProcessUtility(Node *parsetree, const char *queryString,
+									ProcessUtilityContext context, ParamListInfo params,
 									DestReceiver *dest,
 #ifdef PGXC
 									bool sentToRemote,
 #endif /* PGXC */
 									char *completionTag);
-extern PGDLLIMPORT ProcessUtility_hook_type ProcessUtility_hook;
-
-extern void ProcessUtility(Node *parsetree, const char *queryString,
-			   ParamListInfo params, bool isTopLevel,
-			   DestReceiver *dest,
-#ifdef PGXC
-			   bool sentToRemote,
-#endif /* PGXC */
-			   char *completionTag);
-extern void standard_ProcessUtility(Node *parsetree, const char *queryString,
-						ParamListInfo params, bool isTopLevel,
-						DestReceiver *dest,
-#ifdef PGXC
-						bool sentToRemote,
-#endif /* PGXC */
-						char *completionTag);
 
 extern bool UtilityReturnsTuples(Node *parsetree);
 

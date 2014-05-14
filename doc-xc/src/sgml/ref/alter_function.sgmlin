@@ -33,7 +33,7 @@ ALTER FUNCTION <replaceable>name</replaceable> ( [ [ <replaceable class="paramet
 <phrase>where <replaceable class="PARAMETER">action</replaceable> is one of:</phrase>
 
     CALLED ON NULL INPUT | RETURNS NULL ON NULL INPUT | STRICT
-    IMMUTABLE | STABLE | VOLATILE
+    IMMUTABLE | STABLE | VOLATILE | [ NOT ] LEAKPROOF
     [ EXTERNAL ] SECURITY INVOKER | [ EXTERNAL ] SECURITY DEFINER
     COST <replaceable class="parameter">execution_cost</replaceable>
     ROWS <replaceable class="parameter">result_rows</replaceable>
@@ -47,8 +47,7 @@ ALTER FUNCTION <replaceable>name</replaceable> ( [ [ <replaceable class="paramet
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    <command>ALTER FUNCTION</command> changes the definition of a
    function.
@@ -69,6 +68,7 @@ ALTER FUNCTION <replaceable>name</replaceable> ( [ [ <replaceable class="paramet
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -155,8 +155,7 @@ ALTER FUNCTION <replaceable>name</replaceable> ( [ [ <replaceable class="paramet
      <term><literal>STRICT</literal></term>
 
      <listitem>
-      <para>
-       <literal>CALLED ON NULL INPUT</literal> changes the function so
+      <para><literal>CALLED ON NULL INPUT</literal> changes the function so
        that it will be invoked when some or all of its arguments are
        null. <literal>RETURNS NULL ON NULL INPUT</literal> or
        <literal>STRICT</literal> changes the function so that it is not
@@ -189,6 +188,17 @@ ALTER FUNCTION <replaceable>name</replaceable> ( [ [ <replaceable class="paramet
       Change whether the function is a security definer or not. The
       key word <literal>EXTERNAL</literal> is ignored for SQL
       conformance. See <xref linkend="sql-createfunction"> for more information about
+      this capability.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><literal>LEAKPROOF</literal></term>
+    <listitem>
+     <para>
+      Change whether the function is considered leakproof or not.
+      See <xref linkend="sql-createfunction"> for more information about
       this capability.
      </para>
     </listitem>
@@ -250,6 +260,14 @@ ALTER FUNCTION <replaceable>name</replaceable> ( [ [ <replaceable class="paramet
     </listitem>
    </varlistentry>
   </variablelist>
+
+<!## XC>
+&xconly;
+  <para>
+   Stable and Volatile functions will run only on the coordinataor.
+  </para>
+<!## end>
+
  </refsect1>
 
  <refsect1>
@@ -299,6 +317,7 @@ ALTER FUNCTION check_password(text) RESET search_path;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    This statement is partially compatible with the <command>ALTER
    FUNCTION</> statement in the SQL standard. The standard allows more
@@ -307,12 +326,7 @@ ALTER FUNCTION check_password(text) RESET search_path;
    attach configuration parameter values to a function,
    or change the owner, schema, or volatility of a function. The standard also
    requires the <literal>RESTRICT</> key word, which is optional in
-<!## PG>
    <productname>PostgreSQL</>.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</>.
-<!## end>
   </para>
  </refsect1>
 

@@ -16,6 +16,7 @@
 #define REMOTECOPY_H
 
 #include "nodes/parsenodes.h"
+#include "pgxc/pgxcnode.h"
 
 /*
  * This contains the set of data necessary for remote COPY control.
@@ -73,4 +74,5 @@ extern void RemoteCopy_GetRelationLoc(RemoteCopyData *state,
 extern RemoteCopyOptions *makeRemoteCopyOptions(void);
 extern void FreeRemoteCopyData(RemoteCopyData *state);
 extern void FreeRemoteCopyOptions(RemoteCopyOptions *options);
+extern void pgxc_node_copybegin(RemoteCopyData *remoteCopyState, char node_type);
 #endif

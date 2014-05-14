@@ -5,7 +5,7 @@
  *	  along with the relation's initial contents.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_inherits.h
@@ -32,7 +32,7 @@ CATALOG(pg_inherits,2611) BKI_WITHOUT_OIDS
 {
 	Oid			inhrelid;
 	Oid			inhparent;
-	int4		inhseqno;
+	int32		inhseqno;
 } FormData_pg_inherits;
 
 /* ----------------

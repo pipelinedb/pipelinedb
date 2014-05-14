@@ -30,7 +30,6 @@ RESET ALL
   <title>Description</title>
 
 &common;
-
   <para>
    <command>RESET</command> restores run-time parameters to their
    default values.  <command>RESET</command> is an alternative
@@ -63,6 +62,7 @@ SET <replaceable class="parameter">configuration_parameter</replaceable> TO DEFA
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">configuration_parameter</replaceable></term>
@@ -93,20 +93,15 @@ SET <replaceable class="parameter">configuration_parameter</replaceable> TO DEFA
    Set the <varname>timezone</> configuration variable to its default value:
 <screen>
 RESET timezone;
-</screen>
-  </para>
+</screen></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
-<!## PG>
    <command>RESET</command> is a <productname>PostgreSQL</productname> extension.
-<!## end>
-<!## XC>
-   <command>RESET</command> is a <productname>Postgres-XC</productname> extension.
-<!## end>
   </para>
  </refsect1>
 

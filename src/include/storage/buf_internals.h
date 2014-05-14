@@ -5,7 +5,7 @@
  *	  strategy.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/buf_internals.h
@@ -38,8 +38,8 @@
 #define BM_JUST_DIRTIED			(1 << 5)		/* dirtied since write started */
 #define BM_PIN_COUNT_WAITER		(1 << 6)		/* have waiter for sole pin */
 #define BM_CHECKPOINT_NEEDED	(1 << 7)		/* must write for checkpoint */
-#define BM_PERMANENT			(1 << 8)		/* permanent relation (not unlogged) */
-#define BM_STREAMING 				(1 << 9)		/* stream relation (only synced to disk when stream buffer size exceeded) */
+#define BM_PERMANENT			(1 << 8)		/* permanent relation (not
+												 * unlogged) */
 
 typedef bits16 BufFlags;
 

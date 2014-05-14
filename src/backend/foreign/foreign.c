@@ -3,7 +3,7 @@
  * foreign.c
  *		  support for foreign-data wrappers, servers and user mappings.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/backend/foreign/foreign.c
@@ -12,6 +12,7 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/reloptions.h"
 #include "catalog/pg_foreign_data_wrapper.h"
 #include "catalog/pg_foreign_server.h"
@@ -19,8 +20,11 @@
 #include "catalog/pg_user_mapping.h"
 #include "foreign/fdwapi.h"
 #include "foreign/foreign.h"
+#include "lib/stringinfo.h"
 #include "miscadmin.h"
 #include "utils/builtins.h"
+#include "utils/memutils.h"
+#include "utils/rel.h"
 #include "utils/syscache.h"
 
 
@@ -350,6 +354,50 @@ GetFdwRoutineByRelId(Oid relid)
 	return GetFdwRoutine(fdwhandler);
 }
 
+/*
+ * GetFdwRoutineForRelation - look up the handler of the foreign-data wrapper
+ * for the given foreign table, and retrieve its FdwRoutine struct.
+ *
+ * This function is preferred over GetFdwRoutineByRelId because it caches
+ * the data in the relcache entry, saving a number of catalog lookups.
+ *
+ * If makecopy is true then the returned data is freshly palloc'd in the
+ * caller's memory context.  Otherwise, it's a pointer to the relcache data,
+ * which will be lost in any relcache reset --- so don't rely on it long.
+ */
+FdwRoutine *
+GetFdwRoutineForRelation(Relation relation, bool makecopy)
+{
+	FdwRoutine *fdwroutine;
+	FdwRoutine *cfdwroutine;
+
+	if (relation->rd_fdwroutine == NULL)
+	{
+		/* Get the info by consulting the catalogs and the FDW code */
+		fdwroutine = GetFdwRoutineByRelId(RelationGetRelid(relation));
+
+		/* Save the data for later reuse in CacheMemoryContext */
+		cfdwroutine = (FdwRoutine *) MemoryContextAlloc(CacheMemoryContext,
+														sizeof(FdwRoutine));
+		memcpy(cfdwroutine, fdwroutine, sizeof(FdwRoutine));
+		relation->rd_fdwroutine = cfdwroutine;
+
+		/* Give back the locally palloc'd copy regardless of makecopy */
+		return fdwroutine;
+	}
+
+	/* We have valid cached data --- does the caller want a copy? */
+	if (makecopy)
+	{
+		fdwroutine = (FdwRoutine *) palloc(sizeof(FdwRoutine));
+		memcpy(fdwroutine, relation->rd_fdwroutine, sizeof(FdwRoutine));
+		return fdwroutine;
+	}
+
+	/* Only a short-lived reference is needed, so just hand back cached copy */
+	return relation->rd_fdwroutine;
+}
+
 
 /*
  * deflist_to_tuplestore - Helper function to convert DefElem list to
@@ -483,11 +531,15 @@ is_conninfo_option(const char *option, Oid context)
 
 /*
  * Validate the generic option given to SERVER or USER MAPPING.
- * Raise an ERROR if the option or its value is considered
- * invalid.
+ * Raise an ERROR if the option or its value is considered invalid.
  *
  * Valid server options are all libpq conninfo options except
  * user and password -- these may only appear in USER MAPPING options.
+ *
+ * Caution: this function is deprecated, and is now meant only for testing
+ * purposes, because the list of options it knows about doesn't necessarily
+ * square with those known to whichever libpq instance you might be using.
+ * Inquire of libpq itself, instead.
  */
 Datum
 postgresql_fdw_validator(PG_FUNCTION_ARGS)

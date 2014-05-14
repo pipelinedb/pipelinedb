@@ -5,19 +5,12 @@
 
 <chapter id="catalogs">
  <title>System Catalogs</title>
-
 &common;
-
   <para>
    The system catalogs are the place where a relational database
    management system stores schema metadata, such as information about
    tables and columns, and internal bookkeeping information.
-<!## PG>
    <productname>PostgreSQL</productname>'s system catalogs are regular
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname>'s system catalogs are regular
-<!## end>
    tables.  You can drop and recreate the tables, add columns, insert
    and update values, and severely mess up your system that way.
    Normally, one should not change the system catalogs by hand, there
@@ -30,7 +23,6 @@
 
  <sect1 id="catalogs-overview">
   <title>Overview</title>
-
 &common;
   <para>
    <xref linkend="catalog-table"> lists the system catalogs.
@@ -152,6 +144,11 @@
      </row>
 
      <row>
+      <entry><link linkend="catalog-pg-event-trigger"><structname>pg_event_trigger</structname></link></entry>
+      <entry>event triggers</entry>
+     </row>
+
+     <row>
       <entry><link linkend="catalog-pg-extension"><structname>pg_extension</structname></link></entry>
       <entry>installed extensions</entry>
      </row>
@@ -227,6 +224,11 @@
      </row>
 
      <row>
+      <entry><link linkend="catalog-pg-range"><structname>pg_range</structname></link></entry>
+      <entry>information about range types</entry>
+     </row>
+
+     <row>
       <entry><link linkend="catalog-pg-rewrite"><structname>pg_rewrite</structname></link></entry>
       <entry>query rewrite rules</entry>
      </row>
@@ -244,6 +246,11 @@
      <row>
       <entry><link linkend="catalog-pg-shdescription"><structname>pg_shdescription</structname></link></entry>
       <entry>comments on shared objects</entry>
+     </row>
+
+     <row>
+      <entry><link linkend="catalog-pg-shseclabel"><structname>pg_shseclabel</structname></link></entry>
+      <entry>security labels on shared database objects</entry>
      </row>
 
      <row>
@@ -321,7 +328,6 @@
   <indexterm zone="catalog-pg-aggregate">
    <primary>pg_aggregate</primary>
   </indexterm>
-
 &common;
   <para>
    The catalog <structname>pg_aggregate</structname> stores information about
@@ -337,7 +343,6 @@
    other information that is similar to ordinary functions.
   </para>
 
-&xconly;
   <table>
    <title><structname>pg_aggregate</> Columns</title>
 
@@ -391,7 +396,10 @@
       <entry>Data type of the aggregate function's internal transition (state) data</entry>
 <!## end>
 <!## XC>
-      <entry>Data type of the aggregate function's internal transition and collection (state) data (Revised for Postgres-XC)</entry>
+      <entry>
+       Data type of the aggregate function's internal transition and collection (state) 
+       data (Revised for Postgres-XC)
+      </entry>
 <!## end>
      </row>
      <row>
@@ -439,7 +447,6 @@
   <indexterm zone="catalog-pg-am">
    <primary>pg_am</primary>
   </indexterm>
-
 &common;
   <para>
    The catalog <structname>pg_am</structname> stores information about index
@@ -461,6 +468,13 @@
      </row>
     </thead>
     <tbody>
+
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
 
      <row>
       <entry><structfield>amname</structfield></entry>
@@ -528,6 +542,13 @@
       <entry></entry>
       <entry>Does the access method support a scan without any constraint
        for the first index column?</entry>
+     </row>
+
+     <row>
+      <entry><structfield>amsearcharray</structfield></entry>
+      <entry><type>bool</type></entry>
+      <entry></entry>
+      <entry>Does the access method support <literal>ScalarArrayOpExpr</> searches?</entry>
      </row>
 
      <row>
@@ -650,6 +671,14 @@
      </row>
 
      <row>
+      <entry><structfield>amcanreturn</structfield></entry>
+      <entry><type>regproc</type></entry>
+      <entry><literal><link linkend="catalog-pg-proc"><structname>pg_proc</structname></link>.oid</literal></entry>
+      <entry>Function to check whether index supports index-only scans,
+       or zero if none</entry>
+     </row>
+
+     <row>
       <entry><structfield>amcostestimate</structfield></entry>
       <entry><type>regproc</type></entry>
       <entry><literal><link linkend="catalog-pg-proc"><structname>pg_proc</structname></link>.oid</literal></entry>
@@ -676,7 +705,6 @@
   <indexterm zone="catalog-pg-amop">
    <primary>pg_amop</primary>
   </indexterm>
-
 &common;
   <para>
    The catalog <structname>pg_amop</structname> stores information about
@@ -703,6 +731,13 @@
      </row>
     </thead>
     <tbody>
+
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
 
      <row>
       <entry><structfield>amopfamily</structfield></entry>
@@ -819,7 +854,6 @@
   <indexterm zone="catalog-pg-amproc">
    <primary>pg_amproc</primary>
   </indexterm>
-
 &common;
   <para>
    The catalog <structname>pg_amproc</structname> stores information about
@@ -840,6 +874,13 @@
      </row>
     </thead>
     <tbody>
+
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
 
      <row>
       <entry><structfield>amprocfamily</structfield></entry>
@@ -901,7 +942,6 @@
   <indexterm zone="catalog-pg-attrdef">
    <primary>pg_attrdef</primary>
   </indexterm>
-
 &common;
   <para>
    The catalog <structname>pg_attrdef</structname> stores column default values.  The main information
@@ -925,6 +965,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>adrelid</structfield></entry>
       <entry><type>oid</type></entry>
@@ -1207,6 +1254,15 @@
       </entry>
      </row>
 
+     <row>
+      <entry><structfield>attfdwoptions</structfield></entry>
+      <entry><type>text[]</type></entry>
+      <entry></entry>
+      <entry>
+       Attribute-level foreign data wrapper options, as <quote>keyword=value</> strings
+      </entry>
+     </row>
+
     </tbody>
    </tgroup>
   </table>
@@ -1274,6 +1330,13 @@
     </thead>
 
     <tbody>
+
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>rolname</structfield></entry>
       <entry><type>name</type></entry>
@@ -1319,7 +1382,7 @@
       <entry><type>bool</type></entry>
       <entry>
        Role can log in. That is, this role can be given as the initial
-       session authorization identifier.
+       session authorization identifier
       </entry>
      </row>
 
@@ -1330,7 +1393,7 @@
        Role is a replication role. That is, this role can initiate streaming
        replication (see <xref linkend="streaming-replication">) and set/unset
        the system backup mode using <function>pg_start_backup</> and
-       <function>pg_stop_backup</>.
+       <function>pg_stop_backup</>
       </entry>
      </row>
 
@@ -1451,8 +1514,7 @@
 &common;
   <para>
    The catalog <structname>pg_cast</structname> stores data type conversion
-   paths, both built-in paths and those defined with
-   <xref linkend="sql-createcast">.
+   paths, both built-in and user-defined.
   </para>
 
   <para>
@@ -1481,6 +1543,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>castsource</structfield></entry>
       <entry><type>oid</type></entry>
@@ -1576,8 +1645,8 @@
    The catalog <structname>pg_class</structname> catalogs tables and most
    everything else that has columns or is otherwise similar to a
    table.  This includes indexes (but see also
-   <structname>pg_index</structname>), sequences, views, composite types,
-   and TOAST tables; see <structfield>relkind</>.
+   <structname>pg_index</structname>), sequences, views, materialized
+   views, composite types, and TOAST tables; see <structfield>relkind</>.
    Below, when we mean all of these
    kinds of objects we speak of <quote>relations</quote>.  Not all
    columns are meaningful for all relation types.
@@ -1597,6 +1666,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>relname</structfield></entry>
       <entry><type>name</type></entry>
@@ -1693,6 +1769,19 @@
      </row>
 
      <row>
+      <entry><structfield>relallvisible</structfield></entry>
+      <entry><type>int4</type></entry>
+      <entry></entry>
+      <entry>
+       Number of pages that are marked all-visible in the table's
+       visibility map.  This is only an estimate used by the
+       planner.  It is updated by <command>VACUUM</command>,
+       <command>ANALYZE</command>, and a few DDL commands such as
+       <command>CREATE INDEX</command>.
+      </entry>
+     </row>
+
+     <row>
       <entry><structfield>reltoastrelid</structfield></entry>
       <entry><type>oid</type></entry>
       <entry><literal><link linkend="catalog-pg-class"><structname>pg_class</structname></link>.oid</literal></entry>
@@ -1748,8 +1837,9 @@
       <entry></entry>
       <entry>
        <literal>r</> = ordinary table, <literal>i</> = index,
-       <literal>S</> = sequence, <literal>v</> = view, <literal>c</> =
-       composite type, <literal>t</> = TOAST table,
+       <literal>S</> = sequence, <literal>v</> = view,
+       <literal>m</> = materialized view,
+       <literal>c</> = composite type, <literal>t</> = TOAST table,
        <literal>f</> = foreign table
       </entry>
      </row>
@@ -1822,6 +1912,14 @@
      </row>
 
      <row>
+      <entry><structfield>relispopulated</structfield></entry>
+      <entry><type>bool</type></entry>
+      <entry></entry>
+      <entry>True if relation is populated (this is true for all
+       relations other than some materialized views)</entry>
+     </row>
+
+     <row>
       <entry><structfield>relfrozenxid</structfield></entry>
       <entry><type>xid</type></entry>
       <entry></entry>
@@ -1829,6 +1927,19 @@
        All transaction IDs before this one have been replaced with a permanent
        (<quote>frozen</>) transaction ID in this table.  This is used to track
        whether the table needs to be vacuumed in order to prevent transaction
+       ID wraparound or to allow <literal>pg_clog</> to be shrunk.  Zero
+       (<symbol>InvalidTransactionId</symbol>) if the relation is not a table.
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>relminmxid</structfield></entry>
+      <entry><type>xid</type></entry>
+      <entry></entry>
+      <entry>
+       All multitransaction IDs before this one have been replaced by a
+       transaction ID in this table.  This is used to track
+       whether the table needs to be vacuumed in order to prevent multitransaction ID
        ID wraparound or to allow <literal>pg_clog</> to be shrunk.  Zero
        (<symbol>InvalidTransactionId</symbol>) if the relation is not a table.
       </entry>
@@ -1868,6 +1979,89 @@
    <structfield>relhasindex</> if it finds the table has no indexes.  This
    arrangement avoids race conditions and improves concurrency.
   </para>
+ </sect1>
+
+ <sect1 id="catalog-pg-event-trigger">
+  <title><structname>pg_event_trigger</structname></title>
+
+  <indexterm zone="catalog-pg-event-trigger">
+   <primary>pg_event_trigger</primary>
+  </indexterm>
+
+&common;
+  <para>
+   The catalog <structname>pg_event_trigger</structname> stores event triggers.
+   See <xref linkend="event-triggers"> for more information.
+  </para>
+
+  <table>
+   <title><structname>pg_event_trigger</> Columns</title>
+
+   <tgroup cols="4">
+    <thead>
+     <row>
+      <entry>Name</entry>
+      <entry>Type</entry>
+      <entry>References</entry>
+      <entry>Description</entry>
+     </row>
+    </thead>
+
+    <tbody>
+     <row>
+      <entry><structfield>evtname</structfield></entry>
+      <entry><type>name</type></entry>
+      <entry></entry>
+      <entry>Trigger name (must be unique)</entry>
+     </row>
+
+     <row>
+      <entry><structfield>evtevent</structfield></entry>
+      <entry><type>name</type></entry>
+      <entry></entry>
+      <entry>Identifies the event for which this trigger fires</entry>
+     </row>
+
+     <row>
+      <entry><structfield>evtowner</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry><literal><link linkend="catalog-pg-authid"><structname>pg_authid</structname></link>.oid</literal></entry>
+      <entry>Owner of the event trigger</entry>
+     </row>
+
+     <row>
+      <entry><structfield>evtfoid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry><literal><link linkend="catalog-pg-proc"><structname>pg_proc</structname></link>.oid</literal></entry>
+      <entry>The function to be called</entry>
+     </row>
+
+     <row>
+      <entry><structfield>evtenabled</structfield></entry>
+      <entry><type>char</type></entry>
+      <entry></entry>
+      <entry>
+       Controls in which <xref linkend="guc-session-replication-role"> modes
+       the event trigger fires.
+       <literal>O</> = trigger fires in <quote>origin</> and <quote>local</> modes,
+       <literal>D</> = trigger is disabled,
+       <literal>R</> = trigger fires in <quote>replica</> mode,
+       <literal>A</> = trigger fires always.
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>evttags</structfield></entry>
+      <entry><type>text[]</type></entry>
+      <entry></entry>
+      <entry>
+        Command tags for which this trigger will fire.  If NULL, the firing
+        of this trigger is not restricted on the basis of the command tag.
+      </entry>
+     </row>
+    </tbody>
+   </tgroup>
+  </table>
  </sect1>
 
  <sect1 id="catalog-pg-constraint">
@@ -1910,6 +2104,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>conname</structfield></entry>
       <entry><type>name</type></entry>
@@ -1958,7 +2159,8 @@
       <entry><structfield>convalidated</structfield></entry>
       <entry><type>bool</type></entry>
       <entry></entry>
-      <entry>Has the constraint been validated? Can only be false for foreign keys</entry>
+      <entry>Has the constraint been validated?
+       Currently, can only be false for foreign keys and CHECK constraints</entry>
      </row>
 
      <row>
@@ -2023,7 +2225,7 @@
       <entry>Foreign key match type:
             <literal>f</> = full,
             <literal>p</> = partial,
-            <literal>u</> = simple (unspecified)
+            <literal>s</> = simple
           </entry>
      </row>
 
@@ -2045,6 +2247,16 @@
        The number of direct inheritance ancestors this constraint has.
        A constraint with
        a nonzero number of ancestors cannot be dropped nor renamed.
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>connoinherit</structfield></entry>
+      <entry><type>bool</type></entry>
+      <entry></entry>
+      <entry>
+       This constraint is defined locally for the relation.  It is a
+       non-inheritable constraint.
       </entry>
      </row>
 
@@ -2167,6 +2379,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>collname</structfield></entry>
       <entry><type>name</type></entry>
       <entry></entry>
@@ -2246,6 +2465,7 @@
    <primary>pg_conversion</primary>
   </indexterm>
 
+&common;
   <para>
    The catalog <structname>pg_conversion</structname> describes
    encoding conversion procedures.  See <xref linkend="sql-createconversion">
@@ -2266,6 +2486,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>conname</structfield></entry>
       <entry><type>name</type></entry>
@@ -2361,6 +2588,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>datname</structfield></entry>
       <entry><type>name</type></entry>
       <entry></entry>
@@ -2450,6 +2684,20 @@
        transaction ID wraparound or to allow <literal>pg_clog</> to be shrunk.
        It is the minimum of the per-table
        <structname>pg_class</>.<structfield>relfrozenxid</> values.
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>datminmxid</structfield></entry>
+      <entry><type>xid</type></entry>
+      <entry></entry>
+      <entry>
+       All multitransaction IDs before this one have been replaced with a
+       transaction ID in this database.  This is used to
+       track whether the database needs to be vacuumed in order to prevent
+       transaction ID wraparound or to allow <literal>pg_clog</> to be shrunk.
+       It is the minimum of the per-table
+       <structname>pg_class</>.<structfield>relminmxid</> values.
       </entry>
      </row>
 
@@ -2572,6 +2820,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>defaclrole</structfield></entry>
       <entry><type>oid</type></entry>
       <entry><literal><link linkend="catalog-pg-authid"><structname>pg_authid</structname></link>.oid</literal></entry>
@@ -2594,7 +2849,8 @@
        Type of object this entry is for:
        <literal>r</> = relation (table, view),
        <literal>S</> = sequence,
-       <literal>f</> = function
+       <literal>f</> = function,
+       <literal>T</> = type
       </entry>
      </row>
 
@@ -2928,6 +3184,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>enumtypid</structfield></entry>
       <entry><type>oid</type></entry>
       <entry><literal><link linkend="catalog-pg-type"><structname>pg_type</structname></link>.oid</literal></entry>
@@ -2980,6 +3243,7 @@
    <primary>pg_extension</primary>
   </indexterm>
 
+&common;
   <para>
    The catalog <structname>pg_extension</structname> stores information
    about the installed extensions.  See <xref linkend="extend-extensions">
@@ -3000,6 +3264,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>extname</structfield></entry>
       <entry><type>name</type></entry>
@@ -3075,6 +3346,14 @@
    <primary>pg_foreign_data_wrapper</primary>
   </indexterm>
 
+<!## XC>
+  <para>
+   This catalog exists in each coordinator and datanode in 
+   <productname>Postgres-XC</productname> as inheritted from <productname>PostgreSQL</productname>.
+   Please note that current release of <productname>Postgres-XC</productname> does not support
+   foreign data wrapper.
+  </para>
+<!## end>
 &common;
   <para>
    The catalog <structname>pg_foreign_data_wrapper</structname> stores
@@ -3097,6 +3376,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>fdwname</structfield></entry>
       <entry><type>name</type></entry>
@@ -3168,6 +3454,14 @@
    <primary>pg_foreign_server</primary>
   </indexterm>
 
+<!## XC>
+  <para>
+   This catalog exists in each coordinator and datanode in 
+   <productname>Postgres-XC</productname> as inheritted from <productname>PostgreSQL</productname>.
+   Please note that current release of <productname>Postgres-XC</productname> does not support
+   foreign data wrapper.
+  </para>
+<!## end>
 &common;
   <para>
    The catalog <structname>pg_foreign_server</structname> stores
@@ -3190,6 +3484,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>srvname</structfield></entry>
       <entry><type>name</type></entry>
@@ -3258,6 +3559,15 @@
    <primary>pg_foreign_table</primary>
   </indexterm>
 
+<!## XC>
+  <para>
+   This catalog exists in each coordinator and datanode in 
+   <productname>Postgres-XC</productname> as inheritted from <productname>PostgreSQL</productname>.
+   Please note that current release of <productname>Postgres-XC</productname> does not support
+   foreign data wrapper.
+  </para>
+<!## end>
+&common;
   <para>
    The catalog <structname>pg_foreign_table</structname> contains
    auxiliary information about foreign tables.  A foreign table is
@@ -3406,7 +3716,7 @@
        index is possibly incomplete: it must still be modified by
        <command>INSERT</>/<command>UPDATE</> operations, but it cannot safely
        be used for queries. If it is unique, the uniqueness property is not
-       true either.
+       guaranteed true either.
       </entry>
      </row>
 
@@ -3430,6 +3740,16 @@
        If true, the index is currently ready for inserts.  False means the
        index must be ignored by <command>INSERT</>/<command>UPDATE</>
        operations.
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>indislive</structfield></entry>
+      <entry><type>bool</type></entry>
+      <entry></entry>
+      <entry>
+       If false, the index is in process of being dropped, and should be
+       ignored for all purposes (including HOT-safety decisions)
       </entry>
      </row>
 
@@ -3603,6 +3923,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>lanname</structfield></entry>
       <entry><type>name</type></entry>
       <entry></entry>
@@ -3701,6 +4028,14 @@
    <primary>pg_largeobject</primary>
   </indexterm>
 
+<!## XC>
+  <para>
+   This catalog exists in each coordinator and datanode in 
+   <productname>Postgres-XC</productname> as inheritted from <productname>PostgreSQL</productname>.
+   Please note that current release of <productname>Postgres-XC</productname> does not support
+   large object.
+  </para>
+<!## end>
 &common;
   <para>
    The catalog <structname>pg_largeobject</structname> holds the data making up
@@ -3782,6 +4117,14 @@
    <primary>pg_largeobject_metadata</primary>
   </indexterm>
 
+<!## XC>
+  <para>
+   This catalog exists in each coordinator and datanode in 
+   <productname>Postgres-XC</productname> as inheritted from <productname>PostgreSQL</productname>.
+   Please note that current release of <productname>Postgres-XC</productname> does not support
+   large object.
+  </para>
+<!## end>
 &common;
   <para>
    The catalog <structname>pg_largeobject_metadata</structname>
@@ -3804,6 +4147,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>lomowner</structfield></entry>
       <entry><type>oid</type></entry>
@@ -3858,6 +4208,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>nspname</structfield></entry>
       <entry><type>name</type></entry>
       <entry></entry>
@@ -3905,7 +4262,7 @@
    particular operator family is applicable to a particular indexable column
    data type.  The set of operators from the family that are actually usable
    with the indexed column are whichever ones accept the column's data type
-   as their lefthand input.
+   as their left-hand input.
   </para>
 
   <para>
@@ -3925,6 +4282,13 @@
      </row>
     </thead>
     <tbody>
+
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
 
      <row>
       <entry><structfield>opcmethod</structfield></entry>
@@ -4025,6 +4389,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>oprname</structfield></entry>
       <entry><type>name</type></entry>
@@ -4175,6 +4546,13 @@
      </row>
     </thead>
     <tbody>
+
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
 
      <row>
       <entry><structfield>opfmethod</structfield></entry>
@@ -4363,6 +4741,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>proname</structfield></entry>
       <entry><type>name</type></entry>
       <entry></entry>
@@ -4417,6 +4802,14 @@
      </row>
 
      <row>
+      <entry><structfield>protransform</structfield></entry>
+      <entry><type>regproc</type></entry>
+      <entry><literal><link linkend="catalog-pg-proc"><structname>pg_proc</structname></link>.oid</literal></entry>
+      <entry>Calls to this function can be simplified by this other function
+       (see <xref linkend="xfunc-transform-functions">)</entry>
+     </row>
+
+     <row>
       <entry><structfield>proisagg</structfield></entry>
       <entry><type>bool</type></entry>
       <entry></entry>
@@ -4436,6 +4829,18 @@
       <entry></entry>
       <entry>Function is a security definer (i.e., a <quote>setuid</>
       function)</entry>
+     </row>
+
+     <row>
+      <entry><structfield>proleakproof</structfield></entry>
+      <entry><type>bool</type></entry>
+      <entry></entry>
+      <entry>
+       The function has no side effects.  No information about the
+       arguments is conveyed except via the return value.  Any function
+       that might throw an error depending on the values of its arguments
+       is not leak-proof.
+      </entry>
      </row>
 
      <row>
@@ -4625,6 +5030,91 @@
 
  </sect1>
 
+ <sect1 id="catalog-pg-range">
+  <title><structname>pg_range</structname></title>
+
+  <indexterm zone="catalog-pg-range">
+   <primary>pg_range</primary>
+  </indexterm>
+
+&common;
+  <para>
+   The catalog <structname>pg_range</structname> stores information about
+   range types.  This is in addition to the types' entries in
+   <link linkend="catalog-pg-type"><structname>pg_type</structname></link>.
+  </para>
+
+  <table>
+   <title><structname>pg_range</> Columns</title>
+
+   <tgroup cols="4">
+    <thead>
+     <row>
+      <entry>Name</entry>
+      <entry>Type</entry>
+      <entry>References</entry>
+      <entry>Description</entry>
+     </row>
+    </thead>
+
+    <tbody>
+     <row>
+      <entry><structfield>rngtypid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry><literal><link linkend="catalog-pg-type"><structname>pg_type</structname></link>.oid</literal></entry>
+      <entry>OID of the range type</entry>
+     </row>
+
+     <row>
+      <entry><structfield>rngsubtype</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry><literal><link linkend="catalog-pg-type"><structname>pg_type</structname></link>.oid</literal></entry>
+      <entry>OID of the element type (subtype) of this range type</entry>
+     </row>
+
+     <row>
+      <entry><structfield>rngcollation</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry><literal><link linkend="catalog-pg-collation"><structname>pg_collation</structname></link>.oid</literal></entry>
+      <entry>OID of the collation used for range comparisons, or 0 if none</entry>
+     </row>
+
+     <row>
+      <entry><structfield>rngsubopc</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry><literal><link linkend="catalog-pg-opclass"><structname>pg_opclass</structname></link>.oid</literal></entry>
+      <entry>OID of the subtype's operator class used for range comparisons</entry>
+     </row>
+
+     <row>
+      <entry><structfield>rngcanonical</structfield></entry>
+      <entry><type>regproc</type></entry>
+      <entry><literal><link linkend="catalog-pg-proc"><structname>pg_proc</structname></link>.oid</literal></entry>
+      <entry>OID of the function to convert a range value into canonical form,
+      or 0 if none</entry>
+     </row>
+
+     <row>
+      <entry><structfield>rngsubdiff</structfield></entry>
+      <entry><type>regproc</type></entry>
+      <entry><literal><link linkend="catalog-pg-proc"><structname>pg_proc</structname></link>.oid</literal></entry>
+      <entry>OID of the function to return the difference between two element
+      values as <type>double precision</type>, or 0 if none</entry>
+     </row>
+    </tbody>
+   </tgroup>
+  </table>
+
+  <para>
+   <structfield>rngsubopc</> (plus <structfield>rngcollation</>, if the
+   element type is collatable) determines the sort ordering used by the range
+   type.  <structfield>rngcanonical</> is used when the element type is
+   discrete.  <structfield>rngsubdiff</> is optional but should be supplied to
+   improve performance of GiST indexes on the range type.
+  </para>
+
+ </sect1>
+
  <sect1 id="catalog-pg-rewrite">
   <title><structname>pg_rewrite</structname></title>
 
@@ -4652,6 +5142,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>rulename</structfield></entry>
       <entry><type>name</type></entry>
       <entry></entry>
@@ -4669,7 +5166,7 @@
       <entry><structfield>ev_attr</structfield></entry>
       <entry><type>int2</type></entry>
       <entry></entry>
-      <entry>The column this rule is for (currently, always zero to
+      <entry>The column this rule is for (currently, always -1 to
       indicate the whole table)</entry>
      </row>
 
@@ -4747,10 +5244,18 @@
    <primary>pg_seclabel</primary>
   </indexterm>
 
+&common;
   <para>
    The catalog <structname>pg_seclabel</structname> stores security
-   labels on database objects.  See the
-   <xref linkend="sql-security-label"> statement.
+   labels on database objects.  Security labels can be manipulated
+   with the <xref linkend="sql-security-label"> command.  For an easier
+   way to view security labels, see <xref linkend="view-pg-seclabels">.
+  </para>
+
+  <para>
+   See also <link linkend="catalog-pg-shseclabel"><structname>pg_shseclabel</structname></link>,
+   which performs a similar function for security labels of database objects
+   that are shared across a database cluster.
   </para>
 
   <table>
@@ -5033,6 +5538,74 @@
 
  </sect1>
 
+ <sect1 id="catalog-pg-shseclabel">
+  <title><structname>pg_shseclabel</structname></title>
+
+  <indexterm zone="catalog-pg-shseclabel">
+   <primary>pg_shseclabel</primary>
+  </indexterm>
+
+&common;
+  <para>
+   The catalog <structname>pg_shseclabel</structname> stores security
+   labels on shared database objects.  Security labels can be manipulated
+   with the <xref linkend="sql-security-label"> command.  For an easier
+   way to view security labels, see <xref linkend="view-pg-seclabels">.
+  </para>
+
+  <para>
+   See also <link linkend="catalog-pg-seclabel"><structname>pg_seclabel</structname></link>,
+   which performs a similar function for security labels involving objects
+   within a single database.
+  </para>
+
+  <para>
+   Unlike most system catalogs, <structname>pg_shseclabel</structname>
+   is shared across all databases of a cluster: there is only one
+   copy of <structname>pg_shseclabel</structname> per cluster, not
+   one per database.
+  </para>
+
+  <table>
+   <title><structname>pg_shseclabel</structname> Columns</title>
+   <tgroup cols="4">
+    <thead>
+     <row>
+      <entry>Name</entry>
+      <entry>Type</entry>
+      <entry>References</entry>
+      <entry>Description</entry>
+     </row>
+    </thead>
+    <tbody>
+     <row>
+      <entry><structfield>objoid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry>any OID column</entry>
+      <entry>The OID of the object this security label pertains to</entry>
+     </row>
+     <row>
+      <entry><structfield>classoid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry><literal><link linkend="catalog-pg-class"><structname>pg_class</structname></link>.oid</literal></entry>
+      <entry>The OID of the system catalog this object appears in</entry>
+     </row>
+     <row>
+      <entry><structfield>provider</structfield></entry>
+      <entry><type>text</type></entry>
+      <entry></entry>
+      <entry>The label provider associated with this label.</entry>
+     </row>
+     <row>
+      <entry><structfield>label</structfield></entry>
+      <entry><type>text</type></entry>
+      <entry></entry>
+      <entry>The security label applied to this object.</entry>
+     </row>
+    </tbody>
+   </tgroup>
+  </table>
+ </sect1>
 
  <sect1 id="catalog-pg-statistic">
   <title><structname>pg_statistic</structname></title>
@@ -5203,9 +5776,9 @@
        Column data values of the appropriate kind for the
        <replaceable>N</>th <quote>slot</quote>, or null if the slot
        kind does not store any data values.  Each array's element
-       values are actually of the specific column's data type, so there
-       is no way to define these columns' type more specifically than
-       <type>anyarray</>.
+       values are actually of the specific column's data type, or a related
+       type such as an array's element type, so there is no way to define
+       these columns' type more specifically than <type>anyarray</>.
       </entry>
      </row>
     </tbody>
@@ -5251,6 +5824,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>spcname</structfield></entry>
       <entry><type>name</type></entry>
       <entry></entry>
@@ -5262,13 +5842,6 @@
       <entry><type>oid</type></entry>
       <entry><literal><link linkend="catalog-pg-authid"><structname>pg_authid</structname></link>.oid</literal></entry>
       <entry>Owner of the tablespace, usually the user who created it</entry>
-     </row>
-
-     <row>
-      <entry><structfield>spclocation</structfield></entry>
-      <entry><type>text</type></entry>
-      <entry></entry>
-      <entry>Location (directory path) of the tablespace</entry>
      </row>
 
      <row>
@@ -5326,6 +5899,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>tgrelid</structfield></entry>
       <entry><type>oid</type></entry>
@@ -5513,6 +6093,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>cfgname</structfield></entry>
       <entry><type>name</type></entry>
       <entry></entry>
@@ -5654,6 +6241,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>dictname</structfield></entry>
       <entry><type>name</type></entry>
       <entry></entry>
@@ -5730,6 +6324,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>prsname</structfield></entry>
       <entry><type>name</type></entry>
@@ -5822,6 +6423,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>tmplname</structfield></entry>
       <entry><type>name</type></entry>
       <entry></entry>
@@ -5890,6 +6498,13 @@
 
     <tbody>
      <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
+     <row>
       <entry><structfield>typname</structfield></entry>
       <entry><type>name</type></entry>
       <entry></entry>
@@ -5951,7 +6566,8 @@
        <literal>c</literal> for a composite type (e.g., a table's row type),
        <literal>d</literal> for a domain,
        <literal>e</literal> for an enum type,
-       or <literal>p</literal> for a pseudo-type.
+       <literal>p</literal> for a pseudo-type, or
+       <literal>r</literal> for a range type.
        See also <structfield>typrelid</structfield> and
        <structfield>typbasetype</structfield>.
       </entry>
@@ -6262,6 +6878,18 @@
        converter to produce a constant.
       </para></entry>
      </row>
+
+     <row>
+      <entry><structfield>typacl</structfield></entry>
+      <entry><type>aclitem[]</type></entry>
+      <entry></entry>
+      <entry>
+       Access privileges; see
+       <xref linkend="sql-grant"> and
+       <xref linkend="sql-revoke">
+       for details
+      </entry>
+     </row>
     </tbody>
    </tgroup>
   </table>
@@ -6322,6 +6950,10 @@
       <entry>Pseudo-types</entry>
      </row>
      <row>
+      <entry><literal>R</literal></entry>
+      <entry>Range types</entry>
+     </row>
+     <row>
       <entry><literal>S</literal></entry>
       <entry>String types</entry>
      </row>
@@ -6355,6 +6987,14 @@
    <primary>pg_user_mapping</primary>
   </indexterm>
 
+<!## XC>
+  <para>
+   This catalog exists in each coordinator and datanode in 
+   <productname>Postgres-XC</productname> as inheritted from <productname>PostgreSQL</productname>.
+   Please note that current release of <productname>Postgres-XC</productname> does not support
+   foreign data wrapper.
+  </para>
+<!## end>
 &common;
   <para>
    The catalog <structname>pg_user_mapping</structname> stores
@@ -6378,6 +7018,13 @@
     </thead>
 
     <tbody>
+     <row>
+      <entry><structfield>oid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry></entry>
+      <entry>Row identifier (hidden attribute; must be explicitly selected)</entry>
+     </row>
+
      <row>
       <entry><structfield>umuser</structfield></entry>
       <entry><type>oid</type></entry>
@@ -6638,6 +7285,14 @@
  <sect1 id="views-overview">
   <title>System Views</title>
 
+<!## XC>
+&xconly;
+  <para>
+   Unlike general views, all the system views are defined in each coordinator and
+   datanode.
+  </para>
+<!## end>
+
 &common;
   <para>
    In addition to the system catalogs, <productname>PostgreSQL</productname>
@@ -6707,6 +7362,11 @@
      <row>
       <entry><link linkend="view-pg-locks"><structname>pg_locks</structname></link></entry>
       <entry>currently held locks</entry>
+     </row>
+
+     <row>
+      <entry><link linkend="view-pg-matviews"><structname>pg_matviews</structname></link></entry>
+      <entry>materialized views</entry>
      </row>
 
      <row>
@@ -6782,6 +7442,13 @@
     </tbody>
    </tgroup>
   </table>
+<!## XC>
+&xconly;
+  <para>
+   Please note that <productname>Postgres-XC</productname> propagates view definition only to coordinators
+   because not all view definitions can be pushed down to datanodes.
+  </para>
+<!## end>
  </sect1>
 
  <sect1 id="view-pg-available-extensions">
@@ -6791,6 +7458,7 @@
    <primary>pg_available_extensions</primary>
   </indexterm>
 
+&common;
   <para>
    The <structname>pg_available_extensions</structname> view lists the
    extensions that are available for installation.
@@ -6853,6 +7521,7 @@
    <primary>pg_available_extension_versions</primary>
   </indexterm>
 
+&common;
   <para>
    The <structname>pg_available_extension_versions</structname> view lists the
    specific extension versions that are available for installation.
@@ -7208,6 +7877,8 @@
    in the same way as in <structname>pg_description</structname> or
    <structname>pg_depend</structname>).  Also, the right to extend a
    relation is represented as a separate lockable object.
+   Also, <quote>advisory</> locks can be taken on numbers that have
+   user-defined meanings.
   </para>
 
   <table>
@@ -7245,9 +7916,9 @@
       <entry><type>oid</type></entry>
       <entry><literal><link linkend="catalog-pg-database"><structname>pg_database</structname></link>.oid</literal></entry>
       <entry>
-       OID of the database in which the object exists, or
-       zero if the object is a shared object, or
-       null if the object is a transaction ID
+       OID of the database in which the lock target exists, or
+       zero if the target is a shared object, or
+       null if the target is a transaction ID
       </entry>
      </row>
      <row>
@@ -7255,7 +7926,7 @@
       <entry><type>oid</type></entry>
       <entry><literal><link linkend="catalog-pg-class"><structname>pg_class</structname></link>.oid</literal></entry>
       <entry>
-       OID of the relation, or null if the object is not
+       OID of the relation targeted by the lock, or null if the target is not
        a relation or part of a relation
       </entry>
      </row>
@@ -7264,8 +7935,8 @@
       <entry><type>integer</type></entry>
       <entry></entry>
       <entry>
-       Page number within the relation, or null if the object
-       is not a tuple or relation page
+       Page number targeted by the lock within the relation,
+       or null if the target is not a relation page or tuple
       </entry>
      </row>
      <row>
@@ -7273,7 +7944,8 @@
       <entry><type>smallint</type></entry>
       <entry></entry>
       <entry>
-       Tuple number within the page, or null if the object is not a tuple
+       Tuple number targeted by the lock within the page,
+       or null if the target is not a tuple
       </entry>
      </row>
      <row>
@@ -7281,8 +7953,8 @@
       <entry><type>text</type></entry>
       <entry></entry>
       <entry>
-       Virtual ID of a transaction, or null if the object is not a
-       virtual transaction ID
+       Virtual ID of the transaction targeted by the lock,
+       or null if the target is not a virtual transaction ID
       </entry>
      </row>
      <row>
@@ -7290,7 +7962,8 @@
       <entry><type>xid</type></entry>
       <entry></entry>
       <entry>
-       ID of a transaction, or null if the object is not a transaction ID
+       ID of the transaction targeted by the lock,
+       or null if the target is not a transaction ID
       </entry>
      </row>
      <row>
@@ -7298,8 +7971,8 @@
       <entry><type>oid</type></entry>
       <entry><literal><link linkend="catalog-pg-class"><structname>pg_class</structname></link>.oid</literal></entry>
       <entry>
-       OID of the system catalog containing the object, or null if the
-       object is not a general database object
+       OID of the system catalog containing the lock target, or null if the
+       target is not a general database object
       </entry>
      </row>
      <row>
@@ -7307,10 +7980,8 @@
       <entry><type>oid</type></entry>
       <entry>any OID column</entry>
       <entry>
-       OID of the object within its system catalog, or null if the
-       object is not a general database object.
-       For advisory locks it is used to distinguish the two key
-       spaces (1 for an int8 key, 2 for two int4 keys).
+       OID of the lock target within its system catalog, or null if the
+       target is not a general database object
       </entry>
      </row>
      <row>
@@ -7318,10 +7989,11 @@
       <entry><type>smallint</type></entry>
       <entry></entry>
       <entry>
-       For a table column, this is the column number (the
+       Column number targeted by the lock (the
        <structfield>classid</> and <structfield>objid</> refer to the
-       table itself).  For all other object types, this column is
-       zero.  Null if the object is not a general database object
+       table itself),
+       or zero if the target is some other general database object,
+       or null if the target is not a general database object
       </entry>
      </row>
      <row>
@@ -7338,7 +8010,7 @@
       <entry></entry>
       <entry>
        Process ID of the server process holding or awaiting this
-       lock.  Null if the lock is held by a prepared transaction.
+       lock, or null if the lock is held by a prepared transaction
       </entry>
      </row>
      <row>
@@ -7353,6 +8025,13 @@
       <entry><type>boolean</type></entry>
       <entry></entry>
       <entry>True if lock is held, false if lock is awaited</entry>
+     </row>
+     <row>
+      <entry><structfield>fastpath</structfield></entry>
+      <entry><type>boolean</type></entry>
+      <entry></entry>
+      <entry>True if lock was taken via fast path, false if taken via main
+       lock table</entry>
      </row>
     </tbody>
    </tgroup>
@@ -7391,24 +8070,18 @@
 
   <para>
    Advisory locks can be acquired on keys consisting of either a single
-   <type>bigint</type> value or two integer values.  A <type>bigint</type> key is displayed with its
+   <type>bigint</type> value or two integer values.
+   A <type>bigint</type> key is displayed with its
    high-order half in the <structfield>classid</> column, its low-order half
    in the <structfield>objid</> column, and <structfield>objsubid</> equal
-   to 1.  Integer keys are displayed with the first key in the
+   to 1. The original <type>bigint</type> value can be reassembled with the
+   expression <literal>(classid::bigint &lt;&lt; 32) |
+   objid::bigint</literal>. Integer keys are displayed with the
+   first key in the
    <structfield>classid</> column, the second key in the <structfield>objid</>
    column, and <structfield>objsubid</> equal to 2.  The actual meaning of
    the keys is up to the user.  Advisory locks are local to each database,
    so the <structfield>database</> column is meaningful for an advisory lock.
-  </para>
-
-  <para>
-   When the <structname>pg_locks</structname> view is accessed, the
-   internal lock manager data structures are momentarily locked, and
-   a copy is made for the view to display.  This ensures that the
-   view produces a consistent set of results, while not blocking
-   normal lock manager operations longer than necessary.  Nonetheless
-   there could be some impact on database performance if this view is
-   frequently accessed.
   </para>
 
   <para>
@@ -7423,7 +8096,7 @@
 
   <para>
    The <structfield>pid</structfield> column can be joined to the
-   <structfield>procpid</structfield> column of the
+   <structfield>pid</structfield> column of the
    <structname>pg_stat_activity</structname> view to get more
    information on the session holding or waiting to hold each lock.
    Also, if you are using prepared transactions, the
@@ -7434,6 +8107,115 @@
    (A prepared transaction can never be waiting for a lock,
    but it continues to hold the locks it acquired while running.)
   </para>
+
+  <para>
+   The <structname>pg_locks</structname> view displays data from both the
+   regular lock manager and the predicate lock manager, which are
+   separate systems; in addition, the regular lock manager subdivides its
+   locks into regular and <firstterm>fast-path</> locks.
+   This data is not guaranteed to be entirely consistent.
+   When the view is queried,
+   data on fast-path locks (with <structfield>fastpath</> = <literal>true</>)
+   is gathered from each backend one at a time, without freezing the state of
+   the entire lock manager, so it is possible for locks to be taken or
+   released while information is gathered.  Note, however, that these locks are
+   known not to conflict with any other lock currently in place.  After
+   all backends have been queried for fast-path locks, the remainder of the
+   regular lock manager is locked as a unit, and a consistent snapshot of all
+   remaining locks is collected as an atomic action.  After unlocking the
+   regular lock manager, the predicate lock manager is similarly locked and all
+   predicate locks are collected as an atomic action.  Thus, with the exception
+   of fast-path locks, each lock manager will deliver a consistent set of
+   results, but as we do not lock both lock managers simultaneously, it is
+   possible for locks to be taken or released after we interrogate the regular
+   lock manager and before we interrogate the predicate lock manager.
+  </para>
+
+  <para>
+   Locking the regular and/or predicate lock manager could have some
+   impact on database performance if this view is very frequently accessed.
+   The locks are held only for the minimum amount of time necessary to
+   obtain data from the lock managers, but this does not completely eliminate
+   the possibility of a performance impact.
+  </para>
+
+ </sect1>
+
+ <sect1 id="view-pg-matviews">
+  <title><structname>pg_matviews</structname></title>
+
+  <indexterm zone="view-pg-matviews">
+   <primary>pg_matviews</primary>
+  </indexterm>
+
+&common;
+  <indexterm zone="view-pg-matviews">
+   <primary>materialized views</primary>
+  </indexterm>
+
+  <para>
+   The view <structname>pg_matviews</structname> provides access to
+   useful information about each materialized view in the database.
+  </para>
+
+  <table>
+   <title><structname>pg_matviews</> Columns</title>
+
+   <tgroup cols="4">
+    <thead>
+     <row>
+      <entry>Name</entry>
+      <entry>Type</entry>
+      <entry>References</entry>
+      <entry>Description</entry>
+     </row>
+    </thead>
+    <tbody>
+     <row>
+      <entry><structfield>schemaname</structfield></entry>
+      <entry><type>name</type></entry>
+      <entry><literal><link linkend="catalog-pg-namespace"><structname>pg_namespace</structname></link>.nspname</literal></entry>
+      <entry>Name of schema containing materialized view</entry>
+     </row>
+     <row>
+      <entry><structfield>matviewname</structfield></entry>
+      <entry><type>name</type></entry>
+      <entry><literal><link linkend="catalog-pg-class"><structname>pg_class</structname></link>.relname</literal></entry>
+      <entry>Name of materialized view</entry>
+     </row>
+     <row>
+      <entry><structfield>matviewowner</structfield></entry>
+      <entry><type>name</type></entry>
+      <entry><literal><link linkend="catalog-pg-authid"><structname>pg_authid</structname></link>.rolname</literal></entry>
+      <entry>Name of materialized view's owner</entry>
+     </row>
+     <row>
+      <entry><structfield>tablespace</structfield></entry>
+      <entry><type>name</type></entry>
+      <entry><literal><link linkend="catalog-pg-tablespace"><structname>pg_tablespace</structname></link>.spcname</literal></entry>
+      <entry>Name of tablespace containing materialized view (null if default for database)</entry>
+     </row>
+     <row>
+      <entry><structfield>hasindexes</structfield></entry>
+      <entry><type>boolean</type></entry>
+      <entry></entry>
+      <entry>True if materialized view has (or recently had) any indexes</entry>
+     </row>
+     <row>
+      <entry><structfield>ispopulated</structfield></entry>
+      <entry><type>boolean</type></entry>
+      <entry></entry>
+      <entry>True if materialized view is currently populated</entry>
+     </row>
+     <row>
+      <entry><structfield>definition</structfield></entry>
+      <entry><type>text</type></entry>
+      <entry></entry>
+      <entry>Materialized view definition (a reconstructed <command>SELECT</command> query)</entry>
+     </row>
+    </tbody>
+   </tgroup>
+  </table>
 
  </sect1>
 
@@ -7692,7 +8474,7 @@
       <entry></entry>
       <entry>
        Role can update system catalogs directly.  (Even a superuser cannot do
-       this unless this column is true.)
+       this unless this column is true)
       </entry>
      </row>
 
@@ -7703,6 +8485,18 @@
       <entry>
        Role can log in. That is, this role can be given as the initial
        session authorization identifier
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>rolreplication</structfield></entry>
+      <entry><type>bool</type></entry>
+      <entry></entry>
+      <entry>
+       Role is a replication role. That is, this role can initiate streaming
+       replication (see <xref linkend="streaming-replication">) and set/unset
+       the system backup mode using <function>pg_start_backup</> and
+       <function>pg_stop_backup</>
       </entry>
      </row>
 
@@ -7729,6 +8523,13 @@
       <entry></entry>
       <entry>Password expiry time (only used for password authentication);
        null if no expiration</entry>
+     </row>
+
+     <row>
+      <entry><structfield>rolconfig</structfield></entry>
+      <entry><type>text[]</type></entry>
+      <entry></entry>
+      <entry>Role-specific defaults for run-time configuration variables</entry>
      </row>
 
      <row>
@@ -7799,7 +8600,8 @@
 
   <para>
    The <structname>pg_rules</> view excludes the <literal>ON SELECT</> rules
-   of views; those can be seen in <structname>pg_views</>.
+   of views and materialized views; those can be seen in
+   <structname>pg_views</> and <structname>pg_matviews</>.
   </para>
 
  </sect1>
@@ -7811,6 +8613,7 @@
    <primary>pg_seclabels</primary>
   </indexterm>
 
+&common;
   <para>
    The view <structname>pg_seclabels</structname> provides information about
    security labels.  It as an easier-to-query version of the
@@ -8208,6 +9011,16 @@
      </row>
 
      <row>
+      <entry><structfield>userepl</structfield></entry>
+      <entry><type>bool</type></entry>
+      <entry></entry>
+      <entry>
+       User can initiate streaming replication and put the system in and
+       out of backup mode.
+      </entry>
+     </row>
+
+     <row>
       <entry><structfield>passwd</structfield></entry>
       <entry><type>text</type></entry>
       <entry></entry>
@@ -8339,8 +9152,6 @@
       <entry>
        A list of the most common values in the column. (Null if
        no values seem to be more common than any others.)
-       For some data types such as <type>tsvector</>, this is a list of
-       the most common element values rather than values of the type itself.
       </entry>
      </row>
 
@@ -8349,12 +9160,9 @@
       <entry><type>real[]</type></entry>
       <entry></entry>
       <entry>
-       A list of the frequencies of the most common values or elements,
+       A list of the frequencies of the most common values,
        i.e., number of occurrences of each divided by total number of rows.
        (Null when <structfield>most_common_vals</structfield> is.)
-       For some data types such as <type>tsvector</>, it can also store some
-       additional information, making it longer than the
-       <structfield>most_common_vals</> array.
       </entry>
      </row>
 
@@ -8386,13 +9194,47 @@
        type does not have a <literal>&lt;</> operator.)
       </entry>
      </row>
+
+     <row>
+      <entry><structfield>most_common_elems</structfield></entry>
+      <entry><type>anyarray</type></entry>
+      <entry></entry>
+      <entry>
+       A list of non-null element values most often appearing within values of
+       the column. (Null for scalar types.)
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>most_common_elem_freqs</structfield></entry>
+      <entry><type>real[]</type></entry>
+      <entry></entry>
+      <entry>
+       A list of the frequencies of the most common element values, i.e., the
+       fraction of rows containing at least one instance of the given value.
+       Two or three additional values follow the per-element frequencies;
+       these are the minimum and maximum of the preceding per-element
+       frequencies, and optionally the frequency of null elements.
+       (Null when <structfield>most_common_elems</structfield> is.)
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>elem_count_histogram</structfield></entry>
+      <entry><type>real[]</type></entry>
+      <entry></entry>
+      <entry>
+       A histogram of the counts of distinct non-null element values within the
+       values of the column, followed by the average number of distinct
+       non-null elements.  (Null for scalar types.)
+      </entry>
+     </row>
     </tbody>
    </tgroup>
   </table>
 
   <para>
-   The maximum number of entries in the <structfield>most_common_vals</>
-   and <structfield>histogram_bounds</> arrays can be set on a
+   The maximum number of entries in the array fields can be controlled on a
    column-by-column basis using the <command>ALTER TABLE SET STATISTICS</>
    command, or globally by setting the
    <xref linkend="guc-default-statistics-target"> run-time parameter.
@@ -8534,7 +9376,9 @@
    The view <structname>pg_timezone_names</structname> provides a list
    of time zone names that are recognized by <command>SET TIMEZONE</>,
    along with their associated abbreviations, UTC offsets,
-   and daylight-savings status.
+   and daylight-savings status.  (Technically,
+   <productname>PostgreSQL</productname> uses <acronym>UT1</> rather
+   than UTC because leap seconds are not handled.)
    Unlike the abbreviations shown in <link
    linkend="view-pg-timezone-abbrevs"><structname>pg_timezone_abbrevs</structname></link>, many of these names imply a set of daylight-savings transition
    date rules.  Therefore, the associated information changes across local DST
@@ -8616,8 +9460,8 @@
 
      <row>
       <entry><structfield>usesysid</structfield></entry>
-      <entry><type>int4</type></entry>
-      <entry>User ID (arbitrary number used to reference this user)</entry>
+      <entry><type>oid</type></entry>
+      <entry>ID of this user</entry>
      </row>
 
      <row>
@@ -8638,6 +9482,15 @@
       <entry>
        User can update system catalogs.  (Even a superuser cannot do
        this unless this column is true.)
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>userepl</structfield></entry>
+      <entry><type>bool</type></entry>
+      <entry>
+       User can initiate streaming replication and put the system in and
+       out of backup mode.
       </entry>
      </row>
 
@@ -8671,6 +9524,14 @@
    <primary>pg_user_mappings</primary>
   </indexterm>
 
+<!## XC>
+  <para>
+   This catalog exists in each coordinator and datanode in 
+   <productname>Postgres-XC</productname> as inheritted from <productname>PostgreSQL</productname>.
+   Please note that current release of <productname>Postgres-XC</productname> does not support
+   foreign data wrapper.
+  </para>
+<!## end>
 &common;
   <para>
    The view <structname>pg_user_mappings</structname> provides access
@@ -8713,8 +9574,8 @@
 
      <row>
       <entry><structfield>srvname</structfield></entry>
-      <entry><type>text</type></entry>
-      <entry></entry>
+      <entry><type>name</type></entry>
+      <entry><literal><link linkend="catalog-pg-foreign-server"><structname>pg_foreign_server</structname></link>.srvname</literal></entry>
       <entry>
        Name of the foreign server
       </entry>

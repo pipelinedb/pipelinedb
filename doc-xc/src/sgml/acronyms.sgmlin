@@ -3,15 +3,10 @@
 <appendix id="acronyms">
  <title>Acronyms</title>
 
+&common;
  <para>
-<!## PG>
   This is a list of acronyms commonly used in the <productname>PostgreSQL</>
   documentation and in discussions about <productname>PostgreSQL</>.
-<!## end>
-<!## XC>
-  This is a list of acronyms commonly used in the <productname>Postgres-XC</>
-  documentation and in discussions about <productname>Postgres-XC</>.
-<!## end>
 
   <variablelist>
 
@@ -191,12 +186,7 @@
     <term><acronym>ECPG</acronym></term>
     <listitem>
      <para>
-<!## PG>
       <link linkend="ecpg">Embedded C for PostgreSQL</link>
-<!## end>
-<!## XC>
-      <link linkend="ecpg">Embedded C for Postgres-XC</link>
-<!## end>
      </para>
     </listitem>
    </varlistentry>
@@ -281,7 +271,7 @@
     <term><acronym>GTM</acronym></term>
     <listitem>
      <para>
-      Global Transaction Manager
+      Global Transaction Manager.   This is <productname>Postgres-XC</productname> specific.
      </para>
     </listitem>
    </varlistentry>
@@ -303,12 +293,7 @@
     <listitem>
      <para>
       <link linkend="config-setting">Grand Unified Configuration</link>,
-<!## PG>
       the <productname>PostgreSQL</> subsystem that handles server configuration
-<!## end>
-<!## XC>
-      the <productname>Postgres-XC</> subsystem that handles server configuration
-<!## end>
      </para>
     </listitem>
    </varlistentry>
@@ -318,7 +303,7 @@
     <term><acronym>GXID</acronym></term>
     <listitem>
      <para>
-      Global Transaction Identifier
+      Global Transaction Identifier.   This is <productname>Postgres-XC</productname> specific.
      </para>
     </listitem>
    </varlistentry>
@@ -514,12 +499,7 @@
     <term><acronym>PGSQL</acronym></term>
     <listitem>
      <para>
-<!## PG>
       <link linkend="postgres"><productname>PostgreSQL</></link>
-<!## end>
-<!## XC>
-      <link linkend="postgres"><productname>Postgres-XC</></link>
-<!## end>
      </para>
     </listitem>
    </varlistentry>
@@ -528,12 +508,7 @@
     <term><acronym>PGXS</acronym></term>
     <listitem>
      <para>
-<!## PG>
       <link linkend="extend-pgxs"><productname>PostgreSQL</> Extension System</link>
-<!## end>
-<!## XC>
-      <link linkend="extend-pgxs"><productname>Postgres-XC</> Extension System</link>
-<!## end>
      </para>
     </listitem>
    </varlistentry>

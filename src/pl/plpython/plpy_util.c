@@ -61,20 +61,59 @@ PLy_free(void *ptr)
 PyObject *
 PLyUnicode_Bytes(PyObject *unicode)
 {
-	PyObject   *rv;
-	const char *serverenc;
+	PyObject   *bytes,
+			   *rv;
+	char	   *utf8string,
+			   *encoded;
+
+	/* First encode the Python unicode object with UTF-8. */
+	bytes = PyUnicode_AsUTF8String(unicode);
+	if (bytes == NULL)
+		PLy_elog(ERROR, "could not convert Python Unicode object to bytes");
+
+	utf8string = PyBytes_AsString(bytes);
+	if (utf8string == NULL)
+	{
+		Py_DECREF(bytes);
+		PLy_elog(ERROR, "could not extract bytes from encoded string");
+	}
 
 	/*
-	 * Python understands almost all PostgreSQL encoding names, but it doesn't
-	 * know SQL_ASCII.
+	 * Then convert to server encoding if necessary.
+	 *
+	 * PyUnicode_AsEncodedString could be used to encode the object directly
+	 * in the server encoding, but Python doesn't support all the encodings
+	 * that PostgreSQL does (EUC_TW and MULE_INTERNAL). UTF-8 is used as an
+	 * intermediary in PLyUnicode_FromString as well.
 	 */
-	if (GetDatabaseEncoding() == PG_SQL_ASCII)
-		serverenc = "ascii";
+	if (GetDatabaseEncoding() != PG_UTF8)
+	{
+		PG_TRY();
+		{
+			encoded = (char *) pg_do_encoding_conversion(
+												(unsigned char *) utf8string,
+														 strlen(utf8string),
+														 PG_UTF8,
+													  GetDatabaseEncoding());
+		}
+		PG_CATCH();
+		{
+			Py_DECREF(bytes);
+			PG_RE_THROW();
+		}
+		PG_END_TRY();
+	}
 	else
-		serverenc = GetDatabaseEncodingName();
-	rv = PyUnicode_AsEncodedString(unicode, serverenc, "strict");
-	if (rv == NULL)
-		PLy_elog(ERROR, "could not convert Python Unicode object to PostgreSQL server encoding");
+		encoded = utf8string;
+
+	/* finally, build a bytes object in the server encoding */
+	rv = PyBytes_FromStringAndSize(encoded, strlen(encoded));
+
+	/* if pg_do_encoding_conversion allocated memory, free it now */
+	if (utf8string != encoded)
+		pfree(encoded);
+
+	Py_DECREF(bytes);
 	return rv;
 }
 

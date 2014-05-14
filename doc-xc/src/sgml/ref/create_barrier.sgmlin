@@ -48,6 +48,12 @@ CREATE BARRIER <replaceable class="PARAMETER">barrier_name</replaceable>
    used when no barrier name is specified when using <command>CREATE
    BARRIER</command>.
   </para>
+
+  <para>
+   GTM restart port for this barrier can be backed up at GTM and GTM standby.
+   To activate this, set the variable <literal>gtm_backup_barrier</literal>
+   to <literal>on</literal>.
+  </para>
   
  </refsect1>
 

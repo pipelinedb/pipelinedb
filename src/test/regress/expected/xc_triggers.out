@@ -16,7 +16,6 @@ num_truncate_query int DEFAULT 0,
 num_insert_row int DEFAULT 0,
 num_update_row int DEFAULT 0,
 num_delete_row int DEFAULT 0);
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "table_stats_pkey" for table "table_stats"
 -- Insert default entries
 INSERT INTO table_stats (table_name) VALUES ('xc_trigger_rep_tab');
 INSERT INTO table_stats (table_name) VALUES ('xc_trigger_hash_tab');

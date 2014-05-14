@@ -38,18 +38,14 @@ ERROR:  Cannot create index whose evaluation cannot be enforced to remote nodes
 CREATE TABLE xc_cons_rr (c circle, EXCLUDE USING gist (c WITH &&)) DISTRIBUTE BY ROUNDROBIN; -- error
 ERROR:  Cannot create index whose evaluation cannot be enforced to remote nodes
 CREATE TABLE xc_cons_rep (c circle, EXCLUDE USING gist (c WITH &&)) DISTRIBUTE BY REPLICATION; -- OK
-NOTICE:  CREATE TABLE / EXCLUDE will create implicit index "xc_cons_rep_c_excl" for table "xc_cons_rep"
 DROP TABLE xc_cons_rep;
 -- FOREIGN KEY creation
 CREATE SCHEMA xc_constraints_tests;
 SET search_path = xc_constraints_tests;
 -- Some parent tables
 CREATE TABLE xc_parent_rep (a int PRIMARY KEY) DISTRIBUTE BY REPLICATION; -- OK
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "xc_parent_rep_pkey" for table "xc_parent_rep"
 CREATE TABLE xc_parent_hash (a int PRIMARY KEY) DISTRIBUTE BY HASH(a); -- OK
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "xc_parent_hash_pkey" for table "xc_parent_hash"
 CREATE TABLE xc_parent_modulo (a int PRIMARY KEY) DISTRIBUTE BY MODULO(a); -- OK
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "xc_parent_modulo_pkey" for table "xc_parent_modulo"
 -- Test on roundrobin does not make sense as it cannot have a primary key
 CREATE TABLE xc_parent_rr (a int PRIMARY KEY) DISTRIBUTE BY ROUNDROBIN; -- error
 ERROR:  Cannot create index whose evaluation cannot be enforced to remote nodes

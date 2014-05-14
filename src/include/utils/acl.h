@@ -4,7 +4,7 @@
  *	  Definition of (and support for) access control list data structures.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/acl.h
@@ -195,6 +195,7 @@ typedef enum AclObjectKind
 	ACL_KIND_TSCONFIGURATION,	/* pg_ts_config */
 	ACL_KIND_FDW,				/* pg_foreign_data_wrapper */
 	ACL_KIND_FOREIGN_SERVER,	/* pg_foreign_server */
+	ACL_KIND_EVENT_TRIGGER,		/* pg_event_trigger */
 	ACL_KIND_EXTENSION,			/* pg_extension */
 	MAX_ACL_KIND				/* MUST BE LAST */
 } AclObjectKind;
@@ -302,6 +303,8 @@ extern void aclcheck_error(AclResult aclerr, AclObjectKind objectkind,
 extern void aclcheck_error_col(AclResult aclerr, AclObjectKind objectkind,
 				   const char *objectname, const char *colname);
 
+extern void aclcheck_error_type(AclResult aclerr, Oid typeOid);
+
 /* ownercheck routines just return true (owner) or false (not) */
 extern bool pg_class_ownercheck(Oid class_oid, Oid roleid);
 extern bool pg_type_ownercheck(Oid type_oid, Oid roleid);
@@ -320,6 +323,7 @@ extern bool pg_ts_dict_ownercheck(Oid dict_oid, Oid roleid);
 extern bool pg_ts_config_ownercheck(Oid cfg_oid, Oid roleid);
 extern bool pg_foreign_data_wrapper_ownercheck(Oid srv_oid, Oid roleid);
 extern bool pg_foreign_server_ownercheck(Oid srv_oid, Oid roleid);
+extern bool pg_event_trigger_ownercheck(Oid et_oid, Oid roleid);
 extern bool pg_extension_ownercheck(Oid ext_oid, Oid roleid);
 extern bool has_createrole_privilege(Oid roleid);
 

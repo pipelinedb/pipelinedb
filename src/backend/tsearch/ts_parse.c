@@ -3,7 +3,7 @@
  * ts_parse.c
  *		main parse functions for tsearch
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -592,7 +592,7 @@ generateHeadline(HeadlineParsedText *prs)
 	char	   *ptr;
 	int			len = 128;
 	int			numfragments = 0;
-	int2		infrag = 0;
+	int16		infrag = 0;
 
 	HeadlineWordEntry *wrd = prs->words;
 

@@ -29,7 +29,6 @@ DROP VIEW [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP VIEW</command> drops an existing view.  To execute
    this command you must be the owner of the view.
@@ -39,6 +38,7 @@ DROP VIEW [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>IF EXISTS</literal></term>
@@ -88,24 +88,18 @@ DROP VIEW [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
    This command will remove the view called <literal>kinds</literal>:
 <programlisting>
 DROP VIEW kinds;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    This command conforms to the SQL standard, except that the standard only
    allows one view to be dropped per command, and apart from the
-<!## PG>
    <literal>IF EXISTS</> option, which is a <productname>PostgreSQL</>
    extension.
-<!## end>
-<!## XC>
-   <literal>IF EXISTS</> option, which is a <productname>Postgres-XC</>
-   extension inherited from <productname>PostgreSQL</>.
-<!## end>
   </para>
  </refsect1>
 

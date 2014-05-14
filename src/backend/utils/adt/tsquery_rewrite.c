@@ -3,7 +3,7 @@
  * tsquery_rewrite.c
  *	  Utilities for reconstructing tsquery
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -46,7 +46,6 @@ addone(int *counters, int last, int total)
 static QTNode *
 findeq(QTNode *node, QTNode *ex, QTNode *subs, bool *isfind)
 {
-
 	if ((node->sign & ex->sign) != ex->sign ||
 		node->valnode->type != ex->valnode->type)
 		return node;
@@ -196,7 +195,6 @@ dofindsubquery(QTNode *root, QTNode *ex, QTNode *subs, bool *isfind)
 static QTNode *
 dropvoidsubtree(QTNode *root)
 {
-
 	if (!root)
 		return NULL;
 

@@ -9,10 +9,10 @@ msgstr ""
 "Project-Id-Version: PostgreSQL 8.4\n"
 "Report-Msgid-Bugs-To: pgsql-bugs@postgresql.org\n"
 "POT-Creation-Date: 2011-05-12 00:49+0000\n"
-"PO-Revision-Date: 2011-05-16 13:37+0800\n"
+"PO-Revision-Date: 2013-09-03 23:24-0400\n"
 "Last-Translator: Zhenbang Wei <znbang@gmail.com>\n"
 "Language-Team: EnterpriseDB translation team <dev-escalations@enterprisedb.com>\n"
-"Language: \n"
+"Language: zh_TW\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -16909,7 +16909,6 @@ msgstr "interval 欄位值超出範圍: \"%s\""
 msgid "time zone displacement out of range: \"%s\""
 msgstr "時區位移超出範圍:\"%s\""
 
-#  translator: first %s is inet or cidr
 #  translator: first %s is inet or cidr
 # utils/adt/datetime.c:3342 utils/adt/network.c:93
 #. translator: first %s is inet or cidr

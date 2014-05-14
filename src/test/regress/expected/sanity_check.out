@@ -102,6 +102,7 @@ SELECT relname, relhasindex
  pg_depend               | t
  pg_description          | t
  pg_enum                 | t
+ pg_event_trigger        | t
  pg_extension            | t
  pg_foreign_data_wrapper | t
  pg_foreign_server       | t
@@ -136,10 +137,10 @@ SELECT relname, relhasindex
  pgxc_class              | t
  pgxc_group              | t
  pgxc_node               | t
- pipeline_queries        | t
  point_tbl               | t
  polygon_tbl             | t
  quad_point_tbl          | t
+ radix_text_tbl          | t
  ramp                    | f
  real_city               | f
  reltime_tbl             | f
@@ -155,11 +156,11 @@ SELECT relname, relhasindex
  sql_sizing_profiles     | f
  stud_emp                | f
  student                 | f
- suffix_text_tbl         | t
  tenk1                   | t
  tenk2                   | t
  test_range_excl         | t
  test_range_gist         | t
+ test_range_spgist       | t
  test_tsvector           | f
  text_tbl                | f
  time_tbl                | f
@@ -168,7 +169,7 @@ SELECT relname, relhasindex
  timetz_tbl              | f
  tinterval_tbl           | f
  varchar_tbl             | f
-(156 rows)
+(158 rows)
 
 --
 -- another sanity check: every system catalog that has OIDs should have

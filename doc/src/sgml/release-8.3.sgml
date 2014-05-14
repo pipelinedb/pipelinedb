@@ -1,6 +1,804 @@
 <!-- doc/src/sgml/release-8.3.sgml -->
 <!-- See header comment in release.sgml about typical markup -->
 
+ <sect1 id="release-8-3-23">
+  <title>Release 8.3.23</title>
+
+  <note>
+  <title>Release Date</title>
+  <simpara>2013-02-07</simpara>
+  </note>
+
+  <para>
+   This release contains a variety of fixes from 8.3.22.
+   For information about new features in the 8.3 major release, see
+   <xref linkend="release-8-3">.
+  </para>
+
+  <para>
+   This is expected to be the last <productname>PostgreSQL</> release
+   in the 8.3.X series.  Users are encouraged to update to a newer
+   release branch soon.
+  </para>
+
+  <sect2>
+   <title>Migration to Version 8.3.23</title>
+
+   <para>
+    A dump/restore is not required for those running 8.3.X.
+   </para>
+
+   <para>
+    However, if you are upgrading from a version earlier than 8.3.17,
+    see the release notes for 8.3.17.
+   </para>
+
+  </sect2>
+
+  <sect2>
+   <title>Changes</title>
+
+   <itemizedlist>
+
+    <listitem>
+     <para>
+      Prevent execution of <function>enum_recv</> from SQL (Tom Lane)
+     </para>
+
+     <para>
+      The function was misdeclared, allowing a simple SQL command to crash the
+      server.  In principle an attacker might be able to use it to examine the
+      contents of server memory.  Our thanks to Sumit Soni (via Secunia SVCRP)
+      for reporting this issue.  (CVE-2013-0255)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix SQL grammar to allow subscripting or field selection from a
+      sub-SELECT result (Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Protect against race conditions when scanning
+      <structname>pg_tablespace</> (Stephen Frost, Tom Lane)
+     </para>
+
+     <para>
+      <command>CREATE DATABASE</> and <command>DROP DATABASE</> could
+      misbehave if there were concurrent updates of
+      <structname>pg_tablespace</> entries.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Prevent <command>DROP OWNED</> from trying to drop whole databases or
+      tablespaces (&Aacute;lvaro Herrera)
+     </para>
+
+     <para>
+      For safety, ownership of these objects must be reassigned, not dropped.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Prevent misbehavior when a <symbol>RowExpr</> or <symbol>XmlExpr</>
+      is parse-analyzed twice (Andres Freund, Tom Lane)
+     </para>
+
+     <para>
+      This mistake could be user-visible in contexts such as
+      <literal>CREATE TABLE LIKE INCLUDING INDEXES</>.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Improve defenses against integer overflow in hashtable sizing
+      calculations (Jeff Davis)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Ensure that non-ASCII prompt strings are translated to the correct
+      code page on Windows (Alexander Law, Noah Misch)
+     </para>
+
+     <para>
+      This bug affected <application>psql</> and some other client programs.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix possible crash in <application>psql</>'s <command>\?</> command
+      when not connected to a database (Meng Qingzhong)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix one-byte buffer overrun in <application>libpq</>'s
+      <function>PQprintTuples</> (Xi Wang)
+     </para>
+
+     <para>
+      This ancient function is not used anywhere by
+      <productname>PostgreSQL</> itself, but it might still be used by some
+      client code.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Rearrange configure's tests for supplied functions so it is not
+      fooled by bogus exports from libedit/libreadline (Christoph Berg)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Ensure Windows build number increases over time (Magnus Hagander)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Make <application>pgxs</> build executables with the right
+      <literal>.exe</> suffix when cross-compiling for Windows
+      (Zoltan Boszormenyi)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Add new timezone abbreviation <literal>FET</> (Tom Lane)
+     </para>
+
+     <para>
+      This is now used in some eastern-European time zones.
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+  </sect2>
+ </sect1>
+
+ <sect1 id="release-8-3-22">
+  <title>Release 8.3.22</title>
+
+  <note>
+  <title>Release Date</title>
+  <simpara>2012-12-06</simpara>
+  </note>
+
+  <para>
+   This release contains a variety of fixes from 8.3.21.
+   For information about new features in the 8.3 major release, see
+   <xref linkend="release-8-3">.
+  </para>
+
+  <para>
+   The <productname>PostgreSQL</> community will stop releasing updates
+   for the 8.3.X release series in February 2013.
+   Users are encouraged to update to a newer release branch soon.
+  </para>
+
+  <sect2>
+   <title>Migration to Version 8.3.22</title>
+
+   <para>
+    A dump/restore is not required for those running 8.3.X.
+   </para>
+
+   <para>
+    However, if you are upgrading from a version earlier than 8.3.17,
+    see the release notes for 8.3.17.
+   </para>
+
+  </sect2>
+
+  <sect2>
+   <title>Changes</title>
+
+   <itemizedlist>
+
+    <listitem>
+     <para>
+      Fix multiple bugs associated with <command>CREATE INDEX
+      CONCURRENTLY</> (Andres Freund, Tom Lane)
+     </para>
+
+     <para>
+      Fix <command>CREATE INDEX CONCURRENTLY</> to use
+      in-place updates when changing the state of an index's
+      <structname>pg_index</> row.  This prevents race conditions that could
+      cause concurrent sessions to miss updating the target index, thus
+      resulting in corrupt concurrently-created indexes.
+     </para>
+
+     <para>
+      Also, fix various other operations to ensure that they ignore
+      invalid indexes resulting from a failed <command>CREATE INDEX
+      CONCURRENTLY</> command.  The most important of these is
+      <command>VACUUM</>, because an auto-vacuum could easily be launched
+      on the table before corrective action can be taken to fix or remove
+      the invalid index.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Avoid corruption of internal hash tables when out of memory
+      (Hitoshi Harada)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix planning of non-strict equivalence clauses above outer joins
+      (Tom Lane)
+     </para>
+
+     <para>
+      The planner could derive incorrect constraints from a clause equating
+      a non-strict construct to something else, for example
+      <literal>WHERE COALESCE(foo, 0) = 0</>
+      when <literal>foo</> is coming from the nullable side of an outer join.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Improve planner's ability to prove exclusion constraints from
+      equivalence classes (Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix partial-row matching in hashed subplans to handle cross-type cases
+      correctly (Tom Lane)
+     </para>
+
+     <para>
+      This affects multicolumn <literal>NOT IN</> subplans, such as
+      <literal>WHERE (a, b) NOT IN (SELECT x, y FROM ...)</>
+      when for instance <literal>b</> and <literal>y</> are <type>int4</>
+      and <type>int8</> respectively.  This mistake led to wrong answers
+      or crashes depending on the specific datatypes involved.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Acquire buffer lock when re-fetching the old tuple for an
+      <literal>AFTER ROW UPDATE/DELETE</> trigger (Andres Freund)
+     </para>
+
+     <para>
+      In very unusual circumstances, this oversight could result in passing
+      incorrect data to the precheck logic for a foreign-key enforcement
+      trigger.  That could result in a crash, or in an incorrect decision
+      about whether to fire the trigger.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix <command>REASSIGN OWNED</> to handle grants on tablespaces
+      (&Aacute;lvaro Herrera)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Ignore incorrect <structname>pg_attribute</> entries for system
+      columns for views (Tom Lane)
+     </para>
+
+     <para>
+      Views do not have any system columns.  However, we forgot to
+      remove such entries when converting a table to a view.  That's fixed
+      properly for 9.3 and later, but in previous branches we need to defend
+      against existing mis-converted views.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix rule printing to dump <literal>INSERT INTO <replaceable>table</>
+      DEFAULT VALUES</literal> correctly (Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Guard against stack overflow when there are too many
+      <literal>UNION</>/<literal>INTERSECT</>/<literal>EXCEPT</> clauses
+      in a query (Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Prevent platform-dependent failures when dividing the minimum possible
+      integer value by -1 (Xi Wang, Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix possible access past end of string in date parsing
+      (Hitoshi Harada)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Produce an understandable error message if the length of the path name
+      for a Unix-domain socket exceeds the platform-specific limit
+      (Tom Lane, Andrew Dunstan)
+     </para>
+
+     <para>
+      Formerly, this would result in something quite unhelpful, such as
+      <quote>Non-recoverable failure in name resolution</>.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix memory leaks when sending composite column values to the client
+      (Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Make <application>pg_ctl</> more robust about reading the
+      <filename>postmaster.pid</> file (Heikki Linnakangas)
+     </para>
+
+     <para>
+      Fix race conditions and possible file descriptor leakage.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix possible crash in <application>psql</> if incorrectly-encoded data
+      is presented and the <varname>client_encoding</> setting is a
+      client-only encoding, such as SJIS (Jiang Guiqing)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix bugs in the <filename>restore.sql</> script emitted by
+      <application>pg_dump</> in <literal>tar</> output format (Tom Lane)
+     </para>
+
+     <para>
+      The script would fail outright on tables whose names include
+      upper-case characters.  Also, make the script capable of restoring
+      data in <option>--inserts</> mode as well as the regular COPY mode.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix <application>pg_restore</> to accept POSIX-conformant
+      <literal>tar</> files (Brian Weaver, Tom Lane)
+     </para>
+
+     <para>
+      The original coding of <application>pg_dump</>'s <literal>tar</>
+      output mode produced files that are not fully conformant with the
+      POSIX standard.  This has been corrected for version 9.3.  This
+      patch updates previous branches so that they will accept both the
+      incorrect and the corrected formats, in hopes of avoiding
+      compatibility problems when 9.3 comes out.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix <application>pg_resetxlog</> to locate <filename>postmaster.pid</>
+      correctly when given a relative path to the data directory (Tom Lane)
+     </para>
+
+     <para>
+      This mistake could lead to <application>pg_resetxlog</> not noticing
+      that there is an active postmaster using the data directory.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix <application>libpq</>'s <function>lo_import()</> and
+      <function>lo_export()</> functions to report file I/O errors properly
+      (Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix <application>ecpg</>'s processing of nested structure pointer
+      variables (Muhammad Usama)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Make <filename>contrib/pageinspect</>'s btree page inspection
+      functions take buffer locks while examining pages (Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix <application>pgxs</> support for building loadable modules on AIX
+      (Tom Lane)
+     </para>
+
+     <para>
+      Building modules outside the original source tree didn't work on AIX.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Update time zone data files to <application>tzdata</> release 2012j
+      for DST law changes in Cuba, Israel, Jordan, Libya, Palestine, Western
+      Samoa, and portions of Brazil.
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+  </sect2>
+ </sect1>
+
+ <sect1 id="release-8-3-21">
+  <title>Release 8.3.21</title>
+
+  <note>
+  <title>Release Date</title>
+  <simpara>2012-09-24</simpara>
+  </note>
+
+  <para>
+   This release contains a variety of fixes from 8.3.20.
+   For information about new features in the 8.3 major release, see
+   <xref linkend="release-8-3">.
+  </para>
+
+  <para>
+   The <productname>PostgreSQL</> community will stop releasing updates
+   for the 8.3.X release series in February 2013.
+   Users are encouraged to update to a newer release branch soon.
+  </para>
+
+  <sect2>
+   <title>Migration to Version 8.3.21</title>
+
+   <para>
+    A dump/restore is not required for those running 8.3.X.
+   </para>
+
+   <para>
+    However, if you are upgrading from a version earlier than 8.3.17,
+    see the release notes for 8.3.17.
+   </para>
+
+  </sect2>
+
+  <sect2>
+   <title>Changes</title>
+
+   <itemizedlist>
+
+    <listitem>
+     <para>
+      Improve page-splitting decisions in GiST indexes (Alexander Korotkov,
+      Robert Haas, Tom Lane)
+     </para>
+
+     <para>
+      Multi-column GiST indexes might suffer unexpected bloat due to this
+      error.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix cascading privilege revoke to stop if privileges are still held
+      (Tom Lane)
+     </para>
+
+     <para>
+      If we revoke a grant option from some role <replaceable>X</>, but
+      <replaceable>X</> still holds that option via a grant from someone
+      else, we should not recursively revoke the corresponding privilege
+      from role(s) <replaceable>Y</> that <replaceable>X</> had granted it
+      to.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix handling of <literal>SIGFPE</> when PL/Perl is in use (Andres Freund)
+     </para>
+
+     <para>
+      Perl resets the process's <literal>SIGFPE</> handler to
+      <literal>SIG_IGN</>, which could result in crashes later on.  Restore
+      the normal Postgres signal handler after initializing PL/Perl.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Prevent PL/Perl from crashing if a recursive PL/Perl function is
+      redefined while being executed (Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Work around possible misoptimization in PL/Perl (Tom Lane)
+     </para>
+
+     <para>
+      Some Linux distributions contain an incorrect version of
+      <filename>pthread.h</> that results in incorrect compiled code in
+      PL/Perl, leading to crashes if a PL/Perl function calls another one
+      that throws an error.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Update time zone data files to <application>tzdata</> release 2012f
+      for DST law changes in Fiji
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+  </sect2>
+ </sect1>
+
+ <sect1 id="release-8-3-20">
+  <title>Release 8.3.20</title>
+
+  <note>
+  <title>Release Date</title>
+  <simpara>2012-08-17</simpara>
+  </note>
+
+  <para>
+   This release contains a variety of fixes from 8.3.19.
+   For information about new features in the 8.3 major release, see
+   <xref linkend="release-8-3">.
+  </para>
+
+  <para>
+   The <productname>PostgreSQL</> community will stop releasing updates
+   for the 8.3.X release series in February 2013.
+   Users are encouraged to update to a newer release branch soon.
+  </para>
+
+  <sect2>
+   <title>Migration to Version 8.3.20</title>
+
+   <para>
+    A dump/restore is not required for those running 8.3.X.
+   </para>
+
+   <para>
+    However, if you are upgrading from a version earlier than 8.3.17,
+    see the release notes for 8.3.17.
+   </para>
+
+  </sect2>
+
+  <sect2>
+   <title>Changes</title>
+
+   <itemizedlist>
+
+    <listitem>
+     <para>
+      Prevent access to external files/URLs via XML entity references
+      (Noah Misch, Tom Lane)
+     </para>
+
+     <para>
+      <function>xml_parse()</> would attempt to fetch external files or
+      URLs as needed to resolve DTD and entity references in an XML value,
+      thus allowing unprivileged database users to attempt to fetch data
+      with the privileges of the database server.  While the external data
+      wouldn't get returned directly to the user, portions of it could be
+      exposed in error messages if the data didn't parse as valid XML; and
+      in any case the mere ability to check existence of a file might be
+      useful to an attacker.  (CVE-2012-3489)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Prevent access to external files/URLs via <filename>contrib/xml2</>'s
+      <function>xslt_process()</> (Peter Eisentraut)
+     </para>
+
+     <para>
+      <application>libxslt</> offers the ability to read and write both
+      files and URLs through stylesheet commands, thus allowing
+      unprivileged database users to both read and write data with the
+      privileges of the database server.  Disable that through proper use
+      of <application>libxslt</>'s security options.  (CVE-2012-3488)
+     </para>
+
+     <para>
+      Also, remove <function>xslt_process()</>'s ability to fetch documents
+      and stylesheets from external files/URLs.  While this was a
+      documented <quote>feature</>, it was long regarded as a bad idea.
+      The fix for CVE-2012-3489 broke that capability, and rather than
+      expend effort on trying to fix it, we're just going to summarily
+      remove it.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Prevent too-early recycling of btree index pages (Noah Misch)
+     </para>
+
+     <para>
+      When we allowed read-only transactions to skip assigning XIDs, we
+      introduced the possibility that a deleted btree page could be
+      recycled while a read-only transaction was still in flight to it.
+      This would result in incorrect index search results.  The probability
+      of such an error occurring in the field seems very low because of the
+      timing requirements, but nonetheless it should be fixed.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix crash-safety bug with newly-created-or-reset sequences (Tom Lane)
+     </para>
+
+     <para>
+      If <command>ALTER SEQUENCE</> was executed on a freshly created or
+      reset sequence, and then precisely one <function>nextval()</> call
+      was made on it, and then the server crashed, WAL replay would restore
+      the sequence to a state in which it appeared that no
+      <function>nextval()</> had been done, thus allowing the first
+      sequence value to be returned again by the next
+      <function>nextval()</> call.  In particular this could manifest for
+      <type>serial</> columns, since creation of a serial column's sequence
+      includes an <command>ALTER SEQUENCE OWNED BY</> step.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Ensure the <filename>backup_label</> file is fsync'd after
+      <function>pg_start_backup()</> (Dave Kerr)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Back-patch 9.1 improvement to compress the fsync request queue
+      (Robert Haas)
+     </para>
+
+     <para>
+      This improves performance during checkpoints.  The 9.1 change
+      has now seen enough field testing to seem safe to back-patch.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Only allow autovacuum to be auto-canceled by a directly blocked
+      process (Tom Lane)
+     </para>
+
+     <para>
+      The original coding could allow inconsistent behavior in some cases;
+      in particular, an autovacuum could get canceled after less than
+      <literal>deadlock_timeout</> grace period.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Improve logging of autovacuum cancels (Robert Haas)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix log collector so that <literal>log_truncate_on_rotation</> works
+      during the very first log rotation after server start (Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Ensure that a whole-row reference to a subquery doesn't include any
+      extra <literal>GROUP BY</> or <literal>ORDER BY</> columns (Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Disallow copying whole-row references in <literal>CHECK</>
+      constraints and index definitions during <command>CREATE TABLE</>
+      (Tom Lane)
+     </para>
+
+     <para>
+      This situation can arise in <command>CREATE TABLE</> with
+      <literal>LIKE</> or <literal>INHERITS</>.  The copied whole-row
+      variable was incorrectly labeled with the row type of the original
+      table not the new one.  Rejecting the case seems reasonable for
+      <literal>LIKE</>, since the row types might well diverge later.  For
+      <literal>INHERITS</> we should ideally allow it, with an implicit
+      coercion to the parent table's row type; but that will require more
+      work than seems safe to back-patch.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix memory leak in <literal>ARRAY(SELECT ...)</> subqueries (Heikki
+      Linnakangas, Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Fix extraction of common prefixes from regular expressions (Tom Lane)
+     </para>
+
+     <para>
+      The code could get confused by quantified parenthesized
+      subexpressions, such as <literal>^(foo)?bar</>.  This would lead to
+      incorrect index optimization of searches for such patterns.
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Report errors properly in <filename>contrib/xml2</>'s
+      <function>xslt_process()</> (Tom Lane)
+     </para>
+    </listitem>
+
+    <listitem>
+     <para>
+      Update time zone data files to <application>tzdata</> release 2012e
+      for DST law changes in Morocco and Tokelau
+     </para>
+    </listitem>
+
+   </itemizedlist>
+
+  </sect2>
+ </sect1>
+
  <sect1 id="release-8-3-19">
   <title>Release 8.3.19</title>
 

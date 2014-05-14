@@ -29,7 +29,6 @@ DROP [ PROCEDURAL ] LANGUAGE [ IF EXISTS ] <replaceable class="PARAMETER">name</
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP LANGUAGE</command> removes the definition of a
    previously registered procedural language.  You must be a superuser
@@ -49,6 +48,7 @@ DROP [ PROCEDURAL ] LANGUAGE [ IF EXISTS ] <replaceable class="PARAMETER">name</
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
 
    <varlistentry>
@@ -102,13 +102,13 @@ DROP [ PROCEDURAL ] LANGUAGE [ IF EXISTS ] <replaceable class="PARAMETER">name</
 
 <programlisting>
 DROP LANGUAGE plsample;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP LANGUAGE</command> statement in the SQL
    standard.

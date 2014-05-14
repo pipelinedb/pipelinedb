@@ -34,7 +34,6 @@ ALTER TEXT SEARCH DICTIONARY <replaceable>name</replaceable> SET SCHEMA <replace
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER TEXT SEARCH DICTIONARY</command> changes the definition of
    a text search dictionary.  You can change the dictionary's
@@ -50,6 +49,7 @@ ALTER TEXT SEARCH DICTIONARY <replaceable>name</replaceable> SET SCHEMA <replace
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -155,6 +155,7 @@ ALTER TEXT SEARCH DICTIONARY my_dict ( dummy );
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>ALTER TEXT SEARCH DICTIONARY</command> statement in
    the SQL standard.

@@ -23,23 +23,22 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-ALTER SEQUENCE <replaceable class="parameter">name</replaceable> [ INCREMENT [ BY ] <replaceable class="parameter">increment</replaceable> ]
+ALTER SEQUENCE [ IF EXISTS ] <replaceable class="parameter">name</replaceable> [ INCREMENT [ BY ] <replaceable class="parameter">increment</replaceable> ]
     [ MINVALUE <replaceable class="parameter">minvalue</replaceable> | NO MINVALUE ] [ MAXVALUE <replaceable class="parameter">maxvalue</replaceable> | NO MAXVALUE ]
     [ START [ WITH ] <replaceable class="parameter">start</replaceable> ]
     [ RESTART [ [ WITH ] <replaceable class="parameter">restart</replaceable> ] ]
     [ CACHE <replaceable class="parameter">cache</replaceable> ] [ [ NO ] CYCLE ]
-    [ OWNED BY { <replaceable class="parameter">table</replaceable>.<replaceable class="parameter">column</replaceable> | NONE } ]
-ALTER SEQUENCE <replaceable class="parameter">name</replaceable> OWNER TO <replaceable class="PARAMETER">new_owner</replaceable>
-ALTER SEQUENCE <replaceable class="parameter">name</replaceable> RENAME TO <replaceable class="parameter">new_name</replaceable>
-ALTER SEQUENCE <replaceable class="parameter">name</replaceable> SET SCHEMA <replaceable class="parameter">new_schema</replaceable>
+    [ OWNED BY { <replaceable class="parameter">table_name</replaceable>.<replaceable class="parameter">column_name</replaceable> | NONE } ]
+ALTER SEQUENCE [ IF EXISTS ] <replaceable class="parameter">name</replaceable> OWNER TO <replaceable class="PARAMETER">new_owner</replaceable>
+ALTER SEQUENCE [ IF EXISTS ] <replaceable class="parameter">name</replaceable> RENAME TO <replaceable class="parameter">new_name</replaceable>
+ALTER SEQUENCE [ IF EXISTS ] <replaceable class="parameter">name</replaceable> SET SCHEMA <replaceable class="parameter">new_schema</replaceable>
 </synopsis>
  </refsynopsisdiv>
 
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    <command>ALTER SEQUENCE</command> changes the parameters of an existing
    sequence generator.  Any parameters not specifically set in the
@@ -61,6 +60,7 @@ ALTER SEQUENCE <replaceable class="parameter">name</replaceable> SET SCHEMA <rep
  <refsect1>
   <title>Parameters</title>
 
+&common;
    <para>
     <variablelist>
      <varlistentry>
@@ -68,6 +68,16 @@ ALTER SEQUENCE <replaceable class="parameter">name</replaceable> SET SCHEMA <rep
       <listitem>
        <para>
         The name (optionally schema-qualified) of a sequence to be altered.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><literal>IF EXISTS</literal></term>
+      <listitem>
+       <para>
+        Do not throw an error if the sequence does not exist. A notice is issued
+        in this case.
        </para>
       </listitem>
      </varlistentry>
@@ -195,7 +205,7 @@ ALTER SEQUENCE <replaceable class="parameter">name</replaceable> SET SCHEMA <rep
      </varlistentry>
 
    <varlistentry>
-    <term><literal>OWNED BY</literal> <replaceable class="parameter">table</replaceable>.<replaceable class="parameter">column</replaceable></term>
+    <term><literal>OWNED BY</literal> <replaceable class="parameter">table_name</replaceable>.<replaceable class="parameter">column_name</replaceable></term>
     <term><literal>OWNED BY NONE</literal></term>
     <listitem>
      <para>
@@ -246,6 +256,7 @@ ALTER SEQUENCE <replaceable class="parameter">name</replaceable> SET SCHEMA <rep
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    To avoid blocking of concurrent transactions that obtain numbers from the
    same sequence, <command>ALTER SEQUENCE</command>'s effects on the sequence
@@ -284,13 +295,13 @@ ALTER SEQUENCE <replaceable class="parameter">name</replaceable> SET SCHEMA <rep
    Restart a sequence called <literal>serial</literal>, at 105:
 <programlisting>
 ALTER SEQUENCE serial RESTART WITH 105;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>ALTER SEQUENCE</command> conforms to the <acronym>SQL</acronym>
    standard, except for the <literal>START WITH</>,

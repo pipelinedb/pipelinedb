@@ -26,11 +26,13 @@ ALTER FOREIGN DATA WRAPPER <replaceable class="parameter">name</replaceable>
     [ VALIDATOR <replaceable class="parameter">validator_function</replaceable> | NO VALIDATOR ]
     [ OPTIONS ( [ ADD | SET | DROP ] <replaceable class="PARAMETER">option</replaceable> ['<replaceable class="PARAMETER">value</replaceable>'] [, ... ]) ]
 ALTER FOREIGN DATA WRAPPER <replaceable class="parameter">name</replaceable> OWNER TO <replaceable>new_owner</replaceable>
+ALTER FOREIGN DATA WRAPPER <replaceable class="parameter">name</replaceable> RENAME TO <replaceable>new_name</replaceable>
 </synopsis>
  </refsynopsisdiv>
 
  <refsect1>
   <title>Description</title>
+
 <!## XC>
 &xconly;
   <para>
@@ -40,8 +42,6 @@ ALTER FOREIGN DATA WRAPPER <replaceable class="parameter">name</replaceable> OWN
   </para>
 <!## end>
 <!## PG>
-&pgonly;
-
   <para>
    <command>ALTER FOREIGN DATA WRAPPER</command> changes the
    definition of a foreign-data wrapper.  The first form of the
@@ -100,11 +100,13 @@ ALTER FOREIGN DATA WRAPPER <replaceable class="parameter">name</replaceable> OWN
      </para>
 
      <para>
-      Note that it is possible that after changing the validator the
-      options to the foreign-data wrapper, servers, and user mappings
-      have become invalid.   It is up to the user to make sure that
-      these options are correct before using the foreign-data
-      wrapper.
+      Note that it is possible that pre-existing options of the foreign-data
+      wrapper, or of dependent servers, user mappings, or foreign tables, are
+      invalid according to the new validator.  <productname>PostgreSQL</> does
+      not check for this.  It is up to the user to make sure that these
+      options are correct before using the modified foreign-data wrapper.
+      However, any options specified in this <command>ALTER FOREIGN DATA
+      WRAPPER</> command will be checked using the new validator.
      </para>
     </listitem>
    </varlistentry>
@@ -132,6 +134,24 @@ ALTER FOREIGN DATA WRAPPER <replaceable class="parameter">name</replaceable> OWN
      </para>
     </listitem>
    </varlistentry>
+
+   <varlistentry>
+    <term><replaceable class="PARAMETER">new_owner</replaceable></term>
+    <listitem>
+     <para>
+      The user name of the new owner of the foreign-data wrapper.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><replaceable class="parameter">new_name</replaceable></term>
+    <listitem>
+     <para>
+      The new name for the foreign-data wrapper.
+     </para>
+    </listitem>
+   </varlistentry>
   </variablelist>
  </refsect1>
 
@@ -151,8 +171,7 @@ ALTER FOREIGN DATA WRAPPER dbi OPTIONS (ADD foo '1', DROP 'bar');
    to <literal>bob.myvalidator</>:
 <programlisting>
 ALTER FOREIGN DATA WRAPPER dbi VALIDATOR bob.myvalidator;
-</programlisting>
-  </para>
+</programlisting></para>
 
 <!## end>
  </refsect1>
@@ -163,7 +182,8 @@ ALTER FOREIGN DATA WRAPPER dbi VALIDATOR bob.myvalidator;
   <para>
    <command>ALTER FOREIGN DATA WRAPPER</command> conforms to ISO/IEC
    9075-9 (SQL/MED), except that the <literal>HANDLER</literal>,
-   <literal>VALIDATOR</> and <literal>OWNER TO</> clauses are extensions.
+   <literal>VALIDATOR</>, <literal>OWNER TO</>, and <literal>RENAME</literal>
+   clauses are extensions.
   </para>
  </refsect1>
 

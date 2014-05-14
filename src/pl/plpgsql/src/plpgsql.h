@@ -3,7 +3,7 @@
  * plpgsql.h		- Definitions for the PL/pgSQL
  *			  procedural language
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -19,6 +19,7 @@
 #include "postgres.h"
 
 #include "access/xact.h"
+#include "commands/event_trigger.h"
 #include "commands/trigger.h"
 #include "executor/spi.h"
 
@@ -127,7 +128,12 @@ enum
 	PLPGSQL_GETDIAG_ERROR_DETAIL,
 	PLPGSQL_GETDIAG_ERROR_HINT,
 	PLPGSQL_GETDIAG_RETURNED_SQLSTATE,
-	PLPGSQL_GETDIAG_MESSAGE_TEXT
+	PLPGSQL_GETDIAG_COLUMN_NAME,
+	PLPGSQL_GETDIAG_CONSTRAINT_NAME,
+	PLPGSQL_GETDIAG_DATATYPE_NAME,
+	PLPGSQL_GETDIAG_MESSAGE_TEXT,
+	PLPGSQL_GETDIAG_TABLE_NAME,
+	PLPGSQL_GETDIAG_SCHEMA_NAME
 };
 
 /* --------
@@ -139,7 +145,12 @@ enum
 	PLPGSQL_RAISEOPTION_ERRCODE,
 	PLPGSQL_RAISEOPTION_MESSAGE,
 	PLPGSQL_RAISEOPTION_DETAIL,
-	PLPGSQL_RAISEOPTION_HINT
+	PLPGSQL_RAISEOPTION_HINT,
+	PLPGSQL_RAISEOPTION_COLUMN,
+	PLPGSQL_RAISEOPTION_CONSTRAINT,
+	PLPGSQL_RAISEOPTION_DATATYPE,
+	PLPGSQL_RAISEOPTION_TABLE,
+	PLPGSQL_RAISEOPTION_SCHEMA
 };
 
 /* --------
@@ -675,6 +686,12 @@ typedef struct PLpgSQL_func_hashkey
 	Oid			argtypes[FUNC_MAX_ARGS];
 } PLpgSQL_func_hashkey;
 
+typedef enum PLpgSQL_trigtype
+{
+	PLPGSQL_DML_TRIGGER,
+	PLPGSQL_EVENT_TRIGGER,
+	PLPGSQL_NOT_TRIGGER
+} PLpgSQL_trigtype;
 
 typedef struct PLpgSQL_function
 {								/* Complete compiled function	  */
@@ -682,7 +699,7 @@ typedef struct PLpgSQL_function
 	Oid			fn_oid;
 	TransactionId fn_xmin;
 	ItemPointerData fn_tid;
-	bool		fn_is_trigger;
+	PLpgSQL_trigtype fn_is_trigger;
 	Oid			fn_input_collation;
 	PLpgSQL_func_hashkey *fn_hashkey;	/* back-link to hashtable key */
 	MemoryContext fn_cxt;
@@ -712,6 +729,10 @@ typedef struct PLpgSQL_function
 	int			tg_table_schema_varno;
 	int			tg_nargs_varno;
 	int			tg_argv_varno;
+
+	/* for event triggers */
+	int			tg_event_varno;
+	int			tg_tag_varno;
 
 	PLpgSQL_resolve_option resolve_option;
 
@@ -920,6 +941,8 @@ extern Datum plpgsql_exec_function(PLpgSQL_function *func,
 					  FunctionCallInfo fcinfo);
 extern HeapTuple plpgsql_exec_trigger(PLpgSQL_function *func,
 					 TriggerData *trigdata);
+extern void plpgsql_exec_event_trigger(PLpgSQL_function *func,
+						   EventTriggerData *trigdata);
 extern void plpgsql_xact_cb(XactEvent event, void *arg);
 extern void plpgsql_subxact_cb(SubXactEvent event, SubTransactionId mySubid,
 				   SubTransactionId parentSubid, void *arg);
@@ -960,8 +983,10 @@ extern void plpgsql_dumptree(PLpgSQL_function *func);
 extern int	plpgsql_base_yylex(void);
 extern int	plpgsql_yylex(void);
 extern void plpgsql_push_back_token(int token);
+extern bool plpgsql_token_is_unreserved_keyword(int token);
 extern void plpgsql_append_source_text(StringInfo buf,
 						   int startlocation, int endlocation);
+extern int	plpgsql_peek(void);
 extern void plpgsql_peek2(int *tok1_p, int *tok2_p, int *tok1_loc,
 			  int *tok2_loc);
 extern int	plpgsql_scanner_errposition(int location);

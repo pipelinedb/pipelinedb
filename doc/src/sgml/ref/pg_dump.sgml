@@ -73,10 +73,12 @@ PostgreSQL documentation
    transfer mechanism. <application>pg_dump</application> can be used to
    backup an entire database, then <application>pg_restore</application>
    can be used to examine the archive and/or select which parts of the
-   database are to be restored. The most flexible output file format is
-   the <quote>custom</quote> format (<option>-Fc</option>). It allows
-   for selection and reordering of all archived items, and is compressed
-   by default.
+   database are to be restored. The most flexible output file formats are
+   the <quote>custom</quote> format (<option>-Fc</option>) and the
+   <quote>directory</quote> format(<option>-Fd</option>). They allow
+   for selection and reordering of all archived items, support parallel
+   restoration, and are compressed by default. The <quote>directory</quote>
+   format is the only format that supports parallel dumps.
   </para>
 
   <para>
@@ -143,7 +145,8 @@ PostgreSQL documentation
        <para>
         Output commands to clean (drop)
         database objects prior to outputting the commands for creating them.
-        (Restore might generate some harmless errors.)
+        (Restore might generate some harmless error messages, if any objects
+        were not present in the destination database.)
        </para>
 
        <para>
@@ -161,8 +164,10 @@ PostgreSQL documentation
        <para>
         Begin the output with a command to create the
         database itself and reconnect to the created database.  (With a
-        script of this form, it doesn't matter which database you connect
-        to before running the script.)
+        script of this form, it doesn't matter which database in the
+        destination installation you connect to before running the script.)
+        If <option>--clean</option> is also specified, the script drops and
+        recreates the target database before reconnecting to it.
        </para>
 
        <para>
@@ -248,7 +253,8 @@ PostgreSQL documentation
            can read. A directory format archive can be manipulated with
            standard Unix tools; for example, files in an uncompressed archive
            can be compressed with the <application>gzip</application> tool.
-           This format is compressed by default.
+           This format is compressed by default and also supports parallel
+           dumps.
           </para>
          </listitem>
         </varlistentry>
@@ -278,6 +284,61 @@ PostgreSQL documentation
       <listitem>
        <para>
         A deprecated option that is now ignored.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-j <replaceable class="parameter">njobs</replaceable></></term>
+      <term><option>--jobs=<replaceable class="parameter">njobs</replaceable></></term>
+      <listitem>
+       <para>
+        Run the dump in parallel by dumping <replaceable class="parameter">njobs</replaceable>
+        tables simultaneously. This option reduces the time of the dump but it also
+        increases the load on the database server. You can only use this option with the
+        directory output format because this is the only output format where multiple processes
+        can write their data at the same time.
+       </para>
+       <para><application>pg_dump</> will open <replaceable class="parameter">njobs</replaceable>
+        + 1 connections to the database, so make sure your <xref linkend="guc-max-connections">
+        setting is high enough to accommodate all connections.
+       </para>
+       <para>
+        Requesting exclusive locks on database objects while running a parallel dump could
+        cause the dump to fail. The reason is that the <application>pg_dump</> master process
+        requests shared locks on the objects that the worker processes are going to dump later
+        in order to
+        make sure that nobody deletes them and makes them go away while the dump is running.
+        If another client then requests an exclusive lock on a table, that lock will not be
+        granted but will be queued waiting for the shared lock of the master process to be
+        released.. Consequently any other access to the table will not be granted either and
+        will queue after the exclusive lock request. This includes the worker process trying
+        to dump the table. Without any precautions this would be a classic deadlock situation.
+        To detect this conflict, the <application>pg_dump</> worker process requests another
+        shared lock using the <literal>NOWAIT</> option. If the worker process is not granted
+        this shared lock, somebody else must have requested an exclusive lock in the meantime
+        and there is no way to continue with the dump, so <application>pg_dump</> has no choice
+        but to abort the dump.
+       </para>
+       <para>
+        For a consistent backup, the database server needs to support synchronized snapshots,
+        a feature that was introduced in <productname>PostgreSQL</productname> 9.2. With this
+        feature, database clients can ensure they see the same data set even though they use
+        different connections. <command>pg_dump -j</command> uses multiple database
+        connections; it connects to the database once with the master process and
+        once again for each worker job. Without the synchronized snapshot feature, the
+        different worker jobs wouldn't be guaranteed to see the same data in each connection,
+        which could lead to an inconsistent backup.
+       </para>
+       <para>
+        If you want to run a parallel dump of a pre-9.2 server, you need to make sure that the
+        database content doesn't change from between the time the master connects to the
+        database until the last worker job has connected to the database. The easiest way to
+        do this is to halt any data modifying processes (DDL and DML) accessing the database
+        before starting the backup. You also need to specify the
+        <option>--no-synchronized-snapshots</option> parameter when running
+        <command>pg_dump -j</command> against a pre-9.2 <productname>PostgreSQL</productname>
+        server.
        </para>
       </listitem>
      </varlistentry>
@@ -427,7 +488,7 @@ PostgreSQL documentation
       <listitem>
        <para>
         Specify the superuser user name to use when disabling triggers.
-        This is only relevant if <option>--disable-triggers</> is used.
+        This is relevant only if <option>--disable-triggers</> is used.
         (Usually, it's better to leave this out, and instead start the
         resulting script as superuser.)
        </para>
@@ -602,7 +663,7 @@ PostgreSQL documentation
       <term><option>--disable-triggers</></term>
       <listitem>
        <para>
-        This option is only relevant when creating a data-only dump.
+        This option is relevant only when creating a data-only dump.
         It instructs <application>pg_dump</application> to include commands
         to temporarily disable triggers on the target tables while
         the data is reloaded.  Use this if you have referential
@@ -688,6 +749,17 @@ PostgreSQL documentation
      </varlistentry>
 
      <varlistentry>
+      <term><option>--no-synchronized-snapshots</></term>
+      <listitem>
+       <para>
+        This option allows running <command>pg_dump -j</> against a pre-9.2
+        server, see the documentation of the <option>-j</option> parameter
+        for more details.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
       <term><option>--no-tablespaces</option></term>
       <listitem>
        <para>
@@ -710,7 +782,8 @@ PostgreSQL documentation
        <para>
         Do not dump the contents of unlogged tables.  This option has no
         effect on whether or not the table definitions (schema) are dumped;
-        it only suppresses dumping the table data.
+        it only suppresses dumping the table data. Data in unlogged tables
+        is always excluded when dumping from a standby server.
        </para>
       </listitem>
      </varlistentry>
@@ -736,11 +809,11 @@ PostgreSQL documentation
           sections. The default is to dump all sections.
          </para>
          <para>
-          The data section contains actual table data as well as large-object
-          definitions.
-          Post-data items consist of definitions of indexes, triggers, rules
+          The data section contains actual table data, large-object
+          contents, and sequence values.
+          Post-data items include definitions of indexes, triggers, rules,
           and constraints other than validated check constraints.
-          Pre-data items consist of all other data definition items.
+          Pre-data items include all other data definition items.
          </para>
        </listitem>
      </varlistentry>
@@ -813,6 +886,26 @@ PostgreSQL documentation
     The following command-line options control the database connection parameters.
 
     <variablelist>
+     <varlistentry>
+      <term><option>-d <replaceable class="parameter">dbname</replaceable></></term>
+      <term><option>--dbname=<replaceable class="parameter">dbname</replaceable></></term>
+      <listitem>
+      <para>
+       Specifies the name of the database to connect to. This is
+       equivalent to specifying <replaceable
+       class="parameter">dbname</replaceable> as the first non-option
+       argument on the command line.
+      </para>
+      <para>
+       If this parameter contains an <symbol>=</symbol> sign or starts
+       with a valid <acronym>URI</acronym> prefix
+       (<literal>postgresql://</literal>
+       or <literal>postgres://</literal>), it is treated as a
+       <parameter>conninfo</parameter> string. See <xref linkend="libpq-connect"> for more information.
+      </para>
+      </listitem>
+     </varlistentry>
+
      <varlistentry>
       <term><option>-h <replaceable class="parameter">host</replaceable></option></term>
       <term><option>--host=<replaceable class="parameter">host</replaceable></option></term>
@@ -1059,6 +1152,15 @@ CREATE DATABASE foo WITH TEMPLATE template0;
   </para>
 
   <para>
+   To dump a database into a directory-format archive in parallel with
+   5 worker jobs:
+
+<screen>
+<prompt>$</prompt> <userinput>pg_dump -Fd mydb -j 5 -f dumpdir</userinput>
+</screen>
+  </para>
+
+  <para>
    To reload an archive file into a (freshly created) database named
    <literal>newdb</>:
 
@@ -1122,7 +1224,7 @@ CREATE DATABASE foo WITH TEMPLATE template0;
    like
 
 <screen>
-<prompt>$</prompt> <userinput>pg_dump -t '"MixedCaseName"' mydb &gt; mytab.sql</userinput>
+<prompt>$</prompt> <userinput>pg_dump -t "\"MixedCaseName\"" mydb &gt; mytab.sql</userinput>
 </screen></para>
 
  </refsect1>

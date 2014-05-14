@@ -56,7 +56,7 @@
 #include "pgxc/poolutils.h"
 #include "../interfaces/libpq/libpq-fe.h"
 #include "../interfaces/libpq/libpq-int.h"
-#include "postmaster/postmaster.h"		/* For UnixSocketDir */
+#include "postmaster/postmaster.h"		/* For Unix_socket_directories */
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -330,6 +330,7 @@ PoolManagerDestroy(void)
 	return status;
 }
 
+
 /*
  * Get handle to pool manager
  * Invoked from Postmaster's main loop just before forking off new session
@@ -342,7 +343,7 @@ GetPoolManagerHandle(void)
 	int			fdsock;
 
 	/* Connect to the pooler */
-	fdsock = pool_connect(PoolerPort, UnixSocketDir);
+	fdsock = pool_connect(PoolerPort, Unix_socket_directories);
 	if (fdsock < 0)
 	{
 		int			saved_errno = errno;
@@ -745,10 +746,8 @@ agent_init(PoolAgent *agent, const char *database, const char *user_name,
 
 	agent->coord_connections = (PGXCNodePoolSlot **)
 			palloc0(agent->num_coord_connections * sizeof(PGXCNodePoolSlot *));
-
 	agent->dn_connections = (PGXCNodePoolSlot **)
 			palloc0(2 * agent->num_dn_connections * sizeof(PGXCNodePoolSlot *));
-
 	/* find database */
 	agent->pool = find_database_pool(database, user_name, pgoptions);
 
@@ -1511,7 +1510,7 @@ agent_acquire_connections(PoolAgent *agent, List *datanodelist, List *coordlist)
 				return NULL;
 			}
 
-			/* Store in the descriptor unless */
+			/* Store in the descriptor */
 			agent->dn_connections[node] = slot;
 
 			/*
@@ -2358,7 +2357,7 @@ PoolerLoop(void)
 {
 	StringInfoData input_message;
 
-	server_fd = pool_listen(PoolerPort, UnixSocketDir);
+	server_fd = pool_listen(PoolerPort, Unix_socket_directories);
 	if (server_fd == -1)
 	{
 		/* log error */

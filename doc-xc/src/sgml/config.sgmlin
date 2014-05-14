@@ -36,45 +36,54 @@
    <title>Setting Parameters</title>
 
 &common;
-   <para>
-    All parameter names are case-insensitive. Every parameter takes a
-    value of one of five types: Boolean, integer, floating point,
-    string or enum. Boolean values can be written as <literal>on</literal>,
-    <literal>off</literal>, <literal>true</literal>,
-    <literal>false</literal>, <literal>yes</literal>,
-    <literal>no</literal>, <literal>1</literal>, <literal>0</literal>
-    (all case-insensitive) or any unambiguous prefix of these.
-   </para>
+   <sect2 id="config-setting-names-values">
+    <title>Parameter Names and Values</title>
 
-   <para>
-    Some settings specify a memory or time value.  Each of these has an
-    implicit unit, which is either kilobytes, blocks (typically eight
-    kilobytes), milliseconds, seconds, or minutes.  Default units can be
-    found by referencing <structname>pg_settings</>.<structfield>unit</>.
-    For convenience,
-    a different unit can also be specified explicitly.  Valid memory units
-    are <literal>kB</literal> (kilobytes), <literal>MB</literal>
-    (megabytes), and <literal>GB</literal> (gigabytes); valid time units
-    are <literal>ms</literal> (milliseconds), <literal>s</literal>
-    (seconds), <literal>min</literal> (minutes), <literal>h</literal>
-    (hours), and <literal>d</literal> (days).  Note that the multiplier
-    for memory units is 1024, not 1000.
-   </para>
+&common;
+    <para>
+     All parameter names are case-insensitive. Every parameter takes a
+     value of one of five types: Boolean, integer, floating point,
+     string or enum. Boolean values can be written as <literal>on</literal>,
+     <literal>off</literal>, <literal>true</literal>,
+     <literal>false</literal>, <literal>yes</literal>,
+     <literal>no</literal>, <literal>1</literal>, <literal>0</literal>
+     (all case-insensitive) or any unambiguous prefix of these.
+    </para>
 
-   <para>
-    Parameters of type <quote>enum</> are specified in the same way as string
-    parameters, but are restricted to a limited set of values.  The allowed
-    values can be found
-    from <structname>pg_settings</>.<structfield>enumvals</>.
-    Enum parameter values are case-insensitive.
-   </para>
+    <para>
+     Some settings specify a memory or time value.  Each of these has an
+     implicit unit, which is either kilobytes, blocks (typically eight
+     kilobytes), milliseconds, seconds, or minutes.  Default units can be
+     found by referencing <structname>pg_settings</>.<structfield>unit</>.
+     For convenience,
+     a different unit can also be specified explicitly.  Valid memory units
+     are <literal>kB</literal> (kilobytes), <literal>MB</literal>
+     (megabytes), and <literal>GB</literal> (gigabytes); valid time units
+     are <literal>ms</literal> (milliseconds), <literal>s</literal>
+     (seconds), <literal>min</literal> (minutes), <literal>h</literal>
+     (hours), and <literal>d</literal> (days).  Note that the multiplier
+     for memory units is 1024, not 1000.
+    </para>
 
-   <para>
-    One way to set these parameters is to edit the file
-    <filename>postgresql.conf</><indexterm><primary>postgresql.conf</></>,
-    which is normally kept in the data directory.  (A default copy is
-    installed there when the database cluster directory is
-    initialized.)  An example of what this file might look like is:
+    <para>
+     Parameters of type <quote>enum</> are specified in the same way as string
+     parameters, but are restricted to a limited set of values.  The allowed
+     values can be found
+     from <structname>pg_settings</>.<structfield>enumvals</>.
+     Enum parameter values are case-insensitive.
+    </para>
+   </sect2>
+
+   <sect2 id="config-setting-configuration-file">
+    <title>Setting Parameters via the Configuration File</title>
+
+&common;
+    <para>
+     One way to set these parameters is to edit the file
+     <filename>postgresql.conf</><indexterm><primary>postgresql.conf</></>,
+     which is normally kept in the data directory.  (A default copy is
+     installed there when the database cluster directory is
+     initialized.)  An example of what this file might look like is:
 <programlisting>
 # This is a comment
 log_connections = yes
@@ -82,156 +91,254 @@ log_destination = 'syslog'
 search_path = '"$user", public'
 shared_buffers = 128MB
 </programlisting>
-    One parameter is specified per line. The equal sign between name and
-    value is optional. Whitespace is insignificant and blank lines are
-    ignored. Hash marks (<literal>#</literal>) designate the rest of the
-    line as a comment.  Parameter values that are not simple identifiers or
-    numbers must be single-quoted.  To embed a single quote in a parameter
-    value, write either two quotes (preferred) or backslash-quote.
-   </para>
+     One parameter is specified per line. The equal sign between name and
+     value is optional. Whitespace is insignificant and blank lines are
+     ignored. Hash marks (<literal>#</literal>) designate the remainder of the
+     line as a comment.  Parameter values that are not simple identifiers or
+     numbers must be single-quoted.  To embed a single quote in a parameter
+     value, write either two quotes (preferred) or backslash-quote.
+    </para>
 
-   <para>
-    <indexterm>
-     <primary><literal>include</></primary>
-     <secondary>in configuration file</secondary>
-    </indexterm>
-    In addition to parameter settings, the <filename>postgresql.conf</>
-    file can contain <firstterm>include directives</>, which specify
-    another file to read and process as if it were inserted into the
-    configuration file at this point.  Include directives simply look like:
-<programlisting>
-include 'filename'
-</programlisting>
-    If the file name is not an absolute path, it is taken as relative to
-    the directory containing the referencing configuration file.
-    Inclusions can be nested.
-   </para>
+    <para>
+     <indexterm>
+      <primary>SIGHUP</primary>
+     </indexterm>
+     The configuration file is reread whenever the main server process
+     receives a <systemitem>SIGHUP</> signal;  this is most easily done by
+     running <literal>pg_ctl reload</> from the command-line or by calling
+     the SQL function <function>pg_reload_conf()</function>. The main
+     server process
+     also propagates this signal to all currently running server
+     processes so that existing sessions also get the new
+     value. Alternatively, you can send the signal to a single server
+     process directly.  Some parameters can only be set at server start;
+     any changes to their entries in the configuration file will be ignored
+     until the server is restarted.  Invalid parameter settings in the
+     configuration file are likewise ignored (but logged) during
+     <systemitem>SIGHUP</> processing.
+    </para>
+   </sect2>
 
-   <para>
-    <indexterm>
-     <primary>SIGHUP</primary>
-    </indexterm>
+   <sect2 id="config-setting-other-methods">
+    <title>Other Ways to Set Parameters</title>
+
+&xconly;
+    <para>
 <!## PG>
-    The configuration file is reread whenever the main server process receives a
-    <systemitem>SIGHUP</> signal (which is most easily sent by means
-    of <literal>pg_ctl reload</>). The main server process
-    also propagates this signal to all currently running server
-    processes so that existing sessions also get the new
-    value. Alternatively, you can send the signal to a single server
-    process directly.  Some parameters can only be set at server start;
-    any changes to their entries in the configuration file will be ignored
-    until the server is restarted.
-<!## end>
-<!## XC>
-    The configuration file is reread whenever the main Coordinator/Datanode process receives a
-    <systemitem>SIGHUP</> signal (which is most easily sent by means
-    of <literal>pg_ctl reload</>). The main Coordinator/Datanode process
-    also propagates this signal to all currently running server
-    processes so that existing sessions also get the new
-    value. Alternatively, you can send the signal to a single server
-    process directly.  Some parameters can only be set at server start;
-    any changes to their entries in the configuration file will be ignored
-    until the server is restarted.
-<!## end>
-   </para>
-
-   <para>
-    A second way to set these configuration parameters is to give them
-    as a command-line option to the <command>postgres</command> command, such as:
-<!## PG>
+     A second way to set these configuration parameters is to give them
+     as a command-line option to the <command>postgres</command> command,
+     such as:
 <programlisting>
 postgres -c log_connections=yes -c log_destination='syslog'
 </programlisting>
 <!## end>
 <!## XC>
+     A second way to set these configuration parameters is to give them
+     as a command-line option to the <command>postgres</command> command,
+     such as:
 <programlisting>
 postgres --coordinator -c log_connections=yes -c log_destination='syslog'
 </programlisting>
 <!## end>
-    Command-line options override any conflicting settings in
-    <filename>postgresql.conf</filename>.  Note that this means you won't
-    be able to change the value on-the-fly by editing
-    <filename>postgresql.conf</filename>, so while the command-line
-    method might be convenient, it can cost you flexibility later.
-   </para>
+     Command-line options override any conflicting settings in
+     <filename>postgresql.conf</filename>.  Note that this means you won't
+     be able to change the value on-the-fly by editing
+     <filename>postgresql.conf</filename>, so while the command-line
+     method might be convenient, it can cost you flexibility later.
+    </para>
 
-   <para>
-    Occasionally it is useful to give a command line option to
-    one particular session only. The environment variable
-    <envar>PGOPTIONS</envar> can be used for this purpose on the
-    client side:
+&common;
+    <para>
+     Occasionally it is useful to give a command line option to
+     one particular session only. The environment variable
+     <envar>PGOPTIONS</envar> can be used for this purpose on the
+     client side:
 <programlisting>
 env PGOPTIONS='-c geqo=off' psql
 </programlisting>
-    (This works for any <application>libpq</>-based client application, not
-    just <application>psql</application>.) Note that this won't work for
-    parameters that are fixed when the server is started or that must be
-    specified in <filename>postgresql.conf</filename>.
-   </para>
+     (This works for any <application>libpq</>-based client application, not
+     just <application>psql</application>.) Note that this won't work for
+     parameters that are fixed when the server is started or that must be
+     specified in <filename>postgresql.conf</filename>.
+    </para>
 
-   <para>
-    Furthermore, it is possible to assign a set of parameter settings to
-    a user or a database.  Whenever a session is started, the default
-    settings for the user and database involved are loaded.  The
-    commands <xref linkend="sql-alterrole">
-    and <xref linkend="sql-alterdatabase">,
-    respectively, are used to configure these settings.  Per-database
-    settings override anything received from the
-    <command>postgres</command> command-line or the configuration
-    file, and in turn are overridden by per-user settings; both are
-    overridden by per-session settings.
-   </para>
+    <para>
+     Furthermore, it is possible to assign a set of parameter settings to
+     a user or a database.  Whenever a session is started, the default
+     settings for the user and database involved are loaded.  The
+     commands <xref linkend="sql-alterrole">
+     and <xref linkend="sql-alterdatabase">,
+     respectively, are used to configure these settings.  Per-database
+     settings override anything received from the
+     <command>postgres</command> command-line or the configuration
+     file, and in turn are overridden by per-user settings; both are
+     overridden by per-session settings.
+    </para>
 
-   <para>
-    Some parameters can be changed in individual <acronym>SQL</acronym>
-    sessions with the <xref linkend="SQL-SET">
-    command, for example:
+    <para>
+     Some parameters can be changed in individual <acronym>SQL</acronym>
+     sessions with the <xref linkend="SQL-SET">
+     command, for example:
 <screen>
 SET ENABLE_SEQSCAN TO OFF;
 </screen>
-    If <command>SET</> is allowed, it overrides all other sources of
-    values for the parameter. Some parameters cannot be changed via
-    <command>SET</command>: for example, if they control behavior that
-    cannot be changed without restarting the entire
-<!## PG>
-    <productname>PostgreSQL</productname> server.  Also,
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> server.  Also,
-<!## end>
-    some <command>SET</command> or <command>ALTER</> parameter modifications
-    require superuser permission.
-   </para>
+     If <command>SET</> is allowed, it overrides all other sources of
+     values for the parameter. Some parameters cannot be changed via
+     <command>SET</command>: for example, if they control behavior that
+     cannot be changed without restarting the entire
+     <productname>PostgreSQL</productname> server.  Also, some parameters
+     require superuser permission to change via <command>SET</command> or
+     <command>ALTER</>.
+    </para>
+   </sect2>
 
-   <para>
-    The <xref linkend="SQL-SHOW">
-    command allows inspection of the current values of all parameters.
-   </para>
+   <sect2 id="config-setting-examining">
+    <title>Examining Parameter Settings</title>
 
-   <para>
-    The virtual table <structname>pg_settings</structname> also allows
-    displaying and updating session run-time parameters;  see <xref
-    linkend="view-pg-settings"> for details and a description of the
-    different variable types and when they can be changed.
-    <structname>pg_settings</structname> is equivalent to <command>SHOW</>
-    and <command>SET</>, but can be more convenient
-    to use because it can be joined with other tables, or selected from using
-    any desired selection condition. It also contains more information about
-    what values are allowed for the parameters.
-   </para>
-  </sect1>
+&common;
+    <para>
+     The <xref linkend="SQL-SHOW">
+     command allows inspection of the current values of all parameters.
+    </para>
+
+    <para>
+     The virtual table <structname>pg_settings</structname> also allows
+     displaying and updating session run-time parameters;  see <xref
+     linkend="view-pg-settings"> for details and a description of the
+     different variable types and when they can be changed.
+     <structname>pg_settings</structname> is equivalent to <command>SHOW</>
+     and <command>SET</>, but can be more convenient
+     to use because it can be joined with other tables, or selected from using
+     any desired selection condition. It also contains more information about
+     each parameter than is available from <command>SHOW</>.
+    </para>
+
+   </sect2>
+
+   <sect2 id="config-includes">
+    <title>Configuration File Includes</title>
+
+     <para>
+      <indexterm>
+       <primary><literal>include</></primary>
+       <secondary>in configuration file</secondary>
+       </indexterm>
+         In addition to parameter settings, the <filename>postgresql.conf</>
+         file can contain <firstterm>include directives</>, which specify
+         another file to read and process as if it were inserted into the
+         configuration file at this point.  This feature allows a configuration
+         file to be divided into physically separate parts.
+         Include directives simply look like:
+<programlisting>
+include 'filename'
+</programlisting>
+         If the file name is not an absolute path, it is taken as relative to
+         the directory containing the referencing configuration file.
+         Inclusions can be nested.
+     </para>
+
+     <para>
+      <indexterm>
+       <primary><literal>include_if_exists</></primary>
+       <secondary>in configuration file</secondary>
+      </indexterm>
+         There is also an <literal>include_if_exists</> directive, which acts
+         the same as the <literal>include</> directive, except for the behavior
+         when the referenced file does not exist or cannot be read.  A regular
+         <literal>include</> will consider this an error condition, but
+         <literal>include_if_exists</> merely logs a message and continues
+         processing the referencing configuration file.
+     </para>
+
+     <para>
+      <indexterm>
+       <primary><literal>include_dir</></primary>
+       <secondary>in configuration file</secondary>
+      </indexterm>
+        The <filename>postgresql.conf</> file can also contain
+        <literal>include_dir</literal> directives, which specify an entire directory
+        of configuration files to include.  It is used similarly:
+ <programlisting>
+ include_dir 'directory'
+ </programlisting>
+        Non-absolute directory names follow the same rules as single file include
+        directives:  they are relative to the directory containing the referencing
+        configuration file.  Within that directory, only non-directory files whose
+        names end with the suffix <literal>.conf</literal> will be included.  File
+        names that start with the <literal>.</literal> character are also excluded,
+        to prevent mistakes as they are hidden on some platforms.  Multiple files
+        within an include directory are processed in file name order. The file names
+        are ordered by C locale rules, ie. numbers before letters, and uppercase
+        letters before lowercase ones.
+     </para>
+
+     <para>
+       Include files or directories can be used to logically separate portions
+       of the database configuration, rather than having a single large
+       <filename>postgresql.conf</> file.  Consider a company that has two
+       database servers, each with a different amount of memory.  There are likely
+       elements of the configuration both will share, for things such as logging.
+       But memory-related parameters on the server will vary between the two.  And
+       there might be server specific customizations, too.  One way to manage this
+       situation is to break the custom configuration changes for your site into
+       three files.  You could add this to the end of your
+       <filename>postgresql.conf</> file to include them:
+ <programlisting>
+ include 'shared.conf'
+ include 'memory.conf'
+ include 'server.conf'
+ </programlisting>
+       All systems would have the same <filename>shared.conf</>.  Each server
+       with a particular amount of memory could share the same
+       <filename>memory.conf</>; you might have one for all servers with 8GB of RAM,
+       another for those having 16GB.  And finally <filename>server.conf</> could
+       have truly server-specific configuration information in it.
+     </para>
+
+     <para>
+       Another possibility is to create a configuration file directory and
+       put this information into files there. For example, a <filename>conf.d</>
+       directory could be referenced at the end of<filename>postgresql.conf</>:
+ <screen>
+ include_dir 'conf.d'
+ </screen>
+       Then you could name the files in the <filename>conf.d</> directory like this:
+ <screen>
+ 00shared.conf
+ 01memory.conf
+ 02server.conf
+ </screen>
+       This shows a clear order in which these files will be loaded.  This is
+       important because only the last setting encountered when the server is
+       reading its configuration will be used.  Something set in
+       <filename>conf.d/02server.conf</> in this example would override a value
+       set in <filename>conf.d/01memory.conf</>.
+     </para>
+
+     <para>
+       You might instead use this configuration directory approach while naming
+       these files more descriptively:
+ <screen>
+ 00shared.conf
+ 01memory-8GB.conf
+ 02server-foo.conf
+ </screen>
+       This sort of arrangement gives a unique name for each configuration file
+       variation.  This can help eliminate ambiguity when several servers have
+       their configurations all stored in one place, such as in a version
+       control repository.  (Storing database configuration files under version
+       control is another good practice to consider).
+     </para>
+    </sect2>
+   </sect1>
 
    <sect1 id="runtime-config-file-locations">
     <title>File Locations</title>
+
 &common;
      <para>
       In addition to the <filename>postgresql.conf</filename> file
-<!## PG>
       already mentioned, <productname>PostgreSQL</productname> uses
-<!## end>
-<!## XC>
-      already mentioned, <productname>Postgres-XC</productname> uses
-<!## end>
       two other manually-edited configuration files, which control
       client authentication (their use is discussed in <xref
       linkend="client-authentication">).  By default, all three
@@ -307,7 +414,7 @@ SET ENABLE_SEQSCAN TO OFF;
       </indexterm>
       <listitem>
        <para>
-        Specifies the name of an additional process-id (PID) file that the
+        Specifies the name of an additional process-ID (PID) file that the
         server should create for use by server administration programs.
         This parameter can only be set at server start.
        </para>
@@ -360,7 +467,7 @@ SET ENABLE_SEQSCAN TO OFF;
 
     <sect2 id="runtime-config-connection-settings">
      <title>Connection Settings</title>
-&common;
+
      <variablelist>
 
      <varlistentry id="guc-listen-addresses" xreflabel="listen_addresses">
@@ -421,6 +528,7 @@ SET ENABLE_SEQSCAN TO OFF;
         only be set at server start.
        </para>
 
+&xconly;
 <!## XC>
        <para>
         In the case of the Coordinator, this parameter determines how many
@@ -433,23 +541,7 @@ SET ENABLE_SEQSCAN TO OFF;
        </para>
 <!## end>
 
-       <para>
-<!## PG>
-        Increasing this parameter might cause <productname>PostgreSQL</>
-        to request more <systemitem class="osname">System V</> shared
-        memory or semaphores than your operating system's default configuration
-        allows. See <xref linkend="sysvipc"> for information on how to
-        adjust those parameters, if necessary.
-<!## end>
-<!## XC>
-        Increasing this parameter might cause <filename>Coordinator</> or <filename>Datanode</>
-        to request more <systemitem class="osname">System V</> shared
-        memory or semaphores than your operating system's default configuration
-        allows. See <xref linkend="sysvipc"> for information on how to
-        adjust those parameters, if necessary.
-<!## end>
-       </para>
-
+&common;
        <para>
         When running a standby server, you must set this parameter to the
         same or higher value than on the master server. Otherwise, queries
@@ -466,8 +558,8 @@ SET ENABLE_SEQSCAN TO OFF;
        <primary><varname>superuser_reserved_connections</> configuration parameter</primary>
       </indexterm>
       <listitem>
-       <para>
 <!## PG>
+       <para>
         Determines the number of connection <quote>slots</quote> that
         are reserved for connections by <productname>PostgreSQL</>
         superusers.  At most <xref linkend="guc-max-connections">
@@ -477,20 +569,24 @@ SET ENABLE_SEQSCAN TO OFF;
         <varname>superuser_reserved_connections</varname>, new
         connections will be accepted only for superusers, and no
         new replication connections will be accepted.
+       </para>
 <!## end>
 <!## XC>
+&xconly;
+       <para>
         Determines the number of connection <quote>slots</quote> that
-        are reserved for connections by <filename>Coordinator</> or <filename>Datanode</>
+        are reserved for connections by <filename>Coordinator</filename> or <filename>Datanode</filename>
         superusers.  At most <xref linkend="guc-max-connections">
         connections can ever be active simultaneously.  Whenever the
         number of active concurrent connections is at least
-        <varname>max_connections</> minus
+        <varname>max_connections</varname> minus
         <varname>superuser_reserved_connections</varname>, new
         connections will be accepted only for superusers, and no
         new replication connections will be accepted.
-<!## end>
        </para>
+<!## end>
 
+&common;
        <para>
         The default value is three connections. The value must be less
         than the value of <varname>max_connections</varname>. This
@@ -499,17 +595,24 @@ SET ENABLE_SEQSCAN TO OFF;
       </listitem>
      </varlistentry>
 
-     <varlistentry id="guc-unix-socket-directory" xreflabel="unix_socket_directory">
-      <term><varname>unix_socket_directory</varname> (<type>string</type>)</term>
+     <varlistentry id="guc-unix-socket-directories" xreflabel="unix_socket_directories">
+      <term><varname>unix_socket_directories</varname> (<type>string</type>)</term>
       <indexterm>
-       <primary><varname>unix_socket_directory</> configuration parameter</primary>
+       <primary><varname>unix_socket_directories</> configuration parameter</primary>
       </indexterm>
       <listitem>
        <para>
-        Specifies the directory of the Unix-domain socket on which the
-        server is to listen for
-        connections from client applications.  The default is normally
-        <filename>/tmp</filename>, but can be changed at build time.
+        Specifies the directory of the Unix-domain socket(s) on which the
+        server is to listen for connections from client applications.
+        Multiple sockets can be created by listing multiple directories
+        separated by commas.  Whitespace between entries is
+        ignored; surround a directory name with double quotes if you need
+        to include whitespace or commas in the name.
+        An empty value
+        specifies not listening on any Unix-domain sockets, in which case
+        only TCP/IP sockets can be used to connect to the server.
+        The default value is normally
+        <filename>/tmp</filename>, but that can be changed at build time.
         This parameter can only be set at server start.
        </para>
 
@@ -518,8 +621,8 @@ SET ENABLE_SEQSCAN TO OFF;
         <literal>.s.PGSQL.<replaceable>nnnn</></literal> where
         <replaceable>nnnn</> is the server's port number, an ordinary file
         named <literal>.s.PGSQL.<replaceable>nnnn</>.lock</literal> will be
-        created in the <varname>unix_socket_directory</> directory.  Neither
-        file should ever be removed manually.
+        created in each of the <varname>unix_socket_directories</> directories.
+        Neither file should ever be removed manually.
        </para>
 
        <para>
@@ -536,8 +639,8 @@ SET ENABLE_SEQSCAN TO OFF;
       </indexterm>
       <listitem>
        <para>
-        Sets the owning group of the Unix-domain socket.  (The owning
-        user of the socket is always the user that starts the
+        Sets the owning group of the Unix-domain socket(s).  (The owning
+        user of the sockets is always the user that starts the
         server.)  In combination with the parameter
         <varname>unix_socket_permissions</varname> this can be used as
         an additional access control mechanism for Unix-domain connections.
@@ -560,7 +663,7 @@ SET ENABLE_SEQSCAN TO OFF;
       </indexterm>
       <listitem>
        <para>
-        Sets the access permissions of the Unix-domain socket.  Unix-domain
+        Sets the access permissions of the Unix-domain socket(s).  Unix-domain
         sockets use the usual Unix file system permission set.
         The parameter value is expected to be a numeric mode
         specified in the format accepted by the
@@ -637,8 +740,9 @@ SET ENABLE_SEQSCAN TO OFF;
         an otherwise idle connection.  A value of 0 uses the system default.
         This parameter is supported only on systems that support the
         <symbol>TCP_KEEPIDLE</> or <symbol>TCP_KEEPALIVE</> symbols, and on
-        Windows; on other systems, it must be zero. This parameter is ignored
-        for connections made via a Unix-domain socket.
+        Windows; on other systems, it must be zero.
+        In sessions connected via a Unix-domain socket, this parameter is
+        ignored and always reads as zero.
        </para>
        <note>
         <para>
@@ -660,8 +764,9 @@ SET ENABLE_SEQSCAN TO OFF;
         otherwise idle connection.  A value of 0 uses the system default.
         This parameter is supported only on systems that support the
         <symbol>TCP_KEEPINTVL</> symbol, and on Windows; on other systems, it
-        must be zero. This parameter is ignored for connections made via a
-        Unix-domain socket.
+        must be zero.
+        In sessions connected via a Unix-domain socket, this parameter is
+        ignored and always reads as zero.
        </para>
        <note>
         <para>
@@ -682,8 +787,9 @@ SET ENABLE_SEQSCAN TO OFF;
         Specifies the number of keepalive packets to send on an otherwise idle
         connection.  A value of 0 uses the system default.  This parameter is
         supported only on systems that support the <symbol>TCP_KEEPCNT</>
-        symbol; on other systems, it must be zero. This parameter is ignored
-        for connections made via a Unix-domain socket.
+        symbol; on other systems, it must be zero.
+        In sessions connected via a Unix-domain socket, this parameter is
+        ignored and always reads as zero.
        </para>
        <note>
         <para>
@@ -697,6 +803,7 @@ SET ENABLE_SEQSCAN TO OFF;
      </sect2>
      <sect2 id="runtime-config-connection-security">
      <title>Security and Authentication</title>
+
 &common;
      <variablelist>
      <varlistentry id="guc-authentication-timeout" xreflabel="authentication_timeout">
@@ -732,6 +839,70 @@ SET ENABLE_SEQSCAN TO OFF;
         is <literal>off</>. This parameter can only be set at server
         start.  <acronym>SSL</> communication is only possible with
         TCP/IP connections.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry id="guc-ssl-ca-file" xreflabel="ssl_ca_file">
+      <term><varname>ssl_ca_file</varname> (<type>string</type>)</term>
+      <indexterm>
+       <primary><varname>ssl_ca_file</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Specifies the name of the file containing the SSL server certificate
+        authority (CA).  The default is empty, meaning no CA file is loaded,
+        and client certificate verification is not performed.  (In previous
+        releases of PostgreSQL, the name of this file was hard-coded
+        as <filename>root.crt</filename>.)  Relative paths are relative to the
+        data directory.  This parameter can only be set at server start.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry id="guc-ssl-cert-file" xreflabel="ssl_cert_file">
+      <term><varname>ssl_cert_file</varname> (<type>string</type>)</term>
+      <indexterm>
+       <primary><varname>ssl_cert_file</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Specifies the name of the file containing the SSL server certificate.
+        The default is <filename>server.crt</filename>.  Relative paths are
+        relative to the data directory.  This parameter can only be set at
+        server start.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry id="guc-ssl-crl-file" xreflabel="ssl_crl_file">
+      <term><varname>ssl_crl_file</varname> (<type>string</type>)</term>
+      <indexterm>
+       <primary><varname>ssl_crl_file</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Specifies the name of the file containing the SSL server certificate
+        revocation list (CRL).  The default is empty, meaning no CRL file is
+        loaded.  (In previous releases of PostgreSQL, the name of this file was
+        hard-coded as <filename>root.crl</filename>.)  Relative paths are
+        relative to the data directory.  This parameter can only be set at
+        server start.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry id="guc-ssl-key-file" xreflabel="ssl_key_file">
+      <term><varname>ssl_key_file</varname> (<type>string</type>)</term>
+      <indexterm>
+       <primary><varname>ssl_key_file</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Specifies the name of the file containing the SSL server private key.
+        The default is <filename>server.key</filename>.  Relative paths are
+        relative to the data directory.  This parameter can only be set at
+        server start.
        </para>
       </listitem>
      </varlistentry>
@@ -898,8 +1069,10 @@ SET ENABLE_SEQSCAN TO OFF;
    <sect1 id="runtime-config-resource">
     <title>Resource Consumption</title>
 
+&common;
     <sect2 id="runtime-config-resource-memory">
      <title>Memory</title>
+
 &common;
      <variablelist>
      <varlistentry id="guc-shared-buffers" xreflabel="shared_buffers">
@@ -910,8 +1083,8 @@ SET ENABLE_SEQSCAN TO OFF;
       <listitem>
        <para>
         Sets the amount of memory the database server uses for shared
-        memory buffers.  The default is typically 32 megabytes
-        (<literal>32MB</>), but might be less if your kernel settings will
+        memory buffers.  The default is typically 128 megabytes
+        (<literal>128MB</>), but might be less if your kernel settings will
         not support it (as determined during <application>initdb</>).
         This setting must be at least 128 kilobytes.  (Non-default
         values of <symbol>BLCKSZ</symbol> change the minimum.)  However,
@@ -924,12 +1097,7 @@ SET ENABLE_SEQSCAN TO OFF;
         reasonable starting value for <varname>shared_buffers</varname> is 25%
         of the memory in your system.  There are some workloads where even
         large settings for <varname>shared_buffers</varname> are effective, but
-<!## PG>
         because <productname>PostgreSQL</productname> also relies on the
-<!## end>
-<!## XC>
-        because <productname>Postgres-XC</productname> also relies on the
-<!## end>
         operating system cache, it is unlikely that an allocation of more than
         40% of RAM to <varname>shared_buffers</varname> will work better than a
         smaller amount.  Larger settings for <varname>shared_buffers</varname>
@@ -949,18 +1117,6 @@ SET ENABLE_SEQSCAN TO OFF;
         is generally from 64MB to 512MB.
        </para>
 
-       <para>
-<!## PG>
-        Increasing this parameter might cause <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-        Increasing this parameter might cause <productname>Postgres-XC</>
-<!## end>
-        to request more <systemitem class="osname">System V</> shared
-        memory than your operating system's default configuration
-        allows. See <xref linkend="sysvipc"> for information on how to
-        adjust those parameters, if necessary.
-       </para>
       </listitem>
      </varlistentry>
 
@@ -1017,25 +1173,13 @@ SET ENABLE_SEQSCAN TO OFF;
        </para>
 
        <para>
-<!## PG>
-        Increasing this parameter might cause <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-        Increasing this parameter might cause <productname>Postgres-XC</>
-<!## end>
-        to request more <systemitem class="osname">System V</> shared
-        memory than your operating system's default configuration
-        allows. See <xref linkend="sysvipc"> for information on how to
-        adjust those parameters, if necessary.
-       </para>
-
-       <para>
         When running a standby server, you must set this parameter to the
         same or higher value than on the master server. Otherwise, queries
         will not be allowed in the standby server.
        </para>
 
 <!## XC>
+&xconly;
        <para>
         Even though your application does not issue <command>PREPARE
         TRANSACTION</> explicitly, Coordinator may generate this
@@ -1122,12 +1266,7 @@ SET ENABLE_SEQSCAN TO OFF;
         Setting <varname>max_stack_depth</> higher than
         the actual kernel limit will mean that a runaway recursive function
         can crash an individual backend process.  On platforms where
-<!## PG>
         <productname>PostgreSQL</productname> can determine the kernel limit,
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname> can determine the kernel limit,
-<!## end>
         the server will not allow this variable to be set to an unsafe
         value.  However, not all platforms provide the information,
         so caution is recommended in selecting a value.
@@ -1138,10 +1277,42 @@ SET ENABLE_SEQSCAN TO OFF;
      </variablelist>
      </sect2>
 
+     <sect2 id="runtime-config-resource-disk">
+     <title>Disk</title>
+
+     <variablelist>
+     <varlistentry id="guc-temp-file-limit" xreflabel="temp_file_limit">
+      <term><varname>temp_file_limit</varname> (<type>integer</type>)</term>
+      <indexterm>
+       <primary><varname>temp_file_limit</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Specifies the maximum amount of disk space that a session can use
+        for temporary files, such as sort and hash temporary files, or the
+        storage file for a held cursor.  A transaction attempting to exceed
+        this limit will be canceled.
+        The value is specified in kilobytes, and <literal>-1</> (the
+        default) means no limit.
+        Only superusers can change this setting.
+       </para>
+       <para>
+        This setting constrains the total space used at any instant by all
+        temporary files used by a given <productname>PostgreSQL</> session.
+        It should be noted that disk space used for explicit temporary
+        tables, as opposed to temporary files used behind-the-scenes in query
+        execution, does <emphasis>not</emphasis> count against this limit.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     </variablelist>
+     </sect2>
+
      <sect2 id="runtime-config-resource-kernel">
      <title>Kernel Resource Usage</title>
+
      <variablelist>
-&common;
      <varlistentry id="guc-max-files-per-process" xreflabel="max_files_per_process">
       <term><varname>max_files_per_process</varname> (<type>integer</type>)</term>
       <indexterm>
@@ -1181,20 +1352,11 @@ SET ENABLE_SEQSCAN TO OFF;
        </para>
 
        <para>
-<!## PG>
         <productname>PostgreSQL</productname> procedural language
         libraries can be preloaded in this way, typically by using the
         syntax <literal>'$libdir/plXXX'</literal> where
         <literal>XXX</literal> is <literal>pgsql</>, <literal>perl</>,
         <literal>tcl</>, or <literal>python</>.
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname> procedural language
-        libraries can be preloaded in this way, typically by using the
-        syntax <literal>'$libdir/plXXX'</literal> where
-        <literal>XXX</literal> is <literal>pgsql</>, <literal>perl</>,
-        <literal>tcl</>, or <literal>python</>.
-<!## end>
        </para>
 
        <para>
@@ -1205,9 +1367,15 @@ SET ENABLE_SEQSCAN TO OFF;
         libraries that will be used in most sessions.
        </para>
 
-<!## PG>
-<!-- No Window Support yet! -->
      <note>
+<!## XC>
+      <para>
+       Current release of <emphasis>Postgres-XC only:</emphasis> <productname>Postgres-XC</productname>
+       does not support Windows.
+       The following description applies onlyh to <productname>PostgreSQL</productname>.
+      </para>
+<!## end>
+
       <para>
         On Windows hosts, preloading a library at server start will not reduce
         the time required to start each new server process; each server process
@@ -1218,25 +1386,17 @@ SET ENABLE_SEQSCAN TO OFF;
         or shared memory and you can't do that after the postmaster has started).
        </para>
       </note>
-<!## end>
+&common;
        <para>
         If a specified library is not found,
         the server will fail to start.
        </para>
 
        <para>
-<!## PG>
         Every  PostgreSQL-supported library has a <quote>magic
         block</> that is checked to guarantee compatibility.
         For this reason, non-PostgreSQL libraries cannot be
         loaded in this way.
-<!## end>
-<!## XC>
-        Every  Postgres-XC-supported library has a <quote>magic
-        block</> that is checked to guarantee compatibility.
-        For this reason, non-Postgres-XC libraries cannot be
-        loaded in this way.
-<!## end>
        </para>
       </listitem>
      </varlistentry>
@@ -1384,6 +1544,7 @@ SET ENABLE_SEQSCAN TO OFF;
 
     <sect2 id="runtime-config-resource-background-writer">
      <title>Background Writer</title>
+
 &common;
      <para>
       There is a separate server
@@ -1411,12 +1572,14 @@ SET ENABLE_SEQSCAN TO OFF;
          background writer.  In each round the writer issues writes
          for some number of dirty buffers (controllable by the
          following parameters).  It then sleeps for <varname>bgwriter_delay</>
-         milliseconds, and repeats.  The default value is 200 milliseconds
-         (<literal>200ms</>). Note that on many systems, the effective
-         resolution of sleep delays is 10 milliseconds; setting
-         <varname>bgwriter_delay</> to a value that is not a multiple of
-         10 might have the same results as setting it to the next higher
-         multiple of 10.  This parameter can only be set in the
+         milliseconds, and repeats.  When there are no dirty buffers in the
+         buffer pool, though, it goes into a longer sleep regardless of
+         <varname>bgwriter_delay</>.  The default value is 200
+         milliseconds (<literal>200ms</>). Note that on many systems, the
+         effective resolution of sleep delays is 10 milliseconds; setting
+         <varname>bgwriter_delay</> to a value that is not a multiple of 10
+         might have the same results as setting it to the next higher multiple
+         of 10.  This parameter can only be set in the
          <filename>postgresql.conf</> file or on the server command line.
         </para>
        </listitem>
@@ -1431,7 +1594,8 @@ SET ENABLE_SEQSCAN TO OFF;
         <para>
          In each round, no more than this many buffers will be written
          by the background writer.  Setting this to zero disables
-         background writing (except for checkpoint activity).
+         background writing.  (Note that checkpoints, which are managed by
+         a separate, dedicated auxiliary process, are unaffected.)
          The default value is 100 buffers.
          This parameter can only be set in the <filename>postgresql.conf</>
          file or on the server command line.
@@ -1478,6 +1642,7 @@ SET ENABLE_SEQSCAN TO OFF;
 
     <sect2 id="runtime-config-resource-async-behavior">
      <title>Asynchronous Behavior</title>
+
 &common;
      <variablelist>
       <varlistentry id="guc-effective-io-concurrency" xreflabel="effective_io_concurrency">
@@ -1528,15 +1693,17 @@ SET ENABLE_SEQSCAN TO OFF;
 
    <sect1 id="runtime-config-wal">
     <title>Write Ahead Log</title>
+
 &common;
    <para>
-    See also <xref linkend="wal-configuration"> for details on WAL
-    and checkpoint tuning.
+    For additional information on tuning these settings,
+    see <xref linkend="wal-configuration">.
    </para>
 
     <sect2 id="runtime-config-wal-settings">
      <title>Settings</title>
      <variablelist>
+
 &common;
      <varlistentry id="guc-wal-level" xreflabel="wal_level">
       <term><varname>wal_level</varname> (<type>enum</type>)</term>
@@ -1554,18 +1721,24 @@ SET ENABLE_SEQSCAN TO OFF;
         This parameter can only be set at server start.
        </para>
        <para>
-        In <literal>minimal</> level, WAL-logging of some bulk operations, like
-        <command>CREATE INDEX</>, <command>CLUSTER</> and <command>COPY</> on
-        a table that was created or truncated in the same transaction can be
-        safely skipped, which can make those operations much faster (see
-        <xref linkend="populate-pitr">). But minimal WAL does not contain
+        In <literal>minimal</> level, WAL-logging of some bulk
+        operations can be safely skipped, which can make those
+        operations much faster (see <xref linkend="populate-pitr">).
+        Operations in which this optimization can be applied include:
+        <simplelist>
+         <member><command>CREATE TABLE AS</></member>
+         <member><command>CREATE INDEX</></member>
+         <member><command>CLUSTER</></member>
+         <member><command>COPY</> into tables that were created or truncated in the same
+         transaction</member>
+        </simplelist>
+        But minimal WAL does not contain
         enough information to reconstruct the data from a base backup and the
         WAL logs, so either <literal>archive</> or <literal>hot_standby</>
         level must be used to enable
         WAL archiving (<xref linkend="guc-archive-mode">) and streaming
         replication.
        </para>
-<!## PG>
        <para>
         In <literal>hot_standby</> level, the same information is logged as
         with <literal>archive</>, plus information needed to reconstruct
@@ -1578,23 +1751,17 @@ SET ENABLE_SEQSCAN TO OFF;
         <literal>hot_standby</> and <literal>archive</> levels, so feedback
         is welcome if any production impacts are noticeable.
        </para>
-<!## end>
       </listitem>
      </varlistentry>
 
      <varlistentry id="guc-fsync" xreflabel="fsync">
+      <term><varname>fsync</varname> (<type>boolean</type>)</term>
       <indexterm>
        <primary><varname>fsync</> configuration parameter</primary>
       </indexterm>
-      <term><varname>fsync</varname> (<type>boolean</type>)</term>
       <listitem>
        <para>
-<!## PG>
         If this parameter is on, the <productname>PostgreSQL</> server
-<!## end>
-<!## XC>
-        If this parameter is on, the <productname>Postgres-XC</> server
-<!## end>
         will try to make sure that updates are physically written to
         disk, by issuing <function>fsync()</> system calls or various
         equivalent methods (see <xref linkend="guc-wal-sync-method">).
@@ -1624,6 +1791,15 @@ SET ENABLE_SEQSCAN TO OFF;
        </para>
 
        <para>
+        For reliable recovery when changing <varname>fsync</varname>
+        off to on, it is necessary to force all modified buffers in the
+        kernel to durable storage.  This can be done while the cluster
+        is shutdown or while fsync is on by running <command>initdb
+        --sync-only</command>, running <command>sync</>, unmounting the
+        file system, or rebooting the server.
+       </para>
+
+       <para>
         In many situations, turning off <xref linkend="guc-synchronous-commit">
         for noncritical transactions can provide much of the potential
         performance benefit of turning off <varname>fsync</varname>, without
@@ -1640,7 +1816,7 @@ SET ENABLE_SEQSCAN TO OFF;
      </varlistentry>
 
      <varlistentry id="guc-synchronous-commit" xreflabel="synchronous_commit">
-      <term><varname>synchronous_commit</varname> (<type>boolean</type>)</term>
+      <term><varname>synchronous_commit</varname> (<type>enum</type>)</term>
       <indexterm>
        <primary><varname>synchronous_commit</> configuration parameter</primary>
       </indexterm>
@@ -1649,7 +1825,8 @@ SET ENABLE_SEQSCAN TO OFF;
         Specifies whether transaction commit will wait for WAL records
         to be written to disk before the command returns a <quote>success</>
         indication to the client.  Valid values are <literal>on</>,
-        <literal>local</>, and <literal>off</>.  The default, and safe, value
+        <literal>remote_write</>, <literal>local</>, and <literal>off</>.
+        The default, and safe, setting
         is <literal>on</>.  When <literal>off</>, there can be a delay between
         when success is reported to the client and when the transaction is
         really guaranteed to be safe against a server crash.  (The maximum
@@ -1666,16 +1843,34 @@ SET ENABLE_SEQSCAN TO OFF;
        </para>
        <para>
         If <xref linkend="guc-synchronous-standby-names"> is set, this
-        parameter also controls whether or not transaction commit will wait
-        for the transaction's WAL records to be flushed to disk and replicated
-        to the standby server.  The commit wait will last until a reply from
-        the current synchronous standby indicates it has written the commit
-        record of the transaction to durable storage.  If synchronous
+        parameter also controls whether or not transaction commits will wait
+        for the transaction's WAL records to be replicated to the standby
+        server.
+        When set to <literal>on</>, commits will wait until a reply
+        from the current synchronous standby indicates it has received
+        the commit record of the transaction and flushed it to disk.  This
+        ensures the transaction will not be lost unless both primary and
+        standby suffer corruption of their database storage.
+        When set to <literal>remote_write</>, commits will wait
+        until a reply from the current synchronous standby indicates it has
+        received the commit record of the transaction and written it out to
+        the standby's operating system, but the data has not necessarily
+        reached stable storage on the standby. This setting is sufficient to
+        ensure data preservation even if the standby instance of
+        <productname>PostgreSQL</> were to crash, but not if the standby
+        suffers an operating-system-level crash.
+       </para>
+       <para>
+        When synchronous
         replication is in use, it will normally be sensible either to wait
-        both for WAL records to reach both the local and remote disks, or
+        for both local flush to disk and replication of WAL records, or
         to allow the transaction to commit asynchronously.  However, the
-        special value <literal>local</> is available for transactions that
+        setting <literal>local</> is available for transactions that
         wish to wait for local flush to disk, but not synchronous replication.
+        If <varname>synchronous_standby_names</> is not set, the settings
+        <literal>on</>, <literal>remote_write</> and <literal>local</> all
+        provide the same synchronization level: transaction commits only wait
+        for local flush to disk.
        </para>
        <para>
         This parameter can be changed at any time; the behavior for any
@@ -1745,18 +1940,13 @@ SET ENABLE_SEQSCAN TO OFF;
      </varlistentry>
 
      <varlistentry id="guc-full-page-writes" xreflabel="full_page_writes">
+      <term><varname>full_page_writes</varname> (<type>boolean</type>)</term>
       <indexterm>
        <primary><varname>full_page_writes</> configuration parameter</primary>
       </indexterm>
-      <term><varname>full_page_writes</varname> (<type>boolean</type>)</term>
       <listitem>
        <para>
-<!## PG>
         When this parameter is on, the <productname>PostgreSQL</> server
-<!## end>
-<!## XC>
-        When this parameter is on, the <productname>Postgres-XC</> server
-<!## end>
         writes the entire content of each disk page to WAL during the
         first modification of that page after a checkpoint.
         This is needed because
@@ -1823,18 +2013,6 @@ SET ENABLE_SEQSCAN TO OFF;
         results in most cases.
        </para>
 
-       <para>
-<!## PG>
-        Increasing this parameter might cause <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-        Increasing this parameter might cause <productname>Postgres-XC</>
-<!## end>
-        to request more <systemitem class="osname">System V</> shared
-        memory than your operating system's default configuration
-        allows. See <xref linkend="sysvipc"> for information on how to
-        adjust those parameters, if necessary.
-       </para>
       </listitem>
      </varlistentry>
 
@@ -1865,23 +2043,30 @@ SET ENABLE_SEQSCAN TO OFF;
       </indexterm>
       <listitem>
        <para>
-        When the commit data for a transaction is flushed to disk, any
-        additional commits ready at that time are also flushed out.
-        <varname>commit_delay</varname> adds a time delay, set in
-        microseconds, before a transaction attempts to
-        flush the WAL buffer out to disk.  A nonzero delay can allow more
-        transactions to be committed with only one flush operation, if
-        system load is high enough that additional transactions become
-        ready to commit within the given interval. But the delay is
-        just wasted if no other transactions become ready to
-        commit. Therefore, the delay is only performed if at least
-        <varname>commit_siblings</varname> other transactions are
-        active at the instant that a server process has written its
-        commit record.
+        <varname>commit_delay</varname> adds a time delay, measured in
+        microseconds, before a WAL flush is initiated.  This can improve
+        group commit throughput by allowing a larger number of transactions
+        to commit via a single WAL flush, if system load is high enough
+        that additional transactions become ready to commit within the
+        given interval.  However, it also increases latency by up to
+        <varname>commit_delay</varname> microseconds for each WAL
+        flush.  Because the delay is just wasted if no other transactions
+        become ready to commit, a delay is only performed if at least
+        <varname>commit_siblings</varname> other transactions are active
+        when a flush is about to be initiated.  Also, no delays are
+        performed if <varname>fsync</varname> is disabled.
         The default <varname>commit_delay</> is zero (no delay).
-        Since all pending commit data will be written at every flush
-        regardless of this setting, it is rare that adding delay
-        by increasing this parameter will actually improve performance.
+        Only superusers can change this setting.
+       </para>
+       <para>
+        In <productname>PostgreSQL</> releases prior to 9.3,
+        <varname>commit_delay</varname> behaved differently and was much
+        less effective: it affected only commits, rather than all WAL flushes,
+        and waited for the entire configured delay even if the WAL flush
+        was completed sooner.  Beginning in <productname>PostgreSQL</> 9.3,
+        the first process that becomes ready to flush waits for the configured
+        interval, while subsequent processes wait only until the leader
+        completes the flush operation.
        </para>
       </listitem>
      </varlistentry>
@@ -1906,6 +2091,7 @@ SET ENABLE_SEQSCAN TO OFF;
      </sect2>
      <sect2 id="runtime-config-wal-checkpoints">
      <title>Checkpoints</title>
+
 &common;
     <variablelist>
      <varlistentry id="guc-checkpoint-segments" xreflabel="checkpoint_segments">
@@ -1970,6 +2156,8 @@ SET ENABLE_SEQSCAN TO OFF;
         than this many seconds (which suggests that
         <varname>checkpoint_segments</> ought to be raised).  The default is
         30 seconds (<literal>30s</>).  Zero disables the warning.
+        No warnings will be generated if <varname>checkpoint_timeout</varname>
+        is less than <varname>checkpoint_warning</varname>.
         This parameter can only be set in the <filename>postgresql.conf</>
         file or on the server command line.
        </para>
@@ -1980,6 +2168,7 @@ SET ENABLE_SEQSCAN TO OFF;
      </sect2>
      <sect2 id="runtime-config-wal-archiving">
      <title>Archiving</title>
+
 &common;
     <variablelist>
      <varlistentry id="guc-archive-mode" xreflabel="archive_mode">
@@ -1995,9 +2184,9 @@ SET ENABLE_SEQSCAN TO OFF;
         <varname>archive_mode</> and <varname>archive_command</> are
         separate variables so that <varname>archive_command</> can be
         changed without leaving archiving mode.
-        This parameter can only be set at server start. <varname>wal_level</>
-        must be set to <literal>archive</> or <literal>hot_standby</> to
-        enable <varname>archive_mode</>.
+        This parameter can only be set at server start.
+        <varname>archive_mode</> cannot be enabled when
+        <varname>wal_level</> is set to <literal>minimal</>.
        </para>
       </listitem>
      </varlistentry>
@@ -2062,7 +2251,10 @@ SET ENABLE_SEQSCAN TO OFF;
         files.  Therefore, it is unwise to use a very short
         <varname>archive_timeout</> &mdash; it will bloat your archive
         storage.  <varname>archive_timeout</> settings of a minute or so are
-        usually reasonable.  This parameter can only be set in the
+        usually reasonable.  You should consider using streaming replication,
+        instead of archiving, if you want data to be copied off the master
+        server more quickly than that.
+        This parameter can only be set in the
         <filename>postgresql.conf</> file or on the server command line.
        </para>
       </listitem>
@@ -2071,26 +2263,36 @@ SET ENABLE_SEQSCAN TO OFF;
      </variablelist>
     </sect2>
 
-<!-- No evaluation for asynchronous streaming replication -->
-    <sect2 id="runtime-config-replication">
-     <title>Streaming Replication</title>
-<!## XC>
-&pgonly;
-     <para>
-      Streaming replication has not been tested
-      with <productname>Postgres-XC</productname> yet.  Because this
-      version of streaming replication is based upon asynchronous log shipping,
-      there could be a risk to have the status of Coordinators and
-      Datanodes inconsistent.  The development team leaves the test
-      and the use of this entirely to users.
-     </para>
-<!## end>
+   </sect1>
 
+   <sect1 id="runtime-config-replication">
+    <title>Replication</title>
+
+&common;
+    <para>
+     These settings control the behavior of the built-in
+     <firstterm>streaming replication</> feature (see
+     <xref linkend="streaming-replication">).  Servers will be either a
+     Master or a Standby server.  Masters can send data, while Standby(s)
+     are always receivers of replicated data.  When cascading replication
+     (see <xref linkend="cascading-replication">) is used, Standby server(s)
+     can also be senders, as well as receivers.
+     Parameters are mainly for Sending and Standby servers, though some
+     parameters have meaning only on the Master server.  Settings may vary
+     across the cluster without problems if that is required.
+    </para>
+
+    <sect2 id="runtime-config-replication-sender">
+     <title>Sending Server(s)</title>
+
+&common;
      <para>
-      These settings control the behavior of the built-in
-      <firstterm>streaming replication</> feature.
-      These parameters would be set on the primary server that is
+      These parameters can be set on any server that is
       to send replication data to one or more standby servers.
+      The master is always a sending server, so these parameters must
+      always be set on the master.
+      The role and meaning of these parameters does not change after a
+      standby becomes the master.
      </para>
 
      <variablelist>
@@ -2101,35 +2303,16 @@ SET ENABLE_SEQSCAN TO OFF;
        </indexterm>
        <listitem>
        <para>
-        Specifies the maximum number of concurrent connections from standby
-        servers or streaming base backup clients (i.e., the maximum number of
-        simultaneously running WAL sender
-        processes). The default is zero. This parameter can only be set at
-        server start. <varname>wal_level</> must be set to <literal>archive</>
-        or <literal>hot_standby</> to allow connections from standby servers.
-       </para>
-       </listitem>
-      </varlistentry>
-      <varlistentry id="guc-wal-sender-delay" xreflabel="wal_sender_delay">
-       <term><varname>wal_sender_delay</varname> (<type>integer</type>)</term>
-       <indexterm>
-        <primary><varname>wal_sender_delay</> configuration parameter</primary>
-       </indexterm>
-       <listitem>
-       <para>
-        Specifies the delay between activity rounds for WAL sender processes.
-        In each round the WAL sender sends any WAL accumulated since the last
-        round to the standby server. It then sleeps for
-        <varname>wal_sender_delay</> milliseconds, and repeats. The sleep
-        is interrupted by transaction commit, so the effects of a committed
-        transaction are sent to standby servers as soon as the commit
-        happens, regardless of this setting. The default value is one second
-        (<literal>1s</>).
-        Note that on many systems, the effective resolution of sleep delays is
-        10 milliseconds; setting <varname>wal_sender_delay</> to a value that
-        is not a multiple of 10 might have the same results as setting it to
-        the next higher multiple of 10. This parameter can only be set in the
-        <filename>postgresql.conf</> file or on the server command line.
+        Specifies the maximum number of concurrent connections from
+        standby servers or streaming base backup clients (i.e., the
+        maximum number of simultaneously running WAL sender
+        processes). The default is zero, meaning replication is
+        disabled. WAL sender processes count towards the total number
+        of connections, so the parameter cannot be set higher than
+        <xref linkend="guc-max-connections">.  This parameter can only
+        be set at server start. <varname>wal_level</> must be set
+        to <literal>archive</> or <literal>hot_standby</> to allow
+        connections from standby servers.
        </para>
        </listitem>
       </varlistentry>
@@ -2145,10 +2328,11 @@ SET ENABLE_SEQSCAN TO OFF;
         <filename>pg_xlog</>
         directory, in case a standby server needs to fetch them for streaming
         replication. Each segment is normally 16 megabytes. If a standby
-        server connected to the primary falls behind by more than
-        <varname>wal_keep_segments</> segments, the primary might remove
+        server connected to the sending server falls behind by more than
+        <varname>wal_keep_segments</> segments, the sending server might remove
         a WAL segment still needed by the standby, in which case the
-        replication connection will be terminated.  (However, the standby
+        replication connection will be terminated.  Downstream connections
+        will also eventually fail as a result.  (However, the standby
         server can recover by fetching the segment from archive, if WAL
         archiving is in use.)
        </para>
@@ -2158,15 +2342,105 @@ SET ENABLE_SEQSCAN TO OFF;
         <filename>pg_xlog</>; the system might need to retain more segments
         for WAL archival or to recover from a checkpoint. If
         <varname>wal_keep_segments</> is zero (the default), the system
-        doesn't keep any extra segments for standby purposes, and the number
+        doesn't keep any extra segments for standby purposes, so the number
         of old WAL segments available to standby servers is a function of
         the location of the previous checkpoint and status of WAL
-        archiving.  This parameter has no effect on restartpoints.
+        archiving.
         This parameter can only be set in the
         <filename>postgresql.conf</> file or on the server command line.
        </para>
        </listitem>
       </varlistentry>
+
+     <varlistentry id="guc-wal-sender-timeout" xreflabel="wal_sender_timeout">
+      <term><varname>wal_sender_timeout</varname> (<type>integer</type>)</term>
+      <indexterm>
+       <primary><varname>wal_sender_timeout</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Terminate replication connections that are inactive longer
+        than the specified number of milliseconds. This is useful for
+        the sending server to detect a standby crash or network outage.
+        A value of zero disables the timeout mechanism.  This parameter
+        can only be set in
+        the <filename>postgresql.conf</> file or on the server command line.
+        The default value is 60 seconds.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     </variablelist>
+    </sect2>
+
+    <sect2 id="runtime-config-replication-master">
+     <title>Master Server</title>
+
+&common;
+     <para>
+      These parameters can be set on the master/primary server that is
+      to send replication data to one or more standby servers.
+      Note that in addition to these parameters,
+      <xref linkend="guc-wal-level"> must be set appropriately on the master
+      server, and optionally WAL archiving can be enabled as
+      well (see <xref linkend="runtime-config-wal-archiving">).
+      The values of these parameters on standby servers are irrelevant,
+      although you may wish to set them there in preparation for the
+      possibility of a standby becoming the master.
+     </para>
+
+    <variablelist>
+
+     <varlistentry id="guc-synchronous-standby-names" xreflabel="synchronous_standby_names">
+      <term><varname>synchronous_standby_names</varname> (<type>string</type>)</term>
+      <indexterm>
+       <primary><varname>synchronous_standby_names</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Specifies a comma-separated list of standby names that can support
+        <firstterm>synchronous replication</>, as described in
+        <xref linkend="synchronous-replication">.
+        At any one time there will be at most one active synchronous standby;
+        transactions waiting for commit will be allowed to proceed after
+        this standby server confirms receipt of their data.
+        The synchronous standby will be the first standby named in this list
+        that is both currently connected and streaming data in real-time
+        (as shown by a state of <literal>streaming</literal> in the
+        <link linkend="monitoring-stats-views-table">
+        <literal>pg_stat_replication</></link> view).
+        Other standby servers appearing later in this list represent potential
+        synchronous standbys.
+        If the current synchronous standby disconnects for whatever reason,
+        it will be replaced immediately with the next-highest-priority standby.
+        Specifying more than one standby name can allow very high availability.
+       </para>
+       <para>
+        The name of a standby server for this purpose is the
+        <varname>application_name</> setting of the standby, as set in the
+        <varname>primary_conninfo</> of the standby's walreceiver.  There is
+        no mechanism to enforce uniqueness. In case of duplicates one of the
+        matching standbys will be chosen to be the synchronous standby, though
+        exactly which one is indeterminate.
+        The special entry <literal>*</> matches any
+        <varname>application_name</>, including the default application name
+        of <literal>walreceiver</>.
+       </para>
+       <para>
+        If no synchronous standby names are specified here, then synchronous
+        replication is not enabled and transaction commits will not wait for
+        replication.  This is the default configuration.  Even when
+        synchronous replication is enabled, individual transactions can be
+        configured not to wait for replication by setting the
+        <xref linkend="guc-synchronous-commit"> parameter to
+        <literal>local</> or <literal>off</>.
+       </para>
+       <para>
+        This parameter can only be set in the <filename>postgresql.conf</>
+        file or on the server command line.
+       </para>
+      </listitem>
+     </varlistentry>
 
      <varlistentry id="guc-vacuum-defer-cleanup-age" xreflabel="vacuum_defer_cleanup_age">
       <term><varname>vacuum_defer_cleanup_age</varname> (<type>integer</type>)</term>
@@ -2192,102 +2466,38 @@ SET ENABLE_SEQSCAN TO OFF;
        </para>
        <para>
         You should also consider setting <varname>hot_standby_feedback</>
-        as an alternative to using this parameter.
+        on standby server(s) as an alternative to using this parameter.
        </para>
       </listitem>
      </varlistentry>
 
-     <varlistentry id="guc-replication-timeout" xreflabel="replication_timeout">
-      <term><varname>replication_timeout</varname> (<type>integer</type>)</term>
-      <indexterm>
-       <primary><varname>replication_timeout</> configuration parameter</primary>
-      </indexterm>
-      <listitem>
-       <para>
-        Terminate replication connections that are inactive longer
-        than the specified number of milliseconds. This is useful for
-        the primary server to detect a standby crash or network outage.
-        A value of zero disables the timeout mechanism.  This parameter
-        can only be set in
-        the <filename>postgresql.conf</> file or on the server command line.
-        The default value is 60 seconds.
-       </para>
-       <para>
-        To prevent connections from being terminated prematurely,
-        <xref linkend="guc-wal-receiver-status-interval">
-        must be enabled on the standby, and its value must be less than the
-        value of <varname>replication_timeout</>.
-       </para>
-      </listitem>
-     </varlistentry>
      </variablelist>
     </sect2>
 
-    <sect2 id="runtime-config-sync-rep">
-     <title>Synchronous Replication</title>
+    <sect2 id="runtime-config-replication-standby">
+     <title>Standby Servers</title>
 
+<!## XC>
+&xconly;
      <para>
-      These settings control the behavior of the built-in
-      <firstterm>synchronous replication</> feature.
-      These parameters would be set on the primary server that is
-      to send replication data to one or more standby servers.
+      Current release of <productname>Postgres-XC</productname> does not
+      provide consistent view of standby servers.
+      Staandby server of a coordinator does not provide global view of
+      datanode standbys.
+      Each standby server provides only local view of the database.
+      Please also note that the view is not governed by MVCC.
      </para>
+<!## end>
 
-     <variablelist>
-     <varlistentry id="guc-synchronous-standby-names" xreflabel="synchronous_standby_names">
-      <term><varname>synchronous_standby_names</varname> (<type>string</type>)</term>
-      <indexterm>
-       <primary><varname>synchronous_standby_names</> configuration parameter</primary>
-      </indexterm>
-      <listitem>
-       <para>
-        Specifies a priority ordered list of standby names that can offer
-        synchronous replication.  At any one time there will be at most one
-        synchronous standby that will wake sleeping users following commit.
-        The synchronous standby will be the first named standby that is
-        both currently connected and streaming in real-time to the standby
-        (as shown by a state of "STREAMING").  Other standby servers
-        with listed later will become potential synchronous standbys.
-        If the current synchronous standby disconnects for whatever reason
-        it will be replaced immediately with the next highest priority standby.
-        Specifying more than one standby name can allow very high availability.
-       </para>
-       <para>
-        The standby name is currently taken as the application_name of the
-        standby, as set in the primary_conninfo on the standby. Names are
-        not enforced for uniqueness. In case of duplicates one of the standbys
-        will be chosen to be the synchronous standby, though exactly which
-        one is indeterminate.
-        The special entry <literal>*</> matches any application_name, including
-        the default application name of <literal>walreceiver</>.
-       </para>
-       <para>
-        If no synchronous standby names are specified, then synchronous
-        replication is not enabled and transaction commit will never wait for
-        replication.  This is the default configuration.  Even when
-        synchronous replication is enabled, individual transactions can be
-        configured not to wait for replication by setting the
-        <xref linkend="guc-synchronous-commit"> parameter to
-        <literal>local</> or <literal>off</>.
-       </para>
-      </listitem>
-     </varlistentry>
-
-     </variablelist>
-    </sect2>
-
-<!-- No evaluation for standby servers yet! -->
-    <sect2 id="runtime-config-standby">
-    <title>Standby Servers</title>
+&common;
      <para>
       These settings control the behavior of a standby server that is
-      to receive replication data.
+      to receive replication data.  Their values on the master server
+      are irrelevant.
      </para>
 
     <variablelist>
 
-<!## PG>
-<!-- No Hot Standby Server Support Yet -->
      <varlistentry id="guc-hot-standby" xreflabel="hot_standby">
       <term><varname>hot_standby</varname> (<type>boolean</type>)</term>
       <indexterm>
@@ -2303,7 +2513,6 @@ SET ENABLE_SEQSCAN TO OFF;
        </para>
       </listitem>
      </varlistentry>
-<!## end>
 
      <varlistentry id="guc-max-standby-archive-delay" xreflabel="max_standby_archive_delay">
       <term><varname>max_standby_archive_delay</varname> (<type>integer</type>)</term>
@@ -2312,13 +2521,10 @@ SET ENABLE_SEQSCAN TO OFF;
       </indexterm>
       <listitem>
        <para>
-<!## PG>
-        <!-- No Hot Standby Support Yet -->
         When Hot Standby is active, this parameter determines how long the
         standby server should wait before canceling standby queries that
         conflict with about-to-be-applied WAL entries, as described in
         <xref linkend="hot-standby-conflict">.
-<!## end>
         <varname>max_standby_archive_delay</> applies when WAL data is
         being read from WAL archive (and is therefore not current).
         The default is 30 seconds. Units are milliseconds if not specified.
@@ -2345,13 +2551,10 @@ SET ENABLE_SEQSCAN TO OFF;
       </indexterm>
       <listitem>
        <para>
-<!## PG>
-        <!-- No Hot Standby Support Yet -->
         When Hot Standby is active, this parameter determines how long the
         standby server should wait before canceling standby queries that
         conflict with about-to-be-applied WAL entries, as described in
         <xref linkend="hot-standby-conflict">.
-<!## end>
         <varname>max_standby_streaming_delay</> applies when WAL data is
         being received via streaming replication.
         The default is 30 seconds. Units are milliseconds if not specified.
@@ -2379,29 +2582,25 @@ SET ENABLE_SEQSCAN TO OFF;
       </indexterm>
       <listitem>
       <para>
-       Specifies the minimum frequency, in seconds, for the WAL receiver
+       Specifies the minimum frequency for the WAL receiver
        process on the standby to send information about replication progress
-       to the primary, where they can be seen using the
-       <literal>pg_stat_replication</literal> view.  The standby will report
+       to the primary or upstream standby, where it can be seen using the
+       <link linkend="monitoring-stats-views-table">
+       <literal>pg_stat_replication</></link> view.  The standby will report
        the last transaction log position it has written, the last position it
-       has flushed to disk, and the last position it has applied.  Updates are
-       sent each time the write or flush positions changed, or at least as
+       has flushed to disk, and the last position it has applied.
+       This parameter's
+       value is the maximum interval, in seconds, between reports.  Updates are
+       sent each time the write or flush positions change, or at least as
        often as specified by this parameter.  Thus, the apply position may
        lag slightly behind the true position.  Setting this parameter to zero
        disables status updates completely.  This parameter can only be set in
        the <filename>postgresql.conf</> file or on the server command line.
        The default value is 10 seconds.
       </para>
-      <para>
-       When <xref linkend="guc-replication-timeout"> is enabled on the primary,
-       <varname>wal_receiver_status_interval</> must be enabled, and its value
-       must be less than the value of <varname>replication_timeout</>.
-      </para>
       </listitem>
      </varlistentry>
 
-<!## PG>
-     <!-- No Not Standby Support Yet -->
      <varlistentry id="guc-hot-standby-feedback" xreflabel="hot_standby">
       <term><varname>hot_standby_feedback</varname> (<type>boolean</type>)</term>
       <indexterm>
@@ -2410,15 +2609,41 @@ SET ENABLE_SEQSCAN TO OFF;
       <listitem>
        <para>
         Specifies whether or not a hot standby will send feedback to the primary
+        or upstream standby
         about queries currently executing on the standby. This parameter can
         be used to eliminate query cancels caused by cleanup records, but
         can cause database bloat on the primary for some workloads.
-        The default value is <literal>off</literal>.  Feedback messages will not
-        be sent more frequently than once per <varname>wal_receiver_status_interval</>.
+        Feedback messages will not be sent more frequently than once per
+        <varname>wal_receiver_status_interval</>. The default value is
+        <literal>off</literal>. This parameter can only be set in the
+        <filename>postgresql.conf</> file or on the server command line.
+       </para>
+       <para>
+        If cascaded replication is in use the feedback is passed upstream
+        until it eventually reaches the primary.  Standbys make no other use
+        of feedback they receive other than to pass upstream.
        </para>
       </listitem>
      </varlistentry>
-<!## end>
+
+     <varlistentry id="guc-wal-receiver-timeout" xreflabel="wal_receiver_timeout">
+      <term><varname>wal_receiver_timeout</varname> (<type>integer</type>)</term>
+      <indexterm>
+       <primary><varname>wal_receiver_timeout</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Terminate replication connections that are inactive longer
+        than the specified number of milliseconds. This is useful for
+        the receiving standby server to detect a primary node crash or network
+        outage.
+        A value of zero disables the timeout mechanism.  This parameter
+        can only be set in
+        the <filename>postgresql.conf</> file or on the server command line.
+        The default value is 60 seconds.
+       </para>
+      </listitem>
+     </varlistentry>
 
      </variablelist>
     </sect2>
@@ -2427,9 +2652,11 @@ SET ENABLE_SEQSCAN TO OFF;
    <sect1 id="runtime-config-query">
     <title>Query Planning</title>
 
+&common;
     <sect2 id="runtime-config-query-enable">
      <title>Planner Method Configuration</title>
 
+&common;
       <para>
        These configuration parameters provide a crude method of
        influencing the query plans chosen by the query optimizer. If
@@ -2502,6 +2729,22 @@ SET ENABLE_SEQSCAN TO OFF;
       <listitem>
        <para>
         Enables or disables the query planner's use of index-scan plan
+        types. The default is <literal>on</>.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry id="guc-enable-indexonlyscan" xreflabel="enable_indexonlyscan">
+      <term><varname>enable_indexonlyscan</varname> (<type>boolean</type>)</term>
+      <indexterm>
+       <primary>index-only scan</primary>
+      </indexterm>
+      <indexterm>
+       <primary><varname>enable_indexonlyscan</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Enables or disables the query planner's use of index-only-scan plan
         types. The default is <literal>on</>.
        </para>
       </listitem>
@@ -2599,7 +2842,6 @@ SET ENABLE_SEQSCAN TO OFF;
        </para>
       </listitem>
      </varlistentry>
-
 <!## XC>
      <varlistentry id="guc-enable-fastqueryshipping" xreflabel="enable_fast_query_shipping">
       <term><varname>enable_fast_query_shipping</varname> (<type>boolean</type>)</term>
@@ -2686,6 +2928,7 @@ SET ENABLE_SEQSCAN TO OFF;
      <sect2 id="runtime-config-query-constants">
      <title>Planner Cost Constants</title>
 
+&common;
     <para>
      The <firstterm>cost</> variables described in this section are measured
      on an arbitrary scale.  Only their relative values matter, hence
@@ -2719,8 +2962,8 @@ SET ENABLE_SEQSCAN TO OFF;
        <para>
         Sets the planner's estimate of the cost of a disk page fetch
         that is part of a series of sequential fetches.  The default is 1.0.
-        This value can be overridden for a particular tablespace by setting
-        the tablespace parameter of the same name
+        This value can be overridden for tables and indexes in a particular
+        tablespace by setting the tablespace parameter of the same name
         (see <xref linkend="sql-altertablespace">).
        </para>
       </listitem>
@@ -2735,8 +2978,8 @@ SET ENABLE_SEQSCAN TO OFF;
        <para>
         Sets the planner's estimate of the cost of a
         non-sequentially-fetched disk page.  The default is 4.0.
-        This value can be overridden for a particular tablespace by setting
-        the tablespace parameter of the same name
+        This value can be overridden for tables and indexes in a particular
+        tablespace by setting the tablespace parameter of the same name
         (see <xref linkend="sql-altertablespace">).
        </para>
 
@@ -2747,6 +2990,26 @@ SET ENABLE_SEQSCAN TO OFF;
         or lower both values together to change the importance of disk I/O
         costs relative to CPU costs, which are described by the following
         parameters.
+       </para>
+
+       <para>
+        Random access to mechanical disk storage is normally much more expensive
+        than four-times sequential access.  However, a lower default is used
+        (4.0) because the majority of random accesses to disk, such as indexed
+        reads, are assumed to be in cache.  The default value can be thought of
+        as modeling random access as 40 times slower than sequential, while
+        expecting 90% of random reads to be cached.
+       </para>
+
+       <para>
+        If you believe a 90% cache rate is an incorrect assumption
+        for your workload, you can increase random_page_cost to better
+        reflect the true cost of random storage reads. Correspondingly,
+        if your data is likely to be completely in cache, such as when
+        the database is smaller than the total server memory, decreasing
+        random_page_cost can be appropriate.  Storage that has a low random
+        read cost relative to sequential, e.g. solid-state drives, might
+        also be better modeled with a lower value for random_page_cost.
        </para>
 
        <tip>
@@ -2819,25 +3082,13 @@ SET ENABLE_SEQSCAN TO OFF;
         higher value makes it more likely index scans will be used, a
         lower value makes it more likely sequential scans will be
         used. When setting this parameter you should consider both
-<!## PG>
         <productname>PostgreSQL</productname>'s shared buffers and the
         portion of the kernel's disk cache that will be used for
         <productname>PostgreSQL</productname> data files.  Also, take
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname>'s shared buffers and the
-        portion of the kernel's disk cache that will be used for
-        <productname>Postgres-XC</productname> data files.  Also, take
-<!## end>
         into account the expected number of concurrent queries on different
         tables, since they will have to share the available
         space.  This parameter has no effect on the size of shared
-<!## PG>
         memory allocated by <productname>PostgreSQL</productname>, nor
-<!## end>
-<!## XC>
-        memory allocated by <productname>Postgres-XC</productname>, nor
-<!## end>
         does it reserve kernel disk cache; it is used only for estimation
         purposes.  The system also does not assume data remains in
         the disk cache between queries.  The default is 128 megabytes
@@ -2852,19 +3103,20 @@ SET ENABLE_SEQSCAN TO OFF;
      <sect2 id="runtime-config-query-geqo">
      <title>Genetic Query Optimizer</title>
 
+&common;
      <para>
       The genetic query optimizer (GEQO) is an algorithm that does query
       planning using heuristic searching.  This reduces planning time for
       complex queries (those joining many relations), at the cost of producing
       plans that are sometimes inferior to those found by the normal
-      exhaustive-search algorithm.  Also, GEQO's searching is randomized and
-      therefore its plans may vary nondeterministically.
+      exhaustive-search algorithm.
       For more information see <xref linkend="geqo">.
      </para>
 
      <variablelist>
 
      <varlistentry id="guc-geqo" xreflabel="geqo">
+      <term><varname>geqo</varname> (<type>boolean</type>)</term>
       <indexterm>
        <primary>genetic query optimization</primary>
       </indexterm>
@@ -2875,7 +3127,6 @@ SET ENABLE_SEQSCAN TO OFF;
       <indexterm>
        <primary><varname>geqo</> configuration parameter</primary>
       </indexterm>
-      <term><varname>geqo</varname> (<type>boolean</type>)</term>
       <listitem>
        <para>
         Enables or disables genetic query optimization.
@@ -2897,9 +3148,11 @@ SET ENABLE_SEQSCAN TO OFF;
         this many <literal>FROM</> items involved. (Note that a
         <literal>FULL OUTER JOIN</> construct counts as only one <literal>FROM</>
         item.) The default is 12. For simpler queries it is usually best
-        to use the deterministic, exhaustive planner, but for queries with
-        many tables the deterministic planner takes too long, often
-        longer than the penalty of executing a suboptimal plan.
+        to use the regular, exhaustive-search planner, but for queries with
+        many tables the exhaustive search takes too long, often
+        longer than the penalty of executing a suboptimal plan.  Thus,
+        a threshold on the size of the query is a convenient way to manage
+        use of GEQO.
        </para>
       </listitem>
      </varlistentry>
@@ -2999,6 +3252,7 @@ SET ENABLE_SEQSCAN TO OFF;
      <sect2 id="runtime-config-query-other">
      <title>Other Planner Options</title>
 
+&common;
      <variablelist>
 
      <varlistentry id="guc-default-statistics-target" xreflabel="default_statistics_target">
@@ -3013,12 +3267,7 @@ SET ENABLE_SEQSCAN TO OFF;
         SET STATISTICS</>.  Larger values increase the time needed to
         do <command>ANALYZE</>, but might improve the quality of the
         planner's estimates. The default is 100. For more information
-<!## PG>
         on the use of statistics by the <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-        on the use of statistics by the <productname>Postgres-XC</>
-<!## end>
         query planner, refer to <xref linkend="planner-stats">.
        </para>
       </listitem>
@@ -3073,15 +3322,10 @@ SELECT * FROM parent WHERE key = 2400;
         you might prefer to turn it off entirely.
        </para>
 
-<!## PG>
-<!-- NOTICE:
-     Partitioning!
--->
        <para>
         Refer to <xref linkend="ddl-partitioning-constraint-exclusion"> for
         more information on using constraint exclusion and partitioning.
        </para>
-<!## end>
       </listitem>
      </varlistentry>
 
@@ -3121,7 +3365,7 @@ SELECT * FROM parent WHERE key = 2400;
 
        <para>
         Setting this value to <xref linkend="guc-geqo-threshold"> or more
-        may trigger use of the GEQO planner, resulting in nondeterministic
+        may trigger use of the GEQO planner, resulting in non-optimal
         plans.  See <xref linkend="runtime-config-query-geqo">.
        </para>
       </listitem>
@@ -3156,7 +3400,7 @@ SELECT * FROM parent WHERE key = 2400;
 
        <para>
         Setting this value to <xref linkend="guc-geqo-threshold"> or more
-        may trigger use of the GEQO planner, resulting in nondeterministic
+        may trigger use of the GEQO planner, resulting in non-optimal
         plans.  See <xref linkend="runtime-config-query-geqo">.
        </para>
       </listitem>
@@ -3173,12 +3417,14 @@ SELECT * FROM parent WHERE key = 2400;
      <primary>server log</primary>
     </indexterm>
 
+&common;
     <sect2 id="runtime-config-logging-where">
      <title>Where To Log</title>
 
      <indexterm zone="runtime-config-logging-where">
       <primary>where to log</primary>
      </indexterm>
+
 &common;
      <variablelist>
 
@@ -3189,12 +3435,7 @@ SELECT * FROM parent WHERE key = 2400;
       </indexterm>
       <listitem>
        <para>
-<!## PG>
         <productname>PostgreSQL</productname> supports several methods
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname> supports several methods
-<!## end>
          for logging server messages, including
          <systemitem>stderr</systemitem>, <systemitem>csvlog</systemitem> and
          <systemitem>syslog</systemitem>. On Windows,
@@ -3211,7 +3452,7 @@ SELECT * FROM parent WHERE key = 2400;
         value</> (<acronym>CSV</>) format, which is convenient for
         loading logs into programs.
         See <xref linkend="runtime-config-logging-csvlog"> for details.
-        <varname>logging_collector</varname> must be enabled to generate
+        <xref linkend="guc-logging-collector"> must be enabled to generate
         CSV-format log output.
        </para>
 
@@ -3220,12 +3461,7 @@ SELECT * FROM parent WHERE key = 2400;
          On most Unix systems, you will need to alter the configuration of
          your system's <application>syslog</application> daemon in order
          to make use of the <systemitem>syslog</systemitem> option for
-<!## PG>
          <varname>log_destination</>.  <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-         <varname>log_destination</>.  <productname>Postgres-XC</productname>
-<!## end>
          can log to <application>syslog</application> facilities
          <literal>LOCAL0</> through <literal>LOCAL7</> (see <xref
          linkend="guc-syslog-facility">), but the default
@@ -3236,6 +3472,14 @@ local0.*    /var/log/postgresql
 </programlisting>
          to the  <application>syslog</application> daemon's configuration file
          to make it work.
+        </para>
+        <para>
+         On Windows, when you use the <literal>eventlog</literal>
+         option for <varname>log_destination</>, you should
+         register an event source and its library with the operating
+         system so that the Windows Event Viewer can display event
+         log messages cleanly.
+         See <xref linkend="event-log-registration"> for details.
         </para>
        </note>
       </listitem>
@@ -3248,24 +3492,39 @@ local0.*    /var/log/postgresql
       </indexterm>
       <listitem>
        <para>
-         This parameter captures plain and CSV-format log messages
-         sent to <application>stderr</> and redirects them into log files.
+         This parameter enables the <firstterm>logging collector</>, which
+         is a background process that captures log messages
+         sent to <systemitem>stderr</> and redirects them into log files.
          This approach is often more useful than
          logging to <application>syslog</>, since some types of messages
-         might not appear in <application>syslog</> output (a common example
-         is dynamic-linker failure messages).
+         might not appear in <application>syslog</> output.  (One common
+         example is dynamic-linker failure messages; another is error messages
+         produced by scripts such as <varname>archive_command</>.)
          This parameter can only be set at server start.
        </para>
 
        <note>
         <para>
+         It is possible to log to <systemitem>stderr</> without using the
+         logging collector; the log messages will just go to wherever the
+         server's <systemitem>stderr</> is directed.  However, that method is
+         only suitable for low log volumes, since it provides no convenient
+         way to rotate log files.  Also, on some platforms not using the
+         logging collector can result in lost or garbled log output, because
+         multiple processes writing concurrently to the same log file can
+         overwrite each other's output.
+        </para>
+       </note>
+
+       <note>
+        <para>
           The logging collector is designed to never lose messages.  This means
           that in case of extremely high load, server processes could be
-          blocked due to trying to send additional log messages when the
+          blocked while trying to send additional log messages when the
           collector has fallen behind.  In contrast, <application>syslog</>
-          prefers to drop messages if it cannot write them, which means it's
-          less reliable in those cases but it will not block the rest of the
-          system.
+          prefers to drop messages if it cannot write them, which means it
+          may fail to log some messages in such cases but it will not block
+          the rest of the system.
         </para>
        </note>
 
@@ -3298,12 +3557,16 @@ local0.*    /var/log/postgresql
        <para>
         When <varname>logging_collector</varname> is enabled,
         this parameter sets the file names of the created log files.  The value
-        is treated as a <systemitem>strftime</systemitem> pattern,
+        is treated as a <function>strftime</function> pattern,
         so <literal>%</literal>-escapes can be used to specify time-varying
         file names.  (Note that if there are
         any time-zone-dependent <literal>%</literal>-escapes, the computation
         is done in the zone specified
         by <xref linkend="guc-log-timezone">.)
+        The supported <literal>%</literal>-escapes are similar to those
+        listed in the Open Group's <ulink
+        url="http://pubs.opengroup.org/onlinepubs/009695399/functions/strftime.html">strftime
+        </ulink> specification.
         Note that the system's <systemitem>strftime</systemitem> is not used
         directly, so platform-specific (nonstandard) extensions do not work.
        </para>
@@ -3312,12 +3575,7 @@ local0.*    /var/log/postgresql
         use a log rotation utility to avoid eventually filling the
         entire disk.  In releases prior to 8.4, if
         no <literal>%</literal> escapes were
-<!## PG>
         present, <productname>PostgreSQL</productname> would append
-<!## end>
-<!## XC>
-        present, <productname>Postgres-XC</productname> would append
-<!## end>
         the epoch of the new log file's creation time, but this is no
         longer the case.
        </para>
@@ -3414,12 +3672,7 @@ local0.*    /var/log/postgresql
       <listitem>
        <para>
         When <varname>logging_collector</varname> is enabled,
-<!## PG>
         this parameter will cause <productname>PostgreSQL</productname> to truncate (overwrite),
-<!## end>
-<!## XC>
-        this parameter will cause <productname>Postgres-XC</productname> to truncate (overwrite),
-<!## end>
         rather than append to, any existing log file of the same name.
         However, truncation will occur only when a new file is being opened
         due to time-based rotation, not during server startup or size-based
@@ -3484,12 +3737,7 @@ local0.*    /var/log/postgresql
         <para>
          When logging to <application>syslog</> is enabled, this parameter
          determines the program name used to identify
-<!## PG>
          <productname>PostgreSQL</productname> messages in
-<!## end>
-<!## XC>
-         <productname>Postgres-XC</productname> messages in
-<!## end>
          <application>syslog</application> logs. The default is
          <literal>postgres</literal>.
          This parameter can only be set in the <filename>postgresql.conf</>
@@ -3498,33 +3746,20 @@ local0.*    /var/log/postgresql
        </listitem>
       </varlistentry>
 
-     <varlistentry id="guc-silent-mode" xreflabel="silent_mode">
-      <term><varname>silent_mode</varname> (<type>boolean</type>)</term>
+     <varlistentry id="guc-event-source" xreflabel="event_source">
+      <term><varname>event_source</varname> (<type>string</type>)</term>
       <indexterm>
-       <primary><varname>silent_mode</> configuration parameter</primary>
+       <primary><varname>event_source</> configuration parameter</primary>
       </indexterm>
       <listitem>
        <para>
-        Runs the server silently. If this parameter is set, the server
-        will automatically run in background and disassociate from the
-        controlling terminal.
-        This parameter can only be set at server start.
+        When logging to <application>event log</> is enabled, this parameter
+        determines the program name used to identify
+        <productname>PostgreSQL</productname> messages in
+        the log. The default is <literal>PostgreSQL</literal>.
+        This parameter can only be set in the <filename>postgresql.conf</>
+        file or on the server command line.
        </para>
-
-       <caution>
-       <para>
-        When this parameter is set,
-        the server's standard output and standard error are redirected
-        to the file <filename>postmaster.log</> within the data directory.
-        There is no provision for rotating this file, so it will grow
-        indefinitely unless server log output is redirected elsewhere
-        by other settings.  It is recommended that <varname>log_destination</>
-        be set to <literal>syslog</> or that <varname>logging_collector</> be
-        enabled when using this option.  Even with those measures, errors
-        reported early during startup may appear in
-        <filename>postmaster.log</> rather than the normal log destination.
-       </para>
-       </caution>
       </listitem>
      </varlistentry>
 
@@ -3533,6 +3768,7 @@ local0.*    /var/log/postgresql
      <sect2 id="runtime-config-logging-when">
      <title>When To Log</title>
 
+&common;
      <variablelist>
 
      <varlistentry id="guc-client-min-messages" xreflabel="client_min_messages">
@@ -3541,7 +3777,6 @@ local0.*    /var/log/postgresql
        <primary><varname>client_min_messages</> configuration parameter</primary>
       </indexterm>
       <listitem>
-&common;
        <para>
         Controls which message levels are sent to the client.
         Valid values are <literal>DEBUG5</>,
@@ -3650,12 +3885,7 @@ local0.*    /var/log/postgresql
 
     <para>
      <xref linkend="runtime-config-severity-levels"> explains the message
-<!## PG>
      severity levels used by <productname>PostgreSQL</>.  If logging output
-<!## end>
-<!## XC>
-     severity levels used by <productname>Postgres-XC</>.  If logging output
-<!## end>
      is sent to <systemitem>syslog</systemitem> or Windows'
      <systemitem>eventlog</systemitem>, the severity levels are translated
      as shown in the table.
@@ -3744,6 +3974,7 @@ local0.*    /var/log/postgresql
      <sect2 id="runtime-config-logging-what">
      <title>What To Log</title>
 
+&common;
      <variablelist>
 
      <varlistentry id="guc-application-name" xreflabel="application_name">
@@ -3752,7 +3983,6 @@ local0.*    /var/log/postgresql
        <primary><varname>application_name</> configuration parameter</primary>
       </indexterm>
       <listitem>
-&common;
        <para>
         The <varname>application_name</varname> can be any string of less than
         <symbol>NAMEDATALEN</> characters (64 characters in a standard build).
@@ -4067,7 +4297,7 @@ local0.*    /var/log/postgresql
          identifier from <literal>pg_stat_activity</>, use this query:
 <programlisting>
 SELECT to_hex(EXTRACT(EPOCH FROM backend_start)::integer) || '.' ||
-       to_hex(procpid)
+       to_hex(pid)
 FROM pg_stat_activity;
 </programlisting>
 
@@ -4181,9 +4411,10 @@ FROM pg_stat_activity;
         Sets the time zone used for timestamps written in the server log.
         Unlike <xref linkend="guc-timezone">, this value is cluster-wide,
         so that all sessions will report timestamps consistently.
-        If not explicitly set, the server initializes this variable to the
-        time zone specified by its system environment.  See <xref
-        linkend="datatype-timezones"> for more information.
+        The built-in default is <literal>GMT</>, but that is typically
+        overridden in <filename>postgresql.conf</>; <application>initdb</>
+        will install a setting there corresponding to its system environment.
+        See <xref linkend="datatype-timezones"> for more information.
         This parameter can only be set in the <filename>postgresql.conf</>
         file or on the server command line.
        </para>
@@ -4194,6 +4425,7 @@ FROM pg_stat_activity;
     </sect2>
      <sect2 id="runtime-config-logging-csvlog">
      <title>Using CSV-Format Log Output</title>
+
 &common;
        <para>
         Including <literal>csvlog</> in the <varname>log_destination</> list
@@ -4223,12 +4455,7 @@ FROM pg_stat_activity;
         user query that led to the error (if any and enabled by
         <varname>log_min_error_statement</>),
         character count of the error position therein,
-<!## PG>
         location of the error in the PostgreSQL source code
-<!## end>
-<!## XC>
-        location of the error in the Postgres-XC source code
-<!## end>
         (if <varname>log_error_verbosity</> is set to <literal>verbose</>),
         and application name.
         Here is a sample table definition for storing CSV-format log output:
@@ -4328,6 +4555,7 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
 
     <sect2 id="runtime-config-statistics-collector">
      <title>Query and Index Statistics Collector</title>
+
 &common;
      <para>
       These parameters control server-wide statistics collection features.
@@ -4367,7 +4595,7 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
        <para>
        Specifies the number of bytes reserved to track the currently
        executing command for each active session, for the
-       <structname>pg_stat_activity</>.<structfield>current_query</> field.
+       <structname>pg_stat_activity</>.<structfield>query</> field.
        The default value is 1024. This parameter can only be set at server
        start.
        </para>
@@ -4385,6 +4613,27 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
         This parameter is on by default, because the autovacuum
         daemon needs the collected information.
         Only superusers can change this setting.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry id="guc-track-io-timing" xreflabel="track_io_timing">
+      <term><varname>track_io_timing</varname> (<type>boolean</type>)</term>
+      <indexterm>
+       <primary><varname>track_io_timing</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Enables timing of database I/O calls.  This parameter is off by
+        default, because it will repeatedly query the operating system for
+        the current time, which may cause significant overhead on some
+        platforms.  You can use the <xref linkend="pgtesttiming"> tool to
+        measure the overhead of timing on your system.
+        I/O timing information is
+        displayed in <xref linkend="pg-stat-database-view">, in the output of
+        <xref linkend="sql-explain"> when the <literal>BUFFERS</> option is
+        used, and by <xref linkend="pgstatstatements">.  Only superusers can
+        change this setting.
        </para>
       </listitem>
      </varlistentry>
@@ -4453,7 +4702,6 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
     <sect2 id="runtime-config-statistics-monitor">
      <title>Statistics Monitoring</title>
 &common;
-
      <variablelist>
 
      <varlistentry>
@@ -4473,7 +4721,6 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
       <indexterm>
        <primary><varname>log_executor_stats</> configuration parameter</primary>
       </indexterm>
-
       <listitem>
        <para>
         For each query, output performance statistics of the respective
@@ -4500,6 +4747,7 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
      <primary>autovacuum</primary>
      <secondary>configuration parameters</secondary>
     </indexterm>
+
 &common;
      <para>
       These settings control the behavior of the <firstterm>autovacuum</>
@@ -4734,10 +4982,11 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
    <sect1 id="runtime-config-client">
     <title>Client Connection Defaults</title>
 
+&common;
     <sect2 id="runtime-config-client-statement">
      <title>Statement Behavior</title>
-     <variablelist>
 &common;
+     <variablelist>
 
      <varlistentry id="guc-search-path" xreflabel="search_path">
       <term><varname>search_path</varname> (<type>string</type>)</term>
@@ -4758,10 +5007,17 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
 
        <para>
         The value for <varname>search_path</varname> must be a comma-separated
-        list of schema names.  If one of the list items is
-        the special value <literal>$user</literal>, then the schema
-        having the name returned by <function>SESSION_USER</> is substituted, if there
-        is such a schema.  (If not, <literal>$user</literal> is ignored.)
+        list of schema names.  Any name that is not an existing schema, or is
+        a schema for which the user does not have <literal>USAGE</>
+        permission, is silently ignored.
+       </para>
+
+       <para>
+        If one of the list items is the special name
+        <literal>$user</literal>, then the schema having the name returned by
+        <function>SESSION_USER</> is substituted, if there is such a schema
+        and the user has <literal>USAGE</> permission for it.
+        (If not, <literal>$user</literal> is ignored.)
        </para>
 
        <para>
@@ -4776,7 +5032,7 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
         Likewise, the current session's temporary-table schema,
         <literal>pg_temp_<replaceable>nnn</></>, is always searched if it
         exists.  It can be explicitly listed in the path by using the
-        alias <literal>pg_temp</>.  If it is not listed in the path then
+        alias <literal>pg_temp</><indexterm><primary>pg_temp</></>.  If it is not listed in the path then
         it is searched first (even before <literal>pg_catalog</>).  However,
         the temporary schema is only searched for relation (table, view,
         sequence, etc) and data type names.  It is never searched for
@@ -4785,16 +5041,15 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
 
        <para>
         When objects are created without specifying a particular target
-        schema, they will be placed in the first schema listed
-        in the search path.  An error is reported if the search path is
-        empty.
+        schema, they will be placed in the first valid schema named in
+        <varname>search_path</varname>.  An error is reported if the search
+        path is empty.
        </para>
 
        <para>
         The default value for this parameter is
-        <literal>'"$user", public'</literal> (where the second part will be
-        ignored if there is no schema named <literal>public</>).
-        This supports shared use of a database (where no users
+        <literal>"$user", public</literal>.
+        This setting supports shared use of a database (where no users
         have private schemas, and all share use of <literal>public</>),
         private per-user schemas, and combinations of these.  Other
         effects can be obtained by altering the default search path
@@ -4804,9 +5059,11 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
        <para>
         The current effective value of the search path can be examined
         via the <acronym>SQL</acronym> function
-        <function>current_schemas()</>.  This is not quite the same as
+        <function>current_schemas</>
+        (see <xref linkend="functions-info">).
+        This is not quite the same as
         examining the value of <varname>search_path</varname>, since
-        <function>current_schemas()</> shows how the items
+        <function>current_schemas</> shows how the items
         appearing in <varname>search_path</varname> were resolved.
        </para>
 
@@ -4833,12 +5090,7 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
         The value is either the name of a tablespace, or an empty string
         to specify using the default tablespace of the current database.
         If the value does not match the name of any existing tablespace,
-<!## PG>
         <productname>PostgreSQL</> will automatically use the default
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</> will automatically use the default
-<!## end>
         tablespace of the current database.  If a nondefault tablespace
         is specified, the user must have <literal>CREATE</> privilege
         for it, or creation attempts will fail.
@@ -4879,22 +5131,12 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
 
        <para>
         The value is a list of names of tablespaces.  When there is more than
-<!## PG>
         one name in the list, <productname>PostgreSQL</> chooses a random
-<!## end>
-<!## XC>
-        one name in the list, <productname>Postgres-XC</> chooses a random
-<!## end>
         member of the list each time a temporary object is to be created;
         except that within a transaction, successively created temporary
         objects are placed in successive tablespaces from the list.
         If the selected element of the list is an empty string,
-<!## PG>
         <productname>PostgreSQL</> will automatically use the default
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</> will automatically use the default
-<!## end>
         tablespace of the current database instead.
        </para>
 
@@ -4932,22 +5174,12 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
         linkend="sql-createfunction">. Disabling validation is
         occasionally useful to avoid problems such as forward references
         when restoring function definitions from a dump.
-<!## XC>
-        <note>
-         <para>
-          In <productname>Postgres-XC</> setting <varname>check_function_bodies</varname>
-          to <literal>off</> is not recommended. If SQL functions are created after setting
-          <varname>check_function_bodies</varname> to <literal>off</>, the behaviour of the
-          function when executed is un-defined.
-         </para>
-        </note>
-<!## end>
-
        </para>
       </listitem>
      </varlistentry>
 
      <varlistentry id="guc-default-transaction-isolation" xreflabel="default_transaction_isolation">
+      <term><varname>default_transaction_isolation</varname> (<type>enum</type>)</term>
       <indexterm>
        <primary>transaction isolation level</primary>
        <secondary>setting default</secondary>
@@ -4955,7 +5187,6 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
       <indexterm>
        <primary><varname>default_transaction_isolation</> configuration parameter</primary>
       </indexterm>
-      <term><varname>default_transaction_isolation</varname> (<type>enum</type>)</term>
       <listitem>
        <para>
         Each SQL transaction has an isolation level, which can be
@@ -4974,6 +5205,7 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
      </varlistentry>
 
      <varlistentry id="guc-default-transaction-read-only" xreflabel="default_transaction_read_only">
+      <term><varname>default_transaction_read_only</varname> (<type>boolean</type>)</term>
       <indexterm>
        <primary>read-only transaction</primary>
        <secondary>setting default</secondary>
@@ -4981,8 +5213,6 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
       <indexterm>
        <primary><varname>default_transaction_read_only</> configuration parameter</primary>
       </indexterm>
-
-      <term><varname>default_transaction_read_only</varname> (<type>boolean</type>)</term>
       <listitem>
        <para>
         A read-only SQL transaction cannot alter non-temporary tables.
@@ -4997,6 +5227,7 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
      </varlistentry>
 
      <varlistentry id="guc-default-transaction-deferrable" xreflabel="default_transaction_deferrable">
+      <term><varname>default_transaction_deferrable</varname> (<type>boolean</type>)</term>
       <indexterm>
        <primary>deferrable transaction</primary>
        <secondary>setting default</secondary>
@@ -5004,8 +5235,6 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
       <indexterm>
        <primary><varname>default_transaction_deferrable</> configuration parameter</primary>
       </indexterm>
-
-      <term><varname>default_transaction_deferrable</varname> (<type>boolean</type>)</term>
       <listitem>
        <para>
         When running at the <literal>serializable</> isolation level,
@@ -5056,7 +5285,7 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
       </indexterm>
       <listitem>
        <para>
-        Abort any statement that takes over the specified number of
+        Abort any statement that takes more than the specified number of
         milliseconds, starting from the time the command arrives at the server
         from the client.  If <varname>log_min_error_statement</> is set to
         <literal>ERROR</> or lower, the statement that timed out will also be
@@ -5065,8 +5294,42 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
 
        <para>
         Setting <varname>statement_timeout</> in
-        <filename>postgresql.conf</> is not recommended because it
-        affects all sessions.
+        <filename>postgresql.conf</> is not recommended because it would
+        affect all sessions.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry id="guc-lock-timeout" xreflabel="lock_timeout">
+      <term><varname>lock_timeout</varname> (<type>integer</type>)</term>
+      <indexterm>
+       <primary><varname>lock_timeout</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Abort any statement that waits longer than the specified number of
+        milliseconds while attempting to acquire a lock on a table, index,
+        row, or other database object.  The time limit applies separately to
+        each lock acquisition attempt.  The limit applies both to explicit
+        locking requests (such as <command>LOCK TABLE</>, or <command>SELECT
+        FOR UPDATE</> without <literal>NOWAIT</>) and to implicitly-acquired
+        locks.  If <varname>log_min_error_statement</> is set to
+        <literal>ERROR</> or lower, the statement that timed out will be
+        logged.  A value of zero (the default) turns this off.
+       </para>
+
+       <para>
+        Unlike <varname>statement_timeout</>, this timeout can only occur
+        while waiting for locks.  Note that if <varname>statement_timeout</>
+        is nonzero, it is rather pointless to set <varname>lock_timeout</> to
+        the same or larger value, since the statement timeout would always
+        trigger first.
+       </para>
+
+       <para>
+        Setting <varname>lock_timeout</> in
+        <filename>postgresql.conf</> is not recommended because it would
+        affect all sessions.
        </para>
       </listitem>
      </varlistentry>
@@ -5122,12 +5385,7 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
        <para>
         Sets the output format for values of type <type>bytea</type>.
         Valid values are <literal>hex</literal> (the default)
-<!## PG>
         and <literal>escape</literal> (the traditional PostgreSQL
-<!## end>
-<!## XC>
-        and <literal>escape</literal> (the traditional Postgres-XC
-<!## end>
         format).  See <xref linkend="datatype-binary"> for more
         information.  The <type>bytea</type> type always
         accepts both formats on input, regardless of this setting.
@@ -5189,12 +5447,7 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
 <synopsis>
 SET XML OPTION { DOCUMENT | CONTENT };
 </synopsis>
-<!## PG>
         This syntax is also available in PostgreSQL.
-<!## end>
-<!## XC>
-        This syntax is also available in Postgres-XC.
-<!## end>
        </para>
       </listitem>
      </varlistentry>
@@ -5203,8 +5456,8 @@ SET XML OPTION { DOCUMENT | CONTENT };
     </sect2>
      <sect2 id="runtime-config-client-format">
      <title>Locale and Formatting</title>
-&common;
 
+&common;
      <variablelist>
 
      <varlistentry id="guc-datestyle" xreflabel="DateStyle">
@@ -5264,18 +5517,19 @@ SET XML OPTION { DOCUMENT | CONTENT };
       </listitem>
      </varlistentry>
 
-     <varlistentry id="guc-timezone" xreflabel="timezone">
-      <term><varname>timezone</varname> (<type>string</type>)</term>
+     <varlistentry id="guc-timezone" xreflabel="TimeZone">
+      <term><varname>TimeZone</varname> (<type>string</type>)</term>
       <indexterm>
-       <primary><varname>timezone</> configuration parameter</primary>
+       <primary><varname>TimeZone</> configuration parameter</primary>
       </indexterm>
       <indexterm><primary>time zone</></>
       <listitem>
        <para>
         Sets the time zone for displaying and interpreting time stamps.
-        If not explicitly set, the server initializes this variable to the
-        time zone specified by its system environment.  See <xref
-        linkend="datatype-timezones"> for more information.
+        The built-in default is <literal>GMT</>, but that is typically
+        overridden in <filename>postgresql.conf</>; <application>initdb</>
+        will install a setting there corresponding to its system environment.
+        See <xref linkend="datatype-timezones"> for more information.
        </para>
       </listitem>
      </varlistentry>
@@ -5299,6 +5553,7 @@ SET XML OPTION { DOCUMENT | CONTENT };
      </varlistentry>
 
      <varlistentry id="guc-extra-float-digits" xreflabel="extra_float_digits">
+      <term><varname>extra_float_digits</varname> (<type>integer</type>)</term>
       <indexterm>
        <primary>significant digits</primary>
       </indexterm>
@@ -5309,8 +5564,6 @@ SET XML OPTION { DOCUMENT | CONTENT };
       <indexterm>
        <primary><varname>extra_float_digits</> configuration parameter</primary>
       </indexterm>
-
-      <term><varname>extra_float_digits</varname> (<type>integer</type>)</term>
       <listitem>
        <para>
         This parameter adjusts the number of digits displayed for
@@ -5321,6 +5574,7 @@ SET XML OPTION { DOCUMENT | CONTENT };
         partially-significant digits; this is especially useful for dumping
         float data that needs to be restored exactly.  Or it can be set
         negative to suppress unwanted digits.
+        See also <xref linkend="datatype-float">.
        </para>
       </listitem>
      </varlistentry>
@@ -5451,8 +5705,8 @@ SET XML OPTION { DOCUMENT | CONTENT };
     </sect2>
      <sect2 id="runtime-config-client-other">
      <title>Other Defaults</title>
-&common;
 
+&common;
      <variablelist>
 
      <varlistentry id="guc-dynamic-library-path" xreflabel="dynamic_library_path">
@@ -5476,20 +5730,10 @@ SET XML OPTION { DOCUMENT | CONTENT };
         list of absolute directory paths separated by colons (or semi-colons
         on Windows).  If a list element starts
         with the special string <literal>$libdir</literal>, the
-<!## PG>
         compiled-in <productname>PostgreSQL</productname> package
-<!## end>
-<!## XC>
-        compiled-in <productname>Postgres-XC</productname> package
-<!## end>
         library directory is substituted for <literal>$libdir</literal>; this
         is where the modules provided by the standard
-<!## PG>
         <productname>PostgreSQL</productname> distribution are installed.
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname> distribution are installed.
-<!## end>
         (Use <literal>pg_config --pkglibdir</literal> to find out the name of
         this directory.) For example:
 <programlisting>
@@ -5563,7 +5807,7 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
        </para>
 
        <para>
-        Unlike <varname>local_preload_libraries</>, there is no
+        Unlike <xref linkend="guc-shared-preload-libraries">, there is no
         performance advantage to loading a library at session
         start rather than when it is first used.  Rather, the intent of
         this feature is to allow debugging or performance-measurement
@@ -5593,11 +5837,12 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
 
    <sect1 id="runtime-config-locks">
     <title>Lock Management</title>
-&common;
 
+&common;
      <variablelist>
 
      <varlistentry id="guc-deadlock-timeout" xreflabel="deadlock_timeout">
+      <term><varname>deadlock_timeout</varname> (<type>integer</type>)</term>
       <indexterm>
        <primary>deadlock</primary>
        <secondary>timeout during</secondary>
@@ -5609,8 +5854,6 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
       <indexterm>
        <primary><varname>deadlock_timeout</> configuration parameter</primary>
       </indexterm>
-
-      <term><varname>deadlock_timeout</varname> (<type>integer</type>)</term>
       <listitem>
        <para>
         This is the amount of time, in milliseconds, to wait on a lock
@@ -5626,7 +5869,8 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
         practice. On a heavily loaded server you might want to raise it.
         Ideally the setting should exceed your typical transaction time,
         so as to improve the odds that a lock will be released before
-        the waiter decides to check for deadlock.
+        the waiter decides to check for deadlock.  Only superusers can change
+        this setting.
        </para>
 
        <para>
@@ -5644,7 +5888,7 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
         involved.
        </para>
 <!## end>
-      </listitem>
+     </listitem>
      </varlistentry>
 
      <varlistentry id="guc-max-locks-per-transaction" xreflabel="max_locks_per_transaction">
@@ -5665,22 +5909,9 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
         fit in the lock table.  This is <emphasis>not</> the number of
         rows that can be locked; that value is unlimited.  The default,
         64, has historically proven sufficient, but you might need to
-        raise this value if you have clients that touch many different
-        tables in a single transaction. This parameter can only be set at
-        server start.
-       </para>
-
-       <para>
-<!## PG>
-        Increasing this parameter might cause <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-        Increasing this parameter might cause <productname>Postgres-XC</>
-<!## end>
-        to request more <systemitem class="osname">System V</> shared
-        memory than your operating system's default configuration
-        allows. See <xref linkend="sysvipc"> for information on how to
-        adjust those parameters, if necessary.
+        raise this value if you have queries that touch many different
+        tables in a single transaction, e.g. query of a parent table with
+        many children.  This parameter can only be set at server start.
        </para>
 
        <para>
@@ -5714,13 +5945,6 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
         only be set at server start.
        </para>
 
-       <para>
-        Increasing this parameter might cause <productname>PostgreSQL</>
-        to request more <systemitem class="osname">System V</> shared
-        memory than your operating system's default configuration
-        allows. See <xref linkend="sysvipc"> for information on how to
-        adjust those parameters, if necessary.
-       </para>
       </listitem>
      </varlistentry>
 
@@ -5730,8 +5954,10 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
    <sect1 id="runtime-config-compatible">
     <title>Version and Platform Compatibility</title>
 
+&common;
     <sect2 id="runtime-config-compatible-version">
      <title>Previous PostgreSQL Versions</title>
+
 &common;
      <variablelist>
 
@@ -5771,12 +5997,7 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
         This controls whether a quote mark can be represented by
         <literal>\'</> in a string literal.  The preferred, SQL-standard way
         to represent a quote mark is by doubling it (<literal>''</>) but
-<!## PG>
         <productname>PostgreSQL</> has historically also accepted
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</> has historically also accepted
-<!## end>
         <literal>\'</>. However, use of <literal>\'</> creates security risks
         because in some client character set encodings, there are multibyte
         characters in which the last byte is numerically equivalent to ASCII
@@ -5860,17 +6081,18 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
       <listitem>
        <para>
         In <productname>PostgreSQL</> releases prior to 9.0, large objects
-        did not have access privileges and were, in effect, readable and
-        writable by all users.  Setting this variable to <literal>on</>
+        did not have access privileges and were, therefore, always readable
+        and writable by all users.  Setting this variable to <literal>on</>
         disables the new privilege checks, for compatibility with prior
         releases.  The default is <literal>off</>.
+        Only superusers can change this setting.
        </para>
        <para>
         Setting this variable does not disable all security checks related to
         large objects &mdash; only those for which the default behavior has
         changed in <productname>PostgreSQL</> 9.0.
         For example, <literal>lo_import()</literal> and
-        <literal>lo_export()</literal> need superuser privileges independent
+        <literal>lo_export()</literal> need superuser privileges regardless
         of this setting.
        </para>
       </listitem>
@@ -5901,11 +6123,23 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
       <indexterm><primary>inheritance</></>
       <listitem>
        <para>
-        This controls the inheritance semantics.  If turned <literal>off</>,
-        subtables are not accessed by various commands by default; basically
-        an implied <literal>ONLY</literal> key word.  This was added for
-        compatibility with releases prior to 7.1.  See
-        <xref linkend="ddl-inherit"> for more information.
+        This setting controls whether undecorated table references are
+        considered to include inheritance child tables.  The default is
+        <literal>on</>, which means child tables are included (thus,
+        a <literal>*</> suffix is assumed by default).  If turned
+        <literal>off</>, child tables are not included (thus, an
+        <literal>ONLY</literal> prefix is assumed).  The SQL standard
+        requires child tables to be included, so the <literal>off</> setting
+        is not spec-compliant, but it is provided for compatibility with
+        <productname>PostgreSQL</> releases prior to 7.1.
+        See <xref linkend="ddl-inherit"> for more information.
+       </para>
+
+       <para>
+        Turning <varname>sql_inheritance</> off is deprecated, because that
+        behavior has been found to be error-prone as well as contrary to SQL
+        standard.  Discussions of inheritance behavior elsewhere in this
+        manual generally assume that it is <literal>on</>.
        </para>
       </listitem>
      </varlistentry>
@@ -6018,6 +6252,7 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
    <sect1 id="runtime-config-error-handling">
     <title>Error Handling</title>
 
+&common;
     <variablelist>
 
      <varlistentry id="guc-exit-on-error" xreflabel="exit_on_error">
@@ -6058,24 +6293,14 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
 
    <sect1 id="runtime-config-preset">
     <title>Preset Options</title>
-&common;
 
+&common;
     <para>
      The following <quote>parameters</> are read-only, and are determined
-<!## PG>
      when <productname>PostgreSQL</productname> is compiled or when it is
-<!## end>
-<!## XC>
-     when <productname>Postgres-XC</productname> is compiled or when it is
-<!## end>
      installed. As such, they have been excluded from the sample
      <filename>postgresql.conf</> file.  These options report
-<!## PG>
      various aspects of <productname>PostgreSQL</productname> behavior
-<!## end>
-<!## XC>
-     various aspects of <productname>Postgres-XC</productname> behavior
-<!## end>
      that might be of interest to certain applications, particularly
      administrative front-ends.
     </para>
@@ -6106,20 +6331,11 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
       </indexterm>
       <listitem>
        <para>
-<!## PG>
         Reports whether <productname>PostgreSQL</> was built with
         support for 64-bit-integer dates and times.  This can be
         disabled by configuring with <literal>--disable-integer-datetimes</>
         when building <productname>PostgreSQL</>.  The default value is
         <literal>on</literal>.
-<!## end>
-<!## XC>
-        Reports whether <productname>Postgres-XC</> was built with
-        support for 64-bit-integer dates and times.  This can be
-        disabled by configuring with <literal>--disable-integer-datetimes</>
-        when building <productname>Postgres-XC</>.  The default value is
-        <literal>on</literal>.
-<!## end>
        </para>
       </listitem>
      </varlistentry>
@@ -6292,88 +6508,40 @@ dynamic_library_path = 'C:\tools\postgresql;H:\my_project\lib;$libdir'
 
    <sect1 id="runtime-config-custom">
     <title>Customized Options</title>
-&common;
 
+&common;
     <para>
      This feature was designed to allow parameters not normally known to
-<!## PG>
      <productname>PostgreSQL</productname> to be added by add-on modules
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> to be added by add-on modules
-<!## end>
-     (such as procedural languages).  This allows add-on modules to be
+     (such as procedural languages).  This allows extension modules to be
      configured in the standard ways.
     </para>
 
-    <variablelist>
-
-     <varlistentry id="guc-custom-variable-classes" xreflabel="custom_variable_classes">
-      <term><varname>custom_variable_classes</varname> (<type>string</type>)</term>
-      <indexterm>
-       <primary><varname>custom_variable_classes</> configuration parameter</primary>
-      </indexterm>
-      <listitem>
-       <para>
-        This variable specifies one or several class names to be used for
-        custom variables, in the form of a comma-separated list. A custom
-        variable is a variable not normally known
-<!## PG>
-        to <productname>PostgreSQL</productname> proper but used by some
-<!## end>
-<!## XC>
-        to <productname>Postgres-XC</productname> proper but used by some
-<!## end>
-        add-on module.  Such variables must have names consisting of a class
-        name, a dot, and a variable name.  <varname>custom_variable_classes</>
-        specifies all the class names in use in a particular installation.
-        This parameter can only be set in the <filename>postgresql.conf</>
-        file or on the server command line.
-       </para>
-
-      </listitem>
-     </varlistentry>
-    </variablelist>
-
     <para>
-     The difficulty with setting custom variables in
-     <filename>postgresql.conf</> is that the file must be read before add-on
-     modules have been loaded, and so custom variables would ordinarily be
-     rejected as unknown.  When <varname>custom_variable_classes</> is set,
-     the server will accept definitions of arbitrary variables within each
-     specified class.  These variables will be treated as placeholders and
-     will have no function until the module that defines them is loaded. When a
-     module for a specific class is loaded, it will add the proper variable
-     definitions for its class name, convert any placeholder
-     values according to those definitions, and issue warnings for any
-     unrecognized placeholders of its class that remain.
+     Custom options have two-part names: an extension name, then a dot, then
+     the parameter name proper, much like qualified names in SQL.  An example
+     is <literal>plpgsql.variable_conflict</>.
     </para>
 
     <para>
-     Here is an example of what <filename>postgresql.conf</> might contain
-     when using custom variables:
-
-<programlisting>
-custom_variable_classes = 'plpgsql,plperl'
-plpgsql.variable_conflict = use_variable
-plperl.use_strict = true
-plruby.use_strict = true        # generates error: unknown class name
-</programlisting>
+     Because custom options may need to be set in processes that have not
+     loaded the relevant extension module, <productname>PostgreSQL</>
+     will accept a setting for any two-part parameter name.  Such variables
+     are treated as placeholders and have no function until the module that
+     defines them is loaded. When an extension module is loaded, it will add
+     its variable definitions, convert any placeholder values according to
+     those definitions, and issue warnings for any unrecognized placeholders
+     that begin with its extension name.
     </para>
    </sect1>
 
    <sect1 id="runtime-config-developer">
     <title>Developer Options</title>
-&common;
 
+&common;
     <para>
      The following parameters are intended for work on the
-<!## PG>
      <productname>PostgreSQL</productname> source code, and in some cases
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> source code, and in some cases
-<!## end>
      to assist with recovery of severely damaged databases.  There
      should be no reason to use them on a production database.
      As such, they have been excluded from the sample
@@ -6407,21 +6575,11 @@ plruby.use_strict = true        # generates error: unknown class name
         you are experiencing strange problems or crashes you might want
         to turn this on, as it might expose programming mistakes. To use
         this parameter, the macro <symbol>USE_ASSERT_CHECKING</symbol>
-<!## PG>
         must be defined when <productname>PostgreSQL</productname> is
-<!## end>
-<!## XC>
-        must be defined when <productname>Postgres-XC</productname> is
-<!## end>
         built (accomplished by the <command>configure</command> option
         <option>--enable-cassert</option>). Note that
         <varname>debug_assertions</varname> defaults to <literal>on</>
-<!## PG>
         if <productname>PostgreSQL</productname> has been built with
-<!## end>
-<!## XC>
-        if <productname>Postgres-XC</productname> has been built with
-<!## end>
         assertions enabled.
        </para>
       </listitem>
@@ -6527,12 +6685,7 @@ plruby.use_strict = true        # generates error: unknown class name
        <para>
         If on, emit information about resource usage during sort operations.
         This parameter is only available if the <symbol>TRACE_SORT</symbol> macro
-<!## PG>
         was defined when <productname>PostgreSQL</productname> was compiled.
-<!## end>
-<!## XC>
-        was defined when <productname>Postgres-XC</productname> was compiled.
-<!## end>
         (However, <symbol>TRACE_SORT</symbol> is currently defined by default.)
        </para>
       </listitem>
@@ -6572,14 +6725,17 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
        </para>
        <para>
         This parameter is only available if the <symbol>LOCK_DEBUG</symbol>
-<!## PG>
         macro was defined when <productname>PostgreSQL</productname> was
-<!## end>
-<!## XC>
-        macro was defined when <productname>Postgres-XC</productname> was
-<!## end>
         compiled.
        </para>
+<!## XC>
+&xconly;
+       <para>
+        <productname>Postgres-XC</> does not detect global deadlocks
+        where multiple node (Coordinators and/or Datanodes) are
+        involved.
+       </para>
+<!## end>
       </listitem>
      </varlistentry>
 
@@ -6596,12 +6752,7 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
        </para>
        <para>
         This parameter is only available if the <symbol>LOCK_DEBUG</symbol>
-<!## PG>
         macro was defined when <productname>PostgreSQL</productname> was
-<!## end>
-<!## XC>
-        macro was defined when <productname>Postgres-XC</productname> was
-<!## end>
         compiled.
        </para>
       </listitem>
@@ -6615,20 +6766,11 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
       <listitem>
        <para>
         If on, emit information about user lock usage.  Output is the same
-        as for <symbol>trace_locks</symbol>, only for user locks.
-       </para>
-       <para>
-        User locks were removed as of PostgreSQL version 8.2.  This option
-        currently has no effect.
+        as for <symbol>trace_locks</symbol>, only for advisory locks.
        </para>
        <para>
         This parameter is only available if the <symbol>LOCK_DEBUG</symbol>
-<!## PG>
         macro was defined when <productname>PostgreSQL</productname> was
-<!## end>
-<!## XC>
-        macro was defined when <productname>Postgres-XC</productname> was
-<!## end>
         compiled.
        </para>
       </listitem>
@@ -6646,12 +6788,7 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
        </para>
        <para>
         This parameter is only available if the <symbol>LOCK_DEBUG</symbol>
-<!## PG>
         macro was defined when <productname>PostgreSQL</productname> was
-<!## end>
-<!## XC>
-        macro was defined when <productname>Postgres-XC</productname> was
-<!## end>
         compiled.
        </para>
       </listitem>
@@ -6668,12 +6805,7 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
        </para>
        <para>
         This parameter is only available if the <symbol>LOCK_DEBUG</symbol>
-<!## PG>
         macro was defined when <productname>PostgreSQL</productname> was
-<!## end>
-<!## XC>
-        macro was defined when <productname>Postgres-XC</productname> was
-<!## end>
         compiled.
        </para>
       </listitem>
@@ -6691,22 +6823,9 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
        </para>
        <para>
         This parameter is only available if the <symbol>LOCK_DEBUG</symbol>
-<!## PG>
         macro was defined when <productname>PostgreSQL</productname> was
-<!## end>
-<!## XC>
-        macro was defined when <productname>Postgres-XC</productname> was
-<!## end>
         compiled.
        </para>
-<!## XC>
-&xconly;
-       <para>
-        <productname>Postgres-XC</> does not detect global deadlocks
-        where multiple node (Coordinators and/or Datanodes) are
-        involved.
-       </para>
-<!## end>
       </listitem>
      </varlistentry>
 
@@ -6722,12 +6841,7 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
        </para>
        <para>
         This parameter is only available if the <symbol>BTREE_BUILD_STATS</symbol>
-<!## PG>
         macro was defined when <productname>PostgreSQL</productname> was
-<!## end>
-<!## XC>
-        macro was defined when <productname>Postgres-XC</productname> was
-<!## end>
         compiled.
        </para>
       </listitem>
@@ -6742,13 +6856,32 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
        <para>
         If on, emit WAL-related debugging output. This parameter is
         only available if the <symbol>WAL_DEBUG</symbol> macro was
-<!## PG>
         defined when <productname>PostgreSQL</productname> was
-<!## end>
-<!## XC>
-        defined when <productname>Postgres-XC</productname> was
-<!## end>
         compiled.
+       </para>
+      </listitem>
+     </varlistentry>
+
+    <varlistentry id="guc-ignore-checksum-failure" xreflabel="ignore_checksum_failure">
+      <term><varname>ignore_checksum_failure</varname> (<type>boolean</type>)</term>
+      <indexterm>
+       <primary><varname>ignore_checksum_failure</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Only has effect if <xref linkend="app-initdb-data-checksums"> are enabled.
+       </para>
+       <para>
+        Detection of a checksum failure during a read normally causes
+        <productname>PostgreSQL</> to report an error, aborting the current
+        transaction.  Setting <varname>ignore_checksum_failure</> to on causes
+        the system to ignore the failure (but still report a warning), and
+        continue processing.  This behavior may <emphasis>cause crashes, propagate
+        or hide corruption, or other serious problems</>.  However, it may allow
+        you to get past the error and retrieve undamaged tuples that might still be
+        present in the table if the block header is still sane. If the header is
+        corrupt an error will be reported even if this option is enabled. The
+        default setting is <literal>off</>, and it can only be changed by a superuser.
        </para>
       </listitem>
      </varlistentry>
@@ -6761,12 +6894,7 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
       <listitem>
        <para>
         Detection of a damaged page header normally causes
-<!## PG>
-         <productname>PostgreSQL</> to report an error, aborting the current
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</> to report an error, aborting the current
-<!## end>
+        <productname>PostgreSQL</> to report an error, aborting the current
         transaction.  Setting <varname>zero_damaged_pages</> to on causes
         the system to instead report a warning, zero out the damaged
         page in memory, and continue processing.  This behavior <emphasis>will destroy data</>,
@@ -6787,7 +6915,6 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
   </sect1>
   <sect1 id="runtime-config-short">
    <title>Short Options</title>
-&common;
 
    <para>
     For convenience there are also single letter command-line option
@@ -6828,7 +6955,7 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
        <row>
         <entry>
           <option>-fb</option>, <option>-fh</option>, <option>-fi</option>,
-          <option>-fm</option>, <option>-fn</option>,
+          <option>-fm</option>, <option>-fn</option>, <option>-fo</option>,
           <option>-fs</option>, <option>-ft</option>
          </entry>
          <entry>
@@ -6837,6 +6964,7 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
           <literal>enable_indexscan = off</>,
           <literal>enable_mergejoin = off</>,
           <literal>enable_nestloop = off</>,
+          <literal>enable_indexonlyscan = off</>,
           <literal>enable_seqscan = off</>,
           <literal>enable_tidscan = off</>
          </entry>
@@ -6855,7 +6983,7 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
        </row>
        <row>
         <entry><option>-k <replaceable>x</replaceable></option></entry>
-        <entry><literal>unix_socket_directory = <replaceable>x</replaceable></></entry>
+        <entry><literal>unix_socket_directories = <replaceable>x</replaceable></></entry>
        </row>
        <row>
         <entry><option>-l</option></entry>
@@ -6900,14 +7028,9 @@ LOG:  CleanUpLock: deleting: lock(0xb7acd844) id(24688,24696,0,0,0,1)
     </table>
 
   </sect1>
-
-<!## XC>
-<!--
-Postgres-XC Specific Parameters
--->
+<!## XC> <!-- Postgres-XC Specific Parameters -->
   <sect1 id="pg-xc-specifics">
-   <title>Postgres-XC Specific Parameters</title>
-&xconly;
+   <title>Postgres-XC Specific Parameters</title> &xconly;
    <para>
     Because <productname>Postgres-XC</> distribute data into multiple
     Datanodes and multiple Coordinators can accept transactions in
@@ -6920,64 +7043,79 @@ Postgres-XC Specific Parameters
     <variablelist>
 
      <varlistentry id="guc-max-pool-size" xreflabel="max_pool_size">
-      <term><varname>max_pool_size</varname> (<type>integer</type>)</term>
+      <term><varname>max_pool_size</varname>
+      (<type>integer</type>)</term>
       <indexterm>
-       <primary><varname>max_pool_size</> configuration parameter</primary>
+       <primary><varname>max_pool_size</> configuration
+       parameter</primary>
       </indexterm>
       <listitem>
        <para>
-        Specify the maximum connection pool of the Coordinator to Datanodes.
-        Because each transaction can be involved by all the Datanodes,
-        this parameter should at least be <varname>max_connections</>
-        multiplied by number of Datanodes.
+        Specify the maximum connection pool of the Coordinator to
+        Datanodes.  Because each transaction can be involved by all
+        the Datanodes, this parameter should at least
+        be <varname>max_connections</> multiplied by number of
+        Datanodes.
        </para>
       </listitem>
      </varlistentry>
 
      <varlistentry id="guc-min-pool-size" xreflabel="min_pool_size">
-      <term><varname>min_pool_size</varname> (<type>integer</type>)</term>
+      <term><varname>min_pool_size</varname>
+      (<type>integer</type>)</term>
       <indexterm>
-       <primary><varname>min_pool_size</> configuration parameter</primary>
+       <primary><varname>min_pool_size</> configuration
+       parameter</primary>
       </indexterm>
       <listitem>
        <para>
-        Minumum number of the connection from the Coordinator to Datanodes.
+        Minumum number of the connection from the Coordinator to
+        Datanodes.
        </para>
       </listitem>
      </varlistentry>
 
      <varlistentry id="guc-max-coordinators" xreflabel="max_coordinators">
-      <term><varname>max_coordinators</varname> (<type>integer</type>)</term>
+      <term><varname>max_coordinators</varname>
+      (<type>integer</type>)</term>
       <indexterm>
-       <primary><varname>max_coordinators</> configuration parameter</primary>
+       <primary><varname>max_coordinators</> configuration
+       parameter</primary>
       </indexterm>
       <listitem>
        <para>
-        Maximum number of Coordinators that can be configured in the cluster.
+        Maximum number of Coordinators that can be configured in the
+        cluster.
        </para>
       </listitem>
      </varlistentry>
 
      <varlistentry id="guc-max-datanodes" xreflabel="max_datanodes">
-      <term><varname>max_datanodes</varname> (<type>integer</type>)</term>
+      <term><varname>max_datanodes</varname>
+      (<type>integer</type>)</term>
       <indexterm>
-       <primary><varname>max_datanodes</> configuration parameter</primary>
+       <primary><varname>max_datanodes</> configuration
+       parameter</primary>
       </indexterm>
       <listitem>
        <para>
-        Maximum number of Datanodes that can be configured in the cluster.
+        Maximum number of Datanodes that can be configured in the
+        cluster.
        </para>
       </listitem>
      </varlistentry>
 
      <varlistentry id="guc-pgxc-node-name" xreflabel="pgxc_node_name">
-      <term><varname>pgxc_node_name</varname> (<type>integer</type>)</term>
+      <term><varname>pgxc_node_name</varname>
+      (<type>integer</type>)</term>
       <indexterm>
-       <primary><varname>pgxc_node_name</> configuration parameter</primary>
+       <primary><varname>pgxc_node_name</> configuration
+       parameter</primary>
       </indexterm>
       <listitem>
        <para>
-        Specifies the node name. A node uses this parameter to identify itself
+        Specifies the node name. A node uses this parameter to
+        identify itself
         with <link linkend="catalog-pgxc-node"><structname>pgxc_node</structname>
         </link>.nodename
        </para>
@@ -6985,9 +7123,11 @@ Postgres-XC Specific Parameters
      </varlistentry>
 
      <varlistentry id="guc-pooler-port" xreflabel="pooler_port">
-      <term><varname>pooler_port</varname> (<type>integer</type>)</term>
+      <term><varname>pooler_port</varname>
+      (<type>integer</type>)</term>
       <indexterm>
-       <primary><varname>pooler_port</> configuration parameter</primary>
+       <primary><varname>pooler_port</> configuration
+       parameter</primary>
       </indexterm>
       <listitem>
        <para>
@@ -7003,7 +7143,9 @@ Postgres-XC Specific Parameters
       </indexterm>
       <listitem>
        <para>
-        Reports the name or IP address of the <filename>GTM</>.  If you use <filename>GTM-Proxy</>, specify the <filename>GTM-Proxy</>'s one.
+        Reports the name or IP address of the <filename>GTM</>.  If
+        you use <filename>GTM-Proxy</>, specify
+        the <filename>GTM-Proxy</>'s one.
        </para>
       </listitem>
      </varlistentry>
@@ -7021,15 +7163,17 @@ Postgres-XC Specific Parameters
      </varlistentry>
 
      <varlistentry id="gtm-backup-barrier" xreflabel="backup_barrier">
-      <term><varname>gtm_backup_barrier</varname> (<type>string</type>)</term>
+      <term><varname>gtm_backup_barrier</varname>
+      (<type>string</type>)</term>
       <indexterm>
-       <primary><varname>gtm_backup_barrier</> configuration parameter</primary>
+       <primary><varname>gtm_backup_barrier</> configuration
+       parameter</primary>
       </indexterm>
       <listitem>
        <para>
         Specify if GTM backs up the restart point for each barrier.
-        Default value is "OFF".
-        Superuser may set this variable by SET command, or this can be set in the file
+        Default value is "OFF".  Superuser may set this variable by
+        SET command, or this can be set in the file
         <filename>postgresql.conf</filename> file.
        </para>
       </listitem>
@@ -7037,42 +7181,47 @@ Postgres-XC Specific Parameters
 
 
      <varlistentry id="guc-enforce-two-phase-commit" xreflabel="enforce_two_phase_commit">
-      <term><varname>enforce_two_phase_commit</varname> (<type>boolean</type>)</term>
+      <term><varname>enforce_two_phase_commit</varname>
+      (<type>boolean</type>)</term>
       <indexterm>
-       <primary><varname>enforce_two_phase_commit</varname> configuration parameter</primary>
+       <primary><varname>enforce_two_phase_commit</varname>
+       configuration parameter</primary>
       </indexterm>
       <listitem>
        <para>
-        Enforce the usage of two-phase commit instead for transactions involving temporary
-        objects or ON COMMIT actions.
+        Enforce the usage of two-phase commit instead for transactions
+        involving temporary objects or ON COMMIT actions.
        </para>
       </listitem>
      </varlistentry>
 
      <varlistentry id="guc-xc-maintenance-mode" xreflabel="xc_maintenance_mode">
-      <term><varname>xc_maintenance_mode</varname> (<type>bool</type>)</term>
+      <term><varname>xc_maintenance_mode</varname>
+      (<type>bool</type>)</term>
       <indexterm>
-       <primary><varname>xc_maintenance_mode</> configuration parameter</primary>
+       <primary><varname>xc_maintenance_mode</> configuration
+       parameter</primary>
       </indexterm>
       <listitem>
        <para>
-        Specify to enter into maintenance mode. Turning this parameter to on will
-        change behavior of several statements. Each statement
-        behavior may not be compatible in future releases, so users
-        must be extremely careful when they attempt to set this
-        value to <literal>on</literal>.
+        Specify to enter into maintenance mode. Turning this parameter
+        to on will change behavior of several statements. Each
+        statement behavior may not be compatible in future releases,
+        so users must be extremely careful when they attempt to set
+        this value to <literal>on</literal>.
        </para>
        <para>
         Behavior of <xref linkend="sql-commit-prepared"> and
-        <xref linkend="sql-rollback-prepared"> statements are affected by
-        this parameter.
+        <xref linkend="sql-rollback-prepared"> statements are affected
+        by this parameter.
        </para>
        <para>
-        If this is set to ON, you can do many other maintenance work to update
-        Datanode locally through <literal>EXECUTE DIRECT</literal> or connecting
-        directly to Datanodes. As a DBA, you are totally responsible to any side
-        effects. You must be extremely careful not to bring in any inconsistencies
-        to Postgres-XC database cluster.
+        If this is set to ON, you can do many other maintenance work
+        to update Datanode locally through <literal>EXECUTE
+        DIRECT</literal> or connecting directly to Datanodes. As a
+        DBA, you are totally responsible to any side effects. You must
+        be extremely careful not to bring in any inconsistencies to
+        Postgres-XC database cluster.
        </para>
        <para>
         This parameter can only be set by superuser
@@ -7080,9 +7229,9 @@ Postgres-XC Specific Parameters
         will be ignored.
        </para>
        <para>
-        As a session parameter, this parameter is shared among all
-        the connections of the session. It affects originating Coordinator as
-        well as remote nodes involved in session.
+        As a session parameter, this parameter is shared among all the
+        connections of the session. It affects originating Coordinator
+        as well as remote nodes involved in session.
        </para>
       </listitem>
      </varlistentry>

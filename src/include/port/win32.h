@@ -65,12 +65,14 @@
 
 #define USES_WINSOCK
 
-/* defines for dynamic linking on Win32 platform */
-#if defined(WIN32) || defined(__CYGWIN__)
+/* defines for dynamic linking on Win32 platform
+ *
+ *	http://support.microsoft.com/kb/132044
+ *	http://msdn.microsoft.com/en-us/library/8fskxacy(v=vs.80).aspx
+ *	http://msdn.microsoft.com/en-us/library/a90k134d(v=vs.80).aspx
+ */
 
-#if __GNUC__ && ! defined (__declspec)
-#error You need egcs 1.1 or newer for compiling!
-#endif
+#if defined(WIN32) || defined(__CYGWIN__)
 
 #ifdef BUILDING_DLL
 #define PGDLLIMPORT __declspec (dllexport)
@@ -270,36 +272,26 @@ typedef int pid_t;
 #undef EINTR
 #define EINTR WSAEINTR
 #define EAGAIN WSAEWOULDBLOCK
-#ifndef EMSGSIZE
+#undef EMSGSIZE
 #define EMSGSIZE WSAEMSGSIZE
-#endif
-#ifndef EAFNOSUPPORT
+#undef EAFNOSUPPORT
 #define EAFNOSUPPORT WSAEAFNOSUPPORT
-#endif
-#ifndef EWOULDBLOCK
+#undef EWOULDBLOCK
 #define EWOULDBLOCK WSAEWOULDBLOCK
-#endif
-#ifndef ECONNRESET
+#undef ECONNRESET
 #define ECONNRESET WSAECONNRESET
-#endif
-#ifndef EINPROGRESS
+#undef EINPROGRESS
 #define EINPROGRESS WSAEINPROGRESS
-#endif
-#ifndef ENOBUFS
+#undef ENOBUFS
 #define ENOBUFS WSAENOBUFS
-#endif
-#ifndef EPROTONOSUPPORT
+#undef EPROTONOSUPPORT
 #define EPROTONOSUPPORT WSAEPROTONOSUPPORT
-#endif
-#ifndef ECONNREFUSED
+#undef ECONNREFUSED
 #define ECONNREFUSED WSAECONNREFUSED
-#endif
-#ifndef EBADFD
+#undef EBADFD
 #define EBADFD WSAENOTSOCK
-#endif
-#ifndef EOPNOTSUPP
+#undef EOPNOTSUPP
 #define EOPNOTSUPP WSAEOPNOTSUPP
-#endif
 
 /*
  * For Microsoft Visual Studio 2010 and above we intentionally redefine

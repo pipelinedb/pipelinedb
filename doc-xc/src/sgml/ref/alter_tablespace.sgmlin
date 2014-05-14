@@ -32,7 +32,6 @@ ALTER TABLESPACE <replaceable>name</replaceable> RESET ( <replaceable class="PAR
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER TABLESPACE</command> changes the definition of
    a tablespace.
@@ -49,6 +48,7 @@ ALTER TABLESPACE <replaceable>name</replaceable> RESET ( <replaceable class="PAR
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -80,7 +80,7 @@ ALTER TABLESPACE <replaceable>name</replaceable> RESET ( <replaceable class="PAR
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="parameter">tablespace_parameter</replaceable></term>
+    <term><replaceable class="parameter">tablespace_option</replaceable></term>
     <listitem>
      <para>
       A tablespace parameter to be set or reset.  Currently, the only
@@ -113,13 +113,13 @@ ALTER TABLESPACE index_space RENAME TO fast_raid;
    Change the owner of tablespace <literal>index_space</literal>:
 <programlisting>
 ALTER TABLESPACE index_space OWNER TO mary;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>ALTER TABLESPACE</command> statement in
    the SQL standard.

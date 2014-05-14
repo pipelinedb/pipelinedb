@@ -4,7 +4,7 @@
  *	  prototypes for functions in backend/catalog/namespace.c
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/namespace.h
@@ -106,7 +106,7 @@ extern void DeconstructQualifiedName(List *names,
 						 char **nspname_p,
 						 char **objname_p);
 extern Oid	LookupNamespaceNoError(const char *nspname);
-extern Oid	LookupExplicitNamespace(const char *nspname);
+extern Oid	LookupExplicitNamespace(const char *nspname, bool missing_ok);
 extern Oid	get_namespace_oid(const char *nspname, bool missing_ok);
 
 extern Oid	LookupCreationNamespace(const char *nspname);
@@ -128,12 +128,13 @@ extern void ResetTempTableNamespace(void);
 
 extern OverrideSearchPath *GetOverrideSearchPath(MemoryContext context);
 extern OverrideSearchPath *CopyOverrideSearchPath(OverrideSearchPath *path);
+extern bool OverrideSearchPathMatchesCurrent(OverrideSearchPath *path);
 extern void PushOverrideSearchPath(OverrideSearchPath *newpath);
 extern void PopOverrideSearchPath(void);
 
 extern Oid	get_collation_oid(List *collname, bool missing_ok);
 extern Oid	get_conversion_oid(List *conname, bool missing_ok);
-extern Oid	FindDefaultConversionProc(int4 for_encoding, int4 to_encoding);
+extern Oid	FindDefaultConversionProc(int32 for_encoding, int32 to_encoding);
 
 /* initialization & transaction cleanup code */
 extern void InitializeSearchPath(void);

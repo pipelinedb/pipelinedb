@@ -3,10 +3,9 @@
 <appendix id="contrib">
  <title>Additional Supplied Modules</title>
 
-&pgnotice;
-
+&common;
  <para>
-  This appendix contains information regarding the modules that
+  This appendix and the next one contain information regarding the modules that
   can be found in the <literal>contrib</literal> directory of the
   <productname>PostgreSQL</> distribution.
   These include porting tools, analysis utilities,
@@ -17,7 +16,13 @@
  </para>
 
  <para>
-  When building from the source distribution, these modules are not built
+  This appendix covers extensions and other server plug-in modules found in
+  <literal>contrib</literal>.  <xref linkend="contrib-prog"> covers utility
+  programs.
+ </para>
+
+ <para>
+  When building from the source distribution, these components are not built
   automatically, unless you build the "world" target
   (see <xref linkend="build">).
   You can build and install all of them by running:
@@ -31,12 +36,13 @@
   Many of the modules have regression tests, which can be executed by
   running:
 <screen>
+<userinput>gmake check</userinput>
+</screen>
+  before installation or
+<screen>
 <userinput>gmake installcheck</userinput>
 </screen>
-  once you have a <productname>PostgreSQL</> server running.  (Note that
-  <literal>gmake check</> is not supported; you must have an operational
-  database server to perform these tests, and you must have built and
-  installed the module(s) to be tested.)
+  once you have a <productname>PostgreSQL</> server running.
  </para>
 
  <para>
@@ -89,6 +95,14 @@ CREATE EXTENSION <replaceable>module_name</> FROM unpackaged;
   <xref linkend="extend-extensions">.
  </para>
 
+ <para>
+  Note, however, that some of these modules are not <quote>extensions</quote>
+  in this sense, but are loaded into the server in some other way, for instance
+  by way of
+  <xref linkend="guc-shared-preload-libraries">.  See the documentation of each
+  module for details.
+ </para>
+
  &adminpack;
  &auth-delay;
  &auto-explain;
@@ -110,37 +124,108 @@ CREATE EXTENSION <replaceable>module_name</> FROM unpackaged;
  &isn;
  &lo;
  &ltree;
- &oid2name;
  &pageinspect;
  &passwordcheck;
- &pgarchivecleanup;
- &pgbench;
  &pgbuffercache;
  &pgcrypto;
  &pgfreespacemap;
  &pgrowlocks;
- &pgstandby;
  &pgstatstatements;
  &pgstattuple;
- &pgtestfsync;
  &pgtrgm;
- &pgupgrade;
-<!## XC>
- &pgxcclean;
- &pgxcctl;
- &pgxcddl;
- &pgxcmonitor;
-<!## end>
+ &postgres-fdw;
  &seg;
  &sepgsql;
  &contrib-spi;
  &sslinfo;
  &tablefunc;
+ &tcn;
  &test-parser;
  &tsearch2;
  &unaccent;
  &uuid-ossp;
- &vacuumlo;
  &xml2;
 
+</appendix>
+
+<!--
+These are two separate appendixes because it is difficult to mix regular
+sections (for extensions) and refentries (for programs) in one chapter or
+appendix.  And we do want the programs as refentries so that we can produce man
+pages.
+-->
+
+<appendix id="contrib-prog">
+ <title>Additional Supplied Programs</title>
+
+ <para>
+  This appendix and the previous one contain information regarding the modules that
+  can be found in the <literal>contrib</literal> directory of the
+  <productname>PostgreSQL</> distribution.  See <xref linkend="contrib"> for
+  more information about the <literal>contrib</literal> section in general and
+  server extensions and plug-ins found in <literal>contrib</literal>
+  specifically.
+ </para>
+
+ <para>
+  This appendix covers utility programs found in <literal>contrib</literal>.
+  Once installed, either from source or a packaging system, they are found in
+  the <filename>bin</filename> directory of the
+  <productname>PostgreSQL</productname> installation and can be used like any
+  other program.
+ </para>
+
+ <sect1 id="contrib-prog-client">
+  <title>Client Applications</title>
+
+&common;
+  <para>
+   This section covers <productname>PostgreSQL</productname> client
+   applications in <literal>contrib</literal>.  They can be run from anywhere,
+   independent of where the database server resides.  See
+   also <xref linkend="reference-client"> for information about client
+   applications that part of the core <productname>PostgreSQL</productname>
+   distribution.
+  </para>
+
+ &oid2name;
+ &pgbench;
+ &vacuumlo;
+ </sect1>
+
+ <sect1 id="contrib-prog-server">
+  <title>Server Applications</title>
+
+&common;
+  <para>
+   This section covers <productname>PostgreSQL</productname> server-related
+   applications in <literal>contrib</literal>.  They are typically run on the
+   host where the database server resides.  See also <xref
+   linkend="reference-server"> for information about server applications that
+   part of the core <productname>PostgreSQL</productname> distribution.
+  </para>
+
+ &pgarchivecleanup;
+ &pgstandby;
+ &pgtestfsync;
+ &pgtesttiming;
+ &pgupgrade;
+ &pgxlogdump;
+ </sect1>
+<!## XC>
+
+ <sect1 id="contrib-pgxc">
+  <title>Postgres-XC applications</title>
+
+  <para>
+   This section covers applications specific to <productname>Postgres-XC</productname>
+   server.   They do not appear in <productname>PostgreSQL</productname> documentation.
+  </para>
+
+&pgxcclean;
+&pgxcctl;
+&pgxcddl;
+&pgxcmonitor;
+ </sect1>
+<!## end>
 </appendix>

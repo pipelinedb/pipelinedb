@@ -6,7 +6,7 @@
  *	  changes should be made with care.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/gist.h
@@ -65,9 +65,15 @@
 
 typedef XLogRecPtr GistNSN;
 
+/*
+ * For on-disk compatibility with pre-9.3 servers, NSN is stored as two
+ * 32-bit fields on disk, same as LSNs.
+ */
+typedef PageXLogRecPtr PageGistNSN;
+
 typedef struct GISTPageOpaqueData
 {
-	GistNSN		nsn;			/* this value must change on page split */
+	PageGistNSN nsn;			/* this value must change on page split */
 	BlockNumber rightlink;		/* next page if any */
 	uint16		flags;			/* see bit definitions above */
 	uint16		gist_page_id;	/* for identification of GiST indexes */
@@ -85,11 +91,30 @@ typedef GISTPageOpaqueData *GISTPageOpaque;
 
 /*
  * This is the Split Vector to be returned by the PickSplit method.
- * PickSplit should check spl_(r|l)datum_exists. If it is 'true',
- * that corresponding spl_(r|l)datum already defined and
- * PickSplit should use that value. PickSplit should always set
- * spl_(r|l)datum_exists to false: GiST will check value to
- * control supporting this feature by PickSplit...
+ * PickSplit should fill the indexes of tuples to go to the left side into
+ * spl_left[], and those to go to the right into spl_right[] (note the method
+ * is responsible for palloc'ing both of these arrays!).  The tuple counts
+ * go into spl_nleft/spl_nright, and spl_ldatum/spl_rdatum must be set to
+ * the union keys for each side.
+ *
+ * If spl_ldatum_exists and spl_rdatum_exists are true, then we are performing
+ * a "secondary split" using a non-first index column.	In this case some
+ * decisions have already been made about a page split, and the set of tuples
+ * being passed to PickSplit is just the tuples about which we are undecided.
+ * spl_ldatum/spl_rdatum then contain the union keys for the tuples already
+ * chosen to go left or right.	Ideally the PickSplit method should take those
+ * keys into account while deciding what to do with the remaining tuples, ie
+ * it should try to "build out" from those unions so as to minimally expand
+ * them.  If it does so, it should union the given tuples' keys into the
+ * existing spl_ldatum/spl_rdatum values rather than just setting those values
+ * from scratch, and then set spl_ldatum_exists/spl_rdatum_exists to false to
+ * show it has done this.
+ *
+ * If the PickSplit method fails to clear spl_ldatum_exists/spl_rdatum_exists,
+ * the core GiST code will make its own decision about how to merge the
+ * secondary-split results with the previously-chosen tuples, and will then
+ * recompute the union keys from scratch.  This is a workable though often not
+ * optimal approach.
  */
 typedef struct GIST_SPLITVEC
 {
@@ -136,6 +161,9 @@ typedef struct GISTENTRY
 #define GistFollowRight(page) ( GistPageGetOpaque(page)->flags & F_FOLLOW_RIGHT)
 #define GistMarkFollowRight(page) ( GistPageGetOpaque(page)->flags |= F_FOLLOW_RIGHT)
 #define GistClearFollowRight(page)	( GistPageGetOpaque(page)->flags &= ~F_FOLLOW_RIGHT)
+
+#define GistPageGetNSN(page) ( PageXLogRecPtrGet(GistPageGetOpaque(page)->nsn))
+#define GistPageSetNSN(page, val) ( PageXLogRecPtrSet(GistPageGetOpaque(page)->nsn, val))
 
 /*
  * Vector of GISTENTRY structs; user-defined methods union and picksplit

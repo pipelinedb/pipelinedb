@@ -5,7 +5,7 @@
  *
  *	  Should be moved/renamed...	- vadim 07/28/98
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/tqual.h
@@ -88,5 +88,6 @@ extern bool HeapTupleIsSurelyDead(HeapTupleHeader tuple,
 
 extern void HeapTupleSetHintBits(HeapTupleHeader tuple, Buffer buffer,
 					 uint16 infomask, TransactionId xid);
+extern bool HeapTupleHeaderIsOnlyLocked(HeapTupleHeader tuple);
 
 #endif   /* TQUAL_H */

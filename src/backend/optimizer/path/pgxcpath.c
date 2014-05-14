@@ -22,10 +22,12 @@
 #include "parser/parsetree.h"
 #include "pgxc/pgxc.h"
 #include "optimizer/pgxcplan.h"
+#include "tcop/tcopprot.h"
 
 static RemoteQueryPath *pgxc_find_remotequery_path(RelOptInfo *rel);
 static RemoteQueryPath *create_remotequery_path(PlannerInfo *root, RelOptInfo *rel,
-								ExecNodes *exec_nodes, RemoteQueryPath *leftpath,
+								ExecNodes *exec_nodes, ParamPathInfo *param_info,
+								RemoteQueryPath *leftpath,
 								RemoteQueryPath *rightpath, JoinType jointype,
 								List *join_restrictlist);
 /*
@@ -41,9 +43,24 @@ static RemoteQueryPath *create_remotequery_path(PlannerInfo *root, RelOptInfo *r
  *	  This function also marks the path with shippability of the quals.
  *	  If any of the relations involved in this path is a temporary relation,
  *	  record that fact.
+ *	  Note about ParamPathInfo argument: This argument is non-NULL if the
+ *	  current RemoteQuery path needs to be parameterized. Later while
+ *	  crafting the plan node such parameters will be converted into nested loop
+ *	  parameters. As of now (1st Nov. 2013) such parameters are not shippable.
+ *	  Also, we do not create RemoteQuery path for a join involving child
+ *	  RemoteQuery paths with unshippable targetlists or unshippable clauses.
+ *	  Thus when we encounter paths with ParamPathInfo, we will not create
+ *	  RemoteQuery paths above those paths. Which also means that we will not
+ *	  create queries with LATERAL joins. Optimizer might change a LATERAL join
+ *	  into non-LATERAL join by pulling clauses up (which is mostly the case).
+ *	  Hence it is likely that a prima-facie LATERAL join would get shipped
+ *	  because it was turned into non-LATERAL join.
+ *	  PGXC_TODO: Find a way to ship the queries with LATERAL references (if they
+ *	  survive the optimizer).
  */
 static RemoteQueryPath *
 create_remotequery_path(PlannerInfo *root, RelOptInfo *rel, ExecNodes *exec_nodes,
+						ParamPathInfo *param_info,
 						RemoteQueryPath *leftpath, RemoteQueryPath *rightpath,
 						JoinType jointype, List *join_restrictlist)
 {
@@ -55,8 +72,7 @@ create_remotequery_path(PlannerInfo *root, RelOptInfo *rel, ExecNodes *exec_node
 
 	rqpath->path.pathtype = T_RemoteQuery;
 	rqpath->path.parent = rel;
-	/* PGXC_TODO: do we want to care about it */
-	rqpath->path.param_info = NULL;
+	rqpath->path.param_info = param_info;
 	rqpath->path.pathkeys = NIL;	/* result is always unordered */
 	rqpath->rqpath_en = exec_nodes;
 	rqpath->leftpath = leftpath;
@@ -111,10 +127,12 @@ create_remotequery_path(PlannerInfo *root, RelOptInfo *rel, ExecNodes *exec_node
  * value.
  */
 extern bool
-create_plainrel_rqpath(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
+create_plainrel_rqpath(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte,
+						Relids required_outer)
 {
 	List			*quals;
 	ExecNodes		*exec_nodes;
+	ParamPathInfo	*param_info;
 
 	/*
 	 * If we are on the Coordinator, we always want to use
@@ -137,8 +155,10 @@ create_plainrel_rqpath(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 		exec_nodes->en_dist_vars = list_make1(dist_var);
 	}
 
+	param_info = get_baserel_parampathinfo(root, rel, required_outer);
+
 	/* We don't have subpaths for a plain base relation */
-	add_path(rel, (Path *)create_remotequery_path(root, rel, exec_nodes,
+	add_path(rel, (Path *)create_remotequery_path(root, rel, exec_nodes, param_info,
 													NULL, NULL, 0, NULL));
 	return true;
 }
@@ -173,7 +193,7 @@ extern void
 create_joinrel_rqpath(PlannerInfo *root, RelOptInfo *joinrel,
 						RelOptInfo *outerrel, RelOptInfo *innerrel,
 						List *restrictlist, JoinType jointype,
-						SpecialJoinInfo *sjinfo)
+						SpecialJoinInfo *sjinfo, Relids param_source_rels)
 {
 	RemoteQueryPath	*innerpath;
 	RemoteQueryPath	*outerpath;
@@ -182,6 +202,8 @@ create_joinrel_rqpath(PlannerInfo *root, RelOptInfo *joinrel,
 	ExecNodes		*join_en;
 	List			*join_quals = NIL;
 	List			*other_quals = NIL;
+	ParamPathInfo	*param_info;
+	Relids			required_outer;
 
 	/* If GUC does not allow remote join optimization, so be it */
 	if (!enable_remotejoin)
@@ -207,6 +229,20 @@ create_joinrel_rqpath(PlannerInfo *root, RelOptInfo *joinrel,
 
 	if (!inner_en || !outer_en)
 		elog(ERROR, "No node list provided for remote query path");
+
+	/*
+	 * Check to see if proposed path is still parameterized, and reject if the
+	 * parameterization wouldn't be sensible.
+	 */
+	required_outer = calc_non_nestloop_required_outer((Path *)outerpath,
+													  (Path *)innerpath);
+	if (required_outer &&
+		!bms_overlap(required_outer, param_source_rels))
+	{
+		/* Waste no memory when we reject a path here */
+		bms_free(required_outer);
+		return;
+	}
 	/*
 	 * Collect quals from restrictions so as to check the shippability of a JOIN
 	 * between distributed relations.
@@ -236,8 +272,12 @@ create_joinrel_rqpath(PlannerInfo *root, RelOptInfo *joinrel,
 										innerpath->rqhas_unshippable_tlist,
 										outerpath->rqhas_unshippable_tlist,
 										jointype, (Node *)join_quals);
+	param_info = get_joinrel_parampathinfo(root, joinrel, (Path *)outerpath,
+											(Path *)innerpath, sjinfo,
+											required_outer, &restrictlist);
 	if (join_en)
 		add_path(joinrel, (Path *)create_remotequery_path(root, joinrel, join_en,
+															param_info,
 													outerpath, innerpath, jointype,
 													restrictlist));
 	return;

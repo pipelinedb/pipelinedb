@@ -29,18 +29,19 @@ DROP OWNED BY <replaceable class="PARAMETER">name</replaceable> [, ...] [ CASCAD
   <title>Description</title>
 
 &common;
-
   <para>
-   <command>DROP OWNED</command> drops all the objects in the current
+   <command>DROP OWNED</command> drops all the objects within the current
    database that are owned by one of the specified roles. Any
    privileges granted to the given roles on objects in the current
-   database will also be revoked.
+   database and on shared objects (databases, tablespaces) will also be
+   revoked.
   </para>
  </refsect1>
 
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">name</replaceable></term>
@@ -75,6 +76,7 @@ DROP OWNED BY <replaceable class="PARAMETER">name</replaceable> [, ...] [ CASCAD
 
  <refsect1>
   <title>Notes</title>
+&common;
   <para>
    <command>DROP OWNED</command> is often used to prepare for the
    removal of one or more roles. Because <command>DROP OWNED</command>
@@ -95,21 +97,17 @@ DROP OWNED BY <replaceable class="PARAMETER">name</replaceable> [, ...] [ CASCAD
   </para>
 
   <para>
-   Databases owned by the role(s) will not be removed.
+   Databases and tablespaces owned by the role(s) will not be removed.
   </para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The <command>DROP OWNED</command> statement is a
-<!## PG>
    <productname>PostgreSQL</productname> extension.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> extension.
-<!## end>
   </para>
  </refsect1>
 

@@ -14,30 +14,17 @@
 
 &common;
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> has a rich set of native data
    types available to users.  Users can add new types to
    <productname>PostgreSQL</productname> using the <xref
    linkend="sql-createtype"> command.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> has inherits from <productname>PostgreSQL</> a rich set of native data
-   types available to users.  Users can add new types to
-   <productname>Postgres-XC</productname> using the <xref
-   linkend="sql-createtype"> command.
-<!## end>
   </para>
 
   <para>
    <xref linkend="datatype-table"> shows all the built-in general-purpose data
    types. Most of the alternative names listed in the
    <quote>Aliases</quote> column are the names used internally by
-<!## PG>
    <productname>PostgreSQL</productname> for historical reasons.  In
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> for historical reasons.  In
-<!## end>
    addition, some internally used or deprecated types are available,
    but are not listed here.
   </para>
@@ -97,15 +84,15 @@
       </row>
 
       <row>
-       <entry><type>character varying [ (<replaceable>n</replaceable>) ]</type></entry>
-       <entry><type>varchar [ (<replaceable>n</replaceable>) ]</type></entry>
-       <entry>variable-length character string</entry>
-      </row>
-
-      <row>
        <entry><type>character [ (<replaceable>n</replaceable>) ]</type></entry>
        <entry><type>char [ (<replaceable>n</replaceable>) ]</type></entry>
        <entry>fixed-length character string</entry>
+      </row>
+
+      <row>
+       <entry><type>character varying [ (<replaceable>n</replaceable>) ]</type></entry>
+       <entry><type>varchar [ (<replaceable>n</replaceable>) ]</type></entry>
+       <entry>variable-length character string</entry>
       </row>
 
       <row>
@@ -148,6 +135,12 @@
        <entry><type>interval [ <replaceable>fields</replaceable> ] [ (<replaceable>p</replaceable>) ]</type></entry>
        <entry></entry>
        <entry>time span</entry>
+      </row>
+
+      <row>
+       <entry><type>json</type></entry>
+       <entry></entry>
+       <entry>JSON data</entry>
       </row>
 
       <row>
@@ -210,6 +203,12 @@
        <entry><type>smallint</type></entry>
        <entry><type>int2</type></entry>
        <entry>signed two-byte integer</entry>
+      </row>
+
+      <row>
+       <entry><type>smallserial</type></entry>
+       <entry><type>serial2</type></entry>
+       <entry>autoincrementing two-byte integer</entry>
       </row>
 
       <row>
@@ -301,12 +300,7 @@
    Each data type has an external representation determined by its input
    and output functions.  Many of the built-in types have
    obvious external formats.  However, several types are either unique
-<!## PG>
    to <productname>PostgreSQL</productname>, such as geometric
-<!## end>
-<!## XC>
-   to <productname>Postgres-XC</productname>, such as geometric
-<!## end>
    paths, or have several possible formats, such as the date
    and time types.
    Some of the input and output functions are not invertible, i.e.,
@@ -321,6 +315,7 @@
     <primary>data type</primary>
     <secondary>numeric</secondary>
    </indexterm>
+
 &common;
    <para>
     Numeric types consist of two-, four-, and eight-byte integers,
@@ -358,7 +353,7 @@
         <entry><type>bigint</></entry>
         <entry>8 bytes</entry>
         <entry>large-range integer</entry>
-        <entry>-9223372036854775808 to 9223372036854775807</entry>
+        <entry>-9223372036854775808 to +9223372036854775807</entry>
        </row>
 
        <row>
@@ -385,6 +380,13 @@
         <entry>8 bytes</entry>
         <entry>variable-precision, inexact</entry>
         <entry>15 decimal digits precision</entry>
+       </row>
+
+       <row>
+        <entry><type>smallserial</type></entry>
+        <entry>2 bytes</entry>
+        <entry>small autoincrementing integer</entry>
+        <entry>1 to 32767</entry>
        </row>
 
        <row>
@@ -441,6 +443,7 @@
      <primary>int8</primary>
      <see>bigint</see>
     </indexterm>
+
 &common;
     <para>
      The types <type>smallint</type>, <type>integer</type>, and
@@ -453,18 +456,8 @@
      The type <type>integer</type> is the common choice, as it offers
      the best balance between range, storage size, and performance.
      The <type>smallint</type> type is generally only used if disk
-     space is at a premium.  The <type>bigint</type> type should only
-     be used if the range of the <type>integer</type> type is insufficient,
-     because the latter is definitely faster.
-    </para>
-
-    <para>
-     On very minimal operating systems the <type>bigint</type> type
-     might not function correctly, because it relies on compiler support
-     for eight-byte integers.  On such machines, <type>bigint</type>
-     acts the same as <type>integer</type>, but still takes up eight
-     bytes of storage.  (We are not aware of any modern
-     platform where this is the case.)
+     space is at a premium.  The <type>bigint</type> type is designed to be
+     used when the range of the <type>integer</type> type is insufficient.
     </para>
 
     <para>
@@ -493,6 +486,7 @@
      <primary>decimal</primary>
      <see>numeric</see>
     </indexterm>
+
 &common;
     <para>
      The type <type>numeric</type> can store numbers with a
@@ -568,7 +562,7 @@ NUMERIC
      type is more akin to <type>varchar(<replaceable>n</>)</type>
      than to <type>char(<replaceable>n</>)</type>.)  The actual storage
      requirement is two bytes for each group of four decimal digits,
-     plus five to eight bytes overhead.
+     plus three to eight bytes overhead.
     </para>
 
     <indexterm>
@@ -597,12 +591,7 @@ NUMERIC
       <literal>NaN</> is not considered equal to any other numeric
       value (including <literal>NaN</>).  In order to allow
       <type>numeric</> values to be sorted and used in tree-based
-<!## PG>
       indexes, <productname>PostgreSQL</> treats <literal>NaN</>
-<!## end>
-<!## XC>
-      indexes, <productname>Postgres-XC</> treats <literal>NaN</>
-<!## end>
       values as equal, and greater than all non-<literal>NaN</>
       values.
      </para>
@@ -640,6 +629,7 @@ NUMERIC
     <indexterm zone="datatype-float">
      <primary>floating point</primary>
     </indexterm>
+
 &common;
     <para>
      The data types <type>real</type> and <type>double
@@ -696,6 +686,17 @@ NUMERIC
      from zero will cause an underflow error.
     </para>
 
+    <note>
+     <para>
+      The <xref linkend="guc-extra-float-digits"> setting controls the
+      number of extra significant digits included when a floating point
+      value is converted to text for output.  With the default value of
+      <literal>0</literal>, the output is the same on every platform
+      supported by PostgreSQL.  Increasing it will produce output that
+      more accurately represents the stored value, but may be unportable.
+     </para>
+    </note>
+
     <indexterm>
      <primary>not a number</primary>
      <secondary>double precision</secondary>
@@ -724,34 +725,19 @@ NUMERIC
       IEEE754 specifies that <literal>NaN</> should not compare equal
       to any other floating-point value (including <literal>NaN</>).
       In order to allow floating-point values to be sorted and used
-<!## PG>
-       in tree-based indexes, <productname>PostgreSQL</> treats
-<!## end>
-<!## XC>
-      in tree-based indexes, <productname>Postgres-XC</> treats
-<!## end>
+      in tree-based indexes, <productname>PostgreSQL</> treats
       <literal>NaN</> values as equal, and greater than all
       non-<literal>NaN</> values.
      </para>
     </note>
 
     <para>
-<!## PG>
      <productname>PostgreSQL</productname> also supports the SQL-standard
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> also supports the SQL-standard
-<!## end>
      notations <type>float</type> and
      <type>float(<replaceable>p</replaceable>)</type> for specifying
      inexact numeric types.  Here, <replaceable>p</replaceable> specifies
      the minimum acceptable precision in <emphasis>binary</> digits.
-<!## PG>
      <productname>PostgreSQL</productname> accepts
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> accepts 
-<!## end>
      <type>float(1)</type> to <type>float(24)</type> as selecting the
      <type>real</type> type, while
      <type>float(25)</type> to <type>float(53)</type> select
@@ -782,11 +768,19 @@ NUMERIC
     <title>Serial Types</title>
 
     <indexterm zone="datatype-serial">
+     <primary>smallserial</primary>
+    </indexterm>
+
+    <indexterm zone="datatype-serial">
      <primary>serial</primary>
     </indexterm>
 
     <indexterm zone="datatype-serial">
      <primary>bigserial</primary>
+    </indexterm>
+
+    <indexterm zone="datatype-serial">
+     <primary>serial2</primary>
     </indexterm>
 
     <indexterm zone="datatype-serial">
@@ -806,10 +800,11 @@ NUMERIC
      <primary>sequence</primary>
      <secondary>and serial type</secondary>
     </indexterm>
+
 &common;
     <para>
-     The data types <type>serial</type> and <type>bigserial</type>
-     are not true types, but merely
+     The data types <type>smallserial</type>, <type>serial</type> and
+     <type>bigserial</type> are not true types, but merely
      a notational convenience for creating unique identifier columns
      (similar to the <literal>AUTO_INCREMENT</literal> property
      supported by some other databases). In the current
@@ -842,6 +837,20 @@ ALTER SEQUENCE <replaceable class="parameter">tablename</replaceable>_<replaceab
     </para>
 
     <note>
+      <para>
+        Because <type>smallserial</type>, <type>serial</type> and
+        <type>bigserial</type> are implemented using sequences, there may
+        be "holes" or gaps in the sequence of values which appears in the
+        column, even if no rows are ever deleted.  A value allocated
+        from the sequence is still "used up" even if a row containing that
+        value is never successfully inserted into the table column.  This
+        may happen, for example, if the inserting transaction rolls back.
+        See <literal>nextval()</literal> in <xref linkend="functions-sequence">
+        for details.
+      </para>
+    </note>
+
+    <note>
      <para>
       Prior to <productname>PostgreSQL</productname> 7.3, <type>serial</type>
       implied <literal>UNIQUE</literal>.  This is no longer automatic.  If
@@ -867,7 +876,9 @@ ALTER SEQUENCE <replaceable class="parameter">tablename</replaceable>_<replaceab
      the same way, except that they create a <type>bigint</type>
      column.  <type>bigserial</type> should be used if you anticipate
      the use of more than 2<superscript>31</> identifiers over the
-     lifetime of the table.
+     lifetime of the table. The type names <type>smallserial</type> and
+     <type>serial2</type> also work the same way, except that they
+     create a <type>smallint</type> column.
     </para>
 
     <para>
@@ -882,7 +893,6 @@ ALTER SEQUENCE <replaceable class="parameter">tablename</replaceable>_<replaceab
   <sect1 id="datatype-money">
    <title>Monetary Types</title>
 
-&common;
    <para>
     The <type>money</type> type stores a currency amount with a fixed
     fractional precision; see <xref
@@ -917,6 +927,7 @@ ALTER SEQUENCE <replaceable class="parameter">tablename</replaceable>_<replaceab
      </tgroup>
     </table>
 
+&common;
    <para>
     Since the output of this data type is locale-sensitive, it might not
     work to load <type>money</> data into a database that has a different
@@ -1018,12 +1029,7 @@ SELECT '52093.89'::money::numeric::float8;
    <para>
     <xref linkend="datatype-character-table"> shows the
     general-purpose character types available in
-<!## PG>
     <productname>PostgreSQL</productname>.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname>.
-<!## end>
    </para>
 
    <para>
@@ -1060,21 +1066,11 @@ SELECT '52093.89'::money::numeric::float8;
     <type>character</type> without length specifier is equivalent to
     <type>character(1)</type>. If <type>character varying</type> is used
     without length specifier, the type accepts strings of any size. The
-<!## PG>
     latter is a <productname>PostgreSQL</> extension.
-<!## end>
-<!## XC>
-    latter is a <productname>Postgres-XC</>, as well as <productname>PostgreSQL</> extension.
-<!## end>
    </para>
 
    <para>
-<!## PG>
     In addition, <productname>PostgreSQL</productname> provides the
-<!## end>
-<!## XC>
-    In addition, <productname>Postgres-XC</productname> provides the
-<!## end>
     <type>text</type> type, which stores strings of any length.
     Although the type <type>text</type> is not in the
     <acronym>SQL</acronym> standard, several other SQL database
@@ -1121,12 +1117,7 @@ SELECT '52093.89'::money::numeric::float8;
      a length-constrained column.  While
      <type>character(<replaceable>n</>)</type> has performance
      advantages in some other database systems, there is no such advantage in
-<!## PG>
      <productname>PostgreSQL</productname>; in fact
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname>; in fact
-<!## end>
      <type>character(<replaceable>n</>)</type> is usually the slowest of
      the three because of its additional storage costs.  In most situations
      <type>text</type> or <type>character varying</type> should be used
@@ -1183,12 +1174,7 @@ SELECT b, char_length(b) FROM test2;
 
    <para>
     There are two other fixed-length character types in
-<!## PG>
     <productname>PostgreSQL</productname>, shown in <xref
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname>, shown in <xref
-<!## end>
     linkend="datatype-character-special-table">. The <type>name</type>
     type exists <emphasis>only</emphasis> for the storage of identifiers
     in the internal system catalogs and is not intended for use by the general user. Its
@@ -1240,6 +1226,7 @@ SELECT b, char_length(b) FROM test2;
   <indexterm zone="datatype-binary">
    <primary>bytea</primary>
   </indexterm>
+
 &common;
    <para>
     The <type>bytea</type> data type allows storage of binary strings;
@@ -1284,12 +1271,7 @@ SELECT b, char_length(b) FROM test2;
 
    <para>
     The <type>bytea</type> type supports two external formats for
-<!## PG>
     input and output: <productname>PostgreSQL</productname>'s historical
-<!## end>
-<!## XC>
-    input and output: <productname>Postgres-XC</productname>'s historical
-<!## end>
     <quote>escape</quote> format, and <quote>hex</quote> format.  Both
     of these are always accepted on input.  The output format depends
     on the configuration parameter <xref linkend="guc-bytea-output">;
@@ -1340,12 +1322,7 @@ SELECT E'\\xDEADBEEF';
 &common;
    <para>
     The <quote>escape</quote> format is the traditional
-<!## PG>
     <productname>PostgreSQL</productname> format for the <type>bytea</type>
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> format for the <type>bytea</type>
-<!## end>
     type.  It
     takes the approach of representing a binary string as a sequence
     of ASCII characters, while converting those bytes that cannot be
@@ -1438,12 +1415,7 @@ SELECT E'\\xDEADBEEF';
     The reason multiple backslashes are required, as shown
     in <xref linkend="datatype-binary-sqlesc">, is that an input
     string written as a string literal must pass through two parse
-<!## PG>
     phases in the <productname>PostgreSQL</productname> server.
-<!## end>
-<!## XC>
-    phases in the <productname>Postgres-XC</productname> server.
-<!## end>
     The first backslash of each pair is interpreted as an escape
     character by the string-literal parser (assuming escape string
     syntax is used) and is therefore consumed, leaving the second backslash of the
@@ -1515,12 +1487,7 @@ SELECT E'\\xDEADBEEF';
    </table>
 
    <para>
-<!## PG>
     Depending on the front end to <productname>PostgreSQL</> you use,
-<!## end>
-<!## XC>
-    Depending on the front end to <productname>Postgres-XC</> you use,
-<!## end>
     you might have additional work to do in terms of escaping and
     unescaping <type>bytea</type> strings. For example, you might also
     have to escape line feeds and carriage returns if your interface
@@ -1563,18 +1530,17 @@ SELECT E'\\xDEADBEEF';
    <indexterm zone="datatype-datetime">
     <primary>time span</primary>
    </indexterm>
+
 &common;
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> supports the full set of
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> supports the full set of
-<!## end>
     <acronym>SQL</acronym> date and time types, shown in <xref
     linkend="datatype-datetime-table">.  The operations available
     on these data types are described in
     <xref linkend="functions-datetime">.
+    Dates are counted according to the Gregorian calendar, even in
+    years before that calendar was introduced (see <xref
+    linkend="datetime-units-history"> for more information).
    </para>
 
     <table id="datatype-datetime-table">
@@ -1647,12 +1613,7 @@ SELECT E'\\xDEADBEEF';
     <para>
      The SQL standard requires that writing just <type>timestamp</type>
      be equivalent to <type>timestamp without time
-<!## PG>
      zone</type>, and <productname>PostgreSQL</productname> honors that
-<!## end>
-<!## XC>
-     zone</type>, and <productname>Postgres-XC</productname> honors that
-<!## end>
      behavior.  (Releases prior to 7.3 treated it as <type>timestamp
      with time zone</type>.)  <type>timestamptz</type> is accepted as an
      abbreviation for <type>timestamp with time zone</type>; this is a
@@ -1746,6 +1707,7 @@ MINUTE TO SECOND
 
    <sect2 id="datatype-datetime-input">
     <title>Date/Time Input</title>
+
 &common;
     <para>
      Date and time input is accepted in almost any reasonable format, including
@@ -1760,12 +1722,7 @@ MINUTE TO SECOND
     </para>
 
     <para>
-<!## PG>
      <productname>PostgreSQL</productname> is more flexible in
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> is more flexible in
-<!## end>
      handling date/time input than the
      <acronym>SQL</acronym> standard requires.
      See <xref linkend="datetime-appendix">
@@ -1879,7 +1836,7 @@ MINUTE TO SECOND
         </row>
         <row>
          <entry>J2451187</entry>
-         <entry>Julian day</entry>
+         <entry>Julian date</entry>
         </row>
         <row>
          <entry>January 8, 99 BC</entry>
@@ -1902,6 +1859,7 @@ MINUTE TO SECOND
      <indexterm>
       <primary>time with time zone</primary>
      </indexterm>
+
 &common;
      <para>
       The time-of-day types are <type>time [
@@ -2054,6 +2012,7 @@ MINUTE TO SECOND
     <indexterm>
      <primary>timestamp without time zone</primary>
     </indexterm>
+
 &common;
      <para>
       Valid input for the time stamp types consists of the concatenation
@@ -2093,12 +2052,7 @@ January 8 04:05:06 1999 PST
       <programlisting>TIMESTAMP '2004-10-19 10:23:54+02'</programlisting>
 
       is a <type>timestamp with time zone</type>.
-<!## PG>
       <productname>PostgreSQL</productname> never examines the content of a
-<!## end>
-<!## XC>
-      <productname>Postgres-XC</productname> never examines the content of a
-<!## end>
       literal string before determining its type, and therefore will treat
       both of the above as <type>timestamp without time zone</type>.  To
       ensure that a literal is treated as <type>timestamp with time
@@ -2107,12 +2061,7 @@ January 8 04:05:06 1999 PST
       <programlisting>TIMESTAMP WITH TIME ZONE '2004-10-19 10:23:54+02'</programlisting>
 
       In a literal that has been determined to be <type>timestamp without time
-<!## PG>
       zone</type>, <productname>PostgreSQL</productname> will silently ignore
-<!## end>
-<!## XC>
-      zone</type>, <productname>Postgres-XC</productname> will silently ignore
-<!## end>
       any time zone indication.
       That is, the resulting value is derived from the date/time
       fields in the input value, and is not adjusted for time zone.
@@ -2160,14 +2109,10 @@ January 8 04:05:06 1999 PST
       <primary>date</primary>
       <secondary>constants</secondary>
      </indexterm>
+
 &common;
      <para>
-<!## PG>
       <productname>PostgreSQL</productname> supports several
-<!## end>
-<!## XC>
-      <productname>Postgres-XC</productname> supports several
-<!## end>
       special date/time input values for convenience, as shown in <xref
       linkend="datatype-datetime-special-table">.  The values
       <literal>infinity</literal> and <literal>-infinity</literal>
@@ -2264,6 +2209,7 @@ January 8 04:05:06 1999 PST
      <secondary>output format</secondary>
      <seealso>formatting</seealso>
     </indexterm>
+
 &common;
     <para>
      The output format of the date/time types can be set to one of the four
@@ -2293,28 +2239,38 @@ January 8 04:05:06 1999 PST
        </thead>
        <tbody>
         <row>
-         <entry>ISO</entry>
-         <entry>ISO 8601/SQL standard</entry>
-         <entry>1997-12-17 07:37:16-08</entry>
+         <entry><literal>ISO</literal></entry>
+         <entry>ISO 8601, SQL standard</entry>
+         <entry><literal>1997-12-17 07:37:16-08</literal></entry>
         </row>
         <row>
-         <entry>SQL</entry>
+         <entry><literal>SQL</literal></entry>
          <entry>traditional style</entry>
-         <entry>12/17/1997 07:37:16.00 PST</entry>
+         <entry><literal>12/17/1997 07:37:16.00 PST</literal></entry>
         </row>
         <row>
-         <entry>POSTGRES</entry>
+         <entry><literal>Postgres</literal></entry>
          <entry>original style</entry>
-         <entry>Wed Dec 17 07:37:16 1997 PST</entry>
+         <entry><literal>Wed Dec 17 07:37:16 1997 PST</literal></entry>
         </row>
         <row>
-         <entry>German</entry>
+         <entry><literal>German</literal></entry>
          <entry>regional style</entry>
-         <entry>17.12.1997 07:37:16.00 PST</entry>
+         <entry><literal>17.12.1997 07:37:16.00 PST</literal></entry>
         </row>
        </tbody>
       </tgroup>
      </table>
+
+    <note>
+     <para>
+      ISO 8601 specifies the use of uppercase letter <literal>T</> to separate
+      the date and time.  <productname>PostgreSQL</> accepts that format on
+      input, but on output it uses a space rather than <literal>T</>, as shown
+      above.  This is for readability and for consistency with RFC 3339 as
+      well as some other database systems.
+     </para>
+    </note>
 
     <para>
      In the <acronym>SQL</acronym> and POSTGRES styles, day appears before
@@ -2322,8 +2278,7 @@ January 8 04:05:06 1999 PST
      before day.
      (See <xref linkend="datatype-datetime-input">
      for how this setting also affects interpretation of input values.)
-     <xref linkend="datatype-datetime-output2-table"> shows an
-     example.
+     <xref linkend="datatype-datetime-output2-table"> shows examples.
     </para>
 
      <table id="datatype-datetime-output2-table">
@@ -2340,29 +2295,33 @@ January 8 04:05:06 1999 PST
         <row>
          <entry><literal>SQL, DMY</></entry>
          <entry><replaceable>day</replaceable>/<replaceable>month</replaceable>/<replaceable>year</replaceable></entry>
-         <entry>17/12/1997 15:37:16.00 CET</entry>
+         <entry><literal>17/12/1997 15:37:16.00 CET</literal></entry>
         </row>
         <row>
          <entry><literal>SQL, MDY</></entry>
          <entry><replaceable>month</replaceable>/<replaceable>day</replaceable>/<replaceable>year</replaceable></entry>
-         <entry>12/17/1997 07:37:16.00 PST</entry>
+         <entry><literal>12/17/1997 07:37:16.00 PST</literal></entry>
         </row>
         <row>
          <entry><literal>Postgres, DMY</></entry>
          <entry><replaceable>day</replaceable>/<replaceable>month</replaceable>/<replaceable>year</replaceable></entry>
-         <entry>Wed 17 Dec 07:37:16 1997 PST</entry>
+         <entry><literal>Wed 17 Dec 07:37:16 1997 PST</literal></entry>
         </row>
        </tbody>
       </tgroup>
      </table>
 
     <para>
-     The date/time styles can be selected by the user using the
+     The date/time style can be selected by the user using the
      <command>SET datestyle</command> command, the <xref
      linkend="guc-datestyle"> parameter in the
      <filename>postgresql.conf</filename> configuration file, or the
      <envar>PGDATESTYLE</envar> environment variable on the server or
-     client.  The formatting function <function>to_char</function>
+     client.
+    </para>
+
+    <para>
+     The formatting function <function>to_char</function>
      (see <xref linkend="functions-formatting">) is also available as
      a more flexible way to format date/time output.
     </para>
@@ -2374,6 +2333,7 @@ January 8 04:05:06 1999 PST
     <indexterm zone="datatype-timezones">
      <primary>time zone</primary>
     </indexterm>
+
 &common;
    <para>
     Time zones, and time-zone conventions, are influenced by
@@ -2381,25 +2341,15 @@ January 8 04:05:06 1999 PST
     world became somewhat standardized during the 1900's,
     but continue to be prone to arbitrary changes, particularly with
     respect to daylight-savings rules.
-<!## PG>
     <productname>PostgreSQL</productname> uses the widely-used
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> uses the widely-used
-<!## end>
-    <literal>zoneinfo</> time zone database for information about
+    <literal>zoneinfo</> (Olson) time zone database for information about
     historical time zone rules.  For times in the future, the assumption
     is that the latest known rules for a given time zone will
     continue to be observed indefinitely far into the future.
    </para>
 
     <para>
-<!## PG>
      <productname>PostgreSQL</productname> endeavors to be compatible with
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> endeavors to be compatible with
-<!## end>
      the <acronym>SQL</acronym> standard definitions for typical usage.
      However, the <acronym>SQL</acronym> standard has an odd mix of date and
      time types and capabilities. Two obvious problems are:
@@ -2434,16 +2384,9 @@ January 8 04:05:06 1999 PST
      that contain both date and time when using time zones. We
      do <emphasis>not</> recommend using the type <type>time with
      time zone</type> (though it is supported by
-<!## PG>
      <productname>PostgreSQL</productname> for legacy applications and
      for compliance with the <acronym>SQL</acronym> standard).
      <productname>PostgreSQL</productname> assumes
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> for legacy applications and
-     for compliance with the <acronym>SQL</acronym> standard).
-     <productname>Postgres-XC</productname> assumes
-<!## end>
      your local time zone for any type containing only date or time.
     </para>
 
@@ -2455,12 +2398,7 @@ January 8 04:05:06 1999 PST
     </para>
 
     <para>
-<!## PG>
      <productname>PostgreSQL</productname> allows you to specify time zones in
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> allows you to specify time zones in
-<!## end>
      three different forms:
      <itemizedlist>
       <listitem>
@@ -2469,12 +2407,7 @@ January 8 04:05:06 1999 PST
         The recognized time zone names are listed in the
         <literal>pg_timezone_names</literal> view (see <xref
         linkend="view-pg-timezone-names">).
-<!## PG>
         <productname>PostgreSQL</productname> uses the widely-used
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname> uses the widely-used
-<!## end>
         <literal>zoneinfo</> time zone data for this purpose, so the same
         names are also recognized by much other software.
        </para>
@@ -2497,12 +2430,7 @@ January 8 04:05:06 1999 PST
       <listitem>
        <para>
         In addition to the timezone names and abbreviations,
-<!## PG>
         <productname>PostgreSQL</productname> will accept POSIX-style time zone
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname> will accept POSIX-style time zone
-<!## end>
         specifications of the form <replaceable>STD</><replaceable>offset</> or
         <replaceable>STD</><replaceable>offset</><replaceable>DST</>, where
         <replaceable>STD</> is a zone abbreviation, <replaceable>offset</> is a
@@ -2514,12 +2442,7 @@ January 8 04:05:06 1999 PST
         daylight-savings zone name is present, it is assumed to be used
         according to the same daylight-savings transition rules used in the
         <literal>zoneinfo</> time zone database's <filename>posixrules</> entry.
-<!## PG>
         In a standard <productname>PostgreSQL</productname> installation,
-<!## end>
-<!## XC>
-        In a standard <productname>Postgres-XC</productname> installation,
-<!## end>
         <filename>posixrules</> is the same as <literal>US/Eastern</>, so
         that POSIX-style time zone specifications follow USA daylight-savings
         rules.  If needed, you can adjust this behavior by replacing the
@@ -2542,12 +2465,7 @@ January 8 04:05:06 1999 PST
      a rather peculiar abbreviation for UTC.
      Another issue to keep in mind is that in POSIX time zone names,
      positive offsets are used for locations <emphasis>west</> of Greenwich.
-<!## PG>
      Everywhere else, <productname>PostgreSQL</productname> follows the
-<!## end>
-<!## XC>
-     Everywhere else, <productname>Postgres-XC</productname> follows the
-<!## end>
      ISO-8601 convention that positive timezone offsets are <emphasis>east</>
      of Greenwich.
     </para>
@@ -2570,36 +2488,9 @@ January 8 04:05:06 1999 PST
      The <xref linkend="guc-timezone"> configuration parameter can
      be set in the file <filename>postgresql.conf</>, or in any of the
      other standard ways described in <xref linkend="runtime-config">.
-     There are also several special ways to set it:
+     There are also some special ways to set it:
 
      <itemizedlist>
-      <listitem>
-       <para>
-        If <varname>timezone</> is not specified in
-        <filename>postgresql.conf</> or as a server command-line option,
-        the server attempts to use the value of the <envar>TZ</envar>
-        environment variable as the default time zone.  If <envar>TZ</envar>
-        is not defined or is not any of the time zone names known to
-<!## PG>
-        <productname>PostgreSQL</productname>, the server attempts to
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname>, the server attempts to
-<!## end>
-        determine the operating system's default time zone by checking the
-        behavior of the C library function <literal>localtime()</>.  The
-        default time zone is selected as the closest match among
-<!## PG>
-        <productname>PostgreSQL</productname>'s known time zones.
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname>'s known time zones.
-<!## end>
-        (These rules are also used to choose the default value of
-        <xref linkend="guc-log-timezone">, if not specified.)
-       </para>
-      </listitem>
-
       <listitem>
        <para>
         The <acronym>SQL</acronym> command <command>SET TIME ZONE</command>
@@ -2626,6 +2517,7 @@ January 8 04:05:06 1999 PST
     <indexterm>
      <primary>interval</primary>
     </indexterm>
+
 &common;
      <para>
       <type>interval</type> values can be written using the following
@@ -2750,23 +2642,13 @@ P <optional> <replaceable>years</>-<replaceable>months</>-<replaceable>days</> <
      value must have the same sign, so a leading negative sign applies to all
      fields; for example the negative sign in the interval literal
      <literal>'-1 2:03:04'</> applies to both the days and hour/minute/second
-<!## PG>
      parts.  <productname>PostgreSQL</> allows the fields to have different
-<!## end>
-<!## XC>
-     parts.  <productname>Postgres-XC</> allows the fields to have different
-<!## end>
      signs, and traditionally treats each field in the textual representation
      as independently signed, so that the hour/minute/second part is
      considered positive in this example.  If <varname>IntervalStyle</> is
      set to <literal>sql_standard</literal> then a leading sign is considered
      to apply to all fields (but only if no additional signs appear).
-<!## PG>
      Otherwise the traditional <productname>PostgreSQL</> interpretation is
-<!## end>
-<!## XC>
-     Otherwise the traditional <productname>Postgres-XC</> interpretation is
-<!## end>
      used.  To avoid ambiguity, it's recommended to attach an explicit sign
      to each field if any field is negative.
     </para>
@@ -2845,6 +2727,7 @@ P <optional> <replaceable>years</>-<replaceable>months</>-<replaceable>days</> <
      <secondary>output format</secondary>
      <seealso>formatting</seealso>
     </indexterm>
+
 &common;
     <para>
      The output format of the interval type can be set to one of the
@@ -2926,32 +2809,6 @@ P <optional> <replaceable>years</>-<replaceable>months</>-<replaceable>days</> <
 
    </sect2>
 
-   <sect2 id="datatype-datetime-internals">
-    <title>Internals</title>
-&common;
-    <para>
-<!## PG>
-     <productname>PostgreSQL</productname> uses Julian dates
-     for all date/time calculations. This has the useful property of correctly
-     calculating dates from 4713 BC
-     to far into the future, using the assumption that the length of the
-     year is 365.2425 days.
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</>, as <productname>PostgreSQL</productname>, uses Julian dates
-     for all date/time calculations. This has the useful property of correctly
-     calculating dates from 4713 BC
-     to far into the future, using the assumption that the length of the
-     year is 365.2425 days.
-<!## end>
-    </para>
-
-    <para>
-     Date conventions before the 19th century make for interesting reading,
-     but are not consistent enough to warrant coding into a date/time handler.
-    </para>
-   </sect2>
-
   </sect1>
 
   <sect1 id="datatype-boolean">
@@ -2969,14 +2826,10 @@ P <optional> <replaceable>years</>-<replaceable>months</>-<replaceable>days</> <
    <indexterm zone="datatype-boolean">
     <primary>false</primary>
    </indexterm>
+
 &common;
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> provides the
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> provides the
-<!## end>
     standard <acronym>SQL</acronym> type <type>boolean</type>;
     see <xref linkend="datatype-boolean-table">.
     The <type>boolean</type> type can have several states:
@@ -3071,6 +2924,7 @@ SELECT * FROM test1 WHERE a;
    <indexterm zone="datatype-enum">
     <primary>enumerated types</primary>
    </indexterm>
+
 &common;
    <para>
     Enumerated (enum) types are data types that
@@ -3083,6 +2937,7 @@ SELECT * FROM test1 WHERE a;
 
    <sect2>
     <title>Declaration of Enumerated Types</title>
+
 &common;
     <para>
      Enum types are created using the <xref
@@ -3113,6 +2968,7 @@ SELECT * FROM person WHERE current_mood = 'happy';
 
     <sect2>
      <title>Ordering</title>
+
 &common;
      <para>
       The ordering of the values in an enum type is the
@@ -3150,6 +3006,7 @@ WHERE current_mood = (SELECT MIN(current_mood) FROM person);
 
    <sect2>
     <title>Type Safety</title>
+
 &common;
     <para>
      Each enumerated data type is separate and cannot
@@ -3195,12 +3052,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
     <para>
      An enum value occupies four bytes on disk.  The length of an enum
      value's textual label is limited by the <symbol>NAMEDATALEN</symbol>
-<!## PG>
      setting compiled into <productname>PostgreSQL</productname>; in standard
-<!## end>
-<!## XC>
-     setting compiled into <productname>Postgres-XC</productname>; in standard
-<!## end>
      builds this means at most 63 bytes.
     </para>
 
@@ -3222,16 +3074,12 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
 
   <sect1 id="datatype-geometric">
    <title>Geometric Types</title>
+
 &common;
    <para>
     Geometric data types represent two-dimensional spatial
     objects. <xref linkend="datatype-geo-table"> shows the geometric
-<!## PG>
     types available in <productname>PostgreSQL</productname>.  The
-<!## end>
-<!## XC>
-    types available in <productname>Postgres-XC</productname>.  The
-<!## end>
     most fundamental type, the point, forms the basis for all of the
     other types.
    </para>
@@ -3312,6 +3160,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
     <indexterm>
      <primary>point</primary>
     </indexterm>
+
 &common;
     <para>
      Points are the fundamental two-dimensional building block for geometric
@@ -3334,7 +3183,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
 
    <sect2>
     <title>Line Segments</title>
-&common;
+
     <indexterm>
      <primary>lseg</primary>
     </indexterm>
@@ -3343,6 +3192,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
      <primary>line segment</primary>
     </indexterm>
 
+&common;
     <para>
      Line segments (<type>lseg</type>) are represented by pairs of points.
      Values of type <type>lseg</type> are specified using any of the following
@@ -3377,6 +3227,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
     <indexterm>
      <primary>rectangle</primary>
     </indexterm>
+
 &common;
     <para>
      Boxes are represented by pairs of points that are opposite
@@ -3414,6 +3265,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
     <indexterm>
      <primary>path (data type)</primary>
     </indexterm>
+
 &common;
     <para>
      Paths are represented by lists of connected points. Paths can be
@@ -3453,6 +3305,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
     <indexterm>
      <primary>polygon</primary>
     </indexterm>
+
 &common;
     <para>
      Polygons are represented by lists of points (the vertexes of the
@@ -3486,6 +3339,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
     <indexterm>
      <primary>circle</primary>
     </indexterm>
+
 &common;
     <para>
      Circles are represented by a center point and radius.
@@ -3519,14 +3373,10 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
     <primary>network</primary>
     <secondary>data types</secondary>
    </indexterm>
+
 &common;
    <para>
-<!## PG>
     <productname>PostgreSQL</> offers data types to store IPv4, IPv6, and MAC
-<!## end>
-<!## XC>
-    <productname>PostgreSQL</> inherits data types to store IPv4, IPv6, and MAC
-<!## end>
     addresses, as shown in <xref linkend="datatype-net-types-table">.  It
     is better to use these types instead of plain text types to store
     network addresses, because
@@ -3582,6 +3432,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
     <indexterm>
      <primary>inet (data type)</primary>
     </indexterm>
+
 &common;
     <para>
      The <type>inet</type> type holds an IPv4 or IPv6 host address, and
@@ -3619,6 +3470,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
     <indexterm>
      <primary>cidr</primary>
     </indexterm>
+
 &common;
     <para>
      The <type>cidr</type> type holds an IPv4 or IPv6 network specification.
@@ -3738,6 +3590,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
 
    <sect2 id="datatype-inet-vs-cidr">
     <title><type>inet</type> vs. <type>cidr</type></title>
+
 &common;
     <para>
     The essential difference between <type>inet</type> and <type>cidr</type>
@@ -3765,6 +3618,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
      <primary>MAC address</primary>
      <see>macaddr</see>
     </indexterm>
+
 &common;
     <para>
      The <type>macaddr</> type stores MAC addresses, known for example
@@ -3792,13 +3646,8 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
      as the canonical form for MAC addresses, and specifies the first
      form (with colons) as the bit-reversed notation, so that
      08-00-2b-01-02-03 = 01:00:4D:08:04:0C.  This convention is widely
-     ignored nowadays, and it is only relevant for obsolete network
-<!## PG>
+     ignored nowadays, and it is relevant only for obsolete network
      protocols (such as Token Ring).  PostgreSQL makes no provisions
-<!## end>
-<!## XC>
-     protocols (such as Token Ring).  Postgres-XC makes no provisions
-<!## end>
      for bit reversal, and all accepted formats use the canonical LSB
      order.
     </para>
@@ -3817,6 +3666,7 @@ SELECT person.name, holidays.num_weeks FROM person, holidays
     <primary>bit string</primary>
     <secondary>data type</secondary>
    </indexterm>
+
 &common;
    <para>
     Bit strings are strings of 1's and 0's.  They can be used to store
@@ -3898,14 +3748,10 @@ SELECT * FROM test;
     <primary>text search</primary>
     <secondary>data types</secondary>
    </indexterm>
+
 &common;
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> provides two data types that
-<!## end>
-<!## PG>
-    <productname>Postgres-XC</productname> inherits two data types that
-<!## end>
     are designed to support full text search, which is the activity of
     searching through a collection of natural-language <firstterm>documents</>
     to locate those that best match a <firstterm>query</>.
@@ -3923,6 +3769,7 @@ SELECT * FROM test;
     <indexterm>
      <primary>tsvector (data type)</primary>
     </indexterm>
+
 &common;
     <para>
      A <type>tsvector</type> value is a sorted list of distinct
@@ -4033,6 +3880,7 @@ SELECT to_tsvector('english', 'The Fat Rats');
     <indexterm>
      <primary>tsquery (data type)</primary>
     </indexterm>
+
 &common;
     <para>
      A <type>tsquery</type> value stores lexemes that are to be
@@ -4096,7 +3944,7 @@ SELECT to_tsvector( 'postgraduate' ) @@ to_tsquery( 'postgres:*' );
  t
 (1 row)
 </programlisting>
-     because <literal>postgres</> gets stemmed to <literal>postgr</>: 
+     because <literal>postgres</> gets stemmed to <literal>postgr</>:
 <programlisting>
 SELECT to_tsquery('postgres:*');
  to_tsquery 
@@ -4132,6 +3980,7 @@ SELECT to_tsquery('Fat:ab &amp; Cats');
    <indexterm zone="datatype-uuid">
     <primary>UUID</primary>
    </indexterm>
+
 &common;
    <para>
     The data type <type>uuid</type> stores Universally Unique Identifiers
@@ -4155,12 +4004,7 @@ SELECT to_tsquery('Fat:ab &amp; Cats');
 <programlisting>
 a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11
 </programlisting>
-<!## PG>
     <productname>PostgreSQL</productname> also accepts the following
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> also accepts the following
-<!## end>
     alternative forms for input:
     use of upper-case digits, the standard format surrounded by
     braces, omitting some or all hyphens, adding a hyphen after any
@@ -4176,12 +4020,7 @@ a0ee-bc99-9c0b-4ef8-bb6d-6bb9-bd38-0a11
    </para>
 
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> provides storage and comparison
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> provides storage and comparison
-<!## end>
     functions for UUIDs, but the core database does not include any
     function for generating UUIDs, because no single algorithm is well
     suited for every application.  The <xref
@@ -4198,6 +4037,7 @@ a0ee-bc99-9c0b-4ef8-bb6d-6bb9-bd38-0a11
    <indexterm zone="datatype-xml">
     <primary>XML</primary>
    </indexterm>
+
 &common;
    <para>
     The <type>xml</type> data type can be used to store XML data.  Its
@@ -4237,12 +4077,7 @@ XMLPARSE (DOCUMENT '<?xml version="1.0"?><book><title>Manual</title><chapter>...
 XMLPARSE (CONTENT 'abc<foo>bar</foo><bar>foo</bar>')
 ]]></programlisting>
     While this is the only way to convert character strings into XML
-<!## PG>
     values according to the SQL standard, the PostgreSQL-specific
-<!## end>
-<!## XC>
-    values according to the SQL standard, the Postgres-XC-specific
-<!## end>
     syntaxes:
 <programlisting><![CDATA[
 xml '<foo>bar</foo>'
@@ -4271,12 +4106,7 @@ XMLSERIALIZE ( { DOCUMENT | CONTENT } <replaceable>value</replaceable> AS <repla
     <type>character</type>, <type>character varying</type>, or
     <type>text</type> (or an alias for one of those).  Again, according
     to the SQL standard, this is the only way to convert between type
-<!## PG>
     <type>xml</type> and character types, but PostgreSQL also allows
-<!## end>
-<!## XC>
-    <type>xml</type> and character types, but Postgres-XC also allows
-<!## end>
     you to simply cast the value.
    </para>
 
@@ -4292,12 +4122,7 @@ XMLSERIALIZE ( { DOCUMENT | CONTENT } <replaceable>value</replaceable> AS <repla
 <synopsis>
 SET XML OPTION { DOCUMENT | CONTENT };
 </synopsis>
-<!## PG>
     or the more PostgreSQL-like syntax
-<!## end>
-<!## XC>
-    or the more Postgres-XC-like syntax
-<!## end>
 <synopsis>
 SET xmloption TO { DOCUMENT | CONTENT };
 </synopsis>
@@ -4324,12 +4149,7 @@ SET xmloption TO { DOCUMENT | CONTENT };
     Care must be taken when dealing with multiple character encodings
     on the client, server, and in the XML data passed through them.
     When using the text mode to pass queries to the server and query
-<!## PG>
     results to the client (which is the normal mode), PostgreSQL
-<!## end>
-<!## XC>
-    results to the client (which is the normal mode), Postgres-XC
-<!## end>
     converts all character data passed between the client and the
     server and vice versa to the character encoding of the respective
     end; see <xref linkend="multibyte">.  This includes string
@@ -4358,24 +4178,14 @@ SET xmloption TO { DOCUMENT | CONTENT };
     is performed, so the situation is different.  In this case, an
     encoding declaration in the XML data will be observed, and if it
     is absent, the data will be assumed to be in UTF-8 (as required by
-<!## PG>
     the XML standard; note that PostgreSQL does not support UTF-16).
-<!## end>
-<!## XC>
-    the XML standard; note that Postgres-XC does not support UTF-16).
-<!## end>
     On output, data will have an encoding declaration
     specifying the client encoding, unless the client encoding is
     UTF-8, in which case it will be omitted.
    </para>
 
    <para>
-<!## PG>
     Needless to say, processing XML data with PostgreSQL will be less
-<!## end>
-<!## XC>
-    Needless to say, processing XML data with Postgres-XC will be less
-<!## end>
     error-prone and more efficient if the XML data encoding, client encoding,
     and server encoding are the same.  Since XML data is internally
     processed in UTF-8, computations will be most efficient if the
@@ -4393,6 +4203,7 @@ SET xmloption TO { DOCUMENT | CONTENT };
 
    <sect2>
    <title>Accessing XML Values</title>
+
 &common;
    <para>
     The <type>xml</type> data type is unusual in that it does not
@@ -4418,27 +4229,49 @@ SET xmloption TO { DOCUMENT | CONTENT };
    </para>
 
    <para>
-<!## PG>
     The text-search functionality in PostgreSQL can also be used to speed
-<!## end>
-<!## XC>
-    The text-search functionality in Postgres-XC can also be used to speed
-<!## end>
     up full-document searches of XML data.  The necessary
-<!## PG>
     preprocessing support is, however, not yet available in the PostgreSQL
-<!## end>
-<!## XC>
-    preprocessing support is, however, not yet available in the Postgres-XC
-<!## end>
     distribution.
    </para>
    </sect2>
   </sect1>
 
+  <sect1 id="datatype-json">
+   <title><acronym>JSON</> Type</title>
+
+   <indexterm zone="datatype-json">
+    <primary>JSON</primary>
+   </indexterm>
+
+&common;
+   <para>
+    The <type>json</type> data type can be used to store JSON (JavaScript
+    Object Notation) data, as specified in <ulink
+    url="http://www.ietf.org/rfc/rfc4627.txt">RFC 4627</ulink>.  Such
+    data can also be stored as <type>text</type>, but the
+    <type>json</type> data type has the advantage of checking that each
+    stored value is a valid JSON value.  There are also related support
+    functions available; see <xref linkend="functions-json">.
+   </para>
+
+   <para>
+    <productname>PostgreSQL</productname> allows only one server encoding
+    per database.  It is therefore not possible for JSON to conform rigidly
+    to the specification unless the server encoding is UTF-8.  Attempts to
+    directly include characters which cannot be represented in the server
+    encoding will fail; conversely, characters which can be represented in
+    the server encoding but not in UTF-8 will be allowed.
+    <literal>\uXXXX</literal> escapes are allowed regardless of the server
+    encoding, and are checked only for syntactic correctness.
+   </para>
+  </sect1>
+
   &array;
 
   &rowtypes;
+
+  &rangetypes;
 
   <sect1 id="datatype-oid">
    <title>Object Identifier Types</title>
@@ -4495,15 +4328,11 @@ SET xmloption TO { DOCUMENT | CONTENT };
    <indexterm zone="datatype-oid">
     <primary>tid</primary>
    </indexterm>
+
 &common;
    <para>
     Object identifiers (OIDs) are used internally by
-<!## PG>
     <productname>PostgreSQL</productname> as primary keys for various
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> as primary keys for various
-<!## end>
     system tables.  OIDs are not added to user-created tables, unless
     <literal>WITH OIDS</literal> is specified when the table is
     created, or the <xref linkend="guc-default-with-oids">
@@ -4656,12 +4485,7 @@ SELECT * FROM pg_attribute
     (such as a column default expression or view), it creates a dependency
     on the referenced object.  For example, if a column has a default
     expression <literal>nextval('my_seq'::regclass)</>,
-<!## PG>
     <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname>
-<!## end>
     understands that the default expression depends on the sequence
     <literal>my_seq</>; the system will not let the sequence be dropped
     without first removing the default expression.
@@ -4691,13 +4515,6 @@ SELECT * FROM pg_attribute
     (The system columns are further explained in <xref
     linkend="ddl-system-columns">.)
    </para>
-<!## XC>
-   <para>
-    Please note that <productname>Postgres-XC</> enforces OID identity only locally.
-    Different object at different Coordinator or Datanode may be assigned the same
-    OID value.
-   </para>
-<!## end>
   </sect1>
 
   <sect1 id="datatype-pseudo">
@@ -4728,6 +4545,10 @@ SELECT * FROM pg_attribute
    </indexterm>
 
    <indexterm zone="datatype-pseudo">
+    <primary>anyrange</primary>
+   </indexterm>
+
+   <indexterm zone="datatype-pseudo">
     <primary>void</primary>
    </indexterm>
 
@@ -4754,14 +4575,10 @@ SELECT * FROM pg_attribute
    <indexterm zone="datatype-pseudo">
     <primary>opaque</primary>
    </indexterm>
+
 &common;
    <para>
-<!## PG>
     The <productname>PostgreSQL</productname> type system contains a
-<!## end>
-<!## XC>
-    The <productname>Postgres-XC</productname> type system contains a
-<!## end>
     number of special-purpose entries that are collectively called
     <firstterm>pseudo-types</>.  A pseudo-type cannot be used as a
     column data type, but it can be used to declare a function's
@@ -4790,14 +4607,20 @@ SELECT * FROM pg_attribute
        </row>
 
        <row>
+        <entry><type>anyelement</></entry>
+        <entry>Indicates that a function accepts any data type
+        (see <xref linkend="extend-types-polymorphic">).</entry>
+       </row>
+
+       <row>
         <entry><type>anyarray</></entry>
         <entry>Indicates that a function accepts any array data type
         (see <xref linkend="extend-types-polymorphic">).</entry>
        </row>
 
        <row>
-        <entry><type>anyelement</></entry>
-        <entry>Indicates that a function accepts any data type
+        <entry><type>anynonarray</></entry>
+        <entry>Indicates that a function accepts any non-array data type
         (see <xref linkend="extend-types-polymorphic">).</entry>
        </row>
 
@@ -4809,9 +4632,10 @@ SELECT * FROM pg_attribute
        </row>
 
        <row>
-        <entry><type>anynonarray</></entry>
-        <entry>Indicates that a function accepts any non-array data type
-        (see <xref linkend="extend-types-polymorphic">).</entry>
+        <entry><type>anyrange</></entry>
+        <entry>Indicates that a function accepts any range data type
+        (see <xref linkend="extend-types-polymorphic"> and
+        <xref linkend="rangetypes">).</entry>
        </row>
 
        <row>
@@ -4871,8 +4695,9 @@ SELECT * FROM pg_attribute
     languages all forbid use of a pseudo-type as argument type, and allow
     only <type>void</> and <type>record</> as a result type (plus
     <type>trigger</> when the function is used as a trigger).  Some also
-    support polymorphic functions using the types <type>anyarray</>,
-    <type>anyelement</>, <type>anyenum</>, and <type>anynonarray</>.
+    support polymorphic functions using the types <type>anyelement</>,
+    <type>anyarray</>, <type>anynonarray</>, <type>anyenum</>, and
+    <type>anyrange</>.
    </para>
 
    <para>

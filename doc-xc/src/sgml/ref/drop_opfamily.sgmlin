@@ -29,7 +29,6 @@ DROP OPERATOR FAMILY [ IF EXISTS ] <replaceable class="PARAMETER">name</replacea
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP OPERATOR FAMILY</command> drops an existing operator family.
    To execute this command you must be the owner of the operator family.
@@ -47,6 +46,7 @@ DROP OPERATOR FAMILY [ IF EXISTS ] <replaceable class="PARAMETER">name</replacea
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
 
    <varlistentry>
@@ -117,6 +117,7 @@ DROP OPERATOR FAMILY float_ops USING btree;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP OPERATOR FAMILY</command> statement in the
    SQL standard.

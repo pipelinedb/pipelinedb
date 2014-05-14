@@ -27,6 +27,8 @@
 #include "pgxc/locator.h"
 #include "pgxc/nodemgr.h"
 #include "pgxc/pgxc.h"
+#include "access/htup_details.h"
+#include "pg_config.h"
 
 /*
  * How many times should we try to find a unique indetifier
@@ -490,6 +492,7 @@ PgxcNodeCreate(CreateNodeStmt *stmt)
 	bool		is_primary = false;
 	bool		is_preferred = false;
 	Datum		node_id;
+	Oid			nodeOid;
 
 	/* Only a DB administrator can add nodes */
 	if (!superuser())
@@ -535,8 +538,8 @@ PgxcNodeCreate(CreateNodeStmt *stmt)
 	 */
 	if (node_port == 0)
 	{
-		node_port = 5432;
-		elog(LOG, "PGXC node %s: Applying default port value: %d",
+		node_port = DEF_PGPORT;
+		elog(NOTICE, "PGXC node %s: Applying default port value: %d",
 			 node_name, node_port);
 	}
 
@@ -544,7 +547,7 @@ PgxcNodeCreate(CreateNodeStmt *stmt)
 	if (!node_host)
 	{
 		node_host = strdup("localhost");
-		elog(LOG, "PGXC node %s: Applying default host value: %s",
+		elog(NOTICE, "PGXC node %s: Applying default host value: %s",
 			 node_name, node_host);
 	}
 
@@ -575,11 +578,14 @@ PgxcNodeCreate(CreateNodeStmt *stmt)
 	htup = heap_form_tuple(pgxcnodesrel->rd_att, values, nulls);
 
 	/* Insert tuple in catalog */
-	simple_heap_insert(pgxcnodesrel, htup);
+	nodeOid = simple_heap_insert(pgxcnodesrel, htup);
 
 	CatalogUpdateIndexes(pgxcnodesrel, htup);
 
 	heap_close(pgxcnodesrel, RowExclusiveLock);
+
+	if (is_primary)
+		primary_data_node = nodeOid;
 }
 
 /*
@@ -596,6 +602,9 @@ PgxcNodeAlter(AlterNodeStmt *stmt)
 	int			node_port;
 	bool		is_preferred;
 	bool		is_primary;
+	bool		was_primary;
+	bool		primary_off = false;
+	Oid			new_primary = InvalidOid;
 	HeapTuple	oldtup, newtup;
 	Oid			nodeOid = get_pgxc_nodeoid(node_name);
 	Relation	rel;
@@ -632,7 +641,7 @@ PgxcNodeAlter(AlterNodeStmt *stmt)
 	node_host = get_pgxc_nodehost(nodeOid);
 	node_port = get_pgxc_nodeport(nodeOid);
 	is_preferred = is_pgxc_nodepreferred(nodeOid);
-	is_primary = is_pgxc_nodeprimary(nodeOid);
+	is_primary = was_primary = is_pgxc_nodeprimary(nodeOid);
 	node_type = get_pgxc_nodetype(nodeOid);
 	node_type_old = node_type;
 	node_id = get_pgxc_node_id(nodeOid);
@@ -649,11 +658,22 @@ PgxcNodeAlter(AlterNodeStmt *stmt)
 	 */
 	if (is_primary &&
 		OidIsValid(primary_data_node) &&
-		node_id != primary_data_node)
+		nodeOid != primary_data_node)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("PGXC node %s: two nodes cannot be primary",
 						node_name)));
+	/*
+	 * If this node is a primary and the statement says primary = false,
+	 * we need to invalidate primary_data_node when the whole operation
+	 * is successful.
+	 */
+	if (was_primary && !is_primary &&
+		OidIsValid(primary_data_node) &&
+		nodeOid == primary_data_node)
+		primary_off = true;
+	else if (is_primary)
+		new_primary = nodeOid;
 
 	/* Check type dependency */
 	if (node_type_old == PGXC_NODE_COORDINATOR &&
@@ -696,6 +716,12 @@ PgxcNodeAlter(AlterNodeStmt *stmt)
 	/* Update indexes */
 	CatalogUpdateIndexes(rel, newtup);
 
+	/* Invalidate primary_data_node if needed */
+	if (primary_off)
+		primary_data_node = InvalidOid;
+	/* Update primary datanode if needed */
+	if (OidIsValid(new_primary))
+		primary_data_node = new_primary;
 	/* Release lock at Commit */
 	heap_close(rel, NoLock);
 }
@@ -713,6 +739,7 @@ PgxcNodeRemove(DropNodeStmt *stmt)
 	HeapTuple	tup;
 	const char	*node_name = stmt->node_name;
 	Oid		noid = get_pgxc_nodeoid(node_name);
+	bool 		is_primary;
 
 	/* Only a DB administrator can remove cluster nodes */
 	if (!superuser())
@@ -745,6 +772,7 @@ PgxcNodeRemove(DropNodeStmt *stmt)
 	/* Delete the pgxc_node tuple */
 	relation = heap_open(PgxcNodeRelationId, RowExclusiveLock);
 	tup = SearchSysCache1(PGXCNODEOID, ObjectIdGetDatum(noid));
+	is_primary = is_pgxc_nodeprimary(noid);
 	if (!HeapTupleIsValid(tup)) /* should not happen */
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
@@ -755,5 +783,7 @@ PgxcNodeRemove(DropNodeStmt *stmt)
 
 	ReleaseSysCache(tup);
 
+	if (is_primary)
+		primary_data_node = InvalidOid;
 	heap_close(relation, RowExclusiveLock);
 }

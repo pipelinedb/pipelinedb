@@ -12,6 +12,10 @@
   examining what's happening in the shared buffer cache in real time.
  </para>
 
+ <indexterm>
+  <primary>pg_buffercache_pages</primary>
+ </indexterm>
+
  <para>
   The module provides a C function <function>pg_buffercache_pages</function>
   that returns a set of records, plus a view
@@ -84,7 +88,8 @@
       <entry><structfield>relforknumber</structfield></entry>
       <entry><type>smallint</type></entry>
       <entry></entry>
-      <entry>Fork number within the relation</entry>
+      <entry>Fork number within the relation;  see
+      <filename>include/storage/relfilenode.h</></entry>
      </row>
 
      <row>
@@ -98,7 +103,7 @@
       <entry><structfield>usagecount</structfield></entry>
       <entry><type>smallint</type></entry>
       <entry></entry>
-      <entry>Page LRU count</entry>
+      <entry>Clock-sweep access count</entry>
      </row>
 
     </tbody>

@@ -29,7 +29,6 @@ CREATE TABLESPACE <replaceable class="parameter">tablespace_name</replaceable> [
   <title>Description</title>
 
 &common;
-
   <para>
    <command>CREATE TABLESPACE</command> registers a new cluster-wide
    tablespace.  The tablespace name must be distinct from the name of any
@@ -54,6 +53,7 @@ CREATE TABLESPACE <replaceable class="parameter">tablespace_name</replaceable> [
  <refsect1>
   <title>Parameters</title>
 
+&common;
     <variablelist>
      <varlistentry>
       <term><replaceable class="parameter">tablespace_name</replaceable></term>
@@ -84,12 +84,7 @@ CREATE TABLESPACE <replaceable class="parameter">tablespace_name</replaceable> [
        <para>
         The directory that will be used for the tablespace. The directory
         should be empty and must be owned by the
-<!## PG>
         <productname>PostgreSQL</> system user.  The directory must be
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</> system user.  The directory must be
-<!## end>
         specified by an absolute path name.
        </para>
       </listitem>
@@ -100,6 +95,7 @@ CREATE TABLESPACE <replaceable class="parameter">tablespace_name</replaceable> [
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    Tablespaces are only supported on systems that support symbolic links.
   </para>
@@ -141,20 +137,15 @@ CREATE TABLESPACE dbspace LOCATION '/data/dbs';
    owned by user <literal>genevieve</>:
 <programlisting>
 CREATE TABLESPACE indexspace OWNER genevieve LOCATION '/data/indexes';
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
-<!## PG>
    <command>CREATE TABLESPACE</command> is a <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-   <command>CREATE TABLESPACE</command> is a <productname>Postgres-XC</>
-<!## end>
    extension.
   </para>
  </refsect1>

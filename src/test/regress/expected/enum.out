@@ -95,6 +95,28 @@ ERROR:  invalid enum label "plutoplutoplutoplutoplutoplutoplutoplutoplutoplutopl
 DETAIL:  Labels must be 63 characters or less.
 ALTER TYPE planets ADD VALUE 'pluto' AFTER 'zeus';
 ERROR:  "zeus" is not an existing enum label
+-- if not exists tests
+--  existing value gives error
+ALTER TYPE planets ADD VALUE 'mercury';
+ERROR:  enum label "mercury" already exists
+-- unless IF NOT EXISTS is specified
+ALTER TYPE planets ADD VALUE IF NOT EXISTS 'mercury';
+NOTICE:  enum label "mercury" already exists, skipping
+-- should be neptune, not mercury
+SELECT enum_last(NULL::planets);
+ enum_last 
+-----------
+ neptune
+(1 row)
+
+ALTER TYPE planets ADD VALUE IF NOT EXISTS 'pluto';
+-- should be pluto, i.e. the new value
+SELECT enum_last(NULL::planets);
+ enum_last 
+-----------
+ pluto
+(1 row)
+
 --
 -- Test inserting so many values that we have to renumber
 --
@@ -544,6 +566,30 @@ CREATE TYPE bogus AS ENUM('good', 'bad', 'ugly');
 CREATE TABLE enumtest_bogus_child(parent bogus REFERENCES enumtest_parent);
 ERROR:  relation "enumtest_parent" does not exist
 DROP TYPE bogus;
+--
+-- check transactional behaviour of ALTER TYPE ... ADD VALUE
+--
+CREATE TYPE bogus AS ENUM('good');
+-- check that we can't add new values to existing enums in a transaction
+BEGIN;
+ALTER TYPE bogus ADD VALUE 'bad';
+ERROR:  ALTER TYPE ... ADD cannot run inside a transaction block
+COMMIT;
+-- check that we recognize the case where the enum already existed but was
+-- modified in the current txn
+BEGIN;
+ALTER TYPE bogus RENAME TO bogon;
+ALTER TYPE bogon ADD VALUE 'bad';
+ERROR:  ALTER TYPE ... ADD cannot run inside a transaction block
+ROLLBACK;
+DROP TYPE bogus;
+-- check that we *can* add new values to existing enums in a transaction,
+-- if the type is new as well
+BEGIN;
+CREATE TYPE bogus AS ENUM();
+ALTER TYPE bogus ADD VALUE 'good';
+ALTER TYPE bogus ADD VALUE 'ugly';
+ROLLBACK;
 --
 -- Cleanup
 --

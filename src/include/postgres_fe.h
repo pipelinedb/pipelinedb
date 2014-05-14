@@ -8,7 +8,7 @@
  * postgres.h.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1995, Regents of the University of California
  *
  * src/include/postgres_fe.h
@@ -23,5 +23,7 @@
 #endif
 
 #include "c.h"
+
+#include "common/fe_memutils.h"
 
 #endif   /* POSTGRES_FE_H */

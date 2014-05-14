@@ -1744,9 +1744,6 @@ select trap_matching_test(0);
 select trap_matching_test(100000);
 select trap_matching_test(1);
 
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-
 create temp table foo (f1 int);
 
 create function blockme() returns int as $$
@@ -2942,7 +2939,119 @@ select * from returnqueryf() order by 1,2,3;
 drop function returnqueryf();
 drop table tabwithcols;
 
+--
+-- Tests for composite-type results
+--
+
+create type compostype as (x int, y varchar);
+
+-- test: use of variable of composite type in return statement
+create or replace function compos() returns compostype as $$
+declare
+  v compostype;
+begin
+  v := (1, 'hello');
+  return v;
+end;
+$$ language plpgsql;
+
+select compos();
+
+-- test: use of variable of record type in return statement
+create or replace function compos() returns compostype as $$
+declare
+  v record;
+begin
+  v := (1, 'hello'::varchar);
+  return v;
+end;
+$$ language plpgsql;
+
+select compos();
+
+-- test: use of row expr in return statement
+create or replace function compos() returns compostype as $$
+begin
+  return (1, 'hello'::varchar);
+end;
+$$ language plpgsql;
+
+select compos();
+
+-- this does not work currently (no implicit casting)
+create or replace function compos() returns compostype as $$
+begin
+  return (1, 'hello');
+end;
+$$ language plpgsql;
+
+select compos();
+
+-- ... but this does
+create or replace function compos() returns compostype as $$
+begin
+  return (1, 'hello')::compostype;
+end;
+$$ language plpgsql;
+
+select compos();
+
+drop function compos();
+
+-- test: return a row expr as record.
+create or replace function composrec() returns record as $$
+declare
+  v record;
+begin
+  v := (1, 'hello');
+  return v;
+end;
+$$ language plpgsql;
+
+select composrec();
+
+-- test: return row expr in return statement.
+create or replace function composrec() returns record as $$
+begin
+  return (1, 'hello');
+end;
+$$ language plpgsql;
+
+select composrec();
+
+drop function composrec();
+
+-- test: row expr in RETURN NEXT statement.
+create or replace function compos() returns setof compostype as $$
+begin
+  for i in 1..3
+  loop
+    return next (1, 'hello'::varchar);
+  end loop;
+  return next null::compostype;
+  return next (2, 'goodbye')::compostype;
+end;
+$$ language plpgsql;
+
+select * from compos();
+
+drop function compos();
+
+-- test: use invalid expr in return statement.
+create or replace function compos() returns compostype as $$
+begin
+  return 1 + 1;
+end;
+$$ language plpgsql;
+
+select compos();
+
+drop function compos();
+drop type compostype;
+
+--
 -- Tests for 8.4's new RAISE features
+--
 
 create or replace function raise_test() returns void as $$
 begin
@@ -3154,6 +3263,38 @@ $$ language plpgsql;
 select raise_test();
 
 drop function raise_test();
+
+-- test passing column_name, constraint_name, datatype_name, table_name
+-- and schema_name error fields
+
+create or replace function stacked_diagnostics_test() returns void as $$
+declare _column_name text;
+        _constraint_name text;
+        _datatype_name text;
+        _table_name text;
+        _schema_name text;
+begin
+  raise exception using
+    column = '>>some column name<<',
+    constraint = '>>some constraint name<<',
+    datatype = '>>some datatype name<<',
+    table = '>>some table name<<',
+    schema = '>>some schema name<<';
+exception when others then
+  get stacked diagnostics
+        _column_name = column_name,
+        _constraint_name = constraint_name,
+        _datatype_name = pg_datatype_name,
+        _table_name = table_name,
+        _schema_name = schema_name;
+  raise notice 'column %, constraint %, type %, table %, schema %',
+    _column_name, _constraint_name, _datatype_name, _table_name, _schema_name;
+end;
+$$ language plpgsql;
+
+select stacked_diagnostics_test();
+
+drop function stacked_diagnostics_test();
 
 -- test CASE statement
 
@@ -3429,6 +3570,19 @@ rollback;
 
 drop function error2(p_name_table text);
 drop function error1(text);
+
+-- Test for consistent reporting of error context
+
+create function fail() returns int language plpgsql as $$
+begin
+  return 1/0;
+end
+$$;
+
+select fail();
+select fail();
+
+drop function fail();
 
 -- Test handling of string literals.
 

@@ -17,7 +17,7 @@
  * append relations, and thenceforth share code with the UNION ALL case.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -28,8 +28,10 @@
  */
 #include "postgres.h"
 
+#include <limits.h>
 
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "catalog/pg_inherits_fn.h"
 #include "catalog/pg_type.h"
@@ -236,6 +238,9 @@ recurse_set_operations(Node *setOp, PlannerInfo *root,
 		 */
 		rel = build_simple_rel(root, rtr->rtindex, RELOPT_BASEREL);
 
+		/* plan_params should not be in use in current query level */
+		Assert(root->plan_params == NIL);
+
 		/*
 		 * Generate plan for primitive subquery
 		 */
@@ -247,6 +252,13 @@ recurse_set_operations(Node *setOp, PlannerInfo *root,
 		/* Save subroot and subplan in RelOptInfo for setrefs.c */
 		rel->subplan = subplan;
 		rel->subroot = subroot;
+
+		/*
+		 * It should not be possible for the primitive query to contain any
+		 * cross-references to other primitive queries in the setop tree.
+		 */
+		if (root->plan_params)
+			elog(ERROR, "unexpected outer reference in set operation subquery");
 
 		/*
 		 * Estimate number of groups if caller wants it.  If the subquery used
@@ -970,7 +982,7 @@ generate_setop_tlist(List *colTypes, List *colCollations,
 											exprType(expr),
 											exprTypmod(expr),
 											colColl,
-											COERCE_DONTCARE);
+											COERCE_IMPLICIT_CAST);
 		}
 
 		tle = makeTargetEntry((Expr *) expr,
@@ -987,7 +999,7 @@ generate_setop_tlist(List *colTypes, List *colCollations,
 		expr = (Node *) makeConst(INT4OID,
 								  -1,
 								  InvalidOid,
-								  sizeof(int4),
+								  sizeof(int32),
 								  Int32GetDatum(flag),
 								  false,
 								  true);
@@ -1746,6 +1758,7 @@ adjust_appendrel_attrs_mutator(Node *node,
 	}
 	/* Shouldn't need to handle planner auxiliary nodes here */
 	Assert(!IsA(node, SpecialJoinInfo));
+	Assert(!IsA(node, LateralJoinInfo));
 	Assert(!IsA(node, AppendRelInfo));
 	Assert(!IsA(node, PlaceHolderInfo));
 	Assert(!IsA(node, MinMaxAggInfo));

@@ -46,6 +46,8 @@ endif
 
 override XSLTPROCFLAGS += --stringparam pg.version '$(VERSION)'
 
+DBTOEPUB ?= dbtoepub
+
 
 GENERATED_SGML = bookindex.sgml version.sgml \
 	features-supported.sgml features-unsupported.sgml errcodes-table.sgml
@@ -255,8 +257,12 @@ postgres.xml: $(srcdir)/postgres.sgml $(ALMOSTALLSGML)
 	rm postgres.xmltmp
 # ' hello Emacs
 
-xslthtml: stylesheet.xsl postgres.xml
+xslthtml: xslthtml-stamp
+
+xslthtml-stamp: stylesheet.xsl postgres.xml
 	$(XSLTPROC) $(XSLTPROCFLAGS) $(XSLTPROC_HTML_FLAGS) $^
+	cp $(srcdir)/stylesheet.css html/
+	touch $@
 
 htmlhelp: stylesheet-hh.xsl postgres.xml
 	$(XSLTPROC) $(XSLTPROCFLAGS) $^
@@ -266,6 +272,10 @@ htmlhelp: stylesheet-hh.xsl postgres.xml
 
 %-US.fo: stylesheet-fo.xsl %.xml
 	$(XSLTPROC) $(XSLTPROCFLAGS) --stringparam paper.type USletter -o $@ $^
+
+epub: postgres.epub
+postgres.epub: postgres.xml
+	$(DBTOEPUB) $<
 
 
 ##
@@ -381,6 +391,8 @@ clean:
 	rm -f HTML.index $(GENERATED_SGML)
 # XSLT
 	rm -f postgres.xml postgres.xmltmp htmlhelp.hhp toc.hhc index.hhk *.fo
+# EPUB
+	rm -f postgres.epub
 # Texinfo
 	rm -f *.texixml *.texi *.info db2texi.refs
 

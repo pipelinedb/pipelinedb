@@ -3,7 +3,7 @@
  * fastpath.c
  *	  routines to handle function requests from the frontend
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -20,7 +20,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/objectaccess.h"
 #include "catalog/pg_proc.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
@@ -354,11 +356,13 @@ HandleFunctionRequest(StringInfo msgBuf)
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, ACL_KIND_NAMESPACE,
 					   get_namespace_name(fip->namespace));
+	InvokeNamespaceSearchHook(fip->namespace, true);
 
 	aclresult = pg_proc_aclcheck(fid, GetUserId(), ACL_EXECUTE);
 	if (aclresult != ACLCHECK_OK)
 		aclcheck_error(aclresult, ACL_KIND_PROC,
 					   get_func_name(fid));
+	InvokeFunctionExecuteHook(fid);
 
 	/*
 	 * Prepare function call info block and insert arguments.

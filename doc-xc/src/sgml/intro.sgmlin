@@ -3,8 +3,8 @@
 <preface id="preface">
  <title>Preface</title>
 
- <para>
 <!## PG>
+ <para>
   This book is the official documentation of
   <productname>PostgreSQL</productname>.  It has been written by the
   <productname>PostgreSQL</productname> developers and other
@@ -12,8 +12,11 @@
   <productname>PostgreSQL</productname> software.  It describes all
   the functionality that the current version of
   <productname>PostgreSQL</productname> officially supports.
+ </para>
 <!## end>
 <!## XC>
+&xconly;
+ <para>
   This book is the official documentation of
   <productname>Postgres-XC</productname>.  It has been written by the
   <productname>Postgres-XC</productname> developers and other
@@ -32,24 +35,23 @@
   <para>
    <productname>Postgres-XC</> inherits almost all major features from <productname>PostgreSQL</>.
    This document is also based upon <productname>PostgreSQL</> reference manual.
-<!## end>
  </para>
-
  <para>
-<!## PG>
+  <productname>Postgres-XC</productname> inherits many code and feature from
+  <productname>PostgreSQL</productname>.  This book is also based upon
+  <productname>PostgreSQL</productname> reference manual.
+  Because of this background, you may read <productname>PostgreSQL</productname> as
+  <productname>Postgres-XC</productname> if not described explicitly.
+ </para>
+<!## end>
+
+&common;
+ <para>
   To make the large amount of information about
   <productname>PostgreSQL</productname> manageable, this book has been
   organized in several parts.  Each part is targeted at a different
   class of users, or at users in different stages of their
   <productname>PostgreSQL</productname> experience:
-<!## end>
-<!## XC>
-  To make the large amount of information about
-  <productname>Postgres-XC</productname> manageable, this book has been
-  organized in several parts.  Each part is targeted at a different
-  class of users, or at users in different stages of their
-  <productname>Postgres-XC</productname> experience:
-<!## end>
 
   <itemizedlist>
    <listitem>
@@ -69,33 +71,18 @@
 
    <listitem>
     <para>
-<!## PG>
      <xref linkend="admin"> describes the installation and
      administration of the server.  Everyone who runs a
      <productname>PostgreSQL</productname> server, be it for private
      use or for others, should read this part.
-<!## end>
-<!## XC>
-     <xref linkend="admin"> describes the installation and
-     administration of the server.  Everyone who runs
-     <productname>Postgres-XC</productname> servers, be it for private
-     use or for others, should read this part.
-<!## end>
     </para>
    </listitem>
 
    <listitem>
     <para>
-<!## PG>
      <xref linkend="client-interfaces"> describes the programming
      interfaces for <productname>PostgreSQL</productname> client
      programs.
-<!## end>
-<!## XC>
-     <xref linkend="client-interfaces"> describes the programming
-     interfaces for <productname>Postgres-XC</productname> client
-     programs.
-<!## end>
     </para>
    </listitem>
 
@@ -112,22 +99,16 @@
    <listitem>
     <para>
      <xref linkend="reference"> contains reference information about
-     SQL commands, client and server programs.  This part supports the
-     other parts with structured information sorted by command or
+     SQL commands, client and server programs.  This part supports
+     the other parts with structured information sorted by command or
      program.
     </para>
    </listitem>
 
    <listitem>
     <para>
-<!## PG>
      <xref linkend="internals"> contains assorted information that might be of
      use to <productname>PostgreSQL</> developers.
-<!## end>
-<!## XC>
-     <xref linkend="internals"> contains assorted information that might be of
-     use to <productname>Postgres-XC</> developers.
-<!## end>
     </para>
    </listitem>
   </itemizedlist>
@@ -139,10 +120,13 @@
 <!## end>
 <!## XC>
   <title> What is <productname>Postgres-XC</productname>?</title>
-
+<!## end>
+<!## XC>
+&xconly;
   <sect2 id="whatis-in-short">
    <title>In short</title>
 
+&xconly;
    <para>
     Postgres-XC is an open source project to provide write-scalable,
     synchronous symmetric, transparent PostgreSQL cluster
@@ -205,6 +189,7 @@
   <sect2 id="whatis-xc-goal">
    <title>Postgres-XC's Goal</title>
 
+&xconly;
    <para>
     Ultimate goal of Postgres-XC is to provide synchronous
     multi-master PostgreSQL cluster with read/write scalability. That
@@ -259,6 +244,7 @@ from applications, which is known as "master" server in general. In Postgres-XC,
   <sect2 id="whatis-xc-key-components">
    <title>Postgres-XC Key Components</title>
 
+&xconly;
    <para>
     In this section, we will show main components of Postgres-XC.
    </para>
@@ -272,6 +258,7 @@ from applications, which is known as "master" server in general. In Postgres-XC,
    <sect3>
     <title>GTM (Global Transaction Manager)</title>
 
+&xconly;
     <para>
      GTM is a key component of Postgres-XC to provide consistent
      transaction management and tuple visibility control.
@@ -292,6 +279,7 @@ from applications, which is known as "master" server in general. In Postgres-XC,
    <sect3>
     <title>Coordinator</title>
 
+&xconly;
     <para>
      Coordinator is an interface to applications. It acts like
      conventional PostgreSQL backend process. However, Coordinator
@@ -309,6 +297,7 @@ from applications, which is known as "master" server in general. In Postgres-XC,
    <sect3>
     <title>Datanode</title>
 
+&xconly;
     <para>
      Datanode actually stores your data. Tables may be distributed
      among Datanodes, or replicated to all the Datanodes.
@@ -331,6 +320,7 @@ from applications, which is known as "master" server in general. In Postgres-XC,
   <sect2 id="whatis-xc-inherits-postgresql">
    <title><productname>Postgres-XC</productname> Inherits <productname>PostgreSQL</productname></title>
 
+&xconly;
    <para>
     <productname>Postgres-XC</productname> is an extension
     to <productname>PostgreSQL</productname> and inherits most of its
@@ -411,7 +401,6 @@ from applications, which is known as "master" server in general. In Postgres-XC,
 
 <!## end>
 
-
 <!## PG>
   <para>
    <productname>PostgreSQL</productname> is an object-relational
@@ -439,7 +428,7 @@ from applications, which is known as "master" server in general. In Postgres-XC,
      <simpara>triggers</simpara>
     </listitem>
     <listitem>
-     <simpara>views</simpara>
+     <simpara>updatable views</simpara>
     </listitem>
     <listitem>
      <simpara>transactional integrity</simpara>

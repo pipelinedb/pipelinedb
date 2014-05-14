@@ -4,19 +4,12 @@
  <title>Reference</title>
 
  <partintro>
-
 &common;
-
   <para>
    The entries in this Reference are meant to provide in reasonable
    length an authoritative, complete, and formal summary about their
    respective subjects.  More information about the use of
-<!## PG>
    <productname>PostgreSQL</productname>, in narrative, tutorial, or
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname>, in narrative, tutorial, or
-<!## end>
    example form, can be found in other parts of this book.  See the
    cross-references listed on each reference page.
   </para>
@@ -34,12 +27,7 @@
    <para>
     This part contains reference information for the
     <acronym>SQL</acronym> commands supported by
-<!## PG>
     <productname>PostgreSQL</productname>.  By <quote>SQL</quote> the
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname>.  By <quote>SQL</quote> the
-<!## end>
     language in general is meant; information about the standards
     conformance and compatibility of each command can be found on the
     respective reference page.
@@ -53,6 +41,7 @@
    &alterDatabase;
    &alterDefaultPrivileges;
    &alterDomain;
+   &alterEventTrigger;
    &alterExtension;
    &alterForeignDataWrapper;
    &alterForeignTable;
@@ -61,6 +50,7 @@
    &alterIndex;
    &alterLanguage;
    &alterLargeObject;
+   &alterMaterializedView;
 <!## XC>
    &alterNode;
 <!## end>
@@ -68,6 +58,7 @@
    &alterOperatorClass;
    &alterOperatorFamily;
    &alterRole;
+   &alterRule;
    &alterSchema;
    &alterSequence;
    &alterServer;
@@ -103,6 +94,7 @@
    &createConversion;
    &createDatabase;
    &createDomain;
+   &createEventTrigger;
    &createExtension;
    &createForeignDataWrapper;
    &createForeignTable;
@@ -110,6 +102,7 @@
    &createGroup;
    &createIndex;
    &createLanguage;
+   &createMaterializedView;
 <!## XC>
    &createNode;
    &createNodeGroup;
@@ -145,6 +138,7 @@
    &dropConversion;
    &dropDatabase;
    &dropDomain;
+   &dropEventTrigger;
    &dropExtension;
    &dropForeignDataWrapper;
    &dropForeignTable;
@@ -152,6 +146,7 @@
    &dropGroup;
    &dropIndex;
    &dropLanguage;
+   &dropMaterializedView;
 <!## XC>
    &dropNode;
    &dropNodeGroup;
@@ -193,6 +188,7 @@
    &prepare;
    &prepareTransaction;
    &reassignOwned;
+   &refreshMaterializedView;
    &reindex;
    &releaseSavepoint;
    &reset;
@@ -241,6 +237,14 @@
     applications is that they can be run on any host, independent of
     where the database server resides.
    </para>
+
+   <para>
+    When specified on the command line, user and database names have
+    their case preserved &mdash; the presence of spaces or special
+    characters might require quoting.  Table names and other identifiers
+    do not have their case preserved, except where documented, and
+    might require quoting.
+   </para>
   </partintro>
 
    &clusterdb;
@@ -255,6 +259,8 @@
    &pgConfig;
    &pgDump;
    &pgDumpall;
+   &pgIsready;
+   &pgReceivexlog;
    &pgRestore;
    &psqlRef;
    &reindexdb;

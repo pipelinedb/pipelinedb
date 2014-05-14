@@ -5,7 +5,7 @@
  *
  * Code originally contributed by Adriaan Joubert.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -16,7 +16,7 @@
 
 #include "postgres.h"
 
-#include "access/htup.h"
+#include "access/htup_details.h"
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
 #include "utils/array.h"

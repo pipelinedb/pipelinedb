@@ -3,7 +3,7 @@
  * allpaths.c
  *	  Routines to find possible search paths for processing a query
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -69,6 +69,9 @@ static void set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 static void generate_mergeappend_paths(PlannerInfo *root, RelOptInfo *rel,
 						   List *live_childrels,
 						   List *all_child_pathkeys);
+static Path *get_cheapest_parameterized_child_path(PlannerInfo *root,
+									  RelOptInfo *rel,
+									  Relids required_outer);
 static List *accumulate_append_subpath(List *subpaths, Path *path);
 static void set_dummy_rel_pathlist(RelOptInfo *rel);
 static void set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
@@ -83,13 +86,14 @@ static void set_worktable_pathlist(PlannerInfo *root, RelOptInfo *rel,
 					   RangeTblEntry *rte);
 static RelOptInfo *make_rel_from_joinlist(PlannerInfo *root, List *joinlist);
 static bool subquery_is_pushdown_safe(Query *subquery, Query *topquery,
-						  bool *differentTypes);
+						  bool *unsafeColumns);
 static bool recurse_pushdown_safe(Node *setOp, Query *topquery,
-					  bool *differentTypes);
+					  bool *unsafeColumns);
+static void check_output_expressions(Query *subquery, bool *unsafeColumns);
 static void compare_tlist_datatypes(List *tlist, List *colTypes,
-						bool *differentTypes);
+						bool *unsafeColumns);
 static bool qual_is_pushdown_safe(Query *subquery, Index rti, Node *qual,
-					  bool *differentTypes);
+					  bool *unsafeColumns);
 static void subquery_push_qual(Query *subquery,
 				   RangeTblEntry *rte, Index rti, Node *qual);
 static void recurse_push_qual(Node *setOp, Query *topquery,
@@ -254,8 +258,9 @@ set_rel_size(PlannerInfo *root, RelOptInfo *rel,
 			case RTE_SUBQUERY:
 
 				/*
-				 * Subqueries don't support parameterized paths, so just go
-				 * ahead and build their paths immediately.
+				 * Subqueries don't support making a choice between
+				 * parameterized and unparameterized paths, so just go ahead
+				 * and build their paths immediately.
 				 */
 				set_subquery_pathlist(root, rel, rti, rte);
 				break;
@@ -268,8 +273,9 @@ set_rel_size(PlannerInfo *root, RelOptInfo *rel,
 			case RTE_CTE:
 
 				/*
-				 * CTEs don't support parameterized paths, so just go ahead
-				 * and build their paths immediately.
+				 * CTEs don't support making a choice between parameterized
+				 * and unparameterized paths, so just go ahead and build their
+				 * paths immediately.
 				 */
 				if (rte->self_reference)
 					set_worktable_pathlist(root, rel, rte);
@@ -377,13 +383,21 @@ set_plain_rel_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 static void
 set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 {
+	Relids		required_outer;
+
+	/*
+	 * We don't support pushing join clauses into the quals of a seqscan, but
+	 * it could still have required parameterization due to LATERAL refs in
+	 * its tlist.
+	 */
+	required_outer = rel->lateral_relids;
 #ifdef PGXC
-	if (!create_plainrel_rqpath(root, rel, rte))
+	if (!create_plainrel_rqpath(root, rel, rte, required_outer))
 	{
 #endif
 
 	/* Consider sequential scan */
-	add_path(rel, create_seqscan_path(root, rel, NULL));
+	add_path(rel, create_seqscan_path(root, rel, required_outer));
 
 	/* Consider index scans */
 	create_index_paths(root, rel);
@@ -407,9 +421,6 @@ set_foreign_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 {
 	/* Mark rel with estimated output rows, width, etc */
 	set_foreign_size_estimates(root, rel);
-
-	/* Get FDW routine pointers for the rel */
-	rel->fdwroutine = GetFdwRoutineByRelId(rte->relid);
 
 	/* Let FDW adjust the size estimates, if it can */
 	rel->fdwroutine->GetForeignRelSize(root, rel, rte->relid);
@@ -545,10 +556,10 @@ set_append_rel_size(PlannerInfo *root, RelOptInfo *rel,
 		 * CE failed, so finish copying/modifying targetlist and join quals.
 		 *
 		 * Note: the resulting childrel->reltargetlist may contain arbitrary
-		 * expressions, which normally would not occur in a reltargetlist.
-		 * That is okay because nothing outside of this routine will look at
-		 * the child rel's reltargetlist.  We do have to cope with the case
-		 * while constructing attr_widths estimates below, though.
+		 * expressions, which otherwise would not occur in a reltargetlist.
+		 * Code that might be looking at an appendrel child must cope with
+		 * such.  (Normally, a reltargetlist would only include Vars and
+		 * PlaceHolderVars.)
 		 */
 		childrel->joininfo = (List *)
 			adjust_appendrel_attrs(root,
@@ -619,7 +630,8 @@ set_append_rel_size(PlannerInfo *root, RelOptInfo *rel,
 					int			pndx = parentvar->varattno - rel->min_attr;
 					int32		child_width = 0;
 
-					if (IsA(childvar, Var))
+					if (IsA(childvar, Var) &&
+						((Var *) childvar)->varno == childrel->relid)
 					{
 						int			cndx = ((Var *) childvar)->varattno - childrel->min_attr;
 
@@ -670,6 +682,7 @@ set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	int			parentRTindex = rti;
 	List	   *live_childrels = NIL;
 	List	   *subpaths = NIL;
+	bool		subpaths_valid = true;
 	List	   *all_child_pathkeys = NIL;
 	List	   *all_child_outers = NIL;
 	ListCell   *l;
@@ -709,14 +722,20 @@ set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 			continue;
 
 		/*
-		 * Child is live, so add its cheapest access path to the Append path
-		 * we are constructing for the parent.
+		 * Child is live, so add it to the live_childrels list for use below.
 		 */
-		subpaths = accumulate_append_subpath(subpaths,
-											 childrel->cheapest_total_path);
-
-		/* Remember which childrels are live, for logic below */
 		live_childrels = lappend(live_childrels, childrel);
+
+		/*
+		 * If child has an unparameterized cheapest-total path, add that to
+		 * the unparameterized Append path we are constructing for the parent.
+		 * If not, there's no workable unparameterized path.
+		 */
+		if (childrel->cheapest_total_path->param_info == NULL)
+			subpaths = accumulate_append_subpath(subpaths,
+											  childrel->cheapest_total_path);
+		else
+			subpaths_valid = false;
 
 		/*
 		 * Collect lists of all the available path orderings and
@@ -784,17 +803,20 @@ set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	}
 
 	/*
-	 * Next, build an unordered, unparameterized Append path for the rel.
-	 * (Note: this is correct even if we have zero or one live subpath due to
-	 * constraint exclusion.)
+	 * If we found unparameterized paths for all children, build an unordered,
+	 * unparameterized Append path for the rel.  (Note: this is correct even
+	 * if we have zero or one live subpath due to constraint exclusion.)
 	 */
-	add_path(rel, (Path *) create_append_path(rel, subpaths, NULL));
+	if (subpaths_valid)
+		add_path(rel, (Path *) create_append_path(rel, subpaths, NULL));
 
 	/*
-	 * Build unparameterized MergeAppend paths based on the collected list of
-	 * child pathkeys.
+	 * Also build unparameterized MergeAppend paths based on the collected
+	 * list of child pathkeys.
 	 */
-	generate_mergeappend_paths(root, rel, live_childrels, all_child_pathkeys);
+	if (subpaths_valid)
+		generate_mergeappend_paths(root, rel, live_childrels,
+								   all_child_pathkeys);
 
 	/*
 	 * Build Append paths for each parameterization seen among the child rels.
@@ -812,39 +834,29 @@ set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	foreach(l, all_child_outers)
 	{
 		Relids		required_outer = (Relids) lfirst(l);
-		bool		ok = true;
 		ListCell   *lcr;
 
 		/* Select the child paths for an Append with this parameterization */
 		subpaths = NIL;
+		subpaths_valid = true;
 		foreach(lcr, live_childrels)
 		{
 			RelOptInfo *childrel = (RelOptInfo *) lfirst(lcr);
-			Path	   *cheapest_total;
+			Path	   *subpath;
 
-			cheapest_total =
-				get_cheapest_path_for_pathkeys(childrel->pathlist,
-											   NIL,
-											   required_outer,
-											   TOTAL_COST);
-			Assert(cheapest_total != NULL);
-
-			/* Children must have exactly the desired parameterization */
-			if (!bms_equal(PATH_REQ_OUTER(cheapest_total), required_outer))
+			subpath = get_cheapest_parameterized_child_path(root,
+															childrel,
+															required_outer);
+			if (subpath == NULL)
 			{
-				cheapest_total = reparameterize_path(root, cheapest_total,
-													 required_outer, 1.0);
-				if (cheapest_total == NULL)
-				{
-					ok = false;
-					break;
-				}
+				/* failed to make a suitable path for this child */
+				subpaths_valid = false;
+				break;
 			}
-
-			subpaths = accumulate_append_subpath(subpaths, cheapest_total);
+			subpaths = accumulate_append_subpath(subpaths, subpath);
 		}
 
-		if (ok)
+		if (subpaths_valid)
 			add_path(rel, (Path *)
 					 create_append_path(rel, subpaths, required_outer));
 	}
@@ -918,7 +930,8 @@ generate_mergeappend_paths(PlannerInfo *root, RelOptInfo *rel,
 			{
 				cheapest_startup = cheapest_total =
 					childrel->cheapest_total_path;
-				Assert(cheapest_total != NULL);
+				/* Assert we do have an unparameterized path for this child */
+				Assert(cheapest_total->param_info == NULL);
 			}
 
 			/*
@@ -948,6 +961,79 @@ generate_mergeappend_paths(PlannerInfo *root, RelOptInfo *rel,
 															pathkeys,
 															NULL));
 	}
+}
+
+/*
+ * get_cheapest_parameterized_child_path
+ *		Get cheapest path for this relation that has exactly the requested
+ *		parameterization.
+ *
+ * Returns NULL if unable to create such a path.
+ */
+static Path *
+get_cheapest_parameterized_child_path(PlannerInfo *root, RelOptInfo *rel,
+									  Relids required_outer)
+{
+	Path	   *cheapest;
+	ListCell   *lc;
+
+	/*
+	 * Look up the cheapest existing path with no more than the needed
+	 * parameterization.  If it has exactly the needed parameterization, we're
+	 * done.
+	 */
+	cheapest = get_cheapest_path_for_pathkeys(rel->pathlist,
+											  NIL,
+											  required_outer,
+											  TOTAL_COST);
+	Assert(cheapest != NULL);
+	if (bms_equal(PATH_REQ_OUTER(cheapest), required_outer))
+		return cheapest;
+
+	/*
+	 * Otherwise, we can "reparameterize" an existing path to match the given
+	 * parameterization, which effectively means pushing down additional
+	 * joinquals to be checked within the path's scan.  However, some existing
+	 * paths might check the available joinquals already while others don't;
+	 * therefore, it's not clear which existing path will be cheapest after
+	 * reparameterization.	We have to go through them all and find out.
+	 */
+	cheapest = NULL;
+	foreach(lc, rel->pathlist)
+	{
+		Path	   *path = (Path *) lfirst(lc);
+
+		/* Can't use it if it needs more than requested parameterization */
+		if (!bms_is_subset(PATH_REQ_OUTER(path), required_outer))
+			continue;
+
+		/*
+		 * Reparameterization can only increase the path's cost, so if it's
+		 * already more expensive than the current cheapest, forget it.
+		 */
+		if (cheapest != NULL &&
+			compare_path_costs(cheapest, path, TOTAL_COST) <= 0)
+			continue;
+
+		/* Reparameterize if needed, then recheck cost */
+		if (!bms_equal(PATH_REQ_OUTER(path), required_outer))
+		{
+			path = reparameterize_path(root, path, required_outer, 1.0);
+			if (path == NULL)
+				continue;		/* failed to reparameterize this one */
+			Assert(bms_equal(PATH_REQ_OUTER(path), required_outer));
+
+			if (cheapest != NULL &&
+				compare_path_costs(cheapest, path, TOTAL_COST) <= 0)
+				continue;
+		}
+
+		/* We have a new best path */
+		cheapest = path;
+	}
+
+	/* Return the best path, or NULL if we found no suitable candidate */
+	return cheapest;
 }
 
 /*
@@ -1022,8 +1108,13 @@ has_multiple_baserels(PlannerInfo *root)
  * set_subquery_pathlist
  *		Build the (single) access path for a subquery RTE
  *
- * There's no need for a separate set_subquery_size phase, since we don't
- * support parameterized paths for subqueries.
+ * We don't currently support generating parameterized paths for subqueries
+ * by pushing join clauses down into them; it seems too expensive to re-plan
+ * the subquery multiple times to consider different alternatives.	So the
+ * subquery will have exactly one path.  (The path will be parameterized
+ * if the subquery contains LATERAL references, otherwise not.)  Since there's
+ * no freedom of action here, there's no need for a separate set_subquery_size
+ * phase: we just make the path right away.
  */
 static void
 set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
@@ -1031,7 +1122,8 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 {
 	Query	   *parse = root->parse;
 	Query	   *subquery = rte->subquery;
-	bool	   *differentTypes;
+	Relids		required_outer;
+	bool	   *unsafeColumns;
 	double		tuple_fraction;
 	PlannerInfo *subroot;
 	List	   *pathkeys;
@@ -1043,8 +1135,19 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	 */
 	subquery = copyObject(subquery);
 
-	/* We need a workspace for keeping track of set-op type coercions */
-	differentTypes = (bool *)
+	/*
+	 * If it's a LATERAL subquery, it might contain some Vars of the current
+	 * query level, requiring it to be treated as parameterized, even though
+	 * we don't support pushing down join quals into subqueries.
+	 */
+	required_outer = rel->lateral_relids;
+
+	/*
+	 * We need a workspace for keeping track of unsafe-to-reference columns.
+	 * unsafeColumns[i] is set TRUE if we've found that output column i of the
+	 * subquery is unsafe to use in a pushed-down qual.
+	 */
+	unsafeColumns = (bool *)
 		palloc0((list_length(subquery->targetList) + 1) * sizeof(bool));
 
 	/*
@@ -1061,10 +1164,9 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	 * pseudoconstant clauses; better to have the gating node above the
 	 * subquery.
 	 *
-	 * Also, if the sub-query has "security_barrier" flag, it means the
+	 * Also, if the sub-query has the "security_barrier" flag, it means the
 	 * sub-query originated from a view that must enforce row-level security.
-	 * We must not push down quals in order to avoid information leaks, either
-	 * via side-effects or error output.
+	 * Then we must not push down quals that contain leaky functions.
 	 *
 	 * Non-pushed-down clauses will get evaluated as qpquals of the
 	 * SubqueryScan node.
@@ -1073,7 +1175,7 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	 * push down a pushable qual, because it'd result in a worse plan?
 	 */
 	if (rel->baserestrictinfo != NIL &&
-		subquery_is_pushdown_safe(subquery, subquery, differentTypes))
+		subquery_is_pushdown_safe(subquery, subquery, unsafeColumns))
 	{
 		/* OK to consider pushing down individual quals */
 		List	   *upperrestrictlist = NIL;
@@ -1087,7 +1189,7 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 			if (!rinfo->pseudoconstant &&
 				(!rte->security_barrier ||
 				 !contain_leaky_functions(clause)) &&
-				qual_is_pushdown_safe(subquery, rti, clause, differentTypes))
+				qual_is_pushdown_safe(subquery, rti, clause, unsafeColumns))
 			{
 				/* Push it down */
 				subquery_push_qual(subquery, rte, rti, clause);
@@ -1101,7 +1203,7 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 		rel->baserestrictinfo = upperrestrictlist;
 	}
 
-	pfree(differentTypes);
+	pfree(unsafeColumns);
 
 	/*
 	 * We can safely pass the outer tuple_fraction down to the subquery if the
@@ -1119,6 +1221,9 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	else
 		tuple_fraction = root->tuple_fraction;
 
+	/* plan_params should not be in use in current query level */
+	Assert(root->plan_params == NIL);
+
 	/* Generate the plan for the subquery */
 	rel->subplan = subquery_planner(root->glob, subquery,
 									root,
@@ -1126,10 +1231,14 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 									&subroot);
 	rel->subroot = subroot;
 
+	/* Isolate the params needed by this specific subplan */
+	rel->subplan_params = root->plan_params;
+	root->plan_params = NIL;
+
 	/*
 	 * It's possible that constraint exclusion proved the subquery empty. If
 	 * so, it's convenient to turn it back into a dummy path so that we will
-	 * recognize appropriate optimizations at this level.
+	 * recognize appropriate optimizations at this query level.
 	 */
 	if (is_dummy_plan(rel->subplan))
 	{
@@ -1144,7 +1253,7 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 	pathkeys = convert_subquery_pathkeys(root, rel, subroot->query_pathkeys);
 
 	/* Generate appropriate path */
-	add_path(rel, create_subqueryscan_path(root, rel, pathkeys, NULL));
+	add_path(rel, create_subqueryscan_path(root, rel, pathkeys, required_outer));
 
 	/* Select cheapest path (pretty easy in this case...) */
 	set_cheapest(rel);
@@ -1157,8 +1266,17 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 static void
 set_function_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 {
+	Relids		required_outer;
+
+	/*
+	 * We don't support pushing join clauses into the quals of a function
+	 * scan, but it could still have required parameterization due to LATERAL
+	 * refs in the function expression.
+	 */
+	required_outer = rel->lateral_relids;
+
 	/* Generate appropriate path */
-	add_path(rel, create_functionscan_path(root, rel));
+	add_path(rel, create_functionscan_path(root, rel, required_outer));
 
 	/* Select cheapest path (pretty easy in this case...) */
 	set_cheapest(rel);
@@ -1171,8 +1289,17 @@ set_function_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 static void
 set_values_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 {
+	Relids		required_outer;
+
+	/*
+	 * We don't support pushing join clauses into the quals of a values scan,
+	 * but it could still have required parameterization due to LATERAL refs
+	 * in the values expressions.
+	 */
+	required_outer = rel->lateral_relids;
+
 	/* Generate appropriate path */
-	add_path(rel, create_valuesscan_path(root, rel));
+	add_path(rel, create_valuesscan_path(root, rel, required_outer));
 
 	/* Select cheapest path (pretty easy in this case...) */
 	set_cheapest(rel);
@@ -1183,7 +1310,7 @@ set_values_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
  *		Build the (single) access path for a non-self-reference CTE RTE
  *
  * There's no need for a separate set_cte_size phase, since we don't
- * support parameterized paths for CTEs.
+ * support join-qual-parameterized paths for CTEs.
  */
 static void
 set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
@@ -1194,6 +1321,7 @@ set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	int			ndx;
 	ListCell   *lc;
 	int			plan_id;
+	Relids		required_outer;
 
 	/*
 	 * Find the referenced CTE, and locate the plan previously made for it.
@@ -1232,8 +1360,15 @@ set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	/* Mark rel with estimated output rows, width, etc */
 	set_cte_size_estimates(root, rel, cteplan);
 
+	/*
+	 * We don't support pushing join clauses into the quals of a CTE scan, but
+	 * it could still have required parameterization due to LATERAL refs in
+	 * its tlist.
+	 */
+	required_outer = rel->lateral_relids;
+
 	/* Generate appropriate path */
-	add_path(rel, create_ctescan_path(root, rel));
+	add_path(rel, create_ctescan_path(root, rel, required_outer));
 
 	/* Select cheapest path (pretty easy in this case...) */
 	set_cheapest(rel);
@@ -1244,7 +1379,7 @@ set_cte_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
  *		Build the (single) access path for a self-reference CTE RTE
  *
  * There's no need for a separate set_worktable_size phase, since we don't
- * support parameterized paths for CTEs.
+ * support join-qual-parameterized paths for CTEs.
  */
 static void
 set_worktable_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
@@ -1252,6 +1387,7 @@ set_worktable_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	Plan	   *cteplan;
 	PlannerInfo *cteroot;
 	Index		levelsup;
+	Relids		required_outer;
 
 	/*
 	 * We need to find the non-recursive term's plan, which is in the plan
@@ -1276,8 +1412,16 @@ set_worktable_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	/* Mark rel with estimated output rows, width, etc */
 	set_cte_size_estimates(root, rel, cteplan);
 
+	/*
+	 * We don't support pushing join clauses into the quals of a worktable
+	 * scan, but it could still have required parameterization due to LATERAL
+	 * refs in its tlist.  (I'm not sure this is actually possible given the
+	 * restrictions on recursive references, but it's easy enough to support.)
+	 */
+	required_outer = rel->lateral_relids;
+
 	/* Generate appropriate path */
-	add_path(rel, create_worktablescan_path(root, rel));
+	add_path(rel, create_worktablescan_path(root, rel, required_outer));
 
 	/* Select cheapest path (pretty easy in this case...) */
 	set_cheapest(rel);
@@ -1485,17 +1629,19 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
  * 3. If the subquery contains EXCEPT or EXCEPT ALL set ops we cannot push
  * quals into it, because that could change the results.
  *
- * 4. For subqueries using UNION/UNION ALL/INTERSECT/INTERSECT ALL, we can
- * push quals into each component query, but the quals can only reference
- * subquery columns that suffer no type coercions in the set operation.
- * Otherwise there are possible semantic gotchas.  So, we check the
- * component queries to see if any of them have different output types;
- * differentTypes[k] is set true if column k has different type in any
- * component.
+ * In addition, we make several checks on the subquery's output columns
+ * to see if it is safe to reference them in pushed-down quals.  If output
+ * column k is found to be unsafe to reference, we set unsafeColumns[k] to
+ * TRUE, but we don't reject the subquery overall since column k might
+ * not be referenced by some/all quals.  The unsafeColumns[] array will be
+ * consulted later by qual_is_pushdown_safe().	It's better to do it this
+ * way than to make the checks directly in qual_is_pushdown_safe(), because
+ * when the subquery involves set operations we have to check the output
+ * expressions in each arm of the set op.
  */
 static bool
 subquery_is_pushdown_safe(Query *subquery, Query *topquery,
-						  bool *differentTypes)
+						  bool *unsafeColumns)
 {
 	SetOperationStmt *topop;
 
@@ -1507,13 +1653,22 @@ subquery_is_pushdown_safe(Query *subquery, Query *topquery,
 	if (subquery->hasWindowFuncs)
 		return false;
 
+	/*
+	 * If we're at a leaf query, check for unsafe expressions in its target
+	 * list, and mark any unsafe ones in unsafeColumns[].  (Non-leaf nodes in
+	 * setop trees have only simple Vars in their tlists, so no need to check
+	 * them.)
+	 */
+	if (subquery->setOperations == NULL)
+		check_output_expressions(subquery, unsafeColumns);
+
 	/* Are we at top level, or looking at a setop component? */
 	if (subquery == topquery)
 	{
 		/* Top level, so check any component queries */
 		if (subquery->setOperations != NULL)
 			if (!recurse_pushdown_safe(subquery->setOperations, topquery,
-									   differentTypes))
+									   unsafeColumns))
 				return false;
 	}
 	else
@@ -1526,7 +1681,7 @@ subquery_is_pushdown_safe(Query *subquery, Query *topquery,
 		Assert(topop && IsA(topop, SetOperationStmt));
 		compare_tlist_datatypes(subquery->targetList,
 								topop->colTypes,
-								differentTypes);
+								unsafeColumns);
 	}
 	return true;
 }
@@ -1536,7 +1691,7 @@ subquery_is_pushdown_safe(Query *subquery, Query *topquery,
  */
 static bool
 recurse_pushdown_safe(Node *setOp, Query *topquery,
-					  bool *differentTypes)
+					  bool *unsafeColumns)
 {
 	if (IsA(setOp, RangeTblRef))
 	{
@@ -1545,19 +1700,19 @@ recurse_pushdown_safe(Node *setOp, Query *topquery,
 		Query	   *subquery = rte->subquery;
 
 		Assert(subquery != NULL);
-		return subquery_is_pushdown_safe(subquery, topquery, differentTypes);
+		return subquery_is_pushdown_safe(subquery, topquery, unsafeColumns);
 	}
 	else if (IsA(setOp, SetOperationStmt))
 	{
 		SetOperationStmt *op = (SetOperationStmt *) setOp;
 
-		/* EXCEPT is no good */
+		/* EXCEPT is no good (point 3 for subquery_is_pushdown_safe) */
 		if (op->op == SETOP_EXCEPT)
 			return false;
 		/* Else recurse */
-		if (!recurse_pushdown_safe(op->larg, topquery, differentTypes))
+		if (!recurse_pushdown_safe(op->larg, topquery, unsafeColumns))
 			return false;
-		if (!recurse_pushdown_safe(op->rarg, topquery, differentTypes))
+		if (!recurse_pushdown_safe(op->rarg, topquery, unsafeColumns))
 			return false;
 	}
 	else
@@ -1569,17 +1724,92 @@ recurse_pushdown_safe(Node *setOp, Query *topquery,
 }
 
 /*
- * Compare tlist's datatypes against the list of set-operation result types.
- * For any items that are different, mark the appropriate element of
- * differentTypes[] to show that this column will have type conversions.
+ * check_output_expressions - check subquery's output expressions for safety
+ *
+ * There are several cases in which it's unsafe to push down an upper-level
+ * qual if it references a particular output column of a subquery.	We check
+ * each output column of the subquery and set unsafeColumns[k] to TRUE if
+ * that column is unsafe for a pushed-down qual to reference.  The conditions
+ * checked here are:
+ *
+ * 1. We must not push down any quals that refer to subselect outputs that
+ * return sets, else we'd introduce functions-returning-sets into the
+ * subquery's WHERE/HAVING quals.
+ *
+ * 2. We must not push down any quals that refer to subselect outputs that
+ * contain volatile functions, for fear of introducing strange results due
+ * to multiple evaluation of a volatile function.
+ *
+ * 3. If the subquery uses DISTINCT ON, we must not push down any quals that
+ * refer to non-DISTINCT output columns, because that could change the set
+ * of rows returned.  (This condition is vacuous for DISTINCT, because then
+ * there are no non-DISTINCT output columns, so we needn't check.  But note
+ * we are assuming that the qual can't distinguish values that the DISTINCT
+ * operator sees as equal.	This is a bit shaky but we have no way to test
+ * for the case, and it's unlikely enough that we shouldn't refuse the
+ * optimization just because it could theoretically happen.)
+ */
+static void
+check_output_expressions(Query *subquery, bool *unsafeColumns)
+{
+	ListCell   *lc;
+
+	foreach(lc, subquery->targetList)
+	{
+		TargetEntry *tle = (TargetEntry *) lfirst(lc);
+
+		if (tle->resjunk)
+			continue;			/* ignore resjunk columns */
+
+		/* We need not check further if output col is already known unsafe */
+		if (unsafeColumns[tle->resno])
+			continue;
+
+		/* Functions returning sets are unsafe (point 1) */
+		if (expression_returns_set((Node *) tle->expr))
+		{
+			unsafeColumns[tle->resno] = true;
+			continue;
+		}
+
+		/* Volatile functions are unsafe (point 2) */
+		if (contain_volatile_functions((Node *) tle->expr))
+		{
+			unsafeColumns[tle->resno] = true;
+			continue;
+		}
+
+		/* If subquery uses DISTINCT ON, check point 3 */
+		if (subquery->hasDistinctOn &&
+			!targetIsInSortList(tle, InvalidOid, subquery->distinctClause))
+		{
+			/* non-DISTINCT column, so mark it unsafe */
+			unsafeColumns[tle->resno] = true;
+			continue;
+		}
+	}
+}
+
+/*
+ * For subqueries using UNION/UNION ALL/INTERSECT/INTERSECT ALL, we can
+ * push quals into each component query, but the quals can only reference
+ * subquery columns that suffer no type coercions in the set operation.
+ * Otherwise there are possible semantic gotchas.  So, we check the
+ * component queries to see if any of them have output types different from
+ * the top-level setop outputs.  unsafeColumns[k] is set true if column k
+ * has different type in any component.
  *
  * We don't have to care about typmods here: the only allowed difference
  * between set-op input and output typmods is input is a specific typmod
  * and output is -1, and that does not require a coercion.
+ *
+ * tlist is a subquery tlist.
+ * colTypes is an OID list of the top-level setop's output column types.
+ * unsafeColumns[] is the result array.
  */
 static void
 compare_tlist_datatypes(List *tlist, List *colTypes,
-						bool *differentTypes)
+						bool *unsafeColumns)
 {
 	ListCell   *l;
 	ListCell   *colType = list_head(colTypes);
@@ -1593,7 +1823,7 @@ compare_tlist_datatypes(List *tlist, List *colTypes,
 		if (colType == NULL)
 			elog(ERROR, "wrong number of tlist entries");
 		if (exprType((Node *) tle->expr) != lfirst_oid(colType))
-			differentTypes[tle->resno] = true;
+			unsafeColumns[tle->resno] = true;
 		colType = lnext(colType);
 	}
 	if (colType != NULL)
@@ -1616,34 +1846,15 @@ compare_tlist_datatypes(List *tlist, List *colTypes,
  * (since there is no easy way to name that within the subquery itself).
  *
  * 3. The qual must not refer to any subquery output columns that were
- * found to have inconsistent types across a set operation tree by
- * subquery_is_pushdown_safe().
- *
- * 4. If the subquery uses DISTINCT ON, we must not push down any quals that
- * refer to non-DISTINCT output columns, because that could change the set
- * of rows returned.  (This condition is vacuous for DISTINCT, because then
- * there are no non-DISTINCT output columns, so we needn't check.  But note
- * we are assuming that the qual can't distinguish values that the DISTINCT
- * operator sees as equal.	This is a bit shaky but we have no way to test
- * for the case, and it's unlikely enough that we shouldn't refuse the
- * optimization just because it could theoretically happen.)
- *
- * 5. We must not push down any quals that refer to subselect outputs that
- * return sets, else we'd introduce functions-returning-sets into the
- * subquery's WHERE/HAVING quals.
- *
- * 6. We must not push down any quals that refer to subselect outputs that
- * contain volatile functions, for fear of introducing strange results due
- * to multiple evaluation of a volatile function.
+ * found to be unsafe to reference by subquery_is_pushdown_safe().
  */
 static bool
 qual_is_pushdown_safe(Query *subquery, Index rti, Node *qual,
-					  bool *differentTypes)
+					  bool *unsafeColumns)
 {
 	bool		safe = true;
 	List	   *vars;
 	ListCell   *vl;
-	Bitmapset  *tested = NULL;
 
 	/* Refuse subselects (point 1) */
 	if (contain_subplans(qual))
@@ -1666,7 +1877,6 @@ qual_is_pushdown_safe(Query *subquery, Index rti, Node *qual,
 	foreach(vl, vars)
 	{
 		Var		   *var = (Var *) lfirst(vl);
-		TargetEntry *tle;
 
 		/*
 		 * XXX Punt if we find any PlaceHolderVars in the restriction clause.
@@ -1682,6 +1892,7 @@ qual_is_pushdown_safe(Query *subquery, Index rti, Node *qual,
 		}
 
 		Assert(var->varno == rti);
+		Assert(var->varattno >= 0);
 
 		/* Check point 2 */
 		if (var->varattno == 0)
@@ -1690,45 +1901,8 @@ qual_is_pushdown_safe(Query *subquery, Index rti, Node *qual,
 			break;
 		}
 
-		/*
-		 * We use a bitmapset to avoid testing the same attno more than once.
-		 * (NB: this only works because subquery outputs can't have negative
-		 * attnos.)
-		 */
-		if (bms_is_member(var->varattno, tested))
-			continue;
-		tested = bms_add_member(tested, var->varattno);
-
 		/* Check point 3 */
-		if (differentTypes[var->varattno])
-		{
-			safe = false;
-			break;
-		}
-
-		/* Must find the tlist element referenced by the Var */
-		tle = get_tle_by_resno(subquery->targetList, var->varattno);
-		Assert(tle != NULL);
-		Assert(!tle->resjunk);
-
-		/* If subquery uses DISTINCT ON, check point 4 */
-		if (subquery->hasDistinctOn &&
-			!targetIsInSortList(tle, InvalidOid, subquery->distinctClause))
-		{
-			/* non-DISTINCT column, so fail */
-			safe = false;
-			break;
-		}
-
-		/* Refuse functions returning sets (point 5) */
-		if (expression_returns_set((Node *) tle->expr))
-		{
-			safe = false;
-			break;
-		}
-
-		/* Refuse volatile functions (point 6) */
-		if (contain_volatile_functions((Node *) tle->expr))
+		if (unsafeColumns[var->varattno])
 		{
 			safe = false;
 			break;
@@ -1736,7 +1910,6 @@ qual_is_pushdown_safe(Query *subquery, Index rti, Node *qual,
 	}
 
 	list_free(vars);
-	bms_free(tested);
 
 	return safe;
 }
@@ -1764,10 +1937,10 @@ subquery_push_qual(Query *subquery, RangeTblEntry *rte, Index rti, Node *qual)
 		 * This step also ensures that when we are pushing into a setop tree,
 		 * each component query gets its own copy of the qual.
 		 */
-		qual = ResolveNew(qual, rti, 0, rte,
-						  subquery->targetList,
-						  CMD_SELECT, 0,
-						  &subquery->hasSubLinks);
+		qual = ReplaceVarsFromTargetList(qual, rti, 0, rte,
+										 subquery->targetList,
+										 REPLACEVARS_REPORT_ERROR, 0,
+										 &subquery->hasSubLinks);
 
 		/*
 		 * Now attach the qual to the proper place: normally WHERE, but if the
@@ -1998,10 +2171,16 @@ debug_print_rel(PlannerInfo *root, RelOptInfo *rel)
 	printf("\tpath list:\n");
 	foreach(l, rel->pathlist)
 		print_path(root, lfirst(l), 1);
-	printf("\n\tcheapest startup path:\n");
-	print_path(root, rel->cheapest_startup_path, 1);
-	printf("\n\tcheapest total path:\n");
-	print_path(root, rel->cheapest_total_path, 1);
+	if (rel->cheapest_startup_path)
+	{
+		printf("\n\tcheapest startup path:\n");
+		print_path(root, rel->cheapest_startup_path, 1);
+	}
+	if (rel->cheapest_total_path)
+	{
+		printf("\n\tcheapest total path:\n");
+		print_path(root, rel->cheapest_total_path, 1);
+	}
 	printf("\n");
 	fflush(stdout);
 }

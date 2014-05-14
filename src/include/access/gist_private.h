@@ -4,7 +4,7 @@
  *	  private declarations for GiST -- declarations related to the
  *	  internal implementation of GiST, not the public API
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/gist_private.h
@@ -167,7 +167,7 @@ typedef GISTScanOpaqueData *GISTScanOpaque;
 #define XLOG_GIST_PAGE_SPLIT		0x30
  /* #define XLOG_GIST_INSERT_COMPLETE	 0x40 */	/* not used anymore */
 #define XLOG_GIST_CREATE_INDEX		0x50
-#define XLOG_GIST_PAGE_DELETE		0x60
+ /* #define XLOG_GIST_PAGE_DELETE		 0x60 */	/* not used anymore */
 
 typedef struct gistxlogPageUpdate
 {
@@ -211,12 +211,6 @@ typedef struct gistxlogPage
 	int			num;			/* number of index tuples following */
 } gistxlogPage;
 
-typedef struct gistxlogPageDelete
-{
-	RelFileNode node;
-	BlockNumber blkno;
-} gistxlogPageDelete;
-
 /* SplitedPageLayout - gistSplit function result */
 typedef struct SplitedPageLayout
 {
@@ -254,20 +248,21 @@ typedef struct GISTInsertStack
 	struct GISTInsertStack *parent;
 } GISTInsertStack;
 
+/* Working state and results for multi-column split logic in gistsplit.c */
 typedef struct GistSplitVector
 {
-	GIST_SPLITVEC splitVector;	/* to/from PickSplit method */
+	GIST_SPLITVEC splitVector;	/* passed to/from user PickSplit method */
 
 	Datum		spl_lattr[INDEX_MAX_KEYS];		/* Union of subkeys in
-												 * spl_left */
+												 * splitVector.spl_left */
 	bool		spl_lisnull[INDEX_MAX_KEYS];
 
 	Datum		spl_rattr[INDEX_MAX_KEYS];		/* Union of subkeys in
-												 * spl_right */
+												 * splitVector.spl_right */
 	bool		spl_risnull[INDEX_MAX_KEYS];
 
-	bool	   *spl_equiv;		/* equivalent tuples which can be freely
-								 * distributed between left and right pages */
+	bool	   *spl_dontcare;	/* flags tuples which could go to either side
+								 * of the split for zero penalty */
 } GistSplitVector;
 
 typedef struct
@@ -430,7 +425,8 @@ typedef struct
 
 extern bool gistplacetopage(Relation rel, Size freespace, GISTSTATE *giststate,
 				Buffer buffer,
-				IndexTuple *itup, int ntup, OffsetNumber oldoffnum,
+				IndexTuple *itup, int ntup,
+				OffsetNumber oldoffnum, BlockNumber *newblkno,
 				Buffer leftchildbuf,
 				List **splitinfo,
 				bool markleftchild);
@@ -505,7 +501,7 @@ extern void gistdentryinit(GISTSTATE *giststate, int nkey, GISTENTRY *e,
 extern float gistpenalty(GISTSTATE *giststate, int attno,
 			GISTENTRY *key1, bool isNull1,
 			GISTENTRY *key2, bool isNull2);
-extern void gistMakeUnionItVec(GISTSTATE *giststate, IndexTuple *itvec, int len, int startkey,
+extern void gistMakeUnionItVec(GISTSTATE *giststate, IndexTuple *itvec, int len,
 				   Datum *attr, bool *isnull);
 extern bool gistKeyIsEQ(GISTSTATE *giststate, int attno, Datum a, Datum b);
 extern void gistDeCompressAtt(GISTSTATE *giststate, Relation r, IndexTuple tuple, Page p,
@@ -516,7 +512,7 @@ extern void gistMakeUnionKey(GISTSTATE *giststate, int attno,
 				 GISTENTRY *entry2, bool isnull2,
 				 Datum *dst, bool *dstisnull);
 
-extern XLogRecPtr GetXLogRecPtrForTemp(void);
+extern XLogRecPtr gistGetFakeLSN(Relation rel);
 
 /* gistvacuum.c */
 extern Datum gistbulkdelete(PG_FUNCTION_ARGS);
@@ -525,7 +521,7 @@ extern Datum gistvacuumcleanup(PG_FUNCTION_ARGS);
 /* gistsplit.c */
 extern void gistSplitByKey(Relation r, Page page, IndexTuple *itup,
 			   int len, GISTSTATE *giststate,
-			   GistSplitVector *v, GistEntryVector *entryvec,
+			   GistSplitVector *v,
 			   int attno);
 
 /* gistbuild.c */

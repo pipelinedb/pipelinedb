@@ -3,15 +3,8 @@
 <appendix id="docguide">
  <title>Documentation</title>
 
-&common;
-
  <para>
-<!## PG>
   <productname>PostgreSQL</productname> has four primary documentation
-<!## end>
-<!## XC>
-  <productname>Postgres-XC</productname> has four primary documentation
-<!## end>
   formats:
 
   <itemizedlist>
@@ -38,12 +31,7 @@
   </itemizedlist>
 
   Additionally, a number of plain-text <filename>README</filename> files can
-<!## PG>
   be found throughout the <productname>PostgreSQL</productname> source tree,
-<!## end>
-<!## XC>
-  be found throughout the <productname>Postgres-XC</productname> source tree,
-<!## end>
   documenting various implementation issues.
  </para>
 
@@ -84,7 +72,6 @@
    information, including a number of style guidelines that might be
    worth considering.
   </para>
-
 <!## XC>
 &xconly;
   <para>
@@ -140,7 +127,7 @@
     </varlistentry>
 
     <varlistentry>
-     <term><ulink url="http://wiki.docbook.org/topic/DocBookDssslStylesheets">DocBook DSSSL Stylesheets</ulink></term>
+     <term><ulink url="http://wiki.docbook.org/DocBookDssslStylesheetDocs">DocBook DSSSL Stylesheets</ulink></term>
      <listitem>
       <para>
        These contain the processing instructions for converting the
@@ -151,19 +138,18 @@
     </varlistentry>
 
     <varlistentry>
-     <term><ulink url="http://wiki.docbook.org/topic/DocBookXslStylesheets">DocBook XSL Stylesheets</ulink></term>
+     <term><ulink url="http://wiki.docbook.org/DocBookXslStylesheets">DocBook XSL Stylesheets</ulink></term>
      <listitem>
       <para>
        This is another stylesheet for converting DocBook to other
        formats.  We currently use this to produce man pages and
        optionally HTMLHelp.  You can also use this toolchain to
-<!## PG>
        produce HTML or PDF output, but official PostgreSQL releases
-<!## end>
-<!## XC>
-       produce HTML or PDF output, but official Postgres-XC releases
-<!## end>
        use the DSSSL stylesheets for that.
+      </para>
+
+      <para>
+       The minimum required version is currently 1.74.0.
       </para>
      </listitem>
     </varlistentry>
@@ -215,7 +201,6 @@
       </para>
      </listitem>
     </varlistentry>
-
 <!## XC>
     <varlistentry>
      <term>makesgml</term>
@@ -262,14 +247,13 @@
     installing, or the following packages:
     <filename>sgml-common</filename>, <filename>docbook</filename>,
     <filename>stylesheets</filename>, <filename>openjade</filename>
-    (or <filename>jade</filename>).  Possibly
-    <filename>sgml-tools</filename> will be needed as well.  If your
+    (or <filename>jade</filename>).  You may also need <filename>sgml-tools</filename>
+    and either <filename>xsltproc</filename> or <filename>libxslt</>.  If your
     distributor does not provide these then you should be able to make
     use of the packages from some other, reasonably compatible vendor.
    </para>
   </sect2>
 
-<!## PG>
   <sect2>
    <title>FreeBSD Installation</title>
 
@@ -307,8 +291,9 @@
 
    <para>
     It's possible that the ports do not update the main catalog file
-    in <filename>/usr/local/share/sgml/catalog.ports</filename> or order
-    isn't proper .  Be sure to have the following lines in beginning of file:
+    in <filename>/usr/local/share/sgml/catalog.ports</filename> or that the
+    order isn't proper.  Be sure to have the following lines in the beginning
+    of the file:
 <programlisting>
 CATALOG "openjade/catalog"
 CATALOG "iso8879/catalog"
@@ -326,9 +311,7 @@ CATALOG "docbook/4.2/catalog"
     FreeBSD Documentation Project's instructions</ulink>.
    </para>
   </sect2>
-<!## end>
 
-<!## PG>
   <sect2>
    <title>Debian Packages</title>
 
@@ -338,11 +321,22 @@ CATALOG "docbook/4.2/catalog"
     available for <productname>Debian GNU/Linux</productname>.
     To install, simply use:
 <programlisting>
-apt-get install docbook docbook-dsssl docbook-xsl openjade1.3 xsltproc
+apt-get install docbook docbook-dsssl docbook-xsl openjade1.3 opensp xsltproc
 </programlisting>
    </para>
   </sect2>
-<!## end>
+
+  <sect2>
+   <title>Mac OS X</title>
+
+&common;
+   <para>
+    If you use MacPorts, the following will get you set up:
+<programlisting>
+sudo port install docbook-dsssl docbook-sgml-4.2 docbook-xml-4.2 docbook-xsl libxslt openjade opensp
+</programlisting>
+   </para>
+  </sect2>
 
   <sect2>
    <title>Manual Installation from Source</title>
@@ -360,9 +354,9 @@ apt-get install docbook docbook-dsssl docbook-xsl openjade1.3 xsltproc
    <sect3>
     <title>Installing OpenJade</title>
 
+&common;
     <procedure>
       <step>
-&common;
        <para>
         The installation of OpenJade offers a GNU-style
         <literal>./configure; make; make install</literal> build
@@ -386,12 +380,12 @@ make install
        <note>
        <para>
         Some users have reported encountering a segmentation fault using
-        openjade 1.4devel to build the PDFs, with a message like:
+        OpenJade 1.4devel to build the PDFs, with a message like:
 <screen>
 openjade:./stylesheet.dsl:664:2:E: flow object not accepted by port; only display flow objects accepted
 make: *** [postgres-A4.tex-pdf] Segmentation fault
 </screen>
-        Downgrading to openjade 1.3 should get rid of this error.
+        Downgrading to OpenJade 1.3 should get rid of this error.
        </para>
        </note>
 
@@ -431,9 +425,9 @@ CATALOG "dsssl/catalog"
    <sect3>
     <title>Installing the <productname>DocBook</productname> <acronym>DTD</acronym> Kit</title>
 
+&common;
     <procedure>
      <step>
-&common;
       <para>
        Obtain the <ulink url="http://www.docbook.org/sgml/4.2/docbook-4.2.zip">
        DocBook V4.2 distribution</ulink>.
@@ -525,12 +519,7 @@ CATALOG "docbook-dsssl-1.<replaceable>xx</>/catalog"
 </programlisting>
      Because stylesheets change rather often, and it's sometimes
      beneficial to try out alternative versions,
-<!## PG>
      <productname>PostgreSQL</productname> doesn't use this catalog
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> doesn't use this catalog
-<!## end>
      entry.  See <xref linkend="docguide-toolsets-configure"> for
      information about how to select the stylesheets instead.
     </para>
@@ -568,12 +557,7 @@ CATALOG "docbook-dsssl-1.<replaceable>xx</>/catalog"
 
     <para>
      Before you can use <application>JadeTeX</application> with the
-<!## PG>
      <productname>PostgreSQL</productname> documentation sources, you
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> documentation sources, you
-<!## end>
      will need to increase the size of
      <application>TeX</application>'s internal data structures.
      Details on this can be found in the <application>JadeTeX</application>
@@ -603,12 +587,7 @@ CATALOG "docbook-dsssl-1.<replaceable>xx</>/catalog"
   <para>
    Before you can build the documentation you need to run the
    <filename>configure</filename> script as you would when building
-<!## PG>
    the <productname>PostgreSQL</productname> programs themselves.
-<!## end>
-<!## XC>
-   the <productname>Postgres-XC</productname> programs themselves.
-<!## end>
    Check the output near the end of the run, it should look something
    like this:
 <screen>
@@ -742,12 +721,7 @@ gmake man
    </para>
 
    <para>
-<!## PG>
     When using JadeTeX to build the PostgreSQL documentation, you will
-<!## end>
-<!## XC>
-    When using JadeTeX to build the Postgres-XC documentation, you will
-<!## end>
     probably need to increase some of TeX's internal parameters.  These
     can be set in the file <filename>texmf.cnf</filename>.  The following
     settings worked at the time of this writing:
@@ -793,12 +767,7 @@ save_size.pdfjadetex = 15000
 
 &common;
    <para>
-<!## PG>
     You can also create a printable version of the <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-    You can also create a printable version of the <productname>Postgres-XC</productname>
-<!## end>
     documentation by converting it to <acronym>RTF</acronym> and
     applying minor formatting corrections using an office suite.
     Depending on the capabilities of the particular office suite, you
@@ -809,12 +778,7 @@ save_size.pdfjadetex = 15000
 
    <note>
     <para>
-<!## PG>
      It appears that current versions of the <productname>PostgreSQL</productname> documentation
-<!## end>
-<!## XC>
-     It appears that current versions of the <productname>Postgres-XC</productname> documentation
-<!## end>
      trigger some bug in or exceed the size limit of OpenJade.  If the
      build process of the <acronym>RTF</acronym> version hangs for a
      long time and the output file still has size 0, then you might have
@@ -1201,6 +1165,7 @@ save_size.pdfjadetex = 15000
  <sect1 id="docguide-style">
   <title>Style Guide</title>
 
+&common;
   <sect2>
    <title>Reference Pages</title>
 
@@ -1210,12 +1175,7 @@ save_size.pdfjadetex = 15000
     users to find the desired information more quickly, and it also
     encourages writers to document all relevant aspects of a command.
     Consistency is not only desired among
-<!## PG>
     <productname>PostgreSQL</productname> reference pages, but also
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> reference pages, but also
-<!## end>
     with reference pages provided by the operating system and other
     packages.  Hence the following guidelines have been developed.
     They are for the most part consistent with similar guidelines
@@ -1361,20 +1321,22 @@ save_size.pdfjadetex = 15000
      </varlistentry>
 
      <varlistentry>
+      <term>Author</term>
+      <listitem>
+       <para>
+        Author (only used in the contrib section)
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
       <term>See Also</term>
       <listitem>
        <para>
         Cross-references, listed in the following order: other
-<!## PG>
         <productname>PostgreSQL</productname> command reference pages,
         <productname>PostgreSQL</productname> SQL command reference
         pages, citation of <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname> command reference pages,
-        <productname>Postgres-XC</productname> SQL command reference
-        pages, citation of <productname>Postgres-XC</productname>
-<!## end>
         manuals, other reference pages (e.g., operating system, other
         packages), other documentation.  Items in the same group are
         listed alphabetically.

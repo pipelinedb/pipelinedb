@@ -3,8 +3,6 @@
 <chapter id="diskusage">
  <title>Monitoring Disk Usage</title>
 
-&pgnotice;
-
  <para>
   This chapter discusses how to monitor the disk usage of a
   <productname>PostgreSQL</> database system.
@@ -17,6 +15,7 @@
    <primary>disk usage</primary>
   </indexterm>
 
+&pgnotice;
   <para>
    Each table has a primary heap disk file where most of the data is
    stored. If the table has any columns with potentially-wide values,
@@ -113,8 +112,8 @@ ORDER BY relpages DESC;
 
  <sect1 id="disk-full">
   <title>Disk Full Failure</title>
-&pgnotice;
 
+&pgnotice;
   <para>
    The most important disk monitoring task of a database administrator
    is to make sure the disk doesn't become full.  A filled data disk will

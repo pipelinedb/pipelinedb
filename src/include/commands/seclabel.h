@@ -3,7 +3,7 @@
  *
  * Prototypes for functions in commands/seclabel.c
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  */
 #ifndef SECLABEL_H
@@ -24,7 +24,7 @@ extern void DeleteSharedSecurityLabel(Oid objectId, Oid classId);
 /*
  * Statement and ESP hook support
  */
-extern void ExecSecLabelStmt(SecLabelStmt *stmt);
+extern Oid	ExecSecLabelStmt(SecLabelStmt *stmt);
 
 typedef void (*check_object_relabel_type) (const ObjectAddress *object,
 													   const char *seclabel);

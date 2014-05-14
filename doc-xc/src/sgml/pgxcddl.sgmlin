@@ -1,14 +1,29 @@
 <!-- doc/src/sgml/pgxcddl.sgml -->
 
-<sect1 id="pgxcddl" xreflabel="pgxcddl">
+<refentry id="pgxcddl" xreflabel="pgxcddl">
+ <refmeta>
+  <refentrytitle><application>pgxc_ddl</application></refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Application</refmiscinfo>
+ </refmeta>
 
-<title>pgxc_ddl</title>
+ <refnamediv>
+  <refname>pgxc_ddl</refname>
+  <refpurpose>coordinator catalog table synchronization and DDL treatment for <productname>Postgres-XC</productname></refpurpose>
+ </refnamediv>
 
- <indexterm zone="pgxcddl">
+ <indexterm zone="pgarchivecleanup">
   <primary>pgxc_ddl</primary>
  </indexterm>
 
- <sect2>
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pgxc_ddl</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
   <title>
    Overview
   </title>
@@ -45,9 +60,9 @@ pgxc_ddl <optional> <replaceable>option</> </optional>
    in the folder <filename>contrib/pgxc_ddl</filename>.
   </para>
 
- </sect2>
+ </refsect1>
 
- <sect2>
+ <refsect1>
   <title>Options</title>
 
   <para>
@@ -192,5 +207,5 @@ pgxc_ddl <optional> <replaceable>option</> </optional>
     in <filename>pgxc.conf</filename>.
    </para>
   </note>
- </sect2>
-</sect1>
+ </refsect1>
+</refentry>

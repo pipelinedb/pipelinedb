@@ -30,7 +30,6 @@ ALTER OPERATOR <replaceable>name</replaceable> ( { <replaceable>left_type</repla
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER OPERATOR</command> changes the definition of
    an operator.  The only currently available functionality is to change the
@@ -50,6 +49,7 @@ ALTER OPERATOR <replaceable>name</replaceable> ( { <replaceable>left_type</repla
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -107,13 +107,13 @@ ALTER OPERATOR <replaceable>name</replaceable> ( { <replaceable>left_type</repla
    Change the owner of a custom operator <literal>a @@ b</literal> for type <type>text</type>:
 <programlisting>
 ALTER OPERATOR @@ (text, text) OWNER TO joe;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>ALTER OPERATOR</command> statement in
    the SQL standard.

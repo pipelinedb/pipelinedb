@@ -1,8 +1,6 @@
 --
 -- WINDOW FUNCTIONS
 --
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 CREATE TEMPORARY TABLE empsalary (
     depname varchar,
     empno bigint,
@@ -618,6 +616,18 @@ group by ten order by ten;
    9 | 10040184 |    7
 (10 rows)
 
+-- window and aggregate with GROUP BY expression (9.2 bug)
+explain (costs off, nodes off)
+select first_value(max(x)) over (), y
+  from (select unique1 as x, ten+four as y from tenk1) ss
+  group by y;
+                         QUERY PLAN                         
+------------------------------------------------------------
+ WindowAgg
+   ->  HashAggregate
+         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
+(3 rows)
+
 -- test non-default frame specifications
 SELECT four, ten,
 	sum(ten) over (partition by four order by ten),
@@ -942,9 +952,11 @@ SELECT * FROM v_window;
 (10 rows)
 
 SELECT pg_get_viewdef('v_window');
-                                                         pg_get_viewdef                                                          
----------------------------------------------------------------------------------------------------------------------------------
- SELECT i.i, sum(i.i) OVER (ORDER BY i.i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum_rows FROM generate_series(1, 10) i(i);
+                                    pg_get_viewdef                                     
+---------------------------------------------------------------------------------------
+  SELECT i.i,                                                                         +
+     sum(i.i) OVER (ORDER BY i.i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum_rows+
+    FROM generate_series(1, 10) i(i);
 (1 row)
 
 -- with UNION
@@ -962,32 +974,32 @@ SELECT rank() OVER (ORDER BY length('abc'));
 
 -- can't order by another window function
 SELECT rank() OVER (ORDER BY rank() OVER (ORDER BY random()));
-ERROR:  window functions not allowed in window definition
+ERROR:  window functions are not allowed in window definitions
 LINE 1: SELECT rank() OVER (ORDER BY rank() OVER (ORDER BY random())...
                                      ^
 -- some other errors
 SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10;
-ERROR:  window functions not allowed in WHERE clause
+ERROR:  window functions are not allowed in WHERE
 LINE 1: SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY sa...
                                       ^
 SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10;
-ERROR:  window functions not allowed in JOIN conditions
+ERROR:  window functions are not allowed in JOIN conditions
 LINE 1: SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVE...
                                                     ^
 SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1;
-ERROR:  window functions not allowed in GROUP BY clause
+ERROR:  window functions are not allowed in GROUP BY
 LINE 1: SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GRO...
                ^
 SELECT * FROM rank() OVER (ORDER BY random());
-ERROR:  cannot use window function in function expression in FROM
+ERROR:  window functions are not allowed in functions in FROM
 LINE 1: SELECT * FROM rank() OVER (ORDER BY random());
                       ^
 DELETE FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10;
-ERROR:  window functions not allowed in WHERE clause
+ERROR:  window functions are not allowed in WHERE
 LINE 1: DELETE FROM empsalary WHERE (rank() OVER (ORDER BY random())...
                                      ^
 DELETE FROM empsalary RETURNING rank() OVER (ORDER BY random());
-ERROR:  cannot use window function in RETURNING
+ERROR:  window functions are not allowed in RETURNING
 LINE 1: DELETE FROM empsalary RETURNING rank() OVER (ORDER BY random...
                                         ^
 SELECT count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1);
@@ -1012,3 +1024,38 @@ SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
 ERROR:  argument of nth_value must be greater than zero
 -- cleanup
 DROP TABLE empsalary;
+-- test user-defined window function with named args and default args
+CREATE FUNCTION nth_value_def(val anyelement, n integer = 1) RETURNS anyelement
+  LANGUAGE internal WINDOW IMMUTABLE STRICT AS 'window_nth_value';
+SELECT nth_value_def(n := 2, val := ten) OVER (PARTITION BY four), ten, four
+  FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten) s;
+ nth_value_def | ten | four 
+---------------+-----+------
+             0 |   0 |    0
+             0 |   0 |    0
+             0 |   4 |    0
+             1 |   1 |    1
+             1 |   1 |    1
+             1 |   7 |    1
+             1 |   9 |    1
+               |   0 |    2
+             3 |   1 |    3
+             3 |   3 |    3
+(10 rows)
+
+SELECT nth_value_def(ten) OVER (PARTITION BY four), ten, four
+  FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten) s;
+ nth_value_def | ten | four 
+---------------+-----+------
+             0 |   0 |    0
+             0 |   0 |    0
+             0 |   4 |    0
+             1 |   1 |    1
+             1 |   1 |    1
+             1 |   7 |    1
+             1 |   9 |    1
+             0 |   0 |    2
+             1 |   1 |    3
+             1 |   3 |    3
+(10 rows)
+

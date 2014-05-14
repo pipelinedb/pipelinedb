@@ -5,7 +5,7 @@
  *	  along with the relation's initial contents.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_opfamily.h
@@ -142,6 +142,7 @@ DATA(insert OID = 3702 (	783		tsquery_ops		PGNSP PGUID ));
 DATA(insert OID = 3901 (	403		range_ops		PGNSP PGUID ));
 DATA(insert OID = 3903 (	405		range_ops		PGNSP PGUID ));
 DATA(insert OID = 3919 (	783		range_ops		PGNSP PGUID ));
+DATA(insert OID = 3474 (	4000	range_ops		PGNSP PGUID ));
 DATA(insert OID = 4015 (	4000	quad_point_ops	PGNSP PGUID ));
 DATA(insert OID = 4016 (	4000	kd_point_ops	PGNSP PGUID ));
 DATA(insert OID = 4017 (	4000	text_ops		PGNSP PGUID ));

@@ -1,6 +1,3 @@
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-
 CREATE TEMP TABLE x (
 	a serial,
 	b int,
@@ -181,7 +178,106 @@ COPY testnull FROM stdin WITH NULL AS E'\\0';
 
 SELECT * FROM testnull ORDER BY 1,2;
 
+-- The following block fails in Postgres-XC because it does not suport
+-- Savepoint yet.
+-- Leave the test as is.
+BEGIN;
+CREATE TABLE vistest (LIKE testeoc);
+COPY vistest FROM stdin CSV;
+a0
+b
+\.
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV;
+a1
+b
+\.
+SELECT * FROM vistest ORDER BY 1;
+SAVEPOINT s1;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV;
+d1
+e
+\.
+SELECT * FROM vistest ORDER BY 1;
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
 
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+a2
+b
+\.
+SELECT * FROM vistest ORDER BY 1;
+SAVEPOINT s1;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+d2
+e
+\.
+SELECT * FROM vistest ORDER BY 1;
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+x
+y
+\.
+SELECT * FROM vistest ORDER BY 1;
+COMMIT;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+p
+g
+\.
+BEGIN;
+TRUNCATE vistest;
+SAVEPOINT s1;
+COPY vistest FROM stdin CSV FREEZE;
+m
+k
+\.
+COMMIT;
+BEGIN;
+INSERT INTO vistest VALUES ('z');
+SAVEPOINT s1;
+TRUNCATE vistest;
+ROLLBACK TO SAVEPOINT s1;
+COPY vistest FROM stdin CSV FREEZE;
+d3
+e
+\.
+COMMIT;
+CREATE FUNCTION truncate_in_subxact() RETURNS VOID AS
+$$
+BEGIN
+	TRUNCATE vistest;
+EXCEPTION
+  WHEN OTHERS THEN
+	INSERT INTO vistest VALUES ('subxact failure');
+END;
+$$ language plpgsql;
+BEGIN;
+INSERT INTO vistest VALUES ('z');
+SELECT truncate_in_subxact();
+COPY vistest FROM stdin CSV FREEZE;
+d4
+e
+\.
+SELECT * FROM vistest ORDER BY 1;
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+DROP TABLE vistest;
+DROP FUNCTION truncate_in_subxact();
+--
+-- End of unsupported savepoint block
+--
 DROP TABLE x, y;
 DROP FUNCTION fn_x_before();
 DROP FUNCTION fn_x_after();

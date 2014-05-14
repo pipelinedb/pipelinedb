@@ -34,7 +34,6 @@ CREATE OPERATOR CLASS <replaceable class="parameter">name</replaceable> [ DEFAUL
   <title>Description</title>
 
 &common;
-
   <para>
    <command>CREATE OPERATOR CLASS</command> creates a new operator class.
    An operator class defines how a particular data type can be used with
@@ -86,6 +85,7 @@ CREATE OPERATOR CLASS <replaceable class="parameter">name</replaceable> [ DEFAUL
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -171,13 +171,14 @@ CREATE OPERATOR CLASS <replaceable class="parameter">name</replaceable> [ DEFAUL
      <para>
       In a <literal>FUNCTION</> clause, the operand data type(s) the
       function is intended to support, if different from
-      the input data type(s) of the function (for B-tree and hash indexes)
-      or the class's data type (for GIN and GiST indexes).  These defaults
-      are always correct, so there is no point in specifying <replaceable
-      class="parameter">op_type</replaceable> in a <literal>FUNCTION</> clause
-      in <command>CREATE OPERATOR CLASS</>, but the option is provided
-      for consistency with the comparable syntax in
-      <command>ALTER OPERATOR FAMILY</>.
+      the input data type(s) of the function (for B-tree comparison functions
+      and hash functions)
+      or the class's data type (for B-tree sort support functions and all
+      functions in GiST, SP-GiST and GIN operator classes).  These defaults
+      are correct, and so <replaceable
+      class="parameter">op_type</replaceable> need not be specified in
+      <literal>FUNCTION</> clauses, except for the case of a B-tree sort
+      support function that is meant to support cross-data-type comparisons.
      </para>
     </listitem>
    </varlistentry>
@@ -233,7 +234,7 @@ CREATE OPERATOR CLASS <replaceable class="parameter">name</replaceable> [ DEFAUL
      <para>
       The data type actually stored in the index.  Normally this is
       the same as the column data type, but some index methods
-      (currently GIN and GiST) allow it to be different.  The
+      (currently GiST and GIN) allow it to be different.  The
       <literal>STORAGE</> clause must be omitted unless the index
       method allows a different type to be used.
      </para>
@@ -250,6 +251,7 @@ CREATE OPERATOR CLASS <replaceable class="parameter">name</replaceable> [ DEFAUL
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    Because the index machinery does not check access permissions on functions
    before using them, including a function or operator in an operator class
@@ -303,14 +305,10 @@ CREATE OPERATOR CLASS gist__int_ops
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>CREATE OPERATOR CLASS</command> is a
-<!## PG>
    <productname>PostgreSQL</productname> extension.  There is no
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> extension.  There is no
-<!## end>
    <command>CREATE OPERATOR CLASS</command> statement in the SQL
    standard.
   </para>

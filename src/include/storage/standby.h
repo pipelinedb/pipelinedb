@@ -4,7 +4,7 @@
  *	  Definitions for hot standby mode.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/standby.h
@@ -33,8 +33,9 @@ extern void ResolveRecoveryConflictWithTablespace(Oid tsid);
 extern void ResolveRecoveryConflictWithDatabase(Oid dbid);
 
 extern void ResolveRecoveryConflictWithBufferPin(void);
-extern void SendRecoveryConflictWithBufferPin(ProcSignalReason reason);
 extern void CheckRecoveryConflictDeadlock(void);
+extern void StandbyDeadLockHandler(void);
+extern void StandbyTimeoutHandler(void);
 
 /*
  * Standby Rmgr (RM_STANDBY_ID)
@@ -67,6 +68,7 @@ typedef struct xl_standby_locks
 typedef struct xl_running_xacts
 {
 	int			xcnt;			/* # of xact ids in xids[] */
+	int			subxcnt;		/* # of subxact ids in xids[] */
 	bool		subxid_overflow;	/* snapshot overflowed, subxids missing */
 	TransactionId nextXid;		/* copy of ShmemVariableCache->nextXid */
 	TransactionId oldestRunningXid;		/* *not* oldestXmin */
@@ -97,6 +99,7 @@ extern void standby_desc(StringInfo buf, uint8 xl_info, char *rec);
 typedef struct RunningTransactionsData
 {
 	int			xcnt;			/* # of xact ids in xids[] */
+	int			subxcnt;		/* # of subxact ids in xids[] */
 	bool		subxid_overflow;	/* snapshot overflowed, subxids missing */
 	TransactionId nextXid;		/* copy of ShmemVariableCache->nextXid */
 	TransactionId oldestRunningXid;		/* *not* oldestXmin */
@@ -110,6 +113,6 @@ typedef RunningTransactionsData *RunningTransactions;
 extern void LogAccessExclusiveLock(Oid dbOid, Oid relOid);
 extern void LogAccessExclusiveLockPrepare(void);
 
-extern void LogStandbySnapshot(TransactionId *nextXid);
+extern void LogStandbySnapshot(void);
 
 #endif   /* STANDBY_H */

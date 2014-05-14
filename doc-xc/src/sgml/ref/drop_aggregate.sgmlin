@@ -21,7 +21,7 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-DROP AGGREGATE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ( <replaceable class="PARAMETER">type</replaceable> [ , ... ] ) [ CASCADE | RESTRICT ]
+DROP AGGREGATE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ( <replaceable class="PARAMETER">argtype</replaceable> [ , ... ] ) [ CASCADE | RESTRICT ]
 </synopsis>
  </refsynopsisdiv>
 
@@ -29,7 +29,6 @@ DROP AGGREGATE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> (
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP AGGREGATE</command> removes an existing
    aggregate function. To execute this command the current
@@ -39,6 +38,7 @@ DROP AGGREGATE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> (
 
  <refsect1>
   <title>Parameters</title>
+
 &common;
   <variablelist>
 
@@ -62,7 +62,7 @@ DROP AGGREGATE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> (
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="parameter">type</replaceable></term>
+    <term><replaceable class="parameter">argtype</replaceable></term>
     <listitem>
      <para>
       An input data type on which the aggregate function operates.
@@ -95,19 +95,19 @@ DROP AGGREGATE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> (
 
  <refsect1>
   <title>Examples</title>
-&common;
+
   <para>
    To remove the aggregate function <literal>myavg</literal> for type
    <type>integer</type>:
 <programlisting>
 DROP AGGREGATE myavg(integer);
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP AGGREGATE</command> statement in the SQL
    standard.

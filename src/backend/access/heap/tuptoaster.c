@@ -4,7 +4,7 @@
  *	  Support routines for external and compressed storage of
  *	  variable size attributes.
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -353,10 +353,11 @@ toast_delete(Relation rel, HeapTuple oldtup)
 	bool		toast_isnull[MaxHeapAttributeNumber];
 
 	/*
-	 * We should only ever be called for tuples of plain relations ---
-	 * recursing on a toast rel is bad news.
+	 * We should only ever be called for tuples of plain relations or
+	 * materialized views --- recursing on a toast rel is bad news.
 	 */
-	Assert(rel->rd_rel->relkind == RELKIND_RELATION);
+	Assert(rel->rd_rel->relkind == RELKIND_RELATION ||
+		   rel->rd_rel->relkind == RELKIND_MATVIEW);
 
 	/*
 	 * Get the tuple descriptor and break down the tuple into fields.
@@ -440,10 +441,11 @@ toast_insert_or_update(Relation rel, HeapTuple newtup, HeapTuple oldtup,
 	bool		toast_delold[MaxHeapAttributeNumber];
 
 	/*
-	 * We should only ever be called for tuples of plain relations ---
-	 * recursing on a toast rel is bad news.
+	 * We should only ever be called for tuples of plain relations or
+	 * materialized views --- recursing on a toast rel is bad news.
 	 */
-	Assert(rel->rd_rel->relkind == RELKIND_RELATION);
+	Assert(rel->rd_rel->relkind == RELKIND_RELATION ||
+		   rel->rd_rel->relkind == RELKIND_MATVIEW);
 
 	/*
 	 * Get the tuple descriptor and break down the tuple(s) into fields.

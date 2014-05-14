@@ -76,11 +76,11 @@ select count(*) from (select * from xc_limit_tab1 limit all) q;
 (1 row)
 
 explain (costs off, verbose on, nodes off) select * from xc_limit_tab1 limit all;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
- Data Node Scan on "__REMOTE_LIMIT_QUERY__"
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on xc_limit_tab1 "_REMOTE_TABLE_QUERY_"
    Output: xc_limit_tab1.val, xc_limit_tab1.val2
-   Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true LIMIT ALL
+   Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true
 (3 rows)
 
 select count(*) from (select * from xc_limit_tab1 limit null) q;
@@ -90,11 +90,11 @@ select count(*) from (select * from xc_limit_tab1 limit null) q;
 (1 row)
 
 explain (costs off, verbose on, nodes off) select * from xc_limit_tab1 limit null;
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
- Data Node Scan on "__REMOTE_LIMIT_QUERY__"
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on xc_limit_tab1 "_REMOTE_TABLE_QUERY_"
    Output: xc_limit_tab1.val, xc_limit_tab1.val2
-   Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true LIMIT ALL
+   Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true
 (3 rows)
 
 select count(*) from (select * from xc_limit_tab1 offset 0) q;
@@ -104,11 +104,11 @@ select count(*) from (select * from xc_limit_tab1 offset 0) q;
 (1 row)
 
 explain (costs off, verbose on, nodes off) select * from xc_limit_tab1 offset 0;
-                                         QUERY PLAN                                          
----------------------------------------------------------------------------------------------
- Data Node Scan on "__REMOTE_LIMIT_QUERY__"
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on xc_limit_tab1 "_REMOTE_TABLE_QUERY_"
    Output: xc_limit_tab1.val, xc_limit_tab1.val2
-   Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true OFFSET 0::bigint
+   Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true
 (3 rows)
 
 -- unshippable LIMIT or OFFSET clauses
@@ -256,14 +256,12 @@ select count(*) from (select * from xc_limit_tab1 limit all) q;
 (1 row)
 
 explain (costs off, verbose on, nodes off) select * from xc_limit_tab1 limit all;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Limit
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on xc_limit_tab1 "_REMOTE_TABLE_QUERY_"
    Output: xc_limit_tab1.val, xc_limit_tab1.val2
-   ->  Data Node Scan on "__REMOTE_LIMIT_QUERY__"
-         Output: xc_limit_tab1.val, xc_limit_tab1.val2
-         Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true LIMIT ALL
-(5 rows)
+   Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true
+(3 rows)
 
 select count(*) from (select * from xc_limit_tab1 limit null) q;
  count 
@@ -272,14 +270,12 @@ select count(*) from (select * from xc_limit_tab1 limit null) q;
 (1 row)
 
 explain (costs off, verbose on, nodes off) select * from xc_limit_tab1 limit null;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Limit
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on xc_limit_tab1 "_REMOTE_TABLE_QUERY_"
    Output: xc_limit_tab1.val, xc_limit_tab1.val2
-   ->  Data Node Scan on "__REMOTE_LIMIT_QUERY__"
-         Output: xc_limit_tab1.val, xc_limit_tab1.val2
-         Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true LIMIT ALL
-(5 rows)
+   Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true
+(3 rows)
 
 select count(*) from (select * from xc_limit_tab1 offset 0) q;
  count 
@@ -288,14 +284,12 @@ select count(*) from (select * from xc_limit_tab1 offset 0) q;
 (1 row)
 
 explain (costs off, verbose on, nodes off) select * from xc_limit_tab1 offset 0;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
- Limit
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on xc_limit_tab1 "_REMOTE_TABLE_QUERY_"
    Output: xc_limit_tab1.val, xc_limit_tab1.val2
-   ->  Data Node Scan on xc_limit_tab1 "_REMOTE_TABLE_QUERY_"
-         Output: xc_limit_tab1.val, xc_limit_tab1.val2
-         Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true
-(5 rows)
+   Remote query: SELECT val, val2 FROM ONLY public.xc_limit_tab1 WHERE true
+(3 rows)
 
 -- unshippable LIMIT or OFFSET clauses
 explain (costs off, verbose on, nodes off) select * from xc_limit_tab1 limit random() * 10;

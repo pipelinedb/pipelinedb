@@ -12,7 +12,12 @@ PostgreSQL documentation
 
  <refnamediv>
   <refname id="vacuumdb">vacuumdb</refname>
+<!## PG>
   <refpurpose>garbage-collect and analyze a <productname>PostgreSQL</productname> database</refpurpose>
+<!## end>
+<!## XC>
+  <refpurpose>garbage-collect and analyze a <productname>Postgres-XC</productname> database</refpurpose>
+<!## end>
  </refnamediv>
 
  <indexterm zone="app-vacuumdb">
@@ -23,26 +28,30 @@ PostgreSQL documentation
   <cmdsynopsis>
    <command>vacuumdb</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
-   <group><arg>--full</arg><arg>-f</arg></group>
-   <group><arg>--freeze</arg><arg>-F</arg></group>
-   <group><arg>--verbose</arg><arg>-v</arg></group>
-   <group><arg>--analyze</arg><arg>-z</arg></group>
-   <group><arg>--analyze-only</arg><arg>-Z</arg></group>
-   <arg>--table | -t <replaceable>table</replaceable>
-    <arg>( <replaceable class="parameter">column</replaceable> [,...] )</arg>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+
+   <arg choice="plain" rep="repeat">
+    <arg choice="opt">
+     <group choice="plain">
+      <arg choice="plain"><option>--table</option></arg>
+      <arg choice="plain"><option>-t</option></arg>
+     </group>
+     <replaceable>table</replaceable>
+     <arg choice="opt">( <replaceable class="parameter">column</replaceable> [,...] )</arg>
+    </arg>
    </arg>
-   <arg><replaceable>dbname</replaceable></arg>
+
+   <arg choice="opt"><replaceable>dbname</replaceable></arg>
   </cmdsynopsis>
 
   <cmdsynopsis>
    <command>vacuumdb</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
-   <group><arg>--full</arg><arg>-f</arg></group>
-   <group><arg>--freeze</arg><arg>-F</arg></group>
-   <group><arg>--verbose</arg><arg>-v</arg></group>
-   <group><arg>--analyze</arg><arg>-z</arg></group>
-   <group><arg>--analyze-only</arg><arg>-Z</arg></group>
-   <group><arg>--all</arg><arg>-a</arg></group>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <group choice="plain">
+    <arg choice="plain"><option>--all</option></arg>
+    <arg choice="plain"><option>-a</option></arg>
+   </group>
   </cmdsynopsis>
  </refsynopsisdiv>
 
@@ -50,19 +59,11 @@ PostgreSQL documentation
   <title>Description</title>
 
 &common;
-
   <para>
    <application>vacuumdb</application> is a utility for cleaning a
-<!## PG>
    <productname>PostgreSQL</productname> database.
    <application>vacuumdb</application> will also generate internal statistics
    used by the <productname>PostgreSQL</productname> query optimizer.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> database.
-   <application>vacuumdb</application> will also generate internal statistics
-   used by the <productname>Postgres-XC</productname> query optimizer.
-<!## end>
   </para>
 
   <para>
@@ -86,6 +87,7 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Options</title>
+
 &common;
    <para>
     <application>vacuumdb</application> accepts the following command-line arguments:
@@ -164,6 +166,8 @@ PostgreSQL documentation
         Clean or analyze <replaceable class="parameter">table</replaceable> only.
         Column names can be specified only in conjunction with
         the <option>--analyze</option> or <option>--analyze-only</option> options.
+        Multiple tables can be vacuumed by writing multiple
+        <option>-t</> switches.
        </para>
        <tip>
         <para>
@@ -301,6 +305,18 @@ PostgreSQL documentation
        </para>
       </listitem>
      </varlistentry>
+
+     <varlistentry>
+      <term><option>--maintenance-db=<replaceable class="parameter">dbname</replaceable></></term>
+      <listitem>
+       <para>
+         Specifies the name of the database to connect to discover what other
+         databases should be vacuumed. If not specified, the
+         <literal>postgres</literal> database will be used,
+         and if that does not exist, <literal>template1</literal> will be used.
+       </para>
+      </listitem>
+     </varlistentry>
     </variablelist>
    </para>
  </refsect1>
@@ -308,6 +324,7 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Environment</title>
+
 &common;
   <variablelist>
    <varlistentry>
@@ -325,12 +342,7 @@ PostgreSQL documentation
   </variablelist>
 
   <para>
-<!## PG>
    This utility, like most other <productname>PostgreSQL</> utilities,
-<!## end>
-<!## XC>
-   This utility, like most other <productname>Postgres-XC</> utilities,
-<!## end>
    also uses the environment variables supported by <application>libpq</>
    (see <xref linkend="libpq-envars">).
   </para>
@@ -340,6 +352,7 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Diagnostics</title>
+
 &common;
   <para>
    In case of difficulty, see <xref linkend="SQL-VACUUM">
@@ -357,14 +370,10 @@ PostgreSQL documentation
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    <application>vacuumdb</application> might need to connect several
-<!## PG>
    times to the <productname>PostgreSQL</productname> server, asking
-<!## end>
-<!## XC>
-   times to the <productname>Postgres-XC</productname> server, asking
-<!## end>
    for a password each time. It is convenient to have a
    <filename>~/.pgpass</> file in such cases. See <xref
    linkend="libpq-pgpass"> for more information.
@@ -396,8 +405,7 @@ PostgreSQL documentation
     <literal>bar</literal> of the table for the optimizer:
 <screen>
 <prompt>$ </prompt><userinput>vacuumdb --analyze --verbose --table 'foo(bar)' xyzzy</userinput>
-</screen>
-   </para>
+</screen></para>
 
  </refsect1>
 

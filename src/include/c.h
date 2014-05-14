@@ -9,7 +9,7 @@
  *	  polluting the namespace with lots of stuff...
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/c.h
@@ -31,9 +31,10 @@
  *		3)		standard system types
  *		4)		IsValid macros for system types
  *		5)		offsetof, lengthof, endof, alignment
- *		6)		widely useful macros
- *		7)		random stuff
- *		8)		system-specific hacks
+ *		6)		assertions
+ *		7)		widely useful macros
+ *		8)		random stuff
+ *		9)		system-specific hacks
  *
  * NOTE: since this file is included by both frontend and backend modules, it's
  * almost certainly wrong to put an "extern" declaration here.	typedefs and
@@ -44,25 +45,29 @@
 #ifndef C_H
 #define C_H
 
-/*
- * We have to include stdlib.h here because it defines many of these macros
- * on some platforms, and we only want our definitions used if stdlib.h doesn't
- * have its own.  The same goes for stddef and stdarg if present.
- */
+#include "postgres_ext.h"
+
+/* Must undef pg_config_ext.h symbols before including pg_config.h */
+#undef PG_INT64_TYPE
 
 #include "pg_config.h"
 #include "pg_config_manual.h"	/* must be after pg_config.h */
-#if !defined(WIN32) && !defined(__CYGWIN__)		/* win32 will include further
-												 * down */
+
+#if !defined(WIN32) && !defined(__CYGWIN__)		/* win32 includes further down */
 #include "pg_config_os.h"		/* must be before any system header files */
 #endif
-#include "postgres_ext.h"
 
 #if _MSC_VER >= 1400 || defined(HAVE_CRTDEFS_H)
 #define errcode __msvc_errcode
 #include <crtdefs.h>
 #undef errcode
 #endif
+
+/*
+ * We have to include stdlib.h here because it defines many of these macros
+ * on some platforms, and we only want our definitions used if stdlib.h doesn't
+ * have its own.  The same goes for stddef and stdarg if present.
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -329,8 +334,6 @@ typedef signed int Offset;
 /*
  * Common Postgres datatype names (as used in the catalogs)
  */
-typedef int16 int2;
-typedef int32 int4;
 typedef float float4;
 typedef double float8;
 
@@ -424,7 +427,7 @@ typedef struct
 	Oid			elemtype;
 	int			dim1;
 	int			lbound1;
-	int2		values[1];		/* VARIABLE LENGTH ARRAY */
+	int16		values[1];		/* VARIABLE LENGTH ARRAY */
 } int2vector;					/* VARIABLE LENGTH STRUCT */
 
 typedef struct
@@ -548,7 +551,131 @@ typedef NameData *Name;
 #define MAXALIGN_DOWN(LEN)		TYPEALIGN_DOWN(MAXIMUM_ALIGNOF, (LEN))
 
 /* ----------------------------------------------------------------
- *				Section 6:	widely useful macros
+ *				Section 6:	assertions
+ * ----------------------------------------------------------------
+ */
+
+/*
+ * USE_ASSERT_CHECKING, if defined, turns on all the assertions.
+ * - plai  9/5/90
+ *
+ * It should _NOT_ be defined in releases or in benchmark copies
+ */
+
+/*
+ * Assert() can be used in both frontend and backend code. In frontend code it
+ * just calls the standard assert, if it's available. If use of assertions is
+ * not configured, it does nothing.
+ */
+#ifndef USE_ASSERT_CHECKING
+
+#define Assert(condition)
+#define AssertMacro(condition)	((void)true)
+#define AssertArg(condition)
+#define AssertState(condition)
+#elif defined(FRONTEND)
+
+#include <assert.h>
+#define Assert(p) assert(p)
+#define AssertMacro(p)	((void) assert(p))
+#define AssertArg(condition) assert(condition)
+#define AssertState(condition) assert(condition)
+#else							/* USE_ASSERT_CHECKING && !FRONTEND */
+
+/*
+ * Trap
+ *		Generates an exception if the given condition is true.
+ */
+#define Trap(condition, errorType) \
+	do { \
+		if ((assert_enabled) && (condition)) \
+			ExceptionalCondition(CppAsString(condition), (errorType), \
+								 __FILE__, __LINE__); \
+	} while (0)
+
+/*
+ *	TrapMacro is the same as Trap but it's intended for use in macros:
+ *
+ *		#define foo(x) (AssertMacro(x != 0), bar(x))
+ *
+ *	Isn't CPP fun?
+ */
+#define TrapMacro(condition, errorType) \
+	((bool) ((! assert_enabled) || ! (condition) || \
+			 (ExceptionalCondition(CppAsString(condition), (errorType), \
+								   __FILE__, __LINE__), 0)))
+
+#define Assert(condition) \
+		Trap(!(condition), "FailedAssertion")
+
+#define AssertMacro(condition) \
+		((void) TrapMacro(!(condition), "FailedAssertion"))
+
+#define AssertArg(condition) \
+		Trap(!(condition), "BadArgument")
+
+#define AssertState(condition) \
+		Trap(!(condition), "BadState")
+#endif   /* USE_ASSERT_CHECKING && !FRONTEND */
+
+
+/*
+ * Macros to support compile-time assertion checks.
+ *
+ * If the "condition" (a compile-time-constant expression) evaluates to false,
+ * throw a compile error using the "errmessage" (a string literal).
+ *
+ * gcc 4.6 and up supports _Static_assert(), but there are bizarre syntactic
+ * placement restrictions.	These macros make it safe to use as a statement
+ * or in an expression, respectively.
+ *
+ * Otherwise we fall back on a kluge that assumes the compiler will complain
+ * about a negative width for a struct bit-field.  This will not include a
+ * helpful error message, but it beats not getting an error at all.
+ */
+#ifdef HAVE__STATIC_ASSERT
+#define StaticAssertStmt(condition, errmessage) \
+	do { _Static_assert(condition, errmessage); } while(0)
+#define StaticAssertExpr(condition, errmessage) \
+	({ StaticAssertStmt(condition, errmessage); true; })
+#else							/* !HAVE__STATIC_ASSERT */
+#define StaticAssertStmt(condition, errmessage) \
+	((void) sizeof(struct { int static_assert_failure : (condition) ? 1 : -1; }))
+#define StaticAssertExpr(condition, errmessage) \
+	StaticAssertStmt(condition, errmessage)
+#endif   /* HAVE__STATIC_ASSERT */
+
+
+/*
+ * Compile-time checks that a variable (or expression) has the specified type.
+ *
+ * AssertVariableIsOfType() can be used as a statement.
+ * AssertVariableIsOfTypeMacro() is intended for use in macros, eg
+ *		#define foo(x) (AssertVariableIsOfTypeMacro(x, int), bar(x))
+ *
+ * If we don't have __builtin_types_compatible_p, we can still assert that
+ * the types have the same size.  This is far from ideal (especially on 32-bit
+ * platforms) but it provides at least some coverage.
+ */
+#ifdef HAVE__BUILTIN_TYPES_COMPATIBLE_P
+#define AssertVariableIsOfType(varname, typename) \
+	StaticAssertStmt(__builtin_types_compatible_p(__typeof__(varname), typename), \
+	CppAsString(varname) " does not have type " CppAsString(typename))
+#define AssertVariableIsOfTypeMacro(varname, typename) \
+	((void) StaticAssertExpr(__builtin_types_compatible_p(__typeof__(varname), typename), \
+	 CppAsString(varname) " does not have type " CppAsString(typename)))
+#else							/* !HAVE__BUILTIN_TYPES_COMPATIBLE_P */
+#define AssertVariableIsOfType(varname, typename) \
+	StaticAssertStmt(sizeof(varname) == sizeof(typename), \
+	CppAsString(varname) " does not have type " CppAsString(typename))
+#define AssertVariableIsOfTypeMacro(varname, typename) \
+	((void) StaticAssertExpr(sizeof(varname) == sizeof(typename),		\
+	 CppAsString(varname) " does not have type " CppAsString(typename)))
+#endif   /* HAVE__BUILTIN_TYPES_COMPATIBLE_P */
+
+
+/* ----------------------------------------------------------------
+ *				Section 7:	widely useful macros
  * ----------------------------------------------------------------
  */
 /*
@@ -691,8 +818,40 @@ typedef NameData *Name;
 	} while (0)
 
 
+/*
+ * Mark a point as unreachable in a portable fashion.  This should preferably
+ * be something that the compiler understands, to aid code generation.
+ * In assert-enabled builds, we prefer abort() for debugging reasons.
+ */
+#if defined(HAVE__BUILTIN_UNREACHABLE) && !defined(USE_ASSERT_CHECKING)
+#define pg_unreachable() __builtin_unreachable()
+#elif defined(_MSC_VER) && !defined(USE_ASSERT_CHECKING)
+#define pg_unreachable() __assume(0)
+#else
+#define pg_unreachable() abort()
+#endif
+
+
+/*
+ * Function inlining support -- Allow modules to define functions that may be
+ * inlined, if the compiler supports it.
+ *
+ * The function bodies must be defined in the module header prefixed by
+ * STATIC_IF_INLINE, protected by a cpp symbol that the module's .c file must
+ * define.	If the compiler doesn't support inline functions, the function
+ * definitions are pulled in by the .c file as regular (not inline) symbols.
+ *
+ * The header must also declare the functions' prototypes, protected by
+ * !PG_USE_INLINE.
+ */
+#ifdef PG_USE_INLINE
+#define STATIC_IF_INLINE static inline
+#else
+#define STATIC_IF_INLINE
+#endif   /* PG_USE_INLINE */
+
 /* ----------------------------------------------------------------
- *				Section 7:	random stuff
+ *				Section 8:	random stuff
  * ----------------------------------------------------------------
  */
 
@@ -746,7 +905,7 @@ typedef NameData *Name;
 
 
 /* ----------------------------------------------------------------
- *				Section 8: system-specific hacks
+ *				Section 9: system-specific hacks
  *
  *		This should be limited to things that absolutely have to be
  *		included in every source file.	The port-specific header file

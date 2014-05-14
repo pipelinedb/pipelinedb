@@ -52,7 +52,6 @@ MOVE [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <r
   <title>Description</title>
 
 &common;
-
   <para>
    <command>MOVE</command> repositions a cursor without retrieving any data.
    <command>MOVE</command> works exactly like the <command>FETCH</command>
@@ -70,6 +69,7 @@ MOVE [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <r
  <refsect1>
   <title>Outputs</title>
 
+&common;
   <para>
    On successful completion, a <command>MOVE</> command returns a command
    tag of the form
@@ -109,6 +109,7 @@ COMMIT WORK;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>MOVE</command> statement in the SQL standard.
   </para>

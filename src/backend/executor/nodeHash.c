@@ -3,7 +3,7 @@
  * nodeHash.c
  *	  Routines to hash relations for hashjoin
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -24,6 +24,7 @@
 #include <math.h>
 #include <limits.h>
 
+#include "access/htup_details.h"
 #include "catalog/pg_statistic.h"
 #include "commands/tablespace.h"
 #include "executor/execdebug.h"
@@ -499,7 +500,9 @@ ExecChooseHashTableSize(double ntuples, int tupwidth, bool useskew,
 	 * Both nbuckets and nbatch must be powers of 2 to make
 	 * ExecHashGetBucketAndBatch fast.	We already fixed nbatch; now inflate
 	 * nbuckets to the next larger power of 2.	We also force nbuckets to not
-	 * be real small, by starting the search at 2^10.
+	 * be real small, by starting the search at 2^10.  (Note: above we made
+	 * sure that nbuckets is not more than INT_MAX / 2, so this loop cannot
+	 * overflow, nor can the final shift to recalculate nbuckets.)
 	 */
 	i = 10;
 	while ((1 << i) < nbuckets)

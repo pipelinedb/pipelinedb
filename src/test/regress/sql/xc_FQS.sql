@@ -65,7 +65,7 @@ select avg(val) from tab1_rr where val = 7;
 explain (costs off, verbose on, nodes off) select avg(val) from tab1_rr where val = 7;
 select val, val2 from tab1_rr where val = 7 order by val2;
 explain (costs off, verbose on, nodes off) select val, val2 from tab1_rr where val = 7 order by val2;
-select distinct val2 from tab1_rr where val = 7;
+select distinct val2 from tab1_rr where val = 7 ORDER BY 1;
 explain (costs off, verbose on, nodes off) select distinct val2 from tab1_rr where val = 7;
 -- DMLs
 update tab1_rr set val2 = 1000 where val = 7; 

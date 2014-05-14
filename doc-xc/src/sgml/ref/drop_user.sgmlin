@@ -29,7 +29,6 @@ DROP USER [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP USER</command> is now an alias for
    <xref linkend="sql-droprole">.
@@ -39,14 +38,10 @@ DROP USER [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The <command>DROP USER</command> statement is a
-<!## PG>
    <productname>PostgreSQL</productname> extension.  The SQL standard
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> extension.  The SQL standard
-<!## end>
    leaves the definition of users to the implementation.
   </para>
  </refsect1>

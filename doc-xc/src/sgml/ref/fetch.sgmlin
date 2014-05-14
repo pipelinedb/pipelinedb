@@ -68,7 +68,6 @@ FETCH [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <
   <title>Description</title>
 
 &common;
-
   <para>
    <command>FETCH</command> retrieves rows using a previously-created cursor.
   </para>
@@ -104,6 +103,7 @@ FETCH [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <
   </para>
 <!## end>
 
+&common;
   <para>
    The forms using <literal>FORWARD</> and <literal>BACKWARD</>
    retrieve the indicated number of rows moving in the forward or
@@ -112,6 +112,7 @@ FETCH [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <
    class="PARAMETER">count</replaceable> exceeds the number of rows
    available).
   </para>
+
 &xconly;
 <!## XC>
   <para>
@@ -120,6 +121,7 @@ FETCH [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <
   </para>
 <!## end>
 
+&common;
   <para>
    <literal>RELATIVE 0</>, <literal>FORWARD 0</>, and
    <literal>BACKWARD 0</> all request fetching the current row without
@@ -127,6 +129,7 @@ FETCH [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <
    row.  This will succeed unless the cursor is positioned before the
    first row or after the last row; in which case, no row is returned.
   </para>
+
 &xconly;
 <!## XC>
   <para>
@@ -135,6 +138,7 @@ FETCH [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <
   </para>
 <!## end>
 
+&common;
   <note>
    <para>
     This page describes usage of cursors at the SQL command level.
@@ -148,12 +152,12 @@ FETCH [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">direction</replaceable></term>
     <listitem>
-     <para>
-      <replaceable class="PARAMETER">direction</replaceable> defines
+     <para><replaceable class="PARAMETER">direction</replaceable> defines
       the fetch direction and number of rows to fetch.  It can be one
       of the following:
 
@@ -312,6 +316,13 @@ FETCH [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <
          <para>
           Fetch the prior row (same as <literal>PRIOR</literal>).
          </para>
+&xconly;
+<!## XC>
+        <para>
+         <literal>BACKWARD</literal> is not supported by the current
+         release of <productname>Postgres-XC</>.
+        </para>
+<!## end>
         </listitem>
        </varlistentry>
 
@@ -327,7 +338,7 @@ FETCH [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <
 &xconly;
 <!## XC>
         <para>
-         <literal>BACKWARD</literal> is not supported by the current
+         <literal>BACKWARD <replaceable class="PARAMETER">count</replaceable></literal> is not supported by the current
          release of <productname>Postgres-XC</>.
         </para>
 <!## end>
@@ -349,16 +360,14 @@ FETCH [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <
 <!## end>
         </listitem>
        </varlistentry>
-      </variablelist>
-     </para>
+      </variablelist></para>
     </listitem>
    </varlistentry>
 
    <varlistentry>
     <term><replaceable class="PARAMETER">count</replaceable></term>
     <listitem>
-     <para>
-      <replaceable class="PARAMETER">count</replaceable> is a
+     <para><replaceable class="PARAMETER">count</replaceable> is a
       possibly-signed integer constant, determining the location or
       number of rows to fetch.  For <literal>FORWARD</> and
       <literal>BACKWARD</> cases, specifying a negative <replaceable
@@ -382,6 +391,7 @@ FETCH [ <replaceable class="PARAMETER">direction</replaceable> [ FROM | IN ] ] <
  <refsect1>
   <title>Outputs</title>
 
+&common;
   <para>
    On successful completion, a <command>FETCH</> command returns a command
    tag of the form
@@ -399,6 +409,7 @@ FETCH <replaceable class="parameter">count</replaceable>
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    The cursor should be declared with the <literal>SCROLL</literal>
    option if one intends to use any variants of <command>FETCH</>
@@ -461,13 +472,13 @@ FETCH PRIOR FROM liahona;
 -- Close the cursor and end the transaction:
 CLOSE liahona;
 COMMIT WORK;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The SQL standard defines <command>FETCH</command> for use in
    embedded SQL only.  The variant of <command>FETCH</command>

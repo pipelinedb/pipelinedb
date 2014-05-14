@@ -76,6 +76,7 @@ ALL : config "$(OUTDIR)" "$(OUTDIR)\blibpq.dll" "$(OUTDIR)\blibpq.lib"
 CLEAN :
 	-@erase "$(INTDIR)\getaddrinfo.obj"
 	-@erase "$(INTDIR)\pgstrcasecmp.obj"
+	-@erase "$(INTDIR)\pqsignal.obj"
 	-@erase "$(INTDIR)\thread.obj"
 	-@erase "$(INTDIR)\inet_aton.obj"
 	-@erase "$(INTDIR)\crypt.obj"
@@ -95,7 +96,6 @@ CLEAN :
 	-@erase "$(INTDIR)\fe-secure.obj"
 	-@erase "$(INTDIR)\libpq-events.obj"
 	-@erase "$(INTDIR)\pqexpbuffer.obj"
-	-@erase "$(INTDIR)\pqsignal.obj"
 	-@erase "$(INTDIR)\win32.obj"
 	-@erase "$(INTDIR)\wchar.obj"
 	-@erase "$(INTDIR)\encnames.obj"
@@ -121,6 +121,7 @@ LIB32_OBJS= \
 	"$(INTDIR)\win32.obj" \
 	"$(INTDIR)\getaddrinfo.obj" \
 	"$(INTDIR)\pgstrcasecmp.obj" \
+	"$(INTDIR)\pqsignal.obj" \
 	"$(INTDIR)\thread.obj" \
 	"$(INTDIR)\inet_aton.obj" \
 	"$(INTDIR)\crypt.obj" \
@@ -140,7 +141,6 @@ LIB32_OBJS= \
 	"$(INTDIR)\fe-secure.obj" \
 	"$(INTDIR)\libpq-events.obj" \
 	"$(INTDIR)\pqexpbuffer.obj" \
-	"$(INTDIR)\pqsignal.obj" \
 	"$(INTDIR)\wchar.obj" \
 	"$(INTDIR)\encnames.obj" \
 	"$(INTDIR)\snprintf.obj" \
@@ -153,10 +153,13 @@ LIB32_OBJS= \
 	"$(INTDIR)\pthread-win32.obj"
 
 
-config: ..\..\include\pg_config.h ..\..\include\pg_config_os.h pg_config_paths.h
+config: ..\..\include\pg_config.h ..\..\include\pg_config_ext.h ..\..\include\pg_config_os.h pg_config_paths.h
 
 ..\..\include\pg_config.h: ..\..\include\pg_config.h.win32
 	copy ..\..\include\pg_config.h.win32 ..\..\include\pg_config.h
+
+..\..\include\pg_config_ext.h: ..\..\include\pg_config_ext.h.win32
+	copy ..\..\include\pg_config_ext.h.win32 ..\..\include\pg_config_ext.h
 
 ..\..\include\pg_config_os.h: ..\..\include\port\win32.h
 	copy ..\..\include\port\win32.h ..\..\include\pg_config_os.h
@@ -204,6 +207,11 @@ LINK32_FLAGS = -Gn -L$(BCB)\lib;$(INTDIR); -x -Tpd -v
 "$(INTDIR)\pgstrcasecmp.obj" : ..\..\port\pgstrcasecmp.c
 	$(CPP) @<<
 	$(CPP_PROJ) ..\..\port\pgstrcasecmp.c
+<<
+
+"$(INTDIR)\pqsignal.obj" : ..\..\port\pqsignal.c
+	$(CPP) @<<
+	$(CPP_PROJ) ..\..\port\pqsignal.c
 <<
 
 "$(INTDIR)\thread.obj" : ..\..\port\thread.c

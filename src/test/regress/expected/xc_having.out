@@ -106,7 +106,7 @@ explain (verbose true, costs false, nodes false) select count(*), sum(xc_having_
                Remote query: SELECT val2, val FROM ONLY public.xc_having_tab1 WHERE true
          ->  Hash
                Output: xc_having_tab2.val2, xc_having_tab2.val
-               ->  Data Node Scan on xc_having_tab2 "_REMOTE_TABLE_QUERY_"
+               ->  Data Node Scan on xc_having_tab2 "_REMOTE_TABLE_QUERY__1"
                      Output: xc_having_tab2.val2, xc_having_tab2.val
                      Remote query: SELECT val2, val FROM ONLY public.xc_having_tab2 WHERE true
 (14 rows)
@@ -411,7 +411,7 @@ explain (verbose true, costs false, nodes false) select count(*), sum(xc_having_
                      Remote query: SELECT val2, val FROM ONLY public.xc_having_tab1 WHERE true
                ->  Hash
                      Output: xc_having_tab2.val2, xc_having_tab2.val
-                     ->  Data Node Scan on xc_having_tab2 "_REMOTE_TABLE_QUERY_"
+                     ->  Data Node Scan on xc_having_tab2 "_REMOTE_TABLE_QUERY__1"
                            Output: xc_having_tab2.val2, xc_having_tab2.val
                            Remote query: SELECT val2, val FROM ONLY public.xc_having_tab2 WHERE true
 (17 rows)

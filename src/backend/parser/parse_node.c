@@ -3,7 +3,7 @@
  * parse_node.c
  *	  various routines that make nodes for querytrees
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -15,6 +15,7 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "catalog/pg_type.h"
 #include "mb/pg_wchar.h"
 #include "nodes/makefuncs.h"
@@ -144,10 +145,10 @@ setup_parser_errposition_callback(ParseCallbackState *pcbstate,
 	/* Setup error traceback support for ereport() */
 	pcbstate->pstate = pstate;
 	pcbstate->location = location;
-	pcbstate->errcontext.callback = pcb_error_callback;
-	pcbstate->errcontext.arg = (void *) pcbstate;
-	pcbstate->errcontext.previous = error_context_stack;
-	error_context_stack = &pcbstate->errcontext;
+	pcbstate->errcallback.callback = pcb_error_callback;
+	pcbstate->errcallback.arg = (void *) pcbstate;
+	pcbstate->errcallback.previous = error_context_stack;
+	error_context_stack = &pcbstate->errcallback;
 }
 
 /*
@@ -157,7 +158,7 @@ void
 cancel_parser_errposition_callback(ParseCallbackState *pcbstate)
 {
 	/* Pop the error context stack */
-	error_context_stack = pcbstate->errcontext.previous;
+	error_context_stack = pcbstate->errcallback.previous;
 }
 
 /*
@@ -225,6 +226,18 @@ transformArrayType(Oid *arrayType, int32 *arrayTypmod)
 	 */
 	*arrayType = getBaseTypeAndTypmod(*arrayType, arrayTypmod);
 
+	/*
+	 * We treat int2vector and oidvector as though they were domains over
+	 * int2[] and oid[].  This is needed because array slicing could create an
+	 * array that doesn't satisfy the dimensionality constraints of the
+	 * xxxvector type; so we want the result of a slice operation to be
+	 * considered to be of the more general type.
+	 */
+	if (*arrayType == INT2VECTOROID)
+		*arrayType = INT2ARRAYOID;
+	else if (*arrayType == OIDVECTOROID)
+		*arrayType = OIDARRAYOID;
+
 	/* Get the type tuple for the array */
 	type_tuple_array = SearchSysCache1(TYPEOID, ObjectIdGetDatum(*arrayType));
 	if (!HeapTupleIsValid(type_tuple_array))
@@ -262,6 +275,7 @@ transformArrayType(Oid *arrayType, int32 *arrayTypmod)
  * For both cases, if the source array is of a domain-over-array type,
  * the result is of the base array type or its element type; essentially,
  * we must fold a domain to its base type before applying subscripting.
+ * (Note that int2vector and oidvector are treated as domains here.)
  *
  * pstate		Parse state
  * arrayBase	Already-transformed expression for the array as a whole
@@ -328,7 +342,7 @@ transformArraySubscripts(ParseState *pstate,
 		{
 			if (ai->lidx)
 			{
-				subexpr = transformExpr(pstate, ai->lidx);
+				subexpr = transformExpr(pstate, ai->lidx, pstate->p_expr_kind);
 				/* If it's not int4 already, try to coerce */
 				subexpr = coerce_to_target_type(pstate,
 												subexpr, exprType(subexpr),
@@ -355,7 +369,7 @@ transformArraySubscripts(ParseState *pstate,
 			}
 			lowerIndexpr = lappend(lowerIndexpr, subexpr);
 		}
-		subexpr = transformExpr(pstate, ai->uidx);
+		subexpr = transformExpr(pstate, ai->uidx, pstate->p_expr_kind);
 		/* If it's not int4 already, try to coerce */
 		subexpr = coerce_to_target_type(pstate,
 										subexpr, exprType(subexpr),

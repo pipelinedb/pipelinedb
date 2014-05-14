@@ -179,8 +179,8 @@ PostgreSQL documentation
       <term><option>-D <replaceable class="parameter">datadir</replaceable></option></term>
       <listitem>
        <para>
-        Specifies the file system location of the data directory or
-        configuration file(s).  See
+        Specifies the file system location of the database
+        configuration files.  See
         <xref linkend="runtime-config-file-locations"> for details.
        </para>
       </listitem>
@@ -254,8 +254,14 @@ PostgreSQL documentation
        <para>
         Specifies the directory of the Unix-domain socket on which
         <command>postgres</command> is to listen for
-        connections from client applications.  The default is normally
-        <filename>/tmp</filename>, but can be changed at build time.
+        connections from client applications.  The value can also be a
+        comma-separated list of directories.  An empty value
+        specifies not listening on any Unix-domain sockets, in which case
+        only TCP/IP sockets can be used to connect to the server.
+        The default value is normally
+        <filename>/tmp</filename>, but that can be changed at build time.
+        Specifying this option is equivalent to setting the <xref
+        linkend="guc-unix-socket-directories"> configuration parameter.
        </para>
       </listitem>
      </varlistentry>
@@ -346,6 +352,16 @@ PostgreSQL documentation
      </varlistentry>
 
      <varlistentry>
+      <term><option>-V</></term>
+      <term><option>--version</></term>
+      <listitem>
+       <para>
+        Print the <application>postgres</application> version and exit.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
       <term><option>--<replaceable>name</replaceable>=<replaceable>value</replaceable></option></term>
       <listitem>
        <para>
@@ -362,6 +378,17 @@ PostgreSQL documentation
         This option dumps out the server's internal configuration variables,
         descriptions, and defaults in tab-delimited <command>COPY</> format.
         It is designed primarily for use by administration tools.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-?</></term>
+      <term><option>--help</></term>
+      <listitem>
+       <para>
+        Show help about <application>postgres</application> command line
+        arguments, and exit.
        </para>
       </listitem>
      </varlistentry>
@@ -705,14 +732,18 @@ PostgreSQL documentation
 
   <para>
    To cancel a running query, send the <literal>SIGINT</literal> signal
-   to the process running that command.
+   to the process running that command. To terminate a backend process
+   cleanly, send <literal>SIGTERM</literal> to that process. See
+   also <function>pg_cancel_backend</> and <function>pg_terminate_backend</>
+   in <xref linkend="functions-admin-signal"> for the SQL-callable equivalents
+   of these two actions.
   </para>
 
   <para>
-   The <command>postgres</command> server uses <literal>SIGTERM</literal>
-   to tell subordinate server processes to quit normally and
-   <literal>SIGQUIT</literal> to terminate without the normal cleanup.
-   These signals <emphasis>should not</emphasis> be used by users.  It
+   The <command>postgres</command> server uses <literal>SIGQUIT</literal>
+   to tell subordinate server processes to terminate without normal
+   cleanup.
+   This signal <emphasis>should not</emphasis> be used by users.  It
    is also unwise to send <literal>SIGKILL</literal> to a server
    process &mdash; the main <command>postgres</command> process will
    interpret this as a crash and will force all the sibling processes

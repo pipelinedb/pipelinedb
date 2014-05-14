@@ -31,15 +31,9 @@ CREATE [ OR REPLACE ] [ TRUSTED ] [ PROCEDURAL ] LANGUAGE <replaceable class="pa
   <title>Description</title>
 
 &common;
-
   <para>
    <command>CREATE LANGUAGE</command> registers a new
-<!## PG>
    procedural language with a <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-   procedural language with a <productname>Postgres-XC</productname>
-<!## end>
    database.  Subsequently, functions and trigger procedures can be
    defined in this new language.
   </para>
@@ -69,12 +63,7 @@ CREATE [ OR REPLACE ] [ TRUSTED ] [ PROCEDURAL ] LANGUAGE <replaceable class="pa
   <para>
    There are two forms of the <command>CREATE LANGUAGE</command> command.
    In the first form, the user supplies just the name of the desired
-<!## PG>
    language, and the <productname>PostgreSQL</productname> server consults
-<!## end>
-<!## XC>
-   language, and the <productname>Postgres-XC</productname> servers consult
-<!## end>
    the <link linkend="catalog-pg-pltemplate"><structname>pg_pltemplate</structname></link>
    system catalog to determine the correct parameters.  In the second form,
    the user supplies the language parameters along with the language name.
@@ -92,12 +81,7 @@ CREATE [ OR REPLACE ] [ TRUSTED ] [ PROCEDURAL ] LANGUAGE <replaceable class="pa
 
   <para>
    Ordinarily, the user must have the
-<!## PG>
    <productname>PostgreSQL</productname> superuser privilege to
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> superuser privilege to
-<!## end>
    register a new language.  However, the owner of a database can register
    a new language within that database if the language is listed in
    the <structname>pg_pltemplate</structname> catalog and is marked
@@ -130,22 +114,17 @@ CREATE [ OR REPLACE ] [ TRUSTED ] [ PROCEDURAL ] LANGUAGE <replaceable class="pa
  <refsect1 id="sql-createlanguage-parameters">
   <title>Parameters</title>
 
+&common;
    <variablelist>
     <varlistentry>
      <term><literal>TRUSTED</literal></term>
 
      <listitem>
-      <para>
-       <literal>TRUSTED</literal> specifies that the language does
+      <para><literal>TRUSTED</literal> specifies that the language does
        not grant access to data that the user would not otherwise
        have.  If this key word is omitted
        when registering the language, only users with the
-<!## PG>
        <productname>PostgreSQL</productname> superuser privilege can
-<!## end>
-<!## XC>
-       <productname>Postgres-XC</productname> superuser privilege can
-<!## end>
        use this language to create new functions.
       </para>
      </listitem>
@@ -166,9 +145,8 @@ CREATE [ OR REPLACE ] [ TRUSTED ] [ PROCEDURAL ] LANGUAGE <replaceable class="pa
 
      <listitem>
       <para>
-       The name of the new procedural language.  The language name is
-       case insensitive. The name must be unique among the languages
-       in the database.
+       The name of the new procedural language.
+       The name must be unique among the languages in the database.
       </para>
 
       <para>
@@ -182,18 +160,12 @@ CREATE [ OR REPLACE ] [ TRUSTED ] [ PROCEDURAL ] LANGUAGE <replaceable class="pa
      <term><literal>HANDLER</literal> <replaceable class="parameter">call_handler</replaceable></term>
 
      <listitem>
-      <para>
-       <replaceable class="parameter">call_handler</replaceable> is
+      <para><replaceable class="parameter">call_handler</replaceable> is
        the name of a previously registered function that will be
        called to execute the procedural language's functions.  The call
        handler for a procedural language must be written in a compiled
        language such as C with version 1 call convention and
-<!## PG>
        registered with <productname>PostgreSQL</productname> as a
-<!## end>
-<!## XC>
-       registered with <productname>Postgres-XC</productname> as a
-<!## end>
        function taking no arguments and returning the
        <type>language_handler</type> type, a placeholder type that is
        simply used to identify the function as a call handler.
@@ -205,8 +177,7 @@ CREATE [ OR REPLACE ] [ TRUSTED ] [ PROCEDURAL ] LANGUAGE <replaceable class="pa
      <term><literal>INLINE</literal> <replaceable class="parameter">inline_handler</replaceable></term>
 
      <listitem>
-      <para>
-       <replaceable class="parameter">inline_handler</replaceable> is the
+      <para><replaceable class="parameter">inline_handler</replaceable> is the
        name of a previously registered function that will be called
        to execute an anonymous code block
        (<xref linkend="sql-do"> command)
@@ -226,8 +197,7 @@ CREATE [ OR REPLACE ] [ TRUSTED ] [ PROCEDURAL ] LANGUAGE <replaceable class="pa
      <term><literal>VALIDATOR</literal> <replaceable class="parameter">valfunction</replaceable></term>
 
      <listitem>
-      <para>
-       <replaceable class="parameter">valfunction</replaceable> is the
+      <para><replaceable class="parameter">valfunction</replaceable> is the
        name of a previously registered function that will be called
        when a new function in the language is created, to validate the
        new function.
@@ -261,6 +231,7 @@ CREATE [ OR REPLACE ] [ TRUSTED ] [ PROCEDURAL ] LANGUAGE <replaceable class="pa
  <refsect1 id="sql-createlanguage-notes">
   <title>Notes</title>
 
+&common;
   <para>
    The <xref linkend="app-createlang"> program is a simple wrapper around
    the <command>CREATE LANGUAGE</> command.  It eases
@@ -336,21 +307,16 @@ CREATE FUNCTION plsample_call_handler() RETURNS language_handler
     LANGUAGE C;
 CREATE LANGUAGE plsample
     HANDLER plsample_call_handler;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1 id="sql-createlanguage-compat">
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>CREATE LANGUAGE</command> is a
-<!## PG>
    <productname>PostgreSQL</productname> extension.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> extension.
-<!## end>
   </para>
  </refsect1>
 

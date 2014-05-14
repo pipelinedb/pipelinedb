@@ -8,7 +8,6 @@
 
 &common;
    <para>
-<!## PG>
     In the previous chapter we have covered the basics of using
     <acronym>SQL</acronym> to store and access your data in
     <productname>PostgreSQL</productname>.  We will now discuss some
@@ -16,16 +15,6 @@
     management and prevent loss or corruption of your data.  Finally,
     we will look at some <productname>PostgreSQL</productname>
     extensions.
-<!## end>
-<!## XC>
-    In the previous chapter we have covered the basics of using
-    <acronym>SQL</acronym> to store and access your data in
-    <productname>Postgres-XC</productname>.  We will now discuss some
-    more advanced features of <acronym>SQL</acronym> that simplify
-    management and prevent loss or corruption of your data.  Finally,
-    we will look at some <productname>Postgres-XC</productname>
-    extensions.
-<!## end>
    </para>
 
    <para>
@@ -105,12 +94,7 @@ SELECT * FROM myview;
     exists, and then inserting or rejecting the new
     <classname>weather</classname> records.  This approach has a
     number of problems and is very inconvenient, so
-<!## PG>
     <productname>PostgreSQL</productname> can do this for you.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> can do this for you.
-<!## end>
    </para>
 
    <para>
@@ -152,6 +136,9 @@ DETAIL:  Key (city)=(Berkeley) is not present in table "cities".
     applications, so you are strongly encouraged to learn about them.
    </para>
 
+   <para>
+    Please refer to <xref linkend="sql-select"> for details.
+   </para>
 <!## XC>
 &xconly;
    <para>
@@ -163,9 +150,15 @@ DETAIL:  Key (city)=(Berkeley) is not present in table "cities".
     table distribution, or you can have copies of a table in all the
     Datanodes.
    </para>
+<!## end>
+<!## XC>
+&xconly;
    <para>
-    Please refer to <xref linkend="sql-select"> for details.
+    In the current <productname>Postgres-XC</> release, you can
+    specify columns of a replciated table or the distribution column
+    of a distributed column as referred column.
    </para>
+<!## end>
 
   </sect1>
 
@@ -250,18 +243,10 @@ UPDATE branches SET balance = balance + 100.00
    </para>
 
    <para>
-<!## PG>
     In <productname>PostgreSQL</>, a transaction is set up by surrounding
     the SQL commands of the transaction with
     <command>BEGIN</> and <command>COMMIT</> commands.  So our banking
     transaction would actually look like:
-<!## end>
-<!## XC>
-    In <productname>Postgres-XC</>, a transaction is set up by surrounding
-    the SQL commands of the transaction with
-    <command>BEGIN</> and <command>COMMIT</> commands.  So our banking
-    transaction would actually look like:
-<!## end>
 
 <programlisting>
 BEGIN;
@@ -280,12 +265,7 @@ COMMIT;
    </para>
 
    <para>
-<!## PG>
     <productname>PostgreSQL</> actually treats every SQL statement as being
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> actually treats every SQL statement as being
-<!## end>
     executed within a transaction.  If you do not issue a <command>BEGIN</>
     command,
     then each individual statement has an implicit <command>BEGIN</> and
@@ -327,7 +307,6 @@ COMMIT;
     will automatically release all savepoints that were defined after it.
    </para>
 <!## end>
-
    <para>
     All this is happening within the transaction block, so none of it
     is visible to other database sessions.  When and if you commit the
@@ -372,6 +351,14 @@ COMMIT;
    </para>
 
 <!## end>
+<!## XC>
+&xconly;
+   <para>
+    Please note that <productname>Postgres-XC</productname> does not
+    support <firstterm>savepoints</> yet.   This may be supported in
+    a future release.
+   </para>
+<!## end>
 
   </sect1>
 
@@ -383,7 +370,7 @@ COMMIT;
    <indexterm zone="tutorial-window">
     <primary>window function</primary>
    </indexterm>
-
+&common;
    <para>
     A <firstterm>window function</> performs a calculation across a set of
     table rows that are somehow related to the current row.  This is comparable
@@ -689,20 +676,10 @@ CREATE TABLE capitals (
     <structfield>population</>, and <structfield>altitude</>) from its
     <firstterm>parent</firstterm>, <classname>cities</classname>.  The
     type of the column <structfield>name</structfield> is
-<!## PG>
     <type>text</type>, a native <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-    <type>text</type>, a native <productname>Postgres-XC</productname>
-<!## end>
     type for variable length character strings.  State capitals have
     an extra column, <structfield>state</>, that shows their state.  In
-<!## PG>
     <productname>PostgreSQL</productname>, a table can inherit from
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname>, a table can inherit from
-<!## end>
     zero or more other tables.
    </para>
 
@@ -776,12 +753,7 @@ SELECT name, altitude
 
 &common;
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> has many features not
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> has many features not
-<!## end>
     touched upon in this tutorial introduction, which has been
     oriented toward newer users of <acronym>SQL</acronym>.  These
     features are discussed in more detail in the remainder of this

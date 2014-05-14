@@ -2,7 +2,7 @@
  * dbsize.c
  *		Database object size functions, and related inquiries
  *
- * Copyright (c) 2002-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2002-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/adt/dbsize.c
@@ -15,18 +15,20 @@
 #include <sys/stat.h>
 
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "catalog/catalog.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_namespace.h"
 #include "catalog/pg_tablespace.h"
 #include "commands/dbcommands.h"
 #include "commands/tablespace.h"
-#include "executor/spi.h"
+#include "common/relpath.h"
 #include "miscadmin.h"
 #ifdef PGXC
 #include "pgxc/nodemgr.h"
 #include "pgxc/pgxc.h"
 #include "pgxc/pgxcnode.h"
+#include "executor/spi.h"
 #endif
 #include "storage/fd.h"
 #include "utils/acl.h"
@@ -314,6 +316,9 @@ pg_tablespace_size_name(PG_FUNCTION_ARGS)
 
 /*
  * calculate size of (one fork of) a relation
+ *
+ * Note: we can safely apply this to temp tables of other sessions, so there
+ * is no check here or at the call sites for that.
  */
 static int64
 calculate_relation_size(RelFileNode *rfn, BackendId backend, ForkNumber forknum)
@@ -376,7 +381,7 @@ pg_relation_size(PG_FUNCTION_ARGS)
 	 * that makes queries like "SELECT pg_relation_size(oid) FROM pg_class"
 	 * less robust, because while we scan pg_class with an MVCC snapshot,
 	 * someone else might drop the table. It's better to return NULL for
-	 * alread-dropped tables than throw an error and abort the whole query.
+	 * already-dropped tables than throw an error and abort the whole query.
 	 */
 	if (rel == NULL)
 		PG_RETURN_NULL();
@@ -792,6 +797,7 @@ pg_relation_filenode(PG_FUNCTION_ARGS)
 	switch (relform->relkind)
 	{
 		case RELKIND_RELATION:
+		case RELKIND_MATVIEW:
 		case RELKIND_INDEX:
 		case RELKIND_SEQUENCE:
 		case RELKIND_TOASTVALUE:
@@ -840,6 +846,7 @@ pg_relation_filepath(PG_FUNCTION_ARGS)
 	switch (relform->relkind)
 	{
 		case RELKIND_RELATION:
+		case RELKIND_MATVIEW:
 		case RELKIND_INDEX:
 		case RELKIND_SEQUENCE:
 		case RELKIND_TOASTVALUE:
@@ -880,7 +887,6 @@ pg_relation_filepath(PG_FUNCTION_ARGS)
 	switch (relform->relpersistence)
 	{
 		case RELPERSISTENCE_UNLOGGED:
-		case RELPERSISTENCE_STREAMING:
 		case RELPERSISTENCE_PERMANENT:
 			backend = InvalidBackendId;
 			break;
@@ -963,7 +969,7 @@ pgxc_database_size(Oid dbOid)
 
 /*
  * pgxc_execute_on_nodes
- * Execute 'query' on all the nodes in 'nodelist', and returns int64 datum
+ * Execute 'query' on all the nodes in 'nodelist', and returns int64 datumpgxc
  * which has the sum of all the results. If multiples nodes are involved, it
  * assumes that the query returns exactly one row with one attribute of type
  * int64. If there is a single node, it just returns the datum as-is without

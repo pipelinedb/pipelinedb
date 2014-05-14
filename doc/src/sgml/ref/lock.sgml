@@ -21,7 +21,7 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-LOCK [ TABLE ] [ ONLY ] <replaceable class="PARAMETER">name</replaceable> [, ...] [ IN <replaceable class="PARAMETER">lockmode</replaceable> MODE ] [ NOWAIT ]
+LOCK [ TABLE ] [ ONLY ] <replaceable class="PARAMETER">name</replaceable> [ * ] [, ...] [ IN <replaceable class="PARAMETER">lockmode</replaceable> MODE ] [ NOWAIT ]
 
 <phrase>where <replaceable class="PARAMETER">lockmode</replaceable> is one of:</phrase>
 
@@ -111,9 +111,11 @@ LOCK [ TABLE ] [ ONLY ] <replaceable class="PARAMETER">name</replaceable> [, ...
     <listitem>
      <para>
       The name (optionally schema-qualified) of an existing table to
-      lock.  If <literal>ONLY</> is specified, only that table is
-      locked.  If <literal>ONLY</> is not specified, the table and all
-      its descendant tables (if any) are locked.
+      lock. If <literal>ONLY</> is specified before the table name, only that
+      table is locked. If <literal>ONLY</> is not specified, the table and all
+      its descendant tables (if any) are locked.  Optionally, <literal>*</>
+      can be specified after the table name to explicitly indicate that
+      descendant tables are included.
      </para>
 
      <para>
@@ -181,7 +183,7 @@ LOCK [ TABLE ] [ ONLY ] <replaceable class="PARAMETER">name</replaceable> [, ...
    the mode names involving <literal>ROW</> are all misnomers.  These
    mode names should generally be read as indicating the intention of
    the user to acquire row-level locks within the locked table.  Also,
-   <literal>ROW EXCLUSIVE</> mode is a sharable table lock.  Keep in
+   <literal>ROW EXCLUSIVE</> mode is a shareable table lock.  Keep in
    mind that all the lock modes have identical semantics so far as
    <command>LOCK TABLE</> is concerned, differing only in the rules
    about which modes conflict with which. For information on how to

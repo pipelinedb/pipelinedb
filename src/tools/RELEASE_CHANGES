@@ -16,14 +16,16 @@ For All Releases (major, minor, beta, RC)
   Windows releases, if any (see src/timezone/README)
 
 * Translation updates
-	Translations are kept in the project "pgtranslation" on PgFoundry.
-	1. Check out the messages module (of the right branch).
-	2. Tag the messages: cvs tag -c RELx_y_z
-	3. Check out the admin module.
-	4. From babel.postgresql.org, download the "qualified list"
+	1. Check out the messages repository (of the right branch) from
+	   <http://git.postgresql.org/git/pgtranslation/messages.git>.
+	2. Check out the admin repository from
+	   <http://git.postgresql.org/git/pgtranslation/admin.git>.
+	3. From babel.postgresql.org, download the "qualified list"
 	   for the respective branch.
-	5. Run "sh .../admin/cp-po -L qualified-list-xxx.txt .../messages .../pgsql
-	6. Commit.
+	4. Run ".../admin/cp-po -L qualified-list-xxx.txt -g .../messages .../postgresql".
+	   This creates a commit in the postgresql repository.
+	5. Tag the messages: git tag RELx_y_z
+	6. Push everything.
 
 
 For Major Releases
@@ -62,6 +64,11 @@ Starting a New Development Cycle
 ================================
 
 * Create a branch in git for maintenance of the previous release
+	o on master branch, do:
+		git pull           # be sure you have the latest "master"
+		git push origin master:refs/heads/"new-branch-name"
+	  for example,
+		git push origin master:refs/heads/REL9_2_STABLE
 
 * Increment the major version number in src/tools/version_stamp.pl
 
@@ -70,6 +77,8 @@ Starting a New Development Cycle
 * Bump minor library versions, major if appropriate (see below)
 	o src/interfaces/*/Makefile
 	o src/interfaces/*/*/Makefile
+
+* Add version tag to src/tools/git_changelog
 
 
 Creating Back-Branch Release Notes
@@ -157,7 +166,7 @@ Then doing it like this:
 
 	void print_stuff(int arg1, int arg2)
 	{
-	    print_stuff(arg1, arg2, 0);
+	    print_stuff2(arg1, arg2, 0);
 	}
 
 would maintain binary compatibility. Obviously this would add a fair

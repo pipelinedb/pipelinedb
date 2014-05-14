@@ -156,7 +156,7 @@ gmake installcheck
 
   <para>
    The source distribution also contains regression tests of the static
-   behaviour of Hot Standby. These tests require a running primary server
+   behavior of Hot Standby. These tests require a running primary server
    and a running standby server that is accepting new WAL changes from the
    primary using either file-based log shipping or streaming replication.
    Those servers are not automatically created for you, nor is the setup
@@ -185,9 +185,9 @@ gmake standbycheck
   </para>
 
   <para>
-   Some extreme behaviours can also be generated on the primary using the
+   Some extreme behaviors can also be generated on the primary using the
    script: <filename>src/test/regress/sql/hs_primary_extremes.sql</filename>
-   to allow the behaviour of the standby to be tested.
+   to allow the behavior of the standby to be tested.
   </para>
 
   <para>
@@ -285,7 +285,10 @@ gmake check EXTRA_TESTS=collate.linux.utf8 LANG=en_US.utf8
     file against the reference outputs stored in the
     <filename>src/test/regress/expected</filename> directory.  Any
     differences are saved for your inspection in
-    <filename>src/test/regress/regression.diffs</filename>.  (Or you
+    <filename>src/test/regress/regression.diffs</filename>.  If you don't
+    like the <command>diff</command> options that are used by default, set the
+    environment variable <envar>PG_REGRESS_DIFF_OPTS</envar>, for
+    instance <literal>PG_REGRESS_DIFF_OPTS='-u'</literal>.  (Or you
     can run <command>diff</command> yourself, if you prefer.)
    </para>
 

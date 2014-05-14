@@ -8,7 +8,6 @@
  </indexterm>
 
 &common;
-
  <para>
   <filename>unaccent</> is a text search dictionary that removes accents
   (diacritic signs) from lexemes.
@@ -36,12 +35,7 @@
      <literal>RULES</> is the base name of the file containing the list of
      translation rules.  This file must be stored in
      <filename>$SHAREDIR/tsearch_data/</> (where <literal>$SHAREDIR</> means
-<!## PG>
      the <productname>PostgreSQL</> installation's shared-data directory).
-<!## end>
-<!## XC>
-     the <productname>Postgres-XC</> installation's shared-data directory).
-<!## end>
      Its name must end in <literal>.rules</> (which is not to be included in
      the <literal>RULES</> parameter).
     </para>

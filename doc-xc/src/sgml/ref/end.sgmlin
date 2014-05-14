@@ -28,6 +28,7 @@ END [ WORK | TRANSACTION ]
  <refsect1>
   <title>Description</title>
 
+&common;
   <para>
    <command>END</command> commits the current transaction. All changes
    made by the transaction become visible to others and are guaranteed
@@ -40,6 +41,7 @@ END [ WORK | TRANSACTION ]
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>WORK</literal></term>
@@ -74,13 +76,13 @@ END [ WORK | TRANSACTION ]
    To commit the current transaction and make all changes permanent:
 <programlisting>
 END;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>END</command> is a <productname>PostgreSQL</productname>
    extension that provides functionality equivalent to <xref

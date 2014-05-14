@@ -29,7 +29,6 @@ DROP TEXT SEARCH DICTIONARY [ IF EXISTS ] <replaceable class="PARAMETER">name</r
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP TEXT SEARCH DICTIONARY</command> drops an existing text
    search dictionary.  To execute this command you must be the owner of the
@@ -40,6 +39,7 @@ DROP TEXT SEARCH DICTIONARY [ IF EXISTS ] <replaceable class="PARAMETER">name</r
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
 
    <varlistentry>
@@ -102,6 +102,7 @@ DROP TEXT SEARCH DICTIONARY english;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP TEXT SEARCH DICTIONARY</command> statement in the
    SQL standard.

@@ -32,8 +32,7 @@ DO [ LANGUAGE <replaceable class="PARAMETER">lang_name</replaceable> ] <replacea
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    <command>DO</command> executes an anonymous code block, or in other
    words a transient anonymous function in a procedural language.
@@ -54,6 +53,7 @@ DO [ LANGUAGE <replaceable class="PARAMETER">lang_name</replaceable> ] <replacea
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">code</replaceable></term>
@@ -81,6 +81,7 @@ DO [ LANGUAGE <replaceable class="PARAMETER">lang_name</replaceable> ] <replacea
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    The procedural language to be used must already have been installed
    into the current database by means of <command>CREATE LANGUAGE</>.
@@ -109,12 +110,13 @@ BEGIN
         EXECUTE 'GRANT ALL ON ' || quote_ident(r.table_schema) || '.' || quote_ident(r.table_name) || ' TO webuser';
     END LOOP;
 END$$;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
+
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DO</command> statement in the SQL standard.
   </para>

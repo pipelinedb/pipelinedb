@@ -6,6 +6,7 @@
 
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/transam.h"
 #include "catalog/pg_type.h"
 #include "funcapi.h"
@@ -38,6 +39,7 @@ static PyObject *PLyFloat_FromNumeric(PLyDatumToOb *arg, Datum d);
 static PyObject *PLyInt_FromInt16(PLyDatumToOb *arg, Datum d);
 static PyObject *PLyInt_FromInt32(PLyDatumToOb *arg, Datum d);
 static PyObject *PLyLong_FromInt64(PLyDatumToOb *arg, Datum d);
+static PyObject *PLyLong_FromOid(PLyDatumToOb *arg, Datum d);
 static PyObject *PLyBytes_FromBytea(PLyDatumToOb *arg, Datum d);
 static PyObject *PLyString_FromDatum(PLyDatumToOb *arg, Datum d);
 static PyObject *PLyList_FromArray(PLyDatumToOb *arg, Datum d);
@@ -198,7 +200,7 @@ PLy_output_tuple_funcs(PLyTypeInfo *arg, TupleDesc desc)
 		if (arg->out.r.atts)
 			PLy_free(arg->out.r.atts);
 		arg->out.r.natts = desc->natts;
-		arg->out.r.atts = PLy_malloc0(desc->natts * sizeof(PLyDatumToOb));
+		arg->out.r.atts = PLy_malloc0(desc->natts * sizeof(PLyObToDatum));
 	}
 
 	Assert(OidIsValid(desc->tdtypeid));
@@ -459,6 +461,9 @@ PLy_input_datum_func2(PLyDatumToOb *arg, Oid typeOid, HeapTuple typeTup)
 		case INT8OID:
 			arg->func = PLyLong_FromInt64;
 			break;
+		case OIDOID:
+			arg->func = PLyLong_FromOid;
+			break;
 		case BYTEAOID:
 			arg->func = PLyBytes_FromBytea;
 			break;
@@ -490,7 +495,7 @@ PLyBool_FromBool(PLyDatumToOb *arg, Datum d)
 	/*
 	 * We would like to use Py_RETURN_TRUE and Py_RETURN_FALSE here for
 	 * generating SQL from trigger functions, but those are only supported in
-	 * Python >= 2.3, and we support older versions.
+	 * Python >= 2.4, and we support older versions.
 	 * http://docs.python.org/api/boolObjects.html
 	 */
 	if (DatumGetBool(d))
@@ -543,6 +548,12 @@ PLyLong_FromInt64(PLyDatumToOb *arg, Datum d)
 		return PyLong_FromLongLong(DatumGetInt64(d));
 	else
 		return PyLong_FromLong(DatumGetInt64(d));
+}
+
+static PyObject *
+PLyLong_FromOid(PLyDatumToOb *arg, Datum d)
+{
+	return PyLong_FromUnsignedLong(DatumGetObjectId(d));
 }
 
 static PyObject *

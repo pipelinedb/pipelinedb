@@ -15,7 +15,7 @@
  * The error constants are taken from the Frambak Bakfram LGSOCKET
  * library guys who in turn took them from the Winsock FAQ.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  */
@@ -319,7 +319,7 @@ winsock_strerror(int err, char *strerrbuf, size_t buflen)
 	}
 
 	if (!success)
-		sprintf(strerrbuf, libpq_gettext("Unknown socket error (0x%08X/%d)"), err, err);
+		sprintf(strerrbuf, libpq_gettext("unrecognized socket error: 0x%08X/%d"), err, err);
 	else
 	{
 		strerrbuf[buflen - 1] = '\0';

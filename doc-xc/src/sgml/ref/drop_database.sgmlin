@@ -29,7 +29,6 @@ DROP DATABASE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable>
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP DATABASE</command> drops a database. It removes the
    catalog entries for the database and deletes the directory
@@ -42,7 +41,6 @@ DROP DATABASE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable>
   <para>
    <command>DROP DATABASE</command> cannot be undone.  Use it with care!
   </para>
-
 <!## XC>
 &xconly;
    <para>
@@ -58,6 +56,7 @@ DROP DATABASE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable>
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>IF EXISTS</literal></term>
@@ -83,6 +82,7 @@ DROP DATABASE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable>
  <refsect1>
   <title>Notes</title>
 
+&common;
    <para>
     <command>DROP DATABASE</> cannot be executed inside a transaction
     block.
@@ -99,6 +99,7 @@ DROP DATABASE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable>
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP DATABASE</command> statement in the SQL standard.
   </para>

@@ -5,7 +5,7 @@
  *	  along with the relation's initial contents.
  *
  *
- * Copyright (c) 2006-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2006-2013, PostgreSQL Global Development Group
  *
  * src/include/catalog/pg_enum.h
  *
@@ -65,6 +65,7 @@ typedef FormData_pg_enum *Form_pg_enum;
 extern void EnumValuesCreate(Oid enumTypeOid, List *vals);
 extern void EnumValuesDelete(Oid enumTypeOid);
 extern void AddEnumLabel(Oid enumTypeOid, const char *newVal,
-			 const char *neighbor, bool newValIsAfter);
+			 const char *neighbor, bool newValIsAfter,
+			 bool skipIfExists);
 
 #endif   /* PG_ENUM_H */

@@ -2,9 +2,6 @@
 -- XC_TEMP
 --
 
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-
 -- Create TEMPORARY and normal tables
 CREATE TABLE table_rep (a int, b_rep char(1)) DISTRIBUTE BY REPLICATION;
 CREATE TABLE table_hash (a int, b_hash char(1)) DISTRIBUTE BY HASH(a);

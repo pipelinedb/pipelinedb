@@ -411,9 +411,10 @@ distrib_copy_to(RedistribState *distribState)
 					RelationGetRelationName(rel))));
 
 	/* Begin the COPY process */
-	copyState->connections = DataNodeCopyBegin(copyState->query_buf.data,
+	copyState->connections = pgxcNodeCopyBegin(copyState->query_buf.data,
 											   copyState->exec_nodes->nodeList,
-											   GetActiveSnapshot());
+											   GetActiveSnapshot(),
+											   PGXC_NODE_DATANODE);
 
 	/* Create tuplestore storage */
 	store = tuplestore_begin_heap(true, false, work_mem);
@@ -492,9 +493,10 @@ distrib_copy_from(RedistribState *distribState, ExecNodes *exec_nodes)
 					RelationGetRelationName(rel))));
 
 	/* Begin redistribution on remote nodes */
-	copyState->connections = DataNodeCopyBegin(copyState->query_buf.data,
+	copyState->connections = pgxcNodeCopyBegin(copyState->query_buf.data,
 											   copyState->exec_nodes->nodeList,
-											   GetActiveSnapshot());
+											   GetActiveSnapshot(),
+											   PGXC_NODE_DATANODE);
 
 	/* Transform each tuple stored into a COPY message and send it to remote nodes */
 	while (contains_tuple)
@@ -558,9 +560,9 @@ distrib_copy_from(RedistribState *distribState, ExecNodes *exec_nodes)
 
 	/* Finish the redistribution process */
 	replicated = copyState->rel_loc->locatorType == LOCATOR_TYPE_REPLICATED;
-	DataNodeCopyFinish(copyState->connections,
+	pgxcNodeCopyFinish(copyState->connections,
 					   replicated ? PGXCNodeGetNodeId(primary_data_node, PGXC_NODE_DATANODE) : -1,
-					   replicated ? COMBINE_TYPE_SAME : COMBINE_TYPE_SUM);
+					   replicated ? COMBINE_TYPE_SAME : COMBINE_TYPE_SUM, PGXC_NODE_DATANODE);
 
 	/* Lock is maintained until transaction commits */
 	relation_close(rel, NoLock);

@@ -4,7 +4,7 @@
  *	  header file for postgres btree access method implementation.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/nbtree.h
@@ -535,6 +535,7 @@ typedef struct BTArrayKeyInfo
 {
 	int			scan_key;		/* index of associated key in arrayKeyData */
 	int			cur_elem;		/* index of current element in elem_values */
+	int			mark_elem;		/* index of marked element in elem_values */
 	int			num_elems;		/* number of elems in current array value */
 	Datum	   *elem_values;	/* array of num_elems Datums */
 } BTArrayKeyInfo;
@@ -625,6 +626,7 @@ extern void _bt_insert_parent(Relation rel, Buffer buf, Buffer rbuf,
 extern void _bt_initmetapage(Page page, BlockNumber rootbknum, uint32 level);
 extern Buffer _bt_getroot(Relation rel, int access);
 extern Buffer _bt_gettrueroot(Relation rel);
+extern int	_bt_getrootheight(Relation rel);
 extern void _bt_checkpage(Relation rel, Buffer buf);
 extern Buffer _bt_getbuf(Relation rel, BlockNumber blkno, int access);
 extern Buffer _bt_relandgetbuf(Relation rel, Buffer obuf,
@@ -665,6 +667,8 @@ extern void _bt_freestack(BTStack stack);
 extern void _bt_preprocess_array_keys(IndexScanDesc scan);
 extern void _bt_start_array_keys(IndexScanDesc scan, ScanDirection dir);
 extern bool _bt_advance_array_keys(IndexScanDesc scan, ScanDirection dir);
+extern void _bt_mark_array_keys(IndexScanDesc scan);
+extern void _bt_restore_array_keys(IndexScanDesc scan);
 extern void _bt_preprocess_keys(IndexScanDesc scan);
 extern IndexTuple _bt_checkkeys(IndexScanDesc scan,
 			  Page page, OffsetNumber offnum,
@@ -682,7 +686,8 @@ extern void BTreeShmemInit(void);
  */
 typedef struct BTSpool BTSpool; /* opaque type known only within nbtsort.c */
 
-extern BTSpool *_bt_spoolinit(Relation index, bool isunique, bool isdead);
+extern BTSpool *_bt_spoolinit(Relation heap, Relation index,
+			  bool isunique, bool isdead);
 extern void _bt_spooldestroy(BTSpool *btspool);
 extern void _bt_spool(IndexTuple itup, BTSpool *btspool);
 extern void _bt_leafbuild(BTSpool *btspool, BTSpool *spool2);

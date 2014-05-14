@@ -28,7 +28,7 @@
  * all these files commit in a single map file update rather than being tied
  * to transaction commit.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -588,7 +588,8 @@ load_relmap_file(bool shared)
 	}
 
 	/* Read data ... */
-	fd = BasicOpenFile(mapfilename, O_RDONLY | PG_BINARY, S_IRUSR | S_IWUSR);
+	fd = OpenTransientFile(mapfilename,
+						   O_RDONLY | PG_BINARY, S_IRUSR | S_IWUSR);
 	if (fd < 0)
 		ereport(FATAL,
 				(errcode_for_file_access(),
@@ -608,7 +609,7 @@ load_relmap_file(bool shared)
 				 errmsg("could not read relation mapping file \"%s\": %m",
 						mapfilename)));
 
-	close(fd);
+	CloseTransientFile(fd);
 
 	/* check for correct magic number, etc */
 	if (map->magic != RELMAPPER_FILEMAGIC ||
@@ -672,12 +673,6 @@ write_relmap_file(bool shared, RelMapFile *newmap,
 	/*
 	 * Open the target file.  We prefer to do this before entering the
 	 * critical section, so that an open() failure need not force PANIC.
-	 *
-	 * Note: since we use BasicOpenFile, we are nominally responsible for
-	 * ensuring the fd is closed on error.	In practice, this isn't important
-	 * because either an error happens inside the critical section, or we are
-	 * in bootstrap or WAL replay; so an error past this point is always fatal
-	 * anyway.
 	 */
 	if (shared)
 	{
@@ -692,9 +687,9 @@ write_relmap_file(bool shared, RelMapFile *newmap,
 		realmap = &local_map;
 	}
 
-	fd = BasicOpenFile(mapfilename,
-					   O_WRONLY | O_CREAT | PG_BINARY,
-					   S_IRUSR | S_IWUSR);
+	fd = OpenTransientFile(mapfilename,
+						   O_WRONLY | O_CREAT | PG_BINARY,
+						   S_IRUSR | S_IWUSR);
 	if (fd < 0)
 		ereport(ERROR,
 				(errcode_for_file_access(),
@@ -753,7 +748,7 @@ write_relmap_file(bool shared, RelMapFile *newmap,
 				 errmsg("could not fsync relation mapping file \"%s\": %m",
 						mapfilename)));
 
-	if (close(fd))
+	if (CloseTransientFile(fd))
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("could not close relation mapping file \"%s\": %m",
@@ -895,20 +890,4 @@ relmap_redo(XLogRecPtr lsn, XLogRecord *record)
 	}
 	else
 		elog(PANIC, "relmap_redo: unknown op code %u", info);
-}
-
-void
-relmap_desc(StringInfo buf, uint8 xl_info, char *rec)
-{
-	uint8		info = xl_info & ~XLR_INFO_MASK;
-
-	if (info == XLOG_RELMAP_UPDATE)
-	{
-		xl_relmap_update *xlrec = (xl_relmap_update *) rec;
-
-		appendStringInfo(buf, "update relmap: database %u tablespace %u size %u",
-						 xlrec->dbid, xlrec->tsid, xlrec->nbytes);
-	}
-	else
-		appendStringInfo(buf, "UNKNOWN");
 }

@@ -92,7 +92,7 @@
  * heap's TOAST table will go through the normal bufmgr.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994-5, Regents of the University of California
  *
  * IDENTIFICATION
@@ -103,6 +103,7 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "access/heapam_xlog.h"
 #include "access/rewriteheap.h"
 #include "access/transam.h"
 #include "access/tuptoaster.h"
@@ -110,6 +111,7 @@
 #include "storage/smgr.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
+#include "utils/tqual.h"
 
 
 /*
@@ -127,6 +129,8 @@ typedef struct RewriteStateData
 										 * determine tuple visibility */
 	TransactionId rs_freeze_xid;/* Xid that will be used as freeze cutoff
 								 * point */
+	MultiXactId rs_cutoff_multi;/* MultiXactId that will be used as cutoff
+								 * point for multixacts */
 	MemoryContext rs_cxt;		/* for hash tables and entries and tuples in
 								 * them */
 	HTAB	   *rs_unresolved_tups;		/* unmatched A tuples */
@@ -176,6 +180,7 @@ static void raw_heap_insert(RewriteState state, HeapTuple tup);
  * new_heap		new, locked heap relation to insert tuples to
  * oldest_xmin	xid used by the caller to determine which tuples are dead
  * freeze_xid	xid before which tuples will be frozen
+ * min_multi	multixact before which multis will be removed
  * use_wal		should the inserts to the new heap be WAL-logged?
  *
  * Returns an opaque RewriteState, allocated in current memory context,
@@ -183,7 +188,8 @@ static void raw_heap_insert(RewriteState state, HeapTuple tup);
  */
 RewriteState
 begin_heap_rewrite(Relation new_heap, TransactionId oldest_xmin,
-				   TransactionId freeze_xid, bool use_wal)
+				   TransactionId freeze_xid, MultiXactId cutoff_multi,
+				   bool use_wal)
 {
 	RewriteState state;
 	MemoryContext rw_cxt;
@@ -212,6 +218,7 @@ begin_heap_rewrite(Relation new_heap, TransactionId oldest_xmin,
 	state->rs_use_wal = use_wal;
 	state->rs_oldest_xmin = oldest_xmin;
 	state->rs_freeze_xid = freeze_xid;
+	state->rs_cutoff_multi = cutoff_multi;
 	state->rs_cxt = rw_cxt;
 
 	/* Initialize hash tables used to track update chains */
@@ -272,6 +279,9 @@ end_heap_rewrite(RewriteState state)
 						state->rs_blockno,
 						state->rs_buffer);
 		RelationOpenSmgr(state->rs_new_rel);
+
+		PageSetChecksumInplace(state->rs_buffer, state->rs_blockno);
+
 		smgrextend(state->rs_new_rel->rd_smgr, MAIN_FORKNUM, state->rs_blockno,
 				   (char *) state->rs_buffer, true);
 	}
@@ -336,7 +346,8 @@ rewrite_heap_tuple(RewriteState state,
 	 * While we have our hands on the tuple, we may as well freeze any
 	 * very-old xmin or xmax, so that future VACUUM effort can be saved.
 	 */
-	heap_freeze_tuple(new_tuple->t_data, state->rs_freeze_xid);
+	heap_freeze_tuple(new_tuple->t_data, state->rs_freeze_xid,
+					  state->rs_cutoff_multi);
 
 	/*
 	 * Invalid ctid means that ctid should point to the tuple itself. We'll
@@ -347,15 +358,15 @@ rewrite_heap_tuple(RewriteState state,
 	/*
 	 * If the tuple has been updated, check the old-to-new mapping hash table.
 	 */
-	if (!(old_tuple->t_data->t_infomask & (HEAP_XMAX_INVALID |
-										   HEAP_IS_LOCKED)) &&
+	if (!((old_tuple->t_data->t_infomask & HEAP_XMAX_INVALID) ||
+		  HeapTupleHeaderIsOnlyLocked(old_tuple->t_data)) &&
 		!(ItemPointerEquals(&(old_tuple->t_self),
 							&(old_tuple->t_data->t_ctid))))
 	{
 		OldToNewMapping mapping;
 
 		memset(&hashkey, 0, sizeof(hashkey));
-		hashkey.xmin = HeapTupleHeaderGetXmax(old_tuple->t_data);
+		hashkey.xmin = HeapTupleHeaderGetUpdateXid(old_tuple->t_data);
 		hashkey.tid = old_tuple->t_data->t_ctid;
 
 		mapping = (OldToNewMapping)
@@ -620,6 +631,9 @@ raw_heap_insert(RewriteState state, HeapTuple tup)
 			 * end_heap_rewrite.
 			 */
 			RelationOpenSmgr(state->rs_new_rel);
+
+			PageSetChecksumInplace(page, state->rs_blockno);
+
 			smgrextend(state->rs_new_rel->rd_smgr, MAIN_FORKNUM,
 					   state->rs_blockno, (char *) page, true);
 

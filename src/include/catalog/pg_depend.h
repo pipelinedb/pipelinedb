@@ -5,7 +5,7 @@
  *	  along with the relation's initial contents.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_depend.h
@@ -37,14 +37,14 @@ CATALOG(pg_depend,2608) BKI_WITHOUT_OIDS
 	 */
 	Oid			classid;		/* OID of table containing object */
 	Oid			objid;			/* OID of object itself */
-	int4		objsubid;		/* column number, or 0 if not used */
+	int32		objsubid;		/* column number, or 0 if not used */
 
 	/*
 	 * Identification of the independent (referenced) object.
 	 */
 	Oid			refclassid;		/* OID of table containing object */
 	Oid			refobjid;		/* OID of object itself */
-	int4		refobjsubid;	/* column number, or 0 if not used */
+	int32		refobjsubid;	/* column number, or 0 if not used */
 
 	/*
 	 * Precise semantics of the relationship are specified by the deptype

@@ -8,6 +8,7 @@
   <secondary>SQL</secondary>
  </indexterm>
 
+&common;
  <para>
   This chapter describes the syntax of SQL.  It forms the foundation
   for understanding the following chapters which will go into detail
@@ -18,14 +19,8 @@
   We also advise users who are already familiar with SQL to read this
   chapter carefully because it contains several rules and concepts that
   are implemented inconsistently among SQL databases or that are
-  <!## PG>
   specific to <productname>PostgreSQL</productname>.
-  <!## end>
-  <!## XC>
-  specific to <productname>Postgres-XC</productname>.
-  <!## end>
  </para>
-
 
  <sect1 id="sql-syntax-lexical">
   <title>Lexical Structure</title>
@@ -102,6 +97,7 @@ INSERT INTO MY_TABLE VALUES (3, 'hi there');
     <primary>key word</primary>
     <secondary>syntax of</secondary>
    </indexterm>
+
 &common;
    <para>
     Tokens such as <token>SELECT</token>, <token>UPDATE</token>, or
@@ -262,20 +258,10 @@ U&amp;"d!0061t!+000061" UESCAPE '!'
     unquoted names are always folded to lower case.  For example, the
     identifiers <literal>FOO</literal>, <literal>foo</literal>, and
     <literal>"foo"</literal> are considered the same by
-<!## PG>
     <productname>PostgreSQL</productname>, but
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname>, but
-<!## end>
     <literal>"Foo"</literal> and <literal>"FOO"</literal> are
     different from these three and each other.  (The folding of
-<!## PG>
     unquoted names to lower case in <productname>PostgreSQL</> is
-<!## end>
-<!## XC>
-    unquoted names to lower case in <productname>Postgres-XC</> is
-<!## end>
     incompatible with the SQL standard, which says that unquoted names
     should be folded to upper case.  Thus, <literal>foo</literal>
     should be equivalent to <literal>"FOO"</literal> not
@@ -292,15 +278,11 @@ U&amp;"d!0061t!+000061" UESCAPE '!'
    <indexterm zone="sql-syntax-constants">
     <primary>constant</primary>
    </indexterm>
+
 &common;
    <para>
     There are three kinds of <firstterm>implicitly-typed
-<!## PG>
     constants</firstterm> in <productname>PostgreSQL</productname>:
-<!## end>
-<!## XC>
-    constants</firstterm> in <productname>Postgres-XC</productname>:
-<!## end>
     strings, bit strings, and numbers.
     Constants can also be specified with explicit types, which can
     enable more accurate representation and more efficient handling by
@@ -315,6 +297,7 @@ U&amp;"d!0061t!+000061" UESCAPE '!'
      <primary>character string</primary>
      <secondary>constant</secondary>
     </indexterm>
+
 &common;
     <para>
      <indexterm>
@@ -349,12 +332,7 @@ SELECT 'foobar';
 SELECT 'foo'      'bar';
 </programlisting>
      is not valid syntax.  (This slightly bizarre behavior is specified
-<!## PG>
      by <acronym>SQL</acronym>; <productname>PostgreSQL</productname> is
-<!## end>
-<!## XC>
-     by <acronym>SQL</acronym>; <productname>Postgres-XC</productname> is
-<!## end>
      following the standard.)
     </para>
    </sect3>
@@ -368,14 +346,10 @@ SELECT 'foo'      'bar';
      <indexterm zone="sql-syntax-strings-escape">
       <primary>backslash escapes</primary>
      </indexterm>
+
 &common;
     <para>
-<!## PG>
      <productname>PostgreSQL</productname> also accepts <quote>escape</>
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> also accepts <quote>escape</>
-<!## end>
      string constants, which are an extension to the SQL standard.
      An escape string constant is specified by writing the letter
      <literal>E</literal> (upper or lower case) just before the opening single
@@ -484,12 +458,7 @@ SELECT 'foo'      'bar';
     <para>
      If the configuration parameter
      <xref linkend="guc-standard-conforming-strings"> is <literal>off</>,
-<!## PG>
      then <productname>PostgreSQL</productname> recognizes backslash escapes
-<!## end>
-<!## XC>
-     then <productname>Postgres-XC</productname> recognizes backslash escapes
-<!## end>
      in both regular and escape string constants.  However, as of
      <productname>PostgreSQL</> 9.1, the default is <literal>on</>, meaning
      that backslash escapes are recognized only in escape string constants.
@@ -521,14 +490,10 @@ SELECT 'foo'      'bar';
      <primary>Unicode escape</primary>
      <secondary>in string constants</secondary>
     </indexterm>
+
 &common;
     <para>
-<!## PG>
      <productname>PostgreSQL</productname> also supports another type
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> also supports another type
-<!## end>
      of escape syntax for strings that allows specifying arbitrary
      Unicode characters by code point.  A Unicode escape string
      constant starts with <literal>U&amp;</literal> (upper or lower case
@@ -601,18 +566,14 @@ U&amp;'d!0061t!+000061' UESCAPE '!'
      <indexterm>
       <primary>dollar quoting</primary>
      </indexterm>
+
 &common;
     <para>
      While the standard syntax for specifying string constants is usually
      convenient, it can be difficult to understand when the desired string
      contains many single quotes or backslashes, since each of those must
      be doubled. To allow more readable queries in such situations,
-<!## PG>
      <productname>PostgreSQL</productname> provides another way, called
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> provides another way, called
-<!## end>
      <quote>dollar quoting</quote>, to write string constants.
      A dollar-quoted string constant
      consists of a dollar sign (<literal>$</literal>), an optional
@@ -648,12 +609,7 @@ $function$
      Here, the sequence <literal>$q$[\t\r\n\v\\]$q$</> represents a
      dollar-quoted literal string <literal>[\t\r\n\v\\]</>, which will
      be recognized when the function body is executed by
-<!## PG>
      <productname>PostgreSQL</>.  But since the sequence does not match
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</>.  But since the sequence does not match
-<!## end>
      the outer dollar quoting delimiter <literal>$function$</>, it is
      just some more characters within the constant so far as the outer
      string is concerned.
@@ -692,8 +648,8 @@ $function$
      <primary>bit string</primary>
      <secondary>constant</secondary>
     </indexterm>
-&common;
 
+&common;
     <para>
      Bit-string constants look like regular string constants with a
      <literal>B</literal> (upper or lower case) immediately before the
@@ -717,15 +673,15 @@ $function$
     </para>
    </sect3>
 
-   <sect3>
+   <sect3 id="sql-syntax-constants-numeric">
     <title>Numeric Constants</title>
 
     <indexterm>
      <primary>number</primary>
      <secondary>constant</secondary>
     </indexterm>
-&common;
 
+&common;
     <para>
      Numeric constants are accepted in these general forms:
 <synopsis>
@@ -797,8 +753,8 @@ REAL '1.23'  -- string style
      <primary>data type</primary>
      <secondary>constant</secondary>
     </indexterm>
-&common;
 
+&common;
     <para>
      A constant of an <emphasis>arbitrary</emphasis> type can be
      entered using any one of the following notations:
@@ -847,19 +803,9 @@ CAST ( '<replaceable>string</replaceable>' AS <replaceable>type</replaceable> )
      The <literal>CAST()</> syntax conforms to SQL.  The
      <literal><replaceable>type</> '<replaceable>string</>'</literal>
      syntax is a generalization of the standard: SQL specifies this syntax only
-<!## PG>
      for a few data types, but <productname>PostgreSQL</productname> allows it
-<!## end>
-<!## XC>
-     for a few data types, but <productname>Postgres-XC</productname> allows it
-<!## end>
      for all types.  The syntax with
-<!## PG>
      <literal>::</literal> is historical <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-     <literal>::</literal> is historical <productname>Postgres-XC</productname>
-<!## end>
      usage, as is the function-call syntax.
     </para>
    </sect3>
@@ -872,8 +818,8 @@ CAST ( '<replaceable>string</replaceable>' AS <replaceable>type</replaceable> )
     <primary>operator</primary>
     <secondary>syntax</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
     An operator name is a sequence of up to <symbol>NAMEDATALEN</symbol>-1
     (63 by default) characters from the following list:
@@ -900,12 +846,7 @@ CAST ( '<replaceable>string</replaceable>' AS <replaceable>type</replaceable> )
 </literallayout>
        For example, <literal>@-</literal> is an allowed operator name,
        but <literal>*-</literal> is not.  This restriction allows
-<!## PG>
        <productname>PostgreSQL</productname> to parse SQL-compliant
-<!## end>
-<!## XC>
-       <productname>Postgres-XC</productname> to parse SQL-compliant
-<!## end>
        queries without requiring spaces between tokens.
       </para>
      </listitem>
@@ -918,20 +859,15 @@ CAST ( '<replaceable>string</replaceable>' AS <replaceable>type</replaceable> )
     For example, if you have defined a left unary operator named <literal>@</literal>,
     you cannot write <literal>X*@Y</literal>; you must write
     <literal>X* @Y</literal> to ensure that
-<!## PG>
     <productname>PostgreSQL</productname> reads it as two operator names
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> reads it as two operator names
-<!## end>
     not one.
    </para>
   </sect2>
 
-  <sect2>
+  <sect2 id="sql-syntax-special-chars">
    <title>Special Characters</title>
-&common;
 
+&common;
   <para>
    Some characters that are not alphanumeric have a special meaning
    that is different from being an operator.  Details on the usage can
@@ -1019,8 +955,8 @@ CAST ( '<replaceable>string</replaceable>' AS <replaceable>type</replaceable> )
     <primary>comment</primary>
     <secondary sortas="SQL">in SQL</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
     A comment is a sequence of characters beginning with
     double dashes and extending to the end of the line, e.g.:
@@ -1056,16 +992,11 @@ CAST ( '<replaceable>string</replaceable>' AS <replaceable>type</replaceable> )
     <primary>operator</primary>
     <secondary>precedence</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
     <xref linkend="sql-precedence-table"> shows the precedence and
-<!## PG>
     associativity of the operators in <productname>PostgreSQL</>.
-<!## end>
-<!## XC>
-    associativity of the operators in <productname>Postgres-XC</>.
-<!## end>
     Most operators have the same precedence and are left-associative.
     The precedence and associativity of the operators is hard-wired
     into the parser.  This can lead to non-intuitive behavior; for
@@ -1113,12 +1044,7 @@ SELECT (5 !) - 6;
       <row>
        <entry><token>::</token></entry>
        <entry>left</entry>
-<!## PG>
        <entry><productname>PostgreSQL</productname>-style typecast</entry>
-<!## end>
-<!## XC>
-       <entry><productname>Postgres-XC</productname>-style typecast</entry>
-<!## end>
       </row>
 
       <row>
@@ -1270,8 +1196,8 @@ SELECT 3 OPERATOR(pg_catalog.+) 4;
    <primary>scalar</primary>
    <see>expression</see>
   </indexterm>
-&common;
 
+&common;
   <para>
    Value expressions are used in a variety of contexts, such
    as in the target list of the <command>SELECT</command> command, as
@@ -1400,14 +1326,14 @@ SELECT 3 OPERATOR(pg_catalog.+) 4;
    the remaining options.
   </para>
 
-  <sect2>
+  <sect2 id="sql-expressions-column-refs">
    <title>Column References</title>
 
    <indexterm>
     <primary>column reference</primary>
    </indexterm>
-&common;
 
+&common;
    <para>
     A column can be referenced in the form:
 <synopsis>
@@ -1424,7 +1350,7 @@ SELECT 3 OPERATOR(pg_catalog.+) 4;
    </para>
   </sect2>
 
-  <sect2>
+  <sect2 id="sql-expressions-parameters-positional">
    <title>Positional Parameters</title>
 
    <indexterm>
@@ -1435,8 +1361,8 @@ SELECT 3 OPERATOR(pg_catalog.+) 4;
    <indexterm>
     <primary>$</primary>
    </indexterm>
-&common;
 
+&common;
    <para>
     A positional parameter reference is used to indicate a value
     that is supplied externally to an SQL statement.  Parameters are
@@ -1465,14 +1391,14 @@ CREATE FUNCTION dept(text) RETURNS dept
    </para>
   </sect2>
 
-  <sect2>
+  <sect2 id="sql-expressions-subscripts">
    <title>Subscripts</title>
 
    <indexterm>
     <primary>subscript</primary>
    </indexterm>
-&common;
 
+&common;
    <para>
     If an expression yields a value of an array type, then a specific
     element of the array value can be extracted by writing
@@ -1515,8 +1441,8 @@ $1[10:42]
    <indexterm>
     <primary>field selection</primary>
    </indexterm>
-&common;
 
+&common;
    <para>
     If an expression yields a value of a composite type (row type), then a
     specific field of the row can be extracted by writing
@@ -1562,15 +1488,15 @@ $1.somecolumn
    </para>
   </sect2>
 
-  <sect2>
+  <sect2 id="sql-expressions-operator-calls">
    <title>Operator Invocations</title>
 
    <indexterm>
     <primary>operator</primary>
     <secondary>invocation</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
     There are three possible syntaxes for an operator invocation:
     <simplelist>
@@ -1592,15 +1518,15 @@ $1.somecolumn
    </para>
   </sect2>
 
-  <sect2>
+  <sect2 id="sql-expressions-function-calls">
    <title>Function Calls</title>
 
    <indexterm>
     <primary>function</primary>
     <secondary>invocation</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
     The syntax for a function call is the name of a function
     (possibly qualified with a schema name), followed by its argument list
@@ -1649,8 +1575,8 @@ sqrt(2)
     <primary>aggregate function</primary>
     <secondary>invocation</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
     An <firstterm>aggregate expression</firstterm> represents the
     application of an aggregate function across the rows selected by a
@@ -1748,12 +1674,7 @@ SELECT string_agg(a ORDER BY a, ',') FROM table;  -- incorrect
    <note>
     <para>
      The ability to specify both <literal>DISTINCT</> and <literal>ORDER BY</>
-<!## PG>
      in an aggregate function is a <productname>PostgreSQL</> extension.
-<!## end>
-<!## XC>
-     in an aggregate function is a <productname>Postgres-XC</> extension.
-<!## end>
     </para>
    </note>
 
@@ -1799,6 +1720,7 @@ SELECT string_agg(a ORDER BY a, ',') FROM table;  -- incorrect
     <primary>OVER clause</primary>
    </indexterm>
 
+&common;
    <para>
     A <firstterm>window function call</firstterm> represents the application
     of an aggregate-like function over some portion of the rows selected
@@ -1811,10 +1733,10 @@ SELECT string_agg(a ORDER BY a, ',') FROM table;  -- incorrect
     The syntax of a window function call is one of the following:
 
 <synopsis>
-<replaceable>function_name</replaceable> (<optional><replaceable>expression</replaceable> <optional>, <replaceable>expression</replaceable> ... </optional></optional>) OVER ( <replaceable class="parameter">window_definition</replaceable> )
 <replaceable>function_name</replaceable> (<optional><replaceable>expression</replaceable> <optional>, <replaceable>expression</replaceable> ... </optional></optional>) OVER <replaceable>window_name</replaceable>
-<replaceable>function_name</replaceable> ( * ) OVER ( <replaceable class="parameter">window_definition</replaceable> )
+<replaceable>function_name</replaceable> (<optional><replaceable>expression</replaceable> <optional>, <replaceable>expression</replaceable> ... </optional></optional>) OVER ( <replaceable class="parameter">window_definition</replaceable> )
 <replaceable>function_name</replaceable> ( * ) OVER <replaceable>window_name</replaceable>
+<replaceable>function_name</replaceable> ( * ) OVER ( <replaceable class="parameter">window_definition</replaceable> )
 </synopsis>
     where <replaceable class="parameter">window_definition</replaceable>
     has the syntax
@@ -1844,57 +1766,93 @@ UNBOUNDED FOLLOWING
    <para>
     Here, <replaceable>expression</replaceable> represents any value
     expression that does not itself contain window function calls.
-    The <literal>PARTITION BY</> and <literal>ORDER BY</> lists have
-    essentially the same syntax and semantics as <literal>GROUP BY</>
-    and <literal>ORDER BY</> clauses of the whole query, except that their
-    expressions are always just expressions and cannot be output-column
-    names or numbers.
+   </para>
+
+   <para>
     <replaceable>window_name</replaceable> is a reference to a named window
     specification defined in the query's <literal>WINDOW</literal> clause.
-    Named window specifications are usually referenced with just
-    <literal>OVER</> <replaceable>window_name</replaceable>, but it is
-    also possible to write a window name inside the parentheses and then
-    optionally supply an ordering clause and/or frame clause (the referenced
-    window must lack these clauses, if they are supplied here).
-    This latter syntax follows the same rules as modifying an existing
-    window name within the <literal>WINDOW</literal> clause; see the
-    <xref linkend="sql-select"> reference
-    page for details.
+    Alternatively, a full <replaceable>window_definition</replaceable> can
+    be given within parentheses, using the same syntax as for defining a
+    named window in the <literal>WINDOW</literal> clause; see the
+    <xref linkend="sql-select"> reference page for details.  It's worth
+    pointing out that <literal>OVER wname</> is not exactly equivalent to
+    <literal>OVER (wname)</>; the latter implies copying and modifying the
+    window definition, and will be rejected if the referenced window
+    specification includes a frame clause.
+   </para>
+
+   <para>
+    The <literal>PARTITION BY</> option groups the rows of the query into
+    <firstterm>partitions</>, which are processed separately by the window
+    function.  <literal>PARTITION BY</> works similarly to a query-level
+    <literal>GROUP BY</> clause, except that its expressions are always just
+    expressions and cannot be output-column names or numbers.
+    Without <literal>PARTITION BY</>, all rows produced by the query are
+    treated as a single partition.
+    The <literal>ORDER BY</> option determines the order in which the rows
+    of a partition are processed by the window function.  It works similarly
+    to a query-level <literal>ORDER BY</> clause, but likewise cannot use
+    output-column names or numbers.  Without <literal>ORDER BY</>, rows are
+    processed in an unspecified order.
    </para>
 
    <para>
     The <replaceable class="parameter">frame_clause</replaceable> specifies
-    the set of rows constituting the <firstterm>window frame</>, for those
-    window functions that act on the frame instead of the whole partition.
-    If <replaceable>frame_end</> is omitted it defaults to <literal>CURRENT
-    ROW</>.  Restrictions are that
+    the set of rows constituting the <firstterm>window frame</>, which is a
+    subset of the current partition, for those window functions that act on
+    the frame instead of the whole partition.  The frame can be specified in
+    either <literal>RANGE</> or <literal>ROWS</> mode; in either case, it
+    runs from the <replaceable>frame_start</> to the
+    <replaceable>frame_end</>.  If <replaceable>frame_end</> is omitted,
+    it defaults to <literal>CURRENT ROW</>.
+   </para>
+
+   <para>
+    A <replaceable>frame_start</> of <literal>UNBOUNDED PRECEDING</> means
+    that the frame starts with the first row of the partition, and similarly
+    a <replaceable>frame_end</> of <literal>UNBOUNDED FOLLOWING</> means
+    that the frame ends with the last row of the partition.
+   </para>
+
+   <para>
+    In <literal>RANGE</> mode, a <replaceable>frame_start</> of
+    <literal>CURRENT ROW</> means the frame starts with the current row's
+    first <firstterm>peer</> row (a row that <literal>ORDER BY</> considers
+    equivalent to the current row), while a <replaceable>frame_end</> of
+    <literal>CURRENT ROW</> means the frame ends with the last equivalent
+    peer.  In <literal>ROWS</> mode, <literal>CURRENT ROW</> simply means
+    the current row.
+   </para>
+
+   <para>
+    The <replaceable>value</> <literal>PRECEDING</> and
+    <replaceable>value</> <literal>FOLLOWING</> cases are currently only
+    allowed in <literal>ROWS</> mode.  They indicate that the frame starts
+    or ends the specified number of rows before or after the current row.
+    <replaceable>value</replaceable> must be an integer expression not
+    containing any variables, aggregate functions, or window functions.
+    The value must not be null or negative; but it can be zero, which
+    just selects the current row.
+   </para>
+
+   <para>
+    The default framing option is <literal>RANGE UNBOUNDED PRECEDING</>,
+    which is the same as <literal>RANGE BETWEEN UNBOUNDED PRECEDING AND
+    CURRENT ROW</>.  With <literal>ORDER BY</>, this sets the frame to be
+    all rows from the partition start up through the current row's last
+    peer.  Without <literal>ORDER BY</>, all rows of the partition are
+    included in the window frame, since all rows become peers of the current
+    row.
+   </para>
+
+   <para>
+    Restrictions are that
     <replaceable>frame_start</> cannot be <literal>UNBOUNDED FOLLOWING</>,
     <replaceable>frame_end</> cannot be <literal>UNBOUNDED PRECEDING</>,
     and the <replaceable>frame_end</> choice cannot appear earlier in the
     above list than the <replaceable>frame_start</> choice &mdash; for example
     <literal>RANGE BETWEEN CURRENT ROW AND <replaceable>value</>
     PRECEDING</literal> is not allowed.
-    The default framing option is <literal>RANGE UNBOUNDED PRECEDING</>,
-    which is the same as <literal>RANGE BETWEEN UNBOUNDED PRECEDING AND
-    CURRENT ROW</>; it sets the frame to be all rows from the partition start
-    up through the current row's last peer in the <literal>ORDER BY</>
-    ordering (which means all rows if there is no <literal>ORDER BY</>).
-    In general, <literal>UNBOUNDED PRECEDING</> means that the frame
-    starts with the first row of the partition, and similarly
-    <literal>UNBOUNDED FOLLOWING</> means that the frame ends with the last
-    row of the partition (regardless of <literal>RANGE</> or <literal>ROWS</>
-    mode).  In <literal>ROWS</> mode, <literal>CURRENT ROW</>
-    means that the frame starts or ends with the current row; but in
-    <literal>RANGE</> mode it means that the frame starts or ends with
-    the current row's first or last peer in the <literal>ORDER BY</> ordering.
-    The <replaceable>value</> <literal>PRECEDING</> and
-    <replaceable>value</> <literal>FOLLOWING</> cases are currently only
-    allowed in <literal>ROWS</> mode.  They indicate that the frame starts
-    or ends with the row that many rows before or after the current row.
-    <replaceable>value</replaceable> must be an integer expression not
-    containing any variables, aggregate functions, or window functions.
-    The value must not be null or negative; but it can be zero, which
-    selects the current row itself.
    </para>
 
    <para>
@@ -1908,7 +1866,7 @@ UNBOUNDED FOLLOWING
     The syntaxes using <literal>*</> are used for calling parameter-less
     aggregate functions as window functions, for example
     <literal>count(*) OVER (PARTITION BY x ORDER BY y)</>.
-    <literal>*</> is customarily not used for non-aggregate window functions.
+    The asterisk (<literal>*</>) is customarily not used for non-aggregate window functions.
     Aggregate window functions, unlike normal aggregate functions, do not
     allow <literal>DISTINCT</> or <literal>ORDER BY</> to be used within the
     function argument list.
@@ -1942,28 +1900,18 @@ UNBOUNDED FOLLOWING
    <indexterm>
     <primary>::</primary>
    </indexterm>
-&common;
 
+&common;
    <para>
     A type cast specifies a conversion from one data type to another.
-<!## PG>
     <productname>PostgreSQL</productname> accepts two equivalent syntaxes
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> accepts two equivalent syntaxes
-<!## end>
     for type casts:
 <synopsis>
 CAST ( <replaceable>expression</replaceable> AS <replaceable>type</replaceable> )
 <replaceable>expression</replaceable>::<replaceable>type</replaceable>
 </synopsis>
     The <literal>CAST</> syntax conforms to SQL; the syntax with
-<!## PG>
     <literal>::</literal> is historical <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-    <literal>::</literal> is historical <productname>Postgres-XC</productname>
-<!## end>
     usage.
    </para>
 
@@ -2028,6 +1976,7 @@ CAST ( <replaceable>expression</replaceable> AS <replaceable>type</replaceable> 
     <primary>COLLATE</primary>
    </indexterm>
 
+&common;
    <para>
     The <literal>COLLATE</literal> clause overrides the collation of
     an expression.  It is appended to the expression it applies to:
@@ -2088,8 +2037,8 @@ SELECT * FROM tbl WHERE (a &gt; 'foo') COLLATE "C";
    <indexterm>
     <primary>subquery</primary>
    </indexterm>
-&common;
 
+&common;
    <para>
     A scalar subquery is an ordinary
     <command>SELECT</command> query in parentheses that returns exactly one
@@ -2126,8 +2075,8 @@ SELECT name, (SELECT max(pop) FROM cities WHERE cities.state = states.name)
    <indexterm>
     <primary>ARRAY</primary>
    </indexterm>
-&common;
 
+&common;
    <para>
     An array constructor is an expression that builds an
     array value using values for its member elements.  A simple array
@@ -2224,9 +2173,9 @@ SELECT ARRAY[]::integer[];
    bracketed) subquery. For example:
 <programlisting>
 SELECT ARRAY(SELECT oid FROM pg_proc WHERE proname LIKE 'bytea%');
-                          ?column?
--------------------------------------------------------------
- {2011,1954,1948,1952,1951,1244,1950,2005,1949,1953,2006,31}
+                                 array
+-----------------------------------------------------------------------
+ {2011,1954,1948,1952,1951,1244,1950,2005,1949,1953,2006,31,2412,2413}
 (1 row)
 </programlisting>
    The subquery must return a single column. The resulting
@@ -2259,8 +2208,8 @@ SELECT ARRAY(SELECT oid FROM pg_proc WHERE proname LIKE 'bytea%');
    <indexterm>
     <primary>ROW</primary>
    </indexterm>
-&common;
 
+&common;
    <para>
     A row constructor is an expression that builds a row value (also
     called a composite value) using values
@@ -2365,8 +2314,8 @@ SELECT ROW(table.*) IS NULL FROM table;  -- detect all-null rows
     <primary>expression</primary>
     <secondary>order of evaluation</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
     The order of evaluation of subexpressions is not defined.  In
     particular, the inputs of an operator or function are not necessarily
@@ -2427,15 +2376,10 @@ SELECT ... WHERE CASE WHEN x &gt; 0 THEN y/x &gt; 1.5 ELSE false END;
     <primary>notation</primary>
     <secondary>functions</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> allows functions that have named
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> allows functions that have named
-<!## end>
     parameters to be called using either <firstterm>positional</firstterm> or
     <firstterm>named</firstterm> notation.  Named notation is especially
     useful for functions that have a large number of parameters, since it
@@ -2456,12 +2400,7 @@ SELECT ... WHERE CASE WHEN x &gt; 0 THEN y/x &gt; 1.5 ELSE false END;
    </para>
 
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> also supports
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> also supports
-<!## end>
     <firstterm>mixed</firstterm> notation, which combines positional and
     named notation.  In this case, positional parameters are written first
     and named parameters appear after them.
@@ -2500,16 +2439,11 @@ LANGUAGE SQL IMMUTABLE STRICT;
      <primary>function</primary>
      <secondary>positional notation</secondary>
     </indexterm>
-&common;
 
+&common;
     <para>
      Positional notation is the traditional mechanism for passing arguments
-<!## PG>
      to functions in <productname>PostgreSQL</productname>.  An example is:
-<!## end>
-<!## XC>
-     to functions in <productname>Postgres-XC</productname>.  An example is:
-<!## end>
 <screen>
 SELECT concat_lower_or_upper('Hello', 'World', true);
  concat_lower_or_upper 
@@ -2541,8 +2475,8 @@ SELECT concat_lower_or_upper('Hello', 'World');
      <primary>function</primary>
      <secondary>named notation</secondary>
     </indexterm>
-&common;
 
+&common;
     <para>
      In named notation, each argument's name is specified using
      <literal>:=</literal> to separate it from the argument expression.
@@ -2581,8 +2515,8 @@ SELECT concat_lower_or_upper(a := 'Hello', uppercase := true, b := 'World');
     <primary>function</primary>
     <secondary>mixed notation</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
     The mixed notation combines positional and named notation. However, as
     already mentioned, named arguments cannot precede positional arguments.
@@ -2601,6 +2535,14 @@ SELECT concat_lower_or_upper('Hello', 'World', uppercase := true);
     having numerous parameters that have default values, named or mixed
     notation can save a great deal of writing and reduce chances for error.
    </para>
+
+   <note>
+    <para>
+     Named and mixed call notations currently cannot be used when calling an
+     aggregate function (but they do work when an aggregate function is used
+     as a window function).
+    </para>
+   </note>
   </sect2>
  </sect1>
 

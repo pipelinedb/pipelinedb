@@ -111,7 +111,7 @@ Lock_AF_UNIX(unsigned short port, const char *unixSocketName)
 {
 	POOLER_UNIXSOCK_PATH(sock_path, port, unixSocketName);
 
-	CreateSocketLockFile(sock_path, true);
+	CreateSocketLockFile(sock_path, true, NULL);
 
 	unlink(sock_path);
 

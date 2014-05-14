@@ -22,7 +22,7 @@
  * process, SIGUSR1 is sent and the signal handler in the waiting process
  * writes the byte to the pipe on behalf of the signaling process.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -33,6 +33,7 @@
 #include "postgres.h"
 
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <unistd.h>
 #include <sys/time.h>
@@ -48,6 +49,7 @@
 #endif
 
 #include "miscadmin.h"
+#include "portability/instr_time.h"
 #include "postmaster/postmaster.h"
 #include "storage/latch.h"
 #include "storage/pmsignal.h"
@@ -60,11 +62,41 @@ static volatile sig_atomic_t waiting = false;
 static int	selfpipe_readfd = -1;
 static int	selfpipe_writefd = -1;
 
-/* private function prototypes */
-static void initSelfPipe(void);
-static void drainSelfPipe(void);
+/* Private function prototypes */
 static void sendSelfPipeByte(void);
+static void drainSelfPipe(void);
 
+
+/*
+ * Initialize the process-local latch infrastructure.
+ *
+ * This must be called once during startup of any process that can wait on
+ * latches, before it issues any InitLatch() or OwnLatch() calls.
+ */
+void
+InitializeLatchSupport(void)
+{
+	int			pipefd[2];
+
+	Assert(selfpipe_readfd == -1);
+
+	/*
+	 * Set up the self-pipe that allows a signal handler to wake up the
+	 * select() in WaitLatch. Make the write-end non-blocking, so that
+	 * SetLatch won't block if the event has already been set many times
+	 * filling the kernel buffer. Make the read-end non-blocking too, so that
+	 * we can easily clear the pipe by reading until EAGAIN or EWOULDBLOCK.
+	 */
+	if (pipe(pipefd) < 0)
+		elog(FATAL, "pipe() failed: %m");
+	if (fcntl(pipefd[0], F_SETFL, O_NONBLOCK) < 0)
+		elog(FATAL, "fcntl() failed on read-end of self-pipe: %m");
+	if (fcntl(pipefd[1], F_SETFL, O_NONBLOCK) < 0)
+		elog(FATAL, "fcntl() failed on write-end of self-pipe: %m");
+
+	selfpipe_readfd = pipefd[0];
+	selfpipe_writefd = pipefd[1];
+}
 
 /*
  * Initialize a backend-local latch.
@@ -72,9 +104,8 @@ static void sendSelfPipeByte(void);
 void
 InitLatch(volatile Latch *latch)
 {
-	/* Initialize the self-pipe if this is our first latch in the process */
-	if (selfpipe_readfd == -1)
-		initSelfPipe();
+	/* Assert InitializeLatchSupport has been called in this process */
+	Assert(selfpipe_readfd >= 0);
 
 	latch->is_set = false;
 	latch->owner_pid = MyProcPid;
@@ -116,11 +147,10 @@ InitSharedLatch(volatile Latch *latch)
 void
 OwnLatch(volatile Latch *latch)
 {
-	Assert(latch->is_shared);
+	/* Assert InitializeLatchSupport has been called in this process */
+	Assert(selfpipe_readfd >= 0);
 
-	/* Initialize the self-pipe if this is our first latch in this process */
-	if (selfpipe_readfd == -1)
-		initSelfPipe();
+	Assert(latch->is_shared);
 
 	/* sanity check */
 	if (latch->owner_pid != 0)
@@ -147,13 +177,10 @@ DisownLatch(volatile Latch *latch)
  * to wait for. If the latch is already set (and WL_LATCH_SET is given), the
  * function returns immediately.
  *
- * The 'timeout' is given in milliseconds. It must be >= 0 if WL_TIMEOUT flag
- * is given.  On some platforms, signals do not interrupt the wait, or even
- * cause the timeout to be restarted, so beware that the function can sleep
- * for several times longer than the requested timeout.  However, this
- * difficulty is not so great as it seems, because the signal handlers for any
- * signals that the caller should respond to ought to be programmed to end the
- * wait by calling SetLatch.  Ideally, the timeout parameter is vestigial.
+ * The "timeout" is given in milliseconds. It must be >= 0 if WL_TIMEOUT flag
+ * is given.  Although it is declared as "long", we don't actually support
+ * timeouts longer than INT_MAX milliseconds.  Note that some extra overhead
+ * is incurred when WL_TIMEOUT is given, so avoid using a timeout if possible.
  *
  * The latch must be owned by the current process, ie. it must be a
  * backend-local latch initialized with InitLatch, or a shared latch
@@ -183,13 +210,16 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
 {
 	int			result = 0;
 	int			rc;
+	instr_time	start_time,
+				cur_time;
+	long		cur_timeout;
 
 #ifdef HAVE_POLL
 	struct pollfd pfds[3];
 	int			nfds;
 #else
 	struct timeval tv,
-			   *tvp = NULL;
+			   *tvp;
 	fd_set		input_mask;
 	fd_set		output_mask;
 	int			hifd;
@@ -206,21 +236,30 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
 	if ((wakeEvents & WL_LATCH_SET) && latch->owner_pid != MyProcPid)
 		elog(ERROR, "cannot wait on a latch owned by another process");
 
-	/* Initialize timeout */
+	/*
+	 * Initialize timeout if requested.  We must record the current time so
+	 * that we can determine the remaining timeout if the poll() or select()
+	 * is interrupted.	(On some platforms, select() will update the contents
+	 * of "tv" for us, but unfortunately we can't rely on that.)
+	 */
 	if (wakeEvents & WL_TIMEOUT)
 	{
-		Assert(timeout >= 0);
+		INSTR_TIME_SET_CURRENT(start_time);
+		Assert(timeout >= 0 && timeout <= INT_MAX);
+		cur_timeout = timeout;
+
 #ifndef HAVE_POLL
-		tv.tv_sec = timeout / 1000L;
-		tv.tv_usec = (timeout % 1000L) * 1000L;
+		tv.tv_sec = cur_timeout / 1000L;
+		tv.tv_usec = (cur_timeout % 1000L) * 1000L;
 		tvp = &tv;
 #endif
 	}
 	else
 	{
-#ifdef HAVE_POLL
-		/* make sure poll() agrees there is no timeout */
-		timeout = -1;
+		cur_timeout = -1;
+
+#ifndef HAVE_POLL
+		tvp = NULL;
 #endif
 	}
 
@@ -283,54 +322,62 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
 		}
 
 		/* Sleep */
-		rc = poll(pfds, nfds, (int) timeout);
+		rc = poll(pfds, nfds, (int) cur_timeout);
 
 		/* Check return code */
 		if (rc < 0)
 		{
-			if (errno == EINTR)
-				continue;
-			waiting = false;
-			ereport(ERROR,
-					(errcode_for_socket_access(),
-					 errmsg("poll() failed: %m")));
+			/* EINTR is okay, otherwise complain */
+			if (errno != EINTR)
+			{
+				waiting = false;
+				ereport(ERROR,
+						(errcode_for_socket_access(),
+						 errmsg("poll() failed: %m")));
+			}
 		}
-		if (rc == 0 && (wakeEvents & WL_TIMEOUT))
+		else if (rc == 0)
 		{
 			/* timeout exceeded */
-			result |= WL_TIMEOUT;
+			if (wakeEvents & WL_TIMEOUT)
+				result |= WL_TIMEOUT;
 		}
-		if ((wakeEvents & WL_SOCKET_READABLE) &&
-			(pfds[0].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)))
+		else
 		{
-			/* data available in socket, or EOF/error condition */
-			result |= WL_SOCKET_READABLE;
-		}
-		if ((wakeEvents & WL_SOCKET_WRITEABLE) &&
-			(pfds[0].revents & POLLOUT))
-		{
-			result |= WL_SOCKET_WRITEABLE;
-		}
+			/* at least one event occurred, so check revents values */
+			if ((wakeEvents & WL_SOCKET_READABLE) &&
+				(pfds[0].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)))
+			{
+				/* data available in socket, or EOF/error condition */
+				result |= WL_SOCKET_READABLE;
+			}
+			if ((wakeEvents & WL_SOCKET_WRITEABLE) &&
+				(pfds[0].revents & POLLOUT))
+			{
+				result |= WL_SOCKET_WRITEABLE;
+			}
 
-		/*
-		 * We expect a POLLHUP when the remote end is closed, but because we
-		 * don't expect the pipe to become readable or to have any errors
-		 * either, treat those as postmaster death, too.
-		 */
-		if ((wakeEvents & WL_POSTMASTER_DEATH) &&
-		  (pfds[nfds - 1].revents & (POLLHUP | POLLIN | POLLERR | POLLNVAL)))
-		{
 			/*
-			 * According to the select(2) man page on Linux, select(2) may
-			 * spuriously return and report a file descriptor as readable,
-			 * when it's not; and presumably so can poll(2).  It's not clear
-			 * that the relevant cases would ever apply to the postmaster
-			 * pipe, but since the consequences of falsely returning
-			 * WL_POSTMASTER_DEATH could be pretty unpleasant, we take the
-			 * trouble to positively verify EOF with PostmasterIsAlive().
+			 * We expect a POLLHUP when the remote end is closed, but because
+			 * we don't expect the pipe to become readable or to have any
+			 * errors either, treat those cases as postmaster death, too.
 			 */
-			if (!PostmasterIsAlive())
-				result |= WL_POSTMASTER_DEATH;
+			if ((wakeEvents & WL_POSTMASTER_DEATH) &&
+				(pfds[nfds - 1].revents & (POLLHUP | POLLIN | POLLERR | POLLNVAL)))
+			{
+				/*
+				 * According to the select(2) man page on Linux, select(2) may
+				 * spuriously return and report a file descriptor as readable,
+				 * when it's not; and presumably so can poll(2).  It's not
+				 * clear that the relevant cases would ever apply to the
+				 * postmaster pipe, but since the consequences of falsely
+				 * returning WL_POSTMASTER_DEATH could be pretty unpleasant,
+				 * we take the trouble to positively verify EOF with
+				 * PostmasterIsAlive().
+				 */
+				if (!PostmasterIsAlive())
+					result |= WL_POSTMASTER_DEATH;
+			}
 		}
 #else							/* !HAVE_POLL */
 
@@ -367,43 +414,66 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
 		/* Check return code */
 		if (rc < 0)
 		{
-			if (errno == EINTR)
-				continue;
-			waiting = false;
-			ereport(ERROR,
-					(errcode_for_socket_access(),
-					 errmsg("select() failed: %m")));
+			/* EINTR is okay, otherwise complain */
+			if (errno != EINTR)
+			{
+				waiting = false;
+				ereport(ERROR,
+						(errcode_for_socket_access(),
+						 errmsg("select() failed: %m")));
+			}
 		}
-		if (rc == 0 && (wakeEvents & WL_TIMEOUT))
+		else if (rc == 0)
 		{
 			/* timeout exceeded */
-			result |= WL_TIMEOUT;
+			if (wakeEvents & WL_TIMEOUT)
+				result |= WL_TIMEOUT;
 		}
-		if ((wakeEvents & WL_SOCKET_READABLE) && FD_ISSET(sock, &input_mask))
+		else
 		{
-			/* data available in socket, or EOF */
-			result |= WL_SOCKET_READABLE;
-		}
-		if ((wakeEvents & WL_SOCKET_WRITEABLE) && FD_ISSET(sock, &output_mask))
-		{
-			result |= WL_SOCKET_WRITEABLE;
-		}
-		if ((wakeEvents & WL_POSTMASTER_DEATH) &&
+			/* at least one event occurred, so check masks */
+			if ((wakeEvents & WL_SOCKET_READABLE) && FD_ISSET(sock, &input_mask))
+			{
+				/* data available in socket, or EOF */
+				result |= WL_SOCKET_READABLE;
+			}
+			if ((wakeEvents & WL_SOCKET_WRITEABLE) && FD_ISSET(sock, &output_mask))
+			{
+				result |= WL_SOCKET_WRITEABLE;
+			}
+			if ((wakeEvents & WL_POSTMASTER_DEATH) &&
 			FD_ISSET(postmaster_alive_fds[POSTMASTER_FD_WATCH], &input_mask))
-		{
-			/*
-			 * According to the select(2) man page on Linux, select(2) may
-			 * spuriously return and report a file descriptor as readable,
-			 * when it's not; and presumably so can poll(2).  It's not clear
-			 * that the relevant cases would ever apply to the postmaster
-			 * pipe, but since the consequences of falsely returning
-			 * WL_POSTMASTER_DEATH could be pretty unpleasant, we take the
-			 * trouble to positively verify EOF with PostmasterIsAlive().
-			 */
-			if (!PostmasterIsAlive())
-				result |= WL_POSTMASTER_DEATH;
+			{
+				/*
+				 * According to the select(2) man page on Linux, select(2) may
+				 * spuriously return and report a file descriptor as readable,
+				 * when it's not; and presumably so can poll(2).  It's not
+				 * clear that the relevant cases would ever apply to the
+				 * postmaster pipe, but since the consequences of falsely
+				 * returning WL_POSTMASTER_DEATH could be pretty unpleasant,
+				 * we take the trouble to positively verify EOF with
+				 * PostmasterIsAlive().
+				 */
+				if (!PostmasterIsAlive())
+					result |= WL_POSTMASTER_DEATH;
+			}
 		}
 #endif   /* HAVE_POLL */
+
+		/* If we're not done, update cur_timeout for next iteration */
+		if (result == 0 && cur_timeout >= 0)
+		{
+			INSTR_TIME_SET_CURRENT(cur_time);
+			INSTR_TIME_SUBTRACT(cur_time, start_time);
+			cur_timeout = timeout - (long) INSTR_TIME_GET_MILLISEC(cur_time);
+			if (cur_timeout < 0)
+				cur_timeout = 0;
+
+#ifndef HAVE_POLL
+			tv.tv_sec = cur_timeout / 1000L;
+			tv.tv_usec = (cur_timeout % 1000L) * 1000L;
+#endif
+		}
 	} while (result == 0);
 	waiting = false;
 
@@ -418,6 +488,9 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
  * NB: when calling this in a signal handler, be sure to save and restore
  * errno around it.  (That's standard practice in most signal handlers, of
  * course, but we used to omit it in handlers that only set a flag.)
+ *
+ * NB: this function is called from critical sections and signal handlers so
+ * throwing an error is not a good idea.
  */
 void
 SetLatch(volatile Latch *latch)
@@ -509,30 +582,6 @@ latch_sigusr1_handler(void)
 {
 	if (waiting)
 		sendSelfPipeByte();
-}
-
-/* initialize the self-pipe */
-static void
-initSelfPipe(void)
-{
-	int			pipefd[2];
-
-	/*
-	 * Set up the self-pipe that allows a signal handler to wake up the
-	 * select() in WaitLatch. Make the write-end non-blocking, so that
-	 * SetLatch won't block if the event has already been set many times
-	 * filling the kernel buffer. Make the read-end non-blocking too, so that
-	 * we can easily clear the pipe by reading until EAGAIN or EWOULDBLOCK.
-	 */
-	if (pipe(pipefd) < 0)
-		elog(FATAL, "pipe() failed: %m");
-	if (fcntl(pipefd[0], F_SETFL, O_NONBLOCK) < 0)
-		elog(FATAL, "fcntl() failed on read-end of self-pipe: %m");
-	if (fcntl(pipefd[1], F_SETFL, O_NONBLOCK) < 0)
-		elog(FATAL, "fcntl() failed on write-end of self-pipe: %m");
-
-	selfpipe_readfd = pipefd[0];
-	selfpipe_writefd = pipefd[1];
 }
 
 /* Send one byte to the self-pipe, to wake up WaitLatch */

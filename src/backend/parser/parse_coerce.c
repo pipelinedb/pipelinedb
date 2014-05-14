@@ -3,7 +3,7 @@
  * parse_coerce.c
  *		handle type coercions/conversions for parser
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -14,6 +14,7 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "catalog/pg_cast.h"
 #include "catalog/pg_class.h"
 #include "catalog/pg_inherits_fn.h"
@@ -1700,7 +1701,7 @@ enforce_generic_type_consistency(Oid *actual_arg_types,
 			if (!OidIsValid(range_typelem))
 				ereport(ERROR,
 						(errcode(ERRCODE_DATATYPE_MISMATCH),
-						 errmsg("argument declared \"anyrange\" is not a range but type %s",
+						 errmsg("argument declared \"anyrange\" is not a range type but type %s",
 								format_type_be(range_typeid))));
 		}
 
@@ -1921,7 +1922,7 @@ resolve_generic_type(Oid declared_type,
 			if (!OidIsValid(range_typelem))
 				ereport(ERROR,
 						(errcode(ERRCODE_DATATYPE_MISMATCH),
-						 errmsg("argument declared \"anyrange\" is not a range but type %s",
+						 errmsg("argument declared \"anyrange\" is not a range type but type %s",
 								format_type_be(context_base_type))));
 			return range_typelem;
 		}

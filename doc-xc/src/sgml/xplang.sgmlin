@@ -7,15 +7,8 @@
    <primary>procedural language</primary>
   </indexterm>
 
-&common;
-
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> allows user-defined functions
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> allows user-defined functions
-<!## end>
    to be written in other languages besides SQL and C.  These other
    languages are generically called <firstterm>procedural
    languages</firstterm> (<acronym>PL</>s).  For a function
@@ -25,12 +18,7 @@
    the details of the language.  The handler could either do all the
    work of parsing, syntax analysis, execution, etc. itself, or it
    could serve as <quote>glue</quote> between
-<!## PG>
    <productname>PostgreSQL</productname> and an existing implementation
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> and an existing implementation
-<!## end>
    of a programming language.  The handler itself is a
    C language function compiled into a shared object and
    loaded on demand, just like any other C function.
@@ -38,12 +26,7 @@
 
   <para>
    There are currently four procedural languages available in the
-<!## PG>
    standard <productname>PostgreSQL</productname> distribution:
-<!## end>
-<!## XC>
-   standard <productname>Postgres-XC</productname> distribution:
-<!## end>
    <application>PL/pgSQL</application> (<xref linkend="plpgsql">),
    <application>PL/Tcl</application> (<xref linkend="pltcl">),
    <application>PL/Perl</application> (<xref linkend="plperl">), and
@@ -237,12 +220,7 @@ CREATE TRUSTED PROCEDURAL LANGUAGE plperl
   </example>
 
    <para>
-<!## PG>
     In a default <productname>PostgreSQL</productname> installation,
-<!## end>
-<!## XC>
-    In a default <productname>Postgres-XC</productname> installation,
-<!## end>
     the handler for the <application>PL/pgSQL</application> language
     is built and installed into the <quote>library</quote>
     directory; furthermore, the <application>PL/pgSQL</application> language

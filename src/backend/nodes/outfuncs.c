@@ -3,7 +3,7 @@
  * outfuncs.c
  *	  Output functions for Postgres tree nodes.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -336,6 +336,7 @@ _outModifyTable(StringInfo str, const ModifyTable *node)
 	WRITE_INT_FIELD(resultRelIndex);
 	WRITE_NODE_FIELD(plans);
 	WRITE_NODE_FIELD(returningLists);
+	WRITE_NODE_FIELD(fdwPrivLists);
 	WRITE_NODE_FIELD(rowMarks);
 	WRITE_INT_FIELD(epqParam);
 #ifdef PGXC
@@ -491,6 +492,8 @@ _outRemoteQuery(StringInfo str, const RemoteQuery *node)
 	WRITE_NODE_FIELD(query_var_tlist);
 	WRITE_BOOL_FIELD(rq_save_command_id);
 	WRITE_BOOL_FIELD(rq_params_internal);
+	WRITE_BOOL_FIELD(rq_use_pk_for_rep_change);
+	WRITE_BOOL_FIELD(rq_max_param_num);
 }
 
 static void
@@ -949,6 +952,7 @@ _outIntoClause(StringInfo str, const IntoClause *node)
 	WRITE_NODE_FIELD(options);
 	WRITE_ENUM_FIELD(onCommit, OnCommitAction);
 	WRITE_STRING_FIELD(tableSpaceName);
+	WRITE_NODE_FIELD(viewQuery);
 	WRITE_BOOL_FIELD(skipData);
 }
 
@@ -1061,6 +1065,7 @@ _outFuncExpr(StringInfo str, const FuncExpr *node)
 	WRITE_OID_FIELD(funcid);
 	WRITE_OID_FIELD(funcresulttype);
 	WRITE_BOOL_FIELD(funcretset);
+	WRITE_BOOL_FIELD(funcvariadic);
 	WRITE_ENUM_FIELD(funcformat, CoercionForm);
 	WRITE_OID_FIELD(funccollid);
 	WRITE_OID_FIELD(inputcollid);
@@ -1727,7 +1732,6 @@ _outPlannerGlobal(StringInfo str, const PlannerGlobal *node)
 	WRITE_NODE_TYPE("PLANNERGLOBAL");
 
 	/* NB: this isn't a complete set of fields */
-	WRITE_NODE_FIELD(paramlist);
 	WRITE_NODE_FIELD(subplans);
 	WRITE_BITMAPSET_FIELD(rewindPlanIDs);
 	WRITE_NODE_FIELD(finalrtable);
@@ -1735,6 +1739,7 @@ _outPlannerGlobal(StringInfo str, const PlannerGlobal *node)
 	WRITE_NODE_FIELD(resultRelations);
 	WRITE_NODE_FIELD(relationOids);
 	WRITE_NODE_FIELD(invalItems);
+	WRITE_INT_FIELD(nParamExec);
 	WRITE_UINT_FIELD(lastPHId);
 	WRITE_UINT_FIELD(lastRowMarkId);
 	WRITE_BOOL_FIELD(transientPlan);
@@ -1749,7 +1754,9 @@ _outPlannerInfo(StringInfo str, const PlannerInfo *node)
 	WRITE_NODE_FIELD(parse);
 	WRITE_NODE_FIELD(glob);
 	WRITE_UINT_FIELD(query_level);
+	WRITE_NODE_FIELD(plan_params);
 	WRITE_BITMAPSET_FIELD(all_baserels);
+	WRITE_BITMAPSET_FIELD(nullable_baserels);
 	WRITE_NODE_FIELD(join_rel_list);
 	WRITE_INT_FIELD(join_cur_level);
 	WRITE_NODE_FIELD(init_plans);
@@ -1760,6 +1767,7 @@ _outPlannerInfo(StringInfo str, const PlannerInfo *node)
 	WRITE_NODE_FIELD(right_join_clauses);
 	WRITE_NODE_FIELD(full_join_clauses);
 	WRITE_NODE_FIELD(join_info_list);
+	WRITE_NODE_FIELD(lateral_info_list);
 	WRITE_NODE_FIELD(append_rel_list);
 	WRITE_NODE_FIELD(rowMarks);
 	WRITE_NODE_FIELD(placeholder_list);
@@ -1774,6 +1782,7 @@ _outPlannerInfo(StringInfo str, const PlannerInfo *node)
 	WRITE_FLOAT_FIELD(limit_tuples, "%.0f");
 	WRITE_BOOL_FIELD(hasInheritedTarget);
 	WRITE_BOOL_FIELD(hasJoinRTEs);
+	WRITE_BOOL_FIELD(hasLateralRTEs);
 	WRITE_BOOL_FIELD(hasHavingQual);
 	WRITE_BOOL_FIELD(hasPseudoConstantQuals);
 	WRITE_BOOL_FIELD(hasRecursion);
@@ -1796,6 +1805,7 @@ _outRelOptInfo(StringInfo str, const RelOptInfo *node)
 	WRITE_BITMAPSET_FIELD(relids);
 	WRITE_FLOAT_FIELD(rows, "%.0f");
 	WRITE_INT_FIELD(width);
+	WRITE_BOOL_FIELD(consider_startup);
 	WRITE_NODE_FIELD(reltargetlist);
 	WRITE_NODE_FIELD(pathlist);
 	WRITE_NODE_FIELD(ppilist);
@@ -1808,12 +1818,16 @@ _outRelOptInfo(StringInfo str, const RelOptInfo *node)
 	WRITE_ENUM_FIELD(rtekind, RTEKind);
 	WRITE_INT_FIELD(min_attr);
 	WRITE_INT_FIELD(max_attr);
+	WRITE_NODE_FIELD(lateral_vars);
+	WRITE_BITMAPSET_FIELD(lateral_relids);
+	WRITE_BITMAPSET_FIELD(lateral_referencers);
 	WRITE_NODE_FIELD(indexlist);
 	WRITE_UINT_FIELD(pages);
 	WRITE_FLOAT_FIELD(tuples, "%.0f");
 	WRITE_FLOAT_FIELD(allvisfrac, "%.6f");
 	WRITE_NODE_FIELD(subplan);
 	WRITE_NODE_FIELD(subroot);
+	WRITE_NODE_FIELD(subplan_params);
 	/* we don't try to print fdwroutine or fdw_private */
 	WRITE_NODE_FIELD(baserestrictinfo);
 	WRITE_NODE_FIELD(joininfo);
@@ -1830,7 +1844,9 @@ _outIndexOptInfo(StringInfo str, const IndexOptInfo *node)
 	/* Do NOT print rel field, else infinite recursion */
 	WRITE_UINT_FIELD(pages);
 	WRITE_FLOAT_FIELD(tuples, "%.0f");
+	WRITE_INT_FIELD(tree_height);
 	WRITE_INT_FIELD(ncolumns);
+	/* array fields aren't really worth the trouble to print */
 	WRITE_OID_FIELD(relam);
 	/* indexprs is redundant since we print indextlist */
 	WRITE_NODE_FIELD(indpred);
@@ -1839,6 +1855,7 @@ _outIndexOptInfo(StringInfo str, const IndexOptInfo *node)
 	WRITE_BOOL_FIELD(unique);
 	WRITE_BOOL_FIELD(immediate);
 	WRITE_BOOL_FIELD(hypothetical);
+	/* we don't bother with fields copied from the pg_am entry */
 }
 
 static void
@@ -1873,6 +1890,7 @@ _outEquivalenceMember(StringInfo str, const EquivalenceMember *node)
 
 	WRITE_NODE_FIELD(em_expr);
 	WRITE_BITMAPSET_FIELD(em_relids);
+	WRITE_BITMAPSET_FIELD(em_nullable_relids);
 	WRITE_BOOL_FIELD(em_is_const);
 	WRITE_BOOL_FIELD(em_is_child);
 	WRITE_OID_FIELD(em_datatype);
@@ -1956,6 +1974,15 @@ _outSpecialJoinInfo(StringInfo str, const SpecialJoinInfo *node)
 }
 
 static void
+_outLateralJoinInfo(StringInfo str, const LateralJoinInfo *node)
+{
+	WRITE_NODE_TYPE("LATERALJOININFO");
+
+	WRITE_BITMAPSET_FIELD(lateral_lhs);
+	WRITE_BITMAPSET_FIELD(lateral_rhs);
+}
+
+static void
 _outAppendRelInfo(StringInfo str, const AppendRelInfo *node)
 {
 	WRITE_NODE_TYPE("APPENDRELINFO");
@@ -1976,8 +2003,8 @@ _outPlaceHolderInfo(StringInfo str, const PlaceHolderInfo *node)
 	WRITE_UINT_FIELD(phid);
 	WRITE_NODE_FIELD(ph_var);
 	WRITE_BITMAPSET_FIELD(ph_eval_at);
+	WRITE_BITMAPSET_FIELD(ph_lateral);
 	WRITE_BITMAPSET_FIELD(ph_needed);
-	WRITE_BITMAPSET_FIELD(ph_may_need);
 	WRITE_INT_FIELD(ph_width);
 }
 
@@ -2001,7 +2028,7 @@ _outPlannerParamItem(StringInfo str, const PlannerParamItem *node)
 	WRITE_NODE_TYPE("PLANNERPARAMITEM");
 
 	WRITE_NODE_FIELD(item);
-	WRITE_UINT_FIELD(abslevel);
+	WRITE_INT_FIELD(paramId);
 }
 
 /*****************************************************************************
@@ -2059,6 +2086,7 @@ _outIndexStmt(StringInfo str, const IndexStmt *node)
 	WRITE_NODE_FIELD(options);
 	WRITE_NODE_FIELD(whereClause);
 	WRITE_NODE_FIELD(excludeOpNames);
+	WRITE_STRING_FIELD(idxcomment);
 	WRITE_OID_FIELD(indexOid);
 	WRITE_OID_FIELD(oldNode);
 	WRITE_BOOL_FIELD(unique);
@@ -2101,12 +2129,12 @@ _outSelectStmt(StringInfo str, const SelectStmt *node)
 	WRITE_NODE_FIELD(groupClause);
 	WRITE_NODE_FIELD(havingClause);
 	WRITE_NODE_FIELD(windowClause);
-	WRITE_NODE_FIELD(withClause);
 	WRITE_NODE_FIELD(valuesLists);
 	WRITE_NODE_FIELD(sortClause);
 	WRITE_NODE_FIELD(limitOffset);
 	WRITE_NODE_FIELD(limitCount);
 	WRITE_NODE_FIELD(lockingClause);
+	WRITE_NODE_FIELD(withClause);
 	WRITE_ENUM_FIELD(op, SetOperation);
 	WRITE_BOOL_FIELD(all);
 	WRITE_NODE_FIELD(larg);
@@ -2154,7 +2182,7 @@ _outLockingClause(StringInfo str, const LockingClause *node)
 	WRITE_NODE_TYPE("LOCKINGCLAUSE");
 
 	WRITE_NODE_FIELD(lockedRels);
-	WRITE_BOOL_FIELD(forUpdate);
+	WRITE_ENUM_FIELD(strength, LockClauseStrength);
 	WRITE_BOOL_FIELD(noWait);
 }
 
@@ -2332,7 +2360,7 @@ _outRowMarkClause(StringInfo str, const RowMarkClause *node)
 	WRITE_NODE_TYPE("ROWMARKCLAUSE");
 
 	WRITE_UINT_FIELD(rti);
-	WRITE_BOOL_FIELD(forUpdate);
+	WRITE_ENUM_FIELD(strength, LockClauseStrength);
 	WRITE_BOOL_FIELD(noWait);
 	WRITE_BOOL_FIELD(pushedDown);
 }
@@ -2434,6 +2462,7 @@ _outRangeTblEntry(StringInfo str, const RangeTblEntry *node)
 			break;
 	}
 
+	WRITE_BOOL_FIELD(lateral);
 	WRITE_BOOL_FIELD(inh);
 	WRITE_BOOL_FIELD(inFromCl);
 	WRITE_UINT_FIELD(requiredPerms);
@@ -2637,6 +2666,7 @@ _outRangeSubselect(StringInfo str, const RangeSubselect *node)
 {
 	WRITE_NODE_TYPE("RANGESUBSELECT");
 
+	WRITE_BOOL_FIELD(lateral);
 	WRITE_NODE_FIELD(subquery);
 	WRITE_NODE_FIELD(alias);
 }
@@ -2646,6 +2676,7 @@ _outRangeFunction(StringInfo str, const RangeFunction *node)
 {
 	WRITE_NODE_TYPE("RANGEFUNCTION");
 
+	WRITE_BOOL_FIELD(lateral);
 	WRITE_NODE_FIELD(funccallnode);
 	WRITE_NODE_FIELD(alias);
 	WRITE_NODE_FIELD(coldeflist);
@@ -3109,6 +3140,9 @@ _outNode(StringInfo str, const void *obj)
 				break;
 			case T_SpecialJoinInfo:
 				_outSpecialJoinInfo(str, obj);
+				break;
+			case T_LateralJoinInfo:
+				_outLateralJoinInfo(str, obj);
 				break;
 			case T_AppendRelInfo:
 				_outAppendRelInfo(str, obj);

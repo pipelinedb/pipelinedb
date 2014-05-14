@@ -17,7 +17,7 @@ use VCBuildProject;
 use MSBuildProject;
 
 our (@ISA, @EXPORT);
-@ISA = qw(Exporter);
+@ISA    = qw(Exporter);
 @EXPORT = qw(CreateSolution CreateProject DetermineVisualStudioVersion);
 
 sub CreateSolution
@@ -40,6 +40,10 @@ sub CreateSolution
 	elsif ($visualStudioVersion eq '10.00')
 	{
 		return new VS2010Solution(@_);
+	}
+	elsif ($visualStudioVersion eq '11.00')
+	{
+		return new VS2012Solution(@_);
 	}
 	else
 	{
@@ -68,6 +72,10 @@ sub CreateProject
 	{
 		return new VC2010Project(@_);
 	}
+	elsif ($visualStudioVersion eq '11.00')
+	{
+		return new VC2012Project(@_);
+	}
 	else
 	{
 		croak "The requested Visual Studio version is not supported.";
@@ -81,12 +89,12 @@ sub DetermineVisualStudioVersion
 	if (!defined($nmakeVersion))
 	{
 
-	     # Determine version of nmake command, to set proper version of visual studio
-	     # we use nmake as it has existed for a long time and still exists in visual studio 2010
-		open(P,"nmake /? 2>&1 |")
+# Determine version of nmake command, to set proper version of visual studio
+# we use nmake as it has existed for a long time and still exists in current visual studio versions
+		open(P, "nmake /? 2>&1 |")
 		  || croak
-		  "Unable to determine Visual Studio version: The nmake command wasn't found.";
-		while(<P>)
+"Unable to determine Visual Studio version: The nmake command wasn't found.";
+		while (<P>)
 		{
 			chomp;
 			if (/(\d+)\.(\d+)\.\d+(\.\d+)?$/)
@@ -96,22 +104,22 @@ sub DetermineVisualStudioVersion
 		}
 		close(P);
 	}
-	elsif($nmakeVersion =~ /(\d+)\.(\d+)\.\d+(\.\d+)?$/)
+	elsif ($nmakeVersion =~ /(\d+)\.(\d+)\.\d+(\.\d+)?$/)
 	{
 		return _GetVisualStudioVersion($1, $2);
 	}
 	croak
-	  "Unable to determine Visual Studio version: The nmake version could not be determined.";
+"Unable to determine Visual Studio version: The nmake version could not be determined.";
 }
 
 sub _GetVisualStudioVersion
 {
-	my($major, $minor) = @_;
-	if ($major > 10)
+	my ($major, $minor) = @_;
+	if ($major > 11)
 	{
 		carp
 "The determined version of Visual Studio is newer than the latest supported version. Returning the latest supported version instead.";
-		return '10.00';
+		return '11.00';
 	}
 	elsif ($major < 6)
 	{

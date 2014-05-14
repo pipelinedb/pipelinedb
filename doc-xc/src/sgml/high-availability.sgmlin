@@ -10,6 +10,14 @@
  <indexterm><primary>clustering</></>
  <indexterm><primary>data partitioning</></>
 
+<!## XC>
+&xconly;
+ <para>
+  <productname>Postgres-XC</productname> inherits most of the high availability feature from
+  <productname>PostgreSQL</productname>.
+  In this chapter, please read PostgreSQL as Postgres-XC if not described explicitly.
+ </para>
+<!## end>
 &common;
  <para>
   Database servers can work together to allow a second server to
@@ -82,6 +90,16 @@
   also available.
  </para>
 
+<!## XC>
+&xconly;
+ <para>
+  At failover, you should be careful to synchronize restration point of
+  all the coordinators and datanodes.
+  Barrier will help this synchronization.
+  See <xref linkend="SQL-CREATEBARRIER"> for details.
+ </para>
+<!## end>
+
  <sect1 id="different-replication-solutions">
  <title>Comparison of Different Solutions</title>
 
@@ -90,8 +108,8 @@
   <varlistentry>
    <term>Shared Disk Failover</term>
    <listitem>
-&pgnotice;
 
+&common;
     <para>
      Shared disk failover avoids synchronization overhead by having only one
      copy of the database.  It uses a single disk array that is shared by
@@ -142,7 +160,7 @@ protocol to make nodes agree on a serializable transactional order.
   </varlistentry>
 
   <varlistentry>
-   <term>Warm and Hot Standby Using Point-In-Time Recovery (<acronym>PITR</>)</term>
+   <term>Transaction Log Shipping</term>
    <listitem>
 
     <para>
@@ -150,16 +168,14 @@ protocol to make nodes agree on a serializable transactional order.
      stream of write-ahead log (<acronym>WAL</>)
      records.  If the main server fails, the standby contains
      almost all of the data of the main server, and can be quickly
-     made the new master database server.  This is asynchronous and
-     can only be done for the entire database server.
+     made the new master database server.  This can be synchronous or
+     asynchronous and can only be done for the entire database server.
     </para>
     <para>
-     A PITR standby server can be implemented using file-based log shipping
+     A standby server can be implemented using file-based log shipping
      (<xref linkend="warm-standby">) or streaming replication (see
      <xref linkend="streaming-replication">), or a combination of both. For
      information on hot standby, see <xref linkend="hot-standby">.
-     A PITR standby server can be implemented using file-based log shipping
-     (<xref linkend="warm-standby">).
     </para>
    </listitem>
   </varlistentry>
@@ -295,7 +311,7 @@ protocol to make nodes agree on a serializable transactional order.
      <entry>Feature</entry>
      <entry>Shared Disk Failover</entry>
      <entry>File System Replication</entry>
-     <entry>Hot/Warm Standby Using PITR</entry>
+     <entry>Transaction Log Shipping</entry>
      <entry>Trigger-Based Master-Standby Replication</entry>
      <entry>Statement-Based Replication Middleware</entry>
      <entry>Asynchronous Multimaster Replication</entry>
@@ -309,7 +325,7 @@ protocol to make nodes agree on a serializable transactional order.
      <entry>Most Common Implementation</entry>
      <entry align="center">NAS</entry>
      <entry align="center">DRBD</entry>
-     <entry align="center">PITR</entry>
+     <entry align="center">Streaming Repl.</entry>
      <entry align="center">Slony</entry>
      <entry align="center">pgpool-II</entry>
      <entry align="center">Bucardo</entry>
@@ -364,7 +380,7 @@ protocol to make nodes agree on a serializable transactional order.
      <entry>No waiting for multiple servers</entry>
      <entry align="center">&bull;</entry>
      <entry align="center"></entry>
-     <entry align="center">&bull;</entry>
+     <entry align="center">with sync off</entry>
      <entry align="center">&bull;</entry>
      <entry align="center"></entry>
      <entry align="center">&bull;</entry>
@@ -375,7 +391,7 @@ protocol to make nodes agree on a serializable transactional order.
      <entry>Master failure will never lose data</entry>
      <entry align="center">&bull;</entry>
      <entry align="center">&bull;</entry>
-     <entry align="center"></entry>
+     <entry align="center">with sync on</entry>
      <entry align="center"></entry>
      <entry align="center">&bull;</entry>
      <entry align="center"></entry>
@@ -386,7 +402,7 @@ protocol to make nodes agree on a serializable transactional order.
      <entry>Standby accept read-only queries</entry>
      <entry align="center"></entry>
      <entry align="center"></entry>
-     <entry align="center">Hot only</entry>
+     <entry align="center">with hot</entry>
      <entry align="center">&bull;</entry>
      <entry align="center">&bull;</entry>
      <entry align="center">&bull;</entry>
@@ -462,13 +478,24 @@ protocol to make nodes agree on a serializable transactional order.
 
  </variablelist>
 
+<!## XC>
+&xconly;
+ <para>
+  At failover, you should be careful to synchronize restration point of
+  all the coordinators and datanodes.
+  Barrier will help this synchronization.
+  See <xref linkend="SQL-CREATEBARRIER"> for details.
+ </para>
+<!## end>
+
  </sect1>
+
 
  <sect1 id="warm-standby">
  <title>Log-Shipping Standby Servers</title>
 
-&pgnotice;
 
+&common;
   <para>
    Continuous archiving can be used to create a <firstterm>high
    availability</> (HA) cluster configuration with one or more
@@ -554,8 +581,8 @@ protocol to make nodes agree on a serializable transactional order.
 
   <sect2 id="standby-planning">
    <title>Planning</title>
-&pgnotice;
 
+&common;
    <para>
     It is usually wise to create the primary and standby servers
     so that they are as similar as possible, at least from the
@@ -592,8 +619,8 @@ protocol to make nodes agree on a serializable transactional order.
 
   <sect2 id="standby-server-operation">
    <title>Standby Server Operation</title>
-&pgnotice;
 
+&common;
    <para>
     In standby mode, the server continuously applies WAL received from the
     master server. The standby server can read WAL from a WAL archive
@@ -632,8 +659,8 @@ protocol to make nodes agree on a serializable transactional order.
 
   <sect2 id="preparing-master-for-standby">
    <title>Preparing the Master for Standby Servers</title>
-&pgnotice;
 
+&common;
    <para>
     Set up continuous archiving on the primary to an archive directory
     accessible from the standby, as described
@@ -661,8 +688,8 @@ protocol to make nodes agree on a serializable transactional order.
 
   <sect2 id="standby-server-setup">
    <title>Setting Up a Standby Server</title>
-&pgnotice;
 
+&common;
    <para>
     To set up the standby server, restore the base backup taken from primary
     server (see <xref linkend="backup-pitr-recovery">). Create a recovery
@@ -729,17 +756,26 @@ archive_cleanup_command = 'pg_archivecleanup /path/to/archive %r'
     the primary to allow them to be connected simultaneously.
    </para>
 
+<!## XC>
+&xconly;
+ <para>
+  At failover, you should be careful to synchronize restration point of
+  all the coordinators and datanodes.
+  Barrier will help this synchronization.
+  See <xref linkend="SQL-CREATEBARRIER"> for details.
+ </para>
+<!## end>
+
   </sect2>
 
-<!-- No streaming replciation for XC so far -->
   <sect2 id="streaming-replication">
    <title>Streaming Replication</title>
 
    <indexterm zone="high-availability">
     <primary>Streaming Replication</primary>
    </indexterm>
-&pgnotice;
 
+&common;
    <para>
     Streaming replication allows a standby server to stay more up-to-date
     than is possible with file-based log shipping. The standby connects
@@ -748,13 +784,14 @@ archive_cleanup_command = 'pg_archivecleanup /path/to/archive %r'
    </para>
 
    <para>
-    Streaming replication is asynchronous, so there is still a small delay
-    between committing a transaction in the primary and for the changes to
-    become visible in the standby. The delay is however much smaller than with
-    file-based log shipping, typically under one second assuming the standby
-    is powerful enough to keep up with the load. With streaming replication,
-    <varname>archive_timeout</> is not required to reduce the data loss
-    window.
+    Streaming replication is asynchronous by default
+    (see <xref linkend="synchronous-replication">), in which case there is
+    a small delay between committing a transaction in the primary and the
+    changes becoming visible in the standby. This delay is however much
+    smaller than with file-based log shipping, typically under one second
+    assuming the standby is powerful enough to keep up with the load. With
+    streaming replication, <varname>archive_timeout</> is not required to
+    reduce the data loss window.
    </para>
 
    <para>
@@ -803,27 +840,18 @@ archive_cleanup_command = 'pg_archivecleanup /path/to/archive %r'
 
    <sect3 id="streaming-replication-authentication">
     <title>Authentication</title>
-&pgnotice;
+&common;
     <para>
      It is very important that the access privileges for replication be set up
      so that only trusted users can read the WAL stream, because it is
      easy to extract privileged information from it.  Standby servers must
-     authenticate to the primary as an account that has the
-     <literal>REPLICATION</> privilege. So a role with the
-     <literal>REPLICATION</> and <literal>LOGIN</> privileges needs to be
-     created on the primary.
+     authenticate to the primary as a superuser or an account that has the
+     <literal>REPLICATION</> privilege. It is recommended to create a
+     dedicated user account with <literal>REPLICATION</> and <literal>LOGIN</>
+     privileges for replication. While <literal>REPLICATION</> privilege gives
+     very high permissions, it does not allow the user to modify any data on
+     the primary system, which the <literal>SUPERUSER</> privilege does.
     </para>
-
-    <note>
-     <para>
-      It is recommended that a dedicated user account is used for replication.
-      While the <literal>REPLICATION</> privilege is granted to superuser
-      accounts by default, it is not recommended to use superuser accounts
-      for replication. While <literal>REPLICATION</> privilege gives very high
-      permissions, it does not allow the user to modify any data on the
-      primary system, which the <literal>SUPERUSER</> privilege does.
-     </para>
-    </note>
 
     <para>
      Client authentication for replication is controlled by a
@@ -863,7 +891,7 @@ primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
 
    <sect3 id="streaming-replication-monitoring">
     <title>Monitoring</title>
-&pgnotice;
+&common;
     <para>
      An important health indicator of streaming replication is the amount
      of WAL records generated in the primary, but not yet applied in the
@@ -884,13 +912,72 @@ primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
      <literal>pg_stat_replication</></link> view. Large differences between
      <function>pg_current_xlog_location</> and <literal>sent_location</> field
      might indicate that the master server is under heavy load, while
-     differences between <literal>sent_location</> and 
+     differences between <literal>sent_location</> and
      <function>pg_last_xlog_receive_location</> on the standby might indicate
      network delay, or that the standby is under heavy load.
     </para>
    </sect3>
-
   </sect2>
+
+  <sect2 id="cascading-replication">
+   <title>Cascading Replication</title>
+
+   <indexterm zone="high-availability">
+    <primary>Cascading Replication</primary>
+   </indexterm>
+
+&common;
+   <para>
+    The cascading replication feature allows a standby server to accept replication
+    connections and stream WAL records to other standbys, acting as a relay.
+    This can be used to reduce the number of direct connections to the master
+    and also to minimize inter-site bandwidth overheads.
+   </para>
+
+   <para>
+    A standby acting as both a receiver and a sender is known as a cascading
+    standby.  Standbys that are more directly connected to the master are known
+    as upstream servers, while those standby servers further away are downstream
+    servers.  Cascading replication does not place limits on the number or
+    arrangement of downstream servers, though each standby connects to only
+    one upstream server which eventually links to a single master/primary
+    server.
+   </para>
+
+   <para>
+    A cascading standby sends not only WAL records received from the
+    master but also those restored from the archive. So even if the replication
+    connection in some upstream connection is terminated, streaming replication
+    continues downstream for as long as new WAL records are available.
+   </para>
+
+   <para>
+    Cascading replication is currently asynchronous. Synchronous replication
+    (see <xref linkend="synchronous-replication">) settings have no effect on
+    cascading replication at present.
+   </para>
+
+   <para>
+    Hot Standby feedback propagates upstream, whatever the cascaded arrangement.
+   </para>
+
+   <para>
+    If an upstream standby server is promoted to become new master, downstream
+    servers will continue to stream from the new master if
+    <varname>recovery_target_timeline</> is set to <literal>'latest'</>.
+   </para>
+
+   <para>
+    To use cascading replication, set up the cascading standby so that it can
+    accept replication connections (that is, set
+    <xref linkend="guc-max-wal-senders"> and <xref linkend="guc-hot-standby">,
+    and configure
+    <link linkend="auth-pg-hba-conf">host-based authentication</link>).
+    You will also need to set <varname>primary_conninfo</> in the downstream
+    standby to point to the cascading standby.
+   </para>
+  </sect2>
+
   <sect2 id="synchronous-replication">
    <title>Synchronous Replication</title>
 
@@ -898,6 +985,7 @@ primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
     <primary>Synchronous Replication</primary>
    </indexterm>
 
+&common;
    <para>
     <productname>PostgreSQL</> streaming replication is asynchronous by
     default. If the primary server
@@ -941,17 +1029,20 @@ primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
    <sect3 id="synchronous-replication-config">
     <title>Basic Configuration</title>
 
+&common;
    <para>
     Once streaming replication has been configured, configuring synchronous
     replication requires only one additional configuration step:
     <xref linkend="guc-synchronous-standby-names"> must be set to
     a non-empty value.  <varname>synchronous_commit</> must also be set to
     <literal>on</>, but since this is the default value, typically no change is
-    required.  This configuration will cause each commit to wait for
+    required.  (See <xref linkend="runtime-config-wal-settings"> and
+    <xref linkend="runtime-config-replication-master">.)
+    This configuration will cause each commit to wait for
     confirmation that the standby has written the commit record to durable
-    storage, even if that takes a very long time.
+    storage.
     <varname>synchronous_commit</> can be set by individual
-    users, so can be configured in the configuration file, for particular
+    users, so it can be configured in the configuration file, for particular
     users or databases, or dynamically by applications, in order to control
     the durability guarantee on a per-transaction basis.
    </para>
@@ -967,25 +1058,51 @@ primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
     confirmation that the commit record has been received. These parameters
     allow the administrator to specify which standby servers should be
     synchronous standbys. Note that the configuration of synchronous
-    replication is mainly on the master.
+    replication is mainly on the master. Named standbys must be directly
+    connected to the master; the master knows nothing about downstream
+    standby servers using cascaded replication.
+   </para>
+
+   <para>
+    Setting <varname>synchronous_commit</> to <literal>remote_write</> will
+    cause each commit to wait for confirmation that the standby has received
+    the commit record and written it out to its own operating system, but not
+    for the data to be flushed to disk on the standby.  This
+    setting provides a weaker guarantee of durability than <literal>on</>
+    does: the standby could lose the data in the event of an operating system
+    crash, though not a <productname>PostgreSQL</> crash.
+    However, it's a useful setting in practice
+    because it can decrease the response time for the transaction.
+    Data loss could only occur if both the primary and the standby crash and
+    the database of the primary gets corrupted at the same time.
    </para>
 
    <para>
     Users will stop waiting if a fast shutdown is requested.  However, as
-    when using asynchronous replication, the server will does not fully
+    when using asynchronous replication, the server will not fully
     shutdown until all outstanding WAL records are transferred to the currently
     connected standby servers.
    </para>
 
+<!## XC>
+&xconly;
+ <para>
+  At failover, you should be careful to synchronize restration point of
+  all the coordinators and datanodes.
+  Barrier will help this synchronization.
+  See <xref linkend="SQL-CREATEBARRIER"> for details.
+ </para>
+<!## end>
    </sect3>
 
    <sect3 id="synchronous-replication-performance">
     <title>Planning for Performance</title>
 
+&common;
    <para>
     Synchronous replication usually requires carefully planned and placed
     standby servers to ensure applications perform acceptably. Waiting
-    doesn't utilise system resources, but transaction locks continue to be
+    doesn't utilize system resources, but transaction locks continue to be
     held until the transfer is confirmed. As a result, incautious use of
     synchronous replication will reduce performance for database
     applications because of increased response times and higher contention.
@@ -1023,15 +1140,16 @@ primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
    <sect3 id="synchronous-replication-ha">
     <title>Planning for High Availability</title>
 
+&common;
    <para>
     Commits made when <varname>synchronous_commit</> is set to <literal>on</>
-    will wait until the sync standby responds. The response may never occur
-    if the last, or only, standby should crash.
+    or <literal>remote_write</> will wait until the synchronous standby responds. The response
+    may never occur if the last, or only, standby should crash.
    </para>
 
    <para>
     The best solution for avoiding data loss is to ensure you don't lose
-    your last remaining sync standby. This can be achieved by naming multiple
+    your last remaining synchronous standby. This can be achieved by naming multiple
     potential synchronous standbys using <varname>synchronous_standby_names</>.
     The first named standby will be used as the synchronous standby. Standbys
     listed after this will take over the role of synchronous standby if the
@@ -1040,14 +1158,14 @@ primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
 
    <para>
     When a standby first attaches to the primary, it will not yet be properly
-    synchronized. This is described as <literal>CATCHUP</> mode. Once
+    synchronized. This is described as <literal>catchup</> mode. Once
     the lag between standby and primary reaches zero for the first time
-    we move to real-time <literal>STREAMING</> state.
+    we move to real-time <literal>streaming</> state.
     The catch-up duration may be long immediately after the standby has
     been created. If the standby is shut down, then the catch-up period
     will increase according to the length of time the standby has been down.
     The standby is only able to become a synchronous standby
-    once it has reached <literal>STREAMING</> state.
+    once it has reached <literal>streaming</> state.
    </para>
 
    <para>
@@ -1076,7 +1194,7 @@ primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
 
    <para>
     If you need to re-create a standby server while transactions are
-    waiting, make sure that the commands to run pg_start_backup() and
+    waiting, make sure that the commands pg_start_backup() and
     pg_stop_backup() are run in a session with
     <varname>synchronous_commit</> = <literal>off</>, otherwise those
     requests will wait forever for the standby to appear.
@@ -1088,8 +1206,8 @@ primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
 
   <sect1 id="warm-standby-failover">
    <title>Failover</title>
-&pgnotice;
 
+&common;
    <para>
     If the primary server fails then the standby server should begin
     failover procedures.
@@ -1164,12 +1282,21 @@ primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
     only used to offload read-only queries from the primary, not for high
     availability purposes, you don't need to promote it.
    </para>
+<!## XC>
+&xconly;
+ <para>
+  At failover, you should be careful to synchronize restration point of
+  all the coordinators and datanodes.
+  Barrier will help this synchronization.
+  See <xref linkend="SQL-CREATEBARRIER"> for details.
+ </para>
+<!## end>
   </sect1>
 
   <sect1 id="log-shipping-alternative">
    <title>Alternative Method for Log Shipping</title>
 
-&pgnotice;
+&common;
    <para>
     An alternative to the built-in standby mode described in the previous
     sections is to use a <varname>restore_command</> that polls the archive location.
@@ -1257,11 +1384,20 @@ if (!triggered)
     to initiate failover. A notification mechanism such as the explicit
     creation of a trigger file is ideal, if this can be arranged.
    </para>
+<!## XC>
+&xconly;
+ <para>
+  At failover, you should be careful to synchronize restration point of
+  all the coordinators and datanodes.
+  Barrier will help this synchronization.
+  See <xref linkend="SQL-CREATEBARRIER"> for details.
+ </para>
+<!## end>
 
   <sect2 id="warm-standby-config">
    <title>Implementation</title>
-&pgnotice;
 
+&common;
    <para>
     The short procedure for configuring a standby server using this alternative
     method is as follows. For
@@ -1320,18 +1456,8 @@ if (!triggered)
 
   <sect2 id="warm-standby-record">
    <title>Record-based Log Shipping</title>
-<!## XC>
-&pgonly;
-     <para>
-      Streaming replication has not been tested
-      with <productname>Postgres-XC</productname> yet.  Because this
-      version of streaming replication is based upon asynchronous log shipping,
-      there could be a risk to have the status of Coordinators and
-      Datanodes inconsistent.  The development team leaves the test
-      and the use of this entirely to users.
-     </para>
-<!## end>
 
+&common;
    <para>
     It is also possible to implement record-based log shipping using this
     alternative method, though this requires custom development, and changes
@@ -1363,8 +1489,6 @@ if (!triggered)
     streaming replication (see <xref linkend="streaming-replication">) to
     achieve the same benefits with less effort.
    </para>
-
-
   </sect2>
  </sect1>
 
@@ -1375,7 +1499,7 @@ if (!triggered)
    <primary>Hot Standby</primary>
   </indexterm>
 
-
+&common;
    <para>
     Hot Standby is the term used to describe the ability to connect to
     the server and run read-only queries while the server is in archive
@@ -1393,19 +1517,23 @@ if (!triggered)
     explained below.
    </para>
 
-<!## XC>
-&pgonly;
-
+ <!## XC>
+&xconly;
    <para>
-    Hot Standby is not supported by the current version
+    Hot Standby is not fully supported by the current version
     of <productname>Postgres-XC</productname>.
+    Please note that <productname>Postgres-XC</productname> does not provide integrated database view
+    to applications.
+    Please note that you cannot connect to hot standby node of datanodes through coordiantors.
+    You can connect directly to hot-standby nodes using conventional manners and
+    read only their local database.
    </para>
-<!## end>
+ <!## end>
 
-<!## PG>
   <sect2 id="hot-standby-users">
    <title>User's Overview</title>
 
+&common;
    <para>
     When the <xref linkend="guc-hot-standby"> parameter is set to true on a
     standby server, it will begin accepting connections once the recovery has
@@ -1607,12 +1735,21 @@ if (!triggered)
     can be used to monitor the progress of recovery, or to allow you to
     write complex programs that restore the database to particular states.
    </para>
-  </sect2>
+<!## XC>
+&xconly;
+ <para>
+  At failover, you should be careful to synchronize restration point of
+  all the coordinators and datanodes.
+  Barrier will help this synchronization.
+  See <xref linkend="SQL-CREATEBARRIER"> for details.
+ </para>
+<!## end>
+ </sect2>
 
   <sect2 id="hot-standby-conflict">
    <title>Handling Query Conflicts</title>
 
-&pgnotice;
+&common;
    <para>
     The primary and standby servers are in many ways loosely connected. Actions
     on the primary will have an effect on the standby. As a result, there is
@@ -1625,7 +1762,7 @@ if (!triggered)
    <para>
     There are also additional types of conflict that can occur with Hot Standby.
     These conflicts are <emphasis>hard conflicts</> in the sense that queries
-    might need to be cancelled and, in some cases, sessions disconnected to resolve them.
+    might need to be canceled and, in some cases, sessions disconnected to resolve them.
     The user is provided with several ways to handle these
     conflicts. Conflict cases include:
 
@@ -1722,7 +1859,7 @@ if (!triggered)
    <para>
     Once the delay specified by <varname>max_standby_archive_delay</> or
     <varname>max_standby_streaming_delay</> has been exceeded, conflicting
-    queries will be cancelled.  This usually results just in a cancellation
+    queries will be canceled.  This usually results just in a cancellation
     error, although in the case of replaying a <command>DROP DATABASE</>
     the entire conflicting session will be terminated.  Also, if the conflict
     is over a lock held by an idle transaction, the conflicting session is
@@ -1730,10 +1867,10 @@ if (!triggered)
    </para>
 
    <para>
-    Cancelled queries may be retried immediately (after beginning a new
+    Canceled queries may be retried immediately (after beginning a new
     transaction, of course).  Since query cancellation depends on
     the nature of the WAL records being replayed, a query that was
-    cancelled may well succeed if it is executed again.
+    canceled may well succeed if it is executed again.
    </para>
 
    <para>
@@ -1791,7 +1928,7 @@ if (!triggered)
     Another option is to increase <xref linkend="guc-vacuum-defer-cleanup-age">
     on the primary server, so that dead rows will not be cleaned up as quickly
     as they normally would be.  This will allow more time for queries to
-    execute before they are cancelled on the standby, without having to set
+    execute before they are canceled on the standby, without having to set
     a high <varname>max_standby_streaming_delay</>.  However it is
     difficult to guarantee any specific execution-time window with this
     approach, since <varname>vacuum_defer_cleanup_age</> is measured in
@@ -1808,8 +1945,8 @@ if (!triggered)
 
   <sect2 id="hot-standby-admin">
    <title>Administrator's Overview</title>
-&pgnotice;
 
+&common;
    <para>
     If <varname>hot_standby</> is turned <literal>on</> in
     <filename>postgresql.conf</> and there is a <filename>recovery.conf</>
@@ -1884,7 +2021,6 @@ LOG:  database system is ready to accept read only connections
    </para>
 
    <para>
-<!## PG>
     It is important that the administrator select appropriate settings for
     <xref linkend="guc-max-standby-archive-delay"> and <xref
     linkend="guc-max-standby-streaming-delay">.  The best choices vary
@@ -1894,7 +2030,6 @@ LOG:  database system is ready to accept read only connections
     the standby server is tasked as an additional server for decision support
     queries then it might be acceptable to set the maximum delay values to
     many hours, or even -1 which means wait forever for queries to complete.
-<!## end>
    </para>
 
    <para>
@@ -1950,13 +2085,15 @@ LOG:  database system is ready to accept read only connections
    </para>
 
    <para>
-    <function>pg_cancel_backend()</> will work on user backends, but not the
-    Startup process, which performs recovery. <structname>pg_stat_activity</structname> does not
-    show an entry for the Startup process, nor do recovering transactions
-    show as active. As a result, <structname>pg_prepared_xacts</structname> is always empty during
-    recovery. If you wish to resolve in-doubt prepared transactions,
-    view <literal>pg_prepared_xacts</> on the primary and issue commands to
-    resolve transactions there.
+    <function>pg_cancel_backend()</>
+    and <function>pg_terminate_backend()</> will work on user backends,
+    but not the Startup process, which performs
+    recovery. <structname>pg_stat_activity</structname> does not show an
+    entry for the Startup process, nor do recovering transactions show
+    as active. As a result, <structname>pg_prepared_xacts</structname>
+    is always empty during recovery. If you wish to resolve in-doubt
+    prepared transactions, view <literal>pg_prepared_xacts</> on the
+    primary and issue commands to resolve transactions there.
    </para>
 
    <para>
@@ -2024,7 +2161,7 @@ LOG:  database system is ready to accept read only connections
     <command>DROP TABLESPACE</> can only succeed if the tablespace is empty.
     Some standby users may be actively using the tablespace via their
     <varname>temp_tablespaces</> parameter. If there are temporary files in the
-    tablespace, all active queries are cancelled to ensure that temporary
+    tablespace, all active queries are canceled to ensure that temporary
     files are removed, so the tablespace can be removed and WAL replay
     can continue.
    </para>
@@ -2076,6 +2213,7 @@ LOG:  database system is ready to accept read only connections
   <sect2 id="hot-standby-parameters">
    <title>Hot Standby Parameter Reference</title>
 
+&common;
    <para>
     Various parameters have been mentioned above in
     <xref linkend="hot-standby-conflict"> and
@@ -2103,6 +2241,7 @@ LOG:  database system is ready to accept read only connections
   <sect2 id="hot-standby-caveats">
    <title>Caveats</title>
 
+&common;
    <para>
     There are several limitations of Hot Standby.
     These can and probably will be fixed in future releases:
@@ -2164,7 +2303,7 @@ LOG:  database system is ready to accept read only connections
 
    </para>
   </sect2>
-<!## end>
 
  </sect1>
+
 </chapter>

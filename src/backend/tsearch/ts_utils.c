@@ -3,7 +3,7 @@
  * ts_utils.c
  *		various support functions
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -57,12 +57,6 @@ get_tsearch_config_filename(const char *basename,
 			 sharepath, basename, extension);
 
 	return result;
-}
-
-static int
-comparestr(const void *a, const void *b)
-{
-	return strcmp(*(char *const *) a, *(char *const *) b);
 }
 
 /*
@@ -140,7 +134,7 @@ readstoplist(const char *fname, StopList *s, char *(*wordop) (const char *))
 
 	/* Sort to allow binary searching */
 	if (s->stop && s->len > 0)
-		qsort(s->stop, s->len, sizeof(char *), comparestr);
+		qsort(s->stop, s->len, sizeof(char *), pg_qsort_strcmp);
 }
 
 bool
@@ -148,5 +142,5 @@ searchstoplist(StopList *s, char *key)
 {
 	return (s->stop && s->len > 0 &&
 			bsearch(&key, s->stop, s->len,
-					sizeof(char *), comparestr)) ? true : false;
+					sizeof(char *), pg_qsort_strcmp)) ? true : false;
 }

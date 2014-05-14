@@ -30,7 +30,6 @@ SHOW ALL
   <title>Description</title>
 
 &common;
-
   <para>
    <command>SHOW</command> will display the current setting of
    run-time parameters. These variables can be set using the
@@ -47,6 +46,7 @@ SHOW ALL
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">name</replaceable></term>
@@ -111,8 +111,7 @@ SHOW ALL
          </para>
         </listitem>
        </varlistentry>
-      </variablelist>
-     </para>
+      </variablelist></para>
     </listitem>
    </varlistentry>
 
@@ -130,6 +129,7 @@ SHOW ALL
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    The function <function>current_setting</function> produces
    equivalent output; see <xref linkend="functions-admin">.
@@ -187,21 +187,16 @@ SHOW ALL;
  xmloption               | content | Sets whether XML data in implicit parsing ...
  zero_damaged_pages      | off     | Continues processing past damaged page headers.
 (196 rows)
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The <command>SHOW</command> command is a
-<!## PG>
    <productname>PostgreSQL</productname> extension.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> extension.
-<!## end>
   </para>
  </refsect1>
 

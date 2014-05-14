@@ -4,7 +4,7 @@
  *	  POSTGRES LIBPQ buffer structure definitions.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/libpq/libpq.h
@@ -45,11 +45,11 @@ typedef struct
  * prototypes for functions in pqcomm.c
  */
 extern int StreamServerPort(int family, char *hostName,
-	unsigned short portNumber, char *unixSocketName, pgsocket ListenSocket[],
-				 int MaxListen);
+				 unsigned short portNumber, char *unixSocketDir,
+				 pgsocket ListenSocket[], int MaxListen);
 extern int	StreamConnection(pgsocket server_fd, Port *port);
 extern void StreamClose(pgsocket sock);
-extern void TouchSocketFile(void);
+extern void TouchSocketFiles(void);
 extern void pq_init(void);
 extern void pq_comm_reset(void);
 extern int	pq_getbytes(char *s, size_t len);

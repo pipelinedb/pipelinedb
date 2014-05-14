@@ -15,6 +15,7 @@
 #define PRINTBUFFER_H
 
 #include "utils/portal.h"
+#include "lib/stringinfo.h"
 
 typedef struct
 {								/* Per-attribute information */

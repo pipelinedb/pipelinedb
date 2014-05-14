@@ -8,8 +8,7 @@
   <secondary>examples</secondary>
  </indexterm>
 
-&pgnotice;
-
+&common;
  <para>
   The <application>spi</> module provides several workable examples
   of using SPI and triggers.  While these functions are of some value in
@@ -27,7 +26,7 @@
  <sect2>
   <title>refint &mdash; Functions for Implementing Referential Integrity</title>
 
-&pgnotice;
+&common;
   <para>
    <function>check_primary_key()</> and
    <function>check_foreign_key()</> are used to check foreign key constraints.
@@ -69,7 +68,7 @@
  <sect2>
   <title>timetravel &mdash; Functions for Implementing Time Travel</title>
 
-&pgnotice;
+&common;
   <para>
    Long ago, <productname>PostgreSQL</> had a built-in time travel feature
    that kept the insert and delete times for each tuple.  This can be
@@ -163,7 +162,7 @@ CREATE TABLE mytab (
  <sect2>
   <title>autoinc &mdash; Functions for Autoincrementing Fields</title>
 
-&pgnotice;
+&common;
   <para>
    <function>autoinc()</> is a trigger that stores the next value of
    a sequence into an integer field.  This has some overlap with the
@@ -191,7 +190,7 @@ CREATE TABLE mytab (
  <sect2>
   <title>insert_username &mdash; Functions for Tracking Who Changed a Table</title>
 
-&pgnotice;
+&common;
   <para>
    <function>insert_username()</> is a trigger that stores the current
    user's name into a text field.  This can be useful for tracking
@@ -213,7 +212,7 @@ CREATE TABLE mytab (
  <sect2>
   <title>moddatetime &mdash; Functions for Tracking Last Modification Time</title>
 
-&pgnotice;
+&common;
   <para>
    <function>moddatetime()</> is a trigger that stores the current
    time into a <type>timestamp</> field.  This can be useful for tracking

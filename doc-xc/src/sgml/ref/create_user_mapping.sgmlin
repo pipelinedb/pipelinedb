@@ -29,6 +29,7 @@ CREATE USER MAPPING FOR { <replaceable class="parameter">user_name</replaceable>
 
  <refsect1>
   <title>Description</title>
+
 <!## XC>
 &xconly;
   <para>
@@ -38,13 +39,11 @@ CREATE USER MAPPING FOR { <replaceable class="parameter">user_name</replaceable>
   </para>
 <!## end>
 <!## PG>
-&pgonly;
-
   <para>
    <command>CREATE USER MAPPING</command> defines a mapping of a user
    to a foreign server.  A user mapping typically encapsulates
    connection information that a foreign-data wrapper uses together
-   with the information encapsulated be a foreign server to access an
+   with the information encapsulated by a foreign server to access an
    external data resource.
   </para>
 
@@ -104,10 +103,10 @@ CREATE USER MAPPING FOR { <replaceable class="parameter">user_name</replaceable>
    Create a user mapping for user <literal>bob</>, server <literal>foo</>:
 <programlisting>
 CREATE USER MAPPING FOR bob SERVER foo OPTIONS (user 'bob', password 'secret');
-</programlisting>
-  </para>
+</programlisting></para>
 
 <!## end>
+
  </refsect1>
 
  <refsect1>

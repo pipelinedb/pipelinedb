@@ -54,6 +54,22 @@ ALTER TYPE planets ADD VALUE
 
 ALTER TYPE planets ADD VALUE 'pluto' AFTER 'zeus';
 
+-- if not exists tests
+
+--  existing value gives error
+ALTER TYPE planets ADD VALUE 'mercury';
+
+-- unless IF NOT EXISTS is specified
+ALTER TYPE planets ADD VALUE IF NOT EXISTS 'mercury';
+
+-- should be neptune, not mercury
+SELECT enum_last(NULL::planets);
+
+ALTER TYPE planets ADD VALUE IF NOT EXISTS 'pluto';
+
+-- should be pluto, i.e. the new value
+SELECT enum_last(NULL::planets);
+
 --
 -- Test inserting so many values that we have to renumber
 --
@@ -240,6 +256,33 @@ DELETE FROM enumtest_parent;  -- fail
 CREATE TYPE bogus AS ENUM('good', 'bad', 'ugly');
 CREATE TABLE enumtest_bogus_child(parent bogus REFERENCES enumtest_parent);
 DROP TYPE bogus;
+
+--
+-- check transactional behaviour of ALTER TYPE ... ADD VALUE
+--
+CREATE TYPE bogus AS ENUM('good');
+
+-- check that we can't add new values to existing enums in a transaction
+BEGIN;
+ALTER TYPE bogus ADD VALUE 'bad';
+COMMIT;
+
+-- check that we recognize the case where the enum already existed but was
+-- modified in the current txn
+BEGIN;
+ALTER TYPE bogus RENAME TO bogon;
+ALTER TYPE bogon ADD VALUE 'bad';
+ROLLBACK;
+
+DROP TYPE bogus;
+
+-- check that we *can* add new values to existing enums in a transaction,
+-- if the type is new as well
+BEGIN;
+CREATE TYPE bogus AS ENUM();
+ALTER TYPE bogus ADD VALUE 'good';
+ALTER TYPE bogus ADD VALUE 'ugly';
+ROLLBACK;
 
 --
 -- Cleanup

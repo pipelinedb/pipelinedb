@@ -342,8 +342,6 @@ ERROR:  function ffnp(anyarray) does not exist
 -- multi-arg polymorphic
 CREATE AGGREGATE mysum2(anyelement,anyelement) (SFUNC = sum3,
   STYPE = anyelement, INITCOND = '0');
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 -- create test data for polymorphic aggregates
 create temp table t(f1 int, f2 int[], f3 text);
 insert into t values(1,array[1],'a');
@@ -1028,7 +1026,7 @@ select dfunc(10,20);
 create or replace function dfunc(a variadic int[]) returns int as
 $$ select array_upper($1, 1) $$ language sql;
 ERROR:  cannot remove parameter defaults from existing function
-HINT:  Use DROP FUNCTION first.
+HINT:  Use DROP FUNCTION dfunc(integer[]) first.
 \df dfunc
                                       List of functions
  Schema | Name  | Result data type |               Argument data types               |  Type  
@@ -1241,13 +1239,13 @@ returns record as $$
   select $1, $2;
 $$ language sql;
 ERROR:  cannot change name of input parameter "c"
-HINT:  Use DROP FUNCTION first.
+HINT:  Use DROP FUNCTION dfunc(character varying,numeric) first.
 create or replace function dfunc(a varchar = 'def a', out _a varchar, numeric = NULL, out _c numeric)
 returns record as $$
   select $1, $2;
 $$ language sql;
 ERROR:  cannot change name of input parameter "c"
-HINT:  Use DROP FUNCTION first.
+HINT:  Use DROP FUNCTION dfunc(character varying,numeric) first.
 drop function dfunc(varchar, numeric);
 --fail, named parameters are not unique
 create function testfoo(a int, a int) returns int as $$ select 1;$$ language sql;
@@ -1383,8 +1381,9 @@ select * from dfview order by 1,2,3,4;
  c3     | bigint |           | plain   | 
  c4     | bigint |           | plain   | 
 View definition:
- SELECT int8_tbl.q1, int8_tbl.q2, 
-    dfunc(int8_tbl.q1, int8_tbl.q2, flag := int8_tbl.q1 > int8_tbl.q2) AS c3, 
+ SELECT int8_tbl.q1,
+    int8_tbl.q2,
+    dfunc(int8_tbl.q1, int8_tbl.q2, flag := int8_tbl.q1 > int8_tbl.q2) AS c3,
     dfunc(int8_tbl.q1, flag := int8_tbl.q1 < int8_tbl.q2, b := int8_tbl.q2) AS c4
    FROM int8_tbl;
 

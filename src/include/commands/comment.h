@@ -7,7 +7,7 @@
  *
  * Prototypes for functions in commands/comment.c
  *
- * Copyright (c) 1999-2012, PostgreSQL Global Development Group
+ * Copyright (c) 1999-2013, PostgreSQL Global Development Group
  *
  *-------------------------------------------------------------------------
  */
@@ -29,7 +29,7 @@
  *------------------------------------------------------------------
  */
 
-extern void CommentObject(CommentStmt *stmt);
+extern Oid	CommentObject(CommentStmt *stmt);
 
 extern void DeleteComments(Oid oid, Oid classoid, int32 subid);
 

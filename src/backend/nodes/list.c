@@ -4,7 +4,7 @@
  *	  implementation for PostgreSQL generic linked list package
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -14,6 +14,9 @@
  *-------------------------------------------------------------------------
  */
 #include "postgres.h"
+
+/* see pg_list.h */
+#define PG_LIST_INCLUDE_DEFINITIONS
 
 #include "nodes/pg_list.h"
 
@@ -1250,31 +1253,6 @@ list_copy_tail(const List *oldlist, int nskip)
 	check_list_invariants(newlist);
 	return newlist;
 }
-
-/*
- * pg_list.h defines inline versions of these functions if allowed by the
- * compiler; in which case the definitions below are skipped.
- */
-#ifndef USE_INLINE
-
-ListCell *
-list_head(const List *l)
-{
-	return l ? l->head : NULL;
-}
-
-ListCell *
-list_tail(List *l)
-{
-	return l ? l->tail : NULL;
-}
-
-int
-list_length(const List *l)
-{
-	return l ? l->length : 0;
-}
-#endif   /* ! USE_INLINE */
 
 /*
  * Temporary compatibility functions

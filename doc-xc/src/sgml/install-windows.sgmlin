@@ -10,7 +10,7 @@
 
  <para>
   It is recommended that most users download the binary distribution for
-  Windows, available as a one-click installer package
+  Windows, available as a graphical installer package
   from the <productname>PostgreSQL</productname> website. Building from source
   is only intended for people developing <productname>PostgreSQL</productname>
   or extensions.
@@ -19,11 +19,11 @@
  <para>
   There are several different ways of building PostgreSQL on
   <productname>Windows</productname>. The simplest way to build with
-  Microsoft tools is to install a supported version of the
-  <productname>Microsoft Platform SDK</productname> and use use the included
+  Microsoft tools is to install <productname>Visual Studio Express 2012
+  for Windows Desktop</productname> and use the included
   compiler. It is also possible to build with the full
-  <productname>Microsoft Visual C++ 2005 or 2008</productname>. In some cases
-  that requires the installation of the <productname>Platform SDK</productname>
+  <productname>Microsoft Visual C++ 2005, 2008 or 2010</productname>. In some cases
+  that requires the installation of the <productname>Windows SDK</productname>
   in addition to the compiler.
  </para>
 
@@ -49,8 +49,8 @@
   <xref linkend="installation-notes-mingw"> and <xref linkend="installation-notes-cygwin">.
   To produce native 64 bit binaries in these environments, use the tools from
   <productname>MinGW-w64</productname>. These tools can also be used to
-  cross-compile for 32 bit and 64 bit <productname>Windows</productname> 
-  targets on other hosts, such as <productname>Linux</productname> and 
+  cross-compile for 32 bit and 64 bit <productname>Windows</productname>
+  targets on other hosts, such as <productname>Linux</productname> and
   <productname>Darwin</productname>.
   <productname>Cygwin</productname> is not recommended for running a
   production server, and it should only be used for running on
@@ -61,7 +61,7 @@
  </para>
 
  <para>
-  Native builds of <application>psql</application> don't support command 
+  Native builds of <application>psql</application> don't support command
   line editing. The <productname>Cygwin</productname> build does support
   command line editing, so it should be used where psql is needed for
   interactive use on  <productname>Windows</productname>.
@@ -69,48 +69,48 @@
 
  <sect1 id="install-windows-full">
   <title>Building with <productname>Visual C++</productname> or the
-  <productname>Platform SDK</productname></title>
+  <productname>Microsoft Windows SDK</productname></title>
 
  <para>
   PostgreSQL can be built using the Visual C++ compiler suite from Microsoft.
   These compilers can be either from <productname>Visual Studio</productname>,
   <productname>Visual Studio Express</productname> or some versions of the
-  <productname>Platform SDK</productname>. If you do not already have a
+  <productname>Microsoft Windows SDK</productname>. If you do not already have a
   <productname>Visual Studio</productname> environment set up, the easiest
-  way us to use the compilers in the <productname>Platform SDK</productname>,
-  which is a free download from Microsoft.
+  ways are to use the compilers in the <productname>Windows SDK 7.1</productname>
+  or those from <productname>Visual Studio Express 2012 for Windows
+  Desktop</productname>, which are both free downloads from Microsoft.
  </para>
 
  <para>
-  PostgreSQL supports the compilers from
-  <productname>Visual Studio 2005</productname> and
-  <productname>Visual Studio 2008</productname>. When using the Platform SDK
-  only, or when building for 64-bit Windows, only
-  <productname>Visual Studio 2008</productname> is supported.
-  <productname>Visual Studio 2010</productname> is not yet supported.
+  PostgreSQL is known to support compilation using the compilers shipped with
+  <productname>Visual Studio 2005</productname> to
+  <productname>Visual Studio 2012</productname> (including Express editions),
+  as well as standalone Windows SDK releases 6.0 to 7.1.
+  64-bit PostgreSQL builds are only supported with
+  <productname>Microsoft Windows SDK</productname> version 6.0a to 7.1 or
+  <productname>Visual Studio 2008</productname> and above.
  </para>
 
  <para>
-  When building using the <productname>Platform SDK</productname>, versions
-  6.0 to 7.0 of the SDK are supported. Older or newer versions will not work.
-  In particular, versions from 7.0a and later will not work, since
-  they include compilers from <productname>Visual Studio 2010</productname>.
- </para>
-
- <para>
-  The tools for building using <productname>Visual C++</productname>,
-  are in the <filename>src/tools/msvc</filename> directory. When building,
-  make sure there are no tools from <productname>MinGW</productname> or
+  The tools for building using <productname>Visual C++</productname> or
+  <productname>Platform SDK</productname> are in the
+  <filename>src/tools/msvc</filename> directory. When building, make sure
+  there are no tools from <productname>MinGW</productname> or
   <productname>Cygwin</productname> present in your system PATH. Also, make
   sure you have all the required Visual C++ tools available in the PATH. In
   <productname>Visual Studio</productname>, start the
-  <application>Visual Studio Command Prompt</application>. In the
-  <productname>Platform SDK</productname>, start the
-  <application>CMD shell</application> listed under the SDK on the Start Menu.
+  <application>Visual Studio Command Prompt</application>.
   If you wish to build a 64-bit version, you must use the 64-bit version of
   the command, and vice versa.
-  All commands should be run from the <filename>src\tools\msvc</filename>
-  directory.
+  In the <productname>Microsoft Windows SDK</productname>, start the
+  <application>CMD shell</application> listed under the SDK on the Start Menu.
+  In recent SDK versions you can change the targeted CPU architecture, build
+  type, and target OS by using the <command>setenv</command> command, e.g.
+  <command>setenv /x86 /release /xp</command> to target Windows XP or later
+  with a 32-bit release build. See <command>/?</command> for other options to
+  <command>setenv</command>.  All commands should be run from the
+  <filename>src\tools\msvc</filename> directory.
  </para>
 
  <para>
@@ -148,19 +148,22 @@ $ENV{PATH}=$ENV{PATH} . ';c:\some\where\bison\bin';
 
    <variablelist>
     <varlistentry>
-     <term><productname>Microsoft Platform SDK</productname></term>
+     <term><productname>Microsoft Windows SDK</productname></term>
      <listitem><para>
-      It is recommended that you upgrade to the latest supported version
-      of the <productname>Microsoft Platform SDK</productname> (currently
-      version 7.0), available for download from
+      If your build environment doesn't ship with a supported version of the
+      <productname>Microsoft Windows SDK</productname> it
+      is recommended that you upgrade to the latest version (currently
+      version 7.1), available for download from
       <ulink url="http://www.microsoft.com/downloads/"></>.
      </para>
      <para>
       You must always include the
       <application>Windows Headers and Libraries</application> part of the SDK.
-      If you install the <productname>Platform SDK</productname>
+      If you install a <productname>Windows SDK</productname>
       including the <application>Visual C++ Compilers</application>,
       you don't need <productname>Visual Studio</productname> to build.
+      Note that as of Version 8.0a the Windows SDK no longer ships with a
+      complete command-line build environment.
      </para></listitem>
     </varlistentry>
 
@@ -170,7 +173,7 @@ $ENV{PATH}=$ENV{PATH} . ';c:\some\where\bison\bin';
       ActiveState Perl is required to run the build generation scripts. MinGW
       or Cygwin Perl will not work. It must also be present in the PATH.
       Binaries can be downloaded from
-      <ulink url="http://www.activestate.com"></> (Note: version 5.8 is required,
+      <ulink url="http://www.activestate.com"></> (Note: version 5.8 or later is required,
       the free Standard Distribution is sufficient).
      </para></listitem>
     </varlistentry>
@@ -195,13 +198,32 @@ $ENV{PATH}=$ENV{PATH} . ';c:\some\where\bison\bin';
     <varlistentry>
      <term><productname>Bison</productname> and
       <productname>Flex</productname></term>
-     <listitem><para>
-      Bison and Flex are required to build from Git, but not required when
-      building from a release file. Note that only Bison 1.875 or versions
-      2.2 and later will work. Also, Flex version 2.5.31 or later is required.
-      Bison can be downloaded from <ulink url="http://gnuwin32.sourceforge.net"></>.
-      Flex can be downloaded from
-      <ulink url="http://www.postgresql.org/ftp/misc/winflex/"></>.
+     <listitem>
+     <para>
+      <productname>Bison</productname> and <productname>Flex</productname> are
+      required to build from Git, but not required when building from a release
+      file. Only <productname>Bison</productname> 1.875 or versions 2.2 and later
+      will work. <productname>Flex</productname> must be version 2.5.31 or later.
+     </para>
+
+     <para>
+      Both <productname>Bison</productname> and <productname>Flex</productname>
+      are included in the <productname>msys</productname> tool suite, available
+      from <ulink url="http://www.mingw.org/wiki/MSYS"></> as part of the
+      <productname>MinGW</productname> compiler suite. You can also get
+      <productname>msys</productname> as part of
+      <productname>msysGit</productname> from <ulink url="http://git-scm.com/"></>.
+     </para>
+
+     <para>
+      You will need to add the directory containing
+      <filename>flex.exe</filename> and <filename>bison.exe</filename> to the
+      PATH environment variable in <filename>buildenv.pl</filename> unless
+      they are already in PATH. In the case of MinGW, the directory is the
+      <filename>\msys\1.0\bin</filename> subdirectory of your MinGW
+      installation directory. For msysGit, it's the <filename>bin</filename>
+      directory in your Git install directory. Do not add the MinGW compiler
+      tools themselves to PATH.
      </para>
 
      <note>
@@ -210,7 +232,18 @@ $ENV{PATH}=$ENV{PATH} . ';c:\some\where\bison\bin';
         causes Bison to malfunction when installed in a directory with
         spaces in the name, such as the default location on English
         installations <filename>C:\Program Files\GnuWin32</filename>.
-        Consider installing into <filename>C:\GnuWin32</filename> instead.
+        Consider installing into <filename>C:\GnuWin32</filename> or use the
+        NTFS short name path to GnuWin32 in your PATH environment setting
+        (e.g. <filename>C:\PROGRA~1\GnuWin32</filename>).
+       </para>
+     </note>
+
+     <note>
+       <para>
+       The obsolete "winflex" binaries distributed on the PostgreSQL FTP site
+       and referenced in older documentation will fail with "flex: fatal
+       internal error, exec failed" on 64-bit Windows hosts. Use flex from
+       msys instead.
        </para>
      </note>
      </listitem>
@@ -479,7 +512,7 @@ $ENV{DOCROOT}='c:\docbook';
   static library to link into an application. For normal use the
   <productname>MinGW</productname> or
   <productname>Visual Studio</productname> or
-  <productname>Platform SDK</productname> method is recommended.
+  <productname>Windows SDK</productname> method is recommended.
  </para>
 
  <para>

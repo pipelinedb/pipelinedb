@@ -46,7 +46,7 @@
  * only work with varlena arrays.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/array.h
@@ -211,6 +211,8 @@ extern Datum generate_subscripts_nodir(PG_FUNCTION_ARGS);
 extern Datum array_fill(PG_FUNCTION_ARGS);
 extern Datum array_fill_with_lower_bounds(PG_FUNCTION_ARGS);
 extern Datum array_unnest(PG_FUNCTION_ARGS);
+extern Datum array_remove(PG_FUNCTION_ARGS);
+extern Datum array_replace(PG_FUNCTION_ARGS);
 
 extern Datum array_ref(ArrayType *array, int nSubscripts, int *indx,
 		  int arraytyplen, int elmlen, bool elmbyval, char elmalign,

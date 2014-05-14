@@ -2,7 +2,7 @@
  *
  * createuser
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/scripts/createuser.c
@@ -89,13 +89,13 @@ main(int argc, char *argv[])
 		switch (c)
 		{
 			case 'h':
-				host = optarg;
+				host = pg_strdup(optarg);
 				break;
 			case 'p':
-				port = optarg;
+				port = pg_strdup(optarg);
 				break;
 			case 'U':
-				username = optarg;
+				username = pg_strdup(optarg);
 				break;
 			case 'w':
 				prompt_password = TRI_NO;
@@ -139,7 +139,7 @@ main(int argc, char *argv[])
 				login = TRI_NO;
 				break;
 			case 'c':
-				conn_limit = optarg;
+				conn_limit = pg_strdup(optarg);
 				break;
 			case 'P':
 				pwprompt = true;
@@ -345,12 +345,12 @@ help(const char *progname)
 	printf(_("  -R, --no-createrole       role cannot create roles (default)\n"));
 	printf(_("  -s, --superuser           role will be superuser\n"));
 	printf(_("  -S, --no-superuser        role will not be superuser (default)\n"));
+	printf(_("  -V, --version             output version information, then exit\n"));
 	printf(_("  --interactive             prompt for missing role name and attributes rather\n"
 			 "                            than using defaults\n"));
 	printf(_("  --replication             role can initiate replication\n"));
 	printf(_("  --no-replication          role cannot initiate replication\n"));
-	printf(_("  --help                    show this help, then exit\n"));
-	printf(_("  --version                 output version information, then exit\n"));
+	printf(_("  -?, --help                show this help, then exit\n"));
 	printf(_("\nConnection options:\n"));
 	printf(_("  -h, --host=HOSTNAME       database server host or socket directory\n"));
 	printf(_("  -p, --port=PORT           database server port\n"));

@@ -1,7 +1,7 @@
 /* src/interfaces/ecpg/preproc/ecpg.c */
 
 /* Main for ecpg, the PostgreSQL embedded SQL precompiler. */
-/* Copyright (c) 1996-2012, PostgreSQL Global Development Group */
+/* Copyright (c) 1996-2013, PostgreSQL Global Development Group */
 
 #include "postgres_fe.h"
 
@@ -54,8 +54,8 @@ help(const char *progname)
 	 "                 \"no_indicator\", \"prepare\", \"questionmarks\"\n"));
 	printf(_("  --regression   run in regression testing mode\n"));
 	printf(_("  -t             turn on autocommit of transactions\n"));
-	printf(_("  --help         show this help, then exit\n"));
 	printf(_("  --version      output version information, then exit\n"));
+	printf(_("  -?, --help     show this help, then exit\n"));
 	printf(_("\nIf no output file is specified, the name is formed by adding .c to the\n"
 			 "input file name, after stripping off .pgc if present.\n"));
 	printf(_("\nReport bugs to <pgsql-bugs@postgresql.org>.\n"));
@@ -171,7 +171,7 @@ main(int argc, char *const argv[])
 				regression_mode = true;
 				break;
 			case 'o':
-				output_filename = optarg;
+				output_filename = strdup(optarg);
 				if (strcmp(output_filename, "-") == 0)
 					yyout = stdout;
 				else

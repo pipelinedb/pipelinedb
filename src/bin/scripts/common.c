@@ -4,7 +4,7 @@
  *		Common support routines for bin/scripts/
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/scripts/common.c
@@ -19,7 +19,6 @@
 #include <unistd.h>
 
 #include "common.h"
-#include "libpq/pqsignal.h"
 
 static void SetCancelConn(PGconn *conn);
 static void ResetCancelConn(void);
@@ -109,14 +108,8 @@ connectDatabase(const char *dbname, const char *pghost, const char *pgport,
 	do
 	{
 #define PARAMS_ARRAY_SIZE	7
-		const char **keywords = malloc(PARAMS_ARRAY_SIZE * sizeof(*keywords));
-		const char **values = malloc(PARAMS_ARRAY_SIZE * sizeof(*values));
-
-		if (!keywords || !values)
-		{
-			fprintf(stderr, _("%s: out of memory\n"), progname);
-			exit(1);
-		}
+		const char **keywords = pg_malloc(PARAMS_ARRAY_SIZE * sizeof(*keywords));
+		const char **values = pg_malloc(PARAMS_ARRAY_SIZE * sizeof(*values));
 
 		keywords[0] = "host";
 		values[0] = pghost;
@@ -281,28 +274,6 @@ executeMaintenanceCommand(PGconn *conn, const char *query, bool echo)
 		PQclear(res);
 
 	return r;
-}
-
-/*
- * "Safe" wrapper around strdup().	Pulled from psql/common.c
- */
-char *
-pg_strdup(const char *string)
-{
-	char	   *tmp;
-
-	if (!string)
-	{
-		fprintf(stderr, _("pg_strdup: cannot duplicate null pointer (internal error)\n"));
-		exit(EXIT_FAILURE);
-	}
-	tmp = strdup(string);
-	if (!tmp)
-	{
-		fprintf(stderr, _("out of memory\n"));
-		exit(EXIT_FAILURE);
-	}
-	return tmp;
 }
 
 /*

@@ -10,18 +10,15 @@ PostgreSQL documentation
   <refmiscinfo>Application</refmiscinfo>
  </refmeta>
 
-<!## PG>
  <refnamediv>
   <refname id="reindexdb">reindexdb</refname>
+<!## PG>
   <refpurpose>reindex a <productname>PostgreSQL</productname> database</refpurpose>
- </refnamediv>
 <!## end>
 <!## XC>
- <refnamediv>
-  <refname id="reindexdb">reindexdb</refname>
   <refpurpose>reindex a <productname>Postgres-XC</productname> database</refpurpose>
- </refnamediv>
 <!## end>
+ </refnamediv>
 
  <indexterm zone="app-reindexdb">
   <primary>reindexdb</primary>
@@ -31,22 +28,47 @@ PostgreSQL documentation
   <cmdsynopsis>
    <command>reindexdb</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
-   <arg>--table | -t <replaceable>table</replaceable> </arg>
-   <arg>--index | -i <replaceable>index</replaceable> </arg>
-   <arg><replaceable>dbname</replaceable></arg>
+
+   <arg choice="plain" rep="repeat">
+    <arg choice="opt">
+     <group choice="plain">
+      <arg choice="plain"><option>--table</option></arg>
+      <arg choice="plain"><option>-t</option></arg>
+     </group>
+     <replaceable>table</replaceable>
+    </arg>
+   </arg>
+
+   <arg choice="plain" rep="repeat">
+    <arg choice="opt">
+     <group choice="plain">
+      <arg choice="plain"><option>--index</option></arg>
+      <arg choice="plain"><option>-i</option></arg>
+     </group>
+     <replaceable>index</replaceable>
+    </arg>
+   </arg>
+
+   <arg choice="opt"><replaceable>dbname</replaceable></arg>
   </cmdsynopsis>
 
   <cmdsynopsis>
    <command>reindexdb</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
-   <arg>--all | -a</arg>
+   <group choice="plain">
+    <arg choice="plain"><option>--all</option></arg>
+    <arg choice="plain"><option>-a</option></arg>
+   </group>
   </cmdsynopsis>
 
   <cmdsynopsis>
    <command>reindexdb</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
-   <arg>--system | -s</arg>
-   <arg><replaceable>dbname</replaceable></arg>
+   <group choice="plain">
+    <arg choice="plain"><option>--system</option></arg>
+    <arg choice="plain"><option>-s</option></arg>
+   </group>
+   <arg choice="opt"><replaceable>dbname</replaceable></arg>
   </cmdsynopsis>
  </refsynopsisdiv>
 
@@ -55,15 +77,9 @@ PostgreSQL documentation
   <title>Description</title>
 
 &common;
-
   <para>
    <application>reindexdb</application> is a utility for rebuilding indexes
-<!## PG>
    in a <productname>PostgreSQL</productname> database.
-<!## end>
-<!## XC>
-   in a <productname>Postgres-XC</productname> database.
-<!## end>
   </para>
 
   <para>
@@ -80,7 +96,6 @@ PostgreSQL documentation
   <title>Options</title>
 
 &common;
-
    <para>
     <application>reindexdb</application> accepts the following command-line arguments:
 
@@ -127,6 +142,8 @@ PostgreSQL documentation
       <listitem>
        <para>
         Recreate <replaceable class="parameter">index</replaceable> only.
+        Multiple indexes can be recreated by writing multiple
+        <option>-i</> switches.
        </para>
       </listitem>
      </varlistentry>
@@ -157,6 +174,8 @@ PostgreSQL documentation
       <listitem>
        <para>
         Reindex <replaceable class="parameter">table</replaceable> only.
+        Multiple tables can be reindexed by writing multiple
+        <option>-t</> switches.
        </para>
       </listitem>
      </varlistentry>
@@ -260,6 +279,18 @@ PostgreSQL documentation
        </para>
       </listitem>
      </varlistentry>
+
+     <varlistentry>
+      <term><option>--maintenance-db=<replaceable class="parameter">dbname</replaceable></></term>
+      <listitem>
+       <para>
+         Specifies the name of the database to connect to discover what other
+         databases should be reindexed. If not specified, the
+         <literal>postgres</literal> database will be used,
+         and if that does not exist, <literal>template1</literal> will be used.
+       </para>
+      </listitem>
+     </varlistentry>
     </variablelist>
    </para>
  </refsect1>
@@ -267,8 +298,8 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Environment</title>
-&common;
 
+&common;
   <variablelist>
    <varlistentry>
     <term><envar>PGDATABASE</envar></term>
@@ -285,12 +316,7 @@ PostgreSQL documentation
   </variablelist>
 
   <para>
-<!## PG>
    This utility, like most other <productname>PostgreSQL</> utilities,
-<!## end>
-<!## XC>
-   This utility, like most other <productname>Postgres-XC</> utilities,
-<!## end>
    also uses the environment variables supported by <application>libpq</>
    (see <xref linkend="libpq-envars">).
   </para>
@@ -300,8 +326,8 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Diagnostics</title>
-&common;
 
+&common;
   <para>
    In case of difficulty, see <xref linkend="SQL-REINDEX">
    and <xref linkend="APP-PSQL"> for
@@ -317,16 +343,11 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Notes</title>
-&common;
 
+&common;
   <para>
    <application>reindexdb</application> might need to connect several
-<!## PG>
    times to the <productname>PostgreSQL</productname> server, asking
-<!## end>
-<!## XC>
-   times to the <productname>Postgres-XC</productname> server, asking
-<!## end>
    for a password each time. It is convenient to have a
    <filename>~/.pgpass</> file in such cases. See <xref
    linkend="libpq-pgpass"> for more information.
@@ -336,7 +357,6 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Examples</title>
-&common;
 
    <para>
     To reindex the database <literal>test</literal>:
@@ -350,14 +370,12 @@ PostgreSQL documentation
     <literal>bar</literal> in a database named <literal>abcd</literal>:
 <screen>
 <prompt>$ </prompt><userinput>reindexdb --table foo --index bar abcd</userinput>
-</screen>
-   </para>
+</screen></para>
 
  </refsect1>
 
  <refsect1>
   <title>See Also</title>
-&common;
 
   <simplelist type="inline">
    <member><xref linkend="sql-reindex"></member>

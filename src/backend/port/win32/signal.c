@@ -3,7 +3,7 @@
  * signal.c
  *	  Microsoft Windows Win32 Signal Emulation Functions
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/port/win32/signal.c
@@ -13,7 +13,7 @@
 
 #include "postgres.h"
 
-#include <libpq/pqsignal.h>
+#include "libpq/pqsignal.h"
 
 /*
  * These are exported for use by the UNBLOCKED_SIGNAL_QUEUE() macro.
@@ -158,7 +158,11 @@ pqsigsetmask(int mask)
 }
 
 
-/* signal manipulation. Only called on main thread, no sync required */
+/*
+ * Unix-like signal handler installation
+ *
+ * Only called on main thread, no sync required
+ */
 pqsigfunc
 pqsignal(int signum, pqsigfunc handler)
 {

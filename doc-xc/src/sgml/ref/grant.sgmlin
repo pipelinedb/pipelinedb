@@ -27,8 +27,8 @@ GRANT { { SELECT | INSERT | UPDATE | DELETE | TRUNCATE | REFERENCES | TRIGGER }
          | ALL TABLES IN SCHEMA <replaceable class="PARAMETER">schema_name</replaceable> [, ...] }
     TO { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...] [ WITH GRANT OPTION ]
 
-GRANT { { SELECT | INSERT | UPDATE | REFERENCES } ( <replaceable class="PARAMETER">column</replaceable> [, ...] )
-    [, ...] | ALL [ PRIVILEGES ] ( <replaceable class="PARAMETER">column</replaceable> [, ...] ) }
+GRANT { { SELECT | INSERT | UPDATE | REFERENCES } ( <replaceable class="PARAMETER">column_name</replaceable> [, ...] )
+    [, ...] | ALL [ PRIVILEGES ] ( <replaceable class="PARAMETER">column_name</replaceable> [, ...] ) }
     ON [ TABLE ] <replaceable class="PARAMETER">table_name</replaceable> [, ...]
     TO { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...] [ WITH GRANT OPTION ]
 
@@ -40,6 +40,10 @@ GRANT { { USAGE | SELECT | UPDATE }
 
 GRANT { { CREATE | CONNECT | TEMPORARY | TEMP } [, ...] | ALL [ PRIVILEGES ] }
     ON DATABASE <replaceable>database_name</replaceable> [, ...]
+    TO { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...] [ WITH GRANT OPTION ]
+
+GRANT { USAGE | ALL [ PRIVILEGES ] }
+    ON DOMAIN <replaceable>domain_name</replaceable> [, ...]
     TO { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...] [ WITH GRANT OPTION ]
 
 GRANT { USAGE | ALL [ PRIVILEGES ] }
@@ -71,6 +75,10 @@ GRANT { CREATE | ALL [ PRIVILEGES ] }
     ON TABLESPACE <replaceable>tablespace_name</replaceable> [, ...]
     TO { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...] [ WITH GRANT OPTION ]
 
+GRANT { USAGE | ALL [ PRIVILEGES ] }
+    ON TYPE <replaceable>type_name</replaceable> [, ...]
+    TO { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...] [ WITH GRANT OPTION ]
+
 GRANT <replaceable class="PARAMETER">role_name</replaceable> [, ...] TO <replaceable class="PARAMETER">role_name</replaceable> [, ...] [ WITH ADMIN OPTION ]
 </synopsis>
  </refsynopsisdiv>
@@ -79,7 +87,6 @@ GRANT <replaceable class="PARAMETER">role_name</replaceable> [, ...] TO <replace
   <title>Description</title>
 
 &common;
-
   <para>
    The <command>GRANT</command> command has two basic variants: one
    that grants privileges on a database object (table, column, view, foreign
@@ -92,6 +99,7 @@ GRANT <replaceable class="PARAMETER">role_name</replaceable> [, ...] TO <replace
  <refsect2 id="sql-grant-description-objects">
   <title>GRANT on Database Objects</title>
 
+&common;
   <para>
    This variant of the <command>GRANT</command> command gives specific
    privileges on a database object to
@@ -141,15 +149,16 @@ GRANT <replaceable class="PARAMETER">role_name</replaceable> [, ...] TO <replace
   </para>
 
   <para>
-   Depending on the type of object, the initial default privileges might
-   include granting some privileges to <literal>PUBLIC</literal>.
-   The default is no public access for tables, columns, schemas, and
-   tablespaces;
-   <literal>CONNECT</> privilege and <literal>TEMP</> table creation privilege
-   for databases;
-   <literal>EXECUTE</> privilege for functions; and
-   <literal>USAGE</> privilege for languages.
-   The object owner can of course revoke these privileges.  (For maximum
+   PostgreSQL grants default privileges on some types of objects to
+   <literal>PUBLIC</literal>.  No privileges are granted to
+   <literal>PUBLIC</literal> by default on tables,
+   columns, schemas or tablespaces. For other types, the default privileges
+   granted to <literal>PUBLIC</literal> are as follows:
+   <literal>CONNECT</literal> and <literal>CREATE TEMP TABLE</literal> for
+   databases; <literal>EXECUTE</literal> privilege for functions; and
+   <literal>USAGE</literal> privilege for languages.
+   The object owner can, of course, <command>REVOKE</command>
+   both default and  expressly granted privileges. (For maximum
    security, issue the <command>REVOKE</> in the same transaction that
    creates the object; then there is no window in which another user
    can use the object.)
@@ -337,14 +346,22 @@ GRANT <replaceable class="PARAMETER">role_name</replaceable> [, ...] TO <replace
        <function>currval</function> and <function>nextval</function> functions.
       </para>
       <para>
+       For types and domains, this privilege allow the use of the type or
+       domain in the creation of tables, functions, and other schema objects.
+       (Note that it does not control general <quote>usage</quote> of the type,
+       such as values of the type appearing in queries.  It only prevents
+       objects from being created that depend on the type.  The main purpose of
+       the privilege is controlling which users create dependencies on a type,
+       which could prevent the owner from changing the type later.)
+      </para>
+      <para>
        For foreign-data wrappers, this privilege enables the grantee
        to create new servers using that foreign-data wrapper.
       </para>
       <para>
-       For servers, this privilege enables the grantee to create,
-       alter, and drop his own user's user mappings associated with
-       that server.  Also, it enables the grantee to query the options
-       of the server and associated user mappings.
+       For servers, this privilege enables the grantee to create foreign
+       tables using the server, and also to create, alter, or drop his own
+       user's user mappings associated with that server.
       </para>
      </listitem>
     </varlistentry>
@@ -355,12 +372,7 @@ GRANT <replaceable class="PARAMETER">role_name</replaceable> [, ...] TO <replace
       <para>
        Grant all of the available privileges at once.
        The <literal>PRIVILEGES</literal> key word is optional in
-<!## PG>
        <productname>PostgreSQL</productname>, though it is required by
-<!## end>
-<!## XC>
-       <productname>Postgres-XC</productname>, though it is required by
-<!## end>
        strict SQL.
       </para>
      </listitem>
@@ -375,6 +387,7 @@ GRANT <replaceable class="PARAMETER">role_name</replaceable> [, ...] TO <replace
  <refsect2 id="sql-grant-description-roles">
   <title>GRANT on Roles</title>
 
+&common;
   <para>
    This variant of the <command>GRANT</command> command grants membership
    in a role to one or more other roles.  Membership in a role is significant
@@ -404,6 +417,7 @@ GRANT <replaceable class="PARAMETER">role_name</replaceable> [, ...] TO <replace
  <refsect1 id="SQL-GRANT-notes">
   <title>Notes</title>
 
+&common;
    <para>
     The <xref linkend="sql-revoke"> command is used
     to revoke access privileges.
@@ -593,13 +607,13 @@ GRANT ALL PRIVILEGES ON kinds TO manuel;
 
 <programlisting>
 GRANT admins TO joe;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1 id="sql-grant-compatibility">
   <title>Compatibility</title>
 
+&common;
    <para>
     According to the SQL standard, the <literal>PRIVILEGES</literal>
     key word in <literal>ALL PRIVILEGES</literal> is required.  The
@@ -608,22 +622,12 @@ GRANT admins TO joe;
    </para>
 
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> allows an object owner to revoke his
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> allows an object owner to revoke his
-<!## end>
     own ordinary privileges: for example, a table owner can make the table
     read-only to himself by revoking his own <literal>INSERT</>,
     <literal>UPDATE</>, <literal>DELETE</>, and <literal>TRUNCATE</>
     privileges.  This is not possible according to the SQL standard.  The
-<!## PG>
     reason is that <productname>PostgreSQL</productname> treats the owner's
-<!## end>
-<!## XC>
-    reason is that <productname>Postgres-XC</productname> treats the owner's
-<!## end>
     privileges as having been granted by the owner to himself; therefore he
     can revoke them too.  In the SQL standard, the owner's privileges are
     granted by an assumed entity <quote>_SYSTEM</>.  Not being
@@ -631,19 +635,32 @@ GRANT admins TO joe;
    </para>
 
    <para>
+    According to the SQL standard, grant options can be granted to
+    <literal>PUBLIC</literal>; PostgreSQL only supports granting grant options
+    to roles.
+   </para>
+
+   <para>
     The SQL standard provides for a <literal>USAGE</literal> privilege
     on other kinds of objects: character sets, collations,
-    translations, domains.
+    translations.
+   </para>
+
+   <para>
+    In the SQL standard, sequences only have a <literal>USAGE</literal>
+    privilege, which controls the use of the <literal>NEXT VALUE FOR</literal>
+    expression, which is equivalent to the
+    function <function>nextval</function> in PostgreSQL.  The sequence
+    privileges <literal>SELECT</literal> and <literal>UPDATE</literal> are
+    PostgreSQL extensions.  The application of the
+    sequence <literal>USAGE</literal> privilege to
+    the <literal>currval</literal> function is also a PostgreSQL extension (as
+    is the function itself).
    </para>
 
    <para>
     Privileges on databases, tablespaces, schemas, and languages are
-<!## PG>
     <productname>PostgreSQL</productname> extensions.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> extensions.
-<!## end>
    </para>
  </refsect1>
 

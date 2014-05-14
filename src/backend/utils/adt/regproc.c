@@ -8,7 +8,7 @@
  * special I/O conversion routines.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -23,6 +23,7 @@
 
 #include "access/genam.h"
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_class.h"
@@ -31,6 +32,7 @@
 #include "catalog/pg_ts_config.h"
 #include "catalog/pg_ts_dict.h"
 #include "catalog/pg_type.h"
+#include "lib/stringinfo.h"
 #include "miscadmin.h"
 #include "parser/parse_type.h"
 #include "utils/builtins.h"
@@ -39,6 +41,8 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 
+static char *format_operator_internal(Oid operator_oid, bool force_qualify);
+static char *format_procedure_internal(Oid procedure_oid, bool force_qualify);
 static void parseNameAndArgTypes(const char *string, bool allowNone,
 					 List **names, int *nargs, Oid *argtypes);
 
@@ -302,6 +306,25 @@ regprocedurein(PG_FUNCTION_ARGS)
 char *
 format_procedure(Oid procedure_oid)
 {
+	return format_procedure_internal(procedure_oid, false);
+}
+
+char *
+format_procedure_qualified(Oid procedure_oid)
+{
+	return format_procedure_internal(procedure_oid, true);
+}
+
+/*
+ * Routine to produce regprocedure names; see format_procedure above.
+ *
+ * force_qualify says whether to schema-qualify; if true, the name is always
+ * qualified regardless of search_path visibility.	Otherwise the name is only
+ * qualified if the function is not in path.
+ */
+static char *
+format_procedure_internal(Oid procedure_oid, bool force_qualify)
+{
 	char	   *result;
 	HeapTuple	proctup;
 
@@ -322,9 +345,9 @@ format_procedure(Oid procedure_oid)
 
 		/*
 		 * Would this proc be found (given the right args) by regprocedurein?
-		 * If not, we need to qualify it.
+		 * If not, or if caller requests it, we need to qualify it.
 		 */
-		if (FunctionIsVisible(procedure_oid))
+		if (!force_qualify && FunctionIsVisible(procedure_oid))
 			nspname = NULL;
 		else
 			nspname = get_namespace_name(procform->pronamespace);
@@ -337,7 +360,10 @@ format_procedure(Oid procedure_oid)
 
 			if (i > 0)
 				appendStringInfoChar(&buf, ',');
-			appendStringInfoString(&buf, format_type_be(thisargtype));
+			appendStringInfoString(&buf,
+								   force_qualify ?
+								   format_type_be_qualified(thisargtype) :
+								   format_type_be(thisargtype));
 		}
 		appendStringInfoChar(&buf, ')');
 
@@ -651,8 +677,8 @@ regoperatorin(PG_FUNCTION_ARGS)
  * This exports the useful functionality of regoperatorout for use
  * in other backend modules.  The result is a palloc'd string.
  */
-char *
-format_operator(Oid operator_oid)
+static char *
+format_operator_internal(Oid operator_oid, bool force_qualify)
 {
 	char	   *result;
 	HeapTuple	opertup;
@@ -672,9 +698,10 @@ format_operator(Oid operator_oid)
 
 		/*
 		 * Would this oper be found (given the right args) by regoperatorin?
-		 * If not, we need to qualify it.
+		 * If not, or if caller explicitely requests it, we need to qualify
+		 * it.
 		 */
-		if (!OperatorIsVisible(operator_oid))
+		if (force_qualify || !OperatorIsVisible(operator_oid))
 		{
 			nspname = get_namespace_name(operform->oprnamespace);
 			appendStringInfo(&buf, "%s.",
@@ -685,12 +712,16 @@ format_operator(Oid operator_oid)
 
 		if (operform->oprleft)
 			appendStringInfo(&buf, "%s,",
+							 force_qualify ?
+							 format_type_be_qualified(operform->oprleft) :
 							 format_type_be(operform->oprleft));
 		else
 			appendStringInfo(&buf, "NONE,");
 
 		if (operform->oprright)
 			appendStringInfo(&buf, "%s)",
+							 force_qualify ?
+							 format_type_be_qualified(operform->oprright) :
 							 format_type_be(operform->oprright));
 		else
 			appendStringInfo(&buf, "NONE)");
@@ -709,6 +740,18 @@ format_operator(Oid operator_oid)
 	}
 
 	return result;
+}
+
+char *
+format_operator(Oid operator_oid)
+{
+	return format_operator_internal(operator_oid, false);
+}
+
+char *
+format_operator_qualified(Oid operator_oid)
+{
+	return format_operator_internal(operator_oid, true);
 }
 
 /*

@@ -3,7 +3,7 @@
  * pl_handler.c		- Handler for the PL/pgSQL
  *			  procedural language
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -15,6 +15,7 @@
 
 #include "plpgsql.h"
 
+#include "access/htup_details.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "funcapi.h"
@@ -118,6 +119,12 @@ plpgsql_call_handler(PG_FUNCTION_ARGS)
 		if (CALLED_AS_TRIGGER(fcinfo))
 			retval = PointerGetDatum(plpgsql_exec_trigger(func,
 										   (TriggerData *) fcinfo->context));
+		else if (CALLED_AS_EVENT_TRIGGER(fcinfo))
+		{
+			plpgsql_exec_event_trigger(func,
+									   (EventTriggerData *) fcinfo->context);
+			retval = (Datum) 0;
+		}
 		else
 			retval = plpgsql_exec_function(func, fcinfo);
 	}
@@ -224,7 +231,8 @@ plpgsql_validator(PG_FUNCTION_ARGS)
 	Oid		   *argtypes;
 	char	  **argnames;
 	char	   *argmodes;
-	bool		istrigger = false;
+	bool		is_dml_trigger = false;
+	bool		is_event_trigger = false;
 	int			i;
 
 	/* Get the new function's pg_proc entry */
@@ -242,7 +250,9 @@ plpgsql_validator(PG_FUNCTION_ARGS)
 		/* we assume OPAQUE with no arguments means a trigger */
 		if (proc->prorettype == TRIGGEROID ||
 			(proc->prorettype == OPAQUEOID && proc->pronargs == 0))
-			istrigger = true;
+			is_dml_trigger = true;
+		else if (proc->prorettype == EVTTRIGGEROID)
+			is_event_trigger = true;
 		else if (proc->prorettype != RECORDOID &&
 				 proc->prorettype != VOIDOID &&
 				 !IsPolymorphicType(proc->prorettype))
@@ -273,8 +283,9 @@ plpgsql_validator(PG_FUNCTION_ARGS)
 	{
 		FunctionCallInfoData fake_fcinfo;
 		FmgrInfo	flinfo;
-		TriggerData trigdata;
 		int			rc;
+		TriggerData trigdata;
+		EventTriggerData etrigdata;
 
 		/*
 		 * Connect to SPI manager (is this needed for compilation?)
@@ -291,11 +302,17 @@ plpgsql_validator(PG_FUNCTION_ARGS)
 		fake_fcinfo.flinfo = &flinfo;
 		flinfo.fn_oid = funcoid;
 		flinfo.fn_mcxt = CurrentMemoryContext;
-		if (istrigger)
+		if (is_dml_trigger)
 		{
 			MemSet(&trigdata, 0, sizeof(trigdata));
 			trigdata.type = T_TriggerData;
 			fake_fcinfo.context = (Node *) &trigdata;
+		}
+		else if (is_event_trigger)
+		{
+			MemSet(&etrigdata, 0, sizeof(etrigdata));
+			etrigdata.type = T_EventTriggerData;
+			fake_fcinfo.context = (Node *) &etrigdata;
 		}
 
 		/* Test-compile the function */

@@ -4,8 +4,7 @@
 
 <title>Database Physical Storage</title>
 
-&pgnotice;
-
+&common;
 <para>
 This chapter provides an overview of the physical storage format used by
 <productname>PostgreSQL</productname> databases.
@@ -15,14 +14,15 @@ This chapter provides an overview of the physical storage format used by
 
 <title>Database File Layout</title>
 
-&pgnotice;
+&common;
 <para>
 This section describes the storage format at the level of files and
 directories.
 </para>
 
 <para>
-All the data needed for a database cluster is stored within the cluster's data
+Traditionally, the configuration and data files used by a database
+cluster are stored together within the cluster's data
 directory, commonly referred to as <varname>PGDATA</> (after the name of the
 environment variable that can be used to define it).  A common location for
 <varname>PGDATA</> is <filename>/var/lib/pgsql/data</>.  Multiple clusters,
@@ -36,7 +36,7 @@ these required items, the cluster configuration files
 <filename>postgresql.conf</filename>, <filename>pg_hba.conf</filename>, and
 <filename>pg_ident.conf</filename> are traditionally stored in
 <varname>PGDATA</> (although in <productname>PostgreSQL</productname> 8.0 and
-later, it is possible to keep them elsewhere).
+later, it is possible to place them elsewhere).
 </para>
 
 <table tocentry="1" id="pgdata-contents-table">
@@ -91,6 +91,11 @@ Item
 </row>
 
 <row>
+ <entry><filename>pg_snapshots</></entry>
+ <entry>Subdirectory containing exported snapshots</entry>
+</row>
+
+<row>
  <entry><filename>pg_stat_tmp</></entry>
  <entry>Subdirectory containing temporary files for the statistics
   subsystem</entry>
@@ -124,7 +129,7 @@ last started with</entry>
 
 <row>
  <entry><filename>postmaster.pid</></entry>
- <entry>A lock file recording the current postmaster process id (PID),
+ <entry>A lock file recording the current postmaster process ID (PID),
   cluster data directory path,
   postmaster start timestamp,
   port number,
@@ -261,7 +266,7 @@ where <replaceable>PPP</> is the PID of the owning backend and
     </indexterm>
     <indexterm><primary>sliced bread</><see>TOAST</></indexterm>
 
-&pgnotice;
+&common;
 <para>
 This section provides an overview of <acronym>TOAST</> (The
 Oversized-Attribute Storage Technique).
@@ -437,7 +442,7 @@ comparison table, in which all the HTML pages were cut down to 7 kB to fit.
 </indexterm>
 <indexterm><primary>FSM</><see>Free Space Map</></indexterm>
 
-&pgnotice;
+&common;
 <para>
 Each heap and index relation, except for hash indexes, has a Free Space Map
 (FSM) to keep track of available space in the relation. It's stored
@@ -480,7 +485,7 @@ can be used to examine the information stored in free space maps.
 </indexterm>
 <indexterm><primary>VM</><see>Visibility Map</></indexterm>
 
-&pgnotice;
+&common;
 <para>
 Each heap relation has a Visibility Map
 (VM) to keep track of which pages contain only tuples that are known to be
@@ -495,11 +500,16 @@ Note that indexes do not have VMs.
 <para>
 The visibility map simply stores one bit per heap page. A set bit means
 that all tuples on the page are known to be visible to all transactions.
-This means that the page does not contain any tuples that need to be vacuumed;
-in future it might also be used to avoid visiting the page for visibility
-checks. The map is conservative in the sense that we
-make sure that whenever a bit is set, we know the condition is true, but if
-a bit is not set, it might or might not be true.
+This means that the page does not contain any tuples that need to be vacuumed.
+This information can also be used by <firstterm>index-only scans</> to answer
+queries using only the index tuple.
+</para>
+
+<para>
+The map is conservative in the sense that we make sure that whenever a bit is
+set, we know the condition is true, but if a bit is not set, it might or
+might not be true. Visibility map bits are only set by vacuum, but are
+cleared by any data-modifying operations on a page.
 </para>
 
 </sect1>
@@ -512,6 +522,7 @@ a bit is not set, it might or might not be true.
  <primary>Initialization Fork</primary>
 </indexterm>
 
+&common;
 <para>
 Each unlogged table, and each index on an unlogged table, has an initialization
 fork.  The initialization fork is an empty table or index of the appropriate
@@ -526,7 +537,7 @@ erased (they will be recreated automatically as needed).
 
 <title>Database Page Layout</title>
 
-&pgnotice;
+&common;
 <para>
 This section provides an overview of the page format used within
 <productname>PostgreSQL</productname> tables and indexes.<footnote>
@@ -662,10 +673,10 @@ data. Empty in ordinary tables.</entry>
    to this page</entry>
   </row>
   <row>
-   <entry>pd_tli</entry>
+   <entry>pd_checksum</entry>
    <entry>uint16</entry>
    <entry>2 bytes</entry>
-   <entry>TimeLineID of last change (only its lowest 16 bits)</entry>
+   <entry>Page checksum</entry>
   </row>
   <row>
    <entry>pd_flags</entry>
@@ -825,7 +836,7 @@ data. Empty in ordinary tables.</entry>
   </row>
   <row>
    <entry>t_infomask2</entry>
-   <entry>int16</entry>
+   <entry>uint16</entry>
    <entry>2 bytes</entry>
    <entry>number of attributes, plus various flag bits</entry>
   </row>

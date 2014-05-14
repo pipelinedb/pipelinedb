@@ -2,7 +2,7 @@
  *
  * droplang
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/scripts/droplang.c
@@ -64,13 +64,13 @@ main(int argc, char *argv[])
 				listlangs = true;
 				break;
 			case 'h':
-				host = optarg;
+				host = pg_strdup(optarg);
 				break;
 			case 'p':
-				port = optarg;
+				port = pg_strdup(optarg);
 				break;
 			case 'U':
-				username = optarg;
+				username = pg_strdup(optarg);
 				break;
 			case 'w':
 				prompt_password = TRI_NO;
@@ -79,7 +79,7 @@ main(int argc, char *argv[])
 				prompt_password = TRI_YES;
 				break;
 			case 'd':
-				dbname = optarg;
+				dbname = pg_strdup(optarg);
 				break;
 			case 'e':
 				echo = true;
@@ -238,8 +238,8 @@ help(const char *progname)
 	printf(_("  -d, --dbname=DBNAME       database from which to remove the language\n"));
 	printf(_("  -e, --echo                show the commands being sent to the server\n"));
 	printf(_("  -l, --list                show a list of currently installed languages\n"));
-	printf(_("  --help                    show this help, then exit\n"));
-	printf(_("  --version                 output version information, then exit\n"));
+	printf(_("  -V, --version             output version information, then exit\n"));
+	printf(_("  -?, --help                show this help, then exit\n"));
 	printf(_("\nConnection options:\n"));
 	printf(_("  -h, --host=HOSTNAME       database server host or socket directory\n"));
 	printf(_("  -p, --port=PORT           database server port\n"));

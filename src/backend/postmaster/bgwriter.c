@@ -24,7 +24,7 @@
  * should be killed by SIGQUIT and then a recovery cycle started.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -39,6 +39,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "access/xlog.h"
 #include "access/xlog_internal.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
@@ -46,6 +47,7 @@
 #include "postmaster/bgwriter.h"
 #include "storage/bufmgr.h"
 #include "storage/buf_internals.h"
+#include "storage/fd.h"
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
 #include "storage/proc.h"
@@ -74,11 +76,6 @@ int			BgWriterDelay = 200;
 static volatile sig_atomic_t got_SIGHUP = false;
 static volatile sig_atomic_t shutdown_requested = false;
 
-/*
- * Private state
- */
-static bool am_bg_writer = false;
-
 /* Signal handlers */
 
 static void bg_quickdie(SIGNAL_ARGS);
@@ -90,8 +87,8 @@ static void bgwriter_sigusr1_handler(SIGNAL_ARGS);
 /*
  * Main entry point for bgwriter process
  *
- * This is invoked from BootstrapMain, which has already created the basic
- * execution environment, but not enabled signals yet.
+ * This is invoked from AuxiliaryProcessMain, which has already created the
+ * basic execution environment, but not enabled signals yet.
  */
 void
 BackgroundWriterMain(void)
@@ -99,8 +96,6 @@ BackgroundWriterMain(void)
 	sigjmp_buf	local_sigjmp_buf;
 	MemoryContext bgwriter_context;
 	bool		prev_hibernate;
-
-	am_bg_writer = true;
 
 	/*
 	 * If possible, make this process a group leader, so that the postmaster
@@ -189,6 +184,7 @@ BackgroundWriterMain(void)
 							 false, true);
 		/* we needn't bother with the other ResourceOwnerRelease phases */
 		AtEOXact_Buffers(false);
+		AtEOXact_SMgr();
 		AtEOXact_Files();
 		AtEOXact_HashTables(false);
 
@@ -227,12 +223,6 @@ BackgroundWriterMain(void)
 	 * Unblock signals (they were blocked when the postmaster forked us)
 	 */
 	PG_SETMASK(&UnBlockSig);
-
-	/*
-	 * Use the recovery target timeline ID during recovery
-	 */
-	if (RecoveryInProgress())
-		ThisTimeLineID = GetRecoveryTargetTLI();
 
 	/*
 	 * Reset hibernation state after any error.

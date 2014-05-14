@@ -7,7 +7,7 @@
  * HAVE_CBRT, HAVE_FUNCNAME_FUNC, HAVE_GETOPT, HAVE_GETOPT_H, HAVE_INTTYPES_H,
  * HAVE_GETOPT_LONG, HAVE_LOCALE_T, HAVE_RINT, HAVE_STRINGS_H, HAVE_STRTOLL,
  * HAVE_STRTOULL, HAVE_STRUCT_OPTION, ENABLE_THREAD_SAFETY,
- * USE_INLINE, inline
+ * PG_USE_INLINE, inline
  */
 
 /* Define to the type of arg 1 of 'accept' */
@@ -249,6 +249,9 @@
 #define HAVE_LONG_LONG_INT_64
 #endif
 
+/* Define to 1 if you have the `mbstowcs_l' function. */
+#define HAVE_MBSTOWCS_L 1
+
 /* Define to 1 if you have the `memmove' function. */
 #define HAVE_MEMMOVE 1
 
@@ -420,6 +423,9 @@
 /* Define to 1 if you have the `symlink' function. */
 #define HAVE_SYMLINK 1
 
+/* Define to 1 if you have the `sync_file_range' function. */
+/* #undef HAVE_SYNC_FILE_RANGE */
+
 /* Define to 1 if you have the `sysconf' function. */
 /* #undef HAVE_SYSCONF */
 
@@ -505,9 +511,6 @@
 /* Define to 1 if you have the `vsnprintf' function. */
 #define HAVE_VSNPRINTF 1
 
-/* Define to 1 if you have the `waitpid' function. */
-/* #undef HAVE_WAITPID */
-
 /* Define to 1 if you have the <wchar.h> header file. */
 #define HAVE_WCHAR_H 1
 
@@ -522,6 +525,21 @@
 
 /* Define to 1 if you have the <winldap.h> header file. */
 /* #undef HAVE_WINLDAP_H */
+
+/* Define to 1 if your compiler understands __builtin_constant_p. */
+/* #undef HAVE__BUILTIN_CONSTANT_P */
+
+/* Define to 1 if your compiler understands __builtin_types_compatible_p. */
+/* #undef HAVE__BUILTIN_TYPES_COMPATIBLE_P */
+
+/* Define to 1 if your compiler understands __builtin_unreachable. */
+/* #undef HAVE__BUILTIN_UNREACHABLE */
+
+/* Define to 1 if your compiler understands _Static_assert. */
+/* #undef HAVE__STATIC_ASSERT */
+
+/* Define to 1 if your compiler understands __VA_ARGS__ in macros. */
+#define HAVE__VA_ARGS 1
 
 /* Define to the appropriate snprintf format for 64-bit ints, if any. */
 #define INT64_FORMAT "%lld"
@@ -548,16 +566,19 @@
 #define PACKAGE_NAME "Postgres-XC"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "Postgres-XC 1.1devel"
+#define PACKAGE_STRING "Postgres-XC 1.2devel"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "9.2beta2"
+#define PACKAGE_VERSION "9.3.2"
+
+/* Define to the name of a signed 64-bit integer type. */
+#define PG_INT64_TYPE long long int
 
 /* PostgreSQL version as a string */
-#define PG_VERSION "9.2beta2"
+#define PG_VERSION "9.3.2"
 
 /* PostgreSQL version as a number */
-#define PG_VERSION_NUM 90200
+#define PG_VERSION_NUM 90302
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "postgres-xc"
@@ -620,7 +641,7 @@
 
 /* Define to 1 if "static inline" works without unwanted warnings from
    compilations where static inline functions are defined but not called. */
-#define USE_INLINE 1
+#define PG_USE_INLINE 1
 
 /* Define to 1 if you want 64-bit integer timestamp and interval support.
    (--enable-integer-datetimes) */

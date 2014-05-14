@@ -310,6 +310,24 @@ pg_restore -d <replaceable class="parameter">dbname</replaceable> <replaceable c
     with one of the other two approaches.
    </para>
 
+   <formalpara>
+    <title>Use <application>pg_dump</>'s parallel dump feature.</title>
+    <para>
+     To speed up the dump of a large database, you can use
+     <application>pg_dump</application>'s parallel mode. This will dump
+     multiple tables at the same time. You can control the degree of
+     parallelism with the <command>-j</command> parameter. Parallel dumps
+     are only supported for the "directory" archive format.
+
+<programlisting>
+pg_dump -j <replaceable class="parameter">num</replaceable> -F d -f <replaceable class="parameter">out.dir</replaceable> <replaceable class="parameter">dbname</replaceable>
+</programlisting>
+
+     You can use <command>pg_restore -j</command> to restore a dump in parallel.
+     This will work for any archive of either the "custom" or the "directory"
+     archive mode, whether or not it has been created with <command>pg_dump -j</command>.
+    </para>
+   </formalpara>
   </sect2>
  </sect1>
 
@@ -724,7 +742,72 @@ test ! -f /mnt/server/archivedir/00000001000000A900000065 &amp;&amp; cp pg_xlog/
    <title>Making a Base Backup</title>
 
    <para>
-    The procedure for making a base backup is relatively simple:
+    The easiest way to perform a base backup is to use the
+    <xref linkend="app-pgbasebackup"> tool. It can create
+    a base backup either as regular files or as a tar archive. If more
+    flexibility than <xref linkend="app-pgbasebackup"> can provide is
+    required, you can also make a base backup using the low level API
+    (see <xref linkend="backup-lowlevel-base-backup">).
+   </para>
+
+   <para>
+    It is not necessary to be concerned about the amount of time it takes
+    to make a base backup. However, if you normally run the
+    server with <varname>full_page_writes</> disabled, you might notice a drop
+    in performance while the backup runs since <varname>full_page_writes</> is
+    effectively forced on during backup mode.
+   </para>
+
+   <para>
+    To make use of the backup, you will need to keep all the WAL
+    segment files generated during and after the file system backup.
+    To aid you in doing this, the base backup process
+    creates a <firstterm>backup history file</> that is immediately
+    stored into the WAL archive area. This file is named after the first
+    WAL segment file that you need for the file system backup.
+    For example, if the starting WAL file is
+    <literal>0000000100001234000055CD</> the backup history file will be
+    named something like
+    <literal>0000000100001234000055CD.007C9330.backup</>. (The second
+    part of the file name stands for an exact position within the WAL
+    file, and can ordinarily be ignored.) Once you have safely archived
+    the file system backup and the WAL segment files used during the
+    backup (as specified in the backup history file), all archived WAL
+    segments with names numerically less are no longer needed to recover
+    the file system backup and can be deleted. However, you should
+    consider keeping several backup sets to be absolutely certain that
+    you can recover your data.
+   </para>
+
+   <para>
+    The backup history file is just a small text file. It contains the
+    label string you gave to <xref linkend="app-pgbasebackup">, as well as
+    the starting and ending times and WAL segments of the backup.
+    If you used the label to identify the associated dump file,
+    then the archived history file is enough to tell you which dump file to
+    restore.
+   </para>
+
+   <para>
+    Since you have to keep around all the archived WAL files back to your
+    last base backup, the interval between base backups should usually be
+    chosen based on how much storage you want to expend on archived WAL
+    files.  You should also consider how long you are prepared to spend
+    recovering, if recovery should be necessary &mdash; the system will have to
+    replay all those WAL segments, and that could take awhile if it has
+    been a long time since the last base backup.
+   </para>
+  </sect2>
+
+  <sect2 id="backup-lowlevel-base-backup">
+   <title>Making a Base Backup Using the Low Level API</title>
+   <para>
+    The procedure for making a base backup using the low level
+    APIs contains a few more steps than
+    the <xref linkend="app-pgbasebackup"> method, but is relatively
+    simple. It is very important that these steps are executed in
+    sequence, and that the success of a step is verified before
+    proceeding to the next step.
   <orderedlist>
    <listitem>
     <para>
@@ -743,7 +826,8 @@ SELECT pg_start_backup('label');
      <function>pg_start_backup</> creates a <firstterm>backup label</> file,
      called <filename>backup_label</>, in the cluster directory with
      information about your backup, including the start time and label
-     string.
+     string.  The file is critical to the integrity of the backup, should
+     you need to restore from it.
     </para>
 
     <para>
@@ -814,17 +898,6 @@ SELECT pg_stop_backup();
    </para>
 
    <para>
-    You can also use the <xref linkend="app-pgbasebackup"> tool to take
-    the backup, instead of manually copying the files. This tool will do
-    the equivalent of <function>pg_start_backup()</>, copy and
-    <function>pg_stop_backup()</> steps automatically, and transfers the
-    backup over a regular <productname>PostgreSQL</productname> connection
-    using the replication protocol, instead of requiring file system level
-    access. <command>pg_basebackup</command> does not interfere with file system level backups
-    taken using <function>pg_start_backup()</>/<function>pg_stop_backup()</>.
-   </para>
-
-   <para>
     Some file system backup tools emit warnings or errors
     if the files they are trying to copy change while the copy proceeds.
     When taking a base backup of an active database, this situation is normal
@@ -840,19 +913,6 @@ SELECT pg_stop_backup();
     and 2 for other errors.  With GNU <application>tar</> version 1.23 and
     later, you can use the warning options <literal>--warning=no-file-changed
     --warning=no-file-removed</literal> to hide the related warning messages.
-   </para>
-
-   <para>
-    It is not necessary to be concerned about the amount of time elapsed
-    between <function>pg_start_backup</> and the start of the actual backup,
-    nor between the end of the backup and <function>pg_stop_backup</>; a
-    few minutes' delay won't hurt anything.  (However, if you normally run the
-    server with <varname>full_page_writes</> disabled, you might notice a drop
-    in performance between <function>pg_start_backup</> and
-    <function>pg_stop_backup</>, since <varname>full_page_writes</> is
-    effectively forced on during backup mode.)  You must ensure that these
-    steps are carried out in sequence, without any possible
-    overlap, or you will invalidate the backup.
    </para>
 
    <para>
@@ -879,46 +939,6 @@ SELECT pg_stop_backup();
    </para>
 
    <para>
-    To make use of the backup, you will need to keep all the WAL
-    segment files generated during and after the file system backup.
-    To aid you in doing this, the <function>pg_stop_backup</> function
-    creates a <firstterm>backup history file</> that is immediately
-    stored into the WAL archive area. This file is named after the first
-    WAL segment file that you need for the file system backup.
-    For example, if the starting WAL file is
-    <literal>0000000100001234000055CD</> the backup history file will be
-    named something like
-    <literal>0000000100001234000055CD.007C9330.backup</>. (The second
-    part of the file name stands for an exact position within the WAL
-    file, and can ordinarily be ignored.) Once you have safely archived
-    the file system backup and the WAL segment files used during the
-    backup (as specified in the backup history file), all archived WAL
-    segments with names numerically less are no longer needed to recover
-    the file system backup and can be deleted. However, you should
-    consider keeping several backup sets to be absolutely certain that
-    you can recover your data.
-   </para>
-
-   <para>
-    The backup history file is just a small text file. It contains the
-    label string you gave to <function>pg_start_backup</>, as well as
-    the starting and ending times and WAL segments of the backup.
-    If you used the label to identify the associated dump file,
-    then the archived history file is enough to tell you which dump file to
-    restore.
-   </para>
-
-   <para>
-    Since you have to keep around all the archived WAL files back to your
-    last base backup, the interval between base backups should usually be
-    chosen based on how much storage you want to expend on archived WAL
-    files.  You should also consider how long you are prepared to spend
-    recovering, if recovery should be necessary &mdash; the system will have to
-    replay all those WAL segments, and that could take awhile if it has
-    been a long time since the last base backup.
-   </para>
-
-   <para>
     It's also worth noting that the <function>pg_start_backup</> function
     makes a file named <filename>backup_label</> in the database cluster
     directory, which is removed by <function>pg_stop_backup</>.
@@ -926,9 +946,11 @@ SELECT pg_stop_backup();
     The backup label file includes the label string you gave to
     <function>pg_start_backup</>, as well as the time at which
     <function>pg_start_backup</> was run, and the name of the starting WAL
-    file.  In case of confusion it is
-    therefore possible to look inside a backup dump file and determine
-    exactly which backup session the dump file came from.
+    file.  In case of confusion it is therefore possible to look inside a
+    backup dump file and determine exactly which backup session the dump file
+    came from.  However, this file is not merely for your information; its
+    presence and contents are critical to the proper operation of the system's
+    recovery process.
    </para>
 
    <para>
@@ -1070,9 +1092,7 @@ restore_command = 'cp /mnt/server/archivedir/%f %p'
     WAL segments that cannot be found in the archive will be sought in
     <filename>pg_xlog/</>; this allows use of recent un-archived segments.
     However, segments that are available from the archive will be used in
-    preference to files in <filename>pg_xlog/</>.  The system will not
-    overwrite the existing contents of <filename>pg_xlog/</> when retrieving
-    archived files.
+    preference to files in <filename>pg_xlog/</>.
    </para>
 
    <para>
@@ -1214,7 +1234,18 @@ restore_command = 'cp /mnt/server/archivedir/%f %p'
      </para>
 
      <para>
-      To prepare for standalone hot backups, set <varname>wal_level</> to
+      As with base backups, the easiest way to produce a standalone
+      hot backup is to use the <xref linkend="app-pgbasebackup">
+      tool. If you include the <literal>-X</> parameter when calling
+      it, all the transaction log required to use the backup will be
+      included in the backup automatically, and no special action is
+      required to restore the backup.
+     </para>
+
+     <para>
+      If more flexibility in copying the backup files is needed, a lower
+      level process can be used for standalone hot backups as well.
+      To prepare for low level standalone hot backups, set <varname>wal_level</> to
       <literal>archive</> (or <literal>hot_standby</>), <varname>archive_mode</> to
       <literal>on</>, and set up an <varname>archive_command</> that performs
       archiving only when a <emphasis>switch file</> exists.  For example:
@@ -1245,6 +1276,11 @@ tar -rf /var/lib/pgsql/backup.tar /var/lib/pgsql/archive/
       WAL files are part of the same <application>tar</> file.
       Please remember to add error handling to your backup scripts.
      </para>
+
+    </sect3>
+
+    <sect3 id="compressed-archive-logs">
+     <title>Compressed Archive Logs</title>
 
      <para>
       If archive storage size is a concern, you can use

@@ -32,7 +32,6 @@ CREATE TEXT SEARCH TEMPLATE <replaceable class="parameter">name</replaceable> (
   <title>Description</title>
 
 &common;
-
   <para>
    <command>CREATE TEXT SEARCH TEMPLATE</command> creates a new text search
    template.  Text search templates define the functions that implement
@@ -65,6 +64,7 @@ CREATE TEXT SEARCH TEMPLATE <replaceable class="parameter">name</replaceable> (
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -110,6 +110,7 @@ CREATE TEXT SEARCH TEMPLATE <replaceable class="parameter">name</replaceable> (
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no
    <command>CREATE TEXT SEARCH TEMPLATE</command> statement in the SQL

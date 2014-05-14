@@ -24,6 +24,7 @@
 
 #define NO_SOCKET -1
 
+#define PGXCNODE_CANCEL_DELAY 10	/* Cancel delay duration in millisecond */
 
 /* Connection to Datanode maintained by Pool Manager */
 typedef struct PGconn NODE_CONNECTION;
@@ -36,7 +37,7 @@ typedef enum
 	DN_CONNECTION_STATE_QUERY,			/* query is sent, response expected */
 	DN_CONNECTION_STATE_ERROR_FATAL,	/* fatal error */
 	DN_CONNECTION_STATE_COPY_IN,
-	DN_CONNECTION_STATE_COPY_OUT,
+	DN_CONNECTION_STATE_COPY_OUT
 }	DNConnectionState;
 
 typedef enum

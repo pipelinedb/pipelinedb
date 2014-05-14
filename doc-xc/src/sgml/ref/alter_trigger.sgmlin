@@ -21,13 +21,14 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-ALTER TRIGGER <replaceable class="PARAMETER">name</replaceable> ON <replaceable class="PARAMETER">table</replaceable> RENAME TO <replaceable class="PARAMETER">new_name</replaceable>
+ALTER TRIGGER <replaceable class="PARAMETER">name</replaceable> ON <replaceable class="PARAMETER">table_name</replaceable> RENAME TO <replaceable class="PARAMETER">new_name</replaceable>
 </synopsis>
  </refsynopsisdiv>
 
  <refsect1>
   <title>Description</title>
 
+&common;
   <para>
    <command>ALTER TRIGGER</command> changes properties of an existing
    trigger.  The <literal>RENAME</literal> clause changes the name of
@@ -43,6 +44,7 @@ ALTER TRIGGER <replaceable class="PARAMETER">name</replaceable> ON <replaceable 
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">name</replaceable></term>
@@ -54,7 +56,7 @@ ALTER TRIGGER <replaceable class="PARAMETER">name</replaceable> ON <replaceable 
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="PARAMETER">table</replaceable></term>
+    <term><replaceable class="PARAMETER">table_name</replaceable></term>
     <listitem>
      <para>
       The name of the table on which this trigger acts.
@@ -76,6 +78,7 @@ ALTER TRIGGER <replaceable class="PARAMETER">name</replaceable> ON <replaceable 
  <refsect1>
   <title>Notes</title>
 
+&common;
    <para>
     The ability to temporarily enable or disable a trigger is provided by
     <xref linkend="SQL-ALTERTABLE">, not by
@@ -92,13 +95,13 @@ ALTER TRIGGER <replaceable class="PARAMETER">name</replaceable> ON <replaceable 
    To rename an existing trigger:
 <programlisting>
 ALTER TRIGGER emp_stamp ON emp RENAME TO emp_track_chgs;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>ALTER TRIGGER</command> is a <productname>PostgreSQL</>
    extension of the SQL standard.

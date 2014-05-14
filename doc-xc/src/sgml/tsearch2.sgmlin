@@ -8,7 +8,6 @@
  </indexterm>
 
 &common;
-
  <para>
   The <application>tsearch2</> module provides backwards-compatible
   text search functionality for applications that used

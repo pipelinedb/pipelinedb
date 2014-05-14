@@ -2,7 +2,7 @@
  *
  * clusterdb
  *
- * Portions Copyright (c) 2002-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2002-2013, PostgreSQL Global Development Group
  *
  * src/bin/scripts/clusterdb.c
  *
@@ -58,8 +58,8 @@ main(int argc, char *argv[])
 	bool		echo = false;
 	bool		quiet = false;
 	bool		alldb = false;
-	char	   *table = NULL;
 	bool		verbose = false;
+	SimpleStringList tables = {NULL, NULL};
 
 	progname = get_progname(argv[0]);
 	set_pglocale_pgservice(argv[0], PG_TEXTDOMAIN("pgscripts"));
@@ -71,13 +71,13 @@ main(int argc, char *argv[])
 		switch (c)
 		{
 			case 'h':
-				host = optarg;
+				host = pg_strdup(optarg);
 				break;
 			case 'p':
-				port = optarg;
+				port = pg_strdup(optarg);
 				break;
 			case 'U':
-				username = optarg;
+				username = pg_strdup(optarg);
 				break;
 			case 'w':
 				prompt_password = TRI_NO;
@@ -92,19 +92,19 @@ main(int argc, char *argv[])
 				quiet = true;
 				break;
 			case 'd':
-				dbname = optarg;
+				dbname = pg_strdup(optarg);
 				break;
 			case 'a':
 				alldb = true;
 				break;
 			case 't':
-				table = optarg;
+				simple_string_list_append(&tables, optarg);
 				break;
 			case 'v':
 				verbose = true;
 				break;
 			case 2:
-				maintenance_db = optarg;
+				maintenance_db = pg_strdup(optarg);
 				break;
 			default:
 				fprintf(stderr, _("Try \"%s --help\" for more information.\n"), progname);
@@ -125,7 +125,7 @@ main(int argc, char *argv[])
 	if (optind < argc)
 	{
 		fprintf(stderr, _("%s: too many command-line arguments (first is \"%s\")\n"),
-				progname, argv[optind + 1]);
+				progname, argv[optind]);
 		fprintf(stderr, _("Try \"%s --help\" for more information.\n"), progname);
 		exit(1);
 	}
@@ -140,9 +140,10 @@ main(int argc, char *argv[])
 					progname);
 			exit(1);
 		}
-		if (table)
+
+		if (tables.head != NULL)
 		{
-			fprintf(stderr, _("%s: cannot cluster a specific table in all databases\n"),
+			fprintf(stderr, _("%s: cannot cluster specific table(s) in all databases\n"),
 					progname);
 			exit(1);
 		}
@@ -162,9 +163,21 @@ main(int argc, char *argv[])
 				dbname = get_user_name(progname);
 		}
 
-		cluster_one_database(dbname, verbose, table,
-							 host, port, username, prompt_password,
-							 progname, echo);
+		if (tables.head != NULL)
+		{
+			SimpleStringListCell *cell;
+
+			for (cell = tables.head; cell; cell = cell->next)
+			{
+				cluster_one_database(dbname, verbose, cell->val,
+									 host, port, username, prompt_password,
+									 progname, echo);
+			}
+		}
+		else
+			cluster_one_database(dbname, verbose, NULL,
+								 host, port, username, prompt_password,
+								 progname, echo);
 	}
 
 	exit(0);
@@ -253,10 +266,10 @@ help(const char *progname)
 	printf(_("  -d, --dbname=DBNAME       database to cluster\n"));
 	printf(_("  -e, --echo                show the commands being sent to the server\n"));
 	printf(_("  -q, --quiet               don't write any messages\n"));
-	printf(_("  -t, --table=TABLE         cluster specific table only\n"));
+	printf(_("  -t, --table=TABLE         cluster specific table(s) only\n"));
 	printf(_("  -v, --verbose             write a lot of output\n"));
-	printf(_("  --help                    show this help, then exit\n"));
-	printf(_("  --version                 output version information, then exit\n"));
+	printf(_("  -V, --version             output version information, then exit\n"));
+	printf(_("  -?, --help                show this help, then exit\n"));
 	printf(_("\nConnection options:\n"));
 	printf(_("  -h, --host=HOSTNAME       database server host or socket directory\n"));
 	printf(_("  -p, --port=PORT           database server port\n"));

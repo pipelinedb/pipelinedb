@@ -5,7 +5,7 @@
  *
  * This should be included _AFTER_ postgres.h and system include files
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1995, Regents of the University of California
  *
  * src/pl/plperl/plperl.h
@@ -101,7 +101,5 @@ SV		   *plperl_spi_query_prepared(char *, int, SV **);
 void		plperl_spi_freeplan(char *);
 void		plperl_spi_cursor_close(char *);
 char	   *plperl_sv_to_literal(SV *, char *);
-
-
 
 #endif   /* PL_PERL_H */

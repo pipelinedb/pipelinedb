@@ -13,7 +13,7 @@
  * use the Windows native routines, but if not, we use our own.
  *
  *
- * Copyright (c) 2003-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2003-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/port/getaddrinfo.c
@@ -371,11 +371,6 @@ getnameinfo(const struct sockaddr * sa, int salen,
 
 	/* Invalid arguments. */
 	if (sa == NULL || (node == NULL && service == NULL))
-		return EAI_FAIL;
-
-	/* We don't support those. */
-	if ((node && !(flags & NI_NUMERICHOST))
-		|| (service && !(flags & NI_NUMERICSERV)))
 		return EAI_FAIL;
 
 #ifdef	HAVE_IPV6

@@ -27,6 +27,7 @@ DROP TEXT SEARCH TEMPLATE [ IF EXISTS ] <replaceable class="PARAMETER">name</rep
 
  <refsect1>
   <title>Description</title>
+
 &common;
   <para>
    <command>DROP TEXT SEARCH TEMPLATE</command> drops an existing text search
@@ -37,6 +38,7 @@ DROP TEXT SEARCH TEMPLATE [ IF EXISTS ] <replaceable class="PARAMETER">name</rep
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
 
    <varlistentry>
@@ -99,6 +101,7 @@ DROP TEXT SEARCH TEMPLATE thesaurus;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP TEXT SEARCH TEMPLATE</command> statement in the
    SQL standard.

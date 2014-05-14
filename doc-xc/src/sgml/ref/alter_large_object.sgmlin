@@ -27,6 +27,7 @@ ALTER LARGE OBJECT <replaceable class="PARAMETER">large_object_oid</replaceable>
 
  <refsect1>
   <title>Description</title>
+
 <!## XC>
 &xconly;
   <para>
@@ -36,8 +37,6 @@ ALTER LARGE OBJECT <replaceable class="PARAMETER">large_object_oid</replaceable>
   </para>
 <!## end>
 <!## PG>
-&pgnotice;
-
   <para>
    <command>ALTER LARGE OBJECT</command> changes the definition of a
    large object. The only functionality is to assign a new owner.

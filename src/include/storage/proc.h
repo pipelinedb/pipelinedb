@@ -4,7 +4,7 @@
  *	  per-process shared memory data structures
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/proc.h
@@ -14,8 +14,7 @@
 #ifndef _PROC_H_
 #define _PROC_H_
 
-#include "access/xlog.h"
-#include "datatype/timestamp.h"
+#include "access/xlogdefs.h"
 #include "storage/latch.h"
 #include "storage/lock.h"
 #include "storage/pg_sema.h"
@@ -174,7 +173,8 @@ typedef struct PGXACT
 
 	uint8		vacuumFlags;	/* vacuum-related flags, see above */
 	bool		overflowed;
-	bool		inCommit;		/* true if within commit critical section */
+	bool		delayChkpt;		/* true if this proc delays checkpoint start;
+								 * previously called InCommit */
 
 	uint8		nxids;
 } PGXACT;
@@ -194,6 +194,8 @@ typedef struct PROC_HDR
 	PGPROC	   *freeProcs;
 	/* Head of list of autovacuum's free PGPROC structures */
 	PGPROC	   *autovacFreeProcs;
+	/* Head of list of bgworker free PGPROC structures */
+	PGPROC	   *bgworkerFreeProcs;
 	/* WALWriter process's latch */
 	Latch	   *walwriterLatch;
 	/* Checkpointer process's latch */
@@ -231,9 +233,8 @@ extern PGPROC *PreparedXactProcs;
 /* configurable options */
 extern int	DeadlockTimeout;
 extern int	StatementTimeout;
+extern int	LockTimeout;
 extern bool log_lock_waits;
-
-extern volatile bool cancel_from_timeout;
 
 
 /*
@@ -257,19 +258,11 @@ extern void ProcQueueInit(PROC_QUEUE *queue);
 extern int	ProcSleep(LOCALLOCK *locallock, LockMethod lockMethodTable);
 extern PGPROC *ProcWakeup(PGPROC *proc, int waitStatus);
 extern void ProcLockWakeup(LockMethod lockMethodTable, LOCK *lock);
+extern void CheckDeadLock(void);
 extern bool IsWaitingForLock(void);
 extern void LockErrorCleanup(void);
 
 extern void ProcWaitForSignal(void);
 extern void ProcSendSignal(int pid);
-
-extern bool enable_sig_alarm(int delayms, bool is_statement_timeout);
-extern bool disable_sig_alarm(bool is_statement_timeout);
-extern void handle_sig_alarm(SIGNAL_ARGS);
-
-extern bool enable_standby_sig_alarm(TimestampTz now,
-						 TimestampTz fin_time, bool deadlock_only);
-extern bool disable_standby_sig_alarm(void);
-extern void handle_standby_sig_alarm(SIGNAL_ARGS);
 
 #endif   /* PROC_H */

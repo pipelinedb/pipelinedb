@@ -8,7 +8,6 @@
  </indexterm>
 
 &common;
-
  <para>
   The <filename>pg_freespacemap</> module provides a means for examining the
   free space map (FSM). It provides a function called
@@ -38,14 +37,17 @@
  <sect2>
   <title>Functions</title>
 
+&common;
   <variablelist>
    <varlistentry>
+    <indexterm>
+     <primary>pg_freespace</primary>
+    </indexterm>
     <term>
      <function>pg_freespace(rel regclass IN, blkno bigint IN) returns int2</function>
     </term>
 
     <listitem>
-&common;
      <para>
       Returns the amount of free space on the page of the relation, specified
       by <literal>blkno</>, according to the FSM.
@@ -81,10 +83,12 @@
    whether a page is full or empty.
   </para>
 
-  <para>
-   NOTE: The interface was changed in version 8.4, to reflect the new FSM
-   implementation introduced in the same version.
-  </para>
+  <note>
+   <para>
+    The interface was changed in version 8.4, to reflect the new FSM
+    implementation introduced in the same version.
+   </para>
+  </note>
  </sect2>
 
  <sect2>

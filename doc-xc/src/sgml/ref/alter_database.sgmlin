@@ -44,7 +44,6 @@ ALTER DATABASE <replaceable class="PARAMETER">name</replaceable> RESET ALL
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER DATABASE</command> changes the attributes
    of a database.
@@ -83,12 +82,7 @@ ALTER DATABASE <replaceable class="PARAMETER">name</replaceable> RESET ALL
 
   <para>
    The remaining forms change the session default for a run-time
-<!## PG>
    configuration variable for a <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-   configuration variable for a <productname>Postgres-XC</productname>
-<!## end>
    database. Whenever a new session is subsequently started in that
    database, the specified value becomes the session default value.
    The database-specific default overrides whatever setting is present
@@ -107,11 +101,13 @@ ALTER DATABASE <replaceable class="PARAMETER">name</replaceable> RESET ALL
     CONNECITON</> statement.
    </para>
 <!## end>
+
  </refsect1>
 
  <refsect1>
   <title>Parameters</title>
 
+&common;
     <variablelist>
      <varlistentry>
       <term><replaceable class="PARAMETER">name</replaceable></term>
@@ -188,6 +184,7 @@ ALTER DATABASE <replaceable class="PARAMETER">name</replaceable> RESET ALL
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    It is also possible to tie a session default to a specific role
    rather than to a database; see
@@ -206,21 +203,16 @@ ALTER DATABASE <replaceable class="PARAMETER">name</replaceable> RESET ALL
 
 <programlisting>
 ALTER DATABASE test SET enable_indexscan TO off;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The <command>ALTER DATABASE</command> statement is a
-<!## PG>
    <productname>PostgreSQL</productname> extension.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> extension.
-<!## end>
   </para>
  </refsect1>
 

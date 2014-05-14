@@ -27,8 +27,7 @@
 
   <title>Genetic Query Optimizer</title>
 
-&common
-
+&common;
   <para>
    <note>
     <title>Author</title>
@@ -52,7 +51,7 @@
   <sect1 id="geqo-intro">
    <title>Query Handling as a Complex Optimization Problem</title>
 
-&common
+&common;
    <para>
     Among all relational operators the most difficult one to process
     and optimize is the <firstterm>join</firstterm>. The number of

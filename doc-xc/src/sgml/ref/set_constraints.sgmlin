@@ -24,8 +24,7 @@ SET CONSTRAINTS { ALL | <replaceable class="parameter">name</replaceable> [, ...
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    <command>SET CONSTRAINTS</command> sets the behavior of constraint
    checking within the current transaction. <literal>IMMEDIATE</literal>
@@ -89,6 +88,7 @@ SET CONSTRAINTS { ALL | <replaceable class="parameter">name</replaceable> [, ...
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    Because <productname>PostgreSQL</productname> does not require constraint
    names to be unique within a schema (but only per-table), it is possible
@@ -111,6 +111,7 @@ SET CONSTRAINTS { ALL | <replaceable class="parameter">name</replaceable> [, ...
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    This command complies with the behavior defined in the SQL
    standard, except for the limitation that, in

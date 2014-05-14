@@ -7,7 +7,7 @@
  * collation-sensitive, so the code in this file has no support for passing
  * collation settings through from callers.  That may have to change someday.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -291,7 +291,7 @@ BuildTupleHashTable(int numCols, AttrNumber *keyColIdx,
 	hashtable = (TupleHashTable) MemoryContextAlloc(tablecxt,
 												 sizeof(TupleHashTableData));
 
-	/*
+  /*
 	 * Sometimes it's actually useful to use this thing even
 	 * when there are no hash columns. This allows us to avoid
 	 * handling special cases in surrounding code where numCols
@@ -301,7 +301,7 @@ BuildTupleHashTable(int numCols, AttrNumber *keyColIdx,
 	 * case in these scenarios.
 	 */
 	if (numCols == 0)
-		nbuckets = 1;
+	 nbuckets = 1;
 
 	hashtable->numCols = numCols;
 	hashtable->keyColIdx = keyColIdx;

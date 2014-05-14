@@ -29,7 +29,6 @@ PREPARE TRANSACTION <replaceable class="PARAMETER">transaction_id</replaceable>
   <title>Description</title>
 
 &common;
-
   <para>
    <command>PREPARE TRANSACTION</command> prepares the current transaction
    for two-phase commit. After this command, the transaction is no longer
@@ -65,6 +64,7 @@ PREPARE TRANSACTION <replaceable class="PARAMETER">transaction_id</replaceable>
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">transaction_id</replaceable></term>
@@ -84,6 +84,7 @@ PREPARE TRANSACTION <replaceable class="PARAMETER">transaction_id</replaceable>
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    <command>PREPARE TRANSACTION</> is not intended for use in applications
    or interactive sessions. Its purpose is to allow an external
@@ -171,7 +172,19 @@ PREPARE TRANSACTION <replaceable class="PARAMETER">transaction_id</replaceable>
 
 <programlisting>
 PREPARE TRANSACTION 'foobar';
-</programlisting>
+</programlisting></para>
+ </refsect1>
+
+ <refsect1>
+  <title>Compatibility</title>
+
+&common;
+  <para>
+   <command>PREPARE TRANSACTION</command> is a
+   <productname>PostgreSQL</productname> extension.  It is intended for use by
+   external transaction management systems, some of which are covered by
+   standards (such as X/Open XA), but the SQL side of those systems is not
+   standardized.
   </para>
  </refsect1>
 

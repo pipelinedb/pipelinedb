@@ -100,7 +100,7 @@ PostgreSQL documentation
      <para>
       All WAL records required for the backup must contain sufficient full-page writes,
       which requires you to enable <varname>full_page_writes</> on the master and
-      not to use the tool like <application>pg_compresslog</> as
+      not to use a tool like <application>pg_compresslog</> as
       <varname>archive_command</> to remove full-page writes from WAL files.
      </para>
     </listitem>
@@ -122,6 +122,9 @@ PostgreSQL documentation
       <listitem>
        <para>
         Directory to write the output to.
+        <application>pg_basebackup</application> will create the directory and
+        any parent directories if necessary.  The directory may already exist,
+        but it is an error if the directory already exists and is not empty.
        </para>
        <para>
         When the backup is in tar mode, and the directory is specified as
@@ -186,6 +189,31 @@ PostgreSQL documentation
      </varlistentry>
 
      <varlistentry>
+      <term><option>-R</option></term>
+      <term><option>--write-recovery-conf</option></term>
+      <listitem>
+
+       <para>
+        Write a minimal <filename>recovery.conf</filename> in the output directory (or into
+        the base archive file when using tar format) to ease setting
+        up a standby server.
+       </para>
+
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-x</option></term>
+      <term><option>--xlog</option></term>
+      <listitem>
+       <para>
+        Using this option is equivalent of using <literal>-X</literal> with
+        method <literal>fetch</literal>.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
       <term><option>-X <replaceable class="parameter">method</replaceable></option></term>
       <term><option>--xlog-method=<replaceable class="parameter">method</replaceable></option></term>
       <listitem>
@@ -233,17 +261,6 @@ PostgreSQL documentation
           </listitem>
          </varlistentry>
         </variablelist>
-       </para>
-      </listitem>
-     </varlistentry>
-
-     <varlistentry>
-      <term><option>-x</option></term>
-      <term><option>--xlog</option></term>
-      <listitem>
-       <para>
-        Using this option is equivalent of using <literal>-X</literal> with
-        method <literal>fetch</literal>.
        </para>
       </listitem>
      </varlistentry>
@@ -342,15 +359,18 @@ PostgreSQL documentation
 
     <variablelist>
      <varlistentry>
-      <term><option>-s <replaceable class="parameter">interval</replaceable></option></term>
-      <term><option>--statusint=<replaceable class="parameter">interval</replaceable></option></term>
+      <term><option>-d <replaceable class="parameter">connstr</replaceable></option></term>
+      <term><option>--dbname=<replaceable class="parameter">connstr</replaceable></option></term>
       <listitem>
        <para>
-        Specifies the number of seconds between status packets sent back to the
-        server. This is required when streaming the transaction log (using
-        <literal>--xlog=stream</literal>) if replication timeout is configured
-        on the server, and allows for easier monitoring. A value of zero disables
-        the status updates completely. The default value is 10 seconds.
+        Specifies parameters used to connect to the server, as a connection
+        string. See <xref linkend="libpq-connstring"> for more information.
+       </para>
+       <para>
+        The option is called <literal>--dbname</> for consistency with other
+        client applications, but because <application>pg_basebackup</application>
+        doesn't connect to any particular database in the cluster, database
+        name in the connection string will be ignored.
        </para>
       </listitem>
      </varlistentry>
@@ -378,6 +398,20 @@ PostgreSQL documentation
         extension on which the server is listening for connections.
         Defaults to the <envar>PGPORT</envar> environment variable, if
         set, or a compiled-in default.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-s <replaceable class="parameter">interval</replaceable></option></term>
+      <term><option>--status-interval=<replaceable class="parameter">interval</replaceable></option></term>
+      <listitem>
+       <para>
+        Specifies the number of seconds between status packets sent back to the
+        server. This allows for easier monitoring of the progress from server.
+        A value of zero disables the periodic status updates completely,
+        although an update will still be sent when requested by the server, to
+        avoid timeout disconnect. The default value is 10 seconds.
        </para>
       </listitem>
      </varlistentry>
@@ -431,7 +465,7 @@ PostgreSQL documentation
    </para>
 
    <para>
-    Other, less commonly used, options are also available:
+    Other options are also available:
 
     <variablelist>
      <varlistentry>
@@ -485,6 +519,12 @@ PostgreSQL documentation
    The way <productname>PostgreSQL</productname> manages tablespaces, the path
    for all additional tablespaces must be identical whenever a backup is
    restored. The main data directory, however, is relocatable to any location.
+  </para>
+
+  <para>
+   <application>pg_basebackup</application> works with servers of the same
+   or an older major version, down to 9.1. However, WAL streaming mode (-X
+   stream) only works with server version 9.3.
   </para>
  </refsect1>
 

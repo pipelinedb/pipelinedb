@@ -35,7 +35,6 @@ CREATE OPERATOR <replaceable>name</replaceable> (
   <title>Description</title>
 
 &common;
-
   <para>
    <command>CREATE OPERATOR</command> defines a new operator,
    <replaceable class="parameter">name</replaceable>.  The user who
@@ -54,8 +53,7 @@ CREATE OPERATOR <replaceable>name</replaceable> (
    There are a few restrictions on your choice of name:
    <itemizedlist>
     <listitem>
-     <para>
-     <literal>--</literal> and <literal>/*</literal> cannot appear anywhere in an operator name,
+     <para><literal>--</literal> and <literal>/*</literal> cannot appear anywhere in an operator name,
      since they will be taken as the start of a comment.
      </para>
     </listitem>
@@ -69,12 +67,7 @@ CREATE OPERATOR <replaceable>name</replaceable> (
 </literallayout>
      For example, <literal>@-</literal> is an allowed operator name,
      but <literal>*-</literal> is not.
-<!## PG>
      This restriction allows <productname>PostgreSQL</productname> to
-<!## end>
-<!## XC>
-     This restriction allows <productname>Postgres-XC</productname> to
-<!## end>
      parse SQL-compliant commands without requiring spaces between tokens.
      </para>
     </listitem>
@@ -111,11 +104,19 @@ CREATE OPERATOR <replaceable>name</replaceable> (
    The other clauses specify optional operator optimization clauses.
    Their meaning is detailed in <xref linkend="xoper-optimization">.
   </para>
+
+  <para>
+   To be able to create an operator, you must have <literal>USAGE</literal>
+   privilege on the argument types and the return type, as well
+   as <literal>EXECUTE</literal> privilege on the underlying function.  If a
+   commutator or negator operator is specified, you must own these operators.
+  </para>
  </refsect1>
 
  <refsect1>
   <title>Parameters</title>
 
+&common;
     <variablelist>
      <varlistentry>
       <term><replaceable class="parameter">name</replaceable></term>
@@ -222,13 +223,13 @@ CREATE OPERATOR <replaceable>name</replaceable> (
    arguments, use the <literal>OPERATOR()</> syntax, for example:
 <programlisting>
 COMMUTATOR = OPERATOR(myschema.===) ,
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    Refer to <xref linkend="xoper"> for further information.
   </para>
@@ -273,21 +274,16 @@ CREATE OPERATOR === (
     JOIN = area_join_procedure,
     HASHES, MERGES
 );
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>CREATE OPERATOR</command> is a
-<!## PG>
    <productname>PostgreSQL</productname> extension.  There are no
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> extension.  There are no
-<!## end>
    provisions for user-defined operators in the SQL standard.
   </para>
  </refsect1>

@@ -7,6 +7,7 @@
  <indexterm zone="ecpg"><primary>C</primary></indexterm>
  <indexterm zone="ecpg"><primary>ECPG</primary></indexterm>
 
+&common;
  <para>
   This chapter describes the embedded <acronym>SQL</acronym> package
   for <productname>PostgreSQL</productname>. It was written by
@@ -197,9 +198,11 @@ EXEC SQL CONNECT TO unix:postgresql://sql.mydomain.com/mydb AS myconnection USER
 EXEC SQL BEGIN DECLARE SECTION;
 const char *target = "mydb@sql.mydomain.com";
 const char *user = "john";
+const char *passwd = "secret";
 EXEC SQL END DECLARE SECTION;
  ...
-EXEC SQL CONNECT TO :target USER :user;
+EXEC SQL CONNECT TO :target USER :user USING :passwd;
+/* or EXEC SQL CONNECT TO :target USER :user/:passwd; */
 </programlisting>
    The last form makes use of the variant referred to above as
    character variable reference.  You will see in later sections how C
@@ -774,11 +777,6 @@ do
     normal clauses.
    </para>
 
-   <para>
-    Both of these methods only allow retrieving one row at a time.  If
-    you need to process result sets that potentially contain more than
-    one row, you need to use a cursor, as shown in the second example.
-   </para>
   </sect2>
 
   <sect2 id="ecpg-variables-type-mapping">
@@ -857,6 +855,11 @@ do
       <row>
        <entry><type>double precision</type></entry>
        <entry><type>double</type></entry>
+      </row>
+
+      <row>
+       <entry><type>smallserial</type></entry>
+       <entry><type>short</type></entry>
       </row>
 
       <row>
@@ -957,20 +960,6 @@ struct varchar_var { int len; char arr[180]; } var;
     </para>
 
     <para>
-     Two or more <type>VARCHAR</type> host variables cannot be defined
-     in single line statement.  The following code will confuse
-     the <command>ecpg</command> preprocessor:
-<programlisting>
-VARCHAR v1[128], v2[128];   /* WRONG */
-</programlisting>
-     Two variables should be defined in separate statements like this:
-<programlisting>
-VARCHAR v1[128];
-VARCHAR v2[128];
-</programlisting>
-    </para>
-
-    <para>
      <type>VARCHAR</type> can be written in upper or lower case, but
      not in mixed case.
     </para>
@@ -1056,7 +1045,7 @@ ts = 2010-06-27 18:03:56.949343
 
      <para>
       In addition, the DATE type can be handled in the same way. The
-      program has to include <filename>pg_types_date.h</filename>, declare a host variable
+      program has to include <filename>pgtypes_date.h</filename>, declare a host variable
       as the date type and convert a DATE value into a text form using
       <function>PGTYPESdate_to_asc()</function> function. For more details about the
       pgtypes library functions, see <xref linkend="ecpg-pgtypes">.
@@ -1358,7 +1347,7 @@ EXEC SQL END DECLARE SECTION;
      <title>Typedefs</title>
 
 &common;
-    <para>
+     <para>
       Use the <literal>typedef</literal> keyword to map new types to already
       existing types.
 <programlisting>
@@ -2785,7 +2774,7 @@ timestamp PGTYPEStimestamp_from_asc(char *str, char **endptr);
        <para>
         In general, the input string can contain any combination of an allowed
         date specification, a whitespace character and an allowed time
-        specification. Note that timezones are not supported by ECPG. It can
+        specification. Note that time zones are not supported by ECPG. It can
         parse them but does not apply any calculation as the
         <productname>PostgreSQL</> server does for example. Timezone
         specifiers are silently discarded.
@@ -4081,7 +4070,7 @@ typedef struct sqlvar_struct sqlvar_t;
          <term><literal>sqlname</></term>
           <listitem>
            <para>
-            The the name of the field.
+            The name of the field.
            </para>
           </listitem>
          </varlistentry>
@@ -4132,8 +4121,8 @@ struct sqlname
    <sect3 id="ecpg-sqlda-output">
     <title>Retrieving a Result Set Using an SQLDA</title>
 
-&common;
     <procedure>
+&common;
      <para>
       The general steps to retrieve a query result set through an
       SQLDA are:
@@ -4222,8 +4211,8 @@ switch (v.sqltype)
    <sect3 id="ecpg-sqlda-input">
     <title>Passing Query Parameters Using an SQLDA</title>
 
-&common;
     <procedure>
+&common;
      <para>
       The general steps to use an SQLDA to pass input
       parameters to a prepared query are:
@@ -5773,6 +5762,16 @@ cc -o myprog prog1.o prog2.o ... -lecpg
    <literal>-L/usr/local/pgsql/lib</literal> to that command line.
   </para>
 
+  <para>
+   You can
+   use <command>pg_config</command><indexterm><primary>pg_config</primary><secondary sortas="ecpg">with
+   ecpg</secondary></indexterm>
+   or <command>pkg-config</command><indexterm><primary>pkg-config</primary><secondary sortas="ecpg">with
+   ecpg</secondary></indexterm> with package name <literal>libecpg</literal> to
+   get the paths for your installation.
+  </para>
+
+&common;
   <para>
    If you manage the build process of a larger project using
    <application>make</application>, it might be convenient to include
@@ -7747,9 +7746,9 @@ VAR <replaceable>varname</replaceable> IS <replaceable>ctype</replaceable>
     <title>Description</title>
 
     <para>
-     The <command>VAR</command> command defines a host variable.  It
-     is equivalent to an ordinary C variable definition inside a
-     declare section.
+     The <command>VAR</command> command assigns a new C data type
+     to a host variable.  The host variable must be previously
+     declared in a declare section.
     </para>
    </refsect1>
 
@@ -7781,8 +7780,10 @@ VAR <replaceable>varname</replaceable> IS <replaceable>ctype</replaceable>
     <title>Examples</title>
 
 <programlisting>
-EXEC SQL VAR vc IS VARCHAR[10];
-EXEC SQL VAR boolvar IS bool;
+Exec sql begin declare section;
+short a;
+exec sql end declare section;
+EXEC SQL VAR a IS int;
 </programlisting>
    </refsect1>
 
@@ -9231,7 +9232,7 @@ int rtypwidth(int sqltype, int sqllen);
 int rsetnull(int t, char *ptr);
 </synopsis>
         The function receives an integer that indicates the type of the
-        variable and a pointer to the variable itself that is casted to a C
+        variable and a pointer to the variable itself that is cast to a C
         char* pointer.
        </para>
        <para>
@@ -9316,7 +9317,7 @@ int risnull(int t, char *ptr);
 </synopsis>
         The function receives the type of the variable to test (<literal>t</>)
         as well a pointer to this variable (<literal>ptr</>). Note that the
-        latter needs to be casted to a char*. See the function <xref
+        latter needs to be cast to a char*. See the function <xref
         linkend="rsetnull"> for a list of possible variable types.
        </para>
        <para>
@@ -9497,7 +9498,7 @@ risnull(CINTTYPE, (char *) &i);
       <listitem>
        <para>
         Functions return this value if a parsing routine is passed extra
-        characters is cannot parse.  Internally it is defined as -1264 (the
+        characters it cannot parse.  Internally it is defined as -1264 (the
         <productname>Informix</productname> definition).
        </para>
       </listitem>

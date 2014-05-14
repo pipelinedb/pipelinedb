@@ -9,7 +9,6 @@
    </indexterm>
 
 &pgnotice;
-
    <para>
     All calls to functions that are written in a language other than
     the current <quote>version 1</quote> interface for compiled
@@ -168,8 +167,7 @@ CREATE LANGUAGE plsample
     to allow language-specific checking to be done during
     <xref linkend="sql-createfunction">.
     An inline handler can be provided to allow the language to support
-    anonymous code blocks executed via the <xref linkend="sql-do"
-   > command.
+    anonymous code blocks executed via the <xref linkend="sql-do"> command.
    </para>
 
    <para>
@@ -203,6 +201,13 @@ CREATE LANGUAGE plsample
     of having a validator is not to let the call handler omit checks, but
     to notify the user immediately if there are obvious errors in a
     <command>CREATE FUNCTION</> command.)
+    While the choice of exactly what to check is mostly left to the
+    discretion of the validator function, note that the core
+    <command>CREATE FUNCTION</> code only executes <literal>SET</> clauses
+    attached to a function when <varname>check_function_bodies</> is on.
+    Therefore, checks whose results might be affected by GUC parameters
+    definitely should be skipped when <varname>check_function_bodies</> is
+    off, to avoid false failures when reloading a dump.
    </para>
 
    <para>

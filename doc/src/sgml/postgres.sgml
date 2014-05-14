@@ -208,6 +208,7 @@
 
   &extend;
   &trigger;
+  &event-trigger;
   &rules;
 
   &xplang;
@@ -217,6 +218,7 @@
   &plpython;
 
   &spi;
+  &bgworker;
 
  </part>
 

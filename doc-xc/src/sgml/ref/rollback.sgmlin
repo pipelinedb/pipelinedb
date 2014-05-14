@@ -29,7 +29,6 @@ ROLLBACK [ WORK | TRANSACTION ]
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ROLLBACK</command> rolls back the current transaction and causes
    all the updates made by the transaction to be discarded.
@@ -39,6 +38,7 @@ ROLLBACK [ WORK | TRANSACTION ]
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>WORK</literal></term>
@@ -73,13 +73,13 @@ ROLLBACK [ WORK | TRANSACTION ]
    To abort all changes:
 <programlisting>
 ROLLBACK;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The SQL standard only specifies the two forms
    <literal>ROLLBACK</literal> and <literal>ROLLBACK

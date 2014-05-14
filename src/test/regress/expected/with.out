@@ -49,6 +49,36 @@ SELECT * FROM t ORDER BY n;
  5
 (5 rows)
 
+-- recursive view
+CREATE RECURSIVE VIEW nums (n) AS
+    VALUES (1)
+UNION ALL
+    SELECT n+1 FROM nums WHERE n < 5;
+SELECT * FROM nums;
+ n 
+---
+ 1
+ 2
+ 3
+ 4
+ 5
+(5 rows)
+
+CREATE OR REPLACE RECURSIVE VIEW nums (n) AS
+    VALUES (1)
+UNION ALL
+    SELECT n+1 FROM nums WHERE n < 6;
+SELECT * FROM nums;
+ n 
+---
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+(6 rows)
+
 -- This is an infinite loop with UNION ALL, but not with UNION
 WITH RECURSIVE t(n) AS (
     SELECT 1
@@ -134,14 +164,11 @@ SELECT n, n IS OF (text) as is_text FROM t ORDER BY n;
 --      |         |
 --      |         +->D-+->F
 --      +->E-+->G
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 CREATE TEMP TABLE department (
 	id INTEGER PRIMARY KEY,  -- department ID
 	parent_department INTEGER ,
 	name TEXT -- department name
 );
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "department_pkey" for table "department"
 INSERT INTO department VALUES (0, NULL, 'ROOT');
 INSERT INTO department VALUES (1, 0, 'A');
 INSERT INTO department VALUES (2, 1, 'B');
@@ -273,27 +300,74 @@ SELECT * FROM vsubdepartment ORDER BY name;
 
 -- Check reverse listing
 SELECT pg_get_viewdef('vsubdepartment'::regclass);
-                                                                                                                                                                                    pg_get_viewdef                                                                                                                                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- WITH RECURSIVE subdepartment AS (SELECT department.id, department.parent_department, department.name FROM department WHERE (department.name = 'A'::text) UNION ALL SELECT d.id, d.parent_department, d.name FROM department d, subdepartment sd WHERE (d.parent_department = sd.id)) SELECT subdepartment.id, subdepartment.parent_department, subdepartment.name FROM subdepartment;
+                    pg_get_viewdef                     
+-------------------------------------------------------
+  WITH RECURSIVE subdepartment AS (                   +
+                  SELECT department.id,               +
+                     department.parent_department,    +
+                     department.name                  +
+                    FROM department                   +
+                   WHERE (department.name = 'A'::text)+
+         UNION ALL                                    +
+                  SELECT d.id,                        +
+                     d.parent_department,             +
+                     d.name                           +
+                    FROM department d,                +
+                     subdepartment sd                 +
+                   WHERE (d.parent_department = sd.id)+
+         )                                            +
+  SELECT subdepartment.id,                            +
+     subdepartment.parent_department,                 +
+     subdepartment.name                               +
+    FROM subdepartment;
 (1 row)
 
 SELECT pg_get_viewdef('vsubdepartment'::regclass, true);
-                                pg_get_viewdef                                 
--------------------------------------------------------------------------------
-  WITH RECURSIVE subdepartment AS (                                           +
-                  SELECT department.id, department.parent_department,         +
-                     department.name                                          +
-                    FROM department                                           +
-                   WHERE department.name = 'A'::text                          +
-         UNION ALL                                                            +
-                  SELECT d.id, d.parent_department, d.name                    +
-                    FROM department d, subdepartment sd                       +
-                   WHERE d.parent_department = sd.id                          +
-         )                                                                    +
-  SELECT subdepartment.id, subdepartment.parent_department, subdepartment.name+
+                   pg_get_viewdef                    
+-----------------------------------------------------
+  WITH RECURSIVE subdepartment AS (                 +
+                  SELECT department.id,             +
+                     department.parent_department,  +
+                     department.name                +
+                    FROM department                 +
+                   WHERE department.name = 'A'::text+
+         UNION ALL                                  +
+                  SELECT d.id,                      +
+                     d.parent_department,           +
+                     d.name                         +
+                    FROM department d,              +
+                     subdepartment sd               +
+                   WHERE d.parent_department = sd.id+
+         )                                          +
+  SELECT subdepartment.id,                          +
+     subdepartment.parent_department,               +
+     subdepartment.name                             +
     FROM subdepartment;
 (1 row)
+
+-- Another reverse-listing example
+CREATE VIEW sums_1_100 AS
+WITH RECURSIVE t(n) AS (
+    VALUES (1)
+UNION ALL
+    SELECT n+1 FROM t WHERE n < 100
+)
+SELECT sum(n) FROM t;
+\d+ sums_1_100
+              View "public.sums_1_100"
+ Column |  Type  | Modifiers | Storage | Description 
+--------+--------+-----------+---------+-------------
+ sum    | bigint |           | plain   | 
+View definition:
+ WITH RECURSIVE t(n) AS (
+                 VALUES (1)
+        UNION ALL
+                 SELECT t_1.n + 1
+                   FROM t t_1
+                  WHERE t_1.n < 100
+        )
+ SELECT sum(t.n) AS sum
+   FROM t;
 
 -- corner case in which sub-WITH gets initialized first
 select * from (with recursive q as (
@@ -400,7 +474,6 @@ CREATE TEMPORARY TABLE tree(
     id INTEGER PRIMARY KEY,
     parent_id INTEGER 
 );
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "tree_pkey" for table "tree"
 INSERT INTO tree
 VALUES (1, NULL), (2, 1), (3,1), (4,2), (5,2), (6,2), (7,3), (8,3),
        (9,4), (10,4), (11,7), (12,7), (13,7), (14, 9), (15,11), (16,11);
@@ -941,12 +1014,12 @@ LINE 2:                           WHERE n IN (SELECT * FROM x))
 -- aggregate functions
 WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT count(*) FROM x)
   SELECT * FROM x;
-ERROR:  aggregate functions not allowed in a recursive query's recursive term
+ERROR:  aggregate functions are not allowed in a recursive query's recursive term
 LINE 1: WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT count(*) F...
                                                           ^
 WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT sum(n) FROM x)
   SELECT * FROM x;
-ERROR:  aggregate functions not allowed in a recursive query's recursive term
+ERROR:  aggregate functions are not allowed in a recursive query's recursive term
 LINE 1: WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT sum(n) FRO...
                                                           ^
 -- ORDER BY
@@ -1161,6 +1234,153 @@ SELECT * FROM t order by 1;
  10
  10
 (55 rows)
+
+--
+-- test WITH attached to intermediate-level set operation
+--
+WITH outermost(x) AS (
+  SELECT 1
+  UNION (WITH innermost as (SELECT 2)
+         SELECT * FROM innermost
+         UNION SELECT 3)
+)
+SELECT * FROM outermost;
+ x 
+---
+ 1
+ 2
+ 3
+(3 rows)
+
+WITH outermost(x) AS (
+  SELECT 1
+  UNION (WITH innermost as (SELECT 2)
+         SELECT * FROM outermost  -- fail
+         UNION SELECT * FROM innermost)
+)
+SELECT * FROM outermost;
+ERROR:  relation "outermost" does not exist
+LINE 4:          SELECT * FROM outermost  
+                               ^
+DETAIL:  There is a WITH item named "outermost", but it cannot be referenced from this part of the query.
+HINT:  Use WITH RECURSIVE, or re-order the WITH items to remove forward references.
+WITH RECURSIVE outermost(x) AS (
+  SELECT 1
+  UNION (WITH innermost as (SELECT 2)
+         SELECT * FROM outermost
+         UNION SELECT * FROM innermost)
+)
+SELECT * FROM outermost;
+ x 
+---
+ 1
+ 2
+(2 rows)
+
+WITH RECURSIVE outermost(x) AS (
+  WITH innermost as (SELECT 2 FROM outermost) -- fail
+    SELECT * FROM innermost
+    UNION SELECT * from outermost
+)
+SELECT * FROM outermost;
+ERROR:  recursive reference to query "outermost" must not appear within a subquery
+LINE 2:   WITH innermost as (SELECT 2 FROM outermost) 
+                                           ^
+--
+-- This test will fail with the old implementation of PARAM_EXEC parameter
+-- assignment, because the "q1" Var passed down to A's targetlist subselect
+-- looks exactly like the "A.id" Var passed down to C's subselect, causing
+-- the old code to give them the same runtime PARAM_EXEC slot.  But the
+-- lifespans of the two parameters overlap, thanks to B also reading A.
+--
+with
+A as ( select q2 as id, (select q1) as x from int8_tbl ),
+B as ( select id, row_number() over (partition by id) as r from A ),
+C as ( select A.id, array(select B.id from B where B.id = A.id) from A )
+select * from C order by 1,2;
+        id         |                array                
+-------------------+-------------------------------------
+ -4567890123456789 | {-4567890123456789}
+               123 | {123}
+               456 | {456}
+  4567890123456789 | {4567890123456789,4567890123456789}
+  4567890123456789 | {4567890123456789,4567890123456789}
+(5 rows)
+
+--
+-- Test CTEs read in non-initialization orders
+--
+WITH RECURSIVE
+  tab(id_key,link) AS (VALUES (1,17), (2,17), (3,17), (4,17), (6,17), (5,17)),
+  iter (id_key, row_type, link) AS (
+      SELECT 0, 'base', 17
+    UNION ALL (
+      WITH remaining(id_key, row_type, link, min) AS (
+        SELECT tab.id_key, 'true'::text, iter.link, MIN(tab.id_key) OVER ()
+        FROM tab INNER JOIN iter USING (link)
+        WHERE tab.id_key > iter.id_key
+      ),
+      first_remaining AS (
+        SELECT id_key, row_type, link
+        FROM remaining
+        WHERE id_key=min
+      ),
+      effect AS (
+        SELECT tab.id_key, 'new'::text, tab.link
+        FROM first_remaining e INNER JOIN tab ON e.id_key=tab.id_key
+        WHERE e.row_type = 'false'
+      )
+      SELECT * FROM first_remaining
+      UNION ALL SELECT * FROM effect
+    )
+  )
+SELECT * FROM iter;
+ id_key | row_type | link 
+--------+----------+------
+      0 | base     |   17
+      1 | true     |   17
+      2 | true     |   17
+      3 | true     |   17
+      4 | true     |   17
+      5 | true     |   17
+      6 | true     |   17
+(7 rows)
+
+WITH RECURSIVE
+  tab(id_key,link) AS (VALUES (1,17), (2,17), (3,17), (4,17), (6,17), (5,17)),
+  iter (id_key, row_type, link) AS (
+      SELECT 0, 'base', 17
+    UNION (
+      WITH remaining(id_key, row_type, link, min) AS (
+        SELECT tab.id_key, 'true'::text, iter.link, MIN(tab.id_key) OVER ()
+        FROM tab INNER JOIN iter USING (link)
+        WHERE tab.id_key > iter.id_key
+      ),
+      first_remaining AS (
+        SELECT id_key, row_type, link
+        FROM remaining
+        WHERE id_key=min
+      ),
+      effect AS (
+        SELECT tab.id_key, 'new'::text, tab.link
+        FROM first_remaining e INNER JOIN tab ON e.id_key=tab.id_key
+        WHERE e.row_type = 'false'
+      )
+      SELECT * FROM first_remaining
+      UNION ALL SELECT * FROM effect
+    )
+  )
+SELECT * FROM iter;
+ id_key | row_type | link 
+--------+----------+------
+      0 | base     |   17
+      1 | true     |   17
+      2 | true     |   17
+      3 | true     |   17
+      4 | true     |   17
+      5 | true     |   17
+      6 | true     |   17
+(7 rows)
 
 --
 -- Data-modifying statements in WITH
@@ -1863,56 +2083,56 @@ SELECT * FROM parent ORDER BY id;
 EXPLAIN (VERBOSE, COSTS OFF, NODES OFF, NUM_NODES OFF)
 WITH wcte AS ( INSERT INTO int8_tbl VALUES ( 42, 47 ) RETURNING q2 )
 DELETE FROM a USING wcte WHERE aa = q2;
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
- Delete on public.a
-   Remote query: DELETE FROM ONLY public.a WHERE ((public.a.ctid = $1) AND (public.a.xc_node_id = $2))
-   Remote query: DELETE FROM ONLY public.b a WHERE ((a.ctid = $1) AND (a.xc_node_id = $2))
-   Remote query: DELETE FROM ONLY public.c a WHERE ((a.ctid = $1) AND (a.xc_node_id = $2))
-   Remote query: DELETE FROM ONLY public.d a WHERE ((a.ctid = $1) AND (a.xc_node_id = $2))
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Delete on public.a a_1
+   Remote query: DELETE FROM ONLY public.a a_1 WHERE ((a_1.ctid = $1) AND (a_1.xc_node_id = $2))
+   Remote query: DELETE FROM ONLY public.b WHERE ((b.ctid = $1) AND (b.xc_node_id = $2))
+   Remote query: DELETE FROM ONLY public.c WHERE ((c.ctid = $1) AND (c.xc_node_id = $2))
+   Remote query: DELETE FROM ONLY public.d WHERE ((d.ctid = $1) AND (d.xc_node_id = $2))
    CTE wcte
      ->  Insert on public.int8_tbl
            Output: int8_tbl.q2
-           Node expr: public.a.aa
+           Node expr: aa
            Remote query: INSERT INTO public.int8_tbl (q1, q2) VALUES ($1, $2) RETURNING q2
            ->  Result
                  Output: 42::bigint, 47::bigint
    ->  Hash Join
-         Output: public.a.aa, public.a.ctid, public.a.xc_node_id, wcte.*
-         Hash Cond: (public.a.aa = wcte.q2)
+         Output: a_1.aa, a_1.ctid, a_1.xc_node_id, wcte.*
+         Hash Cond: (a_1.aa = wcte.q2)
          ->  Data Node Scan on a "_REMOTE_TABLE_QUERY_"
-               Output: public.a.aa, public.a.ctid, public.a.xc_node_id
+               Output: a_1.aa, a_1.ctid, a_1.xc_node_id
                Remote query: SELECT aa, ctid, xc_node_id FROM ONLY public.a WHERE true
          ->  Hash
                Output: wcte.*, wcte.q2
                ->  CTE Scan on wcte
                      Output: wcte.*, wcte.q2
    ->  Hash Join
-         Output: a.aa, a.ctid, a.xc_node_id, wcte.*
-         Hash Cond: (a.aa = wcte.q2)
+         Output: aa, ctid, xc_node_id, wcte.*
+         Hash Cond: (aa = wcte.q2)
          ->  Data Node Scan on b "_REMOTE_TABLE_QUERY_"
-               Output: a.aa, a.ctid, a.xc_node_id
-               Remote query: SELECT aa, ctid, xc_node_id FROM ONLY public.b a WHERE true
+               Output: aa, ctid, xc_node_id
+               Remote query: SELECT aa, ctid, xc_node_id FROM ONLY public.b WHERE true
          ->  Hash
                Output: wcte.*, wcte.q2
                ->  CTE Scan on wcte
                      Output: wcte.*, wcte.q2
    ->  Hash Join
-         Output: a.aa, a.ctid, a.xc_node_id, wcte.*
-         Hash Cond: (a.aa = wcte.q2)
+         Output: aa, ctid, xc_node_id, wcte.*
+         Hash Cond: (aa = wcte.q2)
          ->  Data Node Scan on c "_REMOTE_TABLE_QUERY_"
-               Output: a.aa, a.ctid, a.xc_node_id
-               Remote query: SELECT aa, ctid, xc_node_id FROM ONLY public.c a WHERE true
+               Output: aa, ctid, xc_node_id
+               Remote query: SELECT aa, ctid, xc_node_id FROM ONLY public.c WHERE true
          ->  Hash
                Output: wcte.*, wcte.q2
                ->  CTE Scan on wcte
                      Output: wcte.*, wcte.q2
    ->  Hash Join
-         Output: a.aa, a.ctid, a.xc_node_id, wcte.*
-         Hash Cond: (a.aa = wcte.q2)
+         Output: aa, ctid, xc_node_id, wcte.*
+         Hash Cond: (aa = wcte.q2)
          ->  Data Node Scan on d "_REMOTE_TABLE_QUERY_"
-               Output: a.aa, a.ctid, a.xc_node_id
-               Remote query: SELECT aa, ctid, xc_node_id FROM ONLY public.d a WHERE true
+               Output: aa, ctid, xc_node_id
+               Remote query: SELECT aa, ctid, xc_node_id FROM ONLY public.d WHERE true
          ->  Hash
                Output: wcte.*, wcte.q2
                ->  CTE Scan on wcte

@@ -1,14 +1,37 @@
 <!-- doc/src/sgml/pgbench.sgml -->
 
-<sect1 id="pgbench" xreflabel="pgbench">
- <title>pgbench</title>
+<refentry id="pgbench">
+ <refmeta>
+  <refentrytitle><application>pgbench</application></refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Application</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>pgbench</refname>
+  <refpurpose>run a benchmark test on <productname>PostgreSQL</productname></refpurpose>
+ </refnamediv>
 
  <indexterm zone="pgbench">
   <primary>pgbench</primary>
  </indexterm>
 
-&common;
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pgbench</command>
+   <arg choice="plain"><option>-i</option></arg>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg choice="opt"><replaceable>dbname</replaceable></arg>
+  </cmdsynopsis>
+  <cmdsynopsis>
+   <command>pgbench</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+   <arg choice="opt"><replaceable>dbname</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
 
+ <refsect1>
+  <title>Description</title>
  <para>
   <application>pgbench</application> is a simple program for running benchmark
   tests on <productname>PostgreSQL</>.  It runs the same sequence of SQL
@@ -40,19 +63,16 @@ tps = 85.296346 (excluding connections establishing)
   settings.  The next line reports the number of transactions completed
   and intended (the latter being just the product of number of clients
   and number of transactions per client); these will be equal unless the run
-  failed before completion.  (In <literal>-T</> mode, only the actual
+  failed before completion.  (In <option>-T</> mode, only the actual
   number of transactions is printed.)
   The last two lines report the number of transactions per second,
   figured with and without counting the time to start database sessions.
  </para>
 
- <sect2>
-  <title>Overview</title>
-
   <para>
    The default TPC-B-like transaction test requires specific tables to be
    set up beforehand.  <application>pgbench</> should be invoked with
-   the <literal>-i</> (initialize) option to create and populate these
+   the <option>-i</> (initialize) option to create and populate these
    tables.  (When you are testing a custom script, you don't need this
    step, but will instead need to do whatever setup your test needs.)
    Initialization looks like:
@@ -62,8 +82,8 @@ pgbench -i <optional> <replaceable>other-options</> </optional> <replaceable>dbn
 </programlisting>
 
    where <replaceable>dbname</> is the name of the already-created
-   database to test in.  (You may also need <literal>-h</>,
-   <literal>-p</>, and/or <literal>-U</> options to specify how to
+   database to test in.  (You may also need <option>-h</>,
+   <option>-p</>, and/or <option>-U</> options to specify how to
    connect to the database server.)
   </para>
 
@@ -90,38 +110,37 @@ pgbench_accounts        100000
 pgbench_history         0
 </screen>
    You can (and, for most purposes, probably should) increase the number
-   of rows by using the <literal>-s</> (scale factor) option.  The
-   <literal>-F</> (fillfactor) option might also be used at this point.
+   of rows by using the <option>-s</> (scale factor) option.  The
+   <option>-F</> (fillfactor) option might also be used at this point.
   </para>
 
   <para>
    Once you have done the necessary setup, you can run your benchmark
-   with a command that doesn't include <literal>-i</>, that is
+   with a command that doesn't include <option>-i</>, that is
 
 <programlisting>
 pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
 </programlisting>
 
    In nearly all cases, you'll need some options to make a useful test.
-   The most important options are <literal>-c</> (number of clients),
-   <literal>-t</> (number of transactions), <literal>-T</> (time limit),
-   and <literal>-f</> (specify a custom script file).
+   The most important options are <option>-c</> (number of clients),
+   <option>-t</> (number of transactions), <option>-T</> (time limit),
+   and <option>-f</> (specify a custom script file).
    See below for a full list.
   </para>
+ </refsect1>
+
+ <refsect1>
+  <title>Options</title>
 
   <para>
-   <xref linkend="pgbench-init-options"> shows options that are used
-   during database initialization, while
-   <xref linkend="pgbench-run-options"> shows options that are used
-   while running benchmarks, and
-   <xref linkend="pgbench-common-options"> shows options that are useful
-   in both cases.
+   The following is divided into three subsections: Different options are used
+   during database initialization and while running benchmarks, some options
+   are useful in both cases.
   </para>
 
- </sect2>
-
- <sect2 id="pgbench-init-options">
-  <title><application>pgbench</> Initialization Options</title>
+ <refsect2 id="pgbench-init-options">
+  <title>Initialization Options</title>
 
    <para>
     <application>pgbench</application> accepts the following command-line
@@ -151,12 +170,46 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
      </varlistentry>
 
      <varlistentry>
+      <term><option>-n</option></term>
+      <listitem>
+       <para>
+        Perform no vacuuming after initialization.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-q</option></term>
+      <listitem>
+       <para>
+        Switch logging to quiet mode, producing only one progress message per 5
+        seconds. The default logging prints one message each 100000 rows, which
+        often outputs many lines per second (especially on good hardware).
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
       <term><option>-s</option> <replaceable>scale_factor</></term>
       <listitem>
        <para>
         Multiply the number of rows generated by the scale factor.
         For example, <literal>-s 100</> will create 10,000,000 rows
         in the <structname>pgbench_accounts</> table. Default is 1.
+        When the scale is 20,000 or larger, the columns used to
+        hold account identifiers (<structfield>aid</structfield> columns)
+        will switch to using larger integers (<type>bigint</type>),
+        in order to be big enough to hold the range of account
+        identifiers.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>--foreign-keys</option></term>
+      <listitem>
+       <para>
+        Create foreign key constraints between the standard tables.
        </para>
       </listitem>
      </varlistentry>
@@ -171,18 +224,48 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
         <structname>pgbench_branches</>. This limits the selectivity of
         remote nodes to a single node for each transaction as all the tables
         are distributed respecting the same key.
+        Specific to <productname>Postgres-XC</>.
        </para>
       </listitem>
      </varlistentry>
 <!## end>
 
+     <varlistentry>
+      <term><option>--index-tablespace=<replaceable>index_tablespace</replaceable></option></term>
+      <listitem>
+       <para>
+        Create indexes in the specified tablespace, rather than the default
+        tablespace.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>--tablespace=<replaceable>tablespace</replaceable></option></term>
+      <listitem>
+       <para>
+        Create tables in the specified tablespace, rather than the default
+        tablespace.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>--unlogged-tables</option></term>
+      <listitem>
+       <para>
+        Create all tables as unlogged tables, rather than permanent tables.
+       </para>
+      </listitem>
+     </varlistentry>
+
     </variablelist>
    </para>
 
- </sect2>
+ </refsect2>
 
- <sect2 id="pgbench-run-options">
-  <title><application>pgbench</> Benchmarking Options</title>
+ <refsect2 id="pgbench-run-options">
+  <title>Benchmarking Options</title>
 
    <para>
     <application>pgbench</application> accepts the following command-line
@@ -225,7 +308,7 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
       <listitem>
        <para>
         Define a variable for use by a custom script (see below).
-        Multiple <literal>-D</> options are allowed.
+        Multiple <option>-D</> options are allowed.
        </para>
       </listitem>
      </varlistentry>
@@ -236,7 +319,7 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
        <para>
         Read transaction script from <replaceable>filename</>.
         See below for details.
-        <literal>-N</literal>, <literal>-S</literal>, and <literal>-f</literal>
+        <option>-N</option>, <option>-S</option>, and <option>-f</option>
         are mutually exclusive.
        </para>
       </listitem>
@@ -332,7 +415,7 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
         output.  With the built-in tests, this is not necessary; the
         correct scale factor will be detected by counting the number of
         rows in the <structname>pgbench_branches</> table.  However, when testing
-        custom benchmarks (<literal>-f</> option), the scale factor
+        custom benchmarks (<option>-f</> option), the scale factor
         will be reported as 1 unless this option is used.
        </para>
       </listitem>
@@ -361,8 +444,8 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
       <listitem>
        <para>
         Run the test for this many seconds, rather than a fixed number of
-        transactions per client. <literal>-t</literal> and
-        <literal>-T</literal> are mutually exclusive.
+        transactions per client. <option>-t</option> and
+        <option>-T</option> are mutually exclusive.
        </para>
       </listitem>
      </varlistentry>
@@ -372,34 +455,53 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
       <listitem>
        <para>
         Vacuum all four standard tables before running the test.
-        With neither <literal>-n</> nor <literal>-v</>, pgbench will vacuum the
+        With neither <option>-n</> nor <option>-v</>, pgbench will vacuum the
         <structname>pgbench_tellers</> and <structname>pgbench_branches</>
         tables, and will truncate <structname>pgbench_history</>.
        </para>
       </listitem>
      </varlistentry>
 
-<!## XC>
      <varlistentry>
-      <term><option>-k</option></term>
+      <term><option>--aggregate-interval=<replaceable>seconds</></option></term>
       <listitem>
        <para>
-        Add an additional condition based on column <structname>bid</> based
-        on its values as a hash key to enforce selectivity of all write queries
-        to a single remote node. This functionality permits to check the
-        write-scalability performance of the system by distributing data among cluster nodes.
+        Length of aggregation interval (in seconds). May be used only together
+        with <application>-l</application> - with this option, the log contains
+        per-interval summary (number of transactions, min/max latency and two
+        additional fields useful for variance estimation).
+       </para>
+       <para>
+        This option is not currently supported on Windows.
        </para>
       </listitem>
      </varlistentry>
-<!## end>
+
+     <varlistentry>
+      <term><option>--sampling-rate=<replaceable>rate</></option></term>
+      <listitem>
+       <para>
+        Sampling rate, used when writing data into the log, to reduce the
+        amount of log generated. If this option is given, only the specified
+        fraction of transactions are logged. 1.0 means all transactions will
+        be logged, 0.05 means only 5% of the transactions will be logged.
+       </para>
+       <para>
+        Remember to take the sampling rate into account when processing the
+        log file. For example, when computing tps values, you need to multiply
+        the numbers accordingly (e.g. with 0.01 sample rate, you'll only get
+        1/100 of the actual tps).
+       </para>
+      </listitem>
+     </varlistentry>
 
     </variablelist>
    </para>
 
- </sect2>
+ </refsect2>
 
- <sect2 id="pgbench-common-options">
-  <title><application>pgbench</> Common Options</title>
+ <refsect2 id="pgbench-common-options">
+  <title>Common Options</title>
 
    <para>
     <application>pgbench</application> accepts the following command-line
@@ -434,12 +536,36 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
       </listitem>
      </varlistentry>
 
+     <varlistentry>
+      <term><option>-V</></term>
+      <term><option>--version</></term>
+      <listitem>
+       <para>
+        Print the <application>pgbench</application> version and exit.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-?</></term>
+      <term><option>--help</></term>
+      <listitem>
+       <para>
+        Show help about <application>pgbench</application> command line
+        arguments, and exit.
+       </para>
+      </listitem>
+     </varlistentry>
     </variablelist>
    </para>
 
- </sect2>
+ </refsect2>
+ </refsect1>
 
- <sect2>
+ <refsect1>
+  <title>Notes</title>
+
+ <refsect2>
   <title>What is the <quote>Transaction</> Actually Performed in pgbench?</title>
 
   <para>
@@ -457,22 +583,22 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
   </orderedlist>
 
   <para>
-   If you specify <literal>-N</>, steps 4 and 5 aren't included in the
-   transaction.  If you specify <literal>-S</>, only the <command>SELECT</> is
+   If you specify <option>-N</>, steps 4 and 5 aren't included in the
+   transaction.  If you specify <option>-S</>, only the <command>SELECT</> is
    issued.
   </para>
- </sect2>
+ </refsect2>
 
- <sect2>
+ <refsect2>
   <title>Custom Scripts</title>
 
   <para>
    <application>pgbench</application> has support for running custom
    benchmark scenarios by replacing the default transaction script
    (described above) with a transaction script read from a file
-   (<literal>-f</literal> option).  In this case a <quote>transaction</>
+   (<option>-f</option> option).  In this case a <quote>transaction</>
    counts as one execution of a script file.  You can even specify
-   multiple scripts (multiple <literal>-f</literal> options), in which
+   multiple scripts (multiple <option>-f</option> options), in which
    case a random one of the scripts is chosen each time a client session
    starts a new transaction.
   </para>
@@ -487,9 +613,9 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
 
   <para>
    There is a simple variable-substitution facility for script files.
-   Variables can be set by the command-line <literal>-D</> option,
+   Variables can be set by the command-line <option>-D</> option,
    explained above, or by the meta commands explained below.
-   In addition to any variables preset by <literal>-D</> command-line options,
+   In addition to any variables preset by <option>-D</> command-line options,
    the variable <literal>scale</> is preset to the current scale factor.
    Once set, a variable's
    value can be inserted into a SQL command by writing
@@ -522,8 +648,7 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
       Example:
 <programlisting>
 \set ntellers 10 * :scale
-</programlisting>
-     </para>
+</programlisting></para>
     </listitem>
    </varlistentry>
 
@@ -545,8 +670,7 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
       Example:
 <programlisting>
 \setrandom aid 1 :naccounts
-</programlisting>
-     </para>
+</programlisting></para>
     </listitem>
    </varlistentry>
 
@@ -569,8 +693,7 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
       Example:
 <programlisting>
 \sleep 10 ms
-</programlisting>
-     </para>
+</programlisting></para>
     </listitem>
    </varlistentry>
 
@@ -586,8 +709,7 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
       through its standard output.
      </para>
 
-     <para>
-      <replaceable>argument</> can be either a text constant or a
+     <para><replaceable>argument</> can be either a text constant or a
       <literal>:</><replaceable>variablename</> reference to a variable of
       any types. If you want to use <replaceable>argument</> starting with
       colons, you need to add an additional colon at the beginning of
@@ -598,8 +720,7 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
       Example:
 <programlisting>
 \setshell variable_to_be_assigned command literal_argument :variable ::literal_starting_with_colon
-</programlisting>
-     </para>
+</programlisting></para>
     </listitem>
    </varlistentry>
 
@@ -617,8 +738,7 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
       Example:
 <programlisting>
 \shell command literal_argument :variable ::literal_starting_with_colon
-</programlisting>
-     </para>
+</programlisting></para>
     </listitem>
    </varlistentry>
   </variablelist>
@@ -650,17 +770,18 @@ END;
    otherwise they'd not be independently touching different rows.)
   </para>
 
- </sect2>
+ </refsect2>
 
- <sect2>
+ <refsect2>
   <title>Per-Transaction Logging</title>
 
   <para>
-   With the <literal>-l</> option, <application>pgbench</> writes the time
-   taken by each transaction to a log file.  The log file will be named
+   With the <option>-l</> option but without the <option>--aggregate-interval</option>,
+   <application>pgbench</> writes the time taken by each transaction
+   to a log file.  The log file will be named
    <filename>pgbench_log.<replaceable>nnn</></filename>, where
    <replaceable>nnn</> is the PID of the pgbench process.
-   If the <literal>-j</> option is 2 or higher, creating multiple worker
+   If the <option>-j</> option is 2 or higher, creating multiple worker
    threads, each will have its own log file. The first worker will use the
    same name for its log file as in the standard single worker case.
    The additional log files for the other workers will be named
@@ -678,7 +799,7 @@ END;
 
    where <replaceable>time</> is the total elapsed transaction time in microseconds,
    <replaceable>file_no</> identifies which script file was used
-   (useful when multiple scripts were specified with <literal>-f</>),
+   (useful when multiple scripts were specified with <option>-f</>),
    and <replaceable>time_epoch</>/<replaceable>time_us</> are a
    UNIX epoch format timestamp and an offset
    in microseconds (suitable for creating a ISO 8601
@@ -693,15 +814,59 @@ END;
  0 200 2465 0 1175850568 998079
  0 201 2513 0 1175850569 608
  0 202 2038 0 1175850569 2663
-</screen>
-  </para>
- </sect2>
+</screen></para>
 
- <sect2>
+  <para>
+   When running a long test on hardware that can handle a lot of transactions,
+   the log files can become very large.  The <option>--sampling-rate</> option
+   can be used to log only a random sample of transactions.
+  </para>
+ </refsect2>
+
+ <refsect2>
+  <title>Aggregated Logging</title>
+  
+  <para>
+   With the <option>--aggregate-interval</option> option, the logs use a bit different format:
+
+<synopsis>
+<replaceable>interval_start</> <replaceable>num_of_transactions</> <replaceable>latency_sum</> <replaceable>latency_2_sum</> <replaceable>min_latency</> <replaceable>max_latency</>
+</synopsis>
+
+   where <replaceable>interval_start</> is the start of the interval (UNIX epoch
+   format timestamp), <replaceable>num_of_transactions</> is the number of transactions
+   within the interval, <replaceable>latency_sum</replaceable> is a sum of latencies
+   (so you can compute average latency easily). The following two fields are useful
+   for variance estimation - <replaceable>latency_sum</> is a sum of latencies and
+   <replaceable>latency_2_sum</> is a sum of 2nd powers of latencies. The last two
+   fields are <replaceable>min_latency</> - a minimum latency within the interval, and
+   <replaceable>max_latency</> - maximum latency within the interval. A transaction is
+   counted into the interval when it was committed.
+  </para>
+
+  <para>
+   Here is example outputs:
+<screen>
+1345828501 5601 1542744 483552416 61 2573
+1345828503 7884 1979812 565806736 60 1479
+1345828505 7208 1979422 567277552 59 1391
+1345828507 7685 1980268 569784714 60 1398
+1345828509 7073 1979779 573489941 236 1411
+</screen></para>
+
+  <para>
+   Notice that while the plain (unaggregated) log file contains index
+   of the custom script files, the aggregated log does not. Therefore if
+   you need per script data, you need to aggregate the data on your own.
+  </para>
+
+ </refsect2>
+
+ <refsect2>
   <title>Per-Statement Latencies</title>
 
   <para>
-   With the <literal>-r</> option, <application>pgbench</> collects
+   With the <option>-r</> option, <application>pgbench</> collects
    the elapsed transaction time of each statement executed by every
    client.  It then reports an average of those values, referred to
    as the latency for each statement, after the benchmark has finished.
@@ -751,9 +916,9 @@ statement latencies in milliseconds:
    Comparing average TPS values with and without latency reporting enabled
    is a good way to measure if the timing overhead is significant.
   </para>
- </sect2>
+ </refsect2>
 
- <sect2>
+ <refsect2>
   <title>Good Practices</title>
 
   <para>
@@ -764,7 +929,7 @@ statement latencies in milliseconds:
 
   <para>
    In the first place, <emphasis>never</> believe any test that runs
-   for only a few seconds.  Use the <literal>-t</> or <literal>-T</> option
+   for only a few seconds.  Use the <option>-t</> or <option>-T</> option
    to make the run last at least a few minutes, so as to average out noise.
    In some cases you could need hours to get numbers that are reproducible.
    It's a good idea to try the test run a few times, to find out if your
@@ -773,11 +938,11 @@ statement latencies in milliseconds:
 
   <para>
    For the default TPC-B-like test scenario, the initialization scale factor
-   (<literal>-s</>) should be at least as large as the largest number of
-   clients you intend to test (<literal>-c</>); else you'll mostly be
-   measuring update contention.  There are only <literal>-s</> rows in
+   (<option>-s</>) should be at least as large as the largest number of
+   clients you intend to test (<option>-c</>); else you'll mostly be
+   measuring update contention.  There are only <option>-s</> rows in
    the <structname>pgbench_branches</> table, and every transaction wants to
-   update one of them, so <literal>-c</> values in excess of <literal>-s</>
+   update one of them, so <option>-c</> values in excess of <option>-s</>
    will undoubtedly result in lots of transactions blocked waiting for
    other transactions.
   </para>
@@ -800,6 +965,6 @@ statement latencies in milliseconds:
    instances concurrently, on several client machines, against the same
    database server.
   </para>
- </sect2>
-
-</sect1>
+ </refsect2>
+ </refsect1>
+</refentry>

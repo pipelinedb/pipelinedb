@@ -3,7 +3,7 @@
  * spi_priv.h
  *				Server Programming Interface private declarations
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/executor/spi_priv.h
@@ -23,8 +23,10 @@ typedef struct
 	/* current results */
 	uint32		processed;		/* by Executor */
 	Oid			lastoid;
-	SPITupleTable *tuptable;
+	SPITupleTable *tuptable;	/* tuptable currently being built */
 
+	/* resources of this execution context */
+	slist_head	tuptables;		/* list of all live SPITupleTables */
 	MemoryContext procCxt;		/* procedure context */
 	MemoryContext execCxt;		/* executor context */
 	MemoryContext savedcxt;		/* context of SPI_connect's caller */
@@ -59,6 +61,12 @@ typedef struct
  * while additional data such as argtypes and list cells is loose in the SPI
  * executor context.  Such plans can be identified by having plancxt == NULL.
  *
+ * We can also have "one-shot" SPI plans (which are typically temporary,
+ * as described above).  These are meant to be executed once and discarded,
+ * and various optimizations are made on the assumption of single use.
+ * Note in particular that the CachedPlanSources within such an SPI plan
+ * are not "complete" until execution.
+ *
  * Note: if the original query string contained only whitespace and comments,
  * the plancache_list will be NIL and so there is no place to store the
  * query string.  We don't care about that, but we do care about the
@@ -68,6 +76,7 @@ typedef struct _SPI_plan
 {
 	int			magic;			/* should equal _SPI_PLAN_MAGIC */
 	bool		saved;			/* saved or unsaved plan? */
+	bool		oneshot;		/* one-shot plan? */
 	List	   *plancache_list; /* one CachedPlanSource per parsetree */
 	MemoryContext plancxt;		/* Context containing _SPI_plan and data */
 	int			cursor_options; /* Cursor options used for planning */

@@ -24,15 +24,14 @@ PostgreSQL documentation
 CREATE [ TEMPORARY | TEMP ] SEQUENCE <replaceable class="parameter">name</replaceable> [ INCREMENT [ BY ] <replaceable class="parameter">increment</replaceable> ]
     [ MINVALUE <replaceable class="parameter">minvalue</replaceable> | NO MINVALUE ] [ MAXVALUE <replaceable class="parameter">maxvalue</replaceable> | NO MAXVALUE ]
     [ START [ WITH ] <replaceable class="parameter">start</replaceable> ] [ CACHE <replaceable class="parameter">cache</replaceable> ] [ [ NO ] CYCLE ]
-    [ OWNED BY { <replaceable class="parameter">table</replaceable>.<replaceable class="parameter">column</replaceable> | NONE } ]
+    [ OWNED BY { <replaceable class="parameter">table_name</replaceable>.<replaceable class="parameter">column_name</replaceable> | NONE } ]
 </synopsis>
  </refsynopsisdiv>
 
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    <command>CREATE SEQUENCE</command> creates a new sequence number
    generator.  This involves creating and initializing a new special
@@ -77,6 +76,7 @@ SELECT * FROM <replaceable>name</replaceable>;
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>TEMPORARY</literal> or <literal>TEMP</literal></term>
@@ -199,7 +199,7 @@ SELECT * FROM <replaceable>name</replaceable>;
    </varlistentry>
 
    <varlistentry>
-    <term><literal>OWNED BY</literal> <replaceable class="parameter">table</replaceable>.<replaceable class="parameter">column</replaceable></term>
+    <term><literal>OWNED BY</literal> <replaceable class="parameter">table_name</replaceable>.<replaceable class="parameter">column_name</replaceable></term>
     <term><literal>OWNED BY NONE</literal></term>
     <listitem>
      <para>
@@ -219,6 +219,7 @@ SELECT * FROM <replaceable>name</replaceable>;
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    Use <command>DROP SEQUENCE</command> to remove a sequence.
   </para>
@@ -320,13 +321,13 @@ BEGIN;
 COPY distributors FROM 'input_file';
 SELECT setval('serial', max(id)) FROM distributors;
 END;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>CREATE SEQUENCE</command> conforms to the <acronym>SQL</acronym>
    standard, with the following exceptions:
@@ -350,8 +351,7 @@ END;
       extension.
      </para>
     </listitem>
-   </itemizedlist>
-  </para>
+   </itemizedlist></para>
  </refsect1>
 
  <refsect1>

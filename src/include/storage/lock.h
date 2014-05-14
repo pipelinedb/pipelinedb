@@ -4,7 +4,7 @@
  *	  POSTGRES low-level lock mechanism
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/lock.h
@@ -379,6 +379,20 @@ typedef struct PROCLOCK
  * shared memory.  We also track the number of lock acquisitions per
  * ResourceOwner, so that we can release just those locks belonging to a
  * particular ResourceOwner.
+ *
+ * When holding a lock taken "normally", the lock and proclock fields always
+ * point to the associated objects in shared memory.  However, if we acquired
+ * the lock via the fast-path mechanism, the lock and proclock fields are set
+ * to NULL, since there probably aren't any such objects in shared memory.
+ * (If the lock later gets promoted to normal representation, we may eventually
+ * update our locallock's lock/proclock fields after finding the shared
+ * objects.)
+ *
+ * Caution: a locallock object can be left over from a failed lock acquisition
+ * attempt.  In this case its lock/proclock fields are untrustworthy, since
+ * the shared lock object is neither held nor awaited, and hence is available
+ * to be reclaimed.  If nLocks > 0 then these pointers must either be valid or
+ * NULL, but when nLocks == 0 they should be considered garbage.
  */
 typedef struct LOCALLOCKTAG
 {
@@ -404,13 +418,13 @@ typedef struct LOCALLOCK
 	LOCALLOCKTAG tag;			/* unique identifier of locallock entry */
 
 	/* data */
-	LOCK	   *lock;			/* associated LOCK object in shared mem */
-	PROCLOCK   *proclock;		/* associated PROCLOCK object in shmem */
+	LOCK	   *lock;			/* associated LOCK object, if any */
+	PROCLOCK   *proclock;		/* associated PROCLOCK object, if any */
 	uint32		hashcode;		/* copy of LOCKTAG's hash value */
 	int64		nLocks;			/* total number of times lock is held */
 	int			numLockOwners;	/* # of relevant ResourceOwners */
 	int			maxLockOwners;	/* allocated size of array */
-	bool		holdsStrongLockCount;	/* bumped FastPathStrongRelatonLocks? */
+	bool		holdsStrongLockCount;	/* bumped FastPathStrongRelationLocks */
 	LOCALLOCKOWNER *lockOwners; /* dynamically resizable array */
 } LOCALLOCK;
 
@@ -478,6 +492,7 @@ typedef enum
 extern void InitLocks(void);
 extern LockMethod GetLocksMethodTable(const LOCK *lock);
 extern uint32 LockTagHashCode(const LOCKTAG *locktag);
+extern bool DoLockModesConflict(LOCKMODE mode1, LOCKMODE mode2);
 extern LockAcquireResult LockAcquire(const LOCKTAG *locktag,
 			LOCKMODE lockmode,
 			bool sessionLock,
@@ -493,8 +508,10 @@ extern bool LockRelease(const LOCKTAG *locktag,
 			LOCKMODE lockmode, bool sessionLock);
 extern void LockReleaseAll(LOCKMETHODID lockmethodid, bool allLocks);
 extern void LockReleaseSession(LOCKMETHODID lockmethodid);
-extern void LockReleaseCurrentOwner(void);
-extern void LockReassignCurrentOwner(void);
+extern void LockReleaseCurrentOwner(LOCALLOCK **locallocks, int nlocks);
+extern void LockReassignCurrentOwner(LOCALLOCK **locallocks, int nlocks);
+extern bool LockHasWaiters(const LOCKTAG *locktag,
+			   LOCKMODE lockmode, bool sessionLock);
 extern VirtualTransactionId *GetLockConflicts(const LOCKTAG *locktag,
 				 LOCKMODE lockmode);
 extern void AtPrepare_Locks(void);
@@ -531,7 +548,7 @@ extern void lock_twophase_standby_recover(TransactionId xid, uint16 info,
 
 extern DeadLockState DeadLockCheck(PGPROC *proc);
 extern PGPROC *GetBlockingAutoVacuumPgproc(void);
-extern void DeadLockReport(void);
+extern void DeadLockReport(void) __attribute__((noreturn));
 extern void RememberSimpleDeadLock(PGPROC *proc1,
 					   LOCKMODE lockmode,
 					   LOCK *lock,
@@ -545,6 +562,7 @@ extern void DumpAllLocks(void);
 
 /* Lock a VXID (used to wait for a transaction to finish) */
 extern void VirtualXactLockTableInsert(VirtualTransactionId vxid);
+extern void VirtualXactLockTableCleanup(void);
 extern bool VirtualXactLock(VirtualTransactionId vxid, bool wait);
 
 #endif   /* LOCK_H */

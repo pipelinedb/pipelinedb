@@ -4,7 +4,7 @@
  *	  build algorithm for GiST indexes implementation.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -85,7 +85,7 @@ static void gistBufferingBuildInsert(GISTBuildState *buildstate,
 						 IndexTuple itup);
 static bool gistProcessItup(GISTBuildState *buildstate, IndexTuple itup,
 				BlockNumber startblkno, int startlevel);
-static void gistbufferinginserttuples(GISTBuildState *buildstate,
+static BlockNumber gistbufferinginserttuples(GISTBuildState *buildstate,
 						  Buffer buffer, int level,
 						  IndexTuple *itup, int ntup, OffsetNumber oldoffnum,
 						  BlockNumber parentblk, OffsetNumber downlinkoffnum);
@@ -158,16 +158,6 @@ gistbuild(PG_FUNCTION_ARGS)
 		elog(ERROR, "index \"%s\" already contains data",
 			 RelationGetRelationName(index));
 
-	/*
-	 * We can't yet handle unlogged GiST indexes, because we depend on LSNs.
-	 * This is duplicative of an error in gistbuildempty, but we want to check
-	 * here so as to throw error before doing all the index-build work.
-	 */
-	if (heap->rd_rel->relpersistence == RELPERSISTENCE_UNLOGGED)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("unlogged GiST indexes are not supported")));
-
 	/* no locking is needed */
 	buildstate.giststate = initGISTstate(index);
 
@@ -201,10 +191,9 @@ gistbuild(PG_FUNCTION_ARGS)
 
 		recptr = XLogInsert(RM_GIST_ID, XLOG_GIST_CREATE_INDEX, &rdata);
 		PageSetLSN(page, recptr);
-		PageSetTLI(page, ThisTimeLineID);
 	}
 	else
-		PageSetLSN(page, GetXLogRecPtrForTemp());
+		PageSetLSN(page, gistGetFakeLSN(heap));
 
 	UnlockReleaseBuffer(buffer);
 
@@ -621,9 +610,14 @@ gistProcessItup(GISTBuildState *buildstate, IndexTuple itup,
 		newtup = gistgetadjusted(indexrel, idxtuple, itup, giststate);
 		if (newtup)
 		{
-			gistbufferinginserttuples(buildstate, buffer, level,
-									  &newtup, 1, childoffnum,
-									InvalidBlockNumber, InvalidOffsetNumber);
+			blkno = gistbufferinginserttuples(buildstate,
+											  buffer,
+											  level,
+											  &newtup,
+											  1,
+											  childoffnum,
+											  InvalidBlockNumber,
+											  InvalidOffsetNumber);
 			/* gistbufferinginserttuples() released the buffer */
 		}
 		else
@@ -676,10 +670,14 @@ gistProcessItup(GISTBuildState *buildstate, IndexTuple itup,
  *
  * This is analogous with gistinserttuples() in the regular insertion code.
  *
+ * Returns the block number of the page where the (first) new or updated tuple
+ * was inserted. Usually that's the original page, but might be a sibling page
+ * if the original page was split.
+ *
  * Caller should hold a lock on 'buffer' on entry. This function will unlock
  * and unpin it.
  */
-static void
+static BlockNumber
 gistbufferinginserttuples(GISTBuildState *buildstate, Buffer buffer, int level,
 						  IndexTuple *itup, int ntup, OffsetNumber oldoffnum,
 						  BlockNumber parentblk, OffsetNumber downlinkoffnum)
@@ -687,12 +685,13 @@ gistbufferinginserttuples(GISTBuildState *buildstate, Buffer buffer, int level,
 	GISTBuildBuffers *gfbb = buildstate->gfbb;
 	List	   *splitinfo;
 	bool		is_split;
+	BlockNumber placed_to_blk = InvalidBlockNumber;
 
 	is_split = gistplacetopage(buildstate->indexrel,
 							   buildstate->freespace,
 							   buildstate->giststate,
 							   buffer,
-							   itup, ntup, oldoffnum,
+							   itup, ntup, oldoffnum, &placed_to_blk,
 							   InvalidBuffer,
 							   &splitinfo,
 							   false);
@@ -823,6 +822,8 @@ gistbufferinginserttuples(GISTBuildState *buildstate, Buffer buffer, int level,
 	}
 	else
 		UnlockReleaseBuffer(buffer);
+
+	return placed_to_blk;
 }
 
 /*

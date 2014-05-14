@@ -5,9 +5,11 @@
  * The Startup process initialises the server and performs any recovery
  * actions that have been specified. Notice that there is no "main loop"
  * since the Startup process ends as soon as initialisation is complete.
+ * (in standby mode, one can think of the replay loop as a main loop,
+ * though.)
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -27,8 +29,9 @@
 #include "storage/ipc.h"
 #include "storage/latch.h"
 #include "storage/pmsignal.h"
-#include "storage/proc.h"
+#include "storage/standby.h"
 #include "utils/guc.h"
+#include "utils/timeout.h"
 
 
 /*
@@ -185,20 +188,12 @@ StartupProcessMain(void)
 
 	/*
 	 * Properly accept or ignore signals the postmaster might send us.
-	 *
-	 * Note: ideally we'd not enable handle_standby_sig_alarm unless actually
-	 * doing hot standby, but we don't know that yet.  Rely on it to not do
-	 * anything if it shouldn't.
 	 */
 	pqsignal(SIGHUP, StartupProcSigHupHandler); /* reload config file */
 	pqsignal(SIGINT, SIG_IGN);	/* ignore query cancel */
 	pqsignal(SIGTERM, StartupProcShutdownHandler);		/* request shutdown */
 	pqsignal(SIGQUIT, startupproc_quickdie);	/* hard crash time */
-	if (EnableHotStandby)
-		pqsignal(SIGALRM, handle_standby_sig_alarm);	/* ignored unless
-														 * InHotStandby */
-	else
-		pqsignal(SIGALRM, SIG_IGN);
+	InitializeTimeouts();		/* establishes SIGALRM handler */
 	pqsignal(SIGPIPE, SIG_IGN);
 	pqsignal(SIGUSR1, StartupProcSigUsr1Handler);
 	pqsignal(SIGUSR2, StartupProcTriggerHandler);
@@ -213,10 +208,19 @@ StartupProcessMain(void)
 	pqsignal(SIGWINCH, SIG_DFL);
 
 	/*
+	 * Register timeouts needed for standby mode
+	 */
+	RegisterTimeout(STANDBY_DEADLOCK_TIMEOUT, StandbyDeadLockHandler);
+	RegisterTimeout(STANDBY_TIMEOUT, StandbyTimeoutHandler);
+
+	/*
 	 * Unblock signals (they were blocked when the postmaster forked us)
 	 */
 	PG_SETMASK(&UnBlockSig);
 
+	/*
+	 * Do what we came for.
+	 */
 	StartupXLOG();
 
 	/*

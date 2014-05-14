@@ -29,7 +29,6 @@ DROP TEXT SEARCH CONFIGURATION [ IF EXISTS ] <replaceable class="PARAMETER">name
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP TEXT SEARCH CONFIGURATION</command> drops an existing text
    search configuration.  To execute this command you must be the owner of the
@@ -40,6 +39,7 @@ DROP TEXT SEARCH CONFIGURATION [ IF EXISTS ] <replaceable class="PARAMETER">name
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
 
    <varlistentry>
@@ -103,6 +103,7 @@ DROP TEXT SEARCH CONFIGURATION my_english;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP TEXT SEARCH CONFIGURATION</command> statement in
    the SQL standard.

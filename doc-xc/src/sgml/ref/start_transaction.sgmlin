@@ -35,18 +35,27 @@ START TRANSACTION [ <replaceable class="parameter">transaction_mode</replaceable
   <title>Description</title>
 
 &common;
-
   <para>
    This command begins a new transaction block. If the isolation level,
    read/write mode, or deferrable mode is specified, the new transaction has those
    characteristics, as if <xref linkend="sql-set-transaction"> was executed. This is the same
    as the <xref linkend="sql-begin"> command.
   </para>
+
+&xconly;
+<!## XC>
+  <para>
+   <literal>REPEATABLE READ</literal> and <literal>SERIALIZABLE</literal> do not run properly
+   in the current version of <productname>Postgres-XC</productname>.
+  </para>
+<!## end>
+
  </refsect1>
 
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <para>
    Refer to <xref linkend="sql-set-transaction"> for information on the meaning
    of the parameters to this statement.
@@ -56,15 +65,11 @@ START TRANSACTION [ <replaceable class="parameter">transaction_mode</replaceable
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    In the standard, it is not necessary to issue <command>START TRANSACTION</>
    to start a transaction block: any SQL command implicitly begins a block.
-<!## PG>
    <productname>PostgreSQL</productname>'s behavior can be seen as implicitly
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname>'s behavior can be seen as implicitly
-<!## end>
    issuing a <command>COMMIT</command> after each command that does not
    follow <command>START TRANSACTION</> (or <command>BEGIN</command>),
    and it is therefore often called <quote>autocommit</>.
@@ -81,12 +86,7 @@ START TRANSACTION [ <replaceable class="parameter">transaction_mode</replaceable
   <para>
    The SQL standard requires commas between successive <replaceable
    class="parameter">transaction_modes</replaceable>, but for historical
-<!## PG>
    reasons <productname>PostgreSQL</productname> allows the commas to be
-<!## end>
-<!## XC>
-   reasons <productname>Postgres-XC</productname> allows the commas to be
-<!## end>
    omitted.
   </para>
 

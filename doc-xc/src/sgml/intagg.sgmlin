@@ -8,7 +8,6 @@
  </indexterm>
 
 &pgonly;
-
  <para>
   The <filename>intagg</filename> module provides an integer aggregator and an
   enumerator.  <filename>intagg</filename> is now obsolete, because there
@@ -21,8 +20,6 @@
   <title>Functions</title>
 
 &pgonly;
-
-
  <para>
   The aggregator is an aggregate function
   <function>int_array_aggregate(integer)</>
@@ -31,6 +28,18 @@
   This is a wrapper around <function>array_agg</>,
   which does the same thing for any array type.
  </para>
+
+ <indexterm>
+  <primary>int_array_aggregate</primary>
+ </indexterm>
+
+ <indexterm>
+  <primary>array_agg</primary>
+ </indexterm>
+
+ <indexterm>
+  <primary>int_array_enum</primary>
+ </indexterm>
 
  <para>
   The enumerator is a function
@@ -47,8 +56,6 @@
   <title>Sample Uses</title>
 
 &pgonly;
-
-
   <para>
    Many database systems have the notion of a one to many table. Such a table
    usually sits between two indexed tables, for example:

@@ -1,18 +1,13 @@
 <!-- doc/src/sgml/history.sgml -->
 
 <sect1 id="history">
-<!## PG>
  <title>A Brief History of <productname>PostgreSQL</productname></title>
-<!## end>
-<!## XC>
- <title>A Brief History of <productname>PostgreSQL</productname> and <productname>Postgres-XC</productname></title>
-<!## end>
 
  <indexterm zone="history">
   <primary>history</primary>
   <secondary>of PostgreSQL</secondary>
  </indexterm>
-&common;
+
  <para>
   The object-relational database management system now known as
   <productname>PostgreSQL</productname> is derived from the
@@ -119,7 +114,9 @@
     <listitem>
      <para>
       The query language PostQUEL was replaced with
-      <acronym>SQL</acronym> (implemented in the server).  Subqueries
+      <acronym>SQL</acronym> (implemented in the server).  (Interface
+      library <link linkend="libpq">libpq</link> was named after PostQUEL.)
+      Subqueries
       were not supported until <productname>PostgreSQL</productname>
       (see below), but they could be imitated in
       <productname>Postgres95</productname> with user-defined
@@ -217,102 +214,9 @@
    all areas.
   </para>
 
-<!## PG>
   <para>
    Details about what has happened in <productname>PostgreSQL</> since
    then can be found in <xref linkend="release">.
   </para>
-<!## end>
-<!## XC>
-  <para>
-   Details about what has happened in <productname>PostgreSQL</> since
-   then can be found in release notes.
-  </para>
-<!## end>
  </sect2>
-<!## XC>
-
-<sect2 id="rita-db">
- <title>NTT DATA <productname>Rita-DB</productname> Project</title>
-
- <indexterm zone="rita-db">
-  <primary>history</primary>
-  <secondary>of Rita-DB</secondary>
- </indexterm>
-&xconly;
- <para>
-  In 2001, NTT DATA began a research project
-  called <productname>Rita-DB</productname> which aimed to provide
-  both read and write scalability
-  of <productname>PostgreSQL</productname>.   The architecture was
-  very similar to current <productname>Postgres-XC</productname>.
-  After three years effort, it
-  was successful to provide globally transparent transaction
-  capability among database servers involved.
- </para>
-
- <para>
-  However, <productname>Rita-DB</productname> was not successful to
-  show that the architecture scales.  It scaled to some extent but the
-  result was not attractive to prospect users.
- </para>
-
- <para>
-  The result was presented in PostgreSQL anniversary summit in
-  Toronto.
- </para>
-
-</sect2>
-
-<sect2 id="pgxc-history">
- <title><productname>Postgres-XC</productname> from PostgreSQL</title>
-
- <indexterm zone="pgxc-history">
- <primary>history</primary>
- <secondary>of Postgres-XC</secondary>
- </indexterm>
-&xconly;
-
- <para>
-  In 2010, <productname>Rita-DB</productname> was carried over to
-  NTT's Open Source Software Center as Postgres-XC project.
-  EnterpriseDB Inc., joined the project. After six month effort,
-  they were successful to show
-  that multiple <productname>PostgreSQL</productname> can be
-  integrated into database cluster and they can provide transparent
-  global transaction management feature. Benchmark showed both read and
-  write scalability.
- </para>
-
- <para>
-  These outcome was presented in PGCon2010, CHAR(10) and JPUG
-  conference.
- </para>
-
- <para>
-  After then, the development and core teams decided to expand statement
-  capability of <productname>Postgres-XC</productname> to
-  full <productname>PostgreSQL</productname> as much as possible.
-  They're working hard to this goal.
- </para>
-
- <para>
-  <productname>Postgres-XC</productname> is under copyright of Postgres-XC Development
-  Group since 2012. More details about this legal entity can be found
-  <ulink url="https://sourceforge.net/apps/mediawiki/postgres-xc/index.php?title=Charter">here.</ulink>
- </para>
-
-<!## omitted>
- <para>
-  On the other hand, it is very important to provide high availability
-  feature to database clusters. Especially, GTM was pointed out to
-  become single point of failure.
-  High availability feature was also added
-  to <productname>Postgres-XC</productname>.
- </para>
-<!## end>
-
-</sect2>
-<!## end>
-
 </sect1>

@@ -12,6 +12,21 @@ CREATE TABLE lotest_stash_values (loid oid, junk integer, fd integer);
 -- returns the large object id
 INSERT INTO lotest_stash_values (loid) VALUES( lo_creat(42) );
 
+-- Test ALTER LARGE OBJECT
+CREATE ROLE regresslo;
+DO $$
+  BEGIN
+    EXECUTE 'ALTER LARGE OBJECT ' || (select loid from lotest_stash_values)
+		|| ' OWNER TO regresslo';
+  END
+$$;
+SELECT
+	rol.rolname
+FROM
+	lotest_stash_values s
+	JOIN pg_largeobject_metadata lo ON s.loid = lo.oid
+	JOIN pg_authid rol ON lo.lomowner = rol.oid;
+
 -- NOTE: large objects require transactions
 BEGIN;
 
@@ -110,6 +125,29 @@ SELECT lo_tell(fd) FROM lotest_stash_values;
 SELECT lo_close(fd) FROM lotest_stash_values;
 END;
 
+-- Test 64-bit large object functions.
+BEGIN;
+UPDATE lotest_stash_values SET fd = lo_open(loid, CAST(x'20000' | x'40000' AS integer));
+
+SELECT lo_lseek64(fd, 4294967296, 0) FROM lotest_stash_values;
+SELECT lowrite(fd, 'offset:4GB') FROM lotest_stash_values;
+SELECT lo_tell64(fd) FROM lotest_stash_values;
+
+SELECT lo_lseek64(fd, -10, 1) FROM lotest_stash_values;
+SELECT lo_tell64(fd) FROM lotest_stash_values;
+SELECT loread(fd, 10) FROM lotest_stash_values;
+
+SELECT lo_truncate64(fd, 5000000000) FROM lotest_stash_values;
+SELECT lo_lseek64(fd, 0, 2) FROM lotest_stash_values;
+SELECT lo_tell64(fd) FROM lotest_stash_values;
+
+SELECT lo_truncate64(fd, 3000000000) FROM lotest_stash_values;
+SELECT lo_lseek64(fd, 0, 2) FROM lotest_stash_values;
+SELECT lo_tell64(fd) FROM lotest_stash_values;
+
+SELECT lo_close(fd) FROM lotest_stash_values;
+END;
+
 -- lo_unlink(lobjId oid) returns integer
 -- return value appears to always be 1
 SELECT lo_unlink(loid) from lotest_stash_values;
@@ -120,6 +158,9 @@ INSERT INTO lotest_stash_values (loid) VALUES( lo_import('@abs_srcdir@/data/tenk
 
 BEGIN;
 UPDATE lotest_stash_values SET fd=lo_open(loid, CAST(x'20000' | x'40000' AS integer));
+
+-- verify length of large object
+SELECT lo_lseek(fd, 0, 2) FROM lotest_stash_values;
 
 -- with the default BLKSZ, LOBLKSZ = 2048, so this positions us for a block
 -- edge case
@@ -163,3 +204,4 @@ SELECT lo_unlink(loid) FROM lotest_stash_values;
 \lo_unlink :newloid
 
 TRUNCATE lotest_stash_values;
+DROP ROLE regresslo;

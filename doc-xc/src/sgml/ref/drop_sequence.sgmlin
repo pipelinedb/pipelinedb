@@ -28,8 +28,7 @@ DROP SEQUENCE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [,
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    <command>DROP SEQUENCE</command> removes sequence number
    generators. A sequence can only be dropped by its owner or a superuser.
@@ -39,6 +38,7 @@ DROP SEQUENCE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [,
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>IF EXISTS</literal></term>
@@ -88,13 +88,13 @@ DROP SEQUENCE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [,
 
 <programlisting>
 DROP SEQUENCE serial;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>DROP SEQUENCE</command> conforms to the <acronym>SQL</acronym>
    standard, except that the standard only allows one

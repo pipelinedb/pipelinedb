@@ -28,11 +28,12 @@ PostgreSQL documentation
   <cmdsynopsis>
    <command>initdb</command>
    <arg rep="repeat"><replaceable>option</replaceable></arg>
-   <arg>--nodename <replaceable>nodename</replaceable></arg>
    <group choice="plain">
-    <arg>--pgdata</arg>
-    <arg>-D </arg>
-    <replaceable>directory</replaceable>
+    <group choice="opt">
+     <arg choice="plain"><option>--pgdata</option></arg>
+     <arg choice="plain"><option>-D</option></arg>
+    </group>
+    <replaceable> directory</replaceable>
    </group>
   </cmdsynopsis>
  </refsynopsisdiv>
@@ -131,6 +132,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Options</title>
 
+&common;
    <para>
     <variablelist>
      <varlistentry>
@@ -138,10 +140,33 @@ PostgreSQL documentation
       <term><option>--auth=<replaceable class="parameter">authmethod</replaceable></option></term>
       <listitem>
        <para>
-        This option specifies the authentication method for local users
-        used in <filename>pg_hba.conf</>.  Do not use <literal>trust</>
-        unless you trust all local users on your system.  <literal>Trust</>
-        is the default for ease of installation.
+        This option specifies the authentication method for local users used
+        in <filename>pg_hba.conf</> (<literal>host</literal>
+        and <literal>local</literal> lines).  Do not use <literal>trust</>
+        unless you trust all local users on your system.  <literal>trust</> is
+        the default for ease of installation.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>--auth-host=<replaceable class="parameter">authmethod</replaceable></option></term>
+      <listitem>
+       <para>
+        This option specifies the authentication method for local users via
+        TCP/IP connections used in <filename>pg_hba.conf</>
+        (<literal>host</literal> lines).
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>--auth-local=<replaceable class="parameter">authmethod</replaceable></option></term>
+      <listitem>
+       <para>
+        This option specifies the authentication method for local users via
+        Unix-domain socket connections used in <filename>pg_hba.conf</>
+        (<literal>local</literal> lines).
        </para>
       </listitem>
      </varlistentry>
@@ -185,13 +210,22 @@ PostgreSQL documentation
         be the default encoding of any database you create later,
         unless you override it there.  The default is derived from the locale, or
         <literal>SQL_ASCII</literal> if that does not work. The character sets supported by
-<!## PG>
         the <productname>PostgreSQL</productname> server are described
-<!## end>
-<!## XC>
-        the <productname>Postgres-XC</productname> server are described
-<!## end>
         in <xref linkend="multibyte-charset-supported">.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry id="app-initdb-data-checksums" xreflabel="data checksums">
+      <term><option>-k</option></term>
+      <term><option>--data-checksums</option></term>
+      <listitem>
+       <para>
+        Use checksums on data pages to help detect corruption by the
+        I/O system that would otherwise be silent. Enabling checksums
+        may incur a noticeable performance penalty. This option can only
+        be set during initialization, and cannot be changed later. If
+        set, checksums are calculated for all objects, in all databases.
        </para>
       </listitem>
      </varlistentry>
@@ -225,6 +259,30 @@ PostgreSQL documentation
      </varlistentry>
 
      <varlistentry>
+      <term><option>--no-locale</option></term>
+      <listitem>
+       <para>
+        Equivalent to <option>--locale=C</option>.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-N</option></term>
+      <term><option>--nosync</option></term>
+      <listitem>
+       <para>
+        By default, <command>initdb</command> will wait for all files to be
+        written safely to disk.  This option causes <command>initdb</command>
+        to return without waiting, which is faster, but means that a
+        subsequent operating system crash can leave the data directory
+        corrupt.  Generally, this option is useful for testing, but should not
+        be used when creating a production installation.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
       <term><option>--pwfile=<replaceable>filename</></option></term>
       <listitem>
        <para>
@@ -233,6 +291,29 @@ PostgreSQL documentation
        </para>
       </listitem>
      </varlistentry>
+
+     <varlistentry>
+      <term><option>-S</option></term>
+      <term><option>--sync-only</option></term>
+      <listitem>
+       <para>
+        Safely write all database files to disk and exit.  This does not
+        perform any of the normal <application>initdb</> operations.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-T <replaceable>CFG</></option></term>
+      <term><option>--text-search-config=<replaceable>CFG</></option></term>
+      <listitem>
+       <para>
+        Sets the default text search configuration.
+        See <xref linkend="guc-default-text-search-config"> for further information.
+       </para>
+      </listitem>
+     </varlistentry>
+
      <varlistentry>
       <term><option>-U <replaceable class="parameter">username</replaceable></option></term>
       <term><option>--username=<replaceable class="parameter">username</replaceable></option></term>
@@ -277,7 +358,7 @@ PostgreSQL documentation
    </para>
 
    <para>
-    Other, less commonly used, parameters are also available:
+    Other, less commonly used, options are also available:
 
     <variablelist>
      <varlistentry>
@@ -319,7 +400,13 @@ PostgreSQL documentation
        </para>
       </listitem>
      </varlistentry>
+    </variablelist>
+   </para>
 
+   <para>
+    Other options:
+
+    <variablelist>
      <varlistentry>
        <term><option>-V</></term>
        <term><option>--version</></term>
@@ -363,12 +450,7 @@ PostgreSQL documentation
   </variablelist>
 
   <para>
-<!## PG>
    This utility, like most other <productname>PostgreSQL</> utilities,
-<!## end>
-<!## XC>
-   This utility, like most other <productname>Postgres-XC</> utilities,
-<!## end>
    also uses the environment variables supported by <application>libpq</>
    (see <xref linkend="libpq-envars">).
   </para>
@@ -386,6 +468,7 @@ PostgreSQL documentation
   </para>
 <!## end>
 &common;
+
   <para>
    <command>initdb</command> can also be invoked via
    <command>pg_ctl initdb</command>.

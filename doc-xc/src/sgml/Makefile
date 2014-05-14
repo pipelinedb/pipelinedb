@@ -51,9 +51,9 @@ ifndef XSLTPROC
 XSLTPROC = xsltproc
 endif
 
-VERSION = 1.1devel
-
 override XSLTPROCFLAGS += --stringparam pg.version '$(VERSION)'
+
+DBTOEPUB ?= dbtoepub
 
 
 GENERATED_SGML = bookindex.sgml version.sgml \
@@ -65,7 +65,6 @@ ALLSGMLIN := $(wildcard $(srcdir)/*.sgmlin $(srcdir)/ref/*.sgmlin)
 ALLSGML := $(ALLSGMLIN:%sgmlin=%sgml) $(GENERATED_SGML)
 
 ALLSGMLTOREMOVE := $(ALLSGMLIN:%sgmlin=%sgml)
-
 
 # Sometimes we don't want this one.
 ALMOSTALLSGML := $(filter-out %bookindex.sgml,$(ALLSGML))
@@ -141,10 +140,11 @@ bookindex.sgml: HTML.index
 # even in distribution tarballs.  So this is cheating a bit, but it
 # will achieve the goal of updating the version number when it
 # changes.
+# Please note that XC version needs manual maintenance here.
 version.sgml: $(top_srcdir)/configure
 	{ \
-	  echo "<!ENTITY version \"$(VERSION)\">"; \
-	  echo "<!ENTITY majorversion \"$(MAJORVERSION)\">"; \
+	  echo "<!ENTITY version \"1.2.1\">"; \
+	  echo "<!ENTITY majorversion \"1.2.1\">"; \
 	} > $@
 
 features-supported.sgml: $(top_srcdir)/src/backend/catalog/sql_feature_packages.txt $(top_srcdir)/src/backend/catalog/sql_features.txt
@@ -268,8 +268,12 @@ postgres.xml: $(srcdir)/postgres.sgml $(ALMOSTALLSGML)
 	rm postgres.xmltmp
 # ' hello Emacs
 
-xslthtml: stylesheet.xsl postgres.xml
+xslthtml: xslthtml-stamp
+
+xslthtml-stamp: stylesheet.xsl postgres.xml
 	$(XSLTPROC) $(XSLTPROCFLAGS) $(XSLTPROC_HTML_FLAGS) $^
+	cp $(srcdir)/stylesheet.css html/
+	touch $@
 
 htmlhelp: stylesheet-hh.xsl postgres.xml
 	$(XSLTPROC) $(XSLTPROCFLAGS) $^
@@ -279,6 +283,10 @@ htmlhelp: stylesheet-hh.xsl postgres.xml
 
 %-US.fo: stylesheet-fo.xsl %.xml
 	$(XSLTPROC) $(XSLTPROCFLAGS) --stringparam paper.type USletter -o $@ $^
+
+epub: postgres.epub
+postgres.epub: postgres.xml
+	$(DBTOEPUB) $<
 
 
 ##
@@ -399,6 +407,8 @@ clean:
 	rm -f HTML.index $(GENERATED_SGML)
 # XSLT
 	rm -f postgres.xml postgres.xmltmp htmlhelp.hhp toc.hhc index.hhk *.fo
+# EPUB
+	rm -f postgres.epub
 # Texinfo
 	rm -f *.texixml *.texi *.info db2texi.refs
 

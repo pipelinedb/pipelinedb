@@ -24,7 +24,6 @@ SELECT pg_sleep(2.0);
  
 (1 row)
 
-SET enforce_two_phase_commit TO off;
 -- save counters
 CREATE TEMP TABLE prevstats AS
 SELECT t.seq_scan, t.seq_tup_read, t.idx_scan, t.idx_tup_fetch,
@@ -109,7 +108,7 @@ SELECT st.heap_blks_read + st.heap_blks_hit >= pr.heap_blks + cl.relpages,
  WHERE st.relname='tenk2' AND cl.relname='tenk2';
  ?column? | ?column? 
 ----------+----------
- t        | f
+ t        | t
 (1 row)
 
 -- End of Stats Test

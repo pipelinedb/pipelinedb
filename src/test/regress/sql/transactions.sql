@@ -36,9 +36,6 @@ SELECT * FROM aggtest order by a, b;
 
 -- Read-only tests
 
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-
 CREATE TABLE writetest (a int);
 CREATE TEMPORARY TABLE temptest (a int);
 

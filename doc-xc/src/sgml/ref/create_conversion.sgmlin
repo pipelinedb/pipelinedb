@@ -27,7 +27,6 @@ CREATE [ DEFAULT ] CONVERSION <replaceable>name</replaceable>
   <title>Description</title>
 
 &common;
-
   <para>
    <command>CREATE CONVERSION</command> defines a new conversion between
    character set encodings.  Also, conversions that
@@ -47,6 +46,7 @@ CREATE [ DEFAULT ] CONVERSION <replaceable>name</replaceable>
  <refsect1>
   <title>Parameters</title>
 
+&common;
    <variablelist>
     <varlistentry>
      <term><literal>DEFAULT</literal></term>
@@ -115,8 +115,7 @@ conv_proc(
     internal, -- destination (fill with a null terminated C string)
     integer   -- source string length
 ) RETURNS void;
-</programlisting>
-      </para>
+</programlisting></para>
      </listitem>
     </varlistentry>
    </variablelist>
@@ -125,6 +124,7 @@ conv_proc(
  <refsect1 id="sql-createconversion-notes">
   <title>Notes</title>
 
+&common;
   <para>
    Use <command>DROP CONVERSION</command> to remove user-defined conversions.
   </para>
@@ -143,22 +143,17 @@ conv_proc(
    <literal>LATIN1</literal> using <function>myfunc</>:
 <programlisting>
 CREATE CONVERSION myconv FOR 'UTF8' TO 'LATIN1' FROM myfunc;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
 
  <refsect1 id="sql-createconversion-compat">
   <title>Compatibility</title>
 
+&common;
   <para>
     <command>CREATE CONVERSION</command>
-<!## PG>
     is a <productname>PostgreSQL</productname> extension.
-<!## end>
-<!## XC>
-    is a <productname>Postgres-XC</productname> extension.
-<!## end>
     There is no <command>CREATE CONVERSION</command>
     statement in the SQL standard, but a <command>CREATE TRANSLATION</command>
     statement that is very similar in purpose and syntax.

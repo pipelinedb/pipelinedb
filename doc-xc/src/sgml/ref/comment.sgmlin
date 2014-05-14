@@ -26,17 +26,19 @@ COMMENT ON
   AGGREGATE <replaceable class="PARAMETER">agg_name</replaceable> (<replaceable class="PARAMETER">agg_type</replaceable> [, ...] ) |
   CAST (<replaceable>source_type</replaceable> AS <replaceable>target_type</replaceable>) |
   COLLATION <replaceable class="PARAMETER">object_name</replaceable> |
-  COLUMN <replaceable class="PARAMETER">table_name</replaceable>.<replaceable class="PARAMETER">column_name</replaceable> |
+  COLUMN <replaceable class="PARAMETER">relation_name</replaceable>.<replaceable class="PARAMETER">column_name</replaceable> |
   CONSTRAINT <replaceable class="PARAMETER">constraint_name</replaceable> ON <replaceable class="PARAMETER">table_name</replaceable> |
   CONVERSION <replaceable class="PARAMETER">object_name</replaceable> |
   DATABASE <replaceable class="PARAMETER">object_name</replaceable> |
   DOMAIN <replaceable class="PARAMETER">object_name</replaceable> |
   EXTENSION <replaceable class="PARAMETER">object_name</replaceable> |
+  EVENT TRIGGER <replaceable class="PARAMETER">object_name</replaceable> |
   FOREIGN DATA WRAPPER <replaceable class="PARAMETER">object_name</replaceable> |
   FOREIGN TABLE <replaceable class="PARAMETER">object_name</replaceable> |
   FUNCTION <replaceable class="PARAMETER">function_name</replaceable> ( [ [ <replaceable class="parameter">argmode</replaceable> ] [ <replaceable class="parameter">argname</replaceable> ] <replaceable class="parameter">argtype</replaceable> [, ...] ] ) |
   INDEX <replaceable class="PARAMETER">object_name</replaceable> |
   LARGE OBJECT <replaceable class="PARAMETER">large_object_oid</replaceable> |
+  MATERIALIZED VIEW <replaceable class="PARAMETER">object_name</replaceable> |
   OPERATOR <replaceable class="PARAMETER">operator_name</replaceable> (<replaceable class="PARAMETER">left_type</replaceable>, <replaceable class="PARAMETER">right_type</replaceable>) |
   OPERATOR CLASS <replaceable class="PARAMETER">object_name</replaceable> USING <replaceable class="parameter">index_method</replaceable> |
   OPERATOR FAMILY <replaceable class="PARAMETER">object_name</replaceable> USING <replaceable class="parameter">index_method</replaceable> |
@@ -63,7 +65,6 @@ COMMENT ON
   <title>Description</title>
 
 &common;
-
   <para>
    <command>COMMENT</command> stores a comment about a database object.
   </para>
@@ -97,10 +98,11 @@ COMMENT ON
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">object_name</replaceable></term>
-    <term><replaceable class="parameter">table_name.column_name</replaceable></term>
+    <term><replaceable class="parameter">relation_name</replaceable>.<replaceable>column_name</replaceable></term>
     <term><replaceable class="parameter">agg_name</replaceable></term>
     <term><replaceable class="parameter">constraint_name</replaceable></term>
     <term><replaceable class="parameter">function_name</replaceable></term>
@@ -113,6 +115,9 @@ COMMENT ON
       aggregates, collations, conversions, domains, foreign tables, functions,
       indexes, operators, operator classes, operator families, sequences,
       text search objects, types, and views can be schema-qualified.
+      When commenting on a column,
+      <replaceable class="parameter">relation_name</replaceable> must refer
+      to a table, view, composite type, or foreign table.
      </para>
     </listitem>
    </varlistentry>
@@ -230,6 +235,7 @@ COMMENT ON
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    There is presently no security mechanism for viewing comments: any user
    connected to a database can see all the comments for objects in
@@ -277,6 +283,7 @@ COMMENT ON FUNCTION my_function (timestamp) IS 'Returns Roman Numeral';
 COMMENT ON INDEX my_index IS 'Enforces uniqueness on employee ID';
 COMMENT ON LANGUAGE plpython IS 'Python support for stored procedures';
 COMMENT ON LARGE OBJECT 346344 IS 'Planning document';
+COMMENT ON MATERIALIZED VIEW my_matview IS 'Summary of order history';
 COMMENT ON OPERATOR ^ (text, text) IS 'Performs intersection of two texts';
 COMMENT ON OPERATOR - (NONE, integer) IS 'Unary minus';
 COMMENT ON OPERATOR CLASS int4ops USING btree IS '4 byte integer operators for btrees';
@@ -295,13 +302,13 @@ COMMENT ON TEXT SEARCH TEMPLATE snowball IS 'Snowball stemmer';
 COMMENT ON TRIGGER my_trigger ON my_table IS 'Used for RI';
 COMMENT ON TYPE complex IS 'Complex number data type';
 COMMENT ON VIEW my_view IS 'View of departmental costs';
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>COMMENT</command> command in the SQL standard.
   </para>

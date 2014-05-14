@@ -19,7 +19,7 @@
  * some don't pay attention to non-default functions at all.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_amproc.h
@@ -47,7 +47,7 @@ CATALOG(pg_amproc,2603)
 	Oid			amprocfamily;	/* the index opfamily this entry is for */
 	Oid			amproclefttype; /* procedure's left input data type */
 	Oid			amprocrighttype;	/* procedure's right input data type */
-	int2		amprocnum;		/* support procedure index */
+	int16		amprocnum;		/* support procedure index */
 	regproc		amproc;			/* OID of the proc */
 } FormData_pg_amproc;
 
@@ -373,5 +373,10 @@ DATA(insert (	4017   25 25 2 4028 ));
 DATA(insert (	4017   25 25 3 4029 ));
 DATA(insert (	4017   25 25 4 4030 ));
 DATA(insert (	4017   25 25 5 4031 ));
+DATA(insert (	3474   3831 3831 1 3469 ));
+DATA(insert (	3474   3831 3831 2 3470 ));
+DATA(insert (	3474   3831 3831 3 3471 ));
+DATA(insert (	3474   3831 3831 4 3472 ));
+DATA(insert (	3474   3831 3831 5 3473 ));
 
 #endif   /* PG_AMPROC_H */

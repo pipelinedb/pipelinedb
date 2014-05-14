@@ -28,7 +28,6 @@ LOAD '<replaceable class="PARAMETER">filename</replaceable>'
   <title>Description</title>
 
 &common;
-
   <para>
    This command loads a shared library file into the <productname>PostgreSQL</>
    server's address space.  If the file has been loaded already,
@@ -75,6 +74,7 @@ LOAD '<replaceable class="PARAMETER">filename</replaceable>'
 
  <refsect1 id="sql-load-compat">
   <title>Compatibility</title>
+
 &common;
   <para>
    <command>LOAD</command> is a <productname>PostgreSQL</productname>

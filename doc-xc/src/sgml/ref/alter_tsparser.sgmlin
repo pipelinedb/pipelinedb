@@ -30,7 +30,6 @@ ALTER TEXT SEARCH PARSER <replaceable>name</replaceable> SET SCHEMA <replaceable
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER TEXT SEARCH PARSER</command> changes the definition of
    a text search parser.  Currently, the only supported functionality
@@ -45,6 +44,7 @@ ALTER TEXT SEARCH PARSER <replaceable>name</replaceable> SET SCHEMA <replaceable
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -78,6 +78,7 @@ ALTER TEXT SEARCH PARSER <replaceable>name</replaceable> SET SCHEMA <replaceable
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>ALTER TEXT SEARCH PARSER</command> statement in
    the SQL standard.

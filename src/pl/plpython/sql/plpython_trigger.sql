@@ -253,7 +253,7 @@ DROP TRIGGER stupid_trigger6 ON trigger_test;
 
 CREATE FUNCTION stupid7() RETURNS trigger
 AS $$
-    TD["new"] = {'a': 'foo', 'b': 'bar'}
+    TD["new"] = {'v': 'foo', 'a': 'bar'}
     return "MODIFY";
 $$ LANGUAGE plpythonu;
 
@@ -270,7 +270,7 @@ DROP TRIGGER stupid_trigger7 ON trigger_test;
 
 CREATE FUNCTION stupid7u() RETURNS trigger
 AS $$
-    TD["new"] = {u'a': 'foo', u'b': 'bar'}
+    TD["new"] = {u'v': 'foo', u'a': 'bar'}
     return "MODIFY"
 $$ LANGUAGE plpythonu;
 
@@ -388,3 +388,21 @@ INSERT INTO composite_trigger_nested_test VALUES (NULL);
 INSERT INTO composite_trigger_nested_test VALUES (ROW(ROW(1, 'f'), NULL, 3));
 INSERT INTO composite_trigger_nested_test VALUES (ROW(ROW(NULL, 't'), ROW(1, 'f'), NULL));
 SELECT * FROM composite_trigger_nested_test;
+
+-- check that using a function as a trigger over two tables works correctly
+CREATE FUNCTION trig1234() RETURNS trigger LANGUAGE plpythonu AS $$
+    TD["new"]["data"] = '1234'
+    return 'MODIFY'
+$$;
+
+CREATE TABLE a(data text);
+CREATE TABLE b(data int); -- different type conversion
+
+CREATE TRIGGER a_t BEFORE INSERT ON a FOR EACH ROW EXECUTE PROCEDURE trig1234();
+CREATE TRIGGER b_t BEFORE INSERT ON b FOR EACH ROW EXECUTE PROCEDURE trig1234();
+
+INSERT INTO a DEFAULT VALUES;
+SELECT * FROM a;
+DROP TABLE a;
+INSERT INTO b DEFAULT VALUES;
+SELECT * FROM b;

@@ -205,7 +205,7 @@ explain (costs off, verbose on, nodes off) select * from xc_sort1_hash join xc_s
                Remote query: SELECT val2, val FROM ONLY public.xc_sort1_hash WHERE true
          ->  Hash
                Output: xc_sort2_hash.val, xc_sort2_hash.val2
-               ->  Data Node Scan on xc_sort2_hash "_REMOTE_TABLE_QUERY_"
+               ->  Data Node Scan on xc_sort2_hash "_REMOTE_TABLE_QUERY__1"
                      Output: xc_sort2_hash.val, xc_sort2_hash.val2
                      Remote query: SELECT val, val2 FROM ONLY public.xc_sort2_hash WHERE true
 (14 rows)
@@ -355,7 +355,7 @@ explain (costs off, verbose on, nodes off) select * from xc_sort1_rep join xc_so
                Remote query: SELECT val2, val FROM ONLY public.xc_sort1_rep WHERE true
          ->  Hash
                Output: xc_sort2_hash.val, xc_sort2_hash.val2
-               ->  Data Node Scan on xc_sort2_hash "_REMOTE_TABLE_QUERY_"
+               ->  Data Node Scan on xc_sort2_hash "_REMOTE_TABLE_QUERY__1"
                      Output: xc_sort2_hash.val, xc_sort2_hash.val2
                      Remote query: SELECT val, val2 FROM ONLY public.xc_sort2_hash WHERE true
 (14 rows)

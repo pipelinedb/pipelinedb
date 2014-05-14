@@ -3,7 +3,7 @@
  * hashfunc.c
  *	  Support functions for hash access method.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -142,7 +142,7 @@ hashint2vector(PG_FUNCTION_ARGS)
 {
 	int2vector *key = (int2vector *) PG_GETARG_POINTER(0);
 
-	return hash_any((unsigned char *) key->values, key->dim1 * sizeof(int2));
+	return hash_any((unsigned char *) key->values, key->dim1 * sizeof(int16));
 }
 
 Datum

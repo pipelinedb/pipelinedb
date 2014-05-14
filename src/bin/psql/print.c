@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  *
  * src/bin/psql/print.c
  */
@@ -23,7 +23,6 @@
 #include <locale.h>
 
 #include "catalog/pg_type.h"
-#include "pqsignal.h"
 
 #include "common.h"
 #include "mbprint.h"
@@ -131,34 +130,6 @@ static void IsPagerNeeded(const printTableContent *cont, const int extra_lines, 
 static void print_aligned_vertical(const printTableContent *cont, FILE *fout);
 
 
-static void *
-pg_local_malloc(size_t size)
-{
-	void	   *tmp;
-
-	tmp = malloc(size);
-	if (!tmp)
-	{
-		fprintf(stderr, _("out of memory\n"));
-		exit(EXIT_FAILURE);
-	}
-	return tmp;
-}
-
-static void *
-pg_local_calloc(int count, size_t size)
-{
-	void	   *tmp;
-
-	tmp = calloc(count, size);
-	if (!tmp)
-	{
-		fprintf(stderr, _("out of memory\n"));
-		exit(EXIT_FAILURE);
-	}
-	return tmp;
-}
-
 static int
 integer_digits(const char *my_str)
 {
@@ -210,8 +181,7 @@ format_numeric_locale(const char *my_str)
 				leading_digits;
 	int			groupdigits = atoi(grouping);
 	int			new_str_start = 0;
-	char	   *new_str = pg_local_malloc(
-									 strlen_with_numeric_locale(my_str) + 1);
+	char	   *new_str = pg_malloc(strlen_with_numeric_locale(my_str) + 1);
 
 	leading_digits = (int_len % groupdigits != 0) ?
 		int_len % groupdigits : groupdigits;
@@ -468,10 +438,13 @@ print_unaligned_vertical(const printTableContent *cont, FILE *fout)
 		}
 
 		/* see above in print_unaligned_text() */
-		if (cont->opt->recordSep.separator_zero)
-			print_separator(cont->opt->recordSep, fout);
-		else
-			fputc('\n', fout);
+		if (need_recordsep)
+		{
+			if (cont->opt->recordSep.separator_zero)
+				print_separator(cont->opt->recordSep, fout);
+			else
+				fputc('\n', fout);
+		}
 	}
 }
 
@@ -571,18 +544,18 @@ print_aligned_text(const printTableContent *cont, FILE *fout)
 	if (cont->ncolumns > 0)
 	{
 		col_count = cont->ncolumns;
-		width_header = pg_local_calloc(col_count, sizeof(*width_header));
-		width_average = pg_local_calloc(col_count, sizeof(*width_average));
-		max_width = pg_local_calloc(col_count, sizeof(*max_width));
-		width_wrap = pg_local_calloc(col_count, sizeof(*width_wrap));
-		max_nl_lines = pg_local_calloc(col_count, sizeof(*max_nl_lines));
-		curr_nl_line = pg_local_calloc(col_count, sizeof(*curr_nl_line));
-		col_lineptrs = pg_local_calloc(col_count, sizeof(*col_lineptrs));
-		max_bytes = pg_local_calloc(col_count, sizeof(*max_bytes));
-		format_buf = pg_local_calloc(col_count, sizeof(*format_buf));
-		header_done = pg_local_calloc(col_count, sizeof(*header_done));
-		bytes_output = pg_local_calloc(col_count, sizeof(*bytes_output));
-		wrap = pg_local_calloc(col_count, sizeof(*wrap));
+		width_header = pg_malloc0(col_count * sizeof(*width_header));
+		width_average = pg_malloc0(col_count * sizeof(*width_average));
+		max_width = pg_malloc0(col_count * sizeof(*max_width));
+		width_wrap = pg_malloc0(col_count * sizeof(*width_wrap));
+		max_nl_lines = pg_malloc0(col_count * sizeof(*max_nl_lines));
+		curr_nl_line = pg_malloc0(col_count * sizeof(*curr_nl_line));
+		col_lineptrs = pg_malloc0(col_count * sizeof(*col_lineptrs));
+		max_bytes = pg_malloc0(col_count * sizeof(*max_bytes));
+		format_buf = pg_malloc0(col_count * sizeof(*format_buf));
+		header_done = pg_malloc0(col_count * sizeof(*header_done));
+		bytes_output = pg_malloc0(col_count * sizeof(*bytes_output));
+		wrap = pg_malloc0(col_count * sizeof(*wrap));
 	}
 	else
 	{
@@ -678,10 +651,10 @@ print_aligned_text(const printTableContent *cont, FILE *fout)
 	for (i = 0; i < col_count; i++)
 	{
 		/* Add entry for ptr == NULL array termination */
-		col_lineptrs[i] = pg_local_calloc(max_nl_lines[i] + 1,
-										  sizeof(**col_lineptrs));
+		col_lineptrs[i] = pg_malloc0((max_nl_lines[i] + 1) *
+									 sizeof(**col_lineptrs));
 
-		format_buf[i] = pg_local_malloc(max_bytes[i] + 1);
+		format_buf[i] = pg_malloc(max_bytes[i] + 1);
 
 		col_lineptrs[i]->ptr = format_buf[i];
 	}
@@ -1198,7 +1171,8 @@ print_aligned_vertical(const printTableContent *cont, FILE *fout)
 	if (cont->cells[0] == NULL && cont->opt->start_table &&
 		cont->opt->stop_table)
 	{
-		fprintf(fout, _("(No rows)\n"));
+		if (!opt_tuples_only)
+			fprintf(fout, _("(No rows)\n"));
 		return;
 	}
 
@@ -1247,11 +1221,11 @@ print_aligned_vertical(const printTableContent *cont, FILE *fout)
 	 * We now have all the information we need to setup the formatting
 	 * structures
 	 */
-	dlineptr = pg_local_malloc((sizeof(*dlineptr)) * (dheight + 1));
-	hlineptr = pg_local_malloc((sizeof(*hlineptr)) * (hheight + 1));
+	dlineptr = pg_malloc((sizeof(*dlineptr)) * (dheight + 1));
+	hlineptr = pg_malloc((sizeof(*hlineptr)) * (hheight + 1));
 
-	dlineptr->ptr = pg_local_malloc(dformatsize);
-	hlineptr->ptr = pg_local_malloc(hformatsize);
+	dlineptr->ptr = pg_malloc(dformatsize);
+	hlineptr->ptr = pg_malloc(hformatsize);
 
 	if (cont->opt->start_table)
 	{
@@ -1641,8 +1615,8 @@ print_latex_text(const printTableContent *cont, FILE *fout)
 	if (cancel_pressed)
 		return;
 
-	if (opt_border > 2)
-		opt_border = 2;
+	if (opt_border > 3)
+		opt_border = 3;
 
 	if (cont->opt->start_table)
 	{
@@ -1657,7 +1631,7 @@ print_latex_text(const printTableContent *cont, FILE *fout)
 		/* begin environment and set alignments and borders */
 		fputs("\\begin{tabular}{", fout);
 
-		if (opt_border == 2)
+		if (opt_border >= 2)
 			fputs("| ", fout);
 		for (i = 0; i < cont->ncolumns; i++)
 		{
@@ -1665,12 +1639,12 @@ print_latex_text(const printTableContent *cont, FILE *fout)
 			if (opt_border != 0 && i < cont->ncolumns - 1)
 				fputs(" | ", fout);
 		}
-		if (opt_border == 2)
+		if (opt_border >= 2)
 			fputs(" |", fout);
 
 		fputs("}\n", fout);
 
-		if (!opt_tuples_only && opt_border == 2)
+		if (!opt_tuples_only && opt_border >= 2)
 			fputs("\\hline\n", fout);
 
 		/* print headers */
@@ -1697,6 +1671,8 @@ print_latex_text(const printTableContent *cont, FILE *fout)
 		if ((i + 1) % cont->ncolumns == 0)
 		{
 			fputs(" \\\\\n", fout);
+			if (opt_border == 3)
+				fputs("\\hline\n", fout);
 			if (cancel_pressed)
 				break;
 		}
@@ -1727,6 +1703,162 @@ print_latex_text(const printTableContent *cont, FILE *fout)
 
 		fputc('\n', fout);
 	}
+}
+
+
+static void
+print_latex_longtable_text(const printTableContent *cont, FILE *fout)
+{
+	bool		opt_tuples_only = cont->opt->tuples_only;
+	unsigned short opt_border = cont->opt->border;
+	unsigned int i;
+	const char *opt_table_attr = cont->opt->tableAttr;
+	const char *next_opt_table_attr_char = opt_table_attr;
+	const char *last_opt_table_attr_char = NULL;
+	const char *const * ptr;
+
+	if (cancel_pressed)
+		return;
+
+	if (opt_border > 3)
+		opt_border = 3;
+
+	if (cont->opt->start_table)
+	{
+		/* begin environment and set alignments and borders */
+		fputs("\\begin{longtable}{", fout);
+
+		if (opt_border >= 2)
+			fputs("| ", fout);
+
+		for (i = 0; i < cont->ncolumns; i++)
+		{
+			/* longtable supports either a width (p) or an alignment (l/r) */
+			/* Are we left-justified and was a proportional width specified? */
+			if (*(cont->aligns + i) == 'l' && opt_table_attr)
+			{
+#define LONGTABLE_WHITESPACE	" \t\n"
+
+				/* advance over whitespace */
+				next_opt_table_attr_char += strspn(next_opt_table_attr_char,
+												   LONGTABLE_WHITESPACE);
+				/* We have a value? */
+				if (next_opt_table_attr_char[0] != '\0')
+				{
+					fputs("p{", fout);
+					fwrite(next_opt_table_attr_char, strcspn(next_opt_table_attr_char,
+											 LONGTABLE_WHITESPACE), 1, fout);
+					last_opt_table_attr_char = next_opt_table_attr_char;
+					next_opt_table_attr_char += strcspn(next_opt_table_attr_char,
+														LONGTABLE_WHITESPACE);
+					fputs("\\textwidth}", fout);
+				}
+				/* use previous value */
+				else if (last_opt_table_attr_char != NULL)
+				{
+					fputs("p{", fout);
+					fwrite(last_opt_table_attr_char, strcspn(last_opt_table_attr_char,
+											 LONGTABLE_WHITESPACE), 1, fout);
+					fputs("\\textwidth}", fout);
+				}
+				else
+					fputc('l', fout);
+			}
+			else
+				fputc(*(cont->aligns + i), fout);
+
+			if (opt_border != 0 && i < cont->ncolumns - 1)
+				fputs(" | ", fout);
+		}
+
+		if (opt_border >= 2)
+			fputs(" |", fout);
+
+		fputs("}\n", fout);
+
+		/* print headers */
+		if (!opt_tuples_only)
+		{
+			/* firsthead */
+			if (opt_border >= 2)
+				fputs("\\toprule\n", fout);
+			for (i = 0, ptr = cont->headers; i < cont->ncolumns; i++, ptr++)
+			{
+				if (i != 0)
+					fputs(" & ", fout);
+				fputs("\\small\\textbf{\\textit{", fout);
+				latex_escaped_print(*ptr, fout);
+				fputs("}}", fout);
+			}
+			fputs(" \\\\\n", fout);
+			fputs("\\midrule\n\\endfirsthead\n", fout);
+
+			/* secondary heads */
+			if (opt_border >= 2)
+				fputs("\\toprule\n", fout);
+			for (i = 0, ptr = cont->headers; i < cont->ncolumns; i++, ptr++)
+			{
+				if (i != 0)
+					fputs(" & ", fout);
+				fputs("\\small\\textbf{\\textit{", fout);
+				latex_escaped_print(*ptr, fout);
+				fputs("}}", fout);
+			}
+			fputs(" \\\\\n", fout);
+			/* If the line under the row already appeared, don't do another */
+			if (opt_border != 3)
+				fputs("\\midrule\n", fout);
+			fputs("\\endhead\n", fout);
+
+			/* table name, caption? */
+			if (!opt_tuples_only && cont->title)
+			{
+				/* Don't output if we are printing a line under each row */
+				if (opt_border == 2)
+					fputs("\\bottomrule\n", fout);
+				fputs("\\caption[", fout);
+				latex_escaped_print(cont->title, fout);
+				fputs(" (Continued)]{", fout);
+				latex_escaped_print(cont->title, fout);
+				fputs("}\n\\endfoot\n", fout);
+				if (opt_border == 2)
+					fputs("\\bottomrule\n", fout);
+				fputs("\\caption[", fout);
+				latex_escaped_print(cont->title, fout);
+				fputs("]{", fout);
+				latex_escaped_print(cont->title, fout);
+				fputs("}\n\\endlastfoot\n", fout);
+			}
+			/* output bottom table line? */
+			else if (opt_border >= 2)
+			{
+				fputs("\\bottomrule\n\\endfoot\n", fout);
+				fputs("\\bottomrule\n\\endlastfoot\n", fout);
+			}
+		}
+	}
+
+	/* print cells */
+	for (i = 0, ptr = cont->cells; *ptr; i++, ptr++)
+	{
+		/* Add a line under each row? */
+		if (i != 0 && i % cont->ncolumns != 0)
+			fputs("\n&\n", fout);
+		fputs("\\raggedright{", fout);
+		latex_escaped_print(*ptr, fout);
+		fputc('}', fout);
+		if ((i + 1) % cont->ncolumns == 0)
+		{
+			fputs(" \\tabularnewline\n", fout);
+			if (opt_border == 3)
+				fputs(" \\hline\n", fout);
+		}
+		if (cancel_pressed)
+			break;
+	}
+
+	if (cont->opt->stop_table)
+		fputs("\\end{longtable}\n", fout);
 }
 
 
@@ -2132,17 +2264,14 @@ printTableInit(printTableContent *const content, const printTableOpt *opt,
 	content->ncolumns = ncolumns;
 	content->nrows = nrows;
 
-	content->headers = pg_local_calloc(ncolumns + 1,
-									   sizeof(*content->headers));
+	content->headers = pg_malloc0((ncolumns + 1) * sizeof(*content->headers));
 
-	content->cells = pg_local_calloc(ncolumns * nrows + 1,
-									 sizeof(*content->cells));
+	content->cells = pg_malloc0((ncolumns * nrows + 1) * sizeof(*content->cells));
 
 	content->cellmustfree = NULL;
 	content->footers = NULL;
 
-	content->aligns = pg_local_calloc(ncolumns + 1,
-									  sizeof(*content->align));
+	content->aligns = pg_malloc0((ncolumns + 1) * sizeof(*content->align));
 
 	content->header = content->headers;
 	content->cell = content->cells;
@@ -2230,8 +2359,8 @@ printTableAddCell(printTableContent *const content, char *cell,
 	if (mustfree)
 	{
 		if (content->cellmustfree == NULL)
-			content->cellmustfree = pg_local_calloc(
-					   content->ncolumns * content->nrows + 1, sizeof(bool));
+			content->cellmustfree =
+				pg_malloc0((content->ncolumns * content->nrows + 1) * sizeof(bool));
 
 		content->cellmustfree[content->cellsadded] = true;
 	}
@@ -2256,7 +2385,7 @@ printTableAddFooter(printTableContent *const content, const char *footer)
 {
 	printTableFooter *f;
 
-	f = pg_local_calloc(1, sizeof(*f));
+	f = pg_malloc0(sizeof(*f));
 	f->data = pg_strdup(footer);
 
 	if (content->footers == NULL)
@@ -2425,6 +2554,12 @@ printTable(const printTableContent *cont, FILE *fout, FILE *flog)
 				print_latex_vertical(cont, fout);
 			else
 				print_latex_text(cont, fout);
+			break;
+		case PRINT_LATEX_LONGTABLE:
+			if (cont->opt->expanded == 1)
+				print_latex_vertical(cont, fout);
+			else
+				print_latex_longtable_text(cont, fout);
 			break;
 		case PRINT_TROFF_MS:
 			if (cont->opt->expanded == 1)

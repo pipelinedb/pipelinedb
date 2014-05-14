@@ -9,7 +9,7 @@
  * The Windows implementation uses Windows events that are inherited by
  * all postmaster child processes.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -20,15 +20,23 @@
 #include "postgres.h"
 
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <unistd.h>
 
 #include "miscadmin.h"
+#include "portability/instr_time.h"
 #include "postmaster/postmaster.h"
 #include "storage/latch.h"
 #include "storage/pmsignal.h"
 #include "storage/shmem.h"
 
+
+void
+InitializeLatchSupport(void)
+{
+	/* currently, nothing to do here for Windows */
+}
 
 void
 InitLatch(volatile Latch *latch)
@@ -94,6 +102,9 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
 				  long timeout)
 {
 	DWORD		rc;
+	instr_time	start_time,
+				cur_time;
+	long		cur_timeout;
 	HANDLE		events[4];
 	HANDLE		latchevent;
 	HANDLE		sockevent = WSA_INVALID_EVENT;
@@ -112,11 +123,19 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
 	if ((wakeEvents & WL_LATCH_SET) && latch->owner_pid != MyProcPid)
 		elog(ERROR, "cannot wait on a latch owned by another process");
 
-	/* Convert timeout to form used by WaitForMultipleObjects() */
+	/*
+	 * Initialize timeout if requested.  We must record the current time so
+	 * that we can determine the remaining timeout if WaitForMultipleObjects
+	 * is interrupted.
+	 */
 	if (wakeEvents & WL_TIMEOUT)
-		Assert(timeout >= 0);
+	{
+		INSTR_TIME_SET_CURRENT(start_time);
+		Assert(timeout >= 0 && timeout <= INT_MAX);
+		cur_timeout = timeout;
+	}
 	else
-		timeout = INFINITE;
+		cur_timeout = INFINITE;
 
 	/*
 	 * Construct an array of event handles for WaitforMultipleObjects().
@@ -181,7 +200,7 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
 			break;
 		}
 
-		rc = WaitForMultipleObjects(numevents, events, FALSE, timeout);
+		rc = WaitForMultipleObjects(numevents, events, FALSE, cur_timeout);
 
 		if (rc == WAIT_FAILED)
 			elog(ERROR, "WaitForMultipleObjects() failed: error code %lu",
@@ -197,7 +216,11 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
 		}
 		else if (rc == WAIT_OBJECT_0 + 1)
 		{
-			/* Latch is set, we'll handle that on next iteration of loop */
+			/*
+			 * Latch is set.  We'll handle that on next iteration of loop, but
+			 * let's not waste the cycles to update cur_timeout below.
+			 */
+			continue;
 		}
 		else if ((wakeEvents & (WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE)) &&
 				 rc == WAIT_OBJECT_0 + 2)		/* socket is at event slot 2 */
@@ -234,8 +257,17 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
 		}
 		else
 			elog(ERROR, "unexpected return code from WaitForMultipleObjects(): %lu", rc);
-	}
-	while (result == 0);
+
+		/* If we're not done, update cur_timeout for next iteration */
+		if (result == 0 && cur_timeout != INFINITE)
+		{
+			INSTR_TIME_SET_CURRENT(cur_time);
+			INSTR_TIME_SUBTRACT(cur_time, start_time);
+			cur_timeout = timeout - (long) INSTR_TIME_GET_MILLISEC(cur_time);
+			if (cur_timeout < 0)
+				cur_timeout = 0;
+		}
+	} while (result == 0);
 
 	/* Clean up the event object we created for the socket */
 	if (sockevent != WSA_INVALID_EVENT)
@@ -247,6 +279,10 @@ WaitLatchOrSocket(volatile Latch *latch, int wakeEvents, pgsocket sock,
 	return result;
 }
 
+/*
+ * The comments above the unix implementation (unix_latch.c) of this function
+ * apply here as well.
+ */
 void
 SetLatch(volatile Latch *latch)
 {

@@ -3,7 +3,7 @@
  * copydir.c
  *	  copies a directory
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *	While "xcopy /e /i /q" works fine for copying directories, on Windows XP
@@ -25,17 +25,6 @@
 #include "storage/copydir.h"
 #include "storage/fd.h"
 #include "miscadmin.h"
-
-/*
- *	On Windows, call non-macro versions of palloc; we can't reference
- *	CurrentMemoryContext in this file because of PGDLLIMPORT conflict.
- */
-#if defined(WIN32) || defined(__CYGWIN__)
-#undef palloc
-#undef pstrdup
-#define palloc(sz)		pgport_palloc(sz)
-#define pstrdup(str)	pgport_pstrdup(str)
-#endif
 
 
 static void fsync_fname(char *fname, bool isdir);
@@ -98,7 +87,11 @@ copydir(char *fromdir, char *todir, bool recurse)
 
 	/*
 	 * Be paranoid here and fsync all files to ensure the copy is really done.
+	 * But if fsync is disabled, we're done.
 	 */
+	if (!enableFsync)
+		return;
+
 	xldir = AllocateDir(todir);
 	if (xldir == NULL)
 		ereport(ERROR,
@@ -158,14 +151,14 @@ copy_file(char *fromfile, char *tofile)
 	/*
 	 * Open the files
 	 */
-	srcfd = BasicOpenFile(fromfile, O_RDONLY | PG_BINARY, 0);
+	srcfd = OpenTransientFile(fromfile, O_RDONLY | PG_BINARY, 0);
 	if (srcfd < 0)
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("could not open file \"%s\": %m", fromfile)));
 
-	dstfd = BasicOpenFile(tofile, O_RDWR | O_CREAT | O_EXCL | PG_BINARY,
-						  S_IRUSR | S_IWUSR);
+	dstfd = OpenTransientFile(tofile, O_RDWR | O_CREAT | O_EXCL | PG_BINARY,
+							  S_IRUSR | S_IWUSR);
 	if (dstfd < 0)
 		ereport(ERROR,
 				(errcode_for_file_access(),
@@ -200,17 +193,17 @@ copy_file(char *fromfile, char *tofile)
 		/*
 		 * We fsync the files later but first flush them to avoid spamming the
 		 * cache and hopefully get the kernel to start writing them out before
-		 * the fsync comes.
+		 * the fsync comes.  Ignore any error, since it's only a hint.
 		 */
-		pg_flush_data(dstfd, offset, nbytes);
+		(void) pg_flush_data(dstfd, offset, nbytes);
 	}
 
-	if (close(dstfd))
+	if (CloseTransientFile(dstfd))
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("could not close file \"%s\": %m", tofile)));
 
-	close(srcfd);
+	CloseTransientFile(srcfd);
 
 	pfree(buffer);
 }
@@ -234,13 +227,13 @@ fsync_fname(char *fname, bool isdir)
 	 * cases here
 	 */
 	if (!isdir)
-		fd = BasicOpenFile(fname,
-						   O_RDWR | PG_BINARY,
-						   S_IRUSR | S_IWUSR);
+		fd = OpenTransientFile(fname,
+							   O_RDWR | PG_BINARY,
+							   S_IRUSR | S_IWUSR);
 	else
-		fd = BasicOpenFile(fname,
-						   O_RDONLY | PG_BINARY,
-						   S_IRUSR | S_IWUSR);
+		fd = OpenTransientFile(fname,
+							   O_RDONLY | PG_BINARY,
+							   S_IRUSR | S_IWUSR);
 
 	/*
 	 * Some OSs don't allow us to open directories at all (Windows returns
@@ -259,7 +252,7 @@ fsync_fname(char *fname, bool isdir)
 	/* Some OSs don't allow us to fsync directories at all */
 	if (returncode != 0 && isdir && errno == EBADF)
 	{
-		close(fd);
+		CloseTransientFile(fd);
 		return;
 	}
 
@@ -268,5 +261,5 @@ fsync_fname(char *fname, bool isdir)
 				(errcode_for_file_access(),
 				 errmsg("could not fsync file \"%s\": %m", fname)));
 
-	close(fd);
+	CloseTransientFile(fd);
 }

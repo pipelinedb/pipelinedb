@@ -13,7 +13,7 @@
   information schema is defined in the SQL standard and can therefore
   be expected to be portable and remain stable &mdash; unlike the system
   catalogs, which are specific to
-  <productname>PostgreSQL</productname> and are modelled after
+  <productname>PostgreSQL</productname> and are modeled after
   implementation concerns.  The information schema views do not,
   however, contain information about
   <productname>PostgreSQL</productname>-specific features; to inquire
@@ -2167,7 +2167,7 @@
       <entry><literal>collation_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
       <entry>
-       Name of the collation of the column, null if default or the
+       Name of the collation of the domain, null if default or the
        data type of the domain is not collatable
       </entry>
      </row>

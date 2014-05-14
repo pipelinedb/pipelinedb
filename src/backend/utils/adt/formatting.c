@@ -4,7 +4,7 @@
  * src/backend/utils/adt/formatting.c
  *
  *
- *	 Portions Copyright (c) 1999-2012, PostgreSQL Global Development Group
+ *	 Portions Copyright (c) 1999-2013, PostgreSQL Global Development Group
  *
  *
  *	 TO_CHAR(); TO_TIMESTAMP(); TO_DATE(); TO_NUMBER();
@@ -412,7 +412,7 @@ typedef struct
 				mi,
 				ss,
 				ssss,
-				d,
+				d,				/* stored as 1-7, Sunday = 1, 0 means missing */
 				dd,
 				ddd,
 				mm,
@@ -1045,7 +1045,6 @@ suff_search(char *str, KeySuffix *suf, int type)
 static void
 NUMDesc_prepare(NUMDesc *num, FormatNode *n)
 {
-
 	if (n->type != NODE_TYPE_ACTION)
 		return;
 
@@ -1439,7 +1438,6 @@ get_th(char *num, int type)
 				return numTH[3];
 			return numth[3];
 	}
-	return NULL;
 }
 
 /* ----------
@@ -1493,12 +1491,7 @@ str_tolower(const char *buff, size_t nbytes, Oid collid)
 	/* C/POSIX collations use this path regardless of database encoding */
 	if (lc_ctype_is_c(collid))
 	{
-		char	   *p;
-
-		result = pnstrdup(buff, nbytes);
-
-		for (p = result; *p; p++)
-			*p = pg_ascii_tolower((unsigned char) *p);
+		result = asc_tolower(buff, nbytes);
 	}
 #ifdef USE_WIDE_UPPER_LOWER
 	else if (pg_database_encoding_max_length() > 1)
@@ -1618,12 +1611,7 @@ str_toupper(const char *buff, size_t nbytes, Oid collid)
 	/* C/POSIX collations use this path regardless of database encoding */
 	if (lc_ctype_is_c(collid))
 	{
-		char	   *p;
-
-		result = pnstrdup(buff, nbytes);
-
-		for (p = result; *p; p++)
-			*p = pg_ascii_toupper((unsigned char) *p);
+		result = asc_toupper(buff, nbytes);
 	}
 #ifdef USE_WIDE_UPPER_LOWER
 	else if (pg_database_encoding_max_length() > 1)
@@ -1744,23 +1732,7 @@ str_initcap(const char *buff, size_t nbytes, Oid collid)
 	/* C/POSIX collations use this path regardless of database encoding */
 	if (lc_ctype_is_c(collid))
 	{
-		char	   *p;
-
-		result = pnstrdup(buff, nbytes);
-
-		for (p = result; *p; p++)
-		{
-			char		c;
-
-			if (wasalnum)
-				*p = c = pg_ascii_tolower((unsigned char) *p);
-			else
-				*p = c = pg_ascii_toupper((unsigned char) *p);
-			/* we don't trust isalnum() here */
-			wasalnum = ((c >= 'A' && c <= 'Z') ||
-						(c >= 'a' && c <= 'z') ||
-						(c >= '0' && c <= '9'));
-		}
+		result = asc_initcap(buff, nbytes);
 	}
 #ifdef USE_WIDE_UPPER_LOWER
 	else if (pg_database_encoding_max_length() > 1)
@@ -1887,6 +1859,87 @@ str_initcap(const char *buff, size_t nbytes, Oid collid)
 	return result;
 }
 
+/*
+ * ASCII-only lower function
+ *
+ * We pass the number of bytes so we can pass varlena and char*
+ * to this function.  The result is a palloc'd, null-terminated string.
+ */
+char *
+asc_tolower(const char *buff, size_t nbytes)
+{
+	char	   *result;
+	char	   *p;
+
+	if (!buff)
+		return NULL;
+
+	result = pnstrdup(buff, nbytes);
+
+	for (p = result; *p; p++)
+		*p = pg_ascii_tolower((unsigned char) *p);
+
+	return result;
+}
+
+/*
+ * ASCII-only upper function
+ *
+ * We pass the number of bytes so we can pass varlena and char*
+ * to this function.  The result is a palloc'd, null-terminated string.
+ */
+char *
+asc_toupper(const char *buff, size_t nbytes)
+{
+	char	   *result;
+	char	   *p;
+
+	if (!buff)
+		return NULL;
+
+	result = pnstrdup(buff, nbytes);
+
+	for (p = result; *p; p++)
+		*p = pg_ascii_toupper((unsigned char) *p);
+
+	return result;
+}
+
+/*
+ * ASCII-only initcap function
+ *
+ * We pass the number of bytes so we can pass varlena and char*
+ * to this function.  The result is a palloc'd, null-terminated string.
+ */
+char *
+asc_initcap(const char *buff, size_t nbytes)
+{
+	char	   *result;
+	char	   *p;
+	int			wasalnum = false;
+
+	if (!buff)
+		return NULL;
+
+	result = pnstrdup(buff, nbytes);
+
+	for (p = result; *p; p++)
+	{
+		char		c;
+
+		if (wasalnum)
+			*p = c = pg_ascii_tolower((unsigned char) *p);
+		else
+			*p = c = pg_ascii_toupper((unsigned char) *p);
+		/* we don't trust isalnum() here */
+		wasalnum = ((c >= 'A' && c <= 'Z') ||
+					(c >= 'a' && c <= 'z') ||
+					(c >= '0' && c <= '9'));
+	}
+
+	return result;
+}
+
 /* convenience routines for when the input is null-terminated */
 
 static char *
@@ -1906,6 +1959,20 @@ str_initcap_z(const char *buff, Oid collid)
 {
 	return str_initcap(buff, strlen(buff), collid);
 }
+
+static char *
+asc_tolower_z(const char *buff)
+{
+	return asc_tolower(buff, strlen(buff));
+}
+
+static char *
+asc_toupper_z(const char *buff)
+{
+	return asc_toupper(buff, strlen(buff));
+}
+
+/* asc_initcap_z is not currently needed */
 
 
 /* ----------
@@ -1987,20 +2054,20 @@ static int
 adjust_partial_year_to_2020(int year)
 {
 	/*
-	 * Adjust all dates toward 2020;  this is effectively what happens when we
+	 * Adjust all dates toward 2020; this is effectively what happens when we
 	 * assume '70' is 1970 and '69' is 2069.
 	 */
 	/* Force 0-69 into the 2000's */
 	if (year < 70)
 		return year + 2000;
 	/* Force 70-99 into the 1900's */
-	else if (year >= 70 && year < 100)
+	else if (year < 100)
 		return year + 1900;
 	/* Force 100-519 into the 2000's */
-	else if (year >= 100 && year < 519)
+	else if (year < 520)
 		return year + 2000;
 	/* Force 520-999 into the 1000's */
-	else if (year >= 520 && year < 1000)
+	else if (year < 1000)
 		return year + 1000;
 	else
 		return year;
@@ -2419,7 +2486,8 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 				INVALID_FOR_INTERVAL;
 				if (tmtcTzn(in))
 				{
-					char	   *p = str_tolower_z(tmtcTzn(in), collid);
+					/* We assume here that timezone names aren't localized */
+					char	   *p = asc_tolower_z(tmtcTzn(in));
 
 					strcpy(s, p);
 					pfree(p);
@@ -2466,7 +2534,7 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 					strcpy(s, str_toupper_z(localized_full_months[tm->tm_mon - 1], collid));
 				else
 					sprintf(s, "%*s", S_FM(n->suffix) ? 0 : -9,
-						 str_toupper_z(months_full[tm->tm_mon - 1], collid));
+							asc_toupper_z(months_full[tm->tm_mon - 1]));
 				s += strlen(s);
 				break;
 			case DCH_Month:
@@ -2476,7 +2544,8 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 				if (S_TM(n->suffix))
 					strcpy(s, str_initcap_z(localized_full_months[tm->tm_mon - 1], collid));
 				else
-					sprintf(s, "%*s", S_FM(n->suffix) ? 0 : -9, months_full[tm->tm_mon - 1]);
+					sprintf(s, "%*s", S_FM(n->suffix) ? 0 : -9,
+							months_full[tm->tm_mon - 1]);
 				s += strlen(s);
 				break;
 			case DCH_month:
@@ -2486,10 +2555,8 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 				if (S_TM(n->suffix))
 					strcpy(s, str_tolower_z(localized_full_months[tm->tm_mon - 1], collid));
 				else
-				{
-					sprintf(s, "%*s", S_FM(n->suffix) ? 0 : -9, months_full[tm->tm_mon - 1]);
-					*s = pg_tolower((unsigned char) *s);
-				}
+					sprintf(s, "%*s", S_FM(n->suffix) ? 0 : -9,
+							asc_tolower_z(months_full[tm->tm_mon - 1]));
 				s += strlen(s);
 				break;
 			case DCH_MON:
@@ -2499,7 +2566,7 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 				if (S_TM(n->suffix))
 					strcpy(s, str_toupper_z(localized_abbrev_months[tm->tm_mon - 1], collid));
 				else
-					strcpy(s, str_toupper_z(months[tm->tm_mon - 1], collid));
+					strcpy(s, asc_toupper_z(months[tm->tm_mon - 1]));
 				s += strlen(s);
 				break;
 			case DCH_Mon:
@@ -2519,10 +2586,7 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 				if (S_TM(n->suffix))
 					strcpy(s, str_tolower_z(localized_abbrev_months[tm->tm_mon - 1], collid));
 				else
-				{
-					strcpy(s, months[tm->tm_mon - 1]);
-					*s = pg_tolower((unsigned char) *s);
-				}
+					strcpy(s, asc_tolower_z(months[tm->tm_mon - 1]));
 				s += strlen(s);
 				break;
 			case DCH_MM:
@@ -2537,7 +2601,7 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 					strcpy(s, str_toupper_z(localized_full_days[tm->tm_wday], collid));
 				else
 					sprintf(s, "%*s", S_FM(n->suffix) ? 0 : -9,
-							str_toupper_z(days[tm->tm_wday], collid));
+							asc_toupper_z(days[tm->tm_wday]));
 				s += strlen(s);
 				break;
 			case DCH_Day:
@@ -2545,7 +2609,8 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 				if (S_TM(n->suffix))
 					strcpy(s, str_initcap_z(localized_full_days[tm->tm_wday], collid));
 				else
-					sprintf(s, "%*s", S_FM(n->suffix) ? 0 : -9, days[tm->tm_wday]);
+					sprintf(s, "%*s", S_FM(n->suffix) ? 0 : -9,
+							days[tm->tm_wday]);
 				s += strlen(s);
 				break;
 			case DCH_day:
@@ -2553,10 +2618,8 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 				if (S_TM(n->suffix))
 					strcpy(s, str_tolower_z(localized_full_days[tm->tm_wday], collid));
 				else
-				{
-					sprintf(s, "%*s", S_FM(n->suffix) ? 0 : -9, days[tm->tm_wday]);
-					*s = pg_tolower((unsigned char) *s);
-				}
+					sprintf(s, "%*s", S_FM(n->suffix) ? 0 : -9,
+							asc_tolower_z(days[tm->tm_wday]));
 				s += strlen(s);
 				break;
 			case DCH_DY:
@@ -2564,7 +2627,7 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 				if (S_TM(n->suffix))
 					strcpy(s, str_toupper_z(localized_abbrev_days[tm->tm_wday], collid));
 				else
-					strcpy(s, str_toupper_z(days_short[tm->tm_wday], collid));
+					strcpy(s, asc_toupper_z(days_short[tm->tm_wday]));
 				s += strlen(s);
 				break;
 			case DCH_Dy:
@@ -2580,10 +2643,7 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 				if (S_TM(n->suffix))
 					strcpy(s, str_tolower_z(localized_abbrev_days[tm->tm_wday], collid));
 				else
-				{
-					strcpy(s, days_short[tm->tm_wday]);
-					*s = pg_tolower((unsigned char) *s);
-				}
+					strcpy(s, asc_tolower_z(days_short[tm->tm_wday]));
 				s += strlen(s);
 				break;
 			case DCH_DDD:
@@ -2641,8 +2701,15 @@ DCH_to_char(FormatNode *node, bool is_interval, TmToChar *in, char *out, Oid col
 			case DCH_CC:
 				if (is_interval)	/* straight calculation */
 					i = tm->tm_year / 100;
-				else	/* century 21 starts in 2001 */
-					i = (tm->tm_year - 1) / 100 + 1;
+				else
+				{
+					if (tm->tm_year > 0)
+						/* Century 20 == 1901 - 2000 */
+						i = (tm->tm_year - 1) / 100 + 1;
+					else
+						/* Century 6BC == 600BC - 501BC */
+						i = tm->tm_year / 100 - 1;
+				}
 				if (i <= 99 && i >= -99)
 					sprintf(s, "%0*d", S_FM(n->suffix) ? 0 : 2, i);
 				else
@@ -2891,6 +2958,7 @@ DCH_from_char(FormatNode *node, char *in, TmFromChar *out)
 				from_char_seq_search(&value, &s, days, ONE_UPPER,
 									 MAX_DAY_LEN, n);
 				from_char_set_int(&out->d, value, n);
+				out->d++;
 				break;
 			case DCH_DY:
 			case DCH_Dy:
@@ -2898,6 +2966,7 @@ DCH_from_char(FormatNode *node, char *in, TmFromChar *out)
 				from_char_seq_search(&value, &s, days, ONE_UPPER,
 									 MAX_DY_LEN, n);
 				from_char_set_int(&out->d, value, n);
+				out->d++;
 				break;
 			case DCH_DDD:
 				from_char_parse_int(&out->ddd, &s, n);
@@ -2913,11 +2982,13 @@ DCH_from_char(FormatNode *node, char *in, TmFromChar *out)
 				break;
 			case DCH_D:
 				from_char_parse_int(&out->d, &s, n);
-				out->d--;
 				s += SKIP_THth(n->suffix);
 				break;
 			case DCH_ID:
 				from_char_parse_int_len(&out->d, &s, 1, n);
+				/* Shift numbering to match Gregorian where Sunday = 1 */
+				if (++out->d > 7)
+					out->d = 1;
 				s += SKIP_THth(n->suffix);
 				break;
 			case DCH_WW:
@@ -3322,6 +3393,12 @@ to_date(PG_FUNCTION_ARGS)
 
 	do_to_timestamp(date_txt, fmt, &tm, &fsec);
 
+	if (!IS_VALID_JULIAN(tm.tm_year, tm.tm_mon, tm.tm_mday))
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("date out of range: \"%s\"",
+						text_to_cstring(date_txt))));
+
 	result = date2j(tm.tm_year, tm.tm_mon, tm.tm_mday) - POSTGRES_EPOCH_JDATE;
 
 	PG_RETURN_DATEADT(result);
@@ -3466,33 +3543,43 @@ do_to_timestamp(text *date_txt, text *fmt,
 		/*
 		 * If CC and YY (or Y) are provided, use YY as 2 low-order digits for
 		 * the year in the given century.  Keep in mind that the 21st century
-		 * runs from 2001-2100, not 2000-2099.
-		 *
-		 * If a 4-digit year is provided, we use that and ignore CC.
+		 * AD runs from 2001-2100, not 2000-2099; 6th century BC runs from
+		 * 600BC to 501BC.
 		 */
 		if (tmfc.cc && tmfc.yysz <= 2)
 		{
+			if (tmfc.bc)
+				tmfc.cc = -tmfc.cc;
 			tm->tm_year = tmfc.year % 100;
 			if (tm->tm_year)
-				tm->tm_year += (tmfc.cc - 1) * 100;
+			{
+				if (tmfc.cc >= 0)
+					tm->tm_year += (tmfc.cc - 1) * 100;
+				else
+					tm->tm_year = (tmfc.cc + 1) * 100 - tm->tm_year + 1;
+			}
 			else
-				tm->tm_year = tmfc.cc * 100;
+				/* find century year for dates ending in "00" */
+				tm->tm_year = tmfc.cc * 100 + ((tmfc.cc >= 0) ? 0 : 1);
 		}
 		else
+			/* If a 4-digit year is provided, we use that and ignore CC. */
+		{
 			tm->tm_year = tmfc.year;
+			if (tmfc.bc && tm->tm_year > 0)
+				tm->tm_year = -(tm->tm_year - 1);
+		}
 	}
 	else if (tmfc.cc)			/* use first year of century */
-		tm->tm_year = (tmfc.cc - 1) * 100 + 1;
-
-	if (tmfc.bc)
 	{
-		if (tm->tm_year > 0)
-			tm->tm_year = -(tm->tm_year - 1);
+		if (tmfc.bc)
+			tmfc.cc = -tmfc.cc;
+		if (tmfc.cc >= 0)
+			/* +1 becuase 21st century started in 2001 */
+			tm->tm_year = (tmfc.cc - 1) * 100 + 1;
 		else
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_DATETIME_FORMAT),
-					 errmsg("inconsistent use of year %04d and \"BC\"",
-							tm->tm_year)));
+			/* +1 because year == 599 is 600 BC */
+			tm->tm_year = tmfc.cc * 100 + 1;
 	}
 
 	if (tmfc.j)
@@ -3518,7 +3605,7 @@ do_to_timestamp(text *date_txt, text *fmt,
 	if (tmfc.w)
 		tmfc.dd = (tmfc.w - 1) * 7 + 1;
 	if (tmfc.d)
-		tm->tm_wday = tmfc.d;
+		tm->tm_wday = tmfc.d - 1;		/* convert to native numbering */
 	if (tmfc.dd)
 		tm->tm_mday = tmfc.dd;
 	if (tmfc.ddd)
@@ -4043,7 +4130,7 @@ NUM_numpart_from_char(NUMProc *Np, int id, int plen)
 #endif
 
 	/*
-	 * read digit
+	 * read digit or decimal point
 	 */
 	if (isdigit((unsigned char) *Np->inout_p))
 	{
@@ -4063,39 +4150,27 @@ NUM_numpart_from_char(NUMProc *Np, int id, int plen)
 #ifdef DEBUG_TO_FROM_CHAR
 		elog(DEBUG_elog_output, "Read digit (%c)", *Np->inout_p);
 #endif
-
-		/*
-		 * read decimal point
-		 */
 	}
 	else if (IS_DECIMAL(Np->Num) && Np->read_dec == FALSE)
 	{
+		/*
+		 * We need not test IS_LDECIMAL(Np->Num) explicitly here, because
+		 * Np->decimal is always just "." if we don't have a D format token.
+		 * So we just unconditionally match to Np->decimal.
+		 */
+		int			x = strlen(Np->decimal);
+
 #ifdef DEBUG_TO_FROM_CHAR
-		elog(DEBUG_elog_output, "Try read decimal point (%c)", *Np->inout_p);
+		elog(DEBUG_elog_output, "Try read decimal point (%c)",
+			 *Np->inout_p);
 #endif
-		if (*Np->inout_p == '.')
+		if (x && AMOUNT_TEST(x) && strncmp(Np->inout_p, Np->decimal, x) == 0)
 		{
+			Np->inout_p += x - 1;
 			*Np->number_p = '.';
 			Np->number_p++;
 			Np->read_dec = TRUE;
 			isread = TRUE;
-		}
-		else
-		{
-			int			x = strlen(Np->decimal);
-
-#ifdef DEBUG_TO_FROM_CHAR
-			elog(DEBUG_elog_output, "Try read locale point (%c)",
-				 *Np->inout_p);
-#endif
-			if (x && AMOUNT_TEST(x) && strncmp(Np->inout_p, Np->decimal, x) == 0)
-			{
-				Np->inout_p += x - 1;
-				*Np->number_p = '.';
-				Np->number_p++;
-				Np->read_dec = TRUE;
-				isread = TRUE;
-			}
 		}
 	}
 
@@ -4664,12 +4739,12 @@ NUM_processor(FormatNode *node, NUMDesc *Num, char *inout, char *number,
 				case NUM_rn:
 					if (IS_FILLMODE(Np->Num))
 					{
-						strcpy(Np->inout_p, str_tolower_z(Np->number_p, collid));
+						strcpy(Np->inout_p, asc_tolower_z(Np->number_p));
 						Np->inout_p += strlen(Np->inout_p) - 1;
 					}
 					else
 					{
-						sprintf(Np->inout_p, "%15s", str_tolower_z(Np->number_p, collid));
+						sprintf(Np->inout_p, "%15s", asc_tolower_z(Np->number_p));
 						Np->inout_p += strlen(Np->inout_p) - 1;
 					}
 					break;

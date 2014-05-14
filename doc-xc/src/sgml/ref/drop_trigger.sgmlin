@@ -21,13 +21,14 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-DROP TRIGGER [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ON <replaceable class="PARAMETER">table</replaceable> [ CASCADE | RESTRICT ]
+DROP TRIGGER [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ON <replaceable class="PARAMETER">table_name</replaceable> [ CASCADE | RESTRICT ]
 </synopsis>
  </refsynopsisdiv>
 
  <refsect1>
   <title>Description</title>
 
+&common;
   <para>
    <command>DROP TRIGGER</command> removes an existing
    trigger definition. To execute this command, the current
@@ -38,6 +39,7 @@ DROP TRIGGER [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ON 
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
 
    <varlistentry>
@@ -60,7 +62,7 @@ DROP TRIGGER [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ON 
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="PARAMETER">table</replaceable></term>
+    <term><replaceable class="PARAMETER">table_name</replaceable></term>
     <listitem>
      <para>
       The name (optionally schema-qualified) of the table for which
@@ -99,13 +101,13 @@ DROP TRIGGER [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ON 
 
 <programlisting>
 DROP TRIGGER if_dist_exists ON films;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1 id="SQL-DROPTRIGGER-compatibility">
   <title>Compatibility</title>
 
+&common;
   <para>
    The <command>DROP TRIGGER</command> statement in
    <productname>PostgreSQL</productname> is incompatible with the SQL
@@ -113,7 +115,6 @@ DROP TRIGGER if_dist_exists ON films;
    tables, so the command is simply <literal>DROP TRIGGER
    <replaceable>name</replaceable></literal>.
   </para>
-
  </refsect1>
 
  <refsect1>

@@ -106,9 +106,6 @@ DROP TYPE default_test_row CASCADE;
 
 DROP TABLE default_test;
 
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-
 -- Check usage of typmod with a user-defined type
 -- (we have borrowed numeric's typmod functions)
 

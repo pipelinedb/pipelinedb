@@ -28,22 +28,14 @@ NOTIFY <replaceable class="PARAMETER">channel</replaceable> [ , <replaceable cla
  <refsect1>
   <title>Description</title>
 
-<!## XC>
-&xconly;
-  <para>
-   <command>NOTIFY</> statement has not been supported
-   in <productname>Postgres-XC</> yet.
-  </para>
-<!## end>
-
-<!## PG>
-
+&common;
   <para>
    The <command>NOTIFY</command> command sends a notification event together
    with an optional <quote>payload</> string to each client application that
    has previously executed
    <command>LISTEN <replaceable class="parameter">channel</></command>
    for the specified channel name in the current database.
+   Notifications are visible to all users.
   </para>
 
   <para>
@@ -130,11 +122,21 @@ NOTIFY <replaceable class="PARAMETER">channel</replaceable> [ , <replaceable cla
    are the same, the notification event is one's own work bouncing
    back, and can be ignored.
   </para>
+&xconly;
+<!## XC>
+  <para>
+   In <productname>Postgres-XC</productname>, notification chanells work only locally at
+   the originating coordinator.
+   Issued notification can be listened only by sessions originated at the same coordinator.
+  </para>
+<!## end>
+
  </refsect1>
 
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">channel</replaceable></term>
@@ -162,6 +164,7 @@ NOTIFY <replaceable class="PARAMETER">channel</replaceable> [ , <replaceable cla
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    There is a queue that holds notifications that have been sent but not
    yet processed by all listening sessions.  If this queue becomes full,
@@ -214,19 +217,17 @@ Asynchronous notification "virtual" with payload "This is the payload" received 
 LISTEN foo;
 SELECT pg_notify('fo' || 'o', 'pay' || 'load');
 Asynchronous notification "foo" with payload "payload" received from server process with PID 14728.
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>NOTIFY</command> statement in the SQL
    standard.
   </para>
-<!## end>
-
  </refsect1>
 
  <refsect1>

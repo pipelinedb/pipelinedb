@@ -19,12 +19,18 @@
  <refsynopsisdiv>
 <synopsis>
 CREATE FOREIGN TABLE [ IF NOT EXISTS ] <replaceable class="PARAMETER">table_name</replaceable> ( [
-  { <replaceable class="PARAMETER">column_name</replaceable> <replaceable class="PARAMETER">data_type</replaceable> [ OPTIONS ( <replaceable class="PARAMETER">option</replaceable> '<replaceable class="PARAMETER">value</replaceable>' [, ... ] ) ] [ NULL | NOT NULL ] }
+    <replaceable class="PARAMETER">column_name</replaceable> <replaceable class="PARAMETER">data_type</replaceable> [ OPTIONS ( <replaceable class="PARAMETER">option</replaceable> '<replaceable class="PARAMETER">value</replaceable>' [, ... ] ) ] [ COLLATE <replaceable>collation</replaceable> ] [ <replaceable class="PARAMETER">column_constraint</replaceable> [ ... ] ]
     [, ... ]
 ] )
   SERVER <replaceable class="parameter">server_name</replaceable>
 [ OPTIONS ( <replaceable class="PARAMETER">option</replaceable> '<replaceable class="PARAMETER">value</replaceable>' [, ... ] ) ]
 
+<phrase>where <replaceable class="PARAMETER">column_constraint</replaceable> is:</phrase>
+
+[ CONSTRAINT <replaceable class="PARAMETER">constraint_name</replaceable> ]
+{ NOT NULL |
+  NULL |
+  DEFAULT <replaceable>default_expr</replaceable> }
 </synopsis>
  </refsynopsisdiv>
 
@@ -32,7 +38,7 @@ CREATE FOREIGN TABLE [ IF NOT EXISTS ] <replaceable class="PARAMETER">table_name
   <title>Description</title>
 
   <para>
-   <command>CREATE FOREIGN TABLE</command> will create a new foreign table
+   <command>CREATE FOREIGN TABLE</command> creates a new foreign table
    in the current database. The table will be owned by the user issuing the
    command.
   </para>
@@ -54,8 +60,9 @@ CREATE FOREIGN TABLE [ IF NOT EXISTS ] <replaceable class="PARAMETER">table_name
   </para>
 
   <para>
-   To be able to create a table, you must have <literal>USAGE</literal>
-   privilege on all column types.
+   To be able to create a foreign table, you must have <literal>USAGE</literal>
+   privilege on the foreign server, as well as <literal>USAGE</literal>
+   privilege on all column types used in the table.
   </para>
  </refsect1>
 
@@ -131,10 +138,33 @@ CREATE FOREIGN TABLE [ IF NOT EXISTS ] <replaceable class="PARAMETER">table_name
    </varlistentry>
 
    <varlistentry>
+    <term><literal>DEFAULT
+    <replaceable>default_expr</replaceable></literal></term>
+    <listitem>
+     <para>
+      The <literal>DEFAULT</> clause assigns a default data value for
+      the column whose column definition it appears within.  The value
+      is any variable-free expression (subqueries and cross-references
+      to other columns in the current table are not allowed).  The
+      data type of the default expression must match the data type of the
+      column.
+     </para>
+
+     <para>
+      The default expression will be used in any insert operation that
+      does not specify a value for the column.  If there is no default
+      for a column, then the default is null.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
     <term><replaceable class="PARAMETER">server_name</replaceable></term>
     <listitem>
      <para>
-      The name of an existing server for the foreign table.
+      The name of an existing foreign server to use for the foreign table.
+      For details on defining a server, see <xref
+      linkend="SQL-CREATESERVER">.
      </para>
     </listitem>
    </varlistentry>
@@ -162,7 +192,8 @@ CREATE FOREIGN TABLE [ IF NOT EXISTS ] <replaceable class="PARAMETER">table_name
   <title>Examples</title>
 
   <para>
-   Create foreign table <structname>films</> with <structname>film_server</>:
+   Create foreign table <structname>films</>, which will be accessed through
+   the server <structname>film_server</>:
 
 <programlisting>
 CREATE FOREIGN TABLE films (
@@ -186,6 +217,8 @@ SERVER film_server;
    <acronym>SQL</acronym> standard; however, much as with
    <link linkend="sql-createtable"><command>CREATE TABLE</></link>,
    <literal>NULL</> constraints and zero-column foreign tables are permitted.
+   The ability to specify a default value is also a <productname>PostgreSQL</>
+   extension.
   </para>
 
  </refsect1>

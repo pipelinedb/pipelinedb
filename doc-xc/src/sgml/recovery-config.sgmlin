@@ -11,7 +11,8 @@
 
    <para>
     This chapter describes the settings available in the
-    <filename>recovery.conf</> file. They apply only for the duration of the
+    <filename>recovery.conf</><indexterm><primary>recovery.conf</></>
+    file. They apply only for the duration of the
     recovery.  They must be reset for any subsequent recovery you wish to
     perform.  They cannot be changed once recovery has begun.
    </para>
@@ -32,9 +33,9 @@
   <sect1 id="archive-recovery-settings">
 
     <title>Archive Recovery Settings</title>
-&common;
      <variablelist>
 
+&common;
      <varlistentry id="restore-command" xreflabel="restore_command">
       <term><varname>restore_command</varname> (<type>string</type>)</term>
       <indexterm>
@@ -57,12 +58,7 @@
         to truncate the archive to just the minimum required to support
         restarting from the current restore. <literal>%r</> is typically only
         used by warm-standby configurations
-<!## PG>
         (see <xref linkend="warm-standby">).
-<!## end>
-<!## XC>
-.
-<!## end>
 <!## XC>
         <footnote>
          <para>
@@ -119,12 +115,7 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
         same archive directory, you will need to ensure that you do not delete
         WAL files until they are no longer needed by any of the servers.
         <varname>archive_cleanup_command</> would typically be used in a
-<!## PG>
         warm-standby configuration (see <xref linkend="warm-standby">).
-<!## end>
-<!## XC>
-        warm-standby configuration.
-<!## end>
         Write <literal>%%</> to embed an actual <literal>%</> character in the
         command.
        </para>
@@ -165,9 +156,9 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
   <sect1 id="recovery-target-settings">
 
     <title>Recovery Target Settings</title>
-&common;
      <variablelist>
 
+&common;
      <varlistentry id="recovery-target-name" xreflabel="recovery_target_name">
       <term><varname>recovery_target_name</varname>
            (<type>string</type>)
@@ -180,8 +171,15 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
         This parameter specifies the named restore point, created with
         <function>pg_create_restore_point()</> to which recovery will proceed.
         At most one of <varname>recovery_target_name</>,
+<!## PG>
         <xref linkend="recovery-target-time"> or
         <xref linkend="recovery-target-xid"> can be specified.  The default is to
+<!## end>
+<!## XC>
+        <xref linkend="recovery-target-time">, 
+        <xref linkend="recovery-target-xid"> or
+        <xref linkend="recovery-target-barrier"> can be specified.  The default is to
+<!## end>
         recover to the end of the WAL log.
        </para>
       </listitem>
@@ -196,16 +194,14 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
       </indexterm>
       <listitem>
        <para>
-&xconly;
         This parameter specifies the time stamp up to which recovery
         will proceed.
-<!## PG>
         At most one of <varname>recovery_target_time</>,
+<!## PG>
         <xref linkend="recovery-target-name"> or
         <xref linkend="recovery-target-xid"> can be specified.
 <!## end>
 <!## XC>
-        At most one of <varname>recovery_target_time</>,
         <xref linkend="recovery-target-name">,
         <xref linkend="recovery-target-xid"> or
         <xref linkend="recovery-target-barrier"> can be specified.
@@ -217,38 +213,7 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
       </listitem>
      </varlistentry>
 
-     <varlistentry id="recovery-target-xid" xreflabel="recovery_target_xid">
-      <term><varname>recovery_target_xid</varname> (<type>string</type>)</term>
-      <indexterm>
-        <primary><varname>recovery_target_xid</> recovery parameter</primary>
-      </indexterm>
-      <listitem>
-&xconly;
-       <para>
-        This parameter specifies the transaction ID up to which recovery
-        will proceed. Keep in mind
-        that while transaction IDs are assigned sequentially at transaction
-        start, transactions can complete in a different numeric order.
-        The transactions that will be recovered are those that committed
-        before (and optionally including) the specified one.
-<!## PG>
-        At most one of <varname>recovery_target_xid</>,
-        <xref linkend="recovery-target-name"> or
-        <xref linkend="recovery-target-time"> can be specified.
-<!## end>
 <!## XC>
-        At most one of <varname>recovery_target_xid</>,
-        <xref linkend="recovery-target-name">,
-        <xref linkend="recovery-target-time"> or
-        <xref linkend="recovery-target-barrier"> can be specified.
-
-        The default is to recover to the end of the WAL log.
-        The precise stopping point is also influenced by
-        <xref linkend="recovery-target-inclusive">.
-       </para>
-      </listitem>
-     </varlistentry>
-
      <varlistentry id="recovery-target-barrier" xreflabel="recovery_target_barrier">
       <term><varname>recovery_target_barrier</varname> (<type>string</type>)</term>
       <indexterm>
@@ -263,7 +228,6 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
         one of <varname>recovery_target_xid</>,
         <xref linkend="recovery-target-time"> and 
         <varname>recovery_target_barrier</> can be specified.
-<!## end>
         The default is to recover to the end of the WAL log.
         The precise stopping point is also influenced by
         <xref linkend="recovery-target-inclusive">.
@@ -272,6 +236,30 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
        <para>
         A barrier ID, to which recovery will proceed, has to be specified with
         <xref linkend="SQL-CREATEBARRIER">. Refer to this command for syntax details.
+       </para>
+      </listitem>
+     </varlistentry>
+<!## end>
+
+     <varlistentry id="recovery-target-xid" xreflabel="recovery_target_xid">
+      <term><varname>recovery_target_xid</varname> (<type>string</type>)</term>
+      <indexterm>
+        <primary><varname>recovery_target_xid</> recovery parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        This parameter specifies the transaction ID up to which recovery
+        will proceed. Keep in mind
+        that while transaction IDs are assigned sequentially at transaction
+        start, transactions can complete in a different numeric order.
+        The transactions that will be recovered are those that committed
+        before (and optionally including) the specified one.
+        At most one of <varname>recovery_target_xid</>,
+        <xref linkend="recovery-target-name"> or
+        <xref linkend="recovery-target-time"> can be specified.
+        The default is to recover to the end of the WAL log.
+        The precise stopping point is also influenced by
+        <xref linkend="recovery-target-inclusive">.
        </para>
       </listitem>
      </varlistentry>
@@ -285,7 +273,6 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
         <primary><varname>recovery_target_inclusive</> recovery parameter</primary>
       </indexterm>
       <listitem>
-&common;
        <para>
         Specifies whether we stop just after the specified recovery target
         (<literal>true</literal>), or just before the recovery target
@@ -343,13 +330,10 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
         recovery target settings to a later target and restart to
         continue recovery.
        </para>
-<!## PG>
-       <!-- XC does not support hot-standby at present -->
        <para>
         This setting has no effect if <xref linkend="guc-hot-standby"> is not
         enabled, or if no recovery target is set.
        </para>
-<!## end>
       </listitem>
      </varlistentry>
 
@@ -359,10 +343,9 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
   <sect1 id="standby-settings">
 
     <title>Standby Server Settings</title>
-
-&common;
      <variablelist>
 
+&common;
        <varlistentry id="standby-mode" xreflabel="standby_mode">
         <term><varname>standby_mode</varname> (<type>boolean</type>)</term>
         <indexterm>
@@ -389,21 +372,18 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
          <para>
           Specifies a connection string to be used for the standby server
           to connect with the primary. This string is in the format
-          accepted by the libpq <function>PQconnectdb</function> function,
-          described in <xref linkend="libpq-connect">. If any option is
+          described in <xref linkend="libpq-connstring">. If any option is
           unspecified in this string, then the corresponding environment
           variable (see <xref linkend="libpq-envars">) is checked. If the
           environment variable is not set either, then
           defaults are used.
          </para>
-
          <para>
           The connection string should specify the host name (or address)
           of the primary server, as well as the port number if it is not
           the same as the standby server's default.
-          Also specify a user name corresponding to a role that has the
-          <literal>SUPERUSER</> and <literal>LOGIN</> privileges on the
-          primary (see
+          Also specify a user name corresponding to a suitably-privileged role
+          on the primary (see
           <xref linkend="streaming-replication-authentication">).
           A password needs to be provided too, if the primary demands password
           authentication.  It can be provided in the
@@ -413,7 +393,6 @@ restore_command = 'copy "C:\\server\\archivedir\\%f" "%p"'  # Windows
           Do not specify a database name in the
           <varname>primary_conninfo</varname> string.
          </para>
-
          <para>
           This setting has no effect if <varname>standby_mode</> is <literal>off</>.
          </para>

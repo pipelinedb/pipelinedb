@@ -7,18 +7,16 @@
   <primary>cube</primary>
  </indexterm>
 
-&common;
-
  <para>
   This module implements a data type <type>cube</> for
   representing multidimensional cubes.
  </para>
 
+&common;
  <sect2>
   <title>Syntax</title>
 
 &common;
-
   <para>
    <xref linkend="cube-repr-table"> shows the valid external
    representations for the <type>cube</>
@@ -91,7 +89,6 @@
   <title>Precision</title>
 
 &common;
-
   <para>
    Values are stored internally as 64-bit floating point numbers. This means
    that numbers with more than about 16 significant digits will be truncated.
@@ -102,7 +99,6 @@
   <title>Usage</title>
 
 &common;
-
   <para>
    The <filename>cube</> module includes a GiST index operator class for
    <type>cube</> values.
@@ -323,7 +319,6 @@
   <title>Defaults</title>
 
 &common;
-
   <para>
    I believe this union:
   </para>
@@ -379,7 +374,6 @@ t
   <title>Notes</title>
 
 &common;
-
   <para>
    For examples of usage, see the regression test <filename>sql/cube.sql</>.
   </para>
@@ -394,6 +388,7 @@ t
  <sect2>
   <title>Credits</title>
 
+&common;
   <para>
    Original author: Gene Selkov, Jr. <email>selkovjr@mcs.anl.gov</email>,
    Mathematics and Computer Science Division, Argonne National Laboratory.

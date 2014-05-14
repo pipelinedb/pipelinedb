@@ -26,6 +26,7 @@
   <indexterm zone="dml-insert">
    <primary>INSERT</primary>
   </indexterm>
+
 &common;
   <para>
    When a table is created, it contains no data.  The first thing to
@@ -78,12 +79,7 @@ INSERT INTO products (name, price, product_no) VALUES ('Cheese', 9.99, 1);
 INSERT INTO products (product_no, name) VALUES (1, 'Cheese');
 INSERT INTO products VALUES (1, 'Cheese');
 </programlisting>
-<!## PG>
    The second form is a <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-   The second form is a <productname>Postgres-XC</productname>
-<!## end>
    extension.  It fills the columns from the left with as many values
    as are given, and the rest will be defaulted.
   </para>
@@ -129,6 +125,7 @@ INSERT INTO products (product_no, name, price) VALUES
   <indexterm zone="dml-update">
    <primary>UPDATE</primary>
   </indexterm>
+
 &common;
   <para>
    The modification of data that is already in the database is
@@ -212,7 +209,6 @@ UPDATE products SET price = price * 1.10;
 UPDATE mytable SET a = 5, b = 3, c = 1 WHERE a &gt; 0;
 </programlisting>
   </para>
-
 <!## XC>
 &xconly;
   <para>
@@ -232,6 +228,7 @@ UPDATE mytable SET a = 5, b = 3, c = 1 WHERE a &gt; 0;
   <indexterm zone="dml-delete">
    <primary>DELETE</primary>
   </indexterm>
+
 &common;
   <para>
    So far we have explained how to add data to tables and how to

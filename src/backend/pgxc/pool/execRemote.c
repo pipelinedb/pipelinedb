@@ -48,6 +48,7 @@
 #include "utils/relcache.h"
 #include "utils/snapmgr.h"
 #include "utils/tuplesort.h"
+#include "utils/snapmgr.h"
 #include "utils/builtins.h"
 #include "pgxc/locator.h"
 #include "pgxc/pgxc.h"
@@ -57,6 +58,18 @@
 
 /* Enforce the use of two-phase commit when temporary objects are used */
 bool EnforceTwoPhaseCommit = true;
+
+/*
+ * non-FQS UPDATE & DELETE to a replicated table without any primary key or
+ * unique key should be prohibited (true) or allowed (false)
+ */
+bool RequirePKeyForRepTab = true;
+
+/*
+ * Max to begin flushing data to datanodes, max to stop flushing data to datanodes.
+ */
+#define MAX_SIZE_TO_FORCE_FLUSH (2^10 * 64 * 2)
+#define MAX_SIZE_TO_STOP_FLUSH (2^10 * 64)
 
 #define END_QUERY_TIMEOUT	20
 #define ROLLBACK_RESP_LEN	9
@@ -183,6 +196,8 @@ static void pgxc_append_param_val(StringInfo buf, Datum val, Oid valtype);
 static void pgxc_append_param_junkval(TupleTableSlot *slot, AttrNumber attno, Oid valtype, StringInfo buf);
 static void pgxc_rq_fire_bstriggers(RemoteQueryState *node);
 static void pgxc_rq_fire_astriggers(RemoteQueryState *node);
+
+static int flushPGXCNodeHandleData(PGXCNodeHandle *handle);
 
 /*
  * Create a structure to store parameters needed to combine responses from
@@ -2105,13 +2120,16 @@ pgxc_node_remote_abort(void)
 
 /*
  * Begin COPY command
- * The copy_connections array must have room for NumDataNodes items
+ * The copy_connections array must have room for requested number of items.
+ * The function can not deal with mix of coordinators and datanodes.
  */
 PGXCNodeHandle**
-DataNodeCopyBegin(const char *query, List *nodelist, Snapshot snapshot)
+pgxcNodeCopyBegin(const char *query, List *nodelist, Snapshot snapshot, char node_type)
 {
 	int i;
-	int conn_count = list_length(nodelist) == 0 ? NumDataNodes : list_length(nodelist);
+	int default_node_count = (node_type == PGXC_NODE_DATANODE) ?
+									NumDataNodes : NumCoords;
+	int conn_count = list_length(nodelist) == 0 ? default_node_count : list_length(nodelist);
 	struct timeval *timeout = NULL;
 	PGXCNodeAllHandles *pgxc_handles;
 	PGXCNodeHandle **connections;
@@ -2121,12 +2139,22 @@ DataNodeCopyBegin(const char *query, List *nodelist, Snapshot snapshot)
 	GlobalTransactionId gxid;
 	RemoteQueryState *combiner;
 
+	Assert(node_type == PGXC_NODE_DATANODE || node_type == PGXC_NODE_COORDINATOR);
+
 	if (conn_count == 0)
 		return NULL;
 
 	/* Get needed Datanode connections */
-	pgxc_handles = get_handles(nodelist, NULL, false, false);
-	connections = pgxc_handles->datanode_handles;
+	if (node_type == PGXC_NODE_DATANODE)
+	{
+		pgxc_handles = get_handles(nodelist, NULL, false, false);
+		connections = pgxc_handles->datanode_handles;
+	}
+	else
+	{
+		pgxc_handles = get_handles(NULL, nodelist, true, false);
+		connections = pgxc_handles->coord_handles;
+	}
 
 	if (!connections)
 		return NULL;
@@ -2145,7 +2173,7 @@ DataNodeCopyBegin(const char *query, List *nodelist, Snapshot snapshot)
 	 * So store connections in an array where index is node-1.
 	 * Unused items in the array should be NULL
 	 */
-	copy_connections = (PGXCNodeHandle **) palloc0(NumDataNodes * sizeof(PGXCNodeHandle *));
+	copy_connections = (PGXCNodeHandle **) palloc0(default_node_count * sizeof(PGXCNodeHandle *));
 	i = 0;
 	foreach(nodeitem, nodelist)
 		copy_connections[lfirst_int(nodeitem)] = connections[i++];
@@ -2160,7 +2188,7 @@ DataNodeCopyBegin(const char *query, List *nodelist, Snapshot snapshot)
 	}
 
 	/* Start transaction on connections where it is not started */
-	if (pgxc_node_begin(conn_count, connections, gxid, need_tran_block, false, PGXC_NODE_DATANODE))
+	if (pgxc_node_begin(conn_count, connections, gxid, need_tran_block, false, node_type))
 	{
 		pfree_pgxc_all_handles(pgxc_handles);
 		pfree(copy_connections);
@@ -2200,7 +2228,7 @@ DataNodeCopyBegin(const char *query, List *nodelist, Snapshot snapshot)
 	if (pgxc_node_receive_responses(conn_count, connections, timeout, combiner)
 			|| !ValidateAndCloseCombiner(combiner))
 	{
-		DataNodeCopyFinish(connections, -1, COMBINE_TYPE_NONE);
+		pgxcNodeCopyFinish(connections, -1, COMBINE_TYPE_NONE, PGXC_NODE_DATANODE);
 		pfree(connections);
 		pfree(copy_connections);
 		return NULL;
@@ -2259,6 +2287,13 @@ DataNodeCopyIn(char *data_row, int len, ExecNodes *exec_nodes, PGXCNodeHandle** 
 				{
 					add_error_message(primary_handle, "failed to send data to Datanode");
 					return EOF;
+				}
+				else if (primary_handle->outEnd > MAX_SIZE_TO_FORCE_FLUSH)
+				{
+					int rv;
+
+					if ((rv = flushPGXCNodeHandleData(primary_handle)) != 0)
+						return EOF;
 				}
 			}
 
@@ -2338,6 +2373,13 @@ DataNodeCopyIn(char *data_row, int len, ExecNodes *exec_nodes, PGXCNodeHandle** 
 				{
 					add_error_message(handle, "failed to send data to Datanode");
 					return EOF;
+				}
+				else if (handle->outEnd > MAX_SIZE_TO_FORCE_FLUSH)
+				{
+					int rv;
+
+					if ((rv = flushPGXCNodeHandleData(handle)) != 0)
+						return EOF;
 				}
 			}
 
@@ -2444,17 +2486,21 @@ DataNodeCopyOut(ExecNodes *exec_nodes,
  * Finish copy process on all connections
  */
 void
-DataNodeCopyFinish(PGXCNodeHandle** copy_connections, int primary_dn_index, CombineType combine_type)
+pgxcNodeCopyFinish(PGXCNodeHandle** copy_connections, int primary_dn_index,
+					CombineType combine_type, char node_type)
 {
 	int		i;
 	RemoteQueryState *combiner = NULL;
 	bool 		error = false;
 	struct timeval *timeout = NULL; /* wait forever */
-	PGXCNodeHandle *connections[NumDataNodes];
+	int		default_conn_count = (node_type == PGXC_NODE_DATANODE) ? NumDataNodes : NumCoords;
+	PGXCNodeHandle **connections = palloc0(sizeof(PGXCNodeHandle *) * default_conn_count);
 	PGXCNodeHandle *primary_handle = NULL;
 	int 		conn_count = 0;
 
-	for (i = 0; i < NumDataNodes; i++)
+	Assert(node_type == PGXC_NODE_DATANODE || node_type == PGXC_NODE_COORDINATOR);
+
+	for (i = 0; i < default_conn_count; i++)
 	{
 		PGXCNodeHandle *handle = copy_connections[i];
 
@@ -3321,15 +3367,11 @@ DoRemoteMerge(RemoteMergeState mergeState)
 
 /*
  * ExecRemoteQuery
- *
  * Wrapper around the main RemoteQueryNext() function. This
  * wrapper provides materialization of the result returned by
- * RemoteQueryNext.
- *
- * It works by sending the query to remote datanodes, which actually
- * execute the query on their subsets of the input. Partial results from
- * the datanodes are then combined into a single unified result.
+ * RemoteQueryNext
  */
+
 TupleTableSlot *
 ExecRemoteQuery(RemoteQueryState *node)
 {
@@ -5085,7 +5127,6 @@ void AtEOXact_DBCleanup(bool isCommit)
  * and the ctid/nodeid values to be supplied for the WHERE clause of the
  * query. The data values are present in dataSlot whereas the ctid/nodeid
  * are available in sourceSlot as junk attributes.
- * For DELETEs, the dataSlot is NULL.
  * sourceSlot is used only to retrieve ctid/nodeid, so it does not get
  * used for INSERTs, although it will never be NULL.
  * The slots themselves are undisturbed.
@@ -5097,11 +5138,14 @@ SetDataRowForIntParams(JunkFilter *junkfilter,
 {
 	StringInfoData	buf;
 	uint16			numparams = 0;
+	RemoteQuery		*step = (RemoteQuery *) rq_state->ss.ps.plan;
 
 	Assert(sourceSlot);
 
 	/* Calculate the total number of parameters */
-	if (dataSlot)
+	if (step->rq_max_param_num > 0)
+		numparams = step->rq_max_param_num;
+	else if (dataSlot)
 		numparams = dataSlot->tts_tupleDescriptor->natts;
 	/* Add number of junk attributes */
 	if (junkfilter)
@@ -5139,6 +5183,10 @@ SetDataRowForIntParams(JunkFilter *junkfilter,
 		{
 			TupleDesc tdesc = dataSlot->tts_tupleDescriptor;
 			int numatts = tdesc->natts;
+
+			if (step->rq_max_param_num > 0)
+				numatts = step->rq_max_param_num;
+
 			for (attindex = 0; attindex < numatts; attindex++)
 			{
 				rq_state->rqs_param_types[attindex] =
@@ -5183,20 +5231,20 @@ SetDataRowForIntParams(JunkFilter *junkfilter,
 		appendBinaryStringInfo(&buf, (char *) &params_nbo, sizeof(params_nbo));
 	}
 
-	/*
-	 * The data attributes would not be present for DELETE. In such case,
-	 * dataSlot will be NULL.
-	 */
 	if (dataSlot)
 	{
 		TupleDesc	 	tdesc = dataSlot->tts_tupleDescriptor;
 		int				attindex;
+		int				numatts = tdesc->natts;
 
 		/* Append the data attributes */
 
+		if (step->rq_max_param_num > 0)
+			numatts = step->rq_max_param_num;
+
 		/* ensure we have all values */
 		slot_getallattrs(dataSlot);
-		for (attindex = 0; attindex < tdesc->natts; attindex++)
+		for (attindex = 0; attindex < numatts; attindex++)
 		{
 			uint32 n32;
 			Assert(attindex < numparams);
@@ -5365,4 +5413,45 @@ pgxc_rq_fire_astriggers(RemoteQueryState *node)
 				break;
 		}
 	}
+}
+
+/*
+ * Flush PGXCNodeHandle cash to the coordinator until the amount of remaining data
+ * becomes lower than the threshold.
+ *
+ * If datanode is too slow to handle data sent, retry to flush some of the buffered
+ * data.
+ */
+static int flushPGXCNodeHandleData(PGXCNodeHandle *handle)
+{
+	int retry_no = 0;
+	int wait_microsec = 0;
+	size_t remaining;
+
+	while (handle->outEnd > MAX_SIZE_TO_STOP_FLUSH)
+	{
+		remaining = handle->outEnd;
+		if (send_some(handle, handle->outEnd) <0)
+		{
+			add_error_message(handle, "failed to send data to Datanode");
+			return EOF;
+		}
+		if (remaining == handle->outEnd)
+		{
+			/* No data sent */
+			retry_no++;
+			wait_microsec = retry_no < 5 ? 0 : (retry_no < 35 ? 2^(retry_no / 5) : 128) * 1000;
+			if (wait_microsec)
+				pg_usleep(wait_microsec);
+			continue;
+		}
+		else
+		{
+			/* Some data sent */
+			retry_no = 0;
+			wait_microsec = 0;
+			continue;
+		}
+	}
+	return 0;
 }

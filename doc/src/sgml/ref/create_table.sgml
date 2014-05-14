@@ -21,7 +21,7 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-CREATE [ STREAMING [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXISTS ] <replaceable class="PARAMETER">table_name</replaceable> ( [
+CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXISTS ] <replaceable class="PARAMETER">table_name</replaceable> ( [
   { <replaceable class="PARAMETER">column_name</replaceable> <replaceable class="PARAMETER">data_type</replaceable> [ COLLATE <replaceable>collation</replaceable> ] [ <replaceable class="PARAMETER">column_constraint</replaceable> [ ... ] ]
     | <replaceable>table_constraint</replaceable>
     | LIKE <replaceable>source_table</replaceable> [ <replaceable>like_option</replaceable> ... ] }
@@ -30,7 +30,7 @@ CREATE [ STREAMING [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ 
 [ INHERITS ( <replaceable>parent_table</replaceable> [, ... ] ) ]
 [ WITH ( <replaceable class="PARAMETER">storage_parameter</replaceable> [= <replaceable class="PARAMETER">value</replaceable>] [, ... ] ) | WITH OIDS | WITHOUT OIDS ]
 [ ON COMMIT { PRESERVE ROWS | DELETE ROWS | DROP } ]
-[ TABLESPACE <replaceable class="PARAMETER">tablespace</replaceable> ]
+[ TABLESPACE <replaceable class="PARAMETER">tablespace_name</replaceable> ]
 
 CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXISTS ] <replaceable class="PARAMETER">table_name</replaceable>
     OF <replaceable class="PARAMETER">type_name</replaceable> [ (
@@ -40,14 +40,14 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
 ) ]
 [ WITH ( <replaceable class="PARAMETER">storage_parameter</replaceable> [= <replaceable class="PARAMETER">value</replaceable>] [, ... ] ) | WITH OIDS | WITHOUT OIDS ]
 [ ON COMMIT { PRESERVE ROWS | DELETE ROWS | DROP } ]
-[ TABLESPACE <replaceable class="PARAMETER">tablespace</replaceable> ]
+[ TABLESPACE <replaceable class="PARAMETER">tablespace_name</replaceable> ]
 
 <phrase>where <replaceable class="PARAMETER">column_constraint</replaceable> is:</phrase>
 
 [ CONSTRAINT <replaceable class="PARAMETER">constraint_name</replaceable> ]
 { NOT NULL |
   NULL |
-  CHECK [ NO INHERIT ] ( <replaceable class="PARAMETER">expression</replaceable> ) |
+  CHECK ( <replaceable class="PARAMETER">expression</replaceable> ) [ NO INHERIT ] |
   DEFAULT <replaceable>default_expr</replaceable> |
   UNIQUE <replaceable class="PARAMETER">index_parameters</replaceable> |
   PRIMARY KEY <replaceable class="PARAMETER">index_parameters</replaceable> |
@@ -58,7 +58,7 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
 <phrase>and <replaceable class="PARAMETER">table_constraint</replaceable> is:</phrase>
 
 [ CONSTRAINT <replaceable class="PARAMETER">constraint_name</replaceable> ]
-{ CHECK [ NO INHERIT ] ( <replaceable class="PARAMETER">expression</replaceable> ) |
+{ CHECK ( <replaceable class="PARAMETER">expression</replaceable> ) [ NO INHERIT ] |
   UNIQUE ( <replaceable class="PARAMETER">column_name</replaceable> [, ... ] ) <replaceable class="PARAMETER">index_parameters</replaceable> |
   PRIMARY KEY ( <replaceable class="PARAMETER">column_name</replaceable> [, ... ] ) <replaceable class="PARAMETER">index_parameters</replaceable> |
   EXCLUDE [ USING <replaceable class="parameter">index_method</replaceable> ] ( <replaceable class="parameter">exclude_element</replaceable> WITH <replaceable class="parameter">operator</replaceable> [, ... ] ) <replaceable class="parameter">index_parameters</replaceable> [ WHERE ( <replaceable class="parameter">predicate</replaceable> ) ] |
@@ -73,11 +73,11 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
 <phrase><replaceable class="PARAMETER">index_parameters</replaceable> in <literal>UNIQUE</literal>, <literal>PRIMARY KEY</literal>, and <literal>EXCLUDE</literal> constraints are:</phrase>
 
 [ WITH ( <replaceable class="PARAMETER">storage_parameter</replaceable> [= <replaceable class="PARAMETER">value</replaceable>] [, ... ] ) ]
-[ USING INDEX TABLESPACE <replaceable class="PARAMETER">tablespace</replaceable> ]
+[ USING INDEX TABLESPACE <replaceable class="PARAMETER">tablespace_name</replaceable> ]
 
 <phrase><replaceable class="PARAMETER">exclude_element</replaceable> in an <literal>EXCLUDE</literal> constraint is:</phrase>
 
-{ <replaceable class="parameter">column</replaceable> | ( <replaceable class="parameter">expression</replaceable> ) } [ <replaceable class="parameter">opclass</replaceable> ] [ ASC | DESC ] [ NULLS { FIRST | LAST } ]
+{ <replaceable class="parameter">column_name</replaceable> | ( <replaceable class="parameter">expression</replaceable> ) } [ <replaceable class="parameter">opclass</replaceable> ] [ ASC | DESC ] [ NULLS { FIRST | LAST } ]
 </synopsis>
 
  </refsynopsisdiv>
@@ -182,8 +182,7 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
       automatically truncated after a crash or unclean shutdown.  The contents
       of an unlogged table are also not replicated to standby servers.
       Any indexes created on an unlogged table are automatically unlogged as
-      well; however, unlogged <link linkend="GiST">GiST indexes</link> are
-      currently not supported and cannot be created on an unlogged table.
+      well.
      </para>
     </listitem>
    </varlistentry>
@@ -336,16 +335,13 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
      </para>
      <para>
       Not-null constraints are always copied to the new table.
-      <literal>CHECK</literal> constraints will only be copied if
-      <literal>INCLUDING CONSTRAINTS</literal> is specified; other types of
-      constraints will never be copied. Also, no distinction is made between
-      column constraints and table constraints &mdash; when constraints are
-      requested, all check constraints are copied.
-     </para>
-     <para>
-      Any indexes on the original table will not be created on the new
-      table, unless the <literal>INCLUDING INDEXES</literal> clause is
-      specified.
+      <literal>CHECK</literal> constraints will be copied only if
+      <literal>INCLUDING CONSTRAINTS</literal> is specified.
+      Indexes, <literal>PRIMARY KEY</>, and <literal>UNIQUE</> constraints
+      on the original table will be created on the new table only if the
+      <literal>INCLUDING INDEXES</literal> clause is specified.
+      No distinction is made between column constraints and table
+      constraints.
      </para>
      <para><literal>STORAGE</> settings for the copied column definitions will only
       be copied if <literal>INCLUDING STORAGE</literal> is specified.  The
@@ -368,7 +364,7 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
       constraints copied by <literal>LIKE</> are not merged with similarly
       named columns and constraints.
       If the same name is specified explicitly or in another
-      <literal>LIKE</literal> clause, an error is signalled.
+      <literal>LIKE</literal> clause, an error is signaled.
      </para>
      <para>
       The <literal>LIKE</literal> clause can also be used to copy columns from
@@ -417,7 +413,7 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
    </varlistentry>
 
    <varlistentry>
-    <term><literal>CHECK [ NO INHERIT ] ( <replaceable class="PARAMETER">expression</replaceable> )</literal></term>
+    <term><literal>CHECK ( <replaceable class="PARAMETER">expression</replaceable> ) [ NO INHERIT ] </literal></term>
     <listitem>
      <para>
       The <literal>CHECK</> clause specifies an expression producing a
@@ -573,7 +569,7 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
    <varlistentry>
     <term><literal>REFERENCES <replaceable class="parameter">reftable</replaceable> [ ( <replaceable class="parameter">refcolumn</replaceable> ) ] [ MATCH <replaceable class="parameter">matchtype</replaceable> ] [ ON DELETE <replaceable class="parameter">action</replaceable> ] [ ON UPDATE <replaceable class="parameter">action</replaceable> ]</literal> (column constraint)</term>
 
-   <term><literal>FOREIGN KEY ( <replaceable class="parameter">column</replaceable> [, ... ] )
+   <term><literal>FOREIGN KEY ( <replaceable class="parameter">column_name</replaceable> [, ... ] )
     REFERENCES <replaceable class="parameter">reftable</replaceable> [ ( <replaceable class="parameter">refcolumn</replaceable> [, ... ] ) ]
     [ MATCH <replaceable class="parameter">matchtype</replaceable> ]
     [ ON DELETE <replaceable class="parameter">action</replaceable> ]
@@ -585,8 +581,8 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
       These clauses specify a foreign key constraint, which requires
       that a group of one or more columns of the new table must only
       contain values that match values in the referenced
-      column(s) of some row of the referenced table.  If <replaceable
-      class="parameter">refcolumn</replaceable> is omitted, the
+      column(s) of some row of the referenced table.  If the <replaceable
+      class="parameter">refcolumn</replaceable> list is omitted, the
       primary key of the <replaceable class="parameter">reftable</replaceable>
       is used.  The referenced columns must be the columns of a non-deferrable
       unique or primary key constraint in the referenced table.  Note that
@@ -599,12 +595,16 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
       values of the referenced table and referenced columns using the
       given match type.  There are three match types: <literal>MATCH
       FULL</>, <literal>MATCH PARTIAL</>, and <literal>MATCH
-      SIMPLE</literal>, which is also the default.  <literal>MATCH
+      SIMPLE</literal> (which is the default).  <literal>MATCH
       FULL</> will not allow one column of a multicolumn foreign key
-      to be null unless all foreign key columns are null.
-      <literal>MATCH SIMPLE</literal> allows some foreign key columns
-      to be null while other parts of the foreign key are not
-      null. <literal>MATCH PARTIAL</> is not yet implemented.
+      to be null unless all foreign key columns are null; if they are all
+      null, the row is not required to have a match in the referenced table.
+      <literal>MATCH SIMPLE</literal> allows any of the foreign key columns
+      to be null; if any of them are null, the row is not required to have a
+      match in the referenced table.
+      <literal>MATCH PARTIAL</> is not yet implemented.
+      (Of course, <literal>NOT NULL</> constraints can be applied to the
+      referencing column(s) to prevent these cases from arising.)
      </para>
 
      <para>
@@ -652,8 +652,8 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
         <listitem>
          <para>
           Delete any rows referencing the deleted row, or update the
-          value of the referencing column to the new value of the
-          referenced column, respectively.
+          values of the referencing column(s) to the new values of the
+          referenced columns, respectively.
          </para>
         </listitem>
        </varlistentry>
@@ -672,6 +672,8 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
         <listitem>
          <para>
           Set the referencing column(s) to their default values.
+          (There must be a row in the referenced table matching the default
+          values, if they are not null, or the operation will fail.)
          </para>
         </listitem>
        </varlistentry>
@@ -680,8 +682,8 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
 
      <para>
       If the referenced column(s) are changed frequently, it might be wise to
-      add an index to the foreign key column so that referential actions
-      associated with the foreign key column can be performed more
+      add an index to the referencing column(s) so that referential actions
+      associated with the foreign key constraint can be performed more
       efficiently.
      </para>
     </listitem>
@@ -819,10 +821,10 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
    </varlistentry>
 
    <varlistentry>
-    <term><literal>TABLESPACE <replaceable class="PARAMETER">tablespace</replaceable></literal></term>
+    <term><literal>TABLESPACE <replaceable class="PARAMETER">tablespace_name</replaceable></literal></term>
     <listitem>
      <para>
-      The <replaceable class="PARAMETER">tablespace</replaceable> is the name
+      The <replaceable class="PARAMETER">tablespace_name</replaceable> is the name
       of the tablespace in which the new table is to be created.
       If not specified,
       <xref linkend="guc-default-tablespace"> is consulted, or
@@ -832,7 +834,7 @@ CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXI
    </varlistentry>
 
    <varlistentry>
-    <term><literal>USING INDEX TABLESPACE <replaceable class="PARAMETER">tablespace</replaceable></literal></term>
+    <term><literal>USING INDEX TABLESPACE <replaceable class="PARAMETER">tablespace_name</replaceable></literal></term>
     <listitem>
      <para>
       This clause allows selection of the tablespace in which the index
@@ -1450,6 +1452,7 @@ CREATE TABLE employees OF employee_type (
   <simplelist type="inline">
    <member><xref linkend="sql-altertable"></member>
    <member><xref linkend="sql-droptable"></member>
+   <member><xref linkend="sql-createtableas"></member>
    <member><xref linkend="sql-createtablespace"></member>
    <member><xref linkend="sql-createtype"></member>
   </simplelist>

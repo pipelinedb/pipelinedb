@@ -9,8 +9,6 @@ CREATE SCHEMA test_schema_1
               a serial,
               b int UNIQUE
        );
-NOTICE:  CREATE TABLE will create implicit sequence "abc_a_seq" for serial column "abc.a"
-NOTICE:  CREATE TABLE / UNIQUE will create implicit index "abc_b_key" for table "abc"
 ERROR:  Cannot create index whose evaluation cannot be enforced to remote nodes
 -- verify that the objects were created
 SELECT COUNT(*) FROM pg_class WHERE relnamespace =
@@ -21,27 +19,38 @@ SELECT COUNT(*) FROM pg_class WHERE relnamespace =
 (1 row)
 
 INSERT INTO test_schema_1.abc DEFAULT VALUES;
-ERROR:  schema "test_schema_1" does not exist
+ERROR:  relation "test_schema_1.abc" does not exist
 LINE 1: INSERT INTO test_schema_1.abc DEFAULT VALUES;
                     ^
 INSERT INTO test_schema_1.abc DEFAULT VALUES;
-ERROR:  schema "test_schema_1" does not exist
+ERROR:  relation "test_schema_1.abc" does not exist
 LINE 1: INSERT INTO test_schema_1.abc DEFAULT VALUES;
                     ^
 INSERT INTO test_schema_1.abc DEFAULT VALUES;
-ERROR:  schema "test_schema_1" does not exist
+ERROR:  relation "test_schema_1.abc" does not exist
 LINE 1: INSERT INTO test_schema_1.abc DEFAULT VALUES;
                     ^
 SELECT * FROM test_schema_1.abc ORDER BY a;
-ERROR:  schema "test_schema_1" does not exist
+ERROR:  relation "test_schema_1.abc" does not exist
 LINE 1: SELECT * FROM test_schema_1.abc ORDER BY a;
                       ^
 SELECT * FROM test_schema_1.abc_view ORDER BY a;
-ERROR:  schema "test_schema_1" does not exist
+ERROR:  relation "test_schema_1.abc_view" does not exist
 LINE 1: SELECT * FROM test_schema_1.abc_view ORDER BY a;
                       ^
+-- test IF NOT EXISTS cases
+CREATE SCHEMA test_schema_1; -- fail, already exists
+CREATE SCHEMA IF NOT EXISTS test_schema_1; -- ok with notice
+NOTICE:  schema "test_schema_1" already exists, skipping
+CREATE SCHEMA IF NOT EXISTS test_schema_1 -- fail, disallowed
+       CREATE TABLE abc (
+              a serial,
+              b int UNIQUE
+       );
+ERROR:  CREATE SCHEMA IF NOT EXISTS cannot include schema elements
+LINE 2:        CREATE TABLE abc (
+               ^
 DROP SCHEMA test_schema_1 CASCADE;
-ERROR:  schema "test_schema_1" does not exist
 -- verify that the objects were dropped
 SELECT COUNT(*) FROM pg_class WHERE relnamespace =
     (SELECT oid FROM pg_namespace WHERE nspname = 'test_schema_1');

@@ -4,7 +4,7 @@
  *		Functions for finding and validating executable files
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -26,11 +26,13 @@
 #include <unistd.h>
 
 #ifndef FRONTEND
-/* We use only 3-parameter elog calls in this file, for simplicity */
+/* We use only 3- and 4-parameter elog calls in this file, for simplicity */
 /* NOTE: caller must provide gettext call around str! */
 #define log_error(str, param)	elog(LOG, str, param)
+#define log_error4(str, param, arg1)	elog(LOG, str, param, arg1)
 #else
 #define log_error(str, param)	(fprintf(stderr, str, param), fputc('\n', stderr))
+#define log_error4(str, param, arg1)	(fprintf(stderr, str, param, arg1), fputc('\n', stderr))
 #endif
 
 #ifdef WIN32_ONLY_COMPILER
@@ -252,7 +254,7 @@ resolve_symlinks(char *path)
 			*lsep = '\0';
 			if (chdir(path) == -1)
 			{
-				log_error(_("could not change directory to \"%s\""), path);
+				log_error4(_("could not change directory to \"%s\": %s"), path, strerror(errno));
 				return -1;
 			}
 			fname = lsep + 1;
@@ -288,7 +290,7 @@ resolve_symlinks(char *path)
 
 	if (chdir(orig_wd) == -1)
 	{
-		log_error(_("could not change directory to \"%s\""), orig_wd);
+		log_error4(_("could not change directory to \"%s\": %s"), orig_wd, strerror(errno));
 		return -1;
 	}
 #endif   /* HAVE_READLINK */
@@ -322,7 +324,7 @@ find_other_exec(const char *argv0, const char *target,
 	if (validate_exec(retpath) != 0)
 		return -1;
 
-	snprintf(cmd, sizeof(cmd), "\"%s\" -V 2>%s", retpath, DEVNULL);
+	snprintf(cmd, sizeof(cmd), "\"%s\" -V", retpath);
 
 	if (!pipe_read_line(cmd, line, sizeof(line)))
 		return -1;
@@ -352,12 +354,20 @@ pipe_read_line(char *cmd, char *line, int maxsize)
 	fflush(stdout);
 	fflush(stderr);
 
+	errno = 0;
 	if ((pgver = popen(cmd, "r")) == NULL)
+	{
+		perror("popen failure");
 		return NULL;
+	}
 
+	errno = 0;
 	if (fgets(line, maxsize, pgver) == NULL)
 	{
-		perror("fgets failure");
+		if (feof(pgver))
+			fprintf(stderr, "no data was returned by command \"%s\"\n", cmd);
+		else
+			perror("fgets failure");
 		pclose(pgver);			/* no error checking */
 		return NULL;
 	}
@@ -495,14 +505,12 @@ pipe_read_line(char *cmd, char *line, int maxsize)
 
 /*
  * pclose() plus useful error reporting
- * Is this necessary?  bjm 2004-05-11
- * Originaally this was stated to be here because pipe.c had backend linkage.
- * Perhaps that's no longer so now we have got rid of pipe.c amd 2012-03-28
  */
 int
 pclose_check(FILE *stream)
 {
 	int			exitstatus;
+	char	   *reason;
 
 	exitstatus = pclose(stream);
 
@@ -512,35 +520,20 @@ pclose_check(FILE *stream)
 	if (exitstatus == -1)
 	{
 		/* pclose() itself failed, and hopefully set errno */
-		perror("pclose failed");
+		log_error(_("pclose failed: %s"), strerror(errno));
 	}
-	else if (WIFEXITED(exitstatus))
-		log_error(_("child process exited with exit code %d"),
-				  WEXITSTATUS(exitstatus));
-	else if (WIFSIGNALED(exitstatus))
-#if defined(WIN32)
-		log_error(_("child process was terminated by exception 0x%X"),
-				  WTERMSIG(exitstatus));
-#elif defined(HAVE_DECL_SYS_SIGLIST) && HAVE_DECL_SYS_SIGLIST
-	{
-		char		str[256];
-
-		snprintf(str, sizeof(str), "%d: %s", WTERMSIG(exitstatus),
-				 WTERMSIG(exitstatus) < NSIG ?
-				 sys_siglist[WTERMSIG(exitstatus)] : "(unknown)");
-		log_error(_("child process was terminated by signal %s"), str);
-	}
-#else
-		log_error(_("child process was terminated by signal %d"),
-				  WTERMSIG(exitstatus));
-#endif
 	else
-		log_error(_("child process exited with unrecognized status %d"),
-				  exitstatus);
-
-	return -1;
+	{
+		reason = wait_result_to_str(exitstatus);
+		log_error("%s", reason);
+#ifdef FRONTEND
+		free(reason);
+#else
+		pfree(reason);
+#endif
+	}
+	return exitstatus;
 }
-
 
 /*
  *	set_pglocale_pgservice

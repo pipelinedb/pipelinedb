@@ -3,7 +3,7 @@
  * trigger.h
  *	  Declarations for trigger handling.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/commands/trigger.h
@@ -115,7 +115,7 @@ extern Oid CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 extern void RemoveTriggerById(Oid trigOid);
 extern Oid	get_trigger_oid(Oid relid, const char *name, bool missing_ok);
 
-extern void renametrig(RenameStmt *stmt);
+extern Oid	renametrig(RenameStmt *stmt);
 
 extern void EnableDisableTrigger(Relation rel, const char *tgname,
 					 char fires_when, bool skip_system);
@@ -206,10 +206,10 @@ extern bool AfterTriggerPendingOnRel(Oid relid);
 /*
  * in utils/adt/ri_triggers.c
  */
-extern bool RI_FKey_keyequal_upd_pk(Trigger *trigger, Relation pk_rel,
-						HeapTuple old_row, HeapTuple new_row);
-extern bool RI_FKey_keyequal_upd_fk(Trigger *trigger, Relation fk_rel,
-						HeapTuple old_row, HeapTuple new_row);
+extern bool RI_FKey_pk_upd_check_required(Trigger *trigger, Relation pk_rel,
+							  HeapTuple old_row, HeapTuple new_row);
+extern bool RI_FKey_fk_upd_check_required(Trigger *trigger, Relation fk_rel,
+							  HeapTuple old_row, HeapTuple new_row);
 extern bool RI_Initial_Check(Trigger *trigger,
 				 Relation fk_rel, Relation pk_rel);
 

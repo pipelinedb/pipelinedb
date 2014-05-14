@@ -19,6 +19,8 @@
  *-------------------------------------------------------------------------
  */
 
+
+#define FE_MEMUTILS_H	/* We don't need pg_malloc() definition in fe_memutils.h */
 #include "postgres_fe.h"
 
 #include <dirent.h>

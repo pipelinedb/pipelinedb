@@ -29,7 +29,6 @@ DROP OPERATOR [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ( 
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP OPERATOR</command> drops an existing operator from
    the database system.  To execute this command you must be the owner
@@ -40,6 +39,7 @@ DROP OPERATOR [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ( 
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
 
    <varlistentry>
@@ -125,13 +125,13 @@ DROP OPERATOR ~ (none, bit);
    for type <type>bigint</type>:
 <programlisting>
 DROP OPERATOR ! (bigint, none);
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP OPERATOR</command> statement in the SQL standard.
   </para>

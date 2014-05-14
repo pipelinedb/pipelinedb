@@ -27,6 +27,7 @@ COMMIT [ WORK | TRANSACTION ]
 
  <refsect1>
   <title>Description</title>
+
 &common;
   <para>
    <command>COMMIT</command> commits the current transaction. All
@@ -38,6 +39,7 @@ COMMIT [ WORK | TRANSACTION ]
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>WORK</literal></term>
@@ -72,13 +74,13 @@ COMMIT [ WORK | TRANSACTION ]
    To commit the current transaction and make all changes permanent:
 <programlisting>
 COMMIT;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The SQL standard only specifies the two forms
    <literal>COMMIT</literal> and <literal>COMMIT

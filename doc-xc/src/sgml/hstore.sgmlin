@@ -6,7 +6,8 @@
  <indexterm zone="hstore">
   <primary>hstore</primary>
  </indexterm>
-&pgonly;
+
+&common;
  <para>
   This module implements the <type>hstore</> data type for storing sets of
   key/value pairs within a single <productname>PostgreSQL</> value.
@@ -18,9 +19,7 @@
  <sect2>
   <title><type>hstore</> External Representation</title>
 
-&pgonly;
-
-
+&common;
   <para>
 
    The text representation of an <type>hstore</>, used for input and output,
@@ -87,9 +86,8 @@ key =&gt; NULL
 
  <sect2>
   <title><type>hstore</> Operators and Functions</title>
-&pgonly;
 
-
+&common;
   <para>
    The operators provided by the <literal>hstore</literal> module are
    shown in <xref linkend="hstore-op-table">, the functions
@@ -122,13 +120,6 @@ key =&gt; NULL
       <entry>get values for keys (<literal>NULL</> if not present)</entry>
       <entry><literal>'a=&gt;x, b=&gt;y, c=&gt;z'::hstore -&gt; ARRAY['c','a']</literal></entry>
       <entry><literal>{"z","x"}</literal></entry>
-     </row>
-
-     <row>
-      <entry><type>text</> <literal>=&gt;</> <type>text</></entry>
-      <entry>make single-pair <type>hstore</></entry>
-      <entry><literal>'a' =&gt; 'b'</literal></entry>
-      <entry><literal>"a"=&gt;"b"</literal></entry>
      </row>
 
      <row>
@@ -229,14 +220,6 @@ key =&gt; NULL
    </para>
   </note>
 
-  <note>
-  <para>
-   The <literal>=&gt;</> operator is deprecated and may be removed in a
-   future release.  Use the <literal>hstore(text, text)</literal> function
-   instead.
-   </para>
-  </note>
-
   <table id="hstore-func-table">
    <title><type>hstore</> Functions</title>
 
@@ -253,7 +236,7 @@ key =&gt; NULL
 
     <tbody>
      <row>
-      <entry><function>hstore(record)</function></entry>
+      <entry><function>hstore(record)</function><indexterm><primary>hstore</primary></indexterm></entry>
       <entry><type>hstore</type></entry>
       <entry>construct an <type>hstore</> from a record or row</entry>
       <entry><literal>hstore(ROW(1,2))</literal></entry>
@@ -286,7 +269,7 @@ key =&gt; NULL
      </row>
 
      <row>
-      <entry><function>akeys(hstore)</function></entry>
+      <entry><function>akeys(hstore)</function><indexterm><primary>akeys</primary></indexterm></entry>
       <entry><type>text[]</type></entry>
       <entry>get <type>hstore</>'s keys as an array</entry>
       <entry><literal>akeys('a=&gt;1,b=&gt;2')</literal></entry>
@@ -294,7 +277,7 @@ key =&gt; NULL
      </row>
 
      <row>
-      <entry><function>skeys(hstore)</function></entry>
+      <entry><function>skeys(hstore)</function><indexterm><primary>skeys</primary></indexterm></entry>
       <entry><type>setof text</type></entry>
       <entry>get <type>hstore</>'s keys as a set</entry>
       <entry><literal>skeys('a=&gt;1,b=&gt;2')</literal></entry>
@@ -306,7 +289,7 @@ b
      </row>
 
      <row>
-      <entry><function>avals(hstore)</function></entry>
+      <entry><function>avals(hstore)</function><indexterm><primary>avals</primary></indexterm></entry>
       <entry><type>text[]</type></entry>
       <entry>get <type>hstore</>'s values as an array</entry>
       <entry><literal>avals('a=&gt;1,b=&gt;2')</literal></entry>
@@ -314,7 +297,7 @@ b
      </row>
 
      <row>
-      <entry><function>svals(hstore)</function></entry>
+      <entry><function>svals(hstore)</function><indexterm><primary>svals</primary></indexterm></entry>
       <entry><type>setof text</type></entry>
       <entry>get <type>hstore</>'s values as a set</entry>
       <entry><literal>svals('a=&gt;1,b=&gt;2')</literal></entry>
@@ -326,7 +309,7 @@ b
      </row>
 
      <row>
-      <entry><function>hstore_to_array(hstore)</function></entry>
+      <entry><function>hstore_to_array(hstore)</function><indexterm><primary>hstore_to_array</primary></indexterm></entry>
       <entry><type>text[]</type></entry>
       <entry>get <type>hstore</>'s keys and values as an array of alternating
        keys and values</entry>
@@ -335,7 +318,7 @@ b
      </row>
 
      <row>
-      <entry><function>hstore_to_matrix(hstore)</function></entry>
+      <entry><function>hstore_to_matrix(hstore)</function><indexterm><primary>hstore_to_matrix</primary></indexterm></entry>
       <entry><type>text[]</type></entry>
       <entry>get <type>hstore</>'s keys and values as a two-dimensional array</entry>
       <entry><literal>hstore_to_matrix('a=&gt;1,b=&gt;2')</literal></entry>
@@ -343,7 +326,23 @@ b
      </row>
 
      <row>
-      <entry><function>slice(hstore, text[])</function></entry>
+      <entry><function>hstore_to_json(hstore)</function><indexterm><primary>hstore_to_json</primary></indexterm></entry>
+      <entry><type>json</type></entry>
+      <entry>get <type>hstore</type> as a <type>json</type> value</entry>
+      <entry><literal>hstore_to_json('"a key"=&gt;1, b=&gt;t, c=&gt;null, d=&gt;12345, e=&gt;012345, f=&gt;1.234, g=&gt;2.345e+4')</literal></entry>
+      <entry><literal>{"a key": "1", "b": "t", "c": null, "d": "12345", "e": "012345", "f": "1.234", "g": "2.345e+4"}</literal></entry>
+     </row>
+
+     <row>
+      <entry><function>hstore_to_json_loose(hstore)</function><indexterm><primary>hstore_to_json_loose</primary></indexterm></entry>
+      <entry><type>json</type></entry>
+      <entry>get <type>hstore</type> as a <type>json</type> value, but attempting to distinguish numerical and Boolean values so they are unquoted in the JSON</entry>
+      <entry><literal>hstore_to_json_loose('"a key"=&gt;1, b=&gt;t, c=&gt;null, d=&gt;12345, e=&gt;012345, f=&gt;1.234, g=&gt;2.345e+4')</literal></entry>
+      <entry><literal>{"a key": 1, "b": true, "c": null, "d": 12345, "e": "012345", "f": 1.234, "g": 2.345e+4}</literal></entry>
+     </row>
+
+     <row>
+      <entry><function>slice(hstore, text[])</function><indexterm><primary>slice</primary></indexterm></entry>
       <entry><type>hstore</type></entry>
       <entry>extract a subset of an <type>hstore</></entry>
       <entry><literal>slice('a=&gt;1,b=&gt;2,c=&gt;3'::hstore, ARRAY['b','c','x'])</literal></entry>
@@ -351,7 +350,7 @@ b
      </row>
 
      <row>
-      <entry><function>each(hstore)</function></entry>
+      <entry><function>each(hstore)</function><indexterm><primary>each</primary></indexterm></entry>
       <entry><type>setof(key text, value text)</type></entry>
       <entry>get <type>hstore</>'s keys and values as a set</entry>
       <entry><literal>select * from each('a=&gt;1,b=&gt;2')</literal></entry>
@@ -365,7 +364,7 @@ b
      </row>
 
      <row>
-      <entry><function>exist(hstore,text)</function></entry>
+      <entry><function>exist(hstore,text)</function><indexterm><primary>exist</primary></indexterm></entry>
       <entry><type>boolean</type></entry>
       <entry>does <type>hstore</> contain key?</entry>
       <entry><literal>exist('a=&gt;1','a')</literal></entry>
@@ -373,7 +372,7 @@ b
      </row>
 
      <row>
-      <entry><function>defined(hstore,text)</function></entry>
+      <entry><function>defined(hstore,text)</function><indexterm><primary>defined</primary></indexterm></entry>
       <entry><type>boolean</type></entry>
       <entry>does <type>hstore</> contain non-<literal>NULL</> value for key?</entry>
       <entry><literal>defined('a=&gt;NULL','a')</literal></entry>
@@ -381,7 +380,7 @@ b
      </row>
 
      <row>
-      <entry><function>delete(hstore,text)</function></entry>
+      <entry><function>delete(hstore,text)</function><indexterm><primary>delete</primary></indexterm></entry>
       <entry><type>hstore</type></entry>
       <entry>delete pair with matching key</entry>
       <entry><literal>delete('a=&gt;1,b=&gt;2','b')</literal></entry>
@@ -405,7 +404,7 @@ b
      </row>
 
      <row>
-      <entry><function>populate_record(record,hstore)</function></entry>
+      <entry><function>populate_record(record,hstore)</function><indexterm><primary>populate_record</primary></indexterm></entry>
       <entry><type>record</type></entry>
       <entry>replace fields in <type>record</> with matching values from <type>hstore</></entry>
       <entry>see Examples section</entry>
@@ -415,6 +414,13 @@ b
     </tbody>
    </tgroup>
   </table>
+
+  <note>
+   <para>
+     The function <function>hstore_to_json</function> is used when an <type>hstore</type>
+     value is cast to <type>json</type>.
+   </para>
+  </note>
 
   <note>
    <para>
@@ -428,9 +434,7 @@ b
  <sect2>
   <title>Indexes</title>
 
-&pgonly;
-
-
+&common;
   <para>
    <type>hstore</> has GiST and GIN index support for the <literal>@&gt;</>,
    <literal>?</>, <literal>?&amp;</> and <literal>?|</> operators. For example:
@@ -460,13 +464,11 @@ CREATE INDEX hidx ON testhstore USING HASH (h);
  <sect2>
   <title>Examples</title>
 
-&pgonly;
-
-
+&common;
   <para>
    Add a key, or update an existing key with a new value:
 <programlisting>
-UPDATE tab SET h = h || ('c' =&gt; '3');
+UPDATE tab SET h = h || hstore('c', '3');
 </programlisting>
   </para>
 
@@ -523,9 +525,7 @@ SELECT (r).* FROM (SELECT t #= '"col3"=&gt;"baz"' AS r FROM test t) s;
  <sect2>
   <title>Statistics</title>
 
-&pgonly;
-
-
+&common;
   <para>
    The <type>hstore</> type, because of its intrinsic liberality, could
    contain a lot of different keys. Checking for valid keys is the task of the
@@ -573,9 +573,7 @@ SELECT key, count(*) FROM
  <sect2>
   <title>Compatibility</title>
 
-&pgonly;
-
-
+&common;
   <para>
    As of PostgreSQL 9.0, <type>hstore</> uses a different internal
    representation than previous versions. This presents no obstacle for
@@ -608,6 +606,7 @@ ALTER TABLE tablename ALTER hstorecol TYPE hstore USING hstorecol || '';
  <sect2>
   <title>Authors</title>
 
+&common;
   <para>
    Oleg Bartunov <email>oleg@sai.msu.su</email>, Moscow, Moscow University, Russia
   </para>

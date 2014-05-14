@@ -883,6 +883,16 @@ cancel_query(void)
 			handle->state = DN_CONNECTION_STATE_IDLE;
 		}
 	}
+		/*
+		 * Hack to wait a moment to cancel requests are processed in other nodes.
+		 * If we send a new query to nodes before cancel requests get to be
+		 * processed, the query will get unanticipated failure.
+		 * As we have no way to know when to the request processed, we can't not
+		 * wait an experimental duration (10ms).
+		 */
+#if PGXC_CANCEL_DELAY > 0
+		pg_usleep(PGXC_CANCEL_DELAY * 1000);
+#endif
 }
 /*
  * This method won't return until all network buffers are empty
@@ -1120,7 +1130,7 @@ send_some(PGXCNodeHandle *handle, int len)
 	}
 
 	/* shift the remaining contents of the buffer */
-	if (remaining > 0)
+	if ((remaining > 0) && (handle->outBuffer != ptr))
 		memmove(handle->outBuffer, ptr, remaining);
 	handle->outEnd = remaining;
 
@@ -1144,10 +1154,8 @@ pgxc_node_send_parse(PGXCNodeHandle * handle, const char* statement,
 	/* message length */
 	int			msgLen;
 	int			cnt_params;
-#if 0
+#if USE_ASSERT_CHECKING
 	size_t		old_outEnd = handle->outEnd;
-#else
-#define old_outEnd handle->outEnd
 #endif	
 
 	/* if there are parameters, param_types should exist */
@@ -1849,6 +1857,7 @@ get_handles(List *datanodelist, List *coordlist, bool is_coord_only_query, bool 
 			 * We do not have to zero the array - on success all items will be set
 			 * to correct pointers, on error the array will be freed
 			 */
+
 			result->datanode_handles = (PGXCNodeHandle **)
 				palloc(list_length(datanodelist) * sizeof(PGXCNodeHandle *));
 			if (!result->datanode_handles)
@@ -1954,6 +1963,7 @@ get_handles(List *datanodelist, List *coordlist, bool is_coord_only_query, bool 
 		int	j = 0;
 		int offset = use_aux ? list_length(dn_allocate) : 0;
 		int	*fds = PoolManagerGetConnections(dn_allocate, co_allocate, offset);
+
 		if (!fds)
 		{
 			if (coordlist)

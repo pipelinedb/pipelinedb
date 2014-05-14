@@ -1394,7 +1394,8 @@
        </entry>
        <entry><type>text</type></entry>
        <entry>
-        Concatenate all arguments. NULL arguments are ignored.
+        Concatenate the text representations of all the arguments.
+        NULL arguments are ignored.
        </entry>
        <entry><literal>concat('abcde', 2, NULL, 22)</literal></entry>
        <entry><literal>abcde222</literal></entry>
@@ -1411,8 +1412,8 @@
        </entry>
        <entry><type>text</type></entry>
        <entry>
-        Concatenate all but first arguments with separators. The first
-        parameter is used as a separator. NULL arguments are ignored.
+        Concatenate all but the first argument with separators. The first
+        argument is used as the separator string. NULL arguments are ignored.
        </entry>
        <entry><literal>concat_ws(',', 'abcde', 2, NULL, 22)</literal></entry>
        <entry><literal>abcde,2,22</literal></entry>
@@ -1505,7 +1506,8 @@
        <entry>
         Encode binary data into a textual representation.  Supported
         formats are: <literal>base64</>, <literal>hex</>, <literal>escape</>.
-        <literal>escape</> merely outputs null bytes as <literal>\000</> and
+        <literal>escape</> converts zero bytes and high-bit-set bytes to
+        octal sequences (<literal>\</><replaceable>nnn</>) and
         doubles backslashes.
        </entry>
        <entry><literal>encode(E'123\\000\\001', 'base64')</literal></entry>
@@ -1518,20 +1520,13 @@
          <primary>format</primary>
         </indexterm>
         <literal><function>format</function>(<parameter>formatstr</parameter> <type>text</type>
-        [, <parameter>str</parameter> <type>"any"</type> [, ...] ])</literal>
+        [, <parameter>formatarg</parameter> <type>"any"</type> [, ...] ])</literal>
        </entry>
        <entry><type>text</type></entry>
        <entry>
-         Format a string.  This function is similar to the C function
-         <function>sprintf</>; but only the following conversion specifications
-         are recognized: <literal>%s</literal> interpolates the corresponding
-         argument as a string; <literal>%I</literal> escapes its argument as
-         an SQL identifier; <literal>%L</literal> escapes its argument as an
-         SQL literal; <literal>%%</literal> outputs a literal <literal>%</>.
-         A conversion can reference an explicit parameter position by preceding
-         the conversion specifier with <literal><replaceable>n</>$</>, where
-         <replaceable>n</replaceable> is the argument position.
-         See also <xref linkend="plpgsql-quote-literal-example">.
+         Format arguments according to a format string.
+         This function is similar to the C function <function>sprintf</>.
+         See <xref linkend="functions-string-format">.
        </entry>
        <entry><literal>format('Hello %s, %1$s', 'World')</literal></entry>
        <entry><literal>Hello World, World</literal></entry>
@@ -2032,6 +2027,18 @@
      </tbody>
     </tgroup>
    </table>
+
+   <para>
+    The <function>concat</function>, <function>concat_ws</function> and
+    <function>format</function> functions are variadic, so it is possible to
+    pass the values to be concatenated or formatted as an array marked with
+    the <literal>VARIADIC</literal> keyword (see <xref
+    linkend="xfunc-sql-variadic-functions">).  The array's elements are
+    treated as if they were separate ordinary arguments to the function.
+    If the variadic array argument is NULL, <function>concat</function>
+    and <function>concat_ws</function> return NULL, but
+    <function>format</function> treats a NULL as a zero-element array.
+   </para>
 
    <para>
    See also the aggregate function <function>string_agg</function> in
@@ -2800,7 +2807,7 @@
       </row>
 
       <row>
-       <entry><literal>ut8_to_euc_jis_2004</literal></entry>
+       <entry><literal>utf8_to_euc_jis_2004</literal></entry>
        <entry><literal>UTF8</literal></entry>
        <entry><literal>EUC_JIS_2004</literal></entry>
       </row>
@@ -2812,7 +2819,7 @@
       </row>
 
       <row>
-       <entry><literal>ut8_to_shift_jis_2004</literal></entry>
+       <entry><literal>utf8_to_shift_jis_2004</literal></entry>
        <entry><literal>UTF8</literal></entry>
        <entry><literal>SHIFT_JIS_2004</literal></entry>
       </row>
@@ -2832,6 +2839,214 @@
      </tbody>
     </tgroup>
    </table>
+
+   <sect2 id="functions-string-format">
+    <title><function>format</function></title>
+
+    <indexterm>
+     <primary>format</primary>
+    </indexterm>
+
+    <para>
+     The function <function>format</> produces output formatted according to
+     a format string, in a style similar to the C function
+     <function>sprintf</>.
+    </para>
+
+    <para>
+<synopsis>
+<function>format</>(<parameter>formatstr</> <type>text</> [, <parameter>formatarg</> <type>"any"</> [, ...] ])
+</synopsis>
+     <replaceable>formatstr</> is a format string that specifies how the
+     result should be formatted.  Text in the format string is copied
+     directly to the result, except where <firstterm>format specifiers</> are
+     used.  Format specifiers act as placeholders in the string, defining how
+     subsequent function arguments should be formatted and inserted into the
+     result.  Each <replaceable>formatarg</> argument is converted to text
+     according to the usual output rules for its data type, and then formatted
+     and inserted into the result string according to the format specifier(s).
+    </para>
+
+    <para>
+     Format specifiers are introduced by a <literal>%</> character and have
+     the form
+<synopsis>
+%[<replaceable>position</>][<replaceable>flags</>][<replaceable>width</>]<replaceable>type</>
+</synopsis>
+     where the component fields are:
+
+     <variablelist>
+      <varlistentry>
+       <term><replaceable>position</replaceable> (optional)</term>
+       <listitem>
+        <para>
+         A string of the form <literal><replaceable>n</>$</> where
+         <replaceable>n</> is the index of the argument to print.
+         Index 1 means the first argument after
+         <replaceable>formatstr</>.  If the <replaceable>position</> is
+         omitted, the default is to use the next argument in sequence.
+        </para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><replaceable>flags</replaceable> (optional)</term>
+       <listitem>
+        <para>
+         Additional options controlling how the format specifier's output is
+         formatted.  Currently the only supported flag is a minus sign
+         (<literal>-</>) which will cause the format specifier's output to be
+         left-justified.  This has no effect unless the <replaceable>width</>
+         field is also specified.
+        </para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><replaceable>width</replaceable> (optional)</term>
+       <listitem>
+        <para>
+         Specifies the <emphasis>minimum</> number of characters to use to
+         display the format specifier's output.  The output is padded on the
+         left or right (depending on the <literal>-</> flag) with spaces as
+         needed to fill the width.  A too-small width does not cause
+         truncation of the output, but is simply ignored.  The width may be
+         specified using any of the following: a positive integer; an
+         asterisk (<literal>*</>) to use the next function argument as the
+         width; or a string of the form <literal>*<replaceable>n</>$</> to
+         use the <replaceable>n</>th function argument as the width.
+        </para>
+
+        <para>
+         If the width comes from a function argument, that argument is
+         consumed before the argument that is used for the format specifier's
+         value.  If the width argument is negative, the result is left
+         aligned (as if the <literal>-</> flag had been specified) within a
+         field of length <function>abs</>(<replaceable>width</replaceable>).
+        </para>
+       </listitem>
+      </varlistentry>
+
+      <varlistentry>
+       <term><replaceable>type</replaceable> (required)</term>
+       <listitem>
+        <para>
+         The type of format conversion to use to produce the format
+         specifier's output.  The following types are supported:
+         <itemizedlist>
+          <listitem>
+           <para>
+            <literal>s</literal> formats the argument value as a simple
+            string.  A null value is treated as an empty string.
+           </para>
+          </listitem>
+          <listitem>
+           <para>
+            <literal>I</literal> treats the argument value as an SQL
+            identifier, double-quoting it if necessary.
+            It is an error for the value to be null.
+           </para>
+          </listitem>
+          <listitem>
+           <para>
+            <literal>L</literal> quotes the argument value as an SQL literal.
+            A null value is displayed as the string <literal>NULL</>, without
+            quotes.
+           </para>
+          </listitem>
+         </itemizedlist>
+        </para>
+       </listitem>
+      </varlistentry>
+     </variablelist>
+    </para>
+
+    <para>
+     In addition to the format specifiers described above, the special sequence
+     <literal>%%</> may be used to output a literal <literal>%</> character.
+    </para>
+
+    <para>
+     Here are some examples of the basic format conversions:
+
+<screen>
+SELECT format('Hello %s', 'World');
+<lineannotation>Result: </lineannotation><computeroutput>Hello World</computeroutput>
+
+SELECT format('Testing %s, %s, %s, %%', 'one', 'two', 'three');
+<lineannotation>Result: </><computeroutput>Testing one, two, three, %</>
+
+SELECT format('INSERT INTO %I VALUES(%L)', 'Foo bar', E'O\'Reilly');
+<lineannotation>Result: </lineannotation><computeroutput>INSERT INTO "Foo bar" VALUES('O''Reilly')</computeroutput>
+
+SELECT format('INSERT INTO %I VALUES(%L)', 'locations', E'C:\\Program Files');
+<lineannotation>Result: </lineannotation><computeroutput>INSERT INTO locations VALUES(E'C:\\Program Files')</computeroutput>
+</screen>
+    </para>
+
+    <para>
+     Here are examples using <replaceable>width</replaceable> fields
+     and the <literal>-</> flag:
+
+<screen>
+SELECT format('|%10s|', 'foo');
+<lineannotation>Result: </><computeroutput>|       foo|</>
+
+SELECT format('|%-10s|', 'foo');
+<lineannotation>Result: </><computeroutput>|foo       |</>
+
+SELECT format('|%*s|', 10, 'foo');
+<lineannotation>Result: </><computeroutput>|       foo|</>
+
+SELECT format('|%*s|', -10, 'foo');
+<lineannotation>Result: </><computeroutput>|foo       |</>
+
+SELECT format('|%-*s|', 10, 'foo');
+<lineannotation>Result: </><computeroutput>|foo       |</>
+
+SELECT format('|%-*s|', -10, 'foo');
+<lineannotation>Result: </><computeroutput>|foo       |</>
+</screen>
+    </para>
+
+    <para>
+     These examples show use of <replaceable>position</> fields:
+
+<screen>
+SELECT format('Testing %3$s, %2$s, %1$s', 'one', 'two', 'three');
+<lineannotation>Result: </><computeroutput>Testing three, two, one</>
+
+SELECT format('|%*2$s|', 'foo', 10, 'bar');
+<lineannotation>Result: </><computeroutput>|       bar|</>
+
+SELECT format('|%1$*2$s|', 'foo', 10, 'bar');
+<lineannotation>Result: </><computeroutput>|       foo|</>
+</screen>
+    </para>
+
+    <para>
+     Unlike the standard C function <function>sprintf</>,
+     <productname>PostgreSQL</>'s <function>format</> function allows format
+     specifiers with and without <replaceable>position</> fields to be mixed
+     in the same format string.  A format specifier without a
+     <replaceable>position</> field always uses the next argument after the
+     last argument consumed.
+     In addition, the <function>format</> function does not require all
+     function arguments to be used in the format string.
+     For example:
+
+<screen>
+SELECT format('Testing %3$s, %2$s, %s', 'one', 'two', 'three');
+<lineannotation>Result: </><computeroutput>Testing three, two, three</>
+</screen>
+    </para>
+
+    <para>
+     The <literal>%I</> and <literal>%L</> format specifiers are particularly
+     useful for safely constructing dynamic SQL statements.  See
+     <xref linkend="plpgsql-quote-literal-example">.
+    </para>
+   </sect2>
 
   </sect1>
 
@@ -3020,12 +3235,12 @@
          <primary>decode</primary>
         </indexterm>
        <literal><function>decode(<parameter>string</parameter> <type>text</type>,
-              <parameter>type</parameter> <type>text</type>)</function></literal>
+       <parameter>format</parameter> <type>text</type>)</function></literal>
       </entry>
       <entry><type>bytea</type></entry>
       <entry>
-       Decode binary string from <parameter>string</parameter> previously
-       encoded with <function>encode</>.  Parameter type is same as in <function>encode</>.
+       Decode binary data from textual representation in <parameter>string</>.
+       Options for <parameter>format</> are same as in <function>encode</>.
       </entry>
       <entry><literal>decode(E'123\\000456', 'escape')</literal></entry>
       <entry><literal>123\000456</literal></entry>
@@ -3036,13 +3251,16 @@
         <indexterm>
          <primary>encode</primary>
         </indexterm>
-       <literal><function>encode(<parameter>string</parameter> <type>bytea</type>,
-              <parameter>type</parameter> <type>text</type>)</function></literal>
+       <literal><function>encode(<parameter>data</parameter> <type>bytea</type>,
+       <parameter>format</parameter> <type>text</type>)</function></literal>
       </entry>
       <entry><type>text</type></entry>
       <entry>
-       Encode binary string to <acronym>ASCII</acronym>-only representation.  Supported
-       types are: <literal>base64</>, <literal>hex</>, <literal>escape</>.
+       Encode binary data into a textual representation.  Supported
+       formats are: <literal>base64</>, <literal>hex</>, <literal>escape</>.
+       <literal>escape</> converts zero bytes and high-bit-set bytes to
+       octal sequences (<literal>\</><replaceable>nnn</>) and
+       doubles backslashes.
       </entry>
       <entry><literal>encode(E'123\\000456'::bytea, 'escape')</literal></entry>
       <entry><literal>123\000456</literal></entry>
@@ -3830,24 +4048,24 @@ SELECT col1, (SELECT regexp_matches(col2, '(bar)(beque)')) FROM tab;
     Some examples:
 <programlisting>
 
-SELECT foo FROM regexp_split_to_table('the quick brown fox jumped over the lazy dog', E'\\s+') AS foo;
+SELECT foo FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', E'\\s+') AS foo;
   foo   
---------
+-------
  the    
  quick  
  brown  
  fox    
- jumped 
+ jumps 
  over   
  the    
  lazy   
  dog    
 (9 rows)
 
-SELECT regexp_split_to_array('the quick brown fox jumped over the lazy dog', E'\\s+');
+SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', E'\\s+');
               regexp_split_to_array             
-------------------------------------------------
- {the,quick,brown,fox,jumped,over,the,lazy,dog}
+-----------------------------------------------
+ {the,quick,brown,fox,jumps,over,the,lazy,dog}
 (1 row)
 
 SELECT foo FROM regexp_split_to_table('the quick brown fox', E'\\s*') AS foo;
@@ -4967,7 +5185,7 @@ SELECT SUBSTRING('XY1234Z', 'Y*?([0-9]{1,3})');
     will never match the newline character
     (so that matches will never cross newlines unless the RE
     explicitly arranges it)
-    and <literal>^</>and <literal>$</>
+    and <literal>^</> and <literal>$</>
     will match the empty string after and before a newline
     respectively, in addition to matching at beginning and end of string
     respectively.
@@ -5405,7 +5623,7 @@ SELECT SUBSTRING('XY1234Z', 'Y*?([0-9]{1,3})');
        </row>
        <row>
         <entry><literal>J</literal></entry>
-        <entry>Julian Day (days since November 24, 4714 BC at midnight)</entry>
+        <entry>Julian Day (integer days since November 24, 4714 BC at midnight UTC)</entry>
        </row>
        <row>
         <entry><literal>Q</literal></entry>
@@ -5575,7 +5793,9 @@ SELECT SUBSTRING('XY1234Z', 'Y*?([0-9]{1,3})');
        if there is a <literal>YYY</literal>, <literal>YYYY</literal> or
        <literal>Y,YYY</literal> field. If <literal>CC</literal> is used with
        <literal>YY</literal> or <literal>Y</literal> then the year is computed
-       as <literal>(CC-1)*100+YY</literal>.
+       as the year in the specified century.  If the century is
+       specified but the year is not, the first year of the century
+       is assumed.
       </para>
      </listitem>
 
@@ -6935,16 +7155,19 @@ SELECT EXTRACT(SECOND FROM TIME '17:12:28.5');
       <listitem>
        <para>
         The number of the week of the year that the day is in.  By definition
-        (<acronym>ISO</acronym> 8601), the first week of a year
-        contains January 4 of that year.  (The <acronym>ISO</acronym>-8601
-        week starts on Monday.)  In other words, the first Thursday of
-        a year is in week 1 of that year.
+        (<acronym>ISO</acronym> 8601), weeks start on Mondays and the first
+        week of a year contains January 4 of that year.  In other words, the
+        first Thursday of a year is in week 1 of that year.
        </para>
        <para>
-        Because of this, it is possible for early January dates to be part of the
-        52nd or 53rd week of the previous year.  For example, <literal>2005-01-01</>
-        is part of the 53rd week of year 2004, and <literal>2006-01-01</> is part of
-        the 52nd week of year 2005.
+        In the ISO definition, it is possible for early-January dates to be
+        part of the 52nd or 53rd week of the previous year, and for
+        late-December dates to be part of the first week of the next year.
+        For example, <literal>2005-01-01</> is part of the 53rd week of year
+        2004, and <literal>2006-01-01</> is part of the 52nd week of year
+        2005, while <literal>2012-12-31</> is part of the first week of 2013.
+        It's recommended to use the <literal>isoyear</> field together with
+        <literal>week</> to get consistent results.
        </para>
 
 <screen>
@@ -7870,7 +8093,7 @@ CREATE TYPE rainbow AS ENUM ('red', 'orange', 'yellow', 'green', 'blue', 'purple
          </indexterm>
          <literal><function>path(<type>polygon</type>)</function></literal>
         </entry>
-        <entry><type>point</type></entry>
+        <entry><type>path</type></entry>
         <entry>polygon to path</entry>
         <entry><literal>path(polygon '((0,0),(1,1),(2,0))')</literal></entry>
        </row>
@@ -9616,24 +9839,82 @@ table2-mapping
  </sect1>
 
  <sect1 id="functions-json">
-  <title>JSON Functions</title>
+  <title>JSON Functions and Operators</title>
 
-  <indexterm zone="datatype-json">
+  <indexterm zone="functions-json">
     <primary>JSON</primary>
     <secondary>Functions and operators</secondary>
   </indexterm>
 
+   <para>
+   <xref linkend="functions-json-op-table"> shows the operators that are
+   available for use with JSON (see <xref linkend="datatype-json">) data.
+  </para>
+
+  <table id="functions-json-op-table">
+     <title>JSON Operators</title>
+     <tgroup cols="4">
+      <thead>
+       <row>
+        <entry>Operator</entry>
+        <entry>Right Operand Type</entry>
+        <entry>Description</entry>
+        <entry>Example</entry>
+       </row>
+      </thead>
+      <tbody>
+       <row>
+        <entry><literal>-&gt;</literal></entry>
+        <entry>int</entry>
+        <entry>Get JSON array element</entry>
+        <entry><literal>'[1,2,3]'::json-&gt;2</literal></entry>
+       </row>
+       <row>
+        <entry><literal>-&gt;</literal></entry>
+        <entry>text</entry>
+        <entry>Get JSON object field</entry>
+        <entry><literal>'{"a":1,"b":2}'::json-&gt;'b'</literal></entry>
+       </row>
+        <row>
+        <entry><literal>-&gt;&gt;</literal></entry>
+        <entry>int</entry>
+        <entry>Get JSON array element as text</entry>
+        <entry><literal>'[1,2,3]'::json-&gt;&gt;2</literal></entry>
+       </row>
+       <row>
+        <entry><literal>-&gt;&gt;</literal></entry>
+        <entry>text</entry>
+        <entry>Get JSON object field as text</entry>
+        <entry><literal>'{"a":1,"b":2}'::json-&gt;&gt;'b'</literal></entry>
+       </row>
+       <row>
+        <entry><literal>#&gt;</literal></entry>
+        <entry>array of text</entry>
+        <entry>Get JSON object at specified path</entry>
+        <entry><literal>'{"a":[1,2,3],"b":[4,5,6]}'::json#&gt;'{a,2}'</literal></entry>
+       </row>
+       <row>
+        <entry><literal>#&gt;&gt;</literal></entry>
+        <entry>array of text</entry>
+        <entry>Get JSON object at specified path as text</entry>
+        <entry><literal>'{"a":[1,2,3],"b":[4,5,6]}'::json#&gt;&gt;'{a,2}'</literal></entry>
+       </row>
+      </tbody>
+     </tgroup>
+   </table>
+
   <para>
    <xref linkend="functions-json-table"> shows the functions that are available
-   for creating JSON (see <xref linkend="datatype-json">) data.
+   for creating and manipulating JSON (see <xref linkend="datatype-json">) data.
   </para>
 
   <table id="functions-json-table">
     <title>JSON Support Functions</title>
-    <tgroup cols="4">
+    <tgroup cols="5">
      <thead>
       <row>
        <entry>Function</entry>
+       <entry>Return Type</entry>
        <entry>Description</entry>
        <entry>Example</entry>
        <entry>Example Result</entry>
@@ -9647,6 +9928,7 @@ table2-mapping
          </indexterm>
          <literal>array_to_json(anyarray [, pretty_bool])</literal>
        </entry>
+       <entry><type>json</type></entry>
        <entry>
          Returns the array as JSON. A PostgreSQL multidimensional array
          becomes a JSON array of arrays. Line feeds will be added between
@@ -9662,6 +9944,7 @@ table2-mapping
          </indexterm>
          <literal>row_to_json(record [, pretty_bool])</literal>
        </entry>
+       <entry><type>json</type></entry>
        <entry>
          Returns the row as JSON. Line feeds will be added between level
          1 elements if <parameter>pretty_bool</parameter> is true.
@@ -9669,10 +9952,237 @@ table2-mapping
        <entry><literal>row_to_json(row(1,'foo'))</literal></entry>
        <entry><literal>{"f1":1,"f2":"foo"}</literal></entry>
       </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>to_json</primary>
+         </indexterm>
+         <literal>to_json(anyelement)</literal>
+       </entry>
+       <entry><type>json</type></entry>
+       <entry>
+         Returns the value as JSON. If the data type is not built in, and there
+         is a cast from the type to <type>json</type>, the cast function will be used to
+         perform the conversion. Otherwise, for any value other than a number,
+         a Boolean, or a null value, the text representation will be used, escaped and
+         quoted so that it is legal JSON.
+       </entry>
+       <entry><literal>to_json('Fred said "Hi."'::text)</literal></entry>
+       <entry><literal>"Fred said \"Hi.\""</literal></entry>
+      </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_array_length</primary>
+         </indexterm>
+         <literal>json_array_length(json)</literal>
+       </entry>
+       <entry><type>int</type></entry>
+       <entry>
+         Returns the number of elements in the outermost JSON array.
+       </entry>
+       <entry><literal>json_array_length('[1,2,3,{"f1":1,"f2":[5,6]},4]')</literal></entry>
+       <entry><literal>5</literal></entry>
+      </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_each</primary>
+         </indexterm>
+         <literal>json_each(json)</literal>
+       </entry>
+       <entry><type>SETOF key text, value json</type></entry>
+       <entry>
+         Expands the outermost JSON object into a set of key/value pairs.
+       </entry>
+       <entry><literal>select * from json_each('{"a":"foo", "b":"bar"}')</literal></entry>
+       <entry>
+<programlisting>
+ key | value
+-----+-------
+ a   | "foo"
+ b   | "bar"
+ </programlisting>
+       </entry>
+      </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_each_text</primary>
+         </indexterm>
+         <literal>json_each_text(from_json json)</literal>
+       </entry>
+       <entry><type>SETOF key text, value text</type></entry>
+       <entry>
+         Expands the outermost JSON object into a set of key/value pairs. The
+         returned value will be of type text.
+       </entry>
+       <entry><literal>select * from json_each_text('{"a":"foo", "b":"bar"}')</literal></entry>
+       <entry>
+<programlisting>
+ key | value
+-----+-------
+ a   | foo
+ b   | bar
+ </programlisting>
+       </entry>
+      </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_extract_path</primary>
+         </indexterm>
+         <literal>json_extract_path(from_json json, VARIADIC path_elems text[])</literal>
+       </entry>
+       <entry><type>json</type></entry>
+       <entry>
+         Returns JSON object pointed to by <parameter>path_elems</parameter>.
+       </entry>
+       <entry><literal>json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}','f4')</literal></entry>
+       <entry><literal>{"f5":99,"f6":"foo"}</literal></entry>
+      </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_extract_path_text</primary>
+         </indexterm>
+         <literal>json_extract_path_text(from_json json, VARIADIC path_elems text[])</literal>
+       </entry>
+       <entry><type>text</type></entry>
+       <entry>
+         Returns JSON object pointed to by <parameter>path_elems</parameter>.
+       </entry>
+       <entry><literal>json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}','f4', 'f6')</literal></entry>
+       <entry><literal>foo</literal></entry>
+      </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_object_keys</primary>
+         </indexterm>
+         <literal>json_object_keys(json)</literal>
+       </entry>
+       <entry><type>SETOF text</type></entry>
+       <entry>
+          Returns set of keys in the JSON object.  Only the <quote>outer</quote> object will be displayed.
+       </entry>
+       <entry><literal>json_object_keys('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}')</literal></entry>
+       <entry>
+<programlisting>
+ json_object_keys
+------------------
+ f1
+ f2
+</programlisting>
+       </entry>
+      </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_populate_record</primary>
+         </indexterm>
+         <literal>json_populate_record(base anyelement, from_json json, [, use_json_as_text bool=false]</literal>
+       </entry>
+       <entry><type>anyelement</type></entry>
+       <entry>
+         Expands the object in <replaceable>from_json</replaceable> to a row whose columns match
+         the record type defined by base. Conversion will be best
+         effort; columns in base with no corresponding key in <replaceable>from_json</replaceable>
+         will be left null. If a column is specified more than once, the last value is used.
+       </entry>
+       <entry><literal>select * from json_populate_record(null::x, '{"a":1,"b":2}')</literal></entry>
+       <entry>
+<programlisting>
+ a | b
+---+---
+ 1 | 2
+</programlisting>
+       </entry>
+      </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_populate_recordset</primary>
+         </indexterm>
+         <literal>json_populate_recordset(base anyelement, from_json json, [, use_json_as_text bool=false]</literal>
+       </entry>
+       <entry><type>SETOF anyelement</type></entry>
+       <entry>
+         Expands the outermost set of objects in <replaceable>from_json</replaceable> to a set
+         whose columns match the record type defined by base.
+         Conversion will be best effort; columns in base with no
+         corresponding key in <replaceable>from_json</replaceable> will be left null.
+         If a column is specified more than once, the last value is used.
+       </entry>
+       <entry><literal>select * from json_populate_recordset(null::x, '[{"a":1,"b":2},{"a":3,"b":4}]')</literal></entry>
+       <entry>
+<programlisting>
+ a | b
+---+---
+ 1 | 2
+ 3 | 4
+ </programlisting>
+       </entry>
+      </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_array_elements</primary>
+         </indexterm>
+         <literal>json_array_elements(json)</literal>
+       </entry>
+       <entry><type>SETOF json</type></entry>
+       <entry>
+         Expands a JSON array to a set of JSON elements.
+       </entry>
+       <entry><literal>json_array_elements('[1,true, [2,false]]')</literal></entry>
+       <entry>
+<programlisting>
+   value
+-----------
+ 1
+ true
+ [2,false]
+</programlisting>
+       </entry>
+      </row>
      </tbody>
     </tgroup>
    </table>
 
+  <note>
+    <para>
+      The <type>json</type> functions and operators can impose stricter validity requirements
+      than the type's input functions. In particular, they check much more closely that any use
+      of Unicode surrogate pairs to designate characters outside the Unicode Basic Multilingual
+      Plane is correct.
+    </para>
+  </note>
+
+  <note>
+    <para>
+      Many of these functions and operators will convert Unicode escapes
+      in the JSON text to the appropriate UTF8 character when the database encoding is UTF8. In
+      other encodings the escape sequence must be for an ASCII character, and any other code point
+      in a Unicode escape sequence will result in an error.
+      In general, it is best to avoid mixing Unicode escapes in JSON with a non-UTF8 database
+      encoding, if possible.
+    </para>
+  </note>
+
+  <note>
+    <para>
+      The <xref linkend="hstore"> extension has a cast from <type>hstore</type> to
+      <type>json</type>, so that converted <type>hstore</type> values are represented as JSON objects,
+      not as string values.
+    </para>
+  </note>
+
+  <para>
+    See also <xref linkend="functions-aggregate"> about the aggregate
+    function <function>json_agg</function> which aggregates record
+    values as JSON efficiently.
+  </para>
  </sect1>
 
  <sect1 id="functions-sequence">
@@ -9695,12 +10205,11 @@ table2-mapping
   </indexterm>
 
   <para>
-   This section describes <productname>PostgreSQL</productname>'s
-   functions for operating on <firstterm>sequence objects</firstterm>.
-   Sequence objects (also called sequence generators or just
-   sequences) are special single-row tables created with <xref
+   This section describes functions for operating on <firstterm>sequence
+   objects</firstterm>, also called sequence generators or just sequences.
+   Sequence objects are special single-row tables created with <xref
    linkend="sql-createsequence">.
-   A sequence object is usually used to generate unique identifiers
+   Sequence objects are commonly used to generate unique identifiers
    for rows of a table.  The sequence functions, listed in <xref
    linkend="functions-sequence-table">, provide simple, multiuser-safe
    methods for obtaining successive sequence values from sequence
@@ -9820,6 +10329,27 @@ nextval('foo'::text)      <lineannotation><literal>foo</literal> is looked up at
         execute <function>nextval</function> concurrently, each will safely receive
         a distinct sequence value.
        </para>
+
+       <para>
+        If a sequence object has been created with default parameters,
+        successive <function>nextval</function> calls will return successive
+        values beginning with 1.  Other behaviors can be obtained by using
+        special parameters in the <xref linkend="sql-createsequence"> command;
+        see its command reference page for more information.
+       </para>
+
+       <important>
+        <para>
+         To avoid blocking concurrent transactions that obtain numbers from the
+         same sequence, a <function>nextval</function> operation is never
+         rolled back; that is, once a value has been fetched it is considered
+         used, even if the transaction that did the
+         <function>nextval</function> later aborts.  This means that aborted
+         transactions might leave unused <quote>holes</quote> in the sequence
+         of assigned values.
+        </para>
+       </important>
+
       </listitem>
      </varlistentry>
 
@@ -9883,30 +10413,17 @@ SELECT setval('foo', 42, false);    <lineannotation>Next <function>nextval</> wi
         The result returned by <function>setval</function> is just the value of its
         second argument.
        </para>
+       <important>
+        <para>
+         Because sequences are non-transactional, changes made by
+         <function>setval</function> are not undone if the transaction rolls
+         back.
+        </para>
+       </important>
       </listitem>
      </varlistentry>
     </variablelist>
   </para>
-
-  <para>
-   If a sequence object has been created with default parameters,
-   successive <function>nextval</function> calls will return successive values
-   beginning with 1.  Other behaviors can be obtained by using
-   special parameters in the <xref linkend="sql-createsequence"> command;
-   see its command reference page for more information.
-  </para>
-
-  <important>
-   <para>
-    To avoid blocking concurrent transactions that obtain numbers from the
-    same sequence, a <function>nextval</function> operation is never rolled back;
-    that is, once a value has been fetched it is considered used, even if the
-    transaction that did the <function>nextval</function> later aborts.  This means
-    that aborted transactions might leave unused <quote>holes</quote> in the
-    sequence of assigned values.  <function>setval</function> operations are never
-    rolled back, either.
-   </para>
-  </important>
 
  </sect1>
 
@@ -10045,6 +10562,16 @@ SELECT a,
 SELECT ... WHERE CASE WHEN x &lt;&gt; 0 THEN y/x &gt; 1.5 ELSE false END;
 </programlisting>
    </para>
+
+   <note>
+    <para>
+     As described in <xref linkend="xfunc-volatility">, functions and
+     operators marked <literal>IMMUTABLE</literal> can be evaluated when
+     the query is planned rather than when it is executed.  This means
+     that constant parts of a subexpression that is not evaluated during
+     query execution might still be evaluated during query planning.
+    </para>
+   </note>
   </sect2>
 
   <sect2 id="functions-coalesce-nvl-ifnull">
@@ -10282,7 +10809,8 @@ SELECT NULLIF(value, '(none)') ...
 
   <para>
    See <xref linkend="arrays"> for more details about array operator
-   behavior.
+   behavior.  See <xref linkend="indexes-types"> for more details about
+   which operators support indexed operations.
   </para>
 
   <para>
@@ -10314,6 +10842,12 @@ SELECT NULLIF(value, '(none)') ...
   </indexterm>
   <indexterm>
     <primary>array_prepend</primary>
+  </indexterm>
+  <indexterm>
+    <primary>array_remove</primary>
+  </indexterm>
+  <indexterm>
+    <primary>array_replace</primary>
   </indexterm>
   <indexterm>
     <primary>array_to_string</primary>
@@ -10430,6 +10964,29 @@ SELECT NULLIF(value, '(none)') ...
         <entry>append an element to the beginning of an array</entry>
         <entry><literal>array_prepend(1, ARRAY[2,3])</literal></entry>
         <entry><literal>{1,2,3}</literal></entry>
+       </row>
+       <row>
+        <entry>
+         <literal>
+          <function>array_remove</function>(<type>anyarray</type>, <type>anyelement</type>)
+         </literal>
+        </entry>
+        <entry><type>anyarray</type></entry>
+        <entry>remove all elements equal to the given value from the array
+         (array must be one-dimensional)</entry>
+        <entry><literal>array_remove(ARRAY[1,2,3,2], 2)</literal></entry>
+        <entry><literal>{1,3}</literal></entry>
+       </row>
+       <row>
+        <entry>
+         <literal>
+          <function>array_replace</function>(<type>anyarray</type>, <type>anyelement</type>, <type>anyelement</type>)
+         </literal>
+        </entry>
+        <entry><type>anyarray</type></entry>
+        <entry>replace each array element equal to the given value with a new value</entry>
+        <entry><literal>array_replace(ARRAY[1,2,5,4], 5, 3)</literal></entry>
+        <entry><literal>{1,2,3,4}</literal></entry>
        </row>
        <row>
         <entry>
@@ -11008,6 +11565,22 @@ SELECT NULLIF(value, '(none)') ...
      <row>
       <entry>
        <indexterm>
+        <primary>json_agg</primary>
+       </indexterm>
+       <function>json_agg(<replaceable class="parameter">record</replaceable>)</function>
+      </entry>
+      <entry>
+       <type>record</type>
+      </entry>
+      <entry>
+       <type>json</type>
+      </entry>
+      <entry>aggregates records as a JSON array of objects</entry>
+     </row>
+
+     <row>
+      <entry>
+       <indexterm>
         <primary>max</primary>
        </indexterm>
        <function>max(<replaceable class="parameter">expression</replaceable>)</function>
@@ -11150,6 +11723,7 @@ SELECT count(*) FROM sometable;
 
   <para>
    The aggregate functions <function>array_agg</function>,
+   <function>json_agg</function>,
    <function>string_agg</function>,
    and <function>xmlagg</function>, as well as similar user-defined
    aggregate functions, produce meaningfully different result values
@@ -12508,9 +13082,10 @@ AND
 
   <para>
    This section describes functions that possibly return more than one row.
-   Currently the only functions in this class are series generating functions,
-   as detailed in <xref linkend="functions-srf-series"> and
-   <xref linkend="functions-srf-subscripts">.
+   The most widely used functions in this class are series generating
+   functions, as detailed in <xref linkend="functions-srf-series"> and
+   <xref linkend="functions-srf-subscripts">.  Other, more specialized
+   set-returning functions are described elsewhere in this manual.
   </para>
 
   <table id="functions-srf-series">
@@ -13466,6 +14041,11 @@ SELECT relname FROM pg_class WHERE pg_table_is_visible(oid);
 </programlisting>
   </para>
 
+   <indexterm>
+    <primary>search path</primary>
+    <secondary>object visibility</secondary>
+   </indexterm>
+
    <table id="functions-info-schema-table">
     <title>Schema Visibility Inquiry Functions</title>
     <tgroup cols="3">
@@ -13620,6 +14200,10 @@ SELECT pg_type_is_visible('myschema.widget'::regtype);
    </indexterm>
 
    <indexterm>
+    <primary>pg_identify_object</primary>
+   </indexterm>
+
+   <indexterm>
     <primary>pg_get_constraintdef</primary>
    </indexterm>
 
@@ -13715,6 +14299,11 @@ SELECT pg_type_is_visible('myschema.widget'::regtype);
        <entry>get description of a database object</entry>
       </row>
       <row>
+       <entry><literal><function>pg_identify_object(<parameter>catalog_id</parameter> <type>oid</>, <parameter>object_id</parameter> <type>oid</>, <parameter>object_sub_id</parameter> <type>integer</>)</function></literal></entry>
+       <entry><parameter>type</> <type>text</>, <parameter>schema</> <type>text</>, <parameter>name</> <type>text</>, <parameter>identity</> <type>text</></entry>
+       <entry>get identity of a database object</entry>
+      </row>
+      <row>
        <entry><literal><function>pg_get_constraintdef(<parameter>constraint_oid</parameter>)</function></literal></entry>
        <entry><type>text</type></entry>
        <entry>get definition of a constraint</entry>
@@ -13807,30 +14396,29 @@ SELECT pg_type_is_visible('myschema.widget'::regtype);
       <row>
        <entry><literal><function>pg_get_viewdef(<parameter>view_name</parameter>)</function></literal></entry>
        <entry><type>text</type></entry>
-       <entry>get underlying <command>SELECT</command> command for view (<emphasis>deprecated</emphasis>)</entry>
+       <entry>get underlying <command>SELECT</command> command for view or materialized view (<emphasis>deprecated</emphasis>)</entry>
       </row>
       <row>
        <entry><literal><function>pg_get_viewdef(<parameter>view_name</parameter>, <parameter>pretty_bool</>)</function></literal></entry>
        <entry><type>text</type></entry>
-       <entry>get underlying <command>SELECT</command> command for view,
-              lines with fields are wrapped to 80 columns if <parameter>pretty_bool</parameter> is true (<emphasis>deprecated</emphasis>)</entry>
+       <entry>get underlying <command>SELECT</command> command for view or materialized view (<emphasis>deprecated</emphasis>)</entry>
       </row>
       <row>
        <entry><literal><function>pg_get_viewdef(<parameter>view_oid</parameter>)</function></literal></entry>
        <entry><type>text</type></entry>
-       <entry>get underlying <command>SELECT</command> command for view</entry>
+       <entry>get underlying <command>SELECT</command> command for view or materialized view</entry>
       </row>
       <row>
        <entry><literal><function>pg_get_viewdef(<parameter>view_oid</parameter>, <parameter>pretty_bool</>)</function></literal></entry>
        <entry><type>text</type></entry>
-       <entry>get underlying <command>SELECT</command> command for view,
-              lines with fields are wrapped to 80 columns if <parameter>pretty_bool</parameter> is true</entry>
+       <entry>get underlying <command>SELECT</command> command for view or materialized view</entry>
       </row>
       <row>
-       <entry><literal><function>pg_get_viewdef(<parameter>view_oid</parameter>, <parameter>wrap_int</>)</function></literal></entry>
+       <entry><literal><function>pg_get_viewdef(<parameter>view_oid</parameter>, <parameter>wrap_column_int</>)</function></literal></entry>
        <entry><type>text</type></entry>
-       <entry>get underlying <command>SELECT</command> command for view,
-              wrapping lines with fields as specified, pretty printing is implied</entry>
+       <entry>get underlying <command>SELECT</command> command for view or
+              materialized view; lines with fields are wrapped to specified
+              number of columns, pretty-printing is implied</entry>
       </row>
       <row>
        <entry><literal><function>pg_options_to_table(<parameter>reloptions</parameter>)</function></literal></entry>
@@ -13954,10 +14542,28 @@ SELECT pg_type_is_visible('myschema.widget'::regtype);
   </para>
 
   <para>
-   <function>pg_describe_object</function> returns a description of a database
+   <function>pg_describe_object</function> returns a textual description of a database
    object specified by catalog OID, object OID and a (possibly zero) sub-object ID.
+   This description is intended to be human-readable, and might be translated,
+   depending on server configuration.
    This is useful to determine the identity of an object as stored in the
    <structname>pg_depend</structname> catalog.
+  </para>
+
+  <para>
+   <function>pg_identify_object</function> returns a row containing enough information
+   to uniquely identify the database object specified by catalog OID, object OID and a
+   (possibly zero) sub-object ID.  This information is intended to be machine-readable,
+   and is never translated.
+   <parameter>type</> identifies the type of database object;
+   <parameter>schema</> is the schema name that the object belongs in, or
+   <literal>NULL</> for object types that do not belong to schemas;
+   <parameter>name</> is the name of the object, quoted if necessary, only
+   present if it can be used (alongside schema name, if pertinent) as an unique
+   identifier of the object, otherwise <literal>NULL</>;
+   <parameter>identity</> is the complete object identity, with the precise format
+   depending on object type, and each part within the format being
+   schema-qualified and quoted as necessary.
   </para>
 
   <para>
@@ -14327,7 +14933,7 @@ SELECT set_config('log_statement_stats', 'off', false);
   </sect2>
 
   <sect2 id="functions-admin-signal">
-   <title>Server Signalling Functions</title>
+   <title>Server Signaling Functions</title>
 
    <indexterm>
     <primary>pg_cancel_backend</primary>
@@ -14355,7 +14961,7 @@ SELECT set_config('log_statement_stats', 'off', false);
    </para>
 
    <table id="functions-admin-signal-table">
-    <title>Server Signalling Functions</title>
+    <title>Server Signaling Functions</title>
     <tgroup cols="3">
      <thead>
       <row><entry>Name</entry> <entry>Return Type</entry> <entry>Description</entry>
@@ -14392,7 +14998,11 @@ SELECT set_config('log_statement_stats', 'off', false);
         <literal><function>pg_terminate_backend(<parameter>pid</parameter> <type>int</>)</function></literal>
         </entry>
        <entry><type>boolean</type></entry>
-       <entry>Terminate a backend</entry>
+       <entry>Terminate a backend.  You can execute this against
+        another backend that has exactly the same role as the user
+        calling the function.  In all other cases, you must be a
+        superuser.
+       </entry>
       </row>
      </tbody>
     </tgroup>
@@ -14413,9 +15023,8 @@ SELECT set_config('log_statement_stats', 'off', false);
     <command>postgres</command> processes on the server (using
     <application>ps</> on Unix or the <application>Task
     Manager</> on <productname>Windows</>).
-    For the less restrictive <function>pg_cancel_backend</>, the role of an
-    active backend can be found from
-    the <structfield>usename</structfield> column of the
+    The role of an active backend can be found from the
+    <structfield>usename</structfield> column of the
     <structname>pg_stat_activity</structname> view.
    </para>
 
@@ -14456,6 +15065,12 @@ SELECT set_config('log_statement_stats', 'off', false);
     <primary>pg_stop_backup</primary>
    </indexterm>
    <indexterm>
+    <primary>pg_is_in_backup</primary>
+   </indexterm>
+   <indexterm>
+    <primary>pg_backup_start_time</primary>
+   </indexterm>
+   <indexterm>
     <primary>pg_switch_xlog</primary>
    </indexterm>
    <indexterm>
@@ -14472,7 +15087,8 @@ SELECT set_config('log_statement_stats', 'off', false);
     The functions shown in <xref
     linkend="functions-admin-backup-table"> assist in making on-line backups.
     These functions cannot be executed during recovery (except
-    <function>pg_xlog_location_diff</function>).
+    <function>pg_is_in_backup</function>, <function>pg_backup_start_time</function>
+    and <function>pg_xlog_location_diff</function>).
    </para>
 
    <table id="functions-admin-backup-table">
@@ -14518,6 +15134,20 @@ SELECT set_config('log_statement_stats', 'off', false);
         </entry>
        <entry><type>text</type></entry>
        <entry>Finish performing on-line backup (restricted to superusers or replication roles)</entry>
+      </row>
+      <row>
+       <entry>
+        <literal><function>pg_is_in_backup()</function></literal>
+        </entry>
+       <entry><type>bool</type></entry>
+       <entry>True if an on-line exclusive backup is still in progress.</entry>
+      </row>
+      <row>
+       <entry>
+        <literal><function>pg_backup_start_time()</function></literal>
+        </entry>
+       <entry><type>timestamp with time zone</type></entry>
+       <entry>Get start time of an on-line exclusive backup in progress.</entry>
       </row>
       <row>
        <entry>
@@ -15610,4 +16240,117 @@ FOR EACH ROW EXECUTE PROCEDURE suppress_redundant_updates_trigger();
         <xref linkend="SQL-CREATETRIGGER">.
     </para>
   </sect1>
+
+  <sect1 id="functions-event-triggers">
+   <title>Event Trigger Functions</title>
+
+   <indexterm>
+     <primary>pg_event_trigger_dropped_objects</primary>
+   </indexterm>
+
+   <para>
+    Currently <productname>PostgreSQL</> provides one built-in event trigger
+    helper function, <function>pg_event_trigger_dropped_objects</>.
+   </para>
+
+   <para>
+    <function>pg_event_trigger_dropped_objects</> returns a list of all object
+    dropped by the command in whose <literal>sql_drop</> event it is called.
+    If called in any other context,
+    <function>pg_event_trigger_dropped_objects</> raises an error.
+    <function>pg_event_trigger_dropped_objects</> returns the following columns:
+
+    <informaltable>
+     <tgroup cols="3">
+      <thead>
+       <row>
+        <entry>Name</entry>
+        <entry>Type</entry>
+        <entry>Description</entry>
+       </row>
+      </thead>
+
+      <tbody>
+       <row>
+        <entry><literal>classid</literal></entry>
+        <entry><type>Oid</type></entry>
+        <entry>OID of catalog the object belonged in</entry>
+       </row>
+       <row>
+        <entry><literal>objid</literal></entry>
+        <entry><type>Oid</type></entry>
+        <entry>OID the object had within the catalog</entry>
+       </row>
+       <row>
+        <entry><literal>objsubid</literal></entry>
+        <entry><type>int32</type></entry>
+        <entry>Object sub-id (e.g. attribute number for columns)</entry>
+       </row>
+       <row>
+        <entry><literal>object_type</literal></entry>
+        <entry><type>text</type></entry>
+        <entry>Type of the object</entry>
+       </row>
+       <row>
+        <entry><literal>schema_name</literal></entry>
+        <entry><type>text</type></entry>
+        <entry>
+         Name of the schema the object belonged in, if any; otherwise <literal>NULL</>.
+         No quoting is applied.
+        </entry>
+       </row>
+       <row>
+        <entry><literal>object_name</literal></entry>
+        <entry><type>text</type></entry>
+        <entry>
+         Name of the object, if the combination of schema and name can be
+         used as an unique identifier for the object; otherwise <literal>NULL</>.
+         No quoting is applied, and name is never schema-qualified.
+        </entry>
+       </row>
+       <row>
+        <entry><literal>object_identity</literal></entry>
+        <entry><type>text</type></entry>
+        <entry>
+         Text rendering of the object identity, schema-qualified. Each and every
+         identifier present in the identity is quoted if necessary.
+        </entry>
+       </row>
+      </tbody>
+     </tgroup>
+    </informaltable>
+   </para>
+
+   <para>
+    The <function>pg_event_trigger_dropped_objects</> function can be used
+    in an event trigger like this:
+<programlisting>
+CREATE FUNCTION test_event_trigger_for_drops()
+        RETURNS event_trigger LANGUAGE plpgsql AS $$
+DECLARE
+    obj record;
+BEGIN
+    FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()
+    LOOP
+        RAISE NOTICE '% dropped object: % %.% %',
+                     tg_tag,
+                     obj.object_type,
+                     obj.schema_name,
+                     obj.object_name,
+                     obj.object_identity;
+    END LOOP;
+END
+$$;
+CREATE EVENT TRIGGER test_event_trigger_for_drops
+   ON sql_drop
+   EXECUTE PROCEDURE test_event_trigger_for_drops();
+</programlisting>
+    </para>
+
+     <para>
+       For more information about event triggers,
+       see <xref linkend="event-triggers">.
+    </para>
+  </sect1>
+
 </chapter>

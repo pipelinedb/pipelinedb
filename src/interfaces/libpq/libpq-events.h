@@ -5,7 +5,7 @@
  *	  that invoke the libpq "events" API, but are not interesting to
  *	  ordinary users of libpq.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/interfaces/libpq/libpq-events.h
@@ -24,7 +24,7 @@ extern		"C"
 #endif
 
 /* Callback Event Ids */
-			typedef enum
+typedef enum
 {
 	PGEVT_REGISTER,
 	PGEVT_CONNRESET,

@@ -6,31 +6,18 @@
 <!## XC>
 &xconly;
   <para>
-   Original <productname>PostgreSQL</> has a lot of external projects.
-   For details, please see the corresponding sections of
-   original <productname>PostgreSQL</> manuals.
+   This section describes external projects of the Original <productname>PostgreSQL</productname>.
+   Not all the project products are tested with <productname>Postgres-XC</productname>.
+   You may find specific remarks for some of them.   Otherwise, they're not tested well so far.
   </para>
 <!## end>
 
-<!## PG>
+&common;
   <para>
    <productname>PostgreSQL</productname> is a complex software project,
    and managing the project is difficult. We have found that many
    enhancements to <productname>PostgreSQL</productname> can be more
    efficiently developed separately from the core project.
-  </para>
-
-  <para>
-   To help our community with the development of their external projects, we
-   have created <ulink url="http://www.pgfoundry.org/">PgFoundry</ulink>, a
-   website that provides hosting for <productname>PostgreSQL</>-related
-   projects that are maintained outside the core <productname>PostgreSQL</>
-   distribution. PgFoundry is built using the GForge software project and is
-   similar to <ulink url="http://sourceforge.net">SourceForge.net</> in its
-   feature set, providing mailing lists, forums, bug tracking, SCM, and web
-   hosting. If you have a <productname>PostgreSQL</>-related open source
-   project that you would like to have hosted at PgFoundry, please feel free
-   to create a new project there.
   </para>
 
  <sect1 id="external-interfaces">
@@ -41,7 +28,6 @@
    <secondary>externally maintained</secondary>
   </indexterm>
 
-&pgnotice;
   <para>
    There are only two client interfaces included in the base
    <productname>PostgreSQL</productname> distribution:
@@ -114,23 +100,16 @@
      </row>
 
      <row>
-      <entry>ODBCng</entry>
-      <entry>ODBC</entry>
-      <entry>An alternative ODBC driver</entry>
-      <entry><ulink url="http://projects.commandprompt.com/public/odbcng/">http://projects.commandprompt.com/public/odbcng/</ulink></entry>
-     </row>
-
-     <row>
       <entry>pgtclng</entry>
       <entry>Tcl</entry>
       <entry></entry>
-      <entry><ulink url="http://pgfoundry.org/projects/pgtclng/">http://pgfoundry.org/projects/pgtclng/</ulink></entry>
+      <entry><ulink url="http://sourceforge.net/projects/pgtclng/">http://sourceforge.net/projects/pgtclng/</ulink></entry>
      </row>
 
      <row>
       <entry>psqlODBC</entry>
       <entry>ODBC</entry>
-      <entry>The most commonly-used ODBC driver</entry>
+      <entry>ODBC driver</entry>
       <entry><ulink url="http://psqlodbc.projects.postgresql.org/">http://psqlodbc.projects.postgresql.org/</ulink></entry>
      </row>
 
@@ -138,7 +117,7 @@
       <entry>psycopg</entry>
       <entry>Python</entry>
       <entry>DB API 2.0-compliant</entry>
-      <entry><ulink url="http://www.initd.org/">http://www.initd.org/</ulink></entry>
+      <entry><ulink url="http://initd.org/psycopg/"></ulink></entry>
      </row>
     </tbody>
    </tgroup>
@@ -169,7 +148,6 @@
    <secondary>externally maintained</secondary>
   </indexterm>
 
-&pgnotice;
   <para>
    <productname>PostgreSQL</productname> includes several procedural
    languages with the base distribution: <link
@@ -216,7 +194,7 @@
      <row>
       <entry>PL/Py</entry>
       <entry>Python</entry>
-      <entry><ulink url="http://python.projects.postgresql.org/">http://python.projects.postgresql.org/</ulink></entry>
+      <entry><ulink url="http://python.projects.postgresql.org/backend/">http://python.projects.postgresql.org/backend/</ulink></entry>
      </row>
 
      <row>
@@ -255,7 +233,6 @@
    <secondary>externally maintained</secondary>
   </indexterm>
 
-&pgnotice;
   <para>
    <productname>PostgreSQL</> is designed to be easily extensible. For
    this reason, extensions loaded into the database can function
@@ -272,5 +249,4 @@
    from the core project.
   </para>
  </sect1>
-<!## end>
 </appendix>

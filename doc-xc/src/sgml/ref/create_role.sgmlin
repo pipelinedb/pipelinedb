@@ -48,15 +48,9 @@ CREATE ROLE <replaceable class="PARAMETER">name</replaceable> [ [ WITH ] <replac
   <title>Description</title>
 
 &common;
-
   <para>
    <command>CREATE ROLE</command> adds a new role to a
-<!## PG>
    <productname>PostgreSQL</productname> database cluster.  A role is
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> database cluster.  A role is
-<!## end>
    an entity that can own database objects and have database privileges;
    a role can be considered a <quote>user</>, a <quote>group</>, or both
    depending on how it is used.  Refer to
@@ -75,6 +69,7 @@ CREATE ROLE <replaceable class="PARAMETER">name</replaceable> [ [ WITH ] <replac
  <refsect1>
   <title>Parameters</title>
 
+&common;
     <variablelist>
      <varlistentry>
       <term><replaceable class="parameter">name</replaceable></term>
@@ -177,7 +172,7 @@ CREATE ROLE <replaceable class="PARAMETER">name</replaceable> [ [ WITH ] <replac
         If not specified,
         <literal>NOLOGIN</literal> is the default, except when
         <command>CREATE ROLE</> is invoked through its alternative spelling
-        <command>CREATE USER</>.
+        <xref linkend="sql-createuser">.
        </para>
       </listitem>
      </varlistentry>
@@ -192,8 +187,7 @@ CREATE ROLE <replaceable class="PARAMETER">name</replaceable> [ [ WITH ] <replac
         A role having the <literal>REPLICATION</> attribute is a very
         highly privileged role, and should only be used on roles actually
         used for replication. If not specified,
-        <literal>NOREPLICATION</literal> is the default for all roles except
-        superusers.
+        <literal>NOREPLICATION</literal> is the default.
        </para>
       </listitem>
      </varlistentry>
@@ -275,8 +269,7 @@ CREATE ROLE <replaceable class="PARAMETER">name</replaceable> [ [ WITH ] <replac
      <varlistentry>
       <term><literal>IN GROUP</> <replaceable class="parameter">role_name</replaceable></term>
       <listitem>
-       <para>
-        <literal>IN GROUP</literal> is an obsolete spelling of
+       <para><literal>IN GROUP</literal> is an obsolete spelling of
         <literal>IN ROLE</>.
        </para>
       </listitem>
@@ -330,6 +323,7 @@ CREATE ROLE <replaceable class="PARAMETER">name</replaceable> [ [ WITH ] <replac
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    Use <xref linkend="SQL-ALTERROLE"> to
    change the attributes of a role, and <xref linkend="SQL-DROPROLE">
@@ -366,12 +360,7 @@ CREATE ROLE <replaceable class="PARAMETER">name</replaceable> [ [ WITH ] <replac
 
   <para>
    The <literal>INHERIT</> attribute is the default for reasons of backwards
-<!## PG>
    compatibility: in prior releases of <productname>PostgreSQL</productname>,
-<!## end>
-<!## XC>
-   compatibility: in prior releases of <productname>Postgres-XC</productname>,
-<!## end>
    users always had access to all privileges of groups they were members of.
    However, <literal>NOINHERIT</> provides a closer match to the semantics
    specified in the SQL standard.
@@ -391,12 +380,7 @@ CREATE ROLE <replaceable class="PARAMETER">name</replaceable> [ [ WITH ] <replac
   </para>
 
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> includes a program <xref
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> includes a program <xref
-<!## end>
    linkend="APP-CREATEUSER"> that has
    the same functionality as <command>CREATE ROLE</command> (in fact,
    it calls this command) but can be run from the command shell.
@@ -455,13 +439,13 @@ CREATE ROLE miriam WITH LOGIN PASSWORD 'jw8s0F4' VALID UNTIL '2005-01-01';
    Create a role that can create databases and manage roles:
 <programlisting>
 CREATE ROLE admin WITH CREATEDB CREATEROLE;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The <command>CREATE ROLE</command> statement is in the SQL standard,
    but the standard only requires the syntax
@@ -470,24 +454,14 @@ CREATE ROLE <replaceable class="PARAMETER">name</> [ WITH ADMIN <replaceable cla
 </synopsis>
    Multiple initial administrators, and all the other options of
    <command>CREATE ROLE</command>, are
-<!## PG>
    <productname>PostgreSQL</productname> extensions.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> extensions.
-<!## end>
   </para>
 
   <para>
    The SQL standard defines the concepts of users and roles, but it
    regards them as distinct concepts and leaves all commands defining
    users to be specified by each database implementation.  In
-<!## PG>
    <productname>PostgreSQL</productname> we have chosen to unify
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> we have chosen to unify
-<!## end>
    users and roles into a single kind of entity.  Roles therefore
    have many more optional attributes than they do in the standard.
   </para>

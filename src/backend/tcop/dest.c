@@ -4,7 +4,7 @@
  *	  support for communication destinations
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -32,6 +32,7 @@
 #include "access/xact.h"
 #include "commands/copy.h"
 #include "commands/createas.h"
+#include "commands/matview.h"
 #include "executor/functions.h"
 #include "executor/tstoreReceiver.h"
 #include "executor/tupletableReceiver.h"
@@ -129,6 +130,9 @@ CreateDestReceiver(CommandDest dest)
 
 		case DestTupleTable:
 			return CreateTupleTableDestReceiver();
+
+		case DestTransientRel:
+			return CreateTransientRelDestReceiver(InvalidOid);
 	}
 
 	/* should never get here */
@@ -162,6 +166,7 @@ EndCommand(const char *commandTag, CommandDest dest)
 		case DestCopyOut:
 		case DestSQLFunction:
 		case DestTupleTable:
+		case DestTransientRel:
 			break;
 	}
 }
@@ -204,6 +209,7 @@ NullCommand(CommandDest dest)
 		case DestCopyOut:
 		case DestSQLFunction:
 		case DestTupleTable:
+		case DestTransientRel:
 			break;
 	}
 }
@@ -248,6 +254,7 @@ ReadyForQuery(CommandDest dest)
 		case DestCopyOut:
 		case DestSQLFunction:
 		case DestTupleTable:
+		case DestTransientRel:
 			break;
 	}
 }

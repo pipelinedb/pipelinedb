@@ -34,7 +34,7 @@
  * database contents or layout, such as altering tuple headers.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/catversion.h
@@ -54,9 +54,9 @@
 
 /*							yyyymmddN */
 #ifdef PGXC
-#define CATALOG_VERSION_NO	201404300
+#define CATALOG_VERSION_NO	201306121
 #else
-#define CATALOG_VERSION_NO	201404300
+#define CATALOG_VERSION_NO	201306121
 #endif
 
 #endif

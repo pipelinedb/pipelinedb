@@ -22,25 +22,26 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-COPY <replaceable class="parameter">table_name</replaceable> [ ( <replaceable class="parameter">column</replaceable> [, ...] ) ]
-    FROM { '<replaceable class="parameter">filename</replaceable>' | STDIN }
+COPY <replaceable class="parameter">table_name</replaceable> [ ( <replaceable class="parameter">column_name</replaceable> [, ...] ) ]
+    FROM { '<replaceable class="parameter">filename</replaceable>' | PROGRAM '<replaceable class="parameter">command</replaceable>' | STDIN }
     [ [ WITH ] ( <replaceable class="parameter">option</replaceable> [, ...] ) ]
 
-COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable class="parameter">column</replaceable> [, ...] ) ] | ( <replaceable class="parameter">query</replaceable> ) }
-    TO { '<replaceable class="parameter">filename</replaceable>' | STDOUT }
+COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable class="parameter">column_name</replaceable> [, ...] ) ] | ( <replaceable class="parameter">query</replaceable> ) }
+    TO { '<replaceable class="parameter">filename</replaceable>' | PROGRAM '<replaceable class="parameter">command</replaceable>' | STDOUT }
     [ [ WITH ] ( <replaceable class="parameter">option</replaceable> [, ...] ) ]
 
 <phrase>where <replaceable class="parameter">option</replaceable> can be one of:</phrase>
 
     FORMAT <replaceable class="parameter">format_name</replaceable>
     OIDS [ <replaceable class="parameter">boolean</replaceable> ]
+    FREEZE [ <replaceable class="parameter">boolean</replaceable> ]
     DELIMITER '<replaceable class="parameter">delimiter_character</replaceable>'
     NULL '<replaceable class="parameter">null_string</replaceable>'
     HEADER [ <replaceable class="parameter">boolean</replaceable> ]
     QUOTE '<replaceable class="parameter">quote_character</replaceable>'
     ESCAPE '<replaceable class="parameter">escape_character</replaceable>'
-    FORCE_QUOTE { ( <replaceable class="parameter">column</replaceable> [, ...] ) | * }
-    FORCE_NOT_NULL ( <replaceable class="parameter">column</replaceable> [, ...] ) |
+    FORCE_QUOTE { ( <replaceable class="parameter">column_name</replaceable> [, ...] ) | * }
+    FORCE_NOT_NULL ( <replaceable class="parameter">column_name</replaceable> [, ...] )
     ENCODING '<replaceable class="parameter">encoding_name</replaceable>'
 </synopsis>
  </refsynopsisdiv>
@@ -49,15 +50,9 @@ COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable 
   <title>Description</title>
 
 &common;
-
   <para>
    <command>COPY</command> moves data between
-<!## PG>
    <productname>PostgreSQL</productname> tables and standard file-system
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> tables and standard file-system
-<!## end>
    files. <command>COPY TO</command> copies the contents of a table
    <emphasis>to</> a file, while <command>COPY FROM</command> copies
    data <emphasis>from</> a file to a table (appending the data to
@@ -75,14 +70,13 @@ COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable 
 
   <para>
    <command>COPY</command> with a file name instructs the
-<!## PG>
    <productname>PostgreSQL</productname> server to directly read from
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> server to directly read from
-<!## end>
    or write to a file. The file must be accessible to the server and
    the name must be specified from the viewpoint of the server. When
+   <literal>PROGRAM</literal> is specified, the server executes the
+   given command, and reads from its standard input, or writes to its
+   standard output. The command must be specified from the viewpoint of the
+   server, and be executable by the <literal>postgres</> user. When
    <literal>STDIN</literal> or <literal>STDOUT</literal> is
    specified, data is transmitted via the connection between the
    client and the server.
@@ -92,6 +86,7 @@ COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable 
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">table_name</replaceable></term>
@@ -103,7 +98,7 @@ COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable 
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="parameter">column</replaceable></term>
+    <term><replaceable class="parameter">column_name</replaceable></term>
      <listitem>
      <para>
       An optional list of columns to be copied.  If no column list is
@@ -128,9 +123,29 @@ COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable 
     <term><replaceable class="parameter">filename</replaceable></term>
     <listitem>
      <para>
-      The absolute path name of the input or output file.  Windows users
-      might need to use an <literal>E''</> string and double any backslashes
-      used in the path name.
+      The path name of the input or output file.  An input file name can be
+      an absolute or relative path, but an output file name must be an absolute
+      path.  Windows users might need to use an <literal>E''</> string and
+      double any backslashes used in the path name.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><literal>PROGRAM</literal></term>
+    <listitem>
+     <para>
+      A command to execute. In <command>COPY FROM</command>, the input is
+      read from standard output of the command, and in <command>COPY TO</>,
+      the output is written to the standard input of the command.
+     </para>
+     <para>
+      Note that the command is invoked by the shell, so if you need to pass
+      any arguments to shell command that come from an untrusted source, you
+      must be careful to strip or escape any special characters that might
+      have a special meaning for the shell. For security reasons, it is best
+      to use a fixed command string, or at least avoid passing any user input
+      in it.
      </para>
     </listitem>
    </varlistentry>
@@ -197,6 +212,26 @@ COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable 
       may conflict if you copy this value to another table.
      </para>
 <!## end>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><literal>FREEZE</literal></term>
+    <listitem>
+     <para>
+      Requests copying the data with rows already frozen, just as they
+      would be after running the <command>VACUUM FREEZE</> command.
+      This is intended as a performance option for initial data loading.
+      Rows will be frozen only if the table being loaded has been created
+      or truncated in the current subtransaction, there are no cursors
+      open and there are no older snapshots held by this transaction.
+     </para>
+     <para>
+      Note that all other sessions will immediately be able to see the data
+      once it has been successfully loaded. This violates the normal rules
+      of MVCC visibility and users specifying should be aware of the
+      potential problems this might cause.
+     </para>
     </listitem>
    </varlistentry>
 
@@ -321,6 +356,7 @@ COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable 
  <refsect1>
   <title>Outputs</title>
 
+&common;
   <para>
    On successful completion, a <command>COPY</> command returns a command
    tag of the form
@@ -335,6 +371,7 @@ COPY <replaceable class="parameter">count</replaceable>
  <refsect1>
   <title>Notes</title>
 
+&common;
    <para>
     <command>COPY</command> can only be used with plain tables, not
     with views.  However, you can write <literal>COPY (SELECT * FROM
@@ -364,21 +401,20 @@ COPY <replaceable class="parameter">count</replaceable>
     directly by the server, not by the client application. Therefore,
     they must reside on or be accessible to the database server machine,
     not the client. They must be accessible to and readable or writable
-<!## PG>
     by the <productname>PostgreSQL</productname> user (the user ID the
-<!## end>
-<!## XC>
-    by the <productname>Postgres-XC</productname> user (the user ID the
-<!## end>
-    server runs as), not the client. <command>COPY</command> naming a
-    file is only allowed to database superusers, since it allows reading
-    or writing any file that the server has privileges to access.
+    server runs as), not the client. Similarly,
+    the command specified with <literal>PROGRAM</literal> is executed directly
+    by the server, not by the client application, must be executable by the
+    <productname>PostgreSQL</productname> user.
+    <command>COPY</command> naming a file or command is only allowed to
+    database superusers, since it allows reading or writing any file that the
+    server has privileges to access.
    </para>
 
    <para>
     Do not confuse <command>COPY</command> with the
     <application>psql</application> instruction
-    <command>\copy</command>. <command>\copy</command> invokes
+    <command><link linkend="APP-PSQL-meta-commands-copy">\copy</link></command>. <command>\copy</command> invokes
     <command>COPY FROM STDIN</command> or <command>COPY TO
     STDOUT</command>, and then fetches/stores the data in a file
     accessible to the <application>psql</application> client. Thus,
@@ -394,6 +430,11 @@ COPY <replaceable class="parameter">count</replaceable>
     a file specified by a relative path. The path will be interpreted
     relative to the working directory of the server process (normally
     the cluster's data directory), not the client's working directory.
+   </para>
+
+   <para>
+    Executing a command with <literal>PROGRAM</literal> might be restricted
+    by the operating system's access control mechanisms, such as SELinux.
    </para>
 
    <para>
@@ -413,12 +454,7 @@ COPY <replaceable class="parameter">count</replaceable>
    <para>
     <command>COPY</command> input and output is affected by
     <varname>DateStyle</varname>. To ensure portability to other
-<!## PG>
     <productname>PostgreSQL</productname> installations that might use
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> installations that might use
-<!## end>
     non-default <varname>DateStyle</varname> settings,
     <varname>DateStyle</varname> should be set to <literal>ISO</> before
     using <command>COPY TO</>.  It is also a good idea to avoid dumping
@@ -452,9 +488,11 @@ COPY <replaceable class="parameter">count</replaceable>
  <refsect1>
   <title>File Formats</title>
 
+&common;
   <refsect2>
    <title>Text Format</title>
 
+&common;
    <para>
     When the <literal>text</> format is used,
     the data read or written is a text file with one line per table row.
@@ -591,16 +629,12 @@ COPY <replaceable class="parameter">count</replaceable>
   <refsect2>
    <title>CSV Format</title>
 
+&common;
    <para>
     This format option is used for importing and exporting the Comma
     Separated Value (<literal>CSV</>) file format used by many other
     programs, such as spreadsheets. Instead of the escaping rules used by
-<!## PG>
     <productname>PostgreSQL</productname>'s standard text format, it
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname>'s standard text format, it
-<!## end>
     produces and recognizes the common CSV escaping mechanism.
    </para>
 
@@ -619,12 +653,7 @@ COPY <replaceable class="parameter">count</replaceable>
    <para>
     The <literal>CSV</> format has no standard way to distinguish a
     <literal>NULL</> value from an empty string.
-<!## PG>
     <productname>PostgreSQL</>'s <command>COPY</> handles this by quoting.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</>'s <command>COPY</> handles this by quoting.
-<!## end>
     A <literal>NULL</> is output as the <literal>NULL</> parameter string
     and is not quoted, while a non-<literal>NULL</> value matching the
     <literal>NULL</> parameter string is quoted.  For example, with the
@@ -656,12 +685,7 @@ COPY <replaceable class="parameter">count</replaceable>
      lines with white space out to some fixed width. If such a situation
      arises you might need to preprocess the <literal>CSV</> file to remove
      the trailing white space, before importing the data into
-<!## PG>
      <productname>PostgreSQL</>.
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</>.
-<!## end>
     </para>
    </note>
 
@@ -689,17 +713,13 @@ COPY <replaceable class="parameter">count</replaceable>
   <refsect2>
    <title>Binary Format</title>
 
+&common;
    <para>
     The <literal>binary</literal> format option causes all data to be
     stored/read as binary format rather than as text.  It is
     somewhat faster than the text and <literal>CSV</> formats,
     but a binary-format file is less portable across machine architectures and
-<!## PG>
     <productname>PostgreSQL</productname> versions.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> versions.
-<!## end>
     Also, the binary format is very data type specific; for example
     it will not work to output binary data from a <type>smallint</> column
     and read it into an <type>integer</> column, even though that would work
@@ -722,6 +742,7 @@ COPY <replaceable class="parameter">count</replaceable>
    <refsect3>
     <title>File Header</title>
 
+&common;
     <para>
      The file header consists of 15 bytes of fixed fields, followed
      by a variable-length header extension area.  The fixed fields are:
@@ -762,8 +783,7 @@ only one flag bit is defined, and the rest must be zero:
            </para>
           </listitem>
          </varlistentry>
-        </variablelist>
-       </para>
+        </variablelist></para>
       </listitem>
      </varlistentry>
 
@@ -799,6 +819,7 @@ is left for a later release.
 
    <refsect3>
     <title>Tuples</title>
+&common;
     <para>
 Each tuple begins with a 16-bit integer count of the number of fields in the
 tuple.  (Presently, all tuples in a table will have the same count, but that
@@ -821,12 +842,7 @@ to be specified.
 
     <para>
 To determine the appropriate binary format for the actual tuple data you
-<!## PG>
 should consult the <productname>PostgreSQL</productname> source, in
-<!## end>
-<!## XC>
-should consult the <productname>Postgres-XC</productname> source, in
-<!## end>
 particular the <function>*send</> and <function>*recv</> functions for
 each column's data type (typically these functions are found in the
 <filename>src/backend/utils/adt/</filename> directory of the source
@@ -845,6 +861,7 @@ OIDs to be shown as null if that ever proves desirable.
    <refsect3>
     <title>File Trailer</title>
 
+&common;
     <para>
      The file trailer consists of a 16-bit integer word containing -1.  This
      is easily distinguished from a tuple's field-count word.
@@ -885,6 +902,14 @@ COPY (SELECT * FROM country WHERE country_name LIKE 'A%') TO '/usr1/proj/bray/sq
   </para>
 
   <para>
+   To copy into a compressed file, you can pipe the output through an external
+   compression program:
+<programlisting>
+COPY country TO PROGRAM 'gzip > /usr1/proj/bray/sql/country_data.gz';
+</programlisting>
+  </para>
+
+  <para>
    Here is a sample of data suitable for copying into a table from
    <literal>STDIN</literal>:
 <programlisting>
@@ -914,13 +939,13 @@ ZW      ZIMBABWE
 0000140  \0 002   Z   M  \0  \0  \0 006   Z   A   M   B   I   A 377 377
 0000160 377 377  \0 003  \0  \0  \0 002   Z   W  \0  \0  \0  \b   Z   I
 0000200   M   B   A   B   W   E 377 377 377 377 377 377
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>COPY</command> statement in the SQL standard.
   </para>
@@ -930,7 +955,7 @@ ZW      ZIMBABWE
    version 9.0 and is still supported:
 
 <synopsis>
-COPY <replaceable class="parameter">table_name</replaceable> [ ( <replaceable class="parameter">column</replaceable> [, ...] ) ]
+COPY <replaceable class="parameter">table_name</replaceable> [ ( <replaceable class="parameter">column_name</replaceable> [, ...] ) ]
     FROM { '<replaceable class="parameter">filename</replaceable>' | STDIN }
     [ [ WITH ]
           [ BINARY ]
@@ -940,9 +965,9 @@ COPY <replaceable class="parameter">table_name</replaceable> [ ( <replaceable cl
           [ CSV [ HEADER ]
                 [ QUOTE [ AS ] '<replaceable class="parameter">quote</replaceable>' ]
                 [ ESCAPE [ AS ] '<replaceable class="parameter">escape</replaceable>' ]
-                [ FORCE NOT NULL <replaceable class="parameter">column</replaceable> [, ...] ] ] ]
+                [ FORCE NOT NULL <replaceable class="parameter">column_name</replaceable> [, ...] ] ] ]
 
-COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable class="parameter">column</replaceable> [, ...] ) ] | ( <replaceable class="parameter">query</replaceable> ) }
+COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable class="parameter">column_name</replaceable> [, ...] ) ] | ( <replaceable class="parameter">query</replaceable> ) }
     TO { '<replaceable class="parameter">filename</replaceable>' | STDOUT }
     [ [ WITH ]
           [ BINARY ]
@@ -952,7 +977,7 @@ COPY { <replaceable class="parameter">table_name</replaceable> [ ( <replaceable 
           [ CSV [ HEADER ]
                 [ QUOTE [ AS ] '<replaceable class="parameter">quote</replaceable>' ]
                 [ ESCAPE [ AS ] '<replaceable class="parameter">escape</replaceable>' ]
-                [ FORCE QUOTE { <replaceable class="parameter">column</replaceable> [, ...] | * } ] ] ]
+                [ FORCE QUOTE { <replaceable class="parameter">column_name</replaceable> [, ...] | * } ] ] ]
 </synopsis>
 
    Note that in this syntax, <literal>BINARY</> and <literal>CSV</> are
@@ -974,7 +999,6 @@ COPY [ BINARY ] <replaceable class="parameter">table_name</replaceable> [ WITH O
     TO { '<replaceable class="parameter">filename</replaceable>' | STDOUT }
     [ [USING] DELIMITERS '<replaceable class="parameter">delimiter</replaceable>' ]
     [ WITH NULL AS '<replaceable class="parameter">null string</replaceable>' ]
-</synopsis>
-  </para>
+</synopsis></para>
  </refsect1>
 </refentry>

@@ -42,6 +42,10 @@ GRANT { EXECUTE | ALL [ PRIVILEGES ] }
     ON FUNCTIONS
     TO { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...] [ WITH GRANT OPTION ]
 
+GRANT { USAGE | ALL [ PRIVILEGES ] }
+    ON TYPES
+    TO { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...] [ WITH GRANT OPTION ]
+
 REVOKE [ GRANT OPTION FOR ]
     { { SELECT | INSERT | UPDATE | DELETE | TRUNCATE | REFERENCES | TRIGGER }
     [, ...] | ALL [ PRIVILEGES ] }
@@ -61,6 +65,12 @@ REVOKE [ GRANT OPTION FOR ]
     ON FUNCTIONS
     FROM { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...]
     [ CASCADE | RESTRICT ]
+
+REVOKE [ GRANT OPTION FOR ]
+    { USAGE | ALL [ PRIVILEGES ] }
+    ON TYPES
+    FROM { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...]
+    [ CASCADE | RESTRICT ]
 </synopsis>
  </refsynopsisdiv>
 
@@ -68,13 +78,12 @@ REVOKE [ GRANT OPTION FOR ]
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER DEFAULT PRIVILEGES</> allows you to set the privileges
    that will be applied to objects created in the future.  (It does not
    affect privileges assigned to already-existing objects.)  Currently,
    only the privileges for tables (including views and foreign tables),
-   sequences, and functions can be altered.
+   sequences, functions, and types (including domains) can be altered.
   </para>
 
   <para>
@@ -98,6 +107,7 @@ REVOKE [ GRANT OPTION FOR ]
  <refsect2>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable>target_role</replaceable></term>
@@ -113,8 +123,8 @@ REVOKE [ GRANT OPTION FOR ]
     <term><replaceable>schema_name</replaceable></term>
     <listitem>
      <para>
-      The name of an existing schema.  Each <replaceable>target_role</>
-      must have <literal>CREATE</> privileges for each specified schema.
+      The name of an existing schema.  If specified, the default privileges
+      are altered for objects later created in that schema.
       If <literal>IN SCHEMA</> is omitted, the global default privileges
       are altered.
      </para>
@@ -143,6 +153,7 @@ REVOKE [ GRANT OPTION FOR ]
  <refsect1 id="sql-alterdefaultprivileges-notes">
   <title>Notes</title>
 
+&common;
   <para>
    Use <xref linkend="app-psql">'s <command>\ddp</command> command
    to obtain information about existing assignments of default privileges.
@@ -189,13 +200,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA myschema REVOKE INSERT ON TABLES FROM webuser
 
 <programlisting>
 ALTER DEFAULT PRIVILEGES FOR ROLE admin REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>ALTER DEFAULT PRIVILEGES</command> statement in the SQL
    standard.

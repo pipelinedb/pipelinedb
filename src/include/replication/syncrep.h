@@ -3,7 +3,7 @@
  * syncrep.h
  *	  Exports from replication/syncrep.c.
  *
- * Portions Copyright (c) 2010-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		src/include/replication/syncrep.h
@@ -13,6 +13,7 @@
 #ifndef _SYNCREP_H
 #define _SYNCREP_H
 
+#include "access/xlogdefs.h"
 #include "utils/guc.h"
 
 #define SyncRepRequested() \
@@ -43,7 +44,7 @@ extern void SyncRepCleanupAtProcExit(void);
 extern void SyncRepInitConfig(void);
 extern void SyncRepReleaseWaiters(void);
 
-/* called by wal writer */
+/* called by checkpointer */
 extern void SyncRepUpdateSyncStandbysDefined(void);
 
 /* called by various procs */

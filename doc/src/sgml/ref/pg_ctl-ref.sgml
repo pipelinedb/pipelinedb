@@ -188,7 +188,9 @@ PostgreSQL documentation
   <para>
    <option>restart</option> mode effectively executes a stop followed
    by a start.  This allows changing the <command>postgres</command>
-   command-line options.
+   command-line options.  <option>restart</option> might fail if
+   relative paths specified were specified on the command-line during
+   server start.
   </para>
 
   <para>
@@ -261,7 +263,7 @@ PostgreSQL documentation
       <term><option>--pgdata <replaceable class="parameter">datadir</replaceable></option></term>
       <listitem>
        <para>
-        Specifies the file system location of the database files.  If
+        Specifies the file system location of the database configuration files.  If
         this is omitted, the environment variable
         <envar>PGDATA</envar> is used.
        </para>
@@ -364,6 +366,16 @@ PostgreSQL documentation
      </varlistentry>
 
      <varlistentry>
+      <term><option>-V</></term>
+      <term><option>--version</></term>
+       <listitem>
+        <para>
+         Print the <application>pg_ctl</application> version and exit.
+        </para>
+       </listitem>
+     </varlistentry>
+
+     <varlistentry>
       <term><option>-w</option></term>
       <listitem>
        <para>
@@ -373,6 +385,7 @@ PostgreSQL documentation
         attempts to connect to the server.
         When waiting for shutdown, <command>pg_ctl</command> waits for
         the server to remove its <acronym>PID</acronym> file.
+        This option allows the entry of an <acronym>SSL</> passphrase on startup.
         <command>pg_ctl</command> returns an exit code based on the
         success of the startup or shutdown.
        </para>
@@ -385,6 +398,17 @@ PostgreSQL documentation
        <para>
         Do not wait for startup or shutdown to complete.  This is the
         default for start and restart modes.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-?</></term>
+      <term><option>--help</></term>
+      <listitem>
+       <para>
+        Show help about <application>pg_ctl</application> command line
+        arguments, and exit.
        </para>
       </listitem>
      </varlistentry>

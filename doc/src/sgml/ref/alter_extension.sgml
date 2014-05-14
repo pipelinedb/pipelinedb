@@ -23,10 +23,10 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-ALTER EXTENSION <replaceable class="PARAMETER">extension_name</replaceable> UPDATE [ TO <replaceable class="PARAMETER">new_version</replaceable> ]
-ALTER EXTENSION <replaceable class="PARAMETER">extension_name</replaceable> SET SCHEMA <replaceable class="PARAMETER">new_schema</replaceable>
-ALTER EXTENSION <replaceable class="PARAMETER">extension_name</replaceable> ADD <replaceable class="PARAMETER">member_object</replaceable>
-ALTER EXTENSION <replaceable class="PARAMETER">extension_name</replaceable> DROP <replaceable class="PARAMETER">member_object</replaceable>
+ALTER EXTENSION <replaceable class="PARAMETER">name</replaceable> UPDATE [ TO <replaceable class="PARAMETER">new_version</replaceable> ]
+ALTER EXTENSION <replaceable class="PARAMETER">name</replaceable> SET SCHEMA <replaceable class="PARAMETER">new_schema</replaceable>
+ALTER EXTENSION <replaceable class="PARAMETER">name</replaceable> ADD <replaceable class="PARAMETER">member_object</replaceable>
+ALTER EXTENSION <replaceable class="PARAMETER">name</replaceable> DROP <replaceable class="PARAMETER">member_object</replaceable>
 
 <phrase>where <replaceable class="PARAMETER">member_object</replaceable> is:</phrase>
 
@@ -35,9 +35,11 @@ ALTER EXTENSION <replaceable class="PARAMETER">extension_name</replaceable> DROP
   COLLATION <replaceable class="PARAMETER">object_name</replaceable> |
   CONVERSION <replaceable class="PARAMETER">object_name</replaceable> |
   DOMAIN <replaceable class="PARAMETER">object_name</replaceable> |
+  EVENT TRIGGER <replaceable class="PARAMETER">object_name</replaceable> |
   FOREIGN DATA WRAPPER <replaceable class="PARAMETER">object_name</replaceable> |
   FOREIGN TABLE <replaceable class="PARAMETER">object_name</replaceable> |
   FUNCTION <replaceable class="PARAMETER">function_name</replaceable> ( [ [ <replaceable class="parameter">argmode</replaceable> ] [ <replaceable class="parameter">argname</replaceable> ] <replaceable class="parameter">argtype</replaceable> [, ...] ] ) |
+  MATERIALIZED VIEW <replaceable class="PARAMETER">object_name</replaceable> |
   OPERATOR <replaceable class="PARAMETER">operator_name</replaceable> (<replaceable class="PARAMETER">left_type</replaceable>, <replaceable class="PARAMETER">right_type</replaceable>) |
   OPERATOR CLASS <replaceable class="PARAMETER">object_name</replaceable> USING <replaceable class="parameter">index_method</replaceable> |
   OPERATOR FAMILY <replaceable class="PARAMETER">object_name</replaceable> USING <replaceable class="parameter">index_method</replaceable> |
@@ -126,7 +128,7 @@ ALTER EXTENSION <replaceable class="PARAMETER">extension_name</replaceable> DROP
   <para>
    <variablelist>
     <varlistentry>
-     <term><replaceable class="PARAMETER">extension_name</replaceable></term>
+     <term><replaceable class="PARAMETER">name</replaceable></term>
      <listitem>
       <para>
        The name of an installed extension.

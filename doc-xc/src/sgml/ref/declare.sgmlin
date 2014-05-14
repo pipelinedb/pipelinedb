@@ -43,7 +43,6 @@ DECLARE <replaceable class="parameter">name</replaceable> [ BINARY ] [ NO SCROLL
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DECLARE</command> allows a user to create cursors, which
    can be used to retrieve
@@ -65,6 +64,7 @@ DECLARE <replaceable class="parameter">name</replaceable> [ BINARY ] [ NO SCROLL
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -110,8 +110,7 @@ DECLARE <replaceable class="parameter">name</replaceable> [ BINARY ] [ NO SCROLL
     <term><literal>SCROLL</literal></term>
     <term><literal>NO SCROLL</literal></term>
     <listitem>
-     <para>
-      <literal>SCROLL</literal> specifies that the cursor can be used
+     <para><literal>SCROLL</literal> specifies that the cursor can be used
       to retrieve rows in a nonsequential fashion (e.g.,
       backward). Depending upon the complexity of the query's
       execution plan, specifying <literal>SCROLL</literal> might impose
@@ -136,8 +135,7 @@ DECLARE <replaceable class="parameter">name</replaceable> [ BINARY ] [ NO SCROLL
     <term><literal>WITH HOLD</literal></term>
     <term><literal>WITHOUT HOLD</literal></term>
     <listitem>
-     <para>
-      <literal>WITH HOLD</literal> specifies that the cursor can
+     <para><literal>WITH HOLD</literal> specifies that the cursor can
       continue to be used after the transaction that created it
       successfully commits.  <literal>WITHOUT HOLD</literal> specifies
       that the cursor cannot be used outside of the transaction that
@@ -177,6 +175,7 @@ DECLARE <replaceable class="parameter">name</replaceable> [ BINARY ] [ NO SCROLL
  <refsect1 id="sql-declare-notes">
   <title id="sql-declare-notes-title">Notes</title>
 
+&common;
   <para>
    Normal cursors return data in text format, the same as a
    <command>SELECT</> would produce.  The <literal>BINARY</> option
@@ -352,6 +351,7 @@ DECLARE liahona CURSOR FOR SELECT * FROM films;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The SQL standard says that it is implementation-dependent whether cursors
    are sensitive to concurrent updates of the underlying data by default.  In

@@ -3,7 +3,7 @@
  * pl_comp.c		- Compiler part of the PL/pgSQL
  *			  procedural language
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -17,6 +17,7 @@
 
 #include <ctype.h>
 
+#include "access/htup_details.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_proc_fn.h"
@@ -263,7 +264,8 @@ do_compile(FunctionCallInfo fcinfo,
 		   bool forValidator)
 {
 	Form_pg_proc procStruct = (Form_pg_proc) GETSTRUCT(procTup);
-	bool		is_trigger = CALLED_AS_TRIGGER(fcinfo);
+	bool		is_dml_trigger = CALLED_AS_TRIGGER(fcinfo);
+	bool		is_event_trigger = CALLED_AS_EVENT_TRIGGER(fcinfo);
 	Datum		prosrcdatum;
 	bool		isnull;
 	char	   *proc_source;
@@ -345,11 +347,17 @@ do_compile(FunctionCallInfo fcinfo,
 	function->fn_oid = fcinfo->flinfo->fn_oid;
 	function->fn_xmin = HeapTupleHeaderGetXmin(procTup->t_data);
 	function->fn_tid = procTup->t_self;
-	function->fn_is_trigger = is_trigger;
 	function->fn_input_collation = fcinfo->fncollation;
 	function->fn_cxt = func_cxt;
 	function->out_param_varno = -1;		/* set up for no OUT param */
 	function->resolve_option = plpgsql_variable_conflict;
+
+	if (is_dml_trigger)
+		function->fn_is_trigger = PLPGSQL_DML_TRIGGER;
+	else if (is_event_trigger)
+		function->fn_is_trigger = PLPGSQL_EVENT_TRIGGER;
+	else
+		function->fn_is_trigger = PLPGSQL_NOT_TRIGGER;
 
 	/*
 	 * Initialize the compiler, particularly the namespace stack.  The
@@ -367,9 +375,9 @@ do_compile(FunctionCallInfo fcinfo,
 									 sizeof(PLpgSQL_datum *) * datums_alloc);
 	datums_last = 0;
 
-	switch (is_trigger)
+	switch (function->fn_is_trigger)
 	{
-		case false:
+		case PLPGSQL_NOT_TRIGGER:
 
 			/*
 			 * Fetch info about the procedure's parameters. Allocations aren't
@@ -529,7 +537,7 @@ do_compile(FunctionCallInfo fcinfo,
 				if (rettypeid == VOIDOID ||
 					rettypeid == RECORDOID)
 					 /* okay */ ;
-				else if (rettypeid == TRIGGEROID)
+				else if (rettypeid == TRIGGEROID || rettypeid == EVTTRIGGEROID)
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("trigger functions can only be called as triggers")));
@@ -568,7 +576,7 @@ do_compile(FunctionCallInfo fcinfo,
 			ReleaseSysCache(typeTup);
 			break;
 
-		case true:
+		case PLPGSQL_DML_TRIGGER:
 			/* Trigger procedure's return type is unknown yet */
 			function->fn_rettype = InvalidOid;
 			function->fn_retbyval = false;
@@ -672,8 +680,39 @@ do_compile(FunctionCallInfo fcinfo,
 
 			break;
 
+		case PLPGSQL_EVENT_TRIGGER:
+			function->fn_rettype = VOIDOID;
+			function->fn_retbyval = false;
+			function->fn_retistuple = true;
+			function->fn_retset = false;
+
+			/* shouldn't be any declared arguments */
+			if (procStruct->pronargs != 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
+						 errmsg("event trigger functions cannot have declared arguments")));
+
+			/* Add the variable tg_event */
+			var = plpgsql_build_variable("tg_event", 0,
+										 plpgsql_build_datatype(TEXTOID,
+																-1,
+											   function->fn_input_collation),
+										 true);
+			function->tg_event_varno = var->dno;
+
+			/* Add the variable tg_tag */
+			var = plpgsql_build_variable("tg_tag", 0,
+										 plpgsql_build_datatype(TEXTOID,
+																-1,
+											   function->fn_input_collation),
+										 true);
+			function->tg_tag_varno = var->dno;
+
+			break;
+
 		default:
-			elog(ERROR, "unrecognized function typecode: %d", (int) is_trigger);
+			elog(ERROR, "unrecognized function typecode: %d",
+				 (int) function->fn_is_trigger);
 			break;
 	}
 
@@ -803,7 +842,7 @@ plpgsql_compile_inline(char *proc_source)
 	compile_tmp_cxt = MemoryContextSwitchTo(func_cxt);
 
 	function->fn_signature = pstrdup(func_name);
-	function->fn_is_trigger = false;
+	function->fn_is_trigger = PLPGSQL_NOT_TRIGGER;
 	function->fn_input_collation = InvalidOid;
 	function->fn_cxt = func_cxt;
 	function->out_param_varno = -1;		/* set up for no OUT param */
@@ -1721,11 +1760,13 @@ plpgsql_parse_cwordtype(List *idents)
 	classStruct = (Form_pg_class) GETSTRUCT(classtup);
 
 	/*
-	 * It must be a relation, sequence, view, composite type, or foreign table
+	 * It must be a relation, sequence, view, materialized view, composite
+	 * type, or foreign table
 	 */
 	if (classStruct->relkind != RELKIND_RELATION &&
 		classStruct->relkind != RELKIND_SEQUENCE &&
 		classStruct->relkind != RELKIND_VIEW &&
+		classStruct->relkind != RELKIND_MATVIEW &&
 		classStruct->relkind != RELKIND_COMPOSITE_TYPE &&
 		classStruct->relkind != RELKIND_FOREIGN_TABLE)
 		goto done;
@@ -1943,10 +1984,14 @@ build_row_from_class(Oid classOid)
 	classStruct = RelationGetForm(rel);
 	relname = RelationGetRelationName(rel);
 
-	/* accept relation, sequence, view, composite type, or foreign table */
+	/*
+	 * Accept relation, sequence, view, materialized view, composite type, or
+	 * foreign table.
+	 */
 	if (classStruct->relkind != RELKIND_RELATION &&
 		classStruct->relkind != RELKIND_SEQUENCE &&
 		classStruct->relkind != RELKIND_VIEW &&
+		classStruct->relkind != RELKIND_MATVIEW &&
 		classStruct->relkind != RELKIND_COMPOSITE_TYPE &&
 		classStruct->relkind != RELKIND_FOREIGN_TABLE)
 		ereport(ERROR,

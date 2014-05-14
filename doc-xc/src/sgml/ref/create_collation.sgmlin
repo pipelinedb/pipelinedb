@@ -30,6 +30,7 @@ CREATE COLLATION <replaceable>name</replaceable> FROM <replaceable>existing_coll
  <refsect1 id="sql-createcollation-description">
   <title>Description</title>
 
+&common;
   <para>
    <command>CREATE COLLATION</command> defines a new collation using
    the specified operating system locale settings,
@@ -46,6 +47,7 @@ CREATE COLLATION <replaceable>name</replaceable> FROM <replaceable>existing_coll
  <refsect1>
   <title>Parameters</title>
 
+&common;
    <variablelist>
     <varlistentry>
      <term><replaceable>name</replaceable></term>
@@ -120,6 +122,7 @@ CREATE COLLATION <replaceable>name</replaceable> FROM <replaceable>existing_coll
  <refsect1 id="sql-createcollation-notes">
   <title>Notes</title>
 
+&common;
   <para>
    Use <command>DROP COLLATION</command> to remove user-defined collations.
   </para>
@@ -156,6 +159,7 @@ CREATE COLLATION german FROM "de_DE";
  <refsect1 id="sql-createcollation-compat">
   <title>Compatibility</title>
 
+&common;
   <para>
    There is a <command>CREATE COLLATION</command> statement in the SQL
    standard, but it is limited to copying an existing collation.  The

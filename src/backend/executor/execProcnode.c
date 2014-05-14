@@ -7,7 +7,7 @@
  *	 ExecProcNode, or ExecEndNode on its subnodes and do the appropriate
  *	 processing.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -32,6 +32,7 @@
  *		the number of employees in that department.  So we have the query:
  *
  *				select DEPT.no_emps, EMP.age
+ *				from DEPT, EMP
  *				where EMP.name = DEPT.mgr and
  *					  DEPT.name = "shoe"
  *
@@ -112,6 +113,7 @@
 #include "executor/nodeWindowAgg.h"
 #include "executor/nodeWorktablescan.h"
 #include "miscadmin.h"
+#include "nodes/execnodes.h"
 #ifdef PGXC
 #include "pgxc/execRemote.h"
 #endif
@@ -245,6 +247,7 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 			result = (PlanState *) ExecInitForeignScan((ForeignScan *) node,
 													   estate, eflags);
 			break;
+
 		case T_TuplestoreScan:
 			result = (PlanState *) ExecInitTuplestoreScan((TuplestoreScan *) node,
 														 estate, eflags);
@@ -359,44 +362,44 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 	return result;
 }
 
-/* ----------------------------------------------------------------
- *		ExecBeginBatch
- *
- *		Prepare a node for a new batch
- * ----------------------------------------------------------------
- */
-void
-ExecBeginBatch(PlanState *node)
-{
+ /* ----------------------------------------------------------------
+  *		ExecBeginBatch
+  *
+  *		Prepare a node for a new batch
+  * ----------------------------------------------------------------
+  */
+ void
+ ExecBeginBatch(PlanState *node)
+ {
 
-}
+ }
 
-/* ----------------------------------------------------------------
- *		ExecEndBatch
- *
- *		Clean up a node after finishing a batch
- * ----------------------------------------------------------------
- */
-TupleTableSlot *
-ExecEndBatch(PlanState *node)
-{
-	switch (nodeTag(node))
-	{
-		case T_AggState:
-			{
-				AggState *agg = (AggState *) node;
-				agg->agg_done = false;
-				agg->table_filled = false;
-			}
-			break;
-		default:
-			break;
-	}
+ /* ----------------------------------------------------------------
+  *		ExecEndBatch
+  *
+  *		Clean up a node after finishing a batch
+  * ----------------------------------------------------------------
+  */
+ TupleTableSlot *
+ ExecEndBatch(PlanState *node)
+ {
+ 	switch (nodeTag(node))
+ 	{
+ 		case T_AggState:
+ 			{
+ 				AggState *agg = (AggState *) node;
+ 				agg->agg_done = false;
+ 				agg->table_filled = false;
+ 			}
+ 			break;
+ 		default:
+ 			break;
+ 	}
 
-	node->cq_batch_progress = 0;
+ 	node->cq_batch_progress = 0;
 
-	return NULL;
-}
+ 	return NULL;
+ }
 
 /* ----------------------------------------------------------------
  *		ExecProcNode

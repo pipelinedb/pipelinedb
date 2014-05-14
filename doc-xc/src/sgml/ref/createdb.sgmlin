@@ -29,8 +29,8 @@ PostgreSQL documentation
    <command>createdb</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
    <arg rep="repeat"><replaceable>option</replaceable></arg>
-   <arg><replaceable>dbname</replaceable></arg>
-   <arg><replaceable>description</replaceable></arg>
+   <arg choice="opt"><replaceable>dbname</replaceable>
+   <arg choice="opt"><replaceable>description</replaceable></arg></arg>
   </cmdsynopsis>
  </refsynopsisdiv>
 
@@ -39,16 +39,9 @@ PostgreSQL documentation
   <title>
    Description
   </title>
-
 &common;
-
   <para>
-<!## PG>
    <application>createdb</application> creates a new <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-   <application>createdb</application> creates a new <productname>Postgres-XC</productname>
-<!## end>
    database.
   </para>
 
@@ -72,6 +65,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Options</title>
 
+&common;
   <para>
    <application>createdb</application> accepts the following command-line arguments:
 
@@ -81,12 +75,7 @@ PostgreSQL documentation
       <listitem>
        <para>
         Specifies the name of the database to be created.  The name must be
-<!## PG>
         unique among all <productname>PostgreSQL</productname> databases in this cluster.
-<!## end>
-<!## XC>
-        unique among all <productname>Postgres-XC</productname> databases in this cluster.
-<!## end>
         The default is to create a database with the same name as the
         current system user.
        </para>
@@ -108,7 +97,8 @@ PostgreSQL documentation
       <term><option>--tablespace=<replaceable class="parameter">tablespace</replaceable></></term>
       <listitem>
        <para>
-        Specifies the default tablespace for the database.
+        Specifies the default tablespace for the database. (This name
+        is processed as a double-quoted identifier.)
        </para>
       </listitem>
      </varlistentry>
@@ -131,12 +121,7 @@ PostgreSQL documentation
        <para>
         Specifies the character encoding scheme to be used in this
         database. The character sets supported by the
-<!## PG>
         <productname>PostgreSQL</productname> server are described in
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname> servers are described in
-<!## end>
         <xref linkend="multibyte-charset-supported">.
        </para>
       </listitem>
@@ -177,6 +162,7 @@ PostgreSQL documentation
       <listitem>
        <para>
         Specifies the database user who will own the new database.
+        (This name is processed as a double-quoted identifier.)
        </para>
       </listitem>
      </varlistentry>
@@ -186,7 +172,8 @@ PostgreSQL documentation
       <term><option>--template=<replaceable class="parameter">template</replaceable></></term>
       <listitem>
        <para>
-        Specifies the template database from which to build this database.
+        Specifies the template database from which to build this
+        database.  (This name is processed as a double-quoted identifier.)
        </para>
       </listitem>
      </varlistentry>
@@ -296,6 +283,19 @@ PostgreSQL documentation
        </para>
       </listitem>
      </varlistentry>
+
+     <varlistentry>
+      <term><option>--maintenance-db=<replaceable class="parameter">dbname</replaceable></></term>
+      <listitem>
+       <para>
+         Specifies the name of the database to connect to when creating the
+         new database. If not specified, the <literal>postgres</literal>
+         database will be used; if that does not exist (or if it is the name
+         of the new database being created), <literal>template1</literal> will
+         be used.
+       </para>
+      </listitem>
+     </varlistentry>
     </variablelist>
    </para>
 
@@ -305,6 +305,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Environment</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><envar>PGDATABASE</envar></term>
@@ -332,12 +333,7 @@ PostgreSQL documentation
   </variablelist>
 
   <para>
-<!## PG>
    This utility, like most other <productname>PostgreSQL</> utilities,
-<!## end>
-<!## XC>
-   This utility, like most other <productname>Postgres-XC</> utilities,
-<!## end>
    also uses the environment variables supported by <application>libpq</>
    (see <xref linkend="libpq-envars">).
   </para>
@@ -348,6 +344,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Diagnostics</title>
 
+&common;
   <para>
    In case of difficulty, see <xref linkend="SQL-CREATEDATABASE">
    and <xref linkend="APP-PSQL"> for
@@ -380,8 +377,7 @@ PostgreSQL documentation
 <screen>
 <prompt>$ </prompt><userinput>createdb -p 5000 -h eden -E LATIN1 -e demo</userinput>
 <computeroutput>CREATE DATABASE demo ENCODING 'LATIN1';</computeroutput>
-</screen>
-   </para>
+</screen></para>
  </refsect1>
 
 

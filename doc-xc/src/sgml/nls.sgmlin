@@ -10,27 +10,18 @@
 
  <title>Native Language Support</title>
 
+&common;
  <sect1 id="nls-translator">
   <title>For the Translator</title>
 
 &common;
   <para>
-<!## PG>
    <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</>
-<!## end>
    programs (server and client) can issue their messages in
    your favorite language &mdash; if the messages have been translated.
    Creating and maintaining translated message sets needs the help of
    people who speak their own language well and want to contribute to
-<!## PG>
    the <productname>PostgreSQL</> effort.  You do not have to be a
-<!## end>
-<!## XC>
-   the <productname>Postgres-XC</> effort.  You do not have to be a
-<!## end>
    programmer at all
    to do this.  This section explains how to help.
   </para>
@@ -174,7 +165,7 @@ msgstr "another translated"
     can also be named
     <filename><replaceable>language</replaceable>_<replaceable>region</replaceable>.po</filename>
     where <replaceable>region</replaceable> is the
-    <ulink url="http://www.iso.org/iso/english_country_names_and_code_elements">
+    <ulink url="http://www.iso.org/iso/country_names_and_code_elements">
     ISO 3166-1 two-letter country code (in upper case)</ulink>,
     e.g.,
     <filename>pt_BR.po</filename> for Portuguese in Brazil.  If you
@@ -324,12 +315,7 @@ msgstr "Die Datei %2$s hat %1$u Zeichen."
   <para>
    This section describes how to implement native language support in a
    program or library that is part of the
-<!## PG>
    <productname>PostgreSQL</> distribution.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</> distribution.
-<!## end>
    Currently, it only applies to C programs.
   </para>
 

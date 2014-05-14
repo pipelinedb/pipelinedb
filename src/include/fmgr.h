@@ -8,7 +8,7 @@
  * or call fmgr-callable functions.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/fmgr.h
@@ -624,6 +624,7 @@ extern Oid	get_fn_expr_argtype(FmgrInfo *flinfo, int argnum);
 extern Oid	get_call_expr_argtype(fmNodePtr expr, int argnum);
 extern bool get_fn_expr_arg_stable(FmgrInfo *flinfo, int argnum);
 extern bool get_call_expr_arg_stable(fmNodePtr expr, int argnum);
+extern bool get_fn_expr_variadic(FmgrInfo *flinfo);
 
 /*
  * Routines in dfmgr.c

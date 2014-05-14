@@ -33,6 +33,7 @@ BEGIN [ WORK | TRANSACTION ] [ <replaceable class="parameter">transaction_mode</
 
  <refsect1>
   <title>Description</title>
+
 &common;
   <para>
    <command>BEGIN</command> initiates a transaction block, that is,
@@ -41,12 +42,7 @@ BEGIN [ WORK | TRANSACTION ] [ <replaceable class="parameter">transaction_mode</
    linkend="sql-commit"> or <xref
    linkend="sql-rollback"> is given.
    By default (without <command>BEGIN</command>),
-<!## PG>
    <productname>PostgreSQL</productname> executes
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> executes
-<!## end>
    transactions in <quote>autocommit</quote> mode, that is, each
    statement is executed in its own transaction and a commit is
    implicitly performed at the end of the statement (if execution was
@@ -73,6 +69,7 @@ BEGIN [ WORK | TRANSACTION ] [ <replaceable class="parameter">transaction_mode</
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>WORK</literal></term>
@@ -94,6 +91,7 @@ BEGIN [ WORK | TRANSACTION ] [ <replaceable class="parameter">transaction_mode</
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    <xref linkend="sql-start-transaction"> has the same functionality
    as <command>BEGIN</>.
@@ -127,20 +125,15 @@ BEGIN [ WORK | TRANSACTION ] [ <replaceable class="parameter">transaction_mode</
 
 <programlisting>
 BEGIN;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
-<!## PG>
    <command>BEGIN</command> is a <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-   <command>BEGIN</command> is a <productname>Postgres-XC</productname>
-<!## end>
    language extension.  It is equivalent to the SQL-standard command
    <xref linkend="sql-start-transaction">, whose reference page
    contains additional compatibility information.

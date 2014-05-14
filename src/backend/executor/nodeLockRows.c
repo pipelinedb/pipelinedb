@@ -3,7 +3,7 @@
  * nodeLockRows.c
  *	  Routines to handle FOR UPDATE/FOR SHARE row locking
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -21,6 +21,7 @@
 
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/xact.h"
 #include "executor/executor.h"
 #include "executor/nodeLockRows.h"
@@ -70,8 +71,7 @@ lnext:
 		bool		isNull;
 		HeapTupleData tuple;
 		Buffer		buffer;
-		ItemPointerData update_ctid;
-		TransactionId update_xmax;
+		HeapUpdateFailureData hufd;
 		LockTupleMode lockmode;
 		HTSU_Result test;
 		HeapTuple	copyTuple;
@@ -111,20 +111,47 @@ lnext:
 		tuple.t_self = *((ItemPointer) DatumGetPointer(datum));
 
 		/* okay, try to lock the tuple */
-		if (erm->markType == ROW_MARK_EXCLUSIVE)
-			lockmode = LockTupleExclusive;
-		else
-			lockmode = LockTupleShared;
+		switch (erm->markType)
+		{
+			case ROW_MARK_EXCLUSIVE:
+				lockmode = LockTupleExclusive;
+				break;
+			case ROW_MARK_NOKEYEXCLUSIVE:
+				lockmode = LockTupleNoKeyExclusive;
+				break;
+			case ROW_MARK_SHARE:
+				lockmode = LockTupleShare;
+				break;
+			case ROW_MARK_KEYSHARE:
+				lockmode = LockTupleKeyShare;
+				break;
+			default:
+				elog(ERROR, "unsupported rowmark type");
+				lockmode = LockTupleNoKeyExclusive;		/* keep compiler quiet */
+				break;
+		}
 
-		test = heap_lock_tuple(erm->relation, &tuple, &buffer,
-							   &update_ctid, &update_xmax,
+		test = heap_lock_tuple(erm->relation, &tuple,
 							   estate->es_output_cid,
-							   lockmode, erm->noWait);
+							   lockmode, erm->noWait, true,
+							   &buffer, &hufd);
 		ReleaseBuffer(buffer);
 		switch (test)
 		{
 			case HeapTupleSelfUpdated:
-				/* treat it as deleted; do not process */
+
+				/*
+				 * The target tuple was already updated or deleted by the
+				 * current command, or by a later command in the current
+				 * transaction.  We *must* ignore the tuple in the former
+				 * case, so as to avoid the "Halloween problem" of repeated
+				 * update attempts.  In the latter case it might be sensible
+				 * to fetch the updated tuple instead, but doing so would
+				 * require changing heap_lock_tuple as well as heap_update and
+				 * heap_delete to not complain about updating "invisible"
+				 * tuples, which seems pretty scary.  So for now, treat the
+				 * tuple as deleted and do not process.
+				 */
 				goto lnext;
 
 			case HeapTupleMayBeUpdated:
@@ -136,8 +163,7 @@ lnext:
 					ereport(ERROR,
 							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 							 errmsg("could not serialize access due to concurrent update")));
-				if (ItemPointerEquals(&update_ctid,
-									  &tuple.t_self))
+				if (ItemPointerEquals(&hufd.ctid, &tuple.t_self))
 				{
 					/* Tuple was deleted, so don't return it */
 					goto lnext;
@@ -145,7 +171,7 @@ lnext:
 
 				/* updated, so fetch and lock the updated version */
 				copyTuple = EvalPlanQualFetch(estate, erm->relation, lockmode,
-											  &update_ctid, update_xmax);
+											  &hufd.ctid, hufd.xmax);
 
 				if (copyTuple == NULL)
 				{

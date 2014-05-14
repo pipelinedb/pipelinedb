@@ -27,7 +27,7 @@ CREATE DATABASE <replaceable class="PARAMETER">name</replaceable>
            [ ENCODING [=] <replaceable class="parameter">encoding</replaceable> ]
            [ LC_COLLATE [=] <replaceable class="parameter">lc_collate</replaceable> ]
            [ LC_CTYPE [=] <replaceable class="parameter">lc_ctype</replaceable> ]
-           [ TABLESPACE [=] <replaceable class="parameter">tablespace</replaceable> ]
+           [ TABLESPACE [=] <replaceable class="parameter">tablespace_name</replaceable> ]
            [ CONNECTION LIMIT [=] <replaceable class="parameter">connlimit</replaceable> ] ]
 </synopsis>
  </refsynopsisdiv>
@@ -36,15 +36,9 @@ CREATE DATABASE <replaceable class="PARAMETER">name</replaceable>
   <title>Description</title>
 
 &common;
-
   <para>
    <command>CREATE DATABASE</command> creates a new
-<!## PG>
    <productname>PostgreSQL</productname> database.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> database.
-<!## end>
   </para>
 
   <para>
@@ -54,31 +48,17 @@ CREATE DATABASE <replaceable class="PARAMETER">name</replaceable>
   </para>
 
   <para>
-   Normally, the creator becomes the owner of the new database.
-   Superusers can create databases owned by other users, by using the
-   <literal>OWNER</> clause. They can even create databases owned by
-   users with no special privileges. Non-superusers with <literal>CREATEDB</>
-   privilege can only create databases owned by themselves.
-  </para>
-
-  <para>
    By default, the new database will be created by cloning the standard
    system database <literal>template1</>.  A different template can be
    specified by writing <literal>TEMPLATE
    <replaceable class="parameter">name</replaceable></literal>.  In particular,
    by writing <literal>TEMPLATE template0</>, you can create a virgin
    database containing only the standard objects predefined by your
-<!## PG>
    version of <productname>PostgreSQL</productname>.  This is useful
-<!## end>
-<!## XC>
-   version of <productname>Postgres-XC</productname>.  This is useful
-<!## end>
    if you wish to avoid copying
    any installation-local objects that might have been added to
    <literal>template1</>.
   </para>
-
 <!## XC>
 &xconly;
    <para>
@@ -93,6 +73,7 @@ CREATE DATABASE <replaceable class="PARAMETER">name</replaceable>
  <refsect1>
   <title>Parameters</title>
 
+&common;
     <variablelist>
      <varlistentry>
       <term><replaceable class="parameter">name</replaceable></term>
@@ -103,12 +84,14 @@ CREATE DATABASE <replaceable class="PARAMETER">name</replaceable>
       </listitem>
      </varlistentry>
      <varlistentry>
-      <term><replaceable class="parameter">use_name</replaceable></term>
+      <term><replaceable class="parameter">user_name</replaceable></term>
       <listitem>
        <para>
-        The name of the database user who will own the new database,
+        The role name of the user who will own the new database,
         or <literal>DEFAULT</literal> to use the default (namely, the
-        user executing the command).
+        user executing the command).  To create a database owned by another
+        role, you must be a direct or indirect member of that role,
+        or be a superuser.
        </para>
       </listitem>
      </varlistentry>
@@ -131,12 +114,7 @@ CREATE DATABASE <replaceable class="PARAMETER">name</replaceable>
         or an integer encoding number, or <literal>DEFAULT</literal>
         to use the default encoding (namely, the encoding of the
         template database). The character sets supported by the
-<!## PG>
         <productname>PostgreSQL</productname> server are described in
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname> server are described in
-<!## end>
         <xref linkend="multibyte-charset-supported">. See below for
         additional restrictions.
        </para>
@@ -166,7 +144,7 @@ CREATE DATABASE <replaceable class="PARAMETER">name</replaceable>
       </listitem>
      </varlistentry>
      <varlistentry>
-      <term><replaceable class="parameter">tablespace</replaceable></term>
+      <term><replaceable class="parameter">tablespace_name</replaceable></term>
       <listitem>
        <para>
         The name of the tablespace that will be associated with the
@@ -200,6 +178,7 @@ CREATE DATABASE <replaceable class="PARAMETER">name</replaceable>
  <refsect1>
   <title>Notes</title>
 
+&common;
    <para>
     <command>CREATE DATABASE</> cannot be executed inside a transaction
     block.
@@ -303,6 +282,7 @@ CREATE DATABASE music ENCODING 'LATIN1' TEMPLATE template0;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>CREATE DATABASE</command> statement in the SQL
    standard.  Databases are equivalent to catalogs, whose creation is

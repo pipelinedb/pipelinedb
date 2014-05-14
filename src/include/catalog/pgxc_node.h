@@ -36,7 +36,7 @@ CATALOG(pgxc_node,9015) BKI_SHARED_RELATION
 	/*
 	 * Port number of the node to connect to
 	 */
-	int4 		node_port;
+	int32 		node_port;
 
 	/*
 	 * Host name of IP address of the node to connect to
@@ -56,7 +56,7 @@ CATALOG(pgxc_node,9015) BKI_SHARED_RELATION
 	/*
 	 * Node identifier to be used at places where a fixed length node identification is required
 	 */
-	int4		node_id;
+	int32		node_id;
 } FormData_pgxc_node;
 
 typedef FormData_pgxc_node *Form_pgxc_node;

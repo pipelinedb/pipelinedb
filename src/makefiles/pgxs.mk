@@ -146,6 +146,9 @@ endif # MODULE_big
 
 
 installdirs:
+ifneq (,$(EXTENSION))
+	$(MKDIR_P) '$(DESTDIR)$(datadir)/extension'
+endif
 ifneq (,$(DATA)$(DATA_built))
 	$(MKDIR_P) '$(DESTDIR)$(datadir)/$(datamoduledir)'
 endif
@@ -237,7 +240,11 @@ distclean maintainer-clean: clean
 ifdef REGRESS
 
 # Select database to use for running the tests
-REGRESS_OPTS += --dbname=$(CONTRIB_TESTDB)
+ifneq ($(USE_MODULE_DB),)
+  REGRESS_OPTS += --dbname=$(CONTRIB_TESTDB_MODULE)
+else
+  REGRESS_OPTS += --dbname=$(CONTRIB_TESTDB)
+endif
 
 # where to find psql for running the tests
 PSQLDIR = $(bindir)
@@ -289,5 +296,5 @@ endif
 
 ifdef PROGRAM
 $(PROGRAM): $(OBJS)
-	$(CC) $(CFLAGS) $(OBJS) $(PG_LIBS) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@
+	$(CC) $(CFLAGS) $(OBJS) $(PG_LIBS) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
 endif

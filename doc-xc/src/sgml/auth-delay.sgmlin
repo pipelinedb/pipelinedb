@@ -6,7 +6,7 @@
  <indexterm zone="auth-delay">
   <primary>auth_delay</primary>
  </indexterm>
-
+&common;
  <para>
   <filename>auth_delay</filename> causes the server to pause briefly before
   reporting authentication failure, to make brute-force attacks on database
@@ -40,11 +40,10 @@
     </listitem>
    </varlistentry>
   </variablelist>
-
+&common;
   <para>
-   In order to set these parameters in your <filename>postgresql.conf</> file,
-   you will need to add <literal>auth_delay</> to
-   <xref linkend="guc-custom-variable-classes">.  Typical usage might be:
+   These parameters must be set in <filename>postgresql.conf</>.
+   Typical usage might be:
   </para>
 
 <programlisting>
@@ -58,7 +57,7 @@ auth_delay.milliseconds = '500'
 
  <sect2>
   <title>Author</title>
-
+&common;
   <para>
    KaiGai Kohei <email>kaigai@ak.jp.nec.com</email>
   </para>

@@ -2,9 +2,6 @@
 -- WINDOW FUNCTIONS
 --
 
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-
 CREATE TEMPORARY TABLE empsalary (
     depname varchar,
     empno bigint,
@@ -150,6 +147,12 @@ select ten,
 from tenk1
 group by ten order by ten;
 
+-- window and aggregate with GROUP BY expression (9.2 bug)
+explain (costs off, nodes off)
+select first_value(max(x)) over (), y
+  from (select unique1 as x, ten+four as y from tenk1) ss
+  group by y;
+
 -- test non-default frame specifications
 SELECT four, ten,
 	sum(ten) over (partition by four order by ten),
@@ -265,3 +268,13 @@ SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
 
 -- cleanup
 DROP TABLE empsalary;
+
+-- test user-defined window function with named args and default args
+CREATE FUNCTION nth_value_def(val anyelement, n integer = 1) RETURNS anyelement
+  LANGUAGE internal WINDOW IMMUTABLE STRICT AS 'window_nth_value';
+
+SELECT nth_value_def(n := 2, val := ten) OVER (PARTITION BY four), ten, four
+  FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten) s;
+
+SELECT nth_value_def(ten) OVER (PARTITION BY four), ten, four
+  FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten) s;

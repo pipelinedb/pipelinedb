@@ -5,7 +5,7 @@
  *	Lately it's also being used by psql and bin/scripts/ ...
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/pg_dump/dumputils.c
@@ -25,20 +25,6 @@
 extern const ScanKeyword FEScanKeywords[];
 extern const int NumFEScanKeywords;
 
-/* Globals exported by this file */
-int			quote_all_identifiers = 0;
-const char *progname = NULL;
-
-#define MAX_ON_EXIT_NICELY				20
-
-static struct
-{
-	on_exit_nicely_callback function;
-	void	   *arg;
-}	on_exit_nicely_list[MAX_ON_EXIT_NICELY];
-
-static int	on_exit_nicely_index;
-
 #define supports_grant_options(version) ((version) >= 70400)
 
 static bool parseAclItem(const char *item, const char *type,
@@ -48,55 +34,24 @@ static bool parseAclItem(const char *item, const char *type,
 static char *copyAclUserName(PQExpBuffer output, char *input);
 static void AddAcl(PQExpBuffer aclbuf, const char *keyword,
 	   const char *subname);
+static PQExpBuffer defaultGetLocalPQExpBuffer(void);
 
-#ifdef WIN32
-static bool parallel_init_done = false;
-static DWORD tls_index;
-static DWORD mainThreadId;
-#endif
-
-void
-init_parallel_dump_utils(void)
-{
-#ifdef WIN32
-	if (!parallel_init_done)
-	{
-		tls_index = TlsAlloc();
-		parallel_init_done = true;
-		mainThreadId = GetCurrentThreadId();
-	}
-#endif
-}
+/* Globals exported by this file */
+int			quote_all_identifiers = 0;
+PQExpBuffer (*getLocalPQExpBuffer) (void) = defaultGetLocalPQExpBuffer;
 
 /*
- *	Quotes input string if it's not a legitimate SQL identifier as-is.
+ * Returns a temporary PQExpBuffer, valid until the next call to the function.
+ * This is used by fmtId and fmtQualifiedId.
  *
- *	Note that the returned string must be used before calling fmtId again,
- *	since we re-use the same return buffer each time.  Non-reentrant but
- *	reduces memory leakage. (On Windows the memory leakage will be one buffer
- *	per thread, which is at least better than one per call).
+ * Non-reentrant and non-thread-safe but reduces memory leakage. You can
+ * replace this with a custom version by setting the getLocalPQExpBuffer
+ * function pointer.
  */
-const char *
-fmtId(const char *rawid)
+static PQExpBuffer
+defaultGetLocalPQExpBuffer(void)
 {
-	/*
-	 * The Tls code goes awry if we use a static var, so we provide for both
-	 * static and auto, and omit any use of the static var when using Tls.
-	 */
-	static PQExpBuffer s_id_return = NULL;
-	PQExpBuffer id_return;
-
-	const char *cp;
-	bool		need_quotes = false;
-
-#ifdef WIN32
-	if (parallel_init_done)
-		id_return = (PQExpBuffer) TlsGetValue(tls_index);		/* 0 when not set */
-	else
-		id_return = s_id_return;
-#else
-	id_return = s_id_return;
-#endif
+	static PQExpBuffer id_return = NULL;
 
 	if (id_return)				/* first time through? */
 	{
@@ -107,16 +62,24 @@ fmtId(const char *rawid)
 	{
 		/* new buffer */
 		id_return = createPQExpBuffer();
-#ifdef WIN32
-		if (parallel_init_done)
-			TlsSetValue(tls_index, id_return);
-		else
-			s_id_return = id_return;
-#else
-		s_id_return = id_return;
-#endif
-
 	}
+
+	return id_return;
+}
+
+/*
+ *	Quotes input string if it's not a legitimate SQL identifier as-is.
+ *
+ *	Note that the returned string must be used before calling fmtId again,
+ *	since we re-use the same return buffer each time.
+ */
+const char *
+fmtId(const char *rawid)
+{
+	PQExpBuffer id_return = getLocalPQExpBuffer();
+
+	const char *cp;
+	bool		need_quotes = false;
 
 	/*
 	 * These checks need to match the identifier production in scan.l. Don't
@@ -185,6 +148,35 @@ fmtId(const char *rawid)
 	return id_return->data;
 }
 
+/*
+ * fmtQualifiedId - convert a qualified name to the proper format for
+ * the source database.
+ *
+ * Like fmtId, use the result before calling again.
+ *
+ * Since we call fmtId and it also uses getThreadLocalPQExpBuffer() we cannot
+ * use it until we're finished with calling fmtId().
+ */
+const char *
+fmtQualifiedId(int remoteVersion, const char *schema, const char *id)
+{
+	PQExpBuffer id_return;
+	PQExpBuffer lcl_pqexp = createPQExpBuffer();
+
+	/* Suppress schema name if fetching from pre-7.3 DB */
+	if (remoteVersion >= 70300 && schema && *schema)
+	{
+		appendPQExpBuffer(lcl_pqexp, "%s.", fmtId(schema));
+	}
+	appendPQExpBuffer(lcl_pqexp, "%s", fmtId(id));
+
+	id_return = getLocalPQExpBuffer();
+
+	appendPQExpBuffer(id_return, "%s", lcl_pqexp->data);
+	destroyPQExpBuffer(lcl_pqexp);
+
+	return id_return->data;
+}
 
 /*
  * Convert a string value to an SQL string literal and append it to
@@ -393,29 +385,6 @@ appendByteaLiteral(PQExpBuffer buf, const unsigned char *str, size_t length,
 	*target = '\0';
 
 	buf->len = target - buf->data;
-}
-
-
-/*
- * Convert backend's version string into a number.
- */
-int
-parse_version(const char *versionString)
-{
-	int			cnt;
-	int			vmaj,
-				vmin,
-				vrev;
-
-	cnt = sscanf(versionString, "%d.%d.%d", &vmaj, &vmin, &vrev);
-
-	if (cnt < 2)
-		return -1;
-
-	if (cnt == 2)
-		vrev = 0;
-
-	return (100 * vmaj + vmin) * 100 + vrev;
 }
 
 
@@ -890,6 +859,9 @@ do { \
 	}
 	else if (strcmp(type, "TABLESPACE") == 0)
 		CONVERT_PRIV('C', "CREATE");
+	else if (strcmp(type, "TYPE") == 0 ||
+			 strcmp(type, "TYPES") == 0)
+		CONVERT_PRIV('U', "USAGE");
 	else if (strcmp(type, "FOREIGN DATA WRAPPER") == 0)
 		CONVERT_PRIV('U', "USAGE");
 	else if (strcmp(type, "FOREIGN SERVER") == 0)
@@ -1238,114 +1210,34 @@ emitShSecLabels(PGconn *conn, PGresult *res, PQExpBuffer buffer,
 }
 
 
-/*
- * Parse a --section=foo command line argument.
- *
- * Set or update the bitmask in *dumpSections according to arg.
- * dumpSections is initialised as DUMP_UNSECTIONED by pg_dump and
- * pg_restore so they can know if this has even been called.
- */
 void
-set_dump_section(const char *arg, int *dumpSections)
+simple_string_list_append(SimpleStringList *list, const char *val)
 {
-	/* if this is the first call, clear all the bits */
-	if (*dumpSections == DUMP_UNSECTIONED)
-		*dumpSections = 0;
+	SimpleStringListCell *cell;
 
-	if (strcmp(arg, "pre-data") == 0)
-		*dumpSections |= DUMP_PRE_DATA;
-	else if (strcmp(arg, "data") == 0)
-		*dumpSections |= DUMP_DATA;
-	else if (strcmp(arg, "post-data") == 0)
-		*dumpSections |= DUMP_POST_DATA;
+	/* this calculation correctly accounts for the null trailing byte */
+	cell = (SimpleStringListCell *)
+		pg_malloc(sizeof(SimpleStringListCell) + strlen(val));
+
+	cell->next = NULL;
+	strcpy(cell->val, val);
+
+	if (list->tail)
+		list->tail->next = cell;
 	else
+		list->head = cell;
+	list->tail = cell;
+}
+
+bool
+simple_string_list_member(SimpleStringList *list, const char *val)
+{
+	SimpleStringListCell *cell;
+
+	for (cell = list->head; cell; cell = cell->next)
 	{
-		fprintf(stderr, _("%s: unrecognized section name: \"%s\"\n"),
-				progname, arg);
-		fprintf(stderr, _("Try \"%s --help\" for more information.\n"),
-				progname);
-		exit_nicely(1);
+		if (strcmp(cell->val, val) == 0)
+			return true;
 	}
-}
-
-
-/*
- * Write a printf-style message to stderr.
- *
- * The program name is prepended, if "progname" has been set.
- * Also, if modulename isn't NULL, that's included too.
- * Note that we'll try to translate the modulename and the fmt string.
- */
-void
-write_msg(const char *modulename, const char *fmt,...)
-{
-	va_list		ap;
-
-	va_start(ap, fmt);
-	vwrite_msg(modulename, fmt, ap);
-	va_end(ap);
-}
-
-/*
- * As write_msg, but pass a va_list not variable arguments.
- */
-void
-vwrite_msg(const char *modulename, const char *fmt, va_list ap)
-{
-	if (progname)
-	{
-		if (modulename)
-			fprintf(stderr, "%s: [%s] ", progname, _(modulename));
-		else
-			fprintf(stderr, "%s: ", progname);
-	}
-	vfprintf(stderr, _(fmt), ap);
-}
-
-
-/*
- * Fail and die, with a message to stderr.	Parameters as for write_msg.
- */
-void
-exit_horribly(const char *modulename, const char *fmt,...)
-{
-	va_list		ap;
-
-	va_start(ap, fmt);
-	vwrite_msg(modulename, fmt, ap);
-	va_end(ap);
-
-	exit_nicely(1);
-}
-
-/* Register a callback to be run when exit_nicely is invoked. */
-void
-on_exit_nicely(on_exit_nicely_callback function, void *arg)
-{
-	if (on_exit_nicely_index >= MAX_ON_EXIT_NICELY)
-		exit_horribly(NULL, "out of on_exit_nicely slots");
-	on_exit_nicely_list[on_exit_nicely_index].function = function;
-	on_exit_nicely_list[on_exit_nicely_index].arg = arg;
-	on_exit_nicely_index++;
-}
-
-/*
- * Run accumulated on_exit_nicely callbacks in reverse order and then exit
- * quietly.  This needs to be thread-safe.
- */
-void
-exit_nicely(int code)
-{
-	int			i;
-
-	for (i = on_exit_nicely_index - 1; i >= 0; i--)
-		(*on_exit_nicely_list[i].function) (code,
-											on_exit_nicely_list[i].arg);
-
-#ifdef WIN32
-	if (parallel_init_done && GetCurrentThreadId() != mainThreadId)
-		ExitThread(code);
-#endif
-
-	exit(code);
+	return false;
 }

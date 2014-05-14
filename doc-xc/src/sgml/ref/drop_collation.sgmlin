@@ -25,6 +25,7 @@ DROP COLLATION [ IF EXISTS ] <replaceable>name</replaceable> [ CASCADE | RESTRIC
  <refsect1 id="sql-dropcollation-description">
   <title>Description</title>
 
+&common;
   <para>
    <command>DROP COLLATION</command> removes a previously defined collation.
    To be able to drop a collation, you must own the collation.
@@ -34,6 +35,7 @@ DROP COLLATION [ IF EXISTS ] <replaceable>name</replaceable> [ CASCADE | RESTRIC
  <refsect1>
   <title>Parameters</title>
 
+&common;
    <variablelist>
     <varlistentry>
      <term><literal>IF EXISTS</literal></term>
@@ -84,13 +86,13 @@ DROP COLLATION [ IF EXISTS ] <replaceable>name</replaceable> [ CASCADE | RESTRIC
    To drop the collation named <literal>german</>:
 <programlisting>
 DROP COLLATION german;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1 id="sql-dropcollation-compat">
   <title>Compatibility</title>
 
+&common;
   <para>
    The <command>DROP COLLATION</command> command conforms to the
    <acronym>SQL</acronym> standard, apart from the <literal>IF

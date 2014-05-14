@@ -25,7 +25,7 @@
    <command>pg_restore</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
    <arg rep="repeat"><replaceable>option</replaceable></arg>
-   <arg><replaceable>filename</replaceable></arg>
+   <arg choice="opt"><replaceable>filename</replaceable></arg>
   </cmdsynopsis>
  </refsynopsisdiv>
 
@@ -33,6 +33,7 @@
  <refsect1 id="app-pgrestore-description">
   <title>Description</title>
 
+&common;
   <para>
    <application>pg_restore</application> is a utility for restoring a
    <productname>PostgreSQL</productname> database from an archive
@@ -70,6 +71,7 @@
  <refsect1 id="app-pgrestore-options">
   <title>Options</title>
 
+&common;
    <para>
     <application>pg_restore</application> accepts the following command
     line arguments.
@@ -92,6 +94,13 @@
       <listitem>
        <para>
         Restore only the data, not the schema (data definitions).
+        Table data, large objects, and sequence values are restored,
+        if present in the archive.
+       </para>
+
+       <para>
+        This option is similar to, but for historical reasons not identical
+        to, specifying <option>--section=data</>.
        </para>
       </listitem>
      </varlistentry>
@@ -102,6 +111,8 @@
       <listitem>
        <para>
         Clean (drop) database objects before recreating them.
+        (This might generate some harmless error messages, if any objects
+        were not present in the destination database.)
        </para>
       </listitem>
      </varlistentry>
@@ -111,11 +122,16 @@
       <term><option>--create</option></term>
       <listitem>
        <para>
-        Create the database before restoring into it.  (When this
-        option is used, the database named with <option>-d</option> is
-        used only to issue the initial <command>CREATE DATABASE</>
-        command.  All data is restored into the database name that
-        appears in the archive.)
+        Create the database before restoring into it.
+        If <option>--clean</option> is also specified, drop and
+        recreate the target database before connecting to it.
+       </para>
+
+       <para>
+        When this option is used, the database named with <option>-d</option>
+        is used only to issue the initial <command>DROP DATABASE</> and
+        <command>CREATE DATABASE</> commands.  All data is restored into the
+        database name that appears in the archive.
        </para>
       </listitem>
      </varlistentry>
@@ -197,8 +213,7 @@
           </para>
          </listitem>
         </varlistentry>
-       </variablelist>
-       </para>
+       </variablelist></para>
       </listitem>
      </varlistentry>
 
@@ -252,8 +267,9 @@
        </para>
 
        <para>
-        Only the custom archive format is supported with this option.
-        The input file must be a regular file (not, for example, a
+        Only the custom and directory archive formats are supported
+        with this option.
+        The input must be a regular file or directory (not, for example, a
         pipe).  This option is ignored when emitting a script rather
         than connecting directly to a database server.  Also, multiple
         jobs cannot be used together with the
@@ -286,8 +302,7 @@
         if filtering switches such as <option>-n</> or <option>-t</> are
         used with <option>-L</>, they will further restrict the items restored.
        </para>
-       <para>
-        <replaceable class="PARAMETER">list-file</> is normally created by
+       <para><replaceable class="PARAMETER">list-file</> is normally created by
         editing the output of a previous <option>-l</> operation.
         Lines can be moved or removed, and can also
         be commented out by placing a semicolon (<literal>;</literal>) at the
@@ -356,8 +371,16 @@
       <term><option>--schema-only</option></term>
       <listitem>
        <para>
-        Restore only the schema (data definitions), not the data (table
-        contents).  Current sequence values will not be restored, either.
+        Restore only the schema (data definitions), not data,
+        to the extent that schema entries are present in the archive.
+       </para>
+       <para>
+        This option is the inverse of <option>--data-only</>.
+        It is similar to, but for historical reasons not identical to,
+        specifying
+        <option>--section=pre-data --section=post-data</>.
+       </para>
+       <para>
         (Do not confuse this with the <option>--schema</> option, which
         uses the word <quote>schema</> in a different meaning.)
        </para>
@@ -370,7 +393,7 @@
       <listitem>
        <para>
         Specify the superuser user name to use when disabling triggers.
-        This is only relevant if <option>--disable-triggers</> is used.
+        This is relevant only if <option>--disable-triggers</> is used.
        </para>
       </listitem>
      </varlistentry>
@@ -380,7 +403,8 @@
       <term><option>--table=<replaceable class="parameter">table</replaceable></option></term>
       <listitem>
        <para>
-        Restore definition and/or data of named table only.  This can be
+        Restore definition and/or data of named table only. Multiple tables
+        may be specified with multiple <option>-t</> switches. This can be
         combined with the <option>-n</option> option to specify a schema.
        </para>
       </listitem>
@@ -445,7 +469,7 @@
       <term><option>--disable-triggers</></term>
       <listitem>
        <para>
-        This option is only relevant when performing a data-only restore.
+        This option is relevant only when performing a data-only restore.
         It instructs <application>pg_restore</application> to execute commands
         to temporarily disable triggers on the target tables while
         the data is reloaded.  Use this if you have referential
@@ -455,9 +479,9 @@
 
        <para>
         Presently, the commands emitted for
-        <option>--disable-triggers</> must be done as superuser.  So, you
-        should also specify a superuser name with <option>-S</>, or
-        preferably run <application>pg_restore</application> as a
+        <option>--disable-triggers</> must be done as superuser.  So you
+        should also specify a superuser name with <option>-S</> or,
+        preferably, run <application>pg_restore</application> as a
         <productname>PostgreSQL</> superuser.
        </para>
       </listitem>
@@ -504,6 +528,25 @@
         tablespace is the default during restore.
        </para>
       </listitem>
+     </varlistentry>
+
+     <varlistentry>
+       <term><option>--section=<replaceable class="parameter">sectionname</replaceable></option></term>
+       <listitem>
+         <para>
+          Only restore the named section. The section name can be
+          <option>pre-data</>, <option>data</>, or <option>post-data</>.
+          This option can be specified more than once to select multiple
+          sections. The default is to restore all sections.
+         </para>
+         <para>
+          The data section contains actual table data as well as large-object
+          definitions.
+          Post-data items consist of definitions of indexes, triggers, rules
+          and constraints other than validated check constraints.
+          Pre-data items consist of all other data definition items.
+         </para>
+       </listitem>
      </varlistentry>
 
      <varlistentry>
@@ -636,6 +679,7 @@
  <refsect1>
   <title>Environment</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><envar>PGHOST</envar></term>
@@ -654,7 +698,8 @@
   <para>
    This utility, like most other <productname>PostgreSQL</> utilities,
    also uses the environment variables supported by <application>libpq</>
-   (see <xref linkend="libpq-envars">).
+   (see <xref linkend="libpq-envars">).  However, it does not read
+   <envar>PGDATABASE</envar> when a database name is not supplied.
   </para>
 
  </refsect1>
@@ -663,6 +708,7 @@
  <refsect1 id="app-pgrestore-diagnostics">
   <title>Diagnostics</title>
 
+&common;
   <para>
    When a direct database connection is specified using the
    <option>-d</option> option, <application>pg_restore</application>
@@ -679,6 +725,7 @@
  <refsect1 id="app-pgrestore-notes">
   <title>Notes</title>
 
+&common;
   <para>
    If your installation has any local additions to the
    <literal>template1</> database, be careful to load the output of
@@ -707,8 +754,7 @@ CREATE DATABASE foo WITH TEMPLATE template0;
     </listitem>
 
     <listitem>
-     <para>
-      <application>pg_restore</application> cannot restore large objects
+     <para><application>pg_restore</application> cannot restore large objects
       selectively;  for instance, only those for a specific table.  If
       an archive contains large objects, then all large objects will be
       restored, or none of them if they are excluded via <option>-L</option>,
@@ -821,8 +867,7 @@ CREATE DATABASE foo WITH TEMPLATE template0;
    items 10 and 6, in that order:
 <screen>
 <prompt>$</prompt> <userinput>pg_restore -L db.list db.dump</userinput>
-</screen>
-  </para>
+</screen></para>
 
  </refsect1>
 

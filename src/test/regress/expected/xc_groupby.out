@@ -60,7 +60,7 @@ explain (verbose true, costs false, nodes false) select count(*), sum(xc_groupby
                      Remote query: SELECT val2, val FROM ONLY public.xc_groupby_tab1 WHERE true
                ->  Hash
                      Output: xc_groupby_tab2.val2, xc_groupby_tab2.val
-                     ->  Data Node Scan on xc_groupby_tab2 "_REMOTE_TABLE_QUERY_"
+                     ->  Data Node Scan on xc_groupby_tab2 "_REMOTE_TABLE_QUERY__1"
                            Output: xc_groupby_tab2.val2, xc_groupby_tab2.val
                            Remote query: SELECT val2, val FROM ONLY public.xc_groupby_tab2 WHERE true
 (16 rows)
@@ -84,9 +84,9 @@ explain (verbose true, costs false, nodes false) select sum(y) from (select sum(
          ->  Subquery Scan on q1
                Output: q1.x, q1.y
                ->  HashAggregate
-                     Output: pg_catalog.sum((sum(xc_groupby_tab1.val))), ((xc_groupby_tab1.val2 % 2)), xc_groupby_tab1.val2
+                     Output: pg_catalog.sum((sum(val))), ((val2 % 2)), val2
                      ->  Data Node Scan on "__REMOTE_GROUP_QUERY__"
-                           Output: (sum(xc_groupby_tab1.val)), ((xc_groupby_tab1.val2 % 2)), xc_groupby_tab1.val2
+                           Output: (sum(val)), ((val2 % 2)), val2
                            Remote query: SELECT sum(val), (val2 % 2), val2 FROM ONLY public.xc_groupby_tab1 WHERE true GROUP BY 3
 (12 rows)
 
@@ -893,7 +893,7 @@ explain (verbose true, costs false, nodes false) select count(*), sum(xc_groupby
                      Remote query: SELECT val2, val FROM ONLY public.xc_groupby_tab1 WHERE true
                ->  Hash
                      Output: xc_groupby_tab2.val2, xc_groupby_tab2.val
-                     ->  Data Node Scan on xc_groupby_tab2 "_REMOTE_TABLE_QUERY_"
+                     ->  Data Node Scan on xc_groupby_tab2 "_REMOTE_TABLE_QUERY__1"
                            Output: xc_groupby_tab2.val2, xc_groupby_tab2.val
                            Remote query: SELECT val2, val FROM ONLY public.xc_groupby_tab2 WHERE true
 (16 rows)
@@ -917,12 +917,12 @@ explain (verbose true, costs false, nodes false) select sum(y) from (select sum(
          ->  Subquery Scan on q1
                Output: q1.x, q1.y
                ->  GroupAggregate
-                     Output: pg_catalog.sum((sum(xc_groupby_tab1.val))), ((xc_groupby_tab1.val2 % 2)), xc_groupby_tab1.val2
+                     Output: pg_catalog.sum((sum(val))), ((val2 % 2)), val2
                      ->  Sort
-                           Output: (sum(xc_groupby_tab1.val)), ((xc_groupby_tab1.val2 % 2)), xc_groupby_tab1.val2
-                           Sort Key: xc_groupby_tab1.val2
+                           Output: (sum(val)), ((val2 % 2)), val2
+                           Sort Key: val2
                            ->  Data Node Scan on "__REMOTE_GROUP_QUERY__"
-                                 Output: (sum(xc_groupby_tab1.val)), ((xc_groupby_tab1.val2 % 2)), xc_groupby_tab1.val2
+                                 Output: (sum(val)), ((val2 % 2)), val2
                                  Remote query: SELECT sum(val), (val2 % 2), val2 FROM ONLY public.xc_groupby_tab1 WHERE true GROUP BY 3 ORDER BY 3
 (15 rows)
 
@@ -1370,7 +1370,7 @@ explain (verbose true, costs false, nodes false) select sum(y) from (select sum(
          ->  Subquery Scan on q1
                Output: q1.x, q1.y
                ->  Data Node Scan on "__REMOTE_GROUP_QUERY__"
-                     Output: (sum(xc_groupby_tab1.val)), ((xc_groupby_tab1.val2 % 2)), xc_groupby_tab1.val2
+                     Output: (sum(val)), ((val2 % 2)), val2
                      Remote query: SELECT sum(val), (val2 % 2), val2 FROM ONLY public.xc_groupby_tab1 WHERE true GROUP BY 3 ORDER BY 3
 (10 rows)
 

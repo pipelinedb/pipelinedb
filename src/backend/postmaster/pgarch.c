@@ -14,7 +14,7 @@
  *
  *	Initial author: Simon Riggs		simon@2ndquadrant.com
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -32,6 +32,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "access/xlog.h"
 #include "access/xlog_internal.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
@@ -101,7 +102,7 @@ static Latch mainloop_latch;
 static pid_t pgarch_forkexec(void);
 #endif
 
-NON_EXEC_STATIC void PgArchiverMain(int argc, char *argv[]);
+NON_EXEC_STATIC void PgArchiverMain(int argc, char *argv[]) __attribute__((noreturn));
 static void pgarch_exit(SIGNAL_ARGS);
 static void ArchSigHupHandler(SIGNAL_ARGS);
 static void ArchSigTermHandler(SIGNAL_ARGS);
@@ -234,8 +235,6 @@ PgArchiverMain(int argc, char *argv[])
 
 	MyProcPid = getpid();		/* reset MyProcPid */
 
-	InitLatch(&mainloop_latch); /* initialize latch used in main loop */
-
 	MyStartTime = time(NULL);	/* record Start Time for logging */
 
 	/*
@@ -246,6 +245,10 @@ PgArchiverMain(int argc, char *argv[])
 	if (setsid() < 0)
 		elog(FATAL, "setsid() failed: %m");
 #endif
+
+	InitializeLatchSupport();	/* needed for latch waits */
+
+	InitLatch(&mainloop_latch); /* initialize latch used in main loop */
 
 	/*
 	 * Ignore all signals usually bound to some action in the postmaster,
@@ -500,7 +503,7 @@ pgarch_ArchiverCopyLoop(void)
 				if (++failures >= NUM_ARCHIVE_RETRIES)
 				{
 					ereport(WARNING,
-							(errmsg("transaction log file \"%s\" could not be archived: too many failures",
+							(errmsg("archiving transaction log file \"%s\" failed too many times, will try again later",
 									xlog)));
 					return;		/* give up archiving for now */
 				}

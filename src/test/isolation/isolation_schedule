@@ -9,8 +9,16 @@ test: ri-trigger
 test: partial-index
 test: two-ids
 test: multiple-row-versions
-test: prepared-transactions
+test: index-only-scan
 test: fk-contention
 test: fk-deadlock
 test: fk-deadlock2
 test: eval-plan-qual
+test: lock-update-delete
+test: lock-update-traversal
+test: delete-abort-savept
+test: delete-abort-savept-2
+test: aborted-keyrevoke
+test: multixact-no-deadlock
+test: drop-index-concurrently-1
+test: timeouts

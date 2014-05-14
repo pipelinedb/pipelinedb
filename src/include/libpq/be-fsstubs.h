@@ -4,7 +4,7 @@
  *
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/libpq/be-fsstubs.h
@@ -34,8 +34,11 @@ extern Datum lowrite(PG_FUNCTION_ARGS);
 
 extern Datum lo_lseek(PG_FUNCTION_ARGS);
 extern Datum lo_tell(PG_FUNCTION_ARGS);
+extern Datum lo_lseek64(PG_FUNCTION_ARGS);
+extern Datum lo_tell64(PG_FUNCTION_ARGS);
 extern Datum lo_unlink(PG_FUNCTION_ARGS);
 extern Datum lo_truncate(PG_FUNCTION_ARGS);
+extern Datum lo_truncate64(PG_FUNCTION_ARGS);
 
 /*
  * compatibility option for access control

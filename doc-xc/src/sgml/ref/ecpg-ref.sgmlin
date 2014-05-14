@@ -32,7 +32,6 @@ PostgreSQL documentation
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ecpg</command> is the embedded SQL preprocessor for C
    programs.  It converts C programs with embedded SQL statements to
@@ -62,8 +61,8 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Options</title>
-&common;
 
+&common;
   <para>
    <command>ecpg</command> accepts the following command-line
    arguments:
@@ -169,8 +168,7 @@ PostgreSQL documentation
          </para>
          </listitem>
         </varlistentry>
-       </variablelist>
-      </para>
+       </variablelist></para>
      </listitem>
     </varlistentry>
 
@@ -206,6 +204,7 @@ PostgreSQL documentation
     </varlistentry>
 
     <varlistentry>
+     <term><option>-?</option></term>
      <term><option>--help</option></term>
      <listitem>
       <para>
@@ -222,8 +221,8 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Notes</title>
-&common;
 
+&common;
   <para>
    When compiling the preprocessed C code files, the compiler needs to
    be able to find the <application>ECPG</> header files in the
@@ -248,7 +247,6 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Examples</title>
-&common;
 
   <para>
    If you have an embedded SQL C source file named
@@ -258,8 +256,7 @@ PostgreSQL documentation
 ecpg prog1.pgc
 cc -I/usr/local/pgsql/include -c prog1.c
 cc -o prog1 prog1.o -L/usr/local/pgsql/lib -lecpg
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
 </refentry>

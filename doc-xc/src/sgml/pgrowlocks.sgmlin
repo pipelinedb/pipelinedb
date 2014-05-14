@@ -8,7 +8,6 @@
  </indexterm>
 
 &common;
-
  <para>
   The <filename>pgrowlocks</filename> module provides a function to show row
   locking information for a specified table.
@@ -28,6 +27,10 @@
 
  <sect2>
   <title>Overview</title>
+
+  <indexterm>
+   <primary>pgrowlocks</primary>
+  </indexterm>
 
 <synopsis>
 pgrowlocks(text) returns setof record
@@ -59,30 +62,33 @@ pgrowlocks(text) returns setof record
       <entry>Tuple ID (TID) of locked row</entry>
      </row>
      <row>
-      <entry><structfield>lock_type</structfield></entry>
-      <entry><type>text</type></entry>
-      <entry><literal>Shared</> for shared lock, or
-             <literal>Exclusive</> for exclusive lock</entry>
-     </row>
-     <row>
       <entry><structfield>locker</structfield></entry>
       <entry><type>xid</type></entry>
-      <entry>Transaction ID of locker, or multixact ID if multi-transaction</entry>
+      <entry>Transaction ID of locker, or multixact ID if multitransaction</entry>
      </row>
      <row>
       <entry><structfield>multi</structfield></entry>
       <entry><type>boolean</type></entry>
-      <entry>True if locker is a multi-transaction</entry>
+      <entry>True if locker is a multitransaction</entry>
      </row>
      <row>
       <entry><structfield>xids</structfield></entry>
       <entry><type>xid[]</type></entry>
-      <entry>Transaction IDs of lockers (more than one if multi-transaction)</entry>
+      <entry>Transaction IDs of lockers (more than one if multitransaction)</entry>
      </row>
+     <row>
+      <entry><structfield>lock_type</structfield></entry>
+      <entry><type>text[]</type></entry>
+      <entry>Lock mode of lockers (more than one if multitransaction),
+       an array of <literal>Key Share</>, <literal>Share</>,
+       <literal>For No Key Update</>, <literal>No Key Update</>,
+       <literal>For Update</>, <literal>Update</>.</entry>
+     </row>
+
      <row>
       <entry><structfield>pids</structfield></entry>
       <entry><type>integer[]</type></entry>
-      <entry>Process IDs of locking backends (more than one if multi-transaction)</entry>
+      <entry>Process IDs of locking backends (more than one if multitransaction)</entry>
      </row>
 
     </tbody>

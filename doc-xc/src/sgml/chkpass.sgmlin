@@ -8,7 +8,6 @@
  </indexterm>
 
 &common;
-
  <para>
   This module implements a data type <type>chkpass</> that is
   designed for storing encrypted passwords.

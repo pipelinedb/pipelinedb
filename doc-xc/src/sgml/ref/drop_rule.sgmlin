@@ -21,7 +21,7 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-DROP RULE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ON <replaceable class="PARAMETER">table</replaceable> [ CASCADE | RESTRICT ]
+DROP RULE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ON <replaceable class="PARAMETER">table_name</replaceable> [ CASCADE | RESTRICT ]
 </synopsis>
  </refsynopsisdiv>
 
@@ -29,7 +29,6 @@ DROP RULE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ON <re
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP RULE</command> drops a rewrite rule.
   </para>
@@ -40,6 +39,7 @@ DROP RULE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ON <re
 
   <variablelist>
 
+&common;
    <varlistentry>
     <term><literal>IF EXISTS</literal></term>
     <listitem>
@@ -60,7 +60,7 @@ DROP RULE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ON <re
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="parameter">table</replaceable></term>
+    <term><replaceable class="parameter">table_name</replaceable></term>
     <listitem>
      <para>
       The name (optionally schema-qualified) of the table or view that
@@ -98,15 +98,17 @@ DROP RULE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> ON <re
 
 <programlisting>
 DROP RULE newrule ON mytable;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
-   There is no <command>DROP RULE</command> statement in the SQL standard.
+   <command>DROP RULE</command> is a
+   <productname>PostgreSQL</productname> language extension, as is the
+   entire query rewrite system.
   </para>
  </refsect1>
 
@@ -115,6 +117,7 @@ DROP RULE newrule ON mytable;
 
   <simplelist type="inline">
    <member><xref linkend="sql-createrule"></member>
+   <member><xref linkend="sql-alterrule"></member>
   </simplelist>
  </refsect1>
 

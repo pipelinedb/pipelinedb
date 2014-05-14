@@ -30,6 +30,7 @@ ALTER COLLATION <replaceable>name</replaceable> SET SCHEMA <replaceable>new_sche
  <refsect1>
   <title>Description</title>
 
+&common;
   <para>
    <command>ALTER COLLATION</command> changes the definition of a
    collation.
@@ -49,6 +50,7 @@ ALTER COLLATION <replaceable>name</replaceable> SET SCHEMA <replaceable>new_sche
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -104,13 +106,13 @@ ALTER COLLATION "de_DE" RENAME TO german;
    <literal>joe</literal>:
 <programlisting>
 ALTER COLLATION "en_US" OWNER TO joe;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>ALTER COLLATION</command> statement in the SQL
    standard.

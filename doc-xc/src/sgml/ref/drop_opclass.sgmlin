@@ -29,7 +29,6 @@ DROP OPERATOR CLASS [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceab
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP OPERATOR CLASS</command> drops an existing operator class.
    To execute this command you must be the owner of the operator class.
@@ -46,6 +45,7 @@ DROP OPERATOR CLASS [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceab
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
 
    <varlistentry>
@@ -100,6 +100,7 @@ DROP OPERATOR CLASS [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceab
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    <command>DROP OPERATOR CLASS</> will not drop the operator family
    containing the class, even if there is nothing else left in the
@@ -130,6 +131,7 @@ DROP OPERATOR CLASS widget_ops USING btree;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP OPERATOR CLASS</command> statement in the
    SQL standard.

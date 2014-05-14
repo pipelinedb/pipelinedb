@@ -31,12 +31,7 @@ CLUSTER [VERBOSE]
 
 &common;
   <para>
-<!## PG>
    <command>CLUSTER</command> instructs <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-   <command>CLUSTER</command> instructs <productname>Postgres-XC</productname>
-<!## end>
    to cluster the table specified
    by <replaceable class="parameter">table_name</replaceable>
    based on the index specified by
@@ -58,12 +53,7 @@ CLUSTER [VERBOSE]
   </para>
 
   <para>
-<!## PG>
    When a table is clustered, <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-   When a table is clustered, <productname>Postgres-XC</productname>
-<!## end>
    remembers which index it was clustered by.  The form
    <command>CLUSTER <replaceable class="parameter">table_name</replaceable></command>
    reclusters the table using the same index as before.  You can also
@@ -87,8 +77,8 @@ CLUSTER [VERBOSE]
    table until the <command>CLUSTER</command> is finished.
   </para>
 
-<!## XC>
 &xconly;
+<!## XC>
   <para>
    In <productname>Postgres-XC</>, <command>CLUSTER</> will be
    executed on all the Datanodes as well.
@@ -98,6 +88,7 @@ CLUSTER [VERBOSE]
 
  <refsect1>
   <title>Parameters</title>
+
 &common;
   <variablelist>
    <varlistentry>
@@ -132,6 +123,7 @@ CLUSTER [VERBOSE]
  <refsect1>
   <title>Notes</title>
 
+&common;
    <para>
     In cases where you are accessing single rows randomly
     within a table, the actual order of the data in the
@@ -216,13 +208,13 @@ CLUSTER employees;
    Cluster all tables in the database that have previously been clustered:
 <programlisting>
 CLUSTER;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>CLUSTER</command> statement in the SQL standard.
   </para>

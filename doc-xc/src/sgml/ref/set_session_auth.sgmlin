@@ -26,8 +26,7 @@ RESET SESSION AUTHORIZATION
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    This command sets the session user identifier and the current user
    identifier of the current SQL session to be <replaceable
@@ -70,6 +69,7 @@ RESET SESSION AUTHORIZATION
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    <command>SET SESSION AUTHORIZATION</> cannot be used within a
    <literal>SECURITY DEFINER</> function.
@@ -99,6 +99,7 @@ SELECT SESSION_USER, CURRENT_USER;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The SQL standard allows some other expressions to appear in place
    of the literal <replaceable>user_name</replaceable>, but these options

@@ -63,7 +63,7 @@
     <filename>sepgsql</> can only be used on <productname>Linux</productname>
     2.6.28 or higher with <productname>SELinux</productname> enabled.
     It is not available on any other platform.  You will also need
-    <productname>libselinux</> 2.0.99 or higher and
+    <productname>libselinux</> 2.1.10 or higher and
     <productname>selinux-policy</> 3.9.13 or higher (although some
     distributions may backport the necessary rules into older policy
     versions).
@@ -187,7 +187,7 @@ $ cd .../contrib/sepgsql
 $ make -f /usr/share/selinux/devel/Makefile
 $ sudo semodule -u sepgsql-regtest.pp
 $ sudo semodule -l | grep sepgsql
-sepgsql-regtest 1.04
+sepgsql-regtest 1.07
 </screen>
 
   <para>
@@ -315,7 +315,7 @@ $ sudo semodule -r sepgsql-regtest
     control rules as relationships between a subject entity (typically,
     a client of the database) and an object entity (such as a database
     object), each of which is
-    identified by a security label.  If access to an unlabelled object is
+    identified by a security label.  If access to an unlabeled object is
     attempted, the object is treated as if it were assigned the label
     <literal>unlabeled_t</>.
    </para>
@@ -326,8 +326,9 @@ $ sudo semodule -r sepgsql-regtest
     When <filename>sepgsql</filename> is in use, security labels are
     automatically assigned to supported database objects at creation time.
     This label is called a default security label, and is decided according
-    to the system security policy, which takes as input the creator's label
-    and the label assigned to the new object's parent object.
+    to the system security policy, which takes as input the creator's label,
+    the label assigned to the new object's parent object and optionally name
+    of the constructed object.
    </para>
 
    <para>
@@ -392,8 +393,21 @@ UPDATE t1 SET x = 2, y = md5sum(y) WHERE z = 100;
    </para>
 
    <para>
-    For functions, <literal>db_procedure:{execute}</> is defined, but is not
-    checked in this version.
+    For functions, <literal>db_procedure:{execute}</> will be checked when
+    user tries to execute a function as a part of query, or using fast-path
+    invocation. If this function is a trusted procedure, it also checks
+    <literal>db_procedure:{entrypoint}</> permission to check whether it
+    can perform as entry point of trusted procedure.
+   </para>
+
+   <para>
+    In order to access any schema object, <literal>db_schema:search</>
+    permission is required on the containing schema.  When an object is
+    referenced without schema qualification, schemas on which this
+    permission is not present will not be searched (just as if the user did
+    not have <literal>USAGE</> privilege on the schema).  If an explicit schema
+    qualification is present, an error will occur if the user does not have
+    the requisite permission on the named schema.
    </para>
 
    <para>
@@ -421,47 +435,85 @@ UPDATE t1 SET x = 2, y = md5sum(y) WHERE z = 100;
     addition or deletion of name entries within a particular schema.
    </para>
    <para>
-    When a <literal>CREATE</> command is executed, <literal>create</> will
-    be checked on the object being constructed for each object types.
-    A default security label will be assigned to the new database object,
-    and the <literal>create</> permission will be checked on the pair
-    of security label of the client and the new object itself.
-    We consider <xref linkend="sql-createtable"> to construct a table and
-    underlying columns at the same time, so it requires the users to have
-    permission to create both the table and its columns.
+    Creating a new database object requires <literal>create</> permission.
+    <productname>SELinux</> will grant or deny this permission based on the
+    client's security label and the proposed security label for the new
+    object.  In some cases, additional privileges are required:
    </para>
-   <para>
-    A few additional checks are applied depending on object types.
-    On <xref linkend="sql-createdatabase">, <literal>getattr</> permission
-    will be checked on the source or template database of the new database,
-    not only <literal>create</> on the new database.
-    On creation of objects within a particular schema (tables, views,
-    sequences and procedures), <literal>add_name</> will be also checked
-    on the schema, not only <literal>create</> on the new object itself.
-   </para>
+
+   <itemizedlist>
+    <listitem>
+     <para>
+      <xref linkend="sql-createdatabase"> additionally requires
+      <literal>getattr</> permission for the source or template database.
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Creating a schema object additionally requires <literal>add_name</>
+      permission on the parent schema.
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Creating a table additionally requires permission to create each
+      individual table column, just as if each table column were a
+      separate top-level object.
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Creating a function marked as <literal>LEAKPROOF</> additionally
+      requires <literal>install</> permission.  (This permission is also
+      checked when <literal>LEAKPROOF</> is set for an existing function.)
+     </para>
+    </listitem>
+   </itemizedlist>
 
    <para>
     When <literal>DROP</> command is executed, <literal>drop</> will be
-    checked on the object being removed for each object types.  Permissions
-    will not be checked for objects dropped indirectly via <literal>CASCADE</>.
-    Deletion of objects contained within a particular schema (tables, views,
-    sequences and procedures) additionally requires
-    <literal>remove_name</> on the schema.
+    checked on the object being removed.  Permissions will be also checked for
+    objects dropped indirectly via <literal>CASCADE</>.  Deletion of objects
+    contained within a particular schema (tables, views, sequences and
+    procedures) additionally requires <literal>remove_name</> on the schema.
    </para>
 
    <para>
-    When <xref linkend="sql-security-label"> is executed, <literal>setattr</>
-    and <literal>relabelfrom</> will be checked on the object being relabeled
-    with its old security label, then <literal>relabelto</> with the supplied
-    new security label.
+    When <literal>ALTER</> command is executed, <literal>setattr</> will be
+    checked on the object being modified for each object types, except for
+    subsidiary objects such as the indexes or triggers of a table, where
+    permissions are instead checked on the parent object.  In some cases,
+    additional permissions are required:
    </para>
 
-   <para>
-    In the case where multiple label providers are installed and the user tries
-    to set a security label, but it is not managed by <productname>SELinux</>,
-    only <literal>setattr</> should be checked here.
-    This is currently not done due to implementation restrictions.
-   </para>
+   <itemizedlist>
+    <listitem>
+     <para>
+      Moving an object to a new schema additionally requires
+      <literal>remove_name</> permission on the old schema and
+      <literal>add_name</> permission on the new one.
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Setting the <literal>LEAKPROOF</> attribute on a function requires
+      <literal>install</> permission.
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Using <xref linkend="sql-security-label"> on an object additionally
+      requires <literal>relabelfrom</> permission for the object in
+      conjunction with its old security label and <literal>relabelto</>
+      permission for the object in conjunction with its new security label.
+      (In cases where multiple label providers are installed and the user
+      tries to set a security label, but it is not managed by
+      <productname>SELinux</>, only <literal>setattr</> should be checked here.
+      This is currently not done due to implementation restrictions.)
+     </para>
+    </listitem>
+   </itemizedlist>
+
   </sect3>
 
   <sect3>

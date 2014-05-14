@@ -3,7 +3,7 @@
  * postmaster.h
  *	  Exports from postmaster/postmaster.c.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/postmaster/postmaster.h
@@ -19,7 +19,7 @@ extern int	ReservedBackends;
 extern int	PostPortNumber;
 extern int	Unix_socket_permissions;
 extern char *Unix_socket_group;
-extern char *UnixSocketDir;
+extern char *Unix_socket_directories;
 extern char *ListenAddresses;
 extern bool ClientAuthInProgress;
 extern int	PreAuthDelay;
@@ -46,17 +46,28 @@ extern int	postmaster_alive_fds[2];
 
 extern const char *progname;
 
-extern int	PostmasterMain(int argc, char *argv[]);
+extern void PostmasterMain(int argc, char *argv[]) __attribute__((noreturn));
 extern void ClosePostmasterPorts(bool am_syslogger);
 
 extern int	MaxLivePostmasterChildren(void);
 
+extern int	GetNumShmemAttachedBgworkers(void);
+
 #ifdef EXEC_BACKEND
 extern pid_t postmaster_forkexec(int argc, char *argv[]);
-extern int	SubPostmasterMain(int argc, char *argv[]);
+extern void SubPostmasterMain(int argc, char *argv[]) __attribute__((noreturn));
 
 extern Size ShmemBackendArraySize(void);
 extern void ShmemBackendArrayAllocation(void);
 #endif
+
+/*
+ * Note: MAX_BACKENDS is limited to 2^23-1 because inval.c stores the
+ * backend ID as a 3-byte signed integer.  Even if that limitation were
+ * removed, we still could not exceed INT_MAX/4 because some places compute
+ * 4*MaxBackends without any overflow check.  This is rechecked in the relevant
+ * GUC check hooks and in RegisterBackgroundWorker().
+ */
+#define MAX_BACKENDS	0x7fffff
 
 #endif   /* _POSTMASTER_H */

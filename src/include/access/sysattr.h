@@ -4,7 +4,7 @@
  *	  POSTGRES system attribute definitions.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/sysattr.h
@@ -31,7 +31,6 @@
 #else
 #define FirstLowInvalidHeapAttributeNumber		(-8)
 #endif
-
 
 
 #endif   /* SYSATTR_H */

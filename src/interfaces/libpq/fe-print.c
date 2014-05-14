@@ -3,7 +3,7 @@
  * fe-print.c
  *	  functions for pretty-printing query results
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * These functions were formerly part of fe-exec.c, but they
@@ -35,7 +35,6 @@
 
 #include "libpq-fe.h"
 #include "libpq-int.h"
-#include "pqsignal.h"
 
 
 static void do_field(const PQprintOpt *po, const PGresult *res,
@@ -330,7 +329,6 @@ do_field(const PQprintOpt *po, const PGresult *res,
 		 unsigned char *fieldNotNum, int *fieldMax,
 		 const int fieldMaxLen, FILE *fout)
 {
-
 	const char *pval,
 			   *p;
 	int			plen;
@@ -442,7 +440,6 @@ do_header(FILE *fout, const PQprintOpt *po, const int nFields, int *fieldMax,
 		  const char **fieldNames, unsigned char *fieldNotNum,
 		  const int fs_len, const PGresult *res)
 {
-
 	int			j;				/* for loop index */
 	char	   *border = NULL;
 
@@ -529,7 +526,6 @@ output_row(FILE *fout, const PQprintOpt *po, const int nFields, char **fields,
 		   unsigned char *fieldNotNum, int *fieldMax, char *border,
 		   const int row_index)
 {
-
 	int			field_index;	/* for loop index */
 
 	if (po->html3)
@@ -681,7 +677,6 @@ PQprintTuples(const PGresult *res,
 	int			i,
 				j;
 	char		formatString[80];
-
 	char	   *tborder = NULL;
 
 	nFields = PQnfields(res);
@@ -700,15 +695,15 @@ PQprintTuples(const PGresult *res,
 			int			width;
 
 			width = nFields * 14;
-			tborder = malloc(width + 1);
+			tborder = (char *) malloc(width + 1);
 			if (!tborder)
 			{
 				fprintf(stderr, libpq_gettext("out of memory\n"));
 				abort();
 			}
-			for (i = 0; i <= width; i++)
+			for (i = 0; i < width; i++)
 				tborder[i] = '-';
-			tborder[i] = '\0';
+			tborder[width] = '\0';
 			fprintf(fout, "%s\n", tborder);
 		}
 

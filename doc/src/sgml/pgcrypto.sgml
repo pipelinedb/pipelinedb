@@ -23,6 +23,10 @@
   <sect3>
    <title><function>digest()</function></title>
 
+   <indexterm>
+    <primary>digest</primary>
+   </indexterm>
+
 <synopsis>
 digest(data text, type text) returns bytea
 digest(data bytea, type text) returns bytea
@@ -52,6 +56,10 @@ $$ LANGUAGE SQL STRICT IMMUTABLE;
 
   <sect3>
    <title><function>hmac()</function></title>
+
+   <indexterm>
+    <primary>hmac</primary>
+   </indexterm>
 
 <synopsis>
 hmac(data text, key text, type text) returns bytea
@@ -87,8 +95,8 @@ hmac(data bytea, key text, type text) returns bytea
   </para>
 
   <para>
-   The algorithms in <function>crypt()</> differ from usual hashing algorithms
-   like MD5 or SHA1 in the following respects:
+   The algorithms in <function>crypt()</> differ from the usual 
+   MD5 or SHA1 hashing algorithms in the following respects:
   </para>
 
   <orderedlist>
@@ -127,13 +135,14 @@ hmac(data bytea, key text, type text) returns bytea
 
   <table id="pgcrypto-crypt-algorithms">
    <title>Supported Algorithms for <function>crypt()</></title>
-   <tgroup cols="5">
+   <tgroup cols="6">
     <thead>
      <row>
       <entry>Algorithm</entry>
       <entry>Max Password Length</entry>
       <entry>Adaptive?</entry>
       <entry>Salt Bits</entry>
+      <entry>Output Length</entry>
       <entry>Description</entry>
      </row>
     </thead>
@@ -143,6 +152,7 @@ hmac(data bytea, key text, type text) returns bytea
       <entry>72</entry>
       <entry>yes</entry>
       <entry>128</entry>
+      <entry>60</entry>
       <entry>Blowfish-based, variant 2a</entry>
      </row>
      <row>
@@ -150,6 +160,7 @@ hmac(data bytea, key text, type text) returns bytea
       <entry>unlimited</entry>
       <entry>no</entry>
       <entry>48</entry>
+      <entry>34</entry>
       <entry>MD5-based crypt</entry>
      </row>
      <row>
@@ -157,6 +168,7 @@ hmac(data bytea, key text, type text) returns bytea
       <entry>8</entry>
       <entry>yes</entry>
       <entry>24</entry>
+      <entry>20</entry>
       <entry>Extended DES</entry>
      </row>
      <row>
@@ -164,6 +176,7 @@ hmac(data bytea, key text, type text) returns bytea
       <entry>8</entry>
       <entry>no</entry>
       <entry>12</entry>
+      <entry>13</entry>
       <entry>Original UNIX crypt</entry>
      </row>
     </tbody>
@@ -172,6 +185,10 @@ hmac(data bytea, key text, type text) returns bytea
 
   <sect3>
    <title><function>crypt()</></title>
+
+   <indexterm>
+    <primary>crypt</primary>
+   </indexterm>
 
 <synopsis>
 crypt(password text, salt text) returns text
@@ -193,7 +210,7 @@ UPDATE ... SET pswhash = crypt('new password', gen_salt('md5'));
    <para>
     Example of authentication:
 <programlisting>
-SELECT pswhash = crypt('entered password', pswhash) FROM ... ;
+SELECT (pswhash = crypt('entered password', pswhash)) AS pswmatch FROM ... ;
 </programlisting>
     This returns <literal>true</> if the entered password is correct.
    </para>
@@ -201,6 +218,10 @@ SELECT pswhash = crypt('entered password', pswhash) FROM ... ;
 
   <sect3>
    <title><function>gen_salt()</></title>
+
+  <indexterm>
+   <primary>gen_salt</primary>
+  </indexterm>
 
 <synopsis>
 gen_salt(type text [, iter_count integer ]) returns text
@@ -337,7 +358,7 @@ gen_salt(type text [, iter_count integer ]) returns text
        <entry>12 years</entry>
       </row>
       <row>
-       <entry><literal>md5</></entry>
+       <entry><literal>md5 hash</></entry>
        <entry>2345086</entry>
        <entry>1 day</entry>
        <entry>3 years</entry>
@@ -364,7 +385,7 @@ gen_salt(type text [, iter_count integer ]) returns text
     </listitem>
     <listitem>
      <para>
-      <literal>md5</> numbers are from mdcrack 1.2.
+      <literal>md5 hash</> numbers are from mdcrack 1.2.
      </para>
     </listitem>
     <listitem>
@@ -497,6 +518,14 @@ gen_salt(type text [, iter_count integer ]) returns text
   <sect3>
    <title><function>pgp_sym_encrypt()</function></title>
 
+   <indexterm>
+    <primary>pgp_sym_encrypt</primary>
+   </indexterm>
+
+   <indexterm>
+    <primary>pgp_sym_encrypt_bytea</primary>
+   </indexterm>
+
 <synopsis>
 pgp_sym_encrypt(data text, psw text [, options text ]) returns bytea
 pgp_sym_encrypt_bytea(data bytea, psw text [, options text ]) returns bytea
@@ -510,6 +539,14 @@ pgp_sym_encrypt_bytea(data bytea, psw text [, options text ]) returns bytea
 
   <sect3>
    <title><function>pgp_sym_decrypt()</function></title>
+
+   <indexterm>
+    <primary>pgp_sym_decrypt</primary>
+   </indexterm>
+
+   <indexterm>
+    <primary>pgp_sym_decrypt_bytea</primary>
+   </indexterm>
 
 <synopsis>
 pgp_sym_decrypt(msg bytea, psw text [, options text ]) returns text
@@ -532,6 +569,14 @@ pgp_sym_decrypt_bytea(msg bytea, psw text [, options text ]) returns bytea
   <sect3>
    <title><function>pgp_pub_encrypt()</function></title>
 
+   <indexterm>
+    <primary>pgp_pub_encrypt</primary>
+   </indexterm>
+
+   <indexterm>
+    <primary>pgp_pub_encrypt_bytea</primary>
+   </indexterm>
+
 <synopsis>
 pgp_pub_encrypt(data text, key bytea [, options text ]) returns bytea
 pgp_pub_encrypt_bytea(data bytea, key bytea [, options text ]) returns bytea
@@ -548,6 +593,14 @@ pgp_pub_encrypt_bytea(data bytea, key bytea [, options text ]) returns bytea
 
   <sect3>
    <title><function>pgp_pub_decrypt()</function></title>
+
+   <indexterm>
+    <primary>pgp_pub_decrypt</primary>
+   </indexterm>
+
+   <indexterm>
+    <primary>pgp_pub_decrypt_bytea</primary>
+   </indexterm>
 
 <synopsis>
 pgp_pub_decrypt(msg bytea, key bytea [, psw text [, options text ]]) returns text
@@ -573,6 +626,10 @@ pgp_pub_decrypt_bytea(msg bytea, key bytea [, psw text [, options text ]]) retur
 
   <sect3>
    <title><function>pgp_key_id()</function></title>
+
+   <indexterm>
+    <primary>pgp_key_id</primary>
+   </indexterm>
 
 <synopsis>
 pgp_key_id(bytea) returns text
@@ -615,6 +672,14 @@ pgp_key_id(bytea) returns text
 
   <sect3>
    <title><function>armor()</function>, <function>dearmor()</function></title>
+
+   <indexterm>
+    <primary>armor</primary>
+   </indexterm>
+
+   <indexterm>
+    <primary>dearmor</primary>
+   </indexterm>
 
 <synopsis>
 armor(data bytea) returns text
@@ -913,6 +978,22 @@ gpg -a --export-secret-keys KEYID > secret.key
    encryption functions is discouraged.
   </para>
 
+  <indexterm>
+   <primary>encrypt</primary>
+  </indexterm>
+
+  <indexterm>
+   <primary>decrypt</primary>
+  </indexterm>
+
+  <indexterm>
+   <primary>encrypt_iv</primary>
+  </indexterm>
+
+  <indexterm>
+   <primary>decrypt_iv</primary>
+  </indexterm>
+
 <synopsis>
 encrypt(data bytea, key bytea, type text) returns bytea
 decrypt(data bytea, key bytea, type text) returns bytea
@@ -981,6 +1062,10 @@ encrypt(data, 'fooz', 'bf-cbc/pad:pkcs')
 
  <sect2>
   <title>Random-Data Functions</title>
+
+  <indexterm>
+   <primary>gen_random_bytes</primary>
+  </indexterm>
 
 <synopsis>
 gen_random_bytes(count integer) returns bytea
@@ -1263,7 +1348,7 @@ gen_random_bytes(count integer) returns bytea
       <entry>OpenBSD sys/crypto</entry>
      </row>
      <row>
-      <entry>MD5 and SHA1</entry>
+      <entry>MD5 hash and SHA1</entry>
       <entry>WIDE Project</entry>
       <entry>KAME kame/sys/crypto</entry>
      </row>

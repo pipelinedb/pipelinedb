@@ -6,6 +6,7 @@
  <indexterm zone="indexes">
   <primary>index</primary>
  </indexterm>
+
 &common;
  <para>
   Indexes are a common way to enhance database performance.  An index
@@ -25,9 +26,9 @@
    </para>
 <!## end>
 
-
  <sect1 id="indexes-intro">
   <title>Introduction</title>
+
 &common;
   <para>
    Suppose we have a table similar to this:
@@ -102,12 +103,7 @@ CREATE INDEX test1_id_index ON test1 (id);
 
   <para>
    Creating an index on a large table can take a long time.  By default,
-<!## PG>
    <productname>PostgreSQL</productname> allows reads (<command>SELECT</command> statements) to occur
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> allows reads (<command>SELECT</command> statements) to occur
-<!## end>
    on the table in parallel with index creation, but writes (<command>INSERT</command>,
    <command>UPDATE</command>, <command>DELETE</command>) are blocked until the index build is finished.
    In production environments this is often unacceptable.
@@ -128,15 +124,11 @@ CREATE INDEX test1_id_index ON test1 (id);
 
  <sect1 id="indexes-types">
   <title>Index Types</title>
+
 &common;
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> provides several index types:
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> provides several index types:
-<!## end>
-   B-tree, Hash, GiST and GIN.  Each index type uses a different
+   B-tree, Hash, GiST, SP-GiST and GIN.  Each index type uses a different
    algorithm that is best suited to different types of queries.
    By default, the <command>CREATE INDEX</command> command creates
    B-tree indexes, which fit the most common situations.
@@ -153,12 +145,7 @@ CREATE INDEX test1_id_index ON test1 (id);
    </indexterm>
    B-trees can handle equality and range queries on data that can be sorted
    into some ordering.
-<!## PG>
    In particular, the <productname>PostgreSQL</productname> query planner
-<!## end>
-<!## XC>
-   In particular, the <productname>Postgres-XC</productname> query planner
-<!## end>
    will consider using a B-tree index whenever an indexed column is
    involved in a comparison using one of these operators:
 
@@ -221,8 +208,10 @@ CREATE INDEX <replaceable>name</replaceable> ON <replaceable>table</replaceable>
    <para>
     Hash index operations are not presently WAL-logged,
     so hash indexes might need to be rebuilt with <command>REINDEX</>
-    after a database crash. They are also not replicated over streaming or
-    file-based replication.
+    after a database crash if there were unwritten changes.
+    Also, changes to hash indexes are not replicated over streaming or
+    file-based replication after the initial base backup, so they
+    give wrong answers to queries that subsequently use them.
     For these reasons, hash index use is presently discouraged.
    </para>
   </caution>
@@ -241,12 +230,7 @@ CREATE INDEX <replaceable>name</replaceable> ON <replaceable>table</replaceable>
    Accordingly, the particular operators with which a GiST index can be
    used vary depending on the indexing strategy (the <firstterm>operator
    class</>).  As an example, the standard distribution of
-<!## PG>
    <productname>PostgreSQL</productname> includes GiST operator classes
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> includes GiST operator classes
-<!## end>
    for several two-dimensional geometric data types, which support indexed
    queries using these operators:
 
@@ -286,6 +270,37 @@ SELECT * FROM places ORDER BY location <-> point '(101,456)' LIMIT 10;
   <para>
    <indexterm>
     <primary>index</primary>
+    <secondary>SP-GiST</secondary>
+   </indexterm>
+   <indexterm>
+    <primary>SP-GiST</primary>
+    <see>index</see>
+   </indexterm>
+   SP-GiST indexes, like GiST indexes, offer an infrastructure that supports
+   various kinds of searches.  SP-GiST permits implementation of a wide range
+   of different non-balanced disk-based data structures, such as quadtrees,
+   k-d trees, and radix trees (tries).  As an example, the standard distribution of
+   <productname>PostgreSQL</productname> includes SP-GiST operator classes
+   for two-dimensional points, which support indexed
+   queries using these operators:
+
+   <simplelist>
+    <member><literal>&lt;&lt;</literal></member>
+    <member><literal>&gt;&gt;</literal></member>
+    <member><literal>~=</literal></member>
+    <member><literal>&lt;@</literal></member>
+    <member><literal>&lt;^</literal></member>
+    <member><literal>&gt;^</literal></member>
+   </simplelist>
+
+   (See <xref linkend="functions-geometry"> for the meaning of
+   these operators.)
+   For more information see <xref linkend="SPGiST">.
+  </para>
+
+  <para>
+   <indexterm>
+    <primary>index</primary>
     <secondary>GIN</secondary>
    </indexterm>
    <indexterm>
@@ -293,17 +308,12 @@ SELECT * FROM places ORDER BY location <-> point '(101,456)' LIMIT 10;
     <see>index</see>
    </indexterm>
    GIN indexes are inverted indexes which can handle values that contain more
-   than one key, arrays for example. Like GiST, GIN can support
+   than one key, arrays for example. Like GiST and SP-GiST, GIN can support
    many different user-defined indexing strategies and the particular
    operators with which a GIN index can be used vary depending on the
    indexing strategy.
    As an example, the standard distribution of
-<!## PG>
    <productname>PostgreSQL</productname> includes GIN operator classes
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> includes GIN operator classes
-<!## end>
    for one-dimensional arrays, which support indexed
    queries using these operators:
 
@@ -330,6 +340,7 @@ SELECT * FROM places ORDER BY location <-> point '(101,456)' LIMIT 10;
    <primary>index</primary>
    <secondary>multicolumn</secondary>
   </indexterm>
+
 &common;
   <para>
    An index can be defined on more than one column of a table.  For example, if
@@ -357,12 +368,7 @@ CREATE INDEX test2_mm_idx ON test2 (major, minor);
   <para>
    Currently, only the B-tree, GiST and GIN index types support multicolumn
    indexes.  Up to 32 columns can be specified.  (This limit can be
-<!## PG>
    altered when building <productname>PostgreSQL</productname>; see the
-<!## end>
-<!## XC>
-   altered when building <productname>Postgres-XC</productname>; see the
-<!## end>
    file <filename>pg_config_manual.h</filename>.)
   </para>
 
@@ -428,18 +434,14 @@ CREATE INDEX test2_mm_idx ON test2 (major, minor);
    <primary>index</primary>
    <secondary>and <literal>ORDER BY</></secondary>
   </indexterm>
+
 &common;
   <para>
    In addition to simply finding the rows to be returned by a query,
    an index may be able to deliver them in a specific sorted order.
    This allows a query's <literal>ORDER BY</> specification to be honored
    without a separate sorting step.  Of the index types currently
-<!## PG>
    supported by <productname>PostgreSQL</productname>, only B-tree
-<!## end>
-<!## XC>
-   supported by <productname>Postgres-XC</productname>, only B-tree
-<!## end>
    can produce sorted output &mdash; the other index types return
    matching rows in an unspecified, implementation-dependent order.
   </para>
@@ -520,6 +522,7 @@ CREATE INDEX test3_desc_index ON test3 (id DESC NULLS LAST);
   <indexterm zone="indexes-bitmap-scans">
    <primary>bitmap scan</primary>
   </indexterm>
+
 &common;
   <para>
    A single index scan can only use query clauses that use the index's
@@ -532,12 +535,7 @@ CREATE INDEX test3_desc_index ON test3 (id DESC NULLS LAST);
 
   <para>
    Fortunately,
-<!## PG>
    <productname>PostgreSQL</> has the ability to combine multiple indexes
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</> has the ability to combine multiple indexes
-<!## end>
    (including multiple uses of the same index) to handle cases that cannot
    be implemented by single index scans.  The system can form <literal>AND</>
    and <literal>OR</> conditions across several index scans.  For example,
@@ -612,6 +610,7 @@ CREATE INDEX test3_desc_index ON test3 (id DESC NULLS LAST);
    tables, there's no such restriction.
   </para>
 <!## end>
+
 &common;
   <para>
    Indexes can also be used to enforce uniqueness of a column's value,
@@ -630,12 +629,7 @@ CREATE UNIQUE INDEX <replaceable>name</replaceable> ON <replaceable>table</repla
   </para>
 
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> automatically creates a unique
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> automatically creates a unique
-<!## end>
    index when a unique constraint or primary key is defined for a table.
    The index covers the columns that make up the primary key or unique
    constraint (a multicolumn index, if appropriate), and is the mechanism
@@ -653,7 +647,6 @@ CREATE UNIQUE INDEX <replaceable>name</replaceable> ON <replaceable>table</repla
     the automatically-created index.
    </para>
   </note>
-&xc-constraint;
  </sect1>
 
 
@@ -664,6 +657,7 @@ CREATE UNIQUE INDEX <replaceable>name</replaceable> ON <replaceable>table</repla
    <primary>index</primary>
    <secondary sortas="expressions">on expressions</secondary>
   </indexterm>
+
 &common;
   <para>
    An index column need not be just a column of the underlying table,
@@ -693,6 +687,7 @@ CREATE INDEX test1_lower_col1_idx ON test1 (lower(col1));
    Thus, indexes on expressions can be used to enforce constraints that
    are not definable as simple unique constraints.
   </para>
+
   <para>
    As another example, if one often does queries like:
 <programlisting>
@@ -722,7 +717,6 @@ CREATE INDEX people_names ON people ((first_name || ' ' || last_name));
    query.  Thus, indexes on expressions are useful when retrieval speed
    is more important than insertion and update speed.
   </para>
-&xc-constraint;
  </sect1>
 
 
@@ -733,6 +727,7 @@ CREATE INDEX people_names ON people ((first_name || ' ' || last_name));
    <primary>index</primary>
    <secondary>partial</secondary>
   </indexterm>
+
 &common;
   <para>
    A <firstterm>partial index</firstterm> is an index built over a
@@ -869,12 +864,7 @@ SELECT * FROM orders WHERE order_nr = 3501;
   <para>
    <xref linkend="indexes-partial-ex2"> also illustrates that the
    indexed column and the column used in the predicate do not need to
-<!## PG>
    match.  <productname>PostgreSQL</productname> supports partial
-<!## end>
-<!## XC>
-   match.  <productname>Postgres-XC</productname> supports partial
-<!## end>
    indexes with arbitrary predicates, so long as only columns of the
    table being indexed are involved.  However, keep in mind that the
    predicate must match the conditions used in the queries that
@@ -882,12 +872,7 @@ SELECT * FROM orders WHERE order_nr = 3501;
    index can be used in a query only if the system can recognize that
    the <literal>WHERE</> condition of the query mathematically implies
    the predicate of the index.
-<!## PG>
    <productname>PostgreSQL</productname> does not have a sophisticated
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> does not have a sophisticated
-<!## end>
    theorem prover that can recognize mathematically equivalent
    expressions that are written in different forms.  (Not
    only is such a general theorem prover extremely difficult to
@@ -943,12 +928,7 @@ CREATE UNIQUE INDEX tests_success_constraint ON tests (subject, target)
    distributions might cause the system to use an index when it really
    should not.  In that case the index can be set up so that it is not
    available for the offending query.  Normally,
-<!## PG>
    <productname>PostgreSQL</> makes reasonable choices about index
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</> makes reasonable choices about index
-<!## end>
    usage (e.g., it avoids them when retrieving common values, so the
    earlier example really only saves index size, it is not required to
    avoid index usage), and grossly incorrect plan choices are cause
@@ -960,12 +940,7 @@ CREATE UNIQUE INDEX tests_success_constraint ON tests (subject, target)
    know at least as much as the query planner knows, in particular you
    know when an index might be profitable.  Forming this knowledge
    requires experience and understanding of how indexes in
-<!## PG>
    <productname>PostgreSQL</> work.  In most cases, the advantage of a
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</> work.  In most cases, the advantage of a
-<!## end>
    partial index over a regular index will be minimal.
   </para>
 
@@ -974,7 +949,6 @@ CREATE UNIQUE INDEX tests_success_constraint ON tests (subject, target)
    linkend="STON89b">, <xref linkend="OLSON93">, and <xref
    linkend="SESHADRI95">.
   </para>
-&xc-constraint;
  </sect1>
 
 
@@ -988,6 +962,7 @@ CREATE UNIQUE INDEX tests_success_constraint ON tests (subject, target)
   <indexterm zone="indexes-opclass">
    <primary>operator family</primary>
   </indexterm>
+
 &common;
   <para>
    An index definition can specify an <firstterm>operator
@@ -1092,6 +1067,7 @@ SELECT am.amname AS index_method,
  <sect1 id="indexes-collations">
   <title>Indexes and Collations</title>
 
+&common;
   <para>
    An index can support only one collation per index column.
    If multiple collations are of interest, multiple indexes may be needed.
@@ -1134,14 +1110,10 @@ CREATE INDEX test1c_content_y_index ON test1c (content COLLATE "y");
    <primary>index</primary>
    <secondary>examining usage</secondary>
   </indexterm>
+
 &common;
   <para>
-<!## PG>
    Although indexes in <productname>PostgreSQL</> do not need
-<!## end>
-<!## XC>
-   Although indexes in <productname>Postgres-XC</> do not need
-<!## end>
    maintenance or tuning, it is still important to check
    which indexes are actually used by the real-life query workload.
    Examining index usage for an individual query is done with the
@@ -1248,12 +1220,7 @@ CREATE INDEX test1c_content_y_index ON test1c (content COLLATE "y");
      If you do not succeed in adjusting the costs to be more
      appropriate, then you might have to resort to forcing index usage
      explicitly.  You might also want to contact the
-<!## PG>
      <productname>PostgreSQL</> developers to examine the issue.
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</> developers to examine the issue.
-<!## end>
     </para>
    </listitem>
   </itemizedlist>

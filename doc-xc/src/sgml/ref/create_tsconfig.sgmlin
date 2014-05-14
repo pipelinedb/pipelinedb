@@ -32,7 +32,6 @@ CREATE TEXT SEARCH CONFIGURATION <replaceable class="parameter">name</replaceabl
   <title>Description</title>
 
 &common;
-
   <para>
    <command>CREATE TEXT SEARCH CONFIGURATION</command> creates a new text
    search configuration.  A text search configuration specifies a text
@@ -66,6 +65,7 @@ CREATE TEXT SEARCH CONFIGURATION <replaceable class="parameter">name</replaceabl
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -100,6 +100,7 @@ CREATE TEXT SEARCH CONFIGURATION <replaceable class="parameter">name</replaceabl
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    The <literal>PARSER</> and <literal>COPY</> options are mutually
    exclusive, because when an existing configuration is copied, its
@@ -111,6 +112,7 @@ CREATE TEXT SEARCH CONFIGURATION <replaceable class="parameter">name</replaceabl
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>CREATE TEXT SEARCH CONFIGURATION</command> statement
    in the SQL standard.

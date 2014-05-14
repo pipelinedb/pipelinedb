@@ -4,7 +4,7 @@
  *	  various support functions for SP-GiST
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -661,7 +661,7 @@ spgFormInnerTuple(SpGistState *state, bool hasPrefix, Datum prefix,
 	if (size > SPGIST_PAGE_CAPACITY - sizeof(ItemIdData))
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-				 errmsg("SPGiST inner tuple size %lu exceeds maximum %lu",
+				 errmsg("SP-GiST inner tuple size %lu exceeds maximum %lu",
 						(unsigned long) size,
 				(unsigned long) (SPGIST_PAGE_CAPACITY - sizeof(ItemIdData))),
 			errhint("Values larger than a buffer page cannot be indexed.")));
@@ -722,6 +722,7 @@ spgFormDeadTuple(SpGistState *state, int tupstate,
 	if (tupstate == SPGIST_REDIRECT)
 	{
 		ItemPointerSet(&tuple->pointer, blkno, offnum);
+		Assert(TransactionIdIsValid(state->myXid));
 		tuple->xid = state->myXid;
 	}
 	else
@@ -742,27 +743,32 @@ Datum *
 spgExtractNodeLabels(SpGistState *state, SpGistInnerTuple innerTuple)
 {
 	Datum	   *nodeLabels;
-	int			nullcount = 0;
 	int			i;
 	SpGistNodeTuple node;
 
-	nodeLabels = (Datum *) palloc(sizeof(Datum) * innerTuple->nNodes);
-	SGITITERATE(innerTuple, i, node)
+	/* Either all the labels must be NULL, or none. */
+	node = SGITNODEPTR(innerTuple);
+	if (IndexTupleHasNulls(node))
 	{
-		if (IndexTupleHasNulls(node))
-			nullcount++;
-		else
-			nodeLabels[i] = SGNTDATUM(node, state);
-	}
-	if (nullcount == innerTuple->nNodes)
-	{
+		SGITITERATE(innerTuple, i, node)
+		{
+			if (!IndexTupleHasNulls(node))
+				elog(ERROR, "some but not all node labels are null in SPGiST inner tuple");
+		}
 		/* They're all null, so just return NULL */
-		pfree(nodeLabels);
 		return NULL;
 	}
-	if (nullcount != 0)
-		elog(ERROR, "some but not all node labels are null in SPGiST inner tuple");
-	return nodeLabels;
+	else
+	{
+		nodeLabels = (Datum *) palloc(sizeof(Datum) * innerTuple->nNodes);
+		SGITITERATE(innerTuple, i, node)
+		{
+			if (IndexTupleHasNulls(node))
+				elog(ERROR, "some but not all node labels are null in SPGiST inner tuple");
+			nodeLabels[i] = SGNTDATUM(node, state);
+		}
+		return nodeLabels;
+	}
 }
 
 /*

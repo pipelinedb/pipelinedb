@@ -23,9 +23,9 @@ PostgreSQL documentation
 <!## PG>
 <synopsis>
 [ WITH [ RECURSIVE ] <replaceable class="parameter">with_query</replaceable> [, ...] ]
-UPDATE [ ONLY ] <replaceable class="PARAMETER">table</replaceable> [ [ AS ] <replaceable class="parameter">alias</replaceable> ]
-    SET { <replaceable class="PARAMETER">column</replaceable> = { <replaceable class="PARAMETER">expression</replaceable> | DEFAULT } |
-          ( <replaceable class="PARAMETER">column</replaceable> [, ...] ) = ( { <replaceable class="PARAMETER">expression</replaceable> | DEFAULT } [, ...] ) } [, ...]
+UPDATE [ ONLY ] <replaceable class="PARAMETER">table_name</replaceable> [ * ] [ [ AS ] <replaceable class="parameter">alias</replaceable> ]
+    SET { <replaceable class="PARAMETER">column_name</replaceable> = { <replaceable class="PARAMETER">expression</replaceable> | DEFAULT } |
+          ( <replaceable class="PARAMETER">column_name</replaceable> [, ...] ) = ( { <replaceable class="PARAMETER">expression</replaceable> | DEFAULT } [, ...] ) } [, ...]
     [ FROM <replaceable class="PARAMETER">from_list</replaceable> ]
     [ WHERE <replaceable class="PARAMETER">condition</replaceable> | WHERE CURRENT OF <replaceable class="PARAMETER">cursor_name</replaceable> ]
     [ RETURNING * | <replaceable class="parameter">output_expression</replaceable> [ [ AS ] <replaceable class="parameter">output_name</replaceable> ] [, ...] ]
@@ -46,19 +46,11 @@ UPDATE [ ONLY ] <replaceable class="PARAMETER">table</replaceable> [ [ AS ] <rep
   <title>Description</title>
 
 &common;
-
   <para>
    <command>UPDATE</command> changes the values of the specified
    columns in all rows that satisfy the condition. Only the columns to
    be modified need be mentioned in the <literal>SET</literal> clause;
    columns not explicitly modified retain their previous values.
-  </para>
-
-  <para>
-   By default, <command>UPDATE</command> will update rows in the
-   specified table and all its subtables. If you wish to only update
-   the specific table mentioned, you must use the <literal>ONLY</>
-   clause.
   </para>
 
   <para>
@@ -92,6 +84,7 @@ UPDATE [ ONLY ] <replaceable class="PARAMETER">table</replaceable> [ [ AS ] <rep
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">with_query</replaceable></term>
@@ -106,10 +99,15 @@ UPDATE [ ONLY ] <replaceable class="PARAMETER">table</replaceable> [ [ AS ] <rep
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="PARAMETER">table</replaceable></term>
+    <term><replaceable class="PARAMETER">table_name</replaceable></term>
     <listitem>
      <para>
       The name (optionally schema-qualified) of the table to update.
+      If <literal>ONLY</> is specified before the table name, matching rows
+      are updated in the named table only.  If <literal>ONLY</> is not
+      specified, matching rows are also updated in any tables inheriting from
+      the named table.  Optionally, <literal>*</> can be specified after the
+      table name to explicitly indicate that descendant tables are included.
      </para>
     </listitem>
    </varlistentry>
@@ -128,11 +126,11 @@ UPDATE [ ONLY ] <replaceable class="PARAMETER">table</replaceable> [ [ AS ] <rep
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="PARAMETER">column</replaceable></term>
+    <term><replaceable class="PARAMETER">column_name</replaceable></term>
     <listitem>
      <para>
-      The name of a column in <replaceable
-      class="PARAMETER">table</replaceable>.
+      The name of a column in the table named by <replaceable
+      class="PARAMETER">table_name</replaceable>.
       The column name can be qualified with a subfield name or array
       subscript, if needed.  Do not include the table's name in the
       specification of a target column &mdash; for example,
@@ -191,7 +189,6 @@ UPDATE [ ONLY ] <replaceable class="PARAMETER">table</replaceable> [ [ AS ] <rep
    <varlistentry>
     <term><replaceable class="PARAMETER">cursor_name</replaceable></term>
     <listitem>
-&pgonly;
      <para>
       The name of the cursor to use in a <literal>WHERE CURRENT OF</>
       condition.  The row to be updated is the one most recently fetched
@@ -202,36 +199,38 @@ UPDATE [ ONLY ] <replaceable class="PARAMETER">table</replaceable> [ [ AS ] <rep
       <xref linkend="sql-declare">
       for more information about using cursors with
       <literal>WHERE CURRENT OF</>.
-<!## XC>
-      <footnote>
-       <para>
-        <literal>WHERE CURRENT OF</literal> clause is not supported by
-        the current release of <productname>Postgres-XC</productname>.
-       </para>
-      </footnote>
-<!## end>
      </para>
+<!## XC>
+&xconly;
+     <para>
+      <literal>WHERE CURRENT OF</literal> clause is not supported by
+      the current release of <productname>Postgres-XC</productname>.
+     </para>
+<!## end>
     </listitem>
    </varlistentry>
 
    <varlistentry>
     <term><replaceable class="PARAMETER">output_expression</replaceable></term>
     <listitem>
-     <para>
 <!## PG>
+     <para>
       An expression to be computed and returned by the <command>UPDATE</>
       command after each row is updated.  The expression can use any
-      column names of the <replaceable class="PARAMETER">table</replaceable>
+      column names of the table named by <replaceable class="PARAMETER">table_name</replaceable>
       or table(s) listed in <literal>FROM</>.
       Write <literal>*</> to return all columns.
+     </para>
 <!## end>
+&xconly;
 <!## XC>
+     <para>
       An expression to be computed and returned by the <command>UPDATE</>
       command after each row is updated.  The expression can use any
       column names of the <replaceable class="PARAMETER">table</replaceable>.
       Write <literal>*</> to return all columns.
-<!## end>
      </para>
+<!## end>
     </listitem>
    </varlistentry>
 
@@ -249,6 +248,7 @@ UPDATE [ ONLY ] <replaceable class="PARAMETER">table</replaceable> [ [ AS ] <rep
  <refsect1>
   <title>Outputs</title>
 
+&common;
   <para>
    On successful completion, an <command>UPDATE</> command returns a command
    tag of the form
@@ -256,10 +256,12 @@ UPDATE [ ONLY ] <replaceable class="PARAMETER">table</replaceable> [ [ AS ] <rep
 UPDATE <replaceable class="parameter">count</replaceable>
 </screen>
    The <replaceable class="parameter">count</replaceable> is the number
-   of rows updated.  If <replaceable class="parameter">count</replaceable> is
-   0, no rows matched the <replaceable
-   class="parameter">condition</replaceable> (this is not considered
-   an error).
+   of rows updated, including matched rows whose values did not change.
+   Note that the number may be less than the number of rows that matched
+   the <replaceable class="parameter">condition</replaceable> when
+   updates were suppressed by a <literal>BEFORE UPDATE</> trigger.  If
+   <replaceable class="parameter">count</replaceable> is 0, no rows were
+   updated by the query (this is not considered an error).
   </para>
 
   <para>
@@ -274,10 +276,7 @@ UPDATE <replaceable class="parameter">count</replaceable>
  <refsect1>
   <title>Notes</title>
 
-<!## PG>
-<!-- NOTICE:
-     FROM clause not supported yet
--->
+&common;
   <para>
    When a <literal>FROM</> clause is present, what essentially happens
    is that the target table is joined to the tables mentioned in the
@@ -290,13 +289,22 @@ UPDATE <replaceable class="parameter">count</replaceable>
    will be used to update the target row, but which one will be used
    is not readily predictable.
   </para>
-<!## end>
 
   <para>
    Because of this indeterminacy, referencing other tables only within
    sub-selects is safer, though often harder to read and slower than
    using a join.
   </para>
+
+&xconly;
+<!## PG>
+  <para>
+   Current version of <productname>Postgres-XC</productname> does not
+   support <literal>FROM</literal> clause in <command>UPDATE</command>
+   statement.
+  </para>
+<!## end>
+
  </refsect1>
 
  <refsect1>
@@ -339,10 +347,6 @@ UPDATE weather SET (temp_lo, temp_hi, prcp) = (temp_lo+1, temp_lo+15, DEFAULT)
 </programlisting>
   </para>
 
-<!## PG>
-<!-- NOTICE:
-     FROM clause not supported yet
--->
   <para>
    Increment the sales count of the salesperson who manages the
    account for Acme Corporation, using the <literal>FROM</literal>
@@ -353,12 +357,7 @@ UPDATE employees SET sales_count = sales_count + 1 FROM accounts
   AND employees.id = accounts.sales_person;
 </programlisting>
   </para>
-<!## end>
 
-<!## PG>
-<!-- NOTICE:
-     FROM clause not supported yet
--->
   <para>
    Perform the same operation, using a sub-select in the
    <literal>WHERE</literal> clause:
@@ -367,8 +366,17 @@ UPDATE employees SET sales_count = sales_count + 1 WHERE id =
   (SELECT sales_person FROM accounts WHERE name = 'Acme Corporation');
 </programlisting>
   </para>
+
+&xconly;
+<!## PG>
+  <para>
+   Current version of <productname>Postgres-XC</productname> does not
+   support <literal>FROM</literal> clause in <command>UPDATE</command>
+   statement.
+  </para>
 <!## end>
 
+&common;
   <para>
    Attempt to insert a new stock item along with the quantity of stock. If
    the item already exists, instead update the stock count of the existing
@@ -387,14 +395,19 @@ COMMIT;
 </programlisting>
   </para>
 
-<!## PG>
   <para>
    Change the <structfield>kind</> column of the table
    <structname>films</structname> in the row on which the cursor
    <literal>c_films</> is currently positioned:
 <programlisting>
 UPDATE films SET kind = 'Dramatic' WHERE CURRENT OF c_films;
-</programlisting>
+</programlisting></para>
+
+&xconly;
+<!## XC>
+  <para>
+   <literal>WHERE CURRENT OF</literal> is not supported in the current
+   version of <productname>Postgres-XC</productname>.
   </para>
 <!## end>
  </refsect1>
@@ -402,6 +415,7 @@ UPDATE films SET kind = 'Dramatic' WHERE CURRENT OF c_films;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    This command conforms to the <acronym>SQL</acronym> standard, except
    that the <literal>FROM</literal> and <literal>RETURNING</> clauses
@@ -422,10 +436,6 @@ UPDATE accounts SET (contact_last_name, contact_first_name) =
    of independent expressions.
   </para>
 
-<!## PG>
-<!-- NOTICE:
-     FROM clause not supported yet
--->
   <para>
    Some other database systems offer a <literal>FROM</> option in which
    the target table is supposed to be listed again within <literal>FROM</>.
@@ -433,6 +443,14 @@ UPDATE accounts SET (contact_last_name, contact_first_name) =
    <literal>FROM</>.  Be careful when porting applications that use this
    extension.
   </para>
+
+&xconly;
+<!## XC>
+  <para>
+   <literal>FROM</literal> clause in <command>UPDATE</command> statement
+   is not supported in the current version of <productname>Postgres-XC</productname>.
+  </para>
 <!## end>
+
  </refsect1>
 </refentry>

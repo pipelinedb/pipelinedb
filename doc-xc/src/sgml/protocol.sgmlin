@@ -8,8 +8,17 @@
   <secondary>frontend-backend</secondary>
  </indexterm>
 
-&pgnotice;
+&xconly;
+<!## XC>
+ <para>
+  This chapter describes protocol between <productname>Postgres-XC</productname>
+  client and coordinator.
+  Coordinator and datanode communication is using the same mechanism with
+  a little extension.
+ </para>
+<!## end>
 
+&common;
  <para>
   <productname>PostgreSQL</productname> uses a message-based protocol
   for communication between frontends and backends (clients and servers).
@@ -44,7 +53,7 @@
  <sect1 id="protocol-overview">
   <title>Overview</title>
 
-&pgnotice;
+&common;
   <para>
    The protocol has separate phases for startup and normal operation.
    In the startup phase, the frontend opens a connection to the server
@@ -90,7 +99,7 @@
  <sect2 id="protocol-message-concepts">
   <title>Messaging Overview</title>
 
-&pgnotice;
+&common;
   <para>
    All communication is through a stream of messages.  The first byte of a
    message identifies the message type, and the next four bytes specify the
@@ -124,15 +133,14 @@
   <sect2 id="protocol-query-concepts">
    <title>Extended Query Overview</title>
 
-&pgnotice;
+&common;
    <para>
     In the extended-query protocol, execution of SQL commands is divided
     into multiple steps.  The state retained between steps is represented
     by two types of objects: <firstterm>prepared statements</> and
     <firstterm>portals</>.  A prepared statement represents the result of
-    parsing, semantic analysis, and (optionally) planning of a textual query
-    string.
-    A prepared statement is not necessarily ready to execute, because it might
+    parsing and semantic analysis of a textual query string.
+    A prepared statement is not in itself ready to execute, because it might
     lack specific values for <firstterm>parameters</>.  A portal represents
     a ready-to-execute or already-partially-executed statement, with any
     missing parameter values filled in.  (For <command>SELECT</> statements,
@@ -168,7 +176,7 @@
   <sect2 id="protocol-format-codes">
    <title>Formats and Format Codes</title>
 
-&pgnotice;
+&common;
    <para>
     Data of a particular data type might be transmitted in any of several
     different <firstterm>formats</>.  As of <productname>PostgreSQL</> 7.4
@@ -203,7 +211,7 @@
  <sect1 id="protocol-flow">
   <title>Message Flow</title>
 
-&pgnotice;
+&common;
   <para>
    This section describes the message flow and the semantics of each
    message type.  (Details of the exact representation of each message
@@ -219,7 +227,7 @@
   <sect2>
    <title>Start-up</title>
 
-&pgnotice;
+&common;
    <para>
     To begin a session, a frontend opens a connection to the server and sends
     a startup message.  This message includes the names of the user and of the
@@ -302,10 +310,15 @@
       <listitem>
        <para>
         The frontend must now send a PasswordMessage containing the
-        password encrypted via MD5, using the 4-character salt
-        specified in the AuthenticationMD5Password message.  If
-        this is the correct password, the server responds with an
-        AuthenticationOk, otherwise it responds with an ErrorResponse.
+        password (with username) encrypted via MD5, then encrypted
+        again using the 4-byte random salt specified in the
+        AuthenticationMD5Password message.  If this is the correct
+        password, the server responds with an AuthenticationOk,
+        otherwise it responds with an ErrorResponse.  The actual
+        PasswordMessage can be computed in SQL as <literal>concat('md5',
+        md5(concat(md5(concat(password, username)), random-salt)))</>.
+        (Keep in mind the <function>md5()</> function returns its
+        result as a hex string.)
        </para>
       </listitem>
      </varlistentry>
@@ -470,7 +483,7 @@
   <sect2>
    <title>Simple Query</title>
 
-&pgnotice;
+&common;
    <para>
     A simple query cycle is initiated by the frontend sending a Query message
     to the backend.  The message includes an SQL command (or commands)
@@ -644,7 +657,7 @@
   <sect2 id="protocol-flow-ext-query">
    <title>Extended Query</title>
 
-&pgnotice;
+&common;
    <para>
     The extended query protocol breaks down the above-described simple
     query protocol into multiple steps.  The results of preparatory
@@ -702,7 +715,7 @@
     the unnamed statement as destination is issued.  (Note that a simple
     Query message also destroys the unnamed statement.)  Named prepared
     statements must be explicitly closed before they can be redefined by
-    a Parse message, but this is not required for the unnamed statement.
+    another Parse message, but this is not required for the unnamed statement.
     Named prepared statements can also be created and accessed at the SQL
     command level, using <command>PREPARE</> and <command>EXECUTE</>.
    </para>
@@ -732,35 +745,14 @@
    </note>
 
    <para>
-    Query planning for named prepared-statement objects occurs when the Parse
-    message is processed. If a query will be repeatedly executed with
-    different parameters, it might be beneficial to send a single Parse message
-    containing a parameterized query, followed by multiple Bind
-    and Execute messages. This will avoid replanning the query on each
-    execution.
+    Query planning typically occurs when the Bind message is processed.
+    If the prepared statement has no parameters, or is executed repeatedly,
+    the server might save the created plan and re-use it during subsequent
+    Bind messages for the same prepared statement.  However, it will do so
+    only if it finds that a generic plan can be created that is not much
+    less efficient than a plan that depends on the specific parameter values
+    supplied.  This happens transparently so far as the protocol is concerned.
    </para>
-
-   <para>
-    The unnamed prepared statement is likewise planned during Parse processing
-    if the Parse message defines no parameters.  But if there are parameters,
-    query planning occurs every time Bind parameters are supplied.  This allows the
-    planner to make use of the actual values of the parameters provided by
-    each Bind message, rather than use generic estimates.
-   </para>
-
-   <note>
-    <para>
-     Query plans generated from a parameterized query might be less
-     efficient than query plans generated from an equivalent query with actual
-     parameter values substituted. The query planner cannot make decisions
-     based on actual parameter values (for example, index selectivity) when
-     planning a parameterized query assigned to a named prepared-statement
-     object.  This possible penalty is avoided when using the unnamed
-     statement, since it is not planned until actual parameter values are
-     available.  The cost is that planning must occur afresh for each Bind,
-     even if the query stays the same.
-    </para>
-   </note>
 
    <para>
     If successfully created, a named portal object lasts till the end of the
@@ -768,8 +760,8 @@
     destroyed at the end of the transaction, or as soon as the next Bind
     statement specifying the unnamed portal as destination is issued.  (Note
     that a simple Query message also destroys the unnamed portal.)  Named
-    portals must be explicitly closed before they can be redefined by a Bind
-    message, but this is not required for the unnamed portal.
+    portals must be explicitly closed before they can be redefined by another
+    Bind message, but this is not required for the unnamed portal.
     Named portals can also be created and accessed at the SQL
     command level, using <command>DECLARE CURSOR</> and <command>FETCH</>.
    </para>
@@ -895,7 +887,7 @@
   <sect2>
    <title>Function Call</title>
 
-&pgnotice;
+&common;
    <para>
     The Function Call sub-protocol allows the client to request a direct
     call of any function that exists in the database's
@@ -974,7 +966,7 @@
   <sect2 id="protocol-copy">
    <title>COPY Operations</title>
 
-&pgnotice;
+&common;
    <para>
     The <command>COPY</> command allows high-speed bulk data transfer
     to or from the server.  Copy-in and copy-out operations each switch
@@ -1047,14 +1039,26 @@
    </para>
 
    <para>
-    There is another Copy-related mode called Copy-both, which allows
+    There is another Copy-related mode called copy-both, which allows
     high-speed bulk data transfer to <emphasis>and</> from the server.
     Copy-both mode is initiated when a backend in walsender mode
     executes a <command>START_REPLICATION</command> statement.  The
     backend sends a CopyBothResponse message to the frontend.  Both
     the backend and the frontend may then send CopyData messages
-    until the connection is terminated.  See <xref
-    linkend="protocol-replication">.
+    until either end sends a CopyDone message. After the client
+    sends a CopyDone message, the connection goes from copy-both mode to
+    copy-out mode, and the client may not send any more CopyData messages.
+    Similarly, when the server sends a CopyDone message, the connection
+    goes into copy-in mode, and the server may not send any more CopyData
+    messages. After both sides have sent a CopyDone message, the copy mode
+    is terminated, and the backend reverts to the command-processing mode.
+    In the event of a backend-detected error during copy-both mode,
+    the backend will issue an ErrorResponse message, discard frontend messages
+    until a Sync message is received, and then issue ReadyForQuery and return
+    to normal processing.  The frontend should treat receipt of ErrorResponse
+    as terminating the copy in both directions; no CopyDone should be sent
+    in this case.  See <xref linkend="protocol-replication"> for more
+    information on the subprotocol transmitted over copy-both mode.
    </para>
 
    <para>
@@ -1066,12 +1070,21 @@
     assume this.)
    </para>
 
+&xconly;
+<!## XC>
+   <para>
+    <productname>Postgres-XC</productname> assumes work files located at
+    the originating coordinator.
+    The data are eventually goes from/to target datanodes using different
+    protocol.
+   </para>
+<!## end>
+
   </sect2>
 
   <sect2 id="protocol-async">
    <title>Asynchronous Operations</title>
 
-&pgnotice;
    <para>
     There are several cases in which the backend will send messages that
     are not specifically prompted by the frontend's command stream.
@@ -1155,9 +1168,9 @@
   </sect2>
 
   <sect2>
-   <title>Cancelling Requests in Progress</title>
+   <title>Canceling Requests in Progress</title>
 
-&pgnotice;
+&common;
    <para>
     During the processing of a query, the frontend might request
     cancellation of the query.  The cancel request is not sent
@@ -1222,7 +1235,7 @@
   <sect2>
    <title>Termination</title>
 
-&pgnotice;
+&common;
    <para>
     The normal, graceful termination procedure is that the frontend
     sends a Terminate message and immediately closes the connection.
@@ -1263,7 +1276,7 @@
   <sect2>
    <title><acronym>SSL</acronym> Session Encryption</title>
 
-&pgnotice;
+&common;
    <para>
     If <productname>PostgreSQL</> was built with
     <acronym>SSL</acronym> support, frontend/backend communications
@@ -1296,7 +1309,9 @@
     The frontend should also be prepared to handle an ErrorMessage
     response to SSLRequest from the server.  This would only occur if
     the server predates the addition of <acronym>SSL</acronym> support
-    to <productname>PostgreSQL</>.  In this case the connection must
+    to <productname>PostgreSQL</>.  (Such servers are now very ancient,
+    and likely do not exist in the wild anymore.)
+    In this case the connection must
     be closed, but the frontend might choose to open a fresh connection
     and proceed without requesting <acronym>SSL</acronym>.
    </para>
@@ -1318,7 +1333,7 @@
 <sect1 id="protocol-replication">
 <title>Streaming Replication Protocol</title>
 
-&pgnotice;
+&common;
 <para>
 To initiate streaming replication, the frontend sends the
 <literal>replication</> parameter in the startup message. This tells the
@@ -1382,23 +1397,84 @@ The commands accepted in walsender mode are:
   </varlistentry>
 
   <varlistentry>
-    <term>START_REPLICATION <replaceable>XXX</>/<replaceable>XXX</></term>
+    <term>TIMELINE_HISTORY <replaceable class="parameter">tli</replaceable></term>
+    <listitem>
+     <para>
+      Requests the server to send over the timeline history file for timeline
+      <replaceable class="parameter">tli</replaceable>.  Server replies with a
+      result set of a single row, containing two fields:
+     </para>
+
+     <para>
+      <variablelist>
+      <varlistentry>
+      <term>
+       filename
+      </term>
+      <listitem>
+      <para>
+       Filename of the timeline history file, e.g 00000002.history.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+      <term>
+       content
+      </term>
+      <listitem>
+      <para>
+       Contents of the timeline history file.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      </variablelist>
+     </para>
+    </listitem>
+  </varlistentry>
+
+  <varlistentry>
+    <term>START_REPLICATION <replaceable class="parameter">XXX/XXX</> TIMELINE <replaceable class="parameter">tli</></term>
     <listitem>
      <para>
       Instructs server to start streaming WAL, starting at
-      WAL position <replaceable>XXX</>/<replaceable>XXX</>.
+      WAL position <replaceable class="parameter">XXX/XXX</> on timeline
+      <replaceable class="parameter">tli</>.
       The server can reply with an error, e.g. if the requested section of WAL
       has already been recycled. On success, server responds with a
       CopyBothResponse message, and then starts to stream WAL to the frontend.
-      WAL will continue to be streamed until the connection is broken;
-      no further commands will be accepted.
+     </para>
+
+     <para>
+      If the client requests a timeline that's not the latest, but is part of
+      the history of the server, the server will stream all the WAL on that
+      timeline starting from the requested startpoint, up to the point where
+      the server switched to another timeline. If the client requests
+      streaming at exactly the end of an old timeline, the server responds
+      immediately with CommandComplete without entering COPY mode.
+     </para>
+
+     <para>
+      After streaming all the WAL on a timeline that is not the latest one,
+      the server will end streaming by exiting the COPY mode. When the client
+      acknowledges this by also exiting COPY mode, the server sends a result
+      set with one row and two columns, indicating the next timeline in this
+      server's history. The first column is the next timeline's ID, and the
+      second column is the XLOG position where the switch happened. Usually,
+      the switch position is the end of the WAL that was streamed, but there
+      are corner cases where the server can send some WAL from the old
+      timeline that it has not itself replayed before promoting. Finally, the
+      server sends CommandComplete message, and is ready to accept a new
+      command.
      </para>
 
      <para>
       WAL data is sent as a series of CopyData messages.  (This allows
       other information to be intermixed; in particular the server can send
       an ErrorResponse message if it encounters a failure after beginning
-      to stream.)  The payload in each CopyData message follows this format:
+      to stream.)  The payload of each CopyData message from server to the
+      client contains a message of one of the following formats:
      </para>
 
      <para>
@@ -1422,34 +1498,32 @@ The commands accepted in walsender mode are:
       </varlistentry>
       <varlistentry>
       <term>
-          Byte8
+          Int64
       </term>
       <listitem>
       <para>
-          The starting point of the WAL data in this message, given in
-          XLogRecPtr format.
+          The starting point of the WAL data in this message.
       </para>
       </listitem>
       </varlistentry>
       <varlistentry>
       <term>
-          Byte8
+          Int64
       </term>
       <listitem>
       <para>
-          The current end of WAL on the server, given in
-          XLogRecPtr format.
+          The current end of WAL on the server.
       </para>
       </listitem>
       </varlistentry>
       <varlistentry>
       <term>
-          Byte8
+          Int64
       </term>
       <listitem>
       <para>
-          The server's system clock at the time of transmission,
-          given in TimestampTz format.
+          The server's system clock at the time of transmission, as
+          microseconds since midnight on 2000-01-01.
       </para>
       </listitem>
       </varlistentry>
@@ -1461,6 +1535,66 @@ The commands accepted in walsender mode are:
       <para>
           A section of the WAL data stream.
       </para>
+      <para>
+          A single WAL record is never split across two XLogData messages.
+          When a WAL record crosses a WAL page boundary, and is therefore
+          already split using continuation records, it can be split at the page
+          boundary. In other words, the first main WAL record and its
+          continuation records can be sent in different XLogData messages.
+      </para>
+      </listitem>
+      </varlistentry>
+      </variablelist>
+      </para>
+      </listitem>
+      </varlistentry>
+      <varlistentry>
+      <term>
+          Primary keepalive message (B)
+      </term>
+      <listitem>
+      <para>
+      <variablelist>
+      <varlistentry>
+      <term>
+          Byte1('k')
+      </term>
+      <listitem>
+      <para>
+          Identifies the message as a sender keepalive.
+      </para>
+      </listitem>
+      </varlistentry>
+      <varlistentry>
+      <term>
+          Int64
+      </term>
+      <listitem>
+      <para>
+          The current end of WAL on the server.
+      </para>
+      </listitem>
+      </varlistentry>
+      <varlistentry>
+      <term>
+          Int64
+      </term>
+      <listitem>
+      <para>
+          The server's system clock at the time of transmission, as
+          microseconds since midnight on 2000-01-01.
+      </para>
+      </listitem>
+      </varlistentry>
+      <varlistentry>
+      <term>
+          Byte1
+      </term>
+      <listitem>
+      <para>
+          1 means that the client should reply to this message as soon as
+          possible, to avoid a timeout disconnect. 0 otherwise.
+      </para>
       </listitem>
       </varlistentry>
       </variablelist>
@@ -1468,25 +1602,6 @@ The commands accepted in walsender mode are:
       </listitem>
       </varlistentry>
       </variablelist>
-     </para>
-     <para>
-       A single WAL record is never split across two CopyData messages.
-       When a WAL record crosses a WAL page boundary, and is therefore
-       already split using continuation records, it can be split at the page
-       boundary. In other words, the first main WAL record and its
-       continuation records can be sent in different CopyData messages.
-     </para>
-     <para>
-       Note that all fields within the WAL data and the above-described header
-       will be in the sending server's native format.  Endianness, and the
-       format for the timestamp, are unpredictable unless the receiver has
-       verified that the sender's system identifier matches its own
-       <filename>pg_control</> contents.
-     </para>
-     <para>
-       If the WAL sender process is terminated normally (during postmaster
-       shutdown), it will send a CommandComplete message before exiting.
-       This might not happen during an abnormal shutdown, of course.
      </para>
 
      <para>
@@ -1516,45 +1631,56 @@ The commands accepted in walsender mode are:
       </varlistentry>
       <varlistentry>
       <term>
-          Byte8
+          Int64
       </term>
       <listitem>
       <para>
           The location of the last WAL byte + 1 received and written to disk
-          in the standby, in XLogRecPtr format.
+          in the standby.
       </para>
       </listitem>
       </varlistentry>
       <varlistentry>
       <term>
-          Byte8
+          Int64
       </term>
       <listitem>
       <para>
           The location of the last WAL byte + 1 flushed to disk in
-          the standby, in XLogRecPtr format.
+          the standby.
       </para>
       </listitem>
       </varlistentry>
       <varlistentry>
       <term>
-          Byte8
+          Int64
       </term>
       <listitem>
       <para>
-          The location of the last WAL byte + 1 applied in the standby, in
-          XLogRecPtr format.
+          The location of the last WAL byte + 1 applied in the standby.
       </para>
       </listitem>
       </varlistentry>
       <varlistentry>
       <term>
-          Byte8
+          Int64
       </term>
       <listitem>
       <para>
-          The server's system clock at the time of transmission,
-          given in TimestampTz format.
+          The client's system clock at the time of transmission, as
+          microseconds since midnight on 2000-01-01.
+      </para>
+      </listitem>
+      </varlistentry>
+      <varlistentry>
+      <term>
+          Byte1
+      </term>
+      <listitem>
+      <para>
+          If 1, the client requests the server to reply to this message
+          immediately. This can be used to ping the server, to test if
+          the connection is still healthy.
       </para>
       </listitem>
       </varlistentry>
@@ -1586,28 +1712,31 @@ The commands accepted in walsender mode are:
       </varlistentry>
       <varlistentry>
       <term>
-          Byte8
+          Int64
       </term>
       <listitem>
       <para>
-          The server's system clock at the time of transmission,
-          given in TimestampTz format.
+          The client's system clock at the time of transmission, as
+          microseconds since midnight on 2000-01-01.
       </para>
       </listitem>
       </varlistentry>
       <varlistentry>
       <term>
-          Byte4
+          Int32
       </term>
       <listitem>
       <para>
-          The standby's current xmin.
+          The standby's current xmin. This may be 0, if the standby is
+          sending notification that Hot Standby feedback will no longer
+          be sent on this connection. Later non-zero messages may
+          reinitiate the feedback mechanism.
       </para>
       </listitem>
       </varlistentry>
       <varlistentry>
       <term>
-          Byte4
+          Int32
       </term>
       <listitem>
       <para>
@@ -1704,7 +1833,9 @@ The commands accepted in walsender mode are:
      </para>
      <para>
       The first ordinary result set contains the starting position of the
-      backup, given in XLogRecPtr format as a single column in a single row.
+      backup, in a single row with two columns. The first column contains
+      the start position given in XLogRecPtr format, and the second column
+      contains the corresponding timeline ID.
      </para>
      <para>
       The second ordinary result set has one row for each tablespace.
@@ -1743,9 +1874,13 @@ The commands accepted in walsender mode are:
       After the second regular result set, one or more CopyResponse results
       will be sent, one for PGDATA and one for each additional tablespace other
       than <literal>pg_default</> and <literal>pg_global</>. The data in
-      the CopyResponse results will be a tar format (using ustar00
-      extensions) dump of the tablespace contents. After the tar data is
-      complete, a final ordinary result set will be sent.
+      the CopyResponse results will be a tar format (following the
+      <quote>ustar interchange format</> specified in the POSIX 1003.1-2008
+      standard) dump of the tablespace contents, except that the two trailing
+      blocks of zeroes specified in the standard are omitted.
+      After the tar data is complete, a final ordinary result set will be sent,
+      containing the WAL end position of the backup, in the same format as
+      the start position.
      </para>
 
      <para>
@@ -1761,14 +1896,19 @@ The commands accepted in walsender mode are:
        </listitem>
        <listitem>
         <para>
+         <filename>postmaster.opts</>
+        </para>
+       </listitem>
+       <listitem>
+        <para>
          <filename>pg_xlog</>, including subdirectories. If the backup is run
-         with wal files included, a synthesized version of pg_xlog will be
+         with WAL files included, a synthesized version of <filename>pg_xlog</filename> will be
          included, but it will only contain the files necessary for the
          backup to work, not the rest of the contents.
         </para>
        </listitem>
       </itemizedlist>
-      Owner, group and file mode are set if the underlying filesystem on
+      Owner, group and file mode are set if the underlying file system on
       the server supports it.
      </para>
      <para>
@@ -1787,7 +1927,7 @@ The commands accepted in walsender mode are:
 <sect1 id="protocol-message-types">
 <title>Message Data Types</title>
 
-&pgnotice;
+&common;
 <para>
 This section describes the base data types used in messages.
 
@@ -1870,7 +2010,7 @@ characters that don't fit into your fixed-size buffer.
 <sect1 id="protocol-message-formats">
 <title>Message Formats</title>
 
-&pgnotice;
+&common;
 <para>
 This section describes the detailed format of each message.  Each is marked to
 indicate that it can be sent by a frontend (F), a backend (B), or both
@@ -4536,7 +4676,7 @@ Terminate (F)
 <sect1 id="protocol-error-fields">
 <title>Error and Notice Message Fields</title>
 
-&pgnotice;
+&common;
 <para>
 This section describes the fields that can appear in ErrorResponse and
 NoticeResponse messages.  Each field type has a single-byte identification
@@ -4669,6 +4809,72 @@ message.
 
 <varlistentry>
 <term>
+<literal>s</>
+</term>
+<listitem>
+<para>
+        Schema name: if the error was associated with a specific database
+        object, the name of the schema containing that object, if any.
+</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term>
+<literal>t</>
+</term>
+<listitem>
+<para>
+        Table name: if the error was associated with a specific table, the
+        name of the table.  (Refer to the schema name field for the name of
+        the table's schema.)
+</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term>
+<literal>c</>
+</term>
+<listitem>
+<para>
+        Column name: if the error was associated with a specific table column,
+        the name of the column.  (Refer to the schema and table name fields to
+        identify the table.)
+</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term>
+<literal>d</>
+</term>
+<listitem>
+<para>
+        Data type name: if the error was associated with a specific data type,
+        the name of the data type.  (Refer to the schema name field for the
+        name of the data type's schema.)
+</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term>
+<literal>n</>
+</term>
+<listitem>
+<para>
+        Constraint name: if the error was associated with a specific
+        constraint, the name of the constraint.  Refer to fields listed above
+        for the associated table or domain.  (For this purpose, indexes are
+        treated as constraints, even if they weren't created with constraint
+        syntax.)
+</para>
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term>
 <literal>F</>
 </term>
 <listitem>
@@ -4704,6 +4910,19 @@ message.
 
 </variablelist>
 
+<note>
+ <para>
+  The fields for schema name, table name, column name, data type name, and
+  constraint name are supplied only for a limited number of error types;
+  see <xref linkend="errcodes-appendix">.  Frontends should not assume that
+  the presence of any of these fields guarantees the presence of another
+  field.  Core error sources observe the interrelationships noted above, but
+  user-defined functions may use these fields in other ways.  In the same
+  vein, clients should not assume that these fields denote contemporary
+  objects in the current database.
+ </para>
+</note>
+
 <para>
 The client is responsible for formatting displayed information to meet its
 needs; in particular it should break long lines as needed.  Newline characters
@@ -4716,7 +4935,7 @@ not line breaks.
 <sect1 id="protocol-changes">
 <title>Summary of Changes since Protocol 2.0</title>
 
-&pgnotice;
+&common;
 <para>
 This section provides a quick checklist of changes, for the benefit of
 developers trying to update existing client libraries to protocol 3.0.

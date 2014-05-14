@@ -40,9 +40,9 @@
  */
 
 #include "pg_backup_archiver.h"
-
-#include "dumpmem.h"
+#include "pg_backup_utils.h"
 #include "dumputils.h"
+#include "parallel.h"
 
 #include <ctype.h>
 
@@ -72,6 +72,7 @@ main(int argc, char **argv)
 	RestoreOptions *opts;
 	int			c;
 	int			exit_code;
+	int			numWorkers = 1;
 	Archive    *AH;
 	char	   *inputFileSpec;
 	static int	disable_triggers = 0;
@@ -183,7 +184,7 @@ main(int argc, char **argv)
 				break;
 
 			case 'j':			/* number of restore jobs */
-				opts->number_of_jobs = atoi(optarg);
+				numWorkers = atoi(optarg);
 				break;
 
 			case 'l':			/* Dump the TOC summary */
@@ -234,11 +235,11 @@ main(int argc, char **argv)
 			case 't':			/* Dump data for this table only */
 				opts->selTypes = 1;
 				opts->selTable = 1;
-				opts->tableNames = pg_strdup(optarg);
+				simple_string_list_append(&opts->tableNames, optarg);
 				break;
 
 			case 'U':
-				opts->username = optarg;
+				opts->username = pg_strdup(optarg);
 				break;
 
 			case 'v':			/* verbose */
@@ -270,7 +271,7 @@ main(int argc, char **argv)
 				break;
 
 			case 2:				/* SET ROLE */
-				opts->use_role = optarg;
+				opts->use_role = pg_strdup(optarg);
 				break;
 
 			case 3:				/* section */
@@ -314,7 +315,7 @@ main(int argc, char **argv)
 	}
 
 	/* Can't do single-txn mode with multiple connections */
-	if (opts->single_txn && opts->number_of_jobs > 1)
+	if (opts->single_txn && numWorkers > 1)
 	{
 		fprintf(stderr, _("%s: cannot specify both --single-transaction and multiple jobs\n"),
 				progname);
@@ -373,6 +374,18 @@ main(int argc, char **argv)
 	if (opts->tocFile)
 		SortTocFromFile(AH, opts);
 
+	/* See comments in pg_dump.c */
+#ifdef WIN32
+	if (numWorkers > MAXIMUM_WAIT_OBJECTS)
+	{
+		fprintf(stderr, _("%s: maximum number of parallel jobs is %d\n"),
+				progname, MAXIMUM_WAIT_OBJECTS);
+		exit(1);
+	}
+#endif
+
+	AH->numWorkers = numWorkers;
+
 	if (opts->tocSummary)
 		PrintTOCSummary(AH, opts);
 	else
@@ -407,8 +420,8 @@ usage(const char *progname)
 	printf(_("  -F, --format=c|d|t       backup file format (should be automatic)\n"));
 	printf(_("  -l, --list               print summarized TOC of the archive\n"));
 	printf(_("  -v, --verbose            verbose mode\n"));
-	printf(_("  --help                   show this help, then exit\n"));
-	printf(_("  --version                output version information, then exit\n"));
+	printf(_("  -V, --version            output version information, then exit\n"));
+	printf(_("  -?, --help               show this help, then exit\n"));
 
 	printf(_("\nOptions controlling the restore:\n"));
 	printf(_("  -a, --data-only              restore only the data, no schema\n"));
@@ -424,7 +437,7 @@ usage(const char *progname)
 	printf(_("  -P, --function=NAME(args)    restore named function\n"));
 	printf(_("  -s, --schema-only            restore only the schema, no data\n"));
 	printf(_("  -S, --superuser=NAME         superuser user name to use for disabling triggers\n"));
-	printf(_("  -t, --table=NAME             restore named table\n"));
+	printf(_("  -t, --table=NAME             restore named table(s)\n"));
 	printf(_("  -T, --trigger=NAME           restore named trigger\n"));
 	printf(_("  -x, --no-privileges          skip restoration of access privileges (grant/revoke)\n"));
 	printf(_("  -1, --single-transaction     restore as a single transaction\n"));

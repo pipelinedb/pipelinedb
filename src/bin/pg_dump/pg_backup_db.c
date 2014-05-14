@@ -11,8 +11,9 @@
  */
 
 #include "pg_backup_db.h"
-#include "dumpmem.h"
+#include "pg_backup_utils.h"
 #include "dumputils.h"
+#include "parallel.h"
 
 #include <unistd.h>
 #include <ctype.h>
@@ -23,45 +24,30 @@
 
 #define DB_MAX_ERR_STMT 128
 
+/* translator: this is a module name */
 static const char *modulename = gettext_noop("archiver (db)");
 
 static void _check_database_version(ArchiveHandle *AH);
 static PGconn *_connectDB(ArchiveHandle *AH, const char *newdbname, const char *newUser);
 static void notice_processor(void *arg, const char *message);
 
-static int
-_parse_version(const char *versionString)
-{
-	int			v;
-
-	v = parse_version(versionString);
-	if (v < 0)
-		exit_horribly(modulename, "could not parse version string \"%s\"\n", versionString);
-
-	return v;
-}
-
 static void
 _check_database_version(ArchiveHandle *AH)
 {
-	int			myversion;
 	const char *remoteversion_str;
 	int			remoteversion;
 
-	myversion = _parse_version(PG_VERSION);
-
 	remoteversion_str = PQparameterStatus(AH->connection, "server_version");
-	if (!remoteversion_str)
+	remoteversion = PQserverVersion(AH->connection);
+	if (remoteversion == 0 || !remoteversion_str)
 		exit_horribly(modulename, "could not get server_version from libpq\n");
-
-	remoteversion = _parse_version(remoteversion_str);
 
 	AH->public.remoteVersionStr = pg_strdup(remoteversion_str);
 	AH->public.remoteVersion = remoteversion;
 	if (!AH->archiveRemoteVersion)
 		AH->archiveRemoteVersion = AH->public.remoteVersionStr;
 
-	if (myversion != remoteversion
+	if (remoteversion != PG_VERSION_NUM
 		&& (remoteversion < AH->public.minRemoteVersion ||
 			remoteversion > AH->public.maxRemoteVersion))
 	{
@@ -300,7 +286,8 @@ ConnectDatabase(Archive *AHX,
 	/* check to see that the backend connection was successfully made */
 	if (PQstatus(AH->connection) == CONNECTION_BAD)
 		exit_horribly(modulename, "connection to database \"%s\" failed: %s",
-					  PQdb(AH->connection), PQerrorMessage(AH->connection));
+					  PQdb(AH->connection) ? PQdb(AH->connection) : "",
+					  PQerrorMessage(AH->connection));
 
 	/* check for version mismatch */
 	_check_database_version(AH);
@@ -308,12 +295,30 @@ ConnectDatabase(Archive *AHX,
 	PQsetNoticeProcessor(AH->connection, notice_processor, NULL);
 }
 
+/*
+ * Close the connection to the database and also cancel off the query if we
+ * have one running.
+ */
 void
 DisconnectDatabase(Archive *AHX)
 {
 	ArchiveHandle *AH = (ArchiveHandle *) AHX;
+	PGcancel   *cancel;
+	char		errbuf[1];
 
-	PQfinish(AH->connection);	/* noop if AH->connection is NULL */
+	if (!AH->connection)
+		return;
+
+	if (PQtransactionStatus(AH->connection) == PQTRANS_ACTIVE)
+	{
+		if ((cancel = PQgetCancel(AH->connection)))
+		{
+			PQcancel(cancel, errbuf, sizeof(errbuf));
+			PQfreeCancel(cancel);
+		}
+	}
+
+	PQfinish(AH->connection);
 	AH->connection = NULL;
 }
 

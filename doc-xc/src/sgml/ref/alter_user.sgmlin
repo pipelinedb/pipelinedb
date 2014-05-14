@@ -49,7 +49,6 @@ ALTER USER <replaceable class="PARAMETER">name</replaceable> RESET ALL
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER USER</command> is now an alias for
    <xref linkend="sql-alterrole">.
@@ -59,14 +58,10 @@ ALTER USER <replaceable class="PARAMETER">name</replaceable> RESET ALL
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The <command>ALTER USER</command> statement is a
-<!## PG>
    <productname>PostgreSQL</productname> extension.  The SQL standard
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> extension.  The SQL standard
-<!## end>
    leaves the definition of users to the implementation.
   </para>
  </refsect1>

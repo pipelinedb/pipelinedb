@@ -29,7 +29,7 @@
  * and a non-lossy page.
  *
  *
- * Copyright (c) 2003-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2003-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/nodes/tidbitmap.c
@@ -40,7 +40,7 @@
 
 #include <limits.h>
 
-#include "access/htup.h"
+#include "access/htup_details.h"
 #include "nodes/bitmapset.h"
 #include "nodes/tidbitmap.h"
 #include "utils/hsearch.h"
@@ -361,7 +361,7 @@ tbm_union_page(TIDBitmap *a, const PagetableEntry *bpage)
 	if (bpage->ischunk)
 	{
 		/* Scan b's chunk, mark each indicated page lossy in a */
-		for (wordnum = 0; wordnum < WORDS_PER_PAGE; wordnum++)
+		for (wordnum = 0; wordnum < WORDS_PER_CHUNK; wordnum++)
 		{
 			bitmapword	w = bpage->words[wordnum];
 
@@ -473,7 +473,7 @@ tbm_intersect_page(TIDBitmap *a, PagetableEntry *apage, const TIDBitmap *b)
 		/* Scan each bit in chunk, try to clear */
 		bool		candelete = true;
 
-		for (wordnum = 0; wordnum < WORDS_PER_PAGE; wordnum++)
+		for (wordnum = 0; wordnum < WORDS_PER_CHUNK; wordnum++)
 		{
 			bitmapword	w = apage->words[wordnum];
 

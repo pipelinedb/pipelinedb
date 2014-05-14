@@ -21,9 +21,9 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-VACUUM [ ( { FULL | FREEZE | VERBOSE | ANALYZE } [, ...] ) ] [ <replaceable class="PARAMETER">table</replaceable> [ (<replaceable class="PARAMETER">column</replaceable> [, ...] ) ] ]
-VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] [ <replaceable class="PARAMETER">table</replaceable> ]
-VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] ANALYZE [ <replaceable class="PARAMETER">table</replaceable> [ (<replaceable class="PARAMETER">column</replaceable> [, ...] ) ] ]
+VACUUM [ ( { FULL | FREEZE | VERBOSE | ANALYZE } [, ...] ) ] [ <replaceable class="PARAMETER">table_name</replaceable> [ (<replaceable class="PARAMETER">column_name</replaceable> [, ...] ) ] ]
+VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] [ <replaceable class="PARAMETER">table_name</replaceable> ]
+VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] ANALYZE [ <replaceable class="PARAMETER">table_name</replaceable> [ (<replaceable class="PARAMETER">column_name</replaceable> [, ...] ) ] ]
 </synopsis>
  </refsynopsisdiv>
 
@@ -31,15 +31,9 @@ VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] ANALYZE [ <replaceable class="PARAMETER">
   <title>Description</title>
 
 &common;
-
   <para>
    <command>VACUUM</command> reclaims storage occupied by dead tuples.
-<!## PG>
    In normal <productname>PostgreSQL</productname> operation, tuples that
-<!## end>
-<!## XC>
-   In normal <productname>Postgres-XC</productname> operation, tuples that
-<!## end>
    are deleted or obsoleted by an update are not physically removed from
    their table; they remain present until a <command>VACUUM</command> is
    done.  Therefore it's necessary to do <command>VACUUM</command>
@@ -93,6 +87,7 @@ VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] ANALYZE [ <replaceable class="PARAMETER">
 
  <refsect1>
   <title>Parameters</title>
+
 &common;
   <variablelist>
    <varlistentry>
@@ -142,7 +137,7 @@ VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] ANALYZE [ <replaceable class="PARAMETER">
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="PARAMETER">table</replaceable></term>
+    <term><replaceable class="PARAMETER">table_name</replaceable></term>
     <listitem>
      <para>
       The name (optionally schema-qualified) of a specific table to
@@ -152,7 +147,7 @@ VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] ANALYZE [ <replaceable class="PARAMETER">
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="PARAMETER">column</replaceable></term>
+    <term><replaceable class="PARAMETER">column_name</replaceable></term>
     <listitem>
      <para>
       The name of a specific column to analyze. Defaults to all columns.
@@ -166,6 +161,7 @@ VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] ANALYZE [ <replaceable class="PARAMETER">
  <refsect1>
   <title>Outputs</title>
 
+&common;
    <para>
     When <literal>VERBOSE</> is specified, <command>VACUUM</> emits
     progress messages to indicate which table is currently being
@@ -176,6 +172,7 @@ VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] ANALYZE [ <replaceable class="PARAMETER">
  <refsect1>
   <title>Notes</title>
 
+&common;
    <para>
     To vacuum a table, one must ordinarily be the table's owner or a
     superuser.  However, database owners are allowed to
@@ -205,12 +202,7 @@ VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] ANALYZE [ <replaceable class="PARAMETER">
     ANALYZE</command> command for the affected table. This will update the
     system catalogs with
     the results of all recent changes, and allow the
-<!## PG>
     <productname>PostgreSQL</productname> query planner to make better
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> query planner to make better
-<!## end>
     choices in planning queries.
    </para>
 
@@ -231,12 +223,7 @@ VACUUM [ FULL ] [ FREEZE ] [ VERBOSE ] ANALYZE [ <replaceable class="PARAMETER">
    </para>
 
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> includes an <quote>autovacuum</>
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> includes an <quote>autovacuum</>
-<!## end>
     facility which can automate routine vacuum maintenance.  For more
     information about automatic and manual vacuuming, see
     <xref linkend="routine-vacuuming">.
@@ -279,13 +266,13 @@ CPU 0.07s/0.39u sec elapsed 1.56 sec.
 INFO:  analyzing "public.onek"
 INFO:  "onek": 36 pages, 1000 rows sampled, 1000 estimated total rows
 VACUUM
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>VACUUM</command> statement in the SQL standard.
   </para>

@@ -5,7 +5,7 @@
  *	  commands.  At one time acted as an interface between the Lisp and C
  *	  systems.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2010-2012 Postgres-XC Development Group
  *
@@ -17,6 +17,7 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/reloptions.h"
 #include "access/twophase.h"
 #include "access/xact.h"
@@ -26,6 +27,9 @@
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "catalog/toasting.h"
+#ifdef PGXC
+#include "catalog/index.h"
+#endif /* PGXC */
 #include "commands/alter.h"
 #include "commands/async.h"
 #include "commands/cluster.h"
@@ -37,8 +41,10 @@
 #include "commands/dbcommands.h"
 #include "commands/defrem.h"
 #include "commands/discard.h"
+#include "commands/event_trigger.h"
 #include "commands/explain.h"
 #include "commands/extension.h"
+#include "commands/matview.h"
 #include "commands/lockcmds.h"
 #include "commands/pipelinecmds.h"
 #include "commands/portalcmds.h"
@@ -104,6 +110,22 @@ static bool IsStmtAllowedInLockedMode(Node *parsetree,
 /* Hook for plugins to get control in ProcessUtility() */
 ProcessUtility_hook_type ProcessUtility_hook = NULL;
 
+/* local function declarations */
+static void ProcessUtilitySlow(Node *parsetree,
+				   const char *queryString,
+				   ProcessUtilityContext context,
+				   ParamListInfo params,
+				   DestReceiver *dest,
+#ifdef PGXC
+							   bool sentToRemote,
+#endif
+				   char *completionTag);
+#ifdef PGXC
+static void ExecDropStmt(DropStmt *stmt, bool isTopLevel, const char *queryString, bool sentToRemote);
+#else
+static void ExecDropStmt(DropStmt *stmt, bool isTopLevel);
+#endif
+
 
 /*
  * Verify user has ownership of specified relation, else ereport.
@@ -168,7 +190,7 @@ CommandIsReadOnly(Node *parsetree)
 		{
 			case CMD_SELECT:
 				if (stmt->rowMarks != NIL)
-					return false;		/* SELECT FOR UPDATE/SHARE */
+					return false;		/* SELECT FOR [KEY] UPDATE/SHARE */
 				else if (stmt->hasModifyingCTE)
 					return false;		/* data-modifying CTE */
 				else
@@ -222,6 +244,8 @@ check_xact_readonly(Node *parsetree)
 		case T_CommentStmt:
 		case T_DefineStmt:
 		case T_CreateCastStmt:
+		case T_CreateEventTrigStmt:
+		case T_AlterEventTrigStmt:
 		case T_CreateConversionStmt:
 		case T_CreatedbStmt:
 		case T_CreateDomainStmt:
@@ -237,6 +261,7 @@ check_xact_readonly(Node *parsetree)
 		case T_CreateSeqStmt:
 		case T_CreateStmt:
 		case T_CreateTableAsStmt:
+		case T_RefreshMatViewStmt:
 		case T_CreateTableSpaceStmt:
 		case T_CreateTrigStmt:
 		case T_CompositeTypeStmt:
@@ -338,8 +363,9 @@ CheckRestrictedOperation(const char *cmdname)
  *
  *	parsetree: the parse tree for the utility statement
  *	queryString: original source text of command
+ *	context: identifies source of statement (toplevel client command,
+ *		non-toplevel client command, subcommand of a larger utility command)
  *	params: parameters to use during execution
- *	isTopLevel: true if executing a "top level" (interactively issued) command
  *	dest: where to send results
  *	completionTag: points to a buffer of size COMPLETION_TAG_BUFSIZE
  *		in which to store a command completion status string.
@@ -355,8 +381,8 @@ CheckRestrictedOperation(const char *cmdname)
 void
 ProcessUtility(Node *parsetree,
 			   const char *queryString,
+			   ProcessUtilityContext context,
 			   ParamListInfo params,
-			   bool isTopLevel,
 			   DestReceiver *dest,
 #ifdef PGXC
 			   bool	sentToRemote,
@@ -371,32 +397,47 @@ ProcessUtility(Node *parsetree,
 	 * call standard_ProcessUtility().
 	 */
 	if (ProcessUtility_hook)
-		(*ProcessUtility_hook) (parsetree, queryString, params,
-								isTopLevel, dest,
+		(*ProcessUtility_hook) (parsetree, queryString,
+								context, params,
+								dest, 
 #ifdef PGXC
 								sentToRemote,
 #endif /* PGXC */
 								completionTag);
 	else
-		standard_ProcessUtility(parsetree, queryString, params,
-								isTopLevel, dest,
+		standard_ProcessUtility(parsetree, queryString,
+								context, params,
+								dest,
 #ifdef PGXC
 								sentToRemote,
 #endif /* PGXC */
 								completionTag);
 }
 
+/*
+ * standard_ProcessUtility itself deals only with utility commands for
+ * which we do not provide event trigger support.  Commands that do have
+ * such support are passed down to ProcessUtilitySlow, which contains the
+ * necessary infrastructure for such triggers.
+ *
+ * This division is not just for performance: it's critical that the
+ * event trigger code not be invoked when doing START TRANSACTION for
+ * example, because we might need to refresh the event trigger cache,
+ * which requires being in a valid transaction.
+ */
 void
 standard_ProcessUtility(Node *parsetree,
 						const char *queryString,
+						ProcessUtilityContext context,
 						ParamListInfo params,
-						bool isTopLevel,
 						DestReceiver *dest,
 #ifdef PGXC
 						bool sentToRemote,
 #endif /* PGXC */
 						char *completionTag)
 {
+	bool		isTopLevel = (context == PROCESS_UTILITY_TOPLEVEL);
+
 #ifdef PGXC
 	/*
 	 * For more detail see comments in function pgxc_lock_for_backup.
@@ -429,7 +470,6 @@ standard_ProcessUtility(Node *parsetree,
 			pgxc_lock_for_utility_stmt(parsetree);
 	}
 #endif
-
 	check_xact_readonly(parsetree);
 
 	if (completionTag)
@@ -623,16 +663,20 @@ standard_ProcessUtility(Node *parsetree,
 							   completionTag);
 			break;
 
-			/*
-			 * relation and attribute manipulation
-			 */
-		case T_CreateSchemaStmt:
+		case T_DoStmt:
+			ExecuteDoStmt((DoStmt *) parsetree);
+			break;
+
+		case T_CreateTableSpaceStmt:
 #ifdef PGXC
-			CreateSchemaCommand((CreateSchemaStmt *) parsetree,
-								queryString, sentToRemote);
-#else
-			CreateSchemaCommand((CreateSchemaStmt *) parsetree,
-								queryString);
+			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
+#endif
+			/* no event triggers for global objects */
+			PreventTransactionChain(isTopLevel, "CREATE TABLESPACE");
+			CreateTableSpace((CreateTableSpaceStmt *) parsetree);
+#ifdef PGXC
+			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
+				ExecUtilityWithMessage(queryString, sentToRemote, false);
 #endif
 			break;
 
@@ -644,7 +688,8 @@ standard_ProcessUtility(Node *parsetree,
 				if (remote)
 				{
 					Node *stmt = lfirst(remote->head);
-					ProcessUtility(stmt, queryString, params, false, None_Receiver, true, NULL);
+					ProcessUtility(stmt, queryString, PROCESS_UTILITY_TOPLEVEL,
+							params, None_Receiver, true, NULL);
 				}
 			}
 			break;
@@ -656,163 +701,10 @@ standard_ProcessUtility(Node *parsetree,
 				if (remote)
 				{
 					Node *stmt = lfirst(remote->head);
-					ProcessUtility(stmt, queryString, params, false, None_Receiver, true, NULL);
+					ProcessUtility(stmt, queryString, PROCESS_UTILITY_TOPLEVEL,
+							params, None_Receiver, true, NULL);
 				}
 			}
-			break;
-		case T_CreateStmt:
-		case T_CreateForeignTableStmt:
-			{
-				List	   *stmts;
-				ListCell   *l;
-				Oid			relOid;
-#ifdef PGXC
-				bool		is_temp = false;
-#endif
-
-				/* Run parse analysis ... */
-				stmts = transformCreateStmt((CreateStmt *) parsetree,
-											queryString);
-#ifdef PGXC
-				if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
-				{
-					/*
-					 * Scan the list of objects.
-					 * Temporary tables are created on Datanodes only.
-					 * Non-temporary objects are created on all nodes.
-					 * In case temporary and non-temporary objects are mized return an error.
-					 */
-					bool	is_first = true;
-
-					foreach(l, stmts)
-					{
-						Node       *stmt = (Node *) lfirst(l);
-
-						if (IsA(stmt, CreateStmt))
-						{
-							CreateStmt *stmt_loc = (CreateStmt *) stmt;
-							bool is_object_temp = stmt_loc->relation->relpersistence == RELPERSISTENCE_TEMP;
-
-							if (is_first)
-							{
-								is_first = false;
-								if (is_object_temp)
-									is_temp = true;
-							}
-							else
-							{
-								if (is_object_temp != is_temp)
-									ereport(ERROR,
-											(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-											 errmsg("CREATE not supported for TEMP and non-TEMP objects"),
-											 errdetail("You should separate TEMP and non-TEMP objects")));
-							}
-						}
-						else if (IsA(stmt, CreateForeignTableStmt))
-						{
-							/* There are no temporary foreign tables */
-							if (is_first)
-							{
-								is_first = false;
-							}
-							else
-							{
-								if (!is_temp)
-									ereport(ERROR,
-											(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-											 errmsg("CREATE not supported for TEMP and non-TEMP objects"),
-											 errdetail("You should separate TEMP and non-TEMP objects")));
-							}
-						}
-					}
-				}
-
-				/*
-				 * Add a RemoteQuery node for a query at top level on a remote
-				 * Coordinator, if not already done so
-				 */
-				if (!sentToRemote)
-					stmts = AddRemoteQueryNode(stmts, queryString, EXEC_ON_ALL_NODES, is_temp);
-#endif
-
-				/* ... and do it */
-				foreach(l, stmts)
-				{
-					Node	   *stmt = (Node *) lfirst(l);
-
-					if (IsA(stmt, CreateStmt))
-					{
-						Datum		toast_options;
-						static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
-
-#ifdef PGXC
-						/* Set temporary object object flag in pooler */
-						if (is_temp)
-							PoolManagerSetCommand(POOL_CMD_TEMP, NULL);
-#endif
-
-						/* Create the table itself */
-						relOid = DefineRelation((CreateStmt *) stmt,
-												RELKIND_RELATION,
-												InvalidOid);
-						/*
-						 * Let AlterTableCreateToastTable decide if this one
-						 * needs a secondary relation too.
-						 */
-						CommandCounterIncrement();
-
-						/* parse and validate reloptions for the toast table */
-						toast_options = transformRelOptions((Datum) 0,
-											  ((CreateStmt *) stmt)->options,
-															"toast",
-															validnsps,
-															true, false);
-
-						(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options,
-											   true);
-
-						AlterTableCreateToastTable(relOid, toast_options);
-					}
-					else if (IsA(stmt, CreateForeignTableStmt))
-					{
-						/* Create the table itself */
-						relOid = DefineRelation((CreateStmt *) stmt,
-												RELKIND_FOREIGN_TABLE,
-												InvalidOid);
-						CreateForeignTable((CreateForeignTableStmt *) stmt,
-										   relOid);
-					}
-					else
-					{
-						/* Recurse for anything else */
-						ProcessUtility(stmt,
-									   queryString,
-									   params,
-									   false,
-									   None_Receiver,
-#ifdef PGXC
-									   true,
-#endif /* PGXC */
-									   NULL);
-					}
-
-					/* Need CCI between commands */
-					if (lnext(l) != NULL)
-						CommandCounterIncrement();
-				}
-			}
-			break;
-
-		case T_CreateTableSpaceStmt:
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
-#endif
-				PreventTransactionChain(isTopLevel, "CREATE TABLESPACE");
-			CreateTableSpace((CreateTableSpaceStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
-				ExecUtilityWithMessage(queryString, sentToRemote, false);
-#endif
 			break;
 
 		case T_DropTableSpaceStmt:
@@ -820,8 +712,8 @@ standard_ProcessUtility(Node *parsetree,
 			/* Allow this to be run inside transaction block on remote nodes */
 			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
 #endif
-				PreventTransactionChain(isTopLevel, "DROP TABLESPACE");
-
+			/* no event triggers for global objects */
+			PreventTransactionChain(isTopLevel, "DROP TABLESPACE");
 			DropTableSpace((DropTableSpaceStmt *) parsetree);
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR)
@@ -830,133 +722,12 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_AlterTableSpaceOptionsStmt:
+			/* no event triggers for global objects */
 			AlterTableSpaceOptions((AlterTableSpaceOptionsStmt *) parsetree);
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR)
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true, EXEC_ON_ALL_NODES, false);
 #endif
-			break;
-
-		case T_CreateExtensionStmt:
-			CreateExtension((CreateExtensionStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_AlterExtensionStmt:
-			ExecAlterExtensionStmt((AlterExtensionStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_AlterExtensionContentsStmt:
-			ExecAlterExtensionContentsStmt((AlterExtensionContentsStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_CreateFdwStmt:
-#ifdef PGXC
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("Postgres-XC does not support FOREIGN DATA WRAPPER yet"),
-					 errdetail("The feature is not currently supported")));
-#endif
-			CreateForeignDataWrapper((CreateFdwStmt *) parsetree);
-			break;
-
-		case T_AlterFdwStmt:
-			AlterForeignDataWrapper((AlterFdwStmt *) parsetree);
-			break;
-
-		case T_CreateForeignServerStmt:
-#ifdef PGXC
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("Postgres-XC does not support SERVER yet"),
-					 errdetail("The feature is not currently supported")));
-#endif
-			CreateForeignServer((CreateForeignServerStmt *) parsetree);
-			break;
-
-		case T_AlterForeignServerStmt:
-			AlterForeignServer((AlterForeignServerStmt *) parsetree);
-			break;
-
-		case T_CreateUserMappingStmt:
-#ifdef PGXC
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("Postgres-XC does not support USER MAPPING yet"),
-					 errdetail("The feature is not currently supported")));
-#endif
-			CreateUserMapping((CreateUserMappingStmt *) parsetree);
-			break;
-
-		case T_AlterUserMappingStmt:
-			AlterUserMapping((AlterUserMappingStmt *) parsetree);
-			break;
-
-		case T_DropUserMappingStmt:
-			RemoveUserMapping((DropUserMappingStmt *) parsetree);
-			break;
-
-		case T_DropStmt:
-			switch (((DropStmt *) parsetree)->removeType)
-			{
-				case OBJECT_INDEX:
-					if (((DropStmt *) parsetree)->concurrent)
-						PreventTransactionChain(isTopLevel,
-												"DROP INDEX CONCURRENTLY");
-					/* fall through */
-
-				case OBJECT_TABLE:
-				case OBJECT_SEQUENCE:
-				case OBJECT_VIEW:
-				case OBJECT_FOREIGN_TABLE:
-#ifdef PGXC
-					{
-						bool		is_temp = false;
-						RemoteQueryExecType exec_type = EXEC_ON_ALL_NODES;
-
-						/* Check restrictions on objects dropped */
-						DropStmtPreTreatment((DropStmt *) parsetree, queryString, sentToRemote,
-											 &is_temp, &exec_type);
-#endif
-						RemoveRelations((DropStmt *) parsetree);
-#ifdef PGXC
-						/* DROP is done depending on the object type and its temporary type */
-						if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
-							ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false,
-												   exec_type, is_temp);
-					}
-#endif
-					break;
-				default:
-#ifdef PGXC
-					{
-						bool		is_temp = false;
-						RemoteQueryExecType exec_type = EXEC_ON_ALL_NODES;
-
-						/* Check restrictions on objects dropped */
-						DropStmtPreTreatment((DropStmt *) parsetree, queryString, sentToRemote,
-											 &is_temp, &exec_type);
-#endif
-						RemoveObjects((DropStmt *) parsetree);
-#ifdef PGXC
-						if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
-							ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false,
-												   exec_type, is_temp);
-					}
-#endif
-					break;
-			}
 			break;
 
 		case T_TruncateStmt:
@@ -994,7 +765,8 @@ standard_ProcessUtility(Node *parsetree,
 		case T_CopyStmt:
 			{
 				uint64		processed;
-				processed = DoCopy((CopyStmt *) parsetree, queryString);
+
+				DoCopy((CopyStmt *) parsetree, queryString, &processed);
 				if (completionTag)
 					snprintf(completionTag, COMPLETION_TAG_BUFSIZE,
 							 "COPY " UINT64_FORMAT, processed);
@@ -1017,241 +789,8 @@ standard_ProcessUtility(Node *parsetree,
 			DeallocateQuery((DeallocateStmt *) parsetree);
 			break;
 
-			/*
-			 * schema
-			 */
-		case T_RenameStmt:
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
-			{
-				RenameStmt *stmt = (RenameStmt *) parsetree;
-				RemoteQueryExecType exec_type;
-				bool is_temp = false;
-
-				/* Try to use the object relation if possible */
-				if (stmt->relation)
-				{
-					/*
-					 * When a relation is defined, it is possible that this object does
-					 * not exist but an IF EXISTS clause might be used. So we do not do
-					 * any error check here but block the access to remote nodes to
-					 * this object as it does not exisy
-					 */
-					Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-
-					if (OidIsValid(relid))
-						exec_type = ExecUtilityFindNodes(stmt->renameType,
-														 relid,
-														 &is_temp);
-					else
-						exec_type = EXEC_ON_NONE;
-				}
-				else
-				{
-					exec_type = ExecUtilityFindNodes(stmt->renameType,
-													 InvalidOid,
-													 &is_temp);
-				}
-
-				ExecUtilityStmtOnNodes(queryString,
-									   NULL,
-									   sentToRemote,
-									   false,
-									   exec_type,
-									   is_temp);
-			}
-#endif
-			ExecRenameStmt((RenameStmt *) parsetree);
-			break;
-
-		case T_AlterObjectSchemaStmt:
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
-			{
-				AlterObjectSchemaStmt *stmt = (AlterObjectSchemaStmt *) parsetree;
-				RemoteQueryExecType exec_type;
-				bool is_temp = false;
-
-				/* Try to use the object relation if possible */
-				if (stmt->relation)
-				{
-					/*
-					 * When a relation is defined, it is possible that this object does
-					 * not exist but an IF EXISTS clause might be used. So we do not do
-					 * any error check here but block the access to remote nodes to
-					 * this object as it does not exisy
-					 */
-					Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-
-					if (OidIsValid(relid))
-						exec_type = ExecUtilityFindNodes(stmt->objectType,
-														 relid,
-														 &is_temp);
-					else
-						exec_type = EXEC_ON_NONE;
-				}
-				else
-				{
-					exec_type = ExecUtilityFindNodes(stmt->objectType,
-													 InvalidOid,
-													 &is_temp);
-				}
-
-				ExecUtilityStmtOnNodes(queryString,
-									   NULL,
-									   sentToRemote,
-									   false,
-									   exec_type,
-									   is_temp);
-			}
-#endif
-			ExecAlterObjectSchemaStmt((AlterObjectSchemaStmt *) parsetree);
-			break;
-
-		case T_AlterOwnerStmt:
-			ExecAlterOwnerStmt((AlterOwnerStmt *) parsetree);
-
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_AlterTableStmt:
-			{
-				AlterTableStmt *atstmt = (AlterTableStmt *) parsetree;
-				Oid			relid;
-				List	   *stmts = NIL;
-				ListCell   *l;
-				LOCKMODE	lockmode;
-
-				/*
-				 * Figure out lock mode, and acquire lock.	This also does
-				 * basic permissions checks, so that we won't wait for a lock
-				 * on (for example) a relation on which we have no
-				 * permissions.
-				 */
-				lockmode = AlterTableGetLockLevel(atstmt->cmds);
-				relid = AlterTableLookupRelation(atstmt, lockmode);
-
-				if (OidIsValid(relid))
-				{
-					/* Run parse analysis ... */
-					stmts = transformAlterTableStmt(atstmt, queryString);
-
-#ifdef PGXC
-					/*
-					 * Add a RemoteQuery node for a query at top level on a remote
-					 * Coordinator, if not already done so
-					 */
-					if (!sentToRemote)
-					{
-						bool is_temp = false;
-						RemoteQueryExecType exec_type;
-						Oid relid = RangeVarGetRelid(atstmt->relation,
-													 NoLock, true);
-
-						if (OidIsValid(relid))
-						{
-							exec_type = ExecUtilityFindNodes(atstmt->relkind,
-															 relid,
-															 &is_temp);
-
-							stmts = AddRemoteQueryNode(stmts, queryString, exec_type, is_temp);
-						}
-					}
-#endif
-
-					/* ... and do it */
-					foreach(l, stmts)
-					{
-						Node	   *stmt = (Node *) lfirst(l);
-
-						if (IsA(stmt, AlterTableStmt))
-						{
-							/* Do the table alteration proper */
-							AlterTable(relid, lockmode, (AlterTableStmt *) stmt);
-						}
-						else
-						{
-							/* Recurse for anything else */
-							ProcessUtility(stmt,
-										   queryString,
-										   params,
-										   false,
-										   None_Receiver,
-#ifdef PGXC
-										   true,
-#endif /* PGXC */
-										   NULL);
-						}
-
-						/* Need CCI between commands */
-						if (lnext(l) != NULL)
-							CommandCounterIncrement();
-					}
-				}
-				else
-					ereport(NOTICE,
-						  (errmsg("relation \"%s\" does not exist, skipping",
-								  atstmt->relation->relname)));
-			}
-			break;
-
-		case T_AlterDomainStmt:
-			{
-				AlterDomainStmt *stmt = (AlterDomainStmt *) parsetree;
-
-				/*
-				 * Some or all of these functions are recursive to cover
-				 * inherited things, so permission checks are done there.
-				 */
-				switch (stmt->subtype)
-				{
-					case 'T':	/* ALTER DOMAIN DEFAULT */
-
-						/*
-						 * Recursively alter column default for table and, if
-						 * requested, for descendants
-						 */
-						AlterDomainDefault(stmt->typeName,
-										   stmt->def);
-						break;
-					case 'N':	/* ALTER DOMAIN DROP NOT NULL */
-						AlterDomainNotNull(stmt->typeName,
-										   false);
-						break;
-					case 'O':	/* ALTER DOMAIN SET NOT NULL */
-						AlterDomainNotNull(stmt->typeName,
-										   true);
-						break;
-					case 'C':	/* ADD CONSTRAINT */
-						AlterDomainAddConstraint(stmt->typeName,
-												 stmt->def);
-						break;
-					case 'X':	/* DROP CONSTRAINT */
-						AlterDomainDropConstraint(stmt->typeName,
-												  stmt->name,
-												  stmt->behavior,
-												  stmt->missing_ok);
-						break;
-					case 'V':	/* VALIDATE CONSTRAINT */
-						AlterDomainValidateConstraint(stmt->typeName,
-													  stmt->name);
-						break;
-					default:	/* oops */
-						elog(ERROR, "unrecognized alter domain type: %d",
-							 (int) stmt->subtype);
-						break;
-				}
-			}
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
 		case T_GrantStmt:
+			/* no event triggers for global objects */
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
 			{
@@ -1306,6 +845,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_GrantRoleStmt:
+			/* no event triggers for global objects */
 			GrantRole((GrantRoleStmt *) parsetree);
 
 #ifdef PGXC
@@ -1314,282 +854,12 @@ standard_ProcessUtility(Node *parsetree,
 #endif
 			break;
 
-		case T_AlterDefaultPrivilegesStmt:
-			ExecAlterDefaultPrivilegesStmt((AlterDefaultPrivilegesStmt *) parsetree);
-
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-			/*
-			 * **************** object creation / destruction *****************
-			 */
-		case T_DefineStmt:
-			{
-				DefineStmt *stmt = (DefineStmt *) parsetree;
-
-				switch (stmt->kind)
-				{
-					case OBJECT_AGGREGATE:
-						DefineAggregate(stmt->defnames, stmt->args,
-										stmt->oldstyle, stmt->definition);
-						break;
-					case OBJECT_OPERATOR:
-						Assert(stmt->args == NIL);
-						DefineOperator(stmt->defnames, stmt->definition);
-						break;
-					case OBJECT_TYPE:
-						Assert(stmt->args == NIL);
-						DefineType(stmt->defnames, stmt->definition);
-						break;
-					case OBJECT_TSPARSER:
-						Assert(stmt->args == NIL);
-						DefineTSParser(stmt->defnames, stmt->definition);
-						break;
-					case OBJECT_TSDICTIONARY:
-						Assert(stmt->args == NIL);
-						DefineTSDictionary(stmt->defnames, stmt->definition);
-						break;
-					case OBJECT_TSTEMPLATE:
-						Assert(stmt->args == NIL);
-						DefineTSTemplate(stmt->defnames, stmt->definition);
-						break;
-					case OBJECT_TSCONFIGURATION:
-						Assert(stmt->args == NIL);
-						DefineTSConfiguration(stmt->defnames, stmt->definition);
-						break;
-					case OBJECT_COLLATION:
-						Assert(stmt->args == NIL);
-						DefineCollation(stmt->defnames, stmt->definition);
-						break;
-					default:
-						elog(ERROR, "unrecognized define stmt type: %d",
-							 (int) stmt->kind);
-						break;
-				}
-			}
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_CompositeTypeStmt:		/* CREATE TYPE (composite) */
-			{
-				CompositeTypeStmt *stmt = (CompositeTypeStmt *) parsetree;
-
-				DefineCompositeType(stmt->typevar, stmt->coldeflist);
-			}
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_CreateEnumStmt:	/* CREATE TYPE AS ENUM */
-			DefineEnum((CreateEnumStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_CreateRangeStmt:	/* CREATE TYPE AS RANGE */
-			DefineRange((CreateRangeStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_AlterEnumStmt:	/* ALTER TYPE (enum) */
-
-			/*
-			 * We disallow this in transaction blocks, because we can't cope
-			 * with enum OID values getting into indexes and then having their
-			 * defining pg_enum entries go away.
-			 */
-#ifdef PGXC
-			/* Allow this to be run inside transaction block on remote nodes */
-			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
-#endif
-				PreventTransactionChain(isTopLevel, "ALTER TYPE ... ADD");
-			AlterEnum((AlterEnumStmt *) parsetree);
-#ifdef PGXC
-			/*
-			 * In this case force autocommit, this transaction cannot be launched
-			 * inside a transaction block.
-			 */
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_ViewStmt:		/* CREATE VIEW */
-			DefineView((ViewStmt *) parsetree, queryString);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-			{
-				if (!ExecIsTempObjectIncluded())
-					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_COORDS, false);
-			}
-#endif
-			break;
-
-		case T_CreateFunctionStmt:		/* CREATE FUNCTION */
-			CreateFunction((CreateFunctionStmt *) parsetree, queryString);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_AlterFunctionStmt:		/* ALTER FUNCTION */
-			AlterFunction((AlterFunctionStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_IndexStmt:		/* CREATE INDEX */
-			{
-				IndexStmt  *stmt = (IndexStmt *) parsetree;
-
-#ifdef PGXC
-				Oid relid;
-				bool is_temp = false;
-				RemoteQueryExecType exec_type = EXEC_ON_ALL_NODES;
-
-				if (stmt->concurrent)
-				{
-					ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("PGXC does not support concurrent INDEX yet"),
-						 errdetail("The feature is not currently supported")));
-				}
-
-				/* INDEX on a temporary table cannot use 2PC at commit */
-				relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-
-				if (OidIsValid(relid))
-					exec_type = ExecUtilityFindNodes(OBJECT_INDEX, relid, &is_temp);
-				else
-					exec_type = EXEC_ON_NONE;
-#endif
-
-				if (stmt->concurrent)
-					PreventTransactionChain(isTopLevel,
-											"CREATE INDEX CONCURRENTLY");
-
-				CheckRelationOwnership(stmt->relation, true);
-
-				/* Run parse analysis ... */
-				stmt = transformIndexStmt(stmt, queryString);
-
-				/* ... and do it */
-				DefineIndex(stmt->relation,		/* relation */
-							stmt->idxname,		/* index name */
-							InvalidOid, /* no predefined OID */
-							InvalidOid, /* no previous storage */
-							stmt->accessMethod, /* am name */
-							stmt->tableSpace,
-							stmt->indexParams,	/* parameters */
-							(Expr *) stmt->whereClause,
-							stmt->options,
-							stmt->excludeOpNames,
-							stmt->unique,
-							stmt->primary,
-							stmt->isconstraint,
-							stmt->deferrable,
-							stmt->initdeferred,
-							false,		/* is_alter_table */
-							true,		/* check_rights */
-							false,		/* skip_build */
-							false,		/* quiet */
-							stmt->concurrent);	/* concurrent */
-#ifdef PGXC
-				if (IS_PGXC_COORDINATOR && !stmt->isconstraint && !IsConnFromCoord())
-					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote,
-										   stmt->concurrent, exec_type, is_temp);
-#endif
-			}
-			break;
-
-		case T_RuleStmt:		/* CREATE RULE */
-			DefineRule((RuleStmt *) parsetree, queryString);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
-			{
-				RemoteQueryExecType exec_type;
-				bool	is_temp;
-				exec_type = GetNodesForRulesUtility(((RuleStmt *) parsetree)->relation,
-													&is_temp);
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, exec_type, is_temp);
-			}
-#endif
-			break;
-
-		case T_CreateSeqStmt:
-			DefineSequence((CreateSeqStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-			{
-				CreateSeqStmt *stmt = (CreateSeqStmt *) parsetree;
-
-				/* In case this query is related to a SERIAL execution, just bypass */
-				if (!stmt->is_serial)
-				{
-					bool is_temp = stmt->sequence->relpersistence == RELPERSISTENCE_TEMP;
-
-					/* Set temporary object flag in pooler */
-					if (is_temp)
-						PoolManagerSetCommand(POOL_CMD_TEMP, NULL);
-
-					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, is_temp);
-				}
-			}
-#endif
-			break;
-
-		case T_AlterSeqStmt:
-			AlterSequence((AlterSeqStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-			{
-				AlterSeqStmt *stmt = (AlterSeqStmt *) parsetree;
-
-				/* In case this query is related to a SERIAL execution, just bypass */
-				if (!stmt->is_serial)
-				{
-					bool		  is_temp;
-					RemoteQueryExecType exec_type;
-					Oid					relid = RangeVarGetRelid(stmt->sequence, NoLock, true);
-
-					if (!OidIsValid(relid))
-						break;
-
-					exec_type = ExecUtilityFindNodes(OBJECT_SEQUENCE,
-													 relid,
-													 &is_temp);
-
-					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, exec_type, is_temp);
-				}
-			}
-#endif
-			break;
-
-		case T_DoStmt:
-			ExecuteDoStmt((DoStmt *) parsetree);
-			break;
-
 		case T_CreatedbStmt:
+			/* no event triggers for global objects */
 #ifdef PGXC
-		if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
+			if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
 #endif
-			PreventTransactionChain(isTopLevel, "CREATE DATABASE");
+				PreventTransactionChain(isTopLevel, "CREATE DATABASE");
 
 			createdb((CreatedbStmt *) parsetree);
 #ifdef PGXC
@@ -1599,6 +869,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_AlterDatabaseStmt:
+			/* no event triggers for global objects */
 			AlterDatabase((AlterDatabaseStmt *) parsetree, isTopLevel);
 #ifdef PGXC
 		if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
@@ -1616,6 +887,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_AlterDatabaseSetStmt:
+			/* no event triggers for global objects */
 			AlterDatabaseSet((AlterDatabaseSetStmt *) parsetree);
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR)
@@ -1645,8 +917,8 @@ standard_ProcessUtility(Node *parsetree,
 				/* Allow this to be run inside transaction block on remote nodes */
 				if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
 #endif
+					/* no event triggers for global objects */
 					PreventTransactionChain(isTopLevel, "DROP DATABASE");
-
 				dropdb(stmt->dbname, stmt->missing_ok);
 			}
 #ifdef PGXC
@@ -1713,27 +985,26 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_VacuumStmt:
-			/* we choose to allow this during "read only" transactions */
-			PreventCommandDuringRecovery("VACUUM");
+			{
+				VacuumStmt *stmt = (VacuumStmt *) parsetree;
+
+				/* we choose to allow this during "read only" transactions */
+				PreventCommandDuringRecovery((stmt->options & VACOPT_VACUUM) ?
+											 "VACUUM" : "ANALYZE");
 #ifdef PGXC
-			/*
-			 * We have to run the command on nodes before Coordinator because
-			 * vacuum() pops active snapshot and we can not send it to nodes
-			 */
-			if (IS_PGXC_COORDINATOR)
+				/*
+				 * We have to run the command on nodes before Coordinator because
+				 * vacuum() pops active snapshot and we can not send it to nodes
+				 */
+				if (IS_PGXC_COORDINATOR)
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true, EXEC_ON_DATANODES, false);
 #endif
-			vacuum((VacuumStmt *) parsetree, InvalidOid, true, NULL, false,
-				   isTopLevel);
+				vacuum(stmt, InvalidOid, true, NULL, false, isTopLevel);
+			}
 			break;
 
 		case T_ExplainStmt:
 			ExplainQuery((ExplainStmt *) parsetree, queryString, params, dest);
-			break;
-
-		case T_CreateTableAsStmt:
-			ExecCreateTableAs((CreateTableAsStmt *) parsetree,
-							  queryString, params, completionTag);
 			break;
 
 		case T_VariableSetStmt:
@@ -1787,38 +1058,26 @@ standard_ProcessUtility(Node *parsetree,
 #endif
 			break;
 
-		case T_CreateTrigStmt:
-			(void) CreateTrigger((CreateTrigStmt *) parsetree, queryString,
-								 InvalidOid, InvalidOid, false);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-			{
-				CreateTrigStmt *stmt = (CreateTrigStmt *) parsetree;
-				RemoteQueryExecType exec_type;
-				bool is_temp;
-
-				exec_type = ExecUtilityFindNodes(OBJECT_TABLE,
-												 RangeVarGetRelid(stmt->relation, NoLock, false),
-												 &is_temp);
-
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, exec_type, is_temp);
-			}
-#endif
-			break;
-
-		case T_CreatePLangStmt:
-			CreateProceduralLanguage((CreatePLangStmt *) parsetree);
+		case T_CreateEventTrigStmt:
+			/* no event triggers on event triggers */
+			/*
+			 * K.Suzuki, Sep.2nd, 2013
+			 * Need design decision how to support event trigger in XC.
+			 */
+			CreateEventTrigger((CreateEventTrigStmt *) parsetree);
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR)
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
 #endif
 			break;
 
+		case T_AlterEventTrigStmt:
+			/* no event triggers on event triggers */
 			/*
-			 * ******************************** DOMAIN statements ****
+			 * K.Suzuki, Sep.2nd, 2013
+			 * Need design decision how to support event trigger in XC.
 			 */
-		case T_CreateDomainStmt:
-			DefineDomain((CreateDomainStmt *) parsetree);
+			AlterEventTrigger((AlterEventTrigStmt *) parsetree);
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR)
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
@@ -1829,6 +1088,7 @@ standard_ProcessUtility(Node *parsetree,
 			 * ******************************** ROLE statements ****
 			 */
 		case T_CreateRoleStmt:
+			/* no event triggers for global objects */
 			CreateRole((CreateRoleStmt *) parsetree);
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR)
@@ -1837,6 +1097,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_AlterRoleStmt:
+			/* no event triggers for global objects */
 			AlterRole((AlterRoleStmt *) parsetree);
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR)
@@ -1845,6 +1106,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_AlterRoleSetStmt:
+			/* no event triggers for global objects */
 			AlterRoleSet((AlterRoleSetStmt *) parsetree);
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR)
@@ -1853,6 +1115,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_DropRoleStmt:
+			/* no event triggers for global objects */
 			DropRole((DropRoleStmt *) parsetree);
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR)
@@ -1860,15 +1123,8 @@ standard_ProcessUtility(Node *parsetree,
 #endif
 			break;
 
-		case T_DropOwnedStmt:
-			DropOwnedObjects((DropOwnedStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
 		case T_ReassignOwnedStmt:
+			/* no event triggers for global objects */
 			ReassignOwnedObjects((ReassignOwnedStmt *) parsetree);
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR)
@@ -1969,6 +1225,7 @@ standard_ProcessUtility(Node *parsetree,
 						ReindexIndex(stmt->relation);
 						break;
 					case OBJECT_TABLE:
+					case OBJECT_MATVIEW:
 						ReindexTable(stmt->relation);
 						break;
 					case OBJECT_DATABASE:
@@ -1997,69 +1254,169 @@ standard_ProcessUtility(Node *parsetree,
 				break;
 			}
 			break;
+			/*
+			 * The following statements are supported by Event Triggers only
+			 * in some cases, so we "fast path" them in the other cases.
+			 */
 
-		case T_CreateConversionStmt:
-			CreateConversionCommand((CreateConversionStmt *) parsetree);
+		case T_DropStmt:
+			{
+				DropStmt   *stmt = (DropStmt *) parsetree;
+
+				if (EventTriggerSupportsObjectType(stmt->removeType))
+					ProcessUtilitySlow(parsetree, queryString,
+									   context, params,
+									   dest, 
+#ifdef PGXC
+									   sentToRemote,
+#endif
+									   completionTag);
+				else
+#ifdef PGXC
+					ExecDropStmt(stmt, isTopLevel, queryString, sentToRemote);
+#else
+					ExecDropStmt(stmt, isTopLevel);
+#endif
+			}
+			break;
+
+		case T_RenameStmt:
+			{
+				RenameStmt *stmt = (RenameStmt *) parsetree;
+
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
+				{
+					RemoteQueryExecType exec_type;
+					bool is_temp = false;
+
+					/* Try to use the object relation if possible */
+					if (stmt->relation)
+					{
+						/*
+						 * When a relation is defined, it is possible that this object does
+						 * not exist but an IF EXISTS clause might be used. So we do not do
+						 * any error check here but block the access to remote nodes to
+						 * this object as it does not exisy
+						 */
+						Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+
+						if (OidIsValid(relid))
+							exec_type = ExecUtilityFindNodes(stmt->renameType,
+															 relid,
+															 &is_temp);
+						else
+							exec_type = EXEC_ON_NONE;
+					}
+					else
+					{
+						exec_type = ExecUtilityFindNodes(stmt->renameType,
+														 InvalidOid,
+														 &is_temp);
+					}
+
+					ExecUtilityStmtOnNodes(queryString,
+										   NULL,
+										   sentToRemote,
+										   false,
+										   exec_type,
+										   is_temp);
+				}
+#endif
+				if (EventTriggerSupportsObjectType(stmt->renameType))
+					ProcessUtilitySlow(parsetree, queryString,
+									   context, params,
+									   dest, 
+#ifdef PGXC
+									   sentToRemote,
+#endif
+									   completionTag);
+				else
+					ExecRenameStmt(stmt);
+			}
+			break;
+
+		case T_AlterObjectSchemaStmt:
+			{
+				AlterObjectSchemaStmt *stmt = (AlterObjectSchemaStmt *) parsetree;
+
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
+				{
+					RemoteQueryExecType exec_type;
+					bool is_temp = false;
+
+					/* Try to use the object relation if possible */
+					if (stmt->relation)
+					{
+						/*
+						 * When a relation is defined, it is possible that this object does
+						 * not exist but an IF EXISTS clause might be used. So we do not do
+						 * any error check here but block the access to remote nodes to
+						 * this object as it does not exisy
+						 */
+						Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+
+						if (OidIsValid(relid))
+							exec_type = ExecUtilityFindNodes(stmt->objectType,
+															 relid,
+															 &is_temp);
+						else
+							exec_type = EXEC_ON_NONE;
+					}
+					else
+					{
+						exec_type = ExecUtilityFindNodes(stmt->objectType,
+														 InvalidOid,
+														 &is_temp);
+					}
+
+					ExecUtilityStmtOnNodes(queryString,
+										   NULL,
+										   sentToRemote,
+										   false,
+										   exec_type,
+										   is_temp);
+				}
+#endif
+				if (EventTriggerSupportsObjectType(stmt->objectType))
+					ProcessUtilitySlow(parsetree, queryString,
+									   context, params,
+									   dest, 
+#ifdef PGXC
+									   sentToRemote,
+#endif
+									   completionTag);
+				else
+					ExecAlterObjectSchemaStmt(stmt);
+			}
+			break;
+
+		case T_AlterOwnerStmt:
+			{
+				AlterOwnerStmt *stmt = (AlterOwnerStmt *) parsetree;
+
+				if (EventTriggerSupportsObjectType(stmt->objectType))
+					ProcessUtilitySlow(parsetree, queryString,
+									   context, params,
+									   dest, 
+#ifdef PGXC
+									   sentToRemote,
+#endif
+									   completionTag);
+				else
+					ExecAlterOwnerStmt(stmt);
+			}
 #ifdef PGXC
 			if (IS_PGXC_COORDINATOR)
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
 #endif
 			break;
 
-		case T_CreateCastStmt:
-			CreateCast((CreateCastStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_CreateOpClassStmt:
-			DefineOpClass((CreateOpClassStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_CreateOpFamilyStmt:
-			DefineOpFamily((CreateOpFamilyStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_AlterOpFamilyStmt:
-			AlterOpFamily((AlterOpFamilyStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_AlterTSDictionaryStmt:
-			AlterTSDictionary((AlterTSDictionaryStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
-
-		case T_AlterTSConfigurationStmt:
-			AlterTSConfiguration((AlterTSConfigurationStmt *) parsetree);
-#ifdef PGXC
-			if (IS_PGXC_COORDINATOR)
-				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
-#endif
-			break;
 #ifdef PGXC
 		case T_RemoteQuery:
 			Assert(IS_PGXC_COORDINATOR);
-			/*
-			 * Do not launch query on Other Datanodes if remote connection is a Coordinator one
-			 * it will cause a deadlock in the cluster at Datanode levels.
-			 */
+
 			if (!IsConnFromCoord())
 				ExecRemoteUtility((RemoteQuery *) parsetree);
 			break;
@@ -2072,9 +1429,1022 @@ standard_ProcessUtility(Node *parsetree,
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true, EXEC_ON_COORDS, false);
 			break;
 #endif
+
 		default:
-			elog(ERROR, "unrecognized node type: %d",
-				 (int) nodeTag(parsetree));
+			/* All other statement types have event trigger support */
+			ProcessUtilitySlow(parsetree, queryString,
+							   context, params,
+							   dest, 
+#ifdef PGXC
+							   sentToRemote,
+#endif
+							   completionTag);
+			break;
+	}
+}
+
+/*
+ * The "Slow" variant of ProcessUtility should only receive statements
+ * supported by the event triggers facility.  Therefore, we always
+ * perform the trigger support calls if the context allows it.
+ */
+static void
+ProcessUtilitySlow(Node *parsetree,
+				   const char *queryString,
+				   ProcessUtilityContext context,
+				   ParamListInfo params,
+				   DestReceiver *dest,
+#ifdef PGXC
+				   bool sentToRemote,
+#endif
+				   char *completionTag)
+{
+	bool		isTopLevel = (context == PROCESS_UTILITY_TOPLEVEL);
+	bool		isCompleteQuery = (context <= PROCESS_UTILITY_QUERY);
+	bool		needCleanup;
+
+	/* All event trigger calls are done only when isCompleteQuery is true */
+	needCleanup = isCompleteQuery && EventTriggerBeginCompleteQuery();
+
+	/* PG_TRY block is to ensure we call EventTriggerEndCompleteQuery */
+	PG_TRY();
+	{
+		if (isCompleteQuery)
+			EventTriggerDDLCommandStart(parsetree);
+
+		switch (nodeTag(parsetree))
+		{
+				/*
+				 * relation and attribute manipulation
+				 */
+			case T_CreateSchemaStmt:
+				/*
+				 * K.Suzuki, memo, Sep.2nd, 2013
+				 * This was moded from standard_ProcessUtility().
+				 */
+#ifdef PGXC
+				CreateSchemaCommand((CreateSchemaStmt *) parsetree,
+									queryString, sentToRemote);
+#else
+				CreateSchemaCommand((CreateSchemaStmt *) parsetree,
+									queryString);
+#endif
+				break;
+
+			case T_CreateStmt:
+			case T_CreateForeignTableStmt:
+				{
+					/*
+					 * K.Suzuki, memo, Sep.2nd, 2013
+					 * This was moved from standard_ProcessUtility().
+					 */
+					List	   *stmts;
+					ListCell   *l;
+					Oid			relOid;
+#ifdef PGXC
+					bool		is_temp = false;
+#endif
+
+					/* Run parse analysis ... */
+					stmts = transformCreateStmt((CreateStmt *) parsetree,
+												queryString);
+#ifdef PGXC
+					if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
+					{
+						/*
+						 * Scan the list of objects.
+						 * Temporary tables are created on Datanodes only.
+						 * Non-temporary objects are created on all nodes.
+						 * In case temporary and non-temporary objects are mized return an error.
+						 */
+						bool	is_first = true;
+
+						foreach(l, stmts)
+						{
+							Node       *stmt = (Node *) lfirst(l);
+
+							if (IsA(stmt, CreateStmt))
+							{
+								CreateStmt *stmt_loc = (CreateStmt *) stmt;
+								bool is_object_temp = stmt_loc->relation->relpersistence == RELPERSISTENCE_TEMP;
+
+								if (is_first)
+								{
+									is_first = false;
+									if (is_object_temp)
+										is_temp = true;
+								}
+								else
+								{
+									if (is_object_temp != is_temp)
+										ereport(ERROR,
+												(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+												 errmsg("CREATE not supported for TEMP and non-TEMP objects"),
+												 errdetail("You should separate TEMP and non-TEMP objects")));
+								}
+							}
+							else if (IsA(stmt, CreateForeignTableStmt))
+							{
+								/* There are no temporary foreign tables */
+								if (is_first)
+								{
+									is_first = false;
+								}
+								else
+								{
+									if (!is_temp)
+										ereport(ERROR,
+												(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+												 errmsg("CREATE not supported for TEMP and non-TEMP objects"),
+												 errdetail("You should separate TEMP and non-TEMP objects")));
+								}
+							}
+						}
+					}
+
+					/*
+					 * Add a RemoteQuery node for a query at top level on a remote
+					 * Coordinator, if not already done so
+					 */
+					if (!sentToRemote)
+						stmts = AddRemoteQueryNode(stmts, queryString, EXEC_ON_ALL_NODES, is_temp);
+#endif
+
+					/* ... and do it */
+					foreach(l, stmts)
+					{
+						Node	   *stmt = (Node *) lfirst(l);
+
+						if (IsA(stmt, CreateStmt))
+						{
+							Datum		toast_options;
+							static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+
+#ifdef PGXC
+							/* Set temporary object object flag in pooler */
+							if (is_temp)
+								PoolManagerSetCommand(POOL_CMD_TEMP, NULL);
+#endif
+							/* Create the table itself */
+							relOid = DefineRelation((CreateStmt *) stmt,
+													RELKIND_RELATION,
+													InvalidOid);
+
+							/*
+							 * Let AlterTableCreateToastTable decide if this
+							 * one needs a secondary relation too.
+							 */
+							CommandCounterIncrement();
+
+							/*
+							 * parse and validate reloptions for the toast
+							 * table
+							 */
+							toast_options = transformRelOptions((Datum) 0,
+											  ((CreateStmt *) stmt)->options,
+																"toast",
+																validnsps,
+																true,
+																false);
+							(void) heap_reloptions(RELKIND_TOASTVALUE,
+												   toast_options,
+												   true);
+
+							AlterTableCreateToastTable(relOid, toast_options);
+						}
+						else if (IsA(stmt, CreateForeignTableStmt))
+						{
+							/* Create the table itself */
+							relOid = DefineRelation((CreateStmt *) stmt,
+													RELKIND_FOREIGN_TABLE,
+													InvalidOid);
+							CreateForeignTable((CreateForeignTableStmt *) stmt,
+											   relOid);
+						}
+						else
+						{
+							/* Recurse for anything else */
+							ProcessUtility(stmt,
+										   queryString,
+										   PROCESS_UTILITY_SUBCOMMAND,
+										   params,
+										   None_Receiver,
+#ifdef PGXC
+										   true,
+#endif /* PGXC */
+										   NULL);
+						}
+
+						/* Need CCI between commands */
+						if (lnext(l) != NULL)
+							CommandCounterIncrement();
+					}
+				}
+				break;
+
+			case T_AlterTableStmt:
+				{
+					/*
+					 * K.Suzuki, Sep.2nd, 2013
+					 * Moved from standard_ProcessUtility().
+					 */
+					AlterTableStmt *atstmt = (AlterTableStmt *) parsetree;
+					Oid			relid;
+					List	   *stmts;
+					ListCell   *l;
+					LOCKMODE	lockmode;
+
+					/*
+					 * Figure out lock mode, and acquire lock.	This also does
+					 * basic permissions checks, so that we won't wait for a
+					 * lock on (for example) a relation on which we have no
+					 * permissions.
+					 */
+					lockmode = AlterTableGetLockLevel(atstmt->cmds);
+					relid = AlterTableLookupRelation(atstmt, lockmode);
+
+					if (OidIsValid(relid))
+					{
+						/* Run parse analysis ... */
+						stmts = transformAlterTableStmt(atstmt, queryString);
+
+#ifdef PGXC
+						/*
+						 * Add a RemoteQuery node for a query at top level on a remote
+						 * Coordinator, if not already done so
+						 */
+						if (!sentToRemote)
+						{
+							bool is_temp = false;
+							RemoteQueryExecType exec_type;
+							Oid relid = RangeVarGetRelid(atstmt->relation,
+														 NoLock, true);
+
+							if (OidIsValid(relid))
+							{
+								exec_type = ExecUtilityFindNodes(atstmt->relkind,
+																 relid,
+																 &is_temp);
+
+								stmts = AddRemoteQueryNode(stmts, queryString, exec_type, is_temp);
+							}
+						}
+#endif
+						/* ... and do it */
+						foreach(l, stmts)
+						{
+							Node	   *stmt = (Node *) lfirst(l);
+
+							if (IsA(stmt, AlterTableStmt))
+							{
+								/* Do the table alteration proper */
+								AlterTable(relid, lockmode,
+										   (AlterTableStmt *) stmt);
+							}
+							else
+							{
+								/* Recurse for anything else */
+								ProcessUtility(stmt,
+											   queryString,
+											   PROCESS_UTILITY_SUBCOMMAND,
+											   params,
+											   None_Receiver,
+#ifdef PGXC
+											   true,
+#endif /* PGXC */
+											   NULL);
+							}
+
+							/* Need CCI between commands */
+							if (lnext(l) != NULL)
+								CommandCounterIncrement();
+						}
+					}
+					else
+						ereport(NOTICE,
+						  (errmsg("relation \"%s\" does not exist, skipping",
+								  atstmt->relation->relname)));
+				}
+				break;
+
+			case T_AlterDomainStmt:
+				{
+					/*
+					 * K.Suzuki, Sep.2nd, 2013
+					 * Moved from standard_ProcessUtility().
+					 */
+					AlterDomainStmt *stmt = (AlterDomainStmt *) parsetree;
+
+					/*
+					 * Some or all of these functions are recursive to cover
+					 * inherited things, so permission checks are done there.
+					 */
+					switch (stmt->subtype)
+					{
+						case 'T':		/* ALTER DOMAIN DEFAULT */
+
+							/*
+							 * Recursively alter column default for table and,
+							 * if requested, for descendants
+							 */
+							AlterDomainDefault(stmt->typeName,
+											   stmt->def);
+							break;
+						case 'N':		/* ALTER DOMAIN DROP NOT NULL */
+							AlterDomainNotNull(stmt->typeName,
+											   false);
+							break;
+						case 'O':		/* ALTER DOMAIN SET NOT NULL */
+							AlterDomainNotNull(stmt->typeName,
+											   true);
+							break;
+						case 'C':		/* ADD CONSTRAINT */
+							AlterDomainAddConstraint(stmt->typeName,
+													 stmt->def);
+							break;
+						case 'X':		/* DROP CONSTRAINT */
+							AlterDomainDropConstraint(stmt->typeName,
+													  stmt->name,
+													  stmt->behavior,
+													  stmt->missing_ok);
+							break;
+						case 'V':		/* VALIDATE CONSTRAINT */
+							AlterDomainValidateConstraint(stmt->typeName,
+														  stmt->name);
+							break;
+						default:		/* oops */
+							elog(ERROR, "unrecognized alter domain type: %d",
+								 (int) stmt->subtype);
+							break;
+					}
+				}
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+				/*
+				 * ************* object creation / destruction **************
+				 */
+			case T_DefineStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility
+				 */
+				{
+					DefineStmt *stmt = (DefineStmt *) parsetree;
+
+					switch (stmt->kind)
+					{
+						case OBJECT_AGGREGATE:
+							DefineAggregate(stmt->defnames, stmt->args,
+											stmt->oldstyle, stmt->definition);
+							break;
+						case OBJECT_OPERATOR:
+							Assert(stmt->args == NIL);
+							DefineOperator(stmt->defnames, stmt->definition);
+							break;
+						case OBJECT_TYPE:
+							Assert(stmt->args == NIL);
+							DefineType(stmt->defnames, stmt->definition);
+							break;
+						case OBJECT_TSPARSER:
+							Assert(stmt->args == NIL);
+							DefineTSParser(stmt->defnames, stmt->definition);
+							break;
+						case OBJECT_TSDICTIONARY:
+							Assert(stmt->args == NIL);
+							DefineTSDictionary(stmt->defnames,
+											   stmt->definition);
+							break;
+						case OBJECT_TSTEMPLATE:
+							Assert(stmt->args == NIL);
+							DefineTSTemplate(stmt->defnames,
+											 stmt->definition);
+							break;
+						case OBJECT_TSCONFIGURATION:
+							Assert(stmt->args == NIL);
+							DefineTSConfiguration(stmt->defnames,
+												  stmt->definition);
+							break;
+						case OBJECT_COLLATION:
+							Assert(stmt->args == NIL);
+							DefineCollation(stmt->defnames, stmt->definition);
+							break;
+						default:
+							elog(ERROR, "unrecognized define stmt type: %d",
+								 (int) stmt->kind);
+							break;
+					}
+				}
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_IndexStmt:	/* CREATE INDEX */
+				{
+					IndexStmt  *stmt = (IndexStmt *) parsetree;
+
+#ifdef PGXC
+					Oid relid;
+					bool is_temp = false;
+					RemoteQueryExecType exec_type = EXEC_ON_ALL_NODES;
+
+					if (stmt->concurrent)
+					{
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("PGXC does not support concurrent INDEX yet"),
+								 errdetail("The feature is not currently supported")));
+					}
+
+					/* INDEX on a temporary table cannot use 2PC at commit */
+					relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+
+					if (OidIsValid(relid))
+						exec_type = ExecUtilityFindNodes(OBJECT_INDEX, relid, &is_temp);
+					else
+						exec_type = EXEC_ON_NONE;
+#endif
+					if (stmt->concurrent)
+						PreventTransactionChain(isTopLevel,
+												"CREATE INDEX CONCURRENTLY");
+
+					CheckRelationOwnership(stmt->relation, true);
+
+					/* Run parse analysis ... */
+					stmt = transformIndexStmt(stmt, queryString);
+
+					/* ... and do it */
+					DefineIndex(stmt,
+								InvalidOid,		/* no predefined OID */
+								false,	/* is_alter_table */
+								true,	/* check_rights */
+								false,	/* skip_build */
+								false); /* quiet */
+#ifdef PGXC
+					if (IS_PGXC_COORDINATOR && !stmt->isconstraint && !IsConnFromCoord())
+						ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote,
+											   stmt->concurrent, exec_type, is_temp);
+#endif
+				}
+				break;
+
+			case T_CreateExtensionStmt:
+				CreateExtension((CreateExtensionStmt *) parsetree);
+#ifdef PGXC
+				/* K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility().
+				 */
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_AlterExtensionStmt:
+				ExecAlterExtensionStmt((AlterExtensionStmt *) parsetree);
+#ifdef PGXC
+				/* K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility().
+				 */
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_AlterExtensionContentsStmt:
+				ExecAlterExtensionContentsStmt((AlterExtensionContentsStmt *) parsetree);
+#ifdef PGXC
+				/* K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility().
+				 */
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_CreateFdwStmt:
+#ifdef PGXC
+				/* K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility().
+				 */
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("Postgres-XC does not support FOREIGN DATA WRAPPER yet"),
+						 errdetail("The feature is not currently supported")));
+#endif
+				CreateForeignDataWrapper((CreateFdwStmt *) parsetree);
+				break;
+
+			case T_AlterFdwStmt:
+				AlterForeignDataWrapper((AlterFdwStmt *) parsetree);
+				break;
+
+			case T_CreateForeignServerStmt:
+#ifdef PGXC
+				/* K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility().
+				 */
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("Postgres-XC does not support SERVER yet"),
+						 errdetail("The feature is not currently supported")));
+#endif
+				CreateForeignServer((CreateForeignServerStmt *) parsetree);
+				break;
+
+			case T_AlterForeignServerStmt:
+				AlterForeignServer((AlterForeignServerStmt *) parsetree);
+				break;
+
+			case T_CreateUserMappingStmt:
+#ifdef PGXC
+				/* K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility().
+				 */
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("Postgres-XC does not support USER MAPPING yet"),
+						 errdetail("The feature is not currently supported")));
+#endif
+				CreateUserMapping((CreateUserMappingStmt *) parsetree);
+				break;
+
+			case T_AlterUserMappingStmt:
+				AlterUserMapping((AlterUserMappingStmt *) parsetree);
+				break;
+
+
+			case T_DropUserMappingStmt:
+				RemoveUserMapping((DropUserMappingStmt *) parsetree);
+				break;
+
+			case T_CompositeTypeStmt:	/* CREATE TYPE (composite) */
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from sgtandard_ProcessUtility().
+				 */
+				{
+					CompositeTypeStmt *stmt = (CompositeTypeStmt *) parsetree;
+
+					DefineCompositeType(stmt->typevar, stmt->coldeflist);
+				}
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_CreateEnumStmt:		/* CREATE TYPE AS ENUM */
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from sgtandard_ProcessUtility().
+				 */
+				DefineEnum((CreateEnumStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_CreateRangeStmt:		/* CREATE TYPE AS RANGE */
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from sgtandard_ProcessUtility().
+				 */
+				DefineRange((CreateRangeStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_AlterEnumStmt:		/* ALTER TYPE (enum) */
+				AlterEnum((AlterEnumStmt *) parsetree, isTopLevel);
+#ifdef PGXC
+				/*
+				 * In this case force autocommit, this transaction cannot be launched
+				 * inside a transaction block.
+				 */
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_ViewStmt:	/* CREATE VIEW */
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from sgtandard_ProcessUtility().
+				 */
+				DefineView((ViewStmt *) parsetree, queryString);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+				{
+					if (!ExecIsTempObjectIncluded())
+						ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_COORDS, false);
+				}
+#endif
+				break;
+
+			case T_CreateFunctionStmt:	/* CREATE FUNCTION */
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from sgtandard_ProcessUtility().
+				 */
+				CreateFunction((CreateFunctionStmt *) parsetree, queryString);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_AlterFunctionStmt:	/* ALTER FUNCTION */
+				AlterFunction((AlterFunctionStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_RuleStmt:	/* CREATE RULE */
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from sgtandard_ProcessUtility().
+				 */
+				DefineRule((RuleStmt *) parsetree, queryString);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
+				{
+					RemoteQueryExecType exec_type;
+					bool	is_temp;
+					exec_type = GetNodesForRulesUtility(((RuleStmt *) parsetree)->relation,
+														&is_temp);
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, exec_type, is_temp);
+				}
+#endif
+				break;
+
+			case T_CreateSeqStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from sgtandard_ProcessUtility().
+				 */
+				DefineSequence((CreateSeqStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+				{
+					CreateSeqStmt *stmt = (CreateSeqStmt *) parsetree;
+
+					/* In case this query is related to a SERIAL execution, just bypass */
+					if (!stmt->is_serial)
+					{
+						bool is_temp = stmt->sequence->relpersistence == RELPERSISTENCE_TEMP;
+
+						/* Set temporary object flag in pooler */
+						if (is_temp)
+							PoolManagerSetCommand(POOL_CMD_TEMP, NULL);
+
+						ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, is_temp);
+					}
+				}
+#endif
+				break;
+
+			case T_AlterSeqStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from sgtandard_ProcessUtility().
+				 */
+				AlterSequence((AlterSeqStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+				{
+					AlterSeqStmt *stmt = (AlterSeqStmt *) parsetree;
+
+					/* In case this query is related to a SERIAL execution, just bypass */
+					if (!stmt->is_serial)
+					{
+						bool		  is_temp;
+						RemoteQueryExecType exec_type;
+						Oid					relid = RangeVarGetRelid(stmt->sequence, NoLock, true);
+
+						if (!OidIsValid(relid))
+							break;
+
+						exec_type = ExecUtilityFindNodes(OBJECT_SEQUENCE,
+														 relid,
+														 &is_temp);
+
+						ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, exec_type, is_temp);
+					}
+				}
+#endif
+				break;
+
+			case T_CreateTableAsStmt:
+				ExecCreateTableAs((CreateTableAsStmt *) parsetree,
+								  queryString, params, completionTag);
+#ifdef PGXC
+				/* Send CREATE MATERIALIZED VIEW command to all coordinators. */
+				Assert(((CreateTableAsStmt *) parsetree)->relkind == OBJECT_MATVIEW);
+				if (!((CreateTableAsStmt *) parsetree)->into->skipData && !IsConnFromCoord())
+					pgxc_send_matview_data(((CreateTableAsStmt *) parsetree)->into->rel,
+											queryString);
+				else
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_COORDS, false);
+
+#endif /* PGXC */
+				break;
+
+			case T_RefreshMatViewStmt:
+				ExecRefreshMatView((RefreshMatViewStmt *) parsetree,
+								   queryString, params, completionTag);
+#ifdef PGXC
+				Assert(IS_PGXC_COORDINATOR);
+				/* Send REFRESH MATERIALIZED VIEW command and the data to be populated
+				 * to all coordinators.
+				 */
+				if (!((RefreshMatViewStmt *)parsetree)->skipData && !IsConnFromCoord())
+					pgxc_send_matview_data(((RefreshMatViewStmt *)parsetree)->relation,
+											queryString);
+				else
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_COORDS, false);
+#endif /* PGXC */
+				break;
+
+			case T_CreateTrigStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				(void) CreateTrigger((CreateTrigStmt *) parsetree, queryString,
+									 InvalidOid, InvalidOid, false);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+				{
+					CreateTrigStmt *stmt = (CreateTrigStmt *) parsetree;
+					RemoteQueryExecType exec_type;
+					bool is_temp;
+
+					exec_type = ExecUtilityFindNodes(OBJECT_TABLE,
+													 RangeVarGetRelid(stmt->relation, NoLock, false),
+													 &is_temp);
+
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, exec_type, is_temp);
+				}
+#endif
+				break;
+
+			case T_CreatePLangStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				CreateProceduralLanguage((CreatePLangStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_CreateDomainStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				DefineDomain((CreateDomainStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_CreateConversionStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				CreateConversionCommand((CreateConversionStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_CreateCastStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				CreateCast((CreateCastStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_CreateOpClassStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				DefineOpClass((CreateOpClassStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_CreateOpFamilyStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				DefineOpFamily((CreateOpFamilyStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_AlterOpFamilyStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				AlterOpFamily((AlterOpFamilyStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_AlterTSDictionaryStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				AlterTSDictionary((AlterTSDictionaryStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_AlterTSConfigurationStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				AlterTSConfiguration((AlterTSConfigurationStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_DropStmt:
+#ifdef PGXC
+				ExecDropStmt((DropStmt *) parsetree, isTopLevel, queryString, sentToRemote);
+#else
+				ExecDropStmt((DropStmt *) parsetree, isTopLevel);
+#endif
+				break;
+
+			case T_RenameStmt:
+				ExecRenameStmt((RenameStmt *) parsetree);
+				break;
+
+			case T_AlterObjectSchemaStmt:
+				ExecAlterObjectSchemaStmt((AlterObjectSchemaStmt *) parsetree);
+				break;
+
+			case T_AlterOwnerStmt:
+				ExecAlterOwnerStmt((AlterOwnerStmt *) parsetree);
+				break;
+
+			case T_DropOwnedStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				DropOwnedObjects((DropOwnedStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			case T_AlterDefaultPrivilegesStmt:
+				/*
+				 * K.Suzuki, Sep.2nd, 2013
+				 * Moved from standard_ProcessUtility()
+				 */
+				ExecAlterDefaultPrivilegesStmt((AlterDefaultPrivilegesStmt *) parsetree);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR)
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false, EXEC_ON_ALL_NODES, false);
+#endif
+				break;
+
+			default:
+				elog(ERROR, "unrecognized node type: %d",
+					 (int) nodeTag(parsetree));
+				break;
+		}
+
+		if (isCompleteQuery)
+		{
+			EventTriggerSQLDrop(parsetree);
+			EventTriggerDDLCommandEnd(parsetree);
+		}
+	}
+	PG_CATCH();
+	{
+		if (needCleanup)
+			EventTriggerEndCompleteQuery();
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	if (needCleanup)
+		EventTriggerEndCompleteQuery();
+}
+
+/*
+ * Dispatch function for DropStmt
+ */
+static void
+#ifdef PGXC
+ExecDropStmt(DropStmt *stmt, bool isTopLevel, const char *queryString, bool sentToRemote)
+#else
+ExecDropStmt(DropStmt *stmt, bool isTopLevel)
+#endif
+{
+	switch (stmt->removeType)
+	{
+		case OBJECT_INDEX:
+			if (stmt->concurrent)
+#ifdef PGXC
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("PGXC does not support concurrent INDEX yet"),
+						 errdetail("The feature is not currently supported")));
+
+#else
+				PreventTransactionChain(isTopLevel,
+										"DROP INDEX CONCURRENTLY");
+#endif
+			/* fall through */
+
+		case OBJECT_TABLE:
+		case OBJECT_SEQUENCE:
+		case OBJECT_VIEW:
+		case OBJECT_MATVIEW:
+		case OBJECT_FOREIGN_TABLE:
+#ifdef PGXC
+			{
+				bool		is_temp = false;
+				RemoteQueryExecType exec_type;
+
+				if (stmt->removeType == OBJECT_MATVIEW)
+					exec_type = EXEC_ON_COORDS;
+				else
+					exec_type = EXEC_ON_ALL_NODES;
+
+				/* Check restrictions on objects dropped */
+				DropStmtPreTreatment(stmt, queryString, sentToRemote,
+									 &is_temp, &exec_type);
+#endif
+				RemoveRelations(stmt);
+#ifdef PGXC
+				/* DROP is done depending on the object type and its temporary type */
+				if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false,
+										   exec_type, is_temp);
+			}
+#endif
+			break;
+		default:
+#ifdef PGXC
+			{
+				bool		is_temp = false;
+				RemoteQueryExecType exec_type = EXEC_ON_ALL_NODES;
+
+				/* Check restrictions on objects dropped */
+				DropStmtPreTreatment(stmt, queryString, sentToRemote,
+									 &is_temp, &exec_type);
+#endif
+				RemoveObjects(stmt);
+#ifdef PGXC
+				if (IS_PGXC_COORDINATOR && !IsConnFromCoord())
+					ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, false,
+										   exec_type, is_temp);
+			}
+#endif
 			break;
 	}
 }
@@ -2123,6 +2493,13 @@ IsStmtAllowedInLockedMode(Node *parsetree, const char *queryString)
 		case T_DropNodeStmt:				/*
 											 * This has to be allowed so that DROP NODE
 											 * can be issued to drop a node that has crashed.
+											 * Otherwise system would try to acquire a shared
+											 * advisory lock on the crashed node.
+											 */
+		case T_AlterNodeStmt:				/*
+											 * This has to be allowed so that ALTER
+											 * can be issued to alter a node that has crashed
+											 * and may be failed over.
 											 * Otherwise system would try to acquire a shared
 											 * advisory lock on the crashed node.
 											 */
@@ -2293,8 +2670,22 @@ ExecUtilityFindNodes(ObjectType object_type,
 			/* Check if given index uses temporary tables */
 			if ((*is_temp = IsTempTable(object_id)))
 				exec_type = EXEC_ON_DATANODES;
+			/*
+			 * Materialized views and hence index on those are located on
+			 * coordinators
+			 */
+			else if (get_rel_relkind(object_id) == RELKIND_MATVIEW ||
+						(get_rel_relkind(object_id) == RELKIND_INDEX &&
+							get_rel_relkind(IndexGetRelation(object_id, false)) == RELKIND_MATVIEW))
+				exec_type = EXEC_ON_COORDS;
 			else
 				exec_type = EXEC_ON_ALL_NODES;
+			break;
+
+		case OBJECT_MATVIEW:
+			/* Materialized views are located only on the coordinators */
+			*is_temp = false;
+			exec_type = EXEC_ON_COORDS;
 			break;
 
 		default:
@@ -2488,26 +2879,36 @@ QueryReturnsTuples(Query *parsetree)
  * UtilityContainsQuery
  *		Return the contained Query, or NULL if there is none
  *
- * Certain utility statements, such as EXPLAIN, contain a Query.
+ * Certain utility statements, such as EXPLAIN, contain a plannable Query.
  * This function encapsulates knowledge of exactly which ones do.
  * We assume it is invoked only on already-parse-analyzed statements
  * (else the contained parsetree isn't a Query yet).
+ *
+ * In some cases (currently, only EXPLAIN of CREATE TABLE AS/SELECT INTO and
+ * CREATE MATERIALIZED VIEW), potentially Query-containing utility statements
+ * can be nested.  This function will drill down to a non-utility Query, or
+ * return NULL if none.
  */
 Query *
 UtilityContainsQuery(Node *parsetree)
 {
+	Query	   *qry;
+
 	switch (nodeTag(parsetree))
 	{
 		case T_ExplainStmt:
-			Assert(IsA(((ExplainStmt *) parsetree)->query, Query));
-			return (Query *) ((ExplainStmt *) parsetree)->query;
+			qry = (Query *) ((ExplainStmt *) parsetree)->query;
+			Assert(IsA(qry, Query));
+			if (qry->commandType == CMD_UTILITY)
+				return UtilityContainsQuery(qry->utilityStmt);
+			return qry;
 
 		case T_CreateTableAsStmt:
-			/* might or might not contain a Query ... */
-			if (IsA(((CreateTableAsStmt *) parsetree)->query, Query))
-				return (Query *) ((CreateTableAsStmt *) parsetree)->query;
-			Assert(IsA(((CreateTableAsStmt *) parsetree)->query, ExecuteStmt));
-			return NULL;
+			qry = (Query *) ((CreateTableAsStmt *) parsetree)->query;
+			Assert(IsA(qry, Query));
+			if (qry->commandType == CMD_UTILITY)
+				return UtilityContainsQuery(qry->utilityStmt);
+			return qry;
 
 		default:
 			return NULL;
@@ -2609,6 +3010,9 @@ AlterObjectTypeCommandTag(ObjectType objtype)
 		case OBJECT_TRIGGER:
 			tag = "ALTER TRIGGER";
 			break;
+		case OBJECT_EVENT_TRIGGER:
+			tag = "ALTER EVENT TRIGGER";
+			break;
 		case OBJECT_TSCONFIGURATION:
 			tag = "ALTER TEXT SEARCH CONFIGURATION";
 			break;
@@ -2626,6 +3030,9 @@ AlterObjectTypeCommandTag(ObjectType objtype)
 			break;
 		case OBJECT_VIEW:
 			tag = "ALTER VIEW";
+			break;
+		case OBJECT_MATVIEW:
+			tag = "ALTER MATERIALIZED VIEW";
 			break;
 		default:
 			tag = "???";
@@ -2753,10 +3160,7 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_CreateStmt:
-			if ((((CreateStmt *) parsetree)->relation->relpersistence == RELPERSISTENCE_STREAMING))
-				tag = "CREATE STREAMING TABLE";
-			else
-				tag = "CREATE TABLE";
+			tag = "CREATE TABLE";
 			break;
 
 		case T_CreateTableSpaceStmt:
@@ -2830,6 +3234,9 @@ CreateCommandTag(Node *parsetree)
 				case OBJECT_CONTINUOUS_VIEW:
 					tag = "DROP CONTINUOUS VIEW";
 					break;
+				case OBJECT_MATVIEW:
+					tag = "DROP MATERIALIZED VIEW";
+					break;
 				case OBJECT_INDEX:
 					tag = "DROP INDEX";
 					break;
@@ -2883,6 +3290,9 @@ CreateCommandTag(Node *parsetree)
 					break;
 				case OBJECT_TRIGGER:
 					tag = "DROP TRIGGER";
+					break;
+				case OBJECT_EVENT_TRIGGER:
+					tag = "DROP EVENT TRIGGER";
 					break;
 				case OBJECT_RULE:
 					tag = "DROP RULE";
@@ -3093,11 +3503,26 @@ CreateCommandTag(Node *parsetree)
 		case T_CreateEncodingStmt:
 			tag = "CREATE ENCODING";
 			break;
+
 		case T_CreateTableAsStmt:
-			if (((CreateTableAsStmt *) parsetree)->is_select_into)
-				tag = "SELECT INTO";
-			else
-				tag = "CREATE TABLE AS";
+			switch (((CreateTableAsStmt *) parsetree)->relkind)
+			{
+				case OBJECT_TABLE:
+					if (((CreateTableAsStmt *) parsetree)->is_select_into)
+						tag = "SELECT INTO";
+					else
+						tag = "CREATE TABLE AS";
+					break;
+				case OBJECT_MATVIEW:
+					tag = "CREATE MATERIALIZED VIEW";
+					break;
+				default:
+					tag = "???";
+			}
+			break;
+
+		case T_RefreshMatViewStmt:
+			tag = "REFRESH MATERIALIZED VIEW";
 			break;
 
 		case T_VariableSetStmt:
@@ -3141,6 +3566,14 @@ CreateCommandTag(Node *parsetree)
 
 		case T_CreateTrigStmt:
 			tag = "CREATE TRIGGER";
+			break;
+
+		case T_CreateEventTrigStmt:
+			tag = "CREATE EVENT TRIGGER";
+			break;
+
+		case T_AlterEventTrigStmt:
+			tag = "ALTER EVENT TRIGGER";
 			break;
 
 		case T_CreatePLangStmt:
@@ -3282,10 +3715,28 @@ CreateCommandTag(Node *parsetree)
 						else if (stmt->rowMarks != NIL)
 						{
 							/* not 100% but probably close enough */
-							if (((PlanRowMark *) linitial(stmt->rowMarks))->markType == ROW_MARK_EXCLUSIVE)
-								tag = "SELECT FOR UPDATE";
-							else
-								tag = "SELECT FOR SHARE";
+							switch (((PlanRowMark *) linitial(stmt->rowMarks))->markType)
+							{
+								case ROW_MARK_EXCLUSIVE:
+									tag = "SELECT FOR UPDATE";
+									break;
+								case ROW_MARK_NOKEYEXCLUSIVE:
+									tag = "SELECT FOR NO KEY UPDATE";
+									break;
+								case ROW_MARK_SHARE:
+									tag = "SELECT FOR SHARE";
+									break;
+								case ROW_MARK_KEYSHARE:
+									tag = "SELECT FOR KEY SHARE";
+									break;
+								case ROW_MARK_REFERENCE:
+								case ROW_MARK_COPY:
+									tag = "SELECT";
+									break;
+								default:
+									tag = "???";
+									break;
+							}
 						}
 						else
 							tag = "SELECT";
@@ -3330,10 +3781,24 @@ CreateCommandTag(Node *parsetree)
 						else if (stmt->rowMarks != NIL)
 						{
 							/* not 100% but probably close enough */
-							if (((RowMarkClause *) linitial(stmt->rowMarks))->forUpdate)
-								tag = "SELECT FOR UPDATE";
-							else
-								tag = "SELECT FOR SHARE";
+							switch (((RowMarkClause *) linitial(stmt->rowMarks))->strength)
+							{
+								case LCS_FORKEYSHARE:
+									tag = "SELECT FOR KEY SHARE";
+									break;
+								case LCS_FORSHARE:
+									tag = "SELECT FOR SHARE";
+									break;
+								case LCS_FORNOKEYUPDATE:
+									tag = "SELECT FOR NO KEY UPDATE";
+									break;
+								case LCS_FORUPDATE:
+									tag = "SELECT FOR UPDATE";
+									break;
+								default:
+									tag = "???";
+									break;
+							}
 						}
 						else
 							tag = "SELECT";
@@ -3657,6 +4122,10 @@ GetCommandLogLevel(Node *parsetree)
 			lev = LOGSTMT_DDL;
 			break;
 
+		case T_RefreshMatViewStmt:
+			lev = LOGSTMT_DDL;
+			break;
+
 		case T_VariableSetStmt:
 			lev = LOGSTMT_ALL;
 			break;
@@ -3670,6 +4139,14 @@ GetCommandLogLevel(Node *parsetree)
 			break;
 
 		case T_CreateTrigStmt:
+			lev = LOGSTMT_DDL;
+			break;
+
+		case T_CreateEventTrigStmt:
+			lev = LOGSTMT_DDL;
+			break;
+
+		case T_AlterEventTrigStmt:
 			lev = LOGSTMT_DDL;
 			break;
 
@@ -3914,6 +4391,10 @@ GetNodesForRulesUtility(RangeVar *relation, bool *is_temp)
  * TreatDropStmtOnCoord
  * Do a pre-treatment of Drop statement on a remote Coordinator
  */
+/*
+ * By utility.c refactoring to support event trigger, it is difficult fo callers to
+ * supply queryString, which is not used in this function.
+ */
 static void
 DropStmtPreTreatment(DropStmt *stmt, const char *queryString, bool sentToRemote,
 					 bool *is_temp, RemoteQueryExecType *exec_type)
@@ -4023,7 +4504,7 @@ DropStmtPreTreatment(DropStmt *stmt, const char *queryString, bool sentToRemote,
 
 		default:
 			res_is_temp = false;
-			res_exec_type = EXEC_ON_ALL_NODES;
+			res_exec_type = *exec_type;
 			break;
 	}
 

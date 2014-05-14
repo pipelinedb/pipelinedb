@@ -4,7 +4,7 @@
  *	  prototypes for plancat.c.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/optimizer/plancat.h
@@ -43,11 +43,13 @@ extern bool has_unique_index(RelOptInfo *rel, AttrNumber attno);
 extern Selectivity restriction_selectivity(PlannerInfo *root,
 						Oid operatorid,
 						List *args,
+						Oid inputcollid,
 						int varRelid);
 
 extern Selectivity join_selectivity(PlannerInfo *root,
 				 Oid operatorid,
 				 List *args,
+				 Oid inputcollid,
 				 JoinType jointype,
 				 SpecialJoinInfo *sjinfo);
 

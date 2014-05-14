@@ -25,10 +25,10 @@ PostgreSQL documentation
 <synopsis>
 ALTER TYPE <replaceable class="PARAMETER">name</replaceable> <replaceable class="PARAMETER">action</replaceable> [, ... ]
 ALTER TYPE <replaceable class="PARAMETER">name</replaceable> OWNER TO <replaceable class="PARAMETER">new_owner</replaceable>
-ALTER TYPE <replaceable class="PARAMETER">name</replaceable> RENAME ATTRIBUTE <replaceable class="PARAMETER">attribute_name</replaceable> TO <replaceable class="PARAMETER">new_attribute_name</replaceable>
-ALTER TYPE <replaceable class="PARAMETER">name</replaceable> RENAME TO <replaceable class="PARAMETER">new_name</replaceable> [ CASCADE | RESTRICT ]
+ALTER TYPE <replaceable class="PARAMETER">name</replaceable> RENAME ATTRIBUTE <replaceable class="PARAMETER">attribute_name</replaceable> TO <replaceable class="PARAMETER">new_attribute_name</replaceable> [ CASCADE | RESTRICT ]
+ALTER TYPE <replaceable class="PARAMETER">name</replaceable> RENAME TO <replaceable class="PARAMETER">new_name</replaceable>
 ALTER TYPE <replaceable class="PARAMETER">name</replaceable> SET SCHEMA <replaceable class="PARAMETER">new_schema</replaceable>
-ALTER TYPE <replaceable class="PARAMETER">name</replaceable> ADD VALUE <replaceable class="PARAMETER">new_enum_value</replaceable> [ { BEFORE | AFTER } <replaceable class="PARAMETER">existing_enum_value</replaceable> ]
+ALTER TYPE <replaceable class="PARAMETER">name</replaceable> ADD VALUE [ IF NOT EXISTS ] <replaceable class="PARAMETER">new_enum_value</replaceable> [ { BEFORE | AFTER } <replaceable class="PARAMETER">existing_enum_value</replaceable> ]
 
 <phrase>where <replaceable class="PARAMETER">action</replaceable> is one of:</phrase>
 
@@ -42,7 +42,6 @@ ALTER TYPE <replaceable class="PARAMETER">name</replaceable> ADD VALUE <replacea
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER TYPE</command> changes the definition of an existing type.
    There are several subforms:
@@ -108,13 +107,19 @@ ALTER TYPE <replaceable class="PARAMETER">name</replaceable> ADD VALUE <replacea
    </varlistentry>
 
    <varlistentry>
-    <term><literal>ADD VALUE [ BEFORE | AFTER ]</literal></term>
+    <term><literal>ADD VALUE [ IF NOT EXISTS ] [ BEFORE | AFTER ]</literal></term>
     <listitem>
      <para>
-      This form adds a new value to an enum type. If the new value's place in
-      the enum's ordering is not specified using <literal>BEFORE</literal> or
-      <literal>AFTER</literal>, then the new item is placed at the end of the
-      list of values.
+      This form adds a new value to an enum type.  The new value's place in
+      the enum's ordering can be specified as being <literal>BEFORE</literal>
+      or <literal>AFTER</literal> one of the existing values.  Otherwise,
+      the new item is added at the end of the list of values.
+     </para>
+     <para>
+      If <literal>IF NOT EXISTS</literal> is specified, it is not an error if
+      the type already contains the new value: a notice is issued but no other
+      action is taken. Otherwise, an error will occur if the new value is
+      already present.
      </para>
     </listitem>
    </varlistentry>
@@ -158,12 +163,15 @@ ALTER TYPE <replaceable class="PARAMETER">name</replaceable> ADD VALUE <replacea
    the type's schema.  (These restrictions enforce that altering the owner
    doesn't do anything you couldn't do by dropping and recreating the type.
    However, a superuser can alter ownership of any type anyway.)
+   To add an attribute or alter an attribute type, you must also
+   have <literal>USAGE</literal> privilege on the data type.
   </para>
  </refsect1>
 
  <refsect1>
   <title>Parameters</title>
 
+&common;
    <para>
     <variablelist>
      <varlistentry>
@@ -259,6 +267,7 @@ ALTER TYPE <replaceable class="PARAMETER">name</replaceable> ADD VALUE <replacea
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    <command>ALTER TYPE ... ADD VALUE</> (the form that adds a new value to an
    enum type) cannot be executed inside a transaction block.
@@ -315,13 +324,13 @@ ALTER TYPE compfoo ADD ATTRIBUTE f3 int;
    To add a new value to an enum type in a particular sort position:
 <programlisting>
 ALTER TYPE colors ADD VALUE 'orange' AFTER 'red';
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The variants to add and drop attributes are part of the SQL
    standard; the other variants are PostgreSQL extensions.

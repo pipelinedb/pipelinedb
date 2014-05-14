@@ -11,6 +11,7 @@
 <!entity xconly		SYSTEM "xconly.sgml">
 <!entity pgonly     SYSTEM "pgonly.sgml">
 <!entity common		SYSTEM "common.sgml">
+<!entity not-supported		SYSTEM "not-supported.sgml">
 <!entity xc-constraint SYSTEM "xc-constraint.sgml">
 <!## end>
 
@@ -32,6 +33,7 @@
 <!ENTITY mvcc       SYSTEM "mvcc.sgml">
 <!ENTITY perform    SYSTEM "perform.sgml">
 <!ENTITY queries    SYSTEM "queries.sgml">
+<!ENTITY rangetypes SYSTEM "rangetypes.sgml">
 <!ENTITY rowtypes   SYSTEM "rowtypes.sgml">
 <!ENTITY syntax     SYSTEM "syntax.sgml">
 <!ENTITY textsearch SYSTEM "textsearch.sgml">
@@ -56,10 +58,9 @@
 <!ENTITY config        SYSTEM "config.sgml">
 <!ENTITY user-manag    SYSTEM "user-manag.sgml">
 <!ENTITY wal           SYSTEM "wal.sgml">
-<!ENTITY add-node      SYSTEM "add-node.sgml">
-<!ENTITY remove-node   SYSTEM "remove-node.sgml">
 
 <!-- programmer's guide -->
+<!ENTITY bgworker   SYSTEM "bgworker.sgml">
 <!ENTITY dfunc      SYSTEM "dfunc.sgml">
 <!ENTITY ecpg       SYSTEM "ecpg.sgml">
 <!ENTITY extend     SYSTEM "extend.sgml">
@@ -71,6 +72,7 @@
 <!ENTITY rules      SYSTEM "rules.sgml">
 <!ENTITY spi        SYSTEM "spi.sgml">
 <!ENTITY trigger    SYSTEM "trigger.sgml">
+<!ENTITY event-trigger SYSTEM "event-trigger.sgml">
 <!ENTITY xaggr      SYSTEM "xaggr.sgml">
 <!ENTITY xfunc      SYSTEM "xfunc.sgml">
 <!ENTITY xindex     SYSTEM "xindex.sgml">
@@ -92,6 +94,7 @@
 <!ENTITY catalogs   SYSTEM "catalogs.sgml">
 <!ENTITY geqo       SYSTEM "geqo.sgml">
 <!ENTITY gist       SYSTEM "gist.sgml">
+<!ENTITY spgist     SYSTEM "spgist.sgml">
 <!ENTITY gin        SYSTEM "gin.sgml">
 <!ENTITY planstats    SYSTEM "planstats.sgml">
 <!ENTITY indexam    SYSTEM "indexam.sgml">
@@ -138,6 +141,7 @@
 <!ENTITY pgstatstatements SYSTEM "pgstatstatements.sgml">
 <!ENTITY pgstattuple     SYSTEM "pgstattuple.sgml">
 <!ENTITY pgtestfsync     SYSTEM "pgtestfsync.sgml">
+<!ENTITY pgtesttiming    SYSTEM "pgtesttiming.sgml">
 <!ENTITY pgtrgm          SYSTEM "pgtrgm.sgml">
 <!ENTITY pgupgrade       SYSTEM "pgupgrade.sgml">
 <!## XC>
@@ -146,11 +150,14 @@
 <!ENTITY pgxcddl         SYSTEM "pgxcddl.sgml">
 <!ENTITY pgxcmonitor	 SYSTEM "pgxcmonitor.sgml">
 <!## end>
+<!ENTITY pgxlogdump      SYSTEM "pg_xlogdump.sgml">
+<!ENTITY postgres-fdw    SYSTEM "postgres-fdw.sgml">
 <!ENTITY seg             SYSTEM "seg.sgml">
 <!ENTITY contrib-spi     SYSTEM "contrib-spi.sgml">
 <!ENTITY sepgsql         SYSTEM "sepgsql.sgml">
 <!ENTITY sslinfo         SYSTEM "sslinfo.sgml">
 <!ENTITY tablefunc       SYSTEM "tablefunc.sgml">
+<!ENTITY tcn             SYSTEM "tcn.sgml">
 <!ENTITY test-parser     SYSTEM "test-parser.sgml">
 <!ENTITY tsearch2        SYSTEM "tsearch2.sgml">
 <!ENTITY unaccent      SYSTEM "unaccent.sgml">
@@ -170,8 +177,12 @@
 <!ENTITY release    SYSTEM "release.sgml">
 <!## XC>
 <!ENTITY release-xc-1.0 SYSTEM "release-xc-1.0.sgml">
+<!ENTITY release-xc-1.1 SYSTEM "release-xc-1.1.sgml">
+<!ENTITY release-xc-1.2 SYSTEM "release-xc-1.2.sgml">
 <!## end>
 <!## PG>
+<!ENTITY release-9.3    SYSTEM "release-9.3.sgml">
+<!ENTITY release-9.2    SYSTEM "release-9.2.sgml">
 <!ENTITY release-9.1    SYSTEM "release-9.1.sgml">
 <!ENTITY release-9.0    SYSTEM "release-9.0.sgml">
 <!ENTITY release-8.4    SYSTEM "release-8.4.sgml">

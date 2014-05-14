@@ -39,9 +39,6 @@ SELECT DISTINCT p.age FROM person* p ORDER BY age using >;
 -- very own regression file.
 --
 
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-
 CREATE TEMP TABLE disttable (f1 integer);
 INSERT INTO DISTTABLE VALUES(1);
 INSERT INTO DISTTABLE VALUES(2);

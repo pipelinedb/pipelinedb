@@ -1,10 +1,10 @@
 /*-------------------------------------------------------------------------
  *
  * spgtextproc.c
- *	  implementation of compressed-suffix tree over text
+ *	  implementation of radix tree (compressed trie) over text
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -23,16 +23,22 @@
 
 
 /*
- * In the worst case, a inner tuple in a text suffix tree could have as many
+ * In the worst case, a inner tuple in a text radix tree could have as many
  * as 256 nodes (one for each possible byte value).  Each node can take 16
  * bytes on MAXALIGN=8 machines.  The inner tuple must fit on an index page
  * of size BLCKSZ.	Rather than assuming we know the exact amount of overhead
  * imposed by page headers, tuple headers, etc, we leave 100 bytes for that
  * (the actual overhead should be no more than 56 bytes at this writing, so
- * there is slop in this number).  The upshot is that the maximum safe prefix
- * length is this:
+ * there is slop in this number).  So we can safely create prefixes up to
+ * BLCKSZ - 256 * 16 - 100 bytes long.	Unfortunately, because 256 * 16 is
+ * already 4K, there is no safe prefix length when BLCKSZ is less than 8K;
+ * it is always possible to get "SPGiST inner tuple size exceeds maximum"
+ * if there are too many distinct next-byte values at a given place in the
+ * tree.  Since use of nonstandard block sizes appears to be negligible in
+ * the field, we just live with that fact for now, choosing a max prefix
+ * size of 32 bytes when BLCKSZ is configured smaller than default.
  */
-#define SPGIST_MAX_PREFIX_LENGTH	(BLCKSZ - 256 * 16 - 100)
+#define SPGIST_MAX_PREFIX_LENGTH	Max((int) (BLCKSZ - 256 * 16 - 100), 32)
 
 /* Struct for sorting values in picksplit */
 typedef struct spgNodePtr

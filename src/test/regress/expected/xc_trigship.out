@@ -11,8 +11,6 @@ set search_path to xc_trigship,public;
 -----------------
 -- Base table on which the DML operations would be fired.
 create table xctrigemp1 (id int unique, empname varchar unique, empsal float, empadd varchar, trigop varchar) distribute by replication;
-NOTICE:  CREATE TABLE / UNIQUE will create implicit index "xctrigemp1_id_key" for table "xctrigemp1"
-NOTICE:  CREATE TABLE / UNIQUE will create implicit index "xctrigemp1_empname_key" for table "xctrigemp1"
 -- Table where all the logs of DML operations would be dumped.
 create table xc_auditlog (trigdata varchar, nodename varchar) distribute by replication;
 -- Convenience function to be used by all the trigger functions to dump all the trigger
@@ -646,7 +644,7 @@ INSERT 0 6
                                                                                         QUERY PLAN                                                                                        
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Update on xc_trigship.xctrigemp1
-   Remote query: UPDATE ONLY xc_trigship.xctrigemp1 SET empsal = $3 WHERE (xctrigemp1.ctid = $6)
+   Remote query: UPDATE ONLY xc_trigship.xctrigemp1 SET id = $1, empname = $2, empsal = $3, empadd = $4, trigop = $5 WHERE ((xctrigemp1.empname = $2))
    ->  Data Node Scan on xctrigemp1 "_REMOTE_TABLE_QUERY_"
          Output: xctrigemp1.id, xctrigemp1.empname, (xctrigemp1.empsal + 1000::double precision), xctrigemp1.empadd, xctrigemp1.trigop, xctrigemp1.empname, xctrigemp1.ctid, xctrigemp1.*
          Remote query: SELECT id, empname, empsal, empadd, trigop, ctid, xctrigemp1.*::xc_trigship.xctrigemp1 FROM ONLY xc_trigship.xctrigemp1 WHERE ((empname)::text <> 'Dummy'::text)

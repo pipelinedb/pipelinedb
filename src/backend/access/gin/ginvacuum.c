@@ -4,7 +4,7 @@
  *	  delete & vacuum routines for the postgres GIN
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -147,7 +147,6 @@ xlogVacuumPage(Relation index, Buffer buffer)
 
 	recptr = XLogInsert(RM_GIN_ID, XLOG_GIN_VACUUM_PAGE, rdata);
 	PageSetLSN(page, recptr);
-	PageSetTLI(page, ThisTimeLineID);
 }
 
 static bool
@@ -238,6 +237,9 @@ ginVacuumPostingTreeLeaves(GinVacuumState *gvs, BlockNumber blkno, bool isRoot, 
 	return hasVoidPage;
 }
 
+/*
+ * Delete a posting tree page.
+ */
 static void
 ginDeletePage(GinVacuumState *gvs, BlockNumber deleteBlkno, BlockNumber leftBlkno,
 			  BlockNumber parentBlkno, OffsetNumber myoff, bool isParentRoot)
@@ -247,39 +249,35 @@ ginDeletePage(GinVacuumState *gvs, BlockNumber deleteBlkno, BlockNumber leftBlkn
 	Buffer		pBuffer;
 	Page		page,
 				parentPage;
+	BlockNumber	rightlink;
 
+	/*
+	 * Lock the pages in the same order as an insertion would, to avoid
+	 * deadlocks: left, then right, then parent.
+	 */
+	lBuffer = ReadBufferExtended(gvs->index, MAIN_FORKNUM, leftBlkno,
+								 RBM_NORMAL, gvs->strategy);
 	dBuffer = ReadBufferExtended(gvs->index, MAIN_FORKNUM, deleteBlkno,
 								 RBM_NORMAL, gvs->strategy);
-
-	if (leftBlkno != InvalidBlockNumber)
-		lBuffer = ReadBufferExtended(gvs->index, MAIN_FORKNUM, leftBlkno,
-									 RBM_NORMAL, gvs->strategy);
-	else
-		lBuffer = InvalidBuffer;
-
 	pBuffer = ReadBufferExtended(gvs->index, MAIN_FORKNUM, parentBlkno,
 								 RBM_NORMAL, gvs->strategy);
 
+	LockBuffer(lBuffer, GIN_EXCLUSIVE);
 	LockBuffer(dBuffer, GIN_EXCLUSIVE);
 	if (!isParentRoot)			/* parent is already locked by
 								 * LockBufferForCleanup() */
 		LockBuffer(pBuffer, GIN_EXCLUSIVE);
-	if (leftBlkno != InvalidBlockNumber)
-		LockBuffer(lBuffer, GIN_EXCLUSIVE);
 
 	START_CRIT_SECTION();
 
-	if (leftBlkno != InvalidBlockNumber)
-	{
-		BlockNumber rightlink;
+	/* Unlink the page by changing left sibling's rightlink */
+	page = BufferGetPage(dBuffer);
+	rightlink = GinPageGetOpaque(page)->rightlink;
 
-		page = BufferGetPage(dBuffer);
-		rightlink = GinPageGetOpaque(page)->rightlink;
+	page = BufferGetPage(lBuffer);
+	GinPageGetOpaque(page)->rightlink = rightlink;
 
-		page = BufferGetPage(lBuffer);
-		GinPageGetOpaque(page)->rightlink = rightlink;
-	}
-
+	/* Delete downlink from parent */
 	parentPage = BufferGetPage(pBuffer);
 #ifdef USE_ASSERT_CHECKING
 	do
@@ -350,24 +348,18 @@ ginDeletePage(GinVacuumState *gvs, BlockNumber deleteBlkno, BlockNumber leftBlkn
 
 		recptr = XLogInsert(RM_GIN_ID, XLOG_GIN_DELETE_PAGE, rdata);
 		PageSetLSN(page, recptr);
-		PageSetTLI(page, ThisTimeLineID);
 		PageSetLSN(parentPage, recptr);
-		PageSetTLI(parentPage, ThisTimeLineID);
 		if (leftBlkno != InvalidBlockNumber)
 		{
 			page = BufferGetPage(lBuffer);
 			PageSetLSN(page, recptr);
-			PageSetTLI(page, ThisTimeLineID);
 		}
 	}
 
 	if (!isParentRoot)
 		LockBuffer(pBuffer, GIN_UNLOCK);
 	ReleaseBuffer(pBuffer);
-
-	if (leftBlkno != InvalidBlockNumber)
-		UnlockReleaseBuffer(lBuffer);
-
+	UnlockReleaseBuffer(lBuffer);
 	UnlockReleaseBuffer(dBuffer);
 
 	END_CRIT_SECTION();
@@ -435,15 +427,12 @@ ginScanToDelete(GinVacuumState *gvs, BlockNumber blkno, bool isRoot, DataPageDel
 
 	if (GinPageGetOpaque(page)->maxoff < FirstOffsetNumber)
 	{
-		if (!(me->leftBlkno == InvalidBlockNumber && GinPageRightMost(page)))
+		/* we never delete the left- or rightmost branch */
+		if (me->leftBlkno != InvalidBlockNumber && !GinPageRightMost(page))
 		{
-			/* we never delete right most branch */
 			Assert(!isRoot);
-			if (GinPageGetOpaque(page)->maxoff < FirstOffsetNumber)
-			{
-				ginDeletePage(gvs, blkno, me->leftBlkno, me->parent->blkno, myoff, me->parent->isRoot);
-				meDelete = TRUE;
-			}
+			ginDeletePage(gvs, blkno, me->leftBlkno, me->parent->blkno, myoff, me->parent->isRoot);
+			meDelete = TRUE;
 		}
 	}
 

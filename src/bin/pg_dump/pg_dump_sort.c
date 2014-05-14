@@ -4,7 +4,7 @@
  *	  Sort the items of a dump into a safe order for dumping
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -14,9 +14,10 @@
  *-------------------------------------------------------------------------
  */
 #include "pg_backup_archiver.h"
-#include "dumputils.h"
-#include "dumpmem.h"
+#include "pg_backup_utils.h"
+#include "parallel.h"
 
+/* translator: this is a module name */
 static const char *modulename = gettext_noop("sorter");
 
 /*
@@ -24,8 +25,14 @@ static const char *modulename = gettext_noop("sorter");
  * Objects are sorted by priority levels, and within an equal priority level
  * by OID.	(This is a relatively crude hack to provide semi-reasonable
  * behavior for old databases without full dependency info.)  Note: collations,
- * extensions, text search, foreign-data, and default ACL objects can't really
- * happen here, so the rather bogus priorities for them don't matter.
+ * extensions, text search, foreign-data, materialized view, event trigger,
+ * and default ACL objects can't really happen here, so the rather bogus
+ * priorities for them don't matter.
+ *
+ * NOTE: object-type priorities must match the section assignments made in
+ * pg_dump.c; that is, PRE_DATA objects must sort before DO_PRE_DATA_BOUNDARY,
+ * POST_DATA objects must sort after DO_POST_DATA_BOUNDARY, and DATA objects
+ * must sort between them.
  */
 static const int oldObjectTypePriority[] =
 {
@@ -38,33 +45,42 @@ static const int oldObjectTypePriority[] =
 	3,							/* DO_OPERATOR */
 	4,							/* DO_OPCLASS */
 	4,							/* DO_OPFAMILY */
+	4,							/* DO_COLLATION */
 	5,							/* DO_CONVERSION */
 	6,							/* DO_TABLE */
 	8,							/* DO_ATTRDEF */
-	13,							/* DO_INDEX */
-	14,							/* DO_RULE */
-	15,							/* DO_TRIGGER */
-	12,							/* DO_CONSTRAINT */
-	16,							/* DO_FK_CONSTRAINT */
+	15,							/* DO_INDEX */
+	16,							/* DO_RULE */
+	17,							/* DO_TRIGGER */
+	14,							/* DO_CONSTRAINT */
+	18,							/* DO_FK_CONSTRAINT */
 	2,							/* DO_PROCLANG */
 	2,							/* DO_CAST */
-	10,							/* DO_TABLE_DATA */
+	11,							/* DO_TABLE_DATA */
 	7,							/* DO_DUMMY_TYPE */
-	3,							/* DO_TSPARSER */
+	4,							/* DO_TSPARSER */
 	4,							/* DO_TSDICT */
-	3,							/* DO_TSTEMPLATE */
-	5,							/* DO_TSCONFIG */
-	3,							/* DO_FDW */
+	4,							/* DO_TSTEMPLATE */
+	4,							/* DO_TSCONFIG */
+	4,							/* DO_FDW */
 	4,							/* DO_FOREIGN_SERVER */
-	17,							/* DO_DEFAULT_ACL */
+	19,							/* DO_DEFAULT_ACL */
 	9,							/* DO_BLOB */
-	11,							/* DO_BLOB_DATA */
-	2							/* DO_COLLATION */
+	12,							/* DO_BLOB_DATA */
+	10,							/* DO_PRE_DATA_BOUNDARY */
+	13,							/* DO_POST_DATA_BOUNDARY */
+	20,							/* DO_EVENT_TRIGGER */
+	15							/* DO_REFRESH_MATVIEW */
 };
 
 /*
  * Sort priority for object types when dumping newer databases.
  * Objects are sorted by type, and within a type by name.
+ *
+ * NOTE: object-type priorities must match the section assignments made in
+ * pg_dump.c; that is, PRE_DATA objects must sort before DO_PRE_DATA_BOUNDARY,
+ * POST_DATA objects must sort after DO_POST_DATA_BOUNDARY, and DATA objects
+ * must sort between them.
  */
 static const int newObjectTypePriority[] =
 {
@@ -77,17 +93,18 @@ static const int newObjectTypePriority[] =
 	8,							/* DO_OPERATOR */
 	9,							/* DO_OPCLASS */
 	9,							/* DO_OPFAMILY */
+	3,							/* DO_COLLATION */
 	11,							/* DO_CONVERSION */
 	18,							/* DO_TABLE */
 	20,							/* DO_ATTRDEF */
-	25,							/* DO_INDEX */
-	26,							/* DO_RULE */
-	27,							/* DO_TRIGGER */
-	24,							/* DO_CONSTRAINT */
-	28,							/* DO_FK_CONSTRAINT */
+	27,							/* DO_INDEX */
+	28,							/* DO_RULE */
+	29,							/* DO_TRIGGER */
+	26,							/* DO_CONSTRAINT */
+	30,							/* DO_FK_CONSTRAINT */
 	2,							/* DO_PROCLANG */
 	10,							/* DO_CAST */
-	22,							/* DO_TABLE_DATA */
+	23,							/* DO_TABLE_DATA */
 	19,							/* DO_DUMMY_TYPE */
 	12,							/* DO_TSPARSER */
 	14,							/* DO_TSDICT */
@@ -95,11 +112,17 @@ static const int newObjectTypePriority[] =
 	15,							/* DO_TSCONFIG */
 	16,							/* DO_FDW */
 	17,							/* DO_FOREIGN_SERVER */
-	29,							/* DO_DEFAULT_ACL */
+	31,							/* DO_DEFAULT_ACL */
 	21,							/* DO_BLOB */
-	23,							/* DO_BLOB_DATA */
-	3							/* DO_COLLATION */
+	24,							/* DO_BLOB_DATA */
+	22,							/* DO_PRE_DATA_BOUNDARY */
+	25,							/* DO_POST_DATA_BOUNDARY */
+	32,							/* DO_EVENT_TRIGGER */
+	33							/* DO_REFRESH_MATVIEW */
 };
+
+static DumpId preDataBoundId;
+static DumpId postDataBoundId;
 
 
 static int	DOTypeNameCompare(const void *p1, const void *p2);
@@ -121,6 +144,96 @@ static void repairDependencyLoop(DumpableObject **loop,
 static void describeDumpableObject(DumpableObject *obj,
 					   char *buf, int bufsize);
 
+static int	DOSizeCompare(const void *p1, const void *p2);
+
+static int
+findFirstEqualType(DumpableObjectType type, DumpableObject **objs, int numObjs)
+{
+	int			i;
+
+	for (i = 0; i < numObjs; i++)
+		if (objs[i]->objType == type)
+			return i;
+	return -1;
+}
+
+static int
+findFirstDifferentType(DumpableObjectType type, DumpableObject **objs, int numObjs, int start)
+{
+	int			i;
+
+	for (i = start; i < numObjs; i++)
+		if (objs[i]->objType != type)
+			return i;
+	return numObjs - 1;
+}
+
+/*
+ * When we do a parallel dump, we want to start with the largest items first.
+ *
+ * Say we have the objects in this order:
+ * ....DDDDD....III....
+ *
+ * with D = Table data, I = Index, . = other object
+ *
+ * This sorting function now takes each of the D or I blocks and sorts them
+ * according to their size.
+ */
+void
+sortDataAndIndexObjectsBySize(DumpableObject **objs, int numObjs)
+{
+	int			startIdx,
+				endIdx;
+	void	   *startPtr;
+
+	if (numObjs <= 1)
+		return;
+
+	startIdx = findFirstEqualType(DO_TABLE_DATA, objs, numObjs);
+	if (startIdx >= 0)
+	{
+		endIdx = findFirstDifferentType(DO_TABLE_DATA, objs, numObjs, startIdx);
+		startPtr = objs + startIdx;
+		qsort(startPtr, endIdx - startIdx, sizeof(DumpableObject *),
+			  DOSizeCompare);
+	}
+
+	startIdx = findFirstEqualType(DO_INDEX, objs, numObjs);
+	if (startIdx >= 0)
+	{
+		endIdx = findFirstDifferentType(DO_INDEX, objs, numObjs, startIdx);
+		startPtr = objs + startIdx;
+		qsort(startPtr, endIdx - startIdx, sizeof(DumpableObject *),
+			  DOSizeCompare);
+	}
+}
+
+static int
+DOSizeCompare(const void *p1, const void *p2)
+{
+	DumpableObject *obj1 = *(DumpableObject **) p1;
+	DumpableObject *obj2 = *(DumpableObject **) p2;
+	int			obj1_size = 0;
+	int			obj2_size = 0;
+
+	if (obj1->objType == DO_TABLE_DATA)
+		obj1_size = ((TableDataInfo *) obj1)->tdtable->relpages;
+	if (obj1->objType == DO_INDEX)
+		obj1_size = ((IndxInfo *) obj1)->relpages;
+
+	if (obj2->objType == DO_TABLE_DATA)
+		obj2_size = ((TableDataInfo *) obj2)->tdtable->relpages;
+	if (obj2->objType == DO_INDEX)
+		obj2_size = ((IndxInfo *) obj2)->relpages;
+
+	/* we want to see the biggest item go first */
+	if (obj1_size > obj2_size)
+		return -1;
+	if (obj2_size > obj1_size)
+		return 1;
+
+	return 0;
+}
 
 /*
  * Sort the given objects into a type/name-based ordering
@@ -175,6 +288,9 @@ DOTypeNameCompare(const void *p1, const void *p2)
 		FuncInfo   *fobj2 = *(FuncInfo *const *) p2;
 
 		cmpval = fobj1->nargs - fobj2->nargs;
+		if (cmpval != 0)
+			return cmpval;
+		cmpval = strcmp(fobj1->proiargs, fobj2->proiargs);
 		if (cmpval != 0)
 			return cmpval;
 	}
@@ -237,15 +353,26 @@ DOTypeOidCompare(const void *p1, const void *p2)
 /*
  * Sort the given objects into a safe dump order using dependency
  * information (to the extent we have it available).
+ *
+ * The DumpIds of the PRE_DATA_BOUNDARY and POST_DATA_BOUNDARY objects are
+ * passed in separately, in case we need them during dependency loop repair.
  */
 void
-sortDumpableObjects(DumpableObject **objs, int numObjs)
+sortDumpableObjects(DumpableObject **objs, int numObjs,
+					DumpId preBoundaryId, DumpId postBoundaryId)
 {
 	DumpableObject **ordering;
 	int			nOrdering;
 
-	if (numObjs <= 0)
+	if (numObjs <= 0)			/* can't happen anymore ... */
 		return;
+
+	/*
+	 * Saving the boundary IDs in static variables is a bit grotty, but seems
+	 * better than adding them to parameter lists of subsidiary functions.
+	 */
+	preDataBoundId = preBoundaryId;
+	postDataBoundId = postBoundaryId;
 
 	ordering = (DumpableObject **) pg_malloc(numObjs * sizeof(DumpableObject *));
 	while (!TopoSort(objs, numObjs, ordering, &nOrdering))
@@ -520,7 +647,7 @@ findDependencyLoops(DumpableObject **objs, int nObjs, int totObjs)
 	bool		fixedloop;
 	int			i;
 
-	processed = (bool *) pg_calloc(getMaxDumpId() + 1, sizeof(bool));
+	processed = (bool *) pg_malloc0((getMaxDumpId() + 1) * sizeof(bool));
 	workspace = (DumpableObject **) pg_malloc(totObjs * sizeof(DumpableObject *));
 	fixedloop = false;
 
@@ -693,14 +820,25 @@ static void
 repairViewRuleMultiLoop(DumpableObject *viewobj,
 						DumpableObject *ruleobj)
 {
+	TableInfo  *viewinfo = (TableInfo *) viewobj;
+	RuleInfo   *ruleinfo = (RuleInfo *) ruleobj;
+
 	/* remove view's dependency on rule */
 	removeObjectDependency(viewobj, ruleobj->dumpId);
 	/* pretend view is a plain table and dump it that way */
-	((TableInfo *) viewobj)->relkind = 'r';		/* RELKIND_RELATION */
+	viewinfo->relkind = 'r';	/* RELKIND_RELATION */
 	/* mark rule as needing its own dump */
-	((RuleInfo *) ruleobj)->separate = true;
+	ruleinfo->separate = true;
+	/* move any reloptions from view to rule */
+	if (viewinfo->reloptions)
+	{
+		ruleinfo->reloptions = viewinfo->reloptions;
+		viewinfo->reloptions = NULL;
+	}
 	/* put back rule's dependency on view */
 	addObjectDependency(ruleobj, viewobj->dumpId);
+	/* now that rule is separate, it must be post-data */
+	addObjectDependency(ruleobj, postDataBoundId);
 }
 
 /*
@@ -736,6 +874,8 @@ repairTableConstraintMultiLoop(DumpableObject *tableobj,
 	((ConstraintInfo *) constraintobj)->separate = true;
 	/* put back constraint's dependency on table */
 	addObjectDependency(constraintobj, tableobj->dumpId);
+	/* now that constraint is separate, it must be post-data */
+	addObjectDependency(constraintobj, postDataBoundId);
 }
 
 /*
@@ -782,6 +922,8 @@ repairDomainConstraintMultiLoop(DumpableObject *domainobj,
 	((ConstraintInfo *) constraintobj)->separate = true;
 	/* put back constraint's dependency on domain */
 	addObjectDependency(constraintobj, domainobj->dumpId);
+	/* now that constraint is separate, it must be post-data */
+	addObjectDependency(constraintobj, postDataBoundId);
 }
 
 /*
@@ -1103,6 +1245,11 @@ describeDumpableObject(DumpableObject *obj, char *buf, int bufsize)
 					 "INDEX %s  (ID %d OID %u)",
 					 obj->name, obj->dumpId, obj->catId.oid);
 			return;
+		case DO_REFRESH_MATVIEW:
+			snprintf(buf, bufsize,
+					 "REFRESH MATERIALIZED VIEW %s  (ID %d OID %u)",
+					 obj->name, obj->dumpId, obj->catId.oid);
+			return;
 		case DO_RULE:
 			snprintf(buf, bufsize,
 					 "RULE %s  (ID %d OID %u)",
@@ -1111,6 +1258,11 @@ describeDumpableObject(DumpableObject *obj, char *buf, int bufsize)
 		case DO_TRIGGER:
 			snprintf(buf, bufsize,
 					 "TRIGGER %s  (ID %d OID %u)",
+					 obj->name, obj->dumpId, obj->catId.oid);
+			return;
+		case DO_EVENT_TRIGGER:
+			snprintf(buf, bufsize,
+					 "EVENT TRIGGER %s (ID %d OID %u)",
 					 obj->name, obj->dumpId, obj->catId.oid);
 			return;
 		case DO_CONSTRAINT:
@@ -1188,6 +1340,16 @@ describeDumpableObject(DumpableObject *obj, char *buf, int bufsize)
 		case DO_BLOB_DATA:
 			snprintf(buf, bufsize,
 					 "BLOB DATA  (ID %d)",
+					 obj->dumpId);
+			return;
+		case DO_PRE_DATA_BOUNDARY:
+			snprintf(buf, bufsize,
+					 "PRE-DATA BOUNDARY  (ID %d)",
+					 obj->dumpId);
+			return;
+		case DO_POST_DATA_BOUNDARY:
+			snprintf(buf, bufsize,
+					 "POST-DATA BOUNDARY  (ID %d)",
 					 obj->dumpId);
 			return;
 	}

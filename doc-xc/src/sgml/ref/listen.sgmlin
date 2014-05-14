@@ -28,15 +28,7 @@ LISTEN <replaceable class="PARAMETER">channel</replaceable>
  <refsect1>
   <title>Description</title>
 
-<!## XC>
-&xconly;
-  <para>
-   <command>LISTEN</> statement has not been supported
-   in <productname>Postgres-XC</> yet.
-  </para>
-<!## end>
-
-<!## PG>
+&common;
   <para>
    <command>LISTEN</command> registers the current session as a
    listener on the notification channel named <replaceable
@@ -79,11 +71,22 @@ LISTEN <replaceable class="PARAMETER">channel</replaceable>
    discussion of the use of <command>LISTEN</command> and
    <command>NOTIFY</command>.
   </para>
+
+&xconly;
+<!## XC>
+  <para>
+   In <productname>Postgres-XC</productname>, notification chanells work only locally at
+   the originating coordinator.
+   Only notification issued locally can be listened.
+  </para>
+<!## end>
+
  </refsect1>
 
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">channel</replaceable></term>
@@ -99,6 +102,7 @@ LISTEN <replaceable class="PARAMETER">channel</replaceable>
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    <command>LISTEN</command> takes effect at transaction commit.
    If <command>LISTEN</command> or <command>UNLISTEN</command> is executed
@@ -122,18 +126,17 @@ LISTEN <replaceable class="PARAMETER">channel</replaceable>
 LISTEN virtual;
 NOTIFY virtual;
 Asynchronous notification "virtual" received from server process with PID 8448.
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>LISTEN</command> statement in the SQL
    standard.
   </para>
-<!## end>
  </refsect1>
 
  <refsect1>

@@ -4,7 +4,7 @@
  *	  POSTGRES relation trigger definitions.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/reltrigger.h
@@ -69,6 +69,5 @@ typedef struct TriggerDesc
 	bool		trig_truncate_before_statement;
 	bool		trig_truncate_after_statement;
 } TriggerDesc;
-
 
 #endif   /* RELTRIGGER_H */

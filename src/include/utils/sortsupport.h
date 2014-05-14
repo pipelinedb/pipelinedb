@@ -37,7 +37,7 @@
  * function for such cases, but probably not any other acceleration method.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/sortsupport.h
@@ -101,14 +101,21 @@ typedef struct SortSupportData
 } SortSupportData;
 
 
-/* ApplySortComparator should be inlined if possible */
-#ifdef USE_INLINE
-
+/*
+ * ApplySortComparator should be inlined if possible.  See STATIC_IF_INLINE
+ * in c.h.
+ */
+#ifndef PG_USE_INLINE
+extern int ApplySortComparator(Datum datum1, bool isNull1,
+					Datum datum2, bool isNull2,
+					SortSupport ssup);
+#endif   /* !PG_USE_INLINE */
+#if defined(PG_USE_INLINE) || defined(SORTSUPPORT_INCLUDE_DEFINITIONS)
 /*
  * Apply a sort comparator function and return a 3-way comparison result.
  * This takes care of handling reverse-sort and NULLs-ordering properly.
  */
-static inline int
+STATIC_IF_INLINE int
 ApplySortComparator(Datum datum1, bool isNull1,
 					Datum datum2, bool isNull2,
 					SortSupport ssup)
@@ -140,12 +147,7 @@ ApplySortComparator(Datum datum1, bool isNull1,
 
 	return compare;
 }
-#else
-
-extern int ApplySortComparator(Datum datum1, bool isNull1,
-					Datum datum2, bool isNull2,
-					SortSupport ssup);
-#endif   /* USE_INLINE */
+#endif   /*-- PG_USE_INLINE || SORTSUPPORT_INCLUDE_DEFINITIONS */
 
 /* Other functions in utils/sort/sortsupport.c */
 extern void PrepareSortSupportComparisonShim(Oid cmpFunc, SortSupport ssup);

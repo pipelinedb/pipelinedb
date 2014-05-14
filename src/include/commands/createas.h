@@ -4,7 +4,7 @@
  *	  prototypes for createas.c.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/commands/createas.h
@@ -25,5 +25,6 @@ extern void ExecCreateTableAs(CreateTableAsStmt *stmt, const char *queryString,
 extern int	GetIntoRelEFlags(IntoClause *intoClause);
 
 extern DestReceiver *CreateIntoRelDestReceiver(IntoClause *intoClause);
+extern Relation		get_dest_into_rel(DestReceiver *self);
 
 #endif   /* CREATEAS_H */

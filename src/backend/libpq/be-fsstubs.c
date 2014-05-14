@@ -3,7 +3,7 @@
  * be-fsstubs.c
  *	  Builtin functions for open/close/read/write operations on large objects
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -56,7 +56,9 @@
  */
 bool		lo_compat_privileges;
 
-/*#define FSDB 1*/
+/* define this to enable debug logging */
+/* #define FSDB 1 */
+/* chunk size for lo_import/lo_export transfers */
 #define BUFSIZE			8192
 
 /*
@@ -169,6 +171,7 @@ int
 lo_read(int fd, char *buf, int len)
 {
 	int			status;
+	LargeObjectDesc *lobj;
 
 #ifdef PGXC
 	ereport(ERROR,
@@ -181,19 +184,26 @@ lo_read(int fd, char *buf, int len)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("invalid large-object descriptor: %d", fd)));
+	lobj = cookies[fd];
 
-	/* Permission checks */
-	if (!lo_compat_privileges &&
-		pg_largeobject_aclcheck_snapshot(cookies[fd]->id,
-										 GetUserId(),
-										 ACL_SELECT,
-									   cookies[fd]->snapshot) != ACLCHECK_OK)
-		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("permission denied for large object %u",
-						cookies[fd]->id)));
+	/* We don't bother to check IFS_RDLOCK, since it's always set */
 
-	status = inv_read(cookies[fd], buf, len);
+	/* Permission checks --- first time through only */
+	if ((lobj->flags & IFS_RD_PERM_OK) == 0)
+	{
+		if (!lo_compat_privileges &&
+			pg_largeobject_aclcheck_snapshot(lobj->id,
+											 GetUserId(),
+											 ACL_SELECT,
+											 lobj->snapshot) != ACLCHECK_OK)
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("permission denied for large object %u",
+							lobj->id)));
+		lobj->flags |= IFS_RD_PERM_OK;
+	}
+
+	status = inv_read(lobj, buf, len);
 
 	return status;
 }
@@ -202,6 +212,7 @@ int
 lo_write(int fd, const char *buf, int len)
 {
 	int			status;
+	LargeObjectDesc *lobj;
 
 #ifdef PGXC
 	ereport(ERROR,
@@ -214,29 +225,33 @@ lo_write(int fd, const char *buf, int len)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("invalid large-object descriptor: %d", fd)));
+	lobj = cookies[fd];
 
-	if ((cookies[fd]->flags & IFS_WRLOCK) == 0)
+	if ((lobj->flags & IFS_WRLOCK) == 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 			  errmsg("large object descriptor %d was not opened for writing",
 					 fd)));
 
-	/* Permission checks */
-	if (!lo_compat_privileges &&
-		pg_largeobject_aclcheck_snapshot(cookies[fd]->id,
-										 GetUserId(),
-										 ACL_UPDATE,
-									   cookies[fd]->snapshot) != ACLCHECK_OK)
-		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("permission denied for large object %u",
-						cookies[fd]->id)));
+	/* Permission checks --- first time through only */
+	if ((lobj->flags & IFS_WR_PERM_OK) == 0)
+	{
+		if (!lo_compat_privileges &&
+			pg_largeobject_aclcheck_snapshot(lobj->id,
+											 GetUserId(),
+											 ACL_UPDATE,
+											 lobj->snapshot) != ACLCHECK_OK)
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("permission denied for large object %u",
+							lobj->id)));
+		lobj->flags |= IFS_WR_PERM_OK;
+	}
 
-	status = inv_write(cookies[fd], buf, len);
+	status = inv_write(lobj, buf, len);
 
 	return status;
 }
-
 
 Datum
 lo_lseek(PG_FUNCTION_ARGS)
@@ -244,7 +259,32 @@ lo_lseek(PG_FUNCTION_ARGS)
 	int32		fd = PG_GETARG_INT32(0);
 	int32		offset = PG_GETARG_INT32(1);
 	int32		whence = PG_GETARG_INT32(2);
-	int			status;
+	int64		status;
+
+	if (fd < 0 || fd >= cookies_size || cookies[fd] == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("invalid large-object descriptor: %d", fd)));
+
+	status = inv_seek(cookies[fd], offset, whence);
+
+	/* guard against result overflow */
+	if (status != (int32) status)
+		ereport(ERROR,
+				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+		errmsg("lo_lseek result out of range for large-object descriptor %d",
+			   fd)));
+
+	PG_RETURN_INT32((int32) status);
+}
+
+Datum
+lo_lseek64(PG_FUNCTION_ARGS)
+{
+	int32		fd = PG_GETARG_INT32(0);
+	int64		offset = PG_GETARG_INT64(1);
+	int32		whence = PG_GETARG_INT32(2);
+	int64		status;
 
 #ifdef PGXC
 	ereport(ERROR,
@@ -260,7 +300,7 @@ lo_lseek(PG_FUNCTION_ARGS)
 
 	status = inv_seek(cookies[fd], offset, whence);
 
-	PG_RETURN_INT32(status);
+	PG_RETURN_INT64(status);
 }
 
 Datum
@@ -313,6 +353,7 @@ Datum
 lo_tell(PG_FUNCTION_ARGS)
 {
 	int32		fd = PG_GETARG_INT32(0);
+	int64		offset;
 
 #ifdef PGXC
 	ereport(ERROR,
@@ -326,7 +367,32 @@ lo_tell(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("invalid large-object descriptor: %d", fd)));
 
-	PG_RETURN_INT32(inv_tell(cookies[fd]));
+	offset = inv_tell(cookies[fd]);
+
+	/* guard against result overflow */
+	if (offset != (int32) offset)
+		ereport(ERROR,
+				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+		 errmsg("lo_tell result out of range for large-object descriptor %d",
+				fd)));
+
+	PG_RETURN_INT32((int32) offset);
+}
+
+Datum
+lo_tell64(PG_FUNCTION_ARGS)
+{
+	int32		fd = PG_GETARG_INT32(0);
+	int64		offset;
+
+	if (fd < 0 || fd >= cookies_size || cookies[fd] == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("invalid large-object descriptor: %d", fd)));
+
+	offset = inv_tell(cookies[fd]);
+
+	PG_RETURN_INT64(offset);
 }
 
 Datum
@@ -467,7 +533,7 @@ lo_import_with_oid(PG_FUNCTION_ARGS)
 static Oid
 lo_import_internal(text *filename, Oid lobjOid)
 {
-	File		fd;
+	int			fd;
 	int			nbytes,
 				tmp PG_USED_FOR_ASSERTS_ONLY;
 	char		buf[BUFSIZE];
@@ -489,7 +555,7 @@ lo_import_internal(text *filename, Oid lobjOid)
 	 * open the file to be read in
 	 */
 	text_to_cstring_buffer(filename, fnamebuf, sizeof(fnamebuf));
-	fd = PathNameOpenFile(fnamebuf, O_RDONLY | PG_BINARY, S_IRWXU);
+	fd = OpenTransientFile(fnamebuf, O_RDONLY | PG_BINARY, S_IRWXU);
 	if (fd < 0)
 		ereport(ERROR,
 				(errcode_for_file_access(),
@@ -506,7 +572,7 @@ lo_import_internal(text *filename, Oid lobjOid)
 	 */
 	lobj = inv_open(oid, INV_WRITE, fscxt);
 
-	while ((nbytes = FileRead(fd, buf, BUFSIZE)) > 0)
+	while ((nbytes = read(fd, buf, BUFSIZE)) > 0)
 	{
 		tmp = inv_write(lobj, buf, nbytes);
 		Assert(tmp == nbytes);
@@ -519,7 +585,7 @@ lo_import_internal(text *filename, Oid lobjOid)
 						fnamebuf)));
 
 	inv_close(lobj);
-	FileClose(fd);
+	CloseTransientFile(fd);
 
 	return oid;
 }
@@ -533,7 +599,7 @@ lo_export(PG_FUNCTION_ARGS)
 {
 	Oid			lobjId = PG_GETARG_OID(0);
 	text	   *filename = PG_GETARG_TEXT_PP(1);
-	File		fd;
+	int			fd;
 	int			nbytes,
 				tmp;
 	char		buf[BUFSIZE];
@@ -572,8 +638,8 @@ lo_export(PG_FUNCTION_ARGS)
 	 */
 	text_to_cstring_buffer(filename, fnamebuf, sizeof(fnamebuf));
 	oumask = umask(S_IWGRP | S_IWOTH);
-	fd = PathNameOpenFile(fnamebuf, O_CREAT | O_WRONLY | O_TRUNC | PG_BINARY,
-						  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	fd = OpenTransientFile(fnamebuf, O_CREAT | O_WRONLY | O_TRUNC | PG_BINARY,
+						   S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	umask(oumask);
 	if (fd < 0)
 		ereport(ERROR,
@@ -586,7 +652,7 @@ lo_export(PG_FUNCTION_ARGS)
 	 */
 	while ((nbytes = inv_read(lobj, buf, BUFSIZE)) > 0)
 	{
-		tmp = FileWrite(fd, buf, nbytes);
+		tmp = write(fd, buf, nbytes);
 		if (tmp != nbytes)
 			ereport(ERROR,
 					(errcode_for_file_access(),
@@ -594,7 +660,7 @@ lo_export(PG_FUNCTION_ARGS)
 							fnamebuf)));
 	}
 
-	FileClose(fd);
+	CloseTransientFile(fd);
 	inv_close(lobj);
 
 	PG_RETURN_INT32(1);
@@ -604,11 +670,10 @@ lo_export(PG_FUNCTION_ARGS)
  * lo_truncate -
  *	  truncate a large object to a specified length
  */
-Datum
-lo_truncate(PG_FUNCTION_ARGS)
+static void
+lo_truncate_internal(int32 fd, int64 len)
 {
-	int32		fd = PG_GETARG_INT32(0);
-	int32		len = PG_GETARG_INT32(1);
+	LargeObjectDesc *lobj;
 
 #ifdef PGXC
 	ereport(ERROR,
@@ -621,20 +686,49 @@ lo_truncate(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("invalid large-object descriptor: %d", fd)));
+	lobj = cookies[fd];
 
-	/* Permission checks */
-	if (!lo_compat_privileges &&
-		pg_largeobject_aclcheck_snapshot(cookies[fd]->id,
-										 GetUserId(),
-										 ACL_UPDATE,
-									   cookies[fd]->snapshot) != ACLCHECK_OK)
+	if ((lobj->flags & IFS_WRLOCK) == 0)
 		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("permission denied for large object %u",
-						cookies[fd]->id)));
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+			  errmsg("large object descriptor %d was not opened for writing",
+					 fd)));
 
-	inv_truncate(cookies[fd], len);
+	/* Permission checks --- first time through only */
+	if ((lobj->flags & IFS_WR_PERM_OK) == 0)
+	{
+		if (!lo_compat_privileges &&
+			pg_largeobject_aclcheck_snapshot(lobj->id,
+											 GetUserId(),
+											 ACL_UPDATE,
+											 lobj->snapshot) != ACLCHECK_OK)
+			ereport(ERROR,
+					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+					 errmsg("permission denied for large object %u",
+							lobj->id)));
+		lobj->flags |= IFS_WR_PERM_OK;
+	}
 
+	inv_truncate(lobj, len);
+}
+
+Datum
+lo_truncate(PG_FUNCTION_ARGS)
+{
+	int32		fd = PG_GETARG_INT32(0);
+	int32		len = PG_GETARG_INT32(1);
+
+	lo_truncate_internal(fd, len);
+	PG_RETURN_INT32(0);
+}
+
+Datum
+lo_truncate64(PG_FUNCTION_ARGS)
+{
+	int32		fd = PG_GETARG_INT32(0);
+	int64		len = PG_GETARG_INT64(1);
+
+	lo_truncate_internal(fd, len);
 	PG_RETURN_INT32(0);
 }
 

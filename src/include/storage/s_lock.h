@@ -12,10 +12,11 @@
  *	void S_INIT_LOCK(slock_t *lock)
  *		Initialize a spinlock (to the unlocked state).
  *
- *	void S_LOCK(slock_t *lock)
+ *	int S_LOCK(slock_t *lock)
  *		Acquire a spinlock, waiting if necessary.
  *		Time out and abort() if unable to acquire the lock in a
  *		"reasonable" amount of time --- typically ~ 1 minute.
+ *		Should return number of "delays"; see s_lock.c
  *
  *	void S_UNLOCK(slock_t *lock)
  *		Unlock a previously acquired lock.
@@ -83,7 +84,7 @@
  *	when using the SysV semaphore code.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *	  src/include/storage/s_lock.h
@@ -333,6 +334,29 @@ tas(volatile slock_t *lock)
 
 #endif	 /* HAVE_GCC_INT_ATOMICS */
 #endif	 /* __arm__ */
+
+
+/*
+ * On ARM64, we use __sync_lock_test_and_set(int *, int) if available.
+ */
+#if defined(__aarch64__) || defined(__aarch64)
+#ifdef HAVE_GCC_INT_ATOMICS
+#define HAS_TEST_AND_SET
+
+#define TAS(lock) tas(lock)
+
+typedef int slock_t;
+
+static __inline__ int
+tas(volatile slock_t *lock)
+{
+	return __sync_lock_test_and_set(lock, 1);
+}
+
+#define S_UNLOCK(lock) __sync_lock_release(lock)
+
+#endif	 /* HAVE_GCC_INT_ATOMICS */
+#endif	 /* __aarch64__ */
 
 
 /* S/390 and S/390x Linux (32- and 64-bit zSeries) */
@@ -978,10 +1002,7 @@ extern int	tas_sema(volatile slock_t *lock);
 
 #if !defined(S_LOCK)
 #define S_LOCK(lock) \
-	do { \
-		if (TAS(lock)) \
-			s_lock((lock), __FILE__, __LINE__); \
-	} while (0)
+	(TAS(lock) ? s_lock((lock), __FILE__, __LINE__) : 0)
 #endif	 /* S_LOCK */
 
 #if !defined(S_LOCK_FREE)
@@ -1015,7 +1036,7 @@ extern int	tas(volatile slock_t *lock);		/* in port/.../tas.s, or
 /*
  * Platform-independent out-of-line support routines
  */
-extern void s_lock(volatile slock_t *lock, const char *file, int line);
+extern int s_lock(volatile slock_t *lock, const char *file, int line);
 
 /* Support for dynamic adjustment of spins_per_delay */
 #define DEFAULT_SPINS_PER_DELAY  100

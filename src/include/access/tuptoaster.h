@@ -4,7 +4,7 @@
  *	  POSTGRES definitions for external and compressed storage
  *	  of variable size attributes.
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  *
  * src/include/access/tuptoaster.h
  *
@@ -13,7 +13,7 @@
 #ifndef TUPTOASTER_H
 #define TUPTOASTER_H
 
-#include "access/htup.h"
+#include "access/htup_details.h"
 #include "utils/relcache.h"
 
 /*

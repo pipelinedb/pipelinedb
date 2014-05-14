@@ -29,7 +29,6 @@ DROP TYPE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP TYPE</command> removes a user-defined data type.
    Only the owner of a type can remove it.
@@ -39,6 +38,7 @@ DROP TYPE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>IF EXISTS</literal></term>
@@ -88,30 +88,20 @@ DROP TYPE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
    To remove the data type <type>box</type>:
 <programlisting>
 DROP TYPE box;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1 id="SQL-DROPTYPE-compatibility">
   <title>Compatibility</title>
 
+&common;
   <para>
    This command is similar to the corresponding command in the SQL
    standard, apart from the <literal>IF EXISTS</>
-<!## PG>
    option, which is a <productname>PostgreSQL</> extension.
-<!## end>
-<!## XC>
-   option, which is a <productname>Postgres-XC</> extension inherited from <productname>PostgreSQL</>.
-<!## end>
    But note that much of the <command>CREATE TYPE</command> command
    and the data type extension mechanisms in
-<!## PG>
    <productname>PostgreSQL</productname> differ from the SQL standard.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> differ from the SQL standard.
-<!## end>
   </para>
  </refsect1>
 

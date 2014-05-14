@@ -24,9 +24,14 @@
 
 &pgonly;
  <para>
-  <filename>dblink</> is a module which supports connections to
+  <filename>dblink</> is a module that supports connections to
   other <productname>PostgreSQL</> databases from within a database
   session.
+ </para>
+
+ <para>
+  See also <xref linkend="postgres-fdw">, which provides roughly the same
+  functionality using a more modern and standards-compliant infrastructure.
  </para>
 
  <refentry id="CONTRIB-DBLINK-CONNECT">
@@ -40,6 +45,10 @@
    <refpurpose>opens a persistent connection to a remote database</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_connect</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_connect(text connstr) returns text
@@ -49,6 +58,7 @@ dblink_connect(text connname, text connstr) returns text
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -76,15 +86,11 @@ dblink_connect(text connname, text connstr) returns text
 
    <para>
     The connection string may also be the name of an existing foreign
-    server.  It is recommended to use
-    the <function>postgresql_fdw_validator</function> when defining
-    the corresponding foreign-data wrapper.  See the example below, as
-    well as the following:
-    <simplelist type="inline">
-     <member><xref linkend="sql-createforeigndatawrapper"></member>
-     <member><xref linkend="sql-createserver"></member>
-     <member><xref linkend="sql-createusermapping"></member>
-    </simplelist>
+    server.  It is recommended to use the foreign-data wrapper
+    <literal>dblink_fdw</literal> when defining the foreign
+    server.  See the example below, as well as
+    <xref linkend="sql-createserver"> and
+    <xref linkend="sql-createusermapping">.
    </para>
 
   </refsect1>
@@ -106,12 +112,11 @@ dblink_connect(text connname, text connstr) returns text
     <varlistentry>
      <term><parameter>connstr</parameter></term>
      <listitem>
-      <para>
-       <application>libpq</>-style connection info string, for example
+      <para><application>libpq</>-style connection info string, for example
        <literal>hostaddr=127.0.0.1 port=5432 dbname=mydb user=postgres
        password=mypasswd</>.
-       For details see <function>PQconnectdb</> in
-       <xref linkend="libpq-connect">.
+       For details see <xref linkend="libpq-connstring">.
+       Alternatively, the name of a foreign server.
       </para>
      </listitem>
     </varlistentry>
@@ -129,7 +134,7 @@ dblink_connect(text connname, text connstr) returns text
 
   <refsect1>
    <title>Notes</title>
-&pgonly;
+
    <para>
     Only superusers may use <function>dblink_connect</> to create
     non-password-authenticated connections.  If non-superusers need this
@@ -144,7 +149,7 @@ dblink_connect(text connname, text connstr) returns text
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
+   <title>Examples</title>
 &pgonly;
 <screen>
 SELECT dblink_connect('dbname=postgres');
@@ -166,10 +171,10 @@ SELECT dblink_connect('myconn', 'dbname=postgres');
 --       ERROR:  password is required
 --       DETAIL:  Non-superuser cannot connect if the server does not request a password.
 --       HINT:  Target server's authentication method must be changed.
-CREATE USER dblink_regression_test WITH PASSWORD 'secret';
-CREATE FOREIGN DATA WRAPPER postgresql VALIDATOR postgresql_fdw_validator;
-CREATE SERVER fdtest FOREIGN DATA WRAPPER postgresql OPTIONS (hostaddr '127.0.0.1', dbname 'contrib_regression');
 
+CREATE SERVER fdtest FOREIGN DATA WRAPPER dblink_fdw OPTIONS (hostaddr '127.0.0.1', dbname 'contrib_regression');
+
+CREATE USER dblink_regression_test WITH PASSWORD 'secret';
 CREATE USER MAPPING FOR dblink_regression_test SERVER fdtest OPTIONS (user 'dblink_regression_test', password 'secret');
 GRANT USAGE ON FOREIGN SERVER fdtest TO dblink_regression_test;
 GRANT SELECT ON TABLE foo TO dblink_regression_test;
@@ -200,11 +205,10 @@ SELECT * FROM dblink('myconn','SELECT * FROM foo') AS t(a int, b text, c text[])
 
 \c - :ORIGINAL_USER
 REVOKE USAGE ON FOREIGN SERVER fdtest FROM dblink_regression_test;
-REVOKE SELECT ON TABLE foo FROM  dblink_regression_test;
+REVOKE SELECT ON TABLE foo FROM dblink_regression_test;
 DROP USER MAPPING FOR dblink_regression_test SERVER fdtest;
 DROP USER dblink_regression_test;
 DROP SERVER fdtest;
-DROP FOREIGN DATA WRAPPER postgresql;
 </screen>
   </refsect1>
  </refentry>
@@ -220,6 +224,10 @@ DROP FOREIGN DATA WRAPPER postgresql;
    <refpurpose>opens a persistent connection to a remote database, insecurely</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_connect_u</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_connect_u(text connstr) returns text
@@ -229,6 +237,7 @@ dblink_connect_u(text connname, text connstr) returns text
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -287,6 +296,10 @@ dblink_connect_u(text connname, text connstr) returns text
    <refpurpose>closes a persistent connection to a remote database</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_disconnect</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_disconnect() returns text
@@ -296,6 +309,7 @@ dblink_disconnect(text connname) returns text
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -343,9 +357,9 @@ dblink_disconnect(text connname) returns text
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <screen>
 SELECT dblink_disconnect();
  dblink_disconnect
@@ -373,6 +387,10 @@ SELECT dblink_disconnect('myconn');
    <refpurpose>executes a query in a remote database</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink(text connname, text sql [, bool fail_on_error]) returns setof record
@@ -383,6 +401,7 @@ dblink(text sql [, bool fail_on_error]) returns setof record
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -398,7 +417,6 @@ dblink(text sql [, bool fail_on_error]) returns setof record
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink</> executes a query (usually a <command>SELECT</>,
     but it can be any SQL statement that returns rows) in a remote database.
@@ -416,7 +434,6 @@ dblink(text sql [, bool fail_on_error]) returns setof record
   <refsect1>
    <title>Arguments</title>
 &pgonly;
-
    <variablelist>
     <varlistentry>
      <term><parameter>conname</parameter></term>
@@ -465,7 +482,6 @@ dblink(text sql [, bool fail_on_error]) returns setof record
   <refsect1>
    <title>Return Value</title>
 &pgonly;
-
    <para>
     The function returns the row(s) produced by the query.  Since
     <function>dblink</> can be used with any query, it is declared
@@ -501,15 +517,6 @@ SELECT *
 
   <refsect1>
    <title>Notes</title>
-&pgonly;
-
-   <para>
-    <function>dblink</> fetches the entire remote query result before
-    returning any of it to the local system.  If the query is expected
-    to return a large number of rows, it's better to open it as a cursor
-    with <function>dblink_open</> and then fetch a manageable number
-    of rows at a time.
-   </para>
 
    <para>
     A convenient way to use <function>dblink</> with predetermined
@@ -524,14 +531,12 @@ CREATE VIEW myremote_pg_proc AS
     AS t1(proname name, prosrc text);
 
 SELECT * FROM myremote_pg_proc WHERE proname LIKE 'bytea%';
-</programlisting>
-   </para>
+</programlisting></para>
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
+   <title>Examples</title>
 &pgonly;
-
 <screen>
 SELECT * FROM dblink('dbname=postgres', 'select proname, prosrc from pg_proc')
   AS t1(proname name, prosrc text) WHERE proname LIKE 'bytea%';
@@ -615,6 +620,10 @@ SELECT * FROM dblink('myconn', 'select proname, prosrc from pg_proc')
    <refpurpose>executes a command in a remote database</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_exec</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_exec(text connname, text sql [, bool fail_on_error]) returns text
@@ -625,6 +634,7 @@ dblink_exec(text sql [, bool fail_on_error]) returns text
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -640,7 +650,6 @@ dblink_exec(text sql [, bool fail_on_error]) returns text
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_exec</> executes a command (that is, any SQL statement
     that doesn't return rows) in a remote database.
@@ -658,7 +667,6 @@ dblink_exec(text sql [, bool fail_on_error]) returns text
   <refsect1>
    <title>Arguments</title>
 &pgonly;
-
    <variablelist>
     <varlistentry>
      <term><parameter>conname</parameter></term>
@@ -708,16 +716,14 @@ dblink_exec(text sql [, bool fail_on_error]) returns text
   <refsect1>
    <title>Return Value</title>
 &pgonly;
-
    <para>
     Returns status, either the command's status string or <literal>ERROR</>.
    </para>
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
+   <title>Examples</title>
 &pgonly;
-
 <screen>
 SELECT dblink_connect('dbname=dblink_test_standby');
  dblink_connect
@@ -766,6 +772,10 @@ DETAIL:  ERROR:  null value in column "relnamespace" violates not-null constrain
    <refpurpose>opens a cursor in a remote database</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_open</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_open(text cursorname, text sql [, bool fail_on_error]) returns text
@@ -775,6 +785,7 @@ dblink_open(text connname, text cursorname, text sql [, bool fail_on_error]) ret
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -790,7 +801,6 @@ dblink_open(text connname, text cursorname, text sql [, bool fail_on_error]) ret
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_open()</> opens a cursor in a remote database.
     The cursor can subsequently be manipulated with
@@ -800,8 +810,8 @@ dblink_open(text connname, text cursorname, text sql [, bool fail_on_error]) ret
 
   <refsect1>
    <title>Arguments</title>
-&pgonly;
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>conname</parameter></term>
@@ -848,8 +858,8 @@ dblink_open(text connname, text cursorname, text sql [, bool fail_on_error]) ret
 
   <refsect1>
    <title>Return Value</title>
-&pgonly;
 
+&pgonly;
    <para>
     Returns status, either <literal>OK</> or <literal>ERROR</>.
    </para>
@@ -857,8 +867,8 @@ dblink_open(text connname, text cursorname, text sql [, bool fail_on_error]) ret
 
   <refsect1>
    <title>Notes</title>
-&pgonly;
 
+&pgonly;
    <para>
     Since a cursor can only persist within a transaction,
     <function>dblink_open</> starts an explicit transaction block
@@ -875,9 +885,9 @@ dblink_open(text connname, text cursorname, text sql [, bool fail_on_error]) ret
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <screen>
 SELECT dblink_connect('dbname=postgres');
  dblink_connect
@@ -905,6 +915,10 @@ SELECT dblink_open('foo', 'select proname, prosrc from pg_proc');
    <refpurpose>returns rows from an open cursor in a remote database</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_fetch</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_fetch(text cursorname, int howmany [, bool fail_on_error]) returns setof record
@@ -914,6 +928,7 @@ dblink_fetch(text connname, text cursorname, int howmany [, bool fail_on_error])
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -938,8 +953,8 @@ dblink_fetch(text connname, text cursorname, int howmany [, bool fail_on_error])
 
   <refsect1>
    <title>Arguments</title>
-&pgonly;
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>conname</parameter></term>
@@ -987,8 +1002,8 @@ dblink_fetch(text connname, text cursorname, int howmany [, bool fail_on_error])
 
   <refsect1>
    <title>Return Value</title>
-&pgonly;
 
+&pgonly;
    <para>
     The function returns the row(s) fetched from the cursor.  To use this
     function, you will need to specify the expected set of columns,
@@ -998,8 +1013,8 @@ dblink_fetch(text connname, text cursorname, int howmany [, bool fail_on_error])
 
   <refsect1>
    <title>Notes</title>
-&pgonly;
 
+&pgonly;
    <para>
     On a mismatch between the number of return columns specified in the
     <literal>FROM</> clause, and the actual number of columns returned by the
@@ -1011,9 +1026,9 @@ dblink_fetch(text connname, text cursorname, int howmany [, bool fail_on_error])
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <screen>
 SELECT dblink_connect('dbname=postgres');
  dblink_connect
@@ -1073,6 +1088,10 @@ SELECT * FROM dblink_fetch('foo', 5) AS (funcname name, source text);
    <refpurpose>closes a cursor in a remote database</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_close</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_close(text cursorname [, bool fail_on_error]) returns text
@@ -1082,6 +1101,7 @@ dblink_close(text connname, text cursorname [, bool fail_on_error]) returns text
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -1097,7 +1117,6 @@ dblink_close(text connname, text cursorname [, bool fail_on_error]) returns text
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_close</> closes a cursor previously opened with
     <function>dblink_open</>.
@@ -1106,8 +1125,8 @@ dblink_close(text connname, text cursorname [, bool fail_on_error]) returns text
 
   <refsect1>
    <title>Arguments</title>
-&pgonly;
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>conname</parameter></term>
@@ -1144,8 +1163,8 @@ dblink_close(text connname, text cursorname [, bool fail_on_error]) returns text
 
   <refsect1>
    <title>Return Value</title>
-&pgonly;
 
+&pgonly;
    <para>
     Returns status, either <literal>OK</> or <literal>ERROR</>.
    </para>
@@ -1153,8 +1172,8 @@ dblink_close(text connname, text cursorname [, bool fail_on_error]) returns text
 
   <refsect1>
    <title>Notes</title>
-&pgonly;
 
+&pgonly;
    <para>
     If <function>dblink_open</> started an explicit transaction block,
     and this is the last remaining open cursor in this connection,
@@ -1163,9 +1182,9 @@ dblink_close(text connname, text cursorname [, bool fail_on_error]) returns text
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <screen>
 SELECT dblink_connect('dbname=postgres');
  dblink_connect
@@ -1199,6 +1218,10 @@ SELECT dblink_close('foo');
    <refpurpose>returns the names of all open named dblink connections</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_get_connections</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_get_connections() returns text[]
@@ -1207,6 +1230,7 @@ dblink_get_connections() returns text[]
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -1222,7 +1246,6 @@ dblink_get_connections() returns text[]
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_get_connections</> returns an array of the names
     of all open named <filename>dblink</> connections.
@@ -1231,14 +1254,12 @@ dblink_get_connections() returns text[]
 
   <refsect1>
    <title>Return Value</title>
-&pgonly;
 
    <para>Returns a text array of connection names, or NULL if none.</para>
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
 <programlisting>
 SELECT dblink_get_connections();
@@ -1257,6 +1278,10 @@ SELECT dblink_get_connections();
    <refpurpose>gets last error message on the named connection</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_error_message</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_error_message(text connname) returns text
@@ -1265,6 +1290,7 @@ dblink_error_message(text connname) returns text
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -1280,7 +1306,6 @@ dblink_error_message(text connname) returns text
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_error_message</> fetches the most recent remote
     error message for a given connection.
@@ -1289,8 +1314,8 @@ dblink_error_message(text connname) returns text
 
   <refsect1>
    <title>Arguments</title>
-&pgonly;
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>conname</parameter></term>
@@ -1305,8 +1330,8 @@ dblink_error_message(text connname) returns text
 
   <refsect1>
    <title>Return Value</title>
-&pgonly;
 
+&pgonly;
    <para>
     Returns last error message, or an empty string if there has been
     no error in this connection.
@@ -1314,9 +1339,9 @@ dblink_error_message(text connname) returns text
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <programlisting>
 SELECT dblink_error_message('dtest1');
 </programlisting>
@@ -1334,6 +1359,10 @@ SELECT dblink_error_message('dtest1');
    <refpurpose>sends an async query to a remote database</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_send_query</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_send_query(text connname, text sql) returns int
@@ -1342,6 +1371,7 @@ dblink_send_query(text connname, text sql) returns int
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -1357,7 +1387,6 @@ dblink_send_query(text connname, text sql) returns int
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_send_query</> sends a query to be executed
     asynchronously, that is, without immediately waiting for the result.
@@ -1376,8 +1405,8 @@ dblink_send_query(text connname, text sql) returns int
 
   <refsect1>
    <title>Arguments</title>
-&pgonly;
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>conname</parameter></term>
@@ -1410,9 +1439,9 @@ dblink_send_query(text connname, text sql) returns int
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <programlisting>
 SELECT dblink_send_query('dtest1', 'SELECT * FROM foo WHERE f1 &lt; 3');
 </programlisting>
@@ -1430,6 +1459,10 @@ SELECT dblink_send_query('dtest1', 'SELECT * FROM foo WHERE f1 &lt; 3');
    <refpurpose>checks if connection is busy with an async query</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_is_busy</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_is_busy(text connname) returns int
@@ -1438,6 +1471,7 @@ dblink_is_busy(text connname) returns int
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -1453,7 +1487,6 @@ dblink_is_busy(text connname) returns int
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_is_busy</> tests whether an async query is in progress.
    </para>
@@ -1462,6 +1495,7 @@ dblink_is_busy(text connname) returns int
   <refsect1>
    <title>Arguments</title>
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>conname</parameter></term>
@@ -1476,8 +1510,8 @@ dblink_is_busy(text connname) returns int
 
   <refsect1>
    <title>Return Value</title>
-&pgonly;
 
+&pgonly;
    <para>
     Returns 1 if connection is busy, 0 if it is not busy.
     If this function returns 0, it is guaranteed that
@@ -1486,9 +1520,9 @@ dblink_is_busy(text connname) returns int
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <programlisting>
 SELECT dblink_is_busy('dtest1');
 </programlisting>
@@ -1505,6 +1539,10 @@ SELECT dblink_is_busy('dtest1');
    <refname>dblink_get_notify</refname>
    <refpurpose>retrieve async notifications on a connection</refpurpose>
   </refnamediv>
+
+  <indexterm>
+   <primary>dblink_get_notify</primary>
+  </indexterm>
 
   <refsynopsisdiv>
 <synopsis>
@@ -1543,8 +1581,8 @@ dblink_get_notify(text connname) returns setof (notify_name text, be_pid int, ex
 
   <refsect1>
    <title>Arguments</title>
-&pgonly;
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>conname</parameter></term>
@@ -1564,9 +1602,9 @@ dblink_get_notify(text connname) returns setof (notify_name text, be_pid int, ex
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <screen>
 SELECT dblink_exec('LISTEN virtual');
  dblink_exec 
@@ -1602,6 +1640,10 @@ SELECT * FROM dblink_get_notify();
    <refpurpose>gets an async query result</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_get_result</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_get_result(text connname [, bool fail_on_error]) returns setof record
@@ -1610,6 +1652,7 @@ dblink_get_result(text connname [, bool fail_on_error]) returns setof record
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -1625,7 +1668,6 @@ dblink_get_result(text connname [, bool fail_on_error]) returns setof record
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_get_result</> collects the results of an
     asynchronous query previously sent with <function>dblink_send_query</>.
@@ -1637,6 +1679,7 @@ dblink_get_result(text connname [, bool fail_on_error]) returns setof record
   <refsect1>
    <title>Arguments</title>
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>conname</parameter></term>
@@ -1663,8 +1706,8 @@ dblink_get_result(text connname [, bool fail_on_error]) returns setof record
 
   <refsect1>
    <title>Return Value</title>
-&pgonly;
 
+&pgonly;
    <para>
     For an async query (that is, a SQL statement returning rows),
     the function returns the row(s) produced by the query.  To use this
@@ -1683,8 +1726,8 @@ dblink_get_result(text connname [, bool fail_on_error]) returns setof record
 
   <refsect1>
    <title>Notes</title>
-&pgonly;
 
+&pgonly;
    <para>
     This function <emphasis>must</> be called if
     <function>dblink_send_query</> returned 1.
@@ -1692,12 +1735,24 @@ dblink_get_result(text connname [, bool fail_on_error]) returns setof record
     sent, and one additional time to obtain an empty set result,
     before the connection can be used again.
    </para>
+
+   <para>
+    When using <function>dblink_send_query</> and
+    <function>dblink_get_result</>, <application>dblink</> fetches the entire
+    remote query result before returning any of it to the local query
+    processor.  If the query returns a large number of rows, this can result
+    in transient memory bloat in the local session.  It may be better to open
+    such a query as a cursor with <function>dblink_open</> and then fetch a
+    manageable number of rows at a time.  Alternatively, use plain
+    <function>dblink()</>, which avoids memory bloat by spooling large result
+    sets to disk.
+   </para>
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <screen>
 contrib_regression=# SELECT dblink_connect('dtest1', 'dbname=contrib_regression');
  dblink_connect
@@ -1768,6 +1823,10 @@ contrib_regression=# SELECT * FROM dblink_get_result('dtest1') AS t1(f1 int, f2 
    <refpurpose>cancels any active query on the named connection</refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_cancel_query</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_cancel_query(text connname) returns text
@@ -1776,6 +1835,7 @@ dblink_cancel_query(text connname) returns text
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -1791,7 +1851,6 @@ dblink_cancel_query(text connname) returns text
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_cancel_query</> attempts to cancel any query that
     is in progress on the named connection.  Note that this is not
@@ -1806,6 +1865,7 @@ dblink_cancel_query(text connname) returns text
   <refsect1>
    <title>Arguments</title>
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>conname</parameter></term>
@@ -1821,6 +1881,7 @@ dblink_cancel_query(text connname) returns text
   <refsect1>
    <title>Return Value</title>
 
+&pgonly;
    <para>
     Returns <literal>OK</> if the cancel request has been sent, or
     the text of an error message on failure.
@@ -1828,9 +1889,9 @@ dblink_cancel_query(text connname) returns text
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <programlisting>
 SELECT dblink_cancel_query('dtest1');
 </programlisting>
@@ -1850,6 +1911,10 @@ SELECT dblink_cancel_query('dtest1');
    </refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_get_pkey</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_get_pkey(text relname) returns setof dblink_pkey_results
@@ -1858,6 +1923,7 @@ dblink_get_pkey(text relname) returns setof dblink_pkey_results
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -1873,7 +1939,6 @@ dblink_get_pkey(text relname) returns setof dblink_pkey_results
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_get_pkey</> provides information about the primary
     key of a relation in the local database.  This is sometimes useful
@@ -1883,8 +1948,8 @@ dblink_get_pkey(text relname) returns setof dblink_pkey_results
 
   <refsect1>
    <title>Arguments</title>
-&pgonly;
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>relname</parameter></term>
@@ -1903,8 +1968,8 @@ dblink_get_pkey(text relname) returns setof dblink_pkey_results
 
   <refsect1>
    <title>Return Value</title>
-&pgonly;
 
+&pgonly;
    <para>
     Returns one row for each primary key field, or no rows if the relation
     has no primary key.  The result row type is defined as
@@ -1920,9 +1985,9 @@ CREATE TYPE dblink_pkey_results AS (position int, colname text);
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <screen>
 CREATE TABLE foobar (
     f1 int,
@@ -1957,6 +2022,10 @@ SELECT * FROM dblink_get_pkey('foobar');
    </refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_build_sql_insert</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_build_sql_insert(text relname,
@@ -1969,6 +2038,7 @@ dblink_build_sql_insert(text relname,
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -1984,7 +2054,6 @@ dblink_build_sql_insert(text relname,
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_build_sql_insert</> can be useful in doing selective
     replication of a local table to a remote database.  It selects a row
@@ -1998,8 +2067,8 @@ dblink_build_sql_insert(text relname,
 
   <refsect1>
    <title>Arguments</title>
-&pgonly;
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>relname</parameter></term>
@@ -2059,15 +2128,15 @@ dblink_build_sql_insert(text relname,
 
   <refsect1>
    <title>Return Value</title>
-&pgonly;
 
+&pgonly;
    <para>Returns the requested SQL statement as text.</para>
   </refsect1>
 
   <refsect1>
    <title>Notes</title>
-&pgonly;
 
+&pgonly;
    <para>
     As of <productname>PostgreSQL</> 9.0, the attribute numbers in
     <parameter>primary_key_attnums</parameter> are interpreted as logical
@@ -2080,9 +2149,9 @@ dblink_build_sql_insert(text relname,
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <screen>
 SELECT dblink_build_sql_insert('foo', '1 2', 2, '{"1", "a"}', '{"1", "b''a"}');
              dblink_build_sql_insert
@@ -2106,6 +2175,10 @@ SELECT dblink_build_sql_insert('foo', '1 2', 2, '{"1", "a"}', '{"1", "b''a"}');
    </refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_build_sql_delete</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_build_sql_delete(text relname,
@@ -2117,6 +2190,7 @@ dblink_build_sql_delete(text relname,
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -2132,7 +2206,6 @@ dblink_build_sql_delete(text relname,
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_build_sql_delete</> can be useful in doing selective
     replication of a local table to a remote database.  It builds a SQL
@@ -2143,8 +2216,8 @@ dblink_build_sql_delete(text relname,
 
   <refsect1>
    <title>Arguments</title>
-&pgonly;
 
+&pgonly;
    <variablelist>
     <varlistentry>
      <term><parameter>relname</parameter></term>
@@ -2192,14 +2265,15 @@ dblink_build_sql_delete(text relname,
 
   <refsect1>
    <title>Return Value</title>
-&pgonly;
 
+&pgonly;
    <para>Returns the requested SQL statement as text.</para>
   </refsect1>
 
   <refsect1>
    <title>Notes</title>
 
+&pgonly;
    <para>
     As of <productname>PostgreSQL</> 9.0, the attribute numbers in
     <parameter>primary_key_attnums</parameter> are interpreted as logical
@@ -2212,9 +2286,9 @@ dblink_build_sql_delete(text relname,
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <screen>
 SELECT dblink_build_sql_delete('"MyFoo"', '1 2', 2, '{"1", "b"}');
            dblink_build_sql_delete
@@ -2238,6 +2312,10 @@ SELECT dblink_build_sql_delete('"MyFoo"', '1 2', 2, '{"1", "b"}');
    </refpurpose>
   </refnamediv>
 
+  <indexterm>
+   <primary>dblink_build_sql_update</primary>
+  </indexterm>
+
   <refsynopsisdiv>
 <synopsis>
 dblink_build_sql_update(text relname,
@@ -2250,6 +2328,7 @@ dblink_build_sql_update(text relname,
 
   <refsect1>
    <title>Description</title>
+
 <!## XC>
 &xconly;
  <para>
@@ -2265,7 +2344,6 @@ dblink_build_sql_update(text relname,
  </para>
 <!## end>
 &pgonly;
-
    <para>
     <function>dblink_build_sql_update</> can be useful in doing selective
     replication of a local table to a remote database.  It selects a row
@@ -2282,23 +2360,8 @@ dblink_build_sql_update(text relname,
 
   <refsect1>
    <title>Arguments</title>
-<!## XC>
-&xconly;
- <para>
-  <filename>dblink</> module has not been tested
-  with <productname>Postges-XC</> yet.  Although there're no reason
-  that <filename>dblink</> does not run
-  in <productname>Postgres-XC</>, the development team leaves the test
-  and the use of this module entirely to users.
- </para>
- <para>
-  This section is identical to the
-  corresponding <productname>PostgreSQL</> reference manual.
- </para>
-<!## end>
 
 &pgonly;
-
    <variablelist>
     <varlistentry>
      <term><parameter>relname</parameter></term>
@@ -2358,29 +2421,15 @@ dblink_build_sql_update(text relname,
 
   <refsect1>
    <title>Return Value</title>
-&pgonly;
 
+&pgonly;
    <para>Returns the requested SQL statement as text.</para>
   </refsect1>
 
   <refsect1>
    <title>Notes</title>
-<!## XC>
-&xconly;
- <para>
-  <filename>dblink</> module has not been tested
-  with <productname>Postges-XC</> yet.  Although there're no reason
-  that <filename>dblink</> does not run
-  in <productname>Postgres-XC</>, the development team leaves the test
-  and the use of this module entirely to users.
- </para>
- <para>
-  This section is identical to the
-  corresponding <productname>PostgreSQL</> reference manual.
- </para>
-<!## end>
-&pgonly;
 
+&pgonly;
    <para>
     As of <productname>PostgreSQL</> 9.0, the attribute numbers in
     <parameter>primary_key_attnums</parameter> are interpreted as logical
@@ -2393,9 +2442,9 @@ dblink_build_sql_update(text relname,
   </refsect1>
 
   <refsect1>
-   <title>Example</title>
-&pgonly;
+   <title>Examples</title>
 
+&pgonly;
 <screen>
 SELECT dblink_build_sql_update('foo', '1 2', 2, '{"1", "a"}', '{"1", "b"}');
                    dblink_build_sql_update

@@ -3,7 +3,7 @@
  * parse_func.c
  *		handle function calls in parser
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -14,9 +14,11 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "funcapi.h"
+#include "lib/stringinfo.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_agg.h"
@@ -382,6 +384,7 @@ ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 		funcexpr->funcid = funcid;
 		funcexpr->funcresulttype = rettype;
 		funcexpr->funcretset = retset;
+		funcexpr->funcvariadic = func_variadic;
 		funcexpr->funcformat = COERCE_EXPLICIT_CALL;
 		/* funccollid and inputcollid will be set by parse_collate.c */
 		funcexpr->args = fargs;
@@ -492,17 +495,6 @@ ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
 					 errmsg("window functions cannot return sets"),
-					 parser_errposition(pstate, location)));
-
-		/*
-		 * We might want to support this later, but for now reject it because
-		 * the planner and executor wouldn't cope with NamedArgExprs in a
-		 * WindowFunc node.
-		 */
-		if (argnames != NIL)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("window functions cannot use named arguments"),
 					 parser_errposition(pstate, location)));
 
 		/* parse_agg.c does additional window-func-specific processing */

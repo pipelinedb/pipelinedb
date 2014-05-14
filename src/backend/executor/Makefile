@@ -27,5 +27,4 @@ OBJS = execAmi.o execCurrent.o execGrouping.o execJunk.o execMain.o \
        nodeForeignscan.o nodeWindowAgg.o nodeTuplestoreScan.o tstoreReceiver.o spi.o \
        tupletableReceiver.o
 
-
 include $(top_srcdir)/src/backend/common.mk

@@ -5,7 +5,7 @@
  *	  clients and standalone backends are supported here).
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -20,6 +20,7 @@
 #include "libpq/pqformat.h"
 #include "tcop/pquery.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 #ifdef PGXC
 #include "pgxc/pgxc.h"
 #endif
@@ -62,6 +63,7 @@ typedef struct
 	TupleDesc	attrinfo;		/* The attr info we are set up for */
 	int			nattrs;
 	PrinttupAttrInfo *myinfo;	/* Cached info about each attr */
+	MemoryContext tmpcontext;	/* Memory context for per-row workspace */
 } DR_printtup;
 
 /* ----------------
@@ -88,6 +90,7 @@ printtup_create_DR(CommandDest dest)
 	self->attrinfo = NULL;
 	self->nattrs = 0;
 	self->myinfo = NULL;
+	self->tmpcontext = NULL;
 
 	return (DestReceiver *) self;
 }
@@ -124,6 +127,18 @@ printtup_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 {
 	DR_printtup *myState = (DR_printtup *) self;
 	Portal		portal = myState->portal;
+
+	/*
+	 * Create a temporary memory context that we can reset once per row to
+	 * recover palloc'd memory.  This avoids any problems with leaks inside
+	 * datatype output routines, and should be faster than retail pfree's
+	 * anyway.
+	 */
+	myState->tmpcontext = AllocSetContextCreate(CurrentMemoryContext,
+												"printtup",
+												ALLOCSET_DEFAULT_MINSIZE,
+												ALLOCSET_DEFAULT_INITSIZE,
+												ALLOCSET_DEFAULT_MAXSIZE);
 
 	if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)
 	{
@@ -304,6 +319,7 @@ printtup(TupleTableSlot *slot, DestReceiver *self)
 {
 	TupleDesc	typeinfo = slot->tts_tupleDescriptor;
 	DR_printtup *myState = (DR_printtup *) self;
+	MemoryContext oldcontext;
 	StringInfoData buf;
 	int			natts = typeinfo->natts;
 	int			i;
@@ -328,8 +344,11 @@ printtup(TupleTableSlot *slot, DestReceiver *self)
 	/* Make sure the tuple is fully deconstructed */
 	slot_getallattrs(slot);
 
+	/* Switch into per-row context so we can recover memory below */
+	oldcontext = MemoryContextSwitchTo(myState->tmpcontext);
+
 	/*
-	 * Prepare a DataRow message
+	 * Prepare a DataRow message (note buffer is in per-row context)
 	 */
 	pq_beginmessage(&buf, 'D');
 
@@ -341,23 +360,13 @@ printtup(TupleTableSlot *slot, DestReceiver *self)
 	for (i = 0; i < natts; ++i)
 	{
 		PrinttupAttrInfo *thisState = myState->myinfo + i;
-		Datum		origattr = slot->tts_values[i],
-					attr;
+		Datum		attr = slot->tts_values[i];
 
 		if (slot->tts_isnull[i])
 		{
 			pq_sendint(&buf, -1, 4);
 			continue;
 		}
-
-		/*
-		 * If we have a toasted datum, forcibly detoast it here to avoid
-		 * memory leakage inside the type's output routine.
-		 */
-		if (thisState->typisvarlena)
-			attr = PointerGetDatum(PG_DETOAST_DATUM(origattr));
-		else
-			attr = origattr;
 
 		if (thisState->format == 0)
 		{
@@ -366,7 +375,6 @@ printtup(TupleTableSlot *slot, DestReceiver *self)
 
 			outputstr = OutputFunctionCall(&thisState->finfo, attr);
 			pq_sendcountedtext(&buf, outputstr, strlen(outputstr), false);
-			pfree(outputstr);
 		}
 		else
 		{
@@ -377,15 +385,14 @@ printtup(TupleTableSlot *slot, DestReceiver *self)
 			pq_sendint(&buf, VARSIZE(outputbytes) - VARHDRSZ, 4);
 			pq_sendbytes(&buf, VARDATA(outputbytes),
 						 VARSIZE(outputbytes) - VARHDRSZ);
-			pfree(outputbytes);
 		}
-
-		/* Clean up detoasted copy, if any */
-		if (DatumGetPointer(attr) != DatumGetPointer(origattr))
-			pfree(DatumGetPointer(attr));
 	}
 
 	pq_endmessage(&buf);
+
+	/* Return to caller's context, and flush row's temporary memory */
+	MemoryContextSwitchTo(oldcontext);
+	MemoryContextReset(myState->tmpcontext);
 }
 
 /* ----------------
@@ -397,6 +404,7 @@ printtup_20(TupleTableSlot *slot, DestReceiver *self)
 {
 	TupleDesc	typeinfo = slot->tts_tupleDescriptor;
 	DR_printtup *myState = (DR_printtup *) self;
+	MemoryContext oldcontext;
 	StringInfoData buf;
 	int			natts = typeinfo->natts;
 	int			i,
@@ -409,6 +417,9 @@ printtup_20(TupleTableSlot *slot, DestReceiver *self)
 
 	/* Make sure the tuple is fully deconstructed */
 	slot_getallattrs(slot);
+
+	/* Switch into per-row context so we can recover memory below */
+	oldcontext = MemoryContextSwitchTo(myState->tmpcontext);
 
 	/*
 	 * tell the frontend to expect new tuple data (in ASCII style)
@@ -441,8 +452,7 @@ printtup_20(TupleTableSlot *slot, DestReceiver *self)
 	for (i = 0; i < natts; ++i)
 	{
 		PrinttupAttrInfo *thisState = myState->myinfo + i;
-		Datum		origattr = slot->tts_values[i],
-					attr;
+		Datum		attr = slot->tts_values[i];
 		char	   *outputstr;
 
 		if (slot->tts_isnull[i])
@@ -450,25 +460,15 @@ printtup_20(TupleTableSlot *slot, DestReceiver *self)
 
 		Assert(thisState->format == 0);
 
-		/*
-		 * If we have a toasted datum, forcibly detoast it here to avoid
-		 * memory leakage inside the type's output routine.
-		 */
-		if (thisState->typisvarlena)
-			attr = PointerGetDatum(PG_DETOAST_DATUM(origattr));
-		else
-			attr = origattr;
-
 		outputstr = OutputFunctionCall(&thisState->finfo, attr);
 		pq_sendcountedtext(&buf, outputstr, strlen(outputstr), true);
-		pfree(outputstr);
-
-		/* Clean up detoasted copy, if any */
-		if (DatumGetPointer(attr) != DatumGetPointer(origattr))
-			pfree(DatumGetPointer(attr));
 	}
 
 	pq_endmessage(&buf);
+
+	/* Return to caller's context, and flush row's temporary memory */
+	MemoryContextSwitchTo(oldcontext);
+	MemoryContextReset(myState->tmpcontext);
 }
 
 /* ----------------
@@ -485,6 +485,10 @@ printtup_shutdown(DestReceiver *self)
 	myState->myinfo = NULL;
 
 	myState->attrinfo = NULL;
+
+	if (myState->tmpcontext)
+		MemoryContextDelete(myState->tmpcontext);
+	myState->tmpcontext = NULL;
 }
 
 /* ----------------
@@ -547,8 +551,7 @@ debugtup(TupleTableSlot *slot, DestReceiver *self)
 	TupleDesc	typeinfo = slot->tts_tupleDescriptor;
 	int			natts = typeinfo->natts;
 	int			i;
-	Datum		origattr,
-				attr;
+	Datum		attr;
 	char	   *value;
 	bool		isnull;
 	Oid			typoutput;
@@ -556,30 +559,15 @@ debugtup(TupleTableSlot *slot, DestReceiver *self)
 
 	for (i = 0; i < natts; ++i)
 	{
-		origattr = slot_getattr(slot, i + 1, &isnull);
+		attr = slot_getattr(slot, i + 1, &isnull);
 		if (isnull)
 			continue;
 		getTypeOutputInfo(typeinfo->attrs[i]->atttypid,
 						  &typoutput, &typisvarlena);
 
-		/*
-		 * If we have a toasted datum, forcibly detoast it here to avoid
-		 * memory leakage inside the type's output routine.
-		 */
-		if (typisvarlena)
-			attr = PointerGetDatum(PG_DETOAST_DATUM(origattr));
-		else
-			attr = origattr;
-
 		value = OidOutputFunctionCall(typoutput, attr);
 
 		printatt((unsigned) i + 1, typeinfo->attrs[i], value);
-
-		pfree(value);
-
-		/* Clean up detoasted copy, if any */
-		if (DatumGetPointer(attr) != DatumGetPointer(origattr))
-			pfree(DatumGetPointer(attr));
 	}
 	printf("\t----\n");
 }
@@ -598,6 +586,7 @@ printtup_internal_20(TupleTableSlot *slot, DestReceiver *self)
 {
 	TupleDesc	typeinfo = slot->tts_tupleDescriptor;
 	DR_printtup *myState = (DR_printtup *) self;
+	MemoryContext oldcontext;
 	StringInfoData buf;
 	int			natts = typeinfo->natts;
 	int			i,
@@ -610,6 +599,9 @@ printtup_internal_20(TupleTableSlot *slot, DestReceiver *self)
 
 	/* Make sure the tuple is fully deconstructed */
 	slot_getallattrs(slot);
+
+	/* Switch into per-row context so we can recover memory below */
+	oldcontext = MemoryContextSwitchTo(myState->tmpcontext);
 
 	/*
 	 * tell the frontend to expect new tuple data (in binary style)
@@ -642,8 +634,7 @@ printtup_internal_20(TupleTableSlot *slot, DestReceiver *self)
 	for (i = 0; i < natts; ++i)
 	{
 		PrinttupAttrInfo *thisState = myState->myinfo + i;
-		Datum		origattr = slot->tts_values[i],
-					attr;
+		Datum		attr = slot->tts_values[i];
 		bytea	   *outputbytes;
 
 		if (slot->tts_isnull[i])
@@ -651,26 +642,15 @@ printtup_internal_20(TupleTableSlot *slot, DestReceiver *self)
 
 		Assert(thisState->format == 1);
 
-		/*
-		 * If we have a toasted datum, forcibly detoast it here to avoid
-		 * memory leakage inside the type's output routine.
-		 */
-		if (thisState->typisvarlena)
-			attr = PointerGetDatum(PG_DETOAST_DATUM(origattr));
-		else
-			attr = origattr;
-
 		outputbytes = SendFunctionCall(&thisState->finfo, attr);
-		/* We assume the result will not have been toasted */
 		pq_sendint(&buf, VARSIZE(outputbytes) - VARHDRSZ, 4);
 		pq_sendbytes(&buf, VARDATA(outputbytes),
 					 VARSIZE(outputbytes) - VARHDRSZ);
-		pfree(outputbytes);
-
-		/* Clean up detoasted copy, if any */
-		if (DatumGetPointer(attr) != DatumGetPointer(origattr))
-			pfree(DatumGetPointer(attr));
 	}
 
 	pq_endmessage(&buf);
+
+	/* Return to caller's context, and flush row's temporary memory */
+	MemoryContextSwitchTo(oldcontext);
+	MemoryContextReset(myState->tmpcontext);
 }

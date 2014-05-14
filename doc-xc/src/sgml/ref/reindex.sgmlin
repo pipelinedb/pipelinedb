@@ -29,7 +29,6 @@ REINDEX { INDEX | TABLE | DATABASE | SYSTEM } <replaceable class="PARAMETER">nam
   <title>Description</title>
 
 &common;
-
   <para>
    <command>REINDEX</command> rebuilds an index using the data
    stored in the index's table, replacing the old copy of the index. There are
@@ -50,12 +49,7 @@ REINDEX { INDEX | TABLE | DATABASE | SYSTEM } <replaceable class="PARAMETER">nam
      <para>
       An index has become <quote>bloated</>, that it is contains many
       empty or nearly-empty pages.  This can occur with B-tree indexes in
-<!## PG>
       <productname>PostgreSQL</productname> under certain uncommon access
-<!## end>
-<!## XC>
-      <productname>Postgres-XC</productname> under certain uncommon access
-<!## end>
       patterns. <command>REINDEX</command> provides a way to reduce
       the space consumption of the index by writing a new version of
       the index without the dead pages. See <xref
@@ -81,12 +75,12 @@ REINDEX { INDEX | TABLE | DATABASE | SYSTEM } <replaceable class="PARAMETER">nam
      </para>
     </listitem>
 
-   </itemizedlist>
-  </para>
+   </itemizedlist></para>
  </refsect1>
 
  <refsect1>
   <title>Parameters</title>
+
 &common;
   <variablelist>
    <varlistentry>
@@ -159,6 +153,7 @@ REINDEX { INDEX | TABLE | DATABASE | SYSTEM } <replaceable class="PARAMETER">nam
 
  <refsect1>
   <title>Notes</title>
+
 &common;
   <para>
    If you suspect corruption of an index on a user table, you can
@@ -179,12 +174,7 @@ REINDEX { INDEX | TABLE | DATABASE | SYSTEM } <replaceable class="PARAMETER">nam
 
   <para>
    One way to do this is to shut down the server and start a single-user
-<!## PG>
    <productname>PostgreSQL</productname> server
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> servers
-<!## end>
    with the <option>-P</option> option included on its command line.
    Then, <command>REINDEX DATABASE</>, <command>REINDEX SYSTEM</>,
    <command>REINDEX TABLE</>, or <command>REINDEX INDEX</> can be
@@ -275,12 +265,12 @@ $ <userinput>psql broken_db</userinput>
 ...
 broken_db=&gt; REINDEX DATABASE broken_db;
 broken_db=&gt; \q
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
+
 &common;
   <para>
    There is no <command>REINDEX</command> command in the SQL standard.

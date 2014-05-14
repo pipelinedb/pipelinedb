@@ -540,17 +540,18 @@ CREATE VIEW xmlview8 AS SELECT xmlserialize(content 'good' as char(10));
 CREATE VIEW xmlview9 AS SELECT xmlserialize(content 'good' as text);
 SELECT table_name, view_definition FROM information_schema.views
   WHERE table_name LIKE 'xmlview%' ORDER BY 1;
- table_name |                                                      view_definition                                                       
-------------+----------------------------------------------------------------------------------------------------------------------------
- xmlview1   | SELECT xmlcomment('test'::text) AS xmlcomment;
- xmlview2   | SELECT XMLCONCAT('hello'::xml, 'you'::xml) AS "xmlconcat";
- xmlview3   | SELECT XMLELEMENT(NAME element, XMLATTRIBUTES(1 AS ":one:", 'deuce' AS two), 'content&') AS "xmlelement";
- xmlview4   | SELECT XMLELEMENT(NAME employee, XMLFOREST(emp.name AS name, emp.age AS age, emp.salary AS pay)) AS "xmlelement" FROM emp;
- xmlview5   | SELECT XMLPARSE(CONTENT '<abc>x</abc>'::text STRIP WHITESPACE) AS "xmlparse";
- xmlview6   | SELECT XMLPI(NAME foo, 'bar'::text) AS "xmlpi";
- xmlview7   | SELECT XMLROOT('<foo/>'::xml, VERSION NO VALUE, STANDALONE YES) AS "xmlroot";
- xmlview8   | SELECT (XMLSERIALIZE(CONTENT 'good'::xml AS character(10)))::character(10) AS "xmlserialize";
- xmlview9   | SELECT XMLSERIALIZE(CONTENT 'good'::xml AS text) AS "xmlserialize";
+ table_name |                                                  view_definition                                                  
+------------+-------------------------------------------------------------------------------------------------------------------
+ xmlview1   |  SELECT xmlcomment('test'::text) AS xmlcomment;
+ xmlview2   |  SELECT XMLCONCAT('hello'::xml, 'you'::xml) AS "xmlconcat";
+ xmlview3   |  SELECT XMLELEMENT(NAME element, XMLATTRIBUTES(1 AS ":one:", 'deuce' AS two), 'content&') AS "xmlelement";
+ xmlview4   |  SELECT XMLELEMENT(NAME employee, XMLFOREST(emp.name AS name, emp.age AS age, emp.salary AS pay)) AS "xmlelement"+
+            |    FROM emp;
+ xmlview5   |  SELECT XMLPARSE(CONTENT '<abc>x</abc>'::text STRIP WHITESPACE) AS "xmlparse";
+ xmlview6   |  SELECT XMLPI(NAME foo, 'bar'::text) AS "xmlpi";
+ xmlview7   |  SELECT XMLROOT('<foo/>'::xml, VERSION NO VALUE, STANDALONE YES) AS "xmlroot";
+ xmlview8   |  SELECT (XMLSERIALIZE(CONTENT 'good'::xml AS character(10)))::character(10) AS "xmlserialize";
+ xmlview9   |  SELECT XMLSERIALIZE(CONTENT 'good'::xml AS text) AS "xmlserialize";
 (9 rows)
 
 -- Text XPath expressions evaluation
@@ -894,5 +895,25 @@ CONTEXT:  SQL function "xpath" statement 1
                 xpath                 
 --------------------------------------
  {"<relativens xmlns=\"relative\"/>"}
+(1 row)
+
+-- External entity references should not leak filesystem information.
+SELECT XMLPARSE(DOCUMENT '<!DOCTYPE foo [<!ENTITY c SYSTEM "/etc/passwd">]><foo>&c;</foo>');
+                            xmlparse                             
+-----------------------------------------------------------------
+ <!DOCTYPE foo [<!ENTITY c SYSTEM "/etc/passwd">]><foo>&c;</foo>
+(1 row)
+
+SELECT XMLPARSE(DOCUMENT '<!DOCTYPE foo [<!ENTITY c SYSTEM "/etc/no.such.file">]><foo>&c;</foo>');
+                               xmlparse                                
+-----------------------------------------------------------------------
+ <!DOCTYPE foo [<!ENTITY c SYSTEM "/etc/no.such.file">]><foo>&c;</foo>
+(1 row)
+
+-- This might or might not load the requested DTD, but it mustn't throw error.
+SELECT XMLPARSE(DOCUMENT '<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.1.2//EN" "http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd"><chapter>&nbsp;</chapter>');
+                                                                       xmlparse                                                                       
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ <!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.1.2//EN" "http://www.oasis-open.org/docbook/xml/4.1.2/docbookx.dtd"><chapter>&nbsp;</chapter>
 (1 row)
 

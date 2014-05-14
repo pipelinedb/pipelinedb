@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  *
  * src/bin/psql/startup.c
  */
@@ -150,6 +150,24 @@ main(int argc, char *argv[])
 
 	parse_psql_options(argc, argv, &options);
 
+	/*
+	 * If no action was specified and we're in non-interactive mode, treat it
+	 * as if the user had specified "-f -".  This lets single-transaction mode
+	 * work in this case.
+	 */
+	if (options.action == ACT_NOTHING && pset.notty)
+	{
+		options.action = ACT_FILE;
+		options.action_string = NULL;
+	}
+
+	/* Bail out if -1 was specified but will be ignored. */
+	if (options.single_txn && options.action != ACT_FILE && options.action == ACT_NOTHING)
+	{
+		fprintf(stderr, _("%s: -1 can only be used in non-interactive mode\n"), pset.progname);
+		exit(EXIT_FAILURE);
+	}
+
 	if (!pset.popt.topt.fieldSep.separator &&
 		!pset.popt.topt.fieldSep.separator_zero)
 	{
@@ -167,8 +185,8 @@ main(int argc, char *argv[])
 		password_prompt = pg_strdup(_("Password: "));
 	else
 	{
-		password_prompt = malloc(strlen(_("Password for user %s: ")) - 2 +
-								 strlen(options.username) + 1);
+		password_prompt = pg_malloc(strlen(_("Password for user %s: ")) - 2 +
+									strlen(options.username) + 1);
 		sprintf(password_prompt, _("Password for user %s: "),
 				options.username);
 	}
@@ -239,7 +257,7 @@ main(int argc, char *argv[])
 		if (!options.no_psqlrc)
 			process_psqlrc(argv[0]);
 
-		success = listAllDbs(false);
+		success = listAllDbs(NULL, false);
 		PQfinish(pset.db);
 		exit(success ? EXIT_SUCCESS : EXIT_FAILURE);
 	}
@@ -309,11 +327,9 @@ main(int argc, char *argv[])
 			process_psqlrc(argv[0]);
 
 		connection_warnings(true);
-		if (!pset.quiet && !pset.notty)
+		if (!pset.quiet)
 			printf(_("Type \"help\" for help.\n\n"));
-		if (!pset.notty)
-			initializeInput(options.no_readline ? 0 : 1);
-
+		initializeInput(options.no_readline ? 0 : 1);
 		successResult = MainLoop(stdin);
 	}
 
@@ -392,7 +408,7 @@ parse_psql_options(int argc, char *argv[], struct adhoc_opts * options)
 				pset.popt.topt.format = PRINT_UNALIGNED;
 				break;
 			case 'c':
-				options->action_string = optarg;
+				options->action_string = pg_strdup(optarg);
 				if (optarg[0] == '\\')
 				{
 					options->action = ACT_SINGLE_SLASH;
@@ -402,7 +418,7 @@ parse_psql_options(int argc, char *argv[], struct adhoc_opts * options)
 					options->action = ACT_SINGLE_QUERY;
 				break;
 			case 'd':
-				options->dbname = optarg;
+				options->dbname = pg_strdup(optarg);
 				break;
 			case 'e':
 				SetVariable(pset.vars, "ECHO", "queries");
@@ -412,14 +428,14 @@ parse_psql_options(int argc, char *argv[], struct adhoc_opts * options)
 				break;
 			case 'f':
 				options->action = ACT_FILE;
-				options->action_string = optarg;
+				options->action_string = pg_strdup(optarg);
 				break;
 			case 'F':
 				pset.popt.topt.fieldSep.separator = pg_strdup(optarg);
 				pset.popt.topt.fieldSep.separator_zero = false;
 				break;
 			case 'h':
-				options->host = optarg;
+				options->host = pg_strdup(optarg);
 				break;
 			case 'H':
 				pset.popt.topt.format = PRINT_HTML;
@@ -428,7 +444,7 @@ parse_psql_options(int argc, char *argv[], struct adhoc_opts * options)
 				options->action = ACT_LIST_DB;
 				break;
 			case 'L':
-				options->logfilename = optarg;
+				options->logfilename = pg_strdup(optarg);
 				break;
 			case 'n':
 				options->no_readline = true;
@@ -437,7 +453,7 @@ parse_psql_options(int argc, char *argv[], struct adhoc_opts * options)
 				setQFout(optarg);
 				break;
 			case 'p':
-				options->port = optarg;
+				options->port = pg_strdup(optarg);
 				break;
 			case 'P':
 				{
@@ -484,7 +500,7 @@ parse_psql_options(int argc, char *argv[], struct adhoc_opts * options)
 				pset.popt.topt.tableAttr = pg_strdup(optarg);
 				break;
 			case 'U':
-				options->username = optarg;
+				options->username = pg_strdup(optarg);
 				break;
 			case 'v':
 				{
@@ -591,7 +607,7 @@ process_psqlrc(char *argv0)
 	char		rc_file[MAXPGPATH];
 	char		my_exec_path[MAXPGPATH];
 	char		etc_path[MAXPGPATH];
-	char	   *envrc;
+	char	   *envrc = getenv("PSQLRC");
 
 	find_my_exec(argv0, my_exec_path);
 	get_etc_path(my_exec_path, etc_path);
@@ -599,12 +615,13 @@ process_psqlrc(char *argv0)
 	snprintf(rc_file, MAXPGPATH, "%s/%s", etc_path, SYSPSQLRC);
 	process_psqlrc_file(rc_file);
 
-	envrc = getenv("PSQLRC");
-
 	if (envrc != NULL && strlen(envrc) > 0)
 	{
-		expand_tilde(&envrc);
-		process_psqlrc_file(envrc);
+		/* might need to free() this */
+		char	   *envrc_alloc = pstrdup(envrc);
+
+		expand_tilde(&envrc_alloc);
+		process_psqlrc_file(envrc_alloc);
 	}
 	else if (get_home_path(home))
 	{

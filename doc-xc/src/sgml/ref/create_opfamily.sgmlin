@@ -29,7 +29,6 @@ CREATE OPERATOR FAMILY <replaceable class="parameter">name</replaceable> USING <
   <title>Description</title>
 
 &common;
-
   <para>
    <command>CREATE OPERATOR FAMILY</command> creates a new operator family.
    An operator family defines a collection of related operator classes,
@@ -73,6 +72,7 @@ CREATE OPERATOR FAMILY <replaceable class="parameter">name</replaceable> USING <
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -98,14 +98,10 @@ CREATE OPERATOR FAMILY <replaceable class="parameter">name</replaceable> USING <
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>CREATE OPERATOR FAMILY</command> is a
-<!## PG>
    <productname>PostgreSQL</productname> extension.  There is no
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> extension.  There is no
-<!## end>
    <command>CREATE OPERATOR FAMILY</command> statement in the SQL
    standard.
   </para>

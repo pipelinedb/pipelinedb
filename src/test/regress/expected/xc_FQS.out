@@ -314,11 +314,11 @@ explain (costs off, verbose on, nodes off) select val, val2 from tab1_rr where v
          Remote query: SELECT val, val2 FROM ONLY public.tab1_rr WHERE (val = 7) ORDER BY 2
 (6 rows)
 
-select distinct val2 from tab1_rr where val = 7;
+select distinct val2 from tab1_rr where val = 7 ORDER BY 1;
  val2 
 ------
-    8
     2
+    8
 (2 rows)
 
 explain (costs off, verbose on, nodes off) select distinct val2 from tab1_rr where val = 7;

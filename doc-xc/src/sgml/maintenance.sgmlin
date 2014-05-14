@@ -21,8 +21,6 @@
 <!## end>
 
 &common;
-
-<!## PG>
   <para>
    <productname>PostgreSQL</>, like any database software, requires that certain tasks
    be performed regularly to achieve optimum performance. The tasks
@@ -33,21 +31,7 @@
    administrator's responsibility to set up appropriate scripts, and to
    check that they execute successfully.
   </para>
-<!## end>
-<!## XC>
-  <para>
-   <productname>Postgres-XC</> inherits most of its fundamentals from <productname>PostgreSQL</>.   Like any database software, requires that certain tasks
-   be performed regularly to achieve optimum performance. The tasks
-   discussed here are <emphasis>required</emphasis>, but they
-   are repetitive in nature and can easily be automated using standard
-   tools such as <application>cron</application> scripts or
-   Windows' <application>Task Scheduler</>.  It is the database
-   administrator's responsibility to set up appropriate scripts, and to
-   check that they execute successfully.
-  </para>
-<!## end>
 
-<!## PG>
   <para>
    One obvious maintenance task is the creation of backup copies of the data on a
    regular schedule.  Without a recent backup, you have no chance of recovery
@@ -56,17 +40,6 @@
    <productname>PostgreSQL</productname> are discussed at length in
    <xref linkend="backup">.
   </para>
-<!## end>
-<!## XC>
-  <para>
-   One obvious maintenance task is the creation of backup copies of the data on a
-   regular schedule.  Without a recent backup, you have no chance of recovery
-   after a catastrophe (disk failure, fire, mistakenly dropping a critical
-   table, etc.).  The backup and recovery mechanisms available in
-   <productname>Postgres-XC</productname> are discussed at length in
-   <xref linkend="backup">.
-  </para>
-<!## end>
 
   <para>
    The other main category of maintenance task is periodic <quote>vacuuming</>
@@ -89,6 +62,13 @@
    Nagios and MRTG, but can be run standalone too.
   </para>
 
+  <para>
+   <productname>PostgreSQL</productname> is low-maintenance compared
+   to some other database management systems.  Nonetheless,
+   appropriate attention to these tasks will go far towards ensuring a
+   pleasant and productive experience with the system.
+  </para>
+
 <!## PG>
   <para>
    <productname>PostgreSQL</productname> is low-maintenance compared
@@ -104,6 +84,7 @@
   <indexterm zone="routine-vacuuming">
    <primary>vacuum</primary>
   </indexterm>
+
 <!## XC>
 &xconly;
   <para>
@@ -113,14 +94,8 @@
 <!## end>
 
 &common;
-
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> databases require periodic
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</> databases require periodic
-<!## end>
    maintenance known as <firstterm>vacuuming</>.  For many installations, it
    is sufficient to let vacuuming be performed by the <firstterm>autovacuum
    daemon</>, which is described in <xref linkend="autovacuum">.  You might
@@ -137,6 +112,7 @@
 
   <sect2 id="vacuum-basics">
    <title>Vacuuming Basics</title>
+
 <!## XC>
 &xconly;
   <para>
@@ -144,16 +120,9 @@
    Coordinator and Datanode.  It should be done for each of them.
   </para>
 <!## end>
-
 &common;
-
    <para>
-<!## PG>
     <productname>PostgreSQL</productname>'s
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname>'s
-<!## end>
     <xref linkend="sql-vacuum"> command has to
     process each table on a regular basis for several reasons:
 
@@ -165,12 +134,12 @@
 
      <listitem>
       <simpara>To update data statistics used by the
-<!## PG>
       <productname>PostgreSQL</productname> query planner.</simpara>
-<!## end>
-<!## XC>
-      <productname>Postgres-XC</productname> query planner.</simpara>
-<!## end>
+     </listitem>
+
+     <listitem>
+      <simpara>To update the visibility map, which speeds up index-only
+      scans.</simpara>
      </listitem>
 
      <listitem>
@@ -215,6 +184,7 @@
    <indexterm zone="vacuum-for-space-recovery">
     <primary>disk space</primary>
    </indexterm>
+
 <!## XC>
 &xconly;
   <para>
@@ -224,14 +194,8 @@
 <!## end>
 
 &common;
-
    <para>
-<!## PG>
     In <productname>PostgreSQL</productname>, an
-<!## end>
-<!## XC>
-    In <productname>Postgres-XC</productname>, an
-<!## end>
     <command>UPDATE</> or <command>DELETE</> of a row does not
     immediately remove the old version of the row.
     This approach is necessary to gain the benefits of multiversion
@@ -343,6 +307,7 @@
    <indexterm zone="vacuum-for-statistics">
     <primary>ANALYZE</primary>
    </indexterm>
+
 <!## XC>
 &xconly;
   <para>
@@ -352,14 +317,8 @@
 <!## end>
 
 &common;
-
    <para>
-<!## PG>
     The <productname>PostgreSQL</productname> query planner relies on
-<!## end>
-<!## XC>
-    As in <productname>PostgreSQL</>, <productname>Postgres-XC</productname> query planner relies on
-<!## end>
     statistical information about the contents of tables in order to
     generate good plans for queries.  These statistics are gathered by
     the <xref linkend="sql-analyze"> command,
@@ -427,15 +386,21 @@
      plans that use the expression index.
     </para>
    </tip>
+
+   <tip>
+    <para>
+     The autovacuum daemon does not issue <command>ANALYZE</> commands for
+     foreign tables, since it has no means of determining how often that
+     might be useful.  If your queries require statistics on foreign tables
+     for proper planning, it's a good idea to run manually-managed
+     <command>ANALYZE</> commands on those tables on a suitable schedule.
+    </para>
+   </tip>
   </sect2>
 
-  <sect2 id="vacuum-for-wraparound">
-   <title>Preventing Transaction ID Wraparound Failures</title>
+  <sect2 id="vacuum-for-visibility-map">
+   <title>Updating The Visibility Map</title>
 
-   <indexterm zone="vacuum-for-wraparound">
-    <primary>transaction ID</primary>
-    <secondary>wraparound</secondary>
-   </indexterm>
 <!## XC>
 &xconly;
   <para>
@@ -445,14 +410,49 @@
 <!## end>
 
 &common;
+   <para>
+    Vacuum maintains a <link linkend="storage-vm">visibility map</> for each
+    table to keep track of which pages contain only tuples that are known to be
+    visible to all active transactions (and all future transactions, until the
+    page is again modified).  This has two purposes.  First, vacuum
+    itself can skip such pages on the next run, since there is nothing to
+    clean up.
+   </para>
 
    <para>
-<!## PG>
-    <productname>PostgreSQL</productname>'s MVCC transaction semantics
-<!## end>
+    Second, it allows <productname>PostgreSQL</productname> to answer some
+    queries using only the index, without reference to the underlying table.
+    Since <productname>PostgreSQL</productname> indexes don't contain tuple
+    visibility information, a normal index scan fetches the heap tuple for each
+    matching index entry, to check whether it should be seen by the current
+    transaction.  An <firstterm>index-only scan</>, on the other hand, checks
+    the visibility map first.  If it's known that all tuples on the page are
+    visible, the heap fetch can be skipped.  This is most noticeable on
+    large data sets where the visibility map can prevent disk accesses.
+    The visibility map is vastly smaller than the heap, so it can easily be
+    cached even when the heap is very large.
+   </para>
+  </sect2>
+
+  <sect2 id="vacuum-for-wraparound">
+   <title>Preventing Transaction ID Wraparound Failures</title>
+
+   <indexterm zone="vacuum-for-wraparound">
+    <primary>transaction ID</primary>
+    <secondary>wraparound</secondary>
+   </indexterm>
+
 <!## XC>
-    <productname>Postgres-XC</productname>'s MVCC transaction semantics
+&xconly;
+  <para>
+   Please note that this section describes the task of individual
+   Coordinator and Datanode.  It should be done for each of them.
+  </para>
 <!## end>
+
+&common;
+   <para>
+    <productname>PostgreSQL</productname>'s MVCC transaction semantics
     depend on being able to compare transaction ID (<acronym>XID</>)
     numbers: a row version with an insertion XID greater than the current
     transaction's XID is <quote>in the future</> and should not be visible
@@ -475,15 +475,11 @@
     global transaction manager (<acronym>GTM</>).
    </para>
 <!## end>
+
 &common;
    <para>
     The reason that periodic vacuuming solves the problem is that
-<!## PG>
     <productname>PostgreSQL</productname> reserves a special XID
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> reserves a special XID
-<!## end>
     as <literal>FrozenXID</>.  This XID does not follow the normal XID
     comparison rules and is always considered older
     than every normal XID. Normal XIDs are
@@ -578,8 +574,8 @@
     will take more space, because it must store the commit status of all
     transactions back to the <varname>autovacuum_freeze_max_age</> horizon.
     The commit status uses two bits per transaction, so if
-    <varname>autovacuum_freeze_max_age</> is set to its maximum allowed value of
-    a little less than two billion, <filename>pg_clog</> can be expected to
+    <varname>autovacuum_freeze_max_age</> is set to its maximum allowed
+    value of two billion, <filename>pg_clog</> can be expected to
     grow to about half a gigabyte.  If this is trivial compared to your
     total database size, setting <varname>autovacuum_freeze_max_age</> to
     its maximum allowed value is recommended.  Otherwise, set it depending
@@ -620,7 +616,12 @@
     examine this information is to execute queries such as:
 
 <programlisting>
-SELECT relname, age(relfrozenxid) FROM pg_class WHERE relkind = 'r';
+SELECT c.oid::regclass as table_name,
+       greatest(age(c.relfrozenxid),age(t.relfrozenxid)) as age
+FROM pg_class c
+LEFT JOIN pg_class t ON c.reltoastrelid = t.oid
+WHERE c.relkind IN ('r', 'm');
+
 SELECT datname, age(datfrozenxid) FROM pg_database;
 </programlisting>
 
@@ -699,14 +700,8 @@ HINT:  Stop the postmaster and use a standalone backend to VACUUM in "mydb".
 <!## end>
 
 &common;
-
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> has an optional but highly
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> has an optional but highly
-<!## end>
     recommended feature called <firstterm>autovacuum</firstterm>,
     whose purpose is to automate the execution of
     <command>VACUUM</command> and <command>ANALYZE </command> commands.
@@ -735,6 +730,8 @@ HINT:  Stop the postmaster and use a standalone backend to VACUUM in "mydb".
     the next database will be processed as soon as the first worker finishes.
     Each worker process will check each table within its database and
     execute <command>VACUUM</> and/or <command>ANALYZE</> as needed.
+    <varname>log_autovacuum_min_duration</varname> can be used to monitor
+    autovacuum activity.
    </para>
 
    <para>
@@ -842,6 +839,7 @@ analyze threshold = analyze base threshold + analyze scale factor * number of tu
   <indexterm zone="routine-reindex">
    <primary>reindex</primary>
   </indexterm>
+
 <!## XC>
 &xconly;
   <para>
@@ -851,7 +849,6 @@ analyze threshold = analyze base threshold + analyze scale factor * number of tu
 <!## end>
 
 &common;
-
   <para>
    In some situations it is worthwhile to rebuild indexes periodically
    with the <xref linkend="sql-reindex">
@@ -891,6 +888,7 @@ analyze threshold = analyze base threshold + analyze scale factor * number of tu
    <primary>server log</primary>
    <secondary>log file maintenance</secondary>
   </indexterm>
+
 <!## XC>
 &xconly;
   <para>
@@ -900,7 +898,6 @@ analyze threshold = analyze base threshold + analyze scale factor * number of tu
 <!## end>
 
 &common;
-
   <para>
    It is a good idea to save the database server's log output
    somewhere, rather than just discarding it via <filename>/dev/null</>.
@@ -918,12 +915,7 @@ analyze threshold = analyze base threshold + analyze scale factor * number of tu
    file, you will have log output, but
    the only way to truncate the log file is to stop and restart
    the server. This might be acceptable if you are using
-<!## PG>
    <productname>PostgreSQL</productname> in a development environment,
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> in a development environment,
-<!## end>
    but few production servers would find this behavior acceptable.
   </para>
 
@@ -944,12 +936,7 @@ analyze threshold = analyze base threshold + analyze scale factor * number of tu
    program if you have one that you are already using with other
    server software. For example, the <application>rotatelogs</application>
    tool included in the <productname>Apache</productname> distribution
-<!## PG>
    can be used with <productname>PostgreSQL</productname>.  To do this,
-<!## end>
-<!## XC>
-   can be used with <productname>Postgres-XC</productname>.  To do this,
-<!## end>
    just pipe the server's
    <systemitem>stderr</> output to the desired program.
    If you start the server with
@@ -995,10 +982,10 @@ pg_ctl start | rotatelogs /var/log/pgsql_log 86400
   </para>
 
   <para>
-   <ulink url="http://pgfouine.projects.postgresql.org/">pgFouine</ulink>
+   <ulink url="http://dalibo.github.io/pgbadger/"><productname>pgBadger</productname></ulink>
    is an external project that does sophisticated log file analysis.
    <ulink
-   url="http://bucardo.org/wiki/Check_postgres">check_postgres</ulink>
+   url="http://bucardo.org/wiki/Check_postgres"><productname>check_postgres</productname></ulink>
    provides Nagios alerts when important messages appear in the log
    files, as well as detection of many other extraordinary conditions.
   </para>

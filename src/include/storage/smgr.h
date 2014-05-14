@@ -4,7 +4,7 @@
  *	  storage manager switch public interface declarations.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/smgr.h
@@ -33,6 +33,9 @@
  * without having to make the smgr explicitly aware of relcache.  There
  * can't be more than one "owner" pointer per SMgrRelation, but that's
  * all we need.
+ *
+ * SMgrRelations that do not have an "owner" are considered to be transient,
+ * and are deleted at end of transaction.
  */
 typedef struct SMgrRelationData
 {
@@ -60,20 +63,21 @@ typedef struct SMgrRelationData
 	 * submodules.	Do not touch them from elsewhere.
 	 */
 	int			smgr_which;		/* storage manager selector */
-	bool		smgr_transient; /* T if files are to be closed at EOXact */
 
 	/* for md.c; NULL for forks that are not open */
 	struct _MdfdVec *md_fd[MAX_FORKNUM + 1];
+
+	/* if unowned, list link in list of all unowned SMgrRelations */
+	struct SMgrRelationData *next_unowned_reln;
 } SMgrRelationData;
 
 typedef SMgrRelationData *SMgrRelation;
 
 #define SmgrIsTemp(smgr) \
-	((smgr)->smgr_rnode.backend != InvalidBackendId)
+	RelFileNodeBackendIsTemp((smgr)->smgr_rnode)
 
 extern void smgrinit(void);
 extern SMgrRelation smgropen(RelFileNode rnode, BackendId backend);
-extern void smgrsettransient(SMgrRelation reln);
 extern bool smgrexists(SMgrRelation reln, ForkNumber forknum);
 extern void smgrsetowner(SMgrRelation *owner, SMgrRelation reln);
 extern void smgrclose(SMgrRelation reln);
@@ -81,6 +85,7 @@ extern void smgrcloseall(void);
 extern void smgrclosenode(RelFileNodeBackend rnode);
 extern void smgrcreate(SMgrRelation reln, ForkNumber forknum, bool isRedo);
 extern void smgrdounlink(SMgrRelation reln, bool isRedo);
+extern void smgrdounlinkall(SMgrRelation *rels, int nrels, bool isRedo);
 extern void smgrdounlinkfork(SMgrRelation reln, ForkNumber forknum, bool isRedo);
 extern void smgrextend(SMgrRelation reln, ForkNumber forknum,
 		   BlockNumber blocknum, char *buffer, bool skipFsync);
@@ -97,6 +102,7 @@ extern void smgrimmedsync(SMgrRelation reln, ForkNumber forknum);
 extern void smgrpreckpt(void);
 extern void smgrsync(void);
 extern void smgrpostckpt(void);
+extern void AtEOXact_SMgr(void);
 
 
 /* internals: move me elsewhere -- ay 7/94 */
@@ -124,10 +130,9 @@ extern void mdsync(void);
 extern void mdpostckpt(void);
 
 extern void SetForwardFsyncRequests(void);
-extern void RememberFsyncRequest(RelFileNodeBackend rnode, ForkNumber forknum,
+extern void RememberFsyncRequest(RelFileNode rnode, ForkNumber forknum,
 					 BlockNumber segno);
-extern void ForgetRelationFsyncRequests(RelFileNodeBackend rnode,
-							ForkNumber forknum);
+extern void ForgetRelationFsyncRequests(RelFileNode rnode, ForkNumber forknum);
 extern void ForgetDatabaseFsyncRequests(Oid dbid);
 
 /* smgrtype.c */

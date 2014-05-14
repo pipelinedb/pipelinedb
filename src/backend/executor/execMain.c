@@ -26,7 +26,7 @@
  *	before ExecutorEnd.  This can be omitted only in case of EXPLAIN,
  *	which should also omit ExecutorRun.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -35,10 +35,9 @@
  *
  *-------------------------------------------------------------------------
  */
-#include <sys/time.h>
-
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "access/transam.h"
 #include "access/xact.h"
@@ -47,6 +46,7 @@
 #include "commands/trigger.h"
 #include "executor/execdebug.h"
 #include "libpq/libpq.h"
+#include "foreign/fdwapi.h"
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "optimizer/clauses.h"
@@ -89,6 +89,7 @@ static void ExecutePlan(EState *estate, PlanState *planstate,
 static bool ExecCheckRTEPerms(RangeTblEntry *rte);
 static void ExecCheckXactReadOnly(PlannedStmt *plannedstmt);
 static char *ExecBuildSlotValueDescription(TupleTableSlot *slot,
+							  TupleDesc tupdesc,
 							  int maxfieldlen);
 static void EvalPlanQualStart(EPQState *epqstate, EState *parentestate,
 				  Plan *planTree);
@@ -170,7 +171,8 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
 		case CMD_SELECT:
 
 			/*
-			 * SELECT FOR UPDATE/SHARE and modifying CTEs need to mark tuples
+			 * SELECT FOR [KEY] UPDATE/SHARE and modifying CTEs need to mark
+			 * tuples
 			 */
 			if (queryDesc->plannedstmt->rowMarks != NIL ||
 				queryDesc->plannedstmt->hasModifyingCTE)
@@ -235,7 +237,9 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
  *		we retrieve up to 'count' tuples in the specified direction.
  *
  *		Note: count = 0 is interpreted as no portal limit, i.e., run to
- *		completion.
+ *		completion.  Also note that the count limit is only applied to
+ *		retrieved tuples, not for instance to those inserted/updated/deleted
+ *		by a ModifyTable plan node.
  *
  *		There is no return value, but output tuples (if any) are sent to
  *		the destination receiver specified in the QueryDesc; and the number
@@ -258,10 +262,80 @@ ExecutorRun(QueryDesc *queryDesc,
 		standard_ExecutorRun(queryDesc, direction, count);
 }
 
+void
+standard_ExecutorRun(QueryDesc *queryDesc,
+					 ScanDirection direction, long count)
+{
+	EState	   *estate;
+	CmdType		operation;
+	DestReceiver *dest;
+	bool		sendTuples;
+	MemoryContext oldcontext;
+
+	/* sanity checks */
+	Assert(queryDesc != NULL);
+
+	estate = queryDesc->estate;
+
+	Assert(estate != NULL);
+	Assert(!(estate->es_top_eflags & EXEC_FLAG_EXPLAIN_ONLY));
+
+	/*
+	 * Switch into per-query memory context
+	 */
+	oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+
+	/* Allow instrumentation of Executor overall runtime */
+	if (queryDesc->totaltime)
+		InstrStartNode(queryDesc->totaltime);
+
+	/*
+	 * extract information from the query descriptor and the query feature.
+	 */
+	operation = queryDesc->operation;
+	dest = queryDesc->dest;
+
+	/*
+	 * startup tuple receiver, if we will be emitting tuples
+	 */
+	estate->es_processed = 0;
+	estate->es_lastoid = InvalidOid;
+
+	sendTuples = (operation == CMD_SELECT ||
+				  queryDesc->plannedstmt->hasReturning);
+
+	if (sendTuples)
+		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
+
+	/*
+	 * run plan
+	 */
+	if (!ScanDirectionIsNoMovement(direction))
+		ExecutePlan(estate,
+					queryDesc->planstate,
+					operation,
+					sendTuples,
+					count,
+					0,
+					direction,
+					dest);
+
+	/*
+	 * shutdown tuple receiver, if we started it
+	 */
+	if (sendTuples)
+		(*dest->rShutdown) (dest);
+
+	if (queryDesc->totaltime)
+		InstrStopNode(queryDesc->totaltime, estate->es_processed);
+
+	MemoryContextSwitchTo(oldcontext);
+}
+
 /*
  * ExecutorRunContinuous
  *
- * Runs a query continuously on microbatches of newly-materialized data, until
+ * Runs a query continuously on microbatches of newlymaterialized data, until
  * a deactivate message is received
  */
 void
@@ -358,76 +432,6 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	/* Start a new transaction before committing in PostgresMain */
 	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());
-
-	/*
-	 * shutdown tuple receiver, if we started it
-	 */
-	if (sendTuples)
-		(*dest->rShutdown) (dest);
-
-	if (queryDesc->totaltime)
-		InstrStopNode(queryDesc->totaltime, estate->es_processed);
-
-	MemoryContextSwitchTo(oldcontext);
-}
-
-void
-standard_ExecutorRun(QueryDesc *queryDesc,
-					 ScanDirection direction, long count)
-{
-	EState	   *estate;
-	CmdType		operation;
-	DestReceiver *dest;
-	bool		sendTuples;
-	MemoryContext oldcontext;
-
-	/* sanity checks */
-	Assert(queryDesc != NULL);
-
-	estate = queryDesc->estate;
-
-	Assert(estate != NULL);
-	Assert(!(estate->es_top_eflags & EXEC_FLAG_EXPLAIN_ONLY));
-
-	/*
-	 * Switch into per-query memory context
-	 */
-	oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
-
-	/* Allow instrumentation of Executor overall runtime */
-	if (queryDesc->totaltime)
-		InstrStartNode(queryDesc->totaltime);
-
-	/*
-	 * extract information from the query descriptor and the query feature.
-	 */
-	operation = queryDesc->operation;
-	dest = queryDesc->dest;
-
-	/*
-	 * startup tuple receiver, if we will be emitting tuples
-	 */
-	estate->es_processed = 0;
-	estate->es_lastoid = InvalidOid;
-
-	sendTuples = (operation == CMD_SELECT ||
-				  queryDesc->plannedstmt->hasReturning);
-
-	if (sendTuples)
-		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
-
-	/*
-	 * run plan
-	 */
-	if (!ScanDirectionIsNoMovement(direction))
-		ExecutePlan(estate,
-					queryDesc->planstate,
-					operation,
-					sendTuples,
-					count,
-					0,
-					direction,
-					dest);
 
 	/*
 	 * shutdown tuple receiver, if we started it
@@ -903,7 +907,7 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	}
 
 	/*
-	 * Similarly, we have to lock relations selected FOR UPDATE/FOR SHARE
+	 * Similarly, we have to lock relations selected FOR [KEY] UPDATE/SHARE
 	 * before we initialize the plan tree, else we'd be risking lock upgrades.
 	 * While we are at it, build the ExecRowMark list.
 	 */
@@ -922,7 +926,9 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 		switch (rc->markType)
 		{
 			case ROW_MARK_EXCLUSIVE:
+			case ROW_MARK_NOKEYEXCLUSIVE:
 			case ROW_MARK_SHARE:
+			case ROW_MARK_KEYSHARE:
 				relid = getrelid(rc->rti, rangeTable);
 				relation = heap_open(relid, RowShareLock);
 				break;
@@ -988,7 +994,8 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 		 * it is a parameterless subplan (not initplan), we suggest that it be
 		 * prepared to handle REWIND efficiently; otherwise there is no need.
 		 */
-		sp_eflags = eflags & EXEC_FLAG_EXPLAIN_ONLY;
+		sp_eflags = eflags
+			& (EXEC_FLAG_EXPLAIN_ONLY | EXEC_FLAG_WITH_NO_DATA);
 		if (bms_is_member(i, plannedstmt->rewindPlanIDs))
 			sp_eflags |= EXEC_FLAG_REWIND;
 
@@ -1053,9 +1060,8 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 /*
  * Check that a proposed result relation is a legal target for the operation
  *
- * In most cases parser and/or planner should have noticed this already, but
- * let's make sure.  In the view case we do need a test here, because if the
- * view wasn't rewritten by a rule, it had better have an INSTEAD trigger.
+ * Generally the parser and/or planner should have noticed any such mistake
+ * already, but let's make sure.
  *
  * Note: when changing this function, you probably also need to look at
  * CheckValidRowMarkRel.
@@ -1064,6 +1070,7 @@ void
 CheckValidResultRel(Relation resultRel, CmdType operation)
 {
 	TriggerDesc *trigDesc = resultRel->trigdesc;
+	FdwRoutine *fdwroutine;
 
 	switch (resultRel->rd_rel->relkind)
 	{
@@ -1083,6 +1090,14 @@ CheckValidResultRel(Relation resultRel, CmdType operation)
 							RelationGetRelationName(resultRel))));
 			break;
 		case RELKIND_VIEW:
+
+			/*
+			 * Okay only if there's a suitable INSTEAD OF trigger.  Messages
+			 * here should match rewriteHandler.c's rewriteTargetView, except
+			 * that we omit errdetail because we haven't got the information
+			 * handy (and given that we really shouldn't get here anyway, it's
+			 * not worth great exertion to get).
+			 */
 			switch (operation)
 			{
 				case CMD_INSERT:
@@ -1091,7 +1106,7 @@ CheckValidResultRel(Relation resultRel, CmdType operation)
 						  (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 						   errmsg("cannot insert into view \"%s\"",
 								  RelationGetRelationName(resultRel)),
-						   errhint("You need an unconditional ON INSERT DO INSTEAD rule or an INSTEAD OF INSERT trigger.")));
+						   errhint("To enable inserting into the view, provide an INSTEAD OF INSERT trigger or an unconditional ON INSERT DO INSTEAD rule.")));
 					break;
 				case CMD_UPDATE:
 					if (!trigDesc || !trigDesc->trig_update_instead_row)
@@ -1099,7 +1114,7 @@ CheckValidResultRel(Relation resultRel, CmdType operation)
 						  (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 						   errmsg("cannot update view \"%s\"",
 								  RelationGetRelationName(resultRel)),
-						   errhint("You need an unconditional ON UPDATE DO INSTEAD rule or an INSTEAD OF UPDATE trigger.")));
+						   errhint("To enable updating the view, provide an INSTEAD OF UPDATE trigger or an unconditional ON UPDATE DO INSTEAD rule.")));
 					break;
 				case CMD_DELETE:
 					if (!trigDesc || !trigDesc->trig_delete_instead_row)
@@ -1107,18 +1122,67 @@ CheckValidResultRel(Relation resultRel, CmdType operation)
 						  (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 						   errmsg("cannot delete from view \"%s\"",
 								  RelationGetRelationName(resultRel)),
-						   errhint("You need an unconditional ON DELETE DO INSTEAD rule or an INSTEAD OF DELETE trigger.")));
+						   errhint("To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.")));
 					break;
 				default:
 					elog(ERROR, "unrecognized CmdType: %d", (int) operation);
 					break;
 			}
 			break;
-		case RELKIND_FOREIGN_TABLE:
+		case RELKIND_MATVIEW:
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("cannot change foreign table \"%s\"",
+					 errmsg("cannot change materialized view \"%s\"",
 							RelationGetRelationName(resultRel))));
+			break;
+		case RELKIND_FOREIGN_TABLE:
+			/* Okay only if the FDW supports it */
+			fdwroutine = GetFdwRoutineForRelation(resultRel, false);
+			switch (operation)
+			{
+				case CMD_INSERT:
+					if (fdwroutine->ExecForeignInsert == NULL)
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							errmsg("cannot insert into foreign table \"%s\"",
+								   RelationGetRelationName(resultRel))));
+					if (fdwroutine->IsForeignRelUpdatable != NULL &&
+						(fdwroutine->IsForeignRelUpdatable(resultRel) & (1 << CMD_INSERT)) == 0)
+						ereport(ERROR,
+						  (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+						errmsg("foreign table \"%s\" does not allow inserts",
+							   RelationGetRelationName(resultRel))));
+					break;
+				case CMD_UPDATE:
+					if (fdwroutine->ExecForeignUpdate == NULL)
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("cannot update foreign table \"%s\"",
+										RelationGetRelationName(resultRel))));
+					if (fdwroutine->IsForeignRelUpdatable != NULL &&
+						(fdwroutine->IsForeignRelUpdatable(resultRel) & (1 << CMD_UPDATE)) == 0)
+						ereport(ERROR,
+						  (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+						errmsg("foreign table \"%s\" does not allow updates",
+							   RelationGetRelationName(resultRel))));
+					break;
+				case CMD_DELETE:
+					if (fdwroutine->ExecForeignDelete == NULL)
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							errmsg("cannot delete from foreign table \"%s\"",
+								   RelationGetRelationName(resultRel))));
+					if (fdwroutine->IsForeignRelUpdatable != NULL &&
+						(fdwroutine->IsForeignRelUpdatable(resultRel) & (1 << CMD_DELETE)) == 0)
+						ereport(ERROR,
+						  (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+						errmsg("foreign table \"%s\" does not allow deletes",
+							   RelationGetRelationName(resultRel))));
+					break;
+				default:
+					elog(ERROR, "unrecognized CmdType: %d", (int) operation);
+					break;
+			}
 			break;
 		default:
 			ereport(ERROR,
@@ -1158,14 +1222,21 @@ CheckValidRowMarkRel(Relation rel, RowMarkType markType)
 							RelationGetRelationName(rel))));
 			break;
 		case RELKIND_VIEW:
-			/* Should not get here */
+			/* Should not get here; planner should have expanded the view */
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot lock rows in view \"%s\"",
 							RelationGetRelationName(rel))));
 			break;
+		case RELKIND_MATVIEW:
+			/* Should not get here */
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("cannot lock rows in materialized view \"%s\"",
+							RelationGetRelationName(rel))));
+			break;
 		case RELKIND_FOREIGN_TABLE:
-			/* Perhaps we can support this someday, but not today */
+			/* Should not get here */
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot lock rows in foreign table \"%s\"",
@@ -1219,6 +1290,11 @@ InitResultRelInfo(ResultRelInfo *resultRelInfo,
 		resultRelInfo->ri_TrigWhenExprs = NULL;
 		resultRelInfo->ri_TrigInstrument = NULL;
 	}
+	if (resultRelationDesc->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
+		resultRelInfo->ri_FdwRoutine = GetFdwRoutineForRelation(resultRelationDesc, true);
+	else
+		resultRelInfo->ri_FdwRoutine = NULL;
+	resultRelInfo->ri_FdwState = NULL;
 	resultRelInfo->ri_ConstraintExprs = NULL;
 	resultRelInfo->ri_junkFilter = NULL;
 	resultRelInfo->ri_projectReturning = NULL;
@@ -1465,7 +1541,8 @@ ExecEndPlan(PlanState *planstate, EState *estate)
 	}
 
 	/*
-	 * close any relations selected FOR UPDATE/FOR SHARE, again keeping locks
+	 * close any relations selected FOR [KEY] UPDATE/SHARE, again keeping
+	 * locks
 	 */
 	foreach(l, estate->es_rowMarks)
 	{
@@ -1479,7 +1556,7 @@ ExecEndPlan(PlanState *planstate, EState *estate)
 /* ----------------------------------------------------------------
  *		ExecutePlan
  *
- *		Processes the query plan until we have processed 'numberTuples' tuples,
+ *		Processes the query plan until we have retrieved 'numberTuples' tuples,
  *		moving in the specified direction.
  *
  *		Runs to completion if numberTuples is 0
@@ -1500,10 +1577,8 @@ ExecutePlan(EState *estate,
 {
 	TupleTableSlot *slot;
 	long		current_tuple_count;
-
 	struct timeval scanstart;
 	struct timeval current;
-
 	long 		startms;
 	long		currentms;
 
@@ -1599,6 +1674,8 @@ ExecutePlan(EState *estate,
 
 /*
  * ExecRelCheck --- check that tuple meets constraints for result relation
+ *
+ * Returns NULL if OK, else name of failed check constraint
  */
 static const char *
 ExecRelCheck(ResultRelInfo *resultRelInfo,
@@ -1647,9 +1724,9 @@ ExecRelCheck(ResultRelInfo *resultRelInfo,
 		qual = resultRelInfo->ri_ConstraintExprs[i];
 
 		/*
-		 * NOTE: SQL92 specifies that a NULL result from a constraint
-		 * expression is not to be treated as a failure.  Therefore, tell
-		 * ExecQual to return TRUE for NULL.
+		 * NOTE: SQL specifies that a NULL result from a constraint expression
+		 * is not to be treated as a failure.  Therefore, tell ExecQual to
+		 * return TRUE for NULL.
 		 */
 		if (!ExecQual(qual, econtext, true))
 			return check[i].ccname;
@@ -1664,25 +1741,29 @@ ExecConstraints(ResultRelInfo *resultRelInfo,
 				TupleTableSlot *slot, EState *estate)
 {
 	Relation	rel = resultRelInfo->ri_RelationDesc;
-	TupleConstr *constr = rel->rd_att->constr;
+	TupleDesc	tupdesc = RelationGetDescr(rel);
+	TupleConstr *constr = tupdesc->constr;
 
 	Assert(constr);
 
 	if (constr->has_not_null)
 	{
-		int			natts = rel->rd_att->natts;
+		int			natts = tupdesc->natts;
 		int			attrChk;
 
 		for (attrChk = 1; attrChk <= natts; attrChk++)
 		{
-			if (rel->rd_att->attrs[attrChk - 1]->attnotnull &&
+			if (tupdesc->attrs[attrChk - 1]->attnotnull &&
 				slot_attisnull(slot, attrChk))
 				ereport(ERROR,
 						(errcode(ERRCODE_NOT_NULL_VIOLATION),
 						 errmsg("null value in column \"%s\" violates not-null constraint",
-						  NameStr(rel->rd_att->attrs[attrChk - 1]->attname)),
+							  NameStr(tupdesc->attrs[attrChk - 1]->attname)),
 						 errdetail("Failing row contains %s.",
-								   ExecBuildSlotValueDescription(slot, 64))));
+								   ExecBuildSlotValueDescription(slot,
+																 tupdesc,
+																 64)),
+						 errtablecol(rel, attrChk)));
 		}
 	}
 
@@ -1696,7 +1777,10 @@ ExecConstraints(ResultRelInfo *resultRelInfo,
 					 errmsg("new row for relation \"%s\" violates check constraint \"%s\"",
 							RelationGetRelationName(rel), failed),
 					 errdetail("Failing row contains %s.",
-							   ExecBuildSlotValueDescription(slot, 64))));
+							   ExecBuildSlotValueDescription(slot,
+															 tupdesc,
+															 64)),
+					 errtableconstraint(rel, failed)));
 	}
 }
 
@@ -1704,15 +1788,22 @@ ExecConstraints(ResultRelInfo *resultRelInfo,
  * ExecBuildSlotValueDescription -- construct a string representing a tuple
  *
  * This is intentionally very similar to BuildIndexValueDescription, but
- * unlike that function, we truncate long field values.  That seems necessary
- * here since heap field values could be very long, whereas index entries
- * typically aren't so wide.
+ * unlike that function, we truncate long field values (to at most maxfieldlen
+ * bytes).	That seems necessary here since heap field values could be very
+ * long, whereas index entries typically aren't so wide.
+ *
+ * Also, unlike the case with index entries, we need to be prepared to ignore
+ * dropped columns.  We used to use the slot's tuple descriptor to decode the
+ * data, but the slot's descriptor doesn't identify dropped columns, so we
+ * now need to be passed the relation's descriptor.
  */
 static char *
-ExecBuildSlotValueDescription(TupleTableSlot *slot, int maxfieldlen)
+ExecBuildSlotValueDescription(TupleTableSlot *slot,
+							  TupleDesc tupdesc,
+							  int maxfieldlen)
 {
 	StringInfoData buf;
-	TupleDesc	tupdesc = slot->tts_tupleDescriptor;
+	bool		write_comma = false;
 	int			i;
 
 	/* Make sure the tuple is fully deconstructed */
@@ -1727,6 +1818,10 @@ ExecBuildSlotValueDescription(TupleTableSlot *slot, int maxfieldlen)
 		char	   *val;
 		int			vallen;
 
+		/* ignore dropped columns */
+		if (tupdesc->attrs[i]->attisdropped)
+			continue;
+
 		if (slot->tts_isnull[i])
 			val = "null";
 		else
@@ -1739,8 +1834,10 @@ ExecBuildSlotValueDescription(TupleTableSlot *slot, int maxfieldlen)
 			val = OidOutputFunctionCall(foutoid, slot->tts_values[i]);
 		}
 
-		if (i > 0)
+		if (write_comma)
 			appendStringInfoString(&buf, ", ");
+		else
+			write_comma = true;
 
 		/* truncate if needed */
 		vallen = strlen(val);
@@ -1847,6 +1944,7 @@ ExecBuildAuxRowMark(ExecRowMark *erm, List *targetlist)
  *	epqstate - state for EvalPlanQual rechecking
  *	relation - table containing tuple
  *	rti - rangetable index of table containing tuple
+ *	lockmode - requested tuple lock mode
  *	*tid - t_ctid from the outdated tuple (ie, next updated version)
  *	priorXmax - t_xmax from the outdated tuple
  *
@@ -1855,10 +1953,13 @@ ExecBuildAuxRowMark(ExecRowMark *erm, List *targetlist)
  *
  * Returns a slot containing the new candidate update/delete tuple, or
  * NULL if we determine we shouldn't process the row.
+ *
+ * Note: properly, lockmode should be declared as enum LockTupleMode,
+ * but we use "int" to avoid having to include heapam.h in executor.h.
  */
 TupleTableSlot *
 EvalPlanQual(EState *estate, EPQState *epqstate,
-			 Relation relation, Index rti,
+			 Relation relation, Index rti, int lockmode,
 			 ItemPointer tid, TransactionId priorXmax)
 {
 	TupleTableSlot *slot;
@@ -1869,7 +1970,7 @@ EvalPlanQual(EState *estate, EPQState *epqstate,
 	/*
 	 * Get and lock the updated version of the row; if fail, return NULL.
 	 */
-	copyTuple = EvalPlanQualFetch(estate, relation, LockTupleExclusive,
+	copyTuple = EvalPlanQualFetch(estate, relation, lockmode,
 								  tid, priorXmax);
 
 	if (copyTuple == NULL)
@@ -1961,8 +2062,7 @@ EvalPlanQualFetch(EState *estate, Relation relation, int lockmode,
 		if (heap_fetch(relation, &SnapshotDirty, &tuple, &buffer, true, NULL))
 		{
 			HTSU_Result test;
-			ItemPointerData update_ctid;
-			TransactionId update_xmax;
+			HeapUpdateFailureData hufd;
 
 			/*
 			 * If xmin isn't what we're expecting, the slot must have been
@@ -1997,12 +2097,12 @@ EvalPlanQualFetch(EState *estate, Relation relation, int lockmode,
 			/*
 			 * If tuple was inserted by our own transaction, we have to check
 			 * cmin against es_output_cid: cmin >= current CID means our
-			 * command cannot see the tuple, so we should ignore it.  Without
-			 * this we are open to the "Halloween problem" of indefinitely
-			 * re-updating the same tuple. (We need not check cmax because
-			 * HeapTupleSatisfiesDirty will consider a tuple deleted by our
-			 * transaction dead, regardless of cmax.)  We just checked that
-			 * priorXmax == xmin, so we can test that variable instead of
+			 * command cannot see the tuple, so we should ignore it. Otherwise
+			 * heap_lock_tuple() will throw an error, and so would any later
+			 * attempt to update or delete the tuple.  (We need not check cmax
+			 * because HeapTupleSatisfiesDirty will consider a tuple deleted
+			 * by our transaction dead, regardless of cmax.) Wee just checked
+			 * that priorXmax == xmin, so we can test that variable instead of
 			 * doing HeapTupleHeaderGetXmin again.
 			 */
 			if (TransactionIdIsCurrentTransactionId(priorXmax) &&
@@ -2015,17 +2115,30 @@ EvalPlanQualFetch(EState *estate, Relation relation, int lockmode,
 			/*
 			 * This is a live tuple, so now try to lock it.
 			 */
-			test = heap_lock_tuple(relation, &tuple, &buffer,
-								   &update_ctid, &update_xmax,
+			test = heap_lock_tuple(relation, &tuple,
 								   estate->es_output_cid,
-								   lockmode, false);
+								   lockmode, false /* wait */ ,
+								   false, &buffer, &hufd);
 			/* We now have two pins on the buffer, get rid of one */
 			ReleaseBuffer(buffer);
 
 			switch (test)
 			{
 				case HeapTupleSelfUpdated:
-					/* treat it as deleted; do not process */
+
+					/*
+					 * The target tuple was already updated or deleted by the
+					 * current command, or by a later command in the current
+					 * transaction.  We *must* ignore the tuple in the former
+					 * case, so as to avoid the "Halloween problem" of
+					 * repeated update attempts.  In the latter case it might
+					 * be sensible to fetch the updated tuple instead, but
+					 * doing so would require changing heap_lock_tuple as well
+					 * as heap_update and heap_delete to not complain about
+					 * updating "invisible" tuples, which seems pretty scary.
+					 * So for now, treat the tuple as deleted and do not
+					 * process.
+					 */
 					ReleaseBuffer(buffer);
 					return NULL;
 
@@ -2039,12 +2152,12 @@ EvalPlanQualFetch(EState *estate, Relation relation, int lockmode,
 						ereport(ERROR,
 								(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 								 errmsg("could not serialize access due to concurrent update")));
-					if (!ItemPointerEquals(&update_ctid, &tuple.t_self))
+					if (!ItemPointerEquals(&hufd.ctid, &tuple.t_self))
 					{
 						/* it was updated, so look at the updated version */
-						tuple.t_self = update_ctid;
+						tuple.t_self = hufd.ctid;
 						/* updated row should have xmin matching this xmax */
-						priorXmax = update_xmax;
+						priorXmax = hufd.xmax;
 						continue;
 					}
 					/* tuple was deleted, so give up */
@@ -2107,7 +2220,7 @@ EvalPlanQualFetch(EState *estate, Relation relation, int lockmode,
 		/* updated, so look at the updated row */
 		tuple.t_self = tuple.t_data->t_ctid;
 		/* updated row should have xmin matching this xmax */
-		priorXmax = HeapTupleHeaderGetXmax(tuple.t_data);
+		priorXmax = HeapTupleHeaderGetUpdateXid(tuple.t_data);
 		ReleaseBuffer(buffer);
 		/* loop back to fetch next in chain */
 	}

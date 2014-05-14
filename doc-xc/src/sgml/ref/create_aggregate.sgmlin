@@ -20,7 +20,6 @@ PostgreSQL documentation
  </indexterm>
 
  <refsynopsisdiv>
-<!## PG>
 <synopsis>
 CREATE AGGREGATE <replaceable class="PARAMETER">name</replaceable> ( <replaceable class="PARAMETER">input_data_type</replaceable> [ , ... ] ) (
     SFUNC = <replaceable class="PARAMETER">sfunc</replaceable>,
@@ -41,38 +40,12 @@ CREATE AGGREGATE <replaceable class="PARAMETER">name</replaceable> (
     [ , SORTOP = <replaceable class="PARAMETER">sort_operator</replaceable> ]
 )
 </synopsis>
-<!## end>
-<!## XC>
-<synopsis>
-CREATE AGGREGATE <replaceable class="PARAMETER">name</replaceable> ( <replaceable class="PARAMETER">input_data_type</replaceable> [ , ... ] ) (
-    SFUNC = <replaceable class="PARAMETER">sfunc</replaceable>,
-    STYPE = <replaceable class="PARAMETER">state_data_type</replaceable>
-    [ , CFUNC = <replaceable class="PARAMETER">cfunc</replaceable> ]
-    [ , FINALFUNC = <replaceable class="PARAMETER">ffunc</replaceable> ]
-    [ , INITCOND = <replaceable class="PARAMETER">initial_condition</replaceable> ]
-    [ , INITCOLLECT = <replaceable class="PARAMETER">initial_collection_condition</replaceable> ]
-    [ , SORTOP = <replaceable class="PARAMETER">sort_operator</replaceable> ]
-)
-
-<phrase>or the old syntax</phrase>
-
-CREATE AGGREGATE <replaceable class="PARAMETER">name</replaceable> (
-    BASETYPE = <replaceable class="PARAMETER">base_type</replaceable>,
-    SFUNC = <replaceable class="PARAMETER">sfunc</replaceable>,
-    STYPE = <replaceable class="PARAMETER">state_data_type</replaceable>
-    [ , FINALFUNC = <replaceable class="PARAMETER">ffunc</replaceable> ]
-    [ , INITCOND = <replaceable class="PARAMETER">initial_condition</replaceable> ]
-    [ , SORTOP = <replaceable class="PARAMETER">sort_operator</replaceable> ]
-)
-</synopsis>
-<!## end>
  </refsynopsisdiv>
 
  <refsect1>
   <title>Description</title>
 
-&xconly;
-
+&common;
   <para>
    <command>CREATE AGGREGATE</command> defines a new aggregate
    function. Some basic and commonly-used aggregate functions are
@@ -101,11 +74,11 @@ CREATE AGGREGATE <replaceable class="PARAMETER">name</replaceable> (
   <para>
 <!## PG>
    An aggregate function is made from one or two ordinary
+   functions:
 <!## end>
 <!## XC>
    An aggregate function is made from one to maximum 3 ordinary
 <!## end>
-   functions:
    a state transition function
    <replaceable class="PARAMETER">sfunc</replaceable>,
 <!## XC>
@@ -130,6 +103,7 @@ CREATE AGGREGATE <replaceable class="PARAMETER">name</replaceable> (
 <!## end>
   </para>
 
+&xconly;
   <para>
 <!## PG>
    <productname>PostgreSQL</productname> creates a temporary variable
@@ -191,7 +165,6 @@ CREATE AGGREGATE <replaceable class="PARAMETER">name</replaceable> (
    aggregate. <productname>Postgres-XC</productname> planner chooses the cheapest
    feasible mode of the above two, during planning.
 <!## end>
-
   </para>
 
 &xconly;
@@ -295,15 +268,24 @@ SELECT col FROM tab ORDER BY col USING sortop LIMIT 1;
    than</quote> or <quote>greater than</quote> strategy member of a B-tree
    index operator class.
   </para>
+
+  <para>
+   To be able to create an aggregate function, you must
+   have <literal>USAGE</literal> privilege on the argument types, the state
+   type, and the return type, as well as <literal>EXECUTE</literal> privilege
+   on the transition and final functions.
+  </para>
  </refsect1>
 
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">name</replaceable></term>
     <listitem>
+&common;
      <para>
       The name (optionally schema-qualified) of the aggregate function
       to create.
@@ -385,6 +367,7 @@ SELECT col FROM tab ORDER BY col USING sortop LIMIT 1;
    <varlistentry>
     <term><replaceable class="PARAMETER">state_data_type</replaceable></term>
     <listitem>
+&common;
      <para>
       The data type for the aggregate's state value.
      </para>
@@ -422,24 +405,6 @@ SELECT col FROM tab ORDER BY col USING sortop LIMIT 1;
     </listitem>
    </varlistentry>
 
-<!## XC>
-   <varlistentry>
-    <term><replaceable class="PARAMETER">initial_collection_condition</replaceable></term>
-    <listitem>
-&xconly;
-     <para>
-      The initial setting for the state collection value.  This must
-      be a string constant in the form accepted for the data
-      type <replaceable class="PARAMETER">state_data_type</replaceable>.
-      If not specified, the collection state value starts out null. If
-      the collection
-      function <replaceable class="PARAMETER">cfunc</replaceable> is
-      not supplied, this parameter is stored but not used.
-     </para>
-    </listitem>
-   </varlistentry>
-<!## end>
-
    <varlistentry>
     <term><replaceable class="PARAMETER">sort_operator</replaceable></term>
     <listitem>
@@ -464,6 +429,7 @@ SELECT col FROM tab ORDER BY col USING sortop LIMIT 1;
  <refsect1>
   <title>Examples</title>
 
+&common;
   <para>
    See <xref linkend="xaggr">.
   </para>
@@ -472,15 +438,9 @@ SELECT col FROM tab ORDER BY col USING sortop LIMIT 1;
  <refsect1>
   <title>Compatibility</title>
 
-&common;
   <para>
    <command>CREATE AGGREGATE</command> is a
-<!## PG>
    <productname>PostgreSQL</productname> language extension.  The SQL
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> language extension.  The SQL
-<!## end>
    standard does not provide for user-defined aggregate functions.
   </para>
  </refsect1>

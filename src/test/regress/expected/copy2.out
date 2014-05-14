@@ -1,5 +1,3 @@
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 CREATE TEMP TABLE x (
 	a serial,
 	b int,
@@ -7,7 +5,6 @@ CREATE TEMP TABLE x (
 	d text,
 	e text
 ) WITH OIDS;
-NOTICE:  CREATE TABLE will create implicit sequence "x_a_seq" for serial column "x.a"
 CREATE FUNCTION fn_x_before () RETURNS TRIGGER AS '
   BEGIN
 		NEW.e := ''before trigger fired''::text;
@@ -257,6 +254,136 @@ SELECT * FROM testnull ORDER BY 1,2;
     | 
 (4 rows)
 
+BEGIN;
+CREATE TABLE vistest (LIKE testeoc);
+COPY vistest FROM stdin CSV;
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a0
+ b
+(2 rows)
+
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a1
+ b
+(2 rows)
+
+SAVEPOINT s1;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ d1
+ e
+(2 rows)
+
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ d1
+ e
+(2 rows)
+
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a2
+ b
+(2 rows)
+
+SAVEPOINT s1;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ d2
+ e
+(2 rows)
+
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ d2
+ e
+(2 rows)
+
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+SELECT * FROM vistest ORDER BY 1;
+ a 
+---
+ x
+ y
+(2 rows)
+
+COMMIT;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  cannot perform FREEZE because the table was not created or truncated in the current subtransaction
+BEGIN;
+TRUNCATE vistest;
+SAVEPOINT s1;
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  cannot perform FREEZE because the table was not created or truncated in the current subtransaction
+COMMIT;
+BEGIN;
+INSERT INTO vistest VALUES ('z');
+SAVEPOINT s1;
+TRUNCATE vistest;
+ROLLBACK TO SAVEPOINT s1;
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  cannot perform FREEZE because the table was not created or truncated in the current subtransaction
+COMMIT;
+CREATE FUNCTION truncate_in_subxact() RETURNS VOID AS
+$$
+BEGIN
+	TRUNCATE vistest;
+EXCEPTION
+  WHEN OTHERS THEN
+	INSERT INTO vistest VALUES ('subxact failure');
+END;
+$$ language plpgsql;
+BEGIN;
+INSERT INTO vistest VALUES ('z');
+SELECT truncate_in_subxact();
+ truncate_in_subxact 
+---------------------
+ 
+(1 row)
+
+COPY vistest FROM stdin CSV FREEZE;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ d4
+ e
+(2 rows)
+
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ d4
+ e
+(2 rows)
+
+DROP TABLE vistest;
+DROP FUNCTION truncate_in_subxact();
 DROP TABLE x, y;
 DROP FUNCTION fn_x_before();
 DROP FUNCTION fn_x_after();

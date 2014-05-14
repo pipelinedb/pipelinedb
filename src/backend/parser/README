@@ -5,10 +5,11 @@ Parser
 
 This directory does more than tokenize and parse SQL queries.  It also
 creates Query structures for the various complex queries that are passed
-to the optimizer and then executor. 
+to the optimizer and then executor.
 
 Note: if you make any changes to the parser, it may be necessary to 
 `make clean` this directory for them to take effect.
+
 
 parser.c	things start here
 scan.l		break query into tokens

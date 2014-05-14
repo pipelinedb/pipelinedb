@@ -29,7 +29,6 @@ DISCARD { ALL | PLANS | TEMPORARY | TEMP }
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DISCARD</> releases internal resources associated with a
    database session. These resources are normally released at the end
@@ -48,6 +47,7 @@ DISCARD { ALL | PLANS | TEMPORARY | TEMP }
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
 
    <varlistentry>
@@ -85,8 +85,7 @@ UNLISTEN *;
 SELECT pg_advisory_unlock_all();
 DISCARD PLANS;
 DISCARD TEMP;
-</programlisting>
-     </para>
+</programlisting></para>
     </listitem>
    </varlistentry>
 
@@ -96,6 +95,7 @@ DISCARD TEMP;
  <refsect1>
   <title>Notes</title>
 
+&common;
    <para>
     <command>DISCARD ALL</> cannot be executed inside a transaction block.
    </para>

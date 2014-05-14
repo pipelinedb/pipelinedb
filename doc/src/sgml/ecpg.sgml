@@ -194,9 +194,11 @@ EXEC SQL CONNECT TO unix:postgresql://sql.mydomain.com/mydb AS myconnection USER
 EXEC SQL BEGIN DECLARE SECTION;
 const char *target = "mydb@sql.mydomain.com";
 const char *user = "john";
+const char *passwd = "secret";
 EXEC SQL END DECLARE SECTION;
  ...
-EXEC SQL CONNECT TO :target USER :user;
+EXEC SQL CONNECT TO :target USER :user USING :passwd;
+/* or EXEC SQL CONNECT TO :target USER :user/:passwd; */
 </programlisting>
    The last form makes use of the variant referred to above as
    character variable reference.  You will see in later sections how C
@@ -760,11 +762,6 @@ do
     normal clauses.
    </para>
 
-   <para>
-    Both of these methods only allow retrieving one row at a time.  If
-    you need to process result sets that potentially contain more than
-    one row, you need to use a cursor, as shown in the second example.
-   </para>
   </sect2>
 
   <sect2 id="ecpg-variables-type-mapping">
@@ -943,20 +940,6 @@ struct varchar_var { int len; char arr[180]; } var;
      a query, if <literal>strlen(arr)</literal>
      and <structfield>len</structfield> are different, the shorter one
      is used.
-    </para>
-
-    <para>
-     Two or more <type>VARCHAR</type> host variables cannot be defined
-     in single line statement.  The following code will confuse
-     the <command>ecpg</command> preprocessor:
-<programlisting>
-VARCHAR v1[128], v2[128];   /* WRONG */
-</programlisting>
-     Two variables should be defined in separate statements like this:
-<programlisting>
-VARCHAR v1[128];
-VARCHAR v2[128];
-</programlisting>
     </para>
 
     <para>
@@ -5718,6 +5701,15 @@ cc -o myprog prog1.o prog2.o ... -lecpg
   </para>
 
   <para>
+   You can
+   use <command>pg_config</command><indexterm><primary>pg_config</primary><secondary sortas="ecpg">with
+   ecpg</secondary></indexterm>
+   or <command>pkg-config</command><indexterm><primary>pkg-config</primary><secondary sortas="ecpg">with
+   ecpg</secondary></indexterm> with package name <literal>libecpg</literal> to
+   get the paths for your installation.
+  </para>
+
+  <para>
    If you manage the build process of a larger project using
    <application>make</application>, it might be convenient to include
    the following implicit rule to your makefiles:
@@ -7685,9 +7677,9 @@ VAR <replaceable>varname</replaceable> IS <replaceable>ctype</replaceable>
     <title>Description</title>
 
     <para>
-     The <command>VAR</command> command defines a host variable.  It
-     is equivalent to an ordinary C variable definition inside a
-     declare section.
+     The <command>VAR</command> command assigns a new C data type
+     to a host variable.  The host variable must be previously
+     declared in a declare section.
     </para>
    </refsect1>
 
@@ -7719,8 +7711,10 @@ VAR <replaceable>varname</replaceable> IS <replaceable>ctype</replaceable>
     <title>Examples</title>
 
 <programlisting>
-EXEC SQL VAR vc IS VARCHAR[10];
-EXEC SQL VAR boolvar IS bool;
+Exec sql begin declare section;
+short a;
+exec sql end declare section;
+EXEC SQL VAR a IS int;
 </programlisting>
    </refsect1>
 

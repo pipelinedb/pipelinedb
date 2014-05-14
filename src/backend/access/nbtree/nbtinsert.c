@@ -3,7 +3,7 @@
  * nbtinsert.c
  *	  Item insertion in Lehman and Yao btrees for Postgres.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -393,7 +393,9 @@ _bt_check_unique(Relation rel, IndexTuple itup, Relation heapRel,
 										RelationGetRelationName(rel)),
 								 errdetail("Key %s already exists.",
 										   BuildIndexValueDescription(rel,
-														  values, isnull))));
+															values, isnull)),
+								 errtableconstraint(heapRel,
+											 RelationGetRelationName(rel))));
 					}
 				}
 				else if (all_dead)
@@ -405,11 +407,15 @@ _bt_check_unique(Relation rel, IndexTuple itup, Relation heapRel,
 					 */
 					ItemIdMarkDead(curitemid);
 					opaque->btpo_flags |= BTP_HAS_GARBAGE;
-					/* be sure to mark the proper buffer dirty... */
+
+					/*
+					 * Mark buffer with a dirty hint, since state is not
+					 * crucial. Be sure to mark the proper buffer dirty.
+					 */
 					if (nbuf != InvalidBuffer)
-						SetBufferCommitInfoNeedsSave(nbuf);
+						MarkBufferDirtyHint(nbuf, true);
 					else
-						SetBufferCommitInfoNeedsSave(buf);
+						MarkBufferDirtyHint(buf, true);
 				}
 			}
 		}
@@ -455,7 +461,9 @@ _bt_check_unique(Relation rel, IndexTuple itup, Relation heapRel,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("failed to re-find tuple within index \"%s\"",
 						RelationGetRelationName(rel)),
-		errhint("This may be because of a non-immutable index expression.")));
+		 errhint("This may be because of a non-immutable index expression."),
+				 errtableconstraint(heapRel,
+									RelationGetRelationName(rel))));
 
 	if (nbuf != InvalidBuffer)
 		_bt_relbuf(rel, nbuf);
@@ -523,6 +531,8 @@ _bt_findinsertloc(Relation rel,
 	 * able to fit three items on every page, so restrict any one item to 1/3
 	 * the per-page available space. Note that at this point, itemsz doesn't
 	 * include the ItemId.
+	 *
+	 * NOTE: if you change this, see also the similar code in _bt_buildadd().
 	 */
 	if (itemsz > BTMaxItemSize(page))
 		ereport(ERROR,
@@ -533,7 +543,9 @@ _bt_findinsertloc(Relation rel,
 				   RelationGetRelationName(rel)),
 		errhint("Values larger than 1/3 of a buffer page cannot be indexed.\n"
 				"Consider a function index of an MD5 hash of the value, "
-				"or use full text indexing.")));
+				"or use full text indexing."),
+				 errtableconstraint(heapRel,
+									RelationGetRelationName(rel))));
 
 	/*----------
 	 * If we will need to split the page to put the item on this page,
@@ -850,11 +862,9 @@ _bt_insertonpg(Relation rel,
 			if (BufferIsValid(metabuf))
 			{
 				PageSetLSN(metapg, recptr);
-				PageSetTLI(metapg, ThisTimeLineID);
 			}
 
 			PageSetLSN(page, recptr);
-			PageSetTLI(page, ThisTimeLineID);
 		}
 
 		END_CRIT_SECTION();
@@ -938,7 +948,6 @@ _bt_split(Relation rel, Buffer buf, OffsetNumber firstright,
 	 * examine these fields and possibly dump them in a page image.
 	 */
 	PageSetLSN(leftpage, PageGetLSN(origpage));
-	PageSetTLI(leftpage, PageGetTLI(origpage));
 
 	/* init btree private data */
 	oopaque = (BTPageOpaque) PageGetSpecialPointer(origpage);
@@ -1311,13 +1320,10 @@ _bt_split(Relation rel, Buffer buf, OffsetNumber firstright,
 		recptr = XLogInsert(RM_BTREE_ID, xlinfo, rdata);
 
 		PageSetLSN(origpage, recptr);
-		PageSetTLI(origpage, ThisTimeLineID);
 		PageSetLSN(rightpage, recptr);
-		PageSetTLI(rightpage, ThisTimeLineID);
 		if (!P_RIGHTMOST(ropaque))
 		{
 			PageSetLSN(spage, recptr);
-			PageSetTLI(spage, ThisTimeLineID);
 		}
 	}
 
@@ -1953,9 +1959,7 @@ _bt_newroot(Relation rel, Buffer lbuf, Buffer rbuf)
 		recptr = XLogInsert(RM_BTREE_ID, XLOG_BTREE_NEWROOT, rdata);
 
 		PageSetLSN(rootpage, recptr);
-		PageSetTLI(rootpage, ThisTimeLineID);
 		PageSetLSN(metapg, recptr);
-		PageSetTLI(metapg, ThisTimeLineID);
 	}
 
 	END_CRIT_SECTION();

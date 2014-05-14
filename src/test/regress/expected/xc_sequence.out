@@ -99,7 +99,6 @@ DROP SEQUENCE xc_sequence_2;
 -- Columns with SERIAL
 -- Serial sequence is named xc_sequence_tab1_col2_seq
 CREATE TABLE xc_sequence_tab1 (col1 int, col2 serial) DISTRIBUTE BY ROUNDROBIN;
-NOTICE:  CREATE TABLE will create implicit sequence "xc_sequence_tab1_col2_seq" for serial column "xc_sequence_tab1.col2"
 -- Some data
 INSERT INTO xc_sequence_tab1 VALUES (1, DEFAULT);
 INSERT INTO xc_sequence_tab1 VALUES (2, DEFAULT);
@@ -145,7 +144,6 @@ COMMIT;
 DROP TABLE xc_sequence_tab1;
 -- Need to recreate here, serial column is no more
 CREATE TABLE xc_sequence_tab1 (col1 int, col2 serial) DISTRIBUTE BY ROUNDROBIN;
-NOTICE:  CREATE TABLE will create implicit sequence "xc_sequence_tab1_col2_seq" for serial column "xc_sequence_tab1.col2"
 INSERT INTO xc_sequence_tab1 VALUES (1234, DEFAULT);
 SELECT col1, col2 FROM xc_sequence_tab1 ORDER BY 1;
  col1 | col2 

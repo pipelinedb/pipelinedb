@@ -10,12 +10,7 @@
 &common;
   <para>
    In  the  sections  that follow, we will discuss how you
-<!## PG>
    can extend the <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-   can extend the <productname>Postgres-XC</productname>
-<!## end>
    <acronym>SQL</acronym> query language by adding:
 
    <itemizedlist spacing="compact" mark="bullet">
@@ -57,12 +52,7 @@
 
 &common;
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> is extensible because its operation  is
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> is extensible because its operation  is
-<!## end>
     catalog-driven.   If  you  are familiar with standard
     relational database systems, you know that  they  store  information
     about  databases,  tables,  columns,  etc., in what are
@@ -70,25 +60,13 @@
     this  the data dictionary.)  The catalogs appear to the
     user as tables like any other, but  the  <acronym>DBMS</acronym>  stores
     its  internal  bookkeeping in them.  One key difference
-<!## PG>
     between <productname>PostgreSQL</productname> and  standard  relational database systems  is
     that <productname>PostgreSQL</productname> stores much more information in its
-<!## end>
-<!## XC>
-    between <productname>Postgres-XC</productname> and  standard  relational database systems  is
-    that <productname>Postgres-XC</productname> stores much more information in its
-<!## end>
     catalogs: not only information about tables and  columns,
     but also information about data types, functions, access
     methods, and so on.  These tables can be  modified  by
-<!## PG>
     the  user, and since <productname>PostgreSQL</productname> bases its operation
     on these tables, this means that <productname>PostgreSQL</productname> can  be
-<!## end>
-<!## XC>
-    the  user, and since <productname>Postgres-XC</productname> bases its operation
-    on these tables, this means that <productname>Postgres-XC</productname> can  be
-<!## end>
     extended   by   users.    By  comparison,  conventional
     database systems can only be extended by changing hardcoded
     procedures in the source code or by loading modules
@@ -96,14 +74,15 @@
    </para>
 
 <!## XC>
+&xconly;
    <para>
     <productname>Postgres-XC</> inherits all of this feature
     from <productname>PostgreSQL</>.
    </para>
 <!## end>
+&common;
 
    <para>
-<!## PG>
     The <productname>PostgreSQL</productname> server can moreover
     incorporate user-written code into itself through dynamic loading.
     That is, the user can specify an object code file (e.g., a shared
@@ -114,29 +93,11 @@
     fly</quote> makes <productname>PostgreSQL</productname> uniquely
     suited for rapid prototyping of new applications and storage
     structures.
-<!## end>
-<!## XC>
-    The <productname>Postgres-XC</productname> server can moreover
-    incorporate user-written code into itself through dynamic loading.
-    That is, the user can specify an object code file (e.g., a shared
-    library) that implements a new type or function, and
-    <productname>Postgres-XC</productname> will load it as required.
-    Code written in <acronym>SQL</acronym> is even more trivial to add
-    to the server.  This ability to modify its operation <quote>on the
-    fly</quote> makes <productname>Postgres-XC</productname> uniquely
-    suited for rapid prototyping of new applications and storage
-    structures.
-<!## end>
    </para>
   </sect1>
 
   <sect1 id="extend-type-system">
-<!## PG>
    <title>The <productname>PostgreSQL</productname> Type System</title>
-<!## end>
-<!## XC>
-   <title>The <productname>Postgres-XC</productname> Type System</title>
-<!## end>
 
    <indexterm zone="extend-type-system">
     <primary>base type</primary>
@@ -158,12 +119,7 @@
 
 &common;
    <para>
-<!## PG>
     <productname>PostgreSQL</productname> data types are divided into base
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</>'s, and <productname>PostgreSQL</productname>'s as well, data types are divided into base
-<!## end>
     types, composite types, domains, and pseudo-types.
    </para>
 
@@ -176,12 +132,7 @@
      implemented below the level of the <acronym>SQL</> language
      (typically in a low-level language such as C).  They generally
      correspond to what are often known as abstract data types.
-<!## PG>
      <productname>PostgreSQL</productname> can only operate on such
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> can only operate on such
-<!## end>
      types through functions provided by the user and only understands
      the behavior of such types to the extent that the user describes
      them.  Base types are further subdivided into scalar and array
@@ -208,7 +159,7 @@
     </para>
    </sect2>
 
-   <sect2>
+   <sect2 id="extend-type-system-domains">
     <title>Domains</title>
 
 &common;
@@ -264,8 +215,9 @@
 
 &common;
     <para>
-     Four pseudo-types of special interest are <type>anyelement</>,
-     <type>anyarray</>, <type>anynonarray</>, and <type>anyenum</>,
+     Five pseudo-types of special interest are <type>anyelement</>,
+     <type>anyarray</>, <type>anynonarray</>, <type>anyenum</>,
+     and <type>anyrange</>,
      which are collectively called <firstterm>polymorphic types</>.
      Any function declared using these types is said to be
      a <firstterm>polymorphic function</>.  A polymorphic function can
@@ -282,10 +234,16 @@
      data type, but in any given call they must all be the
      <emphasis>same</emphasis> actual type. Each
      position declared as <type>anyarray</type> can have any array data type,
-     but similarly they must all be the same type. If there are
+     but similarly they must all be the same type.  And similarly,
+     positions declared as <type>anyrange</type> must all be the same range
+     type.  Furthermore, if there are
      positions declared <type>anyarray</type> and others declared
      <type>anyelement</type>, the actual array type in the
      <type>anyarray</type> positions must be an array whose elements are
+     the same type appearing in the <type>anyelement</type> positions.
+     Similarly, if there are positions declared <type>anyrange</type>
+     and others declared <type>anyelement</type>, the actual range type in
+     the <type>anyrange</type> positions must be a range whose subtype is
      the same type appearing in the <type>anyelement</type> positions.
      <type>anynonarray</> is treated exactly the same as <type>anyelement</>,
      but adds the additional constraint that the actual type must not be
@@ -352,6 +310,7 @@
     <primary>extension</primary>
    </indexterm>
 
+&common;
    <para>
     A useful extension to <productname>PostgreSQL</> typically includes
     multiple SQL objects; for example, a new data type will require new
@@ -418,6 +377,12 @@
     extension.)  Also notice that while a table can be a member of an
     extension, its subsidiary objects such as indexes are not directly
     considered members of the extension.
+    Another important point is that schemas can belong to extensions, but not
+    vice versa: an extension as such has an unqualified name and does not
+    exist <quote>within</> any schema.  The extension's member objects,
+    however, will belong to schemas whenever appropriate for their object
+    types.  It may or may not be appropriate for an extension to own the
+    schema(s) its member objects are within.
    </para>
 
    <sect2>
@@ -427,6 +392,7 @@
     <primary>control file</primary>
    </indexterm>
 
+&common;
     <para>
      The <xref linkend="sql-createextension"> command relies on a control
      file for each extension, which must be named the same as the extension
@@ -589,6 +555,17 @@
     </para>
 
     <para>
+     An extension's <acronym>SQL</> script files can also contain lines
+     beginning with <literal>\echo</>, which will be ignored (treated as
+     comments) by the extension mechanism.  This provision is commonly used
+     to throw an error if the script file is fed to <application>psql</>
+     rather than being loaded via <command>CREATE EXTENSION</> (see example
+     script below).  Without that, users might accidentally load the
+     extension's contents as <quote>loose</> objects rather than as an
+     extension, a state of affairs that's a bit tedious to recover from.
+    </para>
+
+    <para>
      While the script files can contain any characters allowed by the specified
      encoding, control files should contain only plain ASCII, because there
      is no way for <productname>PostgreSQL</> to know what encoding a
@@ -604,6 +581,7 @@
    <sect2>
     <title>Extension Relocatability</title>
 
+&common;
     <para>
      Users often wish to load the objects contained in an extension into a
      different schema than the extension's author had in mind.  There are
@@ -702,6 +680,7 @@ SET LOCAL search_path TO @extschema@;
    <sect2>
     <title>Extension Configuration Tables</title>
 
+&common;
     <para>
      Some extensions include configuration tables, which contain data that
      might be added or changed by the user after installation of the
@@ -712,6 +691,10 @@ SET LOCAL search_path TO @extschema@;
      included in dumps, or the extension will behave differently after a dump
      and reload.
     </para>
+
+   <indexterm>
+    <primary>pg_extension_config_dump</primary>
+   </indexterm>
 
     <para>
      To solve this problem, an extension's script file can mark a table
@@ -751,11 +734,20 @@ SELECT pg_catalog.pg_extension_config_dump('my_config', 'WHERE NOT standard_entr
      be modified by users, can be handled by creating triggers on the
      configuration table to ensure that modified rows are marked correctly.
     </para>
+
+    <para>
+     You can alter the filter condition associated with a configuration table
+     by calling <function>pg_extension_config_dump</> again.  (This would
+     typically be useful in an extension update script.)  The only way to mark
+     a table as no longer a configuration table is to dissociate it from the
+     extension with <command>ALTER EXTENSION ... DROP TABLE</>.
+    </para>
    </sect2>
 
    <sect2>
     <title>Extension Updates</title>
 
+&common;
     <para>
      One advantage of the extension mechanism is that it provides convenient
      ways to manage updates to the SQL commands that define an extension's
@@ -863,6 +855,7 @@ SELECT * FROM pg_extension_update_paths('<replaceable>extension_name</>');
    <sect2>
     <title>Extension Example</title>
 
+&common;
     <para>
      Here is a complete example of an <acronym>SQL</>-only
      extension, a two-element composite type that can store any type of value
@@ -874,6 +867,9 @@ SELECT * FROM pg_extension_update_paths('<replaceable>extension_name</>');
      The script file <filename>pair--1.0.sql</> looks like this:
 
 <programlisting><![CDATA[
+-- complain if script is sourced in psql, rather than via CREATE EXTENSION
+\echo Use "CREATE EXTENSION pair" to load this file. \quit
+
 CREATE TYPE pair AS ( k text, v text );
 
 CREATE OR REPLACE FUNCTION pair(anyelement, text)
@@ -941,6 +937,7 @@ include $(PGXS)
     <primary>pgxs</primary>
    </indexterm>
 
+&common;
    <para>
     If you are thinking about distributing your
     <productname>PostgreSQL</> extension modules, setting up a
@@ -1111,6 +1108,15 @@ include $(PGXS)
       <listitem>
        <para>
         list of regression test cases (without suffix), see below
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><varname>REGRESS_OPTS</varname></term>
+      <listitem>
+       <para>
+        additional switches to pass to <application>pg_regress</>
        </para>
       </listitem>
      </varlistentry>

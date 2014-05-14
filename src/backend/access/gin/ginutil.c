@@ -4,7 +4,7 @@
  *	  utilities routines for the postgres inverted index access method.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -593,7 +593,6 @@ ginUpdateStats(Relation index, const GinStatsData *stats)
 
 		recptr = XLogInsert(RM_GIN_ID, XLOG_GIN_UPDATE_META_PAGE, &rdata);
 		PageSetLSN(metapage, recptr);
-		PageSetTLI(metapage, ThisTimeLineID);
 	}
 
 	UnlockReleaseBuffer(metabuffer);

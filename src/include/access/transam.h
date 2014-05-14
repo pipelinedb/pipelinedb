@@ -4,7 +4,7 @@
  *	  postgres transaction access method support code
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2010-2012 Postgres-XC Development Group
  *
@@ -141,10 +141,6 @@ extern bool TransactionStartedDuringRecovery(void);
 
 /* in transam/varsup.c */
 extern PGDLLIMPORT VariableCache ShmemVariableCache;
-
-/* in transam/transam.c */
-extern const XLogRecPtr InvalidXLogRecPtr;
-
 
 /*
  * prototypes for functions in transam/transam.c

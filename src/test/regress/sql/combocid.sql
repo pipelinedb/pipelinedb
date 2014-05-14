@@ -1,8 +1,6 @@
 --
 -- Tests for some likely failure cases with combo cmin/cmax mechanism
 --
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 
 CREATE TEMP TABLE combocidtest (foobar int) distribute by replication;
 

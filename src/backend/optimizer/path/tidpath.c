@@ -25,7 +25,7 @@
  * for that.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -249,10 +249,19 @@ TidQualFromRestrictinfo(List *restrictinfo, int varno)
 void
 create_tidscan_paths(PlannerInfo *root, RelOptInfo *rel)
 {
+	Relids		required_outer;
 	List	   *tidquals;
+
+	/*
+	 * We don't support pushing join clauses into the quals of a tidscan, but
+	 * it could still have required parameterization due to LATERAL refs in
+	 * its tlist.
+	 */
+	required_outer = rel->lateral_relids;
 
 	tidquals = TidQualFromRestrictinfo(rel->baserestrictinfo, rel->relid);
 
 	if (tidquals)
-		add_path(rel, (Path *) create_tidscan_path(root, rel, tidquals));
+		add_path(rel, (Path *) create_tidscan_path(root, rel, tidquals,
+												   required_outer));
 }

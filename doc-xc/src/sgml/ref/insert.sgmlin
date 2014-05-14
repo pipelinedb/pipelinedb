@@ -22,7 +22,7 @@ PostgreSQL documentation
  <refsynopsisdiv>
 <synopsis>
 [ WITH [ RECURSIVE ] <replaceable class="parameter">with_query</replaceable> [, ...] ]
-INSERT INTO <replaceable class="PARAMETER">table</replaceable> [ ( <replaceable class="PARAMETER">column</replaceable> [, ...] ) ]
+INSERT INTO <replaceable class="PARAMETER">table_name</replaceable> [ ( <replaceable class="PARAMETER">column_name</replaceable> [, ...] ) ]
     { DEFAULT VALUES | VALUES ( { <replaceable class="PARAMETER">expression</replaceable> | DEFAULT } [, ...] ) [, ...] | <replaceable class="PARAMETER">query</replaceable> }
     [ RETURNING * | <replaceable class="parameter">output_expression</replaceable> [ [ AS ] <replaceable class="parameter">output_name</replaceable> ] [, ...] ]
 </synopsis>
@@ -32,11 +32,20 @@ INSERT INTO <replaceable class="PARAMETER">table</replaceable> [ ( <replaceable 
   <title>Description</title>
 
 &common;
-
   <para>
    <command>INSERT</command> inserts new rows into a table.
    One can insert one or more rows specified by value expressions,
    or zero or more rows resulting from a query.
+  </para>
+
+  <para>
+   The target column names can be listed in any order.  If no list of
+   column names is given at all, the default is all the columns of the
+   table in their declared order; or the first <replaceable>N</> column
+   names, if there are only <replaceable>N</> columns supplied by the
+   <literal>VALUES</> clause or <replaceable>query</>.  The values
+   supplied by the <literal>VALUES</> clause or <replaceable>query</> are
+   associated with the explicit or implicit column list left-to-right.
   </para>
 
   <para>
@@ -75,6 +84,7 @@ INSERT INTO <replaceable class="PARAMETER">table</replaceable> [ ( <replaceable 
 
  <refsect1>
   <title>Parameters</title>
+
 &common;
   <variablelist>
    <varlistentry>
@@ -98,7 +108,7 @@ INSERT INTO <replaceable class="PARAMETER">table</replaceable> [ ( <replaceable 
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="PARAMETER">table</replaceable></term>
+    <term><replaceable class="PARAMETER">table_name</replaceable></term>
     <listitem>
      <para>
       The name (optionally schema-qualified) of an existing table.
@@ -107,10 +117,10 @@ INSERT INTO <replaceable class="PARAMETER">table</replaceable> [ ( <replaceable 
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="PARAMETER">column</replaceable></term>
+    <term><replaceable class="PARAMETER">column_name</replaceable></term>
     <listitem>
      <para>
-      The name of a column in <replaceable class="PARAMETER">table</replaceable>.
+      The name of a column in the table named by <replaceable class="PARAMETER">table_name</replaceable>.
       The column name can be qualified with a subfield name or array
       subscript, if needed.  (Inserting into only some fields of a
       composite column leaves the other fields null.)
@@ -131,8 +141,7 @@ INSERT INTO <replaceable class="PARAMETER">table</replaceable> [ ( <replaceable 
     <term><replaceable class="PARAMETER">expression</replaceable></term>
     <listitem>
      <para>
-      An expression or value to assign to the corresponding <replaceable
-      class="PARAMETER">column</replaceable>.
+      An expression or value to assign to the corresponding column.
      </para>
     </listitem>
    </varlistentry>
@@ -141,7 +150,7 @@ INSERT INTO <replaceable class="PARAMETER">table</replaceable> [ ( <replaceable 
     <term><literal>DEFAULT</literal></term>
     <listitem>
      <para>
-      The corresponding <replaceable>column</replaceable> will be filled with
+      The corresponding column will be filled with
       its default value.
      </para>
     </listitem>
@@ -165,7 +174,7 @@ INSERT INTO <replaceable class="PARAMETER">table</replaceable> [ ( <replaceable 
      <para>
       An expression to be computed and returned by the <command>INSERT</>
       command after each row is inserted.  The expression can use any
-      column names of the <replaceable class="PARAMETER">table</replaceable>.
+      column names of the table named by <replaceable class="PARAMETER">table_name</replaceable>.
       Write <literal>*</> to return all columns of the inserted row(s).
      </para>
     </listitem>
@@ -184,6 +193,7 @@ INSERT INTO <replaceable class="PARAMETER">table</replaceable> [ ( <replaceable 
 
  <refsect1>
   <title>Outputs</title>
+
 &common;
   <para>
    On successful completion, an <command>INSERT</> command returns a command
@@ -210,7 +220,7 @@ INSERT <replaceable>oid</replaceable> <replaceable class="parameter">count</repl
 
  <refsect1>
   <title>Examples</title>
-&common;
+
   <para>
    Insert a single row into table <literal>films</literal>:
 
@@ -304,19 +314,22 @@ WITH upd AS (
     RETURNING *
 )
 INSERT INTO employees_log SELECT *, current_timestamp FROM upd;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
-   <command>INSERT</> conforms to the <acronym>SQL</acronym> standard, except
-   that the <literal>RETURNING</> clause is a <productname>PostgreSQL</productname>
-   extension, as is the ability to use <literal>WITH</> with <command>INSERT</>.
-   Also, the case in which a column name list is omitted, but not all the columns
-   are filled from the <command>VALUES</> clause or query, is disallowed by the standard.
+   <command>INSERT</command> conforms to the SQL standard, except that
+   the <literal>RETURNING</> clause is a
+   <productname>PostgreSQL</productname> extension, as is the ability
+   to use <literal>WITH</> with <command>INSERT</>.
+   Also, the case in
+   which a column name list is omitted, but not all the columns are
+   filled from the <literal>VALUES</> clause or <replaceable>query</>,
+   is disallowed by the standard.
   </para>
 
   <para>

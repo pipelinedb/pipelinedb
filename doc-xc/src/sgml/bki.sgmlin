@@ -8,12 +8,7 @@
  <para>
   Backend Interface (<acronym>BKI</acronym>) files are scripts in a
   special language that is understood by the
-<!## PG>
   <productname>PostgreSQL</productname> backend when running in the
-<!## end>
-<!## XC>
-  <productname>Postgres-XC</productname> backend when running in the
-<!## end>
   <quote>bootstrap</quote> mode.  The bootstrap mode allows system catalogs
   to be created and filled from scratch, whereas ordinary SQL commands
   require the catalogs to exist already.

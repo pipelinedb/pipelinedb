@@ -339,9 +339,6 @@ CREATE AGGREGATE myaggn20a(BASETYPE = anyelement, SFUNC = tfp,
 CREATE AGGREGATE mysum2(anyelement,anyelement) (SFUNC = sum3,
   STYPE = anyelement, INITCOND = '0');
 
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-
 -- create test data for polymorphic aggregates
 create temp table t(f1 int, f2 int[], f3 text);
 insert into t values(1,array[1],'a');

@@ -4,7 +4,7 @@
  *
  *	  Routines for aggregate-manipulation commands
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -23,11 +23,13 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
 #include "catalog/pg_aggregate.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
+#include "commands/alter.h"
 #include "commands/defrem.h"
 #include "miscadmin.h"
 #include "parser/parse_func.h"
@@ -45,7 +47,7 @@
  * is specified by a BASETYPE element in the parameters.  Otherwise,
  * "args" defines the input type(s).
  */
-void
+Oid
 DefineAggregate(List *name, List *args, bool oldstyle, List *parameters)
 {
 	char	   *aggName;
@@ -64,6 +66,7 @@ DefineAggregate(List *name, List *args, bool oldstyle, List *parameters)
 	Oid		   *aggArgTypes;
 	int			numArgs;
 	Oid			transTypeId;
+	char		transTypeType;
 	ListCell   *pl;
 
 	/* Convert list of names to a name and namespace */
@@ -190,7 +193,8 @@ DefineAggregate(List *name, List *args, bool oldstyle, List *parameters)
 	 * aggregate.
 	 */
 	transTypeId = typenameTypeId(NULL, transType);
-	if (get_typtype(transTypeId) == TYPTYPE_PSEUDO &&
+	transTypeType = get_typtype(transTypeId);
+	if (transTypeType == TYPTYPE_PSEUDO &&
 		!IsPolymorphicType(transTypeId))
 	{
 		if (transTypeId == INTERNALOID && superuser())
@@ -203,99 +207,41 @@ DefineAggregate(List *name, List *args, bool oldstyle, List *parameters)
 	}
 
 	/*
+	 * If we have an initval, and it's not for a pseudotype (particularly a
+	 * polymorphic type), make sure it's acceptable to the type's input
+	 * function.  We will store the initval as text, because the input
+	 * function isn't necessarily immutable (consider "now" for timestamp),
+	 * and we want to use the runtime not creation-time interpretation of the
+	 * value.  However, if it's an incorrect value it seems much more
+	 * user-friendly to complain at CREATE AGGREGATE time.
+	 */
+	if (initval && transTypeType != TYPTYPE_PSEUDO)
+	{
+		Oid			typinput,
+					typioparam;
+
+		getTypeInputInfo(transTypeId, &typinput, &typioparam);
+		(void) OidInputFunctionCall(typinput, initval, typioparam, -1);
+	}
+
+	/*
 	 * Most of the argument-checking is done inside of AggregateCreate
 	 */
-	AggregateCreate(aggName,	/* aggregate name */
-					aggNamespace,		/* namespace */
-					aggArgTypes,	/* input data type(s) */
-					numArgs,
-					transfuncName,		/* step function name */
+	return AggregateCreate(aggName,		/* aggregate name */
+						   aggNamespace,		/* namespace */
+						   aggArgTypes, /* input data type(s) */
+						   numArgs,
+						   transfuncName,		/* step function name */
 #ifdef PGXC
-					collectfuncName,	/* collect function name */
+						   collectfuncName,	/* collect function name */
 #endif
-					finalfuncName,		/* final function name */
-					sortoperatorName,	/* sort operator name */
-					transTypeId,	/* transition data type */
+						   finalfuncName,		/* final function name */
+						   sortoperatorName,	/* sort operator name */
+						   transTypeId, /* transition data type */
 #ifdef PGXC
-					initval,	/* initial condition */
-					initcollect);	/* initial condition for collection function */
+						   initval,	/* initial condition */
+						   initcollect);	/* initial condition for collection function */
 #else
-					initval);	/* initial condition */
+						   initval);	/* initial condition */
 #endif
-}
-
-
-/*
- * RenameAggregate
- *		Rename an aggregate.
- */
-void
-RenameAggregate(List *name, List *args, const char *newname)
-{
-	Oid			procOid;
-	Oid			namespaceOid;
-	HeapTuple	tup;
-	Form_pg_proc procForm;
-	Relation	rel;
-	AclResult	aclresult;
-
-	rel = heap_open(ProcedureRelationId, RowExclusiveLock);
-
-	/* Look up function and make sure it's an aggregate */
-	procOid = LookupAggNameTypeNames(name, args, false);
-
-	tup = SearchSysCacheCopy1(PROCOID, ObjectIdGetDatum(procOid));
-	if (!HeapTupleIsValid(tup)) /* should not happen */
-		elog(ERROR, "cache lookup failed for function %u", procOid);
-	procForm = (Form_pg_proc) GETSTRUCT(tup);
-
-	namespaceOid = procForm->pronamespace;
-
-	/* make sure the new name doesn't exist */
-	if (SearchSysCacheExists3(PROCNAMEARGSNSP,
-							  CStringGetDatum(newname),
-							  PointerGetDatum(&procForm->proargtypes),
-							  ObjectIdGetDatum(namespaceOid)))
-		ereport(ERROR,
-				(errcode(ERRCODE_DUPLICATE_FUNCTION),
-				 errmsg("function %s already exists in schema \"%s\"",
-						funcname_signature_string(newname,
-												  procForm->pronargs,
-												  NIL,
-											   procForm->proargtypes.values),
-						get_namespace_name(namespaceOid))));
-
-	/* must be owner */
-	if (!pg_proc_ownercheck(procOid, GetUserId()))
-		aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_PROC,
-					   NameListToString(name));
-
-	/* must have CREATE privilege on namespace */
-	aclresult = pg_namespace_aclcheck(namespaceOid, GetUserId(), ACL_CREATE);
-	if (aclresult != ACLCHECK_OK)
-		aclcheck_error(aclresult, ACL_KIND_NAMESPACE,
-					   get_namespace_name(namespaceOid));
-
-	/* rename */
-	namestrcpy(&(((Form_pg_proc) GETSTRUCT(tup))->proname), newname);
-	simple_heap_update(rel, &tup->t_self, tup);
-	CatalogUpdateIndexes(rel, tup);
-
-	heap_close(rel, NoLock);
-	heap_freetuple(tup);
-}
-
-/*
- * Change aggregate owner
- */
-void
-AlterAggregateOwner(List *name, List *args, Oid newOwnerId)
-{
-	Oid			procOid;
-
-	/* Look up function and make sure it's an aggregate */
-	procOid = LookupAggNameTypeNames(name, args, false);
-
-	/* The rest is just like a function */
-	AlterFunctionOwner_oid(procOid, newOwnerId);
 }

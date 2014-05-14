@@ -3,7 +3,7 @@
  * nodeFuncs.c
  *		Various general-purpose manipulations of Node trees
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -554,8 +554,7 @@ exprIsLengthCoercion(const Node *expr, int32 *coercedTypmod)
  *
  * This is primarily intended to be used during planning.  Therefore, it
  * strips any existing RelabelType nodes to maintain the planner's invariant
- * that there are not adjacent RelabelTypes, and it uses COERCE_DONTCARE
- * which would typically be inappropriate earlier.
+ * that there are not adjacent RelabelTypes.
  */
 Node *
 relabel_to_typmod(Node *expr, int32 typmod)
@@ -569,7 +568,7 @@ relabel_to_typmod(Node *expr, int32 typmod)
 
 	/* Apply new typmod, preserving the previous exposed type and collation */
 	return (Node *) makeRelabelType((Expr *) expr, type, typmod, coll,
-									COERCE_DONTCARE);
+									COERCE_EXPLICIT_CAST);
 }
 
 /*
@@ -2838,6 +2837,9 @@ raw_expression_tree_walker(Node *node,
 				if (walker(into->rel, context))
 					return true;
 				/* colNames, options are deemed uninteresting */
+				/* viewQuery should be null in raw parsetree, but check it */
+				if (walker(into->viewQuery, context))
+					return true;
 			}
 			break;
 		case T_List:
@@ -2917,8 +2919,6 @@ raw_expression_tree_walker(Node *node,
 					return true;
 				if (walker(stmt->windowClause, context))
 					return true;
-				if (walker(stmt->withClause, context))
-					return true;
 				if (walker(stmt->valuesLists, context))
 					return true;
 				if (walker(stmt->sortClause, context))
@@ -2928,6 +2928,8 @@ raw_expression_tree_walker(Node *node,
 				if (walker(stmt->limitCount, context))
 					return true;
 				if (walker(stmt->lockingClause, context))
+					return true;
+				if (walker(stmt->withClause, context))
 					return true;
 				if (walker(stmt->larg, context))
 					return true;

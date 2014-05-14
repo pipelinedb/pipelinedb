@@ -16,6 +16,7 @@
 #include <locale.h>
 
 /* postgreSQL stuff */
+#include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/pg_language.h"
 #include "catalog/pg_proc.h"
@@ -28,6 +29,7 @@
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
 #include "storage/ipc.h"
+#include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
 #include "utils/guc.h"
@@ -67,6 +69,7 @@ PG_MODULE_MAGIC;
  *
  * The plperl_interp_desc structs are kept in a Postgres hash table indexed
  * by userid OID, with OID 0 used for the single untrusted interpreter.
+ * Once created, an interpreter is kept for the life of the process.
  *
  * We start out by creating a "held" interpreter, which we initialize
  * only as far as we can do without deciding if it will be trusted or
@@ -92,27 +95,43 @@ typedef struct plperl_interp_desc
 
 /**********************************************************************
  * The information we cache about loaded procedures
+ *
+ * The refcount field counts the struct's reference from the hash table shown
+ * below, plus one reference for each function call level that is using the
+ * struct.	We can release the struct, and the associated Perl sub, when the
+ * refcount goes to zero.
  **********************************************************************/
 typedef struct plperl_proc_desc
 {
 	char	   *proname;		/* user name of procedure */
-	TransactionId fn_xmin;
+	TransactionId fn_xmin;		/* xmin/TID of procedure's pg_proc tuple */
 	ItemPointerData fn_tid;
+	int			refcount;		/* reference count of this struct */
+	SV		   *reference;		/* CODE reference for Perl sub */
 	plperl_interp_desc *interp; /* interpreter it's created in */
-	bool		fn_readonly;
-	bool		lanpltrusted;
+	bool		fn_readonly;	/* is function readonly (not volatile)? */
+	bool		lanpltrusted;	/* is it plperl, rather than plperlu? */
 	bool		fn_retistuple;	/* true, if function returns tuple */
 	bool		fn_retisset;	/* true, if function returns set */
 	bool		fn_retisarray;	/* true if function returns array */
+	/* Conversion info for function's result type: */
 	Oid			result_oid;		/* Oid of result type */
 	FmgrInfo	result_in_func; /* I/O function and arg for result type */
 	Oid			result_typioparam;
+	/* Conversion info for function's argument types: */
 	int			nargs;
 	FmgrInfo	arg_out_func[FUNC_MAX_ARGS];
 	bool		arg_is_rowtype[FUNC_MAX_ARGS];
 	Oid			arg_arraytype[FUNC_MAX_ARGS];	/* InvalidOid if not an array */
-	SV		   *reference;
 } plperl_proc_desc;
+
+#define increment_prodesc_refcount(prodesc)  \
+	((prodesc)->refcount++)
+#define decrement_prodesc_refcount(prodesc)  \
+	do { \
+		if (--((prodesc)->refcount) <= 0) \
+			free_plperl_function(prodesc); \
+	} while(0)
 
 /**********************************************************************
  * For speedy lookup, we maintain a hash table mapping from
@@ -164,6 +183,7 @@ typedef struct plperl_call_data
 typedef struct plperl_query_desc
 {
 	char		qname[24];
+	MemoryContext plan_cxt;		/* context holding this struct */
 	SPIPlanPtr	plan;
 	int			nargs;
 	Oid		   *argtypes;
@@ -234,6 +254,8 @@ static void set_interp_require(bool trusted);
 
 static Datum plperl_func_handler(PG_FUNCTION_ARGS);
 static Datum plperl_trigger_handler(PG_FUNCTION_ARGS);
+
+static void free_plperl_function(plperl_proc_desc *prodesc);
 
 static plperl_proc_desc *compile_plperl_function(Oid fn_oid, bool is_trigger);
 
@@ -741,6 +763,18 @@ plperl_init_interp(void)
 			char	   *dummy_env[1] = {NULL};
 
 			PERL_SYS_INIT3(&nargs, (char ***) &embedding, (char ***) &dummy_env);
+
+			/*
+			 * For unclear reasons, PERL_SYS_INIT3 sets the SIGFPE handler to
+			 * SIG_IGN.  Aside from being extremely unfriendly behavior for a
+			 * library, this is dumb on the grounds that the results of a
+			 * SIGFPE in this state are undefined according to POSIX, and in
+			 * fact you get a forced process kill at least on Linux.  Hence,
+			 * restore the SIGFPE handler to the backend's standard setting.
+			 * (See Perl bug 114574 for more information.)
+			 */
+			pqsignal(SIGFPE, FloatExceptionHandler);
+
 			perl_sys_init_done = 1;
 			/* quiet warning if PERL_SYS_INIT3 doesn't use the third argument */
 			dummy_env[0] = NULL;
@@ -832,7 +866,16 @@ pp_require_safe(pTHX)
 		RETPUSHYES;
 
 	DIE(aTHX_ "Unable to load %s into plperl", name);
-	return NULL;				/* keep compiler quiet */
+
+	/*
+	 * In most Perl versions, DIE() expands to a return statement, so the next
+	 * line is not necessary.  But in versions between but not including
+	 * 5.11.1 and 5.13.3 it does not, so the next line is necessary to avoid a
+	 * "control reaches end of non-void function" warning from gcc.  Other
+	 * compilers such as Solaris Studio will, however, issue a "statement not
+	 * reached" warning instead.
+	 */
+	return NULL;
 }
 
 
@@ -1663,9 +1706,15 @@ plperl_call_handler(PG_FUNCTION_ARGS)
 	Datum		retval;
 	plperl_call_data *save_call_data = current_call_data;
 	plperl_interp_desc *oldinterp = plperl_active_interp;
+	plperl_call_data this_call_data;
+
+	/* Initialize current-call status record */
+	MemSet(&this_call_data, 0, sizeof(this_call_data));
+	this_call_data.fcinfo = fcinfo;
 
 	PG_TRY();
 	{
+		current_call_data = &this_call_data;
 		if (CALLED_AS_TRIGGER(fcinfo))
 			retval = PointerGetDatum(plperl_trigger_handler(fcinfo));
 		else
@@ -1673,12 +1722,16 @@ plperl_call_handler(PG_FUNCTION_ARGS)
 	}
 	PG_CATCH();
 	{
+		if (this_call_data.prodesc)
+			decrement_prodesc_refcount(this_call_data.prodesc);
 		current_call_data = save_call_data;
 		activate_interpreter(oldinterp);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
 
+	if (this_call_data.prodesc)
+		decrement_prodesc_refcount(this_call_data.prodesc);
 	current_call_data = save_call_data;
 	activate_interpreter(oldinterp);
 	return retval;
@@ -1698,7 +1751,11 @@ plperl_inline_handler(PG_FUNCTION_ARGS)
 	plperl_proc_desc desc;
 	plperl_call_data *save_call_data = current_call_data;
 	plperl_interp_desc *oldinterp = plperl_active_interp;
+	plperl_call_data this_call_data;
 	ErrorContextCallback pl_error_context;
+
+	/* Initialize current-call status record */
+	MemSet(&this_call_data, 0, sizeof(this_call_data));
 
 	/* Set up a callback for error reporting */
 	pl_error_context.callback = plperl_inline_callback;
@@ -1730,13 +1787,15 @@ plperl_inline_handler(PG_FUNCTION_ARGS)
 	desc.nargs = 0;
 	desc.reference = NULL;
 
-	current_call_data = (plperl_call_data *) palloc0(sizeof(plperl_call_data));
-	current_call_data->fcinfo = &fake_fcinfo;
-	current_call_data->prodesc = &desc;
+	this_call_data.fcinfo = &fake_fcinfo;
+	this_call_data.prodesc = &desc;
+	/* we do not bother with refcounting the fake prodesc */
 
 	PG_TRY();
 	{
 		SV		   *perlret;
+
+		current_call_data = &this_call_data;
 
 		if (SPI_connect() != SPI_OK_CONNECT)
 			elog(ERROR, "could not connect to SPI manager");
@@ -2119,18 +2178,12 @@ plperl_func_handler(PG_FUNCTION_ARGS)
 	ReturnSetInfo *rsi;
 	ErrorContextCallback pl_error_context;
 
-	/*
-	 * Create the call_data before connecting to SPI, so that it is not
-	 * allocated in the SPI memory context
-	 */
-	current_call_data = (plperl_call_data *) palloc0(sizeof(plperl_call_data));
-	current_call_data->fcinfo = fcinfo;
-
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI manager");
 
 	prodesc = compile_plperl_function(fcinfo->flinfo->fn_oid, false);
 	current_call_data->prodesc = prodesc;
+	increment_prodesc_refcount(prodesc);
 
 	/* Set a callback for error reporting */
 	pl_error_context.callback = plperl_exec_callback;
@@ -2237,13 +2290,6 @@ plperl_trigger_handler(PG_FUNCTION_ARGS)
 	HV		   *hvTD;
 	ErrorContextCallback pl_error_context;
 
-	/*
-	 * Create the call_data before connecting to SPI, so that it is not
-	 * allocated in the SPI memory context
-	 */
-	current_call_data = (plperl_call_data *) palloc0(sizeof(plperl_call_data));
-	current_call_data->fcinfo = fcinfo;
-
 	/* Connect to SPI manager */
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI manager");
@@ -2251,6 +2297,7 @@ plperl_trigger_handler(PG_FUNCTION_ARGS)
 	/* Find or compile the function */
 	prodesc = compile_plperl_function(fcinfo->flinfo->fn_oid, true);
 	current_call_data->prodesc = prodesc;
+	increment_prodesc_refcount(prodesc);
 
 	/* Set a callback for error reporting */
 	pl_error_context.callback = plperl_exec_callback;
@@ -2360,20 +2407,32 @@ validate_plperl_function(plperl_proc_ptr *proc_ptr, HeapTuple procTup)
 
 		/* Otherwise, unlink the obsoleted entry from the hashtable ... */
 		proc_ptr->proc_ptr = NULL;
-		/* ... and throw it away */
-		if (prodesc->reference)
-		{
-			plperl_interp_desc *oldinterp = plperl_active_interp;
-
-			activate_interpreter(prodesc->interp);
-			SvREFCNT_dec(prodesc->reference);
-			activate_interpreter(oldinterp);
-		}
-		free(prodesc->proname);
-		free(prodesc);
+		/* ... and release the corresponding refcount, probably deleting it */
+		decrement_prodesc_refcount(prodesc);
 	}
 
 	return false;
+}
+
+
+static void
+free_plperl_function(plperl_proc_desc *prodesc)
+{
+	Assert(prodesc->refcount <= 0);
+	/* Release CODE reference, if we have one, from the appropriate interp */
+	if (prodesc->reference)
+	{
+		plperl_interp_desc *oldinterp = plperl_active_interp;
+
+		activate_interpreter(prodesc->interp);
+		SvREFCNT_dec(prodesc->reference);
+		activate_interpreter(oldinterp);
+	}
+	/* Get rid of what we conveniently can of our own structs */
+	/* (FmgrInfo subsidiary info will get leaked ...) */
+	if (prodesc->proname)
+		free(prodesc->proname);
+	free(prodesc);
 }
 
 
@@ -2447,12 +2506,17 @@ compile_plperl_function(Oid fn_oid, bool is_trigger)
 			ereport(ERROR,
 					(errcode(ERRCODE_OUT_OF_MEMORY),
 					 errmsg("out of memory")));
+		/* Initialize all fields to 0 so free_plperl_function is safe */
 		MemSet(prodesc, 0, sizeof(plperl_proc_desc));
+
 		prodesc->proname = strdup(NameStr(procStruct->proname));
 		if (prodesc->proname == NULL)
+		{
+			free_plperl_function(prodesc);
 			ereport(ERROR,
 					(errcode(ERRCODE_OUT_OF_MEMORY),
 					 errmsg("out of memory")));
+		}
 		prodesc->fn_xmin = HeapTupleHeaderGetXmin(procTup->t_data);
 		prodesc->fn_tid = procTup->t_self;
 
@@ -2467,8 +2531,7 @@ compile_plperl_function(Oid fn_oid, bool is_trigger)
 								  ObjectIdGetDatum(procStruct->prolang));
 		if (!HeapTupleIsValid(langTup))
 		{
-			free(prodesc->proname);
-			free(prodesc);
+			free_plperl_function(prodesc);
 			elog(ERROR, "cache lookup failed for language %u",
 				 procStruct->prolang);
 		}
@@ -2487,8 +2550,7 @@ compile_plperl_function(Oid fn_oid, bool is_trigger)
 								ObjectIdGetDatum(procStruct->prorettype));
 			if (!HeapTupleIsValid(typeTup))
 			{
-				free(prodesc->proname);
-				free(prodesc);
+				free_plperl_function(prodesc);
 				elog(ERROR, "cache lookup failed for type %u",
 					 procStruct->prorettype);
 			}
@@ -2502,8 +2564,7 @@ compile_plperl_function(Oid fn_oid, bool is_trigger)
 					 /* okay */ ;
 				else if (procStruct->prorettype == TRIGGEROID)
 				{
-					free(prodesc->proname);
-					free(prodesc);
+					free_plperl_function(prodesc);
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("trigger functions can only be called "
@@ -2511,8 +2572,7 @@ compile_plperl_function(Oid fn_oid, bool is_trigger)
 				}
 				else
 				{
-					free(prodesc->proname);
-					free(prodesc);
+					free_plperl_function(prodesc);
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("PL/Perl functions cannot return type %s",
@@ -2547,8 +2607,7 @@ compile_plperl_function(Oid fn_oid, bool is_trigger)
 						ObjectIdGetDatum(procStruct->proargtypes.values[i]));
 				if (!HeapTupleIsValid(typeTup))
 				{
-					free(prodesc->proname);
-					free(prodesc);
+					free_plperl_function(prodesc);
 					elog(ERROR, "cache lookup failed for type %u",
 						 procStruct->proargtypes.values[i]);
 				}
@@ -2558,8 +2617,7 @@ compile_plperl_function(Oid fn_oid, bool is_trigger)
 				if (typeStruct->typtype == TYPTYPE_PSEUDO &&
 					procStruct->proargtypes.values[i] != RECORDOID)
 				{
-					free(prodesc->proname);
-					free(prodesc);
+					free_plperl_function(prodesc);
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("PL/Perl functions cannot accept type %s",
@@ -2612,8 +2670,7 @@ compile_plperl_function(Oid fn_oid, bool is_trigger)
 		pfree(proc_source);
 		if (!prodesc->reference)	/* can this happen? */
 		{
-			free(prodesc->proname);
-			free(prodesc);
+			free_plperl_function(prodesc);
 			elog(ERROR, "could not create PL/Perl internal procedure");
 		}
 
@@ -2625,6 +2682,7 @@ compile_plperl_function(Oid fn_oid, bool is_trigger)
 		proc_ptr = hash_search(plperl_proc_hash, &proc_key,
 							   HASH_ENTER, NULL);
 		proc_ptr->proc_ptr = prodesc;
+		increment_prodesc_refcount(prodesc);
 	}
 
 	/* restore previous error callback */
@@ -3152,33 +3210,57 @@ plperl_spi_cursor_close(char *cursor)
 SV *
 plperl_spi_prepare(char *query, int argc, SV **argv)
 {
-	plperl_query_desc *qdesc;
-	plperl_query_entry *hash_entry;
-	bool		found;
-	SPIPlanPtr	plan;
-	int			i;
-
+	volatile SPIPlanPtr plan = NULL;
+	volatile MemoryContext plan_cxt = NULL;
+	plperl_query_desc *volatile qdesc = NULL;
+	plperl_query_entry *volatile hash_entry = NULL;
 	MemoryContext oldcontext = CurrentMemoryContext;
 	ResourceOwner oldowner = CurrentResourceOwner;
+	MemoryContext work_cxt;
+	bool		found;
+	int			i;
 
 	check_spi_usage_allowed();
 
 	BeginInternalSubTransaction(NULL);
 	MemoryContextSwitchTo(oldcontext);
 
-	/************************************************************
-	 * Allocate the new querydesc structure
-	 ************************************************************/
-	qdesc = (plperl_query_desc *) malloc(sizeof(plperl_query_desc));
-	MemSet(qdesc, 0, sizeof(plperl_query_desc));
-	snprintf(qdesc->qname, sizeof(qdesc->qname), "%p", qdesc);
-	qdesc->nargs = argc;
-	qdesc->argtypes = (Oid *) malloc(argc * sizeof(Oid));
-	qdesc->arginfuncs = (FmgrInfo *) malloc(argc * sizeof(FmgrInfo));
-	qdesc->argtypioparams = (Oid *) malloc(argc * sizeof(Oid));
-
 	PG_TRY();
 	{
+		CHECK_FOR_INTERRUPTS();
+
+		/************************************************************
+		 * Allocate the new querydesc structure
+		 *
+		 * The qdesc struct, as well as all its subsidiary data, lives in its
+		 * plan_cxt.  But note that the SPIPlan does not.
+		 ************************************************************/
+		plan_cxt = AllocSetContextCreate(TopMemoryContext,
+										 "PL/Perl spi_prepare query",
+										 ALLOCSET_SMALL_MINSIZE,
+										 ALLOCSET_SMALL_INITSIZE,
+										 ALLOCSET_SMALL_MAXSIZE);
+		MemoryContextSwitchTo(plan_cxt);
+		qdesc = (plperl_query_desc *) palloc0(sizeof(plperl_query_desc));
+		snprintf(qdesc->qname, sizeof(qdesc->qname), "%p", qdesc);
+		qdesc->plan_cxt = plan_cxt;
+		qdesc->nargs = argc;
+		qdesc->argtypes = (Oid *) palloc(argc * sizeof(Oid));
+		qdesc->arginfuncs = (FmgrInfo *) palloc(argc * sizeof(FmgrInfo));
+		qdesc->argtypioparams = (Oid *) palloc(argc * sizeof(Oid));
+		MemoryContextSwitchTo(oldcontext);
+
+		/************************************************************
+		 * Do the following work in a short-lived context so that we don't
+		 * leak a lot of memory in the PL/Perl function's SPI Proc context.
+		 ************************************************************/
+		work_cxt = AllocSetContextCreate(CurrentMemoryContext,
+										 "PL/Perl spi_prepare workspace",
+										 ALLOCSET_DEFAULT_MINSIZE,
+										 ALLOCSET_DEFAULT_INITSIZE,
+										 ALLOCSET_DEFAULT_MAXSIZE);
+		MemoryContextSwitchTo(work_cxt);
+
 		/************************************************************
 		 * Resolve argument type names and then look them up by oid
 		 * in the system cache, and remember the required information
@@ -3199,7 +3281,7 @@ plperl_spi_prepare(char *query, int argc, SV **argv)
 			getTypeInputInfo(typId, &typInput, &typIOParam);
 
 			qdesc->argtypes[i] = typId;
-			perm_fmgr_info(typInput, &(qdesc->arginfuncs[i]));
+			fmgr_info_cxt(typInput, &(qdesc->arginfuncs[i]), plan_cxt);
 			qdesc->argtypioparams[i] = typIOParam;
 		}
 
@@ -3223,6 +3305,17 @@ plperl_spi_prepare(char *query, int argc, SV **argv)
 			elog(ERROR, "SPI_keepplan() failed");
 		qdesc->plan = plan;
 
+		/************************************************************
+		 * Insert a hashtable entry for the plan.
+		 ************************************************************/
+		hash_entry = hash_search(plperl_active_interp->query_hash,
+								 qdesc->qname,
+								 HASH_ENTER, &found);
+		hash_entry->query_data = qdesc;
+
+		/* Get rid of workspace */
+		MemoryContextDelete(work_cxt);
+
 		/* Commit the inner transaction, return to outer xact context */
 		ReleaseCurrentSubTransaction();
 		MemoryContextSwitchTo(oldcontext);
@@ -3238,15 +3331,20 @@ plperl_spi_prepare(char *query, int argc, SV **argv)
 	{
 		ErrorData  *edata;
 
-		free(qdesc->argtypes);
-		free(qdesc->arginfuncs);
-		free(qdesc->argtypioparams);
-		free(qdesc);
-
 		/* Save error info */
 		MemoryContextSwitchTo(oldcontext);
 		edata = CopyErrorData();
 		FlushErrorState();
+
+		/* Drop anything we managed to allocate */
+		if (hash_entry)
+			hash_search(plperl_active_interp->query_hash,
+						qdesc->qname,
+						HASH_REMOVE, NULL);
+		if (plan_cxt)
+			MemoryContextDelete(plan_cxt);
+		if (plan)
+			SPI_freeplan(plan);
 
 		/* Abort the inner transaction */
 		RollbackAndReleaseCurrentSubTransaction();
@@ -3269,14 +3367,8 @@ plperl_spi_prepare(char *query, int argc, SV **argv)
 	PG_END_TRY();
 
 	/************************************************************
-	 * Insert a hashtable entry for the plan and return
-	 * the key to the caller.
+	 * Return the query's hash key to the caller.
 	 ************************************************************/
-
-	hash_entry = hash_search(plperl_active_interp->query_hash, qdesc->qname,
-							 HASH_ENTER, &found);
-	hash_entry->query_data = qdesc;
-
 	return cstr2sv(qdesc->qname);
 }
 
@@ -3311,16 +3403,14 @@ plperl_spi_exec_prepared(char *query, HV *attr, int argc, SV **argv)
 		/************************************************************
 		 * Fetch the saved plan descriptor, see if it's o.k.
 		 ************************************************************/
-
 		hash_entry = hash_search(plperl_active_interp->query_hash, query,
 								 HASH_FIND, NULL);
 		if (hash_entry == NULL)
 			elog(ERROR, "spi_exec_prepared: Invalid prepared query passed");
 
 		qdesc = hash_entry->query_data;
-
 		if (qdesc == NULL)
-			elog(ERROR, "spi_exec_prepared: panic - plperl query_hash value vanished");
+			elog(ERROR, "spi_exec_prepared: plperl query_hash value vanished");
 
 		if (qdesc->nargs != argc)
 			elog(ERROR, "spi_exec_prepared: expected %d argument(s), %d passed",
@@ -3452,12 +3542,11 @@ plperl_spi_query_prepared(char *query, int argc, SV **argv)
 		hash_entry = hash_search(plperl_active_interp->query_hash, query,
 								 HASH_FIND, NULL);
 		if (hash_entry == NULL)
-			elog(ERROR, "spi_exec_prepared: Invalid prepared query passed");
+			elog(ERROR, "spi_query_prepared: Invalid prepared query passed");
 
 		qdesc = hash_entry->query_data;
-
 		if (qdesc == NULL)
-			elog(ERROR, "spi_query_prepared: panic - plperl query_hash value vanished");
+			elog(ERROR, "spi_query_prepared: plperl query_hash value vanished");
 
 		if (qdesc->nargs != argc)
 			elog(ERROR, "spi_query_prepared: expected %d argument(s), %d passed",
@@ -3562,12 +3651,12 @@ plperl_spi_freeplan(char *query)
 	hash_entry = hash_search(plperl_active_interp->query_hash, query,
 							 HASH_FIND, NULL);
 	if (hash_entry == NULL)
-		elog(ERROR, "spi_exec_prepared: Invalid prepared query passed");
+		elog(ERROR, "spi_freeplan: Invalid prepared query passed");
 
 	qdesc = hash_entry->query_data;
-
 	if (qdesc == NULL)
-		elog(ERROR, "spi_exec_freeplan: panic - plperl query_hash value vanished");
+		elog(ERROR, "spi_freeplan: plperl query_hash value vanished");
+	plan = qdesc->plan;
 
 	/*
 	 * free all memory before SPI_freeplan, so if it dies, nothing will be
@@ -3576,11 +3665,7 @@ plperl_spi_freeplan(char *query)
 	hash_search(plperl_active_interp->query_hash, query,
 				HASH_REMOVE, NULL);
 
-	plan = qdesc->plan;
-	free(qdesc->argtypes);
-	free(qdesc->arginfuncs);
-	free(qdesc->argtypioparams);
-	free(qdesc);
+	MemoryContextDelete(qdesc->plan_cxt);
 
 	SPI_freeplan(plan);
 }

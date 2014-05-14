@@ -30,8 +30,7 @@ RESET ROLE
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    This command sets the current user
    identifier of the current SQL session to be <replaceable
@@ -64,6 +63,7 @@ RESET ROLE
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    Using this command, it is possible to either add privileges or restrict
    one's privileges.  If the session user role has the <literal>INHERITS</>
@@ -127,6 +127,7 @@ SELECT SESSION_USER, CURRENT_USER;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <productname>PostgreSQL</productname>
    allows identifier syntax (<literal>"rolename"</literal>), while

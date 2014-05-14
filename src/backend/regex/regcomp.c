@@ -122,12 +122,15 @@ static void destroystate(struct nfa *, struct state *);
 static void newarc(struct nfa *, int, pcolor, struct state *, struct state *);
 static struct arc *allocarc(struct nfa *, struct state *);
 static void freearc(struct nfa *, struct arc *);
+static int	hasnonemptyout(struct state *);
+static int	nonemptyouts(struct state *);
+static int	nonemptyins(struct state *);
 static struct arc *findarc(struct state *, int, pcolor);
 static void cparc(struct nfa *, struct arc *, struct state *, struct state *);
 static void moveins(struct nfa *, struct state *, struct state *);
-static void copyins(struct nfa *, struct state *, struct state *);
+static void copyins(struct nfa *, struct state *, struct state *, int);
 static void moveouts(struct nfa *, struct state *, struct state *);
-static void copyouts(struct nfa *, struct state *, struct state *);
+static void copyouts(struct nfa *, struct state *, struct state *, int);
 static void cloneouts(struct nfa *, struct state *, struct state *, struct state *, int);
 static void delsub(struct nfa *, struct state *, struct state *);
 static void deltraverse(struct nfa *, struct state *, struct state *);
@@ -146,7 +149,8 @@ static int	push(struct nfa *, struct arc *);
 #define COMPATIBLE	3			/* compatible but not satisfied yet */
 static int	combine(struct arc *, struct arc *);
 static void fixempties(struct nfa *, FILE *);
-static int	unempty(struct nfa *, struct arc *);
+static struct state *emptyreachable(struct state *, struct state *);
+static void replaceempty(struct nfa *, struct state *, struct state *);
 static void cleanup(struct nfa *);
 static void markreachable(struct nfa *, struct state *, struct state *, struct state *);
 static void markcanreach(struct nfa *, struct state *, struct state *, struct state *);
@@ -162,7 +166,7 @@ static void dumparcs(struct state *, FILE *);
 static int	dumprarcs(struct arc *, struct state *, FILE *, int);
 static void dumparc(struct arc *, struct state *, FILE *);
 static void dumpcnfa(struct cnfa *, FILE *);
-static void dumpcstate(int, struct carc *, struct cnfa *, FILE *);
+static void dumpcstate(int, struct cnfa *, FILE *);
 #endif
 /* === regc_cvec.c === */
 static struct cvec *newcvec(int, int);
@@ -278,6 +282,9 @@ static struct fns functions = {
 
 /*
  * pg_regcomp - compile regular expression
+ *
+ * Note: on failure, no resources remain allocated, so pg_regfree()
+ * need not be applied to re.
  */
 int
 pg_regcomp(regex_t *re,
@@ -580,7 +587,7 @@ makesearch(struct vars * v,
 	for (s = slist; s != NULL; s = s2)
 	{
 		s2 = newstate(nfa);
-		copyouts(nfa, s, s2);
+		copyouts(nfa, s, s2, 1);
 		for (a = s->ins; a != NULL; a = b)
 		{
 			b = a->inchain;
@@ -709,6 +716,7 @@ parsebranch(struct vars * v,
 
 		/* NB, recursion in parseqatom() may swallow rest of branch */
 		parseqatom(v, stopper, type, lp, right, t);
+		NOERRN();
 	}
 
 	if (!seencontent)
@@ -1166,6 +1174,7 @@ parseqatom(struct vars * v,
 		EMPTYARC(s2, rp);
 		t->right = subre(v, '=', 0, s2, rp);
 	}
+	NOERR();
 	assert(SEE('|') || SEE(stopper) || SEE(EOS));
 	t->flags |= COMBINE(t->flags, t->right->flags);
 	top->flags |= COMBINE(top->flags, t->flags);
@@ -1870,15 +1879,18 @@ rfree(regex_t *re)
 	g = (struct guts *) re->re_guts;
 	re->re_guts = NULL;
 	re->re_fns = NULL;
-	g->magic = 0;
-	freecm(&g->cmap);
-	if (g->tree != NULL)
-		freesubre((struct vars *) NULL, g->tree);
-	if (g->lacons != NULL)
-		freelacons(g->lacons, g->nlacons);
-	if (!NULLCNFA(g->search))
-		freecnfa(&g->search);
-	FREE(g);
+	if (g != NULL)
+	{
+		g->magic = 0;
+		freecm(&g->cmap);
+		if (g->tree != NULL)
+			freesubre((struct vars *) NULL, g->tree);
+		if (g->lacons != NULL)
+			freelacons(g->lacons, g->nlacons);
+		if (!NULLCNFA(g->search))
+			freecnfa(&g->search);
+		FREE(g);
+	}
 }
 
 #ifdef REG_DEBUG

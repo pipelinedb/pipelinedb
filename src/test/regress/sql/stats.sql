@@ -18,8 +18,6 @@ SET enable_indexonlyscan TO off;
 -- else our messages might get lost due to contention
 SELECT pg_sleep(2.0);
 
-SET enforce_two_phase_commit TO off;
-
 -- save counters
 CREATE TEMP TABLE prevstats AS
 SELECT t.seq_scan, t.seq_tup_read, t.idx_scan, t.idx_tup_fetch,

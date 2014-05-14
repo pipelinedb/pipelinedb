@@ -664,7 +664,7 @@ $function$
     </para>
    </sect3>
 
-   <sect3>
+   <sect3 id="sql-syntax-constants-numeric">
     <title>Numeric Constants</title>
 
     <indexterm>
@@ -852,7 +852,7 @@ CAST ( '<replaceable>string</replaceable>' AS <replaceable>type</replaceable> )
    </para>
   </sect2>
 
-  <sect2>
+  <sect2 id="sql-syntax-special-chars">
    <title>Special Characters</title>
 
   <para>
@@ -1310,7 +1310,7 @@ SELECT 3 OPERATOR(pg_catalog.+) 4;
    the remaining options.
   </para>
 
-  <sect2>
+  <sect2 id="sql-expressions-column-refs">
    <title>Column References</title>
 
    <indexterm>
@@ -1333,7 +1333,7 @@ SELECT 3 OPERATOR(pg_catalog.+) 4;
    </para>
   </sect2>
 
-  <sect2>
+  <sect2 id="sql-expressions-parameters-positional">
    <title>Positional Parameters</title>
 
    <indexterm>
@@ -1373,7 +1373,7 @@ CREATE FUNCTION dept(text) RETURNS dept
    </para>
   </sect2>
 
-  <sect2>
+  <sect2 id="sql-expressions-subscripts">
    <title>Subscripts</title>
 
    <indexterm>
@@ -1468,7 +1468,7 @@ $1.somecolumn
    </para>
   </sect2>
 
-  <sect2>
+  <sect2 id="sql-expressions-operator-calls">
    <title>Operator Invocations</title>
 
    <indexterm>
@@ -1497,7 +1497,7 @@ $1.somecolumn
    </para>
   </sect2>
 
-  <sect2>
+  <sect2 id="sql-expressions-function-calls">
    <title>Function Calls</title>
 
    <indexterm>
@@ -1709,10 +1709,10 @@ SELECT string_agg(a ORDER BY a, ',') FROM table;  -- incorrect
     The syntax of a window function call is one of the following:
 
 <synopsis>
-<replaceable>function_name</replaceable> (<optional><replaceable>expression</replaceable> <optional>, <replaceable>expression</replaceable> ... </optional></optional>) OVER ( <replaceable class="parameter">window_definition</replaceable> )
 <replaceable>function_name</replaceable> (<optional><replaceable>expression</replaceable> <optional>, <replaceable>expression</replaceable> ... </optional></optional>) OVER <replaceable>window_name</replaceable>
-<replaceable>function_name</replaceable> ( * ) OVER ( <replaceable class="parameter">window_definition</replaceable> )
+<replaceable>function_name</replaceable> (<optional><replaceable>expression</replaceable> <optional>, <replaceable>expression</replaceable> ... </optional></optional>) OVER ( <replaceable class="parameter">window_definition</replaceable> )
 <replaceable>function_name</replaceable> ( * ) OVER <replaceable>window_name</replaceable>
+<replaceable>function_name</replaceable> ( * ) OVER ( <replaceable class="parameter">window_definition</replaceable> )
 </synopsis>
     where <replaceable class="parameter">window_definition</replaceable>
     has the syntax
@@ -1742,57 +1742,93 @@ UNBOUNDED FOLLOWING
    <para>
     Here, <replaceable>expression</replaceable> represents any value
     expression that does not itself contain window function calls.
-    The <literal>PARTITION BY</> and <literal>ORDER BY</> lists have
-    essentially the same syntax and semantics as <literal>GROUP BY</>
-    and <literal>ORDER BY</> clauses of the whole query, except that their
-    expressions are always just expressions and cannot be output-column
-    names or numbers.
+   </para>
+
+   <para>
     <replaceable>window_name</replaceable> is a reference to a named window
     specification defined in the query's <literal>WINDOW</literal> clause.
-    Named window specifications are usually referenced with just
-    <literal>OVER</> <replaceable>window_name</replaceable>, but it is
-    also possible to write a window name inside the parentheses and then
-    optionally supply an ordering clause and/or frame clause (the referenced
-    window must lack these clauses, if they are supplied here).
-    This latter syntax follows the same rules as modifying an existing
-    window name within the <literal>WINDOW</literal> clause; see the
-    <xref linkend="sql-select"> reference
-    page for details.
+    Alternatively, a full <replaceable>window_definition</replaceable> can
+    be given within parentheses, using the same syntax as for defining a
+    named window in the <literal>WINDOW</literal> clause; see the
+    <xref linkend="sql-select"> reference page for details.  It's worth
+    pointing out that <literal>OVER wname</> is not exactly equivalent to
+    <literal>OVER (wname)</>; the latter implies copying and modifying the
+    window definition, and will be rejected if the referenced window
+    specification includes a frame clause.
+   </para>
+
+   <para>
+    The <literal>PARTITION BY</> option groups the rows of the query into
+    <firstterm>partitions</>, which are processed separately by the window
+    function.  <literal>PARTITION BY</> works similarly to a query-level
+    <literal>GROUP BY</> clause, except that its expressions are always just
+    expressions and cannot be output-column names or numbers.
+    Without <literal>PARTITION BY</>, all rows produced by the query are
+    treated as a single partition.
+    The <literal>ORDER BY</> option determines the order in which the rows
+    of a partition are processed by the window function.  It works similarly
+    to a query-level <literal>ORDER BY</> clause, but likewise cannot use
+    output-column names or numbers.  Without <literal>ORDER BY</>, rows are
+    processed in an unspecified order.
    </para>
 
    <para>
     The <replaceable class="parameter">frame_clause</replaceable> specifies
-    the set of rows constituting the <firstterm>window frame</>, for those
-    window functions that act on the frame instead of the whole partition.
-    If <replaceable>frame_end</> is omitted it defaults to <literal>CURRENT
-    ROW</>.  Restrictions are that
+    the set of rows constituting the <firstterm>window frame</>, which is a
+    subset of the current partition, for those window functions that act on
+    the frame instead of the whole partition.  The frame can be specified in
+    either <literal>RANGE</> or <literal>ROWS</> mode; in either case, it
+    runs from the <replaceable>frame_start</> to the
+    <replaceable>frame_end</>.  If <replaceable>frame_end</> is omitted,
+    it defaults to <literal>CURRENT ROW</>.
+   </para>
+
+   <para>
+    A <replaceable>frame_start</> of <literal>UNBOUNDED PRECEDING</> means
+    that the frame starts with the first row of the partition, and similarly
+    a <replaceable>frame_end</> of <literal>UNBOUNDED FOLLOWING</> means
+    that the frame ends with the last row of the partition.
+   </para>
+
+   <para>
+    In <literal>RANGE</> mode, a <replaceable>frame_start</> of
+    <literal>CURRENT ROW</> means the frame starts with the current row's
+    first <firstterm>peer</> row (a row that <literal>ORDER BY</> considers
+    equivalent to the current row), while a <replaceable>frame_end</> of
+    <literal>CURRENT ROW</> means the frame ends with the last equivalent
+    peer.  In <literal>ROWS</> mode, <literal>CURRENT ROW</> simply means
+    the current row.
+   </para>
+
+   <para>
+    The <replaceable>value</> <literal>PRECEDING</> and
+    <replaceable>value</> <literal>FOLLOWING</> cases are currently only
+    allowed in <literal>ROWS</> mode.  They indicate that the frame starts
+    or ends the specified number of rows before or after the current row.
+    <replaceable>value</replaceable> must be an integer expression not
+    containing any variables, aggregate functions, or window functions.
+    The value must not be null or negative; but it can be zero, which
+    just selects the current row.
+   </para>
+
+   <para>
+    The default framing option is <literal>RANGE UNBOUNDED PRECEDING</>,
+    which is the same as <literal>RANGE BETWEEN UNBOUNDED PRECEDING AND
+    CURRENT ROW</>.  With <literal>ORDER BY</>, this sets the frame to be
+    all rows from the partition start up through the current row's last
+    peer.  Without <literal>ORDER BY</>, all rows of the partition are
+    included in the window frame, since all rows become peers of the current
+    row.
+   </para>
+
+   <para>
+    Restrictions are that
     <replaceable>frame_start</> cannot be <literal>UNBOUNDED FOLLOWING</>,
     <replaceable>frame_end</> cannot be <literal>UNBOUNDED PRECEDING</>,
     and the <replaceable>frame_end</> choice cannot appear earlier in the
     above list than the <replaceable>frame_start</> choice &mdash; for example
     <literal>RANGE BETWEEN CURRENT ROW AND <replaceable>value</>
     PRECEDING</literal> is not allowed.
-    The default framing option is <literal>RANGE UNBOUNDED PRECEDING</>,
-    which is the same as <literal>RANGE BETWEEN UNBOUNDED PRECEDING AND
-    CURRENT ROW</>; it sets the frame to be all rows from the partition start
-    up through the current row's last peer in the <literal>ORDER BY</>
-    ordering (which means all rows if there is no <literal>ORDER BY</>).
-    In general, <literal>UNBOUNDED PRECEDING</> means that the frame
-    starts with the first row of the partition, and similarly
-    <literal>UNBOUNDED FOLLOWING</> means that the frame ends with the last
-    row of the partition (regardless of <literal>RANGE</> or <literal>ROWS</>
-    mode).  In <literal>ROWS</> mode, <literal>CURRENT ROW</>
-    means that the frame starts or ends with the current row; but in
-    <literal>RANGE</> mode it means that the frame starts or ends with
-    the current row's first or last peer in the <literal>ORDER BY</> ordering.
-    The <replaceable>value</> <literal>PRECEDING</> and
-    <replaceable>value</> <literal>FOLLOWING</> cases are currently only
-    allowed in <literal>ROWS</> mode.  They indicate that the frame starts
-    or ends with the row that many rows before or after the current row.
-    <replaceable>value</replaceable> must be an integer expression not
-    containing any variables, aggregate functions, or window functions.
-    The value must not be null or negative; but it can be zero, which
-    selects the current row itself.
    </para>
 
    <para>
@@ -2465,6 +2501,14 @@ SELECT concat_lower_or_upper('Hello', 'World', uppercase := true);
     having numerous parameters that have default values, named or mixed
     notation can save a great deal of writing and reduce chances for error.
    </para>
+
+   <note>
+    <para>
+     Named and mixed call notations currently cannot be used when calling an
+     aggregate function (but they do work when an aggregate function is used
+     as a window function).
+    </para>
+   </note>
   </sect2>
  </sect1>
 

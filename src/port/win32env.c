@@ -5,7 +5,7 @@
  *	  environment and the cached versions in (potentially multiple)
  *	  MSVCRT.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -60,6 +60,12 @@ pgwin32_putenv(const char *envval)
 		{
 			"msvcr90", 0, NULL
 		},						/* Visual Studio 2008 */
+		{
+			"msvcr100", 0, NULL
+		},						/* Visual Studio 2010 */
+		{
+			"msvcr110", 0, NULL
+		},						/* Visual Studio 2012 */
 		{
 			NULL, 0, NULL
 		}

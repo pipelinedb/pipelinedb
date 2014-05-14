@@ -312,9 +312,6 @@ select 'y123'::dtop; -- fail
 select 'yz23'::dtop; -- fail
 select 'xz23'::dtop; -- fail
 
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-
 create temp table dtest(f1 dtop);
 
 insert into dtest values('x123');

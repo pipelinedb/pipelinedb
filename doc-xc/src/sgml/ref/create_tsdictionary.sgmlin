@@ -32,7 +32,6 @@ CREATE TEXT SEARCH DICTIONARY <replaceable class="parameter">name</replaceable> 
   <title>Description</title>
 
 &common;
-
   <para>
    <command>CREATE TEXT SEARCH DICTIONARY</command> creates a new text search
    dictionary.  A text search dictionary specifies a way of recognizing
@@ -59,6 +58,7 @@ CREATE TEXT SEARCH DICTIONARY <replaceable class="parameter">name</replaceable> 
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -126,6 +126,7 @@ CREATE TEXT SEARCH DICTIONARY my_russian (
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>CREATE TEXT SEARCH DICTIONARY</command> statement in
    the SQL standard.

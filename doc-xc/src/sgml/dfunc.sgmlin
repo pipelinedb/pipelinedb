@@ -3,16 +3,9 @@
 <sect2 id="dfunc">
  <title>Compiling and Linking Dynamically-loaded Functions</title>
 
-&common;
-
  <para>
   Before you are able to use your
-<!## PG>
   <productname>PostgreSQL</productname> extension functions written in
-<!## end>
-<!## XC>
-  <productname>Postgres-XC</productname> extension functions written in
-<!## end>
   C, they must be compiled and linked in a special way to produce a
   file that can be dynamically loaded by the server.  To be precise, a
   <firstterm>shared library</firstterm> needs to be
@@ -25,21 +18,11 @@
   you should read the documentation of your
   operating system, in particular the manual pages for the C compiler,
   <command>cc</command>, and the link editor, <command>ld</command>.
-<!## PG>
   In addition, the <productname>PostgreSQL</productname> source code
-<!## end>
-<!## XC>
-  In addition, the <productname>Postgres-XC</productname> source code
-<!## end>
   contains several working examples in the
   <filename>contrib</filename> directory.  If you rely on these
   examples you will make your modules dependent on the availability
-<!## PG>
   of the <productname>PostgreSQL</productname> source code, however.
-<!## end>
-<!## XC>
-  of the <productname>Postgres-XC</productname> source code, however.
-<!## end>
  </para>
 
  <para>
@@ -65,36 +48,22 @@
   here.
  </para>
 
+<!## XC>
+&xconly;
+ <para>
+  <productname>Postgres-XC</productname> has not been built on many
+  of the following environments, except for Intel Red Hat Linux,
+  CentOS and other Intel-based Linux platforms and couple of others.
+ </para>
+<!## end>
+
 <!--
   Note: Reading GNU Libtool sources is generally a good way of
   figuring out this information.  The methods used within PostgreSQL
   source code are not necessarily ideal.
 -->
-
-<!## PG>
+&common;
   <variablelist>
-<!## end>
-
-<!## PG>
-   <varlistentry>
-    <term><systemitem class="osname">BSD/OS</></term>
-    <indexterm><primary>BSD/OS</><secondary>shared library</></>
-    <listitem>
-     <para>
-      The compiler flag to create <acronym>PIC</acronym> is
-      <option>-fpic</option>.  The linker flag to create shared
-      libraries is <option>-shared</option>.
-<programlisting>
-gcc -fpic -c foo.c
-ld -shared -o foo.so foo.o
-</programlisting>
-      This is applicable as of version 4.0 of
-      <systemitem class="osname">BSD/OS</>.
-     </para>
-    </listitem>
-   </varlistentry>
-<!## end>
-<!## PG>
    <varlistentry>
     <term><systemitem class="osname">FreeBSD</></term>
     <indexterm><primary>FreeBSD</><secondary>shared library</></>
@@ -112,8 +81,7 @@ gcc -shared -o foo.so foo.o
      </para>
     </listitem>
    </varlistentry>
-<!## end>
-<!## PG>
+
    <varlistentry>
     <term><systemitem class="osname">HP-UX</></term>
     <indexterm><primary>HP-UX</><secondary>shared library</></>
@@ -140,9 +108,7 @@ ld -b -o foo.sl foo.o
      </para>
     </listitem>
    </varlistentry>
-<!## end>
 
-<!## PG>
    <varlistentry>
     <term><systemitem class="osname">IRIX</></term>
     <indexterm><primary>IRIX</><secondary>shared library</></>
@@ -177,12 +143,10 @@ cc -shared -o foo.so foo.o
      </para>
     </listitem>
    </varlistentry>
-<!## end>
 
-<!## PG>
    <varlistentry>
-    <term><systemitem class="osname">MacOS X</></term>
-    <indexterm><primary>MacOS X</><secondary>shared library</></>
+    <term><systemitem class="osname">Mac OS X</></term>
+    <indexterm><primary>Mac OS X</><secondary>shared library</></>
     <listitem>
      <para>
       Here is an example.  It assumes the developer tools are installed.
@@ -211,9 +175,7 @@ gcc -shared -o foo.so foo.o
      </para>
     </listitem>
    </varlistentry>
-<!## end>
 
-<!## PG>
    <varlistentry>
     <term><systemitem class="osname">OpenBSD</></term>
     <indexterm><primary>OpenBSD</><secondary>shared library</></>
@@ -253,9 +215,7 @@ gcc -G -o foo.so foo.o
      </para>
     </listitem>
    </varlistentry>
-<!## end>
 
-<!## PG>
    <varlistentry>
     <term><systemitem class="osname">Tru64 UNIX</></term>
     <indexterm><primary>Tru64 UNIX</><secondary>shared library</></>
@@ -298,11 +258,8 @@ gcc -shared -o foo.so foo.o
      </para>
     </listitem>
    </varlistentry>
-<!## end>
 
-<!## PG>
   </variablelist>
-<!## end>
 
  <tip>
   <para>
@@ -315,12 +272,7 @@ gcc -shared -o foo.so foo.o
 
  <para>
   The resulting shared library file can then be loaded into
-<!## PG>
   <productname>PostgreSQL</productname>.  When specifying the file name
-<!## end>
-<!## XC>
-  <productname>Postgres-XC</productname>.  When specifying the file name
-<!## end>
   to the <command>CREATE FUNCTION</command> command, one must give it
   the name of the shared library file, not the intermediate object file.
   Note that the system's standard shared-library extension (usually

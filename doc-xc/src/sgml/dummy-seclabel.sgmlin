@@ -1,4 +1,4 @@
-<!-- doc/src/sgml/dummy_seclabel.sgml -->
+<!-- doc/src/sgml/dummy-seclabel.sgml -->
 
 <sect1 id="dummy-seclabel" xreflabel="dummy_seclabel">
  <title>dummy_seclabel</title>
@@ -7,6 +7,7 @@
   <primary>dummy_seclabel</primary>
  </indexterm>
 
+&common;
  <para>
   The <filename>dummy_seclabel</> module exists only to support regression
   testing of the <command>SECURITY LABEL</> statement.  It is not intended
@@ -16,6 +17,7 @@
  <sect2>
   <title>Rationale</title>
 
+&common;
   <para>
    The <command>SECURITY LABEL</> statement allows the user to assign security
    labels to database objects; however, security labels can only be assigned
@@ -34,13 +36,14 @@
  <sect2>
   <title>Usage</title>
 
+&common;
   <para>
    Here's a simple example of usage:
   </para>
 
 <programlisting>
 # postgresql.conf
-shared_preload_libraries = 'dummy_label'
+shared_preload_libraries = 'dummy_seclabel'
 </programlisting>
 
 <programlisting>

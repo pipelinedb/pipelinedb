@@ -5,14 +5,17 @@
 
  <indexterm zone="managing-databases"><primary>database</></>
 
+<!## XC>
+&xconly;
+  <para>
+   Please note that this section describes the task of individual
+   Coordinator and Datanode.  It should be done for each of them.
+  </para>
+<!## end>
+
 &common;
  <para>
-<!## PG>
   Every instance of a running <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-  Every instance of a running <productname>Postgres-XC</productname>
-<!## end>
   server manages one or more databases.  Databases are therefore the
   topmost hierarchical level for organizing <acronym>SQL</acronym>
   objects (<quote>database objects</quote>).  This chapter describes
@@ -26,6 +29,14 @@
   <indexterm zone="manage-ag-overview">
    <primary>schema</primary>
   </indexterm>
+
+<!## XC>
+&xconly;
+  <para>
+   Please note that this section describes the task of individual
+   Coordinator and Datanode.  It should be done for each of them.
+  </para>
+<!## end>
 
 &common;
   <para>
@@ -48,15 +59,10 @@
    connection. However, an application is not restricted in the number of
    connections it opens to the same or other databases.  Databases are
    physically separated and access control is managed at the
-<!## PG>
    connection level.  If one <productname>PostgreSQL</> server
-<!## end>
-<!## XC>
-   connection level.  If one <productname>Postgres-XC</> server
-<!## end>
    instance is to house projects or users that should be separate and
    for the most part unaware of each other, it is therefore
-   recommendable to put them into separate databases.  If the projects
+   recommended to put them into separate databases.  If the projects
    or users are interrelated and should be able to use each other's
    resources, they should be put in the same database but possibly
    into separate schemas.  Schemas are a purely logical structure and who can
@@ -92,13 +98,17 @@ SELECT datname FROM pg_database;
 
   <indexterm><primary>CREATE DATABASE</></>
 
-  <para>
-<!## PG>
-   In order to create a database, the <productname>PostgreSQL</>
-<!## end>
 <!## XC>
-   In order to create a database, the <productname>Postgres-XC</>
+&xconly;
+  <para>
+   Please note that this section describes the task of individual
+   Coordinator and Datanode.  It should be done for each of them.
+  </para>
 <!## end>
+
+&common;
+  <para>
+   In order to create a database, the <productname>PostgreSQL</>
    server must be up and running (see <xref
    linkend="server-start">).
   </para>
@@ -192,6 +202,15 @@ createdb -O <replaceable>rolename</> <replaceable>dbname</>
  <sect1 id="manage-ag-templatedbs">
   <title>Template Databases</title>
 
+<!## XC>
+&xconly;
+  <para>
+   Please note that this section describes the task of individual
+   Coordinator and Datanode.  It should be done for each of them.
+  </para>
+<!## end>
+
+&common;
   <para>
    <command>CREATE DATABASE</> actually works by copying an existing
    database.  By default, it copies the standard system database named
@@ -212,12 +231,7 @@ createdb -O <replaceable>rolename</> <replaceable>dbname</>
    database contains the same data as the initial contents of
    <literal>template1</>, that is, only the standard objects
    predefined by your version of
-<!## PG>
    <productname>PostgreSQL</productname>.  <literal>template0</>
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname>.  <literal>template0</>
-<!## end>
    should never be changed after the database cluster has been
    initialized.  By instructing
    <command>CREATE DATABASE</> to copy <literal>template0</> instead
@@ -298,30 +312,24 @@ createdb -T template0 <replaceable>dbname</>
     users and applications to connect to. It is simply a copy of
     <literal>template1</> and can be dropped and recreated if necessary.
    </para>
-<!## XC>
-   <para>
-    <emphasis>For Postgres-XC only.</>
-   </para>
-   <para>
-    In <productname>Postgres-XC</>, template databases are hold in
-    each Coordinator and Datanode.  They are locally copied when new
-    database is created.
-   </para>
-<!## end>
   </note>
  </sect1>
 
  <sect1 id="manage-ag-config">
   <title>Database Configuration</title>
 
+<!## XC>
+&xconly;
+  <para>
+   Please note that this section describes the task of individual
+   Coordinator and Datanode.  It should be done for each of them.
+  </para>
+<!## end>
+
+&common;
   <para>
    Recall from <xref linkend="runtime-config"> that the
-<!## PG>
    <productname>PostgreSQL</> server provides a large number of
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</> server provides a large number of
-<!## end>
    run-time configuration variables.  You can set database-specific
    default values for many of these settings.
   </para>
@@ -349,6 +357,14 @@ ALTER DATABASE mydb SET geqo TO off;
 
  <sect1 id="manage-ag-dropdb">
   <title>Destroying a Database</title>
+
+<!## XC>
+&xconly;
+  <para>
+   Please note that this section describes the task of individual
+   Coordinator and Datanode.  It should be done for each of them.
+  </para>
+<!## end>
 
 &common;
   <para>
@@ -391,14 +407,17 @@ dropdb <replaceable class="parameter">dbname</replaceable>
    <primary>tablespace</primary>
   </indexterm>
 
+<!## XC>
+&xconly;
+  <para>
+   Please note that this section describes the task of individual
+   Coordinator and Datanode.  It should be done for each of them.
+  </para>
+<!## end>
+
 &common;
   <para>
-<!## PG>
    Tablespaces in <productname>PostgreSQL</> allow database administrators to
-<!## end>
-<!## XC>
-   Tablespaces in <productname>Postgres-XC</> allow database administrators to
-<!## end>
    define locations in the file system where the files representing
    database objects can be stored. Once created, a tablespace can be referred
    to by name when creating database objects.
@@ -406,12 +425,7 @@ dropdb <replaceable class="parameter">dbname</replaceable>
 
   <para>
    By using tablespaces, an administrator can control the disk layout
-<!## PG>
    of a <productname>PostgreSQL</> installation. This is useful in at
-<!## end>
-<!## XC>
-   of a <productname>Postgres-XC</> installation. This is useful in at
-<!## end>
    least two ways. First, if the partition or volume on which the
    cluster was initialized runs out of space and cannot be extended,
    a tablespace can be created on a different partition and used
@@ -436,12 +450,7 @@ dropdb <replaceable class="parameter">dbname</replaceable>
 CREATE TABLESPACE fastspace LOCATION '/mnt/sda1/postgresql/data';
 </programlisting>
    The location must be an existing, empty directory that is owned by
-<!## PG>
    the <productname>PostgreSQL</> operating system user.  All objects subsequently
-<!## end>
-<!## XC>
-   the <productname>Postgres-XC</> operating system user.  All objects subsequently
-<!## end>
    created within the tablespace will be stored in files underneath this
    directory.
   </para>
@@ -451,12 +460,7 @@ CREATE TABLESPACE fastspace LOCATION '/mnt/sda1/postgresql/data';
     There is usually not much point in making more than one
     tablespace per logical file system, since you cannot control the location
     of individual files within a logical file system.  However,
-<!## PG>
     <productname>PostgreSQL</> does not enforce any such limitation, and
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> does not enforce any such limitation, and
-<!## end>
     indeed it is not directly aware of the file system boundaries on your
     system.  It just stores files in the directories you tell it to use.
    </para>
@@ -538,7 +542,8 @@ CREATE TABLE foo(i int);
 
   <para>
    To determine the set of existing tablespaces, examine the
-   <structname>pg_tablespace</> system catalog, for example
+   <link linkend="catalog-pg-tablespace"><structname>pg_tablespace</structname>
+   </link> system catalog, for example
 <synopsis>
 SELECT spcname FROM pg_tablespace;
 </synopsis>
@@ -547,12 +552,7 @@ SELECT spcname FROM pg_tablespace;
   </para>
 
   <para>
-<!## PG>
    <productname>PostgreSQL</> makes use of symbolic links
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</> makes use of symbolic links
-<!## end>
    to simplify the implementation of tablespaces. This
    means that tablespaces can be used <emphasis>only</> on systems
    that support symbolic links.
@@ -562,11 +562,11 @@ SELECT spcname FROM pg_tablespace;
    The directory <filename>$PGDATA/pg_tblspc</> contains symbolic links that
    point to each of the non-built-in tablespaces defined in the cluster.
    Although not recommended, it is possible to adjust the tablespace
-   layout by hand by redefining these links.  Two warnings: do not do so
-   while the server is running; and after you restart the server,
-   update the <structname>pg_tablespace</> catalog with the new
-   locations.  (If you do not, <literal>pg_dump</> will continue to output
-   the old tablespace locations.)
+   layout by hand by redefining these links. Under no circumstances perform
+   this operation while the server is running. Note that in PostgreSQL 9.1
+   and earlier you will also need to update the <structname>pg_tablespace</>
+   catalog with the new locations. (If you do not, <literal>pg_dump</> will
+   continue to output the old tablespace locations.)
   </para>
 
  </sect1>

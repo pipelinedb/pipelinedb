@@ -40,6 +40,7 @@
    &alterDatabase;
    &alterDefaultPrivileges;
    &alterDomain;
+   &alterEventTrigger;
    &alterExtension;
    &alterForeignDataWrapper;
    &alterForeignTable;
@@ -48,10 +49,12 @@
    &alterIndex;
    &alterLanguage;
    &alterLargeObject;
+   &alterMaterializedView;
    &alterOperator;
    &alterOperatorClass;
    &alterOperatorFamily;
    &alterRole;
+   &alterRule;
    &alterSchema;
    &alterSequence;
    &alterServer;
@@ -81,6 +84,7 @@
    &createConversion;
    &createDatabase;
    &createDomain;
+   &createEventTrigger;
    &createExtension;
    &createForeignDataWrapper;
    &createForeignTable;
@@ -88,6 +92,7 @@
    &createGroup;
    &createIndex;
    &createLanguage;
+   &createMaterializedView;
    &createOperator;
    &createOperatorClass;
    &createOperatorFamily;
@@ -119,6 +124,7 @@
    &dropConversion;
    &dropDatabase;
    &dropDomain;
+   &dropEventTrigger;
    &dropExtension;
    &dropForeignDataWrapper;
    &dropForeignTable;
@@ -126,6 +132,7 @@
    &dropGroup;
    &dropIndex;
    &dropLanguage;
+   &dropMaterializedView;
    &dropOperator;
    &dropOperatorClass;
    &dropOperatorFamily;
@@ -160,6 +167,7 @@
    &prepare;
    &prepareTransaction;
    &reassignOwned;
+   &refreshMaterializedView;
    &reindex;
    &releaseSavepoint;
    &reset;
@@ -220,6 +228,7 @@
    &pgConfig;
    &pgDump;
    &pgDumpall;
+   &pgIsready;
    &pgReceivexlog;
    &pgRestore;
    &psqlRef;

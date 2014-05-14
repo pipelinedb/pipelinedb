@@ -21,7 +21,7 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-DROP TABLESPACE [ IF EXISTS ] <replaceable class="PARAMETER">tablespace_name</replaceable>
+DROP TABLESPACE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable>
 </synopsis>
  </refsynopsisdiv>
 
@@ -29,7 +29,6 @@ DROP TABLESPACE [ IF EXISTS ] <replaceable class="PARAMETER">tablespace_name</re
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP TABLESPACE</command> removes a tablespace from the system.
   </para>
@@ -49,6 +48,7 @@ DROP TABLESPACE [ IF EXISTS ] <replaceable class="PARAMETER">tablespace_name</re
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
 
    <varlistentry>
@@ -62,7 +62,7 @@ DROP TABLESPACE [ IF EXISTS ] <replaceable class="PARAMETER">tablespace_name</re
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="PARAMETER">tablespace_name</replaceable></term>
+    <term><replaceable class="PARAMETER">name</replaceable></term>
     <listitem>
      <para>
       The name of a tablespace.
@@ -75,13 +75,15 @@ DROP TABLESPACE [ IF EXISTS ] <replaceable class="PARAMETER">tablespace_name</re
  <refsect1>
   <title>Notes</title>
 
+&common;
    <para>
     <command>DROP TABLESPACE</> cannot be executed inside a transaction block.
    </para>
 
+&xconly;
 <!## XC>
    <para>
-    <command>DROP TABLESPACE</> can be run with EXECUTE DIRECT to control
+    <command>DROP TABLESPACE</> can be run with <command>EXECUTE DIRECT</command> to control
     tablespace existence on remote nodes. This works for both remote Coordinators
     and	Datanodes but not on this operation is not authorized on node where
     application client is connected.
@@ -97,20 +99,15 @@ DROP TABLESPACE [ IF EXISTS ] <replaceable class="PARAMETER">tablespace_name</re
    To remove tablespace <literal>mystuff</literal> from the system:
 <programlisting>
 DROP TABLESPACE mystuff;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
-<!## PG>
    <command>DROP TABLESPACE</command> is a <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-   <command>DROP TABLESPACE</command> is a <productname>Postgres-XC</>
-<!## end>
    extension.
   </para>
  </refsect1>

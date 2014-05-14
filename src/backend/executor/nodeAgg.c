@@ -67,7 +67,7 @@
  *	  but direct examination of the node is needed to use it before 9.0.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -78,6 +78,8 @@
 
 #include "postgres.h"
 
+#include "access/htup_details.h"
+#include "catalog/objectaccess.h"
 #include "catalog/pg_aggregate.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
@@ -85,6 +87,7 @@
 #include "executor/nodeAgg.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/execnodes.h"
 #include "optimizer/clauses.h"
 #include "optimizer/tlist.h"
 #include "parser/parse_agg.h"
@@ -256,7 +259,6 @@ typedef struct AggStatePerGroupData
 	bool		collectValueIsNull;
 	bool		noCollectValue;		/* true if the collectValue not set yet */
 #endif /* PGXC */
-
 } AggStatePerGroupData;
 
 /*
@@ -1432,7 +1434,6 @@ agg_fill_hash_table(AggState *aggstate)
 		outerslot = ExecProcNode(outerPlan);
 		if (TupIsNull(outerslot))
 			break;
-
 		/* set up for advance_aggregates call */
 		tmpcontext->ecxt_outertuple = outerslot;
 
@@ -1476,6 +1477,7 @@ agg_retrieve_hash_table(AggState *aggstate)
 	aggnulls = econtext->ecxt_aggnulls;
 	peragg = aggstate->peragg;
 	firstSlot = aggstate->ss.ss_ScanTupleSlot;
+
 	/*
 	 * We loop retrieving groups until we find one satisfying
 	 * aggstate->ss.ps.qual
@@ -1728,6 +1730,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 	if (node->aggstrategy == AGG_HASHED)
 	{
+		build_hash_table(aggstate);
 		aggstate->table_filled = false;
 		/* Compute the columns we actually need to hash on */
 		aggstate->hash_needed = find_hash_columns(aggstate);
@@ -1834,11 +1837,10 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		if (aclresult != ACLCHECK_OK)
 			aclcheck_error(aclresult, ACL_KIND_PROC,
 						   get_func_name(aggref->aggfnoid));
+		InvokeFunctionExecuteHook(aggref->aggfnoid);
 
 		peraggstate->transfn_oid = transfn_oid = aggform->aggtransfn;
 		peraggstate->finalfn_oid = finalfn_oid = aggform->aggfinalfn;
-		peraggstate->collectfn_oid = collectfn_oid = aggform->aggcollectfn;
-
 #ifdef PGXC
 		peraggstate->collectfn_oid = collectfn_oid = aggform->aggcollectfn;
 		/*
@@ -1869,6 +1871,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 			if (aclresult != ACLCHECK_OK)
 				aclcheck_error(aclresult, ACL_KIND_PROC,
 							   get_func_name(transfn_oid));
+			InvokeFunctionExecuteHook(transfn_oid);
 			if (OidIsValid(finalfn_oid))
 			{
 				aclresult = pg_proc_aclcheck(finalfn_oid, aggOwner,
@@ -1876,6 +1879,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 				if (aclresult != ACLCHECK_OK)
 					aclcheck_error(aclresult, ACL_KIND_PROC,
 								   get_func_name(finalfn_oid));
+				InvokeFunctionExecuteHook(finalfn_oid);
 			}
 
 #ifdef PGXC
@@ -2259,6 +2263,7 @@ ExecReScanAgg(AggState *node)
 	if (((Agg *) node->ss.ps.plan)->aggstrategy == AGG_HASHED)
 	{
 		/* Rebuild an empty hash table */
+		build_hash_table(node);
 		node->table_filled = false;
 	}
 	else

@@ -3,7 +3,7 @@
  * pg_enum.c
  *	  routines to support manipulation of the pg_enum relation
  *
- * Copyright (c) 2006-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2006-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -15,6 +15,7 @@
 
 #include "access/genam.h"
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "catalog/indexing.h"
@@ -23,6 +24,7 @@
 #include "storage/lmgr.h"
 #include "miscadmin.h"
 #include "utils/builtins.h"
+#include "utils/catcache.h"
 #include "utils/fmgroids.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
@@ -177,7 +179,8 @@ void
 AddEnumLabel(Oid enumTypeOid,
 			 const char *newVal,
 			 const char *neighbor,
-			 bool newValIsAfter)
+			 bool newValIsAfter,
+			 bool skipIfExists)
 {
 	Relation	pg_enum;
 	Oid			newOid;
@@ -208,6 +211,32 @@ AddEnumLabel(Oid enumTypeOid,
 	 * RenumberEnumType.
 	 */
 	LockDatabaseObject(TypeRelationId, enumTypeOid, 0, ExclusiveLock);
+
+	/*
+	 * Check if label is already in use.  The unique index on pg_enum would
+	 * catch this anyway, but we prefer a friendlier error message, and
+	 * besides we need a check to support IF NOT EXISTS.
+	 */
+	enum_tup = SearchSysCache2(ENUMTYPOIDNAME,
+							   ObjectIdGetDatum(enumTypeOid),
+							   CStringGetDatum(newVal));
+	if (HeapTupleIsValid(enum_tup))
+	{
+		ReleaseSysCache(enum_tup);
+		if (skipIfExists)
+		{
+			ereport(NOTICE,
+					(errcode(ERRCODE_DUPLICATE_OBJECT),
+					 errmsg("enum label \"%s\" already exists, skipping",
+							newVal)));
+			return;
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_DUPLICATE_OBJECT),
+					 errmsg("enum label \"%s\" already exists",
+							newVal)));
+	}
 
 	pg_enum = heap_open(EnumRelationId, RowExclusiveLock);
 

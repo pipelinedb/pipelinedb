@@ -3,7 +3,7 @@
  * dropcmds.c
  *	  handle various "DROP" operations
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -16,6 +16,7 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "catalog/dependency.h"
 #include "catalog/namespace.h"
 #include "catalog/objectaddress.h"
@@ -25,7 +26,6 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
-#include "utils/acl.h"
 #include "utils/builtins.h"
 #include "utils/syscache.h"
 
@@ -203,13 +203,17 @@ does_not_exist_skipping(ObjectType objtype, List *objname, List *objargs)
 		case OBJECT_TRIGGER:
 			msg = gettext_noop("trigger \"%s\" for table \"%s\" does not exist, skipping");
 			name = strVal(llast(objname));
-			args = NameListToString(list_truncate(objname,
+			args = NameListToString(list_truncate(list_copy(objname),
 												  list_length(objname) - 1));
+			break;
+		case OBJECT_EVENT_TRIGGER:
+			msg = gettext_noop("event trigger \"%s\" does not exist, skipping");
+			name = NameListToString(objname);
 			break;
 		case OBJECT_RULE:
 			msg = gettext_noop("rule \"%s\" for relation \"%s\" does not exist, skipping");
 			name = strVal(llast(objname));
-			args = NameListToString(list_truncate(objname,
+			args = NameListToString(list_truncate(list_copy(objname),
 												  list_length(objname) - 1));
 			break;
 		case OBJECT_FDW:

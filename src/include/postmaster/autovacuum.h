@@ -4,7 +4,7 @@
  *	  header file for integrated autovacuum daemon
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2010-2012 Postgres-XC Development Group
  *
@@ -58,8 +58,8 @@ extern void AutoVacWorkerFailed(void);
 extern void AutoVacuumUpdateDelay(void);
 
 #ifdef EXEC_BACKEND
-extern void AutoVacLauncherMain(int argc, char *argv[]);
-extern void AutoVacWorkerMain(int argc, char *argv[]);
+extern void AutoVacLauncherMain(int argc, char *argv[]) __attribute__((noreturn));
+extern void AutoVacWorkerMain(int argc, char *argv[]) __attribute__((noreturn));
 extern void AutovacuumWorkerIAm(void);
 extern void AutovacuumLauncherIAm(void);
 #endif

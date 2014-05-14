@@ -30,6 +30,7 @@
   <sect1 id="trigger-definition">
    <title>Overview of Trigger Behavior</title>
 
+&common;
    <para>
     A trigger is a specification that the database should automatically
     execute a particular function whenever a certain type of operation is
@@ -302,6 +303,7 @@
   <sect1 id="trigger-datachanges">
    <title>Visibility of Data Changes</title>
 
+&common;
    <para>
     If you execute SQL commands in your trigger function, and these
     commands access the table that the trigger is for, then
@@ -383,6 +385,7 @@
     <secondary>in C</secondary>
    </indexterm>
 
+&common;
    <para>
     This section describes the low-level details of the interface to a
     trigger function.  This information is only needed when writing
@@ -594,7 +597,7 @@ typedef struct TriggerData
       <listitem>
        <para>
         A pointer to a structure of type <structname>Trigger</>,
-        defined in <filename>utils/rel.h</>:
+        defined in <filename>utils/reltrigger.h</>:
 
 <programlisting>
 typedef struct Trigger
@@ -603,7 +606,7 @@ typedef struct Trigger
     char       *tgname;
     Oid         tgfoid;
     int16       tgtype;
-    bool        tgenabled;
+    char        tgenabled;
     bool        tgisinternal;
     Oid         tgconstrrelid;
     Oid         tgconstrindid;
@@ -662,6 +665,7 @@ typedef struct Trigger
    </para>
 <!## end>
 
+&common;
    <para>
     A trigger function must return either a
     <structname>HeapTuple</> pointer or a <symbol>NULL</> pointer
@@ -675,6 +679,7 @@ typedef struct Trigger
   <sect1 id="trigger-example">
    <title>A Complete Trigger Example</title>
 
+&common;
    <para>
     Here is a very simple example of a trigger function written in C.
     (Examples of triggers written in procedural languages can be found
@@ -703,7 +708,8 @@ CREATE TABLE ttest (
 <programlisting><![CDATA[
 #include "postgres.h"
 #include "executor/spi.h"       /* this is what you need to work with SPI */
-#include "commands/trigger.h"   /* ... and triggers */
+#include "commands/trigger.h"   /* ... triggers ... */
+#include "utils/rel.h"          /* ... and relations */
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;

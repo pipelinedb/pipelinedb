@@ -37,7 +37,7 @@ LOAD 'auto_explain';
 <!## XC>
  <para>
   To log plans on Datanodes, you must preload this module in each
-  Datanode.  This module will log local plans of each node.  For
+  Datanode and/or Coordinator.  This module will log local plans of each node.  For
   example, Coordinator log will include the plan for Coordinator only.
   Corresponding plan in Datanodes will be found in each Datanode's
   log.
@@ -156,6 +156,27 @@ LOAD 'auto_explain';
 
    <varlistentry>
     <term>
+     <varname>auto_explain.log_timing</varname> (<type>boolean</type>)
+    </term>
+    <indexterm>
+     <primary><varname>auto_explain.log_timing</> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      <varname>auto_explain.log_timing</varname> causes <command>EXPLAIN
+      (ANALYZE, TIMING off)</> output, rather than just <command>EXPLAIN (ANALYZE)</>
+      output. The overhead of repeatedly reading the system clock can slow down the
+      query significantly on some systems, so it may be useful to set this
+      parameter to off when only actual row counts, and not exact times, are needed.
+      This parameter is only effective when <varname>auto_explain.log_analyze</varname>
+      is also enabled.  This parameter is on by default.
+      Only superusers can change this setting.
+     </para>
+    </listitem>
+   </varlistentry>
+   
+   <varlistentry>
+    <term>
      <varname>auto_explain.log_nested_statements</varname> (<type>boolean</type>)
     </term>
     <indexterm>
@@ -173,9 +194,8 @@ LOAD 'auto_explain';
   </variablelist>
 
   <para>
-   In order to set these parameters in your <filename>postgresql.conf</> file,
-   you will need to add <literal>auto_explain</> to
-   <xref linkend="guc-custom-variable-classes">.  Typical usage might be:
+   These parameters must be set in <filename>postgresql.conf</>.
+   Typical usage might be:
   </para>
 
 <programlisting>
@@ -198,7 +218,6 @@ postgres=# SELECT count(*)
            WHERE oid = indrelid AND indisunique;
 </programlisting>
 
-&common;
   <para>
    This might produce log output such as:
   </para>

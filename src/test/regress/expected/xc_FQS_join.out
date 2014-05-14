@@ -107,11 +107,11 @@ select * from tab1_rep natural join tab2_rep
 
 explain (costs off, num_nodes on, nodes off, verbose on) select * from tab1_rep natural join tab2_rep
 			where tab2_rep.val > 2 and tab2_rep.val < 5;
-                                                                        QUERY PLAN                                                                        
-----------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
    Output: tab1_rep.val, tab1_rep.val2
-   Remote query: SELECT tab1_rep.val, tab1_rep.val2 FROM (public.tab1_rep NATURAL JOIN public.tab2_rep) WHERE ((tab2_rep.val > 2) AND (tab2_rep.val < 5))
+   Remote query: SELECT tab1_rep.val, tab1_rep.val2 FROM (public.tab1_rep JOIN public.tab2_rep USING (val, val2)) WHERE ((tab2_rep.val > 2) AND (tab2_rep.val < 5))
 (3 rows)
 
 select * from tab1_rep join tab2_rep using (val, val2) join tab3_rep using (val, val2)
@@ -157,11 +157,11 @@ select * from tab1_rep natural join tab2_rep natural join tab3_rep
 
 explain (costs off, num_nodes on, nodes off, verbose on) select * from tab1_rep natural join tab2_rep natural join tab3_rep
 			where tab1_rep.val > 0 and tab2_rep.val < 3;
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
    Output: tab1_rep.val, tab1_rep.val2
-   Remote query: SELECT tab1_rep.val, tab1_rep.val2 FROM ((public.tab1_rep NATURAL JOIN public.tab2_rep) NATURAL JOIN public.tab3_rep) WHERE ((tab1_rep.val > 0) AND (tab2_rep.val < 3))
+   Remote query: SELECT tab1_rep.val, tab1_rep.val2 FROM ((public.tab1_rep JOIN public.tab2_rep USING (val, val2)) JOIN public.tab3_rep USING (val, val2)) WHERE ((tab1_rep.val > 0) AND (tab2_rep.val < 3))
 (3 rows)
 
 -- make sure in Joins which are shippable and involve only one node, aggregates
@@ -175,11 +175,11 @@ select avg(tab1_rep.val) from tab1_rep natural join tab2_rep natural join tab3_r
 
 explain (costs off, num_nodes on, nodes off, verbose on) select avg(tab1_rep.val) from tab1_rep natural join tab2_rep natural join tab3_rep
 			where tab1_rep.val > 0 and tab2_rep.val < 3;
-                                                                                                QUERY PLAN                                                                                                 
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                          QUERY PLAN                                                                                                           
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
    Output: (avg(tab1_rep.val))
-   Remote query: SELECT pg_catalog.int8_avg(avg(tab1_rep.val)) AS avg FROM ((public.tab1_rep NATURAL JOIN public.tab2_rep) NATURAL JOIN public.tab3_rep) WHERE ((tab1_rep.val > 0) AND (tab2_rep.val < 3))
+   Remote query: SELECT pg_catalog.int8_avg(avg(tab1_rep.val)) AS avg FROM ((public.tab1_rep JOIN public.tab2_rep USING (val, val2)) JOIN public.tab3_rep USING (val, val2)) WHERE ((tab1_rep.val > 0) AND (tab2_rep.val < 3))
 (3 rows)
 
 -- the two replicated tables being joined do not have any node in common, the
@@ -202,8 +202,8 @@ select * from tab3_rep natural join tab4_rep
 
 explain (costs off, num_nodes on, nodes off, verbose on) select * from tab3_rep natural join tab4_rep
 			where tab3_rep.val > 2 and tab4_rep.val < 5;
-                                             QUERY PLAN                                             
-----------------------------------------------------------------------------------------------------
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
  Hash Join
    Output: tab3_rep.val, tab3_rep.val2
    Hash Cond: ((tab3_rep.val = tab4_rep.val) AND (tab3_rep.val2 = tab4_rep.val2))
@@ -212,7 +212,7 @@ explain (costs off, num_nodes on, nodes off, verbose on) select * from tab3_rep 
          Remote query: SELECT val, val2 FROM ONLY public.tab3_rep WHERE (val > 2)
    ->  Hash
          Output: tab4_rep.val, tab4_rep.val2
-         ->  Data Node Scan (primary node count=0, node count=1) on tab4_rep "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan (primary node count=0, node count=1) on tab4_rep "_REMOTE_TABLE_QUERY__1"
                Output: tab4_rep.val, tab4_rep.val2
                Remote query: SELECT val, val2 FROM ONLY public.tab4_rep WHERE (val < 5)
 (11 rows)
@@ -233,11 +233,11 @@ select * from tab1_mod natural join tab1_rep
 
 explain (costs off, verbose on, nodes off) select * from tab1_mod natural join tab1_rep
 			where tab1_mod.val > 2 and tab1_rep.val < 4;
-                                                                        QUERY PLAN                                                                        
-----------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan on "__REMOTE_FQS_QUERY__"
    Output: tab1_mod.val, tab1_mod.val2
-   Remote query: SELECT tab1_mod.val, tab1_mod.val2 FROM (public.tab1_mod NATURAL JOIN public.tab1_rep) WHERE ((tab1_mod.val > 2) AND (tab1_rep.val < 4))
+   Remote query: SELECT tab1_mod.val, tab1_mod.val2 FROM (public.tab1_mod JOIN public.tab1_rep USING (val, val2)) WHERE ((tab1_mod.val > 2) AND (tab1_rep.val < 4))
 (3 rows)
 
 -- Join involving one distributed and one replicated table, with replicated
@@ -266,7 +266,7 @@ explain (costs off, verbose on, nodes off) select * from tab1_mod natural join t
          Remote query: SELECT val, val2 FROM ONLY public.tab1_mod WHERE (val > 2)
    ->  Hash
          Output: tab4_rep.val, tab4_rep.val2
-         ->  Data Node Scan on tab4_rep "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on tab4_rep "_REMOTE_TABLE_QUERY__1"
                Output: tab4_rep.val, tab4_rep.val2
                Remote query: SELECT val, val2 FROM ONLY public.tab4_rep WHERE (val < 4)
 (11 rows)
@@ -295,7 +295,7 @@ explain (costs off, verbose on, nodes off) select * from tab1_mod natural join t
          Remote query: SELECT val, val2 FROM ONLY public.tab1_mod WHERE (val > 2)
    ->  Hash
          Output: tab2_mod.val, tab2_mod.val2
-         ->  Data Node Scan on tab2_mod "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on tab2_mod "_REMOTE_TABLE_QUERY__1"
                Output: tab2_mod.val, tab2_mod.val2
                Remote query: SELECT val, val2 FROM ONLY public.tab2_mod WHERE (val < 4)
 (11 rows)
@@ -316,11 +316,11 @@ select * from tab2_rep natural join tab4_rep natural join tab2_mod
 
 explain (costs off, verbose on, nodes off) select * from tab2_rep natural join tab4_rep natural join tab2_mod
 			where tab2_rep.val > 2 and tab4_rep.val < 4;
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan on "__REMOTE_FQS_QUERY__"
    Output: tab2_rep.val, tab2_rep.val2
-   Remote query: SELECT tab2_rep.val, tab2_rep.val2 FROM ((public.tab2_rep NATURAL JOIN public.tab4_rep) NATURAL JOIN public.tab2_mod) WHERE ((tab2_rep.val > 2) AND (tab4_rep.val < 4))
+   Remote query: SELECT tab2_rep.val, tab2_rep.val2 FROM ((public.tab2_rep JOIN public.tab4_rep USING (val, val2)) JOIN public.tab2_mod USING (val, val2)) WHERE ((tab2_rep.val > 2) AND (tab4_rep.val < 4))
 (3 rows)
 
 select * from tab4_rep natural join tab2_rep natural join tab2_mod
@@ -336,11 +336,11 @@ select * from tab4_rep natural join tab2_rep natural join tab2_mod
 
 explain (costs off, verbose on, nodes off) select * from tab4_rep natural join tab2_rep natural join tab2_mod
 			where tab2_rep.val > 2 and tab4_rep.val < 4;
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan on "__REMOTE_FQS_QUERY__"
    Output: tab4_rep.val, tab4_rep.val2
-   Remote query: SELECT tab4_rep.val, tab4_rep.val2 FROM ((public.tab4_rep NATURAL JOIN public.tab2_rep) NATURAL JOIN public.tab2_mod) WHERE ((tab2_rep.val > 2) AND (tab4_rep.val < 4))
+   Remote query: SELECT tab4_rep.val, tab4_rep.val2 FROM ((public.tab4_rep JOIN public.tab2_rep USING (val, val2)) JOIN public.tab2_mod USING (val, val2)) WHERE ((tab2_rep.val > 2) AND (tab4_rep.val < 4))
 (3 rows)
 
 select * from tab2_rep natural join tab2_mod natural join tab4_rep
@@ -356,11 +356,11 @@ select * from tab2_rep natural join tab2_mod natural join tab4_rep
 
 explain (costs off, verbose on, nodes off) select * from tab2_rep natural join tab2_mod natural join tab4_rep
 			where tab2_rep.val > 2 and tab4_rep.val < 4;
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan on "__REMOTE_FQS_QUERY__"
    Output: tab2_rep.val, tab2_rep.val2
-   Remote query: SELECT tab2_rep.val, tab2_rep.val2 FROM ((public.tab2_rep NATURAL JOIN public.tab2_mod) NATURAL JOIN public.tab4_rep) WHERE ((tab2_rep.val > 2) AND (tab4_rep.val < 4))
+   Remote query: SELECT tab2_rep.val, tab2_rep.val2 FROM ((public.tab2_rep JOIN public.tab2_mod USING (val, val2)) JOIN public.tab4_rep USING (val, val2)) WHERE ((tab2_rep.val > 2) AND (tab4_rep.val < 4))
 (3 rows)
 
 -- qualifications on distributed tables
@@ -470,11 +470,11 @@ explain (costs off, verbose on, nodes off, num_nodes on)
 	select * from (select * from tab1_rep) t1 natural join (select * from tab2_rep) t2
 				where t1.val > 1 and t1.val < 4
 				order by t1.val, t1.val2;
-                                                                                                                     QUERY PLAN                                                                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                          QUERY PLAN                                                                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
    Output: t1.val, t1.val2, t1.val, t1.val2
-   Remote query: SELECT t1.val, t1.val2 FROM ((SELECT tab1_rep.val, tab1_rep.val2 FROM public.tab1_rep) t1 NATURAL JOIN (SELECT tab2_rep.val, tab2_rep.val2 FROM public.tab2_rep) t2) WHERE ((t1.val > 1) AND (t1.val < 4)) ORDER BY t1.val, t1.val2
+   Remote query: SELECT t1.val, t1.val2 FROM ((SELECT tab1_rep.val, tab1_rep.val2 FROM public.tab1_rep) t1 JOIN (SELECT tab2_rep.val, tab2_rep.val2 FROM public.tab2_rep) t2 USING (val, val2)) WHERE ((t1.val > 1) AND (t1.val < 4)) ORDER BY t1.val, t1.val2
 (3 rows)
 
 select * from (select avg(val2), val from tab1_rep group by val) t1 natural join
@@ -493,11 +493,11 @@ explain (costs off, verbose on, nodes off, num_nodes on)
 	select * from (select avg(val2), val from tab1_rep group by val) t1 natural join
 					(select avg(val2), val from tab2_rep group by val) t2
 				order by 1, 2;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                         
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                             QUERY PLAN                                                                                                                                                             
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan (primary node count=0, node count=1) on "__REMOTE_FQS_QUERY__"
    Output: t1.avg, t1.val
-   Remote query: SELECT t1.avg, t1.val FROM ((SELECT pg_catalog.int8_avg(avg(tab1_rep.val2)) AS avg, tab1_rep.val FROM public.tab1_rep GROUP BY tab1_rep.val) t1 NATURAL JOIN (SELECT pg_catalog.int8_avg(avg(tab2_rep.val2)) AS avg, tab2_rep.val FROM public.tab2_rep GROUP BY tab2_rep.val) t2) ORDER BY t1.avg, t1.val
+   Remote query: SELECT t1.avg, t1.val FROM ((SELECT pg_catalog.int8_avg(avg(tab1_rep.val2)) AS avg, tab1_rep.val FROM public.tab1_rep GROUP BY tab1_rep.val) t1 JOIN (SELECT pg_catalog.int8_avg(avg(tab2_rep.val2)) AS avg, tab2_rep.val FROM public.tab2_rep GROUP BY tab2_rep.val) t2 USING (avg, val)) ORDER BY t1.avg, t1.val
 (3 rows)
 
 -- replicated and distributed subqueries 
@@ -513,11 +513,11 @@ explain (costs off, verbose on, nodes off)
 	select * from (select avg(val2), val from tab1_mod group by val) t1 natural join
 					(select avg(val2), val from tab1_rep group by val) t2
 				where t1.val = 3;
-                                                                                                                                                      QUERY PLAN                                                                                                                                                      
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                          QUERY PLAN                                                                                                                                                           
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan on "__REMOTE_FQS_QUERY__"
    Output: t1.avg, t1.val
-   Remote query: SELECT t1.avg, t1.val FROM ((SELECT pg_catalog.int8_avg(avg(tab1_mod.val2)) AS avg, tab1_mod.val FROM public.tab1_mod GROUP BY tab1_mod.val) t1 NATURAL JOIN (SELECT pg_catalog.int8_avg(avg(tab1_rep.val2)) AS avg, tab1_rep.val FROM public.tab1_rep GROUP BY tab1_rep.val) t2) WHERE (t1.val = 3)
+   Remote query: SELECT t1.avg, t1.val FROM ((SELECT pg_catalog.int8_avg(avg(tab1_mod.val2)) AS avg, tab1_mod.val FROM public.tab1_mod GROUP BY tab1_mod.val) t1 JOIN (SELECT pg_catalog.int8_avg(avg(tab1_rep.val2)) AS avg, tab1_rep.val FROM public.tab1_rep GROUP BY tab1_rep.val) t2 USING (avg, val)) WHERE (t1.val = 3)
 (3 rows)
 
 -- distributed subqueries
@@ -533,11 +533,11 @@ explain (costs off, verbose on, nodes off)
 	select * from (select avg(val2), val from tab1_mod group by val) t1 natural join
 					(select avg(val2), val from tab3_mod group by val) t2
 			where t1.val = 3;
-                                                                                                                                                      QUERY PLAN                                                                                                                                                      
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                          QUERY PLAN                                                                                                                                                           
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan on "__REMOTE_FQS_QUERY__"
    Output: t1.avg, t1.val
-   Remote query: SELECT t1.avg, t1.val FROM ((SELECT pg_catalog.int8_avg(avg(tab1_mod.val2)) AS avg, tab1_mod.val FROM public.tab1_mod GROUP BY tab1_mod.val) t1 NATURAL JOIN (SELECT pg_catalog.int8_avg(avg(tab3_mod.val2)) AS avg, tab3_mod.val FROM public.tab3_mod GROUP BY tab3_mod.val) t2) WHERE (t1.val = 3)
+   Remote query: SELECT t1.avg, t1.val FROM ((SELECT pg_catalog.int8_avg(avg(tab1_mod.val2)) AS avg, tab1_mod.val FROM public.tab1_mod GROUP BY tab1_mod.val) t1 JOIN (SELECT pg_catalog.int8_avg(avg(tab3_mod.val2)) AS avg, tab3_mod.val FROM public.tab3_mod GROUP BY tab3_mod.val) t2 USING (avg, val)) WHERE (t1.val = 3)
 (3 rows)
 
 -- OUTER joins, we insert some data in existing tables for testing OUTER join
@@ -654,7 +654,7 @@ select * from tab1_mod left join tab3_mod using (val2)
                Remote query: SELECT val2, val FROM ONLY public.tab1_mod WHERE true
          ->  Hash
                Output: tab3_mod.val, tab3_mod.val2
-               ->  Data Node Scan on tab3_mod "_REMOTE_TABLE_QUERY_"
+               ->  Data Node Scan on tab3_mod "_REMOTE_TABLE_QUERY__1"
                      Output: tab3_mod.val, tab3_mod.val2
                      Remote query: SELECT val, val2 FROM ONLY public.tab3_mod WHERE true
 (15 rows)
@@ -705,7 +705,7 @@ select * from tab1_mod right join tab1_rep on (tab1_mod.val > tab1_rep.val and t
          Remote query: SELECT val, val2 FROM ONLY public.tab1_mod WHERE true
    ->  Hash
          Output: tab1_rep.val, tab1_rep.val2
-         ->  Data Node Scan on tab1_rep "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on tab1_rep "_REMOTE_TABLE_QUERY__1"
                Output: tab1_rep.val, tab1_rep.val2
                Remote query: SELECT val, val2 FROM ONLY public.tab1_rep WHERE (val >= 5)
 (12 rows)
@@ -724,7 +724,7 @@ select * from tab1_rep left join tab1_mod on (tab1_mod.val > tab1_rep.val and ta
          Remote query: SELECT val, val2 FROM ONLY public.tab1_mod WHERE true
    ->  Hash
          Output: tab1_rep.val, tab1_rep.val2
-         ->  Data Node Scan on tab1_rep "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on tab1_rep "_REMOTE_TABLE_QUERY__1"
                Output: tab1_rep.val, tab1_rep.val2
                Remote query: SELECT val, val2 FROM ONLY public.tab1_rep WHERE (val >= 5)
 (12 rows)
@@ -741,11 +741,11 @@ select * from single_node_rep_tab natural full outer join single_node_mod_tab or
 
 explain (costs off, verbose on, nodes off)
 select * from single_node_rep_tab natural full outer join single_node_mod_tab order by val, val2;
-                                                             QUERY PLAN                                                             
-------------------------------------------------------------------------------------------------------------------------------------
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
  Data Node Scan on "__REMOTE_FQS_QUERY__"
    Output: val, val2
-   Remote query: SELECT val, val2 FROM (public.single_node_rep_tab NATURAL FULL JOIN public.single_node_mod_tab) ORDER BY val, val2
+   Remote query: SELECT val, val2 FROM (public.single_node_rep_tab FULL JOIN public.single_node_mod_tab USING (val, val2)) ORDER BY val, val2
 (3 rows)
 
 -- DMLs involving JOINs are not FQSed
@@ -755,21 +755,21 @@ select * from single_node_rep_tab natural full outer join single_node_mod_tab or
 set enable_remotejoin to false;
 explain (costs off, verbose on, nodes off) update tab1_mod set val2 = 1000 from tab2_mod 
 		where tab1_mod.val = tab2_mod.val and tab1_mod. val2 = tab2_mod.val2;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
  Update on public.tab1_mod
    Node expr: tab1_mod.val
-   Remote query: UPDATE ONLY public.tab1_mod SET val2 = $2 WHERE ((tab1_mod.ctid = $3) AND (tab1_mod.xc_node_id = $4))
+   Remote query: UPDATE ONLY public.tab1_mod SET val = $1, val2 = $2 WHERE ((tab1_mod.ctid = $3) AND (tab1_mod.xc_node_id = $4))
    ->  Hash Join
-         Output: tab1_mod.val, 1000, tab1_mod.val, tab1_mod.val2, tab1_mod.ctid, tab1_mod.xc_node_id, tab2_mod.ctid
-         Hash Cond: ((tab1_mod.val = tab2_mod.val) AND (tab1_mod.val2 = tab2_mod.val2))
+         Output: tab1_mod.val, 1000, tab1_mod.val, tab1_mod.val2, tab1_mod.ctid, tab1_mod.xc_node_id, ctid
+         Hash Cond: ((tab1_mod.val = val) AND (tab1_mod.val2 = val2))
          ->  Data Node Scan on tab1_mod "_REMOTE_TABLE_QUERY_"
                Output: tab1_mod.val, tab1_mod.val2, tab1_mod.ctid, tab1_mod.xc_node_id
                Remote query: SELECT val, val2, ctid, xc_node_id FROM ONLY public.tab1_mod WHERE true
          ->  Hash
-               Output: tab2_mod.ctid, tab2_mod.val, tab2_mod.val2
+               Output: ctid, val, val2
                ->  Data Node Scan on tab2_mod "_REMOTE_TABLE_QUERY_"
-                     Output: tab2_mod.ctid, tab2_mod.val, tab2_mod.val2
+                     Output: ctid, val, val2
                      Remote query: SELECT ctid, val, val2 FROM ONLY public.tab2_mod WHERE true
 (14 rows)
 
@@ -780,34 +780,34 @@ explain (costs off, verbose on, nodes off) delete from tab1_mod using tab2_mod
  Delete on public.tab1_mod
    Remote query: DELETE FROM ONLY public.tab1_mod WHERE ((tab1_mod.ctid = $1) AND (tab1_mod.xc_node_id = $2))
    ->  Hash Join
-         Output: tab1_mod.val, tab1_mod.val2, tab1_mod.ctid, tab1_mod.xc_node_id, tab2_mod.ctid
-         Hash Cond: ((tab1_mod.val = tab2_mod.val) AND (tab1_mod.val2 = tab2_mod.val2))
+         Output: tab1_mod.val, tab1_mod.val2, tab1_mod.ctid, tab1_mod.xc_node_id, ctid
+         Hash Cond: ((tab1_mod.val = val) AND (tab1_mod.val2 = val2))
          ->  Data Node Scan on tab1_mod "_REMOTE_TABLE_QUERY_"
                Output: tab1_mod.val, tab1_mod.val2, tab1_mod.ctid, tab1_mod.xc_node_id
                Remote query: SELECT val, val2, ctid, xc_node_id FROM ONLY public.tab1_mod WHERE true
          ->  Hash
-               Output: tab2_mod.ctid, tab2_mod.val, tab2_mod.val2
+               Output: ctid, val, val2
                ->  Data Node Scan on tab2_mod "_REMOTE_TABLE_QUERY_"
-                     Output: tab2_mod.ctid, tab2_mod.val, tab2_mod.val2
+                     Output: ctid, val, val2
                      Remote query: SELECT ctid, val, val2 FROM ONLY public.tab2_mod WHERE true
 (13 rows)
 
 explain (costs off, verbose on, nodes off) update tab1_rep set val2 = 1000 from tab2_rep
 		where tab1_rep.val = tab2_rep.val and tab1_rep.val2 = tab2_rep.val2;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+                                            QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
  Update on public.tab1_rep
-   Remote query: UPDATE ONLY public.tab1_rep SET val2 = $2 WHERE (tab1_rep.ctid = $3)
+   Remote query: UPDATE ONLY public.tab1_rep SET val = $1, val2 = $2 WHERE ((tab1_rep.ctid = $3))
    ->  Hash Join
-         Output: tab1_rep.val, 1000, tab1_rep.val, tab1_rep.val2, tab1_rep.ctid, tab2_rep.ctid
-         Hash Cond: ((tab1_rep.val = tab2_rep.val) AND (tab1_rep.val2 = tab2_rep.val2))
+         Output: tab1_rep.val, 1000, tab1_rep.val, tab1_rep.val2, tab1_rep.ctid, ctid
+         Hash Cond: ((tab1_rep.val = val) AND (tab1_rep.val2 = val2))
          ->  Data Node Scan on tab1_rep "_REMOTE_TABLE_QUERY_"
                Output: tab1_rep.val, tab1_rep.val2, tab1_rep.ctid
                Remote query: SELECT val, val2, ctid FROM ONLY public.tab1_rep WHERE true
          ->  Hash
-               Output: tab2_rep.ctid, tab2_rep.val, tab2_rep.val2
+               Output: ctid, val, val2
                ->  Data Node Scan on tab2_rep "_REMOTE_TABLE_QUERY_"
-                     Output: tab2_rep.ctid, tab2_rep.val, tab2_rep.val2
+                     Output: ctid, val, val2
                      Remote query: SELECT ctid, val, val2 FROM ONLY public.tab2_rep WHERE true
 (13 rows)
 
@@ -816,17 +816,17 @@ explain (costs off, verbose on, nodes off) delete from tab1_rep using tab2_rep
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
  Delete on public.tab1_rep
-   Remote query: DELETE FROM ONLY public.tab1_rep WHERE (tab1_rep.ctid = $1)
+   Remote query: DELETE FROM ONLY public.tab1_rep WHERE ((tab1_rep.ctid = $1))
    ->  Hash Join
-         Output: tab1_rep.val, tab1_rep.val2, tab1_rep.ctid, tab2_rep.ctid
-         Hash Cond: ((tab1_rep.val = tab2_rep.val) AND (tab1_rep.val2 = tab2_rep.val2))
+         Output: tab1_rep.val, tab1_rep.val2, tab1_rep.ctid, ctid
+         Hash Cond: ((tab1_rep.val = val) AND (tab1_rep.val2 = val2))
          ->  Data Node Scan on tab1_rep "_REMOTE_TABLE_QUERY_"
                Output: tab1_rep.val, tab1_rep.val2, tab1_rep.ctid
                Remote query: SELECT val, val2, ctid FROM ONLY public.tab1_rep WHERE true
          ->  Hash
-               Output: tab2_rep.ctid, tab2_rep.val, tab2_rep.val2
+               Output: ctid, val, val2
                ->  Data Node Scan on tab2_rep "_REMOTE_TABLE_QUERY_"
-                     Output: tab2_rep.ctid, tab2_rep.val, tab2_rep.val2
+                     Output: ctid, val, val2
                      Remote query: SELECT ctid, val, val2 FROM ONLY public.tab2_rep WHERE true
 (13 rows)
 

@@ -5,7 +5,7 @@
  *	  wherein you authenticate a user by seeing what IP address the system
  *	  says he comes from and choosing authentication method based on it).
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -37,11 +37,20 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 
+#ifdef USE_LDAP
+#ifdef WIN32
+#include <winldap.h>
+#else
+#include <ldap.h>
+#endif
+#endif
+
 
 #define atooid(x)  ((Oid) strtoul((x), NULL, 10))
 #define atoxid(x)  ((TransactionId) strtoul((x), NULL, 10))
 
 #define MAX_TOKEN	256
+#define MAX_LINE	8192
 
 /* callback data for check_network_callback */
 typedef struct check_network_data
@@ -73,22 +82,19 @@ static List *parsed_hba_lines = NIL;
 static MemoryContext parsed_hba_context = NULL;
 
 /*
- * These variables hold the pre-parsed contents of the ident usermap
- * configuration file.	ident_lines is a triple-nested list of lines, fields
- * and tokens, as returned by tokenize_file.  There will be one line in
- * ident_lines for each (non-empty, non-comment) line of the file.	Note there
- * will always be at least one field, since blank lines are not entered in the
- * data structure.	ident_line_nums is an integer list containing the actual
- * line number for each line represented in ident_lines.  ident_context is
- * the memory context holding all this.
+ * pre-parsed content of ident mapping file: list of IdentLine structs.
+ * parsed_ident_context is the memory context where it lives.
+ *
+ * NOTE: the IdentLine structs can contain pre-compiled regular expressions
+ * that live outside the memory context. Before destroying or resetting the
+ * memory context, they need to be expliticly free'd.
  */
-static List *ident_lines = NIL;
-static List *ident_line_nums = NIL;
-static MemoryContext ident_context = NULL;
+static List *parsed_ident_lines = NIL;
+static MemoryContext parsed_ident_context = NULL;
 
 
 static MemoryContext tokenize_file(const char *filename, FILE *file,
-			  List **lines, List **line_nums);
+			  List **lines, List **line_nums, List **raw_lines);
 static List *tokenize_inc_file(List *tokens, const char *outer_filename,
 				  const char *inc_filename);
 static bool parse_hba_auth_opt(char *name, char *val, HbaLine *hbaline,
@@ -106,7 +112,8 @@ pg_isblank(const char c)
 
 
 /*
- * Grab one token out of fp. Tokens are strings of non-blank
+ * Grab one token out of the string pointed to by lineptr.
+ * Tokens are strings of non-blank
  * characters bounded by blank characters, commas, beginning of line, and
  * end of line. Blank means space or tab. Tokens can be delimited by
  * double quotes (this allows the inclusion of blanks, but not newlines).
@@ -129,7 +136,7 @@ pg_isblank(const char c)
  * Handle comments.
  */
 static bool
-next_token(FILE *fp, char *buf, int bufsz, bool *initial_quote,
+next_token(char **lineptr, char *buf, int bufsz, bool *initial_quote,
 		   bool *terminating_comma)
 {
 	int			c;
@@ -146,10 +153,10 @@ next_token(FILE *fp, char *buf, int bufsz, bool *initial_quote,
 	*terminating_comma = false;
 
 	/* Move over initial whitespace and commas */
-	while ((c = getc(fp)) != EOF && (pg_isblank(c) || c == ','))
+	while ((c = (*(*lineptr)++)) != '\0' && (pg_isblank(c) || c == ','))
 		;
 
-	if (c == EOF || c == '\n')
+	if (c == '\0' || c == '\n')
 	{
 		*buf = '\0';
 		return false;
@@ -159,17 +166,17 @@ next_token(FILE *fp, char *buf, int bufsz, bool *initial_quote,
 	 * Build a token in buf of next characters up to EOF, EOL, unquoted comma,
 	 * or unquoted whitespace.
 	 */
-	while (c != EOF && c != '\n' &&
+	while (c != '\0' && c != '\n' &&
 		   (!pg_isblank(c) || in_quote))
 	{
 		/* skip comments to EOL */
 		if (c == '#' && !in_quote)
 		{
-			while ((c = getc(fp)) != EOF && c != '\n')
+			while ((c = (*(*lineptr)++)) != '\0' && c != '\n')
 				;
 			/* If only comment, consume EOL too; return EOL */
-			if (c != EOF && buf == start_buf)
-				c = getc(fp);
+			if (c != '\0' && buf == start_buf)
+				(*lineptr)++;
 			break;
 		}
 
@@ -181,7 +188,7 @@ next_token(FILE *fp, char *buf, int bufsz, bool *initial_quote,
 			   errmsg("authentication file token too long, skipping: \"%s\"",
 					  start_buf)));
 			/* Discard remainder of line */
-			while ((c = getc(fp)) != EOF && c != '\n')
+			while ((c = (*(*lineptr)++)) != '\0' && c != '\n')
 				;
 			break;
 		}
@@ -210,15 +217,14 @@ next_token(FILE *fp, char *buf, int bufsz, bool *initial_quote,
 				*initial_quote = true;
 		}
 
-		c = getc(fp);
+		c = *(*lineptr)++;
 	}
 
 	/*
 	 * Put back the char right after the token (critical in case it is EOL,
 	 * since we need to detect end-of-line at next call).
 	 */
-	if (c != EOF)
-		ungetc(c, fp);
+	(*lineptr)--;
 
 	*buf = '\0';
 
@@ -253,13 +259,13 @@ copy_hba_token(HbaToken *in)
 
 
 /*
- * Tokenize one HBA field from a file, handling file inclusion and comma lists.
+ * Tokenize one HBA field from a line, handling file inclusion and comma lists.
  *
  * The result is a List of HbaToken structs for each individual token,
  * or NIL if we reached EOL.
  */
 static List *
-next_field_expand(const char *filename, FILE *file)
+next_field_expand(const char *filename, char **lineptr)
 {
 	char		buf[MAX_TOKEN];
 	bool		trailing_comma;
@@ -268,7 +274,7 @@ next_field_expand(const char *filename, FILE *file)
 
 	do
 	{
-		if (!next_token(file, buf, sizeof(buf), &initial_quote, &trailing_comma))
+		if (!next_token(lineptr, buf, sizeof(buf), &initial_quote, &trailing_comma))
 			break;
 
 		/* Is this referencing a file? */
@@ -330,7 +336,7 @@ tokenize_inc_file(List *tokens,
 	}
 
 	/* There is possible recursion here if the file contains @ */
-	linecxt = tokenize_file(inc_fullname, inc_file, &inc_lines, &inc_line_nums);
+	linecxt = tokenize_file(inc_fullname, inc_file, &inc_lines, &inc_line_nums, NULL);
 
 	FreeFile(inc_file);
 	pfree(inc_fullname);
@@ -359,8 +365,8 @@ tokenize_inc_file(List *tokens,
 }
 
 /*
- * Tokenize the given file, storing the resulting data into two Lists: a
- * List of lines, and a List of line numbers.
+ * Tokenize the given file, storing the resulting data into three Lists: a
+ * List of lines, a List of line numbers, and a List of raw line contents.
  *
  * The list of lines is a triple-nested List structure.  Each line is a List of
  * fields, and each field is a List of HbaTokens.
@@ -372,7 +378,7 @@ tokenize_inc_file(List *tokens,
  */
 static MemoryContext
 tokenize_file(const char *filename, FILE *file,
-			  List **lines, List **line_nums)
+			  List **lines, List **line_nums, List **raw_lines)
 {
 	List	   *current_line = NIL;
 	List	   *current_field = NIL;
@@ -391,30 +397,51 @@ tokenize_file(const char *filename, FILE *file,
 
 	while (!feof(file) && !ferror(file))
 	{
-		current_field = next_field_expand(filename, file);
+		char		rawline[MAX_LINE];
+		char	   *lineptr;
 
-		/* add tokens to list, unless we are at EOL or comment start */
-		if (list_length(current_field) > 0)
+		if (!fgets(rawline, sizeof(rawline), file))
+			break;
+		if (strlen(rawline) == MAX_LINE - 1)
+			/* Line too long! */
+			ereport(ERROR,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("authentication file line too long"),
+					 errcontext("line %d of configuration file \"%s\"",
+								line_number, filename)));
+
+		/* Strip trailing linebreak from rawline */
+		lineptr = rawline + strlen(rawline) - 1;
+		while (lineptr >= rawline && (*lineptr == '\n' || *lineptr == '\r'))
+			*lineptr-- = '\0';
+
+		lineptr = rawline;
+		while (strlen(lineptr) > 0)
 		{
-			if (current_line == NIL)
+			current_field = next_field_expand(filename, &lineptr);
+
+			/* add tokens to list, unless we are at EOL or comment start */
+			if (list_length(current_field) > 0)
 			{
-				/* make a new line List, record its line number */
-				current_line = lappend(current_line, current_field);
-				*lines = lappend(*lines, current_line);
-				*line_nums = lappend_int(*line_nums, line_number);
-			}
-			else
-			{
-				/* append tokens to current line's list */
-				current_line = lappend(current_line, current_field);
+				if (current_line == NIL)
+				{
+					/* make a new line List, record its line number */
+					current_line = lappend(current_line, current_field);
+					*lines = lappend(*lines, current_line);
+					*line_nums = lappend_int(*line_nums, line_number);
+					if (raw_lines)
+						*raw_lines = lappend(*raw_lines, pstrdup(rawline));
+				}
+				else
+				{
+					/* append tokens to current line's list */
+					current_line = lappend(current_line, current_field);
+				}
 			}
 		}
-		else
-		{
-			/* we are at real or logical EOL, so force a new line List */
-			current_line = NIL;
-			line_number++;
-		}
+		/* we are at real or logical EOL, so force a new line List */
+		current_line = NIL;
+		line_number++;
 	}
 
 	MemoryContextSwitchTo(oldcxt);
@@ -763,7 +790,7 @@ check_same_host_or_net(SockAddr *raddr, IPCompareMethod method)
 						authname, argname), \
 				 errcontext("line %d of configuration file \"%s\"", \
 						line_num, HbaFileName))); \
-		return false; \
+		return NULL; \
 	} \
 } while (0);
 
@@ -782,8 +809,7 @@ check_same_host_or_net(SockAddr *raddr, IPCompareMethod method)
 				(errcode(ERRCODE_CONFIG_FILE_ERROR), \
 				 errmsg("missing entry in file \"%s\" at end of line %d", \
 						IdentFileName, line_number))); \
-		*error_p = true; \
-		return; \
+		return NULL; \
 	} \
 } while (0);
 
@@ -794,8 +820,7 @@ check_same_host_or_net(SockAddr *raddr, IPCompareMethod method)
 				 errmsg("multiple values in ident field"), \
 				 errcontext("line %d of configuration file \"%s\"", \
 						line_number, IdentFileName))); \
-		*error_p = true; \
-		return; \
+		return NULL; \
 	} \
 } while (0);
 
@@ -812,7 +837,7 @@ check_same_host_or_net(SockAddr *raddr, IPCompareMethod method)
  * NULL.
  */
 static HbaLine *
-parse_hba_line(List *line, int line_num)
+parse_hba_line(List *line, int line_num, char *raw_line)
 {
 	char	   *str;
 	struct addrinfo *gai_result;
@@ -828,6 +853,7 @@ parse_hba_line(List *line, int line_num)
 
 	parsedline = palloc0(sizeof(HbaLine));
 	parsedline->linenumber = line_num;
+	parsedline->rawline = pstrdup(raw_line);
 
 	/* Check the record type. */
 	field = list_head(line);
@@ -1341,7 +1367,7 @@ parse_hba_line(List *line, int line_num)
 			{
 				ereport(LOG,
 						(errcode(ERRCODE_CONFIG_FILE_ERROR),
-						 errmsg("cannot use ldapbasedn, ldapbinddn, ldapbindpasswd, or ldapsearchattribute together with ldapprefix"),
+						 errmsg("cannot use ldapbasedn, ldapbinddn, ldapbindpasswd, ldapsearchattribute, or ldapurl together with ldapprefix"),
 						 errcontext("line %d of configuration file \"%s\"",
 									line_num, HbaFileName)));
 				return NULL;
@@ -1383,6 +1409,10 @@ parse_hba_line(List *line, int line_num)
 static bool
 parse_hba_auth_opt(char *name, char *val, HbaLine *hbaline, int line_num)
 {
+#ifdef USE_LDAP
+	hbaline->ldapscope = LDAP_SCOPE_SUBTREE;
+#endif
+
 	if (strcmp(name, "map") == 0)
 	{
 		if (hbaline->auth_method != uaIdent &&
@@ -1441,6 +1471,55 @@ parse_hba_auth_opt(char *name, char *val, HbaLine *hbaline, int line_num)
 	{
 		REQUIRE_AUTH_OPTION(uaPAM, "pamservice", "pam");
 		hbaline->pamservice = pstrdup(val);
+	}
+	else if (strcmp(name, "ldapurl") == 0)
+	{
+#ifdef LDAP_API_FEATURE_X_OPENLDAP
+		LDAPURLDesc *urldata;
+		int			rc;
+#endif
+
+		REQUIRE_AUTH_OPTION(uaLDAP, "ldapurl", "ldap");
+#ifdef LDAP_API_FEATURE_X_OPENLDAP
+		rc = ldap_url_parse(val, &urldata);
+		if (rc != LDAP_SUCCESS)
+		{
+			ereport(LOG,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("could not parse LDAP URL \"%s\": %s", val, ldap_err2string(rc))));
+			return false;
+		}
+
+		if (strcmp(urldata->lud_scheme, "ldap") != 0)
+		{
+			ereport(LOG,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+			errmsg("unsupported LDAP URL scheme: %s", urldata->lud_scheme)));
+			ldap_free_urldesc(urldata);
+			return false;
+		}
+
+		hbaline->ldapserver = pstrdup(urldata->lud_host);
+		hbaline->ldapport = urldata->lud_port;
+		hbaline->ldapbasedn = pstrdup(urldata->lud_dn);
+
+		if (urldata->lud_attrs)
+			hbaline->ldapsearchattribute = pstrdup(urldata->lud_attrs[0]);		/* only use first one */
+		hbaline->ldapscope = urldata->lud_scope;
+		if (urldata->lud_filter)
+		{
+			ereport(LOG,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("filters not supported in LDAP URLs")));
+			ldap_free_urldesc(urldata);
+			return false;
+		}
+		ldap_free_urldesc(urldata);
+#else							/* not OpenLDAP */
+		ereport(LOG,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("LDAP URLs not supported on this platform")));
+#endif   /* not OpenLDAP */
 	}
 	else if (strcmp(name, "ldaptls") == 0)
 	{
@@ -1705,8 +1784,10 @@ load_hba(void)
 	FILE	   *file;
 	List	   *hba_lines = NIL;
 	List	   *hba_line_nums = NIL;
+	List	   *hba_raw_lines = NIL;
 	ListCell   *line,
-			   *line_num;
+			   *line_num,
+			   *raw_line;
 	List	   *new_parsed_lines = NIL;
 	bool		ok = true;
 	MemoryContext linecxt;
@@ -1723,7 +1804,7 @@ load_hba(void)
 		return false;
 	}
 
-	linecxt = tokenize_file(HbaFileName, file, &hba_lines, &hba_line_nums);
+	linecxt = tokenize_file(HbaFileName, file, &hba_lines, &hba_line_nums, &hba_raw_lines);
 	FreeFile(file);
 
 	/* Now parse all the lines */
@@ -1733,11 +1814,11 @@ load_hba(void)
 								   ALLOCSET_DEFAULT_MINSIZE,
 								   ALLOCSET_DEFAULT_MAXSIZE);
 	oldcxt = MemoryContextSwitchTo(hbacxt);
-	forboth(line, hba_lines, line_num, hba_line_nums)
+	forthree(line, hba_lines, line_num, hba_line_nums, raw_line, hba_raw_lines)
 	{
 		HbaLine    *newline;
 
-		if ((newline = parse_hba_line(lfirst(line), lfirst_int(line_num))) == NULL)
+		if ((newline = parse_hba_line(lfirst(line), lfirst_int(line_num), lfirst(raw_line))) == NULL)
 		{
 			/*
 			 * Parse error in the file, so indicate there's a problem.  NB: a
@@ -1794,34 +1875,37 @@ load_hba(void)
 }
 
 /*
- *	Process one line from the ident config file.
+ * Parse one tokenised line from the ident config file and store the result in
+ * an IdentLine structure, or NULL if parsing fails.
  *
- *	Take the line and compare it to the needed map, pg_role and ident_user.
- *	*found_p and *error_p are set according to our results.
+ * The tokenised line is a nested List of fields and tokens.
+ *
+ * If ident_user is a regular expression (ie. begins with a slash), it is
+ * compiled and stored in IdentLine structure.
+ *
+ * Note: this function leaks memory when an error occurs.  Caller is expected
+ * to have set a memory context that will be reset if this function returns
+ * NULL.
  */
-static void
-parse_ident_usermap(List *line, int line_number, const char *usermap_name,
-					const char *pg_role, const char *ident_user,
-					bool case_insensitive, bool *found_p, bool *error_p)
+static IdentLine *
+parse_ident_line(List *line, int line_number)
 {
 	ListCell   *field;
 	List	   *tokens;
 	HbaToken   *token;
-	char	   *file_map;
-	char	   *file_pgrole;
-	char	   *file_ident_user;
-
-	*found_p = false;
-	*error_p = false;
+	IdentLine  *parsedline;
 
 	Assert(line != NIL);
 	field = list_head(line);
+
+	parsedline = palloc0(sizeof(IdentLine));
+	parsedline->linenumber = line_number;
 
 	/* Get the map token (must exist) */
 	tokens = lfirst(field);
 	IDENT_MULTI_VALUE(tokens);
 	token = linitial(tokens);
-	file_map = token->string;
+	parsedline->usermap = pstrdup(token->string);
 
 	/* Get the ident user token */
 	field = lnext(field);
@@ -1829,7 +1913,7 @@ parse_ident_usermap(List *line, int line_number, const char *usermap_name,
 	tokens = lfirst(field);
 	IDENT_MULTI_VALUE(tokens);
 	token = linitial(tokens);
-	file_ident_user = token->string;
+	parsedline->ident_user = pstrdup(token->string);
 
 	/* Get the PG rolename token */
 	field = lnext(field);
@@ -1837,14 +1921,62 @@ parse_ident_usermap(List *line, int line_number, const char *usermap_name,
 	tokens = lfirst(field);
 	IDENT_MULTI_VALUE(tokens);
 	token = linitial(tokens);
-	file_pgrole = token->string;
+	parsedline->pg_role = pstrdup(token->string);
 
-	if (strcmp(file_map, usermap_name) != 0)
+	if (parsedline->ident_user[0] == '/')
+	{
+		/*
+		 * When system username starts with a slash, treat it as a regular
+		 * expression. Pre-compile it.
+		 */
+		int			r;
+		pg_wchar   *wstr;
+		int			wlen;
+
+		wstr = palloc((strlen(parsedline->ident_user + 1) + 1) * sizeof(pg_wchar));
+		wlen = pg_mb2wchar_with_len(parsedline->ident_user + 1,
+									wstr, strlen(parsedline->ident_user + 1));
+
+		r = pg_regcomp(&parsedline->re, wstr, wlen, REG_ADVANCED, C_COLLATION_OID);
+		if (r)
+		{
+			char		errstr[100];
+
+			pg_regerror(r, &parsedline->re, errstr, sizeof(errstr));
+			ereport(LOG,
+					(errcode(ERRCODE_INVALID_REGULAR_EXPRESSION),
+					 errmsg("invalid regular expression \"%s\": %s",
+							parsedline->ident_user + 1, errstr)));
+
+			pfree(wstr);
+			return NULL;
+		}
+		pfree(wstr);
+	}
+
+	return parsedline;
+}
+
+/*
+ *	Process one line from the parsed ident config lines.
+ *
+ *	Compare input parsed ident line to the needed map, pg_role and ident_user.
+ *	*found_p and *error_p are set according to our results.
+ */
+static void
+check_ident_usermap(IdentLine *identLine, const char *usermap_name,
+					const char *pg_role, const char *ident_user,
+					bool case_insensitive, bool *found_p, bool *error_p)
+{
+	*found_p = false;
+	*error_p = false;
+
+	if (strcmp(identLine->usermap, usermap_name) != 0)
 		/* Line does not match the map name we're looking for, so just abort */
 		return;
 
 	/* Match? */
-	if (file_ident_user[0] == '/')
+	if (identLine->ident_user[0] == '/')
 	{
 		/*
 		 * When system username starts with a slash, treat it as a regular
@@ -1853,41 +1985,16 @@ parse_ident_usermap(List *line, int line_number, const char *usermap_name,
 		 * for \1 in the database username string, if present.
 		 */
 		int			r;
-		regex_t		re;
 		regmatch_t	matches[2];
 		pg_wchar   *wstr;
 		int			wlen;
 		char	   *ofs;
 		char	   *regexp_pgrole;
 
-		wstr = palloc((strlen(file_ident_user + 1) + 1) * sizeof(pg_wchar));
-		wlen = pg_mb2wchar_with_len(file_ident_user + 1, wstr, strlen(file_ident_user + 1));
-
-		/*
-		 * XXX: Major room for optimization: regexps could be compiled when
-		 * the file is loaded and then re-used in every connection.
-		 */
-		r = pg_regcomp(&re, wstr, wlen, REG_ADVANCED, C_COLLATION_OID);
-		if (r)
-		{
-			char		errstr[100];
-
-			pg_regerror(r, &re, errstr, sizeof(errstr));
-			ereport(LOG,
-					(errcode(ERRCODE_INVALID_REGULAR_EXPRESSION),
-					 errmsg("invalid regular expression \"%s\": %s",
-							file_ident_user + 1, errstr)));
-
-			pfree(wstr);
-			*error_p = true;
-			return;
-		}
-		pfree(wstr);
-
 		wstr = palloc((strlen(ident_user) + 1) * sizeof(pg_wchar));
 		wlen = pg_mb2wchar_with_len(ident_user, wstr, strlen(ident_user));
 
-		r = pg_regexec(&re, wstr, wlen, 0, NULL, 2, matches, 0);
+		r = pg_regexec(&identLine->re, wstr, wlen, 0, NULL, 2, matches, 0);
 		if (r)
 		{
 			char		errstr[100];
@@ -1895,21 +2002,20 @@ parse_ident_usermap(List *line, int line_number, const char *usermap_name,
 			if (r != REG_NOMATCH)
 			{
 				/* REG_NOMATCH is not an error, everything else is */
-				pg_regerror(r, &re, errstr, sizeof(errstr));
+				pg_regerror(r, &identLine->re, errstr, sizeof(errstr));
 				ereport(LOG,
 						(errcode(ERRCODE_INVALID_REGULAR_EXPRESSION),
 					 errmsg("regular expression match for \"%s\" failed: %s",
-							file_ident_user + 1, errstr)));
+							identLine->ident_user + 1, errstr)));
 				*error_p = true;
 			}
 
 			pfree(wstr);
-			pg_regfree(&re);
 			return;
 		}
 		pfree(wstr);
 
-		if ((ofs = strstr(file_pgrole, "\\1")) != NULL)
+		if ((ofs = strstr(identLine->pg_role, "\\1")) != NULL)
 		{
 			/* substitution of the first argument requested */
 			if (matches[1].rm_so < 0)
@@ -1917,8 +2023,7 @@ parse_ident_usermap(List *line, int line_number, const char *usermap_name,
 				ereport(LOG,
 						(errcode(ERRCODE_INVALID_REGULAR_EXPRESSION),
 						 errmsg("regular expression \"%s\" has no subexpressions as requested by backreference in \"%s\"",
-								file_ident_user + 1, file_pgrole)));
-				pg_regfree(&re);
+							identLine->ident_user + 1, identLine->pg_role)));
 				*error_p = true;
 				return;
 			}
@@ -1927,8 +2032,8 @@ parse_ident_usermap(List *line, int line_number, const char *usermap_name,
 			 * length: original length minus length of \1 plus length of match
 			 * plus null terminator
 			 */
-			regexp_pgrole = palloc0(strlen(file_pgrole) - 2 + (matches[1].rm_eo - matches[1].rm_so) + 1);
-			strncpy(regexp_pgrole, file_pgrole, (ofs - file_pgrole));
+			regexp_pgrole = palloc0(strlen(identLine->pg_role) - 2 + (matches[1].rm_eo - matches[1].rm_so) + 1);
+			strncpy(regexp_pgrole, identLine->pg_role, (ofs - identLine->pg_role));
 			memcpy(regexp_pgrole + strlen(regexp_pgrole),
 				   ident_user + matches[1].rm_so,
 				   matches[1].rm_eo - matches[1].rm_so);
@@ -1937,10 +2042,8 @@ parse_ident_usermap(List *line, int line_number, const char *usermap_name,
 		else
 		{
 			/* no substitution, so copy the match */
-			regexp_pgrole = pstrdup(file_pgrole);
+			regexp_pgrole = pstrdup(identLine->pg_role);
 		}
-
-		pg_regfree(&re);
 
 		/*
 		 * now check if the username actually matched what the user is trying
@@ -1965,14 +2068,14 @@ parse_ident_usermap(List *line, int line_number, const char *usermap_name,
 		/* Not regular expression, so make complete match */
 		if (case_insensitive)
 		{
-			if (pg_strcasecmp(file_pgrole, pg_role) == 0 &&
-				pg_strcasecmp(file_ident_user, ident_user) == 0)
+			if (pg_strcasecmp(identLine->pg_role, pg_role) == 0 &&
+				pg_strcasecmp(identLine->ident_user, ident_user) == 0)
 				*found_p = true;
 		}
 		else
 		{
-			if (strcmp(file_pgrole, pg_role) == 0 &&
-				strcmp(file_ident_user, ident_user) == 0)
+			if (strcmp(identLine->pg_role, pg_role) == 0 &&
+				strcmp(identLine->ident_user, ident_user) == 0)
 				*found_p = true;
 		}
 	}
@@ -2021,13 +2124,12 @@ check_usermap(const char *usermap_name,
 	}
 	else
 	{
-		ListCell   *line_cell,
-				   *num_cell;
+		ListCell   *line_cell;
 
-		forboth(line_cell, ident_lines, num_cell, ident_line_nums)
+		foreach(line_cell, parsed_ident_lines)
 		{
-			parse_ident_usermap(lfirst(line_cell), lfirst_int(num_cell),
-						  usermap_name, pg_role, auth_user, case_insensitive,
+			check_ident_usermap(lfirst(line_cell), usermap_name,
+								pg_role, auth_user, case_insensitive,
 								&found_entry, &error);
 			if (found_entry || error)
 				break;
@@ -2044,21 +2146,26 @@ check_usermap(const char *usermap_name,
 
 
 /*
- * Read the ident config file and populate ident_lines and ident_line_nums.
+ * Read the ident config file and create a List of IdentLine records for
+ * the contents.
  *
- * Like parsed_hba_lines, ident_lines is a triple-nested List of lines, fields
- * and tokens.
+ * This works the same as load_hba(), but for the user config file.
  */
-void
+bool
 load_ident(void)
 {
 	FILE	   *file;
-
-	if (ident_context != NULL)
-	{
-		MemoryContextDelete(ident_context);
-		ident_context = NULL;
-	}
+	List	   *ident_lines = NIL;
+	List	   *ident_line_nums = NIL;
+	ListCell   *line_cell,
+			   *num_cell,
+			   *parsed_line_cell;
+	List	   *new_parsed_lines = NIL;
+	bool		ok = true;
+	MemoryContext linecxt;
+	MemoryContext oldcxt;
+	MemoryContext ident_context;
+	IdentLine  *newline;
 
 	file = AllocateFile(IdentFileName, "r");
 	if (file == NULL)
@@ -2068,13 +2175,82 @@ load_ident(void)
 				(errcode_for_file_access(),
 				 errmsg("could not open usermap file \"%s\": %m",
 						IdentFileName)));
+		return false;
 	}
-	else
+
+	linecxt = tokenize_file(IdentFileName, file, &ident_lines, &ident_line_nums, NULL);
+	FreeFile(file);
+
+	/* Now parse all the lines */
+	ident_context = AllocSetContextCreate(TopMemoryContext,
+										  "ident parser context",
+										  ALLOCSET_DEFAULT_MINSIZE,
+										  ALLOCSET_DEFAULT_MINSIZE,
+										  ALLOCSET_DEFAULT_MAXSIZE);
+	oldcxt = MemoryContextSwitchTo(ident_context);
+	forboth(line_cell, ident_lines, num_cell, ident_line_nums)
 	{
-		ident_context = tokenize_file(IdentFileName, file, &ident_lines,
-									  &ident_line_nums);
-		FreeFile(file);
+		if ((newline = parse_ident_line(lfirst(line_cell), lfirst_int(num_cell))) == NULL)
+		{
+			/*
+			 * Parse error in the file, so indicate there's a problem.  Free
+			 * all the memory and regular expressions of lines parsed so far.
+			 */
+			foreach(parsed_line_cell, new_parsed_lines)
+			{
+				newline = (IdentLine *) lfirst(parsed_line_cell);
+				if (newline->ident_user[0] == '/')
+					pg_regfree(&newline->re);
+			}
+			MemoryContextReset(ident_context);
+			new_parsed_lines = NIL;
+			ok = false;
+
+			/*
+			 * Keep parsing the rest of the file so we can report errors on
+			 * more than the first row. Error has already been reported in the
+			 * parsing function, so no need to log it here.
+			 */
+			continue;
+		}
+
+		new_parsed_lines = lappend(new_parsed_lines, newline);
 	}
+
+	/* Free tokenizer memory */
+	MemoryContextDelete(linecxt);
+	MemoryContextSwitchTo(oldcxt);
+
+	if (!ok)
+	{
+		/* File contained one or more errors, so bail out */
+		foreach(parsed_line_cell, new_parsed_lines)
+		{
+			newline = (IdentLine *) lfirst(parsed_line_cell);
+			if (newline->ident_user[0] == '/')
+				pg_regfree(&newline->re);
+		}
+		MemoryContextDelete(ident_context);
+		return false;
+	}
+
+	/* Loaded new file successfully, replace the one we use */
+	if (parsed_ident_lines != NIL)
+	{
+		foreach(parsed_line_cell, parsed_ident_lines)
+		{
+			newline = (IdentLine *) lfirst(parsed_line_cell);
+			if (newline->ident_user[0] == '/')
+				pg_regfree(&newline->re);
+		}
+	}
+	if (parsed_ident_context != NULL)
+		MemoryContextDelete(parsed_ident_context);
+
+	parsed_ident_context = ident_context;
+	parsed_ident_lines = new_parsed_lines;
+
+	return true;
 }
 
 

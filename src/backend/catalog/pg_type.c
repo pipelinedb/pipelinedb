@@ -3,7 +3,7 @@
  * pg_type.c
  *	  routines to support manipulation of the pg_type relation
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -15,6 +15,7 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
@@ -91,7 +92,7 @@ TypeShellMake(const char *typeName, Oid typeNamespace, Oid ownerId)
 	values[Anum_pg_type_typname - 1] = NameGetDatum(&name);
 	values[Anum_pg_type_typnamespace - 1] = ObjectIdGetDatum(typeNamespace);
 	values[Anum_pg_type_typowner - 1] = ObjectIdGetDatum(ownerId);
-	values[Anum_pg_type_typlen - 1] = Int16GetDatum(sizeof(int4));
+	values[Anum_pg_type_typlen - 1] = Int16GetDatum(sizeof(int32));
 	values[Anum_pg_type_typbyval - 1] = BoolGetDatum(true);
 	values[Anum_pg_type_typtype - 1] = CharGetDatum(TYPTYPE_PSEUDO);
 	values[Anum_pg_type_typcategory - 1] = CharGetDatum(TYPCATEGORY_PSEUDOTYPE);
@@ -162,8 +163,7 @@ TypeShellMake(const char *typeName, Oid typeNamespace, Oid ownerId)
 								 false);
 
 	/* Post creation hook for new shell type */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   TypeRelationId, typoid, 0, NULL);
+	InvokeObjectPostCreateHook(TypeRelationId, typoid, 0);
 
 	/*
 	 * clean up and return the type-oid
@@ -475,8 +475,7 @@ TypeCreate(Oid newTypeOid,
 								 rebuildDeps);
 
 	/* Post creation hook for new type */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   TypeRelationId, typeObjectId, 0, NULL);
+	InvokeObjectPostCreateHook(TypeRelationId, typeObjectId, 0);
 
 	/*
 	 * finish up
@@ -712,6 +711,8 @@ RenameTypeInternal(Oid typeOid, const char *newTypeName, Oid typeNamespace)
 
 	/* update the system catalog indexes */
 	CatalogUpdateIndexes(pg_type_desc, tuple);
+
+	InvokeObjectPostAlterHook(TypeRelationId, typeOid, 0);
 
 	heap_freetuple(tuple);
 	heap_close(pg_type_desc, RowExclusiveLock);

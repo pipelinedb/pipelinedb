@@ -8,7 +8,7 @@
  * None of this code is used during normal system operation.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/xlogutils.c
@@ -20,6 +20,7 @@
 #include "access/xlog.h"
 #include "access/xlogutils.h"
 #include "catalog/catalog.h"
+#include "common/relpath.h"
 #include "storage/smgr.h"
 #include "utils/guc.h"
 #include "utils/hsearch.h"
@@ -394,6 +395,8 @@ CreateFakeRelcacheEntry(RelFileNode rnode)
 	FakeRelCacheEntry fakeentry;
 	Relation	rel;
 
+	Assert(InRecovery);
+
 	/* Allocate the Relation struct and all related space in one block. */
 	fakeentry = palloc0(sizeof(FakeRelCacheEntryData));
 	rel = (Relation) fakeentry;
@@ -402,6 +405,9 @@ CreateFakeRelcacheEntry(RelFileNode rnode)
 	rel->rd_node = rnode;
 	/* We will never be working with temp rels during recovery */
 	rel->rd_backend = InvalidBackendId;
+
+	/* It must be a permanent table if we're in recovery. */
+	rel->rd_rel->relpersistence = RELPERSISTENCE_PERMANENT;
 
 	/* We don't know the name of the relation; use relfilenode instead */
 	sprintf(RelationGetRelationName(rel), "%u", rnode.relNode);

@@ -2,7 +2,8 @@
 <!--
 
 Use </link> not just </> so INSTALL.html can be created without links
-to the main documentation.  Don't use <xref>.
+to the main documentation.  Don't use <xref>; or if you must, wrap it
+in a standalone-ignore clause.
 
 -->
 
@@ -92,7 +93,7 @@ su - postgres
      <para>
       You need an <acronym>ISO</>/<acronym>ANSI</> C compiler (at least
       C89-compliant). Recent
-      versions of <productname>GCC</> are recommendable, but
+      versions of <productname>GCC</> are recommended, but
       <productname>PostgreSQL</> is known to build using a wide variety
       of compilers from different vendors.
      </para>
@@ -280,6 +281,16 @@ su - postgres
       encryption using those services.
      </para>
     </listitem>
+
+    <listitem>
+     <para>
+      To build the <productname>PostgreSQL</productname> documentation,
+      there is a separate set of requirements; see
+      <![%standalone-ignore;[<xref linkend="docguide-toolsets">.]]>
+      <![%standalone-include;[the main documentation's appendix on
+      documentation.]]>
+     </para>
+    </listitem>
    </itemizedlist>
   </para>
 
@@ -352,16 +363,18 @@ su - postgres
   <title>Getting The Source</title>
 
   <para>
-   The <productname>PostgreSQL</> &version; sources can be obtained by
-   anonymous FTP from <ulink
-   url="ftp://ftp.postgresql.org/pub/source/v&version;/postgresql-&version;.tar.gz"></ulink>.
-   Other download options can be found on our website:
-   <ulink url="http://www.postgresql.org/download/"></ulink>. After you
-   have obtained the file, unpack it:
+   The <productname>PostgreSQL</> &version; sources can be obtained from the
+   download section of our
+   website: <ulink url="http://www.postgresql.org/download/"></ulink>.  You
+   should get a file named <filename>postgresql-&version;.tar.gz</filename>
+   or <filename>postgresql-&version;.tar.bz2</filename>. After
+   you have obtained the file, unpack it:
 <screen>
 <userinput>gunzip postgresql-&version;.tar.gz</userinput>
 <userinput>tar xf postgresql-&version;.tar</userinput>
 </screen>
+   (Use <command>bunzip2</command> instead of <command>gunzip</command> if you
+   have the <filename>.bz2</filename> file.)
    This will create a directory
    <filename>postgresql-&version;</filename> under the current directory
    with the <productname>PostgreSQL</> sources.
@@ -2309,7 +2322,7 @@ createlang: language installation failed: ERROR:  could not load library "/opt/d
      </biblioentry>
 
      <biblioentry>
-       <title><ulink url="  http://www.redbooks.ibm.com/abstracts/sg245674.html?Open">Developing and Porting C and C++ Applications on AIX</ulink></title>
+       <title><ulink url="http://www.redbooks.ibm.com/abstracts/sg245674.html?Open">Developing and Porting C and C++ Applications on AIX</ulink></title>
        <publisher>
         <publishername>IBM Redbook</publishername>
        </publisher>
@@ -2810,15 +2823,6 @@ MANPATH=/usr/lib/scohelp/%L/man:/usr/dt/man:/usr/man:/usr/share/man:scohelp:/usr
     below.
    </para>
 
-   <para>
-    Note that PostgreSQL is bundled with Solaris 10 (from update 2).
-    Official packages are also available on
-    <ulink url="http://pgfoundry.org/projects/solarispackages/"></ulink>.
-    Packages for older Solaris versions (8, 9) you can be obtained
-    from <ulink url="http://www.sunfreeware.com/"></ulink> or
-    <ulink url="http://www.blastwave.org/"></ulink>.
-   </para>
-
    <sect3>
     <title>Required Tools</title>
 
@@ -2834,12 +2838,12 @@ MANPATH=/usr/lib/scohelp/%L/man:/usr/dt/man:/usr/man:/usr/share/man:scohelp:/usr
 
     <para>
      You can download Sun Studio
-     from <ulink url="http://developers.sun.com/sunstudio/downloads/"></ulink>.
+     from <ulink url="http://www.oracle.com/technetwork/server-storage/solarisstudio/downloads/"></ulink>.
      Many of GNU tools are integrated into Solaris 10, or they are
      present on the Solaris companion CD.  If you like packages for
      older version of Solaris, you can find these tools
-     at <ulink url="http://www.sunfreeware.com"></ulink>
-     or <ulink url="http://www.blastwave.org"></ulink>.  If you prefer
+     at <ulink url="http://www.sunfreeware.com"></ulink>.
+     If you prefer
      sources, look
      at <ulink url="http://www.gnu.org/order/ftp.html"></ulink>.
     </para>
@@ -2934,15 +2938,6 @@ LIBOBJS = snprintf.o
      and that is why 32-bit code is significant slower on this CPU
      family.
     </para>
-
-    <para>
-     Some tricks for tuning PostgreSQL and Solaris for performance can
-     be found
-     at <ulink url="http://www.sun.com/servers/coolthreads/tnb/applications_postgresql.jsp"></ulink>.
-     This article is primary focused on T2000 platform, but many of
-     the recommendations are also useful on other hardware with
-     Solaris.
-    </para>
    </sect3>
 
    <sect3>
@@ -2953,7 +2948,7 @@ LIBOBJS = snprintf.o
      documentation]]>
      <![%standalone-ignore[<xref linkend="dynamic-trace">]]> for further
      information.  You can also find more information in this
-     article: <ulink url="http://blogs.sun.com/robertlor/entry/user_level_dtrace_probes_in"></ulink>.
+     article: <ulink url="https://blogs.oracle.com/robertlor/entry/user_level_dtrace_probes_in"></ulink>.
     </para>
 
     <para>

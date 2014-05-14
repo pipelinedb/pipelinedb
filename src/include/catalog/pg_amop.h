@@ -30,7 +30,7 @@
  * intentional denormalization of the catalogs to buy lookup speed.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_amop.h
@@ -58,7 +58,7 @@ CATALOG(pg_amop,2602)
 	Oid			amopfamily;		/* the index opfamily this entry is for */
 	Oid			amoplefttype;	/* operator's left input data type */
 	Oid			amoprighttype;	/* operator's right input data type */
-	int2		amopstrategy;	/* operator strategy number */
+	int16		amopstrategy;	/* operator strategy number */
 	char		amoppurpose;	/* is operator for 's'earch or 'o'rdering? */
 	Oid			amopopr;		/* the operator's pg_operator OID */
 	Oid			amopmethod;		/* the index access method this entry is for */
@@ -766,5 +766,19 @@ DATA(insert (	4017   25 25 11 s	664 4000 0 ));
 DATA(insert (	4017   25 25 12 s	665 4000 0 ));
 DATA(insert (	4017   25 25 14 s	667 4000 0 ));
 DATA(insert (	4017   25 25 15 s	666 4000 0 ));
+
+/*
+ * SP-GiST range_ops
+ */
+DATA(insert (	3474   3831 3831 1 s	3893 4000 0 ));
+DATA(insert (	3474   3831 3831 2 s	3895 4000 0 ));
+DATA(insert (	3474   3831 3831 3 s	3888 4000 0 ));
+DATA(insert (	3474   3831 3831 4 s	3896 4000 0 ));
+DATA(insert (	3474   3831 3831 5 s	3894 4000 0 ));
+DATA(insert (	3474   3831 3831 6 s	3897 4000 0 ));
+DATA(insert (	3474   3831 3831 7 s	3890 4000 0 ));
+DATA(insert (	3474   3831 3831 8 s	3892 4000 0 ));
+DATA(insert (	3474   3831 2283 16 s	3889 4000 0 ));
+DATA(insert (	3474   3831 3831 18 s	3882 4000 0 ));
 
 #endif   /* PG_AMOP_H */

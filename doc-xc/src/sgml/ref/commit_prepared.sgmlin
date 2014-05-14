@@ -27,6 +27,7 @@ COMMIT PREPARED <replaceable class="PARAMETER">transaction_id</replaceable>
 
  <refsect1>
   <title>Description</title>
+
 &common;
   <para>
    <command>COMMIT PREPARED</command> commits a transaction that is in
@@ -37,6 +38,7 @@ COMMIT PREPARED <replaceable class="PARAMETER">transaction_id</replaceable>
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">transaction_id</replaceable></term>
@@ -53,6 +55,7 @@ COMMIT PREPARED <replaceable class="PARAMETER">transaction_id</replaceable>
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    To commit a prepared transaction, you must be either the same user that
    executed the transaction originally, or a superuser.  But you do not
@@ -91,9 +94,21 @@ COMMIT PREPARED <replaceable class="PARAMETER">transaction_id</replaceable>
 
 <programlisting>
 COMMIT PREPARED 'foobar';
-</programlisting>
-  </para>
+</programlisting></para>
 
+ </refsect1>
+
+ <refsect1>
+  <title>Compatibility</title>
+
+&common;
+  <para>
+   <command>COMMIT PREPARED</command> is a
+   <productname>PostgreSQL</productname> extension.  It is intended for use by
+   external transaction management systems, some of which are covered by
+   standards (such as X/Open XA), but the SQL side of those systems is not
+   standardized.
+  </para>
  </refsect1>
 
  <refsect1>
@@ -102,9 +117,6 @@ COMMIT PREPARED 'foobar';
   <simplelist type="inline">
    <member><xref linkend="sql-prepare-transaction"></member>
    <member><xref linkend="sql-rollback-prepared"></member>
-<!## XC>
-   <member><xref linkend="guc-xc-maintenance-mode"></member>
-<!## end>
   </simplelist>
  </refsect1>
 

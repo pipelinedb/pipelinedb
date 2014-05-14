@@ -3,7 +3,7 @@
  * pg_aggregate.c
  *	  routines to support manipulation of the pg_aggregate relation
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -15,6 +15,7 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
 #include "catalog/pg_aggregate.h"
@@ -41,7 +42,7 @@ static Oid lookup_agg_function(List *fnName, int nargs, Oid *input_types,
 /*
  * AggregateCreate
  */
-void
+Oid
 AggregateCreate(const char *aggName,
 				Oid aggNamespace,
 				Oid *aggArgTypes,
@@ -253,19 +254,16 @@ AggregateCreate(const char *aggName,
 	{
 		aclresult = pg_type_aclcheck(aggArgTypes[i], GetUserId(), ACL_USAGE);
 		if (aclresult != ACLCHECK_OK)
-			aclcheck_error(aclresult, ACL_KIND_TYPE,
-						   format_type_be(aggArgTypes[i]));
+			aclcheck_error_type(aclresult, aggArgTypes[i]);
 	}
 
 	aclresult = pg_type_aclcheck(aggTransType, GetUserId(), ACL_USAGE);
 	if (aclresult != ACLCHECK_OK)
-		aclcheck_error(aclresult, ACL_KIND_TYPE,
-					   format_type_be(aggTransType));
+		aclcheck_error_type(aclresult, aggTransType);
 
 	aclresult = pg_type_aclcheck(finaltype, GetUserId(), ACL_USAGE);
 	if (aclresult != ACLCHECK_OK)
-		aclcheck_error(aclresult, ACL_KIND_TYPE,
-					   format_type_be(finaltype));
+		aclcheck_error_type(aclresult, finaltype);
 
 
 	/*
@@ -382,6 +380,8 @@ AggregateCreate(const char *aggName,
 		referenced.objectSubId = 0;
 		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
 	}
+
+	return procOid;
 }
 
 /*

@@ -10,18 +10,15 @@ PostgreSQL documentation
   <refmiscinfo>Application</refmiscinfo>
  </refmeta>
 
-<!## PG>
  <refnamediv>
   <refname>postgres</refname>
+<!## PG>
   <refpurpose><productname>PostgreSQL</productname> database server</refpurpose>
- </refnamediv>
 <!## end>
 <!## XC>
- <refnamediv>
-  <refname>postgres</refname>
-  <refpurpose><productname>Postgres-XC</productname> database server</refpurpose>
- </refnamediv>
+  <refpurpose><productname>Postgres-XC</productname> coordinator and datanode</refpurpose>
 <!## end>
+ </refnamediv>
 
  <indexterm zone="app-postgres">
   <primary>postgres</primary>
@@ -38,15 +35,9 @@ PostgreSQL documentation
   <title>Description</title>
 
 &common;
-
   <para>
    <command>postgres</command> is the
-<!## PG>
    <productname>PostgreSQL</productname> database server.  In order
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> database server.  In order
-<!## end>
    for a client application to access a database it connects (over a
    network or locally) to a running <command>postgres</command> instance.
    The <command>postgres</command> instance then starts a separate server
@@ -94,10 +85,20 @@ PostgreSQL documentation
    can be used to manually recover from certain
    kinds of accidental damage to the system catalogs.
   </para>
+
+&xconly;
+<!## XC>
+  <para>
+   You should read "PostgreSQL database server" in this page as
+   coordinator or datanode.
+  </para>
+<!## end>
+
  </refsect1>
 
  <refsect1 id="app-postgres-options">
   <title>Options</title>
+
 &common;
    <para>
     <command>postgres</command> accepts the following command-line
@@ -123,12 +124,7 @@ PostgreSQL documentation
        <para>
         Enables run-time assertion checks, which is a debugging aid to
         detect programming mistakes.  This option is only available if
-<!## PG>
         assertions were enabled when <productname>PostgreSQL</> was
-<!## end>
-<!## XC>
-        assertions were enabled when <productname>Postgres-XC</> was
-<!## end>
         compiled. If so, the default is on.
        </para>
       </listitem>
@@ -164,16 +160,32 @@ PostgreSQL documentation
       <listitem>
        <para>
         Sets a named run-time parameter. The configuration parameters
-<!## PG>
         supported by <productname>PostgreSQL</productname> are
-<!## end>
-<!## XC>
-        supported by <productname>Postgres-XC</productname> are
-<!## end>
         described in <xref linkend="runtime-config">. Most of the
         other command line options are in fact short forms of such a
         parameter assignment.  <option>-c</> can appear multiple times
         to set multiple parameters.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-C <replaceable>name</replaceable></option></term>
+      <listitem>
+       <para>
+        Prints the value of the named run-time parameter, and exits.
+        (See the <option>-c</> option above for details.)  This can
+        be used on a running server, and returns values from
+        <filename>postgresql.conf</>, modified by any parameters
+        supplied in this invocation.  It does not reflect parameters
+        supplied when the cluster was started.
+       </para>
+
+       <para>
+        This option is meant for other programs that interact with a server
+        instance, such as <xref linkend="app-pg-ctl">, to query configuration
+        parameter values.  User-facing applications should instead use <xref
+        linkend="sql-show"> or the <structname>pg_settings</structname> view.
        </para>
       </listitem>
      </varlistentry>
@@ -196,8 +208,8 @@ PostgreSQL documentation
       <term><option>-D <replaceable class="parameter">datadir</replaceable></option></term>
       <listitem>
        <para>
-        Specifies the file system location of the data directory or
-        configuration file(s).  See
+        Specifies the file system location of the database
+        configuration files.  See
         <xref linkend="runtime-config-file-locations"> for details.
        </para>
       </listitem>
@@ -271,8 +283,14 @@ PostgreSQL documentation
        <para>
         Specifies the directory of the Unix-domain socket on which
         <command>postgres</command> is to listen for
-        connections from client applications.  The default is normally
-        <filename>/tmp</filename>, but can be changed at build time.
+        connections from client applications.  The value can also be a
+        comma-separated list of directories.  An empty value
+        specifies not listening on any Unix-domain sockets, in which case
+        only TCP/IP sockets can be used to connect to the server.
+        The default value is normally
+        <filename>/tmp</filename>, but that can be changed at build time.
+        Specifying this option is equivalent to setting the <xref
+        linkend="guc-unix-socket-directories"> configuration parameter.
        </para>
       </listitem>
      </varlistentry>
@@ -282,12 +300,7 @@ PostgreSQL documentation
       <listitem>
        <para>
         Enables secure connections using <acronym>SSL</acronym>.
-<!## PG>
         <productname>PostgreSQL</productname> must have been compiled with
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname> must have been compiled with
-<!## end>
         support for <acronym>SSL</acronym> for this option to be
         available. For more information on using <acronym>SSL</acronym>,
         refer to <xref linkend="ssl-tcp">.
@@ -367,6 +380,26 @@ PostgreSQL documentation
       </listitem>
      </varlistentry>
 
+     <varlistentry>
+      <term><option>-V</></term>
+      <term><option>--version</></term>
+      <listitem>
+       <para>
+        Print the <application>postgres</application> version and exit.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>--<replaceable>name</replaceable>=<replaceable>value</replaceable></option></term>
+      <listitem>
+       <para>
+        Sets a named run-time parameter; a shorter form of
+        <option>-c</>.
+       </para>
+      </listitem>
+     </varlistentry>
+
 <!## XC>
      <varlistentry>
       <term><option>--datanode</option></term>
@@ -380,16 +413,6 @@ PostgreSQL documentation
 <!## end>
 
      <varlistentry>
-      <term><option>--<replaceable>name</replaceable>=<replaceable>value</replaceable></option></term>
-      <listitem>
-       <para>
-        Sets a named run-time parameter; a shorter form of
-        <option>-c</>.
-       </para>
-      </listitem>
-     </varlistentry>
-
-     <varlistentry>
       <term><option>--describe-config</option></term>
       <listitem>
        <para>
@@ -399,35 +422,45 @@ PostgreSQL documentation
        </para>
       </listitem>
      </varlistentry>
+
+     <varlistentry>
+      <term><option>-?</></term>
+      <term><option>--help</></term>
+      <listitem>
+       <para>
+        Show help about <application>postgres</application> command line
+        arguments, and exit.
+       </para>
+      </listitem>
+     </varlistentry>
     </variablelist>
    </refsect2>
 
    <refsect2>
     <title>Semi-internal Options</title>
+
 &common;
     <para>
      The options described here are used
      mainly for debugging purposes, and in some cases to assist with
      recovery of severely damaged databases. There should be no reason
      to use them in a production database setup.  They are listed
-<!## PG>
      here only for use by <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-     here only for use by <productname>Postgres-XC</productname>
-<!## end>
      system developers.  Furthermore, these options might
      change or be removed in a future release without notice.
     </para>
 
     <variablelist>
      <varlistentry>
-      <term><option>-f</option> <literal>{ s | i | m | n | h }</literal></term>
+      <term><option>-f</option> <literal>{ s | i | o | b | t | n | m | h }</literal></term>
       <listitem>
        <para>
         Forbids the use of particular scan and join methods:
         <literal>s</literal> and <literal>i</literal>
-        disable sequential and index scans respectively, while
+        disable sequential and index scans respectively,
+        <literal>o</literal>, <literal>b</literal> and <literal>t</literal>
+        disable index-only scans, bitmap index scans, and TID scans
+        respectively, while
         <literal>n</literal>, <literal>m</literal>, and <literal>h</literal>
         disable nested-loop, merge and hash joins respectively.
        </para>
@@ -553,6 +586,7 @@ PostgreSQL documentation
    <refsect2>
     <title>Options for Single-User Mode</title>
 
+&common;
     <para>
      The following options only apply to the single-user mode.
     </para>
@@ -614,6 +648,7 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Environment</title>
+
 &common;
   <variablelist>
    <varlistentry>
@@ -674,6 +709,7 @@ PostgreSQL documentation
 
  <refsect1>
    <title>Diagnostics</title>
+
 &common;
    <para>
     A failure message mentioning <literal>semget</> or
@@ -682,12 +718,7 @@ PostgreSQL documentation
     discussion see <xref linkend="kernel-resources">.  You might be able
     to postpone reconfiguring your kernel by decreasing <xref
     linkend="guc-shared-buffers"> to reduce the shared memory
-<!## PG>
     consumption of <productname>PostgreSQL</>, and/or by reducing
-<!## end>
-<!## XC>
-    consumption of <productname>Postgres-XC</>, and/or by reducing
-<!## end>
     <xref linkend="guc-max-connections"> to reduce the semaphore
     consumption.
    </para>
@@ -710,12 +741,7 @@ PostgreSQL documentation
    <para>
     A failure message indicating inability to bind to a port might
     indicate that that port is already in use by some
-<!## PG>
     non-<productname>PostgreSQL</productname> process.  You might also
-<!## end>
-<!## XC>
-    non-<productname>Postgres-XC</productname> process.  You might also
-<!## end>
     get this error if you terminate <command>postgres</command>
     and immediately restart it using the same port; in this case, you
     must simply wait a few seconds until the operating system closes
@@ -730,6 +756,7 @@ PostgreSQL documentation
 
  <refsect1>
   <title>Notes</title>
+
 &common;
   <para>
    The utility command <xref linkend="app-pg-ctl"> can be used to
@@ -766,14 +793,18 @@ PostgreSQL documentation
 
   <para>
    To cancel a running query, send the <literal>SIGINT</literal> signal
-   to the process running that command.
+   to the process running that command. To terminate a backend process
+   cleanly, send <literal>SIGTERM</literal> to that process. See
+   also <function>pg_cancel_backend</> and <function>pg_terminate_backend</>
+   in <xref linkend="functions-admin-signal"> for the SQL-callable equivalents
+   of these two actions.
   </para>
 
   <para>
-   The <command>postgres</command> server uses <literal>SIGTERM</literal>
-   to tell subordinate server processes to quit normally and
-   <literal>SIGQUIT</literal> to terminate without the normal cleanup.
-   These signals <emphasis>should not</emphasis> be used by users.  It
+   The <command>postgres</command> server uses <literal>SIGQUIT</literal>
+   to tell subordinate server processes to terminate without normal
+   cleanup.
+   This signal <emphasis>should not</emphasis> be used by users.  It
    is also unwise to send <literal>SIGKILL</literal> to a server
    process &mdash; the main <command>postgres</command> process will
    interpret this as a crash and will force all the sibling processes
@@ -781,9 +812,9 @@ PostgreSQL documentation
   </para>
  </refsect1>
 
-<!## PG>
  <refsect1 id="app-postgres-bugs">
   <title>Bugs</title>
+&common;
   <para>
    The <option>--</> options will not work on <systemitem
    class="osname">FreeBSD</> or <systemitem class="osname">OpenBSD</>.
@@ -792,10 +823,10 @@ PostgreSQL documentation
    will provide a workaround if this is not fixed.
   </para>
  </refsect1>
-<!## end>
 
  <refsect1>
   <title>Usage</title>
+
 &common;
    <para>
     To start a single-user mode server, use a command like
@@ -832,7 +863,7 @@ PostgreSQL documentation
 
    <para>
     Note that the single-user mode server does not provide sophisticated
-    line-editing features (no command history, for example). 
+    line-editing features (no command history, for example).
     Single-User mode also does not do any background processing, like
     automatic checkpoints.
 

@@ -1,15 +1,30 @@
 <!-- doc/src/sgml/pgxcclean.sgml -->
 
-<sect1 id="pgxcclean" xreflabel="pgxcclean">
+<refentry id="pgxcclean" xreflabel="pgxcclean">
+ <refmeta>
+  <refentrytitle><application>pgxc_clean</application></refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Application</refmiscinfo>
+ </refmeta>
 
-<title>pgxc_clean</title>
+ <refnamediv>
+  <refname>pgxc_clean</refname>
+  <refpurpose>clean up outstanding 2PC status among <productname>Postgres-XC</productname> nodes</refpurpose>
+ </refnamediv>
 
- <indexterm zone="pgxcclean">
+ <indexterm zone="pgarchivecleanup">
   <primary>pgxc_clean</primary>
  </indexterm>
 
- <sect2>
-  <title>Overview</title>
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pgxc_clean</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
+  <title>Description</title>
 
 &xconly;
     <para>
@@ -29,9 +44,9 @@ pgxc_clean <optional> <replaceable>option</> </optional> <optional><replaceable>
      You should run this utility against one of the available Coordinators. The tool cleans up transaction status
      of all the nodes automatically.
     </para>
- </sect2>
+ </refsect1>
 
- <sect2>
+ <refsect1>
   <title>Options</title>
 
   <variablelist>
@@ -206,6 +221,6 @@ pgxc_clean <optional> <replaceable>option</> </optional> <optional><replaceable>
     </varlistentry>
 
   </variablelist>
- </sect2>
+ </refsect1>
 
-</sect1>
+</refentry>

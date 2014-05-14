@@ -29,21 +29,17 @@ PostgreSQL documentation
    <command>createuser</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
    <arg rep="repeat"><replaceable>option</replaceable></arg>
-   <arg><replaceable>username</replaceable></arg>
+   <arg choice="opt"><replaceable>username</replaceable></arg>
   </cmdsynopsis>
  </refsynopsisdiv>
 
 
  <refsect1>
   <title>Description</title>
+&common;
   <para>
    <application>createuser</application> creates a
-<!## PG>
    new <productname>PostgreSQL</productname> user (or more precisely, a role).
-<!## end>
-<!## XC>
-   new <productname>Postgres-XC</productname> user (or more precisely, a role).
-<!## end>
    Only superusers and users with <literal>CREATEROLE</> privilege can create
    new users, so <application>createuser</application> must be
    invoked by someone who can connect as a superuser or a user with
@@ -70,6 +66,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Options</title>
 
+&common;
   <para>
    <application>createuser</> accepts the following command-line arguments:
 
@@ -78,20 +75,10 @@ PostgreSQL documentation
       <term><replaceable class="parameter">username</replaceable></term>
       <listitem>
        <para>
-<!## PG>
         Specifies the name of the <productname>PostgreSQL</productname> user
-<!## end>
-<!## XC>
-        Specifies the name of the <productname>Postgres-XC</productname> user
-<!## end>
         to be created.
         This name must be different from all existing roles in this
-<!## PG>
         <productname>PostgreSQL</productname> installation.
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</productname> installation.
-<!## end>
        </para>
       </listitem>
      </varlistentry>
@@ -122,7 +109,8 @@ PostgreSQL documentation
       <term><option>--no-createdb</></term>
       <listitem>
        <para>
-        The new user will not be allowed to create databases.
+        The new user will not be allowed to create databases.  This is the
+        default.
        </para>
       </listitem>
      </varlistentry>
@@ -168,6 +156,20 @@ PostgreSQL documentation
        <para>
         The new role will not automatically inherit privileges of roles
         it is a member of.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>--interactive</></term>
+      <listitem>
+       <para>
+        Prompt for the user name if none is specified on the command line, and
+        also prompt for whichever of the options
+        <option>-d</option>/<option>-D</option>,
+        <option>-r</option>/<option>-R</option>,
+        <option>-s</option>/<option>-S</option> is not specified on the command
+        line.  (This was the default behavior up to PostgreSQL 9.1.)
        </para>
       </listitem>
      </varlistentry>
@@ -235,7 +237,8 @@ PostgreSQL documentation
       <term><option>--no-createrole</></term>
       <listitem>
        <para>
-        The new user will not be allowed to create new roles.
+        The new user will not be allowed to create new roles.  This is the
+        default.
        </para>
       </listitem>
      </varlistentry>
@@ -255,7 +258,7 @@ PostgreSQL documentation
       <term><option>--no-superuser</></term>
       <listitem>
        <para>
-        The new user will not be a superuser.
+        The new user will not be a superuser.  This is the default.
        </para>
       </listitem>
      </varlistentry>
@@ -271,6 +274,28 @@ PostgreSQL documentation
      </varlistentry>
 
      <varlistentry>
+      <term><option>--replication</></term>
+      <listitem>
+       <para>
+        The new user will have the <literal>REPLICATION</literal> privilege,
+        which is described more fully in the documentation for <xref
+        linkend="sql-createrole">.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>--no-replication</></term>
+      <listitem>
+       <para>
+        The new user will not have the <literal>REPLICATION</literal>
+        privilege, which is described more fully in the documentation for <xref
+        linkend="sql-createrole">.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
        <term><option>-?</></term>
        <term><option>--help</></term>
        <listitem>
@@ -282,11 +307,6 @@ PostgreSQL documentation
      </varlistentry>
 
     </variablelist>
-  </para>
-
-  <para>
-   You will be prompted for a name and other missing information if it
-   is not specified on the command line.
   </para>
 
   <para>
@@ -373,6 +393,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Environment</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><envar>PGHOST</envar></term>
@@ -388,12 +409,7 @@ PostgreSQL documentation
   </variablelist>
 
   <para>
-<!## PG>
    This utility, like most other <productname>PostgreSQL</> utilities,
-<!## end>
-<!## XC>
-   This utility, like most other <productname>Postgres-XC</> utilities,
-<!## end>
    also uses the environment variables supported by <application>libpq</>
    (see <xref linkend="libpq-envars">).
   </para>
@@ -404,6 +420,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Diagnostics</title>
 
+&common;
   <para>
    In case of difficulty, see <xref linkend="SQL-CREATEROLE">
    and <xref linkend="APP-PSQL"> for
@@ -425,6 +442,14 @@ PostgreSQL documentation
     server:
 <screen>
 <prompt>$ </prompt><userinput>createuser joe</userinput>
+</screen>
+   </para>
+
+   <para>
+    To create a user <literal>joe</literal> on the default database
+    server with prompting for some additional attributes:
+<screen>
+<prompt>$ </prompt><userinput>createuser --interactive joe</userinput>
 <computeroutput>Shall the new role be a superuser? (y/n) </computeroutput><userinput>n</userinput>
 <computeroutput>Shall the new role be allowed to create databases? (y/n) </computeroutput><userinput>n</userinput>
 <computeroutput>Shall the new role be allowed to create more new roles? (y/n) </computeroutput><userinput>n</userinput>
@@ -433,7 +458,7 @@ PostgreSQL documentation
 
    <para>
     To create the same user <literal>joe</literal> using the
-    server on host <literal>eden</>, port 5000, avoiding the prompts and
+    server on host <literal>eden</>, port 5000, with attributes explicitly specified,
     taking a look at the underlying command:
 <screen>
 <prompt>$ </prompt><userinput>createuser -h eden -p 5000 -S -D -R -e joe</userinput>

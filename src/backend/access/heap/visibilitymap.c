@@ -3,7 +3,7 @@
  * visibilitymap.c
  *	  bitmap for tracking visibility of heap tuples
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -82,7 +82,7 @@
  */
 #include "postgres.h"
 
-#include "access/heapam.h"
+#include "access/heapam_xlog.h"
 #include "access/visibilitymap.h"
 #include "miscadmin.h"
 #include "storage/bufmgr.h"
@@ -233,13 +233,18 @@ visibilitymap_pin_ok(BlockNumber heapBlk, Buffer buf)
  * marked all-visible; it is needed for Hot Standby, and can be
  * InvalidTransactionId if the page contains no tuples.
  *
+ * Caller is expected to set the heap page's PD_ALL_VISIBLE bit before calling
+ * this function. Except in recovery, caller should also pass the heap
+ * buffer. When checksums are enabled and we're not in recovery, we must add
+ * the heap buffer to the WAL chain to protect it from being torn.
+ *
  * You must pass a buffer containing the correct map page to this function.
  * Call visibilitymap_pin first to pin the right one. This function doesn't do
  * any I/O.
  */
 void
-visibilitymap_set(Relation rel, BlockNumber heapBlk, XLogRecPtr recptr,
-				  Buffer buf, TransactionId cutoff_xid)
+visibilitymap_set(Relation rel, BlockNumber heapBlk, Buffer heapBuf,
+				  XLogRecPtr recptr, Buffer vmBuf, TransactionId cutoff_xid)
 {
 	BlockNumber mapBlock = HEAPBLK_TO_MAPBLOCK(heapBlk);
 	uint32		mapByte = HEAPBLK_TO_MAPBYTE(heapBlk);
@@ -252,35 +257,55 @@ visibilitymap_set(Relation rel, BlockNumber heapBlk, XLogRecPtr recptr,
 #endif
 
 	Assert(InRecovery || XLogRecPtrIsInvalid(recptr));
+	Assert(InRecovery || BufferIsValid(heapBuf));
 
-	/* Check that we have the right page pinned */
-	if (!BufferIsValid(buf) || BufferGetBlockNumber(buf) != mapBlock)
-		elog(ERROR, "wrong buffer passed to visibilitymap_set");
+	/* Check that we have the right heap page pinned, if present */
+	if (BufferIsValid(heapBuf) && BufferGetBlockNumber(heapBuf) != heapBlk)
+		elog(ERROR, "wrong heap buffer passed to visibilitymap_set");
 
-	page = BufferGetPage(buf);
+	/* Check that we have the right VM page pinned */
+	if (!BufferIsValid(vmBuf) || BufferGetBlockNumber(vmBuf) != mapBlock)
+		elog(ERROR, "wrong VM buffer passed to visibilitymap_set");
+
+	page = BufferGetPage(vmBuf);
 	map = PageGetContents(page);
-	LockBuffer(buf, BUFFER_LOCK_EXCLUSIVE);
+	LockBuffer(vmBuf, BUFFER_LOCK_EXCLUSIVE);
 
 	if (!(map[mapByte] & (1 << mapBit)))
 	{
 		START_CRIT_SECTION();
 
 		map[mapByte] |= (1 << mapBit);
-		MarkBufferDirty(buf);
+		MarkBufferDirty(vmBuf);
 
 		if (RelationNeedsWAL(rel))
 		{
 			if (XLogRecPtrIsInvalid(recptr))
-				recptr = log_heap_visible(rel->rd_node, heapBlk, buf,
+			{
+				Assert(!InRecovery);
+				recptr = log_heap_visible(rel->rd_node, heapBuf, vmBuf,
 										  cutoff_xid);
+
+				/*
+				 * If data checksums are enabled, we need to protect the heap
+				 * page from being torn.
+				 */
+				if (DataChecksumsEnabled())
+				{
+					Page		heapPage = BufferGetPage(heapBuf);
+
+					/* caller is expected to set PD_ALL_VISIBLE first */
+					Assert(PageIsAllVisible(heapPage));
+					PageSetLSN(heapPage, recptr);
+				}
+			}
 			PageSetLSN(page, recptr);
-			PageSetTLI(page, ThisTimeLineID);
 		}
 
 		END_CRIT_SECTION();
 	}
 
-	LockBuffer(buf, BUFFER_LOCK_UNLOCK);
+	LockBuffer(vmBuf, BUFFER_LOCK_UNLOCK);
 }
 
 /*
@@ -451,11 +476,15 @@ visibilitymap_truncate(Relation rel, BlockNumber nheapblocks)
 		/* Clear out the unwanted bytes. */
 		MemSet(&map[truncByte + 1], 0, MAPSIZE - (truncByte + 1));
 
-		/*
+		/*----
 		 * Mask out the unwanted bits of the last remaining byte.
 		 *
-		 * ((1 << 0) - 1) = 00000000 ((1 << 1) - 1) = 00000001 ... ((1 << 6) -
-		 * 1) = 00111111 ((1 << 7) - 1) = 01111111
+		 * ((1 << 0) - 1) = 00000000
+		 * ((1 << 1) - 1) = 00000001
+		 * ...
+		 * ((1 << 6) - 1) = 00111111
+		 * ((1 << 7) - 1) = 01111111
+		 *----
 		 */
 		map[truncByte] &= (1 << truncBit) - 1;
 
@@ -580,6 +609,8 @@ vm_extend(Relation rel, BlockNumber vm_nblocks)
 	/* Now extend the file */
 	while (vm_nblocks_now < vm_nblocks)
 	{
+		PageSetChecksumInplace(pg, vm_nblocks_now);
+
 		smgrextend(rel->rd_smgr, VISIBILITYMAP_FORKNUM, vm_nblocks_now,
 				   (char *) pg, false);
 		vm_nblocks_now++;

@@ -8,8 +8,6 @@
  </indexterm>
 
 &pgnotice;
-
-
  <para>
   <filename>dict_int</> is an example of an add-on dictionary template
   for full-text search.  The motivation for this example dictionary is to
@@ -22,8 +20,6 @@
   <title>Configuration</title>
 
 &pgnotice;
-
-
   <para>
    The dictionary accepts two options:
   </para>
@@ -53,8 +49,6 @@
   <title>Usage</title>
 
 &pgnotice;
-
-
   <para>
    Installing the <literal>dict_int</> extension creates a text search
    template <literal>intdict_template</> and a dictionary <literal>intdict</>

@@ -48,7 +48,6 @@ create table xccopydef(idseq serial, id1 int,
 					   def6 bytea default deffunc_bytea(),
 					   id2 varchar,
 					   def7 float default length(deffunc_str()) + 0.433);
-NOTICE:  CREATE TABLE will create implicit sequence "xccopydef_idseq_seq" for serial column "xccopydef.idseq"
 copy xccopydef (id1, id2) from stdin (delimiter '|');
 copy xccopydef (id1, id2) from stdin (format 'csv');
 insert into xccopydef (id1, id2) values (NULL, NULL);

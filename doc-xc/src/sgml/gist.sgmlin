@@ -8,8 +8,6 @@
     <secondary>GiST</secondary>
    </indexterm>
 
-&common;
-
 <sect1 id="gist-intro">
  <title>Introduction</title>
 
@@ -35,12 +33,7 @@
     <ulink url="http://www.sai.msu.su/~megera/postgres/gist/papers/concurrency/access-methods-for-next-generation.pdf.gz">
     Access Methods for Next-Generation Database Systems</ulink>.
     The <acronym>GiST</acronym>
-<!## PG>
     implementation in <productname>PostgreSQL</productname> is primarily
-<!## end>
-<!## XC>
-    implementation in <productname>PostgreSQL</productname> is inherited from <productname>PostgreSQL</> and is primarily
-<!## end>
     maintained by Teodor Sigaev and Oleg Bartunov, and there is more
     information on their
     <ulink url="http://www.sai.msu.su/~megera/postgres/gist/">web site</ulink>.
@@ -65,16 +58,9 @@
  <para>
    This extensibility should not be confused with the extensibility of the
    other standard search trees in terms of the data they can handle.  For
-<!## PG>
    example, <productname>PostgreSQL</productname> supports extensible B-trees
    and hash indexes. That means that you can use
    <productname>PostgreSQL</productname> to build a B-tree or hash over any
-<!## end>
-<!## XC>
-   example, <productname>Postgres-XC</productname> supports extensible B-trees
-   and hash indexes. That means that you can use
-   <productname>Postgres-XC</productname> to build a B-tree or hash over any
-<!## end>
    data type you want. But B-trees only support range predicates
    (<literal>&lt;</literal>, <literal>=</literal>, <literal>&gt;</literal>),
    and hash indexes only support equality queries.
@@ -82,12 +68,7 @@
 
  <para>
    So if you index, say, an image collection with a
-<!## PG>
    <productname>PostgreSQL</productname> B-tree, you can only issue queries
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> B-tree, you can only issue queries
-<!## end>
    such as <quote>is imagex equal to imagey</quote>, <quote>is imagex less
    than imagey</quote> and <quote>is imagex greater than imagey</quote>.
    Depending on how you define <quote>equals</quote>, <quote>less than</quote>
@@ -107,12 +88,6 @@
    reuse, and a clean interface.
   </para>
 
-</sect1>
-
-<sect1 id="gist-implementation">
- <title>Implementation</title>
-
-&common;
  <para>
    There are seven methods that an index operator class for
    <acronym>GiST</acronym> must provide, and an eighth that is optional.
@@ -125,12 +100,7 @@
    <function>decompress</>, which allow an index to have internal tree data of
    a different type than the data it indexes. The leaves are to be of the
    indexed data type, while the other tree nodes can be of any C struct (but
-<!## PG>
    you still have to follow <productname>PostgreSQL</> data type rules here,
-<!## end>
-<!## XC>
-   you still have to follow <productname>Postgres-XC</> data type rules here,
-<!## end>
    see about <literal>varlena</> for variable sized data). If the tree's
    internal data type exists at the SQL level, the <literal>STORAGE</> option
    of the <command>CREATE OPERATOR CLASS</> command can be used.
@@ -405,6 +375,8 @@ my_decompress(PG_FUNCTION_ARGS)
        Returns a value indicating the <quote>cost</quote> of inserting the new
        entry into a particular branch of the tree.  Items will be inserted
        down the path of least <function>penalty</function> in the tree.
+       Values returned by <function>penalty</function> should be non-negative.
+       If a negative value is returned, it will be treated as zero.
       </para>
 
       <para>
@@ -667,19 +639,68 @@ my_distance(PG_FUNCTION_ARGS)
 
   </variablelist>
 
+  <para>
+   All the GiST support methods are normally called in short-lived memory
+   contexts; that is, <varname>CurrentMemoryContext</> will get reset after
+   each tuple is processed.  It is therefore not very important to worry about
+   pfree'ing everything you palloc.  However, in some cases it's useful for a
+   support method to cache data across repeated calls.  To do that, allocate
+   the longer-lived data in <literal>fcinfo-&gt;flinfo-&gt;fn_mcxt</>, and
+   keep a pointer to it in <literal>fcinfo-&gt;flinfo-&gt;fn_extra</>.  Such
+   data will survive for the life of the index operation (e.g., a single GiST
+   index scan, index build, or index tuple insertion).  Be careful to pfree
+   the previous value when replacing a <literal>fn_extra</> value, or the leak
+   will accumulate for the duration of the operation.
+  </para>
+
+</sect1>
+
+<sect1 id="gist-implementation">
+ <title>Implementation</title>
+
+&common;
+ <sect2 id="gist-buffering-build">
+  <title>GiST buffering build</title>
+&common;
+  <para>
+   Building large GiST indexes by simply inserting all the tuples tends to be
+   slow, because if the index tuples are scattered across the index and the
+   index is large enough to not fit in cache, the insertions need to perform
+   a lot of random I/O.  Beginning in version 9.2, PostgreSQL supports a more
+   efficient method to build GiST indexes based on buffering, which can
+   dramatically reduce the number of random I/Os needed for non-ordered data
+   sets. For well-ordered data sets the benefit is smaller or non-existent,
+   because only a small number of pages receive new tuples at a time, and
+   those pages fit in cache even if the index as whole does not.
+  </para>
+
+  <para>
+   However, buffering index build needs to call the <function>penalty</>
+   function more often, which consumes some extra CPU resources. Also, the
+   buffers used in the buffering build need temporary disk space, up to
+   the size of the resulting index. Buffering can also influence the quality
+   of the resulting index, in both positive and negative directions. That
+   influence depends on various factors, like the distribution of the input
+   data and the operator class implementation.
+  </para>
+
+  <para>
+   By default, a GiST index build switches to the buffering method when the
+   index size reaches <xref linkend="guc-effective-cache-size">. It can
+   be manually turned on or off by the <literal>BUFFERING</literal> parameter
+   to the CREATE INDEX command. The default behavior is good for most cases,
+   but turning buffering off might speed up the build somewhat if the input
+   data is ordered.
+  </para>
+
+ </sect2>
 </sect1>
 
 <sect1 id="gist-examples">
  <title>Examples</title>
 
-&common;
  <para>
-<!## PG>
   The <productname>PostgreSQL</productname> source distribution includes
-<!## end>
-<!## XC>
-  The <productname>Postgres-XC</productname> source distribution includes
-<!## end>
   several examples of index methods implemented using
   <acronym>GiST</acronym>.  The core system currently provides text search
   support (indexing for <type>tsvector</> and <type>tsquery</>) as well as

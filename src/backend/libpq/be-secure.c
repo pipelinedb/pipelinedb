@@ -6,7 +6,7 @@
  *	  message integrity and endpoint authentication.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -201,9 +201,9 @@ secure_loaded_verify_locations(void)
 {
 #ifdef USE_SSL
 	return ssl_loaded_verify_locations;
-#endif
-
+#else
 	return false;
+#endif
 }
 
 /*

@@ -5,7 +5,7 @@
  *	  However, we define it here so that the format is documented.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_control.h
@@ -21,7 +21,7 @@
 
 
 /* Version identifier for this pg_control format */
-#define PG_CONTROL_VERSION	922
+#define PG_CONTROL_VERSION	937
 
 /*
  * Body of CheckPoint XLOG records.  This is declared here because we keep
@@ -33,6 +33,8 @@ typedef struct CheckPoint
 	XLogRecPtr	redo;			/* next RecPtr available when we began to
 								 * create CheckPoint (i.e. REDO start point) */
 	TimeLineID	ThisTimeLineID; /* current TLI */
+	TimeLineID	PrevTimeLineID; /* previous TLI, if this record begins a new
+								 * timeline (equals ThisTimeLineID otherwise) */
 	bool		fullPageWrites; /* current full_page_writes */
 	uint32		nextXidEpoch;	/* higher-order bits of nextXid */
 	TransactionId nextXid;		/* next free XID */
@@ -41,6 +43,8 @@ typedef struct CheckPoint
 	MultiXactOffset nextMultiOffset;	/* next free MultiXact offset */
 	TransactionId oldestXid;	/* cluster-wide minimum datfrozenxid */
 	Oid			oldestXidDB;	/* database with minimum datfrozenxid */
+	MultiXactId oldestMulti;	/* cluster-wide minimum datminmxid */
+	Oid			oldestMultiDB;	/* database with minimum datminmxid */
 	pg_time_t	time;			/* time stamp of checkpoint */
 
 	/*
@@ -61,7 +65,9 @@ typedef struct CheckPoint
 #define XLOG_BACKUP_END					0x50
 #define XLOG_PARAMETER_CHANGE			0x60
 #define XLOG_RESTORE_POINT				0x70
-#define XLOG_FPW_CHANGE				0x80
+#define XLOG_FPW_CHANGE					0x80
+#define XLOG_END_OF_RECOVERY			0x90
+#define XLOG_FPI						0xA0
 
 
 /*
@@ -121,6 +127,8 @@ typedef struct ControlFileData
 
 	CheckPoint	checkPointCopy; /* copy of last check point record */
 
+	XLogRecPtr	unloggedLSN;	/* current fake LSN value, for unlogged rels */
+
 	/*
 	 * These two values determine the minimum point we must recover up to
 	 * before starting up:
@@ -153,6 +161,7 @@ typedef struct ControlFileData
 	 * pg_start_backup() call, not accompanied by pg_stop_backup().
 	 */
 	XLogRecPtr	minRecoveryPoint;
+	TimeLineID	minRecoveryPointTLI;
 	XLogRecPtr	backupStartPoint;
 	XLogRecPtr	backupEndPoint;
 	bool		backupEndRequired;
@@ -203,6 +212,9 @@ typedef struct ControlFileData
 	/* flags indicating pass-by-value status of various types */
 	bool		float4ByVal;	/* float4 pass-by-value? */
 	bool		float8ByVal;	/* float8, int8, etc pass-by-value? */
+
+	/* Are data pages protected by checksums? Zero if no checksum version */
+	uint32		data_checksum_version;
 
 	/* CRC of all above ... MUST BE LAST! */
 	pg_crc32	crc;

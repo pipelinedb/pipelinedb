@@ -27,8 +27,8 @@ GRANT { { SELECT | INSERT | UPDATE | DELETE | TRUNCATE | REFERENCES | TRIGGER }
          | ALL TABLES IN SCHEMA <replaceable class="PARAMETER">schema_name</replaceable> [, ...] }
     TO { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...] [ WITH GRANT OPTION ]
 
-GRANT { { SELECT | INSERT | UPDATE | REFERENCES } ( <replaceable class="PARAMETER">column</replaceable> [, ...] )
-    [, ...] | ALL [ PRIVILEGES ] ( <replaceable class="PARAMETER">column</replaceable> [, ...] ) }
+GRANT { { SELECT | INSERT | UPDATE | REFERENCES } ( <replaceable class="PARAMETER">column_name</replaceable> [, ...] )
+    [, ...] | ALL [ PRIVILEGES ] ( <replaceable class="PARAMETER">column_name</replaceable> [, ...] ) }
     ON [ TABLE ] <replaceable class="PARAMETER">table_name</replaceable> [, ...]
     TO { [ GROUP ] <replaceable class="PARAMETER">role_name</replaceable> | PUBLIC } [, ...] [ WITH GRANT OPTION ]
 
@@ -357,10 +357,9 @@ GRANT <replaceable class="PARAMETER">role_name</replaceable> [, ...] TO <replace
        to create new servers using that foreign-data wrapper.
       </para>
       <para>
-       For servers, this privilege enables the grantee to create,
-       alter, and drop his own user's user mappings associated with
-       that server.  Also, it enables the grantee to query the options
-       of the server and associated user mappings.
+       For servers, this privilege enables the grantee to create foreign
+       tables using the server, and also to create, alter, or drop his own
+       user's user mappings associated with that server.
       </para>
      </listitem>
     </varlistentry>

@@ -40,7 +40,10 @@ int			pqsigsetmask(int mask);
 #endif
 #endif
 
-typedef void (*pqsigfunc) (int);
+#if 0
+/ * This type has already been defined at port.h./
+typedef void (*pqsigfunc) (int); 
+#endif
 
 extern void pqinitmask(void);
 

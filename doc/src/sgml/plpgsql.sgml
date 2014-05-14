@@ -1292,7 +1292,7 @@ EXECUTE 'UPDATE tbl SET '
     </para>
 
     <para>
-     Because <function>quote_literal</function> is labelled
+     Because <function>quote_literal</function> is labeled
      <literal>STRICT</literal>, it will always return null when called with a
      null argument.  In the above example, if <literal>newvalue</> or
      <literal>keyvalue</> were null, the entire dynamic query string would
@@ -1571,11 +1571,11 @@ RETURN <replaceable>expression</replaceable>;
      </para>
 
      <para>
-      When returning a scalar type, any expression can be used. The
-      expression's result will be automatically cast into the
-      function's return type as described for assignments. To return a
-      composite (row) value, you must write a record or row variable
-      as the <replaceable>expression</replaceable>.
+      In a function that returns a scalar type, the expression's result will
+      automatically be cast into the function's return type as described for
+      assignments.  But to return a composite (row) value, you must write an
+      expression delivering exactly the requested column set.  This may
+      require use of explicit casting.
      </para>
 
      <para>
@@ -1599,6 +1599,20 @@ RETURN <replaceable>expression</replaceable>;
       with output parameters and functions returning <type>void</type>,
       however.  In those cases a <command>RETURN</command> statement is
       automatically executed if the top-level block finishes.
+     </para>
+
+     <para>
+      Some examples:
+
+<programlisting>
+-- functions returning a scalar type
+RETURN 1 + 2;
+RETURN scalar_var;
+
+-- functions returning a composite type
+RETURN composite_type_var;
+RETURN (1, 2, 'three'::text);  -- must cast columns to correct types
+</programlisting>
      </para>
     </sect3>
 
@@ -1680,13 +1694,13 @@ CREATE TABLE foo (fooid INT, foosubid INT, fooname TEXT);
 INSERT INTO foo VALUES (1, 2, 'three');
 INSERT INTO foo VALUES (4, 5, 'six');
 
-CREATE OR REPLACE FUNCTION getAllFoo() RETURNS SETOF foo AS
+CREATE OR REPLACE FUNCTION get_all_foo() RETURNS SETOF foo AS
 $BODY$
 DECLARE
     r foo%rowtype;
 BEGIN
-    FOR r IN SELECT * FROM foo
-    WHERE fooid &gt; 0
+    FOR r IN
+        SELECT * FROM foo WHERE fooid &gt; 0
     LOOP
         -- can do some processing here
         RETURN NEXT r; -- return current row of SELECT
@@ -1694,9 +1708,39 @@ BEGIN
     RETURN;
 END
 $BODY$
-LANGUAGE 'plpgsql' ;
+LANGUAGE plpgsql;
 
-SELECT * FROM getallfoo();
+SELECT * FROM get_all_foo();
+</programlisting>
+     </para>
+
+     <para>
+      Here is an example of a function using <command>RETURN
+      QUERY</command>:
+
+<programlisting>
+CREATE FUNCTION get_available_flightid(date) RETURNS SETOF integer AS
+$BODY$
+BEGIN
+    RETURN QUERY SELECT flightid
+                   FROM flight
+                  WHERE flightdate >= $1
+                    AND flightdate < ($1 + 1);
+
+    -- Since execution is not finished, we can check whether rows were returned
+    -- and raise exception if not.
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'No flight at %.', $1;
+    END IF;
+
+    RETURN;
+ END
+$BODY$
+LANGUAGE plpgsql;
+
+-- Returns available flights or raises exception if there are no
+-- available flights.
+SELECT * FROM get_available_flightid(CURRENT_DATE);
 </programlisting>
      </para>
 
@@ -2063,11 +2107,11 @@ EXIT <optional> <replaceable>label</replaceable> </optional> <optional> WHEN <re
         When used with a
         <literal>BEGIN</literal> block, <literal>EXIT</literal> passes
         control to the next statement after the end of the block.
-        Note that a label must be used for this purpose; an unlabelled
+        Note that a label must be used for this purpose; an unlabeled
         <literal>EXIT</literal> is never considered to match a
         <literal>BEGIN</literal> block.  (This is a change from
         pre-8.4 releases of <productname>PostgreSQL</productname>, which
-        would allow an unlabelled <literal>EXIT</literal> to match
+        would allow an unlabeled <literal>EXIT</literal> to match
         a <literal>BEGIN</literal> block.)
        </para>
 
@@ -2621,9 +2665,34 @@ GET STACKED DIAGNOSTICS <replaceable>variable</replaceable> = <replaceable>item<
          <entry>the SQLSTATE error code of the exception</entry>
         </row>
         <row>
+         <entry><literal>COLUMN_NAME</literal></entry>
+         <entry>text</entry>
+         <entry>the name of column related to exception</entry>
+        </row>
+        <row>
+         <entry><literal>CONSTRAINT_NAME</literal></entry>
+         <entry>text</entry>
+         <entry>the name of constraint related to exception</entry>
+        </row>
+        <row>
+         <entry><literal>PG_DATATYPE_NAME</literal></entry>
+         <entry>text</entry>
+         <entry>the name of datatype related to exception</entry>
+        </row>
+        <row>
          <entry><literal>MESSAGE_TEXT</literal></entry>
          <entry>text</entry>
          <entry>the text of the exception's primary message</entry>
+        </row>
+        <row>
+         <entry><literal>TABLE_NAME</literal></entry>
+         <entry>text</entry>
+         <entry>the name of table related to exception</entry>
+        </row>
+        <row>
+         <entry><literal>SCHEMA_NAME</literal></entry>
+         <entry>text</entry>
+         <entry>the name of schema related to exception</entry>
         </row>
         <row>
          <entry><literal>PG_EXCEPTION_DETAIL</literal></entry>
@@ -3274,20 +3343,55 @@ RAISE NOTICE 'Calling cs_create_job(%)', v_job_id;
     You can attach additional information to the error report by writing
     <literal>USING</> followed by <replaceable
     class="parameter">option</replaceable> = <replaceable
-    class="parameter">expression</replaceable> items.  The allowed
-    <replaceable class="parameter">option</replaceable> keywords are
-    <literal>MESSAGE</>, <literal>DETAIL</>, <literal>HINT</>, and
-    <literal>ERRCODE</>, while each <replaceable
-    class="parameter">expression</replaceable> can be any string-valued
-    expression.
-    <literal>MESSAGE</> sets the error message text (this option can't
-    be used in the form of <command>RAISE</> that includes a format
-    string before <literal>USING</>).
-    <literal>DETAIL</> supplies an error detail message, while
-    <literal>HINT</> supplies a hint message.
-    <literal>ERRCODE</> specifies the error code (SQLSTATE) to report,
-    either by condition name as shown in <xref linkend="errcodes-appendix">,
-    or directly as a five-character SQLSTATE code.
+    class="parameter">expression</replaceable> items.  Each
+    <replaceable class="parameter">expression</replaceable> can be any
+    string-valued expression.  The allowed <replaceable
+    class="parameter">option</replaceable> key words are:
+
+    <variablelist id="raise-using-options">
+     <varlistentry>
+      <term><literal>MESSAGE</literal></term>
+      <listitem>
+       <para>Sets the error message text.  This option can't be used in the
+        form of <command>RAISE</> that includes a format string
+        before <literal>USING</>.</para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><literal>DETAIL</literal></term>
+      <listitem>
+       <para>Supplies an error detail message.</para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><literal>HINT</literal></term>
+      <listitem>
+       <para>Supplies a hint message.</para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><literal>ERRCODE</literal></term>
+      <listitem>
+       <para>Specifies the error code (SQLSTATE) to report, either by condition
+        name, as shown in <xref linkend="errcodes-appendix">, or directly as a
+        five-character SQLSTATE code.</para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><literal>COLUMN</literal></term>
+      <term><literal>CONSTRAINT</literal></term>
+      <term><literal>DATATYPE</literal></term>
+      <term><literal>TABLE</literal></term>
+      <term><literal>SCHEMA</literal></term>
+      <listitem>
+       <para>Supplies the name of a related object.</para>
+      </listitem>
+     </varlistentry>
+    </variablelist>
    </para>
 
    <para>
@@ -3377,7 +3481,10 @@ RAISE unique_violation USING MESSAGE = 'Duplicate user ID: ' || user_id;
    <secondary>in PL/pgSQL</secondary>
   </indexterm>
 
-  <para>
+  <sect2 id="plpgsql-dml-trigger">
+   <title>Triggers on data changes</title>
+
+   <para>
     <application>PL/pgSQL</application> can be used to define trigger
     procedures. A trigger procedure is created with the
     <command>CREATE FUNCTION</> command, declaring it as a function with
@@ -3400,7 +3507,7 @@ RAISE unique_violation USING MESSAGE = 'Duplicate user ID: ' || user_id;
       <para>
        Data type <type>RECORD</type>; variable holding the new
        database row for <command>INSERT</>/<command>UPDATE</> operations in row-level
-       triggers. This variable is <symbol>NULL</symbol> in statement-level triggers
+       triggers. This variable is unassigned in statement-level triggers
        and for <command>DELETE</command> operations.
       </para>
      </listitem>
@@ -3412,7 +3519,7 @@ RAISE unique_violation USING MESSAGE = 'Duplicate user ID: ' || user_id;
       <para>
        Data type <type>RECORD</type>; variable holding the old
        database row for <command>UPDATE</>/<command>DELETE</> operations in row-level
-       triggers. This variable is <symbol>NULL</symbol> in statement-level triggers
+       triggers. This variable is unassigned in statement-level triggers
        and for <command>INSERT</command> operations.
       </para>
      </listitem>
@@ -3924,6 +4031,70 @@ UPDATE sales_fact SET units_sold = units_sold * 2;
 SELECT * FROM sales_summary_bytime;
 </programlisting>
    </example>
+</sect2>
+
+  <sect2 id="plpgsql-event-trigger">
+   <title>Triggers on events</title>
+
+   <para>
+    <application>PL/pgSQL</application> can be used to define event
+    triggers.  <productname>PostgreSQL</> requires that a procedure that
+    is to be called as an event trigger must be declared as a function with
+    no arguments and a return type of <literal>event_trigger</>.
+   </para>
+
+   <para>
+    When a <application>PL/pgSQL</application> function is called as a
+    event trigger, several special variables are created automatically
+    in the top-level block. They are:
+
+   <variablelist>
+    <varlistentry>
+     <term><varname>TG_EVENT</varname></term>
+     <listitem>
+      <para>
+       Data type <type>text</type>; a string representing the event the
+       trigger is fired for.
+      </para>
+     </listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><varname>TG_TAG</varname></term>
+     <listitem>
+      <para>
+       Data type <type>text</type>; variable that contains the command tag
+       for which the trigger is fired.
+      </para>
+     </listitem>
+    </varlistentry>
+   </variablelist>
+  </para>
+
+   <para>
+    <xref linkend="plpgsql-event-trigger-example"> shows an example of a
+    event trigger procedure in <application>PL/pgSQL</application>.
+   </para>
+
+   <example id="plpgsql-event-trigger-example">
+    <title>A <application>PL/pgSQL</application> Event Trigger Procedure</title>
+
+    <para>
+     This example trigger simply raises a <literal>NOTICE</literal> message
+     each time a supported command is executed.
+    </para>
+
+<programlisting>
+CREATE OR REPLACE FUNCTION snitch() RETURNS event_trigger AS $$
+BEGIN
+    RAISE NOTICE 'snitch: % %', tg_event, tg_tag;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE EVENT TRIGGER snitch ON ddl_command_start EXECUTE PROCEDURE snitch();
+</programlisting>
+   </example>
+  </sect2>
 
   </sect1>
 
@@ -4153,7 +4324,9 @@ $$ LANGUAGE plpgsql;
     on specific parameter values, and caching that for re-use.  Typically
     this will happen only if the execution plan is not very sensitive to
     the values of the <application>PL/pgSQL</> variables referenced in it.
-    If it is, generating a plan each time is a net win.
+    If it is, generating a plan each time is a net win.  See <xref
+    linkend="sql-prepare"> for more information about the behavior of
+    prepared statements.
    </para>
 
    <para>
@@ -5115,7 +5288,7 @@ BEGIN
         ELSE
             RETURN pos + beg_index - 1;
         END IF;
-    ELSE
+    ELSIF beg_index &lt; 0 THEN
         ss_length := char_length(string_to_search);
         length := char_length(string);
         beg := length + beg_index - ss_length + 2;
@@ -5131,6 +5304,8 @@ BEGIN
             beg := beg - 1;
         END LOOP;
 
+        RETURN 0;
+    ELSE
         RETURN 0;
     END IF;
 END;
@@ -5170,7 +5345,7 @@ BEGIN
         ELSE
             RETURN beg;
         END IF;
-    ELSE
+    ELSIF beg_index &lt; 0 THEN
         ss_length := char_length(string_to_search);
         length := char_length(string);
         beg := length + beg_index - ss_length + 2;
@@ -5190,6 +5365,8 @@ BEGIN
             beg := beg - 1;
         END LOOP;
 
+        RETURN 0;
+    ELSE
         RETURN 0;
     END IF;
 END;

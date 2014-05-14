@@ -22,114 +22,115 @@ PostgreSQL documentation
  <refsynopsisdiv>
   <cmdsynopsis>
    <command>pg_ctl</command>
-   <arg choice="plain">init[db]</arg>
-   <arg>-s</arg>
-   <arg>-D <replaceable>datadir</replaceable></arg>
-   <arg>-o <replaceable>initdb-options</replaceable></arg>
+   <arg choice="plain"><option>init[db]</option></arg>
+   <arg choice="opt"><option>-s</option></arg>
+   <arg choice="opt"><option>-D</option> <replaceable>datadir</replaceable></arg>
+   <arg choice="opt"><option>-o</option> <replaceable>initdb-options</replaceable></arg>
   </cmdsynopsis>
 
   <cmdsynopsis>
    <command>pg_ctl</command>
-   <arg choice="plain">start</arg>
-   <arg>-w</arg>
-   <arg>-t <replaceable>seconds</replaceable></arg>
-   <arg>-s</arg>
-   <arg>-D <replaceable>datadir</replaceable></arg>
-   <arg>-l <replaceable>filename</replaceable></arg>
-   <arg>-o <replaceable>options</replaceable></arg>
-   <arg>-p <replaceable>path</replaceable></arg>
-   <arg>-c</arg>
+   <arg choice="plain"><option>start</option></arg>
+   <arg choice="opt"><option>-w</option></arg>
+   <arg choice="opt"><option>-t</option> <replaceable>seconds</replaceable></arg>
+   <arg choice="opt"><option>-s</option></arg>
+   <arg choice="opt"><option>-D</option> <replaceable>datadir</replaceable></arg>
+   <arg choice="opt"><option>-l</option> <replaceable>filename</replaceable></arg>
+   <arg choice="opt"><option>-o</option> <replaceable>options</replaceable></arg>
+   <arg choice="opt"><option>-p</option> <replaceable>path</replaceable></arg>
 <!## XC>
-   <arg>-Z <replaceable>nodeopt</replaceable></arg>
+   <arg choice="plain">-Z <replaceable>nodeopt</replaceable></arg>
+<!## end>
+   <arg choice="opt"><option>-c</option></arg>
+  </cmdsynopsis>
+
+  <cmdsynopsis>
+   <command>pg_ctl</command>
+   <arg choice="plain"><option>stop</option></arg>
+   <arg choice="opt"><option>-W</option></arg>
+   <arg choice="opt"><option>-t</option> <replaceable>seconds</replaceable></arg>
+   <arg choice="opt"><option>-s</option></arg>
+   <arg choice="opt"><option>-D</option> <replaceable>datadir</replaceable></arg>
+   <arg choice="opt"><option>-m</option>
+     <group choice="plain">
+       <arg choice="plain"><option>s[mart]</option></arg>
+       <arg choice="plain"><option>f[ast]</option></arg>
+       <arg choice="plain"><option>i[mmediate]</option></arg>
+     </group>
+   </arg>
+  </cmdsynopsis>
+
+  <cmdsynopsis>
+   <command>pg_ctl</command>
+   <arg choice="plain"><option>restart</option></arg>
+   <arg choice="opt"><option>-w</option></arg>
+   <arg choice="opt"><option>-t</option> <replaceable>seconds</replaceable></arg>
+   <arg choice="opt"><option>-s</option></arg>
+   <arg choice="opt"><option>-D</option> <replaceable>datadir</replaceable></arg>
+   <arg choice="opt"><option>-c</option></arg>
+   <arg choice="opt"><option>-m</option>
+     <group choice="plain">
+       <arg choice="plain"><option>s[mart]</option></arg>
+       <arg choice="plain"><option>f[ast]</option></arg>
+       <arg choice="plain"><option>i[mmediate]</option></arg>
+     </group>
+   </arg>
+   <arg choice="opt"><option>-o</option> <replaceable>options</replaceable></arg>
+<!## XC>
+   <arg choice="opt">-Z <replaceable>nodeopt</replaceable></arg>
 <!## end>
   </cmdsynopsis>
 
   <cmdsynopsis>
    <command>pg_ctl</command>
-   <arg choice="plain">stop</arg>
-   <arg>-W</arg>
-   <arg>-t <replaceable>seconds</replaceable></arg>
-   <arg>-s</arg>
-   <arg>-D <replaceable>datadir</replaceable></arg>
-   <arg>-m
+   <arg choice="plain"><option>reload</option></arg>
+   <arg choice="opt"><option>-s</option></arg>
+   <arg choice="opt"><option>-D</option> <replaceable>datadir</replaceable></arg>
+  </cmdsynopsis>
+
+  <cmdsynopsis>
+   <command>pg_ctl</command>
+   <arg choice="plain"><option>status</option></arg>
+   <arg choice="opt"><option>-D</option> <replaceable>datadir</replaceable></arg>
+  </cmdsynopsis>
+
+  <cmdsynopsis>
+   <command>pg_ctl</command>
+   <arg choice="plain"><option>promote</option></arg>
+   <arg choice="opt"><option>-s</option></arg>
+   <arg choice="opt"><option>-D</option> <replaceable>datadir</replaceable></arg>
+  </cmdsynopsis>
+
+  <cmdsynopsis>
+   <command>pg_ctl</command>
+   <arg choice="plain"><option>kill</option></arg>
+   <arg choice="plain"><replaceable>signal_name</replaceable></arg>
+   <arg choice="plain"><replaceable>process_id</replaceable></arg>
+  </cmdsynopsis>
+
+  <cmdsynopsis>
+   <command>pg_ctl</command>
+   <arg choice="plain"><option>register</option></arg>
+   <arg choice="opt"><option>-N</option> <replaceable>servicename</replaceable></arg>
+   <arg choice="opt"><option>-U</option> <replaceable>username</replaceable></arg>
+   <arg choice="opt"><option>-P</option> <replaceable>password</replaceable></arg>
+   <arg choice="opt"><option>-D</option> <replaceable>datadir</replaceable></arg>
+   <arg choice="opt"><option>-S</option>
      <group choice="plain">
-       <arg>s[mart]</arg>
-       <arg>f[ast]</arg>
-       <arg>i[mmediate]</arg>
+       <arg choice="plain"><option>a[uto]</option></arg>
+       <arg choice="plain"><option>d[emand]</option></arg>
      </group>
    </arg>
+   <arg choice="opt"><option>-w</option></arg>
+   <arg choice="opt"><option>-t</option> <replaceable>seconds</replaceable></arg>
+   <arg choice="opt"><option>-s</option></arg>
+   <arg choice="opt"><option>-o</option> <replaceable>options</replaceable></arg>
   </cmdsynopsis>
 
   <cmdsynopsis>
    <command>pg_ctl</command>
-   <arg choice="plain">restart</arg>
-   <arg>-w</arg>
-   <arg>-t <replaceable>seconds</replaceable></arg>
-   <arg>-s</arg>
-   <arg>-D <replaceable>datadir</replaceable></arg>
-   <arg>-c</arg>
-   <arg>-m
-     <group choice="plain">
-       <arg>s[mart]</arg>
-       <arg>f[ast]</arg>
-       <arg>i[mmediate]</arg>
-     </group>
-   </arg>
-   <arg>-o <replaceable>options</replaceable></arg>
-<!## XC>
-   <arg>-Z <replaceable>nodeopt</replaceable></arg>
-<!## end>
-  </cmdsynopsis>
-
-  <cmdsynopsis>
-   <command>pg_ctl</command>
-   <arg choice="plain">reload</arg>
-   <arg>-s</arg>
-   <arg>-D <replaceable>datadir</replaceable></arg>
-  </cmdsynopsis>
-
-  <cmdsynopsis>
-   <command>pg_ctl</command>
-   <arg choice="plain">status</arg>
-   <arg>-D <replaceable>datadir</replaceable></arg>
-  </cmdsynopsis>
-
-  <cmdsynopsis>
-   <command>pg_ctl</command>
-   <arg choice="plain">promote</arg>
-   <arg>-s</arg>
-   <arg>-D <replaceable>datadir</replaceable></arg>
-  </cmdsynopsis>
-
-  <cmdsynopsis>
-   <command>pg_ctl</command>
-   <arg choice="plain">kill</arg>
-   <arg><replaceable>signal_name</replaceable></arg>
-   <arg><replaceable>process_id</replaceable></arg>
-  </cmdsynopsis>
-
-  <cmdsynopsis>
-   <command>pg_ctl</command>
-   <arg choice="plain">register</arg>
-   <arg>-N <replaceable>servicename</replaceable></arg>
-   <arg>-U <replaceable>username</replaceable></arg>
-   <arg>-P <replaceable>password</replaceable></arg>
-   <arg>-D <replaceable>datadir</replaceable></arg>
-   <arg>-S
-     <group choice="plain">
-       <arg>a[uto]</arg>
-       <arg>d[emand]</arg>
-     </group>
-   </arg>
-   <arg>-w</arg>
-   <arg>-t <replaceable>seconds</replaceable></arg>
-   <arg>-o <replaceable>options</replaceable></arg>
-  </cmdsynopsis>
-
-  <cmdsynopsis>
-   <command>pg_ctl</command>
-   <arg choice="plain">unregister</arg>
-   <arg>-N <replaceable>servicename</replaceable></arg>
+   <arg choice="plain"><option>unregister</option></arg>
+   <arg choice="opt"><option>-N</option> <replaceable>servicename</replaceable></arg>
   </cmdsynopsis>
  </refsynopsisdiv>
 
@@ -194,7 +195,9 @@ PostgreSQL documentation
   <para>
    <option>restart</option> mode effectively executes a stop followed
    by a start.  This allows changing the <command>postgres</command>
-   command-line options.
+   command-line options.  <option>restart</option> might fail if
+   relative paths specified were specified on the command-line during
+   server start.
   </para>
 
   <para>
@@ -211,7 +214,8 @@ PostgreSQL documentation
    <option>status</option> mode checks whether a server is running in
    the specified data directory. If it is, the <acronym>PID</acronym>
    and the command line options that were used to invoke it are
-   displayed.
+   displayed.  If the server is not running, the process returns an
+   exit status of 3.
   </para>
 
   <para>
@@ -240,15 +244,26 @@ PostgreSQL documentation
    on <productname>Microsoft Windows</>.  This undoes the effects of the
    <option>register</option> command.
   </para>
+
+&xconly;
+<!## XC>
+  <para>
+   In <productname>Postgres-XC</productname>, <application>pg_ctl</application> is
+   used to control a coordinator or a datanode separately.
+  </para>
+<!## end>
+
  </refsect1>
 
  <refsect1 id="app-pg-ctl-options">
   <title>Options</title>
 
+&common;
     <variablelist>
 
      <varlistentry>
       <term><option>-c</option></term>
+      <term><option>--core-file</option></term>
       <listitem>
        <para>
         Attempt to allow server crashes to produce core files, on platforms
@@ -262,9 +277,10 @@ PostgreSQL documentation
 
      <varlistentry>
       <term><option>-D <replaceable class="parameter">datadir</replaceable></option></term>
+      <term><option>--pgdata <replaceable class="parameter">datadir</replaceable></option></term>
       <listitem>
        <para>
-        Specifies the file system location of the database files.  If
+        Specifies the file system location of the database configuration files.  If
         this is omitted, the environment variable
         <envar>PGDATA</envar> is used.
        </para>
@@ -273,6 +289,7 @@ PostgreSQL documentation
 
      <varlistentry>
       <term><option>-l <replaceable class="parameter">filename</replaceable></option></term>
+      <term><option>--log <replaceable class="parameter">filename</replaceable></option></term>
       <listitem>
        <para>
         Append the server log output to
@@ -285,6 +302,7 @@ PostgreSQL documentation
 
      <varlistentry>
       <term><option>-m <replaceable class="parameter">mode</replaceable></option></term>
+      <term><option>--mode <replaceable class="parameter">mode</replaceable></option></term>
       <listitem>
        <para>
         Specifies the shutdown mode.  <replaceable>mode</replaceable>
@@ -361,6 +379,7 @@ PostgreSQL documentation
 
      <varlistentry>
       <term><option>-s</option></term>
+      <term><option>--silent</option></term>
       <listitem>
        <para>
         Print only errors, no informational messages.
@@ -370,12 +389,23 @@ PostgreSQL documentation
 
      <varlistentry>
       <term><option>-t</option></term>
+      <term><option>--timeout</option></term>
       <listitem>
        <para>
         The maximum number of seconds to wait when waiting for startup or
         shutdown to complete.  The default is 60 seconds.
        </para>
       </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-V</></term>
+      <term><option>--version</></term>
+       <listitem>
+        <para>
+         Print the <application>pg_ctl</application> version and exit.
+        </para>
+       </listitem>
      </varlistentry>
 
      <varlistentry>
@@ -388,6 +418,7 @@ PostgreSQL documentation
         attempts to connect to the server.
         When waiting for shutdown, <command>pg_ctl</command> waits for
         the server to remove its <acronym>PID</acronym> file.
+        This option allows the entry of an <acronym>SSL</> passphrase on startup.
         <command>pg_ctl</command> returns an exit code based on the
         success of the startup or shutdown.
        </para>
@@ -404,15 +435,28 @@ PostgreSQL documentation
       </listitem>
      </varlistentry>
 
+     <varlistentry>
+      <term><option>-?</></term>
+      <term><option>--help</></term>
+      <listitem>
+       <para>
+        Show help about <application>pg_ctl</application> command line
+        arguments, and exit.
+       </para>
+      </listitem>
+     </varlistentry>
    </variablelist>
 
-<!## PG>
-<!-- NOTICE:
-     No Windows support yet
--->
   <refsect2 id="app-pg-ctl-windows-options">
    <title>Options for Windows</title>
 
+&xconly;
+<!## XC>
+   <para>
+    Current version of<productname>Postgres-XC</productname> does not run on Windows.
+   </para>
+<!## end>
+<!## PG>
    <variablelist>
     <varlistentry>
      <term><option>-N <replaceable class="parameter">servicename</replaceable></option></term>
@@ -455,8 +499,8 @@ PostgreSQL documentation
      </listitem>
     </varlistentry>
    </variablelist>
-  </refsect2>
 <!## end>
+  </refsect2>
 
  </refsect1>
 
@@ -464,6 +508,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Environment</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><envar>PGDATA</envar></term>
@@ -485,6 +530,7 @@ PostgreSQL documentation
    For additional server variables, see <xref linkend="app-postgres">.
   </para>
 
+&xconly;
 <!## XC>
   <para>
    This command controls individual Coordinator or Datanode.
@@ -496,6 +542,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Files</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><filename>postmaster.pid</filename></term>
@@ -533,6 +580,7 @@ PostgreSQL documentation
   <refsect2 id="R2-APP-PGCTL-3">
    <title>Starting the Server</title>
 
+&common;
    <para>
     To start the server:
 <screen>
@@ -553,12 +601,12 @@ PostgreSQL documentation
     running without <function>fsync</function>, use:
 <screen>
 <prompt>$</prompt> <userinput>pg_ctl -o "-F -p 5433" start</userinput>
-</screen>
-   </para>
+</screen></para>
   </refsect2>
 
   <refsect2 id="R2-APP-PGCTL-4">
    <title>Stopping the Server</title>
+&common;
    <para>
     To stop the server, use:
 <screen>
@@ -568,13 +616,13 @@ PostgreSQL documentation
     <emphasis>how</emphasis> the server shuts down:
 <screen>
 <prompt>$</prompt> <userinput>pg_ctl stop -m fast</userinput>
-</screen>
-   </para>
+</screen></para>
   </refsect2>
 
   <refsect2 id="R2-APP-PGCTL-5">
    <title>Restarting the Server</title>
 
+&common;
    <para>
     Restarting the server is almost equivalent to stopping the
     server and starting it again,
@@ -598,13 +646,13 @@ PostgreSQL documentation
     To restart using port 5433, disabling <function>fsync</> upon restart:
 <screen>
 <prompt>$</prompt> <userinput>pg_ctl -o "-F -p 5433" restart</userinput>
-</screen>
-   </para>
+</screen></para>
   </refsect2>
 
   <refsect2 id="R2-APP-PGCTL-6">
    <title>Showing the Server Status</title>
 
+&common;
    <para>
     Here is sample status output from
     <application>pg_ctl</application>:

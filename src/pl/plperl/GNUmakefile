@@ -12,15 +12,10 @@ ifeq ($(perl_useshrplib),yes)
 shared_libperl = yes
 endif
 
-# If we don't have a shared library and the platform doesn't allow it
-# to work without, we have to skip it.
-ifneq (,$(findstring yes, $(shared_libperl)$(allow_nonpic_in_shlib)))
+# If we don't have a shared library, we have to skip it.
+ifeq ($(shared_libperl),yes)
 
 ifeq ($(PORTNAME), win32)
-perl_archlibexp := $(subst \,/,$(perl_archlibexp))
-perl_privlibexp := $(subst \,/,$(perl_privlibexp))
-perl_lib := $(basename $(notdir $(wildcard $(perl_archlibexp)/CORE/perl[5-9]*.lib)))
-perl_embed_ldflags = -L$(perl_archlibexp)/CORE -l$(perl_lib)
 override CPPFLAGS += -DPLPERL_HAVE_UID_GID
 # Perl on win32 contains /* within comment all over the header file,
 # so disable this warning.
@@ -44,7 +39,7 @@ PERLCHUNKS = plc_perlboot.pl plc_trusted.pl
 SHLIB_LINK = $(perl_embed_ldflags)
 
 REGRESS_OPTS = --dbname=$(PL_TESTDB) --load-extension=plperl  --load-extension=plperlu
-REGRESS = plperl plperl_trigger plperl_shared plperl_elog plperl_util plperl_init plperlu plperl_array
+REGRESS = plperl plperl_lc plperl_trigger plperl_shared plperl_elog plperl_util plperl_init plperlu plperl_array
 # if Perl can support two interpreters in one backend,
 # test plperl-and-plperlu cases
 ifneq ($(PERL),)

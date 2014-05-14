@@ -1,14 +1,29 @@
 <!-- doc/src/sgml/pgxcmonitor.sgml -->
 
-<sect1 id="pgxcmonitor" xreflabel="pgxcmonitor">
+<refentry id="pgxcmonitor" xreflabel="pgxcmonitor">
+ <refmeta>
+  <refentrytitle><application>pgxc_monitor</application></refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Application</refmiscinfo>
+ </refmeta>
 
-<title>pgxc_monitor</title>
+ <refnamediv>
+  <refname>pgxc_monitor</refname>
+  <refpurpose>test if a <productname>Postgres-XC</productname> node is running</refpurpose>
+ </refnamediv>
 
- <indexterm zone="pgxcmonitor">
+ <indexterm zone="pgarchivecleanup">
   <primary>pgxc_monitor</primary>
  </indexterm>
 
- <sect2>
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>pgxc_monitor</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
+
+ <refsect1>
   <title>Overview</title>
 
 &xconly;
@@ -36,9 +51,9 @@ pgxc_monitor <optional> <replaceable>option</> </optional>
     <para>
      If invalid options are specified, it exits with exit code 3.
     </para>
- </sect2>
+ </refsect1>
 
- <sect2>
+ <refsect1>
   <title>Options</title>
 
   <variablelist>
@@ -129,9 +144,9 @@ pgxc_monitor <optional> <replaceable>option</> </optional>
     </varlistentry>
 
   </variablelist>
- </sect2>
+ </refsect1>
 
- <sect2>
+ <refsect1>
   <title>Options</title>
 
   <para>
@@ -160,6 +175,6 @@ pgxc_monitor <optional> <replaceable>option</> </optional>
    If invalid parameters are given, 
    error message will be printed even if <option>-q</option> is specified.
   </para>
- </sect2>
+ </refsect1>
 
-</sect1>
+</refentry>

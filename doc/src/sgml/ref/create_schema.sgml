@@ -23,6 +23,8 @@ PostgreSQL documentation
 <synopsis>
 CREATE SCHEMA <replaceable class="parameter">schema_name</replaceable> [ AUTHORIZATION <replaceable class="parameter">user_name</replaceable> ] [ <replaceable class="parameter">schema_element</replaceable> [ ... ] ]
 CREATE SCHEMA AUTHORIZATION <replaceable class="parameter">user_name</replaceable> [ <replaceable class="parameter">schema_element</replaceable> [ ... ] ]
+CREATE SCHEMA IF NOT EXISTS <replaceable class="parameter">schema_name</replaceable> [ AUTHORIZATION <replaceable class="parameter">user_name</replaceable> ]
+CREATE SCHEMA IF NOT EXISTS AUTHORIZATION <replaceable class="parameter">user_name</replaceable>
 </synopsis>
  </refsynopsisdiv>
 
@@ -65,7 +67,8 @@ CREATE SCHEMA AUTHORIZATION <replaceable class="parameter">user_name</replaceabl
       <term><replaceable class="parameter">schema_name</replaceable></term>
       <listitem>
        <para>
-        The name of a schema to be created.  If this is omitted, the user name
+        The name of a schema to be created.  If this is omitted, the
+        <replaceable class="parameter">user_name</replaceable>
         is used as the schema name.  The name cannot
         begin with <literal>pg_</literal>, as such names
         are reserved for system schemas.
@@ -77,9 +80,10 @@ CREATE SCHEMA AUTHORIZATION <replaceable class="parameter">user_name</replaceabl
       <term><replaceable class="parameter">user_name</replaceable></term>
       <listitem>
        <para>
-        The name of the user who will own the schema.  If omitted,
-        defaults to the user executing the command.  Only superusers
-        can create schemas owned by users other than themselves.
+        The role name of the user who will own the new schema.  If omitted,
+        defaults to the user executing the command.  To create a schema
+        owned by another role, you must be a direct or indirect member of
+        that role, or be a superuser.
        </para>
       </listitem>
      </varlistentry>
@@ -95,6 +99,17 @@ CREATE SCHEMA AUTHORIZATION <replaceable class="parameter">user_name</replaceabl
         TRIGGER</> and <command>GRANT</> are accepted as clauses
         within <command>CREATE SCHEMA</>. Other kinds of objects may
         be created in separate commands after the schema is created.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><literal>IF NOT EXISTS</literal></term>
+      <listitem>
+       <para>
+        Do nothing (except issuing a notice) if a schema with the same name
+        already exists.  <replaceable class="parameter">schema_element</>
+        subcommands cannot be included when this option is used.
        </para>
       </listitem>
      </varlistentry>
@@ -126,6 +141,15 @@ CREATE SCHEMA myschema;
    named <literal>joe</>:
 <programlisting>
 CREATE SCHEMA AUTHORIZATION joe;
+</programlisting>
+  </para>
+
+  <para>
+   Create a schema named <literal>test</> that will be owned by user
+   <literal>joe</>, unless there already is a schema named <literal>test</>.
+   (It does not matter whether <literal>joe</> owns the pre-existing schema.)
+<programlisting>
+CREATE SCHEMA IF NOT EXISTS test AUTHORIZATION joe;
 </programlisting>
   </para>
 
@@ -175,7 +199,13 @@ CREATE VIEW hollywood.winners AS
    all objects within it.  <productname>PostgreSQL</productname>
    allows schemas to contain objects owned by users other than the
    schema owner.  This can happen only if the schema owner grants the
-   <literal>CREATE</> privilege on his schema to someone else.
+   <literal>CREATE</> privilege on his schema to someone else, or a
+   superuser chooses to create objects in it.
+  </para>
+
+  <para>
+   The <literal>IF NOT EXISTS</literal> option is a
+   <productname>PostgreSQL</productname> extension.
   </para>
  </refsect1>
 

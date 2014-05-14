@@ -33,7 +33,7 @@
  * of ALTER TABLE.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -47,6 +47,7 @@
 
 #include "access/hash.h"
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "access/nbtree.h"
 #include "catalog/indexing.h"
 #include "catalog/pg_enum.h"
@@ -55,6 +56,7 @@
 #include "catalog/pg_type.h"
 #include "commands/defrem.h"
 #include "utils/builtins.h"
+#include "utils/catcache.h"
 #include "utils/fmgroids.h"
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
@@ -646,6 +648,9 @@ cache_record_field_properties(TypeCacheEntry *typentry)
 			load_typcache_tupdesc(typentry);
 		tupdesc = typentry->tupDesc;
 
+		/* Must bump the refcount while we do additional catalog lookups */
+		IncrTupleDescRefCount(tupdesc);
+
 		/* Have each property if all non-dropped fields have the property */
 		newflags = (TCFLAGS_HAVE_FIELD_EQUALITY |
 					TCFLAGS_HAVE_FIELD_COMPARE);
@@ -669,6 +674,8 @@ cache_record_field_properties(TypeCacheEntry *typentry)
 				break;
 		}
 		typentry->flags |= newflags;
+
+		DecrTupleDescRefCount(tupdesc);
 	}
 	typentry->flags |= TCFLAGS_CHECKED_FIELD_PROPERTIES;
 }
@@ -1089,7 +1096,7 @@ load_enum_cache_data(TypeCacheEntry *tcache)
 	enum_rel = heap_open(EnumRelationId, AccessShareLock);
 	enum_scan = systable_beginscan(enum_rel,
 								   EnumTypIdLabelIndexId,
-								   true, GetTransactionSnapshot(),
+								   true, GetLatestSnapshot(),
 								   1, &skey);
 
 	while (HeapTupleIsValid(enum_tuple = systable_getnext(enum_scan)))

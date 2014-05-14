@@ -11,7 +11,7 @@
  * we do better?)
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -287,6 +287,33 @@ trigger_out(PG_FUNCTION_ARGS)
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("cannot display a value of type trigger")));
+
+	PG_RETURN_VOID();			/* keep compiler quiet */
+}
+
+
+/*
+ * event_trigger_in - input routine for pseudo-type event_trigger.
+ */
+Datum
+event_trigger_in(PG_FUNCTION_ARGS)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("cannot accept a value of type event_trigger")));
+
+	PG_RETURN_VOID();			/* keep compiler quiet */
+}
+
+/*
+ * event_trigger_out - output routine for pseudo-type event_trigger.
+ */
+Datum
+event_trigger_out(PG_FUNCTION_ARGS)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("cannot display a value of type event_trigger")));
 
 	PG_RETURN_VOID();			/* keep compiler quiet */
 }

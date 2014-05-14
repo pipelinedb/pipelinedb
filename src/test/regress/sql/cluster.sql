@@ -3,7 +3,7 @@
 --
 
 CREATE TABLE clstr_tst_s (rf_a SERIAL PRIMARY KEY,
-	b INT);
+	b INT) distribute by replication;
 
 CREATE TABLE clstr_tst (a SERIAL PRIMARY KEY,
 	b INT,
@@ -160,7 +160,7 @@ ORDER BY 1;
 -- Test MVCC-safety of cluster. There isn't much we can do to verify the
 -- results with a single backend...
 
-CREATE TABLE clustertest (key int PRIMARY KEY);
+CREATE TABLE clustertest (key int PRIMARY KEY) distribute by replication;
 
 INSERT INTO clustertest VALUES (10);
 INSERT INTO clustertest VALUES (20);
@@ -193,7 +193,6 @@ SELECT * FROM clustertest ORDER BY 1;
 -- check that temp tables can be clustered
 -- Enforce use of COMMIT instead of 2PC for temporary objects
 RESET SESSION AUTHORIZATION;
-SET enforce_two_phase_commit TO off; -- Done by a superuser
 SET SESSION AUTHORIZATION clstr_user;
 
 create temp table clstr_temp (col1 int primary key, col2 text);

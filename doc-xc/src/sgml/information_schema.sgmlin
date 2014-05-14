@@ -7,6 +7,14 @@
   <primary>information schema</primary>
  </indexterm>
 
+<!## XC>
+&xconly;
+ <para>
+  Information schema described in this section holds data
+  only local to a coordinator or a datanode.
+ </para>
+<!## end>
+
 &common;
  <para>
   The information schema consists of a set of views that contain
@@ -14,20 +22,10 @@
   information schema is defined in the SQL standard and can therefore
   be expected to be portable and remain stable &mdash; unlike the system
   catalogs, which are specific to
-<!## PG>
-  <productname>PostgreSQL</productname> and are modelled after
-<!## end>
-<!## XC>
-  <productname>Postgres-XC</productname> and are modelled after
-<!## end>
+  <productname>PostgreSQL</productname> and are modeled after
   implementation concerns.  The information schema views do not,
   however, contain information about
-<!## PG>
   <productname>PostgreSQL</productname>-specific features; to inquire
-<!## end>
-<!## XC>
-  <productname>Postgres-XC</productname>-specific features; to inquire
-<!## end>
   about those you need to query the system catalogs or other
   <productname>PostgreSQL</productname>-specific views.
  </para>
@@ -38,12 +36,7 @@
    for a standard-compliant query that expects to return one row to
    return several.  This is because the SQL standard requires constraint
    names to be unique within a schema, but
-<!## PG>
    <productname>PostgreSQL</productname> does not enforce this
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> does not enforce this
-<!## end>
    restriction.  <productname>PostgreSQL</productname>
    automatically-generated constraint names avoid duplicates in the
    same schema, but users can specify such duplicate names.
@@ -86,6 +79,7 @@
 
  <sect1 id="infoschema-datatypes">
   <title>Data Types</title>
+
 &common;
   <para>
    The columns of the information schema views use special data types
@@ -160,6 +154,7 @@
 
  <sect1 id="infoschema-information-schema-catalog-name">
   <title><literal>information_schema_catalog_name</literal></title>
+
 &common;
   <para>
    <literal>information_schema_catalog_name</literal> is a table that
@@ -192,6 +187,7 @@
 
  <sect1 id="infoschema-administrable-role-authorizations">
   <title><literal>administrable_role_authorizations</literal></title>
+
 &common;
   <para>
    The view <literal>administrable_role_authorizations</literal>
@@ -240,6 +236,7 @@
 
  <sect1 id="infoschema-applicable-roles">
   <title><literal>applicable_roles</literal></title>
+
 &common;
   <para>
    The view <literal>applicable_roles</literal> identifies all roles
@@ -295,17 +292,15 @@
 
  <sect1 id="infoschema-attributes">
   <title><literal>attributes</literal></title>
+
 &common;
   <para>
    The view <literal>attributes</literal> contains information about
    the attributes of composite data types defined in the database.
    (Note that the view does not give information about table columns,
-<!## PG>
    which are sometimes called attributes in PostgreSQL contexts.)
-<!## end>
-<!## XC>
-   which are sometimes called attributes in Postgres-XC contexts.)
-<!## end>
+   Only those attributes are shown that the current user has access to (by way
+   of being the owner of or having some privilege on the type).
   </para>
 
   <table>
@@ -402,6 +397,53 @@
      </row>
 
      <row>
+      <entry><literal>character_set_catalog</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>character_set_schema</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>character_set_name</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>collation_catalog</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>
+       Name of the database containing the collation of the attribute
+       (always the current database), null if default or the data type
+       of the attribute is not collatable
+      </entry>
+     </row>
+
+     <row>
+      <entry><literal>collation_schema</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>
+       Name of the schema containing the collation of the attribute,
+       null if default or the data type of the attribute is not
+       collatable
+      </entry>
+     </row>
+
+     <row>
+      <entry><literal>collation_name</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>
+       Name of the collation of the attribute, null if default or the
+       data type of the attribute is not collatable
+      </entry>
+     </row>
+
+     <row>
       <entry><literal>numeric_precision</literal></entry>
       <entry><type>cardinal_number</type></entry>
       <entry>
@@ -458,13 +500,26 @@
      <row>
       <entry><literal>interval_type</literal></entry>
       <entry><type>character_data</type></entry>
-      <entry>Not yet implemented</entry>
+      <entry>
+       If <literal>data_type</literal> identifies an interval type,
+       this column contains the specification which fields the
+       intervals include for this attribute, e.g., <literal>YEAR TO
+       MONTH</literal>, <literal>DAY TO SECOND</literal>, etc.  If no
+       field restrictions were specified (that is, the interval
+       accepts all fields), and for all other data types, this field
+       is null.
+      </entry>
      </row>
 
      <row>
       <entry><literal>interval_precision</literal></entry>
-      <entry><type>character_data</type></entry>
-      <entry>Not yet implemented</entry>
+      <entry><type>cardinal_number</type></entry>
+      <entry>
+       Applies to a feature not available
+       in <productname>PostgreSQL</productname>
+       (see <literal>datetime_precision</literal> for the fractional
+       seconds precision of interval type attributes)
+      </entry>
      </row>
 
      <row>
@@ -495,45 +550,25 @@
      <row>
       <entry><literal>scope_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>maximum_cardinality</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -552,12 +587,7 @@
      <row>
       <entry><literal>is_derived_reference_attribute</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
     </tbody>
    </tgroup>
@@ -572,14 +602,10 @@
  <sect1 id="infoschema-character-sets">
   <title><literal>character_sets</literal></title>
 
+&common;
   <para>
    The view <literal>character_sets</literal> identifies the character
-<!## PG>
    sets available in the current database.  Since PostgreSQL does not
-<!## end>
-<!## XC>
-   sets available in the current database.  Since Postgres-XC does not
-<!## end>
    support multiple character sets within one database, this view only
    shows one, which is the database encoding.
   </para>
@@ -609,12 +635,7 @@
        encoding form applicable to the <literal>LATIN1</literal>
        repertoire).  But for example Unicode has the encoding forms
        <literal>UTF8</literal>, <literal>UTF16</literal>, etc. (not
-<!## PG>
        all supported by PostgreSQL).  Encoding forms are not exposed
-<!## end>
-<!## XC>
-       all supported by Postgres-XC).  Encoding forms are not exposed
-<!## end>
        as an SQL object, but are visible in this view.
       </para>
      </listitem>
@@ -636,12 +657,7 @@
     </varlistentry>
    </variablelist>
 
-<!## PG>
    You can think of an <quote>encoding</quote> in PostgreSQL either as
-<!## end>
-<!## XC>
-   You can think of an <quote>encoding</quote> in Postgres-XC either as
-<!## end>
    a character set or a character encoding form.  They will have the
    same name, and there can only be one in one database.
   </para>
@@ -720,6 +736,7 @@
 
  <sect1 id="infoschema-check-constraint-routine-usage">
   <title><literal>check_constraint_routine_usage</literal></title>
+
 &common;
   <para>
    The view <literal>check_constraint_routine_usage</literal>
@@ -786,6 +803,7 @@
 
  <sect1 id="infoschema-check-constraints">
   <title><literal>check_constraints</literal></title>
+
 &common;
   <para>
    The view <literal>check_constraints</literal> contains all check
@@ -838,6 +856,7 @@
  <sect1 id="infoschema-collations">
   <title><literal>collations</literal></title>
 
+&common;
   <para>
    The view <literal>collations</literal> contains the collations
    available in the current database.
@@ -879,12 +898,7 @@
       <entry><literal>character_data</literal></entry>
       <entry>
        Always <literal>NO PAD</literal> (The alternative <literal>PAD
-<!## PG>
        SPACE</literal> is not supported by PostgreSQL.)
-<!## end>
-<!## XC>
-       SPACE</literal> is not supported by Postgres-XC.)
-<!## end>
       </entry>
      </row>
     </tbody>
@@ -895,15 +909,11 @@
  <sect1 id="infoschema-collation-character-set-applicab"> <!-- max 44 characters -->
   <title><literal>collation_character_set_applicability</literal></title>
 
+&common;
   <para>
    The view <literal>collation_character_set_applicability</literal>
    identifies which character set the available collations are
-<!## PG>
    applicable to.  In PostgreSQL, there is only one character set per
-<!## end>
-<!## XC>
-   applicable to.  In Postgres-XC, there is only one character set per
-<!## end>
    database (see explanation
    in <xref linkend="infoschema-character-sets">), so this view does
    not provide much useful information.
@@ -964,6 +974,7 @@
 
  <sect1 id="infoschema-column-domain-usage">
   <title><literal>column_domain_usage</literal></title>
+
 &common;
   <para>
    The view <literal>column_domain_usage</literal> identifies all
@@ -1030,8 +1041,73 @@
   </table>
  </sect1>
 
+ <sect1 id="infoschema-column-options">
+  <title><literal>column_options</literal></title>
+
+&common;
+  <para>
+   The view <literal>column_options</literal> contains all the
+   options defined for foreign table columns in the current database.  Only
+   those foreign table columns are shown that the current user has access to
+   (by way of being the owner or having some privilege).
+  </para>
+
+  <table>
+   <title><literal>column_options</literal> Columns</title>
+
+   <tgroup cols="3">
+    <thead>
+     <row>
+      <entry>Name</entry>
+      <entry>Data Type</entry>
+      <entry>Description</entry>
+     </row>
+    </thead>
+
+    <tbody>
+     <row>
+      <entry><literal>table_catalog</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the database that contains the foreign table (always the current database)</entry>
+     </row>
+
+     <row>
+      <entry><literal>table_schema</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the schema that contains the foreign table</entry>
+     </row>
+
+     <row>
+      <entry><literal>table_name</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the foreign table</entry>
+     </row>
+
+     <row>
+      <entry><literal>column_name</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the column</entry>
+     </row>
+
+     <row>
+      <entry><literal>option_name</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of an option</entry>
+     </row>
+
+     <row>
+      <entry><literal>option_value</literal></entry>
+      <entry><type>character_data</type></entry>
+      <entry>Value of the option</entry>
+     </row>
+    </tbody>
+   </tgroup>
+  </table>
+ </sect1>
+
  <sect1 id="infoschema-column-privileges">
   <title><literal>column_privileges</literal></title>
+
 &common;
   <para>
    The view <literal>column_privileges</literal> identifies all
@@ -1119,16 +1195,12 @@
 
  <sect1 id="infoschema-column-udt-usage">
   <title><literal>column_udt_usage</literal></title>
+
 &common;
   <para>
    The view <literal>column_udt_usage</literal> identifies all columns
    that use data types owned by a currently enabled role.  Note that in
-<!## PG>
    <productname>PostgreSQL</productname>, built-in data types behave
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname>, built-in data types behave
-<!## end>
    like user-defined types, so they are included here as well.  See
    also <xref linkend="infoschema-columns"> for details.
   </para>
@@ -1204,6 +1276,7 @@
 
  <sect1 id="infoschema-columns">
   <title><literal>columns</literal></title>
+
 &common;
   <para>
    The view <literal>columns</literal> contains information about all
@@ -1368,79 +1441,72 @@
      <row>
       <entry><literal>interval_type</literal></entry>
       <entry><type>character_data</type></entry>
-      <entry>Not yet implemented</entry>
+      <entry>
+       If <literal>data_type</literal> identifies an interval type,
+       this column contains the specification which fields the
+       intervals include for this column, e.g., <literal>YEAR TO
+       MONTH</literal>, <literal>DAY TO SECOND</literal>, etc.  If no
+       field restrictions were specified (that is, the interval
+       accepts all fields), and for all other data types, this field
+       is null.
+      </entry>
      </row>
 
      <row>
       <entry><literal>interval_precision</literal></entry>
-      <entry><type>character_data</type></entry>
-      <entry>Not yet implemented</entry>
+      <entry><type>cardinal_number</type></entry>
+      <entry>
+       Applies to a feature not available
+       in <productname>PostgreSQL</productname>
+       (see <literal>datetime_precision</literal> for the fractional
+       seconds precision of interval type columns)
+      </entry>
      </row>
 
      <row>
       <entry><literal>character_set_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>collation_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       Name of the database containing the collation of the column
+       (always the current database), null if default or the data type
+       of the column is not collatable
+      </entry>
      </row>
 
      <row>
       <entry><literal>collation_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       Name of the schema containing the collation of the column, null
+       if default or the data type of the column is not collatable
+      </entry>
      </row>
 
      <row>
       <entry><literal>collation_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       Name of the collation of the column, null if default or the
+       data type of the column is not collatable
+      </entry>
      </row>
 
      <row>
@@ -1499,45 +1565,25 @@
      <row>
       <entry><literal>scope_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>maximum_cardinality</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -1556,111 +1602,61 @@
      <row>
       <entry><literal>is_self_referencing</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>is_identity</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>identity_generation</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>identity_start</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>identity_increment</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>identity_maximum</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>identity_minimum</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>identity_cycle</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>is_generated</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>generation_expression</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -1678,21 +1674,11 @@
 
   <para>
    Since data types can be defined in a variety of ways in SQL, and
-<!## PG>
    <productname>PostgreSQL</productname> contains additional ways to
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> contains additional ways to
-<!## end>
    define data types, their representation in the information schema
    can be somewhat difficult.  The column <literal>data_type</literal>
    is supposed to identify the underlying built-in type of the column.
-<!## PG>
    In <productname>PostgreSQL</productname>, this means that the type
-<!## end>
-<!## XC>
-   In <productname>Postgres-XC</productname>, this means that the type
-<!## end>
    is defined in the system catalog schema
    <literal>pg_catalog</literal>.  This column might be useful if the
    application can handle the well-known built-in types specially (for
@@ -1701,12 +1687,7 @@
    <literal>udt_schema</literal>, and <literal>udt_catalog</literal>
    always identify the underlying data type of the column, even if the
    column is based on a domain.  (Since
-<!## PG>
    <productname>PostgreSQL</productname> treats built-in types like
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> treats built-in types like
-<!## end>
    user-defined types, built-in types appear here as well.  This is an
    extension of the SQL standard.)  These columns should be used if an
    application wants to process data differently according to the
@@ -1723,6 +1704,7 @@
 
  <sect1 id="infoschema-constraint-column-usage">
   <title><literal>constraint_column_usage</literal></title>
+
 &common;
   <para>
    The view <literal>constraint_column_usage</literal> identifies all
@@ -1808,6 +1790,7 @@
 
  <sect1 id="infoschema-constraint-table-usage">
   <title><literal>constraint_table_usage</literal></title>
+
 &common;
   <para>
    The view <literal>constraint_table_usage</literal> identifies all
@@ -1883,6 +1866,7 @@
 
  <sect1 id="infoschema-data-type-privileges">
   <title><literal>data_type_privileges</literal></title>
+
 &common;
   <para>
    The view <literal>data_type_privileges</literal> identifies all
@@ -1959,10 +1943,13 @@
 
  <sect1 id="infoschema-domain-constraints">
   <title><literal>domain_constraints</literal></title>
+
 &common;
   <para>
-   The view <literal>domain_constraints</literal> contains all
-   constraints belonging to domains defined in the current database.
+   The view <literal>domain_constraints</literal> contains all constraints
+   belonging to domains defined in the current database.  Only those domains
+   are shown that the current user has access to (by way of being the owner or
+   having some privilege).
   </para>
 
   <table>
@@ -2032,16 +2019,12 @@
 
  <sect1 id="infoschema-domain-udt-usage">
   <title><literal>domain_udt_usage</literal></title>
+
 &common;
   <para>
    The view <literal>domain_udt_usage</literal> identifies all domains
    that are based on data types owned by a currently enabled role.
-<!## PG>
    Note that in <productname>PostgreSQL</productname>, built-in data
-<!## end>
-<!## XC>
-   Note that in <productname>Postgres-XC</productname>, built-in data
-<!## end>
    types behave like user-defined types, so they are included here as
    well.
   </para>
@@ -2101,10 +2084,12 @@
 
  <sect1 id="infoschema-domains">
   <title><literal>domains</literal></title>
+
 &common;
   <para>
-   The view <literal>domains</literal> contains all domains defined in
-   the current database.
+   The view <literal>domains</literal> contains all domains defined in the
+   current database.  Only those domains are shown that the current user has
+   access to (by way of being the owner or having some privilege).
   </para>
 
   <table>
@@ -2175,67 +2160,47 @@
      <row>
       <entry><literal>character_set_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>collation_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       Name of the database containing the collation of the domain
+       (always the current database), null if default or the data type
+       of the domain is not collatable
+      </entry>
      </row>
 
      <row>
       <entry><literal>collation_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       Name of the schema containing the collation of the domain, null
+       if default or the data type of the domain is not collatable
+      </entry>
      </row>
 
      <row>
       <entry><literal>collation_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       Name of the collation of the domain, null if default or the
+       data type of the domain is not collatable
+      </entry>
      </row>
 
      <row>
@@ -2294,13 +2259,26 @@
      <row>
       <entry><literal>interval_type</literal></entry>
       <entry><type>character_data</type></entry>
-      <entry>Not yet implemented</entry>
+      <entry>
+       If <literal>data_type</literal> identifies an interval type,
+       this column contains the specification which fields the
+       intervals include for this domain, e.g., <literal>YEAR TO
+       MONTH</literal>, <literal>DAY TO SECOND</literal>, etc.  If no
+       field restrictions were specified (that is, the interval
+       accepts all fields), and for all other data types, this field
+       is null.
+      </entry>
      </row>
 
      <row>
       <entry><literal>interval_precision</literal></entry>
-      <entry><type>character_data</type></entry>
-      <entry>Not yet implemented</entry>
+      <entry><type>cardinal_number</type></entry>
+      <entry>
+       Applies to a feature not available
+       in <productname>PostgreSQL</productname>
+       (see <literal>datetime_precision</literal> for the fractional
+       seconds precision of interval type domains)
+      </entry>
      </row>
 
      <row>
@@ -2330,45 +2308,25 @@
      <row>
       <entry><literal>scope_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>maximum_cardinality</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -2391,10 +2349,11 @@
 
  <sect1 id="infoschema-element-types">
   <title><literal>element_types</literal></title>
+
 &common;
   <para>
    The view <literal>element_types</literal> contains the data type
-   descriptors of the elements of arrays.  When a table column,
+   descriptors of the elements of arrays.  When a table column, composite-type attribute,
    domain, function parameter, or function return value is defined to
    be of an array type, the respective information schema view only
    contains <literal>ARRAY</literal> in the column
@@ -2406,7 +2365,7 @@
 SELECT c.column_name, c.data_type, e.data_type AS element_type
 FROM information_schema.columns c LEFT JOIN information_schema.element_types e
      ON ((c.table_catalog, c.table_schema, c.table_name, 'TABLE', c.dtd_identifier)
-       = (e.object_catalog, e.object_schema, e.object_name, e.object_type, e.dtd_identifier))
+       = (e.object_catalog, e.object_schema, e.object_name, e.object_type, e.collection_type_identifier))
 WHERE c.table_schema = '...' AND c.table_name = '...'
 ORDER BY c.ordinal_position;
 </programlisting>
@@ -2459,18 +2418,22 @@ ORDER BY c.ordinal_position;
       <entry>
        The type of the object that uses the array being described: one
        of <literal>TABLE</literal> (the array is used by a column of
-       that table), <literal>DOMAIN</literal> (the array is used by
-       that domain), <literal>ROUTINE</literal> (the array is used by
-       a parameter or the return data type of that function).
+       that table), <literal>USER-DEFINED TYPE</literal> (the array is
+       used by an attribute of that composite type),
+       <literal>DOMAIN</literal> (the array is used by that domain),
+       <literal>ROUTINE</literal> (the array is used by a parameter or
+       the return data type of that function).
       </entry>
      </row>
 
      <row>
-      <entry><literal>dtd_identifier</literal></entry>
+      <entry><literal>collection_type_identifier</literal></entry>
       <entry><type>sql_identifier</type></entry>
       <entry>
        The identifier of the data type descriptor of the array being
-       described
+       described.  Use this to join with the
+       <literal>dtd_identifier</literal> columns of other information
+       schema views.
       </entry>
      </row>
 
@@ -2488,155 +2451,96 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>character_maximum_length</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to array element data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to array element data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_octet_length</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to array element data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to array element data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>collation_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       Name of the database containing the collation of the element
+       type (always the current database), null if default or the data
+       type of the element is not collatable
+      </entry>
      </row>
 
      <row>
       <entry><literal>collation_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       Name of the schema containing the collation of the element
+       type, null if default or the data type of the element is not
+       collatable
+      </entry>
      </row>
 
      <row>
       <entry><literal>collation_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       Name of the collation of the element type, null if default or
+       the data type of the element is not collatable
+      </entry>
      </row>
 
      <row>
       <entry><literal>numeric_precision</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to array element data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to array element data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>numeric_precision_radix</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to array element data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to array element data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>numeric_scale</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to array element data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to array element data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>datetime_precision</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to array element data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to array element data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>interval_type</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to array element data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to array element data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>interval_precision</literal></entry>
-      <entry><type>character_data</type></entry>
-<!## PG>
+      <entry><type>cardinal_number</type></entry>
       <entry>Always null, since this information is not applied to array element data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to array element data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -2674,47 +2578,35 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>scope_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>maximum_cardinality</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
+     <row>
+      <entry><literal>dtd_identifier</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>
+       An identifier of the data type descriptor of the element.  This
+       is currently not useful.
+      </entry>
+     </row>
     </tbody>
    </tgroup>
   </table>
@@ -2722,6 +2614,7 @@ ORDER BY c.ordinal_position;
 
  <sect1 id="infoschema-enabled-roles">
   <title><literal>enabled_roles</literal></title>
+
 &common;
   <para>
    The view <literal>enabled_roles</literal> identifies the currently
@@ -2767,6 +2660,7 @@ ORDER BY c.ordinal_position;
 
  <sect1 id="infoschema-foreign-data-wrapper-options">
   <title><literal>foreign_data_wrapper_options</literal></title>
+
 &common;
   <para>
    The view <literal>foreign_data_wrapper_options</literal> contains
@@ -2819,6 +2713,7 @@ ORDER BY c.ordinal_position;
 
  <sect1 id="infoschema-foreign-data-wrappers">
   <title><literal>foreign_data_wrappers</literal></title>
+
 &common;
   <para>
    The view <literal>foreign_data_wrappers</literal> contains all
@@ -2877,6 +2772,7 @@ ORDER BY c.ordinal_position;
 
  <sect1 id="infoschema-foreign-server-options">
   <title><literal>foreign_server_options</literal></title>
+
 &common;
   <para>
    The view <literal>foreign_server_options</literal> contains all the
@@ -2928,6 +2824,7 @@ ORDER BY c.ordinal_position;
 
  <sect1 id="infoschema-foreign-servers">
   <title><literal>foreign_servers</literal></title>
+
 &common;
   <para>
    The view <literal>foreign_servers</literal> contains all foreign
@@ -2999,6 +2896,7 @@ ORDER BY c.ordinal_position;
  <sect1 id="infoschema-foreign-table-options">
   <title><literal>foreign_table_options</literal></title>
 
+&common;
   <para>
    The view <literal>foreign_table_options</literal> contains all the
    options defined for foreign tables in the current database.  Only
@@ -3068,6 +2966,7 @@ ORDER BY c.ordinal_position;
  <sect1 id="infoschema-foreign-tables">
   <title><literal>foreign_tables</literal></title>
 
+&common;
   <para>
    The view <literal>foreign_tables</literal> contains all foreign
    tables defined in the current database.  Only those foreign
@@ -3124,6 +3023,7 @@ ORDER BY c.ordinal_position;
 
  <sect1 id="infoschema-key-column-usage">
   <title><literal>key_column_usage</literal></title>
+
 &common;
   <para>
    The view <literal>key_column_usage</literal> identifies all columns
@@ -3225,6 +3125,7 @@ ORDER BY c.ordinal_position;
 
  <sect1 id="infoschema-parameters">
   <title><literal>parameters</literal></title>
+
 &common;
   <para>
    The view <literal>parameters</literal> contains information about
@@ -3289,23 +3190,13 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>is_result</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>as_locator</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -3330,155 +3221,85 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>character_maximum_length</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to parameter data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to parameter data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_octet_length</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to parameter data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to parameter data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>collation_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>Always null, since this information is not applied to parameter data types in <productname>PostgreSQL</></entry>
      </row>
 
      <row>
       <entry><literal>collation_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>Always null, since this information is not applied to parameter data types in <productname>PostgreSQL</></entry>
      </row>
 
      <row>
       <entry><literal>collation_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>Always null, since this information is not applied to parameter data types in <productname>PostgreSQL</></entry>
      </row>
 
      <row>
       <entry><literal>numeric_precision</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to parameter data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to parameter data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>numeric_precision_radix</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to parameter data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to parameter data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>numeric_scale</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to parameter data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to parameter data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>datetime_precision</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to parameter data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to parameter data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>interval_type</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to parameter data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to parameter data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>interval_precision</literal></entry>
-      <entry><type>character_data</type></entry>
-<!## PG>
+      <entry><type>cardinal_number</type></entry>
       <entry>Always null, since this information is not applied to parameter data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to parameter data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -3510,45 +3331,25 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>scope_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>maximum_cardinality</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -3570,13 +3371,14 @@ ORDER BY c.ordinal_position;
 
  <sect1 id="infoschema-referential-constraints">
   <title><literal>referential_constraints</literal></title>
+
 &common;
   <para>
    The view <literal>referential_constraints</literal> contains all
    referential (foreign key) constraints in the current database.
    Only those constraints are shown for which the current user has
    write access to the referencing table (by way of being the
-   owner or having some privilege other than SELECT).
+   owner or having some privilege other than <literal>SELECT</literal>).
   </para>
 
   <table>
@@ -3677,6 +3479,7 @@ ORDER BY c.ordinal_position;
 
  <sect1 id="infoschema-role-column-grants">
   <title><literal>role_column_grants</literal></title>
+
 &common;
   <para>
    The view <literal>role_column_grants</literal> identifies all
@@ -3686,7 +3489,7 @@ ORDER BY c.ordinal_position;
    difference between this view
    and <literal>column_privileges</literal> is that this view omits
    columns that have been made accessible to the current user by way
-   of a grant to public.
+   of a grant to <literal>PUBLIC</literal>.
   </para>
 
   <table>
@@ -3770,7 +3573,7 @@ ORDER BY c.ordinal_position;
    difference between this view
    and <literal>routine_privileges</literal> is that this view omits
    functions that have been made accessible to the current user by way
-   of a grant to public.
+   of a grant to <literal>PUBLIC</literal>.
   </para>
 
   <table>
@@ -3865,7 +3668,7 @@ ORDER BY c.ordinal_position;
    difference between this view
    and <literal>table_privileges</literal> is that this view omits
    tables that have been made accessible to the current user by way of
-   a grant to public.
+   a grant to <literal>PUBLIC</literal>.
   </para>
 
   <table>
@@ -3931,12 +3734,90 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>with_hierarchy</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       In the SQL standard, <literal>WITH HIERARCHY OPTION</literal>
+       is a separate (sub-)privilege allowing certain operations on
+       table inheritance hierarchies.  In PostgreSQL, this is included
+       in the <literal>SELECT</literal> privilege, so this column
+       shows <literal>YES</literal> if the privilege
+       is <literal>SELECT</literal>, else <literal>NO</literal>.
+      </entry>
+     </row>
+    </tbody>
+   </tgroup>
+  </table>
+ </sect1>
+
+ <sect1 id="infoschema-role-udt-grants">
+  <title><literal>role_udt_grants</literal></title>
+
+&common;
+  <para>
+   The view <literal>role_udt_grants</literal> is intended to identify
+   <literal>USAGE</literal> privileges granted on user-defined types
+   where the grantor or grantee is a currently enabled role.  Further
+   information can be found under
+   <literal>udt_privileges</literal>.  The only effective difference
+   between this view and <literal>udt_privileges</literal> is that
+   this view omits objects that have been made accessible to the
+   current user by way of a grant to <literal>PUBLIC</literal>.  Since
+   data types do not have real privileges in PostgreSQL, but only an
+   implicit grant to <literal>PUBLIC</literal>, this view is empty.
+  </para>
+
+  <table>
+   <title><literal>role_udt_grants</literal> Columns</title>
+
+   <tgroup cols="3">
+    <thead>
+     <row>
+      <entry>Name</entry>
+      <entry>Data Type</entry>
+      <entry>Description</entry>
+     </row>
+    </thead>
+
+    <tbody>
+     <row>
+      <entry><literal>grantor</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>The name of the role that granted the privilege</entry>
+     </row>
+
+     <row>
+      <entry><literal>grantee</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>The name of the role that the privilege was granted to</entry>
+     </row>
+
+     <row>
+      <entry><literal>udt_catalog</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the database containing the type (always the current database)</entry>
+     </row>
+
+     <row>
+      <entry><literal>udt_schema</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the schema containing the type</entry>
+     </row>
+
+     <row>
+      <entry><literal>udt_name</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the type</entry>
+     </row>
+
+     <row>
+      <entry><literal>privilege_type</literal></entry>
+      <entry><type>character_data</type></entry>
+      <entry>Always <literal>TYPE USAGE</literal></entry>
+     </row>
+
+     <row>
+      <entry><literal>is_grantable</literal></entry>
+      <entry><type>yes_or_no</type></entry>
+      <entry><literal>YES</literal> if the privilege is grantable, <literal>NO</literal> if not</entry>
      </row>
     </tbody>
    </tgroup>
@@ -3955,7 +3836,7 @@ ORDER BY c.ordinal_position;
    <literal>usage_privileges</literal>.  The only effective difference
    between this view and <literal>usage_privileges</literal> is that
    this view omits objects that have been made accessible to the
-   current user by way of a grant to public.
+   current user by way of a grant to <literal>PUBLIC</literal>.
   </para>
 
   <table>
@@ -4005,7 +3886,7 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>object_type</literal></entry>
       <entry><type>character_data</type></entry>
-      <entry><literal>COLLATION</literal> or <literal>DOMAIN</literal> or <literal>FOREIGN DATA WRAPPER</literal> or <literal>FOREIGN SERVER</literal></entry>
+      <entry><literal>COLLATION</literal> or <literal>DOMAIN</literal> or <literal>FOREIGN DATA WRAPPER</literal> or <literal>FOREIGN SERVER</literal> or <literal>SEQUENCE</literal></entry>
      </row>
 
      <row>
@@ -4193,67 +4074,37 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>module_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>module_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>module_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>udt_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>udt_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>udt_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -4272,155 +4123,85 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>character_maximum_length</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to return data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to return data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_octet_length</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to return data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to return data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>character_set_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>collation_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>Always null, since this information is not applied to return data types in <productname>PostgreSQL</></entry>
      </row>
 
      <row>
       <entry><literal>collation_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>Always null, since this information is not applied to return data types in <productname>PostgreSQL</></entry>
      </row>
 
      <row>
       <entry><literal>collation_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>Always null, since this information is not applied to return data types in <productname>PostgreSQL</></entry>
      </row>
 
      <row>
       <entry><literal>numeric_precision</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to return data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to return data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>numeric_precision_radix</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to return data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to return data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>numeric_scale</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to return data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to return data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>datetime_precision</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to return data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to return data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>interval_type</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Always null, since this information is not applied to return data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to return data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>interval_precision</literal></entry>
-      <entry><type>character_data</type></entry>
-<!## PG>
+      <entry><type>cardinal_number</type></entry>
       <entry>Always null, since this information is not applied to return data types in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, since this information is not applied to return data types in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -4452,45 +4233,25 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>scope_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>scope_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>maximum_cardinality</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Always null, because arrays always have unlimited maximum cardinality in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -4523,12 +4284,7 @@ ORDER BY c.ordinal_position;
        owned by a currently enabled role).  (According to the SQL
        standard, this column is only applicable if
        <literal>routine_body</literal> is <literal>SQL</literal>, but
-<!## PG>
        in <productname>PostgreSQL</productname> it will contain
-<!## end>
-<!## XC>
-       in <productname>Postgres-XC</productname> it will contain
-<!## end>
        whatever source text was specified when the function was
        created.)
       </entry>
@@ -4556,12 +4312,7 @@ ORDER BY c.ordinal_position;
       <entry><type>character_data</type></entry>
       <entry>
        Always <literal>GENERAL</literal> (The SQL standard defines
-<!## PG>
        other parameter styles, which are not available in <productname>PostgreSQL</>.)
-<!## end>
-<!## XC>
-       other parameter styles, which are not available in <productname>Postgres-XC</>.)
-<!## end>
       </entry>
      </row>
 
@@ -4572,12 +4323,7 @@ ORDER BY c.ordinal_position;
        If the function is declared immutable (called deterministic in
        the SQL standard), then <literal>YES</literal>, else
        <literal>NO</literal>.  (You cannot query the other volatility
-<!## PG>
        levels available in <productname>PostgreSQL</> through the information schema.)
-<!## end>
-<!## XC>
-       levels available in <productname>Postgres-XC</> through the information schema.)
-<!## end>
       </entry>
      </row>
 
@@ -4587,12 +4333,7 @@ ORDER BY c.ordinal_position;
       <entry>
        Always <literal>MODIFIES</literal>, meaning that the function
        possibly modifies SQL data.  This information is not useful for
-<!## PG>
        <productname>PostgreSQL</>.
-<!## end>
-<!## XC>
-       <productname>Postgres-XC</>.
-<!## end>
       </entry>
      </row>
 
@@ -4609,12 +4350,7 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>sql_path</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -4623,46 +4359,26 @@ ORDER BY c.ordinal_position;
       <entry>
        Always <literal>YES</literal> (The opposite would be a method
        of a user-defined type, which is a feature not available in
-<!## PG>
        <productname>PostgreSQL</>.)
-<!## end>
-<!## XC>
-       <productname>Postgres-XC</>.)
-<!## end>
       </entry>
      </row>
 
      <row>
       <entry><literal>max_dynamic_result_sets</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>is_user_defined_cast</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>is_implicitly_invocable</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -4679,353 +4395,197 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>to_sql_specific_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>to_sql_specific_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>to_sql_specific_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>as_locator</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>created</literal></entry>
       <entry><type>time_stamp</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>last_altered</literal></entry>
       <entry><type>time_stamp</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>new_savepoint_level</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>is_udt_dependent</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       Currently always <literal>NO</literal>.  The alternative
+       <literal>YES</literal> applies to a feature not available in
+       <productname>PostgreSQL</>.
+      </entry>
      </row>
 
      <row>
       <entry><literal>result_cast_from_data_type</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_as_locator</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_char_max_length</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_char_octet_length</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_char_set_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_char_set_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_char_set_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_collation_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_collation_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_collation_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_numeric_precision</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_numeric_precision_radix</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_numeric_scale</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_datetime_precision</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_interval_type</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_interval_precision</literal></entry>
-      <entry><type>character_data</type></entry>
-<!## PG>
+      <entry><type>cardinal_number</type></entry>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_type_udt_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_type_udt_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_type_udt_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_scope_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_scope_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_scope_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_maximum_cardinality</literal></entry>
       <entry><type>cardinal_number</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>result_cast_dtd_identifier</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
     </tbody>
    </tgroup>
@@ -5075,45 +4635,25 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>default_character_set_catalog</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>default_character_set_schema</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>default_character_set_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>sql_path</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
     </tbody>
    </tgroup>
@@ -5167,12 +4707,7 @@ ORDER BY c.ordinal_position;
       <entry><type>character_data</type></entry>
       <entry>
        The data type of the sequence.  In
-<!## PG>
        <productname>PostgreSQL</productname>, this is currently always
-<!## end>
-<!## XC>
-       <productname>Postgres-XC</productname>, this is currently always
-<!## end>
        <literal>bigint</literal>.
       </entry>
      </row>
@@ -5259,12 +4794,7 @@ ORDER BY c.ordinal_position;
   <para>
    The table <literal>sql_features</literal> contains information
    about which formal features defined in the SQL standard are
-<!## PG>
    supported by <productname>PostgreSQL</productname>.  This is the
-<!## end>
-<!## XC>
-   supported by <productname>Postgres-XC</productname>.  This is the
-<!## end>
    same information that is presented in <xref linkend="features">.
    There you can also find some additional background information.
   </para>
@@ -5311,12 +4841,7 @@ ORDER BY c.ordinal_position;
       <entry><type>yes_or_no</type></entry>
       <entry>
        <literal>YES</literal> if the feature is fully supported by the
-<!## PG>
        current version of <productname>PostgreSQL</>, <literal>NO</literal> if not
-<!## end>
-<!## XC>
-       current version of <productname>Postgres-XC</>, <literal>NO</literal> if not
-<!## end>
       </entry>
      </row>
 
@@ -5324,12 +4849,7 @@ ORDER BY c.ordinal_position;
       <entry><literal>is_verified_by</literal></entry>
       <entry><type>character_data</type></entry>
       <entry>
-<!## PG>
        Always null, since the <productname>PostgreSQL</> development group does not
-<!## end>
-<!## XC>
-       Always null, since the <productname>Postgres-XC</> development group does not
-<!## end>
        perform formal testing of feature conformance
       </entry>
      </row>
@@ -5421,19 +4941,14 @@ ORDER BY c.ordinal_position;
   <para>
    The table <literal>sql_languages</literal> contains one row for
    each SQL language binding that is supported by
-<!## PG>
    <productname>PostgreSQL</productname>.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname>.
-<!## end>
-<!## PG>
    <productname>PostgreSQL</productname> supports direct SQL and
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> supports direct SQL and
-<!## end>
    embedded SQL in C; that is all you will learn from this table.
+  </para>
+
+  <para>
+   This table was removed from the SQL standard in SQL:2008, so there
+   are no entries referring to standards later than SQL:2003.
   </para>
 
   <table>
@@ -5463,8 +4978,7 @@ ORDER BY c.ordinal_position;
       <entry><type>character_data</type></entry>
       <entry>
        The year the standard referenced in
-       <literal>sql_language_source</literal> was approved; currently
-       <literal>2003</>
+       <literal>sql_language_source</literal> was approved.
       </entry>
      </row>
 
@@ -5503,12 +5017,7 @@ ORDER BY c.ordinal_position;
       <entry><type>character_data</type></entry>
       <entry>
        The programming language, if the binding style is
-<!## PG>
        <literal>EMBEDDED</literal>, else null.  <productname>PostgreSQL</> only
-<!## end>
-<!## XC>
-       <literal>EMBEDDED</literal>, else null.  <productname>Postgres-XC</> only
-<!## end>
        supports the language C.
       </entry>
      </row>
@@ -5524,12 +5033,7 @@ ORDER BY c.ordinal_position;
   <para>
    The table <literal>sql_packages</literal> contains information
    about which feature packages defined in the SQL standard are
-<!## PG>
    supported by <productname>PostgreSQL</productname>.  Refer to <xref
-<!## end>
-<!## XC>
-   supported by <productname>Postgres-XC</productname>.  Refer to <xref
-<!## end>
    linkend="features"> for background information on feature packages.
   </para>
 
@@ -5563,12 +5067,7 @@ ORDER BY c.ordinal_position;
       <entry><type>yes_or_no</type></entry>
       <entry>
        <literal>YES</literal> if the package is fully supported by the
-<!## PG>
        current version of <productname>PostgreSQL</>, <literal>NO</literal> if not
-<!## end>
-<!## XC>
-       current version of <productname>Postgres-XC</>, <literal>NO</literal> if not
-<!## end>
       </entry>
      </row>
 
@@ -5576,12 +5075,7 @@ ORDER BY c.ordinal_position;
       <entry><literal>is_verified_by</literal></entry>
       <entry><type>character_data</type></entry>
       <entry>
-<!## PG>
        Always null, since the <productname>PostgreSQL</> development group does not
-<!## end>
-<!## XC>
-       Always null, since the <productname>Postgres-XC</> development group does not
-<!## end>
        perform formal testing of feature conformance
       </entry>
      </row>
@@ -5603,12 +5097,7 @@ ORDER BY c.ordinal_position;
   <para>
    The table <literal>sql_parts</literal> contains information about
    which of the several parts of the SQL standard are supported by
-<!## PG>
    <productname>PostgreSQL</productname>.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname>.
-<!## end>
   </para>
 
   <table>
@@ -5641,12 +5130,7 @@ ORDER BY c.ordinal_position;
       <entry><type>yes_or_no</type></entry>
       <entry>
        <literal>YES</literal> if the part is fully supported by the
-<!## PG>
        current version of <productname>PostgreSQL</>,
-<!## end>
-<!## XC>
-       current version of <productname>Postgres-XC</>,
-<!## end>
        <literal>NO</literal> if not
       </entry>
      </row>
@@ -5655,12 +5139,7 @@ ORDER BY c.ordinal_position;
       <entry><literal>is_verified_by</literal></entry>
       <entry><type>character_data</type></entry>
       <entry>
-<!## PG>
        Always null, since the <productname>PostgreSQL</> development group does not
-<!## end>
-<!## XC>
-       Always null, since the <productname>Postgres-XC</> development group does not
-<!## end>
        perform formal testing of feature conformance
       </entry>
      </row>
@@ -5682,12 +5161,7 @@ ORDER BY c.ordinal_position;
   <para>
    The table <literal>sql_sizing</literal> contains information about
    various size limits and maximum values in
-<!## PG>
    <productname>PostgreSQL</productname>.  This information is
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname>.  This information is
-<!## end>
    primarily intended for use in the context of the ODBC interface;
    users of other interfaces will probably find this information to be
    of little use.  For this reason, the individual sizing items are
@@ -5747,12 +5221,7 @@ ORDER BY c.ordinal_position;
   <para>
    The table <literal>sql_sizing_profiles</literal> contains
    information about the <literal>sql_sizing</literal> values that are
-<!## PG>
    required by various profiles of the SQL standard.  <productname>PostgreSQL</> does
-<!## end>
-<!## XC>
-   required by various profiles of the SQL standard.  <productname>Postgres-XC</> does
-<!## end>
    not track any SQL profiles, so this table is empty.
   </para>
 
@@ -5815,7 +5284,7 @@ ORDER BY c.ordinal_position;
   <para>
    The view <literal>table_constraints</literal> contains all
    constraints belonging to tables that the current user owns or has
-   some non-SELECT privilege on.
+   some privilege other than <literal>SELECT</literal> on.
   </para>
 
   <table>
@@ -5967,12 +5436,14 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>with_hierarchy</literal></entry>
       <entry><type>yes_or_no</type></entry>
-<!## PG>
-      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
+      <entry>
+       In the SQL standard, <literal>WITH HIERARCHY OPTION</literal>
+       is a separate (sub-)privilege allowing certain operations on
+       table inheritance hierarchies.  In PostgreSQL, this is included
+       in the <literal>SELECT</literal> privilege, so this column
+       shows <literal>YES</literal> if the privilege
+       is <literal>SELECT</literal>, else <literal>NO</literal>.
+      </entry>
      </row>
     </tbody>
    </tgroup>
@@ -6036,23 +5507,13 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>self_referencing_column_name</literal></entry>
       <entry><type>sql_identifier</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
       <entry><literal>reference_generation</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>
@@ -6102,17 +5563,7 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>commit_action</literal></entry>
       <entry><type>character_data</type></entry>
-      <entry>
-       If the table is a temporary table, then
-       <literal>PRESERVE</literal>, else null.  (The SQL standard
-       defines other commit actions for temporary tables, which are
-<!## PG>
-       not supported by <productname>PostgreSQL</>.)
-<!## end>
-<!## XC>
-       not supported by <productname>Postgres-XC</>.)
-<!## end>
-      </entry>
+      <entry>Not yet implemented</entry>
      </row>
     </tbody>
    </tgroup>
@@ -6129,7 +5580,8 @@ ORDER BY c.ordinal_position;
    view <literal>triggered_update_columns</literal> identifies these
    columns.  Triggers that do not specify a column list are not
    included in this view.  Only those columns are shown that the
-   current user owns or has some non-SELECT privilege on.
+   current user owns or has some privilege other than
+   <literal>SELECT</literal> on.
   </para>
 
   <table>
@@ -6201,7 +5653,7 @@ ORDER BY c.ordinal_position;
   <para>
    The view <literal>triggers</literal> contains all triggers defined
    in the current database on tables and views that the current user owns
-   or has some non-SELECT privilege on.
+   or has some privilege other than <literal>SELECT</literal> on.
   </para>
 
   <table>
@@ -6343,9 +5795,6 @@ ORDER BY c.ordinal_position;
    </tgroup>
   </table>
 
-<!## PG>
-<!-- NOTICE: No TRIGGER suport yet!
--->
   <para>
    Triggers in <productname>PostgreSQL</productname> have two
    incompatibilities with the SQL standard that affect the
@@ -6371,7 +5820,6 @@ ORDER BY c.ordinal_position;
    standard (trigger names unique in the schema and only one event
    type per trigger), this will not affect you.
   </para>
-<!## end>
 
   <note>
    <para>
@@ -6394,34 +5842,105 @@ ORDER BY c.ordinal_position;
   </note>
  </sect1>
 
+ <sect1 id="infoschema-udt-privileges">
+  <title><literal>udt_privileges</literal></title>
+
+&common;
+  <para>
+   The view <literal>udt_privileges</literal> identifies
+   <literal>USAGE</literal> privileges granted on user-defined types to a
+   currently enabled role or by a currently enabled role.  There is one row for
+   each combination of column, grantor, and grantee.  This view shows only
+   composite types (see under <xref linkend="infoschema-user-defined-types">
+   for why); see
+   <xref linkend="infoschema-usage-privileges"> for domain privileges.
+  </para>
+
+  <table>
+   <title><literal>udt_privileges</literal> Columns</title>
+
+   <tgroup cols="3">
+    <thead>
+     <row>
+      <entry>Name</entry>
+      <entry>Data Type</entry>
+      <entry>Description</entry>
+     </row>
+    </thead>
+
+    <tbody>
+     <row>
+      <entry><literal>grantor</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the role that granted the privilege</entry>
+     </row>
+
+     <row>
+      <entry><literal>grantee</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the role that the privilege was granted to</entry>
+     </row>
+
+     <row>
+      <entry><literal>udt_catalog</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the database containing the type (always the current database)</entry>
+     </row>
+
+     <row>
+      <entry><literal>udt_schema</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the schema containing the type</entry>
+     </row>
+
+     <row>
+      <entry><literal>udt_name</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the type</entry>
+     </row>
+
+     <row>
+      <entry><literal>privilege_type</literal></entry>
+      <entry><type>character_data</type></entry>
+      <entry>Always <literal>TYPE USAGE</literal></entry>
+     </row>
+
+     <row>
+      <entry><literal>is_grantable</literal></entry>
+      <entry><type>yes_or_no</type></entry>
+      <entry><literal>YES</literal> if the privilege is grantable, <literal>NO</literal> if not</entry>
+     </row>
+    </tbody>
+   </tgroup>
+  </table>
+ </sect1>
+
  <sect1 id="infoschema-usage-privileges">
   <title><literal>usage_privileges</literal></title>
 
+&common;
   <para>
    The view <literal>usage_privileges</literal> identifies
    <literal>USAGE</literal> privileges granted on various kinds of
    objects to a currently enabled role or by a currently enabled role.
-<!## PG>
    In <productname>PostgreSQL</productname>, this currently applies to
-<!## end>
-<!## XC>
-   In <productname>Postgres-XC</productname>, this currently applies to
-<!## end>
-   collations, domains, foreign-data wrappers, and foreign servers.  There is one
+   collations, domains, foreign-data wrappers, foreign servers, and sequences.  There is one
    row for each combination of object, grantor, and grantee.
   </para>
 
   <para>
-   Since collations and domains do not have real privileges
-<!## PG>
+   Since collations do not have real privileges
    in <productname>PostgreSQL</productname>, this view shows implicit
-<!## end>
-<!## XC>
-   in <productname>Postgres-XC</productname>, this view shows implicit
-<!## end>
    non-grantable <literal>USAGE</literal> privileges granted by the
-   owner to <literal>PUBLIC</literal> for all collations and domains.  The other
+   owner to <literal>PUBLIC</literal> for all collations.  The other
    object types, however, show real privileges.
+  </para>
+
+  <para>
+   In PostgreSQL, sequences also support <literal>SELECT</literal>
+   and <literal>UPDATE</literal> privileges in addition to
+   the <literal>USAGE</literal> privilege.  These are nonstandard and therefore
+   not visible in the information schema.
   </para>
 
   <table>
@@ -6471,7 +5990,7 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>object_type</literal></entry>
       <entry><type>character_data</type></entry>
-      <entry><literal>COLLATION</literal> or <literal>DOMAIN</literal> or <literal>FOREIGN DATA WRAPPER</literal> or <literal>FOREIGN SERVER</literal></entry>
+      <entry><literal>COLLATION</literal> or <literal>DOMAIN</literal> or <literal>FOREIGN DATA WRAPPER</literal> or <literal>FOREIGN SERVER</literal> or <literal>SEQUENCE</literal></entry>
      </row>
 
      <row>
@@ -6484,6 +6003,223 @@ ORDER BY c.ordinal_position;
       <entry><literal>is_grantable</literal></entry>
       <entry><type>yes_or_no</type></entry>
       <entry><literal>YES</literal> if the privilege is grantable, <literal>NO</literal> if not</entry>
+     </row>
+    </tbody>
+   </tgroup>
+  </table>
+ </sect1>
+
+ <sect1 id="infoschema-user-defined-types">
+  <title><literal>user_defined_types</literal></title>
+
+&common;
+  <para>
+   The view <literal>user_defined_types</literal> currently contains
+   all composite types defined in the current database.
+   Only those types are shown that the current user has access to (by way
+   of being the owner or having some privilege).
+  </para>
+
+  <para>
+   SQL knows about two kinds of user-defined types: structured types
+   (also known as composite types
+   in <productname>PostgreSQL</productname>) and distinct types (not
+   implemented in <productname>PostgreSQL</productname>).  To be
+   future-proof, use the
+   column <literal>user_defined_type_category</literal> to
+   differentiate between these.  Other user-defined types such as base
+   types and enums, which are <productname>PostgreSQL</productname>
+   extensions, are not shown here.  For domains,
+   see <xref linkend="infoschema-domains"> instead.
+  </para>
+
+  <table>
+   <title><literal>user_defined_types</literal> Columns</title>
+
+   <tgroup cols="3">
+    <thead>
+     <row>
+      <entry>Name</entry>
+      <entry>Data Type</entry>
+      <entry>Description</entry>
+     </row>
+    </thead>
+
+    <tbody>
+     <row>
+      <entry><literal>user_defined_type_catalog</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the database that contains the type (always the current database)</entry>
+     </row>
+
+     <row>
+      <entry><literal>user_defined_type_schema</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the schema that contains the type</entry>
+     </row>
+
+     <row>
+      <entry><literal>user_defined_type_name</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Name of the type</entry>
+     </row>
+
+     <row>
+      <entry><literal>user_defined_type_category</literal></entry>
+      <entry><type>character_data</type></entry>
+      <entry>
+       Currently always <literal>STRUCTURED</literal>
+      </entry>
+     </row>
+
+     <row>
+      <entry><literal>is_instantiable</literal></entry>
+      <entry><type>yes_or_no</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>is_final</literal></entry>
+      <entry><type>yes_or_no</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>ordering_form</literal></entry>
+      <entry><type>character_data</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>ordering_category</literal></entry>
+      <entry><type>character_data</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>ordering_routine_catalog</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>ordering_routine_schema</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>ordering_routine_name</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>reference_type</literal></entry>
+      <entry><type>character_data</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>data_type</literal></entry>
+      <entry><type>character_data</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>character_maximum_length</literal></entry>
+      <entry><type>cardinal_number</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>character_octet_length</literal></entry>
+      <entry><type>cardinal_number</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>character_set_catalog</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>character_set_schema</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>character_set_name</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>collation_catalog</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>collation_schema</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>collation_name</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>numeric_precision</literal></entry>
+      <entry><type>cardinal_number</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>numeric_precision_radix</literal></entry>
+      <entry><type>cardinal_number</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>numeric_scale</literal></entry>
+      <entry><type>cardinal_number</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>datetime_precision</literal></entry>
+      <entry><type>cardinal_number</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>interval_type</literal></entry>
+      <entry><type>character_data</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>interval_precision</literal></entry>
+      <entry><type>cardinal_number</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>source_dtd_identifier</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
+     </row>
+
+     <row>
+      <entry><literal>ref_dtd_identifier</literal></entry>
+      <entry><type>sql_identifier</type></entry>
+      <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
      </row>
     </tbody>
    </tgroup>
@@ -6892,12 +6628,7 @@ ORDER BY c.ordinal_position;
      <row>
       <entry><literal>check_option</literal></entry>
       <entry><type>character_data</type></entry>
-<!## PG>
       <entry>Applies to a feature not available in <productname>PostgreSQL</></entry>
-<!## end>
-<!## XC>
-      <entry>Applies to a feature not available in <productname>Postgres-XC</></entry>
-<!## end>
      </row>
 
      <row>

@@ -29,10 +29,6 @@ ROLLBACK PREPARED <replaceable class="PARAMETER">transaction_id</replaceable>
   <title>Description</title>
 
 &common;
-<!-- NOTICE:
-     Make sure if this propagates to involved nodes -> Michael 
--->
-
   <para>
    <command>ROLLBACK PREPARED</command> rolls back a transaction that is in
    prepared state.
@@ -42,6 +38,7 @@ ROLLBACK PREPARED <replaceable class="PARAMETER">transaction_id</replaceable>
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">transaction_id</replaceable></term>
@@ -58,6 +55,7 @@ ROLLBACK PREPARED <replaceable class="PARAMETER">transaction_id</replaceable>
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    To roll back a prepared transaction, you must be either the same user that
    executed the transaction originally, or a superuser.  But you do not
@@ -91,15 +89,28 @@ ROLLBACK PREPARED <replaceable class="PARAMETER">transaction_id</replaceable>
 
  <refsect1 id="sql-rollback-prepared-examples">
   <title id="sql-rollback-prepared-examples-title">Examples</title>
+&common;
   <para>
    Roll back the transaction identified by the transaction
    identifier <literal>foobar</>:
 
 <programlisting>
 ROLLBACK PREPARED 'foobar';
-</programlisting>
-  </para>
+</programlisting></para>
 
+ </refsect1>
+
+ <refsect1>
+  <title>Compatibility</title>
+
+&common;
+  <para>
+   <command>ROLLBACK PREPARED</command> is a
+   <productname>PostgreSQL</productname> extension.  It is intended for use by
+   external transaction management systems, some of which are covered by
+   standards (such as X/Open XA), but the SQL side of those systems is not
+   standardized.
+  </para>
  </refsect1>
 
  <refsect1>

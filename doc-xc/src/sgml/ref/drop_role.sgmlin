@@ -29,7 +29,6 @@ DROP ROLE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP ROLE</command> removes the specified role(s).
    To drop a superuser role, you must be a superuser yourself;
@@ -58,6 +57,7 @@ DROP ROLE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>IF EXISTS</literal></term>
@@ -83,13 +83,9 @@ DROP ROLE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> includes a program <xref
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> includes a program <xref
-<!## end>
    linkend="APP-DROPUSER"> that has the
    same functionality as this command (in fact, it calls this command)
    but can be run from the command shell.
@@ -103,22 +99,17 @@ DROP ROLE [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...
    To drop a role:
 <programlisting>
 DROP ROLE jonathan;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The SQL standard defines <command>DROP ROLE</command>, but it allows
    only one role to be dropped at a time, and it specifies different
-<!## PG>
    privilege requirements than <productname>PostgreSQL</productname> uses.
-<!## end>
-<!## XC>
-   privilege requirements than <productname>Postgres-XC</productname> uses.
-<!## end>
   </para>
  </refsect1>
 

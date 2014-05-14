@@ -2,7 +2,7 @@
 #
 # Makefile for src/interfaces/libpq library
 #
-# Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+# Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
 # Portions Copyright (c) 1994, Regents of the University of California
 #
 # src/interfaces/libpq/Makefile
@@ -17,7 +17,7 @@ include $(top_builddir)/src/Makefile.global
 # shared library parameters
 NAME= pq
 SO_MAJOR_VERSION= 5
-SO_MINOR_VERSION= 5
+SO_MINOR_VERSION= 6
 
 override CPPFLAGS :=  -DFRONTEND -DUNSAFE_STAT_OK -I$(srcdir) $(CPPFLAGS) -I$(top_builddir)/src/port -I$(top_srcdir)/src/port
 ifneq ($(PORTNAME), win32)
@@ -32,10 +32,11 @@ LIBS := $(LIBS:-lpgport=)
 # We can't use Makefile variables here because the MSVC build system scrapes
 # OBJS from this file.
 OBJS=	fe-auth.o fe-connect.o fe-exec.o fe-misc.o fe-print.o fe-lobj.o \
-	fe-protocol2.o fe-protocol3.o pqexpbuffer.o pqsignal.o fe-secure.o \
+	fe-protocol2.o fe-protocol3.o pqexpbuffer.o fe-secure.o \
 	libpq-events.o
 # libpgport C files we always use
-OBJS += chklocale.o inet_net_ntop.o noblock.o pgstrcasecmp.o thread.o
+OBJS += chklocale.o inet_net_ntop.o noblock.o pgstrcasecmp.o pqsignal.o \
+	thread.o
 # libpgport C files that are needed if identified by configure
 OBJS += $(filter crypt.o getaddrinfo.o getpeereid.o inet_aton.o open.o snprintf.o strerror.o strlcpy.o win32error.o win32setlocale.o, $(LIBOBJS))
 # backend/libpq
@@ -81,14 +82,14 @@ include $(top_srcdir)/src/Makefile.shlib
 backend_src = $(top_srcdir)/src/backend
 
 
-# We use several backend modules verbatim, but since we need to
-# compile with appropriate options to build a shared lib, we can't
-# necessarily use the same object files as the backend uses. Instead,
-# symlink the source files in here and build our own object file.
+# We use several libpgport and backend modules verbatim, but since we need
+# to compile with appropriate options to build a shared lib, we can't
+# necessarily use the same object files built for libpgport and the backend.
+# Instead, symlink the source files in here and build our own object files.
 # For some libpgport modules, this only happens if configure decides
 # the module is needed (see filter hack in OBJS, above).
 
-chklocale.c crypt.c getaddrinfo.c getpeereid.c inet_aton.c inet_net_ntop.c noblock.c open.c pgsleep.c pgstrcasecmp.c snprintf.c strerror.c strlcpy.c thread.c win32error.c win32setlocale.c: % : $(top_srcdir)/src/port/%
+chklocale.c crypt.c getaddrinfo.c getpeereid.c inet_aton.c inet_net_ntop.c noblock.c open.c pgsleep.c pgstrcasecmp.c pqsignal.c snprintf.c strerror.c strlcpy.c thread.c win32error.c win32setlocale.c: % : $(top_srcdir)/src/port/%
 	rm -f $@ && $(LN_S) $< .
 
 ip.c md5.c: % : $(backend_src)/libpq/%
@@ -125,7 +126,7 @@ installcheck:
 	$(MAKE) -C test $@
 
 installdirs: installdirs-lib
-	$(MKDIR_P) '$(DESTDIR)$(includedir)' '$(DESTDIR)$(includedir_internal)'
+	$(MKDIR_P) '$(DESTDIR)$(includedir)' '$(DESTDIR)$(includedir_internal)' '$(DESTDIR)$(datadir)'
 
 uninstall: uninstall-lib
 	rm -f '$(DESTDIR)$(includedir)/libpq-fe.h'
@@ -139,7 +140,7 @@ clean distclean: clean-lib
 	rm -f $(OBJS) pthread.h libpq.rc
 # Might be left over from a Win32 client-only build
 	rm -f pg_config_paths.h
-	rm -f inet_net_ntop.c noblock.c pgstrcasecmp.c thread.c
+	rm -f inet_net_ntop.c noblock.c pgstrcasecmp.c pqsignal.c thread.c
 	rm -f chklocale.c crypt.c getaddrinfo.c getpeereid.c inet_aton.c open.c snprintf.c strerror.c strlcpy.c win32error.c win32setlocale.c
 	rm -f pgsleep.c
 	rm -f md5.c ip.c

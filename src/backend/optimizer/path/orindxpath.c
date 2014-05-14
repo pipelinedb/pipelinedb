@@ -3,7 +3,7 @@
  * orindxpath.c
  *	  Routines to find index paths that match a set of OR clauses
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -103,7 +103,7 @@ create_or_index_quals(PlannerInfo *root, RelOptInfo *rel)
 		RestrictInfo *rinfo = (RestrictInfo *) lfirst(i);
 
 		if (restriction_is_or_clause(rinfo) &&
-			join_clause_is_movable_to(rinfo, rel->relid))
+			join_clause_is_movable_to(rinfo, rel))
 		{
 			/*
 			 * Use the generate_bitmap_or_paths() machinery to estimate the

@@ -7,7 +7,7 @@ INSERT INTO foo2 VALUES(1, 111);
 
 CREATE FUNCTION foot(int) returns setof foo2 as 'SELECT * FROM foo2 WHERE fooid = $1;' LANGUAGE SQL;
 
--- supposed to fail with ERROR
+-- function with implicit LATERAL
 select * from foo2, foot(foo2.fooid) z where foo2.f2 = z.f2;
 
 -- function in subselect
@@ -286,12 +286,16 @@ AS $$ SELECT a, b
 SELECT * FROM foo(3) ORDER BY 1, 2;
 DROP FUNCTION foo(int);
 
+-- case that causes change of typmod knowledge during inlining
+CREATE OR REPLACE FUNCTION foo()
+RETURNS TABLE(a varchar(5))
+AS $$ SELECT 'hello'::varchar(5) $$ LANGUAGE sql STABLE;
+SELECT * FROM foo() GROUP BY 1;
+DROP FUNCTION foo();
+
 --
 -- some tests on SQL functions with RETURNING
 --
-
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 
 create temp table tt(f1 serial, data text);
 

@@ -210,6 +210,7 @@ CREATE TABLE log_table (tstamp timestamp default timeofday()::timestamp);
 
 CREATE TABLE main_table (a int, b int) distribute by replication;
 
+/* -- XC does not support row triggers with COPY command.
 COPY main_table (a,b) FROM stdin;
 5	10
 20	20
@@ -217,6 +218,13 @@ COPY main_table (a,b) FROM stdin;
 50	35
 80	15
 \.
+*/
+INSERT INTO main_table (a, b) VALUES
+(5, 10),
+(20, 20),
+(30, 10),
+(50, 35),
+(80, 15);
 
 CREATE FUNCTION trigger_func() RETURNS trigger LANGUAGE plpgsql AS '
 BEGIN
@@ -247,10 +255,15 @@ UPDATE main_table SET a = a + 1 WHERE b < 30;
 UPDATE main_table SET a = a + 2 WHERE b > 100;
 
 -- COPY should fire per-row and per-statement INSERT triggers
+/* -- XC does not support row triggers with COPY.
 COPY main_table (a, b) FROM stdin;
 30	40
 50	60
 \.
+*/
+INSERT INTO main_table (a, b) VALUES
+(30, 40),
+(50, 60);
 
 SELECT * FROM main_table ORDER BY a, b;
 
@@ -271,11 +284,16 @@ FOR EACH STATEMENT WHEN (true) EXECUTE PROCEDURE trigger_func('insert_when');
 CREATE TRIGGER delete_when AFTER DELETE ON main_table
 FOR EACH STATEMENT WHEN (true) EXECUTE PROCEDURE trigger_func('delete_when');
 INSERT INTO main_table (a) VALUES (123), (456);
+/* -- XC does not support row triggers with COPY.
 COPY main_table FROM stdin;
 123	999
 456	999
 \.
 ;
+*/
+INSERT INTO main_table VALUES
+(123, 999),
+(456, 999);
 
 DELETE FROM main_table WHERE a IN (123, 456);
 UPDATE main_table SET a = 50, b = 60;
@@ -612,13 +630,6 @@ DROP TABLE min_updates_test_oids;
 --
 
 CREATE VIEW main_view AS SELECT a, b FROM main_table;
-
--- Updates should fail without rules or triggers
-INSERT INTO main_view VALUES (1,2);
-UPDATE main_view SET b = 20 WHERE a = 50;
-DELETE FROM main_view WHERE a = 50;
--- Should fail even when there are no matching rows
-DELETE FROM main_view WHERE a = 51;
 
 -- VIEW trigger function
 CREATE OR REPLACE FUNCTION view_trigger() RETURNS trigger
@@ -1027,3 +1038,161 @@ drop table depth_a, depth_b, depth_c;
 drop function depth_a_tf();
 drop function depth_b_tf();
 drop function depth_c_tf();
+
+--
+-- Test updates to rows during firing of BEFORE ROW triggers.
+-- As of 9.2, such cases should be rejected (see bug #6123).
+--
+-- Postgres-XC 1.2 needs more effort to fix this.  As of
+-- release 1.2 beta, this has not been fixed.
+--
+
+create temp table parent (
+    aid int not null primary key,
+    val1 text,
+    val2 text,
+    val3 text,
+    val4 text,
+    bcnt int not null default 0);
+create temp table child (
+    bid int not null primary key,
+    aid int not null,
+    val1 text);
+
+create function parent_upd_func()
+  returns trigger language plpgsql as
+$$
+begin
+  if old.val1 <> new.val1 then
+    new.val2 = new.val1;
+    delete from child where child.aid = new.aid and child.val1 = new.val1;
+  end if;
+  return new;
+end;
+$$;
+create trigger parent_upd_trig before update on parent
+  for each row execute procedure parent_upd_func();
+
+create function parent_del_func()
+  returns trigger language plpgsql as
+$$
+begin
+  delete from child where aid = old.aid;
+  return old;
+end;
+$$;
+create trigger parent_del_trig before delete on parent
+  for each row execute procedure parent_del_func();
+
+create function child_ins_func()
+  returns trigger language plpgsql as
+$$
+begin
+  update parent set bcnt = bcnt + 1 where aid = new.aid;
+  return new;
+end;
+$$;
+create trigger child_ins_trig after insert on child
+  for each row execute procedure child_ins_func();
+
+create function child_del_func()
+  returns trigger language plpgsql as
+$$
+begin
+  update parent set bcnt = bcnt - 1 where aid = old.aid;
+  return old;
+end;
+$$;
+create trigger child_del_trig after delete on child
+  for each row execute procedure child_del_func();
+
+insert into parent values (1, 'a', 'a', 'a', 'a', 0);
+insert into child values (10, 1, 'b');
+select * from parent; select * from child;
+
+update parent set val1 = 'b' where aid = 1; -- should fail
+select * from parent; select * from child;
+
+delete from parent where aid = 1; -- should fail
+select * from parent; select * from child;
+
+-- replace the trigger function with one that restarts the deletion after
+-- having modified a child
+create or replace function parent_del_func()
+  returns trigger language plpgsql as
+$$
+begin
+  delete from child where aid = old.aid;
+  if found then
+    delete from parent where aid = old.aid;
+    return null; -- cancel outer deletion
+  end if;
+  return old;
+end;
+$$;
+
+delete from parent where aid = 1;
+select * from parent; select * from child;
+
+drop table parent, child;
+
+drop function parent_upd_func();
+drop function parent_del_func();
+drop function child_ins_func();
+drop function child_del_func();
+
+-- similar case, but with a self-referencing FK so that parent and child
+-- rows can be affected by a single operation
+
+create temp table self_ref_trigger (
+    id int primary key,
+    parent int references self_ref_trigger,
+    data text,
+    nchildren int not null default 0
+);
+
+create function self_ref_trigger_ins_func()
+  returns trigger language plpgsql as
+$$
+begin
+  if new.parent is not null then
+    update self_ref_trigger set nchildren = nchildren + 1
+      where id = new.parent;
+  end if;
+  return new;
+end;
+$$;
+create trigger self_ref_trigger_ins_trig before insert on self_ref_trigger
+  for each row execute procedure self_ref_trigger_ins_func();
+
+create function self_ref_trigger_del_func()
+  returns trigger language plpgsql as
+$$
+begin
+  if old.parent is not null then
+    update self_ref_trigger set nchildren = nchildren - 1
+      where id = old.parent;
+  end if;
+  return old;
+end;
+$$;
+create trigger self_ref_trigger_del_trig before delete on self_ref_trigger
+  for each row execute procedure self_ref_trigger_del_func();
+
+insert into self_ref_trigger values (1, null, 'root');
+insert into self_ref_trigger values (2, 1, 'root child A');
+insert into self_ref_trigger values (3, 1, 'root child B');
+insert into self_ref_trigger values (4, 2, 'grandchild 1');
+insert into self_ref_trigger values (5, 3, 'grandchild 2');
+
+update self_ref_trigger set data = 'root!' where id = 1;
+
+select * from self_ref_trigger;
+
+delete from self_ref_trigger;
+
+select * from self_ref_trigger;
+
+drop table self_ref_trigger;
+drop function self_ref_trigger_ins_func();
+drop function self_ref_trigger_del_func();

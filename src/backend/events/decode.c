@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "postgres.h"
+#include "access/htup_details.h"
 #include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_proc.h"

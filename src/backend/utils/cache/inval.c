@@ -85,7 +85,7 @@
  *	problems can be overcome cheaply.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -95,11 +95,13 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "miscadmin.h"
 #include "storage/sinval.h"
 #include "storage/smgr.h"
+#include "utils/catcache.h"
 #include "utils/inval.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
@@ -174,7 +176,7 @@ static int	maxSharedInvalidMessagesArray;
  * assumes there won't be very many of these at once; could improve if needed.
  */
 
-#define MAX_SYSCACHE_CALLBACKS 20
+#define MAX_SYSCACHE_CALLBACKS 32
 #define MAX_RELCACHE_CALLBACKS 5
 
 static struct SYSCACHECALLBACK

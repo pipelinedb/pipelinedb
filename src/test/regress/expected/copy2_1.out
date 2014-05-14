@@ -1,5 +1,3 @@
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 CREATE TEMP TABLE x (
 	a serial,
 	b int,
@@ -7,7 +5,6 @@ CREATE TEMP TABLE x (
 	d text,
 	e text
 ) WITH OIDS;
-NOTICE:  CREATE TABLE will create implicit sequence "x_a_seq" for serial column "x.a"
 CREATE FUNCTION fn_x_before () RETURNS TRIGGER AS '
   BEGIN
 		NEW.e := ''before trigger fired''::text;
@@ -242,6 +239,170 @@ SELECT * FROM testnull ORDER BY 1,2;
     | 
 (4 rows)
 
+-- The following block fails in Postgres-XC because it does not suport
+-- Savepoint yet.
+-- Leave the test as is.
+BEGIN;
+CREATE TABLE vistest (LIKE testeoc);
+COPY vistest FROM stdin CSV;
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a0
+ b
+(2 rows)
+
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a1
+ b
+(2 rows)
+
+SAVEPOINT s1;
+ERROR:  SAVEPOINT is not yet supported.
+TRUNCATE vistest;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+COPY vistest FROM stdin CSV;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+d1
+e
+\.
+invalid command \.
+SELECT * FROM vistest ORDER BY 1;
+ERROR:  syntax error at or near "d1"
+LINE 1: d1
+        ^
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a0
+ b
+(2 rows)
+
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a2
+ b
+(2 rows)
+
+SAVEPOINT s1;
+ERROR:  SAVEPOINT is not yet supported.
+TRUNCATE vistest;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+d2
+e
+\.
+invalid command \.
+SELECT * FROM vistest ORDER BY 1;
+ERROR:  syntax error at or near "d2"
+LINE 1: d2
+        ^
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a  
+----
+ a0
+ b
+(2 rows)
+
+BEGIN;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+SELECT * FROM vistest ORDER BY 1;
+ a 
+---
+ x
+ y
+(2 rows)
+
+COMMIT;
+TRUNCATE vistest;
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  cannot perform FREEZE because the table was not created or truncated in the current subtransaction
+BEGIN;
+TRUNCATE vistest;
+SAVEPOINT s1;
+ERROR:  SAVEPOINT is not yet supported.
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+m
+k
+\.
+invalid command \.
+COMMIT;
+ERROR:  syntax error at or near "m"
+LINE 1: m
+        ^
+BEGIN;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+INSERT INTO vistest VALUES ('z');
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SAVEPOINT s1;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+TRUNCATE vistest;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK TO SAVEPOINT s1;
+ERROR:  no such savepoint
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+d3
+e
+\.
+invalid command \.
+COMMIT;
+ERROR:  syntax error at or near "d3"
+LINE 1: d3
+        ^
+CREATE FUNCTION truncate_in_subxact() RETURNS VOID AS
+$$
+BEGIN
+	TRUNCATE vistest;
+EXCEPTION
+  WHEN OTHERS THEN
+	INSERT INTO vistest VALUES ('subxact failure');
+END;
+$$ language plpgsql;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+BEGIN;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+INSERT INTO vistest VALUES ('z');
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+SELECT truncate_in_subxact();
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+COPY vistest FROM stdin CSV FREEZE;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+d4
+e
+\.
+invalid command \.
+SELECT * FROM vistest ORDER BY 1;
+ERROR:  syntax error at or near "d4"
+LINE 1: d4
+        ^
+COMMIT;
+SELECT * FROM vistest ORDER BY 1;
+ a 
+---
+(0 rows)
+
+DROP TABLE vistest;
+DROP FUNCTION truncate_in_subxact();
+ERROR:  function truncate_in_subxact() does not exist
+--
+-- End of unsupported savepoint block
+--
 DROP TABLE x, y;
 DROP FUNCTION fn_x_before();
 DROP FUNCTION fn_x_after();

@@ -2,6 +2,7 @@
 doc/src/sgml/ref/create_index.sgml
 PostgreSQL documentation
 -->
+
 <!## XC>
 <!-- NOTICE:
      CONCURRENTLY not supported yet.
@@ -27,10 +28,10 @@ PostgreSQL documentation
  <refsynopsisdiv>
 <!## PG>
 <synopsis>
-CREATE [ UNIQUE ] INDEX [ CONCURRENTLY ] [ <replaceable class="parameter">name</replaceable> ] ON <replaceable class="parameter">table</replaceable> [ USING <replaceable class="parameter">method</replaceable> ]
-    ( { <replaceable class="parameter">column</replaceable> | ( <replaceable class="parameter">expression</replaceable> ) } [ COLLATE <replaceable class="parameter">collation</replaceable> ] [ <replaceable class="parameter">opclass</replaceable> ] [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [, ...] )
+CREATE [ UNIQUE ] INDEX [ CONCURRENTLY ] [ <replaceable class="parameter">name</replaceable> ] ON <replaceable class="parameter">table_name</replaceable> [ USING <replaceable class="parameter">method</replaceable> ]
+    ( { <replaceable class="parameter">column_name</replaceable> | ( <replaceable class="parameter">expression</replaceable> ) } [ COLLATE <replaceable class="parameter">collation</replaceable> ] [ <replaceable class="parameter">opclass</replaceable> ] [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [, ...] )
     [ WITH ( <replaceable class="PARAMETER">storage_parameter</replaceable> = <replaceable class="PARAMETER">value</replaceable> [, ... ] ) ]
-    [ TABLESPACE <replaceable class="parameter">tablespace</replaceable> ]
+    [ TABLESPACE <replaceable class="parameter">tablespace_name</replaceable> ]
     [ WHERE <replaceable class="parameter">predicate</replaceable> ]
 </synopsis>
 <!## end>
@@ -49,10 +50,9 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
   <title>Description</title>
 
 &common;
-
   <para>
-   <command>CREATE INDEX</command> constructs an index
-   on the specified column(s) of the specified table.
+   <command>CREATE INDEX</command> constructs an index on the specified column(s)
+   of the specified relation, which can be a table or a materialized view.
    Indexes are primarily used to enhance database performance (though
    inappropriate use can result in slower performance).
   </para>
@@ -73,27 +73,22 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
    <literal>WHERE upper(col) = 'JIM'</> to use an index.
   </para>
 
-<!## PG>
   <para>
    <productname>PostgreSQL</productname> provides the index methods
-   B-tree, hash, GiST, and GIN.  Users can also define their own index
+   B-tree, hash, GiST, SP-GiST, and GIN.  Users can also define their own index
    methods, but that is fairly complicated.
   </para>
-<!## end>
+
 <!## XC>
-  <para>
-   <productname>Postgres-XC</productname> inherits the index methods
-   B-tree, hash, GiST, and GIN from <productname>PostgreSQL</>.  Users can also define their own index
-   methods, but that is fairly complicated.
-  </para>
 &xconly;
   <para>
    Please note that indexes are maintained only locally in each
-   Coordinator and/or Datanodes.  They do not have any information on
-   the column value outside Coordinator or Datanode.
+   coordinator and datanodes.  They do not have any information on
+   the column value stored in the other coordinators or datanodes.
   </para>
 <!## end>
 
+&common;
   <para>
     When the <literal>WHERE</literal> clause is present, a
     <firstterm>partial index</firstterm> is created.
@@ -129,6 +124,7 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
 
  <refsect1>
   <title>Parameters</title>
+
 &common;
     <variablelist>
      <varlistentry>
@@ -147,7 +143,6 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
      <varlistentry>
       <term><literal>CONCURRENTLY</literal></term>
       <listitem>
-
 <!## XC>
 &xconly;
       <para>
@@ -175,12 +170,7 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
        <para>
         The name of the index to be created.  No schema name can be included
         here; the index is always created in the same schema as its parent
-<!## PG>
         table.  If the name is omitted, <productname>PostgreSQL</> chooses a
-<!## end>
-<!## XC>
-        table.  If the name is omitted, <productname>Postgres-XC</> chooses a
-<!## end>
         suitable name based on the parent table's name and the indexed column
         name(s).
        </para>
@@ -188,7 +178,7 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
      </varlistentry>
 
      <varlistentry>
-      <term><replaceable class="parameter">table</replaceable></term>
+      <term><replaceable class="parameter">table_name</replaceable></term>
       <listitem>
        <para>
         The name (possibly schema-qualified) of the table to be indexed.
@@ -202,14 +192,14 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
        <para>
         The name of the index method to be used.  Choices are
         <literal>btree</literal>, <literal>hash</literal>,
-        <literal>gist</literal>, and <literal>gin</>.  The
-        default method is <literal>btree</literal>.
+        <literal>gist</literal>, <literal>spgist</> and <literal>gin</>.
+        The default method is <literal>btree</literal>.
        </para>
       </listitem>
      </varlistentry>
 
      <varlistentry>
-      <term><replaceable class="parameter">column</replaceable></term>
+      <term><replaceable class="parameter">column_name</replaceable></term>
       <listitem>
        <para>
         The name of a column of the table.
@@ -301,7 +291,7 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
      </varlistentry>
 
      <varlistentry>
-      <term><replaceable class="parameter">tablespace</replaceable></term>
+      <term><replaceable class="parameter">tablespace_name</replaceable></term>
       <listitem>
        <para>
         The tablespace in which to create the index.  If not specified,
@@ -326,15 +316,15 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
   <refsect2 id="SQL-CREATEINDEX-storage-parameters">
    <title id="SQL-CREATEINDEX-storage-parameters-title">Index Storage Parameters</title>
 
+&common;
    <para>
     The optional <literal>WITH</> clause specifies <firstterm>storage
     parameters</> for the index.  Each index method has its own set of allowed
-    storage parameters.  The B-tree, hash and GiST index methods all accept a
-    single parameter:
+    storage parameters.  The B-tree, hash, GiST and SP-GiST index methods all
+    accept this parameter:
    </para>
 
    <variablelist>
-
    <varlistentry>
     <term><literal>FILLFACTOR</></term>
     <listitem>
@@ -355,7 +345,25 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
      </para>
     </listitem>
    </varlistentry>
+   </variablelist>
 
+   <para>
+    GiST indexes additionally accept this parameter:
+   </para>
+
+   <variablelist>
+   <varlistentry>
+    <term><literal>BUFFERING</></term>
+    <listitem>
+    <para>
+     Determines whether the buffering build technique described in
+     <xref linkend="gist-buffering-build"> is used to build the index. With
+     <literal>OFF</> it is disabled, with <literal>ON</> it is enabled, and
+     with <literal>AUTO</> it is initially disabled, but turned on
+     on-the-fly once the index size reaches <xref linkend="guc-effective-cache-size">. The default is <literal>AUTO</>.
+    </para>
+    </listitem>
+   </varlistentry>
    </variablelist>
 
    <para>
@@ -363,7 +371,6 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
    </para>
 
    <variablelist>
-
    <varlistentry>
     <term><literal>FASTUPDATE</></term>
     <listitem>
@@ -387,7 +394,6 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
     </note>
     </listitem>
    </varlistentry>
-
    </variablelist>
   </refsect2>
 
@@ -399,14 +405,10 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
    <secondary>building concurrently</secondary>
    </indexterm>
 
+&common;
    <para>
     Creating an index can interfere with regular operation of a database.
-<!## PG>
     Normally <productname>PostgreSQL</> locks the table to be indexed against
-<!## end>
-<!## XC>
-    Normally <productname>Postgres-XC</> locks the table to be indexed against
-<!## end>
     writes and performs the entire index build with a single scan of the
     table. Other transactions can still read the table, but if they try to
     insert, update, or delete rows in the table they will block until the
@@ -417,21 +419,11 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
    </para>
 
    <para>
-<!## PG>
     <productname>PostgreSQL</> supports building indexes without locking
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> supports building indexes without locking
-<!## end>
     out writes.  This method is invoked by specifying the
     <literal>CONCURRENTLY</> option of <command>CREATE INDEX</>.
     When this option is used,
-<!## PG>
     <productname>PostgreSQL</> must perform two scans of the table, and in
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> must perform two scans of the table, and in
-<!## end>
     addition it must wait for all existing transactions that could potentially
     use the index to terminate.  Thus
     this method requires more total work than a standard index build and takes
@@ -442,9 +434,17 @@ CREATE [ UNIQUE ] INDEX [ <replaceable class="parameter">name</replaceable> ] ON
    </para>
 
    <para>
-    In a concurrent index build, the index is actually entered into the
-    system catalogs in one transaction, then the two table scans occur in a
-    second and third transaction.
+    In a concurrent index build, the index is actually entered into
+    the system catalogs in one transaction, then two table scans occur in
+    two more transactions.  Any transaction active when the second table
+    scan starts can block concurrent index creation until it completes,
+    even transactions that only reference the table after the second table
+    scan starts.   Concurrent index creation serially waits for each old
+    transaction to complete using the method outlined in section <xref
+    linkend="view-pg-locks">.
+   </para>
+
+   <para>
     If a problem arises while scanning the table, such as a
     uniqueness violation in a unique index, the <command>CREATE INDEX</>
     command will fail but leave behind an <quote>invalid</> index. This index
@@ -500,22 +500,30 @@ Indexes:
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    See <xref linkend="indexes"> for information about when indexes can
    be used, when they are not used, and in which particular situations
    they can be useful.
   </para>
 
+  <caution>
+   <para>
+    Hash index operations are not presently WAL-logged,
+    so hash indexes might need to be rebuilt with <command>REINDEX</>
+    after a database crash if there were unwritten changes.
+    Also, changes to hash indexes are not replicated over streaming or
+    file-based replication after the initial base backup, so they
+    give wrong answers to queries that subsequently use them.
+    For these reasons, hash index use is presently discouraged.
+   </para>
+  </caution>
+
   <para>
    Currently, only the B-tree, GiST and GIN index methods support
    multicolumn indexes. Up to 32 fields can be specified by default.
    (This limit can be altered when building
-<!## PG>
    <productname>PostgreSQL</productname>.)  Only B-tree currently
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname>.)  Only B-tree currently
-<!## end>
    supports unique indexes.
   </para>
 
@@ -558,12 +566,7 @@ Indexes:
    as you don't make it larger than the amount of memory really available,
    which would drive the machine into swapping.  For hash indexes, the
    value of <xref linkend="guc-effective-cache-size"> is also relevant to
-<!## PG>
    index creation time: <productname>PostgreSQL</productname> will use one
-<!## end>
-<!## XC>
-   index creation time: <productname>Postgres-XC</productname> will use one
-<!## end>
    of two different hash index creation methods depending on whether the
    estimated index size is more or less than <varname>effective_cache_size</>.
    For best results, make sure that this parameter is also set to something
@@ -579,12 +582,7 @@ Indexes:
   </para>
 
   <para>
-<!## PG>
    Prior releases of <productname>PostgreSQL</productname> also had an
-<!## end>
-<!## XC>
-   Prior releases of <productname>Postgres-XC</productname> also had an
-<!## end>
    R-tree index method.  This method has been removed because
    it had no significant advantages over the GiST method.
    If <literal>USING rtree</> is specified, <command>CREATE INDEX</>
@@ -595,17 +593,22 @@ Indexes:
 <!## XC>
 &xconly;
    <para>
-    With a hash or a round-robin table, it is forbidden to create an unique index.
+    With a round-robin table, it is forbidden to create an unique index.
+   </para>
+   <para>
+    With a hash or modulo table, it is forbidden to create an unique index unless
+    the distribution column is involved.
    </para>
    <para>
     It is not possible to create concurrent index.
    </para>
 <!## end>
+
  </refsect1>
 
  <refsect1>
   <title>Examples</title>
-&common;
+
   <para>
    To create a B-tree index on the column <literal>title</literal> in
    the table <literal>films</literal>:
@@ -677,22 +680,17 @@ SELECT * FROM points
    To create an index without locking out writes to the table:
 <programlisting>
 CREATE INDEX CONCURRENTLY sales_quantity_index ON sales_table (quantity);
-</programlisting>
-  </para>
+</programlisting></para>
 
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>CREATE INDEX</command> is a
-<!## PG>
    <productname>PostgreSQL</productname> language extension.  There
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> language extension.  There
-<!## end>
    are no provisions for indexes in the SQL standard.
   </para>
  </refsect1>

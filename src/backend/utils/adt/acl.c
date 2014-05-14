@@ -3,7 +3,7 @@
  * acl.c
  *	  Basic access control list data structures manipulation routines.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -16,6 +16,7 @@
 
 #include <ctype.h>
 
+#include "access/htup_details.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_authid.h"
 #include "catalog/pg_auth_members.h"
@@ -29,6 +30,7 @@
 #include "miscadmin.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
+#include "utils/catcache.h"
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
@@ -1230,11 +1232,11 @@ recursive_revoke(Acl *acl,
 	if (grantee == ownerId)
 		return acl;
 
-	/* The grantee might still have the privileges via another grantor */
+	/* The grantee might still have some grant options via another grantor */
 	still_has = aclmask(acl, grantee, ownerId,
 						ACL_GRANT_OPTION_FOR(revoke_privs),
 						ACLMASK_ALL);
-	revoke_privs &= ~still_has;
+	revoke_privs &= ~ACL_OPTION_TO_PRIVS(still_has);
 	if (revoke_privs == ACL_NO_RIGHTS)
 		return acl;
 

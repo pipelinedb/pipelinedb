@@ -5,7 +5,7 @@
  *	  along with the relation's initial contents.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -34,7 +34,7 @@ CATALOG(pg_collation,3456)
 	NameData	collname;		/* collation name */
 	Oid			collnamespace;	/* OID of namespace containing collation */
 	Oid			collowner;		/* owner of collation */
-	int4		collencoding;	/* encoding for this collation; -1 = "all" */
+	int32		collencoding;	/* encoding for this collation; -1 = "all" */
 	NameData	collcollate;	/* LC_COLLATE setting */
 	NameData	collctype;		/* LC_CTYPE setting */
 } FormData_pg_collation;

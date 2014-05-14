@@ -1,6 +1,7 @@
 #include "libpq-fe.h"
 
 extern const char *progname;
+extern char *connection_string;
 extern char *dbhost;
 extern char *dbuser;
 extern char *dbport;
@@ -15,8 +16,4 @@ extern PGconn *conn;
 	exit(code);									\
 	}
 
-
-char	   *xstrdup(const char *s);
-void	   *xmalloc0(int size);
-
-PGconn	   *GetConnection(void);
+extern PGconn *GetConnection(void);

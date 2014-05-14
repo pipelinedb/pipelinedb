@@ -4,7 +4,7 @@
  *	  Standard POSTGRES buffer page definitions.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/bufpage.h
@@ -15,6 +15,7 @@
 #define BUFPAGE_H
 
 #include "access/xlogdefs.h"
+#include "storage/block.h"
 #include "storage/item.h"
 #include "storage/off.h"
 
@@ -83,12 +84,27 @@ typedef uint16 LocationIndex;
 
 
 /*
+ * For historical reasons, the 64-bit LSN value is stored as two 32-bit
+ * values.
+ */
+typedef struct
+{
+	uint32		xlogid;			/* high bits */
+	uint32		xrecoff;		/* low bits */
+} PageXLogRecPtr;
+
+#define PageXLogRecPtrGet(val) \
+	((uint64) (val).xlogid << 32 | (val).xrecoff)
+#define PageXLogRecPtrSet(ptr, lsn) \
+	((ptr).xlogid = (uint32) ((lsn) >> 32), (ptr).xrecoff = (uint32) (lsn))
+
+/*
  * disk page organization
  *
  * space management information generic to any page
  *
  *		pd_lsn		- identifies xlog record for last change to this page.
- *		pd_tli		- ditto.
+ *		pd_checksum - page checksum, if set.
  *		pd_flags	- flag bits.
  *		pd_lower	- offset to start of free space.
  *		pd_upper	- offset to end of free space.
@@ -99,9 +115,17 @@ typedef uint16 LocationIndex;
  * The LSN is used by the buffer manager to enforce the basic rule of WAL:
  * "thou shalt write xlog before data".  A dirty buffer cannot be dumped
  * to disk until xlog has been flushed at least as far as the page's LSN.
- * We also store the 16 least significant bits of the TLI for identification
- * purposes (it is not clear that this is actually necessary, but it seems
- * like a good idea).
+ *
+ * pd_checksum stores the page checksum, if it has been set for this page;
+ * zero is a valid value for a checksum. If a checksum is not in use then
+ * we leave the field unset. This will typically mean the field is zero
+ * though non-zero values may also be present if databases have been
+ * pg_upgraded from releases prior to 9.3, when the same byte offset was
+ * used to store the current timelineid when the page was last updated.
+ * Note that there is no indication on a page as to whether the checksum
+ * is valid or not, a deliberate design choice which avoids the problem
+ * of relying on the page contents to decide whether to verify it. Hence
+ * there are no flag bits relating to checksums.
  *
  * pd_prune_xid is a hint field that helps determine whether pruning will be
  * useful.	It is currently unused in index pages.
@@ -119,13 +143,13 @@ typedef uint16 LocationIndex;
  * On the high end, we can only support pages up to 32KB because lp_off/lp_len
  * are 15 bits.
  */
+
 typedef struct PageHeaderData
 {
 	/* XXX LSN is member of *any* block, not only page-organized ones */
-	XLogRecPtr	pd_lsn;			/* LSN: next byte after last byte of xlog
+	PageXLogRecPtr pd_lsn;		/* LSN: next byte after last byte of xlog
 								 * record for last change to this page */
-	uint16		pd_tli;			/* least significant bits of the TimeLineID
-								 * containing the LSN */
+	uint16		pd_checksum;	/* checksum */
 	uint16		pd_flags;		/* flag bits, see below */
 	LocationIndex pd_lower;		/* offset to start of free space */
 	LocationIndex pd_upper;		/* offset to end of free space */
@@ -165,9 +189,12 @@ typedef PageHeaderData *PageHeader;
  * Release 8.3 uses 4; it changed the HeapTupleHeader layout again, and
  *		added the pd_flags field (by stealing some bits from pd_tli),
  *		as well as adding the pd_prune_xid field (which enlarges the header).
+ *
+ * As of Release 9.3, the checksum version must also be considered when
+ * handling pages.
  */
 #define PG_PAGE_LAYOUT_VERSION		4
-
+#define PG_DATA_CHECKSUM_VERSION	1
 
 /* ----------------------------------------------------------------
  *						page support macros
@@ -311,18 +338,13 @@ typedef PageHeaderData *PageHeader;
 	  / sizeof(ItemIdData)))
 
 /*
- * Additional macros for access to page headers
+ * Additional macros for access to page headers. (Beware multiple evaluation
+ * of the arguments!)
  */
 #define PageGetLSN(page) \
-	(((PageHeader) (page))->pd_lsn)
+	PageXLogRecPtrGet(((PageHeader) (page))->pd_lsn)
 #define PageSetLSN(page, lsn) \
-	(((PageHeader) (page))->pd_lsn = (lsn))
-
-/* NOTE: only the 16 least significant bits are stored */
-#define PageGetTLI(page) \
-	(((PageHeader) (page))->pd_tli)
-#define PageSetTLI(page, tli) \
-	(((PageHeader) (page))->pd_tli = (uint16) (tli))
+	PageXLogRecPtrSet(((PageHeader) (page))->pd_lsn, lsn)
 
 #define PageHasFreeLinePointers(page) \
 	(((PageHeader) (page))->pd_flags & PD_HAS_FREE_LINES)
@@ -368,7 +390,7 @@ do { \
  */
 
 extern void PageInit(Page page, Size pageSize, Size specialSize);
-extern bool PageHeaderIsValid(PageHeader page);
+extern bool PageIsVerified(Page page, BlockNumber blkno);
 extern OffsetNumber PageAddItem(Page page, Item item, Size size,
 			OffsetNumber offsetNumber, bool overwrite, bool is_heap);
 extern Page PageGetTempPage(Page page);
@@ -381,5 +403,7 @@ extern Size PageGetExactFreeSpace(Page page);
 extern Size PageGetHeapFreeSpace(Page page);
 extern void PageIndexTupleDelete(Page page, OffsetNumber offset);
 extern void PageIndexMultiDelete(Page page, OffsetNumber *itemnos, int nitems);
+extern char *PageSetChecksumCopy(Page page, BlockNumber blkno);
+extern void PageSetChecksumInplace(Page page, BlockNumber blkno);
 
 #endif   /* BUFPAGE_H */

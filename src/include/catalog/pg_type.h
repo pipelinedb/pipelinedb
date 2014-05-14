@@ -5,7 +5,7 @@
  *	  along with the relation's initial contents.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_type.h
@@ -47,7 +47,7 @@ CATALOG(pg_type,1247) BKI_BOOTSTRAP BKI_ROWTYPE_OID(71) BKI_SCHEMA_MACRO
 	 * "varlena" type (one that has a length word), -2 to indicate a
 	 * null-terminated C string.
 	 */
-	int2		typlen;
+	int16		typlen;
 
 	/*
 	 * typbyval determines whether internal Postgres routines pass a value of
@@ -185,13 +185,13 @@ CATALOG(pg_type,1247) BKI_BOOTSTRAP BKI_ROWTYPE_OID(71) BKI_SCHEMA_MACRO
 	 * type (-1 if base type does not use a typmod).  -1 if this type is not a
 	 * domain.
 	 */
-	int4		typtypmod;
+	int32		typtypmod;
 
 	/*
 	 * typndims is the declared number of dimensions for an array domain type
 	 * (i.e., typbasetype is an array type).  Otherwise zero.
 	 */
-	int4		typndims;
+	int32		typndims;
 
 	/*
 	 * Collation: 0 if type cannot use collations, DEFAULT_COLLATION_OID for
@@ -447,6 +447,7 @@ DATA(insert OID = 1001 (  _bytea	 PGNSP PGUID -1 f b A f t \054 0	17 0 array_in 
 DATA(insert OID = 1002 (  _char		 PGNSP PGUID -1 f b A f t \054 0	18 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
 DATA(insert OID = 1003 (  _name		 PGNSP PGUID -1 f b A f t \054 0	19 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
 DATA(insert OID = 1005 (  _int2		 PGNSP PGUID -1 f b A f t \054 0	21 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
+#define INT2ARRAYOID		1005
 DATA(insert OID = 1006 (  _int2vector PGNSP PGUID -1 f b A f t \054 0	22 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
 DATA(insert OID = 1007 (  _int4		 PGNSP PGUID -1 f b A f t \054 0	23 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
 #define INT4ARRAYOID		1007
@@ -454,6 +455,7 @@ DATA(insert OID = 1008 (  _regproc	 PGNSP PGUID -1 f b A f t \054 0	24 0 array_i
 DATA(insert OID = 1009 (  _text		 PGNSP PGUID -1 f b A f t \054 0	25 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 100 _null_ _null_ _null_ ));
 #define TEXTARRAYOID		1009
 DATA(insert OID = 1028 (  _oid		 PGNSP PGUID -1 f b A f t \054 0	26 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
+#define OIDARRAYOID			1028
 DATA(insert OID = 1010 (  _tid		 PGNSP PGUID -1 f b A f t \054 0	27 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
 DATA(insert OID = 1011 (  _xid		 PGNSP PGUID -1 f b A f t \054 0	28 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
 DATA(insert OID = 1012 (  _cid		 PGNSP PGUID -1 f b A f t \054 0	29 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
@@ -573,6 +575,7 @@ DATA(insert OID = 2211 ( _regtype	   PGNSP PGUID -1 f b A f t \054 0 2206 0 arra
 /* uuid */
 DATA(insert OID = 2950 ( uuid			PGNSP PGUID 16 f b U f t \054 0 0 2951 uuid_in uuid_out uuid_recv uuid_send - - - c p f 0 -1 0 0 _null_ _null_ _null_ ));
 DESCR("UUID datatype");
+#define UUIDOID 2950
 DATA(insert OID = 2951 ( _uuid			PGNSP PGUID -1 f b A f t \054 0 2950 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
 
 /* text search */
@@ -650,6 +653,8 @@ DATA(insert OID = 2278 ( void			PGNSP PGUID  4 t p P f t \054 0 0 0 void_in void
 #define VOIDOID			2278
 DATA(insert OID = 2279 ( trigger		PGNSP PGUID  4 t p P f t \054 0 0 0 trigger_in trigger_out - - - - - i p f 0 -1 0 0 _null_ _null_ _null_ ));
 #define TRIGGEROID		2279
+DATA(insert OID = 3838 ( event_trigger		PGNSP PGUID  4 t p P f t \054 0 0 0 event_trigger_in event_trigger_out - - - - - i p f 0 -1 0 0 _null_ _null_ _null_ ));
+#define EVTTRIGGEROID		3838
 DATA(insert OID = 2280 ( language_handler	PGNSP PGUID  4 t p P f t \054 0 0 0 language_handler_in language_handler_out - - - - - i p f 0 -1 0 0 _null_ _null_ _null_ ));
 #define LANGUAGE_HANDLEROID		2280
 DATA(insert OID = 2281 ( internal		PGNSP PGUID  SIZEOF_POINTER t p P f t \054 0 0 0 internal_in internal_out - - - - - ALIGNOF_POINTER p f 0 -1 0 0 _null_ _null_ _null_ ));

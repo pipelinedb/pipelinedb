@@ -4,7 +4,7 @@
  *	  POSTGRES error reporting/logging definitions.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/elog.h
@@ -100,11 +100,34 @@
  * and have errstart insert the default text domain.  Modules can either use
  * ereport_domain() directly, or preferably they can override the TEXTDOMAIN
  * macro.
+ *
+ * If elevel >= ERROR, the call will not return; we try to inform the compiler
+ * of that via pg_unreachable().  However, no useful optimization effect is
+ * obtained unless the compiler sees elevel as a compile-time constant, else
+ * we're just adding code bloat.  So, if __builtin_constant_p is available,
+ * use that to cause the second if() to vanish completely for non-constant
+ * cases.  We avoid using a local variable because it's not necessary and
+ * prevents gcc from making the unreachability deduction at optlevel -O0.
  *----------
  */
+#ifdef HAVE__BUILTIN_CONSTANT_P
 #define ereport_domain(elevel, domain, rest)	\
-	(errstart(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, domain) ? \
-	 (errfinish rest) : (void) 0)
+	do { \
+		if (errstart(elevel, __FILE__, __LINE__, PG_FUNCNAME_MACRO, domain)) \
+			errfinish rest; \
+		if (__builtin_constant_p(elevel) && (elevel) >= ERROR) \
+			pg_unreachable(); \
+	} while(0)
+#else							/* !HAVE__BUILTIN_CONSTANT_P */
+#define ereport_domain(elevel, domain, rest)	\
+	do { \
+		const int elevel_ = (elevel); \
+		if (errstart(elevel_, __FILE__, __LINE__, PG_FUNCNAME_MACRO, domain)) \
+			errfinish rest; \
+		if (elevel_ >= ERROR) \
+			pg_unreachable(); \
+	} while(0)
+#endif   /* HAVE__BUILTIN_CONSTANT_P */
 
 #define ereport(elevel, rest)	\
 	ereport_domain(elevel, TEXTDOMAIN, rest)
@@ -172,8 +195,19 @@ errhint(const char *fmt,...)
    the supplied arguments. */
 __attribute__((format(PG_PRINTF_ATTRIBUTE, 1, 2)));
 
+/*
+ * errcontext() is typically called in error context callback functions, not
+ * within an ereport() invocation. The callback function can be in a different
+ * module than the ereport() call, so the message domain passed in errstart()
+ * is not usually the correct domain for translating the context message.
+ * set_errcontext_domain() first sets the domain to be used, and
+ * errcontext_msg() passes the actual message.
+ */
+#define errcontext	set_errcontext_domain(TEXTDOMAIN),	errcontext_msg
+
+extern int	set_errcontext_domain(const char *domain);
 extern int
-errcontext(const char *fmt,...)
+errcontext_msg(const char *fmt,...)
 /* This extension allows gcc to check the format string for consistency with
    the supplied arguments. */
 __attribute__((format(PG_PRINTF_ATTRIBUTE, 1, 2)));
@@ -186,6 +220,8 @@ extern int	errposition(int cursorpos);
 extern int	internalerrposition(int cursorpos);
 extern int	internalerrquery(const char *query);
 
+extern int	err_generic_string(int field, const char *str);
+
 extern int	geterrcode(void);
 extern int	geterrposition(void);
 extern int	getinternalerrposition(void);
@@ -196,7 +232,37 @@ extern int	getinternalerrposition(void);
  *		elog(ERROR, "portal \"%s\" not found", stmt->portalname);
  *----------
  */
-#define elog	elog_start(__FILE__, __LINE__, PG_FUNCNAME_MACRO), elog_finish
+#ifdef HAVE__VA_ARGS
+/*
+ * If we have variadic macros, we can give the compiler a hint about the
+ * call not returning when elevel >= ERROR.  See comments for ereport().
+ * Note that historically elog() has called elog_start (which saves errno)
+ * before evaluating "elevel", so we preserve that behavior here.
+ */
+#ifdef HAVE__BUILTIN_CONSTANT_P
+#define elog(elevel, ...)  \
+	do { \
+		elog_start(__FILE__, __LINE__, PG_FUNCNAME_MACRO); \
+		elog_finish(elevel, __VA_ARGS__); \
+		if (__builtin_constant_p(elevel) && (elevel) >= ERROR) \
+			pg_unreachable(); \
+	} while(0)
+#else							/* !HAVE__BUILTIN_CONSTANT_P */
+#define elog(elevel, ...)  \
+	do { \
+		int		elevel_; \
+		elog_start(__FILE__, __LINE__, PG_FUNCNAME_MACRO); \
+		elevel_ = (elevel); \
+		elog_finish(elevel_, __VA_ARGS__); \
+		if (elevel_ >= ERROR) \
+			pg_unreachable(); \
+	} while(0)
+#endif   /* HAVE__BUILTIN_CONSTANT_P */
+#else							/* !HAVE__VA_ARGS */
+#define elog  \
+	elog_start(__FILE__, __LINE__, PG_FUNCNAME_MACRO), \
+	elog_finish
+#endif   /* HAVE__VA_ARGS */
 
 extern void elog_start(const char *filename, int lineno, const char *funcname);
 extern void
@@ -283,14 +349,14 @@ extern PGDLLIMPORT ErrorContextCallback *error_context_stack;
 
 /*
  * gcc understands __attribute__((noreturn)); for other compilers, insert
- * a useless exit() call so that the compiler gets the point.
+ * pg_unreachable() so that the compiler gets the point.
  */
 #ifdef __GNUC__
 #define PG_RE_THROW()  \
 	pg_re_throw()
 #else
 #define PG_RE_THROW()  \
-	(pg_re_throw(), exit(1))
+	(pg_re_throw(), pg_unreachable())
 #endif
 
 extern PGDLLIMPORT sigjmp_buf *PG_exception_stack;
@@ -315,12 +381,18 @@ typedef struct ErrorData
 	int			lineno;			/* __LINE__ of ereport() call */
 	const char *funcname;		/* __func__ of ereport() call */
 	const char *domain;			/* message domain */
+	const char *context_domain; /* message domain for context message */
 	int			sqlerrcode;		/* encoded ERRSTATE */
 	char	   *message;		/* primary error message */
 	char	   *detail;			/* detail error message */
 	char	   *detail_log;		/* detail error message for server log only */
 	char	   *hint;			/* hint message */
 	char	   *context;		/* context message */
+	char	   *schema_name;	/* name of schema */
+	char	   *table_name;		/* name of table */
+	char	   *column_name;	/* name of column */
+	char	   *datatype_name;	/* name of datatype */
+	char	   *constraint_name;	/* name of constraint */
 	int			cursorpos;		/* cursor index into query string */
 	int			internalpos;	/* cursor index into internalquery */
 	char	   *internalquery;	/* text of internally-generated query */
@@ -351,6 +423,7 @@ typedef enum
 extern int	Log_error_verbosity;
 extern char *Log_line_prefix;
 extern int	Log_destination;
+extern char *Log_destination_string;
 
 /* Log destination bitmap */
 #define LOG_DESTINATION_STDERR	 1

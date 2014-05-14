@@ -9,7 +9,6 @@
   </indexterm>
 
 &common;
-
   <para>
    Every operator is <quote>syntactic sugar</quote> for a call to an
    underlying function that does the real work; so you must
@@ -22,12 +21,7 @@
   </para>
 
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> supports left unary, right
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> supports left unary, right
-<!## end>
    unary, and binary operators.  Operators can be
    overloaded;<indexterm><primary>overloading</primary><secondary>operators</secondary></indexterm>
    that is, the same operator name can be used for different operators
@@ -84,14 +78,10 @@ SELECT (a + b) AS c FROM test_complex;
 
   <sect1 id="xoper-optimization">
    <title>Operator Optimization Information</title>
+
 &common;
    <para>
-<!## PG>
     A <productname>PostgreSQL</productname> operator definition can include
-<!## end>
-<!## XC>
-    A <productname>Postgres-XC</productname> operator definition can include
-<!## end>
     several optional clauses that tell the system useful things about how
     the operator behaves.  These clauses should be provided whenever
     appropriate, because they can make for considerable speedups in execution
@@ -105,17 +95,13 @@ SELECT (a + b) AS c FROM test_complex;
 
    <para>
     Additional optimization clauses might be added in future versions of
-<!## PG>
     <productname>PostgreSQL</productname>.  The ones described here are all
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname>.  The ones described here are all
-<!## end>
     the ones that release &version; understands.
    </para>
 
    <sect2>
     <title><literal>COMMUTATOR</></title>
+
 &common;
     <para>
      The <literal>COMMUTATOR</> clause, if provided, names an operator that is the
@@ -130,12 +116,7 @@ SELECT (a + b) AS c FROM test_complex;
     <para>
      The left operand type of a commutable operator is the same as the
      right operand type of its commutator, and vice versa.  So the name of
-<!## PG>
      the commutator operator is all that <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-     the commutator operator is all that <productname>Postgres-XC</productname>
-<!## end>
      needs to be given to look up the commutator, and that's all that needs to
      be provided in the <literal>COMMUTATOR</> clause.
     </para>
@@ -151,12 +132,7 @@ SELECT (a + b) AS c FROM test_complex;
      index scan unless it can determine how to flip the clause around to
      <literal>tab2.y = tab1.x</>, because the index-scan machinery expects
      to see the indexed column on the left of the operator it is given.
-<!## PG>
      <productname>PostgreSQL</productname> will <emphasis>not</> simply
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> will <emphasis>not</> simply
-<!## end>
      assume that this is a valid transformation &mdash; the creator of the
      <literal>=</> operator must specify that it is valid, by marking the
      operator with commutator information.
@@ -174,12 +150,7 @@ SELECT (a + b) AS c FROM test_complex;
        <para>
         One way is to omit the <literal>COMMUTATOR</> clause in the first operator that
         you define, and then provide one in the second operator's definition.
-<!## PG>
         Since <productname>PostgreSQL</productname> knows that commutative
-<!## end>
-<!## XC>
-        Since <productname>Postgres-XC</productname> knows that commutative
-<!## end>
         operators come in pairs, when it sees the second definition it will
         automatically go back and fill in the missing <literal>COMMUTATOR</> clause in
         the first definition.
@@ -189,22 +160,12 @@ SELECT (a + b) AS c FROM test_complex;
       <listitem>
        <para>
         The other, more straightforward way is just to include <literal>COMMUTATOR</> clauses
-<!## PG>
         in both definitions.  When <productname>PostgreSQL</productname> processes
-<!## end>
-<!## XC>
-        in both definitions.  When <productname>Postgres-XC</productname> processes
-<!## end>
         the first definition and realizes that <literal>COMMUTATOR</> refers to a nonexistent
         operator, the system will make a dummy entry for that operator in the
         system catalog.  This dummy entry will have valid data only
         for the operator name, left and right operand types, and result type,
-<!## PG>
         since that's all that <productname>PostgreSQL</productname> can deduce
-<!## end>
-<!## XC>
-        since that's all that <productname>Postgres-XC</productname> can deduce
-<!## end>
         at this point.  The first operator's catalog entry will link to this
         dummy entry.  Later, when you define the second operator, the system
         updates the dummy entry with the additional information from the second
@@ -218,6 +179,7 @@ SELECT (a + b) AS c FROM test_complex;
 
    <sect2>
     <title><literal>NEGATOR</></title>
+
 &common;
     <para>
      The <literal>NEGATOR</> clause, if provided, names an operator that is the
@@ -257,6 +219,7 @@ SELECT (a + b) AS c FROM test_complex;
 
   <sect2>
    <title><literal>RESTRICT</></title>
+
 &common;
    <para>
     The <literal>RESTRICT</> clause, if provided, names a restriction selectivity
@@ -329,6 +292,7 @@ column OP constant
 
    <sect2>
     <title><literal>JOIN</></title>
+
 &common;
     <para>
      The <literal>JOIN</> clause, if provided, names a join selectivity
@@ -363,6 +327,7 @@ table1.column1 OP table2.column2
 
    <sect2>
     <title><literal>HASHES</></title>
+
 &common;
     <para>
      The <literal>HASHES</literal> clause, if present, tells the system that
@@ -451,6 +416,7 @@ table1.column1 OP table2.column2
 
    <sect2>
     <title><literal>MERGES</></title>
+
 &common;
     <para>
      The <literal>MERGES</literal> clause, if present, tells the system that

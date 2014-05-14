@@ -106,7 +106,7 @@
     </varlistentry>
 
     <varlistentry>
-     <term><ulink url="http://wiki.docbook.org/topic/DocBookDssslStylesheets">DocBook DSSSL Stylesheets</ulink></term>
+     <term><ulink url="http://wiki.docbook.org/DocBookDssslStylesheetDocs">DocBook DSSSL Stylesheets</ulink></term>
      <listitem>
       <para>
        These contain the processing instructions for converting the
@@ -117,7 +117,7 @@
     </varlistentry>
 
     <varlistentry>
-     <term><ulink url="http://wiki.docbook.org/topic/DocBookXslStylesheets">DocBook XSL Stylesheets</ulink></term>
+     <term><ulink url="http://wiki.docbook.org/DocBookXslStylesheets">DocBook XSL Stylesheets</ulink></term>
      <listitem>
       <para>
        This is another stylesheet for converting DocBook to other
@@ -201,8 +201,8 @@
     installing, or the following packages:
     <filename>sgml-common</filename>, <filename>docbook</filename>,
     <filename>stylesheets</filename>, <filename>openjade</filename>
-    (or <filename>jade</filename>).  Possibly
-    <filename>sgml-tools</filename> will be needed as well.  If your
+    (or <filename>jade</filename>).  You may also need <filename>sgml-tools</filename>
+    and either <filename>xsltproc</filename> or <filename>libxslt</>.  If your
     distributor does not provide these then you should be able to make
     use of the packages from some other, reasonably compatible vendor.
    </para>
@@ -244,8 +244,9 @@
 
    <para>
     It's possible that the ports do not update the main catalog file
-    in <filename>/usr/local/share/sgml/catalog.ports</filename> or order
-    isn't proper .  Be sure to have the following lines in beginning of file:
+    in <filename>/usr/local/share/sgml/catalog.ports</filename> or that the
+    order isn't proper.  Be sure to have the following lines in the beginning
+    of the file:
 <programlisting>
 CATALOG "openjade/catalog"
 CATALOG "iso8879/catalog"
@@ -273,6 +274,17 @@ CATALOG "docbook/4.2/catalog"
     To install, simply use:
 <programlisting>
 apt-get install docbook docbook-dsssl docbook-xsl openjade1.3 opensp xsltproc
+</programlisting>
+   </para>
+  </sect2>
+
+  <sect2>
+   <title>Mac OS X</title>
+
+   <para>
+    If you use MacPorts, the following will get you set up:
+<programlisting>
+sudo port install docbook-dsssl docbook-sgml-4.2 docbook-xml-4.2 docbook-xsl libxslt openjade opensp
 </programlisting>
    </para>
   </sect2>

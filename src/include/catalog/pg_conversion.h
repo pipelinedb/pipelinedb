@@ -5,7 +5,7 @@
  *	  along with the relation's initial contents.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_conversion.h
@@ -42,8 +42,8 @@ CATALOG(pg_conversion,2607)
 	NameData	conname;
 	Oid			connamespace;
 	Oid			conowner;
-	int4		conforencoding;
-	int4		contoencoding;
+	int32		conforencoding;
+	int32		contoencoding;
 	regproc		conproc;
 	bool		condefault;
 } FormData_pg_conversion;

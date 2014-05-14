@@ -45,14 +45,12 @@ CREATE TABLE persons2 OF person_type (
     id WITH OPTIONS PRIMARY KEY,
     UNIQUE (name)
 );
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "persons2_pkey" for table "persons2"
 ERROR:  Cannot create index whose evaluation cannot be enforced to remote nodes
 \d persons2
 CREATE TABLE persons3 OF person_type (
     PRIMARY KEY (id),
     name WITH OPTIONS DEFAULT ''
 );
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "persons3_pkey" for table "persons3"
 \d persons3
        Table "public.persons3"
  Column |  Type   |    Modifiers     

@@ -3,19 +3,12 @@
 <chapter id="charset">
  <title>Localization</title>
 
-
 &common;
  <para>
   This chapter describes the available localization features from the
   point of view of the administrator.
-<!## PG>
   <productname>PostgreSQL</productname> supports two localization
   facilities:
-<!## end>
-<!## XC>
-  <productname>Postgres-XC</productname> inherits supports of two localization
-  facilities from <productname>PostgreSQL</>:
-<!## end>
 
    <itemizedlist>
     <listitem>
@@ -44,17 +37,12 @@
   <title>Locale Support</title>
 
   <indexterm zone="locale"><primary>locale</></>
-&common;
 
+&common;
   <para>
    <firstterm>Locale</> support refers to an application respecting
    cultural preferences regarding alphabets, sorting, number
-<!## PG>
    formatting, etc.  <productname>PostgreSQL</> uses the standard ISO
-<!## end>
-<!## XC>
-   formatting, etc.  <productname>Postgres-XC</> uses the standard ISO
-<!## end>
    C and <acronym>POSIX</acronym> locale facilities provided by the server operating
    system.  For additional information refer to the documentation of your
    system.
@@ -272,24 +260,14 @@ initdb --locale=sv_SE
 
    <para>
     The drawback of using locales other than <literal>C</> or
-<!## PG>
     <literal>POSIX</> in <productname>PostgreSQL</> is its performance
-<!## end>
-<!## XC>
-    <literal>POSIX</> in <productname>Postgres-XC</> is its performance
-<!## end>
     impact. It slows character handling and prevents ordinary indexes
     from being used by <literal>LIKE</>. For this reason use locales
     only if you actually need them.
    </para>
 
    <para>
-<!## PG>
     As a workaround to allow <productname>PostgreSQL</> to use indexes
-<!## end>
-<!## XC>
-    As a workaround to allow <productname>Postgres-XC</> to use indexes
-<!## end>
     with <literal>LIKE</> clauses under a non-C locale, several custom
     operator classes exist. These allow the creation of an index that
     performs a strict character-by-character comparison, ignoring
@@ -303,7 +281,6 @@ initdb --locale=sv_SE
   <sect2>
    <title>Problems</title>
 
-&common;
    <para>
     If locale support doesn't work according to the explanation above,
     check that the locale support in your operating system is
@@ -313,12 +290,7 @@ initdb --locale=sv_SE
    </para>
 
    <para>
-<!## PG>
     Check that <productname>PostgreSQL</> is actually using the locale
-<!## end>
-<!## XC>
-    Check that <productname>Postgres-XC</> is actually using the locale
-<!## end>
     that you think it is.  The <envar>LC_COLLATE</> and <envar>LC_CTYPE</>
     settings are determined when a database is created, and cannot be
     changed except by creating a new database.  Other locale
@@ -331,12 +303,7 @@ initdb --locale=sv_SE
    <para>
     The directory <filename>src/test/locale</> in the source
     distribution contains a test suite for
-<!## PG>
     <productname>PostgreSQL</>'s locale support.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</>'s locale support.
-<!## end>
    </para>
 
    <para>
@@ -350,12 +317,7 @@ initdb --locale=sv_SE
    <para>
     Maintaining catalogs of message translations requires the on-going
     efforts of many volunteers that want to see
-<!## PG>
     <productname>PostgreSQL</> speak their preferred language well.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> speak their preferred language well.
-<!## end>
     If messages in your language are currently not available or not fully
     translated, your assistance would be appreciated.  If you want to
     help, refer to <xref linkend="nls"> or write to the developers'
@@ -370,6 +332,7 @@ initdb --locale=sv_SE
 
   <indexterm zone="collation"><primary>collation</></>
 
+&common;
   <para>
    The collation feature allows specifying the sort order and character
    classification behavior of data per-column, or even per-operation.
@@ -381,6 +344,7 @@ initdb --locale=sv_SE
   <sect2>
    <title>Concepts</title>
 
+&common;
    <para>
     Conceptually, every expression of a collatable data type has a
     collation.  (The built-in collatable data types are
@@ -541,6 +505,7 @@ SELECT * FROM test1 ORDER BY a || b COLLATE "fr_FR";
   <sect2>
    <title>Managing Collations</title>
 
+&common;
    <para>
     A collation is an SQL schema object that maps an SQL name to
     operating system locales.  In particular, it maps to a combination
@@ -605,7 +570,7 @@ SELECT * FROM test1 ORDER BY a || b COLLATE "fr_FR";
     <literal>pg_collation</literal> are ignored.  Thus, a stripped collation
     name such as <literal>de_DE</literal> can be considered unique
     within a given database even though it would not be unique globally.
-    Use of the stripped collation names is recommendable, since it will
+    Use of the stripped collation names is recommended, since it will
     make one less thing you need to change if you decide to change to
     another database encoding.  Note however that the <literal>default</>,
     <literal>C</>, and <literal>POSIX</> collations can be used
@@ -630,15 +595,10 @@ SELECT a COLLATE "C" &lt; b COLLATE "POSIX" FROM test1;
   <title>Character Set Support</title>
 
   <indexterm zone="multibyte"><primary>character set</></>
-&common;
 
+&common;
   <para>
-<!## PG>
    The character set support in <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-   The character set support in <productname>Postgres-XC</productname>
-<!## end>
    allows you to store text in a variety of character sets (also called
    encodings), including
    single-byte character sets such as the ISO 8859 series and
@@ -647,12 +607,7 @@ SELECT a COLLATE "C" &lt; b COLLATE "POSIX" FROM test1;
    can be used transparently by clients, but a few are not supported
    for use within the server (that is, as a server-side encoding).
    The default character set is selected while
-<!## PG>
    initializing your <productname>PostgreSQL</productname> database
-<!## end>
-<!## XC>
-   initializing your <productname>Postgres-XC</productname> database
-<!## end>
    cluster using <command>initdb</>.  It can be overridden when you
    create a database, so you can have multiple
    databases each with a different character set.
@@ -670,25 +625,15 @@ SELECT a COLLATE "C" &lt; b COLLATE "POSIX" FROM test1;
 
    <sect2 id="multibyte-charset-supported">
     <title>Supported Character Sets</title>
-&common;
 
+&common;
     <para>
      <xref linkend="charset-table"> shows the character sets available
-<!## PG>
      for use in <productname>PostgreSQL</productname>.
-<!## end>
-<!## XC>
-     for use in <productname>Postgres-XC</productname>.
-<!## end>
     </para>
 
      <table id="charset-table">
-<!## PG>
       <title><productname>PostgreSQL</productname> Character Sets</title>
-<!## end>
-<!## XC>
-      <title><productname>Postgres-XC</productname> Character Sets</title>
-<!## end>
       <tgroup cols="6">
        <thead>
         <row>
@@ -1047,12 +992,7 @@ SELECT a COLLATE "C" &lt; b COLLATE "POSIX" FROM test1;
 
      <para>
       Not all client <acronym>API</>s support all the listed character sets. For example, the
-<!## PG>
       <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-      <productname>Postgres-XC</>
-<!## end>
       JDBC driver does not support <literal>MULE_INTERNAL</>, <literal>LATIN6</>,
       <literal>LATIN8</>, and <literal>LATIN10</>.
      </para>
@@ -1068,28 +1008,18 @@ SELECT a COLLATE "C" &lt; b COLLATE "POSIX" FROM test1;
       of ignorance about the encoding.  In most cases, if you are
       working with any non-ASCII data, it is unwise to use the
       <literal>SQL_ASCII</> setting because
-<!## PG>
       <productname>PostgreSQL</productname> will be unable to help you by
-<!## end>
-<!## XC>
-      <productname>Postgres-XC</productname> will be unable to help you by
-<!## end>
       converting or validating non-ASCII characters.
      </para>
     </sect2>
 
    <sect2>
     <title>Setting the Character Set</title>
-&common;
 
+&common;
     <para>
      <command>initdb</> defines the default character set (encoding)
-<!## PG>
      for a <productname>PostgreSQL</productname> cluster. For example,
-<!## end>
-<!## XC>
-     for a <productname>Postgres-XC</productname> cluster. For example,
-<!## end>
 
 <screen>
 initdb -E EUC_JP
@@ -1151,12 +1081,7 @@ $ <userinput>psql -l</userinput>
 
     <important>
      <para>
-<!## PG>
       On most modern operating systems, <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-      On most modern operating systems, <productname>Postgres-XC</productname>
-<!## end>
       can determine which character set is implied by the <envar>LC_CTYPE</>
       setting, and it will enforce that only the matching database encoding is
       used.  On older systems it is your responsibility to ensure that you use
@@ -1166,12 +1091,7 @@ $ <userinput>psql -l</userinput>
      </para>
 
      <para>
-<!## PG>
       <productname>PostgreSQL</productname> will allow superusers to create
-<!## end>
-<!## XC>
-      <productname>Postgres-XC</productname> will allow superusers to create
-<!## end>
       databases with <literal>SQL_ASCII</> encoding even when
       <envar>LC_CTYPE</> is not <literal>C</> or <literal>POSIX</>.  As noted
       above, <literal>SQL_ASCII</> does not enforce that the data stored in
@@ -1184,23 +1104,13 @@ $ <userinput>psql -l</userinput>
 
    <sect2>
     <title>Automatic Character Set Conversion Between Server and Client</title>
-&common;
 
+&common;
     <para>
-<!## PG>
      <productname>PostgreSQL</productname> supports automatic
-<!## end>
-<!## XC>
-     <productname>Postgres-XC</productname> supports automatic
-<!## end>
      character set conversion between server and client for certain
      character set combinations. The conversion information is stored in the
-<!## PG>
      <literal>pg_conversion</> system catalog.  <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-     <literal>pg_conversion</> system catalog.  <productname>Postgres-XC</>
-<!## end>
      comes with some predefined conversions, as shown in <xref
      linkend="multibyte-translation-table">. You can create a new
      conversion using the SQL command <command>CREATE CONVERSION</command>.
@@ -1495,12 +1405,7 @@ $ <userinput>psql -l</userinput>
 
     <para>
      To enable automatic character set conversion, you have to
-<!## PG>
      tell <productname>PostgreSQL</productname> the character set
-<!## end>
-<!## XC>
-     tell <productname>Postgres-XC</productname> the character set
-<!## end>
      (encoding) you would like to use in the client. There are several
      ways to accomplish this:
 
@@ -1599,24 +1504,13 @@ RESET client_encoding;
 
    <sect2>
     <title>Further Reading</title>
-&common;
 
+&common;
     <para>
      These are good sources to start learning about various kinds of encoding
      systems.
 
      <variablelist>
-      <varlistentry>
-       <term><ulink url="http://www.i18ngurus.com/docs/984813247.html"></ulink></term>
-
-       <listitem>
-        <para>
-         An extensive collection of documents about character sets, encodings,
-         and code pages.
-        </para>
-       </listitem>
-      </varlistentry>
-
       <varlistentry>
        <term><citetitle>CJKV Information Processing: Chinese, Japanese, Korean &amp; Vietnamese Computing</citetitle></term>
 

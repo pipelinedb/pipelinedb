@@ -22,7 +22,7 @@ PostgreSQL documentation
  <refsynopsisdiv>
 <synopsis>
 CREATE EXTENSION [ IF NOT EXISTS ] <replaceable class="parameter">extension_name</replaceable>
-    [ WITH ] [ SCHEMA <replaceable class="parameter">schema</replaceable> ]
+    [ WITH ] [ SCHEMA <replaceable class="parameter">schema_name</replaceable> ]
              [ VERSION <replaceable class="parameter">version</replaceable> ]
              [ FROM <replaceable class="parameter">old_version</replaceable> ]
 </synopsis>
@@ -31,6 +31,7 @@ CREATE EXTENSION [ IF NOT EXISTS ] <replaceable class="parameter">extension_name
  <refsect1>
   <title>Description</title>
 
+&common;
   <para>
    <command>CREATE EXTENSION</command> loads a new extension into the current
    database.  There must not be an extension of the same name already loaded.
@@ -59,6 +60,7 @@ CREATE EXTENSION [ IF NOT EXISTS ] <replaceable class="parameter">extension_name
  <refsect1>
   <title>Parameters</title>
 
+&common;
     <variablelist>
      <varlistentry>
       <term><literal>IF NOT EXISTS</></term>
@@ -85,7 +87,7 @@ CREATE EXTENSION [ IF NOT EXISTS ] <replaceable class="parameter">extension_name
      </varlistentry>
 
      <varlistentry>
-      <term><replaceable class="parameter">schema</replaceable></term>
+      <term><replaceable class="parameter">schema_name</replaceable></term>
       <listitem>
        <para>
         The name of the schema in which to install the extension's
@@ -93,6 +95,12 @@ CREATE EXTENSION [ IF NOT EXISTS ] <replaceable class="parameter">extension_name
         relocated.  The named schema must already exist.
         If not specified, and the extension's control file does not specify a
         schema either, the current default object creation schema is used.
+       </para>
+       <para>
+        Remember that the extension itself is not considered to be within any
+        schema: extensions have unqualified names that must be unique
+        database-wide.  But objects belonging to the extension can be within
+        schemas.
        </para>
       </listitem>
      </varlistentry>
@@ -111,8 +119,7 @@ CREATE EXTENSION [ IF NOT EXISTS ] <replaceable class="parameter">extension_name
      <varlistentry>
       <term><replaceable class="parameter">old_version</replaceable></term>
       <listitem>
-       <para>
-        <literal>FROM</> <replaceable class="parameter">old_version</>
+       <para><literal>FROM</> <replaceable class="parameter">old_version</>
         must be specified when, and only when, you are attempting to install
         an extension that replaces an <quote>old style</> module that is just
         a collection of objects not packaged into an extension.  This option
@@ -140,6 +147,7 @@ CREATE EXTENSION [ IF NOT EXISTS ] <replaceable class="parameter">extension_name
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    Before you can use <command>CREATE EXTENSION</> to load an extension
    into a database, the extension's supporting files must be installed.
@@ -187,6 +195,7 @@ CREATE EXTENSION hstore SCHEMA public FROM unpackaged;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>CREATE EXTENSION</command> is a <productname>PostgreSQL</>
    extension.

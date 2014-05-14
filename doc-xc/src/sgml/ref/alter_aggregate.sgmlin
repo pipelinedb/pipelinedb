@@ -21,9 +21,9 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-ALTER AGGREGATE <replaceable>name</replaceable> ( <replaceable>type</replaceable> [ , ... ] ) RENAME TO <replaceable>new_name</replaceable>
-ALTER AGGREGATE <replaceable>name</replaceable> ( <replaceable>type</replaceable> [ , ... ] ) OWNER TO <replaceable>new_owner</replaceable>
-ALTER AGGREGATE <replaceable>name</replaceable> ( <replaceable>type</replaceable> [ , ... ] ) SET SCHEMA <replaceable>new_schema</replaceable>
+ALTER AGGREGATE <replaceable>name</replaceable> ( <replaceable>argtype</replaceable> [ , ... ] ) RENAME TO <replaceable>new_name</replaceable>
+ALTER AGGREGATE <replaceable>name</replaceable> ( <replaceable>argtype</replaceable> [ , ... ] ) OWNER TO <replaceable>new_owner</replaceable>
+ALTER AGGREGATE <replaceable>name</replaceable> ( <replaceable>argtype</replaceable> [ , ... ] ) SET SCHEMA <replaceable>new_schema</replaceable>
 </synopsis>
  </refsynopsisdiv>
 
@@ -31,7 +31,6 @@ ALTER AGGREGATE <replaceable>name</replaceable> ( <replaceable>type</replaceable
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER AGGREGATE</command> changes the definition of an
    aggregate function.
@@ -52,6 +51,7 @@ ALTER AGGREGATE <replaceable>name</replaceable> ( <replaceable>type</replaceable
 
  <refsect1>
   <title>Parameters</title>
+
 &common;
   <variablelist>
    <varlistentry>
@@ -64,7 +64,7 @@ ALTER AGGREGATE <replaceable>name</replaceable> ( <replaceable>type</replaceable
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="parameter">type</replaceable></term>
+    <term><replaceable class="parameter">argtype</replaceable></term>
     <listitem>
      <para>
       An input data type on which the aggregate function operates.
@@ -105,7 +105,7 @@ ALTER AGGREGATE <replaceable>name</replaceable> ( <replaceable>type</replaceable
 
  <refsect1>
   <title>Examples</title>
-&common;
+
   <para>
    To rename the aggregate function <literal>myavg</literal> for type
    <type>integer</type> to <literal>my_average</literal>:
@@ -127,12 +127,12 @@ ALTER AGGREGATE myavg(integer) OWNER TO joe;
    <type>integer</type> into schema <literal>myschema</literal>:
 <programlisting>
 ALTER AGGREGATE myavg(integer) SET SCHEMA myschema;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
+
 &common;
   <para>
    There is no <command>ALTER AGGREGATE</command> statement in the SQL

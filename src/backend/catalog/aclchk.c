@@ -3,7 +3,7 @@
  * aclchk.c
  *	  Routines to check access control permissions.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -19,16 +19,19 @@
 
 #include "access/genam.h"
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
+#include "catalog/objectaccess.h"
 #include "catalog/pg_authid.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_conversion.h"
 #include "catalog/pg_database.h"
 #include "catalog/pg_default_acl.h"
+#include "catalog/pg_event_trigger.h"
 #include "catalog/pg_extension.h"
 #include "catalog/pg_foreign_data_wrapper.h"
 #include "catalog/pg_foreign_server.h"
@@ -277,6 +280,10 @@ restrict_and_check_grant(bool is_grant, AclMode avail_goptions, bool all_privs,
 		case ACL_KIND_FOREIGN_SERVER:
 			whole_mask = ACL_ALL_RIGHTS_FOREIGN_SERVER;
 			break;
+		case ACL_KIND_EVENT_TRIGGER:
+			elog(ERROR, "grantable rights not supported for event triggers");
+			/* not reached, but keep compiler quiet */
+			return ACL_NO_RIGHTS;
 		case ACL_KIND_TYPE:
 			whole_mask = ACL_ALL_RIGHTS_TYPE;
 			break;
@@ -749,15 +756,16 @@ objectsInSchemaToOids(GrantObjectType objtype, List *nspnames)
 		Oid			namespaceId;
 		List	   *objs;
 
-		namespaceId = LookupExplicitNamespace(nspname);
+		namespaceId = LookupExplicitNamespace(nspname, false);
 
 		switch (objtype)
 		{
 			case ACL_OBJECT_RELATION:
-				/* Process regular tables, views and foreign tables */
 				objs = getRelationsInNamespace(namespaceId, RELKIND_RELATION);
 				objects = list_concat(objects, objs);
 				objs = getRelationsInNamespace(namespaceId, RELKIND_VIEW);
+				objects = list_concat(objects, objs);
+				objs = getRelationsInNamespace(namespaceId, RELKIND_MATVIEW);
 				objects = list_concat(objects, objs);
 				objs = getRelationsInNamespace(namespaceId, RELKIND_FOREIGN_TABLE);
 				objects = list_concat(objects, objs);
@@ -1030,27 +1038,26 @@ SetDefaultACLsInSchemas(InternalDefaultACL *iacls, List *nspnames)
 	}
 	else
 	{
-		/* Look up the schema OIDs and do permissions checks */
+		/* Look up the schema OIDs and set permissions for each one */
 		ListCell   *nspcell;
 
 		foreach(nspcell, nspnames)
 		{
 			char	   *nspname = strVal(lfirst(nspcell));
-			AclResult	aclresult;
 
-			/*
-			 * Note that we must do the permissions check against the target
-			 * role not the calling user.  We require CREATE privileges, since
-			 * without CREATE you won't be able to do anything using the
-			 * default privs anyway.
-			 */
 			iacls->nspid = get_namespace_oid(nspname, false);
 
-			aclresult = pg_namespace_aclcheck(iacls->nspid, iacls->roleid,
-											  ACL_CREATE);
-			if (aclresult != ACLCHECK_OK)
-				aclcheck_error(aclresult, ACL_KIND_NAMESPACE,
-							   nspname);
+			/*
+			 * We used to insist that the target role have CREATE privileges
+			 * on the schema, since without that it wouldn't be able to create
+			 * an object for which these default privileges would apply.
+			 * However, this check proved to be more confusing than helpful,
+			 * and it also caused certain database states to not be
+			 * dumpable/restorable, since revoking CREATE doesn't cause
+			 * default privileges for the schema to go away.  So now, we just
+			 * allow the ALTER; if the user lacks CREATE he'll find out when
+			 * he tries to create an object.
+			 */
 
 			SetDefaultACL(iacls);
 		}
@@ -1282,6 +1289,13 @@ SetDefaultACL(InternalDefaultACL *iacls)
 							  iacls->roleid,
 							  noldmembers, oldmembers,
 							  nnewmembers, newmembers);
+
+		if (isNew)
+			InvokeObjectPostCreateHook(DefaultAclRelationId,
+									   HeapTupleGetOid(newtuple), 0);
+		else
+			InvokeObjectPostAlterHook(DefaultAclRelationId,
+									  HeapTupleGetOid(newtuple), 0);
 	}
 
 	if (HeapTupleIsValid(tuple))
@@ -1340,10 +1354,13 @@ RemoveRoleFromObjectACL(Oid roleid, Oid classid, Oid objid)
 			case DEFACLOBJ_FUNCTION:
 				iacls.objtype = ACL_OBJECT_FUNCTION;
 				break;
+			case DEFACLOBJ_TYPE:
+				iacls.objtype = ACL_OBJECT_TYPE;
+				break;
 			default:
 				/* Shouldn't get here */
-				elog(ERROR, "unexpected default ACL type %d",
-					 pg_default_acl_tuple->defaclobjtype);
+				elog(ERROR, "unexpected default ACL type: %d",
+					 (int) pg_default_acl_tuple->defaclobjtype);
 				break;
 		}
 
@@ -3286,6 +3303,8 @@ static const char *const no_priv_msg[MAX_ACL_KIND] =
 	gettext_noop("permission denied for foreign-data wrapper %s"),
 	/* ACL_KIND_FOREIGN_SERVER */
 	gettext_noop("permission denied for foreign server %s"),
+	/* ACL_KIND_EVENT_TRIGGER */
+	gettext_noop("permission denied for event trigger %s"),
 	/* ACL_KIND_EXTENSION */
 	gettext_noop("permission denied for extension %s"),
 };
@@ -3330,6 +3349,8 @@ static const char *const not_owner_msg[MAX_ACL_KIND] =
 	gettext_noop("must be owner of foreign-data wrapper %s"),
 	/* ACL_KIND_FOREIGN_SERVER */
 	gettext_noop("must be owner of foreign server %s"),
+	/* ACL_KIND_EVENT_TRIGGER */
+	gettext_noop("must be owner of event trigger %s"),
 	/* ACL_KIND_EXTENSION */
 	gettext_noop("must be owner of extension %s"),
 };
@@ -3389,6 +3410,19 @@ aclcheck_error_col(AclResult aclerr, AclObjectKind objectkind,
 }
 
 
+/*
+ * Special common handling for types: use element type instead of array type,
+ * and format nicely
+ */
+void
+aclcheck_error_type(AclResult aclerr, Oid typeOid)
+{
+	Oid			element_type = get_element_type(typeOid);
+
+	aclcheck_error(aclerr, ACL_KIND_TYPE, format_type_be(element_type ? element_type : typeOid));
+}
+
+
 /* Check if given user has rolcatupdate privilege according to pg_authid */
 static bool
 has_rolcatupdate(Oid roleid)
@@ -3442,6 +3476,10 @@ pg_aclmask(AclObjectKind objkind, Oid table_oid, AttrNumber attnum, Oid roleid,
 			return pg_foreign_data_wrapper_aclmask(table_oid, roleid, mask, how);
 		case ACL_KIND_FOREIGN_SERVER:
 			return pg_foreign_server_aclmask(table_oid, roleid, mask, how);
+		case ACL_KIND_EVENT_TRIGGER:
+			elog(ERROR, "grantable rights not supported for event triggers");
+			/* not reached, but keep compiler quiet */
+			return ACL_NO_RIGHTS;
 		case ACL_KIND_TYPE:
 			return pg_type_aclmask(table_oid, roleid, mask, how);
 		default:
@@ -4856,6 +4894,33 @@ pg_foreign_server_ownercheck(Oid srv_oid, Oid roleid)
 						srv_oid)));
 
 	ownerId = ((Form_pg_foreign_server) GETSTRUCT(tuple))->srvowner;
+
+	ReleaseSysCache(tuple);
+
+	return has_privs_of_role(roleid, ownerId);
+}
+
+/*
+ * Ownership check for an event trigger (specified by OID).
+ */
+bool
+pg_event_trigger_ownercheck(Oid et_oid, Oid roleid)
+{
+	HeapTuple	tuple;
+	Oid			ownerId;
+
+	/* Superusers bypass all permission checking. */
+	if (superuser_arg(roleid))
+		return true;
+
+	tuple = SearchSysCache1(EVENTTRIGGEROID, ObjectIdGetDatum(et_oid));
+	if (!HeapTupleIsValid(tuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("event trigger with OID %u does not exist",
+						et_oid)));
+
+	ownerId = ((Form_pg_event_trigger) GETSTRUCT(tuple))->evtowner;
 
 	ReleaseSysCache(tuple);
 

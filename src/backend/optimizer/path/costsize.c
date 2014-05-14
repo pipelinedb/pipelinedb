@@ -57,7 +57,7 @@
  * values.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -68,8 +68,12 @@
 
 #include "postgres.h"
 
+#ifdef _MSC_VER
+#include <float.h>				/* for _isnan */
+#endif
 #include <math.h>
 
+#include "access/htup_details.h"
 #include "executor/executor.h"
 #include "executor/nodeHash.h"
 #include "miscadmin.h"
@@ -862,14 +866,19 @@ cost_bitmap_or_node(BitmapOrPath *path, PlannerInfo *root)
 /*
  * cost_tidscan
  *	  Determines and returns the cost of scanning a relation using TIDs.
+ *
+ * 'baserel' is the relation to be scanned
+ * 'tidquals' is the list of TID-checkable quals
+ * 'param_info' is the ParamPathInfo if this is a parameterized path, else NULL
  */
 void
 cost_tidscan(Path *path, PlannerInfo *root,
-			 RelOptInfo *baserel, List *tidquals)
+			 RelOptInfo *baserel, List *tidquals, ParamPathInfo *param_info)
 {
 	Cost		startup_cost = 0;
 	Cost		run_cost = 0;
 	bool		isCurrentOf = false;
+	QualCost	qpqual_cost;
 	Cost		cpu_per_tuple;
 	QualCost	tid_qual_cost;
 	int			ntuples;
@@ -880,8 +889,11 @@ cost_tidscan(Path *path, PlannerInfo *root,
 	Assert(baserel->relid > 0);
 	Assert(baserel->rtekind == RTE_RELATION);
 
-	/* For now, tidscans are never parameterized */
-	path->rows = baserel->rows;
+	/* Mark the path with the correct row estimate */
+	if (param_info)
+		path->rows = param_info->ppi_rows;
+	else
+		path->rows = baserel->rows;
 
 	/* Count how many tuples we expect to retrieve */
 	ntuples = 0;
@@ -938,10 +950,12 @@ cost_tidscan(Path *path, PlannerInfo *root,
 	/* disk costs --- assume each tuple on a different page */
 	run_cost += spc_random_page_cost * ntuples;
 
-	/* CPU costs */
-	startup_cost += baserel->baserestrictcost.startup +
-		tid_qual_cost.per_tuple;
-	cpu_per_tuple = cpu_tuple_cost + baserel->baserestrictcost.per_tuple -
+	/* Add scanning CPU costs */
+	get_restriction_qual_cost(root, baserel, param_info, &qpqual_cost);
+
+	/* XXX currently we assume TID quals are a subset of qpquals */
+	startup_cost += qpqual_cost.startup + tid_qual_cost.per_tuple;
+	cpu_per_tuple = cpu_tuple_cost + qpqual_cost.per_tuple -
 		tid_qual_cost.per_tuple;
 	run_cost += cpu_per_tuple * ntuples;
 
@@ -996,12 +1010,17 @@ cost_subqueryscan(Path *path, PlannerInfo *root,
 /*
  * cost_functionscan
  *	  Determines and returns the cost of scanning a function RTE.
+ *
+ * 'baserel' is the relation to be scanned
+ * 'param_info' is the ParamPathInfo if this is a parameterized path, else NULL
  */
 void
-cost_functionscan(Path *path, PlannerInfo *root, RelOptInfo *baserel)
+cost_functionscan(Path *path, PlannerInfo *root,
+				  RelOptInfo *baserel, ParamPathInfo *param_info)
 {
 	Cost		startup_cost = 0;
 	Cost		run_cost = 0;
+	QualCost	qpqual_cost;
 	Cost		cpu_per_tuple;
 	RangeTblEntry *rte;
 	QualCost	exprcost;
@@ -1011,8 +1030,11 @@ cost_functionscan(Path *path, PlannerInfo *root, RelOptInfo *baserel)
 	rte = planner_rt_fetch(baserel->relid, root);
 	Assert(rte->rtekind == RTE_FUNCTION);
 
-	/* functionscans are never parameterized */
-	path->rows = baserel->rows;
+	/* Mark the path with the correct row estimate */
+	if (param_info)
+		path->rows = param_info->ppi_rows;
+	else
+		path->rows = baserel->rows;
 
 	/*
 	 * Estimate costs of executing the function expression.
@@ -1032,8 +1054,10 @@ cost_functionscan(Path *path, PlannerInfo *root, RelOptInfo *baserel)
 	startup_cost += exprcost.startup + exprcost.per_tuple;
 
 	/* Add scanning CPU costs */
-	startup_cost += baserel->baserestrictcost.startup;
-	cpu_per_tuple = cpu_tuple_cost + baserel->baserestrictcost.per_tuple;
+	get_restriction_qual_cost(root, baserel, param_info, &qpqual_cost);
+
+	startup_cost += qpqual_cost.startup;
+	cpu_per_tuple = cpu_tuple_cost + qpqual_cost.per_tuple;
 	run_cost += cpu_per_tuple * baserel->tuples;
 
 	path->startup_cost = startup_cost;
@@ -1043,20 +1067,28 @@ cost_functionscan(Path *path, PlannerInfo *root, RelOptInfo *baserel)
 /*
  * cost_valuesscan
  *	  Determines and returns the cost of scanning a VALUES RTE.
+ *
+ * 'baserel' is the relation to be scanned
+ * 'param_info' is the ParamPathInfo if this is a parameterized path, else NULL
  */
 void
-cost_valuesscan(Path *path, PlannerInfo *root, RelOptInfo *baserel)
+cost_valuesscan(Path *path, PlannerInfo *root,
+				RelOptInfo *baserel, ParamPathInfo *param_info)
 {
 	Cost		startup_cost = 0;
 	Cost		run_cost = 0;
+	QualCost	qpqual_cost;
 	Cost		cpu_per_tuple;
 
 	/* Should only be applied to base relations that are values lists */
 	Assert(baserel->relid > 0);
 	Assert(baserel->rtekind == RTE_VALUES);
 
-	/* valuesscans are never parameterized */
-	path->rows = baserel->rows;
+	/* Mark the path with the correct row estimate */
+	if (param_info)
+		path->rows = param_info->ppi_rows;
+	else
+		path->rows = baserel->rows;
 
 	/*
 	 * For now, estimate list evaluation cost at one operator eval per list
@@ -1065,8 +1097,10 @@ cost_valuesscan(Path *path, PlannerInfo *root, RelOptInfo *baserel)
 	cpu_per_tuple = cpu_operator_cost;
 
 	/* Add scanning CPU costs */
-	startup_cost += baserel->baserestrictcost.startup;
-	cpu_per_tuple += cpu_tuple_cost + baserel->baserestrictcost.per_tuple;
+	get_restriction_qual_cost(root, baserel, param_info, &qpqual_cost);
+
+	startup_cost += qpqual_cost.startup;
+	cpu_per_tuple += cpu_tuple_cost + qpqual_cost.per_tuple;
 	run_cost += cpu_per_tuple * baserel->tuples;
 
 	path->startup_cost = startup_cost;
@@ -1084,25 +1118,32 @@ cost_valuesscan(Path *path, PlannerInfo *root, RelOptInfo *baserel)
  * and should NOT be counted here.
  */
 void
-cost_ctescan(Path *path, PlannerInfo *root, RelOptInfo *baserel)
+cost_ctescan(Path *path, PlannerInfo *root,
+			 RelOptInfo *baserel, ParamPathInfo *param_info)
 {
 	Cost		startup_cost = 0;
 	Cost		run_cost = 0;
+	QualCost	qpqual_cost;
 	Cost		cpu_per_tuple;
 
 	/* Should only be applied to base relations that are CTEs */
 	Assert(baserel->relid > 0);
 	Assert(baserel->rtekind == RTE_CTE);
 
-	/* ctescans are never parameterized */
-	path->rows = baserel->rows;
+	/* Mark the path with the correct row estimate */
+	if (param_info)
+		path->rows = param_info->ppi_rows;
+	else
+		path->rows = baserel->rows;
 
 	/* Charge one CPU tuple cost per row for tuplestore manipulation */
 	cpu_per_tuple = cpu_tuple_cost;
 
 	/* Add scanning CPU costs */
-	startup_cost += baserel->baserestrictcost.startup;
-	cpu_per_tuple += cpu_tuple_cost + baserel->baserestrictcost.per_tuple;
+	get_restriction_qual_cost(root, baserel, param_info, &qpqual_cost);
+
+	startup_cost += qpqual_cost.startup;
+	cpu_per_tuple += cpu_tuple_cost + qpqual_cost.per_tuple;
 	run_cost += cpu_per_tuple * baserel->tuples;
 
 	path->startup_cost = startup_cost;
@@ -2981,6 +3022,13 @@ cost_qual_eval_walker(Node *node, cost_qual_eval_context *context)
 	 * to expect that the current ordering of the clauses is the one that's
 	 * going to end up being used.	The above per-RestrictInfo caching would
 	 * not mix well with trying to re-order clauses anyway.
+	 *
+	 * Another issue that is entirely ignored here is that if a set-returning
+	 * function is below top level in the tree, the functions/operators above
+	 * it will need to be evaluated multiple times.  In practical use, such
+	 * cases arise so seldom as to not be worth the added complexity needed;
+	 * moreover, since our rowcount estimates for functions tend to be pretty
+	 * phony, the results would also be pretty phony.
 	 */
 	if (IsA(node, FuncExpr))
 	{
@@ -3717,6 +3765,15 @@ set_subquery_size_estimates(PlannerInfo *root, RelOptInfo *rel)
 			continue;
 
 		/*
+		 * The subquery could be an expansion of a view that's had columns
+		 * added to it since the current query was parsed, so that there are
+		 * non-junk tlist columns in it that don't correspond to any column
+		 * visible at our query level.	Ignore such columns.
+		 */
+		if (te->resno < rel->min_attr || te->resno > rel->max_attr)
+			continue;
+
+		/*
 		 * XXX This currently doesn't work for subqueries containing set
 		 * operations, because the Vars in their tlists are bogus references
 		 * to the first leaf subquery, which wouldn't give the right answer
@@ -3737,7 +3794,6 @@ set_subquery_size_estimates(PlannerInfo *root, RelOptInfo *rel)
 
 			item_width = subrel->attr_widths[var->varattno - subrel->min_attr];
 		}
-		Assert(te->resno >= rel->min_attr && te->resno <= rel->max_attr);
 		rel->attr_widths[te->resno - rel->min_attr] = item_width;
 	}
 
@@ -3765,7 +3821,7 @@ set_function_size_estimates(PlannerInfo *root, RelOptInfo *rel)
 	Assert(rte->rtekind == RTE_FUNCTION);
 
 	/* Estimate number of rows the function itself will return */
-	rel->tuples = clamp_row_est(expression_returns_set_rows(rte->funcexpr));
+	rel->tuples = expression_returns_set_rows(rte->funcexpr);
 
 	/* Now estimate number of output rows, etc */
 	set_baserel_size_estimates(root, rel);
@@ -3900,13 +3956,19 @@ set_rel_width(PlannerInfo *root, RelOptInfo *rel)
 	{
 		Node	   *node = (Node *) lfirst(lc);
 
-		if (IsA(node, Var))
+		/*
+		 * Ordinarily, a Var in a rel's reltargetlist must belong to that rel;
+		 * but there are corner cases involving LATERAL references where that
+		 * isn't so.  If the Var has the wrong varno, fall through to the
+		 * generic case (it doesn't seem worth the trouble to be any smarter).
+		 */
+		if (IsA(node, Var) &&
+			((Var *) node)->varno == rel->relid)
 		{
 			Var		   *var = (Var *) node;
 			int			ndx;
 			int32		item_width;
 
-			Assert(var->varno == rel->relid);
 			Assert(var->varattno >= rel->min_attr);
 			Assert(var->varattno <= rel->max_attr);
 

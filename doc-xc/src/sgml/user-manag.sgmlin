@@ -4,14 +4,8 @@
  <title>Database Roles</title>
 
 &common;
-
  <para>
-<!## PG>
   <productname>PostgreSQL</productname> manages database access permissions
-<!## end>
-<!## XC>
-  <productname>Postgres-XC</productname> manages database access permissions
-<!## end>
   using the concept of <firstterm>roles</>.  A role can be thought of as
   either a database user, or a group of database users, depending on how
   the role is set up.  Roles can own database objects (for example,
@@ -23,12 +17,7 @@
 
  <para>
   The concept of roles subsumes the concepts of <quote>users</> and
-<!## PG>
   <quote>groups</>.  In <productname>PostgreSQL</productname> versions
-<!## end>
-<!## XC>
-  <quote>groups</>.  In <productname>Postgres-XC</productname> versions
-<!## end>
   before 8.1, users and groups were distinct kinds of entities, but now
   there are only roles.  Any role can act as a user, a group, or both.
  </para>
@@ -57,6 +46,7 @@
   <indexterm>
    <primary>DROP ROLE</primary>
   </indexterm>
+
 &common;
   <para>
    Database roles are conceptually completely separate from
@@ -150,6 +140,7 @@ SELECT rolname FROM pg_roles;
 
  <sect1 id="role-attributes">
   <title>Role Attributes</title>
+
 &common;
    <para>
     A database role can have a number of attributes that define its
@@ -181,16 +172,11 @@ CREATE USER <replaceable>name</replaceable>;
       <listitem>
        <para>
         A database superuser bypasses all permission checks, except the right
-        to log in or the right to initiate replication.  This is a
-        dangerous privilege and should not be used carelessly; it is best
-        to do most of your work as a role that is not a superuser.
-        To create a new database superuser, use <literal>CREATE ROLE
-        <replaceable>name</replaceable> SUPERUSER</literal>.  You must do
-        this as a role that is already a superuser. Creating a superuser
-        will by default also grant permissions to initiate streaming
-        replication. For increased security this can be disallowed using
-        <literal>CREATE ROLE <replaceable>name</replaceable> SUPERUSER
-        NOREPLICATION</literal>.
+        to log in.  This is a dangerous privilege and should not be used
+        carelessly; it is best to do most of your work as a role that is not a
+        superuser.  To create a new database superuser, use <literal>CREATE
+        ROLE <replaceable>name</replaceable> SUPERUSER</literal>.  You must do
+        this as a role that is already a superuser.
        </para>
       </listitem>
      </varlistentry>
@@ -229,7 +215,8 @@ CREATE USER <replaceable>name</replaceable>;
       <listitem>
        <para>
         A role must explicitly be given permission to initiate streaming
-        replication. A role used for streaming replication must always
+        replication (except for superusers, since those bypass all permission
+        checks). A role used for streaming replication must always
         have <literal>LOGIN</> permission as well. To create such a role, use
         <literal>CREATE ROLE <replaceable>name</replaceable> REPLICATION
         LOGIN</literal>.
@@ -256,9 +243,8 @@ CREATE USER <replaceable>name</replaceable>;
 
     A role's attributes can be modified after creation with
     <command>ALTER ROLE</command>.<indexterm><primary>ALTER ROLE</></>
-    See the reference pages for the <xref linkend="sql-createrole"
-   > and <xref linkend="sql-alterrole"
-   > commands for details.
+    See the reference pages for the <xref linkend="sql-createrole">
+    and <xref linkend="sql-alterrole"> commands for details.
    </para>
 
   <tip>
@@ -299,16 +285,12 @@ ALTER ROLE myname SET enable_indexscan TO off;
   <indexterm zone="role-membership">
    <primary>role</><secondary>membership in</>
   </indexterm>
+
 &common;
   <para>
    It is frequently convenient to group users together to ease
    management of privileges: that way, privileges can be granted to, or
-<!## PG>
    revoked from, a group as a whole.  In <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-   revoked from, a group as a whole.  In <productname>Postgres-XC</productname>
-<!## end>
    this is done by creating a role that represents the group, and then
    granting <firstterm>membership</> in the group role to individual user
    roles.
@@ -397,20 +379,10 @@ RESET ROLE;
    <para>
     In the SQL standard, there is a clear distinction between users and roles,
     and users do not automatically inherit privileges while roles do.  This
-<!## PG>
     behavior can be obtained in <productname>PostgreSQL</productname> by giving
-<!## end>
-<!## XC>
-    behavior can be obtained in <productname>Postgres-XC</productname> by giving
-<!## end>
     roles being used as SQL roles the <literal>INHERIT</> attribute, while
     giving roles being used as SQL users the <literal>NOINHERIT</> attribute.
-<!## PG>
     However, <productname>PostgreSQL</productname> defaults to giving all roles
-<!## end>
-<!## XC>
-    However, <productname>Postgres-XC</productname> defaults to giving all roles
-<!## end>
     the <literal>INHERIT</> attribute, for backward compatibility with pre-8.1
     releases in which users always had use of permissions granted to groups
     they were members of.
@@ -448,6 +420,7 @@ DROP ROLE <replaceable>name</replaceable>;
 
  <sect1 id="perm-functions">
   <title>Function and Trigger Security</title>
+
 &common;
   <para>
    Functions and triggers allow users to insert code into the backend
@@ -466,12 +439,7 @@ DROP ROLE <replaceable>name</replaceable>;
    Hence, among many other things, such functions can circumvent any
    system access controls.  Function languages that allow such access
    are considered <quote>untrusted</>, and
-<!## PG>
    <productname>PostgreSQL</productname> allows only superusers to
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> allows only superusers to
-<!## end>
    create functions written in those languages.
   </para>
  </sect1>

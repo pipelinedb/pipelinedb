@@ -4,7 +4,7 @@
  *	  support routines for the lex/flex scanner, used by both the normal
  * backend as well as the bootstrap backend
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -56,6 +56,8 @@ scanstr(const char *s)
 			 * appear in pairs, so there should be another character.
 			 */
 			i++;
+			/* The bootstrap parser is not as smart, so check here. */
+			Assert(s[i] == '\'');
 			newStr[j] = s[i];
 		}
 		else if (s[i] == '\\')
@@ -130,8 +132,10 @@ downcase_truncate_identifier(const char *ident, int len, bool warn)
 {
 	char	   *result;
 	int			i;
+	bool        enc_is_single_byte;
 
 	result = palloc(len + 1);
+	enc_is_single_byte = pg_database_encoding_max_length() == 1;
 
 	/*
 	 * SQL99 specifies Unicode-aware case normalization, which we don't yet
@@ -139,8 +143,8 @@ downcase_truncate_identifier(const char *ident, int len, bool warn)
 	 * locale-aware translation.  However, there are some locales where this
 	 * is not right either (eg, Turkish may do strange things with 'i' and
 	 * 'I').  Our current compromise is to use tolower() for characters with
-	 * the high bit set, and use an ASCII-only downcasing for 7-bit
-	 * characters.
+	 * the high bit set, as long as they aren't part of a multi-byte character,
+	 * and use an ASCII-only downcasing for 7-bit characters.
 	 */
 	for (i = 0; i < len; i++)
 	{
@@ -148,7 +152,7 @@ downcase_truncate_identifier(const char *ident, int len, bool warn)
 
 		if (ch >= 'A' && ch <= 'Z')
 			ch += 'a' - 'A';
-		else if (IS_HIGHBIT_SET(ch) && isupper(ch))
+		else if (enc_is_single_byte && IS_HIGHBIT_SET(ch) && isupper(ch))
 			ch = tolower(ch);
 		result[i] = (char) ch;
 	}

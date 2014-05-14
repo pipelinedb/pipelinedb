@@ -9,7 +9,7 @@
  * storage management for portals (but doesn't run any queries in them).
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -132,7 +132,7 @@ PerformCursorOpen(PlannedStmt *stmt, ParamListInfo params,
 	/*
 	 * Start execution, inserting parameters if any.
 	 */
-	PortalStart(portal, params, 0, true);
+	PortalStart(portal, params, 0, GetActiveSnapshot());
 
 	Assert(portal->strategy == PORTAL_ONE_SELECT);
 
@@ -285,7 +285,8 @@ PortalCleanup(Portal portal)
 			saveResourceOwner = CurrentResourceOwner;
 			PG_TRY();
 			{
-				CurrentResourceOwner = portal->resowner;
+				if (portal->resowner)
+					CurrentResourceOwner = portal->resowner;
 				ExecutorFinish(queryDesc);
 				ExecutorEnd(queryDesc);
 				FreeQueryDesc(queryDesc);
@@ -360,7 +361,8 @@ PersistHoldablePortal(Portal portal)
 	PG_TRY();
 	{
 		ActivePortal = portal;
-		CurrentResourceOwner = portal->resowner;
+		if (portal->resowner)
+			CurrentResourceOwner = portal->resowner;
 		PortalContext = PortalGetHeapMemory(portal);
 
 		MemoryContextSwitchTo(PortalContext);

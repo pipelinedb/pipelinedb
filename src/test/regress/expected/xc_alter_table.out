@@ -3,7 +3,6 @@
 --
 -- Check on dropped columns
 CREATE TABLE xc_alter_table_1 (id serial, name varchar(80), code varchar(80)) DISTRIBUTE BY HASH(id);
-NOTICE:  CREATE TABLE will create implicit sequence "xc_alter_table_1_id_seq" for serial column "xc_alter_table_1.id"
 EXPLAIN (VERBOSE true, COSTS false, NODES false) INSERT INTO xc_alter_table_1(name) VALUES ('aaa'),('bbb'),('ccc');
                                                 QUERY PLAN                                                 
 -----------------------------------------------------------------------------------------------------------
@@ -83,7 +82,7 @@ EXPLAIN (VERBOSE true, COSTS false, NODES false) UPDATE xc_alter_table_1 SET nam
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
  Update on public.xc_alter_table_1
    Node expr: xc_alter_table_1.id
-   Remote query: UPDATE ONLY public.xc_alter_table_1 SET name = $2 WHERE ((xc_alter_table_1.ctid = $4) AND (xc_alter_table_1.xc_node_id = $5))
+   Remote query: UPDATE ONLY public.xc_alter_table_1 SET id = $1, name = $2 WHERE ((xc_alter_table_1.ctid = $4) AND (xc_alter_table_1.xc_node_id = $5))
    ->  Data Node Scan on xc_alter_table_1 "_REMOTE_TABLE_QUERY_"
          Output: xc_alter_table_1.id, 'zzz'::character varying(80), NULL::integer, xc_alter_table_1.id, xc_alter_table_1.ctid, xc_alter_table_1.xc_node_id
          Remote query: SELECT id, ctid, xc_node_id FROM ONLY public.xc_alter_table_1 WHERE true
@@ -148,7 +147,7 @@ EXPLAIN (VERBOSE true, COSTS false, NODES false) UPDATE xc_alter_table_2 SET b =
                                                                    QUERY PLAN                                                                    
 -------------------------------------------------------------------------------------------------------------------------------------------------
  Update on public.xc_alter_table_2
-   Remote query: UPDATE ONLY public.xc_alter_table_2 SET b = $2, c = $3 WHERE (xc_alter_table_2.ctid = $6)
+   Remote query: UPDATE ONLY public.xc_alter_table_2 SET b = $2, c = $3 WHERE ((xc_alter_table_2.ctid = $6))
    ->  Data Node Scan on xc_alter_table_2 "_REMOTE_TABLE_QUERY_"
          Output: NULL::integer, 'Morphee'::character varying(20), false, NULL::integer, NULL::integer, xc_alter_table_2.b, xc_alter_table_2.ctid
          Remote query: SELECT b, ctid FROM ONLY public.xc_alter_table_2 WHERE ((b)::text = 'Neo'::text)
@@ -193,7 +192,7 @@ EXPLAIN (VERBOSE true, COSTS false, NODES false) UPDATE xc_alter_table_2 SET a =
                                                                                     QUERY PLAN                                                                                     
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Update on public.xc_alter_table_2
-   Remote query: UPDATE ONLY public.xc_alter_table_2 SET a = $6, a2 = $7 WHERE (xc_alter_table_2.ctid = $8)
+   Remote query: UPDATE ONLY public.xc_alter_table_2 SET b = $2, c = $3, a = $6, a2 = $7 WHERE ((xc_alter_table_2.ctid = $8))
    ->  Data Node Scan on xc_alter_table_2 "_REMOTE_TABLE_QUERY_"
          Output: NULL::integer, xc_alter_table_2.b, xc_alter_table_2.c, NULL::integer, NULL::integer, 200, 'CTO'::character varying(20), xc_alter_table_2.b, xc_alter_table_2.ctid
          Remote query: SELECT b, c, ctid FROM ONLY public.xc_alter_table_2 WHERE ((b)::text = 'John'::text)

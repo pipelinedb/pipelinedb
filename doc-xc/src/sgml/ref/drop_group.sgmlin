@@ -28,8 +28,7 @@ DROP GROUP [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ..
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    <command>DROP GROUP</command> is now an alias for
    <xref linkend="sql-droprole">.
@@ -39,6 +38,7 @@ DROP GROUP [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ..
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP GROUP</command> statement in the SQL standard.
   </para>

@@ -3,7 +3,7 @@
  * tsquery.c
  *	  I/O functions for tsquery
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -216,7 +216,6 @@ gettoken_query(TSQueryParserState state,
 		}
 		state->buf += pg_mblen(state->buf);
 	}
-	return PT_END;
 }
 
 /*
@@ -271,7 +270,7 @@ pushValue_internal(TSQueryParserState state, pg_crc32 valcrc, int distance, int 
  * of the string.
  */
 void
-pushValue(TSQueryParserState state, char *strval, int lenval, int2 weight, bool prefix)
+pushValue(TSQueryParserState state, char *strval, int lenval, int16 weight, bool prefix)
 {
 	pg_crc32	valcrc;
 

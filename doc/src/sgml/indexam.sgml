@@ -113,8 +113,8 @@
    <structfield>amoptionalkey</structfield> false.
    One reason that an index AM might set
    <structfield>amoptionalkey</structfield> false is if it doesn't index
-   NULLs.  Since most indexable operators are
-   strict and hence cannot return TRUE for NULL inputs,
+   null values.  Since most indexable operators are
+   strict and hence cannot return true for null inputs,
    it is at first sight attractive to not store index entries for null values:
    they could never be returned by an index scan anyway.  However, this
    argument fails when an index scan has no restriction clause for a given
@@ -746,7 +746,7 @@ amrestrpos (IndexScanDesc scan);
   <para>
    When the <structfield>ampredlocks</> flag is not set, any scan using that
    index access method within a serializable transaction will acquire a
-   non-blocking predicate lock on the full index.  This will generate a
+   nonblocking predicate lock on the full index.  This will generate a
    read-write conflict with the insert of any tuple into that index by a
    concurrent serializable transaction.  If certain patterns of read-write
    conflicts are detected among a set of concurrent serializable

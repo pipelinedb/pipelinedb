@@ -18,6 +18,12 @@
 #define CONST84
 #endif
 
+/* ... and for Tcl 8.6. */
+#ifndef CONST86
+#define CONST86
+#endif
+
+#include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
@@ -258,7 +264,7 @@ pltcl_FinalizeNotifier(ClientData clientData)
 }
 
 static void
-pltcl_SetTimer(Tcl_Time *timePtr)
+pltcl_SetTimer(CONST86 Tcl_Time *timePtr)
 {
 }
 
@@ -284,7 +290,7 @@ pltcl_ServiceModeHook(int mode)
 }
 
 static int
-pltcl_WaitForEvent(Tcl_Time *timePtr)
+pltcl_WaitForEvent(CONST86 Tcl_Time *timePtr)
 {
 	return 0;
 }
@@ -498,8 +504,9 @@ pltcl_init_load_unknown(Tcl_Interp *interp)
 									 AccessShareLock, true);
 	if (pmrel == NULL)
 		return;
-	/* must be table or view, else ignore */
+	/* sanity-check the relation kind */
 	if (!(pmrel->rd_rel->relkind == RELKIND_RELATION ||
+		  pmrel->rd_rel->relkind == RELKIND_MATVIEW ||
 		  pmrel->rd_rel->relkind == RELKIND_VIEW))
 	{
 		relation_close(pmrel, AccessShareLock);

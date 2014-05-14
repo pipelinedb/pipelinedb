@@ -2,7 +2,7 @@
  *
  * createdb
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/scripts/createdb.c
@@ -74,13 +74,13 @@ main(int argc, char *argv[])
 		switch (c)
 		{
 			case 'h':
-				host = optarg;
+				host = pg_strdup(optarg);
 				break;
 			case 'p':
-				port = optarg;
+				port = pg_strdup(optarg);
 				break;
 			case 'U':
-				username = optarg;
+				username = pg_strdup(optarg);
 				break;
 			case 'w':
 				prompt_password = TRI_NO;
@@ -92,28 +92,28 @@ main(int argc, char *argv[])
 				echo = true;
 				break;
 			case 'O':
-				owner = optarg;
+				owner = pg_strdup(optarg);
 				break;
 			case 'D':
-				tablespace = optarg;
+				tablespace = pg_strdup(optarg);
 				break;
 			case 'T':
-				template = optarg;
+				template = pg_strdup(optarg);
 				break;
 			case 'E':
-				encoding = optarg;
+				encoding = pg_strdup(optarg);
 				break;
 			case 1:
-				lc_collate = optarg;
+				lc_collate = pg_strdup(optarg);
 				break;
 			case 2:
-				lc_ctype = optarg;
+				lc_ctype = pg_strdup(optarg);
 				break;
 			case 'l':
-				locale = optarg;
+				locale = pg_strdup(optarg);
 				break;
 			case 3:
-				maintenance_db = optarg;
+				maintenance_db = pg_strdup(optarg);
 				break;
 			default:
 				fprintf(stderr, _("Try \"%s --help\" for more information.\n"), progname);
@@ -260,8 +260,8 @@ help(const char *progname)
 	printf(_("      --lc-ctype=LOCALE        LC_CTYPE setting for the database\n"));
 	printf(_("  -O, --owner=OWNER            database user to own the new database\n"));
 	printf(_("  -T, --template=TEMPLATE      template database to copy\n"));
-	printf(_("  --help                       show this help, then exit\n"));
-	printf(_("  --version                    output version information, then exit\n"));
+	printf(_("  -V, --version                output version information, then exit\n"));
+	printf(_("  -?, --help                   show this help, then exit\n"));
 	printf(_("\nConnection options:\n"));
 	printf(_("  -h, --host=HOSTNAME          database server host or socket directory\n"));
 	printf(_("  -p, --port=PORT              database server port\n"));

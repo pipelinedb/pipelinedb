@@ -107,8 +107,6 @@ ERROR:  type "text_w_default" already exists
 DROP TYPE default_test_row CASCADE;
 NOTICE:  drop cascades to function get_default_test()
 DROP TABLE default_test;
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 -- Check usage of typmod with a user-defined type
 -- (we have borrowed numeric's typmod functions)
 CREATE TEMP TABLE mytab (foo widget(42,13,7));     -- should fail

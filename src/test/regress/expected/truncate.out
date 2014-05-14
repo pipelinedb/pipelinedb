@@ -1,6 +1,5 @@
 -- Test basic TRUNCATE functionality.
 CREATE TABLE truncate_a (col1 integer primary key);
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "truncate_a_pkey" for table "truncate_a"
 INSERT INTO truncate_a VALUES (1);
 INSERT INTO truncate_a VALUES (2);
 SELECT * FROM truncate_a ORDER BY 1;
@@ -143,7 +142,6 @@ SELECT * FROM trunc_e;
 DROP TABLE truncate_a,trunc_c,trunc_b,trunc_d,trunc_e CASCADE;
 -- Test TRUNCATE with inheritance
 CREATE TABLE trunc_f (col1 integer primary key);
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "trunc_f_pkey" for table "trunc_f"
 INSERT INTO trunc_f VALUES (1);
 INSERT INTO trunc_f VALUES (2);
 CREATE TABLE trunc_fa (col2a text) INHERITS (trunc_f);
@@ -367,7 +365,6 @@ DROP FUNCTION trunctrigger();
 CREATE SEQUENCE truncate_a_id1 START WITH 33;
 CREATE TABLE truncate_a (id serial,
                          id1 integer default nextval('truncate_a_id1'));
-NOTICE:  CREATE TABLE will create implicit sequence "truncate_a_id_seq" for serial column "truncate_a.id"
 ALTER SEQUENCE truncate_a_id1 OWNED BY truncate_a.id1;
 INSERT INTO truncate_a DEFAULT VALUES;
 INSERT INTO truncate_a DEFAULT VALUES;

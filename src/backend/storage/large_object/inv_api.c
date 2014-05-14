@@ -19,7 +19,7 @@
  * memory context given to inv_open (for LargeObjectDesc structs).
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -29,6 +29,8 @@
  *-------------------------------------------------------------------------
  */
 #include "postgres.h"
+
+#include <limits.h>
 
 #include "access/genam.h"
 #include "access/heapam.h"
@@ -216,8 +218,7 @@ inv_create(Oid lobjId)
 							lobjId_new, GetUserId());
 
 	/* Post creation hook for new large object */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   LargeObjectRelationId, lobjId_new, 0, NULL);
+	InvokeObjectPostCreateHook(LargeObjectRelationId, lobjId_new, 0);
 
 	/*
 	 * Advance command counter to make new tuple visible to later operations.
@@ -239,38 +240,49 @@ LargeObjectDesc *
 inv_open(Oid lobjId, int flags, MemoryContext mcxt)
 {
 	LargeObjectDesc *retval;
-
-	retval = (LargeObjectDesc *) MemoryContextAlloc(mcxt,
-													sizeof(LargeObjectDesc));
-
-	retval->id = lobjId;
-	retval->subid = GetCurrentSubTransactionId();
-	retval->offset = 0;
+	Snapshot	snapshot = NULL;
+	int			descflags = 0;
 
 	if (flags & INV_WRITE)
 	{
-		retval->snapshot = SnapshotNow;
-		retval->flags = IFS_WRLOCK | IFS_RDLOCK;
+		snapshot = SnapshotNow;
+		descflags = IFS_WRLOCK | IFS_RDLOCK;
 	}
 	else if (flags & INV_READ)
 	{
-		/*
-		 * We must register the snapshot in TopTransaction's resowner, because
-		 * it must stay alive until the LO is closed rather than until the
-		 * current portal shuts down.
-		 */
-		retval->snapshot = RegisterSnapshotOnOwner(GetActiveSnapshot(),
-												TopTransactionResourceOwner);
-		retval->flags = IFS_RDLOCK;
+		snapshot = GetActiveSnapshot();
+		descflags = IFS_RDLOCK;
 	}
 	else
-		elog(ERROR, "invalid flags: %d", flags);
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid flags for opening a large object: %d",
+						flags)));
 
 	/* Can't use LargeObjectExists here because it always uses SnapshotNow */
-	if (!myLargeObjectExists(lobjId, retval->snapshot))
+	if (!myLargeObjectExists(lobjId, snapshot))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("large object %u does not exist", lobjId)));
+
+	/*
+	 * We must register the snapshot in TopTransaction's resowner, because
+	 * it must stay alive until the LO is closed rather than until the
+	 * current portal shuts down. Do this after checking that the LO exists,
+	 * to avoid leaking the snapshot if an error is thrown.
+	 */
+	if (snapshot != SnapshotNow)
+		snapshot = RegisterSnapshotOnOwner(snapshot,
+										   TopTransactionResourceOwner);
+
+	/* All set, create a descriptor */
+	retval = (LargeObjectDesc *) MemoryContextAlloc(mcxt,
+													sizeof(LargeObjectDesc));
+	retval->id = lobjId;
+	retval->subid = GetCurrentSubTransactionId();
+	retval->offset = 0;
+	retval->snapshot = snapshot;
+	retval->flags = descflags;
 
 	return retval;
 }
@@ -324,10 +336,10 @@ inv_drop(Oid lobjId)
  * NOTE: LOs can contain gaps, just like Unix files.  We actually return
  * the offset of the last byte + 1.
  */
-static uint32
+static uint64
 inv_getsize(LargeObjectDesc *obj_desc)
 {
-	uint32		lastbyte = 0;
+	uint64		lastbyte = 0;
 	ScanKeyData skey[1];
 	SysScanDesc sd;
 	HeapTuple	tuple;
@@ -368,7 +380,7 @@ inv_getsize(LargeObjectDesc *obj_desc)
 				heap_tuple_untoast_attr((struct varlena *) datafield);
 			pfreeit = true;
 		}
-		lastbyte = data->pageno * LOBLKSIZE + getbytealen(datafield);
+		lastbyte = (uint64) data->pageno * LOBLKSIZE + getbytealen(datafield);
 		if (pfreeit)
 			pfree(datafield);
 	}
@@ -378,39 +390,51 @@ inv_getsize(LargeObjectDesc *obj_desc)
 	return lastbyte;
 }
 
-int
-inv_seek(LargeObjectDesc *obj_desc, int offset, int whence)
+int64
+inv_seek(LargeObjectDesc *obj_desc, int64 offset, int whence)
 {
+	int64		newoffset;
+
 	Assert(PointerIsValid(obj_desc));
 
+	/*
+	 * Note: overflow in the additions is possible, but since we will reject
+	 * negative results, we don't need any extra test for that.
+	 */
 	switch (whence)
 	{
 		case SEEK_SET:
-			if (offset < 0)
-				elog(ERROR, "invalid seek offset: %d", offset);
-			obj_desc->offset = offset;
+			newoffset = offset;
 			break;
 		case SEEK_CUR:
-			if (offset < 0 && obj_desc->offset < ((uint32) (-offset)))
-				elog(ERROR, "invalid seek offset: %d", offset);
-			obj_desc->offset += offset;
+			newoffset = obj_desc->offset + offset;
 			break;
 		case SEEK_END:
-			{
-				uint32		size = inv_getsize(obj_desc);
-
-				if (offset < 0 && size < ((uint32) (-offset)))
-					elog(ERROR, "invalid seek offset: %d", offset);
-				obj_desc->offset = size + offset;
-			}
+			newoffset = inv_getsize(obj_desc) + offset;
 			break;
 		default:
-			elog(ERROR, "invalid whence: %d", whence);
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid whence setting: %d", whence)));
+			newoffset = 0;		/* keep compiler quiet */
+			break;
 	}
-	return obj_desc->offset;
+
+	/*
+	 * use errmsg_internal here because we don't want to expose INT64_FORMAT
+	 * in translatable strings; doing better is not worth the trouble
+	 */
+	if (newoffset < 0 || newoffset > MAX_LARGE_OBJECT_SIZE)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+		   errmsg_internal("invalid large object seek target: " INT64_FORMAT,
+						   newoffset)));
+
+	obj_desc->offset = newoffset;
+	return newoffset;
 }
 
-int
+int64
 inv_tell(LargeObjectDesc *obj_desc)
 {
 	Assert(PointerIsValid(obj_desc));
@@ -422,11 +446,11 @@ int
 inv_read(LargeObjectDesc *obj_desc, char *buf, int nbytes)
 {
 	int			nread = 0;
-	int			n;
-	int			off;
+	int64		n;
+	int64		off;
 	int			len;
 	int32		pageno = (int32) (obj_desc->offset / LOBLKSIZE);
-	uint32		pageoff;
+	uint64		pageoff;
 	ScanKeyData skey[2];
 	SysScanDesc sd;
 	HeapTuple	tuple;
@@ -467,7 +491,7 @@ inv_read(LargeObjectDesc *obj_desc, char *buf, int nbytes)
 		 * there may be missing pages if the LO contains unwritten "holes". We
 		 * want missing sections to read out as zeroes.
 		 */
-		pageoff = ((uint32) data->pageno) * LOBLKSIZE;
+		pageoff = ((uint64) data->pageno) * LOBLKSIZE;
 		if (pageoff > obj_desc->offset)
 		{
 			n = pageoff - obj_desc->offset;
@@ -545,20 +569,17 @@ inv_write(LargeObjectDesc *obj_desc, const char *buf, int nbytes)
 	Assert(buf != NULL);
 
 	/* enforce writability because snapshot is probably wrong otherwise */
-	if ((obj_desc->flags & IFS_WRLOCK) == 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("large object %u was not opened for writing",
-						obj_desc->id)));
-
-	/* check existence of the target largeobject */
-	if (!LargeObjectExists(obj_desc->id))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-			   errmsg("large object %u was already dropped", obj_desc->id)));
+	Assert(obj_desc->flags & IFS_WRLOCK);
 
 	if (nbytes <= 0)
 		return 0;
+
+	/* this addition can't overflow because nbytes is only int32 */
+	if ((nbytes + obj_desc->offset) > MAX_LARGE_OBJECT_SIZE)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid large object write request size: %d",
+						nbytes)));
 
 	open_lo_relation();
 
@@ -718,10 +739,10 @@ inv_write(LargeObjectDesc *obj_desc, const char *buf, int nbytes)
 }
 
 void
-inv_truncate(LargeObjectDesc *obj_desc, int len)
+inv_truncate(LargeObjectDesc *obj_desc, int64 len)
 {
 	int32		pageno = (int32) (len / LOBLKSIZE);
-	int			off;
+	int32		off;
 	ScanKeyData skey[2];
 	SysScanDesc sd;
 	HeapTuple	oldtuple;
@@ -742,17 +763,17 @@ inv_truncate(LargeObjectDesc *obj_desc, int len)
 	Assert(PointerIsValid(obj_desc));
 
 	/* enforce writability because snapshot is probably wrong otherwise */
-	if ((obj_desc->flags & IFS_WRLOCK) == 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("large object %u was not opened for writing",
-						obj_desc->id)));
+	Assert(obj_desc->flags & IFS_WRLOCK);
 
-	/* check existence of the target largeobject */
-	if (!LargeObjectExists(obj_desc->id))
+	/*
+	 * use errmsg_internal here because we don't want to expose INT64_FORMAT
+	 * in translatable strings; doing better is not worth the trouble
+	 */
+	if (len < 0 || len > MAX_LARGE_OBJECT_SIZE)
 		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-			   errmsg("large object %u was already dropped", obj_desc->id)));
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg_internal("invalid large object truncation target: " INT64_FORMAT,
+								 len)));
 
 	open_lo_relation();
 

@@ -14,8 +14,8 @@ include $(top_builddir)/src/Makefile.global
 
 override CPPFLAGS := -I. -I$(srcdir) $(CPPFLAGS)
 
-OBJS = guc.o help_config.o pg_rusage.o ps_status.o superuser.o tzparser.o \
-       rbtree.o
+OBJS = guc.o help_config.o pg_rusage.o ps_status.o rbtree.o \
+       superuser.o timeout.o tzparser.o
 
 # This location might depend on the installation directories. Therefore
 # we can't subsitute it into pg_config.h.
@@ -27,13 +27,6 @@ include $(top_srcdir)/src/backend/common.mk
 
 # guc-file is compiled as part of guc
 guc.o: guc-file.c
-
-guc-file.c: guc-file.l
-ifdef FLEX
-	$(FLEX) $(FLEXFLAGS) -o'$@' $<
-else
-	@$(missing) flex $< $@
-endif
 
 # Note: guc-file.c is not deleted by 'make clean',
 # since we want to ship it in distribution tarballs.

@@ -31,7 +31,7 @@
  * should be killed by SIGQUIT and then a recovery cycle started.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -51,6 +51,7 @@
 #include "miscadmin.h"
 #include "postmaster/walwriter.h"
 #include "storage/bufmgr.h"
+#include "storage/fd.h"
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
 #include "storage/proc.h"
@@ -89,8 +90,8 @@ static void walwriter_sigusr1_handler(SIGNAL_ARGS);
 /*
  * Main entry point for walwriter process
  *
- * This is invoked from BootstrapMain, which has already created the basic
- * execution environment, but not enabled signals yet.
+ * This is invoked from AuxiliaryProcessMain, which has already created the
+ * basic execution environment, but not enabled signals yet.
  */
 void
 WalWriterMain(void)
@@ -187,6 +188,7 @@ WalWriterMain(void)
 							 false, true);
 		/* we needn't bother with the other ResourceOwnerRelease phases */
 		AtEOXact_Buffers(false);
+		AtEOXact_SMgr();
 		AtEOXact_Files();
 		AtEOXact_HashTables(false);
 

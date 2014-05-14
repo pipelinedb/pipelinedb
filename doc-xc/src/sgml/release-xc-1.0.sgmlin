@@ -1,6 +1,66 @@
 <!-- doc/src/sgml/release-xc-1.0.sgml -->
 <!-- See header comment in release.sgml about typical markup -->
 
+ <sect1 id="release-xc-1-0-3">
+  <title>Release 1.0.3</title>
+
+  <note>
+   <title>Release Date</title>
+   <simpara>2013-04-27</simpara>
+  </note>
+
+  <para>
+   This release contains fixes in PostgreSQL 9.1.8 and PostgreSQL 9.1.19, as well as a couple
+   of fixes in Postgres-XC.
+   For informations about new feature in the 1.0 major release, see
+   <xref linkend="release-xc-1-0">.
+   For information about fixes in the 1.0.1 and 1.0.2 minor releases, see
+   <xref linkend="release-xc-1-0-1"> and <xref linkend="release-xc-1-0-2">
+   respectively.
+  </para>
+
+ <sect2>
+  <title>Migrations to Version 1.0.3</title>
+
+  <para>
+   A dump/restore is not required for those running 1.0.x.
+  </para>
+
+ </sect2>
+
+ <sect2>
+  <title>Changes</title>
+
+  <itemizedlist>
+
+  <listitem>
+   <para>
+    Fixed behavior of <literal>gtm_ctl -w start</literal> command behavior to be
+    the same as those of <literal>pg_ctl</literal>.  Nikhil Sontakke provided the
+    original fix.
+   </para>
+  </listitem>
+
+  <listitem>
+   <para>
+    Fixed typo in <literal>max_coordinators</literal> and <literal>max_datanodes</literal>
+    description in the document, by Michael Paquier.
+   </para>
+  </listitem>
+
+  <listitem>
+   <para>
+    Fixed gtm slave crash.   Nikhil Sontakke reported this possiblity and provided
+    the fix.
+   </para>
+  </listitem>
+
+  </itemizedlist>
+
+ </sect2>
+
+ </sect1>
+
  <sect1 id="release-xc-1-0-2">
   <title>Release 1.0.2</title>
 

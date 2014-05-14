@@ -12,7 +12,6 @@
   </indexterm>
 
 &common;
-
   <para>
    PL/Perl is a loadable procedural language that enables you to write
    <productname>PostgreSQL</productname> functions in the
@@ -204,7 +203,7 @@ select returns_array();
 
   <para>
    Perl passes <productname>PostgreSQL</productname> arrays as a blessed
-   PostgreSQL::InServer::ARRAY object. This object may be treated as an array
+   <type>PostgreSQL::InServer::ARRAY</type> object. This object may be treated as an array
    reference or a string, allowing for backward compatibility with Perl
    code written for <productname>PostgreSQL</productname> versions below 9.1 to
    run.  For example:
@@ -231,7 +230,7 @@ SELECT concat_array_elements(ARRAY['PL','/','Perl']);
 
   <note>
    <para>
-    Multi-dimensional arrays are represented as references to
+    Multidimensional arrays are represented as references to
     lower-dimensional arrays of references in a way common to every Perl
     programmer.
    </para>
@@ -281,7 +280,7 @@ SELECT * FROM perl_row();
   <para>
     PL/Perl functions can also return sets of either scalar or
     composite types.  Usually you'll want to return rows one at a
-    time, both to speed up startup time and to keep from queueing up
+    time, both to speed up startup time and to keep from queuing up
     the entire result set in memory.  You can do this with
     <function>return_next</function> as illustrated below.  Note that
     after the last <function>return_next</function>, you must put
@@ -360,7 +359,7 @@ use strict;
  <sect1 id="plperl-data">
   <title>Data Values in PL/Perl</title>
 
-&pgnotice;
+&common;
   <para>
    The argument values supplied to a PL/Perl function's code are
    simply the input arguments converted to text form (just as if they
@@ -377,7 +376,7 @@ use strict;
  <sect2 id="plperl-database">
   <title>Database Access from PL/Perl</title>
 
-&pgnotice;
+&common;
   <para>
    Access to the database itself from your Perl function can be done
    via the following functions:
@@ -559,10 +558,6 @@ SELECT * from lotsa_md5(500);
      <term><literal><function>spi_freeplan(<replaceable>plan</replaceable>)</function></literal></term>
 
     <listitem>
-<!## PG>
-<!-- NOTICE:
-     No prepare support yet.
--->
     <para>
     <literal>spi_prepare</literal>, <literal>spi_query_prepared</literal>, <literal>spi_exec_prepared</literal>,
     and <literal>spi_freeplan</literal> implement the same functionality but for prepared queries.
@@ -650,15 +645,6 @@ SELECT release_hosts_query();
 (2 rows)
 </programlisting>
     </para>
-<!## end>
-<!## XC>
-&xconly;
-     <para>
-      <command>PREPARE</> is not supported in the current release
-      of <productname>Postgres-XC</>.  This may be supported in the
-      future releases.
-     </para>
-<!## end>
     </listitem>
     </varlistentry>
    </variablelist>
@@ -667,6 +653,7 @@ SELECT release_hosts_query();
  <sect2 id="plperl-utility-functions">
   <title>Utility Functions in PL/Perl</title>
 
+&common;
    <variablelist>
     <varlistentry>
      <indexterm>
@@ -676,7 +663,6 @@ SELECT release_hosts_query();
 
      <term><literal><function>elog(<replaceable>level</replaceable>, <replaceable>msg</replaceable>)</function></literal></term>
      <listitem>
-&pgnotice;
       <para>
        Emit a log or error message. Possible levels are
        <literal>DEBUG</>, <literal>LOG</>, <literal>INFO</>,
@@ -870,7 +856,7 @@ SELECT release_hosts_query();
  <sect1 id="plperl-global">
   <title>Global Values in PL/Perl</title>
 
-&pgnotice;
+&common;
   <para>
     You can use the global hash <varname>%_SHARED</varname> to store
     data, including code references, between function calls for the
@@ -951,7 +937,7 @@ $$ LANGUAGE plperl;
    <secondary>PL/Perl</secondary>
   </indexterm>
 
-&pgnotice;
+&common;
   <para>
    Normally, PL/Perl is installed as a <quote>trusted</> programming
    language named <literal>plperl</>.  In this setup, certain Perl
@@ -1047,7 +1033,7 @@ $$ LANGUAGE plperl;
  <sect1 id="plperl-triggers">
   <title>PL/Perl Triggers</title>
 
-&pgnotice;
+&common;
   <para>
    PL/Perl can be used to write trigger functions.  In a trigger function,
    the hash reference <varname>$_TD</varname> contains information about the
@@ -1239,13 +1225,9 @@ CREATE TRIGGER test_valid_id_trig
  <sect2 id="plperl-config">
   <title>Configuration</title>
 
-&pgnotice;
+&common;
   <para>
   This section lists configuration parameters that affect <application>PL/Perl</>.
-  To set any of these parameters before <application>PL/Perl</> has been loaded,
-  it is necessary to have added <quote><literal>plperl</></> to the
-  <xref linkend="guc-custom-variable-classes"> list in
-  <filename>postgresql.conf</filename>.
   </para>
 
   <variablelist>
@@ -1279,7 +1261,7 @@ plperl.on_init = 'use lib "/my/app"; use MyApp::PgInit;'
        indirectly, will be available for use by <literal>plperl</>.  This may
        create a security risk. To see what modules have been loaded you can use:
 <programlisting>
-DO 'elog(WARNING, join ", ", sort keys %INC)' language plperl;
+DO 'elog(WARNING, join ", ", sort keys %INC)' LANGUAGE plperl;
 </programlisting>
        </para>
        <para>
@@ -1364,7 +1346,7 @@ DO 'elog(WARNING, join ", ", sort keys %INC)' language plperl;
  <sect2 id="plperl-missing">
   <title>Limitations and Missing Features</title>
 
-&pgnotice;
+&common;
   <para>
    The following features are currently missing from PL/Perl, but they
    would make welcome contributions.

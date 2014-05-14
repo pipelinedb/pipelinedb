@@ -30,7 +30,6 @@ ALTER SCHEMA <replaceable>name</replaceable> OWNER TO <replaceable>new_owner</re
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER SCHEMA</command> changes the definition of a schema.
   </para>
@@ -49,6 +48,7 @@ ALTER SCHEMA <replaceable>name</replaceable> OWNER TO <replaceable>new_owner</re
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable>name</replaceable></term>
@@ -84,6 +84,7 @@ ALTER SCHEMA <replaceable>name</replaceable> OWNER TO <replaceable>new_owner</re
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>ALTER SCHEMA</command> statement in the SQL
    standard.

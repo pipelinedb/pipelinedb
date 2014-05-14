@@ -19,15 +19,10 @@
   <indexterm>
    <primary>postgres user</primary>
   </indexterm>
-&common;
+
   <para>
    As with any server daemon that is accessible to the outside world,
-<!## PG>
    it is advisable to run <productname>PostgreSQL</productname> under a
-<!## end>
-<!## XC>
-   it is advisable to run <productname>Postgres-XC</productname> under a
-<!## end>
    separate user account. This user account should only own the data
    that is managed by the server, and should not be shared with other
    daemons. (For example, using the user <literal>nobody</literal> is a bad
@@ -56,6 +51,7 @@
    <see>database cluster</see>
   </indexterm>
 
+&common;
   <para>
    Before you can do anything, you must initialize a database storage
    area on disk. We call this a <firstterm>database cluster</firstterm>.
@@ -81,7 +77,8 @@
    each <firstterm>Coordinator</> and <firstterm>Datanode</>.
   </para>
  <!## end>
-&common;
+
+&xconly;
   <para>
    In file system terms, a database cluster will be a single directory
    under which all data will be stored. We call this the <firstterm>data
@@ -115,7 +112,6 @@
    described in the previous section.
 <!## end>
 <!## XC>
-&xconly;
    Note that you must execute this command while logged into the
    <productname>Postgres-XC</productname> user account, which is
    described in the previous section.  You should assign
@@ -124,6 +120,7 @@
    are configuring them in a same server.  
 <!## end>
   </para>
+
 &xconly;
   <tip>
    <para>
@@ -143,7 +140,8 @@
    </para>
 <!## end>
   </tip>
-&common;
+
+&xconly;
   <para>
    Alternatively, you can run <command>initdb</command> via
    the <xref linkend="app-pg-ctl">
@@ -165,24 +163,20 @@
    for managing the database server instance.
   </para>
 
+&common;
   <para>
    <command>initdb</command> will attempt to create the directory you
    specify if it does not already exist. It is likely that it will not
    have the permission to do so (if you followed our advice and created
    an unprivileged account). In that case you should create the
    directory yourself (as root) and change the owner to be the
-<!## PG>
    <productname>PostgreSQL</productname> user. Here is how this might
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> user. Here is how this might
-<!## end>
    be done:
 <screen>
 root# <userinput>mkdir /usr/local/pgsql/data</userinput>
 root# <userinput>chown postgres /usr/local/pgsql/data</userinput>
 root# <userinput>su postgres</userinput>
-postgres$ <userinput>initdb -D /usr/local/pgsql/data --nodename foo</userinput>
+postgres$ <userinput>initdb -D /usr/local/pgsql/data</userinput>
 </screen>
   </para>
 
@@ -195,12 +189,7 @@ postgres$ <userinput>initdb -D /usr/local/pgsql/data --nodename foo</userinput>
    database, it is essential that it be secured from unauthorized
    access. <command>initdb</command> therefore revokes access
    permissions from everyone but the
-<!## PG>
    <productname>PostgreSQL</productname> user.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> user.
-<!## end>
   </para>
 
   <para>
@@ -254,17 +243,13 @@ postgres$ <userinput>initdb -D /usr/local/pgsql/data --nodename foo</userinput>
    </indexterm>
    <indexterm><primary><acronym>NFS</></><see>Network File Systems</></>
    <indexterm><primary>Network Attached Storage (<acronym>NAS</>)</><see>Network File Systems</></>
+
 &common;
    <para>
     Many installations create database clusters on network file systems.
     Sometimes this is done directly via <acronym>NFS</>, or by using a
     Network Attached Storage (<acronym>NAS</>) device that uses
-<!## PG>
     <acronym>NFS</> internally.  <productname>PostgreSQL</> does nothing
-<!## end>
-<!## XC>
-    <acronym>NFS</> internally.  <productname>Postgres-XC</> does nothing
-<!## end>
     special for <acronym>NFS</> file systems, meaning it assumes
     <acronym>NFS</> behaves exactly like locally-connected drives
     (<acronym>DAS</>, Direct Attached Storage).  If client and server
@@ -291,8 +276,8 @@ postgres$ <userinput>initdb -D /usr/local/pgsql/data --nodename foo</userinput>
   <title>Starting Postgres-XC Cluster</title>
 <!## end>
 
-<!## XC>
 &xconly;
+<!## XC>
   <para>
    Before anyone can access <productname>Postgres-XC</>
    (or <productname>XC</> in short) database, you must
@@ -719,6 +704,7 @@ postgres$ <userinput>initdb -D /usr/local/pgsql/data --nodename foo</userinput>
   <sect2 id="starting-Datanode">
    <title>Starting Datanodes</title>
 
+&xconly;
    <para>
     Now you can start central component
     of <productname>Postgres-XC</>, Datanode and Coordinator.
@@ -827,14 +813,14 @@ pg_ctl start -l logfile
    Different systems have different conventions for starting up daemons
    at boot time. Many systems have a file
    <filename>/etc/rc.local</filename> or
-   <filename>/etc/rc.d/rc.local</filename>. Others use
+   <filename>/etc/rc.d/rc.local</filename>. Others use <filename>init.d</filename> or
    <filename>rc.d</> directories. Whatever you do, the server must be
    run by the <productname>PostgreSQL</productname> user account
    <emphasis>and not by root</emphasis> or any other user. Therefore you
-   probably should form your commands using <literal>su -c '...'
-   postgres</literal>.  For example:
+   probably should form your commands using
+   <literal>su postgres -c '...'</literal>.  For example:
 <programlisting>
-su -c 'pg_ctl start -D /usr/local/pgsql/data -l serverlog' postgres
+su postgres -c 'pg_ctl start -D /usr/local/pgsql/data -l serverlog'
 </programlisting>
   </para>
 
@@ -860,7 +846,7 @@ su -c 'pg_ctl start -D /usr/local/pgsql/data -l serverlog' postgres
       <indexterm><primary>OpenBSD</><secondary>start script</secondary></>
 <programlisting>
 if [ -x /usr/local/pgsql/bin/pg_ctl -a -x /usr/local/pgsql/bin/postgres ]; then
-    su - -c '/usr/local/pgsql/bin/pg_ctl start -l /var/postgresql/log -s' postgres
+    su -l postgres -c '/usr/local/pgsql/bin/pg_ctl start -s -l /var/postgresql/log -D /usr/local/pgsql/data'
     echo -n ' postgresql'
 fi
 </programlisting>
@@ -874,7 +860,8 @@ fi
 <programlisting>
 /usr/local/pgsql/bin/pg_ctl start -l logfile -D /usr/local/pgsql/data
 </programlisting>
-      to <filename>/etc/rc.d/rc.local</filename> or look at the file
+      to <filename>/etc/rc.d/rc.local</filename>
+      or <filename>/etc/rc.local</filename> or look at the file
       <filename>contrib/start-scripts/linux</filename> in the
       <productname>PostgreSQL</productname> source distribution.
      </para>
@@ -882,10 +869,11 @@ fi
 
     <listitem>
      <para>
-      On <productname>NetBSD</productname>, either use the
+      On <productname>NetBSD</productname>, use either the
       <productname>FreeBSD</productname> or
       <productname>Linux</productname> start scripts, depending on
-      preference. <indexterm><primary>NetBSD</><secondary>start script</secondary></>
+      preference.
+      <indexterm><primary>NetBSD</><secondary>start script</secondary></>
      </para>
     </listitem>
 
@@ -919,6 +907,7 @@ su - postgres -c "/usr/local/pgsql/bin/pg_ctl start -l logfile -D /usr/local/pgs
 
    <sect2 id="server-start-failures">
     <title>Server Start-up Failures</title>
+
 &common;
     <para>
      There are several common reasons the server might fail to
@@ -998,6 +987,7 @@ DETAIL:  Failed system call was semget(5440126, 17, 03600).
 
    <sect2 id="client-connection-problems">
     <title>Client Connection Problems</title>
+
 &common;
     <para>
      Although the error conditions possible on the client side are quite
@@ -1050,23 +1040,19 @@ psql: could not connect to server: No such file or directory
 
  <sect1 id="kernel-resources">
   <title>Managing Kernel Resources</title>
+
 &common;
   <para>
-<!## PG>
-   A large <productname>PostgreSQL</> installation can quickly exhaust
-<!## end>
-<!## XC>
-   A large <productname>Postgres-XC</> installation can quickly exhaust
-<!## end>
-   various operating system resource limits. (On some systems, the
-   factory defaults are so low that you don't even need a really
-   <quote>large</> installation.) If you have encountered this kind of
-   problem, keep reading.
+   <productname>PostgreSQL</> can sometimes exhaust various operating system
+   resource limits, especially when multiple copies of the server are running
+   on the same system, or in very large installations.  This section explains
+   the kernel resources used by <productname>PostgreSQL</> and the steps you
+   can take to resolve problems related to kernel resource consumption.
   </para>
 
   <sect2 id="sysvipc">
    <title>Shared Memory and Semaphores</title>
-&common;
+
    <indexterm zone="sysvipc">
     <primary>shared memory</primary>
    </indexterm>
@@ -1075,50 +1061,28 @@ psql: could not connect to server: No such file or directory
     <primary>semaphores</primary>
    </indexterm>
 
+&common;
    <para>
     Shared memory and semaphores are collectively referred to as
     <quote><systemitem class="osname">System V</>
     <acronym>IPC</></quote> (together with message queues, which are not
-<!## PG>
-    relevant for <productname>PostgreSQL</>). Almost all modern
-<!## end>
-<!## XC>
-    relevant for <productname>Postgres-XC</>). Almost all modern
-<!## end>
-    operating systems provide these features, but many of them don't have
-    them turned on or sufficiently sized by default, especially as
-    available RAM and the demands of database applications grow.
-    (On <systemitem class="osname">Windows</>,
-<!## PG>
-    <productname>PostgreSQL</> provides its own replacement
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> provides its own replacement
-<!## end>
-    implementation of these facilities, so most of this section
-    can be disregarded.)
+    relevant for <productname>PostgreSQL</>).  Except on
+    <systemitem class="osname">Windows</>, where <productname>PostgreSQL</>
+    provides its own replacement implementation of these facilities, these
+    facilities are required in order to run
+    <productname>PostgreSQL</>.
    </para>
 
    <para>
     The complete lack of these facilities is usually manifested by an
     <errorname>Illegal system call</> error upon server start. In
     that case there is no alternative but to reconfigure your
-<!## PG>
     kernel.  <productname>PostgreSQL</> won't work without them.
-<!## end>
-<!## XC>
-    kernel.  <productname>Postgres-XC</> won't work without them.
-<!## end>
     This situation is rare, however, among modern operating systems.
    </para>
 
    <para>
-<!## PG>
     When <productname>PostgreSQL</> exceeds one of the various hard
-<!## end>
-<!## XC>
-    When <productname>Postgres-XC</> exceeds one of the various hard
-<!## end>
     <acronym>IPC</> limits, the server will refuse to start and
     should leave an instructive error message describing the problem
     and what to do about it. (See also <xref
@@ -1128,6 +1092,14 @@ psql: could not connect to server: No such file or directory
     them, however, vary. Suggestions for some platforms are given below.
    </para>
 
+   <note>
+     <para>
+       Prior to <productname>PostgreSQL</> 9.3, the amount of System V shared
+       memory required to start the server was much larger.  If you are running
+       an older version of the server, please consult the documentation for
+       your server version.
+     </para>
+   </note>
 
    <table id="sysvipc-parameters">
     <title><systemitem class="osname">System V</> <acronym>IPC</> Parameters</title>
@@ -1145,7 +1117,7 @@ psql: could not connect to server: No such file or directory
       <row>
        <entry><varname>SHMMAX</></>
        <entry>Maximum size of shared memory segment (bytes)</>
-       <entry>at least several megabytes (see text)</entry>
+       <entry>at least 1kB (more if running many copies of the server)</entry>
       </row>
 
       <row>
@@ -1175,13 +1147,13 @@ psql: could not connect to server: No such file or directory
        <row>
         <entry><varname>SEMMNI</></>
         <entry>Maximum number of semaphore identifiers (i.e., sets)</>
-        <entry>at least <literal>ceil((max_connections + autovacuum_max_workers) / 16)</literal></>
+        <entry>at least <literal>ceil((max_connections + autovacuum_max_workers + 4) / 16)</literal></>
        </row>
 
        <row>
         <entry><varname>SEMMNS</></>
         <entry>Maximum number of semaphores system-wide</>
-        <entry><literal>ceil((max_connections + autovacuum_max_workers) / 16) * 17</literal> plus room for other applications</>
+        <entry><literal>ceil((max_connections + autovacuum_max_workers + 4) / 16) * 17</literal> plus room for other applications</>
        </row>
 
        <row>
@@ -1206,68 +1178,29 @@ psql: could not connect to server: No such file or directory
     </tgroup>
    </table>
 
-
    <para>
-    <indexterm><primary>SHMMAX</primary></indexterm> The most important
-    shared memory parameter is <varname>SHMMAX</>, the maximum size, in
-    bytes, of a shared memory segment. If you get an error message from
-    <function>shmget</> like <quote>Invalid argument</>, it is
-    likely that this limit has been exceeded.  The size of the required
-    shared memory segment varies depending on several
-<!## PG>
-    <productname>PostgreSQL</> configuration parameters, as shown in
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> configuration parameters, as shown in
-<!## end>
-    <xref linkend="shared-memory-parameters">.  (Any error message you might
-    get will include the exact size of the failed allocation request.)
-    You can, as a temporary solution, lower some of those settings to
-    avoid the failure.  While it is possible to get
-<!## PG>
-    <productname>PostgreSQL</> to run with <varname>SHMMAX</> as small as
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> to run with <varname>SHMMAX</> as small as
-<!## end>
-    2 MB, you need considerably more for acceptable performance.  Desirable
-    settings are in the hundreds of megabytes to a few gigabytes.
-   </para>
-
-   <para>
-    Some systems also have a limit on the total amount of shared memory in
-    the system (<varname>SHMALL</>).  Make sure this is large enough
-<!## PG>
-    for <productname>PostgreSQL</> plus any other applications that
-<!## end>
-<!## XC>
-    for <productname>Postgres-XC</> plus any other applications that
-<!## end>
-    are using shared memory segments.  Note that <varname>SHMALL</>
-    is measured in pages rather than bytes on many systems.
+    <productname>PostgreSQL</> requires a few bytes of System V shared memory
+    (typically 48 bytes, on 64-bit platforms) for each copy of the server.
+    On most modern operating systems, this amount can easily be allocated.
+    However, if you are running many copies of the server, or if other
+    applications are also using System V shared memory, it may be necessary
+    to increase <varname>SHMMAX</>, the maximum size in bytes of a shared
+    memory segment, or <varname>SHMALL</>, the total amount of System V shared
+    memory system-wide.  Note that <varname>SHMALL</> is measured in pages
+    rather than bytes on many systems.
    </para>
 
    <para>
     Less likely to cause problems is the minimum size for shared
     memory segments (<varname>SHMMIN</>), which should be at most
-<!## PG>
-    approximately 500 kB for <productname>PostgreSQL</> (it is
-<!## end>
-<!## XC>
-    approximately 500 kB for <productname>Postgres-XC</> (it is
-<!## end>
+    approximately 32 bytes for <productname>PostgreSQL</> (it is
     usually just 1). The maximum number of segments system-wide
     (<varname>SHMMNI</>) or per-process (<varname>SHMSEG</>) are unlikely
     to cause a problem unless your system has them set to zero.
    </para>
 
    <para>
-<!## PG>
     <productname>PostgreSQL</> uses one semaphore per allowed connection
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> uses one semaphore per allowed connection
-<!## end>
     (<xref linkend="guc-max-connections">) and allowed autovacuum worker
     process (<xref linkend="guc-autovacuum-max-workers">), in sets of 16.
     Each such set will
@@ -1281,7 +1214,7 @@ psql: could not connect to server: No such file or directory
     linkend="sysvipc-parameters">).  The parameter <varname>SEMMNI</>
     determines the limit on the number of semaphore sets that can
     exist on the system at one time.  Hence this parameter must be at
-    least <literal>ceil((max_connections + autovacuum_max_workers) / 16)</>.
+    least <literal>ceil((max_connections + autovacuum_max_workers + 4) / 16)</>.
     Lowering the number
     of allowed connections is a temporary workaround for failures,
     which are usually confusingly worded <quote>No space
@@ -1304,23 +1237,13 @@ psql: could not connect to server: No such file or directory
    <para>
     The <varname>SEMMSL</> parameter, which determines how many
     semaphores can be in a set, must be at least 17 for
-<!## PG>
     <productname>PostgreSQL</>.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</>.
-<!## end>
    </para>
 
    <para>
     Various other settings related to <quote>semaphore undo</>, such as
     <varname>SEMMNU</> and <varname>SEMUME</>, do not affect
-<!## PG>
     <productname>PostgreSQL</>.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</>.
-<!## end>
    </para>
 
 
@@ -1346,67 +1269,20 @@ psql: could not connect to server: No such file or directory
       </listitem>
      </varlistentry>
 
-     <varlistentry>
-      <term><systemitem class="osname">BSD/OS</></term>
-      <indexterm><primary>BSD/OS</><secondary>IPC configuration</></>
-      <listitem>
-       <formalpara>
-        <title>Shared Memory</title>
-        <para>
-         By default, only 4 MB of shared memory is supported. Keep in
-         mind that shared memory is not pageable; it is locked in RAM.
-         To increase the amount of shared memory supported by your
-         system, add something like the following to your kernel configuration
-         file:
-<programlisting>
-options "SHMALL=8192"
-options "SHMMAX=\(SHMALL*PAGE_SIZE\)"
-</programlisting>
-         <varname>SHMALL</> is measured in 4 kB pages, so a value of
-         1024 represents 4 MB of shared memory. Therefore the above increases
-         the maximum shared memory area to 32 MB.
-         For those running 4.3 or later, you will probably also need to increase
-         <varname>KERNEL_VIRTUAL_MB</> above the default <literal>248</>.
-         Once all changes have been made, recompile the kernel, and reboot.
-        </para>
-       </formalpara>
-
-       <formalpara>
-        <title>Semaphores</title>
-        <para>
-         You will probably want to increase the number of semaphores
-         as well; the default system total of 60 will only allow about
-<!## PG>
-         50 <productname>PostgreSQL</productname> connections.  Set the
-<!## end>
-<!## XC>
-         50 <productname>Postgres-XC</productname> connections.  Set the
-<!## end>
-         values you want in your kernel configuration file, e.g.:
-<programlisting>
-options "SEMMNI=40"
-options "SEMMNS=240"
-</programlisting>
-        </para>
-       </formalpara>
-      </listitem>
-     </varlistentry>
-
 
      <varlistentry>
       <term><systemitem class="osname">FreeBSD</></term>
       <indexterm><primary>FreeBSD</><secondary>IPC configuration</></>
       <listitem>
        <para>
-        The default settings are only suitable for small installations
-        (for example, default <varname>SHMMAX</varname> is 32
-        MB). Changes can be made via the <command>sysctl</command> or
+        The default settings can be changed using
+        the <command>sysctl</command> or
         <command>loader</command> interfaces.  The following
         parameters can be set using <command>sysctl</command>:
 <screen>
-<prompt>$</prompt> <userinput>sysctl -w kern.ipc.shmall=32768</userinput>
-<prompt>$</prompt> <userinput>sysctl -w kern.ipc.shmmax=134217728</userinput>
-<prompt>$</prompt> <userinput>sysctl -w kern.ipc.semmap=256</userinput>
+<prompt>#</prompt> <userinput>sysctl kern.ipc.shmall=32768</userinput>
+<prompt>#</prompt> <userinput>sysctl kern.ipc.shmmax=134217728</userinput>
+<prompt>#</prompt> <userinput>sysctl kern.ipc.semmap=256</userinput>
 </screen>
         To have these settings persist over reboots, modify
         <filename>/etc/sysctl.conf</filename>.
@@ -1414,15 +1290,15 @@ options "SEMMNS=240"
 
        <para>
         The remaining semaphore settings are read-only as far as
-        <command>sysctl</command> is concerned, but can be changed
-        before boot using the <command>loader</command> prompt:
-<screen>
-<prompt>(loader)</prompt> <userinput>set kern.ipc.semmni=256</userinput>
-<prompt>(loader)</prompt> <userinput>set kern.ipc.semmns=512</userinput>
-<prompt>(loader)</prompt> <userinput>set kern.ipc.semmnu=256</userinput>
-</screen>
-        Similarly these can be saved between reboots in
-        <filename>/boot/loader.conf</filename>.
+        <command>sysctl</command> is concerned, but can be set in
+        <filename>/boot/loader.conf</filename>:
+<programlisting>
+kern.ipc.semmni=256
+kern.ipc.semmns=512
+kern.ipc.semmnu=256
+</programlisting>
+        After modifying these values a reboot is required for the new
+        settings to take affect.
        </para>
 
        <para>
@@ -1438,12 +1314,7 @@ options "SEMMNS=240"
         running in different jails should be run by different operating system
         users.  This improves security because it prevents non-root users
         from interfering with shared memory or semaphores in different jails,
-<!## PG>
         and it allows the PostgreSQL IPC cleanup code to function properly.
-<!## end>
-<!## XC>
-        and it allows the Postgres-XC IPC cleanup code to function properly.
-<!## end>
         (In FreeBSD 6.0 and later the IPC cleanup code does not properly detect
         processes in other jails, preventing the running of postmasters on the
         same port in different jails.)
@@ -1451,16 +1322,44 @@ options "SEMMNS=240"
 
        <para>
         <systemitem class="osname">FreeBSD</> versions before 4.0 work like
-        <systemitem class="osname">NetBSD</> and <systemitem class="osname">
-        OpenBSD</> (see below).
+        <systemitem class="osname">OpenBSD</> (see below).
        </para>
       </listitem>
      </varlistentry>
 
      <varlistentry>
       <term><systemitem class="osname">NetBSD</></term>
-      <term><systemitem class="osname">OpenBSD</></term>
       <indexterm><primary>NetBSD</><secondary>IPC configuration</></>
+      <listitem>
+       <para>
+        In <systemitem class="osname">NetBSD</> 5.0 and later,
+        IPC parameters can be adjusted using <command>sysctl</command>,
+        for example:
+<screen>
+<prompt>$</prompt> <userinput>sysctl -w kern.ipc.shmmax=16777216</userinput>
+</screen>
+        To have these settings persist over reboots, modify
+        <filename>/etc/sysctl.conf</filename>.
+       </para>
+
+       <para>
+        You might also want to configure your kernel to lock shared
+        memory into RAM and prevent it from being paged out to swap.
+        This can be accomplished using the <command>sysctl</command>
+        setting <literal>kern.ipc.shm_use_phys</literal>.
+       </para>
+
+       <para>
+        <systemitem class="osname">NetBSD</> versions before 5.0 work like
+        <systemitem class="osname">OpenBSD</> (see below), except that
+        parameters should be set with the keyword <literal>options</> not
+        <literal>option</>.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><systemitem class="osname">OpenBSD</></term>
       <indexterm><primary>OpenBSD</><secondary>IPC configuration</></>
       <listitem>
        <para>
@@ -1468,19 +1367,17 @@ options "SEMMNS=240"
         to be enabled when the kernel is compiled. (They are by
         default.) The maximum size of shared memory is determined by
         the option <varname>SHMMAXPGS</> (in pages). The following
-        shows an example of how to set the various parameters on
-        <systemitem class="osname">NetBSD</>
-        (<systemitem class="osname">OpenBSD</> uses <literal>option</> instead):
+        shows an example of how to set the various parameters:
 <programlisting>
-options        SYSVSHM
-options        SHMMAXPGS=4096
-options        SHMSEG=256
+option        SYSVSHM
+option        SHMMAXPGS=4096
+option        SHMSEG=256
 
-options        SYSVSEM
-options        SEMMNI=256
-options        SEMMNS=512
-options        SEMMNU=256
-options        SEMMAP=256
+option        SYSVSEM
+option        SEMMNI=256
+option        SEMMNS=512
+option        SEMMNU=256
+option        SEMMAP=256
 </programlisting>
        </para>
 
@@ -1492,7 +1389,6 @@ options        SEMMAP=256
        </para>
       </listitem>
      </varlistentry>
-
 
      <varlistentry>
       <term><systemitem class="osname">HP-UX</></term>
@@ -1520,19 +1416,11 @@ options        SEMMAP=256
       <indexterm><primary>Linux</><secondary>IPC configuration</></>
       <listitem>
        <para>
-        The default maximum segment size is 32 MB, which is only adequate
-<!## PG>
-        for very small <productname>PostgreSQL</productname>
-<!## end>
-<!## XC>
-        for very small <productname>Postgres-XC</productname>
-<!## end>
-        installations.  The default maximum total size is 2097152
+        The default maximum segment size is 32 MB, and the
+        default maximum total size is 2097152
         pages.  A page is almost always 4096 bytes except in unusual
         kernel configurations with <quote>huge pages</quote>
-        (use <literal>getconf PAGE_SIZE</literal> to verify).  That
-        makes a default limit of 8 GB, which is often enough, but not
-        always.
+        (use <literal>getconf PAGE_SIZE</literal> to verify).
        </para>
 
        <para>
@@ -1566,8 +1454,8 @@ options        SEMMAP=256
 
 
      <varlistentry>
-      <term><systemitem class="osname">MacOS X</></term>
-      <indexterm><primary>MacOS X</><secondary>IPC configuration</></>
+      <term><systemitem class="osname">Mac OS X</></term>
+      <indexterm><primary>Mac OS X</><secondary>IPC configuration</></>
       <listitem>
        <para>
         The recommended method for configuring shared memory in OS X
@@ -1661,13 +1549,7 @@ sysctl -w kern.sysv.shmall
       <indexterm><primary>Solaris</><secondary>IPC configuration</></>
       <listitem>
        <para>
-        The default maximum size of a shared memory segment is too low for
-<!## PG>
-        <productname>PostgreSQL</>. The relevant settings can be changed in
-<!## end>
-<!## XC>
-        <productname>Postgres-XC</>. The relevant settings can be changed in
-<!## end>
+        The relevant settings can be changed in
         <filename>/etc/system</>, for example:
 <programlisting>
 set shmsys:shminfo_shmmax=0x2000000
@@ -1689,16 +1571,15 @@ set semsys:seminfo_semmsl=32
 
      <varlistentry>
       <term><systemitem class="osname">Solaris</> 2.10 (Solaris
-      10)</term>
+      10) and later</term>
       <term><systemitem class="osname">OpenSolaris</></term>
       <listitem>
        <para>
-        In Solaris 10 and OpenSolaris, the default shared memory and
+        In Solaris 10 and later, and OpenSolaris, the default shared memory and
         semaphore settings are good enough for most
         <productname>PostgreSQL</> applications.  Solaris now defaults
-        to a <varname>SHMMAX</> of one-quarter of system <acronym>RAM</>.  If
-        you need to increase this in order to set shared memory settings
-        slightly higher, you should use a project setting associated
+        to a <varname>SHMMAX</> of one-quarter of system <acronym>RAM</>.
+        To further adjust this setting, use a project setting associated
         with the <literal>postgres</> user.  For example, run the
         following as <literal>root</>:
 <programlisting>
@@ -1708,7 +1589,7 @@ projadd -c "PostgreSQL DB User" -K "project.max-shm-memory=(privileged,8GB,deny)
 
        <para>
         This command adds the <literal>user.postgres</> project and
-        raises the shared memory maximum for the <literal>postgres</>
+        sets the shared memory maximum for the <literal>postgres</>
         user to 8GB, and takes effect the next time that user logs
         in, or when you restart <productname>PostgreSQL</> (not reload).
         The above assumes that <productname>PostgreSQL</> is run by
@@ -1730,7 +1611,7 @@ project.max-msg-ids=(priv,4096,deny)
         Additionally, if you are running <productname>PostgreSQL</>
         inside a zone, you may need to raise the zone resource usage
         limits as well.  See "Chapter2:  Projects and Tasks" in the
-        <citetitle>Solaris 10 System Administrator's Guide</> for more
+        <citetitle>System Administrator's Guide</> for more
         information on <literal>projects</> and <command>prctl</>.
        </para>
       </listitem>
@@ -1743,7 +1624,7 @@ project.max-msg-ids=(priv,4096,deny)
       <listitem>
        <para>
         On <productname>UnixWare</> 7, the maximum size for shared
-        memory segments is only 512 kB in the default configuration.
+        memory segments is 512 kB in the default configuration.
         To display the current value of <varname>SHMMAX</>, run:
 <programlisting>
 /etc/conf/bin/idtune -g SHMMAX
@@ -1767,76 +1648,16 @@ project.max-msg-ids=(priv,4096,deny)
 
     </variablelist>
 
-
-   <table id="shared-memory-parameters">
-<!## PG>
-    <title><productname>PostgreSQL</productname> Shared Memory Usage</>
-<!## end>
-<!## XC>
-    <title><productname>Postgres-XC</productname> Shared Memory Usage</>
-<!## end>
-
-    <tgroup cols="2">
-     <thead>
-      <row>
-       <entry>Usage</>
-       <entry>Approximate shared memory bytes required (as of 8.3)</>
-      </row>
-     </thead>
-
-     <tbody>
-      <row>
-       <entry>Connections</>
-       <entry>(1800 + 270 * <xref
-       linkend="guc-max-locks-per-transaction">) * <xref
-       linkend="guc-max-connections"></entry>
-      </row>
-
-      <row>
-       <entry>Autovacuum workers</>
-       <entry>(1800 + 270 * <xref
-       linkend="guc-max-locks-per-transaction">) * <xref
-       linkend="guc-autovacuum-max-workers"></entry>
-      </row>
-
-      <row>
-       <entry>Prepared transactions</>
-       <entry>(770 + 270 * <xref
-       linkend="guc-max-locks-per-transaction">) * <xref linkend="guc-max-prepared-transactions"></entry>
-      </row>
-
-      <row>
-       <entry>Shared disk buffers</>
-       <entry>(<xref linkend="guc-block-size"> + 208) * <xref linkend="guc-shared-buffers"></entry>
-      </row>
-
-      <row>
-       <entry>WAL buffers</>
-       <entry>(<xref linkend="guc-wal-block-size"> + 8) * <xref linkend="guc-wal-buffers"></entry>
-      </row>
-
-      <row>
-       <entry>Fixed space requirements</>
-       <entry>770 kB</entry>
-      </row>
-     </tbody>
-    </tgroup>
-   </table>
-
   </sect2>
 
   <sect2>
    <title>Resource Limits</title>
+
 &common;
    <para>
     Unix-like operating systems enforce various kinds of resource limits
     that might interfere with the operation of your
-<!## PG>
     <productname>PostgreSQL</productname> server. Of particular
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> server. Of particular
-<!## end>
     importance are limits on the number of processes per user, the
     number of open files per process, and the amount of memory available
     to each process. Each of these have a <quote>hard</quote> and a
@@ -1885,12 +1706,7 @@ default:\
    </para>
 
    <para>
-<!## PG>
     The <productname>PostgreSQL</productname> server uses one process
-<!## end>
-<!## XC>
-    The <productname>Postgres-XC</productname> server uses one process
-<!## end>
     per connection so you should provide for at least as many processes
     as allowed connections, in addition to what you need for the rest
     of your system.  This is usually not a problem but if you run
@@ -1911,12 +1727,7 @@ default:\
     processes to open large numbers of files; if more than a few
     processes do so then the system-wide limit can easily be exceeded.
     If you find this happening, and you do not want to alter the
-<!## PG>
     system-wide limit, you can set <productname>PostgreSQL</>'s <xref
-<!## end>
-<!## XC>
-    system-wide limit, you can set <productname>Postgres-XC</>'s <xref
-<!## end>
     linkend="guc-max-files-per-process"> configuration parameter to
     limit the consumption of open files.
    </para>
@@ -1924,24 +1735,16 @@ default:\
 
   <sect2 id="linux-memory-overcommit">
    <title>Linux Memory Overcommit</title>
+
 &common;
    <para>
     In Linux 2.4 and later, the default virtual memory behavior is not
-<!## PG>
     optimal for <productname>PostgreSQL</productname>. Because of the
-<!## end>
-<!## XC>
-    optimal for <productname>Postgres-XC</productname>. Because of the
-<!## end>
     way that the kernel implements memory overcommit, the kernel might
-<!## PG>
-    terminate the <productname>PostgreSQL</productname> server (the
-<!## end>
-<!## XC>
-    terminate the <productname>Postgres-XC</productname> server (the
-<!## end>
-    master server process) if the memory demands of
-    another process cause the system to run out of virtual memory.
+    terminate the <productname>PostgreSQL</productname> postmaster (the
+    master server process) if the memory demands of either
+    <productname>PostgreSQL</productname> or another process cause the
+    system to run out of virtual memory.
    </para>
 
    <para>
@@ -1955,27 +1758,30 @@ Out of Memory: Killed process 12345 (postgres).
     has been terminated due to memory pressure.
     Although existing database connections will continue to function
     normally, no new connections will be accepted.  To recover,
-<!## PG>
     <productname>PostgreSQL</productname> will need to be restarted.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> will need to be restarted.
-<!## end>
    </para>
 
    <para>
     One way to avoid this problem is to run
-<!## PG>
     <productname>PostgreSQL</productname> on a machine where you can
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</productname> on a machine where you can
-<!## end>
     be sure that other processes will not run the machine out of
     memory.  If memory is tight, increasing the swap space of the
     operating system can help avoid the problem, because the
     out-of-memory (OOM) killer is invoked only when physical memory and
     swap space are exhausted.
+   </para>
+
+   <para>
+    If <productname>PostgreSQL</productname> itself is the cause of the
+    system running out of memory, you can avoid the problem by changing
+    your configuration.  In some cases, it may help to lower memory-related
+    configuration parameters, particularly
+    <link linkend="guc-shared-buffers"><varname>shared_buffers</></link>
+    and <link linkend="guc-work-mem"><varname>work_mem</></link>.  In
+    other cases, the problem may be caused by allowing too many connections
+    to the database server itself.  In many cases, it may be better to reduce
+    <link linkend="guc-max-connections"><varname>max_connections</></link>
+    and instead make use of external connection-pooling software.
    </para>
 
    <para>
@@ -1998,25 +1804,29 @@ sysctl -w vm.overcommit_memory=2
    <para>
     Another approach, which can be used with or without altering
     <varname>vm.overcommit_memory</>, is to set the process-specific
-    <varname>oom_adj</> value for the postmaster process to <literal>-17</>,
-    thereby guaranteeing it will not be targeted by the OOM killer.  The
-    simplest way to do this is to execute
+    <varname>oom_score_adj</> value for the postmaster process to
+    <literal>-1000</>, thereby guaranteeing it will not be targeted by the OOM
+    killer.  The simplest way to do this is to execute
 <programlisting>
-echo -17 > /proc/self/oom_adj
+echo -1000 > /proc/self/oom_score_adj
 </programlisting>
     in the postmaster's startup script just before invoking the postmaster.
     Note that this action must be done as root, or it will have no effect;
     so a root-owned startup script is the easiest place to do it.  If you
-<!## PG>
     do this, you may also wish to build <productname>PostgreSQL</>
-<!## end>
-<!## XC>
-    do this, you may also wish to build <productname>Postgres-XC</>
-<!## end>
-    with <literal>-DLINUX_OOM_ADJ=0</> added to <varname>CFLAGS</>.
+    with <literal>-DLINUX_OOM_SCORE_ADJ=0</> added to <varname>CPPFLAGS</>.
     That will cause postmaster child processes to run with the normal
-    <varname>oom_adj</> value of zero, so that the OOM killer can still
+    <varname>oom_score_adj</> value of zero, so that the OOM killer can still
     target them at need.
+   </para>
+
+   <para>
+    Older Linux kernels do not offer <filename>/proc/self/oom_score_adj</>,
+    but may have a previous version of the same functionality called
+    <filename>/proc/self/oom_adj</>.  This works the same except the disable
+    value is <literal>-17</> not <literal>-1000</>.  The corresponding
+    build flag for <productname>PostgreSQL</> is
+    <literal>-DLINUX_OOM_ADJ=0</>.
    </para>
 
    <note>
@@ -2045,6 +1855,7 @@ echo -17 > /proc/self/oom_adj
   <indexterm zone="server-shutdown">
    <primary>shutdown</>
   </indexterm>
+
 &xconly;
 <!## XC>
   <para>
@@ -2056,8 +1867,8 @@ echo -17 > /proc/self/oom_adj
 
   <sect2 id="Coordinator-Datanode-shutdown">
    <title>Shutting Down Coordinators and Datanodes</title>
-
 <!## end>
+
 &common;
   <para>
    There are several ways to shut down the database server. You control
@@ -2151,14 +1962,14 @@ $ <userinput>kill -INT `head -1 /usr/local/pgsql/data/postmaster.pid`</userinput
    <systemitem>SIGTERM</> signal to the child process associated with
    the session.
   </para>
- </sect2>
 
 <!## XC>
+ </sect2>
 
  <sect2 id="shutting-down-gtm-proxy">
   <title>Shutting Down GTM-Proxies</title>
 
-&common;
+&xconly;
   <para>
    You can shut down GTM-Proxies by sending SIGKILL, SIGTERM, SIGQUIT,
    SIGINT or SIGHUP to each GTM-Proxy process.
@@ -2183,7 +1994,6 @@ $ <userinput>kill -INT `head -1 /usr/local/pgsql/data/postmaster.pid`</userinput
  </sect2>
 
 <!## end>
-
  </sect1>
 
  <sect1 id="upgrading">
@@ -2213,6 +2023,7 @@ $ <userinput>kill -INT `head -1 /usr/local/pgsql/data/postmaster.pid`</userinput
   </para>
 <!## end>
 
+&common;
   <para>
    <productname>PostgreSQL</> major versions are represented by the
    first two digit groups of the version number, e.g., 8.4.
@@ -2323,20 +2134,40 @@ $ <userinput>kill -INT `head -1 /usr/local/pgsql/data/postmaster.pid`</userinput
    <title>Upgrading Data via <application>pg_dump</></title>
 
    <para>
+<!## PG>
     To dump data from one major version of <productname>PostgreSQL</> and
+<!## end>
+<!## XC>
+    To dump data from one major version of <productname>Postgres-XC</> and
+<!## end>
     reload it in another, you must use <application>pg_dump</>; file system
     level backup methods will not work. (There are checks in place that prevent
     you from using a data directory with an incompatible version of
+<!## PG>
     <productname>PostgreSQL</productname>, so no great harm can be done by
+<!## end>
+<!## XC>
+    <productname>Postgres-XC</productname>, so no great harm can be done by
+<!## end>
     trying to start the wrong server version on a data directory.)
    </para>
 
    <para>
     It is recommended that you use the <application>pg_dump</> and
     <application>pg_dumpall</> programs from the newer version of
+<!## PG>
     <productname>PostgreSQL</>, to take advantage of enhancements
+<!## end>
+<!## XC>
+    <productname>Postgres-XC</>, to take advantage of enhancements
+<!## end>
     that might have been made in these programs.  Current releases of the
+<!## PG>
     dump programs can read data from any server version back to 7.0.
+<!## end>
+<!## XC>
+    dump programs can read data from any server version back to <productname>PostgreSQL</> 7.0.
+<!## end>
    </para>
 
    <para>
@@ -2377,7 +2208,12 @@ $ <userinput>kill -INT `head -1 /usr/local/pgsql/data/postmaster.pid`</userinput
       To make the backup, you can use the <application>pg_dumpall</application>
       command from the version you are currently running.  For best
       results, however, try to use the <application>pg_dumpall</application>
+<!## PG>
       command from <productname>PostgreSQL</productname> &version;,
+<!## end>
+<!## XC>
+      command from <productname>Postgres-XC</productname> &version;,
+<!## end>
       since this version contains bug fixes and improvements over older
       versions.  While this advice might seem idiosyncratic since you
       haven't installed the new version yet, it is advisable to follow
@@ -2394,7 +2230,12 @@ $ <userinput>kill -INT `head -1 /usr/local/pgsql/data/postmaster.pid`</userinput
 <screen>
 <userinput>pg_ctl stop</>
 </screen>
+<!## PG>
       On systems that have <productname>PostgreSQL</> started at boot time,
+<!## end>
+<!## XC>
+      On systems that have <productname>Postgres-XC</> started at boot time,
+<!## end>
       there is probably a start-up file that will accomplish the same thing. For
       example, on a <systemitem class="osname">Red Hat Linux</> system one
       might find that this works:
@@ -2423,7 +2264,12 @@ $ <userinput>kill -INT `head -1 /usr/local/pgsql/data/postmaster.pid`</userinput
 
     <step>
      <para>
+<!## PG>
       Install the new version of <productname>PostgreSQL</productname> as
+<!## end>
+<!## XC>
+      Install the new version of <productname>Postgres-XC</productname> as
+<!## end>
       outlined in <![%standalone-include[the next section.]]>
       <![%standalone-ignore[<xref linkend="install-procedure">.]]>
      </para>
@@ -2484,6 +2330,15 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
   <sect2 id="upgrading-methods-other">
    <title>Non-Dump Upgrade Methods</title>
 
+<!## XC>
+&xconly;
+   <para>
+    Please note that <link linkend="pgupgrade"> pg_upgrade </link> module and 
+    <productname>Slony</productname> does not run as expected in <productname>Postgres-XC</productname>.
+    They could be supported in the future version of <productname>Postgres-XC</productname>
+   </para>
+<!## end>
+
    <para>
     The <link linkend="pgupgrade">pg_upgrade</link> module allows an
     installation to be migrated in-place from one major
@@ -2519,13 +2374,12 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
    <primary>server spoofing</primary>
   </indexterm>
 
-&common;
   <para>
 <!## PG>
    While the server is running, it is not possible for a malicious user
 <!## end>
 <!## XC>
-   While Coordinators and Datanodes are running, it is not possible for a malicious user
+   While coordinators and datanodes are running, it is not possible for a malicious user
 <!## end>
    to take the place of the normal database server.  However, when the
    server is down, it is possible for a local user to spoof the normal
@@ -2540,7 +2394,7 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
   <para>
    The simplest way to prevent spoofing for <literal>local</>
    connections is to use a Unix domain socket directory (<xref
-   linkend="guc-unix-socket-directory">) that has write permission only
+   linkend="guc-unix-socket-directories">) that has write permission only
    for a trusted local user.  This prevents a malicious user from creating
    their own socket file in that directory.  If you are concerned that
    some applications might still reference <filename>/tmp</> for the
@@ -2555,13 +2409,11 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
    SSL certificates and make sure that clients check the server's certificate.
    To do that, the server
    must be configured to accept only <literal>hostssl</> connections (<xref
-   linkend="auth-pg-hba-conf">) and have SSL
-   <filename>server.key</filename> (key) and
-   <filename>server.crt</filename> (certificate) files (<xref
-   linkend="ssl-tcp">). The TCP client must connect using
+   linkend="auth-pg-hba-conf">) and have SSL key and certificate files
+   (<xref linkend="ssl-tcp">). The TCP client must connect using
    <literal>sslmode=verify-ca</> or
    <literal>verify-full</> and have the appropriate root certificate
-   file installed (<xref linkend="libpq-connect">).
+   file installed (<xref linkend="libq-ssl-certificates">).
   </para>
  </sect1>
 
@@ -2571,14 +2423,10 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
   <indexterm zone="encryption-options">
    <primary>encryption</primary>
   </indexterm>
+
 &common;
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> offers encryption at several
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> offers encryption at several
-<!## end>
    levels, and provides flexibility in protecting data from disclosure
    due to database server theft, unscrupulous administrators, and
    insecure networks. Encryption might also be required to secure
@@ -2729,34 +2577,20 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
   <indexterm zone="ssl-tcp">
    <primary>SSL</primary>
   </indexterm>
+
 &common;
   <para>
-<!## PG>
    <productname>PostgreSQL</> has native support for using
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</> has native support for using
-<!## end>
    <acronym>SSL</> connections to encrypt client/server communications
    for increased security. This requires that
    <productname>OpenSSL</productname> is installed on both client and
-<!## PG>
    server systems and that support in <productname>PostgreSQL</> is
-<!## end>
-<!## XC>
-   server systems and that support in <productname>Postgres-XC</> is
-<!## end>
    enabled at build time (see <xref linkend="installation">).
   </para>
 
   <para>
    With <acronym>SSL</> support compiled in, the
-<!## PG>
    <productname>PostgreSQL</> server can be started with
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</> server can be started with
-<!## end>
    <acronym>SSL</> enabled by setting the parameter
    <xref linkend="guc-ssl"> to <literal>on</> in
    <filename>postgresql.conf</>.  The server will listen for both normal
@@ -2768,12 +2602,7 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
   </para>
 
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> reads the system-wide
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> reads the system-wide
-<!## end>
    <productname>OpenSSL</productname> configuration file. By default, this
    file is named <filename>openssl.cnf</filename> and is located in the
    directory reported by <literal>openssl version -d</>.
@@ -2802,10 +2631,12 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
   </note>
 
   <para>
-   To start in <acronym>SSL</> mode, the files <filename>server.crt</>
-   and <filename>server.key</> must exist in the server's data directory.
-   These files should contain the server certificate and private key,
-   respectively.
+   To start in <acronym>SSL</> mode, files containing the server certificate
+   and private key must exist.  By default, these files are expected to be
+   named <filename>server.crt</> and <filename>server.key</>, respectively, in
+   the server's data directory, but other names and locations can be specified
+   using the configuration parameters <xref linkend="guc-ssl-cert-file">
+   and <xref linkend="guc-ssl-key-file">.
    On Unix systems, the permissions on <filename>server.key</filename> must
    disallow any access to world or group; achieve this by the command
    <command>chmod 0600 server.key</command>.
@@ -2833,7 +2664,9 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
    To require the client to supply a trusted certificate, place
    certificates of the certificate authorities (<acronym>CA</acronym>s)
    you trust in the file <filename>root.crt</filename> in the data
-   directory, and set the <literal>clientcert</literal> parameter
+   directory, set the parameter <xref linkend="guc-ssl-ca-file"> in
+   <filename>postgresql.conf</filename> to <literal>root.crt</literal>,
+   and set the <literal>clientcert</literal> parameter
    to 1 on the appropriate <literal>hostssl</> line(s) in
    <filename>pg_hba.conf</>.
    A certificate will then be requested from the client during
@@ -2841,7 +2674,7 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
    description of how to set up certificates on the client.)  The server will
    verify that the client's certificate is signed by one of the trusted
    certificate authorities.  Certificate Revocation List (CRL) entries
-   are also checked if the file <filename>root.crl</filename> exists.
+   are also checked if the parameter <xref linkend="guc-ssl-crl-file"> is set.
    <!-- If this URL changes replace it with a URL to www.archive.org. -->
    (See <ulink
    url="http://h71000.www7.hp.com/DOC/83final/BA554_90007/ch04s02.html"></>
@@ -2853,7 +2686,7 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
    available for all authentication methods, but only for rows specified as
    <literal>hostssl</>.  When <literal>clientcert</literal> is not specified
    or is set to 0, the server will still verify presented client
-   certificates against <filename>root.crt</filename> if that file exists
+   certificates against its CA list, if one is configured,
    &mdash; but it will not insist that a client certificate be presented.
   </para>
 
@@ -2878,7 +2711,8 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
 &common;
    <para>
     <xref linkend="ssl-file-usage"> summarizes the files that are
-    relevant to the SSL setup on the server.
+    relevant to the SSL setup on the server.  (The shown file names are default
+    or typical names.  The locally configured names could be different.)
    </para>
 
   <table id="ssl-file-usage">
@@ -2895,27 +2729,27 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
     <tbody>
 
      <row>
-      <entry><filename>$PGDATA/server.crt</></entry>
+      <entry><xref linkend="guc-ssl-cert-file"> (<filename>$PGDATA/server.crt</>)</entry>
       <entry>server certificate</entry>
       <entry>sent to client to indicate server's identity</entry>
      </row>
 
      <row>
-      <entry><filename>$PGDATA/server.key</></entry>
+      <entry><xref linkend="guc-ssl-key-file"> (<filename>$PGDATA/server.key</>)</entry>
       <entry>server private key</entry>
       <entry>proves server certificate was sent by the owner; does not indicate
       certificate owner is trustworthy</entry>
      </row>
 
      <row>
-      <entry><filename>$PGDATA/root.crt</></entry>
+      <entry><xref linkend="guc-ssl-ca-file"> (<filename>$PGDATA/root.crt</>)</entry>
       <entry>trusted certificate authorities</entry>
       <entry>checks that client certificate is
       signed by a trusted certificate authority</entry>
      </row>
 
      <row>
-      <entry><filename>$PGDATA/root.crl</></entry>
+      <entry><xref linkend="guc-ssl-crl-file"> (<filename>$PGDATA/root.crl</>)</entry>
       <entry>certificates revoked by certificate authorities</entry>
       <entry>client certificate must not be on this list</entry>
      </row>
@@ -2927,6 +2761,7 @@ pg_dumpall -p 5432 | psql -d postgres -p 5433
    <para>
     The files <filename>server.key</>, <filename>server.crt</>,
     <filename>root.crt</filename>, and <filename>root.crl</filename>
+    (or their configured alternative names)
     are only examined during server start; so you must restart
     the server for changes in them to take effect.
    </para>
@@ -2987,16 +2822,12 @@ chmod og-rwx server.key
   <indexterm zone="ssh-tunnels">
    <primary>ssh</primary>
   </indexterm>
+
 &common;
   <para>
    It is possible to use <application>SSH</application> to encrypt the network
    connection between clients and a
-<!## PG>
    <productname>PostgreSQL</productname> server. Done properly, this
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> server. Done properly, this
-<!## end>
    provides an adequately secure network connection, even for non-SSL-capable
    clients.
   </para>
@@ -3004,12 +2835,7 @@ chmod og-rwx server.key
   <para>
    First make sure that an <application>SSH</application> server is
    running properly on the same machine as the
-<!## PG>
    <productname>PostgreSQL</productname> server and that you can log in using
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> server and that you can log in using
-<!## end>
    <command>ssh</command> as some user. Then you can establish a secure
    tunnel with a command like this from the client machine:
 <programlisting>
@@ -3036,12 +2862,7 @@ psql -h localhost -p 63333 postgres
    think the connection is SSL-encrypted, since in fact it is not
    encrypted between the
    <application>SSH</application> server and the
-<!## PG>
    <productname>PostgreSQL</productname> server.  This should not pose any
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> server.  This should not pose any
-<!## end>
    extra security risk as long as they are on the same machine.
   </para>
 
@@ -3086,6 +2907,62 @@ ssh -L 63333:db.foo.com:5432 joe@shell.foo.com
    </para>
   </tip>
 
+ </sect1>
+
+ <sect1 id="event-log-registration">
+  <title>Registering <application>Event Log</> on <systemitem
+  class="osname">Windows</></title>
+
+  <indexterm zone="event-log-registration">
+   <primary>event log</primary>
+   <secondary>event log</secondary>
+  </indexterm>
+
+&xconly;
+<!## XC>
+  <para>
+   Current version of <productname>Postgres-XC</productname> does not run
+   on Windows.
+  </para>
+<!## end>
+
+<!## PG>
+  <para>
+   To register a <systemitem class="osname">Windows</>
+   <application>event log</> library with the operating system,
+   issue this command:
+<screen>
+<userinput>regsvr32 <replaceable>pgsql_library_directory</>/pgevent.dll</>
+</screen>
+   This creates registry entries used by the event viewer, under the default
+   event source named <literal>PostgreSQL</literal>.
+  </para>
+
+  <para>
+   To specify a different event source name (see
+   <xref linkend="guc-event-source">), use the <literal>/n</literal>
+   and <literal>/i</literal> options:
+<screen>
+<userinput>regsvr32 /n /i:<replaceable>event_source_name</> <replaceable>pgsql_library_directory</>/pgevent.dll</>
+</screen>
+  </para>
+
+  <para>
+   To unregister the <application>event log</> library from
+   the operating system, issue this command:
+<screen>
+<userinput>regsvr32 /u [/i:<replaceable>event_source_name</>] <replaceable>pgsql_library_directory</>/pgevent.dll</>
+</screen>
+  </para>
+
+  <note>
+   <para>
+    To enable event logging in the database server, modify
+    <xref linkend="guc-log-destination"> to include
+    <literal>eventlog</literal> in <filename>postgresql.conf</filename>.
+   </para>
+  </note>
+<!## end>
  </sect1>
 
 </chapter>

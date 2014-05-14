@@ -3,7 +3,7 @@
  *
  *	Definitions for the PostgreSQL statistics collector daemon.
  *
- *	Copyright (c) 2001-2012, PostgreSQL Global Development Group
+ *	Copyright (c) 2001-2013, PostgreSQL Global Development Group
  *
  *	src/include/pgstat.h
  * ----------
@@ -203,7 +203,9 @@ typedef struct PgStat_MsgDummy
 typedef struct PgStat_MsgInquiry
 {
 	PgStat_MsgHdr m_hdr;
-	TimestampTz inquiry_time;	/* minimum acceptable file timestamp */
+	TimestampTz clock_time;		/* observed local clock time */
+	TimestampTz cutoff_time;	/* minimum acceptable file timestamp */
+	Oid			databaseid;		/* requested DB (InvalidOid => all DBs) */
 } PgStat_MsgInquiry;
 
 
@@ -513,7 +515,7 @@ typedef union PgStat_Msg
  * ------------------------------------------------------------
  */
 
-#define PGSTAT_FILE_FORMAT_ID	0x01A5BC9A
+#define PGSTAT_FILE_FORMAT_ID	0x01A5BC9B
 
 /* ----------
  * PgStat_StatDBEntry			The collector's data per database
@@ -544,6 +546,7 @@ typedef struct PgStat_StatDBEntry
 	PgStat_Counter n_block_write_time;
 
 	TimestampTz stat_reset_timestamp;
+	TimestampTz stats_timestamp;	/* time of db stats file update */
 
 	/*
 	 * tables and functions must be last in the struct, because we don't write
@@ -721,6 +724,7 @@ extern bool pgstat_track_activities;
 extern bool pgstat_track_counts;
 extern int	pgstat_track_functions;
 extern PGDLLIMPORT int pgstat_track_activity_query_size;
+extern char *pgstat_stat_directory;
 extern char *pgstat_stat_tmpname;
 extern char *pgstat_stat_filename;
 
@@ -748,7 +752,7 @@ extern void pgstat_reset_all(void);
 extern void allow_immediate_pgstat_restart(void);
 
 #ifdef EXEC_BACKEND
-extern void PgstatCollectorMain(int argc, char *argv[]);
+extern void PgstatCollectorMain(int argc, char *argv[]) __attribute__((noreturn));
 #endif
 
 

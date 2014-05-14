@@ -93,9 +93,6 @@ SELECT * FROM serialTest ORDER BY f1, f2;
 -- Check dependencies of serial and ordinary sequences
 --
 
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-
 CREATE TEMP SEQUENCE myseq2;
 CREATE TEMP SEQUENCE myseq3;
 CREATE TEMP TABLE t1 (

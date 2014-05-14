@@ -26,7 +26,6 @@ DROP CONVERSION [ IF EXISTS ] <replaceable>name</replaceable> [ CASCADE | RESTRI
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP CONVERSION</command> removes a previously defined conversion.
    To be able to drop a conversion, you must own the conversion.
@@ -36,6 +35,7 @@ DROP CONVERSION [ IF EXISTS ] <replaceable>name</replaceable> [ CASCADE | RESTRI
  <refsect1>
   <title>Parameters</title>
 
+&common;
    <variablelist>
     <varlistentry>
      <term><literal>IF EXISTS</literal></term>
@@ -79,24 +79,19 @@ DROP CONVERSION [ IF EXISTS ] <replaceable>name</replaceable> [ CASCADE | RESTRI
    To drop the conversion named <literal>myname</>:
 <programlisting>
 DROP CONVERSION myname;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1 id="sql-dropconversion-compat">
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP CONVERSION</command> statement in the SQL
    standard, but a <command>DROP TRANSLATION</command> statement that
    goes along with the <command>CREATE TRANSLATION</command> statement
    that is similar to the <command>CREATE CONVERSION</command>
-<!## PG>
    statement in PostgreSQL.
-<!## end>
-<!## XC>
-   statement in Postgres-XC.
-<!## end>
   </para>
  </refsect1>
 

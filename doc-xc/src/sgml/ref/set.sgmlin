@@ -30,7 +30,6 @@ SET [ SESSION | LOCAL ] TIME ZONE { <replaceable class="PARAMETER">timezone</rep
   <title>Description</title>
 
 &common;
-
   <para>
    The <command>SET</command> command changes run-time configuration
    parameters.  Many of the run-time parameters listed in
@@ -94,6 +93,7 @@ SET [ SESSION | LOCAL ] TIME ZONE { <replaceable class="PARAMETER">timezone</rep
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><literal>SESSION</></term>
@@ -156,8 +156,7 @@ SET [ SESSION | LOCAL ] TIME ZONE { <replaceable class="PARAMETER">timezone</rep
     <varlistentry>
      <term><literal>SCHEMA</literal></term>
      <listitem>
-      <para>
-       <literal>SET SCHEMA '<replaceable>value</>'</> is an alias for
+      <para><literal>SET SCHEMA '<replaceable>value</>'</> is an alias for
        <literal>SET search_path TO <replaceable>value</></>.  Only one
        schema can be specified using this syntax.
       </para>
@@ -167,8 +166,7 @@ SET [ SESSION | LOCAL ] TIME ZONE { <replaceable class="PARAMETER">timezone</rep
     <varlistentry>
      <term><literal>NAMES</literal></term>
      <listitem>
-      <para>
-       <literal>SET NAMES <replaceable>value</></> is an alias for
+      <para><literal>SET NAMES <replaceable>value</></> is an alias for
        <literal>SET client_encoding TO <replaceable>value</></>.
       </para>
      </listitem>
@@ -189,16 +187,14 @@ SET [ SESSION | LOCAL ] TIME ZONE { <replaceable class="PARAMETER">timezone</rep
        <function>setseed</function>:
 <programlisting>
 SELECT setseed(<replaceable>value</replaceable>);
-</programlisting>
-      </para>
+</programlisting></para>
      </listitem>
     </varlistentry>
 
     <varlistentry>
      <term><literal>TIME ZONE</literal></term>
      <listitem>
-      <para>
-       <literal>SET TIME ZONE <replaceable>value</></> is an alias
+      <para><literal>SET TIME ZONE <replaceable>value</></> is an alias
        for <literal>SET timezone TO <replaceable>value</></>.  The
        syntax <literal>SET TIME ZONE</literal> allows special syntax
        for the time zone specification.  Here are examples of valid
@@ -245,9 +241,7 @@ SELECT setseed(<replaceable>value</replaceable>);
          <listitem>
           <para>
            Set the time zone to your local time zone (that is, the
-           server's default value of <varname>timezone</>; if this
-           has not been explicitly set anywhere, it will be the zone that
-           the server's operating system defaults to).
+           server's default value of <varname>timezone</>).
           </para>
          </listitem>
         </varlistentry>
@@ -265,6 +259,7 @@ SELECT setseed(<replaceable>value</replaceable>);
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    The function <function>set_config</function> provides equivalent
    functionality; see <xref linkend="functions-admin">.
@@ -304,29 +299,19 @@ SET TIME ZONE 'PST8PDT';
    Set the time zone for Italy:
 <screen>
 SET TIME ZONE 'Europe/Rome';
-</screen>
-  </para>
+</screen></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <literal>SET TIME ZONE</literal> extends syntax defined in the SQL
    standard.  The standard allows only numeric time zone offsets while
-<!## PG>
    <productname>PostgreSQL</productname> allows more flexible
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> allows more flexible
-<!## end>
    time-zone specifications.  All other <literal>SET</literal>
-<!## PG>
    features are <productname>PostgreSQL</productname> extensions.
-<!## end>
-<!## XC>
-   features are <productname>Postgres-XC</productname> extensions.
-<!## end>
   </para>
  </refsect1>
 

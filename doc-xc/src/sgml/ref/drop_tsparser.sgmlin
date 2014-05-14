@@ -29,7 +29,6 @@ DROP TEXT SEARCH PARSER [ IF EXISTS ] <replaceable class="PARAMETER">name</repla
   <title>Description</title>
 
 &common;
-
   <para>
    <command>DROP TEXT SEARCH PARSER</command> drops an existing text search
    parser.  You must be a superuser to use this command.
@@ -39,6 +38,7 @@ DROP TEXT SEARCH PARSER [ IF EXISTS ] <replaceable class="PARAMETER">name</repla
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
 
    <varlistentry>
@@ -100,6 +100,7 @@ DROP TEXT SEARCH PARSER my_parser;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>DROP TEXT SEARCH PARSER</command> statement in the
    SQL standard.

@@ -246,7 +246,6 @@ CREATE TABLE IF NOT EXISTS test_tsvector(
 CREATE UNLOGGED TABLE unlogged1 (a int primary key);			-- OK
 INSERT INTO unlogged1 VALUES (42);
 CREATE UNLOGGED TABLE public.unlogged2 (a int primary key);		-- also OK
-SET enforce_two_phase_commit TO off;
 CREATE UNLOGGED TABLE pg_temp.unlogged3 (a int primary key);	-- not OK
 CREATE TABLE pg_temp.implicitly_temp (a int primary key);		-- OK
 CREATE TEMP TABLE explicitly_temp (a int primary key);			-- also OK

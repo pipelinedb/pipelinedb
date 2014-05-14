@@ -1,12 +1,10 @@
 --
 -- Test inheritance features
 --
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-CREATE TABLE a (aa TEXT) distribute by round robin;
-CREATE TABLE b (bb TEXT) INHERITS (a) distribute by round robin;
-CREATE TABLE c (cc TEXT) INHERITS (a) distribute by round robin;
-CREATE TABLE d (dd TEXT) INHERITS (b,c,a) distribute by round robin;
+CREATE TABLE a (aa TEXT) distribute by roundrobin;
+CREATE TABLE b (bb TEXT) INHERITS (a) distribute by roundrobin;
+CREATE TABLE c (cc TEXT) INHERITS (a) distribute by roundrobin;
+CREATE TABLE d (dd TEXT) INHERITS (b,c,a) distribute by roundrobin;
 NOTICE:  merging multiple inherited definitions of column "aa"
 NOTICE:  merging multiple inherited definitions of column "aa"
 INSERT INTO a(aa) VALUES('aaa');
@@ -1050,11 +1048,8 @@ SELECT * from ONLY d ORDER BY d.aa;
 ----+----+----+----
 (0 rows)
 
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 -- Confirm PRIMARY KEY adds NOT NULL constraint to child table
 CREATE TEMP TABLE z (b TEXT, PRIMARY KEY(aa, b)) inherits (a);
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "z_pkey" for table "z"
 INSERT INTO z VALUES (NULL, 'text'); -- should fail
 ERROR:  null value in column "aa" violates not-null constraint
 DETAIL:  Failing row contains (null, text).
@@ -1151,7 +1146,7 @@ select * from d;
 
 -- Test non-inheritable parent constraints
 create table p1(ff1 int);
-alter table p1 add constraint p1chk check no inherit (ff1 > 0);
+alter table p1 add constraint p1chk check (ff1 > 0) no inherit;
 alter table p1 add constraint p2chk check (ff1 > 10);
 -- connoinherit should be true for NO INHERIT constraint
 select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pgc.connoinherit from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname = 'p1' order by 1,2;
@@ -1169,7 +1164,7 @@ create table c1 () inherits (p1);
 --------+---------+-----------
  ff1    | integer | 
 Check constraints:
-    "p1chk" CHECK NO INHERIT (ff1 > 0)
+    "p1chk" CHECK (ff1 > 0) NO INHERIT
     "p2chk" CHECK (ff1 > 10)
 Number of child tables: 1 (Use \d+ to list them.)
 
@@ -1529,6 +1524,137 @@ DETAIL:  drop cascades to table inht2
 drop cascades to table inhts
 drop cascades to table inht3
 drop cascades to table inht4
+-- Test non-inheritable indices [UNIQUE, EXCLUDE] contraints
+CREATE TABLE test_constraints (id int, val1 varchar, val2 int, UNIQUE(val1, val2));
+CREATE TABLE test_constraints_inh () INHERITS (test_constraints);
+\d+ test_constraints
+                        Table "public.test_constraints"
+ Column |       Type        | Modifiers | Storage  | Stats target | Description 
+--------+-------------------+-----------+----------+--------------+-------------
+ id     | integer           |           | plain    |              | 
+ val1   | character varying |           | extended |              | 
+ val2   | integer           |           | plain    |              | 
+Indexes:
+    "test_constraints_val1_val2_key" UNIQUE CONSTRAINT, btree (val1, val2)
+Child tables: test_constraints_inh
+Has OIDs: no
+Distribute By: HASH(val1)
+Location Nodes: ALL DATANODES
+
+ALTER TABLE ONLY test_constraints DROP CONSTRAINT test_constraints_val1_val2_key;
+\d+ test_constraints
+                        Table "public.test_constraints"
+ Column |       Type        | Modifiers | Storage  | Stats target | Description 
+--------+-------------------+-----------+----------+--------------+-------------
+ id     | integer           |           | plain    |              | 
+ val1   | character varying |           | extended |              | 
+ val2   | integer           |           | plain    |              | 
+Child tables: test_constraints_inh
+Has OIDs: no
+Distribute By: HASH(val1)
+Location Nodes: ALL DATANODES
+
+\d+ test_constraints_inh
+                      Table "public.test_constraints_inh"
+ Column |       Type        | Modifiers | Storage  | Stats target | Description 
+--------+-------------------+-----------+----------+--------------+-------------
+ id     | integer           |           | plain    |              | 
+ val1   | character varying |           | extended |              | 
+ val2   | integer           |           | plain    |              | 
+Inherits: test_constraints
+Has OIDs: no
+Distribute By: HASH(id)
+Location Nodes: ALL DATANODES
+
+DROP TABLE test_constraints_inh;
+DROP TABLE test_constraints;
+CREATE TABLE test_ex_constraints (
+    c circle,
+    EXCLUDE USING gist (c WITH &&)
+);
+CREATE TABLE test_ex_constraints_inh () INHERITS (test_ex_constraints);
+\d+ test_ex_constraints
+                 Table "public.test_ex_constraints"
+ Column |  Type  | Modifiers | Storage | Stats target | Description 
+--------+--------+-----------+---------+--------------+-------------
+ c      | circle |           | plain   |              | 
+Indexes:
+    "test_ex_constraints_c_excl" EXCLUDE USING gist (c WITH &&)
+Child tables: test_ex_constraints_inh
+Has OIDs: no
+
+ALTER TABLE test_ex_constraints DROP CONSTRAINT test_ex_constraints_c_excl;
+\d+ test_ex_constraints
+                 Table "public.test_ex_constraints"
+ Column |  Type  | Modifiers | Storage | Stats target | Description 
+--------+--------+-----------+---------+--------------+-------------
+ c      | circle |           | plain   |              | 
+Child tables: test_ex_constraints_inh
+Has OIDs: no
+
+\d+ test_ex_constraints_inh
+               Table "public.test_ex_constraints_inh"
+ Column |  Type  | Modifiers | Storage | Stats target | Description 
+--------+--------+-----------+---------+--------------+-------------
+ c      | circle |           | plain   |              | 
+Inherits: test_ex_constraints
+Has OIDs: no
+
+DROP TABLE test_ex_constraints_inh;
+DROP TABLE test_ex_constraints;
+-- Test non-inheritable foreign key contraints
+CREATE TABLE test_primary_constraints(id int PRIMARY KEY);
+CREATE TABLE test_foreign_constraints(id1 int REFERENCES test_primary_constraints(id));
+CREATE TABLE test_foreign_constraints_inh () INHERITS (test_foreign_constraints);
+\d+ test_primary_constraints
+               Table "public.test_primary_constraints"
+ Column |  Type   | Modifiers | Storage | Stats target | Description 
+--------+---------+-----------+---------+--------------+-------------
+ id     | integer | not null  | plain   |              | 
+Indexes:
+    "test_primary_constraints_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "test_foreign_constraints" CONSTRAINT "test_foreign_constraints_id1_fkey" FOREIGN KEY (id1) REFERENCES test_primary_constraints(id)
+Has OIDs: no
+Distribute By: HASH(id)
+Location Nodes: ALL DATANODES
+
+\d+ test_foreign_constraints
+               Table "public.test_foreign_constraints"
+ Column |  Type   | Modifiers | Storage | Stats target | Description 
+--------+---------+-----------+---------+--------------+-------------
+ id1    | integer |           | plain   |              | 
+Foreign-key constraints:
+    "test_foreign_constraints_id1_fkey" FOREIGN KEY (id1) REFERENCES test_primary_constraints(id)
+Child tables: test_foreign_constraints_inh
+Has OIDs: no
+Distribute By: HASH(id1)
+Location Nodes: ALL DATANODES
+
+ALTER TABLE test_foreign_constraints DROP CONSTRAINT test_foreign_constraints_id1_fkey;
+\d+ test_foreign_constraints
+               Table "public.test_foreign_constraints"
+ Column |  Type   | Modifiers | Storage | Stats target | Description 
+--------+---------+-----------+---------+--------------+-------------
+ id1    | integer |           | plain   |              | 
+Child tables: test_foreign_constraints_inh
+Has OIDs: no
+Distribute By: HASH(id1)
+Location Nodes: ALL DATANODES
+
+\d+ test_foreign_constraints_inh
+             Table "public.test_foreign_constraints_inh"
+ Column |  Type   | Modifiers | Storage | Stats target | Description 
+--------+---------+-----------+---------+--------------+-------------
+ id1    | integer |           | plain   |              | 
+Inherits: test_foreign_constraints
+Has OIDs: no
+Distribute By: HASH(id1)
+Location Nodes: ALL DATANODES
+
+DROP TABLE test_foreign_constraints_inh;
+DROP TABLE test_foreign_constraints;
+DROP TABLE test_primary_constraints;
 --
 -- Test parameterized append plans for inheritance trees
 --
@@ -1551,11 +1677,11 @@ select * from patest0 join (select f1 from int4_tbl where f1 >= 0 order by f1 li
                             QUERY PLAN                             
 -------------------------------------------------------------------
  Hash Join
-   Hash Cond: (pg_temp_2.patest0.id = int4_tbl.f1)
+   Hash Cond: (patest0_1.id = int4_tbl.f1)
    ->  Append
          ->  Data Node Scan on patest0 "_REMOTE_TABLE_QUERY_"
-         ->  Data Node Scan on patest1 "_REMOTE_TABLE_QUERY_"
-         ->  Data Node Scan on patest2 "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on patest1 "_REMOTE_TABLE_QUERY__1"
+         ->  Data Node Scan on patest2 "_REMOTE_TABLE_QUERY__2"
    ->  Hash
          ->  Limit
                ->  Sort
@@ -1577,11 +1703,11 @@ select * from patest0 join (select f1 from int4_tbl where f1 >= 0 order by f1 li
                             QUERY PLAN                             
 -------------------------------------------------------------------
  Hash Join
-   Hash Cond: (pg_temp_2.patest0.id = int4_tbl.f1)
+   Hash Cond: (patest0_1.id = int4_tbl.f1)
    ->  Append
          ->  Data Node Scan on patest0 "_REMOTE_TABLE_QUERY_"
-         ->  Data Node Scan on patest1 "_REMOTE_TABLE_QUERY_"
-         ->  Data Node Scan on patest2 "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on patest1 "_REMOTE_TABLE_QUERY__1"
+         ->  Data Node Scan on patest2 "_REMOTE_TABLE_QUERY__2"
    ->  Hash
          ->  Limit
                ->  Sort
@@ -1605,17 +1731,12 @@ drop cascades to table patest2
 -- Test merge-append plans for inheritance trees
 --
 create table matest0 (id serial primary key, name text);
-NOTICE:  CREATE TABLE will create implicit sequence "matest0_id_seq" for serial column "matest0.id"
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "matest0_pkey" for table "matest0"
 create table matest1 (id integer primary key) inherits (matest0);
 NOTICE:  merging column "id" with inherited definition
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "matest1_pkey" for table "matest1"
 create table matest2 (id integer primary key) inherits (matest0);
 NOTICE:  merging column "id" with inherited definition
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "matest2_pkey" for table "matest2"
 create table matest3 (id integer primary key) inherits (matest0);
 NOTICE:  merging column "id" with inherited definition
-NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "matest3_pkey" for table "matest3"
 create index matest0i on matest0 ((1-id));
 create index matest1i on matest1 ((1-id));
 -- create index matest2i on matest2 ((1-id));  -- intentionally missing
@@ -1628,26 +1749,26 @@ insert into matest3 (name) values ('Test 5');
 insert into matest3 (name) values ('Test 6');
 set enable_indexscan = off;  -- force use of seqscan/sort, so no merge
 explain (verbose, costs off, nodes off) select * from matest0 order by 1-id;
-                                          QUERY PLAN                                           
-----------------------------------------------------------------------------------------
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
  Sort
-   Output: public.matest0.id, public.matest0.name, ((1 - public.matest0.id))
-   Sort Key: ((1 - public.matest0.id))
+   Output: matest0_1.id, matest0_1.name, ((1 - matest0_1.id))
+   Sort Key: ((1 - matest0_1.id))
    ->  Result
-         Output: public.matest0.id, public.matest0.name, (1 - public.matest0.id)
+         Output: matest0_1.id, matest0_1.name, (1 - matest0_1.id)
          ->  Append
                ->  Data Node Scan on matest0 "_REMOTE_TABLE_QUERY_"
-                     Output: public.matest0.id, public.matest0.name
+                     Output: matest0_1.id, matest0_1.name
                      Remote query: SELECT id, name FROM ONLY public.matest0 WHERE true
-               ->  Data Node Scan on matest1 "_REMOTE_TABLE_QUERY_"
-                     Output: public.matest0.id, public.matest0.name
-                     Remote query: SELECT id, name FROM ONLY public.matest1 matest0 WHERE true
-               ->  Data Node Scan on matest2 "_REMOTE_TABLE_QUERY_"
-                     Output: public.matest0.id, public.matest0.name
-                     Remote query: SELECT id, name FROM ONLY public.matest2 matest0 WHERE true
-               ->  Data Node Scan on matest3 "_REMOTE_TABLE_QUERY_"
-                     Output: public.matest0.id, public.matest0.name
-                     Remote query: SELECT id, name FROM ONLY public.matest3 matest0 WHERE true
+               ->  Data Node Scan on matest1 "_REMOTE_TABLE_QUERY__1"
+                     Output: matest1.id, matest1.name
+                     Remote query: SELECT id, name FROM ONLY public.matest1 WHERE true
+               ->  Data Node Scan on matest2 "_REMOTE_TABLE_QUERY__2"
+                     Output: matest2.id, matest2.name
+                     Remote query: SELECT id, name FROM ONLY public.matest2 WHERE true
+               ->  Data Node Scan on matest3 "_REMOTE_TABLE_QUERY__3"
+                     Output: matest3.id, matest3.name
+                     Remote query: SELECT id, name FROM ONLY public.matest3 WHERE true
 (18 rows)
 
 select * from matest0 order by 1-id;
@@ -1660,30 +1781,52 @@ select * from matest0 order by 1-id;
   2 | Test 2
   1 | Test 1
 (6 rows)
+
+explain (verbose, costs off) select min(1-id) from matest0;
+               QUERY PLAN               
+----------------------------------------
+ Aggregate
+   Output: min((1 - matest0.id))
+   ->  Append
+         ->  Seq Scan on public.matest0
+               Output: matest0.id
+         ->  Seq Scan on public.matest1
+               Output: matest1.id
+         ->  Seq Scan on public.matest2
+               Output: matest2.id
+         ->  Seq Scan on public.matest3
+               Output: matest3.id
+(11 rows)
+
+select min(1-id) from matest0;
+ min 
+-----
+  -5
+(1 row)
 
 reset enable_indexscan;
 set enable_seqscan = off;  -- plan with fewest seqscans should be merge
 explain (verbose, costs off, nodes off) select * from matest0 order by 1-id;
-                                          QUERY PLAN                                           
-----------------------------------------------------------------------------------------
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
  Sort
-   Output: public.matest0.id, public.matest0.name, ((1 - public.matest0.id))
-   Sort Key: ((1 - public.matest0.id))
+   Output: matest0_1.id, matest0_1.name, ((1 - matest0_1.id))
+   Sort Key: ((1 - matest0_1.id))
    ->  Result
-         Output: public.matest0.id, public.matest0.name, (1 - public.matest0.id)
+         Output: matest0_1.id, matest0_1.name, (1 - matest0_1.id)
          ->  Append
                ->  Data Node Scan on matest0 "_REMOTE_TABLE_QUERY_"
-                     Output: public.matest0.id, public.matest0.name
+                     Output: matest0_1.id, matest0_1.name
                      Remote query: SELECT id, name FROM ONLY public.matest0 WHERE true
-               ->  Data Node Scan on matest1 "_REMOTE_TABLE_QUERY_"
-                     Output: public.matest0.id, public.matest0.name
-                     Remote query: SELECT id, name FROM ONLY public.matest1 matest0 WHERE true
-               ->  Data Node Scan on matest2 "_REMOTE_TABLE_QUERY_"
-                     Output: public.matest0.id, public.matest0.name
-                     Remote query: SELECT id, name FROM ONLY public.matest2 matest0 WHERE true
-               ->  Data Node Scan on matest3 "_REMOTE_TABLE_QUERY_"
-                     Output: public.matest0.id, public.matest0.name
-                     Remote query: SELECT id, name FROM ONLY public.matest3 matest0 WHERE true
+               ->  Data Node Scan on matest1 "_REMOTE_TABLE_QUERY__1"
+                     Output: matest1.id, matest1.name
+                     Remote query: SELECT id, name FROM ONLY public.matest1 WHERE true
+               ->  Data Node Scan on matest2 "_REMOTE_TABLE_QUERY__2"
+                     Output: matest2.id, matest2.name
+                     Remote query: SELECT id, name FROM ONLY public.matest2 WHERE true
+               ->  Data Node Scan on matest3 "_REMOTE_TABLE_QUERY__3"
+                     Output: matest3.id, matest3.name
+                     Remote query: SELECT id, name FROM ONLY public.matest3 WHERE true
 (18 rows)
 
 select * from matest0 order by 1-id;
@@ -1696,6 +1839,42 @@ select * from matest0 order by 1-id;
   2 | Test 2
   1 | Test 1
 (6 rows)
+
+explain (verbose, costs off) select min(1-id) from matest0;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Result
+   Output: $0
+   InitPlan 1 (returns $0)
+     ->  Limit
+           Output: ((1 - matest0.id))
+           ->  Result
+                 Output: ((1 - matest0.id))
+                 ->  Merge Append
+                       Sort Key: ((1 - matest0.id))
+                       ->  Index Scan using matest0i on public.matest0
+                             Output: matest0.id, (1 - matest0.id)
+                             Index Cond: ((1 - matest0.id) IS NOT NULL)
+                       ->  Index Scan using matest1i on public.matest1
+                             Output: matest1.id, (1 - matest1.id)
+                             Index Cond: ((1 - matest1.id) IS NOT NULL)
+                       ->  Sort
+                             Output: matest2.id, ((1 - matest2.id))
+                             Sort Key: ((1 - matest2.id))
+                             ->  Bitmap Heap Scan on public.matest2
+                                   Output: matest2.id, (1 - matest2.id)
+                                   Filter: ((1 - matest2.id) IS NOT NULL)
+                                   ->  Bitmap Index Scan on matest2_pkey
+                       ->  Index Scan using matest3i on public.matest3
+                             Output: matest3.id, (1 - matest3.id)
+                             Index Cond: ((1 - matest3.id) IS NOT NULL)
+(25 rows)
+
+select min(1-id) from matest0;
+ min 
+-----
+  -5
+(1 row)
 
 reset enable_seqscan;
 drop table matest0 cascade;
@@ -1715,45 +1894,42 @@ SELECT thousand, tenthous FROM tenk1
 UNION ALL
 SELECT thousand, thousand FROM tenk1
 ORDER BY thousand, tenthous;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                          QUERY PLAN                          
+--------------------------------------------------------------
  Sort
-   Sort Key: public.tenk1.thousand, public.tenk1.tenthous
-   ->  Result
-         ->  Append
-               ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
-               ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
-(6 rows)
+   Sort Key: tenk1.thousand, tenk1.tenthous
+   ->  Append
+         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY__1"
+(5 rows)
 
 explain (costs off, num_nodes off, nodes off)
 SELECT thousand, tenthous, thousand+tenthous AS x FROM tenk1
 UNION ALL
 SELECT 42, 42, hundred FROM tenk1
 ORDER BY thousand, tenthous;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                          QUERY PLAN                          
+--------------------------------------------------------------
  Sort
-   Sort Key: public.tenk1.thousand, public.tenk1.tenthous
-   ->  Result
-         ->  Append
-               ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
-               ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
-(6 rows)
+   Sort Key: tenk1.thousand, tenk1.tenthous
+   ->  Append
+         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY__1"
+(5 rows)
 
 explain (costs off, num_nodes off, nodes off)
 SELECT thousand, tenthous FROM tenk1
 UNION ALL
 SELECT thousand, random()::integer FROM tenk1
 ORDER BY thousand, tenthous;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                          QUERY PLAN                          
+--------------------------------------------------------------
  Sort
-   Sort Key: public.tenk1.thousand, public.tenk1.tenthous
-   ->  Result
-         ->  Append
-               ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
-               ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
-(6 rows)
+   Sort Key: tenk1.thousand, tenk1.tenthous
+   ->  Append
+         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY__1"
+(5 rows)
 
 -- Check min/max aggregate optimization
 explain (costs off, num_nodes off, nodes off)
@@ -1761,12 +1937,12 @@ SELECT min(x) FROM
   (SELECT unique1 AS x FROM tenk1 a
    UNION ALL
    SELECT unique2 AS x FROM tenk1 b) s;
-                         QUERY PLAN                         
-------------------------------------------------------------
+                          QUERY PLAN                          
+--------------------------------------------------------------
  Aggregate
    ->  Append
          ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
-         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY__1"
 (4 rows)
 
 explain (costs off, num_nodes off, nodes off)
@@ -1774,12 +1950,12 @@ SELECT min(y) FROM
   (SELECT unique1 AS x, unique1 AS y FROM tenk1 a
    UNION ALL
    SELECT unique2 AS x, unique2 AS y FROM tenk1 b) s;
-                         QUERY PLAN                         
-------------------------------------------------------------
+                          QUERY PLAN                          
+--------------------------------------------------------------
  Aggregate
    ->  Append
          ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
-         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY__1"
 (4 rows)
 
 -- XXX planner doesn't recognize that index on unique2 is sufficiently sorted
@@ -1789,15 +1965,54 @@ SELECT x, y FROM
    UNION ALL
    SELECT unique2 AS x, unique2 AS y FROM tenk1 b) s
 ORDER BY x, y;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+                          QUERY PLAN                          
+--------------------------------------------------------------
  Sort
    Sort Key: a.thousand, a.tenthous
-   ->  Result
-         ->  Append
-               ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
-               ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
-(6 rows)
+   ->  Append
+         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY_"
+         ->  Data Node Scan on tenk1 "_REMOTE_TABLE_QUERY__1"
+(5 rows)
+
+-- exercise rescan code path via a repeatedly-evaluated subquery
+explain (costs off)
+SELECT
+    ARRAY(SELECT f.i FROM (
+        (SELECT d + g.i FROM generate_series(4, 30, 3) d ORDER BY 1)
+        UNION ALL
+        (SELECT d + g.i FROM generate_series(0, 30, 5) d ORDER BY 1)
+    ) f(i)
+    ORDER BY f.i LIMIT 10)
+FROM generate_series(1, 3) g(i);
+                           QUERY PLAN                           
+----------------------------------------------------------------
+ Function Scan on generate_series g
+   SubPlan 1
+     ->  Limit
+           ->  Merge Append
+                 Sort Key: ((d.d + g.i))
+                 ->  Sort
+                       Sort Key: ((d.d + g.i))
+                       ->  Function Scan on generate_series d
+                 ->  Sort
+                       Sort Key: ((d_1.d + g.i))
+                       ->  Function Scan on generate_series d_1
+(11 rows)
+
+SELECT
+    ARRAY(SELECT f.i FROM (
+        (SELECT d + g.i FROM generate_series(4, 30, 3) d ORDER BY 1)
+        UNION ALL
+        (SELECT d + g.i FROM generate_series(0, 30, 5) d ORDER BY 1)
+    ) f(i)
+    ORDER BY f.i LIMIT 10)
+FROM generate_series(1, 3) g(i);
+            array             
+------------------------------
+ {1,5,6,8,11,11,14,16,17,20}
+ {2,6,7,9,12,12,15,17,18,21}
+ {3,7,8,10,13,13,16,18,19,22}
+(3 rows)
 
 reset enable_seqscan;
 reset enable_indexscan;

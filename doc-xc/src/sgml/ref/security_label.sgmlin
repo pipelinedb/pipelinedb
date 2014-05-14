@@ -26,13 +26,18 @@ SECURITY LABEL [ FOR <replaceable class="PARAMETER">provider</replaceable> ] ON
   TABLE <replaceable class="PARAMETER">object_name</replaceable> |
   COLUMN <replaceable class="PARAMETER">table_name</replaceable>.<replaceable class="PARAMETER">column_name</replaceable> |
   AGGREGATE <replaceable class="PARAMETER">agg_name</replaceable> (<replaceable class="PARAMETER">agg_type</replaceable> [, ...] ) |
+  DATABASE <replaceable class="PARAMETER">object_name</replaceable> |
   DOMAIN <replaceable class="PARAMETER">object_name</replaceable> |
+  EVENT TRIGGER <replaceable class="PARAMETER">object_name</replaceable> |
   FOREIGN TABLE <replaceable class="PARAMETER">object_name</replaceable>
   FUNCTION <replaceable class="PARAMETER">function_name</replaceable> ( [ [ <replaceable class="parameter">argmode</replaceable> ] [ <replaceable class="parameter">argname</replaceable> ] <replaceable class="parameter">argtype</replaceable> [, ...] ] ) |
   LARGE OBJECT <replaceable class="PARAMETER">large_object_oid</replaceable> |
+  MATERIALIZED VIEW <replaceable class="PARAMETER">object_name</replaceable> |
   [ PROCEDURAL ] LANGUAGE <replaceable class="PARAMETER">object_name</replaceable> |
+  ROLE <replaceable class="PARAMETER">object_name</replaceable> |
   SCHEMA <replaceable class="PARAMETER">object_name</replaceable> |
   SEQUENCE <replaceable class="PARAMETER">object_name</replaceable> |
+  TABLESPACE <replaceable class="PARAMETER">object_name</replaceable> |
   TYPE <replaceable class="PARAMETER">object_name</replaceable> |
   VIEW <replaceable class="PARAMETER">object_name</replaceable>
 } IS '<replaceable class="PARAMETER">label</replaceable>'
@@ -42,6 +47,7 @@ SECURITY LABEL [ FOR <replaceable class="PARAMETER">provider</replaceable> ] ON
  <refsect1>
   <title>Description</title>
 
+&common;
   <para>
    <command>SECURITY LABEL</command> applies a security label to a database
    object.  An arbitrary number of security labels, one per label provider, can
@@ -74,6 +80,7 @@ SECURITY LABEL [ FOR <replaceable class="PARAMETER">provider</replaceable> ] ON
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">object_name</replaceable></term>
@@ -193,14 +200,22 @@ SECURITY LABEL [ FOR <replaceable class="PARAMETER">provider</replaceable> ] ON
 
 <programlisting>
 SECURITY LABEL FOR selinux ON TABLE mytable IS 'system_u:object_r:sepgsql_table_t:s0';
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
+&common;
   <para>
    There is no <command>SECURITY LABEL</command> command in the SQL standard.
   </para>
+ </refsect1>
+
+ <refsect1>
+  <title>See Also</title>
+  <simplelist type="inline">
+   <member><xref linkend="sepgsql"></member>
+   <member><xref linkend="dummy-seclabel"></member>
+  </simplelist>
  </refsect1>
 </refentry>

@@ -27,6 +27,7 @@ DROP FOREIGN DATA WRAPPER [ IF EXISTS ] <replaceable class="parameter">name</rep
 
  <refsect1>
   <title>Description</title>
+
 <!## XC>
 &xconly;
   <para>
@@ -36,8 +37,6 @@ DROP FOREIGN DATA WRAPPER [ IF EXISTS ] <replaceable class="parameter">name</rep
   </para>
 <!## end>
 <!## PG>
-&pgonly;
-
   <para>
    <command>DROP FOREIGN DATA WRAPPER</command> removes an existing
    foreign-data wrapper.  To execute this command, the current user
@@ -97,10 +96,10 @@ DROP FOREIGN DATA WRAPPER [ IF EXISTS ] <replaceable class="parameter">name</rep
    Drop the foreign-data wrapper <literal>dbi</>:
 <programlisting>
 DROP FOREIGN DATA WRAPPER dbi;
-</programlisting>
-  </para>
+</programlisting></para>
 
 <!## end>
+
  </refsect1>
 
  <refsect1>

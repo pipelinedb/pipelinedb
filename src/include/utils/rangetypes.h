@@ -4,7 +4,7 @@
  *	  Declarations for Postgres range types.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/rangetypes.h
@@ -75,6 +75,19 @@ typedef struct
 #define PG_GETARG_RANGE_COPY(n)		DatumGetRangeTypeCopy(PG_GETARG_DATUM(n))
 #define PG_RETURN_RANGE(x)			return RangeTypeGetDatum(x)
 
+/* Operator strategy numbers used in the GiST and SP-GiST range opclasses */
+/* Numbers are chosen to match up operator names with existing usages */
+#define RANGESTRAT_BEFORE				1
+#define RANGESTRAT_OVERLEFT				2
+#define RANGESTRAT_OVERLAPS				3
+#define RANGESTRAT_OVERRIGHT			4
+#define RANGESTRAT_AFTER				5
+#define RANGESTRAT_ADJACENT				6
+#define RANGESTRAT_CONTAINS				7
+#define RANGESTRAT_CONTAINED_BY			8
+#define RANGESTRAT_CONTAINS_ELEM		16
+#define RANGESTRAT_EQ					18
+
 /*
  * prototypes for functions defined in rangetypes.c
  */
@@ -104,6 +117,8 @@ extern Datum range_upper_inf(PG_FUNCTION_ARGS);
 extern Datum range_contains_elem(PG_FUNCTION_ARGS);
 extern Datum elem_contained_by_range(PG_FUNCTION_ARGS);
 
+extern bool range_contains_elem_internal(TypeCacheEntry *typcache, RangeType *r, Datum val);
+
 /* range, range -> bool */
 extern Datum range_eq(PG_FUNCTION_ARGS);
 extern Datum range_ne(PG_FUNCTION_ARGS);
@@ -115,6 +130,28 @@ extern Datum range_adjacent(PG_FUNCTION_ARGS);
 extern Datum range_overlaps(PG_FUNCTION_ARGS);
 extern Datum range_overleft(PG_FUNCTION_ARGS);
 extern Datum range_overright(PG_FUNCTION_ARGS);
+
+/* internal versions of the above */
+extern bool range_eq_internal(TypeCacheEntry *typcache, RangeType *r1,
+				  RangeType *r2);
+extern bool range_ne_internal(TypeCacheEntry *typcache, RangeType *r1,
+				  RangeType *r2);
+extern bool range_contains_internal(TypeCacheEntry *typcache, RangeType *r1,
+						RangeType *r2);
+extern bool range_contained_by_internal(TypeCacheEntry *typcache, RangeType *r1,
+							RangeType *r2);
+extern bool range_before_internal(TypeCacheEntry *typcache, RangeType *r1,
+					  RangeType *r2);
+extern bool range_after_internal(TypeCacheEntry *typcache, RangeType *r1,
+					 RangeType *r2);
+extern bool range_adjacent_internal(TypeCacheEntry *typcache, RangeType *r1,
+						RangeType *r2);
+extern bool range_overlaps_internal(TypeCacheEntry *typcache, RangeType *r1,
+						RangeType *r2);
+extern bool range_overleft_internal(TypeCacheEntry *typcache, RangeType *r1,
+						RangeType *r2);
+extern bool range_overright_internal(TypeCacheEntry *typcache, RangeType *r1,
+						 RangeType *r2);
 
 /* range, range -> range */
 extern Datum range_minus(PG_FUNCTION_ARGS);
@@ -133,6 +170,7 @@ extern Datum hash_range(PG_FUNCTION_ARGS);
 
 /* ANALYZE support */
 extern Datum range_typanalyze(PG_FUNCTION_ARGS);
+extern Datum rangesel(PG_FUNCTION_ARGS);
 
 /* Canonical functions */
 extern Datum int4range_canonical(PG_FUNCTION_ARGS);
@@ -163,6 +201,8 @@ extern int range_cmp_bounds(TypeCacheEntry *typcache, RangeBound *b1,
 				 RangeBound *b2);
 extern int range_cmp_bound_values(TypeCacheEntry *typcache, RangeBound *b1,
 					   RangeBound *b2);
+extern bool bounds_adjacent(TypeCacheEntry *typcache, RangeBound bound1,
+				RangeBound bound2);
 extern RangeType *make_empty_range(TypeCacheEntry *typcache);
 
 /* GiST support (in rangetypes_gist.c) */

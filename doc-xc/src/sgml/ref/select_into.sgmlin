@@ -42,6 +42,7 @@ SELECT [ ALL | DISTINCT [ ON ( <replaceable class="parameter">expression</replac
  <refsect1>
   <title>Description</title>
 
+&common;
   <para>
    <command>SELECT INTO</command> creates a new table and fills it
    with data computed by a query.  The data is not returned to the
@@ -54,6 +55,7 @@ SELECT [ ALL | DISTINCT [ ON ( <replaceable class="parameter">expression</replac
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
   <varlistentry>
    <term><literal>TEMPORARY</literal> or <literal>TEMP</literal></term>
@@ -94,6 +96,7 @@ SELECT [ ALL | DISTINCT [ ON ( <replaceable class="parameter">expression</replac
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    <xref linkend="sql-createtableas"> is functionally similar to
    <command>SELECT INTO</command>.  <command>CREATE TABLE AS</command>
@@ -114,7 +117,6 @@ SELECT [ ALL | DISTINCT [ ON ( <replaceable class="parameter">expression</replac
    enabled. Alternatively, <command>CREATE TABLE AS</command> can be
    used with the <literal>WITH OIDS</literal> clause.
   </para>
-
 <!## XC>
 &xconly;
    <para>
@@ -125,6 +127,7 @@ SELECT [ ALL | DISTINCT [ ON ( <replaceable class="parameter">expression</replac
     distribution is done by <literal>ROUNDROBIN</literal>.
    </para>
 <!## end>
+
  </refsect1>
 
  <refsect1>
@@ -136,13 +139,13 @@ SELECT [ ALL | DISTINCT [ ON ( <replaceable class="parameter">expression</replac
 
 <programlisting>
 SELECT * INTO films_recent FROM films WHERE date_prod &gt;= '2002-01-01';
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The SQL standard uses <command>SELECT INTO</command> to
    represent selecting values into scalar variables of a host program,

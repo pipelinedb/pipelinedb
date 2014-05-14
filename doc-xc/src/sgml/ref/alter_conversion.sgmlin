@@ -31,7 +31,6 @@ ALTER CONVERSION <replaceable>name</replaceable> SET SCHEMA <replaceable>new_sch
   <title>Description</title>
 
 &common;
-
   <para>
    <command>ALTER CONVERSION</command> changes the definition of a
    conversion.
@@ -51,6 +50,7 @@ ALTER CONVERSION <replaceable>name</replaceable> SET SCHEMA <replaceable>new_sch
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="parameter">name</replaceable></term>
@@ -106,13 +106,13 @@ ALTER CONVERSION iso_8859_1_to_utf8 RENAME TO latin1_to_unicode;
    <literal>joe</literal>:
 <programlisting>
 ALTER CONVERSION iso_8859_1_to_utf8 OWNER TO joe;
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>ALTER CONVERSION</command> statement in the SQL
    standard.

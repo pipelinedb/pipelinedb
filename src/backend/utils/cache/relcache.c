@@ -3,7 +3,7 @@
  * relcache.c
  *	  POSTGRES relation descriptor cache code
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2010-2012 Postgres-XC Development Group
  *
@@ -31,6 +31,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "access/htup_details.h"
+#include "access/multixact.h"
 #include "access/reloptions.h"
 #include "access/sysattr.h"
 #include "access/transam.h"
@@ -55,6 +57,7 @@
 #include "catalog/schemapg.h"
 #include "catalog/storage.h"
 #include "commands/trigger.h"
+#include "common/relpath.h"
 #include "miscadmin.h"
 #include "optimizer/clauses.h"
 #include "optimizer/planmain.h"
@@ -74,7 +77,7 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/relmapper.h"
-#include "utils/resowner.h"
+#include "utils/resowner_private.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 
@@ -141,9 +144,27 @@ static long relcacheInvalsReceived = 0L;
 static List *initFileRelationIds = NIL;
 
 /*
- * This flag lets us optimize away work in AtEO(Sub)Xact_RelationCache().
+ * eoxact_list[] stores the OIDs of relations that (might) need AtEOXact
+ * cleanup work.  This list intentionally has limited size; if it overflows,
+ * we fall back to scanning the whole hashtable.  There is no value in a very
+ * large list because (1) at some point, a hash_seq_search scan is faster than
+ * retail lookups, and (2) the value of this is to reduce EOXact work for
+ * short transactions, which can't have dirtied all that many tables anyway.
+ * EOXactListAdd() does not bother to prevent duplicate list entries, so the
+ * cleanup processing must be idempotent.
  */
-static bool need_eoxact_work = false;
+#define MAX_EOXACT_LIST 32
+static Oid	eoxact_list[MAX_EOXACT_LIST];
+static int	eoxact_list_len = 0;
+static bool eoxact_list_overflowed = false;
+
+#define EOXactListAdd(rel) \
+	do { \
+		if (eoxact_list_len < MAX_EOXACT_LIST) \
+			eoxact_list[eoxact_list_len++] = (rel)->rd_id; \
+		else \
+			eoxact_list_overflowed = true; \
+	} while (0)
 
 
 /*
@@ -208,6 +229,9 @@ static void RelationClearRelation(Relation relation, bool rebuild);
 
 static void RelationReloadIndexInfo(Relation relation);
 static void RelationFlushRelation(Relation relation);
+static void AtEOXact_cleanup(Relation relation, bool isCommit);
+static void AtEOSubXact_cleanup(Relation relation, bool isCommit,
+					SubTransactionId mySubid, SubTransactionId parentSubid);
 static bool load_relcache_init_file(bool shared);
 static void write_relcache_init_file(bool shared);
 static void write_item(const void *data, Size len, FILE *fp);
@@ -380,6 +404,7 @@ RelationParseRelOptions(Relation relation, HeapTuple tuple)
 		case RELKIND_TOASTVALUE:
 		case RELKIND_INDEX:
 		case RELKIND_VIEW:
+		case RELKIND_MATVIEW:
 			break;
 		default:
 			return;
@@ -855,23 +880,35 @@ RelationBuildDesc(Oid targetRelId, bool insertIt)
 	switch (relation->rd_rel->relpersistence)
 	{
 		case RELPERSISTENCE_UNLOGGED:
-		case RELPERSISTENCE_STREAMING:
 		case RELPERSISTENCE_PERMANENT:
 			relation->rd_backend = InvalidBackendId;
+			relation->rd_islocaltemp = false;
 			break;
 		case RELPERSISTENCE_TEMP:
 			if (isTempOrToastNamespace(relation->rd_rel->relnamespace))
+			{
 				relation->rd_backend = MyBackendId;
+				relation->rd_islocaltemp = true;
+			}
 			else
 			{
 				/*
-				 * If it's a local temp table, but not one of ours, we have to
-				 * use the slow, grotty method to figure out the owning
-				 * backend.
+				 * If it's a temp table, but not one of ours, we have to use
+				 * the slow, grotty method to figure out the owning backend.
+				 *
+				 * Note: it's possible that rd_backend gets set to MyBackendId
+				 * here, in case we are looking at a pg_class entry left over
+				 * from a crashed backend that coincidentally had the same
+				 * BackendId we're using.  We should *not* consider such a
+				 * table to be "ours"; this is why we need the separate
+				 * rd_islocaltemp flag.  The pg_class entry will get flushed
+				 * if/when we clean out the corresponding temp table namespace
+				 * in preparation for using it.
 				 */
 				relation->rd_backend =
 					GetTempNamespaceBackendId(relation->rd_rel->relnamespace);
 				Assert(relation->rd_backend != InvalidBackendId);
+				relation->rd_islocaltemp = false;
 			}
 			break;
 		default:
@@ -1398,6 +1435,7 @@ formrdesc(const char *relationName, Oid relationReltype,
 	relation->rd_createSubid = InvalidSubTransactionId;
 	relation->rd_newRelfilenodeSubid = InvalidSubTransactionId;
 	relation->rd_backend = InvalidBackendId;
+	relation->rd_islocaltemp = false;
 
 	/*
 	 * initialize relation tuple form
@@ -1424,6 +1462,9 @@ formrdesc(const char *relationName, Oid relationReltype,
 
 	/* formrdesc is used only for permanent relations */
 	relation->rd_rel->relpersistence = RELPERSISTENCE_PERMANENT;
+
+	/* ... and they're always populated, too */
+	relation->rd_rel->relispopulated = true;
 
 	relation->rd_rel->relpages = 0;
 	relation->rd_rel->reltuples = 0;
@@ -1742,9 +1783,23 @@ RelationReloadIndexInfo(Relation relation)
 				 RelationGetRelid(relation));
 		index = (Form_pg_index) GETSTRUCT(tuple);
 
+		/*
+		 * Basically, let's just copy all the bool fields.  There are one or
+		 * two of these that can't actually change in the current code, but
+		 * it's not worth it to track exactly which ones they are.  None of
+		 * the array fields are allowed to change, though.
+		 */
+		relation->rd_index->indisunique = index->indisunique;
+		relation->rd_index->indisprimary = index->indisprimary;
+		relation->rd_index->indisexclusion = index->indisexclusion;
+		relation->rd_index->indimmediate = index->indimmediate;
+		relation->rd_index->indisclustered = index->indisclustered;
 		relation->rd_index->indisvalid = index->indisvalid;
 		relation->rd_index->indcheckxmin = index->indcheckxmin;
 		relation->rd_index->indisready = index->indisready;
+		relation->rd_index->indislive = index->indislive;
+
+		/* Copy xmin too, as that is needed to make sense of indcheckxmin */
 		HeapTupleHeaderSetXmin(relation->rd_indextuple->t_data,
 							   HeapTupleHeaderGetXmin(tuple->t_data));
 
@@ -1796,6 +1851,8 @@ RelationDestroyRelation(Relation relation)
 		MemoryContextDelete(relation->rd_indexcxt);
 	if (relation->rd_rulescxt)
 		MemoryContextDelete(relation->rd_rulescxt);
+	if (relation->rd_fdwroutine)
+		pfree(relation->rd_fdwroutine);
 	pfree(relation);
 }
 
@@ -2146,8 +2203,14 @@ RelationCacheInvalidate(void)
 		/* Must close all smgr references to avoid leaving dangling ptrs */
 		RelationCloseSmgr(relation);
 
-		/* Ignore new relations, since they are never cross-backend targets */
-		if (relation->rd_createSubid != InvalidSubTransactionId)
+		/*
+		 * Ignore new relations; no other backend will manipulate them before
+		 * we commit.  Likewise, before replacing a relation's relfilenode, we
+		 * shall have acquired AccessExclusiveLock and drained any applicable
+		 * pending invalidations.
+		 */
+		if (relation->rd_createSubid != InvalidSubTransactionId ||
+			relation->rd_newRelfilenodeSubid != InvalidSubTransactionId)
 			continue;
 
 		relcacheInvalsReceived++;
@@ -2252,89 +2315,116 @@ AtEOXact_RelationCache(bool isCommit)
 {
 	HASH_SEQ_STATUS status;
 	RelIdCacheEnt *idhentry;
+	int			i;
 
 	/*
-	 * To speed up transaction exit, we want to avoid scanning the relcache
-	 * unless there is actually something for this routine to do.  Other than
-	 * the debug-only Assert checks, most transactions don't create any work
-	 * for us to do here, so we keep a static flag that gets set if there is
-	 * anything to do.	(Currently, this means either a relation is created in
-	 * the current xact, or one is given a new relfilenode, or an index list
-	 * is forced.)	For simplicity, the flag remains set till end of top-level
-	 * transaction, even though we could clear it at subtransaction end in
-	 * some cases.
+	 * Unless the eoxact_list[] overflowed, we only need to examine the rels
+	 * listed in it.  Otherwise fall back on a hash_seq_search scan.
+	 *
+	 * For simplicity, eoxact_list[] entries are not deleted till end of
+	 * top-level transaction, even though we could remove them at
+	 * subtransaction end in some cases, or remove relations from the list if
+	 * they are cleared for other reasons.	Therefore we should expect the
+	 * case that list entries are not found in the hashtable; if not, there's
+	 * nothing to do for them.
 	 */
-	if (!need_eoxact_work
-#ifdef USE_ASSERT_CHECKING
-		&& !assert_enabled
-#endif
-		)
-		return;
-
-	hash_seq_init(&status, RelationIdCache);
-
-	while ((idhentry = (RelIdCacheEnt *) hash_seq_search(&status)) != NULL)
+	if (eoxact_list_overflowed)
 	{
-		Relation	relation = idhentry->reldesc;
-
-		/*
-		 * The relcache entry's ref count should be back to its normal
-		 * not-in-a-transaction state: 0 unless it's nailed in cache.
-		 *
-		 * In bootstrap mode, this is NOT true, so don't check it --- the
-		 * bootstrap code expects relations to stay open across start/commit
-		 * transaction calls.  (That seems bogus, but it's not worth fixing.)
-		 */
-#ifdef USE_ASSERT_CHECKING
-		if (!IsBootstrapProcessingMode())
+		hash_seq_init(&status, RelationIdCache);
+		while ((idhentry = (RelIdCacheEnt *) hash_seq_search(&status)) != NULL)
 		{
-			int			expected_refcnt;
-
-			expected_refcnt = relation->rd_isnailed ? 1 : 0;
-			Assert(relation->rd_refcnt == expected_refcnt);
+			AtEOXact_cleanup(idhentry->reldesc, isCommit);
 		}
-#endif
-
-		/*
-		 * Is it a relation created in the current transaction?
-		 *
-		 * During commit, reset the flag to zero, since we are now out of the
-		 * creating transaction.  During abort, simply delete the relcache
-		 * entry --- it isn't interesting any longer.  (NOTE: if we have
-		 * forgotten the new-ness of a new relation due to a forced cache
-		 * flush, the entry will get deleted anyway by shared-cache-inval
-		 * processing of the aborted pg_class insertion.)
-		 */
-		if (relation->rd_createSubid != InvalidSubTransactionId)
+	}
+	else
+	{
+		for (i = 0; i < eoxact_list_len; i++)
 		{
-			if (isCommit)
-				relation->rd_createSubid = InvalidSubTransactionId;
-			else
-			{
-				RelationClearRelation(relation, false);
-				continue;
-			}
-		}
-
-		/*
-		 * Likewise, reset the hint about the relfilenode being new.
-		 */
-		relation->rd_newRelfilenodeSubid = InvalidSubTransactionId;
-
-		/*
-		 * Flush any temporary index list.
-		 */
-		if (relation->rd_indexvalid == 2)
-		{
-			list_free(relation->rd_indexlist);
-			relation->rd_indexlist = NIL;
-			relation->rd_oidindex = InvalidOid;
-			relation->rd_indexvalid = 0;
+			idhentry = (RelIdCacheEnt *) hash_search(RelationIdCache,
+													 (void *) &eoxact_list[i],
+													 HASH_FIND,
+													 NULL);
+			if (idhentry != NULL)
+				AtEOXact_cleanup(idhentry->reldesc, isCommit);
 		}
 	}
 
-	/* Once done with the transaction, we can reset need_eoxact_work */
-	need_eoxact_work = false;
+	/* Now we're out of the transaction and can clear the list */
+	eoxact_list_len = 0;
+	eoxact_list_overflowed = false;
+}
+
+/*
+ * AtEOXact_cleanup
+ *
+ *	Clean up a single rel at main-transaction commit or abort
+ *
+ * NB: this processing must be idempotent, because EOXactListAdd() doesn't
+ * bother to prevent duplicate entries in eoxact_list[].
+ */
+static void
+AtEOXact_cleanup(Relation relation, bool isCommit)
+{
+	/*
+	 * The relcache entry's ref count should be back to its normal
+	 * not-in-a-transaction state: 0 unless it's nailed in cache.
+	 *
+	 * In bootstrap mode, this is NOT true, so don't check it --- the
+	 * bootstrap code expects relations to stay open across start/commit
+	 * transaction calls.  (That seems bogus, but it's not worth fixing.)
+	 *
+	 * Note: ideally this check would be applied to every relcache entry, not
+	 * just those that have eoxact work to do.	But it's not worth forcing a
+	 * scan of the whole relcache just for this.  (Moreover, doing so would
+	 * mean that assert-enabled testing never tests the hash_search code path
+	 * above, which seems a bad idea.)
+	 */
+#ifdef USE_ASSERT_CHECKING
+	if (!IsBootstrapProcessingMode())
+	{
+		int			expected_refcnt;
+
+		expected_refcnt = relation->rd_isnailed ? 1 : 0;
+		Assert(relation->rd_refcnt == expected_refcnt);
+	}
+#endif
+
+	/*
+	 * Is it a relation created in the current transaction?
+	 *
+	 * During commit, reset the flag to zero, since we are now out of the
+	 * creating transaction.  During abort, simply delete the relcache entry
+	 * --- it isn't interesting any longer.  (NOTE: if we have forgotten the
+	 * new-ness of a new relation due to a forced cache flush, the entry will
+	 * get deleted anyway by shared-cache-inval processing of the aborted
+	 * pg_class insertion.)
+	 */
+	if (relation->rd_createSubid != InvalidSubTransactionId)
+	{
+		if (isCommit)
+			relation->rd_createSubid = InvalidSubTransactionId;
+		else
+		{
+			RelationClearRelation(relation, false);
+			return;
+		}
+	}
+
+	/*
+	 * Likewise, reset the hint about the relfilenode being new.
+	 */
+	relation->rd_newRelfilenodeSubid = InvalidSubTransactionId;
+
+	/*
+	 * Flush any temporary index list.
+	 */
+	if (relation->rd_indexvalid == 2)
+	{
+		list_free(relation->rd_indexlist);
+		relation->rd_indexlist = NIL;
+		relation->rd_oidindex = InvalidOid;
+		relation->rd_indexvalid = 0;
+	}
 }
 
 /*
@@ -2350,59 +2440,88 @@ AtEOSubXact_RelationCache(bool isCommit, SubTransactionId mySubid,
 {
 	HASH_SEQ_STATUS status;
 	RelIdCacheEnt *idhentry;
+	int			i;
 
 	/*
-	 * Skip the relcache scan if nothing to do --- see notes for
-	 * AtEOXact_RelationCache.
+	 * Unless the eoxact_list[] overflowed, we only need to examine the rels
+	 * listed in it.  Otherwise fall back on a hash_seq_search scan.  Same
+	 * logic as in AtEOXact_RelationCache.
 	 */
-	if (!need_eoxact_work)
-		return;
-
-	hash_seq_init(&status, RelationIdCache);
-
-	while ((idhentry = (RelIdCacheEnt *) hash_seq_search(&status)) != NULL)
+	if (eoxact_list_overflowed)
 	{
-		Relation	relation = idhentry->reldesc;
-
-		/*
-		 * Is it a relation created in the current subtransaction?
-		 *
-		 * During subcommit, mark it as belonging to the parent, instead.
-		 * During subabort, simply delete the relcache entry.
-		 */
-		if (relation->rd_createSubid == mySubid)
+		hash_seq_init(&status, RelationIdCache);
+		while ((idhentry = (RelIdCacheEnt *) hash_seq_search(&status)) != NULL)
 		{
-			if (isCommit)
-				relation->rd_createSubid = parentSubid;
-			else
-			{
-				RelationClearRelation(relation, false);
-				continue;
-			}
+			AtEOSubXact_cleanup(idhentry->reldesc, isCommit,
+								mySubid, parentSubid);
 		}
-
-		/*
-		 * Likewise, update or drop any new-relfilenode-in-subtransaction
-		 * hint.
-		 */
-		if (relation->rd_newRelfilenodeSubid == mySubid)
+	}
+	else
+	{
+		for (i = 0; i < eoxact_list_len; i++)
 		{
-			if (isCommit)
-				relation->rd_newRelfilenodeSubid = parentSubid;
-			else
-				relation->rd_newRelfilenodeSubid = InvalidSubTransactionId;
+			idhentry = (RelIdCacheEnt *) hash_search(RelationIdCache,
+													 (void *) &eoxact_list[i],
+													 HASH_FIND,
+													 NULL);
+			if (idhentry != NULL)
+				AtEOSubXact_cleanup(idhentry->reldesc, isCommit,
+									mySubid, parentSubid);
 		}
+	}
 
-		/*
-		 * Flush any temporary index list.
-		 */
-		if (relation->rd_indexvalid == 2)
+	/* Don't reset the list; we still need more cleanup later */
+}
+
+/*
+ * AtEOSubXact_cleanup
+ *
+ *	Clean up a single rel at subtransaction commit or abort
+ *
+ * NB: this processing must be idempotent, because EOXactListAdd() doesn't
+ * bother to prevent duplicate entries in eoxact_list[].
+ */
+static void
+AtEOSubXact_cleanup(Relation relation, bool isCommit,
+					SubTransactionId mySubid, SubTransactionId parentSubid)
+{
+	/*
+	 * Is it a relation created in the current subtransaction?
+	 *
+	 * During subcommit, mark it as belonging to the parent, instead. During
+	 * subabort, simply delete the relcache entry.
+	 */
+	if (relation->rd_createSubid == mySubid)
+	{
+		if (isCommit)
+			relation->rd_createSubid = parentSubid;
+		else
 		{
-			list_free(relation->rd_indexlist);
-			relation->rd_indexlist = NIL;
-			relation->rd_oidindex = InvalidOid;
-			relation->rd_indexvalid = 0;
+			RelationClearRelation(relation, false);
+			return;
 		}
+	}
+
+	/*
+	 * Likewise, update or drop any new-relfilenode-in-subtransaction hint.
+	 */
+	if (relation->rd_newRelfilenodeSubid == mySubid)
+	{
+		if (isCommit)
+			relation->rd_newRelfilenodeSubid = parentSubid;
+		else
+			relation->rd_newRelfilenodeSubid = InvalidSubTransactionId;
+	}
+
+	/*
+	 * Flush any temporary index list.
+	 */
+	if (relation->rd_indexvalid == 2)
+	{
+		list_free(relation->rd_indexlist);
+		relation->rd_indexlist = NIL;
+		relation->rd_oidindex = InvalidOid;
+		relation->rd_indexvalid = 0;
 	}
 }
 
@@ -2421,7 +2540,8 @@ RelationBuildLocalRelation(const char *relname,
 						   Oid reltablespace,
 						   bool shared_relation,
 						   bool mapped_relation,
-						   char relpersistence)
+						   char relpersistence,
+						   char relkind)
 {
 	Relation	rel;
 	MemoryContext oldcxt;
@@ -2492,9 +2612,6 @@ RelationBuildLocalRelation(const char *relname,
 	rel->rd_createSubid = GetCurrentSubTransactionId();
 	rel->rd_newRelfilenodeSubid = InvalidSubTransactionId;
 
-	/* must flag that we have rels created in this transaction */
-	need_eoxact_work = true;
-
 	/*
 	 * create a new tuple descriptor from the one passed in.  We do this
 	 * partly to copy it into the cache context, and partly because the new
@@ -2527,29 +2644,37 @@ RelationBuildLocalRelation(const char *relname,
 	namestrcpy(&rel->rd_rel->relname, relname);
 	rel->rd_rel->relnamespace = relnamespace;
 
-	rel->rd_rel->relkind = RELKIND_UNCATALOGED;
+	rel->rd_rel->relkind = relkind;
 	rel->rd_rel->relhasoids = rel->rd_att->tdhasoid;
 	rel->rd_rel->relnatts = natts;
 	rel->rd_rel->reltype = InvalidOid;
 	/* needed when bootstrapping: */
 	rel->rd_rel->relowner = BOOTSTRAP_SUPERUSERID;
 
-	/* set up persistence; rd_backend is a function of persistence type */
+	/* set up persistence and relcache fields dependent on it */
 	rel->rd_rel->relpersistence = relpersistence;
 	switch (relpersistence)
 	{
 		case RELPERSISTENCE_UNLOGGED:
-		case RELPERSISTENCE_STREAMING:
 		case RELPERSISTENCE_PERMANENT:
 			rel->rd_backend = InvalidBackendId;
+			rel->rd_islocaltemp = false;
 			break;
 		case RELPERSISTENCE_TEMP:
+			Assert(isTempOrToastNamespace(relnamespace));
 			rel->rd_backend = MyBackendId;
+			rel->rd_islocaltemp = true;
 			break;
 		default:
 			elog(ERROR, "invalid relpersistence: %c", relpersistence);
 			break;
 	}
+
+	/* if it's a materialized view, it's not populated initially */
+	if (relkind == RELKIND_MATVIEW)
+		rel->rd_rel->relispopulated = false;
+	else
+		rel->rd_rel->relispopulated = true;
 
 	/*
 	 * Insert relation physical and logical identifiers (OIDs) into the right
@@ -2582,6 +2707,12 @@ RelationBuildLocalRelation(const char *relname,
 	 * Okay to insert into the relcache hash tables.
 	 */
 	RelationCacheInsert(rel);
+
+	/*
+	 * Flag relation as needing eoxact cleanup (to clear rd_createSubid). We
+	 * can't do this before storing relid in it.
+	 */
+	EOXactListAdd(rel);
 
 	/*
 	 * done building relcache entry.
@@ -2618,7 +2749,8 @@ RelationBuildLocalRelation(const char *relname,
  * the XIDs that will be put into the new relation contents.
  */
 void
-RelationSetNewRelfilenode(Relation relation, TransactionId freezeXid)
+RelationSetNewRelfilenode(Relation relation, TransactionId freezeXid,
+						  MultiXactId minmulti)
 {
 	Oid			newrelfilenode;
 	RelFileNodeBackend newrnode;
@@ -2631,6 +2763,7 @@ RelationSetNewRelfilenode(Relation relation, TransactionId freezeXid)
 			relation->rd_rel->relkind == RELKIND_SEQUENCE) ?
 		   freezeXid == InvalidTransactionId :
 		   TransactionIdIsNormal(freezeXid));
+	Assert(TransactionIdIsNormal(freezeXid) == MultiXactIdIsValid(minmulti));
 
 	/* Allocate a new relfilenode */
 	newrelfilenode = GetNewRelFileNode(relation->rd_rel->reltablespace, NULL,
@@ -2686,6 +2819,7 @@ RelationSetNewRelfilenode(Relation relation, TransactionId freezeXid)
 		classform->relallvisible = 0;
 	}
 	classform->relfrozenxid = freezeXid;
+	classform->relminmxid = minmulti;
 
 	simple_heap_update(pg_class, &tuple->t_self, tuple);
 	CatalogUpdateIndexes(pg_class, tuple);
@@ -2706,8 +2840,9 @@ RelationSetNewRelfilenode(Relation relation, TransactionId freezeXid)
 	 * operations on the rel in the same transaction.
 	 */
 	relation->rd_newRelfilenodeSubid = GetCurrentSubTransactionId();
-	/* ... and now we have eoxact cleanup work to do */
-	need_eoxact_work = true;
+
+	/* Flag relation as needing eoxact cleanup (to remove the hint) */
+	EOXactListAdd(relation);
 }
 
 
@@ -3309,6 +3444,10 @@ CheckConstraintFetch(Relation relation)
  * so that we must recompute the index list on next request.  This handles
  * creation or deletion of an index.
  *
+ * Indexes that are marked not IndexIsLive are omitted from the returned list.
+ * Such indexes are expected to be dropped momentarily, and should not be
+ * touched at all by any caller of this function.
+ *
  * The returned list is guaranteed to be sorted in order by OID.  This is
  * needed by the executor, since for index types that we obtain exclusive
  * locks on when updating the index, all backends must lock the indexes in
@@ -3368,9 +3507,12 @@ RelationGetIndexList(Relation relation)
 		bool		isnull;
 
 		/*
-		 * Ignore any indexes that are currently being dropped
+		 * Ignore any indexes that are currently being dropped.  This will
+		 * prevent them from being searched, inserted into, or considered in
+		 * HOT-safety decisions.  It's unsafe to touch such an index at all
+		 * since its catalog entries could disappear at any instant.
 		 */
-		if (!index->indisvalid && !index->indisready)
+		if (!IndexIsLive(index))
 			continue;
 
 		/* Add index's OID to result list in the proper order */
@@ -3389,7 +3531,8 @@ RelationGetIndexList(Relation relation)
 		indclass = (oidvector *) DatumGetPointer(indclassDatum);
 
 		/* Check to see if it is a unique, non-partial btree index on OID */
-		if (index->indnatts == 1 &&
+		if (IndexIsValid(index) &&
+			index->indnatts == 1 &&
 			index->indisunique && index->indimmediate &&
 			index->indkey.values[0] == ObjectIdAttributeNumber &&
 			indclass->values[0] == OID_BTREE_OPS_OID &&
@@ -3478,8 +3621,8 @@ RelationSetIndexList(Relation relation, List *indexIds, Oid oidIndex)
 	relation->rd_indexlist = indexIds;
 	relation->rd_oidindex = oidIndex;
 	relation->rd_indexvalid = 2;	/* mark list as forced */
-	/* must flag that we have a forced index list */
-	need_eoxact_work = true;
+	/* Flag relation as needing eoxact cleanup (to reset the list) */
+	EOXactListAdd(relation);
 }
 
 /*
@@ -3559,12 +3702,6 @@ RelationGetIndexExpressions(Relation relation)
 	 */
 	result = (List *) eval_const_expressions(NULL, (Node *) result);
 
-	/*
-	 * Also mark any coercion format fields as "don't care", so that the
-	 * planner can match to both explicit and implicit coercions.
-	 */
-	set_coercionform_dontcare((Node *) result);
-
 	/* May as well fix opfuncids too */
 	fix_opfuncids((Node *) result);
 
@@ -3631,12 +3768,6 @@ RelationGetIndexPredicate(Relation relation)
 
 	result = (List *) canonicalize_qual((Expr *) result);
 
-	/*
-	 * Also mark any coercion format fields as "don't care", so that the
-	 * planner can match to both explicit and implicit coercions.
-	 */
-	set_coercionform_dontcare((Node *) result);
-
 	/* Also convert to implicit-AND format */
 	result = make_ands_implicit((Expr *) result);
 
@@ -3659,6 +3790,9 @@ RelationGetIndexPredicate(Relation relation)
  * simple index keys, but attributes used in expressions and partial-index
  * predicates.)
  *
+ * If "keyAttrs" is true, only attributes that can be referenced by foreign
+ * keys are considered.
+ *
  * Attribute numbers are offset by FirstLowInvalidHeapAttributeNumber so that
  * we can include system attributes (e.g., OID) in the bitmap representation.
  *
@@ -3670,16 +3804,17 @@ RelationGetIndexPredicate(Relation relation)
  * be bms_free'd when not needed anymore.
  */
 Bitmapset *
-RelationGetIndexAttrBitmap(Relation relation)
+RelationGetIndexAttrBitmap(Relation relation, bool keyAttrs)
 {
 	Bitmapset  *indexattrs;
+	Bitmapset  *uindexattrs;
 	List	   *indexoidlist;
 	ListCell   *l;
 	MemoryContext oldcxt;
 
 	/* Quick exit if we already computed the result. */
 	if (relation->rd_indexattr != NULL)
-		return bms_copy(relation->rd_indexattr);
+		return bms_copy(keyAttrs ? relation->rd_keyattr : relation->rd_indexattr);
 
 	/* Fast path if definitely no indexes */
 	if (!RelationGetForm(relation)->relhasindex)
@@ -3696,19 +3831,33 @@ RelationGetIndexAttrBitmap(Relation relation)
 
 	/*
 	 * For each index, add referenced attributes to indexattrs.
+	 *
+	 * Note: we consider all indexes returned by RelationGetIndexList, even if
+	 * they are not indisready or indisvalid.  This is important because an
+	 * index for which CREATE INDEX CONCURRENTLY has just started must be
+	 * included in HOT-safety decisions (see README.HOT).  If a DROP INDEX
+	 * CONCURRENTLY is far enough along that we should ignore the index, it
+	 * won't be returned at all by RelationGetIndexList.
 	 */
 	indexattrs = NULL;
+	uindexattrs = NULL;
 	foreach(l, indexoidlist)
 	{
 		Oid			indexOid = lfirst_oid(l);
 		Relation	indexDesc;
 		IndexInfo  *indexInfo;
 		int			i;
+		bool		isKey;
 
 		indexDesc = index_open(indexOid, AccessShareLock);
 
 		/* Extract index key information from the index's pg_index row */
 		indexInfo = BuildIndexInfo(indexDesc);
+
+		/* Can this index be referenced by a foreign key? */
+		isKey = indexInfo->ii_Unique &&
+			indexInfo->ii_Expressions == NIL &&
+			indexInfo->ii_Predicate == NIL;
 
 		/* Collect simple attribute references */
 		for (i = 0; i < indexInfo->ii_NumIndexAttrs; i++)
@@ -3716,8 +3865,13 @@ RelationGetIndexAttrBitmap(Relation relation)
 			int			attrnum = indexInfo->ii_KeyAttrNumbers[i];
 
 			if (attrnum != 0)
+			{
 				indexattrs = bms_add_member(indexattrs,
 							   attrnum - FirstLowInvalidHeapAttributeNumber);
+				if (isKey)
+					uindexattrs = bms_add_member(uindexattrs,
+							   attrnum - FirstLowInvalidHeapAttributeNumber);
+			}
 		}
 
 		/* Collect all attributes used in expressions, too */
@@ -3734,10 +3888,11 @@ RelationGetIndexAttrBitmap(Relation relation)
 	/* Now save a copy of the bitmap in the relcache entry. */
 	oldcxt = MemoryContextSwitchTo(CacheMemoryContext);
 	relation->rd_indexattr = bms_copy(indexattrs);
+	relation->rd_keyattr = bms_copy(uindexattrs);
 	MemoryContextSwitchTo(oldcxt);
 
 	/* We return our original working copy for caller to play with */
-	return indexattrs;
+	return keyAttrs ? uindexattrs : indexattrs;
 }
 
 /*
@@ -3862,6 +4017,82 @@ RelationGetExclusionInfo(Relation indexRelation,
 	memcpy(indexRelation->rd_exclprocs, funcs, sizeof(Oid) * ncols);
 	memcpy(indexRelation->rd_exclstrats, strats, sizeof(uint16) * ncols);
 	MemoryContextSwitchTo(oldcxt);
+}
+
+
+/*
+ * Routines to support ereport() reports of relation-related errors
+ *
+ * These could have been put into elog.c, but it seems like a module layering
+ * violation to have elog.c calling relcache or syscache stuff --- and we
+ * definitely don't want elog.h including rel.h.  So we put them here.
+ */
+
+/*
+ * errtable --- stores schema_name and table_name of a table
+ * within the current errordata.
+ */
+int
+errtable(Relation rel)
+{
+	err_generic_string(PG_DIAG_SCHEMA_NAME,
+					   get_namespace_name(RelationGetNamespace(rel)));
+	err_generic_string(PG_DIAG_TABLE_NAME, RelationGetRelationName(rel));
+
+	return 0;					/* return value does not matter */
+}
+
+/*
+ * errtablecol --- stores schema_name, table_name and column_name
+ * of a table column within the current errordata.
+ *
+ * The column is specified by attribute number --- for most callers, this is
+ * easier and less error-prone than getting the column name for themselves.
+ */
+int
+errtablecol(Relation rel, int attnum)
+{
+	TupleDesc	reldesc = RelationGetDescr(rel);
+	const char *colname;
+
+	/* Use reldesc if it's a user attribute, else consult the catalogs */
+	if (attnum > 0 && attnum <= reldesc->natts)
+		colname = NameStr(reldesc->attrs[attnum - 1]->attname);
+	else
+		colname = get_relid_attribute_name(RelationGetRelid(rel), attnum);
+
+	return errtablecolname(rel, colname);
+}
+
+/*
+ * errtablecolname --- stores schema_name, table_name and column_name
+ * of a table column within the current errordata, where the column name is
+ * given directly rather than extracted from the relation's catalog data.
+ *
+ * Don't use this directly unless errtablecol() is inconvenient for some
+ * reason.	This might possibly be needed during intermediate states in ALTER
+ * TABLE, for instance.
+ */
+int
+errtablecolname(Relation rel, const char *colname)
+{
+	errtable(rel);
+	err_generic_string(PG_DIAG_COLUMN_NAME, colname);
+
+	return 0;					/* return value does not matter */
+}
+
+/*
+ * errtableconstraint --- stores schema_name, table_name and constraint_name
+ * of a table-related constraint within the current errordata.
+ */
+int
+errtableconstraint(Relation rel, const char *conname)
+{
+	errtable(rel);
+	err_generic_string(PG_DIAG_CONSTRAINT_NAME, conname);
+
+	return 0;					/* return value does not matter */
 }
 
 
@@ -4179,7 +4410,7 @@ load_relcache_init_file(bool shared)
 		 * format is complex and subject to change).  They must be rebuilt if
 		 * needed by RelationCacheInitializePhase3.  This is not expected to
 		 * be a big performance hit since few system catalogs have such. Ditto
-		 * for index expressions, predicates, and exclusion info.
+		 * for index expressions, predicates, exclusion info, and FDW info.
 		 */
 		rel->rd_rules = NULL;
 		rel->rd_rulescxt = NULL;
@@ -4189,6 +4420,7 @@ load_relcache_init_file(bool shared)
 		rel->rd_exclops = NULL;
 		rel->rd_exclprocs = NULL;
 		rel->rd_exclstrats = NULL;
+		rel->rd_fdwroutine = NULL;
 
 		/*
 		 * Reset transient-state fields in the relcache entry

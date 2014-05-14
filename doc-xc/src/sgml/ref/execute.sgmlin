@@ -32,6 +32,7 @@ EXECUTE <replaceable class="PARAMETER">name</replaceable> [ ( <replaceable class
 
  <refsect1>
   <title>Description</title>
+
 &common;
   <para>
    <command>EXECUTE</command> is used to execute a previously prepared
@@ -59,6 +60,7 @@ EXECUTE <replaceable class="PARAMETER">name</replaceable> [ ( <replaceable class
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">name</replaceable></term>
@@ -85,6 +87,7 @@ EXECUTE <replaceable class="PARAMETER">name</replaceable> [ ( <replaceable class
 
  <refsect1>
   <title>Outputs</title>
+&common;
    <para>
    The command tag returned by <command>EXECUTE</command>
    is that of the prepared statement, and not <literal>EXECUTE</>.
@@ -103,6 +106,7 @@ EXECUTE <replaceable class="PARAMETER">name</replaceable> [ ( <replaceable class
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    The SQL standard includes an <command>EXECUTE</command> statement,
    but it is only for use in embedded SQL.  This version of the

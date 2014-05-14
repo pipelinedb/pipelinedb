@@ -4,7 +4,7 @@
  *
  *	  Routines for opclass (and opfamily) manipulation commands
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -20,6 +20,7 @@
 #include "access/genam.h"
 #include "access/heapam.h"
 #include "access/nbtree.h"
+#include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
@@ -80,11 +81,6 @@ static void dropOperators(List *opfamilyname, Oid amoid, Oid opfamilyoid,
 			  List *operators);
 static void dropProcedures(List *opfamilyname, Oid amoid, Oid opfamilyoid,
 			   List *procedures);
-static void AlterOpClassOwner_internal(Relation rel, HeapTuple tuple,
-						   Oid newOwnerId);
-static void AlterOpFamilyOwner_internal(Relation rel, HeapTuple tuple,
-							Oid newOwnerId);
-
 
 /*
  * OpFamilyCacheLookup
@@ -107,7 +103,7 @@ OpFamilyCacheLookup(Oid amID, List *opfamilyname, bool missing_ok)
 		/* Look in specific schema only */
 		Oid			namespaceId;
 
-		namespaceId = LookupExplicitNamespace(schemaname);
+		namespaceId = LookupExplicitNamespace(schemaname, false);
 		htup = SearchSysCache3(OPFAMILYAMNAMENSP,
 							   ObjectIdGetDatum(amID),
 							   PointerGetDatum(opfname),
@@ -183,7 +179,7 @@ OpClassCacheLookup(Oid amID, List *opclassname, bool missing_ok)
 		/* Look in specific schema only */
 		Oid			namespaceId;
 
-		namespaceId = LookupExplicitNamespace(schemaname);
+		namespaceId = LookupExplicitNamespace(schemaname, false);
 		htup = SearchSysCache3(CLAAMNAMENSP,
 							   ObjectIdGetDatum(amID),
 							   PointerGetDatum(opcname),
@@ -313,8 +309,7 @@ CreateOpFamily(char *amname, char *opfname, Oid namespaceoid, Oid amoid)
 	recordDependencyOnCurrentExtension(&myself, false);
 
 	/* Post creation hook for new operator family */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   OperatorFamilyRelationId, opfamilyoid, 0, NULL);
+	InvokeObjectPostCreateHook(OperatorFamilyRelationId, opfamilyoid, 0);
 
 	heap_close(rel, RowExclusiveLock);
 
@@ -325,7 +320,7 @@ CreateOpFamily(char *amname, char *opfname, Oid namespaceoid, Oid amoid)
  * DefineOpClass
  *		Define a new index operator class.
  */
-void
+Oid
 DefineOpClass(CreateOpClassStmt *stmt)
 {
 	char	   *opcname;		/* name of opclass we're creating */
@@ -414,8 +409,7 @@ DefineOpClass(CreateOpClassStmt *stmt)
 	/* XXX this is unnecessary given the superuser check above */
 	/* Check we have ownership of the datatype */
 	if (!pg_type_ownercheck(typeoid, GetUserId()))
-		aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_TYPE,
-					   format_type_be(typeoid));
+		aclcheck_error_type(ACLCHECK_NOT_OWNER, typeoid);
 #endif
 
 	/*
@@ -565,8 +559,7 @@ DefineOpClass(CreateOpClassStmt *stmt)
 				/* XXX this is unnecessary given the superuser check above */
 				/* Check we have ownership of the datatype */
 				if (!pg_type_ownercheck(storageoid, GetUserId()))
-					aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_TYPE,
-								   format_type_be(storageoid));
+					aclcheck_error_type(ACLCHECK_NOT_OWNER, storageoid);
 #endif
 				break;
 			default:
@@ -716,10 +709,11 @@ DefineOpClass(CreateOpClassStmt *stmt)
 	recordDependencyOnCurrentExtension(&myself, false);
 
 	/* Post creation hook for new operator class */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   OperatorClassRelationId, opclassoid, 0, NULL);
+	InvokeObjectPostCreateHook(OperatorClassRelationId, opclassoid, 0);
 
 	heap_close(rel, RowExclusiveLock);
+
+	return opclassoid;
 }
 
 
@@ -727,7 +721,7 @@ DefineOpClass(CreateOpClassStmt *stmt)
  * DefineOpFamily
  *		Define a new index operator family.
  */
-void
+Oid
 DefineOpFamily(CreateOpFamilyStmt *stmt)
 {
 	char	   *opfname;		/* name of opfamily we're creating */
@@ -760,7 +754,7 @@ DefineOpFamily(CreateOpFamilyStmt *stmt)
 				 errmsg("must be superuser to create an operator family")));
 
 	/* Insert pg_opfamily catalog entry */
-	(void) CreateOpFamily(stmt->amname, opfname, namespaceoid, amoid);
+	return CreateOpFamily(stmt->amname, opfname, namespaceoid, amoid);
 }
 
 
@@ -772,7 +766,7 @@ DefineOpFamily(CreateOpFamilyStmt *stmt)
  * other commands called ALTER OPERATOR FAMILY exist, but go through
  * different code paths.
  */
-void
+Oid
 AlterOpFamily(AlterOpFamilyStmt *stmt)
 {
 	Oid			amoid,			/* our AM's oid */
@@ -826,6 +820,8 @@ AlterOpFamily(AlterOpFamilyStmt *stmt)
 		AlterOpFamilyAdd(stmt->opfamilyname, amoid, opfamilyoid,
 						 maxOpNumber, maxProcNumber,
 						 stmt->items);
+
+	return opfamilyoid;
 }
 
 /*
@@ -1378,6 +1374,9 @@ storeOperators(List *opfamilyname, Oid amoid,
 			referenced.objectSubId = 0;
 			recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
 		}
+		/* Post create hook of this access method operator */
+		InvokeObjectPostCreateHook(AccessMethodOperatorRelationId,
+								   entryoid, 0);
 	}
 
 	heap_close(rel, RowExclusiveLock);
@@ -1477,6 +1476,9 @@ storeProcedures(List *opfamilyname, Oid amoid,
 			referenced.objectSubId = 0;
 			recordDependencyOn(&myself, &referenced, DEPENDENCY_AUTO);
 		}
+		/* Post create hook of access method procedure */
+		InvokeObjectPostCreateHook(AccessMethodProcedureRelationId,
+								   entryoid, 0);
 	}
 
 	heap_close(rel, RowExclusiveLock);
@@ -1662,447 +1664,65 @@ RemoveAmProcEntryById(Oid entryOid)
 	heap_close(rel, RowExclusiveLock);
 }
 
+static char *
+get_am_name(Oid amOid)
+{
+	HeapTuple	tup;
+	char	   *result = NULL;
+
+	tup = SearchSysCache1(AMOID, ObjectIdGetDatum(amOid));
+	if (HeapTupleIsValid(tup))
+	{
+		result = pstrdup(NameStr(((Form_pg_am) GETSTRUCT(tup))->amname));
+		ReleaseSysCache(tup);
+	}
+	return result;
+}
 
 /*
- * Rename opclass
+ * Subroutine for ALTER OPERATOR CLASS SET SCHEMA/RENAME
+ *
+ * Is there an operator class with the given name and signature already
+ * in the given namespace?	If so, raise an appropriate error message.
  */
 void
-RenameOpClass(List *name, const char *access_method, const char *newname)
+IsThereOpClassInNamespace(const char *opcname, Oid opcmethod,
+						  Oid opcnamespace)
 {
-	Oid			opcOid;
-	Oid			amOid;
-	Oid			namespaceOid;
-	HeapTuple	origtup;
-	HeapTuple	tup;
-	Relation	rel;
-	AclResult	aclresult;
-
-	amOid = get_am_oid(access_method, false);
-
-	rel = heap_open(OperatorClassRelationId, RowExclusiveLock);
-
-	/* Look up the opclass. */
-	origtup = OpClassCacheLookup(amOid, name, false);
-	tup = heap_copytuple(origtup);
-	ReleaseSysCache(origtup);
-	opcOid = HeapTupleGetOid(tup);
-	namespaceOid = ((Form_pg_opclass) GETSTRUCT(tup))->opcnamespace;
-
 	/* make sure the new name doesn't exist */
 	if (SearchSysCacheExists3(CLAAMNAMENSP,
-							  ObjectIdGetDatum(amOid),
-							  CStringGetDatum(newname),
-							  ObjectIdGetDatum(namespaceOid)))
-	{
+							  ObjectIdGetDatum(opcmethod),
+							  CStringGetDatum(opcname),
+							  ObjectIdGetDatum(opcnamespace)))
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_OBJECT),
 				 errmsg("operator class \"%s\" for access method \"%s\" already exists in schema \"%s\"",
-						newname, access_method,
-						get_namespace_name(namespaceOid))));
-	}
-
-	/* must be owner */
-	if (!pg_opclass_ownercheck(opcOid, GetUserId()))
-		aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_OPCLASS,
-					   NameListToString(name));
-
-	/* must have CREATE privilege on namespace */
-	aclresult = pg_namespace_aclcheck(namespaceOid, GetUserId(), ACL_CREATE);
-	if (aclresult != ACLCHECK_OK)
-		aclcheck_error(aclresult, ACL_KIND_NAMESPACE,
-					   get_namespace_name(namespaceOid));
-
-	/* rename */
-	namestrcpy(&(((Form_pg_opclass) GETSTRUCT(tup))->opcname), newname);
-	simple_heap_update(rel, &tup->t_self, tup);
-	CatalogUpdateIndexes(rel, tup);
-
-	heap_close(rel, NoLock);
-	heap_freetuple(tup);
+						opcname,
+						get_am_name(opcmethod),
+						get_namespace_name(opcnamespace))));
 }
 
 /*
- * Rename opfamily
+ * Subroutine for ALTER OPERATOR FAMILY SET SCHEMA/RENAME
+ *
+ * Is there an operator family with the given name and signature already
+ * in the given namespace?	If so, raise an appropriate error message.
  */
 void
-RenameOpFamily(List *name, const char *access_method, const char *newname)
+IsThereOpFamilyInNamespace(const char *opfname, Oid opfmethod,
+						   Oid opfnamespace)
 {
-	Oid			opfOid;
-	Oid			amOid;
-	Oid			namespaceOid;
-	char	   *schemaname;
-	char	   *opfname;
-	HeapTuple	tup;
-	Relation	rel;
-	AclResult	aclresult;
-
-	amOid = get_am_oid(access_method, false);
-
-	rel = heap_open(OperatorFamilyRelationId, RowExclusiveLock);
-
-	/*
-	 * Look up the opfamily
-	 */
-	DeconstructQualifiedName(name, &schemaname, &opfname);
-
-	if (schemaname)
-	{
-		namespaceOid = LookupExplicitNamespace(schemaname);
-
-		tup = SearchSysCacheCopy3(OPFAMILYAMNAMENSP,
-								  ObjectIdGetDatum(amOid),
-								  PointerGetDatum(opfname),
-								  ObjectIdGetDatum(namespaceOid));
-		if (!HeapTupleIsValid(tup))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("operator family \"%s\" does not exist for access method \"%s\"",
-							opfname, access_method)));
-
-		opfOid = HeapTupleGetOid(tup);
-	}
-	else
-	{
-		opfOid = OpfamilynameGetOpfid(amOid, opfname);
-		if (!OidIsValid(opfOid))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("operator family \"%s\" does not exist for access method \"%s\"",
-							opfname, access_method)));
-
-		tup = SearchSysCacheCopy1(OPFAMILYOID, ObjectIdGetDatum(opfOid));
-		if (!HeapTupleIsValid(tup))		/* should not happen */
-			elog(ERROR, "cache lookup failed for opfamily %u", opfOid);
-
-		namespaceOid = ((Form_pg_opfamily) GETSTRUCT(tup))->opfnamespace;
-	}
-
 	/* make sure the new name doesn't exist */
 	if (SearchSysCacheExists3(OPFAMILYAMNAMENSP,
-							  ObjectIdGetDatum(amOid),
-							  CStringGetDatum(newname),
-							  ObjectIdGetDatum(namespaceOid)))
-	{
+							  ObjectIdGetDatum(opfmethod),
+							  CStringGetDatum(opfname),
+							  ObjectIdGetDatum(opfnamespace)))
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_OBJECT),
 				 errmsg("operator family \"%s\" for access method \"%s\" already exists in schema \"%s\"",
-						newname, access_method,
-						get_namespace_name(namespaceOid))));
-	}
-
-	/* must be owner */
-	if (!pg_opfamily_ownercheck(opfOid, GetUserId()))
-		aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_OPFAMILY,
-					   NameListToString(name));
-
-	/* must have CREATE privilege on namespace */
-	aclresult = pg_namespace_aclcheck(namespaceOid, GetUserId(), ACL_CREATE);
-	if (aclresult != ACLCHECK_OK)
-		aclcheck_error(aclresult, ACL_KIND_NAMESPACE,
-					   get_namespace_name(namespaceOid));
-
-	/* rename */
-	namestrcpy(&(((Form_pg_opfamily) GETSTRUCT(tup))->opfname), newname);
-	simple_heap_update(rel, &tup->t_self, tup);
-	CatalogUpdateIndexes(rel, tup);
-
-	heap_close(rel, NoLock);
-	heap_freetuple(tup);
-}
-
-/*
- * Change opclass owner by name
- */
-void
-AlterOpClassOwner(List *name, const char *access_method, Oid newOwnerId)
-{
-	Oid			amOid;
-	Relation	rel;
-	HeapTuple	tup;
-	HeapTuple	origtup;
-
-	amOid = get_am_oid(access_method, false);
-
-	rel = heap_open(OperatorClassRelationId, RowExclusiveLock);
-
-	/* Look up the opclass. */
-	origtup = OpClassCacheLookup(amOid, name, false);
-	tup = heap_copytuple(origtup);
-	ReleaseSysCache(origtup);
-
-	AlterOpClassOwner_internal(rel, tup, newOwnerId);
-
-	heap_freetuple(tup);
-	heap_close(rel, NoLock);
-}
-
-/*
- * Change operator class owner, specified by OID
- */
-void
-AlterOpClassOwner_oid(Oid opclassOid, Oid newOwnerId)
-{
-	HeapTuple	tup;
-	Relation	rel;
-
-	rel = heap_open(OperatorClassRelationId, RowExclusiveLock);
-
-	tup = SearchSysCacheCopy1(CLAOID, ObjectIdGetDatum(opclassOid));
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for opclass %u", opclassOid);
-
-	AlterOpClassOwner_internal(rel, tup, newOwnerId);
-
-	heap_freetuple(tup);
-	heap_close(rel, NoLock);
-}
-
-/*
- * The first parameter is pg_opclass, opened and suitably locked.  The second
- * parameter is a copy of the tuple from pg_opclass we want to modify.
- */
-static void
-AlterOpClassOwner_internal(Relation rel, HeapTuple tup, Oid newOwnerId)
-{
-	Oid			namespaceOid;
-	AclResult	aclresult;
-	Form_pg_opclass opcForm;
-
-	Assert(tup->t_tableOid == OperatorClassRelationId);
-	Assert(RelationGetRelid(rel) == OperatorClassRelationId);
-
-	opcForm = (Form_pg_opclass) GETSTRUCT(tup);
-
-	namespaceOid = opcForm->opcnamespace;
-
-	/*
-	 * If the new owner is the same as the existing owner, consider the
-	 * command to have succeeded.  This is for dump restoration purposes.
-	 */
-	if (opcForm->opcowner != newOwnerId)
-	{
-		/* Superusers can always do it */
-		if (!superuser())
-		{
-			/* Otherwise, must be owner of the existing object */
-			if (!pg_opclass_ownercheck(HeapTupleGetOid(tup), GetUserId()))
-				aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_OPCLASS,
-							   NameStr(opcForm->opcname));
-
-			/* Must be able to become new owner */
-			check_is_member_of_role(GetUserId(), newOwnerId);
-
-			/* New owner must have CREATE privilege on namespace */
-			aclresult = pg_namespace_aclcheck(namespaceOid, newOwnerId,
-											  ACL_CREATE);
-			if (aclresult != ACLCHECK_OK)
-				aclcheck_error(aclresult, ACL_KIND_NAMESPACE,
-							   get_namespace_name(namespaceOid));
-		}
-
-		/*
-		 * Modify the owner --- okay to scribble on tup because it's a copy
-		 */
-		opcForm->opcowner = newOwnerId;
-
-		simple_heap_update(rel, &tup->t_self, tup);
-
-		CatalogUpdateIndexes(rel, tup);
-
-		/* Update owner dependency reference */
-		changeDependencyOnOwner(OperatorClassRelationId, HeapTupleGetOid(tup),
-								newOwnerId);
-	}
-}
-
-/*
- * ALTER OPERATOR CLASS any_name USING access_method SET SCHEMA name
- */
-void
-AlterOpClassNamespace(List *name, char *access_method, const char *newschema)
-{
-	Oid			amOid;
-	Relation	rel;
-	Oid			opclassOid;
-	Oid			nspOid;
-
-	amOid = get_am_oid(access_method, false);
-
-	rel = heap_open(OperatorClassRelationId, RowExclusiveLock);
-
-	/* Look up the opclass */
-	opclassOid = get_opclass_oid(amOid, name, false);
-
-	/* get schema OID */
-	nspOid = LookupCreationNamespace(newschema);
-
-	AlterObjectNamespace(rel, CLAOID, -1,
-						 opclassOid, nspOid,
-						 Anum_pg_opclass_opcname,
-						 Anum_pg_opclass_opcnamespace,
-						 Anum_pg_opclass_opcowner,
-						 ACL_KIND_OPCLASS);
-
-	heap_close(rel, RowExclusiveLock);
-}
-
-Oid
-AlterOpClassNamespace_oid(Oid opclassOid, Oid newNspOid)
-{
-	Oid			oldNspOid;
-	Relation	rel;
-
-	rel = heap_open(OperatorClassRelationId, RowExclusiveLock);
-
-	oldNspOid =
-		AlterObjectNamespace(rel, CLAOID, -1,
-							 opclassOid, newNspOid,
-							 Anum_pg_opclass_opcname,
-							 Anum_pg_opclass_opcnamespace,
-							 Anum_pg_opclass_opcowner,
-							 ACL_KIND_OPCLASS);
-
-	heap_close(rel, RowExclusiveLock);
-
-	return oldNspOid;
-}
-
-/*
- * Change opfamily owner by name
- */
-void
-AlterOpFamilyOwner(List *name, const char *access_method, Oid newOwnerId)
-{
-	Oid			amOid;
-	Relation	rel;
-	HeapTuple	tup;
-	char	   *opfname;
-	char	   *schemaname;
-
-	amOid = get_am_oid(access_method, false);
-
-	rel = heap_open(OperatorFamilyRelationId, RowExclusiveLock);
-
-	/*
-	 * Look up the opfamily
-	 */
-	DeconstructQualifiedName(name, &schemaname, &opfname);
-
-	if (schemaname)
-	{
-		Oid			namespaceOid;
-
-		namespaceOid = LookupExplicitNamespace(schemaname);
-
-		tup = SearchSysCacheCopy3(OPFAMILYAMNAMENSP,
-								  ObjectIdGetDatum(amOid),
-								  PointerGetDatum(opfname),
-								  ObjectIdGetDatum(namespaceOid));
-		if (!HeapTupleIsValid(tup))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("operator family \"%s\" does not exist for access method \"%s\"",
-							opfname, access_method)));
-	}
-	else
-	{
-		Oid			opfOid;
-
-		opfOid = OpfamilynameGetOpfid(amOid, opfname);
-		if (!OidIsValid(opfOid))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("operator family \"%s\" does not exist for access method \"%s\"",
-							opfname, access_method)));
-
-		tup = SearchSysCacheCopy1(OPFAMILYOID, ObjectIdGetDatum(opfOid));
-		if (!HeapTupleIsValid(tup))		/* should not happen */
-			elog(ERROR, "cache lookup failed for opfamily %u", opfOid);
-	}
-
-	AlterOpFamilyOwner_internal(rel, tup, newOwnerId);
-
-	heap_freetuple(tup);
-	heap_close(rel, NoLock);
-}
-
-/*
- * Change operator family owner, specified by OID
- */
-void
-AlterOpFamilyOwner_oid(Oid opfamilyOid, Oid newOwnerId)
-{
-	HeapTuple	tup;
-	Relation	rel;
-
-	rel = heap_open(OperatorFamilyRelationId, RowExclusiveLock);
-
-	tup = SearchSysCacheCopy1(OPFAMILYOID, ObjectIdGetDatum(opfamilyOid));
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for opfamily %u", opfamilyOid);
-
-	AlterOpFamilyOwner_internal(rel, tup, newOwnerId);
-
-	heap_freetuple(tup);
-	heap_close(rel, NoLock);
-}
-
-/*
- * The first parameter is pg_opfamily, opened and suitably locked.	The second
- * parameter is a copy of the tuple from pg_opfamily we want to modify.
- */
-static void
-AlterOpFamilyOwner_internal(Relation rel, HeapTuple tup, Oid newOwnerId)
-{
-	Oid			namespaceOid;
-	AclResult	aclresult;
-	Form_pg_opfamily opfForm;
-
-	Assert(tup->t_tableOid == OperatorFamilyRelationId);
-	Assert(RelationGetRelid(rel) == OperatorFamilyRelationId);
-
-	opfForm = (Form_pg_opfamily) GETSTRUCT(tup);
-
-	namespaceOid = opfForm->opfnamespace;
-
-	/*
-	 * If the new owner is the same as the existing owner, consider the
-	 * command to have succeeded.  This is for dump restoration purposes.
-	 */
-	if (opfForm->opfowner != newOwnerId)
-	{
-		/* Superusers can always do it */
-		if (!superuser())
-		{
-			/* Otherwise, must be owner of the existing object */
-			if (!pg_opfamily_ownercheck(HeapTupleGetOid(tup), GetUserId()))
-				aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_OPFAMILY,
-							   NameStr(opfForm->opfname));
-
-			/* Must be able to become new owner */
-			check_is_member_of_role(GetUserId(), newOwnerId);
-
-			/* New owner must have CREATE privilege on namespace */
-			aclresult = pg_namespace_aclcheck(namespaceOid, newOwnerId,
-											  ACL_CREATE);
-			if (aclresult != ACLCHECK_OK)
-				aclcheck_error(aclresult, ACL_KIND_NAMESPACE,
-							   get_namespace_name(namespaceOid));
-		}
-
-		/*
-		 * Modify the owner --- okay to scribble on tup because it's a copy
-		 */
-		opfForm->opfowner = newOwnerId;
-
-		simple_heap_update(rel, &tup->t_self, tup);
-
-		CatalogUpdateIndexes(rel, tup);
-
-		/* Update owner dependency reference */
-		changeDependencyOnOwner(OperatorFamilyRelationId, HeapTupleGetOid(tup),
-								newOwnerId);
-	}
+						opfname,
+						get_am_name(opfmethod),
+						get_namespace_name(opfnamespace))));
 }
 
 /*
@@ -2122,56 +1742,4 @@ get_am_oid(const char *amname, bool missing_ok)
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("access method \"%s\" does not exist", amname)));
 	return oid;
-}
-
-/*
- * ALTER OPERATOR FAMILY any_name USING access_method SET SCHEMA name
- */
-void
-AlterOpFamilyNamespace(List *name, char *access_method, const char *newschema)
-{
-	Oid			amOid;
-	Relation	rel;
-	Oid			opfamilyOid;
-	Oid			nspOid;
-
-	amOid = get_am_oid(access_method, false);
-
-	rel = heap_open(OperatorFamilyRelationId, RowExclusiveLock);
-
-	/* Look up the opfamily */
-	opfamilyOid = get_opfamily_oid(amOid, name, false);
-
-	/* get schema OID */
-	nspOid = LookupCreationNamespace(newschema);
-
-	AlterObjectNamespace(rel, OPFAMILYOID, -1,
-						 opfamilyOid, nspOid,
-						 Anum_pg_opfamily_opfname,
-						 Anum_pg_opfamily_opfnamespace,
-						 Anum_pg_opfamily_opfowner,
-						 ACL_KIND_OPFAMILY);
-
-	heap_close(rel, RowExclusiveLock);
-}
-
-Oid
-AlterOpFamilyNamespace_oid(Oid opfamilyOid, Oid newNspOid)
-{
-	Oid			oldNspOid;
-	Relation	rel;
-
-	rel = heap_open(OperatorFamilyRelationId, RowExclusiveLock);
-
-	oldNspOid =
-		AlterObjectNamespace(rel, OPFAMILYOID, -1,
-							 opfamilyOid, newNspOid,
-							 Anum_pg_opfamily_opfname,
-							 Anum_pg_opfamily_opfnamespace,
-							 Anum_pg_opfamily_opfowner,
-							 ACL_KIND_OPFAMILY);
-
-	heap_close(rel, RowExclusiveLock);
-
-	return oldNspOid;
 }

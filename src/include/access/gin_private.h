@@ -2,7 +2,7 @@
  * gin_private.h
  *	  header file for postgres inverted index access method implementation.
  *
- *	Copyright (c) 2006-2012, PostgreSQL Global Development Group
+ *	Copyright (c) 2006-2013, PostgreSQL Global Development Group
  *
  *	src/include/access/gin_private.h
  *--------------------------------------------------------------------------
@@ -195,7 +195,7 @@ typedef signed char GinNullCategory;
  */
 #define GinCategoryOffset(itup,ginstate) \
 	(IndexInfoFindDataOffset((itup)->t_info) + \
-	 ((ginstate)->oneCol ? 0 : sizeof(int2)))
+	 ((ginstate)->oneCol ? 0 : sizeof(int16)))
 #define GinGetNullCategory(itup,ginstate) \
 	(*((GinNullCategory *) ((char*)(itup) + GinCategoryOffset(itup,ginstate))))
 #define GinSetNullCategory(itup,ginstate,c) \
@@ -513,6 +513,7 @@ typedef struct GinBtreeData
 
 extern GinBtreeStack *ginPrepareFindLeafPage(GinBtree btree, BlockNumber blkno);
 extern GinBtreeStack *ginFindLeafPage(GinBtree btree, GinBtreeStack *stack);
+extern Buffer ginStepRight(Buffer buffer, Relation index, int lockmode);
 extern void freeGinBtreeStack(GinBtreeStack *stack);
 extern void ginInsertValue(GinBtree btree, GinBtreeStack *stack,
 			   GinStatsData *buildStats);

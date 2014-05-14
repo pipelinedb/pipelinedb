@@ -36,7 +36,7 @@
  * to look like NO SCROLL cursors.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/portal.h
@@ -48,6 +48,7 @@
 
 #include "datatype/timestamp.h"
 #include "executor/execdesc.h"
+#include "utils/plancache.h"
 #include "utils/resowner.h"
 
 /*
@@ -90,8 +91,8 @@ typedef enum PortalStrategy
 	PORTAL_ONE_RETURNING,
 	PORTAL_ONE_MOD_WITH,
 	PORTAL_UTIL_SELECT,
-	PORTAL_MULTI_QUERY,
-	PORTAL_CONTINUOUS_QUERY
+	PORTAL_CONTINUOUS_QUERY,
+	PORTAL_MULTI_QUERY
 } PortalStrategy;
 
 /*
@@ -220,5 +221,6 @@ extern void PortalDefineQuery(Portal portal,
 extern Node *PortalListGetPrimaryStmt(List *stmts);
 extern void PortalCreateHoldStore(Portal portal);
 extern void PortalHashTableDeleteAll(void);
+extern bool ThereAreNoReadyPortals(void);
 
 #endif   /* PORTAL_H */

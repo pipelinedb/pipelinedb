@@ -32,8 +32,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    <application>dropdb</application> destroys an existing
    <productname>PostgreSQL</productname> database.
@@ -54,6 +53,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Options</title>
 
+&common;
   <para>
    <application>dropdb</> accepts the following command-line arguments:
 
@@ -96,6 +96,16 @@ PostgreSQL documentation
        Print the <application>dropdb</application> version and exit.
        </para>
        </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>--if-exists</></term>
+      <listitem>
+       <para>
+       Do not throw an error if the database does not exist. A notice is issued
+       in this case.
+       </para>
+      </listitem>
      </varlistentry>
 
      <varlistentry>
@@ -188,6 +198,18 @@ PostgreSQL documentation
        </para>
       </listitem>
      </varlistentry>
+
+     <varlistentry>
+      <term><option>--maintenance-db=<replaceable class="parameter">dbname</replaceable></></term>
+      <listitem>
+       <para>
+         Specifies the name of the database to connect to in order to drop the
+         target database. If not specified, the <literal>postgres</literal>
+         database will be used; if that does not exist (or is the database
+         being dropped), <literal>template1</literal> will be used.
+       </para>
+      </listitem>
+     </varlistentry>
    </variablelist>
   </para>
  </refsect1>
@@ -196,6 +218,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Environment</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><envar>PGHOST</envar></term>
@@ -222,6 +245,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Diagnostics</title>
 
+&common;
   <para>
    In case of difficulty, see <xref linkend="SQL-DROPDATABASE">
    and <xref linkend="APP-PSQL"> for
@@ -255,8 +279,7 @@ PostgreSQL documentation
 <computeroutput>Database "demo" will be permanently deleted.
 Are you sure? (y/n) </computeroutput><userinput>y</userinput>
 <computeroutput>DROP DATABASE demo;</computeroutput>
-</screen>
-   </para>
+</screen></para>
  </refsect1>
 
 

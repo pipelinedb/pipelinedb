@@ -60,9 +60,6 @@ COPY array_op_test FROM '@abs_srcdir@/data/array.data';
 
 COPY array_index_op_test FROM '@abs_srcdir@/data/array.data';
 
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
-
 --- test copying in CSV mode with various styles
 --- of embedded line ending characters
 

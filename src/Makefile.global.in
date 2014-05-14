@@ -18,7 +18,7 @@
 #
 # Meta configuration
 
-standard_targets = all install installdirs uninstall distprep clean distclean maintainer-clean coverage check installcheck maintainer-check
+standard_targets = all install installdirs uninstall distprep clean distclean maintainer-clean coverage check installcheck maintainer-check init-po update-po
 # these targets should recurse even into subdirectories not being built:
 standard_always_targets = distprep clean distclean maintainer-clean
 
@@ -30,6 +30,9 @@ all:
 # Delete target files if the command fails after it has
 # started to update the file.
 .DELETE_ON_ERROR:
+
+# Never delete any intermediate files automatically.
+.SECONDARY:
 
 # PostgreSQL version number
 VERSION = @PACKAGE_VERSION@
@@ -165,7 +168,6 @@ with_libxml	= @with_libxml@
 with_libxslt	= @with_libxslt@
 with_system_tzdata = @with_system_tzdata@
 with_zlib	= @with_zlib@
-enable_shared	= @enable_shared@
 enable_rpath	= @enable_rpath@
 enable_nls	= @enable_nls@
 enable_debug	= @enable_debug@
@@ -173,11 +175,11 @@ enable_dtrace	= @enable_dtrace@
 enable_coverage	= @enable_coverage@
 enable_thread_safety	= @enable_thread_safety@
 
+python_enable_shared	= @python_enable_shared@
 python_includespec	= @python_includespec@
 python_libdir		= @python_libdir@
 python_libspec		= @python_libspec@
 python_additional_libs	= @python_additional_libs@
-python_configdir	= @python_configdir@
 python_majorversion	= @python_majorversion@
 python_version		= @python_version@
 
@@ -217,6 +219,7 @@ CC = @CC@
 GCC = @GCC@
 SUN_STUDIO_CC = @SUN_STUDIO_CC@
 CFLAGS = @CFLAGS@
+CFLAGS_VECTOR = @CFLAGS_VECTOR@
 
 # Kind-of compilers
 
@@ -241,15 +244,15 @@ LD = @LD@
 with_gnu_ld = @with_gnu_ld@
 ld_R_works = @ld_R_works@
 
-# We want -L for libpgport.a to be first in LDFLAGS.  We also need LDFLAGS
-# to be a "recursively expanded" variable, else adjustments to rpathdir
-# don't work right.  So we must NOT do LDFLAGS := something, meaning this has
-# to be done first and elsewhere we must only do LDFLAGS += something.
-# PGXC_BEGIN
+# We want -L for libpgport.a and libpgcommon.a to be first in LDFLAGS.  We
+# also need LDFLAGS to be a "recursively expanded" variable, else adjustments
+# to rpathdir don't work right.  So we must NOT do LDFLAGS := something,
+# meaning this has to be done first and elsewhere we must only do LDFLAGS +=
+# something.
 ifdef PGXS
   LDFLAGS = -L$(libdir) -lpthread
 else
-  LDFLAGS = -L$(top_builddir)/src/port -lpthread
+  LDFLAGS = -L$(top_builddir)/src/port -L$(top_builddir)/src/common
 endif
 # PGXC_END
 LDFLAGS += @LDFLAGS@
@@ -291,7 +294,9 @@ BZIP2	= bzip2
 
 # Installation.
 
-INSTALL	= $(SHELL) $(top_srcdir)/config/install-sh -c
+install_bin = @install_bin@
+install_sh = $(SHELL) $(top_srcdir)/config/install-sh -c
+INSTALL = $(if $(use_install_sh),$(install_sh),$(if $(install_bin),$(install_bin),$(install_sh)))
 
 INSTALL_SCRIPT_MODE	= 755
 INSTALL_DATA_MODE	= 644
@@ -397,24 +402,18 @@ endif
 # isn't created with the same link flags as libpq, it can't be used.)
 libpq = -L$(libpq_builddir) -lpq
 
-# If doing static linking, shared library dependency info isn't available,
-# so add in the libraries that libpq depends on.
-ifeq ($(enable_shared), no)
-libpq += $(filter -lintl -lssl -lcrypto -lkrb5 -lcrypt, $(LIBS)) \
-	$(LDAP_LIBS_FE) $(PTHREAD_LIBS)
-endif
-
 # This macro is for use by client executables (not libraries) that use libpq.
-# We force clients to pull symbols from the non-shared library libpgport
-# rather than pulling some libpgport symbols from libpq just because
-# libpq uses those functions too.  This makes applications less
+# We force clients to pull symbols from the non-shared libraries libpgport
+# and libpgcommon rather than pulling some libpgport symbols from libpq just
+# because libpq uses those functions too.  This makes applications less
 # dependent on changes in libpq's usage of pgport.  To do this we link to
 # pgport before libpq.  This does cause duplicate -lpgport's to appear
 # on client link lines.
 ifdef PGXS
-libpq_pgport = -L$(libdir) -lpgport $(libpq)
+libpq_pgport = -L$(libdir) -lpgport -lpgcommon $(libpq)
 else
-libpq_pgport = -L$(top_builddir)/src/port -lpgport $(libpq)
+libpq_pgport = -L$(top_builddir)/src/port -lpgport \
+			   -L$(top_builddir)/src/common -lpgcommon $(libpq)
 endif
 
 
@@ -423,6 +422,7 @@ submake-libpq:
 
 submake-libpgport:
 	$(MAKE) -C $(top_builddir)/src/port all
+	$(MAKE) -C $(top_builddir)/src/common all
 
 .PHONY: submake-libpq submake-libpgport
 
@@ -433,6 +433,15 @@ submake-libpgport:
 
 PL_TESTDB = pl_regression
 CONTRIB_TESTDB = contrib_regression
+ifneq ($(MODULE_big),)
+  CONTRIB_TESTDB_MODULE = contrib_regression_$(MODULE_big)
+else
+  ifneq ($(MODULES),)
+    CONTRIB_TESTDB_MODULE = contrib_regression_$(MODULES)
+  else
+    CONTRIB_TESTDB_MODULE = contrib_regression
+  endif
+endif
 
 ifdef NO_LOCALE
 NOLOCALE += --no-locale
@@ -492,7 +501,7 @@ endif
 
 LIBOBJS = @LIBOBJS@
 
-LIBS := -lpgport $(LIBS)
+LIBS := -lpgport -lpgcommon $(LIBS)
 
 # to make ws2_32.lib the last library, and always link with shfolder,
 # so SHGetFolderName isn't picked up from shell32.dll
@@ -507,6 +516,22 @@ TAS         = @TAS@
 ##########################################################################
 #
 # Global targets and rules
+
+%.c: %.l
+ifdef FLEX
+	$(FLEX) $(if $(FLEX_NO_BACKUP),-b) $(FLEXFLAGS) -o'$@' $<
+	@$(if $(FLEX_NO_BACKUP),if [ `wc -l <lex.backup` -eq 1 ]; then rm lex.backup; else echo "Scanner requires backup; see lex.backup." 1>&2; exit 1; fi)
+else
+	@$(missing) flex $< '$@'
+endif
+
+%.c: %.y
+	$(if $(BISON_CHECK_CMD),$(BISON_CHECK_CMD))
+ifdef BISON
+	$(BISON) $(BISONFLAGS) -o $@ $<
+else
+	@$(missing) bison $< $@
+endif
 
 %.i: %.c
 	$(CPP) $(CPPFLAGS) -o $@ $<
@@ -547,6 +572,12 @@ $(top_builddir)/src/include/pg_config.h: $(top_builddir)/src/include/stamp-h ;
 $(top_builddir)/src/include/stamp-h: $(top_srcdir)/src/include/pg_config.h.in $(top_builddir)/config.status
 	cd $(top_builddir) && ./config.status src/include/pg_config.h
 
+# Also remake pg_config_ext.h from pg_config_ext.h.in, same logic as above.
+$(top_builddir)/src/include/pg_config_ext.h: $(top_builddir)/src/include/stamp-ext-h ;
+
+$(top_builddir)/src/include/stamp-ext-h: $(top_srcdir)/src/include/pg_config_ext.h.in $(top_builddir)/config.status
+	cd $(top_builddir) && ./config.status src/include/pg_config_ext.h
+
 # Also remake ecpg_config.h from ecpg_config.h.in if the latter changed, same
 # logic as above.
 $(top_builddir)/src/interfaces/ecpg/include/ecpg_config.h: $(top_builddir)/src/interfaces/ecpg/include/stamp-h ;
@@ -563,7 +594,10 @@ endif # not PGXS
 
 
 install-strip:
-	@$(MAKE) INSTALL_PROGRAM_ENV="STRIPPROG='$(STRIP)'" \
+# install-strip always uses install-sh, so that strip options can be
+# passed.
+	$(MAKE) use_install_sh=yes \
+	    INSTALL_PROGRAM_ENV="STRIPPROG='$(STRIP)'" \
 	    INSTALL_STLIB_ENV="STRIPPROG='$(STRIP_STATIC_LIB)'" \
 	    INSTALL_SHLIB_ENV="STRIPPROG='$(STRIP_SHARED_LIB)'" \
 	    INSTALL_STRIP_FLAG=-s \
@@ -655,9 +689,12 @@ ifeq ($(GCC), yes)
 endif # GCC
 
 # Include all the dependency files generated for the current
-# directory. List /dev/null as dummy because if the wildcard expands
-# to nothing then make would complain.
--include $(wildcard $(DEPDIR)/*.Po) /dev/null
+# directory. Note that make would complain if include was called with
+# no arguments.
+Po_files := $(wildcard $(DEPDIR)/*.Po)
+ifneq (,$(Po_files))
+include $(Po_files)
+endif
 
 # hook for clean-up
 clean distclean maintainer-clean: clean-deps
@@ -665,17 +702,6 @@ clean distclean maintainer-clean: clean-deps
 .PHONY: clean-deps
 clean-deps:
 	@rm -rf $(DEPDIR)
-
-# When in automatic dependency mode, never delete any intermediate
-# files automatically.  Otherwise, the following could happen: When
-# starting from a clean source tree, the first build would delete the
-# intermediate file, but also create the dependency file, which
-# mentions the intermediate file, thus making it non-intermediate.
-# The second build will then need to rebuild the now non-intermediate
-# missing file.  So the second build will do work even though nothing
-# had changed.  One place where this happens is the .c -> .o -> .so
-# chain for some contrib modules.
-.SECONDARY:
 
 endif # autodepend
 

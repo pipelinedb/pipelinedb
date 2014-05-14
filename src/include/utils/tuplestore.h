@@ -21,7 +21,7 @@
  * Also, we have changed the API to return tuples in TupleTableSlots,
  * so that there is a check to prevent attempted access to system columns.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/tuplestore.h
@@ -37,7 +37,7 @@
  * Convenience macro for iterating over a tuplestore
  */
 #define foreach_tuple(slot, store) \
-	while (tuplestore_gettupleslot(store, true, false, slot))
+ while (tuplestore_gettupleslot(store, true, false, slot))
 
 /* Tuplestorestate is an opaque type whose details are not known outside
  * tuplestore.c.

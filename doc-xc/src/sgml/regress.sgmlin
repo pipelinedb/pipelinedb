@@ -10,38 +10,19 @@
   <indexterm zone="regress">
    <primary>test</primary>
   </indexterm>
-<!## XC>
-&xconly;
-  <para>
-   Current version of <productname>Postgres-XC</productname> doesn't
-   support the regression test to run after building but before
-   installation.  You can use each test manually but it is left to
-   users.
-  </para>
-<!## end>
 
-<!## PG>
+&common;
   <para>
    The regression tests are a comprehensive set of tests for the SQL
    implementation in <productname>PostgreSQL</productname>.  They test
    standard SQL operations as well as the extended capabilities of
    <productname>PostgreSQL</productname>.
   </para>
-<!## end>
 
   <sect1 id="regress-run">
    <title>Running the Tests</title>
 
-<!## XC>
-&xconly;
-  <para>
-   Current version of <productname>Postgres-XC</productname> doesn't
-   support the regression test to run after building but before
-   installation.  You can use each test manually but it is left to
-   users.
-  </para>
-<!## end>
-<!## PG>
+&common;
   <para>
    The regression tests can be run against an already installed and
    running server, or using a temporary installation within the build
@@ -56,6 +37,7 @@
   <sect2>
    <title>Running the Tests Against a Temporary Installation</title>
 
+&common;
   <para>
    To run the parallel regression tests after building but before installation,
    type:
@@ -133,6 +115,7 @@ gmake MAX_CONNECTIONS=10 check
   <sect2>
    <title>Running the Tests Against an Existing Installation</title>
 
+&common;
   <para>
    To run the tests after installation<![%standalone-ignore;[ (see <xref linkend="installation">)]]>,
    initialize a data area and start the
@@ -175,9 +158,10 @@ gmake installcheck
   <sect2>
    <title>Testing Hot Standby</title>
 
+&pgnotice;
   <para>
    The source distribution also contains regression tests of the static
-   behaviour of Hot Standby. These tests require a running primary server
+   behavior of Hot Standby. These tests require a running primary server
    and a running standby server that is accepting new WAL changes from the
    primary using either file-based log shipping or streaming replication.
    Those servers are not automatically created for you, nor is the setup
@@ -206,9 +190,9 @@ gmake standbycheck
   </para>
 
   <para>
-   Some extreme behaviours can also be generated on the primary using the
+   Some extreme behaviors can also be generated on the primary using the
    script: <filename>src/test/regress/sql/hs_primary_extremes.sql</filename>
-   to allow the behaviour of the standby to be tested.
+   to allow the behavior of the standby to be tested.
   </para>
 
   <para>
@@ -219,6 +203,7 @@ gmake standbycheck
   <sect2>
    <title>Locale and Encoding</title>
 
+&common;
    <para>
     By default, the tests against a temporary installation use the
     locale defined in the current environment and the corresponding
@@ -261,6 +246,7 @@ gmake check LANG=C ENCODING=EUC_JP
   <sect2>
    <title>Extra Tests</title>
 
+&pgnotice;
    <para>
     The regression test suite contains a few test files that are not
     run by default, because they might be platform-dependent or take a
@@ -278,23 +264,12 @@ gmake check EXTRA_TESTS=collate.linux.utf8 LANG=en_US.utf8
     platforms, and only when run in a database that uses UTF-8 encoding.
    </para>
   </sect2>
-<!## end>
   </sect1>
 
   <sect1 id="regress-evaluation">
    <title>Test Evaluation</title>
 
-<!## XC>
-&xconly;
-  <para>
-   Current version of <productname>Postgres-XC</productname> doesn't
-   support the regression test to run after building but before
-   installation.  You can use each test manually but it is left to
-   users.
-  </para>
-<!## end>
-
-<!## PG>
+&pgnotice;
    <para>
     Some properly installed and fully functional
     <productname>PostgreSQL</productname> installations can
@@ -318,7 +293,10 @@ gmake check EXTRA_TESTS=collate.linux.utf8 LANG=en_US.utf8
     file against the reference outputs stored in the
     <filename>src/test/regress/expected</filename> directory.  Any
     differences are saved for your inspection in
-    <filename>src/test/regress/regression.diffs</filename>.  (Or you
+    <filename>src/test/regress/regression.diffs</filename>.  If you don't
+    like the <command>diff</command> options that are used by default, set the
+    environment variable <envar>PG_REGRESS_DIFF_OPTS</envar>, for
+    instance <literal>PG_REGRESS_DIFF_OPTS='-u'</literal>.  (Or you
     can run <command>diff</command> yourself, if you prefer.)
    </para>
 
@@ -333,6 +311,7 @@ gmake check EXTRA_TESTS=collate.linux.utf8 LANG=en_US.utf8
    <sect2>
     <title>Error Message Differences</title>
 
+&common;
     <para>
      Some of the regression tests involve intentional invalid input
      values.  Error messages can come from either the
@@ -348,6 +327,7 @@ gmake check EXTRA_TESTS=collate.linux.utf8 LANG=en_US.utf8
    <sect2>
     <title>Locale Differences</title>
 
+&common;
     <para>
      If you run the tests against a server that was
      initialized with a collation-order locale other than C, then
@@ -395,6 +375,7 @@ gmake check NO_LOCALE=1
    <sect2>
     <title>Date and Time Differences</title>
 
+&common;
     <para>
      Most of the date and time results are dependent on the time zone
      environment.  The reference files are generated for time zone
@@ -409,6 +390,7 @@ gmake check NO_LOCALE=1
    <sect2>
     <title>Floating-Point Differences</title>
 
+&common;
     <para>
      Some of the tests involve computing 64-bit floating-point numbers (<type>double
      precision</type>) from table columns. Differences in
@@ -437,6 +419,7 @@ gmake check NO_LOCALE=1
    <sect2>
     <title>Row Ordering Differences</title>
 
+&common;
     <para>
 You might see differences in which the same rows are output in a
 different order than what appears in the expected file.  In most cases
@@ -473,6 +456,7 @@ exclusion of those that don't.
    <sect2>
     <title>Insufficient Stack Depth</title>
 
+&common;
     <para>
      If the <literal>errors</literal> test results in a server crash
      at the <literal>select infinite_recurse()</> command, it means that
@@ -490,6 +474,7 @@ exclusion of those that don't.
    <sect2>
     <title>The <quote>random</quote> Test</title>
 
+&pgnotice;
     <para>
      The <literal>random</literal> test script is intended to produce
      random results.   In rare cases, this causes the random regression
@@ -501,24 +486,13 @@ diff results/random.out expected/random.out
      not worry unless the random test fails repeatedly.
     </para>
    </sect2>
-<!## end>
   </sect1>
 
 <!-- We might want to move the following section into the developer's guide. -->
   <sect1 id="regress-variant">
    <title>Variant Comparison Files</title>
 
-<!## XC>
-&xconly;
-  <para>
-   Current version of <productname>Postgres-XC</productname> doesn't
-   support the regression test to run after building but before
-   installation.  You can use each test manually but it is left to
-   users.
-  </para>
-<!## end>
-
-<!## PG>
+&common;
    <para>
     Since some of the tests inherently produce environment-dependent
     results, we have provided ways to specify alternate <quote>expected</>
@@ -608,23 +582,13 @@ float8:out:i.86-.*-openbsd=float8-small-is-zero.out
     mechanism only for variant results that you are willing to consider
     equally valid in all contexts.
    </para>
-<!## end>
+
   </sect1>
 
   <sect1 id="regress-coverage">
    <title>Test Coverage Examination</title>
 
-<!## XC>
-&xconly;
-  <para>
-   Current version of <productname>Postgres-XC</productname> doesn't
-   support the regression test to run after building but before
-   installation.  You can use each test manually but it is left to
-   users.
-  </para>
-<!## end>
-
-<!## PG>
+&pgnotice;
    <para>
     The PostgreSQL source code can be compiled with coverage testing
     instrumentation, so that it becomes possible to examine which
@@ -653,7 +617,6 @@ gmake coverage-html
 gmake coverage-clean
 </screen>
    </para>
-<!## end>
   </sect1>
 
 </chapter>

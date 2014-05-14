@@ -4,7 +4,7 @@
  *	  handle clauses in parser
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/parser/parse_clause.h
@@ -20,17 +20,18 @@ extern void transformFromClause(ParseState *pstate, List *frmList);
 extern int setTargetTable(ParseState *pstate, RangeVar *relation,
 			   bool inh, bool alsoSource, AclMode requiredPerms);
 extern bool interpretInhOption(InhOption inhOpt);
-extern bool interpretOidsOption(List *defList);
+extern bool interpretOidsOption(List *defList, bool allowOids);
 
 extern Node *transformWhereClause(ParseState *pstate, Node *clause,
-					 const char *constructName);
+					 ParseExprKind exprKind, const char *constructName);
 extern Node *transformLimitClause(ParseState *pstate, Node *clause,
-					 const char *constructName);
+					 ParseExprKind exprKind, const char *constructName);
 extern List *transformGroupClause(ParseState *pstate, List *grouplist,
 					 List **targetlist, List *sortClause,
-					 bool useSQL99);
+					 ParseExprKind exprKind, bool useSQL99);
 extern List *transformSortClause(ParseState *pstate, List *orderlist,
-					List **targetlist, bool resolveUnknown, bool useSQL99);
+					List **targetlist, ParseExprKind exprKind,
+					bool resolveUnknown, bool useSQL99);
 
 extern List *transformWindowDefinitions(ParseState *pstate,
 						   List *windowdefs,

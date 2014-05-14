@@ -29,8 +29,7 @@ DROP FUNCTION [ IF EXISTS ] <replaceable class="parameter">name</replaceable> ( 
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    <command>DROP FUNCTION</command> removes the definition of an existing
    function. To execute this command the user must be the
@@ -43,6 +42,7 @@ DROP FUNCTION [ IF EXISTS ] <replaceable class="parameter">name</replaceable> ( 
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
     <varlistentry>
     <term><literal>IF EXISTS</literal></term>
@@ -134,13 +134,13 @@ DROP FUNCTION [ IF EXISTS ] <replaceable class="parameter">name</replaceable> ( 
 
 <programlisting>
 DROP FUNCTION sqrt(integer);
-</programlisting>
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1 id="SQL-DROPFUNCTION-compatibility">
   <title>Compatibility</title>
 
+&common;
   <para>
    A <command>DROP FUNCTION</command> statement is defined in the SQL
    standard, but it is not compatible with this command.

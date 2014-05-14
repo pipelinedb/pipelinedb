@@ -12,12 +12,7 @@ PostgreSQL documentation
 
  <refnamediv>
   <refname>droplang</refname>
-<!## PG>
   <refpurpose>remove a <productname>PostgreSQL</productname> procedural language</refpurpose>
-<!## end>
-<!## XC>
-  <refpurpose>remove a <productname>Postgres-XC</productname> procedural language</refpurpose>
-<!## end>
  </refnamediv>
 
  <indexterm zone="app-droplang">
@@ -29,14 +24,14 @@ PostgreSQL documentation
    <command>droplang</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
    <arg choice="plain"><replaceable>langname</replaceable></arg>
-   <arg><replaceable>dbname</replaceable></arg>
+   <arg choice="opt"><replaceable>dbname</replaceable></arg>
   </cmdsynopsis>
 
   <cmdsynopsis>
    <command>droplang</command>
    <arg rep="repeat"><replaceable>connection-option</replaceable></arg>
-   <group choice="plain"><arg>--list</arg><arg>-l</arg></group>
-   <arg choice="plain"><replaceable>dbname</replaceable></arg>
+   <group choice="plain"><arg choice="plain"><option>--list</option></arg><arg choice="plain"><option>-l</option></arg></group>
+   <arg choice="opt"><replaceable>dbname</replaceable></arg>
   </cmdsynopsis>
  </refsynopsisdiv>
 
@@ -45,15 +40,11 @@ PostgreSQL documentation
    Description
   </title>
 
+&common;
   <para>
    <application>droplang</application> is a utility for removing an
    existing procedural language from a
-<!## PG>
    <productname>PostgreSQL</productname> database.
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> database.
-<!## end>
   </para>
 
   <para>
@@ -64,12 +55,7 @@ PostgreSQL documentation
   <caution>
    <para>
     <application>droplang</application> is deprecated and may be removed
-<!## PG>
     in a future <productname>PostgreSQL</productname> release.  Direct use
-<!## end>
-<!## XC>
-    in a future <productname>Postgres-XC</productname> release.  Direct use
-<!## end>
     of the <command>DROP EXTENSION</> command is recommended instead.
    </para>
   </caution>
@@ -79,6 +65,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Options</title>
 
+&common;
    <para>
     <application>droplang</application> accepts the following command line arguments:
 
@@ -88,6 +75,7 @@ PostgreSQL documentation
       <listitem>
        <para>
         Specifies the name of the procedural language to be removed.
+        (This name is lower-cased.)
        </para>
       </listitem>
      </varlistentry>
@@ -232,6 +220,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Environment</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><envar>PGDATABASE</envar></term>
@@ -248,12 +237,7 @@ PostgreSQL documentation
   </variablelist>
 
   <para>
-<!## PG>
    This utility, like most other <productname>PostgreSQL</> utilities,
-<!## end>
-<!## XC>
-   This utility, like most other <productname>Postgres-XC</> utilities,
-<!## end>
    also uses the environment variables supported by <application>libpq</>
    (see <xref linkend="libpq-envars">).
   </para>
@@ -264,6 +248,7 @@ PostgreSQL documentation
  <refsect1>
    <title>Diagnostics</title>
 
+&common;
    <para>
     Most error messages are self-explanatory. If not, run
     <application>droplang</application> with the <option>--echo</option>
@@ -278,6 +263,7 @@ PostgreSQL documentation
  <refsect1>
   <title>Notes</title>
 
+&common;
   <para>
    Use <xref linkend="app-createlang"> to add a language.
   </para>
@@ -291,8 +277,7 @@ PostgreSQL documentation
     To remove the language <literal>pltcl</literal>:
 <screen>
 <prompt>$ </prompt><userinput>droplang pltcl dbname</userinput>
-</screen>
-   </para>
+</screen></para>
  </refsect1>
 
  <refsect1>

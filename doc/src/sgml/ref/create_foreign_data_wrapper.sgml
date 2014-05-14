@@ -80,11 +80,11 @@ CREATE FOREIGN DATA WRAPPER <replaceable class="parameter">name</replaceable>
    <varlistentry>
     <term><literal>VALIDATOR <replaceable class="parameter">validator_function</replaceable></literal></term>
     <listitem>
-     <para><replaceable class="parameter">validator_function</replaceable> is the
-      name of a previously registered function that will be called to
+     <para><replaceable class="parameter">validator_function</replaceable>
+      is the name of a previously registered function that will be called to
       check the generic options given to the foreign-data wrapper, as
-      well as options for foreign servers and user mappings using the
-      foreign-data wrapper.  If no validator function or <literal>NO
+      well as options for foreign servers, user mappings and foreign tables
+      using the foreign-data wrapper.  If no validator function or <literal>NO
       VALIDATOR</literal> is specified, then options will not be
       checked at creation time.  (Foreign-data wrappers will possibly
       ignore or reject invalid option specifications at run time,
@@ -117,17 +117,10 @@ CREATE FOREIGN DATA WRAPPER <replaceable class="parameter">name</replaceable>
   <title>Notes</title>
 
   <para>
-   At the moment, the foreign-data wrapper functionality is rudimentary.
-   There is no support for updating a foreign table, and optimization of
-   queries is primitive (and mostly left to the wrapper, too).
-  </para>
-
-  <para>
-   There is one built-in foreign-data wrapper validator function
-   provided:
-   <filename>postgresql_fdw_validator</filename>, which accepts
-   options corresponding to <application>libpq</> connection
-   parameters.
+   <productname>PostgreSQL</>'s foreign-data functionality is still under
+   active development.  Optimization of queries is primitive (and mostly left
+   to the wrapper, too).  Thus, there is considerable room for future
+   performance improvements.
   </para>
  </refsect1>
 
@@ -166,7 +159,7 @@ CREATE FOREIGN DATA WRAPPER mywrapper
    9075-9 (SQL/MED), with the exception that the <literal>HANDLER</literal>
    and <literal>VALIDATOR</literal> clauses are extensions and the standard
    clauses <literal>LIBRARY</literal> and <literal>LANGUAGE</literal>
-   are not implemented in PostgreSQL.
+   are not implemented in <productname>PostgreSQL</>.
   </para>
 
   <para>
@@ -183,6 +176,7 @@ CREATE FOREIGN DATA WRAPPER mywrapper
    <member><xref linkend="sql-dropforeigndatawrapper"></member>
    <member><xref linkend="sql-createserver"></member>
    <member><xref linkend="sql-createusermapping"></member>
+   <member><xref linkend="sql-createforeigntable"></member>
   </simplelist>
  </refsect1>
 

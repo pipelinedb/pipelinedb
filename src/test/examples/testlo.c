@@ -3,7 +3,7 @@
  * testlo.c
  *	  test using large objects with libpq
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -251,7 +251,7 @@ main(int argc, char **argv)
 
 		printf("exporting large object to file \"%s\" ...\n", out_filename);
 /*		exportFile(conn, lobjOid, out_filename); */
-		if (!lo_export(conn, lobjOid, out_filename))
+		if (lo_export(conn, lobjOid, out_filename) < 0)
 			fprintf(stderr, "%s\n", PQerrorMessage(conn));
 	}
 

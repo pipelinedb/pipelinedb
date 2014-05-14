@@ -4,7 +4,7 @@
  *	  routines to support running postgres in 'bootstrap' mode
  *	bootstrap mode is used to create the initial template database
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  * Portions Copyright (c) 2010-2012 Postgres-XC Development Group
  *
@@ -22,6 +22,7 @@
 #include <getopt.h>
 #endif
 
+#include "access/htup_details.h"
 #include "bootstrap/bootstrap.h"
 #include "catalog/index.h"
 #include "catalog/pg_collation.h"
@@ -34,6 +35,7 @@
 #include "postmaster/walwriter.h"
 #include "replication/walreceiver.h"
 #include "storage/bufmgr.h"
+#include "storage/bufpage.h"
 #include "storage/ipc.h"
 #include "storage/proc.h"
 #include "tcop/tcopprot.h"
@@ -53,6 +55,8 @@
 extern int	optind;
 extern char *optarg;
 
+uint32		bootstrap_data_checksum_version = 0;		/* No checksum */
+
 
 #define ALLOC(t, c)		((t *) calloc((unsigned)(c), sizeof(t)))
 
@@ -68,6 +72,8 @@ static void cleanup(void);
  *		global variables
  * ----------------
  */
+
+AuxProcType MyAuxProcType = NotAnAuxProcess;	/* declared in miscadmin.h */
 
 Relation	boot_reldesc;		/* current relation descriptor */
 
@@ -193,7 +199,6 @@ AuxiliaryProcessMain(int argc, char *argv[])
 {
 	char	   *progname = argv[0];
 	int			flag;
-	AuxProcType auxType = CheckerProcess;
 	char	   *userDoption = NULL;
 
 	/*
@@ -234,7 +239,10 @@ AuxiliaryProcessMain(int argc, char *argv[])
 		argc--;
 	}
 
-	while ((flag = getopt(argc, argv, "B:c:d:D:Fr:x:-:")) != -1)
+	/* If no -x argument, we are a CheckerProcess */
+	MyAuxProcType = CheckerProcess;
+
+	while ((flag = getopt(argc, argv, "B:c:d:D:Fkr:x:-:")) != -1)
 	{
 		switch (flag)
 		{
@@ -242,7 +250,7 @@ AuxiliaryProcessMain(int argc, char *argv[])
 				SetConfigOption("shared_buffers", optarg, PGC_POSTMASTER, PGC_S_ARGV);
 				break;
 			case 'D':
-				userDoption = optarg;
+				userDoption = strdup(optarg);
 				break;
 			case 'd':
 				{
@@ -260,11 +268,14 @@ AuxiliaryProcessMain(int argc, char *argv[])
 			case 'F':
 				SetConfigOption("fsync", "false", PGC_POSTMASTER, PGC_S_ARGV);
 				break;
+			case 'k':
+				bootstrap_data_checksum_version = PG_DATA_CHECKSUM_VERSION;
+				break;
 			case 'r':
 				strlcpy(OutputFileName, optarg, MAXPGPATH);
 				break;
 			case 'x':
-				auxType = atoi(optarg);
+				MyAuxProcType = atoi(optarg);
 				break;
 			case 'c':
 			case '-':
@@ -314,7 +325,7 @@ AuxiliaryProcessMain(int argc, char *argv[])
 	{
 		const char *statmsg;
 
-		switch (auxType)
+		switch (MyAuxProcType)
 		{
 #ifdef PGXC /* PGXC_COORD */
 			case PoolerProcess:
@@ -365,6 +376,10 @@ AuxiliaryProcessMain(int argc, char *argv[])
 	SetProcessingMode(BootstrapProcessing);
 	IgnoreSystemIndexes = true;
 
+	/* Initialize MaxBackends (if under postmaster, was done already) */
+	if (!IsUnderPostmaster)
+		InitializeMaxBackends();
+
 	BaseInit();
 
 	/*
@@ -376,7 +391,7 @@ AuxiliaryProcessMain(int argc, char *argv[])
 	{
 #ifdef PGXC
 		/* Initialize pooler flag before creating PGPROC structure */
-		if (auxType == PoolerProcess)
+		if (MyAuxProcType == PoolerProcess)
 				PGXCPoolerProcessIam();			
 #endif
 
@@ -391,15 +406,15 @@ AuxiliaryProcessMain(int argc, char *argv[])
 		/*
 		 * Assign the ProcSignalSlot for an auxiliary process.	Since it
 		 * doesn't have a BackendId, the slot is statically allocated based on
-		 * the auxiliary process type (auxType).  Backends use slots indexed
-		 * in the range from 1 to MaxBackends (inclusive), so we use
+		 * the auxiliary process type (MyAuxProcType).	Backends use slots
+		 * indexed in the range from 1 to MaxBackends (inclusive), so we use
 		 * MaxBackends + AuxProcType + 1 as the index of the slot for an
 		 * auxiliary process.
 		 *
 		 * This will need rethinking if we ever want more than one of a
 		 * particular auxiliary process type.
 		 */
-		ProcSignalInit(MaxBackends + auxType + 1);
+		ProcSignalInit(MaxBackends + MyAuxProcType + 1);
 
 		/* finish setting up bufmgr.c */
 		InitBufferPoolBackend();
@@ -413,7 +428,7 @@ AuxiliaryProcessMain(int argc, char *argv[])
 	 */
 	SetProcessingMode(NormalProcessing);
 
-	switch (auxType)
+	switch (MyAuxProcType)
 	{
 #ifdef PGXC /* PGXC_COORD */
 		case PoolerProcess:
@@ -460,7 +475,7 @@ AuxiliaryProcessMain(int argc, char *argv[])
 			proc_exit(1);		/* should never return */
 
 		default:
-			elog(PANIC, "unrecognized process type: %d", auxType);
+			elog(PANIC, "unrecognized process type: %d", (int) MyAuxProcType);
 			proc_exit(1);
 	}
 }
@@ -844,7 +859,6 @@ InsertOneValue(char *value, int i)
 	Oid			typioparam;
 	Oid			typinput;
 	Oid			typoutput;
-	char	   *prt;
 
 	AssertArg(i >= 0 && i < MAXATTR);
 
@@ -858,9 +872,14 @@ InsertOneValue(char *value, int i)
 						  &typinput, &typoutput);
 
 	values[i] = OidInputFunctionCall(typinput, value, typioparam, -1);
-	prt = OidOutputFunctionCall(typoutput, values[i]);
-	elog(DEBUG4, "inserted -> %s", prt);
-	pfree(prt);
+
+	/*
+	 * We use ereport not elog here so that parameters aren't evaluated unless
+	 * the message is going to be printed, which generally it isn't
+	 */
+	ereport(DEBUG4,
+			(errmsg_internal("inserted -> %s",
+							 OidOutputFunctionCall(typoutput, values[i]))));
 }
 
 /* ----------------

@@ -2,8 +2,8 @@
 
 <chapter id="ddl">
  <title>Data Definition</title>
-&common;
 
+&common;
  <para>
   This chapter covers how one creates the database structures that
   will hold one's data.  In a relational database, the raw data is
@@ -30,8 +30,8 @@
   <indexterm>
    <primary>column</primary>
   </indexterm>
-&common;
 
+&common;
   <para>
    A table in a relational database is much like a table on paper: It
    consists of rows and columns.  The number and order of the columns
@@ -61,12 +61,7 @@
   </para>
 
   <para>
-<!## PG>
    <productname>PostgreSQL</productname> includes a sizable set of
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> includes a sizable set of
-<!## end>
    built-in data types that fit many applications.  Users can also
    define their own data types.  Most built-in data types have obvious
    names and semantics, so we defer a detailed explanation to <xref
@@ -256,8 +251,8 @@ DROP TABLE products;
   <indexterm zone="ddl-default">
    <primary>default value</primary>
   </indexterm>
-&common;
 
+&common;
   <para>
    A column can be assigned a default value.  When a new row is
    created and no values are specified for some of the columns, those
@@ -287,7 +282,6 @@ CREATE TABLE products (
   </para>
 
   <para>
-
    The default value can be an expression, which will be
    evaluated whenever the default value is inserted
    (<emphasis>not</emphasis> when the table is created).  A common example
@@ -323,8 +317,8 @@ CREATE TABLE products (
   <indexterm zone="ddl-constraints">
    <primary>constraint</primary>
   </indexterm>
-&common;
 
+&common;
   <para>
    Data types are a way to limit the kind of data that can be stored
    in a table.  For many applications, however, the constraint they
@@ -344,7 +338,16 @@ CREATE TABLE products (
    even if the value came from the default value definition.
   </para>
 
-  <sect2>
+<!## XC>
+&xconly;
+  <para>
+   Current <productname>Postgres-XC</productname> release does not enforce
+   constraints which need to refer to rows stored in different nodes.
+   Specific restrictions will be found in separate sections.
+  </para>
+<!## end>
+
+  <sect2 id="ddl-constraints-check-constraints">
    <title>Check Constraints</title>
 
    <indexterm>
@@ -355,7 +358,6 @@ CREATE TABLE products (
     <primary>constraint</primary>
     <secondary>check</secondary>
    </indexterm>
-&common;
 
    <para>
     A check constraint is the most generic constraint type.  It allows
@@ -371,6 +373,7 @@ CREATE TABLE products (
 </programlisting>
    </para>
 
+&common;
    <para>
     As you see, the constraint definition comes after the data type,
     just like default value definitions.  Default values and
@@ -385,6 +388,7 @@ CREATE TABLE products (
     <primary>constraint</primary>
     <secondary>name</secondary>
    </indexterm>
+
 &common;
    <para>
     You can also give the constraint a separate name.  This clarifies
@@ -480,6 +484,7 @@ CREATE TABLE products (
     <primary>null value</primary>
     <secondary sortas="check constraints">with check constraints</secondary>
    </indexterm>
+
 &common;
    <para>
     It should be noted that a check constraint is satisfied if the
@@ -502,8 +507,8 @@ CREATE TABLE products (
     <primary>constraint</primary>
     <secondary>NOT NULL</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
     A not-null constraint simply specifies that a column must not
     assume the null value.  A syntax example:
@@ -570,7 +575,7 @@ CREATE TABLE products (
    </tip>
   </sect2>
 
-  <sect2>
+  <sect2 id="ddl-constraints-unique-constraints">
    <title>Unique Constraints</title>
 
    <indexterm>
@@ -581,8 +586,8 @@ CREATE TABLE products (
     <primary>constraint</primary>
     <secondary>unique</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
     Unique constraints ensure that the data contained in a column or a
     group of columns is unique with respect to all the rows in the
@@ -634,7 +639,7 @@ CREATE TABLE products (
    </para>
 
    <para>
-    Adding a unique constraint will automatically create a unique tree
+    Adding a unique constraint will automatically create a unique btree
     index on the column or group of columns used in the constraint.
    </para>
 
@@ -656,12 +661,11 @@ CREATE TABLE products (
     careful when developing applications that are intended to be
     portable.
    </para>
-
 <!## XC>
 &xconly;
    <para>
-    In <productname>Postgres-XC</>, in distributed
-    tables, <literal>UNIQUE</literal> constraints must include the
+    In distributed tables of <productname>Postgres-XC</>,
+    <literal>UNIQUE</literal> constraints must include the
     distribution column of the table. If the table is distributed
     by <type>ROUNDROBIN</type>, you cannot enforce <type>UNIQUE</>
     constraint because it does not have a distribution column.
@@ -673,7 +677,7 @@ CREATE TABLE products (
 <!## end>
   </sect2>
 
-  <sect2>
+  <sect2 id="ddl-constraints-primary-keys">
    <title>Primary Keys</title>
 
    <indexterm>
@@ -684,8 +688,8 @@ CREATE TABLE products (
     <primary>constraint</primary>
     <secondary>primary key</secondary>
    </indexterm>
-&common;
 
+&common;
    <para>
     Technically, a primary key constraint is simply a combination of a
     unique constraint and a not-null constraint.  So, the following
@@ -749,7 +753,7 @@ CREATE TABLE example (
 &xconly;
 <!## XC>
    <para>
-    As mentioned in <type>UNIQUE</> constraint, distribution column
+    Similar to <type>UNIQUE</> constraint, distribution column
     must be included in <type>PRIMARY KEY</type>.  Other restrictions
     apply to <type>PRIMARY KEY</> too.  When an expression is used on
     a <type>PRIMARY KEY</> constraint, this expression must contain
@@ -774,8 +778,8 @@ CREATE TABLE example (
    <indexterm>
     <primary>referential integrity</primary>
    </indexterm>
-&common;
 
+&common;
    <para>
     A foreign key constraint specifies that the values in a column (or
     a group of columns) must match the values appearing in some row
@@ -837,7 +841,7 @@ CREATE TABLE orders (
    <para>
 <!## end>
 &common;
-    Now it is impossible to create orders with
+    Now it is impossible to create orders with non-NULL
     <structfield>product_no</structfield> entries that do not appear in the
     products table.
    </para>
@@ -865,9 +869,10 @@ CREATE TABLE orders (
     because in absence of a column list the primary key of the
     referenced table is used as the referenced column(s).
    </para>
+
 <!## end>
 
-<!## PG>
+<!## XC>
 <!-- NOTICE:
      In XC, we cannot specify both PRIMARY KEY and REFERENCES key
      for different columns.
@@ -891,6 +896,22 @@ CREATE TABLE t1 (
 <!## end>
 
    <para>
+    A foreign key can also constrain and reference a group of columns.
+    As usual, it then needs to be written in table constraint form.
+    Here is a contrived syntax example:
+<programlisting>
+CREATE TABLE t1 (
+  a integer PRIMARY KEY,
+  b integer,
+  c integer,
+  <emphasis>FOREIGN KEY (b, c) REFERENCES other_table (c1, c2)</emphasis>
+);
+</programlisting>
+    Of course, the number and type of the constrained columns need to
+    match the number and type of the referenced columns.
+   </para>
+
+   <para>
     You can assign your own name for a foreign key constraint,
     in the usual way.
    </para>
@@ -900,7 +921,7 @@ CREATE TABLE t1 (
      XC does not allow multiple reference integrity in a table.
 -->
    <para>
-    A table can contain more than one foreign key constraint.  This is
+    A table can have more than one foreign key constraint.  This is
     used to implement many-to-many relationships between tables.  Say
     you have tables about products and orders, but now you want to
     allow one order to contain possibly many products (which the
@@ -980,6 +1001,7 @@ CREATE TABLE order_items (
    </para>
 <!## end>
 &common;
+
    <para>
     To illustrate this, let's implement the following policy on the
     many-to-many relationship example above: when someone wants to
@@ -1045,11 +1067,12 @@ CREATE TABLE order_items (
     row(s) referencing it should be automatically deleted as well.
     There are two other options:
     <literal>SET NULL</literal> and <literal>SET DEFAULT</literal>.
-    These cause the referencing columns to be set to nulls or default
+    These cause the referencing column(s) in the referencing row(s)
+    to be set to nulls or their default
     values, respectively, when the referenced row is deleted.
     Note that these do not excuse you from observing any constraints.
     For example, if an action specifies <literal>SET DEFAULT</literal>
-    but the default value would not satisfy the foreign key, the
+    but the default value would not satisfy the foreign key constraint, the
     operation will fail.
    </para>
 
@@ -1057,13 +1080,30 @@ CREATE TABLE order_items (
     Analogous to <literal>ON DELETE</literal> there is also
     <literal>ON UPDATE</literal> which is invoked when a referenced
     column is changed (updated).  The possible actions are the same.
+    In this case, <literal>CASCADE</> means that the updated values of the
+    referenced column(s) should be copied into the referencing row(s).
    </para>
 
    <para>
+    Normally, a referencing row need not satisfy the foreign key constraint
+    if any of its referencing columns are null.  If <literal>MATCH FULL</>
+    is added to the foreign key declaration, a referencing row escapes
+    satisfying the constraint only if all its referencing columns are null
+    (so a mix of null and non-null values is guaranteed to fail a
+    <literal>MATCH FULL</> constraint).  If you don't want referencing rows
+    to be able to avoid satisfying the foreign key constraint, declare the
+    referencing column(s) as <literal>NOT NULL</>.
+   </para>
+
+   <para>
+    A foreign key must reference columns that either are a primary key or
+    form a unique constraint.  This means that the referenced columns always
+    have an index (the one underlying the primary key or unique constraint);
+    so checks on whether a referencing row has a match will be efficient.
     Since a <command>DELETE</command> of a row from the referenced table
     or an <command>UPDATE</command> of a referenced column will require
     a scan of the referencing table for rows matching the old value, it
-    is often a good idea to index the referencing columns.  Because this
+    is often a good idea to index the referencing columns too.  Because this
     is not always needed, and there are many choices available on how
     to index, declaration of a foreign key constraint does not
     automatically create an index on the referencing columns.
@@ -1071,15 +1111,8 @@ CREATE TABLE order_items (
 
    <para>
     More information about updating and deleting data is in <xref
-    linkend="dml">.
-   </para>
-
-   <para>
-    Finally, we should mention that a foreign key must reference
-    columns that either are a primary key or form a unique constraint.
-    If the foreign key references a unique constraint, there are some
-    additional possibilities regarding how null values are matched.
-    These are explained in the reference documentation for
+    linkend="dml">.  Also see the description of foreign key constraint
+    syntax in the reference documentation for
     <xref linkend="sql-createtable">.
    </para>
   </sect2>
@@ -1122,14 +1155,13 @@ CREATE TABLE circles (
     Adding an exclusion constraint will automatically create an index
     of the type specified in the constraint declaration.
    </para>
-$xc-constraint;
   </sect2>
 <!## end>
  </sect1>
 
  <sect1 id="ddl-system-columns">
   <title>System Columns</title>
-&common;
+
   <para>
    Every table has several <firstterm>system columns</> that are
    implicitly defined by the system.  Therefore, these names cannot be
@@ -1225,7 +1257,7 @@ $xc-constraint;
      <indexterm>
       <primary>cmin</primary>
      </indexterm>
-
+&common;
      <para>
       The command identifier (starting at zero) within the inserting
       transaction.
@@ -1256,7 +1288,7 @@ $xc-constraint;
      <indexterm>
       <primary>cmax</primary>
      </indexterm>
-
+&common;
      <para>
       The command identifier within the deleting transaction, or zero.
      </para>
@@ -1269,7 +1301,7 @@ $xc-constraint;
      <indexterm>
       <primary>ctid</primary>
      </indexterm>
-
+&common;
      <para>
       The physical location of the row version within its table.  Note that
       although the <structfield>ctid</structfield> can be used to
@@ -1423,21 +1455,7 @@ $xc-constraint;
    here.
   </para>
 
-<!## XC>
-&xconly;
-  <para>
-   In <productname>Postgres-XC</> the following are not allowed:
-   <itemizedlist spacing="compact">
-    <listitem>
-     <para>Modifying distribution columns definition</para>
-    </listitem>
-    <listitem>
-     <para>Modifying distribution column values</para>
-    </listitem>
-   </itemizedlist>
-  </para>
-<!## end>
-  <sect2>
+  <sect2 id="ddl-alter-adding-a-column">
    <title>Adding a Column</title>
 
    <indexterm>
@@ -1481,7 +1499,7 @@ ALTER TABLE products ADD COLUMN description text CHECK (description &lt;&gt; '')
   </tip>
   </sect2>
 
-  <sect2>
+  <sect2 id="ddl-alter-removing-a-column">
    <title>Removing a Column</title>
 
    <indexterm>
@@ -1489,7 +1507,6 @@ ALTER TABLE products ADD COLUMN description text CHECK (description &lt;&gt; '')
     <secondary>removing</secondary>
    </indexterm>
 &common;
-
    <para>
     To remove a column, use a command like:
 <programlisting>
@@ -1507,9 +1524,16 @@ ALTER TABLE products DROP COLUMN description CASCADE;
     See <xref linkend="ddl-depend"> for a description of the general
     mechanism behind this.
    </para>
+<!## XC>
+&xconly;
+   <para>
+    In <productname>Postgres-XC</productname>, you should not remove the distribution column
+    of a distribution table.
+   </para>
+<!## end>
   </sect2>
 
-  <sect2>
+  <sect2 id="ddl-alter-adding-a-constraint">
    <title>Adding a Constraint</title>
 
    <indexterm>
@@ -1517,7 +1541,6 @@ ALTER TABLE products DROP COLUMN description CASCADE;
     <secondary>adding</secondary>
    </indexterm>
 &common;
-
    <para>
     To add a constraint, the table constraint syntax is used.  For example:
 <programlisting>
@@ -1536,16 +1559,9 @@ ALTER TABLE products ALTER COLUMN product_no SET NOT NULL;
     The constraint will be checked immediately, so the table data must
     satisfy the constraint before it can be added.
    </para>
-<!## XC>
-&xconly;
-   <para>
-    Please remember that distribution column has to be included in UNIQUE and REFERENCE constraints.
-   </para>
-&xc-constraint;
-<!## end>
   </sect2>
 
-  <sect2>
+  <sect2 id="ddl-alter-removing-a-constraint">
    <title>Removing a Constraint</title>
 
    <indexterm>
@@ -1553,7 +1569,6 @@ ALTER TABLE products ALTER COLUMN product_no SET NOT NULL;
     <secondary>removing</secondary>
    </indexterm>
 &common;
-
    <para>
     To remove a constraint you need to know its name.  If you gave it
     a name then that's easy.  Otherwise the system assigned a
@@ -1585,6 +1600,22 @@ ALTER TABLE products ALTER COLUMN product_no DROP NOT NULL;
 </programlisting>
     (Recall that not-null constraints do not have names.)
    </para>
+
+<!## XC>
+&xconly;
+   <para>
+    In <productname>Postgres-XC</> the following are not allowed:
+    <itemizedlist spacing="compact">
+     <listitem>
+      <para>Modifying distribution columns definition</para>
+     </listitem>
+     <listitem>
+      <para>Modifying distribution column values</para>
+     </listitem>
+    </itemizedlist>
+   </para>
+<!## end>
+
   </sect2>
 
   <sect2>
@@ -1595,7 +1626,6 @@ ALTER TABLE products ALTER COLUMN product_no DROP NOT NULL;
     <secondary>changing</secondary>
    </indexterm>
 &common;
-
    <para>
     To set a new default for a column, use a command like:
 <programlisting>
@@ -1625,7 +1655,6 @@ ALTER TABLE products ALTER COLUMN price DROP DEFAULT;
     <secondary>changing</secondary>
    </indexterm>
 &common;
-
    <para>
     To convert a column to a different data type, use a command like:
 <programlisting>
@@ -1638,27 +1667,17 @@ ALTER TABLE products ALTER COLUMN price TYPE numeric(10,2);
    </para>
 
    <para>
-<!## PG>
     <productname>PostgreSQL</> will attempt to convert the column's
     default value (if any) to the new type, as well as any constraints
     that involve the column.  But these conversions might fail, or might
     produce surprising results.  It's often best to drop any constraints
     on the column before altering its type, and then add back suitably
-    modified constraints afterwords.
-<!## end>
-<!## XC>
-    <productname>Postgres-XC</> will attempt to convert the column's
-    default value (if any) to the new type, as well as any constraints
-    that involve the column.  But these conversions might fail, or might
-    produce surprising results.  It's often best to drop any constraints
-    on the column before altering its type, and then add back suitably
     modified constraints afterwards.
-<!## end>
    </para>
 <!## XC>
 &xconly;
    <para>
-    It is <productname>Postgres-XC</>'s restriction that you cannot change the
+    It is <productname>Postgres-XC</productname>'s restriction that you cannot change the
     type of distribution column.
    </para>
 <!## end>
@@ -1990,6 +2009,13 @@ CREATE TABLE products ( ... );
 CREATE TABLE public.products ( ... );
 </programlisting>
    </para>
+<!## XC>
+&xconly;
+   <para>
+    Please remember that distribution column has to be included in UNIQUE and REFERENCE constraints.
+   </para>
+&xc-constraint;
+<!## end>
   </sect2>
 
   <sect2 id="ddl-schemas-path">
@@ -2033,7 +2059,7 @@ CREATE TABLE public.products ( ... );
    </para>
 
    <indexterm>
-    <primary>search_path</primary>
+    <primary><varname>search_path</varname> configuration parameter</primary>
    </indexterm>
 
    <para>
@@ -2269,7 +2295,6 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
   </sect2>
  </sect1>
 
-
  <sect1 id="ddl-inherit">
   <title>Inheritance</title>
 
@@ -2373,6 +2398,23 @@ SELECT name, altitude
   </para>
 
   <para>
+   You can also write the table name with a trailing <literal>*</>
+   to explicitly specify that descendant tables are included:
+
+<programlisting>
+SELECT name, altitude
+    FROM cities*
+    WHERE altitude &gt; 500;
+</programlisting>
+
+   Writing <literal>*</> is not necessary, since this behavior is
+   the default (unless you have changed the setting of the
+   <xref linkend="guc-sql-inheritance"> configuration option).
+   However writing <literal>*</> might be useful to emphasize that
+   additional tables will be searched.
+  </para>
+
+  <para>
    In some cases you might wish to know which table a particular row
    originated from. There is a system column called
    <structfield>tableoid</structfield> in each table which can tell you the
@@ -2394,10 +2436,6 @@ WHERE c.altitude &gt; 500;
    139798 | Madison   |      845
 </programlisting>
 
-<!## PG>
-<!-- NOTICE:
-     XC doesn't enforce OID identity throughout the cluster.
--->
    (If you try to reproduce this example, you will probably get
    different numeric OIDs.)  By doing a join with
    <structname>pg_class</> you can see the actual table names:
@@ -2417,8 +2455,17 @@ WHERE c.altitude &gt; 500 AND c.tableoid = p.oid;
  cities   | Mariposa  |     1953
  capitals | Madison   |      845
 </programlisting>
-<!## end>
   </para>
+
+<!## XC>
+&xconly;
+  <para>
+   Please note that in <productname>Postgres-XC</productname>, OID is local
+   to a node.
+   You may have different OID values for the same object when you test it in
+   different nodes.
+  </para>
+<!## end>
 
   <para>
    Inheritance does not automatically propagate data from
@@ -2471,14 +2518,9 @@ VALUES ('New York', NULL, NULL, 'NY');
    check constraints with the same names and check expressions as those of the
    parent. Similarly an inheritance link can be removed from a child using the
    <literal>NO INHERIT</literal> variant of <command>ALTER TABLE</>.
-<!## PG>
-<!-- NOTICE:
-     Reference to partitioning
--->
    Dynamically adding and removing inheritance links like this can be useful
    when the inheritance relationship is being used for table
    partitioning (see <xref linkend="ddl-partitioning">).
-<!## end>
   </para>
 
   <para>
@@ -2529,15 +2571,15 @@ VALUES ('New York', NULL, NULL, 'NY');
    data modification, or schema modification
    (e.g., <literal>SELECT</literal>, <literal>UPDATE</literal>, <literal>DELETE</literal>,
    most variants of <literal>ALTER TABLE</literal>, but
-   not <literal>INSERT</literal> and <literal>ALTER TABLE ...
+   not <literal>INSERT</literal> or <literal>ALTER TABLE ...
    RENAME</literal>) typically default to including child tables and
    support the <literal>ONLY</literal> notation to exclude them.
    Commands that do database maintenance and tuning
    (e.g., <literal>REINDEX</literal>, <literal>VACUUM</literal>)
-   typically only work on individual, physical tables and do no
+   typically only work on individual, physical tables and do not
    support recursing over inheritance hierarchies.  The respective
-   behavior of each individual command is documented in the reference
-   part (<xref linkend="sql-commands">).
+   behavior of each individual command is documented in its reference
+   page (<xref linkend="sql-commands">).
   </para>
 
   <para>
@@ -2587,26 +2629,8 @@ VALUES ('New York', NULL, NULL, 'NY');
    inheritance is useful for your application.
   </para>
 
-  <note>
-   <title>Deprecated</title>
-   <para>
-     In releases of <productname>PostgreSQL</productname> prior to 7.1, the
-     default behavior was not to include child tables in queries. This was
-     found to be error prone and also in violation of the SQL
-     standard.  You can get the pre-7.1 behavior by turning off the
-     <xref linkend="guc-sql-inheritance"> configuration
-     option.
-   </para>
-  </note>
-
    </sect2>
   </sect1>
-
-<!## PG>
-<!-- NOTICE:
-     XC seems to support almost all the feature here, but needs TRIGGER.
-     Should restore this section when XC supports TRIGGER.
--->
 
   <sect1 id="ddl-partitioning">
    <title>Partitioning</title>
@@ -2619,7 +2643,7 @@ VALUES ('New York', NULL, NULL, 'NY');
     <primary>table</primary>
     <secondary>partitioning</secondary>
    </indexterm>
-
+&common;
    <para>
     <productname>PostgreSQL</productname> supports basic table
     partitioning. This section describes why and how to implement
@@ -2628,7 +2652,7 @@ VALUES ('New York', NULL, NULL, 'NY');
 
    <sect2 id="ddl-partitioning-overview">
      <title>Overview</title>
-
+&common;
    <para>
     Partitioning refers to splitting what is logically one large table
     into smaller physical pieces.
@@ -2658,8 +2682,9 @@ VALUES ('New York', NULL, NULL, 'NY');
      <para>
       Bulk loads and deletes can be accomplished by adding or removing
       partitions, if that requirement is planned into the partitioning design.
-      <command>ALTER TABLE</> is far faster than a bulk operation.
-      It also entirely avoids the <command>VACUUM</command>
+      <command>ALTER TABLE NO INHERIT</> and <command>DROP TABLE</> are
+      both far faster than a bulk operation.
+      These commands also entirely avoid the <command>VACUUM</command>
       overhead caused by a bulk <command>DELETE</>.
      </para>
     </listitem>
@@ -2722,7 +2747,7 @@ VALUES ('New York', NULL, NULL, 'NY');
 
    <sect2 id="ddl-partitioning-implementation">
      <title>Implementing Partitioning</title>
-
+&common;
     <para>
      To set up a partitioned table, do the following:
      <orderedlist spacing="compact">
@@ -3017,7 +3042,7 @@ LANGUAGE plpgsql;
 
    <sect2 id="ddl-partitioning-managing-partitions">
    <title>Managing Partitions</title>
-
+&common;
    <para>
      Normally the set of partitions established when initially
      defining the table are not intended to remain static. It is
@@ -3088,7 +3113,7 @@ ALTER TABLE measurement_y2008m02 INHERIT measurement;
    <indexterm>
     <primary>constraint exclusion</primary>
    </indexterm>
-
+&common;
    <para>
     <firstterm>Constraint exclusion</> is a query optimization technique
     that improves performance for partitioned tables defined in the
@@ -3179,7 +3204,7 @@ EXPLAIN SELECT count(*) FROM measurement WHERE logdate &gt;= DATE '2008-01-01';
 
    <sect2 id="ddl-partitioning-alternatives">
    <title>Alternative Partitioning Methods</title>
-
+&common;
     <para>
      A different approach to redirecting inserts into the appropriate
      partition table is to set up rules, instead of a trigger, on the
@@ -3241,7 +3266,7 @@ UNION ALL SELECT * FROM measurement_y2008m01;
 
    <sect2 id="ddl-partitioning-caveats">
    <title>Caveats</title>
-
+&common;
    <para>
     The following caveats apply to partitioned tables:
    <itemizedlist>
@@ -3289,11 +3314,11 @@ ANALYZE measurement;
     <listitem>
      <para>
       Constraint exclusion only works when the query's <literal>WHERE</>
-      clause contains constants.  A parameterized query will not be
-      optimized, since the planner cannot know which partitions the
-      parameter value might select at run time.  For the same reason,
-      <quote>stable</> functions such as <function>CURRENT_DATE</function>
-      must be avoided.
+      clause contains constants (or externally supplied parameters).
+      For example, a comparison against a non-immutable function such as
+      <function>CURRENT_TIMESTAMP</function> cannot be optimized, since the
+      planner cannot know which partition the function value might fall
+      into at run time.
      </para>
     </listitem>
 
@@ -3333,7 +3358,10 @@ ANALYZE measurement;
    <indexterm>
     <primary>foreign table</primary>
    </indexterm>
-
+   <indexterm>
+    <primary>user mapping</primary>
+   </indexterm>
+&common;
    <para>
     <productname>PostgreSQL</productname> implements portions of the SQL/MED
     specification, allowing you to access data that resides outside
@@ -3346,35 +3374,43 @@ ANALYZE measurement;
     Foreign data is accessed with help from a
     <firstterm>foreign data wrapper</firstterm>. A foreign data wrapper is a
     library that can communicate with an external data source, hiding the
-    details of connecting to the data source and fetching data from it. There
-    are several foreign data wrappers available, which can for example read
-    plain data files residing on the server, or connect to another PostgreSQL
-    instance. If none of the existing foreign data wrappers suit your needs,
-    you can write your own; see <xref linkend="fdwhandler">.
+    details of connecting to the data source and obtaining data from it.
+    There are some foreign data wrappers available as <filename>contrib</>
+    modules; see <xref linkend="contrib">.  Other kinds of foreign data
+    wrappers might be found as third party products.  If none of the existing
+    foreign data wrappers suit your needs, you can write your own; see <xref
+    linkend="fdwhandler">.
    </para>
 
    <para>
     To access foreign data, you need to create a <firstterm>foreign server</>
-    object, which defines how to connect to a particular external data source,
-    according to the set of options used by a particular foreign data
+    object, which defines how to connect to a particular external data source
+    according to the set of options used by its supporting foreign data
     wrapper. Then you need to create one or more <firstterm>foreign
     tables</firstterm>, which define the structure of the remote data. A
     foreign table can be used in queries just like a normal table, but a
     foreign table has no storage in the PostgreSQL server.  Whenever it is
-    used, PostgreSQL asks the foreign data wrapper to fetch the data from the
-    external source.
+    used, <productname>PostgreSQL</productname> asks the foreign data wrapper
+    to fetch data from the external source, or transmit data to the external
+    source in the case of update commands.
    </para>
 
    <para>
-    Currently, foreign tables are read-only.  This limitation may be fixed
-    in a future release.
+    Accessing remote data may require authenticating to the external
+    data source.  This information can be provided by a
+    <firstterm>user mapping</>, which can provide additional data
+    such as user names and passwords based
+    on the current <productname>PostgreSQL</productname> role.
+   </para>
+
+   <para>
+    For additional information, see
+    <xref linkend="sql-createforeigndatawrapper">,
+    <xref linkend="sql-createserver">,
+    <xref linkend="sql-createusermapping">, and
+    <xref linkend="sql-createforeigntable">.
    </para>
  </sect1>
-
-<!-- NOTICE:
-     End of "partitioning"
--->
-<!## end>
 
  <sect1 id="ddl-others">
   <title>Other Database Objects</title>

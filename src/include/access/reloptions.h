@@ -9,7 +9,7 @@
  * into a lot of low-level code.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/reloptions.h
@@ -20,6 +20,7 @@
 #define RELOPTIONS_H
 
 #include "access/htup.h"
+#include "access/tupdesc.h"
 #include "nodes/pg_list.h"
 
 /* types supported by reloptions */

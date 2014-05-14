@@ -8,6 +8,21 @@ SELECT 1 AS zero WHERE 1 NOT IN (SELECT 1);
 
 SELECT 1 AS zero WHERE 1 IN (SELECT 2);
 
+-- Check grammar's handling of extra parens in assorted contexts
+
+SELECT * FROM (SELECT 1 AS x) ss;
+SELECT * FROM ((SELECT 1 AS x)) ss;
+
+(SELECT 2) UNION SELECT 2;
+((SELECT 2)) UNION SELECT 2;
+
+SELECT ((SELECT 2) UNION SELECT 2);
+SELECT (((SELECT 2)) UNION SELECT 2);
+
+SELECT (SELECT ARRAY[1,2,3])[1];
+SELECT ((SELECT ARRAY[1,2,3]))[2];
+SELECT (((SELECT ARRAY[1,2,3])))[3];
+
 -- Set up some simple test tables
 
 CREATE TABLE SUBSELECT_TBL (
@@ -108,9 +123,6 @@ select count(distinct ss.ten) from
 -- "IN (SELECT DISTINCT ...)" and related cases.  Per example from
 -- Luca Pireddu and Michael Fuhr.
 --
-
--- Enforce use of COMMIT instead of 2PC for temporary objects
-SET enforce_two_phase_commit TO off;
 
 CREATE TEMP TABLE foo (id integer);
 CREATE TEMP TABLE bar (id1 integer, id2 integer);
@@ -341,6 +353,15 @@ select (select (select view_a)) from view_a;
 select (select (a.*)::text) from view_a a;
 
 --
+-- Check that whole-row Vars reading the result of a subselect don't include
+-- any junk columns therein
+--
+
+select q from (select max(f1) from int4_tbl group by f1 order by f1) q;
+with q as (select max(f1) from int4_tbl group by f1 order by f1)
+  select q from q;
+
+--
 -- Test case for sublinks pushed down into subselects via join alias expansion
 --
 
@@ -351,6 +372,21 @@ from
    from int8_tbl) sq0
   join
   int4_tbl i4 on dummy = i4.f1;
+
+--
+-- Test case for cross-type partial matching in hashed subplan (bug #7597)
+--
+
+create temp table outer_7597 (f1 int4, f2 int4);
+insert into outer_7597 values (0, 0);
+insert into outer_7597 values (1, 0);
+insert into outer_7597 values (0, null);
+insert into outer_7597 values (1, null);
+
+create temp table inner_7597(c1 int8, c2 int8);
+insert into inner_7597 values(0, null);
+
+select * from outer_7597 where (f1, f2) not in (select * from inner_7597);
 
 --
 -- Test case for premature memory release during hashing of subplan output
@@ -366,3 +402,19 @@ where a.thousand = b.thousand
   and exists ( select 1 from tenk1 c where b.hundred = c.hundred
                    and not exists ( select 1 from tenk1 d
                                     where a.thousand = d.thousand ) );
+
+--
+-- Check that nested sub-selects are not pulled up if they contain volatiles
+--
+explain (verbose, costs off)
+  select x, x from
+    (select (select now()) as x from (values(1),(2)) v(y)) ss;
+explain (verbose, costs off)
+  select x, x from
+    (select (select random()) as x from (values(1),(2)) v(y)) ss;
+explain (verbose, costs off)
+  select x, x from
+    (select (select now() where y=y) as x from (values(1),(2)) v(y)) ss;
+explain (verbose, costs off)
+  select x, x from
+    (select (select random() where y=y) as x from (values(1),(2)) v(y)) ss;

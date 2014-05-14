@@ -3,8 +3,8 @@
  * varsup.c
  *	  postgres OID & XID variables support routines
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
- * Portions Copyright (c) 2010-2012 Postgres-XC Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2013 Postgres-XC Development Group
  *
  * IDENTIFICATION
  *	  src/backend/access/transam/varsup.c
@@ -208,7 +208,8 @@ GetNewTransactionId(bool isSubXact)
 		else
 		{
 			/* Fallback to default */
-			elog(LOG, "Falling back to local Xid. Was = %d, now is = %d",
+			if (!useLocalXid)
+				elog(LOG, "Falling back to local Xid. Was = %d, now is = %d",
 					next_xid, ShmemVariableCache->nextXid);
 			xid = ShmemVariableCache->nextXid;
 		}
@@ -227,6 +228,8 @@ GetNewTransactionId(bool isSubXact)
 	 * If we're past xidStopLimit, refuse to execute transactions, unless
 	 * we are running in a standalone backend (which gives an escape hatch
 	 * to the DBA who somehow got past the earlier defenses).
+	 *
+	 * Note that this coding also appears in GetNewMultiXactId.
 	 *----------
 	 */
 #ifdef PGXC
@@ -658,18 +661,18 @@ GetNewObjectId(void)
 	 * iterations in GetNewOid.)  Note we are relying on unsigned comparison.
 	 *
 	 * During initdb, we start the OID generator at FirstBootstrapObjectId, so
-	 * we only enforce wrapping to that point when in bootstrap or standalone
-	 * mode.  The first time through this routine after normal postmaster
-	 * start, the counter will be forced up to FirstNormalObjectId. This
-	 * mechanism leaves the OIDs between FirstBootstrapObjectId and
-	 * FirstNormalObjectId available for automatic assignment during initdb,
-	 * while ensuring they will never conflict with user-assigned OIDs.
+	 * we only wrap if before that point when in bootstrap or standalone mode.
+	 * The first time through this routine after normal postmaster start, the
+	 * counter will be forced up to FirstNormalObjectId.  This mechanism
+	 * leaves the OIDs between FirstBootstrapObjectId and FirstNormalObjectId
+	 * available for automatic assignment during initdb, while ensuring they
+	 * will never conflict with user-assigned OIDs.
 	 */
 	if (ShmemVariableCache->nextOid < ((Oid) FirstNormalObjectId))
 	{
 		if (IsPostmasterEnvironment)
 		{
-			/* wraparound in normal environment */
+			/* wraparound, or first post-initdb assignment, in normal mode */
 			ShmemVariableCache->nextOid = FirstNormalObjectId;
 			ShmemVariableCache->oidCount = 0;
 		}
@@ -678,8 +681,8 @@ GetNewObjectId(void)
 			/* we may be bootstrapping, so don't enforce the full range */
 			if (ShmemVariableCache->nextOid < ((Oid) FirstBootstrapObjectId))
 			{
-				/* wraparound in standalone environment? */
-				ShmemVariableCache->nextOid = FirstBootstrapObjectId;
+				/* wraparound in standalone mode (unlikely but possible) */
+				ShmemVariableCache->nextOid = FirstNormalObjectId;
 				ShmemVariableCache->oidCount = 0;
 			}
 		}

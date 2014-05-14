@@ -9,15 +9,9 @@
   </indexterm>
 
 &common;
-
   <para>
    As described in <xref linkend="extend-type-system">,
-<!## PG>
    <productname>PostgreSQL</productname> can be extended to support new
-<!## end>
-<!## XC>
-   <productname>Postgres-XC</productname> can be extended to support new
-<!## end>
    data types.  This section describes how to define new base types,
    which are data types defined below the level of the <acronym>SQL</>
    language.  Creating a new base type requires implementing functions
@@ -227,12 +221,7 @@ CREATE TYPE complex (
     <secondary>of user-defined type</secondary>
   </indexterm>
   When you define a new base type,
-<!## PG>
   <productname>PostgreSQL</productname> automatically provides support
-<!## end>
-<!## XC>
-  <productname>Postgres-XC</productname> automatically provides support
-<!## end>
   for arrays of that type.  The array type typically
   has the same name as the base type with the underscore character
   (<literal>_</>) prepended.

@@ -6,7 +6,7 @@
  *	   including abstime, reltime, date, and time.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/datetime.h
@@ -285,7 +285,7 @@ extern int DecodeISO8601Interval(char *str,
 					  int *dtype, struct pg_tm * tm, fsec_t *fsec);
 
 extern void DateTimeParseError(int dterr, const char *str,
-				   const char *datatype);
+				   const char *datatype) __attribute__((noreturn));
 
 extern int	DetermineTimeZoneOffset(struct pg_tm * tm, pg_tz *tzp);
 

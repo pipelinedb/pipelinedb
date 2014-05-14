@@ -1,16 +1,18 @@
 /*-------------------------------------------------------------------------
  *
  * createas.c
- *	  Execution of CREATE TABLE ... AS, a/k/a SELECT INTO
+ *	  Execution of CREATE TABLE ... AS, a/k/a SELECT INTO.
+ *	  Since CREATE MATERIALIZED VIEW shares syntax and most behaviors,
+ *	  we implement that here, too.
  *
  * We implement this by diverting the query's normal output to a
  * specialized DestReceiver type.
  *
- * Formerly, this command was implemented as a variant of SELECT, which led
+ * Formerly, CTAS was implemented as a variant of SELECT, which led
  * to assorted legacy behaviors that we still try to preserve, notably that
  * we must return a tuples-processed count in the completionTag.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -22,13 +24,20 @@
 #include "postgres.h"
 
 #include "access/reloptions.h"
+#include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "access/xact.h"
 #include "catalog/toasting.h"
 #include "commands/createas.h"
+#include "commands/matview.h"
 #include "commands/prepare.h"
 #include "commands/tablecmds.h"
+#include "commands/view.h"
+#include "miscadmin.h"
 #include "parser/parse_clause.h"
+#ifdef PGXC
+#include "pgxc/pgxc.h"
+#endif /* PGXC */
 #include "rewrite/rewriteHandler.h"
 #include "storage/smgr.h"
 #include "tcop/tcopprot.h"
@@ -64,7 +73,11 @@ ExecCreateTableAs(CreateTableAsStmt *stmt, const char *queryString,
 {
 	Query	   *query = (Query *) stmt->query;
 	IntoClause *into = stmt->into;
+	bool		is_matview = (into->viewQuery != NULL);
 	DestReceiver *dest;
+	Oid			save_userid = InvalidOid;
+	int			save_sec_context = 0;
+	int			save_nestlevel = 0;
 	List	   *rewritten;
 	PlannedStmt *plan;
 	QueryDesc  *queryDesc;
@@ -85,11 +98,27 @@ ExecCreateTableAs(CreateTableAsStmt *stmt, const char *queryString,
 	{
 		ExecuteStmt *estmt = (ExecuteStmt *) query->utilityStmt;
 
+		Assert(!is_matview);	/* excluded by syntax */
 		ExecuteQuery(estmt, into, queryString, params, dest, completionTag);
 
 		return;
 	}
 	Assert(query->commandType == CMD_SELECT);
+
+	/*
+	 * For materialized views, lock down security-restricted operations and
+	 * arrange to make GUC variable changes local to this command.	This is
+	 * not necessary for security, but this keeps the behavior similar to
+	 * REFRESH MATERIALIZED VIEW.  Otherwise, one could create a materialized
+	 * view not possible to refresh.
+	 */
+	if (is_matview)
+	{
+		GetUserIdAndSecContext(&save_userid, &save_sec_context);
+		SetUserIdAndSecContext(save_userid,
+						   save_sec_context | SECURITY_RESTRICTED_OPERATION);
+		save_nestlevel = NewGUCNestLevel();
+	}
 
 	/*
 	 * Parse analysis was done already, but we still have to run the rule
@@ -102,7 +131,7 @@ ExecCreateTableAs(CreateTableAsStmt *stmt, const char *queryString,
 	 * the case that CTAS is in a portal or plpgsql function and is executed
 	 * repeatedly.	(See also the same hack in EXPLAIN and PREPARE.)
 	 */
-	rewritten = QueryRewrite((Query *) copyObject(stmt->query));
+	rewritten = QueryRewrite((Query *) copyObject(query));
 
 	/* SELECT should never rewrite to more or less than one SELECT query */
 	if (list_length(rewritten) != 1)
@@ -128,6 +157,20 @@ ExecCreateTableAs(CreateTableAsStmt *stmt, const char *queryString,
 								GetActiveSnapshot(), InvalidSnapshot,
 								dest, params, 0);
 
+#ifdef PGXC
+	/* The data for materialized view comes from the initialising coordinator */
+	if (IS_PGXC_COORDINATOR &&
+		stmt->relkind == OBJECT_MATVIEW &&
+		IsConnFromCoord())
+	{
+		/* We need ExecutorStart to build the tuple descriptor only */
+		ExecutorStart(queryDesc, EXEC_FLAG_EXPLAIN_ONLY);
+		pgxc_fill_matview_by_copy(dest, into->skipData, queryDesc->operation,
+									queryDesc->tupDesc);
+	}
+	else
+	{
+#endif /* PGXC */
 	/* call ExecutorStart to prepare the plan for execution */
 	ExecutorStart(queryDesc, GetIntoRelEFlags(into));
 
@@ -150,11 +193,23 @@ ExecCreateTableAs(CreateTableAsStmt *stmt, const char *queryString,
 
 	/* and clean up */
 	ExecutorFinish(queryDesc);
+#ifdef PGXC
+	}
+#endif /* PGXC */
 	ExecutorEnd(queryDesc);
 
 	FreeQueryDesc(queryDesc);
 
 	PopActiveSnapshot();
+
+	if (is_matview)
+	{
+		/* Roll back any GUC changes */
+		AtEOXact_GUC(false, save_nestlevel);
+
+		/* Restore userid and security context */
+		SetUserIdAndSecContext(save_userid, save_sec_context);
+	}
 }
 
 /*
@@ -168,15 +223,25 @@ ExecCreateTableAs(CreateTableAsStmt *stmt, const char *queryString,
 int
 GetIntoRelEFlags(IntoClause *intoClause)
 {
+	int			flags;
+
 	/*
 	 * We need to tell the executor whether it has to produce OIDs or not,
 	 * because it doesn't have enough information to do so itself (since we
 	 * can't build the target relation until after ExecutorStart).
+	 *
+	 * Disallow the OIDS option for materialized views.
 	 */
-	if (interpretOidsOption(intoClause->options))
-		return EXEC_FLAG_WITH_OIDS;
+	if (interpretOidsOption(intoClause->options,
+							(intoClause->viewQuery == NULL)))
+		flags = EXEC_FLAG_WITH_OIDS;
 	else
-		return EXEC_FLAG_WITHOUT_OIDS;
+		flags = EXEC_FLAG_WITHOUT_OIDS;
+
+	if (intoClause->skipData)
+		flags |= EXEC_FLAG_WITH_NO_DATA;
+
+	return flags;
 }
 
 /*
@@ -210,6 +275,8 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 {
 	DR_intorel *myState = (DR_intorel *) self;
 	IntoClause *into = myState->into;
+	bool		is_matview;
+	char		relkind;
 	CreateStmt *create;
 	Oid			intoRelationId;
 	Relation	intoRelationDesc;
@@ -220,6 +287,10 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 
 	Assert(into != NULL);		/* else somebody forgot to set it */
+
+	/* This code supports both CREATE TABLE AS and CREATE MATERIALIZED VIEW */
+	is_matview = (into->viewQuery != NULL);
+	relkind = is_matview ? RELKIND_MATVIEW : RELKIND_RELATION;
 
 	/*
 	 * Create the target relation by faking up a CREATE TABLE parsetree and
@@ -298,12 +369,12 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 	if (lc != NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("CREATE TABLE AS specifies too many column names")));
+				 errmsg("too many column names were specified")));
 
 	/*
 	 * Actually create the target table
 	 */
-	intoRelationId = DefineRelation(create, RELKIND_RELATION, InvalidOid);
+	intoRelationId = DefineRelation(create, relkind, InvalidOid);
 
 	/*
 	 * If necessary, create a TOAST table for the target table.  Note that
@@ -323,6 +394,16 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 
 	AlterTableCreateToastTable(intoRelationId, toast_options);
 
+	/* Create the "view" part of a materialized view. */
+	if (is_matview)
+	{
+		/* StoreViewQuery scribbles on tree, so make a copy */
+		Query	   *query = (Query *) copyObject(into->viewQuery);
+
+		StoreViewQuery(intoRelationId, query, false);
+		CommandCounterIncrement();
+	}
+
 	/*
 	 * Finally we can open the target table
 	 */
@@ -337,7 +418,7 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 	rte = makeNode(RangeTblEntry);
 	rte->rtekind = RTE_RELATION;
 	rte->relid = intoRelationId;
-	rte->relkind = RELKIND_RELATION;
+	rte->relkind = relkind;
 	rte->requiredPerms = ACL_INSERT;
 
 	for (attnum = 1; attnum <= intoRelationDesc->rd_att->natts; attnum++)
@@ -345,6 +426,13 @@ intorel_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 								attnum - FirstLowInvalidHeapAttributeNumber);
 
 	ExecCheckRTPerms(list_make1(rte), true);
+
+	/*
+	 * Tentatively mark the target as populated, if it's a matview and we're
+	 * going to fill it; otherwise, no change needed.
+	 */
+	if (is_matview && !into->skipData)
+		SetMatViewPopulatedState(intoRelationDesc, true);
 
 	/*
 	 * Fill private fields of myState for use by later routines
@@ -421,3 +509,12 @@ intorel_destroy(DestReceiver *self)
 {
 	pfree(self);
 }
+
+#ifdef PGXC
+/* Function to expose the relation embedded by DR_intorel */
+extern Relation
+get_dest_into_rel(DestReceiver *self)
+{
+	return ((DR_intorel *) self)->rel;
+}
+#endif /* PGXC */

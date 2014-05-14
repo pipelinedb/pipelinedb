@@ -7,7 +7,7 @@
  * accessed via the extended FE/BE query protocol.
  *
  *
- * Copyright (c) 2002-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2002-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/commands/prepare.c
@@ -306,7 +306,7 @@ ExecuteQuery(ExecuteStmt *stmt, IntoClause *intoClause,
 	/*
 	 * Run the portal as appropriate.
 	 */
-	PortalStart(portal, paramLI, eflags, true);
+	PortalStart(portal, paramLI, eflags, GetActiveSnapshot());
 
 	(void) PortalRun(portal, count, false, dest, dest, completionTag);
 
@@ -371,21 +371,7 @@ EvaluateParams(PreparedStatement *pstmt, List *params,
 		Oid			expected_type_id = param_types[i];
 		Oid			given_type_id;
 
-		expr = transformExpr(pstate, expr);
-
-		/* Cannot contain subselects or aggregates */
-		if (pstate->p_hasSubLinks)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("cannot use subquery in EXECUTE parameter")));
-		if (pstate->p_hasAggs)
-			ereport(ERROR,
-					(errcode(ERRCODE_GROUPING_ERROR),
-			  errmsg("cannot use aggregate function in EXECUTE parameter")));
-		if (pstate->p_hasWindowFuncs)
-			ereport(ERROR,
-					(errcode(ERRCODE_WINDOWING_ERROR),
-				 errmsg("cannot use window function in EXECUTE parameter")));
+		expr = transformExpr(pstate, expr, EXPR_KIND_EXECUTE_PARAMETER);
 
 		given_type_id = exprType(expr);
 

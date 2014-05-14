@@ -1,14 +1,32 @@
 <!-- doc/src/sgml/oid2name.sgml -->
 
-<sect1 id="oid2name" xreflabel="oid2name">
- <title>oid2name</title>
+<refentry id="oid2name">
+ <refmeta>
+  <refentrytitle>oid2name</refentrytitle>
+  <manvolnum>1</manvolnum>
+  <refmiscinfo>Application</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>oid2name</refname>
+  <refpurpose>resolve OIDs and file nodes in a <productname>PostgreSQL</productname> data directory</refpurpose>
+ </refnamediv>
 
  <indexterm zone="oid2name">
   <primary>oid2name</primary>
  </indexterm>
 
-&common;
+ <refsynopsisdiv>
+  <cmdsynopsis>
+   <command>oid2name</command>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
+ </refsynopsisdiv>
 
+ <refsect1>
+  <title>Description</title>
+
+&common;
  <para>
   <application>oid2name</> is a utility program that helps administrators to
   examine the file structure used by PostgreSQL.  To make use of it, you need
@@ -26,6 +44,12 @@
   </para>
  </note>
 
+  <para>
+   <application>oid2name</application> connects to a target database and
+   extracts OID, filenode, and/or table name information.  You can also have
+   it show database OIDs or tablespace OIDs.
+  </para>
+
 &xconly;
 <!## XC>
   <para>
@@ -35,20 +59,10 @@
   </para>
 <!## end>
 
- <sect2>
-  <title>Overview</title>
+ </refsect1>
 
-&common;
-  <para>
-   <application>oid2name</application> connects to a target database and
-   extracts OID, filenode, and/or table name information.  You can also have
-   it show database OIDs or tablespace OIDs.
-  </para>
-
- </sect2>
-
- <sect2>
-  <title><application>oid2name</> Options</title>
+ <refsect1>
+  <title>Options</title>
 
 &common;
   <para>
@@ -57,18 +71,23 @@
    <variablelist>
 
     <varlistentry>
-     <term><option>-o</option> <replaceable>oid</></term>
-     <listitem><para>show info for table with OID <replaceable>oid</></para></listitem>
-    </varlistentry>
-
-    <varlistentry>
      <term><option>-f</option> <replaceable>filenode</></term>
      <listitem><para>show info for table with filenode <replaceable>filenode</></para></listitem>
     </varlistentry>
 
     <varlistentry>
-     <term><option>-t</option> <replaceable>tablename_pattern</></term>
-     <listitem><para>show info for table(s) matching <replaceable>tablename_pattern</></para></listitem>
+     <term><option>-i</option></term>
+     <listitem><para>include indexes and sequences in the listing</para></listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-o</option> <replaceable>oid</></term>
+     <listitem><para>show info for table with OID <replaceable>oid</></para></listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-q</option></term>
+     <listitem><para>omit headers (useful for scripting)</para></listitem>
     </varlistentry>
 
     <varlistentry>
@@ -85,8 +104,18 @@
     </varlistentry>
 
     <varlistentry>
-     <term><option>-i</option></term>
-     <listitem><para>include indexes and sequences in the listing</para></listitem>
+     <term><option>-t</option> <replaceable>tablename_pattern</></term>
+     <listitem><para>show info for table(s) matching <replaceable>tablename_pattern</></para></listitem>
+    </varlistentry>
+
+    <varlistentry>
+     <term><option>-V</></term>
+     <term><option>--version</></term>
+     <listitem>
+      <para>
+       Print the <application>oid2name</application> version and exit.
+      </para>
+     </listitem>
     </varlistentry>
 
     <varlistentry>
@@ -97,10 +126,23 @@
     </varlistentry>
 
     <varlistentry>
-     <term><option>-q</option></term>
-     <listitem><para>omit headers (useful for scripting)</para></listitem>
+     <term><option>-?</></term>
+     <term><option>--help</></term>
+     <listitem>
+      <para>
+       Show help about <application>oid2name</application> command line
+       arguments, and exit.
+      </para>
+     </listitem>
     </varlistentry>
+   </variablelist>
+  </para>
 
+  <para>
+   <application>oid2name</application> also accepts the following command-line
+   arguments for connection parameters:
+
+   <variablelist>
     <varlistentry>
      <term><option>-d</option> <replaceable>database</></term>
      <listitem><para>database to connect to</para></listitem>
@@ -155,9 +197,20 @@
    OIDs.  Alternatively you can give <option>-s</> to get a tablespace
    listing.
   </para>
- </sect2>
+ </refsect1>
 
- <sect2>
+ <refsect1>
+  <title>Notes</title>
+
+&common;
+  <para>
+   <application>oid2name</> requires a running database server with
+   non-corrupt system catalogs.  It is therefore of only limited use
+   for recovering from catastrophic database corruption situations.
+  </para>
+ </refsect1>
+
+ <refsect1>
   <title>Examples</title>
 
 <screen>
@@ -278,25 +331,14 @@ From database "alvherre":
 ----------------------
     155156         foo
 </screen>
- </sect2>
+ </refsect1>
 
- <sect2>
-  <title>Limitations</title>
-
-&common;
-  <para>
-   <application>oid2name</> requires a running database server with
-   non-corrupt system catalogs.  It is therefore of only limited use
-   for recovering from catastrophic database corruption situations.
-  </para>
- </sect2>
-
- <sect2>
+ <refsect1>
   <title>Author</title>
 
   <para>
    B. Palmer <email>bpalmer@crimelabs.net</email>
   </para>
- </sect2>
+ </refsect1>
 
-</sect1>
+</refentry>

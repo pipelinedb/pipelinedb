@@ -61,7 +61,7 @@ test: inherit
 # ----------
 # Another group of parallel tests
 # ----------
-test: create_aggregate create_function_3 create_cast constraints triggers create_table_like typed_table vacuum drop_if_exists
+test: create_aggregate create_function_3 create_cast constraints triggers create_table_like typed_table vacuum drop_if_exists updatable_views
 
 # ----------
 # sanity_check does a vacuum, affecting the sort order of SELECT *
@@ -88,11 +88,17 @@ test: prepared_xacts
 # ----------
 # Another group of parallel tests
 # ----------
-test: privileges security_label collate
+test: privileges security_label collate matview
 
-test: misc
+# ----------
+# Another group of parallel tests
+# ----------
+test: alter_generic misc psql
+
 # rules cannot run concurrently with any test that creates a view
 test: rules
+# event triggers cannot run concurrently with any test that runs DDL
+test: event_trigger
 
 # ----------
 # Another group of parallel tests
@@ -118,8 +124,10 @@ test: stats
 # ----------
 # This creates functions used by tests xc_misc, xc_FQS and xc_FQS_join
 test: xc_create_function
+# xc_misc used by xc_returning
+test: xc_misc
 # Those ones can be run in parallel
-test: xc_groupby xc_distkey xc_having xc_temp xc_remote xc_FQS xc_FQS_join xc_copy xc_alter_table xc_sequence xc_misc xc_triggers xc_trigship xc_constraints xc_limit xc_sort xc_returning xc_params
+test: xc_groupby xc_distkey xc_having xc_temp xc_remote xc_FQS xc_FQS_join xc_copy xc_alter_table xc_sequence xc_triggers xc_trigship xc_constraints xc_limit xc_sort xc_returning xc_params
 # Cluster setting related test is independant
 test: xc_node
 

@@ -10,7 +10,7 @@
  *	  Over time, this has also become the preferred place for widely known
  *	  resource-limitation stuff, such as work_mem and check_stack_depth().
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/miscadmin.h
@@ -131,6 +131,7 @@ do { \
 extern pid_t PostmasterPid;
 extern bool IsPostmasterEnvironment;
 extern PGDLLIMPORT bool IsUnderPostmaster;
+extern bool IsBackgroundWorker;
 extern bool IsBinaryUpgrade;
 
 extern bool ExitOnAnyError;
@@ -154,8 +155,6 @@ extern char pkglib_path[];
 #ifdef EXEC_BACKEND
 extern char postgres_exec_path[];
 #endif
-
-extern double StreamBufferMaxFill;
 
 /*
  * done in storage/backendid.h for now.
@@ -334,8 +333,8 @@ extern bool superuser_arg(Oid roleid);	/* given user is superuser */
  * initialization is complete.	Some code behaves differently when executed
  * in this mode to enable system bootstrapping.
  *
- * If a POSTGRES binary is in normal mode, then all code may be executed
- * normally.
+ * If a POSTGRES backend process is in normal mode, then all code may be
+ * executed normally.
  */
 
 typedef enum ProcessingMode
@@ -347,10 +346,11 @@ typedef enum ProcessingMode
 
 extern ProcessingMode Mode;
 
+#define IsBootstrapProcessingMode() (Mode == BootstrapProcessing)
+#define IsInitProcessingMode()		(Mode == InitProcessing)
+#define IsNormalProcessingMode()	(Mode == NormalProcessing)
 
-#define IsBootstrapProcessingMode() ((bool)(Mode == BootstrapProcessing))
-#define IsInitProcessingMode() ((bool)(Mode == InitProcessing))
-#define IsNormalProcessingMode() ((bool)(Mode == NormalProcessing))
+#define GetProcessingMode() Mode
 
 #define SetProcessingMode(mode) \
 	do { \
@@ -360,7 +360,38 @@ extern ProcessingMode Mode;
 		Mode = (mode); \
 	} while(0)
 
-#define GetProcessingMode() Mode
+
+/*
+ * Auxiliary-process type identifiers.	These used to be in bootstrap.h
+ * but it seems saner to have them here, with the ProcessingMode stuff.
+ * The MyAuxProcType global is defined and set in bootstrap.c.
+ */
+
+typedef enum
+{
+	NotAnAuxProcess = -1,
+	CheckerProcess = 0,
+	BootstrapProcess,
+	StartupProcess,
+	BgWriterProcess,
+	CheckpointerProcess,
+	WalWriterProcess,
+	WalReceiverProcess,
+#ifdef PGXC
+	PoolerProcess,
+#endif
+
+	NUM_AUXPROCTYPES			/* Must be last! */
+} AuxProcType;
+
+extern AuxProcType MyAuxProcType;
+
+#define AmBootstrapProcess()		(MyAuxProcType == BootstrapProcess)
+#define AmStartupProcess()			(MyAuxProcType == StartupProcess)
+#define AmBackgroundWriterProcess() (MyAuxProcType == BgWriterProcess)
+#define AmCheckpointerProcess()		(MyAuxProcType == CheckpointerProcess)
+#define AmWalWriterProcess()		(MyAuxProcType == WalWriterProcess)
+#define AmWalReceiverProcess()		(MyAuxProcType == WalReceiverProcess)
 
 
 /*****************************************************************************
@@ -370,6 +401,7 @@ extern ProcessingMode Mode;
 
 /* in utils/init/postinit.c */
 extern void pg_split_opts(char **argv, int *argcp, char *optstr);
+extern void InitializeMaxBackends(void);
 extern void InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 			 char *out_dbname);
 extern void BaseInit(void);
@@ -388,12 +420,12 @@ extern char *local_preload_libraries_string;
  *		2	data directory path
  *		3	postmaster start timestamp (time_t representation)
  *		4	port number
- *		5	socket directory path (empty on Windows)
+ *		5	first Unix socket directory path (empty if none)
  *		6	first listen_address (IP address or "*"; empty if no TCP port)
  *		7	shared memory key (not present on Windows)
  *
  * Lines 6 and up are added via AddToDataDirLockFile() after initial file
- * creation; they have to be ordered according to time of addition.
+ * creation.
  *
  * The socket lock file, if used, has the same contents as lines 1-5.
  */
@@ -406,17 +438,22 @@ extern char *local_preload_libraries_string;
 #define LOCK_FILE_LINE_SHMEM_KEY	7
 
 extern void CreateDataDirLockFile(bool amPostmaster);
-extern void CreateSocketLockFile(const char *socketfile, bool amPostmaster);
-extern void TouchSocketLockFile(void);
+extern void CreateSocketLockFile(const char *socketfile, bool amPostmaster,
+					 const char *socketDir);
+extern void TouchSocketLockFiles(void);
 extern void AddToDataDirLockFile(int target_line, const char *str);
 extern void ValidatePgVersion(const char *path);
 extern void process_shared_preload_libraries(void);
 extern void process_local_preload_libraries(void);
 extern void pg_bindtextdomain(const char *domain);
-extern bool is_authenticated_user_replication_role(void);
+extern bool has_rolreplication(Oid roleid);
 
 /* in access/transam/xlog.c */
 extern bool BackupInProgress(void);
 extern void CancelBackup(void);
+
+#ifdef PGXC
+void PGXC_init_lock_files(void);
+#endif
 
 #endif   /* MISCADMIN_H */

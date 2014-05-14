@@ -4,7 +4,7 @@
  *	  creator functions for primitive nodes. The functions here are for
  *	  the most frequently created nodes.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -467,6 +467,7 @@ makeFuncExpr(Oid funcid, Oid rettype, List *args,
 	funcexpr->funcid = funcid;
 	funcexpr->funcresulttype = rettype;
 	funcexpr->funcretset = false;		/* only allowed case here */
+	funcexpr->funcvariadic = false;		/* only allowed case here */
 	funcexpr->funcformat = fformat;
 	funcexpr->funccollid = funccollid;
 	funcexpr->inputcollid = inputcollid;

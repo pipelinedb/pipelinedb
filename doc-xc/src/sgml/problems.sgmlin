@@ -4,24 +4,26 @@
  <title>Bug Reporting Guidelines</title>
 
 &xconly;
- <para>
 <!## PG>
+ <para>
   When you find a bug in <productname>PostgreSQL</productname> we want to
   hear about it. Your bug reports play an important part in making
   <productname>PostgreSQL</productname> more reliable because even the utmost
   care cannot guarantee that every part of
   <productname>PostgreSQL</productname>
   will work on every platform under every circumstance.
+ </para>
 <!## end>
 <!## XC>
+ <para>
   When you find a bug in <productname>Postgres-XC</productname> we want to
   hear about it. Your bug reports play an important part in making
   <productname>Postgres-XC</productname> more reliable because even the utmost
   care cannot guarantee that every part of
-  <productname>Postgres-XC</productname> 
+  <productname>Postgres-XC</productname>
   will work on every platform under every circumstance.
-<!## end>
  </para>
+<!## end>
 
  <para>
   The following suggestions are intended to assist you in forming bug reports
@@ -85,12 +87,11 @@
      <para>
 <!## PG>
       <productname>PostgreSQL</productname> fails to compile, build, or
-      install according to the instructions on supported platforms.
 <!## end>
 <!## XC>
       <productname>Postgres-XC</productname> fails to compile, build, or
-      install according to the instructions on supported platforms.
 <!## end>
+      install according to the instructions on supported platforms.
      </para>
     </listitem>
    </itemizedlist>
@@ -106,19 +107,16 @@
    specific feature is explicitly claimed.
   </para>
 
-<!## PG>
   <para>
    Before you continue, check on the TODO list and in the FAQ to see if your bug is
    already known. If you cannot decode the information on the TODO list, report your
    problem. The least we can do is make the TODO list clearer.
   </para>
-<!## end>
  </sect2>
 
  <sect2>
   <title>What to Report</title>
 
-&xconly;
   <para>
    The most important thing to remember about bug reporting is to state all
    the facts and only facts. Do not speculate what you think went wrong, what
@@ -258,26 +256,24 @@
      </para>
 
      <para>
-<!## PG>
       If your version is older than &version; we will almost certainly
       tell you to upgrade. There are many bug fixes and improvements
       in each new release, so it is quite possible that a bug you have
+<!## PG>
       encountered in an older release of <productname>PostgreSQL</>
-      has already been fixed. We can only provide limited support for
-      sites using older releases of <productname>PostgreSQL</>; if you
-      require more than we can provide, consider acquiring a
-      commercial support contract.
 <!## end>
 <!## XC>
-      If your version is older than &version; we will almost certainly
-      tell you to upgrade. There are many bug fixes and improvements
-      in each new release, so it is quite possible that a bug you have
       encountered in an older release of <productname>Postgres-XC</>
+<!## end>
       has already been fixed. We can only provide limited support for
+<!## PG>
+      sites using older releases of <productname>PostgreSQL</>; if you
+<!## end>
+<!## XC>
       sites using older releases of <productname>Postgres-XC</>; if you
+<!## end>
       require more than we can provide, consider acquiring a
       commercial support contract.
-<!## end>
      </para>
      <para>
      </para>
@@ -297,20 +293,12 @@
     </listitem>
    </itemizedlist>
 
-<!## PG>
    Do not be afraid if your bug report becomes rather lengthy. That is a fact of life.
    It is better to report everything the first time than us having to squeeze the
    facts out of you. On the other hand, if your input files are huge, it is
    fair to ask first whether somebody is interested in looking into it.  Here is
    an <ulink url="http://www.chiark.greenend.org.uk/~sgtatham/bugs.html">article</ulink>
    that outlines some more tips on reporting bugs.
-<!## end>
-<!## XC>
-   Do not be afraid if your bug report becomes rather lengthy. That is a fact of life.
-   It is better to report everything the first time than us having to squeeze the
-   facts out of you. On the other hand, if your input files are huge, it is
-   fair to ask first whether somebody is interested in looking into it.
-<!## end>
   </para>
 
   <para>
@@ -321,13 +309,22 @@
    guessing why the bug exists. We will find that out soon enough.
   </para>
 
-<!## PG>
   <para>
    When writing a bug report, please avoid confusing terminology.
+<!## PG>
    The software package in total is called <quote>PostgreSQL</quote>,
+<!## end>
+<!## XC>
+   The software package in total is called <quote>Postgres-XC</quote>,
+<!## end>
    sometimes <quote>Postgres</quote> for short. If you
    are specifically talking about the backend process, mention that, do not
+<!## PG>
    just say <quote>PostgreSQL crashes</quote>.  A crash of a single
+<!## end>
+<!## XC>
+   just say <quote>Postgres-XC crashes</quote>.  A crash of a single
+<!## end>
    backend process is quite different from crash of the parent
    <quote>postgres</> process; please don't say <quote>the server
    crashed</> when you mean a single backend process went down, nor vice versa.
@@ -335,26 +332,14 @@
    are completely separate from the backend.  Please try to be specific
    about whether the problem is on the client or server side.
   </para>
-<!## end>
+&xconly;
 <!## XC>
   <para>
-   When writing a bug report, please avoid confusing terminology.
-   The software package in total is called <quote>Postgres-XC</quote>.
-                                                            If you
-   are specifically talking about the backend server, mention that, do not
-   just say <quote>Postgres-XC crashes</quote>.  
-   <quote>Postgres-XC</> consists of several separate component.   Please
-   write which component crashes.
-   A crash of a single
-   backend server process is quite different from crash of the parent
-   <quote>postgres</> process; please don't say <quote>the server
-   crashed</> when you mean a single backend process went down, nor vice versa.
-   Also, client programs such as the interactive frontend <quote><application>psql</application></quote>
-   are completely separate from the backend.  Please try to be specific
-   about whether the problem is on the client or server side.
+   It is also very helpful if you inform configuration of your <productname>Postgres-XC</productname>
+   configuration, especially number of components such as coordinators and datanodes.
+   If you can use a debugger, back trace of the crash will also be very helpful to analyze the issue.
   </para>
 <!## end>
-
  </sect2>
 
  <sect2>

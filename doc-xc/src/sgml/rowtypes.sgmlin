@@ -11,8 +11,7 @@
   <primary>row type</primary>
  </indexterm>
 
-&pgnotice;
-
+&common;
  <para>
   A <firstterm>composite type</> represents the structure of a row or record;
   it is essentially just a list of field names and their data types.
@@ -24,6 +23,7 @@
  <sect2>
   <title>Declaration of Composite Types</title>
 
+&common;
  <para>
   Here are two simple examples of defining composite types:
 <programlisting>
@@ -99,6 +99,7 @@ CREATE TABLE inventory_item (
    <secondary>constant</secondary>
   </indexterm>
 
+&common;
   <para>
    To write a composite value as a literal constant, enclose the field
    values within parentheses and separate them by commas.  You can put double
@@ -158,6 +159,7 @@ ROW('', 42, NULL)
  <sect2>
   <title>Accessing Composite Types</title>
 
+&common;
  <para>
   To access a field of a composite column, one writes a dot and the field
   name, much like selecting a field from a table name.  In fact, it's so
@@ -205,6 +207,7 @@ SELECT (my_func(...)).field FROM ...
  <sect2>
   <title>Modifying Composite Types</title>
 
+&common;
  <para>
   Here are some examples of the proper syntax for inserting and updating
   composite columns.
@@ -245,9 +248,10 @@ INSERT INTO mytab (complex_col.r, complex_col.i) VALUES(1.1, 2.2);
  </para>
  </sect2>
 
- <sect2>
+ <sect2 id="rowtypes-io-syntax">
   <title>Composite Type Input and Output Syntax</title>
 
+&common;
   <para>
    The external text representation of a composite value consists of items that
    are interpreted according to the I/O conversion rules for the individual

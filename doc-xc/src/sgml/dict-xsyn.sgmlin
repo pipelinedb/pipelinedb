@@ -8,8 +8,6 @@
  </indexterm>
 
 &pgnotice;
-
-
  <para>
   <filename>dict_xsyn</> (Extended Synonym Dictionary) is an example of an
   add-on dictionary template for full-text search.  This dictionary type
@@ -21,8 +19,6 @@
   <title>Configuration</title>
 
 &pgnotice;
-
-
   <para>
    A <literal>dict_xsyn</> dictionary accepts the following options:
   </para>
@@ -93,8 +89,6 @@ word syn1 syn2 syn3
   <title>Usage</title>
 
 &pgnotice;
-
-
   <para>
    Installing the <literal>dict_xsyn</> extension creates a text search
    template <literal>xsyn_template</> and a dictionary <literal>xsyn</>

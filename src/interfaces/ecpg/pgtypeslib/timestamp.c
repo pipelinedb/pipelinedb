@@ -76,8 +76,9 @@ tm2timestamp(struct tm * tm, fsec_t fsec, int *tzp, timestamp * result)
 	if ((*result - time) / USECS_PER_DAY != dDate)
 		return -1;
 	/* check for just-barely overflow (okay except time-of-day wraps) */
-	if ((*result < 0 && dDate >= 0) ||
-		(*result >= 0 && dDate < 0))
+	/* caution: we want to allow 1999-12-31 24:00:00 */
+	if ((*result < 0 && dDate > 0) ||
+		(*result > 0 && dDate < -1))
 		return -1;
 #else
 	*result = dDate * SECS_PER_DAY + time;
@@ -253,6 +254,8 @@ recalc_t:
 		if (tzn != NULL)
 			*tzn = NULL;
 	}
+
+	tm->tm_yday = dDate - date2j(tm->tm_year, 1, 1) + 1;
 
 	return 0;
 }	/* timestamp2tm() */
@@ -947,8 +950,6 @@ PGTYPEStimestamp_defmt_asc(char *str, const char *fmt, timestamp * d)
 int
 PGTYPEStimestamp_add_interval(timestamp * tin, interval * span, timestamp * tout)
 {
-
-
 	if (TIMESTAMP_NOT_FINITE(*tin))
 		*tout = *tin;
 

@@ -8,7 +8,7 @@
  * --- ie, rule names are only unique among the rules of a given table.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_rewrite.h
@@ -35,7 +35,7 @@ CATALOG(pg_rewrite,2618)
 {
 	NameData	rulename;
 	Oid			ev_class;
-	int2		ev_attr;
+	int16		ev_attr;
 	char		ev_type;
 	char		ev_enabled;
 	bool		is_instead;

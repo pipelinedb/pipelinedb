@@ -21,13 +21,14 @@ PostgreSQL documentation
 
  <refsynopsisdiv>
 <synopsis>
-DROP EXTENSION [ IF EXISTS ] <replaceable class="PARAMETER">extension_name</replaceable> [, ...] [ CASCADE | RESTRICT ]
+DROP EXTENSION [ IF EXISTS ] <replaceable class="PARAMETER">name</replaceable> [, ...] [ CASCADE | RESTRICT ]
 </synopsis>
  </refsynopsisdiv>
 
  <refsect1>
   <title>Description</title>
 
+&common;
   <para>
    <command>DROP EXTENSION</command> removes extensions from the database.
    Dropping an extension causes its component objects to be dropped as well.
@@ -43,6 +44,7 @@ DROP EXTENSION [ IF EXISTS ] <replaceable class="PARAMETER">extension_name</repl
 
   <variablelist>
 
+&common;
    <varlistentry>
     <term><literal>IF EXISTS</literal></term>
     <listitem>
@@ -54,7 +56,7 @@ DROP EXTENSION [ IF EXISTS ] <replaceable class="PARAMETER">extension_name</repl
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="PARAMETER">extension_name</replaceable></term>
+    <term><replaceable class="PARAMETER">name</replaceable></term>
     <listitem>
      <para>
       The name of an installed extension.
@@ -103,6 +105,7 @@ DROP EXTENSION hstore;
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    <command>DROP EXTENSION</command> is a <productname>PostgreSQL</>
    extension.

@@ -31,8 +31,7 @@ ALTER GROUP <replaceable class="PARAMETER">group_name</replaceable> RENAME TO <r
  <refsect1>
   <title>Description</title>
 
-&pgnotice;
-
+&common;
   <para>
    <command>ALTER GROUP</command> changes the attributes of a user group.
    This is an obsolete command, though still accepted for backwards
@@ -60,6 +59,7 @@ ALTER GROUP <replaceable class="PARAMETER">group_name</replaceable> RENAME TO <r
  <refsect1>
   <title>Parameters</title>
 
+&common;
   <variablelist>
    <varlistentry>
     <term><replaceable class="PARAMETER">group_name</replaceable></term>
@@ -105,14 +105,13 @@ ALTER GROUP staff ADD USER karl, john;
 
 <programlisting>
 ALTER GROUP workers DROP USER beth;
-</programlisting>
-
-  </para>
+</programlisting></para>
  </refsect1>
 
  <refsect1>
   <title>Compatibility</title>
 
+&common;
   <para>
    There is no <command>ALTER GROUP</command> statement in the SQL
    standard.

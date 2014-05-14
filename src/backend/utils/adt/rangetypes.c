@@ -19,7 +19,7 @@
  * value; we must detoast it first.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -63,10 +63,6 @@ static const char *range_parse_bound(const char *string, const char *ptr,
 static char *range_deparse(char flags, const char *lbound_str,
 			  const char *ubound_str);
 static char *range_bound_escape(const char *value);
-static bool range_contains_internal(TypeCacheEntry *typcache,
-						RangeType *r1, RangeType *r2);
-static bool range_contains_elem_internal(TypeCacheEntry *typcache,
-							 RangeType *r, Datum val);
 static Size datum_compute_size(Size sz, Datum datum, bool typbyval,
 				   char typalign, int16 typlen, char typstorage);
 static Pointer datum_write(Pointer ptr, Datum datum, bool typbyval,
@@ -397,7 +393,7 @@ range_constructor3(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(2))
 		ereport(ERROR,
 				(errcode(ERRCODE_DATA_EXCEPTION),
-			   errmsg("range constructor flags argument must not be NULL")));
+			   errmsg("range constructor flags argument must not be null")));
 
 	flags = range_parse_flags(text_to_cstring(PG_GETARG_TEXT_P(2)));
 
@@ -546,13 +542,10 @@ elem_contained_by_range(PG_FUNCTION_ARGS)
 
 /* range, range -> bool functions */
 
-/* equality */
-Datum
-range_eq(PG_FUNCTION_ARGS)
+/* equality (internal version) */
+bool
+range_eq_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
 {
-	RangeType  *r1 = PG_GETARG_RANGE(0);
-	RangeType  *r2 = PG_GETARG_RANGE(1);
-	TypeCacheEntry *typcache;
 	RangeBound	lower1,
 				lower2;
 	RangeBound	upper1,
@@ -564,32 +557,54 @@ range_eq(PG_FUNCTION_ARGS)
 	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
 		elog(ERROR, "range types do not match");
 
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
-
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
 
 	if (empty1 && empty2)
-		PG_RETURN_BOOL(true);
+		return true;
 	if (empty1 != empty2)
-		PG_RETURN_BOOL(false);
+		return false;
 
 	if (range_cmp_bounds(typcache, &lower1, &lower2) != 0)
-		PG_RETURN_BOOL(false);
+		return false;
 
 	if (range_cmp_bounds(typcache, &upper1, &upper2) != 0)
-		PG_RETURN_BOOL(false);
+		return false;
 
-	PG_RETURN_BOOL(true);
+	return true;
+}
+
+/* equality */
+Datum
+range_eq(PG_FUNCTION_ARGS)
+{
+	RangeType  *r1 = PG_GETARG_RANGE(0);
+	RangeType  *r2 = PG_GETARG_RANGE(1);
+	TypeCacheEntry *typcache;
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	PG_RETURN_BOOL(range_eq_internal(typcache, r1, r2));
+}
+
+/* inequality (internal version) */
+bool
+range_ne_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+{
+	return (!range_eq_internal(typcache, r1, r2));
 }
 
 /* inequality */
 Datum
 range_ne(PG_FUNCTION_ARGS)
 {
-	bool		eq = DatumGetBool(range_eq(fcinfo));
+	RangeType  *r1 = PG_GETARG_RANGE(0);
+	RangeType  *r2 = PG_GETARG_RANGE(1);
+	TypeCacheEntry *typcache;
 
-	PG_RETURN_BOOL(!eq);
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	PG_RETURN_BOOL(range_ne_internal(typcache, r1, r2));
 }
 
 /* contains? */
@@ -599,10 +614,6 @@ range_contains(PG_FUNCTION_ARGS)
 	RangeType  *r1 = PG_GETARG_RANGE(0);
 	RangeType  *r2 = PG_GETARG_RANGE(1);
 	TypeCacheEntry *typcache;
-
-	/* Different types should be prevented by ANYRANGE matching rules */
-	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
-		elog(ERROR, "range types do not match");
 
 	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
 
@@ -617,13 +628,34 @@ range_contained_by(PG_FUNCTION_ARGS)
 	RangeType  *r2 = PG_GETARG_RANGE(1);
 	TypeCacheEntry *typcache;
 
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	PG_RETURN_BOOL(range_contained_by_internal(typcache, r1, r2));
+}
+
+/* strictly left of? (internal version) */
+bool
+range_before_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+{
+	RangeBound	lower1,
+				lower2;
+	RangeBound	upper1,
+				upper2;
+	bool		empty1,
+				empty2;
+
 	/* Different types should be prevented by ANYRANGE matching rules */
 	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
 		elog(ERROR, "range types do not match");
 
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
+	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
 
-	PG_RETURN_BOOL(range_contains_internal(typcache, r2, r1));
+	/* An empty range is neither before nor after any other range */
+	if (empty1 || empty2)
+		return false;
+
+	return (range_cmp_bounds(typcache, &upper1, &lower2) < 0);
 }
 
 /* strictly left of? */
@@ -633,6 +665,16 @@ range_before(PG_FUNCTION_ARGS)
 	RangeType  *r1 = PG_GETARG_RANGE(0);
 	RangeType  *r2 = PG_GETARG_RANGE(1);
 	TypeCacheEntry *typcache;
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	PG_RETURN_BOOL(range_before_internal(typcache, r1, r2));
+}
+
+/* strictly right of? (internal version) */
+bool
+range_after_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+{
 	RangeBound	lower1,
 				lower2;
 	RangeBound	upper1,
@@ -644,16 +686,14 @@ range_before(PG_FUNCTION_ARGS)
 	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
 		elog(ERROR, "range types do not match");
 
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
-
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
 
 	/* An empty range is neither before nor after any other range */
 	if (empty1 || empty2)
-		PG_RETURN_BOOL(false);
+		return false;
 
-	PG_RETURN_BOOL(range_cmp_bounds(typcache, &upper1, &lower2) < 0);
+	return (range_cmp_bounds(typcache, &lower1, &upper2) > 0);
 }
 
 /* strictly right of? */
@@ -663,6 +703,74 @@ range_after(PG_FUNCTION_ARGS)
 	RangeType  *r1 = PG_GETARG_RANGE(0);
 	RangeType  *r2 = PG_GETARG_RANGE(1);
 	TypeCacheEntry *typcache;
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	PG_RETURN_BOOL(range_after_internal(typcache, r1, r2));
+}
+
+/*
+ * Check if two bounds A and B are "adjacent", where A is an upper bound and B
+ * is a lower bound. For the bounds to be adjacent, each subtype value must
+ * satisfy strictly one of the bounds: there are no values which satisfy both
+ * bounds (i.e. less than A and greater than B); and there are no values which
+ * satisfy neither bound (i.e. greater than A and less than B).
+ *
+ * For discrete ranges, we rely on the canonicalization function to see if A..B
+ * normalizes to empty. (If there is no canonicalization function, it's
+ * impossible for such a range to normalize to empty, so we needn't bother to
+ * try.)
+ *
+ * If A == B, the ranges are adjacent only if the bounds have different
+ * inclusive flags (i.e., exactly one of the ranges includes the common
+ * boundary point).
+ *
+ * And if A > B then the ranges are not adjacent in this order.
+ */
+bool
+bounds_adjacent(TypeCacheEntry *typcache, RangeBound boundA, RangeBound boundB)
+{
+	int			cmp;
+
+	Assert(!boundA.lower && boundB.lower);
+
+	cmp = range_cmp_bound_values(typcache, &boundA, &boundB);
+	if (cmp < 0)
+	{
+		RangeType  *r;
+
+		/*
+		 * Bounds do not overlap; see if there are points in between.
+		 */
+
+		/* in a continuous subtype, there are assumed to be points between */
+		if (!OidIsValid(typcache->rng_canonical_finfo.fn_oid))
+			return false;
+
+		/*
+		 * The bounds are of a discrete range type; so make a range A..B and
+		 * see if it's empty.
+		 */
+
+		/* flip the inclusion flags */
+		boundA.inclusive = !boundA.inclusive;
+		boundB.inclusive = !boundB.inclusive;
+		/* change upper/lower labels to avoid Assert failures */
+		boundA.lower = true;
+		boundB.lower = false;
+		r = make_range(typcache, &boundA, &boundB, false);
+		return RangeIsEmpty(r);
+	}
+	else if (cmp == 0)
+		return boundA.inclusive != boundB.inclusive;
+	else
+		return false;			/* bounds overlap */
+}
+
+/* adjacent to (but not overlapping)? (internal version) */
+bool
+range_adjacent_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+{
 	RangeBound	lower1,
 				lower2;
 	RangeBound	upper1,
@@ -674,16 +782,19 @@ range_after(PG_FUNCTION_ARGS)
 	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
 		elog(ERROR, "range types do not match");
 
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
-
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
 
-	/* An empty range is neither before nor after any other range */
+	/* An empty range is not adjacent to any other range */
 	if (empty1 || empty2)
-		PG_RETURN_BOOL(false);
+		return false;
 
-	PG_RETURN_BOOL(range_cmp_bounds(typcache, &lower1, &upper2) > 0);
+	/*
+	 * Given two ranges A..B and C..D, the ranges are adjacent if and only if
+	 * B is adjacent to C, or D is adjacent to A.
+	 */
+	return (bounds_adjacent(typcache, upper1, lower2) ||
+			bounds_adjacent(typcache, upper2, lower1));
 }
 
 /* adjacent to (but not overlapping)? */
@@ -693,85 +804,43 @@ range_adjacent(PG_FUNCTION_ARGS)
 	RangeType  *r1 = PG_GETARG_RANGE(0);
 	RangeType  *r2 = PG_GETARG_RANGE(1);
 	TypeCacheEntry *typcache;
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	PG_RETURN_BOOL(range_adjacent_internal(typcache, r1, r2));
+}
+
+/* overlaps? (internal version) */
+bool
+range_overlaps_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+{
 	RangeBound	lower1,
 				lower2;
 	RangeBound	upper1,
 				upper2;
 	bool		empty1,
 				empty2;
-	RangeType  *r3;
-	int			cmp;
 
 	/* Different types should be prevented by ANYRANGE matching rules */
 	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
 		elog(ERROR, "range types do not match");
 
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
-
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
 
-	/* An empty range is not adjacent to any other range */
+	/* An empty range does not overlap any other range */
 	if (empty1 || empty2)
-		PG_RETURN_BOOL(false);
+		return false;
 
-	/*
-	 * Given two ranges A..B and C..D, where B < C, the ranges are adjacent if
-	 * and only if the range B..C is empty, where inclusivity of these two
-	 * bounds is inverted compared to the original bounds.	For discrete
-	 * ranges, we have to rely on the canonicalization function to normalize
-	 * B..C to empty if it contains no elements of the subtype.  (If there is
-	 * no canonicalization function, it's impossible for such a range to
-	 * normalize to empty, so we needn't bother to try.)
-	 *
-	 * If B == C, the ranges are adjacent only if these bounds have different
-	 * inclusive flags (i.e., exactly one of the ranges includes the common
-	 * boundary point).
-	 *
-	 * And if B > C then the ranges cannot be adjacent in this order, but we
-	 * must consider the other order (i.e., check D <= A).
-	 */
-	cmp = range_cmp_bound_values(typcache, &upper1, &lower2);
-	if (cmp < 0)
-	{
-		/* in a continuous subtype, there are assumed to be points between */
-		if (!OidIsValid(typcache->rng_canonical_finfo.fn_oid))
-			PG_RETURN_BOOL(false);
-		/* flip the inclusion flags */
-		upper1.inclusive = !upper1.inclusive;
-		lower2.inclusive = !lower2.inclusive;
-		/* change upper/lower labels to avoid Assert failures */
-		upper1.lower = true;
-		lower2.lower = false;
-		r3 = make_range(typcache, &upper1, &lower2, false);
-		PG_RETURN_BOOL(RangeIsEmpty(r3));
-	}
-	if (cmp == 0)
-	{
-		PG_RETURN_BOOL(upper1.inclusive != lower2.inclusive);
-	}
+	if (range_cmp_bounds(typcache, &lower1, &lower2) >= 0 &&
+		range_cmp_bounds(typcache, &lower1, &upper2) <= 0)
+		return true;
 
-	cmp = range_cmp_bound_values(typcache, &upper2, &lower1);
-	if (cmp < 0)
-	{
-		/* in a continuous subtype, there are assumed to be points between */
-		if (!OidIsValid(typcache->rng_canonical_finfo.fn_oid))
-			PG_RETURN_BOOL(false);
-		/* flip the inclusion flags */
-		upper2.inclusive = !upper2.inclusive;
-		lower1.inclusive = !lower1.inclusive;
-		/* change upper/lower labels to avoid Assert failures */
-		upper2.lower = true;
-		lower1.lower = false;
-		r3 = make_range(typcache, &upper2, &lower1, false);
-		PG_RETURN_BOOL(RangeIsEmpty(r3));
-	}
-	if (cmp == 0)
-	{
-		PG_RETURN_BOOL(upper2.inclusive != lower1.inclusive);
-	}
+	if (range_cmp_bounds(typcache, &lower2, &lower1) >= 0 &&
+		range_cmp_bounds(typcache, &lower2, &upper1) <= 0)
+		return true;
 
-	PG_RETURN_BOOL(false);
+	return false;
 }
 
 /* overlaps? */
@@ -781,6 +850,16 @@ range_overlaps(PG_FUNCTION_ARGS)
 	RangeType  *r1 = PG_GETARG_RANGE(0);
 	RangeType  *r2 = PG_GETARG_RANGE(1);
 	TypeCacheEntry *typcache;
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	PG_RETURN_BOOL(range_overlaps_internal(typcache, r1, r2));
+}
+
+/* does not extend to right of? (internal version) */
+bool
+range_overleft_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+{
 	RangeBound	lower1,
 				lower2;
 	RangeBound	upper1,
@@ -792,24 +871,17 @@ range_overlaps(PG_FUNCTION_ARGS)
 	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
 		elog(ERROR, "range types do not match");
 
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
-
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
 
-	/* An empty range does not overlap any other range */
+	/* An empty range is neither before nor after any other range */
 	if (empty1 || empty2)
-		PG_RETURN_BOOL(false);
+		return false;
 
-	if (range_cmp_bounds(typcache, &lower1, &lower2) >= 0 &&
-		range_cmp_bounds(typcache, &lower1, &upper2) <= 0)
-		PG_RETURN_BOOL(true);
+	if (range_cmp_bounds(typcache, &upper1, &upper2) <= 0)
+		return true;
 
-	if (range_cmp_bounds(typcache, &lower2, &lower1) >= 0 &&
-		range_cmp_bounds(typcache, &lower2, &upper1) <= 0)
-		PG_RETURN_BOOL(true);
-
-	PG_RETURN_BOOL(false);
+	return false;
 }
 
 /* does not extend to right of? */
@@ -819,39 +891,16 @@ range_overleft(PG_FUNCTION_ARGS)
 	RangeType  *r1 = PG_GETARG_RANGE(0);
 	RangeType  *r2 = PG_GETARG_RANGE(1);
 	TypeCacheEntry *typcache;
-	RangeBound	lower1,
-				lower2;
-	RangeBound	upper1,
-				upper2;
-	bool		empty1,
-				empty2;
-
-	/* Different types should be prevented by ANYRANGE matching rules */
-	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
-		elog(ERROR, "range types do not match");
 
 	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
 
-	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
-	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
-
-	/* An empty range is neither before nor after any other range */
-	if (empty1 || empty2)
-		PG_RETURN_BOOL(false);
-
-	if (range_cmp_bounds(typcache, &upper1, &upper2) <= 0)
-		PG_RETURN_BOOL(true);
-
-	PG_RETURN_BOOL(false);
+	PG_RETURN_BOOL(range_overleft_internal(typcache, r1, r2));
 }
 
-/* does not extend to left of? */
-Datum
-range_overright(PG_FUNCTION_ARGS)
+/* does not extend to left of? (internal version) */
+bool
+range_overright_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
 {
-	RangeType  *r1 = PG_GETARG_RANGE(0);
-	RangeType  *r2 = PG_GETARG_RANGE(1);
-	TypeCacheEntry *typcache;
 	RangeBound	lower1,
 				lower2;
 	RangeBound	upper1,
@@ -862,8 +911,6 @@ range_overright(PG_FUNCTION_ARGS)
 	/* Different types should be prevented by ANYRANGE matching rules */
 	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
 		elog(ERROR, "range types do not match");
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
 
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
@@ -876,6 +923,19 @@ range_overright(PG_FUNCTION_ARGS)
 		PG_RETURN_BOOL(true);
 
 	PG_RETURN_BOOL(false);
+}
+
+/* does not extend to left of? */
+Datum
+range_overright(PG_FUNCTION_ARGS)
+{
+	RangeType  *r1 = PG_GETARG_RANGE(0);
+	RangeType  *r2 = PG_GETARG_RANGE(1);
+	TypeCacheEntry *typcache;
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	PG_RETURN_BOOL(range_overright_internal(typcache, r1, r2));
 }
 
 
@@ -1065,16 +1125,22 @@ range_cmp(PG_FUNCTION_ARGS)
 
 	/* For b-tree use, empty ranges sort before all else */
 	if (empty1 && empty2)
-		PG_RETURN_INT32(0);
+		cmp = 0;
 	else if (empty1)
-		PG_RETURN_INT32(-1);
+		cmp = -1;
 	else if (empty2)
-		PG_RETURN_INT32(1);
+		cmp = 1;
+	else
+	{
+		cmp = range_cmp_bounds(typcache, &lower1, &lower2);
+		if (cmp == 0)
+			cmp = range_cmp_bounds(typcache, &upper1, &upper2);
+	}
 
-	if ((cmp = range_cmp_bounds(typcache, &lower1, &lower2)) != 0)
-		PG_RETURN_INT32(cmp);
+	PG_FREE_IF_COPY(r1, 0);
+	PG_FREE_IF_COPY(r2, 1);
 
-	PG_RETURN_INT32(range_cmp_bounds(typcache, &upper1, &upper2));
+	PG_RETURN_INT32(cmp);
 }
 
 /* inequality operators using the range_cmp function */
@@ -1172,23 +1238,6 @@ hash_range(PG_FUNCTION_ARGS)
 
 	PG_RETURN_INT32(result);
 }
-
-/* ANALYZE support */
-
-/* typanalyze function for range datatypes */
-Datum
-range_typanalyze(PG_FUNCTION_ARGS)
-{
-	/*
-	 * For the moment, just punt and don't analyze range columns.  If we get
-	 * close to release without having a better answer, we could consider
-	 * letting std_typanalyze do what it can ... but those stats are probably
-	 * next door to useless for most activity with range columns, so it's not
-	 * clear it's worth gathering them.
-	 */
-	PG_RETURN_BOOL(false);
-}
-
 
 /*
  *----------------------------------------------------------
@@ -1834,7 +1883,7 @@ range_parse_flags(const char *flags_str)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("invalid range bound flags"),
-				 errhint("Valid values are '[]', '[)', '(]', and '()'.")));
+		   errhint("Valid values are \"[]\", \"[)\", \"(]\", and \"()\".")));
 
 	switch (flags_str[0])
 	{
@@ -1847,7 +1896,7 @@ range_parse_flags(const char *flags_str)
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
 					 errmsg("invalid range bound flags"),
-				   errhint("Valid values are '[]', '[)', '(]', and '()'.")));
+			errhint("Valid values are \"[]\", \"[)\", \"(]\", and \"()\".")));
 	}
 
 	switch (flags_str[1])
@@ -1861,7 +1910,7 @@ range_parse_flags(const char *flags_str)
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
 					 errmsg("invalid range bound flags"),
-				   errhint("Valid values are '[]', '[)', '(]', and '()'.")));
+			errhint("Valid values are \"[]\", \"[)\", \"(]\", and \"()\".")));
 	}
 
 	return flags;
@@ -1928,7 +1977,7 @@ range_parse(const char *string, char *flags, char **lbound_str,
 					(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 					 errmsg("malformed range literal: \"%s\"",
 							string),
-					 errdetail("Junk after \"empty\" keyword.")));
+					 errdetail("Junk after \"empty\" key word.")));
 
 		return;
 	}
@@ -2152,7 +2201,7 @@ range_bound_escape(const char *value)
  * Caller has already checked that they are the same range type, and looked up
  * the necessary typcache entry.
  */
-static bool
+bool
 range_contains_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
 {
 	RangeBound	lower1;
@@ -2161,6 +2210,10 @@ range_contains_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
 	RangeBound	lower2;
 	RangeBound	upper2;
 	bool		empty2;
+
+	/* Different types should be prevented by ANYRANGE matching rules */
+	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
+		elog(ERROR, "range types do not match");
 
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
@@ -2180,10 +2233,16 @@ range_contains_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
 	return true;
 }
 
+bool
+range_contained_by_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+{
+	return range_contains_internal(typcache, r2, r1);
+}
+
 /*
  * Test whether range r contains a specific element value.
  */
-static bool
+bool
 range_contains_elem_internal(TypeCacheEntry *typcache, RangeType *r, Datum val)
 {
 	RangeBound	lower;

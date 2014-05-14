@@ -3,7 +3,7 @@
  * pg_wchar.h
  *	  multibyte-character support
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/mb/pg_wchar.h
@@ -25,6 +25,11 @@
 typedef unsigned int pg_wchar;
 
 /*
+ * Maximum byte length of multibyte characters in any backend encoding
+ */
+#define MAX_MULTIBYTE_CHAR_LEN	4
+
+/*
  * various definitions for EUC
  */
 #define SS2 0x8e				/* single shift 2 (JIS0201) */
@@ -36,36 +41,63 @@ typedef unsigned int pg_wchar;
 #define ISSJISHEAD(c) (((c) >= 0x81 && (c) <= 0x9f) || ((c) >= 0xe0 && (c) <= 0xfc))
 #define ISSJISTAIL(c) (((c) >= 0x40 && (c) <= 0x7e) || ((c) >= 0x80 && (c) <= 0xfc))
 
-/*
- * Leading byte types or leading prefix byte for MULE internal code.
- * See http://www.xemacs.org for more details.	(there is a doc titled
- * "XEmacs Internals Manual", "MULE Character Sets and Encodings"
- * section.)
- */
-/*
- * Is a leading byte for "official" single byte encodings?
- */
-#define IS_LC1(c)	((unsigned char)(c) >= 0x81 && (unsigned char)(c) <= 0x8d)
-/*
- * Is a prefix byte for "private" single byte encodings?
- */
-#define IS_LCPRV1(c)	((unsigned char)(c) == 0x9a || (unsigned char)(c) == 0x9b)
-/*
- * Is a leading byte for "official" multibyte encodings?
- */
-#define IS_LC2(c)	((unsigned char)(c) >= 0x90 && (unsigned char)(c) <= 0x99)
-/*
- * Is a prefix byte for "private" multibyte encodings?
- */
-#define IS_LCPRV2(c)	((unsigned char)(c) == 0x9c || (unsigned char)(c) == 0x9d)
-
 /*----------------------------------------------------
- * leading characters
+ * MULE Internal Encoding (MIC)
+ *
+ * This encoding follows the design used within XEmacs; it is meant to
+ * subsume many externally-defined character sets.	Each character includes
+ * identification of the character set it belongs to, so the encoding is
+ * general but somewhat bulky.
+ *
+ * Currently PostgreSQL supports 5 types of MULE character sets:
+ *
+ * 1) 1-byte ASCII characters.	Each byte is below 0x80.
+ *
+ * 2) "Official" single byte charsets such as ISO-8859-1 (Latin1).
+ *	  Each MULE character consists of 2 bytes: LC1 + C1, where LC1 is
+ *	  an identifier for the charset (in the range 0x81 to 0x8d) and C1
+ *	  is the character code (in the range 0xa0 to 0xff).
+ *
+ * 3) "Private" single byte charsets such as SISHENG.  Each MULE
+ *	  character consists of 3 bytes: LCPRV1 + LC12 + C1, where LCPRV1
+ *	  is a private-charset flag, LC12 is an identifier for the charset,
+ *	  and C1 is the character code (in the range 0xa0 to 0xff).
+ *	  LCPRV1 is either 0x9a (if LC12 is in the range 0xa0 to 0xdf)
+ *	  or 0x9b (if LC12 is in the range 0xe0 to 0xef).
+ *
+ * 4) "Official" multibyte charsets such as JIS X0208.	Each MULE
+ *	  character consists of 3 bytes: LC2 + C1 + C2, where LC2 is
+ *	  an identifier for the charset (in the range 0x90 to 0x99) and C1
+ *	  and C2 form the character code (each in the range 0xa0 to 0xff).
+ *
+ * 5) "Private" multibyte charsets such as CNS 11643-1992 Plane 3.
+ *	  Each MULE character consists of 4 bytes: LCPRV2 + LC22 + C1 + C2,
+ *	  where LCPRV2 is a private-charset flag, LC22 is an identifier for
+ *	  the charset, and C1 and C2 form the character code (each in the range
+ *	  0xa0 to 0xff).  LCPRV2 is either 0x9c (if LC22 is in the range 0xf0
+ *	  to 0xf4) or 0x9d (if LC22 is in the range 0xf5 to 0xfe).
+ *
+ * "Official" encodings are those that have been assigned code numbers by
+ * the XEmacs project; "private" encodings have Postgres-specific charset
+ * identifiers.
+ *
+ * See the "XEmacs Internals Manual", available at http://www.xemacs.org,
+ * for more details.  Note that for historical reasons, Postgres'
+ * private-charset flag values do not match what XEmacs says they should be,
+ * so this isn't really exactly MULE (not that private charsets would be
+ * interoperable anyway).
+ *
+ * Note that XEmacs's implementation is different from what emacs does.
+ * We follow emacs's implementaion, rathter than XEmacs's.
  *----------------------------------------------------
  */
 
 /*
- * Official single byte encodings (0x81-0x8e)
+ * Charset identifiers (also called "leading bytes" in the MULE documentation)
+ */
+
+/*
+ * Charset IDs for official single byte encodings (0x81-0x8e)
  */
 #define LC_ISO8859_1		0x81	/* ISO8859 Latin 1 */
 #define LC_ISO8859_2		0x82	/* ISO8859 Latin 2 */
@@ -79,37 +111,62 @@ typedef unsigned int pg_wchar;
 #define LC_JISX0201R		0x8a	/* Japanese 1 byte Roman */
 /* Note that 0x8b seems to be unused as of Emacs 20.7.
  * However, there might be a chance that 0x8b could be used
- * in later version of Emacs.
+ * in later versions of Emacs.
  */
 #define LC_KOI8_R			0x8b	/* Cyrillic KOI8-R */
-#define LC_KOI8_U			0x8b	/* Cyrillic KOI8-U */
 #define LC_ISO8859_5		0x8c	/* ISO8859 Cyrillic */
 #define LC_ISO8859_9		0x8d	/* ISO8859 Latin 5 (not supported yet) */
-/* #define FREE				0x8e	free (unused) */
+#define LC_ISO8859_15		0x8e	/* ISO8859 Latin 15 (not supported yet) */
+/* #define CONTROL_1		0x8f	control characters (unused) */
+
+/* Is a leading byte for "official" single byte encodings? */
+#define IS_LC1(c)	((unsigned char)(c) >= 0x81 && (unsigned char)(c) <= 0x8d)
 
 /*
- * Unused
- */
-#define CONTROL_1			0x8f	/* control characters (unused) */
-
-/*
- * Official multibyte byte encodings (0x90-0x99)
+ * Charset IDs for official multibyte encodings (0x90-0x99)
  * 0x9a-0x9d are free. 0x9e and 0x9f are reserved.
  */
 #define LC_JISX0208_1978	0x90	/* Japanese Kanji, old JIS (not supported) */
-/* #define FREE				0x90	free (unused) */
 #define LC_GB2312_80		0x91	/* Chinese */
 #define LC_JISX0208			0x92	/* Japanese Kanji (JIS X 0208) */
 #define LC_KS5601			0x93	/* Korean */
 #define LC_JISX0212			0x94	/* Japanese Kanji (JIS X 0212) */
 #define LC_CNS11643_1		0x95	/* CNS 11643-1992 Plane 1 */
 #define LC_CNS11643_2		0x96	/* CNS 11643-1992 Plane 2 */
-/* #define FREE				0x97	free (unused) */
+#define LC_JISX0213_1		0x97/* Japanese Kanji (JIS X 0213 Plane 1) (not
+								 * supported) */
 #define LC_BIG5_1			0x98	/* Plane 1 Chinese traditional (not supported) */
 #define LC_BIG5_2			0x99	/* Plane 1 Chinese traditional (not supported) */
 
+/* Is a leading byte for "official" multibyte encodings? */
+#define IS_LC2(c)	((unsigned char)(c) >= 0x90 && (unsigned char)(c) <= 0x99)
+
 /*
- * Private single byte encodings (0xa0-0xef)
+ * Postgres-specific prefix bytes for "private" single byte encodings
+ * (According to the MULE docs, we should be using 0x9e for this)
+ */
+#define LCPRV1_A		0x9a
+#define LCPRV1_B		0x9b
+#define IS_LCPRV1(c)	((unsigned char)(c) == LCPRV1_A || (unsigned char)(c) == LCPRV1_B)
+#define IS_LCPRV1_A_RANGE(c)	\
+	((unsigned char)(c) >= 0xa0 && (unsigned char)(c) <= 0xdf)
+#define IS_LCPRV1_B_RANGE(c)	\
+	((unsigned char)(c) >= 0xe0 && (unsigned char)(c) <= 0xef)
+
+/*
+ * Postgres-specific prefix bytes for "private" multibyte encodings
+ * (According to the MULE docs, we should be using 0x9f for this)
+ */
+#define LCPRV2_A		0x9c
+#define LCPRV2_B		0x9d
+#define IS_LCPRV2(c)	((unsigned char)(c) == LCPRV2_A || (unsigned char)(c) == LCPRV2_B)
+#define IS_LCPRV2_A_RANGE(c)	\
+	((unsigned char)(c) >= 0xf0 && (unsigned char)(c) <= 0xf4)
+#define IS_LCPRV2_B_RANGE(c)	\
+	((unsigned char)(c) >= 0xf5 && (unsigned char)(c) <= 0xfe)
+
+/*
+ * Charset IDs for private single byte encodings (0xa0-0xef)
  */
 #define LC_SISHENG			0xa0/* Chinese SiSheng characters for
 								 * PinYin/ZhuYin (not supported) */
@@ -129,23 +186,35 @@ typedef unsigned int pg_wchar;
 #define LC_ARABIC_2_COLUMN	0xa8	/* Arabic 1-column (not supported) */
 
 /*
- * Private multibyte encodings (0xf0-0xff)
+ * Charset IDs for private multibyte encodings (0xf0-0xff)
  */
-#define LC_INDIAN_1_COLUMN	0xf0/* Indian charset for 1-column width glypps
+#define LC_INDIAN_1_COLUMN	0xf0/* Indian charset for 1-column width glyphs
 								 * (not supported) */
-#define LC_TIBETAN_1_COLUMN 0xf1	/* Tibetan 1 column glyph (not supported) */
+#define LC_TIBETAN_1_COLUMN 0xf1/* Tibetan 1-column width glyphs (not
+								 * supported) */
+#define LC_UNICODE_SUBSET_2 0xf2/* Unicode characters of the range
+								 * U+2500..U+33FF. (not supported) */
+#define LC_UNICODE_SUBSET_3 0xf3/* Unicode characters of the range
+								 * U+E000..U+FFFF. (not supported) */
+#define LC_UNICODE_SUBSET	0xf4/* Unicode characters of the range
+								 * U+0100..U+24FF. (not supported) */
 #define LC_ETHIOPIC			0xf5	/* Ethiopic characters (not supported) */
 #define LC_CNS11643_3		0xf6	/* CNS 11643-1992 Plane 3 */
 #define LC_CNS11643_4		0xf7	/* CNS 11643-1992 Plane 4 */
 #define LC_CNS11643_5		0xf8	/* CNS 11643-1992 Plane 5 */
 #define LC_CNS11643_6		0xf9	/* CNS 11643-1992 Plane 6 */
 #define LC_CNS11643_7		0xfa	/* CNS 11643-1992 Plane 7 */
-#define LC_INDIAN_2_COLUMN	0xfb/* Indian charset for 2-column width glypps
+#define LC_INDIAN_2_COLUMN	0xfb/* Indian charset for 2-column width glyphs
 								 * (not supported) */
 #define LC_TIBETAN			0xfc	/* Tibetan (not supported) */
 /* #define FREE				0xfd	free (unused) */
 /* #define FREE				0xfe	free (unused) */
 /* #define FREE				0xff	free (unused) */
+
+/*----------------------------------------------------
+ * end of MULE stuff
+ *----------------------------------------------------
+ */
 
 /*
  * PostgreSQL encoding identifiers
@@ -280,6 +349,10 @@ typedef int (*mb2wchar_with_len_converter) (const unsigned char *from,
 														pg_wchar *to,
 														int len);
 
+typedef int (*wchar2mb_with_len_converter) (const pg_wchar *from,
+														unsigned char *to,
+														int len);
+
 typedef int (*mblen_converter) (const unsigned char *mbstr);
 
 typedef int (*mbdisplaylen_converter) (const unsigned char *mbstr);
@@ -292,6 +365,8 @@ typedef struct
 {
 	mb2wchar_with_len_converter mb2wchar_with_len;		/* convert a multibyte
 														 * string to a wchar */
+	wchar2mb_with_len_converter wchar2mb_with_len;		/* convert a wchar
+														 * string to a multibyte */
 	mblen_converter mblen;		/* get byte length of a char */
 	mbdisplaylen_converter dsplen;		/* get display width of a char */
 	mbverifier	mbverify;		/* verify multibyte sequence */
@@ -372,6 +447,10 @@ extern int	pg_mb2wchar(const char *from, pg_wchar *to);
 extern int	pg_mb2wchar_with_len(const char *from, pg_wchar *to, int len);
 extern int pg_encoding_mb2wchar_with_len(int encoding,
 							  const char *from, pg_wchar *to, int len);
+extern int	pg_wchar2mb(const pg_wchar *from, char *to);
+extern int	pg_wchar2mb_with_len(const pg_wchar *from, char *to, int len);
+extern int pg_encoding_wchar2mb_with_len(int encoding,
+							  const pg_wchar *from, char *to, int len);
 extern int	pg_char_and_wchar_strcmp(const char *s1, const pg_wchar *s2);
 extern int	pg_wchar_strncmp(const pg_wchar *s1, const pg_wchar *s2, size_t n);
 extern int	pg_char_and_wchar_strncmp(const char *s1, const pg_wchar *s2, size_t n);
@@ -443,9 +522,9 @@ extern void check_encoding_conversion_args(int src_encoding,
 							   int expected_src_encoding,
 							   int expected_dest_encoding);
 
-extern void report_invalid_encoding(int encoding, const char *mbstr, int len);
+extern void report_invalid_encoding(int encoding, const char *mbstr, int len) __attribute__((noreturn));
 extern void report_untranslatable_char(int src_encoding, int dest_encoding,
-						   const char *mbstr, int len);
+					   const char *mbstr, int len) __attribute__((noreturn));
 
 extern void pg_ascii2mic(const unsigned char *l, unsigned char *p, int len);
 extern void pg_mic2ascii(const unsigned char *mic, unsigned char *p, int len);

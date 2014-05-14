@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  *
  * src/bin/psql/print.h
  */
@@ -19,6 +19,7 @@ enum printFormat
 	PRINT_WRAPPED,
 	PRINT_HTML,
 	PRINT_LATEX,
+	PRINT_LATEX_LONGTABLE,
 	PRINT_TROFF_MS
 	/* add your favourite output format here ... */
 };

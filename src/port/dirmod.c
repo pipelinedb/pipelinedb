@@ -3,7 +3,7 @@
  * dirmod.c
  *	  directory handling functions
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *	This includes replacement versions of functions that work on
@@ -39,72 +39,6 @@
 #include <w32api/winioctl.h>
 #endif
 #endif
-
-
-#ifndef FRONTEND
-
-/*
- *	On Windows, call non-macro versions of palloc; we can't reference
- *	CurrentMemoryContext in this file because of PGDLLIMPORT conflict.
- */
-#if defined(WIN32) || defined(__CYGWIN__)
-#undef palloc
-#undef pstrdup
-#define palloc(sz)		pgport_palloc(sz)
-#define pstrdup(str)	pgport_pstrdup(str)
-#endif
-#else							/* FRONTEND */
-
-/*
- *	In frontend, fake palloc behavior with these
- */
-#undef palloc
-#undef pstrdup
-#define palloc(sz)		fe_palloc(sz)
-#define pstrdup(str)	fe_pstrdup(str)
-#define repalloc(pointer,sz)	fe_repalloc(pointer,sz)
-#define pfree(pointer)	free(pointer)
-
-static void *
-fe_palloc(Size size)
-{
-	void	   *res;
-
-	if ((res = malloc(size)) == NULL)
-	{
-		fprintf(stderr, _("out of memory\n"));
-		exit(1);
-	}
-	return res;
-}
-
-static char *
-fe_pstrdup(const char *string)
-{
-	char	   *res;
-
-	if ((res = strdup(string)) == NULL)
-	{
-		fprintf(stderr, _("out of memory\n"));
-		exit(1);
-	}
-	return res;
-}
-
-static void *
-fe_repalloc(void *pointer, Size size)
-{
-	void	   *res;
-
-	if ((res = realloc(pointer, size)) == NULL)
-	{
-		fprintf(stderr, _("out of memory\n"));
-		exit(1);
-	}
-	return res;
-}
-#endif   /* FRONTEND */
-
 
 #if defined(WIN32) || defined(__CYGWIN__)
 

@@ -8,7 +8,6 @@
  </indexterm>
 
 &common;
-
  <para>
   <filename>test_parser</> is an example of a custom parser for full-text
   search.  It doesn't do anything especially useful, but can serve as

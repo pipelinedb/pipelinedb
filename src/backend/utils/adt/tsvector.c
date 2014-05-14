@@ -3,7 +3,7 @@
  * tsvector.c
  *	  I/O functions for tsvector
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -309,7 +309,7 @@ tsvectorout(PG_FUNCTION_ARGS)
 {
 	TSVector	out = PG_GETARG_TSVECTOR(0);
 	char	   *outbuf;
-	int4		i,
+	int32		i,
 				lenbuf = 0,
 				pp;
 	WordEntry  *ptr = ARRPTR(out);

@@ -597,9 +597,6 @@ LINE 1: CREATE FOREIGN TABLE ft1 ();
                                    ^
 CREATE FOREIGN TABLE ft1 () SERVER no_server;                   -- ERROR
 ERROR:  server "no_server" does not exist
-CREATE FOREIGN TABLE ft1 (c1 serial) SERVER sc;                 -- ERROR
-NOTICE:  CREATE FOREIGN TABLE will create implicit sequence "ft1_c1_seq" for serial column "ft1.c1"
-ERROR:  default values on foreign tables are not supported
 CREATE FOREIGN TABLE ft1 () SERVER s0 WITH OIDS;                -- ERROR
 ERROR:  syntax error at or near "WITH OIDS"
 LINE 1: CREATE FOREIGN TABLE ft1 () SERVER s0 WITH OIDS;
@@ -642,7 +639,7 @@ COMMENT ON COLUMN ft1.c1 IS NULL;
 ERROR:  relation "ft1" does not exist
 ALTER FOREIGN TABLE ft1 ADD COLUMN c4 integer;
 ERROR:  relation "ft1" does not exist
-ALTER FOREIGN TABLE ft1 ADD COLUMN c5 integer DEFAULT 0;        -- ERROR
+ALTER FOREIGN TABLE ft1 ADD COLUMN c5 integer DEFAULT 0;
 ERROR:  relation "ft1" does not exist
 ALTER FOREIGN TABLE ft1 ADD COLUMN c6 integer;
 ERROR:  relation "ft1" does not exist
@@ -654,9 +651,9 @@ ALTER FOREIGN TABLE ft1 ADD COLUMN c9 integer;
 ERROR:  relation "ft1" does not exist
 ALTER FOREIGN TABLE ft1 ADD COLUMN c10 integer OPTIONS (p1 'v1');
 ERROR:  relation "ft1" does not exist
-ALTER FOREIGN TABLE ft1 ALTER COLUMN c4 SET DEFAULT 0;          -- ERROR
+ALTER FOREIGN TABLE ft1 ALTER COLUMN c4 SET DEFAULT 0;
 ERROR:  relation "ft1" does not exist
-ALTER FOREIGN TABLE ft1 ALTER COLUMN c5 DROP DEFAULT;           -- ERROR
+ALTER FOREIGN TABLE ft1 ALTER COLUMN c5 DROP DEFAULT;
 ERROR:  relation "ft1" does not exist
 ALTER FOREIGN TABLE ft1 ALTER COLUMN c6 SET NOT NULL;
 ERROR:  relation "ft1" does not exist

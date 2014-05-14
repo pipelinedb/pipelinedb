@@ -4,7 +4,6 @@
  <title>Index Access Method Interface Definition</title>
 
 &common;
-
   <para>
    This chapter defines the interface between the core
    <productname>PostgreSQL</productname> system and <firstterm>index access
@@ -116,8 +115,8 @@
    <structfield>amoptionalkey</structfield> false.
    One reason that an index AM might set
    <structfield>amoptionalkey</structfield> false is if it doesn't index
-   NULLs.  Since most indexable operators are
-   strict and hence cannot return TRUE for NULL inputs,
+   null values.  Since most indexable operators are
+   strict and hence cannot return true for null inputs,
    it is at first sight attractive to not store index entries for null values:
    they could never be returned by an index scan anyway.  However, this
    argument fails when an index scan has no restriction clause for a given
@@ -277,12 +276,23 @@ amvacuumcleanup (IndexVacuumInfo *info,
 
   <para>
 <programlisting>
+bool
+amcanreturn (Relation indexRelation);
+</programlisting>
+   Check whether the index can support <firstterm>index-only scans</> by
+   returning the indexed column values for an index entry in the form of an
+   IndexTuple.  Return TRUE if so, else FALSE.  If the index AM can never
+   support index-only scans (an example is hash, which stores only
+   the hash values not the original data), it is sufficient to set its
+   <structfield>amcanreturn</> field to zero in <structname>pg_am</>.
+  </para>
+
+  <para>
+<programlisting>
 void
 amcostestimate (PlannerInfo *root,
-                IndexOptInfo *index,
-                List *indexQuals,
-                List *indexOrderBys,
-                RelOptInfo *outer_rel,
+                IndexPath *path,
+                double loop_count,
                 Cost *indexStartupCost,
                 Cost *indexTotalCost,
                 Selectivity *indexSelectivity,
@@ -356,7 +366,7 @@ amrescan (IndexScanDesc scan,
           ScanKey orderbys,
           int norderbys);
 </programlisting>
-   Start or restart an indexscan, possibly with new scan keys.  (To restart
+   Start or restart an index scan, possibly with new scan keys.  (To restart
    using previously-passed keys, NULL is passed for <literal>keys</> and/or
    <literal>orderbys</>.)  Note that it is not allowed for
    the number of keys or order-by operators to be larger than
@@ -387,6 +397,20 @@ amgettuple (IndexScanDesc scan,
    Note that rechecking will extend only to the scan conditions; a partial
    index predicate (if any) is never rechecked by <function>amgettuple</>
    callers.
+  </para>
+
+  <para>
+   If the index supports index-only scans (i.e.,
+   <function>amcanreturn</function> returns TRUE for it),
+   then on success the AM must also check
+   <literal>scan-&gt;xs_want_itup</>, and if that is true it must return
+   the original indexed data for the index entry, in the form of an
+   <structname>IndexTuple</> pointer stored at <literal>scan-&gt;xs_itup</>,
+   with tuple descriptor <literal>scan-&gt;xs_itupdesc</>.
+   (Management of the data referenced by the pointer is the access method's
+   responsibility.  The data must remain good at least until the next
+   <function>amgettuple</>, <function>amrescan</>, or <function>amendscan</>
+   call for the scan.)
   </para>
 
   <para>
@@ -587,6 +611,15 @@ amrestrpos (IndexScanDesc scan);
   </para>
 
   <para>
+   If the index stores the original indexed data values (and not some lossy
+   representation of them), it is useful to support index-only scans, in
+   which the index returns the actual data not just the TID of the heap tuple.
+   This will only work if the visibility map shows that the TID is on an
+   all-visible page; else the heap tuple must be visited anyway to check
+   MVCC visibility.  But that is no concern of the access method's.
+  </para>
+
+  <para>
    Instead of using <function>amgettuple</>, an index scan can be done with
    <function>amgetbitmap</> to fetch all tuples in one call.  This can be
    noticeably more efficient than <function>amgettuple</> because it allows
@@ -598,7 +631,11 @@ amrestrpos (IndexScanDesc scan);
    supported. Secondly, the tuples are returned in a bitmap which doesn't
    have any specific ordering, which is why <function>amgetbitmap</> doesn't
    take a <literal>direction</> argument.  (Ordering operators will never be
-   supplied for such a scan, either.)  Finally, <function>amgetbitmap</>
+   supplied for such a scan, either.)
+   Also, there is no provision for index-only scans with
+   <function>amgetbitmap</>, since there is no way to return the contents of
+   index tuples.
+   Finally, <function>amgetbitmap</>
    does not guarantee any locking of the returned tuples, with implications
    spelled out in <xref linkend="index-locking">.
   </para>
@@ -714,11 +751,11 @@ amrestrpos (IndexScanDesc scan);
   <para>
    When the <structfield>ampredlocks</> flag is not set, any scan using that
    index access method within a serializable transaction will acquire a
-   non-blocking predicate lock on the full index.  This will generate a
+   nonblocking predicate lock on the full index.  This will generate a
    read-write conflict with the insert of any tuple into that index by a
    concurrent serializable transaction.  If certain patterns of read-write
    conflicts are detected among a set of concurrent serializable
-   transactions, one of those transactions may be cancelled to protect data
+   transactions, one of those transactions may be canceled to protect data
    integrity.  When the flag is set, it indicates that the index access
    method implements finer-grained predicate locking, which will tend to
    reduce the frequency of such transaction cancellations.
@@ -897,17 +934,15 @@ amrestrpos (IndexScanDesc scan);
 <programlisting>
 void
 amcostestimate (PlannerInfo *root,
-                IndexOptInfo *index,
-                List *indexQuals,
-                List *indexOrderBys,
-                RelOptInfo *outer_rel,
+                IndexPath *path,
+                double loop_count,
                 Cost *indexStartupCost,
                 Cost *indexTotalCost,
                 Selectivity *indexSelectivity,
                 double *indexCorrelation);
 </programlisting>
 
-   The first five parameters are inputs:
+   The first three parameters are inputs:
 
    <variablelist>
     <varlistentry>
@@ -920,46 +955,25 @@ amcostestimate (PlannerInfo *root,
     </varlistentry>
 
     <varlistentry>
-     <term><parameter>index</></term>
+     <term><parameter>path</></term>
      <listitem>
       <para>
-       The index being considered.
+       The index access path being considered.  All fields except cost and
+       selectivity values are valid.
       </para>
      </listitem>
     </varlistentry>
 
     <varlistentry>
-     <term><parameter>indexQuals</></term>
+     <term><parameter>loop_count</></term>
      <listitem>
       <para>
-       List of index qual clauses (implicitly ANDed);
-       a <symbol>NIL</> list indicates no qualifiers are available.
-       Note that the list contains expression trees with RestrictInfo nodes
-       at the top, not ScanKeys.
-      </para>
-     </listitem>
-    </varlistentry>
-
-    <varlistentry>
-     <term><parameter>indexOrderBys</></term>
-     <listitem>
-      <para>
-       List of indexable ORDER BY operators, or <symbol>NIL</> if none.
-       Note that the list contains expression trees, not ScanKeys.
-      </para>
-     </listitem>
-    </varlistentry>
-
-    <varlistentry>
-     <term><parameter>outer_rel</></term>
-     <listitem>
-      <para>
-       If the index is being considered for use in a join inner indexscan,
-       the planner's information about the outer side of the join.  Otherwise
-       <symbol>NULL</>.  When non-<symbol>NULL</>, some of the qual clauses will be join clauses
-       with this rel rather than being simple restriction clauses.  Also,
-       the cost estimator should expect that the index scan will be repeated
-       for each row of the outer rel.
+       The number of repetitions of the index scan that should be factored
+       into the cost estimates.  This will typically be greater than one when
+       considering a parameterized scan for use in the inside of a nestloop
+       join.  Note that the cost estimates should still be for just one scan;
+       a larger <parameter>loop_count</> means that it may be appropriate
+       to allow for some caching effects across multiple scans.
       </para>
      </listitem>
     </varlistentry>
@@ -1023,7 +1037,7 @@ amcostestimate (PlannerInfo *root,
    row should usually be taken as <varname>cpu_index_tuple_cost</>.  In
    addition, an appropriate multiple of <varname>cpu_operator_cost</> should
    be charged for any comparison operators invoked during index processing
-   (especially evaluation of the <literal>indexQuals</> themselves).
+   (especially evaluation of the indexquals themselves).
   </para>
 
   <para>
@@ -1054,8 +1068,8 @@ amcostestimate (PlannerInfo *root,
   </para>
 
   <para>
-   In the join case, the returned numbers should be averages expected for
-   any one scan of the index.
+   When <parameter>loop_count</> is greater than one, the returned numbers
+   should be averages expected for any one scan of the index.
   </para>
 
   <procedure>
@@ -1071,8 +1085,8 @@ amcostestimate (PlannerInfo *root,
      knowledge, use the standard optimizer function <function>clauselist_selectivity()</function>:
 
 <programlisting>
-*indexSelectivity = clauselist_selectivity(root, indexQuals,
-                                           index-&gt;rel-&gt;relid,
+*indexSelectivity = clauselist_selectivity(root, path-&gt;indexquals,
+                                           path-&gt;indexinfo-&gt;rel-&gt;relid,
                                            JOIN_INNER, NULL);
 </programlisting>
     </para>
@@ -1083,7 +1097,8 @@ amcostestimate (PlannerInfo *root,
      Estimate the number of index rows that will be visited during the
      scan.  For many index types this is the same as <parameter>indexSelectivity</> times
      the number of rows in the index, but it might be more.  (Note that the
-     index's size in pages and rows is available from the <structname>IndexOptInfo</> struct.)
+     index's size in pages and rows is available from the
+     <literal>path-&gt;indexinfo</> struct.)
     </para>
    </step>
 
@@ -1105,14 +1120,14 @@ amcostestimate (PlannerInfo *root,
  * Also, we charge for evaluation of the indexquals at each index row.
  * All the costs are assumed to be paid incrementally during the scan.
  */
-cost_qual_eval(&amp;index_qual_cost, indexQuals, root);
+cost_qual_eval(&amp;index_qual_cost, path-&gt;indexquals, root);
 *indexStartupCost = index_qual_cost.startup;
 *indexTotalCost = seq_page_cost * numIndexPages +
     (cpu_index_tuple_cost + index_qual_cost.per_tuple) * numIndexTuples;
 </programlisting>
 
      However, the above does not account for amortization of index reads
-     across repeated index scans in the join case.
+     across repeated index scans.
     </para>
    </step>
 

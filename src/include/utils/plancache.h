@@ -5,7 +5,7 @@
  *
  * See plancache.c for comments.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/plancache.h
@@ -62,6 +62,14 @@
  * context that holds the rewritten query tree and associated data.  This
  * allows the query tree to be discarded easily when it is invalidated.
  *
+ * Some callers wish to use the CachedPlan API even with one-shot queries
+ * that have no reason to be saved at all.	We therefore support a "oneshot"
+ * variant that does no data copying or invalidation checking.	In this case
+ * there are no separate memory contexts: the CachedPlanSource struct and
+ * all subsidiary data live in the caller's CurrentMemoryContext, and there
+ * is no way to free memory short of clearing that entire context.	A oneshot
+ * plan is always treated as unsaved.
+ *
  * Note: the string referenced by commandTag is not subsidiary storage;
  * it is assumed to be a compile-time-constant string.	As with portals,
  * commandTag shall be NULL if and only if the original query string (before
@@ -71,7 +79,7 @@ typedef struct CachedPlanSource
 {
 	int			magic;			/* should equal CACHEDPLANSOURCE_MAGIC */
 	Node	   *raw_parse_tree; /* output of raw_parser() */
-	char	   *query_string;	/* source text of query */
+	const char *query_string;	/* source text of query */
 	const char *commandTag;		/* command tag (a constant!), or NULL */
 	Oid		   *param_types;	/* array of parameter type OIDs, or NULL */
 	int			num_params;		/* length of param_types array */
@@ -80,16 +88,18 @@ typedef struct CachedPlanSource
 	int			cursor_options; /* cursor options used for planning */
 	bool		fixed_result;	/* disallow change in result tupdesc? */
 	TupleDesc	resultDesc;		/* result type; NULL = doesn't return tuples */
-	struct OverrideSearchPath *search_path;		/* saved search_path */
 	MemoryContext context;		/* memory context holding all above */
 	/* These fields describe the current analyzed-and-rewritten query tree: */
 	List	   *query_list;		/* list of Query nodes, or NIL if not valid */
 	List	   *relationOids;	/* OIDs of relations the queries depend on */
 	List	   *invalItems;		/* other dependencies, as PlanInvalItems */
+	struct OverrideSearchPath *search_path;		/* search_path used for
+												 * parsing and planning */
 	MemoryContext query_context;	/* context holding the above, or NULL */
 	/* If we have a generic plan, this is a reference-counted link to it: */
 	struct CachedPlan *gplan;	/* generic plan, or NULL if not valid */
 	/* Some state flags: */
+	bool		is_oneshot;		/* is it a "oneshot" plan? */
 	bool		is_complete;	/* has CompleteCachedPlan been done? */
 	bool		is_saved;		/* has CachedPlanSource been "saved"? */
 	bool		is_valid;		/* is the query_list currently valid? */
@@ -102,10 +112,10 @@ typedef struct CachedPlanSource
 	int			num_custom_plans;		/* number of plans included in total */
 #ifdef PGXC
 	char	   *stmt_name;		/* If set, this is a copy of prepared stmt name */
-#endif
 	Tuplestorestate *store; /* tuplestore to read from, if any */
 	TupleDesc	desc; /* description of the tuplestore, if any */
 	Query *query; /* query associated with this cached plan */
+#endif
 } CachedPlanSource;
 
 /*
@@ -114,13 +124,16 @@ typedef struct CachedPlanSource
  * (if any), and any active plan executions, so the plan can be discarded
  * exactly when refcount goes to zero.	Both the struct itself and the
  * subsidiary data live in the context denoted by the context field.
- * This makes it easy to free a no-longer-needed cached plan.
+ * This makes it easy to free a no-longer-needed cached plan.  (However,
+ * if is_oneshot is true, the context does not belong solely to the CachedPlan
+ * so no freeing is possible.)
  */
 typedef struct CachedPlan
 {
 	int			magic;			/* should equal CACHEDPLAN_MAGIC */
 	List	   *stmt_list;		/* list of statement nodes (PlannedStmts and
 								 * bare utility statements) */
+	bool		is_oneshot;		/* is it a "oneshot" plan? */
 	bool		is_saved;		/* is CachedPlan in a long-lived context? */
 	bool		is_valid;		/* is the stmt_list currently valid? */
 	TransactionId saved_xmin;	/* if valid, replan when TransactionXmin
@@ -140,6 +153,9 @@ extern CachedPlanSource *CreateCachedPlan(Node *raw_parse_tree,
 				 const char *stmt_name,
 #endif
 				 const char *commandTag);
+extern CachedPlanSource *CreateOneShotCachedPlan(Node *raw_parse_tree,
+						const char *query_string,
+						const char *commandTag);
 extern void CompleteCachedPlan(CachedPlanSource *plansource,
 				   List *querytree_list,
 				   MemoryContext querytree_context,

@@ -34,6 +34,7 @@ NOTIFY <replaceable class="PARAMETER">channel</replaceable> [ , <replaceable cla
    has previously executed
    <command>LISTEN <replaceable class="parameter">channel</></command>
    for the specified channel name in the current database.
+   Notifications are visible to all users.
   </para>
 
   <para>
