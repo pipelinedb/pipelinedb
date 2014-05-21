@@ -25,6 +25,7 @@ static HTAB *DecoderCache = NULL;
 
 typedef struct DecoderCacheEntry
 {
+	char key[NAMEDATALEN];
 	StreamEventDecoder *decoder;
 } DecoderCacheEntry;
 
@@ -44,7 +45,9 @@ check_decoder_cache(const char *encoding)
 static void
 cache_decoder(const char *encoding, StreamEventDecoder *decoder)
 {
-	hash_search(DecoderCache, (void *) encoding, HASH_ENTER, NULL);
+	DecoderCacheEntry *entry =
+			(DecoderCacheEntry *) hash_search(DecoderCache, (void *) encoding, HASH_ENTER, NULL);
+	entry->decoder = decoder;
 }
 
 /*
@@ -113,7 +116,6 @@ get_schema(Oid encoding)
 void
 InitDecoderCache(void)
 {
-	MemoryContext oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	HASHCTL ctl;
 
 	MemSet(&ctl, 0, sizeof(ctl));
@@ -123,10 +125,8 @@ InitDecoderCache(void)
 	ctl.entrysize = sizeof(DecoderCacheEntry);
 	ctl.hash = string_hash;
 
-	DecoderCache = hash_create("DecoderCache", 32, &ctl, HASH_ELEM);
-
 	/* XXX TODO: we need to listen for invalidation events via CacheRegisterSyscacheCallback */
-	MemoryContextSwitchTo(oldcontext);
+	DecoderCache = hash_create("DecoderCache", 32, &ctl, HASH_ELEM);
 }
 
 /*
@@ -221,6 +221,7 @@ GetStreamEventDecoder(const char *encoding)
 	 *  XXX TODO: it may not be the best idea to assume that the raw event is the first argument,
 	 *  although we do need to be able to rely on some assumptions to avoid ambiguity
 	 */
+	decoder->name = pstrdup(encoding);
 	decoder->schema = get_schema(row->oid);
 	decoder->rettype = procform->prorettype;
 	decoder->rawpos = 0;
@@ -234,7 +235,6 @@ GetStreamEventDecoder(const char *encoding)
 	{
 		if (i == decoder->rawpos)
 			continue;
-		/* XXX we're assuming that the raw arg is always 0--clean up positioning logic */
 		decoder->fcinfo_data.arg[clist->argnumbers[i]] = typedargs[i - 1];
 	}
 
@@ -247,7 +247,6 @@ GetStreamEventDecoder(const char *encoding)
 	pfree(argvals);
 	pfree(decodedbyname);
 	pfree(argnames);
-	pfree(typedargs);
 	pfree(ps);
 
 	return decoder;
@@ -268,7 +267,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 	int nfields;
 
 	/* we can treat the raw bytes as text because texts are identical in structure to a byteas */
-	decoder->fcinfo_data.arg[decoder->rawpos] = CStringGetTextDatum(event->raw);
+	decoder->fcinfo_data.arg[decoder->rawpos] = CStringGetTextDatum(pnstrdup(event->raw, event->len));
 
 	InitFunctionCallInfoData(decoder->fcinfo_data, decoder->fcinfo_data.flinfo,
 			decoder->fcinfo_data.nargs, InvalidOid, NULL, NULL);
@@ -283,8 +282,6 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 			break;
 		case JSONOID:
 			break;
-//		case RECORDOID:
-//			break;
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_EXTERNAL_ROUTINE_INVOCATION_EXCEPTION),
