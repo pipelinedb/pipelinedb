@@ -15,6 +15,7 @@
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
+#include "utils/json.h"
 #include "utils/memutils.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
@@ -25,7 +26,7 @@ static HTAB *DecoderCache = NULL;
 
 typedef struct DecoderCacheEntry
 {
-	char key[NAMEDATALEN];
+	char key[NAMEDATALEN]; /* hash key --- MUST BE FIRST */
 	StreamEventDecoder *decoder;
 } DecoderCacheEntry;
 
@@ -123,7 +124,6 @@ InitDecoderCache(void)
 	/* Keyed by the name field of the pipeline_encoding catalog table */
 	ctl.keysize = NAMEDATALEN;
 	ctl.entrysize = sizeof(DecoderCacheEntry);
-	ctl.hash = string_hash;
 
 	/* XXX TODO: we need to listen for invalidation events via CacheRegisterSyscacheCallback */
 	DecoderCache = hash_create("DecoderCache", 32, &ctl, HASH_ELEM);
@@ -154,7 +154,7 @@ GetStreamEventDecoder(const char *encoding)
 	HeapTuple	proctup;
 	Form_pg_proc procform;
 	int nargnames;
-	int nargvals;
+	int nargvals = 0;
 	int i;
 
 	if (decoder != NULL)
@@ -184,20 +184,23 @@ GetStreamEventDecoder(const char *encoding)
 		deconstruct_array(DatumGetArrayTypeP(rawarr), TEXTOID, -1,
 				false, 'i', &argvals, NULL, &nargvals);
 
-	/* we need to coerce the arguments into the specific types that the function expects */
-	typedargs = palloc(nargvals * sizeof(Datum));
-	ps = make_parsestate(NULL);
-	for (i=0; i<nargvals; i++)
+	if (nargvals > 0)
 	{
-		Value *v = (Value *) stringToNode(TextDatumGetCString(argvals[i]));
-		Const *c = make_const(ps, v, 0);
-		c = (Const *) coerce_to_common_type(ps, (Node *) c, TEXTOID, "decoder argument");
-		typedargs[i] = c->constvalue;
-	}
+		/* we need to coerce the arguments into the specific types that the function expects */
+		typedargs = palloc(nargvals * sizeof(Datum));
+		ps = make_parsestate(NULL);
+		for (i=0; i<nargvals; i++)
+		{
+			Value *v = (Value *) stringToNode(TextDatumGetCString(argvals[i]));
+			Const *c = make_const(ps, v, 0);
+			c = (Const *) coerce_to_common_type(ps, (Node *) c, TEXTOID, "decoder argument");
+			typedargs[i] = c->constvalue;
+		}
 
-	for (i=0; i<nargnames; i++)
-	{
-		argnames = lappend(argnames, TextDatumGetCString(textargnames[i]));
+		for (i=0; i<nargnames; i++)
+		{
+			argnames = lappend(argnames, TextDatumGetCString(textargnames[i]));
+		}
 	}
 
 	decodedbyname = makeString(row->decodedby.data);
@@ -243,12 +246,6 @@ GetStreamEventDecoder(const char *encoding)
 	ReleaseSysCache(tup);
 	ReleaseSysCache(proctup);
 
-	pfree(textargnames);
-	pfree(argvals);
-	pfree(decodedbyname);
-	pfree(argnames);
-	pfree(ps);
-
 	return decoder;
 }
 
@@ -262,12 +259,25 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 {
 	Datum result;
 	Datum *fields;
-	bool *isnull;
+	Datum rawarg;
 	HeapTuple decoded;
+	AttInMetadata *attinmeta = TupleDescGetAttInMetadata(decoder->schema);
 	int nfields;
+	const char *evbytes = pnstrdup(event->raw, event->len);
+	char **strs;
+	int i;
 
-	/* we can treat the raw bytes as text because texts are identical in structure to a byteas */
-	decoder->fcinfo_data.arg[decoder->rawpos] = CStringGetTextDatum(pnstrdup(event->raw, event->len));
+	switch(decoder->rettype)
+	{
+		case JSONOID:
+			rawarg = CStringGetDatum(evbytes);
+			break;
+		default:
+			/* we can treat the raw bytes as text because texts are identical in structure to a byteas */
+			rawarg = CStringGetTextDatum(evbytes);
+	}
+
+	decoder->fcinfo_data.arg[decoder->rawpos] = rawarg;
 
 	InitFunctionCallInfoData(decoder->fcinfo_data, decoder->fcinfo_data.flinfo,
 			decoder->fcinfo_data.nargs, InvalidOid, NULL, NULL);
@@ -281,7 +291,31 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 					false, 'i', &fields, NULL, &nfields);
 			break;
 		case JSONOID:
+			{
+				/* if we got this far, then the input bytes are valid JSON so we can use them directly here */
+				int i;
+
+				nfields = decoder->schema->natts;
+				fields = palloc(nfields * sizeof(Datum));
+
+				for (i=0; i<decoder->schema->natts; i++)
+				{
+					/* XXX TODO: handle nonexistent fields, json_object_field throws an error for these */
+					const char *key = NameStr(decoder->schema->attrs[i]->attname);
+					Datum raw = DirectFunctionCall2(json_object_field, CStringGetTextDatum(evbytes),
+							CStringGetTextDatum(key));
+
+					char *rawstr = TextDatumGetCString(raw);
+
+					if (rawstr[0] == '"')
+						raw = DirectFunctionCall3(text_substr, raw, DatumGetInt32(2), DatumGetInt32(strlen(rawstr) - 2));
+
+					fields[i] = raw;
+				}
+			}
 			break;
+//		case RECORDOID:
+//			break;
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_EXTERNAL_ROUTINE_INVOCATION_EXCEPTION),
@@ -289,9 +323,13 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 									decoder->name, decoder->rettype)));
 	}
 
-	isnull = palloc0(nfields * sizeof(bool));
-	decoded = heap_form_tuple(decoder->schema, fields, isnull);
-	pfree(isnull);
+	strs = palloc(nfields * sizeof(char *));
+	for (i=0; i<nfields; i++)
+	{
+		strs[i] = TextDatumGetCString(fields[i]);
+	}
+
+	decoded = BuildTupleFromCStrings(attinmeta, strs);
 
 	return decoded;
 }

@@ -83,6 +83,8 @@ int main(int argc, char* argv[])
 	{
 		int nlen;
 		len = strlen(line);
+		line[len - 1] = '\0';
+		len--;
 		if (buf_size + len > MAX_BUF_SIZE)
 		{
 			/* flush buffer to server */
