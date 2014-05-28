@@ -330,6 +330,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 	}
 
 	decoded = BuildTupleFromCStrings(attinmeta, strs);
+	pfree(strs);
 
 	return decoded;
 }
