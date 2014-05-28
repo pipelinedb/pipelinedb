@@ -1673,22 +1673,30 @@ static void
 exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
 	List *events = NIL;
-	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
+	MemoryContext oldcontext;
+	StreamEventDecoder *decoder;
+	TupleTableSlot *slot;
 
-	StreamEventDecoder *decoder = GetStreamEventDecoder(encoding);
+	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+	decoder = GetStreamEventDecoder(encoding);
+	MemoryContextSwitchTo(oldcontext);
 
-	TupleTableSlot *slot = MakeTupleTableSlot();
+	oldcontext = MemoryContextSwitchTo(EventContext);
+
+	slot = MakeTupleTableSlot();
 	ExecSetSlotDescriptor(slot, decoder->schema);
 
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
+		HeapTuple tup;
+
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
-		events = lcons(ev, events);
-		HeapTuple tup = DecodeStreamEvent(ev, decoder);
 
+		events = lappend(events, ev);
+		tup = DecodeStreamEvent(ev, decoder);
 		ExecStoreTuple(tup, slot, InvalidBuffer, false);
 	}
 	pq_getmsgend(message);
