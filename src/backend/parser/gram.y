@@ -356,7 +356,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 				execute_param_clause using_clause returning_clause
 				opt_enum_val_list enum_val_list table_func_column_list
 				create_generic_options alter_generic_options
-				relation_expr_list dostmt_opt_list
+				relation_expr_list dostmt_opt_list decode_args param_list
 
 %type <list>	opt_fdw_options fdw_options
 %type <defelt>	fdw_option
@@ -419,7 +419,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <node>	def_arg columnElem where_clause where_or_current_clause
 				a_expr b_expr c_expr func_expr AexprConst indirection_el
 				columnref in_expr having_clause func_table array_expr
-				ExclusionWhereClause
+				ExclusionWhereClause named_param
 %type <list>	ExclusionConstraintList ExclusionConstraintElem
 %type <list>	func_arg_list
 %type <node>	func_arg_expr
@@ -2687,7 +2687,7 @@ copy_generic_opt_arg_list_item:
 						$$ = (Node *)n;
 					}
 				| CREATE ENCODING qualified_name '(' OptTableElementList ')'
-				DECODED BY qualified_name OptWith
+				DECODED BY qualified_name decode_args
 					{
 						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
 						n->name = $3;
@@ -2696,7 +2696,24 @@ copy_generic_opt_arg_list_item:
 						n->args = $10;
 						$$ = (Node *)n;
 					}
-			;	
+			;
+
+named_param:
+			param_name COLON_EQUALS def_arg
+				{
+					$$ = makeDefElem($1, (Node *) $3);
+				}
+		;
+
+param_list:
+			named_param			{ $$ = list_make1($1); }
+			| param_list ',' named_param		{ $$ = lappend($1, $3); }
+		;
+
+decode_args:
+		'(' param_list ')'		{ $$ = $2; }
+		;
+
 
 /*****************************************************************************
  *
