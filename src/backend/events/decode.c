@@ -203,7 +203,7 @@ GetStreamEventDecoder(const char *encoding)
 		}
 	}
 
-	decodedbyname = makeString(row->decodedby.data);
+	decodedbyname = makeString(NameStr(row->decodedby));
 	clist = FuncnameGetCandidates(list_make1(decodedbyname),
 			list_length(argnames) + 1, argnames, false, false);
 
