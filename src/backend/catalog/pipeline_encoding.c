@@ -11,6 +11,7 @@
 #include "postgres.h"
 
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "access/transam.h"
 #include "catalog/heap.h"
 #include "catalog/indexing.h"
