@@ -31,7 +31,7 @@
  * stream across all datanodes
  */
 EventStream
-open_stream(void)
+OpenStream(void)
 {
 	EventStream stream = (EventStream) palloc(sizeof(EventStream));
 	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, true);
@@ -55,7 +55,7 @@ open_stream(void)
  * that the given number of events were received
  */
 int
-respond_send_events(int numevents)
+RespondSendEvents(int numevents)
 {
 	StringInfoData resp;
 	pq_beginmessage(&resp, '#');
@@ -132,7 +132,7 @@ handle_send_events_response(PGXCNodeHandle *conn, int expected)
  * events to their respective datanodes
  */
 int
-send_events(EventStream stream, const char *encoding,
+SendEvents(EventStream stream, const char *encoding,
 		const char *channel, List *events)
 {
 	List *events_by_node[stream->handle_count];
@@ -233,7 +233,7 @@ send_events(EventStream stream, const char *encoding,
  * Closes datanode connections and cleans up stream state
  */
 void
-close_stream(EventStream stream)
+CloseStream(EventStream stream)
 {
 
 }

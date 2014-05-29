@@ -1701,7 +1701,7 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 	}
 	pq_getmsgend(message);
 
-	if (send_events(stream, encoding, channel, events))
+	if (SendEvents(stream, encoding, channel, events))
 	{
 		MemoryContextSwitchTo(oldcontext);
 		MemoryContextReset(EventContext);
@@ -1736,7 +1736,7 @@ exec_receive_events(const char *encoding, const char *channel, StringInfo messag
 	}
 	pq_getmsgend(message);
 
-	respond_send_events(list_length(events));
+	RespondSendEvents(list_length(events));
 
 	MemoryContextSwitchTo(oldcontext);
 	MemoryContextReset(EventContext);
@@ -5132,7 +5132,7 @@ PostgresMain(int argc, char *argv[],
 					channel = pq_getmsgstring(&input_message);
 
 					if (!stream || EventStreamNeedsOpen(stream))
-						stream = open_stream();
+						stream = OpenStream();
 
 					exec_proxy_events(encoding, channel, &input_message);
 					send_ready_for_query = true;
