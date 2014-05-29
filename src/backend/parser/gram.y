@@ -419,7 +419,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <node>	def_arg columnElem where_clause where_or_current_clause
 				a_expr b_expr c_expr func_expr AexprConst indirection_el
 				columnref in_expr having_clause func_table array_expr
-				ExclusionWhereClause named_param
+				ExclusionWhereClause named_const
 %type <list>	ExclusionConstraintList ExclusionConstraintElem
 %type <list>	func_arg_list
 %type <node>	func_arg_expr
@@ -2698,16 +2698,20 @@ copy_generic_opt_arg_list_item:
 					}
 			;
 
-named_param:
-			param_name COLON_EQUALS def_arg
+named_const:
+			param_name COLON_EQUALS NumericOnly
 				{
 					$$ = makeDefElem($1, (Node *) $3);
+				}
+			| param_name COLON_EQUALS Sconst
+				{
+					$$ = makeDefElem($1, (Node *) makeString($3));
 				}
 		;
 
 param_list:
-			named_param			{ $$ = list_make1($1); }
-			| param_list ',' named_param		{ $$ = lappend($1, $3); }
+			named_const			{ $$ = list_make1($1); }
+			| param_list ',' named_const		{ $$ = lappend($1, $3); }
 		;
 
 decode_args:
