@@ -54,6 +54,7 @@
 #endif
 #include "events/decode.h"
 #include "events/stream.h"
+#include "events/streambuf.h"
 #include "executor/tstoreReceiver.h"
 #include "executor/tupletableReceiver.h"
 #include "funcapi.h"
@@ -1698,6 +1699,8 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 		events = lappend(events, ev);
 		tup = DecodeStreamEvent(ev, decoder);
 		ExecStoreTuple(tup, slot, InvalidBuffer, false);
+
+		AppendStreamEvent(GlobalStreamBuffer, tup);
 	}
 	pq_getmsgend(message);
 
@@ -1732,7 +1735,7 @@ exec_receive_events(const char *encoding, const char *channel, StringInfo messag
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
-		events = lcons(ev, events);
+		events = lappend(events, ev);
 	}
 	pq_getmsgend(message);
 
@@ -4502,6 +4505,9 @@ PostgresMain(int argc, char *argv[],
 											ALLOCSET_DEFAULT_MAXSIZE);
 
 	InitDecoderCache();
+
+	/* Initialize shared-memory stream buffer that all decoded events are appended to */
+	InitGlobalStreamBuffer();
 
 	/*
 	 * Remember stand-alone backend startup time
