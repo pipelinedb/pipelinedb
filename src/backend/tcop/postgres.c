@@ -1673,31 +1673,17 @@ static void
 exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
 	List *events = NIL;
-	MemoryContext oldcontext;
-	StreamEventDecoder *decoder;
-	TupleTableSlot *slot;
-
-	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-	decoder = GetStreamEventDecoder(encoding);
-	MemoryContextSwitchTo(oldcontext);
-
-	oldcontext = MemoryContextSwitchTo(EventContext);
-
-	slot = MakeTupleTableSlot();
-	ExecSetSlotDescriptor(slot, decoder->schema);
+	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
 
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
-		HeapTuple tup;
 
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
 
 		events = lappend(events, ev);
-		tup = DecodeStreamEvent(ev, decoder);
-		ExecStoreTuple(tup, slot, InvalidBuffer, false);
 	}
 	pq_getmsgend(message);
 
@@ -1716,30 +1702,45 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 }
 
 /*
- * exec_receive_events
+ * exec_decode_events
  *
- * Emit received events into the events stream (only run on datanodes)
+ * Decode and emit received events into the events stream (only run on datanodes)
  */
 static void
-exec_receive_events(const char *encoding, const char *channel, StringInfo message)
+exec_decode_events(const char *encoding, const char *channel, StringInfo message)
 {
-	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
-	List *events = NIL;
+	MemoryContext oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+	StreamEventDecoder *decoder;
+	TupleTableSlot *slot = MakeTupleTableSlot();
+	int count = 0;
+
+	start_xact_command();
+
+	decoder = GetStreamEventDecoder(encoding);
+	oldcontext = MemoryContextSwitchTo(EventContext);
+	ExecSetSlotDescriptor(slot, decoder->schema);
 
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
+		HeapTuple tup;
+
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
-		events = lcons(ev, events);
+
+		tup = DecodeStreamEvent(ev, decoder);
+		ExecStoreTuple(tup, slot, InvalidBuffer, false);
+		count++;
 	}
 	pq_getmsgend(message);
 
-	RespondSendEvents(list_length(events));
+	RespondSendEvents(count);
 
 	MemoryContextSwitchTo(oldcontext);
 	MemoryContextReset(EventContext);
+
+	finish_xact_command();
 }
 
 /*
@@ -5151,7 +5152,7 @@ PostgresMain(int argc, char *argv[],
 					encoding = pq_getmsgstring(&input_message);
 					channel = pq_getmsgstring(&input_message);
 
-					exec_receive_events(encoding, channel, &input_message);
+					exec_decode_events(encoding, channel, &input_message);
 				}
 				break;
 			default:
