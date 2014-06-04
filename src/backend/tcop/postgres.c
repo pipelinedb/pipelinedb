@@ -1677,7 +1677,7 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 
 	while (message->cursor < message->len)
 	{
-		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
+		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
 
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
@@ -1709,20 +1709,21 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 static void
 exec_decode_events(const char *encoding, const char *channel, StringInfo message)
 {
-	MemoryContext oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	StreamEventDecoder *decoder;
 	TupleTableSlot *slot = MakeTupleTableSlot();
 	int count = 0;
 
 	start_xact_command();
 
+	MemoryContextSwitchTo(CacheMemoryContext);
 	decoder = GetStreamEventDecoder(encoding);
-	oldcontext = MemoryContextSwitchTo(EventContext);
+	MemoryContextSwitchTo(EventContext);
+
 	ExecSetSlotDescriptor(slot, decoder->schema);
 
 	while (message->cursor < message->len)
 	{
-		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
+		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
 		HeapTuple tup;
 
 		ev->len = pq_getmsgint(message, 4);
@@ -1731,13 +1732,17 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 
 		tup = DecodeStreamEvent(ev, decoder);
 		ExecStoreTuple(tup, slot, InvalidBuffer, false);
+
+		pfree(ev->raw);
+		pfree(ev);
 		count++;
 	}
+
 	pq_getmsgend(message);
 
 	RespondSendEvents(count);
 
-	MemoryContextSwitchTo(oldcontext);
+	MemoryContextSwitchTo(MessageContext);
 	MemoryContextReset(EventContext);
 
 	finish_xact_command();

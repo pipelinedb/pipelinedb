@@ -263,7 +263,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 	HeapTuple decoded;
 	AttInMetadata *attinmeta = TupleDescGetAttInMetadata(decoder->schema);
 	int nfields;
-	const char *evbytes = pnstrdup(event->raw, event->len);
+	char *evbytes = pnstrdup(event->raw, event->len);
 	char **strs;
 	int i;
 
@@ -331,6 +331,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 
 	decoded = BuildTupleFromCStrings(attinmeta, strs);
 	pfree(strs);
+	pfree(evbytes);
 
 	return decoded;
 }
