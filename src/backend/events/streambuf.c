@@ -9,12 +9,110 @@
  *-------------------------------------------------------------------------
  */
 #include "events/streambuf.h"
+#include "executor/tuptable.h"
 
 /* Global stream buffer that lives in shared memory. All stream events are appended to this */
 StreamBuffer *GlobalStreamBuffer;
 
 /* Maximum size in blocks of the global stream buffer */
-long GlobalStreamBufferSize = 1000;
+long GlobalStreamBufferSize = 600;
+
+#define StreamBufferSlotSize(slot) (HEAPTUPLESIZE + \
+		(slot)->event->t_len + sizeof(StreamBufferSlot))
+
+
+/*
+ * wait_for_overwrite
+ *
+ * Waits until the given slot has been read by all CQs that need to see it
+ */
+static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
+{
+
+}
+
+/*
+ * alloc_slot
+ *
+ * Finds enough tombstoned slots to zero out and re-use shared memory for a new slot
+ */
+static StreamBufferSlot *
+alloc_slot(StreamBuffer *buf, HeapTuple event)
+{
+	HeapTuple shared;
+	StreamBufferSlot *result;
+	StreamBufferSlot *victim;
+	Size size = HEAPTUPLESIZE + event->t_len + sizeof(StreamBufferSlot);
+	char *cur;
+	long free = 0;
+
+	if (buf->pos + size > buf->start + buf->capacity)
+	{
+		StreamBufferSlot *sbs;
+
+		/*
+		 * We always start scanning at the beginning of the segment, as we need to look
+		 * at complete events. The beginning
+		 */
+		buf->pos = buf->start;
+
+		cur = buf->pos;
+		sbs = (StreamBufferSlot *) cur;
+		free = StreamBufferSlotSize(sbs);
+		wait_for_overwrite(buf, sbs);
+
+		/*
+		 * Scan for queued events that we can clobber to make room for the incoming event.
+		 * Note that the incoming event may need to clobber more than one
+		 * to fit, so we have to look at entire events before overwriting them
+		 */
+		while (free < size && cur < buf->start + buf->capacity)
+		{
+			sbs = (StreamBufferSlot *) cur;
+			free += StreamBufferSlotSize(sbs);
+			cur += free;
+			wait_for_overwrite(buf, sbs);
+		}
+
+		/* see declaration of nextvictim in streambuf.h for comments */
+		buf->nextvictim = sbs + StreamBufferSlotSize(sbs);
+	}
+
+	victim = (StreamBufferSlot *) buf->pos;
+	wait_for_overwrite(buf, victim);
+
+	while (buf->nextvictim != NULL &&
+			buf->pos < buf->start + buf->capacity &&
+			buf->pos + size > (char *) buf->nextvictim)
+	{
+		/*
+		 * this event will consume the gap between the buffer position
+		 * and the next complete event's (victim) start address, so we
+		 * need to check the event to make sure we can clobber it
+		 */
+		wait_for_overwrite(buf, buf->nextvictim);
+		buf->nextvictim += StreamBufferSlotSize(buf->nextvictim);
+	}
+
+	MemSet(buf->pos, 0, sizeof(StreamBufferSlot));
+	result = (StreamBufferSlot *) buf->pos;
+	buf->pos += sizeof(StreamBufferSlot);
+
+	MemSet(buf->pos, 0, HEAPTUPLESIZE + event->t_len);
+	shared = (HeapTuple) buf->pos;
+	buf->pos += HEAPTUPLESIZE + event->t_len;
+
+	shared->t_len = event->t_len;
+	shared->t_self = event->t_self;
+	shared->t_tableOid = event->t_tableOid;
+	shared->t_xc_node_id = event->t_xc_node_id;
+	shared->t_data = (HeapTupleHeader) ((char *) shared + HEAPTUPLESIZE);
+	memcpy((char *) shared->t_data, (char *) event->t_data, event->t_len);
+
+	result->event = shared;
+
+	return result;
+}
 
 /*
  * AppendStreamEvent
@@ -24,25 +122,8 @@ long GlobalStreamBufferSize = 1000;
 extern void
 AppendStreamEvent(StreamBuffer *buf, HeapTuple event)
 {
-	// needs to wait for free space in shmem queue
-	// - actual size of event since it needs to physically live in shmem
+	StreamBufferSlot *sbs = alloc_slot(buf, event);
 
-	// increase total memory consumed by buf
-
-	// list of queryids needs to be in shared mem
-	HeapTuple shared;
-	StreamBufferSlot *sbs;
-
-	shared = (HeapTuple) ShmemAlloc(HEAPTUPLESIZE + event->t_len);
-	shared->t_len = event->t_len;
-	shared->t_self = event->t_self;
-	shared->t_tableOid = event->t_tableOid;
-	shared->t_xc_node_id = event->t_xc_node_id;
-	shared->t_data = (HeapTupleHeader) ((char *) shared + HEAPTUPLESIZE);
-	memcpy((char *) shared->t_data, (char *) event->t_data, event->t_len);
-
-	sbs = (StreamBufferSlot *) ShmemAlloc(sizeof(StreamBufferSlot));
-	sbs->event = shared;
 	SHMQueueElemInit(&(sbs->link));
 	SHMQueueInsertBefore(&(GlobalStreamBuffer->buf), &(sbs->link));
 }
@@ -54,24 +135,15 @@ AppendStreamEvent(StreamBuffer *buf, HeapTuple event)
  */
 extern void InitGlobalStreamBuffer(void)
 {
-	// all slots on freelist
-
 	bool found;
-	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer", GlobalStreamBufferSize, &found);
+	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer",
+			GlobalStreamBufferSize + sizeof(StreamBuffer), &found);
+
+	GlobalStreamBuffer->capacity = GlobalStreamBufferSize;
+	GlobalStreamBuffer->start = (char *) (GlobalStreamBuffer + sizeof(StreamBuffer));
+	GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
 	if (!found)
 		SHMQueueInit(&(GlobalStreamBuffer->buf));
-}
-
-/*
- * CreateStreamBuffer
- *
- * Creates a new stream buffer
- */
-extern StreamBuffer *
-CreateStreamBuffer(void)
-{
-	// create queue in shmem
-	return NULL;
 }
 
 /*
@@ -95,8 +167,5 @@ OpenStreamBufferReader(StreamBuffer *buf, int queryid)
 extern HeapTuple
 NextStreamEvent(StreamBufferReader *reader)
 {
-	// put deleted on freelist
-
-	// decrement size consumed
 	return NULL;
 }

@@ -44,6 +44,8 @@ typedef struct EventData
 
 typedef StreamEventData *StreamEvent;
 
+#define STREAMEVENTSIZE sizeof(StreamEventData)
+
 extern EventStream OpenStream(void);
 extern int RespondSendEvents(int numevents);
 extern int SendEvents(EventStream stream, const char *encoding,

@@ -1674,33 +1674,17 @@ static void
 exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
 	List *events = NIL;
-	MemoryContext oldcontext;
-	StreamEventDecoder *decoder;
-	TupleTableSlot *slot;
-
-	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-	decoder = GetStreamEventDecoder(encoding);
-	MemoryContextSwitchTo(oldcontext);
-
-	oldcontext = MemoryContextSwitchTo(EventContext);
-
-	slot = MakeTupleTableSlot();
-	ExecSetSlotDescriptor(slot, decoder->schema);
+	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
 
 	while (message->cursor < message->len)
 	{
-		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
-		HeapTuple tup;
+		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
 
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
 
 		events = lappend(events, ev);
-		tup = DecodeStreamEvent(ev, decoder);
-		ExecStoreTuple(tup, slot, InvalidBuffer, false);
-
-		AppendStreamEvent(GlobalStreamBuffer, tup);
 	}
 	pq_getmsgend(message);
 
@@ -1719,30 +1703,63 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 }
 
 /*
- * exec_receive_events
+ * exec_decode_events
  *
- * Emit received events into the events stream (only run on datanodes)
+ * Decode and emit received events into the events stream (only run on datanodes)
  */
 static void
-exec_receive_events(const char *encoding, const char *channel, StringInfo message)
+exec_decode_events(const char *encoding, const char *channel, StringInfo message)
 {
-	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
-	List *events = NIL;
+	StreamEventDecoder *decoder;
+	TupleTableSlot *slot = MakeTupleTableSlot();
+	int count = 0;
+
+	start_xact_command();
+
+	MemoryContextSwitchTo(CacheMemoryContext);
+	decoder = GetStreamEventDecoder(encoding);
+	MemoryContextSwitchTo(EventContext);
+
+	ExecSetSlotDescriptor(slot, decoder->schema);
 
 	while (message->cursor < message->len)
 	{
-		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEvent));
+		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
+		HeapTuple tup;
+
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
-		events = lappend(events, ev);
+
+		tup = DecodeStreamEvent(ev, decoder);
+
+		pfree(ev->raw);
+		pfree(ev);
+		count++;
+
+		AppendStreamEvent(GlobalStreamBuffer, tup);
 	}
+
+	StreamBufferSlot *s = (StreamBufferSlot *) SHMQueueNext(&(GlobalStreamBuffer->buf),
+			&(GlobalStreamBuffer->buf), offsetof(StreamBufferSlot, link));
+
+	while (s != NULL)
+	{
+		ExecStoreTuple(s->event, slot, InvalidBuffer, false);
+		print_slot(slot);
+
+		s = (StreamBufferSlot *) SHMQueueNext(&(GlobalStreamBuffer->buf),
+					&(s->link), offsetof(StreamBufferSlot, link));
+	}
+
 	pq_getmsgend(message);
 
-	RespondSendEvents(list_length(events));
+	RespondSendEvents(count);
 
-	MemoryContextSwitchTo(oldcontext);
+	MemoryContextSwitchTo(MessageContext);
 	MemoryContextReset(EventContext);
+
+	finish_xact_command();
 }
 
 /*
@@ -5157,7 +5174,7 @@ PostgresMain(int argc, char *argv[],
 					encoding = pq_getmsgstring(&input_message);
 					channel = pq_getmsgstring(&input_message);
 
-					exec_receive_events(encoding, channel, &input_message);
+					exec_decode_events(encoding, channel, &input_message);
 				}
 				break;
 			default:
