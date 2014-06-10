@@ -3900,6 +3900,7 @@ BackendStartup(Port *port)
 		BackendInitialize(port);
 
 		sprintf(msg, "backend pid is %d", MyProcPid);
+
 		if (strcmp("[local]", port->remote_host))
 		{
 			sprintf(remote, " (from %s:%s)", port->remote_host, port->remote_port);
