@@ -1740,18 +1740,6 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 		AppendStreamEvent(GlobalStreamBuffer, tup);
 	}
 
-	StreamBufferSlot *s = (StreamBufferSlot *) SHMQueueNext(&(GlobalStreamBuffer->buf),
-			&(GlobalStreamBuffer->buf), offsetof(StreamBufferSlot, link));
-
-	while (s != NULL)
-	{
-		ExecStoreTuple(s->event, slot, InvalidBuffer, false);
-		print_slot(slot);
-
-		s = (StreamBufferSlot *) SHMQueueNext(&(GlobalStreamBuffer->buf),
-					&(s->link), offsetof(StreamBufferSlot, link));
-	}
-
 	pq_getmsgend(message);
 
 	RespondSendEvents(count);

@@ -15,11 +15,12 @@
 StreamBuffer *GlobalStreamBuffer;
 
 /* Maximum size in blocks of the global stream buffer */
-long GlobalStreamBufferSize = 600;
+long GlobalStreamBufferSize = 100000;
 
 #define StreamBufferSlotSize(slot) (HEAPTUPLESIZE + \
 		(slot)->event->t_len + sizeof(StreamBufferSlot))
 
+#define SlotAfter(slot) ((slot) + StreamBufferSlotSize(slot))
 
 /*
  * wait_for_overwrite
@@ -75,7 +76,7 @@ alloc_slot(StreamBuffer *buf, HeapTuple event)
 		}
 
 		/* see declaration of nextvictim in streambuf.h for comments */
-		buf->nextvictim = sbs + StreamBufferSlotSize(sbs);
+		buf->nextvictim = SlotAfter(sbs);
 	}
 
 	victim = (StreamBufferSlot *) buf->pos;
@@ -91,7 +92,7 @@ alloc_slot(StreamBuffer *buf, HeapTuple event)
 		 * need to check the event to make sure we can clobber it
 		 */
 		wait_for_overwrite(buf, buf->nextvictim);
-		buf->nextvictim += StreamBufferSlotSize(buf->nextvictim);
+		buf->nextvictim = SlotAfter(buf->nextvictim);
 	}
 
 	MemSet(buf->pos, 0, sizeof(StreamBufferSlot));
@@ -119,13 +120,15 @@ alloc_slot(StreamBuffer *buf, HeapTuple event)
  *
  * Appends a decoded event to the given stream buffer
  */
-extern void
+extern StreamBufferSlot *
 AppendStreamEvent(StreamBuffer *buf, HeapTuple event)
 {
 	StreamBufferSlot *sbs = alloc_slot(buf, event);
 
 	SHMQueueElemInit(&(sbs->link));
 	SHMQueueInsertBefore(&(GlobalStreamBuffer->buf), &(sbs->link));
+
+	return sbs;
 }
 
 /*

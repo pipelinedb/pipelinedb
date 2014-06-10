@@ -12,7 +12,6 @@
 #define STREAMBUF_H
 
 #include "postgres.h"
-#include "access/tupdesc.h"
 #include "events/stream.h"
 #include "nodes/bitmapset.h"
 #include "storage/shmem.h"
@@ -69,7 +68,7 @@ typedef struct StreamBufferReader
 
 extern StreamBuffer *GlobalStreamBuffer;
 
-extern void AppendStreamEvent(StreamBuffer *buf, HeapTuple event);
+extern StreamBufferSlot *AppendStreamEvent(StreamBuffer *buf, HeapTuple event);
 extern void InitGlobalStreamBuffer(void);
 
 extern StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
