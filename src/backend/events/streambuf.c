@@ -19,7 +19,7 @@ StreamBuffer *GlobalStreamBuffer;
 long GlobalStreamBufferSize = 100000;
 
 #define StreamBufferSlotSize(slot) (HEAPTUPLESIZE + \
-		(slot)->event->t_len + sizeof(StreamBufferSlot))
+		(slot)->event->t_len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1)
 
 #define SlotAfter(slot) ((slot) + StreamBufferSlotSize(slot))
 
@@ -39,12 +39,12 @@ static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
  * Finds enough tombstoned slots to zero out and re-use shared memory for a new slot
  */
 static StreamBufferSlot *
-alloc_slot(StreamBuffer *buf, HeapTuple event)
+alloc_slot(const char *stream, StreamBuffer *buf, HeapTuple event)
 {
 	HeapTuple shared;
 	StreamBufferSlot *result;
 	StreamBufferSlot *victim;
-	Size size = HEAPTUPLESIZE + event->t_len + sizeof(StreamBufferSlot);
+	Size size = HEAPTUPLESIZE + event->t_len + sizeof(StreamBufferSlot) + strlen(stream) + 1;
 	char *cur;
 	long free = 0;
 
@@ -112,6 +112,9 @@ alloc_slot(StreamBuffer *buf, HeapTuple event)
 	memcpy((char *) shared->t_data, (char *) event->t_data, event->t_len);
 
 	result->event = shared;
+	result->stream = buf->pos;
+	memcpy(result->stream, stream, strlen(stream) + 1);
+	buf->pos += strlen(stream) + 1;
 
 	return result;
 }
@@ -122,9 +125,9 @@ alloc_slot(StreamBuffer *buf, HeapTuple event)
  * Appends a decoded event to the given stream buffer
  */
 extern StreamBufferSlot *
-AppendStreamEvent(StreamBuffer *buf, HeapTuple event)
+AppendStreamEvent(const char *stream, StreamBuffer *buf, HeapTuple event)
 {
-	StreamBufferSlot *sbs = alloc_slot(buf, event);
+	StreamBufferSlot *sbs = alloc_slot(stream, buf, event);
 
 	SHMQueueElemInit(&(sbs->link));
 

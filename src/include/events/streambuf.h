@@ -28,6 +28,7 @@ typedef struct StreamBufferSlot
 	 */
 	// needed a shared memory implementation or fixed-size
 //	Bitmapset *readby;
+	char *stream;
 } StreamBufferSlot;
 
 /* Circular buffer containing physical events to be read by continuous queries */
@@ -68,7 +69,7 @@ typedef struct StreamBufferReader
 
 extern StreamBuffer *GlobalStreamBuffer;
 
-extern StreamBufferSlot *AppendStreamEvent(StreamBuffer *buf, HeapTuple event);
+extern StreamBufferSlot *AppendStreamEvent(const char *stream, StreamBuffer *buf, HeapTuple event);
 extern void InitGlobalStreamBuffer(void);
 
 extern StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
