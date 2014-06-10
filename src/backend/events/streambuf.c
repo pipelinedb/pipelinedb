@@ -10,6 +10,7 @@
  */
 #include "events/streambuf.h"
 #include "executor/tuptable.h"
+#include "storage/lwlock.h"
 
 /* Global stream buffer that lives in shared memory. All stream events are appended to this */
 StreamBuffer *GlobalStreamBuffer;
@@ -126,7 +127,10 @@ AppendStreamEvent(StreamBuffer *buf, HeapTuple event)
 	StreamBufferSlot *sbs = alloc_slot(buf, event);
 
 	SHMQueueElemInit(&(sbs->link));
+
+	LWLockAcquire(StreamBufferLock, LW_EXCLUSIVE);
 	SHMQueueInsertBefore(&(GlobalStreamBuffer->buf), &(sbs->link));
+	LWLockRelease(StreamBufferLock);
 
 	return sbs;
 }
