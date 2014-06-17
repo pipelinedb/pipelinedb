@@ -2696,6 +2696,15 @@ copy_generic_opt_arg_list_item:
 						n->args = $10;
 						$$ = (Node *)n;
 					}
+				| CREATE ENCODING qualified_name '(' OptTableElementList ')'
+				DECODED BY qualified_name
+					{
+						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
+						n->name = $3;
+						n->coldefs = $5;
+						n->decodedby = $9;
+						$$ = (Node *)n;
+					}
 			;
 
 named_const:

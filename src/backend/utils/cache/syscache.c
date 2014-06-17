@@ -634,7 +634,18 @@ static const struct cachedesc cacheinfo[] = {
 		256
 	},
 #endif
-	{PipelineQueriesRelationId,	/* PIPELINEQUERIES */
+	{PipelineQueriesRelationId,	/* PIPELINEQUERIESID */
+		PipelineQueriesIdIndexId,
+		1,
+		{
+			Anum_pipeline_queries_id,
+			0,
+			0,
+			0
+		},
+		2048
+	},
+	{PipelineQueriesRelationId,	/* PIPELINEQUERIESNAME */
 		PipelineQueriesNameIndexId,
 		1,
 		{

@@ -291,6 +291,7 @@ IsSharedRelation(Oid relationId)
 		relationId == PgxcGroupOidIndexId ||
 #endif
 		relationId == PipelineQueriesNameIndexId ||
+		relationId == PipelineQueriesIdIndexId ||
 		relationId == DbRoleSettingDatidRolidIndexId)
 		return true;
 	/* These are their toast tables and toast indexes (see toasting.h) */

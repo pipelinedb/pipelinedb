@@ -26,8 +26,7 @@ typedef struct StreamBufferSlot
 	 * Each continuous query maps to exactly one bit in this bitmap.
 	 * After a CQ has read the event, its bit is set to 1.
 	 */
-	// needed a shared memory implementation or fixed-size
-//	Bitmapset *readby;
+	Bitmapset *readby;
 	char *stream;
 } StreamBufferSlot;
 
@@ -58,6 +57,8 @@ typedef struct StreamBuffer
 	 * it can properly be read before being clobbered.
 	 */
 	StreamBufferSlot *nextvictim;
+	/* mapping from streams to the continuous views that read from them */
+	StreamTargets *targets;
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */
