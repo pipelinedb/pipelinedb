@@ -20,7 +20,8 @@ StreamBuffer *GlobalStreamBuffer;
 long GlobalStreamBufferSize = 100000;
 
 #define StreamBufferSlotSize(slot) (HEAPTUPLESIZE + \
-		(slot)->event->t_len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1)
+		(slot)->event->t_len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1 + \
+		(slot)->readby->nwords * sizeof(bitmapword))
 
 #define SlotAfter(slot) ((slot) + StreamBufferSlotSize(slot))
 
@@ -42,12 +43,20 @@ static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
 static StreamBufferSlot *
 alloc_slot(const char *stream, StreamBuffer *buf, HeapTuple event)
 {
+	char *cur;
+	long free = 0;
 	HeapTuple shared;
 	StreamBufferSlot *result;
 	StreamBufferSlot *victim;
-	Size size = HEAPTUPLESIZE + event->t_len + sizeof(StreamBufferSlot) + strlen(stream) + 1;
-	char *cur;
-	long free = 0;
+	Size size;
+	Bitmapset *targets = GetTargetsFor(stream, buf->targets);
+	if (targets == NULL)
+	{
+		/* nothing is reading from this stream, so it's a noop */
+		return NULL;
+	}
+	size = HEAPTUPLESIZE + event->t_len + sizeof(StreamBufferSlot) +
+			strlen(stream) + 1 + sizeof(Bitmapset) + targets->nwords * sizeof(bitmapword);
 
 	if (buf->pos + size > buf->start + buf->capacity)
 	{
@@ -117,6 +126,17 @@ alloc_slot(const char *stream, StreamBuffer *buf, HeapTuple event)
 	memcpy(result->stream, stream, strlen(stream) + 1);
 	buf->pos += strlen(stream) + 1;
 
+	/*
+	 * The source bitmap is allocated in local memory (in GetStreamTargets),
+	 * but the delete operations that will be performed on it should never
+	 * free anything, so it's safe (although a bit sketchy) to copy it into
+	 * shared memory.
+	 */
+	result->readby = (Bitmapset *) buf->pos;
+	result->readby->nwords = targets->nwords;
+	memcpy(result->readby->words, targets->words, sizeof(bitmapword) * targets->nwords);
+	buf->pos += sizeof(bitmapword) * targets->nwords;
+
 	return result;
 }
 
@@ -128,24 +148,7 @@ alloc_slot(const char *stream, StreamBuffer *buf, HeapTuple event)
 extern StreamBufferSlot *
 AppendStreamEvent(const char *stream, StreamBuffer *buf, HeapTuple event)
 {
-	Bitmapset *targets = GetTargetsFor(stream, buf->targets);
-	StreamBufferSlot *sbs;
-	if (targets == NULL)
-	{
-		/* nothing is reading from this stream, so it's a noop */
-		return NULL;
-	}
-
-	elog(LOG, "GOT");
-	sbs = alloc_slot(stream, buf, event);
-
-	/*
-	 * The source bitmap is allocated in local memory (in GetStreamTargets),
-	 * but the delete operations that will be performed on it should never
-	 * free anything, so it's safe (although a bit sketchy) to copy it into
-	 * shared memory.
-	 */
-
+	StreamBufferSlot *sbs = alloc_slot(stream, buf, event);
 
 	SHMQueueElemInit(&(sbs->link));
 
