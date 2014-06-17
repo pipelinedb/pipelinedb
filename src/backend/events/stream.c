@@ -10,18 +10,29 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
+#include "catalog/pipeline_queries.h"
 #include "events/stream.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
+#include "parser/analyze.h"
 #include "pgxc/locator.h"
 #include "pgxc/pgxcnode.h"
 #include "pgxc/execRemote.h"
 #include "storage/ipc.h"
+#include "utils/builtins.h"
+#include "tcop/tcopprot.h"
+#include "utils/tqual.h"
 
 #define SEND_EVENTS_RESPONSE_COMPLETE 0
 #define SEND_EVENTS_RESPONSE_MISMATCH 1
 #define SEND_EVENTS_RESPONSE_FAILED	2
 
+typedef struct StreamTagsEntry
+{
+	char key[NAMEDATALEN]; /* hash key --- MUST BE FIRST */
+	Bitmapset *tags;
+} StreamTagsEntry;
 
 /*
  * open_stream
@@ -235,4 +246,81 @@ void
 CloseStream(EventStream stream)
 {
 
+}
+
+/*
+ * GetStreamTargets
+ *
+ * Builds a mapping from stream name to continuous view tagindexes that read from the stream
+ */
+StreamTargets *
+GetStreamTargets(void)
+{
+	HASHCTL ctl;
+	StreamTargets *targets;
+	Relation rel;
+	HeapScanDesc scandesc;
+	Form_pipeline_queries catrow;
+	Query *query;
+	HeapTuple tup;
+	List *plist;
+	Node *ptree;
+
+	MemSet(&ctl, 0, sizeof(ctl));
+
+	ctl.keysize = NAMEDATALEN;
+	ctl.entrysize = sizeof(StreamTagsEntry);
+
+	targets = hash_create("StreamTargets", 32, &ctl, HASH_ELEM);
+
+	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
+	scandesc = heap_beginscan(rel, SnapshotNow, 0, NULL);
+	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
+	{
+		char *querystring;
+		ListCell *lc;
+
+		catrow = (Form_pipeline_queries) GETSTRUCT(tup);
+		querystring = TextDatumGetCString(&(catrow->query));
+		plist = pg_parse_query(querystring);
+		ptree = (Node *) lfirst(plist->head);
+		query = parse_analyze(ptree, querystring, NULL, 0);
+
+		foreach(lc, query->rtable)
+		{
+			RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+			StreamTagsEntry *entry =
+					(StreamTagsEntry *) hash_search(targets, (void *) rte->relname, HASH_ENTER, NULL);
+
+			entry->tags = bms_add_member(entry->tags, catrow->id);
+		}
+	}
+
+	heap_endscan(scandesc);
+	heap_close(rel, AccessExclusiveLock);
+
+	return targets;
+}
+
+/*
+ * CopyStreamTargets
+ *
+ * Copies the bitmap of the given stream's target CVs into the specified address.
+ * This is used to load the bitmap into the stream buffer's shared memory.
+ */
+void
+CopyStreamTargets(const char *stream, StreamTargets *s, Bitmapset *dest)
+{
+
+}
+
+/*
+ * DestroyStreamTargets
+ *
+ * Cleans up a StreamTargets object
+ */
+void
+DestroyStreamTargets(StreamTargets *s)
+{
+	hash_destroy(s);
 }

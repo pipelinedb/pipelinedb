@@ -12,7 +12,9 @@
 #define STREAM_H
 
 #include "postgres.h"
+#include "nodes/bitmapset.h"
 #include "pgxc/pgxcnode.h"
+#include "utils/hsearch.h"
 
 #define EventStreamNeedsOpen(stream) (stream->state != STREAM_STATE_OPEN)
 
@@ -44,6 +46,8 @@ typedef struct EventData
 
 typedef StreamEventData *StreamEvent;
 
+typedef HTAB StreamTargets;
+
 #define STREAMEVENTSIZE sizeof(StreamEventData)
 
 extern EventStream OpenStream(void);
@@ -51,5 +55,8 @@ extern int RespondSendEvents(int numevents);
 extern int SendEvents(EventStream stream, const char *encoding,
 		const char *channel, List *events);
 extern void CloseStream(EventStream stream);
+extern StreamTargets *GetStreamTargets(void);
+extern void CopyStreamTargets(const char *stream, StreamTargets *s, Bitmapset *dest);
+extern void DestroyStreamTargets(StreamTargets *s);
 
 #endif
