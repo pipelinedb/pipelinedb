@@ -254,7 +254,7 @@ CloseStream(EventStream stream)
  * Builds a mapping from stream name to continuous view tagindexes that read from the stream
  */
 StreamTargets *
-GetStreamTargets(void)
+CreateStreamTargets(void)
 {
 	HASHCTL ctl;
 	StreamTargets *targets;
@@ -275,6 +275,7 @@ GetStreamTargets(void)
 
 	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 	scandesc = heap_beginscan(rel, SnapshotNow, 0, NULL);
+
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
 	{
 		char *querystring;
@@ -308,10 +309,16 @@ GetStreamTargets(void)
  * Copies the bitmap of the given stream's target CVs into the specified address.
  * This is used to load the bitmap into the stream buffer's shared memory.
  */
-void
-CopyStreamTargets(const char *stream, StreamTargets *s, Bitmapset *dest)
+Bitmapset *
+GetTargetsFor(const char *stream, StreamTargets *s)
 {
+	bool found;
+	StreamTagsEntry *entry =
+			(StreamTagsEntry *) hash_search(s, stream, HASH_ENTER, &found);
+	if (!found)
+		return NULL;
 
+	return entry->tags;
 }
 
 /*

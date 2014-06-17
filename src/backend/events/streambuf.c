@@ -8,6 +8,7 @@
  *
  *-------------------------------------------------------------------------
  */
+#include "events/stream.h"
 #include "events/streambuf.h"
 #include "executor/tuptable.h"
 #include "storage/lwlock.h"
@@ -127,7 +128,24 @@ alloc_slot(const char *stream, StreamBuffer *buf, HeapTuple event)
 extern StreamBufferSlot *
 AppendStreamEvent(const char *stream, StreamBuffer *buf, HeapTuple event)
 {
-	StreamBufferSlot *sbs = alloc_slot(stream, buf, event);
+	Bitmapset *targets = GetTargetsFor(stream, buf->targets);
+	StreamBufferSlot *sbs;
+	if (targets == NULL)
+	{
+		/* nothing is reading from this stream, so it's a noop */
+		return NULL;
+	}
+
+	elog(LOG, "GOT");
+	sbs = alloc_slot(stream, buf, event);
+
+	/*
+	 * The source bitmap is allocated in local memory (in GetStreamTargets),
+	 * but the delete operations that will be performed on it should never
+	 * free anything, so it's safe (although a bit sketchy) to copy it into
+	 * shared memory.
+	 */
+
 
 	SHMQueueElemInit(&(sbs->link));
 
@@ -152,6 +170,7 @@ extern void InitGlobalStreamBuffer(void)
 	GlobalStreamBuffer->capacity = GlobalStreamBufferSize;
 	GlobalStreamBuffer->start = (char *) (GlobalStreamBuffer + sizeof(StreamBuffer));
 	GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
+	GlobalStreamBuffer->targets = CreateStreamTargets();
 	if (!found)
 		SHMQueueInit(&(GlobalStreamBuffer->buf));
 }

@@ -55,8 +55,8 @@ extern int RespondSendEvents(int numevents);
 extern int SendEvents(EventStream stream, const char *encoding,
 		const char *channel, List *events);
 extern void CloseStream(EventStream stream);
-extern StreamTargets *GetStreamTargets(void);
-extern void CopyStreamTargets(const char *stream, StreamTargets *s, Bitmapset *dest);
+extern StreamTargets *CreateStreamTargets(void);
+extern Bitmapset *GetTargetsFor(const char *stream, StreamTargets *s);
 extern void DestroyStreamTargets(StreamTargets *s);
 
 #endif

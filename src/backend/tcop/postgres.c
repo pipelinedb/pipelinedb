@@ -4511,9 +4511,6 @@ PostgresMain(int argc, char *argv[],
 
 	InitDecoderCache();
 
-	/* Initialize shared-memory stream buffer that all decoded events are appended to */
-	InitGlobalStreamBuffer();
-
 	/*
 	 * Remember stand-alone backend startup time
 	 */
