@@ -18,7 +18,38 @@
 #include "utils/builtins.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
+#include "utils/tqual.h"
 
+
+/*
+ * get_next_id
+ *
+ * Gets the smallest possible id to assign to the next continuous view.
+ * We keep this minimal so that we can minimize the size of bitmaps used
+ * to tag stream buffer events with.
+ */
+static int32
+get_next_id(void)
+{
+	Relation rel;
+	HeapScanDesc scandesc;
+	HeapTuple tup;
+	int32 id = -1;
+
+	rel = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
+	scandesc = heap_beginscan(rel, SnapshotNow, 0, NULL);
+
+	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_queries catrow = (Form_pipeline_queries) GETSTRUCT(tup);
+		id = catrow->id > id ? catrow->id : id;
+	}
+
+	heap_endscan(scandesc);
+	heap_close(rel, RowExclusiveLock);
+
+	return id + 1;
+}
 
 /*
  * AddQuery
@@ -52,24 +83,28 @@ AddQuery(const char *rawname, const char *query, char state)
 	nulls[0] = false;
 	nulls[1] = false;
 	nulls[2] = false;
+	nulls[3] = false;
 
 	values[0] = (Datum) NULL;
 	values[1] = (Datum) NULL;
 	values[2] = (Datum) NULL;
+	values[3] = (Datum) NULL;
+
+	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 
 	namestrcpy(&name, rawname);
+	values[Anum_pipeline_queries_id - 1] = Int32GetDatum(get_next_id());
 	values[Anum_pipeline_queries_name - 1] = NameGetDatum(&name);
 	values[Anum_pipeline_queries_query - 1] = CStringGetTextDatum(query);
 	values[Anum_pipeline_queries_state - 1] = CharGetDatum(state);
 
-	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 	tup = heap_form_tuple(pipeline_queries->rd_att, values, nulls);
 
 	simple_heap_insert(pipeline_queries, tup);
 	CatalogUpdateIndexes(pipeline_queries, tup);
 
 	heap_freetuple(tup);
-	heap_close(pipeline_queries, RowExclusiveLock);
+	heap_close(pipeline_queries, AccessExclusiveLock);
 }
 
 
@@ -86,7 +121,7 @@ GetQueryString(RangeVar *rvname)
 	char *result;
 
 	namestrcpy(&name, rvname->relname);
-	tuple = SearchSysCache1(PIPELINEQUERIES, NameGetDatum(&name));
+	tuple = SearchSysCache1(PIPELINEQUERIESNAME, NameGetDatum(&name));
 
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "continuous view \"%s\" does not exist", rvname->relname);
