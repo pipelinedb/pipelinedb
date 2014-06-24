@@ -923,9 +923,6 @@ InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 	if (!bootstrap)
 		pgstat_bestart();
 
-	/* Initialize shared-memory stream buffer that all decoded events are appended to */
-	InitGlobalStreamBuffer();
-
 	/* close the transaction we started above */
 	if (!bootstrap)
 		CommitTransactionCommand();
