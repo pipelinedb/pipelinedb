@@ -1716,13 +1716,6 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 
 	start_xact_command();
 
-	/*
-	 * Initialize shared-memory stream buffer that all decoded events are appended to
-	 * XXX: we need to put this in the correct place
-	 */
-	if (!GlobalStreamBuffer)
-		InitGlobalStreamBuffer();
-
 	MemoryContextSwitchTo(CacheMemoryContext);
 	decoder = GetStreamEventDecoder(encoding);
 	MemoryContextSwitchTo(EventContext);
