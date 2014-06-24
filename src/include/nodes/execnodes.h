@@ -1812,6 +1812,15 @@ typedef struct WindowAggState
 } WindowAggState;
 
 /* ----------------
+ *	StreamScanState information
+ * ----------------
+ */
+typedef struct StreamScanState
+{
+	ScanState	ss;
+} StreamScanState;
+
+/* ----------------
  *	 UniqueState information
  *
  *		Unique nodes are used "on top of" sort nodes to discard

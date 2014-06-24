@@ -2554,7 +2554,8 @@ static Query *
 transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt)
 {
 	/* TODO: if it's already running, throw an error */
-	const char *query_string = GetQueryString(stmt->name);
+	int cqid;
+	const char *query_string = GetQueryString(stmt->name, &cqid);
 
 	List *parsetree_list = pg_parse_query(query_string);
 
@@ -2565,6 +2566,7 @@ transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewSt
 	q->is_continuous = true;
 	q->cq_activate_stmt = pstrdup(pstate->p_sourcetext);
 	q->cq_target = stmt->name;
+	q->cqid = cqid;
 
 	return q;
 }
