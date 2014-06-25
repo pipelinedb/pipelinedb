@@ -1711,16 +1711,16 @@ static void
 exec_decode_events(const char *encoding, const char *channel, StringInfo message)
 {
 	StreamEventDecoder *decoder;
-	TupleTableSlot *slot = MakeTupleTableSlot();
 	int count = 0;
 
 	start_xact_command();
 
+	if (!GlobalStreamBuffer)
+		InitGlobalStreamBuffer();
+
 	MemoryContextSwitchTo(CacheMemoryContext);
 	decoder = GetStreamEventDecoder(encoding);
 	MemoryContextSwitchTo(EventContext);
-
-	ExecSetSlotDescriptor(slot, decoder->schema);
 
 	while (message->cursor < message->len)
 	{
@@ -1737,7 +1737,7 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 		pfree(ev);
 		count++;
 
-		AppendStreamEvent(channel, GlobalStreamBuffer, tup);
+		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, tup);
 	}
 
 	pq_getmsgend(message);

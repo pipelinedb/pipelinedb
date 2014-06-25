@@ -21,7 +21,7 @@ long GlobalStreamBufferSize = 100000;
 
 #define StreamBufferSlotSize(slot) (HEAPTUPLESIZE + \
 		(slot)->event->t_len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1 + \
-		(slot)->readby->nwords * sizeof(bitmapword))
+		strlen(slot->encoding) + 1 + (slot)->readby->nwords * sizeof(bitmapword))
 
 #define SlotAfter(slot) ((slot) + StreamBufferSlotSize(slot))
 
@@ -41,7 +41,7 @@ static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
  * Finds enough tombstoned slots to zero out and re-use shared memory for a new slot
  */
 static StreamBufferSlot *
-alloc_slot(const char *stream, StreamBuffer *buf, HeapTuple event)
+alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTuple event)
 {
 	char *cur;
 	long free = 0;
@@ -126,6 +126,10 @@ alloc_slot(const char *stream, StreamBuffer *buf, HeapTuple event)
 	memcpy(result->stream, stream, strlen(stream) + 1);
 	buf->pos += strlen(stream) + 1;
 
+	result->encoding = buf->pos;
+	memcpy(result->encoding, encoding, strlen(encoding) + 1);
+	buf->pos += strlen(encoding) + 1;
+
 	/*
 	 * The source bitmap is allocated in local memory (in GetStreamTargets),
 	 * but the delete operations that will be performed on it should never
@@ -146,9 +150,9 @@ alloc_slot(const char *stream, StreamBuffer *buf, HeapTuple event)
  * Appends a decoded event to the given stream buffer
  */
 extern StreamBufferSlot *
-AppendStreamEvent(const char *stream, StreamBuffer *buf, HeapTuple event)
+AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, HeapTuple event)
 {
-	StreamBufferSlot *sbs = alloc_slot(stream, buf, event);
+	StreamBufferSlot *sbs = alloc_slot(stream, encoding, buf, event);
 
 	SHMQueueElemInit(&(sbs->link));
 
@@ -186,7 +190,12 @@ extern void InitGlobalStreamBuffer(void)
 extern StreamBufferReader *
 OpenStreamBufferReader(StreamBuffer *buf, int queryid)
 {
-	return NULL;
+	StreamBufferReader *reader = (StreamBufferReader *) palloc(sizeof(StreamBufferReader));
+	reader->queryid = queryid;
+	reader->buf = buf;
+	reader->pos = buf->start;
+
+	return reader;
 }
 
 /*
@@ -196,8 +205,35 @@ OpenStreamBufferReader(StreamBuffer *buf, int queryid)
  * If this is the last reader that needs to see a given event, the event is deleted
  * from the stream buffer.
  */
-extern HeapTuple
+extern StreamBufferSlot *
 NextStreamEvent(StreamBufferReader *reader)
 {
-	return NULL;
+	StreamBufferSlot *result = NULL;
+	StreamBufferSlot *current = NULL;
+	long bytesread = 0;
+
+	while (result == NULL &&
+			bytesread <= reader->buf->capacity && reader->pos < reader->buf->pos)
+	{
+		long size;
+
+		current = (StreamBufferSlot *) reader->pos;
+		size = StreamBufferSlotSize(current);
+		reader->pos += size;
+		bytesread += size;
+
+		if (reader->pos >= reader->buf->start + reader->buf->capacity)
+		{
+			reader->pos = reader->buf->start;
+			continue;
+		}
+
+		if (bms_is_member(reader->queryid, current->readby))
+		{
+			result = current;
+			bms_del_member(current->readby, reader->queryid);
+		}
+	}
+
+	return result;
 }

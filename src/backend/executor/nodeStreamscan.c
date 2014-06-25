@@ -13,12 +13,24 @@
 
 #include "executor/executor.h"
 #include "executor/nodeStreamscan.h"
+#include "events/decode.h"
 #include "events/streambuf.h"
 
 
 static TupleTableSlot *
-StreamScanNext(SeqScanState *node)
+StreamScanNext(StreamScanState *node)
 {
+	StreamBufferSlot *sbs = NextStreamEvent(node->reader);
+	StreamEventDecoder *decoder;
+	if (sbs == NULL)
+	{
+		return NULL;
+	}
+	decoder = GetStreamEventDecoder(sbs->encoding);
+	ExecSetSlotDescriptor(node->ss.ss_ScanTupleSlot, decoder->schema);
+	ExecStoreTuple(sbs->event, node->ss.ss_ScanTupleSlot, InvalidBuffer, false);
+	print_slot(node->ss.ss_ScanTupleSlot);
+
 	return NULL;
 }
 
@@ -66,6 +78,8 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 	 */
 	if (!GlobalStreamBuffer)
 		InitGlobalStreamBuffer();
+
+	state->reader = OpenStreamBufferReader(GlobalStreamBuffer, node->cqid);
 
 	return state;
 }
