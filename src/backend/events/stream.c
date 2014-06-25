@@ -22,6 +22,7 @@
 #include "storage/ipc.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
+#include "utils/memutils.h"
 #include "utils/tqual.h"
 
 #define SEND_EVENTS_RESPONSE_COMPLETE 0
@@ -265,13 +266,16 @@ CreateStreamTargets(void)
 	HeapTuple tup;
 	List *plist;
 	Node *ptree;
+	MemoryContext oldcontext;
 
 	MemSet(&ctl, 0, sizeof(ctl));
 
 	ctl.keysize = NAMEDATALEN;
 	ctl.entrysize = sizeof(StreamTagsEntry);
 
+	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	targets = hash_create("StreamTargets", 32, &ctl, HASH_ELEM);
+	MemoryContextSwitchTo(oldcontext);
 
 	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 	scandesc = heap_beginscan(rel, SnapshotNow, 0, NULL);

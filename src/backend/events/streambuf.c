@@ -12,6 +12,7 @@
 #include "events/streambuf.h"
 #include "executor/tuptable.h"
 #include "storage/lwlock.h"
+#include "utils/memutils.h"
 
 /* Global stream buffer that lives in shared memory. All stream events are appended to this */
 StreamBuffer *GlobalStreamBuffer;
@@ -49,7 +50,13 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 	StreamBufferSlot *result;
 	StreamBufferSlot *victim;
 	Size size;
-	Bitmapset *targets = GetTargetsFor(stream, buf->targets);
+	MemoryContext oldcontext;
+	Bitmapset *targets;
+
+	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+	targets = GetTargetsFor(stream, buf->targets);
+	MemoryContextSwitchTo(oldcontext);
+
 	if (targets == NULL)
 	{
 		/* nothing is reading from this stream, so it's a noop */
@@ -171,13 +178,23 @@ AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, H
 extern void InitGlobalStreamBuffer(void)
 {
 	bool found;
+	MemoryContext oldcontext;
+
 	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer",
 			GlobalStreamBufferSize + sizeof(StreamBuffer), &found);
 
 	GlobalStreamBuffer->capacity = GlobalStreamBufferSize;
 	GlobalStreamBuffer->start = (char *) (GlobalStreamBuffer + sizeof(StreamBuffer));
 	GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
+
+	/*
+	 * This is kind of ugly to not just put this thing in shmem,
+	 * but the Bitmapset is a local-memory implementation so we just leave it in cache memory
+	 */
+	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	GlobalStreamBuffer->targets = CreateStreamTargets();
+	MemoryContextSwitchTo(oldcontext);
+
 	if (!found)
 		SHMQueueInit(&(GlobalStreamBuffer->buf));
 }
