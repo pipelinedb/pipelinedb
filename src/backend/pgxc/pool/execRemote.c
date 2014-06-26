@@ -3518,7 +3518,16 @@ RemoteQueryNext(ScanState *scan_node)
 					tuplestore_puttupleslot(tuplestorestate, scanslot);
 			}
 			else
-				node->eof_underlying = !rq->remote_query->is_continuous;
+			{
+				if (IsContinuous(node))
+				{
+					PGXCNodeAllHandles *handles = get_exec_connections(node, NULL, EXEC_ON_DATANODES);
+					node->connections = handles->datanode_handles;
+					node->conn_count = handles->dn_conn_count;
+				}
+				node->eof_underlying = !IsContinuous(node);
+			}
+
 		}
 
 		if (eof_tuplestore && node->eof_underlying)
