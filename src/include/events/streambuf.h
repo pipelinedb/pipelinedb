@@ -60,9 +60,6 @@ typedef struct StreamBuffer
 	StreamBufferSlot *nextvictim;
 	/* mapping from streams to the continuous views that read from them */
 	StreamTargets *targets;
-
-	/* next slot to be returned */
-	StreamBufferSlot *next;
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */
@@ -71,6 +68,8 @@ typedef struct StreamBufferReader
 	int queryid;
 	char *pos;
 	StreamBuffer *buf;
+	/* next slot to be returned */
+	StreamBufferSlot *next;
 } StreamBufferReader;
 
 extern StreamBuffer *GlobalStreamBuffer;

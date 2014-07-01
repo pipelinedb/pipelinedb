@@ -228,7 +228,7 @@ extern StreamBufferSlot *
 NextStreamEvent(StreamBufferReader *reader)
 {
 	StreamBufferSlot *result = NULL;
-	StreamBufferSlot *current = reader->buf->next;
+	StreamBufferSlot *current = reader->next;
 
 	if (current == NULL)
 		current = (StreamBufferSlot *)
@@ -243,7 +243,7 @@ NextStreamEvent(StreamBufferReader *reader)
 		bms_del_member(current->readby, reader->queryid);
 	}
 
-	reader->buf->next = (StreamBufferSlot *)
+	reader->next = (StreamBufferSlot *)
 			SHMQueueNext(&(reader->buf->buf), &(current->link), offsetof(StreamBufferSlot, link));
 
 	return result;
