@@ -1038,7 +1038,7 @@ typedef struct PlanState
  * CQ helper macros
  */
 #define BatchSize(node)				(((PlanState *)(node))->state->cq_batch_size)
-#define IsContinuous(node)			(BatchSize(node) > 0)
+#define IsContinuous(node)			(((PlanState *)(node))->state && BatchSize(node) > 0)
 
 /* ----------------
  *	these are defined to avoid confusion problems with "left"
