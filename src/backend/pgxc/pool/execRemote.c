@@ -1113,13 +1113,6 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 			 */
 			if (have_tuple)
 				return true;
-			else if (IsContinuous(combiner))
-			{
-				conn->state = DN_CONNECTION_STATE_QUERY;
-				/* TODO: we should be smarter about just blindly trying to read from the connection here */
-				pgxc_node_receive(1, &conn, NULL);
-				conn->combiner = combiner;
-			}
 			else
 			{
 				if (pgxc_node_send_execute(conn, combiner->cursor, 1) != 0)
@@ -1151,8 +1144,7 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 		}
 		else if (res == RESPONSE_SUSPENDED)
 		{
-			RemoteQuery *rq = (RemoteQuery*) combiner->ss.ps.plan;
-			if (rq->remote_query->is_continuous)
+			if (IsContinuous(combiner))
 			{
 				combiner->current_conn++;
 			}
@@ -1165,8 +1157,7 @@ FetchTuple(RemoteQueryState *combiner, TupleTableSlot *slot)
 		}
 		else if (res == RESPONSE_COMPLETE)
 		{
-			RemoteQuery *rq = (RemoteQuery*) combiner->ss.ps.plan;
-			if (rq->remote_query->is_continuous)
+			if (IsContinuous(combiner))
 			{
 				combiner->current_conn++;
 			}
@@ -1379,7 +1370,7 @@ handle_response(PGXCNodeHandle * conn, RemoteQueryState *combiner)
 				 */
 				int result = suspended ? RESPONSE_SUSPENDED : RESPONSE_COMPLETE;
 				conn->transaction_status = msg[0];
-				conn->state = DN_CONNECTION_STATE_IDLE;
+				conn->state = IsContinuous(combiner) ? DN_CONNECTION_STATE_QUERY : DN_CONNECTION_STATE_IDLE;
 				conn->combiner = NULL;
 #ifdef DN_CONNECTION_DEBUG
 				conn->have_row_desc = false;
@@ -3524,10 +3515,10 @@ RemoteQueryNext(ScanState *scan_node)
 					PGXCNodeAllHandles *handles = get_exec_connections(node, NULL, EXEC_ON_DATANODES);
 					node->connections = handles->datanode_handles;
 					node->conn_count = handles->dn_conn_count;
+					node->current_conn = 0;
 				}
 				node->eof_underlying = !IsContinuous(node);
 			}
-
 		}
 
 		if (eof_tuplestore && node->eof_underlying)

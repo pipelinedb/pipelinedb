@@ -44,8 +44,9 @@ typedef struct StreamTagsEntry
 EventStream
 OpenStream(void)
 {
+	elog(LOG, "opening stream connection");
 	EventStream stream = (EventStream) palloc(sizeof(EventStream));
-	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, true);
+	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, false);
 
 	if (handles->dn_conn_count <= 0)
 		ereport(ERROR,
@@ -204,6 +205,7 @@ SendEvents(EventStream stream, const char *encoding,
 	{
 		List *evs = events_by_node[i];
 		PGXCNodeHandle *handle = stream->handles[i];
+
 		foreach(lc, evs)
 		{
 			int msglen;

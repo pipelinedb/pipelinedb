@@ -228,31 +228,23 @@ extern StreamBufferSlot *
 NextStreamEvent(StreamBufferReader *reader)
 {
 	StreamBufferSlot *result = NULL;
-	StreamBufferSlot *current = NULL;
-	long bytesread = 0;
+	StreamBufferSlot *current = reader->buf->next;
 
-	while (result == NULL &&
-			bytesread <= reader->buf->capacity && reader->pos < reader->buf->pos)
+	if (current == NULL)
+		current = (StreamBufferSlot *)
+			SHMQueueNext(&(reader->buf->buf), &(reader->buf->buf), offsetof(StreamBufferSlot, link));
+
+	if (current == NULL)
+		return NULL;
+
+	if (bms_is_member(reader->queryid, current->readby))
 	{
-		long size;
-
-		current = (StreamBufferSlot *) reader->pos;
-		size = StreamBufferSlotSize(current);
-		reader->pos += size;
-		bytesread += size;
-
-		if (reader->pos >= reader->buf->start + reader->buf->capacity)
-		{
-			reader->pos = reader->buf->start;
-			continue;
-		}
-
-		if (bms_is_member(reader->queryid, current->readby))
-		{
-			result = current;
-			bms_del_member(current->readby, reader->queryid);
-		}
+		result = current;
+		bms_del_member(current->readby, reader->queryid);
 	}
+
+	reader->buf->next = (StreamBufferSlot *)
+			SHMQueueNext(&(reader->buf->buf), &(current->link), offsetof(StreamBufferSlot, link));
 
 	return result;
 }
