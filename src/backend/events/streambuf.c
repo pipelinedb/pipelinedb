@@ -9,8 +9,10 @@
  *-------------------------------------------------------------------------
  */
 #include "events/stream.h"
+#include "events/decode.h"
 #include "events/streambuf.h"
 #include "executor/tuptable.h"
+#include "nodes/print.h"
 #include "storage/lwlock.h"
 #include "utils/memutils.h"
 
@@ -253,4 +255,38 @@ NextStreamEvent(StreamBufferReader *reader)
 	}
 
 	return result;
+}
+
+extern void
+PrintStreamBuffer(StreamBuffer *buf, bool verbose)
+{
+	TupleTableSlot *slot;
+	StreamEventDecoder *decoder;
+	MemoryContext oldcontext;
+	StreamBufferSlot *sbs = (StreamBufferSlot *)
+		SHMQueueNext(&(buf->buf), &(buf->buf), offsetof(StreamBufferSlot, link));
+	int count = 0;
+
+	printf("====\n");
+	while (sbs != NULL)
+	{
+		oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+		decoder = GetStreamEventDecoder(sbs->encoding);
+		MemoryContextSwitchTo(oldcontext);
+
+		count++;
+		printf("size = %d, stream = \"%s\", encoding = \"%s\"\n",
+				(int) StreamBufferSlotSize(sbs), sbs->stream, sbs->encoding);
+
+		slot = MakeSingleTupleTableSlot(decoder->schema);
+		ExecStoreTuple(sbs->event, slot, InvalidBuffer, false);
+
+		if (verbose)
+			print_slot(slot);
+
+		sbs = (StreamBufferSlot *)
+				SHMQueueNext(&(buf->buf), &(sbs->link), offsetof(StreamBufferSlot, link));
+	}
+	printf("\n%d events.\n", count);
+	printf("====\n");
 }

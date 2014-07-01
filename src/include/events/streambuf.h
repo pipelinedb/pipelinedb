@@ -77,5 +77,7 @@ extern void InitGlobalStreamBuffer(void);
 
 extern StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
 extern StreamBufferSlot *NextStreamEvent(StreamBufferReader *reader);
+extern StreamBufferSlot *NextStreamEvent(StreamBufferReader *reader);
+extern void PrintStreamBuffer(StreamBuffer *buf, bool verbose);
 
 #endif
