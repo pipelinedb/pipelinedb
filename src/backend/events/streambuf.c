@@ -150,7 +150,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 	result->readby = (Bitmapset *) pos;
 	result->readby->nwords = targets->nwords;
 	memcpy(result->readby->words, targets->words, sizeof(bitmapword) * targets->nwords);
-	pos += sizeof(bitmapword) * targets->nwords;
+	pos += sizeof(Bitmapset) + sizeof(bitmapword) * targets->nwords;
 
 	*buf->pos = pos;
 
@@ -239,12 +239,19 @@ NextStreamEvent(StreamBufferReader *reader)
 	StreamBufferSlot *result = NULL;
 	StreamBufferSlot *current = reader->next;
 
-	if (current == NULL)
-		current = (StreamBufferSlot *)
-			SHMQueueNext(&(reader->buf->buf), &(reader->buf->buf), offsetof(StreamBufferSlot, link));
+	LWLockAcquire(StreamBufferLock, LW_EXCLUSIVE);
 
 	if (current == NULL)
+	{
+		current = (StreamBufferSlot *)
+			SHMQueueNext(&(reader->buf->buf), &(reader->buf->buf), offsetof(StreamBufferSlot, link));
+	}
+
+	if (current == NULL)
+	{
+		LWLockRelease(StreamBufferLock);
 		return NULL;
+	}
 
 	if (bms_is_member(reader->queryid, current->readby))
 	{
@@ -254,6 +261,8 @@ NextStreamEvent(StreamBufferReader *reader)
 
 	reader->next = (StreamBufferSlot *)
 			SHMQueueNext(&(reader->buf->buf), &(current->link), offsetof(StreamBufferSlot, link));
+
+	LWLockRelease(StreamBufferLock);
 
 	return result;
 }
