@@ -44,7 +44,6 @@ typedef struct StreamTagsEntry
 EventStream
 OpenStream(void)
 {
-	elog(LOG, "opening stream connection");
 	EventStream stream = (EventStream) palloc(sizeof(EventStream));
 	PGXCNodeAllHandles *handles = get_handles(GetAllDataNodes(), NIL, false, false);
 
