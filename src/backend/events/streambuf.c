@@ -15,6 +15,7 @@
 #include "nodes/print.h"
 #include "storage/lwlock.h"
 #include "utils/memutils.h"
+#include "miscadmin.h"
 
 /* Global stream buffer that lives in shared memory. All stream events are appended to this */
 StreamBuffer *GlobalStreamBuffer;
@@ -46,6 +47,7 @@ static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
 static StreamBufferSlot *
 alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTuple event)
 {
+	char *pos = *buf->pos;
 	char *cur;
 	long free = 0;
 	HeapTuple shared;
@@ -67,7 +69,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 	size = HEAPTUPLESIZE + event->t_len + sizeof(StreamBufferSlot) +
 			strlen(stream) + 1 + sizeof(Bitmapset) + targets->nwords * sizeof(bitmapword);
 
-	if (buf->pos + size > buf->start + buf->capacity)
+	if (pos + size > buf->start + buf->capacity)
 	{
 		StreamBufferSlot *sbs;
 
@@ -75,9 +77,9 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 		 * We always start scanning at the beginning of the segment, as we need to look
 		 * at complete events. The beginning
 		 */
-		buf->pos = buf->start;
+		pos = buf->start;
 
-		cur = buf->pos;
+		cur = pos;
 		sbs = (StreamBufferSlot *) cur;
 		free = StreamBufferSlotSize(sbs);
 		wait_for_overwrite(buf, sbs);
@@ -99,12 +101,12 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 		buf->nextvictim = SlotAfter(sbs);
 	}
 
-	victim = (StreamBufferSlot *) buf->pos;
+	victim = (StreamBufferSlot *) pos;
 	wait_for_overwrite(buf, victim);
 
 	while (buf->nextvictim != NULL &&
-			buf->pos < buf->start + buf->capacity &&
-			buf->pos + size > (char *) buf->nextvictim)
+			pos < buf->start + buf->capacity &&
+			pos + size > (char *) buf->nextvictim)
 	{
 		/*
 		 * this event will consume the gap between the buffer position
@@ -115,13 +117,13 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 		buf->nextvictim = SlotAfter(buf->nextvictim);
 	}
 
-	MemSet(buf->pos, 0, sizeof(StreamBufferSlot));
-	result = (StreamBufferSlot *) buf->pos;
-	buf->pos += sizeof(StreamBufferSlot);
+	MemSet(pos, 0, sizeof(StreamBufferSlot));
+	result = (StreamBufferSlot *) pos;
+	pos += sizeof(StreamBufferSlot);
 
-	MemSet(buf->pos, 0, HEAPTUPLESIZE + event->t_len);
-	shared = (HeapTuple) buf->pos;
-	buf->pos += HEAPTUPLESIZE + event->t_len;
+	MemSet(pos, 0, HEAPTUPLESIZE + event->t_len);
+	shared = (HeapTuple) pos;
+	pos += HEAPTUPLESIZE + event->t_len;
 
 	shared->t_len = event->t_len;
 	shared->t_self = event->t_self;
@@ -131,13 +133,13 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 	memcpy((char *) shared->t_data, (char *) event->t_data, event->t_len);
 
 	result->event = shared;
-	result->stream = buf->pos;
+	result->stream = pos;
 	memcpy(result->stream, stream, strlen(stream) + 1);
-	buf->pos += strlen(stream) + 1;
+	pos += strlen(stream) + 1;
 
-	result->encoding = buf->pos;
+	result->encoding = pos;
 	memcpy(result->encoding, encoding, strlen(encoding) + 1);
-	buf->pos += strlen(encoding) + 1;
+	pos += strlen(encoding) + 1;
 
 	/*
 	 * The source bitmap is allocated in local memory (in GetStreamTargets),
@@ -145,10 +147,12 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 	 * free anything, so it's safe (although a bit sketchy) to copy it into
 	 * shared memory.
 	 */
-	result->readby = (Bitmapset *) buf->pos;
+	result->readby = (Bitmapset *) pos;
 	result->readby->nwords = targets->nwords;
 	memcpy(result->readby->words, targets->words, sizeof(bitmapword) * targets->nwords);
-	buf->pos += sizeof(bitmapword) * targets->nwords;
+	pos += sizeof(bitmapword) * targets->nwords;
+
+	*buf->pos = pos;
 
 	return result;
 }
@@ -161,12 +165,13 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 extern StreamBufferSlot *
 AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, HeapTuple event)
 {
-	StreamBufferSlot *sbs = alloc_slot(stream, encoding, buf, event);
-
-	SHMQueueElemInit(&(sbs->link));
+	StreamBufferSlot *sbs;
 
 	LWLockAcquire(StreamBufferLock, LW_EXCLUSIVE);
-	SHMQueueInsertBefore(&(GlobalStreamBuffer->buf), &(sbs->link));
+	sbs = alloc_slot(stream, encoding, buf, event);
+
+	SHMQueueElemInit(&(sbs->link));
+	SHMQueueInsertBefore(&(buf->buf), &(sbs->link));
 	LWLockRelease(StreamBufferLock);
 
 	return sbs;
@@ -187,18 +192,22 @@ extern void InitGlobalStreamBuffer(void)
 
 	GlobalStreamBuffer->capacity = GlobalStreamBufferSize;
 	GlobalStreamBuffer->start = (char *) (GlobalStreamBuffer + sizeof(StreamBuffer));
-	GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
 
 	/*
 	 * This is kind of ugly to not just put this thing in shmem,
-	 * but the Bitmapset is a local-memory implementation so we just leave it in cache memory
+	 * but the Bitmapset is a constant and a local-memory implementation
+	 * so we just leave it in cache memory.
 	 */
 	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	GlobalStreamBuffer->targets = CreateStreamTargets();
 	MemoryContextSwitchTo(oldcontext);
 
 	if (!found)
+	{
 		SHMQueueInit(&(GlobalStreamBuffer->buf));
+		GlobalStreamBuffer->pos = ShmemAlloc(sizeof(char *));
+		*GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
+	}
 }
 
 /*
@@ -252,23 +261,24 @@ NextStreamEvent(StreamBufferReader *reader)
 extern void
 PrintStreamBuffer(StreamBuffer *buf, bool verbose)
 {
+	int count = 0;
 	TupleTableSlot *slot;
 	StreamEventDecoder *decoder;
 	MemoryContext oldcontext;
 	StreamBufferSlot *sbs = (StreamBufferSlot *)
 		SHMQueueNext(&(buf->buf), &(buf->buf), offsetof(StreamBufferSlot, link));
-	int count = 0;
 
 	printf("====\n");
-	while (sbs != NULL)
+	LWLockAcquire(StreamBufferLock, LW_EXCLUSIVE);
+	while (sbs != NULL && count < 10)
 	{
 		oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 		decoder = GetStreamEventDecoder(sbs->encoding);
 		MemoryContextSwitchTo(oldcontext);
 
 		count++;
-		printf("size = %d, stream = \"%s\", encoding = \"%s\"\n",
-				(int) StreamBufferSlotSize(sbs), sbs->stream, sbs->encoding);
+		printf("size = %d, stream = \"%s\", encoding = \"%s\" addr = %p\n",
+				(int) StreamBufferSlotSize(sbs), sbs->stream, sbs->encoding, &(sbs->link));
 
 		slot = MakeSingleTupleTableSlot(decoder->schema);
 		ExecStoreTuple(sbs->event, slot, InvalidBuffer, false);
@@ -279,6 +289,8 @@ PrintStreamBuffer(StreamBuffer *buf, bool verbose)
 		sbs = (StreamBufferSlot *)
 				SHMQueueNext(&(buf->buf), &(sbs->link), offsetof(StreamBufferSlot, link));
 	}
+	LWLockRelease(StreamBufferLock);
+
 	printf("\n%d events.\n", count);
-	printf("====\n");
+	printf("^^^^\n");
 }
