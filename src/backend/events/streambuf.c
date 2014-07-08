@@ -21,7 +21,7 @@
 StreamBuffer *GlobalStreamBuffer;
 
 /* Maximum size in blocks of the global stream buffer */
-long GlobalStreamBufferSize = 100000;
+int StreamBufferBlocks;
 
 #define StreamBufferSlotSize(slot) (HEAPTUPLESIZE + \
 		(slot)->event->t_len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1 + \
@@ -186,11 +186,12 @@ extern void InitGlobalStreamBuffer(void)
 {
 	bool found;
 	MemoryContext oldcontext;
+	long size = StreamBufferBlocks * BLCKSZ;
 
 	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer",
-			GlobalStreamBufferSize + sizeof(StreamBuffer), &found);
+			size + sizeof(StreamBuffer), &found);
 
-	GlobalStreamBuffer->capacity = GlobalStreamBufferSize;
+	GlobalStreamBuffer->capacity = size;
 	GlobalStreamBuffer->start = (char *) (GlobalStreamBuffer + sizeof(StreamBuffer));
 
 	/*

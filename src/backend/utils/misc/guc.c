@@ -41,6 +41,7 @@
 #include "commands/vacuum.h"
 #include "commands/variable.h"
 #include "commands/trigger.h"
+#include "events/streambuf.h"
 #include "funcapi.h"
 #include "libpq/auth.h"
 #include "libpq/be-fsstubs.h"
@@ -2615,6 +2616,18 @@ static struct config_int ConfigureNamesInt[] =
 		16, 2, 65535,
 		NULL, NULL, NULL
 	},
+
+	{
+		{"stream_buffer_size", PGC_BACKEND, RESOURCES_MEM,
+			gettext_noop("Sets the maximum size of the stream buffer."),
+			NULL,
+			GUC_UNIT_BLOCKS
+		},
+		&StreamBufferBlocks,
+		1024, 0, INT_MAX,
+		NULL, NULL, NULL
+	},
+
 #endif
 	/* End-of-list marker */
 	{
