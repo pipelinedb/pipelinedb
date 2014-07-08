@@ -286,6 +286,17 @@ typedef struct Scan
  */
 typedef Scan SeqScan;
 
+/*
+ * ----------------
+ * 		stream buffer scan node
+ * 	---------------
+ */
+typedef struct StreamScan
+{
+	Scan scan;
+	int32 cqid;
+} StreamScan;
+
 /* ----------------
  *		index scan node
  *

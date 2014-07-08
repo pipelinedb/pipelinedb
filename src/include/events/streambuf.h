@@ -28,6 +28,7 @@ typedef struct StreamBufferSlot
 	 */
 	Bitmapset *readby;
 	char *stream;
+	char *encoding;
 } StreamBufferSlot;
 
 /* Circular buffer containing physical events to be read by continuous queries */
@@ -38,7 +39,7 @@ typedef struct StreamBuffer
 	/* queue of events, which are wrapped by StreamBufferSlots */
 	SHM_QUEUE	buf;
 	/* pointer to location in shared memory that should be consumed by the next append */
-	char *pos;
+	char **pos;
 	/* pointer to the beginning of the shared memory segment consumed by this buffer */
 	char *start;
 	/*
@@ -65,15 +66,20 @@ typedef struct StreamBuffer
 typedef struct StreamBufferReader
 {
 	int queryid;
+	char *pos;
 	StreamBuffer *buf;
+	/* next slot to be returned */
+	StreamBufferSlot *next;
 } StreamBufferReader;
 
 extern StreamBuffer *GlobalStreamBuffer;
 
-extern StreamBufferSlot *AppendStreamEvent(const char *stream, StreamBuffer *buf, HeapTuple event);
+extern StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, HeapTuple event);
 extern void InitGlobalStreamBuffer(void);
 
 extern StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
-extern HeapTuple NextStreamEvent(StreamBufferReader *reader);
+extern StreamBufferSlot *NextStreamEvent(StreamBufferReader *reader);
+extern StreamBufferSlot *NextStreamEvent(StreamBufferReader *reader);
+extern void PrintStreamBuffer(StreamBuffer *buf, bool verbose);
 
 #endif

@@ -60,6 +60,8 @@ static Material *create_material_plan(PlannerInfo *root, MaterialPath *best_path
 static Plan *create_unique_plan(PlannerInfo *root, UniquePath *best_path);
 static SeqScan *create_seqscan_plan(PlannerInfo *root, Path *best_path,
 					List *tlist, List *scan_clauses);
+static StreamScan *create_streamscan_plan(PlannerInfo *root, Path *best_path,
+					List *tlist, List *scan_clauses);
 static Scan *create_indexscan_plan(PlannerInfo *root, IndexPath *best_path,
 					  List *tlist, List *scan_clauses, bool indexonly);
 static BitmapHeapScan *create_bitmap_scan_plan(PlannerInfo *root,
@@ -99,6 +101,7 @@ static List *order_qual_clauses(PlannerInfo *root, List *clauses);
 static void copy_path_costsize(Plan *dest, Path *src);
 static void copy_plan_costsize(Plan *dest, Plan *src);
 static SeqScan *make_seqscan(List *qptlist, List *qpqual, Index scanrelid);
+static StreamScan *make_streamscan(List *qptlist, List *qpqual, int32 cqid);
 static IndexScan *make_indexscan(List *qptlist, List *qpqual, Index scanrelid,
 			   Oid indexid, List *indexqual, List *indexqualorig,
 			   List *indexorderby, List *indexorderbyorig,
@@ -371,10 +374,22 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 		scan_clauses = list_concat(list_copy(scan_clauses),
 								   best_path->param_info->ppi_clauses);
 
+	if (root->parse->is_continuous)
+	{
+		best_path->pathtype = T_StreamScan;
+	}
+
 	switch (best_path->pathtype)
 	{
 		case T_SeqScan:
 			plan = (Plan *) create_seqscan_plan(root,
+												best_path,
+												tlist,
+												scan_clauses);
+			break;
+
+		case T_StreamScan:
+			plan = (Plan *) create_streamscan_plan(root,
 												best_path,
 												tlist,
 												scan_clauses);
@@ -1156,6 +1171,39 @@ create_seqscan_plan(PlannerInfo *root, Path *best_path,
 							 scan_relid);
 
 	copy_path_costsize(&scan_plan->plan, best_path);
+
+	return scan_plan;
+}
+
+/*
+ * create_streamscan_plan
+ *	 Returns a streamscan plan with restriction clauses
+ *	 'scan_clauses' and targetlist 'tlist'.
+ */
+static StreamScan *
+create_streamscan_plan(PlannerInfo *root, Path *best_path,
+					List *tlist, List *scan_clauses)
+{
+	StreamScan    *scan_plan;
+
+	/* Sort clauses into best execution order */
+	scan_clauses = order_qual_clauses(root, scan_clauses);
+
+	/* Reduce RestrictInfo list to bare expressions; ignore pseudoconstants */
+	scan_clauses = extract_actual_clauses(scan_clauses, false);
+
+	/* Replace any outer-relation variables with nestloop params */
+	if (best_path->param_info)
+	{
+		scan_clauses = (List *)
+			replace_nestloop_params(root, (Node *) scan_clauses);
+	}
+
+	scan_plan = make_streamscan(tlist,
+							 scan_clauses,
+							 root->parse->cqid);
+
+	copy_path_costsize(&scan_plan->scan.plan, best_path);
 
 	return scan_plan;
 }
@@ -3290,6 +3338,24 @@ make_seqscan(List *qptlist,
 	plan->lefttree = NULL;
 	plan->righttree = NULL;
 	node->scanrelid = scanrelid;
+
+	return node;
+}
+
+static StreamScan *
+make_streamscan(List *qptlist,
+			 List *qpqual,
+			 int32 cqid)
+{
+	StreamScan *node = makeNode(StreamScan);
+	Plan *plan = &node->scan.plan;
+
+	/* cost should be inserted by caller */
+	plan->targetlist = qptlist;
+	plan->qual = qpqual;
+	plan->lefttree = NULL;
+	plan->righttree = NULL;
+	node->cqid = cqid;
 
 	return node;
 }

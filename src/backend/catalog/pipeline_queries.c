@@ -112,7 +112,7 @@ AddQuery(const char *rawname, const char *query, char state)
  * Retrieves a REGISTERed query from the pipeline_queries catalog table
  */
 char *
-GetQueryString(RangeVar *rvname)
+GetQueryString(RangeVar *rvname, int *cqid)
 {
 	HeapTuple	tuple;
 	Form_pipeline_queries row;
@@ -129,6 +129,10 @@ GetQueryString(RangeVar *rvname)
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
 
 	result = TextDatumGetCString(&(row->query));
+
+	if (cqid != NULL)
+		*cqid = DatumGetInt32(row->id);
+
 	ReleaseSysCache(tuple);
 
 	return result;

@@ -955,7 +955,7 @@ get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
 		 */
 		oldContext = MemoryContextSwitchTo(CacheMemoryContext);
 
-		query_string = GetQueryString(rel);
+		query_string = GetQueryString(rel, NULL);
 		parsetree_list = pg_parse_query(query_string);
 
 		/* CVs should only have a single query */
@@ -1711,23 +1711,16 @@ static void
 exec_decode_events(const char *encoding, const char *channel, StringInfo message)
 {
 	StreamEventDecoder *decoder;
-	TupleTableSlot *slot = MakeTupleTableSlot();
 	int count = 0;
 
 	start_xact_command();
 
-	/*
-	 * Initialize shared-memory stream buffer that all decoded events are appended to
-	 * XXX: we need to put this in the correct place
-	 */
 	if (!GlobalStreamBuffer)
 		InitGlobalStreamBuffer();
 
 	MemoryContextSwitchTo(CacheMemoryContext);
 	decoder = GetStreamEventDecoder(encoding);
 	MemoryContextSwitchTo(EventContext);
-
-	ExecSetSlotDescriptor(slot, decoder->schema);
 
 	while (message->cursor < message->len)
 	{
@@ -1744,7 +1737,7 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 		pfree(ev);
 		count++;
 
-		AppendStreamEvent(channel, GlobalStreamBuffer, tup);
+		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, tup);
 	}
 
 	pq_getmsgend(message);

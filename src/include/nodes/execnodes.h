@@ -17,6 +17,7 @@
 #include "access/genam.h"
 #include "access/heapam.h"
 #include "executor/instrument.h"
+#include "events/streambuf.h"
 #include "nodes/params.h"
 #include "nodes/plannodes.h"
 #include "utils/reltrigger.h"
@@ -1037,7 +1038,7 @@ typedef struct PlanState
  * CQ helper macros
  */
 #define BatchSize(node)				(((PlanState *)(node))->state->cq_batch_size)
-#define IsContinuous(node)			(BatchSize(node) > 0)
+#define IsContinuous(node)			(((PlanState *)(node))->state && BatchSize(node) > 0)
 
 /* ----------------
  *	these are defined to avoid confusion problems with "left"
@@ -1810,6 +1811,16 @@ typedef struct WindowAggState
 	TupleTableSlot *temp_slot_1;
 	TupleTableSlot *temp_slot_2;
 } WindowAggState;
+
+/* ----------------
+ *	StreamScanState information
+ * ----------------
+ */
+typedef struct StreamScanState
+{
+	ScanState	ss;
+	StreamBufferReader *reader;
+} StreamScanState;
 
 /* ----------------
  *	 UniqueState information

@@ -187,6 +187,8 @@ typedef struct Query
 	TupleDesc sourcedesc;
 
 	bool 		cq_is_merge; /* is this query being run as a merge query? */
+
+	int32		cqid; /* id of this CQ, used for tagging stream events */
 #endif
 } Query;
 

@@ -102,6 +102,7 @@
 #include "executor/nodeRecursiveunion.h"
 #include "executor/nodeResult.h"
 #include "executor/nodeSeqscan.h"
+#include "executor/nodeStreamscan.h"
 #include "executor/nodeSetOp.h"
 #include "executor/nodeSort.h"
 #include "executor/nodeSubplan.h"
@@ -191,6 +192,11 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 		case T_SeqScan:
 			result = (PlanState *) ExecInitSeqScan((SeqScan *) node,
 												   estate, eflags);
+			break;
+
+		case T_StreamScan:
+			result = (PlanState *) ExecInitStreamScan((StreamScan *) node,
+													 estate, eflags);
 			break;
 
 		case T_IndexScan:
@@ -457,6 +463,10 @@ ExecProcNode(PlanState *node)
 			 */
 		case T_SeqScanState:
 			result = ExecSeqScan((SeqScanState *) node);
+			break;
+
+		case T_StreamScanState:
+			result = ExecStreamScan((StreamScanState *) node);
 			break;
 
 		case T_IndexScanState:
