@@ -222,10 +222,23 @@ extern void InitGlobalStreamBuffer(void)
 extern StreamBufferReader *
 OpenStreamBufferReader(StreamBuffer *buf, int queryid)
 {
+	StreamBufferSlot *sbs;
 	StreamBufferReader *reader = (StreamBufferReader *) palloc(sizeof(StreamBufferReader));
 	reader->queryid = queryid;
 	reader->buf = buf;
 	reader->pos = buf->start;
+
+	/* advance the reader to the first relevant slot in the stream buffer */
+	sbs = (StreamBufferSlot *)
+		SHMQueueNext(&(reader->buf->buf), &(reader->buf->buf), offsetof(StreamBufferSlot, link));
+	while (sbs != NULL)
+	{
+		if (bms_is_member(queryid, sbs->readby))
+			break;
+		sbs = (StreamBufferSlot *)
+				SHMQueueNext(&(reader->buf->buf), &(sbs->link), offsetof(StreamBufferSlot, link));
+	}
+	reader->next = sbs;
 
 	return reader;
 }
