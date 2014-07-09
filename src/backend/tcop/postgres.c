@@ -525,6 +525,7 @@ SocketBackend(StringInfo inBuf)
 			break;
 #endif
 		case '+':				/* Merge */
+		case '-': 			/* Read stream buffer */
 			break;
 		default:
 
@@ -4800,6 +4801,14 @@ PostgresMain(int argc, char *argv[],
 					 */
 					isMergeNode = false;
 					break;
+			case '-':
+				{
+					int queryid = pq_getmsgint(&input_message, 4);
+					int maxevents = pq_getmsgint(&input_message, 4);
+					pq_getmsgend(&input_message);
+					elog(LOG, "queryid = %d, maxevents = %d", queryid, maxevents);
+				}
+				break;
 
 			case 'P':			/* parse */
 				{

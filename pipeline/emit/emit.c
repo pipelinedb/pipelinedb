@@ -11,7 +11,7 @@ static void
 usage(void)
 {
 	printf("Usage:\n\
-  pipeline_send <host> <port> <database name> <user> <encoding> <stream>\n");
+  emit <host> <port> <database name> <user> <encoding> <stream>\n");
 }
 
 

@@ -380,6 +380,7 @@ extern PGresult *PQexecPrepared(PGconn *conn,
 /* Pipeline functions */
 extern int PQsendEvents(const char *encoding, const char *stream,
 		const char *data, size_t len, PGconn *conn);
+extern int PQreadStreamBuffer(int queryid, int maxevents, PGconn *conn);
 
 /* Interface for multiple-result or asynchronous queries */
 extern int	PQsendQuery(PGconn *conn, const char *query);
