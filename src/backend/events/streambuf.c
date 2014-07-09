@@ -269,6 +269,42 @@ NextStreamEvent(StreamBufferReader *reader)
 }
 
 extern void
+ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, bool verbose, int intervalms)
+{
+	TupleTableSlot *slot;
+	StreamEventDecoder *decoder;
+	MemoryContext oldcontext;
+	StreamBufferReader *reader = OpenStreamBufferReader(buf, queryid);
+	StreamBufferSlot *sbs;
+	int count = 0;
+	int size = 0;
+
+	printf("====\n");
+	while ((sbs = NextStreamEvent(reader)) != NULL)
+	{
+		oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+		decoder = GetStreamEventDecoder(sbs->encoding);
+		MemoryContextSwitchTo(oldcontext);
+
+		count++;
+		printf("size = %dB, stream = \"%s\", encoding = \"%s\" addr = %p\n",
+				(int) StreamBufferSlotSize(sbs), sbs->stream, sbs->encoding, &(sbs->link));
+
+		size += StreamBufferSlotSize(sbs);
+		slot = MakeSingleTupleTableSlot(decoder->schema);
+		ExecStoreTuple(sbs->event, slot, InvalidBuffer, false);
+
+		if (verbose)
+			print_slot(slot);
+
+		if (intervalms > 0)
+			pg_usleep(intervalms * 1000);
+	}
+	printf("\n%d events (%dB).\n", count, size);
+	printf("^^^^\n");
+}
+
+extern void
 PrintStreamBuffer(StreamBuffer *buf, bool verbose)
 {
 	int count = 0;

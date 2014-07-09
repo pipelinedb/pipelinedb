@@ -82,6 +82,7 @@ extern void InitGlobalStreamBuffer(void);
 extern StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
 extern StreamBufferSlot *NextStreamEvent(StreamBufferReader *reader);
 extern StreamBufferSlot *NextStreamEvent(StreamBufferReader *reader);
+extern void ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, bool verbose, int intervalms);
 extern void PrintStreamBuffer(StreamBuffer *buf, bool verbose);
 
 #endif
