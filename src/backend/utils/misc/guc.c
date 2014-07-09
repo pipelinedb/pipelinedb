@@ -1593,6 +1593,16 @@ static struct config_bool ConfigureNamesBool[] =
 		NULL, NULL, NULL
 	},
 
+	{
+		{"debug_print_stream_buffer", PGC_USERSET, LOGGING_WHAT,
+			gettext_noop("Print the state of the stream buffer as it changes."),
+			NULL,
+		},
+		&DebugPrintStreamBuffer,
+		false,
+		NULL, NULL, NULL
+	},
+
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, false, NULL, NULL, NULL

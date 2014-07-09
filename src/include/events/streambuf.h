@@ -16,6 +16,8 @@
 #include "nodes/bitmapset.h"
 #include "storage/shmem.h"
 
+extern bool DebugPrintStreamBuffer;
+
 extern int StreamBufferBlocks;
 
 /* Wraps a physical event and the queries that still need to read it */

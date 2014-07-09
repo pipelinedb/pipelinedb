@@ -17,6 +17,9 @@
 #include "utils/memutils.h"
 #include "miscadmin.h"
 
+/* Whether or not to print the state of the stream buffer as it changes */
+bool DebugPrintStreamBuffer;
+
 /* Global stream buffer that lives in shared memory. All stream events are appended to this */
 StreamBuffer *GlobalStreamBuffer;
 
