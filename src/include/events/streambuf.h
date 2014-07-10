@@ -16,14 +16,14 @@
 #include "nodes/bitmapset.h"
 #include "storage/shmem.h"
 
+#define BufferEnd(buf) ((buf)->start + (buf)->capacity)
+
 #define BufferOffset(buf, ptr) ((int) ((char *) (ptr) - (buf)->start))
 
 #define StreamBufferSlotSize(slot) ((int) (HEAPTUPLESIZE + \
 		(slot)->event->t_len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1 + \
 		strlen(slot->encoding) + 1 + sizeof(Bitmapset) + \
 		(slot)->readby->nwords * sizeof(bitmapword)))
-
-#define SlotAfter(slot) ((slot) + StreamBufferSlotSize(slot))
 
 extern bool DebugPrintStreamBuffer;
 

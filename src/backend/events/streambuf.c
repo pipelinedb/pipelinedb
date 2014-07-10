@@ -35,7 +35,8 @@ StreamTargets *targets;
  */
 static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
 {
-
+	if (DebugPrintStreamBuffer)
+		elog(LOG, "evicted [%d, %d)", BufferOffset(buf, slot), BufferOffset(buf, slot) + StreamBufferSlotSize(slot));
 }
 
 /*
@@ -47,11 +48,9 @@ static StreamBufferSlot *
 alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTuple event)
 {
 	char *pos = *buf->pos;
-	char *cur;
 	long free = 0;
 	HeapTuple shared;
 	StreamBufferSlot *result;
-	StreamBufferSlot *victim;
 	Size size;
 	MemoryContext oldcontext;
 	Bitmapset *bms;
@@ -66,14 +65,21 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 		return NULL;
 	}
 	size = HEAPTUPLESIZE + event->t_len + sizeof(StreamBufferSlot) +
-			strlen(stream) + 1 + sizeof(Bitmapset) + bms->nwords * sizeof(bitmapword);
+			strlen(stream) + 1 + strlen(encoding) + 1 + sizeof(Bitmapset) + bms->nwords * sizeof(bitmapword);
 
-	if (pos + size > buf->start + buf->capacity)
+	if (size > buf->capacity)
+		elog(LOG, "event of size %d too big for stream buffer of size %d", (int) size, (int) buf->capacity);
+
+	if (pos + size > BufferEnd(buf))
 	{
 		StreamBufferSlot *sbs;
 
 		if (DebugPrintStreamBuffer)
+		{
 			elog(LOG, "wrapping around to 0 from offset %d", (int) (pos - buf->start));
+			if (pos < buf->start + buf->capacity)
+				elog(LOG, "garbage detected at [%d, %d)", BufferOffset(buf, pos), (int) buf->capacity);
+		}
 
 		/*
 		 * We always start scanning at the beginning of the segment, as we need to look
@@ -81,8 +87,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 		 */
 		pos = buf->start;
 
-		cur = pos;
-		sbs = (StreamBufferSlot *) cur;
+		sbs = (StreamBufferSlot *) pos;
 		free = StreamBufferSlotSize(sbs);
 		wait_for_overwrite(buf, sbs);
 
@@ -91,23 +96,19 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 		 * Note that the incoming event may need to clobber more than one
 		 * to fit, so we have to look at entire events before overwriting them
 		 */
-		while (free < size && cur < buf->start + buf->capacity)
+		while (free < size)
 		{
-			sbs = (StreamBufferSlot *) cur;
-			free += StreamBufferSlotSize(sbs);
-			cur += free;
+			sbs = (StreamBufferSlot *) SHMQueueNext(&(buf->buf), &(sbs->link), offsetof(StreamBufferSlot, link));
 			wait_for_overwrite(buf, sbs);
+			free += StreamBufferSlotSize(sbs);
 		}
 
 		/* see declaration of nextvictim in streambuf.h for comments */
-		buf->nextvictim = SlotAfter(sbs);
+		buf->nextvictim = (StreamBufferSlot *)
+				SHMQueueNext(&(buf->buf), &(sbs->link), offsetof(StreamBufferSlot, link));
 	}
 
-	victim = (StreamBufferSlot *) pos;
-	wait_for_overwrite(buf, victim);
-
-	while (buf->nextvictim != NULL &&
-			pos < buf->start + buf->capacity &&
+	while (buf->nextvictim != NULL && (char *) buf->nextvictim != buf->start &&
 			pos + size > (char *) buf->nextvictim)
 	{
 		/*
@@ -116,7 +117,8 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 		 * need to check the event to make sure we can clobber it
 		 */
 		wait_for_overwrite(buf, buf->nextvictim);
-		buf->nextvictim = SlotAfter(buf->nextvictim);
+		buf->nextvictim = (StreamBufferSlot *)
+				SHMQueueNext(&(buf->buf), &(buf->nextvictim->link), offsetof(StreamBufferSlot, link));
 	}
 
 	MemSet(pos, 0, sizeof(StreamBufferSlot));
@@ -179,15 +181,12 @@ AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, H
 
 	if (DebugPrintStreamBuffer)
 	{
-		int diff = Max(0, (int) (*buf->pos - prev));
-
 		/* did we wrap around? */
 		if (*buf->pos < prev)
 			prev = buf->start;
 
-		elog(LOG, "appended %dB at [%d, %d) (+%dB)",
-				StreamBufferSlotSize(sbs), BufferOffset(buf, prev),
-				BufferOffset(buf, *buf->pos), diff);
+		elog(LOG, "appended %dB at [%d, %d)",
+				StreamBufferSlotSize(sbs), BufferOffset(buf, prev), BufferOffset(buf, *buf->pos));
 	}
 
 	return sbs;
@@ -209,6 +208,7 @@ extern void InitGlobalStreamBuffer(void)
 
 	GlobalStreamBuffer->capacity = size;
 	GlobalStreamBuffer->start = (char *) (GlobalStreamBuffer + sizeof(StreamBuffer));
+	GlobalStreamBuffer->nextvictim = NULL;
 
 	/*
 	 * This is kind of ugly to not just put this thing in shmem,
