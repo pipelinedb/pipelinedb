@@ -26,10 +26,12 @@ int main(int argc, char* argv[])
 	char *port;
 	char connectstr[64];
   int status = 0;
+  int maxevents;
+  int queryid;
 	PGconn *conn;
 	PGresult *res;
 
-	if (argc < 4)
+	if (argc < 7)
 	{
 		usage();
 		exit(1);
@@ -55,9 +57,10 @@ int main(int argc, char* argv[])
 			PQfinish(conn);
 			exit(1);
 	}
+	queryid = atoi(argv[5]);
+	maxevents = atoi(argv[6]);
 
-	// send read message
-	PQreadStreamBuffer(0, 1, conn);
+	PQreadStreamBuffer(queryid, maxevents, conn);
 
 	PQfinish(conn);
 

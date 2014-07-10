@@ -4820,7 +4820,7 @@ PostgresMain(int argc, char *argv[],
 
 					while ((sbs = NextStreamEvent(reader)) != NULL)
 					{
-						if (maxevents > 0 && ++count > maxevents)
+						if (maxevents > 0 && ++count >= maxevents)
 							break;
 					}
 

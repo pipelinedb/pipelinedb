@@ -72,7 +72,7 @@ typedef struct StreamBuffer
 	 */
 	StreamBufferSlot *nextvictim;
 	/* mapping from streams to the continuous views that read from them */
-	StreamTargets *targets;
+//	StreamTargets *targets;
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */

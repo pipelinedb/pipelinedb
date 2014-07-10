@@ -26,6 +26,8 @@ StreamBuffer *GlobalStreamBuffer;
 /* Maximum size in blocks of the global stream buffer */
 int StreamBufferBlocks;
 
+StreamTargets *targets;
+
 /*
  * wait_for_overwrite
  *
@@ -52,10 +54,10 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 	StreamBufferSlot *victim;
 	Size size;
 	MemoryContext oldcontext;
-	Bitmapset *targets;
+	Bitmapset *bms;
 
 	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-	targets = GetTargetsFor(stream, buf->targets);
+	bms = GetTargetsFor(stream, targets);
 	MemoryContextSwitchTo(oldcontext);
 
 	if (targets == NULL)
@@ -64,7 +66,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 		return NULL;
 	}
 	size = HEAPTUPLESIZE + event->t_len + sizeof(StreamBufferSlot) +
-			strlen(stream) + 1 + sizeof(Bitmapset) + targets->nwords * sizeof(bitmapword);
+			strlen(stream) + 1 + sizeof(Bitmapset) + bms->nwords * sizeof(bitmapword);
 
 	if (pos + size > buf->start + buf->capacity)
 	{
@@ -148,9 +150,9 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 	 * shared memory.
 	 */
 	result->readby = (Bitmapset *) pos;
-	result->readby->nwords = targets->nwords;
-	memcpy(result->readby->words, targets->words, sizeof(bitmapword) * targets->nwords);
-	pos += sizeof(Bitmapset) + sizeof(bitmapword) * targets->nwords;
+	result->readby->nwords = bms->nwords;
+	memcpy(result->readby->words, bms->words, sizeof(bitmapword) * bms->nwords);
+	pos += sizeof(Bitmapset) + sizeof(bitmapword) * bms->nwords;
 
 	*buf->pos = pos;
 
@@ -213,15 +215,15 @@ extern void InitGlobalStreamBuffer(void)
 	 * but the Bitmapset is a constant and a local-memory implementation
 	 * so we just leave it in cache memory.
 	 */
+	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+	targets = CreateStreamTargets();
+	MemoryContextSwitchTo(oldcontext);
+
 	if (!found)
 	{
 		SHMQueueInit(&(GlobalStreamBuffer->buf));
 		GlobalStreamBuffer->pos = ShmemAlloc(sizeof(char *));
 		*GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
-
-		oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-		GlobalStreamBuffer->targets = CreateStreamTargets();
-		MemoryContextSwitchTo(oldcontext);
 	}
 }
 
