@@ -26,9 +26,12 @@ StreamBuffer *GlobalStreamBuffer;
 /* Maximum size in blocks of the global stream buffer */
 int StreamBufferBlocks;
 
-#define StreamBufferSlotSize(slot) (HEAPTUPLESIZE + \
+#define BufferOffset(buf, ptr) ((int) ((char *) (ptr) - (buf)->start))
+
+#define StreamBufferSlotSize(slot) ((int) (HEAPTUPLESIZE + \
 		(slot)->event->t_len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1 + \
-		strlen(slot->encoding) + 1 + (slot)->readby->nwords * sizeof(bitmapword))
+		strlen(slot->encoding) + 1 + sizeof(Bitmapset) + \
+		(slot)->readby->nwords * sizeof(bitmapword)))
 
 #define SlotAfter(slot) ((slot) + StreamBufferSlotSize(slot))
 
@@ -75,6 +78,9 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 	if (pos + size > buf->start + buf->capacity)
 	{
 		StreamBufferSlot *sbs;
+
+		if (DebugPrintStreamBuffer)
+			elog(LOG, "wrapping around to 0 from offset %d", (int) (pos - buf->start));
 
 		/*
 		 * We always start scanning at the beginning of the segment, as we need to look
@@ -169,6 +175,7 @@ extern StreamBufferSlot *
 AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, HeapTuple event)
 {
 	StreamBufferSlot *sbs;
+	char *prev = *buf->pos;
 
 	LWLockAcquire(StreamBufferLock, LW_EXCLUSIVE);
 	sbs = alloc_slot(stream, encoding, buf, event);
@@ -176,6 +183,19 @@ AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, H
 	SHMQueueElemInit(&(sbs->link));
 	SHMQueueInsertBefore(&(buf->buf), &(sbs->link));
 	LWLockRelease(StreamBufferLock);
+
+	if (DebugPrintStreamBuffer)
+	{
+		int diff = Max(0, (int) (*buf->pos - prev));
+
+		/* did we wrap around? */
+		if (*buf->pos < prev)
+			prev = buf->start;
+
+		elog(LOG, "appended %dB at [%d, %d) (+%dB)",
+				StreamBufferSlotSize(sbs), BufferOffset(buf, prev),
+				BufferOffset(buf, *buf->pos), diff);
+	}
 
 	return sbs;
 }
@@ -224,6 +244,7 @@ OpenStreamBufferReader(StreamBuffer *buf, int queryid)
 {
 	StreamBufferSlot *sbs;
 	StreamBufferReader *reader = (StreamBufferReader *) palloc(sizeof(StreamBufferReader));
+	int count = 0;
 	reader->queryid = queryid;
 	reader->buf = buf;
 	reader->pos = buf->start;
@@ -237,7 +258,12 @@ OpenStreamBufferReader(StreamBuffer *buf, int queryid)
 			break;
 		sbs = (StreamBufferSlot *)
 				SHMQueueNext(&(reader->buf->buf), &(sbs->link), offsetof(StreamBufferSlot, link));
+		count++;
 	}
+
+	if (DebugPrintStreamBuffer)
+		elog(LOG, "advanced reader %d past %d events", queryid, count);
+
 	reader->next = sbs;
 
 	return reader;
