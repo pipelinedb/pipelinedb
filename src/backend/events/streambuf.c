@@ -299,7 +299,8 @@ NextStreamEvent(StreamBufferReader *reader)
 	LWLockRelease(StreamBufferLock);
 
 	if (result && DebugPrintStreamBuffer)
-		elog(LOG, "read event at [%d, %d)", BufferOffset(reader->buf, result), StreamBufferSlotSize(result));
+		elog(LOG, "read event at [%d, %d)", BufferOffset(reader->buf, result), \
+				BufferOffset(reader->buf, result) + StreamBufferSlotSize(result));
 
 	return result;
 }
