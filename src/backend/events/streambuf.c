@@ -26,15 +26,6 @@ StreamBuffer *GlobalStreamBuffer;
 /* Maximum size in blocks of the global stream buffer */
 int StreamBufferBlocks;
 
-#define BufferOffset(buf, ptr) ((int) ((char *) (ptr) - (buf)->start))
-
-#define StreamBufferSlotSize(slot) ((int) (HEAPTUPLESIZE + \
-		(slot)->event->t_len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1 + \
-		strlen(slot->encoding) + 1 + sizeof(Bitmapset) + \
-		(slot)->readby->nwords * sizeof(bitmapword)))
-
-#define SlotAfter(slot) ((slot) + StreamBufferSlotSize(slot))
-
 /*
  * wait_for_overwrite
  *
@@ -222,15 +213,15 @@ extern void InitGlobalStreamBuffer(void)
 	 * but the Bitmapset is a constant and a local-memory implementation
 	 * so we just leave it in cache memory.
 	 */
-	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-	GlobalStreamBuffer->targets = CreateStreamTargets();
-	MemoryContextSwitchTo(oldcontext);
-
 	if (!found)
 	{
 		SHMQueueInit(&(GlobalStreamBuffer->buf));
 		GlobalStreamBuffer->pos = ShmemAlloc(sizeof(char *));
 		*GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
+
+		oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+		GlobalStreamBuffer->targets = CreateStreamTargets();
+		MemoryContextSwitchTo(oldcontext);
 	}
 }
 
@@ -306,6 +297,9 @@ NextStreamEvent(StreamBufferReader *reader)
 			SHMQueueNext(&(reader->buf->buf), &(current->link), offsetof(StreamBufferSlot, link));
 
 	LWLockRelease(StreamBufferLock);
+
+	if (result && DebugPrintStreamBuffer)
+		elog(LOG, "read event at [%d, %d)", BufferOffset(reader->buf, result), StreamBufferSlotSize(result));
 
 	return result;
 }
