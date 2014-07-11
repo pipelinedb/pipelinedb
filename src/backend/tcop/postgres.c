@@ -4791,7 +4791,11 @@ PostgresMain(int argc, char *argv[],
 				}
 				break;
 			case '+':			/* merge partial continuous query result */
+					if (!isMergeNode)
+						elog(LOG, "merge proc has pid %d", MyProcPid);
+
 					isMergeNode = true;
+
 					exec_merge(&input_message);
 
 					/*
