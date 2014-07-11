@@ -16,6 +16,15 @@
 #include "nodes/bitmapset.h"
 #include "storage/shmem.h"
 
+#define BufferEnd(buf) ((buf)->start + (buf)->capacity)
+
+#define BufferOffset(buf, ptr) ((int) ((char *) (ptr) - (buf)->start))
+
+#define StreamBufferSlotSize(slot) ((int) (HEAPTUPLESIZE + \
+		(slot)->event->t_len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1 + \
+		strlen(slot->encoding) + 1 + sizeof(Bitmapset) + \
+		(slot)->readby->nwords * sizeof(bitmapword)))
+
 extern bool DebugPrintStreamBuffer;
 
 extern int StreamBufferBlocks;
@@ -63,7 +72,7 @@ typedef struct StreamBuffer
 	 */
 	StreamBufferSlot *nextvictim;
 	/* mapping from streams to the continuous views that read from them */
-	StreamTargets *targets;
+//	StreamTargets *targets;
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */

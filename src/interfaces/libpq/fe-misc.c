@@ -106,6 +106,33 @@ PQsendEvents(const char *encoding, const char *stream, const char *data,
 }
 
 /*
+ * PQreadStreamBuffer: read an event from the stream buffer
+ *
+ * Returns 0 on success, EOF on error
+ */
+int
+PQreadStreamBuffer(int queryid, int maxevents, PGconn *conn)
+{
+	PGresult	*result;
+	if (pqPutMsgStart('-', false, conn) != 0 ||
+			pqPutInt(queryid, 4, conn) != 0 ||
+			pqPutInt(maxevents, 4, conn) != 0 ||
+			pqPutMsgEnd(conn) != 0 ||
+			pqFlush(conn) != 0)
+	{
+		return 1;
+	}
+
+	while ((result = PQgetResult(conn)) != NULL)
+	{
+		if (conn->status == CONNECTION_BAD)
+			break;
+	}
+
+	return 0;
+}
+
+/*
  * fputnbytes: print exactly N bytes to a file
  *
  * We avoid using %.*s here because it can misbehave if the data

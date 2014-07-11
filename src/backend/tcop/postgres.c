@@ -525,6 +525,7 @@ SocketBackend(StringInfo inBuf)
 			break;
 #endif
 		case '+':				/* Merge */
+		case '-': 			/* Read stream buffer */
 			break;
 		default:
 
@@ -4800,6 +4801,32 @@ PostgresMain(int argc, char *argv[],
 					 */
 					isMergeNode = false;
 					break;
+			case '-':
+				{
+					int queryid = pq_getmsgint(&input_message, 4);
+					int maxevents = pq_getmsgint(&input_message, 4);
+					int count = 0;
+					StreamBufferReader *reader;
+					StreamBufferSlot *sbs;
+
+					start_xact_command();
+
+					if (!GlobalStreamBuffer)
+						InitGlobalStreamBuffer();
+
+					pq_getmsgend(&input_message);
+
+					reader = OpenStreamBufferReader(GlobalStreamBuffer, queryid);
+
+					while ((sbs = NextStreamEvent(reader)) != NULL)
+					{
+						if (maxevents > 0 && ++count >= maxevents)
+							break;
+					}
+
+					finish_xact_command();
+				}
+				break;
 
 			case 'P':			/* parse */
 				{
