@@ -707,6 +707,13 @@ standard_ProcessUtility(Node *parsetree,
 			}
 			break;
 
+		case T_DumpStmt:
+			{
+				DumpStmt *dump = (DumpStmt *) parsetree;
+				elog(LOG, "DUMP \"%s\"", dump->name->relname);
+			}
+			break;
+
 		case T_DropTableSpaceStmt:
 #ifdef PGXC
 			/* Allow this to be run inside transaction block on remote nodes */
@@ -3830,6 +3837,9 @@ CreateCommandTag(Node *parsetree)
 			break;
 		case T_DeactivateContinuousViewStmt:
 			tag = "DEACTIVATE CONTINUOUS VIEW";
+			break;
+		case T_DumpStmt:
+			tag = "DUMP";
 			break;
 		case T_ExecDirectStmt:
 			tag = "EXECUTE DIRECT";

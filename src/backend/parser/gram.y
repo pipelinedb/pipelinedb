@@ -242,7 +242,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 		DropGroupStmt DropOpClassStmt DropOpFamilyStmt DropPLangStmt DropStmt
 		DropAssertStmt DropTrigStmt DropRuleStmt DropCastStmt DropRoleStmt
 		DropUserStmt DropdbStmt DropTableSpaceStmt DropFdwStmt
-		DropForeignServerStmt DropUserMappingStmt ExplainStmt ExecDirectStmt FetchStmt
+		DropForeignServerStmt DropUserMappingStmt DumpStmt ExplainStmt ExecDirectStmt FetchStmt
 		GrantStmt GrantRoleStmt IndexStmt InsertStmt ListenStmt LoadStmt
 		LockStmt NotifyStmt ExplainableStmt PreparableStmt
 		CreateFunctionStmt AlterFunctionStmt ReindexStmt RemoveAggrStmt
@@ -557,7 +557,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 /* PGXC_BEGIN */
 	DICTIONARY DIRECT DISABLE_P DISCARD DISTINCT DISTRIBUTE DO DOCUMENT_P DOMAIN_P DOUBLE_P
 /* PGXC_END */
-	DROP
+	DROP DUMP
 
 	EACH ELSE ENABLE_P ENCODING ENCRYPTED END_P ENUM_P ESCAPE EVENT EXCEPT
 	EXCLUDE EXCLUDING EXCLUSIVE EXECUTE EXISTS EXPLAIN
@@ -824,6 +824,7 @@ stmt :
 			| DropUserStmt
 			| DropUserMappingStmt
 			| DropdbStmt
+			| DumpStmt
 			| ExecuteStmt
 			| ExecDirectStmt
 			| ExplainStmt
@@ -2672,7 +2673,7 @@ copy_generic_opt_arg_list_item:
 	
 /*****************************************************************************
  *
- * CREATE EVENT ENCODING encoding_name
+ * CREATE ENCODING encoding_name
  *
  * PipelineDB
  *
@@ -2727,6 +2728,21 @@ decode_args:
 		'(' param_list ')'		{ $$ = $2; }
 		;
 
+/*****************************************************************************
+ *
+ * DUMP node_name
+ *
+ * PipelineDB
+ *
+ * Dumps the state of the given object
+ *
+ *****************************************************************************/
+DumpStmt: DUMP qualified_name
+		{
+			DumpStmt *d = makeNode(DumpStmt);
+			d->name = $2;
+			$$ = (Node *)d;
+		}
 
 /*****************************************************************************
  *
@@ -13255,6 +13271,7 @@ unreserved_keyword:
 			| DOMAIN_P
 			| DOUBLE_P
 			| DROP
+			| DUMP
 			| EACH
 			| ENABLE_P
 			| ENCODING

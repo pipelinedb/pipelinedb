@@ -2843,4 +2843,9 @@ typedef struct CreateEncodingStmt
 	List			*args;
 } CreateEncodingStmt;
 
+typedef struct DumpStmt
+{
+	NodeTag type;
+	RangeVar *name;
+} DumpStmt;
 #endif   /* PARSENODES_H */
