@@ -708,10 +708,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_DumpStmt:
-			{
-				DumpStmt *dump = (DumpStmt *) parsetree;
-				elog(LOG, "DUMP \"%s\"", dump->name->relname);
-			}
+			DumpState((DumpStmt *) parsetree);
 			break;
 
 		case T_DropTableSpaceStmt:

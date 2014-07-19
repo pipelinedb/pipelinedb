@@ -137,6 +137,18 @@ CreateContinuousView(CreateContinuousViewStmt *stmt)
 }
 
 /*
+ * DumpState
+ *
+ * Dumps the state of a given object by sending tuples which describe
+ * the state back to the client
+ */
+void
+DumpState(DumpStmt *stmt)
+{
+	elog(LOG, "DUMP \"%s\"", stmt->name->relname);
+}
+
+/*
  * DropContinuousView
  *
  * Drops the continuous view's underlying table and query row in
