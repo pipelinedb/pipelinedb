@@ -1266,7 +1266,6 @@ standard_ProcessUtility(Node *parsetree,
 		case T_DropStmt:
 			{
 				DropStmt   *stmt = (DropStmt *) parsetree;
-
 				if (EventTriggerSupportsObjectType(stmt->removeType))
 					ProcessUtilitySlow(parsetree, queryString,
 									   context, params,

@@ -5448,6 +5448,7 @@ drop_type:	TABLE									{ $$ = OBJECT_TABLE; }
 			| SEQUENCE								{ $$ = OBJECT_SEQUENCE; }
 			| VIEW									{ $$ = OBJECT_VIEW; }
 			| MATERIALIZED VIEW						{ $$ = OBJECT_MATVIEW; }
+			| CONTINUOUS VIEW				{ $$ = OBJECT_CONTINUOUS_VIEW; }
 			| INDEX									{ $$ = OBJECT_INDEX; }
 			| FOREIGN TABLE							{ $$ = OBJECT_FOREIGN_TABLE; }
 			| EVENT TRIGGER 						{ $$ = OBJECT_EVENT_TRIGGER; }
