@@ -2491,6 +2491,9 @@ pgxcNodeCopyFinish(PGXCNodeHandle** copy_connections, int primary_dn_index,
 
 	Assert(node_type == PGXC_NODE_DATANODE || node_type == PGXC_NODE_COORDINATOR);
 
+	if (copy_connections == NULL)
+		return;
+
 	for (i = 0; i < default_conn_count; i++)
 	{
 		PGXCNodeHandle *handle = copy_connections[i];
