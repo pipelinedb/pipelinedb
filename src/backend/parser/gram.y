@@ -2743,6 +2743,12 @@ DumpStmt: DUMP qualified_name
 			d->name = $2;
 			$$ = (Node *)d;
 		}
+	|	DUMP
+		{
+			DumpStmt *d = makeNode(DumpStmt);
+			d->name = NULL;
+			$$ = (Node *)d;
+		}
 
 /*****************************************************************************
  *

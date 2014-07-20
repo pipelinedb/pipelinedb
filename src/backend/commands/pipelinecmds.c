@@ -145,7 +145,11 @@ CreateContinuousView(CreateContinuousViewStmt *stmt)
 void
 DumpState(DumpStmt *stmt)
 {
-	elog(LOG, "DUMP \"%s\"", stmt->name->relname);
+	char *name = NULL;
+	if (stmt->name)
+		name = stmt->name->relname;
+
+	elog(LOG, "DUMP \"%s\"", name);
 }
 
 /*
