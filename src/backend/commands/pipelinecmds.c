@@ -10,6 +10,7 @@
  */
 
 #include "postgres.h"
+#include "access/heapam.h"
 #include "access/reloptions.h"
 #include "access/xact.h"
 #include "commands/pipelinecmds.h"
@@ -22,6 +23,7 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
 #include "regex/regex.h"
+#include "utils/syscache.h"
 
 #define QUERY_BEGINS_HERE " AS "
 
@@ -155,13 +157,53 @@ DumpState(DumpStmt *stmt)
 /*
  * DropContinuousView
  *
- * Drops the continuous view's underlying table and query row in
- * the pipeline_queries catalog table.
+ * Drops the query row in the pipeline_queries catalog table.
  */
 void
 DropContinuousView(DropStmt *stmt)
 {
+  Relation pipeline_queries;
+  ListCell *item;
 
+  /*
+   * Scan the pipeline_queries relation to find the OID of the views(s) to be
+   * deleted.
+   */
+  // TODO(usmanm): Do we really need an AccessExclusiveLock here? Will a 
+  // RowExclusiveLock do here?
+  pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
+
+  foreach(item, stmt->objects)
+  {
+    RangeVar *view_name = makeRangeVarFromNameList((List *) lfirst(item));
+    HeapTuple	tuple;
+
+    tuple = SearchSysCache1(PIPELINEQUERIESNAME,
+                            CStringGetDatum(view_name->relname));
+
+    if (!HeapTupleIsValid(tuple)) {
+      elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.", view_name);
+      continue;
+    }
+
+    /*
+     * Remove the view from the pipeline_queries table
+     */
+    simple_heap_delete(pipeline_queries, &tuple->t_self);
+
+    ReleaseSysCache(tuple);
+
+    /*
+     * Advance command counter so that later iterations of this loop will
+     * see the changes already made.
+     */
+    CommandCounterIncrement();
+  }
+
+  /*
+   * Now we can clean up; but keep locks until commit.
+   */
+  heap_close(pipeline_queries, NoLock);
 }
 
 /*
