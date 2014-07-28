@@ -88,6 +88,7 @@ typedef struct StreamBufferReader
 extern StreamBuffer *GlobalStreamBuffer;
 
 extern StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, HeapTuple event);
+extern Size StreamBufferShmemSize(void);
 extern void InitGlobalStreamBuffer(void);
 
 extern StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);

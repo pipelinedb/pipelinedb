@@ -193,6 +193,17 @@ AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, H
 }
 
 /*
+ * StreamBufferSize
+ *
+ * Retrieves the size in bytes of the stream buffer
+ */
+extern Size
+StreamBufferShmemSize(void)
+{
+	return (StreamBufferBlocks * BLCKSZ) + sizeof(StreamBuffer);
+}
+
+/*
  * InitGlobalStreamBuffer
  *
  * Initialize global shared-memory buffer that all decoded events are appended to
@@ -201,11 +212,9 @@ extern void InitGlobalStreamBuffer(void)
 {
 	bool found;
 	MemoryContext oldcontext;
-	long size = StreamBufferBlocks * BLCKSZ;
+	long size = StreamBufferShmemSize();
 
-	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer",
-			size + sizeof(StreamBuffer), &found);
-
+	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer", size , &found);
 	GlobalStreamBuffer->capacity = size;
 	GlobalStreamBuffer->start = (char *) (GlobalStreamBuffer + sizeof(StreamBuffer));
 	GlobalStreamBuffer->nextvictim = NULL;
