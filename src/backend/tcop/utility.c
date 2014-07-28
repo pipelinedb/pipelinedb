@@ -2433,6 +2433,10 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 			}
 #endif
 			break;
+    case OBJECT_CONTINUOUS_VIEW:
+        DropContinuousView(stmt);
+        // XXX: Don't break here, we must perform all the `default` steps
+        // after this. That's what does the actual dropping of the view table.
 		default:
 #ifdef PGXC
 			{
