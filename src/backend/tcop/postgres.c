@@ -993,24 +993,6 @@ get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
 	return GetCachedPlan(psrc, 0, false);
 }
 
-static Tuplestorestate *
-get_merge_output_store(bool clear)
-{
-	if (!merge_output_store)
-	{
-		MemoryContext oldContext = MemoryContextSwitchTo(CacheMemoryContext);
-
-		merge_output_store = tuplestore_begin_heap(true, true, 1000);
-
-		MemoryContextSwitchTo(oldContext);
-	}
-
-	if (clear)
-		tuplestore_clear(merge_output_store);
-
-	return merge_output_store;
-}
-
 /*
  * get_merge_columns
  *
@@ -1039,7 +1021,6 @@ get_merge_columns(Query *query)
  * Gets the plan for retrieving all of the existing tuples that
  * this merge request will merge with
  */
-int i = 0;
 static void
 exec_merge_retrieval(char *cvname, TupleDesc desc,
 		Tuplestorestate *incoming_merges, AttrNumber merge_attr,
@@ -1236,7 +1217,7 @@ exec_merge(StringInfo message)
 	Portal portal;
 	MemoryContext oldcontext;
 	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
-	Tuplestorestate *merge_output = get_merge_output_store(true);
+	Tuplestorestate *merge_output = NULL;
 	AttrNumber merge_attr = 1;
 	List *merge_attrs;
 	List *group_clause;
@@ -1304,7 +1285,7 @@ exec_merge(StringInfo message)
 					  cplan->stmt_list,
 					  cplan);
 
-	merge_output = get_merge_output_store(true);
+	merge_output = tuplestore_begin_heap(true, true, work_mem);
 	SetTuplestoreDestReceiverParams(dest, merge_output, PortalGetHeapMemory(portal), true);
 
 	PortalStart(portal, NULL, 0, GetActiveSnapshot());
