@@ -233,6 +233,9 @@ static EventStream stream;
 /* memory context for event processing */
 static MemoryContext EventContext;
 
+/* memory context for temporary memory required by merge requests */
+static MemoryContext MergeTempContext;
+
 /* ----------------------------------------------------------------
  *		decls for routines only used in this file
  * ----------------------------------------------------------------
@@ -1036,6 +1039,7 @@ get_merge_columns(Query *query)
  * Gets the plan for retrieving all of the existing tuples that
  * this merge request will merge with
  */
+int i = 0;
 static void
 exec_merge_retrieval(char *cvname, TupleDesc desc,
 		Tuplestorestate *incoming_merges, AttrNumber merge_attr,
@@ -1149,7 +1153,7 @@ exec_merge_retrieval(char *cvname, TupleDesc desc,
 					  list_make1(plan),
 					  NULL);
 
-	SetTupleTableDestReceiverParams(dest, merge_targets, PortalGetHeapMemory(portal), true);
+	SetTupleTableDestReceiverParams(dest, merge_targets, CacheMemoryContext, true);
 
 	PortalStart(portal, NULL, 0, GetActiveSnapshot());
 
@@ -1285,7 +1289,7 @@ exec_merge(StringInfo message)
 		num_buckets = 1000;
 
 		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
-				sizeof(HeapTupleEntryData), CacheMemoryContext, MessageContext);
+				sizeof(HeapTupleEntryData), CacheMemoryContext, MergeTempContext);
 
 		exec_merge_retrieval(cvname, desc, store, merge_attr, group_clause, merge_targets);
 	}
@@ -4506,6 +4510,12 @@ PostgresMain(int argc, char *argv[],
 	 */
 	EventContext = AllocSetContextCreate(TopMemoryContext,
 											"EventContext",
+											ALLOCSET_DEFAULT_MINSIZE,
+											ALLOCSET_DEFAULT_INITSIZE,
+											ALLOCSET_DEFAULT_MAXSIZE);
+
+	MergeTempContext = AllocSetContextCreate(TopMemoryContext,
+											"MergeTempContext",
 											ALLOCSET_DEFAULT_MINSIZE,
 											ALLOCSET_DEFAULT_INITSIZE,
 											ALLOCSET_DEFAULT_MAXSIZE);
