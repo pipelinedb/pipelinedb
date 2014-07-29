@@ -3094,7 +3094,7 @@ do_query(RemoteQueryState *node)
 				 * randomAccess is false, neither we want this tuple store
 				 * persist across transactions.
 				 */
-				node->tuplestorestate = tuplestore_begin_heap(false, false, work_mem);
+				node->tuplestorestate = tuplestore_begin_heap(false, IsContinuous(node), work_mem);
 				tuplestore_set_eflags(node->tuplestorestate, node->eflags);
 			}
 			else if (res == RESPONSE_DATAROW)
@@ -3203,7 +3203,7 @@ do_query(RemoteQueryState *node)
 				 * randomAccess is false, neither we want this tuple store
 				 * persist across transactions.
 				 */
-				node->tuplestorestate = tuplestore_begin_heap(false, false, work_mem);
+				node->tuplestorestate = tuplestore_begin_heap(false, IsContinuous(node), work_mem);
 				tuplestore_set_eflags(node->tuplestorestate, node->eflags);
 			}
 			else if (res == RESPONSE_DATAROW)
