@@ -221,9 +221,6 @@ static bool RecoveryConflictPending = false;
 static bool RecoveryConflictRetryable = true;
 static ProcSignalReason RecoveryConflictReason;
 
-/* tuplestore that MERGE requests output to */
-static Tuplestorestate *merge_output_store;
-
 /* output type of the merge column */
 static Oid merge_output_type;
 
@@ -936,7 +933,7 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
  * Retrieves a the cached merge plan for a continuous view, creating it if necessary
  */
 static CachedPlan *
-get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
+get_merge_plan(char *cvname, CachedPlanSource **src)
 {
 	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
 	char *query_string;
@@ -979,7 +976,7 @@ get_merge_plan(char *cvname, TupleDesc desc, CachedPlanSource **src)
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
 		/* TODO: size this appropriately */
 		psrc->store = tuplestore_begin_heap(true, true, 1000);
-		psrc->desc = desc;
+		psrc->desc = RelationNameGetTupleDesc(cvname);
 		psrc->query = query;
 
 		CompleteCachedPlan(psrc, query_list, NULL, 0, 0, NULL,  NULL, 0, true);
@@ -1209,7 +1206,6 @@ exec_merge(StringInfo message)
 	char *cvname = (char *) pq_getmsgstring(message);
 	char *datarow;
 	int rowlen;
-	TupleDesc desc;
 	TupleTableSlot *slot;
 	CachedPlan *cplan;
 	CachedPlanSource *psrc;
@@ -1233,9 +1229,8 @@ exec_merge(StringInfo message)
 
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 
-	desc = RelationNameGetTupleDesc(cvname);
-	cplan = get_merge_plan(cvname, desc, &psrc);
-	slot = MakeSingleTupleTableSlot(desc);
+	cplan = get_merge_plan(cvname, &psrc);
+	slot = MakeSingleTupleTableSlot(psrc->desc);
 	store = psrc->store;
 	group_clause = psrc->query->groupClause;
 
@@ -1272,7 +1267,7 @@ exec_merge(StringInfo message)
 		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
 				sizeof(HeapTupleEntryData), CacheMemoryContext, MergeTempContext);
 
-		exec_merge_retrieval(cvname, desc, store, merge_attr, group_clause, merge_targets);
+		exec_merge_retrieval(cvname, psrc->desc, store, merge_attr, group_clause, merge_targets);
 	}
 
 	portal = CreatePortal("__merge__", true, true);
