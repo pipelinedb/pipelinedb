@@ -297,7 +297,6 @@ static void finalize_aggregate(AggState *aggstate,
 				   Datum *resultVal, bool *resultIsNull);
 static Bitmapset *find_unaggregated_cols(AggState *aggstate);
 static bool find_unaggregated_cols_walker(Node *node, Bitmapset **colnos);
-static void build_hash_table(AggState *aggstate);
 static AggHashEntry lookup_hash_entry(AggState *aggstate,
 				  TupleTableSlot *inputslot);
 static TupleTableSlot *agg_retrieve_direct(AggState *aggstate);
@@ -1011,7 +1010,7 @@ find_unaggregated_cols_walker(Node *node, Bitmapset **colnos)
  *
  * The hash table always lives in the aggcontext memory context.
  */
-static void
+void
 build_hash_table(AggState *aggstate)
 {
 	Agg		   *node = (Agg *) aggstate->ss.ps.plan;
@@ -1192,11 +1191,7 @@ ExecAgg(AggState *node)
 	if (((Agg *) node->ss.ps.plan)->aggstrategy == AGG_HASHED)
 	{
 		if (!node->table_filled)
-		{
-			if (!node->incremental_agg)
-				build_hash_table(node);
-			agg_fill_hash_table(node);
-		}
+				agg_fill_hash_table(node);
 		return agg_retrieve_hash_table(node);
 	}
 	else
@@ -1600,16 +1595,6 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 	aggstate->grp_firstTuple = NULL;
 	aggstate->hashtable = NULL;
 	aggstate->skip_trans = node->skip_trans;
-
-	/*
-	 * Since the Coordinator will be collecting aggregations from Datanodes,
-	 * we want to advance aggregates even across CQ batches. We do this by
-	 * reusing the aggregation hashtable on Coordinators. On Datanodes, it's
-	 * cleared before every new batch because we only want to send aggregation
-	 * deltas to the Coordinator, since a single aggregation group may be spread
-	 * across multiple Datanodes.
-	 */
-	aggstate->incremental_agg = IS_PGXC_COORDINATOR && IsContinuous(aggstate);
 
 	/*
 	 * Create expression contexts.	We need two, one for per-input-tuple
@@ -2143,9 +2128,6 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 	/* Update numaggs to match number of unique aggregates found */
 	aggstate->numaggs = aggno + 1;
-
-	if (aggstate->incremental_agg)
-		build_hash_table(aggstate);
 
 	return aggstate;
 }
