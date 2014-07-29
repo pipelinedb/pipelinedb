@@ -1632,7 +1632,7 @@ ExecutePlan(EState *estate,
 			else
 				break; /* no timeout, return as soon as we encounter a null tuple */
 		}
-		print_slot(slot);
+//		print_slot(slot);
 
 		/*
 		 * If we have a junk filter, then project a new tuple with the junk
