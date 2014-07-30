@@ -817,6 +817,11 @@ typedef struct RangeTblEntry
 	List	   *ctecolcollations;		/* OID list of column collation OIDs */
 
 	/*
+	 * Fields valid for a stream RTE (else NULL/zero):
+	 */
+	TupleDesc cvdesc; /* descriptor for a stream, based on SELECT statements target entries */
+
+	/*
 	 * Fields valid in all RTEs:
 	 */
 	Alias	   *alias;			/* user-written alias clause, if any */

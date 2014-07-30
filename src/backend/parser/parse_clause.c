@@ -49,6 +49,7 @@ static Node *transformJoinUsingClause(ParseState *pstate,
 						 List *leftVars, List *rightVars);
 static Node *transformJoinOnClause(ParseState *pstate, JoinExpr *j,
 					  List *namespace);
+static RangeTblEntry *transformStreamEntry(ParseState *pstate, RangeVar *r);
 static RangeTblEntry *transformTableEntry(ParseState *pstate, RangeVar *r);
 static RangeTblEntry *transformCTEReference(ParseState *pstate, RangeVar *r,
 					  CommonTableExpr *cte, Index levelsup);
@@ -414,6 +415,30 @@ transformJoinOnClause(ParseState *pstate, JoinExpr *j, List *namespace)
 }
 
 /*
+ * transformStreamEntry --- transform a RangeVar corresponding to a stream reference
+ */
+static RangeTblEntry *
+transformStreamEntry(ParseState *pstate, RangeVar *relation)
+{
+	RangeTblEntry *rte = makeNode(RangeTblEntry);
+	char	   *refname = relation->alias ? relation->alias->aliasname : relation->relname;
+
+	rte->rtekind = RTE_RELATION;
+	rte->alias = relation->alias;
+	rte->eref = makeAlias(refname, NIL);
+	rte->inFromCl = true;
+	rte->requiredPerms = ACL_SELECT;
+	rte->checkAsUser = InvalidOid;		/* not set-uid by default, either */
+	rte->selectedCols = NULL;
+	rte->modifiedCols = NULL;
+
+	if (pstate != NULL)
+		pstate->p_rtable = lappend(pstate->p_rtable, rte);
+
+	return rte;
+}
+
+/*
  * transformTableEntry --- transform a RangeVar (simple relation reference)
  */
 static RangeTblEntry *
@@ -631,9 +656,17 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 				rte = transformCTEReference(pstate, rv, cte, levelsup);
 		}
 
-		/* if not found as a CTE, must be a table reference */
+		if (pstate->p_is_create_cv && !rte)
+		{
+			/* it's for a CREATE CONTINUOUS VIEW statement, so it might be a stream */
+			rte = transformStreamEntry(pstate, rv);
+		}
+
 		if (!rte)
+		{
+			/* if not found as a CTE or stream, must be a table reference */
 			rte = transformTableEntry(pstate, rv);
+		}
 
 		/* assume new rte is at end */
 		rtindex = list_length(pstate->p_rtable);

@@ -106,6 +106,9 @@ static bool is_rel_child_of_rel(RangeTblEntry *child_rte, RangeTblEntry *parent_
 static void transformLockingClause(ParseState *pstate, Query *qry,
 					   LockingClause *lc, bool pushedDown);
 
+static TupleDesc buildTupleDescFromTargetList(List *targetlist);
+static void transformContinuousView(ParseState *pstate, SelectStmt *stmt);
+
 
 /*
  * parse_analyze
@@ -1002,6 +1005,28 @@ count_rowexpr_columns(ParseState *pstate, Node *expr)
 	return -1;
 }
 
+/*
+ * buildTupleDescFromTargetList -
+ * 		builds a TupleDesc from the given target list. This is useful for continuous views,
+ * 		which SELECT from streams. Since streams don't have to have schemas created in advance,
+ * 		we can derive the output schema given the target list.
+ */
+static TupleDesc
+buildTupleDescFromTargetList(List *targetlist)
+{
+	return NULL;
+}
+
+/*
+ * transformContinuousView -
+ * 		Derives and attaches the output schema of the CV's SELECT statement
+ * 		without using the catalog, which won't have schema information for streams anyways
+ */
+static void
+transformContinuousView(ParseState *pstate, SelectStmt *stmt)
+{
+
+}
 
 /*
  * transformSelectStmt -
@@ -1046,6 +1071,9 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);
+
+	if (stmt->forContinuousView)
+		transformContinuousView(pstate, stmt);
 
 	/* transform targetlist */
 	qry->targetList = transformTargetList(pstate, stmt->targetList,

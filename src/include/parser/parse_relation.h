@@ -97,6 +97,7 @@ extern Name attnumAttName(Relation rd, int attid);
 extern Oid	attnumTypeId(Relation rd, int attid);
 extern Oid	attnumCollationId(Relation rd, int attid);
 extern bool isQueryUsingTempRelation(Query *query);
+extern void buildRelationAliases(TupleDesc tupdesc, Alias *alias, Alias *eref);
 
 #ifdef PGXC
 extern int	specialAttNum(const char *attname);

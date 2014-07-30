@@ -810,7 +810,7 @@ markVarForSelectPriv(ParseState *pstate, Var *var, RangeTblEntry *rte)
  * empty strings for any dropped columns, so that it will be one-to-one with
  * physical column numbers.
  */
-static void
+void
 buildRelationAliases(TupleDesc tupdesc, Alias *alias, Alias *eref)
 {
 	int			maxattrs = tupdesc->natts;
