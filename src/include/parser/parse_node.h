@@ -151,6 +151,7 @@ struct ParseState
 	bool		p_hasModifyingCTE;
 	bool		p_is_insert;
 	bool		p_is_update;
+	bool		p_is_create_cv;
 	bool		p_locked_from_parent;
 	Relation	p_target_relation;
 	RangeTblEntry *p_target_rangetblentry;

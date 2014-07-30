@@ -1108,6 +1108,7 @@ typedef struct SelectStmt
 	 */
 	SetOperation op;			/* type of set op */
 	bool		all;			/* ALL specified? */
+	bool 		forContinuousView; /* does this SELECT statement for a CREATE CONTINUOUS VIEW statement? */
 	struct SelectStmt *larg;	/* left child */
 	struct SelectStmt *rarg;	/* right child */
 	/* Eventually add fields for CORRESPONDING spec here */
