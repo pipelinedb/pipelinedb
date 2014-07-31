@@ -1007,99 +1007,6 @@ count_rowexpr_columns(ParseState *pstate, Node *expr)
 }
 
 /*
- * transformContinuousView -
- * 		Derives and attaches the output schema of the CV's SELECT statement
- * 		without using the catalog, which won't have schema information for streams anyways
- */
-static void
-transformContinuousView(ParseState *pstate, SelectStmt *stmt)
-{
-	ListCell *rtelc;
-	foreach(rtelc, pstate->p_namespace)
-	{
-		ParseNamespaceItem *nsitem = (ParseNamespaceItem *) lfirst(rtelc);
-		RangeTblEntry *rte = nsitem->p_rte;
-		ListCell *tllc;
-
-		/*
-		 * To get the exact length of each RTE's target list, we'd need to iterate
-		 * over the target list and check which entries belong to this RTE. Instead,
-		 * we just allocate enough space in this TupleDesc to hold the entire target list,
-		 * which will always be enough to hold the largest individual target list. It's a
-		 * little ugly but harmless since all we're doing is creating a continuous view.
-		 */
-		TupleDesc desc = CreateTemplateTupleDesc(list_length(stmt->targetList), false);
-		int attr = 1;
-		foreach(tllc, stmt->targetList)
-		{
-			ResTarget *rt = (ResTarget *) lfirst(tllc);
-
-			if (IsA(rt->val, TypeCast))
-			{
-				Oid oid;
-				char *attrname;
-				TypeCast *tc = (TypeCast *) rt->val;
-
-				if (IsA(tc->arg, ColumnRef))
-				{
-					ColumnRef *ref = (ColumnRef *) tc->arg;
-
-					switch (list_length(ref->fields))
-					{
-						case 1:
-							if (list_length(pstate->p_namespace) > 1)
-							{
-								/*
-								 * If there are multiple RTEs, we need to enforce that columns are qualified because
-								 * we can't infer which columns will come from which streams. e.g., consider:
-								 *
-								 * CREATE CONTINUOUS VIEW v AS SELECT col0, col1 FROM s0, s1
-								 *
-								 * We don't know which stream col0 or col1 will come from, so we need to do this:
-								 *
-								 * CREATE CONTINUOUS VIEW v AS SELECT s0.col0, s1.col1 FROM s0, s1
-								 */
-								ereport(ERROR,
-										(errcode(ERRCODE_SYNTAX_ERROR),
-										 errmsg("all column names must be qualified when selecting from multiple streams"),
-										 parser_errposition(pstate,
-														  exprLocation((Node *) stmt->targetList))));
-							}
-
-							/*
-							 * If there's only one field in the column name and only one RTE, then
-							 * this column belongs to the only RTE
-							 */
-							attrname = strVal(linitial(ref->fields));
-							break;
-						case 2:
-							{
-								char *qual = strVal(linitial(ref->fields));
-								char *name = rte->alias ? rte->alias->aliasname : rte->relname;
-								if (strcmp(qual, name) != 0)
-								{
-									/* this column doesn't belong to the current RTE */
-									continue;
-								}
-								attrname = strVal(list_nth(ref->fields, 1));
-							}
-							break;
-					}
-				}
-
-				oid = LookupTypeNameOid(tc->typeName);
-
-				/* PipelineDB XXX: should we be able to handle non-zero dimensions here? */
-				TupleDescInitEntry(desc, attr, attrname, oid, InvalidOid, 0);
-			}
-			attr++;
-		}
-		rte->cvdesc = desc;
-		buildRelationAliases(desc, rte->alias, rte->eref);
-	}
-}
-
-/*
  * transformSelectStmt -
  *	  transforms a Select Statement
  *
@@ -1140,11 +1047,10 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 	/* SELECT statements that belong to CREATE CONTINUOUS VIEW statements get special treatment */
 	pstate->p_is_create_cv = stmt->forContinuousView;
 
+	pstate->p_target_list = stmt->targetList;
+
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);
-
-	if (stmt->forContinuousView)
-		transformContinuousView(pstate, stmt);
 
 	/* transform targetlist */
 	qry->targetList = transformTargetList(pstate, stmt->targetList,

@@ -1680,10 +1680,22 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
-			/* Ordinary relation RTE */
-			expandRelation(rte->relid, rte->eref,
-						   rtindex, sublevels_up, location,
-						   include_dropped, colnames, colvars);
+			{
+				if (rte->cvdesc)
+				{
+					/* it's for a continuous view, so use the schema inferred from the target list */
+					expandTupleDesc(rte->cvdesc, rte->eref, rtindex, sublevels_up,
+									location, include_dropped,
+									colnames, colvars);
+				}
+				else
+				{
+					/* Ordinary relation RTE */
+					expandRelation(rte->relid, rte->eref,
+									 rtindex, sublevels_up, location,
+									 include_dropped, colnames, colvars);
+				}
+			}
 			break;
 		case RTE_SUBQUERY:
 			{

@@ -152,6 +152,7 @@ struct ParseState
 	bool		p_is_insert;
 	bool		p_is_update;
 	bool		p_is_create_cv;
+	List*		p_target_list;
 	bool		p_locked_from_parent;
 	Relation	p_target_relation;
 	RangeTblEntry *p_target_rangetblentry;

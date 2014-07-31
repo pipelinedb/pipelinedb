@@ -48,7 +48,6 @@ static Node *transformAExprOpAll(ParseState *pstate, A_Expr *a);
 static Node *transformAExprDistinct(ParseState *pstate, A_Expr *a);
 static Node *transformAExprNullIf(ParseState *pstate, A_Expr *a);
 static Node *transformAExprOf(ParseState *pstate, A_Expr *a);
-static Node *transformFuncCall(ParseState *pstate, FuncCall *fn);
 static Node *transformCaseExpr(ParseState *pstate, CaseExpr *c);
 static Node *transformSubLink(ParseState *pstate, SubLink *sublink);
 static Node *transformArrayExpr(ParseState *pstate, A_ArrayExpr *a,
@@ -1235,7 +1234,7 @@ transformAExprIn(ParseState *pstate, A_Expr *a)
 	return result;
 }
 
-static Node *
+Node *
 transformFuncCall(ParseState *pstate, FuncCall *fn)
 {
 	List	   *targs;
