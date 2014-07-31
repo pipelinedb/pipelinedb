@@ -30,6 +30,7 @@
 #include "catalog/pg_inherits_fn.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "catalog/indexing.h"
+#include "catalog/namespace.h"
 #include "utils/fmgroids.h"
 #include "utils/tqual.h"
 #endif
@@ -44,6 +45,7 @@
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
 #include "parser/parse_cte.h"
+#include "parser/parse_func.h"
 #include "parser/parse_oper.h"
 #include "parser/parse_param.h"
 #include "parser/parse_relation.h"
@@ -106,7 +108,6 @@ static bool is_rel_child_of_rel(RangeTblEntry *child_rte, RangeTblEntry *parent_
 static void transformLockingClause(ParseState *pstate, Query *qry,
 					   LockingClause *lc, bool pushedDown);
 
-static TupleDesc buildTupleDescFromTargetList(List *targetlist);
 static void transformContinuousView(ParseState *pstate, SelectStmt *stmt);
 
 
@@ -1006,18 +1007,6 @@ count_rowexpr_columns(ParseState *pstate, Node *expr)
 }
 
 /*
- * buildTupleDescFromTargetList -
- * 		builds a TupleDesc from the given target list. This is useful for continuous views,
- * 		which SELECT from streams. Since streams don't have to have schemas created in advance,
- * 		we can derive the output schema given the target list.
- */
-static TupleDesc
-buildTupleDescFromTargetList(List *targetlist)
-{
-	return NULL;
-}
-
-/*
  * transformContinuousView -
  * 		Derives and attaches the output schema of the CV's SELECT statement
  * 		without using the catalog, which won't have schema information for streams anyways
@@ -1025,7 +1014,89 @@ buildTupleDescFromTargetList(List *targetlist)
 static void
 transformContinuousView(ParseState *pstate, SelectStmt *stmt)
 {
+	ListCell *rtelc;
+	foreach(rtelc, pstate->p_namespace)
+	{
+		ParseNamespaceItem *nsitem = (ParseNamespaceItem *) lfirst(rtelc);
+		RangeTblEntry *rte = nsitem->p_rte;
+		ListCell *tllc;
 
+		/*
+		 * To get the exact length of each RTE's target list, we'd need to iterate
+		 * over the target list and check which entries belong to this RTE. Instead,
+		 * we just allocate enough space in this TupleDesc to hold the entire target list,
+		 * which will always be enough to hold the largest individual target list. It's a
+		 * little ugly but harmless since all we're doing is creating a continuous view.
+		 */
+		TupleDesc desc = CreateTemplateTupleDesc(list_length(stmt->targetList), false);
+		int attr = 1;
+		foreach(tllc, stmt->targetList)
+		{
+			ResTarget *rt = (ResTarget *) lfirst(tllc);
+
+			if (IsA(rt->val, TypeCast))
+			{
+				Oid oid;
+				char *attrname;
+				TypeCast *tc = (TypeCast *) rt->val;
+
+				if (IsA(tc->arg, ColumnRef))
+				{
+					ColumnRef *ref = (ColumnRef *) tc->arg;
+
+					switch (list_length(ref->fields))
+					{
+						case 1:
+							if (list_length(pstate->p_namespace) > 1)
+							{
+								/*
+								 * If there are multiple RTEs, we need to enforce that columns are qualified because
+								 * we can't infer which columns will come from which streams. e.g., consider:
+								 *
+								 * CREATE CONTINUOUS VIEW v AS SELECT col0, col1 FROM s0, s1
+								 *
+								 * We don't know which stream col0 or col1 will come from, so we need to do this:
+								 *
+								 * CREATE CONTINUOUS VIEW v AS SELECT s0.col0, s1.col1 FROM s0, s1
+								 */
+								ereport(ERROR,
+										(errcode(ERRCODE_SYNTAX_ERROR),
+										 errmsg("all column names must be qualified when selecting from multiple streams"),
+										 parser_errposition(pstate,
+														  exprLocation((Node *) stmt->targetList))));
+							}
+
+							/*
+							 * If there's only one field in the column name and only one RTE, then
+							 * this column belongs to the only RTE
+							 */
+							attrname = strVal(linitial(ref->fields));
+							break;
+						case 2:
+							{
+								char *qual = strVal(linitial(ref->fields));
+								char *name = rte->alias ? rte->alias->aliasname : rte->relname;
+								if (strcmp(qual, name) != 0)
+								{
+									/* this column doesn't belong to the current RTE */
+									continue;
+								}
+								attrname = strVal(list_nth(ref->fields, 1));
+							}
+							break;
+					}
+				}
+
+				oid = LookupTypeNameOid(tc->typeName);
+
+				/* PipelineDB XXX: should we be able to handle non-zero dimensions here? */
+				TupleDescInitEntry(desc, attr, attrname, oid, InvalidOid, 0);
+			}
+			attr++;
+		}
+		rte->cvdesc = desc;
+		buildRelationAliases(desc, rte->alias, rte->eref);
+	}
 }
 
 /*
@@ -2592,8 +2663,10 @@ transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewSt
 
 	/* TODO: enforce single queries here */
 	Node *parsetree = (Node *) lfirst(parsetree_list->head);
+	CreateContinuousViewStmt *cv = (CreateContinuousViewStmt *) parsetree;
+	Node *select = cv->query;
 
-	Query *q = parse_analyze(parsetree, query_string, NULL, 0);
+	Query *q = parse_analyze(select, query_string, NULL, 0);
 	q->is_continuous = true;
 	q->cq_activate_stmt = pstrdup(pstate->p_sourcetext);
 	q->cq_target = stmt->name;

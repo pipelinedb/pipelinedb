@@ -34,7 +34,7 @@
  * and stores the query in a catalog table.
  */
 void
-CreateContinuousView(CreateContinuousViewStmt *stmt)
+CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 {
 	CreateStmt *create_stmt;
 	Query *query;
@@ -46,7 +46,6 @@ CreateContinuousView(CreateContinuousViewStmt *stmt)
 	ListCell *col;
 	Oid reloid;
 	Datum		toast_options;
-	StringInfoData deparsed;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 
 	relation = stmt->into->rel;
@@ -133,9 +132,7 @@ CreateContinuousView(CreateContinuousViewStmt *stmt)
 	/*
 	 * Now save the underlying query for ACTIVATION/DEACTIVATION
 	 */
-	initStringInfo(&deparsed);
-	deparse_query(query, &deparsed, NIL, false, false);
-	AddQuery(relation->relname, deparsed.data, PIPELINE_QUERY_STATE_INACTIVE);
+	AddQuery(relation->relname, querystring, PIPELINE_QUERY_STATE_INACTIVE);
 }
 
 /*

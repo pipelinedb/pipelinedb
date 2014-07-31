@@ -1562,7 +1562,7 @@ LookupFuncName(List *funcname, int nargs, const Oid *argtypes, bool noError)
  * LookupTypeNameOid
  *		Convenience routine to look up a type, silently accepting shell types
  */
-static Oid
+Oid
 LookupTypeNameOid(const TypeName *typename)
 {
 	Oid			result;

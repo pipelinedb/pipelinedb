@@ -431,6 +431,7 @@ transformStreamEntry(ParseState *pstate, RangeVar *relation)
 	rte->checkAsUser = InvalidOid;		/* not set-uid by default, either */
 	rte->selectedCols = NULL;
 	rte->modifiedCols = NULL;
+	rte->relname = refname;
 
 	if (pstate != NULL)
 		pstate->p_rtable = lappend(pstate->p_rtable, rte);
