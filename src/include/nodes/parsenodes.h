@@ -817,6 +817,11 @@ typedef struct RangeTblEntry
 	List	   *ctecolcollations;		/* OID list of column collation OIDs */
 
 	/*
+	 * Fields valid for a stream RTE (else NULL/zero):
+	 */
+	TupleDesc cvdesc; /* descriptor for a stream, based on SELECT statements target entries */
+
+	/*
 	 * Fields valid in all RTEs:
 	 */
 	Alias	   *alias;			/* user-written alias clause, if any */
@@ -1108,6 +1113,7 @@ typedef struct SelectStmt
 	 */
 	SetOperation op;			/* type of set op */
 	bool		all;			/* ALL specified? */
+	bool 		forContinuousView; /* does this SELECT statement for a CREATE CONTINUOUS VIEW statement? */
 	struct SelectStmt *larg;	/* left child */
 	struct SelectStmt *rarg;	/* right child */
 	/* Eventually add fields for CORRESPONDING spec here */

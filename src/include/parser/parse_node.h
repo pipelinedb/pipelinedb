@@ -140,6 +140,7 @@ struct ParseState
 	List	   *p_ctenamespace; /* current namespace for common table exprs */
 	List	   *p_future_ctes;	/* common table exprs not yet in namespace */
 	CommonTableExpr *p_parent_cte;		/* this query's containing CTE */
+	Node		 *p_parent_expr; /* the parent expression of the current parse node, if any */
 	List	   *p_windowdefs;	/* raw representations of window clauses */
 	ParseExprKind p_expr_kind;	/* what kind of expression we're parsing */
 	int			p_next_resno;	/* next targetlist resno to assign */
@@ -151,6 +152,8 @@ struct ParseState
 	bool		p_hasModifyingCTE;
 	bool		p_is_insert;
 	bool		p_is_update;
+	bool		p_is_create_cv;
+	List*		p_target_list;
 	bool		p_locked_from_parent;
 	Relation	p_target_relation;
 	RangeTblEntry *p_target_rangetblentry;

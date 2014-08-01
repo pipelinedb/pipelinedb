@@ -30,6 +30,7 @@
 #include "catalog/pg_inherits_fn.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "catalog/indexing.h"
+#include "catalog/namespace.h"
 #include "utils/fmgroids.h"
 #include "utils/tqual.h"
 #endif
@@ -44,6 +45,7 @@
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
 #include "parser/parse_cte.h"
+#include "parser/parse_func.h"
 #include "parser/parse_oper.h"
 #include "parser/parse_param.h"
 #include "parser/parse_relation.h"
@@ -105,6 +107,8 @@ static bool is_rel_child_of_rel(RangeTblEntry *child_rte, RangeTblEntry *parent_
 
 static void transformLockingClause(ParseState *pstate, Query *qry,
 					   LockingClause *lc, bool pushedDown);
+
+static void transformContinuousView(ParseState *pstate, SelectStmt *stmt);
 
 
 /*
@@ -1002,7 +1006,6 @@ count_rowexpr_columns(ParseState *pstate, Node *expr)
 	return -1;
 }
 
-
 /*
  * transformSelectStmt -
  *	  transforms a Select Statement
@@ -1040,6 +1043,11 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 
 	/* make WINDOW info available for window functions, too */
 	pstate->p_windowdefs = stmt->windowClause;
+
+	/* SELECT statements that belong to CREATE CONTINUOUS VIEW statements get special treatment */
+	pstate->p_is_create_cv = stmt->forContinuousView;
+
+	pstate->p_target_list = stmt->targetList;
 
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);
@@ -2561,8 +2569,10 @@ transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewSt
 
 	/* TODO: enforce single queries here */
 	Node *parsetree = (Node *) lfirst(parsetree_list->head);
+	CreateContinuousViewStmt *cv = (CreateContinuousViewStmt *) parsetree;
+	Node *select = cv->query;
 
-	Query *q = parse_analyze(parsetree, query_string, NULL, 0);
+	Query *q = parse_analyze(select, query_string, NULL, 0);
 	q->is_continuous = true;
 	q->cq_activate_stmt = pstrdup(pstate->p_sourcetext);
 	q->cq_target = stmt->name;

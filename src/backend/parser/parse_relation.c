@@ -810,7 +810,7 @@ markVarForSelectPriv(ParseState *pstate, Var *var, RangeTblEntry *rte)
  * empty strings for any dropped columns, so that it will be one-to-one with
  * physical column numbers.
  */
-static void
+void
 buildRelationAliases(TupleDesc tupdesc, Alias *alias, Alias *eref)
 {
 	int			maxattrs = tupdesc->natts;
@@ -1680,10 +1680,22 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
-			/* Ordinary relation RTE */
-			expandRelation(rte->relid, rte->eref,
-						   rtindex, sublevels_up, location,
-						   include_dropped, colnames, colvars);
+			{
+				if (rte->cvdesc)
+				{
+					/* it's for a continuous view, so use the schema inferred from the target list */
+					expandTupleDesc(rte->cvdesc, rte->eref, rtindex, sublevels_up,
+									location, include_dropped,
+									colnames, colvars);
+				}
+				else
+				{
+					/* Ordinary relation RTE */
+					expandRelation(rte->relid, rte->eref,
+									 rtindex, sublevels_up, location,
+									 include_dropped, colnames, colvars);
+				}
+			}
 			break;
 		case RTE_SUBQUERY:
 			{
@@ -2116,8 +2128,12 @@ get_rte_attribute_name(RangeTblEntry *rte, AttrNumber attnum)
 	 * eref->colnames list.  This is a little slower but it will give the
 	 * right answer if the column has been renamed since the eref list was
 	 * built (which can easily happen for rules).
+	 *
+	 * Note: if rte->cvdesc is non-null, it means that this RTE belongs
+	 * to a continuous view's SELECT, which is SELECTing from streams,
+	 * not regular relations
 	 */
-	if (rte->rtekind == RTE_RELATION)
+	if (rte->rtekind == RTE_RELATION && !rte->cvdesc)
 		return get_relid_attribute_name(rte->relid, attnum);
 
 	/*
@@ -2145,22 +2161,29 @@ get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 		case RTE_RELATION:
 			{
 				/* Plain relation RTE --- get the attribute's type info */
-				HeapTuple	tp;
-				Form_pg_attribute att_tup;
+				HeapTuple	tp = NULL;
+				Form_pg_attribute att_tup = NULL;
 
-				tp = SearchSysCache2(ATTNUM,
-									 ObjectIdGetDatum(rte->relid),
-									 Int16GetDatum(attnum));
-				if (!HeapTupleIsValid(tp))		/* shouldn't happen */
-					elog(ERROR, "cache lookup failed for attribute %d of relation %u",
-						 attnum, rte->relid);
-				att_tup = (Form_pg_attribute) GETSTRUCT(tp);
+				if (rte->cvdesc)
+				{
+					att_tup = rte->cvdesc->attrs[attnum - 1];
+				}
+				else
+				{
+					tp = SearchSysCache2(ATTNUM,
+										 ObjectIdGetDatum(rte->relid),
+										 Int16GetDatum(attnum));
+					if (!HeapTupleIsValid(tp))		/* shouldn't happen */
+						elog(ERROR, "cache lookup failed for attribute %d of relation %u",
+							 attnum, rte->relid);
+					att_tup = (Form_pg_attribute) GETSTRUCT(tp);
+				}
 
 				/*
 				 * If dropped column, pretend it ain't there.  See notes in
 				 * scanRTEForColumn.
 				 */
-				if (att_tup->attisdropped)
+				if (att_tup && att_tup->attisdropped)
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),
 					errmsg("column \"%s\" of relation \"%s\" does not exist",
@@ -2169,7 +2192,9 @@ get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 				*vartype = att_tup->atttypid;
 				*vartypmod = att_tup->atttypmod;
 				*varcollid = att_tup->attcollation;
-				ReleaseSysCache(tp);
+
+				if (tp)
+					ReleaseSysCache(tp);
 			}
 			break;
 		case RTE_SUBQUERY:

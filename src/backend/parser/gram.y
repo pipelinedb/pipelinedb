@@ -8342,6 +8342,7 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 					CreateContinuousViewStmt *n = makeNode(CreateContinuousViewStmt);
 					n->into = $4;
 					n->query = $6;
+					((SelectStmt *) n->query)->forContinuousView = true;
 					$$ = (Node *) n;
 				}
 		;
@@ -9738,6 +9739,7 @@ simple_select:
 					n->groupClause = $7;
 					n->havingClause = $8;
 					n->windowClause = $9;
+					n->forContinuousView = false;
 					$$ = (Node *)n;
 				}
 			| values_clause							{ $$ = $1; }
@@ -9758,6 +9760,7 @@ simple_select:
 
 					n->targetList = list_make1(rt);
 					n->fromClause = list_make1($2);
+					n->forContinuousView = false;
 					$$ = (Node *)n;
 				}
 			| select_clause UNION opt_all select_clause
@@ -10082,6 +10085,7 @@ values_clause:
 				{
 					SelectStmt *n = makeNode(SelectStmt);
 					n->valuesLists = list_make1($2);
+					n->forContinuousView = false;
 					$$ = (Node *) n;
 				}
 			| values_clause ',' ctext_row
@@ -14016,6 +14020,7 @@ makeSetOp(SetOperation op, bool all, Node *larg, Node *rarg)
 	n->all = all;
 	n->larg = (SelectStmt *) larg;
 	n->rarg = (SelectStmt *) rarg;
+	n->forContinuousView = false;
 	return (Node *) n;
 }
 
@@ -14387,7 +14392,7 @@ makeRecursiveViewSelect(char *relname, List *aliases, Node *query)
 	s->withClause = w;
 	s->targetList = tl;
 	s->fromClause = list_make1(makeRangeVar(NULL, relname, -1));
-
+	s->forContinuousView = false;
 	return (Node *) s;
 }
 

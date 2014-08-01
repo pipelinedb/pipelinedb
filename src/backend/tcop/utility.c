@@ -683,7 +683,7 @@ standard_ProcessUtility(Node *parsetree,
 		case T_CreateContinuousViewStmt:
 			{
 				List *remote;
-				CreateContinuousView((CreateContinuousViewStmt *) parsetree);
+				CreateContinuousView((CreateContinuousViewStmt *) parsetree, queryString);
 				remote = AddRemoteQueryNode(NIL, queryString, EXEC_ON_ALL_NODES, false);
 				if (remote)
 				{
