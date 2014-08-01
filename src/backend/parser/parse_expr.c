@@ -770,14 +770,18 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 					break;
 				case 2:
 				{
-					char *qual = strVal(linitial(cref->fields));
-					char *name = rte->alias ? rte->alias->aliasname : rte->relname;
+					char *qual;
+					char *name;
+
+					rte = currte;
+					name = rte->alias ? rte->alias->aliasname : rte->relname;
+					qual = strVal(linitial(cref->fields));
+
 					if (strcmp(qual, name) != 0)
 					{
 						/* this column doesn't belong to the current RTE */
 						continue;
 					}
-					rte = currte;
 				}
 				break;
 			}
