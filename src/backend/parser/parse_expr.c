@@ -203,7 +203,9 @@ transformExprRecurse(ParseState *pstate, Node *expr)
 					}
 				}
 
+				pstate->p_parent_expr = tc;
 				result = transformTypeCast(pstate, tc);
+				pstate->p_parent_expr = NULL;
 				break;
 			}
 
@@ -763,6 +765,51 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 					 errmsg("column reference \"%s\" is ambiguous",
 							NameListToString(cref->fields)),
 					 parser_errposition(pstate, cref->location)));
+	}
+
+	ListCell *lc;
+	foreach(lc, pstate->p_namespace)
+	{
+		ParseNamespaceItem *nsitem = (ParseNamespaceItem *) lfirst(lc);
+		RangeTblEntry *currte = nsitem->p_rte;
+
+		switch(list_length(cref->fields))
+		{
+			case 1:
+				rte = currte;
+				break;
+			case 2:
+			{
+				char *qual = strVal(linitial(cref->fields));
+				char *name = rte->alias ? rte->alias->aliasname : rte->relname;
+				if (strcmp(qual, name) != 0)
+				{
+					/* this column doesn't belong to the current RTE */
+					continue;
+				}
+				rte = currte;
+			}
+			break;
+		}
+	}
+
+	if (node == NULL && pstate->p_is_create_cv)
+	{
+		int sublevels_up;
+		Index varno = RTERangeTablePosn(pstate, rte, &sublevels_up);
+		AttrNumber attno = pstate->p_next_resno;
+		Oid type;
+		TypeCast *parent;
+
+		if (pstate->p_parent_expr == NULL || !IsA(pstate->p_parent_expr, TypeCast))
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+			errmsg("ambiguous type for column %s", colname),
+					 parser_errposition(pstate, cref->location)));
+
+		parent = (TypeCast *) pstate->p_parent_expr;
+		type = LookupTypeNameOid(parent->typeName);
+		node = (Node *) makeVar(varno, attno, type, 0, InvalidOid, sublevels_up);
 	}
 
 	/*

@@ -437,11 +437,11 @@ transformStreamEntryRTE(ParseState *pstate, RangeTblEntry *rte)
 	foreach(tllc, pstate->p_target_list)
 	{
 		ResTarget *rt = (ResTarget *) lfirst(tllc);
+		Oid oid;
+		char *attrname;
 
 		if (IsA(rt->val, TypeCast))
 		{
-			Oid oid;
-			char *attrname;
 			TypeCast *tc = (TypeCast *) rt->val;
 
 			if (IsA(tc->arg, ColumnRef))
