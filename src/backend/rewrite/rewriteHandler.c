@@ -3346,6 +3346,10 @@ QueryRewrite(Query *parsetree)
 	bool		foundOriginalQuery;
 	Query	   *lastInstead;
 
+	/* CQs don't currently get rewritten */
+	if (parsetree->is_continuous)
+		return list_make1(parsetree);
+
 	/*
 	 * This function is only applied to top-level original queries
 	 */
