@@ -203,7 +203,7 @@ transformExprRecurse(ParseState *pstate, Node *expr)
 					}
 				}
 
-				pstate->p_parent_expr = tc;
+				pstate->p_parent_expr = (Node *) tc;
 				result = transformTypeCast(pstate, tc);
 				pstate->p_parent_expr = NULL;
 				break;
@@ -623,7 +623,7 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 
 				/* Try to identify as a column of the RTE */
 				node = scanRTEForColumn(pstate, rte, colname, cref->location);
-				if (node == NULL)
+				if (node == NULL && !pstate->p_is_create_cv)
 				{
 					/* Try it as a function call on the whole row */
 					node = transformWholeRowRef(pstate, rte, cref->location);
@@ -744,6 +744,61 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 	}
 
 	/*
+	 * If this is a continuous view, this column doesn't need to exist yet so we need
+	 * to figure out its type. We do this by looking at the columns parent cast expression.
+	 * If there's no parent cast, then the type is ambiguous so we throw an error.
+	 */
+	if (node == NULL && pstate->p_is_create_cv)
+	{
+		AttrNumber attno = pstate->p_next_resno;
+		Oid type;
+		TypeCast *parent;
+		Index varno;
+		int sublevels_up;
+		ListCell *lc;
+
+		/* which RTE does this column belong to? */
+		foreach(lc, pstate->p_namespace)
+		{
+			ParseNamespaceItem *nsitem = (ParseNamespaceItem *) lfirst(lc);
+			RangeTblEntry *currte = nsitem->p_rte;
+
+			switch(list_length(cref->fields))
+			{
+				case 1:
+					rte = currte;
+					break;
+				case 2:
+				{
+					char *qual = strVal(linitial(cref->fields));
+					char *name = rte->alias ? rte->alias->aliasname : rte->relname;
+					if (strcmp(qual, name) != 0)
+					{
+						/* this column doesn't belong to the current RTE */
+						continue;
+					}
+					rte = currte;
+				}
+				break;
+			}
+		}
+
+		varno = RTERangeTablePosn(pstate, rte, &sublevels_up);
+
+		if (pstate->p_parent_expr == NULL || !IsA(pstate->p_parent_expr, TypeCast))
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+			errmsg("ambiguous type for column \"%s\"", colname),
+			errhint("Explicitly cast to the desired type, "
+										 "for example %s::integer.", colname),
+					 parser_errposition(pstate, cref->location)));
+
+		parent = (TypeCast *) pstate->p_parent_expr;
+		type = LookupTypeNameOid(parent->typeName);
+		node = (Node *) makeVar(varno, attno, type, 0, InvalidOid, sublevels_up);
+	}
+
+	/*
 	 * Now give the PostParseColumnRefHook, if any, a chance.  We pass the
 	 * translation-so-far so that it can throw an error if it wishes in the
 	 * case that it has a conflicting interpretation of the ColumnRef. (If it
@@ -765,51 +820,6 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 					 errmsg("column reference \"%s\" is ambiguous",
 							NameListToString(cref->fields)),
 					 parser_errposition(pstate, cref->location)));
-	}
-
-	ListCell *lc;
-	foreach(lc, pstate->p_namespace)
-	{
-		ParseNamespaceItem *nsitem = (ParseNamespaceItem *) lfirst(lc);
-		RangeTblEntry *currte = nsitem->p_rte;
-
-		switch(list_length(cref->fields))
-		{
-			case 1:
-				rte = currte;
-				break;
-			case 2:
-			{
-				char *qual = strVal(linitial(cref->fields));
-				char *name = rte->alias ? rte->alias->aliasname : rte->relname;
-				if (strcmp(qual, name) != 0)
-				{
-					/* this column doesn't belong to the current RTE */
-					continue;
-				}
-				rte = currte;
-			}
-			break;
-		}
-	}
-
-	if (node == NULL && pstate->p_is_create_cv)
-	{
-		int sublevels_up;
-		Index varno = RTERangeTablePosn(pstate, rte, &sublevels_up);
-		AttrNumber attno = pstate->p_next_resno;
-		Oid type;
-		TypeCast *parent;
-
-		if (pstate->p_parent_expr == NULL || !IsA(pstate->p_parent_expr, TypeCast))
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-			errmsg("ambiguous type for column %s", colname),
-					 parser_errposition(pstate, cref->location)));
-
-		parent = (TypeCast *) pstate->p_parent_expr;
-		type = LookupTypeNameOid(parent->typeName);
-		node = (Node *) makeVar(varno, attno, type, 0, InvalidOid, sublevels_up);
 	}
 
 	/*
