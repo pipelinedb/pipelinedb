@@ -108,9 +108,6 @@ static bool is_rel_child_of_rel(RangeTblEntry *child_rte, RangeTblEntry *parent_
 static void transformLockingClause(ParseState *pstate, Query *qry,
 					   LockingClause *lc, bool pushedDown);
 
-static void transformContinuousView(ParseState *pstate, SelectStmt *stmt);
-
-
 /*
  * parse_analyze
  *		Analyze a raw parse tree and transform it to Query form.
