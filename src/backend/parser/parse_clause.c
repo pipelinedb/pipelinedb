@@ -34,6 +34,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "rewrite/rewriteManip.h"
+#include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
@@ -424,7 +425,9 @@ transformJoinOnClause(ParseState *pstate, JoinExpr *j, List *namespace)
 static void
 transformStreamEntryRTE(ParseState *pstate, RangeTblEntry *rte)
 {
+	List *attrs = NIL;
 	ListCell *tllc;
+	ListCell *lc;
 	/*
 	 * To get the exact length of each RTE's target list, we'd need to iterate
 	 * over the target list and check which entries belong to this RTE. Instead,
@@ -433,11 +436,12 @@ transformStreamEntryRTE(ParseState *pstate, RangeTblEntry *rte)
 	 * little ugly but harmless since all we're doing is creating a continuous view.
 	 */
 	TupleDesc desc = CreateTemplateTupleDesc(list_length(pstate->p_target_list), false);
-	int attr = 1;
+	int attnum = 1;
 	foreach(tllc, pstate->p_target_list)
 	{
 		ResTarget *rt = (ResTarget *) lfirst(tllc);
 		Oid oid;
+		Form_pg_attribute attr;
 		char *attrname;
 
 		if (IsA(rt->val, TypeCast))
@@ -492,12 +496,26 @@ transformStreamEntryRTE(ParseState *pstate, RangeTblEntry *rte)
 			}
 
 			oid = LookupTypeNameOid(tc->typeName);
+			attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
+			attr->attnum = attnum;
+			attr->atttypid = oid;
+			namestrcpy(&attr->attname, attrname);
 
-			/* PipelineDB XXX: should we be able to handle non-zero dimensions here? */
-			TupleDescInitEntry(desc, attr, attrname, oid, InvalidOid, 0);
+			attrs = lappend(attrs, attr);
 		}
-		attr++;
+		attnum++;
 	}
+
+	desc = CreateTemplateTupleDesc(list_length(attrs), false);
+	foreach(lc, attrs)
+	{
+		Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
+
+		/* PipelineDB XXX: should we be able to handle non-zero dimensions here? */
+		TupleDescInitEntry(desc, attr->attnum, NameStr(attr->attname),
+				attr->atttypid, InvalidOid, 0);
+	}
+
 	rte->cvdesc = desc;
 	buildRelationAliases(desc, rte->alias, rte->eref);
 }
