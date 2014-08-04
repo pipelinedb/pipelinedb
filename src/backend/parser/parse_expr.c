@@ -794,7 +794,7 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 					(errcode(ERRCODE_SYNTAX_ERROR),
 			errmsg("ambiguous type for column \"%s\"", colname),
 			errhint("Explicitly cast to the desired type, "
-										 "for example %s::integer.", colname),
+										 "for example: %s::integer.", colname),
 					 parser_errposition(pstate, cref->location)));
 
 		parent = (TypeCast *) pstate->p_parent_expr;
