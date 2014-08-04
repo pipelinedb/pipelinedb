@@ -497,13 +497,12 @@ transformStreamEntryRTE(ParseState *pstate, RangeTblEntry *rte)
 
 			oid = LookupTypeNameOid(tc->typeName);
 			attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
-			attr->attnum = attnum;
+			attr->attnum = attnum++;
 			attr->atttypid = oid;
 			namestrcpy(&attr->attname, attrname);
 
 			attrs = lappend(attrs, attr);
 		}
-		attnum++;
 	}
 
 	desc = CreateTemplateTupleDesc(list_length(attrs), false);
