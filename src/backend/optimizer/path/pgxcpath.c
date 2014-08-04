@@ -89,7 +89,7 @@ create_remotequery_path(PlannerInfo *root, RelOptInfo *rel, ExecNodes *exec_node
 			if (rte->rtekind != RTE_RELATION)
 				elog(ERROR, "can not create remote path for ranges of type %d",
 							rte->rtekind);
-			rqpath->rqhas_temp_rel = IsTempTable(rte->relid);
+			rqpath->rqhas_temp_rel = !root->parse->is_continuous ? IsTempTable(rte->relid) : false;
 			unshippable_quals = !pgxc_is_expr_shippable((Expr *)extract_actual_clauses(rel->baserestrictinfo, false),
 														NULL);
 		}
@@ -142,10 +142,20 @@ create_plainrel_rqpath(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte,
 	if (!IS_PGXC_COORDINATOR || IsConnFromCoord() || root->parse->is_local)
 		return false;
 
-	quals = extract_actual_clauses(rel->baserestrictinfo, false);
-	exec_nodes = GetRelationNodesByQuals(rte->relid, rel->relid,
-														(Node *)quals,
-														RELATION_ACCESS_READ);
+	if (root->parse->is_continuous)
+	{
+		exec_nodes = makeNode(ExecNodes);
+		exec_nodes->baselocatortype = LOCATOR_TYPE_CUSTOM;
+		exec_nodes->accesstype = RELATION_ACCESS_UPDATE;
+		exec_nodes->nodeList = GetAllDataNodes();
+	}
+	else
+	{
+		quals = extract_actual_clauses(rel->baserestrictinfo, false);
+		exec_nodes = GetRelationNodesByQuals(rte->relid, rel->relid,
+															(Node *)quals,
+															RELATION_ACCESS_READ);
+	}
 	if (!exec_nodes)
 		return false;
 

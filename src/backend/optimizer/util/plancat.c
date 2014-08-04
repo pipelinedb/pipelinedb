@@ -88,7 +88,7 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 				  RelOptInfo *rel)
 {
 	Index		varno = rel->relid;
-	Relation	relation;
+	Relation	relation = NULL;
 	bool		hasindex;
 	List	   *indexinfos = NIL;
 
@@ -97,23 +97,30 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 	 * the rewriter or when expand_inherited_rtentry() added it to the query's
 	 * rangetable.
 	 */
-	relation = heap_open(relationObjectId, NoLock);
+	if (!root->parse->is_continuous)
+	{
+		relation = heap_open(relationObjectId, NoLock);
 
-	/* Temporary and unlogged relations are inaccessible during recovery. */
-	if (!RelationNeedsWAL(relation) && RecoveryInProgress())
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot access temporary or unlogged relations during recovery")));
+		/* Temporary and unlogged relations are inaccessible during recovery. */
+		if (!RelationNeedsWAL(relation) && RecoveryInProgress())
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot access temporary or unlogged relations during recovery")));
+	}
 
 	rel->min_attr = FirstLowInvalidHeapAttributeNumber + 1;
-	rel->max_attr = RelationGetNumberOfAttributes(relation);
-	rel->reltablespace = RelationGetForm(relation)->reltablespace;
+	rel->max_attr = relation ? RelationGetNumberOfAttributes(relation) : list_length(root->parse->targetList);
+	rel->reltablespace = relation ? RelationGetForm(relation)->reltablespace : InvalidOid;
 
 	Assert(rel->max_attr >= rel->min_attr);
 	rel->attr_needed = (Relids *)
 		palloc0((rel->max_attr - rel->min_attr + 1) * sizeof(Relids));
 	rel->attr_widths = (int32 *)
 		palloc0((rel->max_attr - rel->min_attr + 1) * sizeof(int32));
+
+	/* we're scanning streams, so there's nothing more we can do */
+	if (root->parse->is_continuous)
+		return;
 
 	/*
 	 * Estimate relation size --- unless it's an inheritance parent, in which
@@ -876,24 +883,34 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 	List	   *tlist = NIL;
 	Index		varno = rel->relid;
 	RangeTblEntry *rte = planner_rt_fetch(varno, root);
-	Relation	relation;
+	Relation	relation = NULL;
 	Query	   *subquery;
 	Var		   *var;
 	ListCell   *l;
 	int			attrno,
 				numattrs;
 	List	   *colvars;
+	TupleDesc desc;
 
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
-			/* Assume we already have adequate lock */
-			relation = heap_open(rte->relid, NoLock);
+			if (root->parse->is_continuous)
+			{
+				desc = rte->cvdesc;
+				numattrs = desc->natts;
+			}
+			else
+			{
+				/* Assume we already have adequate lock */
+				relation = heap_open(rte->relid, NoLock);
+				desc = relation->rd_att;
+				numattrs = RelationGetNumberOfAttributes(relation);
+			}
 
-			numattrs = RelationGetNumberOfAttributes(relation);
 			for (attrno = 1; attrno <= numattrs; attrno++)
 			{
-				Form_pg_attribute att_tup = relation->rd_att->attrs[attrno - 1];
+				Form_pg_attribute att_tup = desc->attrs[attrno - 1];
 
 				if (att_tup->attisdropped)
 				{
@@ -916,7 +933,8 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 												false));
 			}
 
-			heap_close(relation, NoLock);
+			if (relation)
+				heap_close(relation, NoLock);
 			break;
 
 		case RTE_SUBQUERY:

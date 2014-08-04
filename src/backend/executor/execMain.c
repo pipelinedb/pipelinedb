@@ -847,7 +847,8 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	/*
 	 * Do permissions checks
 	 */
-	ExecCheckRTPerms(rangeTable, true);
+	if (!plannedstmt->is_continuous)
+		ExecCheckRTPerms(rangeTable, true);
 
 	/*
 	 * initialize the node's execution state
