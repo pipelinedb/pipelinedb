@@ -263,10 +263,7 @@ CreateStreamTargets(void)
 	Relation rel;
 	HeapScanDesc scandesc;
 	Form_pipeline_queries catrow;
-	Query *query;
 	HeapTuple tup;
-	List *plist;
-	Node *ptree;
 	MemoryContext oldcontext;
 
 	MemSet(&ctl, 0, sizeof(ctl));
@@ -285,12 +282,20 @@ CreateStreamTargets(void)
 	{
 		char *querystring;
 		ListCell *lc;
+		List *parsetree_list;
+		Node *parsetree;
+		CreateContinuousViewStmt *cv;
+		SelectStmt *select;
+		Query *query;
 
 		catrow = (Form_pipeline_queries) GETSTRUCT(tup);
 		querystring = TextDatumGetCString(&(catrow->query));
-		plist = pg_parse_query(querystring);
-		ptree = (Node *) lfirst(plist->head);
-		query = parse_analyze(ptree, querystring, NULL, 0);
+
+		parsetree_list = pg_parse_query(querystring);
+		parsetree = (Node *) lfirst(parsetree_list->head);
+		cv = (CreateContinuousViewStmt *) parsetree;
+		select = (SelectStmt *) cv->query;
+		query = parse_analyze((Node *) select, querystring, NULL, 0);
 
 		foreach(lc, query->rtable)
 		{
