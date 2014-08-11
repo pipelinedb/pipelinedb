@@ -275,6 +275,8 @@ CreateStreamTargets(void)
 	targets = hash_create("StreamTargets", 32, &ctl, HASH_ELEM);
 	MemoryContextSwitchTo(oldcontext);
 
+	pg_usleep(6*1000*1000);
+
 	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 	scandesc = heap_beginscan(rel, SnapshotNow, 0, NULL);
 
@@ -286,7 +288,6 @@ CreateStreamTargets(void)
 		Node *parsetree;
 		CreateContinuousViewStmt *cv;
 		SelectStmt *select;
-		Query *query;
 
 		catrow = (Form_pipeline_queries) GETSTRUCT(tup);
 		querystring = TextDatumGetCString(&(catrow->query));
@@ -295,15 +296,35 @@ CreateStreamTargets(void)
 		parsetree = (Node *) lfirst(parsetree_list->head);
 		cv = (CreateContinuousViewStmt *) parsetree;
 		select = (SelectStmt *) cv->query;
-		query = parse_analyze((Node *) select, querystring, NULL, 0);
 
-		foreach(lc, query->rtable)
+		foreach(lc, select->fromClause)
 		{
-			RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
-			StreamTagsEntry *entry =
-					(StreamTagsEntry *) hash_search(targets, (void *) rte->relname, HASH_ENTER, NULL);
+			Node *node = (Node *) lfirst(lc);
+			if (IsA(node, JoinExpr))
+			{
+				JoinExpr *j = (JoinExpr *) node;
+				char *relname = ((RangeVar *) j->larg)->relname;
+				StreamTagsEntry *entry =
+						(StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, NULL);
+				entry->tags = bms_add_member(entry->tags, catrow->id);
 
-			entry->tags = bms_add_member(entry->tags, catrow->id);
+				relname = ((RangeVar *) j->rarg)->relname;
+				entry = (StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, NULL);
+				entry->tags = bms_add_member(entry->tags, catrow->id);
+			}
+			else if (IsA(node, RangeVar))
+			{
+				RangeVar *rv = (RangeVar *) node;
+				StreamTagsEntry *entry =
+						(StreamTagsEntry *) hash_search(targets, (void *) rv->relname, HASH_ENTER, NULL);
+				entry->tags = bms_add_member(entry->tags, catrow->id);
+			}
+			else
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+					errmsg("unrecognized node type found when determining stream targets: %d", nodeTag(node))));
+			}
 		}
 	}
 
