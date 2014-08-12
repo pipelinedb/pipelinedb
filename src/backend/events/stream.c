@@ -275,8 +275,6 @@ CreateStreamTargets(void)
 	targets = hash_create("StreamTargets", 32, &ctl, HASH_ELEM);
 	MemoryContextSwitchTo(oldcontext);
 
-	pg_usleep(6*1000*1000);
-
 	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 	scandesc = heap_beginscan(rel, SnapshotNow, 0, NULL);
 
