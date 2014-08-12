@@ -1691,7 +1691,6 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 static void
 exec_decode_events(const char *encoding, const char *channel, StringInfo message)
 {
-	StreamEventDecoder *decoder;
 	int count = 0;
 
 	start_xact_command();
@@ -1699,14 +1698,11 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 	if (!GlobalStreamBuffer)
 		InitGlobalStreamBuffer();
 
-	MemoryContextSwitchTo(CacheMemoryContext);
-	decoder = GetStreamEventDecoder(encoding);
 	MemoryContextSwitchTo(EventContext);
 
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
-		HeapTuple tup;
 
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
