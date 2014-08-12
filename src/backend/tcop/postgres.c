@@ -1712,13 +1712,12 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 		ev->raw = (char *) palloc(ev->len);
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
 
-		tup = DecodeStreamEvent(ev, decoder);
+		count++;
+
+		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev);
 
 		pfree(ev->raw);
 		pfree(ev);
-		count++;
-
-		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, tup);
 	}
 
 	pq_getmsgend(message);
