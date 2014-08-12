@@ -250,6 +250,17 @@ GetStreamEventDecoder(const char *encoding)
 }
 
 /*
+ * ProjectStreamEvent
+ *
+ * Applies types to a decoded event's raw fields
+ */
+HeapTuple
+ProjectStreamEvent(StreamEvent event, TupleDesc desc)
+{
+	return NULL;
+}
+
+/*
  * DecodeStreamEvent
  *
  * Decodes an event into a physical tuple

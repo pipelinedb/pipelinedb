@@ -819,7 +819,7 @@ typedef struct RangeTblEntry
 	/*
 	 * Fields valid for a stream RTE (else NULL/zero):
 	 */
-	TupleDesc cvdesc; /* descriptor for a stream, based on SELECT statements target entries */
+	TupleDesc cvdesc; /* descriptor for a stream, based on SELECT statement's target entries */
 
 	/*
 	 * Fields valid in all RTEs:

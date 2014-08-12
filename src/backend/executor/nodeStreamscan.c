@@ -23,13 +23,15 @@ StreamScanNext(StreamScanState *node)
 	StreamBufferSlot *sbs = NextStreamEvent(node->reader);
 	StreamEventDecoder *decoder;
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
+	HeapTuple tup;
 	if (sbs == NULL)
 	{
 		return NULL;
 	}
 	decoder = GetStreamEventDecoder(sbs->encoding);
+	tup = DecodeStreamEvent(sbs->event, decoder);
 	ExecSetSlotDescriptor(slot, decoder->schema);
-	ExecStoreTuple(sbs->event, slot, InvalidBuffer, false);
+	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 
 	return slot;
 }
@@ -65,6 +67,8 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 	ExecInitScanTupleSlot(estate, &state->ss);
 
 	state->ss.ps.ps_TupFromTlist = false;
+
+	ExecAssignScanType(&state->ss, node->desc);
 
 	/*
 	 * Initialize result tuple type and projection info.
