@@ -319,11 +319,8 @@ NextStreamEvent(StreamBufferReader *reader)
 }
 
 extern void
-ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, bool verbose, int intervalms)
+ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, int intervalms)
 {
-	TupleTableSlot *slot;
-	StreamEventDecoder *decoder;
-	MemoryContext oldcontext;
 	StreamBufferReader *reader = OpenStreamBufferReader(buf, queryid);
 	StreamBufferSlot *sbs;
 	int count = 0;
@@ -332,20 +329,11 @@ ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, bool verbose, int int
 	printf("====\n");
 	while ((sbs = NextStreamEvent(reader)) != NULL)
 	{
-		oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-		decoder = GetStreamEventDecoder(sbs->encoding);
-		MemoryContextSwitchTo(oldcontext);
-
 		count++;
 		printf("size = %dB, stream = \"%s\", encoding = \"%s\" addr = %p\n",
 				(int) StreamBufferSlotSize(sbs), sbs->stream, sbs->encoding, &(sbs->link));
 
 		size += StreamBufferSlotSize(sbs);
-		slot = MakeSingleTupleTableSlot(decoder->schema);
-//		ExecStoreTuple(sbs->event, slot, InvalidBuffer, false);
-
-		if (verbose)
-			print_slot(slot);
 
 		if (intervalms > 0)
 			pg_usleep(intervalms * 1000);
@@ -355,12 +343,9 @@ ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, bool verbose, int int
 }
 
 extern void
-PrintStreamBuffer(StreamBuffer *buf, bool verbose)
+PrintStreamBuffer(StreamBuffer *buf)
 {
 	int count = 0;
-	TupleTableSlot *slot;
-	StreamEventDecoder *decoder;
-	MemoryContext oldcontext;
 	StreamBufferSlot *sbs = (StreamBufferSlot *)
 		SHMQueueNext(&(buf->buf), &(buf->buf), offsetof(StreamBufferSlot, link));
 
@@ -368,19 +353,9 @@ PrintStreamBuffer(StreamBuffer *buf, bool verbose)
 	LWLockAcquire(StreamBufferLock, LW_EXCLUSIVE);
 	while (sbs != NULL && count < 10)
 	{
-		oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-		decoder = GetStreamEventDecoder(sbs->encoding);
-		MemoryContextSwitchTo(oldcontext);
-
 		count++;
 		printf("size = %d, stream = \"%s\", encoding = \"%s\" addr = %p\n",
 				(int) StreamBufferSlotSize(sbs), sbs->stream, sbs->encoding, &(sbs->link));
-
-		slot = MakeSingleTupleTableSlot(decoder->schema);
-//		ExecStoreTuple(sbs->event, slot, InvalidBuffer, false);
-
-		if (verbose)
-			print_slot(slot);
 
 		sbs = (StreamBufferSlot *)
 				SHMQueueNext(&(buf->buf), &(sbs->link), offsetof(StreamBufferSlot, link));
