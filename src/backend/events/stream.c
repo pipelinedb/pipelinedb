@@ -273,7 +273,6 @@ CreateStreamTargets(void)
 
 	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	targets = hash_create("StreamTargets", 32, &ctl, HASH_ELEM);
-	MemoryContextSwitchTo(oldcontext);
 
 	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 	scandesc = heap_beginscan(rel, SnapshotNow, 0, NULL);
@@ -302,8 +301,13 @@ CreateStreamTargets(void)
 			{
 				JoinExpr *j = (JoinExpr *) node;
 				char *relname = ((RangeVar *) j->larg)->relname;
+				bool found;
 				StreamTagsEntry *entry =
-						(StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, NULL);
+						(StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, &found);
+
+				if (!found)
+					entry->tags = NULL;
+
 				entry->tags = bms_add_member(entry->tags, catrow->id);
 
 				relname = ((RangeVar *) j->rarg)->relname;
@@ -313,8 +317,16 @@ CreateStreamTargets(void)
 			else if (IsA(node, RangeVar))
 			{
 				RangeVar *rv = (RangeVar *) node;
+				bool found;
 				StreamTagsEntry *entry =
-						(StreamTagsEntry *) hash_search(targets, (void *) rv->relname, HASH_ENTER, NULL);
+						(StreamTagsEntry *) hash_search(targets, (void *) rv->relname, HASH_ENTER, &found);
+
+				if (!found)
+				{
+					elog(LOG, "NOT FOUND");
+					entry->tags = NULL;
+				}
+
 				entry->tags = bms_add_member(entry->tags, catrow->id);
 			}
 			else
@@ -328,6 +340,8 @@ CreateStreamTargets(void)
 
 	heap_endscan(scandesc);
 	heap_close(rel, AccessExclusiveLock);
+
+	MemoryContextSwitchTo(oldcontext);
 
 	return targets;
 }
