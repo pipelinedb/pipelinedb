@@ -225,7 +225,6 @@ GetStreamEventDecoder(const char *encoding)
 	 *  although we do need to be able to rely on some assumptions to avoid ambiguity
 	 */
 	decoder->name = pstrdup(encoding);
-	decoder->schema = get_schema(row->oid);
 	decoder->rettype = procform->prorettype;
 	decoder->rawpos = 0;
 	decoder->fcinfo_data.flinfo = palloc(sizeof(fcinfo.flinfo));
@@ -266,13 +265,13 @@ ProjectStreamEvent(StreamEvent event, TupleDesc desc)
  * Decodes an event into a physical tuple
  */
 HeapTuple
-DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
+DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc)
 {
 	Datum result;
 	Datum *fields;
 	Datum rawarg;
 	HeapTuple decoded;
-	AttInMetadata *attinmeta = TupleDescGetAttInMetadata(decoder->schema);
+	AttInMetadata *attinmeta = TupleDescGetAttInMetadata(desc);
 	int nfields;
 	char *evbytes = pnstrdup(event->raw, event->len);
 	char **strs;
@@ -306,13 +305,13 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder)
 				/* if we got this far, then the input bytes are valid JSON so we can use them directly here */
 				int i;
 
-				nfields = decoder->schema->natts;
+				nfields = desc->natts;
 				fields = palloc(nfields * sizeof(Datum));
 
-				for (i=0; i<decoder->schema->natts; i++)
+				for (i=0; i<desc->natts; i++)
 				{
 					/* XXX TODO: handle nonexistent fields, json_object_field throws an error for these */
-					const char *key = NameStr(decoder->schema->attrs[i]->attname);
+					const char *key = NameStr(desc->attrs[i]->attname);
 					Datum raw = DirectFunctionCall2(json_object_field, CStringGetTextDatum(evbytes),
 							CStringGetTextDatum(key));
 

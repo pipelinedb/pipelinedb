@@ -19,7 +19,6 @@ typedef struct StreamEventDecoder
 	char *name;
 	int rawpos;
 	FunctionCallInfoData fcinfo_data;
-	TupleDesc schema;
 	Oid rettype;
 } StreamEventDecoder;
 
@@ -27,4 +26,4 @@ typedef struct StreamEventDecoder
 extern StreamEventDecoder *GetStreamEventDecoder(const char *channel);
 extern void InitDecoderCache(void);
 extern HeapTuple ProjectStreamEvent(StreamEvent event, TupleDesc desc);
-extern HeapTuple DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder);
+extern HeapTuple DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc);

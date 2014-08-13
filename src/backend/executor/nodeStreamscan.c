@@ -29,11 +29,9 @@ StreamScanNext(StreamScanState *node)
 	{
 		return NULL;
 	}
-
 	scan = (StreamScan *) node->ss.ps.plan;
 	decoder = GetStreamEventDecoder(sbs->encoding);
-	decoder->schema = scan->desc;
-	tup = DecodeStreamEvent(sbs->event, decoder);
+	tup = DecodeStreamEvent(sbs->event, decoder, scan->desc);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 
 	return slot;
