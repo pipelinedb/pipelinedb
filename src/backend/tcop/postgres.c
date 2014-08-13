@@ -963,6 +963,8 @@ get_merge_plan(char *cvname, CachedPlanSource **src)
 		Assert(parsetree_list->length == 1);
 
 		raw_parse_tree = (Node *) linitial(parsetree_list);
+		((SelectStmt *) raw_parse_tree)->forContinuousView = true;
+
 		query_list = pg_analyze_and_rewrite(raw_parse_tree, query_string, NULL, 0);
 
 		/* CVs should only have a single query */
