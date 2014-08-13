@@ -322,10 +322,7 @@ CreateStreamTargets(void)
 						(StreamTagsEntry *) hash_search(targets, (void *) rv->relname, HASH_ENTER, &found);
 
 				if (!found)
-				{
-					elog(LOG, "NOT FOUND");
 					entry->tags = NULL;
-				}
 
 				entry->tags = bms_add_member(entry->tags, catrow->id);
 			}
