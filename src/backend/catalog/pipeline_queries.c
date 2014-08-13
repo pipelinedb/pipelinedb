@@ -22,6 +22,24 @@
 
 
 /*
+ * skip
+ *
+ * Skips to the end of a substring within another string, beginning
+ * at the given position
+ */
+static int
+skip(const char *needle, const char *haystack, int pos)
+{
+	while(pg_strncasecmp(needle, &haystack[pos++], strlen(needle)) != 0 &&
+			pos < strlen(haystack));
+
+	if (pos == strlen(haystack))
+		return -1;
+
+	return pos + strlen(needle);
+}
+
+/*
  * get_next_id
  *
  * Gets the smallest possible id to assign to the next continuous view.
@@ -112,7 +130,7 @@ AddQuery(const char *rawname, const char *query, char state)
  * Retrieves a REGISTERed query from the pipeline_queries catalog table
  */
 char *
-GetQueryString(RangeVar *rvname, int *cqid)
+GetQueryString(RangeVar *rvname, int *cqid, bool select_only)
 {
 	HeapTuple	tuple;
 	Form_pipeline_queries row;
@@ -134,6 +152,33 @@ GetQueryString(RangeVar *rvname, int *cqid)
 		*cqid = DatumGetInt32(row->id);
 
 	ReleaseSysCache(tuple);
+
+	/* do we only want the return the SELECT portion of statement? */
+	if (select_only)
+	{
+		/*
+		 * Technically the CV could be named "create" or "continuous",
+		 * so it's not enough to simply advance to the CV name. We need
+		 * to skip past the keywords first. Note that these find() calls
+		 * should never return -1 for this string since it's already been
+		 * validated.
+		 */
+		int trimmedlen;
+		char *trimmed;
+		int pos = skip("CREATE", result, 0);
+		pos = skip("CONTINUOUS", result, pos);
+		pos = skip("VIEW", result, pos);
+		pos = skip(rvname->relname, result, pos);
+		pos = skip("AS", result, pos);
+
+		trimmedlen = strlen(result) - pos + 1;
+		trimmed = palloc(trimmedlen);
+
+		memcpy(trimmed, &result[pos], trimmedlen);
+		pfree(result);
+
+		result = trimmed;
+	}
 
 	return result;
 }

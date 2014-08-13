@@ -263,10 +263,7 @@ CreateStreamTargets(void)
 	Relation rel;
 	HeapScanDesc scandesc;
 	Form_pipeline_queries catrow;
-	Query *query;
 	HeapTuple tup;
-	List *plist;
-	Node *ptree;
 	MemoryContext oldcontext;
 
 	MemSet(&ctl, 0, sizeof(ctl));
@@ -285,20 +282,47 @@ CreateStreamTargets(void)
 	{
 		char *querystring;
 		ListCell *lc;
+		List *parsetree_list;
+		Node *parsetree;
+		CreateContinuousViewStmt *cv;
+		SelectStmt *select;
 
 		catrow = (Form_pipeline_queries) GETSTRUCT(tup);
 		querystring = TextDatumGetCString(&(catrow->query));
-		plist = pg_parse_query(querystring);
-		ptree = (Node *) lfirst(plist->head);
-		query = parse_analyze(ptree, querystring, NULL, 0);
 
-		foreach(lc, query->rtable)
+		parsetree_list = pg_parse_query(querystring);
+		parsetree = (Node *) lfirst(parsetree_list->head);
+		cv = (CreateContinuousViewStmt *) parsetree;
+		select = (SelectStmt *) cv->query;
+
+		foreach(lc, select->fromClause)
 		{
-			RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
-			StreamTagsEntry *entry =
-					(StreamTagsEntry *) hash_search(targets, (void *) rte->relname, HASH_ENTER, NULL);
+			Node *node = (Node *) lfirst(lc);
+			if (IsA(node, JoinExpr))
+			{
+				JoinExpr *j = (JoinExpr *) node;
+				char *relname = ((RangeVar *) j->larg)->relname;
+				StreamTagsEntry *entry =
+						(StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, NULL);
+				entry->tags = bms_add_member(entry->tags, catrow->id);
 
-			entry->tags = bms_add_member(entry->tags, catrow->id);
+				relname = ((RangeVar *) j->rarg)->relname;
+				entry = (StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, NULL);
+				entry->tags = bms_add_member(entry->tags, catrow->id);
+			}
+			else if (IsA(node, RangeVar))
+			{
+				RangeVar *rv = (RangeVar *) node;
+				StreamTagsEntry *entry =
+						(StreamTagsEntry *) hash_search(targets, (void *) rv->relname, HASH_ENTER, NULL);
+				entry->tags = bms_add_member(entry->tags, catrow->id);
+			}
+			else
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+					errmsg("unrecognized node type found when determining stream targets: %d", nodeTag(node))));
+			}
 		}
 	}
 

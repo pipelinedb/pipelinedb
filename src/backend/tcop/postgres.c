@@ -956,7 +956,7 @@ get_merge_plan(char *cvname, CachedPlanSource **src)
 		 */
 		oldContext = MemoryContextSwitchTo(CacheMemoryContext);
 
-		query_string = GetQueryString(rel, NULL);
+		query_string = GetQueryString(rel, NULL, true);
 		parsetree_list = pg_parse_query(query_string);
 
 		/* CVs should only have a single query */
@@ -974,6 +974,7 @@ get_merge_plan(char *cvname, CachedPlanSource **src)
 		query->cq_is_merge = true;
 
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
+
 		/* TODO: size this appropriately */
 		psrc->store = tuplestore_begin_heap(true, true, 1000);
 		psrc->desc = RelationNameGetTupleDesc(cvname);
@@ -1691,7 +1692,6 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 static void
 exec_decode_events(const char *encoding, const char *channel, StringInfo message)
 {
-	StreamEventDecoder *decoder;
 	int count = 0;
 
 	start_xact_command();
@@ -1699,26 +1699,22 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 	if (!GlobalStreamBuffer)
 		InitGlobalStreamBuffer();
 
-	MemoryContextSwitchTo(CacheMemoryContext);
-	decoder = GetStreamEventDecoder(encoding);
 	MemoryContextSwitchTo(EventContext);
 
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
-		HeapTuple tup;
 
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
 
-		tup = DecodeStreamEvent(ev, decoder);
+		count++;
+
+		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev);
 
 		pfree(ev->raw);
 		pfree(ev);
-		count++;
-
-		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, tup);
 	}
 
 	pq_getmsgend(message);

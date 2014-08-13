@@ -45,11 +45,11 @@ static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
  * Finds enough tombstoned slots to zero out and re-use shared memory for a new slot
  */
 static StreamBufferSlot *
-alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTuple event)
+alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent event)
 {
 	char *pos = *buf->pos;
 	long free = 0;
-	HeapTuple shared;
+	StreamEvent shared;
 	StreamBufferSlot *result;
 	Size size;
 	MemoryContext oldcontext;
@@ -59,12 +59,12 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 	bms = GetTargetsFor(stream, targets);
 	MemoryContextSwitchTo(oldcontext);
 
-	if (targets == NULL)
+	if (bms == NULL)
 	{
 		/* nothing is reading from this stream, so it's a noop */
 		return NULL;
 	}
-	size = HEAPTUPLESIZE + event->t_len + sizeof(StreamBufferSlot) +
+	size = sizeof(StreamEventData) + event->len + sizeof(StreamBufferSlot) +
 			strlen(stream) + 1 + strlen(encoding) + 1 + sizeof(Bitmapset) + bms->nwords * sizeof(bitmapword);
 
 	if (size > buf->capacity)
@@ -125,16 +125,14 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
 	result = (StreamBufferSlot *) pos;
 	pos += sizeof(StreamBufferSlot);
 
-	MemSet(pos, 0, HEAPTUPLESIZE + event->t_len);
-	shared = (HeapTuple) pos;
-	pos += HEAPTUPLESIZE + event->t_len;
+	MemSet(pos, 0, sizeof(StreamEvent) + event->len);
+	shared = (StreamEvent) pos;
+	shared->len = event->len;
+	pos += sizeof(StreamEventData);
 
-	shared->t_len = event->t_len;
-	shared->t_self = event->t_self;
-	shared->t_tableOid = event->t_tableOid;
-	shared->t_xc_node_id = event->t_xc_node_id;
-	shared->t_data = (HeapTupleHeader) ((char *) shared + HEAPTUPLESIZE);
-	memcpy((char *) shared->t_data, (char *) event->t_data, event->t_len);
+	shared->raw = pos;
+	memcpy(shared->raw, event->raw, event->len);
+	pos += event->len;
 
 	result->event = shared;
 	result->stream = pos;
@@ -167,16 +165,20 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, HeapTupl
  * Appends a decoded event to the given stream buffer
  */
 extern StreamBufferSlot *
-AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, HeapTuple event)
+AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent ev)
 {
 	StreamBufferSlot *sbs;
 	char *prev = *buf->pos;
 
 	LWLockAcquire(StreamBufferLock, LW_EXCLUSIVE);
-	sbs = alloc_slot(stream, encoding, buf, event);
+	sbs = alloc_slot(stream, encoding, buf, ev);
 
-	SHMQueueElemInit(&(sbs->link));
-	SHMQueueInsertBefore(&(buf->buf), &(sbs->link));
+	if (sbs != NULL)
+	{
+		SHMQueueElemInit(&(sbs->link));
+		SHMQueueInsertBefore(&(buf->buf), &(sbs->link));
+	}
+
 	LWLockRelease(StreamBufferLock);
 
 	if (DebugPrintStreamBuffer)
@@ -340,7 +342,7 @@ ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, bool verbose, int int
 
 		size += StreamBufferSlotSize(sbs);
 		slot = MakeSingleTupleTableSlot(decoder->schema);
-		ExecStoreTuple(sbs->event, slot, InvalidBuffer, false);
+//		ExecStoreTuple(sbs->event, slot, InvalidBuffer, false);
 
 		if (verbose)
 			print_slot(slot);
@@ -375,7 +377,7 @@ PrintStreamBuffer(StreamBuffer *buf, bool verbose)
 				(int) StreamBufferSlotSize(sbs), sbs->stream, sbs->encoding, &(sbs->link));
 
 		slot = MakeSingleTupleTableSlot(decoder->schema);
-		ExecStoreTuple(sbs->event, slot, InvalidBuffer, false);
+//		ExecStoreTuple(sbs->event, slot, InvalidBuffer, false);
 
 		if (verbose)
 			print_slot(slot);

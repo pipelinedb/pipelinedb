@@ -20,8 +20,8 @@
 
 #define BufferOffset(buf, ptr) ((int) ((char *) (ptr) - (buf)->start))
 
-#define StreamBufferSlotSize(slot) ((int) (HEAPTUPLESIZE + \
-		(slot)->event->t_len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1 + \
+#define StreamBufferSlotSize(slot) ((int) (sizeof(StreamEventData) + \
+		(slot)->event->len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1 + \
 		strlen(slot->encoding) + 1 + sizeof(Bitmapset) + \
 		(slot)->readby->nwords * sizeof(bitmapword)))
 
@@ -34,7 +34,7 @@ typedef struct StreamBufferSlot
 {
 	SHM_QUEUE	link;
 	/* decoded event */
-	HeapTuple event;
+	StreamEvent event;
 	/*
 	 * Each continuous query maps to exactly one bit in this bitmap.
 	 * After a CQ has read the event, its bit is set to 1.
@@ -87,7 +87,7 @@ typedef struct StreamBufferReader
 
 extern StreamBuffer *GlobalStreamBuffer;
 
-extern StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, HeapTuple event);
+extern StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent event);
 extern Size StreamBufferShmemSize(void);
 extern void InitGlobalStreamBuffer(void);
 

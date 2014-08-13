@@ -61,7 +61,7 @@ static Plan *create_unique_plan(PlannerInfo *root, UniquePath *best_path);
 static SeqScan *create_seqscan_plan(PlannerInfo *root, Path *best_path,
 					List *tlist, List *scan_clauses);
 static StreamScan *create_streamscan_plan(PlannerInfo *root, Path *best_path,
-					List *tlist, List *scan_clauses);
+					List *tlist, List *scan_clauses, RelOptInfo *rel);
 static Scan *create_indexscan_plan(PlannerInfo *root, IndexPath *best_path,
 					  List *tlist, List *scan_clauses, bool indexonly);
 static BitmapHeapScan *create_bitmap_scan_plan(PlannerInfo *root,
@@ -392,7 +392,8 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 			plan = (Plan *) create_streamscan_plan(root,
 												best_path,
 												tlist,
-												scan_clauses);
+												scan_clauses,
+												rel);
 			break;
 
 		case T_IndexScan:
@@ -1182,9 +1183,11 @@ create_seqscan_plan(PlannerInfo *root, Path *best_path,
  */
 static StreamScan *
 create_streamscan_plan(PlannerInfo *root, Path *best_path,
-					List *tlist, List *scan_clauses)
+					List *tlist, List *scan_clauses, RelOptInfo *rel)
 {
 	StreamScan    *scan_plan;
+	Index	varno = rel->relid;
+	RangeTblEntry *rte = planner_rt_fetch(varno, root);
 
 	/* Sort clauses into best execution order */
 	scan_clauses = order_qual_clauses(root, scan_clauses);
@@ -1202,6 +1205,7 @@ create_streamscan_plan(PlannerInfo *root, Path *best_path,
 	scan_plan = make_streamscan(tlist,
 							 scan_clauses,
 							 root->parse->cqid);
+	scan_plan->desc = rte->cvdesc;
 
 	copy_path_costsize(&scan_plan->scan.plan, best_path);
 

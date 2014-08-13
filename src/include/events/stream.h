@@ -36,12 +36,24 @@ typedef struct StreamData
 
 typedef EventStreamData *EventStream;
 
+typedef struct StreamEventField
+{
+	/* name of this field */
+	char *name;
+	/* pointer to the beginning of this field in its StreamEvent's raw bytes */
+	char *fpos;
+	/* length in bytes of the field */
+	Size flen;
+} StreamEventField;
+
 typedef struct EventData
 {
 	/* length of raw event */
 	int len;
 	/* raw encoded event data */
 	char *raw;
+	/* List * of raw fields contained in this event */
+	List *fields;
 } StreamEventData;
 
 typedef StreamEventData *StreamEvent;

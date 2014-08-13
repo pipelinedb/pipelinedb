@@ -295,6 +295,7 @@ typedef struct StreamScan
 {
 	Scan scan;
 	int32 cqid;
+	TupleDesc desc;
 } StreamScan;
 
 /* ----------------
