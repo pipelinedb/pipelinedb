@@ -26,6 +26,7 @@
 #include "access/xlog.h"
 #include "catalog/catalog.h"
 #include "catalog/heap.h"
+#include "events/stream.h"
 #include "foreign/fdwapi.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -97,7 +98,7 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 	 * the rewriter or when expand_inherited_rtentry() added it to the query's
 	 * rangetable.
 	 */
-	if (!root->parse->is_continuous)
+	if (!QueryIsStreaming(root->parse))
 	{
 		relation = heap_open(relationObjectId, NoLock);
 
@@ -119,7 +120,7 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 		palloc0((rel->max_attr - rel->min_attr + 1) * sizeof(int32));
 
 	/* we're scanning streams, so there's nothing more we can do */
-	if (root->parse->is_continuous)
+	if (QueryIsStreaming(root->parse))
 		return;
 
 	/*
@@ -899,6 +900,11 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 			{
 				desc = rte->cvdesc;
 				numattrs = desc->natts;
+			}
+			else if (root->parse->cq_is_merge)
+			{
+				/* XXX PipelineDB: why is rte NULL here for merge queries? */
+				return NIL;
 			}
 			else
 			{

@@ -17,6 +17,7 @@
 #include "catalog/pg_type.h"
 #include "commands/trigger.h"
 #include "foreign/fdwapi.h"
+#include "events/stream.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/clauses.h"
@@ -3347,7 +3348,7 @@ QueryRewrite(Query *parsetree)
 	Query	   *lastInstead;
 
 	/* CQs don't currently get rewritten */
-	if (parsetree->is_continuous)
+	if (QueryIsStreaming(parsetree))
 		return list_make1(parsetree);
 
 	/*

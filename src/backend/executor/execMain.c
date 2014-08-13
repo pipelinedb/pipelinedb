@@ -847,7 +847,7 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	/*
 	 * Do permissions checks
 	 */
-	if (!plannedstmt->is_continuous)
+	if (!PlanIsStreaming(plannedstmt))
 		ExecCheckRTPerms(rangeTable, true);
 
 	/*
