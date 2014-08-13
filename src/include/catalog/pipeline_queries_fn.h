@@ -12,5 +12,5 @@
 #include "nodes/primnodes.h"
 
 void AddQuery(const char *name, const char *query, char state);
-char *GetQueryString(RangeVar *name, int *cqid);
+char *GetQueryString(RangeVar *name, int *cqid, bool selectonly);
 void SetQueryState(RangeVar *name, char state);

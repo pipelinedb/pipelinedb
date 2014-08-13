@@ -2560,7 +2560,7 @@ transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewSt
 {
 	/* TODO: if it's already running, throw an error */
 	int cqid;
-	const char *query_string = GetQueryString(stmt->name, &cqid);
+	const char *query_string = GetQueryString(stmt->name, &cqid, false);
 
 	List *parsetree_list = pg_parse_query(query_string);
 

@@ -956,7 +956,7 @@ get_merge_plan(char *cvname, CachedPlanSource **src)
 		 */
 		oldContext = MemoryContextSwitchTo(CacheMemoryContext);
 
-		query_string = GetQueryString(rel, NULL);
+		query_string = GetQueryString(rel, NULL, true);
 		parsetree_list = pg_parse_query(query_string);
 
 		/* CVs should only have a single query */
@@ -974,6 +974,7 @@ get_merge_plan(char *cvname, CachedPlanSource **src)
 		query->cq_is_merge = true;
 
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, cvname, "SELECT");
+
 		/* TODO: size this appropriately */
 		psrc->store = tuplestore_begin_heap(true, true, 1000);
 		psrc->desc = RelationNameGetTupleDesc(cvname);

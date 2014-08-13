@@ -24,13 +24,16 @@ StreamScanNext(StreamScanState *node)
 	StreamEventDecoder *decoder;
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 	HeapTuple tup;
+	StreamScan *scan;
 	if (sbs == NULL)
 	{
 		return NULL;
 	}
+
+	scan = (StreamScan *) node->ss.ps.plan;
 	decoder = GetStreamEventDecoder(sbs->encoding);
+	decoder->schema = scan->desc;
 	tup = DecodeStreamEvent(sbs->event, decoder);
-	ExecSetSlotDescriptor(slot, decoder->schema);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 
 	return slot;
