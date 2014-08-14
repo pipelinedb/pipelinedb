@@ -220,15 +220,27 @@ GetStreamEventDecoder(const char *encoding)
 	procform = (Form_pg_proc) GETSTRUCT(proctup);
 
 	decoder = palloc(sizeof(StreamEventDecoder));
+
 	/*
 	 *  XXX TODO: it may not be the best idea to assume that the raw event is the first argument,
 	 *  although we do need to be able to rely on some assumptions to avoid ambiguity
 	 */
+	decoder->rawpos = 0;
 	decoder->name = pstrdup(encoding);
 	decoder->rettype = procform->prorettype;
-	decoder->rawpos = 0;
+	decoder->tmp_ctxt = AllocSetContextCreate(CurrentMemoryContext,
+													 "DecoderContext",
+													 ALLOCSET_DEFAULT_MINSIZE,
+													 ALLOCSET_DEFAULT_INITSIZE,
+													 ALLOCSET_DEFAULT_MAXSIZE);
+
 	decoder->fcinfo_data.flinfo = palloc(sizeof(fcinfo.flinfo));
-	decoder->fcinfo_data.flinfo->fn_mcxt = MemoryContextAllocZero(CurrentMemoryContext, ALLOCSET_SMALL_MAXSIZE);
+	decoder->fcinfo_data.flinfo->fn_mcxt = AllocSetContextCreate(CurrentMemoryContext,
+													 decoder->name,
+													 ALLOCSET_DEFAULT_MINSIZE,
+													 ALLOCSET_DEFAULT_INITSIZE,
+													 ALLOCSET_DEFAULT_MAXSIZE);
+
 	decoder->fcinfo_data.nargs = list_length(argnames) + 1;
 	fmgr_info(clist->oid, decoder->fcinfo_data.flinfo);
 
@@ -271,6 +283,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 	Datum *fields;
 	Datum rawarg;
 	HeapTuple decoded;
+	MemoryContext oldcontext = MemoryContextSwitchTo(decoder->tmp_ctxt);
 	AttInMetadata *attinmeta = TupleDescGetAttInMetadata(desc);
 	int nfields;
 	char *evbytes = pnstrdup(event->raw, event->len);
@@ -287,12 +300,14 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 			rawarg = CStringGetTextDatum(evbytes);
 	}
 
-	decoder->fcinfo_data.arg[decoder->rawpos] = rawarg;
+	MemoryContextSwitchTo(oldcontext);
 
+	decoder->fcinfo_data.arg[decoder->rawpos] = rawarg;
 	InitFunctionCallInfoData(decoder->fcinfo_data, decoder->fcinfo_data.flinfo,
 			decoder->fcinfo_data.nargs, InvalidOid, NULL, NULL);
-
 	result = FunctionCallInvoke(&decoder->fcinfo_data);
+
+	oldcontext = MemoryContextSwitchTo(decoder->tmp_ctxt);
 
 	switch(decoder->rettype)
 	{
@@ -311,11 +326,12 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 				for (i=0; i<desc->natts; i++)
 				{
 					/* XXX TODO: handle nonexistent fields, json_object_field throws an error for these */
+					char *rawstr;
 					const char *key = NameStr(desc->attrs[i]->attname);
 					Datum raw = DirectFunctionCall2(json_object_field, CStringGetTextDatum(evbytes),
 							CStringGetTextDatum(key));
 
-					char *rawstr = TextDatumGetCString(raw);
+					rawstr = TextDatumGetCString(raw);
 
 					if (rawstr[0] == '"')
 						raw = DirectFunctionCall3(text_substr, raw, DatumGetInt32(2), DatumGetInt32(strlen(rawstr) - 2));
@@ -339,9 +355,11 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 		strs[i] = TextDatumGetCString(fields[i]);
 	}
 
+	MemoryContextSwitchTo(oldcontext);
+
 	decoded = BuildTupleFromCStrings(attinmeta, strs);
-	pfree(strs);
-	pfree(evbytes);
+
+	MemoryContextReset(decoder->tmp_ctxt);
 
 	return decoded;
 }
