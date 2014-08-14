@@ -36,7 +36,16 @@ StreamTargets *targets;
 static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
 {
 	if (DebugPrintStreamBuffer)
-		elog(LOG, "evicted [%d, %d)", BufferOffset(buf, slot), BufferOffset(buf, slot) + StreamBufferSlotSize(slot));
+	{
+		elog(LOG, "evicted %dB at [%d, %d)", StreamBufferSlotSize(slot),
+				BufferOffset(buf, slot), BufferOffset(buf, slot) + StreamBufferSlotSize(slot));
+	}
+}
+
+static void
+mark_garbage()
+{
+
 }
 
 /*
@@ -351,7 +360,7 @@ PrintStreamBuffer(StreamBuffer *buf)
 
 	printf("====\n");
 	LWLockAcquire(StreamBufferLock, LW_EXCLUSIVE);
-	while (sbs != NULL && count < 10)
+	while (sbs != NULL)
 	{
 		count++;
 		printf("size = %d, stream = \"%s\", encoding = \"%s\" addr = %p\n",

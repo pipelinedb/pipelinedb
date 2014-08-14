@@ -11,7 +11,7 @@ static void
 usage(void)
 {
 	printf("Usage:\n\
-  read <host> <port> <database name> <user> <query id>\n");
+  read <host> <port> <database name> <user> <query id> <max events>\n");
 }
 
 
