@@ -20,6 +20,7 @@ typedef struct StreamEventDecoder
 	int rawpos;
 	FunctionCallInfoData fcinfo_data;
 	Oid rettype;
+	MemoryContext tmp_ctxt;
 } StreamEventDecoder;
 
 
