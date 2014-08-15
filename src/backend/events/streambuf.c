@@ -42,12 +42,6 @@ static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
 	}
 }
 
-static void
-mark_garbage()
-{
-
-}
-
 /*
  * alloc_slot
  *
@@ -63,6 +57,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	Size size;
 	MemoryContext oldcontext;
 	Bitmapset *bms;
+	StreamBufferSlot *victim = *GlobalStreamBuffer->nextvictim;
 
 	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	bms = GetTargetsFor(stream, targets);
@@ -77,7 +72,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 			strlen(stream) + 1 + strlen(encoding) + 1 + sizeof(Bitmapset) + bms->nwords * sizeof(bitmapword);
 
 	if (size > buf->capacity)
-		elog(LOG, "event of size %d too big for stream buffer of size %d", (int) size, (int) buf->capacity);
+		elog(ERROR, "event of size %d too big for stream buffer of size %d", (int) size, (int) buf->capacity);
 
 	if (pos + size > BufferEnd(buf))
 	{
@@ -113,22 +108,24 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		}
 
 		/* see declaration of nextvictim in streambuf.h for comments */
-		buf->nextvictim = (StreamBufferSlot *)
+		victim = (StreamBufferSlot *)
 				SHMQueueNext(&(buf->buf), &(sbs->link), offsetof(StreamBufferSlot, link));
 	}
 
-	while (buf->nextvictim != NULL && (char *) buf->nextvictim != buf->start &&
-			pos + size > (char *) buf->nextvictim)
+	while (victim != NULL && (char *) victim != buf->start &&
+			pos + size > (char *) victim)
 	{
 		/*
 		 * this event will consume the gap between the buffer position
 		 * and the next complete event's (victim) start address, so we
 		 * need to check the event to make sure we can clobber it
 		 */
-		wait_for_overwrite(buf, buf->nextvictim);
-		buf->nextvictim = (StreamBufferSlot *)
-				SHMQueueNext(&(buf->buf), &(buf->nextvictim->link), offsetof(StreamBufferSlot, link));
+		wait_for_overwrite(buf, victim);
+		victim = (StreamBufferSlot *)
+				SHMQueueNext(&(buf->buf), &(victim->link), offsetof(StreamBufferSlot, link));
 	}
+
+	*GlobalStreamBuffer->nextvictim = victim;
 
 	MemSet(pos, 0, sizeof(StreamBufferSlot));
 	result = (StreamBufferSlot *) pos;
@@ -162,6 +159,8 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	result->readby->nwords = bms->nwords;
 	memcpy(result->readby->words, bms->words, sizeof(bitmapword) * bms->nwords);
 	pos += sizeof(Bitmapset) + sizeof(bitmapword) * bms->nwords;
+
+	result->len = size;
 
 	*buf->pos = pos;
 
@@ -223,12 +222,12 @@ extern void InitGlobalStreamBuffer(void)
 {
 	bool found;
 	MemoryContext oldcontext;
-	long size = StreamBufferShmemSize();
+	Size size = StreamBufferShmemSize();
 
-	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer", size , &found);
+	Size headersize = MAXALIGN(sizeof(StreamBuffer));
+
+	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer", headersize , &found);
 	GlobalStreamBuffer->capacity = size;
-	GlobalStreamBuffer->start = (char *) (GlobalStreamBuffer + sizeof(StreamBuffer));
-	GlobalStreamBuffer->nextvictim = NULL;
 
 	/*
 	 * This is kind of ugly to not just put this thing in shmem,
@@ -242,8 +241,14 @@ extern void InitGlobalStreamBuffer(void)
 	if (!found)
 	{
 		SHMQueueInit(&(GlobalStreamBuffer->buf));
+
+		GlobalStreamBuffer->start = (char *) ShmemAlloc(size);
+
 		GlobalStreamBuffer->pos = ShmemAlloc(sizeof(char *));
 		*GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
+
+		GlobalStreamBuffer->nextvictim = ShmemAlloc(sizeof(StreamBufferSlot *));
+		*GlobalStreamBuffer->nextvictim = NULL;
 	}
 }
 
@@ -363,8 +368,8 @@ PrintStreamBuffer(StreamBuffer *buf)
 	while (sbs != NULL)
 	{
 		count++;
-		printf("size = %d, stream = \"%s\", encoding = \"%s\" addr = %p\n",
-				(int) StreamBufferSlotSize(sbs), sbs->stream, sbs->encoding, &(sbs->link));
+		printf("[%p] size = %d, stream = \"%s\", encoding = \"%s\"\n", sbs,
+				(int) StreamBufferSlotSize(sbs), sbs->stream, sbs->encoding);
 
 		sbs = (StreamBufferSlot *)
 				SHMQueueNext(&(buf->buf), &(sbs->link), offsetof(StreamBufferSlot, link));
