@@ -42,6 +42,7 @@ typedef struct StreamBufferSlot
 	Bitmapset *readby;
 	char *stream;
 	char *encoding;
+	int len;
 } StreamBufferSlot;
 
 /* Circular buffer containing physical events to be read by continuous queries */
@@ -70,7 +71,7 @@ typedef struct StreamBuffer
 	 * after the 101st byte, but we need to know where the next event starts so that
 	 * it can properly be read before being clobbered.
 	 */
-	StreamBufferSlot *nextvictim;
+	StreamBufferSlot **nextvictim;
 	/* mapping from streams to the continuous views that read from them */
 //	StreamTargets *targets;
 } StreamBuffer;
