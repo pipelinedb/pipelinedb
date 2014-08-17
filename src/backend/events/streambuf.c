@@ -131,7 +131,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	result = (StreamBufferSlot *) pos;
 	pos += sizeof(StreamBufferSlot);
 
-	MemSet(pos, 0, sizeof(StreamEvent) + event->len);
+	MemSet(pos, 0, sizeof(StreamEventData) + event->len);
 	shared = (StreamEvent) pos;
 	shared->len = event->len;
 	pos += sizeof(StreamEventData);
