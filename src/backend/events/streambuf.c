@@ -89,8 +89,8 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		 /* the buffer got full, so start a new append cycle */
 		(*buf->prev)->nextoffset = BufferEnd(buf) - SlotEnd(*buf->prev);
 
-		*buf->prev = NULL;
 		*buf->tail = *buf->prev;
+		*buf->prev = NULL;
 		free = 0;
 		pos = buf->start;
 	}
