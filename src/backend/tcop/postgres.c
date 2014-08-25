@@ -4803,7 +4803,7 @@ PostgresMain(int argc, char *argv[],
 
 					reader = OpenStreamBufferReader(GlobalStreamBuffer, queryid);
 
-					while ((sbs = NextStreamEvent(reader)) != NULL)
+					while ((sbs = PinNextStreamEvent(reader)) != NULL)
 					{
 						if (maxevents > 0 && ++count >= maxevents)
 							break;

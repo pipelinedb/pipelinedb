@@ -20,19 +20,21 @@
 static TupleTableSlot *
 StreamScanNext(StreamScanState *node)
 {
-	StreamBufferSlot *sbs = NextStreamEvent(node->reader);
+	StreamBufferSlot *sbs = PinNextStreamEvent(node->reader);
 	StreamEventDecoder *decoder;
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 	HeapTuple tup;
 	StreamScan *scan;
+
 	if (sbs == NULL)
-	{
 		return NULL;
-	}
+
 	scan = (StreamScan *) node->ss.ps.plan;
 	decoder = GetStreamEventDecoder(sbs->encoding);
 	tup = DecodeStreamEvent(sbs->event, decoder, scan->desc);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
+
+	UnpinStreamEvent(node->reader, sbs);
 
 	return slot;
 }

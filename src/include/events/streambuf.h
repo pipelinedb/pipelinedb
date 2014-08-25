@@ -17,13 +17,14 @@
 #include "storage/shmem.h"
 
 #define BufferEnd(buf) ((buf)->start + (buf)->capacity)
-
 #define BufferOffset(buf, ptr) ((int) ((char *) (ptr) - (buf)->start))
 
-#define StreamBufferSlotSize(slot) ((int) (sizeof(StreamEventData) + \
-		(slot)->event->len + sizeof(StreamBufferSlot) + strlen(slot->stream) + 1 + \
-		strlen(slot->encoding) + 1 + sizeof(Bitmapset) + \
+#define SlotSize(slot) ((int) (sizeof(StreamEventData) + \
+		(slot)->event->len + sizeof(StreamBufferSlot) + strlen((slot)->stream) + 1 + \
+		strlen((slot)->encoding) + 1 + sizeof(Bitmapset) + \
 		(slot)->readby->nwords * sizeof(bitmapword)))
+
+#define SlotEnd(slot) ((char *) (slot) + SlotSize(slot))
 
 extern bool DebugPrintStreamBuffer;
 
@@ -43,6 +44,7 @@ typedef struct StreamBufferSlot
 	char *stream;
 	char *encoding;
 	int len;
+	int nextoffset;
 } StreamBufferSlot;
 
 /* Circular buffer containing physical events to be read by continuous queries */
@@ -71,9 +73,12 @@ typedef struct StreamBuffer
 	 * after the 101st byte, but we need to know where the next event starts so that
 	 * it can properly be read before being clobbered.
 	 */
-	StreamBufferSlot **nextvictim;
 	/* mapping from streams to the continuous views that read from them */
 //	StreamTargets *targets;
+	StreamBufferSlot **prev;
+	StreamBufferSlot **tail;
+	char **last;
+	int id;
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */
@@ -93,8 +98,8 @@ extern Size StreamBufferShmemSize(void);
 extern void InitGlobalStreamBuffer(void);
 
 extern StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
-extern StreamBufferSlot *NextStreamEvent(StreamBufferReader *reader);
-extern StreamBufferSlot *NextStreamEvent(StreamBufferReader *reader);
+extern StreamBufferSlot *PinNextStreamEvent(StreamBufferReader *reader);
+extern void UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot);
 extern void ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, int intervalms);
 extern void PrintStreamBuffer(StreamBuffer *buf);
 
