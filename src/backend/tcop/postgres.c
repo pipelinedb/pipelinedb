@@ -1714,9 +1714,6 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 		count++;
 
 		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev);
-
-		pfree(ev->raw);
-		pfree(ev);
 	}
 
 	pq_getmsgend(message);
