@@ -78,7 +78,6 @@ typedef struct StreamBuffer
 	StreamBufferSlot **prev;
 	StreamBufferSlot **tail;
 	char **last;
-	int id;
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */
@@ -87,8 +86,7 @@ typedef struct StreamBufferReader
 	int queryid;
 	char *pos;
 	StreamBuffer *buf;
-	/* next slot to be returned */
-	StreamBufferSlot *next;
+	bool reading;
 } StreamBufferReader;
 
 extern StreamBuffer *GlobalStreamBuffer;

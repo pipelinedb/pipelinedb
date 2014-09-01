@@ -86,13 +86,24 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 
 	if (pos + size > BufferEnd(buf))
 	{
+		/* wait for the last event to be read by all readers */
+		while (bms_num_members((*buf->prev)->readby) > 0);
+
+		*buf->pos = buf->start;
+
+		/* we need to make sure all readers are done reading before we begin clobbering entries */
+		LWLockAcquire(StreamBufferLock, LW_EXCLUSIVE);
+
+		*buf->last = NULL;
+		*buf->tail = *buf->prev;
+
 		 /* the buffer got full, so start a new append cycle */
 		(*buf->prev)->nextoffset = BufferEnd(buf) - SlotEnd(*buf->prev);
-
-		*buf->tail = *buf->prev;
 		*buf->prev = NULL;
 		free = 0;
-		pos = buf->start;
+		pos = *buf->pos;
+
+		LWLockRelease(StreamBufferLock);
 	}
 	else
 	{
@@ -180,6 +191,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 
 	*buf->prev = result;
 	*buf->pos = pos;
+	*buf->last = pos;
 
 	return result;
 }
@@ -195,16 +207,7 @@ AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, S
 	StreamBufferSlot *sbs;
 	char *prev = *buf->pos;
 
-	LWLockAcquire(StreamBufferLock, LW_EXCLUSIVE);
 	sbs = alloc_slot(stream, encoding, buf, ev);
-
-	if (sbs != NULL)
-	{
-		SHMQueueElemInit(&(sbs->link));
-		SHMQueueInsertBefore(&(buf->buf), &(sbs->link));
-	}
-
-	LWLockRelease(StreamBufferLock);
 
 	if (DebugPrintStreamBuffer)
 	{
@@ -291,22 +294,13 @@ OpenStreamBufferReader(StreamBuffer *buf, int queryid)
 	reader->buf = buf;
 	reader->pos = buf->start;
 
-	/* advance the reader to the first relevant slot in the stream buffer */
-	sbs = (StreamBufferSlot *)
-		SHMQueueNext(&(reader->buf->buf), &(reader->buf->buf), offsetof(StreamBufferSlot, link));
-	while (sbs != NULL)
-	{
-		if (bms_is_member(queryid, sbs->readby))
-			break;
-		sbs = (StreamBufferSlot *)
-				SHMQueueNext(&(reader->buf->buf), &(sbs->link), offsetof(StreamBufferSlot, link));
-		count++;
-	}
+	LWLockAcquire(StreamBufferLock, LW_SHARED);
+	reader->reading = true;
+
+	/* TODO: advance the reader to the first relevant slot in the stream buffer */
 
 	if (DebugPrintStreamBuffer)
 		elog(LOG, "advanced reader %d past %d events", queryid, count);
-
-	reader->next = sbs;
 
 	return reader;
 }
@@ -321,28 +315,45 @@ OpenStreamBufferReader(StreamBuffer *buf, int queryid)
 extern StreamBufferSlot *
 PinNextStreamEvent(StreamBufferReader *reader)
 {
+	StreamBuffer *buf = reader->buf;
 	StreamBufferSlot *result = NULL;
-	StreamBufferSlot *current = reader->next;
+	StreamBufferSlot *current = NULL;
 
-	if (current == NULL)
+	if (*buf->last == NULL)
+		return NULL;
+
+	if (!reader->reading)
 	{
-		/* wrap around to head of queue */
-		current = (StreamBufferSlot *)
-			SHMQueueNext(&(reader->buf->buf), &(reader->buf->buf), offsetof(StreamBufferSlot, link));
+		LWLockAcquire(StreamBufferLock, LW_SHARED);
+		reader->reading = true;
 	}
 
-	if (current == NULL)
+	if (reader->pos < *buf->last)
+	{
+		/* new data since last read */
+		current = (StreamBufferSlot *) reader->pos;
+	}
+	else if (reader->pos == *buf->last)
+	{
+		if (*buf->pos < *buf->last)
+		{
+			reader->reading = false;
+			LWLockRelease(StreamBufferLock);
+			reader->pos = buf->start;
+		}
 		return NULL;
+	}
+
+	reader->pos += SlotSize(current);
 
 	if (bms_is_member(reader->queryid, current->readby))
 		result = current;
 
-	reader->next = (StreamBufferSlot *)
-			SHMQueueNext(&(reader->buf->buf), &(current->link), offsetof(StreamBufferSlot, link));
-
 	if (result && DebugPrintStreamBuffer)
-		elog(LOG, "read event at [%d, %d)", BufferOffset(reader->buf, result), \
+	{
+		elog(LOG, "read event at [%d, %d)", BufferOffset(reader->buf, result),
 				BufferOffset(reader->buf, result) + SlotSize(result));
+	}
 
 	return result;
 }

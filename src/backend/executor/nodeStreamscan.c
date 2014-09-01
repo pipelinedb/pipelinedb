@@ -16,7 +16,6 @@
 #include "events/decode.h"
 #include "events/streambuf.h"
 
-
 static TupleTableSlot *
 StreamScanNext(StreamScanState *node)
 {
