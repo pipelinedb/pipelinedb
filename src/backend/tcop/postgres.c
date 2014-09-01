@@ -1714,9 +1714,6 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 		count++;
 
 		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev);
-
-		pfree(ev->raw);
-		pfree(ev);
 	}
 
 	pq_getmsgend(message);
@@ -4803,7 +4800,7 @@ PostgresMain(int argc, char *argv[],
 
 					reader = OpenStreamBufferReader(GlobalStreamBuffer, queryid);
 
-					while ((sbs = NextStreamEvent(reader)) != NULL)
+					while ((sbs = PinNextStreamEvent(reader)) != NULL)
 					{
 						if (maxevents > 0 && ++count >= maxevents)
 							break;
