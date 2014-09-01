@@ -396,8 +396,12 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
  				AggState *agg = (AggState *) node;
  				agg->agg_done = false;
  				agg->table_filled = false;
-				hash_destroy(agg->hashtable->hashtab);
-				build_hash_table(agg);
+
+				if (agg->hashtable)
+				{
+					hash_destroy(agg->hashtable->hashtab);
+					build_hash_table(agg);
+				}
  			}
  			break;
  		default:
