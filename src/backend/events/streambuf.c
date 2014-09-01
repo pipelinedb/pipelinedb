@@ -19,6 +19,7 @@
 
 #define NO_SLOTS_FOLLOW -1
 
+#define HasPendingReads(slot) (bms_num_members((slot)->readby) > 0)
 #define IsNewAppendCycle(buf) ((*buf->prev) == NULL)
 #define MustEvict(buf) (!IsNewAppendCycle(buf) && (*buf->prev)->nextoffset != NO_SLOTS_FOLLOW)
 
@@ -41,7 +42,7 @@ StreamTargets *targets;
 static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
 {
 	/* block until all CQs have marked this event as read */
-	while (bms_num_members(slot->readby) > 0);
+	while (HasPendingReads(slot));
 
 	if (DebugPrintStreamBuffer)
 	{
@@ -87,7 +88,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	if (pos + size > BufferEnd(buf))
 	{
 		/* wait for the last event to be read by all readers */
-		while (bms_num_members((*buf->prev)->readby) > 0);
+		while (HasPendingReads(*buf->prev));
 
 		*buf->pos = buf->start;
 
