@@ -14,6 +14,7 @@
 #include "executor/tuptable.h"
 #include "nodes/print.h"
 #include "storage/lwlock.h"
+#include "storage/spin.h"
 #include "utils/memutils.h"
 #include "miscadmin.h"
 
@@ -194,6 +195,8 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	*buf->pos = pos;
 	*buf->last = pos;
 
+	SpinLockInit(&result->mutex);
+
 	return result;
 }
 
@@ -320,7 +323,7 @@ PinNextStreamEvent(StreamBufferReader *reader)
 	StreamBufferSlot *result = NULL;
 	StreamBufferSlot *current = NULL;
 
-	if (*buf->last == NULL)
+	if (*buf->last == NULL || reader->pos == *buf->pos)
 		return NULL;
 
 	if (!reader->reading)
@@ -368,7 +371,10 @@ PinNextStreamEvent(StreamBufferReader *reader)
 extern void
 UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 {
-	bms_del_member(slot->readby, reader->queryid);
+	volatile Bitmapset *bms = slot->readby;
+	SpinLockAcquire(&slot->mutex);
+	bms_del_member((Bitmapset *) bms, reader->queryid);
+	SpinLockRelease(&slot->mutex);
 }
 
 extern void

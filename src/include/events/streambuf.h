@@ -14,6 +14,7 @@
 #include "postgres.h"
 #include "events/stream.h"
 #include "nodes/bitmapset.h"
+#include "storage/s_lock.h"
 #include "storage/shmem.h"
 
 #define BufferEnd(buf) ((buf)->start + (buf)->capacity)
@@ -45,6 +46,7 @@ typedef struct StreamBufferSlot
 	char *encoding;
 	int len;
 	int nextoffset;
+	slock_t mutex;
 } StreamBufferSlot;
 
 /* Circular buffer containing physical events to be read by continuous queries */
