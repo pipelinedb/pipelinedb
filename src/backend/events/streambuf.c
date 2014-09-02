@@ -20,6 +20,11 @@
 
 #define NO_SLOTS_FOLLOW -1
 
+#define BufferWrapped(buf) (*(buf)->pos < *(buf)->last)
+#define AtBufferEnd(reader) (reader->pos == *((reader)->buf)->last)
+#define HasUnreadData(reader) ((reader)->pos < *((reader)->buf)->last)
+#define BufferUnchanged(reader) ((reader)->pos == *((reader)->buf)->pos)
+#define IsNewReadCycle(reader) (!(reader)->reading && (reader)->pos == (reader)->buf->start)
 #define HasPendingReads(slot) (bms_num_members((slot)->readby) > 0)
 #define IsNewAppendCycle(buf) ((*buf->prev) == NULL)
 #define MustEvict(buf) (!IsNewAppendCycle(buf) && (*buf->prev)->nextoffset != NO_SLOTS_FOLLOW)
@@ -323,23 +328,23 @@ PinNextStreamEvent(StreamBufferReader *reader)
 	StreamBufferSlot *result = NULL;
 	StreamBufferSlot *current = NULL;
 
-	if (*buf->last == NULL || reader->pos == *buf->pos)
+	if (BufferUnchanged(reader))
 		return NULL;
 
-	if (!reader->reading)
+	if (IsNewReadCycle(reader))
 	{
 		LWLockAcquire(StreamBufferLock, LW_SHARED);
 		reader->reading = true;
 	}
 
-	if (reader->pos < *buf->last)
+	if (HasUnreadData(reader))
 	{
 		/* new data since last read */
 		current = (StreamBufferSlot *) reader->pos;
 	}
-	else if (reader->pos == *buf->last)
+	else if (AtBufferEnd(reader))
 	{
-		if (*buf->pos < *buf->last)
+		if (BufferWrapped(buf))
 		{
 			reader->reading = false;
 			LWLockRelease(StreamBufferLock);
