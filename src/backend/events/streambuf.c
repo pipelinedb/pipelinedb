@@ -344,12 +344,10 @@ PinNextStreamEvent(StreamBufferReader *reader)
 	}
 	else if (AtBufferEnd(reader))
 	{
-		if (BufferWrapped(buf))
-		{
-			reader->reading = false;
-			LWLockRelease(StreamBufferLock);
-			reader->pos = buf->start;
-		}
+		reader->reading = false;
+		LWLockRelease(StreamBufferLock);
+		reader->pos = buf->start;
+
 		return NULL;
 	}
 
