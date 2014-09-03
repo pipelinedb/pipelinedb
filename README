@@ -11,5 +11,9 @@
 make
 make install
 
-# Initialize data directories and cluster meta data
-bin/init-cluster --root=/path/to/dev/installation --drop-existing
+# Bootstrap the environment
+# This creates PipelineDB's physical data directories, configuration files, etc.
+make bootstrap
+
+# Run PipelineDB
+make run
