@@ -13,12 +13,28 @@ COORDINATOR_DIR = 'coordinator'
 DATANODE_DIR = 'datanode%d'
 POSTGRES = 'src/backend/postgres'
 GTM = 'src/gtm/main/gtm'
+PROCS = []
 
 
-def handle_sigint(signal, frame):
+def _kill(sig):
+    time.sleep(0.1)
+    out, err = subprocess.Popen(['ps', 'x'], stdout=subprocess.PIPE).communicate()
+    errprocs = []
+    for line in out.split('\n'):
+        if 'postgres' in line or 'gtm' in line:
+            pid = line.split()[0]
+            try:
+                os.kill(int(pid), sig)
+            except OSError: pass # It might already be dead so just ignore the exception
+
+
+def handle_sigint(sig, frame):
     """
     Ctrl+C
     """
+    _kill(signal.SIGINT)
+    _kill(signal.SIGKILL)
+
 
 signal.signal(signal.SIGINT, handle_sigint)
 
@@ -48,9 +64,8 @@ def main(args):
     gtm_dir = os.path.join(root, GTM_DIR)
     coord_dir = os.path.join(root, COORDINATOR_DIR)
 
-    procs = []
-    procs.append(subprocess.Popen([GTM, '-D', gtm_dir]))
-    procs.append(subprocess.Popen([POSTGRES, '--coordinator', '-D', coord_dir]))
+    PROCS.append(subprocess.Popen([GTM, '-D', gtm_dir]))
+    PROCS.append(subprocess.Popen([POSTGRES, '--coordinator', '-D', coord_dir]))
 
     # Given the process some time to start
     time.sleep(0.1)
@@ -67,10 +82,10 @@ def main(args):
 
     for node, port in nodes:
         path = os.path.join(root, node)
-        procs.append(subprocess.Popen([POSTGRES, '--datanode', '-D' , path,
+        PROCS.append(subprocess.Popen([POSTGRES, '--datanode', '-D' , path,
                                        '-p', port]))
 
-    for p in procs:
+    for p in PROCS:
         p.wait()
 
 
