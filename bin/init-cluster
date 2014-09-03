@@ -30,12 +30,11 @@ def main(args):
     gtm_dir = os.path.join(root, GTM_DIR)
     coord_dir = os.path.join(root, COORDINATOR_DIR)
     
-    if args.drop_existing:
-        os.path.exists(gtm_dir) and shutil.rmtree(gtm_dir)
-        os.path.exists(coord_dir) and shutil.rmtree(coord_dir)
-        dns = glob.glob(os.path.abspath(os.path.join(root, 'datanode*')))
-        for dn in dns:
-            shutil.rmtree(dn)
+    os.path.exists(gtm_dir) and shutil.rmtree(gtm_dir)
+    os.path.exists(coord_dir) and shutil.rmtree(coord_dir)
+    dns = glob.glob(os.path.abspath(os.path.join(root, 'datanode*')))
+    for dn in dns:
+        shutil.rmtree(dn)
             
     
     output = devnull = open(os.devnull, 'w')
@@ -77,14 +76,14 @@ def main(args):
         os.kill(proc.pid, signal.SIGINT)
         time.sleep(1)
 
+    print 'PipelineDB successfully bootstrapped.'
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', action='store', dest='root', required=True,
                         help='Root directory in which to create the cluster')
     parser.add_argument('--num-datanodes', dest='num_datanodes', default=2,
-                        action='store', help='Number of datanodes to create')
-    parser.add_argument('--drop-existing', dest='drop_existing', action='store_true', 
-                        default=False, help='If present, existing cluster will be completely deleted')
+                        action='store', type=int, help='Number of datanodes to create')
     args = parser.parse_args()
     main(args)

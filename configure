@@ -787,6 +787,7 @@ localstatedir
 sharedstatedir
 sysconfdir
 datadir
+datanodes
 datarootdir
 libexecdir
 sbindir
@@ -872,6 +873,7 @@ ac_unrecognized_sep=
 # The variables have the same names as the options, with
 # dashes changed to underlines.
 cache_file=/dev/null
+datanodes=2
 exec_prefix=NONE
 no_create=
 no_recursion=
@@ -1102,6 +1104,9 @@ do
   | --oldinclude=* | --oldinclud=* | --oldinclu=* | --oldincl=* | --oldinc=* \
   | --oldin=* | --oldi=* | --old=* | --ol=* | --o=*)
     oldincludedir=$ac_optarg ;;
+
+	-datanodes=* | --datanodes=*)
+		datanodes=$ac_optarg ;;
 
   -prefix | --prefix | --prefi | --pref | --pre | --pr | --p)
     ac_prev=prefix ;;

@@ -74,6 +74,8 @@ ifndef PGXS
 # Note that prefix, exec_prefix, and datarootdir aren't defined in a PGXS build;
 # makefiles may only use the derived variables such as bindir.
 
+datanodes := @datanodes@
+
 prefix := @prefix@
 exec_prefix := @exec_prefix@
 datarootdir := @datarootdir@
