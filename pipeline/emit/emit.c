@@ -3,7 +3,7 @@
 #include "libpq-fe.h"
 #include "libpq-int.h"
 
-#define MAX_BUF_SIZE 1024 * 1024
+#define MAX_BUF_SIZE 6 * 1024 * 1024
 
 static void usage(void);
 
