@@ -80,6 +80,8 @@ typedef struct StreamBuffer
 	StreamBufferSlot **prev;
 	StreamBufferSlot **tail;
 	char **last;
+	int writers;
+	slock_t mutex;
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */
@@ -93,6 +95,8 @@ typedef struct StreamBufferReader
 
 extern StreamBuffer *GlobalStreamBuffer;
 
+extern void OpenStreamBuffer(StreamBuffer *buf);
+extern void CloseStreamBuffer(StreamBuffer *buf);
 extern StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent event);
 extern Size StreamBufferShmemSize(void);
 extern void InitGlobalStreamBuffer(void);

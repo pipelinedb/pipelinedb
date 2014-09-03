@@ -1703,6 +1703,8 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 
 	MemoryContextSwitchTo(EventContext);
 
+	OpenStreamBuffer(GlobalStreamBuffer);
+
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
@@ -1719,6 +1721,8 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 	pq_getmsgend(message);
 
 	RespondSendEvents(count);
+
+	CloseStreamBuffer(GlobalStreamBuffer);
 
 	MemoryContextSwitchTo(MessageContext);
 	MemoryContextReset(EventContext);

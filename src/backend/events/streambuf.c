@@ -24,7 +24,7 @@
 #define AtBufferEnd(reader) (reader->pos == *((reader)->buf)->last)
 #define HasUnreadData(reader) ((reader)->pos < *((reader)->buf)->last)
 #define BufferUnchanged(reader) ((reader)->pos == *((reader)->buf)->pos)
-#define IsNewReadCycle(reader) (!(reader)->reading && (reader)->pos == (reader)->buf->start)
+#define IsNewReadCycle(reader) (!(reader)->reading)
 #define HasPendingReads(slot) (bms_num_members((slot)->readby) > 0)
 #define IsNewAppendCycle(buf) ((*buf->prev) == NULL)
 #define MustEvict(buf) (!IsNewAppendCycle(buf) && (*buf->prev)->nextoffset != NO_SLOTS_FOLLOW)
@@ -206,6 +206,32 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 }
 
 /*
+ * OpenStreamBuffer
+ *
+ * Indicate that the current process is currently writing to the given StreamBuffer
+ */
+extern void
+OpenStreamBuffer(StreamBuffer *buf)
+{
+	SpinLockAcquire(&buf->mutex);
+	buf->writers++;
+	SpinLockRelease(&buf->mutex);
+}
+
+/*
+ * CloseStreamBuffer
+ *
+ * Indicate that the current process is finished writing to the given StreamBuffer
+ */
+extern void
+CloseStreamBuffer(StreamBuffer *buf)
+{
+	SpinLockAcquire(&buf->mutex);
+	buf->writers--;
+	SpinLockRelease(&buf->mutex);
+}
+
+/*
  * AppendStreamEvent
  *
  * Appends a decoded event to the given stream buffer
@@ -329,10 +355,19 @@ PinNextStreamEvent(StreamBufferReader *reader)
 	StreamBufferSlot *current = NULL;
 
 	if (BufferUnchanged(reader))
+	{
+		if (reader->reading && buf->writers == 0)
+		{
+			/* the buffer hasn't changed and no writers are writing, so release the read lock */
+			LWLockRelease(StreamBufferLock);
+			reader->reading = false;
+		}
 		return NULL;
+	}
 
 	if (IsNewReadCycle(reader))
 	{
+		/* new data has been added to the buffer but we don't have a read lock yet, so get one */
 		LWLockAcquire(StreamBufferLock, LW_SHARED);
 		reader->reading = true;
 	}
@@ -344,6 +379,7 @@ PinNextStreamEvent(StreamBufferReader *reader)
 	}
 	else if (AtBufferEnd(reader))
 	{
+		/* we've consumed all the data in the buffer, wrap around to start reading from the beginning */
 		reader->reading = false;
 		LWLockRelease(StreamBufferLock);
 		reader->pos = buf->start;
@@ -351,6 +387,10 @@ PinNextStreamEvent(StreamBufferReader *reader)
 		return NULL;
 	}
 
+	/*
+	 * Advance the reader to the end of the current slot. Events are appended contiguously,
+	 * so this is right where the next event will be.
+	 */
 	reader->pos += SlotSize(current);
 
 	if (bms_is_member(reader->queryid, current->readby))
