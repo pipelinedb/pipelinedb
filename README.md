@@ -36,7 +36,7 @@ make
 make run
 ^C
 
-# code changes...
+# Make some code changes...
 make
 make run
 ```
