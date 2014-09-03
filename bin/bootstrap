@@ -8,6 +8,7 @@ import subprocess
 import time
 import getpass
 import signal
+import sys
 
 GTM_DIR = 'gtm'
 COORDINATOR_DIR = 'coordinator'
@@ -26,6 +27,10 @@ def _create_node(name, type, port):
 
 def main(args):
     root = os.path.expandvars(args.root)
+    if not os.path.exists(root):
+        print 'Root directory %s does not exist. Did you run `make install`?' % root
+        sys.exit(1)
+
     root = os.path.expanduser(root)
     gtm_dir = os.path.join(root, GTM_DIR)
     coord_dir = os.path.join(root, COORDINATOR_DIR)
@@ -35,7 +40,6 @@ def main(args):
     dns = glob.glob(os.path.abspath(os.path.join(root, 'datanode*')))
     for dn in dns:
         shutil.rmtree(dn)
-            
     
     output = devnull = open(os.devnull, 'w')
     
@@ -69,12 +73,12 @@ def main(args):
     subprocess.call(['psql', 'postgres', '-c', 'CREATE DATABASE %s' % user])
     
     # Wait for the above transactions to finish before killing
-    time.sleep(1)
+    time.sleep(0.1)
     
     # Cleanup daemons
     for proc in procs:
         os.kill(proc.pid, signal.SIGINT)
-        time.sleep(1)
+        time.sleep(0.1)
 
     print 'PipelineDB successfully bootstrapped.'
 

@@ -1,3 +1,82 @@
 #! /usr/bin/python
 
-# start coord to get datanode metadata
+import argparse
+import os
+import subprocess
+import signal
+import sys
+import time
+
+
+GTM_DIR = 'gtm'
+COORDINATOR_DIR = 'coordinator'
+DATANODE_DIR = 'datanode%d'
+POSTGRES = 'src/backend/postgres'
+GTM = 'src/gtm/main/gtm'
+
+
+def handle_sigint(signal, frame):
+    """
+    Ctrl+C
+    """
+
+signal.signal(signal.SIGINT, handle_sigint)
+
+
+def main(args):
+    root = os.path.expandvars(args.root)
+    root = os.path.expanduser(root)
+
+    # Make sure we've already bootstrapped
+    if not os.path.exists(os.path.join(root, 'coordinator')):
+        print 'Root directory %s not bootstrapped. Did you run `make bootstrap`?' % root
+        sys.exit(1)
+
+    # Make sure that there are no PipelineDB processes already running
+    out, err = subprocess.Popen(['ps', 'x'], stdout=subprocess.PIPE).communicate()
+    errprocs = []
+    for line in out.split('\n'):
+        if 'postgres' in line or 'gtm' in line:
+            errprocs.append(line)
+
+    if errprocs:
+        print 'The following processes must be terminated before running PipelineDB:'
+        for p in errprocs:
+            print p
+        sys.exit(1)
+
+    gtm_dir = os.path.join(root, GTM_DIR)
+    coord_dir = os.path.join(root, COORDINATOR_DIR)
+
+    procs = []
+    procs.append(subprocess.Popen([GTM, '-D', gtm_dir]))
+    procs.append(subprocess.Popen([POSTGRES, '--coordinator', '-D', coord_dir]))
+
+    # Given the process some time to start
+    time.sleep(0.1)
+    q = "SELECT node_name, node_port FROM pgxc_node WHERE node_type = 'D'"
+    p = subprocess.Popen(['psql', '-c', q], stdout=subprocess.PIPE)
+    out, err = p.communicate()
+
+    # We don't care about the last two lines of this output
+    rows = out.split('\n')[2:-3]
+    nodes = []
+    for row in rows:
+        node, port = row.split('|')
+        nodes.append((node.strip(), port.strip()))
+
+    for node, port in nodes:
+        path = os.path.join(root, node)
+        procs.append(subprocess.Popen([POSTGRES, '--datanode', '-D' , path,
+                                       '-p', port]))
+
+    for p in procs:
+        p.wait()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--root', action='store', dest='root', required=True,
+                    help='Root directory in which PipelineDB is installed')
+    args = parser.parse_args()
+    main(args)
