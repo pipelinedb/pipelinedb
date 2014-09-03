@@ -6,6 +6,7 @@
        /_/                                       
 ========================================================================
 
+```
 # Build from source (with debug symbols)
 ./configure CFLAGS="-g -O0" --prefix=/path/to/dev/installation
 make
@@ -17,3 +18,4 @@ make bootstrap
 
 # Run PipelineDB
 make run
+```
