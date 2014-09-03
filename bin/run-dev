@@ -61,6 +61,14 @@ def main(args):
             print p
         sys.exit(1)
 
+    print """\
+    ____  _            ___            ____  ____
+   / __ \(_)___  ___  / (_)___  ___  / __ \/ __ )
+  / /_/ / / __ \/ _ \/ / / __ \/ _ \/ / / / __  |
+ / ____/ / /_/ /  __/ / / / / /  __/ /_/ / /_/ /
+/_/   /_/ .___/\___/_/_/_/ /_/\___/_____/_____/
+       /_/
+"""
     gtm_dir = os.path.join(root, GTM_DIR)
     coord_dir = os.path.join(root, COORDINATOR_DIR)
 
