@@ -27,7 +27,9 @@ make run
 
 Enter `Ctrl+C` to shut down PipelineDB.
 
-`make run` uses the binaries in the PipelineDB root compiled by `make`, so you don't need to `make install` before running `make run` after code changes--only `make` needs to be run. The basic development flow is:
+`make run` uses the binaries in the PipelineDB root compiled by `make`, so you don't need to `make install` before running `make run` after code changes--only `make` needs to be run. 
+
+The basic development flow is:
 
 ```
 make
