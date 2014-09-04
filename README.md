@@ -51,7 +51,7 @@ Now let's generate some test data and stream it into a simple continuous view. F
 
 Next, create a simple continuous view:
 
-    =# CREATE CONTINUOUS VIEW test_view AS SELECT key::text, COUNT(*) FROM test_stream GROUP BY key
+    =# CREATE CONTINUOUS VIEW test_view AS SELECT key::text, COUNT(*) FROM test_stream GROUP BY key;
     CREATE CONTINUOUS VIEW
     =# ACTIVATE test_view --this will block
 
