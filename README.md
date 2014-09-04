@@ -77,6 +77,15 @@ Let's verify that the continuous view was properly updated. What were the 10 mos
      E   |    16
     (10 rows)
 
+Were there actually 10,000 events counted?
+
+    psql -c "SELECT sum(count) FROM test_view;
+      sum  
+    -------
+    10000
+    (1 row)
+
+
     
 
 
