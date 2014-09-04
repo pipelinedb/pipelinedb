@@ -60,7 +60,7 @@ Now use the `generate-json` and `emit-local` scripts to stream data into the con
     cd pipeline/emit
     ./generate-json --key=str --value=float --n=10000 | ./emit-local --encoding test_data --stream test_stream 
     
-Now let's verify that the continuous view was properly updated. What were the 10 most common randomly generated keys?
+Let's verify that the continuous view was properly updated. What were the 10 most common randomly generated keys?
 
     psql -c "SELECT * FROM test_view ORDER BY count DESC limit 10;"
      key | count 
