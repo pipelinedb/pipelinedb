@@ -21,7 +21,7 @@ def _kill(sig):
     out, err = subprocess.Popen(['ps', 'x'], stdout=subprocess.PIPE).communicate()
     errprocs = []
     for line in out.split('\n'):
-        if 'postgres' in line or 'gtm' in line:
+        if __file__ not in line and ('postgres' in line or 'gtm' in line):
             pid = line.split()[0]
             try:
                 os.kill(int(pid), sig)
@@ -42,6 +42,7 @@ signal.signal(signal.SIGINT, handle_sigint)
 def main(args):
     root = os.path.expandvars(args.root)
     root = os.path.expanduser(root)
+    skip = args.skip or []
 
     # Make sure we've already bootstrapped
     if not os.path.exists(os.path.join(root, 'coordinator')):
@@ -52,7 +53,7 @@ def main(args):
     out, err = subprocess.Popen(['ps', 'x'], stdout=subprocess.PIPE).communicate()
     errprocs = []
     for line in out.split('\n'):
-        if 'postgres' in line or 'gtm' in line:
+        if __file__ not in line and ('postgres' in line or 'gtm' in line):
             errprocs.append(line)
 
     if errprocs:
@@ -72,14 +73,25 @@ def main(args):
     gtm_dir = os.path.join(root, GTM_DIR)
     coord_dir = os.path.join(root, COORDINATOR_DIR)
 
-    PROCS.append(subprocess.Popen([GTM, '-D', gtm_dir]))
-    PROCS.append(subprocess.Popen([POSTGRES, '--coordinator', '-D', coord_dir]))
+    if 'gtm' not in skip:
+        PROCS.append(subprocess.Popen([GTM, '-D', gtm_dir]))
+    else:
+        print 'Skipping GTM'
+    if 'coordinator' not in skip:
+        PROCS.append(subprocess.Popen([POSTGRES, '--coordinator', '-D', coord_dir]))
+    else:
+        print 'Skipping coordinator'
 
     # Give the process some time to start
     time.sleep(0.1)
     q = "SELECT node_name, node_port FROM pgxc_node WHERE node_type = 'D'"
     p = subprocess.Popen(['psql', '-c', q], stdout=subprocess.PIPE)
     out, err = p.communicate()
+    if p.returncode != 0:
+        print 'Couldn\'t connect to coordinator to retrieve cluster topology'
+        _kill(signal.SIGINT)
+        _kill(signal.SIGKILL)
+        sys.exit(1)
 
     # We don't care about the last two lines of this output
     rows = out.split('\n')[2:-3]
@@ -89,6 +101,9 @@ def main(args):
         nodes.append((node.strip(), port.strip()))
 
     for node, port in nodes:
+        if node in skip:
+            print 'Skipping', node
+            continue
         path = os.path.join(root, node)
         PROCS.append(subprocess.Popen([POSTGRES, '--datanode', '-D' , path,
                                        '-p', port]))
@@ -101,5 +116,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', action='store', dest='root', required=True,
                     help='Root directory in which PipelineDB is installed')
+    parser.add_argument('--skip', action='append', dest='skip', required=False,
+                    help='Prevent the given node from being launched')
     args = parser.parse_args()
     main(args)
