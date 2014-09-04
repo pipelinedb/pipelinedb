@@ -53,7 +53,7 @@ Next, create a simple continuous view:
 
     =# CREATE CONTINUOUS VIEW test_view AS SELECT key::text, COUNT(*) FROM test_stream GROUP BY key;
     CREATE CONTINUOUS VIEW
-    =# ACTIVATE test_view --this will block
+    =# ACTIVATE test_view; --this will block
 
 Now use the `generate-json` and `emit-local` scripts to stream data into the continuous view. The following invocation of `generate-json` will generate 10,000 JSON payloads with random strings assigned to the `key` field, and random `floats` assigned to the `value` field:
 
