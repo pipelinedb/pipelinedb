@@ -134,6 +134,7 @@ def main(args):
         time.sleep(0.1)
         for stmt in args.stmts:
             p = subprocess.Popen(['psql', '-c', stmt], stdout=subprocess.PIPE)
+            print stmt.upper()
 
     for p in PROCS:
         p.wait()
