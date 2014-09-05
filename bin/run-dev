@@ -28,6 +28,22 @@ def _kill(sig):
             except OSError: pass # It might already be dead so just ignore the exception
 
 
+def _find_root():
+    if not os.path.exists('config.status'):
+        return None
+
+    path = None
+    config = open('config.status')
+    lines = [l.strip() for l in config.readlines()]
+    for line in lines:
+        if line.startswith('S["prefix"]='):
+            path = line.split('=')[1][1:-1]
+
+    config.close()
+
+    return path
+
+
 def handle_sigint(sig, frame):
     """
     Ctrl+C
@@ -40,6 +56,13 @@ signal.signal(signal.SIGINT, handle_sigint)
 
 
 def main(args):
+    if not args.root:
+        args.root = _find_root()
+
+    if args.root is None:
+        print 'Could not find root PipelineDB installation directory. Specify it with the --root option.'
+        sys.exit(1)
+
     root = os.path.expandvars(args.root)
     root = os.path.expanduser(root)
     skip = args.skip or []
@@ -107,6 +130,10 @@ def main(args):
         path = os.path.join(root, node)
         PROCS.append(subprocess.Popen([POSTGRES, '--datanode', '-D' , path,
                                        '-p', port]))
+    if args.stmts:
+        time.sleep(0.1)
+        for stmt in args.stmts:
+            p = subprocess.Popen(['psql', '-c', stmt], stdout=subprocess.PIPE)
 
     for p in PROCS:
         p.wait()
@@ -114,9 +141,11 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--root', action='store', dest='root', required=True,
+    parser.add_argument('--root', action='store', dest='root', required=False,
                     help='Root directory in which PipelineDB is installed')
     parser.add_argument('--skip', action='append', dest='skip', required=False,
                     help='Prevent the given node from being launched')
+    parser.add_argument('--stmt', action='append', dest='stmts', required=False,
+                    help='SQL statements to run after all daemons are running')
     args = parser.parse_args()
     main(args)
