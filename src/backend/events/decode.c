@@ -232,6 +232,7 @@ GetStreamEventDecoder(const char *encoding)
 	 *  although we do need to be able to rely on some assumptions to avoid ambiguity
 	 */
 	decoder->rawpos = 0;
+	decoder->meta = NULL;
 	decoder->name = pstrdup(encoding);
 	decoder->rettype = procform->prorettype;
 	decoder->tmp_ctxt = AllocSetContextCreate(CurrentMemoryContext,
@@ -292,15 +293,20 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 	Datum rawarg;
 	HeapTuple decoded;
 	MemoryContext oldcontext;
-	AttInMetadata *attinmeta;
 	int nfields;
 	char *evbytes;
 	char **strs;
 	int i;
 
+	if (decoder->meta == NULL)
+	{
+		oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+		decoder->meta = TupleDescGetAttInMetadata(desc);
+		MemoryContextSwitchTo(oldcontext);
+	}
+
 	oldcontext = MemoryContextSwitchTo(decoder->tmp_ctxt);
 	evbytes = pnstrdup(event->raw, event->len);
-	attinmeta = TupleDescGetAttInMetadata(desc);
 
 	switch(decoder->rettype)
 	{
@@ -342,7 +348,14 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 					rawstr = TextDatumGetCString(raw);
 
 					if (rawstr[0] == '"')
-						raw = DirectFunctionCall3(text_substr, raw, DatumGetInt32(2), DatumGetInt32(strlen(rawstr) - 2));
+					{
+						/* trim off enclosing quotes for JSON strings */
+						char trimmed[strlen(rawstr) - 1];
+
+						memcpy(trimmed, &rawstr[1], strlen(rawstr) - 2);
+						trimmed[strlen(rawstr) - 2] = '\0';
+						raw = CStringGetTextDatum(rawstr);
+					}
 
 					fields[i] = raw;
 				}
@@ -365,7 +378,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 
 	MemoryContextSwitchTo(oldcontext);
 
-	decoded = BuildTupleFromCStrings(attinmeta, strs);
+	decoded = BuildTupleFromCStrings(decoder->meta, strs);
 
 	MemoryContextReset(decoder->tmp_ctxt);
 

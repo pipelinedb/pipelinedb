@@ -11,6 +11,7 @@
 */
 #include "access/htup.h"
 #include "events/stream.h"
+#include "funcapi.h"
 #include "utils/rel.h"
 
 
@@ -21,6 +22,7 @@ typedef struct StreamEventDecoder
 	FunctionCallInfoData fcinfo_data;
 	Oid rettype;
 	MemoryContext tmp_ctxt;
+	AttInMetadata *meta;
 } StreamEventDecoder;
 
 
