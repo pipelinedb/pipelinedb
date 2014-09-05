@@ -425,6 +425,8 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 			elog(LOG, "processed=%d, batch size=%d", estate->es_processed, batchsize);
 		estate->es_processed = 0;
 
+		MemoryContextReset(ContinuousQueryContext);
+
 		PopActiveSnapshot();
 		CommitTransactionCommand();
 	}

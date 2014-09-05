@@ -117,7 +117,9 @@
 #include "nodes/execnodes.h"
 #ifdef PGXC
 #include "pgxc/execRemote.h"
+#include "pgxc/pgxc.h"
 #endif
+#include "utils/memutils.h"
 
 /* ------------------------------------------------------------------------
  *		ExecInitNode
@@ -423,6 +425,7 @@ TupleTableSlot *
 ExecProcNode(PlanState *node)
 {
 	TupleTableSlot *result;
+	MemoryContext oldcontext;
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -434,6 +437,9 @@ ExecProcNode(PlanState *node)
 
 	if (IsContinuous(node) && node->cq_batch_progress == BatchSize(node))
 		return ExecEndBatch(node);
+
+	if (IS_PGXC_DATANODE && IsContinuous(node))
+		oldcontext = MemoryContextSwitchTo(ContinuousQueryContext);
 
 	switch (nodeTag(node))
 	{
@@ -590,6 +596,9 @@ ExecProcNode(PlanState *node)
 			result = NULL;
 			break;
 	}
+
+	if (IS_PGXC_DATANODE && IsContinuous(node))
+		MemoryContextSwitchTo(oldcontext);
 
 	if (node->instrument)
 		InstrStopNode(node->instrument, TupIsNull(result) ? 0.0 : 1.0);

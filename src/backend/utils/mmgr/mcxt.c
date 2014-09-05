@@ -48,6 +48,7 @@ MemoryContext CacheMemoryContext = NULL;
 MemoryContext MessageContext = NULL;
 MemoryContext TopTransactionContext = NULL;
 MemoryContext CurTransactionContext = NULL;
+MemoryContext ContinuousQueryContext = NULL;
 
 /* This is a transient link to the active portal's memory context: */
 MemoryContext PortalContext = NULL;
@@ -111,6 +112,12 @@ MemoryContextInit(void)
 	 */
 	ErrorContext = AllocSetContextCreate(TopMemoryContext,
 										 "ErrorContext",
+										 8 * 1024,
+										 8 * 1024,
+										 8 * 1024);
+
+	ContinuousQueryContext  = AllocSetContextCreate(TopMemoryContext,
+										 "ContinuousQueryContext",
 										 8 * 1024,
 										 8 * 1024,
 										 8 * 1024);

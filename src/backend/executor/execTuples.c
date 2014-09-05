@@ -97,6 +97,7 @@
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
 
+#include "miscadmin.h"
 
 static TupleDesc ExecTypeFromTLInternal(List *targetList,
 					   bool hasoid, bool skipjunk);

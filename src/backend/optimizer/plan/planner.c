@@ -39,6 +39,7 @@
 #include "parser/analyze.h"
 #include "parser/parsetree.h"
 #include "rewrite/rewriteManip.h"
+#include "utils/memutils.h"
 #include "utils/rel.h"
 #ifdef PGXC
 #include "commands/prepare.h"

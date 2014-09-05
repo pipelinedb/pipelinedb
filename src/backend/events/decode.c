@@ -34,8 +34,11 @@ typedef struct DecoderCacheEntry
 static StreamEventDecoder *
 check_decoder_cache(const char *encoding)
 {
+	MemoryContext oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	DecoderCacheEntry *entry =
 			(DecoderCacheEntry *) hash_search(DecoderCache, (void *) encoding, HASH_FIND, NULL);
+
+	MemoryContextSwitchTo(oldcontext);
 
 	if (entry == NULL)
 		return NULL;
@@ -153,12 +156,15 @@ GetStreamEventDecoder(const char *encoding)
 	StreamEventDecoder *decoder = check_decoder_cache(encoding);
 	HeapTuple	proctup;
 	Form_pg_proc procform;
+	MemoryContext oldcontext;
 	int nargnames;
 	int nargvals = 0;
 	int i;
 
 	if (decoder != NULL)
 		return decoder;
+
+	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 
 	namestrcpy(&name, encoding);
 	tup = SearchSysCache1(PIPELINEENCODINGNAME, NameGetDatum(&name));
@@ -257,6 +263,8 @@ GetStreamEventDecoder(const char *encoding)
 	ReleaseSysCache(tup);
 	ReleaseSysCache(proctup);
 
+	MemoryContextSwitchTo(oldcontext);
+
 	return decoder;
 }
 
@@ -283,12 +291,16 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 	Datum *fields;
 	Datum rawarg;
 	HeapTuple decoded;
-	MemoryContext oldcontext = MemoryContextSwitchTo(decoder->tmp_ctxt);
-	AttInMetadata *attinmeta = TupleDescGetAttInMetadata(desc);
+	MemoryContext oldcontext;
+	AttInMetadata *attinmeta;
 	int nfields;
-	char *evbytes = pnstrdup(event->raw, event->len);
+	char *evbytes;
 	char **strs;
 	int i;
+
+	oldcontext = MemoryContextSwitchTo(decoder->tmp_ctxt);
+	evbytes = pnstrdup(event->raw, event->len);
+	attinmeta = TupleDescGetAttInMetadata(desc);
 
 	switch(decoder->rettype)
 	{
@@ -300,14 +312,10 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 			rawarg = CStringGetTextDatum(evbytes);
 	}
 
-	MemoryContextSwitchTo(oldcontext);
-
 	decoder->fcinfo_data.arg[decoder->rawpos] = rawarg;
 	InitFunctionCallInfoData(decoder->fcinfo_data, decoder->fcinfo_data.flinfo,
 			decoder->fcinfo_data.nargs, InvalidOid, NULL, NULL);
 	result = FunctionCallInvoke(&decoder->fcinfo_data);
-
-	oldcontext = MemoryContextSwitchTo(decoder->tmp_ctxt);
 
 	switch(decoder->rettype)
 	{
