@@ -1668,7 +1668,7 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 		ev->raw = (char *) palloc(ev->len);
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
 
-		events = lappend(events, ev);
+		events = lcons(ev, events);
 	}
 	pq_getmsgend(message);
 

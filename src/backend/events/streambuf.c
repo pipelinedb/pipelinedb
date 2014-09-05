@@ -386,6 +386,9 @@ PinNextStreamEvent(StreamBufferReader *reader)
 		return NULL;
 	}
 
+	if (current == NULL)
+		return NULL;
+
 	/*
 	 * Advance the reader to the end of the current slot. Events are appended contiguously,
 	 * so this is right where the next event will be.
