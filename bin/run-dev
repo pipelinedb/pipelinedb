@@ -107,14 +107,11 @@ def main(args):
         path = os.path.join(root, node)
         PROCS.append(subprocess.Popen([POSTGRES, '--datanode', '-D' , path,
                                        '-p', port]))
-<<<<<<< HEAD
     if args.stmts:
         time.sleep(0.1)
         for stmt in args.stmts:
             p = subprocess.Popen(['psql', '-c', stmt], stdout=subprocess.PIPE)
             print stmt.upper()
-=======
->>>>>>> parent of f3ac740... Make run script smarter about finding root install directory
 
     for p in PROCS:
         p.wait()
