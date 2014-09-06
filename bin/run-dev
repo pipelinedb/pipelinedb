@@ -95,15 +95,11 @@ def main(args):
 """
     gtm_dir = os.path.join(root, GTM_DIR)
     coord_dir = os.path.join(root, COORDINATOR_DIR)
-
-    if 'gtm' not in skip:
-        PROCS.append(subprocess.Popen([GTM, '-D', gtm_dir]))
-    else:
-        print 'Skipping GTM'
-    if 'coordinator' not in skip:
-        PROCS.append(subprocess.Popen([POSTGRES, '--coordinator', '-D', coord_dir]))
-    else:
-        print 'Skipping coordinator'
+    coord = subprocess.Popen([POSTGRES, '--coordinator', '-D', coord_dir])
+    gtm = subprocess.Popen([GTM, '-D', gtm_dir])
+    
+    PROCS.append(gtm)
+    PROCS.append(coord)
 
     # Give the process some time to start
     time.sleep(0.1)
@@ -115,6 +111,13 @@ def main(args):
         _kill(signal.SIGINT)
         _kill(signal.SIGKILL)
         sys.exit(1)
+        
+    if 'coordinator' in skip:
+        print 'Skipping coordinator'
+        coord.kill()
+    if 'gtm' in skip:
+        print 'Skipping GTM'
+        gtm.kill()
 
     # We don't care about the last two lines of this output
     rows = out.split('\n')[2:-3]
