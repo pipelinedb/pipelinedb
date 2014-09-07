@@ -354,7 +354,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 
 						memcpy(trimmed, &rawstr[1], strlen(rawstr) - 2);
 						trimmed[strlen(rawstr) - 2] = '\0';
-						raw = CStringGetTextDatum(rawstr);
+						raw = CStringGetTextDatum(trimmed);
 					}
 
 					fields[i] = raw;
