@@ -61,7 +61,7 @@ typedef FormData_pipeline_queries *Form_pipeline_queries;
  *		microbatching tuning params
  * ----------------
  */
-#define PIPELINE_BATCH_SIZE 1000
+#define PIPELINE_BATCH_SIZE 10000
 #define PIPELINE_SLEEP_MS 10
 #define PIPELINE_BATCH_TIMEOUT_MS 0
 

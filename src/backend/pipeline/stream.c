@@ -4,7 +4,7 @@
  *
  *	  Functions for handling event streams
  *
- * src/backend/events/stream.c
+ * src/backend/pipeline/stream.c
  *
  *-------------------------------------------------------------------------
  */
@@ -12,7 +12,7 @@
 
 #include "access/htup_details.h"
 #include "catalog/pipeline_queries.h"
-#include "events/stream.h"
+#include "pipeline/stream.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "parser/analyze.h"

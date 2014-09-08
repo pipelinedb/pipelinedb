@@ -733,6 +733,10 @@ ExecEndNode(PlanState *node)
 			ExecEndSeqScan((SeqScanState *) node);
 			break;
 
+		case T_StreamScanState:
+			ExecEndStreamScan((StreamScanState *) node);
+			break;
+
 		case T_IndexScanState:
 			ExecEndIndexScan((IndexScanState *) node);
 			break;

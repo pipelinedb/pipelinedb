@@ -26,7 +26,7 @@
 #include "access/xlog.h"
 #include "catalog/catalog.h"
 #include "catalog/heap.h"
-#include "events/stream.h"
+#include "pipeline/stream.h"
 #include "foreign/fdwapi.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"

@@ -8,7 +8,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_encoding.h"
-#include "events/decode.h"
+#include "pipeline/decode.h"
 #include "funcapi.h"
 #include "parser/parse_node.h"
 #include "parser/parse_coerce.h"

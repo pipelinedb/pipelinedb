@@ -41,7 +41,7 @@
 #include "commands/vacuum.h"
 #include "commands/variable.h"
 #include "commands/trigger.h"
-#include "events/streambuf.h"
+#include "pipeline/streambuf.h"
 #include "funcapi.h"
 #include "libpq/auth.h"
 #include "libpq/be-fsstubs.h"
