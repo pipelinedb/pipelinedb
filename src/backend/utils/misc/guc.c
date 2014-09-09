@@ -41,7 +41,6 @@
 #include "commands/vacuum.h"
 #include "commands/variable.h"
 #include "commands/trigger.h"
-#include "events/streambuf.h"
 #include "funcapi.h"
 #include "libpq/auth.h"
 #include "libpq/be-fsstubs.h"
@@ -68,6 +67,7 @@
 #include "pgxc/nodemgr.h"
 #include "pgxc/xc_maintenance_mode.h"
 #endif
+#include "pipeline/streambuf.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
 #include "postmaster/bgwriter.h"

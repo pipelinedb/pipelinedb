@@ -52,9 +52,6 @@
 #ifdef PGXC
 #include "commands/trigger.h"
 #endif
-#include "events/decode.h"
-#include "events/stream.h"
-#include "events/streambuf.h"
 #include "executor/tstoreReceiver.h"
 #include "executor/tupletableReceiver.h"
 #include "funcapi.h"
@@ -74,6 +71,9 @@
 #ifdef PGXC
 #include "parser/parse_type.h"
 #endif /* PGXC */
+#include "pipeline/decode.h"
+#include "pipeline/stream.h"
+#include "pipeline/streambuf.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/postmaster.h"
 #include "replication/walsender.h"

@@ -4,7 +4,7 @@
  *
  *	  Interface for interacting with the stream buffer
  *
- * src/include/events/streambuf.h
+ * src/include/pipeline/streambuf.h
  *
  *-------------------------------------------------------------------------
  */
@@ -12,8 +12,8 @@
 #define STREAMBUF_H
 
 #include "postgres.h"
-#include "events/stream.h"
 #include "nodes/bitmapset.h"
+#include "pipeline/stream.h"
 #include "storage/s_lock.h"
 #include "storage/shmem.h"
 

@@ -4,7 +4,7 @@
  *
  * Functions for handling event streams
  *
- * src/include/events/stream.h
+ * src/include/pipeline/stream.h
  *
  *-------------------------------------------------------------------------
  */

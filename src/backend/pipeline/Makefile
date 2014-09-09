@@ -4,11 +4,11 @@
 #    Makefile for events package
 #
 # IDENTIFICATION
-#    src/backend/events/Makefile
+#    src/backend/pipeline/Makefile
 #
 #-------------------------------------------------------------------------
 
-subdir = src/backend/events
+subdir = src/backend/pipeline
 top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 

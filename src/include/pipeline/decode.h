@@ -6,12 +6,12 @@
  * This package implements decoding functionality for raw events
  *
  *
- * src/events/decode.h
+ * src/pipeline/decode.h
  *-----------------------------------------------------------------------------
 */
 #include "access/htup.h"
-#include "events/stream.h"
 #include "funcapi.h"
+#include "pipeline/stream.h"
 #include "utils/rel.h"
 
 

@@ -21,12 +21,12 @@
 #include "access/subtrans.h"
 #include "access/twophase.h"
 #include "commands/async.h"
-#include "events/streambuf.h"
 #include "miscadmin.h"
 #include "pgstat.h"
 #ifdef PGXC
 #include "pgxc/nodemgr.h"
 #endif
+#include "pipeline/streambuf.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgwriter.h"
 #include "postmaster/postmaster.h"
