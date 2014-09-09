@@ -998,7 +998,7 @@ exec_merge(StringInfo message)
 		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
 				sizeof(HeapTupleEntryData), CacheMemoryContext, MergeTempContext);
 
-		GetTuplesToMergeWith(cvname, psrc->desc, store, merge_attr, group_clause, merge_targets);
+		GetTuplesToUpdate(cvname, psrc->desc, store, merge_attr, group_clause, merge_targets);
 	}
 
 	portal = CreatePortal("__merge__", true, true);
