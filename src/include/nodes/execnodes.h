@@ -17,7 +17,7 @@
 #include "access/genam.h"
 #include "access/heapam.h"
 #include "executor/instrument.h"
-#include "pipeline/streambuf.h"
+#include "events/streambuf.h"
 #include "nodes/params.h"
 #include "nodes/plannodes.h"
 #include "utils/reltrigger.h"

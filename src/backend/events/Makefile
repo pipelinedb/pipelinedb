@@ -1,17 +1,17 @@
 #-------------------------------------------------------------------------
 #
 # Makefile--
-#    Makefile for pipeline package
+#    Makefile for events package
 #
 # IDENTIFICATION
-#    src/backend/pipeline/Makefile
+#    src/backend/events/Makefile
 #
 #-------------------------------------------------------------------------
 
-subdir = src/backend/pipeline
+subdir = src/backend/events
 top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
-OBJS = decode.o stream.o streambuf.o merge.o
+OBJS = decode.o stream.o streambuf.o
 
 include $(top_srcdir)/src/backend/common.mk

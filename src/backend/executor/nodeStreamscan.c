@@ -13,8 +13,8 @@
 
 #include "executor/executor.h"
 #include "executor/nodeStreamscan.h"
-#include "pipeline/decode.h"
-#include "pipeline/streambuf.h"
+#include "events/decode.h"
+#include "events/streambuf.h"
 
 
 static TupleTableSlot *
@@ -98,10 +98,4 @@ ExecStreamScan(StreamScanState *node)
 	return ExecScan((ScanState *) node,
 					(ExecScanAccessMtd) StreamScanNext,
 					(ExecScanRecheckMtd) StreamScanNext);
-}
-
-void
-ExecEndStreamScan(StreamScanState *node)
-{
-
 }

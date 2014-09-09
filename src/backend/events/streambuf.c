@@ -4,13 +4,13 @@
  *
  *	  Interface for interacting with the stream buffer
  *
- * src/backend/pipeline/streambuf.c
+ * src/backend/events/streambuf.c
  *
  *-------------------------------------------------------------------------
  */
-#include "pipeline/stream.h"
-#include "pipeline/decode.h"
-#include "pipeline/streambuf.h"
+#include "events/stream.h"
+#include "events/decode.h"
+#include "events/streambuf.h"
 #include "executor/tuptable.h"
 #include "nodes/print.h"
 #include "storage/lwlock.h"

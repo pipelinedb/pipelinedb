@@ -21,7 +21,7 @@
 #include "access/subtrans.h"
 #include "access/twophase.h"
 #include "commands/async.h"
-#include "pipeline/streambuf.h"
+#include "events/streambuf.h"
 #include "miscadmin.h"
 #include "pgstat.h"
 #ifdef PGXC
