@@ -378,10 +378,6 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
 	/* Finish the transaction started in PostgresMain() */
-	UnregisterSnapshotFromOwner(queryDesc->snapshot, owner);
-	UnregisterSnapshotFromOwner(estate->es_snapshot, owner);
-	PopActiveSnapshot();
-
 	CommitTransactionCommand();
 
 	for (;;)

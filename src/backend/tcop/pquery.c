@@ -1369,10 +1369,8 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	saveowner = CurrentResourceOwner;
 	CurrentResourceOwner = resowner;
 
-	PushActiveSnapshot(GetTransactionSnapshot());
-
 	queryDesc = CreateQueryDesc(stmt, portal->sourceText,
-								GetActiveSnapshot(), InvalidSnapshot,
+			InvalidSnapshot, InvalidSnapshot,
 								dest, portal->portalParams, 0);
 
 	/* create a tuplestore if that's where we're sending tuples */
