@@ -12,6 +12,6 @@ subdir = src/backend/pipeline
 top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
-OBJS = decode.o stream.o streambuf.o
+OBJS = decode.o stream.o streambuf.o merge.o
 
 include $(top_srcdir)/src/backend/common.mk
