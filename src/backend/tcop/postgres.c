@@ -72,6 +72,7 @@
 #include "parser/parse_type.h"
 #endif /* PGXC */
 #include "pipeline/decode.h"
+#include "pipeline/merge.h"
 #include "pipeline/stream.h"
 #include "pipeline/streambuf.h"
 #include "postmaster/autovacuum.h"
@@ -220,9 +221,6 @@ static int	UseNewLine = 0;		/* Use EOF as query delimiters */
 static bool RecoveryConflictPending = false;
 static bool RecoveryConflictRetryable = true;
 static ProcSignalReason RecoveryConflictReason;
-
-/* output type of the merge column */
-static Oid merge_output_type;
 
 /* stream connection */
 static EventStream stream;
@@ -998,7 +996,7 @@ exec_merge(StringInfo message)
 		num_buckets = 1000;
 
 		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
-				sizeof(HeapTupleEntryData), CacheMemoryContext, MergeTempContext);
+				sizeof(HeapTupleEntryData), MergeTempContext, MergeTempContext);
 
 		GetTuplesToMergeWith(cvname, psrc->desc, store, merge_attr, group_clause, merge_targets);
 	}
@@ -1033,6 +1031,8 @@ exec_merge(StringInfo message)
 
 	if (merge_targets)
 		hash_destroy(merge_targets->hashtab);
+
+	MemoryContextReset(MergeTempContext);
 
 	finish_xact_command();
 }

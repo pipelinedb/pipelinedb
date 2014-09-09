@@ -399,6 +399,7 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
  				agg->agg_done = false;
  				agg->table_filled = false;
 
+				MemoryContextReset(agg->aggcontext);
 				if (agg->hashtable)
 				{
 					hash_destroy(agg->hashtable->hashtab);
