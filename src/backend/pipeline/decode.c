@@ -20,7 +20,6 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 
-
 /* Cache for initialized decoders */
 static HTAB *DecoderCache = NULL;
 
@@ -166,6 +165,21 @@ GetStreamEventDecoder(const char *encoding)
 
 	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 
+	if (strcmp(encoding, VALUES_ENCODING) == 0)
+	{
+		decoder = palloc(sizeof(StreamEventDecoder));
+		decoder->name = pstrdup(encoding);
+		decoder->tmp_ctxt = AllocSetContextCreate(CurrentMemoryContext,
+														 "DecoderContext",
+														 ALLOCSET_DEFAULT_MINSIZE,
+														 ALLOCSET_DEFAULT_INITSIZE,
+														 ALLOCSET_DEFAULT_MAXSIZE);
+
+		cache_decoder(encoding, decoder);
+
+		return decoder;
+	}
+
 	namestrcpy(&name, encoding);
 	tup = SearchSysCache1(PIPELINEENCODINGNAME, NameGetDatum(&name));
 	if (!HeapTupleIsValid(tup))
@@ -306,6 +320,35 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 	}
 
 	oldcontext = MemoryContextSwitchTo(decoder->tmp_ctxt);
+
+	if (strcmp(decoder->name, VALUES_ENCODING) == 0)
+	{
+		char **fields = event->fields;
+		char *cur = event->raw;
+
+		nfields = event->nfields;
+		strs = palloc(nfields * sizeof(char *));
+
+		for (i=0; i<nfields; i++)
+		{
+			char *name = fields[i];
+			int j;
+			for (j=0; j<desc->natts; j++)
+			{
+				if (strcmp(name, NameStr(desc->attrs[j]->attname)) == 0)
+					break;
+			}
+			strs[j] = cur;
+			cur += strlen(strs[j]) + 1;
+		}
+
+		decoded = BuildTupleFromCStrings(decoder->meta, strs);
+
+		MemoryContextReset(decoder->tmp_ctxt);
+
+		return decoded;
+	}
+
 	evbytes = pnstrdup(event->raw, event->len);
 
 	switch(decoder->rettype)
@@ -313,9 +356,10 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 		case JSONOID:
 			rawarg = CStringGetDatum(evbytes);
 			break;
-		default:
+		case TEXTARRAYOID:
 			/* we can treat the raw bytes as text because texts are identical in structure to a byteas */
 			rawarg = CStringGetTextDatum(evbytes);
+			break;
 	}
 
 	decoder->fcinfo_data.arg[decoder->rawpos] = rawarg;

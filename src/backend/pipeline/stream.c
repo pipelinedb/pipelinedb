@@ -11,6 +11,7 @@
 #include "postgres.h"
 
 #include "access/htup_details.h"
+#include "catalog/namespace.h"
 #include "catalog/pipeline_queries.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
@@ -18,6 +19,7 @@
 #include "pgxc/locator.h"
 #include "pgxc/pgxcnode.h"
 #include "pgxc/execRemote.h"
+#include "pipeline/decode.h"
 #include "pipeline/stream.h"
 #include "storage/ipc.h"
 #include "utils/builtins.h"
@@ -144,7 +146,7 @@ handle_send_events_response(PGXCNodeHandle *conn, int expected)
  */
 int
 SendEvents(EventStream stream, const char *encoding,
-		const char *channel, List *events)
+		const char *channel, List *fields, List *events)
 {
 	List *events_by_node[stream->handle_count];
 	ListCell *lc;
@@ -152,12 +154,20 @@ SendEvents(EventStream stream, const char *encoding,
 	int lengths[stream->handle_count];
 	int encodinglen = strlen(encoding) + 1;
 	int channellen = strlen(channel) + 1;
+	int numfields = list_length(fields);
+	int fieldslen = 0;
 	int result = 0;
+
+	foreach(lc, fields)
+	{
+		char *field = (char *) lfirst(lc);
+		fieldslen += strlen(field) + 1;
+	}
 
 	for (i=0; i<stream->handle_count; i++)
 	{
 		events_by_node[i] = NIL;
-		lengths[i] = 4 + encodinglen + channellen;
+		lengths[i] = 4 + encodinglen + channellen + 4 + fieldslen;
 	}
 
 	/*
@@ -178,7 +188,8 @@ SendEvents(EventStream stream, const char *encoding,
 	{
 		PGXCNodeHandle *handle = stream->handles[i];
 		int msglen;
-		int headerlen = 1 + 4 + encodinglen + channellen;
+		int desclen;
+		int headerlen = 1 + 4 + encodinglen + channellen + 4 + fieldslen;
 
 		if (ensure_out_buffer_capacity(handle->outEnd + headerlen, handle) != 0)
 		{
@@ -197,6 +208,18 @@ SendEvents(EventStream stream, const char *encoding,
 
 		memcpy(handle->outBuffer + handle->outEnd, channel, channellen);
 		handle->outEnd += channellen;
+
+		desclen = htonl(numfields);
+		memcpy(handle->outBuffer + handle->outEnd, &desclen, 4);
+		handle->outEnd += 4;
+
+		foreach (lc, fields)
+		{
+			char *field = (char *) lfirst(lc);
+			int len = strlen(field) + 1;
+			memcpy(handle->outBuffer + handle->outEnd, field, len);
+			handle->outEnd += len;
+		}
 	}
 
 	/* now serialize each event to each datanode's message buffer, and flush */
@@ -226,7 +249,6 @@ SendEvents(EventStream stream, const char *encoding,
 
 		handle->state = DN_CONNECTION_STATE_QUERY;
 		pgxc_node_flush(handle);
-
 	}
 
 	for (i=0; i<stream->handle_count; i++)
@@ -370,4 +392,103 @@ void
 DestroyStreamTargets(StreamTargets *s)
 {
 	hash_destroy(s);
+}
+
+/*
+ * InsertTargetIsStream
+ *
+ * Is the given INSERT statements target relation a stream?
+ * We assume it is if the relation doesn't exist in the catalog as a normal relation.
+ */
+bool InsertTargetIsStream(InsertStmt *ins)
+{
+	Oid reloid = RangeVarGetRelid(ins->relation, NoLock, true);
+
+	if (reloid != InvalidOid)
+		return false;
+
+	return true;
+}
+
+/*
+ * InsertIntoStream
+ *
+ * Send INSERT-encoded events to the given stream
+ *
+ *
+ */
+void
+InsertIntoStream(EventStream stream, InsertStmt *ins)
+{
+	SelectStmt *sel = (SelectStmt *) ins->selectStmt;
+	ListCell *lc;
+	List *events = NIL;
+	List *values = NIL;
+	List *fields = NIL;
+	int numcols = list_length(ins->cols);
+	int i;
+
+	/* make sure all tuples are of the correct length before sending any */
+	foreach (lc, sel->valuesLists)
+	{
+		List *vals = (List *) lfirst(lc);
+		if (list_length(vals) < numcols)
+			elog(ERROR, "VALUES tuples must have at least %d values", numcols);
+	}
+
+	/* build header */
+	for (i=0; i<numcols; i++)
+	{
+		ResTarget *res = (ResTarget *) list_nth(ins->cols, i);
+		fields = lappend(fields, res->name);
+	}
+
+	foreach (lc, sel->valuesLists)
+	{
+		List *vals = (List *) lfirst(lc);
+		A_Const *c;
+		Value *v;
+		Size size = 0;
+		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
+		ListCell *vlc;
+		int offset = 0;
+
+		for (i=0; i<numcols; i++)
+		{
+			char *sval;
+
+			c = (A_Const *) list_nth(vals, i);
+			v = &(c->val);
+
+			if (IsA(v, Integer))
+			{
+				/* longs have a maximum of 20 digits */
+				sval = palloc(20);
+				sprintf(sval, "%ld", intVal(v));
+			}
+			else
+			{
+				sval = strVal(v);
+			}
+
+			values = lappend(values, sval);
+			size += strlen(sval) + 1;
+		}
+
+		ev->raw = palloc(size);
+		ev->len = size;
+
+		foreach (vlc, values)
+		{
+			char *value = (char *) lfirst(vlc);
+			int len = strlen(value) + 1;
+
+			memcpy(ev->raw + offset, value, len);
+			offset += len;
+		}
+
+		events = lcons(ev, events);
+	}
+
+	SendEvents(stream, VALUES_ENCODING, ins->relation->relname, fields, events);
 }

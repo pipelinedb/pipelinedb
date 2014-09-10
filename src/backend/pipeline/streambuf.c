@@ -168,6 +168,9 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	MemSet(pos, 0, sizeof(StreamEventData) + event->len);
 	shared = (StreamEvent) pos;
 	shared->len = event->len;
+	shared->flags = event->flags;
+	shared->nfields = event->nfields;
+	shared->fields = event->fields;
 	pos += sizeof(StreamEventData);
 
 	shared->raw = pos;
@@ -417,8 +420,19 @@ extern void
 UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 {
 	volatile Bitmapset *bms = slot->readby;
+
 	SpinLockAcquire(&slot->mutex);
+
 	bms_del_member((Bitmapset *) bms, reader->queryid);
+
+	if (slot->event->flags & DESTROY_FIELDS_ARRAY)
+	{
+		/*
+		 * Free up the shared memory used by the slot's field names array
+		 * since no more events will be using it
+		 */
+	}
+
 	SpinLockRelease(&slot->mutex);
 }
 
