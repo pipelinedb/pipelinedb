@@ -19,6 +19,7 @@
 typedef struct StreamEventDecoder
 {
 	char *name;
+	int *fieldstoattrs;
 	int rawpos;
 	FunctionCallInfoData fcinfo_data;
 	Oid rettype;

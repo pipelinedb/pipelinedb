@@ -439,7 +439,20 @@ InsertIntoStream(EventStream stream, InsertStmt *ins)
 	/* build header */
 	for (i=0; i<numcols; i++)
 	{
+		ListCell *rtc;
 		ResTarget *res = (ResTarget *) list_nth(ins->cols, i);
+		int count = 0;
+
+		/* verify that each column only appears once */
+		foreach(rtc, ins->cols)
+		{
+			ResTarget *r = (ResTarget *) lfirst(rtc);
+			if (strcmp(r->name, res->name) == 0)
+				count++;
+		}
+		if (count > 1)
+			elog(ERROR, "column \"%s\" appears more than once in columns list", res->name);
+
 		fields = lappend(fields, res->name);
 	}
 

@@ -54,6 +54,33 @@ cache_decoder(const char *encoding, StreamEventDecoder *decoder)
 }
 
 /*
+ * Maps an ordered set of field names to their corresponding attribute names
+ * in the given TupleDesc
+ */
+static int *
+map_field_positions(char **fields, int nfields, TupleDesc desc)
+{
+	int i;
+	int *result = palloc(nfields * sizeof(int));
+	for (i=0; i<nfields; i++)
+	{
+		int j;
+
+		result[i] = -1;
+		for (j=0; j<desc->natts; j++)
+		{
+			if (strcmp(fields[i], NameStr(desc->attrs[j]->attname)) == 0)
+			{
+				result[i] = j;
+				break;
+			}
+		}
+	}
+
+	return result;
+}
+
+/*
  * get_schema
  *
  * Given an encoding OID, retrieve the corresponding attributes from pg_attribute
@@ -174,6 +201,7 @@ GetStreamEventDecoder(const char *encoding)
 														 ALLOCSET_DEFAULT_MINSIZE,
 														 ALLOCSET_DEFAULT_INITSIZE,
 														 ALLOCSET_DEFAULT_MAXSIZE);
+		decoder->fieldstoattrs = NULL;
 
 		cache_decoder(encoding, decoder);
 
@@ -329,17 +357,20 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 		nfields = event->nfields;
 		strs = palloc(nfields * sizeof(char *));
 
+		if (!decoder->fieldstoattrs)
+		{
+			oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+			decoder->fieldstoattrs = map_field_positions(fields, nfields, desc);
+			MemoryContextSwitchTo(oldcontext);
+		}
+
 		for (i=0; i<nfields; i++)
 		{
-			char *name = fields[i];
-			int j;
-			for (j=0; j<desc->natts; j++)
-			{
-				if (strcmp(name, NameStr(desc->attrs[j]->attname)) == 0)
-					break;
-			}
-			strs[j] = cur;
-			cur += strlen(strs[j]) + 1;
+			int attpos = decoder->fieldstoattrs[i];
+			if (attpos >= 0)
+				strs[attpos] = cur;
+
+			cur += strlen(cur) + 1;
 		}
 
 		decoded = BuildTupleFromCStrings(decoder->meta, strs);
