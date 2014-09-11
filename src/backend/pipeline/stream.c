@@ -423,7 +423,6 @@ InsertIntoStream(EventStream stream, InsertStmt *ins)
 	SelectStmt *sel = (SelectStmt *) ins->selectStmt;
 	ListCell *lc;
 	List *events = NIL;
-	List *values = NIL;
 	List *fields = NIL;
 	int numcols = list_length(ins->cols);
 	int i;
@@ -461,6 +460,7 @@ InsertIntoStream(EventStream stream, InsertStmt *ins)
 		List *vals = (List *) lfirst(lc);
 		A_Const *c;
 		Value *v;
+		List *values = NIL;
 		Size size = 0;
 		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
 		ListCell *vlc;

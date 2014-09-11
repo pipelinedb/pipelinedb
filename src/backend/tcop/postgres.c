@@ -1122,6 +1122,34 @@ exec_simple_query(const char *query_string)
 	 */
 	isTopLevel = (list_length(parsetree_list) == 1);
 
+	if (isTopLevel)
+	{
+		Node *parsetree = (Node *) lfirst(parsetree_list->head);
+
+		/* short circuit everything if we're just inserting into a stream */
+		if (IsA(parsetree, InsertStmt))
+		{
+			InsertStmt *ins = (InsertStmt *) parsetree;
+			if (InsertTargetIsStream(ins))
+			{
+				MemoryContext oldcontext;
+
+				stream = OpenStream();
+
+				oldcontext = MemoryContextSwitchTo(EventContext);
+
+				InsertIntoStream(stream, ins);
+
+				MemoryContextSwitchTo(oldcontext);
+				MemoryContextReset(EventContext);
+
+				finish_xact_command();
+
+				return;
+			}
+		}
+	}
+
 	/*
 	 * Run through the raw parsetree(s) and process each one.
 	 */
@@ -1180,21 +1208,6 @@ exec_simple_query(const char *query_string)
 
 		/* If we got a cancel signal in parsing or prior command, quit */
 		CHECK_FOR_INTERRUPTS();
-
-		/* Short circuit everything if we're just inserting into a stream */
-		if (IsA(parsetree, InsertStmt))
-		{
-			InsertStmt *ins = (InsertStmt *) parsetree;
-			if (InsertTargetIsStream(ins))
-			{
-				stream = OpenStream();
-				InsertIntoStream(stream, ins);
-
-				finish_xact_command();
-
-				return;
-			}
-		}
 
 		/*
 		 * Set up a snapshot if parse analysis/planning will need one.
@@ -1405,7 +1418,6 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
 	List *events = NIL;
 	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
-	List *fields = list_make3("one", "two", "three");
 
 	while (message->cursor < message->len)
 	{
@@ -1419,7 +1431,7 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 	}
 	pq_getmsgend(message);
 
-	if (SendEvents(stream, encoding, channel, fields, events))
+	if (SendEvents(stream, encoding, channel, NIL, events))
 	{
 		MemoryContextSwitchTo(oldcontext);
 		MemoryContextReset(EventContext);
