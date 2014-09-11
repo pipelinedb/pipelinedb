@@ -19,7 +19,7 @@ def main(args, keys):
             field_type = getattr(globals()['__builtins__'], getattr(args, k))
             value = None
             if field_type == str:
-                value = ''.join([random.choice(string.hexdigits) for _ in range(random.randint(1, 32))])
+                value = ''.join([random.choice(string.hexdigits) for _ in range(random.randint(1, 8))]).lower()
             else:
                 value = field_type(random.random() * (random.randint(1, 1024)))
             d[k] = value
@@ -28,12 +28,12 @@ def main(args, keys):
 
         if len(batch) == args.batch_size:
             s = ', '.join([str(v) for v in batch])
-            print 'INSERT INTO %s %s VALUES %s' % (args.stream, cols, s)
+            print 'INSERT INTO %s %s VALUES %s;' % (args.stream, cols, s)
             batch = []
 
     if batch:
         s = ', '.join([str(v) for v in batch])
-        print 'INSERT INTO %s %s VALUES %s' % (args.stream, cols, s)
+        print 'INSERT INTO %s %s VALUES %s;' % (args.stream, cols, s)
 
 
 if __name__ == '__main__':
