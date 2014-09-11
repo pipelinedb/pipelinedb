@@ -996,7 +996,7 @@ exec_merge(StringInfo message)
 		num_buckets = 1000;
 
 		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
-				sizeof(HeapTupleEntryData), MergeTempContext, MergeTempContext);
+				sizeof(HeapTupleEntryData), CacheMemoryContext, MergeTempContext);
 
 		GetTuplesToMergeWith(cvname, psrc->desc, store, merge_attr, group_clause, merge_targets);
 	}
