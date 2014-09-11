@@ -86,6 +86,6 @@ extern StreamTargets *CreateStreamTargets(void);
 extern Bitmapset *GetTargetsFor(const char *stream, StreamTargets *s);
 extern void DestroyStreamTargets(StreamTargets *s);
 extern bool InsertTargetIsStream(InsertStmt *ins);
-extern void InsertIntoStream(EventStream stream, InsertStmt *ins);
+extern int InsertIntoStream(EventStream stream, InsertStmt *ins);
 
 #endif

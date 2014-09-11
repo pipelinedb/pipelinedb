@@ -1133,12 +1133,18 @@ exec_simple_query(const char *query_string)
 			if (InsertTargetIsStream(ins))
 			{
 				MemoryContext oldcontext;
-
-				stream = OpenStream();
+				int count = 0;
+				char buf[32];
 
 				oldcontext = MemoryContextSwitchTo(EventContext);
 
-				InsertIntoStream(stream, ins);
+				BeginCommand("INSERT", dest);
+
+				stream = OpenStream();
+				count = InsertIntoStream(stream, ins);
+
+				sprintf(buf, "INSERT 0 %d", count);
+				EndCommand(buf, dest);
 
 				MemoryContextSwitchTo(oldcontext);
 				MemoryContextReset(EventContext);
@@ -1490,13 +1496,12 @@ exec_decode_events(const char *encoding, const char *channel,
 		ev->nfields = nfields;
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
 
-		count++;
-
 		/* mark this event as the last event needing the fields array to exist */
 		if (fields && message->cursor == message->len)
 			ev->flags |= DESTROY_FIELDS_ARRAY;
 
-		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev);
+		if (AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev))
+			count++;
 	}
 
 	pq_getmsgend(message);

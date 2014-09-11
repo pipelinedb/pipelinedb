@@ -120,22 +120,13 @@ handle_send_events_response(PGXCNodeHandle *conn, int expected)
 			case '#':
 				{
 					int numreceived = pq_getmsgint(&buf, 4);
-					if (numreceived == expected)
-					{
-						return SEND_EVENTS_RESPONSE_COMPLETE;
-					}
-					else
-					{
-						ereport(WARNING,
-								(errcode(ERRCODE_WARNING),
-										errmsg("datanode expected %d events but received %d events", expected, numreceived)));
-						return SEND_EVENTS_RESPONSE_MISMATCH;
-					}
+
+					return numreceived;
 				}
 		}
 	}
 
-	return SEND_EVENTS_RESPONSE_FAILED;
+	return 0;
 }
 
 /*
@@ -255,7 +246,7 @@ SendEvents(EventStream stream, const char *encoding,
 	{
 		PGXCNodeHandle *conn = stream->handles[i];
 		pgxc_node_receive(1, &conn, NULL);
-		result |= handle_send_events_response(conn, list_length(events_by_node[i]));
+		result += handle_send_events_response(conn, list_length(events_by_node[i]));
 	}
 
 	return result;
@@ -417,7 +408,7 @@ bool InsertTargetIsStream(InsertStmt *ins)
  *
  *
  */
-void
+int
 InsertIntoStream(EventStream stream, InsertStmt *ins)
 {
 	SelectStmt *sel = (SelectStmt *) ins->selectStmt;
@@ -503,5 +494,5 @@ InsertIntoStream(EventStream stream, InsertStmt *ins)
 		events = lcons(ev, events);
 	}
 
-	SendEvents(stream, VALUES_ENCODING, ins->relation->relname, fields, events);
+	return SendEvents(stream, VALUES_ENCODING, ins->relation->relname, fields, events);
 }
