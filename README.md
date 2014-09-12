@@ -43,29 +43,23 @@ make run
 
 #### Send PipelineDB some data
 
-Now let's generate some test data and stream it into a simple continuous view. First we'll need to create an encoding that we can use to describe our test data:
-
-    psql
-    =# CREATE ENCODING test_data (key text, value float) DECODED BY json_in;
-    CREATE ENCODING
-
-Next, create a simple continuous view:
+Now let's generate some test data and stream it into a simple continuous view. First, create a simple continuous view:
 
     =# CREATE CONTINUOUS VIEW test_view AS SELECT key::text, COUNT(*) FROM test_stream GROUP BY key;
     CREATE CONTINUOUS VIEW
     =# ACTIVATE test_view; --this will block
 
-Now use the `generate-json` and `emit-local` scripts to stream data into the continuous view. The following invocation of `generate-json` will generate 10,000 JSON payloads with random strings assigned to the `key` field, and random `floats` assigned to the `value` field:
+Now use the `generate-inserts` script to stream data into the continuous view. The following invocation of `generate-inserts` will generate a SQL multi `INSERT` with 100,000 JSON tuples having random strings assigned to the `key` field, and random `ints` assigned to the `value` field. And since it's just generating SQL statements, we can pipe it directly into the `pipeline` client:
 
     cd pipeline/emit
-    ./generate-json --key=str --value=float --n=10000 | ./emit-local --encoding test_data --stream test_stream 
+    ./generate-inserts --key=str --value=int --n=100000 | pipeline 
     
 Let's verify that the continuous view was properly updated. Were there actually 10,000 events counted?
 
     psql -c "SELECT sum(count) FROM test_view"
       sum  
     -------
-    10000
+    100000
     (1 row)
 
 What were the 10 most common randomly generated keys?
@@ -73,16 +67,17 @@ What were the 10 most common randomly generated keys?
     psql -c "SELECT * FROM test_view ORDER BY count DESC limit 10"
      key | count 
     -----+-------
-     2   |    24
-     c   |    22
-     a   |    21
-     4   |    20
-     9   |    20
-     b   |    19
-     8   |    18
-     0   |    17
-     B   |    16
-     E   |    16
+    a   |  4571
+    e   |  4502
+    c   |  4479
+    f   |  4473
+    d   |  4462
+    b   |  4451
+    9   |  2358
+    5   |  2350
+    4   |  2350
+    7   |  2327
+
     (10 rows)
 
 
