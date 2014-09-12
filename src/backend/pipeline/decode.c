@@ -20,7 +20,6 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 
-
 /* Cache for initialized decoders */
 static HTAB *DecoderCache = NULL;
 
@@ -52,6 +51,33 @@ cache_decoder(const char *encoding, StreamEventDecoder *decoder)
 	DecoderCacheEntry *entry =
 			(DecoderCacheEntry *) hash_search(DecoderCache, (void *) encoding, HASH_ENTER, NULL);
 	entry->decoder = decoder;
+}
+
+/*
+ * Maps an ordered set of field names to their corresponding attribute names
+ * in the given TupleDesc
+ */
+static int *
+map_field_positions(char **fields, int nfields, TupleDesc desc)
+{
+	int i;
+	int *result = palloc(nfields * sizeof(int));
+	for (i=0; i<nfields; i++)
+	{
+		int j;
+
+		result[i] = -1;
+		for (j=0; j<desc->natts; j++)
+		{
+			if (strcmp(fields[i], NameStr(desc->attrs[j]->attname)) == 0)
+			{
+				result[i] = j;
+				break;
+			}
+		}
+	}
+
+	return result;
 }
 
 /*
@@ -165,6 +191,22 @@ GetStreamEventDecoder(const char *encoding)
 		return decoder;
 
 	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+
+	if (strcmp(encoding, VALUES_ENCODING) == 0)
+	{
+		decoder = palloc(sizeof(StreamEventDecoder));
+		decoder->name = pstrdup(encoding);
+		decoder->tmp_ctxt = AllocSetContextCreate(CurrentMemoryContext,
+														 "DecoderContext",
+														 ALLOCSET_DEFAULT_MINSIZE,
+														 ALLOCSET_DEFAULT_INITSIZE,
+														 ALLOCSET_DEFAULT_MAXSIZE);
+		decoder->fieldstoattrs = NULL;
+
+		cache_decoder(encoding, decoder);
+
+		return decoder;
+	}
 
 	namestrcpy(&name, encoding);
 	tup = SearchSysCache1(PIPELINEENCODINGNAME, NameGetDatum(&name));
@@ -306,6 +348,38 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 	}
 
 	oldcontext = MemoryContextSwitchTo(decoder->tmp_ctxt);
+
+	if (strcmp(decoder->name, VALUES_ENCODING) == 0)
+	{
+		char **fields = event->fields;
+		char *cur = event->raw;
+
+		nfields = event->nfields;
+		strs = palloc(nfields * sizeof(char *));
+
+		if (!decoder->fieldstoattrs)
+		{
+			oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+			decoder->fieldstoattrs = map_field_positions(fields, nfields, desc);
+			MemoryContextSwitchTo(oldcontext);
+		}
+
+		for (i=0; i<nfields; i++)
+		{
+			int attpos = decoder->fieldstoattrs[i];
+			if (attpos >= 0)
+				strs[attpos] = cur;
+
+			cur += strlen(cur) + 1;
+		}
+
+		decoded = BuildTupleFromCStrings(decoder->meta, strs);
+
+		MemoryContextReset(decoder->tmp_ctxt);
+
+		return decoded;
+	}
+
 	evbytes = pnstrdup(event->raw, event->len);
 
 	switch(decoder->rettype)
@@ -313,9 +387,10 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 		case JSONOID:
 			rawarg = CStringGetDatum(evbytes);
 			break;
-		default:
+		case TEXTARRAYOID:
 			/* we can treat the raw bytes as text because texts are identical in structure to a byteas */
 			rawarg = CStringGetTextDatum(evbytes);
+			break;
 	}
 
 	decoder->fcinfo_data.arg[decoder->rawpos] = rawarg;

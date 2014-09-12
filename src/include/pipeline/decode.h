@@ -14,10 +14,12 @@
 #include "pipeline/stream.h"
 #include "utils/rel.h"
 
+#define VALUES_ENCODING "__VALUES__"
 
 typedef struct StreamEventDecoder
 {
 	char *name;
+	int *fieldstoattrs;
 	int rawpos;
 	FunctionCallInfoData fcinfo_data;
 	Oid rettype;

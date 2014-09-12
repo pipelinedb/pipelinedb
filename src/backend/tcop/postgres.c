@@ -996,7 +996,7 @@ exec_merge(StringInfo message)
 		num_buckets = 1000;
 
 		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
-				sizeof(HeapTupleEntryData), MergeTempContext, MergeTempContext);
+				sizeof(HeapTupleEntryData), CacheMemoryContext, MergeTempContext);
 
 		GetTuplesToMergeWith(cvname, psrc->desc, store, merge_attr, group_clause, merge_targets);
 	}
@@ -1122,6 +1122,40 @@ exec_simple_query(const char *query_string)
 	 */
 	isTopLevel = (list_length(parsetree_list) == 1);
 
+	if (isTopLevel)
+	{
+		Node *parsetree = (Node *) lfirst(parsetree_list->head);
+
+		/* short circuit everything if we're just inserting into a stream */
+		if (IsA(parsetree, InsertStmt))
+		{
+			InsertStmt *ins = (InsertStmt *) parsetree;
+			if (InsertTargetIsStream(ins))
+			{
+				MemoryContext oldcontext;
+				int count = 0;
+				char buf[32];
+
+				oldcontext = MemoryContextSwitchTo(EventContext);
+
+				BeginCommand("INSERT", dest);
+
+				stream = OpenStream();
+				count = InsertIntoStream(stream, ins);
+
+				sprintf(buf, "INSERT 0 %d", count);
+				EndCommand(buf, dest);
+
+				MemoryContextSwitchTo(oldcontext);
+				MemoryContextReset(EventContext);
+
+				finish_xact_command();
+
+				return;
+			}
+		}
+	}
+
 	/*
 	 * Run through the raw parsetree(s) and process each one.
 	 */
@@ -1136,6 +1170,7 @@ exec_simple_query(const char *query_string)
 		Portal		portal;
 		DestReceiver *receiver;
 		int16		format;
+
 #ifdef PGXC
 
 		/*
@@ -1402,7 +1437,7 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 	}
 	pq_getmsgend(message);
 
-	if (SendEvents(stream, encoding, channel, events))
+	if (SendEvents(stream, encoding, channel, NIL, events))
 	{
 		MemoryContextSwitchTo(oldcontext);
 		MemoryContextReset(EventContext);
@@ -1422,9 +1457,11 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
  * Decode and emit received events into the events stream (only run on datanodes)
  */
 static void
-exec_decode_events(const char *encoding, const char *channel, StringInfo message)
+exec_decode_events(const char *encoding, const char *channel,
+		char **fields, int nfields, StringInfo message)
 {
 	int count = 0;
+	char **sharedfields = NULL;
 
 	start_xact_command();
 
@@ -1435,17 +1472,32 @@ exec_decode_events(const char *encoding, const char *channel, StringInfo message
 
 	OpenStreamBuffer(GlobalStreamBuffer);
 
+	if (nfields > 0)
+	{
+		Size size = 0;
+		int i;
+		sharedfields = ShmemAlloc(nfields * sizeof(char *));
+
+		for (i=0; i<nfields; i++)
+		{
+			size += strlen(fields[i]) + 1;
+			sharedfields[i] = ShmemAlloc(size);
+			memcpy(sharedfields[i], fields[i], size);
+		}
+	}
+
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
 
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
+		ev->fields = sharedfields;
+		ev->nfields = nfields;
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
 
-		count++;
-
-		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev);
+		if (AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev))
+			count++;
 	}
 
 	pq_getmsgend(message);
@@ -4893,6 +4945,9 @@ PostgresMain(int argc, char *argv[],
 				{
 					const char *encoding;
 					const char *channel;
+					int nfields = 0;
+					int i;
+					char **fields = NULL;
 
 					if (!IS_PGXC_DATANODE)
 						ereport(FATAL,
@@ -4901,8 +4956,17 @@ PostgresMain(int argc, char *argv[],
 
 					encoding = pq_getmsgstring(&input_message);
 					channel = pq_getmsgstring(&input_message);
+					nfields = pq_getmsgint(&input_message, 4);
 
-					exec_decode_events(encoding, channel, &input_message);
+					if (nfields)
+						fields = palloc0(sizeof(char *) * nfields);
+					for (i=0; i<nfields; i++)
+					{
+						const char *fname = pq_getmsgstring(&input_message);
+						fields[i] = pstrdup(fname);
+					}
+
+					exec_decode_events(encoding, channel, fields, nfields, &input_message);
 				}
 				break;
 			default:

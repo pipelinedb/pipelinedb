@@ -13,6 +13,7 @@
 
 #include "postgres.h"
 #include "nodes/bitmapset.h"
+#include "nodes/parsenodes.h"
 #include "pgxc/pgxcnode.h"
 #include "utils/hsearch.h"
 
@@ -50,12 +51,16 @@ typedef struct StreamEventField
 
 typedef struct EventData
 {
+	/* special flags for this event */
+	char flags;
 	/* length of raw event */
 	int len;
 	/* raw encoded event data */
 	char *raw;
-	/* List * of raw fields contained in this event */
-	List *fields;
+	/* pointer to array in shared memory of field names for this event */
+	char **fields;
+	/* number of fields comprising this event */
+	int nfields;
 } StreamEventData;
 
 typedef StreamEventData *StreamEvent;
@@ -67,10 +72,12 @@ typedef HTAB StreamTargets;
 extern EventStream OpenStream(void);
 extern int RespondSendEvents(int numevents);
 extern int SendEvents(EventStream stream, const char *encoding,
-		const char *channel, List *events);
+		const char *channel, List *fields, List *events);
 extern void CloseStream(EventStream stream);
 extern StreamTargets *CreateStreamTargets(void);
 extern Bitmapset *GetTargetsFor(const char *stream, StreamTargets *s);
 extern void DestroyStreamTargets(StreamTargets *s);
+extern bool InsertTargetIsStream(InsertStmt *ins);
+extern int InsertIntoStream(EventStream stream, InsertStmt *ins);
 
 #endif
