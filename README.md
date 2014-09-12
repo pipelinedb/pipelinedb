@@ -52,7 +52,9 @@ Now let's generate some test data and stream it into a simple continuous view. F
 Now use the `generate-inserts` script to stream data into the continuous view. The following invocation of `generate-inserts` will generate a SQL multi `INSERT` with 100,000 JSON tuples having random strings assigned to the `key` field, and random `ints` assigned to the `value` field. And since our script is just generating SQL, we can pipe its output directly into the `pipeline` client:
 
     cd pipeline/emit
-    ./generate-inserts --key=str --value=int --n=100000 | pipeline 
+    ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
+    
+Try running `generate-inserts` without piping it into `pipeline` to get an idea of what's actually happening (reduce the `batchsize` first!). Basically, any `INSERT` target that isn't a table is considered a stream by PipelineDB. 
     
 Let's verify that the continuous view was properly updated. Were there actually 10,000 events counted?
 
