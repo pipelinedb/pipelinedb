@@ -49,7 +49,7 @@ Now let's generate some test data and stream it into a simple continuous view. F
     CREATE CONTINUOUS VIEW
     =# ACTIVATE test_view; --this will block
 
-Now use the `generate-inserts` script to stream data into the continuous view. The following invocation of `generate-inserts` will generate a SQL multi `INSERT` with 100,000 JSON tuples having random strings assigned to the `key` field, and random `ints` assigned to the `value` field. And since it's just generating SQL statements, we can pipe it directly into the `pipeline` client:
+Now use the `generate-inserts` script to stream data into the continuous view. The following invocation of `generate-inserts` will generate a SQL multi `INSERT` with 100,000 JSON tuples having random strings assigned to the `key` field, and random `ints` assigned to the `value` field. And since our script is just generating SQL, we can pipe its output directly into the `pipeline` client:
 
     cd pipeline/emit
     ./generate-inserts --key=str --value=int --n=100000 | pipeline 
