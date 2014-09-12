@@ -59,7 +59,7 @@ Try running `generate-inserts` without piping it into `pipeline` to get an idea 
     
 Let's verify that the continuous view was properly updated. Were there actually 100,000 events counted?
 
-    psql -c "SELECT sum(count) FROM test_view"
+    pipeline -c "SELECT sum(count) FROM test_view"
       sum  
     -------
     100000
@@ -67,7 +67,7 @@ Let's verify that the continuous view was properly updated. Were there actually 
 
 What were the 10 most common randomly generated keys?
 
-    psql -c "SELECT * FROM test_view ORDER BY count DESC limit 10"
+    pipeline -c "SELECT * FROM test_view ORDER BY count DESC limit 10"
      key | count 
     -----+-------
     a   |  4571
