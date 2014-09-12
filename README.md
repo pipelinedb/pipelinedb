@@ -87,7 +87,7 @@ Finally, note that most of the time taken to execute
 
     ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
 
-is actually due to the `generate-inserts` script (Python) doing a large number of string operations. To get a better feel for the speed at which PipelineDB can process data, run the inserts independently of Python:
+is actually due to the `generate-inserts` script (Python) doing a large number of string operations. To get a better feel for the speed at which PipelineDB can process data, run the `INSERTS` independently of Python:
 
     ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 > inserts.sql
     pipeline -f inserts.sql
