@@ -49,14 +49,6 @@ typedef struct StreamEventField
 	Size flen;
 } StreamEventField;
 
-/*
- * This is the last event that needs to use the fields array it's
- * associated with, so the array can be freed when an event with this
- * flag is encountered. This is to prevent the number of fields arrays
- * in shared memory from growing without bound.
- */
-#define DESTROY_FIELDS_ARRAY (1 << 0)
-
 typedef struct EventData
 {
 	/* special flags for this event */

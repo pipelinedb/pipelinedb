@@ -1496,10 +1496,6 @@ exec_decode_events(const char *encoding, const char *channel,
 		ev->nfields = nfields;
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
 
-		/* mark this event as the last event needing the fields array to exist */
-		if (fields && message->cursor == message->len)
-			ev->flags |= DESTROY_FIELDS_ARRAY;
-
 		if (AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev))
 			count++;
 	}
