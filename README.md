@@ -83,6 +83,16 @@ What were the 10 most common randomly generated keys?
 
     (10 rows)
 
+Also, note that most of the time taken to execute
+
+    ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
+
+is actually due to Python doing a large number of string operations. To get a better feel for the speed at which PipelineDB can process data, run the inserts independently of Python:
+
+    ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 > inserts.sql
+    pipeline -f inserts.sql
+
+    
 
 
     
