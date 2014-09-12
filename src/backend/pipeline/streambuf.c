@@ -20,8 +20,8 @@
 
 #define NO_SLOTS_FOLLOW -1
 
-#define BufferWrapped(buf) (*(buf)->pos < *(buf)->last)
-#define AtBufferEnd(reader) (reader->pos == *((reader)->buf)->last)
+#define ReaderNeedsWrap(buf, reader) (*(buf)->pos < (reader)->pos && !(reader)->reading)
+#define AtBufferEnd(reader) (*((reader)->buf)->last != NULL && reader->pos == *((reader)->buf)->last)
 #define HasUnreadData(reader) ((reader)->pos < *((reader)->buf)->last)
 #define BufferUnchanged(reader) ((reader)->pos == *((reader)->buf)->pos)
 #define IsNewReadCycle(reader) (!(reader)->reading)
@@ -100,6 +100,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		/* wait for the last event to be read by all readers */
 		while (HasPendingReads(*buf->prev));
 
+		*buf->last = *buf->pos;
 		*buf->pos = buf->start;
 
 		/* we need to make sure all readers are done reading before we begin clobbering entries */
@@ -367,6 +368,12 @@ PinNextStreamEvent(StreamBufferReader *reader)
 		return NULL;
 	}
 
+	if (ReaderNeedsWrap(buf, reader))
+	{
+		reader->pos = buf->start;
+		reader->reading = false;
+	}
+
 	if (IsNewReadCycle(reader))
 	{
 		/* new data has been added to the buffer but we don't have a read lock yet, so get one */
@@ -404,7 +411,7 @@ PinNextStreamEvent(StreamBufferReader *reader)
 	if (result && DebugPrintStreamBuffer)
 	{
 		elog(LOG, "read event at [%d, %d)", BufferOffset(reader->buf, result),
-				BufferOffset(reader->buf, result) + SlotSize(result));
+				BufferOffset(reader->buf, reader->pos));
 	}
 
 	return result;
@@ -424,14 +431,6 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 	SpinLockAcquire(&slot->mutex);
 
 	bms_del_member((Bitmapset *) bms, reader->queryid);
-
-	if (slot->event->flags & DESTROY_FIELDS_ARRAY)
-	{
-		/*
-		 * Free up the shared memory used by the slot's field names array
-		 * since no more events will be using it
-		 */
-	}
 
 	SpinLockRelease(&slot->mutex);
 }

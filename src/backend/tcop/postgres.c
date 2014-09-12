@@ -1437,15 +1437,7 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 	}
 	pq_getmsgend(message);
 
-	if (SendEvents(stream, encoding, channel, NIL, events))
-	{
-		MemoryContextSwitchTo(oldcontext);
-		MemoryContextReset(EventContext);
-
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-						errmsg("failed to proxy events to datanodes")));
-	}
+	SendEvents(stream, encoding, channel, NIL, events);
 
 	MemoryContextSwitchTo(oldcontext);
 	MemoryContextReset(EventContext);

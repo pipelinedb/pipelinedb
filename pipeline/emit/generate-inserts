@@ -19,7 +19,7 @@ def main(args, keys):
             field_type = getattr(globals()['__builtins__'], getattr(args, k))
             value = None
             if field_type == str:
-                value = ''.join([random.choice(string.hexdigits) for _ in range(random.randint(1, 8))]).lower()
+                value = ''.join([random.choice(string.hexdigits) for _ in range(random.randint(1, 2))]).lower()
             else:
                 value = field_type(random.random() * (random.randint(1, 1024)))
             d[k] = value
