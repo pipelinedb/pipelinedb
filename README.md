@@ -83,7 +83,7 @@ What were the 10 most common randomly generated keys?
 
     (10 rows)
 
-Also, note that most of the time taken to execute
+Finally, note that most of the time taken to execute
 
     ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
 
