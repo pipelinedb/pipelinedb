@@ -56,7 +56,7 @@ Now use the `generate-inserts` script to stream data into the continuous view. T
     
 Try running `generate-inserts` without piping it into `pipeline` to get an idea of what's actually happening (reduce the `batchsize` first!). Basically, any `INSERT` target that isn't a table is considered a stream by PipelineDB. 
     
-Let's verify that the continuous view was properly updated. Were there actually 10,000 events counted?
+Let's verify that the continuous view was properly updated. Were there actually 100,000 events counted?
 
     psql -c "SELECT sum(count) FROM test_view"
       sum  
