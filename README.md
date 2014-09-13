@@ -50,19 +50,29 @@ Now let's generate some test data and stream it into a simple continuous view. F
     CREATE CONTINUOUS VIEW
     =# ACTIVATE test_view; --this will block
 
-Now use the `generate-inserts` script to stream data into the continuous view. The following invocation of `generate-inserts` will generate a SQL multi `INSERT` with 100,000 tuples having random strings assigned to the `key` field, and random `ints` assigned to the `value` field. And since our script is just generating SQL, we can pipe its output directly into the `pipeline` client:
+Events can be emitted to PipelineDB streams using regular SQL `INSERTS`. Let's emit a single event into the `test_stream` stream since our continuous view is reading from it:
+
+    INSERT INTO test_stream (key, value) VALUES ('key', 42);
+    INSERT 0 1
+    
+The 1 in the "INSERT 0 1" response means that 1 event was emitted into a stream that is actually being read from. If we emit an event into a stream that nothing is reading from we get a response of "INSERT 0 0":
+
+    INSERT INTO does_not_exist (column0, column1) VALUES (1, 2);
+    INSERT 0 0
+
+But one event isn't very interesting. Let's use the `generate-inserts` script to generate and stream a larger amount of data into our continuous view. The following invocation of `generate-inserts` will generate a SQL multi `INSERT` with 100,000 tuples having random strings assigned to the `key` field, and random `ints` assigned to the `value` field. And since our script is just generating SQL, we can pipe its output directly into the `pipeline` client:
 
     cd pipeline/emit
     ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
     
 Try running `generate-inserts` without piping it into `pipeline` to get an idea of what's actually happening (reduce the `batchsize` first!). Basically, any `INSERT` target that isn't a table is considered a stream by PipelineDB. 
     
-Let's verify that the continuous view was properly updated. Were there actually 100,000 events counted?
+Let's verify that the continuous view was properly updated. Were there actually 100,001 events counted?
 
     pipeline -c "SELECT sum(count) FROM test_view"
       sum  
     -------
-    100000
+    100001
     (1 row)
 
 What were the 10 most common randomly generated keys?
