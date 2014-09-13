@@ -50,7 +50,7 @@ Now let's generate some test data and stream it into a simple continuous view. F
     CREATE CONTINUOUS VIEW
     =# ACTIVATE test_view; --this will block
 
-Events can be emitted to PipelineDB streams using regular SQL `INSERTS`. Let's emit a single event into the `test_stream` stream since our continuous view is reading from it:
+Events can be emitted to PipelineDB streams using regular SQL `INSERTS`. Any `INSERT` target that isn't a table is considered a stream by PipelineDB, meaning streams don't need to have a schema created in advance. Let's emit a single event into the `test_stream` stream since our continuous view is reading from it:
 
     pipeline 
     =# INSERT INTO test_stream (key, value) VALUES ('key', 42);
@@ -66,7 +66,7 @@ But one event isn't very interesting. We can use the `generate-inserts` script t
     cd pipeline/emit
     ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
     
-Try running `generate-inserts` without piping it into `pipeline` to get an idea of what's actually happening (reduce the `batchsize` first!). Basically, any `INSERT` target that isn't a table is considered a stream by PipelineDB. 
+Try running `generate-inserts` without piping it into `pipeline` to get an idea of what's actually happening (reduce the `batchsize` first!).
     
 Let's verify that the continuous view was properly updated. Were there actually 100,001 events counted?
 
