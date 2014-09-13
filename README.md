@@ -56,7 +56,7 @@ Events can be emitted to PipelineDB streams using regular SQL `INSERTS`. Any `IN
     =# INSERT INTO test_stream (key, value) VALUES ('key', 42);
     INSERT 0 1
     
-The 1 in the "INSERT 0 1" response means that 1 event was emitted into a stream that is actually being read by a continuous query. If we emit an event into a stream that nothing is reading from, it effectively goes to /dev/null and we get a response of "INSERT 0 0":
+The 1 in the "INSERT 0 1" response means that 1 event was emitted into a stream that is actually being read by a continuous query. If we emit events into a stream that nothing is reading from, they effectively go to /dev/null and we get a response of "INSERT 0 0":
 
     =# INSERT INTO does_not_exist (column0, column1) VALUES (1, 2), (3, 4), (5, 6);
     INSERT 0 0
