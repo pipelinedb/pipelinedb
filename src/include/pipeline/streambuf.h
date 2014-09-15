@@ -100,6 +100,7 @@ extern void CloseStreamBuffer(StreamBuffer *buf);
 extern StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent event);
 extern Size StreamBufferShmemSize(void);
 extern void InitGlobalStreamBuffer(void);
+extern bool IsInputStream(const char *stream);
 
 extern StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
 extern StreamBufferSlot *PinNextStreamEvent(StreamBufferReader *reader);

@@ -398,7 +398,18 @@ bool InsertTargetIsStream(InsertStmt *ins)
 	if (reloid != InvalidOid)
 		return false;
 
-	return true;
+	if (!GlobalStreamBuffer)
+		InitGlobalStreamBuffer();
+
+	if (IsInputStream(ins->relation->relname))
+		return true;
+
+	ereport(ERROR,
+			(errcode(ERRCODE_UNDEFINED_TABLE),
+			 errmsg("relation \"%s\" does not exist",
+					ins->relation->relname)));
+
+	return false;
 }
 
 /*

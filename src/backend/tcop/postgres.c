@@ -1130,6 +1130,7 @@ exec_simple_query(const char *query_string)
 		if (IsA(parsetree, InsertStmt))
 		{
 			InsertStmt *ins = (InsertStmt *) parsetree;
+
 			if (InsertTargetIsStream(ins))
 			{
 				MemoryContext oldcontext;

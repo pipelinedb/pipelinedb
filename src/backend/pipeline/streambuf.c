@@ -76,7 +76,6 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	Bitmapset *bms;
 	StreamBufferSlot *sbs;
 
-
 	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	bms = GetTargetsFor(stream, targets);
 	MemoryContextSwitchTo(oldcontext);
@@ -276,6 +275,24 @@ extern Size
 StreamBufferShmemSize(void)
 {
 	return (StreamBufferBlocks * BLCKSZ) + sizeof(StreamBuffer);
+}
+
+/*
+ * StreamIsBeingRead
+ *
+ * Returns true if at least one continuous query is reading from the given stream
+ */
+extern bool
+IsInputStream(const char *stream)
+{
+	MemoryContext oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+	bool result = false;
+	if (GetTargetsFor(stream, targets))
+		result = true;
+
+	MemoryContextSwitchTo(oldcontext);
+
+	return result;
 }
 
 /*
