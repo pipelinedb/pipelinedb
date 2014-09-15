@@ -8,6 +8,11 @@ make
 make install
 ```
 
+#### Add your dev installation path to the PATH environment variable
+```
+export PATH=/path/to/dev/installation/bin:$PATH
+```
+
 #### Bootstrap the PipelineDB environment
 Create PipelineDB's physical data directories, configuration files, etc:
 
