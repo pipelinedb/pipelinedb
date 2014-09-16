@@ -365,9 +365,9 @@ CreateStreamTargets(void)
 Bitmapset *
 GetTargetsFor(const char *stream, StreamTargets *s)
 {
-	bool found;
+	bool found = false;
 	StreamTagsEntry *entry =
-			(StreamTagsEntry *) hash_search(s, stream, HASH_ENTER, &found);
+			(StreamTagsEntry *) hash_search(s, stream, HASH_FIND, &found);
 	if (!found)
 		return NULL;
 
