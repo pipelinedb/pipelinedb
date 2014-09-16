@@ -4,6 +4,7 @@ import argparse
 import os
 import subprocess
 import signal
+import socket
 import sys
 import time
 
@@ -101,8 +102,13 @@ def main(args):
     PROCS.append(gtm)
     PROCS.append(coord)
 
+    tries = 0
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # Give the process some time to start
-    time.sleep(0.1)
+    while sock.connect_ex(('127.0.0.1', 5432)) != 0 and tries < 100:
+        time.sleep(0.1)
+        tries += 1
+
     q = "SELECT node_name, node_port FROM pgxc_node WHERE node_type = 'D'"
     p = subprocess.Popen(['psql', '-c', q], stdout=subprocess.PIPE)
     out, err = p.communicate()
