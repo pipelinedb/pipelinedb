@@ -98,17 +98,11 @@ def main(args):
     coord_dir = os.path.join(root, COORDINATOR_DIR)
     coord = subprocess.Popen([POSTGRES, '--coordinator', '-D', coord_dir])
     gtm = subprocess.Popen([GTM, '-D', gtm_dir])
-    
+
     PROCS.append(gtm)
     PROCS.append(coord)
 
-    tries = 0
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # Give the process some time to start
-    while sock.connect_ex(('127.0.0.1', 5432)) != 0 and tries < 100:
-        time.sleep(0.1)
-        tries += 1
-
+    time.sleep(0.5)
     q = "SELECT node_name, node_port FROM pgxc_node WHERE node_type = 'D'"
     p = subprocess.Popen(['psql', '-c', q], stdout=subprocess.PIPE)
     out, err = p.communicate()
@@ -117,7 +111,7 @@ def main(args):
         _kill(signal.SIGINT)
         _kill(signal.SIGKILL)
         sys.exit(1)
-        
+
     if 'coordinator' in skip:
         print 'Skipping coordinator'
         coord.kill()
