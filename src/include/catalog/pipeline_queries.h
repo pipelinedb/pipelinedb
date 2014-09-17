@@ -29,8 +29,8 @@ CATALOG(pipeline_queries,4242) BKI_SHARED_RELATION BKI_WITHOUT_OIDS
 {
 	int32			id;
 	NameData	name;
-	text			query;
 	char			state;
+	text			query;
 } FormData_pipeline_queries;
 
 /* ----------------
@@ -47,8 +47,9 @@ typedef FormData_pipeline_queries *Form_pipeline_queries;
 #define Natts_pipeline_queries				4
 #define Anum_pipeline_queries_id			1
 #define Anum_pipeline_queries_name		2
-#define Anum_pipeline_queries_query 	3
-#define Anum_pipeline_queries_state 	4
+#define Anum_pipeline_queries_state 	3
+#define Anum_pipeline_queries_query 	4
+
 
 /* ----------------
  *		query states
