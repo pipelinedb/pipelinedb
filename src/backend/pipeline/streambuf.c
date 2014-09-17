@@ -73,12 +73,8 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	StreamBufferSlot *result;
 	Size size;
 	MemoryContext oldcontext;
-	Bitmapset *bms;
+	Bitmapset *bms = GetTargetsFor(stream, targets);
 	StreamBufferSlot *sbs;
-
-	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-	bms = GetTargetsFor(stream, targets);
-	MemoryContextSwitchTo(oldcontext);
 
 	if (bms == NULL)
 	{
@@ -285,12 +281,10 @@ StreamBufferShmemSize(void)
 extern bool
 IsInputStream(const char *stream)
 {
-	MemoryContext oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	bool result = false;
+
 	if (GetTargetsFor(stream, targets))
 		result = true;
-
-	MemoryContextSwitchTo(oldcontext);
 
 	return result;
 }

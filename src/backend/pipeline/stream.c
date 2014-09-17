@@ -401,15 +401,7 @@ bool InsertTargetIsStream(InsertStmt *ins)
 	if (!GlobalStreamBuffer)
 		InitGlobalStreamBuffer();
 
-	if (IsInputStream(ins->relation->relname))
-		return true;
-
-	ereport(ERROR,
-			(errcode(ERRCODE_UNDEFINED_TABLE),
-			 errmsg("relation \"%s\" does not exist",
-					ins->relation->relname)));
-
-	return false;
+	return IsInputStream(ins->relation->relname);
 }
 
 /*
