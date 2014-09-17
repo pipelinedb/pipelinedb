@@ -1,0 +1,1014 @@
+--
+-- Tests for psql features that aren't closely connected to any
+-- specific server features
+--
+-- \gset
+select 10 as test01, 20 as test02, 'Hello' as test03 \gset pref01_
+\echo :pref01_test01 :pref01_test02 :pref01_test03
+10 20 Hello
+-- should fail: bad variable name
+select 10 as "bad name"
+\gset
+could not set variable "bad name"
+-- multiple backslash commands in one line
+select 1 as x, 2 as y \gset pref01_ \\ \echo :pref01_x
+1
+select 3 as x, 4 as y \gset pref01_ \echo :pref01_x \echo :pref01_y
+3
+4
+select 5 as x, 6 as y \gset pref01_ \\ \g \echo :pref01_x :pref01_y
+ x | y 
+---+---
+ 5 | 6
+(1 row)
+
+5 6
+select 7 as x, 8 as y \g \gset pref01_ \echo :pref01_x :pref01_y
+ x | y 
+---+---
+ 7 | 8
+(1 row)
+
+7 8
+-- NULL should unset the variable
+\set var2 xyz
+select 1 as var1, NULL as var2, 3 as var3 \gset
+\echo :var1 :var2 :var3
+1 :var2 3
+-- \gset requires just one tuple
+select 10 as test01, 20 as test02 from generate_series(1,3) \gset
+more than one row returned for \gset
+select 10 as test01, 20 as test02 from generate_series(1,0) \gset
+no rows returned for \gset
+-- \gset should work in FETCH_COUNT mode too
+\set FETCH_COUNT 1
+select 1 as x, 2 as y \gset pref01_ \\ \echo :pref01_x
+1
+select 3 as x, 4 as y \gset pref01_ \echo :pref01_x \echo :pref01_y
+3
+4
+select 10 as test01, 20 as test02 from generate_series(1,3) \gset
+more than one row returned for \gset
+select 10 as test01, 20 as test02 from generate_series(1,0) \gset
+no rows returned for \gset
+\unset FETCH_COUNT
+-- show all pset options
+\pset
+Border style (border) is 1.
+Target width (columns) unset.
+Expanded display (expanded) is off.
+Field separator (fieldsep) is "|".
+Default footer (footer) is on.
+Output format (format) is aligned.
+Line style (linestyle) is ascii.
+Null display (null) is "".
+Locale-adjusted numeric output (numericlocale) is off.
+Pager (pager) is used for long output.
+Record separator (recordsep) is <newline>.
+Table attributes (tableattr) unset.
+Title (title) unset.
+Tuples only (tuples_only) is off.
+-- test multi-line headers, wrapping, and newline indicators
+prepare q as select array_to_string(array_agg(repeat('x',2*n)),E'\n') as "a
+
+b", array_to_string(array_agg(repeat('y',20-2*n)),E'\n') as "a
+b" from generate_series(1,10) as n(n) group by n>1 ;
+\pset linestyle ascii
+\pset expanded off
+\pset columns 40
+\pset border 0
+\pset format unaligned
+execute q;
+a
+
+b|a
+b
+xx|yyyyyyyyyyyyyyyyyy
+xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+(2 rows)
+\pset format aligned
+execute q;
+         a          +        a         +
+                    +        b          
+         b                              
+-------------------- ------------------
+xx                   yyyyyyyyyyyyyyyyyy
+xxxx                +yyyyyyyyyyyyyyyy  +
+xxxxxx              +yyyyyyyyyyyyyy    +
+xxxxxxxx            +yyyyyyyyyyyy      +
+xxxxxxxxxx          +yyyyyyyyyy        +
+xxxxxxxxxxxx        +yyyyyyyy          +
+xxxxxxxxxxxxxx      +yyyyyy            +
+xxxxxxxxxxxxxxxx    +yyyy              +
+xxxxxxxxxxxxxxxxxx  +yy                +
+xxxxxxxxxxxxxxxxxxxx 
+(2 rows)
+
+\pset format wrapped
+execute q;
+         a          +        a         +
+                    +        b          
+         b                              
+-------------------- ------------------
+xx                   yyyyyyyyyyyyyyyyyy
+xxxx                +yyyyyyyyyyyyyyyy  +
+xxxxxx              +yyyyyyyyyyyyyy    +
+xxxxxxxx            +yyyyyyyyyyyy      +
+xxxxxxxxxx          +yyyyyyyyyy        +
+xxxxxxxxxxxx        +yyyyyyyy          +
+xxxxxxxxxxxxxx      +yyyyyy            +
+xxxxxxxxxxxxxxxx    +yyyy              +
+xxxxxxxxxxxxxxxxxx  +yy                +
+xxxxxxxxxxxxxxxxxxxx 
+(2 rows)
+
+\pset border 1
+\pset format unaligned
+execute q;
+a
+
+b|a
+b
+xx|yyyyyyyyyyyyyyyyyy
+xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+(2 rows)
+\pset format aligned
+execute q;
+          a          +|         a         +
+                     +|         b          
+          b           |                    
+----------------------+--------------------
+ xx                   | yyyyyyyyyyyyyyyyyy
+ xxxx                +| yyyyyyyyyyyyyyyy  +
+ xxxxxx              +| yyyyyyyyyyyyyy    +
+ xxxxxxxx            +| yyyyyyyyyyyy      +
+ xxxxxxxxxx          +| yyyyyyyyyy        +
+ xxxxxxxxxxxx        +| yyyyyyyy          +
+ xxxxxxxxxxxxxx      +| yyyyyy            +
+ xxxxxxxxxxxxxxxx    +| yyyy              +
+ xxxxxxxxxxxxxxxxxx  +| yy                +
+ xxxxxxxxxxxxxxxxxxxx | 
+(2 rows)
+
+\pset format wrapped
+execute q;
+         a        +|         a         +
+                  +|         b          
+         b         |                    
+-------------------+--------------------
+ xx                | yyyyyyyyyyyyyyyyyy
+ xxxx             +| yyyyyyyyyyyyyyyy  +
+ xxxxxx           +| yyyyyyyyyyyyyy    +
+ xxxxxxxx         +| yyyyyyyyyyyy      +
+ xxxxxxxxxx       +| yyyyyyyyyy        +
+ xxxxxxxxxxxx     +| yyyyyyyy          +
+ xxxxxxxxxxxxxx   +| yyyyyy            +
+ xxxxxxxxxxxxxxxx +| yyyy              +
+ xxxxxxxxxxxxxxxxx.| yy                +
+.x                +| 
+ xxxxxxxxxxxxxxxxx.| 
+.xxx               | 
+(2 rows)
+
+\pset border 2
+\pset format unaligned
+execute q;
+a
+
+b|a
+b
+xx|yyyyyyyyyyyyyyyyyy
+xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+(2 rows)
+\pset format aligned
+execute q;
++----------------------+--------------------+
+|          a          +|         a         +|
+|                     +|         b          |
+|          b           |                    |
++----------------------+--------------------+
+| xx                   | yyyyyyyyyyyyyyyyyy |
+| xxxx                +| yyyyyyyyyyyyyyyy  +|
+| xxxxxx              +| yyyyyyyyyyyyyy    +|
+| xxxxxxxx            +| yyyyyyyyyyyy      +|
+| xxxxxxxxxx          +| yyyyyyyyyy        +|
+| xxxxxxxxxxxx        +| yyyyyyyy          +|
+| xxxxxxxxxxxxxx      +| yyyyyy            +|
+| xxxxxxxxxxxxxxxx    +| yyyy              +|
+| xxxxxxxxxxxxxxxxxx  +| yy                +|
+| xxxxxxxxxxxxxxxxxxxx |                    |
++----------------------+--------------------+
+(2 rows)
+
+\pset format wrapped
+execute q;
++-----------------+--------------------+
+|        a       +|         a         +|
+|                +|         b          |
+|        b        |                    |
++-----------------+--------------------+
+| xx              | yyyyyyyyyyyyyyyyyy |
+| xxxx           +| yyyyyyyyyyyyyyyy  +|
+| xxxxxx         +| yyyyyyyyyyyyyy    +|
+| xxxxxxxx       +| yyyyyyyyyyyy      +|
+| xxxxxxxxxx     +| yyyyyyyyyy        +|
+| xxxxxxxxxxxx   +| yyyyyyyy          +|
+| xxxxxxxxxxxxxx +| yyyyyy            +|
+| xxxxxxxxxxxxxxx.| yyyy              +|
+|.x              +| yy                +|
+| xxxxxxxxxxxxxxx.|                    |
+|.xxx            +|                    |
+| xxxxxxxxxxxxxxx.|                    |
+|.xxxxx           |                    |
++-----------------+--------------------+
+(2 rows)
+
+\pset expanded on
+\pset columns 20
+\pset border 0
+\pset format unaligned
+execute q;
+a
+
+b|xx
+a
+b|yyyyyyyyyyyyyyyyyy
+
+a
+
+b|xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx
+a
+b|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+\pset format aligned
+execute q;
+* Record 1           
+ a+ xx                   
+  +
+ b 
+ a+ yyyyyyyyyyyyyyyyyy   
+ b 
+* Record 2           
+ a+ xxxx                +
+  + xxxxxx              +
+ b  xxxxxxxx            +
+    xxxxxxxxxx          +
+    xxxxxxxxxxxx        +
+    xxxxxxxxxxxxxx      +
+    xxxxxxxxxxxxxxxx    +
+    xxxxxxxxxxxxxxxxxx  +
+    xxxxxxxxxxxxxxxxxxxx 
+ a+ yyyyyyyyyyyyyyyy    +
+ b  yyyyyyyyyyyyyy      +
+    yyyyyyyyyyyy        +
+    yyyyyyyyyy          +
+    yyyyyyyy            +
+    yyyyyy              +
+    yyyy                +
+    yy                  +
+                         
+
+\pset format wrapped
+execute q;
+* Record 1         
+ a+ xx                 
+  +
+ b 
+ a+ yyyyyyyyyyyyyyyyyy 
+ b 
+* Record 2         
+ a+ xxxx              +
+  + xxxxxx            +
+ b  xxxxxxxx          +
+    xxxxxxxxxx        +
+    xxxxxxxxxxxx      +
+    xxxxxxxxxxxxxx    +
+    xxxxxxxxxxxxxxxx  +
+    xxxxxxxxxxxxxxxxxx+
+    xxxxxxxxxxxxxxxxxx.
+   .xx                 
+ a+ yyyyyyyyyyyyyyyy  +
+ b  yyyyyyyyyyyyyy    +
+    yyyyyyyyyyyy      +
+    yyyyyyyyyy        +
+    yyyyyyyy          +
+    yyyyyy            +
+    yyyy              +
+    yy                +
+                       
+
+\pset border 1
+\pset format unaligned
+execute q;
+a
+
+b|xx
+a
+b|yyyyyyyyyyyyyyyyyy
+
+a
+
+b|xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx
+a
+b|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+\pset format aligned
+execute q;
+-[ RECORD 1 ]-----------
+ a+| xx                   
+  +|
+ b |
+ a+| yyyyyyyyyyyyyyyyyy   
+ b |
+-[ RECORD 2 ]-----------
+ a+| xxxx                +
+  +| xxxxxx              +
+ b | xxxxxxxx            +
+   | xxxxxxxxxx          +
+   | xxxxxxxxxxxx        +
+   | xxxxxxxxxxxxxx      +
+   | xxxxxxxxxxxxxxxx    +
+   | xxxxxxxxxxxxxxxxxx  +
+   | xxxxxxxxxxxxxxxxxxxx 
+ a+| yyyyyyyyyyyyyyyy    +
+ b | yyyyyyyyyyyyyy      +
+   | yyyyyyyyyyyy        +
+   | yyyyyyyyyy          +
+   | yyyyyyyy            +
+   | yyyyyy              +
+   | yyyy                +
+   | yy                  +
+   |                      
+
+\pset format wrapped
+execute q;
+-[ RECORD 1 ]-------
+ a+| xx               
+  +|
+ b |
+ a+| yyyyyyyyyyyyyyyy.
+ b |.yy               
+-[ RECORD 2 ]-------
+ a+| xxxx            +
+  +| xxxxxx          +
+ b | xxxxxxxx        +
+   | xxxxxxxxxx      +
+   | xxxxxxxxxxxx    +
+   | xxxxxxxxxxxxxx  +
+   | xxxxxxxxxxxxxxxx+
+   | xxxxxxxxxxxxxxxx.
+   |.xx              +
+   | xxxxxxxxxxxxxxxx.
+   |.xxxx             
+ a+| yyyyyyyyyyyyyyyy+
+ b | yyyyyyyyyyyyyy  +
+   | yyyyyyyyyyyy    +
+   | yyyyyyyyyy      +
+   | yyyyyyyy        +
+   | yyyyyy          +
+   | yyyy            +
+   | yy              +
+   |                  
+
+\pset border 2
+\pset format unaligned
+execute q;
+a
+
+b|xx
+a
+b|yyyyyyyyyyyyyyyyyy
+
+a
+
+b|xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx
+a
+b|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+\pset format aligned
+execute q;
++-[ RECORD 1 ]-------------+
+| a+| xx                   |
+|  +|                      |
+| b |                      |
+| a+| yyyyyyyyyyyyyyyyyy   |
+| b |                      |
++-[ RECORD 2 ]-------------+
+| a+| xxxx                +|
+|  +| xxxxxx              +|
+| b | xxxxxxxx            +|
+|   | xxxxxxxxxx          +|
+|   | xxxxxxxxxxxx        +|
+|   | xxxxxxxxxxxxxx      +|
+|   | xxxxxxxxxxxxxxxx    +|
+|   | xxxxxxxxxxxxxxxxxx  +|
+|   | xxxxxxxxxxxxxxxxxxxx |
+| a+| yyyyyyyyyyyyyyyy    +|
+| b | yyyyyyyyyyyyyy      +|
+|   | yyyyyyyyyyyy        +|
+|   | yyyyyyyyyy          +|
+|   | yyyyyyyy            +|
+|   | yyyyyy              +|
+|   | yyyy                +|
+|   | yy                  +|
+|   |                      |
++---+----------------------+
+
+\pset format wrapped
+execute q;
++-[ RECORD 1 ]-----+
+| a+| xx           |
+|  +|              |
+| b |              |
+| a+| yyyyyyyyyyyy.|
+| b |.yyyyyy       |
++-[ RECORD 2 ]-----+
+| a+| xxxx        +|
+|  +| xxxxxx      +|
+| b | xxxxxxxx    +|
+|   | xxxxxxxxxx  +|
+|   | xxxxxxxxxxxx+|
+|   | xxxxxxxxxxxx.|
+|   |.xx          +|
+|   | xxxxxxxxxxxx.|
+|   |.xxxx        +|
+|   | xxxxxxxxxxxx.|
+|   |.xxxxxx      +|
+|   | xxxxxxxxxxxx.|
+|   |.xxxxxxxx     |
+| a+| yyyyyyyyyyyy.|
+| b |.yyyy        +|
+|   | yyyyyyyyyyyy.|
+|   |.yy          +|
+|   | yyyyyyyyyyyy+|
+|   | yyyyyyyyyy  +|
+|   | yyyyyyyy    +|
+|   | yyyyyy      +|
+|   | yyyy        +|
+|   | yy          +|
+|   |              |
++---+--------------+
+
+\pset linestyle old-ascii
+\pset expanded off
+\pset columns 40
+\pset border 0
+\pset format unaligned
+execute q;
+a
+
+b|a
+b
+xx|yyyyyyyyyyyyyyyyyy
+xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+(2 rows)
+\pset format aligned
+execute q;
+         a                   a         
+                    +        b         
+         b          +                  
+-------------------- ------------------
+xx                   yyyyyyyyyyyyyyyyyy
+xxxx                 yyyyyyyyyyyyyyyy   
+xxxxxx               yyyyyyyyyyyyyy     
+xxxxxxxx             yyyyyyyyyyyy       
+xxxxxxxxxx           yyyyyyyyyy         
+xxxxxxxxxxxx         yyyyyyyy           
+xxxxxxxxxxxxxx       yyyyyy             
+xxxxxxxxxxxxxxxx     yyyy               
+xxxxxxxxxxxxxxxxxx   yy                 
+xxxxxxxxxxxxxxxxxxxx 
+(2 rows)
+
+\pset format wrapped
+execute q;
+         a                   a         
+                    +        b         
+         b          +                  
+-------------------- ------------------
+xx                   yyyyyyyyyyyyyyyyyy
+xxxx                 yyyyyyyyyyyyyyyy   
+xxxxxx               yyyyyyyyyyyyyy     
+xxxxxxxx             yyyyyyyyyyyy       
+xxxxxxxxxx           yyyyyyyyyy         
+xxxxxxxxxxxx         yyyyyyyy           
+xxxxxxxxxxxxxx       yyyyyy             
+xxxxxxxxxxxxxxxx     yyyy               
+xxxxxxxxxxxxxxxxxx   yy                 
+xxxxxxxxxxxxxxxxxxxx 
+(2 rows)
+
+\pset border 1
+\pset format unaligned
+execute q;
+a
+
+b|a
+b
+xx|yyyyyyyyyyyyyyyyyy
+xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+(2 rows)
+\pset format aligned
+execute q;
+          a           |         a          
++                     |+        b          
++         b           |+                   
+----------------------+--------------------
+ xx                   | yyyyyyyyyyyyyyyyyy
+ xxxx                 | yyyyyyyyyyyyyyyy   
+ xxxxxx               : yyyyyyyyyyyyyy     
+ xxxxxxxx             : yyyyyyyyyyyy       
+ xxxxxxxxxx           : yyyyyyyyyy         
+ xxxxxxxxxxxx         : yyyyyyyy           
+ xxxxxxxxxxxxxx       : yyyyyy             
+ xxxxxxxxxxxxxxxx     : yyyy               
+ xxxxxxxxxxxxxxxxxx   : yy                 
+ xxxxxxxxxxxxxxxxxxxx : 
+(2 rows)
+
+\pset format wrapped
+execute q;
+         a         |         a          
++                  |+        b          
++        b         |+                   
+-------------------+--------------------
+ xx                | yyyyyyyyyyyyyyyyyy
+ xxxx              | yyyyyyyyyyyyyyyy   
+ xxxxxx            : yyyyyyyyyyyyyy     
+ xxxxxxxx          : yyyyyyyyyyyy       
+ xxxxxxxxxx        : yyyyyyyyyy         
+ xxxxxxxxxxxx      : yyyyyyyy           
+ xxxxxxxxxxxxxx    : yyyyyy             
+ xxxxxxxxxxxxxxxx  : yyyy               
+ xxxxxxxxxxxxxxxxx : yy                 
+ x                 : 
+ xxxxxxxxxxxxxxxxx   
+ xxx                 
+(2 rows)
+
+\pset border 2
+\pset format unaligned
+execute q;
+a
+
+b|a
+b
+xx|yyyyyyyyyyyyyyyyyy
+xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+(2 rows)
+\pset format aligned
+execute q;
++----------------------+--------------------+
+|          a           |         a          |
+|+                     |+        b          |
+|+         b           |+                   |
++----------------------+--------------------+
+| xx                   | yyyyyyyyyyyyyyyyyy |
+| xxxx                 | yyyyyyyyyyyyyyyy   |
+| xxxxxx               : yyyyyyyyyyyyyy     |
+| xxxxxxxx             : yyyyyyyyyyyy       |
+| xxxxxxxxxx           : yyyyyyyyyy         |
+| xxxxxxxxxxxx         : yyyyyyyy           |
+| xxxxxxxxxxxxxx       : yyyyyy             |
+| xxxxxxxxxxxxxxxx     : yyyy               |
+| xxxxxxxxxxxxxxxxxx   : yy                 |
+| xxxxxxxxxxxxxxxxxxxx :                    |
++----------------------+--------------------+
+(2 rows)
+
+\pset format wrapped
+execute q;
++-----------------+--------------------+
+|        a        |         a          |
+|+                |+        b          |
+|+       b        |+                   |
++-----------------+--------------------+
+| xx              | yyyyyyyyyyyyyyyyyy |
+| xxxx            | yyyyyyyyyyyyyyyy   |
+| xxxxxx          : yyyyyyyyyyyyyy     |
+| xxxxxxxx        : yyyyyyyyyyyy       |
+| xxxxxxxxxx      : yyyyyyyyyy         |
+| xxxxxxxxxxxx    : yyyyyyyy           |
+| xxxxxxxxxxxxxx  : yyyyyy             |
+| xxxxxxxxxxxxxxx : yyyy               |
+| x               : yy                 |
+| xxxxxxxxxxxxxxx :                    |
+| xxx                                  |
+| xxxxxxxxxxxxxxx                      |
+| xxxxx                                |
++-----------------+--------------------+
+(2 rows)
+
+\pset expanded on
+\pset columns 20
+\pset border 0
+\pset format unaligned
+execute q;
+a
+
+b|xx
+a
+b|yyyyyyyyyyyyyyyyyy
+
+a
+
+b|xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx
+a
+b|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+\pset format aligned
+execute q;
+* Record 1           
+ a  xx                   
++  
++b 
+ a  yyyyyyyyyyyyyyyyyy   
++b 
+* Record 2           
+ a  xxxx                 
++   xxxxxx               
++b  xxxxxxxx             
+    xxxxxxxxxx           
+    xxxxxxxxxxxx         
+    xxxxxxxxxxxxxx       
+    xxxxxxxxxxxxxxxx     
+    xxxxxxxxxxxxxxxxxx   
+    xxxxxxxxxxxxxxxxxxxx 
+ a  yyyyyyyyyyyyyyyy     
++b  yyyyyyyyyyyyyy       
+    yyyyyyyyyyyy         
+    yyyyyyyyyy           
+    yyyyyyyy             
+    yyyyyy               
+    yyyy                 
+    yy                   
+                         
+
+\pset format wrapped
+execute q;
+* Record 1         
+ a  xx                 
++  
++b 
+ a  yyyyyyyyyyyyyyyyyy 
++b 
+* Record 2         
+ a  xxxx               
++   xxxxxx             
++b  xxxxxxxx           
+    xxxxxxxxxx         
+    xxxxxxxxxxxx       
+    xxxxxxxxxxxxxx     
+    xxxxxxxxxxxxxxxx   
+    xxxxxxxxxxxxxxxxxx 
+    xxxxxxxxxxxxxxxxxx 
+    xx                 
+ a  yyyyyyyyyyyyyyyy   
++b  yyyyyyyyyyyyyy     
+    yyyyyyyyyyyy       
+    yyyyyyyyyy         
+    yyyyyyyy           
+    yyyyyy             
+    yyyy               
+    yy                 
+                       
+
+\pset border 1
+\pset format unaligned
+execute q;
+a
+
+b|xx
+a
+b|yyyyyyyyyyyyyyyyyy
+
+a
+
+b|xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx
+a
+b|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+\pset format aligned
+execute q;
+-[ RECORD 1 ]-----------
+ a | xx                   
++  ;
++b ;
+ a | yyyyyyyyyyyyyyyyyy   
++b ;
+-[ RECORD 2 ]-----------
+ a | xxxx                 
++  : xxxxxx               
++b : xxxxxxxx             
+   : xxxxxxxxxx           
+   : xxxxxxxxxxxx         
+   : xxxxxxxxxxxxxx       
+   : xxxxxxxxxxxxxxxx     
+   : xxxxxxxxxxxxxxxxxx   
+   : xxxxxxxxxxxxxxxxxxxx 
+ a | yyyyyyyyyyyyyyyy     
++b : yyyyyyyyyyyyyy       
+   : yyyyyyyyyyyy         
+   : yyyyyyyyyy           
+   : yyyyyyyy             
+   : yyyyyy               
+   : yyyy                 
+   : yy                   
+   :                      
+
+\pset format wrapped
+execute q;
+-[ RECORD 1 ]-------
+ a | xx               
++  ;
++b ;
+ a | yyyyyyyyyyyyyyyy 
++b ; yy               
+-[ RECORD 2 ]-------
+ a | xxxx             
++  : xxxxxx           
++b : xxxxxxxx         
+   : xxxxxxxxxx       
+   : xxxxxxxxxxxx     
+   : xxxxxxxxxxxxxx   
+   : xxxxxxxxxxxxxxxx 
+   : xxxxxxxxxxxxxxxx 
+   ; xx               
+   : xxxxxxxxxxxxxxxx 
+   ; xxxx             
+ a | yyyyyyyyyyyyyyyy 
++b : yyyyyyyyyyyyyy   
+   : yyyyyyyyyyyy     
+   : yyyyyyyyyy       
+   : yyyyyyyy         
+   : yyyyyy           
+   : yyyy             
+   : yy               
+   :                  
+
+\pset border 2
+\pset format unaligned
+execute q;
+a
+
+b|xx
+a
+b|yyyyyyyyyyyyyyyyyy
+
+a
+
+b|xxxx
+xxxxxx
+xxxxxxxx
+xxxxxxxxxx
+xxxxxxxxxxxx
+xxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx
+a
+b|yyyyyyyyyyyyyyyy
+yyyyyyyyyyyyyy
+yyyyyyyyyyyy
+yyyyyyyyyy
+yyyyyyyy
+yyyyyy
+yyyy
+yy
+
+\pset format aligned
+execute q;
++-[ RECORD 1 ]-------------+
+| a | xx                   |
+|+  ;                      |
+|+b ;                      |
+| a | yyyyyyyyyyyyyyyyyy   |
+|+b ;                      |
++-[ RECORD 2 ]-------------+
+| a | xxxx                 |
+|+  : xxxxxx               |
+|+b : xxxxxxxx             |
+|   : xxxxxxxxxx           |
+|   : xxxxxxxxxxxx         |
+|   : xxxxxxxxxxxxxx       |
+|   : xxxxxxxxxxxxxxxx     |
+|   : xxxxxxxxxxxxxxxxxx   |
+|   : xxxxxxxxxxxxxxxxxxxx |
+| a | yyyyyyyyyyyyyyyy     |
+|+b : yyyyyyyyyyyyyy       |
+|   : yyyyyyyyyyyy         |
+|   : yyyyyyyyyy           |
+|   : yyyyyyyy             |
+|   : yyyyyy               |
+|   : yyyy                 |
+|   : yy                   |
+|   :                      |
++---+----------------------+
+
+\pset format wrapped
+execute q;
++-[ RECORD 1 ]-----+
+| a | xx           |
+|+  ;              |
+|+b ;              |
+| a | yyyyyyyyyyyy |
+|+b ; yyyyyy       |
++-[ RECORD 2 ]-----+
+| a | xxxx         |
+|+  : xxxxxx       |
+|+b : xxxxxxxx     |
+|   : xxxxxxxxxx   |
+|   : xxxxxxxxxxxx |
+|   : xxxxxxxxxxxx |
+|   ; xx           |
+|   : xxxxxxxxxxxx |
+|   ; xxxx         |
+|   : xxxxxxxxxxxx |
+|   ; xxxxxx       |
+|   : xxxxxxxxxxxx |
+|   ; xxxxxxxx     |
+| a | yyyyyyyyyyyy |
+|+b ; yyyy         |
+|   : yyyyyyyyyyyy |
+|   ; yy           |
+|   : yyyyyyyyyyyy |
+|   : yyyyyyyyyy   |
+|   : yyyyyyyy     |
+|   : yyyyyy       |
+|   : yyyy         |
+|   : yy           |
+|   :              |
++---+--------------+
+
+deallocate q;
