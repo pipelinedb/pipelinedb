@@ -898,8 +898,8 @@ PortalRun(Portal portal, long count, bool isTopLevel,
 				result = true;
 				break;
 			case PORTAL_CONTINUOUS_QUERY:
-				PortalRunContinuous(portal, isTopLevel,
-							   dest, altdest, completionTag);
+				PortalRunContinuous(portal, isTopLevel, dest,
+							altdest, completionTag);
 
 				/* Prevent portal's commands from being re-executed */
 				MarkPortalDone(portal);
@@ -1401,8 +1401,8 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	/* run the plan fo-eva */
 	ExecutorRunContinuous(queryDesc, mergeState, resowner);
 
-	/* pop the snapshot if we pushed one */
-	PopActiveSnapshot();
+	if (IS_PGXC_COORDINATOR)
+		strcpy(completionTag, "ACTIVATE");
 
 	/* cleanup */
 	ExecutorFinish(queryDesc);
