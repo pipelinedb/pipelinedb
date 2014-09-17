@@ -102,11 +102,17 @@ def main(args):
     PROCS.append(gtm)
     PROCS.append(coord)
 
-    time.sleep(0.5)
     q = "SELECT node_name, node_port FROM pgxc_node WHERE node_type = 'D'"
-    p = subprocess.Popen(['psql', '-c', q], stdout=subprocess.PIPE)
-    out, err = p.communicate()
-    if p.returncode != 0:
+    running = False
+    attempts = 0
+    while not running and attempts < 100:
+        time.sleep(0.1)
+        p = subprocess.Popen(['psql', '-c', q], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = p.communicate()
+        running = 'datanode' in out
+        attempts += 1
+
+    if not running:
         print 'Couldn\'t connect to coordinator to retrieve cluster topology'
         _kill(signal.SIGINT)
         _kill(signal.SIGKILL)
