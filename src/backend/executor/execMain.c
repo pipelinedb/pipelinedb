@@ -349,6 +349,8 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	ResourceOwner save = CurrentResourceOwner;
 	int batchsize = queryDesc->plannedstmt->cq_batch_size;
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
+	int isBackgroundCoordinatorProc = 0;
+	int pid;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
@@ -381,10 +383,13 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	CommitTransactionCommand();
 
 	// Fork process and start running the coordinator's CQ work asynchronously.
-	// TODO(usmanm): Add error handling in case forking fails.
-	int is_child = IS_PGXC_COORDINATOR && !fork_process();
+	pid = fork_process();
+	if (pid < 0) {
+		elog(ERROR, "could not spawn background process for running CQ.");
+	}
+	isBackgroundCoordinatorProc = IS_PGXC_COORDINATOR && pid == 0;
 
-	if (IS_PGXC_DATANODE || is_child) {
+	if (IS_PGXC_DATANODE || isBackgroundCoordinatorProc) {
 		for (;;)
 		{
 			oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);

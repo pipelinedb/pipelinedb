@@ -1401,7 +1401,6 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	/* run the plan fo-eva */
 	ExecutorRunContinuous(queryDesc, mergeState, resowner);
 
-	// Respond to client with "ACTIVATE"
 	if (IS_PGXC_COORDINATOR) {
 		strcpy(completionTag, "ACTIVATE");
 	}
