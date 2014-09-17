@@ -51,6 +51,7 @@
 #include "miscadmin.h"
 #include "optimizer/clauses.h"
 #include "parser/parsetree.h"
+#include "postmaster/fork_process.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
 #include "tcop/utility.h"
@@ -349,7 +350,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	ResourceOwner save = CurrentResourceOwner;
 	int batchsize = queryDesc->plannedstmt->cq_batch_size;
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
-	int isBackgroundCoordinatorProc;
+	bool isBackgroundCoordinatorProc = false;
 	int pid;
 
 	/* sanity checks */
@@ -383,13 +384,21 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	CommitTransactionCommand();
 
 	/* Fork process and start running the coordinator's CQ work asynchronously. */
-	pid = fork_process();
-	if (pid < 0) {
-		elog(ERROR, "could not spawn background process for running CQ.");
+	if (IS_PGXC_COORDINATOR)
+	{
+		pid = fork_process();
+		if (pid == 0)
+		{
+			isBackgroundCoordinatorProc = true;
+		}
+		else if (pid < 0)
+		{
+			elog(ERROR, "could not spawn background process for running CQ.");
+		}
 	}
-	isBackgroundCoordinatorProc = IS_PGXC_COORDINATOR && pid == 0;
 
-	if (IS_PGXC_DATANODE || isBackgroundCoordinatorProc) {
+	if (IS_PGXC_DATANODE || isBackgroundCoordinatorProc)
+	{
 		for (;;)
 		{
 			oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
