@@ -349,7 +349,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	ResourceOwner save = CurrentResourceOwner;
 	int batchsize = queryDesc->plannedstmt->cq_batch_size;
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
-	int isBackgroundCoordinatorProc = 0;
+	int isBackgroundCoordinatorProc;
 	int pid;
 
 	/* sanity checks */
