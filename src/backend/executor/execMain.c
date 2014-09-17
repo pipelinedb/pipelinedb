@@ -380,51 +380,57 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	/* Finish the transaction started in PostgresMain() */
 	CommitTransactionCommand();
 
-	for (;;)
-	{
-		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
-		CurrentResourceOwner = owner;
+	// Fork process and start running the coordinator's CQ work asynchronously.
+	// TODO(usmanm): Add error handling in case forking fails.
+	int is_child = IS_PGXC_COORDINATOR && !fork_process();
 
-		/*
-		 * Run plan on a microbatch
-		 */
-		ExecutePlan(estate, queryDesc->planstate, operation,
-				sendTuples, batchsize, timeoutms, ForwardScanDirection, dest);
-
-		MemoryContextSwitchTo(oldcontext);
-
-		/*
-		 * If we're a datanode, tell the coordinator that this batch is done
-		 */
-		if (IS_PGXC_DATANODE)
-			ReadyForQuery(dest->mydest);
-
-		/*
-		 * If we're a coordinator, send the partial result back to the datanodes
-		 * for final merging
-		 */
-		if (IS_PGXC_COORDINATOR && estate->es_processed)
+	if (IS_PGXC_DATANODE || is_child) {
+		for (;;)
 		{
-			StartTransactionCommand();
-			PushActiveSnapshot(GetTransactionSnapshot());
+			oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+			CurrentResourceOwner = owner;
 
-			DoRemoteMerge(mergeState);
+			/*
+			 * Run plan on a microbatch
+			 */
+			ExecutePlan(estate, queryDesc->planstate, operation,
+						sendTuples, batchsize, timeoutms, ForwardScanDirection, dest);
 
-			PopActiveSnapshot();
-			CommitTransactionCommand();
+			MemoryContextSwitchTo(oldcontext);
+
+			/*
+			 * If we're a datanode, tell the coordinator that this batch is done
+			 */
+			if (IS_PGXC_DATANODE)
+				ReadyForQuery(dest->mydest);
+
+			/*
+			 * If we're a coordinator, send the partial result back to the datanodes
+			 * for final merging
+			 */
+			if (IS_PGXC_COORDINATOR && estate->es_processed)
+			{
+				StartTransactionCommand();
+				PushActiveSnapshot(GetTransactionSnapshot());
+
+				DoRemoteMerge(mergeState);
+
+				PopActiveSnapshot();
+				CommitTransactionCommand();
+			}
+
+			CurrentResourceOwner = save;
+
+			/*
+			 * If we didn't see any new tuples, sleep briefly to save cycles
+			 */
+			if (estate->es_processed == 0)
+				pg_usleep(PIPELINE_SLEEP_MS * 1000);
+
+			estate->es_processed = 0;
+
+			MemoryContextReset(ContinuousQueryContext);
 		}
-
-		CurrentResourceOwner = save;
-
-		/*
-		 * If we didn't see any new tuples, sleep briefly to save cycles
-		 */
-		if (estate->es_processed == 0)
-			pg_usleep(PIPELINE_SLEEP_MS * 1000);
-
-		estate->es_processed = 0;
-
-		MemoryContextReset(ContinuousQueryContext);
 	}
 
 	/* Start a new transaction before committing in PostgresMain */
