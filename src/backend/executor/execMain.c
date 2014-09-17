@@ -438,8 +438,6 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 
 	if (queryDesc->totaltime)
 		InstrStopNode(queryDesc->totaltime, estate->es_processed);
-
-	MemoryContextSwitchTo(oldcontext);
 }
 
 /* ----------------------------------------------------------------
