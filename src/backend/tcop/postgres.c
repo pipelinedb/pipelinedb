@@ -1331,9 +1331,9 @@ exec_simple_query(const char *query_string)
 						 receiver,
 						 completionTag);
 
-		// Reset dest to be `whereToSendOutput` if running an ACTIVATE query because we
-		// previously changed it to a tuple store.
-		// XXX(usmanm): This is fugly -- fix when refactoring happens.
+		/* Reset dest to be `whereToSendOutput` if running an ACTIVATE query because we
+		 * previously changed it to a tuple store.
+		 * XXX(usmanm): This is fugly -- fix when refactoring happens. */
 		if (IS_PGXC_COORDINATOR && dest == DestTuplestore)
 		{
 			dest = whereToSendOutput;

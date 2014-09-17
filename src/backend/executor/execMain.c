@@ -382,7 +382,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	/* Finish the transaction started in PostgresMain() */
 	CommitTransactionCommand();
 
-	// Fork process and start running the coordinator's CQ work asynchronously.
+	/* Fork process and start running the coordinator's CQ work asynchronously. */
 	pid = fork_process();
 	if (pid < 0) {
 		elog(ERROR, "could not spawn background process for running CQ.");
