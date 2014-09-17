@@ -898,8 +898,8 @@ PortalRun(Portal portal, long count, bool isTopLevel,
 				result = true;
 				break;
 			case PORTAL_CONTINUOUS_QUERY:
-				PortalRunContinuous(portal, isTopLevel,
-							   	   	dest, altdest, completionTag);
+				PortalRunContinuous(portal, isTopLevel, dest,
+							altdest, completionTag);
 
 				/* Prevent portal's commands from being re-executed */
 				MarkPortalDone(portal);
