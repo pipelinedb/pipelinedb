@@ -125,7 +125,6 @@ static void ExecDropStmt(DropStmt *stmt, bool isTopLevel, const char *queryStrin
 #else
 static void ExecDropStmt(DropStmt *stmt, bool isTopLevel);
 #endif
-static void ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt);
 
 
 /*
@@ -1433,7 +1432,7 @@ standard_ProcessUtility(Node *parsetree,
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true, EXEC_ON_COORDS, false);
 			break;
 		case T_DeactivateContinuousViewStmt:
-			ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
+			DeactivateContinuousView((DeactivateContinuousViewStmt *) parsetree);
 			if (IS_PGXC_COORDINATOR)
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true,
 						EXEC_ON_ALL_NODES, false);
@@ -2461,15 +2460,6 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 #endif
 			break;
 	}
-}
-
-/*
- * Dispatch funtcion for DeactivateContinuousViewStmt
- */
-static void
-ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
-{
-	DeactivateContinuousView(stmt);
 }
 
 #ifdef PGXC

@@ -213,7 +213,6 @@ DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
 	bool replaces[Natts_pipeline_queries];
 	Datum values[Natts_pipeline_queries];
 
-
 	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME,
 				CStringGetDatum(stmt->name->relname));

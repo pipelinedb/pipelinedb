@@ -366,8 +366,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	Datum values[Natts_pipeline_queries];
 	bool alreadyRunning = false;
 	bool hasBeenDeactivated = false;
-	int checkIteration;
-	int i = 0;
+	clock_t lastCheckTime = clock();
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
@@ -449,10 +448,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 
 		if (IS_PGXC_DATANODE || isBackgroundCoordinatorProc)
 		{
-			/* Check to see if CV has been deactivated once every
-			 * 2 seconds */
-			checkIteration = (int) 2000 / PIPELINE_SLEEP_MS;
-			for (;;i++)
+			for (;;)
 			{
 				oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 				CurrentResourceOwner = owner;
@@ -490,7 +486,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 
 				CurrentResourceOwner = save;
 
-				if (i % checkIteration == 0)
+				if ((double) (clock() - lastCheckTime) >= (2 * CLOCKS_PER_SEC))
 				{
 					/* Check is we have been deactivated, and break out
 					 * if we have. */
@@ -506,10 +502,12 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 					}
 					ReleaseSysCache(tuple);
 					CommitTransactionCommand();
-				}
 
-				if (hasBeenDeactivated)
-					break;
+					if (hasBeenDeactivated)
+						break;
+
+					lastCheckTime = clock();
+				}
 
 				/*
 				 * If we didn't see any new tuples, sleep briefly to save cycles
