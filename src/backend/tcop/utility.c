@@ -125,6 +125,7 @@ static void ExecDropStmt(DropStmt *stmt, bool isTopLevel, const char *queryStrin
 #else
 static void ExecDropStmt(DropStmt *stmt, bool isTopLevel);
 #endif
+static void ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt);
 
 
 /*
@@ -399,7 +400,7 @@ ProcessUtility(Node *parsetree,
 	if (ProcessUtility_hook)
 		(*ProcessUtility_hook) (parsetree, queryString,
 								context, params,
-								dest, 
+								dest,
 #ifdef PGXC
 								sentToRemote,
 #endif /* PGXC */
@@ -1269,7 +1270,7 @@ standard_ProcessUtility(Node *parsetree,
 				if (EventTriggerSupportsObjectType(stmt->removeType))
 					ProcessUtilitySlow(parsetree, queryString,
 									   context, params,
-									   dest, 
+									   dest,
 #ifdef PGXC
 									   sentToRemote,
 #endif
@@ -1329,7 +1330,7 @@ standard_ProcessUtility(Node *parsetree,
 				if (EventTriggerSupportsObjectType(stmt->renameType))
 					ProcessUtilitySlow(parsetree, queryString,
 									   context, params,
-									   dest, 
+									   dest,
 #ifdef PGXC
 									   sentToRemote,
 #endif
@@ -1385,7 +1386,7 @@ standard_ProcessUtility(Node *parsetree,
 				if (EventTriggerSupportsObjectType(stmt->objectType))
 					ProcessUtilitySlow(parsetree, queryString,
 									   context, params,
-									   dest, 
+									   dest,
 #ifdef PGXC
 									   sentToRemote,
 #endif
@@ -1402,7 +1403,7 @@ standard_ProcessUtility(Node *parsetree,
 				if (EventTriggerSupportsObjectType(stmt->objectType))
 					ProcessUtilitySlow(parsetree, queryString,
 									   context, params,
-									   dest, 
+									   dest,
 #ifdef PGXC
 									   sentToRemote,
 #endif
@@ -1432,6 +1433,10 @@ standard_ProcessUtility(Node *parsetree,
 				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true, EXEC_ON_COORDS, false);
 			break;
 		case T_DeactivateContinuousViewStmt:
+			ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
+			if (IS_PGXC_COORDINATOR)
+				ExecUtilityStmtOnNodes(queryString, NULL, sentToRemote, true,
+						EXEC_ON_ALL_NODES, false);
 			break;
 #endif
 
@@ -1439,7 +1444,7 @@ standard_ProcessUtility(Node *parsetree,
 			/* All other statement types have event trigger support */
 			ProcessUtilitySlow(parsetree, queryString,
 							   context, params,
-							   dest, 
+							   dest,
 #ifdef PGXC
 							   sentToRemote,
 #endif
@@ -2456,6 +2461,15 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 #endif
 			break;
 	}
+}
+
+/*
+ * Dispatch funtcion for DeactivateContinuousViewStmt
+ */
+static void
+ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
+{
+	DeactivateContinuousView(stmt);
 }
 
 #ifdef PGXC
