@@ -83,6 +83,7 @@ _copyPlannedStmt(const PlannedStmt *from)
 	COPY_SCALAR_FIELD(hasModifyingCTE);
 	COPY_SCALAR_FIELD(canSetTag);
 	COPY_SCALAR_FIELD(transientPlan);
+	COPY_SCALAR_FIELD(cq_batch_size);
 	COPY_NODE_FIELD(planTree);
 	COPY_NODE_FIELD(rtable);
 	COPY_NODE_FIELD(resultRelations);
@@ -593,6 +594,18 @@ _copyForeignScan(const ForeignScan *from)
 	COPY_NODE_FIELD(fdw_exprs);
 	COPY_NODE_FIELD(fdw_private);
 	COPY_SCALAR_FIELD(fsSystemCol);
+
+	return newnode;
+}
+
+static TuplestoreScan *
+_copyTuplestoreScan(const TuplestoreScan *from)
+{
+	TuplestoreScan *newnode = makeNode(TuplestoreScan);
+
+	CopyScanFields((const Scan *) from, (Scan *) newnode);
+	COPY_SCALAR_FIELD(store);
+	COPY_SCALAR_FIELD(desc);
 
 	return newnode;
 }
@@ -2491,6 +2504,9 @@ _copyQuery(const Query *from)
 	COPY_NODE_FIELD(rowMarks);
 	COPY_NODE_FIELD(setOperations);
 	COPY_NODE_FIELD(constraintDeps);
+	COPY_SCALAR_FIELD(is_continuous);
+	COPY_SCALAR_FIELD(cq_activate_stmt);
+	COPY_SCALAR_FIELD(cq_is_merge);
 
 	return newnode;
 }

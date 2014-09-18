@@ -321,7 +321,6 @@ static void finalize_aggregate(AggState *aggstate,
 				   Datum *resultVal, bool *resultIsNull);
 static Bitmapset *find_unaggregated_cols(AggState *aggstate);
 static bool find_unaggregated_cols_walker(Node *node, Bitmapset **colnos);
-static void build_hash_table(AggState *aggstate);
 static AggHashEntry lookup_hash_entry(AggState *aggstate,
 				  TupleTableSlot *inputslot);
 static TupleTableSlot *agg_retrieve_direct(AggState *aggstate);
@@ -927,7 +926,7 @@ find_unaggregated_cols_walker(Node *node, Bitmapset **colnos)
  *
  * The hash table always lives in the aggcontext memory context.
  */
-static void
+void
 build_hash_table(AggState *aggstate)
 {
 	Agg		   *node = (Agg *) aggstate->ss.ps.plan;
@@ -1172,6 +1171,9 @@ agg_retrieve_direct(AggState *aggstate)
 			{
 				/* outer plan produced no tuples at all */
 				aggstate->agg_done = true;
+				if (IsContinuous(outerPlan))
+					return NULL;
+
 				/* If we are grouping, we should produce no tuples too */
 				if (node->aggstrategy != AGG_PLAIN)
 					return NULL;

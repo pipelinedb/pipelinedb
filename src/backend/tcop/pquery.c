@@ -23,6 +23,7 @@
 #include "tcop/pquery.h"
 #include "tcop/utility.h"
 #include "utils/memutils.h"
+#include "utils/rel.h"
 #include "utils/snapmgr.h"
 
 
@@ -46,6 +47,9 @@ static long PortalRunSelect(Portal portal, bool forward, long count,
 static void PortalRunUtility(Portal portal, Node *utilityStmt, bool isTopLevel,
 				 DestReceiver *dest, char *completionTag);
 static void PortalRunMulti(Portal portal, bool isTopLevel,
+			   DestReceiver *dest, DestReceiver *altdest,
+			   char *completionTag);
+static void PortalRunContinuous(Portal portal, bool isTopLevel,
 			   DestReceiver *dest, DestReceiver *altdest,
 			   char *completionTag);
 static long DoPortalRunFetch(Portal portal,
@@ -256,7 +260,8 @@ ChoosePortalStrategy(List *stmts)
 		if (IsA(stmt, Query))
 		{
 			Query	   *query = (Query *) stmt;
-
+			if (query->is_continuous)
+				return PORTAL_CONTINUOUS_QUERY;
 			if (query->canSetTag)
 			{
 				if (query->commandType == CMD_SELECT &&
@@ -280,7 +285,8 @@ ChoosePortalStrategy(List *stmts)
 		else if (IsA(stmt, PlannedStmt))
 		{
 			PlannedStmt *pstmt = (PlannedStmt *) stmt;
-
+			if (pstmt->is_continuous)
+				return PORTAL_CONTINUOUS_QUERY;
 			if (pstmt->canSetTag)
 			{
 				if (pstmt->commandType == CMD_SELECT &&
@@ -316,7 +322,8 @@ ChoosePortalStrategy(List *stmts)
 		if (IsA(stmt, Query))
 		{
 			Query	   *query = (Query *) stmt;
-
+			if (query->is_continuous)
+				return PORTAL_CONTINUOUS_QUERY;
 			if (query->canSetTag)
 			{
 				if (++nSetTag > 1)
@@ -602,6 +609,7 @@ PortalStart(Portal portal, ParamListInfo params,
 				break;
 
 			case PORTAL_MULTI_QUERY:
+			case PORTAL_CONTINUOUS_QUERY:
 				/* Need do nothing now */
 				portal->tupDesc = NULL;
 				break;
@@ -820,6 +828,16 @@ PortalRun(Portal portal, long count, bool isTopLevel,
 				MarkPortalDone(portal);
 
 				/* Always complete at end of RunMulti */
+				result = true;
+				break;
+
+			case PORTAL_CONTINUOUS_QUERY:
+				PortalRunContinuous(portal, isTopLevel, dest,
+							altdest, completionTag);
+
+				/* Prevent portal's commands from being re-executed */
+				MarkPortalDone(portal);
+
 				result = true;
 				break;
 
@@ -1371,6 +1389,82 @@ PortalRunMulti(Portal portal, bool isTopLevel,
 		else if (strcmp(completionTag, "DELETE") == 0)
 			strcpy(completionTag, "DELETE 0");
 	}
+}
+
+/*
+ * PortalRunContinuous
+ *
+ * Runs a query continuously on microbatches of newly-materialized data, until
+ * a deactivate message is received
+ */
+static void
+PortalRunContinuous(Portal portal, bool isTopLevel,
+			   DestReceiver *dest, DestReceiver *altdest,
+			   char *completionTag)
+{
+	PlannedStmt * stmt;
+	QueryDesc  *queryDesc;
+	Tuplestorestate *store = NULL;
+	ResourceOwner resowner;
+	ResourceOwner saveowner;
+	Relation rel;
+
+	/*
+	 * If the destination is DestRemoteExecute, change to DestNone.  The
+	 * reason is that the client won't be expecting any tuples, and indeed has
+	 * no way to know what they are, since there is no provision for Describe
+	 * to send a RowDescription message when this portal execution strategy is
+	 * in effect.  This presently will only affect SELECT commands added to
+	 * non-SELECT queries by rewrite rules: such commands will be executed,
+	 * but the results will be discarded unless you use "simple Query"
+	 * protocol.
+	 */
+	if (dest->mydest == DestRemoteExecute)
+		dest = None_Receiver;
+	if (altdest->mydest == DestRemoteExecute)
+		altdest = None_Receiver;
+
+	/* continuous queries are run individually */
+	Assert(portal->stmts->length == 1);
+
+	stmt = (PlannedStmt *) lfirst(portal->stmts->head);
+
+	/* if we got a cancel signal in prior command, quit */
+	CHECK_FOR_INTERRUPTS();
+
+	resowner = ResourceOwnerCreate(NULL, stmt->cq_target->relname);
+	saveowner = CurrentResourceOwner;
+	CurrentResourceOwner = resowner;
+
+	queryDesc = CreateQueryDesc(stmt, portal->sourceText,
+			InvalidSnapshot, InvalidSnapshot,
+								dest, portal->portalParams, 0);
+
+	/* create a tuplestore if that's where we're sending tuples */
+	if (dest->mydest == DestTuplestore)
+	{
+		store = tuplestore_begin_heap(true, true, queryDesc->plannedstmt->cq_batch_size);
+		SetTuplestoreDestReceiverParams(dest, store, PortalGetHeapMemory(portal), true);
+	}
+
+	/* prepare the plan for execution */
+	ExecutorStart(queryDesc, 0);
+
+	CurrentResourceOwner = saveowner;
+
+	/* run the plan fo-eva */
+	ExecutorRunContinuous(queryDesc, resowner);
+
+	//if (IS_PGXC_COORDINATOR)
+	strcpy(completionTag, "ACTIVATE");
+
+	/* cleanup */
+	ExecutorFinish(queryDesc);
+	ExecutorEnd(queryDesc);
+	FreeQueryDesc(queryDesc);
+
+	Assert(PortalGetHeapMemory(portal) == CurrentMemoryContext);
+	MemoryContextDeleteChildren(PortalGetHeapMemory(portal));
 }
 
 /*

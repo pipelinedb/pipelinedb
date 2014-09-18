@@ -3721,6 +3721,8 @@ BackendStartup(Port *port)
 {
 	Backend    *bn;				/* for backend cleanup */
 	pid_t		pid;
+	char msg[64];
+	char remote[32];
 
 	/*
 	 * Create backend data structure.  Better before the fork() so we can
@@ -3786,6 +3788,15 @@ BackendStartup(Port *port)
 
 		/* Perform additional initialization and collect startup packet */
 		BackendInitialize(port);
+
+		sprintf(msg, "backend pid is %d", MyProcPid);
+
+		if (strcmp("[local]", port->remote_host))
+		{
+			sprintf(remote, " (from %s:%s)", port->remote_host, port->remote_port);
+			strcat(msg, remote);
+		}
+		elog(LOG, "%s", msg);
 
 		/* And run the backend */
 		BackendRun(port);

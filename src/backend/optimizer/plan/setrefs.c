@@ -575,7 +575,8 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 					fix_scan_list(root, splan->fdw_exprs, rtoffset);
 			}
 			break;
-
+		case T_TuplestoreScan:
+			break;
 		case T_NestLoop:
 		case T_MergeJoin:
 		case T_HashJoin:

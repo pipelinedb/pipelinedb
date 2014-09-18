@@ -24,8 +24,10 @@
 
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -42,6 +44,8 @@
 #include "parser/parse_target.h"
 #include "parser/parsetree.h"
 #include "rewrite/rewriteManip.h"
+#include "tcop/tcopprot.h"
+#include "miscadmin.h"
 #include "utils/rel.h"
 
 
@@ -70,6 +74,7 @@ static Query *transformCreateTableAsStmt(ParseState *pstate,
 						   CreateTableAsStmt *stmt);
 static void transformLockingClause(ParseState *pstate, Query *qry,
 					   LockingClause *lc, bool pushedDown);
+static Query *transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt);
 
 
 /*
@@ -262,6 +267,11 @@ transformStmt(ParseState *pstate, Node *parseTree)
 		case T_CreateTableAsStmt:
 			result = transformCreateTableAsStmt(pstate,
 											(CreateTableAsStmt *) parseTree);
+			break;
+
+		case T_ActivateContinuousViewStmt:
+			result = transformActivateContinuousViewStmt(pstate,
+											(ActivateContinuousViewStmt *) parseTree);
 			break;
 
 		default:
@@ -2492,6 +2502,33 @@ transformLockingClause(ParseState *pstate, Query *qry, LockingClause *lc,
 						 parser_errposition(pstate, thisrel->location)));
 		}
 	}
+}
+
+/*
+ * Retrieve the registered continuous query, parse and analyze it,
+ * and mark it as as continuous so that it runs in the continuous executor
+ */
+static Query *
+transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt)
+{
+	/* TODO: if it's already running, throw an error */
+	int cqid;
+	const char *query_string = GetQueryString(stmt->name, &cqid, false);
+
+	List *parsetree_list = pg_parse_query(query_string);
+
+	/* TODO: enforce single queries here */
+	Node *parsetree = (Node *) lfirst(parsetree_list->head);
+	CreateContinuousViewStmt *cv = (CreateContinuousViewStmt *) parsetree;
+	SelectStmt *select = (SelectStmt *) cv->query;
+
+	Query *q = parse_analyze((Node *) select, query_string, NULL, 0);
+	q->is_continuous = true;
+	q->cq_activate_stmt = pstrdup(pstate->p_sourcetext);
+	q->cq_target = stmt->name;
+	q->cqid = cqid;
+
+	return q;
 }
 
 /*

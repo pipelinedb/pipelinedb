@@ -16,6 +16,7 @@
 
 #include "executor/execdesc.h"
 #include "nodes/parsenodes.h"
+#include "utils/resowner.h"
 
 
 /*
@@ -174,6 +175,7 @@ extern void ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void standard_ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void ExecutorRun(QueryDesc *queryDesc,
 			ScanDirection direction, long count);
+extern void ExecutorRunContinuous(QueryDesc *queryDesc, ResourceOwner owner);
 extern void standard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, long count);
 extern void ExecutorFinish(QueryDesc *queryDesc);
@@ -221,6 +223,8 @@ extern PlanState *ExecInitNode(Plan *node, EState *estate, int eflags);
 extern TupleTableSlot *ExecProcNode(PlanState *node);
 extern Node *MultiExecProcNode(PlanState *node);
 extern void ExecEndNode(PlanState *node);
+extern void ExecBeginBatch(PlanState *node);
+extern TupleTableSlot *ExecEndBatch(PlanState *node);
 
 /*
  * prototypes from functions in execQual.c

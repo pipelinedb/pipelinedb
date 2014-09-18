@@ -39,7 +39,11 @@
 
 #include "access/printtup.h"
 #include "access/xact.h"
+#include "access/htup_details.h"
+#include "access/transam.h"
+#include "catalog/pg_attribute.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "commands/async.h"
 #include "commands/prepare.h"
 #include "libpq/libpq.h"
@@ -52,6 +56,13 @@
 #include "pg_trace.h"
 #include "parser/analyze.h"
 #include "parser/parser.h"
+#include "parser/parse_clause.h"
+#include "parser/parse_expr.h"
+#include "parser/parse_type.h"
+#include "pipeline/decode.h"
+#include "pipeline/merge.h"
+#include "pipeline/stream.h"
+#include "pipeline/streambuf.h"
 #include "pg_getopt.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/postmaster.h"
@@ -67,12 +78,15 @@
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "tcop/utility.h"
+#include "utils/hsearch.h"
 #include "utils/lsyscache.h"
+#include "utils/syscache.h"
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
 #include "utils/snapmgr.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
+#include "utils/tuplestore.h"
 #include "mb/pg_wchar.h"
 
 
@@ -174,6 +188,12 @@ static int	UseNewLine = 0;		/* Use EOF as query delimiters */
 static bool RecoveryConflictPending = false;
 static bool RecoveryConflictRetryable = true;
 static ProcSignalReason RecoveryConflictReason;
+
+/* memory context for event processing */
+static MemoryContext EventContext;
+
+/* memory context for temporary memory required by merge requests */
+static MemoryContext MergeTempContext;
 
 /* ----------------------------------------------------------------
  *		decls for routines only used in this file
@@ -902,6 +922,40 @@ exec_simple_query(const char *query_string)
 	 */
 	isTopLevel = (list_length(parsetree_list) == 1);
 
+	if (isTopLevel)
+	{
+		Node *parsetree = (Node *) lfirst(parsetree_list->head);
+
+		/* short circuit everything if we're just inserting into a stream */
+		if (IsA(parsetree, InsertStmt))
+		{
+			InsertStmt *ins = (InsertStmt *) parsetree;
+
+			if (InsertTargetIsStream(ins))
+			{
+				MemoryContext oldcontext;
+				int count = 0;
+				char buf[32];
+
+				oldcontext = MemoryContextSwitchTo(EventContext);
+
+				BeginCommand("INSERT", dest);
+
+				count = InsertIntoStream(ins);
+
+				sprintf(buf, "INSERT 0 %d", count);
+				EndCommand(buf, dest);
+
+				MemoryContextSwitchTo(oldcontext);
+				MemoryContextReset(EventContext);
+
+				finish_xact_command();
+
+				return;
+			}
+		}
+	}
+
 	/*
 	 * Run through the raw parsetree(s) and process each one.
 	 */
@@ -1129,6 +1183,96 @@ exec_simple_query(const char *query_string)
 	TRACE_POSTGRESQL_QUERY_DONE(query_string);
 
 	debug_query_string = NULL;
+}
+
+/*
+ * exec_proxy_events
+ *
+ * Send events to the appropriate datanodes, where they will be emitted
+ * into the event stream for consumption (only run from a coordinator)
+ *
+ */
+static void
+exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
+{
+	List *events = NIL;
+	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
+
+	while (message->cursor < message->len)
+	{
+		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
+
+		ev->len = pq_getmsgint(message, 4);
+		ev->raw = (char *) palloc(ev->len);
+		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
+
+		events = lcons(ev, events);
+	}
+	pq_getmsgend(message);
+
+	MemoryContextSwitchTo(oldcontext);
+	MemoryContextReset(EventContext);
+}
+
+/*
+ * exec_decode_events
+ *
+ * Decode and emit received events into the events stream (only run on datanodes)
+ */
+static void
+exec_decode_events(const char *encoding, const char *channel,
+		char **fields, int nfields, StringInfo message)
+{
+	int count = 0;
+	char **sharedfields = NULL;
+
+	start_xact_command();
+
+	if (!GlobalStreamBuffer)
+		InitGlobalStreamBuffer();
+
+	MemoryContextSwitchTo(EventContext);
+
+	OpenStreamBuffer(GlobalStreamBuffer);
+
+	if (nfields > 0)
+	{
+		Size size = 0;
+		int i;
+		sharedfields = ShmemAlloc(nfields * sizeof(char *));
+
+		for (i=0; i<nfields; i++)
+		{
+			size += strlen(fields[i]) + 1;
+			sharedfields[i] = ShmemAlloc(size);
+			memcpy(sharedfields[i], fields[i], size);
+		}
+	}
+
+	while (message->cursor < message->len)
+	{
+		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
+
+		ev->len = pq_getmsgint(message, 4);
+		ev->raw = (char *) palloc(ev->len);
+		ev->fields = sharedfields;
+		ev->nfields = nfields;
+		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
+
+		if (AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev))
+			count++;
+	}
+
+	pq_getmsgend(message);
+
+	RespondSendEvents(count);
+
+	CloseStreamBuffer(GlobalStreamBuffer);
+
+	MemoryContextSwitchTo(MessageContext);
+	MemoryContextReset(EventContext);
+
+	finish_xact_command();
 }
 
 /*
@@ -3777,6 +3921,27 @@ PostgresMain(int argc, char *argv[],
 										   ALLOCSET_DEFAULT_INITSIZE,
 										   ALLOCSET_DEFAULT_MAXSIZE);
 
+
+	/*
+	 * Create the memory context that is used for event processing
+	 *
+	 * EventContext is reset after each request that uses it
+	 */
+	EventContext = AllocSetContextCreate(TopMemoryContext,
+											"EventContext",
+											ALLOCSET_DEFAULT_MINSIZE,
+											ALLOCSET_DEFAULT_INITSIZE,
+											ALLOCSET_DEFAULT_MAXSIZE);
+
+	MergeTempContext = AllocSetContextCreate(TopMemoryContext,
+											"MergeTempContext",
+											ALLOCSET_DEFAULT_MINSIZE,
+											ALLOCSET_DEFAULT_INITSIZE,
+											ALLOCSET_DEFAULT_MAXSIZE);
+
+	InitDecoderCache();
+
+
 	/*
 	 * Remember stand-alone backend startup time
 	 */
@@ -4246,6 +4411,41 @@ PostgresMain(int argc, char *argv[],
 				 */
 				break;
 
+			case '>': /* send events to remote nodes */
+				{
+					const char *encoding;
+					const char *channel;
+
+					encoding = pq_getmsgstring(&input_message);
+					channel = pq_getmsgstring(&input_message);
+
+					exec_proxy_events(encoding, channel, &input_message);
+					send_ready_for_query = true;
+				}
+				break;
+			case ']': /* receive events on remote node */
+				{
+					const char *encoding;
+					const char *channel;
+					int nfields = 0;
+					int i;
+					char **fields = NULL;
+
+					encoding = pq_getmsgstring(&input_message);
+					channel = pq_getmsgstring(&input_message);
+					nfields = pq_getmsgint(&input_message, 4);
+
+					if (nfields)
+						fields = palloc0(sizeof(char *) * nfields);
+					for (i=0; i<nfields; i++)
+					{
+						const char *fname = pq_getmsgstring(&input_message);
+						fields[i] = pstrdup(fname);
+					}
+
+					exec_decode_events(encoding, channel, fields, nfields, &input_message);
+				}
+				break;
 			default:
 				ereport(FATAL,
 						(errcode(ERRCODE_PROTOCOL_VIOLATION),

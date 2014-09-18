@@ -38,6 +38,7 @@ extern Oid	GetColumnDefCollation(ParseState *pstate, ColumnDef *coldef, Oid type
 extern Type typeidType(Oid id);
 
 extern Oid	typeTypeId(Type tp);
+extern Oid typeOutputId(Type t);
 extern int16 typeLen(Type t);
 extern bool typeByVal(Type t);
 extern char *typeTypeName(Type t);

@@ -1,0 +1,161 @@
+#! /usr/bin/python
+
+import argparse
+import os
+import subprocess
+import signal
+import socket
+import sys
+import time
+
+
+GTM_DIR = 'gtm'
+COORDINATOR_DIR = 'coordinator'
+DATANODE_DIR = 'datanode%d'
+POSTGRES = 'src/backend/postgres'
+GTM = 'src/gtm/main/gtm'
+PROCS = []
+
+
+def _kill(sig):
+    time.sleep(0.1)
+    out, err = subprocess.Popen(['ps', 'x'], stdout=subprocess.PIPE).communicate()
+    errprocs = []
+    for line in out.split('\n'):
+        if __file__ not in line and ('postgres' in line or 'gtm' in line):
+            pid = line.split()[0]
+            try:
+                os.kill(int(pid), sig)
+            except OSError: pass # It might already be dead so just ignore the exception
+
+
+def _find_root():
+    if not os.path.exists('config.status'):
+        return None
+
+    path = None
+    config = open('config.status')
+    lines = [l.strip() for l in config.readlines()]
+    for line in lines:
+        if line.startswith('S["prefix"]='):
+            path = line.split('=')[1][1:-1]
+
+    config.close()
+
+    return path
+
+
+def handle_sigint(sig, frame):
+    """
+    Ctrl+C
+    """
+    _kill(signal.SIGINT)
+    _kill(signal.SIGKILL)
+
+
+signal.signal(signal.SIGINT, handle_sigint)
+
+
+def main(args):
+    if not args.root:
+        args.root = _find_root()
+
+    if args.root is None:
+        print 'Could not find root PipelineDB installation directory. Specify it with the --root option.'
+        sys.exit(1)
+
+    root = os.path.expandvars(args.root)
+    root = os.path.expanduser(root)
+    skip = args.skip or []
+
+    # Make sure we've already bootstrapped
+    if not os.path.exists(os.path.join(root, 'coordinator')):
+        print 'Root directory %s not bootstrapped. Did you run `make bootstrap`?' % root
+        sys.exit(1)
+
+    # Make sure that there are no PipelineDB processes already running
+    out, err = subprocess.Popen(['ps', 'x'], stdout=subprocess.PIPE).communicate()
+    errprocs = []
+    for line in out.split('\n'):
+        if __file__ not in line and ('postgres' in line or 'gtm' in line):
+            errprocs.append(line)
+
+    if errprocs:
+        print 'The following processes must be terminated before running PipelineDB:'
+        for p in errprocs:
+            print p
+        sys.exit(1)
+
+    print """\
+    ____  _            ___            ____  ____
+   / __ \(_)___  ___  / (_)___  ___  / __ \/ __ )
+  / /_/ / / __ \/ _ \/ / / __ \/ _ \/ / / / __  |
+ / ____/ / /_/ /  __/ / / / / /  __/ /_/ / /_/ /
+/_/   /_/ .___/\___/_/_/_/ /_/\___/_____/_____/
+       /_/
+"""
+    gtm_dir = os.path.join(root, GTM_DIR)
+    coord_dir = os.path.join(root, COORDINATOR_DIR)
+    coord = subprocess.Popen([POSTGRES, '--coordinator', '-D', coord_dir])
+    gtm = subprocess.Popen([GTM, '-D', gtm_dir])
+
+    PROCS.append(gtm)
+    PROCS.append(coord)
+
+    q = "SELECT node_name, node_port FROM pgxc_node WHERE node_type = 'D'"
+    running = False
+    attempts = 0
+    while not running and attempts < 100:
+        time.sleep(0.1)
+        p = subprocess.Popen(['psql', '-c', q], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = p.communicate()
+        running = 'datanode' in out
+        attempts += 1
+
+    if not running:
+        print 'Couldn\'t connect to coordinator to retrieve cluster topology'
+        _kill(signal.SIGINT)
+        _kill(signal.SIGKILL)
+        sys.exit(1)
+
+    if 'coordinator' in skip:
+        print 'Skipping coordinator'
+        coord.kill()
+    if 'gtm' in skip:
+        print 'Skipping GTM'
+        gtm.kill()
+
+    # We don't care about the last two lines of this output
+    rows = out.split('\n')[2:-3]
+    nodes = []
+    for row in rows:
+        node, port = row.split('|')
+        nodes.append((node.strip(), port.strip()))
+
+    for node, port in nodes:
+        if node in skip:
+            print 'Skipping', node
+            continue
+        path = os.path.join(root, node)
+        PROCS.append(subprocess.Popen([POSTGRES, '--datanode', '-D' , path,
+                                       '-p', port]))
+    if args.stmts:
+        time.sleep(0.1)
+        for stmt in args.stmts:
+            p = subprocess.Popen(['psql', '-c', stmt], stdout=subprocess.PIPE)
+            print stmt.upper()
+
+    for p in PROCS:
+        p.wait()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--root', action='store', dest='root', required=False,
+                    help='Root directory in which PipelineDB is installed')
+    parser.add_argument('--skip', action='append', dest='skip', required=False,
+                    help='Prevent the given node from being launched')
+    parser.add_argument('--stmt', action='append', dest='stmts', required=False,
+                    help='SQL statements to run after all daemons are running')
+    args = parser.parse_args()
+    main(args)

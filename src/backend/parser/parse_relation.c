@@ -832,7 +832,7 @@ markVarForSelectPriv(ParseState *pstate, Var *var, RangeTblEntry *rte)
  *
  * It is an error for there to be more aliases present than required.
  */
-static void
+void
 buildRelationAliases(TupleDesc tupdesc, Alias *alias, Alias *eref)
 {
 	int			maxattrs = tupdesc->natts;
@@ -1805,12 +1805,25 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 
 	switch (rte->rtekind)
 	{
-		case RTE_RELATION:
-			/* Ordinary relation RTE */
-			expandRelation(rte->relid, rte->eref,
-						   rtindex, sublevels_up, location,
-						   include_dropped, colnames, colvars);
-			break;
+	case RTE_RELATION:
+		{
+			if (rte->cvdesc)
+			{
+				/* it's for a continuous view, so use the schema inferred from the target list */
+				expandTupleDesc(rte->cvdesc, rte->eref, rte->cvdesc->natts, 0, rtindex,
+						sublevels_up,
+								location, include_dropped,
+								colnames, colvars);
+			}
+			else
+			{
+				/* Ordinary relation RTE */
+				expandRelation(rte->relid, rte->eref,
+								 rtindex, sublevels_up, location,
+								 include_dropped, colnames, colvars);
+			}
+		}
+		break;
 		case RTE_SUBQUERY:
 			{
 				/* Subquery RTE */
@@ -2309,7 +2322,7 @@ get_rte_attribute_name(RangeTblEntry *rte, AttrNumber attnum)
 	 * right answer if the column has been renamed since the eref list was
 	 * built (which can easily happen for rules).
 	 */
-	if (rte->rtekind == RTE_RELATION)
+	if (rte->rtekind == RTE_RELATION && !rte->cvdesc)
 		return get_relid_attribute_name(rte->relid, attnum);
 
 	/*
@@ -2337,16 +2350,23 @@ get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 		case RTE_RELATION:
 			{
 				/* Plain relation RTE --- get the attribute's type info */
-				HeapTuple	tp;
-				Form_pg_attribute att_tup;
+				HeapTuple	tp = NULL;
+				Form_pg_attribute att_tup = NULL;
 
-				tp = SearchSysCache2(ATTNUM,
-									 ObjectIdGetDatum(rte->relid),
-									 Int16GetDatum(attnum));
-				if (!HeapTupleIsValid(tp))		/* shouldn't happen */
-					elog(ERROR, "cache lookup failed for attribute %d of relation %u",
-						 attnum, rte->relid);
-				att_tup = (Form_pg_attribute) GETSTRUCT(tp);
+				if (rte->cvdesc)
+				{
+					att_tup = rte->cvdesc->attrs[attnum - 1];
+				}
+				else
+				{
+					tp = SearchSysCache2(ATTNUM,
+										 ObjectIdGetDatum(rte->relid),
+										 Int16GetDatum(attnum));
+					if (!HeapTupleIsValid(tp))		/* shouldn't happen */
+						elog(ERROR, "cache lookup failed for attribute %d of relation %u",
+							 attnum, rte->relid);
+					att_tup = (Form_pg_attribute) GETSTRUCT(tp);
+				}
 
 				/*
 				 * If dropped column, pretend it ain't there.  See notes in

@@ -254,7 +254,7 @@ ExecAssignScanProjectionInfo(ScanState *node)
 	else
 		varno = scan->scanrelid;
 
-	if (tlist_matches_tupdesc(&node->ps,
+	if (!IsA(scan, StreamScan) && tlist_matches_tupdesc(&node->ps,
 							  scan->plan.targetlist,
 							  varno,
 							  node->ss_ScanTupleSlot->tts_tupleDescriptor))

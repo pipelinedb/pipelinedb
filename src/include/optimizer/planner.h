@@ -44,6 +44,8 @@ extern Expr *expression_planner(Expr *expr);
 
 extern Expr *preprocess_phv_expression(PlannerInfo *root, Expr *expr);
 
+extern int	get_grouping_column_index(Query *parse, TargetEntry *tle);
+
 extern bool plan_cluster_use_sort(Oid tableOid, Oid indexOid);
 
 #endif   /* PLANNER_H */

@@ -22,6 +22,9 @@
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "catalog/namespace.h"
+#include "catalog/pipeline_encoding_fn.h"
+#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "catalog/toasting.h"
 #include "commands/alter.h"
 #include "commands/async.h"
@@ -39,6 +42,7 @@
 #include "commands/extension.h"
 #include "commands/matview.h"
 #include "commands/lockcmds.h"
+#include "commands/pipelinecmds.h"
 #include "commands/portalcmds.h"
 #include "commands/prepare.h"
 #include "commands/proclang.h"
@@ -495,6 +499,18 @@ standard_ProcessUtility(Node *parsetree,
 			CreateTableSpace((CreateTableSpaceStmt *) parsetree);
 			break;
 
+		case T_CreateContinuousViewStmt:
+			CreateContinuousView((CreateContinuousViewStmt *) parsetree, queryString);
+			break;
+
+		case T_CreateEncodingStmt:
+			CreateEncoding((CreateEncodingStmt *) parsetree);
+			break;
+
+		case T_DumpStmt:
+			DumpState((DumpStmt *) parsetree);
+			break;
+
 		case T_DropTableSpaceStmt:
 			/* no event triggers for global objects */
 			PreventTransactionChain(isTopLevel, "DROP TABLESPACE");
@@ -834,6 +850,9 @@ standard_ProcessUtility(Node *parsetree,
 				else
 					ExecAlterOwnerStmt(stmt);
 			}
+			break;
+
+		case T_DeactivateContinuousViewStmt:
 			break;
 
 		default:
@@ -1361,6 +1380,10 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 		case OBJECT_FOREIGN_TABLE:
 			RemoveRelations(stmt);
 			break;
+    case OBJECT_CONTINUOUS_VIEW:
+        DropContinuousView(stmt);
+        // XXX: Don't break here, we must perform all the `default` steps
+        // after this. That's what does the actual dropping of the view table.
 		default:
 			RemoveObjects(stmt);
 			break;
@@ -1865,6 +1888,9 @@ CreateCommandTag(Node *parsetree)
 				case OBJECT_VIEW:
 					tag = "DROP VIEW";
 					break;
+				case OBJECT_CONTINUOUS_VIEW:
+					tag = "DROP CONTINUOUS VIEW";
+					break;
 				case OBJECT_MATVIEW:
 					tag = "DROP MATERIALIZED VIEW";
 					break;
@@ -2126,6 +2152,13 @@ CreateCommandTag(Node *parsetree)
 
 		case T_ExplainStmt:
 			tag = "EXPLAIN";
+			break;
+
+		case T_CreateContinuousViewStmt:
+			tag = "CREATE CONTINUOUS VIEW";
+			break;
+		case T_CreateEncodingStmt:
+			tag = "CREATE ENCODING";
 			break;
 
 		case T_CreateTableAsStmt:
@@ -2427,6 +2460,16 @@ CreateCommandTag(Node *parsetree)
 						break;
 				}
 			}
+			break;
+
+		case T_ActivateContinuousViewStmt:
+			tag = "ACTIVATE CONTINUOUS VIEW";
+			break;
+		case T_DeactivateContinuousViewStmt:
+			tag = "DEACTIVATE CONTINUOUS VIEW";
+			break;
+		case T_DumpStmt:
+			tag = "DUMP";
 			break;
 
 		default:
