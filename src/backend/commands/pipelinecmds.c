@@ -11,6 +11,7 @@
 
 #include "postgres.h"
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "access/reloptions.h"
 #include "access/xact.h"
 #include "commands/pipelinecmds.h"
@@ -24,6 +25,7 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
 #include "regex/regex.h"
+#include "utils/rel.h"
 #include "utils/syscache.h"
 
 /*
@@ -165,9 +167,7 @@ DropContinuousView(DropStmt *stmt)
    * Scan the pipeline_queries relation to find the OID of the views(s) to be
    * deleted.
    */
-  // TODO(usmanm): Do we really need an AccessExclusiveLock here? Will a 
-  // RowExclusiveLock do here?
-  pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
+  pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 
   foreach(item, stmt->objects)
   {
@@ -200,4 +200,43 @@ DropContinuousView(DropStmt *stmt)
    * Now we can clean up; but keep locks until commit.
    */
   heap_close(pipeline_queries, NoLock);
+}
+
+void
+DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
+{
+	Relation pipeline_queries;
+	HeapTuple tuple;
+	HeapTuple newtuple;
+	Form_pipeline_queries row;
+	bool nulls[Natts_pipeline_queries];
+	bool replaces[Natts_pipeline_queries];
+	Datum values[Natts_pipeline_queries];
+
+	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
+	tuple = SearchSysCache1(PIPELINEQUERIESNAME,
+				CStringGetDatum(stmt->name->relname));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+				stmt->name->relname);
+
+	row = (Form_pipeline_queries) GETSTRUCT(tuple);
+
+	if (row->state != PIPELINE_QUERY_STATE_INACTIVE)
+	{
+		MemSet(values, 0, sizeof(values));
+		MemSet(nulls, false, sizeof(nulls));
+		MemSet(replaces, false, sizeof(replaces));
+
+		replaces[Anum_pipeline_queries_state - 1] = true;
+		values[Anum_pipeline_queries_state - 1] = PIPELINE_QUERY_STATE_INACTIVE;
+		newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att,
+				values, nulls, replaces);
+		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+		CommandCounterIncrement();
+	}
+
+	ReleaseSysCache(tuple);
+	heap_close(pipeline_queries, NoLock);
 }

@@ -4,6 +4,6 @@ Url: http://www.postgresql.org/
 Version: 9.3.2
 Requires: 
 Requires.private: libecpg libpgtypes
-Cflags: -I/home/derek/tmp/pgxc/include
-Libs: -L/home/derek/tmp/pgxc/lib -lecpg_compat
+Cflags: -I/home/usmanm/pdb/include
+Libs: -L/home/usmanm/pdb/lib -lecpg_compat
 Libs.private:  -lpq -lm -lpthread

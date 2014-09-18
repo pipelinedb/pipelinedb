@@ -53,12 +53,16 @@
 #include "parser/parsetree.h"
 #include "postmaster/fork_process.h"
 #include "storage/bufmgr.h"
+#include "storage/ipc.h"
 #include "storage/lmgr.h"
 #include "tcop/utility.h"
 #include "utils/acl.h"
+#include "utils/builtins.h"
+#include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
+#include "utils/syscache.h"
 #include "utils/tqual.h"
 #ifdef PGXC
 #include "pgxc/pgxc.h"
@@ -352,6 +356,17 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
 	bool isBackgroundCoordinatorProc = false;
 	int pid;
+	Relation pipeline_queries;
+	HeapTuple tuple;
+	HeapTuple newtuple;
+	Form_pipeline_queries row;
+	NameData name;
+	bool nulls[Natts_pipeline_queries];
+	bool replaces[Natts_pipeline_queries];
+	Datum values[Natts_pipeline_queries];
+	bool alreadyRunning = false;
+	bool hasBeenDeactivated = false;
+	clock_t lastCheckTime = clock();
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
@@ -380,70 +395,135 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	if (sendTuples)
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
+	namestrcpy(&name, mergeState.targetRelation->relname);
+
+	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
+	tuple = SearchSysCache1(PIPELINEQUERIESNAME, NameGetDatum(&name));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+				mergeState.targetRelation->relname);
+
+	row = (Form_pipeline_queries) GETSTRUCT(tuple);
+	alreadyRunning = row->state == PIPELINE_QUERY_STATE_ACTIVE;
+
+	if (!alreadyRunning)
+	{
+		/* Mark the CV as active. */
+		MemSet(values, 0, sizeof(values));
+		MemSet(nulls, false, sizeof(nulls));
+		MemSet(replaces, false, sizeof(replaces));
+
+		replaces[Anum_pipeline_queries_state - 1] = true;
+		values[Anum_pipeline_queries_state - 1] = PIPELINE_QUERY_STATE_ACTIVE;
+
+		newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att, values,
+				nulls, replaces);
+		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+		CommandCounterIncrement();
+	}
+
+	ReleaseSysCache(tuple);
+	heap_close(pipeline_queries, NoLock);
+
 	/* Finish the transaction started in PostgresMain() */
 	CommitTransactionCommand();
 
-	/* Fork process and start running the coordinator's CQ work asynchronously. */
-	if (IS_PGXC_COORDINATOR)
+	if (!alreadyRunning)
 	{
-		pid = fork_process();
-		if (pid == 0)
+		if (IS_PGXC_COORDINATOR)
 		{
-			isBackgroundCoordinatorProc = true;
-		}
-		else if (pid < 0)
-		{
-			elog(ERROR, "could not spawn background process for running CQ.");
-		}
-	}
-
-	if (IS_PGXC_DATANODE || isBackgroundCoordinatorProc)
-	{
-		for (;;)
-		{
-			oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
-			CurrentResourceOwner = owner;
-
-			/*
-			 * Run plan on a microbatch
-			 */
-			ExecutePlan(estate, queryDesc->planstate, operation,
-						sendTuples, batchsize, timeoutms, ForwardScanDirection, dest);
-
-			MemoryContextSwitchTo(oldcontext);
-
-			/*
-			 * If we're a datanode, tell the coordinator that this batch is done
-			 */
-			if (IS_PGXC_DATANODE)
-				ReadyForQuery(dest->mydest);
-
-			/*
-			 * If we're a coordinator, send the partial result back to the datanodes
-			 * for final merging
-			 */
-			if (IS_PGXC_COORDINATOR && estate->es_processed)
+			/* Fork process and start running the coordinator's CQ work
+			 * asynchronously. */
+			pid = fork_process();
+			if (pid == 0)
 			{
-				StartTransactionCommand();
-				PushActiveSnapshot(GetTransactionSnapshot());
+				isBackgroundCoordinatorProc = true;
+			}
+			else if (pid < 0)
+			{
+				elog(ERROR, "could not spawn background process for running CQ.");
+			}
+		}
 
-				DoRemoteMerge(mergeState);
+		if (IS_PGXC_DATANODE || isBackgroundCoordinatorProc)
+		{
+			for (;;)
+			{
+				oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+				CurrentResourceOwner = owner;
 
-				PopActiveSnapshot();
-				CommitTransactionCommand();
+				/*
+				 * Run plan on a microbatch
+				 */
+				ExecutePlan(estate, queryDesc->planstate, operation,
+						sendTuples, batchsize, timeoutms,
+						ForwardScanDirection, dest);
+
+				MemoryContextSwitchTo(oldcontext);
+
+				/*
+				 * If we're a datanode, tell the coordinator that this batch is
+				 * done
+				 */
+				if (IS_PGXC_DATANODE)
+					ReadyForQuery(dest->mydest);
+
+				/*
+				 * If we're a coordinator, send the partial result back to the
+				 * datanodes for final merging
+				 */
+				if (IS_PGXC_COORDINATOR && estate->es_processed)
+				{
+					StartTransactionCommand();
+					PushActiveSnapshot(GetTransactionSnapshot());
+
+					DoRemoteMerge(mergeState);
+
+					PopActiveSnapshot();
+					CommitTransactionCommand();
+				}
+
+				CurrentResourceOwner = save;
+
+				if ((double) (clock() - lastCheckTime) >= (2 * CLOCKS_PER_SEC))
+				{
+					/* Check is we have been deactivated, and break out
+					 * if we have. */
+					StartTransactionCommand();
+					tuple = SearchSysCache1(PIPELINEQUERIESNAME,
+							NameGetDatum(&name));
+					hasBeenDeactivated = !HeapTupleIsValid(tuple);
+					if (!hasBeenDeactivated)
+					{
+						row = (Form_pipeline_queries) GETSTRUCT(tuple);
+						hasBeenDeactivated = (row->state ==
+								PIPELINE_QUERY_STATE_INACTIVE);
+					}
+					ReleaseSysCache(tuple);
+					CommitTransactionCommand();
+
+					if (hasBeenDeactivated)
+						break;
+
+					lastCheckTime = clock();
+				}
+
+				/*
+				 * If we didn't see any new tuples, sleep briefly to save cycles
+				 */
+				if (estate->es_processed == 0)
+					pg_usleep(PIPELINE_SLEEP_MS * 1000);
+
+				estate->es_processed = 0;
+
+				MemoryContextReset(ContinuousQueryContext);
 			}
 
-			CurrentResourceOwner = save;
-
-			/*
-			 * If we didn't see any new tuples, sleep briefly to save cycles
-			 */
-			if (estate->es_processed == 0)
-				pg_usleep(PIPELINE_SLEEP_MS * 1000);
-
-			estate->es_processed = 0;
-
-			MemoryContextReset(ContinuousQueryContext);
+			/* Kill the forked process on the coordinator */
+			if (IS_PGXC_COORDINATOR) {
+				proc_exit(0);
+			}
 		}
 	}
 

@@ -845,7 +845,9 @@ ExecEndNode(PlanState *node)
 			ExecEndRemoteQuery((RemoteQueryState *) node);
 			break;
 #endif
-
+		case T_StreamScanState:
+			/* XXX(usmanm): Should we do something here? */
+			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d", (int) nodeTag(node));
 			break;
