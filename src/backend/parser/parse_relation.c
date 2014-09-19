@@ -2381,7 +2381,9 @@ get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 				*vartype = att_tup->atttypid;
 				*vartypmod = att_tup->atttypmod;
 				*varcollid = att_tup->attcollation;
-				ReleaseSysCache(tp);
+
+				if (tp)
+					ReleaseSysCache(tp);
 			}
 			break;
 		case RTE_SUBQUERY:

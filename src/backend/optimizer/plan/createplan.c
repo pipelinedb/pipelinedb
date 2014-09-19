@@ -238,7 +238,10 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_CteScan:
 		case T_WorkTableScan:
 		case T_ForeignScan:
-			plan = create_scan_plan(root, best_path);
+			if (root->parse->sourcestore)
+				plan = create_tupstorescan_plan(root, best_path);
+			else
+				plan = create_scan_plan(root, best_path);
 			break;
 		case T_HashJoin:
 		case T_MergeJoin:

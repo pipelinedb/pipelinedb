@@ -353,7 +353,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <defelt>	fdw_option
 
 %type <range>	OptTempTableName
-%type <into>	into_clause create_as_target create_mv_target
+%type <into>	into_clause create_as_target create_cv_target create_mv_target
 
 %type <defelt>	createfunc_opt_item common_func_opt_item dostmt_opt_item
 %type <fun_param> func_arg func_arg_with_default table_func_column aggr_arg
@@ -8397,7 +8397,7 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 								 parser_errposition(@14)));
 					$$ = (Node *) n;
 				}
-		| CREATE CONTINUOUS VIEW qualified_name AS SelectStmt
+		| CREATE CONTINUOUS VIEW create_cv_target AS SelectStmt
 				{
 					CreateContinuousViewStmt *n = makeNode(CreateContinuousViewStmt);
 					n->into = $4;
@@ -8406,6 +8406,13 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 					$$ = (Node *) n;
 				}
 		;
+
+create_cv_target:
+		qualified_name
+				{
+					$$ = makeNode(IntoClause);
+					$$->rel = $1;
+				}
 
 opt_check_option:
 		WITH CHECK OPTION				{ $$ = CASCADED_CHECK_OPTION; }

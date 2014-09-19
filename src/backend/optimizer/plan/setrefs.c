@@ -432,6 +432,8 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 	 */
 	switch (nodeTag(plan))
 	{
+		case T_StreamScan:
+			break;
 		case T_SeqScan:
 			{
 				SeqScan    *splan = (SeqScan *) plan;

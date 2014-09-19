@@ -429,6 +429,8 @@ SocketBackend(StringInfo inBuf)
 		case 'E':				/* execute */
 		case 'H':				/* flush */
 		case 'P':				/* parse */
+		case '>':
+		case ']':
 			doing_extended_query_message = true;
 			/* these are only legal in protocol 3 */
 			if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)

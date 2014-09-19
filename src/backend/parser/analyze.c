@@ -945,6 +945,11 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 	/* make WINDOW info available for window functions, too */
 	pstate->p_windowdefs = stmt->windowClause;
 
+	/* SELECT statements that belong to CREATE CONTINUOUS VIEW statements get special treatment */
+	pstate->p_is_create_cv = stmt->forContinuousView;
+
+	pstate->p_target_list = stmt->targetList;
+
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);
 
