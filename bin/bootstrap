@@ -3,26 +3,13 @@
 import argparse
 import os
 import shutil
-import glob
 import subprocess
 import time
 import getpass
 import signal
-import sys
 
-GTM_DIR = 'gtm'
-COORDINATOR_DIR = 'coordinator'
-DATANODE_DIR = 'datanode%d'
-CREATE_NODE = 'CREATE NODE %(name)s WITH (TYPE=\'%(type)s\', HOST=\'localhost\', PORT=%(port)s)'
-START_PROCS = '' 
 
-def _create_node(name, type, port):
-    cmd = CREATE_NODE % {
-        'name': name,
-        'type': type,
-        'port': str(port)
-    }
-    subprocess.call(['psql', 'postgres', '-c', cmd])
+DATA_DIR = 'data'
 
 
 def main(args):
@@ -32,47 +19,17 @@ def main(args):
         sys.exit(1)
 
     root = os.path.expanduser(root)
-    gtm_dir = os.path.join(root, GTM_DIR)
-    coord_dir = os.path.join(root, COORDINATOR_DIR)
+    data_dir = os.path.join(root, DATA_DIR)
     
-    os.path.exists(gtm_dir) and shutil.rmtree(gtm_dir)
-    os.path.exists(coord_dir) and shutil.rmtree(coord_dir)
-    dns = glob.glob(os.path.abspath(os.path.join(root, 'datanode*')))
-    for dn in dns:
-        shutil.rmtree(dn)
-    
-    output = devnull = open(os.devnull, 'w')
-    
-    subprocess.call(['initgtm', '-Z', 'gtm', gtm_dir])
-    subprocess.call(['initdb', '--nodename=coordinator', '-D', coord_dir])
-    for n in range(args.num_datanodes):
-        path = os.path.join(root, DATANODE_DIR % n)
-        subprocess.call(['initdb', '--nodename=datanode%d' % n, '-D', path])
+    os.path.exists(data_dir) and shutil.rmtree(data_dir)
+    subprocess.call(['initdb', '-D', data_dir])
     
     procs = []
-    procs.append(subprocess.Popen(['gtm', '-D', gtm_dir]))    
-    procs.append(subprocess.Popen(['postgres', '--coordinator', '-D', coord_dir]))
-    
-    port_offset = 0
-    for n in range(args.num_datanodes):
-        path = os.path.join(root, DATANODE_DIR % n)
-        procs.append(subprocess.Popen(['postgres', '--datanode', '-D', path, 
-                                       '-p', str(5433 + port_offset)]))
-        port_offset += 1
-    
-    # Wait for daemons to start
+    procs.append(subprocess.Popen(['postgres', '-D', data_dir]))
     time.sleep(1)
-    
-    port_offset = 0
-    for n in range(args.num_datanodes):
-        name = 'datanode%d' % n
-        _create_node(name, 'datanode', 5433 + port_offset)
-        port_offset += 1
     
     user = getpass.getuser()
     subprocess.call(['psql', 'postgres', '-c', 'CREATE DATABASE %s' % user])
-    
-    # Wait for the above transactions to finish before killing
     time.sleep(0.1)
     
     # Cleanup daemons
@@ -88,7 +45,5 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', action='store', dest='root', required=True,
                         help='Root directory in which to create the cluster')
-    parser.add_argument('--num-datanodes', dest='num_datanodes', default=2,
-                        action='store', type=int, help='Number of datanodes to create')
     args = parser.parse_args()
     main(args)

@@ -72,7 +72,7 @@ $(call recurse,check-world,src/test src/pl src/interfaces/ecpg contrib src/bin,c
 $(call recurse,installcheck-world,src/test src/pl src/interfaces/ecpg contrib src/bin,installcheck)
 
 bootstrap:
-	$(bin_dir)/bootstrap --root=$(prefix) --num-datanodes=$(datanodes)
+	$(bin_dir)/bootstrap --root=$(prefix)
 
 run:
 	$(bin_dir)/run-dev --root=$(prefix)
