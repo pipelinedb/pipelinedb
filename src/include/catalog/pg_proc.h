@@ -5030,9 +5030,9 @@ DATA(insert OID = 3992 ( dense_rank			PGNSP PGUID 12 1 0 2276 0 t f f f f f i 1 
 DESCR("rank of hypothetical row without gaps");
 DATA(insert OID = 3993 ( dense_rank_final	PGNSP PGUID 12 1 0 2276 0 f f f f f f i 2 0 20 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_	hypothetical_dense_rank_final _null_ _null_ _null_ ));
 DESCR("aggregate final function");
-//
-//DATA(insert OID = 4300 (  decode_delimited   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1009 "17 25" _null_ _null_ "{$,delimiter}" _null_ text_to_array _null_ _null_ _null_ ));
-//DESCR("split a string with a delimiter");
+
+DATA(insert OID = 4300 (  decode_delimited   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1009 "17 25" _null_ _null_ "{$,delimiter}" _null_ text_to_array _null_ _null_ _null_ ));
+DESCR("split a string with a delimiter");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result
