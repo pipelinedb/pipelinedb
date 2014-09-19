@@ -678,7 +678,7 @@ pg_parse_query(const char *query_string)
 		else
 		{
 			transformed_parsetree_list = lappend(transformed_parsetree_list,
-					lfirst(parsetree_lc));
+					node);
 		}
 	}
 
