@@ -430,7 +430,6 @@ SocketBackend(StringInfo inBuf)
 		case 'H':				/* flush */
 		case 'P':				/* parse */
 		case '>':
-		case ']':
 			doing_extended_query_message = true;
 			/* these are only legal in protocol 3 */
 			if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)
@@ -1197,84 +1196,28 @@ exec_simple_query(const char *query_string)
 static void
 exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
-	List *events = NIL;
 	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
-
-	while (message->cursor < message->len)
-	{
-		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
-
-		ev->len = pq_getmsgint(message, 4);
-		ev->raw = (char *) palloc(ev->len);
-		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
-
-		events = lcons(ev, events);
-	}
-	pq_getmsgend(message);
-
-	MemoryContextSwitchTo(oldcontext);
-	MemoryContextReset(EventContext);
-}
-
-/*
- * exec_decode_events
- *
- * Decode and emit received events into the events stream (only run on datanodes)
- */
-static void
-exec_decode_events(const char *encoding, const char *channel,
-		char **fields, int nfields, StringInfo message)
-{
-	int count = 0;
-	char **sharedfields = NULL;
-
-	start_xact_command();
-
-	if (!GlobalStreamBuffer)
-		InitGlobalStreamBuffer();
-
-	MemoryContextSwitchTo(EventContext);
 
 	OpenStreamBuffer(GlobalStreamBuffer);
 
-	if (nfields > 0)
-	{
-		Size size = 0;
-		int i;
-		sharedfields = ShmemAlloc(nfields * sizeof(char *));
-
-		for (i=0; i<nfields; i++)
-		{
-			size += strlen(fields[i]) + 1;
-			sharedfields[i] = ShmemAlloc(size);
-			memcpy(sharedfields[i], fields[i], size);
-		}
-	}
-
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
 
 		ev->len = pq_getmsgint(message, 4);
 		ev->raw = (char *) palloc(ev->len);
-		ev->fields = sharedfields;
-		ev->nfields = nfields;
+		ev->fields = NULL;
+		ev->nfields = 0;
 		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
 
-		if (AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev))
-			count++;
+		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev);
 	}
-
 	pq_getmsgend(message);
-
-	RespondSendEvents(count);
 
 	CloseStreamBuffer(GlobalStreamBuffer);
 
-	MemoryContextSwitchTo(MessageContext);
+	MemoryContextSwitchTo(oldcontext);
 	MemoryContextReset(EventContext);
-
-	finish_xact_command();
 }
 
 /*
@@ -4421,31 +4364,11 @@ PostgresMain(int argc, char *argv[],
 					encoding = pq_getmsgstring(&input_message);
 					channel = pq_getmsgstring(&input_message);
 
+					if (!GlobalStreamBuffer)
+						InitGlobalStreamBuffer();
+
 					exec_proxy_events(encoding, channel, &input_message);
 					send_ready_for_query = true;
-				}
-				break;
-			case ']': /* receive events on remote node */
-				{
-					const char *encoding;
-					const char *channel;
-					int nfields = 0;
-					int i;
-					char **fields = NULL;
-
-					encoding = pq_getmsgstring(&input_message);
-					channel = pq_getmsgstring(&input_message);
-					nfields = pq_getmsgint(&input_message, 4);
-
-					if (nfields)
-						fields = palloc0(sizeof(char *) * nfields);
-					for (i=0; i<nfields; i++)
-					{
-						const char *fname = pq_getmsgstring(&input_message);
-						fields[i] = pstrdup(fname);
-					}
-
-					exec_decode_events(encoding, channel, fields, nfields, &input_message);
 				}
 				break;
 			default:
