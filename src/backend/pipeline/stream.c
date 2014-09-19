@@ -215,10 +215,11 @@ InsertIntoStream(InsertStmt *ins)
 {
 	SelectStmt *sel = (SelectStmt *) ins->selectStmt;
 	ListCell *lc;
-	List *events = NIL;
-	List *fields = NIL;
+	Size size = 0;
 	int numcols = list_length(ins->cols);
+	char **sharedfields = NULL;
 	int i;
+	int count = 0;
 
 	/* make sure all tuples are of the correct length before sending any */
 	foreach (lc, sel->valuesLists)
@@ -227,6 +228,8 @@ InsertIntoStream(InsertStmt *ins)
 		if (list_length(vals) < numcols)
 			elog(ERROR, "VALUES tuples must have at least %d values", numcols);
 	}
+
+	sharedfields = ShmemAlloc(numcols * sizeof(char *));
 
 	/* build header */
 	for (i=0; i<numcols; i++)
@@ -242,10 +245,13 @@ InsertIntoStream(InsertStmt *ins)
 			if (strcmp(r->name, res->name) == 0)
 				count++;
 		}
+
 		if (count > 1)
 			elog(ERROR, "column \"%s\" appears more than once in columns list", res->name);
 
-		fields = lappend(fields, res->name);
+		size += strlen(res->name) + 1;
+		sharedfields[i] = ShmemAlloc(size);
+		memcpy(sharedfields[i], res->name, size);
 	}
 
 	foreach (lc, sel->valuesLists)
@@ -283,6 +289,8 @@ InsertIntoStream(InsertStmt *ins)
 
 		ev->raw = palloc(size);
 		ev->len = size;
+		ev->fields = sharedfields;
+		ev->nfields = numcols;
 
 		foreach (vlc, values)
 		{
@@ -293,8 +301,9 @@ InsertIntoStream(InsertStmt *ins)
 			offset += len;
 		}
 
-		events = lcons(ev, events);
+		AppendStreamEvent(ins->relation->relname, VALUES_ENCODING, GlobalStreamBuffer, ev);
+		count++;
 	}
 
-	return 0;
+	return count;
 }
