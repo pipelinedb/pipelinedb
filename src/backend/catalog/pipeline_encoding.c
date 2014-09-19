@@ -93,8 +93,8 @@ CreateEncoding(CreateEncodingStmt *stmt)
 	CatalogCloseIndexes(indstate);
 	heap_close(pgattr, RowExclusiveLock);
 
-	values[Anum_pipeline_encoding_oid - 1] = oid;
-	nulls[Anum_pipeline_encoding_oid - 1] = false;
+	values[Anum_pipeline_encoding_id - 1] = oid;
+	nulls[Anum_pipeline_encoding_id - 1] = false;
 
 	/*
 	 * Here we save two parallel arrays of argument names and values

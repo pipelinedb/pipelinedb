@@ -87,7 +87,7 @@ CreateStreamTargets(void)
 	targets = hash_create("StreamTargets", 32, &ctl, HASH_ELEM);
 
 	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
-	scandesc = heap_beginscan(rel, NULL, 0, NULL);
+	scandesc = heap_beginscan(rel, SnapshotAny, 0, NULL);
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
 	{
