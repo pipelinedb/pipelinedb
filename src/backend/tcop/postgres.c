@@ -656,8 +656,8 @@ pg_parse_query(const char *query_string)
 	{
 		node = lfirst(parsetree_lc);
 
-		if (node->type == T_ActivateContinuousViewStmt ||
-				node->type == T_DeactivateContinuousViewStmt)
+		if (IsA(node, ActivateContinuousViewStmt) ||
+				IsA(node, DeactivateContinuousViewStmt))
 		{
 			/* XXX(usmanm): It doesn't matter if we type cast to
 			 * ActivateContinuousViewStmt or DeactivateContinuousViewStmt
@@ -670,7 +670,7 @@ pg_parse_query(const char *query_string)
 				new_stmt ->type = node->type;
 				assert(new_stmt->views == NIL);
 				new_stmt->views = lappend(new_stmt->views,
-						view_lc->data.ptr_value);
+						lfirst(view_lc));
 				transformed_parsetree_list = lappend(
 						transformed_parsetree_list, new_stmt);
 			}
@@ -678,7 +678,7 @@ pg_parse_query(const char *query_string)
 		else
 		{
 			transformed_parsetree_list = lappend(transformed_parsetree_list,
-					parsetree_lc->data.ptr_value);
+					lfirst(parsetree_lc));
 		}
 	}
 
