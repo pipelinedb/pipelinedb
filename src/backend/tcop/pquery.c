@@ -1407,7 +1407,6 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	Tuplestorestate *store = NULL;
 	ResourceOwner resowner;
 	ResourceOwner saveowner;
-	Relation rel;
 
 	/*
 	 * If the destination is DestRemoteExecute, change to DestNone.  The
@@ -1447,21 +1446,12 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 		SetTuplestoreDestReceiverParams(dest, store, PortalGetHeapMemory(portal), true);
 	}
 
-	/* prepare the plan for execution */
-	ExecutorStart(queryDesc, 0);
-
 	CurrentResourceOwner = saveowner;
 
 	/* run the plan fo-eva */
 	ExecutorRunContinuous(queryDesc, resowner);
 
-	//if (IS_PGXC_COORDINATOR)
 	strcpy(completionTag, "ACTIVATE");
-
-	/* cleanup */
-	ExecutorFinish(queryDesc);
-	ExecutorEnd(queryDesc);
-	FreeQueryDesc(queryDesc);
 
 	Assert(PortalGetHeapMemory(portal) == CurrentMemoryContext);
 	MemoryContextDeleteChildren(PortalGetHeapMemory(portal));

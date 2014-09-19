@@ -37,6 +37,8 @@
  */
 #include "postgres.h"
 
+#include <unistd.h>
+
 #include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "access/transam.h"
@@ -52,6 +54,8 @@
 #include "miscadmin.h"
 #include "optimizer/clauses.h"
 #include "parser/parsetree.h"
+#include "pipeline/combiner.h"
+#include "pipeline/worker.h"
 #include "postmaster/fork_process.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
@@ -77,13 +81,6 @@ static void InitPlan(QueryDesc *queryDesc, int eflags);
 static void CheckValidRowMarkRel(Relation rel, RowMarkType markType);
 static void ExecPostprocessPlan(EState *estate);
 static void ExecEndPlan(PlanState *planstate, EState *estate);
-static void ExecutePlan(EState *estate, PlanState *planstate,
-			CmdType operation,
-			bool sendTuples,
-			long numberTuples,
-			int timeoutms,
-			ScanDirection direction,
-			DestReceiver *dest);
 static bool ExecCheckRTEPerms(RangeTblEntry *rte);
 static void ExecCheckXactReadOnly(PlannedStmt *plannedstmt);
 static char *ExecBuildSlotValueDescription(TupleTableSlot *slot,
@@ -224,130 +221,38 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
 /*
  * ExecutorRunContinuous
  *
- * Runs a query continuously on microbatches of newlymaterialized data, until
+ * Runs a query continuously on microbatches of newly materialized data, until
  * a deactivate message is received
  */
 void
 ExecutorRunContinuous(QueryDesc *queryDesc, ResourceOwner owner)
 {
-	EState	   *estate;
-	CmdType		operation;
-	DestReceiver *dest;
-	bool		sendTuples;
-	MemoryContext oldcontext;
-	ResourceOwner save = CurrentResourceOwner;
-	int batchsize = queryDesc->plannedstmt->cq_batch_size;
-	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
-	bool isBackgroundCoordinatorProc = false;
-	int pid;
-	bool IS_PGXC_COORDINATOR = true;
-	bool IS_PGXC_DATANODE = true;
+	pid_t pid;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
-
-	estate = queryDesc->estate;
-
-	/* Allow instrumentation of Executor overall runtime */
-	if (queryDesc->totaltime)
-		InstrStartNode(queryDesc->totaltime);
-
-	/*
-	 * extract information from the query descriptor and the query feature.
-	 */
-	operation = queryDesc->operation;
-	dest = queryDesc->dest;
-
-	/*
-	 * startup tuple receiver, if we will be emitting tuples
-	 */
-	estate->es_processed = 0;
-	estate->es_lastoid = InvalidOid;
-
-	sendTuples = (operation == CMD_SELECT ||
-				  queryDesc->plannedstmt->hasReturning);
-
-	if (sendTuples)
-		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
 	/* Finish the transaction started in PostgresMain() */
 	CommitTransactionCommand();
 
 	/* Fork process and start running the coordinator's CQ work asynchronously. */
-	if (IS_PGXC_COORDINATOR)
+	pid = fork_process();
+	if (ForkFailed(pid))
 	{
-		pid = fork_process();
-		if (pid == 0)
-		{
-			isBackgroundCoordinatorProc = true;
-		}
-		else if (pid < 0)
-		{
-			elog(ERROR, "could not spawn background process for running CQ.");
-		}
+		elog(ERROR, "could not spawn background process for running CQ.");
 	}
-
-	if (IS_PGXC_DATANODE || isBackgroundCoordinatorProc)
+	else if (IsChildProcess(pid))
 	{
-		for (;;)
-		{
-			oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
-			CurrentResourceOwner = owner;
-
-			/*
-			 * Run plan on a microbatch
-			 */
-			ExecutePlan(estate, queryDesc->planstate, operation,
-						sendTuples, batchsize, timeoutms, ForwardScanDirection, dest);
-
-			MemoryContextSwitchTo(oldcontext);
-
-			/*
-			 * If we're a datanode, tell the coordinator that this batch is done
-			 */
-			if (IS_PGXC_DATANODE)
-				ReadyForQuery(dest->mydest);
-
-			/*
-			 * If we're a coordinator, send the partial result back to the datanodes
-			 * for final merging
-			 */
-			if (IS_PGXC_COORDINATOR && estate->es_processed)
-			{
-				StartTransactionCommand();
-				PushActiveSnapshot(GetTransactionSnapshot());
-
-//				DoRemoteMerge(mergeState);''
-
-				PopActiveSnapshot();
-				CommitTransactionCommand();
-			}
-
-			CurrentResourceOwner = save;
-
-			/*
-			 * If we didn't see any new tuples, sleep briefly to save cycles
-			 */
-			if (estate->es_processed == 0)
-				pg_usleep(PIPELINE_SLEEP_MS * 1000);
-
-			estate->es_processed = 0;
-
-			MemoryContextReset(ContinuousQueryContext);
-		}
+		MyProcPid = getpid();
+		ContinuousQueryWorkerRun(queryDesc, owner);
+	}
+	else
+	{
+		ContinuousQueryCombinerRun(queryDesc, owner);
 	}
 
 	/* Start a new transaction before committing in PostgresMain */
 	StartTransactionCommand();
-
-	/*
-	 * shutdown tuple receiver, if we started it
-	 */
-	if (sendTuples)
-		(*dest->rShutdown) (dest);
-
-	if (queryDesc->totaltime)
-		InstrStopNode(queryDesc->totaltime, estate->es_processed);
 }
 
 /* ----------------------------------------------------------------
@@ -1576,7 +1481,7 @@ ExecEndPlan(PlanState *planstate, EState *estate)
  * user can see it
  * ----------------------------------------------------------------
  */
-static void
+void
 ExecutePlan(EState *estate,
 			PlanState *planstate,
 			CmdType operation,
