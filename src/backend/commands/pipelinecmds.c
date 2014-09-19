@@ -212,14 +212,16 @@ DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
 	bool nulls[Natts_pipeline_queries];
 	bool replaces[Natts_pipeline_queries];
 	Datum values[Natts_pipeline_queries];
+	RangeVar *name = (RangeVar *)lfirst(stmt->views->head);
 
 	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
+	/* The analyzer will always spit out DEACTIVATE statements with a single view */
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME,
-				CStringGetDatum(stmt->name->relname));
+				CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
-				stmt->name->relname);
+				name->relname);
 
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
 

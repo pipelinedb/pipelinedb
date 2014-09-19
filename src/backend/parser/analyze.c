@@ -2560,7 +2560,8 @@ transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewSt
 {
 	/* TODO: if it's already running, throw an error */
 	int cqid;
-	const char *query_string = GetQueryString(stmt->name, &cqid, false);
+	/* The analyzer will always spit out ACTIVATE statements with a single CVs */
+	const char *query_string = GetQueryString(lfirst(stmt->views->head), &cqid, false);
 
 	List *parsetree_list = pg_parse_query(query_string);
 
@@ -2572,7 +2573,7 @@ transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewSt
 	Query *q = parse_analyze((Node *) select, query_string, NULL, 0);
 	q->is_continuous = true;
 	q->cq_activate_stmt = pstrdup(pstate->p_sourcetext);
-	q->cq_target = stmt->name;
+	q->cq_target = lfirst(stmt->views->head);
 	q->cqid = cqid;
 
 	return q;
