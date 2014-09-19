@@ -20,6 +20,7 @@
 
 #include "postgres.h"
 
+#include <assert.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <signal.h>
@@ -633,7 +634,13 @@ client_read_ended(void)
 List *
 pg_parse_query(const char *query_string)
 {
-	List	   *raw_parsetree_list;
+	List		*raw_parsetree_list;
+	List		*transformed_parsetree_list = NIL;
+	ListCell	*parsetree_lc;
+	ListCell	*view_lc;
+	Node		*node;
+	ActivateContinuousViewStmt *stmt;
+	ActivateContinuousViewStmt *new_stmt;
 
 	TRACE_POSTGRESQL_QUERY_PARSE_START(query_string);
 
@@ -641,6 +648,39 @@ pg_parse_query(const char *query_string)
 		ResetUsage();
 
 	raw_parsetree_list = raw_parser(query_string);
+
+	/* Re-write each multi-view ACTIVATE/DEACTIVATE statement into N
+	 * single-view ACTIVATE/DEACTIVATE statements.
+	 */
+	foreach(parsetree_lc, raw_parsetree_list)
+	{
+		node = lfirst(parsetree_lc);
+
+		if (node->type == T_ActivateContinuousViewStmt ||
+				node->type == T_DeactivateContinuousViewStmt)
+		{
+			/* XXX(usmanm): It doesn't matter if we type cast to
+			 * ActivateContinuousViewStmt or DeactivateContinuousViewStmt
+			 * because they're identical structs.
+		     */
+			stmt = (ActivateContinuousViewStmt *) node;
+			foreach(view_lc, stmt->views)
+			{
+				new_stmt = makeNode(ActivateContinuousViewStmt);
+				new_stmt ->type = node->type;
+				assert(new_stmt->views == NIL);
+				new_stmt->views = lappend(new_stmt->views,
+						view_lc->data.ptr_value);
+				transformed_parsetree_list = lappend(
+						transformed_parsetree_list, new_stmt);
+			}
+		}
+		else
+		{
+			transformed_parsetree_list = lappend(transformed_parsetree_list,
+					parsetree_lc->data.ptr_value);
+		}
+	}
 
 	if (log_parser_stats)
 		ShowUsage("PARSER STATISTICS");
@@ -660,7 +700,7 @@ pg_parse_query(const char *query_string)
 
 	TRACE_POSTGRESQL_QUERY_PARSE_DONE(query_string);
 
-	return raw_parsetree_list;
+	return transformed_parsetree_list;
 }
 
 /*
