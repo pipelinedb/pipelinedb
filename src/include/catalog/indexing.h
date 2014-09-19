@@ -322,8 +322,8 @@ DECLARE_UNIQUE_INDEX(pipeline_queries_id_index, 4241, on pipeline_queries using 
 DECLARE_UNIQUE_INDEX(pipeline_encoding_name_index, 4245, on pipeline_encoding using btree(name name_ops));
 #define PipelineEncodingNameIndexId					4245
 
-DECLARE_UNIQUE_INDEX(pipeline_encoding_oid_index, 4246, on pipeline_encoding using btree(oid oid_ops));
-#define PipelineEncodingOidIndexId					4246
+DECLARE_UNIQUE_INDEX(pipeline_encoding_id_index, 4246, on pipeline_encoding using btree(id oid_ops));
+#define PipelineEncodingIdIndexId					4246
 
 /* last step of initialization script: build the indexes declared above */
 BUILD_INDICES

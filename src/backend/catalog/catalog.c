@@ -225,7 +225,6 @@ IsSharedRelation(Oid relationId)
 		relationId == SharedDependRelationId ||
 		relationId == SharedSecLabelRelationId ||
 		relationId == TableSpaceRelationId ||
-		relationId == PipelineQueriesRelationId ||
 		relationId == DbRoleSettingRelationId)
 		return true;
 	/* These are their indexes (see indexing.h) */
@@ -242,8 +241,6 @@ IsSharedRelation(Oid relationId)
 		relationId == SharedSecLabelObjectIndexId ||
 		relationId == TablespaceOidIndexId ||
 		relationId == TablespaceNameIndexId ||
-		relationId == PipelineQueriesNameIndexId ||
-		relationId == PipelineQueriesIdIndexId ||
 		relationId == DbRoleSettingDatidRolidIndexId)
 		return true;
 	/* These are their toast tables and toast indexes (see toasting.h) */
