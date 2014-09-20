@@ -63,6 +63,9 @@ typedef struct
 	int			nattrs;
 	PrinttupAttrInfo *myinfo;	/* Cached info about each attr */
 	MemoryContext tmpcontext;	/* Memory context for per-row workspace */
+	void		(*bufHandler) (StringInfo buf);
+	void 		(*startupHook) (DestReceiver *self, int operation,
+			 TupleDesc typeinfo);
 } DR_printtup;
 
 /* ----------------
@@ -90,9 +93,35 @@ printtup_create_DR(CommandDest dest)
 	self->nattrs = 0;
 	self->myinfo = NULL;
 	self->tmpcontext = NULL;
+	self->bufHandler = NULL;
 
 	return (DestReceiver *) self;
 }
+
+DestReceiver *
+printtup_create_combiner_DR(CommandDest dest,
+		void (*bufHandler) (StringInfo buf),
+		void (*startup) (DestReceiver *self, int operation, TupleDesc typeinfo))
+{
+	DR_printtup *self = (DR_printtup *) palloc0(sizeof(DR_printtup));
+
+	self->pub.receiveSlot = printtup;	/* might get changed later */
+	self->pub.rStartup = printtup_startup;
+	self->pub.rShutdown = printtup_shutdown;
+	self->pub.rDestroy = printtup_destroy;
+	self->pub.mydest = dest;
+
+	self->sendDescrip = false;
+	self->attrinfo = NULL;
+	self->nattrs = 0;
+	self->myinfo = NULL;
+	self->tmpcontext = NULL;
+	self->startupHook = startup;
+	self->bufHandler = bufHandler;
+
+	return (DestReceiver *) self;
+}
+
 
 /*
  * Set parameters for a DestRemote (or DestRemoteExecute) receiver
@@ -138,6 +167,12 @@ printtup_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 												ALLOCSET_DEFAULT_MINSIZE,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
+
+	if (myState->startupHook != NULL)
+	{
+		myState->startupHook(self, operation, typeinfo);
+		return;
+	}
 
 	if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)
 	{
@@ -310,7 +345,7 @@ printtup(TupleTableSlot *slot, DestReceiver *self)
 	int			i;
 
 	/* Set or update my derived attribute info, if needed */
-	if (myState->attrinfo != typeinfo || myState->nattrs != natts)
+	if ((myState->attrinfo != typeinfo || myState->nattrs != natts))
 		printtup_prepare_info(myState, typeinfo, natts);
 
 	/* Make sure the tuple is fully deconstructed */
@@ -371,7 +406,10 @@ printtup(TupleTableSlot *slot, DestReceiver *self)
 		}
 	}
 
-	pq_endmessage(&buf);
+	if (myState->bufHandler != NULL)
+		myState->bufHandler(&buf);
+	else
+		pq_endmessage(&buf);
 
 	/* Return to caller's context, and flush row's temporary memory */
 	MemoryContextSwitchTo(oldcontext);
@@ -447,7 +485,10 @@ printtup_20(TupleTableSlot *slot, DestReceiver *self)
 		pq_sendcountedtext(&buf, outputstr, strlen(outputstr), true);
 	}
 
-	pq_endmessage(&buf);
+	if (myState->bufHandler != NULL)
+		myState->bufHandler(&buf);
+	else
+		pq_endmessage(&buf);
 
 	/* Return to caller's context, and flush row's temporary memory */
 	MemoryContextSwitchTo(oldcontext);
@@ -631,7 +672,10 @@ printtup_internal_20(TupleTableSlot *slot, DestReceiver *self)
 					 VARSIZE(outputbytes) - VARHDRSZ);
 	}
 
-	pq_endmessage(&buf);
+	if (myState->bufHandler != NULL)
+		myState->bufHandler(&buf);
+	else
+		pq_endmessage(&buf);
 
 	/* Return to caller's context, and flush row's temporary memory */
 	MemoryContextSwitchTo(oldcontext);

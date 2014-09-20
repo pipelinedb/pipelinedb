@@ -12,8 +12,9 @@
 #define WORKER_H
 
 #include "executor/execdesc.h"
+#include "pipeline/combiner.h"
 #include "utils/resowner.h"
 
-extern void ContinuousQueryWorkerRun(QueryDesc *queryDesc, ResourceOwner owner);
+extern void ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner);
 
 #endif

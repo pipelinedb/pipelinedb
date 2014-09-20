@@ -38,6 +38,7 @@
 #include "postgres.h"
 
 #include <unistd.h>
+#include <sys/socket.h>
 
 #include "access/htup_details.h"
 #include "access/sysattr.h"
@@ -225,9 +226,10 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
  * a deactivate message is received
  */
 void
-ExecutorRunContinuous(QueryDesc *queryDesc, ResourceOwner owner)
+ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
 {
 	pid_t pid;
+	CombinerDesc *combiner = CreateCombinerDesc(queryDesc->plannedstmt->cq_target->relname);
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
@@ -239,16 +241,27 @@ ExecutorRunContinuous(QueryDesc *queryDesc, ResourceOwner owner)
 	pid = fork_process();
 	if (ForkFailed(pid))
 	{
-		elog(ERROR, "could not spawn background process for running CQ.");
+		elog(ERROR, "could not spawn combiner for \"%s\"",
+						queryDesc->plannedstmt->cq_target->relname);
 	}
 	else if (IsChildProcess(pid))
 	{
 		MyProcPid = getpid();
-		ContinuousQueryWorkerRun(queryDesc, owner);
+		ContinuousQueryCombinerRun(combiner, queryDesc, owner);
 	}
 	else
 	{
-		ContinuousQueryCombinerRun(queryDesc, owner);
+		pid = fork_process();
+		if (ForkFailed(pid))
+		{
+			elog(ERROR, "could not spawn worker for \"%s\"",
+					queryDesc->plannedstmt->cq_target->relname);
+		}
+		else if (IsChildProcess(pid))
+		{
+			MyProcPid = getpid();
+			ContinuousQueryWorkerRun(portal, combiner, queryDesc, owner);
+		}
 	}
 
 	/* Start a new transaction before committing in PostgresMain */

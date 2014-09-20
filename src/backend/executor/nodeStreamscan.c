@@ -36,8 +36,6 @@ StreamScanNext(StreamScanState *node)
 
 	UnpinStreamEvent(node->reader, sbs);
 
-	print_slot(slot);
-
 	return slot;
 }
 

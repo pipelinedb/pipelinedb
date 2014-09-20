@@ -16,6 +16,7 @@
 
 #include "executor/execdesc.h"
 #include "nodes/parsenodes.h"
+#include "utils/portal.h"
 #include "utils/resowner.h"
 
 
@@ -175,7 +176,7 @@ extern void ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void standard_ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void ExecutorRun(QueryDesc *queryDesc,
 			ScanDirection direction, long count);
-extern void ExecutorRunContinuous(QueryDesc *queryDesc, ResourceOwner owner);
+extern void ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner);
 extern void ExecutePlan(EState *estate, PlanState *planstate,
 					CmdType operation, bool sendTuples, long numberTuples, int timeoutms,
 					ScanDirection direction, DestReceiver *dest);

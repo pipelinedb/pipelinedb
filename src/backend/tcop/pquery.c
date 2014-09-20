@@ -1449,7 +1449,7 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	CurrentResourceOwner = saveowner;
 
 	/* run the plan fo-eva */
-	ExecutorRunContinuous(queryDesc, resowner);
+	ExecutorRunContinuous(portal, queryDesc, resowner);
 
 	strcpy(completionTag, "ACTIVATE");
 

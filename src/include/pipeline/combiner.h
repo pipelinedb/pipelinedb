@@ -14,6 +14,14 @@
 #include "executor/execdesc.h"
 #include "utils/resowner.h"
 
-extern void ContinuousQueryCombinerRun(QueryDesc *queryDesc, ResourceOwner owner);
+
+typedef struct CombinerDesc
+{
+	char *name;
+	int sock;
+} CombinerDesc;
+
+extern CombinerDesc *CreateCombinerDesc(const char *name);
+extern void ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner);
 
 #endif

@@ -14,10 +14,14 @@
 #include "catalog/pipeline_queries.h"
 #include "executor/executor.h"
 #include "nodes/execnodes.h"
+#include "pipeline/combiner.h"
+#include "pipeline/combinerReceiver.h"
 #include "pipeline/worker.h"
+#include "tcop/dest.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 #include "miscadmin.h"
+
 
 /*
  * ContinuousQueryWorkerStartup
@@ -26,18 +30,16 @@
  * back to the combiner process.
  */
 extern void
-ContinuousQueryWorkerRun(QueryDesc *queryDesc, ResourceOwner owner)
+ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
 {
 	EState	   *estate;
 	DestReceiver *dest;
 	CmdType		operation;
 	MemoryContext oldcontext;
 	ResourceOwner save = CurrentResourceOwner;
+	char *cvname = queryDesc->plannedstmt->cq_target->relname;
 	int batchsize = queryDesc->plannedstmt->cq_batch_size;
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
-
-	elog(LOG, "running \"%s\" worker with pid %d",
-			queryDesc->plannedstmt->cq_target->relname, MyProcPid);
 
 	CurrentResourceOwner = owner;
 
@@ -50,7 +52,6 @@ ContinuousQueryWorkerRun(QueryDesc *queryDesc, ResourceOwner owner)
 
 	estate = queryDesc->estate;
 	operation = queryDesc->operation;
-	dest = queryDesc->dest;
 
 	/*
 	 * startup tuple receiver, if we will be emitting tuples
@@ -58,7 +59,11 @@ ContinuousQueryWorkerRun(QueryDesc *queryDesc, ResourceOwner owner)
 	estate->es_processed = 0;
 	estate->es_lastoid = InvalidOid;
 
+	dest = CreateDestReceiver(DestCombiner);
+	SetRemoteDestReceiverParams(dest, portal);
+
 	(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
+	elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
 
 	CurrentResourceOwner = save;
 
