@@ -17,7 +17,6 @@
 #include "pipeline/combinerReceiver.h"
 #include "miscadmin.h"
 
-int CombinerSock = -1;
 
 typedef struct
 {
@@ -29,6 +28,7 @@ typedef struct
 static void
 combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 {
+	CombinerState *combiner = (CombinerState *) self;
 	HeapTuple tup = ExecMaterializeSlot(slot);
 	uint32 nlen = htonl(tup->t_len);
 	char *buf = palloc0(4 + tup->t_len);
@@ -36,7 +36,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	memcpy(buf, &nlen, 4);
 	memcpy(buf + 4, tup->t_data, tup->t_len);
 
-  if (send(CombinerSock, buf, 4 + tup->t_len, 0) == -1)
+  if (send(combiner->desc->sock, buf, 4 + tup->t_len, 0) == -1)
   	elog(ERROR, "could not send tuple to combiner: %m");
 }
 
@@ -49,7 +49,7 @@ combiner_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
   int attempts = 0;
   bool connected = false;
 
-  if ((CombinerSock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+  if ((combiner->desc->sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
   	elog(ERROR, "worker could not create combiner socket \"%s\": %m", combiner->desc->name);
 
   remote.sun_family = AF_UNIX;
@@ -60,7 +60,7 @@ combiner_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
   /* this will retry for up to 10 seconds */
   while (attempts++ < 100)
   {
-		if (connect(CombinerSock, (struct sockaddr *) &remote, len) == 0)
+		if (connect(combiner->desc->sock, (struct sockaddr *) &remote, len) == 0)
 			connected = true;
 		else
 			pg_usleep(100*1000); /* 0.1s */
