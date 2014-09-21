@@ -2635,38 +2635,51 @@ copy_generic_opt_arg_list_item:
 
 /*****************************************************************************
  *
- * ( ACTIVATE | DEACTIVATE )  [ CONTINUOUS VIEW ] continuous_view_name
+ * ( ACTIVATE | DEACTIVATE )  [ CONTINUOUS VIEW ] [continuous_view_name_list]
  *
  * PipelineDB
  *
- * Activates/deactivates a continuous view
+ * Activates/deactivates continuous view(s)
  *
  *****************************************************************************/
 
- ActivateContinuousViewStmt: ACTIVATE qualified_name
+ ActivateContinuousViewStmt: ACTIVATE 
+ 				{
+ 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
+					s->views = NULL;
+					$$ = (Node *)s;
+ 				}
+ 			| ACTIVATE qualified_name_list
 				{
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->name = $2;
+					s->views = $2;
 					$$ = (Node *)s;
 				}
-			| ACTIVATE CONTINUOUS VIEW qualified_name
+			| ACTIVATE CONTINUOUS VIEW qualified_name_list
 			  {
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->name = $4;
+					s->views = $4;
 					$$ = (Node *)s;
 			  }
 		;
 
- DeactivateContinuousViewStmt: DEACTIVATE qualified_name
+ DeactivateContinuousViewStmt: DEACTIVATE
+ 				{
+					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
+					s->views = NULL;
+					$$ = (Node *)s;
+
+ 				}
+ 			| DEACTIVATE qualified_name_list
 				{
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->name = $2;
+					s->views = $2;
 					$$ = (Node *)s;
 				}
-			| DEACTIVATE CONTINUOUS VIEW qualified_name
+			| DEACTIVATE CONTINUOUS VIEW qualified_name_list
 			  {
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->name = $4;
+					s->views = $4;
 					$$ = (Node *)s;
 			  }
 		;

@@ -2823,7 +2823,7 @@ typedef struct CleanConnStmt
 typedef struct CreateContinuousViewStmt
 {
 	NodeTag			type;
-	IntoClause 	*into;
+	IntoClause 		*into;
 	Node 			*query;
 
 } CreateContinuousViewStmt;
@@ -2831,13 +2831,13 @@ typedef struct CreateContinuousViewStmt
 typedef struct ActivateContinuousViewStmt
 {
 	NodeTag		type;
-	RangeVar   *name; /* name of query to activate */
+	List		*views;
 } ActivateContinuousViewStmt;
 
 typedef struct DeactivateContinuousViewStmt
 {
 	NodeTag		type;
-	RangeVar   *name; /* name of query to deactivate */
+	List	   	*views;
 } DeactivateContinuousViewStmt;
 
 typedef struct CreateEncodingStmt
