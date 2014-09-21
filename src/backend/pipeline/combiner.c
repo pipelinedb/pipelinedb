@@ -15,6 +15,7 @@
 #include "postgres.h"
 
 #include "pipeline/combiner.h"
+#include "pipeline/merge.h"
 #include "miscadmin.h"
 
 
@@ -36,13 +37,13 @@ accept_worker(CombinerDesc *desc)
 
   len = strlen(local.sun_path) + sizeof(local.sun_family);
   if (bind(desc->sock, (struct sockaddr *) &local, len) == -1)
-  	elog(ERROR, "could not bind to combiner \"%s\": %d", desc->name, errno);
+  	elog(ERROR, "could not bind to combiner \"%s\": %m", desc->name);
 
   if (listen(desc->sock, WORKER_BACKLOG) == -1)
-  	elog(ERROR, "could not listen on socket %d: %d", desc->sock, errno);
+  	elog(ERROR, "could not listen on socket %d: %m", desc->sock);
 
 	if ((sock = accept(desc->sock, (struct sockaddr *) &remote, &addrlen)) == -1)
-		elog(LOG, "could not accept connections on socket %d: %d", desc->sock, errno);
+		elog(LOG, "could not accept connections on socket %d: %m", desc->sock);
 
   return sock;
 }
@@ -92,12 +93,19 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 {
 	ResourceOwner save = CurrentResourceOwner;
 	TupleTableSlot *slot;
+	Tuplestorestate *store;
+	long count = 0;
   int sock;
+  int batchsize = 2;
   char *cvname = queryDesc->plannedstmt->cq_target->relname;
 
   elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
 
   CurrentResourceOwner = owner;
+
+  InitMerge();
+
+  store = tuplestore_begin_heap(true, true, work_mem);
 
   slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
   sock = accept_worker(combiner);
@@ -105,6 +113,12 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
   for (;;)
   {
   	receive_tuple(sock, slot);
+  	tuplestore_puttupleslot(store, slot);
+  	if (count++ == batchsize)
+  	{
+  		Merge(cvname, store);
+  		tuplestore_clear(store);
+  	}
   }
 
   CurrentResourceOwner = save;

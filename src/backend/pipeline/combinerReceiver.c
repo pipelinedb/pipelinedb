@@ -37,7 +37,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	memcpy(buf + 4, tup->t_data, tup->t_len);
 
   if (send(CombinerSock, buf, 4 + tup->t_len, 0) == -1)
-  	elog(LOG, "could not send tuple to combiner");
+  	elog(ERROR, "could not send tuple to combiner: %m");
 }
 
 static void
@@ -48,7 +48,7 @@ combiner_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
   int attempts = 0;
 
   if ((CombinerSock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
-  	elog(ERROR, "worker could not create combiner socket \"%s\"", "combiner_test_view");
+  	elog(ERROR, "worker could not create combiner socket \"%s\": %m", "combiner_test_view");
 
   remote.sun_family = AF_UNIX;
   strcpy(remote.sun_path, "combiner_test_view");

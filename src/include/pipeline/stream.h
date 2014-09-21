@@ -17,7 +17,8 @@
 #include "utils/hsearch.h"
 
 #define EventStreamNeedsOpen(stream) (stream->state != STREAM_STATE_OPEN)
-#define QueryIsStreaming(query) ((query)->is_continuous || false)
+#define QueryIsStreaming(query) ((query)->is_continuous)
+#define QueryIsMerge(query) ((query)->cq_is_merge)
 #define PlanIsStreaming(stmt) ((stmt)->is_continuous || false)
 
 typedef enum

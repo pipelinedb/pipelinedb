@@ -4000,6 +4000,9 @@ copyObject(const void *from)
 		case T_ForeignScan:
 			retval = _copyForeignScan(from);
 			break;
+		case T_TuplestoreScan:
+			retval = _copyTuplestoreScan(from);
+			break;
 		case T_Join:
 			retval = _copyJoin(from);
 			break;

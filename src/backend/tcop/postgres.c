@@ -192,9 +192,6 @@ static ProcSignalReason RecoveryConflictReason;
 /* memory context for event processing */
 static MemoryContext EventContext;
 
-/* memory context for temporary memory required by merge requests */
-static MemoryContext MergeTempContext;
-
 /* ----------------------------------------------------------------
  *		decls for routines only used in this file
  * ----------------------------------------------------------------
@@ -3874,12 +3871,6 @@ PostgresMain(int argc, char *argv[],
 	 */
 	EventContext = AllocSetContextCreate(TopMemoryContext,
 											"EventContext",
-											ALLOCSET_DEFAULT_MINSIZE,
-											ALLOCSET_DEFAULT_INITSIZE,
-											ALLOCSET_DEFAULT_MAXSIZE);
-
-	MergeTempContext = AllocSetContextCreate(TopMemoryContext,
-											"MergeTempContext",
 											ALLOCSET_DEFAULT_MINSIZE,
 											ALLOCSET_DEFAULT_INITSIZE,
 											ALLOCSET_DEFAULT_MAXSIZE);

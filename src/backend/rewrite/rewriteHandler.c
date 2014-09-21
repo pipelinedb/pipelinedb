@@ -3272,7 +3272,7 @@ QueryRewrite(Query *parsetree)
 	Query	   *lastInstead;
 
 	/* CQs don't currently get rewritten */
-	if (QueryIsStreaming(parsetree))
+	if (QueryIsStreaming(parsetree) || QueryIsMerge(parsetree))
 		return list_make1(parsetree);
 
 	/*

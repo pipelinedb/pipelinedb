@@ -95,7 +95,7 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 	 * the rewriter or when expand_inherited_rtentry() added it to the query's
 	 * rangetable.
 	 */
-	if (!QueryIsStreaming(root->parse))
+	if (!QueryIsStreaming(root->parse) && !QueryIsMerge(root->parse))
 	{
 		relation = heap_open(relationObjectId, NoLock);
 
@@ -117,7 +117,7 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 		palloc0((rel->max_attr - rel->min_attr + 1) * sizeof(int32));
 
 	/* we're scanning streams, so there's nothing more we can do */
-	if (QueryIsStreaming(root->parse))
+	if (QueryIsStreaming(root->parse) || QueryIsMerge(root->parse))
 		return;
 
 	/*

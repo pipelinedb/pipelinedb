@@ -16,27 +16,44 @@
 #include "catalog/pipeline_queries_fn.h"
 #include "commands/prepare.h"
 #include "executor/tupletableReceiver.h"
+#include "executor/tstoreReceiver.h"
 #include "nodes/makefuncs.h"
 #include "optimizer/planner.h"
+#include "optimizer/tlist.h"
 #include "parser/parse_clause.h"
 #include "parser/parse_expr.h"
 #include "parser/parse_node.h"
 #include "parser/parse_type.h"
 #include "pipeline/merge.h"
 #include "tcop/tcopprot.h"
+#include "tcop/pquery.h"
 #include "utils/memutils.h"
 #include "utils/plancache.h"
 #include "utils/portal.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
+#include "miscadmin.h"
+
+/* memory context for temporary memory required by merge requests */
+static MemoryContext MergeTempContext;
+
+extern void
+InitMerge(void)
+{
+	MergeTempContext = AllocSetContextCreate(TopMemoryContext,
+											"MergeTempContext",
+											ALLOCSET_DEFAULT_MINSIZE,
+											ALLOCSET_DEFAULT_INITSIZE,
+											ALLOCSET_DEFAULT_MAXSIZE);
+}
 
 /*
- * get_cached_merge_plan
+ * GetMergePlan
  *
  * Retrieves a the cached merge plan for a continuous view, creating it if necessary
  */
 extern CachedPlan *
-GetMergePlan(char *cvname, CachedPlanSource **src)
+GetMergePlan(char *cvname, Tuplestorestate *store, CachedPlanSource **src)
 {
 	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
 	char *query_string;
@@ -79,7 +96,7 @@ GetMergePlan(char *cvname, CachedPlanSource **src)
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, "SELECT");
 
 		/* TODO: size this appropriately */
-		psrc->store = tuplestore_begin_heap(true, true, 1000);
+		psrc->store = store;
 		psrc->desc = RelationNameGetTupleDesc(cvname);
 		psrc->query = query;
 
@@ -95,7 +112,7 @@ GetMergePlan(char *cvname, CachedPlanSource **src)
 }
 
 /*
- * get_merge_columns
+ * GetMergeColumns
  *
  * Given a continuous query, determine the columns in the underlying table
  * that correspond to the GROUP BY clause of the query
@@ -117,7 +134,7 @@ GetMergeColumns(Query *query)
 }
 
 /*
- * exec_merge_retrieval
+ * GetTuplesToMergeWith
  *
  * Gets the plan for retrieving all of the existing tuples that
  * this merge request will merge with
@@ -296,3 +313,123 @@ SyncMerge(char *cvname, Tuplestorestate *results,
 	}
 	relation_close(rel, RowExclusiveLock);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+ * exec_merge
+ *
+ * Merges partial results of a continuous query with this datanode's rows
+ */
+extern void
+Merge(char *cvname, Tuplestorestate *store)
+{
+	TupleTableSlot *slot;
+	CachedPlan *cplan;
+	CachedPlanSource *psrc;
+	Portal portal;
+	MemoryContext oldcontext;
+	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
+	Tuplestorestate *merge_output = NULL;
+	AttrNumber merge_attr = 1;
+	List *merge_attrs;
+	List *group_clause;
+	TupleHashTable merge_targets = NULL;
+	AttrNumber *cols;
+	FmgrInfo *eq_funcs;
+	FmgrInfo *hash_funcs;
+	int num_cols = 0;
+	int num_buckets = 1;
+
+	StartTransactionCommand();
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	oldcontext = MemoryContextSwitchTo(MessageContext);
+
+	cplan = GetMergePlan(cvname, store, &psrc);
+	slot = MakeSingleTupleTableSlot(psrc->desc);
+	group_clause = psrc->query->groupClause;
+
+	merge_attrs = GetMergeColumns(psrc->query);
+	if (merge_attrs)
+		merge_attr = (AttrNumber) lfirst_int(merge_attrs->head);
+
+	if (group_clause)
+	{
+		num_cols = list_length(group_clause);
+		if (num_cols > 1)
+			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", num_cols);
+		cols = (AttrNumber *) palloc(sizeof(AttrNumber) * num_cols);
+		cols[0] = merge_attr;
+		execTuplesHashPrepare(num_cols, extract_grouping_ops(group_clause), &eq_funcs, &hash_funcs);
+		num_buckets = 1000;
+
+		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
+				sizeof(HeapTupleEntryData), CacheMemoryContext, MergeTempContext);
+
+		GetTuplesToMergeWith(cvname, psrc->desc, store, merge_attr, group_clause, merge_targets);
+	}
+
+	portal = CreatePortal("__merge__", true, true);
+	portal->visible = false;
+
+	PortalDefineQuery(portal,
+					  NULL,
+					  NULL,
+					  "SELECT",
+					  cplan->stmt_list,
+					  cplan);
+
+	merge_output = tuplestore_begin_heap(true, true, work_mem);
+	SetTuplestoreDestReceiverParams(dest, merge_output, PortalGetHeapMemory(portal), true);
+
+	PortalStart(portal, NULL, EXEC_FLAG_COMBINE_QUERY, GetActiveSnapshot());
+
+	MemoryContextSwitchTo(oldcontext);
+
+	(void) PortalRun(portal,
+					 FETCH_ALL,
+					 true,
+					 dest,
+					 dest,
+					 NULL);
+
+	PopActiveSnapshot();
+
+	SyncMerge(cvname, merge_output, slot, merge_attr, merge_targets);
+
+	if (merge_targets)
+		hash_destroy(merge_targets->hashtab);
+
+	MemoryContextReset(MergeTempContext);
+
+	CommitTransactionCommand();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

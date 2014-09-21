@@ -104,6 +104,12 @@ parse_analyze(Node *parseTree, const char *sourceText,
 
 	query = transformTopLevelStmt(pstate, parseTree);
 
+	if (IsA(parseTree, SelectStmt))
+	{
+		SelectStmt *stmt = (SelectStmt *) parseTree;
+		query->cq_is_merge = stmt->forContinuousView;
+	}
+
 	if (post_parse_analyze_hook)
 		(*post_parse_analyze_hook) (pstate, query);
 
