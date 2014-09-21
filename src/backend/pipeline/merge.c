@@ -35,10 +35,10 @@
 #include "miscadmin.h"
 
 /* memory context for temporary memory required by merge requests */
-static MemoryContext MergeTempContext;
+static MemoryContext MergeTempContext = NULL;
 
 extern void
-InitMerge(void)
+InitMergeMemory(void)
 {
 	MergeTempContext = AllocSetContextCreate(TopMemoryContext,
 											"MergeTempContext",
@@ -314,20 +314,6 @@ SyncMerge(char *cvname, Tuplestorestate *results,
 	relation_close(rel, RowExclusiveLock);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*
  * exec_merge
  *
@@ -396,7 +382,7 @@ Merge(char *cvname, Tuplestorestate *store)
 	merge_output = tuplestore_begin_heap(true, true, work_mem);
 	SetTuplestoreDestReceiverParams(dest, merge_output, PortalGetHeapMemory(portal), true);
 
-	PortalStart(portal, NULL, EXEC_FLAG_COMBINE_QUERY, GetActiveSnapshot());
+	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, GetActiveSnapshot());
 
 	MemoryContextSwitchTo(oldcontext);
 

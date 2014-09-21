@@ -43,16 +43,17 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 static void
 combiner_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 {
+	CombinerState *combiner = (CombinerState *) self;
   struct sockaddr_un remote;
   int len;
   int attempts = 0;
   bool connected = false;
 
   if ((CombinerSock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
-  	elog(ERROR, "worker could not create combiner socket \"%s\": %m", "combiner_test_view");
+  	elog(ERROR, "worker could not create combiner socket \"%s\": %m", combiner->desc->name);
 
   remote.sun_family = AF_UNIX;
-  strcpy(remote.sun_path, "combiner_filter");
+  strcpy(remote.sun_path, combiner->desc->name);
 
   len = strlen(remote.sun_path) + sizeof(remote.sun_family);
 
@@ -103,7 +104,6 @@ CreateCombinerDestReceiver(void)
 extern void
 SetCombinerDestReceiverParams(DestReceiver *self, CombinerDesc *combiner)
 {
-//	CombinerState *c = (CombinerState *) self;
-//  c->desc = combiner;
-
+	CombinerState *c = (CombinerState *) self;
+  c->desc = combiner;
 }

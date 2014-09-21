@@ -60,7 +60,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	estate->es_lastoid = InvalidOid;
 
 	dest = CreateDestReceiver(DestCombiner);
-	SetRemoteDestReceiverParams(dest, portal);
+	SetCombinerDestReceiverParams(dest, combiner);
 
 	(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 	elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);

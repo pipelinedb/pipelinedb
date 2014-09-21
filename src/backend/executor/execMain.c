@@ -779,7 +779,7 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	/*
 	 * Do permissions checks
 	 */
-	if (!PlanIsStreaming(plannedstmt) && !(eflags & EXEC_FLAG_COMBINE_QUERY))
+	if (!PlanIsStreaming(plannedstmt) && !(eflags & EXEC_FLAG_COMBINE))
 		ExecCheckRTPerms(rangeTable, true);
 
 	/*

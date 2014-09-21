@@ -22,11 +22,10 @@
 #define NAME_PREFIX "combiner_"
 #define WORKER_BACKLOG 32
 
-static int
+static void
 accept_worker(CombinerDesc *desc)
 {
   int len;
-  int sock;
   struct sockaddr_un local;
   struct sockaddr_un remote;
   socklen_t addrlen;
@@ -42,20 +41,18 @@ accept_worker(CombinerDesc *desc)
   if (listen(desc->sock, WORKER_BACKLOG) == -1)
   	elog(ERROR, "could not listen on socket %d: %m", desc->sock);
 
-	if ((sock = accept(desc->sock, (struct sockaddr *) &remote, &addrlen)) == -1)
+	if ((desc->sock = accept(desc->sock, (struct sockaddr *) &remote, &addrlen)) == -1)
 		elog(LOG, "could not accept connections on socket %d: %m", desc->sock);
-
-  return sock;
 }
 
 static void
-receive_tuple(int sock, TupleTableSlot *slot)
+receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 {
 	HeapTuple tup;
 	uint32 len;
 	int read;
 
-	read = recv(sock, &len, 4, 0);
+	read = recv(combiner->sock, &len, 4, 0);
 	if (read < 0)
 		elog(ERROR, "combiner failed to receive tuple length");
 
@@ -65,7 +62,7 @@ receive_tuple(int sock, TupleTableSlot *slot)
 	tup->t_len = len;
 	tup->t_data = (HeapTupleHeader) ((char *) tup + HEAPTUPLESIZE);
 
-	read = recv(sock, tup->t_data, tup->t_len, 0);
+	read = recv(combiner->sock, tup->t_data, tup->t_len, 0);
 	if (read < 0)
 		elog(ERROR, "combiner failed to receive tuple data");
 
@@ -92,32 +89,30 @@ extern void
 ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
 {
 	ResourceOwner save = CurrentResourceOwner;
-	TupleTableSlot *slot;
+	TupleTableSlot *slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
 	Tuplestorestate *store;
 	long count = 0;
-  int sock;
-  int batchsize = 2;
+  int batchsize = 1;
   char *cvname = queryDesc->plannedstmt->cq_target->relname;
 
+  accept_worker(combiner);
   elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
 
   CurrentResourceOwner = owner;
 
-  InitMerge();
+  InitMergeMemory();
 
   store = tuplestore_begin_heap(true, true, work_mem);
 
-  slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
-  sock = accept_worker(combiner);
-
   for (;;)
   {
-  	receive_tuple(sock, slot);
+  	receive_tuple(combiner, slot);
   	tuplestore_puttupleslot(store, slot);
   	if (count++ == batchsize)
   	{
   		Merge(cvname, store);
   		tuplestore_clear(store);
+  		count = 0;
   	}
   }
 
