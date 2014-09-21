@@ -15,6 +15,7 @@
 
 #include "access/printtup.h"
 #include "pipeline/combinerReceiver.h"
+#include "miscadmin.h"
 
 int CombinerSock = -1;
 
@@ -26,15 +27,17 @@ typedef struct
 
 
 static void
-combiner_printtup_handler(StringInfo buf)
+combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 {
-	int len = 1;
+	HeapTuple tup = ExecMaterializeSlot(slot);
+	uint32 nlen = htonl(tup->t_len);
+	char *buf = palloc0(4 + tup->t_len);
 
-	elog(LOG, "HERE WITH THE BUF=%d", buf->len);
-//  if (send(c->desc->sock, NULL, len, 0) == -1)
-//  {
-//
-//  }
+	memcpy(buf, &nlen, 4);
+	memcpy(buf + 4, tup->t_data, tup->t_len);
+
+  if (send(CombinerSock, buf, 4 + tup->t_len, 0) == -1)
+  	elog(LOG, "could not send tuple to combiner");
 }
 
 static void
@@ -77,9 +80,15 @@ combiner_destroy(DestReceiver *self)
 extern DestReceiver *
 CreateCombinerDestReceiver(void)
 {
-	return (DestReceiver *) printtup_create_combiner_DR(DestCombiner,
-			&combiner_printtup_handler,
-			&combiner_startup);
+	CombinerState *self = (CombinerState *) palloc0(sizeof(CombinerState));
+
+	self->pub.receiveSlot = combiner_receive;	/* might get changed later */
+	self->pub.rStartup = combiner_startup;
+	self->pub.rShutdown = combiner_shutdown;
+	self->pub.rDestroy = combiner_destroy;
+	self->pub.mydest = DestCombiner;
+
+	return (DestReceiver *) self;
 }
 
 /*

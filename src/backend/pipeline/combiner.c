@@ -47,13 +47,28 @@ accept_worker(CombinerDesc *desc)
   return sock;
 }
 
-static TupleTableSlot *
-receive_slot(int sock)
+static void
+receive_tuple(int sock, TupleTableSlot *slot)
 {
-//	n = recv(sock, buf, 5, 0);
-//	elog(LOG, "n=%s", buf);
+	HeapTuple tup;
+	uint32 len;
+	int read;
 
-	return NULL;
+	read = recv(sock, &len, 4, 0);
+	if (read < 0)
+		elog(ERROR, "combiner failed to receive tuple length");
+
+	len = ntohl(len);
+
+	tup = (HeapTuple) palloc0(HEAPTUPLESIZE + len);
+	tup->t_len = len;
+	tup->t_data = (HeapTupleHeader) ((char *) tup + HEAPTUPLESIZE);
+
+	read = recv(sock, tup->t_data, tup->t_len, 0);
+	if (read < 0)
+		elog(ERROR, "combiner failed to receive tuple data");
+
+	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 }
 
 extern CombinerDesc *
@@ -75,16 +90,22 @@ CreateCombinerDesc(const char *name)
 extern void
 ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
 {
+	ResourceOwner save = CurrentResourceOwner;
 	TupleTableSlot *slot;
   int sock;
   char *cvname = queryDesc->plannedstmt->cq_target->relname;
 
   elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
 
+  CurrentResourceOwner = owner;
+
+  slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
   sock = accept_worker(combiner);
 
   for (;;)
   {
-  	slot = receive_slot(sock);
+  	receive_tuple(sock, slot);
   }
+
+  CurrentResourceOwner = save;
 }
