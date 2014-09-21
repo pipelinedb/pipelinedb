@@ -46,12 +46,13 @@ combiner_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
   struct sockaddr_un remote;
   int len;
   int attempts = 0;
+  bool connected = false;
 
   if ((CombinerSock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
   	elog(ERROR, "worker could not create combiner socket \"%s\": %m", "combiner_test_view");
 
   remote.sun_family = AF_UNIX;
-  strcpy(remote.sun_path, "combiner_test_view");
+  strcpy(remote.sun_path, "combiner_filter");
 
   len = strlen(remote.sun_path) + sizeof(remote.sun_family);
 
@@ -59,10 +60,15 @@ combiner_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
   while (attempts++ < 100)
   {
 		if (connect(CombinerSock, (struct sockaddr *) &remote, len) == 0)
-			break;
+			connected = true;
 		else
 			pg_usleep(100*1000); /* 0.1s */
+		if (connected)
+			break;
   }
+
+  if (!connected)
+  	elog(ERROR, "could not connect to combiner");
 }
 
 static void
