@@ -28,6 +28,7 @@ accept_worker(CombinerDesc *desc)
   int len;
   struct sockaddr_un local;
   struct sockaddr_un remote;
+  struct timeval to;
   socklen_t addrlen;
 
   local.sun_family = AF_UNIX;
@@ -43,6 +44,18 @@ accept_worker(CombinerDesc *desc)
 
 	if ((desc->sock = accept(desc->sock, (struct sockaddr *) &remote, &addrlen)) == -1)
 		elog(LOG, "could not accept connections on socket %d: %m", desc->sock);
+
+	if (desc->recvtimeoutms > 0)
+	{
+		/*
+		 * Timeouts must be specified in terms of both seconds and usecs,
+		 * usecs here must be < 1m
+		 */
+		to.tv_sec = (desc->recvtimeoutms / 1000);
+		to.tv_usec = (desc->recvtimeoutms - (to.tv_sec * 1000)) * 1000;
+		if (setsockopt(desc->sock, SOL_SOCKET, SO_RCVTIMEO, (char *) &to, sizeof(struct timeval)) == -1)
+			elog(ERROR, "could not set combiner recv() timeout: %m");
+	}
 }
 
 static void
@@ -52,9 +65,20 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 	uint32 len;
 	int read;
 
+	ExecClearTuple(slot);
+
+	/*
+	 * This socket has a receive timeout set on it, so if we get an EAGAIN it just
+	 * means that no new data has arrived.
+	 */
 	read = recv(combiner->sock, &len, 4, 0);
 	if (read < 0)
-		elog(ERROR, "combiner failed to receive tuple length");
+	{
+		/* no new data yet, we'll try again on the next call */
+		if (errno == EAGAIN)
+			return;
+		elog(ERROR, "combiner failed to receive tuple length: %m");
+	}
 
 	len = ntohl(len);
 
@@ -70,11 +94,13 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 }
 
 extern CombinerDesc *
-CreateCombinerDesc(const char *name)
+CreateCombinerDesc(QueryDesc *query)
 {
+	char *name = query->plannedstmt->cq_target->relname;
 	CombinerDesc *desc = palloc(sizeof(CombinerDesc));
 
 	desc->name = palloc(strlen(NAME_PREFIX) + strlen(name) + 1);
+	desc->recvtimeoutms = query->plannedstmt->cq_batch_timeout_ms;
 
 	memcpy(desc->name, NAME_PREFIX, strlen(NAME_PREFIX));
 	memcpy(desc->name + strlen(NAME_PREFIX), name, strlen(name) + 1);
@@ -107,6 +133,9 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
   for (;;)
   {
   	receive_tuple(combiner, slot);
+  	if (TupIsNull(slot))
+  		continue;
+
   	tuplestore_puttupleslot(store, slot);
   	if (count++ == batchsize)
   	{

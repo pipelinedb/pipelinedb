@@ -19,9 +19,10 @@ typedef struct CombinerDesc
 {
 	char *name;
 	int sock;
+	int recvtimeoutms;
 } CombinerDesc;
 
-extern CombinerDesc *CreateCombinerDesc(const char *name);
+extern CombinerDesc *CreateCombinerDesc(QueryDesc *query);
 extern void ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner);
 
 #endif

@@ -229,7 +229,7 @@ void
 ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
 {
 	pid_t pid;
-	CombinerDesc *combiner = CreateCombinerDesc(queryDesc->plannedstmt->cq_target->relname);
+	CombinerDesc *combiner = CreateCombinerDesc(queryDesc);
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
