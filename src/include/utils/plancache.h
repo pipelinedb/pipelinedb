@@ -110,9 +110,6 @@ typedef struct CachedPlanSource
 	double		generic_cost;	/* cost of generic plan, or -1 if not known */
 	double		total_custom_cost;		/* total cost of custom plans so far */
 	int			num_custom_plans;		/* number of plans included in total */
-	Tuplestorestate *store; /* tuplestore to read from, if any */
-	TupleDesc	desc; /* description of the tuplestore, if any */
-	Query *query; /* query associated with this cached plan */
 } CachedPlanSource;
 
 /*
