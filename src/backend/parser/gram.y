@@ -221,7 +221,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 /* PGXC_END */
 }
 
-%type <node>	stmt schema_stmt
+%type <node>	stmt schema_stmt simple_activate_continuous_view_stmt
 		ActivateContinuousViewStmt AlterEventTrigStmt
 		AlterDatabaseStmt AlterDatabaseSetStmt AlterDomainStmt AlterEnumStmt
 		AlterFdwStmt AlterForeignServerStmt AlterGroupStmt
@@ -275,7 +275,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 				create_extension_opt_list alter_extension_opt_list
 				pgxcnode_list pgxcnodes
 %type <defelt>	createdb_opt_item alterdb_opt_item copy_opt_item
-				transaction_mode_item
+				transaction_mode_item activate_continuous_view_opt
 				create_extension_opt_item alter_extension_opt_item
 
 %type <ival>	opt_lock lock_type cast_context
@@ -357,6 +357,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 				opt_enum_val_list enum_val_list table_func_column_list
 				create_generic_options alter_generic_options
 				relation_expr_list dostmt_opt_list decode_args param_list
+				qualified_name_list_or_none activate_continuous_view_opt_list
 
 %type <list>	opt_fdw_options fdw_options
 %type <defelt>	fdw_option
@@ -540,7 +541,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	AGGREGATE ALL ALSO ALTER ALWAYS ANALYSE ANALYZE AND ANY ARRAY AS ASC
 	ASSERTION ASSIGNMENT ASYMMETRIC AT ATTRIBUTE AUTHORIZATION
 
-	BACKWARD BARRIER BEFORE BEGIN_P BETWEEN BIGINT BINARY BIT
+	BACKWARD BARRIER BATCH_SIZE BEFORE BEGIN_P BETWEEN BIGINT BINARY BIT
 	BOOLEAN_P BOTH BY
 
 	CACHE CALLED CASCADE CASCADED CASE CAST CATALOG_P CHAIN CHAR_P
@@ -563,7 +564,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	EXCLUDE EXCLUDING EXCLUSIVE EXECUTE EXISTS EXPLAIN
 	EXTENSION EXTERNAL EXTRACT
 
-	FALSE_P FAMILY FETCH FIRST_P FLOAT_P FOLLOWING FOR FORCE FOREIGN FORWARD
+	FALSE_P FAMILY FETCH FIRST_P FLOAT_P FLUSH_INTERVAL FOLLOWING FOR FORCE FOREIGN FORWARD
 	FREEZE FROM FULL FUNCTION FUNCTIONS
 
 	GLOBAL GRANT GRANTED GREATEST GROUP_P
@@ -593,7 +594,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	OBJECT_P OF OFF OFFSET OIDS ON ONLY OPERATOR OPTION OPTIONS OR
 	ORDER OUT_P OUTER_P OVER OVERLAPS OVERLAY OWNED OWNER
 
-	PARSER PARTIAL PARTITION PASSING PASSWORD PLACING PLANS POSITION
+	PARALLELISM PARSER PARTIAL PARTITION PASSING PASSWORD PLACING PLANS POSITION
 
 /* PGXC_BEGIN */
 	PRECEDING PRECISION PREFERRED PRESERVE PREPARE PREPARED PRIMARY
@@ -2642,48 +2643,110 @@ copy_generic_opt_arg_list_item:
  * Activates/deactivates continuous view(s)
  *
  *****************************************************************************/
+ 
+qualified_name_list_or_none: qualified_name_list
+ 				{
+ 					$$ = (List *) $1;
+ 				}
+ 			| /* EMPTY */
+ 				{
+ 					$$ = NIL;
+ 				}
+ 		;
+ 
+activate_continuous_view_opt : PARALLELISM '=' NumericOnly
+				{
+					$$ = makeDefElem("parallelism", (Node *) $3);
+				}
+			| BATCH_SIZE '=' NumericOnly
+				{
+					$$ = makeDefElem("batch_size", (Node *) $3);
+				}
+			| FLUSH_INTERVAL '=' NumericOnly
+				{
+					$$ = makeDefElem("flush_interval", (Node *) $3);
+				}
+		;
 
- ActivateContinuousViewStmt: ACTIVATE 
+activate_continuous_view_opt_list: activate_continuous_view_opt
+				{
+					$$ = list_make1($1);
+				}
+			| activate_continuous_view_opt_list ',' activate_continuous_view_opt
+				{
+					$$ = lappend($1, $3);
+				}
+		;
+
+simple_activate_continuous_view_stmt: ACTIVATE qualified_name_list_or_none
  				{
  					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->views = NULL;
+					s->views = (List *) $2;
 					$$ = (Node *)s;
  				}
- 			| ACTIVATE qualified_name_list
-				{
+ 			| ACTIVATE CONTINUOUS VIEW qualified_name_list_or_none
+			  	{
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->views = $2;
+					s->views = (List *) $2;
 					$$ = (Node *)s;
-				}
-			| ACTIVATE CONTINUOUS VIEW qualified_name_list
-			  {
-					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->views = $4;
-					$$ = (Node *)s;
-			  }
+			  	}
 		;
 
- DeactivateContinuousViewStmt: DEACTIVATE
+ActivateContinuousViewStmt: simple_activate_continuous_view_stmt
+				{
+					ActivateContinuousViewStmt *s = (ActivateContinuousViewStmt *) $1;
+					s->parallelism = PIPELINE_PARALLELISM;
+					s->batch_size = PIPELINE_BATCH_SIZE;
+					s->flush_interval = PIPELINE_FLUSH_INTERVAL;
+					$$ = (Node *) s;
+				}
+			| simple_activate_continuous_view_stmt WITH '(' activate_continuous_view_opt_list ')'
+				{
+					ListCell *lc;
+					DefElem *elem;
+					int value;
+					ActivateContinuousViewStmt *s = (ActivateContinuousViewStmt *) $1;
+					s->parallelism = PIPELINE_PARALLELISM;
+					s->batch_size = PIPELINE_BATCH_SIZE;
+					s->flush_interval = PIPELINE_FLUSH_INTERVAL;
+					
+					foreach(lc, $4)
+					{
+						elem = (DefElem *) lfirst(lc);
+						value = intVal(elem->arg);
+						if (strcasecmp(elem->defname, "parallelism"))
+						{
+							s->parallelism = value;
+						}
+						else if (strcasecmp(elem->defname, "batch_size"))
+						{
+							s->batch_size =  value;
+						}
+						else if (strcasecmp(elem->defname, "flush_interval"))
+						{
+							s->flush_interval = value;
+						}
+					}
+					
+					$$ = (Node *) s;
+				}
+		;
+
+DeactivateContinuousViewStmt: DEACTIVATE qualified_name_list_or_none
  				{
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->views = NULL;
+					s->views = (List *) $2;
 					$$ = (Node *)s;
 
  				}
- 			| DEACTIVATE qualified_name_list
-				{
-					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->views = $2;
-					$$ = (Node *)s;
-				}
-			| DEACTIVATE CONTINUOUS VIEW qualified_name_list
+ 			| DEACTIVATE CONTINUOUS VIEW qualified_name_list_or_none
 			  {
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->views = $4;
+					s->views = (List *) $2;
 					$$ = (Node *)s;
 			  }
 		;
-	
+
 /*****************************************************************************
  *
  * CREATE ENCODING encoding_name
@@ -13238,6 +13301,7 @@ unreserved_keyword:
 /* PGXC_BEGIN */
 			| BARRIER
 /* PGXC_END */
+			| BATCH_SIZE
 			| BEFORE
 			| BEGIN_P
 			| BY
@@ -13312,6 +13376,7 @@ unreserved_keyword:
 			| EXTERNAL
 			| FAMILY
 			| FIRST_P
+			| FLUSH_INTERVAL
 			| FOLLOWING
 			| FORCE
 			| FORWARD
@@ -13382,6 +13447,7 @@ unreserved_keyword:
 			| OPTIONS
 			| OWNED
 			| OWNER
+			| PARALLELISM
 			| PARSER
 			| PARTIAL
 			| PARTITION

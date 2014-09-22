@@ -2828,17 +2828,27 @@ typedef struct CreateContinuousViewStmt
 
 } CreateContinuousViewStmt;
 
+typedef struct BaseContinuousViewStmt
+{
+	NodeTag		type;
+	List	   	*views;
+} BaseContinuousViewStmt;
+
+/* This extends `BaseContinuousViewStmt` so
+ * keep the order of fields such that all fields
+ * in BaseContinuousViewStmt appear in-order in the
+ * beginning.
+ */
 typedef struct ActivateContinuousViewStmt
 {
 	NodeTag		type;
 	List		*views;
+	int			parallelism;
+	int			batch_size;
+	int			flush_interval;
 } ActivateContinuousViewStmt;
 
-typedef struct DeactivateContinuousViewStmt
-{
-	NodeTag		type;
-	List	   	*views;
-} DeactivateContinuousViewStmt;
+typedef BaseContinuousViewStmt DeactivateContinuousViewStmt;
 
 typedef struct CreateEncodingStmt
 {
