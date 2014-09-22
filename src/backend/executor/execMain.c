@@ -457,7 +457,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 				 * Run plan on a microbatch
 				 */
 				ExecutePlan(estate, queryDesc->planstate, operation,
-						sendTuples, batchsize, timeoutms,
+						sendTuples, batchsize, 0,
 						ForwardScanDirection, dest);
 
 				MemoryContextSwitchTo(oldcontext);
@@ -513,7 +513,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 				 * If we didn't see any new tuples, sleep briefly to save cycles
 				 */
 				if (estate->es_processed == 0)
-					pg_usleep(PIPELINE_SLEEP_MS * 1000);
+					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 
 				estate->es_processed = 0;
 

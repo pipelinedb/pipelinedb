@@ -98,15 +98,7 @@ AddQuery(const char *rawname, const char *query, char state)
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("invalid state: '%c'", state)));
 
-	nulls[0] = false;
-	nulls[1] = false;
-	nulls[2] = false;
-	nulls[3] = false;
-
-	values[0] = (Datum) NULL;
-	values[1] = (Datum) NULL;
-	values[2] = (Datum) NULL;
-	values[3] = (Datum) NULL;
+	MemSet(nulls, 0, Natts_pipeline_queries);
 
 	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 
@@ -115,6 +107,11 @@ AddQuery(const char *rawname, const char *query, char state)
 	values[Anum_pipeline_queries_name - 1] = NameGetDatum(&name);
 	values[Anum_pipeline_queries_query - 1] = CStringGetTextDatum(query);
 	values[Anum_pipeline_queries_state - 1] = CharGetDatum(state);
+
+	values[Anum_pipeline_queries_batchsize - 1] = Int64GetDatum(CQ_DEFAULT_BATCH_SIZE);
+	values[Anum_pipeline_queries_maxwaitms - 1] = Int32GetDatum(CQ_DEFAULT_WAIT_MS);
+	values[Anum_pipeline_queries_emnptysleepms - 1] = Int32GetDatum(CQ_DEFAULT_SLEEP_MS);
+	values[Anum_pipeline_queries_parallelism - 1] = Int32GetDatum(CQ_DEFAULT_PARALLELISM);
 
 	tup = heap_form_tuple(pipeline_queries->rd_att, values, nulls);
 
