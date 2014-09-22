@@ -34,19 +34,6 @@
 #include "utils/syscache.h"
 #include "miscadmin.h"
 
-/* memory context for temporary memory required by merge requests */
-static MemoryContext MergeTempContext = NULL;
-
-extern void
-InitMergeMemory(void)
-{
-	MergeTempContext = AllocSetContextCreate(TopMemoryContext,
-											"MergeTempContext",
-											ALLOCSET_DEFAULT_MINSIZE,
-											ALLOCSET_DEFAULT_INITSIZE,
-											ALLOCSET_DEFAULT_MAXSIZE);
-}
-
 /*
  * GetMergePlan
  *
@@ -326,7 +313,6 @@ Merge(char *cvname, Tuplestorestate *store)
 	CachedPlan *cplan;
 	CachedPlanSource *psrc;
 	Portal portal;
-	MemoryContext oldcontext;
 	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
 	Tuplestorestate *merge_output = NULL;
 	AttrNumber merge_attr = 1;
@@ -340,10 +326,7 @@ Merge(char *cvname, Tuplestorestate *store)
 	int num_buckets = 1;
 
 	StartTransactionCommand();
-
 	PushActiveSnapshot(GetTransactionSnapshot());
-
-	oldcontext = MemoryContextSwitchTo(MessageContext);
 
 	cplan = GetMergePlan(cvname, store, &psrc);
 	slot = MakeSingleTupleTableSlot(psrc->desc);
@@ -364,7 +347,7 @@ Merge(char *cvname, Tuplestorestate *store)
 		num_buckets = 1000;
 
 		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
-				sizeof(HeapTupleEntryData), CacheMemoryContext, MergeTempContext);
+				sizeof(HeapTupleEntryData), CacheMemoryContext, CurrentMemoryContext);
 
 		GetTuplesToMergeWith(cvname, psrc->desc, store, merge_attr, group_clause, merge_targets);
 	}
@@ -384,8 +367,6 @@ Merge(char *cvname, Tuplestorestate *store)
 
 	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, GetActiveSnapshot());
 
-	MemoryContextSwitchTo(oldcontext);
-
 	(void) PortalRun(portal,
 					 FETCH_ALL,
 					 true,
@@ -399,8 +380,6 @@ Merge(char *cvname, Tuplestorestate *store)
 
 	if (merge_targets)
 		hash_destroy(merge_targets->hashtab);
-
-	MemoryContextReset(MergeTempContext);
 
 	CommitTransactionCommand();
 }

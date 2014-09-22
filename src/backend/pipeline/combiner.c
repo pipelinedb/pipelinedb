@@ -17,10 +17,12 @@
 #include "pipeline/combiner.h"
 #include "pipeline/merge.h"
 #include "miscadmin.h"
+#include "utils/memutils.h"
 
 
 #define NAME_PREFIX "combiner_"
 #define WORKER_BACKLOG 32
+
 
 static void
 accept_worker(CombinerDesc *desc)
@@ -45,17 +47,24 @@ accept_worker(CombinerDesc *desc)
 	if ((desc->sock = accept(desc->sock, (struct sockaddr *) &remote, &addrlen)) == -1)
 		elog(LOG, "could not accept connections on socket %d: %m", desc->sock);
 
-	if (desc->recvtimeoutms > 0)
+	/*
+	 * Timeouts must be specified in terms of both seconds and usecs,
+	 * usecs here must be < 1m
+	 */
+	if (desc->recvtimeoutms == 0)
 	{
-		/*
-		 * Timeouts must be specified in terms of both seconds and usecs,
-		 * usecs here must be < 1m
-		 */
+		/* 0 means a blocking recv(), which we don't want, so use a reasonable default */
+		to.tv_sec = 0;
+		to.tv_usec = 1000;
+	}
+	else
+	{
 		to.tv_sec = (desc->recvtimeoutms / 1000);
 		to.tv_usec = (desc->recvtimeoutms - (to.tv_sec * 1000)) * 1000;
-		if (setsockopt(desc->sock, SOL_SOCKET, SO_RCVTIMEO, (char *) &to, sizeof(struct timeval)) == -1)
-			elog(ERROR, "could not set combiner recv() timeout: %m");
 	}
+
+	if (setsockopt(desc->sock, SOL_SOCKET, SO_RCVTIMEO, (char *) &to, sizeof(struct timeval)) == -1)
+		elog(ERROR, "could not set combiner recv() timeout: %m");
 }
 
 static void
@@ -118,30 +127,70 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 	TupleTableSlot *slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
 	Tuplestorestate *store;
 	long count = 0;
-  int batchsize = 1;
+	long lastms;
+  int batchsize = queryDesc->plannedstmt->cq_batch_size;
+  int timeout = queryDesc->plannedstmt->cq_batch_timeout_ms;
   char *cvname = queryDesc->plannedstmt->cq_target->relname;
+	struct timeval lastcombine;
+	struct timeval current;
+
+	MemoryContext combinectx = AllocSetContextCreate(TopMemoryContext,
+																	"CombineContext",
+																	ALLOCSET_DEFAULT_MINSIZE,
+																	ALLOCSET_DEFAULT_INITSIZE,
+																	ALLOCSET_DEFAULT_MAXSIZE);
 
   accept_worker(combiner);
   elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
 
-  CurrentResourceOwner = owner;
-
-  InitMergeMemory();
-
   store = tuplestore_begin_heap(true, true, work_mem);
+
+  gettimeofday(&lastcombine, NULL);
+  lastms = (lastcombine.tv_sec * 1000) + (lastcombine.tv_usec / 1000.0);
 
   for (;;)
   {
-  	receive_tuple(combiner, slot);
-  	if (TupIsNull(slot))
-  		continue;
+  	bool force = false;
+  	CurrentResourceOwner = owner;
 
-  	tuplestore_puttupleslot(store, slot);
-  	if (count++ == batchsize)
+  	receive_tuple(combiner, slot);
+
+  	/*
+  	 * If we get a null tuple, we either want to combine the current batch
+  	 * or wait a little while longer for more tuples before forcing the batch
+  	 */
+  	if (TupIsNull(slot))
   	{
+  		if (timeout > 0)
+  		{
+  			long currentms;
+
+  			gettimeofday(&current, NULL);
+  			currentms = (current.tv_sec * 1000) + (current.tv_usec / 1000.0);
+				if (currentms - lastms <= timeout)
+					continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
+  		}
+  		force = true;
+  	}
+  	else
+  	{
+  		tuplestore_puttupleslot(store, slot);
+  		count++;
+  	}
+
+  	if (count > 0 && (count == batchsize || force))
+  	{
+  		MemoryContext oldcontext = MemoryContextSwitchTo(combinectx);
+
   		Merge(cvname, store);
   		tuplestore_clear(store);
+
+  		MemoryContextReset(combinectx);
+  		MemoryContextSwitchTo(oldcontext);
+
   		count = 0;
+  		gettimeofday(&lastcombine, NULL);
+  		lastms = (lastcombine.tv_sec * 1000) + (lastcombine.tv_usec / 1000.0);
   	}
   }
 
