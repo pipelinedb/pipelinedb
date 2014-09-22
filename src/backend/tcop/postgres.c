@@ -60,7 +60,6 @@
 #include "parser/parse_expr.h"
 #include "parser/parse_type.h"
 #include "pipeline/decode.h"
-#include "pipeline/merge.h"
 #include "pipeline/stream.h"
 #include "pipeline/streambuf.h"
 #include "pg_getopt.h"

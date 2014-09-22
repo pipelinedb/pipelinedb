@@ -902,17 +902,6 @@ BuildCachedPlan(CachedPlanSource *plansource, List *qlist,
 	 */
 	spi_pushed = SPI_push_conditional();
 
- 	/*
-	 * If this plan is supposed to read from a tuplestore, attach the source
-	 * tuplestore to the query so we can properly plan it
-	 */
-	foreach(lc, qlist)
-	{
-		Query *q = (Query *) lfirst(lc);
-		q->sourcestore = plansource->store;
-		q->sourcedesc = plansource->desc;
-	}
-
 	/*
 	 * Generate the plan.
 	 */
