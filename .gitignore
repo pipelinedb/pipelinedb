@@ -10,6 +10,7 @@
 *.dll
 *.a
 *.mo
+*.pc
 objfiles.txt
 .deps/
 *.gcno
