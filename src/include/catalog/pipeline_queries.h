@@ -34,7 +34,10 @@ CATALOG(pipeline_queries,4242) BKI_SHARED_RELATION BKI_WITHOUT_OIDS
 	int32 		maxwaitms;
 	int32		emptysleepms;
 	int16		parallelism;
+
+#ifdef CATALOG_VARLEN
 	text		query;
+#endif
 } FormData_pipeline_queries;
 
 /* ----------------

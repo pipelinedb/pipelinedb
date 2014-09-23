@@ -357,6 +357,8 @@ GetQueryString(RangeVar *rvname, int *cqid, bool select_only)
 	HeapTuple	tuple;
 	Form_pipeline_queries row;
 	NameData name;
+	Datum tmp;
+	bool isnull;
 
 	char *result;
 
@@ -367,8 +369,8 @@ GetQueryString(RangeVar *rvname, int *cqid, bool select_only)
 		elog(ERROR, "continuous view \"%s\" does not exist", rvname->relname);
 
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
-
-	result = TextDatumGetCString(&(row->query));
+	tmp = SysCacheGetAttr(PIPELINEQUERIESNAME, tuple, Anum_pipeline_queries_query, &isnull);
+	result = TextDatumGetCString(tmp);
 
 	if (cqid != NULL)
 		*cqid = DatumGetInt32(row->id);
