@@ -23,7 +23,8 @@
 /*
  * copyStateFromRow
  *
- * Copy
+ * Helper function to copy over all relevant fields from a `pipeline_queries` row
+ * to a ContinuousViewState struct.
  */
 static void copyStateFromRow(Form_pipeline_queries row, ContinuousViewState *cv_state)
 {
@@ -67,7 +68,7 @@ get_next_id(void)
 	HeapTuple tup;
 	int32 id = -1;
 
-	rel = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
+	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 	scandesc = heap_beginscan(rel, SnapshotNow, 0, NULL);
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
@@ -77,7 +78,7 @@ get_next_id(void)
 	}
 
 	heap_endscan(scandesc);
-	heap_close(rel, RowExclusiveLock);
+	heap_close(rel, AccessExclusiveLock);
 
 	return id + 1;
 }
@@ -135,7 +136,7 @@ RegisterContinuousView(RangeVar *name, const char *query_string)
 /*
  * DeregisterContinuousView
  *
- * Removed the CV entry from the `pipeline_queries` catalog table.
+ * Removes the CV entry from the `pipeline_queries` catalog table.
  */
 void
 DeregisterContinuousView(RangeVar *name)
@@ -244,7 +245,7 @@ MarkContinuousViewAsActive(RangeVar *name, List *parameters, ContinuousViewState
 	heap_close(pipeline_queries, NoLock);
 
 	if (cv_state)
-			copyStateFromRow(row, cv_state);
+		copyStateFromRow(row, cv_state);
 
 	return !alreadyActive;
 }
@@ -334,7 +335,7 @@ IsContinuousViewActive(RangeVar *name)
 	bool isActive;
 
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
-	/* If the HeapTuple is invalid, consider the CV inactive */
+	/* If the HeapTuple is invalid, consider the CV inactive. */
 	isActive = HeapTupleIsValid(tuple);
 	if (isActive)
 	{
