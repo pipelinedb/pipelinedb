@@ -358,7 +358,6 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	bool isBackgroundCoordinatorProc = false;
 	int pid;
 	bool cvWasActivated = false;
-	bool hasBeenDeactivated = false;
 	clock_t lastCheckTime = clock();
 
 	/* sanity checks */
@@ -388,8 +387,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	if (sendTuples)
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
-	cvWasActivated = MarkContinuousViewAsActive(mergeState.targetRelation,
-			((ActivateContinuousViewStmt *) queryDesc->plannedstmt)->params, NULL);
+	cvWasActivated = MarkContinuousViewAsActive(mergeState.targetRelation);
 
 	/* Finish the transaction started in PostgresMain() */
 	CommitTransactionCommand();

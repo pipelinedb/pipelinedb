@@ -163,7 +163,8 @@ DropContinuousView(DropStmt *stmt)
 	ListCell *item;
 	foreach(item, stmt->objects)
 	{
-		DeregisterContinuousView(makeRangeVarFromNameList((List *) lfirst(item)));
+		RangeVar *view_name = makeRangeVarFromNameList((List *) lfirst(item));
+		DeregisterContinuousView(view_name);
 	}
 }
 
