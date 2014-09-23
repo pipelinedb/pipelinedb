@@ -72,6 +72,11 @@ typedef FormData_pipeline_queries *Form_pipeline_queries;
  *		microbatching tuning params
  * ----------------
  */
+#define CQ_BATCH_SIZE_KEY 	"batchsize"
+#define CQ_SLEEP_MS_KEY			"emptysleepms"
+#define CQ_WAIT_MS_KEY			"maxwaitms"
+#define CQ_PARALLELISM_KEY	"parallelism"
+
 #define CQ_DEFAULT_BATCH_SIZE 	1000
 #define CQ_DEFAULT_SLEEP_MS 	10
 #define CQ_DEFAULT_WAIT_MS 		0

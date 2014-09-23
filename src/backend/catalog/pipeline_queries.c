@@ -144,10 +144,10 @@ DeregisterContinuousView(RangeVar *name)
 }
 
 /*
- * UpdateContinuousView
+ * MarkContinuousViewAsActive
  *
  * Updates the parameters of an already registered CV in the `pipeline_queries`
- * catalog table and sets the state to *ACTIVATE*. If the CV is already active,
+ * catalog table and sets the state to *ACTIVE*. If the CV is already active,
  * nothing is changed.
  *
  * Returns whether the catalog table was updated or not.
@@ -315,22 +315,22 @@ SetContinousViewParams(RangeVar *name, List *parameters)
 		elem = (DefElem *) lfirst(lc);
 		value = intVal(elem->arg);
 
-		if (strcasecmp(elem->defname, "batchsize"))
+		if (pg_strcasecmp(elem->defname, CQ_BATCH_SIZE_KEY) == 0)
 		{
 			replaces[Anum_pipeline_queries_batchsize - 1] = true;
 			values[Anum_pipeline_queries_batchsize - 1] = Int64GetDatum(value);
 		}
-		else if (strcasecmp(elem->defname, "maxwaitms"))
+		else if (pg_strcasecmp(elem->defname, CQ_WAIT_MS_KEY) == 0)
 		{
 			replaces[Anum_pipeline_queries_maxwaitms - 1] = true;
 			values[Anum_pipeline_queries_maxwaitms - 1] = Int32GetDatum(value);
 		}
-		else if (strcasecmp(elem->defname, "emptysleepms"))
+		else if (pg_strcasecmp(elem->defname, CQ_SLEEP_MS_KEY) == 0)
 		{
 			replaces[Anum_pipeline_queries_emptysleepms - 1] = true;
 			values[Anum_pipeline_queries_emptysleepms - 1] = Int32GetDatum(value);
 		}
-		else if (strcasecmp(elem->defname, "parallelism"))
+		else if (pg_strcasecmp(elem->defname, CQ_PARALLELISM_KEY) == 0)
 		{
 			replaces[Anum_pipeline_queries_parallelism - 1] = true;
 			values[Anum_pipeline_queries_parallelism - 1] = Int16GetDatum(value);
