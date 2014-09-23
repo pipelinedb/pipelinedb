@@ -55,7 +55,7 @@ get_next_id(void)
 	int32 id = -1;
 
 	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
-	scandesc = heap_beginscan(rel, SnapshotAny, 0, NULL);
+	scandesc = heap_beginscan_catalog(rel, 0, NULL);
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
 	{
