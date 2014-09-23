@@ -607,7 +607,7 @@ pg_parse_query(const char *query_string)
 				 * registered CONTINUOUS VIEWS.
 				 */
 				Relation pipeline_queries = heap_open(PipelineQueriesRelationId, RowShareLock);
-				HeapScanDesc scan_desc = heap_beginscan(pipeline_queries, SnapshotAny, 0, NULL);
+				HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_queries, 0, NULL);
 				HeapTuple tup;
 				Form_pipeline_queries row;
 				views = NIL;
