@@ -43,6 +43,7 @@
 #include "access/xact.h"
 #include "catalog/namespace.h"
 #include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "commands/trigger.h"
 #include "executor/execdebug.h"
 #include "libpq/libpq.h"
@@ -356,15 +357,7 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
 	bool isBackgroundCoordinatorProc = false;
 	int pid;
-	Relation pipeline_queries;
-	HeapTuple tuple;
-	HeapTuple newtuple;
-	Form_pipeline_queries row;
-	NameData name;
-	bool nulls[Natts_pipeline_queries];
-	bool replaces[Natts_pipeline_queries];
-	Datum values[Natts_pipeline_queries];
-	bool alreadyRunning = false;
+	bool cvWasActivated = false;
 	bool hasBeenDeactivated = false;
 	clock_t lastCheckTime = clock();
 
@@ -395,41 +388,13 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 	if (sendTuples)
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
-	namestrcpy(&name, mergeState.targetRelation->relname);
-
-	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
-	tuple = SearchSysCache1(PIPELINEQUERIESNAME, NameGetDatum(&name));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
-				mergeState.targetRelation->relname);
-
-	row = (Form_pipeline_queries) GETSTRUCT(tuple);
-	alreadyRunning = row->state == PIPELINE_QUERY_STATE_ACTIVE;
-
-	if (!alreadyRunning)
-	{
-		/* Mark the CV as active. */
-		MemSet(values, 0, sizeof(values));
-		MemSet(nulls, false, sizeof(nulls));
-		MemSet(replaces, false, sizeof(replaces));
-
-		replaces[Anum_pipeline_queries_state - 1] = true;
-		values[Anum_pipeline_queries_state - 1] = PIPELINE_QUERY_STATE_ACTIVE;
-
-		newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att, values,
-				nulls, replaces);
-		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
-		CommandCounterIncrement();
-	}
-
-	ReleaseSysCache(tuple);
-	heap_close(pipeline_queries, NoLock);
+	cvWasActivated = MarkContinuousViewAsActive(mergeState.targetRelation,
+			((ActivateContinuousViewStmt *) queryDesc->plannedstmt)->params, NULL);
 
 	/* Finish the transaction started in PostgresMain() */
 	CommitTransactionCommand();
 
-	if (!alreadyRunning)
+	if (cvWasActivated)
 	{
 		if (IS_PGXC_COORDINATOR)
 		{
@@ -490,20 +455,13 @@ ExecutorRunContinuous(QueryDesc *queryDesc, RemoteMergeState mergeState, Resourc
 				{
 					/* Check is we have been deactivated, and break out
 					 * if we have. */
+					bool isActive;
+
 					StartTransactionCommand();
-					tuple = SearchSysCache1(PIPELINEQUERIESNAME,
-							NameGetDatum(&name));
-					hasBeenDeactivated = !HeapTupleIsValid(tuple);
-					if (!hasBeenDeactivated)
-					{
-						row = (Form_pipeline_queries) GETSTRUCT(tuple);
-						hasBeenDeactivated = (row->state ==
-								PIPELINE_QUERY_STATE_INACTIVE);
-					}
-					ReleaseSysCache(tuple);
+					isActive = IsContinuousViewActive(mergeState.targetRelation);
 					CommitTransactionCommand();
 
-					if (hasBeenDeactivated)
+					if (!isActive)
 						break;
 
 					lastCheckTime = clock();

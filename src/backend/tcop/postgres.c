@@ -47,6 +47,7 @@
 #include "access/htup_details.h"
 #include "catalog/pg_attribute.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "commands/async.h"
 #include "commands/prepare.h"
@@ -97,6 +98,7 @@
 #include "utils/syscache.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
+#include "utils/tqual.h"
 #include "utils/tuplestore.h"
 #include "mb/pg_wchar.h"
 
@@ -636,11 +638,12 @@ pg_parse_query(const char *query_string)
 {
 	List		*raw_parsetree_list;
 	List		*transformed_parsetree_list = NIL;
+	List		*views;
 	ListCell	*parsetree_lc;
 	ListCell	*view_lc;
 	Node		*node;
-	ActivateContinuousViewStmt *stmt;
-	ActivateContinuousViewStmt *new_stmt;
+	BaseContinuousViewStmt *stmt;
+	BaseContinuousViewStmt *new_stmt;
 
 	TRACE_POSTGRESQL_QUERY_PARSE_START(query_string);
 
@@ -659,20 +662,49 @@ pg_parse_query(const char *query_string)
 		if (IsA(node, ActivateContinuousViewStmt) ||
 				IsA(node, DeactivateContinuousViewStmt))
 		{
-			/* XXX(usmanm): It doesn't matter if we type cast to
-			 * ActivateContinuousViewStmt or DeactivateContinuousViewStmt
-			 * because they're identical structs.
-		     */
-			stmt = (ActivateContinuousViewStmt *) node;
-			foreach(view_lc, stmt->views)
+			stmt = (BaseContinuousViewStmt *) node;
+
+			if (!stmt->views)
 			{
-				new_stmt = makeNode(ActivateContinuousViewStmt);
-				new_stmt ->type = node->type;
+				/* If no views are declared, then ACTIVATE/DEACTIVATE all
+				 * registered CONTINUOUS VIEWS.
+				 */
+				Relation pipeline_queries = heap_open(PipelineQueriesRelationId, RowShareLock);
+				HeapScanDesc scan_desc = heap_beginscan(pipeline_queries, SnapshotNow, 0, NULL);
+				HeapTuple tup;
+				Form_pipeline_queries row;
+				views = NIL;
+				while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+				{
+					row = (Form_pipeline_queries) GETSTRUCT(tup);
+					views = lappend(views, makeRangeVar(NULL, row->name.data, -1));
+				}
+				heap_endscan(scan_desc);
+				heap_close(pipeline_queries, RowShareLock);
+			}
+			else
+			{
+				views = stmt->views;
+			}
+
+			foreach(view_lc, views)
+			{
+				if (IsA(node, ActivateContinuousViewStmt))
+				{
+					ActivateContinuousViewStmt *tmp_stmt = makeNode(ActivateContinuousViewStmt);
+					/* Copy over any parameters passed by the client. */
+					tmp_stmt->params = ((ActivateContinuousViewStmt *) stmt)->params;
+					new_stmt = (BaseContinuousViewStmt *) tmp_stmt;
+				}
+				else
+				{
+					new_stmt = (BaseContinuousViewStmt *) makeNode(DeactivateContinuousViewStmt);
+				}
+
 				assert(new_stmt->views == NIL);
-				new_stmt->views = lappend(new_stmt->views,
-						lfirst(view_lc));
-				transformed_parsetree_list = lappend(
-						transformed_parsetree_list, new_stmt);
+				new_stmt->views = lappend(new_stmt->views, lfirst(view_lc));
+				transformed_parsetree_list = lappend(transformed_parsetree_list,
+						new_stmt);
 			}
 		}
 		else

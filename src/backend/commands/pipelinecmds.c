@@ -133,7 +133,7 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 	/*
 	 * Now save the underlying query for ACTIVATION/DEACTIVATION
 	 */
-	AddQuery(relation->relname, querystring, PIPELINE_QUERY_STATE_INACTIVE);
+	RegisterContinuousView(relation, querystring);
 }
 
 /*
@@ -160,84 +160,15 @@ DumpState(DumpStmt *stmt)
 void
 DropContinuousView(DropStmt *stmt)
 {
-  Relation pipeline_queries;
-  ListCell *item;
-
-  /*
-   * Scan the pipeline_queries relation to find the OID of the views(s) to be
-   * deleted.
-   */
-  pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
-
-  foreach(item, stmt->objects)
-  {
-    RangeVar *view_name = makeRangeVarFromNameList((List *) lfirst(item));
-    HeapTuple	tuple;
-
-    tuple = SearchSysCache1(PIPELINEQUERIESNAME,
-                            CStringGetDatum(view_name->relname));
-    if (!HeapTupleIsValid(tuple)) {
-      elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist", strVal(view_name));
-      continue;
-    }
-
-    /*
-     * Remove the view from the pipeline_queries table
-     */
-    simple_heap_delete(pipeline_queries, &tuple->t_self);
-
-    ReleaseSysCache(tuple);
-
-    /*
-     * Advance command counter so that later iterations of this loop will
-     * see the changes already made.
-     */
-    CommandCounterIncrement();
-  }
-
-  /*
-   * Now we can clean up; but keep locks until commit.
-   */
-  heap_close(pipeline_queries, NoLock);
+	ListCell *item;
+	foreach(item, stmt->objects)
+	{
+		DeregisterContinuousView(makeRangeVarFromNameList((List *) lfirst(item)));
+	}
 }
 
 void
 DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
 {
-	Relation pipeline_queries;
-	HeapTuple tuple;
-	HeapTuple newtuple;
-	Form_pipeline_queries row;
-	bool nulls[Natts_pipeline_queries];
-	bool replaces[Natts_pipeline_queries];
-	Datum values[Natts_pipeline_queries];
-	RangeVar *name = (RangeVar *) linitial(stmt->views);
-
-	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
-	/* The analyzer will always spit out DEACTIVATE statements with a single view */
-	tuple = SearchSysCache1(PIPELINEQUERIESNAME,
-				CStringGetDatum(name->relname));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
-				name->relname);
-
-	row = (Form_pipeline_queries) GETSTRUCT(tuple);
-
-	if (row->state != PIPELINE_QUERY_STATE_INACTIVE)
-	{
-		MemSet(values, 0, sizeof(values));
-		MemSet(nulls, false, sizeof(nulls));
-		MemSet(replaces, false, sizeof(replaces));
-
-		replaces[Anum_pipeline_queries_state - 1] = true;
-		values[Anum_pipeline_queries_state - 1] = PIPELINE_QUERY_STATE_INACTIVE;
-		newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att,
-				values, nulls, replaces);
-		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
-		CommandCounterIncrement();
-	}
-
-	ReleaseSysCache(tuple);
-	heap_close(pipeline_queries, NoLock);
+	MarkContinuousViewAsInactive((RangeVar *) linitial(stmt->views));
 }

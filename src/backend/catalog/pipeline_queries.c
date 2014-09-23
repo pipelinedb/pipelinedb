@@ -20,6 +20,19 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 
+/*
+ * copyStateFromRow
+ *
+ * Copy
+ */
+static void copyStateFromRow(Form_pipeline_queries row, ContinuousViewState *cv_state)
+{
+	cv_state->batchsize = row->batchsize;
+	cv_state->maxwaitms = row->maxwaitms;
+	cv_state->emptysleepms = row->emptysleepms;
+	cv_state->parallelism = row->parallelism;
+	cv_state->state = row->state;
+}
 
 /*
  * skip
@@ -70,58 +83,269 @@ get_next_id(void)
 }
 
 /*
- * AddQuery
+ * RegisterContinuousView
  *
- * Adds a REGISTERed query to the pipeline_queries catalog table
+ * Adds a CV to the `pipeline_queries` catalog table.
  */
 void
-AddQuery(const char *rawname, const char *query, char state)
+RegisterContinuousView(RangeVar *name, const char *query_string)
 {
 	Relation	pipeline_queries;
 	HeapTuple	tup;
-	bool nulls[Natts_pipeline_queries];
-	Datum values[Natts_pipeline_queries];
-	NameData name;
+	bool 		nulls[Natts_pipeline_queries];
+	Datum 		values[Natts_pipeline_queries];
+	NameData 	name_data;
 
-	if (!rawname)
+	if (!name)
 		ereport(ERROR,
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("name is null")));
 
-	if (!query)
+	if (!query_string)
 		ereport(ERROR,
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("query is null")));
-
-	if (!(state == PIPELINE_QUERY_STATE_ACTIVE || state == PIPELINE_QUERY_STATE_INACTIVE))
-		ereport(ERROR,
-				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-						errmsg("invalid state: '%c'", state)));
 
 	MemSet(nulls, 0, Natts_pipeline_queries);
 
 	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 
-	namestrcpy(&name, rawname);
+	namestrcpy(&name_data, name->relname);
 	values[Anum_pipeline_queries_id - 1] = Int32GetDatum(get_next_id());
-	values[Anum_pipeline_queries_name - 1] = NameGetDatum(&name);
-	values[Anum_pipeline_queries_query - 1] = CStringGetTextDatum(query);
-	values[Anum_pipeline_queries_state - 1] = CharGetDatum(state);
+	values[Anum_pipeline_queries_name - 1] = NameGetDatum(&name_data);
+	values[Anum_pipeline_queries_query - 1] = CStringGetTextDatum(query_string);
 
+	/* Use default values for state and tuning parameters. */
+	values[Anum_pipeline_queries_state - 1] = CharGetDatum(PIPELINE_QUERY_STATE_INACTIVE);
 	values[Anum_pipeline_queries_batchsize - 1] = Int64GetDatum(CQ_DEFAULT_BATCH_SIZE);
 	values[Anum_pipeline_queries_maxwaitms - 1] = Int32GetDatum(CQ_DEFAULT_WAIT_MS);
-	values[Anum_pipeline_queries_emnptysleepms - 1] = Int32GetDatum(CQ_DEFAULT_SLEEP_MS);
-	values[Anum_pipeline_queries_parallelism - 1] = Int32GetDatum(CQ_DEFAULT_PARALLELISM);
+	values[Anum_pipeline_queries_emptysleepms - 1] = Int32GetDatum(CQ_DEFAULT_SLEEP_MS);
+	values[Anum_pipeline_queries_parallelism - 1] = Int16GetDatum(CQ_DEFAULT_PARALLELISM);
 
 	tup = heap_form_tuple(pipeline_queries->rd_att, values, nulls);
 
 	simple_heap_insert(pipeline_queries, tup);
 	CatalogUpdateIndexes(pipeline_queries, tup);
+	CommandCounterIncrement();
 
 	heap_freetuple(tup);
 	heap_close(pipeline_queries, AccessExclusiveLock);
 }
 
+/*
+ * DeregisterContinuousView
+ *
+ * Removed the CV entry from the `pipeline_queries` catalog table.
+ */
+void
+DeregisterContinuousView(RangeVar *name)
+{
+	Relation pipeline_queries;
+    HeapTuple tup;
+
+	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
+	tup = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
+
+	if (!HeapTupleIsValid(tup))
+		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist", strVal(name));
+
+	simple_heap_delete(pipeline_queries, &tup->t_self);
+	CommandCounterIncrement();
+
+	ReleaseSysCache(tup);
+	heap_close(pipeline_queries, NoLock);
+}
+
+/*
+ * UpdateContinuousView
+ *
+ * Updates the parameters of an already registered CV in the `pipeline_queries`
+ * catalog table and sets the state to *ACTIVATE*. If the CV is already active,
+ * nothing is changed.
+ *
+ * Returns whether the catalog table was updated or not.
+ */
+bool
+MarkContinuousViewAsActive(RangeVar *name, List *parameters, ContinuousViewState *cv_state)
+{
+	Relation pipeline_queries;
+	HeapTuple tuple;
+	HeapTuple newtuple;
+	Form_pipeline_queries row;
+	bool nulls[Natts_pipeline_queries];
+	bool replaces[Natts_pipeline_queries];
+	Datum values[Natts_pipeline_queries];
+	bool alreadyActive = true;
+
+	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
+	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+				name->relname);
+
+	row = (Form_pipeline_queries) GETSTRUCT(tuple);
+
+	/* XXX(usmanm): Right now there's no way to simply update the tuning parameters
+	 * for an already running CV. Revisit later.
+	 */
+	if (row->state != PIPELINE_QUERY_STATE_ACTIVE)
+	{
+		ListCell *lc;
+		DefElem *elem;
+		int8 value;
+
+		MemSet(values, 0, sizeof(values));
+		MemSet(nulls, false, sizeof(nulls));
+		MemSet(replaces, false, sizeof(replaces));
+
+		replaces[Anum_pipeline_queries_state - 1] = true;
+		values[Anum_pipeline_queries_state - 1] = CharGetDatum(PIPELINE_QUERY_STATE_ACTIVE);
+
+		foreach(lc, parameters)
+		{
+			elem = (DefElem *) lfirst(lc);
+			value = intVal(elem->arg);
+
+			if (strcasecmp(elem->defname, "batchsize"))
+			{
+				replaces[Anum_pipeline_queries_batchsize - 1] = true;
+				values[Anum_pipeline_queries_batchsize - 1] = Int64GetDatum(value);
+			}
+			else if (strcasecmp(elem->defname, "maxwaitms"))
+			{
+				replaces[Anum_pipeline_queries_maxwaitms - 1] = true;
+				values[Anum_pipeline_queries_maxwaitms - 1] = Int32GetDatum(value);
+			}
+			else if (strcasecmp(elem->defname, "emptysleepms"))
+			{
+				replaces[Anum_pipeline_queries_emptysleepms - 1] = true;
+				values[Anum_pipeline_queries_emptysleepms - 1] = Int32GetDatum(value);
+			}
+			else if (strcasecmp(elem->defname, "parallelism"))
+			{
+				replaces[Anum_pipeline_queries_parallelism - 1] = true;
+				values[Anum_pipeline_queries_parallelism - 1] = Int16GetDatum(value);
+			}
+		}
+
+		newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att,
+				values, nulls, replaces);
+		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+		CommandCounterIncrement();
+
+		/* Update row so we return the updated ContinuousViewState */
+		row = (Form_pipeline_queries) GETSTRUCT(tuple);
+
+		alreadyActive = false;
+	}
+
+	ReleaseSysCache(tuple);
+	heap_close(pipeline_queries, NoLock);
+
+	if (cv_state)
+			copyStateFromRow(row, cv_state);
+
+	return !alreadyActive;
+}
+
+/*
+ * MarkContinuousViewAsInactive
+ *
+ * If the CV is not already marked as INACTIVE in the `pipeline_queries`
+ * catalog table, mark it as INACTIVE. If the CV is already inactive,
+ * nothing is changed.
+ *
+ * Returns whether the catalog table was updated or not.
+ */
+bool
+MarkContinuousViewAsInactive(RangeVar *name)
+{
+	Relation pipeline_queries;
+	HeapTuple tuple;
+	HeapTuple newtuple;
+	Form_pipeline_queries row;
+	bool nulls[Natts_pipeline_queries];
+	bool replaces[Natts_pipeline_queries];
+	Datum values[Natts_pipeline_queries];
+
+	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
+	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+				name->relname);
+
+	row = (Form_pipeline_queries) GETSTRUCT(tuple);
+
+	if (row->state != PIPELINE_QUERY_STATE_INACTIVE)
+	{
+		MemSet(values, 0, sizeof(Natts_pipeline_queries));
+		MemSet(nulls, false, sizeof(Natts_pipeline_queries));
+		MemSet(replaces, false, sizeof(Natts_pipeline_queries));
+
+		replaces[Anum_pipeline_queries_state - 1] = true;
+		values[Anum_pipeline_queries_state - 1] = CharGetDatum(PIPELINE_QUERY_STATE_INACTIVE);
+
+		newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att,
+				values, nulls, replaces);
+		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+		CommandCounterIncrement();
+	}
+
+	ReleaseSysCache(tuple);
+	heap_close(pipeline_queries, NoLock);
+
+	return row->state != PIPELINE_QUERY_STATE_INACTIVE;
+}
+
+/*
+ * GetContinuousViewState
+ *
+ * Fetch the state for the CV from the `pipeline_queries` catalog table.
+ */
+void
+GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
+{
+	HeapTuple tuple;
+	Form_pipeline_queries row;
+
+	if (!cv_state)
+		return;
+
+	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+				name->relname);
+
+	row = (Form_pipeline_queries) GETSTRUCT(tuple);
+
+	ReleaseSysCache(tuple);
+
+	copyStateFromRow(row, cv_state);
+}
+
+bool
+IsContinuousViewActive(RangeVar *name)
+{
+	HeapTuple tuple;
+	Form_pipeline_queries row;
+	bool isActive;
+
+	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
+	/* If the HeapTuple is invalid, consider the CV inactive */
+	isActive = HeapTupleIsValid(tuple);
+	if (isActive)
+	{
+		row = (Form_pipeline_queries) GETSTRUCT(tuple);
+		isActive = (row->state ==
+				PIPELINE_QUERY_STATE_ACTIVE);
+	}
+	ReleaseSysCache(tuple);
+
+	return isActive;
+}
 
 /*
  * Retrieves a REGISTERed query from the pipeline_queries catalog table
@@ -178,26 +402,4 @@ GetQueryString(RangeVar *rvname, int *cqid, bool select_only)
 	}
 
 	return result;
-}
-
-
-/*
- * SetQueryState
- *
- * Sets a query's state
- */
-void
-SetQueryState(RangeVar *name, char state)
-{
-	if (!name->relname)
-		ereport(ERROR,
-				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-						errmsg("name is null")));
-
-	if (!(state == PIPELINE_QUERY_STATE_ACTIVE || state == PIPELINE_QUERY_STATE_INACTIVE))
-		ereport(ERROR,
-				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-						errmsg("invalid state: '%c'", state)));
-
-	elog(LOG, "Set state for %s to '%c'", name->relname, state);
 }
