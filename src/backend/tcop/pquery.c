@@ -1403,7 +1403,7 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 			   DestReceiver *dest, DestReceiver *altdest,
 			   char *completionTag)
 {
-	PlannedStmt * stmt;
+	PlannedStmt *stmt;
 	QueryDesc  *queryDesc;
 	Tuplestorestate *store = NULL;
 	ResourceOwner resowner;

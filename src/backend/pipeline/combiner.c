@@ -117,7 +117,7 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 }
 
-extern CombinerDesc *
+CombinerDesc *
 CreateCombinerDesc(QueryDesc *query)
 {
 	char *name = query->plannedstmt->cq_target->relname;
@@ -135,7 +135,7 @@ CreateCombinerDesc(QueryDesc *query)
   return desc;
 }
 
-extern void
+void
 ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
 {
 	ResourceOwner save = CurrentResourceOwner;
@@ -143,9 +143,9 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 	Tuplestorestate *store;
 	long count = 0;
 	long lastms;
-  int batchsize = queryDesc->plannedstmt->cq_batch_size;
-  int timeout = queryDesc->plannedstmt->cq_batch_timeout_ms;
-  char *cvname = queryDesc->plannedstmt->cq_target->relname;
+	int batchsize = queryDesc->plannedstmt->cq_batch_size;
+	int timeout = queryDesc->plannedstmt->cq_batch_timeout_ms;
+	char *cvname = queryDesc->plannedstmt->cq_target->relname;
 	struct timeval lastcombine;
 	struct timeval current;
 
@@ -217,7 +217,7 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
  *
  * Retrieves a the cached combine plan for a continuous view, creating it if necessary
  */
-extern PlannedStmt *
+PlannedStmt *
 GetCombinePlan(char *cvname, Tuplestorestate *store, Query **query)
 {
 	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
@@ -251,12 +251,12 @@ GetCombinePlan(char *cvname, Tuplestorestate *store, Query **query)
 }
 
 /*
- * GetMergeColumns
+ * GetCombineColumns
  *
  * Given a continuous query, determine the columns in the underlying table
  * that correspond to the GROUP BY clause of the query
  */
-extern List *
+List *
 GetCombineColumns(Query *query)
 {
 	List *result = NIL;
@@ -278,7 +278,7 @@ GetCombineColumns(Query *query)
  * Gets the plan for retrieving all of the existing tuples that are going
  * to be combined with the incoming tuples
  */
-extern void
+void
 GetTuplesToCombineWith(char *cvname, TupleDesc desc,
 		Tuplestorestate *incoming_merges, AttrNumber merge_attr,
 		List *group_clause, TupleHashTable merge_targets)
@@ -419,7 +419,7 @@ GetTuplesToCombineWith(char *cvname, TupleDesc desc,
  * Writes the combine results to a continuous view's table, performing
  * UPDATES or INSERTS as necessary
  */
-extern void
+void
 SyncCombine(char *cvname, Tuplestorestate *results,
 		TupleTableSlot *slot, AttrNumber merge_attr, TupleHashTable merge_targets)
 {
@@ -458,7 +458,7 @@ SyncCombine(char *cvname, Tuplestorestate *results,
  *
  * Combines partial results of a continuous query with existing rows in the continuous view
  */
-extern void
+void
 Combine(char *cvname, TupleDesc cvdesc, Tuplestorestate *store)
 {
 	TupleTableSlot *slot;
@@ -535,4 +535,3 @@ Combine(char *cvname, TupleDesc cvdesc, Tuplestorestate *store)
 
 	CommitTransactionCommand();
 }
-

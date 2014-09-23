@@ -614,7 +614,7 @@ pg_parse_query(const char *query_string)
 				while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
 				{
 					row = (Form_pipeline_queries) GETSTRUCT(tup);
-					views = lappend(views, (void *) makeRangeVar(NULL, row->name.data, -1));
+					views = lappend(views, (void *) makeRangeVar(NULL, NameStr(row->name), -1));
 				}
 				heap_endscan(scan_desc);
 				heap_close(pipeline_queries, RowShareLock);
