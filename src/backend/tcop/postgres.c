@@ -668,7 +668,7 @@ pg_parse_query(const char *query_string)
 
 	TRACE_POSTGRESQL_QUERY_PARSE_DONE(query_string);
 
-	return raw_parsetree_list;
+	return transformed_parsetree_list;
 }
 
 /*
