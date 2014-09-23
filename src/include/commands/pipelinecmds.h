@@ -17,5 +17,6 @@ extern void CreateEncoding(CreateEncodingStmt *stmt);
 extern void CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring);
 extern void DropContinuousView(DropStmt *stmt);
 extern void DumpState(DumpStmt *stmt);
+extern void DeactivateContinuousView(DeactivateContinuousViewStmt *stmt);
 
 #endif   /* PIPELINECMDS_H */

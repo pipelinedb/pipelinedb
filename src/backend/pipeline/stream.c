@@ -22,6 +22,7 @@
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
 #include "utils/memutils.h"
+#include "utils/syscache.h"
 #include "utils/tqual.h"
 
 #define SEND_EVENTS_RESPONSE_COMPLETE 0
@@ -97,9 +98,12 @@ CreateStreamTargets(void)
 		Node *parsetree;
 		CreateContinuousViewStmt *cv;
 		SelectStmt *select;
+		Datum tmp;
+		bool isnull;
 
 		catrow = (Form_pipeline_queries) GETSTRUCT(tup);
-		querystring = TextDatumGetCString(&(catrow->query));
+		tmp = SysCacheGetAttr(PIPELINEQUERIESNAME, tup, Anum_pipeline_queries_query, &isnull);
+		querystring = TextDatumGetCString(tmp);
 
 		parsetree_list = pg_parse_query(querystring);
 		parsetree = (Node *) lfirst(parsetree_list->head);

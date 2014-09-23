@@ -9,7 +9,9 @@
  *-------------------------------------------------------------------------
  */
 #include "postgres.h"
+#include <time.h>
 
+#include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/pipeline_queries.h"
 #include "executor/executor.h"
@@ -18,8 +20,11 @@
 #include "pipeline/combinerReceiver.h"
 #include "pipeline/worker.h"
 #include "tcop/dest.h"
+#include "utils/builtins.h"
 #include "utils/memutils.h"
+#include "utils/rel.h"
 #include "utils/snapmgr.h"
+#include "utils/syscache.h"
 #include "miscadmin.h"
 
 
@@ -40,6 +45,17 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	char *cvname = queryDesc->plannedstmt->cq_target->relname;
 	int batchsize = queryDesc->plannedstmt->cq_batch_size;
 	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
+	Relation pipeline_queries;
+	HeapTuple tuple;
+	HeapTuple newtuple;
+	Form_pipeline_queries row;
+	NameData name;
+	bool nulls[Natts_pipeline_queries];
+	bool replaces[Natts_pipeline_queries];
+	Datum values[Natts_pipeline_queries];
+	bool alreadyRunning = false;
+	bool hasBeenDeactivated = false;
+	clock_t lastCheckTime = clock();
 
 	CurrentResourceOwner = owner;
 
@@ -65,6 +81,33 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 	elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
 
+	namestrcpy(&name, cvname);
+
+//	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
+//	tuple = SearchSysCache1(PIPELINEQUERIESNAME, NameGetDatum(&name));
+//
+//	if (!HeapTupleIsValid(tuple))
+//		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist", cvname);
+//
+//	row = (Form_pipeline_queries) GETSTRUCT(tuple);
+//	alreadyRunning = row->state == PIPELINE_QUERY_STATE_ACTIVE;
+//
+//	if (!alreadyRunning)
+//	{
+//		/* Mark the CV as active. */
+//		MemSet(values, 0, sizeof(values));
+//		MemSet(nulls, false, sizeof(nulls));
+//		MemSet(replaces, false, sizeof(replaces));
+//
+//		replaces[Anum_pipeline_queries_state - 1] = true;
+//		values[Anum_pipeline_queries_state - 1] = PIPELINE_QUERY_STATE_ACTIVE;
+//
+//		newtuple = heap_modify_tuple(tuple, RelationGetDescr(pipeline_queries), values,
+//				nulls, replaces);
+//		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+//		CommandCounterIncrement();
+//	}
+
 	CurrentResourceOwner = save;
 
 	for (;;)
@@ -86,11 +129,34 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		 * If we didn't see any new tuples, sleep briefly to save cycles
 		 */
 		if (estate->es_processed == 0)
-			pg_usleep(PIPELINE_SLEEP_MS * 1000);
+			pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 
 		estate->es_processed = 0;
 
 		MemoryContextReset(ContinuousQueryContext);
+
+//		if ((double) (clock() - lastCheckTime) >= (2 * CLOCKS_PER_SEC))
+//		{
+//			/* Check is we have been deactivated, and break out
+//			 * if we have. */
+//			StartTransactionCommand();
+//			tuple = SearchSysCache1(PIPELINEQUERIESNAME,
+//					NameGetDatum(&name));
+//			hasBeenDeactivated = !HeapTupleIsValid(tuple);
+//			if (!hasBeenDeactivated)
+//			{
+//				row = (Form_pipeline_queries) GETSTRUCT(tuple);
+//				hasBeenDeactivated = (row->state ==
+//						PIPELINE_QUERY_STATE_INACTIVE);
+//			}
+//			ReleaseSysCache(tuple);
+//			CommitTransactionCommand();
+//
+//			if (hasBeenDeactivated)
+//				break;
+//
+//			lastCheckTime = clock();
+//		}
 	}
 
 	(*dest->rShutdown) (dest);

@@ -43,6 +43,7 @@
 #include "access/transam.h"
 #include "catalog/pg_attribute.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "commands/async.h"
 #include "commands/prepare.h"
@@ -50,6 +51,7 @@
 #include "libpq/pqformat.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
+#include "nodes/makefuncs.h"
 #include "nodes/print.h"
 #include "optimizer/planner.h"
 #include "pgstat.h"
@@ -85,6 +87,7 @@
 #include "utils/snapmgr.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
+#include "utils/tqual.h"
 #include "utils/tuplestore.h"
 #include "mb/pg_wchar.h"
 
@@ -570,7 +573,14 @@ client_read_ended(void)
 List *
 pg_parse_query(const char *query_string)
 {
-	List	   *raw_parsetree_list;
+	List		*raw_parsetree_list;
+	List		*transformed_parsetree_list = NIL;
+	List		*views;
+	ListCell	*parsetree_lc;
+	ListCell	*view_lc;
+	Node		*node;
+	BaseContinuousViewStmt *stmt;
+	BaseContinuousViewStmt *new_stmt;
 
 	TRACE_POSTGRESQL_QUERY_PARSE_START(query_string);
 
@@ -578,6 +588,67 @@ pg_parse_query(const char *query_string)
 		ResetUsage();
 
 	raw_parsetree_list = raw_parser(query_string);
+
+	/* Re-write each multi-view ACTIVATE/DEACTIVATE statement into N
+	 * single-view ACTIVATE/DEACTIVATE statements.
+	 */
+	foreach(parsetree_lc, raw_parsetree_list)
+	{
+		node = lfirst(parsetree_lc);
+
+		if (IsA(node, ActivateContinuousViewStmt) ||
+				IsA(node, DeactivateContinuousViewStmt))
+		{
+			stmt = (BaseContinuousViewStmt *) node;
+
+			if (!stmt->views)
+			{
+				/* If no views are declared, then ACTIVATE/DEACTIVATE all
+				 * registered CONTINUOUS VIEWS.
+				 */
+				Relation pipeline_queries = heap_open(PipelineQueriesRelationId, RowShareLock);
+				HeapScanDesc scan_desc = heap_beginscan(pipeline_queries, SnapshotAny, 0, NULL);
+				HeapTuple tup;
+				Form_pipeline_queries row;
+				views = NIL;
+				while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+				{
+					row = (Form_pipeline_queries) GETSTRUCT(tup);
+					views = lappend(views, (void *) makeRangeVar(NULL, row->name.data, -1));
+				}
+				heap_endscan(scan_desc);
+				heap_close(pipeline_queries, RowShareLock);
+			}
+			else
+			{
+				views = stmt->views;
+			}
+
+			foreach(view_lc, views)
+			{
+				if (IsA(node, ActivateContinuousViewStmt))
+				{
+					ActivateContinuousViewStmt *tmp_stmt = makeNode(ActivateContinuousViewStmt);
+					/* Copy over any parameters passed by the client. */
+					tmp_stmt->params = ((ActivateContinuousViewStmt *) stmt)->params;
+					new_stmt = (BaseContinuousViewStmt *) tmp_stmt;
+				}
+				else
+				{
+					new_stmt = (BaseContinuousViewStmt *) makeNode(DeactivateContinuousViewStmt);
+				}
+
+				new_stmt->views = lappend(new_stmt->views, lfirst(view_lc));
+				transformed_parsetree_list = lappend(transformed_parsetree_list,
+						new_stmt);
+			}
+		}
+		else
+		{
+			transformed_parsetree_list = lappend(transformed_parsetree_list,
+					node);
+		}
+	}
 
 	if (log_parser_stats)
 		ShowUsage("PARSER STATISTICS");

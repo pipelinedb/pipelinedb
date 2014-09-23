@@ -214,7 +214,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	VariableSetStmt		*vsetstmt;
 }
 
-%type <node>	stmt schema_stmt
+%type <node>	stmt schema_stmt activate_continuous_view_stmt_simple
 		ActivateContinuousViewStmt AlterEventTrigStmt
 		AlterDatabaseStmt AlterDatabaseSetStmt AlterDomainStmt AlterEnumStmt
 		AlterFdwStmt AlterForeignServerStmt AlterGroupStmt
@@ -348,6 +348,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 				opt_enum_val_list enum_val_list table_func_column_list
 				create_generic_options alter_generic_options
 				relation_expr_list dostmt_opt_list decode_args param_list
+				qualified_name_list_or_none
 
 %type <list>	opt_fdw_options fdw_options
 %type <defelt>	fdw_option
@@ -2640,42 +2641,60 @@ copy_generic_opt_arg_list_item:
 
 /*****************************************************************************
  *
- * ( ACTIVATE | DEACTIVATE )  [ CONTINUOUS VIEW ] continuous_view_name
+ * ( ACTIVATE | DEACTIVATE )  [ CONTINUOUS VIEW ] [continuous_view_name_list]
  *
  * PipelineDB
  *
- * Activates/deactivates a continuous view
+ * Activates/deactivates continuous view(s)
  *
  *****************************************************************************/
 
- ActivateContinuousViewStmt: ACTIVATE qualified_name
+qualified_name_list_or_none: qualified_name_list
+ 				{
+ 					$$ = (List *) $1;
+ 				}
+ 			| /* EMPTY */
+ 				{
+ 					$$ = NIL;
+ 				}
+ 		;
+
+activate_continuous_view_stmt_simple: ACTIVATE qualified_name_list_or_none
 				{
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->name = $2;
-					$$ = (Node *)s;
+					s->views = (List *) $2;
+					$$ = (Node *) s;
 				}
-			| ACTIVATE CONTINUOUS VIEW qualified_name
-			  {
+			| ACTIVATE CONTINUOUS VIEW qualified_name_list_or_none
+				{
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->name = $4;
-					$$ = (Node *)s;
-			  }
+					s->views = (List *) $4;
+					$$ = (Node *) s;
+				}
 		;
 
- DeactivateContinuousViewStmt: DEACTIVATE qualified_name
+ActivateContinuousViewStmt: activate_continuous_view_stmt_simple opt_reloptions
+				{
+					ActivateContinuousViewStmt *s = (ActivateContinuousViewStmt *) $1;
+					s->params = (List *) $2;
+					$$ = (Node *) s;
+				}
+		;
+
+DeactivateContinuousViewStmt: DEACTIVATE qualified_name_list_or_none
 				{
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->name = $2;
+					s->views = (List *) $2;
 					$$ = (Node *)s;
 				}
-			| DEACTIVATE CONTINUOUS VIEW qualified_name
-			  {
+			| DEACTIVATE CONTINUOUS VIEW qualified_name_list_or_none
+				{
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->name = $4;
+					s->views = (List *) $4;
 					$$ = (Node *)s;
-			  }
+				}
 		;
-
+	
 /*****************************************************************************
  *
  * CREATE ENCODING encoding_name

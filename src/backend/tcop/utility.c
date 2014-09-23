@@ -853,6 +853,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_DeactivateContinuousViewStmt:
+			DeactivateContinuousView((DeactivateContinuousViewStmt *) parsetree);
 			break;
 
 		default:

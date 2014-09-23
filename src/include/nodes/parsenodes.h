@@ -2807,22 +2807,30 @@ typedef struct AlterTSConfigurationStmt
 typedef struct CreateContinuousViewStmt
 {
 	NodeTag			type;
-	IntoClause 	*into;
+	IntoClause 		*into;
 	Node 			*query;
 
 } CreateContinuousViewStmt;
 
+typedef struct BaseContinuousViewStmt
+{
+	NodeTag	type;
+	List	*views;
+} BaseContinuousViewStmt;
+
+/* This extends `BaseContinuousViewStmt` so
+ * keep the order of fields such that all fields
+ * in BaseContinuousViewStmt appear in-order in the
+ * beginning.
+ */
 typedef struct ActivateContinuousViewStmt
 {
-	NodeTag		type;
-	RangeVar   *name; /* name of query to activate */
+	NodeTag	type;
+	List	*views;
+	List	*params;
 } ActivateContinuousViewStmt;
 
-typedef struct DeactivateContinuousViewStmt
-{
-	NodeTag		type;
-	RangeVar   *name; /* name of query to deactivate */
-} DeactivateContinuousViewStmt;
+typedef BaseContinuousViewStmt DeactivateContinuousViewStmt;
 
 typedef struct CreateEncodingStmt
 {

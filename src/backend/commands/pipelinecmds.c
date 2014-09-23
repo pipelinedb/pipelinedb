@@ -11,6 +11,7 @@
 
 #include "postgres.h"
 #include "access/heapam.h"
+#include "access/htup_details.h"
 #include "access/reloptions.h"
 #include "access/xact.h"
 #include "commands/pipelinecmds.h"
@@ -24,6 +25,7 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
 #include "regex/regex.h"
+#include "utils/rel.h"
 #include "utils/syscache.h"
 
 /*
@@ -124,7 +126,7 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 	/*
 	 * Now save the underlying query for ACTIVATION/DEACTIVATION
 	 */
-	AddQuery(relation->relname, querystring, PIPELINE_QUERY_STATE_INACTIVE);
+	RegisterContinuousView(relation, querystring);
 }
 
 /*
@@ -158,9 +160,7 @@ DropContinuousView(DropStmt *stmt)
    * Scan the pipeline_queries relation to find the OID of the views(s) to be
    * deleted.
    */
-  // TODO(usmanm): Do we really need an AccessExclusiveLock here? Will a 
-  // RowExclusiveLock do here?
-  pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
+  pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 
   foreach(item, stmt->objects)
   {
@@ -193,4 +193,10 @@ DropContinuousView(DropStmt *stmt)
    * Now we can clean up; but keep locks until commit.
    */
   heap_close(pipeline_queries, NoLock);
+}
+
+void
+DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
+{
+	MarkContinuousViewAsInactive((RangeVar *) linitial(stmt->views));
 }
