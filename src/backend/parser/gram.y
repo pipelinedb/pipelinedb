@@ -2662,7 +2662,7 @@ qualified_name_list_or_none: qualified_name_list
 ActivateContinuousViewStmt: ACTIVATE qualified_name_list_or_none opt_reloptions where_clause
 				{
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->targetList = (List *) $2;
+					s->views = (List *) $2;
 					s->withOptions = (List *) $3;
 					s->whereClause = (Node *) $4;
 					$$ = (Node *) s;
@@ -2670,7 +2670,7 @@ ActivateContinuousViewStmt: ACTIVATE qualified_name_list_or_none opt_reloptions 
 			| ACTIVATE CONTINUOUS VIEW qualified_name_list_or_none opt_reloptions where_clause
 				{
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->targetList = (List *) $4;
+					s->views = (List *) $4;
 					s->withOptions = (List *) $5;
 					s->whereClause = (Node *) $6;
 					$$ = (Node *) s;
@@ -2680,14 +2680,14 @@ ActivateContinuousViewStmt: ACTIVATE qualified_name_list_or_none opt_reloptions 
 DeactivateContinuousViewStmt: DEACTIVATE qualified_name_list_or_none where_clause
 				{
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->targetList = (List *) $2;
+					s->views = (List *) $2;
 					s->whereClause = (Node *) $3;
 					$$ = (Node *)s;
 				}
 			| DEACTIVATE CONTINUOUS VIEW qualified_name_list_or_none where_clause
 				{
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->targetList = (List *) $4;
+					s->views = (List *) $4;
 					s->whereClause = (Node *) $5;
 					$$ = (Node *)s;
 				}

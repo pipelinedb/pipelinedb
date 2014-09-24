@@ -2527,7 +2527,7 @@ transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewSt
 	ListCell *lc;
 	DefElem *elem;
 	int64 value;
-	RangeVar *name = linitial(stmt->targetList);
+	RangeVar *name = linitial(stmt->views);
 
 	/* The analyzer will always spit out ACTIVATE statements with a single CVs */
 	const char *query_string = GetQueryString(name, false);

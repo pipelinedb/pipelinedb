@@ -604,7 +604,7 @@ pg_parse_query(const char *query_string)
 		{
 			stmt = (BaseContinuousViewStmt *) node;
 
-			if (!stmt->targetList)
+			if (!stmt->views)
 			{
 				if (stmt->whereClause)
 				{
@@ -726,7 +726,7 @@ pg_parse_query(const char *query_string)
 			{
 				if (stmt->whereClause != NULL)
 					elog(ERROR, "can't specify target list and a WHERE selection clause");
-				views = stmt->targetList;
+				views = stmt->views;
 			}
 
 			foreach(view_lc, views)
@@ -743,7 +743,7 @@ pg_parse_query(const char *query_string)
 					new_stmt = (BaseContinuousViewStmt *) makeNode(DeactivateContinuousViewStmt);
 				}
 
-				new_stmt->targetList = lappend(new_stmt->targetList, lfirst(view_lc));
+				new_stmt->views = lappend(new_stmt->views, lfirst(view_lc));
 				transformed_parsetree_list = lappend(transformed_parsetree_list,
 						new_stmt);
 			}
