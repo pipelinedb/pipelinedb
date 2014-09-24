@@ -124,7 +124,7 @@ CreateCombinerDesc(QueryDesc *query)
 	CombinerDesc *desc = palloc(sizeof(CombinerDesc));
 
 	desc->name = palloc(strlen(NAME_PREFIX) + strlen(name) + 1);
-	desc->recvtimeoutms = query->plannedstmt->cq_batch_timeout_ms;
+	desc->recvtimeoutms = query->plannedstmt->cq_state->maxwaitms;
 
 	memcpy(desc->name, NAME_PREFIX, strlen(NAME_PREFIX));
 	memcpy(desc->name + strlen(NAME_PREFIX), name, strlen(name) + 1);
@@ -143,8 +143,8 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 	Tuplestorestate *store;
 	long count = 0;
 	long lastms;
-	int batchsize = queryDesc->plannedstmt->cq_batch_size;
-	int timeout = queryDesc->plannedstmt->cq_batch_timeout_ms;
+	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
+	int timeout = queryDesc->plannedstmt->cq_state->maxwaitms;
 	char *cvname = queryDesc->plannedstmt->cq_target->relname;
 	struct timeval lastcombine;
 	struct timeval current;
@@ -227,7 +227,7 @@ GetCombinePlan(char *cvname, Tuplestorestate *store, Query **query)
 	List		 *query_list;
 	Query 	 *q;
 
-	query_string = GetQueryString(rel, NULL, true);
+	query_string = GetQueryString(rel, true);
 	parsetree_list = pg_parse_query(query_string);
 
 	/* CVs should only have a single query */

@@ -168,15 +168,14 @@ typedef struct Query
 	 */
 	char		*cq_activate_stmt;
 
-	RangeVar *cq_target; /* output relation of this CQ, if any */
+	RangeVar	*cq_target; /* output relation of this CQ, if any */
 
-	Tuplestorestate *sourcestore;
-	TupleDesc sourcedesc;
+	Tuplestorestate	*sourcestore;
+	TupleDesc	sourcedesc;
 
-	bool 		cq_is_merge; /* is this query being run as a merge query? */
+	bool		cq_is_merge; /* is this query being run as a merge query? */
 
-	int32		cqid; /* id of this CQ, used for tagging stream events */
-
+	struct ContinuousViewState	*cq_state; /* put `struct` here to avoid circular dependency */
 } Query;
 
 

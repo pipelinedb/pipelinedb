@@ -22,6 +22,7 @@
 
 #include "postgres.h"
 
+#include "catalog/pipeline_queries_fn.h"
 #include "miscadmin.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
@@ -83,7 +84,13 @@ _copyPlannedStmt(const PlannedStmt *from)
 	COPY_SCALAR_FIELD(hasModifyingCTE);
 	COPY_SCALAR_FIELD(canSetTag);
 	COPY_SCALAR_FIELD(transientPlan);
-	COPY_SCALAR_FIELD(cq_batch_size);
+	/* cq_state will be null in case the PannedStmt is not for
+	 * an ACTIVATE query.
+	 */
+	if (from->cq_state)
+		COPY_POINTER_FIELD(cq_state, sizeof(ContinuousViewState));
+	else
+		COPY_SCALAR_FIELD(cq_state);
 	COPY_NODE_FIELD(planTree);
 	COPY_NODE_FIELD(rtable);
 	COPY_NODE_FIELD(resultRelations);
