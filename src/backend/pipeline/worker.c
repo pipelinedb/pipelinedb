@@ -104,7 +104,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 		MemoryContextReset(ContinuousQueryContext);
 
-		if (TimestampDifferenceExceeds(lastCheckTime, GetCurrentTimestamp(), 2 * 1000))
+		if (TimestampDifferenceExceeds(lastCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
 		{
 			/* Check is we have been deactivated, and break out
 			 * if we have. */

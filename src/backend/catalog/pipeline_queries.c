@@ -417,35 +417,3 @@ GetQueryString(const char *cvname, bool select_only)
 
 	return result;
 }
-
-void
-ActivateContinuousView(ActivateContinuousViewStmt *stmt)
-{
-	RangeVar *rv = linitial(stmt->views);
-	ListCell *lc;
-	ContinuousViewState state;
-
-	GetContinousViewState(rv, &state);
-
-	/*
-	 * Update any tuning parameters passed in with the ACTIVATE
-	 * command.
-	 */
-	foreach(lc, stmt->params)
-	{
-		DefElem *elem = (DefElem *) lfirst(lc);
-		int64 value = intVal(elem->arg);
-
-		if (pg_strcasecmp(elem->defname, CQ_BATCH_SIZE_KEY) == 0)
-			state.batchsize = value;
-		else if (pg_strcasecmp(elem->defname, CQ_WAIT_MS_KEY) == 0)
-			state.maxwaitms = (int32) value;
-		else if (pg_strcasecmp(elem->defname, CQ_SLEEP_MS_KEY) == 0)
-			state.emptysleepms = (int32) value;
-		else if (pg_strcasecmp(elem->defname, CQ_PARALLELISM_KEY) == 0)
-			state.parallelism = (int16) value;
-	}
-
-	RunContinuousQueryProcess(CQCombiner, rv->relname, state);
-	RunContinuousQueryProcess(CQWorker, rv->relname, state);
-}

@@ -17,6 +17,7 @@
 
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "executor/tupletableReceiver.h"
 #include "executor/tstoreReceiver.h"
@@ -221,7 +222,7 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
   		lastms = (lastcombine.tv_sec * 1000) + (lastcombine.tv_usec / 1000.0);
   	}
 
-		if (TimestampDifferenceExceeds(lastCheckTime, GetCurrentTimestamp(), 2 * 1000))
+		if (TimestampDifferenceExceeds(lastCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
 		{
 			/* Check is we have been deactivated, and break out
 			 * if we have. */
