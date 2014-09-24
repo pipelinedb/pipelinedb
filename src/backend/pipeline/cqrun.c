@@ -105,8 +105,6 @@ run_cq(Datum d, char *additional, Size additionalsize)
 
 	memcpy(&args, additional, additionalsize);
 
-//	elog(LOG, "%d", MyProcPid);
-//	pg_usleep(6*1000*1000);
 	/*
 	 * 0. Give this process access to the database
 	 */

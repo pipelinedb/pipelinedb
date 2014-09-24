@@ -9,6 +9,7 @@
  *-------------------------------------------------------------------------
  */
 #include <sys/socket.h>
+#include <time.h>
 #include <sys/un.h>
 #include <sys/unistd.h>
 
@@ -33,6 +34,7 @@
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
+#include "utils/timestamp.h"
 
 
 #define NAME_PREFIX "combiner_"
@@ -103,6 +105,10 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 			return;
 		elog(ERROR, "combiner failed to receive tuple length: %m");
 	}
+	else if (read == 0)
+	{
+		return;
+	}
 
 	len = ntohl(len);
 
@@ -138,6 +144,7 @@ CreateCombinerDesc(QueryDesc *query)
 void
 ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
 {
+	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	ResourceOwner save = CurrentResourceOwner;
 	TupleTableSlot *slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
 	Tuplestorestate *store;
@@ -145,11 +152,13 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 	long lastms;
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeout = queryDesc->plannedstmt->cq_state->maxwaitms;
-	char *cvname = queryDesc->plannedstmt->cq_target->relname;
+	char *cvname = rv->relname;
 	struct timeval lastcombine;
 	struct timeval current;
 	Query *query;
 	PlannedStmt *combineplan;
+	bool hasBeenDeactivated = false;
+	clock_t lastCheckTime = GetCurrentTimestamp();
 
 	MemoryContext combinectx = AllocSetContextCreate(TopMemoryContext,
 																	"CombineContext",
@@ -157,12 +166,12 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 																	ALLOCSET_DEFAULT_INITSIZE,
 																	ALLOCSET_DEFAULT_MAXSIZE);
 
+	elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
   accept_worker(combiner);
-  elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
 
   store = tuplestore_begin_heap(true, true, work_mem);
   combineplan = GetCombinePlan(cvname, store, &query);
-  combineplan->cq_target = queryDesc->plannedstmt->cq_target;
+  combineplan->cq_target = rv;
 
   gettimeofday(&lastcombine, NULL);
   lastms = (lastcombine.tv_sec * 1000) + (lastcombine.tv_usec / 1000.0);
@@ -211,6 +220,22 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
   		gettimeofday(&lastcombine, NULL);
   		lastms = (lastcombine.tv_sec * 1000) + (lastcombine.tv_usec / 1000.0);
   	}
+
+		if (TimestampDifferenceExceeds(lastCheckTime, GetCurrentTimestamp(), 2 * 1000))
+		{
+			/* Check is we have been deactivated, and break out
+			 * if we have. */
+			StartTransactionCommand();
+
+			hasBeenDeactivated = !IsContinuousViewActive(rv);
+
+			CommitTransactionCommand();
+
+			if (hasBeenDeactivated)
+				break;
+
+			lastCheckTime = GetCurrentTimestamp();
+		}
   }
 
   CurrentResourceOwner = save;

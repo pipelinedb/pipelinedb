@@ -8,6 +8,7 @@
  *	  src/backend/pipeline/combinerReceiver.c
  *
  */
+#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
@@ -75,6 +76,9 @@ combiner_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 static void
 combiner_shutdown(DestReceiver *self)
 {
+	CombinerState *c = (CombinerState *) self;
+
+	close(c->desc->sock);
 	pfree(self);
 }
 

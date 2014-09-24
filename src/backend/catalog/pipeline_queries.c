@@ -358,8 +358,7 @@ IsContinuousViewActive(RangeVar *name)
 	if (isActive)
 	{
 		row = (Form_pipeline_queries) GETSTRUCT(tuple);
-		isActive = (row->state ==
-				PIPELINE_QUERY_STATE_ACTIVE);
+		isActive = (row->state == PIPELINE_QUERY_STATE_ACTIVE);
 	}
 	ReleaseSysCache(tuple);
 

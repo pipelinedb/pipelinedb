@@ -256,9 +256,6 @@ ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
 			elog(ERROR, "unrecognized CQ process type: %d", plan->cq_state->ptype);
 	}
 
-	/* Finish the transaction started in PostgresMain() */
-	CommitTransactionCommand();
-
 	/* Start a new transaction before committing in PostgresMain */
 	StartTransactionCommand();
 }
