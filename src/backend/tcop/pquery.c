@@ -1444,7 +1444,7 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	/* create a tuplestore if that's where we're sending tuples */
 	if (dest->mydest == DestTuplestore)
 	{
-		store = tuplestore_begin_heap(true, true, queryDesc->plannedstmt->cq_batch_size);
+		store = tuplestore_begin_heap(true, true, queryDesc->plannedstmt->cq_state->batchsize);
 		SetTuplestoreDestReceiverParams(dest, store, PortalGetHeapMemory(portal), true);
 	}
 

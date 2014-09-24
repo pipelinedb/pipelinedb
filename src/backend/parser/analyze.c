@@ -27,6 +27,7 @@
 #include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -2523,9 +2524,13 @@ static Query *
 transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt)
 {
 	/* TODO: if it's already running, throw an error */
-	int cqid;
+	ListCell *lc;
+	DefElem *elem;
+	int64 value;
+	RangeVar *name = linitial(stmt->views);
+
 	/* The analyzer will always spit out ACTIVATE statements with a single CVs */
-	const char *query_string = GetQueryString(linitial(stmt->views), &cqid, false);
+	const char *query_string = GetQueryString(name, false);
 
 	List *parsetree_list = pg_parse_query(query_string);
 
@@ -2538,7 +2543,36 @@ transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewSt
 	q->is_continuous = true;
 	q->cq_activate_stmt = pstrdup(pstate->p_sourcetext);
 	q->cq_target = lfirst(stmt->views->head);
-	q->cqid = cqid;
+
+	/* Read the CV state from the `pipeline_queries` catalog table. */
+	q->cq_state = palloc(sizeof(ContinuousViewState));
+	GetContinousViewState(name, q->cq_state);
+
+	/* Update any tuning parameters passed in with the ACTIVATE
+	 * command.
+	 */
+	foreach(lc, stmt->params)
+	{
+		elem = (DefElem *) lfirst(lc);
+		value = intVal(elem->arg);
+
+		if (pg_strcasecmp(elem->defname, CQ_BATCH_SIZE_KEY) == 0)
+		{
+			q->cq_state->batchsize = value;
+		}
+		else if (pg_strcasecmp(elem->defname, CQ_WAIT_MS_KEY) == 0)
+		{
+			q->cq_state->maxwaitms = (int32) value;
+		}
+		else if (pg_strcasecmp(elem->defname, CQ_SLEEP_MS_KEY) == 0)
+		{
+			q->cq_state->emptysleepms = (int32) value;
+		}
+		else if (pg_strcasecmp(elem->defname, CQ_PARALLELISM_KEY) == 0)
+		{
+			q->cq_state->parallelism = (int16) value;
+		}
+	}
 
 	return q;
 }

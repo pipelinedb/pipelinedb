@@ -14,22 +14,24 @@
 #include "nodes/parsenodes.h"
 #include "nodes/primnodes.h"
 
-typedef struct ContinuousViewParams
+typedef struct ContinuousViewState
 {
-	int8 		batchsize;
-	int32 		maxwaitms;
-	int32		emptysleepms;
-	int16		parallelism;
+	int32	id;
+	char	state;
+	int64 	batchsize;
+	int32 	maxwaitms;
+	int32	emptysleepms;
+	int16	parallelism;
 
-} ContinuousViewParams;
+} ContinuousViewState;
 
 void RegisterContinuousView(RangeVar *name, const char *query_string);
 void DeregisterContinuousView(RangeVar *name);
 bool MarkContinuousViewAsActive(RangeVar *name);
 bool MarkContinuousViewAsInactive(RangeVar *name);
-void SetContinousViewParams(RangeVar *name, List *parameters);
-void GetContinousViewParams(RangeVar *name, ContinuousViewParams *cv_params);
+void SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state);
+void GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state);
 bool IsContinuousViewActive(RangeVar *name);
-char *GetQueryString(RangeVar *name, int *cqid, bool selectonly);
+char *GetQueryString(RangeVar *name, bool selectonly);
 
 #endif /* PIPELINE_QUERIES_H */

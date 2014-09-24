@@ -46,6 +46,7 @@
 #include "access/xact.h"
 #include "catalog/namespace.h"
 #include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "commands/matview.h"
 #include "commands/trigger.h"
 #include "executor/execdebug.h"
@@ -230,12 +231,13 @@ ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
 {
 	pid_t pid;
 	CombinerDesc *combiner = CreateCombinerDesc(queryDesc);
-	bool wasactivated;
+	bool wasActivated;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
 
-	wasactivated = MarkContinuousViewAsActive(queryDesc->plannedstmt->cq_target);
+	SetContinousViewState(queryDesc->plannedstmt->cq_target, queryDesc->plannedstmt->cq_state);
+	wasActivated = MarkContinuousViewAsActive(queryDesc->plannedstmt->cq_target);
 
 	/* Finish the transaction started in PostgresMain() */
 	CommitTransactionCommand();
@@ -904,7 +906,10 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	estate->es_epqTupleSet = NULL;
 	estate->es_epqScanDone = NULL;
 
-	estate->cq_batch_size = plannedstmt->cq_batch_size;
+	if (plannedstmt->cq_state)
+		estate->cq_batch_size = plannedstmt->cq_state->batchsize;
+	else
+		estate->cq_batch_size = 0;
 
 	/*
 	 * Initialize private state information for each SubPlan.  We must do this

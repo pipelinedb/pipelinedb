@@ -141,8 +141,7 @@ planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 
 	if (result->is_continuous)
 	{
-		result->cq_batch_size = CQ_DEFAULT_BATCH_SIZE;
-		result->cq_batch_timeout_ms = CQ_DEFAULT_WAIT_MS;
+		result->cq_state = parse->cq_state;
 		result->cq_target = parse->cq_target;
 	}
 

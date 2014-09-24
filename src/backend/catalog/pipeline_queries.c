@@ -175,10 +175,6 @@ MarkContinuousViewAsActive(RangeVar *name)
 
 	if (row->state != PIPELINE_QUERY_STATE_ACTIVE)
 	{
-		ListCell *lc;
-		DefElem *elem;
-		int8 value;
-
 		MemSet(values, 0, sizeof(values));
 		MemSet(nulls, false, sizeof(nulls));
 		MemSet(replaces, false, sizeof(replaces));
@@ -256,12 +252,12 @@ MarkContinuousViewAsInactive(RangeVar *name)
  * Fetch the parameters for the CV from the `pipeline_queries` catalog table.
  */
 void
-GetContinousViewParams(RangeVar *name, ContinuousViewParams *cv_params)
+GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 {
 	HeapTuple tuple;
 	Form_pipeline_queries row;
 
-	if (!cv_params)
+	if (!cv_state)
 		return;
 
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
@@ -274,20 +270,22 @@ GetContinousViewParams(RangeVar *name, ContinuousViewParams *cv_params)
 
 	ReleaseSysCache(tuple);
 
-	cv_params->batchsize = row->batchsize;
-	cv_params->maxwaitms = row->maxwaitms;
-	cv_params->emptysleepms = row->emptysleepms;
-	cv_params->parallelism = row->parallelism;
+	cv_state->id = row->id;
+	cv_state->state = row->state;
+	cv_state->batchsize = row->batchsize;
+	cv_state->maxwaitms = row->maxwaitms;
+	cv_state->emptysleepms = row->emptysleepms;
+	cv_state->parallelism = row->parallelism;
 }
 
 /*
  * SetContinuousViewParams
  *
  * Set the tuning parameters for the CV in the `pipeline_queries`
- * catalog table.
+ * catalog table by reading them from cv_state.
  */
 void
-SetContinousViewParams(RangeVar *name, List *parameters)
+SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 {
 	Relation pipeline_queries;
 	HeapTuple tuple;
@@ -295,9 +293,6 @@ SetContinousViewParams(RangeVar *name, List *parameters)
 	bool nulls[Natts_pipeline_queries];
 	bool replaces[Natts_pipeline_queries];
 	Datum values[Natts_pipeline_queries];
-	ListCell *lc;
-	DefElem *elem;
-	int8 value;
 
 	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
@@ -310,32 +305,17 @@ SetContinousViewParams(RangeVar *name, List *parameters)
 	MemSet(nulls, false, sizeof(nulls));
 	MemSet(replaces, false, sizeof(replaces));
 
-	foreach(lc, parameters)
-	{
-		elem = (DefElem *) lfirst(lc);
-		value = intVal(elem->arg);
+	replaces[Anum_pipeline_queries_batchsize - 1] = true;
+	values[Anum_pipeline_queries_batchsize - 1] = Int64GetDatum(cv_state->batchsize);
 
-		if (pg_strcasecmp(elem->defname, CQ_BATCH_SIZE_KEY) == 0)
-		{
-			replaces[Anum_pipeline_queries_batchsize - 1] = true;
-			values[Anum_pipeline_queries_batchsize - 1] = Int64GetDatum(value);
-		}
-		else if (pg_strcasecmp(elem->defname, CQ_WAIT_MS_KEY) == 0)
-		{
-			replaces[Anum_pipeline_queries_maxwaitms - 1] = true;
-			values[Anum_pipeline_queries_maxwaitms - 1] = Int32GetDatum(value);
-		}
-		else if (pg_strcasecmp(elem->defname, CQ_SLEEP_MS_KEY) == 0)
-		{
-			replaces[Anum_pipeline_queries_emptysleepms - 1] = true;
-			values[Anum_pipeline_queries_emptysleepms - 1] = Int32GetDatum(value);
-		}
-		else if (pg_strcasecmp(elem->defname, CQ_PARALLELISM_KEY) == 0)
-		{
-			replaces[Anum_pipeline_queries_parallelism - 1] = true;
-			values[Anum_pipeline_queries_parallelism - 1] = Int16GetDatum(value);
-		}
-	}
+	replaces[Anum_pipeline_queries_maxwaitms - 1] = true;
+	values[Anum_pipeline_queries_maxwaitms - 1] = Int32GetDatum(cv_state->maxwaitms);
+
+	replaces[Anum_pipeline_queries_emptysleepms - 1] = true;
+	values[Anum_pipeline_queries_emptysleepms - 1] = Int32GetDatum(cv_state->emptysleepms);
+
+	replaces[Anum_pipeline_queries_parallelism - 1] = true;
+	values[Anum_pipeline_queries_parallelism - 1] = Int16GetDatum(cv_state->parallelism);
 
 	newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att,
 			values, nulls, replaces);
@@ -371,10 +351,9 @@ IsContinuousViewActive(RangeVar *name)
  * Retrieves a REGISTERed query from the pipeline_queries catalog table
  */
 char *
-GetQueryString(RangeVar *rvname, int *cqid, bool select_only)
+GetQueryString(RangeVar *rvname, bool select_only)
 {
 	HeapTuple tuple;
-	Form_pipeline_queries row;
 	NameData name;
 	Datum tmp;
 	bool isnull;
@@ -386,12 +365,8 @@ GetQueryString(RangeVar *rvname, int *cqid, bool select_only)
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "continuous view \"%s\" does not exist", rvname->relname);
 
-	row = (Form_pipeline_queries) GETSTRUCT(tuple);
 	tmp = SysCacheGetAttr(PIPELINEQUERIESNAME, tuple, Anum_pipeline_queries_query, &isnull);
 	result = TextDatumGetCString(tmp);
-
-	if (cqid != NULL)
-		*cqid = DatumGetInt32(row->id);
 
 	ReleaseSysCache(tuple);
 

@@ -43,8 +43,8 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	MemoryContext oldcontext;
 	ResourceOwner save = CurrentResourceOwner;
 	char *cvname = queryDesc->plannedstmt->cq_target->relname;
-	int batchsize = queryDesc->plannedstmt->cq_batch_size;
-	int timeoutms = queryDesc->plannedstmt->cq_batch_timeout_ms;
+	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
+	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
 	Relation pipeline_queries;
 	HeapTuple tuple;
 	HeapTuple newtuple;

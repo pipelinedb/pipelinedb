@@ -22,6 +22,7 @@
 
 #include "postgres.h"
 
+#include "catalog/pipeline_queries_fn.h"
 #include "miscadmin.h"
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
@@ -83,7 +84,7 @@ _copyPlannedStmt(const PlannedStmt *from)
 	COPY_SCALAR_FIELD(hasModifyingCTE);
 	COPY_SCALAR_FIELD(canSetTag);
 	COPY_SCALAR_FIELD(transientPlan);
-	COPY_SCALAR_FIELD(cq_batch_size);
+	COPY_POINTER_FIELD(cq_state, sizeof(ContinuousViewState));
 	COPY_NODE_FIELD(planTree);
 	COPY_NODE_FIELD(rtable);
 	COPY_NODE_FIELD(resultRelations);

@@ -1196,7 +1196,7 @@ create_streamscan_plan(PlannerInfo *root, Path *best_path,
 
 	scan_plan = make_streamscan(tlist,
 							 scan_clauses,
-							 root->parse->cqid);
+							 root->parse->cq_state->id);
 	scan_plan->desc = rte->cvdesc;
 
 	copy_path_costsize(&scan_plan->scan.plan, best_path);
