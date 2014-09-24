@@ -448,7 +448,4 @@ ActivateContinuousView(ActivateContinuousViewStmt *stmt)
 
 	RunContinuousQueryProcess(CQCombiner, rv->relname, state);
 	RunContinuousQueryProcess(CQWorker, rv->relname, state);
-
-	// block until the query is set to active
-	// fail with error if it doesnt activate after a short timeout period
 }

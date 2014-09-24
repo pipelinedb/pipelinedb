@@ -156,7 +156,7 @@ run_cq(Datum d, char *additional, Size additionalsize)
 }
 
 
-int
+bool
 RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousViewState state)
 {
 	BackgroundWorker worker;
@@ -178,10 +178,5 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 
 	memcpy(worker.bgw_additional_arg, &args, sizeof(RunCQArgs));
 
-	RegisterDynamicBackgroundWorker(&worker, NULL);
-
-	// wait to start
-	// pg_usleep(10*1000)
-
-	return 0;
+	return RegisterDynamicBackgroundWorker(&worker, NULL);
 }

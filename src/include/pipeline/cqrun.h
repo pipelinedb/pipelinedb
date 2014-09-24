@@ -18,6 +18,6 @@ typedef enum
 	CQWorker
 } CQProcessType;
 
-int RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, struct ContinuousViewState state);
+bool RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, struct ContinuousViewState state);
 
 #endif
