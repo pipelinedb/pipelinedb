@@ -2815,6 +2815,7 @@ typedef struct BaseContinuousViewStmt
 {
 	NodeTag	type;
 	List	*views;
+	Node	*whereClause;
 } BaseContinuousViewStmt;
 
 /* This extends `BaseContinuousViewStmt` so
@@ -2826,7 +2827,8 @@ typedef struct ActivateContinuousViewStmt
 {
 	NodeTag	type;
 	List	*views;
-	List	*params;
+	Node	*whereClause;
+	List	*withOptions;
 } ActivateContinuousViewStmt;
 
 typedef BaseContinuousViewStmt DeactivateContinuousViewStmt;
