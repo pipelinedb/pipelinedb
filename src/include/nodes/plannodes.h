@@ -18,6 +18,7 @@
 #include "catalog/pipeline_queries_fn.h"
 #include "nodes/bitmapset.h"
 #include "nodes/primnodes.h"
+#include "pipeline/cqrun.h"
 #include "utils/tuplestore.h"
 
 
@@ -78,6 +79,7 @@ typedef struct PlannedStmt
 	ContinuousViewState	*cq_state;
 
 	RangeVar 	*cq_target; /* target output table of this CQ, if any */
+
 } PlannedStmt;
 
 /* macro for fetching the Plan associated with a SubPlan node */

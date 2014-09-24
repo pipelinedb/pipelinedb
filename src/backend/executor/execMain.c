@@ -116,6 +116,8 @@ static void EvalPlanQualStart(EPQState *epqstate, EState *parentestate,
  *
  * ----------------------------------------------------------------
  */
+QueryDesc *q;
+
 void
 ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
@@ -229,9 +231,9 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
 void
 ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
 {
-	pid_t pid;
 	CombinerDesc *combiner = CreateCombinerDesc(queryDesc);
 	bool wasActivated;
+	PlannedStmt *plan = queryDesc->plannedstmt;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
@@ -242,32 +244,20 @@ ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
 	/* Finish the transaction started in PostgresMain() */
 	CommitTransactionCommand();
 
-	/* Fork process and start running the coordinator's CQ work asynchronously. */
-	pid = fork_process();
-	if (ForkFailed(pid))
+	switch(plan->cq_state->ptype)
 	{
-		elog(ERROR, "could not spawn combiner for \"%s\"",
-						queryDesc->plannedstmt->cq_target->relname);
-	}
-	else if (IsChildProcess(pid))
-	{
-		MyProcPid = getpid();
-		ContinuousQueryCombinerRun(combiner, queryDesc, owner);
-	}
-	else
-	{
-		pid = fork_process();
-		if (ForkFailed(pid))
-		{
-			elog(ERROR, "could not spawn worker for \"%s\"",
-					queryDesc->plannedstmt->cq_target->relname);
-		}
-		else if (IsChildProcess(pid))
-		{
-			MyProcPid = getpid();
+		case CQCombiner:
+			ContinuousQueryCombinerRun(combiner, queryDesc, owner);
+			break;
+		case CQWorker:
 			ContinuousQueryWorkerRun(portal, combiner, queryDesc, owner);
-		}
+			break;
+		default:
+			elog(ERROR, "unrecognized CQ process type: %d", plan->cq_state->ptype);
 	}
+
+	/* Finish the transaction started in PostgresMain() */
+	CommitTransactionCommand();
 
 	/* Start a new transaction before committing in PostgresMain */
 	StartTransactionCommand();
@@ -947,6 +937,7 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	 * tree.  This opens files, allocates storage and leaves us ready to start
 	 * processing tuples.
 	 */
+	q = queryDesc;
 	planstate = ExecInitNode(plan, estate, eflags);
 
 	/*

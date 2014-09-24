@@ -2511,6 +2511,10 @@ _copyQuery(const Query *from)
 	COPY_NODE_FIELD(rowMarks);
 	COPY_NODE_FIELD(setOperations);
 	COPY_NODE_FIELD(constraintDeps);
+	if (from->cq_state)
+		COPY_POINTER_FIELD(cq_state, sizeof(ContinuousViewState));
+	else
+		COPY_SCALAR_FIELD(cq_state);
 	COPY_SCALAR_FIELD(is_continuous);
 	COPY_SCALAR_FIELD(cq_activate_stmt);
 	COPY_SCALAR_FIELD(cq_is_merge);

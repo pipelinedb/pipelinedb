@@ -91,6 +91,7 @@
 #include "access/xlog.h"
 #include "bootstrap/bootstrap.h"
 #include "catalog/pg_control.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "lib/ilist.h"
 #include "libpq/auth.h"
 #include "libpq/ip.h"
@@ -2849,6 +2850,7 @@ CleanupBackgroundWorker(int pid,
 		{
 			/* Record timestamp, so we know when to restart the worker. */
 			rw->rw_crashed_at = GetCurrentTimestamp();
+			rw->rw_terminate = rw->rw_worker.bgw_let_crash;
 		}
 		else
 		{

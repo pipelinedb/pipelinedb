@@ -89,6 +89,14 @@ typedef struct BackgroundWorker
 	char		bgw_additional_arg[BGW_ADDITIONAL_LEN];
 	Size		bgw_additional_size;
 	pid_t		bgw_notify_pid; /* SIGUSR1 this backend on start/stop */
+
+	/*
+	 * Don't try to restart this worker if it crashes
+	 *
+	 * PipelineDB TODO: we should support custom crash handlers.
+	 * A noop can be passed if want to just let the process crash.
+	 */
+	bool		bgw_let_crash;
 } BackgroundWorker;
 
 typedef enum BgwHandleStatus

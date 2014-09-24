@@ -75,7 +75,7 @@ static Query *transformCreateTableAsStmt(ParseState *pstate,
 						   CreateTableAsStmt *stmt);
 static void transformLockingClause(ParseState *pstate, Query *qry,
 					   LockingClause *lc, bool pushedDown);
-static Query *transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt);
+//static Query *transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt);
 
 
 /*
@@ -275,11 +275,11 @@ transformStmt(ParseState *pstate, Node *parseTree)
 			result = transformCreateTableAsStmt(pstate,
 											(CreateTableAsStmt *) parseTree);
 			break;
-
-		case T_ActivateContinuousViewStmt:
-			result = transformActivateContinuousViewStmt(pstate,
-											(ActivateContinuousViewStmt *) parseTree);
-			break;
+//
+//		case T_ActivateContinuousViewStmt:
+//			result = transformActivateContinuousViewStmt(pstate,
+//											(ActivateContinuousViewStmt *) parseTree);
+//			break;
 
 		default:
 
@@ -2514,67 +2514,6 @@ transformLockingClause(ParseState *pstate, Query *qry, LockingClause *lc,
 						 parser_errposition(pstate, thisrel->location)));
 		}
 	}
-}
-
-/*
- * Retrieve the registered continuous query, parse and analyze it,
- * and mark it as as continuous so that it runs in the continuous executor
- */
-static Query *
-transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt)
-{
-	/* TODO: if it's already running, throw an error */
-	ListCell *lc;
-	DefElem *elem;
-	int64 value;
-	RangeVar *name = linitial(stmt->views);
-
-	/* The analyzer will always spit out ACTIVATE statements with a single CVs */
-	const char *query_string = GetQueryString(name, false);
-
-	List *parsetree_list = pg_parse_query(query_string);
-
-	/* TODO: enforce single queries here */
-	Node *parsetree = (Node *) linitial(parsetree_list);
-	CreateContinuousViewStmt *cv = (CreateContinuousViewStmt *) parsetree;
-	SelectStmt *select = (SelectStmt *) cv->query;
-
-	Query *q = parse_analyze((Node *) select, query_string, NULL, 0);
-	q->is_continuous = true;
-	q->cq_activate_stmt = pstrdup(pstate->p_sourcetext);
-	q->cq_target = lfirst(stmt->views->head);
-
-	/* Read the CV state from the `pipeline_queries` catalog table. */
-	q->cq_state = palloc(sizeof(ContinuousViewState));
-	GetContinousViewState(name, q->cq_state);
-
-	/* Update any tuning parameters passed in with the ACTIVATE
-	 * command.
-	 */
-	foreach(lc, stmt->params)
-	{
-		elem = (DefElem *) lfirst(lc);
-		value = intVal(elem->arg);
-
-		if (pg_strcasecmp(elem->defname, CQ_BATCH_SIZE_KEY) == 0)
-		{
-			q->cq_state->batchsize = value;
-		}
-		else if (pg_strcasecmp(elem->defname, CQ_WAIT_MS_KEY) == 0)
-		{
-			q->cq_state->maxwaitms = (int32) value;
-		}
-		else if (pg_strcasecmp(elem->defname, CQ_SLEEP_MS_KEY) == 0)
-		{
-			q->cq_state->emptysleepms = (int32) value;
-		}
-		else if (pg_strcasecmp(elem->defname, CQ_PARALLELISM_KEY) == 0)
-		{
-			q->cq_state->parallelism = (int16) value;
-		}
-	}
-
-	return q;
 }
 
 /*

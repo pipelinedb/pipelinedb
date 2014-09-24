@@ -1074,6 +1074,20 @@ exec_simple_query(const char *query_string)
 		CHECK_FOR_INTERRUPTS();
 
 		/*
+		 * For continuous queries, analyzing and planning is done
+		 * in the worker processes that ultimately get forked after
+		 * we activate, so short circuit the analyzer/planner
+		 */
+		if (IsA(parsetree, ActivateContinuousViewStmt))
+		{
+			ActivateContinuousView((ActivateContinuousViewStmt *) parsetree);
+			EndCommand("ACTIVATE", dest);
+			finish_xact_command();
+
+			continue;
+		}
+
+		/*
 		 * Set up a snapshot if parse analysis/planning will need one.
 		 */
 		if (analyze_requires_snapshot(parsetree))
