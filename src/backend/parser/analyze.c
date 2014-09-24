@@ -75,8 +75,6 @@ static Query *transformCreateTableAsStmt(ParseState *pstate,
 						   CreateTableAsStmt *stmt);
 static void transformLockingClause(ParseState *pstate, Query *qry,
 					   LockingClause *lc, bool pushedDown);
-//static Query *transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt);
-
 
 /*
  * parse_analyze
@@ -275,11 +273,6 @@ transformStmt(ParseState *pstate, Node *parseTree)
 			result = transformCreateTableAsStmt(pstate,
 											(CreateTableAsStmt *) parseTree);
 			break;
-//
-//		case T_ActivateContinuousViewStmt:
-//			result = transformActivateContinuousViewStmt(pstate,
-//											(ActivateContinuousViewStmt *) parseTree);
-//			break;
 
 		default:
 
