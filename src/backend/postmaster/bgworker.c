@@ -292,6 +292,13 @@ BackgroundWorkerStateChange(void)
 		rw->rw_worker.bgw_restart_time = slot->worker.bgw_restart_time;
 		rw->rw_worker.bgw_main = slot->worker.bgw_main;
 		rw->rw_worker.bgw_main_arg = slot->worker.bgw_main_arg;
+		rw->rw_worker.bgw_additional_size = slot->worker.bgw_additional_size;
+
+		if (slot->worker.bgw_additional_size)
+		{
+			memcpy(rw->rw_worker.bgw_additional_arg,
+					slot->worker.bgw_additional_arg, slot->worker.bgw_additional_size);
+		}
 
 		/*
 		 * Copy the PID to be notified about state changes, but only if the
@@ -709,7 +716,8 @@ StartBackgroundWorker(void)
 	/*
 	 * Now invoke the user-defined worker code
 	 */
-	entrypt(worker->bgw_main_arg);
+	entrypt(worker->bgw_main_arg,
+			worker->bgw_additional_arg, worker->bgw_additional_size);
 
 	/* ... and if it returns, we're done */
 	proc_exit(0);
