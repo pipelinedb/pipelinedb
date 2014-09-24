@@ -47,6 +47,8 @@
 #include "catalog/pipeline_queries_fn.h"
 #include "commands/async.h"
 #include "commands/prepare.h"
+#include "executor/tstoreReceiver.h"
+#include "executor/tupletableReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "libpq/pqsignal.h"
@@ -79,6 +81,7 @@
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "tcop/utility.h"
+#include "utils/builtins.h"
 #include "utils/hsearch.h"
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
@@ -575,7 +578,7 @@ pg_parse_query(const char *query_string)
 {
 	List		*raw_parsetree_list;
 	List		*transformed_parsetree_list = NIL;
-	List		*views;
+	List		*views = NIL;
 	ListCell	*parsetree_lc;
 	ListCell	*view_lc;
 	Node		*node;
@@ -601,27 +604,129 @@ pg_parse_query(const char *query_string)
 		{
 			stmt = (BaseContinuousViewStmt *) node;
 
-			if (!stmt->views)
+			if (!stmt->targetList)
 			{
-				/* If no views are declared, then ACTIVATE/DEACTIVATE all
-				 * registered CONTINUOUS VIEWS.
-				 */
-				Relation pipeline_queries = heap_open(PipelineQueriesRelationId, RowShareLock);
-				HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_queries, 0, NULL);
-				HeapTuple tup;
-				Form_pipeline_queries row;
-				views = NIL;
-				while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+				if (stmt->whereClause)
 				{
-					row = (Form_pipeline_queries) GETSTRUCT(tup);
-					views = lappend(views, (void *) makeRangeVar(NULL, NameStr(row->name), -1));
+					CommandDest 	dest = DestTuplestore;
+					Tuplestorestate *store = NULL;
+					Node			*parsetree;
+					List			*querytree_list;
+					List			*plantree_list;
+					Portal			portal;
+					DestReceiver 	*receiver;
+					ResTarget		*resTarget;
+					ColumnRef		*colRef;
+					SelectStmt 		*selectStmt = makeNode(SelectStmt);
+					TupleTableSlot	*slot;
+					QueryDesc		*queryDesc;
+
+					/*
+					 * Create SelectStmt by hand to fetch the matching
+					 * CV names from the `pipeline_queries` catalog table.
+					 */
+					resTarget = makeNode(ResTarget);
+					colRef = makeNode(ColumnRef);
+					colRef->fields = lappend(colRef->fields, makeString("name"));
+					resTarget->val = (Node *) colRef;
+					selectStmt->targetList = lappend(selectStmt->targetList, (void *) resTarget);
+					selectStmt->fromClause = lappend(selectStmt->fromClause, (void *) makeRangeVar(NULL, "pipeline_queries", -1));;
+					selectStmt->whereClause = stmt->whereClause;
+					parsetree = (Node *) selectStmt;
+
+					/* Make sure we are in a transaction command */
+					start_xact_command();
+					PushActiveSnapshot(GetTransactionSnapshot());
+
+					querytree_list = pg_analyze_and_rewrite(parsetree, NULL,
+							NULL, 0);
+
+					plantree_list = pg_plan_queries(querytree_list, 0, NULL);
+
+					/*
+					 * Create unnamed portal to run the query or queries in. If there
+					 * already is one, silently drop it.
+					 */
+					portal = CreatePortal("", true, true);
+					/* Don't display the portal in pg_cursors */
+					portal->visible = false;
+
+					/* create a tuplestore */
+					store = tuplestore_begin_heap(true, true, work_mem);
+					receiver = CreateDestReceiver(dest);
+					SetTuplestoreDestReceiverParams(receiver, store, PortalGetHeapMemory(portal), true);
+
+					/*
+					 * We don't have to copy anything into the portal, because everything
+					 * we are passing here is in MessageContext, which will outlive the
+					 * portal anyway.
+					 */
+					PortalDefineQuery(portal,
+							NULL,
+							query_string,
+							NULL,
+							plantree_list,
+							NULL);
+
+					/*
+					 * Start the portal.  No parameters here.
+					 */
+					PortalStart(portal, NULL, 0, GetActiveSnapshot());
+
+					/*
+					 * Run the portal to completion, and then drop it (and the receiver).
+					 */
+					(void) PortalRun(portal,
+							FETCH_ALL,
+							true,
+							receiver,
+							receiver,
+							NULL);
+
+					queryDesc = PortalGetQueryDesc(portal);
+					slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
+					foreach_tuple(slot, store)
+					{
+						bool	isnull;
+						Datum	*tmp;
+						char	*result;
+						char	*viewName;
+
+						slot_getallattrs(slot);
+						tmp = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
+						result = DatumGetCString(tmp);
+						viewName = palloc(strlen(result));
+						memcpy(viewName, result, strlen(result));
+						views = lappend(views, (void *) makeRangeVar(NULL, viewName, -1));
+					}
+
+					(*receiver->rDestroy) (receiver);
+					tuplestore_end(store);
+
+					PortalDrop(portal, false);
+					PopActiveSnapshot();
+					finish_xact_command();
 				}
-				heap_endscan(scan_desc);
-				heap_close(pipeline_queries, RowShareLock);
+				else
+				{
+					Relation pipeline_queries = heap_open(PipelineQueriesRelationId, RowShareLock);
+					HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_queries, 0, NULL);
+					HeapTuple tup;
+					Form_pipeline_queries row;
+					while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+					{
+						row = (Form_pipeline_queries) GETSTRUCT(tup);
+						views = lappend(views, (void *) makeRangeVar(NULL, NameStr(row->name), -1));
+					}
+					heap_endscan(scan_desc);
+					heap_close(pipeline_queries, RowShareLock);
+				}
 			}
 			else
 			{
-				views = stmt->views;
+				if (stmt->whereClause != NULL)
+					elog(ERROR, "can't specify target list and a WHERE selection clause");
+				views = stmt->targetList;
 			}
 
 			foreach(view_lc, views)
@@ -629,8 +734,8 @@ pg_parse_query(const char *query_string)
 				if (IsA(node, ActivateContinuousViewStmt))
 				{
 					ActivateContinuousViewStmt *tmp_stmt = makeNode(ActivateContinuousViewStmt);
-					/* Copy over any parameters passed by the client. */
-					tmp_stmt->params = ((ActivateContinuousViewStmt *) stmt)->params;
+					/* Copy over any WITH options passed by the client. */
+					tmp_stmt->withOptions = ((ActivateContinuousViewStmt *) stmt)->withOptions;
 					new_stmt = (BaseContinuousViewStmt *) tmp_stmt;
 				}
 				else
@@ -638,7 +743,7 @@ pg_parse_query(const char *query_string)
 					new_stmt = (BaseContinuousViewStmt *) makeNode(DeactivateContinuousViewStmt);
 				}
 
-				new_stmt->views = lappend(new_stmt->views, lfirst(view_lc));
+				new_stmt->targetList = lappend(new_stmt->targetList, lfirst(view_lc));
 				transformed_parsetree_list = lappend(transformed_parsetree_list,
 						new_stmt);
 			}

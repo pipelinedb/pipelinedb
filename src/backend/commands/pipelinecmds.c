@@ -198,5 +198,5 @@ DropContinuousView(DropStmt *stmt)
 void
 DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
 {
-	MarkContinuousViewAsInactive((RangeVar *) linitial(stmt->views));
+	MarkContinuousViewAsInactive((RangeVar *) linitial(stmt->targetList));
 }

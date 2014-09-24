@@ -2523,18 +2523,17 @@ transformLockingClause(ParseState *pstate, Query *qry, LockingClause *lc,
 static Query *
 transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewStmt *stmt)
 {
-	/* TODO: if it's already running, throw an error */
+	/* TODO(derekjn): if it's already running, throw an error */
 	ListCell *lc;
 	DefElem *elem;
 	int64 value;
-	RangeVar *name = linitial(stmt->views);
+	RangeVar *name = linitial(stmt->targetList);
 
 	/* The analyzer will always spit out ACTIVATE statements with a single CVs */
 	const char *query_string = GetQueryString(name, false);
 
 	List *parsetree_list = pg_parse_query(query_string);
 
-	/* TODO: enforce single queries here */
 	Node *parsetree = (Node *) linitial(parsetree_list);
 	CreateContinuousViewStmt *cv = (CreateContinuousViewStmt *) parsetree;
 	SelectStmt *select = (SelectStmt *) cv->query;
@@ -2542,7 +2541,7 @@ transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewSt
 	Query *q = parse_analyze((Node *) select, query_string, NULL, 0);
 	q->is_continuous = true;
 	q->cq_activate_stmt = pstrdup(pstate->p_sourcetext);
-	q->cq_target = lfirst(stmt->views->head);
+	q->cq_target = name;
 
 	/* Read the CV state from the `pipeline_queries` catalog table. */
 	q->cq_state = palloc(sizeof(ContinuousViewState));
@@ -2551,7 +2550,7 @@ transformActivateContinuousViewStmt(ParseState *pstate, ActivateContinuousViewSt
 	/* Update any tuning parameters passed in with the ACTIVATE
 	 * command.
 	 */
-	foreach(lc, stmt->params)
+	foreach(lc, stmt->withOptions)
 	{
 		elem = (DefElem *) lfirst(lc);
 		value = intVal(elem->arg);

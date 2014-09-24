@@ -214,7 +214,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	VariableSetStmt		*vsetstmt;
 }
 
-%type <node>	stmt schema_stmt activate_continuous_view_stmt_simple
+%type <node>	stmt schema_stmt
 		ActivateContinuousViewStmt AlterEventTrigStmt
 		AlterDatabaseStmt AlterDatabaseSetStmt AlterDomainStmt AlterEnumStmt
 		AlterFdwStmt AlterForeignServerStmt AlterGroupStmt
@@ -2659,38 +2659,36 @@ qualified_name_list_or_none: qualified_name_list
  				}
  		;
 
-activate_continuous_view_stmt_simple: ACTIVATE qualified_name_list_or_none
+ActivateContinuousViewStmt: ACTIVATE qualified_name_list_or_none opt_reloptions where_clause
 				{
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->views = (List *) $2;
+					s->targetList = (List *) $2;
+					s->withOptions = (List *) $3;
+					s->whereClause = (Node *) $4;
 					$$ = (Node *) s;
 				}
-			| ACTIVATE CONTINUOUS VIEW qualified_name_list_or_none
+			| ACTIVATE CONTINUOUS VIEW qualified_name_list_or_none opt_reloptions where_clause
 				{
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->views = (List *) $4;
+					s->targetList = (List *) $4;
+					s->withOptions = (List *) $5;
+					s->whereClause = (Node *) $6;
 					$$ = (Node *) s;
 				}
 		;
 
-ActivateContinuousViewStmt: activate_continuous_view_stmt_simple opt_reloptions
-				{
-					ActivateContinuousViewStmt *s = (ActivateContinuousViewStmt *) $1;
-					s->params = (List *) $2;
-					$$ = (Node *) s;
-				}
-		;
-
-DeactivateContinuousViewStmt: DEACTIVATE qualified_name_list_or_none
+DeactivateContinuousViewStmt: DEACTIVATE qualified_name_list_or_none where_clause
 				{
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->views = (List *) $2;
+					s->targetList = (List *) $2;
+					s->whereClause = (Node *) $3;
 					$$ = (Node *)s;
 				}
-			| DEACTIVATE CONTINUOUS VIEW qualified_name_list_or_none
+			| DEACTIVATE CONTINUOUS VIEW qualified_name_list_or_none where_clause
 				{
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->views = (List *) $4;
+					s->targetList = (List *) $4;
+					s->whereClause = (Node *) $5;
 					$$ = (Node *)s;
 				}
 		;
