@@ -87,10 +87,8 @@ _copyPlannedStmt(const PlannedStmt *from)
 	/* cq_state will be null in case the PannedStmt is not for
 	 * an ACTIVATE query.
 	 */
-	if (from->cq_state)
+	if (from->is_continuous)
 		COPY_POINTER_FIELD(cq_state, sizeof(ContinuousViewState));
-	else
-		COPY_SCALAR_FIELD(cq_state);
 	COPY_NODE_FIELD(planTree);
 	COPY_NODE_FIELD(rtable);
 	COPY_NODE_FIELD(resultRelations);
