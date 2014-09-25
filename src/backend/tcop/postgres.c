@@ -695,8 +695,7 @@ pg_parse_query(const char *query_string)
 						slot_getallattrs(slot);
 						tmp = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
 						result = DatumGetCString(tmp);
-						viewName = palloc(strlen(result));
-						memcpy(viewName, result, strlen(result));
+						viewName = pstrdup(result);
 						views = lappend(views, (void *) makeRangeVar(NULL, viewName, -1));
 					}
 
