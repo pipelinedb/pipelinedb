@@ -24,8 +24,11 @@
 
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -42,6 +45,8 @@
 #include "parser/parse_target.h"
 #include "parser/parsetree.h"
 #include "rewrite/rewriteManip.h"
+#include "tcop/tcopprot.h"
+#include "miscadmin.h"
 #include "utils/rel.h"
 
 
@@ -71,7 +76,6 @@ static Query *transformCreateTableAsStmt(ParseState *pstate,
 static void transformLockingClause(ParseState *pstate, Query *qry,
 					   LockingClause *lc, bool pushedDown);
 
-
 /*
  * parse_analyze
  *		Analyze a raw parse tree and transform it to Query form.
@@ -98,6 +102,12 @@ parse_analyze(Node *parseTree, const char *sourceText,
 		parse_fixed_parameters(pstate, paramTypes, numParams);
 
 	query = transformTopLevelStmt(pstate, parseTree);
+
+	if (IsA(parseTree, SelectStmt))
+	{
+		SelectStmt *stmt = (SelectStmt *) parseTree;
+		query->cq_is_merge = stmt->forContinuousView;
+	}
 
 	if (post_parse_analyze_hook)
 		(*post_parse_analyze_hook) (pstate, query);
@@ -934,6 +944,11 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 
 	/* make WINDOW info available for window functions, too */
 	pstate->p_windowdefs = stmt->windowClause;
+
+	/* SELECT statements that belong to CREATE CONTINUOUS VIEW statements get special treatment */
+	pstate->p_is_create_cv = stmt->forContinuousView;
+
+	pstate->p_target_list = stmt->targetList;
 
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);

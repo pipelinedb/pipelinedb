@@ -592,6 +592,12 @@
 #exit_on_error = off			# terminate session on any error?
 #restart_after_crash = on		# reinitialize after backend crash?
 
+#------------------------------------------------------------------------------
+# STREAMS/EVENTS OPTIONS
+#------------------------------------------------------------------------------
+
+#stream_buffer_size = 128MB
+#debug_print_stream_buffer = on
 
 #------------------------------------------------------------------------------
 # CONFIG FILE INCLUDES

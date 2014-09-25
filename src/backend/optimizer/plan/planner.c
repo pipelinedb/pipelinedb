@@ -18,6 +18,7 @@
 #include <limits.h>
 
 #include "access/htup_details.h"
+#include "catalog/pipeline_queries.h"
 #include "executor/executor.h"
 #include "executor/nodeAgg.h"
 #include "miscadmin.h"
@@ -38,6 +39,7 @@
 #include "parser/analyze.h"
 #include "parser/parsetree.h"
 #include "rewrite/rewriteManip.h"
+#include "utils/memutils.h"
 #include "utils/rel.h"
 #include "utils/selfuncs.h"
 
@@ -93,7 +95,6 @@ static bool choose_hashed_distinct(PlannerInfo *root,
 					   double dNumDistinctRows);
 static List *make_subplanTargetList(PlannerInfo *root, List *tlist,
 					   AttrNumber **groupColIdx, bool *need_tlist_eval);
-static int	get_grouping_column_index(Query *parse, TargetEntry *tle);
 static void locate_grouping_columns(PlannerInfo *root,
 						List *tlist,
 						List *sub_tlist,
@@ -137,6 +138,13 @@ planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 		result = (*planner_hook) (parse, cursorOptions, boundParams);
 	else
 		result = standard_planner(parse, cursorOptions, boundParams);
+
+	if (result->is_continuous)
+	{
+		result->cq_state = parse->cq_state;
+		result->cq_target = parse->cq_target;
+	}
+
 	return result;
 }
 
@@ -254,6 +262,7 @@ standard_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	result->relationOids = glob->relationOids;
 	result->invalItems = glob->invalItems;
 	result->nParamExec = glob->nParamExec;
+	result->is_continuous = parse->is_continuous;
 
 	return result;
 }
@@ -1530,8 +1539,11 @@ grouping_planner(PlannerInfo *root, double tuple_fraction)
 			 * Vars.  Usually we need to insert the sub_tlist as the tlist of
 			 * the top plan node.  However, we can skip that if we determined
 			 * that whatever create_plan chose to return will be good enough.
+			 *
+			 * MERGE queries also need their tlists evaluated because we modify
+			 * them for aggregates. See the T_Group case in setrefs.c:set_plan_refs.
 			 */
-			if (need_tlist_eval)
+			if (parse->cq_is_merge || need_tlist_eval)
 			{
 				/*
 				 * If the top-level plan node is one that cannot do expression
@@ -2700,6 +2712,13 @@ choose_hashed_grouping(PlannerInfo *root,
 	Path		sorted_p;
 
 	/*
+	 * XXX PipelineDB: this is a hack to make aggref handling simpler
+	 * for MERGE requests. See setrefs.c:pgxc_set_agg_references.
+	 */
+	if (parse->cq_is_merge)
+		return TRUE;
+
+	/*
 	 * Executor doesn't support hashed aggregation with DISTINCT or ORDER BY
 	 * aggregates.  (Doing so would imply storing *all* the input values in
 	 * the hash table, and/or running many sorts in parallel, either of which
@@ -2868,6 +2887,13 @@ choose_hashed_distinct(PlannerInfo *root,
 	List	   *needed_pathkeys;
 	Path		hashed_p;
 	Path		sorted_p;
+
+	/*
+	 * XXX PipelineDB: this is a hack to make aggref handling simpler
+	 * for MERGE requests. See setrefs.c:pgxc_set_agg_references.
+	 */
+	if (parse->cq_is_merge)
+		return TRUE;
 
 	/*
 	 * If we have a sortable DISTINCT ON clause, we always use sorting. This
@@ -3151,7 +3177,7 @@ make_subplanTargetList(PlannerInfo *root,
  * if it's not a grouping column.  Note: the result is unique because the
  * parser won't make multiple groupClause entries for the same TLE.
  */
-static int
+int
 get_grouping_column_index(Query *parse, TargetEntry *tle)
 {
 	int			colno = 0;

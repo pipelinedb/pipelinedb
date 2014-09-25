@@ -104,14 +104,18 @@
 #include "executor/nodeSeqscan.h"
 #include "executor/nodeSetOp.h"
 #include "executor/nodeSort.h"
+#include "executor/nodeStreamscan.h"
 #include "executor/nodeSubplan.h"
 #include "executor/nodeSubqueryscan.h"
 #include "executor/nodeTidscan.h"
+#include "executor/nodeTuplestoreScan.h"
 #include "executor/nodeUnique.h"
 #include "executor/nodeValuesscan.h"
 #include "executor/nodeWindowAgg.h"
 #include "executor/nodeWorktablescan.h"
 #include "miscadmin.h"
+#include "nodes/execnodes.h"
+#include "utils/memutils.h"
 
 
 /* ------------------------------------------------------------------------
@@ -187,6 +191,16 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 		case T_SeqScan:
 			result = (PlanState *) ExecInitSeqScan((SeqScan *) node,
 												   estate, eflags);
+			break;
+
+		case T_StreamScan:
+			result = (PlanState *) ExecInitStreamScan((StreamScan *) node,
+													 estate, eflags);
+			break;
+
+		case T_TuplestoreScan:
+			result = (PlanState *) ExecInitTuplestoreScan((TuplestoreScan *) node,
+														 estate, eflags);
 			break;
 
 		case T_IndexScan:
@@ -341,9 +355,56 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 	if (estate->es_instrument)
 		result->instrument = InstrAlloc(1, estate->es_instrument);
 
+	result->cq_batch_progress = 0;
+
 	return result;
 }
 
+/* ----------------------------------------------------------------
+ *		ExecBeginBatch
+ *
+ *		Prepare a node for a new batch
+ * ----------------------------------------------------------------
+ */
+void
+ExecBeginBatch(PlanState *node)
+{
+
+}
+
+/* ----------------------------------------------------------------
+ *		ExecEndBatch
+ *
+ *		Clean up a node after finishing a batch
+ * ----------------------------------------------------------------
+ */
+TupleTableSlot *
+ExecEndBatch(PlanState *node)
+{
+	switch (nodeTag(node))
+	{
+		case T_AggState:
+			{
+				AggState *agg = (AggState *) node;
+				agg->agg_done = false;
+				agg->table_filled = false;
+
+				MemoryContextReset(agg->aggcontext);
+				if (agg->hashtable)
+				{
+					hash_destroy(agg->hashtable->hashtab);
+					build_hash_table(agg);
+				}
+			}
+			break;
+		default:
+			break;
+	}
+
+	node->cq_batch_progress = 0;
+
+	return NULL;
+}
 
 /* ----------------------------------------------------------------
  *		ExecProcNode
@@ -355,6 +416,7 @@ TupleTableSlot *
 ExecProcNode(PlanState *node)
 {
 	TupleTableSlot *result;
+	MemoryContext oldcontext;
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -363,6 +425,12 @@ ExecProcNode(PlanState *node)
 
 	if (node->instrument)
 		InstrStartNode(node->instrument);
+
+	if (IsContinuous(node) && node->cq_batch_progress == BatchSize(node))
+		return ExecEndBatch(node);
+
+	if (IsContinuous(node))
+		oldcontext = MemoryContextSwitchTo(ContinuousQueryContext);
 
 	switch (nodeTag(node))
 	{
@@ -398,6 +466,14 @@ ExecProcNode(PlanState *node)
 			 */
 		case T_SeqScanState:
 			result = ExecSeqScan((SeqScanState *) node);
+			break;
+
+		case T_StreamScanState:
+			result = ExecStreamScan((StreamScanState *) node);
+			break;
+
+		case T_TuplestoreScanState:
+			result = ExecTuplestoreScan((TuplestoreScanState *) node);
 			break;
 
 		case T_IndexScanState:
@@ -506,8 +582,16 @@ ExecProcNode(PlanState *node)
 			break;
 	}
 
+	if (IsContinuous(node))
+		MemoryContextSwitchTo(oldcontext);
+
 	if (node->instrument)
 		InstrStopNode(node->instrument, TupIsNull(result) ? 0.0 : 1.0);
+
+	if (!TupIsNull(result))
+		node->cq_batch_progress++;
+	else if (IsContinuous(node))
+		return ExecEndBatch(node);
 
 	return result;
 }
@@ -634,6 +718,9 @@ ExecEndNode(PlanState *node)
 			ExecEndSeqScan((SeqScanState *) node);
 			break;
 
+		case T_StreamScanState:
+			break;
+
 		case T_IndexScanState:
 			ExecEndIndexScan((IndexScanState *) node);
 			break;
@@ -676,6 +763,10 @@ ExecEndNode(PlanState *node)
 
 		case T_ForeignScanState:
 			ExecEndForeignScan((ForeignScanState *) node);
+			break;
+
+		case T_TuplestoreScanState:
+			ExecEndTuplestoreScan((TuplestoreScanState *) node);
 			break;
 
 			/*

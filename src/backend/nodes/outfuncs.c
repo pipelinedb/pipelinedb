@@ -439,6 +439,14 @@ _outSeqScan(StringInfo str, const SeqScan *node)
 }
 
 static void
+_outStreamScan(StringInfo str, const SeqScan *node)
+{
+	WRITE_NODE_TYPE("STREAMSCAN");
+
+	_outScanInfo(str, (const Scan *) node);
+}
+
+static void
 _outIndexScan(StringInfo str, const IndexScan *node)
 {
 	WRITE_NODE_TYPE("INDEXSCAN");

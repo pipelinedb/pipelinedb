@@ -23,6 +23,7 @@
 #include "nodes/bitmapset.h"
 #include "nodes/primnodes.h"
 #include "nodes/value.h"
+#include "utils/tuplestore.h"
 
 /* Possible sources of a Query */
 typedef enum QuerySource
@@ -152,6 +153,29 @@ typedef struct Query
 
 	List	   *constraintDeps; /* a list of pg_constraint OIDs that the query
 								 * depends on to be semantically valid */
+
+	/*
+	 * Continuous query fields
+	 */
+	bool		is_continuous; /* should this be executed continuously? */
+
+	/*
+	 * The original ACTIVATE statement that activated this query. It's useful to
+	 * keep this around because an ACTIVATE query gets rewritten as the target CQ,
+	 * and then flagged as continuous. However, we don't want to send this rewritten
+	 * query to the datanodes when running a RemoteQuery, because we want them to
+	 * know that it's a CQ. So for CQs, we send the original ACTIVATE to the datanodes.
+	 */
+	char		*cq_activate_stmt;
+
+	RangeVar	*cq_target; /* output relation of this CQ, if any */
+
+	Tuplestorestate	*sourcestore;
+	TupleDesc	sourcedesc;
+
+	bool		cq_is_merge; /* is this query being run as a merge query? */
+
+	struct ContinuousViewState	*cq_state; /* put `struct` here to avoid circular dependency */
 } Query;
 
 
@@ -735,6 +759,7 @@ typedef struct RangeTblEntry
 	 */
 	Oid			relid;			/* OID of the relation */
 	char		relkind;		/* relation kind (see pg_class.relkind) */
+	char		*relname;
 
 	/*
 	 * Fields valid for a subquery RTE (else NULL):
@@ -788,6 +813,11 @@ typedef struct RangeTblEntry
 	List	   *ctecoltypes;	/* OID list of column type OIDs */
 	List	   *ctecoltypmods;	/* integer list of column typmods */
 	List	   *ctecolcollations;		/* OID list of column collation OIDs */
+
+	/*
+	 * Fields valid for a stream RTE (else NULL/zero):
+	 */
+	TupleDesc cvdesc; /* descriptor for a stream, based on SELECT statement's target entries */
 
 	/*
 	 * Fields valid in all RTEs:
@@ -1126,6 +1156,7 @@ typedef struct SelectStmt
 	 */
 	SetOperation op;			/* type of set op */
 	bool		all;			/* ALL specified? */
+	bool 		forContinuousView; /* does this SELECT statement for a CREATE CONTINUOUS VIEW statement? */
 	struct SelectStmt *larg;	/* left child */
 	struct SelectStmt *rarg;	/* right child */
 	/* Eventually add fields for CORRESPONDING spec here */
@@ -1195,6 +1226,7 @@ typedef enum ObjectType
 	OBJECT_CONSTRAINT,
 	OBJECT_COLLATION,
 	OBJECT_CONVERSION,
+	OBJECT_CONTINUOUS_VIEW,
 	OBJECT_DATABASE,
 	OBJECT_DOMAIN,
 	OBJECT_EVENT_TRIGGER,
@@ -2770,5 +2802,55 @@ typedef struct AlterTSConfigurationStmt
 	bool		replace;		/* if true - replace dictionary by another */
 	bool		missing_ok;		/* for DROP - skip error if missing? */
 } AlterTSConfigurationStmt;
+
+typedef struct CreateContinuousViewStmt
+{
+	NodeTag			type;
+	IntoClause 		*into;
+	Node 			*query;
+
+} CreateContinuousViewStmt;
+
+typedef struct BaseContinuousViewStmt
+{
+	NodeTag	type;
+	List	*views;
+	Node	*whereClause;
+} BaseContinuousViewStmt;
+
+/* This extends `BaseContinuousViewStmt` so
+ * keep the order of fields such that all fields
+ * in BaseContinuousViewStmt appear in-order in the
+ * beginning.
+ */
+typedef struct ActivateContinuousViewStmt
+{
+	NodeTag	type;
+	List	*views;
+	Node	*whereClause;
+	List	*withOptions;
+} ActivateContinuousViewStmt;
+
+typedef BaseContinuousViewStmt DeactivateContinuousViewStmt;
+
+typedef struct CreateEncodingStmt
+{
+	NodeTag		type;
+	RangeVar	*name;
+	List	   	*coldefs;
+	RangeVar 	*decodedby;
+	List			*args;
+} CreateEncodingStmt;
+
+typedef struct DumpStmt
+{
+	NodeTag type;
+
+	/*
+	 * Name of the node whose state should be dumped,
+	 * or NULL if no node name was given
+	 */
+	RangeVar *name;
+} DumpStmt;
 
 #endif   /* PARSENODES_H */

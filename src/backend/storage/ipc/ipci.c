@@ -23,6 +23,7 @@
 #include "commands/async.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "pipeline/streambuf.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker_internals.h"
 #include "postmaster/bgwriter.h"
@@ -145,6 +146,8 @@ CreateSharedMemoryAndSemaphores(bool makePrivate, int port)
 
 		/* might as well round it off to a multiple of a typical page size */
 		size = add_size(size, 8192 - (size % 8192));
+
+		size = add_size(size, StreamBufferShmemSize());
 
 		elog(DEBUG3, "invoking IpcMemoryCreate(size=%zu)", size);
 

@@ -39,19 +39,33 @@
 
 #include "access/printtup.h"
 #include "access/xact.h"
+#include "access/htup_details.h"
+#include "access/transam.h"
+#include "catalog/pg_attribute.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "commands/async.h"
 #include "commands/prepare.h"
+#include "executor/tstoreReceiver.h"
+#include "executor/tupletableReceiver.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
+#include "nodes/makefuncs.h"
 #include "nodes/print.h"
 #include "optimizer/planner.h"
 #include "pgstat.h"
 #include "pg_trace.h"
 #include "parser/analyze.h"
 #include "parser/parser.h"
+#include "parser/parse_clause.h"
+#include "parser/parse_expr.h"
+#include "parser/parse_type.h"
+#include "pipeline/decode.h"
+#include "pipeline/stream.h"
+#include "pipeline/streambuf.h"
 #include "pg_getopt.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/postmaster.h"
@@ -67,12 +81,17 @@
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "tcop/utility.h"
+#include "utils/builtins.h"
+#include "utils/hsearch.h"
 #include "utils/lsyscache.h"
+#include "utils/syscache.h"
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
 #include "utils/snapmgr.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
+#include "utils/tqual.h"
+#include "utils/tuplestore.h"
 #include "mb/pg_wchar.h"
 
 
@@ -174,6 +193,9 @@ static int	UseNewLine = 0;		/* Use EOF as query delimiters */
 static bool RecoveryConflictPending = false;
 static bool RecoveryConflictRetryable = true;
 static ProcSignalReason RecoveryConflictReason;
+
+/* memory context for event processing */
+static MemoryContext EventContext;
 
 /* ----------------------------------------------------------------
  *		decls for routines only used in this file
@@ -409,6 +431,7 @@ SocketBackend(StringInfo inBuf)
 		case 'E':				/* execute */
 		case 'H':				/* flush */
 		case 'P':				/* parse */
+		case '>':
 			doing_extended_query_message = true;
 			/* these are only legal in protocol 3 */
 			if (PG_PROTOCOL_MAJOR(FrontendProtocol) < 3)
@@ -536,6 +559,189 @@ client_read_ended(void)
 	}
 }
 
+/*
+ * Take the list of parsetrees returned by `pg_parse_query` and
+ * output a new list of parsetrees where any ActivateContinuousViewStmt
+ * or DeactivateContinuousViewStmt Node with multiple `views` is broken down
+ * into singular view Nodes.
+ */
+static List *
+pipeline_rewrite(List *raw_parsetree_list)
+{
+	List		*transformed_parsetree_list = NIL;
+	List		*views = NIL;
+	ListCell	*parsetree_lc;
+	ListCell	*view_lc;
+	Node		*node;
+	BaseContinuousViewStmt *stmt;
+	BaseContinuousViewStmt *new_stmt;
+
+	foreach(parsetree_lc, raw_parsetree_list)
+	{
+		node = lfirst(parsetree_lc);
+
+		if (IsA(node, ActivateContinuousViewStmt) ||
+				IsA(node, DeactivateContinuousViewStmt))
+		{
+			stmt = (BaseContinuousViewStmt *) node;
+
+			if (!stmt->views)
+			{
+				if (stmt->whereClause)
+				{
+					CommandDest 	dest = DestTuplestore;
+					Tuplestorestate *store = NULL;
+					Node			*parsetree;
+					List			*querytree_list;
+					List			*plantree_list;
+					Portal			portal;
+					DestReceiver 	*receiver;
+					ResTarget		*resTarget;
+					ColumnRef		*colRef;
+					SelectStmt 		*selectStmt = makeNode(SelectStmt);
+					TupleTableSlot	*slot;
+					QueryDesc		*queryDesc;
+					MemoryContext	oldcontext;
+
+					/*
+					 * Create SelectStmt by hand to fetch the matching
+					 * CV names from the `pipeline_queries` catalog table.
+					 */
+					resTarget = makeNode(ResTarget);
+					colRef = makeNode(ColumnRef);
+					colRef->fields = lappend(colRef->fields, makeString("name"));
+					resTarget->val = (Node *) colRef;
+					selectStmt->targetList = lappend(selectStmt->targetList, (void *) resTarget);
+					selectStmt->fromClause = lappend(selectStmt->fromClause, (void *) makeRangeVar(NULL, "pipeline_queries", -1));;
+					selectStmt->whereClause = stmt->whereClause;
+					parsetree = (Node *) selectStmt;
+
+					/* Make sure we are in a transaction command */
+					start_xact_command();
+					PushActiveSnapshot(GetTransactionSnapshot());
+
+					querytree_list = pg_analyze_and_rewrite(parsetree, NULL,
+							NULL, 0);
+
+					plantree_list = pg_plan_queries(querytree_list, 0, NULL);
+
+					/*
+					 * Create unnamed portal to run the query or queries in. If there
+					 * already is one, silently drop it.
+					 */
+					portal = CreatePortal("", true, true);
+					/* Don't display the portal in pg_cursors */
+					portal->visible = false;
+
+					/* create a tuplestore */
+					store = tuplestore_begin_heap(true, true, work_mem);
+					receiver = CreateDestReceiver(dest);
+					SetTuplestoreDestReceiverParams(receiver, store, PortalGetHeapMemory(portal), true);
+
+					/*
+					 * We don't have to copy anything into the portal, because everything
+					 * we are passing here is in MessageContext, which will outlive the
+					 * portal anyway.
+					 */
+					PortalDefineQuery(portal,
+							NULL,
+							NULL,
+							NULL,
+							plantree_list,
+							NULL);
+
+					/*
+					 * Start the portal.  No parameters here.
+					 */
+					PortalStart(portal, NULL, 0, GetActiveSnapshot());
+
+					oldcontext = MemoryContextSwitchTo(TopTransactionContext);
+
+					/*
+					 * Run the portal to completion, and then drop it (and the receiver).
+					 */
+					(void) PortalRun(portal,
+							FETCH_ALL,
+							true,
+							receiver,
+							receiver,
+							NULL);
+
+					MemoryContextSwitchTo(oldcontext);
+
+					queryDesc = PortalGetQueryDesc(portal);
+					slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
+					foreach_tuple(slot, store)
+					{
+						bool	isnull;
+						Datum	*tmp;
+						char	*result;
+						char	*viewName;
+
+						slot_getallattrs(slot);
+						tmp = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
+						result = DatumGetCString(tmp);
+						viewName = pstrdup(result);
+						views = lappend(views, (void *) makeRangeVar(NULL, viewName, -1));
+					}
+
+					(*receiver->rDestroy) (receiver);
+					tuplestore_end(store);
+
+					PortalDrop(portal, false);
+					PopActiveSnapshot();
+					finish_xact_command();
+				}
+				else
+				{
+					Relation pipeline_queries = heap_open(PipelineQueriesRelationId, RowShareLock);
+					HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_queries, 0, NULL);
+					HeapTuple tup;
+					Form_pipeline_queries row;
+					while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+					{
+						row = (Form_pipeline_queries) GETSTRUCT(tup);
+						views = lappend(views, (void *) makeRangeVar(NULL, NameStr(row->name), -1));
+					}
+					heap_endscan(scan_desc);
+					heap_close(pipeline_queries, RowShareLock);
+				}
+			}
+			else
+			{
+				if (stmt->whereClause != NULL)
+					elog(ERROR, "can't specify target list and a WHERE selection clause");
+				views = stmt->views;
+			}
+
+			foreach(view_lc, views)
+			{
+				if (IsA(node, ActivateContinuousViewStmt))
+				{
+					ActivateContinuousViewStmt *tmp_stmt = makeNode(ActivateContinuousViewStmt);
+					/* Copy over any WITH options passed by the client. */
+					tmp_stmt->withOptions = ((ActivateContinuousViewStmt *) stmt)->withOptions;
+					new_stmt = (BaseContinuousViewStmt *) tmp_stmt;
+				}
+				else
+				{
+					new_stmt = (BaseContinuousViewStmt *) makeNode(DeactivateContinuousViewStmt);
+				}
+
+				new_stmt->views = lappend(new_stmt->views, lfirst(view_lc));
+				transformed_parsetree_list = lappend(transformed_parsetree_list,
+						new_stmt);
+			}
+		}
+		else
+		{
+			transformed_parsetree_list = lappend(transformed_parsetree_list,
+					node);
+		}
+	}
+
+	return transformed_parsetree_list;
+}
 
 /*
  * Do raw parsing (only).
@@ -553,7 +759,8 @@ client_read_ended(void)
 List *
 pg_parse_query(const char *query_string)
 {
-	List	   *raw_parsetree_list;
+	List		*raw_parsetree_list;
+
 
 	TRACE_POSTGRESQL_QUERY_PARSE_START(query_string);
 
@@ -561,6 +768,8 @@ pg_parse_query(const char *query_string)
 		ResetUsage();
 
 	raw_parsetree_list = raw_parser(query_string);
+
+	raw_parsetree_list = pipeline_rewrite(raw_parsetree_list);
 
 	if (log_parser_stats)
 		ShowUsage("PARSER STATISTICS");
@@ -902,6 +1111,40 @@ exec_simple_query(const char *query_string)
 	 */
 	isTopLevel = (list_length(parsetree_list) == 1);
 
+	if (isTopLevel)
+	{
+		Node *parsetree = (Node *) lfirst(parsetree_list->head);
+
+		/* short circuit everything if we're just inserting into a stream */
+		if (IsA(parsetree, InsertStmt))
+		{
+			InsertStmt *ins = (InsertStmt *) parsetree;
+
+			if (InsertTargetIsStream(ins))
+			{
+				MemoryContext oldcontext;
+				int count = 0;
+				char buf[32];
+
+				oldcontext = MemoryContextSwitchTo(EventContext);
+
+				BeginCommand("INSERT", dest);
+
+				count = InsertIntoStream(ins);
+
+				sprintf(buf, "INSERT 0 %d", count);
+				EndCommand(buf, dest);
+
+				MemoryContextSwitchTo(oldcontext);
+				MemoryContextReset(EventContext);
+
+				finish_xact_command();
+
+				return;
+			}
+		}
+	}
+
 	/*
 	 * Run through the raw parsetree(s) and process each one.
 	 */
@@ -950,6 +1193,20 @@ exec_simple_query(const char *query_string)
 
 		/* If we got a cancel signal in parsing or prior command, quit */
 		CHECK_FOR_INTERRUPTS();
+
+		/*
+		 * For continuous queries, analyzing and planning is done
+		 * in the worker processes that ultimately get forked after
+		 * we activate, so short circuit the analyzer/planner
+		 */
+		if (IsA(parsetree, ActivateContinuousViewStmt))
+		{
+			ActivateContinuousView((ActivateContinuousViewStmt *) parsetree);
+			EndCommand("ACTIVATE", dest);
+			finish_xact_command();
+
+			continue;
+		}
 
 		/*
 		 * Set up a snapshot if parse analysis/planning will need one.
@@ -1129,6 +1386,40 @@ exec_simple_query(const char *query_string)
 	TRACE_POSTGRESQL_QUERY_DONE(query_string);
 
 	debug_query_string = NULL;
+}
+
+/*
+ * exec_proxy_events
+ *
+ * Send events to the appropriate datanodes, where they will be emitted
+ * into the event stream for consumption (only run from a coordinator)
+ *
+ */
+static void
+exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
+{
+	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
+
+	OpenStreamBuffer(GlobalStreamBuffer);
+
+	while (message->cursor < message->len)
+	{
+		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
+
+		ev->len = pq_getmsgint(message, 4);
+		ev->raw = (char *) palloc(ev->len);
+		ev->fields = NULL;
+		ev->nfields = 0;
+		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
+
+		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev);
+	}
+	pq_getmsgend(message);
+
+	CloseStreamBuffer(GlobalStreamBuffer);
+
+	MemoryContextSwitchTo(oldcontext);
+	MemoryContextReset(EventContext);
 }
 
 /*
@@ -3777,6 +4068,21 @@ PostgresMain(int argc, char *argv[],
 										   ALLOCSET_DEFAULT_INITSIZE,
 										   ALLOCSET_DEFAULT_MAXSIZE);
 
+
+	/*
+	 * Create the memory context that is used for event processing
+	 *
+	 * EventContext is reset after each request that uses it
+	 */
+	EventContext = AllocSetContextCreate(TopMemoryContext,
+											"EventContext",
+											ALLOCSET_DEFAULT_MINSIZE,
+											ALLOCSET_DEFAULT_INITSIZE,
+											ALLOCSET_DEFAULT_MAXSIZE);
+
+	InitDecoderCache();
+
+
 	/*
 	 * Remember stand-alone backend startup time
 	 */
@@ -4246,6 +4552,21 @@ PostgresMain(int argc, char *argv[],
 				 */
 				break;
 
+			case '>': /* send events to remote nodes */
+				{
+					const char *encoding;
+					const char *channel;
+
+					encoding = pq_getmsgstring(&input_message);
+					channel = pq_getmsgstring(&input_message);
+
+					if (!GlobalStreamBuffer)
+						InitGlobalStreamBuffer();
+
+					exec_proxy_events(encoding, channel, &input_message);
+					send_ready_for_query = true;
+				}
+				break;
 			default:
 				ereport(FATAL,
 						(errcode(ERRCODE_PROTOCOL_VIOLATION),

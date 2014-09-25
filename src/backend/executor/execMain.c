@@ -37,19 +37,28 @@
  */
 #include "postgres.h"
 
+#include <unistd.h>
+#include <sys/socket.h>
+
 #include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "access/transam.h"
 #include "access/xact.h"
 #include "catalog/namespace.h"
+#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "commands/matview.h"
 #include "commands/trigger.h"
 #include "executor/execdebug.h"
 #include "foreign/fdwapi.h"
+#include "libpq/libpq.h"
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "optimizer/clauses.h"
 #include "parser/parsetree.h"
+#include "pipeline/combiner.h"
+#include "pipeline/worker.h"
+#include "postmaster/fork_process.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
 #include "tcop/utility.h"
@@ -74,12 +83,6 @@ static void InitPlan(QueryDesc *queryDesc, int eflags);
 static void CheckValidRowMarkRel(Relation rel, RowMarkType markType);
 static void ExecPostprocessPlan(EState *estate);
 static void ExecEndPlan(PlanState *planstate, EState *estate);
-static void ExecutePlan(EState *estate, PlanState *planstate,
-			CmdType operation,
-			bool sendTuples,
-			long numberTuples,
-			ScanDirection direction,
-			DestReceiver *dest);
 static bool ExecCheckRTEPerms(RangeTblEntry *rte);
 static void ExecCheckXactReadOnly(PlannedStmt *plannedstmt);
 static char *ExecBuildSlotValueDescription(TupleTableSlot *slot,
@@ -113,6 +116,8 @@ static void EvalPlanQualStart(EPQState *epqstate, EState *parentestate,
  *
  * ----------------------------------------------------------------
  */
+QueryDesc *q;
+
 void
 ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
@@ -217,6 +222,44 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
 	MemoryContextSwitchTo(oldcontext);
 }
 
+/*
+ * ExecutorRunContinuous
+ *
+ * Runs a query continuously on microbatches of newly materialized data, until
+ * a deactivate message is received
+ */
+void
+ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
+{
+	CombinerDesc *combiner = CreateCombinerDesc(queryDesc);
+	bool wasActivated;
+	PlannedStmt *plan = queryDesc->plannedstmt;
+
+	/* sanity checks */
+	Assert(queryDesc != NULL);
+
+	SetContinousViewState(queryDesc->plannedstmt->cq_target, queryDesc->plannedstmt->cq_state);
+	wasActivated = MarkContinuousViewAsActive(queryDesc->plannedstmt->cq_target);
+
+	/* Finish the transaction started in PostgresMain() */
+	CommitTransactionCommand();
+
+	switch(plan->cq_state->ptype)
+	{
+		case CQCombiner:
+			ContinuousQueryCombinerRun(combiner, queryDesc, owner);
+			break;
+		case CQWorker:
+			ContinuousQueryWorkerRun(portal, combiner, queryDesc, owner);
+			break;
+		default:
+			elog(ERROR, "unrecognized CQ process type: %d", plan->cq_state->ptype);
+	}
+
+	/* Start a new transaction before committing in PostgresMain */
+	StartTransactionCommand();
+}
+
 /* ----------------------------------------------------------------
  *		ExecutorRun
  *
@@ -310,6 +353,7 @@ standard_ExecutorRun(QueryDesc *queryDesc,
 					operation,
 					sendTuples,
 					count,
+					0,
 					direction,
 					dest);
 
@@ -727,7 +771,8 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	/*
 	 * Do permissions checks
 	 */
-	ExecCheckRTPerms(rangeTable, true);
+	if (!PlanIsStreaming(plannedstmt) && !(eflags & EXEC_FLAG_COMBINE))
+		ExecCheckRTPerms(rangeTable, true);
 
 	/*
 	 * initialize the node's execution state
@@ -848,6 +893,11 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	estate->es_epqTupleSet = NULL;
 	estate->es_epqScanDone = NULL;
 
+	if (plannedstmt->cq_state)
+		estate->cq_batch_size = plannedstmt->cq_state->batchsize;
+	else
+		estate->cq_batch_size = 0;
+
 	/*
 	 * Initialize private state information for each SubPlan.  We must do this
 	 * before running ExecInitNode on the main query tree, since
@@ -884,6 +934,7 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	 * tree.  This opens files, allocates storage and leaves us ready to start
 	 * processing tuples.
 	 */
+	q = queryDesc;
 	planstate = ExecInitNode(plan, estate, eflags);
 
 	/*
@@ -1439,17 +1490,22 @@ ExecEndPlan(PlanState *planstate, EState *estate)
  * user can see it
  * ----------------------------------------------------------------
  */
-static void
+void
 ExecutePlan(EState *estate,
 			PlanState *planstate,
 			CmdType operation,
 			bool sendTuples,
 			long numberTuples,
+			int timeoutms,
 			ScanDirection direction,
 			DestReceiver *dest)
 {
 	TupleTableSlot *slot;
 	long		current_tuple_count;
+	struct timeval scanstart;
+	struct timeval current;
+	long 		startms;
+	long		currentms;
 
 	/*
 	 * initialize local variables
@@ -1460,6 +1516,9 @@ ExecutePlan(EState *estate,
 	 * Set the direction.
 	 */
 	estate->es_direction = direction;
+
+	gettimeofday(&scanstart, NULL);
+	startms = (scanstart.tv_sec * 1000) + (scanstart.tv_usec / 1000.0);
 
 	/*
 	 * Loop until we've processed the proper number of tuples from the plan.
@@ -1476,10 +1535,29 @@ ExecutePlan(EState *estate,
 
 		/*
 		 * if the tuple is null, then we assume there is nothing more to
-		 * process so we just end the loop...
+		 * process so we just end the loop or potentially wait a while longer
 		 */
 		if (TupIsNull(slot))
-			break;
+		{
+			if (timeoutms > 0)
+			{
+				/*
+				 * If we're using a timeout, only break if we've exceeded
+				 * it during this scan. This is primarily so we don't have
+				 * to wait for microbatches to fill to capacity if no new
+				 * tuples are arriving.
+				 */
+				gettimeofday(&current, NULL);
+				currentms = (current.tv_sec * 1000) + (current.tv_usec / 1000.0);
+				if (currentms - startms > timeoutms)
+					break;	/* timeout reached, return */
+				else
+					continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
+			}
+			else
+				break; /* no timeout, return as soon as we encounter a null tuple */
+		}
+//		print_slot(slot);
 
 		/*
 		 * If we have a junk filter, then project a new tuple with the junk

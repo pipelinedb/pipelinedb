@@ -19,6 +19,7 @@
 #include "executor/instrument.h"
 #include "nodes/params.h"
 #include "nodes/plannodes.h"
+#include "pipeline/streambuf.h"
 #include "utils/reltrigger.h"
 #include "utils/sortsupport.h"
 #include "utils/tuplestore.h"
@@ -407,6 +408,8 @@ typedef struct EState
 	HeapTuple  *es_epqTuple;	/* array of EPQ substitute tuples */
 	bool	   *es_epqTupleSet; /* true if EPQ tuple is provided */
 	bool	   *es_epqScanDone; /* true if EPQ tuple has been fetched */
+
+	int cq_batch_size;
 } EState;
 
 
@@ -1019,7 +1022,15 @@ typedef struct PlanState
 	ProjectionInfo *ps_ProjInfo;	/* info for doing tuple projection */
 	bool		ps_TupFromTlist;/* state flag for processing set-valued
 								 * functions in targetlist */
+
+	int cq_batch_progress;
 } PlanState;
+
+/*
+ * CQ helper macros
+ */
+#define BatchSize(node)				(((PlanState *)(node))->state->cq_batch_size)
+#define IsContinuous(node)			(((PlanState *)(node))->state && BatchSize(node) > 0)
 
 /* ----------------
  *	these are defined to avoid confusion problems with "left"
@@ -1503,6 +1514,17 @@ typedef struct ForeignScanState
 	void	   *fdw_state;		/* foreign-data wrapper can keep state here */
 } ForeignScanState;
 
+/* ----------------
+ *	 TuplestoreScanState information
+ *
+ *		TuplestoreScan nodes are used to scan tuplestores
+ * ----------------
+ */
+typedef struct TuplestoreScanState
+{
+	ScanState	ss;				/* its first field is NodeTag */
+} TuplestoreScanState;
+
 /* ----------------------------------------------------------------
  *				 Join State Information
  * ----------------------------------------------------------------
@@ -1788,6 +1810,16 @@ typedef struct WindowAggState
 	TupleTableSlot *temp_slot_1;
 	TupleTableSlot *temp_slot_2;
 } WindowAggState;
+
+/* ----------------
+ *	StreamScanState information
+ * ----------------
+ */
+typedef struct StreamScanState
+{
+	ScanState	ss;
+	StreamBufferReader *reader;
+} StreamScanState;
 
 /* ----------------
  *	 UniqueState information

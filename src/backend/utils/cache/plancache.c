@@ -851,6 +851,7 @@ BuildCachedPlan(CachedPlanSource *plansource, List *qlist,
 	bool		spi_pushed;
 	MemoryContext plan_context;
 	MemoryContext oldcxt = CurrentMemoryContext;
+	ListCell *lc;
 
 	/*
 	 * Normally the querytree should be valid already, but if it's not,

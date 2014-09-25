@@ -36,6 +36,7 @@
 #include "catalog/pg_shdescription.h"
 #include "catalog/pg_shseclabel.h"
 #include "catalog/pg_tablespace.h"
+#include "catalog/pipeline_queries.h"
 #include "catalog/toasting.h"
 #include "miscadmin.h"
 #include "storage/fd.h"

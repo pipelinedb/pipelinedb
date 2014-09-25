@@ -6,19 +6,20 @@
 
 subdir =
 top_builddir = .
+bin_dir = ./bin
 include $(top_builddir)/src/Makefile.global
 
 $(call recurse,all install,src config)
 
 all:
-	+@echo "All of PostgreSQL successfully made. Ready to install."
+	+@echo "All of PipelineDB successfully made. Ready to install."
 
 docs:
 	$(MAKE) -C doc all
 
 $(call recurse,world,doc src config contrib,all)
 world:
-	+@echo "PostgreSQL, contrib, and documentation successfully made. Ready to install."
+	+@echo "PipelineDB, contrib, and documentation successfully made. Ready to install."
 
 # build src/ before contrib/
 world-contrib-recurse: world-src-recurse
@@ -27,7 +28,7 @@ html man:
 	$(MAKE) -C doc $@
 
 install:
-	+@echo "PostgreSQL installation complete."
+	+@echo "PipelineDB installation complete."
 
 install-docs:
 	$(MAKE) -C doc install
@@ -69,6 +70,12 @@ check check-tests installcheck installcheck-parallel installcheck-tests:
 $(call recurse,check-world,src/test src/pl src/interfaces/ecpg contrib src/bin,check)
 
 $(call recurse,installcheck-world,src/test src/pl src/interfaces/ecpg contrib src/bin,installcheck)
+
+bootstrap:
+	$(bin_dir)/bootstrap --root=$(prefix)
+
+run:
+	$(bin_dir)/run-dev --root=$(prefix)
 
 GNUmakefile: GNUmakefile.in $(top_builddir)/config.status
 	./config.status $@

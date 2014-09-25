@@ -29,6 +29,7 @@ static TupleHashTable CurTupleHashTable = NULL;
 static uint32 TupleHashTableHash(const void *key, Size keysize);
 static int TupleHashTableMatch(const void *key1, const void *key2,
 					Size keysize);
+static uint32 TupleHashTableConstantHash(const void *key, Size keysize);
 
 
 /*****************************************************************************
@@ -290,6 +291,18 @@ BuildTupleHashTable(int numCols, AttrNumber *keyColIdx,
 	hashtable = (TupleHashTable) MemoryContextAlloc(tablecxt,
 												 sizeof(TupleHashTableData));
 
+  /*
+   * Sometimes it's actually useful to use this thing even
+   * when there are no hash columns. This allows us to avoid
+   * handling special cases in surrounding code where numCols
+   * may sometimes be 0. This effectively means that this hashtable
+   * will only ever store a single tuple, but it works transparently
+   * which is cleaner than implementing a special non-TupleHashTable
+   * case in these scenarios.
+   */
+	if (numCols == 0)
+	 nbuckets = 1;
+
 	hashtable->numCols = numCols;
 	hashtable->keyColIdx = keyColIdx;
 	hashtable->tab_hash_funcs = hashfunctions;
@@ -306,6 +319,12 @@ BuildTupleHashTable(int numCols, AttrNumber *keyColIdx,
 	hash_ctl.keysize = sizeof(TupleHashEntryData);
 	hash_ctl.entrysize = entrysize;
 	hash_ctl.hash = TupleHashTableHash;
+
+	if (numCols == 0)
+		hash_ctl.hash = TupleHashTableConstantHash;
+	else
+		hash_ctl.hash = TupleHashTableHash;
+
 	hash_ctl.match = TupleHashTableMatch;
 	hash_ctl.hcxt = tablecxt;
 	hashtable->hashtab = hash_create("TupleHashTable", nbuckets,
@@ -313,6 +332,18 @@ BuildTupleHashTable(int numCols, AttrNumber *keyColIdx,
 					HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_CONTEXT);
 
 	return hashtable;
+}
+
+/*
+ * Used for hashing when we have 0 hash columns, in which case
+ * we just dump everything into the same bucket. This is useful
+ * for transparently handling special cases when we end up with
+ * no hash columns.
+ */
+static uint32
+TupleHashTableConstantHash(const void *key, Size keysize)
+{
+	return 0;
 }
 
 /*

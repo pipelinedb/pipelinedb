@@ -11,6 +11,7 @@
 *.a
 *.mo
 *.pot
+*.pc
 objfiles.txt
 .deps/
 *.gcno
@@ -34,3 +35,7 @@ lib*.pc
 /pgsql.sln.cache
 /Debug/
 /Release/
+
+src/test/regress/regression.diffs
+src/test/regress/regression.out
+

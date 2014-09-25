@@ -51,6 +51,7 @@
 #include "parser/parser.h"
 #include "parser/scansup.h"
 #include "pgstat.h"
+#include "pipeline/streambuf.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
 #include "postmaster/bgwriter.h"
@@ -1509,6 +1510,16 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
+		{"debug_print_stream_buffer", PGC_USERSET, LOGGING_WHAT,
+			gettext_noop("Print the state of the stream buffer as it changes."),
+			NULL,
+		},
+		&DebugPrintStreamBuffer,
+		false,
+		NULL, NULL, NULL
+	},
+
+	{
 		{"data_checksums", PGC_INTERNAL, PRESET_OPTIONS,
 			gettext_noop("Shows whether data checksums are turned on for this cluster."),
 			NULL,
@@ -2551,6 +2562,18 @@ static struct config_int ConfigureNamesInt[] =
 		},
 		&pgstat_track_activity_query_size,
 		1024, 100, 102400,
+		NULL, NULL, NULL
+	},
+
+
+	{
+		{"stream_buffer_size", PGC_BACKEND, RESOURCES_MEM,
+			gettext_noop("Sets the maximum size of the stream buffer."),
+			NULL,
+			GUC_UNIT_BLOCKS
+		},
+		&StreamBufferBlocks,
+		1024, 0, INT_MAX,
 		NULL, NULL, NULL
 	},
 

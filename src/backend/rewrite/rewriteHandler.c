@@ -22,6 +22,7 @@
 #include "parser/analyze.h"
 #include "parser/parse_coerce.h"
 #include "parser/parsetree.h"
+#include "pipeline/stream.h"
 #include "rewrite/rewriteDefine.h"
 #include "rewrite/rewriteHandler.h"
 #include "rewrite/rewriteManip.h"
@@ -3269,6 +3270,10 @@ QueryRewrite(Query *parsetree)
 	CmdType		origCmdType;
 	bool		foundOriginalQuery;
 	Query	   *lastInstead;
+
+	/* CQs don't currently get rewritten */
+	if (QueryIsStreaming(parsetree) || QueryIsMerge(parsetree))
+		return list_make1(parsetree);
 
 	/*
 	 * This function is only applied to top-level original queries

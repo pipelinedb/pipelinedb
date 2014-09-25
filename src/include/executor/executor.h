@@ -16,6 +16,8 @@
 
 #include "executor/execdesc.h"
 #include "nodes/parsenodes.h"
+#include "utils/portal.h"
+#include "utils/resowner.h"
 
 
 /*
@@ -62,6 +64,7 @@
 #define EXEC_FLAG_WITH_OIDS		0x0020	/* force OIDs in returned tuples */
 #define EXEC_FLAG_WITHOUT_OIDS	0x0040	/* force no OIDs in returned tuples */
 #define EXEC_FLAG_WITH_NO_DATA	0x0080	/* rel scannability doesn't matter */
+#define EXEC_FLAG_COMBINE 0x0100 /* executing a combine query */
 
 
 /*
@@ -174,6 +177,10 @@ extern void ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void standard_ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void ExecutorRun(QueryDesc *queryDesc,
 			ScanDirection direction, long count);
+extern void ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner);
+extern void ExecutePlan(EState *estate, PlanState *planstate,
+					CmdType operation, bool sendTuples, long numberTuples, int timeoutms,
+					ScanDirection direction, DestReceiver *dest);
 extern void standard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, long count);
 extern void ExecutorFinish(QueryDesc *queryDesc);
@@ -221,6 +228,8 @@ extern PlanState *ExecInitNode(Plan *node, EState *estate, int eflags);
 extern TupleTableSlot *ExecProcNode(PlanState *node);
 extern Node *MultiExecProcNode(PlanState *node);
 extern void ExecEndNode(PlanState *node);
+extern void ExecBeginBatch(PlanState *node);
+extern TupleTableSlot *ExecEndBatch(PlanState *node);
 
 /*
  * prototypes from functions in execQual.c

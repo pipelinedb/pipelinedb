@@ -15,8 +15,11 @@
 #define PLANNODES_H
 
 #include "access/sdir.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "nodes/bitmapset.h"
 #include "nodes/primnodes.h"
+#include "pipeline/cqrun.h"
+#include "utils/tuplestore.h"
 
 
 /* ----------------------------------------------------------------
@@ -67,6 +70,16 @@ typedef struct PlannedStmt
 	List	   *invalItems;		/* other dependencies, as PlanInvalItems */
 
 	int			nParamExec;		/* number of PARAM_EXEC Params used */
+
+	/*
+	 * Continuous query fields
+	 */
+	bool		is_continuous; /* should this be executed continuously? */
+
+	ContinuousViewState	*cq_state;
+
+	RangeVar 	*cq_target; /* target output table of this CQ, if any */
+
 } PlannedStmt;
 
 /* macro for fetching the Plan associated with a SubPlan node */
@@ -271,6 +284,18 @@ typedef struct Scan
  * ----------------
  */
 typedef Scan SeqScan;
+
+/*
+ * ----------------
+ * 		stream buffer scan node
+ * 	---------------
+ */
+typedef struct StreamScan
+{
+	Scan scan;
+	int32 cqid;
+	TupleDesc desc;
+} StreamScan;
 
 /* ----------------
  *		index scan node
@@ -479,6 +504,23 @@ typedef struct ForeignScan
 	bool		fsSystemCol;	/* true if any "system column" is needed */
 } ForeignScan;
 
+/*
+ * ----------------
+ * 		TuplestoreScan
+ *
+ * 	TuplestoreScans simply scan a tuplestore as input. In the context of
+ * 	continuous queries, this is useful for merging partial query results
+ * 	received on the datanodes from a coordinator. In such cases, we want
+ * 	to run the continuous query plan one final time on a tuplestore containing
+ * 	the partial results as well as any existing tuples that the partial results
+ * 	need to be merged with.
+ */
+typedef struct TuplestoreScan
+{
+	Scan		scan;
+	Tuplestorestate *store; /* tuplestore to scan from */
+	TupleDesc	desc; /* tuple descriptor of store to scan */
+} TuplestoreScan;
 
 /*
  * ==========

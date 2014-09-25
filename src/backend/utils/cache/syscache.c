@@ -63,6 +63,8 @@
 #include "catalog/pg_ts_template.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_user_mapping.h"
+#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_encoding.h"
 #include "utils/rel.h"
 #include "utils/catcache.h"
 #include "utils/syscache.h"
@@ -564,6 +566,50 @@ static const struct cachedesc cacheinfo[] = {
 			0
 		},
 		8
+	},
+	{PipelineQueriesRelationId,	/* PIPELINEQUERIESID */
+		PipelineQueriesIdIndexId,
+		1,
+		{
+			Anum_pipeline_queries_id,
+			0,
+			0,
+			0
+		},
+		2048
+	},
+	{PipelineQueriesRelationId,	/* PIPELINEQUERIESNAME */
+		PipelineQueriesNameIndexId,
+		1,
+		{
+			Anum_pipeline_queries_name,
+			0,
+			0,
+			0
+		},
+		2048
+	},
+	{PipelineEncodingRelationId,	/* PIPELINEENCODINGNAME */
+		PipelineEncodingNameIndexId,
+		1,
+		{
+			Anum_pipeline_encoding_name,
+			0,
+			0,
+			0
+		},
+		2048
+	},
+	{PipelineEncodingRelationId,	/* PIPELINEENCODINGOID */
+		PipelineEncodingIdIndexId,
+		1,
+		{
+			Anum_pipeline_encoding_id,
+			0,
+			0,
+			0
+		},
+		2048
 	},
 	{ProcedureRelationId,		/* PROCNAMEARGSNSP */
 		ProcedureNameArgsNspIndexId,

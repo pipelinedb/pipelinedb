@@ -23,7 +23,7 @@ override CPPFLAGS := -I. -I$(srcdir) -I$(libpq_srcdir) -I$(top_srcdir)/src/bin/p
 OBJS=	command.o common.o help.o input.o stringutils.o mainloop.o copy.o \
 	startup.o prompt.o variables.o large_obj.o print.o describe.o \
 	tab-complete.o mbprint.o dumputils.o keywords.o kwlookup.o \
-	sql_help.o \
+	sql_help.o pipeline.o \
 	$(WIN32RES)
 
 
@@ -55,7 +55,9 @@ distprep: sql_help.h psqlscan.c
 install: all installdirs
 	$(INSTALL_PROGRAM) psql$(X) '$(DESTDIR)$(bindir)/psql$(X)'
 	$(INSTALL_DATA) $(srcdir)/psqlrc.sample '$(DESTDIR)$(datadir)/psqlrc.sample'
-
+	@rm -f '$(DESTDIR)$(bindir)/pipeline$(X)'
+	ln -s $(DESTDIR)$(bindir)/psql $(DESTDIR)$(bindir)/pipeline
+	
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(bindir)' '$(DESTDIR)$(datadir)'
 

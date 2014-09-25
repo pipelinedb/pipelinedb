@@ -12,6 +12,9 @@
 #ifndef FORK_PROCESS_H
 #define FORK_PROCESS_H
 
+#define IsChildProcess(pid) (pid == 0)
+#define ForkFailed(pid) (pid < 0)
+
 extern pid_t fork_process(void);
 
 #endif   /* FORK_PROCESS_H */

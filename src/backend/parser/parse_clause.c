@@ -29,10 +29,13 @@
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
 #include "parser/parse_expr.h"
+#include "parser/parse_func.h"
 #include "parser/parse_oper.h"
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
+#include "parser/parse_type.h"
 #include "rewrite/rewriteManip.h"
+#include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
@@ -49,6 +52,7 @@ static Node *transformJoinUsingClause(ParseState *pstate,
 						 List *leftVars, List *rightVars);
 static Node *transformJoinOnClause(ParseState *pstate, JoinExpr *j,
 					  List *namespace);
+static RangeTblEntry *transformStreamEntry(ParseState *pstate, RangeVar *r);
 static RangeTblEntry *transformTableEntry(ParseState *pstate, RangeVar *r);
 static RangeTblEntry *transformCTEReference(ParseState *pstate, RangeVar *r,
 					  CommonTableExpr *cte, Index levelsup);
@@ -415,6 +419,135 @@ transformJoinOnClause(ParseState *pstate, JoinExpr *j, List *namespace)
 }
 
 /*
+ * transformStreamEntryRTE -
+ * 		Derives and attaches the output schema of the CV's SELECT statement
+ * 		without using the catalog, which won't have schema information for streams anyways
+ */
+static void
+transformStreamEntryRTE(ParseState *pstate, RangeTblEntry *rte)
+{
+	List *attrs = NIL;
+	ListCell *tllc;
+	ListCell *lc;
+	/*
+	 * To get the exact length of each RTE's target list, we'd need to iterate
+	 * over the target list and check which entries belong to this RTE. Instead,
+	 * we just allocate enough space in this TupleDesc to hold the entire target list,
+	 * which will always be enough to hold the largest individual target list. It's a
+	 * little ugly but harmless since all we're doing is creating a continuous view.
+	 */
+	TupleDesc desc = CreateTemplateTupleDesc(list_length(pstate->p_target_list), false);
+	int attnum = 1;
+	foreach(tllc, pstate->p_target_list)
+	{
+		ResTarget *rt = (ResTarget *) lfirst(tllc);
+		Oid oid;
+		Form_pg_attribute attr;
+		char *attrname;
+
+		if (IsA(rt->val, TypeCast))
+		{
+			TypeCast *tc = (TypeCast *) rt->val;
+
+			if (IsA(tc->arg, ColumnRef))
+			{
+				ColumnRef *ref = (ColumnRef *) tc->arg;
+
+				switch (list_length(ref->fields))
+				{
+					case 1:
+						if (list_length(pstate->p_namespace) > 1)
+						{
+							/*
+							 * If there are multiple RTEs, we need to enforce that columns are qualified because
+							 * we can't infer which columns will come from which streams. e.g., consider:
+							 *
+							 * CREATE CONTINUOUS VIEW v AS SELECT col0, col1 FROM s0, s1
+							 *
+							 * We don't know which stream col0 or col1 will come from, so we need to do this:
+							 *
+							 * CREATE CONTINUOUS VIEW v AS SELECT s0.col0, s1.col1 FROM s0, s1
+							 */
+							ereport(ERROR,
+									(errcode(ERRCODE_SYNTAX_ERROR),
+									 errmsg("all column names must be qualified when selecting from multiple streams"),
+									 parser_errposition(pstate,
+														exprLocation((Node *) pstate->p_target_list))));
+						}
+
+						/*
+						 * If there's only one field in the column name and only one RTE, then
+						 * this column belongs to the only RTE
+						 */
+						attrname = strVal(linitial(ref->fields));
+						break;
+					case 2:
+						{
+							char *qual = strVal(linitial(ref->fields));
+							char *name = rte->alias ? rte->alias->aliasname : rte->relname;
+							if (strcmp(qual, name) != 0)
+							{
+								/* this column doesn't belong to the current RTE */
+								continue;
+							}
+							attrname = strVal(list_nth(ref->fields, 1));
+						}
+						break;
+				}
+			}
+
+			oid = LookupTypeNameOid(NULL, tc->typeName, false);
+			attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
+			attr->attnum = attnum++;
+			attr->atttypid = oid;
+			namestrcpy(&attr->attname, attrname);
+
+			attrs = lappend(attrs, attr);
+		}
+	}
+
+	desc = CreateTemplateTupleDesc(list_length(attrs), false);
+	foreach(lc, attrs)
+	{
+		Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
+
+		/* PipelineDB XXX: should we be able to handle non-zero dimensions here? */
+		TupleDescInitEntry(desc, attr->attnum, NameStr(attr->attname),
+				attr->atttypid, InvalidOid, 0);
+	}
+
+	rte->cvdesc = desc;
+	buildRelationAliases(desc, rte->alias, rte->eref);
+}
+
+/*
+ * transformStreamEntry --- transform a RangeVar corresponding to a stream reference
+ */
+static RangeTblEntry *
+transformStreamEntry(ParseState *pstate, RangeVar *relation)
+{
+	RangeTblEntry *rte = makeNode(RangeTblEntry);
+	char	   *refname = relation->alias ? relation->alias->aliasname : relation->relname;
+
+	rte->rtekind = RTE_RELATION;
+	rte->alias = relation->alias;
+	rte->inFromCl = true;
+	rte->requiredPerms = ACL_SELECT;
+	rte->checkAsUser = InvalidOid;		/* not set-uid by default, either */
+	rte->selectedCols = NULL;
+	rte->modifiedCols = NULL;
+	rte->relname = refname;
+
+	rte->eref = makeAlias(refname, NIL);
+	transformStreamEntryRTE(pstate, rte);
+
+	if (pstate != NULL)
+		pstate->p_rtable = lappend(pstate->p_rtable, rte);
+
+	return rte;
+}
+
+/*
  * transformTableEntry --- transform a RangeVar (simple relation reference)
  */
 static RangeTblEntry *
@@ -749,6 +882,12 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 			cte = scanNameSpaceForCTE(pstate, rv->relname, &levelsup);
 			if (cte)
 				rte = transformCTEReference(pstate, rv, cte, levelsup);
+		}
+
+		if (pstate->p_is_create_cv && !rte)
+		{
+			/* it's for a CREATE CONTINUOUS VIEW statement, so it might be a stream */
+			rte = transformStreamEntry(pstate, rv);
 		}
 
 		/* if not found as a CTE, must be a table reference */

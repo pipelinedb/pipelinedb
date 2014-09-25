@@ -17,6 +17,8 @@
 
 #include "access/tupdesc.h"
 #include "nodes/params.h"
+#include "nodes/parsenodes.h"
+#include "utils/tuplestore.h"
 
 #define CACHEDPLANSOURCE_MAGIC		195726186
 #define CACHEDPLAN_MAGIC			953717834

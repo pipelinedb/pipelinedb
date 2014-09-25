@@ -33,6 +33,11 @@
 
 #include "executor/tuptable.h"
 
+/*
+ * Convenience macro for iterating over a tuplestore
+ */
+#define foreach_tuple(slot, store) \
+ while (tuplestore_gettupleslot(store, true, false, slot))
 
 /* Tuplestorestate is an opaque type whose details are not known outside
  * tuplestore.c.

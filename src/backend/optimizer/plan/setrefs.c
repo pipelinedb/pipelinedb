@@ -432,6 +432,8 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 	 */
 	switch (nodeTag(plan))
 	{
+		case T_StreamScan:
+			break;
 		case T_SeqScan:
 			{
 				SeqScan    *splan = (SeqScan *) plan;
@@ -575,7 +577,8 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 					fix_scan_list(root, splan->fdw_exprs, rtoffset);
 			}
 			break;
-
+		case T_TuplestoreScan:
+			break;
 		case T_NestLoop:
 		case T_MergeJoin:
 		case T_HashJoin:
