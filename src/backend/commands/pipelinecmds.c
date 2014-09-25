@@ -167,11 +167,10 @@ DropContinuousView(DropStmt *stmt)
     RangeVar *view_name = makeRangeVarFromNameList((List *) lfirst(item));
     HeapTuple	tuple;
 
-    tuple = SearchSysCache1(PIPELINEQUERIESNAME,
-                            CStringGetDatum(view_name->relname));
-
-    if (!HeapTupleIsValid(tuple)) {
-      elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist", strVal(view_name));
+    tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(view_name->relname));
+    if (!HeapTupleIsValid(tuple))
+    {
+    	elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist", view_name->relname);
       continue;
     }
 
