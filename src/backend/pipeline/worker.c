@@ -15,6 +15,7 @@
 #include "access/xact.h"
 #include "catalog/pipeline_queries.h"
 #include "executor/executor.h"
+#include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "pipeline/combiner.h"
 #include "pipeline/combinerReceiver.h"
@@ -25,7 +26,8 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
-#include "miscadmin.h"
+#include "utils/timestamp.h"
+
 
 
 /*
@@ -42,21 +44,15 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	CmdType		operation;
 	MemoryContext oldcontext;
 	ResourceOwner save = CurrentResourceOwner;
-	char *cvname = queryDesc->plannedstmt->cq_target->relname;
+	RangeVar *rv = queryDesc->plannedstmt->cq_target;
+	char *cvname = rv->relname;
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
-	Relation pipeline_queries;
-	HeapTuple tuple;
-	HeapTuple newtuple;
-	Form_pipeline_queries row;
 	NameData name;
-	bool nulls[Natts_pipeline_queries];
-	bool replaces[Natts_pipeline_queries];
-	Datum values[Natts_pipeline_queries];
-	bool alreadyRunning = false;
 	bool hasBeenDeactivated = false;
-	clock_t lastCheckTime = clock();
+	clock_t lastCheckTime = GetCurrentTimestamp();
 
+	namestrcpy(&name, cvname);
 	CurrentResourceOwner = owner;
 
 	/* prepare the plan for execution */
@@ -80,33 +76,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 	elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
-
-	namestrcpy(&name, cvname);
-
-//	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
-//	tuple = SearchSysCache1(PIPELINEQUERIESNAME, NameGetDatum(&name));
-//
-//	if (!HeapTupleIsValid(tuple))
-//		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist", cvname);
-//
-//	row = (Form_pipeline_queries) GETSTRUCT(tuple);
-//	alreadyRunning = row->state == PIPELINE_QUERY_STATE_ACTIVE;
-//
-//	if (!alreadyRunning)
-//	{
-//		/* Mark the CV as active. */
-//		MemSet(values, 0, sizeof(values));
-//		MemSet(nulls, false, sizeof(nulls));
-//		MemSet(replaces, false, sizeof(replaces));
-//
-//		replaces[Anum_pipeline_queries_state - 1] = true;
-//		values[Anum_pipeline_queries_state - 1] = PIPELINE_QUERY_STATE_ACTIVE;
-//
-//		newtuple = heap_modify_tuple(tuple, RelationGetDescr(pipeline_queries), values,
-//				nulls, replaces);
-//		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
-//		CommandCounterIncrement();
-//	}
 
 	CurrentResourceOwner = save;
 
@@ -135,28 +104,21 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 		MemoryContextReset(ContinuousQueryContext);
 
-//		if ((double) (clock() - lastCheckTime) >= (2 * CLOCKS_PER_SEC))
-//		{
-//			/* Check is we have been deactivated, and break out
-//			 * if we have. */
-//			StartTransactionCommand();
-//			tuple = SearchSysCache1(PIPELINEQUERIESNAME,
-//					NameGetDatum(&name));
-//			hasBeenDeactivated = !HeapTupleIsValid(tuple);
-//			if (!hasBeenDeactivated)
-//			{
-//				row = (Form_pipeline_queries) GETSTRUCT(tuple);
-//				hasBeenDeactivated = (row->state ==
-//						PIPELINE_QUERY_STATE_INACTIVE);
-//			}
-//			ReleaseSysCache(tuple);
-//			CommitTransactionCommand();
-//
-//			if (hasBeenDeactivated)
-//				break;
-//
-//			lastCheckTime = clock();
-//		}
+		if (TimestampDifferenceExceeds(lastCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
+		{
+			/* Check is we have been deactivated, and break out
+			 * if we have. */
+			StartTransactionCommand();
+
+			hasBeenDeactivated = !IsContinuousViewActive(rv);
+
+			CommitTransactionCommand();
+
+			if (hasBeenDeactivated)
+				break;
+
+			lastCheckTime = GetCurrentTimestamp();
+		}
 	}
 
 	(*dest->rShutdown) (dest);

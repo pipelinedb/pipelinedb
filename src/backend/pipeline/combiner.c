@@ -9,6 +9,7 @@
  *-------------------------------------------------------------------------
  */
 #include <sys/socket.h>
+#include <time.h>
 #include <sys/un.h>
 #include <sys/unistd.h>
 
@@ -16,6 +17,7 @@
 
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "executor/tupletableReceiver.h"
 #include "executor/tstoreReceiver.h"
@@ -33,6 +35,7 @@
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
+#include "utils/timestamp.h"
 
 
 #define NAME_PREFIX "combiner_"
@@ -103,6 +106,10 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 			return;
 		elog(ERROR, "combiner failed to receive tuple length: %m");
 	}
+	else if (read == 0)
+	{
+		return;
+	}
 
 	len = ntohl(len);
 
@@ -138,6 +145,7 @@ CreateCombinerDesc(QueryDesc *query)
 void
 ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
 {
+	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	ResourceOwner save = CurrentResourceOwner;
 	TupleTableSlot *slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
 	Tuplestorestate *store;
@@ -145,9 +153,13 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 	long lastms;
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeout = queryDesc->plannedstmt->cq_state->maxwaitms;
-	char *cvname = queryDesc->plannedstmt->cq_target->relname;
+	char *cvname = rv->relname;
 	struct timeval lastcombine;
 	struct timeval current;
+	Query *query;
+	PlannedStmt *combineplan;
+	bool hasBeenDeactivated = false;
+	clock_t lastCheckTime = GetCurrentTimestamp();
 
 	MemoryContext combinectx = AllocSetContextCreate(TopMemoryContext,
 																	"CombineContext",
@@ -155,10 +167,12 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 																	ALLOCSET_DEFAULT_INITSIZE,
 																	ALLOCSET_DEFAULT_MAXSIZE);
 
+	elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
   accept_worker(combiner);
-  elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
 
   store = tuplestore_begin_heap(true, true, work_mem);
+  combineplan = GetCombinePlan(cvname, store, &query);
+  combineplan->cq_target = rv;
 
   gettimeofday(&lastcombine, NULL);
   lastms = (lastcombine.tv_sec * 1000) + (lastcombine.tv_usec / 1000.0);
@@ -197,9 +211,9 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
   	{
   		MemoryContext oldcontext = MemoryContextSwitchTo(combinectx);
 
-  		Combine(cvname, queryDesc->tupDesc, store);
-  		tuplestore_clear(store);
+  		Combine(query, combineplan, queryDesc->tupDesc, store);
 
+  		tuplestore_clear(store);
   		MemoryContextReset(combinectx);
   		MemoryContextSwitchTo(oldcontext);
 
@@ -207,6 +221,22 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
   		gettimeofday(&lastcombine, NULL);
   		lastms = (lastcombine.tv_sec * 1000) + (lastcombine.tv_usec / 1000.0);
   	}
+
+		if (TimestampDifferenceExceeds(lastCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
+		{
+			/* Check is we have been deactivated, and break out
+			 * if we have. */
+			StartTransactionCommand();
+
+			hasBeenDeactivated = !IsContinuousViewActive(rv);
+
+			CommitTransactionCommand();
+
+			if (hasBeenDeactivated)
+				break;
+
+			lastCheckTime = GetCurrentTimestamp();
+		}
   }
 
   CurrentResourceOwner = save;
@@ -220,14 +250,16 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 PlannedStmt *
 GetCombinePlan(char *cvname, Tuplestorestate *store, Query **query)
 {
-	RangeVar *rel = makeRangeVar(NULL, cvname, -1);
 	char *query_string;
 	Node	   *raw_parse_tree;
 	List	   *parsetree_list;
 	List		 *query_list;
 	Query 	 *q;
+	PlannedStmt* plan;
 
-	query_string = GetQueryString(rel, true);
+	StartTransactionCommand();
+
+	query_string = GetQueryString(cvname, true);
 	parsetree_list = pg_parse_query(query_string);
 
 	/* CVs should only have a single query */
@@ -247,7 +279,11 @@ GetCombinePlan(char *cvname, Tuplestorestate *store, Query **query)
 	q->cq_is_merge = true;
 	*query = q;
 
-	return pg_plan_query(q, 0, NULL);
+	plan = pg_plan_query(q, 0, NULL);
+
+	CommitTransactionCommand();
+
+	return plan;
 }
 
 /*
@@ -459,7 +495,7 @@ SyncCombine(char *cvname, Tuplestorestate *results,
  * Combines partial results of a continuous query with existing rows in the continuous view
  */
 void
-Combine(char *cvname, TupleDesc cvdesc, Tuplestorestate *store)
+Combine(Query *query, PlannedStmt *plan, TupleDesc cvdesc, Tuplestorestate *store)
 {
 	TupleTableSlot *slot;
 	Portal portal;
@@ -472,15 +508,13 @@ Combine(char *cvname, TupleDesc cvdesc, Tuplestorestate *store)
 	AttrNumber *cols;
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
-	PlannedStmt *plan;
-	Query *query;
 	int num_cols = 0;
 	int num_buckets = 1;
+	char *cvname = plan->cq_target->relname;
 
 	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	plan = GetCombinePlan(cvname, store, &query);
 	slot = MakeSingleTupleTableSlot(cvdesc);
 	group_clause = query->groupClause;
 

@@ -82,4 +82,6 @@ typedef FormData_pipeline_queries *Form_pipeline_queries;
 #define CQ_DEFAULT_WAIT_MS 		0
 #define CQ_DEFAULT_PARALLELISM 	1
 
+#define CQ_INACTIVE_CHECK_MS 2000
+
 #endif   /* PIPELINE_QUERIES_H */

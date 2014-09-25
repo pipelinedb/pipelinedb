@@ -32,6 +32,6 @@ void GetTuplesToCombineWith(char *cvname, TupleDesc desc,
 		List *group_clause, TupleHashTable merge_targets);
 void SyncCombine(char *cvname, Tuplestorestate *results,
 		TupleTableSlot *slot, AttrNumber merge_attr, TupleHashTable merge_targets);
-void Combine(char *cvname, TupleDesc cvdesc, Tuplestorestate *store);
+void Combine(Query *query, PlannedStmt *plan, TupleDesc cvdesc, Tuplestorestate *store);
 
 #endif /* COMBINER_H */

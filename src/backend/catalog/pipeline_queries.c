@@ -16,10 +16,29 @@
 #include "catalog/indexing.h"
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
+#include "libpq/libpq.h"
+#include "miscadmin.h"
+#include "nodes/makefuncs.h"
+#include "pipeline/cqrun.h"
+#include "postmaster/bgworker.h"
+#include "storage/pmsignal.h"
+#include "storage/proc.h"
+#include "storage/shmem.h"
+#include "tcop/dest.h"
 #include "utils/builtins.h"
+#include "utils/portal.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
+
+
+/* Used to pass arguments to background workers spawned by the postmaster */
+typedef struct RunCQArgs
+{
+	NameData name;
+	NameData dbname;
+	bool combiner;
+} RunCQArgs;
 
 /*
  * skip
@@ -294,7 +313,7 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	bool replaces[Natts_pipeline_queries];
 	Datum values[Natts_pipeline_queries];
 
-	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
+	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
@@ -339,8 +358,7 @@ IsContinuousViewActive(RangeVar *name)
 	if (isActive)
 	{
 		row = (Form_pipeline_queries) GETSTRUCT(tuple);
-		isActive = (row->state ==
-				PIPELINE_QUERY_STATE_ACTIVE);
+		isActive = (row->state == PIPELINE_QUERY_STATE_ACTIVE);
 	}
 	ReleaseSysCache(tuple);
 
@@ -351,7 +369,7 @@ IsContinuousViewActive(RangeVar *name)
  * Retrieves a REGISTERed query from the pipeline_queries catalog table
  */
 char *
-GetQueryString(RangeVar *rvname, bool select_only)
+GetQueryString(const char *cvname, bool select_only)
 {
 	HeapTuple tuple;
 	NameData name;
@@ -359,11 +377,11 @@ GetQueryString(RangeVar *rvname, bool select_only)
 	bool isnull;
 	char *result;
 
-	namestrcpy(&name, rvname->relname);
+	namestrcpy(&name, cvname);
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, NameGetDatum(&name));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "continuous view \"%s\" does not exist", rvname->relname);
+		elog(ERROR, "continuous view \"%s\" does not exist", cvname);
 
 	tmp = SysCacheGetAttr(PIPELINEQUERIESNAME, tuple, Anum_pipeline_queries_query, &isnull);
 	result = TextDatumGetCString(tmp);
@@ -385,7 +403,7 @@ GetQueryString(RangeVar *rvname, bool select_only)
 		int pos = skip("CREATE", result, 0);
 		pos = skip("CONTINUOUS", result, pos);
 		pos = skip("VIEW", result, pos);
-		pos = skip(rvname->relname, result, pos);
+		pos = skip(cvname, result, pos);
 		pos = skip("AS", result, pos);
 
 		trimmedlen = strlen(result) - pos + 1;

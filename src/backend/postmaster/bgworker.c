@@ -293,6 +293,7 @@ BackgroundWorkerStateChange(void)
 		rw->rw_worker.bgw_main = slot->worker.bgw_main;
 		rw->rw_worker.bgw_main_arg = slot->worker.bgw_main_arg;
 		rw->rw_worker.bgw_additional_size = slot->worker.bgw_additional_size;
+		rw->rw_worker.bgw_let_crash = slot->worker.bgw_let_crash;
 
 		if (slot->worker.bgw_additional_size)
 		{
@@ -483,6 +484,16 @@ SanityCheckBackgroundWorker(BackgroundWorker *worker, int elevel)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("background worker \"%s\": invalid restart interval",
 						worker->bgw_name)));
+		return false;
+	}
+
+	if (worker->bgw_additional_size > BGW_ADDITIONAL_LEN)
+	{
+		ereport(elevel,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("additional argument size of %d for worker \"%s\" exceeds the maximum of %d",
+						 (int) worker->bgw_additional_size, worker->bgw_name, BGW_ADDITIONAL_LEN)));
+
 		return false;
 	}
 
