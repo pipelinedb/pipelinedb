@@ -201,6 +201,9 @@ bool InsertTargetIsStream(InsertStmt *ins)
 	if (reloid != InvalidOid)
 		return false;
 
+	if (!GlobalStreamBuffer)
+		InitGlobalStreamBuffer();
+
 	return IsInputStream(ins->relation->relname);
 }
 

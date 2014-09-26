@@ -4560,6 +4560,9 @@ PostgresMain(int argc, char *argv[],
 					encoding = pq_getmsgstring(&input_message);
 					channel = pq_getmsgstring(&input_message);
 
+					if (!GlobalStreamBuffer)
+						InitGlobalStreamBuffer();
+
 					exec_proxy_events(encoding, channel, &input_message);
 					send_ready_for_query = true;
 				}

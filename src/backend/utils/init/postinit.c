@@ -942,8 +942,6 @@ InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 	if (!bootstrap)
 		pgstat_bestart();
 
-	InitGlobalStreamBuffer();
-
 	/* close the transaction we started above */
 	if (!bootstrap)
 		CommitTransactionCommand();
