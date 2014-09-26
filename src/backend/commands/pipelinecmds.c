@@ -153,45 +153,51 @@ DumpState(DumpStmt *stmt)
 void
 DropContinuousView(DropStmt *stmt)
 {
-  Relation pipeline_queries;
-  ListCell *item;
+	Relation pipeline_queries;
+	ListCell *item;
 
-  /*
-   * Scan the pipeline_queries relation to find the OID of the views(s) to be
-   * deleted.
-   */
-  pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
+	/*
+	 * Scan the pipeline_queries relation to find the OID of the views(s) to be
+	 * deleted.
+	 */
+	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 
-  foreach(item, stmt->objects)
-  {
-    RangeVar *view_name = makeRangeVarFromNameList((List *) lfirst(item));
-    HeapTuple	tuple;
+	foreach(item, stmt->objects)
+	{
+		RangeVar *view_name = makeRangeVarFromNameList((List *) lfirst(item));
+		HeapTuple	tuple;
+		Form_pipeline_queries row;
 
-    tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(view_name->relname));
-    if (!HeapTupleIsValid(tuple))
-    {
-    	elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist", view_name->relname);
-      continue;
-    }
+		tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(view_name->relname));
+		if (!HeapTupleIsValid(tuple))
+		{
+			elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist", view_name->relname);
+		}
 
-    /*
-     * Remove the view from the pipeline_queries table
-     */
-    simple_heap_delete(pipeline_queries, &tuple->t_self);
+		row = (Form_pipeline_queries) GETSTRUCT(tuple);
+		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
+		{
+			elog(ERROR, "CONTINUOUS VIEW \"%s\" is currently active; can't be dropped", view_name->relname);
+		}
 
-    ReleaseSysCache(tuple);
+		/*
+		 * Remove the view from the pipeline_queries table
+		 */
+		simple_heap_delete(pipeline_queries, &tuple->t_self);
 
-    /*
-     * Advance command counter so that later iterations of this loop will
-     * see the changes already made.
-     */
-    CommandCounterIncrement();
-  }
+		ReleaseSysCache(tuple);
 
-  /*
-   * Now we can clean up; but keep locks until commit.
-   */
-  heap_close(pipeline_queries, NoLock);
+		/*
+		 * Advance command counter so that later iterations of this loop will
+		 * see the changes already made.
+		 */
+		CommandCounterIncrement();
+	}
+
+	/*
+	 * Now we can clean up; but keep locks until commit.
+	 */
+	heap_close(pipeline_queries, NoLock);
 }
 
 void
