@@ -30,7 +30,7 @@ CATALOG(pipeline_queries,4242) BKI_WITHOUT_OIDS
 	int32		id;
 	NameData	name;
 	char		state;
-	int64 		batchsize;
+	int32 		batchsize;
 	int32 		maxwaitms;
 	int32		emptysleepms;
 	int16		parallelism;

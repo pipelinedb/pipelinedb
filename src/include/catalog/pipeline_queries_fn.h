@@ -19,7 +19,7 @@ typedef struct ContinuousViewState
 {
 	int32	id;
 	char	state;
-	int64 	batchsize;
+	int32 	batchsize;
 	int32 	maxwaitms;
 	int32	emptysleepms;
 	int16	parallelism;
