@@ -58,6 +58,15 @@ skip(const char *needle, const char *haystack, int pos)
 	return pos + strlen(needle);
 }
 
+static int
+compare_int32s (const void *a, const void *b)
+{
+  const int32 *ia = (const int32 *) a;
+  const int32 *ib = (const int32 *) b;
+
+  return (*ia > *ib) - (*ia < *ib);
+}
+
 /*
  * get_next_id
  *
@@ -68,24 +77,48 @@ skip(const char *needle, const char *haystack, int pos)
 static int32
 get_next_id(void)
 {
-	Relation rel;
-	HeapScanDesc scandesc;
-	HeapTuple tup;
-	int32 id = -1;
+	Relation		rel;
+	HeapScanDesc	scandesc;
+	HeapTuple		tup;
+	int32			id = 0;
+	List			*idsList = NIL;
+	ListCell		*lc;
 
 	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 	scandesc = heap_beginscan_catalog(rel, 0, NULL);
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
 	{
-		Form_pipeline_queries catrow = (Form_pipeline_queries) GETSTRUCT(tup);
-		id = catrow->id > id ? catrow->id : id;
+		Form_pipeline_queries row = (Form_pipeline_queries) GETSTRUCT(tup);
+		idsList = lappend(idsList, (void *) Int32GetDatum(row->id));
 	}
 
 	heap_endscan(scandesc);
+
+	if (idsList != NIL)
+	{
+		int32 ids[idsList->length];
+		int i = 0;
+		foreach(lc, idsList)
+		{
+			ids[i] = DatumGetInt32(lfirst(lc));
+			i++;
+		}
+
+		qsort(ids, idsList->length, sizeof(int32), &compare_int32s);
+
+		for (id = 0; id < idsList->length; id++)
+		{
+			if (ids[id] > id)
+			{
+				break;
+			}
+		}
+	}
+
 	heap_close(rel, AccessExclusiveLock);
 
-	return id + 1;
+	return id;
 }
 
 /*
