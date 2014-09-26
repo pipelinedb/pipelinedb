@@ -207,9 +207,9 @@ ActivateContinuousView(ActivateContinuousViewStmt *stmt)
 	ListCell *lc;
 	ContinuousViewState state;
 
-	/* repeated activation is a noop */
 	if (IsContinuousViewActive(rv))
-		return;
+		elog(ERROR, "CONTINUOUS VIEW \"%s\" is already active.",
+				rv->relname);
 
 	GetContinousViewState(rv, &state);
 
