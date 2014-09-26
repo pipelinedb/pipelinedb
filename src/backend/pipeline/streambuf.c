@@ -72,7 +72,6 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	StreamEvent shared;
 	StreamBufferSlot *result;
 	Size size;
-	MemoryContext oldcontext;
 	Bitmapset *bms = GetTargetsFor(stream, targets);
 	StreamBufferSlot *sbs;
 

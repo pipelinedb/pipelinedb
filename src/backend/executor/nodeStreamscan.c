@@ -79,13 +79,6 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 	ExecAssignResultTypeFromTL(&state->ss.ps);
 	ExecAssignScanProjectionInfo(&state->ss);
 
-	/*
-	 * There is probably a better place for this, but we may as well wait to initialize
-	 * it until we actually need it.
-	 */
-	if (!GlobalStreamBuffer)
-		InitGlobalStreamBuffer();
-
 	state->reader = OpenStreamBufferReader(GlobalStreamBuffer, node->cqid);
 
 	return state;
