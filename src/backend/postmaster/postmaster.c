@@ -98,6 +98,7 @@
 #include "libpq/libpq.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
+#include "nodes/print.h"
 #include "pg_getopt.h"
 #include "pgstat.h"
 #include "postmaster/autovacuum.h"
@@ -3930,6 +3931,10 @@ BackendInitialize(Port *port)
 #ifdef HAVE_SETSID
 	if (setsid() < 0)
 		elog(FATAL, "setsid() failed: %m");
+#endif
+
+#ifdef BACKTRACE_SEGFAULTS
+	pqsignal(SIGSEGV, debug_segfault);
 #endif
 
 	/*

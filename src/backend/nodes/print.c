@@ -16,6 +16,8 @@
  *
  *-------------------------------------------------------------------------
  */
+#include <execinfo.h>
+#include <unistd.h>
 
 #include "postgres.h"
 
@@ -26,6 +28,30 @@
 #include "parser/parsetree.h"
 #include "utils/lsyscache.h"
 
+
+/*
+ * debug_segfault
+ * 		SIGSEGV handler that prints a stack trace
+ *
+ * 		Enable by #defining BACKTRACE_SEGFAULTS.
+ *
+ * 		Note, the output of backtrace uses instruction addresses
+ * 		instead of line numbers, which can be hard to read. To translate
+ * 		the addresses into something more human readble, use addr2line:
+ *
+ * 		addr2line -e path/to/postgres <address>
+ */
+void
+debug_segfault(SIGNAL_ARGS)
+{
+  void *array[32];
+  size_t size;
+
+  size = backtrace(array, 32);
+  fprintf(stderr, "segfault at:\n");
+  backtrace_symbols_fd(array, size, STDERR_FILENO);
+  exit(1);
+}
 
 /*
  * print

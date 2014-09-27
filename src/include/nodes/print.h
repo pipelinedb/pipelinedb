@@ -19,6 +19,7 @@
 
 #define nodeDisplay(x)		pprint(x)
 
+extern void debug_segfault(SIGNAL_ARGS);
 extern void print(const void *obj);
 extern void pprint(const void *obj);
 extern void elog_node_display(int lev, const char *title,
