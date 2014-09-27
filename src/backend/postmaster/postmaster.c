@@ -3933,6 +3933,7 @@ BackendInitialize(Port *port)
 		elog(FATAL, "setsid() failed: %m");
 #endif
 
+#define BACKTRACE_SEGFAULTS
 #ifdef BACKTRACE_SEGFAULTS
 	pqsignal(SIGSEGV, debug_segfault);
 #endif
@@ -5381,6 +5382,9 @@ do_start_bgworker(RegisteredBgWorker *rw)
 
 #ifndef EXEC_BACKEND
 		case 0:
+			#ifdef BACKTRACE_SEGFAULTS
+				pqsignal(SIGSEGV, debug_segfault);
+			#endif
 			/* in postmaster child ... */
 			/* Close the postmaster's sockets */
 			ClosePostmasterPorts(false);
