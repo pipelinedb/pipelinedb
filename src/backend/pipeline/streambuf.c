@@ -326,6 +326,13 @@ OpenStreamBufferReader(StreamBuffer *buf, int queryid)
 	return reader;
 }
 
+extern void
+CloseStreamBufferReader(StreamBufferReader *reader)
+{
+	/* currently every reader gets its own process */
+	LWLockRelease(StreamBufferWrapLock);
+}
+
 /*
  * PinNextStreamEvent
  *

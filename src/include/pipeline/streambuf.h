@@ -96,6 +96,7 @@ extern void InitGlobalStreamBuffer(void);
 extern bool IsInputStream(const char *stream);
 
 extern StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
+extern void CloseStreamBufferReader(StreamBufferReader *reader);
 extern StreamBufferSlot *PinNextStreamEvent(StreamBufferReader *reader);
 extern void UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot);
 extern void ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, int intervalms);

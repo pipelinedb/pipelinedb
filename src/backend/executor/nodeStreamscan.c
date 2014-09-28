@@ -92,3 +92,9 @@ ExecStreamScan(StreamScanState *node)
 					(ExecScanAccessMtd) StreamScanNext,
 					(ExecScanRecheckMtd) StreamScanNext);
 }
+
+void
+ExecEndStreamScan(StreamScanState *node)
+{
+	CloseStreamBufferReader(node->reader);
+}
