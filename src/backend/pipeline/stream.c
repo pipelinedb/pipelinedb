@@ -75,7 +75,6 @@ CreateStreamTargets(void)
 	StreamTargets *targets;
 	Relation rel;
 	HeapScanDesc scandesc;
-	Form_pipeline_queries catrow;
 	HeapTuple tup;
 	MemoryContext oldcontext;
 
@@ -100,8 +99,11 @@ CreateStreamTargets(void)
 		SelectStmt *select;
 		Datum tmp;
 		bool isnull;
+		Form_pipeline_queries catrow = (Form_pipeline_queries) GETSTRUCT(tup);
 
-		catrow = (Form_pipeline_queries) GETSTRUCT(tup);
+		if (catrow->state != PIPELINE_QUERY_STATE_ACTIVE)
+			continue;
+
 		tmp = SysCacheGetAttr(PIPELINEQUERIESNAME, tup, Anum_pipeline_queries_query, &isnull);
 		querystring = TextDatumGetCString(tmp);
 
