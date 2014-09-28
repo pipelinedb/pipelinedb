@@ -83,8 +83,8 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		/* nothing is reading from this stream, so it's a noop */
 		return NULL;
 	}
-	size = sizeof(StreamEventData) + event->len + sizeof(StreamBufferSlot) + 1 +
-			strlen(stream) + 1 + strlen(encoding) + BITMAPSET_SIZE(bms->nwords);
+	size = sizeof(StreamEventData) + event->len + sizeof(StreamBufferSlot) +
+			strlen(stream) + 1 + strlen(encoding) + 1 + BITMAPSET_SIZE(bms->nwords);
 
 	if (size > buf->capacity)
 		elog(ERROR, "event of size %d too big for stream buffer of size %d", (int) size, (int) buf->capacity);
