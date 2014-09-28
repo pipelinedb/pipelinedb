@@ -19,12 +19,7 @@
 
 #define BufferEnd(buf) ((buf)->start + (buf)->capacity)
 #define BufferOffset(buf, ptr) ((int) ((char *) (ptr) - (buf)->start))
-
-#define SlotSize(slot) ((int) (sizeof(StreamEventData) + \
-		(slot)->event->len + sizeof(StreamBufferSlot) + strlen((slot)->stream) + 1 + \
-		strlen((slot)->encoding) + 1 + sizeof(Bitmapset) + \
-		(slot)->readby->nwords * sizeof(bitmapword)))
-
+#define SlotSize(slot) ((slot)->len)
 #define SlotEnd(slot) ((char *) (slot) + SlotSize(slot))
 
 extern bool DebugPrintStreamBuffer;
@@ -95,8 +90,6 @@ typedef struct StreamBufferReader
 
 extern StreamBuffer *GlobalStreamBuffer;
 
-extern void OpenStreamBuffer(StreamBuffer *buf);
-extern void CloseStreamBuffer(StreamBuffer *buf);
 extern StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent event);
 extern Size StreamBufferShmemSize(void);
 extern void InitGlobalStreamBuffer(void);

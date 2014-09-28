@@ -1400,8 +1400,6 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
 
-	OpenStreamBuffer(GlobalStreamBuffer);
-
 	while (message->cursor < message->len)
 	{
 		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
@@ -1415,8 +1413,6 @@ exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev);
 	}
 	pq_getmsgend(message);
-
-	CloseStreamBuffer(GlobalStreamBuffer);
 
 	MemoryContextSwitchTo(oldcontext);
 	MemoryContextReset(EventContext);

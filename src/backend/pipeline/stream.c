@@ -255,8 +255,6 @@ InsertIntoStream(InsertStmt *ins)
 		memcpy(sharedfields[i], res->name, size);
 	}
 
-	OpenStreamBuffer(GlobalStreamBuffer);
-
 	foreach (lc, sel->valuesLists)
 	{
 		List *vals = (List *) lfirst(lc);
@@ -307,8 +305,6 @@ InsertIntoStream(InsertStmt *ins)
 		AppendStreamEvent(ins->relation->relname, VALUES_ENCODING, GlobalStreamBuffer, ev);
 		count++;
 	}
-
-	CloseStreamBuffer(GlobalStreamBuffer);
 
 	return count;
 }

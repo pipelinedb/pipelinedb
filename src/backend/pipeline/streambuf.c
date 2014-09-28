@@ -57,6 +57,9 @@ static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
 	}
 }
 
+#define BITMAPSET_SIZE(nwords)	\
+	(offsetof(Bitmapset, words) + (nwords) * sizeof(bitmapword))
+
 /*
  * alloc_slot
  *
@@ -80,8 +83,8 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		/* nothing is reading from this stream, so it's a noop */
 		return NULL;
 	}
-	size = sizeof(StreamEventData) + event->len + sizeof(StreamBufferSlot) +
-			strlen(stream) + 1 + strlen(encoding) + 1 + sizeof(Bitmapset) + bms->nwords * sizeof(bitmapword);
+	size = sizeof(StreamEventData) + event->len + sizeof(StreamBufferSlot) + 1 +
+			strlen(stream) + 1 + strlen(encoding) + BITMAPSET_SIZE(bms->nwords);
 
 	if (size > buf->capacity)
 		elog(ERROR, "event of size %d too big for stream buffer of size %d", (int) size, (int) buf->capacity);
@@ -94,13 +97,11 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		/* wait for the last event to be read by all readers */
 		while (HasPendingReads(*buf->prev));
 
-		*buf->last = *buf->pos;
 		*buf->pos = buf->start;
 
 		/* we need to make sure all readers are done reading before we begin clobbering entries */
 		LWLockAcquire(StreamBufferWrapLock, LW_EXCLUSIVE);
 
-		*buf->last = NULL;
 		*buf->tail = *buf->prev;
 
 		 /* the buffer got full, so start a new append cycle */
@@ -137,7 +138,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		sbs = (StreamBufferSlot *) sbspos;
 		wait_for_overwrite(buf, sbs);
 
-		chunk = SlotSize(sbs) + sbs->nextoffset;
+		chunk = sbs->len + sbs->nextoffset;
 		free += chunk;
 		sbspos += chunk;
 	}
@@ -156,7 +157,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 			offset = 0;
 	}
 
-	MemSet(pos, 0, sizeof(StreamBufferSlot));
+	MemSet(pos, 0, free);
 	result = (StreamBufferSlot *) pos;
 	pos += sizeof(StreamBufferSlot);
 
@@ -188,9 +189,8 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	 * shared memory.
 	 */
 	result->readby = (Bitmapset *) pos;
-	result->readby->nwords = bms->nwords;
-	memcpy(result->readby->words, bms->words, sizeof(bitmapword) * bms->nwords);
-	pos += sizeof(Bitmapset) + sizeof(bitmapword) * bms->nwords;
+	memcpy(result->readby, bms, BITMAPSET_SIZE(bms->nwords));
+	pos += BITMAPSET_SIZE(bms->nwords);
 
 	result->len = size;
 	result->nextoffset = offset;
@@ -207,32 +207,6 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	LWLockRelease(StreamBufferAppendLock);
 
 	return result;
-}
-
-/*
- * OpenStreamBuffer
- *
- * Indicate that the current process is currently writing to the given StreamBuffer
- */
-extern void
-OpenStreamBuffer(StreamBuffer *buf)
-{
-	SpinLockAcquire(&buf->mutex);
-	buf->writers++;
-	SpinLockRelease(&buf->mutex);
-}
-
-/*
- * CloseStreamBuffer
- *
- * Indicate that the current process is finished writing to the given StreamBuffer
- */
-extern void
-CloseStreamBuffer(StreamBuffer *buf)
-{
-	SpinLockAcquire(&buf->mutex);
-	buf->writers--;
-	SpinLockRelease(&buf->mutex);
 }
 
 /*
@@ -298,7 +272,6 @@ extern void InitGlobalStreamBuffer(void)
 	bool found;
 	MemoryContext oldcontext;
 	Size size = StreamBufferShmemSize();
-
 	Size headersize = MAXALIGN(sizeof(StreamBuffer));
 
 	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer", headersize , &found);
@@ -368,15 +341,7 @@ PinNextStreamEvent(StreamBufferReader *reader)
 	StreamBufferSlot *current = NULL;
 
 	if (BufferUnchanged(reader))
-	{
-		if (reader->reading && buf->writers == 0)
-		{
-			/* the buffer hasn't changed and no writers are writing, so release the read lock */
-			LWLockRelease(StreamBufferWrapLock);
-			reader->reading = false;
-		}
 		return NULL;
-	}
 
 	if (ReaderNeedsWrap(buf, reader))
 	{
@@ -400,20 +365,19 @@ PinNextStreamEvent(StreamBufferReader *reader)
 	{
 		/* we've consumed all the data in the buffer, wrap around to start reading from the beginning */
 		reader->reading = false;
-		LWLockRelease(StreamBufferWrapLock);
 		reader->pos = buf->start;
+		LWLockRelease(StreamBufferWrapLock);
 
 		return NULL;
 	}
 
-	if (current == NULL)
-		return NULL;
-
 	/*
+	 * current should always be a correct pointer here
+	 *
 	 * Advance the reader to the end of the current slot. Events are appended contiguously,
 	 * so this is right where the next event will be.
 	 */
-	reader->pos += SlotSize(current);
+	reader->pos += current->len;
 
 	if (bms_is_member(reader->queryid, current->readby))
 		result = current;
