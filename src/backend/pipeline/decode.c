@@ -380,7 +380,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 		 * update the HeapTuple. */
 		for (i = 0; i < desc->natts; i++)
 		{
-			if (pg_strcasecmp(NameStr(desc->attrs[i]->attname), "ARRIVAL_TIMESTAMP") == 0)
+			if (pg_strcasecmp(NameStr(desc->attrs[i]->attname), ARRIVAL_TIMESTAMP) == 0)
 			{
 				bool nulls[desc->natts];
 				bool replaces[desc->natts];

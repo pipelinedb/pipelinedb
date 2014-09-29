@@ -71,6 +71,7 @@ typedef StreamEventData *StreamEvent;
 typedef HTAB StreamTargets;
 
 #define STREAMEVENTSIZE sizeof(StreamEventData)
+#define ARRIVAL_TIMESTAMP "ARRIVAL_TIMESTAMP"
 
 extern EventStream OpenStream(void);
 extern int RespondSendEvents(int numevents);
