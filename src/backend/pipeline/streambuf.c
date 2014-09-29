@@ -167,6 +167,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	shared->flags = event->flags;
 	shared->nfields = event->nfields;
 	shared->fields = event->fields;
+	shared->arrivaltime = event->arrivaltime;
 	pos += sizeof(StreamEventData);
 
 	shared->raw = pos;

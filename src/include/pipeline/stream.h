@@ -15,6 +15,7 @@
 #include "nodes/bitmapset.h"
 #include "nodes/parsenodes.h"
 #include "utils/hsearch.h"
+#include "utils/timestamp.h"
 
 #define EventStreamNeedsOpen(stream) (stream->state != STREAM_STATE_OPEN)
 #define QueryIsStreaming(query) ((query)->is_continuous)
@@ -61,6 +62,8 @@ typedef struct EventData
 	char **fields;
 	/* number of fields comprising this event */
 	int nfields;
+	/* arrival time of the event */
+	TimestampTz arrivaltime;
 } StreamEventData;
 
 typedef StreamEventData *StreamEvent;

@@ -264,14 +264,13 @@ InsertIntoStream(InsertStmt *ins)
 		Value *v;
 		List *values = NIL;
 		Size size = 0;
-		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
+		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEventData));
 		ListCell *vlc;
 		int offset = 0;
 
 		for (i=0; i<numcols; i++)
 		{
 			char *sval;
-
 			c = (A_Const *) list_nth(vals, i);
 			v = &(c->val);
 
@@ -294,6 +293,7 @@ InsertIntoStream(InsertStmt *ins)
 		ev->len = size;
 		ev->fields = sharedfields;
 		ev->nfields = numcols;
+		ev->arrivaltime = GetCurrentTimestamp();
 
 		foreach (vlc, values)
 		{

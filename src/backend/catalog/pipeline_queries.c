@@ -279,9 +279,9 @@ MarkContinuousViewAsInactive(RangeVar *name)
 
 	if (row->state != PIPELINE_QUERY_STATE_INACTIVE)
 	{
-		MemSet(values, 0, sizeof(Natts_pipeline_queries));
-		MemSet(nulls, false, sizeof(Natts_pipeline_queries));
-		MemSet(replaces, false, sizeof(Natts_pipeline_queries));
+		MemSet(values, 0, sizeof(values));
+		MemSet(nulls, false, sizeof(nulls));
+		MemSet(replaces, false, sizeof(replaces));
 
 		replaces[Anum_pipeline_queries_state - 1] = true;
 		values[Anum_pipeline_queries_state - 1] = CharGetDatum(PIPELINE_QUERY_STATE_INACTIVE);

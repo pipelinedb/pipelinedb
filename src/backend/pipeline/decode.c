@@ -62,12 +62,13 @@ map_field_positions(char **fields, int nfields, TupleDesc desc)
 {
 	int i;
 	int *result = palloc(nfields * sizeof(int));
-	for (i=0; i<nfields; i++)
+
+	for (i = 0; i < nfields; i++)
 	{
 		int j;
 
 		result[i] = -1;
-		for (j=0; j<desc->natts; j++)
+		for (j = 0; j < desc->natts; j++)
 		{
 			if (strcmp(fields[i], NameStr(desc->attrs[j]->attname)) == 0)
 			{
@@ -355,7 +356,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 		char *cur = event->raw;
 
 		nfields = event->nfields;
-		strs = palloc(nfields * sizeof(char *));
+		strs = palloc(desc->natts * sizeof(char *));
 
 		if (!decoder->fieldstoattrs)
 		{
@@ -364,7 +365,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 			MemoryContextSwitchTo(oldcontext);
 		}
 
-		for (i=0; i<nfields; i++)
+		for (i = 0; i < nfields; i++)
 		{
 			int attpos = decoder->fieldstoattrs[i];
 			if (attpos >= 0)
@@ -374,6 +375,29 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 		}
 
 		decoded = BuildTupleFromCStrings(decoder->meta, strs);
+
+		/* If arrival_timestamp is requested, pull value from StreamEvent and
+		 * update the HeapTuple. */
+		for (i = 0; i < desc->natts; i++)
+		{
+			if (pg_strcasecmp(NameStr(desc->attrs[i]->attname), "ARRIVAL_TIMESTAMP") == 0)
+			{
+				bool nulls[desc->natts];
+				bool replaces[desc->natts];
+				Datum values[desc->natts];
+
+				MemSet(values, 0, sizeof(values));
+				MemSet(nulls, false, sizeof(nulls));
+				MemSet(replaces, false, sizeof(replaces));
+
+				replaces[i] = true;
+				values[i] = TimestampGetDatum(event->arrivaltime);
+
+				decoded = heap_modify_tuple(decoded, desc,
+							values, nulls, replaces);
+				break;
+			}
+		}
 
 		MemoryContextReset(decoder->tmp_ctxt);
 
