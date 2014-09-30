@@ -268,9 +268,13 @@ InsertIntoStream(InsertStmt *ins)
 		ListCell *vlc;
 		int offset = 0;
 
-		for (i=0; i<numcols; i++)
+		for (i = 0; i < numcols; i++)
 		{
 			char *sval;
+			/*
+			 * XXX(usmanm): This isn't entirely kosher. It'll only work for
+			 * literal values, not expressions or any other funky stuff.
+			 */
 			c = (A_Const *) list_nth(vals, i);
 			v = &(c->val);
 
