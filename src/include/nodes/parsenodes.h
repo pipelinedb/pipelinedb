@@ -817,7 +817,14 @@ typedef struct RangeTblEntry
 	/*
 	 * Fields valid for a stream RTE (else NULL/zero):
 	 */
-	TupleDesc cvdesc; /* descriptor for a stream, based on SELECT statement's target entries */
+
+	/*
+	 * If this RTE represents a stream, this is its schema. We attach it here because
+	 * streams aren't required to be represented as actual relations in the catalog,
+	 * so we use this in some cases instead of looking for nonexsitent relations in
+	 * the catalog.
+	 */
+	StreamDesc *streamdesc;
 
 	/*
 	 * Fields valid in all RTEs:

@@ -607,6 +607,29 @@ scanRTEForColumn(ParseState *pstate, RangeTblEntry *rte, char *colname,
 		}
 	}
 
+	/*
+	 * If the RTE represents a stream look for the column in the stream's inferred tuple descriptor
+	 */
+	if (rte->streamdesc && result == NULL)
+	{
+		Form_pg_attribute *attrs = rte->streamdesc->desc->attrs;
+		int i;
+		for (i=0; i<rte->streamdesc->desc->natts; i++)
+		{
+			if (strcmp(NameStr(attrs[i]->attname), colname) == 0)
+			{
+				AttrNumber attnum = i + 1;
+				int sublevels_up;
+				int vnum = RTERangeTablePosn(pstate, rte, &sublevels_up);
+				var = makeVar(vnum, attnum, attrs[i]->atttypid, attrs[i]->atttypmod,
+						attrs[i]->attcollation, sublevels_up);
+
+				result = (Node *) var;
+				break;
+			}
+		}
+	}
+
 	return result;
 }
 
@@ -1807,10 +1830,10 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 	{
 	case RTE_RELATION:
 		{
-			if (rte->cvdesc)
+			if (rte->streamdesc)
 			{
 				/* it's for a continuous view, so use the schema inferred from the target list */
-				expandTupleDesc(rte->cvdesc, rte->eref, rte->cvdesc->natts, 0, rtindex,
+				expandTupleDesc(rte->streamdesc->desc, rte->eref, rte->streamdesc->desc->natts, 0, rtindex,
 						sublevels_up,
 								location, include_dropped,
 								colnames, colvars);
@@ -2316,13 +2339,18 @@ get_rte_attribute_name(RangeTblEntry *rte, AttrNumber attnum)
 		attnum > 0 && attnum <= list_length(rte->alias->colnames))
 		return strVal(list_nth(rte->alias->colnames, attnum - 1));
 
+	if (rte->streamdesc)
+	{
+		if (attnum > 0 && attnum <= rte->streamdesc->desc->natts)
+			return NameStr(rte->streamdesc->desc->attrs[attnum - 1]->attname);
+	}
 	/*
 	 * If the RTE is a relation, go to the system catalogs not the
 	 * eref->colnames list.  This is a little slower but it will give the
 	 * right answer if the column has been renamed since the eref list was
 	 * built (which can easily happen for rules).
 	 */
-	if (rte->rtekind == RTE_RELATION && !rte->cvdesc)
+	if (rte->rtekind == RTE_RELATION)
 		return get_relid_attribute_name(rte->relid, attnum);
 
 	/*
@@ -2353,9 +2381,9 @@ get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 				HeapTuple	tp = NULL;
 				Form_pg_attribute att_tup = NULL;
 
-				if (rte->cvdesc)
+				if (rte->streamdesc)
 				{
-					att_tup = rte->cvdesc->attrs[attnum - 1];
+					att_tup = rte->streamdesc->desc->attrs[attnum - 1];
 				}
 				else
 				{

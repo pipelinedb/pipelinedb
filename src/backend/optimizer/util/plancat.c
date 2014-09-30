@@ -869,9 +869,9 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
-			if (root->parse->is_continuous)
+			if (rte->streamdesc)
 			{
-				desc = rte->cvdesc;
+				desc = rte->streamdesc->desc;
 				numattrs = desc->natts;
 			}
 			else if (root->parse->cq_is_merge)

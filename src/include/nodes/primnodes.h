@@ -18,6 +18,7 @@
 #define PRIMNODES_H
 
 #include "access/attnum.h"
+#include "access/tupdesc.h"
 #include "nodes/pg_list.h"
 
 
@@ -78,6 +79,13 @@ typedef struct RangeVar
 	Alias	   *alias;			/* table alias & optional column aliases */
 	int			location;		/* token location, or -1 if unknown */
 } RangeVar;
+
+typedef struct StreamDesc
+{
+	NodeTag type;
+	RangeVar *name;
+	TupleDesc desc;
+} StreamDesc;
 
 /*
  * IntoClause - target information for SELECT INTO, CREATE TABLE AS, and
