@@ -108,3 +108,8 @@ test: plancache limit plpgsql copy2 temp domain rangefuncs prepare without_oid c
 
 # run stats by itself because its delay may be insufficient under heavy load
 test: stats
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: cqanalyze

@@ -44,6 +44,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parsetree.h"
+#include "pipeline/cqanalyze.h"
 #include "rewrite/rewriteManip.h"
 #include "tcop/tcopprot.h"
 #include "miscadmin.h"
@@ -945,10 +946,8 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 	/* make WINDOW info available for window functions, too */
 	pstate->p_windowdefs = stmt->windowClause;
 
-	/* SELECT statements that belong to CREATE CONTINUOUS VIEW statements get special treatment */
-	pstate->p_is_create_cv = stmt->forContinuousView;
-
-	pstate->p_target_list = stmt->targetList;
+	if (stmt->forContinuousView)
+		analyzeContinuousSelectStmt(pstate, &stmt);
 
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);

@@ -55,7 +55,7 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 	create_stmt->relation = relation;
 	into = stmt->into;
 
-	query = parse_analyze(stmt->query, NULL, 0, 0);
+	query = parse_analyze(stmt->query, querystring, 0, 0);
 	tlist = query->targetList;
 
 	/*
