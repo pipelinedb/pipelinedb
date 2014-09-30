@@ -1099,11 +1099,6 @@ exec_simple_query(const char *query_string)
 	}
 
 	/*
-	 * Switch back to transaction context to enter the loop.
-	 */
-	MemoryContextSwitchTo(oldcontext);
-
-	/*
 	 * Short circuit any InsertStmt node that is inserting into a stream.
 	 */
 	foreach(parsetree_item, parsetree_list)
@@ -1140,11 +1135,11 @@ exec_simple_query(const char *query_string)
 	}
 
 	parsetree_list = tmp_list;
-	if (parsetree_list == NIL)
-	{
-		finish_xact_command();
-		return;
-	}
+
+	/*
+	 * Switch back to transaction context to enter the loop.
+	 */
+	MemoryContextSwitchTo(oldcontext);
 
 	/*
 	 * We'll tell PortalRun it's a top-level command iff there's exactly one
