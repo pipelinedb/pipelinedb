@@ -1041,6 +1041,7 @@ exec_simple_query(const char *query_string)
 	bool		was_logged = false;
 	bool		isTopLevel;
 	char		msec_str[32];
+	List		*tmp_list = NIL;
 
 
 	/*
@@ -1103,19 +1104,12 @@ exec_simple_query(const char *query_string)
 	MemoryContextSwitchTo(oldcontext);
 
 	/*
-	 * We'll tell PortalRun it's a top-level command iff there's exactly one
-	 * raw parsetree.  If more than one, it's effectively a transaction block
-	 * and we want PreventTransactionChain to reject unsafe commands. (Note:
-	 * we're assuming that query rewrite cannot add commands that are
-	 * significant to PreventTransactionChain.)
+	 * Short circuit any InsertStmt node that is inserting into a stream.
 	 */
-	isTopLevel = (list_length(parsetree_list) == 1);
-
-	if (isTopLevel)
+	foreach(parsetree_item, parsetree_list)
 	{
-		Node *parsetree = (Node *) lfirst(parsetree_list->head);
+		Node *parsetree = (Node *) lfirst(parsetree_item);
 
-		/* short circuit everything if we're just inserting into a stream */
 		if (IsA(parsetree, InsertStmt))
 		{
 			InsertStmt *ins = (InsertStmt *) parsetree;
@@ -1138,12 +1132,28 @@ exec_simple_query(const char *query_string)
 				MemoryContextSwitchTo(oldcontext);
 				MemoryContextReset(EventContext);
 
-				finish_xact_command();
-
-				return;
+				continue;
 			}
 		}
+
+		tmp_list = lappend(tmp_list, parsetree);
 	}
+
+	parsetree_list = tmp_list;
+	if (parsetree_list == NIL)
+	{
+		finish_xact_command();
+		return;
+	}
+
+	/*
+	 * We'll tell PortalRun it's a top-level command iff there's exactly one
+	 * raw parsetree.  If more than one, it's effectively a transaction block
+	 * and we want PreventTransactionChain to reject unsafe commands. (Note:
+	 * we're assuming that query rewrite cannot add commands that are
+	 * significant to PreventTransactionChain.)
+	 */
+	isTopLevel = (list_length(parsetree_list) == 1);
 
 	/*
 	 * Run through the raw parsetree(s) and process each one.
