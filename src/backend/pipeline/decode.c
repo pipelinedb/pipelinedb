@@ -400,6 +400,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 		}
 
 		MemoryContextReset(decoder->tmp_ctxt);
+		MemoryContextSwitchTo(oldcontext);
 
 		return decoded;
 	}
