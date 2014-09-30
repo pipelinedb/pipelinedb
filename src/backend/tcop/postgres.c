@@ -1042,6 +1042,7 @@ exec_simple_query(const char *query_string)
 	bool		isTopLevel;
 	char		msec_str[32];
 	List		*tmp_list = NIL;
+	bool		parsetree_list_empty;
 
 
 	/*
@@ -1097,6 +1098,8 @@ exec_simple_query(const char *query_string)
 				 errdetail_execute(parsetree_list)));
 		was_logged = true;
 	}
+
+	parsetree_list_empty = list_length(parsetree_list) == 0;
 
 	/*
 	 * Short circuit any InsertStmt node that is inserting into a stream.
@@ -1363,7 +1366,7 @@ exec_simple_query(const char *query_string)
 	/*
 	 * If there were no parsetrees, return EmptyQueryResponse message.
 	 */
-	if (!parsetree_list)
+	if (parsetree_list_empty)
 		NullCommand(dest);
 
 	/*

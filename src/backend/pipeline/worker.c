@@ -50,7 +50,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
 	NameData name;
 	bool hasBeenDeactivated = false;
-	clock_t lastCheckTime = GetCurrentTimestamp();
+	TimestampTz lastCheckTime = GetCurrentTimestamp();
 
 	namestrcpy(&name, cvname);
 	CurrentResourceOwner = owner;

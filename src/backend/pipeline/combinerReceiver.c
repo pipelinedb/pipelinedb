@@ -109,5 +109,5 @@ extern void
 SetCombinerDestReceiverParams(DestReceiver *self, CombinerDesc *combiner)
 {
 	CombinerState *c = (CombinerState *) self;
-  c->desc = combiner;
+	c->desc = combiner;
 }

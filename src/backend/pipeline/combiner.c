@@ -159,7 +159,7 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 	Query *query;
 	PlannedStmt *combineplan;
 	bool hasBeenDeactivated = false;
-	clock_t lastCheckTime = GetCurrentTimestamp();
+	TimestampTz lastCheckTime = GetCurrentTimestamp();
 
 	MemoryContext combinectx = AllocSetContextCreate(TopMemoryContext,
 																	"CombineContext",
