@@ -1340,6 +1340,11 @@ hash_freeze(HTAB *hashp)
 	hashp->frozen = true;
 }
 
+void
+hash_unfreeze(HTAB *hashp)
+{
+	hashp->frozen = false;
+}
 
 /********************************* UTILITIES ************************/
 

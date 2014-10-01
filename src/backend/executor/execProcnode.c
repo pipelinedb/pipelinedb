@@ -384,19 +384,9 @@ ExecEndBatch(PlanState *node)
 	switch (nodeTag(node))
 	{
 		case T_AggState:
-			{
-				AggState *agg = (AggState *) node;
-				agg->agg_done = false;
-				agg->table_filled = false;
-
-				MemoryContextReset(agg->aggcontext);
-				if (agg->hashtable)
-				{
-					hash_destroy(agg->hashtable->hashtab);
-					build_hash_table(agg);
-				}
-			}
+			ExecEndAggBatch((AggState *) node);
 			break;
+
 		default:
 			break;
 	}
@@ -429,8 +419,8 @@ ExecProcNode(PlanState *node)
 	if (IsContinuous(node) && node->cq_batch_progress == BatchSize(node))
 		return ExecEndBatch(node);
 
-	if (IsContinuous(node))
-		oldcontext = MemoryContextSwitchTo(ContinuousQueryContext);
+	if (node->state->es_exec_node_cxt)
+		oldcontext = MemoryContextSwitchTo(node->state->es_exec_node_cxt);
 
 	switch (nodeTag(node))
 	{
@@ -582,8 +572,11 @@ ExecProcNode(PlanState *node)
 			break;
 	}
 
-	if (IsContinuous(node))
+	if (node->state->es_exec_node_cxt)
+	{
 		MemoryContextSwitchTo(oldcontext);
+		MemoryContextReset(node->state->es_exec_node_cxt);
+	}
 
 	if (node->instrument)
 		InstrStopNode(node->instrument, TupIsNull(result) ? 0.0 : 1.0);

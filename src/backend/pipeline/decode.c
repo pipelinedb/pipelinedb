@@ -60,6 +60,7 @@ cache_decoder(const char *encoding, StreamEventDecoder *decoder)
 static int *
 map_field_positions(char **fields, int nfields, TupleDesc desc)
 {
+	MemoryContext oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	int i;
 	int *result = palloc(nfields * sizeof(int));
 
@@ -77,6 +78,8 @@ map_field_positions(char **fields, int nfields, TupleDesc desc)
 			}
 		}
 	}
+
+	MemoryContextSwitchTo(oldcontext);
 
 	return result;
 }
@@ -205,6 +208,8 @@ GetStreamEventDecoder(const char *encoding)
 		decoder->fieldstoattrs = NULL;
 
 		cache_decoder(encoding, decoder);
+
+		MemoryContextSwitchTo(oldcontext);
 
 		return decoder;
 	}
@@ -359,11 +364,7 @@ DecodeStreamEvent(StreamEvent event, StreamEventDecoder *decoder, TupleDesc desc
 		strs = palloc(desc->natts * sizeof(char *));
 
 		if (!decoder->fieldstoattrs)
-		{
-			oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 			decoder->fieldstoattrs = map_field_positions(fields, nfields, desc);
-			MemoryContextSwitchTo(oldcontext);
-		}
 
 		for (i = 0; i < nfields; i++)
 		{

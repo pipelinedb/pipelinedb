@@ -50,20 +50,35 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
 	NameData name;
 	bool hasBeenDeactivated = false;
+	MemoryContext runcontext;
+	MemoryContext execcontext;
 	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
+
+	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
+										ALLOCSET_DEFAULT_MINSIZE,
+										ALLOCSET_DEFAULT_INITSIZE,
+										ALLOCSET_DEFAULT_MAXSIZE);
+
+	execcontext = AllocSetContextCreate(runcontext, "ExecProcNodeContext",
+										ALLOCSET_DEFAULT_MINSIZE,
+										ALLOCSET_DEFAULT_INITSIZE,
+										ALLOCSET_DEFAULT_MAXSIZE);
 
 	namestrcpy(&name, cvname);
 	CurrentResourceOwner = owner;
 
 	/* prepare the plan for execution */
-	ExecutorStart(queryDesc, 0);
+	StartTransactionCommand();
 
-	/* Allow instrumentation of Executor overall runtime */
-	if (queryDesc->totaltime)
-		InstrStartNode(queryDesc->totaltime);
+	oldcontext = MemoryContextSwitchTo(runcontext);
+	ExecutorStart(queryDesc, 0);
+	MemoryContextSwitchTo(oldcontext);
+
+	CommitTransactionCommand();
 
 	estate = queryDesc->estate;
 	operation = queryDesc->operation;
+	estate->es_exec_node_cxt = execcontext;
 
 	/*
 	 * startup tuple receiver, if we will be emitting tuples
@@ -88,7 +103,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
-					true, batchsize, timeoutms, ForwardScanDirection, dest);
+					false, batchsize, timeoutms, ForwardScanDirection, dest);
 
 		MemoryContextSwitchTo(oldcontext);
 
@@ -101,8 +116,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 
 		estate->es_processed = 0;
-
-		MemoryContextReset(ContinuousQueryContext);
 
 		if (TimestampDifferenceExceeds(lastDeactivateCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
 		{
@@ -127,6 +140,8 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	ExecutorFinish(queryDesc);
 	ExecutorEnd(queryDesc);
 	FreeQueryDesc(queryDesc);
+
+	MemoryContextDelete(runcontext);
 
 	if (queryDesc->totaltime)
 		InstrStopNode(queryDesc->totaltime, estate->es_processed);

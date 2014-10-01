@@ -1334,6 +1334,7 @@ agg_fill_hash_table(AggState *aggstate)
 	ExprContext *tmpcontext;
 	AggHashEntry entry;
 	TupleTableSlot *outerslot;
+	long count = 0;
 
 	/*
 	 * get state info from node
@@ -1351,6 +1352,9 @@ agg_fill_hash_table(AggState *aggstate)
 		outerslot = ExecProcNode(outerPlan);
 		if (TupIsNull(outerslot))
 			break;
+
+		count++;
+
 		/* set up for advance_aggregates call */
 		tmpcontext->ecxt_outertuple = outerslot;
 
@@ -1362,11 +1366,39 @@ agg_fill_hash_table(AggState *aggstate)
 
 		/* Reset per-input-tuple context after each tuple */
 		ResetExprContext(tmpcontext);
+
+		aggstate->agg_done = false;
 	}
 
-	aggstate->table_filled = true;
-	/* Initialize to walk the hash table */
+	if (count > 0)
+	{
+		ResetTupleHashIterator(aggstate->hashtable, &aggstate->hashiter);
+		aggstate->table_filled = true;
+		/* Initialize to walk the hash table */
+	}
+	else
+	{
+		aggstate->agg_done = true;
+	}
+}
+
+static void
+clear_hash_table(AggState *aggstate)
+{
+	AggHashEntry entry;
+	TupleTableSlot *firstSlot = aggstate->ss.ss_ScanTupleSlot;
+
 	ResetTupleHashIterator(aggstate->hashtable, &aggstate->hashiter);
+	for (;;)
+	{
+		entry = (AggHashEntry) ScanTupleHashTable(&aggstate->hashiter);
+		if (entry == NULL)
+			break;
+
+		ExecStoreMinimalTuple(entry->shared.firstTuple, firstSlot, false);
+		RemoveTupleHashEntry(aggstate->hashtable, firstSlot);
+	}
+	hash_unfreeze(aggstate->hashtable->hashtab);
 }
 
 /*
@@ -1406,6 +1438,7 @@ agg_retrieve_hash_table(AggState *aggstate)
 		entry = (AggHashEntry) ScanTupleHashTable(&aggstate->hashiter);
 		if (entry == NULL)
 		{
+			hash_unfreeze(aggstate->hashtable->hashtab);
 			/* No more entries in hashtable, so done */
 			aggstate->agg_done = TRUE;
 			return NULL;
@@ -2045,6 +2078,14 @@ ExecEndAgg(AggState *node)
 
 	outerPlan = outerPlanState(node);
 	ExecEndNode(outerPlan);
+}
+
+void
+ExecEndAggBatch(AggState *node)
+{
+	clear_hash_table(node);
+	node->table_filled = false;
+	node->agg_done = false;
 }
 
 void
