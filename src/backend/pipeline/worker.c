@@ -50,9 +50,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
 	NameData name;
 	bool hasBeenDeactivated = false;
-	TimestampTz lastCheckTime = GetCurrentTimestamp();
 	MemoryContext runcontext;
 	MemoryContext execcontext;
+	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
 
 	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -117,7 +117,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 		estate->es_processed = 0;
 
-		if (TimestampDifferenceExceeds(lastCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
+		if (TimestampDifferenceExceeds(lastDeactivateCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
 		{
 			/* Check is we have been deactivated, and break out
 			 * if we have. */
@@ -130,7 +130,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			if (hasBeenDeactivated)
 				break;
 
-			lastCheckTime = GetCurrentTimestamp();
+			lastDeactivateCheckTime = GetCurrentTimestamp();
 		}
 	}
 

@@ -18,6 +18,7 @@
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/stream.h"
 #include "storage/lock.h"
 #include "utils/builtins.h"
 
@@ -116,6 +117,7 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 	TupleDesc tupdesc;
 	bool onestream = false;
 	AttrNumber attnum = 1;
+	bool sawArrivalTime = false;
 
 	desc->name = rv;
 
@@ -129,7 +131,6 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 		ColumnRef *ref = (ColumnRef *) tc->arg;
 		Form_pg_attribute attr;
 		char *colname;
-
 		if (onestream)
 		{
 			/* all of the inferred columns belong to this stream desc */
@@ -153,12 +154,25 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 					 parser_errposition(context->pstate, ref->location)));
 		}
 
+		if (strcmp(colname, ARRIVAL_TIMESTAMP) == 0)
+				sawArrivalTime = true;
+
 		oid = LookupTypeNameOid(NULL, tc->typeName, false);
 		attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
 		attr->attnum = attnum++;
 		attr->atttypid = oid;
 		namestrcpy(&attr->attname, colname);
 
+		attrs = lappend(attrs, attr);
+	}
+
+	if (!sawArrivalTime)
+	{
+		Oid oid = LookupTypeNameOid(NULL, makeTypeName("timestamptz"), false);
+		Form_pg_attribute attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
+		attr->attnum = attnum++;
+		attr->atttypid = oid;
+		namestrcpy(&attr->attname, ARRIVAL_TIMESTAMP);
 		attrs = lappend(attrs, attr);
 	}
 
@@ -287,6 +301,9 @@ analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
 			}
 		}
 
+		if (strcmp(strVal(linitial(cref->fields)), "arrival_timestamp") == 0)
+			needstype = false;
+
 		if (needstype && !hastype)
 		{
 			ereport(ERROR,
@@ -316,7 +333,7 @@ transformStreamEntry(ParseState *pstate, StreamDesc *stream)
 {
 	RangeVar *relation = stream->name;
 	RangeTblEntry *rte = makeNode(RangeTblEntry);
-	char	   *refname = relation->alias ? relation->alias->aliasname : relation->relname;
+	char *refname = relation->alias ? relation->alias->aliasname : relation->relname;
 
 	rte->rtekind = RTE_RELATION;
 	rte->alias = relation->alias;
