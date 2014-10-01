@@ -23,8 +23,8 @@ CREATE CONTINUOUS VIEW v14 AS SELECT s0.a::integer, s1.b::integer, s2.c::text FR
 
 -- Stream-table JOINs
 CREATE TABLE t0 (id INTEGER);
-CREATE CONTINUOUS VIEW v15 AS SELECT s0.id::integer AS s0_id, t0.id AS t0_id FROM s0 JOIN t0 ON s0.id = t0.id;
-CREATE CONTINUOUS VIEW v16 AS SELECT s.x::integer, t0.id FROM stream s JOIN t0 ON s.x = t0.id;
+CREATE CONTINUOUS VIEW j0 AS SELECT s0.id::integer AS s0_id, t0.id AS t0_id FROM s0 JOIN t0 ON s0.id = t0.id;
+CREATE CONTINUOUS VIEW j1 AS SELECT s.x::integer, t0.id FROM stream s JOIN t0 ON s.x = t0.id;
 
 -- Stream-stream JOINs
 CREATE CONTINUOUS VIEW v17 AS SELECT s0.id::integer as id0, s1.id::integer as id1 FROM s0 JOIN s1 ON s0.id = s1.id;
@@ -34,6 +34,7 @@ CREATE CONTINUOUS VIEW v18 AS SELECT s0.id::integer AS id0, s1.id::integer AS id
 CREATE table sts (id INTEGER);
 CREATE CONTINUOUS VIEW stsjoin AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM s0 JOIN sts ON s0.id = sts.id JOIN s1 ON sts.id = s1.x;
 CREATE CONTINUOUS VIEW stsjoin2 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM stream s0 JOIN sts ON s0.id = sts.id JOIN s1 ON sts.id = s1.id::integer WHERE sts.id > 42;
+CREATE CONTINUOUS VIEW stsjoin2 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM stream s0 INNER JOIN sts ON s0.id = sts.id RIGHT OUTER JOIN s1 ON sts.id = s1.id::integer WHERE sts.id > 42;
 
 -- Now let's verify our error handling and messages
 -- Stream column doesn't have a type
@@ -44,3 +45,42 @@ CREATE CONTINUOUS VIEW v20 AS SELECT id::integer FROM s0, s1;
 
 -- Column has multiple types
 CREATE CONTINUOUS VIEW v21 AS SELECT id::integer AS id0, id::text AS id1 FROM stream;
+
+-- Verify all relevant types are recognized
+CREATE CONTINUOUS VIEW types AS SELECT
+a::bigint,
+b::bit[2],
+c::varbit(5),
+d::boolean,
+c0::box,
+d0::bytea,
+e::char(42),
+f::varchar(32),
+g::cidr,
+h::circle,
+i::date,
+j::float8,
+k::inet,
+l::integer,
+m::json,
+n::jsonb,
+o::line,
+p::lseg,
+q::macaddr,
+r::money,
+s::numeric(1, 1),
+t::path,
+u::point,
+v::polygon,
+w::real,
+x::smallint,
+y::text,
+z::time,
+aa::timetz,
+bb::timestamp,
+cc::timestamptz,
+dd::tsquery,
+ee::tsvector,
+ff::uuid,
+gg::xml
+FROM stream WHERE aa > '2014-01-01 00:00:00' AND n @> '{"key": "value"}'::jsonb AND r > 42.3::money;
