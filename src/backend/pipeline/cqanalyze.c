@@ -154,7 +154,7 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 					 parser_errposition(context->pstate, ref->location)));
 		}
 
-		if (strcmp(colname, "arrival_timestamp") == 0)
+		if (strcmp(colname, ARRIVAL_TIMESTAMP) == 0)
 				sawArrivalTime = true;
 
 		oid = LookupTypeNameOid(NULL, tc->typeName, false);
@@ -172,7 +172,7 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 		Form_pg_attribute attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
 		attr->attnum = attnum++;
 		attr->atttypid = oid;
-		namestrcpy(&attr->attname, "arrival_timestamp");
+		namestrcpy(&attr->attname, ARRIVAL_TIMESTAMP);
 		attrs = lappend(attrs, attr);
 	}
 
