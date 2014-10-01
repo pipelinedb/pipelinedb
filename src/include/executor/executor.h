@@ -375,4 +375,6 @@ extern void UnregisterExprContextCallback(ExprContext *econtext,
 							  ExprContextCallbackFunction function,
 							  Datum arg);
 
+/* prototypes for functions in execCombine.c */
+
 #endif   /* EXECUTOR_H  */
