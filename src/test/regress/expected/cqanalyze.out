@@ -48,14 +48,14 @@ ERROR:  column has an ambiguous type because of a conflicting previous type cast
 LINE 1: ...CONTINUOUS VIEW v21 AS SELECT id::integer AS id0, id::text A...
                                                              ^
 -- Verify all relevant types are recognized
-CREATE CONTINUOUS VIEW types AS SELECT 
-a::bigint, 
-b::bit[2], 
-c::varbit(5), 
-d::boolean, 
-c0::box, 
-d0::bytea, 
-e::char(42), 
+CREATE CONTINUOUS VIEW types AS SELECT
+a::bigint,
+b::bit[2],
+c::varbit(5),
+d::boolean,
+c0::box,
+d0::bytea,
+e::char(42),
 f::varchar(32),
 g::cidr,
 h::circle,
