@@ -103,7 +103,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
-					false, batchsize, timeoutms, ForwardScanDirection, dest);
+					true, batchsize, timeoutms, ForwardScanDirection, dest);
 
 		MemoryContextSwitchTo(oldcontext);
 
