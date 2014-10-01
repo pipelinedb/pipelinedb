@@ -150,79 +150,68 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 	TupleTableSlot *slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
 	Tuplestorestate *store;
 	long count = 0;
-	long lastms;
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeout = queryDesc->plannedstmt->cq_state->maxwaitms;
 	char *cvname = rv->relname;
-	struct timeval lastcombine;
-	struct timeval current;
 	Query *query;
 	PlannedStmt *combineplan;
 	bool hasBeenDeactivated = false;
-	TimestampTz lastCheckTime = GetCurrentTimestamp();
+	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
+	TimestampTz lastCombineTime = GetCurrentTimestamp();
 
 	MemoryContext combinectx = AllocSetContextCreate(TopMemoryContext,
-																	"CombineContext",
-																	ALLOCSET_DEFAULT_MINSIZE,
-																	ALLOCSET_DEFAULT_INITSIZE,
-																	ALLOCSET_DEFAULT_MAXSIZE);
+			"CombineContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
 
 	elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
-  accept_worker(combiner);
+	accept_worker(combiner);
 
-  store = tuplestore_begin_heap(true, true, work_mem);
-  combineplan = GetCombinePlan(cvname, store, &query);
-  combineplan->cq_target = rv;
+	store = tuplestore_begin_heap(true, true, work_mem);
+	combineplan = GetCombinePlan(cvname, store, &query);
+	combineplan->cq_target = rv;
 
-  gettimeofday(&lastcombine, NULL);
-  lastms = (lastcombine.tv_sec * 1000) + (lastcombine.tv_usec / 1000.0);
+	for (;;)
+	{
+		bool force = false;
+		CurrentResourceOwner = owner;
 
-  for (;;)
-  {
-  	bool force = false;
-  	CurrentResourceOwner = owner;
+		receive_tuple(combiner, slot);
 
-  	receive_tuple(combiner, slot);
-
-  	/*
-  	 * If we get a null tuple, we either want to combine the current batch
-  	 * or wait a little while longer for more tuples before forcing the batch
-  	 */
-  	if (TupIsNull(slot))
-  	{
-  		if (timeout > 0)
-  		{
-  			long currentms;
-
-  			gettimeofday(&current, NULL);
-  			currentms = (current.tv_sec * 1000) + (current.tv_usec / 1000.0);
-				if (currentms - lastms <= timeout)
+		/*
+		 * If we get a null tuple, we either want to combine the current batch
+		 * or wait a little while longer for more tuples before forcing the batch
+		 */
+		if (TupIsNull(slot))
+		{
+			if (timeout > 0)
+			{
+				if (!TimestampDifferenceExceeds(lastCombineTime, GetCurrentTimestamp(), timeout))
 					continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
-  		}
-  		force = true;
-  	}
-  	else
-  	{
-  		tuplestore_puttupleslot(store, slot);
-  		count++;
-  	}
+			}
+			force = true;
+		}
+		else
+		{
+			tuplestore_puttupleslot(store, slot);
+			count++;
+		}
 
-  	if (count > 0 && (count == batchsize || force))
-  	{
-  		MemoryContext oldcontext = MemoryContextSwitchTo(combinectx);
+		if (count > 0 && (count == batchsize || force))
+		{
+			MemoryContext oldcontext = MemoryContextSwitchTo(combinectx);
 
-  		Combine(query, combineplan, queryDesc->tupDesc, store);
+			Combine(query, combineplan, queryDesc->tupDesc, store);
 
-  		tuplestore_clear(store);
-  		MemoryContextReset(combinectx);
-  		MemoryContextSwitchTo(oldcontext);
+			tuplestore_clear(store);
+			MemoryContextReset(combinectx);
+			MemoryContextSwitchTo(oldcontext);
 
-  		count = 0;
-  		gettimeofday(&lastcombine, NULL);
-  		lastms = (lastcombine.tv_sec * 1000) + (lastcombine.tv_usec / 1000.0);
-  	}
+			lastCombineTime = GetCurrentTimestamp();
+		}
 
-		if (TimestampDifferenceExceeds(lastCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
+		if (TimestampDifferenceExceeds(lastDeactivateCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
 		{
 			/* Check is we have been deactivated, and break out
 			 * if we have. */
@@ -235,11 +224,11 @@ ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, Resourc
 			if (hasBeenDeactivated)
 				break;
 
-			lastCheckTime = GetCurrentTimestamp();
+			lastDeactivateCheckTime = GetCurrentTimestamp();
 		}
-  }
+	}
 
-  CurrentResourceOwner = save;
+	CurrentResourceOwner = save;
 }
 
 /*

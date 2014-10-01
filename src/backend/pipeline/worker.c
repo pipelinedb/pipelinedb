@@ -50,7 +50,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
 	NameData name;
 	bool hasBeenDeactivated = false;
-	TimestampTz lastCheckTime = GetCurrentTimestamp();
+	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
 
 	namestrcpy(&name, cvname);
 	CurrentResourceOwner = owner;
@@ -104,7 +104,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 		MemoryContextReset(ContinuousQueryContext);
 
-		if (TimestampDifferenceExceeds(lastCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
+		if (TimestampDifferenceExceeds(lastDeactivateCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
 		{
 			/* Check is we have been deactivated, and break out
 			 * if we have. */
@@ -117,7 +117,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			if (hasBeenDeactivated)
 				break;
 
-			lastCheckTime = GetCurrentTimestamp();
+			lastDeactivateCheckTime = GetCurrentTimestamp();
 		}
 	}
 
