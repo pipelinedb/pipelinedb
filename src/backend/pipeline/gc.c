@@ -36,7 +36,7 @@ GarbageCollectDisqualifiedTuples(PlannedStmt *plannedstmt)
 	DestReceiver *receiver;
 	char completionTag[COMPLETION_TAG_BUFSIZE];
 
-	Assert(plannedstmt->cq_cleanup_plan != NULL);
+	Assert(plannedstmt->cq_gc_plan != NULL);
 
 	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());
@@ -47,7 +47,7 @@ GarbageCollectDisqualifiedTuples(PlannedStmt *plannedstmt)
 			NULL,
 			NULL,
 			"DELETE",
-			list_make1(plannedstmt->cq_cleanup_plan),
+			list_make1(plannedstmt->cq_gc_plan),
 			NULL);
 
 	receiver = CreateDestReceiver(DestNone);
@@ -85,7 +85,7 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
 
 	/* if there is no clean up needed, exit immediately. */
-	if (!queryDesc->plannedstmt->cq_cleanup_plan)
+	if (!queryDesc->plannedstmt->cq_gc_plan)
 		return;
 
 	gc_ctx = AllocSetContextCreate(TopMemoryContext,
