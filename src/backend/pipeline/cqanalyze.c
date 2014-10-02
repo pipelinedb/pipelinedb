@@ -14,6 +14,7 @@
 #include "catalog/namespace.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/print.h"
 #include "parser/parse_node.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
@@ -21,6 +22,8 @@
 #include "pipeline/stream.h"
 #include "storage/lock.h"
 #include "utils/builtins.h"
+
+#define CLOCK_TIMESTAMP "clock_timestamp"
 
 typedef struct CQAnalyzeContext
 {
@@ -31,6 +34,241 @@ typedef struct CQAnalyzeContext
 	List *tables;
 	List *targets;
 } CQAnalyzeContext;
+
+typedef struct CQValidTupleAnalyzeContext
+{
+	Node *matchExpr;
+	List *cols;
+} CQSlidingAnalyzeContext;
+
+/*
+ * find_invalidate_expr
+ *
+ * Walk the parse tree of the `whereClause` in the SelectStmt of
+ * a CQ and set context->matchExpr to be the minimal expression
+ * that must match for a tuple to be considered in the sliding window.
+ *
+ * This function tries to rip out all expressions not containing clock_timestamp().
+ */
+static bool
+find_validation_expr(Node *node, CQSlidingAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, FuncCall))
+	{
+		FuncCall *funccall = (FuncCall *) node;
+		char *name = NameListToString(funccall->funcname);
+		if (pg_strcasecmp(name, CLOCK_TIMESTAMP) == 0)
+		{
+			return true;
+		}
+	}
+	else if (IsA(node, A_Expr))
+	{
+		A_Expr *a_expr = (A_Expr *) node;
+		bool l_res, r_res;
+		Node *l_expr, *r_expr;
+
+		context->matchExpr = NULL;
+
+		l_res = find_validation_expr(a_expr->lexpr, context);
+		if (context->matchExpr != NULL)
+			l_expr = context->matchExpr;
+		else
+			l_expr = a_expr->lexpr;
+
+		context->matchExpr = NULL;
+
+		r_res = find_validation_expr(a_expr->rexpr, context);
+		if (context->matchExpr)
+			r_expr = context->matchExpr;
+		else
+			r_expr = a_expr->rexpr;
+
+		switch (a_expr->kind)
+		{
+		case AEXPR_OP:
+			if (l_res || r_res)
+			{
+				context->matchExpr = (Node *) makeA_Expr(AEXPR_OP, a_expr->name, l_expr, r_expr, -1);
+				return true;
+			}
+			return false;
+		case AEXPR_AND:
+			if (l_res && r_res)
+				context->matchExpr = (Node *) makeA_Expr(AEXPR_AND, NIL, l_expr, r_expr, -1);
+			else if (l_res)
+				context->matchExpr = l_expr;
+			else if (r_res)
+				context->matchExpr = r_expr;
+			return (l_res || r_res);
+		case AEXPR_OR:
+			if (l_res || r_res)
+			{
+				context->matchExpr = (Node *) makeA_Expr(AEXPR_OR, NIL, l_expr, r_expr, -1);
+				return true;
+			}
+			return false;
+		case AEXPR_NOT:
+			if (r_res)
+				context->matchExpr = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, r_expr, -1);
+			return r_res;
+		case AEXPR_OP_ANY:
+		case AEXPR_OP_ALL:
+		case AEXPR_DISTINCT:
+		case AEXPR_NULLIF:
+		case AEXPR_OF:
+		case AEXPR_IN:
+		default:
+			/* TODO(usmanm): Implement these operators as well */
+			elog(ERROR, "unsupported expression kind %d", a_expr->kind);
+			break;
+		}
+	}
+
+	return raw_expression_tree_walker(node, find_validation_expr, (void *) context);
+}
+
+/*
+ * has_arrival_timestamp
+ *
+ * Walk the parse tree and return true iff ARRIVAL_TIMESTAMP is being
+ * referenced.
+ */
+static bool
+find_cols_to_store(Node *node, CQSlidingAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, ColumnRef))
+	{
+		context->cols = lappend(context->cols, node);
+	}
+
+	return raw_expression_tree_walker(node, find_cols_to_store, (void *) context);
+}
+
+static bool
+does_colref_match_res_target(Node *node, ColumnRef *cref)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, ColumnRef))
+	{
+		ColumnRef *test_cref = (ColumnRef *) node;
+		ListCell *lc1;
+		ListCell *lc2;
+		bool match = true;
+
+		if (list_length(test_cref->fields) != list_length(cref->fields))
+			return false;
+
+		forboth(lc1, test_cref->fields, lc2, cref->fields)
+		{
+			if (strcmp(strVal(lfirst(lc1)), strVal(lfirst(lc2))) != 0)
+			{
+				match = false;
+				break;
+			}
+		}
+
+		return match;
+	}
+	return raw_expression_tree_walker(node, does_colref_match_res_target, (void *) cref);
+}
+
+/*
+ * invalidTupleSelectStmt
+ */
+DeleteStmt *
+getGarbageTupleDeleteStmt(char *cv_name, SelectStmt *stmt)
+{
+	CQSlidingAnalyzeContext context;
+	DeleteStmt *disqualified_delete_stmt = NULL;
+	context.matchExpr = NULL;
+
+	/* find the subset of the whereClause that we must match valid tuples */
+	find_validation_expr(stmt->whereClause, &context);
+
+	if (context.matchExpr)
+	{
+		disqualified_delete_stmt = makeNode(DeleteStmt);
+		disqualified_delete_stmt->relation = makeRangeVar(NULL, cv_name, -1);
+		disqualified_delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, context.matchExpr, -1);
+	}
+
+	return disqualified_delete_stmt;
+}
+
+/*
+ * getResTargetsForGarbageCollection
+ *
+ * Any ColRef that is used in an expression with "clock_timestamp()" in the WHERE clause
+ * needs to be stored with the sliding event window.
+ */
+List *
+getResTargetsForGarbageCollection(SelectStmt *stmt)
+{
+	CQSlidingAnalyzeContext context;
+	List *gcResTargets = NIL;
+	ListCell *clc;
+	context.matchExpr = NULL;
+	context.cols = NIL;
+
+	if (!stmt->whereClause)
+		return NIL;
+
+	/* find the subset of the whereClause that depends on clock_timestamp() */
+	find_validation_expr(stmt->whereClause, &context);
+
+	if (!context.matchExpr)
+		return NIL;
+
+	/* find all ColRefs in the squashed whereClause expression. */
+	find_cols_to_store((Node *) context.matchExpr, &context);
+
+	foreach(clc, context.cols)
+	{
+		ColumnRef *cref = (ColumnRef *) lfirst(clc);
+		ListCell *tlc;
+		bool found = false;
+		char *colname = FigureColname((Node *) cref);
+
+		foreach(tlc, stmt->targetList)
+		{
+			ResTarget *res = (ResTarget *) lfirst(tlc);
+
+			/* see if ColRef references an alias (<expr> AS <alias>). */
+			if (res->name && strcmp(res->name, colname) == 0)
+			{
+				found = true;
+				break;
+			}
+
+			if (does_colref_match_res_target(res->val, cref))
+			{
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+		{
+			ResTarget *res = makeNode(ResTarget);
+			res->name = NULL;
+			res->indirection = NIL;
+			res->val = (Node *) cref;
+			res->location = cref->location;
+			gcResTargets = lappend(gcResTargets, res);
+		}
+	}
+
+	return gcResTargets;
+}
 
 /*
  * find_colref_types
