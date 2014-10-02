@@ -279,6 +279,16 @@ analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
 				continue;
 		}
 
+		/* ensure that we have no '*' for a stream target */
+		if (IsA(lfirst(cref->fields->tail), A_Star))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+					 errmsg("can't select %s", NameListToString(cref->fields)),
+					 errhint("Explicitly state the fields you want to read from the stream"),
+					 parser_errposition(pstate, cref->location)));
+		}
+
 		/* verify that we have a type for the column if it needs one */
 		foreach(tlc, context.types)
 		{

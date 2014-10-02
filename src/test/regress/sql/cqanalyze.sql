@@ -86,8 +86,14 @@ gg::xml
 FROM stream WHERE aa > '2014-01-01 00:00:00' AND n @> '{"key": "value"}'::jsonb AND r > 42.3::money;
 
 -- Verify that type cast for arrival_timestamp is optional
-CREATE CONTINUOUS VIEW v22 AS SELECT arrival_timestamp FROM test_stream;
-CREATE CONTINUOUS VIEW v23 AS SELECT key::text, arrival_timestamp FROM test_stream;
-CREATE CONTINUOUS VIEW v24 AS SELECT key::text FROM test_stream WHERE arrival_timestamp < clock_timestamp();
-CREATE CONTINUOUS VIEW v25 AS SELECT key::text, arrival_timestamp::timestamptz FROM test_stream;
-CREATE CONTINUOUS VIEW v26 AS SELECT key::text, arrival_timestamp FROM test_stream WHERE arrival_timestamp::timestamptz < clock_timestamp();
+CREATE CONTINUOUS VIEW v22 AS SELECT arrival_timestamp FROM stream;
+CREATE CONTINUOUS VIEW v23 AS SELECT key::text, arrival_timestamp FROM stream;
+CREATE CONTINUOUS VIEW v24 AS SELECT key::text FROM stream WHERE arrival_timestamp < clock_timestamp();
+CREATE CONTINUOUS VIEW v25 AS SELECT key::text, arrival_timestamp::timestamptz FROM stream;
+CREATE CONTINUOUS VIEW v26 AS SELECT key::text, arrival_timestamp FROM stream WHERE arrival_timestamp::timestamptz < clock_timestamp();
+
+-- Verify that we can't do wildcard selections from streams
+CREATE CONTINUOUS VIEW v27 AS SELECT * from stream;
+CREATE CONTINUOUS VIEW v27 AS SELECT * from stream, t0;
+CREATE CONTINUOUS VIEW v27 AS SELECT t0.* from stream, t0;
+CREATE CONTINUOUS VIEW v27 AS SELECT stream.* from stream, t0;
