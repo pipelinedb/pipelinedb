@@ -164,7 +164,7 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	 */
 	cvname = NameStr(args.name);
 	sql = GetQueryString(cvname, true);
-	pg_usleep(15*1000*1000);
+
 	switch(state.ptype)
 	{
 		case CQCombiner:

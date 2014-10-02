@@ -29,7 +29,6 @@
 void
 ExecutePlannedStmt(PlannedStmt *plannedstmt)
 {
-	MemoryContext oldcontext;
 	Portal portal;
 	DestReceiver *receiver;
 	char completionTag[COMPLETION_TAG_BUFSIZE];
@@ -49,8 +48,6 @@ ExecutePlannedStmt(PlannedStmt *plannedstmt)
 	receiver = CreateDestReceiver(DestNone);
 	PortalStart(portal, NULL, 0, GetActiveSnapshot());
 
-	oldcontext = MemoryContextSwitchTo(TopTransactionContext);
-
 	(void) PortalRun(portal,
 			FETCH_ALL,
 			true,
@@ -58,11 +55,10 @@ ExecutePlannedStmt(PlannedStmt *plannedstmt)
 			receiver,
 			completionTag);
 
-	MemoryContextSwitchTo(oldcontext);
 
 	(*receiver->rDestroy) (receiver);
-
 	PortalDrop(portal, false);
+
 	PopActiveSnapshot();
 	CommitTransactionCommand();
 }
@@ -89,6 +85,9 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 	elog(LOG, "\"%s\" gc %d running", cvname, MyProcPid);
 
 	CurrentResourceOwner = owner;
+
+	/* Mark the PlannedStmt as not continuous now */
+	queryDesc->plannedstmt->is_continuous = false;
 
 	for(;;)
 	{
