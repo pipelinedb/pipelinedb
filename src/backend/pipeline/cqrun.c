@@ -101,7 +101,7 @@ get_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	plan->cq_state = palloc(sizeof(ContinuousViewState));
 	memcpy(plan->cq_state, query->cq_state, sizeof(ContinuousViewState));
 
-	plan->cq_cleanup_plan = get_gc_plan(cvname, selectparse);
+	plan->cq_gc_plan = get_gc_plan(cvname, selectparse);
 
 	return plan;
 }

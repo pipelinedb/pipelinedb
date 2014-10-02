@@ -80,7 +80,7 @@ typedef struct PlannedStmt
 
 	RangeVar 	*cq_target; /* target output table of this CQ, if any */
 
-	struct PlannedStmt *cq_cleanup_plan; /* plan to clean up disqualified tuples */
+	struct PlannedStmt *cq_gc_plan; /* plan to clean up disqualified tuples */
 } PlannedStmt;
 
 /* macro for fetching the Plan associated with a SubPlan node */
