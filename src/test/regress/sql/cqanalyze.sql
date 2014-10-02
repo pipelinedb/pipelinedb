@@ -5,6 +5,7 @@ CREATE CONTINUOUS VIEW v2 AS SELECT a::integer FROM stream GROUP BY a;
 CREATE CONTINUOUS VIEW v3 AS SELECT a::integer FROM stream WHERE a > 10 GROUP BY a;
 CREATE CONTINUOUS VIEW v4 AS SELECT a::integer, b::integer FROM stream WHERE a > 10 GROUP BY a, b, c HAVING a < 12 AND c::integer > 2;
 CREATE CONTINUOUS VIEW v5 AS SELECT substring(url::text, 1, 2) AS g, COUNT(*) FROM stream GROUP BY g;
+CREATE CONTINUOUS VIEW aliased AS SELECT s.id::integer FROM stream s WHERE s.id < 10 AND s.value::integer > 10;
 
 -- Verify that we can infer types for columns appearing outside of the target list
 CREATE CONTINUOUS VIEW v6 AS SELECT id::integer FROM stream ORDER BY f::integer DESC;
@@ -45,6 +46,9 @@ CREATE CONTINUOUS VIEW v20 AS SELECT id::integer FROM s0, s1;
 
 -- Column has multiple types
 CREATE CONTINUOUS VIEW v21 AS SELECT id::integer AS id0, id::text AS id1 FROM stream;
+
+-- Another untyped column with an aliased stream
+CREATE CONTINUOUS VIEW aliased AS SELECT s.id FROM stream s WHERE s.id < 10;
 
 -- Verify all relevant types are recognized
 CREATE CONTINUOUS VIEW types AS SELECT

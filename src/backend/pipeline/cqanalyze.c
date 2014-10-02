@@ -372,7 +372,11 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 		if (onestream)
 		{
 			/* all of the inferred columns belong to this stream desc */
-			colname = strVal(linitial(ref->fields));
+			RangeVar *s = linitial(context->streams);
+			if (s->alias)
+				colname = strVal(lsecond(ref->fields));
+			else
+				colname = strVal(linitial(ref->fields));
 		}
 		else if (list_length(ref->fields) == 2)
 		{
@@ -399,6 +403,7 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 		attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
 		attr->attnum = attnum++;
 		attr->atttypid = oid;
+
 		namestrcpy(&attr->attname, colname);
 
 		attrs = lappend(attrs, attr);
@@ -498,23 +503,35 @@ analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
 		ListCell *tlc;
 		ListCell *slc;
 		ColumnRef *cref = lfirst(lc);
-		RangeVar *rv = NULL;
 		bool needstype = true;
 		bool hastype = false;
+		char *colname;
 
 		if (list_length(cref->fields) == 2)
 		{
+			char *colrelname = strVal(linitial(cref->fields));
+
+			colname = strVal(lsecond(cref->fields));
 			needstype = false;
-			rv = makeRangeVar(NULL, strVal(linitial(cref->fields)), -1);
+
 			foreach(slc, context.streams)
 			{
 				RangeVar *r = (RangeVar *) lfirst(slc);
+				char *sname = r->alias ? r->alias->aliasname : r->relname;
+
 				/* if it's a legit relation, the column doesn't need to have a type yet */
-				if (equal(r, rv))
+				if (strcmp(colrelname, sname) == 0)
+				{
 					needstype = true;
+					break;
+				}
 			}
 			if (!needstype)
 				continue;
+		}
+		else
+		{
+			colname = strVal(linitial(cref->fields));
 		}
 
 		/* ensure that we have no '*' for a stream target */
@@ -549,7 +566,7 @@ analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
 			}
 		}
 
-		if (strcmp(strVal(linitial(cref->fields)), "arrival_timestamp") == 0)
+		if (strcmp(colname, "arrival_timestamp") == 0)
 			needstype = false;
 
 		if (needstype && !hastype)

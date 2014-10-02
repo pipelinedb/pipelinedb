@@ -5,6 +5,7 @@ CREATE CONTINUOUS VIEW v2 AS SELECT a::integer FROM stream GROUP BY a;
 CREATE CONTINUOUS VIEW v3 AS SELECT a::integer FROM stream WHERE a > 10 GROUP BY a;
 CREATE CONTINUOUS VIEW v4 AS SELECT a::integer, b::integer FROM stream WHERE a > 10 GROUP BY a, b, c HAVING a < 12 AND c::integer > 2;
 CREATE CONTINUOUS VIEW v5 AS SELECT substring(url::text, 1, 2) AS g, COUNT(*) FROM stream GROUP BY g;
+CREATE CONTINUOUS VIEW aliased AS SELECT s.id::integer FROM stream s WHERE s.id < 10 AND s.value::integer > 10;
 -- Verify that we can infer types for columns appearing outside of the target list
 CREATE CONTINUOUS VIEW v6 AS SELECT id::integer FROM stream ORDER BY f::integer DESC;
 CREATE CONTINUOUS VIEW v7 AS SELECT id::integer FROM stream GROUP BY id, url::text;
@@ -47,6 +48,12 @@ CREATE CONTINUOUS VIEW v21 AS SELECT id::integer AS id0, id::text AS id1 FROM st
 ERROR:  column has an ambiguous type because of a conflicting previous type cast
 LINE 1: ...CONTINUOUS VIEW v21 AS SELECT id::integer AS id0, id::text A...
                                                              ^
+-- Another untyped column with an aliased stream
+CREATE CONTINUOUS VIEW aliased AS SELECT s.id FROM stream s WHERE s.id < 10;
+ERROR:  column reference "s.id" has an ambiguous type
+LINE 1: CREATE CONTINUOUS VIEW aliased AS SELECT s.id FROM stream s ...
+                                                 ^
+HINT:  Explicitly cast to the desired type. For example, s.id::integer.
 -- Verify all relevant types are recognized
 CREATE CONTINUOUS VIEW types AS SELECT
 a::bigint,
