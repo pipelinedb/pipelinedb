@@ -2467,7 +2467,7 @@ CreateCommandTag(Node *parsetree)
 			tag = "ACTIVATE CONTINUOUS VIEW";
 			break;
 		case T_DeactivateContinuousViewStmt:
-			tag = "DEACTIVATE";
+			tag = "DEACTIVATE CONTINUOUS VIEW";
 			break;
 		case T_DumpStmt:
 			tag = "DUMP";

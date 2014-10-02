@@ -1212,7 +1212,7 @@ exec_simple_query(const char *query_string)
 		if (IsA(parsetree, ActivateContinuousViewStmt))
 		{
 			ActivateContinuousView((ActivateContinuousViewStmt *) parsetree);
-			EndCommand("ACTIVATE", dest);
+			EndCommand("ACTIVATE CONTINUOUS VIEW", dest);
 			finish_xact_command();
 
 			continue;

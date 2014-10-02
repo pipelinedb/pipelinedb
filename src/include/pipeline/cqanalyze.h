@@ -18,4 +18,7 @@ TupleDesc inferStreamScanTupleDescriptor(ParseState *pstate, RangeTblEntry *rte)
 void analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
 RangeTblEntry *transformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
+DeleteStmt *getGarbageTupleDeleteStmt(char *cv_name, SelectStmt *stmt);
+List *getResTargetsForGarbageCollection(SelectStmt *stmt);
+
 #endif
