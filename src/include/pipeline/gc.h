@@ -15,7 +15,7 @@
 #include "pipeline/combiner.h"
 #include "utils/portal.h"
 
-void GarbageCollectDisqualifiedTuples(PlannedStmt *plannedstmt);
+void ExecutePlannedStmt(PlannedStmt *plannedstmt);
 void ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner);
 
 #endif /* GC_H */

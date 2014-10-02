@@ -22,21 +22,17 @@
 #include "utils/snapmgr.h"
 
 /*
- * GarbageCollectDisqualifiedTuples
+ * ExecutePlannedStmt
  *
- * Garbage collect any tuples that no longer belong to the CQ result set.
- * This is only applicable to sliding windows of the form:
- *   SELECT * from test_stream WHERE time::timestamptz > clock_timestamp() - interval '5' minute;
+ * Execute plannedstmt, and discard the results.
  */
 void
-GarbageCollectDisqualifiedTuples(PlannedStmt *plannedstmt)
+ExecutePlannedStmt(PlannedStmt *plannedstmt)
 {
 	MemoryContext oldcontext;
 	Portal portal;
 	DestReceiver *receiver;
 	char completionTag[COMPLETION_TAG_BUFSIZE];
-
-	Assert(plannedstmt->cq_gc_plan != NULL);
 
 	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());
@@ -47,7 +43,7 @@ GarbageCollectDisqualifiedTuples(PlannedStmt *plannedstmt)
 			NULL,
 			NULL,
 			"DELETE",
-			list_make1(plannedstmt->cq_gc_plan),
+			list_make1(plannedstmt),
 			NULL);
 
 	receiver = CreateDestReceiver(DestNone);
@@ -84,10 +80,6 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 	bool hasBeenDeactivated = false;
 	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
 
-	/* if there is no clean up needed, exit immediately. */
-	if (!queryDesc->plannedstmt->cq_gc_plan)
-		return;
-
 	gc_ctx = AllocSetContextCreate(TopMemoryContext,
 			"GarbageCollectContext",
 			ALLOCSET_DEFAULT_MINSIZE,
@@ -102,7 +94,7 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 	{
 		MemoryContext oldcontext = MemoryContextSwitchTo(gc_ctx);
 
-		GarbageCollectDisqualifiedTuples(queryDesc->plannedstmt);
+		ExecutePlannedStmt(queryDesc->plannedstmt);
 
 		MemoryContextReset(gc_ctx);
 		MemoryContextSwitchTo(oldcontext);
