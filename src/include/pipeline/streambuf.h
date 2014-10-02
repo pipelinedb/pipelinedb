@@ -76,7 +76,13 @@ typedef struct StreamBuffer
 	StreamBufferSlot **tail;
 	char **last;
 	int writers;
-	slock_t mutex;
+	slock_t *mutex;
+
+	/*
+	 * Used by other procs to tell the StreamBuffer that something about the environment
+	 * has changed and it needs to update its information
+	 */
+	bool *update;
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */
@@ -88,18 +94,22 @@ typedef struct StreamBufferReader
 	bool reading;
 } StreamBufferReader;
 
-extern StreamBuffer *GlobalStreamBuffer;
+StreamBuffer *GlobalStreamBuffer;
 
-extern StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent event);
-extern Size StreamBufferShmemSize(void);
-extern void InitGlobalStreamBuffer(void);
-extern bool IsInputStream(const char *stream);
+StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent event);
+Size StreamBufferShmemSize(void);
+void InitGlobalStreamBuffer(void);
+bool IsInputStream(const char *stream);
+void UpdateStreamBuffer(StreamBuffer *buf);
+void UpdateGlobalStreamBuffer(void);
+void NotifyUpdateStreamBuffer(StreamBuffer *buf);
+void NotifyUpdateGlobalStreamBuffer(void);
 
-extern StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
-extern void CloseStreamBufferReader(StreamBufferReader *reader);
-extern StreamBufferSlot *PinNextStreamEvent(StreamBufferReader *reader);
-extern void UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot);
-extern void ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, int intervalms);
-extern void PrintStreamBuffer(StreamBuffer *buf);
+StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
+void CloseStreamBufferReader(StreamBufferReader *reader);
+StreamBufferSlot *PinNextStreamEvent(StreamBufferReader *reader);
+void UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot);
+void ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, int intervalms);
+void PrintStreamBuffer(StreamBuffer *buf);
 
 #endif

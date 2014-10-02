@@ -25,32 +25,13 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 
-#define SEND_EVENTS_RESPONSE_COMPLETE 0
-#define SEND_EVENTS_RESPONSE_MISMATCH 1
-#define SEND_EVENTS_RESPONSE_FAILED	2
-
 typedef struct StreamTagsEntry
 {
 	char key[NAMEDATALEN]; /* hash key --- MUST BE FIRST */
 	Bitmapset *tags;
 } StreamTagsEntry;
 
-/*
- * respond_send_events
- *
- * Sends a response from a datanode to a coordinator, signifying
- * that the given number of events were received
- */
-int
-RespondSendEvents(int numevents)
-{
-	StringInfoData resp;
-	pq_beginmessage(&resp, '#');
-	pq_sendint(&resp, numevents, 4);
-	pq_endmessage(&resp);
-
-	return pq_flush();
-}
+static StreamTargets *targets = NULL;
 
 /*
  * close_stream
@@ -66,17 +47,19 @@ CloseStream(EventStream stream)
 /*
  * GetStreamTargets
  *
- * Builds a mapping from stream name to continuous view tagindexes that read from the stream
+ * Builds a mapping from stream name to continuous views that need to read from the stream
  */
-StreamTargets *
+void
 CreateStreamTargets(void)
 {
 	HASHCTL ctl;
-	StreamTargets *targets;
 	Relation rel;
 	HeapScanDesc scandesc;
 	HeapTuple tup;
 	MemoryContext oldcontext;
+
+	if (targets != NULL)
+		hash_destroy(targets);
 
 	MemSet(&ctl, 0, sizeof(ctl));
 
@@ -157,8 +140,6 @@ CreateStreamTargets(void)
 	heap_close(rel, AccessExclusiveLock);
 
 	MemoryContextSwitchTo(oldcontext);
-
-	return targets;
 }
 
 /*
@@ -168,26 +149,19 @@ CreateStreamTargets(void)
  * This is used to load the bitmap into the stream buffer's shared memory.
  */
 Bitmapset *
-GetTargetsFor(const char *stream, StreamTargets *s)
+GetTargetsFor(const char *stream)
 {
 	bool found = false;
-	StreamTagsEntry *entry =
-			(StreamTagsEntry *) hash_search(s, stream, HASH_FIND, &found);
+	StreamTagsEntry *entry;
+
+	if (targets == NULL)
+		CreateStreamTargets();
+
+	entry = (StreamTagsEntry *) hash_search(targets, stream, HASH_FIND, &found);
 	if (!found)
 		return NULL;
 
 	return entry->tags;
-}
-
-/*
- * DestroyStreamTargets
- *
- * Cleans up a StreamTargets object
- */
-void
-DestroyStreamTargets(StreamTargets *s)
-{
-	hash_destroy(s);
 }
 
 /*
@@ -210,8 +184,6 @@ bool InsertTargetIsStream(InsertStmt *ins)
  * InsertIntoStream
  *
  * Send INSERT-encoded events to the given stream
- *
- *
  */
 int
 InsertIntoStream(InsertStmt *ins)
