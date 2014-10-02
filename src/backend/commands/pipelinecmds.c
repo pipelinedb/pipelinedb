@@ -64,7 +64,7 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 
 	/* Any columns that need to be kept around for garbage collection
 	 * should be added to the targetList. */
-	gcResTargets = getResTargetsForGarbageCollection(select_stmt);
+	gcResTargets = getResTargetsForGC(select_stmt);
 	select_stmt->targetList = list_concat(select_stmt->targetList, gcResTargets);
 
 	query = parse_analyze(stmt->query, querystring, 0, 0);

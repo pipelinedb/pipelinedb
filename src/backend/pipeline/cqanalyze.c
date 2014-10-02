@@ -33,13 +33,8 @@ typedef struct CQAnalyzeContext
 	List *streams;
 	List *tables;
 	List *targets;
-} CQAnalyzeContext;
-
-typedef struct CQValidTupleAnalyzeContext
-{
 	Node *matchExpr;
-	List *cols;
-} CQSlidingAnalyzeContext;
+} CQAnalyzeContext;
 
 /*
  * find_invalidate_expr
@@ -51,7 +46,7 @@ typedef struct CQValidTupleAnalyzeContext
  * This function tries to rip out all expressions not containing clock_timestamp().
  */
 static bool
-find_validation_expr(Node *node, CQSlidingAnalyzeContext *context)
+find_validation_expr(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -138,7 +133,7 @@ find_validation_expr(Node *node, CQSlidingAnalyzeContext *context)
  * referenced.
  */
 static bool
-find_cols_to_store(Node *node, CQSlidingAnalyzeContext *context)
+find_cols_to_store(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -187,7 +182,7 @@ does_colref_match_res_target(Node *node, ColumnRef *cref)
 Node *
 getExpressionForGC(SelectStmt *stmt)
 {
-	CQSlidingAnalyzeContext context;
+	CQAnalyzeContext context;
 	context.matchExpr = NULL;
 
 	/* find the subset of the whereClause that we must match valid tuples */
@@ -203,9 +198,9 @@ getExpressionForGC(SelectStmt *stmt)
  * needs to be stored with the sliding event window.
  */
 List *
-getResTargetsForGarbageCollection(SelectStmt *stmt)
+getResTargetsForGC(SelectStmt *stmt)
 {
-	CQSlidingAnalyzeContext context;
+	CQAnalyzeContext context;
 	List *gcResTargets = NIL;
 	ListCell *clc;
 	context.matchExpr = NULL;

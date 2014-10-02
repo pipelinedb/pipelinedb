@@ -19,6 +19,6 @@ void analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
 RangeTblEntry *transformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
 Node *getExpressionForGC(SelectStmt *stmt);
-List *getResTargetsForGarbageCollection(SelectStmt *stmt);
+List *getResTargetsForGC(SelectStmt *stmt);
 
 #endif
