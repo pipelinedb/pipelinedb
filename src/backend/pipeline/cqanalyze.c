@@ -151,6 +151,36 @@ find_cols_to_store(Node *node, CQSlidingAnalyzeContext *context)
 	return raw_expression_tree_walker(node, find_cols_to_store, (void *) context);
 }
 
+static bool
+does_colref_match_res_target(Node *node, ColumnRef *cref)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, ColumnRef))
+	{
+		ColumnRef *test_cref = (ColumnRef *) node;
+		ListCell *lc1;
+		ListCell *lc2;
+		bool match = true;
+
+		if (list_length(test_cref->fields) != list_length(cref->fields))
+			return false;
+
+		forboth(lc1, test_cref->fields, lc2, cref->fields)
+		{
+			if (strcmp(strVal(lfirst(lc1)), strVal(lfirst(lc2))) != 0)
+			{
+				match = false;
+				break;
+			}
+		}
+
+		return match;
+	}
+	return raw_expression_tree_walker(node, does_colref_match_res_target, (void *) cref);
+}
+
 /*
  * invalidTupleSelectStmt
  */
@@ -203,18 +233,14 @@ getResTargetsForGarbageCollection(SelectStmt *stmt)
 
 	foreach(clc, context.cols)
 	{
-		ColumnRef *ccref = (ColumnRef *) lfirst(clc);
+		ColumnRef *cref = (ColumnRef *) lfirst(clc);
 		ListCell *tlc;
 		bool found = false;
-		char *colname = FigureColname((Node *) ccref);
+		char *colname = FigureColname((Node *) cref);
 
 		foreach(tlc, stmt->targetList)
 		{
 			ResTarget *res = (ResTarget *) lfirst(tlc);
-			ColumnRef *tcref;
-			bool match = true;
-			ListCell *cname;
-			ListCell *tname;
 
 			/* see if ColRef references an alias (<expr> AS <alias>). */
 			if (res->name && strcmp(res->name, colname) == 0)
@@ -223,24 +249,7 @@ getResTargetsForGarbageCollection(SelectStmt *stmt)
 				break;
 			}
 
-			if (!IsA(res->val, ColumnRef))
-				continue;
-
-			tcref = (ColumnRef *) res->val;
-
-			if (list_length(ccref->fields) != list_length(tcref->fields))
-				continue;
-
-			forboth(cname, ccref->fields, tname, tcref->fields)
-			{
-				if (strcmp(strVal(lfirst(cname)), strVal(lfirst(tname))) != 0)
-				{
-					match = false;
-					break;
-				}
-			}
-
-			if (match)
+			if (does_colref_match_res_target(res->val, cref))
 			{
 				found = true;
 				break;
@@ -252,8 +261,8 @@ getResTargetsForGarbageCollection(SelectStmt *stmt)
 			ResTarget *res = makeNode(ResTarget);
 			res->name = NULL;
 			res->indirection = NIL;
-			res->val = (Node *) ccref;
-			res->location = ccref->location;
+			res->val = (Node *) cref;
+			res->location = cref->location;
 			gcResTargets = lappend(gcResTargets, res);
 		}
 	}
