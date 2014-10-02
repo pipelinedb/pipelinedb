@@ -46,13 +46,36 @@ typedef struct RunCQArgs
 } RunCQArgs;
 
 static PlannedStmt*
+get_gc_plan(const char *cvname, SelectStmt *cqselect)
+{
+	List *querytree_list;
+	List *plantree_list;
+	Node *gc_expr;
+	DeleteStmt *delete_stmt;
+
+	/* Do we need to garbage collect tuples for this CQ? */
+	gc_expr = getExpressionForGC(cqselect);
+
+	if (gc_expr == NULL)
+		return NULL;
+
+	delete_stmt = makeNode(DeleteStmt);
+	delete_stmt->relation = makeRangeVar(NULL, (char *) cvname, -1);
+	delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, gc_expr, -1);
+	querytree_list = pg_analyze_and_rewrite((Node *) delete_stmt, NULL, NULL, 0);
+	Assert(list_length(querytree_list) == 1);
+	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
+	Assert(list_length(plantree_list) == 1);
+	return (PlannedStmt *) linitial(plantree_list);
+}
+
+static PlannedStmt*
 get_plan(char *cvname, const char *sql, ContinuousViewState *state)
 {
 	List		*parsetree_list;
 	List		*querytree_list;
 	List		*plantree_list;
 	SelectStmt	*selectparse;
-	DeleteStmt	*cleanup_stmt;
 	Query		*query;
 	PlannedStmt	*plan;
 
@@ -78,20 +101,7 @@ get_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	plan->cq_state = palloc(sizeof(ContinuousViewState));
 	memcpy(plan->cq_state, query->cq_state, sizeof(ContinuousViewState));
 
-	/* Do we need to garbage collect tuples for this CQ? */
-	cleanup_stmt = getGarbageTupleDeleteStmt(cvname, selectparse);
-	if (cleanup_stmt)
-	{
-		querytree_list = pg_analyze_and_rewrite((Node *) cleanup_stmt, NULL, NULL, 0);
-		Assert(list_length(querytree_list) == 1);
-		plantree_list = pg_plan_queries(querytree_list, 0, NULL);
-		Assert(list_length(plantree_list) == 1);
-		plan->cq_cleanup_plan = (PlannedStmt *) linitial(plantree_list);
-	}
-	else
-	{
-		plan->cq_cleanup_plan = NULL;
-	}
+	plan->cq_cleanup_plan = get_gc_plan(cvname, selectparse);
 
 	return plan;
 }

@@ -184,24 +184,16 @@ does_colref_match_res_target(Node *node, ColumnRef *cref)
 /*
  * invalidTupleSelectStmt
  */
-DeleteStmt *
-getGarbageTupleDeleteStmt(char *cv_name, SelectStmt *stmt)
+Node *
+getExpressionForGC(SelectStmt *stmt)
 {
 	CQSlidingAnalyzeContext context;
-	DeleteStmt *disqualified_delete_stmt = NULL;
 	context.matchExpr = NULL;
 
 	/* find the subset of the whereClause that we must match valid tuples */
 	find_validation_expr(stmt->whereClause, &context);
 
-	if (context.matchExpr)
-	{
-		disqualified_delete_stmt = makeNode(DeleteStmt);
-		disqualified_delete_stmt->relation = makeRangeVar(NULL, cv_name, -1);
-		disqualified_delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, context.matchExpr, -1);
-	}
-
-	return disqualified_delete_stmt;
+	return context.matchExpr;
 }
 
 /*
