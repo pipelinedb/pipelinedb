@@ -13,6 +13,7 @@
 
 #include "executor/execdesc.h"
 #include "utils/plancache.h"
+#include "utils/portal.h"
 #include "utils/resowner.h"
 
 
@@ -24,7 +25,7 @@ typedef struct CombinerDesc
 } CombinerDesc;
 
 CombinerDesc *CreateCombinerDesc(QueryDesc *query);
-void ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner);
+void ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner);
 PlannedStmt *GetCombinePlan(char *cvname, Tuplestorestate *store, Query **query);
 List *GetCombineColumns(Query *query);
 void GetTuplesToCombineWith(char *cvname, TupleDesc desc,

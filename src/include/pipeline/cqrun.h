@@ -15,9 +15,10 @@
 typedef enum
 {
 	CQCombiner,
-	CQWorker
+	CQWorker,
+	CQGarbageCollector
 } CQProcessType;
 
-bool RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, struct ContinuousViewState state);
+bool RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, struct ContinuousViewState *state);
 
 #endif

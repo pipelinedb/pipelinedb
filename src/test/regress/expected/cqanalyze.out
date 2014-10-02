@@ -86,11 +86,11 @@ ff::uuid,
 gg::xml
 FROM stream WHERE aa > '2014-01-01 00:00:00' AND n @> '{"key": "value"}'::jsonb AND r > 42.3::money;
 -- Verify that type cast for arrival_timestamp is optional
-CREATE CONTINUOUS VIEW v22 AS SELECT arrival_timestamp FROM stream;
-CREATE CONTINUOUS VIEW v23 AS SELECT key::text, arrival_timestamp FROM stream;
-CREATE CONTINUOUS VIEW v24 AS SELECT key::text FROM stream WHERE arrival_timestamp < clock_timestamp();
-CREATE CONTINUOUS VIEW v25 AS SELECT key::text, arrival_timestamp::timestamptz FROM stream;
-CREATE CONTINUOUS VIEW v26 AS SELECT key::text, arrival_timestamp FROM stream WHERE arrival_timestamp::timestamptz < clock_timestamp();
+CREATE CONTINUOUS VIEW v22 AS SELECT arrival_timestamp FROM test_stream;
+CREATE CONTINUOUS VIEW v23 AS SELECT key::text, arrival_timestamp FROM test_stream;
+CREATE CONTINUOUS VIEW v24 AS SELECT key::text FROM test_stream WHERE arrival_timestamp < clock_timestamp();
+CREATE CONTINUOUS VIEW v25 AS SELECT key::text, arrival_timestamp::timestamptz FROM test_stream;
+CREATE CONTINUOUS VIEW v26 AS SELECT key::text, arrival_timestamp FROM test_stream WHERE arrival_timestamp::timestamptz < clock_timestamp();
 -- Verify that we can't do wildcard selections from streams
 CREATE CONTINUOUS VIEW v27 AS SELECT * from stream;
 ERROR:  can't select *
@@ -108,3 +108,5 @@ ERROR:  can't select stream.*
 LINE 1: CREATE CONTINUOUS VIEW v27 AS SELECT stream.* from stream, t...
                                              ^
 HINT:  Explicitly state the fields you want to read from the stream
+-- Regression tests
+CREATE CONTINUOUS VIEW test AS SELECT s0.ts::timestamp AS a, s0.id::timestamp, s1.id2::timestamp FROM stream s0, stream2 s1 WHERE s0.arrival_timestamp > (clock_timestamp() - interval '1 hour') AND s1.ts::timestamp > clock_timestamp() AND s1.id2 < clock_timestamp();

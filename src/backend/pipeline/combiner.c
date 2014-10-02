@@ -143,7 +143,7 @@ CreateCombinerDesc(QueryDesc *query)
 }
 
 void
-ContinuousQueryCombinerRun(CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
+ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
 {
 	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	ResourceOwner save = CurrentResourceOwner;

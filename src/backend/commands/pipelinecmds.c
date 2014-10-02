@@ -24,6 +24,7 @@
 #include "catalog/toasting.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
+#include "pipeline/cqanalyze.h"
 #include "pipeline/streambuf.h"
 #include "regex/regex.h"
 #include "utils/rel.h"
@@ -49,12 +50,22 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 	Oid reloid;
 	Datum		toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+	List *gcResTargets;
+	SelectStmt *select_stmt;
 
 	relation = stmt->into->rel;
 
 	create_stmt = makeNode(CreateStmt);
 	create_stmt->relation = relation;
 	into = stmt->into;
+
+	Assert(IsA(stmt->query, SelectStmt));
+	select_stmt = (SelectStmt *) stmt->query;
+
+	/* Any columns that need to be kept around for garbage collection
+	 * should be added to the targetList. */
+	gcResTargets = getResTargetsForGarbageCollection(select_stmt);
+	select_stmt->targetList = list_concat(select_stmt->targetList, gcResTargets);
 
 	query = parse_analyze(stmt->query, querystring, 0, 0);
 	tlist = query->targetList;
@@ -66,7 +77,7 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 	lc = list_head(into->colNames);
 	foreach(col, tlist)
 	{
-		TargetEntry *tle = (TargetEntry *)lfirst(col);
+		TargetEntry *tle = (TargetEntry *) lfirst(col);
 		ColumnDef   *coldef;
 		TypeName    *typename;
 
@@ -101,6 +112,8 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 		typename->typemod = exprTypmod((Node *)tle->expr);
 
 		coldef->typeName = typename;
+
+		/* TODO(usmanm): Mark the GC columns as hidden/System Columns. */
 
 		tableElts = lappend(tableElts, coldef);
 	}
@@ -201,6 +214,15 @@ DropContinuousView(DropStmt *stmt)
 	heap_close(pipeline_queries, NoLock);
 }
 
+static
+void
+RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state)
+{
+	RunContinuousQueryProcess(CQCombiner, cvname, state);
+	RunContinuousQueryProcess(CQWorker, cvname, state);
+	RunContinuousQueryProcess(CQGarbageCollector, cvname, state);
+}
+
 void
 ActivateContinuousView(ActivateContinuousViewStmt *stmt)
 {
@@ -233,8 +255,7 @@ ActivateContinuousView(ActivateContinuousViewStmt *stmt)
 			state.parallelism = (int16) value;
 	}
 
-	RunContinuousQueryProcess(CQCombiner, rv->relname, state);
-	RunContinuousQueryProcess(CQWorker, rv->relname, state);
+	RunContinuousQueryProcs(rv->relname, &state);
 }
 
 void
