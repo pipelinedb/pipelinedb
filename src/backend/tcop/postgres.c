@@ -1112,6 +1112,8 @@ exec_simple_query(const char *query_string)
 		{
 			InsertStmt *ins = (InsertStmt *) parsetree;
 
+			UpdateGlobalStreamBuffer();
+
 			if (InsertTargetIsStream(ins))
 			{
 				MemoryContext oldcontext;
@@ -1407,6 +1409,8 @@ static void
 exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
+
+	UpdateGlobalStreamBuffer();
 
 	while (message->cursor < message->len)
 	{
