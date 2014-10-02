@@ -321,9 +321,9 @@ UpdateGlobalStreamBuffer(void)
 void
 NotifyUpdateStreamBuffer(StreamBuffer *buf)
 {
-	SpinLockAcquire(GlobalStreamBuffer->mutex);
+	SpinLockAcquire(buf->mutex);
 	*buf->update = true;
-	SpinLockRelease(GlobalStreamBuffer->mutex);
+	SpinLockRelease(buf->mutex);
 }
 
 void
@@ -341,10 +341,10 @@ UpdateStreamBuffer(StreamBuffer *buf)
 {
 	if (*buf->update == false)
 		return;
-	SpinLockAcquire(GlobalStreamBuffer->mutex);
+	SpinLockAcquire(buf->mutex);
 	CreateStreamTargets();
 	*buf->update = false;
-	SpinLockRelease(GlobalStreamBuffer->mutex);
+	SpinLockRelease(buf->mutex);
 }
 
 /*
