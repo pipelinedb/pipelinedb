@@ -22,12 +22,10 @@
 #include "utils/snapmgr.h"
 
 /*
- * ExecutePlannedStmt
- *
- * Execute plannedstmt, and discard the results.
+ * execute_delete_plan
  */
-void
-ExecutePlannedStmt(PlannedStmt *plannedstmt)
+static void
+execute_delete_plan(PlannedStmt *plannedstmt)
 {
 	Portal portal;
 	DestReceiver *receiver;
@@ -93,7 +91,7 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 	{
 		MemoryContext oldcontext = MemoryContextSwitchTo(gc_ctx);
 
-		ExecutePlannedStmt(queryDesc->plannedstmt);
+		execute_delete_plan(queryDesc->plannedstmt);
 
 		MemoryContextReset(gc_ctx);
 		MemoryContextSwitchTo(oldcontext);
