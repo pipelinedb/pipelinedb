@@ -185,6 +185,11 @@ getExpressionForGC(SelectStmt *stmt)
 	CQAnalyzeContext context;
 	context.matchExpr = NULL;
 
+	if (stmt->whereClause == NULL)
+	{
+		return NULL;
+	}
+
 	/* find the subset of the whereClause that we must match valid tuples */
 	find_validation_expr(stmt->whereClause, &context);
 
@@ -206,13 +211,13 @@ getResTargetsForGC(SelectStmt *stmt)
 	context.matchExpr = NULL;
 	context.cols = NIL;
 
-	if (!stmt->whereClause)
+	if (stmt->whereClause == NULL)
 		return NIL;
 
 	/* find the subset of the whereClause that depends on clock_timestamp() */
 	find_validation_expr(stmt->whereClause, &context);
 
-	if (!context.matchExpr)
+	if (context.matchExpr == NULL)
 		return NIL;
 
 	/* find all ColRefs in the squashed whereClause expression. */
@@ -471,6 +476,11 @@ analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
 	ListCell *lc;
 	CQAnalyzeContext context;
 	List *newfrom = NIL;
+
+	if (stmt->sortClause != NULL)
+	{
+		elog(ERROR, "continuous view select can't have any sorting");
+	}
 
 	context.pstate = pstate;
 	context.types = NIL;
