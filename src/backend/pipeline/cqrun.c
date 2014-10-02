@@ -18,6 +18,7 @@
 #include "libpq/libpq.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
+#include "pipeline/cqanalyze.h"
 #include "pipeline/cqrun.h"
 #include "pipeline/decode.h"
 #include "postmaster/bgworker.h"
@@ -47,12 +48,13 @@ typedef struct RunCQArgs
 static PlannedStmt*
 get_plan(char *cvname, const char *sql, ContinuousViewState *state)
 {
-	List *parsetree_list;
-	List *querytree_list;
-	List *plantree_list;
-	SelectStmt *selectparse;
-	Query *query;
-	PlannedStmt* plan;
+	List		*parsetree_list;
+	List		*querytree_list;
+	List		*plantree_list;
+	SelectStmt	*selectparse;
+	DeleteStmt	*cleanup_stmt;
+	Query		*query;
+	PlannedStmt	*plan;
 
 	parsetree_list = pg_parse_query(sql);
 	Assert(list_length(parsetree_list) == 1);
@@ -76,6 +78,21 @@ get_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	plan->cq_state = palloc(sizeof(ContinuousViewState));
 	memcpy(plan->cq_state, query->cq_state, sizeof(ContinuousViewState));
 
+	/* Do we need to garbage collect tuples for this CQ? */
+	cleanup_stmt = getGarbageTupleDeleteStmt(cvname, selectparse);
+	if (cleanup_stmt)
+	{
+		querytree_list = pg_analyze_and_rewrite((Node *) cleanup_stmt, NULL, NULL, 0);
+		Assert(list_length(querytree_list) == 1);
+		plantree_list = pg_plan_queries(querytree_list, 0, NULL);
+		Assert(list_length(plantree_list) == 1);
+		plan->cq_cleanup_plan = (PlannedStmt *) linitial(plantree_list);
+	}
+	else
+	{
+		plan->cq_cleanup_plan = NULL;
+	}
+
 	return plan;
 }
 
@@ -98,10 +115,10 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	char *cvname;
 
 	MemoryContext planctxt = AllocSetContextCreate(TopMemoryContext,
-																 "RunCQPlanContext",
-																 ALLOCSET_DEFAULT_MINSIZE,
-																 ALLOCSET_DEFAULT_INITSIZE,
-																 ALLOCSET_DEFAULT_MAXSIZE);
+													"RunCQPlanContext",
+													ALLOCSET_DEFAULT_MINSIZE,
+													ALLOCSET_DEFAULT_INITSIZE,
+													ALLOCSET_DEFAULT_MAXSIZE);
 
 	memcpy(&args, additional, additionalsize);
 
@@ -153,17 +170,39 @@ run_cq(Datum d, char *additional, Size additionalsize)
 					 receiver,
 					 completionTag);
 
+
+	(*receiver->rDestroy) (receiver);
+
+	PortalDrop(portal, false);
+
 	CommitTransactionCommand();
 }
 
+static char *
+getCQProcessName(CQProcessType ptype)
+{
+	switch(ptype)
+	{
+	case CQCombiner:
+		return " [combiner]";
+	case CQWorker:
+		return " [worker]";
+	case CQGarbageCollector:
+		return " [gc]";
+	default:
+		elog(ERROR, "unknown CQProcessType $%d", ptype);
+	}
+}
 
 bool
-RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousViewState state)
+RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousViewState *state)
 {
 	BackgroundWorker worker;
 	RunCQArgs args;
+	char *procName = getCQProcessName(ptype);
 
 	memcpy(worker.bgw_name, cvname, strlen(cvname) + 1);
+	memcpy(&worker.bgw_name[strlen(cvname)], procName, strlen(procName) + 1);
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	worker.bgw_restart_time = BGW_NEVER_RESTART;
@@ -172,7 +211,7 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	worker.bgw_let_crash = true;
 	worker.bgw_additional_size = sizeof(RunCQArgs);
 
-	args.state = state;
+	args.state = *state;
 	args.ptype = ptype;
 	namestrcpy(&args.name, cvname);
 	namestrcpy(&args.dbname, MyProcPort->database_name);
