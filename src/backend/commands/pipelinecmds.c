@@ -24,6 +24,7 @@
 #include "catalog/toasting.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
+#include "pipeline/streambuf.h"
 #include "regex/regex.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
@@ -240,4 +241,11 @@ void
 DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
 {
 	MarkContinuousViewAsInactive((RangeVar *) linitial(stmt->views));
+
+	/*
+	 * This will stop the stream buffer from assigning new events to this
+	 * continuous view immediately, even if the worker procs actually take a few
+	 * more seconds to shut themselves down. This seems like the behavior we want.
+	 */
+	NotifyUpdateGlobalStreamBuffer();
 }

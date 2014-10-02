@@ -232,14 +232,13 @@ void
 ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
 {
 	CombinerDesc *combiner = CreateCombinerDesc(queryDesc);
-	bool wasActivated;
 	PlannedStmt *plan = queryDesc->plannedstmt;
 
 	/* sanity checks */
 	Assert(queryDesc != NULL);
 
 	SetContinousViewState(queryDesc->plannedstmt->cq_target, queryDesc->plannedstmt->cq_state);
-	wasActivated = MarkContinuousViewAsActive(queryDesc->plannedstmt->cq_target);
+	MarkContinuousViewAsActive(queryDesc->plannedstmt->cq_target);
 
 	/* Finish the transaction started in PostgresMain() */
 	CommitTransactionCommand();

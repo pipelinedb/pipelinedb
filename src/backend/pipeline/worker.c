@@ -92,6 +92,13 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 	elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
 
+	/*
+	 * We wait until we're up and running before telling the stream buffer that
+	 * there is a new reader in order to avoid having any events being assigned
+	 * to a process that fails to launch properly.
+	 */
+	NotifyUpdateGlobalStreamBuffer();
+
 	CurrentResourceOwner = save;
 
 	for (;;)
@@ -103,7 +110,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
-					false, batchsize, timeoutms, ForwardScanDirection, dest);
+					true, batchsize, timeoutms, ForwardScanDirection, dest);
 
 		MemoryContextSwitchTo(oldcontext);
 

@@ -38,14 +38,13 @@ StreamBuffer *GlobalStreamBuffer;
 /* Maximum size in blocks of the global stream buffer */
 int StreamBufferBlocks;
 
-StreamTargets *targets;
-
 /*
  * wait_for_overwrite
  *
  * Waits until the given slot has been read by all CQs that need to see it
  */
-static void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
+static void
+wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
 {
 	/* block until all CQs have marked this event as read */
 	while (HasPendingReads(slot));
@@ -75,7 +74,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	StreamEvent shared;
 	StreamBufferSlot *result;
 	Size size;
-	Bitmapset *bms = GetTargetsFor(stream, targets);
+	Bitmapset *bms = GetTargetsFor(stream);
 	StreamBufferSlot *sbs;
 
 	if (bms == NULL)
@@ -83,6 +82,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		/* nothing is reading from this stream, so it's a noop */
 		return NULL;
 	}
+
 	size = sizeof(StreamEventData) + event->len + sizeof(StreamBufferSlot) +
 			strlen(stream) + 1 + strlen(encoding) + 1 + BITMAPSET_SIZE(bms->nwords);
 
@@ -215,7 +215,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
  *
  * Appends a decoded event to the given stream buffer
  */
-extern StreamBufferSlot *
+StreamBufferSlot *
 AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent ev)
 {
 	StreamBufferSlot *sbs;
@@ -241,7 +241,7 @@ AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, S
  *
  * Retrieves the size in bytes of the stream buffer
  */
-extern Size
+Size
 StreamBufferShmemSize(void)
 {
 	return (StreamBufferBlocks * BLCKSZ) + sizeof(StreamBuffer);
@@ -252,12 +252,12 @@ StreamBufferShmemSize(void)
  *
  * Returns true if at least one continuous query is reading from the given stream
  */
-extern bool
+bool
 IsInputStream(const char *stream)
 {
 	bool result = false;
 
-	if (GetTargetsFor(stream, targets))
+	if (GetTargetsFor(stream))
 		result = true;
 
 	return result;
@@ -268,24 +268,15 @@ IsInputStream(const char *stream)
  *
  * Initialize global shared-memory buffer that all decoded events are appended to
  */
-extern void InitGlobalStreamBuffer(void)
+void
+InitGlobalStreamBuffer(void)
 {
 	bool found;
-	MemoryContext oldcontext;
 	Size size = StreamBufferShmemSize();
 	Size headersize = MAXALIGN(sizeof(StreamBuffer));
 
 	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer", headersize , &found);
 	GlobalStreamBuffer->capacity = size;
-
-	/*
-	 * This is kind of ugly to not just put this thing in shmem,
-	 * but the Bitmapset is a constant and a local-memory implementation
-	 * so we just leave it in cache memory.
-	 */
-	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-	targets = CreateStreamTargets();
-	MemoryContextSwitchTo(oldcontext);
 
 	if (!found)
 	{
@@ -305,7 +296,55 @@ extern void InitGlobalStreamBuffer(void)
 
 		GlobalStreamBuffer->tail = ShmemAlloc(sizeof(StreamBufferSlot *));
 		*GlobalStreamBuffer->tail = NULL;
+
+		GlobalStreamBuffer->mutex = ShmemAlloc(sizeof(slock_t));
+		SpinLockInit(GlobalStreamBuffer->mutex);
+
+		GlobalStreamBuffer->update = ShmemAlloc(sizeof(bool));
+		*GlobalStreamBuffer->update = false;
 	}
+}
+
+/*
+ * If the GlobalStreamBuffer needs to be updated, update it
+ */
+void
+UpdateGlobalStreamBuffer(void)
+{
+	if (*GlobalStreamBuffer->update)
+		UpdateStreamBuffer(GlobalStreamBuffer);
+}
+
+/*
+ * Tell the given StreamBuffer that it needs to update itself
+ */
+void
+NotifyUpdateStreamBuffer(StreamBuffer *buf)
+{
+	SpinLockAcquire(buf->mutex);
+	*buf->update = true;
+	SpinLockRelease(buf->mutex);
+}
+
+void
+NotifyUpdateGlobalStreamBuffer(void)
+{
+	NotifyUpdateStreamBuffer(GlobalStreamBuffer);
+}
+
+/*
+ * Something about the environment has changed, so look for what we need to update
+ * about the given buffer
+ */
+void
+UpdateStreamBuffer(StreamBuffer *buf)
+{
+	if (*buf->update == false)
+		return;
+	SpinLockAcquire(buf->mutex);
+	CreateStreamTargets();
+	*buf->update = false;
+	SpinLockRelease(buf->mutex);
 }
 
 /*
@@ -313,7 +352,7 @@ extern void InitGlobalStreamBuffer(void)
  *
  * Opens a reader into the given stream buffer for a given continuous query
  */
-extern StreamBufferReader *
+StreamBufferReader *
 OpenStreamBufferReader(StreamBuffer *buf, int queryid)
 {
 	StreamBufferReader *reader = (StreamBufferReader *) palloc(sizeof(StreamBufferReader));
@@ -327,7 +366,7 @@ OpenStreamBufferReader(StreamBuffer *buf, int queryid)
 	return reader;
 }
 
-extern void
+void
 CloseStreamBufferReader(StreamBufferReader *reader)
 {
 	/* currently every reader gets its own process */
@@ -341,7 +380,7 @@ CloseStreamBufferReader(StreamBufferReader *reader)
  * If this is the last reader that needs to see a given event, the event is deleted
  * from the stream buffer.
  */
-extern StreamBufferSlot *
+StreamBufferSlot *
 PinNextStreamEvent(StreamBufferReader *reader)
 {
 	StreamBuffer *buf = reader->buf;
@@ -405,7 +444,7 @@ PinNextStreamEvent(StreamBufferReader *reader)
  * Marks the given slot as read by the given reader. Once all open readers
  * have unpinned a slot, it can be freed.
  */
-extern void
+void
 UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 {
 	volatile Bitmapset *bms = slot->readby;
@@ -417,7 +456,7 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 	SpinLockRelease(&slot->mutex);
 }
 
-extern void
+void
 ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, int intervalms)
 {
 	StreamBufferReader *reader = OpenStreamBufferReader(buf, queryid);
@@ -441,7 +480,7 @@ ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, int intervalms)
 	printf("^^^^\n");
 }
 
-extern void
+void
 PrintStreamBuffer(StreamBuffer *buf)
 {
 	int count = 0;
