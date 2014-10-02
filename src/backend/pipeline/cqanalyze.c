@@ -476,6 +476,7 @@ analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
 	ListCell *lc;
 	CQAnalyzeContext context;
 	List *newfrom = NIL;
+	List *gcResTargets;
 
 	if (stmt->sortClause != NULL)
 	{
@@ -585,6 +586,14 @@ analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
 	}
 
 	stmt->fromClause = newfrom;
+
+	/*
+	 * Any columns that need to be kept around for garbage collection
+	 * should be added to the targetList.
+	 * TODO(usmanm): Mark the GC columns as hidden/System Columns.
+	 */
+	gcResTargets = getResTargetsForGC(stmt);
+	stmt->targetList = list_concat(stmt->targetList, gcResTargets);
 }
 
 /*

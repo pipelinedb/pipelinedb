@@ -50,7 +50,6 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 	Oid reloid;
 	Datum		toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
-	List *gcResTargets;
 	SelectStmt *select_stmt;
 
 	relation = stmt->into->rel;
@@ -61,11 +60,6 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 
 	Assert(IsA(stmt->query, SelectStmt));
 	select_stmt = (SelectStmt *) stmt->query;
-
-	/* Any columns that need to be kept around for garbage collection
-	 * should be added to the targetList. */
-	gcResTargets = getResTargetsForGC(select_stmt);
-	select_stmt->targetList = list_concat(select_stmt->targetList, gcResTargets);
 
 	query = parse_analyze(stmt->query, querystring, 0, 0);
 	tlist = query->targetList;
@@ -112,8 +106,6 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 		typename->typemod = exprTypmod((Node *)tle->expr);
 
 		coldef->typeName = typename;
-
-		/* TODO(usmanm): Mark the GC columns as hidden/System Columns. */
 
 		tableElts = lappend(tableElts, coldef);
 	}
