@@ -3933,6 +3933,7 @@ BackendInitialize(Port *port)
 		elog(FATAL, "setsid() failed: %m");
 #endif
 
+#define BACKTRACE_SEGFAULTS
 #ifdef BACKTRACE_SEGFAULTS
 	pqsignal(SIGSEGV, debug_segfault);
 #endif

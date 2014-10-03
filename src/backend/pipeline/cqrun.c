@@ -231,8 +231,10 @@ getCQProcessName(CQProcessType ptype)
 	case CQGarbageCollector:
 		return " [gc]";
 	default:
-		elog(ERROR, "unknown CQProcessType $%d", ptype);
+		elog(ERROR, "unknown CQProcessType %d", ptype);
 	}
+
+	return NULL;
 }
 
 bool

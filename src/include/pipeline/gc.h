@@ -15,6 +15,8 @@
 #include "pipeline/combiner.h"
 #include "utils/portal.h"
 
+#define CQ_GC_SLEEP_MS
+
 void ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner);
 
 #endif /* GC_H */
