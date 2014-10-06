@@ -1530,6 +1530,16 @@ static struct config_bool ConfigureNamesBool[] =
 		NULL, NULL, NULL
 	},
 
+	{
+		{"debug_sync_insert", PGC_USERSET, DEVELOPER_OPTIONS,
+			gettext_noop("Return success only if all the events in the stream have been consumed."),
+			NULL,
+		},
+		&DebugSyncInsert,
+		false,
+		NULL, NULL, NULL
+	},
+
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, false, NULL, NULL, NULL
