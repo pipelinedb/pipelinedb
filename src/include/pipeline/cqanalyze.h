@@ -19,7 +19,6 @@ void analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
 RangeTblEntry *transformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
 Node *getWindowMatchExpr(SelectStmt *stmt);
-List *getResTargetsForGC(SelectStmt *stmt);
 
 SelectStmt *transformSelectStmtForWorker(SelectStmt *stmt);
 
