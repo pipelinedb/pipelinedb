@@ -83,18 +83,17 @@ static PlannedStmt*
 get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
 {
 	List		*parsetree_list;
-	SelectStmt	*selectparse;
+	SelectStmt	*selectstmt;
 	Node		*gc_expr;
 	DeleteStmt	*delete_stmt;
 
 	parsetree_list = pg_parse_query(sql);
 	Assert(list_length(parsetree_list) == 1);
 
-	selectparse = (SelectStmt *) linitial(parsetree_list);
-	selectparse->forContinuousView = true;
+	selectstmt = (SelectStmt *) linitial(parsetree_list);
 
 	/* Do we need to garbage collect tuples for this CQ? */
-	gc_expr = getExpressionForGC(selectparse);
+	gc_expr = getWindowMatchExpr(selectstmt);
 
 	if (gc_expr == NULL)
 		return NULL;
@@ -104,6 +103,22 @@ get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, gc_expr, -1);
 
 	return get_plan_from_stmt(cvname, (Node *) delete_stmt, NULL, state);
+}
+
+static PlannedStmt*
+get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
+{
+	List		*parsetree_list;
+	SelectStmt	*selectstmt;
+
+	parsetree_list = pg_parse_query(sql);
+	Assert(list_length(parsetree_list) == 1);
+
+	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	selectstmt = transformSelectStmtForWorker(selectstmt);
+	selectstmt->forContinuousView = true;
+
+	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state);
 }
 
 static PlannedStmt*
@@ -168,8 +183,10 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	switch(state.ptype)
 	{
 		case CQCombiner:
-		case CQWorker:
 			plan = get_plan(cvname, sql, &state);
+			break;
+		case CQWorker:
+			plan = get_worker_plan(cvname, sql, &state);
 			break;
 		case CQGarbageCollector:
 			plan = get_gc_plan(cvname, sql, &state);

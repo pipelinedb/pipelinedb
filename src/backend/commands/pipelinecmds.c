@@ -58,17 +58,26 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 	create_stmt->relation = relation;
 	into = stmt->into;
 
-	Assert(IsA(stmt->query, SelectStmt));
-	select_stmt = (SelectStmt *) stmt->query;
+	select_stmt = (SelectStmt *) copyObject(stmt->query);
 
+	// Analyze the SelectStmt portion of the CreateContinuousViewStmt to make
+	// sure it's well-formed.
 	query = parse_analyze(stmt->query, querystring, 0, 0);
+
+	// Transform the SelectStmt to add any ColRefs to the targetList
+	// that need to be kept around for sliding window queries.
+	select_stmt = transformSelectStmtForWorker(select_stmt);
+
+	query = parse_analyze((Node *) select_stmt, querystring, 0, 0);
 	tlist = query->targetList;
 
 	/*
 	 * Build a list of columns from the SELECT statement that we
 	 * can use to create a table with
 	 */
+	/* TODO(usmanm): This into business is janky. Revisit post-alpha. */
 	lc = list_head(into->colNames);
+
 	foreach(col, tlist)
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(col);
