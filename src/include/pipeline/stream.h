@@ -22,6 +22,10 @@
 #define QueryIsMerge(query) ((query)->cq_is_merge)
 #define PlanIsStreaming(stmt) ((stmt)->is_continuous || false)
 
+
+/* Whether or not to wait on the inserted event to be consumed by the CV*/
+extern bool DebugSyncInsert;
+
 typedef enum
 {
 	STREAM_STATE_OPEN,

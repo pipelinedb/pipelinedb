@@ -33,6 +33,9 @@ typedef struct StreamTagsEntry
 
 static StreamTargets *targets = NULL;
 
+/* Whether or not to block till the events are consumed by a cv*/
+bool DebugSyncInsert;
+
 /*
  * close_stream
  *
@@ -190,6 +193,7 @@ InsertIntoStream(InsertStmt *ins)
 {
 	SelectStmt *sel = (SelectStmt *) ins->selectStmt;
 	ListCell *lc;
+	StreamBufferSlot* sbs = NULL;
 	Size size = 0;
 	int numcols = list_length(ins->cols);
 	char **sharedfields = NULL;
@@ -280,9 +284,20 @@ InsertIntoStream(InsertStmt *ins)
 			offset += len;
 		}
 
-		AppendStreamEvent(ins->relation->relname, VALUES_ENCODING, GlobalStreamBuffer, ev);
+		sbs = AppendStreamEvent(ins->relation->relname, VALUES_ENCODING, GlobalStreamBuffer, ev);
+		Assert(sbs);
 		count++;
 	}
+
+	/*
+		#392 Wait till the last event has been consumed by a CV before returning
+		Used for testing, based on a config setting.
+	*/
+	if (DebugSyncInsert)
+	{
+		wait_for_overwrite(GlobalStreamBuffer, sbs);
+	}
+	/* Print out the binary variable that tells you how many cvs are waiting on this stream */
 
 	return count;
 }
