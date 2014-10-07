@@ -13,10 +13,11 @@
 
 #include "nodes/parsenodes.h"
 
-extern void CreateEncoding(CreateEncodingStmt *stmt);
-extern void CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring);
-extern void DropContinuousView(DropStmt *stmt);
-extern void DumpState(DumpStmt *stmt);
-extern void DeactivateContinuousView(DeactivateContinuousViewStmt *stmt);
+void CreateEncoding(CreateEncodingStmt *stmt);
+void CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring);
+void DropContinuousView(DropStmt *stmt);
+void DumpState(DumpStmt *stmt);
+void DeactivateContinuousView(DeactivateContinuousViewStmt *stmt);
+void ClearContinuousView(ClearContinuousViewStmt *stmt);
 
 #endif   /* PIPELINECMDS_H */

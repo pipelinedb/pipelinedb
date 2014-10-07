@@ -23,6 +23,7 @@
 #include "catalog/pipeline_queries_fn.h"
 #include "catalog/toasting.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/pg_list.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/streambuf.h"
@@ -270,4 +271,16 @@ DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
 	 * more seconds to shut themselves down. This seems like the behavior we want.
 	 */
 	NotifyUpdateGlobalStreamBuffer();
+}
+
+void
+ClearContinuousView(ClearContinuousViewStmt *stmt)
+{
+	/* TODO(usmanm): Do we need to do any other state clean up? */
+	/* Call TRUNCATE on the backing view table. */
+	TruncateStmt *truncate_stmt = makeNode(TruncateStmt);
+	truncate_stmt->relations = list_make1((RangeVar *) linitial(stmt->views));
+	truncate_stmt->behavior = DROP_RESTRICT;
+	truncate_stmt->restart_seqs = false;
+	ExecuteTruncate(truncate_stmt);
 }
