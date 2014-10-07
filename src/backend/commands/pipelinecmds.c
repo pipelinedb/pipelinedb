@@ -23,6 +23,7 @@
 #include "catalog/pipeline_queries_fn.h"
 #include "catalog/toasting.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/pg_list.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/streambuf.h"
@@ -50,7 +51,6 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 	Oid reloid;
 	Datum		toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
-	List *gcResTargets;
 	SelectStmt *select_stmt;
 
 	relation = stmt->into->rel;
@@ -59,22 +59,26 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 	create_stmt->relation = relation;
 	into = stmt->into;
 
-	Assert(IsA(stmt->query, SelectStmt));
-	select_stmt = (SelectStmt *) stmt->query;
+	select_stmt = (SelectStmt *) copyObject(stmt->query);
 
-	/* Any columns that need to be kept around for garbage collection
-	 * should be added to the targetList. */
-	gcResTargets = getResTargetsForGarbageCollection(select_stmt);
-	select_stmt->targetList = list_concat(select_stmt->targetList, gcResTargets);
-
+	// Analyze the SelectStmt portion of the CreateContinuousViewStmt to make
+	// sure it's well-formed.
 	query = parse_analyze(stmt->query, querystring, 0, 0);
+
+	// Transform the SelectStmt to add any ColRefs to the targetList
+	// that need to be kept around for sliding window queries.
+	select_stmt = transformSelectStmtForCQWorker(select_stmt);
+
+	query = parse_analyze((Node *) select_stmt, querystring, 0, 0);
 	tlist = query->targetList;
 
 	/*
 	 * Build a list of columns from the SELECT statement that we
 	 * can use to create a table with
 	 */
+	/* TODO(usmanm): This into business is janky. Revisit post-alpha. */
 	lc = list_head(into->colNames);
+
 	foreach(col, tlist)
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(col);
@@ -112,8 +116,6 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 		typename->typemod = exprTypmod((Node *)tle->expr);
 
 		coldef->typeName = typename;
-
-		/* TODO(usmanm): Mark the GC columns as hidden/System Columns. */
 
 		tableElts = lappend(tableElts, coldef);
 	}
@@ -269,4 +271,16 @@ DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
 	 * more seconds to shut themselves down. This seems like the behavior we want.
 	 */
 	NotifyUpdateGlobalStreamBuffer();
+}
+
+void
+ClearContinuousView(ClearContinuousViewStmt *stmt)
+{
+	/* TODO(usmanm): Do we need to do any other state clean up? */
+	/* Call TRUNCATE on the backing view table. */
+	TruncateStmt *truncate_stmt = makeNode(TruncateStmt);
+	truncate_stmt->relations = list_make1((RangeVar *) linitial(stmt->views));
+	truncate_stmt->behavior = DROP_RESTRICT;
+	truncate_stmt->restart_seqs = false;
+	ExecuteTruncate(truncate_stmt);
 }

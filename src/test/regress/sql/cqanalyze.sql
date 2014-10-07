@@ -98,9 +98,13 @@ CREATE CONTINUOUS VIEW v26 AS SELECT key::text, arrival_timestamp FROM test_stre
 
 -- Verify that we can't do wildcard selections from streams
 CREATE CONTINUOUS VIEW v27 AS SELECT * from stream;
-CREATE CONTINUOUS VIEW v27 AS SELECT * from stream, t0;
-CREATE CONTINUOUS VIEW v27 AS SELECT t0.* from stream, t0;
-CREATE CONTINUOUS VIEW v27 AS SELECT stream.* from stream, t0;
+CREATE CONTINUOUS VIEW v28 AS SELECT * from stream, t0;
+CREATE CONTINUOUS VIEW v29 AS SELECT t0.* from stream, t0;
+CREATE CONTINUOUS VIEW v30 AS SELECT stream.* from stream, t0;
+
+-- Disallow sorting streams
+CREATE CONTINUOUS VIEW v31 AS SELECT key::text from stream ORDER BY key;
+CREATE CONTINUOUS VIEW v31 AS SELECT key::text from stream ORDER BY arrival_time;
 
 -- Regression tests
 CREATE CONTINUOUS VIEW test AS SELECT s0.ts::timestamp AS a, s0.id::timestamp, s1.id2::timestamp FROM stream s0, stream2 s1 WHERE s0.arrival_timestamp > (clock_timestamp() - interval '1 hour') AND s1.ts::timestamp > clock_timestamp() AND s1.id2 < clock_timestamp();

@@ -1453,8 +1453,6 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	/* run the plan fo-eva */
 	ExecutorRunContinuous(portal, queryDesc, resowner);
 
-	strcpy(completionTag, "ACTIVATE CONTINUOUS VIEW");
-
 	Assert(PortalGetHeapMemory(portal) == CurrentMemoryContext);
 	MemoryContextDeleteChildren(PortalGetHeapMemory(portal));
 }

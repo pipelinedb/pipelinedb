@@ -11,17 +11,24 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "catalog/namespace.h"
+#include "catalog/pg_proc.h"
+#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/print.h"
+#include "parser/parse_func.h"
 #include "parser/parse_node.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/stream.h"
 #include "storage/lock.h"
+#include "tcop/tcopprot.h"
 #include "utils/builtins.h"
+#include "utils/syscache.h"
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
 
@@ -33,13 +40,8 @@ typedef struct CQAnalyzeContext
 	List *streams;
 	List *tables;
 	List *targets;
-} CQAnalyzeContext;
-
-typedef struct CQValidTupleAnalyzeContext
-{
 	Node *matchExpr;
-	List *cols;
-} CQSlidingAnalyzeContext;
+} CQAnalyzeContext;
 
 /*
  * find_invalidate_expr
@@ -51,7 +53,7 @@ typedef struct CQValidTupleAnalyzeContext
  * This function tries to rip out all expressions not containing clock_timestamp().
  */
 static bool
-find_validation_expr(Node *node, CQSlidingAnalyzeContext *context)
+find_clock_time_expr(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -73,7 +75,7 @@ find_validation_expr(Node *node, CQSlidingAnalyzeContext *context)
 
 		context->matchExpr = NULL;
 
-		l_res = find_validation_expr(a_expr->lexpr, context);
+		l_res = find_clock_time_expr(a_expr->lexpr, context);
 		if (context->matchExpr != NULL)
 			l_expr = context->matchExpr;
 		else
@@ -81,7 +83,7 @@ find_validation_expr(Node *node, CQSlidingAnalyzeContext *context)
 
 		context->matchExpr = NULL;
 
-		r_res = find_validation_expr(a_expr->rexpr, context);
+		r_res = find_clock_time_expr(a_expr->rexpr, context);
 		if (context->matchExpr)
 			r_expr = context->matchExpr;
 		else
@@ -128,29 +130,38 @@ find_validation_expr(Node *node, CQSlidingAnalyzeContext *context)
 		}
 	}
 
-	return raw_expression_tree_walker(node, find_validation_expr, (void *) context);
+	return raw_expression_tree_walker(node, find_clock_time_expr, (void *) context);
 }
 
 /*
- * has_arrival_timestamp
- *
- * Walk the parse tree and return true iff ARRIVAL_TIMESTAMP is being
- * referenced.
+ * find_cols_to_store
  */
 static bool
-find_cols_to_store(Node *node, CQSlidingAnalyzeContext *context)
+find_cols_to_store(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
 
-	if (IsA(node, ColumnRef))
+	if (IsA(node, TypeCast))
+	{
+		TypeCast *tc = (TypeCast *) node;
+		if (IsA(tc->arg, ColumnRef))
+		{
+			context->cols = lappend(context->cols, node);
+			return false;
+		}
+
+	}
+	else if (IsA(node, ColumnRef))
 	{
 		context->cols = lappend(context->cols, node);
 	}
 
 	return raw_expression_tree_walker(node, find_cols_to_store, (void *) context);
 }
-
+/*
+ * does_colref_match_res_target
+ */
 static bool
 does_colref_match_res_target(Node *node, ColumnRef *cref)
 {
@@ -178,6 +189,15 @@ does_colref_match_res_target(Node *node, ColumnRef *cref)
 
 		return match;
 	}
+
+	/*
+	 * Even if a FuncCall has cref as an argument, its value
+	 * can be different from the column, so we need to project
+	 * the column.
+	 */
+	if (IsA(node, FuncCall))
+		return false;
+
 	return raw_expression_tree_walker(node, does_colref_match_res_target, (void *) cref);
 }
 
@@ -185,81 +205,198 @@ does_colref_match_res_target(Node *node, ColumnRef *cref)
  * invalidTupleSelectStmt
  */
 Node *
-getExpressionForGC(SelectStmt *stmt)
+getWindowMatchExpr(SelectStmt *stmt)
 {
-	CQSlidingAnalyzeContext context;
+	CQAnalyzeContext context;
 	context.matchExpr = NULL;
 
+	if (stmt->whereClause == NULL)
+	{
+		return NULL;
+	}
+
 	/* find the subset of the whereClause that we must match valid tuples */
-	find_validation_expr(stmt->whereClause, &context);
+	find_clock_time_expr(stmt->whereClause, &context);
 
 	return context.matchExpr;
 }
 
 /*
- * getResTargetsForGarbageCollection
- *
- * Any ColRef that is used in an expression with "clock_timestamp()" in the WHERE clause
- * needs to be stored with the sliding event window.
+ * is_agg_func
+ * TODO(usmanm): Turn this into a walker.
  */
-List *
-getResTargetsForGarbageCollection(SelectStmt *stmt)
+static bool
+is_agg_func(Node *node)
 {
-	CQSlidingAnalyzeContext context;
-	List *gcResTargets = NIL;
-	ListCell *clc;
-	context.matchExpr = NULL;
-	context.cols = NIL;
+	HeapTuple	ftup;
+	Form_pg_proc pform;
+	bool is_agg = false;
+	FuncCandidateList clist;
+	FuncCall *fn;
 
-	if (!stmt->whereClause)
-		return NIL;
+	if (!IsA(node, FuncCall))
+		return false;
 
-	/* find the subset of the whereClause that depends on clock_timestamp() */
-	find_validation_expr(stmt->whereClause, &context);
+	fn = (FuncCall *) node;
 
-	if (!context.matchExpr)
-		return NIL;
+	clist = FuncnameGetCandidates(fn->funcname, list_length(fn->args), NIL, false, false, true);
 
-	/* find all ColRefs in the squashed whereClause expression. */
-	find_cols_to_store((Node *) context.matchExpr, &context);
-
-	foreach(clc, context.cols)
+	while (clist != NULL)
 	{
-		ColumnRef *cref = (ColumnRef *) lfirst(clc);
-		ListCell *tlc;
+		if (!OidIsValid(clist->oid))
+			break;
+
+		ftup = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
+		if (!HeapTupleIsValid(ftup))
+			break;
+
+		pform = (Form_pg_proc) GETSTRUCT(ftup);
+		is_agg = pform->proisagg;
+
+		if (is_agg)
+			break;
+
+		clist = clist->next;
+	}
+
+	ReleaseSysCache(ftup);
+
+	return is_agg;
+}
+
+static List *
+add_res_targets_for_missing_cols(List *targetList, List *cols, List *resTargetsToAdd)
+{
+	ListCell *clc;
+	ListCell *tlc;
+	ResTarget *res;
+
+	foreach(clc, cols)
+	{
+		Node *node = (Node *) lfirst(clc);
+		ColumnRef *cref;
+		int location;
 		bool found = false;
-		char *colname = FigureColname((Node *) cref);
 
-		foreach(tlc, stmt->targetList)
+		if (IsA(node, TypeCast))
 		{
-			ResTarget *res = (ResTarget *) lfirst(tlc);
+			TypeCast *tc = (TypeCast *) node;
+			cref = (ColumnRef *) tc->arg;
+			location = tc->location;
+		}
+		else
+		{
+			cref = (ColumnRef *) lfirst(clc);
+			location = cref->location;
+		}
 
-			/* see if ColRef references an alias (<expr> AS <alias>). */
-			if (res->name && strcmp(res->name, colname) == 0)
-			{
-				found = true;
-				break;
-			}
+		foreach(tlc, targetList)
+		{
+			res = (ResTarget *) lfirst(tlc);
+			found = does_colref_match_res_target(res->val, cref);
 
-			if (does_colref_match_res_target(res->val, cref))
-			{
-				found = true;
+			if (found)
 				break;
-			}
 		}
 
 		if (!found)
 		{
-			ResTarget *res = makeNode(ResTarget);
+			res = makeNode(ResTarget);
 			res->name = NULL;
 			res->indirection = NIL;
-			res->val = (Node *) cref;
-			res->location = cref->location;
-			gcResTargets = lappend(gcResTargets, res);
+			res->val = node;
+			res->location = location;
+			resTargetsToAdd = lappend(resTargetsToAdd, res);
 		}
 	}
 
-	return gcResTargets;
+	return resTargetsToAdd;
+}
+
+/*
+ * transformSelectStmtForCQWorker
+ *
+ * If the SelectStmt doesn't define a sliding window query, this
+ * is a no-op. Otherwise we add any ColRefs needed to recompute the
+ * whereClause expression needed to test for inclusion in the window.
+ * Furthermore, if a sliding window query has aggregates, we *flatten* the query
+ * into a simple SELECT as the read path will do the aggregations.
+ */
+SelectStmt *
+transformSelectStmtForCQWorker(SelectStmt *stmt)
+{
+	CQAnalyzeContext context;
+	List *resTargetsToAdd = NIL;
+	List *targetList = NIL;
+	ListCell *clc;
+	ListCell *tlc;
+	ResTarget *res;
+
+	context.matchExpr = NULL;
+	context.cols = NIL;
+
+	if (stmt->whereClause == NULL)
+		return stmt;
+
+	/* find the subset of the whereClause that depends on clock_timestamp() */
+	find_clock_time_expr(stmt->whereClause, &context);
+	if (context.matchExpr == NULL)
+		return stmt;
+
+	/* find all ColRefs in the squashed whereClause expression. */
+	find_cols_to_store((Node *) context.matchExpr, &context);
+	resTargetsToAdd = add_res_targets_for_missing_cols(stmt->targetList, context.cols, resTargetsToAdd);
+
+	/* find all ColRefs in the groupClause. */
+	context.cols = NIL;
+	find_cols_to_store((Node *) stmt->groupClause, &context);
+	resTargetsToAdd = add_res_targets_for_missing_cols(stmt->targetList, context.cols, resTargetsToAdd);
+
+	foreach(tlc, stmt->targetList)
+	{
+		res = (ResTarget *) lfirst(tlc);
+		if (is_agg_func(res->val))
+		{
+			context.cols = NIL;
+			find_cols_to_store((Node *) res->val, &context);
+
+			foreach(clc, context.cols)
+			{
+				Node *node = lfirst(clc);
+
+				res = makeNode(ResTarget);
+				res->name = NULL;
+				res->indirection = NIL;
+				res->val = (Node *) node;
+
+				if (IsA(node, ColumnRef))
+				{
+					res->location = ((ColumnRef *) node)->location;
+				}
+				else
+				{
+					res->location = ((TypeCast *) node)->location;
+				}
+
+				resTargetsToAdd = lappend(resTargetsToAdd, res);
+			}
+
+			stmt->groupClause = NIL;
+		}
+		else
+			targetList = lappend(targetList, res);
+	}
+
+	/*
+	 * Add any columns that need to be kept around for GC or calculating
+	 * aggregates for sliding windows.
+	 * TODO(usmanm): Mark these columns as hidden/System Columns.
+	 */
+	targetList = list_concat(targetList, resTargetsToAdd);
+
+	stmt->targetList = targetList;
+
+	return stmt;
 }
 
 /*
@@ -276,7 +413,6 @@ find_colref_types(Node *node, CQAnalyzeContext *context)
 	if (IsA(node, TypeCast))
 	{
 		TypeCast *tc = (TypeCast *) node;
-
 		if (IsA(tc->arg, ColumnRef))
 		{
 			ListCell* lc;
@@ -477,6 +613,11 @@ analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
 	CQAnalyzeContext context;
 	List *newfrom = NIL;
 
+	if (stmt->sortClause != NULL)
+	{
+		elog(ERROR, "continuous view select can't have any sorting");
+	}
+
 	context.pstate = pstate;
 	context.types = NIL;
 	context.cols = NIL;
@@ -485,10 +626,10 @@ analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
 	context.targets = NIL;
 
 	/* make sure that we can infer types for every column that appears anywhere in the statement */
-	raw_expression_tree_walker((Node *) stmt, find_colref_types, (void *) &context);
+	find_colref_types((Node *) stmt, &context);
 
 	/* now indicate which relations are actually streams */
-	raw_expression_tree_walker((Node *) stmt->fromClause, add_streams, (void *) &context);
+	add_streams((Node *) stmt->fromClause, &context);
 
 	foreach(lc, context.cols)
 	{
@@ -608,4 +749,53 @@ transformStreamEntry(ParseState *pstate, StreamDesc *stream)
 		pstate->p_rtable = lappend(pstate->p_rtable, rte);
 
 	return rte;
+}
+
+Node *
+transformToRangeSubselectIfWindowView(ParseState *pstate, RangeVar *rv)
+{
+	char			*sql;
+	List			*parsetree_list;
+	SelectStmt		*selectstmt;
+	Node			*match_expr;
+	RangeSubselect	*rss;
+	Alias			*alias;
+
+	if (pstate->p_sliding_select != NIL)
+	{
+		RangeVar *rv2 = linitial(pstate->p_sliding_select);
+		if (equal(rv, rv2))
+			return NULL;
+	}
+
+	sql = GetQueryStringOrNull(rv->relname, true);
+
+	if (sql == NULL)
+		return NULL;
+
+	parsetree_list = pg_parse_query(sql);
+	Assert(list_length(parsetree_list) == 1);
+
+	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	match_expr = getWindowMatchExpr(selectstmt);
+
+	if (match_expr == NULL)
+		return NULL;
+
+	selectstmt->whereClause = match_expr;
+	selectstmt->fromClause = list_make1(rv);
+
+	alias = rv->alias;
+	if (alias == NULL)
+	{
+		alias = makeNode(Alias);
+		alias->aliasname = rv->relname;
+	}
+
+	rss = makeNode(RangeSubselect);
+	rss->alias = alias;
+	rss->subquery = (Node *) selectstmt;
+	rss->lateral = false;
+
+	return rss;
 }

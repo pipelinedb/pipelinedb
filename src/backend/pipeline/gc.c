@@ -12,6 +12,7 @@
 
 #include "access/xact.h"
 #include "catalog/pipeline_queries.h"
+#include "executor/executor.h"
 #include "miscadmin.h"
 #include "nodes/parsenodes.h"
 #include "nodes/plannodes.h"
@@ -22,90 +23,66 @@
 #include "utils/snapmgr.h"
 
 /*
- * GarbageCollectDisqualifiedTuples
+ * ContinuousQueryWorkerStartup
  *
- * Garbage collect any tuples that no longer belong to the CQ result set.
- * This is only applicable to sliding windows of the form:
- *   SELECT * from test_stream WHERE time::timestamptz > clock_timestamp() - interval '5' minute;
- */
-void
-GarbageCollectDisqualifiedTuples(PlannedStmt *plannedstmt)
-{
-	MemoryContext oldcontext;
-	Portal portal;
-	DestReceiver *receiver;
-	char completionTag[COMPLETION_TAG_BUFSIZE];
-
-	Assert(plannedstmt->cq_gc_plan != NULL);
-
-	StartTransactionCommand();
-	PushActiveSnapshot(GetTransactionSnapshot());
-
-	portal = CreatePortal("__gc__", true, true);
-	portal->visible = false;
-	PortalDefineQuery(portal,
-			NULL,
-			NULL,
-			"DELETE",
-			list_make1(plannedstmt->cq_gc_plan),
-			NULL);
-
-	receiver = CreateDestReceiver(DestNone);
-	PortalStart(portal, NULL, 0, GetActiveSnapshot());
-
-	oldcontext = MemoryContextSwitchTo(TopTransactionContext);
-
-	(void) PortalRun(portal,
-			FETCH_ALL,
-			true,
-			receiver,
-			receiver,
-			completionTag);
-
-	MemoryContextSwitchTo(oldcontext);
-
-	(*receiver->rDestroy) (receiver);
-
-	PortalDrop(portal, false);
-	PopActiveSnapshot();
-	CommitTransactionCommand();
-}
-
-/*
- * ContinuousQueryGarbageCollectorRun
+ * Launches a CQ worker, which continuously generates partial query results to send
+ * back to the combiner process.
  */
 void
 ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
 {
+	EState	   *estate;
+	DestReceiver *dest;
+	MemoryContext oldcontext;
+	MemoryContext exec_ctx;
+	ResourceOwner save = CurrentResourceOwner;
 	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	char *cvname = rv->relname;
-	MemoryContext gc_ctx;
-	ResourceOwner save = CurrentResourceOwner;
 	bool hasBeenDeactivated = false;
 	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
 
-	/* if there is no clean up needed, exit immediately. */
-	if (!queryDesc->plannedstmt->cq_gc_plan)
-		return;
+	exec_ctx = AllocSetContextCreate(TopMemoryContext, "GCContext",
+										ALLOCSET_DEFAULT_MINSIZE,
+										ALLOCSET_DEFAULT_INITSIZE,
+										ALLOCSET_DEFAULT_MAXSIZE);
 
-	gc_ctx = AllocSetContextCreate(TopMemoryContext,
-			"GarbageCollectContext",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
+	dest = CreateDestReceiver(DestNone);
 
 	elog(LOG, "\"%s\" gc %d running", cvname, MyProcPid);
 
-	CurrentResourceOwner = owner;
-
-	for(;;)
+	for (;;)
 	{
-		MemoryContext oldcontext = MemoryContextSwitchTo(gc_ctx);
+		CurrentResourceOwner = owner;
+		oldcontext = MemoryContextSwitchTo(exec_ctx);
 
-		GarbageCollectDisqualifiedTuples(queryDesc->plannedstmt);
+		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
 
-		MemoryContextReset(gc_ctx);
+		queryDesc->snapshot = GetActiveSnapshot();
+
+		ExecutorStart(queryDesc, 0);
+
+		estate = queryDesc->estate;
+		estate->es_exec_node_cxt = exec_ctx;
+		estate->es_lastoid = InvalidOid;
+		estate->es_processed = 0;
+
+		ExecutePlan(estate, queryDesc->planstate, queryDesc->operation,
+					true, 0, 0, ForwardScanDirection, dest);
+
+		ExecutorFinish(queryDesc);
+		ExecutorEnd(queryDesc);
+
+		queryDesc->snapshot = NULL;
+		queryDesc->estate = NULL;
+
+		PopActiveSnapshot();
+		CommitTransactionCommand();
+
+		MemoryContextReset(exec_ctx);
 		MemoryContextSwitchTo(oldcontext);
+
+		CurrentResourceOwner = save;
 
 		if (TimestampDifferenceExceeds(lastDeactivateCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
 		{
@@ -123,8 +100,9 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 			lastDeactivateCheckTime = GetCurrentTimestamp();
 		}
 
-		pg_usleep(1 * 1000 * 1000);
+		pg_usleep(CQ_GC_SLEEP_MS * 1000);
 	}
 
-	CurrentResourceOwner = save;
+	FreeQueryDesc(queryDesc);
+	MemoryContextDelete(exec_ctx);
 }

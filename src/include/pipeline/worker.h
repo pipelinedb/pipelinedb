@@ -15,6 +15,6 @@
 #include "pipeline/combiner.h"
 #include "utils/resowner.h"
 
-extern void ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner);
+void ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner);
 
 #endif

@@ -18,7 +18,10 @@ TupleDesc inferStreamScanTupleDescriptor(ParseState *pstate, RangeTblEntry *rte)
 void analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
 RangeTblEntry *transformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
-Node *getExpressionForGC(SelectStmt *stmt);
-List *getResTargetsForGarbageCollection(SelectStmt *stmt);
+Node *getWindowMatchExpr(SelectStmt *stmt);
+
+SelectStmt *transformSelectStmtForCQWorker(SelectStmt *stmt);
+
+Node *transformToRangeSubselectIfWindowView(ParseState *pstate, RangeVar *rv);
 
 #endif

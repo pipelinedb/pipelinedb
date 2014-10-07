@@ -36,7 +36,7 @@
  * Launches a CQ worker, which continuously generates partial query results to send
  * back to the combiner process.
  */
-extern void
+void
 ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
 {
 	EState	   *estate;

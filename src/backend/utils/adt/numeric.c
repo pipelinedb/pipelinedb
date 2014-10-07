@@ -455,9 +455,10 @@ static NumericAggState *makeNumericAggState(FunctionCallInfo fcinfo, bool calcSu
  */
 
 /*
- * numeric_agg_state_in() -
+ * naggstaterecv() -
  *
- *	Input function for numeric aggregation states
+ *	Input function for numeric aggregation states, used by combiners to
+ *	deserialize partial transition states sent to it by a worker process
  */
 Datum
 naggstaterecv(PG_FUNCTION_ARGS)
@@ -501,9 +502,10 @@ naggstaterecv(PG_FUNCTION_ARGS)
 }
 
 /*
- * numeric_agg_state_out() -
+ * naggstatesend() -
  *
- *	Output function for numeric aggregation states
+ *	Output function for numeric aggregation states, used by CQ workers to
+ *	send their transition states to a combiner process
  */
 Datum
 naggstatesend(PG_FUNCTION_ARGS)

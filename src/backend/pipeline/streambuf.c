@@ -20,15 +20,6 @@
 
 #define NO_SLOTS_FOLLOW -1
 
-#define ReaderNeedsWrap(buf, reader) (*(buf)->pos < (reader)->pos && !(reader)->reading)
-#define AtBufferEnd(reader) (*((reader)->buf)->last != NULL && reader->pos == *((reader)->buf)->last)
-#define HasUnreadData(reader) ((reader)->pos < *((reader)->buf)->last)
-#define BufferUnchanged(reader) ((reader)->pos == *((reader)->buf)->pos)
-#define IsNewReadCycle(reader) (!(reader)->reading)
-#define HasPendingReads(slot) (bms_num_members((slot)->readby) > 0)
-#define IsNewAppendCycle(buf) ((*buf->prev) == NULL)
-#define MustEvict(buf) (!IsNewAppendCycle(buf) && (*buf->prev)->nextoffset != NO_SLOTS_FOLLOW)
-
 /* Whether or not to print the state of the stream buffer as it changes */
 bool DebugPrintStreamBuffer;
 
@@ -38,13 +29,15 @@ StreamBuffer *GlobalStreamBuffer;
 /* Maximum size in blocks of the global stream buffer */
 int StreamBufferBlocks;
 
+#define BITMAPSET_SIZE(nwords)	\
+	(offsetof(Bitmapset, words) + (nwords) * sizeof(bitmapword))
+
 /*
  * wait_for_overwrite
  *
  * Waits until the given slot has been read by all CQs that need to see it
  */
-static void
-wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
+void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
 {
 	/* block until all CQs have marked this event as read */
 	while (HasPendingReads(slot));
@@ -55,9 +48,6 @@ wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
 				BufferOffset(buf, slot), BufferOffset(buf, slot) + SlotSize(slot));
 	}
 }
-
-#define BITMAPSET_SIZE(nwords)	\
-	(offsetof(Bitmapset, words) + (nwords) * sizeof(bitmapword))
 
 /*
  * alloc_slot

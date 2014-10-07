@@ -45,16 +45,55 @@ typedef struct RunCQArgs
 	ContinuousViewState state;
 } RunCQArgs;
 
-static PlannedStmt*
-get_gc_plan(const char *cvname, SelectStmt *cqselect)
+static PlannedStmt *
+get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewState *state)
 {
-	List *querytree_list;
-	List *plantree_list;
-	Node *gc_expr;
-	DeleteStmt *delete_stmt;
+	List		*querytree_list;
+	List		*plantree_list;
+	Query		*query;
+	PlannedStmt	*plan;
+
+	querytree_list = pg_analyze_and_rewrite(node, sql, NULL, 0);
+	Assert(list_length(querytree_list) == 1);
+
+	query = linitial(querytree_list);
+
+	/*
+	 * TODO(usmanm): This is a hack needed for get_gc_plan to work.
+	 * Figure out this shit.
+	 */
+	if (IsA(node, SelectStmt))
+		query->is_continuous = true;
+	query->cq_target = makeRangeVar(NULL, cvname, -1);
+	query->cq_state = state;
+
+	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
+	Assert(list_length(plantree_list) == 1);
+	plan = (PlannedStmt *) linitial(plantree_list);
+
+	plan->is_continuous = true;
+	plan->cq_target = makeRangeVar(NULL, cvname, -1);
+	plan->cq_state = palloc(sizeof(ContinuousViewState));
+	memcpy(plan->cq_state, query->cq_state, sizeof(ContinuousViewState));
+
+	return plan;
+}
+
+static PlannedStmt*
+get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
+{
+	List		*parsetree_list;
+	SelectStmt	*selectstmt;
+	Node		*gc_expr;
+	DeleteStmt	*delete_stmt;
+
+	parsetree_list = pg_parse_query(sql);
+	Assert(list_length(parsetree_list) == 1);
+
+	selectstmt = (SelectStmt *) linitial(parsetree_list);
 
 	/* Do we need to garbage collect tuples for this CQ? */
-	gc_expr = getExpressionForGC(cqselect);
+	gc_expr = getWindowMatchExpr(selectstmt);
 
 	if (gc_expr == NULL)
 		return NULL;
@@ -62,22 +101,31 @@ get_gc_plan(const char *cvname, SelectStmt *cqselect)
 	delete_stmt = makeNode(DeleteStmt);
 	delete_stmt->relation = makeRangeVar(NULL, (char *) cvname, -1);
 	delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, gc_expr, -1);
-	querytree_list = pg_analyze_and_rewrite((Node *) delete_stmt, NULL, NULL, 0);
-	Assert(list_length(querytree_list) == 1);
-	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
-	Assert(list_length(plantree_list) == 1);
-	return (PlannedStmt *) linitial(plantree_list);
+
+	return get_plan_from_stmt(cvname, (Node *) delete_stmt, NULL, state);
+}
+
+static PlannedStmt*
+get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
+{
+	List		*parsetree_list;
+	SelectStmt	*selectstmt;
+
+	parsetree_list = pg_parse_query(sql);
+	Assert(list_length(parsetree_list) == 1);
+
+	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	selectstmt = transformSelectStmtForCQWorker(selectstmt);
+	selectstmt->forContinuousView = true;
+
+	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state);
 }
 
 static PlannedStmt*
 get_plan(char *cvname, const char *sql, ContinuousViewState *state)
 {
 	List		*parsetree_list;
-	List		*querytree_list;
-	List		*plantree_list;
 	SelectStmt	*selectparse;
-	Query		*query;
-	PlannedStmt	*plan;
 
 	parsetree_list = pg_parse_query(sql);
 	Assert(list_length(parsetree_list) == 1);
@@ -85,25 +133,7 @@ get_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	selectparse = (SelectStmt *) linitial(parsetree_list);
 	selectparse->forContinuousView = true;
 
-	querytree_list = pg_analyze_and_rewrite((Node *) selectparse, sql, NULL, 0);
-	Assert(list_length(querytree_list) == 1);
-
-	query = linitial(querytree_list);
-	query->is_continuous = true;
-	query->cq_target = makeRangeVar(NULL, cvname, -1);
-	query->cq_state = state;
-	GetContinousViewState(query->cq_target, query->cq_state);
-
-	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
-	Assert(list_length(plantree_list) == 1);
-	plan = (PlannedStmt *) linitial(plantree_list);
-
-	plan->cq_state = palloc(sizeof(ContinuousViewState));
-	memcpy(plan->cq_state, query->cq_state, sizeof(ContinuousViewState));
-
-	plan->cq_gc_plan = get_gc_plan(cvname, selectparse);
-
-	return plan;
+	return get_plan_from_stmt(cvname, (Node *) selectparse, sql, state);
 }
 
 /*
@@ -131,6 +161,8 @@ run_cq(Datum d, char *additional, Size additionalsize)
 													ALLOCSET_DEFAULT_MAXSIZE);
 
 	memcpy(&args, additional, additionalsize);
+	state = args.state;
+	state.ptype = args.ptype;
 
 	/*
 	 * 0. Give this process access to the database
@@ -147,9 +179,25 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	 */
 	cvname = NameStr(args.name);
 	sql = GetQueryString(cvname, true);
-	plan = get_plan(cvname, sql, &state);
-	plan->cq_state = &args.state;
-	plan->cq_state->ptype = args.ptype;
+
+	switch(state.ptype)
+	{
+		case CQCombiner:
+			plan = get_plan(cvname, sql, &state);
+			break;
+		case CQWorker:
+			plan = get_worker_plan(cvname, sql, &state);
+			break;
+		case CQGarbageCollector:
+			plan = get_gc_plan(cvname, sql, &state);
+			break;
+		default:
+			elog(ERROR, "unrecognized CQ process type: %d", state.ptype);
+	}
+
+	/* No plan? Terminate CQ process. */
+	if (plan == NULL)
+		return;
 
 	SetCQPlanRefs(plan);
 
@@ -202,8 +250,10 @@ getCQProcessName(CQProcessType ptype)
 	case CQGarbageCollector:
 		return " [gc]";
 	default:
-		elog(ERROR, "unknown CQProcessType $%d", ptype);
+		elog(ERROR, "unknown CQProcessType %d", ptype);
 	}
+
+	return NULL;
 }
 
 bool

@@ -137,10 +137,10 @@ CreateCombinerDesc(QueryDesc *query)
 	memcpy(desc->name, NAME_PREFIX, strlen(NAME_PREFIX));
 	memcpy(desc->name + strlen(NAME_PREFIX), name, strlen(name) + 1);
 
-  if ((desc->sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
-  	elog(ERROR, "could not create combiner socket for \"%s\"", name);
+	if ((desc->sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+		elog(ERROR, "could not create combiner socket for \"%s\"", name);
 
-  return desc;
+	return desc;
 }
 
 void
@@ -351,7 +351,6 @@ GetTuplesToCombineWith(char *cvname, TupleDesc desc,
 	HASH_SEQ_STATUS status;
 	HeapTupleEntry entry;
 
-	return;
 	strcpy(stmt_name, cvname);
 	sprintf(base_select, "SELECT * FROM %s", cvname);
 
