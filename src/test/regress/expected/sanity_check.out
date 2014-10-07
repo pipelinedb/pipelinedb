@@ -135,6 +135,7 @@ pg_ts_parser|t
 pg_ts_template|t
 pg_type|t
 pg_user_mapping|t
+pipeline_combine|t
 pipeline_encoding|t
 pipeline_queries|t
 point_tbl|t

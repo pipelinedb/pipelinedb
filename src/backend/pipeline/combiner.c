@@ -30,6 +30,7 @@
 #include "parser/parse_expr.h"
 #include "parser/parse_type.h"
 #include "pipeline/combiner.h"
+#include "pipeline/cqplan.h"
 #include "tcop/tcopprot.h"
 #include "tcop/pquery.h"
 #include "utils/memutils.h"
@@ -158,19 +159,28 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	bool hasBeenDeactivated = false;
 	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
 	TimestampTz lastCombineTime = GetCurrentTimestamp();
-
 	MemoryContext combinectx = AllocSetContextCreate(TopMemoryContext,
 			"CombineContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
+	MemoryContext oldcontext;
+
+	CurrentResourceOwner = owner;
+
 	elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
 	accept_worker(combiner);
 
 	store = tuplestore_begin_heap(true, true, work_mem);
-	combineplan = GetCombinePlan(cvname, store, &query);
-	combineplan->cq_target = rv;
+
+	StartTransactionCommand();
+
+	oldcontext = MemoryContextSwitchTo(combinectx);
+	combineplan = GetCombinePlan(rv, store, &query);
+	MemoryContextSwitchTo(oldcontext);
+
+	CommitTransactionCommand();
 
 	for (;;)
 	{
@@ -200,15 +210,22 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 
 		if (count > 0 && (count == batchsize || force))
 		{
-			MemoryContext oldcontext = MemoryContextSwitchTo(combinectx);
+			MemoryContext oldcontext;
 
+			StartTransactionCommand();
+
+			oldcontext = MemoryContextSwitchTo(combinectx);
 			Combine(query, combineplan, queryDesc->tupDesc, store);
+			MemoryContextSwitchTo(oldcontext);
+
+			CommitTransactionCommand();
 
 			tuplestore_clear(store);
 			MemoryContextReset(combinectx);
 			MemoryContextSwitchTo(oldcontext);
 
 			lastCombineTime = GetCurrentTimestamp();
+			count = 0;
 		}
 
 		if (TimestampDifferenceExceeds(lastDeactivateCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
@@ -237,7 +254,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
  * Retrieves a the cached combine plan for a continuous view, creating it if necessary
  */
 PlannedStmt *
-GetCombinePlan(char *cvname, Tuplestorestate *store, Query **query)
+GetCombinePlan(RangeVar *cvrel, Tuplestorestate *store, Query **query)
 {
 	char *query_string;
 	Node	   *raw_parse_tree;
@@ -246,9 +263,7 @@ GetCombinePlan(char *cvname, Tuplestorestate *store, Query **query)
 	Query 	 *q;
 	PlannedStmt* plan;
 
-	StartTransactionCommand();
-
-	query_string = GetQueryString(cvname, true);
+	query_string = GetQueryString(cvrel->relname, true);
 	parsetree_list = pg_parse_query(query_string);
 
 	/* CVs should only have a single query */
@@ -264,13 +279,17 @@ GetCombinePlan(char *cvname, Tuplestorestate *store, Query **query)
 	q = (Query *) linitial(query_list);
 
 	q->sourcestore = store;
-	q->sourcedesc = RelationNameGetTupleDesc(cvname);
+	q->sourcedesc = RelationNameGetTupleDesc(cvrel->relname);
 	q->cq_is_merge = true;
+
 	*query = q;
 
 	plan = pg_plan_query(q, 0, NULL);
+	plan->cq_state = palloc0(sizeof(ContinuousViewState));
+	plan->cq_state->ptype = CQCombiner;
+	plan->cq_target = cvrel;
 
-	CommitTransactionCommand();
+	SetCQPlanRefs(plan);
 
 	return plan;
 }
@@ -323,7 +342,6 @@ GetTuplesToCombineWith(char *cvname, TupleDesc desc,
 	ParseState *ps;
 	DestReceiver *dest;
 	Type typeinfo;
-	MemoryContext oldcontext;
 	int length;
 	char stmt_name[strlen(cvname) + 9 + 1];
 	char base_select[14 + strlen(cvname) + 1];
@@ -333,6 +351,7 @@ GetTuplesToCombineWith(char *cvname, TupleDesc desc,
 	HASH_SEQ_STATUS status;
 	HeapTupleEntry entry;
 
+	return;
 	strcpy(stmt_name, cvname);
 	sprintf(base_select, "SELECT * FROM %s", cvname);
 
@@ -399,8 +418,6 @@ GetTuplesToCombineWith(char *cvname, TupleDesc desc,
 
 	plan = pg_plan_query(query, 0, NULL);
 
-	oldcontext = MemoryContextSwitchTo(MessageContext);
-
 	/*
 	 * Now run the query that retrieves existing tuples to merge this merge request with.
 	 * This query outputs to the tuplestore currently holding the incoming merge tuples.
@@ -418,8 +435,6 @@ GetTuplesToCombineWith(char *cvname, TupleDesc desc,
 	SetTupleTableDestReceiverParams(dest, merge_targets, CacheMemoryContext, true);
 
 	PortalStart(portal, NULL, 0, GetActiveSnapshot());
-
-	MemoryContextSwitchTo(oldcontext);
 
 	(void) PortalRun(portal,
 					 FETCH_ALL,
@@ -501,7 +516,6 @@ Combine(Query *query, PlannedStmt *plan, TupleDesc cvdesc, Tuplestorestate *stor
 	int num_buckets = 1;
 	char *cvname = plan->cq_target->relname;
 
-	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());
 
 	slot = MakeSingleTupleTableSlot(cvdesc);
@@ -555,6 +569,4 @@ Combine(Query *query, PlannedStmt *plan, TupleDesc cvdesc, Tuplestorestate *stor
 
 	if (merge_targets)
 		hash_destroy(merge_targets->hashtab);
-
-	CommitTransactionCommand();
 }

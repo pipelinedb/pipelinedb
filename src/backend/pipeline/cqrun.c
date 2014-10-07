@@ -151,6 +151,8 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	plan->cq_state = &args.state;
 	plan->cq_state->ptype = args.ptype;
 
+	SetCQPlanRefs(plan);
+
 	/*
 	 * 2. Set up the portal to run it in
 	 */

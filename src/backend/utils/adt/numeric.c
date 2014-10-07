@@ -259,6 +259,18 @@ typedef struct NumericVar
 	NumericDigit *digits;		/* base-NBASE digits */
 } NumericVar;
 
+typedef struct NumericAggState
+{
+	bool		calcSumX2;		/* if true, calculate sumX2 */
+	MemoryContext agg_context;	/* context we're calculating in */
+	int64		N;				/* count of processed numbers */
+	NumericVar	sumX;			/* sum of processed numbers */
+	NumericVar	sumX2;			/* sum of squares of processed numbers */
+	int			maxScale;		/* maximum scale seen so far */
+	int64		maxScaleCount;	/* number of values seen with maximum scale */
+	int64		NaNcount;		/* count of NaN values (not included in N!) */
+} NumericAggState;
+
 
 /* ----------
  * Some preinitialized constants
@@ -433,6 +445,7 @@ static void strip_var(NumericVar *var);
 static void compute_bucket(Numeric operand, Numeric bound1, Numeric bound2,
 			   NumericVar *count_var, NumericVar *result_var);
 
+static NumericAggState *makeNumericAggState(FunctionCallInfo fcinfo, bool calcSumX2);
 
 /* ----------------------------------------------------------------------
  *
@@ -441,6 +454,114 @@ static void compute_bucket(Numeric operand, Numeric bound1, Numeric bound2,
  * ----------------------------------------------------------------------
  */
 
+/*
+ * numeric_agg_state_in() -
+ *
+ *	Input function for numeric aggregation states
+ */
+Datum
+naggstaterecv(PG_FUNCTION_ARGS)
+{
+	bytea *bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
+	NumericAggState *result = (NumericAggState *) palloc0(sizeof(NumericAggState));
+	StringInfoData buf;
+	int nbytes = VARSIZE(bytesin);
+	int digitssize;
+	int i;
+
+	initStringInfo(&buf);
+	appendBinaryStringInfo(&buf, VARDATA(bytesin), nbytes);
+
+	result->agg_context = CurrentMemoryContext;
+	result->calcSumX2 = pq_getmsgint(&buf, 1);
+	result->N = pq_getmsgint64(&buf);
+	result->maxScale = pq_getmsgint(&buf, sizeof(int));
+	result->maxScaleCount = pq_getmsgint64(&buf);
+	result->NaNcount = pq_getmsgint64(&buf);
+
+	result->sumX.ndigits = pq_getmsgint(&buf, sizeof(int));
+	result->sumX.weight = pq_getmsgint(&buf, sizeof(int));
+	result->sumX.sign = pq_getmsgint(&buf, sizeof(int));
+	result->sumX.dscale = pq_getmsgint(&buf, sizeof(int));
+	digitssize = result->sumX.ndigits * sizeof(NumericDigit);
+	result->sumX.digits = palloc0(digitssize);
+	for (i=0; i<result->sumX.ndigits; i++)
+		result->sumX.digits[i] = pq_getmsgint(&buf, sizeof(NumericDigit));
+
+	result->sumX2.ndigits = pq_getmsgint(&buf, sizeof(int));
+	result->sumX2.weight = pq_getmsgint(&buf, sizeof(int));
+	result->sumX2.sign = pq_getmsgint(&buf, sizeof(int));
+	result->sumX2.dscale = pq_getmsgint(&buf, sizeof(int));
+	digitssize = result->sumX2.ndigits * sizeof(NumericDigit);
+	result->sumX2.digits = palloc0(digitssize);
+	for (i=0; i<result->sumX2.ndigits; i++)
+		result->sumX2.digits[i] = pq_getmsgint(&buf, sizeof(NumericDigit));
+
+	PG_RETURN_POINTER(result);
+}
+
+/*
+ * numeric_agg_state_out() -
+ *
+ *	Output function for numeric aggregation states
+ */
+Datum
+naggstatesend(PG_FUNCTION_ARGS)
+{
+	NumericAggState *nagg = (NumericAggState *) PG_GETARG_POINTER(0);
+	StringInfoData buf;
+	bytea *result;
+	int nbytes;
+	int i;
+
+	initStringInfo(&buf);
+
+	pq_sendint(&buf, nagg->calcSumX2, sizeof(bool));
+	pq_sendint64(&buf, nagg->N);
+	pq_sendint(&buf, nagg->maxScale, sizeof(int));
+	pq_sendint64(&buf, nagg->maxScaleCount);
+	pq_sendint64(&buf, nagg->NaNcount);
+
+	pq_sendint(&buf, nagg->sumX.ndigits, sizeof(int));
+	pq_sendint(&buf, nagg->sumX.weight, sizeof(int));
+	pq_sendint(&buf, nagg->sumX.sign, sizeof(int));
+	pq_sendint(&buf, nagg->sumX.dscale, sizeof(int));
+	for (i=0; i<nagg->sumX.ndigits; i++)
+		pq_sendint(&buf,  nagg->sumX.digits[i], sizeof(NumericDigit));
+
+	pq_sendint(&buf, nagg->sumX2.ndigits, sizeof(int));
+	pq_sendint(&buf, nagg->sumX2.weight, sizeof(int));
+	pq_sendint(&buf, nagg->sumX2.sign, sizeof(int));
+	pq_sendint(&buf, nagg->sumX2.dscale, sizeof(int));
+	for (i=0; i<nagg->sumX2.ndigits; i++)
+		pq_sendint(&buf,  nagg->sumX2.digits[i], sizeof(NumericDigit));
+
+	nbytes = buf.len - buf.cursor;
+	result = (bytea *) palloc(nbytes + VARHDRSZ);
+	SET_VARSIZE(result, nbytes + VARHDRSZ);
+
+	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
+
+	PG_RETURN_BYTEA_P(result);
+}
+
+Datum
+numeric_avg_combine(PG_FUNCTION_ARGS)
+{
+	NumericAggState  *state = (NumericAggState  *) PG_GETARG_POINTER(0);
+	NumericAggState	 *incoming = (NumericAggState *) PG_GETARG_POINTER(1);
+	NumericVar sumXresult;
+
+	if (state == NULL)
+		state = makeNumericAggState(fcinfo, false);
+
+	init_var(&sumXresult);
+	add_var(&state->sumX, &incoming->sumX, &sumXresult);
+	set_var_from_var(&sumXresult, &state->sumX);
+	state->N += incoming->N;
+
+	PG_RETURN_POINTER(state);
+}
 
 /*
  * numeric_in() -
@@ -2509,18 +2630,6 @@ numeric_float4(PG_FUNCTION_ARGS)
  *
  * ----------------------------------------------------------------------
  */
-
-typedef struct NumericAggState
-{
-	bool		calcSumX2;		/* if true, calculate sumX2 */
-	MemoryContext agg_context;	/* context we're calculating in */
-	int64		N;				/* count of processed numbers */
-	NumericVar	sumX;			/* sum of processed numbers */
-	NumericVar	sumX2;			/* sum of squares of processed numbers */
-	int			maxScale;		/* maximum scale seen so far */
-	int64		maxScaleCount;	/* number of values seen with maximum scale */
-	int64		NaNcount;		/* count of NaN values (not included in N!) */
-} NumericAggState;
 
 /*
  * Prepare state data for a numeric aggregate function that needs to compute

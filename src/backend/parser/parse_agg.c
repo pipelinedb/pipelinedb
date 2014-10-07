@@ -410,9 +410,8 @@ check_agg_arguments(ParseState *pstate,
 	if (context.min_varlevel < 0)
 	{
 		if (context.min_agglevel < 0)
-			agglevel = 0;
-		else
-			agglevel = context.min_agglevel;
+			return 0;
+		agglevel = context.min_agglevel;
 	}
 	else if (context.min_agglevel < 0)
 		agglevel = context.min_varlevel;

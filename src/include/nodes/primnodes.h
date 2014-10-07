@@ -270,6 +270,8 @@ typedef struct Aggref
 	char		aggkind;		/* aggregate kind (see pg_aggregate.h) */
 	Index		agglevelsup;	/* > 0 if agg belongs to outer query */
 	int			location;		/* token location, or -1 if unknown */
+
+	Oid aggtranstype; /* type Oid of transition results */
 } Aggref;
 
 /*
