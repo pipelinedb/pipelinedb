@@ -199,6 +199,8 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	if (plan == NULL)
 		return;
 
+	SetCQPlanRefs(plan);
+
 	/*
 	 * 2. Set up the portal to run it in
 	 */
