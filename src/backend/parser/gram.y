@@ -223,7 +223,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 		AlterCompositeTypeStmt AlterUserStmt AlterUserMappingStmt AlterUserSetStmt
 		AlterRoleStmt AlterRoleSetStmt
 		AlterDefaultPrivilegesStmt DefACLAction
-		AnalyzeStmt ClosePortalStmt ClusterStmt CommentStmt
+		AnalyzeStmt ClearContinuousViewStmt ClosePortalStmt ClusterStmt CommentStmt
 		ConstraintsSetStmt CopyStmt CreateAsStmt CreateCastStmt
 		CreateDomainStmt CreateEncodingStmt CreateExtensionStmt CreateGroupStmt CreateOpClassStmt
 		CreateOpFamilyStmt AlterOpFamilyStmt CreatePLangStmt
@@ -531,7 +531,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	BOOLEAN_P BOTH BY
 
 	CACHE CALLED CASCADE CASCADED CASE CAST CATALOG_P CHAIN CHAR_P
-	CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLOSE
+	CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLEAR CLOSE
 	CLUSTER COALESCE COLLATE COLLATION COLUMN COMMENT COMMENTS COMMIT
 	COMMITTED CONCURRENTLY CONFIGURATION CONNECTION CONSTRAINT CONSTRAINTS
 	CONTENT_P CONTINUE_P CONTINUOUS CONVERSION_P COPY COST CREATE
@@ -742,6 +742,7 @@ stmt :
 			| AlterUserStmt
 			| AnalyzeStmt
 			| CheckPointStmt
+			| ClearContinuousViewStmt
 			| ClosePortalStmt
 			| ClusterStmt
 			| CommentStmt
@@ -2641,11 +2642,13 @@ copy_generic_opt_arg_list_item:
 
 /*****************************************************************************
  *
- * ( ACTIVATE | DEACTIVATE )  [ CONTINUOUS VIEW ] [continuous_view_name_list]
+ * ( ACTIVATE | DEACTIVATE | CLEAR ) CONTINUOUS VIEW [continuous_view_name_list]
  *
  * PipelineDB
  *
- * Activates/deactivates continuous view(s)
+ * Activates/deactivates/clears continuous view(s)
+ * TODO(usmanm): Release should require typing out CONTINUOUS VIEW for ACTIVATE
+ * and DEACTIVATE statements.
  *
  *****************************************************************************/
 
@@ -2692,7 +2695,16 @@ DeactivateContinuousViewStmt: DEACTIVATE qualified_name_list_or_none where_claus
 					$$ = (Node *)s;
 				}
 		;
-	
+
+ClearContinuousViewStmt: CLEAR CONTINUOUS VIEW qualified_name_list_or_none where_clause
+				{
+					ClearContinuousViewStmt *s = makeNode(ClearContinuousViewStmt);
+					s->views = (List *) $4;
+					s->whereClause = (Node *) $5;
+					$$ = (Node *)s;
+				}
+		;
+
 /*****************************************************************************
  *
  * CREATE ENCODING encoding_name
@@ -12983,6 +12995,7 @@ unreserved_keyword:
 			| CHARACTERISTICS
 			| CHECKPOINT
 			| CLASS
+			| CLEAR
 			| CLOSE
 			| CLUSTER
 			| COMMENT

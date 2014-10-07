@@ -22,6 +22,6 @@ Node *getWindowMatchExpr(SelectStmt *stmt);
 
 SelectStmt *transformSelectStmtForCQWorker(SelectStmt *stmt);
 
-RangeSubselect *transformToRangeSubselectIfWindowView(ParseState *pstate, RangeVar *rv);
+Node *transformToRangeSubselectIfWindowView(ParseState *pstate, RangeVar *rv);
 
 #endif

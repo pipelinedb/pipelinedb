@@ -2840,6 +2840,8 @@ typedef struct ActivateContinuousViewStmt
 
 typedef BaseContinuousViewStmt DeactivateContinuousViewStmt;
 
+typedef BaseContinuousViewStmt ClearContinuousViewStmt;
+
 typedef struct CreateEncodingStmt
 {
 	NodeTag		type;
