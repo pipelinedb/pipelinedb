@@ -459,3 +459,15 @@ GetQueryString(const char *cvname, bool select_only)
 		elog(ERROR, "continuous view \"%s\" does not exist", cvname);
 	return result;
 }
+
+bool
+IsContinuousView(RangeVar *name)
+{
+	HeapTuple tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
+	if (HeapTupleIsValid(tuple))
+	{
+		ReleaseSysCache(tuple);
+		return true;
+	}
+	return false;
+}

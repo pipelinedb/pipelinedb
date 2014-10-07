@@ -500,7 +500,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_CreateContinuousViewStmt:
-			CreateContinuousView((CreateContinuousViewStmt *) parsetree, queryString);
+			ExecCreateContinuousViewStmt((CreateContinuousViewStmt *) parsetree, queryString);
 			break;
 
 		case T_CreateEncodingStmt:
@@ -508,7 +508,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_DumpStmt:
-			DumpState((DumpStmt *) parsetree);
+			ExecDumpStmt((DumpStmt *) parsetree);
 			break;
 
 		case T_DropTableSpaceStmt:
@@ -853,11 +853,7 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_DeactivateContinuousViewStmt:
-			DeactivateContinuousView((DeactivateContinuousViewStmt *) parsetree);
-			break;
-
-		case T_ClearContinuousViewStmt:
-			ClearContinuousView((ClearContinuousViewStmt *) parsetree);
+			ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
 			break;
 
 		default:
@@ -1385,10 +1381,9 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 		case OBJECT_FOREIGN_TABLE:
 			RemoveRelations(stmt);
 			break;
-    case OBJECT_CONTINUOUS_VIEW:
-        DropContinuousView(stmt);
-        // XXX: Don't break here, we must perform all the `default` steps
-        // after this. That's what does the actual dropping of the view table.
+		case OBJECT_CONTINUOUS_VIEW:
+			ExecDropContinuousViewStmt(stmt);
+			break;
 		default:
 			RemoveObjects(stmt);
 			break;
@@ -1977,7 +1972,17 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_TruncateStmt:
-			tag = "TRUNCATE TABLE";
+			switch (((TruncateStmt *) parsetree)->objType)
+			{
+			case OBJECT_CONTINUOUS_VIEW:
+				tag = "TRUNCATE CONTINUOUS VIEW";
+				break;
+			case OBJECT_TABLE:
+				tag = "TRUNCATE TABLE";
+				break;
+			default:
+				tag = "???";
+			}
 			break;
 
 		case T_CommentStmt:
@@ -2472,9 +2477,6 @@ CreateCommandTag(Node *parsetree)
 			break;
 		case T_DeactivateContinuousViewStmt:
 			tag = "DEACTIVATE CONTINUOUS VIEW";
-			break;
-		case T_ClearContinuousViewStmt:
-			tag = "CLEAR CONTINUOUS VIEW";
 			break;
 		case T_DumpStmt:
 			tag = "DUMP";

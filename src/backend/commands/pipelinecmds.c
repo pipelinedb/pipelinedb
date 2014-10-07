@@ -14,6 +14,7 @@
 #include "access/htup_details.h"
 #include "access/reloptions.h"
 #include "access/xact.h"
+#include "commands/defrem.h"
 #include "commands/pipelinecmds.h"
 #include "commands/tablecmds.h"
 #include "utils/builtins.h"
@@ -38,7 +39,7 @@
  * and stores the query in a catalog table.
  */
 void
-CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
+ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring)
 {
 	CreateStmt *create_stmt;
 	Query *query;
@@ -152,7 +153,7 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
  * the state back to the client
  */
 void
-DumpState(DumpStmt *stmt)
+ExecDumpStmt(DumpStmt *stmt)
 {
 	char *name = NULL;
 	if (stmt->name)
@@ -162,12 +163,12 @@ DumpState(DumpStmt *stmt)
 }
 
 /*
- * DropContinuousView
+ * RemoveContinuousViewFromCatalog
  *
  * Drops the query row in the pipeline_queries catalog table.
  */
 void
-DropContinuousView(DropStmt *stmt)
+ExecDropContinuousViewStmt(DropStmt *stmt)
 {
 	Relation pipeline_queries;
 	ListCell *item;
@@ -187,13 +188,13 @@ DropContinuousView(DropStmt *stmt)
 		tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(view_name->relname));
 		if (!HeapTupleIsValid(tuple))
 		{
-			elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist", view_name->relname);
+			elog(ERROR, "continuous view \"%s\" does not exist", view_name->relname);
 		}
 
 		row = (Form_pipeline_queries) GETSTRUCT(tuple);
 		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
 		{
-			elog(ERROR, "CONTINUOUS VIEW \"%s\" is currently active; can't be dropped", view_name->relname);
+			elog(ERROR, "continuous view \"%s\" is currently active; can't be dropped", view_name->relname);
 		}
 
 		/*
@@ -214,6 +215,8 @@ DropContinuousView(DropStmt *stmt)
 	 * Now we can clean up; but keep locks until commit.
 	 */
 	heap_close(pipeline_queries, NoLock);
+
+	RemoveObjects(stmt);
 }
 
 static
@@ -226,44 +229,54 @@ RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state)
 }
 
 void
-ActivateContinuousView(ActivateContinuousViewStmt *stmt)
+ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 {
-	RangeVar *rv = linitial(stmt->views);
 	ListCell *lc;
-	ContinuousViewState state;
 
-	if (IsContinuousViewActive(rv))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" is already active.",
-				rv->relname);
-
-	GetContinousViewState(rv, &state);
-
-	/*
-	 * Update any tuning parameters passed in with the ACTIVATE
-	 * command.
-	 */
-	foreach(lc, stmt->withOptions)
+	foreach(lc, stmt->views)
 	{
-		DefElem *elem = (DefElem *) lfirst(lc);
-		int64 value = intVal(elem->arg);
+		RangeVar *rv = linitial(stmt->views);
+		ListCell *lc;
+		ContinuousViewState state;
 
-		if (pg_strcasecmp(elem->defname, CQ_BATCH_SIZE_KEY) == 0)
-			state.batchsize = value;
-		else if (pg_strcasecmp(elem->defname, CQ_WAIT_MS_KEY) == 0)
-			state.maxwaitms = (int32) value;
-		else if (pg_strcasecmp(elem->defname, CQ_SLEEP_MS_KEY) == 0)
-			state.emptysleepms = (int32) value;
-		else if (pg_strcasecmp(elem->defname, CQ_PARALLELISM_KEY) == 0)
-			state.parallelism = (int16) value;
+		if (IsContinuousViewActive(rv))
+			elog(ERROR, "CONTINUOUS VIEW \"%s\" is already active.",
+					rv->relname);
+
+		GetContinousViewState(rv, &state);
+
+		/*
+		 * Update any tuning parameters passed in with the ACTIVATE
+		 * command.
+		 */
+		foreach(lc, stmt->withOptions)
+		{
+			DefElem *elem = (DefElem *) lfirst(lc);
+			int64 value = intVal(elem->arg);
+
+			if (pg_strcasecmp(elem->defname, CQ_BATCH_SIZE_KEY) == 0)
+				state.batchsize = value;
+			else if (pg_strcasecmp(elem->defname, CQ_WAIT_MS_KEY) == 0)
+				state.maxwaitms = (int32) value;
+			else if (pg_strcasecmp(elem->defname, CQ_SLEEP_MS_KEY) == 0)
+				state.emptysleepms = (int32) value;
+			else if (pg_strcasecmp(elem->defname, CQ_PARALLELISM_KEY) == 0)
+				state.parallelism = (int16) value;
+		}
+
+		RunContinuousQueryProcs(rv->relname, &state);
 	}
-
-	RunContinuousQueryProcs(rv->relname, &state);
 }
 
 void
-DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
+ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 {
-	MarkContinuousViewAsInactive((RangeVar *) linitial(stmt->views));
+	ListCell *lc;
+
+	foreach(lc, stmt->views)
+	{
+		MarkContinuousViewAsInactive(lfirst(lc));
+	}
 
 	/*
 	 * This will stop the stream buffer from assigning new events to this
@@ -274,13 +287,21 @@ DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
 }
 
 void
-ClearContinuousView(ClearContinuousViewStmt *stmt)
+ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 {
+	ListCell *lc;
+
+	/* Ensure that all *relations* are CQs. */
+	foreach(lc, stmt->relations)
+	{
+		RangeVar *rv = (RangeVar *) lfirst(lc);
+		if (!IsContinuousView(rv))
+			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
+	}
+
+	/* Call TRUNCATE on the backing view table(s). */
+	stmt->objType = OBJECT_TABLE;
+	ExecuteTruncate(stmt);
+
 	/* TODO(usmanm): Do we need to do any other state clean up? */
-	/* Call TRUNCATE on the backing view table. */
-	TruncateStmt *truncate_stmt = makeNode(TruncateStmt);
-	truncate_stmt->relations = list_make1((RangeVar *) linitial(stmt->views));
-	truncate_stmt->behavior = DROP_RESTRICT;
-	truncate_stmt->restart_seqs = false;
-	ExecuteTruncate(truncate_stmt);
 }

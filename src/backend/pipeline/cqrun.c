@@ -19,6 +19,7 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cqplan.h"
 #include "pipeline/cqrun.h"
 #include "pipeline/decode.h"
 #include "postmaster/bgworker.h"
