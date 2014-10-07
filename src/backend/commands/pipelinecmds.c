@@ -66,7 +66,7 @@ CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring)
 
 	// Transform the SelectStmt to add any ColRefs to the targetList
 	// that need to be kept around for sliding window queries.
-	select_stmt = transformSelectStmtForWorker(select_stmt);
+	select_stmt = transformSelectStmtForCQWorker(select_stmt);
 
 	query = parse_analyze((Node *) select_stmt, querystring, 0, 0);
 	tlist = query->targetList;

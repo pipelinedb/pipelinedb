@@ -14,6 +14,8 @@
 #include "access/htup_details.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_proc.h"
+#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_queries_fn.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/print.h"
@@ -24,6 +26,7 @@
 #include "pipeline/cqanalyze.h"
 #include "pipeline/stream.h"
 #include "storage/lock.h"
+#include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/syscache.h"
 
@@ -218,6 +221,10 @@ getWindowMatchExpr(SelectStmt *stmt)
 	return context.matchExpr;
 }
 
+/*
+ * is_agg_func
+ * TODO(usmanm): Turn this into a walker.
+ */
 static bool
 is_agg_func(Node *node)
 {
@@ -307,13 +314,16 @@ add_res_targets_for_missing_cols(List *targetList, List *cols, List *resTargetsT
 }
 
 /*
- * getResTargetsForViewTable
+ * transformSelectStmtForCQWorker
  *
- * Any ColRef that is used in an expression with "clock_timestamp()" in the WHERE clause
- * needs to be stored.
+ * If the SelectStmt doesn't define a sliding window query, this
+ * is a no-op. Otherwise we add any ColRefs needed to recompute the
+ * whereClause expression needed to test for inclusion in the window.
+ * Furthermore, if a sliding window query has aggregates, we *flatten* the query
+ * into a simple SELECT as the read path will do the aggregations.
  */
 SelectStmt *
-transformSelectStmtForWorker(SelectStmt *stmt)
+transformSelectStmtForCQWorker(SelectStmt *stmt)
 {
 	CQAnalyzeContext context;
 	List *resTargetsToAdd = NIL;
@@ -739,4 +749,53 @@ transformStreamEntry(ParseState *pstate, StreamDesc *stream)
 		pstate->p_rtable = lappend(pstate->p_rtable, rte);
 
 	return rte;
+}
+
+Node *
+transformToRangeSubselectIfWindowView(ParseState *pstate, RangeVar *rv)
+{
+	char			*sql;
+	List			*parsetree_list;
+	SelectStmt		*selectstmt;
+	Node			*match_expr;
+	RangeSubselect	*rss;
+	Alias			*alias;
+
+	if (pstate->p_sliding_select != NIL)
+	{
+		RangeVar *rv2 = linitial(pstate->p_sliding_select);
+		if (equal(rv, rv2))
+			return NULL;
+	}
+
+	sql = GetQueryStringOrNull(rv->relname, true);
+
+	if (sql == NULL)
+		return NULL;
+
+	parsetree_list = pg_parse_query(sql);
+	Assert(list_length(parsetree_list) == 1);
+
+	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	match_expr = getWindowMatchExpr(selectstmt);
+
+	if (match_expr == NULL)
+		return NULL;
+
+	selectstmt->whereClause = match_expr;
+	selectstmt->fromClause = list_make1(rv);
+
+	alias = rv->alias;
+	if (alias == NULL)
+	{
+		alias = makeNode(Alias);
+		alias->aliasname = rv->relname;
+	}
+
+	rss = makeNode(RangeSubselect);
+	rss->alias = alias;
+	rss->subquery = (Node *) selectstmt;
+	rss->lateral = false;
+
+	return rss;
 }

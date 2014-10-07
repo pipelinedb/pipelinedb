@@ -20,6 +20,8 @@ RangeTblEntry *transformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
 Node *getWindowMatchExpr(SelectStmt *stmt);
 
-SelectStmt *transformSelectStmtForWorker(SelectStmt *stmt);
+SelectStmt *transformSelectStmtForCQWorker(SelectStmt *stmt);
+
+RangeSubselect *transformToRangeSubselectIfWindowView(ParseState *pstate, RangeVar *rv);
 
 #endif

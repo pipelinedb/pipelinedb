@@ -115,7 +115,7 @@ get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
-	selectstmt = transformSelectStmtForWorker(selectstmt);
+	selectstmt = transformSelectStmtForCQWorker(selectstmt);
 	selectstmt->forContinuousView = true;
 
 	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state);
