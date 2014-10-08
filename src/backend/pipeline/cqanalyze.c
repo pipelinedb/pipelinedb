@@ -135,6 +135,8 @@ find_clock_time_expr(Node *node, CQAnalyzeContext *context)
 
 /*
  * find_cols_to_store
+ *
+ * Recursively search this node and find all ColRefs in it.
  */
 static bool
 find_cols_to_store(Node *node, CQAnalyzeContext *context)
@@ -161,6 +163,9 @@ find_cols_to_store(Node *node, CQAnalyzeContext *context)
 }
 /*
  * does_colref_match_res_target
+ *
+ * Does this ColRef match the ResTarget? This is used
+ * so that TypeCasted ColRefs are also considered matches.
  */
 static bool
 does_colref_match_res_target(Node *node, ColumnRef *cref)
@@ -202,10 +207,14 @@ does_colref_match_res_target(Node *node, ColumnRef *cref)
 }
 
 /*
- * invalidTupleSelectStmt
+ * getSlidingWindowMatchExpr
+ *
+ * Return the squashed whereClause that is used by the
+ * CQ VIEW or the GC to disqualify tuples which don't fall
+ * in the sliding window.
  */
 Node *
-getWindowMatchExpr(SelectStmt *stmt)
+getSlidingWindowMatchExpr(SelectStmt *stmt)
 {
 	CQAnalyzeContext context;
 	context.matchExpr = NULL;
@@ -222,7 +231,22 @@ getWindowMatchExpr(SelectStmt *stmt)
 }
 
 /*
+ * isSlidingWindowSelectStmt
+ *
+ * Does the SelectStmt define a sliding window CQ? Returns true
+ * iff some part of the whereClause depends on clock_timestamp().
+ */
+bool
+isSlidingWindowSelectStmt(SelectStmt *stmt)
+{
+	return getSlidingWindowMatchExpr(stmt) != NULL;
+}
+
+/*
  * is_agg_func
+ *
+ * Does the node represent an aggregate function?
+ *
  * TODO(usmanm): Turn this into a walker.
  */
 static bool
@@ -264,8 +288,14 @@ is_agg_func(Node *node)
 	return is_agg;
 }
 
-static List *
-add_res_targets_for_missing_cols(List *targetList, List *cols, List *resTargetsToAdd)
+/*
+ * add_res_targets_for_missing_cols
+ *
+ * Add ResTargets for any ColRef that is missing in the
+ * targetList of the SelectStmt.
+ */
+static void
+add_res_targets_for_missing_cols(SelectStmt *stmt, List *cols)
 {
 	ListCell *clc;
 	ListCell *tlc;
@@ -290,7 +320,7 @@ add_res_targets_for_missing_cols(List *targetList, List *cols, List *resTargetsT
 			location = cref->location;
 		}
 
-		foreach(tlc, targetList)
+		foreach(tlc, stmt->targetList)
 		{
 			res = (ResTarget *) lfirst(tlc);
 			found = does_colref_match_res_target(res->val, cref);
@@ -306,55 +336,46 @@ add_res_targets_for_missing_cols(List *targetList, List *cols, List *resTargetsT
 			res->indirection = NIL;
 			res->val = node;
 			res->location = location;
-			resTargetsToAdd = lappend(resTargetsToAdd, res);
+			stmt->targetList = lappend(stmt->targetList, res);
 		}
 	}
-
-	return resTargetsToAdd;
 }
 
 /*
- * transformSelectStmtForCQWorker
+ * transform_select_for_sliding_window
  *
- * If the SelectStmt doesn't define a sliding window query, this
- * is a no-op. Otherwise we add any ColRefs needed to recompute the
- * whereClause expression needed to test for inclusion in the window.
- * Furthermore, if a sliding window query has aggregates, we *flatten* the query
- * into a simple SELECT as the read path will do the aggregations.
+ * Performs the necessary transformations on the SelectStmt
+ * so that it can be executed by CQ workers to generate
+ * tuples for the underlying materialization table of the CQ.
  */
-SelectStmt *
-transformSelectStmtForCQWorker(SelectStmt *stmt)
+static void
+transform_select_for_sliding_window(SelectStmt *stmt, Node *matchExpr)
 {
 	CQAnalyzeContext context;
-	List *resTargetsToAdd = NIL;
 	List *targetList = NIL;
 	ListCell *clc;
 	ListCell *tlc;
 	ResTarget *res;
 
-	context.matchExpr = NULL;
+	/*
+	 * Find all ColRefs in matchExpr expression and add them to the
+	 * targetList if they're missing.
+	 */
 	context.cols = NIL;
+	find_cols_to_store(matchExpr, &context);
+	add_res_targets_for_missing_cols(stmt, context.cols);
 
-	if (stmt->whereClause == NULL)
-		return stmt;
-
-	/* find the subset of the whereClause that depends on clock_timestamp() */
-	find_clock_time_expr(stmt->whereClause, &context);
-	if (context.matchExpr == NULL)
-		return stmt;
-
-	/* find all ColRefs in the squashed whereClause expression. */
-	find_cols_to_store((Node *) context.matchExpr, &context);
-	resTargetsToAdd = add_res_targets_for_missing_cols(stmt->targetList, context.cols, resTargetsToAdd);
-
-	/* find all ColRefs in the groupClause. */
-	context.cols = NIL;
-	find_cols_to_store((Node *) stmt->groupClause, &context);
-	resTargetsToAdd = add_res_targets_for_missing_cols(stmt->targetList, context.cols, resTargetsToAdd);
-
+	/*
+	 * Find all ColRefs needed to calculate aggregates for this sliding
+	 * window and add them to the targetList if they're missing.
+	 *
+	 * This step must happen after the projection of missing columns from
+	 * the groupClause and matchExpr.
+	 */
 	foreach(tlc, stmt->targetList)
 	{
 		res = (ResTarget *) lfirst(tlc);
+
 		if (is_agg_func(res->val))
 		{
 			context.cols = NIL;
@@ -378,7 +399,7 @@ transformSelectStmtForCQWorker(SelectStmt *stmt)
 					res->location = ((TypeCast *) node)->location;
 				}
 
-				resTargetsToAdd = lappend(resTargetsToAdd, res);
+				targetList = lappend(targetList, res);
 			}
 
 			stmt->groupClause = NIL;
@@ -387,14 +408,117 @@ transformSelectStmtForCQWorker(SelectStmt *stmt)
 			targetList = lappend(targetList, res);
 	}
 
-	/*
-	 * Add any columns that need to be kept around for GC or calculating
-	 * aggregates for sliding windows.
-	 * TODO(usmanm): Mark these columns as hidden/System Columns.
-	 */
-	targetList = list_concat(targetList, resTargetsToAdd);
-
 	stmt->targetList = targetList;
+}
+
+/*
+ * getSelectStmtForCQWorker
+ *
+ * Get the SelectStmt that should be executed by the
+ * CQ worker on micro-batches.
+ *
+ * The targetList of this SelectStmt is also used to determine
+ * the columns that must be created in the CQ's underlying
+ * materialization table.
+ */
+SelectStmt *
+getSelectStmtForCQWorker(SelectStmt *stmt)
+{
+	CQAnalyzeContext context;
+	Node *matchExpr;
+
+	stmt = (SelectStmt *) copyObject(stmt);
+
+	/*
+	 * Find all ColRefs in the groupClause and add them to the targetList
+	 * if they're missing.
+	 *
+	 * These columns need to be projected by the worker so that the combiner
+	 * can determine which row to merge the partial results with.
+	 */
+	context.cols = NIL;
+	find_cols_to_store((Node *) stmt->groupClause, &context);
+	add_res_targets_for_missing_cols(stmt, context.cols);
+
+	/*
+	 *
+	 */
+	matchExpr = getSlidingWindowMatchExpr(stmt);
+	if (matchExpr != NULL)
+	{
+		transform_select_for_sliding_window(stmt, matchExpr);
+		return stmt;
+	}
+
+	/*
+	 * TODO(usmanm/derekjn): We should add columns to store transition states here.
+	 * These columns must have a unique name and need to be added with an explicit
+	 * TypeCast for the analyzer to determine what the type of the column should be
+	 * in the underlying materialization table.
+	 */
+
+	return stmt;
+}
+
+/*
+ * getSelectStmtForCQView
+ *
+ * Get the SelectStmt that should be passed to the VIEW we
+ * create for this CQ.
+ */
+SelectStmt *
+getSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
+{
+	Node		*match_expr;
+	List		*origTargetList = stmt->targetList;
+	ListCell	*lc;
+
+	stmt = (SelectStmt *) copyObject(stmt);
+
+	/*
+	 * Is this a sliding window CQ? If so create a SELECT over
+	 * the materialization table that filters based on the
+	 * `matchExpr` rather than the original `whereClause`.
+	 */
+	match_expr = getSlidingWindowMatchExpr(stmt);
+	if (match_expr != NULL)
+	{
+		stmt->whereClause = match_expr;
+		stmt->fromClause = list_make1(cqrel);
+		return stmt;
+	}
+
+	/*
+	 * Only pick the fields that the user expects from the
+	 * CQ materialization table.
+	 */
+	stmt = makeNode(SelectStmt);
+	stmt->fromClause = list_make1(cqrel);
+	stmt->targetList = NIL;
+
+	foreach(lc, origTargetList)
+	{
+		ResTarget *origRes = lfirst(lc);
+		ResTarget *res;
+		ColumnRef *cref;
+		char *colname;
+
+		if (origRes->name != NULL)
+			colname = origRes->name;
+		else
+			colname = FigureColname(origRes->val);
+
+		cref = makeNode(ColumnRef);
+		cref->fields = list_make1(makeString(colname));
+
+		res = makeNode(ResTarget);
+		res->name = colname;
+		res->indirection = NIL;
+		res->val = (Node *) cref;
+		res->location = origRes->location;
+
+		stmt->targetList = lappend(stmt->targetList, res);
+	}
 
 	return stmt;
 }
@@ -749,53 +873,4 @@ transformStreamEntry(ParseState *pstate, StreamDesc *stream)
 		pstate->p_rtable = lappend(pstate->p_rtable, rte);
 
 	return rte;
-}
-
-Node *
-transformToRangeSubselectIfWindowView(ParseState *pstate, RangeVar *rv)
-{
-	char			*sql;
-	List			*parsetree_list;
-	SelectStmt		*selectstmt;
-	Node			*match_expr;
-	RangeSubselect	*rss;
-	Alias			*alias;
-
-	if (pstate->p_sliding_select != NIL)
-	{
-		RangeVar *rv2 = linitial(pstate->p_sliding_select);
-		if (equal(rv, rv2))
-			return NULL;
-	}
-
-	sql = GetQueryStringOrNull(rv->relname, true);
-
-	if (sql == NULL)
-		return NULL;
-
-	parsetree_list = pg_parse_query(sql);
-	Assert(list_length(parsetree_list) == 1);
-
-	selectstmt = (SelectStmt *) linitial(parsetree_list);
-	match_expr = getWindowMatchExpr(selectstmt);
-
-	if (match_expr == NULL)
-		return NULL;
-
-	selectstmt->whereClause = match_expr;
-	selectstmt->fromClause = list_make1(rv);
-
-	alias = rv->alias;
-	if (alias == NULL)
-	{
-		alias = makeNode(Alias);
-		alias->aliasname = rv->relname;
-	}
-
-	rss = makeNode(RangeSubselect);
-	rss->alias = alias;
-	rss->subquery = (Node *) selectstmt;
-	rss->lateral = false;
-
-	return rss;
 }
