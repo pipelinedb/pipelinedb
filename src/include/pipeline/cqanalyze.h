@@ -18,10 +18,11 @@ TupleDesc inferStreamScanTupleDescriptor(ParseState *pstate, RangeTblEntry *rte)
 void analyzeContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
 RangeTblEntry *transformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
-Node *getWindowMatchExpr(SelectStmt *stmt);
+Node *getSlidingWindowMatchExpr(SelectStmt *stmt);
 
-SelectStmt *transformSelectStmtForCQWorker(SelectStmt *stmt);
+SelectStmt *getSelectStmtForCQWorker(SelectStmt *stmt);
+SelectStmt *getSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel);
 
-Node *transformToRangeSubselectIfWindowView(ParseState *pstate, RangeVar *rv);
+bool isSlidingWindowSelectStmt(SelectStmt *stmt);
 
 #endif

@@ -52,8 +52,6 @@ make_parsestate(ParseState *parentParseState)
 	/* Fill in fields that don't start at null/false/zero */
 	pstate->p_next_resno = 1;
 
-	pstate->p_sliding_select = NIL;
-
 	if (parentParseState)
 	{
 		pstate->p_sourcetext = parentParseState->p_sourcetext;
@@ -63,7 +61,6 @@ make_parsestate(ParseState *parentParseState)
 		pstate->p_paramref_hook = parentParseState->p_paramref_hook;
 		pstate->p_coerce_param_hook = parentParseState->p_coerce_param_hook;
 		pstate->p_ref_hook_state = parentParseState->p_ref_hook_state;
-		pstate->p_sliding_select = parentParseState->p_sliding_select;
 	}
 
 	return pstate;
