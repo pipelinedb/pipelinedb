@@ -14,15 +14,16 @@
 
 #include "parser/parse_node.h"
 
-TupleDesc inferStreamScanTupleDescriptor(ParseState *pstate, RangeTblEntry *rte);
-void analyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
-RangeTblEntry *transformStreamEntry(ParseState *pstate, StreamDesc *stream);
+TupleDesc InferStreamScanTupleDescriptor(ParseState *pstate, RangeTblEntry *rte);
+void AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
+RangeTblEntry *TransformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
-Node *getSlidingWindowMatchExpr(SelectStmt *stmt);
+Node *GetSlidingWindowMatchExpr(SelectStmt *stmt);
 
-SelectStmt *getSelectStmtForCQWorker(SelectStmt *stmt);
-SelectStmt *getSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel);
+SelectStmt *GetSelectStmtForCQWorker(SelectStmt *stmt);
+SelectStmt *GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel);
 
-bool isSlidingWindowSelectStmt(SelectStmt *stmt);
+bool IsSlidingWindowSelectStmt(SelectStmt *stmt);
+bool IsSlidingWindowContinuousView(RangeVar *cvname);
 
 #endif

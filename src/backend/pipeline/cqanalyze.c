@@ -215,14 +215,14 @@ does_colref_match_res_target(Node *node, ColumnRef *cref)
 }
 
 /*
- * getSlidingWindowMatchExpr
+ * GetSlidingWindowMatchExpr
  *
  * Return the squashed whereClause that is used by the
  * CQ VIEW or the GC to disqualify tuples which don't fall
  * in the sliding window.
  */
 Node *
-getSlidingWindowMatchExpr(SelectStmt *stmt)
+GetSlidingWindowMatchExpr(SelectStmt *stmt)
 {
 	CQAnalyzeContext context;
 	context.matchExpr = NULL;
@@ -239,15 +239,31 @@ getSlidingWindowMatchExpr(SelectStmt *stmt)
 }
 
 /*
- * isSlidingWindowSelectStmt
+ * IsSlidingWindowSelectStmt
  *
  * Does the SelectStmt define a sliding window CQ? Returns true
  * iff some part of the whereClause depends on clock_timestamp().
  */
 bool
-isSlidingWindowSelectStmt(SelectStmt *stmt)
+IsSlidingWindowSelectStmt(SelectStmt *stmt)
 {
-	return getSlidingWindowMatchExpr(stmt) != NULL;
+	return GetSlidingWindowMatchExpr(stmt) != NULL;
+}
+
+/*
+ * IsSlidingWindowContinuousView
+ */
+bool
+IsSlidingWindowContinuousView(RangeVar *cvname)
+{
+	char *sql = GetQueryString(cvname->relname, true);
+	List *parsetree_list = pg_parse_query(sql);
+	SelectStmt	*select_stmt;
+
+	Assert(list_length(parsetree_list) == 1);
+
+	select_stmt = (SelectStmt *) linitial(parsetree_list);
+	return IsSlidingWindowSelectStmt(select_stmt);
 }
 
 /*
@@ -445,7 +461,7 @@ replace_colrefs_with_colnames(Node *node, void *colname)
 }
 
 /*
- * getSelectStmtForCQWorker
+ * GetSelectStmtForCQWorker
  *
  * Get the SelectStmt that should be executed by the
  * CQ worker on micro-batches.
@@ -455,7 +471,7 @@ replace_colrefs_with_colnames(Node *node, void *colname)
  * materialization table.
  */
 SelectStmt *
-getSelectStmtForCQWorker(SelectStmt *stmt)
+GetSelectStmtForCQWorker(SelectStmt *stmt)
 {
 	CQAnalyzeContext context;
 	Node *matchExpr;
@@ -476,7 +492,7 @@ getSelectStmtForCQWorker(SelectStmt *stmt)
 	/*
 	 *
 	 */
-	matchExpr = getSlidingWindowMatchExpr(stmt);
+	matchExpr = GetSlidingWindowMatchExpr(stmt);
 	if (matchExpr != NULL)
 	{
 		transform_select_for_sliding_window(stmt, matchExpr);
@@ -494,13 +510,13 @@ getSelectStmtForCQWorker(SelectStmt *stmt)
 }
 
 /*
- * getSelectStmtForCQView
+ * GetSelectStmtForCQView
  *
  * Get the SelectStmt that should be passed to the VIEW we
  * create for this CQ.
  */
 SelectStmt *
-getSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
+GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
 {
 	Node		*match_expr;
 	List		*origTargetList = stmt->targetList;
@@ -513,7 +529,7 @@ getSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
 	 * the materialization table that filters based on the
 	 * `matchExpr` rather than the original `whereClause`.
 	 */
-	match_expr = getSlidingWindowMatchExpr(stmt);
+	match_expr = GetSlidingWindowMatchExpr(stmt);
 	if (match_expr != NULL)
 	{
 		stmt->whereClause = match_expr;
@@ -763,12 +779,12 @@ analyze_from_item(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * analyzeContinuousSelectStmt
+ * AnalyzeContinuousSelectStmt
  *
  * This is mainly to prepare a CV SELECT's FROM clause, which may involve streams
  */
 void
-analyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
+AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
 {
 	SelectStmt *stmt = *topselect;
 	ListCell *lc;
@@ -899,12 +915,12 @@ analyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 }
 
 /*
- * transformStreamEntry
+ * TransformStreamEntry
  *
  * Transform a StreamDesc to a RangeTblEntry
  */
 RangeTblEntry *
-transformStreamEntry(ParseState *pstate, StreamDesc *stream)
+TransformStreamEntry(ParseState *pstate, StreamDesc *stream)
 {
 	RangeVar *relation = stream->name;
 	RangeTblEntry *rte = makeNode(RangeTblEntry);

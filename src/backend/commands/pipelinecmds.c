@@ -110,7 +110,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * TODO(usmanm): Should be create an arbitrary byte field that
 	 * contains serialized aggregate states?
 	 */
-	select_stmt = getSelectStmtForCQWorker(raw_select_stmt);
+	select_stmt = GetSelectStmtForCQWorker(raw_select_stmt);
 	query = parse_analyze((Node *) select_stmt, querystring, 0, 0);
 	tlist = query->targetList;
 
@@ -199,7 +199,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 */
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
-	view_stmt->query = (Node *) getSelectStmtForCQView(raw_select_stmt, relation);
+	view_stmt->query = (Node *) GetSelectStmtForCQView(raw_select_stmt, relation);
 	DefineView(view_stmt, querystring);
 
 	/*
