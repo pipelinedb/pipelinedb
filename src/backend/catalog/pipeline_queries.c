@@ -461,7 +461,7 @@ GetQueryString(const char *cvname, bool select_only)
 }
 
 bool
-IsContinuousView(RangeVar *name)
+IsAContinuousView(RangeVar *name)
 {
 	HeapTuple tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 	if (HeapTupleIsValid(tuple))

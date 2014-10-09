@@ -39,3 +39,5 @@ lib*.pc
 src/test/regress/regression.diffs
 src/test/regress/regression.out
 
+# Temp Emacs files
+*.*~

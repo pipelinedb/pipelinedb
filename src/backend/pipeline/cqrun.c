@@ -94,7 +94,7 @@ get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 
 	/* Do we need to garbage collect tuples for this CQ? */
-	gc_expr = getWindowMatchExpr(selectstmt);
+	gc_expr = getSlidingWindowMatchExpr(selectstmt);
 
 	if (gc_expr == NULL)
 		return NULL;
@@ -116,7 +116,7 @@ get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
-	selectstmt = transformSelectStmtForCQWorker(selectstmt);
+	selectstmt = getSelectStmtForCQWorker(selectstmt);
 	selectstmt->forContinuousView = true;
 
 	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state);

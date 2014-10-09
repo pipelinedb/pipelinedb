@@ -17,20 +17,44 @@
 #include "commands/defrem.h"
 #include "commands/pipelinecmds.h"
 #include "commands/tablecmds.h"
-#include "utils/builtins.h"
+#include "commands/view.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_class.h"
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "catalog/toasting.h"
+#include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/pg_list.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/streambuf.h"
 #include "regex/regex.h"
+#include "utils/builtins.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
+
+#define CQ_TABLE_SUFFIX "_pdb"
+#define CQ_TABLE_SUFFIX_LEN strlen(CQ_TABLE_SUFFIX)
+
+/*
+ * get_cq_mat_rel_name
+ */
+static char *
+get_cq_mat_rel_name(char *cvname)
+{
+	char relname[NAMEDATALEN];
+
+	/*
+	 * The name of the underlying materialized table should
+	 * be CV name suffixed with "_pdb". We truncate the CV name
+	 * if needed.
+	 */
+	int chunk = Min(strlen(cvname), NAMEDATALEN - CQ_TABLE_SUFFIX_LEN);
+	strcpy(relname, cvname);
+	strcpy(&relname[chunk], CQ_TABLE_SUFFIX);
+	return strdup(relname);
+}
 
 /*
  * CreateContinuousView
@@ -42,43 +66,62 @@ void
 ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring)
 {
 	CreateStmt *create_stmt;
+	ViewStmt *view_stmt;
 	Query *query;
 	RangeVar *relation;
-	IntoClause *into;
+	RangeVar *view;
 	List *tableElts = NIL;
 	List *tlist;
 	ListCell *lc;
 	ListCell *col;
 	Oid reloid;
-	Datum		toast_options;
+	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+	SelectStmt *raw_select_stmt;
 	SelectStmt *select_stmt;
 
-	relation = stmt->into->rel;
+	view = stmt->into->rel;
+	relation = makeRangeVar(view->schemaname, get_cq_mat_rel_name(view->relname), -1);
 
-	create_stmt = makeNode(CreateStmt);
-	create_stmt->relation = relation;
-	into = stmt->into;
+	/*
+	 * Check if CV already exists?
+	 */
+	if (IsAContinuousView(view))
+		elog(ERROR, "continuous view \"%s\" already exists", view->relname);
 
-	select_stmt = (SelectStmt *) copyObject(stmt->query);
+	/*
+	 * Keep around a copy of the original SelectStmt struct.
+	 * `parse_analyze` modified the struct, and causes things to blow
+	 * up in cqanalyze.h functions.
+	 */
+	raw_select_stmt = (SelectStmt *) copyObject(stmt->query);
 
-	// Analyze the SelectStmt portion of the CreateContinuousViewStmt to make
-	// sure it's well-formed.
+	/*
+	 * Analyze the SelectStmt portion of the CreateContinuousViewStmt to make
+	 * sure it's well-formed.
+	 */
 	query = parse_analyze(stmt->query, querystring, 0, 0);
 
-	// Transform the SelectStmt to add any ColRefs to the targetList
-	// that need to be kept around for sliding window queries.
-	select_stmt = transformSelectStmtForCQWorker(select_stmt);
-
+	/*
+	 * Get the transformed SelectStmt used by CQ workers. We do this
+	 * because the targetList of this SelectStmt contains all columns
+	 * that need to be created in the underlying materialization table.
+	 *
+	 * TODO(usmanm): Should be create an arbitrary byte field that
+	 * contains serialized aggregate states?
+	 */
+	select_stmt = getSelectStmtForCQWorker(raw_select_stmt);
 	query = parse_analyze((Node *) select_stmt, querystring, 0, 0);
 	tlist = query->targetList;
 
 	/*
 	 * Build a list of columns from the SELECT statement that we
 	 * can use to create a table with
+	 *
+	 * TODO(usmanm): This `stmt->into` business seems janky. Revisit
+	 * post-alpha.
 	 */
-	/* TODO(usmanm): This into business is janky. Revisit post-alpha. */
-	lc = list_head(into->colNames);
+	lc = list_head(stmt->into->colNames);
 
 	foreach(col, tlist)
 	{
@@ -121,14 +164,16 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		tableElts = lappend(tableElts, coldef);
 	}
 
+	/*
+	 * Create the actual undering materialzation relation.
+	 */
+	create_stmt = makeNode(CreateStmt);
+	create_stmt->relation = relation;
 	create_stmt->tableElts = tableElts;
 	create_stmt->tablespacename = stmt->into->tableSpaceName;
 	create_stmt->oncommit = stmt->into->onCommit;
 	create_stmt->options = stmt->into->options;
 
-	/*
-	 * Actually create the relation
-	 */
 	reloid = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid);
 	CommandCounterIncrement();
 
@@ -141,9 +186,27 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	AlterTableCreateToastTable(reloid, toast_options, AccessExclusiveLock);
 
 	/*
-	 * Now save the underlying query for ACTIVATION/DEACTIVATION
+	 * Create a VIEW over the CQ materialization relation which exposes
+	 * only the columns that users expect. This is needed primarily for two
+	 * reasons:
+	 *
+	 * 1. Sliding window queries. For such queries, we store raw events in the
+	 *    materialization table and this VIEW filters events out of the window
+	 *    (that have no been GC'd) and performed aggregates (if needed).
+	 * 2. Some aggregate operators require storing some additional state along
+	 *    with partial results and this VIEW filters out such *private/hidden*
+	 *    columns.
 	 */
-	RegisterContinuousView(relation, querystring);
+	view_stmt = makeNode(ViewStmt);
+	view_stmt->view = view;
+	view_stmt->query = (Node *) getSelectStmtForCQView(raw_select_stmt, relation);
+	DefineView(view_stmt, querystring);
+
+	/*
+	 * Now save the underlying query in the `pipeline_queries` catalog
+	 * relation.
+	 */
+	RegisterContinuousView(view, querystring);
 }
 
 /*
@@ -171,6 +234,7 @@ void
 ExecDropContinuousViewStmt(DropStmt *stmt)
 {
 	Relation pipeline_queries;
+	List *relations = NIL;
 	ListCell *item;
 
 	/*
@@ -181,20 +245,20 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 
 	foreach(item, stmt->objects)
 	{
-		RangeVar *view_name = makeRangeVarFromNameList((List *) lfirst(item));
-		HeapTuple	tuple;
+		RangeVar *rv = makeRangeVarFromNameList((List *) lfirst(item));
+		HeapTuple tuple;
 		Form_pipeline_queries row;
 
-		tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(view_name->relname));
+		tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(rv->relname));
 		if (!HeapTupleIsValid(tuple))
 		{
-			elog(ERROR, "continuous view \"%s\" does not exist", view_name->relname);
+			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
 		}
 
 		row = (Form_pipeline_queries) GETSTRUCT(tuple);
 		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
 		{
-			elog(ERROR, "continuous view \"%s\" is currently active; can't be dropped", view_name->relname);
+			elog(ERROR, "continuous view \"%s\" is currently active; can't be dropped", rv->relname);
 		}
 
 		/*
@@ -209,6 +273,11 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		 * see the changes already made.
 		 */
 		CommandCounterIncrement();
+
+		/*
+		 * Add object for the CQ's underlying materialization table.
+		 */
+		relations = lappend(relations, list_make1(makeString(get_cq_mat_rel_name(rv->relname))));
 	}
 
 	/*
@@ -216,6 +285,11 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 	 */
 	heap_close(pipeline_queries, NoLock);
 
+	/*
+	 * Remove the VIEWs and underlying materialization relations
+	 * of all CVs.
+	 */
+	stmt->objects = list_concat(stmt->objects, relations);
 	RemoveObjects(stmt);
 }
 
@@ -295,7 +369,7 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 	foreach(lc, stmt->relations)
 	{
 		RangeVar *rv = (RangeVar *) lfirst(lc);
-		if (!IsContinuousView(rv))
+		if (!IsAContinuousView(rv))
 			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
 	}
 

@@ -871,7 +871,12 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 								RelationGetRelationName(relation))));
 			break;
 		case OBJECT_CONTINUOUS_VIEW:
-			if (relation->rd_rel->relkind != RELKIND_RELATION)
+			/*
+			 * Each continuous view is backed by a TABLE and
+			 * a VIEW.
+			 */
+			if (relation->rd_rel->relkind != RELKIND_RELATION &&
+					relation->rd_rel->relkind != RELKIND_VIEW)
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("\"%s\" is not a continuous view",

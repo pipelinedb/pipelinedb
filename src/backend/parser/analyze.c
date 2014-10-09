@@ -947,7 +947,7 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 	pstate->p_windowdefs = stmt->windowClause;
 
 	if (stmt->forContinuousView)
-		analyzeContinuousSelectStmt(pstate, &stmt);
+		analyzeAndValidateContinuousSelectStmt(pstate, &stmt);
 
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);
