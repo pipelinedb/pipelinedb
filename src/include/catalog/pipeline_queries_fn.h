@@ -36,6 +36,6 @@ void GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state);
 bool IsContinuousViewActive(RangeVar *name);
 char *GetQueryStringOrNull(const char *cvname, bool selectonly);
 char *GetQueryString(const char *cvname, bool selectonly);
-bool IsContinuousView(RangeVar *name);
+bool IsAContinuousView(RangeVar *name);
 
 #endif

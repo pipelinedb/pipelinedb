@@ -111,5 +111,8 @@ test: stats
 
 # ----------
 # Another group of parallel tests
+# TODO(usmanm): Right now all CQ tests fail when run in parallel. Figure out
+# the issues and eventually merge all these tests into the same group.
 # ----------
 test: cqanalyze
+test: cqcreate

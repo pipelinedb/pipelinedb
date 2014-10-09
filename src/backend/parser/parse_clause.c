@@ -757,24 +757,7 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 
 		/* if not found as a CTE, must be a table reference */
 		if (!rte)
-		{
-			RangeSubselect *rss = transformToRangeSubselectIfWindowView(pstate, rv);
-			if (rss)
-			{
-				Node *n;
-
-				/* push this RangeVar to the sliding select stack */
-				pstate->p_sliding_select = list_concat(list_make1(rv), pstate->p_sliding_select);
-
-				n = transformFromClauseItem(pstate, (Node *) rss, top_rte, top_rti, namespace);
-
-				/* pop off this RangeVar from the sliding select stack */
-				pstate->p_sliding_select = lnext(list_head(pstate->p_sliding_select));
-
-				return n;
-			}
 			rte = transformTableEntry(pstate, rv);
-		}
 
 		/* assume new rte is at end */
 		rtindex = list_length(pstate->p_rtable);
