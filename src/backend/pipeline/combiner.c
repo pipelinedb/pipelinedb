@@ -32,13 +32,13 @@
 #include "parser/parse_type.h"
 #include "pipeline/combiner.h"
 #include "pipeline/cqplan.h"
+#include "pipeline/cvmetadata.h"
 #include "tcop/tcopprot.h"
 #include "tcop/pquery.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
-#include "pipeline/cvmetadata.h"
 
 #define NAME_PREFIX "combiner_"
 #define WORKER_BACKLOG 32
@@ -160,6 +160,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	PlannedStmt *combineplan;
 	TimestampTz lastCombineTime = GetCurrentTimestamp();
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
+	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
 
 	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
 			"CombinerRunContext",
@@ -177,7 +178,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	CurrentResourceOwner = owner;
 
 	elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
-	
+
 	DecrementProcessGroupCount(cq_id);
 
 	accept_worker(combiner);
@@ -242,10 +243,8 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 		}
 
 		/* Check the shared metadata to see if the CV has been deactivated */
-		if (GetActiveFlag(cq_id) == false)
-		{
+		if (!*activeFlagPtr)
 			break;
-		}
 	}
 
 	IncrementProcessGroupCount(cq_id);

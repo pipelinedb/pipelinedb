@@ -12,16 +12,17 @@
 
 #include "access/xact.h"
 #include "catalog/pipeline_queries.h"
+#include "commands/pipelinecmds.h"
 #include "executor/executor.h"
 #include "miscadmin.h"
 #include "nodes/parsenodes.h"
 #include "nodes/plannodes.h"
 #include "pipeline/gc.h"
+#include "pipeline/cvmetadata.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
-#include "commands/pipelinecmds.h"
 
 /*
  * ContinuousQueryWorkerStartup
@@ -39,9 +40,8 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 	ResourceOwner save = CurrentResourceOwner;
 	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	char *cvname = rv->relname;
-	bool hasBeenDeactivated = false;
-	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
+	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
 
 	exec_ctx = AllocSetContextCreate(TopMemoryContext, "GCContext",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -87,21 +87,9 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 
 		CurrentResourceOwner = save;
 
-		if (TimestampDifferenceExceeds(lastDeactivateCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
-		{
-			/* Check is we have been deactivated, and break out
-			 * if we have. */
-			StartTransactionCommand();
-
-			hasBeenDeactivated = !IsContinuousViewActive(rv);
-
-			CommitTransactionCommand();
-
-			if (hasBeenDeactivated)
-				break;
-
-			lastDeactivateCheckTime = GetCurrentTimestamp();
-		}
+		/* Check the shared metadata to see if the CV has been deactivated */
+		if (!*activeFlagPtr)
+			break;
 
 		pg_usleep(CQ_GC_SLEEP_MS * 1000);
 	}

@@ -19,6 +19,7 @@
 #include "nodes/execnodes.h"
 #include "pipeline/combiner.h"
 #include "pipeline/combinerReceiver.h"
+#include "pipeline/cvmetadata.h"
 #include "pipeline/worker.h"
 #include "tcop/dest.h"
 #include "utils/builtins.h"
@@ -27,7 +28,6 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
-#include "pipeline/cvmetadata.h"
 
 
 /*
@@ -49,11 +49,10 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
 	NameData name;
-	bool hasBeenDeactivated = false;
 	MemoryContext runcontext;
 	MemoryContext execcontext;
-	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
+	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
 
 	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -128,17 +127,16 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 
 		estate->es_processed = 0;
-		
+
 		/* Check the shared metadata to see if the CV has been deactivated */
-		if (GetActiveFlag(cq_id) == false)
-		{
+		if (!*activeFlagPtr)
 			break;
-		}
 	}
 
 	(*dest->rShutdown) (dest);
 
 	IncrementProcessGroupCount(cq_id);
+
 	/* cleanup */
 	ExecutorFinish(queryDesc);
 	ExecutorEnd(queryDesc);
