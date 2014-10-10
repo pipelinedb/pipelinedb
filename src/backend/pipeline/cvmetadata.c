@@ -144,6 +144,22 @@ EntryAlloc(int32 key, uint32 pg_size)
 }
 
 /*
+   * EntryRemove
+   *
+   * Remove an entry in the shared memory
+   * hash table. 
+   *
+ */
+void
+EntryRemove(int32 key)
+{
+	CVMetadata  *entry;
+	bool		found;
+
+	/* Find or create an entry with desired hash code */
+	hash_search(cv_metadata_hash, &key, HASH_REMOVE, &found);
+}
+/*
    * GetCVMetadata(int32 id)
    *
    * Return the entry based on a key

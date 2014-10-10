@@ -1532,7 +1532,7 @@ static struct config_bool ConfigureNamesBool[] =
 
 	{
 		{"debug_sync_cq", PGC_USERSET, DEVELOPER_OPTIONS,
-			gettext_noop("Return success only if all the events in the stream have been consumed."),
+			gettext_noop("Runs ACTIVATE/DEACTIVATE CV and INSERT INTO CV synchronous."),
 			NULL,
 		},
 		&DebugSyncCQ,

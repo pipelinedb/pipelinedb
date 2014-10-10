@@ -327,8 +327,8 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 
 	foreach(lc, stmt->views)
 	{
-		RangeVar *rv = linitial(stmt->views);
-		ListCell *lc;
+		RangeVar *rv = lfirst(lc);
+		ListCell *lcwithOptions;
 		ContinuousViewState state;
 
 		if (IsContinuousViewActive(rv))
@@ -341,9 +341,9 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		 * Update any tuning parameters passed in with the ACTIVATE
 		 * command.
 		 */
-		foreach(lc, stmt->withOptions)
+		foreach(lcwithOptions, stmt->withOptions)
 		{
-			DefElem *elem = (DefElem *) lfirst(lc);
+			DefElem *elem = (DefElem *) lfirst(lcwithOptions);
 			int64 value = intVal(elem->arg);
 
 			if (pg_strcasecmp(elem->defname, CQ_BATCH_SIZE_KEY) == 0)
@@ -382,9 +382,11 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		/* 
 		   Block till all the processes in the group have terminated 
 		   Predicated off a debug config variable
+		   Clear up any CV metadata
 		 */
 		if (DebugSyncCQ)
 			WaitForCQProcessEnd(state.id);
+		EntryRemove(state.id);
 	}
 
 	/*

@@ -34,6 +34,7 @@ extern bool GetActiveFlag(int32 id);
 extern void SetActiveFlag(int32 id, bool flag);
 
 extern CVMetadata* EntryAlloc(int32 key, uint32 pg_size);
+extern void EntryRemove(int32 key);
 extern void WaitForCQProcessStart(int32 id);
 extern void WaitForCQProcessEnd(int32 id);
 #endif   /* CVMETADATA_H */
