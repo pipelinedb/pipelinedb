@@ -469,6 +469,16 @@ create_singleton_array(FunctionCallInfo fcinfo,
 							  typlen, typbyval, typalign);
 }
 
+/*
+ * ARRAY_AGG combine function
+ */
+Datum
+array_agg_combine(PG_FUNCTION_ARGS)
+{
+	ArrayBuildState *state = (ArrayBuildState *) PG_GETARG_POINTER(1);
+
+	return state;
+}
 
 /*
  * ARRAY_AGG aggregate function

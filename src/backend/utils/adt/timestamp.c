@@ -3425,6 +3425,61 @@ interval_accum(PG_FUNCTION_ARGS)
 }
 
 Datum
+interval_combine(PG_FUNCTION_ARGS)
+{
+	ArrayType  *collectarray = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType  *transarray = PG_GETARG_ARRAYTYPE_P(1);
+	Datum	   *collectdatums;
+	Datum	   *transdatums;
+	int			ndatums;
+	Interval	sumX1,
+				N1,
+				sumX2,
+				N2;
+	Interval   *newsum;
+	ArrayType  *result;
+
+	deconstruct_array(collectarray,
+					  INTERVALOID, sizeof(Interval), false, 'd',
+					  &collectdatums, NULL, &ndatums);
+	if (ndatums != 2)
+		elog(ERROR, "expected 2-element interval array");
+
+	deconstruct_array(transarray,
+					  INTERVALOID, sizeof(Interval), false, 'd',
+					  &transdatums, NULL, &ndatums);
+	if (ndatums != 2)
+		elog(ERROR, "expected 2-element interval array");
+
+	/*
+	 * XXX memcpy, instead of just extracting a pointer, to work around buggy
+	 * array code: it won't ensure proper alignment of Interval objects on
+	 * machines where double requires 8-byte alignment. That should be fixed,
+	 * but in the meantime...
+	 *
+	 * Note: must use DatumGetPointer here, not DatumGetIntervalP, else some
+	 * compilers optimize into double-aligned load/store anyway.
+	 */
+	memcpy((void *) &sumX1, DatumGetPointer(collectdatums[0]), sizeof(Interval));
+	memcpy((void *) &N1, DatumGetPointer(collectdatums[1]), sizeof(Interval));
+	memcpy((void *) &sumX2, DatumGetPointer(transdatums[0]), sizeof(Interval));
+	memcpy((void *) &N2, DatumGetPointer(transdatums[1]), sizeof(Interval));
+
+	newsum = DatumGetIntervalP(DirectFunctionCall2(interval_pl,
+												   IntervalPGetDatum(&sumX1),
+												   IntervalPGetDatum(&sumX2)));
+	N1.time += N2.time;
+
+	collectdatums[0] = IntervalPGetDatum(newsum);
+	collectdatums[1] = IntervalPGetDatum(&N1);
+
+	result = construct_array(collectdatums, 2,
+							 INTERVALOID, sizeof(Interval), false, 'd');
+
+	PG_RETURN_ARRAYTYPE_P(result);
+}
+
+Datum
 interval_accum_inv(PG_FUNCTION_ARGS)
 {
 	ArrayType  *transarray = PG_GETARG_ARRAYTYPE_P(0);

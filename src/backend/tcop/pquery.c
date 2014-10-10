@@ -1439,7 +1439,8 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	queryDesc = CreateQueryDesc(stmt, portal->sourceText,
 			InvalidSnapshot, InvalidSnapshot,
 								dest, portal->portalParams, 0);
-	queryDesc->tupDesc = RelationNameGetTupleDesc(stmt->cq_target->relname);
+
+	queryDesc->tupDesc = ExecTypeFromTL(stmt->planTree->targetlist, false);
 
 	/* create a tuplestore if that's where we're sending tuples */
 	if (dest->mydest == DestTuplestore)

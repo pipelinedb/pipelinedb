@@ -447,6 +447,14 @@ _outStreamScan(StringInfo str, const SeqScan *node)
 }
 
 static void
+_outTuplestoreScan(StringInfo str, const SeqScan *node)
+{
+	WRITE_NODE_TYPE("TUPLESTORESCAN");
+
+	_outScanInfo(str, (const Scan *) node);
+}
+
+static void
 _outIndexScan(StringInfo str, const IndexScan *node)
 {
 	WRITE_NODE_TYPE("INDEXSCAN");
@@ -2820,6 +2828,9 @@ _outNode(StringInfo str, const void *obj)
 				break;
 			case T_StreamScan:
 				_outStreamScan(str, obj);
+				break;
+			case T_TuplestoreScan:
+				_outTuplestoreScan(str, obj);
 				break;
 			case T_IndexScan:
 				_outIndexScan(str, obj);

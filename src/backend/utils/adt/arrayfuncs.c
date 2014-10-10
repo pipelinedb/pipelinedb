@@ -1483,6 +1483,52 @@ ReadArrayBinary(StringInfo buf,
 	*nbytes = totbytes;
 }
 
+/*
+ * arrayaggstatesend() -
+ *
+ *	Output function for array aggregation states, used by CQ workers to
+ *	send their transition states to a combiner process
+ */
+Datum
+arrayaggstatesend(PG_FUNCTION_ARGS)
+{
+	ArrayBuildState *state = (ArrayBuildState *) PG_GETARG_POINTER(0);
+	ArrayType *vals;
+
+	vals = construct_array(state->dvalues, state->nelems, state->element_type,
+			state->typlen, state->typbyval, state->typalign);
+
+	PG_RETURN_ARRAYTYPE_P(vals);
+}
+
+/*
+ * arrayaggstaterecv() -
+ *
+ *	Input function for array aggregation states, used by combiners to
+ *	deserialize partial transition states sent to it by a worker process
+ */
+Datum
+arrayaggstaterecv(PG_FUNCTION_ARGS)
+{
+	ArrayType *vals = (ArrayType *) PG_GETARG_ARRAYTYPE_P(0);
+	ArrayBuildState *result = (ArrayBuildState *) palloc0(sizeof(ArrayBuildState));
+
+	result->mcontext = CurrentMemoryContext;
+	result->element_type = ARR_ELEMTYPE(vals);
+
+	get_typlenbyvalalign(result->element_type,
+						 &result->typlen,
+						 &result->typbyval,
+						 &result->typalign);
+
+	deconstruct_array(vals, result->element_type,
+			result->typlen, result->typbyval, result->typalign,
+			&result->dvalues, &result->dnulls, &result->nelems);
+
+	result->alen = result->nelems;
+
+	PG_RETURN_POINTER(result);
+}
 
 /*
  * array_send :

@@ -717,6 +717,35 @@ int8inc(PG_FUNCTION_ARGS)
 	}
 }
 
+/*
+ * Similar to int8_sum, except that the result is casted into int8
+ */
+Datum
+int8_sum_to_int8(PG_FUNCTION_ARGS)
+{
+	Datum	result_num;
+	Datum	numeric_arg;
+
+	/* if both arguments are null, the result is null */
+	if (PG_ARGISNULL(0) && PG_ARGISNULL(1))
+		PG_RETURN_NULL();
+	/* if either of them is null, the other is the result */
+	if (PG_ARGISNULL(0))
+		PG_RETURN_DATUM(PG_GETARG_DATUM(1));
+	if (PG_ARGISNULL(1))
+		PG_RETURN_DATUM(PG_GETARG_DATUM(0));
+
+	/*
+	 * convert the first argument to numeric (second one is converted into
+	 * numeric)
+	 * add both the arguments using int8_sum
+	 * convert the result into int8 using numeric_int8
+	 */
+	numeric_arg = DirectFunctionCall1(int8_numeric, PG_GETARG_DATUM(0));
+	result_num = DirectFunctionCall2(int8_sum, numeric_arg, PG_GETARG_DATUM(1));
+	PG_RETURN_DATUM(DirectFunctionCall1(numeric_int8, result_num));
+}
+
 Datum
 int8dec(PG_FUNCTION_ARGS)
 {

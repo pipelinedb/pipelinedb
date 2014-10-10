@@ -1044,7 +1044,6 @@ exec_simple_query(const char *query_string)
 	List		*tmp_list = NIL;
 	bool		parsetree_list_empty;
 
-
 	/*
 	 * Report query to various monitoring facilities.
 	 */

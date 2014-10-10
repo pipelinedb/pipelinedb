@@ -547,24 +547,6 @@ naggstatesend(PG_FUNCTION_ARGS)
 	PG_RETURN_BYTEA_P(result);
 }
 
-Datum
-numeric_avg_combine(PG_FUNCTION_ARGS)
-{
-	NumericAggState  *state = (NumericAggState  *) PG_GETARG_POINTER(0);
-	NumericAggState	 *incoming = (NumericAggState *) PG_GETARG_POINTER(1);
-	NumericVar sumXresult;
-
-	if (state == NULL)
-		state = makeNumericAggState(fcinfo, false);
-
-	init_var(&sumXresult);
-	add_var(&state->sumX, &incoming->sumX, &sumXresult);
-	set_var_from_var(&sumXresult, &state->sumX);
-	state->N += incoming->N;
-
-	PG_RETURN_POINTER(state);
-}
-
 /*
  * numeric_in() -
  *
@@ -2852,6 +2834,27 @@ numeric_avg_accum(PG_FUNCTION_ARGS)
 }
 
 /*
+ * Combines two NumericAggStates into one
+ */
+Datum
+numeric_combine(PG_FUNCTION_ARGS)
+{
+	NumericAggState  *state = (NumericAggState  *) PG_GETARG_POINTER(0);
+	NumericAggState	 *incoming = (NumericAggState *) PG_GETARG_POINTER(1);
+	NumericVar sumXresult;
+
+	if (state == NULL)
+		state = makeNumericAggState(fcinfo, false);
+
+	init_var(&sumXresult);
+	add_var(&state->sumX, &incoming->sumX, &sumXresult);
+	set_var_from_var(&sumXresult, &state->sumX);
+	state->N += incoming->N;
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
  * Generic inverse transition function for numeric aggregates
  * (with or without requirement for X^2).
  */
@@ -2980,7 +2983,6 @@ int8_avg_accum(PG_FUNCTION_ARGS)
 
 	PG_RETURN_POINTER(state);
 }
-
 
 /*
  * Inverse transition functions to go with the above.
@@ -3437,6 +3439,45 @@ typedef struct Int8TransTypeData
 	int64		count;
 	int64		sum;
 } Int8TransTypeData;
+
+/*
+ * Combines two array-based aggregation states into one
+ */
+Datum
+int_avg_combine(PG_FUNCTION_ARGS)
+{
+	ArrayType  *collectarray;
+	ArrayType  *transarray = PG_GETARG_ARRAYTYPE_P(1);
+	Int8TransTypeData *collectdata;
+	Int8TransTypeData *transdata;
+
+	/*
+	 * If we're invoked by nodeAgg, we can cheat and modify our first
+	 * parameter in-place to reduce palloc overhead. Otherwise we need to make
+	 * a copy of it before scribbling on it.
+	 */
+	if (fcinfo->context &&
+		(IsA(fcinfo->context, AggState) ||
+		 IsA(fcinfo->context, WindowAggState)))
+		collectarray = PG_GETARG_ARRAYTYPE_P(0);
+	else
+		collectarray = PG_GETARG_ARRAYTYPE_P_COPY(0);
+
+	if (ARR_HASNULL(collectarray) ||
+		ARR_SIZE(collectarray) != ARR_OVERHEAD_NONULLS(1) + sizeof(Int8TransTypeData))
+		elog(ERROR, "expected 2-element int8 array");
+	collectdata = (Int8TransTypeData *) ARR_DATA_PTR(collectarray);
+
+	if (ARR_HASNULL(transarray) ||
+		ARR_SIZE(transarray) != ARR_OVERHEAD_NONULLS(1) + sizeof(Int8TransTypeData))
+		elog(ERROR, "expected 2-element int8 array");
+	transdata = (Int8TransTypeData *) ARR_DATA_PTR(transarray);
+
+	collectdata->count += transdata->count;
+	collectdata->sum += transdata->sum;
+
+	PG_RETURN_ARRAYTYPE_P(collectarray);
+}
 
 Datum
 int2_avg_accum(PG_FUNCTION_ARGS)

@@ -5037,13 +5037,11 @@ DESCR("split a string with a delimiter");
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
 DATA(insert OID = 4301 ( float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1022 "1022 1022" _null_ _null_ _null_ _null_ float8_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
-DATA(insert OID = 4302 ( numeric_avg_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1231 "1231 1231" _null_ _null_ _null_ _null_ numeric_avg_combine _null_ _null_ _null_ ));
-DESCR("aggregate combination function");
 DATA(insert OID = 4303 ( numeric_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1231 "1231 1231" _null_ _null_ _null_ _null_ numeric_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
 DATA(insert OID = 4304 ( interval_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1187 "1187 1187" _null_ _null_ _null_ _null_ interval_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
-DATA(insert OID = 4305 ( int8_avg_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1016 "1016 1016" _null_ _null_ _null_ _null_ int8_avg_combine _null_ _null_ _null_ ));
+DATA(insert OID = 4305 ( int_avg_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1016 "1016 1016" _null_ _null_ _null_ _null_ int_avg_combine _null_ _null_ _null_ ));
 DESCR("AVG(int) combination function");
 DATA(insert OID = 4306 ( int8_sum_to_int8	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 20 "20 20" _null_ _null_ _null_ _null_ int8_sum_to_int8 _null_ _null_ _null_ ));
 DESCR("SUM(int) collection function");
@@ -5055,6 +5053,17 @@ DATA(insert OID = 4308 (naggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2
 DESCR("deserializer for numeric aggregation transition states");
 DATA(insert OID = 4309 (naggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ naggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for numeric aggregation transition states");
+
+DATA(insert OID = 4310 (arrayaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "2281" _null_ _null_ _null_ _null_ arrayaggstaterecv _null_ _null_ _null_ ));
+DESCR("deserializer for array aggregation transition states");
+DATA(insert OID = 4311 (arrayaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ arrayaggstatesend _null_ _null_ _null_ ));
+DESCR("serializer for array aggregation transition states");
+
+DATA(insert OID = 4312 ( array_agg_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ array_agg_combine _null_ _null_ _null_ ));
+DESCR("array aggregation combination function");
+
+DATA(insert OID = 4313 (byteatostringinfo PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "2281" _null_ _null_ _null_ _null_ byteatostringinfo _null_ _null_ _null_ ));
+DESCR("deserializer for string aggregation transition states");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result
