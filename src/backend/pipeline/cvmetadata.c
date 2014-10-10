@@ -137,15 +137,16 @@ EntryAlloc(int32 key, uint32 pg_size)
 	/* Find or create an entry with desired hash code */
 	entry = (CVMetadata *) hash_search(cv_metadata_hash, &key, HASH_ENTER, &found);
 	Assert(entry);
-	if (!found)
-	{
-		/* New entry, initialize it with the process group size */
-		memcpy(&(entry->pg_size), &(pg_size), sizeof(uint32));
-		/* New entry, No processes are active on creation*/
-		entry->pg_count = 0;
-		/* New entry, and is active the moment this entry is created */
-		entry->active = true;
-	}
+
+	if (found)
+		return NULL;
+
+	/* New entry, initialize it with the process group size */
+	memcpy(&(entry->pg_size), &(pg_size), sizeof(uint32));
+	/* New entry, No processes are active on creation*/
+	entry->pg_count = 0;
+	/* New entry, and is active the moment this entry is created */
+	entry->active = true;
 
 	return entry;
 }
@@ -160,7 +161,7 @@ EntryAlloc(int32 key, uint32 pg_size)
 void
 EntryRemove(int32 key)
 {
-	/* Find or create an entry with desired hash code */
+	/* Remove the entry from the hash table. */
 	hash_search(cv_metadata_hash, &key, HASH_REMOVE, NULL);
 }
 /*
