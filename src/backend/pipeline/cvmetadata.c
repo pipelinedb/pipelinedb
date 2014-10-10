@@ -34,7 +34,7 @@
 
 
 static HTAB *cv_metadata_hash = NULL;
-static int32 cv_max = 50;
+static int32 cv_max = 50; /* TODO(usmanm): 50 seems rather low? */
 static uint32 cv_metadata_hash_function(const void *key, Size keysize);
 
 /*
@@ -281,6 +281,16 @@ GetActiveFlag(int32 id)
 	entry = GetCVMetadata(id);
 	Assert(entry);
 	return entry->active;
+}
+
+bool *
+GetActiveFlagPtr(int32 id)
+{
+	CVMetadata *entry;
+
+	entry = GetCVMetadata(id);
+	Assert(entry);
+	return &entry->active;
 }
 
 /*
