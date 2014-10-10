@@ -392,6 +392,9 @@ extern void InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 			 char *out_dbname);
 extern void BaseInit(void);
 
+/* in utils/pipelineinit.c */
+extern void InitPipeline(void);
+
 /* in utils/init/miscinit.c */
 extern bool IgnoreSystemIndexes;
 extern PGDLLIMPORT bool process_shared_preload_libraries_in_progress;

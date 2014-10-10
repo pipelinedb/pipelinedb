@@ -37,5 +37,6 @@ bool IsContinuousViewActive(RangeVar *name);
 char *GetQueryStringOrNull(const char *cvname, bool selectonly);
 char *GetQueryString(const char *cvname, bool selectonly);
 bool IsAContinuousView(RangeVar *name);
+void MarkAllContinuousViewsAsInactive();
 
 #endif

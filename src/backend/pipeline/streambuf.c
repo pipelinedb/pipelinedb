@@ -37,7 +37,7 @@ int StreamBufferBlocks;
  *
  * Waits until the given slot has been read by all CQs that need to see it
  */
-void 
+void
 wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
 {
 	/* block until all CQs have marked this event as read */
@@ -266,6 +266,8 @@ InitGlobalStreamBuffer(void)
 	Size size = StreamBufferShmemSize();
 	Size headersize = MAXALIGN(sizeof(StreamBuffer));
 
+	LWLockAcquire(StreamBufferAppendLock, LW_EXCLUSIVE);
+
 	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer", headersize , &found);
 	GlobalStreamBuffer->capacity = size;
 
@@ -294,6 +296,8 @@ InitGlobalStreamBuffer(void)
 		GlobalStreamBuffer->update = ShmemAlloc(sizeof(bool));
 		*GlobalStreamBuffer->update = false;
 	}
+
+	LWLockRelease(StreamBufferAppendLock);
 }
 
 /*

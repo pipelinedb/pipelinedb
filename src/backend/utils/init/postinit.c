@@ -942,11 +942,9 @@ InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 	if (!bootstrap)
 		pgstat_bestart();
 
+	/* initialize all PipelineDB stuff */
 	if (!bootstrap)
-		InitGlobalStreamBuffer();
-
-	if (!bootstrap)
-		InitCQMetadataTable();
+		InitPipeline();
 
 	/* close the transaction we started above */
 	if (!bootstrap)

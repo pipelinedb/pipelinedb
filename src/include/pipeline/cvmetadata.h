@@ -13,11 +13,11 @@
 
 #include "nodes/parsenodes.h"
 
-/* 
+/*
    CV Metadata, elements of which are stored
    in shared memory
  */
-typedef struct cv_bgw_metadata
+typedef struct CVMetadata
 {
 	uint32 key; /* KEY (MUST BE THE FIRST FIELD) */
 	int32 pg_count;
@@ -25,9 +25,12 @@ typedef struct cv_bgw_metadata
 	bool active;
 } CVMetadata;
 
+extern void InitCVMetadataTable(void);
 
 extern void InitCQMetadataTable(void);
 extern CVMetadata* GetCVMetadata(int32 id);
+extern uint32 GetProcessGroupSize(int32 id);
+extern uint32 GetProcessGroupSizeFromCatalog(RangeVar* rv);
 extern int32 GetProcessGroupCount(int32 id);
 extern uint32 GetProcessGroupSizeFromCatalog(RangeVar* rv);
 extern uint32 GetProcessGroupSize(int32 id);

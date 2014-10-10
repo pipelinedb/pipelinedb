@@ -32,7 +32,9 @@
 #include "utils/tqual.h"
 
 
-/* Used to pass arguments to background workers spawned by the postmaster */
+/*
+ * Used to pass arguments to background workers spawned by the postmaster
+ */
 typedef struct RunCQArgs
 {
 	NameData name;
@@ -58,6 +60,9 @@ skip(const char *needle, const char *haystack, int pos)
 	return pos + strlen(needle);
 }
 
+/*
+ * compare_int32s
+ */
 static int
 compare_int32s (const void *a, const void *b)
 {
@@ -268,13 +273,13 @@ MarkContinuousViewAsInactive(RangeVar *name)
 	bool replaces[Natts_pipeline_queries];
 	Datum values[Natts_pipeline_queries];
 
-	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
 				name->relname);
 
+	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
 
 	if (row->state != PIPELINE_QUERY_STATE_INACTIVE)
@@ -377,6 +382,9 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	heap_close(pipeline_queries, NoLock);
 }
 
+/*
+ * IsContinuousViewActive
+ */
 bool
 IsContinuousViewActive(RangeVar *name)
 {
@@ -397,6 +405,9 @@ IsContinuousViewActive(RangeVar *name)
 	return isActive;
 }
 
+/*
+ * GetQueryStringOrNull
+ */
 char *
 GetQueryStringOrNull(const char *cvname, bool select_only)
 {
@@ -448,7 +459,11 @@ GetQueryStringOrNull(const char *cvname, bool select_only)
 }
 
 /*
- * Retrieves a REGISTERed query from the pipeline_queries catalog table
+ * GetQueryString
+ *
+ * Retrieves the query string of a registered continuous
+ * view. If `select_only` is true, only the SELECT portion
+ * of the query string is returned.
  */
 char *
 GetQueryString(const char *cvname, bool select_only)
@@ -459,6 +474,12 @@ GetQueryString(const char *cvname, bool select_only)
 	return result;
 }
 
+/*
+ * IsContinuousView
+ *
+ * Returns if the RangeVar represents a registered
+ * continuous view.
+ */
 bool
 IsAContinuousView(RangeVar *name)
 {
@@ -469,4 +490,52 @@ IsAContinuousView(RangeVar *name)
 		return true;
 	}
 	return false;
+}
+
+/*
+ * MarkAllContinuousViewsAsInactive
+ *
+ * Marks all registered continuous views as inactive.
+  *
+ * This is used on server restart which implies that
+ * in case of server restart users will have to activate
+ * all the required views manually.
+ */
+void
+MarkAllContinuousViewsAsInactive()
+{
+	Relation		pipeline_queries;
+	HeapScanDesc	scandesc;
+	HeapTuple		tup;
+
+	pipeline_queries = heap_open(PipelineQueriesRelationId, NoLock);
+	scandesc = heap_beginscan_catalog(pipeline_queries, 0, NULL);
+
+	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_queries row = (Form_pipeline_queries) GETSTRUCT(tup);
+		HeapTuple newtuple;
+		bool nulls[Natts_pipeline_queries];
+		bool replaces[Natts_pipeline_queries];
+		Datum values[Natts_pipeline_queries];
+
+		if (row->state != PIPELINE_QUERY_STATE_INACTIVE)
+		{
+			MemSet(values, 0, sizeof(values));
+			MemSet(nulls, false, sizeof(nulls));
+			MemSet(replaces, false, sizeof(replaces));
+
+			replaces[Anum_pipeline_queries_state - 1] = true;
+			values[Anum_pipeline_queries_state - 1] = CharGetDatum(PIPELINE_QUERY_STATE_INACTIVE);
+
+			newtuple = heap_modify_tuple(tup, pipeline_queries->rd_att,
+					values, nulls, replaces);
+			simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+
+			CommandCounterIncrement();
+		}
+	}
+
+	heap_endscan(scandesc);
+	heap_close(pipeline_queries, NoLock);
 }

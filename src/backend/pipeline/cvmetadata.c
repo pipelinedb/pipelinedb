@@ -25,6 +25,7 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cvmetadata.h"
 #include "pipeline/streambuf.h"
 #include "regex/regex.h"
 #include "utils/rel.h"
@@ -43,13 +44,20 @@ static uint32 cv_metadata_hash_function(const void *key, Size keysize);
  * in each CQ process group
  */
 void
-InitCQMetadataTable(void)
+InitCVMetadataTable(void)
 {
 	HASHCTL		info;
-	
+
 	info.keysize = sizeof(uint32);
 	info.hash = cv_metadata_hash_function;
 	info.entrysize = sizeof(CVMetadata);
+
+	/*
+	 * XXX(usmanm): We don't need to acquire CVMetadataLock
+	 * lock around this because there is no initialization
+	 * work we need to do. ShmemInitHash does all of that
+	 * atomically for us.
+	 */
 	cv_metadata_hash = ShmemInitHash("cv_metadata_hash",
 							  cv_max, cv_max,
 							  &info,
@@ -78,14 +86,14 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 
 	ReleaseSysCache(tuple);
 	heap_close(pipeline_queries, AccessShareLock);
-	
+
 	return pg_size;
 }
 
 /*
    * GetProcessGroupSize
    *
-   * Returns the number of processes that form 
+   * Returns the number of processes that form
    * the process group for a continuous query
    *
  */
@@ -146,7 +154,7 @@ EntryAlloc(int32 key, uint32 pg_size)
    * EntryRemove
    *
    * Remove an entry in the shared memory
-   * hash table. 
+   * hash table.
    *
  */
 void
@@ -179,7 +187,7 @@ GetCVMetadata(int32 id)
 /*
    * GetProcessGroupCount(int32 id)
    *
-   * Return the current 
+   * Return the current
    * process group count for the given cv
    *
  */
@@ -198,7 +206,7 @@ GetProcessGroupCount(int32 id)
 
 /*
    * DecrementProcessGroupCount(int32 id)
-   * 
+   *
    * Decrement the process group count
    * Called from sub processes
  */
@@ -208,12 +216,12 @@ DecrementProcessGroupCount(int32 id)
 	int32 pg_count;
 	CVMetadata *entry;
 
-	LWLockAcquire(CQMetadataLock, LW_EXCLUSIVE);
+	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
 	entry = GetCVMetadata(id);
 	pg_count = entry->pg_count;
 	pg_count--;
 	memcpy(&(entry->pg_count), &pg_count, sizeof(int32));
-	LWLockRelease(CQMetadataLock);
+	LWLockRelease(CVMetadataLock);
 }
 
 /*
@@ -228,8 +236,8 @@ IncrementProcessGroupCount(int32 id)
 	int32 pg_count;
 	CVMetadata *entry;
 
-	LWLockAcquire(CQMetadataLock, LW_EXCLUSIVE);
-	/* 
+	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
+	/*
 	   If the entry has not been created for this cv id create
 	   it before incrementing the pg_count.
 	 */
@@ -237,13 +245,13 @@ IncrementProcessGroupCount(int32 id)
 	pg_count = entry->pg_count;
 	pg_count++;
 	memcpy(&(entry->pg_count), &pg_count, sizeof(int32));
-	LWLockRelease(CQMetadataLock);
+	LWLockRelease(CVMetadataLock);
 }
 
 /*
    * SetActiveFlag
    *
-   * Sets the flag insicating whether the process is active 
+   * Sets the flag insicating whether the process is active
    * or not
  */
 void
@@ -251,17 +259,17 @@ SetActiveFlag(int32 id, bool flag)
 {
 	CVMetadata *entry;
 
-	LWLockAcquire(CQMetadataLock, LW_EXCLUSIVE);
+	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
 	entry = GetCVMetadata(id);
 	Assert(entry);
 	entry->active = flag;
-	LWLockRelease(CQMetadataLock);
+	LWLockRelease(CVMetadataLock);
 }
 
 /*
    * GetActiveFlag
    *
-   * returns the flag insicating whether the process is active 
+   * returns the flag insicating whether the process is active
    * or not
  */
 bool
@@ -277,7 +285,7 @@ GetActiveFlag(int32 id)
 /*
    * WaitForCQProcessStart(int32 id)
    *
-   * Block on the process group count till 
+   * Block on the process group count till
    * it reaches 0. This enables the activate cv
    * to be synchronous
  */
@@ -295,7 +303,7 @@ WaitForCQProcessStart(int32 id)
 /*
    * WaitForCQProcessEnd(int32 id)
    *
-   * Block on the process group count till 
+   * Block on the process group count till
    * it reaches pg_size. This enables the deactivate cv
    * to be synchronous
  */
@@ -309,6 +317,3 @@ WaitForCQProcessEnd(int32 id)
 		pg_usleep(1000);
 	}
 }
-
-
-
