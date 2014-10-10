@@ -26,4 +26,6 @@ SelectStmt *GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel);
 bool IsSlidingWindowSelectStmt(SelectStmt *stmt);
 bool IsSlidingWindowContinuousView(RangeVar *cvname);
 
+Oid GetCombineStateColumnType(TargetEntry *te);
+
 #endif

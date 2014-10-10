@@ -41,8 +41,53 @@
  */
 bool DebugSyncCQ;
 
+#define CQ_COMBINESTATE_COL_SUFFIX "_c"
 #define CQ_TABLE_SUFFIX "_pdb"
-#define CQ_TABLE_SUFFIX_LEN strlen(CQ_TABLE_SUFFIX)
+
+/*
+ * Appends a suffix to a string, ensuring that the result fits
+ * in a NameData
+ */
+static char *append_suffix(char *base, char *suffix)
+{
+	char relname[NAMEDATALEN];
+
+	/* we truncate the CV name if needed */
+	int chunk = Min(strlen(base), NAMEDATALEN - strlen(suffix));
+	strcpy(relname, base);
+	strcpy(&relname[chunk], suffix);
+
+	return strdup(relname);
+}
+
+static char *
+make_combine_state_colname(char *basename)
+{
+	return append_suffix(basename, CQ_COMBINESTATE_COL_SUFFIX);
+}
+
+static ColumnDef *
+make_cv_columndef(char *name, Oid type, Oid typemod)
+{
+	ColumnDef *result;
+	TypeName *typename;
+
+	typename = makeNode(TypeName);
+	typename->typeOid = type;
+	typename->typemod = typemod;
+
+	result = makeNode(ColumnDef);
+	result->colname = name;
+	result->inhcount = 0;
+	result->is_local = true;
+	result->is_not_null = false;
+	result->raw_default = NULL;
+	result->cooked_default = NULL;
+	result->constraints = NIL;
+	result->typeName = typename;
+
+	return result;
+}
 
 /*
  * GetCQMatRelName
@@ -52,17 +97,11 @@ bool DebugSyncCQ;
 char *
 GetCQMatRelName(char *cvname)
 {
-	char relname[NAMEDATALEN];
-
 	/*
 	 * The name of the underlying materialized table should
-	 * be CV name suffixed with "_pdb". We truncate the CV name
-	 * if needed.
+	 * be CV name suffixed with "_pdb".
 	 */
-	int chunk = Min(strlen(cvname), NAMEDATALEN - CQ_TABLE_SUFFIX_LEN);
-	strcpy(relname, cvname);
-	strcpy(&relname[chunk], CQ_TABLE_SUFFIX);
-	return strdup(relname);
+	return append_suffix(cvname, CQ_TABLE_SUFFIX);
 }
 
 /*
@@ -136,41 +175,42 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(col);
 		ColumnDef   *coldef;
-		TypeName    *typename;
+		char				*colname;
+		Oid					hiddentype;
 
 		/* Ignore junk columns from the targetlist */
 		if (tle->resjunk)
 			continue;
 
-		coldef = makeNode(ColumnDef);
-		typename = makeNode(TypeName);
-
 		/* Take the column name specified if any */
 		if (lc)
 		{
-			coldef->colname = strVal(lfirst(lc));
+			colname = strVal(lfirst(lc));
 			lc = lnext(lc);
 		}
 		else
-			coldef->colname = pstrdup(tle->resname);
-
-		coldef->inhcount = 0;
-		coldef->is_local = true;
-		coldef->is_not_null = false;
-		coldef->raw_default = NULL;
-		coldef->cooked_default = NULL;
-		coldef->constraints = NIL;
+			colname = pstrdup(tle->resname);
 
 		/*
 		 * Set typeOid and typemod. The name of the type is derived while
 		 * generating query
 		 */
-		typename->typeOid = exprType((Node *)tle->expr);
-		typename->typemod = exprTypmod((Node *)tle->expr);
-
-		coldef->typeName = typename;
-
+		coldef = make_cv_columndef(colname, exprType((Node *) tle->expr), exprTypmod((Node *) tle->expr));
 		tableElts = lappend(tableElts, coldef);
+
+		/*
+		 * If this column requires state to support incremental transitions, create it. Note: since this
+		 * column isn't in the target list, it won't be visible when selecting from this CV,
+		 * which will have an overlay view that only exposes target list columns.
+		 */
+		hiddentype = GetCombineStateColumnType(tle);
+		if (OidIsValid(hiddentype))
+		{
+			char *hiddenname = make_combine_state_colname(colname);
+			ColumnDef *hidden = make_cv_columndef(hiddenname, hiddentype, InvalidOid);
+
+			tableElts = lappend(tableElts, hidden);
+		}
 	}
 
 	/*
