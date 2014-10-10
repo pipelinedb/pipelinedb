@@ -43,7 +43,7 @@ static uint32 cv_metadata_hash_function(const void *key, Size keysize);
  * in each CQ process group
  */
 void
-InitCQMetadataTable()
+InitCQMetadataTable(void)
 {
 	HASHCTL		info;
 	
@@ -62,7 +62,6 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 {
 	Relation pipeline_queries;
 	HeapTuple tuple;
-	HeapTuple newtuple;
 	Form_pipeline_queries row;
 	/* Initialize the counter to 1 (combiner) not including GC for now */
 	uint32 pg_size = 1;
@@ -71,7 +70,7 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "continuous view \"%s\" does not exist.",
+		elog(ERROR, "continuous view \"%s\" does not exist",
 				rv->relname);
 
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
@@ -174,7 +173,6 @@ GetCVMetadata(int32 id)
 int32
 GetProcessGroupCount(int32 id)
 {
-	int32 pg_count;
 	CVMetadata  *entry;
 
 	entry = GetCVMetadata(id);

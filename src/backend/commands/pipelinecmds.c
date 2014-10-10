@@ -45,10 +45,12 @@ bool DebugSyncCQ;
 #define CQ_TABLE_SUFFIX_LEN strlen(CQ_TABLE_SUFFIX)
 
 /*
- * get_cq_mat_rel_name
+ * GetCQMatRelName
+ *
+ * Returns the name of the given CV's underlying materialization table
  */
-static char *
-get_cq_mat_rel_name(char *cvname)
+char *
+GetCQMatRelName(char *cvname)
 {
 	char relname[NAMEDATALEN];
 
@@ -88,7 +90,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	SelectStmt *select_stmt;
 
 	view = stmt->into->rel;
-	relation = makeRangeVar(view->schemaname, get_cq_mat_rel_name(view->relname), -1);
+	relation = makeRangeVar(view->schemaname, GetCQMatRelName(view->relname), -1);
 
 	/*
 	 * Check if CV already exists?
@@ -284,7 +286,7 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		/*
 		 * Add object for the CQ's underlying materialization table.
 		 */
-		relations = lappend(relations, list_make1(makeString(get_cq_mat_rel_name(rv->relname))));
+		relations = lappend(relations, list_make1(makeString(GetCQMatRelName(rv->relname))));
 	}
 
 	/*

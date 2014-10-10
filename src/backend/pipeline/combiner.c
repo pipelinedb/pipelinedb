@@ -19,6 +19,7 @@
 #include "access/xact.h"
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
+#include "commands/pipelinecmds.h"
 #include "executor/tupletableReceiver.h"
 #include "executor/tstoreReceiver.h"
 #include "funcapi.h"
@@ -157,10 +158,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	char *cvname = rv->relname;
 	Query *query;
 	PlannedStmt *combineplan;
-	bool hasBeenDeactivated = false;
-	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
 	TimestampTz lastCombineTime = GetCurrentTimestamp();
-	int32 pg_count = 0;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 
 	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
@@ -476,7 +474,7 @@ void
 SyncCombine(char *cvname, Tuplestorestate *results,
 		TupleTableSlot *slot, AttrNumber merge_attr, TupleHashTable merge_targets)
 {
-	Relation rel = heap_openrv(makeRangeVar(NULL, cvname, -1), RowExclusiveLock);
+	Relation rel = heap_openrv(makeRangeVar(NULL, GetCQMatRelName(cvname), -1), RowExclusiveLock);
 	bool *replace_all = palloc(sizeof(bool) * slot->tts_tupleDescriptor->natts);
 	MemSet(replace_all, true, sizeof(replace_all));
 
