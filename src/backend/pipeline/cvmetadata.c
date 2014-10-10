@@ -152,11 +152,8 @@ EntryAlloc(int32 key, uint32 pg_size)
 void
 EntryRemove(int32 key)
 {
-	CVMetadata  *entry;
-	bool		found;
-
 	/* Find or create an entry with desired hash code */
-	hash_search(cv_metadata_hash, &key, HASH_REMOVE, &found);
+	hash_search(cv_metadata_hash, &key, HASH_REMOVE, NULL);
 }
 /*
    * GetCVMetadata(int32 id)
