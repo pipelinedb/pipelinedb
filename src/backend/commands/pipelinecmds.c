@@ -36,7 +36,7 @@
 #include "pipeline/cvmetadata.h"
 
 /* Whether or not to block till the events are consumed by a cv
-   Also used to represent whether the activate/deactivate are to be 
+   Also used to represent whether the activate/deactivate are to be
    synchronous
  */
 bool DebugSyncCQ;
@@ -358,7 +358,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 				state.parallelism = (int16) value;
 		}
 
-		/* 
+		/*
 		   Initialize the metadata entry for the CV
 		   Input would be an id (used as key) and a Process group size.
 		 */
@@ -381,13 +381,14 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id,false);
-		/* 
-		   Block till all the processes in the group have terminated 
+		/*
+		   Block till all the processes in the group have terminated
 		   Predicated off a debug config variable
 		   Clear up any CV metadata
 		 */
 		if (DebugSyncCQ)
 			WaitForCQProcessEnd(state.id);
+
 		EntryRemove(state.id);
 	}
 
