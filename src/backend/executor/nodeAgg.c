@@ -446,6 +446,7 @@ advance_combine_function(TupleTableSlot *slot, AggState *aggstate,
 		fcinfo->argnull[0] = slot->tts_isnull[0];
 
 		combineinput = FunctionCallInvoke(fcinfo);
+		combineoutput = combineinput;
 		isnull = fcinfo->isnull;
 	}
 
@@ -665,7 +666,8 @@ advance_aggregates(AggState *aggstate, AggStatePerGroup pergroup)
 		}
 		else
 		{
-			if (((Agg *) aggstate->ss.ps.plan)->resultState == AGG_COMBINE)
+			if ((OidIsValid(peraggstate->combineinfn_oid) || OidIsValid(peraggstate->combinefn_oid)) &&
+					((Agg *) aggstate->ss.ps.plan)->resultState == AGG_COMBINE)
 			{
 				advance_combine_function(slot, aggstate, peraggstate, pergroupstate);
 			}
@@ -1877,8 +1879,9 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		 */
 		if (node->resultState == AGG_TRANSITION || node->resultState == AGG_COMBINE)
 		{
-			combTuple = SearchSysCache1(PIPELINECOMBINETRANSFNOID,
-									   ObjectIdGetDatum(transfn_oid));
+			combTuple = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
+					ObjectIdGetDatum(finalfn_oid),
+					ObjectIdGetDatum(transfn_oid));
 
 			if (HeapTupleIsValid(combTuple))
 			{

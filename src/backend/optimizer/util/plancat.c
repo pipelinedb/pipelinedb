@@ -34,6 +34,7 @@
 #include "optimizer/plancat.h"
 #include "optimizer/predtest.h"
 #include "optimizer/prep.h"
+#include "optimizer/var.h"
 #include "parser/parse_relation.h"
 #include "parser/parsetree.h"
 #include "rewrite/rewriteManip.h"
@@ -89,13 +90,14 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 	Relation	relation = NULL;
 	bool		hasindex;
 	List	   *indexinfos = NIL;
+	int max_attr = 0;
 
 	/*
 	 * We need not lock the relation since it was already locked, either by
 	 * the rewriter or when expand_inherited_rtentry() added it to the query's
 	 * rangetable.
 	 */
-	if (!QueryIsStreaming(root->parse) && !QueryIsMerge(root->parse))
+	if (!QueryIsStreaming(root->parse) && !QueryIsCombine(root->parse))
 	{
 		relation = heap_open(relationObjectId, NoLock);
 
@@ -105,9 +107,15 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot access temporary or unlogged relations during recovery")));
 	}
+	else
+	{
+		List *vars = pull_var_clause((Node *) root->parse->targetList,
+				PVC_RECURSE_AGGREGATES, PVC_INCLUDE_PLACEHOLDERS);
+		max_attr = list_length(vars);
+	}
 
 	rel->min_attr = FirstLowInvalidHeapAttributeNumber + 1;
-	rel->max_attr = relation ? RelationGetNumberOfAttributes(relation) : list_length(root->parse->targetList);
+	rel->max_attr = relation ? RelationGetNumberOfAttributes(relation) : max_attr;
 	rel->reltablespace = relation ? RelationGetForm(relation)->reltablespace : InvalidOid;
 
 	Assert(rel->max_attr >= rel->min_attr);
@@ -117,7 +125,7 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 		palloc0((rel->max_attr - rel->min_attr + 1) * sizeof(int32));
 
 	/* we're scanning streams, so there's nothing more we can do */
-	if (QueryIsStreaming(root->parse) || QueryIsMerge(root->parse))
+	if (QueryIsStreaming(root->parse) || QueryIsCombine(root->parse))
 		return;
 
 	/*
@@ -874,7 +882,7 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 				desc = rte->streamdesc->desc;
 				numattrs = desc->natts;
 			}
-			else if (root->parse->cq_is_merge)
+			else if (root->parse->is_combine)
 			{
 				/* XXX PipelineDB: why is rte NULL here for merge queries? */
 				return NIL;

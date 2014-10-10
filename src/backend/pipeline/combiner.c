@@ -148,7 +148,8 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 {
 	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	ResourceOwner save = CurrentResourceOwner;
-	TupleTableSlot *slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
+	TupleTableSlot *slot;
+	TupleDesc desc;
 	Tuplestorestate *store;
 	long count = 0;
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
@@ -162,6 +163,11 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	int32 pg_count = 0;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 
+	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
+			"CombinerRunContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
 	MemoryContext combinectx = AllocSetContextCreate(TopMemoryContext,
 			"CombineContext",
 			ALLOCSET_DEFAULT_MINSIZE,
@@ -182,8 +188,11 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 
 	StartTransactionCommand();
 
-	oldcontext = MemoryContextSwitchTo(combinectx);
-	combineplan = GetCombinePlan(rv, store, &query);
+	oldcontext = MemoryContextSwitchTo(runctx);
+
+	combineplan = GetCombinePlan(rv, store, &query, &desc);
+	slot = MakeSingleTupleTableSlot(desc);
+
 	MemoryContextSwitchTo(oldcontext);
 
 	CommitTransactionCommand();
@@ -251,7 +260,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
  * Retrieves a the cached combine plan for a continuous view, creating it if necessary
  */
 PlannedStmt *
-GetCombinePlan(RangeVar *cvrel, Tuplestorestate *store, Query **query)
+GetCombinePlan(RangeVar *cvrel, Tuplestorestate *store, Query **query, TupleDesc *desc)
 {
 	char *query_string;
 	Node	   *raw_parse_tree;
@@ -259,6 +268,7 @@ GetCombinePlan(RangeVar *cvrel, Tuplestorestate *store, Query **query)
 	List		 *query_list;
 	Query 	 *q;
 	PlannedStmt* plan;
+	TuplestoreScan *scan;
 
 	query_string = GetQueryString(cvrel->relname, true);
 	parsetree_list = pg_parse_query(query_string);
@@ -275,11 +285,8 @@ GetCombinePlan(RangeVar *cvrel, Tuplestorestate *store, Query **query)
 	Assert(query_list->length == 1);
 	q = (Query *) linitial(query_list);
 
-	q->sourcestore = store;
-	q->sourcedesc = RelationNameGetTupleDesc(cvrel->relname);
-	q->cq_is_merge = true;
-
-	*query = q;
+	q->is_combine = true;
+	q->is_continuous = false;
 
 	plan = pg_plan_query(q, 0, NULL);
 	plan->cq_state = palloc0(sizeof(ContinuousViewState));
@@ -287,6 +294,16 @@ GetCombinePlan(RangeVar *cvrel, Tuplestorestate *store, Query **query)
 	plan->cq_target = cvrel;
 
 	SetCQPlanRefs(plan);
+
+	if (IsA(plan->planTree, TuplestoreScan))
+		scan = (TuplestoreScan *) plan->planTree;
+	else if (IsA(plan->planTree->lefttree, TuplestoreScan))
+		scan = (TuplestoreScan *) plan->planTree->lefttree;
+
+	scan->store = store;
+
+	*query = q;
+	*desc = ExecTypeFromTL(((Plan *) scan)->targetlist, false);
 
 	return plan;
 }

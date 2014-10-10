@@ -1908,6 +1908,65 @@ float4_accum(PG_FUNCTION_ARGS)
 	}
 }
 
+
+/*
+ * Combines two transition state arrays into one
+ */
+Datum
+float8_combine(PG_FUNCTION_ARGS)
+{
+	ArrayType  *collectarray = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType  *transarray = PG_GETARG_ARRAYTYPE_P(1);
+	float8	   *collectvalues;
+	float8	   *transvalues;
+	float8		N,
+				sumX,
+				sumX2;
+
+	collectvalues = check_float8_array(collectarray, "float8_combine", 3);
+	transvalues = check_float8_array(transarray, "float8_combine", 3);
+	N = collectvalues[0];
+	sumX = collectvalues[1];
+	sumX2 = collectvalues[2];
+
+	N += transvalues[0];
+	sumX += transvalues[1];
+	CHECKFLOATVAL(sumX, isinf(collectvalues[1]) || isinf(transvalues[1]), true);
+	sumX2 += transvalues[2];
+	CHECKFLOATVAL(sumX2, isinf(collectvalues[2]) || isinf(transvalues[2]), true);
+
+	/*
+	 * If we're invoked by nodeAgg, we can cheat and modify our first
+	 * parameter in-place to reduce palloc overhead. Otherwise we construct a
+	 * new array with the updated transition data and return it.
+	 */
+	if (fcinfo->context &&
+		(IsA(fcinfo->context, AggState) ||
+		 IsA(fcinfo->context, WindowAggState)))
+	{
+		collectvalues[0] = N;
+		collectvalues[1] = sumX;
+		collectvalues[2] = sumX2;
+
+		PG_RETURN_ARRAYTYPE_P(collectarray);
+	}
+	else
+	{
+		Datum		collectdatums[3];
+		ArrayType  *result;
+
+		collectdatums[0] = Float8GetDatumFast(N);
+		collectdatums[1] = Float8GetDatumFast(sumX);
+		collectdatums[2] = Float8GetDatumFast(sumX2);
+
+		result = construct_array(collectdatums, 3,
+								 FLOAT8OID,
+								 sizeof(float8), FLOAT8PASSBYVAL, 'd');
+
+		PG_RETURN_ARRAYTYPE_P(result);
+	}
+}
+
 Datum
 float8_avg(PG_FUNCTION_ARGS)
 {

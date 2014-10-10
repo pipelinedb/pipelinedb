@@ -43,7 +43,10 @@ get_trans_type(Aggref *agg)
 	 * If we have a transition out function, its output type will be the
 	 * transition output type
 	 */
-	combTuple = SearchSysCache1(PIPELINECOMBINETRANSFNOID, ObjectIdGetDatum(aggform->aggtransfn));
+	combTuple = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
+			ObjectIdGetDatum(aggform->aggfinalfn),
+			ObjectIdGetDatum(aggform->aggtransfn));
+
 	if (HeapTupleIsValid(combTuple))
 	{
 		combform = (Form_pipeline_combine) GETSTRUCT(combTuple);
@@ -66,6 +69,9 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 	Plan *plan = pstmt->planTree;
 	Agg *agg;
 	ListCell *lc;
+	List *vars = NIL;
+	AttrNumber attno = 1;
+	List *targetlist = NIL;
 
 	if (!IsA(plan, Agg))
 		return;
@@ -90,29 +96,32 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 	{
 		TargetEntry *te = (TargetEntry *) lfirst(lc);
 		Expr *expr = (Expr *) te->expr;
+		TargetEntry *toappend = te;
 		if (IsA(expr, Aggref))
 		{
 			Aggref *aggref = (Aggref *) expr;
-			ListCell *lc;
 			Oid transtype = get_trans_type(aggref);
+			Var *v;
 
 			if (agg->resultState == AGG_TRANSITION)
 				aggref->aggtype = transtype;
 
-			if (agg->resultState != AGG_COMBINE)
-				continue;
-
-			foreach(lc, aggref->args)
+			if (agg->resultState == AGG_COMBINE)
 			{
-				TargetEntry *t = (TargetEntry *) lfirst(lc);
-				Var *v;
-
-				if (!IsA(t->expr, Var))
-					elog(ERROR, "unsupported continuous aggregate argument type: %d", nodeTag(t->expr));
-
-				v = (Var *) t->expr;
-				v->vartype = transtype;
+				v = makeVar(OUTER_VAR, attno, transtype, InvalidOid, InvalidOid, 0);
+				toappend = makeTargetEntry((Expr *) v, 1, NULL, false);
+				aggref->args = list_make1(toappend);
+				vars = lappend(vars, v);
 			}
 		}
+		targetlist = lappend(targetlist, toappend);
+		attno++;
 	}
+
+	/*
+	 * This is where the combiner gets its input rows from, so it needs to expect whatever types
+	 * the worker is going to output
+	 */
+	if (IsA(plan->lefttree, TuplestoreScan))
+		plan->lefttree->targetlist = targetlist;
 }

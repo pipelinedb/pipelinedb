@@ -26,7 +26,7 @@ typedef struct CombinerDesc
 
 CombinerDesc *CreateCombinerDesc(QueryDesc *query);
 void ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner);
-PlannedStmt *GetCombinePlan(RangeVar *cvrel, Tuplestorestate *store, Query **query);
+PlannedStmt *GetCombinePlan(RangeVar *cvrel, Tuplestorestate *store, Query **query, TupleDesc *desc);
 List *GetCombineColumns(Query *query);
 void GetTuplesToCombineWith(char *cvname, TupleDesc desc,
 		Tuplestorestate *incoming_merges, AttrNumber merge_attr,

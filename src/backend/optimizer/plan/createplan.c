@@ -238,7 +238,7 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_CteScan:
 		case T_WorkTableScan:
 		case T_ForeignScan:
-			if (root->parse->sourcestore)
+			if (root->parse->is_combine)
 				plan = create_tupstorescan_plan(root, best_path);
 			else
 				plan = create_scan_plan(root, best_path);
@@ -302,8 +302,6 @@ create_tupstorescan_plan(PlannerInfo *root, Path *best_path)
 		tlist = build_path_tlist(root, best_path);
 
 	plan->targetlist = tlist;
-	scan->store = root->parse->sourcestore;
-	scan->desc = root->parse->sourcedesc;
 
 	return (Plan *) scan;
 }

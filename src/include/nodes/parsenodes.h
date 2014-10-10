@@ -170,10 +170,7 @@ typedef struct Query
 
 	RangeVar	*cq_target; /* output relation of this CQ, if any */
 
-	Tuplestorestate	*sourcestore;
-	TupleDesc	sourcedesc;
-
-	bool		cq_is_merge; /* is this query being run as a merge query? */
+	bool		is_combine; /* is this query being run as a merge query? */
 
 	struct ContinuousViewState	*cq_state; /* put `struct` here to avoid circular dependency */
 } Query;

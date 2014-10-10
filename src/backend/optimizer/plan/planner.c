@@ -1540,10 +1540,10 @@ grouping_planner(PlannerInfo *root, double tuple_fraction)
 			 * the top plan node.  However, we can skip that if we determined
 			 * that whatever create_plan chose to return will be good enough.
 			 *
-			 * MERGE queries also need their tlists evaluated because we modify
-			 * them for aggregates. See the T_Group case in setrefs.c:set_plan_refs.
+			 * combine queries also need their tlists evaluated because we modify
+			 * them for aggregates (see cqplan.c).
 			 */
-			if (parse->cq_is_merge || need_tlist_eval)
+			if (parse->is_combine || need_tlist_eval)
 			{
 				/*
 				 * If the top-level plan node is one that cannot do expression
@@ -2712,13 +2712,6 @@ choose_hashed_grouping(PlannerInfo *root,
 	Path		sorted_p;
 
 	/*
-	 * XXX PipelineDB: this is a hack to make aggref handling simpler
-	 * for MERGE requests. See setrefs.c:pgxc_set_agg_references.
-	 */
-	if (parse->cq_is_merge)
-		return TRUE;
-
-	/*
 	 * Executor doesn't support hashed aggregation with DISTINCT or ORDER BY
 	 * aggregates.  (Doing so would imply storing *all* the input values in
 	 * the hash table, and/or running many sorts in parallel, either of which
@@ -2887,13 +2880,6 @@ choose_hashed_distinct(PlannerInfo *root,
 	List	   *needed_pathkeys;
 	Path		hashed_p;
 	Path		sorted_p;
-
-	/*
-	 * XXX PipelineDB: this is a hack to make aggref handling simpler
-	 * for MERGE requests. See setrefs.c:pgxc_set_agg_references.
-	 */
-	if (parse->cq_is_merge)
-		return TRUE;
 
 	/*
 	 * If we have a sortable DISTINCT ON clause, we always use sorting. This
