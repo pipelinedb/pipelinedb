@@ -36,7 +36,7 @@
 #include "pipeline/cvmetadata.h"
 
 /* Whether or not to block till the events are consumed by a cv
-   Also used to represent whether the activate/deactivate are to be 
+   Also used to represent whether the activate/deactivate are to be
    synchronous
  */
 bool DebugSyncCQ;
@@ -326,6 +326,7 @@ void
 ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 {
 	ListCell *lc;
+	CVMetadata *entry;
 
 	foreach(lc, stmt->views)
 	{
@@ -334,7 +335,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		ContinuousViewState state;
 
 		if (IsContinuousViewActive(rv))
-			elog(ERROR, "CONTINUOUS VIEW \"%s\" is already active.",
+			elog(ERROR, "continuous view \"%s\" is already active",
 					rv->relname);
 
 		GetContinousViewState(rv, &state);
@@ -358,11 +359,16 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 				state.parallelism = (int16) value;
 		}
 
-		/* 
+		/*
 		   Initialize the metadata entry for the CV
 		   Input would be an id (used as key) and a Process group size.
 		 */
-		EntryAlloc(state.id, GetProcessGroupSizeFromCatalog(rv));
+		entry = EntryAlloc(state.id, GetProcessGroupSizeFromCatalog(rv));
+
+		if (entry == NULL)
+			elog(ERROR, "continuous view \"%s\" is being deactivated",
+					rv->relname);
+
 		RunContinuousQueryProcs(rv->relname, &state);
 	}
 }
@@ -376,18 +382,18 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		RangeVar *rv = (RangeVar *) lfirst(lc);
 		ContinuousViewState state;
 
-		GetContinousViewState(rv, &state);
 		MarkContinuousViewAsInactive(rv);
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id,false);
-		/* 
-		   Block till all the processes in the group have terminated 
+		/*
+		   Block till all the processes in the group have terminated
 		   Predicated off a debug config variable
 		   Clear up any CV metadata
 		 */
 		if (DebugSyncCQ)
 			WaitForCQProcessEnd(state.id);
+
 		EntryRemove(state.id);
 	}
 
