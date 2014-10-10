@@ -291,7 +291,6 @@ MarkContinuousViewAsInactive(RangeVar *name)
 		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
 		CommandCounterIncrement();
 	}
-
 	ReleaseSysCache(tuple);
 	heap_close(pipeline_queries, NoLock);
 

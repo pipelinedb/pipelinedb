@@ -29,6 +29,13 @@
 #include "regex/regex.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
+#include "pipeline/cvmetadata.h"
+
+/* Whether or not to block till the events are consumed by a cv
+   Also used to represent whether the activate/deactivate are to be 
+   synchronous
+ */
+bool DebugSyncCQ;
 
 /*
  * CreateContinuousView
@@ -219,9 +226,20 @@ static
 void
 RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state)
 {
+	int32 id;
+	Assert(state);
+	id = state->id;
+
 	RunContinuousQueryProcess(CQCombiner, cvname, state);
 	RunContinuousQueryProcess(CQWorker, cvname, state);
 	RunContinuousQueryProcess(CQGarbageCollector, cvname, state);
+
+	/*
+	   Spin here waiting for the number of waiting CQ related processes
+	   to complete
+	*/
+	if (DebugSyncCQ)
+		WaitForCQProcessStart(id);
 }
 
 void
@@ -256,13 +274,32 @@ ActivateContinuousView(ActivateContinuousViewStmt *stmt)
 			state.parallelism = (int16) value;
 	}
 
+	/* 
+	   Initialize the metadata entry for the CV
+	 	Input would be an id (used as key) and a Process group size.
+	 */
+	EntryAlloc(state.id, GetProcessGroupSizeFromCatalog(rv));
 	RunContinuousQueryProcs(rv->relname, &state);
 }
 
 void
 DeactivateContinuousView(DeactivateContinuousViewStmt *stmt)
 {
-	MarkContinuousViewAsInactive((RangeVar *) linitial(stmt->views));
+	RangeVar *rv = (RangeVar *) linitial(stmt->views);
+	ContinuousViewState state;
+
+	GetContinousViewState(rv, &state);
+
+	MarkContinuousViewAsInactive(rv);
+
+	/* Indicate to the child processes that this CV has been marked for inactivation */
+	SetActiveFlag(state.id,false);
+	/* 
+	   Block till all the processes in the group have terminated 
+	 	Predicated off a debug config variable
+	 */
+	if (DebugSyncCQ)
+		WaitForCQProcessEnd(state.id);
 
 	/*
 	 * This will stop the stream buffer from assigning new events to this

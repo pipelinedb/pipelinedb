@@ -13,6 +13,7 @@
 
 #include "nodes/parsenodes.h"
 
+
 extern void CreateEncoding(CreateEncodingStmt *stmt);
 extern void CreateContinuousView(CreateContinuousViewStmt *stmt, const char *querystring);
 extern void DropContinuousView(DropStmt *stmt);

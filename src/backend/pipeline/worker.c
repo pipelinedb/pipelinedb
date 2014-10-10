@@ -27,7 +27,7 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
-
+#include "pipeline/cvmetadata.h"
 
 
 /*
@@ -53,6 +53,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	MemoryContext runcontext;
 	MemoryContext execcontext;
 	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
+	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 
 	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -92,6 +93,8 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 	elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
 
+	DecrementProcessGroupCount(cq_id);
+
 	/*
 	 * We wait until we're up and running before telling the stream buffer that
 	 * there is a new reader in order to avoid having any events being assigned
@@ -123,26 +126,17 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 
 		estate->es_processed = 0;
-
-		if (TimestampDifferenceExceeds(lastDeactivateCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
+		
+		/* Check the shared metadata to see if the CV has been deactivated */
+		if (GetActiveFlag(cq_id) == false)
 		{
-			/* Check is we have been deactivated, and break out
-			 * if we have. */
-			StartTransactionCommand();
-
-			hasBeenDeactivated = !IsContinuousViewActive(rv);
-
-			CommitTransactionCommand();
-
-			if (hasBeenDeactivated)
-				break;
-
-			lastDeactivateCheckTime = GetCurrentTimestamp();
+			break;
 		}
 	}
 
 	(*dest->rShutdown) (dest);
 
+	IncrementProcessGroupCount(cq_id);
 	/* cleanup */
 	ExecutorFinish(queryDesc);
 	ExecutorEnd(queryDesc);

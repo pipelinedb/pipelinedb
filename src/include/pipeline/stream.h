@@ -24,7 +24,7 @@
 
 
 /* Whether or not to wait on the inserted event to be consumed by the CV*/
-extern bool DebugSyncInsert;
+extern bool DebugSyncCQ;
 
 typedef enum
 {

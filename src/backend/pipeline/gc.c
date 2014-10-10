@@ -21,6 +21,7 @@
 #include "tcop/pquery.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
+#include "commands/pipelinecmds.h"
 
 /*
  * ContinuousQueryWorkerStartup
@@ -40,6 +41,7 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 	char *cvname = rv->relname;
 	bool hasBeenDeactivated = false;
 	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
+	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 
 	exec_ctx = AllocSetContextCreate(TopMemoryContext, "ExecProcNodeContext",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -49,6 +51,7 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 	dest = CreateDestReceiver(DestNone);
 
 	elog(LOG, "\"%s\" gc %d running", cvname, MyProcPid);
+
 
 	for (;;)
 	{

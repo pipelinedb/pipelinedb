@@ -1531,11 +1531,11 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"debug_sync_insert", PGC_USERSET, DEVELOPER_OPTIONS,
+		{"debug_sync_cq", PGC_USERSET, DEVELOPER_OPTIONS,
 			gettext_noop("Return success only if all the events in the stream have been consumed."),
 			NULL,
 		},
-		&DebugSyncInsert,
+		&DebugSyncCQ,
 		false,
 		NULL, NULL, NULL
 	},

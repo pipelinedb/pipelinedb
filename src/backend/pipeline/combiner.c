@@ -36,7 +36,7 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
-
+#include "pipeline/cvmetadata.h"
 
 #define NAME_PREFIX "combiner_"
 #define WORKER_BACKLOG 32
@@ -158,6 +158,8 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	bool hasBeenDeactivated = false;
 	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
 	TimestampTz lastCombineTime = GetCurrentTimestamp();
+	int32 pg_count = 0;
+	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 
 	MemoryContext combinectx = AllocSetContextCreate(TopMemoryContext,
 			"CombineContext",
@@ -166,6 +168,9 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			ALLOCSET_DEFAULT_MAXSIZE);
 
 	elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
+	
+	DecrementProcessGroupCount(cq_id);
+
 	accept_worker(combiner);
 
 	store = tuplestore_begin_heap(true, true, work_mem);
@@ -211,23 +216,14 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			lastCombineTime = GetCurrentTimestamp();
 		}
 
-		if (TimestampDifferenceExceeds(lastDeactivateCheckTime, GetCurrentTimestamp(), CQ_INACTIVE_CHECK_MS))
+		/* Check the shared metadata to see if the CV has been deactivated */
+		if (GetActiveFlag(cq_id) == false)
 		{
-			/* Check is we have been deactivated, and break out
-			 * if we have. */
-			StartTransactionCommand();
-
-			hasBeenDeactivated = !IsContinuousViewActive(rv);
-
-			CommitTransactionCommand();
-
-			if (hasBeenDeactivated)
-				break;
-
-			lastDeactivateCheckTime = GetCurrentTimestamp();
+			break;
 		}
 	}
 
+	IncrementProcessGroupCount(cq_id);
 	CurrentResourceOwner = save;
 }
 

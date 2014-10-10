@@ -34,7 +34,7 @@ typedef struct StreamTagsEntry
 static StreamTargets *targets = NULL;
 
 /* Whether or not to block till the events are consumed by a cv*/
-bool DebugSyncInsert;
+bool DebugSyncCQ;
 
 /*
  * close_stream
@@ -293,7 +293,7 @@ InsertIntoStream(InsertStmt *ins)
 		#392 Wait till the last event has been consumed by a CV before returning
 		Used for testing, based on a config setting.
 	*/
-	if (DebugSyncInsert)
+	if (DebugSyncCQ)
 	{
 		wait_for_overwrite(GlobalStreamBuffer, sbs);
 	}

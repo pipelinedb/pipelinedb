@@ -91,6 +91,11 @@ typedef struct BackgroundWorker
 	pid_t		bgw_notify_pid; /* SIGUSR1 this backend on start/stop */
 
 	/*
+	   Continuous view id. This is used to index
+	   into a hash table of CV meta data.
+	 */
+	int32 bgw_cvid;
+	/*
 	 * Don't try to restart this worker if it crashes
 	 *
 	 * PipelineDB TODO: we should support custom crash handlers.

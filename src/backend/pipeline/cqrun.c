@@ -34,6 +34,7 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
+#include "pipeline/cvmetadata.h"
 
 
 /* Used to pass arguments to background workers spawned by the postmaster */
@@ -197,7 +198,9 @@ run_cq(Datum d, char *additional, Size additionalsize)
 
 	/* No plan? Terminate CQ process. */
 	if (plan == NULL)
+	{
 		return;
+	}
 
 	/*
 	 * 2. Set up the portal to run it in
@@ -261,6 +264,12 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	RunCQArgs args;
 	char *procName = getCQProcessName(ptype);
 
+	/* HACK till the Garbage collector process is actively used */
+	if (ptype != CQGarbageCollector)
+	{
+		IncrementProcessGroupCount(state->id);
+	}
+
 	memcpy(worker.bgw_name, cvname, strlen(cvname) + 1);
 	memcpy(&worker.bgw_name[strlen(cvname)], procName, strlen(procName) + 1);
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
@@ -270,6 +279,7 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	worker.bgw_notify_pid = MyProcPid;
 	worker.bgw_let_crash = true;
 	worker.bgw_additional_size = sizeof(RunCQArgs);
+	worker.bgw_cvid = state->id;
 
 	args.state = *state;
 	args.ptype = ptype;
