@@ -1133,7 +1133,7 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 		RangeTblEntry *rte;
 		int rtindex;
 
-		rte = transformStreamEntry(pstate, desc);
+		rte = TransformStreamEntry(pstate, desc);
 
 		/* assume new rte is at end */
 		rtindex = list_length(pstate->p_rtable);

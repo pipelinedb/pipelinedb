@@ -2097,6 +2097,7 @@ typedef struct DropStmt
 typedef struct TruncateStmt
 {
 	NodeTag		type;
+	ObjectType	objType;
 	List	   *relations;		/* relations (RangeVars) to be truncated */
 	bool		restart_seqs;	/* restart owned sequences? */
 	DropBehavior behavior;		/* RESTRICT or CASCADE behavior */

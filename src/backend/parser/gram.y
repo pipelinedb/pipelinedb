@@ -348,7 +348,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 				opt_enum_val_list enum_val_list table_func_column_list
 				create_generic_options alter_generic_options
 				relation_expr_list dostmt_opt_list decode_args param_list
-				qualified_name_list_or_none
+				opt_qualified_name_list
 
 %type <list>	opt_fdw_options fdw_options
 %type <defelt>	fdw_option
@@ -2641,15 +2641,16 @@ copy_generic_opt_arg_list_item:
 
 /*****************************************************************************
  *
- * ( ACTIVATE | DEACTIVATE )  [ CONTINUOUS VIEW ] [continuous_view_name_list]
+ * ( ACTIVATE | DEACTIVATE ) [CONTINUOUS VIEW] [continuous_view_name_list]
  *
  * PipelineDB
  *
  * Activates/deactivates continuous view(s)
+ * TODO(usmanm): Release should require typing out CONTINUOUS VIEW.
  *
  *****************************************************************************/
 
-qualified_name_list_or_none: qualified_name_list
+opt_qualified_name_list: qualified_name_list
  				{
  					$$ = (List *) $1;
  				}
@@ -2659,7 +2660,7 @@ qualified_name_list_or_none: qualified_name_list
  				}
  		;
 
-ActivateContinuousViewStmt: ACTIVATE qualified_name_list_or_none opt_reloptions where_clause
+ActivateContinuousViewStmt: ACTIVATE opt_qualified_name_list opt_reloptions where_clause
 				{
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
 					s->views = (List *) $2;
@@ -2667,7 +2668,7 @@ ActivateContinuousViewStmt: ACTIVATE qualified_name_list_or_none opt_reloptions 
 					s->whereClause = (Node *) $4;
 					$$ = (Node *) s;
 				}
-			| ACTIVATE CONTINUOUS VIEW qualified_name_list_or_none opt_reloptions where_clause
+			| ACTIVATE CONTINUOUS VIEW opt_qualified_name_list opt_reloptions where_clause
 				{
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
 					s->views = (List *) $4;
@@ -2677,14 +2678,14 @@ ActivateContinuousViewStmt: ACTIVATE qualified_name_list_or_none opt_reloptions 
 				}
 		;
 
-DeactivateContinuousViewStmt: DEACTIVATE qualified_name_list_or_none where_clause
+DeactivateContinuousViewStmt: DEACTIVATE opt_qualified_name_list where_clause
 				{
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
 					s->views = (List *) $2;
 					s->whereClause = (Node *) $3;
 					$$ = (Node *)s;
 				}
-			| DEACTIVATE CONTINUOUS VIEW qualified_name_list_or_none where_clause
+			| DEACTIVATE CONTINUOUS VIEW opt_qualified_name_list where_clause
 				{
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
 					s->views = (List *) $4;
@@ -2692,7 +2693,7 @@ DeactivateContinuousViewStmt: DEACTIVATE qualified_name_list_or_none where_claus
 					$$ = (Node *)s;
 				}
 		;
-	
+
 /*****************************************************************************
  *
  * CREATE ENCODING encoding_name
@@ -5337,12 +5338,11 @@ DropStmt:	DROP drop_type IF_P EXISTS any_name_list opt_drop_behavior
 				}
 		;
 
-
 drop_type:	TABLE									{ $$ = OBJECT_TABLE; }
+			| CONTINUOUS VIEW						{ $$ = OBJECT_CONTINUOUS_VIEW; }
 			| SEQUENCE								{ $$ = OBJECT_SEQUENCE; }
 			| VIEW									{ $$ = OBJECT_VIEW; }
 			| MATERIALIZED VIEW						{ $$ = OBJECT_MATVIEW; }
-			| CONTINUOUS VIEW				{ $$ = OBJECT_CONTINUOUS_VIEW; }
 			| INDEX									{ $$ = OBJECT_INDEX; }
 			| FOREIGN TABLE							{ $$ = OBJECT_FOREIGN_TABLE; }
 			| EVENT TRIGGER 						{ $$ = OBJECT_EVENT_TRIGGER; }
@@ -5377,7 +5377,7 @@ attrs:		'.' attr_name
 /*****************************************************************************
  *
  *		QUERY:
- *				truncate table relname1, relname2, ...
+ *				truncate [table | continuous view] relname1, relname2, ...
  *
  *****************************************************************************/
 
@@ -5385,11 +5385,21 @@ TruncateStmt:
 			TRUNCATE opt_table relation_expr_list opt_restart_seqs opt_drop_behavior
 				{
 					TruncateStmt *n = makeNode(TruncateStmt);
+					n->objType = OBJECT_TABLE;
 					n->relations = $3;
 					n->restart_seqs = $4;
 					n->behavior = $5;
 					$$ = (Node *)n;
 				}
+			| TRUNCATE CONTINUOUS VIEW relation_expr_list opt_restart_seqs opt_drop_behavior
+				{
+					TruncateStmt *n = makeNode(TruncateStmt);
+					n->objType = OBJECT_CONTINUOUS_VIEW;
+					n->relations = $4;
+					n->restart_seqs = $5;
+					n->behavior = $6;
+					$$ = (Node *)n;
+				}				
 		;
 
 opt_restart_seqs:
@@ -12994,7 +13004,6 @@ unreserved_keyword:
 			| CONSTRAINTS
 			| CONTENT_P
 			| CONTINUE_P
-			| CONTINUOUS
 			| CONVERSION_P
 			| COPY
 			| COST
@@ -13338,6 +13347,7 @@ reserved_keyword:
 			| COLLATE
 			| COLUMN
 			| CONSTRAINT
+			| CONTINUOUS
 			| CREATE
 			| CURRENT_CATALOG
 			| CURRENT_DATE

@@ -797,6 +797,7 @@ _copyAgg(const Agg *from)
 		COPY_POINTER_FIELD(grpOperators, from->numCols * sizeof(Oid));
 	}
 	COPY_SCALAR_FIELD(numGroups);
+	COPY_SCALAR_FIELD(resultState);
 
 	return newnode;
 }
@@ -2853,6 +2854,7 @@ _copyTruncateStmt(const TruncateStmt *from)
 	COPY_NODE_FIELD(relations);
 	COPY_SCALAR_FIELD(restart_seqs);
 	COPY_SCALAR_FIELD(behavior);
+	COPY_SCALAR_FIELD(objType);
 
 	return newnode;
 }

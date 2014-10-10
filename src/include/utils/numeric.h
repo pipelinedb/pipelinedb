@@ -60,4 +60,8 @@ int32		numeric_maximum_size(int32 typmod);
 extern char *numeric_out_sci(Numeric num, int scale);
 extern char *numeric_normalize(Numeric num);
 
+/* serialization/deserialization functions for passing transition states between procs */
+extern Datum naggstaterecv(PG_FUNCTION_ARGS);
+extern Datum naggstatesend(PG_FUNCTION_ARGS);
+
 #endif   /* _PG_NUMERIC_H_ */

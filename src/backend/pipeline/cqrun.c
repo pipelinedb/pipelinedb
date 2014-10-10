@@ -19,6 +19,7 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cqplan.h"
 #include "pipeline/cqrun.h"
 #include "pipeline/decode.h"
 #include "postmaster/bgworker.h"
@@ -94,7 +95,7 @@ get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 
 	/* Do we need to garbage collect tuples for this CQ? */
-	gc_expr = getWindowMatchExpr(selectstmt);
+	gc_expr = GetSlidingWindowMatchExpr(selectstmt);
 
 	if (gc_expr == NULL)
 		return NULL;
@@ -116,7 +117,7 @@ get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
-	selectstmt = transformSelectStmtForWorker(selectstmt);
+	selectstmt = GetSelectStmtForCQWorker(selectstmt);
 	selectstmt->forContinuousView = true;
 
 	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state);
@@ -201,6 +202,8 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	{
 		return;
 	}
+
+	SetCQPlanRefs(plan);
 
 	/*
 	 * 2. Set up the portal to run it in

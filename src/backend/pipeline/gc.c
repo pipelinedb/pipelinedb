@@ -43,7 +43,7 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 	TimestampTz lastDeactivateCheckTime = GetCurrentTimestamp();
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 
-	exec_ctx = AllocSetContextCreate(TopMemoryContext, "ExecProcNodeContext",
+	exec_ctx = AllocSetContextCreate(TopMemoryContext, "GCContext",
 										ALLOCSET_DEFAULT_MINSIZE,
 										ALLOCSET_DEFAULT_INITSIZE,
 										ALLOCSET_DEFAULT_MAXSIZE);

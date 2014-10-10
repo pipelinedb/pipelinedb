@@ -397,11 +397,8 @@ IsContinuousViewActive(RangeVar *name)
 	return isActive;
 }
 
-/*
- * Retrieves a REGISTERed query from the pipeline_queries catalog table
- */
 char *
-GetQueryString(const char *cvname, bool select_only)
+GetQueryStringOrNull(const char *cvname, bool select_only)
 {
 	HeapTuple tuple;
 	NameData name;
@@ -413,7 +410,7 @@ GetQueryString(const char *cvname, bool select_only)
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, NameGetDatum(&name));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "continuous view \"%s\" does not exist", cvname);
+		return NULL;
 
 	tmp = SysCacheGetAttr(PIPELINEQUERIESNAME, tuple, Anum_pipeline_queries_query, &isnull);
 	result = TextDatumGetCString(tmp);
@@ -448,4 +445,28 @@ GetQueryString(const char *cvname, bool select_only)
 	}
 
 	return result;
+}
+
+/*
+ * Retrieves a REGISTERed query from the pipeline_queries catalog table
+ */
+char *
+GetQueryString(const char *cvname, bool select_only)
+{
+	char *result = GetQueryStringOrNull(cvname, select_only);
+	if (result == NULL)
+		elog(ERROR, "continuous view \"%s\" does not exist", cvname);
+	return result;
+}
+
+bool
+IsAContinuousView(RangeVar *name)
+{
+	HeapTuple tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
+	if (HeapTupleIsValid(tuple))
+	{
+		ReleaseSysCache(tuple);
+		return true;
+	}
+	return false;
 }

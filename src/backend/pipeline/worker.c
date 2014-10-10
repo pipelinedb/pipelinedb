@@ -106,6 +106,8 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	for (;;)
 	{
+		TopTransactionContext = runcontext;
+
 		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 		CurrentResourceOwner = owner;
 

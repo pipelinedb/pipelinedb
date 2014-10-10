@@ -1,0 +1,175 @@
+-- Simple ones
+CREATE CONTINUOUS VIEW cqcreate0 AS SELECT key::integer FROM stream;
+SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate0';
+ count 
+-------
+     1
+(1 row)
+
+\d+ cqcreate0;
+               View "public.cqcreate0"
+ Column |  Type   | Modifiers | Storage | Description 
+--------+---------+-----------+---------+-------------
+ key    | integer |           | plain   | 
+View definition:
+ SELECT cqcreate0_pdb.key
+   FROM cqcreate0_pdb;
+
+\d+ cqcreate0_pdb;
+                    Table "public.cqcreate0_pdb"
+ Column |  Type   | Modifiers | Storage | Stats target | Description 
+--------+---------+-----------+---------+--------------+-------------
+ key    | integer |           | plain   |              | 
+
+CREATE CONTINUOUS VIEW cqcreate1 AS SELECT substring(url::text, 1, 2) FROM stream;
+SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate1';
+ count 
+-------
+     1
+(1 row)
+
+\d+ cqcreate1;
+                View "public.cqcreate1"
+  Column   | Type | Modifiers | Storage  | Description 
+-----------+------+-----------+----------+-------------
+ substring | text |           | extended | 
+View definition:
+ SELECT cqcreate1_pdb."substring"
+   FROM cqcreate1_pdb;
+
+\d+ cqcreate1_pdb;
+                     Table "public.cqcreate1_pdb"
+  Column   | Type | Modifiers | Storage  | Stats target | Description 
+-----------+------+-----------+----------+--------------+-------------
+ substring | text |           | extended |              | 
+
+CREATE CONTINUOUS VIEW cqcreate2 AS SELECT key::integer, substring(value::text, 1, 2) AS s FROM stream;
+SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate2';
+ count 
+-------
+     1
+(1 row)
+
+\d+ cqcreate2;
+                View "public.cqcreate2"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ key    | integer |           | plain    | 
+ s      | text    |           | extended | 
+View definition:
+ SELECT cqcreate2_pdb.key,
+    cqcreate2_pdb.s
+   FROM cqcreate2_pdb;
+
+\d+ cqcreate2_pdb;
+                     Table "public.cqcreate2_pdb"
+ Column |  Type   | Modifiers | Storage  | Stats target | Description 
+--------+---------+-----------+----------+--------------+-------------
+ key    | integer |           | plain    |              | 
+ s      | text    |           | extended |              | 
+
+-- Group by projections
+CREATE CONTINUOUS VIEW cqcreate3 AS SELECT key::text, COUNT(*), SUM(value::int8) FROM stream GROUP BY key;
+SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate3';
+ count 
+-------
+     1
+(1 row)
+
+\d+ cqcreate3;
+                View "public.cqcreate3"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ key    | text(0) |           | extended | 
+ count  | bigint  |           | plain    | 
+ sum    | numeric |           | main     | 
+View definition:
+ SELECT cqcreate3_pdb.key,
+    cqcreate3_pdb.count,
+    cqcreate3_pdb.sum
+   FROM cqcreate3_pdb;
+
+\d+ cqcreate3_pdb;
+                     Table "public.cqcreate3_pdb"
+ Column |  Type   | Modifiers | Storage  | Stats target | Description 
+--------+---------+-----------+----------+--------------+-------------
+ key    | text(0) |           | extended |              | 
+ count  | bigint  |           | plain    |              | 
+ sum    | numeric |           | main     |              | 
+
+CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value::int8) FROM stream GROUP BY key::text;
+SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate4';
+ count 
+-------
+     1
+(1 row)
+
+\d+ cqcreate4;
+               View "public.cqcreate4"
+ Column |  Type   | Modifiers | Storage | Description 
+--------+---------+-----------+---------+-------------
+ count  | bigint  |           | plain   | 
+ sum    | numeric |           | main    | 
+View definition:
+ SELECT cqcreate4_pdb.count,
+    cqcreate4_pdb.sum
+   FROM cqcreate4_pdb;
+
+\d+ cqcreate4_pdb;
+                     Table "public.cqcreate4_pdb"
+ Column |  Type   | Modifiers | Storage  | Stats target | Description 
+--------+---------+-----------+----------+--------------+-------------
+ count  | bigint  |           | plain    |              | 
+ sum    | numeric |           | main     |              | 
+ key    | text(0) |           | extended |              | 
+
+-- Sliding window queries
+CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
+SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate5';
+ count 
+-------
+     1
+(1 row)
+
+\d+ cqcreate5;
+                View "public.cqcreate5"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ key    | text(0) |           | extended | 
+View definition:
+ SELECT cqcreate5_pdb.key
+   FROM cqcreate5_pdb
+  WHERE cqcreate5_pdb.arrival_timestamp > (clock_timestamp() - '@ 5 secs'::interval second);
+
+\d+ cqcreate5_pdb;
+                                    Table "public.cqcreate5_pdb"
+      Column       |            Type             | Modifiers | Storage  | Stats target | Description 
+-------------------+-----------------------------+-----------+----------+--------------+-------------
+ key               | text(0)                     |           | extended |              | 
+ arrival_timestamp | timestamp(0) with time zone |           | plain    |              | 
+
+CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key::text;
+SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate6';
+ count 
+-------
+     1
+(1 row)
+
+\d+ cqcreate6;
+               View "public.cqcreate6"
+ Column |  Type  | Modifiers | Storage | Description 
+--------+--------+-----------+---------+-------------
+ count  | bigint |           | plain   | 
+View definition:
+ SELECT count(*) AS count
+   FROM cqcreate6_pdb
+  WHERE cqcreate6_pdb.arrival_timestamp > (clock_timestamp() - '@ 5 secs'::interval second)
+  GROUP BY cqcreate6_pdb.key;
+
+\d+ cqcreate6_pdb;
+                                    Table "public.cqcreate6_pdb"
+      Column       |            Type             | Modifiers | Storage  | Stats target | Description 
+-------------------+-----------------------------+-----------+----------+--------------+-------------
+ key               | text(0)                     |           | extended |              | 
+ arrival_timestamp | timestamp(0) with time zone |           | plain    |              | 
+

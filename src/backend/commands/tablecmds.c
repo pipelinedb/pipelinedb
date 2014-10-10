@@ -46,6 +46,7 @@
 #include "commands/cluster.h"
 #include "commands/comment.h"
 #include "commands/defrem.h"
+#include "commands/pipelinecmds.h"
 #include "commands/sequence.h"
 #include "commands/tablecmds.h"
 #include "commands/tablespace.h"
@@ -981,6 +982,12 @@ ExecuteTruncate(TruncateStmt *stmt)
 	ResultRelInfo *resultRelInfo;
 	SubTransactionId mySubid;
 	ListCell   *cell;
+
+	if (stmt->objType == OBJECT_CONTINUOUS_VIEW)
+		return ExecTruncateContinuousViewStmt(stmt);
+
+	if (stmt->objType != OBJECT_TABLE)
+		elog(ERROR, "unknown object type %d", stmt->objType);
 
 	/*
 	 * Open, exclusive-lock, and check all the explicitly-specified relations
