@@ -173,3 +173,108 @@ View definition:
  key               | text(0)                     |           | extended |              | 
  arrival_timestamp | timestamp(0) with time zone |           | plain    |              | 
 
+-- AVG needs a combine state column
+CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS avg_col FROM stream GROUP BY key;
+\d+ cvavg;
+                       View "public.cvavg"
+ Column  |       Type       | Modifiers | Storage  | Description 
+---------+------------------+-----------+----------+-------------
+ key     | text(0)          |           | extended | 
+ avg_col | double precision |           | plain    | 
+View definition:
+ SELECT cvavg_pdb.key,
+    cvavg_pdb.avg_col
+   FROM cvavg_pdb;
+
+\d+ cvavg_pdb;
+                                Table "public.cvavg_pdb"
+  Column   |          Type          | Modifiers | Storage  | Stats target | Description 
+-----------+------------------------+-----------+----------+--------------+-------------
+ key       | text(0)                |           | extended |              | 
+ avg_col   | double precision       |           | plain    |              | 
+ avg_col_c | numeric(65535,65532)[] |           | extended |              | 
+
+-- But these aggregates don't
+CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(x::integer + y::float8) AS sum_col FROM stream;
+\d+ cvcount;
+                     View "public.cvcount"
+ Column  |       Type       | Modifiers | Storage | Description 
+---------+------------------+-----------+---------+-------------
+ sum_col | double precision |           | plain   | 
+View definition:
+ SELECT cvcount_pdb.sum_col
+   FROM cvcount_pdb;
+
+\d+ cvcount_pdb;
+                          Table "public.cvcount_pdb"
+ Column  |       Type       | Modifiers | Storage | Stats target | Description 
+---------+------------------+-----------+---------+--------------+-------------
+ sum_col | double precision |           | plain   |              | 
+
+CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM stream;
+\d+ cvarray;
+                 View "public.cvarray"
+  Column   |  Type  | Modifiers | Storage | Description 
+-----------+--------+-----------+---------+-------------
+ count_col | bigint |           | plain   | 
+View definition:
+ SELECT cvarray_pdb.count_col
+   FROM cvarray_pdb;
+
+\d+ cvarray_pdb;
+                      Table "public.cvarray_pdb"
+  Column   |  Type  | Modifiers | Storage | Stats target | Description 
+-----------+--------+-----------+---------+--------------+-------------
+ count_col | bigint |           | plain   |              | 
+
+CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text, 1, 2), ',') FROM stream GROUP BY key;
+\d+ cvtext;
+                   View "public.cvtext"
+   Column   |  Type   | Modifiers | Storage  | Description 
+------------+---------+-----------+----------+-------------
+ key        | text(0) |           | extended | 
+ string_agg | text    |           | extended | 
+View definition:
+ SELECT cvtext_pdb.key,
+    cvtext_pdb.string_agg
+   FROM cvtext_pdb;
+
+\d+ cvtext_pdb;
+                        Table "public.cvtext_pdb"
+   Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+------------+---------+-----------+----------+--------------+-------------
+ key        | text(0) |           | extended |              | 
+ string_agg | text    |           | extended |              | 
+
+CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM stream;
+\d+ cvjson;
+                 View "public.cvjson"
+  Column   | Type | Modifiers | Storage  | Description 
+-----------+------+-----------+----------+-------------
+ count_col | json |           | extended | 
+View definition:
+ SELECT cvjson_pdb.count_col
+   FROM cvjson_pdb;
+
+\d+ cvjson_pdb;
+                      Table "public.cvjson_pdb"
+  Column   | Type | Modifiers | Storage  | Stats target | Description 
+-----------+------+-----------+----------+--------------+-------------
+ count_col | json |           | extended |              | 
+
+CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM stream;
+\d+ cvjsonobj;
+                   View "public.cvjsonobj"
+     Column      | Type | Modifiers | Storage  | Description 
+-----------------+------+-----------+----------+-------------
+ json_object_agg | json |           | extended | 
+View definition:
+ SELECT cvjsonobj_pdb.json_object_agg
+   FROM cvjsonobj_pdb;
+
+\d+ cvjsonobj_pdb;
+                        Table "public.cvjsonobj_pdb"
+     Column      | Type | Modifiers | Storage  | Stats target | Description 
+-----------------+------+-----------+----------+--------------+-------------
+ json_object_agg | json |           | extended |              | 
+

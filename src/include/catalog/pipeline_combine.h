@@ -71,12 +71,13 @@ CATALOG(pipeline_combine,4247) BKI_WITHOUT_OIDS
 	regproc combinefn;
 	regproc statestorefn;
 	regproc stateloadfn;
+	bool storestate;
 	Oid transouttype;
 } FormData_pipeline_combine;
 
 typedef FormData_pipeline_combine *Form_pipeline_combine;
 
-#define Natts_pipeline_combine							8
+#define Natts_pipeline_combine							9
 #define Anum_pipeline_combine_aggfinalfn		1
 #define Anum_pipeline_combine_transfn 			2
 #define Anum_pipeline_combine_transoutfn 		3
@@ -84,32 +85,33 @@ typedef FormData_pipeline_combine *Form_pipeline_combine;
 #define Anum_pipeline_combine_combinefn 		5
 #define Anum_pipeline_combine_statestorefn 	6
 #define Anum_pipeline_combine_stateloadfn 	7
-#define Anum_pipeline_combine_transouttype 	8
+#define Anum_pipeline_combine_storestate		8
+#define Anum_pipeline_combine_transouttype 	9
 
 /* avg */
-DATA(insert (numeric_avg numeric_avg_accum naggstatesend naggstaterecv numeric_combine 0 0 17));
-DATA(insert (numeric_avg int8_avg_accum naggstatesend naggstaterecv numeric_combine 0 0 17));
-DATA(insert (int8_avg int4_avg_accum 0 0 int_avg_combine 0 0 1231));
-DATA(insert (int8_avg int2_avg_accum 0 0 int_avg_combine 0 0 1231));
-DATA(insert (float8_avg float4_accum 0 0 float8_combine 0 0 1231));
-DATA(insert (float8_avg float8_accum 0 0 float8_combine 0 0 1231));
-DATA(insert (interval_avg interval_accum 0 0 interval_combine 0 0 1231));
+DATA(insert (numeric_avg numeric_avg_accum naggstatesend naggstaterecv numeric_combine 0 0 t 17));
+DATA(insert (numeric_avg int8_avg_accum naggstatesend naggstaterecv numeric_combine 0 0 t 17));
+DATA(insert (int8_avg int4_avg_accum 0 0 int_avg_combine 0 0 t 1231));
+DATA(insert (int8_avg int2_avg_accum 0 0 int_avg_combine 0 0 t 1231));
+DATA(insert (float8_avg float4_accum 0 0 float8_combine 0 0 t 1231));
+DATA(insert (float8_avg float8_accum 0 0 float8_combine 0 0 t 1231));
+DATA(insert (interval_avg interval_accum 0 0 interval_combine 0 0 t 1231));
 
 /* sum */
-DATA(insert (numeric_sum int8_avg_accum naggstatesend naggstaterecv numeric_combine 0 0 17));
+DATA(insert (numeric_sum int8_avg_accum naggstatesend naggstaterecv numeric_combine 0 0 f 17));
 
 /* count */
-DATA(insert (0 int8inc 0 0 int8_sum_to_int8 0 0 20));
-DATA(insert (0 int8inc_any 0 0 int8_sum_to_int8 0 0 20));
+DATA(insert (0 int8inc 0 0 int8_sum_to_int8 0 0 f 20));
+DATA(insert (0 int8inc_any 0 0 int8_sum_to_int8 0 0 f 20));
 
 /* array */
-DATA(insert (array_agg_finalfn array_agg_transfn arrayaggstatesend arrayaggstaterecv array_agg_combine 0 0 2277));
+DATA(insert (array_agg_finalfn array_agg_transfn arrayaggstatesend arrayaggstaterecv array_agg_combine 0 0 f 2277));
 
 /* text */
-DATA(insert (string_agg_finalfn string_agg_transfn bytea_string_agg_finalfn byteatostringinfo 0 0 0 17));
+DATA(insert (string_agg_finalfn string_agg_transfn bytea_string_agg_finalfn byteatostringinfo 0 0 0 f 17));
 
 /* json */
-DATA(insert (json_agg_finalfn json_agg_transfn bytea_string_agg_finalfn byteatostringinfo 0 0 0 17));
-DATA(insert (json_object_agg_finalfn json_object_agg_transfn bytea_string_agg_finalfn byteatostringinfo 0 0 0 17));
+DATA(insert (json_agg_finalfn json_agg_transfn bytea_string_agg_finalfn byteatostringinfo 0 0 0 f 17));
+DATA(insert (json_object_agg_finalfn json_object_agg_transfn bytea_string_agg_finalfn byteatostringinfo 0 0 0 f 17));
 
 #endif

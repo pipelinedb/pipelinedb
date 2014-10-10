@@ -267,6 +267,27 @@ IsSlidingWindowContinuousView(RangeVar *cvname)
 }
 
 /*
+ * GetCombineStateColumnType
+ *
+ * Retrieves the additional hidden columns that will be
+ * required to store transition states for the given target entry
+ */
+Oid
+GetCombineStateColumnType(TargetEntry *te)
+{
+	Oid result = InvalidOid;
+
+	if (IsA(te->expr, Aggref))
+	{
+		Aggref *agg = (Aggref *) te->expr;
+
+		result = GetCombineStateType(agg->aggfnoid);
+	}
+
+	return result;
+}
+
+/*
  * is_agg_func
  *
  * Does the node represent an aggregate function?
