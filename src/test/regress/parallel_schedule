@@ -116,3 +116,4 @@ test: stats
 # ----------
 test: cqanalyze
 test: cqcreate
+test: cqsync

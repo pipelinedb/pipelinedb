@@ -1,0 +1,11 @@
+SET debug_sync_cq = on;
+CREATE CONTINUOUS VIEW sync_cq_test1 as select id::integer from stream_sync_cq where id=9099;
+ACTIVATE CONTINUOUS VIEW sync_cq_test1;
+CREATE CONTINUOUS VIEW sync_cq_test2 as select id::integer from stream_sync_cq where id=9099;
+ACTIVATE CONTINUOUS VIEW sync_cq_test2;
+SELECT name,query FROM pipeline_queries WHERE state='a' and name='sync_cq_test1' ;
+SELECT name,query FROM pipeline_queries WHERE state='a' and name='sync_cq_test2' ;
+DEACTIVATE CONTINUOUS VIEW sync_cq_test1;
+DEACTIVATE CONTINUOUS VIEW sync_cq_test2;
+SELECT name,query FROM pipeline_queries WHERE state='i' and name='sync_cq_test1' ;
+SELECT name,query FROM pipeline_queries WHERE state='i' and name='sync_cq_test2' ;
