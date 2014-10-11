@@ -423,6 +423,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		ContinuousViewState state;
 
 		MarkContinuousViewAsInactive(rv);
+		GetContinousViewState(rv, &state);
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id,false);
