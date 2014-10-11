@@ -1,0 +1,10 @@
+CREATE CONTINUOUS VIEW cqactivate1 AS SELECT id::integer FROM stream_sync_cq WHERE id=9099;
+ACTIVATE CONTINUOUS VIEW cqactivate1;
+CREATE CONTINUOUS VIEW cqactivate2 AS SELECT id::integer FROM stream_sync_cq WHERE id=9099;
+ACTIVATE CONTINUOUS VIEW cqactivate2;
+SELECT name, query FROM pipeline_queries WHERE state='a' AND name='cqactivate1';
+SELECT name, query FROM pipeline_queries WHERE state='a' AND name='cqactivate2';
+DEACTIVATE CONTINUOUS VIEW cqactivate1;
+DEACTIVATE CONTINUOUS VIEW cqactivate2;
+SELECT name, query FROM pipeline_queries WHERE state='i' AND name='cqactivate1';
+SELECT name, query FROM pipeline_queries WHERE state='i' AND name='cqactivate2';

@@ -39,7 +39,7 @@
    Also used to represent whether the activate/deactivate are to be
    synchronous
  */
-bool DebugSyncCQ;
+bool DebugSyncStreamInsert;
 
 #define CQ_COMBINESTATE_COL_SUFFIX "_c"
 #define CQ_TABLE_SUFFIX "_pdb"
@@ -355,11 +355,10 @@ RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state)
 	RunContinuousQueryProcess(CQGarbageCollector, cvname, state);
 
 	/*
-	   Spin here waiting for the number of waiting CQ related processes
-	   to complete
-	*/
-	if (DebugSyncCQ)
-		WaitForCQProcessStart(id);
+	 * Spin here waiting for the number of waiting CQ related processes
+	 * to complete.
+	 */
+	WaitForCQProcessStart(id);
 }
 
 void
@@ -427,14 +426,12 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id,false);
-		/*
-		   Block till all the processes in the group have terminated
-		   Predicated off a debug config variable
-		   Clear up any CV metadata
-		 */
-		if (DebugSyncCQ)
-			WaitForCQProcessEnd(state.id);
 
+		/*
+		 * Block till all the processes in the group have terminated
+		 * and remove the CVMetadata entry.
+		 */
+		WaitForCQProcessEnd(state.id);
 		EntryRemove(state.id);
 	}
 
