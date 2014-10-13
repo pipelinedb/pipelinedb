@@ -459,6 +459,8 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 		RangeVar *rv = (RangeVar *) lfirst(lc);
 		if (!IsAContinuousView(rv))
 			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
+
+		rv->relname = GetCQMatRelName(rv->relname);
 	}
 
 	/* Call TRUNCATE on the backing view table(s). */
