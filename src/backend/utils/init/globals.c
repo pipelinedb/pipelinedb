@@ -108,7 +108,7 @@ int			maintenance_work_mem = 16384;
  */
 int			NBuffers = 1000;
 int			MaxConnections = 90;
-int			max_worker_processes = 8;
+int			max_worker_processes = 1024;
 int			MaxBackends = 0;
 
 int			VacuumCostPageHit = 1;		/* GUC parameters for vacuum */
