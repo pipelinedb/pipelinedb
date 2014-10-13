@@ -46,6 +46,12 @@ void
 InitCVMetadataTable(void)
 {
 	HASHCTL		info;
+	/* 
+	   * Each continuous view has at least 2 concurrent processes (1 worker and 1 combiner)
+	   * num_concurrent_cv is set to half that value.
+	   * max_concurrent_processes is set as a conf parameter
+	*/
+	int32 num_concurrent_cv = max_worker_processes / 2;
 
 	info.keysize = sizeof(uint32);
 	info.hash = cv_metadata_hash_function;
@@ -57,7 +63,6 @@ InitCVMetadataTable(void)
 	 * work we need to do. ShmemInitHash does all of that
 	 * atomically for us.
 	 */
-	int32 num_concurrent_cv = max_worker_processes / 2;
 	cv_metadata_hash = ShmemInitHash("cv_metadata_hash",
 							  num_concurrent_cv, num_concurrent_cv,
 							  &info,
