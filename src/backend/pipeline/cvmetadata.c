@@ -32,9 +32,8 @@
 #include "utils/syscache.h"
 #include "pipeline/cvmetadata.h"
 
-
+extern int max_worker_processes;
 static HTAB *cv_metadata_hash = NULL;
-static int32 cv_max = 50; /* TODO(usmanm): 50 seems rather low? */
 static uint32 cv_metadata_hash_function(const void *key, Size keysize);
 
 /*
@@ -58,8 +57,9 @@ InitCVMetadataTable(void)
 	 * work we need to do. ShmemInitHash does all of that
 	 * atomically for us.
 	 */
+	int32 num_concurrent_cv = max_worker_processes / 2;
 	cv_metadata_hash = ShmemInitHash("cv_metadata_hash",
-							  cv_max, cv_max,
+							  num_concurrent_cv, num_concurrent_cv,
 							  &info,
 							  HASH_ELEM | HASH_FUNCTION);
 
