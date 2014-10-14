@@ -95,7 +95,7 @@ get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 
 	/* Do we need to garbage collect tuples for this CQ? */
-	gc_expr = GetSlidingWindowMatchExpr(selectstmt);
+	gc_expr = GetSlidingWindowMatchExpr(selectstmt, NULL);
 
 	if (gc_expr == NULL)
 		return NULL;
