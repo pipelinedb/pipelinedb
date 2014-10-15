@@ -92,7 +92,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 	elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
 
-	DecrementProcessGroupCount(cq_id);
+	IncrementProcessGroupCount(cq_id);
 
 	/*
 	 * We wait until we're up and running before telling the stream buffer that
@@ -135,7 +135,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	(*dest->rShutdown) (dest);
 
-	IncrementProcessGroupCount(cq_id);
+	DecrementProcessGroupCount(cq_id);
 
 	/* cleanup */
 	ExecutorFinish(queryDesc);

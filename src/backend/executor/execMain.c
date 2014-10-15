@@ -238,9 +238,6 @@ ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
 	/* sanity checks */
 	Assert(queryDesc != NULL);
 
-	SetContinousViewState(queryDesc->plannedstmt->cq_target, queryDesc->plannedstmt->cq_state);
-	MarkContinuousViewAsActive(queryDesc->plannedstmt->cq_target);
-
 	/* Finish the transaction started in PostgresMain() */
 	CommitTransactionCommand();
 

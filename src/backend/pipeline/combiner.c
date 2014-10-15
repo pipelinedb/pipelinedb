@@ -179,7 +179,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 
 	elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
 
-	DecrementProcessGroupCount(cq_id);
+	IncrementProcessGroupCount(cq_id);
 
 	accept_worker(combiner);
 
@@ -247,7 +247,8 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			break;
 	}
 
-	IncrementProcessGroupCount(cq_id);
+	DecrementProcessGroupCount(cq_id);
+
 	CurrentResourceOwner = save;
 }
 
