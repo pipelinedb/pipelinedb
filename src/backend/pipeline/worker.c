@@ -28,7 +28,10 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
+#include "storage/proc.h"
 
+extern StreamBuffer *GlobalStreamBuffer;
+extern StreamBufferLatch *GlobalStreamBufferLatch;
 
 /*
  * ContinuousQueryWorkerStartup
@@ -53,6 +56,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	MemoryContext execcontext;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
+
+	/* This worker process now should "own" the latch so that it can wait on it */
+	OwnStreamBufferLatch(GlobalStreamBufferLatch);
 
 	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -105,11 +111,22 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	for (;;)
 	{
+	
+		ResetStreamBufferLatch(GlobalStreamBufferLatch);
+		if (GlobalStreamBuffer->empty)
+		{
+			elog(LOG,"WORKER:LATCH: WAITING\n");
+			WaitOnStreamBufferLatch(GlobalStreamBufferLatch);
+			elog(LOG,"WORKER: WOKE UP\n");
+			//pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
+		}
+
+
 		TopTransactionContext = runcontext;
 
 		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 		CurrentResourceOwner = owner;
-
+		
 		/*
 		 * Run plan on a microbatch
 		 */
@@ -119,13 +136,11 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		MemoryContextSwitchTo(oldcontext);
 
 		CurrentResourceOwner = save;
-
 		/*
 		 * If we didn't see any new tuples, sleep briefly to save cycles
 		 */
-		if (estate->es_processed == 0)
-			pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 
+//		if (estate->es_processed == 0)
 		estate->es_processed = 0;
 
 		/* Check the shared metadata to see if the CV has been deactivated */

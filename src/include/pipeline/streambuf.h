@@ -16,6 +16,7 @@
 #include "pipeline/stream.h"
 #include "storage/s_lock.h"
 #include "storage/shmem.h"
+#include "storage/latch.h"
 
 #define BufferEnd(buf) ((buf)->start + (buf)->capacity)
 #define BufferOffset(buf, ptr) ((int) ((char *) (ptr) - (buf)->start))
@@ -35,6 +36,10 @@
 extern bool DebugPrintStreamBuffer;
 
 extern int StreamBufferBlocks;
+typedef struct StreamBufferLatch
+{
+	Latch procLatch;
+} StreamBufferLatch;
 
 /* Wraps a physical event and the queries that still need to read it */
 typedef struct StreamBufferSlot
@@ -86,9 +91,12 @@ typedef struct StreamBuffer
 	StreamBufferSlot **tail;
 	char **last;
 	int writers;
+	Latch procLatch;	
+	bool empty;
+	Latch streamBufferLatch;
 	slock_t *mutex;
 
-	/*
+/*
 	 * Used by other procs to tell the StreamBuffer that something about the environment
 	 * has changed and it needs to update its information
 	 */
@@ -114,6 +122,7 @@ void UpdateStreamBuffer(StreamBuffer *buf);
 void UpdateGlobalStreamBuffer(void);
 void NotifyUpdateStreamBuffer(StreamBuffer *buf);
 void NotifyUpdateGlobalStreamBuffer(void);
+void InitStreamBufferLatch();
 
 StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
 void CloseStreamBufferReader(StreamBufferReader *reader);
