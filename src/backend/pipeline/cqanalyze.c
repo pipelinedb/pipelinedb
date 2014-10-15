@@ -41,19 +41,27 @@ typedef struct CQAnalyzeContext
 	List *tables;
 	List *targets;
 	Node *matchExpr;
+	int location;
 } CQAnalyzeContext;
 
 /*
- * find_invalidate_expr
+ * find_sliding_window_expr
  *
  * Walk the parse tree of the `whereClause` in the SelectStmt of
  * a CQ and set context->matchExpr to be the minimal expression
  * that must match for a tuple to be considered in the sliding window.
  *
- * This function tries to rip out all expressions not containing clock_timestamp().
+ * This function picks out the part of the where clause
+ * that depends on clock_timestamp().
+ *
+ * XXX(usmanm): For now we only allow a clock_timestamp()
+ * expression to exist in a conjunction at the top level of the
+ * whereClause expression tree. This lets us avoid complicated
+ * situations like sliding windows with holes etc. which turns
+ * into a tricky combinatorial problem.
  */
 static bool
-find_clock_time_expr(Node *node, CQAnalyzeContext *context)
+find_sliding_window_expr(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -64,6 +72,7 @@ find_clock_time_expr(Node *node, CQAnalyzeContext *context)
 		char *name = NameListToString(funccall->funcname);
 		if (pg_strcasecmp(name, CLOCK_TIMESTAMP) == 0)
 		{
+			context->location = funccall->location;
 			return true;
 		}
 	}
@@ -75,7 +84,7 @@ find_clock_time_expr(Node *node, CQAnalyzeContext *context)
 
 		context->matchExpr = NULL;
 
-		l_res = find_clock_time_expr(a_expr->lexpr, context);
+		l_res = find_sliding_window_expr(a_expr->lexpr, context);
 		if (context->matchExpr != NULL)
 			l_expr = context->matchExpr;
 		else
@@ -83,7 +92,7 @@ find_clock_time_expr(Node *node, CQAnalyzeContext *context)
 
 		context->matchExpr = NULL;
 
-		r_res = find_clock_time_expr(a_expr->rexpr, context);
+		r_res = find_sliding_window_expr(a_expr->rexpr, context);
 		if (context->matchExpr)
 			r_expr = context->matchExpr;
 		else
@@ -100,23 +109,20 @@ find_clock_time_expr(Node *node, CQAnalyzeContext *context)
 			return false;
 		case AEXPR_AND:
 			if (l_res && r_res)
-				context->matchExpr = (Node *) makeA_Expr(AEXPR_AND, NIL, l_expr, r_expr, -1);
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+								errmsg("clock_timestamp may only appear once in a WHERE clause"),
+								parser_errposition(context->pstate, context->location)));
 			else if (l_res)
 				context->matchExpr = l_expr;
 			else if (r_res)
 				context->matchExpr = r_expr;
 			return (l_res || r_res);
-		case AEXPR_OR:
-			if (l_res || r_res)
-			{
-				context->matchExpr = (Node *) makeA_Expr(AEXPR_OR, NIL, l_expr, r_expr, -1);
-				return true;
-			}
-			return false;
 		case AEXPR_NOT:
 			if (r_res)
 				context->matchExpr = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, r_expr, -1);
 			return r_res;
+		case AEXPR_OR:
 		case AEXPR_OP_ANY:
 		case AEXPR_OP_ALL:
 		case AEXPR_DISTINCT:
@@ -124,22 +130,47 @@ find_clock_time_expr(Node *node, CQAnalyzeContext *context)
 		case AEXPR_OF:
 		case AEXPR_IN:
 		default:
-			/* TODO(usmanm): Implement these operators as well */
-			elog(ERROR, "unsupported expression kind %d", a_expr->kind);
+			if (l_res || r_res)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+								errmsg("clock_timestamp may only appear as a top-level predicate"),
+								parser_errposition(context->pstate, context->location)));
 			break;
 		}
 	}
 
-	return raw_expression_tree_walker(node, find_clock_time_expr, (void *) context);
+	return raw_expression_tree_walker(node, find_sliding_window_expr, (void *) context);
 }
 
 /*
- * find_cols_to_store
+ * has_clock_timestamp
+ */
+static bool
+has_clock_timestamp(Node *node, void *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, FuncCall))
+	{
+		FuncCall *funccall = (FuncCall *) node;
+		char *name = NameListToString(funccall->funcname);
+		if (pg_strcasecmp(name, CLOCK_TIMESTAMP) == 0)
+		{
+			return true;
+		}
+	}
+
+	return raw_expression_tree_walker(node, has_clock_timestamp, context);
+}
+
+/*
+ * find_col_refs
  *
  * Recursively search this node and find all ColRefs in it.
  */
 static bool
-find_cols_to_store(Node *node, CQAnalyzeContext *context)
+find_col_refs(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -159,7 +190,7 @@ find_cols_to_store(Node *node, CQAnalyzeContext *context)
 		context->cols = lappend(context->cols, node);
 	}
 
-	return raw_expression_tree_walker(node, find_cols_to_store, (void *) context);
+	return raw_expression_tree_walker(node, find_col_refs, (void *) context);
 }
 /*
  * does_colref_match_res_target
@@ -222,9 +253,10 @@ does_colref_match_res_target(Node *node, ColumnRef *cref)
  * in the sliding window.
  */
 Node *
-GetSlidingWindowMatchExpr(SelectStmt *stmt)
+GetSlidingWindowMatchExpr(SelectStmt *stmt, ParseState *pstate)
 {
 	CQAnalyzeContext context;
+	context.pstate = pstate;
 	context.matchExpr = NULL;
 
 	if (stmt->whereClause == NULL)
@@ -233,7 +265,7 @@ GetSlidingWindowMatchExpr(SelectStmt *stmt)
 	}
 
 	/* find the subset of the whereClause that we must match valid tuples */
-	find_clock_time_expr(stmt->whereClause, &context);
+	find_sliding_window_expr(stmt->whereClause, &context);
 
 	return context.matchExpr;
 }
@@ -247,7 +279,7 @@ GetSlidingWindowMatchExpr(SelectStmt *stmt)
 bool
 IsSlidingWindowSelectStmt(SelectStmt *stmt)
 {
-	return GetSlidingWindowMatchExpr(stmt) != NULL;
+	return has_clock_timestamp(stmt->whereClause, NULL);
 }
 
 /*
@@ -407,7 +439,7 @@ transform_select_for_sliding_window(SelectStmt *stmt, Node *matchExpr)
 	 * targetList if they're missing.
 	 */
 	context.cols = NIL;
-	find_cols_to_store(matchExpr, &context);
+	find_col_refs(matchExpr, &context);
 	add_res_targets_for_missing_cols(stmt, context.cols);
 
 	/*
@@ -424,7 +456,7 @@ transform_select_for_sliding_window(SelectStmt *stmt, Node *matchExpr)
 		if (is_agg_func(res->val))
 		{
 			context.cols = NIL;
-			find_cols_to_store((Node *) res->val, &context);
+			find_col_refs((Node *) res->val, &context);
 
 			foreach(clc, context.cols)
 			{
@@ -507,25 +539,18 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 	 * can determine which row to merge the partial results with.
 	 */
 	context.cols = NIL;
-	find_cols_to_store((Node *) stmt->groupClause, &context);
+	find_col_refs((Node *) stmt->groupClause, &context);
 	add_res_targets_for_missing_cols(stmt, context.cols);
 
 	/*
 	 *
 	 */
-	matchExpr = GetSlidingWindowMatchExpr(stmt);
+	matchExpr = GetSlidingWindowMatchExpr(stmt, NULL);
 	if (matchExpr != NULL)
 	{
 		transform_select_for_sliding_window(stmt, matchExpr);
 		return stmt;
 	}
-
-	/*
-	 * TODO(usmanm/derekjn): We should add columns to store transition states here.
-	 * These columns must have a unique name and need to be added with an explicit
-	 * TypeCast for the analyzer to determine what the type of the column should be
-	 * in the underlying materialization table.
-	 */
 
 	return stmt;
 }
@@ -550,7 +575,7 @@ GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
 	 * the materialization table that filters based on the
 	 * `matchExpr` rather than the original `whereClause`.
 	 */
-	match_expr = GetSlidingWindowMatchExpr(stmt);
+	match_expr = GetSlidingWindowMatchExpr(stmt, NULL);
 	if (match_expr != NULL)
 	{
 		stmt->whereClause = match_expr;
@@ -933,6 +958,9 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 	}
 
 	stmt->fromClause = newfrom;
+
+	/* This will validate the sliding window expression */
+	GetSlidingWindowMatchExpr(stmt, pstate);
 }
 
 /*

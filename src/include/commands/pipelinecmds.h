@@ -13,6 +13,7 @@
 
 #include "nodes/parsenodes.h"
 
+AttrNumber GetCombineStateAttr(char *attname, TupleDesc desc);
 char *GetCQMatRelName(char *cvname);
 void CreateEncoding(CreateEncodingStmt *stmt);
 void ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring);

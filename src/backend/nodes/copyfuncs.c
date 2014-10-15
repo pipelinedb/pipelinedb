@@ -797,7 +797,6 @@ _copyAgg(const Agg *from)
 		COPY_POINTER_FIELD(grpOperators, from->numCols * sizeof(Oid));
 	}
 	COPY_SCALAR_FIELD(numGroups);
-	COPY_SCALAR_FIELD(resultState);
 
 	return newnode;
 }
@@ -1161,6 +1160,7 @@ _copyAggref(const Aggref *from)
 	COPY_SCALAR_FIELD(aggkind);
 	COPY_SCALAR_FIELD(agglevelsup);
 	COPY_LOCATION_FIELD(location);
+	COPY_SCALAR_FIELD(aggresultstate);
 
 	return newnode;
 }

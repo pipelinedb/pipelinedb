@@ -150,7 +150,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	ResourceOwner save = CurrentResourceOwner;
 	TupleTableSlot *slot;
-	TupleDesc desc;
+	TupleDesc workerdesc;
 	Tuplestorestate *store;
 	long count = 0;
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
@@ -167,8 +167,13 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
-	MemoryContext combinectx = AllocSetContextCreate(TopMemoryContext,
+	MemoryContext combinectx = AllocSetContextCreate(runctx,
 			"CombineContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+	MemoryContext tmpctx = AllocSetContextCreate(runctx,
+			"CombineTmpContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
@@ -179,18 +184,17 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 
 	elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
 
-	DecrementProcessGroupCount(cq_id);
+	IncrementProcessGroupCount(cq_id);
 
 	accept_worker(combiner);
-
-	store = tuplestore_begin_heap(true, true, work_mem);
 
 	StartTransactionCommand();
 
 	oldcontext = MemoryContextSwitchTo(runctx);
 
-	combineplan = GetCombinePlan(rv, store, &query, &desc);
-	slot = MakeSingleTupleTableSlot(desc);
+	store = tuplestore_begin_heap(true, true, work_mem);
+	combineplan = GetCombinePlan(rv, store, &query, &workerdesc);
+	slot = MakeSingleTupleTableSlot(workerdesc);
 
 	MemoryContextSwitchTo(oldcontext);
 
@@ -229,7 +233,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			StartTransactionCommand();
 
 			oldcontext = MemoryContextSwitchTo(combinectx);
-			Combine(query, combineplan, queryDesc->tupDesc, store);
+			Combine(query, combineplan, workerdesc, store, tmpctx);
 			MemoryContextSwitchTo(oldcontext);
 
 			CommitTransactionCommand();
@@ -247,7 +251,8 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			break;
 	}
 
-	IncrementProcessGroupCount(cq_id);
+	DecrementProcessGroupCount(cq_id);
+
 	CurrentResourceOwner = save;
 }
 
@@ -459,9 +464,10 @@ GetTuplesToCombineWith(char *cvname, TupleDesc desc,
 	 */
 	hash_seq_init(&status, merge_targets->hashtab);
 	while ((entry = (HeapTupleEntry) hash_seq_search(&status)) != NULL)
+	{
 		tuplestore_puttuple(incoming_merges, entry->tuple);
+	}
 }
-
 
 /*
  * SyncCombine
@@ -473,7 +479,7 @@ void
 SyncCombine(char *cvname, Tuplestorestate *results,
 		TupleTableSlot *slot, AttrNumber merge_attr, TupleHashTable merge_targets)
 {
-	Relation rel = heap_openrv(makeRangeVar(NULL, GetCQMatRelName(cvname), -1), RowExclusiveLock);
+	Relation rel = heap_openrv(makeRangeVar(NULL, cvname, -1), RowExclusiveLock);
 	bool *replace_all = palloc(sizeof(bool) * slot->tts_tupleDescriptor->natts);
 	MemSet(replace_all, true, sizeof(replace_all));
 
@@ -484,6 +490,7 @@ SyncCombine(char *cvname, Tuplestorestate *results,
 
 		if (merge_targets)
 			update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
+
 		if (update)
 		{
 			/*
@@ -509,7 +516,8 @@ SyncCombine(char *cvname, Tuplestorestate *results,
  * Combines partial results of a continuous query with existing rows in the continuous view
  */
 void
-Combine(Query *query, PlannedStmt *plan, TupleDesc cvdesc, Tuplestorestate *store)
+Combine(Query *query, PlannedStmt *plan, TupleDesc cvdesc,
+		Tuplestorestate *store, MemoryContext tmpctx)
 {
 	TupleTableSlot *slot;
 	Portal portal;
@@ -524,7 +532,7 @@ Combine(Query *query, PlannedStmt *plan, TupleDesc cvdesc, Tuplestorestate *stor
 	FmgrInfo *hash_funcs;
 	int num_cols = 0;
 	int num_buckets = 1;
-	char *cvname = plan->cq_target->relname;
+	char *cvname = GetCQMatRelName(plan->cq_target->relname);
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
@@ -546,7 +554,7 @@ Combine(Query *query, PlannedStmt *plan, TupleDesc cvdesc, Tuplestorestate *stor
 		num_buckets = 1000;
 
 		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
-				sizeof(HeapTupleEntryData), CacheMemoryContext, CurrentMemoryContext);
+				sizeof(HeapTupleEntryData), CacheMemoryContext, tmpctx);
 
 		GetTuplesToCombineWith(cvname, cvdesc, store, merge_attr, group_clause, merge_targets);
 	}

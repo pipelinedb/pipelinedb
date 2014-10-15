@@ -115,6 +115,17 @@ typedef FormData_pg_aggregate *Form_pg_aggregate;
 #define AGGKIND_ORDERED_SET		'o'
 #define AGGKIND_HYPOTHETICAL	'h'
 
+/*
+ * aggkind that takes the output of another aggregate as its input, and
+ * stores its finalized results in its own column. This is useful for
+ * combine queries, when we want to keep both the transition state as
+ * well as the finalized result without having to duplicate the
+ * aggregation overhead.
+ */
+#define AGGKIND_STORE 's'
+
+#define AGGKIND_IS_STORE(kind) ((kind) == AGGKIND_STORE)
+
 /* Use this macro to test for "ordered-set agg including hypothetical case" */
 #define AGGKIND_IS_ORDERED_SET(kind)  ((kind) != AGGKIND_NORMAL)
 

@@ -96,34 +96,43 @@ FROM stream WHERE aa > '2014-01-01 00:00:00' AND n @> '{"key": "value"}'::jsonb 
 -- Verify that type cast for arrival_timestamp is optional
 CREATE CONTINUOUS VIEW cqanalyze28 AS SELECT arrival_timestamp FROM test_stream;
 CREATE CONTINUOUS VIEW cqanalyze29 AS SELECT key::text, arrival_timestamp FROM test_stream;
-CREATE CONTINUOUS VIEW cqanalyze30 AS SELECT key::text FROM test_stream WHERE arrival_timestamp < clock_timestamp();
+CREATE CONTINUOUS VIEW cqanalyze30 AS SELECT key::text FROM test_stream WHERE arrival_timestamp < TIMESTAMP '2004-10-19 10:23:54+02';
 CREATE CONTINUOUS VIEW cqanalyze31 AS SELECT key::text, arrival_timestamp::timestamptz FROM test_stream;
-CREATE CONTINUOUS VIEW cqanalyze32 AS SELECT key::text, arrival_timestamp FROM test_stream WHERE arrival_timestamp::timestamptz < clock_timestamp();
 -- Verify that we can't do wildcard selections from streams
-CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from stream;
+CREATE CONTINUOUS VIEW cqanalyze32 AS SELECT * from stream;
 ERROR:  can't select *
-LINE 1: CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from stream;
+LINE 1: CREATE CONTINUOUS VIEW cqanalyze32 AS SELECT * from stream;
                                                      ^
 HINT:  Explicitly state the fields you want to select
-CREATE CONTINUOUS VIEW cqanalyze34 AS SELECT * from stream, t0;
+CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from stream, t0;
 ERROR:  can't select *
-LINE 1: CREATE CONTINUOUS VIEW cqanalyze34 AS SELECT * from stream, ...
+LINE 1: CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from stream, ...
                                                      ^
 HINT:  Explicitly state the fields you want to select
-CREATE CONTINUOUS VIEW cqanalyze35 AS SELECT t0.* from stream, t0;
+CREATE CONTINUOUS VIEW cqanalyze34 AS SELECT t0.* from stream, t0;
 ERROR:  can't select t0.*
-LINE 1: CREATE CONTINUOUS VIEW cqanalyze35 AS SELECT t0.* from strea...
+LINE 1: CREATE CONTINUOUS VIEW cqanalyze34 AS SELECT t0.* from strea...
                                                      ^
 HINT:  Explicitly state the fields you want to select
-CREATE CONTINUOUS VIEW cqanalyze36 AS SELECT stream.* from stream, t0;
+CREATE CONTINUOUS VIEW cqanalyze35 AS SELECT stream.* from stream, t0;
 ERROR:  can't select stream.*
-LINE 1: CREATE CONTINUOUS VIEW cqanalyze36 AS SELECT stream.* from s...
+LINE 1: CREATE CONTINUOUS VIEW cqanalyze35 AS SELECT stream.* from s...
                                                      ^
 HINT:  Explicitly state the fields you want to select
 -- Disallow sorting streams
-CREATE CONTINUOUS VIEW cqanalyze37 AS SELECT key::text from stream ORDER BY key;
+CREATE CONTINUOUS VIEW cqanalyze36 AS SELECT key::text from stream ORDER BY key;
 ERROR:  continuous view select can't have any sorting
-CREATE CONTINUOUS VIEW cqanalyze38 AS SELECT key::text from stream ORDER BY arrival_time;
+CREATE CONTINUOUS VIEW cqanalyze37 AS SELECT key::text from stream ORDER BY arrival_time;
 ERROR:  continuous view select can't have any sorting
--- Regression tests
-CREATE CONTINUOUS VIEW cqanalyze39 AS SELECT s0.ts::timestamp AS a, s0.id::timestamp, s1.id2::timestamp FROM stream s0, stream2 s1 WHERE s0.arrival_timestamp > (clock_timestamp() - interval '1 hour') AND s1.ts::timestamp > clock_timestamp() AND s1.id2 < clock_timestamp();
+-- Sliding window queries
+CREATE CONTINUOUS VIEW cqanalyze38 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour';
+CREATE CONTINUOUS VIEW cqanalyze39 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour' AND key::text='pipelinedb';
+CREATE CONTINUOUS VIEW cqanalyze40 AS SELECT COUNT(*) FROM stream WHERE NOT arrival_timestamp < clock_timestamp() - interval '1 hour';
+CREATE CONTINUOUS VIEW cqanalyze41 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour' OR key::text='pipelinedb';
+ERROR:  clock_timestamp may only appear as a top-level predicate
+LINE 1: ...CT COUNT(*) FROM stream WHERE arrival_timestamp < clock_time...
+                                                             ^
+CREATE CONTINUOUS VIEW cqanalyze42 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour' AND arrival_timestamp > clock_timestamp() - interval '5 hour';
+ERROR:  clock_timestamp may only appear once in a WHERE clause
+LINE 1: ...amp() - interval '1 hour' AND arrival_timestamp > clock_time...
+                                                             ^

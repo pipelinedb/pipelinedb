@@ -598,7 +598,7 @@
 
 #stream_buffer_size = 128MB
 #debug_print_stream_buffer = on
-#debug_sync_cq = off
+#debug_sync_stream_insert = off
 
 #------------------------------------------------------------------------------
 # CONFIG FILE INCLUDES

@@ -666,13 +666,6 @@ typedef enum AggStrategy
 	AGG_HASHED					/* grouped agg, use internal hashtable */
 } AggStrategy;
 
-typedef enum AggResultState
-{
-	AGG_DEFAULT,
-	AGG_TRANSITION,
-	AGG_COMBINE
-} AggResultState;
-
 typedef struct Agg
 {
 	Plan		plan;
@@ -681,7 +674,6 @@ typedef struct Agg
 	AttrNumber *grpColIdx;		/* their indexes in the target list */
 	Oid		   *grpOperators;	/* equality operators to compare with */
 	long		numGroups;		/* estimated number of groups in input */
-	AggResultState resultState; /* what aggregation state the output of this Agg should be */
 } Agg;
 
 /* ----------------

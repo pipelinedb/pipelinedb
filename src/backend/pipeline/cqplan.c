@@ -11,6 +11,8 @@
 #include "access/htup_details.h"
 #include "catalog/pg_aggregate.h"
 #include "catalog/pipeline_combine.h"
+#include "commands/pipelinecmds.h"
+#include "funcapi.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/tlist.h"
@@ -59,6 +61,39 @@ get_trans_type(Aggref *agg)
 	return result;
 }
 
+static TargetEntry *
+make_store_target(TargetEntry *tostore, char *resname, AttrNumber attno, Oid aggtype, Oid transtype)
+{
+	TargetEntry *argte;
+	TargetEntry *result;
+	Var *var;
+	Aggref *aggref = makeNode(Aggref);
+	Aggref *sibling;
+
+	if (!IsA(tostore->expr, Aggref))
+		elog(ERROR, "store aggrefs can only store the results of other aggrefs");
+
+	sibling = (Aggref *) tostore->expr;
+
+	aggref->aggfnoid = sibling->aggfnoid;
+	aggref->aggtype = aggtype;
+	aggref->aggfilter = InvalidOid;
+	aggref->aggstar = InvalidOid;
+	aggref->aggvariadic = false;
+	aggref->aggkind = AGGKIND_STORE;
+	aggref->aggresultstate = AGG_FINALIZE_COMBINE;
+
+	var = makeVar(OUTER_VAR, attno, transtype, InvalidOid, InvalidOid, 0);
+	var->varoattno = attno + 1;
+
+	argte = makeTargetEntry((Expr *) var, 1, NULL, false);
+	aggref->args = list_make1(argte);
+
+	result = makeTargetEntry((Expr *) aggref, attno, resname, false);
+
+	return result;
+}
+
 /*
  * CQ combiners expect transition values from worker processes, so we need
  * to modify the combiner's Aggrefs accordingly.
@@ -67,21 +102,18 @@ void
 SetCQPlanRefs(PlannedStmt *pstmt)
 {
 	Plan *plan = pstmt->planTree;
-	Agg *agg;
 	ListCell *lc;
-	List *vars = NIL;
 	AttrNumber attno = 1;
 	List *targetlist = NIL;
+	char *matname = GetCQMatRelName(pstmt->cq_target->relname);
+	TupleDesc matdesc;
+	CQProcessType ptype = pstmt->cq_state->ptype;
+	int i;
 
 	if (!IsA(plan, Agg))
 		return;
 
-	agg = (Agg *) plan;
-
-	if (pstmt->cq_state->ptype == CQWorker)
-		agg->resultState = AGG_TRANSITION;
-	else if (pstmt->cq_state->ptype == CQCombiner)
-		agg->resultState = AGG_COMBINE;
+	matdesc = RelationNameGetTupleDesc(matname);
 
 	/*
 	 * There are two cases we need to handle here:
@@ -97,26 +129,81 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 		TargetEntry *te = (TargetEntry *) lfirst(lc);
 		Expr *expr = (Expr *) te->expr;
 		TargetEntry *toappend = te;
+		char *origresname = pstrdup(toappend->resname);
+		TargetEntry *storete = NULL;
+
 		if (IsA(expr, Aggref))
 		{
 			Aggref *aggref = (Aggref *) expr;
-			Oid transtype = get_trans_type(aggref);
-			Var *v;
+			AttrNumber hidden = GetCombineStateAttr(te->resname, matdesc);
+			Oid transtype;
 
-			if (agg->resultState == AGG_TRANSITION)
-				aggref->aggtype = transtype;
+			if (AttributeNumberIsValid(hidden))
+				toappend->resname = NameStr(matdesc->attrs[hidden - 1]->attname);
 
-			if (agg->resultState == AGG_COMBINE)
+			aggref->aggresultstate = AGG_TRANSITION;
+			transtype = get_trans_type(aggref);
+
+			/*
+			 * If this Aggref has hidden state associated with it, we create an Aggref
+			 * that finalizes the transition state from the hidden column and stores
+			 * it into the visible column.
+			 */
+			if (AttributeNumberIsValid(hidden))
 			{
-				v = makeVar(OUTER_VAR, attno, transtype, InvalidOid, InvalidOid, 0);
-				toappend = makeTargetEntry((Expr *) v, 1, NULL, false);
-				aggref->args = list_make1(toappend);
-				vars = lappend(vars, v);
+				storete = make_store_target(te, origresname, attno, aggref->aggtype, transtype);
+				attno++;
 			}
+
+			/*
+			 * If we're a combiner, this Aggref will take one argument whose type is
+			 * the transition output type of this Aggref on the worker.
+			 */
+			if (ptype == CQCombiner)
+			{
+				Var *v = makeVar(OUTER_VAR, attno, transtype, InvalidOid, InvalidOid, 0);
+				TargetEntry *arte = makeTargetEntry((Expr *) v, 1, toappend->resname, false);
+
+				aggref->args = list_make1(arte);
+				aggref->aggresultstate = AGG_COMBINE;
+			}
+
+			aggref->aggtype = transtype;
 		}
+
+		/* add the extra store Aggref */
+		if (storete)
+			targetlist = lappend(targetlist, storete);
+
+		toappend->resno = attno;
 		targetlist = lappend(targetlist, toappend);
 		attno++;
 	}
+
+	/*
+	 * XXX(derek) At this point, the target list should match the tuple descriptor of the
+	 * materialization table. However, this assumes things about the ordering of columns
+	 * and their corresponding hidden columns. Ideally, the combiner and worker should be
+	 * able to work with any ordering of attributes as long as they're all present. Then,
+	 * when combining with on-disk tuples, we could reorder attributes as necessary if
+	 * we detect different orderings. Another option is to have strong guarantees about
+	 * attribute ordering when creating materializtion tables which we can rely on here.
+	 *
+	 * For now, let's just explode if there is an
+	 * inconsistency detected here. This would be a shitty error for a user to get though,
+	 * because there's nothing they can do about it.
+	 */
+	if (list_length(targetlist) != matdesc->natts)
+		elog(ERROR, "continuous query target list is inconsistent with materialization table schema");
+
+	for (i=0; i<matdesc->natts; i++)
+	{
+		TargetEntry *te = list_nth(targetlist, i);
+		if (strcmp(te->resname, NameStr(matdesc->attrs[i]->attname)) != 0)
+			elog(ERROR, "continuous query target list is inconsistent with materialization table schema");
+	}
+
+	plan->targetlist = targetlist;
 
 	/*
 	 * This is where the combiner gets its input rows from, so it needs to expect whatever types

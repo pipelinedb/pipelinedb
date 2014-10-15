@@ -650,6 +650,7 @@ ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 		aggref->aggkind = aggkind;
 		/* agglevelsup will be set by transformAggregateCall */
 		aggref->location = location;
+		aggref->aggresultstate = AGG_DEFAULT;
 
 		/*
 		 * Reject attempt to call a parameterless aggregate without (*)

@@ -93,8 +93,8 @@ DATA(insert (numeric_avg numeric_avg_accum naggstatesend naggstaterecv numeric_c
 DATA(insert (numeric_avg int8_avg_accum naggstatesend naggstaterecv numeric_combine 0 0 t 17));
 DATA(insert (int8_avg int4_avg_accum 0 0 int_avg_combine 0 0 t 1231));
 DATA(insert (int8_avg int2_avg_accum 0 0 int_avg_combine 0 0 t 1231));
-DATA(insert (float8_avg float4_accum 0 0 float8_combine 0 0 t 1231));
-DATA(insert (float8_avg float8_accum 0 0 float8_combine 0 0 t 1231));
+DATA(insert (float8_avg float4_accum 0 0 float8_combine 0 0 t 1022));
+DATA(insert (float8_avg float8_accum 0 0 float8_combine 0 0 t 1022));
 DATA(insert (interval_avg interval_accum 0 0 interval_combine 0 0 t 1231));
 
 /* sum */

@@ -46,7 +46,7 @@ void
 InitCVMetadataTable(void)
 {
 	HASHCTL		info;
-	/* 
+	/*
 	   * Each continuous view has at least 2 concurrent processes (1 worker and 1 combiner)
 	   * num_concurrent_cv is set to half that value.
 	   * max_concurrent_processes is set as a conf parameter
@@ -73,13 +73,11 @@ InitCVMetadataTable(void)
 uint32
 GetProcessGroupSizeFromCatalog(RangeVar* rv)
 {
-	Relation pipeline_queries;
 	HeapTuple tuple;
 	Form_pipeline_queries row;
-	/* Initialize the counter to 1 (combiner) not including GC for now */
+	/* Initialize the counter to 1 for the combiner proc. */
 	uint32 pg_size = 1;
 
-	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessShareLock);
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tuple))
@@ -87,10 +85,14 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 				rv->relname);
 
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
+	/* Add number of worker processes. */
 	pg_size += row->parallelism;
 
 	ReleaseSysCache(tuple);
-	heap_close(pipeline_queries, AccessShareLock);
+
+	/* Add GC process, if needed */
+	if (IsSlidingWindowContinuousView(rv))
+		pg_size += 1;
 
 	return pg_size;
 }
@@ -147,8 +149,8 @@ EntryAlloc(int32 key, uint32 pg_size)
 		return NULL;
 
 	/* New entry, initialize it with the process group size */
-	memcpy(&(entry->pg_size), &(pg_size), sizeof(uint32));
-	/* New entry, No processes are active on creation*/
+	entry->pg_size = pg_size;
+	/* New entry, No processes are active on creation */
 	entry->pg_count = 0;
 	/* New entry, and is active the moment this entry is created */
 	entry->active = true;
@@ -224,9 +226,7 @@ DecrementProcessGroupCount(int32 id)
 
 	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
 	entry = GetCVMetadata(id);
-	pg_count = entry->pg_count;
-	pg_count--;
-	memcpy(&(entry->pg_count), &pg_count, sizeof(int32));
+	entry->pg_count--;
 	LWLockRelease(CVMetadataLock);
 }
 
@@ -248,9 +248,7 @@ IncrementProcessGroupCount(int32 id)
 	   it before incrementing the pg_count.
 	 */
 	entry = GetCVMetadata(id);
-	pg_count = entry->pg_count;
-	pg_count++;
-	memcpy(&(entry->pg_count), &pg_count, sizeof(int32));
+	entry->pg_count++;
 	LWLockRelease(CVMetadataLock);
 }
 
@@ -310,9 +308,9 @@ WaitForCQProcessStart(int32 id)
 {
 	while (true)
 	{
-		if (GetProcessGroupCount(id) == 0)
+		if (GetProcessGroupCount(id) == GetProcessGroupSize(id))
 			break;
-		pg_usleep(1000);
+		pg_usleep(5000);
 	}
 }
 
@@ -328,8 +326,8 @@ WaitForCQProcessEnd(int32 id)
 {
 	while (true)
 	{
-		if (GetProcessGroupCount(id) == GetProcessGroupSize(id))
+		if (GetProcessGroupCount(id) == 0)
 			break;
-		pg_usleep(1000);
+		pg_usleep(5000);
 	}
 }

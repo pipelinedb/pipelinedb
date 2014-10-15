@@ -518,3 +518,24 @@ print_slot(TupleTableSlot *slot)
 
 	debugtup(slot, NULL);
 }
+
+/*
+ * print_tupledesc
+ * 		print out the given tuple descriptor
+ */
+void
+print_tupledesc(TupleDesc desc)
+{
+	int i;
+	for (i=0; i<desc->natts; i++)
+	{
+		Form_pg_attribute attr = desc->attrs[i];
+		printf("\t%2d: \"%s\"\t(typeid = %u, len = %d, typmod = %d, byval = %c)\n",
+			   attr->attnum,
+			   NameStr(attr->attname),
+			   (unsigned int) (attr->atttypid),
+			   attr->attlen,
+			   attr->atttypmod,
+			   attr->attbyval ? 't' : 'f');
+	}
+}

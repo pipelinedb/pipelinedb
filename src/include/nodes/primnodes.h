@@ -230,6 +230,14 @@ typedef struct Param
 	int			location;		/* token location, or -1 if unknown */
 } Param;
 
+typedef enum AggResultState
+{
+	AGG_DEFAULT,
+	AGG_TRANSITION,
+	AGG_COMBINE,
+	AGG_FINALIZE_COMBINE
+} AggResultState;
+
 /*
  * Aggref
  *
@@ -271,7 +279,7 @@ typedef struct Aggref
 	Index		agglevelsup;	/* > 0 if agg belongs to outer query */
 	int			location;		/* token location, or -1 if unknown */
 
-	Oid aggtranstype; /* type Oid of transition results */
+	AggResultState aggresultstate; /* what aggregation state the output of this Agg should be */
 } Aggref;
 
 /*

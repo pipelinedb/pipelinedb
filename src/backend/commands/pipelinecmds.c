@@ -90,6 +90,32 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 }
 
 /*
+ * GetCombineStateAttr
+ *
+ * Given an attribute and a tuple descriptor, returns the corresponding
+ * hidden attribute, or InvalidAttribute if it doesn't exist
+ */
+AttrNumber
+GetCombineStateAttr(char *base, TupleDesc desc)
+{
+	AttrNumber i;
+	char *colname;
+
+	if (!base)
+		return InvalidAttrNumber;
+
+	colname = make_combine_state_colname(base);
+
+	for (i=0; i<desc->natts; i++)
+	{
+		if (strcmp(NameStr(desc->attrs[i]->attname), colname) == 0)
+			return desc->attrs[i]->attnum;
+	}
+
+	return InvalidAttrNumber;
+}
+
+/*
  * GetCQMatRelName
  *
  * Returns the name of the given CV's underlying materialization table
@@ -154,9 +180,6 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Get the transformed SelectStmt used by CQ workers. We do this
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying materialization table.
-	 *
-	 * TODO(usmanm): Should be create an arbitrary byte field that
-	 * contains serialized aggregate states?
 	 */
 	select_stmt = GetSelectStmtForCQWorker(raw_select_stmt);
 	query = parse_analyze((Node *) select_stmt, querystring, 0, 0);
@@ -214,7 +237,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	}
 
 	/*
-	 * Create the actual undering materialzation relation.
+	 * Create the actual underlying materialzation relation.
 	 */
 	create_stmt = makeNode(CreateStmt);
 	create_stmt->relation = relation;
@@ -372,10 +395,15 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		RangeVar *rv = lfirst(lc);
 		ListCell *lcwithOptions;
 		ContinuousViewState state;
+		bool wasInactive;
 
 		if (IsContinuousViewActive(rv))
 			elog(ERROR, "continuous view \"%s\" is already active",
 					rv->relname);
+
+		wasInactive = MarkContinuousViewAsActive(rv);
+		if (!wasInactive)
+			continue;
 
 		GetContinousViewState(rv, &state);
 
@@ -397,6 +425,9 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 			else if (pg_strcasecmp(elem->defname, CQ_PARALLELISM_KEY) == 0)
 				state.parallelism = (int16) value;
 		}
+
+		/* TODO(usmanm): This causes a dead lock right now. Fix later */
+		// SetContinousViewState(rv, &state);
 
 		/*
 		   Initialize the metadata entry for the CV
@@ -420,23 +451,23 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	{
 		RangeVar *rv = (RangeVar *) lfirst(lc);
 		ContinuousViewState state;
-		bool wasactive;
+		bool wasActive = MarkContinuousViewAsInactive(rv);
 
-		wasactive = MarkContinuousViewAsInactive(rv);
 		GetContinousViewState(rv, &state);
 
 		/* deactivating an inactive CV is a noop */
-		if (!wasactive)
+		if (!wasActive)
 			continue;
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */
-		SetActiveFlag(state.id,false);
+		SetActiveFlag(state.id, false);
 
 		/*
 		 * Block till all the processes in the group have terminated
 		 * and remove the CVMetadata entry.
 		 */
 		WaitForCQProcessEnd(state.id);
+
 		EntryRemove(state.id);
 	}
 
