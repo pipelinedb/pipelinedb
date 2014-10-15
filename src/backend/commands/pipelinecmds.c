@@ -154,9 +154,6 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Get the transformed SelectStmt used by CQ workers. We do this
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying materialization table.
-	 *
-	 * TODO(usmanm): Should be create an arbitrary byte field that
-	 * contains serialized aggregate states?
 	 */
 	select_stmt = GetSelectStmtForCQWorker(raw_select_stmt);
 	query = parse_analyze((Node *) select_stmt, querystring, 0, 0);

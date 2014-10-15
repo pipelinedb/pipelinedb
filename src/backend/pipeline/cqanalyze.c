@@ -520,13 +520,6 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 		return stmt;
 	}
 
-	/*
-	 * TODO(usmanm/derekjn): We should add columns to store transition states here.
-	 * These columns must have a unique name and need to be added with an explicit
-	 * TypeCast for the analyzer to determine what the type of the column should be
-	 * in the underlying materialization table.
-	 */
-
 	return stmt;
 }
 
