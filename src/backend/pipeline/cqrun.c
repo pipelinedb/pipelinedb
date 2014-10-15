@@ -101,7 +101,7 @@ get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
 		return NULL;
 
 	delete_stmt = makeNode(DeleteStmt);
-	delete_stmt->relation = makeRangeVar(NULL, (char *) cvname, -1);
+	delete_stmt->relation = makeRangeVar(NULL, GetCQMatRelName(cvname), -1);
 	delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, gc_expr, -1);
 
 	return get_plan_from_stmt(cvname, (Node *) delete_stmt, NULL, state);
@@ -266,12 +266,6 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	BackgroundWorker worker;
 	RunCQArgs args;
 	char *procName = getCQProcessName(ptype);
-
-	/* HACK till the Garbage collector process is actively used */
-	if (ptype != CQGarbageCollector)
-	{
-		IncrementProcessGroupCount(state->id);
-	}
 
 	memcpy(worker.bgw_name, cvname, strlen(cvname) + 1);
 	memcpy(&worker.bgw_name[strlen(cvname)], procName, strlen(procName) + 1);

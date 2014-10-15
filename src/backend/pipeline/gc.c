@@ -52,6 +52,7 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 
 	elog(LOG, "\"%s\" gc %d running", cvname, MyProcPid);
 
+	IncrementProcessGroupCount(cq_id);
 
 	for (;;)
 	{
@@ -91,8 +92,14 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 		if (!*activeFlagPtr)
 			break;
 
+		/*
+		 * TODO(usmanm): Sleep for less time and run GC every N iterations or
+		 * something. Otherwise DEACTIVATE's expected wait time is through the roof.
+		 */
 		pg_usleep(CQ_GC_SLEEP_MS * 1000);
 	}
+
+	DecrementProcessGroupCount(cq_id);
 
 	FreeQueryDesc(queryDesc);
 	MemoryContextDelete(exec_ctx);

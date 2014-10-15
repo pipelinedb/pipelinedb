@@ -369,10 +369,15 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		RangeVar *rv = lfirst(lc);
 		ListCell *lcwithOptions;
 		ContinuousViewState state;
+		bool wasInactive;
 
 		if (IsContinuousViewActive(rv))
 			elog(ERROR, "continuous view \"%s\" is already active",
 					rv->relname);
+
+		wasInactive = MarkContinuousViewAsActive(rv);
+		if (!wasInactive)
+			continue;
 
 		GetContinousViewState(rv, &state);
 
@@ -394,6 +399,9 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 			else if (pg_strcasecmp(elem->defname, CQ_PARALLELISM_KEY) == 0)
 				state.parallelism = (int16) value;
 		}
+
+		/* TODO(usmanm): This causes a dead lock right now. Fix later */
+		// SetContinousViewState(rv, &state);
 
 		/*
 		   Initialize the metadata entry for the CV
@@ -417,23 +425,23 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	{
 		RangeVar *rv = (RangeVar *) lfirst(lc);
 		ContinuousViewState state;
-		bool wasactive;
+		bool wasActive = MarkContinuousViewAsInactive(rv);
 
-		wasactive = MarkContinuousViewAsInactive(rv);
 		GetContinousViewState(rv, &state);
 
 		/* deactivating an inactive CV is a noop */
-		if (!wasactive)
+		if (!wasActive)
 			continue;
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */
-		SetActiveFlag(state.id,false);
+		SetActiveFlag(state.id, false);
 
 		/*
 		 * Block till all the processes in the group have terminated
 		 * and remove the CVMetadata entry.
 		 */
 		WaitForCQProcessEnd(state.id);
+
 		EntryRemove(state.id);
 	}
 
