@@ -42,6 +42,8 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 	char *cvname = rv->relname;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
+	int executeIterationNum = CQ_GC_SLEEP_MS / CQ_DEFAULT_SLEEP_MS;
+	uint32 i;
 
 	exec_ctx = AllocSetContextCreate(TopMemoryContext, "GCContext",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -54,49 +56,48 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 
 	IncrementProcessGroupCount(cq_id);
 
-	for (;;)
+	for (i = 0;; i++)
 	{
-		CurrentResourceOwner = owner;
-		oldcontext = MemoryContextSwitchTo(exec_ctx);
+		if (i % executeIterationNum == 0)
+		{
+			CurrentResourceOwner = owner;
+			oldcontext = MemoryContextSwitchTo(exec_ctx);
 
-		StartTransactionCommand();
-		PushActiveSnapshot(GetTransactionSnapshot());
+			StartTransactionCommand();
+			PushActiveSnapshot(GetTransactionSnapshot());
 
-		queryDesc->snapshot = GetActiveSnapshot();
+			queryDesc->snapshot = GetActiveSnapshot();
 
-		ExecutorStart(queryDesc, 0);
+			ExecutorStart(queryDesc, 0);
 
-		estate = queryDesc->estate;
-		estate->es_exec_node_cxt = exec_ctx;
-		estate->es_lastoid = InvalidOid;
-		estate->es_processed = 0;
+			estate = queryDesc->estate;
+			estate->es_exec_node_cxt = exec_ctx;
+			estate->es_lastoid = InvalidOid;
+			estate->es_processed = 0;
 
-		ExecutePlan(estate, queryDesc->planstate, queryDesc->operation,
-					true, 0, 0, ForwardScanDirection, dest);
+			ExecutePlan(estate, queryDesc->planstate, queryDesc->operation,
+						true, 0, 0, ForwardScanDirection, dest);
 
-		ExecutorFinish(queryDesc);
-		ExecutorEnd(queryDesc);
+			ExecutorFinish(queryDesc);
+			ExecutorEnd(queryDesc);
 
-		queryDesc->snapshot = NULL;
-		queryDesc->estate = NULL;
+			queryDesc->snapshot = NULL;
+			queryDesc->estate = NULL;
 
-		PopActiveSnapshot();
-		CommitTransactionCommand();
+			PopActiveSnapshot();
+			CommitTransactionCommand();
 
-		MemoryContextReset(exec_ctx);
-		MemoryContextSwitchTo(oldcontext);
+			MemoryContextReset(exec_ctx);
+			MemoryContextSwitchTo(oldcontext);
 
-		CurrentResourceOwner = save;
+			CurrentResourceOwner = save;
+		}
 
 		/* Check the shared metadata to see if the CV has been deactivated */
 		if (!*activeFlagPtr)
 			break;
 
-		/*
-		 * TODO(usmanm): Sleep for less time and run GC every N iterations or
-		 * something. Otherwise DEACTIVATE's expected wait time is through the roof.
-		 */
-		pg_usleep(CQ_GC_SLEEP_MS * 1000);
+		pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 	}
 
 	DecrementProcessGroupCount(cq_id);
