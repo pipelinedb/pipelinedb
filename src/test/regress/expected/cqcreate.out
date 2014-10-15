@@ -187,12 +187,12 @@ View definition:
    FROM cvavg_pdb;
 
 \d+ cvavg_pdb;
-                                Table "public.cvavg_pdb"
-  Column   |          Type          | Modifiers | Storage  | Stats target | Description 
------------+------------------------+-----------+----------+--------------+-------------
- key       | text(0)                |           | extended |              | 
- avg_col   | double precision       |           | plain    |              | 
- avg_col_c | numeric(65535,65532)[] |           | extended |              | 
+                              Table "public.cvavg_pdb"
+  Column   |        Type        | Modifiers | Storage  | Stats target | Description 
+-----------+--------------------+-----------+----------+--------------+-------------
+ key       | text(0)            |           | extended |              | 
+ avg_col   | double precision   |           | plain    |              | 
+ avg_col_c | double precision[] |           | extended |              | 
 
 -- But these aggregates don't
 CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(x::integer + y::float8) AS sum_col FROM stream;

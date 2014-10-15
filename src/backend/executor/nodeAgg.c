@@ -618,6 +618,9 @@ advance_aggregates(AggState *aggstate, AggStatePerGroup pergroup)
 		int			i;
 		TupleTableSlot *slot;
 
+		if (AGGKIND_IS_STORE(peraggstate->aggref->aggkind))
+			continue;
+
 		/* Skip anything FILTERed out */
 		if (filter)
 		{
@@ -667,7 +670,7 @@ advance_aggregates(AggState *aggstate, AggStatePerGroup pergroup)
 		else
 		{
 			if ((OidIsValid(peraggstate->combineinfn_oid) || OidIsValid(peraggstate->combinefn_oid)) &&
-					((Agg *) aggstate->ss.ps.plan)->resultState == AGG_COMBINE)
+					peraggstate->aggref->aggresultstate == AGG_COMBINE)
 			{
 				advance_combine_function(slot, aggstate, peraggstate, pergroupstate);
 			}
@@ -886,7 +889,6 @@ finalize_aggregate(AggState *aggstate,
 	MemoryContext oldContext;
 	int			i;
 	ListCell   *lc;
-	AggResultState rstate = ((Agg *) aggstate->ss.ps.plan)->resultState;
 
 	oldContext = MemoryContextSwitchTo(aggstate->ss.ps.ps_ExprContext->ecxt_per_tuple_memory);
 
@@ -912,7 +914,9 @@ finalize_aggregate(AggState *aggstate,
 	/*
 	 * Apply the agg's finalfn if one is provided, else return transValue.
 	 */
-	if (rstate != AGG_TRANSITION && OidIsValid(peraggstate->finalfn_oid))
+	if (peraggstate->aggref->aggresultstate != AGG_TRANSITION &&
+			peraggstate->aggref->aggresultstate != AGG_COMBINE &&
+			OidIsValid(peraggstate->finalfn_oid))
 	{
 		int			numFinalArgs = peraggstate->numFinalArgs;
 
@@ -952,7 +956,8 @@ finalize_aggregate(AggState *aggstate,
 	}
 	else
 	{
-		if (rstate == AGG_TRANSITION && OidIsValid(peraggstate->transoutfn_oid))
+		if ((peraggstate->aggref->aggresultstate == AGG_TRANSITION || peraggstate->aggref->aggresultstate == AGG_COMBINE) &&
+				OidIsValid(peraggstate->transoutfn_oid))
 		{
 			FunctionCallInfo outinfo = &peraggstate->transoutfn_fcinfo;
 			outinfo->arg[0] = pergroupstate->transValue;
@@ -1505,6 +1510,33 @@ clear_hash_table(AggState *aggstate)
 	hash_unfreeze(aggstate->hashtable->hashtab);
 }
 
+static void
+store_and_finalize_aggregate(AggState *aggstate, AggStatePerAgg peragg,
+		AggStatePerGroup pergroup, int aggno)
+{
+	AggStatePerAgg peraggstate = &peragg[aggno];
+	AggStatePerGroup sourcestate;
+	AggStatePerGroup deststate;
+	Datum *aggvalues;
+	bool *aggnulls;
+	ExprContext *econtext;
+	TargetEntry *te = (TargetEntry *) linitial(peraggstate->aggref->args);
+	Var *v = (Var *) te->expr;
+	int sourceaggno = aggstate->resno_to_aggno[v->varoattno - 1];
+
+	econtext = aggstate->ss.ps.ps_ExprContext;
+	aggvalues = econtext->ecxt_aggvalues;
+	aggnulls = econtext->ecxt_aggnulls;
+
+	sourcestate = &pergroup[sourceaggno];
+	deststate = &pergroup[aggno];
+
+	deststate->transValue = sourcestate->transValue;
+	deststate->transValueIsNull = sourcestate->transValueIsNull;
+
+	finalize_aggregate(aggstate, peraggstate, deststate, &aggvalues[aggno], &aggnulls[aggno]);
+}
+
 /*
  * ExecAgg for hashed case: phase 2, retrieving groups from hash table
  */
@@ -1577,8 +1609,12 @@ agg_retrieve_hash_table(AggState *aggstate)
 			AggStatePerGroup pergroupstate = &pergroup[aggno];
 
 			Assert(peraggstate->numSortCols == 0);
-			finalize_aggregate(aggstate, peraggstate, pergroupstate,
-							   &aggvalues[aggno], &aggnulls[aggno]);
+
+			if (AGGKIND_IS_STORE(peraggstate->aggref->aggkind))
+				store_and_finalize_aggregate(aggstate, peragg, pergroup, aggno);
+			else
+				finalize_aggregate(aggstate, peraggstate, pergroupstate,
+									 &aggvalues[aggno], &aggnulls[aggno]);
 		}
 
 		/*
@@ -1788,6 +1824,8 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		aggstate->pergroup = pergroup;
 	}
 
+	aggstate->resno_to_aggno = palloc0(sizeof(int) * numaggs);
+
 	/*
 	 * Perform lookups of aggregate function info, and initialize the
 	 * unchanging fields of the per-agg data.  We also detect duplicate
@@ -1825,6 +1863,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		Oid			transoutfn_oid = InvalidOid;
 		Oid			combineinfn_oid = InvalidOid;
 		Oid			combinefn_oid = InvalidOid;
+		TargetEntry *parent = NULL;
 
 		/* Planner should have assigned aggregate to correct level */
 		Assert(aggref->agglevelsup == 0);
@@ -1845,6 +1884,11 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 		/* Nope, so assign a new PerAgg record */
 		peraggstate = &peragg[++aggno];
+
+		parent = tlist_member((Node *) aggref, ((Plan *) node)->targetlist);
+
+		if (parent)
+			aggstate->resno_to_aggno[parent->resno - 1] = aggno;
 
 		/* Mark Aggref state node with assigned index in the result array */
 		aggrefstate->aggno = aggno;
@@ -1877,7 +1921,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		 * If we are only computing transition results, we may need to
 		 * apply a function that finalizes the transition state
 		 */
-		if (node->resultState == AGG_TRANSITION || node->resultState == AGG_COMBINE)
+		if (aggref->aggresultstate == AGG_TRANSITION || aggref->aggresultstate == AGG_COMBINE || aggref->aggresultstate == AGG_FINALIZE_COMBINE)
 		{
 			combTuple = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
 					ObjectIdGetDatum(finalfn_oid),

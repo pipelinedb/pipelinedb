@@ -1745,6 +1745,7 @@ typedef struct AggState
 	List	   *hash_needed;	/* list of columns needed in hash table */
 	bool		table_filled;	/* hash table filled yet? */
 	TupleHashIterator hashiter; /* for iterating through hash table */
+	int *resno_to_aggno; /* maps 0-based target list resnos to their corresponding aggno */
 } AggState;
 
 /* ----------------

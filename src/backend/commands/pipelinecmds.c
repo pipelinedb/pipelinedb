@@ -90,6 +90,32 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 }
 
 /*
+ * GetCombineStateAttr
+ *
+ * Given an attribute and a tuple descriptor, returns the corresponding
+ * hidden attribute, or InvalidAttribute if it doesn't exist
+ */
+AttrNumber
+GetCombineStateAttr(char *base, TupleDesc desc)
+{
+	AttrNumber i;
+	char *colname;
+
+	if (!base)
+		return InvalidAttrNumber;
+
+	colname = make_combine_state_colname(base);
+
+	for (i=0; i<desc->natts; i++)
+	{
+		if (strcmp(NameStr(desc->attrs[i]->attname), colname) == 0)
+			return desc->attrs[i]->attnum;
+	}
+
+	return InvalidAttrNumber;
+}
+
+/*
  * GetCQMatRelName
  *
  * Returns the name of the given CV's underlying materialization table
@@ -211,7 +237,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	}
 
 	/*
-	 * Create the actual undering materialzation relation.
+	 * Create the actual underlying materialzation relation.
 	 */
 	create_stmt = makeNode(CreateStmt);
 	create_stmt->relation = relation;
