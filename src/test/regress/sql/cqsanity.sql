@@ -13,12 +13,10 @@ ACTIVATE test_avg;
 
 INSERT INTO stream (key, value) VALUES ('x', 10), ('x', 20), ('y', 200);
 
-SELECT * FROM test_avg;
-SELECT * FROM test_avg_pdb;
-
 DEACTIVATE test_avg;
 
 SELECT * FROM test_avg;
+SELECT * FROM test_avg_pdb;
 
 CREATE CONTINUOUS VIEW cv AS SELECT key::text, COUNT(*), MAX(x::integer + y::integer) FROM stream GROUP BY key;
 

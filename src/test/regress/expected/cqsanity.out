@@ -19,26 +19,19 @@ SELECT * FROM test_avg_pdb;
 
 ACTIVATE test_avg;
 INSERT INTO stream (key, value) VALUES ('x', 10), ('x', 20), ('y', 200);
-SELECT * FROM test_avg;
- key | avg 
------+-----
- y   | 100
- x   | 1.5
-(2 rows)
-
-SELECT * FROM test_avg_pdb;
- key | avg |     avg_c     
------+-----+---------------
- y   | 100 | {1,100,10000}
- x   | 1.5 | {2,3,5}
-(2 rows)
-
 DEACTIVATE test_avg;
 SELECT * FROM test_avg;
  key | avg  
 -----+------
  y   |  150
  x   | 8.25
+(2 rows)
+
+SELECT * FROM test_avg_pdb;
+ key | avg  |     avg_c     
+-----+------+---------------
+ y   |  150 | {2,300,50000}
+ x   | 8.25 | {4,33,505}
 (2 rows)
 
 CREATE CONTINUOUS VIEW cv AS SELECT key::text, COUNT(*), MAX(x::integer + y::integer) FROM stream GROUP BY key;
