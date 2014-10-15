@@ -117,3 +117,4 @@ test: stats
 test: cqanalyze
 test: cqcreate
 test: cqactivate
+test: cqsanity
