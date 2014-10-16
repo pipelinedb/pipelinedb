@@ -29,3 +29,6 @@ INSERT INTO stream (key, x, y) VALUES ('z', -1000, 1001);
 DEACTIVATE cv;
 
 SELECT * FROM cv;
+
+DROP CONTINUOUS VIEW test_avg;
+DROP CONTINUOUS VIEW cv;

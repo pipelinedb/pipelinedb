@@ -119,3 +119,11 @@ DEACTIVATE;
 
 SELECT * FROM test_interval_sum;
 
+DROP CONTINUOUS VIEW test_int8_sum;
+DROP CONTINUOUS VIEW test_int4_sum;
+DROP CONTINUOUS VIEW test_int2_sum;
+DROP CONTINUOUS VIEW test_cash_sum;
+DROP CONTINUOUS VIEW test_float8_sum;
+DROP CONTINUOUS VIEW test_float4_sum;
+DROP CONTINUOUS VIEW test_numeric_sum;
+DROP CONTINUOUS VIEW test_interval_sum;

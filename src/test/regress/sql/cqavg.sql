@@ -30,6 +30,7 @@ SELECT * FROM test_int2_avg;
 
 -------------------------------------------------------------------------------
 -- Float averages
+
 CREATE CONTINUOUS VIEW test_float8_avg AS SELECT k::text, AVG(v::float8) FROM float_stream GROUP BY k;
 CREATE CONTINUOUS VIEW test_float4_avg AS SELECT k::text, AVG(v::float4) FROM float_stream GROUP BY k;
 
@@ -78,7 +79,6 @@ SELECT * FROM test_numeric_avg;
 -- Interval averages
 CREATE CONTINUOUS VIEW test_interval_avg AS SELECT k::text, AVG(date_trunc('day', ts1::timestamp) - date_trunc('day', ts0::timestamp)) FROM interval_stream GROUP BY k;
 
---use functions for dates so we can verify nested works
 ACTIVATE test_interval_avg;
 
 INSERT INTO interval_stream (k, ts0, ts1) VALUES ('x', '2014-01-01 00:00:00', '2014-01-02 23:00:00');
@@ -99,4 +99,10 @@ DEACTIVATE;
 
 SELECT * FROM test_interval_avg;
 
-
+DROP CONTINUOUS VIEW test_int8_avg;
+DROP CONTINUOUS VIEW test_int4_avg;
+DROP CONTINUOUS VIEW test_int2_avg;
+DROP CONTINUOUS VIEW test_float8_avg;
+DROP CONTINUOUS VIEW test_float4_avg;
+DROP CONTINUOUS VIEW test_numeric_avg;
+DROP CONTINUOUS VIEW test_interval_avg;

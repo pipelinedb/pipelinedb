@@ -48,3 +48,5 @@ SELECT * FROM cv;
  z   |     1 |   1
 (3 rows)
 
+DROP CONTINUOUS VIEW test_avg;
+DROP CONTINUOUS VIEW cv;

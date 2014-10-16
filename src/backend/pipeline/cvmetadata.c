@@ -31,8 +31,8 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 #include "pipeline/cvmetadata.h"
+#include "miscadmin.h"
 
-extern int max_worker_processes;
 static HTAB *cv_metadata_hash = NULL;
 static uint32 cv_metadata_hash_function(const void *key, Size keysize);
 
@@ -221,7 +221,6 @@ GetProcessGroupCount(int32 id)
 void
 DecrementProcessGroupCount(int32 id)
 {
-	int32 pg_count;
 	CVMetadata *entry;
 
 	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
@@ -239,7 +238,6 @@ DecrementProcessGroupCount(int32 id)
 void
 IncrementProcessGroupCount(int32 id)
 {
-	int32 pg_count;
 	CVMetadata *entry;
 
 	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
