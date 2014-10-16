@@ -925,10 +925,46 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 			}
 		}
 
-		/* if the ColRef refers to a named ResTarget then it doesn't need an explicit type */
+		/*
+		 * If the ColRef refers to a named ResTarget then it doesn't need an explicit type.
+		 * XXX(usmanm): This doesn't work in cases where the ResTarget contains the ColumnRef
+		 * being checked against. For example:
+		 *   SELECT date_trunc('hour', ts) AS ts FROM stream
+		 * Here we need as explicit for ts.
+		 */
 		foreach(tlc, context.targets)
 		{
 			ResTarget *rt = (ResTarget *) lfirst(tlc);
+			CQAnalyzeContext context;
+			ListCell *lc;
+			ColumnRef *rt_cref;
+			bool is_matching = false;
+
+			context.pstate = pstate;
+			context.types = NIL;
+			context.cols = NIL;
+			context.streams = NIL;
+			context.tables = NIL;
+			context.targets = NIL;
+
+			find_colref_types(rt->val, &context);
+
+			foreach(lc, context.cols)
+			{
+				rt_cref = (ColumnRef *) lfirst(lc);
+				if (equal(rt_cref, cref))
+				{
+					is_matching = true;
+					break;
+				}
+			}
+
+			if (is_matching)
+			{
+				needstype = true;
+				break;
+			}
+
 			if (rt->name != NULL && strcmp(strVal(linitial(cref->fields)), rt->name) == 0)
 			{
 				needstype = false;

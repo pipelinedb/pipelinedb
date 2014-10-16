@@ -111,3 +111,6 @@ CREATE CONTINUOUS VIEW cqanalyze39 AS SELECT COUNT(*) FROM stream WHERE arrival_
 CREATE CONTINUOUS VIEW cqanalyze40 AS SELECT COUNT(*) FROM stream WHERE NOT arrival_timestamp < clock_timestamp() - interval '1 hour';
 CREATE CONTINUOUS VIEW cqanalyze41 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour' OR key::text='pipelinedb';
 CREATE CONTINUOUS VIEW cqanalyze42 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour' AND arrival_timestamp > clock_timestamp() - interval '5 hour';
+
+-- Regression
+CREATE CONTINUOUS VIEW cqanalyze43 AS SELECT date_trunc('hour', ts) AS ts FROM stream;
