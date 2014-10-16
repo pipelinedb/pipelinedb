@@ -32,14 +32,12 @@
 #define IsNewAppendCycle(buf) ((*buf->prev) == NULL)
 #define MustEvict(buf) (!IsNewAppendCycle(buf) && (*buf->prev)->nextoffset != NO_SLOTS_FOLLOW)
 
+/* Number of seconds the stream buffer can be empty before workers go to sleep */
+#define EMPTY_THRESHOLD 10
 
 extern bool DebugPrintStreamBuffer;
 
 extern int StreamBufferBlocks;
-typedef struct StreamBufferLatch
-{
-	Latch procLatch;
-} StreamBufferLatch;
 
 /* Wraps a physical event and the queries that still need to read it */
 typedef struct StreamBufferSlot
@@ -91,9 +89,8 @@ typedef struct StreamBuffer
 	StreamBufferSlot **tail;
 	char **last;
 	int writers;
-	Latch procLatch;	
+	Latch procLatch[512];	
 	bool empty;
-	Latch streamBufferLatch;
 	slock_t *mutex;
 
 /*
@@ -122,7 +119,6 @@ void UpdateStreamBuffer(StreamBuffer *buf);
 void UpdateGlobalStreamBuffer(void);
 void NotifyUpdateStreamBuffer(StreamBuffer *buf);
 void NotifyUpdateGlobalStreamBuffer(void);
-void InitStreamBufferLatch();
 
 StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
 void CloseStreamBufferReader(StreamBufferReader *reader);
@@ -132,4 +128,10 @@ void ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, int intervalms);
 void PrintStreamBuffer(StreamBuffer *buf);
 void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot);
 
+
+void OwnStreamBufferLatch();
+void ResetStreamBufferLatch();
+void WaitOnStreamBufferLatch();
+void SetStreamBufferLatch();
+//void InitStreamBufferLatch();
 #endif

@@ -31,7 +31,6 @@
 #include "storage/proc.h"
 
 extern StreamBuffer *GlobalStreamBuffer;
-extern StreamBufferLatch *GlobalStreamBufferLatch;
 
 /*
  * ContinuousQueryWorkerStartup
@@ -56,9 +55,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	MemoryContext execcontext;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
-
-	/* This worker process now should "own" the latch so that it can wait on it */
-	OwnStreamBufferLatch(GlobalStreamBufferLatch);
 
 	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -100,25 +96,36 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	DecrementProcessGroupCount(cq_id);
 
+
 	/*
 	 * We wait until we're up and running before telling the stream buffer that
 	 * there is a new reader in order to avoid having any events being assigned
 	 * to a process that fails to launch properly.
 	 */
 	NotifyUpdateGlobalStreamBuffer();
-
 	CurrentResourceOwner = save;
+	/* XXX (jay)Should be able to copy pointers and maintain an array of pointers instead
+	   of an array of latches. This somehow does not work as expected and autovacuum
+	   seems to be obliterating the new shared array. Make this better.
+	 */
+	memcpy(&GlobalStreamBuffer->procLatch[cq_id], &MyProc->procLatch, sizeof(Latch));
 
+	time_t last_process_time = time(NULL);
+	time_t curtime;
 	for (;;)
 	{
-	
-		ResetStreamBufferLatch(GlobalStreamBufferLatch);
+		ResetStreamBufferLatch(cq_id);
 		if (GlobalStreamBuffer->empty)
 		{
-			elog(LOG,"WORKER:LATCH: WAITING\n");
-			WaitOnStreamBufferLatch(GlobalStreamBufferLatch);
-			elog(LOG,"WORKER: WOKE UP\n");
-			//pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
+			curtime = time(NULL);
+			if ((uint32)(curtime - last_process_time) > EMPTY_THRESHOLD)
+			{
+				WaitOnStreamBufferLatch(cq_id);
+			}
+			else
+			{
+				pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
+			}
 		}
 
 
@@ -140,7 +147,17 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		 * If we didn't see any new tuples, sleep briefly to save cycles
 		 */
 
-//		if (estate->es_processed == 0)
+		if (estate->es_processed != 0)
+		{
+			/* 
+			 * If the CV query is such that the select does not return any tuples
+			 * ex: select id where id=99; and id=99 does not exist, then this reset
+			 * will fail. What will happen is that the worker will block at the latch for every
+			 * allocated slot, TILL a cv returns a non-zero tuple, at which point
+			 * the worker will resume a simple sleep for the threshold time.
+			 */
+			last_process_time = time(NULL);
+		}
 		estate->es_processed = 0;
 
 		/* Check the shared metadata to see if the CV has been deactivated */

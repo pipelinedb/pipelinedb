@@ -45,7 +45,6 @@ init_pipeline()
 {
 	InitGlobalStreamBuffer();
 	InitCVMetadataTable();
-	InitStreamBufferLatch();
 }
 
 /*

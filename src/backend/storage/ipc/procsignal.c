@@ -266,6 +266,7 @@ CheckProcSignal(ProcSignalReason reason)
 void
 procsignal_sigusr1_handler(SIGNAL_ARGS)
 {
+	elog(LOG,"proc signal handler:!!! PID %d\n", getpid());
 	int			save_errno = errno;
 
 	if (CheckProcSignal(PROCSIG_CATCHUP_INTERRUPT))

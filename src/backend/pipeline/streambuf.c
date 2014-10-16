@@ -26,10 +26,10 @@ bool DebugPrintStreamBuffer;
 
 /* Global stream buffer that lives in shared memory. All stream events are appended to this */
 StreamBuffer *GlobalStreamBuffer;
-StreamBufferLatch *GlobalStreamBufferLatch;
 
 /* Maximum size in blocks of the global stream buffer */
 int StreamBufferBlocks;
+extern int max_worker_processes;
 
 #define BITMAPSET_SIZE(nwords)	\
 	(offsetof(Bitmapset, words) + (nwords) * sizeof(bitmapword))
@@ -199,17 +199,22 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 
 	SpinLockInit(&result->mutex);
 	/* 
-	 * Stream event appended, now signal worker
+	 * Stream event appended, now signal workers waiting on this stream
 	 * only if the buffer went from empty to not
 	 * empty
 	*/
-	elog(LOG,"ALLOC_SLOT: allocated slot\n");
 	if (buf->empty)
 	{
-		SetStreamBufferLatch(GlobalStreamBufferLatch);
+		int32 latchCtr;
+		Bitmapset* toSignal = bms_copy(bms);
+ 		while ((latchCtr = bms_first_member(toSignal)) >= 0)
+		{
+			SetStreamBufferLatch(latchCtr);
+		}
+		bms_free(toSignal);
+		buf->empty = false; 
 	}
 
-	buf->empty = false; 
 	LWLockRelease(StreamBufferAppendLock);
 
 	return result;
@@ -279,7 +284,9 @@ InitGlobalStreamBuffer(void)
 {
 	bool found;
 	Size size = StreamBufferShmemSize();
-	Size headersize = MAXALIGN(sizeof(StreamBuffer));
+	Size latchArraySize = (max_worker_processes / 2) * sizeof(Latch*);
+
+	Size headersize = MAXALIGN(sizeof(StreamBuffer)); 
 
 	LWLockAcquire(StreamBufferAppendLock, LW_EXCLUSIVE);
 
@@ -312,9 +319,6 @@ InitGlobalStreamBuffer(void)
 		*GlobalStreamBuffer->update = false;
 
 		GlobalStreamBuffer->empty = true;
-		/* Initialize the latch that indicates available slots to process */
-		elog(LOG,"INIT: Initializing latch %p\n",&GlobalStreamBuffer->procLatch);
-		InitSharedLatch(&GlobalStreamBuffer->procLatch);
 	}
 
 	LWLockRelease(StreamBufferAppendLock);
@@ -473,8 +477,6 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 	   * is truly empty at the time of this unpin event
 	   * Mark the flag in the StreamBuffer.
 	 */
-	elog(LOG,"UNPIN:bms_membership is %d\n",bms_membership(bms));
-	elog(LOG,"UNPIN:prev is %p, slot is %p\n",*(GlobalStreamBuffer->prev), slot);
 	if ((bms_membership(bms) == BMS_SINGLETON) &&
 		(bms_is_member(reader->queryid, bms)) &&
 		(*(GlobalStreamBuffer->prev) == slot))
@@ -482,7 +484,6 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 		/* 
 		 *  XXX test atomicity of thie set
 		 */
-		elog(LOG,"UNPIN: Buffer is EMPTY\n");
 		GlobalStreamBuffer->empty = true;
 	}
 
@@ -539,36 +540,22 @@ PrintStreamBuffer(StreamBuffer *buf)
 }
 
 void
-OwnStreamBufferLatch(StreamBufferLatch* procLatch)
+ResetStreamBufferLatch(int32 id)
 {
-	elog(LOG,"OWN: owning latch %p\n",procLatch);
-	OwnLatch(procLatch);
+	ResetLatch((&GlobalStreamBuffer->procLatch[id]));
 }
 
 void
-ResetStreamBufferLatch(StreamBufferLatch* procLatch)
+WaitOnStreamBufferLatch(int32 id)
 {
-	ResetLatch(procLatch);
+	BackgroundWorkerUnblockSignals();
+	WaitLatch((&GlobalStreamBuffer->procLatch[id]),WL_LATCH_SET, 0);
+	BackgroundWorkerBlockSignals();
 }
 
 void
-WaitOnStreamBufferLatch(StreamBufferLatch* procLatch)
+SetStreamBufferLatch(int32 id)
 {
-	elog(LOG,"WAIT: waiting on latch %p\n",procLatch);
-	WaitLatch(procLatch,WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
+	SetLatch((&GlobalStreamBuffer->procLatch[id]));
 }
 
-void
-SetStreamBufferLatch(StreamBufferLatch* procLatch)
-{
-	elog(LOG,"SETLATCH: Setting Latch %p\n",procLatch);
-	SetLatch(procLatch);
-}
-
-void
-InitStreamBufferLatch()
-{
-	bool found;
-	Size size = MAXALIGN(sizeof(GlobalStreamBufferLatch));
-	GlobalStreamBufferLatch = ShmemInitStruct("StreamBufferLatch", size , &found);
-}
