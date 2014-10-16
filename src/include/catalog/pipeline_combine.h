@@ -98,7 +98,8 @@ DATA(insert (float8_avg float8_accum 0 0 float8_combine 0 0 t 1022));
 DATA(insert (interval_avg interval_accum 0 0 interval_combine 0 0 t 1231));
 
 /* sum */
-DATA(insert (numeric_sum int8_avg_accum naggstatesend naggstaterecv numeric_combine 0 0 f 17));
+DATA(insert (numeric_sum int8_avg_accum naggstatesend naggstaterecv numeric_combine 0 0 t 17));
+DATA(insert (numeric_sum numeric_avg_accum naggstatesend naggstaterecv numeric_combine 0 0 t 17));
 
 /* count */
 DATA(insert (0 int8inc 0 0 int8_sum_to_int8 0 0 f 20));
