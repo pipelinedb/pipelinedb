@@ -18,13 +18,8 @@ TupleDesc InferStreamScanTupleDescriptor(ParseState *pstate, RangeTblEntry *rte)
 void AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
 RangeTblEntry *TransformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
-Node *GetSlidingWindowMatchExpr(SelectStmt *stmt, ParseState *pstate);
-
 SelectStmt *GetSelectStmtForCQWorker(SelectStmt *stmt);
 SelectStmt *GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel);
-
-bool IsSlidingWindowSelectStmt(SelectStmt *stmt);
-bool IsSlidingWindowContinuousView(RangeVar *cvname);
 
 Oid GetCombineStateColumnType(TargetEntry *te);
 
