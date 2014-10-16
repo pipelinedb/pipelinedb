@@ -136,3 +136,9 @@ CREATE CONTINUOUS VIEW cqanalyze42 AS SELECT COUNT(*) FROM stream WHERE arrival_
 ERROR:  clock_timestamp may only appear once in a WHERE clause
 LINE 1: ...amp() - interval '1 hour' AND arrival_timestamp > clock_time...
                                                              ^
+-- Regression
+CREATE CONTINUOUS VIEW cqanalyze43 AS SELECT date_trunc('hour', ts) AS ts FROM stream;
+ERROR:  column reference "ts" has an ambiguous type
+LINE 1: ...OUS VIEW cqanalyze43 AS SELECT date_trunc('hour', ts) AS ts ...
+                                                             ^
+HINT:  Explicitly cast to the desired type. For example, ts::integer.
