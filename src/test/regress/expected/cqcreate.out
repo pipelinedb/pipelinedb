@@ -91,11 +91,12 @@ View definition:
 
 \d+ cqcreate3_pdb;
                      Table "public.cqcreate3_pdb"
- Column |  Type   | Modifiers | Storage  | Stats target | Description 
---------+---------+-----------+----------+--------------+-------------
- key    | text(0) |           | extended |              | 
- count  | bigint  |           | plain    |              | 
- sum    | numeric |           | main     |              | 
+ Column |   Type   | Modifiers | Storage  | Stats target | Description 
+--------+----------+-----------+----------+--------------+-------------
+ key    | text(0)  |           | extended |              | 
+ count  | bigint   |           | plain    |              | 
+ sum    | numeric  |           | main     |              | 
+ sum_c  | bytea(0) |           | extended |              | 
 
 CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value::int8) FROM stream GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate4';
@@ -117,11 +118,12 @@ View definition:
 
 \d+ cqcreate4_pdb;
                      Table "public.cqcreate4_pdb"
- Column |  Type   | Modifiers | Storage  | Stats target | Description 
---------+---------+-----------+----------+--------------+-------------
- count  | bigint  |           | plain    |              | 
- sum    | numeric |           | main     |              | 
- key    | text(0) |           | extended |              | 
+ Column |   Type   | Modifiers | Storage  | Stats target | Description 
+--------+----------+-----------+----------+--------------+-------------
+ count  | bigint   |           | plain    |              | 
+ sum    | numeric  |           | main     |              | 
+ sum_c  | bytea(0) |           | extended |              | 
+ key    | text(0)  |           | extended |              | 
 
 -- Sliding window queries
 CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
