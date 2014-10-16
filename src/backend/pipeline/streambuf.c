@@ -284,7 +284,6 @@ InitGlobalStreamBuffer(void)
 {
 	bool found;
 	Size size = StreamBufferShmemSize();
-	Size latchArraySize = (max_worker_processes / 2) * sizeof(Latch*);
 
 	Size headersize = MAXALIGN(sizeof(StreamBuffer)); 
 
