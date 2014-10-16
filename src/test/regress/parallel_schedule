@@ -120,3 +120,4 @@ test: cqactivate
 test: cqsanity
 test: cqsum
 test: cqavg
+test: cqcount
