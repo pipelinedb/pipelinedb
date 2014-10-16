@@ -129,9 +129,8 @@ void PrintStreamBuffer(StreamBuffer *buf);
 void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot);
 
 
-void OwnStreamBufferLatch();
-void ResetStreamBufferLatch();
-void WaitOnStreamBufferLatch();
-void SetStreamBufferLatch();
+void ResetStreamBufferLatch(int32 id);
+void WaitOnStreamBufferLatch(int32 id);
+void SetStreamBufferLatch(int32 id);
 //void InitStreamBufferLatch();
 #endif
