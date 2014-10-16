@@ -15,12 +15,14 @@
 #include "catalog/indexing.h"
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
+#include "commands/pipelinecmds.h"
 #include "libpq/libpq.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqplan.h"
 #include "pipeline/cqrun.h"
+#include "pipeline/cqslidingwindow.h"
 #include "pipeline/decode.h"
 #include "postmaster/bgworker.h"
 #include "storage/pmsignal.h"
@@ -95,7 +97,7 @@ get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 
 	/* Do we need to garbage collect tuples for this CQ? */
-	gc_expr = GetSlidingWindowMatchExpr(selectstmt, NULL);
+	gc_expr = GetSlidingWindowExpr(selectstmt, NULL);
 
 	if (gc_expr == NULL)
 		return NULL;
