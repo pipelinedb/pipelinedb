@@ -169,11 +169,12 @@ View definition:
   GROUP BY cqcreate6_pdb.key;
 
 \d+ cqcreate6_pdb;
-                                    Table "public.cqcreate6_pdb"
-      Column       |            Type             | Modifiers | Storage  | Stats target | Description 
--------------------+-----------------------------+-----------+----------+--------------+-------------
- key               | text(0)                     |           | extended |              | 
- arrival_timestamp | timestamp(0) with time zone |           | plain    |              | 
+                                   Table "public.cqcreate6_pdb"
+      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+--------------+-------------
+ count             | bigint                   |           | plain    |              | 
+ key               | text(0)                  |           | extended |              | 
+ arrival_timestamp | timestamp with time zone |           | plain    |              | 
 
 -- AVG needs a combine state column
 CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS avg_col FROM stream GROUP BY key;

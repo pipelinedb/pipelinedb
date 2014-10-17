@@ -129,8 +129,14 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 		TargetEntry *te = (TargetEntry *) lfirst(lc);
 		Expr *expr = (Expr *) te->expr;
 		TargetEntry *toappend = te;
-		char *origresname = pstrdup(toappend->resname);
+		char *origresname;
 		TargetEntry *storete = NULL;
+
+		/* Ignore junk columns from the targetlist */
+		if (te->resjunk)
+			continue;
+
+		origresname = pstrdup(toappend->resname);
 
 		if (IsA(expr, Aggref))
 		{
@@ -196,7 +202,7 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 	if (list_length(targetlist) != matdesc->natts)
 		elog(ERROR, "continuous query target list is inconsistent with materialization table schema");
 
-	for (i=0; i<matdesc->natts; i++)
+	for (i = 0; i < matdesc->natts; i++)
 	{
 		TargetEntry *te = list_nth(targetlist, i);
 		if (strcmp(te->resname, NameStr(matdesc->attrs[i]->attname)) != 0)
