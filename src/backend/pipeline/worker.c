@@ -29,7 +29,7 @@
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 #include "storage/proc.h"
-
+#include "pgstat.h"
 extern StreamBuffer *GlobalStreamBuffer;
 
 /*
@@ -120,7 +120,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			curtime = time(NULL);
 			if ((uint32)(curtime - last_process_time) > EMPTY_THRESHOLD)
 			{
+				pgstat_report_activity(STATE_WORKER_WAIT_ON_LATCH,queryDesc->sourceText);
 				WaitOnStreamBufferLatch(cq_id);
+				pgstat_report_activity(STATE_WORKER_CONTINUE,queryDesc->sourceText);
 			}
 			else
 			{
@@ -143,10 +145,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		MemoryContextSwitchTo(oldcontext);
 
 		CurrentResourceOwner = save;
-		/*
-		 * If we didn't see any new tuples, sleep briefly to save cycles
-		 */
-
 		if (estate->es_processed != 0)
 		{
 			/* 

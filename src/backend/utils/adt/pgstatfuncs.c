@@ -699,6 +699,12 @@ pg_stat_get_activity(PG_FUNCTION_ARGS)
 				case STATE_DISABLED:
 					values[4] = CStringGetTextDatum("disabled");
 					break;
+				case STATE_WORKER_WAIT_ON_LATCH:
+					values[4] = CStringGetTextDatum("worker waiting on latch");
+					break;
+				case STATE_WORKER_CONTINUE:
+					values[4] = CStringGetTextDatum("worker latch unblocked");
+					break;
 				case STATE_UNDEFINED:
 					nulls[4] = true;
 					break;

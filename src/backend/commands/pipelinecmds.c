@@ -431,7 +431,8 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id,false);
-
+		/* This should be a good place to release the waiting latch on the worker */
+		SetStreamBufferLatch(state.id); 
 		/*
 		 * Block till all the processes in the group have terminated
 		 * and remove the CVMetadata entry.
