@@ -29,7 +29,6 @@ StreamBuffer *GlobalStreamBuffer;
 
 /* Maximum size in blocks of the global stream buffer */
 int StreamBufferBlocks;
-extern int max_worker_processes;
 
 #define BITMAPSET_SIZE(nwords)	\
 	(offsetof(Bitmapset, words) + (nwords) * sizeof(bitmapword))
@@ -186,7 +185,6 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	memcpy(result->readby, bms, BITMAPSET_SIZE(bms->nwords));
 	pos += BITMAPSET_SIZE(bms->nwords);
 
-	
 	result->len = size;
 	result->nextoffset = offset;
 
@@ -232,7 +230,6 @@ AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, S
 	char *prev = *buf->pos;
 
 	sbs = alloc_slot(stream, encoding, buf, ev);
-
 
 	if (DebugPrintStreamBuffer)
 	{
@@ -284,7 +281,6 @@ InitGlobalStreamBuffer(void)
 {
 	bool found;
 	Size size = StreamBufferShmemSize();
-
 	Size headersize = MAXALIGN(sizeof(StreamBuffer)); 
 
 	LWLockAcquire(StreamBufferAppendLock, LW_EXCLUSIVE);
@@ -316,7 +312,6 @@ InitGlobalStreamBuffer(void)
 
 		GlobalStreamBuffer->update = ShmemAlloc(sizeof(bool));
 		*GlobalStreamBuffer->update = false;
-
 		GlobalStreamBuffer->empty = true;
 	}
 

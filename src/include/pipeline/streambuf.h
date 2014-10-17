@@ -93,7 +93,7 @@ typedef struct StreamBuffer
 	bool empty;
 	slock_t *mutex;
 
-/*
+	/*
 	 * Used by other procs to tell the StreamBuffer that something about the environment
 	 * has changed and it needs to update its information
 	 */

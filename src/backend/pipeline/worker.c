@@ -30,6 +30,7 @@
 #include "utils/timestamp.h"
 #include "storage/proc.h"
 #include "pgstat.h"
+
 extern StreamBuffer *GlobalStreamBuffer;
 
 /*
@@ -103,6 +104,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	 * to a process that fails to launch properly.
 	 */
 	NotifyUpdateGlobalStreamBuffer();
+
 	CurrentResourceOwner = save;
 	/* XXX (jay)Should be able to copy pointers and maintain an array of pointers instead
 	   of an array of latches. This somehow does not work as expected and autovacuum
@@ -135,7 +137,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 		CurrentResourceOwner = owner;
-		
+
 		/*
 		 * Run plan on a microbatch
 		 */
