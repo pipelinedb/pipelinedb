@@ -196,6 +196,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	*buf->last = pos;
 
 	SpinLockInit(&result->mutex);
+
 	/* 
 	 * Stream event appended, now signal workers waiting on this stream
 	 * only if the buffer went from empty to not
@@ -465,11 +466,12 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 	SpinLockAcquire(&slot->mutex);
 
 	/* 
-	   * If the number of readers for this slot are 0
-	   * AND the sequence number matches the global
-	   * slot counter indicating that the stream buffer
-	   * is truly empty at the time of this unpin event
-	   * Mark the flag in the StreamBuffer.
+	 * If there is only 1 reader reading the slot AND
+	 * The reader unpinning the slot Is the above reader AND
+	 * the slot being Unpinned was the next one in line to be clobbered 
+	 *   Then This is the last slot being deleted in the buffer
+	 *   Which also meant that after the delete happens, the buffer is empty
+	 *   so set the flag
 	 */
 	if ((bms_membership(bms) == BMS_SINGLETON) &&
 		(bms_is_member(reader->queryid, bms)) &&

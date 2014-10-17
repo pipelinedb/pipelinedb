@@ -434,6 +434,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 
 		/* This should be a good place to release the waiting latch on the worker */
 		SetStreamBufferLatch(state.id); 
+
 		/*
 		 * Block till all the processes in the group have terminated
 		 * and remove the CVMetadata entry.
