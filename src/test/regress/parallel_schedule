@@ -121,3 +121,4 @@ test: cqsanity
 test: cqsum
 test: cqavg
 test: cqcount
+test: cqlatch

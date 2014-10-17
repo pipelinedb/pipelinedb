@@ -28,7 +28,11 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
+#include "storage/proc.h"
+#include "pgstat.h"
+#include "utils/timestamp.h"
 
+extern StreamBuffer *GlobalStreamBuffer;
 
 /*
  * ContinuousQueryWorkerStartup
@@ -94,6 +98,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	IncrementProcessGroupCount(cq_id);
 
+
 	/*
 	 * We wait until we're up and running before telling the stream buffer that
 	 * there is a new reader in order to avoid having any events being assigned
@@ -102,9 +107,33 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	NotifyUpdateGlobalStreamBuffer();
 
 	CurrentResourceOwner = save;
+	/* XXX (jay)Should be able to copy pointers and maintain an array of pointers instead
+	   of an array of latches. This somehow does not work as expected and autovacuum
+	   seems to be obliterating the new shared array. Make this better.
+	 */
+	memcpy(&GlobalStreamBuffer->procLatch[cq_id], &MyProc->procLatch, sizeof(Latch));
 
+	TimestampTz curtime = GetCurrentTimestamp();
+	TimestampTz last_process_time = GetCurrentTimestamp();
 	for (;;)
 	{
+		ResetStreamBufferLatch(cq_id);
+		if (GlobalStreamBuffer->empty)
+		{
+			curtime = GetCurrentTimestamp();
+			if (TimestampDifferenceExceeds(last_process_time, curtime, EMPTY_THRESHOLD * 1000))
+			{
+				pgstat_report_activity(STATE_WORKER_WAIT_ON_LATCH,queryDesc->sourceText);
+				WaitOnStreamBufferLatch(cq_id);
+				pgstat_report_activity(STATE_WORKER_CONTINUE,queryDesc->sourceText);
+			}
+			else
+			{
+				pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
+			}
+		}
+
+
 		TopTransactionContext = runcontext;
 
 		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
@@ -119,13 +148,17 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		MemoryContextSwitchTo(oldcontext);
 
 		CurrentResourceOwner = save;
-
-		/*
-		 * If we didn't see any new tuples, sleep briefly to save cycles
-		 */
-		if (estate->es_processed == 0)
-			pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
-
+		if (estate->es_processed != 0)
+		{
+			/* 
+			 * If the CV query is such that the select does not return any tuples
+			 * ex: select id where id=99; and id=99 does not exist, then this reset
+			 * will fail. What will happen is that the worker will block at the latch for every
+			 * allocated slot, TILL a cv returns a non-zero tuple, at which point
+			 * the worker will resume a simple sleep for the threshold time.
+			 */
+			last_process_time = GetCurrentTimestamp();
+		}
 		estate->es_processed = 0;
 
 		/* Check the shared metadata to see if the CV has been deactivated */

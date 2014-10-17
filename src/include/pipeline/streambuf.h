@@ -16,6 +16,7 @@
 #include "pipeline/stream.h"
 #include "storage/s_lock.h"
 #include "storage/shmem.h"
+#include "storage/latch.h"
 
 #define BufferEnd(buf) ((buf)->start + (buf)->capacity)
 #define BufferOffset(buf, ptr) ((int) ((char *) (ptr) - (buf)->start))
@@ -31,6 +32,8 @@
 #define IsNewAppendCycle(buf) ((*buf->prev) == NULL)
 #define MustEvict(buf) (!IsNewAppendCycle(buf) && (*buf->prev)->nextoffset != NO_SLOTS_FOLLOW)
 
+/* Number of seconds the stream buffer can be empty before workers go to sleep */
+#define EMPTY_THRESHOLD 10
 
 extern bool DebugPrintStreamBuffer;
 
@@ -86,6 +89,8 @@ typedef struct StreamBuffer
 	StreamBufferSlot **tail;
 	char **last;
 	int writers;
+	Latch procLatch[512];	
+	bool empty;
 	slock_t *mutex;
 
 	/*
@@ -123,4 +128,8 @@ void ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, int intervalms);
 void PrintStreamBuffer(StreamBuffer *buf);
 void wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot);
 
+
+void ResetStreamBufferLatch(int32 id);
+void WaitOnStreamBufferLatch(int32 id);
+void SetStreamBufferLatch(int32 id);
 #endif
