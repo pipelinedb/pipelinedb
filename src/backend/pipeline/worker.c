@@ -30,6 +30,7 @@
 #include "utils/timestamp.h"
 #include "storage/proc.h"
 #include "pgstat.h"
+#include "utils/timestamp.h"
 
 extern StreamBuffer *GlobalStreamBuffer;
 
@@ -112,15 +113,15 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	 */
 	memcpy(&GlobalStreamBuffer->procLatch[cq_id], &MyProc->procLatch, sizeof(Latch));
 
-	time_t last_process_time = time(NULL);
-	time_t curtime;
+	TimestampTz curtime = GetCurrentTimestamp();
+	TimestampTz last_process_time = GetCurrentTimestamp();
 	for (;;)
 	{
 		ResetStreamBufferLatch(cq_id);
 		if (GlobalStreamBuffer->empty)
 		{
-			curtime = time(NULL);
-			if ((uint32)(curtime - last_process_time) > EMPTY_THRESHOLD)
+			curtime = GetCurrentTimestamp();
+			if (TimestampDifferenceExceeds(last_process_time, curtime, EMPTY_THRESHOLD * 1000))
 			{
 				pgstat_report_activity(STATE_WORKER_WAIT_ON_LATCH,queryDesc->sourceText);
 				WaitOnStreamBufferLatch(cq_id);
@@ -156,7 +157,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			 * allocated slot, TILL a cv returns a non-zero tuple, at which point
 			 * the worker will resume a simple sleep for the threshold time.
 			 */
-			last_process_time = time(NULL);
+			last_process_time = GetCurrentTimestamp();
 		}
 		estate->es_processed = 0;
 
