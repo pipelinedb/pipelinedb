@@ -50,7 +50,7 @@ typedef struct RunCQArgs
 } RunCQArgs;
 
 static PlannedStmt *
-get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewState *state)
+get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewState *state, bool is_combine)
 {
 	List		*querytree_list;
 	List		*plantree_list;
@@ -62,12 +62,9 @@ get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewStat
 
 	query = linitial(querytree_list);
 
-	/*
-	 * TODO(usmanm): This is a hack needed for get_gc_plan to work.
-	 * Figure out this shit.
-	 */
 	if (IsA(node, SelectStmt))
 		query->is_continuous = true;
+	query->is_combine = is_combine;
 	query->cq_target = makeRangeVar(NULL, cvname, -1);
 	query->cq_state = state;
 
@@ -106,7 +103,7 @@ get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	delete_stmt->relation = makeRangeVar(NULL, GetCQMatRelName(cvname), -1);
 	delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, gc_expr, -1);
 
-	return get_plan_from_stmt(cvname, (Node *) delete_stmt, NULL, state);
+	return get_plan_from_stmt(cvname, (Node *) delete_stmt, NULL, state, false);
 }
 
 static PlannedStmt*
@@ -122,22 +119,24 @@ get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	selectstmt = GetSelectStmtForCQWorker(selectstmt);
 	selectstmt->forContinuousView = true;
 
-	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state);
+	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, false);
 }
 
 static PlannedStmt*
-get_plan(char *cvname, const char *sql, ContinuousViewState *state)
+get_combiner_plan(char *cvname, const char *sql, ContinuousViewState *state)
 {
 	List		*parsetree_list;
-	SelectStmt	*selectparse;
+	SelectStmt	*selectstmt;
+	PlannedStmt *plannedstmt;
 
 	parsetree_list = pg_parse_query(sql);
 	Assert(list_length(parsetree_list) == 1);
 
-	selectparse = (SelectStmt *) linitial(parsetree_list);
-	selectparse->forContinuousView = true;
+	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	selectstmt = GetSelectStmtForCQWorker(selectstmt);
+	selectstmt->forContinuousView = true;
 
-	return get_plan_from_stmt(cvname, (Node *) selectparse, sql, state);
+	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, true);
 }
 
 /*
@@ -187,7 +186,7 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	switch(state.ptype)
 	{
 		case CQCombiner:
-			plan = get_plan(cvname, sql, &state);
+			plan = get_combiner_plan(cvname, sql, &state);
 			break;
 		case CQWorker:
 			plan = get_worker_plan(cvname, sql, &state);

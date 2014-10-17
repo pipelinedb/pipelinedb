@@ -193,7 +193,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	oldcontext = MemoryContextSwitchTo(runctx);
 
 	store = tuplestore_begin_heap(true, true, work_mem);
-	combineplan = GetCombinePlan(rv, store, &query, &workerdesc);
+	combineplan = GetCombinePlan(cvname, queryDesc->plannedstmt, store, &query, &workerdesc);
 	slot = MakeSingleTupleTableSlot(workerdesc);
 
 	MemoryContextSwitchTo(oldcontext);
@@ -262,26 +262,33 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
  * Retrieves a the cached combine plan for a continuous view, creating it if necessary
  */
 PlannedStmt *
-GetCombinePlan(RangeVar *cvrel, Tuplestorestate *store, Query **query, TupleDesc *desc)
+GetCombinePlan(char *cvname, PlannedStmt *plan, Tuplestorestate *store, Query **query, TupleDesc *desc)
 {
-	char *query_string;
-	Node	   *raw_parse_tree;
-	List	   *parsetree_list;
-	List		 *query_list;
-	Query 	 *q;
-	PlannedStmt* plan;
+	char	*query_string;
+	List	*parsetree_list;
+	List	*query_list;
+	SelectStmt *stmt;
+	Query	*q;
 	TuplestoreScan *scan;
 
-	query_string = GetQueryString(cvrel->relname, true);
+	/*
+	 * TODO(usmanm/derekjn): Right now we use the Query node
+	 * to figure out the merge attributes (essentially
+	 * columns being grouped on). We should NOT do this
+	 * because it requires us to do this whole parsing shit
+	 * again. Instead pull them out of Plan->Agg->grpColIfx.
+	 */
+	query_string = GetQueryString(cvname, true);
 	parsetree_list = pg_parse_query(query_string);
 
 	/* CVs should only have a single query */
 	Assert(parsetree_list->length == 1);
 
-	raw_parse_tree = (Node *) linitial(parsetree_list);
-	((SelectStmt *) raw_parse_tree)->forContinuousView = true;
+	stmt = (SelectStmt *) linitial(parsetree_list);
+	stmt = GetSelectStmtForCQWorker(stmt);
+	stmt->forContinuousView = true;
 
-	query_list = pg_analyze_and_rewrite(raw_parse_tree, query_string, NULL, 0);
+	query_list = pg_analyze_and_rewrite((Node *) stmt, query_string, NULL, 0);
 
 	/* CVs should only have a single query */
 	Assert(query_list->length == 1);
@@ -290,12 +297,11 @@ GetCombinePlan(RangeVar *cvrel, Tuplestorestate *store, Query **query, TupleDesc
 	q->is_combine = true;
 	q->is_continuous = false;
 
-	plan = pg_plan_query(q, 0, NULL);
-	plan->cq_state = palloc0(sizeof(ContinuousViewState));
-	plan->cq_state->ptype = CQCombiner;
-	plan->cq_target = cvrel;
-
-	SetCQPlanRefs(plan);
+	/*
+	 * Mark plan as not continuous now because we'll be repeatedly
+	 * executing it in a new portal.
+	 */
+	plan->is_continuous = false;
 
 	if (IsA(plan->planTree, TuplestoreScan))
 		scan = (TuplestoreScan *) plan->planTree;
