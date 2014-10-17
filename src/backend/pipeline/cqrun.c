@@ -127,7 +127,6 @@ get_combiner_plan(char *cvname, const char *sql, ContinuousViewState *state)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
-	PlannedStmt *plannedstmt;
 
 	parsetree_list = pg_parse_query(sql);
 	Assert(list_length(parsetree_list) == 1);

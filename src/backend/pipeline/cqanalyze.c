@@ -245,7 +245,6 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 SelectStmt *
 GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
 {
-	Node		*match_expr;
 	List		*origTargetList = stmt->targetList;
 	ListCell	*lc;
 

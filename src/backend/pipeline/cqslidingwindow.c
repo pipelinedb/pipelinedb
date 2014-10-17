@@ -337,14 +337,13 @@ is_agg_func(Node *node)
 
 		pform = (Form_pg_proc) GETSTRUCT(ftup);
 		is_agg = pform->proisagg;
+		ReleaseSysCache(ftup);
 
 		if (is_agg)
 			break;
 
 		clist = clist->next;
 	}
-
-	ReleaseSysCache(ftup);
 
 	return is_agg;
 }
