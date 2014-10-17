@@ -476,7 +476,7 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 		(*(GlobalStreamBuffer->prev) == slot))
 	{
 		/* 
-		 *  XXX test atomicity of thie set
+		 *  XXX can we trust atomicity of this set
 		 */
 		GlobalStreamBuffer->empty = true;
 	}
