@@ -48,7 +48,8 @@ bool DebugSyncStreamInsert;
  * Appends a suffix to a string, ensuring that the result fits
  * in a NameData
  */
-static char *append_suffix(char *base, char *suffix)
+static char *
+append_suffix(char *base, char *suffix)
 {
 	char relname[NAMEDATALEN];
 
@@ -142,7 +143,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	CreateStmt *create_stmt;
 	ViewStmt *view_stmt;
 	Query *query;
-	RangeVar *relation;
+	RangeVar *mat_relation;
 	RangeVar *view;
 	List *tableElts = NIL;
 	List *tlist;
@@ -155,7 +156,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	SelectStmt *select_stmt;
 
 	view = stmt->into->rel;
-	relation = makeRangeVar(view->schemaname, GetCQMatRelName(view->relname), -1);
+	mat_relation = makeRangeVar(view->schemaname, GetCQMatRelName(view->relname), -1);
 
 	/*
 	 * Check if CV already exists?
@@ -240,7 +241,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Create the actual underlying materialzation relation.
 	 */
 	create_stmt = makeNode(CreateStmt);
-	create_stmt->relation = relation;
+	create_stmt->relation = mat_relation;
 	create_stmt->tableElts = tableElts;
 	create_stmt->tablespacename = stmt->into->tableSpaceName;
 	create_stmt->oncommit = stmt->into->onCommit;
@@ -271,7 +272,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 */
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
-	view_stmt->query = (Node *) GetSelectStmtForCQView(raw_select_stmt, relation);
+	view_stmt->query = (Node *) GetSelectStmtForCQView(raw_select_stmt, mat_relation);
 	DefineView(view_stmt, querystring);
 
 	/*

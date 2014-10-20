@@ -85,23 +85,16 @@ get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
-	Node		*gc_expr;
 	DeleteStmt	*delete_stmt;
 
 	parsetree_list = pg_parse_query(sql);
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	delete_stmt = GetDeleteStmtForGC(cvname, selectstmt);
 
-	/* Do we need to garbage collect tuples for this CQ? */
-	gc_expr = GetSlidingWindowExpr(selectstmt, NULL);
-
-	if (gc_expr == NULL)
+	if (delete_stmt == NULL)
 		return NULL;
-
-	delete_stmt = makeNode(DeleteStmt);
-	delete_stmt->relation = makeRangeVar(NULL, GetCQMatRelName(cvname), -1);
-	delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, gc_expr, -1);
 
 	return get_plan_from_stmt(cvname, (Node *) delete_stmt, NULL, state, false);
 }

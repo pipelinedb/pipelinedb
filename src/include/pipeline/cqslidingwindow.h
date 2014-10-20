@@ -22,4 +22,6 @@ SelectStmt *TransformSWSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel);
 bool IsSlidingWindowSelectStmt(SelectStmt *stmt);
 bool IsSlidingWindowContinuousView(RangeVar *cvname);
 
+DeleteStmt *GetDeleteStmtForGC(char *cvname, SelectStmt *stmt);
+
 #endif

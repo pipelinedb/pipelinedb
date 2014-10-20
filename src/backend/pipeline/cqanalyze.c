@@ -32,8 +32,6 @@
 #include "utils/builtins.h"
 #include "utils/syscache.h"
 
-#define CLOCK_TIMESTAMP "clock_timestamp"
-
 typedef struct CQAnalyzeContext
 {
 	ParseState *pstate;
@@ -249,12 +247,8 @@ GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
 	ListCell	*lc;
 
 	stmt = (SelectStmt *) copyObject(stmt);
+	stmt->forContinuousView = false;
 
-	/*
-	 * Is this a sliding window CQ? If so create a SELECT over
-	 * the materialization table that filters based on the
-	 * `matchExpr` rather than the original `whereClause`.
-	 */
 	if (IsSlidingWindowSelectStmt(stmt))
 	{
 		return TransformSWSelectStmtForCQView(stmt, cqrel);
@@ -286,6 +280,7 @@ GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
 
 		cref = makeNode(ColumnRef);
 		cref->fields = list_make1(makeString(colname));
+		cref->location = origRes->location;
 
 		res = makeNode(ResTarget);
 		res->name = NULL;
@@ -648,7 +643,7 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 			}
 		}
 
-		if (strcmp(colname, "arrival_timestamp") == 0)
+		if (strcmp(colname, ARRIVAL_TIMESTAMP) == 0)
 			needstype = false;
 
 		if (needstype && !hastype)
