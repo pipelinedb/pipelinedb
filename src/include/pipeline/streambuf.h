@@ -32,12 +32,11 @@
 #define IsNewAppendCycle(buf) ((*buf->prev) == NULL)
 #define MustEvict(buf) (!IsNewAppendCycle(buf) && (*buf->prev)->nextoffset != NO_SLOTS_FOLLOW)
 
-/* Number of seconds the stream buffer can be empty before workers go to sleep */
-#define EMPTY_THRESHOLD 10
-
 extern bool DebugPrintStreamBuffer;
 
 extern int StreamBufferBlocks;
+
+uint32 EmptyStreamBufferWaitTime;
 
 /* Wraps a physical event and the queries that still need to read it */
 typedef struct StreamBufferSlot
