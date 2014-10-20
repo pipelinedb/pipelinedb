@@ -2587,6 +2587,17 @@ static struct config_int ConfigureNamesInt[] =
 		NULL, NULL, NULL
 	},
 
+	{
+		{"empty_stream_buffer_wait_time", PGC_BACKEND, RESOURCES_MEM,
+			gettext_noop("Wait time in seconds that the worker waits for on an empty buffer before going to sleep."),
+			NULL,
+			GUC_UNIT_S
+		},
+		&EmptyStreamBufferWaitTime,
+		2, 0, INT_MAX,
+		NULL, NULL, NULL
+	},
+
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, 0, 0, 0, NULL, NULL, NULL

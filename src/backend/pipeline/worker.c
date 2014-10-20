@@ -33,6 +33,8 @@
 #include "utils/timestamp.h"
 
 extern StreamBuffer *GlobalStreamBuffer;
+extern uint32 EmptyStreamBufferWaitTime;
+
 
 /*
  * ContinuousQueryWorkerStartup
@@ -121,7 +123,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		if (GlobalStreamBuffer->empty)
 		{
 			curtime = GetCurrentTimestamp();
-			if (TimestampDifferenceExceeds(last_process_time, curtime, EMPTY_THRESHOLD * 1000))
+			if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
 			{
 				pgstat_report_activity(STATE_WORKER_WAIT_ON_LATCH,queryDesc->sourceText);
 				WaitOnStreamBufferLatch(cq_id);
