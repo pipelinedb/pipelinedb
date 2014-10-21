@@ -141,6 +141,9 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 	return true;
 }
 
+/*
+ * CreateCombinerDesc
+ */
 CombinerDesc *
 CreateCombinerDesc(QueryDesc *query)
 {
@@ -159,6 +162,302 @@ CreateCombinerDesc(QueryDesc *query)
 	return desc;
 }
 
+/*
+ * prepare_combine_plan
+ *
+ * Retrieves a the cached combine plan for a continuous view, creating it if necessary
+ */
+static PlannedStmt *
+prepare_combine_plan(PlannedStmt *plan, Tuplestorestate *store, TupleDesc *desc)
+{
+	TuplestoreScan *scan;
+
+	/*
+	 * Mark plan as not continuous now because we'll be repeatedly
+	 * executing it in a new portal.
+	 */
+	plan->is_continuous = false;
+
+	if (IsA(plan->planTree, TuplestoreScan))
+		scan = (TuplestoreScan *) plan->planTree;
+	else if (IsA(plan->planTree->lefttree, TuplestoreScan))
+		scan = (TuplestoreScan *) plan->planTree->lefttree;
+	else
+		elog(ERROR, "couldn't find TuplestoreScan node");
+
+	scan->store = store;
+
+	*desc = ExecTypeFromTL(((Plan *) scan)->targetlist, false);
+
+	return plan;
+}
+
+/*
+ * get_tuples_to_combine_with
+ *
+ * Gets the plan for retrieving all of the existing tuples that are going
+ * to be combined with the incoming tuples
+ */
+static void
+get_tuples_to_combine_with(char *cvname, TupleDesc desc,
+		Tuplestorestate *incoming_merges, AttrNumber merge_attr,
+		TupleHashTable merge_targets)
+{
+	Node *raw_parse_tree;
+	List *parsetree_list;
+	List *query_list;
+	PlannedStmt *plan;
+	Query *query;
+	A_Expr *in_expr;
+	Node *where;
+	ColumnRef *cref;
+	List *constants = NIL;
+	SelectStmt *stmt;
+	Portal portal;
+	TupleTableSlot 	*slot;
+	ParseState *ps;
+	DestReceiver *dest;
+	char stmt_name[strlen(cvname) + 9 + 1];
+	char base_select[14 + strlen(cvname) + 1];
+	List *name = list_make1(makeString("="));
+	int incoming_size = 0;
+	HASH_SEQ_STATUS status;
+	HeapTupleEntry entry;
+
+	strcpy(stmt_name, cvname);
+	sprintf(base_select, "SELECT * FROM %s", cvname);
+
+	slot = MakeSingleTupleTableSlot(desc);
+	name = list_make1(makeString("="));
+	ps = make_parsestate(NULL);
+
+	dest = CreateDestReceiver(DestTupleTable);
+
+	parsetree_list = pg_parse_query(base_select);
+	Assert(parsetree_list->length == 1);
+
+	/*
+	 * We need to do this to populate the ParseState's p_varnamespace member
+	 */
+	stmt = (SelectStmt *) linitial(parsetree_list);
+	transformFromClause(ps, stmt->fromClause);
+
+	raw_parse_tree = (Node *) linitial(parsetree_list);
+	query_list = pg_analyze_and_rewrite(raw_parse_tree, base_select, NULL, 0);
+
+	Assert(query_list->length == 1);
+	query = (Query *) linitial(query_list);
+
+	if (merge_targets->numCols > 0)
+	{
+		Form_pg_attribute attr = desc->attrs[merge_attr - 1];
+		Type typeinfo;
+		int length;
+
+		if (merge_targets->numCols > 1)
+			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", merge_targets->numCols);
+
+		typeinfo = typeidType(attr->atttypid);
+		length = typeLen(typeinfo);
+		ReleaseSysCache((HeapTuple) typeinfo);
+
+		/*
+		 * We need to extract all of the merge column values from our incoming merge
+		 * tuples so we can use them in an IN clause when retrieving existing tuples
+		 * from the continuous view
+		 */
+		foreach_tuple(slot, incoming_merges)
+		{
+			bool isnull;
+			Datum d = slot_getattr(slot, merge_attr, &isnull);
+			Const *c = makeConst(attr->atttypid, attr->atttypmod, 0, length, d, isnull, true);
+
+			constants = lcons(c, constants);
+			incoming_size++;
+		}
+
+		/*
+		 * Now construct an IN clause from the List of merge column values we just built
+		 */
+		cref = makeNode(ColumnRef);
+		cref->fields = list_make1(makeString(attr->attname.data));
+		cref->location = -1;
+
+		in_expr = makeA_Expr(AEXPR_IN, name,
+				   (Node *) cref, (Node *) constants, -1);
+
+		/*
+		 * This query is now of the form:
+		 *
+		 * SELECT * FROM <continuous view> WHERE <merge column> IN (incoming merge column values)
+		 */
+		where = transformAExprIn(ps, in_expr);
+		query->jointree = makeFromExpr(query->jointree->fromlist, where);
+	}
+
+	plan = pg_plan_query(query, 0, NULL);
+
+	/*
+	 * Now run the query that retrieves existing tuples to merge this merge request with.
+	 * This query outputs to the tuplestore currently holding the incoming merge tuples.
+	 */
+	portal = CreatePortal("__merge_retrieval__", true, true);
+	portal->visible = false;
+
+	PortalDefineQuery(portal,
+					  NULL,
+					  NULL,
+					  "SELECT",
+					  list_make1(plan),
+					  NULL);
+
+	SetTupleTableDestReceiverParams(dest, merge_targets, CacheMemoryContext, true);
+
+	PortalStart(portal, NULL, 0, GetActiveSnapshot());
+
+	(void) PortalRun(portal,
+					 FETCH_ALL,
+					 true,
+					 dest,
+					 dest,
+					 NULL);
+
+	/*
+	 * Now add the merge targets that already exist in the continuous view's table
+	 * to the input of the final merge query
+	 */
+	hash_seq_init(&status, merge_targets->hashtab);
+	while ((entry = (HeapTupleEntry) hash_seq_search(&status)) != NULL)
+	{
+		tuplestore_puttuple(incoming_merges, entry->tuple);
+	}
+}
+
+/*
+ * sync_combine
+ *
+ * Writes the combine results to a continuous view's table, performing
+ * UPDATES or INSERTS as necessary
+ */
+static void
+sync_combine(char *cvname, Tuplestorestate *results,
+		TupleTableSlot *slot, AttrNumber merge_attr, TupleHashTable merge_targets)
+{
+	Relation rel = heap_openrv(makeRangeVar(NULL, cvname, -1), RowExclusiveLock);
+	bool *replace_all = palloc(sizeof(bool) * slot->tts_tupleDescriptor->natts);
+	MemSet(replace_all, true, sizeof(replace_all));
+
+	foreach_tuple(slot, results)
+	{
+		HeapTupleEntry update = NULL;
+		slot_getallattrs(slot);
+
+		if (merge_targets)
+			update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
+
+		if (update)
+		{
+			/*
+			 * The slot has the updated values, so store them in the updatable physical tuple
+			 */
+			HeapTuple updated = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
+					slot->tts_values, slot->tts_isnull, replace_all);
+
+			simple_heap_update(rel, &update->tuple->t_self, updated);
+		}
+		else
+		{
+			/* No existing tuple found, so it's an INSERT */
+			heap_insert(rel, slot->tts_tuple, GetCurrentCommandId(true), 0, NULL);
+		}
+	}
+	relation_close(rel, RowExclusiveLock);
+}
+
+/*
+ * combine
+ *
+ * Combines partial results of a continuous query with existing rows in the continuous view
+ */
+static void
+combine(PlannedStmt *plan, TupleDesc cvdesc,
+		Tuplestorestate *store, MemoryContext tmpctx)
+{
+	TupleTableSlot *slot;
+	Portal portal;
+	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
+	Tuplestorestate *merge_output = NULL;
+	AttrNumber merge_attr = -1;
+	AttrNumber *merge_attrs = NULL;
+	Oid *merge_attr_ops;
+	TupleHashTable merge_targets = NULL;
+	FmgrInfo *eq_funcs;
+	FmgrInfo *hash_funcs;
+	int num_merge_attrs = 0;
+	int num_buckets = 1;
+	char *cvname = GetCQMatRelName(plan->cq_target->relname);
+	Agg *agg = NULL;
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	slot = MakeSingleTupleTableSlot(cvdesc);
+
+	if (IsA(plan->planTree, Agg))
+	{
+		agg = (Agg *) plan->planTree;
+		merge_attrs = agg->grpColIdx;
+		num_merge_attrs = agg->numGroups;
+		merge_attr_ops = agg->grpOperators;
+	}
+
+	if (agg != NULL)
+	{
+		if (num_merge_attrs > 1)
+			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", num_merge_attrs);
+		if (num_merge_attrs > 0)
+			merge_attr = merge_attrs[0];
+		execTuplesHashPrepare(num_merge_attrs, merge_attr_ops, &eq_funcs, &hash_funcs);
+		num_buckets = 1000;
+		/* XXX(usmanm): Shouldn't num_buckets be the same as num_merge_attrs? */
+		merge_targets = BuildTupleHashTable(num_merge_attrs, merge_attrs, eq_funcs, hash_funcs, num_buckets,
+				sizeof(HeapTupleEntryData), CacheMemoryContext, tmpctx);
+
+		get_tuples_to_combine_with(cvname, cvdesc, store, merge_attr, merge_targets);
+	}
+
+	portal = CreatePortal("__merge__", true, true);
+	portal->visible = false;
+
+	PortalDefineQuery(portal,
+					  NULL,
+					  NULL,
+					  "SELECT",
+					  list_make1(plan),
+					  NULL);
+
+	merge_output = tuplestore_begin_heap(true, true, work_mem);
+	SetTuplestoreDestReceiverParams(dest, merge_output, PortalGetHeapMemory(portal), true);
+
+	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, GetActiveSnapshot());
+
+	(void) PortalRun(portal,
+					 FETCH_ALL,
+					 true,
+					 dest,
+					 dest,
+					 NULL);
+
+	PopActiveSnapshot();
+
+	sync_combine(cvname, merge_output, slot, merge_attr, merge_targets);
+
+	if (merge_targets)
+		hash_destroy(merge_targets->hashtab);
+}
+
+/*
+ * ContinuousQueryCombinerRun
+ */
 void
 ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
 {
@@ -209,7 +508,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	oldcontext = MemoryContextSwitchTo(runctx);
 
 	store = tuplestore_begin_heap(true, true, work_mem);
-	combineplan = GetCombinePlan(queryDesc->plannedstmt, store, &workerdesc);
+	combineplan = prepare_combine_plan(queryDesc->plannedstmt, store, &workerdesc);
 	slot = MakeSingleTupleTableSlot(workerdesc);
 
 	MemoryContextSwitchTo(oldcontext);
@@ -249,7 +548,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			StartTransactionCommand();
 
 			oldcontext = MemoryContextSwitchTo(combinectx);
-			Combine(combineplan, workerdesc, store, tmpctx);
+			combine(combineplan, workerdesc, store, tmpctx);
 			MemoryContextSwitchTo(oldcontext);
 
 			CommitTransactionCommand();
@@ -277,289 +576,4 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	DecrementProcessGroupCount(cq_id);
 
 	CurrentResourceOwner = save;
-}
-
-/*
- * GetCombinePlan
- *
- * Retrieves a the cached combine plan for a continuous view, creating it if necessary
- */
-PlannedStmt *
-GetCombinePlan(PlannedStmt *plan, Tuplestorestate *store, TupleDesc *desc)
-{
-	TuplestoreScan *scan;
-
-	/*
-	 * Mark plan as not continuous now because we'll be repeatedly
-	 * executing it in a new portal.
-	 */
-	plan->is_continuous = false;
-
-	if (IsA(plan->planTree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree;
-	else if (IsA(plan->planTree->lefttree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree->lefttree;
-
-	scan->store = store;
-
-	*desc = ExecTypeFromTL(((Plan *) scan)->targetlist, false);
-
-	return plan;
-}
-
-/*
- * GetTuplesToCombineWith
- *
- * Gets the plan for retrieving all of the existing tuples that are going
- * to be combined with the incoming tuples
- */
-void
-GetTuplesToCombineWith(char *cvname, TupleDesc desc,
-		Tuplestorestate *incoming_merges, AttrNumber merge_attr,
-		TupleHashTable merge_targets)
-{
-	Node *raw_parse_tree;
-	List *parsetree_list;
-	List *query_list;
-	PlannedStmt *plan;
-	Query *query;
-	A_Expr *in_expr;
-	Node *where;
-	ColumnRef *cref;
-	List *constants = NIL;
-	SelectStmt *stmt;
-	Portal portal;
-	TupleTableSlot 	*slot;
-	ParseState *ps;
-	DestReceiver *dest;
-	Type typeinfo;
-	int length;
-	char stmt_name[strlen(cvname) + 9 + 1];
-	char base_select[14 + strlen(cvname) + 1];
-	Form_pg_attribute attr = desc->attrs[merge_attr - 1];
-	List *name = list_make1(makeString("="));
-	int incoming_size = 0;
-	HASH_SEQ_STATUS status;
-	HeapTupleEntry entry;
-
-	strcpy(stmt_name, cvname);
-	sprintf(base_select, "SELECT * FROM %s", cvname);
-
-	slot = MakeSingleTupleTableSlot(desc);
-	name = list_make1(makeString("="));
-	ps = make_parsestate(NULL);
-
-	dest = CreateDestReceiver(DestTupleTable);
-
-	parsetree_list = pg_parse_query(base_select);
-	Assert(parsetree_list->length == 1);
-
-	/*
-	 * We need to do this to populate the ParseState's p_varnamespace member
-	 */
-	stmt = (SelectStmt *) linitial(parsetree_list);
-	transformFromClause(ps, stmt->fromClause);
-
-	raw_parse_tree = (Node *) linitial(parsetree_list);
-	query_list = pg_analyze_and_rewrite(raw_parse_tree, base_select, NULL, 0);
-
-	Assert(query_list->length == 1);
-	query = (Query *) linitial(query_list);
-
-	typeinfo = typeidType(attr->atttypid);
-	length = typeLen(typeinfo);
-	ReleaseSysCache((HeapTuple) typeinfo);
-
-	/*
-	 * We need to extract all of the merge column values from our incoming merge
-	 * tuples so we can use them in an IN clause when retrieving existing tuples
-	 * from the continuous view
-	 */
-	foreach_tuple(slot, incoming_merges)
-	{
-		bool isnull;
-		Datum d = slot_getattr(slot, merge_attr, &isnull);
-		Const *c = makeConst(attr->atttypid, attr->atttypmod, 0, length, d, isnull, true);
-
-		constants = lcons(c, constants);
-		incoming_size++;
-	}
-
-	/*
-	 * Now construct an IN clause from the List of merge column values we just built
-	 */
-	cref = makeNode(ColumnRef);
-	cref->fields = list_make1(makeString(attr->attname.data));
-	cref->location = -1;
-
-	in_expr = makeA_Expr(AEXPR_IN, name,
-			   (Node *) cref, (Node *) constants, -1);
-
-	/*
-	 * This query is now of the form:
-	 *
-	 * SELECT * FROM <continuous view> WHERE <merge column> IN (incoming merge column values)
-	 */
-	if (merge_targets->numCols > 0)
-	{
-		where = transformAExprIn(ps, in_expr);
-		query->jointree = makeFromExpr(query->jointree->fromlist, where);
-	}
-
-	plan = pg_plan_query(query, 0, NULL);
-
-	/*
-	 * Now run the query that retrieves existing tuples to merge this merge request with.
-	 * This query outputs to the tuplestore currently holding the incoming merge tuples.
-	 */
-	portal = CreatePortal("__merge_retrieval__", true, true);
-	portal->visible = false;
-
-	PortalDefineQuery(portal,
-					  NULL,
-					  NULL,
-					  "SELECT",
-					  list_make1(plan),
-					  NULL);
-
-	SetTupleTableDestReceiverParams(dest, merge_targets, CacheMemoryContext, true);
-
-	PortalStart(portal, NULL, 0, GetActiveSnapshot());
-
-	(void) PortalRun(portal,
-					 FETCH_ALL,
-					 true,
-					 dest,
-					 dest,
-					 NULL);
-
-	/*
-	 * Now add the merge targets that already exist in the continuous view's table
-	 * to the input of the final merge query
-	 */
-	hash_seq_init(&status, merge_targets->hashtab);
-	while ((entry = (HeapTupleEntry) hash_seq_search(&status)) != NULL)
-	{
-		tuplestore_puttuple(incoming_merges, entry->tuple);
-	}
-}
-
-/*
- * SyncCombine
- *
- * Writes the combine results to a continuous view's table, performing
- * UPDATES or INSERTS as necessary
- */
-void
-SyncCombine(char *cvname, Tuplestorestate *results,
-		TupleTableSlot *slot, AttrNumber merge_attr, TupleHashTable merge_targets)
-{
-	Relation rel = heap_openrv(makeRangeVar(NULL, cvname, -1), RowExclusiveLock);
-	bool *replace_all = palloc(sizeof(bool) * slot->tts_tupleDescriptor->natts);
-	MemSet(replace_all, true, sizeof(replace_all));
-
-	foreach_tuple(slot, results)
-	{
-		HeapTupleEntry update = NULL;
-		slot_getallattrs(slot);
-
-		if (merge_targets)
-			update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
-
-		if (update)
-		{
-			/*
-			 * The slot has the updated values, so store them in the updatable physical tuple
-			 */
-			HeapTuple updated = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
-					slot->tts_values, slot->tts_isnull, replace_all);
-
-			simple_heap_update(rel, &update->tuple->t_self, updated);
-		}
-		else
-		{
-			/* No existing tuple found, so it's an INSERT */
-			heap_insert(rel, slot->tts_tuple, GetCurrentCommandId(true), 0, NULL);
-		}
-	}
-	relation_close(rel, RowExclusiveLock);
-}
-
-/*
- * Combine
- *
- * Combines partial results of a continuous query with existing rows in the continuous view
- */
-void
-Combine(PlannedStmt *plan, TupleDesc cvdesc,
-		Tuplestorestate *store, MemoryContext tmpctx)
-{
-	TupleTableSlot *slot;
-	Portal portal;
-	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
-	Tuplestorestate *merge_output = NULL;
-	AttrNumber merge_attr = 1;
-	AttrNumber *merge_attrs = NULL;
-	Oid *merge_attr_ops;
-	TupleHashTable merge_targets = NULL;
-	FmgrInfo *eq_funcs;
-	FmgrInfo *hash_funcs;
-	int num_merge_attrs = 0;
-	int num_buckets = 1;
-	char *cvname = GetCQMatRelName(plan->cq_target->relname);
-
-	PushActiveSnapshot(GetTransactionSnapshot());
-
-	slot = MakeSingleTupleTableSlot(cvdesc);
-
-	if (IsA(plan->planTree, Agg))
-	{
-		Agg *agg = (Agg *) plan->planTree;
-		merge_attrs = agg->grpColIdx;
-		num_merge_attrs = agg->numGroups;
-		merge_attr_ops = agg->grpOperators;
-	}
-
-	if (merge_attrs != NULL)
-	{
-		if (num_merge_attrs > 1)
-			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", num_merge_attrs);
-		merge_attr = merge_attrs[0];
-		execTuplesHashPrepare(num_merge_attrs, merge_attr_ops, &eq_funcs, &hash_funcs);
-		num_buckets = 1000;
-
-		merge_targets = BuildTupleHashTable(num_merge_attrs, merge_attrs, eq_funcs, hash_funcs, num_buckets,
-				sizeof(HeapTupleEntryData), CacheMemoryContext, tmpctx);
-
-		GetTuplesToCombineWith(cvname, cvdesc, store, merge_attr, merge_targets);
-	}
-
-	portal = CreatePortal("__merge__", true, true);
-	portal->visible = false;
-
-	PortalDefineQuery(portal,
-					  NULL,
-					  NULL,
-					  "SELECT",
-					  list_make1(plan),
-					  NULL);
-
-	merge_output = tuplestore_begin_heap(true, true, work_mem);
-	SetTuplestoreDestReceiverParams(dest, merge_output, PortalGetHeapMemory(portal), true);
-
-	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, GetActiveSnapshot());
-
-	(void) PortalRun(portal,
-					 FETCH_ALL,
-					 true,
-					 dest,
-					 dest,
-					 NULL);
-
-	PopActiveSnapshot();
-
-	SyncCombine(cvname, merge_output, slot, merge_attr, merge_targets);
-
-	if (merge_targets)
-		hash_destroy(merge_targets->hashtab);
 }

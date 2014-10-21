@@ -40,6 +40,17 @@ DEACTIVATE cv_weird_tl;
 
 SELECT * FROM cv_weird_tl;
 
+CREATE CONTINUOUS VIEW cv_no_grp AS SELECT COUNT(*), SUM(value::integer) FROM stream;
+
+ACTIVATE cv_no_grp;
+
+INSERT INTO stream (key, value) VALUES ('x', 10), ('x', 20), ('y', 200);
+
+DEACTIVATE cv_no_grp;
+
+SELECT * FROM cv_no_grp;
+
 DROP CONTINUOUS VIEW test_avg;
 DROP CONTINUOUS VIEW cv;
 DROP CONTINUOUS VIEW cv_weird_tl;
+DROP CONTINUOUS VIEW cv_no_grp;
