@@ -30,5 +30,16 @@ DEACTIVATE cv;
 
 SELECT * FROM cv;
 
+CREATE CONTINUOUS VIEW cv_weird_tl AS SELECT COUNT(*), key::text, SUM(value::integer) FROM stream GROUP BY key;
+
+ACTIVATE cv_weird_tl;
+
+INSERT INTO stream (key, value) VALUES ('x', 10), ('x', 20), ('y', 200);
+
+DEACTIVATE cv_weird_tl;
+
+SELECT * FROM cv_weird_tl;
+
 DROP CONTINUOUS VIEW test_avg;
 DROP CONTINUOUS VIEW cv;
+DROP CONTINUOUS VIEW cv_weird_tl;

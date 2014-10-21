@@ -109,9 +109,12 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 	TupleDesc matdesc;
 	CQProcessType ptype = pstmt->cq_state->ptype;
 	int i;
+	Agg *agg;
 
 	if (!IsA(plan, Agg))
 		return;
+
+	agg = (Agg *) plan;
 
 	matdesc = RelationNameGetTupleDesc(matname);
 
@@ -175,6 +178,28 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 			}
 
 			aggref->aggtype = transtype;
+		}
+		else if (ptype == CQCombiner)
+		{
+			/*
+			 * For any Var expressions in the targetList, we must
+			 * change the attrno to be the same as the resno of the
+			 * TargetEntry. This is because the TupleDesc of the input tuples
+			 * is identical to the TupleDesc of the targetList.
+			 */
+			if (IsA(expr, Var))
+			{
+				Var *var = (Var *) expr;
+
+				for (i = 0; i < agg->numGroups; i++)
+				{
+					if (agg->grpColIdx[i] == var->varattno)
+						agg->grpColIdx[i] = toappend->resno;
+				}
+
+				var->varattno = toappend->resno;
+			}
+
 		}
 
 		/* add the extra store Aggref */

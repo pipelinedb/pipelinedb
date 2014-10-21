@@ -106,6 +106,13 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 		/* no new data yet, we'll try again on the next call */
 		if (errno == EAGAIN)
 			return true;
+		/*
+		 * TODO(usmanm): This should eventually be removed. Only here
+		 * because it makes attaching the debugger to the combiner proc
+		 * easy.
+		 */
+		if (errno == EINTR)
+			return true;
 		elog(ERROR, "combiner failed to receive tuple length: %m");
 	}
 	else if (read == 0)

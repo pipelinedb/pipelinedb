@@ -464,7 +464,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		SetActiveFlag(state.id, false);
 
 		/* This should be a good place to release the waiting latch on the worker */
-		SetStreamBufferLatch(state.id); 
+		SetStreamBufferLatch(state.id);
 
 		/*
 		 * Block till all the processes in the group have terminated
