@@ -125,9 +125,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			curtime = GetCurrentTimestamp();
 			if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
 			{
-				pgstat_report_activity(STATE_WORKER_WAIT_ON_LATCH,queryDesc->sourceText);
+				pgstat_report_activity(STATE_WORKER_WAIT_ON_LATCH, queryDesc->sourceText);
 				WaitOnStreamBufferLatch(cq_id);
-				pgstat_report_activity(STATE_WORKER_CONTINUE,queryDesc->sourceText);
+				pgstat_report_activity(STATE_WORKER_CONTINUE, queryDesc->sourceText);
 			}
 			else
 			{
@@ -169,7 +169,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			int32 i = -1;
 			ssize_t res = write(combiner->sock, &i, sizeof(int32));
 			if (res < 0)
-				elog(ERROR, "failed to write to combiner");
+				elog(ERROR, "failed to send about-to-die message to the combiner");
 			break;
 		}
 	}
