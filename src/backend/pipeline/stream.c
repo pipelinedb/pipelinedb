@@ -211,7 +211,7 @@ InsertIntoStream(InsertStmt *ins)
 	sharedfields = ShmemAlloc(numcols * sizeof(char *));
 
 	/* build header */
-	for (i=0; i<numcols; i++)
+	for (i = 0; i < numcols; i++)
 	{
 		ListCell *rtc;
 		ResTarget *res = (ResTarget *) list_nth(ins->cols, i);
@@ -246,12 +246,28 @@ InsertIntoStream(InsertStmt *ins)
 
 		for (i = 0; i < numcols; i++)
 		{
+			Node *val = list_nth(vals, i);
 			char *sval;
-			/*
-			 * XXX(usmanm): This isn't entirely kosher. It'll only work for
-			 * literal values, not expressions or any other funky stuff.
-			 */
-			c = (A_Const *) list_nth(vals, i);
+
+			if (IsA(val, TypeCast))
+			{
+				TypeCast *tc = (TypeCast *) val;
+				val = tc->arg;
+			}
+
+			if (IsA(val, A_Const))
+			{
+				c = (A_Const *) val;
+			}
+			else
+			{
+				/*
+				 * XXX(usmanm): For now we only allow inserting constant values into streams.
+				 * This should be fixed eventually to support arbitrary expressions.
+				 */
+				elog(ERROR, "only literal values are allowed when inserting into streams");
+			}
+
 			v = &(c->val);
 
 			if (IsA(v, Integer))

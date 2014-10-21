@@ -122,3 +122,4 @@ test: cqsum
 test: cqavg
 test: cqcount
 test: cqlatch
+test: cqdecode
