@@ -156,7 +156,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeout = queryDesc->plannedstmt->cq_state->maxwaitms;
 	char *cvname = rv->relname;
-	Query *query;
+
 	PlannedStmt *combineplan;
 	TimestampTz lastCombineTime = GetCurrentTimestamp();
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
@@ -193,7 +193,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	oldcontext = MemoryContextSwitchTo(runctx);
 
 	store = tuplestore_begin_heap(true, true, work_mem);
-	combineplan = GetCombinePlan(cvname, queryDesc->plannedstmt, store, &query, &workerdesc);
+	combineplan = GetCombinePlan(queryDesc->plannedstmt, store, &workerdesc);
 	slot = MakeSingleTupleTableSlot(workerdesc);
 
 	MemoryContextSwitchTo(oldcontext);
@@ -233,7 +233,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			StartTransactionCommand();
 
 			oldcontext = MemoryContextSwitchTo(combinectx);
-			Combine(query, combineplan, workerdesc, store, tmpctx);
+			Combine(combineplan, workerdesc, store, tmpctx);
 			MemoryContextSwitchTo(oldcontext);
 
 			CommitTransactionCommand();
@@ -262,40 +262,9 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
  * Retrieves a the cached combine plan for a continuous view, creating it if necessary
  */
 PlannedStmt *
-GetCombinePlan(char *cvname, PlannedStmt *plan, Tuplestorestate *store, Query **query, TupleDesc *desc)
+GetCombinePlan(PlannedStmt *plan, Tuplestorestate *store, TupleDesc *desc)
 {
-	char	*query_string;
-	List	*parsetree_list;
-	List	*query_list;
-	SelectStmt *stmt;
-	Query	*q;
 	TuplestoreScan *scan;
-
-	/*
-	 * TODO(usmanm/derekjn): Right now we use the Query node
-	 * to figure out the merge attributes (essentially
-	 * columns being grouped on). We should NOT do this
-	 * because it requires us to do this whole parsing shit
-	 * again. Instead pull them out of Plan->Agg->grpColIfx.
-	 */
-	query_string = GetQueryString(cvname, true);
-	parsetree_list = pg_parse_query(query_string);
-
-	/* CVs should only have a single query */
-	Assert(parsetree_list->length == 1);
-
-	stmt = (SelectStmt *) linitial(parsetree_list);
-	stmt = GetSelectStmtForCQWorker(stmt);
-	stmt->forContinuousView = true;
-
-	query_list = pg_analyze_and_rewrite((Node *) stmt, query_string, NULL, 0);
-
-	/* CVs should only have a single query */
-	Assert(query_list->length == 1);
-	q = (Query *) linitial(query_list);
-
-	q->is_combine = true;
-	q->is_continuous = false;
 
 	/*
 	 * Mark plan as not continuous now because we'll be repeatedly
@@ -310,32 +279,9 @@ GetCombinePlan(char *cvname, PlannedStmt *plan, Tuplestorestate *store, Query **
 
 	scan->store = store;
 
-	*query = q;
 	*desc = ExecTypeFromTL(((Plan *) scan)->targetlist, false);
 
 	return plan;
-}
-
-/*
- * GetCombineColumns
- *
- * Given a continuous query, determine the columns in the underlying table
- * that correspond to the GROUP BY clause of the query
- */
-List *
-GetCombineColumns(Query *query)
-{
-	List *result = NIL;
-	ListCell *tl;
-	AttrNumber col = 0;
-	foreach(tl, query->targetList)
-	{
-		TargetEntry *tle = (TargetEntry *) lfirst(tl);
-		col++;
-		if (get_grouping_column_index(query, tle) >= 0)
-			result = lcons_int(col, result);
-	}
-	return result;
 }
 
 /*
@@ -347,7 +293,7 @@ GetCombineColumns(Query *query)
 void
 GetTuplesToCombineWith(char *cvname, TupleDesc desc,
 		Tuplestorestate *incoming_merges, AttrNumber merge_attr,
-		List *group_clause, TupleHashTable merge_targets)
+		TupleHashTable merge_targets)
 {
 	Node *raw_parse_tree;
 	List *parsetree_list;
@@ -522,7 +468,7 @@ SyncCombine(char *cvname, Tuplestorestate *results,
  * Combines partial results of a continuous query with existing rows in the continuous view
  */
 void
-Combine(Query *query, PlannedStmt *plan, TupleDesc cvdesc,
+Combine(PlannedStmt *plan, TupleDesc cvdesc,
 		Tuplestorestate *store, MemoryContext tmpctx)
 {
 	TupleTableSlot *slot;
@@ -530,39 +476,39 @@ Combine(Query *query, PlannedStmt *plan, TupleDesc cvdesc,
 	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
 	Tuplestorestate *merge_output = NULL;
 	AttrNumber merge_attr = 1;
-	List *merge_attrs;
-	List *group_clause;
+	AttrNumber *merge_attrs = NULL;
+	Oid *merge_attr_ops;
 	TupleHashTable merge_targets = NULL;
-	AttrNumber *cols;
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
-	int num_cols = 0;
+	int num_merge_attrs = 0;
 	int num_buckets = 1;
 	char *cvname = GetCQMatRelName(plan->cq_target->relname);
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
 	slot = MakeSingleTupleTableSlot(cvdesc);
-	group_clause = query->groupClause;
 
-	merge_attrs = GetCombineColumns(query);
-	if (merge_attrs)
-		merge_attr = (AttrNumber) lfirst_int(merge_attrs->head);
-
-	if (group_clause)
+	if (IsA(plan->planTree, Agg))
 	{
-		num_cols = list_length(group_clause);
-		if (num_cols > 1)
-			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", num_cols);
-		cols = (AttrNumber *) palloc(sizeof(AttrNumber) * num_cols);
-		cols[0] = merge_attr;
-		execTuplesHashPrepare(num_cols, extract_grouping_ops(group_clause), &eq_funcs, &hash_funcs);
+		Agg *agg = (Agg *) plan->planTree;
+		merge_attrs = agg->grpColIdx;
+		num_merge_attrs = agg->numGroups;
+		merge_attr_ops = agg->grpOperators;
+	}
+
+	if (merge_attrs != NULL)
+	{
+		if (num_merge_attrs > 1)
+			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", num_merge_attrs);
+		merge_attr = merge_attrs[0];
+		execTuplesHashPrepare(num_merge_attrs, merge_attr_ops, &eq_funcs, &hash_funcs);
 		num_buckets = 1000;
 
-		merge_targets = BuildTupleHashTable(num_cols, cols, eq_funcs, hash_funcs, num_buckets,
+		merge_targets = BuildTupleHashTable(num_merge_attrs, merge_attrs, eq_funcs, hash_funcs, num_buckets,
 				sizeof(HeapTupleEntryData), CacheMemoryContext, tmpctx);
 
-		GetTuplesToCombineWith(cvname, cvdesc, store, merge_attr, group_clause, merge_targets);
+		GetTuplesToCombineWith(cvname, cvdesc, store, merge_attr, merge_targets);
 	}
 
 	portal = CreatePortal("__merge__", true, true);
