@@ -65,7 +65,7 @@ accept_worker(CombinerDesc *desc)
   	elog(ERROR, "could not listen on socket %d: %m", desc->sock);
 
 	if ((desc->sock = accept(desc->sock, (struct sockaddr *) &remote, &addrlen)) == -1)
-		elog(LOG, "could not accept connections on socket %d: %m", desc->sock);
+		elog(ERROR, "could not accept connections on socket %d: %m", desc->sock);
 
 	/*
 	 * Timeouts must be specified in terms of both seconds and usecs,
@@ -87,12 +87,12 @@ accept_worker(CombinerDesc *desc)
 		elog(ERROR, "could not set combiner recv() timeout: %m");
 }
 
-static void
+static bool
 receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 {
 	HeapTuple tup;
-	uint32 len;
-	int read;
+	int32 len;
+	ssize_t read;
 
 	ExecClearTuple(slot);
 
@@ -100,20 +100,27 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 	 * This socket has a receive timeout set on it, so if we get an EAGAIN it just
 	 * means that no new data has arrived.
 	 */
-	read = recv(combiner->sock, &len, 4, 0);
+	read = recv(combiner->sock, &len, sizeof(int32), 0);
 	if (read < 0)
 	{
 		/* no new data yet, we'll try again on the next call */
 		if (errno == EAGAIN)
-			return;
+			return true;
 		elog(ERROR, "combiner failed to receive tuple length: %m");
 	}
 	else if (read == 0)
 	{
-		return;
+		return true;
 	}
 
 	len = ntohl(len);
+
+	/*
+	 * The worker sends a negative int32 to the combiner
+	 * to signal it is done and about to die.
+	 */
+	if (len < 0)
+		return false;
 
 	tup = (HeapTuple) palloc0(HEAPTUPLESIZE + len);
 	tup->t_len = len;
@@ -124,6 +131,7 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 		elog(ERROR, "combiner failed to receive tuple data");
 
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
+	return true;
 }
 
 CombinerDesc *
@@ -161,6 +169,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	TimestampTz lastCombineTime = GetCurrentTimestamp();
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
+	bool isWorkerAlive;
 
 	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
 			"CombinerRunContext",
@@ -205,7 +214,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 		bool force = false;
 		CurrentResourceOwner = owner;
 
-		receive_tuple(combiner, slot);
+		isWorkerAlive = receive_tuple(combiner, slot);
 
 		/*
 		 * If we get a null tuple, we either want to combine the current batch
@@ -246,9 +255,16 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			count = 0;
 		}
 
-		/* Check the shared metadata to see if the CV has been deactivated */
-		if (!*activeFlagPtr)
+		/*
+		 * If the worker signaled that its about to exit,
+		 * we should abort as well.
+		 */
+		if (!isWorkerAlive)
+		{
+			 if (*activeFlagPtr)
+				 elog(ERROR, "worker process died even though the CQ is still active");
 			break;
+		}
 	}
 
 	DecrementProcessGroupCount(cq_id);

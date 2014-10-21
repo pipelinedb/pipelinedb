@@ -165,7 +165,13 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 		/* Check the shared metadata to see if the CV has been deactivated */
 		if (!*activeFlagPtr)
+		{
+			int32 i = -1;
+			ssize_t res = write(combiner->sock, &i, sizeof(int32));
+			if (res < 0)
+				elog(ERROR, "failed to write to combiner");
 			break;
+		}
 	}
 
 	(*dest->rShutdown) (dest);
