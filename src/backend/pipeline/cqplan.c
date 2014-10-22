@@ -141,6 +141,12 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 
 		origresname = pstrdup(toappend->resname);
 
+		/*
+		 * The Agg's top level target list must only contain Aggrefs or Vars.
+		 */
+		if (!(IsA(expr, Aggref) || IsA(expr, Var)))
+			elog(ERROR, "continuous query plans must only contain Aggrefs or Vars in their target list");
+
 		if (IsA(expr, Aggref))
 		{
 			Aggref *aggref = (Aggref *) expr;
@@ -157,6 +163,9 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 			 * If this Aggref has hidden state associated with it, we create an Aggref
 			 * that finalizes the transition state from the hidden column and stores
 			 * it into the visible column.
+			 *
+			 * This must happen before the combiner transform that follows because the
+			 * input to the Aggref will the hidden column (if one exists).
 			 */
 			if (AttributeNumberIsValid(hidden))
 			{
@@ -179,28 +188,25 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 
 			aggref->aggtype = transtype;
 		}
-		else if (ptype == CQCombiner)
+		else
 		{
-			Var *var;
-
-			if (!IsA(expr, Var))
-				elog(ERROR, "combiner target list must either be Vars or Aggrefs");
-
-			/*
-			 * For any Var expressions in the targetList, we must
-			 * change the attrno to be the same as the resno of the
-			 * TargetEntry. This is because the TupleDesc of the input tuples
-			 * is identical to the TupleDesc of the targetList.
-			 */
-			var = (Var *) expr;
-			for (i = 0; i < agg->numGroups; i++)
+			if (ptype == CQCombiner)
 			{
-				if (agg->grpColIdx[i] == var->varattno)
-					agg->grpColIdx[i] = toappend->resno;
+				/*
+				 * For any Var expressions in the targetList, we must
+				 * change the attrno to be the same as the resno of the
+				 * TargetEntry. This is because the TupleDesc of the input tuples
+				 * is identical to the TupleDesc of the targetList.
+				 */
+				Var *var = (Var *) expr;
+				for (i = 0; i < agg->numGroups; i++)
+				{
+					if (agg->grpColIdx[i] == var->varattno)
+						agg->grpColIdx[i] = toappend->resno;
+				}
+
+				var->varattno = toappend->resno;
 			}
-
-			var->varattno = toappend->resno;
-
 		}
 
 		/* add the extra store Aggref */
