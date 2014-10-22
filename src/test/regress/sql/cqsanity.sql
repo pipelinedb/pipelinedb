@@ -50,7 +50,18 @@ DEACTIVATE cv_no_grp;
 
 SELECT * FROM cv_no_grp;
 
+CREATE CONTINUOUS VIEW cv_grp_expr AS SELECT COUNT(*), substring(key::text, 1, 2) AS s FROM stream GROUP BY s;
+
+ACTIVATE cv_grp_expr;
+
+INSERT INTO stream (key) VALUES ('aab'), ('aba'), ('aaa'), ('cab');
+
+DEACTIVATE cv_grp_expr;
+
+SELECT * FROM cv_grp_expr;
+
 DROP CONTINUOUS VIEW test_avg;
 DROP CONTINUOUS VIEW cv;
 DROP CONTINUOUS VIEW cv_weird_tl;
 DROP CONTINUOUS VIEW cv_no_grp;
+DROP CONTINUOUS VIEW cv_grp_expr;

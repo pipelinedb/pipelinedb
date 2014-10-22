@@ -235,6 +235,24 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 }
 
 /*
+ * GetSelectStmtForCQCombiner
+ */
+SelectStmt *
+GetSelectStmtForCQCombiner(SelectStmt *stmt)
+{
+	stmt = GetSelectStmtForCQWorker(stmt);
+
+	/*
+	 * Combiner shouldn't have to check for the
+	 * whereClause conditionals. The worker has already
+	 * done that.
+	 */
+	stmt->whereClause = NULL;
+
+	return stmt;
+}
+
+/*
  * GetSelectStmtForCQView
  *
  * Get the SelectStmt that should be passed to the VIEW we

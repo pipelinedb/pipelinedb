@@ -62,8 +62,7 @@ get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewStat
 
 	query = linitial(querytree_list);
 
-	if (IsA(node, SelectStmt))
-		query->is_continuous = true;
+	query->is_continuous = IsA(node, SelectStmt);
 	query->is_combine = is_combine;
 	query->cq_target = makeRangeVar(NULL, cvname, -1);
 	query->cq_state = state;
@@ -109,7 +108,7 @@ get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
-	selectstmt = GetSelectStmtForCQWorker(selectstmt);
+	selectstmt = GetSelectStmtForCQCombiner(selectstmt);
 	selectstmt->forContinuousView = true;
 
 	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, false);

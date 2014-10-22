@@ -19,6 +19,7 @@ void AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **stm
 RangeTblEntry *TransformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
 SelectStmt *GetSelectStmtForCQWorker(SelectStmt *stmt);
+SelectStmt *GetSelectStmtForCQCombiner(SelectStmt *stmt);
 SelectStmt *GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel);
 
 Oid GetCombineStateColumnType(TargetEntry *te);
