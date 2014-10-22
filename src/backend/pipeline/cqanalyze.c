@@ -526,9 +526,13 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 	CQAnalyzeContext context;
 	List *newfrom = NIL;
 
-	if (stmt->sortClause != NULL)
+	if (list_length(stmt->sortClause) > 0)
 	{
-		elog(ERROR, "continuous view select can't have any sorting");
+		SortBy *sortby = (SortBy *) linitial(stmt->sortClause);
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+						errmsg("continuous queries don't support ORDER BY"),
+						parser_errposition(pstate, sortby->location)));
 	}
 
 	context.pstate = pstate;

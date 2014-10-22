@@ -60,8 +60,19 @@ DEACTIVATE cv_grp_expr;
 
 SELECT * FROM cv_grp_expr;
 
+CREATE CONTINUOUS VIEW cv_multi_grp AS SELECT a, b, COUNT(*) FROM stream GROUP BY a::integer, b::integer;
+
+ACTIVATE cv_multi_grp;
+
+INSERT INTO stream (a, b) VALUES (1, 1), (1, 1), (1, 2), (2, 2), (2, 1);
+
+DEACTIVATE cv_multi_grp;
+
+SELECT * FROM cv_multi_grp;
+
 DROP CONTINUOUS VIEW test_avg;
 DROP CONTINUOUS VIEW cv;
 DROP CONTINUOUS VIEW cv_weird_tl;
 DROP CONTINUOUS VIEW cv_no_grp;
 DROP CONTINUOUS VIEW cv_grp_expr;
+DROP CONTINUOUS VIEW cv_multi_grp;
