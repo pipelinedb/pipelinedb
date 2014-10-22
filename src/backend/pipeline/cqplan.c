@@ -181,24 +181,25 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 		}
 		else if (ptype == CQCombiner)
 		{
+			Var *var;
+
+			if (!IsA(expr, Var))
+				elog(ERROR, "combiner target list must either be Vars or Aggrefs");
+
 			/*
 			 * For any Var expressions in the targetList, we must
 			 * change the attrno to be the same as the resno of the
 			 * TargetEntry. This is because the TupleDesc of the input tuples
 			 * is identical to the TupleDesc of the targetList.
 			 */
-			if (IsA(expr, Var))
+			var = (Var *) expr;
+			for (i = 0; i < agg->numGroups; i++)
 			{
-				Var *var = (Var *) expr;
-
-				for (i = 0; i < agg->numGroups; i++)
-				{
-					if (agg->grpColIdx[i] == var->varattno)
-						agg->grpColIdx[i] = toappend->resno;
-				}
-
-				var->varattno = toappend->resno;
+				if (agg->grpColIdx[i] == var->varattno)
+					agg->grpColIdx[i] = toappend->resno;
 			}
+
+			var->varattno = toappend->resno;
 
 		}
 
