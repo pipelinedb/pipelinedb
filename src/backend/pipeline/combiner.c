@@ -200,31 +200,25 @@ prepare_combine_plan(PlannedStmt *plan, Tuplestorestate *store, TupleDesc *desc)
  */
 static void
 get_tuples_to_combine_with(char *cvname, TupleDesc desc,
-		Tuplestorestate *incoming_merges, AttrNumber merge_attr,
-		TupleHashTable merge_targets)
+		Tuplestorestate *incoming_merges, AttrNumber *merge_attrs,
+		int num_merge_attrs, TupleHashTable merge_targets)
 {
 	Node *raw_parse_tree;
 	List *parsetree_list;
 	List *query_list;
 	PlannedStmt *plan;
 	Query *query;
-	A_Expr *in_expr;
 	Node *where;
-	ColumnRef *cref;
-	List *constants = NIL;
 	SelectStmt *stmt;
 	Portal portal;
 	TupleTableSlot 	*slot;
 	ParseState *ps;
 	DestReceiver *dest;
-	char stmt_name[strlen(cvname) + 9 + 1];
 	char base_select[14 + strlen(cvname) + 1];
 	List *name = list_make1(makeString("="));
-	int incoming_size = 0;
 	HASH_SEQ_STATUS status;
 	HeapTupleEntry entry;
 
-	strcpy(stmt_name, cvname);
 	sprintf(base_select, "SELECT * FROM %s", cvname);
 
 	slot = MakeSingleTupleTableSlot(desc);
@@ -248,50 +242,63 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
 	Assert(query_list->length == 1);
 	query = (Query *) linitial(query_list);
 
-	if (merge_targets->numCols > 0)
+	if (num_merge_attrs > 0)
 	{
-		Form_pg_attribute attr = desc->attrs[merge_attr - 1];
-		Type typeinfo;
-		int length;
+		A_Expr *dnf = NULL;
 
-		if (merge_targets->numCols > 1)
-			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", merge_targets->numCols);
-
-		typeinfo = typeidType(attr->atttypid);
-		length = typeLen(typeinfo);
-		ReleaseSysCache((HeapTuple) typeinfo);
-
-		/*
-		 * We need to extract all of the merge column values from our incoming merge
-		 * tuples so we can use them in an IN clause when retrieving existing tuples
-		 * from the continuous view
-		 */
 		foreach_tuple(slot, incoming_merges)
 		{
-			bool isnull;
-			Datum d = slot_getattr(slot, merge_attr, &isnull);
-			Const *c = makeConst(attr->atttypid, attr->atttypmod, 0, length, d, isnull, true);
+			A_Expr *cnf = NULL;
+			int i;
 
-			constants = lcons(c, constants);
-			incoming_size++;
+			for (i = 0; i < num_merge_attrs; i++)
+			{
+				AttrNumber merge_attr = merge_attrs[i];
+				Form_pg_attribute attr = desc->attrs[merge_attr - 1];
+				ColumnRef *cref;
+				Type typeinfo;
+				int length;
+				A_Expr *expr;
+				bool isnull;
+				Datum d;
+				Const *c;
+
+				typeinfo = typeidType(attr->atttypid);
+				length = typeLen(typeinfo);
+				ReleaseSysCache((HeapTuple) typeinfo);
+
+
+				d = slot_getattr(slot, merge_attr, &isnull);
+				c = makeConst(attr->atttypid, attr->atttypmod, 0, length, d, isnull, true);
+
+				cref = makeNode(ColumnRef);
+				cref->fields = list_make1(makeString(attr->attname.data));
+				cref->location = -1;
+
+				expr = makeA_Expr(AEXPR_OP, name, (Node *) cref, (Node *) c, -1);
+
+				if (cnf == NULL)
+					cnf = expr;
+				else
+				{
+					cnf = makeA_Expr(AEXPR_AND, NULL, (Node *) cnf, (Node *) expr, -1);
+				}
+			}
+
+			if (dnf == NULL)
+				dnf = cnf;
+			else
+			{
+				dnf = makeA_Expr(AEXPR_OR, NULL, (Node *) dnf, (Node *) cnf, -1);
+			}
 		}
-
-		/*
-		 * Now construct an IN clause from the List of merge column values we just built
-		 */
-		cref = makeNode(ColumnRef);
-		cref->fields = list_make1(makeString(attr->attname.data));
-		cref->location = -1;
-
-		in_expr = makeA_Expr(AEXPR_IN, name,
-				   (Node *) cref, (Node *) constants, -1);
 
 		/*
 		 * This query is now of the form:
 		 *
 		 * SELECT * FROM <continuous view> WHERE <merge column> IN (incoming merge column values)
 		 */
-		where = transformAExprIn(ps, in_expr);
+		where = transformExpr(ps, (Node *) dnf, EXPR_KIND_WHERE);
 		query->jointree = makeFromExpr(query->jointree->fromlist, where);
 	}
 
@@ -341,7 +348,7 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
  */
 static void
 sync_combine(char *cvname, Tuplestorestate *results,
-		TupleTableSlot *slot, AttrNumber merge_attr, TupleHashTable merge_targets)
+		TupleTableSlot *slot, TupleHashTable merge_targets)
 {
 	Relation rel = heap_openrv(makeRangeVar(NULL, cvname, -1), RowExclusiveLock);
 	bool *replace_all = palloc(sizeof(bool) * slot->tts_tupleDescriptor->natts);
@@ -387,14 +394,12 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 	Portal portal;
 	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
 	Tuplestorestate *merge_output = NULL;
-	AttrNumber merge_attr = -1;
 	AttrNumber *merge_attrs = NULL;
 	Oid *merge_attr_ops;
 	TupleHashTable merge_targets = NULL;
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
 	int num_merge_attrs = 0;
-	int num_buckets = 1;
 	char *cvname = GetCQMatRelName(plan->cq_target->relname);
 	Agg *agg = NULL;
 
@@ -406,23 +411,18 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 	{
 		agg = (Agg *) plan->planTree;
 		merge_attrs = agg->grpColIdx;
-		num_merge_attrs = agg->numGroups;
+		num_merge_attrs = agg->numCols;
 		merge_attr_ops = agg->grpOperators;
 	}
 
 	if (agg != NULL)
 	{
-		if (num_merge_attrs > 1)
-			elog(ERROR, "grouping on more than one column is not supported yet (attempted to group on %d)", num_merge_attrs);
-		if (num_merge_attrs > 0)
-			merge_attr = merge_attrs[0];
 		execTuplesHashPrepare(num_merge_attrs, merge_attr_ops, &eq_funcs, &hash_funcs);
-		num_buckets = 1000;
 		/* XXX(usmanm): Shouldn't num_buckets be the same as num_merge_attrs? */
-		merge_targets = BuildTupleHashTable(num_merge_attrs, merge_attrs, eq_funcs, hash_funcs, num_buckets,
+		merge_targets = BuildTupleHashTable(num_merge_attrs, merge_attrs, eq_funcs, hash_funcs, 1000,
 				sizeof(HeapTupleEntryData), CacheMemoryContext, tmpctx);
 
-		get_tuples_to_combine_with(cvname, cvdesc, store, merge_attr, merge_targets);
+		get_tuples_to_combine_with(cvname, cvdesc, store, merge_attrs, num_merge_attrs, merge_targets);
 	}
 
 	portal = CreatePortal("__merge__", true, true);
@@ -449,7 +449,7 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 
 	PopActiveSnapshot();
 
-	sync_combine(cvname, merge_output, slot, merge_attr, merge_targets);
+	sync_combine(cvname, merge_output, slot, merge_targets);
 
 	if (merge_targets)
 		hash_destroy(merge_targets->hashtab);
