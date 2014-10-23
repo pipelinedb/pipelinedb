@@ -552,25 +552,47 @@ GetDeleteStmtForGC(char *cvname, SelectStmt *stmt)
 	CQAnalyzeContext context;
 	DeleteStmt *delete_stmt;
 	Node *swExpr = get_sliding_window_expr(stmt, NULL);
+	Node *cmpCRef;
 
 	if (swExpr == NULL)
 		return NULL;
 
-	context.cols = NIL;
-	FindColumnRefsWithTypeCasts(swExpr, &context);
-	Assert(list_length(context.cols) == 1);
+	InitializeCQAnalyzeContext(stmt, NULL, &context);
 
-	if (has_agg_or_group_by(stmt))
+	FindColumnRefsWithTypeCasts(swExpr, &context);
+	cmpCRef = (Node *) linitial(context.cols);
+
+	if (has_agg_or_group_by(stmt) || !IsColumnRefInTargetList(stmt, cmpCRef))
 	{
 		/*
-		 * This will swap out any date_trunc calls in the
-		 * sliding window expression with the column reference
-		 * to that field.
-		 *
-		 * TODO(usmanm): Will this work in all agg/group by cases?
+		 * Find the name we picked for the column we're
+		 * comparing clock_timestamp() to and replace
+		 * it with a ColumnRef to that.
 		 */
-		context.stepSize = NULL;
-		get_step_size(swExpr, &context);
+		char *name = GetUniqueInternalColname(&context);
+		/*
+		 * XXX(usmanm): This is hackery. cmpCRef can be a
+		 * TypeCast or a ColumnRef but since sizeof(TypeCast)
+		 * > sizeof(ColumnRef), we can force cast cmpCRef
+		 * to be a ColumnRef.
+		 */
+		ColumnRef *cref = (ColumnRef *) cmpCRef;
+		cref->type = T_ColumnRef;
+		cref->fields = list_make1(makeString(name));
+		cref->location = -1;
+
+		if (has_agg_or_group_by(stmt))
+		{
+			/*
+			 * This will swap out any date_trunc calls in the
+			 * sliding window expression with the column reference
+			 * to that field.
+			 *
+			 * TODO(usmanm): Will this work in all agg/group by cases?
+			 */
+			context.stepSize = NULL;
+			get_step_size(swExpr, &context);
+		}
 	}
 
 	delete_stmt = makeNode(DeleteStmt);
