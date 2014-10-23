@@ -1539,11 +1539,8 @@ grouping_planner(PlannerInfo *root, double tuple_fraction)
 			 * Vars.  Usually we need to insert the sub_tlist as the tlist of
 			 * the top plan node.  However, we can skip that if we determined
 			 * that whatever create_plan chose to return will be good enough.
-			 *
-			 * combine queries also need their tlists evaluated because we modify
-			 * them for aggregates (see cqplan.c).
 			 */
-			if (parse->is_combine || need_tlist_eval)
+			if (need_tlist_eval)
 			{
 				/*
 				 * If the top-level plan node is one that cannot do expression

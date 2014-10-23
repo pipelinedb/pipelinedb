@@ -17,6 +17,7 @@
 #include "nodes/nodeFuncs.h"
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
+#include "pipeline/cqanalyze.h"
 #include "pipeline/cqplan.h"
 #include "utils/syscache.h"
 
@@ -106,7 +107,7 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 	ListCell *lc;
 	AttrNumber attno = 1;
 	List *targetlist = NIL;
-	char *matname = GetCQMatRelName(pstmt->cq_target->relname);
+	char *matname = GetCQMatRelationName(pstmt->cq_target->relname);
 	TupleDesc matdesc;
 	CQProcessType ptype = pstmt->cq_state->ptype;
 	int i;
@@ -142,20 +143,19 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 
 		origresname = pstrdup(toappend->resname);
 
-		/*
-		 * The Agg's top level target list must only contain Aggrefs or Vars.
-		 */
-		if (!(IsA(expr, Aggref) || IsA(expr, Var)))
-			elog(ERROR, "continuous query plans must only contain Aggrefs or Vars in their target list");
-
 		if (IsA(expr, Aggref))
 		{
 			Aggref *aggref = (Aggref *) expr;
-			AttrNumber hidden = GetCombineStateAttr(te->resname, matdesc);
+			Oid hiddentype = GetCombineStateColumnType(te);
+			AttrNumber hidden = 0;
 			Oid transtype;
 
+			/* The hidden column is always stored adjacent to the column for the aggref */
+			if (OidIsValid(hiddentype))
+				hidden = attno + 1;
+
 			if (AttributeNumberIsValid(hidden))
-				toappend->resname = NameStr(matdesc->attrs[hidden - 1]->attname);
+
 
 			aggref->aggresultstate = AGG_TRANSITION;
 			transtype = get_trans_type(aggref);
@@ -165,12 +165,13 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 			 * that finalizes the transition state from the hidden column and stores
 			 * it into the visible column.
 			 *
-			 * This must happen before the combiner transform that follows because the
+			 * This must happen before the combiner transform that follows this block because the
 			 * input to the Aggref will the hidden column (if one exists).
 			 */
 			if (AttributeNumberIsValid(hidden))
 			{
 				storete = make_store_target(te, origresname, attno, aggref->aggtype, transtype);
+				toappend->resname = NameStr(matdesc->attrs[attno]->attname);
 				attno++;
 			}
 
@@ -194,19 +195,38 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 			if (ptype == CQCombiner)
 			{
 				/*
-				 * For any Var expressions in the targetList, we must
-				 * change the attrno to be the same as the resno of the
-				 * TargetEntry. This is because the TupleDesc of the input tuples
-				 * is identical to the TupleDesc of the targetList.
+				 * Replace any non-Aggref expression with a Var
+				 * which has the same type and this TargetEntry's expr
+				 * and its varattno is equal to the resno of this
+				 * TargetEntry.
 				 */
-				Var *var = (Var *) expr;
-				for (i = 0; i < agg->numGroups; i++)
+				Var *var;
+				AttrNumber oldVarAttNo = -1;
+
+				if (IsA(expr, Var))
 				{
-					if (agg->grpColIdx[i] == var->varattno)
-						agg->grpColIdx[i] = attno;
+					var = (Var *) expr;
+					oldVarAttNo = var->varattno;
+				}
+				else
+				{
+					Oid type = exprType((Node *) expr);
+					int32 typmod = exprTypmod((Node *) expr);
+					var = makeVar(OUTER_VAR, toappend->resno, type, typmod, InvalidOid, 0);
 				}
 
 				var->varattno = attno;
+				te->expr = (Expr *) var;
+
+				/* Fix grpColIdx to reflect the index in the tuple from worker */
+				if (oldVarAttNo > 0 && oldVarAttNo != var->varattno)
+				{
+					for (i = 0; i < agg->numGroups; i++)
+					{
+						if (agg->grpColIdx[i] == oldVarAttNo)
+							agg->grpColIdx[i] = var->varattno;
+					}
+				}
 			}
 		}
 

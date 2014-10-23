@@ -17,6 +17,7 @@
 #include "catalog/pipeline_combine_fn.h"
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
+#include "lib/stringinfo.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/print.h"
@@ -32,15 +33,7 @@
 #include "utils/builtins.h"
 #include "utils/syscache.h"
 
-typedef struct CQAnalyzeContext
-{
-	ParseState *pstate;
-	List *types;
-	List *cols;
-	List *streams;
-	List *tables;
-	List *targets;
-} CQAnalyzeContext;
+#define INTERNAL_COLNAME_PREFIX "_"
 
 /*
  * GetCombineStateColumnType
@@ -64,12 +57,100 @@ GetCombineStateColumnType(TargetEntry *te)
 }
 
 /*
- * find_col_refs
- *
- * Recursively search this node and find all ColRefs in it.
+ * FindColNames
  */
 static bool
-find_col_refs(Node *node, CQAnalyzeContext *context)
+FindColNames(Node *node, CQAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, ResTarget))
+	{
+		ResTarget *res = (ResTarget *) node;
+		if (res->name != NULL)
+			context->colNames = lappend(context->colNames, res->name);
+	}
+	else if (IsA(node, ColumnRef))
+	{
+		context->colNames = lappend(context->colNames, FigureColname(node));
+	}
+
+	return raw_expression_tree_walker(node, FindColNames, (void *) context);
+}
+
+/*
+ * InitializeCQAnalyzeContext
+ */
+void
+InitializeCQAnalyzeContext(SelectStmt *stmt, ParseState *pstate, CQAnalyzeContext *context)
+{
+	memset(context, 0, sizeof(CQAnalyzeContext));
+	context->location = -1;
+	context->pstate = pstate;
+
+	FindColNames((Node *) stmt, context);
+
+	context->cols = NIL;
+	context->colNum = 0;
+}
+
+/*
+ * GetUniqueInternalColname
+ */
+char *
+GetUniqueInternalColname(CQAnalyzeContext *context)
+{
+	StringInfoData colname;
+
+	initStringInfo(&colname);
+
+	while (1)
+	{
+		ListCell *lc;
+		bool alreadyExists = false;
+
+		appendStringInfo(&colname, "%s%d", INTERNAL_COLNAME_PREFIX, context->colNum);
+		context->colNum++;
+
+		foreach(lc, context->colNames)
+		{
+			char *colname2 = lfirst(lc);
+			if (strcmp(colname.data, colname2) == 0)
+			{
+				alreadyExists = true;
+				break;
+			}
+		}
+
+		if (!alreadyExists)
+			break;
+
+		resetStringInfo(&colname);
+	}
+
+	context->colNames = lappend(context->colNames, colname.data);
+
+	return colname.data;
+}
+
+/*
+ * is_column_ref
+ */
+static bool
+is_column_ref(Node *node)
+{
+	TypeCast *tc = (TypeCast *) node;
+
+	return (IsA(node, ColumnRef) ||
+			(IsA(node, TypeCast) && (IsA(tc->arg, ColumnRef))));
+}
+
+/*
+ * FindColRefsWithTypeCasts
+ */
+bool
+FindColumnRefsWithTypeCasts(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -89,17 +170,42 @@ find_col_refs(Node *node, CQAnalyzeContext *context)
 		context->cols = lappend(context->cols, node);
 	}
 
-	return raw_expression_tree_walker(node, find_col_refs, (void *) context);
+	return raw_expression_tree_walker(node, FindColumnRefsWithTypeCasts, (void *) context);
 }
 
 /*
- * does_colref_match_res_target
- *
- * Does this ColRef match the ResTarget? This is used
- * so that TypeCasted ColRefs are also considered matches.
+ * are_column_refs_equal
  */
 static bool
-does_colref_match_res_target(Node *node, ColumnRef *cref)
+are_column_refs_equal(ColumnRef *cr1, ColumnRef *cr2)
+{
+	/* In our land ColumnRef locations are matter */
+	return equal(cr1->fields, cr2->fields);
+}
+
+/*
+ * contains_column_ref
+ */
+static bool
+contains_column_ref(Node *node, ColumnRef *cref)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, ColumnRef))
+	{
+		ColumnRef *cref2 = (ColumnRef *) node;
+		return are_column_refs_equal(cref, cref2);
+	}
+
+	return raw_expression_tree_walker(node, contains_column_ref, (void *) cref);
+}
+
+/*
+ * IsResTargetForColumnRef
+ */
+static bool
+IsResTargetForColumnRef(Node *node, ColumnRef *cref)
 {
 	if (node == NULL)
 		return false;
@@ -109,93 +215,63 @@ does_colref_match_res_target(Node *node, ColumnRef *cref)
 		ResTarget *res = (ResTarget *) node;
 		if (res->name != NULL &&
 				strcmp(res->name, FigureColname((Node *) cref)) == 0)
-			return true;
-	}
-
-	if (IsA(node, ColumnRef))
-	{
-		ColumnRef *test_cref = (ColumnRef *) node;
-		ListCell *lc1;
-		ListCell *lc2;
-		bool match = true;
-
-		if (list_length(test_cref->fields) != list_length(cref->fields))
-			return false;
-
-		forboth(lc1, test_cref->fields, lc2, cref->fields)
 		{
-			if (strcmp(strVal(lfirst(lc1)), strVal(lfirst(lc2))) != 0)
-			{
-				match = false;
-				break;
-			}
+			/*
+			 * Is this ResTarget overriding a column it references?
+			 * Example: substring(key::text, 1, 2) AS key
+			 */
+			if (contains_column_ref((Node *) res, cref))
+				return false;
+			return true;
 		}
-
-		return match;
+	}
+	else if (IsA(node, ColumnRef))
+	{
+		ColumnRef *cref2 = (ColumnRef *) node;
+		return are_column_refs_equal(cref, cref2);
+	}
+	else if (IsA(node, FuncCall))
+	{
+		/*
+		 * Even if a FuncCall has cref as an argument, its value
+		 * can be different from the column, so we need to project
+		 * the column.
+		 */
+		return false;
 	}
 
-	/*
-	 * Even if a FuncCall has cref as an argument, its value
-	 * can be different from the column, so we need to project
-	 * the column.
-	 */
-	if (IsA(node, FuncCall))
-		return false;
-
-	return raw_expression_tree_walker(node, does_colref_match_res_target, (void *) cref);
+	return raw_expression_tree_walker(node, IsResTargetForColumnRef, (void *) cref);
 }
 
 /*
- * add_res_targets_for_missing_cols
- *
- * Add ResTargets for any ColRef that is missing in the
- * targetList of the SelectStmt.
+ * IsColumnRefInTargetList
  */
-static void
-add_res_targets_for_missing_cols(SelectStmt *stmt, List *cols)
+bool
+IsColumnRefInTargetList(SelectStmt *stmt, Node *node)
 {
-	ListCell *clc;
-	ListCell *tlc;
-	ResTarget *res;
+	ColumnRef *cref;
+	ListCell *lc;
+	bool found = false;
 
-	foreach(clc, cols)
+	if (IsA(node, TypeCast))
+		node = ((TypeCast *) node)->arg;
+
+	Assert(IsA(node, ColumnRef));
+
+	cref = (ColumnRef *) node;
+
+	foreach(lc, stmt->targetList)
 	{
-		Node *node = (Node *) lfirst(clc);
-		ColumnRef *cref;
-		int location;
-		bool found = false;
+		node = lfirst(lc);
 
-		if (IsA(node, TypeCast))
+		if (IsResTargetForColumnRef(node, cref))
 		{
-			TypeCast *tc = (TypeCast *) node;
-			cref = (ColumnRef *) tc->arg;
-			location = tc->location;
-		}
-		else
-		{
-			cref = (ColumnRef *) lfirst(clc);
-			location = cref->location;
-		}
-
-		foreach(tlc, stmt->targetList)
-		{
-			res = (ResTarget *) lfirst(tlc);
-			found = does_colref_match_res_target((Node *) res, cref);
-
-			if (found)
-				break;
-		}
-
-		if (!found)
-		{
-			res = makeNode(ResTarget);
-			res->name = NULL;
-			res->indirection = NIL;
-			res->val = node;
-			res->location = location;
-			stmt->targetList = lappend(stmt->targetList, res);
+			found = true;
+			break;
 		}
 	}
+
+	return found;
 }
 
 /*
@@ -212,24 +288,61 @@ SelectStmt *
 GetSelectStmtForCQWorker(SelectStmt *stmt)
 {
 	CQAnalyzeContext context;
+	ListCell *lc;
+	List *newGroupClause = NIL;
+
+	InitializeCQAnalyzeContext(stmt, NULL, &context);
 
 	stmt = (SelectStmt *) copyObject(stmt);
 
 	/*
-	 * Find all ColRefs in the groupClause and add them to the targetList
-	 * if they're missing.
-	 *
-	 * These columns need to be projected by the worker so that the combiner
-	 * can determine which row to merge the partial results with.
+	 * Check to see if we need to project any columns
+	 * that are required to evaluate the sliding window
+	 * match expression.
 	 */
-	context.cols = NIL;
-	find_col_refs((Node *) stmt->groupClause, &context);
-	add_res_targets_for_missing_cols(stmt, context.cols);
-
 	if (IsSlidingWindowSelectStmt(stmt))
 	{
-		return TransformSWSelectStmtForCQWorker(stmt);
+		stmt = TransformSWSelectStmtForCQWorker(stmt, &context);
 	}
+
+	/*
+	 * Rewrite the groupClause.
+	 */
+	foreach(lc, stmt->groupClause)
+	{
+		Node *node = (Node *) lfirst(lc);
+		char *name = NULL;
+		ResTarget *res;
+		ColumnRef *cref;
+
+		if (is_column_ref(node) && IsColumnRefInTargetList(stmt, node))
+		{
+			newGroupClause = lappend(newGroupClause, node);
+			continue;
+		}
+
+		/*
+		 * Any new node we add to the targetList should have a unique
+		 * name. This isn't always necessary, but its always safe.
+		 * Safety over everything else yo.
+		 */
+		name = GetUniqueInternalColname(&context);
+		cref = makeNode(ColumnRef);
+		cref->fields = list_make1(makeString(name));
+		cref->location = -1;
+
+		res = makeNode(ResTarget);
+		res->name = name;
+		res->indirection = NIL;
+		res->val = node;
+		res->location = -1;
+
+		stmt->targetList = lappend(stmt->targetList, res);
+
+		newGroupClause = lappend(newGroupClause, cref);
+	}
+
+	stmt->groupClause = newGroupClause;
 
 	return stmt;
 }
@@ -261,16 +374,17 @@ GetSelectStmtForCQCombiner(SelectStmt *stmt)
 SelectStmt *
 GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
 {
-	List		*origTargetList = stmt->targetList;
-	ListCell	*lc;
+	CQAnalyzeContext context;
+	List *origTargetList = stmt->targetList;
+	ListCell *lc;
+
+	InitializeCQAnalyzeContext(stmt, NULL, &context);
 
 	stmt = (SelectStmt *) copyObject(stmt);
 	stmt->forContinuousView = false;
 
 	if (IsSlidingWindowSelectStmt(stmt))
-	{
-		return TransformSWSelectStmtForCQView(stmt, cqrel);
-	}
+		return TransformSWSelectStmtForCQView(stmt, cqrel, &context);
 
 	/*
 	 * Create a SelectStmt that only projects fields that
@@ -318,7 +432,7 @@ GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
  * Walk the parse tree and associate a single type with each inferred column
  */
 static bool
-find_colref_types(Node *node, CQAnalyzeContext *context)
+associate_types_to_colrefs(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -354,7 +468,7 @@ find_colref_types(Node *node, CQAnalyzeContext *context)
 		context->targets = lappend(context->targets, (ResTarget *) node);
 	}
 
-	return raw_expression_tree_walker(node, find_colref_types, (void *) context);
+	return raw_expression_tree_walker(node, associate_types_to_colrefs, (void *) context);
 }
 
 /*
@@ -477,14 +591,12 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 }
 
 /*
- * analyze_from_item
- *
- * Replaces RangeVar nodes that correspond to streams with StreamDesc nodes.
+ * replace_stream_rangevar_with_streamdesc
  *
  * Doing this as early as possible simplifies the rest of the analyze path.
  */
 static Node*
-analyze_from_item(Node *node, CQAnalyzeContext *context)
+replace_stream_rangevar_with_streamdesc(Node *node, CQAnalyzeContext *context)
 {
 	if (IsA(node, RangeVar))
 	{
@@ -502,8 +614,8 @@ analyze_from_item(Node *node, CQAnalyzeContext *context)
 	else if (IsA(node, JoinExpr))
 	{
 		JoinExpr *join = (JoinExpr *) node;
-		join->larg = analyze_from_item(join->larg, context);
-		join->rarg = analyze_from_item(join->rarg, context);
+		join->larg = replace_stream_rangevar_with_streamdesc(join->larg, context);
+		join->rarg = replace_stream_rangevar_with_streamdesc(join->rarg, context);
 
 		return (Node *) join;
 	}
@@ -521,10 +633,12 @@ analyze_from_item(Node *node, CQAnalyzeContext *context)
 void
 AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselect)
 {
+	CQAnalyzeContext context;
 	SelectStmt *stmt = *topselect;
 	ListCell *lc;
-	CQAnalyzeContext context;
 	List *newfrom = NIL;
+
+	InitializeCQAnalyzeContext(stmt, pstate, &context);
 
 	if (list_length(stmt->sortClause) > 0)
 	{
@@ -535,15 +649,8 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 						parser_errposition(pstate, sortby->location)));
 	}
 
-	context.pstate = pstate;
-	context.types = NIL;
-	context.cols = NIL;
-	context.streams = NIL;
-	context.tables = NIL;
-	context.targets = NIL;
-
 	/* make sure that we can infer types for every column that appears anywhere in the statement */
-	find_colref_types((Node *) stmt, &context);
+	associate_types_to_colrefs((Node *) stmt, &context);
 
 	/* now indicate which relations are actually streams */
 	add_streams((Node *) stmt->fromClause, &context);
@@ -553,9 +660,16 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 		ListCell *tlc;
 		ListCell *slc;
 		ColumnRef *cref = lfirst(lc);
-		bool needstype = true;
-		bool hastype = false;
-		char *colname;
+		bool needsType = true;
+		bool hasType = false;
+		bool matchesResTarget = false;
+		char *colName = FigureColname((Node *) cref);
+
+		/*
+		 * arrival_timestamp doesn't require an explicit TypeCast
+		 */
+		if (pg_strcasecmp(colName, ARRIVAL_TIMESTAMP) == 0)
+			continue;
 
 		/*
 		 * Ensure that we have no '*' for a stream or relation target.
@@ -580,95 +694,79 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 					 parser_errposition(pstate, cref->location)));
 		}
 
+		/*
+		 * If the ColumnRef is for a relation, we don't need any explicit
+		 * TypeCast.
+		 */
 		if (list_length(cref->fields) == 2)
 		{
-			char *colrelname = strVal(linitial(cref->fields));
-
-			colname = strVal(lsecond(cref->fields));
-			needstype = false;
+			char *colRelname = strVal(linitial(cref->fields));
+			needsType = false;
 
 			foreach(slc, context.streams)
 			{
-				RangeVar *r = (RangeVar *) lfirst(slc);
-				char *sname = r->alias ? r->alias->aliasname : r->relname;
+				RangeVar *rv = (RangeVar *) lfirst(slc);
+				char *streamName = rv->alias ? rv->alias->aliasname : rv->relname;
 
-				/* if it's a legit relation, the column doesn't need to have a type yet */
-				if (strcmp(colrelname, sname) == 0)
+				if (strcmp(colRelname, streamName) == 0)
 				{
-					needstype = true;
+					needsType = true;
 					break;
 				}
 			}
-			if (!needstype)
+
+			if (!needsType)
 				continue;
 		}
-		else
-		{
-			colname = strVal(linitial(cref->fields));
-		}
 
-		/* verify that we have a type for the column if it needs one */
+		/* Do we have a TypeCast for this ColumnRef? */
 		foreach(tlc, context.types)
 		{
 			TypeCast *tc = (TypeCast *) lfirst(tlc);
 			if (equal(tc->arg, cref))
 			{
-				hastype = true;
+				hasType = true;
 				break;
 			}
 		}
 
+		if (hasType)
+			continue;
+
 		/*
 		 * If the ColRef refers to a named ResTarget then it doesn't need an explicit type.
-		 * XXX(usmanm): This doesn't work in cases where the ResTarget contains the ColumnRef
+		 *
+		 * This doesn't work in cases where a ResTarget contains the ColumnRef
 		 * being checked against. For example:
-		 *   SELECT date_trunc('hour', ts) AS ts FROM stream
-		 * Here we need as explicit for ts.
+		 *
+		 *   SELECT date_trunc('hour', x) AS x FROM stream
+		 *   SELECT substring(y::text, 1, 2) as x, substring(x, 1, 2) FROM stream
+		 *
+		 * In both these examples we need an explicit TypeCast for `x`.
 		 */
+		needsType = false;
+
 		foreach(tlc, context.targets)
 		{
 			ResTarget *rt = (ResTarget *) lfirst(tlc);
-			CQAnalyzeContext context;
-			ListCell *lc;
-			ColumnRef *rt_cref;
-			bool is_matching = false;
-
-			context.pstate = pstate;
-			context.types = NIL;
-			context.cols = NIL;
-			context.streams = NIL;
-			context.tables = NIL;
-			context.targets = NIL;
-
-			find_colref_types(rt->val, &context);
-
-			foreach(lc, context.cols)
+			if (contains_column_ref((Node *) rt, cref))
 			{
-				rt_cref = (ColumnRef *) lfirst(lc);
-				if (equal(rt_cref, cref))
-				{
-					is_matching = true;
-					break;
-				}
-			}
-
-			if (is_matching)
-			{
-				needstype = true;
+				needsType = true;
 				break;
 			}
 
 			if (rt->name != NULL && strcmp(strVal(linitial(cref->fields)), rt->name) == 0)
 			{
-				needstype = false;
-				break;
+				matchesResTarget = true;
 			}
 		}
 
-		if (strcmp(colname, ARRIVAL_TIMESTAMP) == 0)
-			needstype = false;
+		if (matchesResTarget && !needsType)
+			continue;
 
-		if (needstype && !hastype)
+		needsType = needsType || !matchesResTarget;
+
+		if (needsType && !hasType)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_AMBIGUOUS_COLUMN),
@@ -681,7 +779,7 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 	foreach(lc, stmt->fromClause)
 	{
 		Node *n = (Node *) lfirst(lc);
-		Node *newnode = analyze_from_item(n, &context);
+		Node *newnode = replace_stream_rangevar_with_streamdesc(n, &context);
 
 		newfrom = lappend(newfrom, newnode);
 	}

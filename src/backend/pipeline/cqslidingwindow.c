@@ -23,6 +23,7 @@
 #include "parser/parse_node.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
+#include "pipeline/cqanalyze.h"
 #include "pipeline/cqslidingwindow.h"
 #include "pipeline/stream.h"
 #include "storage/lock.h"
@@ -31,15 +32,7 @@
 #include "utils/syscache.h"
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
-
-typedef struct CQAnalyzeContext
-{
-	ParseState *pstate;
-	List *cols;
-	Node *matchExpr;
-	int location;
-	char *stepSize;
-} CQAnalyzeContext;
+#define DEFAULT_WINDOW_GRANULARITY "second"
 
 /*
  * find_clock_timestamp_expr
@@ -157,92 +150,10 @@ has_clock_timestamp(Node *node, void *context)
 }
 
 /*
- * find_col_refs_with_type_cast
- *
- * Recursively search this node and find all ColRefs in it.
+ * get_sliding_window_expr
  */
-static bool
-find_col_refs_with_type_cast(Node *node, CQAnalyzeContext *context)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, TypeCast))
-	{
-		TypeCast *tc = (TypeCast *) node;
-		if (IsA(tc->arg, ColumnRef))
-		{
-			context->cols = lappend(context->cols, node);
-			return false;
-		}
-	}
-	else if (IsA(node, ColumnRef))
-	{
-		context->cols = lappend(context->cols, node);
-		return false;
-	}
-
-	return raw_expression_tree_walker(node, find_col_refs_with_type_cast, (void *) context);
-}
-
-/*
- * does_colref_match_res_target
- *
- * Does this ColumnRef match the ResTarget? This is used
- * so that TypeCasted ColumnRefs are also considered matches.
- */
-static bool
-does_colref_match_res_target(Node *node, ColumnRef *cref)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, ResTarget))
-	{
-		ResTarget *res = (ResTarget *) node;
-		if (res->name != NULL &&
-				strcmp(res->name, FigureColname((Node *) cref)) == 0)
-			return true;
-	}
-	else if (IsA(node, ColumnRef))
-	{
-		ColumnRef *test_cref = (ColumnRef *) node;
-		ListCell *lc1;
-		ListCell *lc2;
-		bool match = true;
-
-		if (list_length(test_cref->fields) != list_length(cref->fields))
-			return false;
-
-		forboth(lc1, test_cref->fields, lc2, cref->fields)
-		{
-			if (strcmp(strVal(lfirst(lc1)), strVal(lfirst(lc2))) != 0)
-			{
-				match = false;
-				break;
-			}
-		}
-
-		return match;
-	}
-	else if (IsA(node, FuncCall))
-	{
-		/*
-		 * Even if a FuncCall has cref as an argument, its value
-		 * can be different from the column, so we need to project
-		 * the column.
-		 */
-		return false;
-	}
-
-	return raw_expression_tree_walker(node, does_colref_match_res_target, (void *) cref);
-}
-
-/*
- * GetSlidingWindowExpr
- */
-Node *
-GetSlidingWindowExpr(SelectStmt *stmt, ParseState *pstate)
+static Node *
+get_sliding_window_expr(SelectStmt *stmt, ParseState *pstate)
 {
 	CQAnalyzeContext context;
 	context.pstate = pstate;
@@ -263,27 +174,30 @@ GetSlidingWindowExpr(SelectStmt *stmt, ParseState *pstate)
  * validate_clock_timestamp_expr
  */
 static void
-validate_clock_timestamp_expr(SelectStmt *stmt, Node *node, ParseState *pstate)
+validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, ParseState *pstate)
 {
 	CQAnalyzeContext context;
 	A_Expr *a_expr;
+
+	if (expr == NULL)
+			return;
+
 	context.cols = NIL;
 	context.pstate = pstate;
 
-	if (node == NULL)
-		return;
+	Assert(IsA(expr, A_Expr));
+	a_expr = (A_Expr *) expr;
 
-	Assert(IsA(node, A_Expr));
-	a_expr = (A_Expr *) node;
-
-	find_col_refs_with_type_cast(node, &context);
+	FindColumnRefsWithTypeCasts(expr, &context);
 	if (list_length(context.cols) != 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-						errmsg("clock_timestamp can only appear as in an expression containing a single column reference"),
+						errmsg("clock_timestamp can only appear in an expression containing a single column reference"),
 						parser_errposition(pstate, a_expr->location)));
 
-
+	/*
+	 * TODO(usmanm): Ensure that context.cols[0] isn't being grouped on.
+	 */
 }
 
 /*
@@ -292,7 +206,7 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *node, ParseState *pstate)
 void
 ValidateSlidingWindowExpr(SelectStmt *stmt, ParseState *pstate)
 {
-	Node *swExpr = GetSlidingWindowExpr(stmt, pstate);
+	Node *swExpr = get_sliding_window_expr(stmt, pstate);
 	validate_clock_timestamp_expr(stmt, swExpr, pstate);
 }
 
@@ -329,101 +243,49 @@ IsSlidingWindowContinuousView(RangeVar *cvname)
 }
 
 /*
- * is_agg_func
+ * has_agg_func
  *
- * Does the node represent an aggregate function?
- *
- * TODO(usmanm): Turn this into a walker.
+ * Does the node contain an aggregate function?
  */
 static bool
-is_agg_func(Node *node)
+has_agg_func(Node *node, void *context)
 {
-	HeapTuple	ftup;
-	Form_pg_proc pform;
-	bool is_agg = false;
-	FuncCandidateList clist;
-	FuncCall *fn;
-
-	if (!IsA(node, FuncCall))
+	if (node == NULL)
 		return false;
 
-	fn = (FuncCall *) node;
-
-	clist = FuncnameGetCandidates(fn->funcname, list_length(fn->args), NIL, false, false, true);
-
-	while (clist != NULL)
+	if (IsA(node, FuncCall))
 	{
-		if (!OidIsValid(clist->oid))
-			break;
+		FuncCall *fn = (FuncCall *) node;
+		HeapTuple ftup;
+		Form_pg_proc pform;
+		bool is_agg = false;
+		FuncCandidateList clist;
 
-		ftup = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
-		if (!HeapTupleIsValid(ftup))
-			break;
+		clist = FuncnameGetCandidates(fn->funcname, list_length(fn->args), NIL, false, false, true);
 
-		pform = (Form_pg_proc) GETSTRUCT(ftup);
-		is_agg = pform->proisagg;
-		ReleaseSysCache(ftup);
-
-		if (is_agg)
-			break;
-
-		clist = clist->next;
-	}
-
-	return is_agg;
-}
-
-/*
- * add_res_targets_for_missing_cols
- *
- * Add ResTargets for any ColRef that is missing in the
- * targetList of the SelectStmt.
- */
-static void
-add_res_targets_for_missing_cols(SelectStmt *stmt, List *cols)
-{
-	ListCell *clc;
-	ListCell *tlc;
-	ResTarget *res;
-
-	foreach(clc, cols)
-	{
-		Node *node = (Node *) lfirst(clc);
-		ColumnRef *cref;
-		int location;
-		bool found = false;
-
-		if (IsA(node, TypeCast))
+		while (clist != NULL)
 		{
-			TypeCast *tc = (TypeCast *) node;
-			cref = (ColumnRef *) tc->arg;
-			location = tc->location;
-		}
-		else
-		{
-			cref = (ColumnRef *) lfirst(clc);
-			location = cref->location;
-		}
-
-		foreach(tlc, stmt->targetList)
-		{
-			res = (ResTarget *) lfirst(tlc);
-			found = does_colref_match_res_target((Node *) res, cref);
-
-			if (found)
+			if (!OidIsValid(clist->oid))
 				break;
+
+			ftup = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
+			if (!HeapTupleIsValid(ftup))
+				break;
+
+			pform = (Form_pg_proc) GETSTRUCT(ftup);
+			is_agg = pform->proisagg;
+			ReleaseSysCache(ftup);
+
+			if (is_agg)
+				break;
+
+			clist = clist->next;
 		}
 
-		if (!found)
-		{
-			res = makeNode(ResTarget);
-			res->name = NULL;
-			res->indirection = NIL;
-			res->val = node;
-			res->location = location;
-			stmt->targetList = lappend(stmt->targetList, res);
-		}
+		return is_agg;
 	}
+
+	return raw_expression_tree_walker(node, has_agg_func, context);
 }
 
 /*
@@ -524,31 +386,31 @@ has_agg_or_group_by(SelectStmt *stmt)
 	foreach(tlc, stmt->targetList)
 	{
 		res = (ResTarget *) lfirst(tlc);
-		if (is_agg_func(res->val))
+		if (has_agg_func(res->val, NULL))
 		{
 			hasAgg = true;
 			break;
 		}
 	}
 
-	return (hasAgg || stmt->groupClause != NULL);
+	return (hasAgg || stmt->groupClause != NIL);
 }
 
 /*
  * TransformSWSelectStmtForCQWorker
  */
 SelectStmt *
-TransformSWSelectStmtForCQWorker(SelectStmt *stmt)
+TransformSWSelectStmtForCQWorker(SelectStmt *stmt, 	CQAnalyzeContext *context)
 {
-	CQAnalyzeContext context;
-	Node *swExpr = GetSlidingWindowExpr(stmt, NULL);
+	Node *swExpr = get_sliding_window_expr(stmt, NULL);
+	Node *cmpCRef;
 
 	if (swExpr == NULL)
 		return stmt;
 
-	context.cols = NIL;
-	find_col_refs_with_type_cast(swExpr, &context);
-	Assert(list_length(context.cols) == 1);
+	context->cols = NIL;
+	FindColumnRefsWithTypeCasts(swExpr, context);
+	cmpCRef = (Node *) linitial(context->cols);
 
 	/*
 	 * This re-writes the query to be run by worker nodes.
@@ -558,15 +420,15 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt)
 	 * WHERE date_trunc('minute', arrival_timestamp) > clock_timestamp() - interval '15 minute'
 	 * GROUP BY user;
 	 * =>
-	 * SELECT user::int, COUNT(*), date_trunc('hour', arrival_timestamp) AS arrival_timestamp FROM click_stream
-	 * WHERE arrival_timestamp > clock_timestamp() - interval '15 minute'
-	 * GROUP BY user, arrival_timestamp;
+	 * SELECT user::int, COUNT(*), date_trunc('hour', arrival_timestamp) AS _0 FROM click_stream
+	 * WHERE _0 > clock_timestamp() - interval '15 minute'
+	 * GROUP BY user, _0;
 	 *
 	 * SELECT COUNT(*) FROM sream
 	 * WHERE arrival_timestamp > clock_timestamp() - interval '15 minute';
 	 * =>
-	 * SELECT COUNT(*), date_trunc('second', arrival_timestamp) AS arrival_timestamp FROM stream
-	 * WHERE arrival_timestamp > clock_timestamp() - interval '15 minute';
+	 * SELECT COUNT(*), date_trunc('second', arrival_timestamp) AS _0 FROM stream
+	 * WHERE _0 > clock_timestamp() - interval '15 minute';
 	 */
 	if (has_agg_or_group_by(stmt))
 	{
@@ -583,28 +445,26 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt)
 		ResTarget *res = makeNode(ResTarget);
 		FuncCall *func = makeNode(FuncCall);
 		A_Const *aconst = makeNode(A_Const);
-		char *colName = FigureColname(linitial(context.cols));
+		char *name = GetUniqueInternalColname(context);
 		char *stepSize;
 
 		/* Get step size. Default to 'second'. */
-		context.stepSize = NULL;
-		get_step_size(swExpr, &context);
-		if (context.stepSize == NULL)
-			stepSize = "second";
+		context->stepSize = NULL;
+		get_step_size(swExpr, context);
+		if (context->stepSize != NULL)
+			stepSize = context->stepSize;
 		else
-			stepSize = context.stepSize;
+			stepSize = DEFAULT_WINDOW_GRANULARITY;
 
 		/*
 		 * Add ResTarget for step size field.
-		 * We reuse the colname of the ColumnRef for
-		 * this field.
 		 */
 		aconst->val = *makeString(stepSize);
 		aconst->location = -1;
 		func->funcname = list_make1(makeString("date_trunc"));
-		func->args = list_concat(list_make1(aconst), context.cols);
+		func->args = list_concat(list_make1(aconst), context->cols);
 		func->location = -1;
-		res->name = colName;
+		res->name = name;
 		res->indirection = NIL;
 		res->val = (Node *) func;
 		res->location = -1;
@@ -614,18 +474,26 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt)
 		 * Add GROUP BY for step field. This is the group
 		 * we will merge/combine on the read path.
 		 */
-		cref->fields = list_make1(makeString(colName));
+		cref->fields = list_make1(makeString(name));
 		cref->location = -1;
 		stmt->groupClause = lappend(stmt->groupClause, cref);
 	}
-	else
+	else if (!IsColumnRefInTargetList(stmt, cmpCRef))
 	{
 		/*
 		 * The CQ is requesting raw events in the sliding window.
 		 * In this case, simply add the column that clock_timestamp()
-		 * is being compared to to the targetList.
+		 * is being compared to to the targetList (if missing).
 		 */
-		add_res_targets_for_missing_cols(stmt, context.cols);
+		ResTarget *res = makeNode(ResTarget);
+		char *name = GetUniqueInternalColname(context);
+
+		res->name = name;
+		res->indirection = NIL;
+		res->val = cmpCRef;
+		res->location = -1;
+
+		stmt->targetList = lappend(stmt->targetList, res);
 	}
 
 	return stmt;
@@ -635,36 +503,43 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt)
  * TransformSWSelectStmtForCQView
  */
 SelectStmt *
-TransformSWSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
+TransformSWSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel, CQAnalyzeContext *context)
 {
-	CQAnalyzeContext context;
-	Node *swExpr = GetSlidingWindowExpr(stmt, NULL);
+	Node *swExpr = get_sliding_window_expr(stmt, NULL);
+	Node *cmpCRef;
 
 	if (swExpr == NULL)
 		return stmt;
 
-	context.cols = NIL;
-	find_col_refs_with_type_cast(swExpr, &context);
-	Assert(list_length(context.cols) == 1);
+	context->cols = NIL;
+	FindColumnRefsWithTypeCasts(swExpr, context);
+	cmpCRef = (Node *) linitial(context->cols);
 
-	if (has_agg_or_group_by(stmt))
+	if (has_agg_or_group_by(stmt) || !IsColumnRefInTargetList(stmt, cmpCRef))
 	{
 		/*
-		 * This will swap out any date_trunc calls in the
-		 * sliding window expression with the column reference
-		 * to that field.
+		 * Find the name we picked for the column we're
+		 * comparing clock_timestamp() to and replace
+		 * it with a ColumnRef to that.
 		 */
-		context.stepSize = NULL;
-		get_step_size(swExpr, &context);
-	}
-	else
-	{
-		stmt->whereClause = swExpr;
+		char *name = GetUniqueInternalColname(context);
+		/*
+		 * XXX(usmanm): This is hackery. cmpCRef can be a
+		 * TypeCast or a ColumnRef but since sizeof(TypeCast)
+		 * > sizeof(ColumnRef), we can force cast cmpCRef
+		 * to be a ColumnRef.
+		 */
+		ColumnRef *cref = (ColumnRef *) cmpCRef;
+		cref->type = T_ColumnRef;
+		cref->fields = list_make1(makeString(name));
+		cref->location = -1;
 	}
 
 	stmt->whereClause = swExpr;
 	replace_colrefs_with_colnames((Node *) stmt, NULL);
 	stmt->fromClause = list_make1(cqrel);
+	stmt->groupClause = NIL;
+
 	return stmt;
 }
 
@@ -676,13 +551,13 @@ GetDeleteStmtForGC(char *cvname, SelectStmt *stmt)
 {
 	CQAnalyzeContext context;
 	DeleteStmt *delete_stmt;
-	Node *swExpr = GetSlidingWindowExpr(stmt, NULL);
+	Node *swExpr = get_sliding_window_expr(stmt, NULL);
 
 	if (swExpr == NULL)
 		return NULL;
 
 	context.cols = NIL;
-	find_col_refs_with_type_cast(swExpr, &context);
+	FindColumnRefsWithTypeCasts(swExpr, &context);
 	Assert(list_length(context.cols) == 1);
 
 	if (has_agg_or_group_by(stmt))
@@ -699,7 +574,7 @@ GetDeleteStmtForGC(char *cvname, SelectStmt *stmt)
 	}
 
 	delete_stmt = makeNode(DeleteStmt);
-	delete_stmt->relation = makeRangeVar(NULL, GetCQMatRelName(cvname), -1);
+	delete_stmt->relation = makeRangeVar(NULL, GetCQMatRelationName(cvname), -1);
 	delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, swExpr, -1);
 
 	return delete_stmt;

@@ -42,7 +42,6 @@
  */
 bool DebugSyncStreamInsert;
 
-#define CQ_COMBINESTATE_COL_SUFFIX "_c"
 #define CQ_TABLE_SUFFIX "_pdb"
 
 /*
@@ -60,12 +59,6 @@ append_suffix(char *base, char *suffix)
 	strcpy(&relname[chunk], suffix);
 
 	return strdup(relname);
-}
-
-static char *
-make_combine_state_colname(char *basename)
-{
-	return append_suffix(basename, CQ_COMBINESTATE_COL_SUFFIX);
 }
 
 static ColumnDef *
@@ -92,38 +85,12 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 }
 
 /*
- * GetCombineStateAttr
- *
- * Given an attribute and a tuple descriptor, returns the corresponding
- * hidden attribute, or InvalidAttribute if it doesn't exist
- */
-AttrNumber
-GetCombineStateAttr(char *base, TupleDesc desc)
-{
-	AttrNumber i;
-	char *colname;
-
-	if (!base)
-		return InvalidAttrNumber;
-
-	colname = make_combine_state_colname(base);
-
-	for (i=0; i<desc->natts; i++)
-	{
-		if (strcmp(NameStr(desc->attrs[i]->attname), colname) == 0)
-			return desc->attrs[i]->attnum;
-	}
-
-	return InvalidAttrNumber;
-}
-
-/*
- * GetCQMatRelName
+ * GetCQMatRelationName
  *
  * Returns the name of the given CV's underlying materialization table
  */
 char *
-GetCQMatRelName(char *cvname)
+GetCQMatRelationName(char *cvname)
 {
 	/*
 	 * The name of the underlying materialized table should
@@ -148,17 +115,16 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	RangeVar *view;
 	List *tableElts = NIL;
 	List *tlist;
-	ListCell *lc;
 	ListCell *col;
 	Oid reloid;
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
-	SelectStmt *raw_select_stmt;
 	SelectStmt *select_stmt;
+	CQAnalyzeContext context;
 	bool saveAllowSystemTableMods;
 
 	view = stmt->into->rel;
-	mat_relation = makeRangeVar(view->schemaname, GetCQMatRelName(view->relname), -1);
+	mat_relation = makeRangeVar(view->schemaname, GetCQMatRelationName(view->relname), -1);
 
 	/*
 	 * Check if CV already exists?
@@ -167,55 +133,38 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		elog(ERROR, "continuous view \"%s\" already exists", view->relname);
 
 	/*
-	 * Keep around a copy of the original SelectStmt struct.
-	 * `parse_analyze` modified the struct, and causes things to blow
-	 * up in cqanalyze.h functions.
-	 */
-	raw_select_stmt = (SelectStmt *) copyObject(stmt->query);
-
-	/*
 	 * Analyze the SelectStmt portion of the CreateContinuousViewStmt to make
 	 * sure it's well-formed.
 	 */
-	query = parse_analyze(stmt->query, querystring, 0, 0);
+	query = parse_analyze(copyObject(stmt->query), querystring, 0, 0);
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying materialization table.
 	 */
-	select_stmt = GetSelectStmtForCQWorker(raw_select_stmt);
+	select_stmt = GetSelectStmtForCQWorker(copyObject(stmt->query));
+	InitializeCQAnalyzeContext(select_stmt, NULL, &context);
+
 	query = parse_analyze((Node *) select_stmt, querystring, 0, 0);
 	tlist = query->targetList;
 
 	/*
 	 * Build a list of columns from the SELECT statement that we
 	 * can use to create a table with
-	 *
-	 * TODO(usmanm): This `stmt->into` business seems janky. Revisit
-	 * post-alpha.
 	 */
-	lc = list_head(stmt->into->colNames);
-
 	foreach(col, tlist)
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(col);
 		ColumnDef   *coldef;
-		char				*colname;
-		Oid					hiddentype;
+		char		*colname;
+		Oid			hiddentype;
 
 		/* Ignore junk columns from the targetlist */
 		if (tle->resjunk)
 			continue;
 
-		/* Take the column name specified if any */
-		if (lc)
-		{
-			colname = strVal(lfirst(lc));
-			lc = lnext(lc);
-		}
-		else
-			colname = pstrdup(tle->resname);
+		colname = pstrdup(tle->resname);
 
 
 		/*
@@ -242,9 +191,8 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		hiddentype = GetCombineStateColumnType(tle);
 		if (OidIsValid(hiddentype))
 		{
-			char *hiddenname = make_combine_state_colname(colname);
+			char *hiddenname = GetUniqueInternalColname(&context);
 			ColumnDef *hidden = make_cv_columndef(hiddenname, hiddentype, InvalidOid);
-
 			tableElts = lappend(tableElts, hidden);
 		}
 	}
@@ -285,7 +233,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 */
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
-	view_stmt->query = (Node *) GetSelectStmtForCQView(raw_select_stmt, mat_relation);
+	view_stmt->query = (Node *) GetSelectStmtForCQView(copyObject(stmt->query), mat_relation);
 	DefineView(view_stmt, querystring);
 
 	/*
@@ -363,7 +311,7 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		/*
 		 * Add object for the CQ's underlying materialization table.
 		 */
-		relations = lappend(relations, list_make1(makeString(GetCQMatRelName(rv->relname))));
+		relations = lappend(relations, list_make1(makeString(GetCQMatRelationName(rv->relname))));
 	}
 
 	/*
@@ -508,7 +456,7 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 		if (!IsAContinuousView(rv))
 			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
 
-		rv->relname = GetCQMatRelName(rv->relname);
+		rv->relname = GetCQMatRelationName(rv->relname);
 	}
 
 	/* Call TRUNCATE on the backing view table(s). */
