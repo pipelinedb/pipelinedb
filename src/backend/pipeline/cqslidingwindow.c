@@ -657,6 +657,7 @@ TransformSWSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
 	stmt->whereClause = swExpr;
 	replace_colrefs_with_colnames((Node *) stmt, NULL);
 	stmt->fromClause = list_make1(cqrel);
+	stmt->groupClause = NIL;
 	return stmt;
 }
 

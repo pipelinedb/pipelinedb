@@ -330,10 +330,8 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 
 	if (IsSlidingWindowSelectStmt(stmt))
 	{
-		return TransformSWSelectStmtForCQWorker(stmt);
+		stmt = TransformSWSelectStmtForCQWorker(stmt);
 	}
-
-	pprint(stmt);
 
 	return stmt;
 }
@@ -658,8 +656,8 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 		/*
 		 * arrival_timestamp doesn't require an explicit TypeCast
 		 */
-		if (strcmp(colName, ARRIVAL_TIMESTAMP) == 0)
-			needsType = false;
+		if (pg_strcasecmp(colName, ARRIVAL_TIMESTAMP) == 0)
+			continue;
 
 		/*
 		 * Ensure that we have no '*' for a stream or relation target.

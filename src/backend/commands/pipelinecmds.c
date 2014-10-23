@@ -121,8 +121,6 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	SelectStmt *select_stmt;
 	CQAnalyzeContext context;
 
-	InitializeCQAnalyzeContext((SelectStmt *) stmt->query, NULL, &context);
-
 	view = stmt->into->rel;
 	mat_relation = makeRangeVar(view->schemaname, GetCQMatRelationName(view->relname), -1);
 
@@ -144,6 +142,8 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * that need to be created in the underlying materialization table.
 	 */
 	select_stmt = GetSelectStmtForCQWorker(copyObject(stmt->query));
+	InitializeCQAnalyzeContext(select_stmt, NULL, &context);
+
 	query = parse_analyze((Node *) select_stmt, querystring, 0, 0);
 	tlist = query->targetList;
 

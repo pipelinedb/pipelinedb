@@ -126,7 +126,7 @@ get_combiner_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt = GetSelectStmtForCQCombiner(selectstmt);
 	selectstmt->forContinuousView = true;
-	pprint(selectstmt);
+
 	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, true);
 }
 

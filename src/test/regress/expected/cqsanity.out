@@ -11,7 +11,7 @@ SELECT * FROM test_avg;
 (2 rows)
 
 SELECT * FROM test_avg_pdb;
- key | avg |     avg_c     
+ key | avg |      _0       
 -----+-----+---------------
  y   | 100 | {1,100,10000}
  x   | 1.5 | {2,3,5}
@@ -28,7 +28,7 @@ SELECT * FROM test_avg;
 (2 rows)
 
 SELECT * FROM test_avg_pdb;
- key | avg  |     avg_c     
+ key | avg  |      _0       
 -----+------+---------------
  y   |  150 | {2,300,50000}
  x   | 8.25 | {4,33,505}
