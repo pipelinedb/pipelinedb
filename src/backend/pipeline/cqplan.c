@@ -152,10 +152,10 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 
 			/* The hidden column is always stored adjacent to the column for the aggref */
 			if (OidIsValid(hiddentype))
-				hidden = te->resno + 1;
+				hidden = attno + 1;
 
 			if (AttributeNumberIsValid(hidden))
-				toappend->resname = NameStr(matdesc->attrs[hidden - 1]->attname);
+
 
 			aggref->aggresultstate = AGG_TRANSITION;
 			transtype = get_trans_type(aggref);
@@ -171,6 +171,7 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 			if (AttributeNumberIsValid(hidden))
 			{
 				storete = make_store_target(te, origresname, attno, aggref->aggtype, transtype);
+				toappend->resname = NameStr(matdesc->attrs[attno]->attname);
 				attno++;
 			}
 
