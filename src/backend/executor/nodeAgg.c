@@ -1824,7 +1824,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		aggstate->pergroup = pergroup;
 	}
 
-	aggstate->resno_to_aggno = palloc0(sizeof(int) * numaggs);
+	aggstate->resno_to_aggno = palloc0(sizeof(int) * list_length(node->plan.targetlist));
 
 	/*
 	 * Perform lookups of aggregate function info, and initialize the
