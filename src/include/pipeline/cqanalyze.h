@@ -42,9 +42,6 @@ Oid GetCombineStateColumnType(TargetEntry *te);
 void InitializeCQAnalyzeContext(SelectStmt *stmt, ParseState *pstate, CQAnalyzeContext *context);
 char *GetUniqueInternalColname(CQAnalyzeContext *context);
 bool FindColumnRefsWithTypeCasts(Node *node, CQAnalyzeContext *context);
-bool AreColumnRefsEqual(ColumnRef *cr1, ColumnRef *cr2);
-bool ContainsColumnRef(Node *node, ColumnRef *cref);
-bool IsColumnRef(Node *node);
 bool IsColumnRefInTargetList(SelectStmt *stmt, Node *node);
 
 #endif

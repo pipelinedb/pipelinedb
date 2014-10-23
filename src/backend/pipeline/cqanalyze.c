@@ -131,10 +131,10 @@ GetUniqueInternalColname(CQAnalyzeContext *context)
 }
 
 /*
- * IsColumnRef
+ * is_column_ref
  */
-bool
-IsColumnRef(Node *node)
+static bool
+is_column_ref(Node *node)
 {
 	TypeCast *tc = (TypeCast *) node;
 
@@ -170,20 +170,20 @@ FindColumnRefsWithTypeCasts(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * AreColumnRefsEqual
+ * are_column_refs_equal
  */
-bool
-AreColumnRefsEqual(ColumnRef *cr1, ColumnRef *cr2)
+static bool
+are_column_refs_equal(ColumnRef *cr1, ColumnRef *cr2)
 {
 	/* In our land ColumnRef locations are matter */
 	return equal(cr1->fields, cr2->fields);
 }
 
 /*
- * ContainsColumnRef
+ * contains_column_ref
  */
-bool
-ContainsColumnRef(Node *node, ColumnRef *cref)
+static bool
+contains_column_ref(Node *node, ColumnRef *cref)
 {
 	if (node == NULL)
 		return false;
@@ -191,10 +191,10 @@ ContainsColumnRef(Node *node, ColumnRef *cref)
 	if (IsA(node, ColumnRef))
 	{
 		ColumnRef *cref2 = (ColumnRef *) node;
-		return AreColumnRefsEqual(cref, cref2);
+		return are_column_refs_equal(cref, cref2);
 	}
 
-	return raw_expression_tree_walker(node, ContainsColumnRef, (void *) cref);
+	return raw_expression_tree_walker(node, contains_column_ref, (void *) cref);
 }
 
 /*
@@ -216,7 +216,7 @@ IsResTargetForColumnRef(Node *node, ColumnRef *cref)
 			 * Is this ResTarget overriding a column it references?
 			 * Example: substring(key::text, 1, 2) AS key
 			 */
-			if (ContainsColumnRef((Node *) res, cref))
+			if (contains_column_ref((Node *) res, cref))
 				return false;
 			return true;
 		}
@@ -224,7 +224,7 @@ IsResTargetForColumnRef(Node *node, ColumnRef *cref)
 	else if (IsA(node, ColumnRef))
 	{
 		ColumnRef *cref2 = (ColumnRef *) node;
-		return AreColumnRefsEqual(cref, cref2);
+		return are_column_refs_equal(cref, cref2);
 	}
 	else if (IsA(node, FuncCall))
 	{
@@ -311,7 +311,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 		ResTarget *res;
 		ColumnRef *cref;
 
-		if (IsColumnRef(node) && IsColumnRefInTargetList(stmt, node))
+		if (is_column_ref(node) && IsColumnRefInTargetList(stmt, node))
 		{
 			newGroupClause = lappend(newGroupClause, node);
 			continue;
@@ -745,7 +745,7 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 		foreach(tlc, context.targets)
 		{
 			ResTarget *rt = (ResTarget *) lfirst(tlc);
-			if (ContainsColumnRef((Node *) rt, cref))
+			if (contains_column_ref((Node *) rt, cref))
 			{
 				needsType = true;
 				break;
