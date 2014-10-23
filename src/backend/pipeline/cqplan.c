@@ -213,7 +213,7 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 					var = makeVar(OUTER_VAR, toappend->resno, type, typmod, InvalidOid, 0);
 				}
 
-				var->varattno = toappend->resno;
+				var->varattno = attno;
 				te->expr = (Expr *) var;
 
 				/* Fix grpColIdx to reflect the index in the tuple from worker */
