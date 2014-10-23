@@ -41,7 +41,6 @@
  */
 bool DebugSyncStreamInsert;
 
-#define CQ_COMBINESTATE_COL_SUFFIX "_c"
 #define CQ_TABLE_SUFFIX "_pdb"
 
 /*
@@ -59,12 +58,6 @@ append_suffix(char *base, char *suffix)
 	strcpy(&relname[chunk], suffix);
 
 	return strdup(relname);
-}
-
-static char *
-make_combine_state_colname(char *basename)
-{
-	return append_suffix(basename, CQ_COMBINESTATE_COL_SUFFIX);
 }
 
 static ColumnDef *
@@ -97,27 +90,24 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
  * hidden attribute, or InvalidAttribute if it doesn't exist
  */
 AttrNumber
-GetCombineStateAttr(char *base, TupleDesc desc)
+GetCombineStateAttr(char *colName, TupleDesc desc)
 {
 	AttrNumber i;
-	char *colname;
 
-	if (!base)
+	if (colName == NULL)
 		return InvalidAttrNumber;
 
-	colname = make_combine_state_colname(base);
-
-	for (i=0; i<desc->natts; i++)
+	for (i = 0; i < desc->natts; i++)
 	{
-		if (strcmp(NameStr(desc->attrs[i]->attname), colname) == 0)
-			return desc->attrs[i]->attnum;
+		if (strcmp(NameStr(desc->attrs[i]->attname), colName) == 0)
+			return desc->attrs[i]->attnum + 1;
 	}
 
 	return InvalidAttrNumber;
 }
 
 /*
- * GetCQMatRelName
+ * GetCQMatRelationName
  *
  * Returns the name of the given CV's underlying materialization table
  */
@@ -152,6 +142,9 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *select_stmt;
+	CQAnalyzeContext context;
+
+	InitializeCQAnalyzeContext((SelectStmt *) stmt->query, NULL, &context);
 
 	view = stmt->into->rel;
 	mat_relation = makeRangeVar(view->schemaname, GetCQMatRelationName(view->relname), -1);
@@ -209,9 +202,8 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		hiddentype = GetCombineStateColumnType(tle);
 		if (OidIsValid(hiddentype))
 		{
-			char *hiddenname = make_combine_state_colname(colname);
+			char *hiddenname = GetUniqueInternalColname(&context);
 			ColumnDef *hidden = make_cv_columndef(hiddenname, hiddentype, InvalidOid);
-
 			tableElts = lappend(tableElts, hidden);
 		}
 	}

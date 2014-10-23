@@ -537,7 +537,6 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 		}
 		else
 		{
-			print_slot(slot);
 			tuplestore_puttupleslot(store, slot);
 			count++;
 		}
