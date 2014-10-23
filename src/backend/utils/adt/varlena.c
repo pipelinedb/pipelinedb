@@ -50,6 +50,15 @@ typedef struct
 	int			skiptable[256]; /* skip distance for given mismatched char */
 } TextPositionState;
 
+typedef struct StringAggState
+{
+	/* string being built */
+	StringInfo buf;
+
+	/* length of the first delimiter, which we'll need to trim off */
+	int dlen;
+} StringAggState;
+
 #define DatumGetUnknownP(X)			((unknown *) PG_DETOAST_DATUM(X))
 #define DatumGetUnknownPCopy(X)		((unknown *) PG_DETOAST_DATUM_COPY(X))
 #define PG_GETARG_UNKNOWN_P(n)		DatumGetUnknownP(PG_GETARG_DATUM(n))
@@ -78,7 +87,7 @@ static void appendStringInfoText(StringInfo str, const text *t);
 static Datum text_to_array_internal(PG_FUNCTION_ARGS);
 static text *array_to_text_internal(FunctionCallInfo fcinfo, ArrayType *v,
 					   const char *fldsep, const char *null_string);
-static StringInfo makeStringAggState(FunctionCallInfo fcinfo);
+static StringAggState *makeStringAggState(FunctionCallInfo fcinfo);
 static bool text_format_parse_digits(const char **ptr, const char *end_ptr,
 						 int *value);
 static const char *text_format_parse_format(const char *start_ptr,
@@ -408,7 +417,7 @@ byteasend(PG_FUNCTION_ARGS)
 Datum
 byteatostringinfo(PG_FUNCTION_ARGS)
 {
-	StringInfo state = makeStringAggState(fcinfo);
+	StringInfo state = (StringInfo) makeStringAggState(fcinfo)->buf;
 	bytea *bytes = PG_GETARG_BYTEA_PP(0);
 
 	appendBinaryStringInfo(state, VARDATA_ANY(bytes), VARSIZE_ANY_EXHDR(bytes));
@@ -419,26 +428,32 @@ byteatostringinfo(PG_FUNCTION_ARGS)
 Datum
 bytea_string_agg_transfn(PG_FUNCTION_ARGS)
 {
-	StringInfo	state;
+	StringAggState *state;
 
-	state = PG_ARGISNULL(0) ? NULL : (StringInfo) PG_GETARG_POINTER(0);
+	state = PG_ARGISNULL(0) ? NULL : (StringAggState *) PG_GETARG_POINTER(0);
 
 	/* Append the value unless null. */
 	if (!PG_ARGISNULL(1))
 	{
-		bytea	   *value = PG_GETARG_BYTEA_PP(1);
-
-		/* On the first time through, we ignore the delimiter. */
+		bytea *value = PG_GETARG_BYTEA_PP(1);
+		bool isfirst = false;
 		if (state == NULL)
-			state = makeStringAggState(fcinfo);
-		else if (!PG_ARGISNULL(2))
 		{
-			bytea	   *delim = PG_GETARG_BYTEA_PP(2);
-
-			appendBinaryStringInfo(state, VARDATA_ANY(delim), VARSIZE_ANY_EXHDR(delim));
+			isfirst = true;
+			state = makeStringAggState(fcinfo);
 		}
 
-		appendBinaryStringInfo(state, VARDATA_ANY(value), VARSIZE_ANY_EXHDR(value));
+		if (!PG_ARGISNULL(2))
+		{
+			bytea *delim = PG_GETARG_BYTEA_PP(2);
+
+			appendBinaryStringInfo(state->buf, VARDATA_ANY(delim), VARSIZE_ANY_EXHDR(delim));
+		}
+
+		if (isfirst)
+			state->dlen = state->buf->len;
+
+		appendBinaryStringInfo(state->buf, VARDATA_ANY(value), VARSIZE_ANY_EXHDR(value));
 	}
 
 	/*
@@ -451,20 +466,20 @@ bytea_string_agg_transfn(PG_FUNCTION_ARGS)
 Datum
 bytea_string_agg_finalfn(PG_FUNCTION_ARGS)
 {
-	StringInfo	state;
+	StringAggState *state;
 
 	/* cannot be called directly because of internal-type argument */
 	Assert(AggCheckCallContext(fcinfo, NULL));
 
-	state = PG_ARGISNULL(0) ? NULL : (StringInfo) PG_GETARG_POINTER(0);
+	state = PG_ARGISNULL(0) ? NULL : (StringAggState *) PG_GETARG_POINTER(0);
 
 	if (state != NULL)
 	{
-		bytea	   *result;
-
-		result = (bytea *) palloc(state->len + VARHDRSZ);
-		SET_VARSIZE(result, state->len + VARHDRSZ);
-		memcpy(VARDATA(result), state->data, state->len);
+		bytea *result;
+		int size = state->buf->len - state->dlen;
+		result = (bytea *) palloc(size + VARHDRSZ);
+		SET_VARSIZE(result, size + VARHDRSZ);
+		memcpy(VARDATA(result), state->buf->data + state->dlen, size);
 		PG_RETURN_BYTEA_P(result);
 	}
 	else
@@ -3746,10 +3761,10 @@ pg_column_size(PG_FUNCTION_ARGS)
  */
 
 /* subroutine to initialize state */
-static StringInfo
+static StringAggState *
 makeStringAggState(FunctionCallInfo fcinfo)
 {
-	StringInfo	state;
+	StringAggState *result;
 	MemoryContext aggcontext;
 	MemoryContext oldcontext;
 
@@ -3764,29 +3779,38 @@ makeStringAggState(FunctionCallInfo fcinfo)
 	 * calls.
 	 */
 	oldcontext = MemoryContextSwitchTo(aggcontext);
-	state = makeStringInfo();
+	result = palloc0(sizeof(StringAggState));
+	result->buf = makeStringInfo();
 	MemoryContextSwitchTo(oldcontext);
 
-	return state;
+	return result;
 }
 
 Datum
 string_agg_transfn(PG_FUNCTION_ARGS)
 {
-	StringInfo	state;
+	StringAggState *state;
 
-	state = PG_ARGISNULL(0) ? NULL : (StringInfo) PG_GETARG_POINTER(0);
+	state = PG_ARGISNULL(0) ? NULL : (StringAggState *) PG_GETARG_POINTER(0);
 
 	/* Append the value unless null. */
 	if (!PG_ARGISNULL(1))
 	{
-		/* On the first time through, we ignore the delimiter. */
+		bool isfirst = false;
 		if (state == NULL)
+		{
+			isfirst = true;
 			state = makeStringAggState(fcinfo);
-		else if (!PG_ARGISNULL(2))
-			appendStringInfoText(state, PG_GETARG_TEXT_PP(2));	/* delimiter */
+		}
 
-		appendStringInfoText(state, PG_GETARG_TEXT_PP(1));		/* value */
+		if (!PG_ARGISNULL(2))
+			appendStringInfoText(state->buf, PG_GETARG_TEXT_PP(2));	/* delimiter */
+
+		/* the delimiter preceding the first element is trimmed off when finalizing */
+		if (isfirst)
+			state->dlen = state->buf->len;
+
+		appendStringInfoText(state->buf, PG_GETARG_TEXT_PP(1));		/* value */
 	}
 
 	/*
@@ -3796,18 +3820,95 @@ string_agg_transfn(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(state);
 }
 
+/*
+ * Serializes a string aggregation transition state for transmission
+ * to an external process
+ */
+Datum
+stringaggstatesend(PG_FUNCTION_ARGS)
+{
+	StringAggState *state = PG_ARGISNULL(0) ? NULL : (StringAggState *) PG_GETARG_POINTER(0);
+	StringInfoData buf;
+	bytea *result;
+	int nbytes;
+
+	AggCheckCallContext(fcinfo, NULL);
+
+	initStringInfo(&buf);
+
+	pq_sendint(&buf, state->dlen, sizeof(int));
+	appendStringInfoString(&buf, state->buf->data);
+
+	nbytes = buf.len - buf.cursor;
+	result = (bytea *) palloc(nbytes + VARHDRSZ);
+	SET_VARSIZE(result, nbytes + VARHDRSZ);
+
+	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
+
+	PG_RETURN_BYTEA_P(result);
+}
+
+/*
+ * Deserializes a string aggregation transition state sent by an
+ * external process
+ */
+Datum
+stringaggstaterecv(PG_FUNCTION_ARGS)
+{
+	bytea *bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
+	StringAggState *result;
+	StringInfoData buf;
+	int nbytes = VARSIZE(bytesin);
+
+	AggCheckCallContext(fcinfo, NULL);
+
+	result = (StringAggState *) palloc0(sizeof(StringAggState));
+
+	initStringInfo(&buf);
+	appendBinaryStringInfo(&buf, VARDATA(bytesin), nbytes);
+
+	result->dlen = pq_getmsgint(&buf, sizeof(int));
+	result->buf = makeStringInfo();
+	appendStringInfoString(result->buf, pq_getmsgstring(&buf));
+
+	PG_RETURN_POINTER(result);
+}
+
+/*
+ * Concatenates two delimited strings together
+ */
+Datum
+string_agg_combine(PG_FUNCTION_ARGS)
+{
+	StringAggState *state = PG_ARGISNULL(0) ? NULL : (StringAggState *) PG_GETARG_POINTER(0);
+	StringAggState *incoming = PG_ARGISNULL(1) ? NULL : (StringAggState *) PG_GETARG_POINTER(1);
+
+	if (state == NULL)
+	{
+		state = makeStringAggState(fcinfo);
+		state->dlen = incoming->dlen;
+	}
+
+	if (incoming != NULL)
+		appendStringInfoString(state->buf, incoming->buf->data);
+
+	PG_RETURN_POINTER(state);
+}
+
 Datum
 string_agg_finalfn(PG_FUNCTION_ARGS)
 {
-	StringInfo	state;
+	StringAggState *state;
 
 	/* cannot be called directly because of internal-type argument */
 	Assert(AggCheckCallContext(fcinfo, NULL));
 
-	state = PG_ARGISNULL(0) ? NULL : (StringInfo) PG_GETARG_POINTER(0);
+	state = PG_ARGISNULL(0) ? NULL : (StringAggState *) PG_GETARG_POINTER(0);
 
+	/* trim off the delimiter of the first element */
 	if (state != NULL)
-		PG_RETURN_TEXT_P(cstring_to_text_with_len(state->data, state->len));
+		PG_RETURN_TEXT_P(cstring_to_text_with_len(
+				state->buf->data + state->dlen, state->buf->len - state->dlen));
 	else
 		PG_RETURN_NULL();
 }

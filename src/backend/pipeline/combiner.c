@@ -351,8 +351,9 @@ sync_combine(char *cvname, Tuplestorestate *results,
 		TupleTableSlot *slot, TupleHashTable merge_targets)
 {
 	Relation rel = heap_openrv(makeRangeVar(NULL, cvname, -1), RowExclusiveLock);
-	bool *replace_all = palloc(sizeof(bool) * slot->tts_tupleDescriptor->natts);
-	MemSet(replace_all, true, sizeof(replace_all));
+	int size = sizeof(bool) * slot->tts_tupleDescriptor->natts;
+	bool *replace_all = palloc0(size);
+	MemSet(replace_all, true, size);
 
 	foreach_tuple(slot, results)
 	{

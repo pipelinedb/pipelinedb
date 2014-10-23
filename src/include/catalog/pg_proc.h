@@ -5065,6 +5065,20 @@ DESCR("array aggregation combination function");
 DATA(insert OID = 4313 (byteatostringinfo PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "2281" _null_ _null_ _null_ _null_ byteatostringinfo _null_ _null_ _null_ ));
 DESCR("deserializer for string aggregation transition states");
 
+DATA(insert OID = 4314 (json_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ json_agg_combine _null_ _null_ _null_ ));
+DESCR("json array aggregation combination function");
+
+DATA(insert OID = 4315 (json_object_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ json_object_agg_combine _null_ _null_ _null_ ));
+DESCR("json object aggregation combination function");
+
+DATA(insert OID = 4318 (string_agg_combine PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 2281 "2281 2281 25" _null_ _null_ _null_ _null_ string_agg_combine _null_ _null_ _null_ ));
+DESCR("string aggregation combination function");
+
+DATA(insert OID = 4319 (stringaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ stringaggstatesend _null_ _null_ _null_ ));
+DESCR("deserializer for string aggregation transition states");
+DATA(insert OID = 4320 (stringaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "2281" _null_ _null_ _null_ _null_ stringaggstaterecv _null_ _null_ _null_ ));
+DESCR("serializer for string aggregation transition states");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
