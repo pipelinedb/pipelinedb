@@ -202,7 +202,7 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 				for (i = 0; i < agg->numGroups; i++)
 				{
 					if (agg->grpColIdx[i] == var->varattno)
-						agg->grpColIdx[i] = toappend->resno;
+						agg->grpColIdx[i] = attno;
 				}
 
 				var->varattno = attno;
