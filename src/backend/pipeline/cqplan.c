@@ -205,7 +205,7 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 						agg->grpColIdx[i] = toappend->resno;
 				}
 
-				var->varattno = toappend->resno;
+				var->varattno = attno;
 			}
 		}
 
