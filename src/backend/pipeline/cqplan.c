@@ -81,6 +81,7 @@ make_store_target(TargetEntry *tostore, char *resname, AttrNumber attno, Oid agg
 	aggref->aggstar = InvalidOid;
 	aggref->aggvariadic = false;
 	aggref->aggkind = AGGKIND_STORE;
+	aggref->location = sibling->location;
 	aggref->aggresultstate = AGG_FINALIZE_COMBINE;
 
 	var = makeVar(OUTER_VAR, attno, transtype, InvalidOid, InvalidOid, 0);
