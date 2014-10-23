@@ -400,7 +400,7 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
 	int num_merge_attrs = 0;
-	char *cvname = GetCQMatRelName(plan->cq_target->relname);
+	char *cvname = GetCQMatRelationName(plan->cq_target->relname);
 	Agg *agg = NULL;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
@@ -537,6 +537,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 		}
 		else
 		{
+			print_slot(slot);
 			tuplestore_puttupleslot(store, slot);
 			count++;
 		}

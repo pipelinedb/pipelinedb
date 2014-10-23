@@ -24,6 +24,7 @@
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
 #include "pipeline/cqslidingwindow.h"
+#include "pipeline/cqanalyze.h"
 #include "pipeline/stream.h"
 #include "storage/lock.h"
 #include "tcop/tcopprot.h"
@@ -31,15 +32,6 @@
 #include "utils/syscache.h"
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
-
-typedef struct CQAnalyzeContext
-{
-	ParseState *pstate;
-	List *cols;
-	Node *matchExpr;
-	int location;
-	char *stepSize;
-} CQAnalyzeContext;
 
 /*
  * find_clock_timestamp_expr
@@ -699,7 +691,7 @@ GetDeleteStmtForGC(char *cvname, SelectStmt *stmt)
 	}
 
 	delete_stmt = makeNode(DeleteStmt);
-	delete_stmt->relation = makeRangeVar(NULL, GetCQMatRelName(cvname), -1);
+	delete_stmt->relation = makeRangeVar(NULL, GetCQMatRelationName(cvname), -1);
 	delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, swExpr, -1);
 
 	return delete_stmt;

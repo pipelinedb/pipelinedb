@@ -122,7 +122,7 @@ GetCombineStateAttr(char *base, TupleDesc desc)
  * Returns the name of the given CV's underlying materialization table
  */
 char *
-GetCQMatRelName(char *cvname)
+GetCQMatRelationName(char *cvname)
 {
 	/*
 	 * The name of the underlying materialized table should
@@ -147,16 +147,14 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	RangeVar *view;
 	List *tableElts = NIL;
 	List *tlist;
-	ListCell *lc;
 	ListCell *col;
 	Oid reloid;
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
-	SelectStmt *raw_select_stmt;
 	SelectStmt *select_stmt;
 
 	view = stmt->into->rel;
-	mat_relation = makeRangeVar(view->schemaname, GetCQMatRelName(view->relname), -1);
+	mat_relation = makeRangeVar(view->schemaname, GetCQMatRelationName(view->relname), -1);
 
 	/*
 	 * Check if CV already exists?
@@ -165,55 +163,36 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		elog(ERROR, "continuous view \"%s\" already exists", view->relname);
 
 	/*
-	 * Keep around a copy of the original SelectStmt struct.
-	 * `parse_analyze` modified the struct, and causes things to blow
-	 * up in cqanalyze.h functions.
-	 */
-	raw_select_stmt = (SelectStmt *) copyObject(stmt->query);
-
-	/*
 	 * Analyze the SelectStmt portion of the CreateContinuousViewStmt to make
 	 * sure it's well-formed.
 	 */
-	query = parse_analyze(stmt->query, querystring, 0, 0);
+	query = parse_analyze(copyObject(stmt->query), querystring, 0, 0);
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying materialization table.
 	 */
-	select_stmt = GetSelectStmtForCQWorker(raw_select_stmt);
+	select_stmt = GetSelectStmtForCQWorker(copyObject(stmt->query));
 	query = parse_analyze((Node *) select_stmt, querystring, 0, 0);
 	tlist = query->targetList;
 
 	/*
 	 * Build a list of columns from the SELECT statement that we
 	 * can use to create a table with
-	 *
-	 * TODO(usmanm): This `stmt->into` business seems janky. Revisit
-	 * post-alpha.
 	 */
-	lc = list_head(stmt->into->colNames);
-
 	foreach(col, tlist)
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(col);
 		ColumnDef   *coldef;
-		char				*colname;
-		Oid					hiddentype;
+		char		*colname;
+		Oid			hiddentype;
 
 		/* Ignore junk columns from the targetlist */
 		if (tle->resjunk)
 			continue;
 
-		/* Take the column name specified if any */
-		if (lc)
-		{
-			colname = strVal(lfirst(lc));
-			lc = lnext(lc);
-		}
-		else
-			colname = pstrdup(tle->resname);
+		colname = pstrdup(tle->resname);
 
 		/*
 		 * Set typeOid and typemod. The name of the type is derived while
@@ -272,7 +251,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 */
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
-	view_stmt->query = (Node *) GetSelectStmtForCQView(raw_select_stmt, mat_relation);
+	view_stmt->query = (Node *) GetSelectStmtForCQView(copyObject(stmt->query), mat_relation);
 	DefineView(view_stmt, querystring);
 
 	/*
@@ -350,7 +329,7 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		/*
 		 * Add object for the CQ's underlying materialization table.
 		 */
-		relations = lappend(relations, list_make1(makeString(GetCQMatRelName(rv->relname))));
+		relations = lappend(relations, list_make1(makeString(GetCQMatRelationName(rv->relname))));
 	}
 
 	/*
@@ -495,7 +474,7 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 		if (!IsAContinuousView(rv))
 			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
 
-		rv->relname = GetCQMatRelName(rv->relname);
+		rv->relname = GetCQMatRelationName(rv->relname);
 	}
 
 	/* Call TRUNCATE on the backing view table(s). */
