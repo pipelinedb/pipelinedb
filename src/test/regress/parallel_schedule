@@ -121,5 +121,8 @@ test: cqsanity
 test: cqsum
 test: cqavg
 test: cqcount
+test: cqboolagg
 test: cqlatch
 test: cqdecode
+test: cqminmax
+test: cqobjectagg

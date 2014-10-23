@@ -1825,6 +1825,49 @@ json_agg_transfn(PG_FUNCTION_ARGS)
 }
 
 /*
+ * json_agg combine function
+ */
+Datum
+json_agg_combine(PG_FUNCTION_ARGS)
+{
+	StringInfo state;
+	StringInfo incoming;
+	MemoryContext aggcontext;
+
+	if (!AggCheckCallContext(fcinfo, &aggcontext))
+	{
+		/* cannot be called directly because of internal-type argument */
+		elog(ERROR, "json_agg_combine called in non-aggregate context");
+	}
+
+	if (PG_ARGISNULL(0))
+	{
+		MemoryContext oldcontext;
+		/*
+		 * Make this StringInfo in a context where it will persist for the
+		 * duration of the aggregate call.  MemoryContextSwitchTo is only
+		 * needed the first time, as the StringInfo routines make sure they
+		 * use the right context to enlarge the object if necessary.
+		 */
+		oldcontext = MemoryContextSwitchTo(aggcontext);
+		state = makeStringInfo();
+		MemoryContextSwitchTo(oldcontext);
+
+		appendStringInfoChar(state, '[');
+	}
+	else
+	{
+		state = (StringInfo) PG_GETARG_POINTER(0);
+		appendStringInfoString(state, ", ");
+	}
+
+	incoming = (StringInfo) PG_GETARG_POINTER(1);
+	appendBinaryStringInfo(state, incoming->data + 1, incoming->len - 1);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
  * json_agg final function
  */
 Datum
@@ -1937,6 +1980,49 @@ json_object_agg_transfn(PG_FUNCTION_ARGS)
 				 errmsg("arg 2: could not determine data type")));
 
 	add_json(arg, PG_ARGISNULL(2), state, val_type, false);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
+ *
+ */
+Datum
+json_object_agg_combine(PG_FUNCTION_ARGS)
+{
+	StringInfo state;
+	StringInfo incoming;
+	MemoryContext aggcontext;
+
+	if (!AggCheckCallContext(fcinfo, &aggcontext))
+	{
+		/* cannot be called directly because of internal-type argument */
+		elog(ERROR, "json_agg_combine called in non-aggregate context");
+	}
+
+	if (PG_ARGISNULL(0))
+	{
+		MemoryContext oldcontext;
+		/*
+		 * Make this StringInfo in a context where it will persist for the
+		 * duration of the aggregate call.  MemoryContextSwitchTo is only
+		 * needed the first time, as the StringInfo routines make sure they
+		 * use the right context to enlarge the object if necessary.
+		 */
+		oldcontext = MemoryContextSwitchTo(aggcontext);
+		state = makeStringInfo();
+		MemoryContextSwitchTo(oldcontext);
+
+		appendStringInfoString(state, "{ ");
+	}
+	else
+	{
+		state = (StringInfo) PG_GETARG_POINTER(0);
+		appendStringInfoString(state, ", ");
+	}
+
+	incoming = (StringInfo) PG_GETARG_POINTER(1);
+	appendBinaryStringInfo(state, incoming->data + 1, strlen(incoming->data) - 1);
 
 	PG_RETURN_POINTER(state);
 }

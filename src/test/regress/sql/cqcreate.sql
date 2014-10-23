@@ -32,10 +32,18 @@ SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate6';
 \d+ cqcreate6;
 \d+ cqcreate6_pdb;
 
--- AVG needs a combine state column
+-- These use a combine state column
 CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS avg_col FROM stream GROUP BY key;
 \d+ cvavg;
 \d+ cvavg_pdb;
+
+CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM stream;
+\d+ cvjson;
+\d+ cvjson_pdb;
+
+CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM stream;
+\d+ cvjsonobj;
+\d+ cvjsonobj_pdb;
 
 -- But these aggregates don't
 CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(x::integer + y::float8) AS sum_col FROM stream;
@@ -49,11 +57,3 @@ CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM stream;
 CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text, 1, 2), ',') FROM stream GROUP BY key;
 \d+ cvtext;
 \d+ cvtext_pdb;
-
-CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM stream;
-\d+ cvjson;
-\d+ cvjson_pdb;
-
-CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM stream;
-\d+ cvjsonobj;
-\d+ cvjsonobj_pdb;
