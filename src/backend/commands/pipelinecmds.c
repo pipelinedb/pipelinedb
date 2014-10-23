@@ -84,29 +84,6 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 }
 
 /*
- * GetCombineStateAttr
- *
- * Given an attribute and a tuple descriptor, returns the corresponding
- * hidden attribute, or InvalidAttribute if it doesn't exist
- */
-AttrNumber
-GetCombineStateAttr(char *colName, TupleDesc desc)
-{
-	AttrNumber i;
-
-	if (colName == NULL)
-		return InvalidAttrNumber;
-
-	for (i = 0; i < desc->natts; i++)
-	{
-		if (strcmp(NameStr(desc->attrs[i]->attname), colName) == 0)
-			return desc->attrs[i]->attnum + 1;
-	}
-
-	return InvalidAttrNumber;
-}
-
-/*
  * GetCQMatRelationName
  *
  * Returns the name of the given CV's underlying materialization table

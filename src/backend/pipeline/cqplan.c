@@ -17,6 +17,7 @@
 #include "nodes/nodeFuncs.h"
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
+#include "pipeline/cqanalyze.h"
 #include "pipeline/cqplan.h"
 #include "utils/syscache.h"
 
@@ -144,8 +145,13 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 		if (IsA(expr, Aggref))
 		{
 			Aggref *aggref = (Aggref *) expr;
-			AttrNumber hidden = GetCombineStateAttr(te->resname, matdesc);
+			Oid hiddentype = GetCombineStateColumnType(te);
+			AttrNumber hidden = 0;
 			Oid transtype;
+
+			/* The hidden column is always stored adjacent to the column for the aggref */
+			if (OidIsValid(hiddentype))
+				hidden = te->resno + 1;
 
 			if (AttributeNumberIsValid(hidden))
 				toappend->resname = NameStr(matdesc->attrs[hidden - 1]->attname);
