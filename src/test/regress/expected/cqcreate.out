@@ -141,14 +141,14 @@ SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate5';
 View definition:
  SELECT cqcreate5_pdb.key
    FROM cqcreate5_pdb
-  WHERE cqcreate5_pdb.arrival_timestamp > (clock_timestamp() - '@ 5 secs'::interval second);
+  WHERE cqcreate5_pdb._0 > (clock_timestamp() - '@ 5 secs'::interval second);
 
 \d+ cqcreate5_pdb;
-                                    Table "public.cqcreate5_pdb"
-      Column       |            Type             | Modifiers | Storage  | Stats target | Description 
--------------------+-----------------------------+-----------+----------+--------------+-------------
- key               | text(0)                     |           | extended |              | 
- arrival_timestamp | timestamp(0) with time zone |           | plain    |              | 
+                               Table "public.cqcreate5_pdb"
+ Column |            Type             | Modifiers | Storage  | Stats target | Description 
+--------+-----------------------------+-----------+----------+--------------+-------------
+ key    | text(0)                     |           | extended |              | 
+ _0     | timestamp(0) with time zone |           | plain    |              | 
 
 CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate6';
@@ -165,15 +165,15 @@ SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate6';
 View definition:
  SELECT count(*) AS count
    FROM cqcreate6_pdb
-  WHERE cqcreate6_pdb.arrival_timestamp > (clock_timestamp() - '@ 5 secs'::interval second);
+  WHERE cqcreate6_pdb._0 > (clock_timestamp() - '@ 5 secs'::interval second);
 
 \d+ cqcreate6_pdb;
-                                   Table "public.cqcreate6_pdb"
-      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
--------------------+--------------------------+-----------+----------+--------------+-------------
- count             | bigint                   |           | plain    |              | 
- _0                | text(0)                  |           | extended |              | 
- arrival_timestamp | timestamp with time zone |           | plain    |              | 
+                             Table "public.cqcreate6_pdb"
+ Column |           Type           | Modifiers | Storage  | Stats target | Description 
+--------+--------------------------+-----------+----------+--------------+-------------
+ count  | bigint                   |           | plain    |              | 
+ _0     | timestamp with time zone |           | plain    |              | 
+ _1     | text(0)                  |           | extended |              | 
 
 -- AVG needs a combine state column
 CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS avg_col FROM stream GROUP BY key;

@@ -292,6 +292,16 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 	stmt = (SelectStmt *) copyObject(stmt);
 
 	/*
+	 * Check to see if we need to project any columns
+	 * that are required to evaluate the sliding window
+	 * match expression.
+	 */
+	if (IsSlidingWindowSelectStmt(stmt))
+	{
+		stmt = TransformSWSelectStmtForCQWorker(stmt, &context);
+	}
+
+	/*
 	 * Rewrite the groupClause.
 	 */
 	foreach(lc, stmt->groupClause)
@@ -330,11 +340,6 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 
 	stmt->groupClause = newGroupClause;
 
-	if (IsSlidingWindowSelectStmt(stmt))
-	{
-		stmt = TransformSWSelectStmtForCQWorker(stmt, &context);
-	}
-
 	return stmt;
 }
 
@@ -369,14 +374,13 @@ GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
 	List *origTargetList = stmt->targetList;
 	ListCell *lc;
 
+	InitializeCQAnalyzeContext(stmt, NULL, &context);
+
 	stmt = (SelectStmt *) copyObject(stmt);
 	stmt->forContinuousView = false;
 
 	if (IsSlidingWindowSelectStmt(stmt))
-	{
-		InitializeCQAnalyzeContext(stmt, NULL, &context);
 		return TransformSWSelectStmtForCQView(stmt, cqrel, &context);
-	}
 
 	/*
 	 * Create a SelectStmt that only projects fields that

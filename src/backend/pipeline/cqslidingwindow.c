@@ -32,6 +32,7 @@
 #include "utils/syscache.h"
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
+#define DEFAULT_WINDOW_GRANULARITY "second"
 
 /*
  * find_clock_timestamp_expr
@@ -173,27 +174,30 @@ get_sliding_window_expr(SelectStmt *stmt, ParseState *pstate)
  * validate_clock_timestamp_expr
  */
 static void
-validate_clock_timestamp_expr(SelectStmt *stmt, Node *node, ParseState *pstate)
+validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, ParseState *pstate)
 {
 	CQAnalyzeContext context;
 	A_Expr *a_expr;
+
+	if (expr == NULL)
+			return;
+
 	context.cols = NIL;
 	context.pstate = pstate;
 
-	if (node == NULL)
-		return;
+	Assert(IsA(expr, A_Expr));
+	a_expr = (A_Expr *) expr;
 
-	Assert(IsA(node, A_Expr));
-	a_expr = (A_Expr *) node;
-
-	FindColumnRefsWithTypeCasts(node, &context);
+	FindColumnRefsWithTypeCasts(expr, &context);
 	if (list_length(context.cols) != 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-						errmsg("clock_timestamp can only appear as in an expression containing a single column reference"),
+						errmsg("clock_timestamp can only appear in an expression containing a single column reference"),
 						parser_errposition(pstate, a_expr->location)));
 
-
+	/*
+	 * TODO(usmanm): Ensure that context.cols[0] isn't being grouped on.
+	 */
 }
 
 /*
@@ -239,7 +243,7 @@ IsSlidingWindowContinuousView(RangeVar *cvname)
 }
 
 /*
- * is_agg_func
+ * has_agg_func
  *
  * Does the node contain an aggregate function?
  */
@@ -441,28 +445,26 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt, 	CQAnalyzeContext *context)
 		ResTarget *res = makeNode(ResTarget);
 		FuncCall *func = makeNode(FuncCall);
 		A_Const *aconst = makeNode(A_Const);
-		char *colName = FigureColname(linitial(context->cols));
+		char *name = GetUniqueInternalColname(context);
 		char *stepSize;
 
 		/* Get step size. Default to 'second'. */
 		context->stepSize = NULL;
 		get_step_size(swExpr, context);
-		if (context->stepSize == NULL)
-			stepSize = "second";
-		else
+		if (context->stepSize != NULL)
 			stepSize = context->stepSize;
+		else
+			stepSize = DEFAULT_WINDOW_GRANULARITY;
 
 		/*
 		 * Add ResTarget for step size field.
-		 * We reuse the colname of the ColumnRef for
-		 * this field.
 		 */
 		aconst->val = *makeString(stepSize);
 		aconst->location = -1;
 		func->funcname = list_make1(makeString("date_trunc"));
 		func->args = list_concat(list_make1(aconst), context->cols);
 		func->location = -1;
-		res->name = colName;
+		res->name = name;
 		res->indirection = NIL;
 		res->val = (Node *) func;
 		res->location = -1;
@@ -472,7 +474,7 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt, 	CQAnalyzeContext *context)
 		 * Add GROUP BY for step field. This is the group
 		 * we will merge/combine on the read path.
 		 */
-		cref->fields = list_make1(makeString(colName));
+		cref->fields = list_make1(makeString(name));
 		cref->location = -1;
 		stmt->groupClause = lappend(stmt->groupClause, cref);
 	}
@@ -513,17 +515,7 @@ TransformSWSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel, CQAnalyzeConte
 	FindColumnRefsWithTypeCasts(swExpr, context);
 	cmpCRef = (Node *) linitial(context->cols);
 
-	if (has_agg_or_group_by(stmt))
-	{
-		/*
-		 * This will swap out any date_trunc calls in the
-		 * sliding window expression with the column reference
-		 * to that field.
-		 */
-		context->stepSize = NULL;
-		get_step_size(swExpr, context);
-	}
-	else if (!IsColumnRefInTargetList(stmt, cmpCRef))
+	if (has_agg_or_group_by(stmt) || !IsColumnRefInTargetList(stmt, cmpCRef))
 	{
 		/*
 		 * Find the name we picked for the column we're
@@ -547,6 +539,7 @@ TransformSWSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel, CQAnalyzeConte
 	replace_colrefs_with_colnames((Node *) stmt, NULL);
 	stmt->fromClause = list_make1(cqrel);
 	stmt->groupClause = NIL;
+
 	return stmt;
 }
 
