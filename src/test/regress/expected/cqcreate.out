@@ -175,7 +175,7 @@ View definition:
  _0     | timestamp with time zone |           | plain    |              | 
  _1     | text(0)                  |           | extended |              | 
 
--- AVG needs a combine state column
+-- These use a combine state column
 CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS avg_col FROM stream GROUP BY key;
 \d+ cvavg;
                        View "public.cvavg"
@@ -195,6 +195,40 @@ View definition:
  key     | text(0)            |           | extended |              | 
  avg_col | double precision   |           | plain    |              | 
  _0      | double precision[] |           | extended |              | 
+
+CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM stream;
+\d+ cvjson;
+                 View "public.cvjson"
+  Column   | Type | Modifiers | Storage  | Description 
+-----------+------+-----------+----------+-------------
+ count_col | json |           | extended | 
+View definition:
+ SELECT cvjson_pdb.count_col
+   FROM cvjson_pdb;
+
+\d+ cvjson_pdb;
+                         Table "public.cvjson_pdb"
+   Column    |   Type   | Modifiers | Storage  | Stats target | Description 
+-------------+----------+-----------+----------+--------------+-------------
+ count_col   | json     |           | extended |              | 
+ count_col_c | bytea(0) |           | extended |              | 
+
+CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM stream;
+\d+ cvjsonobj;
+                   View "public.cvjsonobj"
+     Column      | Type | Modifiers | Storage  | Description 
+-----------------+------+-----------+----------+-------------
+ json_object_agg | json |           | extended | 
+View definition:
+ SELECT cvjsonobj_pdb.json_object_agg
+   FROM cvjsonobj_pdb;
+
+\d+ cvjsonobj_pdb;
+                           Table "public.cvjsonobj_pdb"
+      Column       |   Type   | Modifiers | Storage  | Stats target | Description 
+-------------------+----------+-----------+----------+--------------+-------------
+ json_object_agg   | json     |           | extended |              | 
+ json_object_agg_c | bytea(0) |           | extended |              | 
 
 -- But these aggregates don't
 CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(x::integer + y::float8) AS sum_col FROM stream;
@@ -242,41 +276,10 @@ View definition:
    FROM cvtext_pdb;
 
 \d+ cvtext_pdb;
-                        Table "public.cvtext_pdb"
-   Column   |  Type   | Modifiers | Storage  | Stats target | Description 
-------------+---------+-----------+----------+--------------+-------------
- key        | text(0) |           | extended |              | 
- string_agg | text    |           | extended |              | 
-
-CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM stream;
-\d+ cvjson;
-                 View "public.cvjson"
-  Column   | Type | Modifiers | Storage  | Description 
------------+------+-----------+----------+-------------
- count_col | json |           | extended | 
-View definition:
- SELECT cvjson_pdb.count_col
-   FROM cvjson_pdb;
-
-\d+ cvjson_pdb;
-                      Table "public.cvjson_pdb"
-  Column   | Type | Modifiers | Storage  | Stats target | Description 
------------+------+-----------+----------+--------------+-------------
- count_col | json |           | extended |              | 
-
-CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM stream;
-\d+ cvjsonobj;
-                   View "public.cvjsonobj"
-     Column      | Type | Modifiers | Storage  | Description 
------------------+------+-----------+----------+-------------
- json_object_agg | json |           | extended | 
-View definition:
- SELECT cvjsonobj_pdb.json_object_agg
-   FROM cvjsonobj_pdb;
-
-\d+ cvjsonobj_pdb;
-                        Table "public.cvjsonobj_pdb"
-     Column      | Type | Modifiers | Storage  | Stats target | Description 
------------------+------+-----------+----------+--------------+-------------
- json_object_agg | json |           | extended |              | 
+                          Table "public.cvtext_pdb"
+    Column    |   Type   | Modifiers | Storage  | Stats target | Description 
+--------------+----------+-----------+----------+--------------+-------------
+ key          | text(0)  |           | extended |              | 
+ string_agg   | text     |           | extended |              | 
+ string_agg_c | bytea(0) |           | extended |              | 
 

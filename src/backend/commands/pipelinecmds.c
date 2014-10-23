@@ -23,6 +23,7 @@
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "catalog/toasting.h"
+#include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/pg_list.h"
@@ -120,6 +121,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *select_stmt;
 	CQAnalyzeContext context;
+	bool saveAllowSystemTableMods;
 
 	view = stmt->into->rel;
 	mat_relation = makeRangeVar(view->schemaname, GetCQMatRelationName(view->relname), -1);
@@ -164,11 +166,21 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 
 		colname = pstrdup(tle->resname);
 
+
+		/*
+		 * allowSystemTableMods is a global flag that, when true, allows certain column types
+		 * to be created. We need it set to true to create some hidden state columns. In particular,
+		 * ones with a type of anyarray.
+		 */
+		saveAllowSystemTableMods = allowSystemTableMods;
+		allowSystemTableMods = true;
+
 		/*
 		 * Set typeOid and typemod. The name of the type is derived while
 		 * generating query
 		 */
 		coldef = make_cv_columndef(colname, exprType((Node *) tle->expr), exprTypmod((Node *) tle->expr));
+		allowSystemTableMods = saveAllowSystemTableMods;
 		tableElts = lappend(tableElts, coldef);
 
 		/*
@@ -195,6 +207,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	create_stmt->oncommit = stmt->into->onCommit;
 	create_stmt->options = stmt->into->options;
 
+	allowSystemTableMods = true;
 	reloid = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid);
 	CommandCounterIncrement();
 
