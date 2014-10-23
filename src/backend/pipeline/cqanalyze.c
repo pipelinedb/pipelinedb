@@ -125,6 +125,8 @@ GetUniqueInternalColname(CQAnalyzeContext *context)
 			break;
 	}
 
+	context->colNames = lappend(context->colNames, colname);
+
 	return colname;
 }
 
@@ -196,7 +198,7 @@ ContainsColumnRef(Node *node, ColumnRef *cref)
 }
 
 /*
- * DoesColumnRefMatchResTarget
+ * IsResTargetForColumnRef
  */
 static bool
 IsResTargetForColumnRef(Node *node, ColumnRef *cref)
@@ -240,7 +242,7 @@ IsResTargetForColumnRef(Node *node, ColumnRef *cref)
 /*
  * IsColumnRefInTargetList
  */
-static bool
+bool
 IsColumnRefInTargetList(SelectStmt *stmt, Node *node)
 {
 	ColumnRef *cref;
@@ -330,7 +332,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 
 	if (IsSlidingWindowSelectStmt(stmt))
 	{
-		stmt = TransformSWSelectStmtForCQWorker(stmt);
+		stmt = TransformSWSelectStmtForCQWorker(stmt, &context);
 	}
 
 	return stmt;
@@ -363,15 +365,17 @@ GetSelectStmtForCQCombiner(SelectStmt *stmt)
 SelectStmt *
 GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
 {
-	List		*origTargetList = stmt->targetList;
-	ListCell	*lc;
+	CQAnalyzeContext context;
+	List *origTargetList = stmt->targetList;
+	ListCell *lc;
 
 	stmt = (SelectStmt *) copyObject(stmt);
 	stmt->forContinuousView = false;
 
 	if (IsSlidingWindowSelectStmt(stmt))
 	{
-		return TransformSWSelectStmtForCQView(stmt, cqrel);
+		InitializeCQAnalyzeContext(stmt, NULL, &context);
+		return TransformSWSelectStmtForCQView(stmt, cqrel, &context);
 	}
 
 	/*

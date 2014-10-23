@@ -13,11 +13,10 @@
 
 #include "parser/parse_node.h"
 
-Node *GetSlidingWindowExpr(SelectStmt *stmt, ParseState *pstate);
 void ValidateSlidingWindowExpr(SelectStmt *stmt, ParseState *pstate);
 
-SelectStmt *TransformSWSelectStmtForCQWorker(SelectStmt *stmt);
-SelectStmt *TransformSWSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel);
+SelectStmt *TransformSWSelectStmtForCQWorker(SelectStmt *stmt, CQAnalyzeContext *context);
+SelectStmt *TransformSWSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel, CQAnalyzeContext *context);
 
 bool IsSlidingWindowSelectStmt(SelectStmt *stmt);
 bool IsSlidingWindowContinuousView(RangeVar *cvname);
