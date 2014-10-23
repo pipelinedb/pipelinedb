@@ -13,9 +13,9 @@ INSERT INTO int_stream (k, v) VALUES ('y', -10000), ('y', 10000), ('y', 0);
 
 DEACTIVATE;
 
-SELECT * FROM test_int8_avg_pdb;
-SELECT * FROM test_int4_avg_pdb;
-SELECT * FROM test_int2_avg_pdb;
+SELECT * FROM test_int8_avg_pdb ORDER BY k;
+SELECT * FROM test_int4_avg_pdb ORDER BY k;
+SELECT * FROM test_int2_avg_pdb ORDER BY k;
 
 ACTIVATE test_int8_avg, test_int4_avg, test_int2_avg;
 
@@ -24,9 +24,9 @@ INSERT INTO int_stream (k, v) VALUES ('y', 1), ('y', 10000), ('y', 2000);
 
 DEACTIVATE;
 
-SELECT * FROM test_int8_avg;
-SELECT * FROM test_int4_avg;
-SELECT * FROM test_int2_avg;
+SELECT * FROM test_int8_avg ORDER BY k;
+SELECT * FROM test_int4_avg ORDER BY k;
+SELECT * FROM test_int2_avg ORDER BY k;
 
 -------------------------------------------------------------------------------
 -- Float averages
@@ -41,8 +41,8 @@ INSERT INTO float_stream (k, v) VALUES ('y', 0.0001), ('y', 0.00002), ('y', 1553
 
 DEACTIVATE;
 
-SELECT * FROM test_float8_avg_pdb;
-SELECT * FROM test_float4_avg_pdb;
+SELECT * FROM test_float8_avg_pdb ORDER BY k;
+SELECT * FROM test_float4_avg_pdb ORDER BY k;
 
 ACTIVATE test_float8_avg, test_float4_avg;
 
@@ -51,8 +51,8 @@ INSERT INTO float_stream (k, v) VALUES ('z', 42.42);
 
 DEACTIVATE;
 
-SELECT * FROM test_float8_avg;
-SELECT * FROM test_float4_avg;
+SELECT * FROM test_float8_avg ORDER BY k;
+SELECT * FROM test_float4_avg ORDER BY k;
 
 -------------------------------------------------------------------------------
 -- Numeric averages
@@ -65,7 +65,7 @@ INSERT INTO numeric_stream (k, v) VALUES ('y', 0.1001), ('y', 0.99999999), ('y',
 
 DEACTIVATE;
 
-SELECT * FROM test_numeric_avg_pdb;
+SELECT * FROM test_numeric_avg_pdb ORDER BY k;
 
 ACTIVATE test_numeric_avg;
 
@@ -88,7 +88,7 @@ INSERT INTO interval_stream (k, ts0, ts1) VALUES ('x', '2014-01-01 00:00:00', '2
 DEACTIVATE;
 
 -- We truncated down to day, so the hours shouldn't have affected the averages
-SELECT * FROM test_interval_avg_pdb;
+SELECT * FROM test_interval_avg_pdb ORDER BY k;
 
 ACTIVATE test_interval_avg;
 
@@ -97,7 +97,7 @@ INSERT INTO interval_stream (k, ts0, ts1) VALUES ('y', '2014-01-01 23:00:00', '2
 
 DEACTIVATE;
 
-SELECT * FROM test_interval_avg;
+SELECT * FROM test_interval_avg ORDER BY k;
 
 DROP CONTINUOUS VIEW test_int8_avg;
 DROP CONTINUOUS VIEW test_int4_avg;

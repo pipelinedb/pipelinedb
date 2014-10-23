@@ -13,9 +13,9 @@ INSERT INTO int_stream (k, v) VALUES ('y', 10), ('y', 10), ('y', 10);
 
 DEACTIVATE;
 
-SELECT * FROM test_int8_sum;
-SELECT * FROM test_int4_sum;
-SELECT * FROM test_int2_sum;
+SELECT * FROM test_int8_sum ORDER BY k;
+SELECT * FROM test_int4_sum ORDER BY k;
+SELECT * FROM test_int2_sum ORDER BY k;
 
 ACTIVATE test_int8_sum, test_int4_sum, test_int2_sum;
 
@@ -24,9 +24,9 @@ INSERT INTO int_stream (k, v) VALUES ('y', 10), ('y', 10), ('z', 10);
 
 DEACTIVATE;
 
-SELECT * FROM test_int8_sum;
-SELECT * FROM test_int4_sum;
-SELECT * FROM test_int2_sum;;
+SELECT * FROM test_int8_sum ORDER BY k;
+SELECT * FROM test_int4_sum ORDER BY k;
+SELECT * FROM test_int2_sum ORDER BY k;
 
 -------------------------------------------------------------------------------
 -- Float sums
@@ -40,8 +40,8 @@ INSERT INTO float_stream (k, v) VALUES ('y', -10.3), ('y', 1.2e6), ('y', '100.4'
 
 DEACTIVATE;
 
-SELECT * FROM test_float8_sum_pdb;
-SELECT * FROM test_float4_sum_pdb;
+SELECT * FROM test_float8_sum_pdb ORDER BY k;
+SELECT * FROM test_float4_sum_pdb ORDER BY k;
 
 ACTIVATE test_float8_sum, test_float4_sum;
 
@@ -64,7 +64,7 @@ INSERT INTO cash_stream (k, v) VALUES ('y', -10), ('y', 10), ('y', 0);
 
 DEACTIVATE;
 
-SELECT * FROM test_cash_sum_pdb;
+SELECT * FROM test_cash_sum_pdb ORDER BY k;
 
 ACTIVATE test_cash_sum;
 
@@ -86,7 +86,7 @@ INSERT INTO numeric_stream (k, v) VALUES ('y', 1.004e5), ('y', 0.4), ('y', 0);
 
 DEACTIVATE;
 
-SELECT * FROM test_numeric_sum_pdb;
+SELECT * FROM test_numeric_sum_pdb ORDER BY k;
 
 ACTIVATE test_numeric_sum;
 
@@ -108,7 +108,7 @@ INSERT INTO interval_stream (k, ts0, ts1) VALUES ('x', '2014-01-01', '2014-01-02
 
 DEACTIVATE;
 
-SELECT * FROM test_interval_sum_pdb;
+SELECT * FROM test_interval_sum_pdb ORDER BY k;
 
 ACTIVATE test_interval_sum;
 
@@ -117,7 +117,7 @@ INSERT INTO interval_stream (k, ts0, ts1) VALUES ('y', '2014-01-01', '2014-01-02
 
 DEACTIVATE;
 
-SELECT * FROM test_interval_sum;
+SELECT * FROM test_interval_sum ORDER BY k;
 
 DROP CONTINUOUS VIEW test_int8_sum;
 DROP CONTINUOUS VIEW test_int4_sum;
