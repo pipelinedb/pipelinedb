@@ -17,6 +17,7 @@
 #include "catalog/pipeline_combine_fn.h"
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
+#include "lib/stringinfo.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/print.h"
@@ -100,21 +101,22 @@ InitializeCQAnalyzeContext(SelectStmt *stmt, ParseState *pstate, CQAnalyzeContex
 char *
 GetUniqueInternalColname(CQAnalyzeContext *context)
 {
-	/* XXX(usmanm): 8 bytes should be hella enough? */
-	char *colname = palloc(8);
+	StringInfoData colname;
+
+	initStringInfo(&colname);
 
 	while (1)
 	{
 		ListCell *lc;
 		bool alreadyExists = false;
 
-		sprintf(colname, "%s%d", INTERNAL_COLNAME_PREFIX, context->colNum);
+		appendStringInfo(&colname, "%s%d", INTERNAL_COLNAME_PREFIX, context->colNum);
 		context->colNum++;
 
 		foreach(lc, context->colNames)
 		{
 			char *colname2 = lfirst(lc);
-			if (strcmp(colname, colname2) == 0)
+			if (strcmp(colname.data, colname2) == 0)
 			{
 				alreadyExists = true;
 				break;
@@ -123,11 +125,13 @@ GetUniqueInternalColname(CQAnalyzeContext *context)
 
 		if (!alreadyExists)
 			break;
+
+		resetStringInfo(&colname);
 	}
 
-	context->colNames = lappend(context->colNames, colname);
+	context->colNames = lappend(context->colNames, colname.data);
 
-	return colname;
+	return colname.data;
 }
 
 /*
