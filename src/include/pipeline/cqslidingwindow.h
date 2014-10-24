@@ -16,7 +16,7 @@
 void ValidateSlidingWindowExpr(SelectStmt *stmt, ParseState *pstate);
 
 SelectStmt *TransformSWSelectStmtForCQWorker(SelectStmt *stmt, CQAnalyzeContext *context);
-SelectStmt *TransformSWSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel, CQAnalyzeContext *context);
+SelectStmt *TransformSWSelectStmtForCQView(SelectStmt *origstmt, SelectStmt *workerstmt, RangeVar *cqrel, CQAnalyzeContext *context);
 
 bool IsSlidingWindowSelectStmt(SelectStmt *stmt);
 bool IsSlidingWindowContinuousView(RangeVar *cvname);

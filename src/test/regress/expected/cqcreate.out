@@ -159,13 +159,14 @@ SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate6';
 
 \d+ cqcreate6;
                View "public.cqcreate6"
- Column |  Type  | Modifiers | Storage | Description 
---------+--------+-----------+---------+-------------
- count  | bigint |           | plain   | 
+ Column |  Type   | Modifiers | Storage | Description 
+--------+---------+-----------+---------+-------------
+ sum    | numeric |           | main    | 
 View definition:
- SELECT count(*) AS count
+ SELECT sum(cqcreate6_pdb.count) AS sum
    FROM cqcreate6_pdb
-  WHERE cqcreate6_pdb._0 > (clock_timestamp() - '@ 5 secs'::interval second);
+  WHERE cqcreate6_pdb._0 > (clock_timestamp() - '@ 5 secs'::interval second)
+  GROUP BY cqcreate6_pdb._1;
 
 \d+ cqcreate6_pdb;
                              Table "public.cqcreate6_pdb"
