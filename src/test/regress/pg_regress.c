@@ -2466,7 +2466,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 	 */
 	if (fail_count == 0 && fail_ignore_count == 0)
 		snprintf(buf, sizeof(buf),
-				 _(" All %d tests passed. "),
+				 _(" All %d regression tests passed. "),
 				 success_count);
 	else if (fail_count == 0)	/* fail_count=0, fail_ignore_count>0 */
 		snprintf(buf, sizeof(buf),
