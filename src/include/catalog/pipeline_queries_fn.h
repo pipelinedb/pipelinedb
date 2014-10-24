@@ -28,7 +28,6 @@ typedef struct ContinuousViewState
 
 void RegisterContinuousView(RangeVar *name, const char *query_string);
 void DeregisterContinuousView(RangeVar *name);
-void ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt);
 bool MarkContinuousViewAsActive(RangeVar *name);
 bool MarkContinuousViewAsInactive(RangeVar *name);
 void SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state);

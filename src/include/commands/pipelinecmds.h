@@ -18,7 +18,8 @@ void CreateEncoding(CreateEncodingStmt *stmt);
 void ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring);
 void ExecDropContinuousViewStmt(DropStmt *stmt);
 void ExecDumpStmt(DumpStmt *stmt);
-void ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt);
+int ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt);
+int ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt);
 void ExecTruncateContinuousViewStmt(TruncateStmt *stmt);
 
 #endif   /* PIPELINECMDS_H */
