@@ -24,6 +24,7 @@ typedef struct CQAnalyzeContext
 	List *streams;
 	List *tables;
 	List *targets;
+	List *funcCalls;
 	Node *matchExpr;
 	int location;
 	char *stepSize;
@@ -35,7 +36,7 @@ RangeTblEntry *TransformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
 SelectStmt *GetSelectStmtForCQWorker(SelectStmt *stmt);
 SelectStmt *GetSelectStmtForCQCombiner(SelectStmt *stmt);
-SelectStmt *GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel);
+SelectStmt *GetSelectStmtForCQView(SelectStmt *origstmt, SelectStmt *workerstmt, RangeVar *cqrel);
 
 Oid GetCombineStateColumnType(TargetEntry *te);
 
@@ -43,5 +44,8 @@ void InitializeCQAnalyzeContext(SelectStmt *stmt, ParseState *pstate, CQAnalyzeC
 char *GetUniqueInternalColname(CQAnalyzeContext *context);
 bool FindColumnRefsWithTypeCasts(Node *node, CQAnalyzeContext *context);
 bool IsColumnRefInTargetList(SelectStmt *stmt, Node *node);
+void ReplaceTargetListWithColumnRefs(SelectStmt *stmt, bool replaceAggs);
+bool AreColumnRefsEqual(Node *cr1, Node *cr2);
+bool CollectAggFuncs(Node *node, CQAnalyzeContext *context);
 
 #endif

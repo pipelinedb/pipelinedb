@@ -119,7 +119,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	Oid reloid;
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
-	SelectStmt *select_stmt;
+	SelectStmt *workerselect;
 	CQAnalyzeContext context;
 	bool saveAllowSystemTableMods;
 
@@ -143,10 +143,10 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying materialization table.
 	 */
-	select_stmt = GetSelectStmtForCQWorker(copyObject(stmt->query));
-	InitializeCQAnalyzeContext(select_stmt, NULL, &context);
+	workerselect = GetSelectStmtForCQWorker(copyObject(stmt->query));
+	InitializeCQAnalyzeContext(workerselect, NULL, &context);
 
-	query = parse_analyze((Node *) select_stmt, querystring, 0, 0);
+	query = parse_analyze(copyObject(workerselect), querystring, 0, 0);
 	tlist = query->targetList;
 
 	/*
@@ -224,16 +224,15 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * only the columns that users expect. This is needed primarily for two
 	 * reasons:
 	 *
-	 * 1. Sliding window queries. For such queries, we store raw events in the
-	 *    materialization table and this VIEW filters events out of the window
-	 *    (that have no been GC'd) and performed aggregates (if needed).
+	 * 1. Sliding window queries. For such queries, this VIEW filters events out
+	 *    of the window (that have not been GC'd).
 	 * 2. Some aggregate operators require storing some additional state along
-	 *    with partial results and this VIEW filters out such *private/hidden*
+	 *    with partial results and this VIEW filters out such hidden
 	 *    columns.
 	 */
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
-	view_stmt->query = (Node *) GetSelectStmtForCQView(copyObject(stmt->query), mat_relation);
+	view_stmt->query = (Node *) GetSelectStmtForCQView(copyObject(stmt->query), workerselect, mat_relation);
 	DefineView(view_stmt, querystring);
 
 	/*
