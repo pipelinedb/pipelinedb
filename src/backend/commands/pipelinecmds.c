@@ -346,11 +346,12 @@ RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state)
 	WaitForCQProcessStart(id);
 }
 
-void
+int
 ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 {
 	ListCell *lc;
 	CVMetadata *entry;
+	int count = 0;
 
 	foreach(lc, stmt->views)
 	{
@@ -359,10 +360,11 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		ContinuousViewState state;
 		bool wasInactive;
 
-		if (IsContinuousViewActive(rv))
-			elog(ERROR, "continuous view \"%s\" is already active",
-					rv->relname);
-
+		/*
+		 * If the user tries to activate an active CV, they'll know because
+		 * the count of CVs that were activated will be less than they
+		 * expected. We only count CVs that go from inactive to active here.
+		 */
 		wasInactive = MarkContinuousViewAsActive(rv);
 		if (!wasInactive)
 			continue;
@@ -402,13 +404,18 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 					rv->relname);
 
 		RunContinuousQueryProcs(rv->relname, &state);
+		count++;
 	}
+
+	return count;
 }
 
-void
+int
 ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 {
+	int count = 0;
 	ListCell *lc;
+
 	foreach(lc, stmt->views)
 	{
 		RangeVar *rv = (RangeVar *) lfirst(lc);
@@ -432,6 +439,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * and remove the CVMetadata entry.
 		 */
 		WaitForCQProcessEnd(state.id);
+		count++;
 
 		EntryRemove(state.id);
 	}
@@ -442,6 +450,8 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	 * more seconds to shut themselves down. This seems like the behavior we want.
 	 */
 	NotifyUpdateGlobalStreamBuffer();
+
+	return count;
 }
 
 void

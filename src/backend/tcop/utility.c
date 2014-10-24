@@ -852,10 +852,6 @@ standard_ProcessUtility(Node *parsetree,
 			}
 			break;
 
-		case T_DeactivateContinuousViewStmt:
-			ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
-			break;
-
 		default:
 			/* All other statement types have event trigger support */
 			ProcessUtilitySlow(parsetree, queryString,
@@ -2473,10 +2469,10 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_ActivateContinuousViewStmt:
-			tag = "ACTIVATE CONTINUOUS VIEW";
+			tag = "ACTIVATE";
 			break;
 		case T_DeactivateContinuousViewStmt:
-			tag = "DEACTIVATE CONTINUOUS VIEW";
+			tag = "DEACTIVATE";
 			break;
 		case T_DumpStmt:
 			tag = "DUMP";

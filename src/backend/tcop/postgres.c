@@ -46,6 +46,7 @@
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "commands/async.h"
+#include "commands/pipelinecmds.h"
 #include "commands/prepare.h"
 #include "executor/tstoreReceiver.h"
 #include "executor/tupletableReceiver.h"
@@ -571,7 +572,6 @@ pipeline_rewrite(List *raw_parsetree_list)
 	List		*transformed_parsetree_list = NIL;
 	List		*views = NIL;
 	ListCell	*parsetree_lc;
-	ListCell	*view_lc;
 	Node		*node;
 	BaseContinuousViewStmt *stmt;
 	BaseContinuousViewStmt *new_stmt;
@@ -714,24 +714,21 @@ pipeline_rewrite(List *raw_parsetree_list)
 				views = stmt->views;
 			}
 
-			foreach(view_lc, views)
+			if (IsA(node, ActivateContinuousViewStmt))
 			{
-				if (IsA(node, ActivateContinuousViewStmt))
-				{
-					ActivateContinuousViewStmt *tmp_stmt = makeNode(ActivateContinuousViewStmt);
-					/* Copy over any WITH options passed by the client. */
-					tmp_stmt->withOptions = ((ActivateContinuousViewStmt *) stmt)->withOptions;
-					new_stmt = (BaseContinuousViewStmt *) tmp_stmt;
-				}
-				else
-				{
-					new_stmt = (BaseContinuousViewStmt *) makeNode(DeactivateContinuousViewStmt);
-				}
-
-				new_stmt->views = lappend(new_stmt->views, lfirst(view_lc));
-				transformed_parsetree_list = lappend(transformed_parsetree_list,
-						new_stmt);
+				ActivateContinuousViewStmt *tmp_stmt = makeNode(ActivateContinuousViewStmt);
+				/* Copy over any WITH options passed by the client. */
+				tmp_stmt->withOptions = ((ActivateContinuousViewStmt *) stmt)->withOptions;
+				new_stmt = (BaseContinuousViewStmt *) tmp_stmt;
 			}
+			else
+			{
+				new_stmt = (BaseContinuousViewStmt *) makeNode(DeactivateContinuousViewStmt);
+			}
+
+			new_stmt->views = views;
+			transformed_parsetree_list = lappend(transformed_parsetree_list,
+					new_stmt);
 		}
 		else
 		{
@@ -1208,10 +1205,30 @@ exec_simple_query(const char *query_string)
 		 * in the worker processes that ultimately get forked after
 		 * we activate, so short circuit the analyzer/planner
 		 */
-		if (IsA(parsetree, ActivateContinuousViewStmt))
+		if (IsA(parsetree, ActivateContinuousViewStmt) || IsA(parsetree, DeactivateContinuousViewStmt))
 		{
-			ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree);
-			EndCommand("ACTIVATE CONTINUOUS VIEW", dest);
+			char *tag;
+			int count = 0;
+			StringInfo buf = makeStringInfo();
+
+			if (IsA(parsetree, ActivateContinuousViewStmt))
+			{
+				tag = "ACTIVATE %d";
+				count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree);
+			}
+			else if (IsA(parsetree, DeactivateContinuousViewStmt))
+			{
+				tag = "DEACTIVATE %d";
+				count = ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
+			}
+			else
+			{
+				/* this would be really weird if this happened, but we want to know if it does */
+				elog(ERROR, "unknown BaseContinuousViewStmt received");
+			}
+
+			appendStringInfo(buf, tag, count);
+			EndCommand(buf->data, dest);
 			finish_xact_command();
 
 			continue;

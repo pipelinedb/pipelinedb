@@ -2641,12 +2641,11 @@ copy_generic_opt_arg_list_item:
 
 /*****************************************************************************
  *
- * ( ACTIVATE | DEACTIVATE ) [CONTINUOUS VIEW] [continuous_view_name_list]
+ * ( ACTIVATE | DEACTIVATE ) [continuous_view_name_list]
  *
  * PipelineDB
  *
  * Activates/deactivates continuous view(s)
- * TODO(usmanm): Release should require typing out CONTINUOUS VIEW.
  *
  *****************************************************************************/
 
@@ -2668,14 +2667,6 @@ ActivateContinuousViewStmt: ACTIVATE opt_qualified_name_list opt_reloptions wher
 					s->whereClause = (Node *) $4;
 					$$ = (Node *) s;
 				}
-			| ACTIVATE CONTINUOUS VIEW opt_qualified_name_list opt_reloptions where_clause
-				{
-					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
-					s->views = (List *) $4;
-					s->withOptions = (List *) $5;
-					s->whereClause = (Node *) $6;
-					$$ = (Node *) s;
-				}
 		;
 
 DeactivateContinuousViewStmt: DEACTIVATE opt_qualified_name_list where_clause
@@ -2683,13 +2674,6 @@ DeactivateContinuousViewStmt: DEACTIVATE opt_qualified_name_list where_clause
 					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
 					s->views = (List *) $2;
 					s->whereClause = (Node *) $3;
-					$$ = (Node *)s;
-				}
-			| DEACTIVATE CONTINUOUS VIEW opt_qualified_name_list where_clause
-				{
-					DeactivateContinuousViewStmt *s = makeNode(DeactivateContinuousViewStmt);
-					s->views = (List *) $4;
-					s->whereClause = (Node *) $5;
 					$$ = (Node *)s;
 				}
 		;
