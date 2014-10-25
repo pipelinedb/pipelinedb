@@ -75,7 +75,7 @@ def test_combine(pipeline, clean_db):
     for n in range(100):
         values = []
         for m in range(100):
-            key = '%d%d' % (n, m)
+            key = '%d%d' % (n % 10, m)
             values.append(str((key, 0)))
 
         pipeline.execute('INSERT INTO stream (key) VALUES %s' % ','.join(values))
