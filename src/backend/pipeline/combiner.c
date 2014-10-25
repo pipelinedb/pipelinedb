@@ -174,9 +174,14 @@ prepare_combine_plan(PlannedStmt *plan, Tuplestorestate *store, TupleDesc *desc)
 
 	/*
 	 * Mark plan as not continuous now because we'll be repeatedly
-	 * executing it in a new portal.
+	 * executing it in a new portal.We also need to set its batch
+	 * size to 0 so that TuplestoreScans don't return early. Since
+	 * they're not being executed continuously, they'd never
+	 * see anything after the first batch was consumed.
+	 *
 	 */
 	plan->is_continuous = false;
+	plan->cq_state->batchsize = 0;
 
 	if (IsA(plan->planTree, TuplestoreScan))
 		scan = (TuplestoreScan *) plan->planTree;
