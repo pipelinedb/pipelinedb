@@ -63,3 +63,28 @@ def test_multiple(pipeline, clean_db):
 
     result = list(pipeline.execute('SELECT * FROM cv1'))
     assert len(result) == 1000
+    
+def test_combine(pipeline, clean_db):
+    """
+    Verify that partial tuples are combined with on-disk tuples
+    """
+    pipeline.set_sync_insert(True)
+    pipeline.create_cv('combine', 'SELECT key::text, COUNT(*) FROM stream GROUP BY key')
+    pipeline.activate()
+
+    for n in range(100):
+        values = []
+        for m in range(100):
+            key = '%d%d' % (n, m)
+            values.append(str((key, 0)))
+
+        pipeline.execute('INSERT INTO stream (key) VALUES %s' % ','.join(values))
+
+    pipeline.deactivate()
+
+    total = 0
+    result = pipeline.execute('SELECT * FROM combine')
+    for row in result:
+        total += row['count']
+
+    assert total == 10000
