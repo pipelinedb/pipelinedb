@@ -475,8 +475,8 @@ create_singleton_array(FunctionCallInfo fcinfo,
 Datum
 array_agg_combine(PG_FUNCTION_ARGS)
 {
-	ArrayBuildState *state = (ArrayBuildState *) PG_GETARG_POINTER(0);
-	ArrayBuildState *incoming = (ArrayBuildState *) PG_GETARG_POINTER(1);
+	ArrayBuildState *toappend = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
+	ArrayBuildState *result = (ArrayBuildState *) PG_GETARG_POINTER(1);
 	MemoryContext aggcontext;
 	int i;
 
@@ -486,16 +486,21 @@ array_agg_combine(PG_FUNCTION_ARGS)
 		elog(ERROR, "array_agg_combine called in non-aggregate context");
 	}
 
-	for (i=0; i<incoming->nelems; i++)
+	if (toappend == NULL)
+		PG_RETURN_POINTER(result);
+
+	/*
+	 * The incoming arrays will be appended to the existing transition state,
+	 * but the order in which they're appended isn't predictable.
+	 */
+	for (i=0; i<toappend->nelems; i++)
 	{
-		state = accumArrayResult(state,
-								 incoming->dvalues[i],
-								 incoming->dnulls[i],
-								 incoming->element_type,
-								 aggcontext);
+		result = accumArrayResult(result,
+				toappend->dvalues[i], toappend->dnulls[i],
+				toappend->element_type, aggcontext);
 	}
 
-	PG_RETURN_POINTER(state);
+	PG_RETURN_POINTER(result);
 }
 
 /*

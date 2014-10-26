@@ -68,21 +68,21 @@ INSERT INTO stream (n, v, t) VALUES ('k2', 4, '4');
 INSERT INTO stream (n, v, t) VALUES ('k3', 5, '5'), ('k3', 6, '6');
 DEACTIVATE;
 SELECT * FROM test_object_agg0 ORDER BY n;
- n  |      json_object_agg      
-----+---------------------------
- k0 | {  "k0" : 2,   "k0" : 1 }
- k1 | {  "k1" : 3 }
- k2 | {  "k2" : 4 }
- k3 | {  "k3" : 5, "k3" : 6 }
+ n  |    json_object_agg     
+----+------------------------
+ k0 | { "k0" : 2, "k0" : 1 }
+ k1 | { "k1" : 3 }
+ k2 | { "k2" : 4 }
+ k3 | { "k3" : 5, "k3" : 6 }
 (4 rows)
 
 SELECT * FROM test_object_agg1 ORDER BY n;
- n  |        json_object_agg        
-----+-------------------------------
- k0 | {  "k0" : "2",   "k0" : "1" }
- k1 | {  "k1" : "3" }
- k2 | {  "k2" : "4" }
- k3 | {  "k3" : "5", "k3" : "6" }
+ n  |      json_object_agg       
+----+----------------------------
+ k0 | { "k0" : "2", "k0" : "1" }
+ k1 | { "k1" : "3" }
+ k2 | { "k2" : "4" }
+ k3 | { "k3" : "5", "k3" : "6" }
 (4 rows)
 
 ACTIVATE test_object_agg0;
@@ -92,21 +92,21 @@ INSERT INTO stream (n, v, t) VALUES ('k0', 2, '2');
 INSERT INTO stream (n, v, t) VALUES ('k1', 3, '3');
 DEACTIVATE;
 SELECT * FROM test_object_agg0 ORDER BY n;
- n  |                  json_object_agg                  
-----+---------------------------------------------------
- k0 | {  "k0" : 2,   "k0" : 1,   "k0" : 2,   "k0" : 1 }
- k1 | {  "k1" : 3,   "k1" : 3 }
- k2 | {  "k2" : 4 }
- k3 | {  "k3" : 5, "k3" : 6 }
+ n  |              json_object_agg               
+----+--------------------------------------------
+ k0 | { "k0" : 2, "k0" : 1, "k0" : 2, "k0" : 1 }
+ k1 | { "k1" : 3, "k1" : 3 }
+ k2 | { "k2" : 4 }
+ k3 | { "k3" : 5, "k3" : 6 }
 (4 rows)
 
 SELECT * FROM test_object_agg1 ORDER BY n;
- n  |                      json_object_agg                      
-----+-----------------------------------------------------------
- k0 | {  "k0" : "2",   "k0" : "1",   "k0" : "2",   "k0" : "1" }
- k1 | {  "k1" : "3",   "k1" : "3" }
- k2 | {  "k2" : "4" }
- k3 | {  "k3" : "5", "k3" : "6" }
+ n  |                  json_object_agg                   
+----+----------------------------------------------------
+ k0 | { "k0" : "2", "k0" : "1", "k0" : "2", "k0" : "1" }
+ k1 | { "k1" : "3", "k1" : "3" }
+ k2 | { "k2" : "4" }
+ k3 | { "k3" : "5", "k3" : "6" }
 (4 rows)
 
 -- bytea_string_agg, string_agg
@@ -169,8 +169,8 @@ DEACTIVATE;
 SELECT * FROM test_array_agg ORDER BY k;
  k |  array_agg  
 ---+-------------
- x | {4,0,1,2,3}
- y | {2,0,1}
+ x | {0,1,2,3,4}
+ y | {0,1,2}
  z | {10,20}
 (3 rows)
 

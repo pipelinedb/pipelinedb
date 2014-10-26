@@ -2013,12 +2013,12 @@ json_object_agg_combine(PG_FUNCTION_ARGS)
 		state = makeStringInfo();
 		MemoryContextSwitchTo(oldcontext);
 
-		appendStringInfoString(state, "{ ");
+		appendStringInfoString(state, "{");
 	}
 	else
 	{
 		state = (StringInfo) PG_GETARG_POINTER(0);
-		appendStringInfoString(state, ", ");
+		appendStringInfoString(state, ",");
 	}
 
 	incoming = (StringInfo) PG_GETARG_POINTER(1);

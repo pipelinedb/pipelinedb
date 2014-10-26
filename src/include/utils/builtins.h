@@ -1220,5 +1220,8 @@ extern Datum numeric_combine(PG_FUNCTION_ARGS);
 extern Datum interval_combine(PG_FUNCTION_ARGS);
 extern Datum numeric_combine(PG_FUNCTION_ARGS);
 extern Datum numeric_avg_combine(PG_FUNCTION_ARGS);
+extern Datum array_agg_combine(PG_FUNCTION_ARGS);
+extern Datum json_agg_combine(PG_FUNCTION_ARGS);
+extern Datum json_object_agg_combine(PG_FUNCTION_ARGS);
 
 #endif   /* BUILTINS_H */

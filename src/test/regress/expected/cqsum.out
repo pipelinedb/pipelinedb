@@ -140,7 +140,7 @@ ACTIVATE test_numeric_sum;
 INSERT INTO numeric_stream (k, v) VALUES ('x', '10000000000000000000000000000000000000000000000000000');
 INSERT INTO numeric_stream (k, v) VALUES ('y', '-0000000000000000000000000000000000000.00000000000000000000000000000000001');
 DEACTIVATE;
-SELECT * FROM test_numeric_sum;
+SELECT * FROM test_numeric_sum ORDER BY k;
  k |                            sum                             
 ---+------------------------------------------------------------
  x | 10000000000000000000000000000000000000000000000000009.9003

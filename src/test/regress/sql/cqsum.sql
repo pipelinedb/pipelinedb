@@ -95,7 +95,7 @@ INSERT INTO numeric_stream (k, v) VALUES ('y', '-0000000000000000000000000000000
 
 DEACTIVATE;
 
-SELECT * FROM test_numeric_sum;
+SELECT * FROM test_numeric_sum ORDER BY k;
 
 -------------------------------------------------------------------------------
 -- Interval sum
