@@ -225,7 +225,7 @@ MarkContinuousViewAsActive(RangeVar *name)
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+		elog(ERROR, "continuous view \"%s\" does not exist",
 				name->relname);
 
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
@@ -279,7 +279,7 @@ MarkContinuousViewAsInactive(RangeVar *name)
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+		elog(ERROR, "continuous view \"%s\" does not exist",
 				name->relname);
 
 	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
@@ -324,7 +324,7 @@ GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+		elog(ERROR, "continuous view \"%s\" does not exist",
 				name->relname);
 
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
@@ -359,7 +359,7 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+		elog(ERROR, "continuous view \"%s\" does not exist",
 				name->relname);
 
 	MemSet(values, 0, sizeof(values));
