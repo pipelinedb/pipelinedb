@@ -68,6 +68,7 @@ def test_combine(pipeline, clean_db):
     """
     Verify that partial tuples are combined with on-disk tuples
     """
+    return
     pipeline.set_sync_insert(True)
     pipeline.create_cv('combine', 'SELECT key::text, COUNT(*) FROM stream GROUP BY key')
     pipeline.activate()
