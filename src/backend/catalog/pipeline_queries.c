@@ -241,14 +241,17 @@ MarkContinuousViewAsActive(RangeVar *name)
 
 		newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att,
 				values, nulls, replaces);
+
 		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+		CatalogUpdateIndexes(pipeline_queries, newtuple);
+
 		CommandCounterIncrement();
 
 		alreadyActive = false;
 	}
 
 	ReleaseSysCache(tuple);
-	heap_close(pipeline_queries, NoLock);
+	heap_close(pipeline_queries, RowExclusiveLock);
 
 	return !alreadyActive;
 }
@@ -294,6 +297,8 @@ MarkContinuousViewAsInactive(RangeVar *name)
 		newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att,
 				values, nulls, replaces);
 		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+
+		CatalogUpdateIndexes(pipeline_queries, newtuple);
 		CommandCounterIncrement();
 	}
 	ReleaseSysCache(tuple);
@@ -375,7 +380,10 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 
 	newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att,
 			values, nulls, replaces);
+
 	simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+	CatalogUpdateIndexes(pipeline_queries, newtuple);
+
 	CommandCounterIncrement();
 
 	ReleaseSysCache(tuple);
@@ -530,7 +538,9 @@ MarkAllContinuousViewsAsInactive()
 
 			newtuple = heap_modify_tuple(tup, pipeline_queries->rd_att,
 					values, nulls, replaces);
+
 			simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+			CatalogUpdateIndexes(pipeline_queries, newtuple);
 
 			CommandCounterIncrement();
 		}
