@@ -16,9 +16,11 @@
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "commands/pipelinecmds.h"
+#include "funcapi.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/print.h"
+#include "parser/analyze.h"
 #include "parser/parse_func.h"
 #include "parser/parse_node.h"
 #include "parser/parse_target.h"
@@ -243,80 +245,6 @@ IsSlidingWindowContinuousView(RangeVar *cvname)
 }
 
 /*
- * has_agg_func
- *
- * Does the node contain an aggregate function?
- */
-static bool
-has_agg_func(Node *node, void *context)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, FuncCall))
-	{
-		FuncCall *fn = (FuncCall *) node;
-		HeapTuple ftup;
-		Form_pg_proc pform;
-		bool is_agg = false;
-		FuncCandidateList clist;
-
-		clist = FuncnameGetCandidates(fn->funcname, list_length(fn->args), NIL, false, false, true);
-
-		while (clist != NULL)
-		{
-			if (!OidIsValid(clist->oid))
-				break;
-
-			ftup = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
-			if (!HeapTupleIsValid(ftup))
-				break;
-
-			pform = (Form_pg_proc) GETSTRUCT(ftup);
-			is_agg = pform->proisagg;
-			ReleaseSysCache(ftup);
-
-			if (is_agg)
-				break;
-
-			clist = clist->next;
-		}
-
-		return is_agg;
-	}
-
-	return raw_expression_tree_walker(node, has_agg_func, context);
-}
-
-/*
- * replace_colrefs_with_colnames
- */
-static bool
-replace_colrefs_with_colnames(Node *node, void *colname)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, ColumnRef))
-	{
-		ColumnRef *cref = (ColumnRef *) node;
-		if (colname == NULL)
-			colname = FigureColname(node);
-		cref->fields = list_make1(makeString(colname));
-		return false;
-	}
-
-	if (IsA(node, ResTarget))
-	{
-		ResTarget *res = (ResTarget *) node;
-		replace_colrefs_with_colnames(res->val, res->name);
-		return false;
-	}
-
-	return raw_expression_tree_walker(node, replace_colrefs_with_colnames, colname);
-}
-
-/*
  * get_step_size
  */
 static bool
@@ -378,22 +306,26 @@ get_step_size(Node *node, CQAnalyzeContext *context)
 static bool
 has_agg_or_group_by(SelectStmt *stmt)
 {
-	bool hasAgg;
+	CQAnalyzeContext context;
 	ListCell *tlc;
 	ResTarget *res;
+
+	context.funcCalls = NIL;
+
+	if (list_length(stmt->groupClause) > 0)
+		return true;
 
 	/* Do we have any aggregates? */
 	foreach(tlc, stmt->targetList)
 	{
 		res = (ResTarget *) lfirst(tlc);
-		if (has_agg_func(res->val, NULL))
-		{
-			hasAgg = true;
-			break;
-		}
+		CollectAggFuncs(res->val, &context);
+
+		if (list_length(context.funcCalls) > 0)
+			return true;
 	}
 
-	return (hasAgg || stmt->groupClause != NIL);
+	return false;
 }
 
 /*
@@ -412,34 +344,33 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt, 	CQAnalyzeContext *context)
 	FindColumnRefsWithTypeCasts(swExpr, context);
 	cmpCRef = (Node *) linitial(context->cols);
 
-	/*
-	 * This re-writes the query to be run by worker nodes.
-	 * See the example re-writes below:
-	 *
-	 * SELECT user::int, COUNT(*) FROM click_stream
-	 * WHERE date_trunc('minute', arrival_timestamp) > clock_timestamp() - interval '15 minute'
-	 * GROUP BY user;
-	 * =>
-	 * SELECT user::int, COUNT(*), date_trunc('hour', arrival_timestamp) AS _0 FROM click_stream
-	 * WHERE _0 > clock_timestamp() - interval '15 minute'
-	 * GROUP BY user, _0;
-	 *
-	 * SELECT COUNT(*) FROM sream
-	 * WHERE arrival_timestamp > clock_timestamp() - interval '15 minute';
-	 * =>
-	 * SELECT COUNT(*), date_trunc('second', arrival_timestamp) AS _0 FROM stream
-	 * WHERE _0 > clock_timestamp() - interval '15 minute';
-	 */
 	if (has_agg_or_group_by(stmt))
 	{
 		/*
+		 * This re-writes the query to be run by worker nodes.
+		 * See the example re-writes below:
+		 *
+		 * SELECT user::int, COUNT(*) FROM click_stream
+		 * WHERE date_trunc('minute', arrival_timestamp) > clock_timestamp() - interval '15 minute'
+		 * GROUP BY user;
+		 * =>
+		 * SELECT user::int, COUNT(*), date_trunc('hour', arrival_timestamp) AS _0 FROM click_stream
+		 * WHERE _0 > clock_timestamp() - interval '15 minute'
+		 * GROUP BY user, _0;
+		 *
+		 * SELECT COUNT(*) FROM sream
+		 * WHERE arrival_timestamp > clock_timestamp() - interval '15 minute';
+		 * =>
+		 * SELECT COUNT(*), date_trunc('second', arrival_timestamp) AS _0 FROM stream
+		 * WHERE _0 > clock_timestamp() - interval '15 minute';
+		 *
 		 * The SELECT has a GROUP BY or some aggregate
 		 * function. We reduce the materialization table
 		 * data size by tweaking the sliding window *step-size*
 		 * to be more coarse grained. What that allows us to do
 		 * is store aggregates for small intervals and dynamically
 		 * combine them on the read path, rather than storing all the
-		 * events and computing the entiring query over them.
+		 * events and computing the entire query over them.
 		 */
 		ColumnRef *cref = makeNode(ColumnRef);
 		ResTarget *res = makeNode(ResTarget);
@@ -499,23 +430,16 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt, 	CQAnalyzeContext *context)
 	return stmt;
 }
 
-/*
- * TransformSWSelectStmtForCQView
- */
-SelectStmt *
-TransformSWSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel, CQAnalyzeContext *context)
+static void
+fix_sliding_window_expr(SelectStmt *stmt, Node *swExpr, CQAnalyzeContext *context)
 {
-	Node *swExpr = get_sliding_window_expr(stmt, NULL);
 	Node *cmpCRef;
+	bool hasAggOrGrp = has_agg_or_group_by(stmt);
 
-	if (swExpr == NULL)
-		return stmt;
-
-	context->cols = NIL;
 	FindColumnRefsWithTypeCasts(swExpr, context);
 	cmpCRef = (Node *) linitial(context->cols);
 
-	if (has_agg_or_group_by(stmt) || !IsColumnRefInTargetList(stmt, cmpCRef))
+	if (hasAggOrGrp || !IsColumnRefInTargetList(stmt, cmpCRef))
 	{
 		/*
 		 * Find the name we picked for the column we're
@@ -533,14 +457,139 @@ TransformSWSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel, CQAnalyzeConte
 		cref->type = T_ColumnRef;
 		cref->fields = list_make1(makeString(name));
 		cref->location = -1;
+
+		if (hasAggOrGrp)
+		{
+			/*
+			 * This will swap out any date_trunc calls in the
+			 * sliding window expression with the column reference
+			 * to that field.
+			 *
+			 * TODO(usmanm): Will this work in all agg/group by cases?
+			 */
+			context->stepSize = NULL;
+			get_step_size(swExpr, context);
+		}
 	}
+}
 
-	stmt->whereClause = swExpr;
-	replace_colrefs_with_colnames((Node *) stmt, NULL);
-	stmt->fromClause = list_make1(cqrel);
-	stmt->groupClause = NIL;
+/*
+ * TransformSWSelectStmtForCQView
+ */
+SelectStmt *
+TransformSWSelectStmtForCQView(SelectStmt *origstmt, SelectStmt *workerstmt, RangeVar *cqrel, CQAnalyzeContext *context)
+{
+	Node *swExpr = get_sliding_window_expr(origstmt, NULL);
+	Node *cmpCRef;
 
-	return stmt;
+	if (swExpr == NULL)
+		return origstmt;
+
+	InitializeCQAnalyzeContext(origstmt, NULL, context);
+	fix_sliding_window_expr(origstmt, swExpr, context);
+	cmpCRef = (Node *) linitial(context->cols);
+
+	/*
+	 * Copy over the *fixed* sliding window expression as the whereClause
+	 * for the view.
+	 */
+	origstmt->whereClause = swExpr;
+	origstmt->fromClause = list_make1(cqrel);
+	origstmt->groupClause = NIL;
+
+	if (has_agg_or_group_by(origstmt))
+	{
+		ListCell *lc;
+		Query *query;
+		TupleDesc matdesc;
+
+		foreach(lc, workerstmt->groupClause)
+		{
+			Node *node = lfirst(lc);
+			if (AreColumnRefsEqual(node, cmpCRef))
+				continue;
+			origstmt->groupClause = lappend(origstmt->groupClause, node);
+		}
+
+		query = parse_analyze(copyObject(workerstmt), NULL, 0, 0);
+		matdesc = RelationNameGetTupleDesc(cqrel->relname);
+
+		/* Replace all non-aggregate targets with column references. */
+		ReplaceTargetListWithColumnRefs(origstmt, false);
+
+		/* Collect all the aggregate functions */
+		foreach(lc, origstmt->targetList)
+		{
+			ResTarget *res = (ResTarget *) lfirst(lc);
+			FuncCall *fcall;
+			ColumnRef *cref;
+			char *colName = res->name;
+
+			context->funcCalls = NIL;
+			CollectAggFuncs((Node *) res, context);
+
+			if (list_length(context->funcCalls) == 0)
+				continue;
+
+			if (list_length(context->funcCalls) > 1)
+				elog(ERROR, "no support for multi-agg restargets");
+
+			if (colName == NULL)
+				colName = FigureColname(res->val);
+
+			cref = makeNode(ColumnRef);
+			cref->location = res->location;
+
+			fcall = (FuncCall *) linitial(context->funcCalls);
+			fcall->agg_star = false;
+			fcall->args = list_make1(cref);
+
+			if (pg_strcasecmp(NameListToString(fcall->funcname), "count") == 0)
+			{
+				/* All COUNT(?) functions are re-written to SUM(count column) */
+				fcall->funcname = list_make1(makeString("sum"));
+				cref->fields = list_make1(makeString(colName));
+			}
+			else
+			{
+				ListCell *tlc;
+
+				foreach(tlc, query->targetList)
+				{
+					TargetEntry *te = (TargetEntry *) lfirst(tlc);
+
+					if (pg_strcasecmp(te->resname, colName) != 0)
+						continue;
+
+					Assert(IsA(te->expr, Aggref));
+
+					if (OidIsValid(GetCombineStateColumnType(te)))
+					{
+						int i;
+
+						for (i = 0; i < matdesc->natts; i++)
+						{
+							if (pg_strcasecmp(NameStr(matdesc->attrs[i]->attname), colName) != 0)
+								continue;
+
+							cref->fields = list_make1(makeString(NameStr(matdesc->attrs[i + 1]->attname)));
+							break;
+						}
+					}
+					else
+						cref->fields = list_make1(makeString(te->resname));
+
+					break;
+				}
+			}
+
+			res->name = colName;
+		}
+	}
+	else
+		ReplaceTargetListWithColumnRefs(origstmt, true);
+
+	return origstmt;
 }
 
 /*
@@ -552,48 +601,12 @@ GetDeleteStmtForGC(char *cvname, SelectStmt *stmt)
 	CQAnalyzeContext context;
 	DeleteStmt *delete_stmt;
 	Node *swExpr = get_sliding_window_expr(stmt, NULL);
-	Node *cmpCRef;
 
 	if (swExpr == NULL)
 		return NULL;
 
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
-
-	FindColumnRefsWithTypeCasts(swExpr, &context);
-	cmpCRef = (Node *) linitial(context.cols);
-
-	if (has_agg_or_group_by(stmt) || !IsColumnRefInTargetList(stmt, cmpCRef))
-	{
-		/*
-		 * Find the name we picked for the column we're
-		 * comparing clock_timestamp() to and replace
-		 * it with a ColumnRef to that.
-		 */
-		char *name = GetUniqueInternalColname(&context);
-		/*
-		 * XXX(usmanm): This is hackery. cmpCRef can be a
-		 * TypeCast or a ColumnRef but since sizeof(TypeCast)
-		 * > sizeof(ColumnRef), we can force cast cmpCRef
-		 * to be a ColumnRef.
-		 */
-		ColumnRef *cref = (ColumnRef *) cmpCRef;
-		cref->type = T_ColumnRef;
-		cref->fields = list_make1(makeString(name));
-		cref->location = -1;
-
-		if (has_agg_or_group_by(stmt))
-		{
-			/*
-			 * This will swap out any date_trunc calls in the
-			 * sliding window expression with the column reference
-			 * to that field.
-			 *
-			 * TODO(usmanm): Will this work in all agg/group by cases?
-			 */
-			context.stepSize = NULL;
-			get_step_size(swExpr, &context);
-		}
-	}
+	fix_sliding_window_expr(stmt, swExpr, &context);
 
 	delete_stmt = makeNode(DeleteStmt);
 	delete_stmt->relation = makeRangeVar(NULL, GetCQMatRelationName(cvname), -1);

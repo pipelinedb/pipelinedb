@@ -154,9 +154,6 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 			if (OidIsValid(hiddentype))
 				hidden = attno + 1;
 
-			if (AttributeNumberIsValid(hidden))
-
-
 			aggref->aggresultstate = AGG_TRANSITION;
 			transtype = get_trans_type(aggref);
 
@@ -201,7 +198,7 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 				 * TargetEntry.
 				 */
 				Var *var;
-				AttrNumber oldVarAttNo = -1;
+				AttrNumber oldVarAttNo = 0;
 
 				if (IsA(expr, Var))
 				{
@@ -219,9 +216,9 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 				te->expr = (Expr *) var;
 
 				/* Fix grpColIdx to reflect the index in the tuple from worker */
-				if (oldVarAttNo > 0 && oldVarAttNo != var->varattno)
+				if (AttributeNumberIsValid(oldVarAttNo) && oldVarAttNo != var->varattno)
 				{
-					for (i = 0; i < agg->numGroups; i++)
+					for (i = 0; i < agg->numCols; i++)
 					{
 						if (agg->grpColIdx[i] == oldVarAttNo)
 							agg->grpColIdx[i] = var->varattno;

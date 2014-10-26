@@ -174,13 +174,24 @@ FindColumnRefsWithTypeCasts(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * are_column_refs_equal
+ * AreColumnRefsEqual
  */
-static bool
-are_column_refs_equal(ColumnRef *cr1, ColumnRef *cr2)
+bool
+AreColumnRefsEqual(Node *cr1, Node *cr2)
 {
-	/* In our land ColumnRef locations are matter */
-	return equal(cr1->fields, cr2->fields);
+	if (IsA(cr1, TypeCast))
+	{
+		cr1 = ((TypeCast *) cr1)->arg;
+	}
+	if (IsA(cr2, TypeCast))
+	{
+		cr2 = ((TypeCast *) cr2)->arg;
+	}
+
+	Assert(IsA(cr1, ColumnRef) && IsA(cr2, ColumnRef));
+
+	/* In our land ColumnRef locations don't matter */
+	return equal(((ColumnRef *) cr1)->fields, ((ColumnRef *) cr2)->fields);
 }
 
 /*
@@ -195,7 +206,7 @@ contains_column_ref(Node *node, ColumnRef *cref)
 	if (IsA(node, ColumnRef))
 	{
 		ColumnRef *cref2 = (ColumnRef *) node;
-		return are_column_refs_equal(cref, cref2);
+		return AreColumnRefsEqual((Node *) cref, (Node *) cref2);
 	}
 
 	return raw_expression_tree_walker(node, contains_column_ref, (void *) cref);
@@ -228,7 +239,7 @@ IsResTargetForColumnRef(Node *node, ColumnRef *cref)
 	else if (IsA(node, ColumnRef))
 	{
 		ColumnRef *cref2 = (ColumnRef *) node;
-		return are_column_refs_equal(cref, cref2);
+		return AreColumnRefsEqual((Node *) cref, (Node *) cref2);
 	}
 	else if (IsA(node, FuncCall))
 	{
@@ -272,6 +283,101 @@ IsColumnRefInTargetList(SelectStmt *stmt, Node *node)
 	}
 
 	return found;
+}
+
+/*
+ * CollectAggFuncs
+ *
+ * Does the node contain an aggregate function?
+ */
+bool
+CollectAggFuncs(Node *node, CQAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, FuncCall))
+	{
+		FuncCall *fn = (FuncCall *) node;
+		HeapTuple ftup;
+		Form_pg_proc pform;
+		bool is_agg = false;
+		FuncCandidateList clist;
+
+		clist = FuncnameGetCandidates(fn->funcname, list_length(fn->args), NIL, false, false, true);
+
+		while (clist != NULL)
+		{
+			ftup = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
+			if (!HeapTupleIsValid(ftup))
+				break;
+
+			pform = (Form_pg_proc) GETSTRUCT(ftup);
+			is_agg = pform->proisagg;
+			ReleaseSysCache(ftup);
+
+			if (is_agg)
+				break;
+
+			clist = clist->next;
+		}
+
+		if (is_agg && context)
+		{
+			context->funcCalls = lappend(context->funcCalls, fn);
+		}
+
+		return false;
+	}
+
+	return raw_expression_tree_walker(node, CollectAggFuncs, context);
+}
+
+/*
+ * ReplaceTargetListWithColumnRefs
+ */
+void
+ReplaceTargetListWithColumnRefs(SelectStmt *stmt, bool replaceAggs)
+{
+	CQAnalyzeContext context;
+	List *origTargetList = stmt->targetList;
+	ListCell *lc;
+
+	stmt->targetList = NIL;
+
+	foreach(lc, origTargetList)
+	{
+		ResTarget *origRes = lfirst(lc);
+		ResTarget *res;
+		ColumnRef *cref;
+		char *colname;
+
+		context.funcCalls = NIL;
+		CollectAggFuncs(origRes->val, &context);
+
+		if (!replaceAggs && list_length(context.funcCalls) > 0)
+		{
+			stmt->targetList = lappend(stmt->targetList, origRes);
+			continue;
+		}
+
+		if (origRes->name != NULL)
+			colname = origRes->name;
+		else
+			colname = FigureColname(origRes->val);
+
+		cref = makeNode(ColumnRef);
+		cref->fields = list_make1(makeString(colname));
+		cref->location = origRes->location;
+
+		res = makeNode(ResTarget);
+		res->name = NULL;
+		res->indirection = NIL;
+		res->val = (Node *) cref;
+		res->location = origRes->location;
+
+		stmt->targetList = lappend(stmt->targetList, res);
+	}
 }
 
 /*
@@ -372,58 +478,30 @@ GetSelectStmtForCQCombiner(SelectStmt *stmt)
  * create for this CQ.
  */
 SelectStmt *
-GetSelectStmtForCQView(SelectStmt *stmt, RangeVar *cqrel)
+GetSelectStmtForCQView(SelectStmt *origstmt, SelectStmt *workerstmt, RangeVar *cqrel)
 {
 	CQAnalyzeContext context;
-	List *origTargetList = stmt->targetList;
-	ListCell *lc;
+	SelectStmt *view_select;
 
-	InitializeCQAnalyzeContext(stmt, NULL, &context);
+	InitializeCQAnalyzeContext(origstmt, NULL, &context);
 
-	stmt = (SelectStmt *) copyObject(stmt);
-	stmt->forContinuousView = false;
+	origstmt = (SelectStmt *) copyObject(origstmt);
+	origstmt->forContinuousView = false;
 
-	if (IsSlidingWindowSelectStmt(stmt))
-		return TransformSWSelectStmtForCQView(stmt, cqrel, &context);
+	if (IsSlidingWindowSelectStmt(origstmt))
+		return TransformSWSelectStmtForCQView(origstmt, workerstmt, cqrel, &context);
 
 	/*
 	 * Create a SelectStmt that only projects fields that
 	 * the user expects in the continuous view.
 	 */
-	stmt = makeNode(SelectStmt);
-	stmt->fromClause = list_make1(cqrel);
-	stmt->targetList = NIL;
+	view_select = makeNode(SelectStmt);
+	view_select->fromClause = list_make1(cqrel);
 
-	/*
-	 * Create a ResTarget to wrap a ColumnRef for each column
-	 * name that we expect in the continuous view.
-	 */
-	foreach(lc, origTargetList)
-	{
-		ResTarget *origRes = lfirst(lc);
-		ResTarget *res;
-		ColumnRef *cref;
-		char *colname;
+	view_select->targetList = origstmt->targetList;
+	ReplaceTargetListWithColumnRefs(view_select, true);
 
-		if (origRes->name != NULL)
-			colname = origRes->name;
-		else
-			colname = FigureColname(origRes->val);
-
-		cref = makeNode(ColumnRef);
-		cref->fields = list_make1(makeString(colname));
-		cref->location = origRes->location;
-
-		res = makeNode(ResTarget);
-		res->name = NULL;
-		res->indirection = NIL;
-		res->val = (Node *) cref;
-		res->location = origRes->location;
-
-		stmt->targetList = lappend(stmt->targetList, res);
-	}
-
-	return stmt;
+	return view_select;
 }
 
 /*
