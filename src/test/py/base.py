@@ -83,6 +83,7 @@ class PipelineDB(object):
         """
         Cleans up resources used by this PipelineDB instance
         """
+        self.deactivate()
         self.conn.close()
         if self.proc:
             os.kill(self.proc.pid, signal.SIGINT)

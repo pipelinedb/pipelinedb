@@ -1,5 +1,4 @@
 from base import pipeline, clean_db
-import pytest
 
 
 def test_create_drop_continuous_view(pipeline, clean_db):
