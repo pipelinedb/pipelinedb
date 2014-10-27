@@ -197,7 +197,7 @@ DeregisterContinuousView(RangeVar *name)
 	CommandCounterIncrement();
 
 	ReleaseSysCache(tup);
-	heap_close(pipeline_queries, NoLock);
+	heap_close(pipeline_queries, AccessExclusiveLock);
 }
 
 /*
@@ -302,7 +302,7 @@ MarkContinuousViewAsInactive(RangeVar *name)
 		CommandCounterIncrement();
 	}
 	ReleaseSysCache(tuple);
-	heap_close(pipeline_queries, NoLock);
+	heap_close(pipeline_queries, RowExclusiveLock);
 
 	return row->state != PIPELINE_QUERY_STATE_INACTIVE;
 }
@@ -516,7 +516,7 @@ MarkAllContinuousViewsAsInactive()
 	HeapScanDesc	scandesc;
 	HeapTuple		tup;
 
-	pipeline_queries = heap_open(PipelineQueriesRelationId, NoLock);
+	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 	scandesc = heap_beginscan_catalog(pipeline_queries, 0, NULL);
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
@@ -547,5 +547,5 @@ MarkAllContinuousViewsAsInactive()
 	}
 
 	heap_endscan(scandesc);
-	heap_close(pipeline_queries, NoLock);
+	heap_close(pipeline_queries, AccessExclusiveLock);
 }

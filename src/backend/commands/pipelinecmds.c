@@ -314,9 +314,9 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 	}
 
 	/*
-	 * Now we can clean up; but keep locks until commit.
+	 * Now we can clean up
 	 */
-	heap_close(pipeline_queries, NoLock);
+	heap_close(pipeline_queries, RowExclusiveLock);
 
 	/*
 	 * Remove the VIEWs and underlying materialization relations
