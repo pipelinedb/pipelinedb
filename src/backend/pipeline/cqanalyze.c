@@ -443,7 +443,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 
 	stmt = (SelectStmt *) copyObject(stmt);
 	if (viewselect != NULL)
-		vselect = (SelectStmt *) copyObject(stmt);
+		vselect = (SelectStmt *) makeNode(SelectStmt);
 
 	/*
 	 * Check to see if we need to project any columns
