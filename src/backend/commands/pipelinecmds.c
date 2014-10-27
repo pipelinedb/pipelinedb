@@ -144,8 +144,8 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying materialization table.
 	 */
-	workerselect = GetSelectStmtForCQWorker(copyObject(stmt->query));
-	InitializeCQAnalyzeContext(workerselect, &viewselect, &context);
+	workerselect = GetSelectStmtForCQWorker(copyObject(stmt->query), &viewselect);
+	InitializeCQAnalyzeContext(workerselect, NULL, &context);
 
 	query = parse_analyze(copyObject(workerselect), querystring, 0, 0);
 	tlist = query->targetList;

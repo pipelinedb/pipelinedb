@@ -279,21 +279,6 @@ get_step_size(Node *node, CQAnalyzeContext *context)
 
 		context->stepSize = strVal(&((A_Const *) truncArg)->val);
 
-		/* Swap out the FuncCall with the column its wrapping */
-		cref = (ColumnRef *) node;
-		cref->type = T_ColumnRef;
-		cref->location = -1;
-		cref->fields = list_make1(makeString(colName));
-
-		/*
-		 * XXX(usmanm): This is safe to do because sizeof(FuncCall)
-		 * > sizeof(ColumnRef) which means we should have enough
-		 * memory change in place node from a FuncCall to a ColumnRef.
-		 */
-		memcpy(node, cref, sizeof(ColumnRef));
-
-		Assert(IsA(node, ColumnRef));
-
 		return false;
 	}
 

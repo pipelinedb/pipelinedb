@@ -520,7 +520,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 
 	if (viewselect != NULL)
 		*viewselect = vselect;
-
+	pprint(stmt);
 	return stmt;
 }
 
