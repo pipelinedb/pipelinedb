@@ -71,19 +71,19 @@ find_clock_timestamp_expr(Node *node, CQAnalyzeContext *context)
 		bool l_res, r_res;
 		Node *l_expr, *r_expr;
 
-		context->matchExpr = NULL;
+		context->swExpr = NULL;
 
 		l_res = find_clock_timestamp_expr(a_expr->lexpr, context);
-		if (context->matchExpr != NULL)
-			l_expr = context->matchExpr;
+		if (context->swExpr != NULL)
+			l_expr = context->swExpr;
 		else
 			l_expr = a_expr->lexpr;
 
-		context->matchExpr = NULL;
+		context->swExpr = NULL;
 
 		r_res = find_clock_timestamp_expr(a_expr->rexpr, context);
-		if (context->matchExpr)
-			r_expr = context->matchExpr;
+		if (context->swExpr)
+			r_expr = context->swExpr;
 		else
 			r_expr = a_expr->rexpr;
 
@@ -97,17 +97,17 @@ find_clock_timestamp_expr(Node *node, CQAnalyzeContext *context)
 		{
 		case AEXPR_OP:
 			if (l_res || r_res)
-				context->matchExpr = (Node *) makeA_Expr(AEXPR_OP, a_expr->name, l_expr, r_expr, -1);
+				context->swExpr = (Node *) makeA_Expr(AEXPR_OP, a_expr->name, l_expr, r_expr, -1);
 			return l_res || r_res;
 		case AEXPR_AND:
 			if (l_res)
-				context->matchExpr = l_expr;
+				context->swExpr = l_expr;
 			else if (r_res)
-				context->matchExpr = r_expr;
+				context->swExpr = r_expr;
 			return l_res || r_res;
 		case AEXPR_NOT:
 			if (r_res)
-				context->matchExpr = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, r_expr, -1);
+				context->swExpr = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, r_expr, -1);
 			return r_res;
 		case AEXPR_OR:
 		case AEXPR_OP_ANY:
@@ -159,7 +159,7 @@ get_sliding_window_expr(SelectStmt *stmt, ParseState *pstate)
 {
 	CQAnalyzeContext context;
 	context.pstate = pstate;
-	context.matchExpr = NULL;
+	context.swExpr = NULL;
 
 	if (stmt->whereClause == NULL)
 	{
@@ -169,7 +169,7 @@ get_sliding_window_expr(SelectStmt *stmt, ParseState *pstate)
 	/* find the subset of the whereClause that we must match valid tuples */
 	find_clock_timestamp_expr(stmt->whereClause, &context);
 
-	return context.matchExpr;
+	return context.swExpr;
 }
 
 /*
@@ -257,14 +257,15 @@ get_step_size(Node *node, CQAnalyzeContext *context)
 		return false;
 
 	if (IsA(node, ColumnRef))
+	{
+		context->stepColumn = node;
 		return true;
+	}
 
 	if (IsA(node, FuncCall))
 	{
 		FuncCall *fcall = (FuncCall *) node;
 		Node *truncArg;
-		ColumnRef *cref;
-		char *colName = FigureColname(linitial(context->cols));
 
 		if (pg_strcasecmp(strVal(linitial(fcall->funcname)), "date_trunc") != 0)
 			return false;
@@ -278,6 +279,7 @@ get_step_size(Node *node, CQAnalyzeContext *context)
 			return false;
 
 		context->stepSize = strVal(&((A_Const *) truncArg)->val);
+		context->stepColumn = node;
 
 		return false;
 	}
@@ -286,40 +288,12 @@ get_step_size(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * has_agg_or_group_by
- */
-static bool
-has_agg_or_group_by(SelectStmt *stmt)
-{
-	CQAnalyzeContext context;
-	ListCell *tlc;
-	ResTarget *res;
-
-	context.funcCalls = NIL;
-
-	if (list_length(stmt->groupClause) > 0)
-		return true;
-
-	/* Do we have any aggregates? */
-	foreach(tlc, stmt->targetList)
-	{
-		res = (ResTarget *) lfirst(tlc);
-		CollectAggFuncs(res->val, &context);
-
-		if (list_length(context.funcCalls) > 0)
-			return true;
-	}
-
-	return false;
-}
-
-/*
- * TransformSWSelectStmtForCQWorker
+ * ProjectColsAndAddGroupByForSlidingWindow
  */
 SelectStmt *
-TransformSWSelectStmtForCQWorker(SelectStmt *stmt, 	CQAnalyzeContext *context)
+AddProjectionAndAddGroupByForSlidingWindow(SelectStmt *stmt, SelectStmt *viewselect, bool hasAggOrGroupBy, CQAnalyzeContext *context)
 {
-	Node *swExpr = get_sliding_window_expr(stmt, NULL);
+	Node *swExpr = copyObject(get_sliding_window_expr(stmt, NULL));
 	Node *cmpCRef;
 
 	if (swExpr == NULL)
@@ -329,7 +303,7 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt, 	CQAnalyzeContext *context)
 	FindColumnRefsWithTypeCasts(swExpr, context);
 	cmpCRef = (Node *) linitial(context->cols);
 
-	if (has_agg_or_group_by(stmt))
+	if (hasAggOrGroupBy)
 	{
 		/*
 		 * This re-writes the query to be run by worker nodes.
@@ -378,7 +352,7 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt, 	CQAnalyzeContext *context)
 		aconst->val = *makeString(stepSize);
 		aconst->location = -1;
 		func->funcname = list_make1(makeString("date_trunc"));
-		func->args = list_concat(list_make1(aconst), context->cols);
+		func->args = list_concat(list_make1(aconst), copyObject(context->cols));
 		func->location = -1;
 		res->name = name;
 		res->indirection = NIL;
@@ -393,6 +367,13 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt, 	CQAnalyzeContext *context)
 		cref->fields = list_make1(makeString(name));
 		cref->location = -1;
 		stmt->groupClause = lappend(stmt->groupClause, cref);
+
+		/*
+		 * Replace date_trunc call in the sliding window expression
+		 * with a ColumnRef to the ResTarget we created above.
+		 * This is needed so that the VIEW can filter out disqualified tuples.
+		 */
+		memcpy(context->stepColumn, CreateColumnRefFromResTarget(res), sizeof(ColumnRef));
 	}
 	else if (!IsColumnRefInTargetList(stmt, cmpCRef))
 	{
@@ -406,20 +387,127 @@ TransformSWSelectStmtForCQWorker(SelectStmt *stmt, 	CQAnalyzeContext *context)
 
 		res->name = name;
 		res->indirection = NIL;
-		res->val = cmpCRef;
+		res->val = copyObject(cmpCRef);
 		res->location = -1;
 
 		stmt->targetList = lappend(stmt->targetList, res);
+
+		memcpy(cmpCRef, CreateColumnRefFromResTarget(res), sizeof(ColumnRef));
 	}
+
+	/*
+	 * Copy over the modified swExpr to the VIEW's SelectStmt.
+	 */
+	viewselect->whereClause = swExpr;
 
 	return stmt;
 }
 
+/*
+ * TransformAggNodeForCQView
+ */
+void
+TransformAggNodeForCQView(SelectStmt *viewselect, Node *node, ResTarget *aggres, bool hasAggOrGroupBy)
+{
+	ColumnRef *cref;
+	Assert(IsA(node, FuncCall));
+
+	cref = CreateColumnRefFromResTarget(aggres);
+
+	if (hasAggOrGroupBy)
+	{
+		FuncCall *agg = (FuncCall *) node;
+		agg->agg_star = false;
+		agg->args = list_make1(cref);
+	}
+	else
+		memcpy(node, cref, sizeof(ColumnRef));
+}
+
+/*
+ * change_agg_arg_to_hidden
+ */
+static void
+change_agg_arg_to_hidden(FuncCall *agg, Query *query, TupleDesc matdesc)
+{
+	ColumnRef *cref = linitial(agg->args);
+	char *colName = FigureColname((Node *) cref);
+	int i;
+	ListCell *lc;
+
+	foreach(lc, query->targetList)
+	{
+		TargetEntry *te = (TargetEntry *) lfirst(lc);
+
+		if (pg_strcasecmp(te->resname, colName) != 0)
+			continue;
+
+		Assert(IsA(te->expr, Aggref));
+
+		if (!OidIsValid(GetCombineStateColumnType(te)))
+			break;
+
+		for (i = 0; i < matdesc->natts; i++)
+		{
+			if (pg_strcasecmp(NameStr(matdesc->attrs[i]->attname), colName) != 0)
+				continue;
+			cref->fields = list_make1(makeString(NameStr(matdesc->attrs[i + 1]->attname)));
+			break;
+		}
+	}
+}
+
+/*
+ * FixAggregatesForCQView
+ */
+void
+FixAggArgForCQView(SelectStmt *viewselect, SelectStmt *workerselect, RangeVar *matrelation)
+{
+	ListCell *lc;
+	CQAnalyzeContext context;
+	Query *query;
+	TupleDesc matdesc;
+
+	if (!HasAggOrGroupBy(workerselect))
+		return;
+
+	query = parse_analyze(copyObject(workerselect), NULL, 0, 0);
+	matdesc = RelationNameGetTupleDesc(matrelation->relname);
+
+	foreach(lc, viewselect->targetList)
+	{
+		ResTarget *res = (ResTarget *) lfirst(lc);
+		ListCell *alc;
+
+		context.aggCalls = NIL;
+		CollectAggFuncs((Node *) res, &context);
+
+		if (list_length(context.aggCalls) == 0)
+			continue;
+
+		foreach(alc, context.aggCalls)
+		{
+			FuncCall *agg = (FuncCall *) lfirst(alc);
+
+			if (pg_strcasecmp(NameListToString(agg->funcname), "count") == 0)
+			{
+				/* All COUNT(?) functions are re-written to SUM(count column) */
+				agg->funcname = list_make1(makeString("sum"));
+			}
+
+			change_agg_arg_to_hidden(agg, query, matdesc);
+		}
+	}
+}
+
+/*
+ * fix_sliding_window_expr
+ */
 static void
 fix_sliding_window_expr(SelectStmt *stmt, Node *swExpr, CQAnalyzeContext *context)
 {
 	Node *cmpCRef;
-	bool hasAggOrGrp = has_agg_or_group_by(stmt);
+	bool hasAggOrGrp = HasAggOrGroupBy(stmt);
 
 	FindColumnRefsWithTypeCasts(swExpr, context);
 	cmpCRef = (Node *) linitial(context->cols);
@@ -456,125 +544,6 @@ fix_sliding_window_expr(SelectStmt *stmt, Node *swExpr, CQAnalyzeContext *contex
 			get_step_size(swExpr, context);
 		}
 	}
-}
-
-/*
- * TransformSWSelectStmtForCQView
- */
-SelectStmt *
-TransformSWSelectStmtForCQView(SelectStmt *origstmt, SelectStmt *workerstmt, RangeVar *cqrel, CQAnalyzeContext *context)
-{
-	Node *swExpr = get_sliding_window_expr(origstmt, NULL);
-	Node *cmpCRef;
-
-	if (swExpr == NULL)
-		return origstmt;
-
-	InitializeCQAnalyzeContext(origstmt, NULL, context);
-	fix_sliding_window_expr(origstmt, swExpr, context);
-	cmpCRef = (Node *) linitial(context->cols);
-
-	/*
-	 * Copy over the *fixed* sliding window expression as the whereClause
-	 * for the view.
-	 */
-	origstmt->whereClause = swExpr;
-	origstmt->fromClause = list_make1(cqrel);
-	origstmt->groupClause = NIL;
-
-	if (has_agg_or_group_by(origstmt))
-	{
-		ListCell *lc;
-		Query *query;
-		TupleDesc matdesc;
-
-		foreach(lc, workerstmt->groupClause)
-		{
-			Node *node = lfirst(lc);
-			if (AreColumnRefsEqual(node, cmpCRef))
-				continue;
-			origstmt->groupClause = lappend(origstmt->groupClause, node);
-		}
-
-		query = parse_analyze(copyObject(workerstmt), NULL, 0, 0);
-		matdesc = RelationNameGetTupleDesc(cqrel->relname);
-
-		/* Replace all non-aggregate targets with column references. */
-		ReplaceTargetListWithColumnRefs(origstmt, false);
-
-		/* Collect all the aggregate functions */
-		foreach(lc, origstmt->targetList)
-		{
-			ResTarget *res = (ResTarget *) lfirst(lc);
-			FuncCall *fcall;
-			ColumnRef *cref;
-			char *colName = res->name;
-
-			context->funcCalls = NIL;
-			CollectAggFuncs((Node *) res, context);
-
-			if (list_length(context->funcCalls) == 0)
-				continue;
-
-			if (list_length(context->funcCalls) > 1)
-				elog(ERROR, "no support for multi-agg restargets");
-
-			if (colName == NULL)
-				colName = FigureColname(res->val);
-
-			cref = makeNode(ColumnRef);
-			cref->location = res->location;
-
-			fcall = (FuncCall *) linitial(context->funcCalls);
-			fcall->agg_star = false;
-			fcall->args = list_make1(cref);
-
-			if (pg_strcasecmp(NameListToString(fcall->funcname), "count") == 0)
-			{
-				/* All COUNT(?) functions are re-written to SUM(count column) */
-				fcall->funcname = list_make1(makeString("sum"));
-				cref->fields = list_make1(makeString(colName));
-			}
-			else
-			{
-				ListCell *tlc;
-
-				foreach(tlc, query->targetList)
-				{
-					TargetEntry *te = (TargetEntry *) lfirst(tlc);
-
-					if (pg_strcasecmp(te->resname, colName) != 0)
-						continue;
-
-					Assert(IsA(te->expr, Aggref));
-
-					if (OidIsValid(GetCombineStateColumnType(te)))
-					{
-						int i;
-
-						for (i = 0; i < matdesc->natts; i++)
-						{
-							if (pg_strcasecmp(NameStr(matdesc->attrs[i]->attname), colName) != 0)
-								continue;
-
-							cref->fields = list_make1(makeString(NameStr(matdesc->attrs[i + 1]->attname)));
-							break;
-						}
-					}
-					else
-						cref->fields = list_make1(makeString(te->resname));
-
-					break;
-				}
-			}
-
-			res->name = colName;
-		}
-	}
-	else
-		ReplaceTargetListWithColumnRefs(origstmt, true);
-
-	return origstmt;
 }
 
 /*

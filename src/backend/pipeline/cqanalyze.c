@@ -130,7 +130,6 @@ GetUniqueInternalColname(CQAnalyzeContext *context)
 	}
 
 	context->colNames = lappend(context->colNames, colname.data);
-	context->internalColNames = lappend(context->internalColNames, colname.data);
 
 	return colname.data;
 }
@@ -325,7 +324,7 @@ CollectAggFuncs(Node *node, CQAnalyzeContext *context)
 
 		if (is_agg && context)
 		{
-			context->funcCalls = lappend(context->funcCalls, fn);
+			context->aggCalls = lappend(context->aggCalls, fn);
 		}
 
 		return false;
@@ -353,10 +352,10 @@ ReplaceTargetListWithColumnRefs(SelectStmt *stmt, bool replaceAggs)
 		ColumnRef *cref;
 		char *colname;
 
-		context.funcCalls = NIL;
+		context.aggCalls = NIL;
 		CollectAggFuncs(origRes->val, &context);
 
-		if (!replaceAggs && list_length(context.funcCalls) > 0)
+		if (!replaceAggs && list_length(context.aggCalls) > 0)
 		{
 			stmt->targetList = lappend(stmt->targetList, origRes);
 			continue;
@@ -385,7 +384,21 @@ ReplaceTargetListWithColumnRefs(SelectStmt *stmt, bool replaceAggs)
  * CreateResTargetForNode
  */
 ResTarget *
-CreateResTargetForNode(Node *node, CQAnalyzeContext *context)
+CreateResTargetForNode(Node *node)
+{
+	ResTarget *res = makeNode(ResTarget);
+	res->name = NULL;
+	res->indirection = NIL;
+	res->val = copyObject(node);
+	res->location = -1;
+	return res;
+}
+
+/*
+ * CreateUniqueResTargetForNode
+ */
+ResTarget *
+CreateUniqueResTargetForNode(Node *node, CQAnalyzeContext *context)
 {
 	/*
 	 * Any new node we add to the targetList should have a unique
@@ -403,10 +416,10 @@ CreateResTargetForNode(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * CreateColumnRef
+ * CreateColumnRefFromResTarget
  */
 ColumnRef *
-CreateColumnRef(ResTarget *res)
+CreateColumnRefFromResTarget(ResTarget *res)
 {
 	ColumnRef *cref;
 	char *name = res->name;
@@ -418,6 +431,55 @@ CreateColumnRef(ResTarget *res)
 	cref->fields = list_make1(makeString(name));
 	cref->location = -1;
 	return cref;
+}
+
+/*
+ * HasAggOrGroupBy
+ */
+bool
+HasAggOrGroupBy(SelectStmt *stmt)
+{
+	CQAnalyzeContext context;
+	ListCell *tlc;
+	ResTarget *res;
+
+	context.aggCalls = NIL;
+
+	if (list_length(stmt->groupClause) > 0)
+		return true;
+
+	/* Do we have any aggregates? */
+	foreach(tlc, stmt->targetList)
+	{
+		res = (ResTarget *) lfirst(tlc);
+		CollectAggFuncs(res->val, &context);
+
+		if (list_length(context.aggCalls) > 0)
+			return true;
+	}
+
+	return false;
+}
+
+/*
+ * add_res_target_to_view
+ */
+static void
+add_res_target_to_view(SelectStmt *viewselect, ResTarget *res)
+{
+	char *colName = res->name;
+	ResTarget *newRes;
+
+	if (colName == NULL)
+		colName = FigureColname(res->val);
+
+	newRes = makeNode(ResTarget);
+	newRes->name = colName;
+	newRes->val = res->val;
+	newRes->location = res->location;
+	newRes->indirection = NIL;
+
+	viewselect->targetList = lappend(viewselect->targetList, newRes);
 }
 
 /*
@@ -434,93 +496,122 @@ SelectStmt *
 GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 {
 	CQAnalyzeContext context;
-	ListCell *lc;
-	List *newGroupClause = NIL;
-	List *newTargetList = NIL;
+	List *newGroupClause;
+	List *newTargetList;
 	SelectStmt *vselect;
+	bool isSlidingWindow = IsSlidingWindowSelectStmt(stmt);
+	int origTargetListLen = list_length(stmt->targetList);
+	int origGroupClauseLen = list_length(stmt->groupClause);
+	int i;
+	bool hasAggOrGroupBy = isSlidingWindow && HasAggOrGroupBy(stmt);
 
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
 
 	stmt = (SelectStmt *) copyObject(stmt);
-	if (viewselect != NULL)
-		vselect = (SelectStmt *) makeNode(SelectStmt);
+
+	vselect = (SelectStmt *) makeNode(SelectStmt);
+	vselect->targetList = NIL;
+	vselect->groupClause = NIL;
 
 	/*
 	 * Check to see if we need to project any columns
 	 * that are required to evaluate the sliding window
 	 * match expression.
 	 */
-	if (IsSlidingWindowSelectStmt(stmt))
-	{
-		stmt = TransformSWSelectStmtForCQWorker(stmt, &context);
-	}
+	if (isSlidingWindow)
+		stmt = AddProjectionAndAddGroupByForSlidingWindow(stmt, vselect, hasAggOrGroupBy, &context);
 
 	/*
-	 * Rewrite the groupClause.
+	 * Rewrite the groupClause and project any group expressions that
+	 * are not already in the targetList.
 	 */
-	foreach(lc, stmt->groupClause)
+	newGroupClause = NIL;
+	for (i = 0; i < origGroupClauseLen; i++)
 	{
-		Node *node = (Node *) lfirst(lc);
+		Node *node = (Node *) list_nth(stmt->groupClause, i);
 		ResTarget *res;
 		ColumnRef *cref;
 
-		if (is_column_ref(node) && IsColumnRefInTargetList(stmt, node))
+		if (!is_column_ref(node) || !IsColumnRefInTargetList(stmt, node))
 		{
-			newGroupClause = lappend(newGroupClause, node);
-			continue;
+			res = CreateUniqueResTargetForNode(node, &context);
+			stmt->targetList = lappend(stmt->targetList, res);
+
+			cref = CreateColumnRefFromResTarget(res);
+			node = (Node *) cref;
 		}
 
-		res = CreateResTargetForNode(node, &context);
-		stmt->targetList = lappend(stmt->targetList, res);
-
-		cref = CreateColumnRef(res);
-		newGroupClause = lappend(newGroupClause, cref);
+		newGroupClause = lappend(newGroupClause, node);
+		if(hasAggOrGroupBy)
+			vselect->groupClause = lappend(vselect->groupClause, node);
 	}
+
+	for (; i < list_length(stmt->groupClause); i++)
+		newGroupClause = lappend(newGroupClause, list_nth(stmt->groupClause, i));
 
 	stmt->groupClause = newGroupClause;
 
 	/*
-	 * Hoist aggregates out of expressions.
+	 * Hoist aggregates out of expressions for workers.
 	 */
-	foreach(lc, stmt->targetList)
+	newTargetList = NIL;
+	for (i = 0; i < origTargetListLen; i++)
 	{
-		ResTarget *res = (ResTarget *) lfirst(lc);
+		ResTarget *res = (ResTarget *) list_nth(stmt->targetList, i);
 		FuncCall *agg;
 		ListCell *agglc;
 
-		context.funcCalls = NIL;
+		context.aggCalls = NIL;
 		CollectAggFuncs(res->val, &context);
 
-		if (list_length(context.funcCalls) == 0)
+		if (list_length(context.aggCalls) == 0)
 		{
 			newTargetList = lappend(newTargetList, res);
+			add_res_target_to_view(vselect,
+					CreateResTargetForNode((Node *) CreateColumnRefFromResTarget(res)));
 			continue;
 		}
 
-		agg = (FuncCall *) linitial(context.funcCalls);
+		agg = (FuncCall *) linitial(context.aggCalls);
 
 		/* No need to rewrite top level agg funcs */
 		if (equal(res->val, agg))
 		{
-			newTargetList = lappend(newTargetList, res);
+			Assert(list_length(context.aggCalls) == 1);
+
+			newTargetList = lappend(newTargetList, copyObject(res));
+			TransformAggNodeForCQView(vselect, res->val, res, hasAggOrGroupBy);
+
+			add_res_target_to_view(vselect, res);
+
 			continue;
 		}
 
-		foreach(agglc, context.funcCalls)
+		/*
+		 * Hoist each agg function call into a new hidden column
+		 * and reference that hidden column in the expression which
+		 * is evaluated by the view.
+		 */
+		foreach(agglc, context.aggCalls)
 		{
 			Node *node = (Node *) lfirst(agglc);
-			ResTarget *aggres = CreateResTargetForNode(node, &context);
-			ColumnRef *cref = CreateColumnRef(aggres);
-
+			ResTarget *aggres = CreateUniqueResTargetForNode(node, &context);
 			newTargetList = lappend(newTargetList, aggres);
+
+			TransformAggNodeForCQView(vselect, node, aggres, hasAggOrGroupBy);
 		}
+
+		add_res_target_to_view(vselect, res);
 	}
+
+	for (; i < list_length(stmt->targetList); i++)
+		newTargetList = lappend(newTargetList, list_nth(stmt->targetList, i));
 
 	stmt->targetList = newTargetList;
 
 	if (viewselect != NULL)
 		*viewselect = vselect;
-	pprint(stmt);
+
 	return stmt;
 }
 
@@ -540,39 +631,6 @@ GetSelectStmtForCQCombiner(SelectStmt *stmt)
 	stmt->whereClause = NULL;
 
 	return stmt;
-}
-
-/*
- * GetSelectStmtForCQView
- *
- * Get the SelectStmt that should be passed to the VIEW we
- * create for this CQ.
- */
-SelectStmt *
-GetSelectStmtForCQView(SelectStmt *origstmt, SelectStmt *workerstmt, RangeVar *cqrel)
-{
-	CQAnalyzeContext context;
-	SelectStmt *view_select;
-
-	InitializeCQAnalyzeContext(origstmt, NULL, &context);
-
-	origstmt = (SelectStmt *) copyObject(origstmt);
-	origstmt->forContinuousView = false;
-
-	if (IsSlidingWindowSelectStmt(origstmt))
-		return TransformSWSelectStmtForCQView(origstmt, workerstmt, cqrel, &context);
-
-	/*
-	 * Create a SelectStmt that only projects fields that
-	 * the user expects in the continuous view.
-	 */
-	view_select = makeNode(SelectStmt);
-	view_select->fromClause = list_make1(cqrel);
-
-	view_select->targetList = origstmt->targetList;
-	ReplaceTargetListWithColumnRefs(view_select, true);
-
-	return view_select;
 }
 
 /*

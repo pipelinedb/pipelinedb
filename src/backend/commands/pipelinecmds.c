@@ -29,6 +29,7 @@
 #include "nodes/pg_list.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cqslidingwindow.h"
 #include "pipeline/streambuf.h"
 #include "regex/regex.h"
 #include "utils/builtins.h"
@@ -232,10 +233,11 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 *    columns.
 	 * 3. View also computes expressions on aggregates.
 	 */
+	FixAggArgForCQView(viewselect, workerselect, mat_relation);
+	viewselect->fromClause = list_make1(mat_relation);
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
-	viewselect->fromClause = list_make1(mat_relation);
 	DefineView(view_stmt, querystring);
 
 	/*

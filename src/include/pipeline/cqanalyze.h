@@ -19,14 +19,14 @@ typedef struct CQAnalyzeContext
 	ParseState *pstate;
 	int colNum;
 	List *colNames;
-	List *internalColNames;
 	List *types;
 	List *cols;
 	List *streams;
 	List *tables;
 	List *targets;
-	List *funcCalls;
-	Node *matchExpr;
+	List *aggCalls;
+	Node *swExpr;
+	Node *stepColumn;
 	int location;
 	char *stepSize;
 } CQAnalyzeContext;
@@ -47,7 +47,9 @@ bool IsColumnRefInTargetList(SelectStmt *stmt, Node *node);
 void ReplaceTargetListWithColumnRefs(SelectStmt *stmt, bool replaceAggs);
 bool AreColumnRefsEqual(Node *cr1, Node *cr2);
 bool CollectAggFuncs(Node *node, CQAnalyzeContext *context);
-ResTarget *CreateResTargetForNode(Node *node, CQAnalyzeContext *context);
-ColumnRef *CreateColumnRef(ResTarget *res);
+ResTarget *CreateResTargetForNode(Node *node);
+ResTarget *CreateUniqueResTargetForNode(Node *node, CQAnalyzeContext *context);
+ColumnRef *CreateColumnRefFromResTarget(ResTarget *res);
+bool HasAggOrGroupBy(SelectStmt *stmt);
 
 #endif

@@ -15,12 +15,12 @@
 
 void ValidateSlidingWindowExpr(SelectStmt *stmt, ParseState *pstate);
 
-SelectStmt *TransformSWSelectStmtForCQWorker(SelectStmt *stmt, CQAnalyzeContext *context);
-SelectStmt *TransformSWSelectStmtForCQView(SelectStmt *origstmt, SelectStmt *workerstmt, RangeVar *cqrel, CQAnalyzeContext *context);
-
 bool IsSlidingWindowSelectStmt(SelectStmt *stmt);
 bool IsSlidingWindowContinuousView(RangeVar *cvname);
 
+SelectStmt *AddProjectionAndAddGroupByForSlidingWindow(SelectStmt *stmt, SelectStmt *viewselect, bool hasAggOrGroupBy, CQAnalyzeContext *context);
+void TransformAggNodeForCQView(SelectStmt *viewselect, Node *agg, ResTarget *aggres, bool hasAggOrGroupBy);
+void FixAggArgForCQView(SelectStmt *viewselect, SelectStmt *workerselect, RangeVar *matrelation);
 DeleteStmt *GetDeleteStmtForGC(char *cvname, SelectStmt *stmt);
 
 #endif
