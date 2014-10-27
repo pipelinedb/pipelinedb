@@ -389,8 +389,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 				state.parallelism = (int16) value;
 		}
 
-		/* TODO(usmanm): This causes a dead lock right now. Fix later */
-		// SetContinousViewState(rv, &state);
+		SetContinousViewState(rv, &state);
 
 		/*
 		   Initialize the metadata entry for the CV

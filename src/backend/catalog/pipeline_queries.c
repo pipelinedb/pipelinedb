@@ -355,7 +355,7 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	bool replaces[Natts_pipeline_queries];
 	Datum values[Natts_pipeline_queries];
 
-	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
+	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
@@ -387,7 +387,7 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	CommandCounterIncrement();
 
 	ReleaseSysCache(tuple);
-	heap_close(pipeline_queries, NoLock);
+	heap_close(pipeline_queries, RowExclusiveLock);
 }
 
 /*
