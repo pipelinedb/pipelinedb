@@ -233,6 +233,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
 	view_stmt->query = (Node *) GetSelectStmtForCQView(copyObject(stmt->query), workerselect, mat_relation);
+	pprint(view_stmt->query);
 	DefineView(view_stmt, querystring);
 
 	/*

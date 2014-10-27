@@ -130,6 +130,7 @@ GetUniqueInternalColname(CQAnalyzeContext *context)
 	}
 
 	context->colNames = lappend(context->colNames, colname.data);
+	context->internalColNames = lappend(context->internalColNames, colname.data);
 
 	return colname.data;
 }
@@ -381,6 +382,45 @@ ReplaceTargetListWithColumnRefs(SelectStmt *stmt, bool replaceAggs)
 }
 
 /*
+ * CreateResTargetForNode
+ */
+ResTarget *
+CreateResTargetForNode(Node *node, CQAnalyzeContext *context)
+{
+	/*
+	 * Any new node we add to the targetList should have a unique
+	 * name. This isn't always necessary, but its always safe.
+	 * Safety over everything else yo.
+	 */
+	char *name = GetUniqueInternalColname(context);
+	ResTarget *res = makeNode(ResTarget);
+	res->name = name;
+	res->indirection = NIL;
+	res->val = copyObject(node);
+	res->location = -1;
+
+	return res;
+}
+
+/*
+ * CreateColumnRef
+ */
+ColumnRef *
+CreateColumnRef(ResTarget *res)
+{
+	ColumnRef *cref;
+	char *name = res->name;
+
+	if (name == NULL)
+		name = FigureColname(res->val);
+
+	cref = makeNode(ColumnRef);
+	cref->fields = list_make1(makeString(name));
+	cref->location = -1;
+	return cref;
+}
+
+/*
  * GetSelectStmtForCQWorker
  *
  * Get the SelectStmt that should be executed by the
@@ -391,15 +431,19 @@ ReplaceTargetListWithColumnRefs(SelectStmt *stmt, bool replaceAggs)
  * materialization table.
  */
 SelectStmt *
-GetSelectStmtForCQWorker(SelectStmt *stmt)
+GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 {
 	CQAnalyzeContext context;
 	ListCell *lc;
 	List *newGroupClause = NIL;
+	List *newTargetList = NIL;
+	SelectStmt *vselect;
 
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
 
 	stmt = (SelectStmt *) copyObject(stmt);
+	if (viewselect != NULL)
+		vselect = (SelectStmt *) copyObject(stmt);
 
 	/*
 	 * Check to see if we need to project any columns
@@ -417,7 +461,6 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 	foreach(lc, stmt->groupClause)
 	{
 		Node *node = (Node *) lfirst(lc);
-		char *name = NULL;
 		ResTarget *res;
 		ColumnRef *cref;
 
@@ -427,28 +470,56 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 			continue;
 		}
 
-		/*
-		 * Any new node we add to the targetList should have a unique
-		 * name. This isn't always necessary, but its always safe.
-		 * Safety over everything else yo.
-		 */
-		name = GetUniqueInternalColname(&context);
-		cref = makeNode(ColumnRef);
-		cref->fields = list_make1(makeString(name));
-		cref->location = -1;
-
-		res = makeNode(ResTarget);
-		res->name = name;
-		res->indirection = NIL;
-		res->val = node;
-		res->location = -1;
-
+		res = CreateResTargetForNode(node, &context);
 		stmt->targetList = lappend(stmt->targetList, res);
 
+		cref = CreateColumnRef(res);
 		newGroupClause = lappend(newGroupClause, cref);
 	}
 
 	stmt->groupClause = newGroupClause;
+
+	/*
+	 * Hoist aggregates out of expressions.
+	 */
+	foreach(lc, stmt->targetList)
+	{
+		ResTarget *res = (ResTarget *) lfirst(lc);
+		FuncCall *agg;
+		ListCell *agglc;
+
+		context.funcCalls = NIL;
+		CollectAggFuncs(res->val, &context);
+
+		if (list_length(context.funcCalls) == 0)
+		{
+			newTargetList = lappend(newTargetList, res);
+			continue;
+		}
+
+		agg = (FuncCall *) linitial(context.funcCalls);
+
+		/* No need to rewrite top level agg funcs */
+		if (equal(res->val, agg))
+		{
+			newTargetList = lappend(newTargetList, res);
+			continue;
+		}
+
+		foreach(agglc, context.funcCalls)
+		{
+			Node *node = (Node *) lfirst(agglc);
+			ResTarget *aggres = CreateResTargetForNode(node, &context);
+			ColumnRef *cref = CreateColumnRef(aggres);
+
+			newTargetList = lappend(newTargetList, aggres);
+		}
+	}
+
+	stmt->targetList = newTargetList;
+
+	if (viewselect != NULL)
+		*viewselect = vselect;
 
 	return stmt;
 }
@@ -459,7 +530,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt)
 SelectStmt *
 GetSelectStmtForCQCombiner(SelectStmt *stmt)
 {
-	stmt = GetSelectStmtForCQWorker(stmt);
+	stmt = GetSelectStmtForCQWorker(stmt, NULL);
 
 	/*
 	 * Combiner shouldn't have to check for the
@@ -736,7 +807,6 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 	foreach(lc, context.cols)
 	{
 		ListCell *tlc;
-		ListCell *slc;
 		ColumnRef *cref = lfirst(lc);
 		bool needsType = true;
 		bool hasType = false;
@@ -781,9 +851,9 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 			char *colRelname = strVal(linitial(cref->fields));
 			needsType = false;
 
-			foreach(slc, context.streams)
+			foreach(tlc, context.streams)
 			{
-				RangeVar *rv = (RangeVar *) lfirst(slc);
+				RangeVar *rv = (RangeVar *) lfirst(tlc);
 				char *streamName = rv->alias ? rv->alias->aliasname : rv->relname;
 
 				if (strcmp(colRelname, streamName) == 0)

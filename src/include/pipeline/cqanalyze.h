@@ -19,6 +19,7 @@ typedef struct CQAnalyzeContext
 	ParseState *pstate;
 	int colNum;
 	List *colNames;
+	List *internalColNames;
 	List *types;
 	List *cols;
 	List *streams;
@@ -34,9 +35,8 @@ TupleDesc InferStreamScanTupleDescriptor(ParseState *pstate, RangeTblEntry *rte)
 void AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
 RangeTblEntry *TransformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
-SelectStmt *GetSelectStmtForCQWorker(SelectStmt *stmt);
+SelectStmt *GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect);
 SelectStmt *GetSelectStmtForCQCombiner(SelectStmt *stmt);
-SelectStmt *GetSelectStmtForCQView(SelectStmt *origstmt, SelectStmt *workerstmt, RangeVar *cqrel);
 
 Oid GetCombineStateColumnType(TargetEntry *te);
 
@@ -47,5 +47,7 @@ bool IsColumnRefInTargetList(SelectStmt *stmt, Node *node);
 void ReplaceTargetListWithColumnRefs(SelectStmt *stmt, bool replaceAggs);
 bool AreColumnRefsEqual(Node *cr1, Node *cr2);
 bool CollectAggFuncs(Node *node, CQAnalyzeContext *context);
+ResTarget *CreateResTargetForNode(Node *node, CQAnalyzeContext *context);
+ColumnRef *CreateColumnRef(ResTarget *res);
 
 #endif
