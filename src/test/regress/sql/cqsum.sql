@@ -73,7 +73,7 @@ INSERT INTO cash_stream (k, v) VALUES ('y', '0.01');
 
 DEACTIVATE;
 
-SELECT * FROM test_cash_sum;
+SELECT * FROM test_cash_sum ORDER BY k;
 
 -------------------------------------------------------------------------------
 -- Numeric sums
