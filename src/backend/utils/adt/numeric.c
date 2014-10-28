@@ -2842,14 +2842,25 @@ numeric_combine(PG_FUNCTION_ARGS)
 	NumericAggState  *state = (NumericAggState  *) PG_GETARG_POINTER(0);
 	NumericAggState	 *incoming = (NumericAggState *) PG_GETARG_POINTER(1);
 	NumericVar sumXresult;
+	NumericVar sumX2result;
 
 	if (state == NULL)
 		state = makeNumericAggState(fcinfo, false);
 
+	state->N += incoming->N;
+	state->maxScale = Max(state->maxScale, incoming->maxScale);
+	state->maxScaleCount += incoming->maxScaleCount;
+	state->NaNcount += incoming->NaNcount;
+
+	/* sumX */
 	init_var(&sumXresult);
 	add_var(&state->sumX, &incoming->sumX, &sumXresult);
 	set_var_from_var(&sumXresult, &state->sumX);
-	state->N += incoming->N;
+
+	/* sumX2 */
+	init_var(&sumX2result);
+	add_var(&state->sumX2, &incoming->sumX2, &sumX2result);
+	set_var_from_var(&sumX2result, &state->sumX2);
 
 	PG_RETURN_POINTER(state);
 }

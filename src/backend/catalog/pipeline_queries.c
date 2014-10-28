@@ -225,7 +225,7 @@ MarkContinuousViewAsActive(RangeVar *name)
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+		elog(ERROR, "continuous view \"%s\" does not exist",
 				name->relname);
 
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
@@ -241,14 +241,17 @@ MarkContinuousViewAsActive(RangeVar *name)
 
 		newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att,
 				values, nulls, replaces);
+
 		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+		CatalogUpdateIndexes(pipeline_queries, newtuple);
+
 		CommandCounterIncrement();
 
 		alreadyActive = false;
 	}
 
 	ReleaseSysCache(tuple);
-	heap_close(pipeline_queries, NoLock);
+	heap_close(pipeline_queries, RowExclusiveLock);
 
 	return !alreadyActive;
 }
@@ -276,7 +279,7 @@ MarkContinuousViewAsInactive(RangeVar *name)
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+		elog(ERROR, "continuous view \"%s\" does not exist",
 				name->relname);
 
 	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
@@ -294,6 +297,8 @@ MarkContinuousViewAsInactive(RangeVar *name)
 		newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att,
 				values, nulls, replaces);
 		simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+
+		CatalogUpdateIndexes(pipeline_queries, newtuple);
 		CommandCounterIncrement();
 	}
 	ReleaseSysCache(tuple);
@@ -319,7 +324,7 @@ GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+		elog(ERROR, "continuous view \"%s\" does not exist",
 				name->relname);
 
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
@@ -354,7 +359,7 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist.",
+		elog(ERROR, "continuous view \"%s\" does not exist",
 				name->relname);
 
 	MemSet(values, 0, sizeof(values));
@@ -375,7 +380,10 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 
 	newtuple = heap_modify_tuple(tuple, pipeline_queries->rd_att,
 			values, nulls, replaces);
+
 	simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+	CatalogUpdateIndexes(pipeline_queries, newtuple);
+
 	CommandCounterIncrement();
 
 	ReleaseSysCache(tuple);
@@ -530,7 +538,9 @@ MarkAllContinuousViewsAsInactive()
 
 			newtuple = heap_modify_tuple(tup, pipeline_queries->rd_att,
 					values, nulls, replaces);
+
 			simple_heap_update(pipeline_queries, &newtuple->t_self, newtuple);
+			CatalogUpdateIndexes(pipeline_queries, newtuple);
 
 			CommandCounterIncrement();
 		}

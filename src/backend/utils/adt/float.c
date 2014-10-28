@@ -2190,6 +2190,95 @@ float8_regr_accum(PG_FUNCTION_ARGS)
 	}
 }
 
+/*
+ * float8_regr_combine
+ *
+ * Combines two array-based regr transition states into one
+ */
+Datum
+float8_regr_combine(PG_FUNCTION_ARGS)
+{
+	ArrayType *state = PG_ARGISNULL(0) ? NULL : PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType *incoming = PG_GETARG_ARRAYTYPE_P(1);
+	float8 *statevals;
+	float8 *incomingvals;
+	float8 N;
+	float8 sumX;
+	float8 sumX2;
+	float8 sumY;
+	float8 sumY2;
+	float8 sumXY;
+
+	incomingvals = check_float8_array(incoming, "float8_regr_combine", 6);
+
+	/*
+	 * This is the first call to combine, use the incoming state as
+	 * the starting state
+	 */
+	if (state == NULL)
+		PG_RETURN_ARRAYTYPE_P(incoming);
+
+	statevals = check_float8_array(state, "float8_regr_combine", 6);
+
+	N = statevals[0];
+	sumX = statevals[1];
+	sumX2 = statevals[2];
+	sumY = statevals[3];
+	sumY2 = statevals[4];
+	sumXY = statevals[5];
+
+	N += incomingvals[0];
+	sumX += incomingvals[1];
+	CHECKFLOATVAL(sumX, isinf(statevals[1]) || isinf(incomingvals[1]), true);
+
+	sumX2 += incomingvals[2];
+	CHECKFLOATVAL(sumX2, isinf(statevals[2]) || isinf(incomingvals[2]), true);
+
+	sumY += incomingvals[3];
+	CHECKFLOATVAL(sumY, isinf(statevals[3]) || isinf(incomingvals[3]), true);
+
+	sumY2 += incomingvals[4];
+	CHECKFLOATVAL(sumY2, isinf(statevals[4]) || isinf(incomingvals[4]), true);
+
+	sumXY += incomingvals[5];
+	CHECKFLOATVAL(sumXY, isinf(statevals[5]) || isinf(incomingvals[5]), true);
+
+	/*
+	 * If we're invoked as an aggregate, we can cheat and modify our first
+	 * parameter in-place to reduce palloc overhead. Otherwise we construct a
+	 * new array with the updated transition data and return it.
+	 */
+	if (AggCheckCallContext(fcinfo, NULL))
+	{
+		statevals[0] = N;
+		statevals[1] = sumX;
+		statevals[2] = sumX2;
+		statevals[3] = sumY;
+		statevals[4] = sumY2;
+		statevals[5] = sumXY;
+
+		PG_RETURN_ARRAYTYPE_P(state);
+	}
+	else
+	{
+		Datum		transdatums[6];
+		ArrayType  *result;
+
+		transdatums[0] = Float8GetDatumFast(N);
+		transdatums[1] = Float8GetDatumFast(sumX);
+		transdatums[2] = Float8GetDatumFast(sumX2);
+		transdatums[3] = Float8GetDatumFast(sumY);
+		transdatums[4] = Float8GetDatumFast(sumY2);
+		transdatums[5] = Float8GetDatumFast(sumXY);
+
+		result = construct_array(transdatums, 6,
+								 FLOAT8OID,
+								 sizeof(float8), FLOAT8PASSBYVAL, 'd');
+
+		PG_RETURN_ARRAYTYPE_P(result);
+	}
+}
+
 Datum
 float8_regr_sxx(PG_FUNCTION_ARGS)
 {

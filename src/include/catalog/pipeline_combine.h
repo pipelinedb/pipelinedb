@@ -112,4 +112,50 @@ DATA(insert (bytea_string_agg_finalfn bytea_string_agg_transfn stringaggstatesen
 DATA(insert (json_agg_finalfn json_agg_transfn bytearecv byteatostringinfo json_agg_combine t 17));
 DATA(insert (json_object_agg_finalfn json_object_agg_transfn bytearecv byteatostringinfo json_object_agg_combine t 17));
 
+/* binary regression aggregates */
+DATA(insert (0 int8inc_float8_float8 0 0 int8_sum_to_int8 f 20));
+DATA(insert (float8_regr_sxx float8_regr_accum 0 0 float8_regr_combine t 1022));
+DATA(insert (float8_regr_syy float8_regr_accum 0 0 float8_regr_combine t 1022));
+DATA(insert (float8_regr_sxy float8_regr_accum 0 0 float8_regr_combine t 1022));
+DATA(insert (float8_regr_avgx float8_regr_accum 0 0 float8_regr_combine t 1022));
+DATA(insert (float8_regr_avgy float8_regr_accum 0 0 float8_regr_combine t 1022));
+DATA(insert (float8_regr_r2 float8_regr_accum 0 0 float8_regr_combine t 1022));
+DATA(insert (float8_regr_slope float8_regr_accum 0 0 float8_regr_combine t 1022));
+DATA(insert (float8_regr_intercept float8_regr_accum 0 0 float8_regr_combine t 1022));
+DATA(insert (float8_covar_pop float8_regr_accum 0 0 float8_regr_combine t 1022));
+DATA(insert (float8_covar_samp float8_regr_accum 0 0 float8_regr_combine t 1022));
+DATA(insert (float8_corr float8_regr_accum 0 0 float8_regr_combine t 1022));
+
+/* var_pop */
+DATA(insert (numeric_var_pop int8_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_var_pop int4_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_var_pop int2_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_var_pop numeric_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (float8_var_pop float8_accum 0 0 float8_combine t 1022));
+DATA(insert (float8_var_pop float4_accum 0 0 float8_combine t 1022));
+
+/* var_samp / variance (same thing) */
+DATA(insert (numeric_var_samp int8_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_var_samp int4_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_var_samp int2_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_var_samp numeric_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (float8_var_samp float8_accum 0 0 float8_combine t 1022));
+DATA(insert (float8_var_samp float4_accum 0 0 float8_combine t 1022));
+
+/* stddev_pop */
+DATA(insert (numeric_stddev_pop int8_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_stddev_pop int4_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_stddev_pop int2_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_stddev_pop numeric_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (float8_stddev_pop float8_accum 0 0 float8_combine t 1022));
+DATA(insert (float8_stddev_pop float4_accum 0 0 float8_combine t 1022));
+
+/* stddev_samp / stddev (same thing) */
+DATA(insert (numeric_stddev_samp int8_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_stddev_samp int4_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_stddev_samp int2_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (numeric_stddev_samp numeric_accum naggstatesend naggstaterecv numeric_combine t 17));
+DATA(insert (float8_stddev_samp float8_accum 0 0 float8_combine t 1022));
+DATA(insert (float8_stddev_samp float4_accum 0 0 float8_combine t 1022));
+
 #endif
