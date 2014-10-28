@@ -362,14 +362,13 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		RangeVar *rv = lfirst(lc);
 		ListCell *lcwithOptions;
 		ContinuousViewState state;
-		bool wasInactive;
+		bool wasInactive = MarkContinuousViewAsActive(rv);
 
 		/*
 		 * If the user tries to activate an active CV, they'll know because
 		 * the count of CVs that were activated will be less than they
 		 * expected. We only count CVs that go from inactive to active here.
 		 */
-		wasInactive = MarkContinuousViewAsActive(rv);
 		if (!wasInactive)
 			continue;
 
@@ -397,8 +396,14 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		SetContinousViewState(rv, &state);
 
 		/*
-		   Initialize the metadata entry for the CV
-		   Input would be an id (used as key) and a Process group size.
+		 * Initialize the metadata entry for the CV
+		 * Input would be an id (used as key) and a Process group size.
+		 *
+		 * Here we don't have to worry about racing transactions.
+		 * If we see the CV as inactive but another transaction has created
+		 * its CVMetadata entry, the next call will fail--albeit with a weird
+		 * message saying the CV is being deactivated. That's only one of the
+		 * cases when this can happen.
 		 */
 		entry = EntryAlloc(state.id, GetProcessGroupSizeFromCatalog(rv));
 
@@ -425,13 +430,16 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		ContinuousViewState state;
 		bool wasActive = MarkContinuousViewAsInactive(rv);
 
-		GetContinousViewState(rv, &state);
-
 		/* deactivating an inactive CV is a noop */
 		if (!wasActive)
 			continue;
 
-		/* TODO(usmanm): Remove this after figuring out the transaction issue */
+		GetContinousViewState(rv, &state);
+
+		/* If the another transaction which deactivated this CV hasn't
+		 * committed yet, we might still see it as active. Since there's only
+		 * one postmaster, the previous transaction's process could have
+		 * removed the CVMetadata--transactions don't protect it. */
 		if (GetCVMetadata(state.id) == NULL)
 			continue;
 
