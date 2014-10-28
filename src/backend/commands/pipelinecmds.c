@@ -29,6 +29,7 @@
 #include "nodes/pg_list.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cqslidingwindow.h"
 #include "pipeline/streambuf.h"
 #include "regex/regex.h"
 #include "utils/builtins.h"
@@ -120,6 +121,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *workerselect;
+	SelectStmt *viewselect;
 	CQAnalyzeContext context;
 	bool saveAllowSystemTableMods;
 
@@ -143,7 +145,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying materialization table.
 	 */
-	workerselect = GetSelectStmtForCQWorker(copyObject(stmt->query));
+	workerselect = GetSelectStmtForCQWorker(copyObject(stmt->query), &viewselect);
 	InitializeCQAnalyzeContext(workerselect, NULL, &context);
 
 	query = parse_analyze(copyObject(workerselect), querystring, 0, 0);
@@ -229,10 +231,13 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * 2. Some aggregate operators require storing some additional state along
 	 *    with partial results and this VIEW filters out such hidden
 	 *    columns.
+	 * 3. View also computes expressions on aggregates.
 	 */
+	FixAggArgForCQView(viewselect, workerselect, mat_relation);
+	viewselect->fromClause = list_make1(mat_relation);
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
-	view_stmt->query = (Node *) GetSelectStmtForCQView(copyObject(stmt->query), workerselect, mat_relation);
+	view_stmt->query = (Node *) viewselect;
 	DefineView(view_stmt, querystring);
 
 	/*

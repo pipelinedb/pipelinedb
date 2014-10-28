@@ -57,3 +57,20 @@ CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM stream;
 CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text, 1, 2), ',') FROM stream GROUP BY key;
 \d+ cvtext;
 \d+ cvtext_pdb;
+
+-- Check for expressions containing aggregates
+CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM stream;
+\d+ cqaggexpr1;
+\d+ cqaggexpr1_pdb;
+
+CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::integer) AS value FROM stream GROUP BY key;
+\d+ cqaggexpr2;
+\d+ cqaggexpr2_pdb;
+
+CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
+\d+ cqaggexpr3;
+\d+ cqaggexpr3_pdb;
+
+CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM stream GROUP BY key;
+\d+ cqaggexpr4;
+\d+ cqaggexpr4_pdb;

@@ -115,7 +115,7 @@ ACTIVATE test_cash_sum;
 INSERT INTO cash_stream (k, v) VALUES ('x', '500.50');
 INSERT INTO cash_stream (k, v) VALUES ('y', '0.01');
 DEACTIVATE;
-SELECT * FROM test_cash_sum;
+SELECT * FROM test_cash_sum ORDER BY k;
  k |   sum   
 ---+---------
  x | $512.00
