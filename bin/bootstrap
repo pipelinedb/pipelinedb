@@ -20,18 +20,18 @@ def main(args):
 
     root = os.path.expanduser(root)
     data_dir = os.path.join(root, DATA_DIR)
-    
+
     os.path.exists(data_dir) and shutil.rmtree(data_dir)
     subprocess.call(['initdb', '-D', data_dir])
-    
+
     procs = []
     procs.append(subprocess.Popen(['postgres', '-D', data_dir]))
     time.sleep(1)
-    
+
     user = getpass.getuser()
-    subprocess.call(['psql', 'postgres', '-c', 'CREATE DATABASE %s' % user])
+    subprocess.call(['pipeline', 'postgres', '-c', 'CREATE DATABASE %s' % user])
     time.sleep(0.1)
-    
+
     # Cleanup daemons
     for proc in procs:
         os.kill(proc.pid, signal.SIGINT)
