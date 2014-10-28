@@ -26,6 +26,7 @@ typedef struct ContinuousViewState
 	CQProcessType ptype;
 } ContinuousViewState;
 
+List *GetAllContinuousViewNames(void);
 void RegisterContinuousView(RangeVar *name, const char *query_string);
 void DeregisterContinuousView(RangeVar *name);
 bool MarkContinuousViewAsActive(RangeVar *name);
@@ -36,6 +37,6 @@ bool IsContinuousViewActive(RangeVar *name);
 char *GetQueryStringOrNull(const char *cvname, bool selectonly);
 char *GetQueryString(const char *cvname, bool selectonly);
 bool IsAContinuousView(RangeVar *name);
-void MarkAllContinuousViewsAsInactive();
+void MarkAllContinuousViewsAsInactive(void);
 
 #endif

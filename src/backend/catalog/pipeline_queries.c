@@ -127,6 +127,34 @@ get_next_id(void)
 }
 
 /*
+ * GetAllContinuousViewNames
+ *
+ * Retrieve a List of all continuous view names, regardless of their state
+ */
+List *
+GetAllContinuousViewNames(void)
+{
+	Relation pipeline_queries = heap_open(PipelineQueriesRelationId, RowShareLock);
+	HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_queries, 0, NULL);
+	HeapTuple tup;
+	List *result = NIL;
+
+	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_queries row = (Form_pipeline_queries) GETSTRUCT(tup);
+		char *s = strdup(NameStr(row->name));
+		RangeVar *rv = makeRangeVar(NULL, s, -1);
+
+		result = lappend(result, rv);
+	}
+
+	heap_endscan(scan_desc);
+	heap_close(pipeline_queries, RowShareLock);
+
+	return result;
+}
+
+/*
  * RegisterContinuousView
  *
  * Adds a CV to the `pipeline_queries` catalog table.
@@ -510,7 +538,7 @@ IsAContinuousView(RangeVar *name)
  * all the required views manually.
  */
 void
-MarkAllContinuousViewsAsInactive()
+MarkAllContinuousViewsAsInactive(void)
 {
 	Relation		pipeline_queries;
 	HeapScanDesc	scandesc;
