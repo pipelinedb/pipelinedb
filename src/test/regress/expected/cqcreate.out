@@ -284,3 +284,84 @@ View definition:
  string_agg | text     |           | extended |              | 
  _0         | bytea(0) |           | extended |              | 
 
+-- Check for expressions containing aggregates
+CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM stream;
+\d+ cqaggexpr1;
+               View "public.cqaggexpr1"
+  Column  |  Type  | Modifiers | Storage | Description 
+----------+--------+-----------+---------+-------------
+ ?column? | bigint |           | plain   | 
+View definition:
+ SELECT cqaggexpr1_pdb._0 + cqaggexpr1_pdb._1
+   FROM cqaggexpr1_pdb;
+
+\d+ cqaggexpr1_pdb;
+                   Table "public.cqaggexpr1_pdb"
+ Column |  Type  | Modifiers | Storage | Stats target | Description 
+--------+--------+-----------+---------+--------------+-------------
+ _0     | bigint |           | plain   |              | 
+ _1     | bigint |           | plain   |              | 
+
+CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::integer) AS value FROM stream GROUP BY key;
+\d+ cqaggexpr2;
+                    View "public.cqaggexpr2"
+ Column |       Type       | Modifiers | Storage  | Description 
+--------+------------------+-----------+----------+-------------
+ key    | text(0)          |           | extended | 
+ value  | double precision |           | plain    | 
+View definition:
+ SELECT cqaggexpr2_pdb.key,
+    cqaggexpr2_pdb._0 + cqaggexpr2_pdb._1::double precision AS value
+   FROM cqaggexpr2_pdb;
+
+\d+ cqaggexpr2_pdb;
+                          Table "public.cqaggexpr2_pdb"
+ Column |        Type        | Modifiers | Storage  | Stats target | Description 
+--------+--------------------+-----------+----------+--------------+-------------
+ key    | text(0)            |           | extended |              | 
+ _0     | double precision   |           | plain    |              | 
+ _2     | double precision[] |           | extended |              | 
+ _1     | integer            |           | plain    |              | 
+
+CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
+\d+ cqaggexpr3;
+               View "public.cqaggexpr3"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ key    | text(0) |           | extended | 
+ value  | numeric |           | main     | 
+View definition:
+ SELECT cqaggexpr3_pdb.key,
+    sum(cqaggexpr3_pdb.value) AS value
+   FROM cqaggexpr3_pdb
+  WHERE cqaggexpr3_pdb._0 > (clock_timestamp() - '@ 5 secs'::interval second)
+  GROUP BY cqaggexpr3_pdb.key;
+
+\d+ cqaggexpr3_pdb;
+                             Table "public.cqaggexpr3_pdb"
+ Column |           Type           | Modifiers | Storage  | Stats target | Description 
+--------+--------------------------+-----------+----------+--------------+-------------
+ key    | text(0)                  |           | extended |              | 
+ value  | bigint                   |           | plain    |              | 
+ _0     | timestamp with time zone |           | plain    |              | 
+
+CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM stream GROUP BY key;
+\d+ cqaggexpr4;
+                    View "public.cqaggexpr4"
+ Column |       Type       | Modifiers | Storage  | Description 
+--------+------------------+-----------+----------+-------------
+ key    | text(0)          |           | extended | 
+ value  | double precision |           | plain    | 
+View definition:
+ SELECT cqaggexpr4_pdb.key,
+    floor(cqaggexpr4_pdb._0) AS value
+   FROM cqaggexpr4_pdb;
+
+\d+ cqaggexpr4_pdb;
+                          Table "public.cqaggexpr4_pdb"
+ Column |        Type        | Modifiers | Storage  | Stats target | Description 
+--------+--------------------+-----------+----------+--------------+-------------
+ key    | text(0)            |           | extended |              | 
+ _0     | double precision   |           | plain    |              | 
+ _1     | double precision[] |           | extended |              | 
+

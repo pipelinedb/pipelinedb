@@ -326,8 +326,6 @@ CollectAggFuncs(Node *node, CQAnalyzeContext *context)
 		{
 			context->aggCalls = lappend(context->aggCalls, fn);
 		}
-
-		return false;
 	}
 
 	return raw_expression_tree_walker(node, CollectAggFuncs, context);
