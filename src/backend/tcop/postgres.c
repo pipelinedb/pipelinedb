@@ -694,17 +694,17 @@ pipeline_rewrite(List *raw_parsetree_list)
 				}
 				else
 				{
-					Relation pipeline_queries = heap_open(PipelineQueriesRelationId, RowShareLock);
+					Relation pipeline_queries = heap_open(PipelineQueriesRelationId, AccessShareLock);
 					HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_queries, 0, NULL);
 					HeapTuple tup;
 					Form_pipeline_queries row;
 					while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
 					{
 						row = (Form_pipeline_queries) GETSTRUCT(tup);
-						views = lappend(views, (void *) makeRangeVar(NULL, NameStr(row->name), -1));
+						views = lappend(views, (void *) makeRangeVar(NULL, strdup(NameStr(row->name)), -1));
 					}
 					heap_endscan(scan_desc);
-					heap_close(pipeline_queries, RowShareLock);
+					heap_close(pipeline_queries, AccessShareLock);
 				}
 			}
 			else

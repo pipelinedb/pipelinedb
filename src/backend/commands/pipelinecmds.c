@@ -431,6 +431,10 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		if (!wasActive)
 			continue;
 
+		/* TODO(usmanm): Remove this after figuring out the transaction issue */
+		if (GetCVMetadata(state.id) == NULL)
+			continue;
+
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id, false);
 
