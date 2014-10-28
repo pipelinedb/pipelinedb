@@ -126,3 +126,5 @@ test: cqlatch
 test: cqdecode
 test: cqminmax
 test: cqobjectagg
+test: cqregr
+test: cqstats

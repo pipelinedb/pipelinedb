@@ -1220,6 +1220,33 @@ ExecAgg(AggState *node)
 		return agg_retrieve_direct(node);
 }
 
+static void
+store_and_finalize_aggregate(AggState *aggstate, AggStatePerAgg peragg,
+		AggStatePerGroup pergroup, int aggno)
+{
+	AggStatePerAgg peraggstate = &peragg[aggno];
+	AggStatePerGroup sourcestate;
+	AggStatePerGroup deststate;
+	Datum *aggvalues;
+	bool *aggnulls;
+	ExprContext *econtext;
+	TargetEntry *te = (TargetEntry *) linitial(peraggstate->aggref->args);
+	Var *v = (Var *) te->expr;
+	int sourceaggno = aggstate->resno_to_aggno[v->varoattno - 1];
+
+	econtext = aggstate->ss.ps.ps_ExprContext;
+	aggvalues = econtext->ecxt_aggvalues;
+	aggnulls = econtext->ecxt_aggnulls;
+
+	sourcestate = &pergroup[sourceaggno];
+	deststate = &pergroup[aggno];
+
+	deststate->transValue = sourcestate->transValue;
+	deststate->transValueIsNull = sourcestate->transValueIsNull;
+
+	finalize_aggregate(aggstate, peraggstate, deststate, &aggvalues[aggno], &aggnulls[aggno]);
+}
+
 /*
  * ExecAgg for non-hashed case
  */
@@ -1396,8 +1423,11 @@ agg_retrieve_direct(AggState *aggstate)
 													pergroupstate);
 			}
 
-			finalize_aggregate(aggstate, peraggstate, pergroupstate,
-							   &aggvalues[aggno], &aggnulls[aggno]);
+			if (AGGKIND_IS_STORE(peraggstate->aggref->aggkind))
+				store_and_finalize_aggregate(aggstate, peragg, pergroup, aggno);
+			else
+				finalize_aggregate(aggstate, peraggstate, pergroupstate,
+									 &aggvalues[aggno], &aggnulls[aggno]);
 		}
 
 		/*
@@ -1508,33 +1538,6 @@ clear_hash_table(AggState *aggstate)
 		RemoveTupleHashEntry(aggstate->hashtable, firstSlot);
 	}
 	hash_unfreeze(aggstate->hashtable->hashtab);
-}
-
-static void
-store_and_finalize_aggregate(AggState *aggstate, AggStatePerAgg peragg,
-		AggStatePerGroup pergroup, int aggno)
-{
-	AggStatePerAgg peraggstate = &peragg[aggno];
-	AggStatePerGroup sourcestate;
-	AggStatePerGroup deststate;
-	Datum *aggvalues;
-	bool *aggnulls;
-	ExprContext *econtext;
-	TargetEntry *te = (TargetEntry *) linitial(peraggstate->aggref->args);
-	Var *v = (Var *) te->expr;
-	int sourceaggno = aggstate->resno_to_aggno[v->varoattno - 1];
-
-	econtext = aggstate->ss.ps.ps_ExprContext;
-	aggvalues = econtext->ecxt_aggvalues;
-	aggnulls = econtext->ecxt_aggnulls;
-
-	sourcestate = &pergroup[sourceaggno];
-	deststate = &pergroup[aggno];
-
-	deststate->transValue = sourcestate->transValue;
-	deststate->transValueIsNull = sourcestate->transValueIsNull;
-
-	finalize_aggregate(aggstate, peraggstate, deststate, &aggvalues[aggno], &aggnulls[aggno]);
 }
 
 /*

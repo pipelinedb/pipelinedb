@@ -1212,8 +1212,9 @@ extern Datum pg_prepared_statement(PG_FUNCTION_ARGS);
 /* utils/mmgr/portalmem.c */
 extern Datum pg_cursor(PG_FUNCTION_ARGS);
 
-/* pipeline/combinefuncs.c */
+/* PipelineDB combine support */
 extern Datum int8_sum_to_int8(PG_FUNCTION_ARGS);
+extern Datum int_avg_combine(PG_FUNCTION_ARGS);
 extern Datum float8_combine(PG_FUNCTION_ARGS);
 extern Datum float8_regr_combine(PG_FUNCTION_ARGS);
 extern Datum numeric_combine(PG_FUNCTION_ARGS);
