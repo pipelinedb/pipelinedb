@@ -247,7 +247,6 @@ MarkContinuousViewAsActive(RangeVar *name)
 	bool nulls[Natts_pipeline_queries];
 	bool replaces[Natts_pipeline_queries];
 	Datum values[Natts_pipeline_queries];
-	bool alreadyActive = true;
 
 	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
@@ -274,14 +273,12 @@ MarkContinuousViewAsActive(RangeVar *name)
 		CatalogUpdateIndexes(pipeline_queries, newtuple);
 
 		CommandCounterIncrement();
-
-		alreadyActive = false;
 	}
 
 	ReleaseSysCache(tuple);
 	heap_close(pipeline_queries, RowExclusiveLock);
 
-	return !alreadyActive;
+	return row->state != PIPELINE_QUERY_STATE_ACTIVE;
 }
 
 /*

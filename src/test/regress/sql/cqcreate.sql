@@ -33,7 +33,7 @@ SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate6';
 \d+ cqcreate6_pdb;
 
 -- These use a combine state column
-CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS avg_col FROM stream GROUP BY key;
+CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, AVG(y::integer) AS int_avg, AVG(ts0::timestamp - ts1::timestamp) AS internal_avg FROM stream GROUP BY key;
 \d+ cvavg;
 \d+ cvavg_pdb;
 

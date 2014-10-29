@@ -30,11 +30,13 @@
 #include "catalog/pg_type.h"
 #include "libpq/pqformat.h"
 #include "miscadmin.h"
+#include "nodes/execnodes.h"
 #include "nodes/nodeFuncs.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/int8.h"
 #include "utils/numeric.h"
+#include "utils/palloc.h"
 
 /* ----------
  * Uncomment the following to enable compilation of dump_numeric()
@@ -2839,10 +2841,8 @@ numeric_avg_accum(PG_FUNCTION_ARGS)
 Datum
 numeric_combine(PG_FUNCTION_ARGS)
 {
-	NumericAggState  *state = (NumericAggState  *) PG_GETARG_POINTER(0);
+	NumericAggState  *state = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
 	NumericAggState	 *incoming = (NumericAggState *) PG_GETARG_POINTER(1);
-	NumericVar sumXresult;
-	NumericVar sumX2result;
 
 	if (state == NULL)
 		state = makeNumericAggState(fcinfo, false);
@@ -2852,17 +2852,41 @@ numeric_combine(PG_FUNCTION_ARGS)
 	state->maxScaleCount += incoming->maxScaleCount;
 	state->NaNcount += incoming->NaNcount;
 
-	/* sumX */
-	init_var(&sumXresult);
-	add_var(&state->sumX, &incoming->sumX, &sumXresult);
-	set_var_from_var(&sumXresult, &state->sumX);
-
-	/* sumX2 */
-	init_var(&sumX2result);
-	add_var(&state->sumX2, &incoming->sumX2, &sumX2result);
-	set_var_from_var(&sumX2result, &state->sumX2);
+	add_var(&(state->sumX), &(incoming->sumX), &(state->sumX));
+	add_var(&(state->sumX2), &(incoming->sumX2), &(state->sumX2));
 
 	PG_RETURN_POINTER(state);
+}
+
+/*
+ * Parses the arg1 NumericAggState and combines it with the arg0 one.
+ */
+Datum
+numeric_pcombine(PG_FUNCTION_ARGS)
+{
+	MemoryContext old_context;
+	MemoryContext agg_context;
+	Datum arg0;
+	Datum result;
+
+	if (!AggCheckCallContext(fcinfo, &agg_context))
+			elog(ERROR, "aggregate function called in non-aggregate context");
+
+	old_context = MemoryContextSwitchTo(agg_context);
+
+	arg0 =(PG_ARGISNULL(0)) ? (Datum) makeNumericAggState(fcinfo, false) : (Datum) PG_GETARG_POINTER(0);
+
+	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
+	fcinfo->nargs = 1;
+	fcinfo->arg[1] = naggstaterecv(fcinfo);
+	fcinfo->arg[0] = arg0;
+	fcinfo->nargs = 2;
+
+	result = numeric_combine(fcinfo);
+
+	MemoryContextSwitchTo(old_context);
+
+	return result;
 }
 
 /*
