@@ -155,11 +155,9 @@ has_clock_timestamp(Node *node, void *context)
  * get_sliding_window_expr
  */
 static Node *
-get_sliding_window_expr(SelectStmt *stmt, ParseState *pstate)
+get_sliding_window_expr(SelectStmt *stmt, CQAnalyzeContext *context)
 {
-	CQAnalyzeContext context;
-	context.pstate = pstate;
-	context.swExpr = NULL;
+	context->swExpr = NULL;
 
 	if (stmt->whereClause == NULL)
 	{
@@ -167,35 +165,33 @@ get_sliding_window_expr(SelectStmt *stmt, ParseState *pstate)
 	}
 
 	/* find the subset of the whereClause that we must match valid tuples */
-	find_clock_timestamp_expr(stmt->whereClause, &context);
+	find_clock_timestamp_expr(stmt->whereClause, context);
 
-	return context.swExpr;
+	return context->swExpr;
 }
 
 /*
  * validate_clock_timestamp_expr
  */
 static void
-validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, ParseState *pstate)
+validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, CQAnalyzeContext *context)
 {
-	CQAnalyzeContext context;
 	A_Expr *a_expr;
 
 	if (expr == NULL)
 			return;
 
-	context.cols = NIL;
-	context.pstate = pstate;
+	context->cols = NIL;
 
 	Assert(IsA(expr, A_Expr));
 	a_expr = (A_Expr *) expr;
 
-	FindColumnRefsWithTypeCasts(expr, &context);
-	if (list_length(context.cols) != 1)
+	FindColumnRefsWithTypeCasts(expr, context);
+	if (list_length(context->cols) != 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 						errmsg("clock_timestamp can only appear in an expression containing a single column reference"),
-						parser_errposition(pstate, a_expr->location)));
+						parser_errposition(context->pstate, a_expr->location)));
 
 	/*
 	 * TODO(usmanm): Ensure that context.cols[0] isn't being grouped on.
@@ -206,10 +202,10 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, ParseState *pstate)
  * ValidateSlidingWindowExpr
  */
 void
-ValidateSlidingWindowExpr(SelectStmt *stmt, ParseState *pstate)
+ValidateSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context)
 {
-	Node *swExpr = get_sliding_window_expr(stmt, pstate);
-	validate_clock_timestamp_expr(stmt, swExpr, pstate);
+	Node *swExpr = get_sliding_window_expr(stmt, context);
+	validate_clock_timestamp_expr(stmt, swExpr, context);
 }
 
 /*
@@ -293,7 +289,7 @@ get_step_size(Node *node, CQAnalyzeContext *context)
 SelectStmt *
 AddProjectionAndAddGroupByForSlidingWindow(SelectStmt *stmt, SelectStmt *viewselect, bool hasAggOrGroupBy, CQAnalyzeContext *context)
 {
-	Node *swExpr = copyObject(get_sliding_window_expr(stmt, NULL));
+	Node *swExpr = copyObject(get_sliding_window_expr(stmt, context));
 	Node *cmpCRef;
 
 	if (swExpr == NULL)
@@ -479,13 +475,13 @@ FixAggArgForCQView(SelectStmt *viewselect, SelectStmt *workerselect, RangeVar *m
 		ResTarget *res = (ResTarget *) lfirst(lc);
 		ListCell *alc;
 
-		context.aggCalls = NIL;
+		context.funcCalls = NIL;
 		CollectAggFuncs((Node *) res, &context);
 
-		if (list_length(context.aggCalls) == 0)
+		if (list_length(context.funcCalls) == 0)
 			continue;
 
-		foreach(alc, context.aggCalls)
+		foreach(alc, context.funcCalls)
 		{
 			FuncCall *agg = (FuncCall *) lfirst(alc);
 
@@ -554,7 +550,7 @@ GetDeleteStmtForGC(char *cvname, SelectStmt *stmt)
 {
 	CQAnalyzeContext context;
 	DeleteStmt *delete_stmt;
-	Node *swExpr = get_sliding_window_expr(stmt, NULL);
+	Node *swExpr = get_sliding_window_expr(stmt, &context);
 
 	if (swExpr == NULL)
 		return NULL;

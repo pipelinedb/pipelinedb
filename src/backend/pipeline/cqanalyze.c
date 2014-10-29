@@ -324,7 +324,7 @@ CollectAggFuncs(Node *node, CQAnalyzeContext *context)
 
 		if (is_agg && context)
 		{
-			context->aggCalls = lappend(context->aggCalls, fn);
+			context->funcCalls = lappend(context->funcCalls, fn);
 		}
 	}
 
@@ -350,10 +350,10 @@ ReplaceTargetListWithColumnRefs(SelectStmt *stmt, bool replaceAggs)
 		ColumnRef *cref;
 		char *colname;
 
-		context.aggCalls = NIL;
+		context.funcCalls = NIL;
 		CollectAggFuncs(origRes->val, &context);
 
-		if (!replaceAggs && list_length(context.aggCalls) > 0)
+		if (!replaceAggs && list_length(context.funcCalls) > 0)
 		{
 			stmt->targetList = lappend(stmt->targetList, origRes);
 			continue;
@@ -441,7 +441,7 @@ HasAggOrGroupBy(SelectStmt *stmt)
 	ListCell *tlc;
 	ResTarget *res;
 
-	context.aggCalls = NIL;
+	context.funcCalls = NIL;
 
 	if (list_length(stmt->groupClause) > 0)
 		return true;
@@ -452,7 +452,7 @@ HasAggOrGroupBy(SelectStmt *stmt)
 		res = (ResTarget *) lfirst(tlc);
 		CollectAggFuncs(res->val, &context);
 
-		if (list_length(context.aggCalls) > 0)
+		if (list_length(context.funcCalls) > 0)
 			return true;
 	}
 
@@ -559,10 +559,10 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 		FuncCall *agg;
 		ListCell *agglc;
 
-		context.aggCalls = NIL;
+		context.funcCalls = NIL;
 		CollectAggFuncs(res->val, &context);
 
-		if (list_length(context.aggCalls) == 0)
+		if (list_length(context.funcCalls) == 0)
 		{
 			newTargetList = lappend(newTargetList, res);
 			add_res_target_to_view(vselect,
@@ -570,12 +570,12 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 			continue;
 		}
 
-		agg = (FuncCall *) linitial(context.aggCalls);
+		agg = (FuncCall *) linitial(context.funcCalls);
 
 		/* No need to rewrite top level agg funcs */
 		if (equal(res->val, agg))
 		{
-			Assert(list_length(context.aggCalls) == 1);
+			Assert(list_length(context.funcCalls) == 1);
 
 			newTargetList = lappend(newTargetList, copyObject(res));
 			TransformAggNodeForCQView(vselect, res->val, res, hasAggOrGroupBy);
@@ -590,7 +590,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 		 * and reference that hidden column in the expression which
 		 * is evaluated by the view.
 		 */
-		foreach(agglc, context.aggCalls)
+		foreach(agglc, context.funcCalls)
 		{
 			Node *node = (Node *) lfirst(agglc);
 			ResTarget *aggres = CreateUniqueResTargetForNode(node, &context);
@@ -831,6 +831,60 @@ replace_stream_rangevar_with_streamdesc(Node *node, CQAnalyzeContext *context)
 }
 
 /*
+ * collect_funcs
+ */
+static bool
+collect_funcs(Node *node, CQAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, FuncCall))
+		context->funcCalls = lappend(context->funcCalls, node);
+
+	return raw_expression_tree_walker(node, collect_funcs, (void *) context);
+}
+
+/*
+ * validate_window
+ */
+static void
+validate_windowdef(WindowDef *wdef, CQAnalyzeContext *context)
+{
+	/* Should ORDER BY arrival_timestamp only */
+	if (wdef->orderClause == NIL)
+	{
+
+	}
+	else
+	{
+
+	}
+}
+
+static void
+validate_windows(SelectStmt *stmt, CQAnalyzeContext *context)
+{
+	ListCell *lc;
+
+	foreach(lc, stmt->windowClause)
+	{
+		WindowDef *wdef = (WindowDef *) lfirst(lc);
+		validate_windowdef(wdef, context);
+	}
+
+	context->funcCalls = NIL;
+	collect_funcs((Node *) stmt->targetList, context);
+
+	foreach(lc, context->funcCalls)
+	{
+		FuncCall *fcall = (FuncCall *) lfirst(lc);
+		if (fcall->over != NULL)
+			validate_windowdef(fcall->over, context);
+	}
+}
+
+/*
  * AnalyzeContinuousSelectStmt
  *
  * This is mainly to prepare a CV SELECT's FROM clause, which may involve streams
@@ -990,7 +1044,9 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 
 	stmt->fromClause = newfrom;
 
-	ValidateSlidingWindowExpr(stmt, pstate);
+	ValidateSlidingWindowExpr(stmt, &context);
+
+	validate_windows(stmt, &context);
 }
 
 /*

@@ -24,7 +24,7 @@ typedef struct CQAnalyzeContext
 	List *streams;
 	List *tables;
 	List *targets;
-	List *aggCalls;
+	List *funcCalls;
 	Node *swExpr;
 	Node *stepColumn;
 	int location;

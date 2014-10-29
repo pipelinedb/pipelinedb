@@ -13,7 +13,7 @@
 
 #include "parser/parse_node.h"
 
-void ValidateSlidingWindowExpr(SelectStmt *stmt, ParseState *pstate);
+void ValidateSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context);
 
 bool IsSlidingWindowSelectStmt(SelectStmt *stmt);
 bool IsSlidingWindowContinuousView(RangeVar *cvname);
