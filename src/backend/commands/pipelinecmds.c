@@ -44,6 +44,7 @@
 bool DebugSyncStreamInsert;
 
 #define CQ_TABLE_SUFFIX "_pdb"
+#define DEFAULT_TYPEMOD -1
 
 /*
  * Appends a suffix to a string, ensuring that the result fits
@@ -194,7 +195,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		if (OidIsValid(hiddentype))
 		{
 			char *hiddenname = GetUniqueInternalColname(&context);
-			ColumnDef *hidden = make_cv_columndef(hiddenname, hiddentype, InvalidOid);
+			ColumnDef *hidden = make_cv_columndef(hiddenname, hiddentype, DEFAULT_TYPEMOD);
 			tableElts = lappend(tableElts, hidden);
 		}
 	}
