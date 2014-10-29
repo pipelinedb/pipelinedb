@@ -80,16 +80,14 @@ compare_int32s (const void *a, const void *b)
  * to tag stream buffer events with.
  */
 static int32
-get_next_id(void)
+get_next_id(Relation rel)
 {
-	Relation		rel;
 	HeapScanDesc	scandesc;
 	HeapTuple		tup;
 	int32			id = 0;
 	List			*idsList = NIL;
 	ListCell		*lc;
 
-	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 	scandesc = heap_beginscan_catalog(rel, 0, NULL);
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
@@ -120,8 +118,6 @@ get_next_id(void)
 			}
 		}
 	}
-
-	heap_close(rel, AccessExclusiveLock);
 
 	return id;
 }
@@ -183,7 +179,7 @@ RegisterContinuousView(RangeVar *name, const char *query_string)
 	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 
 	namestrcpy(&name_data, name->relname);
-	values[Anum_pipeline_queries_id - 1] = Int32GetDatum(get_next_id());
+	values[Anum_pipeline_queries_id - 1] = Int32GetDatum(get_next_id(pipeline_queries));
 	values[Anum_pipeline_queries_name - 1] = NameGetDatum(&name_data);
 	values[Anum_pipeline_queries_query - 1] = CStringGetTextDatum(query_string);
 
