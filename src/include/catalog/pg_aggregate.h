@@ -316,7 +316,7 @@ DATA(insert ( 4323	n 0 int_avg_combine int8_avg	 	-				-				-				f f 0	1016	128 
 DATA(insert ( 4324	n 0 float8_combine  float8_avg	 	-				-				-				f f 0	1022	128 0		0	"{0,0,0}" _null_ ));
 DATA(insert ( 4325	n 0 interval_combine interval_avg 	-				-				-				f f 0	1187	128 0		0	"{0 second,0 second}" _null_ ));
 
-/* pipeline sum */
+/* sum */
 DATA(insert ( 4326	n 0 numeric_pcombine numeric_sum 	-				-				-				f f 0	2281	128 0		0	_null_ _null_ ));
 
 /*
