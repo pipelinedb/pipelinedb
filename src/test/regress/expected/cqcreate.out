@@ -97,6 +97,8 @@ View definition:
  count  | bigint  |           | plain    |              | 
  sum    | numeric |           | main     |              | 
  _0     | bytea   |           | extended |              | 
+Indexes:
+    "cqcreate3_pdb_key_idx" UNIQUE, btree (key)
 
 CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value::int8) FROM stream GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate4';
@@ -124,6 +126,8 @@ View definition:
  sum    | numeric |           | main     |              | 
  _1     | bytea   |           | extended |              | 
  _0     | text(0) |           | extended |              | 
+Indexes:
+    "cqcreate4_pdb__0_idx" UNIQUE, btree (_0)
 
 -- Sliding window queries
 CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
@@ -204,6 +208,8 @@ View definition:
  _1           | bigint[]           |           | extended |              | 
  internal_avg | interval           |           | plain    |              | 
  _2           | interval[]         |           | extended |              | 
+Indexes:
+    "cvavg_pdb_key_idx" UNIQUE, btree (key)
 
 CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM stream;
 \d+ cvjson;
@@ -291,6 +297,8 @@ View definition:
  key        | text(0) |           | extended |              | 
  string_agg | text    |           | extended |              | 
  _0         | bytea   |           | extended |              | 
+Indexes:
+    "cvtext_pdb_key_idx" UNIQUE, btree (key)
 
 -- Check for expressions containing aggregates
 CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM stream;
@@ -330,6 +338,8 @@ View definition:
  _0     | double precision   |           | plain    |              | 
  _2     | double precision[] |           | extended |              | 
  _1     | integer            |           | plain    |              | 
+Indexes:
+    "cqaggexpr2_pdb_key_idx" UNIQUE, btree (key)
 
 CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
 \d+ cqaggexpr3;
@@ -372,4 +382,28 @@ View definition:
  key    | text(0)            |           | extended |              | 
  _0     | double precision   |           | plain    |              | 
  _1     | double precision[] |           | extended |              | 
+Indexes:
+    "cqaggexpr4_pdb_key_idx" UNIQUE, btree (key)
+
+CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM stream GROUP BY k0, k1;
+\d+ cqgroupby
+                View "public.cqgroupby"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ k0     | text(0) |           | extended | 
+ k1     | integer |           | plain    | 
+ count  | bigint  |           | plain    | 
+View definition:
+ SELECT cqgroupby_pdb.k0,
+    cqgroupby_pdb.k1,
+    cqgroupby_pdb.count
+   FROM cqgroupby_pdb;
+
+\d+ cqgroupby_pdb;
+                     Table "public.cqgroupby_pdb"
+ Column |  Type   | Modifiers | Storage  | Stats target | Description 
+--------+---------+-----------+----------+--------------+-------------
+ k0     | text(0) |           | extended |              | 
+ k1     | integer |           | plain    |              | 
+ count  | bigint  |           | plain    |              | 
 

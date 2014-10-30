@@ -15,6 +15,7 @@
 
 char *GetCQMatRelationName(char *cvname);
 void CreateEncoding(CreateEncodingStmt *stmt);
+void CreateCQMatViewIndex(Oid matreloid, RangeVar *matrelname, SelectStmt *stmt);
 void ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring);
 void ExecDropContinuousViewStmt(DropStmt *stmt);
 void ExecDumpStmt(DumpStmt *stmt);
