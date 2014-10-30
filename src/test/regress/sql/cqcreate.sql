@@ -74,3 +74,8 @@ CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM st
 CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM stream GROUP BY key;
 \d+ cqaggexpr4;
 \d+ cqaggexpr4_pdb;
+
+CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM stream GROUP BY k0, k1;
+\d+ cqgroupby
+\d+ cqgroupby_pdb;
+
