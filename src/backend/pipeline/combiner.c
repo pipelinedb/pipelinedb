@@ -28,9 +28,11 @@
 #include "optimizer/planner.h"
 #include "optimizer/tlist.h"
 #include "parser/parse_clause.h"
+#include "parser/parse_collate.h"
 #include "parser/parse_expr.h"
 #include "parser/parse_type.h"
 #include "pipeline/combiner.h"
+#include "pipeline/cqmatrel.h"
 #include "pipeline/cqplan.h"
 #include "pipeline/cvmetadata.h"
 #include "tcop/tcopprot.h"
@@ -198,6 +200,93 @@ prepare_combine_plan(PlannedStmt *plan, Tuplestorestate *store, TupleDesc *desc)
 }
 
 /*
+ * get_retrieval_where_clause
+ *
+ * Given a tuplestore containing incoming tuples to combine with
+ * on-disk tuples, generates a WHERE clause that can be used to
+ * retrieve all corresponding on-disk tuples with a single query.
+ */
+static Node*
+get_retrieval_where_clause(Tuplestorestate *incoming, TupleDesc desc,
+		AttrNumber *merge_attrs, int num_merge_attrs, ParseState *ps)
+{
+	List *name = list_make1(makeString("="));
+	Node *where;
+	Expr *dnf = NULL;
+	List *args = NIL;
+	TupleTableSlot *slot = MakeSingleTupleTableSlot(desc);
+
+	foreach_tuple(slot, incoming)
+	{
+		A_Expr *cnf = NULL;
+		Node *arg;
+		int i;
+
+		for (i = 0; i < num_merge_attrs; i++)
+		{
+			AttrNumber merge_attr = merge_attrs[i];
+			Form_pg_attribute attr = desc->attrs[merge_attr - 1];
+			ColumnRef *cref;
+			Type typeinfo;
+			int length;
+			A_Expr *expr;
+			bool isnull;
+			Datum d;
+			Const *c;
+
+			typeinfo = typeidType(attr->atttypid);
+			length = typeLen(typeinfo);
+			ReleaseSysCache((HeapTuple) typeinfo);
+
+			d = slot_getattr(slot, merge_attr, &isnull);
+			c = makeConst(attr->atttypid, attr->atttypmod,
+					attr->attcollation, length, d, isnull, attr->attbyval);
+
+			cref = makeNode(ColumnRef);
+			cref->fields = list_make1(makeString(NameStr(attr->attname)));
+			cref->location = -1;
+
+			expr = makeA_Expr(AEXPR_OP, name, (Node *) cref, (Node *) c, -1);
+
+			/*
+			 * If we're grouping on multiple columns, the WHERE predicate must
+			 * include a conjunction of all GROUP BY column values for each incoming
+			 * tuple. For example, consider the query:
+			 *
+			 *   SELECT col0, col1, COUNT(*) FROM stream GROUP BY col0, col1
+			 *
+			 * If we have incoming tuples,
+			 *
+			 *   (0, 1, 10), (4, 3, 200)
+			 *
+			 * then we need to look for any tuples on disk for which the following
+			 * predicate evaluates to true:
+			 *
+			 *   (col0 = 0 AND col1 = 1) OR (col0 = 4 AND col1 = 3)
+			 *
+			 * Her we're creating the conjunction clauses, and we pass them all in
+			 * as a list of arguments to an OR expression at the end.
+			 */
+			if (cnf == NULL)
+				cnf = expr;
+			else
+				cnf = makeA_Expr(AEXPR_AND, NULL, (Node *) cnf, (Node *) expr, -1);
+		}
+
+		arg = transformExpr(ps, (Node *) cnf, AEXPR_OP);
+		args = lappend(args, arg);
+	}
+
+	/* this is one big disjunction of conjunctions that match GROUP BY criteria */
+	dnf = (Expr *) makeBoolExpr(OR_EXPR, args, -1);
+	assign_expr_collations(ps, (Node *) dnf);
+
+	where = transformExpr(ps, (Node *) dnf, EXPR_KIND_WHERE);
+
+	return (Node *) where;
+}
+
+/*
  * get_tuples_to_combine_with
  *
  * Gets the plan for retrieving all of the existing tuples that are going
@@ -213,21 +302,16 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
 	List *query_list;
 	PlannedStmt *plan;
 	Query *query;
-	Node *where;
 	SelectStmt *stmt;
 	Portal portal;
-	TupleTableSlot 	*slot;
 	ParseState *ps;
 	DestReceiver *dest;
 	char base_select[14 + strlen(cvname) + 1];
-	List *name = list_make1(makeString("="));
 	HASH_SEQ_STATUS status;
 	HeapTupleEntry entry;
 
 	sprintf(base_select, "SELECT * FROM %s", cvname);
 
-	slot = MakeSingleTupleTableSlot(desc);
-	name = list_make1(makeString("="));
 	ps = make_parsestate(NULL);
 
 	dest = CreateDestReceiver(DestTupleTable);
@@ -249,61 +333,8 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
 
 	if (num_merge_attrs > 0)
 	{
-		A_Expr *dnf = NULL;
-
-		foreach_tuple(slot, incoming_merges)
-		{
-			A_Expr *cnf = NULL;
-			int i;
-
-			for (i = 0; i < num_merge_attrs; i++)
-			{
-				AttrNumber merge_attr = merge_attrs[i];
-				Form_pg_attribute attr = desc->attrs[merge_attr - 1];
-				ColumnRef *cref;
-				Type typeinfo;
-				int length;
-				A_Expr *expr;
-				bool isnull;
-				Datum d;
-				Const *c;
-
-				typeinfo = typeidType(attr->atttypid);
-				length = typeLen(typeinfo);
-				ReleaseSysCache((HeapTuple) typeinfo);
-
-
-				d = slot_getattr(slot, merge_attr, &isnull);
-				c = makeConst(attr->atttypid, attr->atttypmod, 0, length, d, isnull, true);
-
-				cref = makeNode(ColumnRef);
-				cref->fields = list_make1(makeString(attr->attname.data));
-				cref->location = -1;
-
-				expr = makeA_Expr(AEXPR_OP, name, (Node *) cref, (Node *) c, -1);
-
-				if (cnf == NULL)
-					cnf = expr;
-				else
-				{
-					cnf = makeA_Expr(AEXPR_AND, NULL, (Node *) cnf, (Node *) expr, -1);
-				}
-			}
-
-			if (dnf == NULL)
-				dnf = cnf;
-			else
-			{
-				dnf = makeA_Expr(AEXPR_OR, NULL, (Node *) dnf, (Node *) cnf, -1);
-			}
-		}
-
-		/*
-		 * This query is now of the form:
-		 *
-		 * SELECT * FROM <continuous view> WHERE <merge column> IN (incoming merge column values)
-		 */
-		where = transformExpr(ps, (Node *) dnf, EXPR_KIND_WHERE);
+		Node *where = get_retrieval_where_clause(incoming_merges, desc, merge_attrs,
+				num_merge_attrs, ps);
 		query->jointree = makeFromExpr(query->jointree->fromlist, where);
 	}
 
@@ -358,6 +389,8 @@ sync_combine(char *cvname, Tuplestorestate *results,
 	Relation rel = heap_openrv(makeRangeVar(NULL, cvname, -1), RowExclusiveLock);
 	int size = sizeof(bool) * slot->tts_tupleDescriptor->natts;
 	bool *replace_all = palloc0(size);
+	ResultRelInfo *ri = CQMatViewOpen(rel);
+
 	MemSet(replace_all, true, size);
 
 	foreach_tuple(slot, results)
@@ -376,15 +409,18 @@ sync_combine(char *cvname, Tuplestorestate *results,
 			HeapTuple updated = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
 					slot->tts_values, slot->tts_isnull, replace_all);
 
-			simple_heap_update(rel, &update->tuple->t_self, updated);
+			ExecStoreTuple(updated, slot, InvalidBuffer, false);
+			ExecCQMatRelUpdate(ri, slot);
 		}
 		else
 		{
 			/* No existing tuple found, so it's an INSERT */
-			heap_insert(rel, slot->tts_tuple, GetCurrentCommandId(true), 0, NULL);
+			ExecCQMatRelInsert(ri, slot);
 		}
 	}
+	CQMatViewClose(ri);
 	relation_close(rel, RowExclusiveLock);
+
 }
 
 /*
