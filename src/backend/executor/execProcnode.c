@@ -780,6 +780,10 @@ ExecEndNode(PlanState *node)
 			ExecEndNestLoop((NestLoopState *) node);
 			break;
 
+		case T_StreamTableState:
+			ExecEndNestLoop((NestLoopState *) node);
+			break;
+
 		case T_MergeJoinState:
 			ExecEndMergeJoin((MergeJoinState *) node);
 			break;
