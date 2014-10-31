@@ -60,7 +60,8 @@ CreateStreamTargets(void)
 	HeapScanDesc scandesc;
 	HeapTuple tup;
 	MemoryContext oldcontext;
-
+	elog(LOG,"WAITING ON GDB\n");
+	//pg_usleep(60 * 1000 * 1000);
 	if (targets != NULL)
 		hash_destroy(targets);
 
@@ -115,7 +116,11 @@ CreateStreamTargets(void)
 				entry->tags = bms_add_member(entry->tags, catrow->id);
 
 				relname = ((RangeVar *) j->rarg)->relname;
-				entry = (StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, NULL);
+				entry = (StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, &found);
+
+				if (!found)
+					entry->tags = NULL;
+
 				entry->tags = bms_add_member(entry->tags, catrow->id);
 			}
 			else if (IsA(node, RangeVar))
