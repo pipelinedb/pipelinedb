@@ -119,7 +119,9 @@ test: cqcreate
 test: cqactivate
 test: cqsanity
 test: cqsum
+test: cqswsum
 test: cqavg
+test: cqswavg
 test: cqcount
 test: cqboolagg
 test: cqlatch

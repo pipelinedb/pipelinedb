@@ -308,6 +308,16 @@ DATA(insert ( 3988	h 1 ordered_set_transition_multi	percent_rank_final						-		-
 DATA(insert ( 3990	h 1 ordered_set_transition_multi	cume_dist_final							-		-		-		t f 0	2281	0	0		0	_null_ _null_ ));
 DATA(insert ( 3992	h 1 ordered_set_transition_multi	dense_rank_final						-		-		-		t f 0	2281	0	0		0	_null_ _null_ ));
 
+/* PipelineDB Sliding Window Aggregates */
+
+/* avg */
+DATA(insert ( 4322	n 0 numeric_pcombine numeric_avg 	-				-				-				f f 0	2281	128 0		0	_null_ _null_ ));
+DATA(insert ( 4323	n 0 int_avg_combine int8_avg	 	-				-				-				f f 0	1016	128 0		0	"{0,0}" _null_ ));
+DATA(insert ( 4324	n 0 float8_combine  float8_avg	 	-				-				-				f f 0	1022	128 0		0	"{0,0,0}" _null_ ));
+DATA(insert ( 4325	n 0 interval_combine interval_avg 	-				-				-				f f 0	1187	128 0		0	"{0 second,0 second}" _null_ ));
+
+/* sum */
+DATA(insert ( 4326	n 0 numeric_pcombine numeric_sum 	-				-				-				f f 0	2281	128 0		0	_null_ _null_ ));
 
 /*
  * prototypes for functions in pg_aggregate.c

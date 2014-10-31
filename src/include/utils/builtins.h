@@ -1217,12 +1217,13 @@ extern Datum int8_sum_to_int8(PG_FUNCTION_ARGS);
 extern Datum int_avg_combine(PG_FUNCTION_ARGS);
 extern Datum float8_combine(PG_FUNCTION_ARGS);
 extern Datum float8_regr_combine(PG_FUNCTION_ARGS);
-extern Datum numeric_combine(PG_FUNCTION_ARGS);
 extern Datum interval_combine(PG_FUNCTION_ARGS);
 extern Datum numeric_combine(PG_FUNCTION_ARGS);
 extern Datum numeric_avg_combine(PG_FUNCTION_ARGS);
 extern Datum array_agg_combine(PG_FUNCTION_ARGS);
 extern Datum json_agg_combine(PG_FUNCTION_ARGS);
 extern Datum json_object_agg_combine(PG_FUNCTION_ARGS);
+
+extern Datum numeric_pcombine(PG_FUNCTION_ARGS);
 
 #endif   /* BUILTINS_H */

@@ -5037,7 +5037,7 @@ DESCR("split a string with a delimiter");
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
 DATA(insert OID = 4301 ( float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1022 "1022 1022" _null_ _null_ _null_ _null_ float8_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
-DATA(insert OID = 4303 ( numeric_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1231 "1231 1231" _null_ _null_ _null_ _null_ numeric_combine _null_ _null_ _null_ ));
+DATA(insert OID = 4303 ( numeric_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1231 "1231 1231" _null_ _null_ _null_ _null_ numeric_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
 DATA(insert OID = 4304 ( interval_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1187 "1187 1187" _null_ _null_ _null_ _null_ interval_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
@@ -5078,6 +5078,21 @@ DATA(insert OID = 4319 (stringaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 
 DESCR("deserializer for string aggregation transition states");
 DATA(insert OID = 4320 (stringaggstaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "2281" _null_ _null_ _null_ _null_ stringaggstaterecv _null_ _null_ _null_ ));
 DESCR("serializer for string aggregation transition states");
+
+DATA(insert OID = 4321 ( numeric_pcombine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 17" _null_ _null_ _null_ _null_ numeric_pcombine _null_ _null_ _null_ ));
+DESCR("aggregate parse and combine function");
+
+DATA(insert OID = 4322 (  avg				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 1700 "17" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("the average (arithmetic mean) as numeric of all serialized numeric values");
+DATA(insert OID = 4323 (  avg				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 1700 "1016" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("the average (arithmetic mean) as numeric of all numeric[] values");
+DATA(insert OID = 4324 (  avg				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 701  "1022" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("the average (arithmetic mean) as numeric of all double precision[] values");
+DATA(insert OID = 4325 (  avg				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 1186 "1187" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("the average (arithmetic mean) as numeric of all interval[] values");
+
+DATA(insert OID = 4326 (  sum				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 1700 "17" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("sum as numeric across all serialized numeric input values");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result

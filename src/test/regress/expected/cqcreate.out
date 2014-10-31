@@ -91,12 +91,14 @@ View definition:
 
 \d+ cqcreate3_pdb;
                      Table "public.cqcreate3_pdb"
- Column |   Type   | Modifiers | Storage  | Stats target | Description 
---------+----------+-----------+----------+--------------+-------------
- key    | text(0)  |           | extended |              | 
- count  | bigint   |           | plain    |              | 
- sum    | numeric  |           | main     |              | 
- _0     | bytea(0) |           | extended |              | 
+ Column |  Type   | Modifiers | Storage  | Stats target | Description 
+--------+---------+-----------+----------+--------------+-------------
+ key    | text(0) |           | extended |              | 
+ count  | bigint  |           | plain    |              | 
+ sum    | numeric |           | main     |              | 
+ _0     | bytea   |           | extended |              | 
+Indexes:
+    "cqcreate3_pdb_key_idx" UNIQUE, btree (key)
 
 CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value::int8) FROM stream GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate4';
@@ -118,12 +120,14 @@ View definition:
 
 \d+ cqcreate4_pdb;
                      Table "public.cqcreate4_pdb"
- Column |   Type   | Modifiers | Storage  | Stats target | Description 
---------+----------+-----------+----------+--------------+-------------
- count  | bigint   |           | plain    |              | 
- sum    | numeric  |           | main     |              | 
- _1     | bytea(0) |           | extended |              | 
- _0     | text(0)  |           | extended |              | 
+ Column |  Type   | Modifiers | Storage  | Stats target | Description 
+--------+---------+-----------+----------+--------------+-------------
+ count  | bigint  |           | plain    |              | 
+ sum    | numeric |           | main     |              | 
+ _1     | bytea   |           | extended |              | 
+ _0     | text(0) |           | extended |              | 
+Indexes:
+    "cqcreate4_pdb__0_idx" UNIQUE, btree (_0)
 
 -- Sliding window queries
 CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
@@ -177,25 +181,35 @@ View definition:
  _1     | text(0)                  |           | extended |              | 
 
 -- These use a combine state column
-CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS avg_col FROM stream GROUP BY key;
+CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, AVG(y::integer) AS int_avg, AVG(ts0::timestamp - ts1::timestamp) AS internal_avg FROM stream GROUP BY key;
 \d+ cvavg;
-                       View "public.cvavg"
- Column  |       Type       | Modifiers | Storage  | Description 
----------+------------------+-----------+----------+-------------
- key     | text(0)          |           | extended | 
- avg_col | double precision |           | plain    | 
+                         View "public.cvavg"
+    Column    |       Type       | Modifiers | Storage  | Description 
+--------------+------------------+-----------+----------+-------------
+ key          | text(0)          |           | extended | 
+ float_avg    | double precision |           | plain    | 
+ int_avg      | numeric          |           | main     | 
+ internal_avg | interval         |           | plain    | 
 View definition:
  SELECT cvavg_pdb.key,
-    cvavg_pdb.avg_col
+    cvavg_pdb.float_avg,
+    cvavg_pdb.int_avg,
+    cvavg_pdb.internal_avg
    FROM cvavg_pdb;
 
 \d+ cvavg_pdb;
-                             Table "public.cvavg_pdb"
- Column  |        Type        | Modifiers | Storage  | Stats target | Description 
----------+--------------------+-----------+----------+--------------+-------------
- key     | text(0)            |           | extended |              | 
- avg_col | double precision   |           | plain    |              | 
- _0      | double precision[] |           | extended |              | 
+                               Table "public.cvavg_pdb"
+    Column    |        Type        | Modifiers | Storage  | Stats target | Description 
+--------------+--------------------+-----------+----------+--------------+-------------
+ key          | text(0)            |           | extended |              | 
+ float_avg    | double precision   |           | plain    |              | 
+ _0           | double precision[] |           | extended |              | 
+ int_avg      | numeric            |           | main     |              | 
+ _1           | bigint[]           |           | extended |              | 
+ internal_avg | interval           |           | plain    |              | 
+ _2           | interval[]         |           | extended |              | 
+Indexes:
+    "cvavg_pdb_key_idx" UNIQUE, btree (key)
 
 CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM stream;
 \d+ cvjson;
@@ -208,11 +222,11 @@ View definition:
    FROM cvjson_pdb;
 
 \d+ cvjson_pdb;
-                        Table "public.cvjson_pdb"
-  Column   |   Type   | Modifiers | Storage  | Stats target | Description 
------------+----------+-----------+----------+--------------+-------------
- count_col | json     |           | extended |              | 
- _0        | bytea(0) |           | extended |              | 
+                       Table "public.cvjson_pdb"
+  Column   | Type  | Modifiers | Storage  | Stats target | Description 
+-----------+-------+-----------+----------+--------------+-------------
+ count_col | json  |           | extended |              | 
+ _0        | bytea |           | extended |              | 
 
 CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM stream;
 \d+ cvjsonobj;
@@ -225,11 +239,11 @@ View definition:
    FROM cvjsonobj_pdb;
 
 \d+ cvjsonobj_pdb;
-                          Table "public.cvjsonobj_pdb"
-     Column      |   Type   | Modifiers | Storage  | Stats target | Description 
------------------+----------+-----------+----------+--------------+-------------
- json_object_agg | json     |           | extended |              | 
- _0              | bytea(0) |           | extended |              | 
+                        Table "public.cvjsonobj_pdb"
+     Column      | Type  | Modifiers | Storage  | Stats target | Description 
+-----------------+-------+-----------+----------+--------------+-------------
+ json_object_agg | json  |           | extended |              | 
+ _0              | bytea |           | extended |              | 
 
 -- But these aggregates don't
 CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(x::integer + y::float8) AS sum_col FROM stream;
@@ -277,12 +291,14 @@ View definition:
    FROM cvtext_pdb;
 
 \d+ cvtext_pdb;
-                         Table "public.cvtext_pdb"
-   Column   |   Type   | Modifiers | Storage  | Stats target | Description 
-------------+----------+-----------+----------+--------------+-------------
- key        | text(0)  |           | extended |              | 
- string_agg | text     |           | extended |              | 
- _0         | bytea(0) |           | extended |              | 
+                        Table "public.cvtext_pdb"
+   Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+------------+---------+-----------+----------+--------------+-------------
+ key        | text(0) |           | extended |              | 
+ string_agg | text    |           | extended |              | 
+ _0         | bytea   |           | extended |              | 
+Indexes:
+    "cvtext_pdb_key_idx" UNIQUE, btree (key)
 
 -- Check for expressions containing aggregates
 CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM stream;
@@ -322,6 +338,8 @@ View definition:
  _0     | double precision   |           | plain    |              | 
  _2     | double precision[] |           | extended |              | 
  _1     | integer            |           | plain    |              | 
+Indexes:
+    "cqaggexpr2_pdb_key_idx" UNIQUE, btree (key)
 
 CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
 \d+ cqaggexpr3;
@@ -364,4 +382,28 @@ View definition:
  key    | text(0)            |           | extended |              | 
  _0     | double precision   |           | plain    |              | 
  _1     | double precision[] |           | extended |              | 
+Indexes:
+    "cqaggexpr4_pdb_key_idx" UNIQUE, btree (key)
+
+CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM stream GROUP BY k0, k1;
+\d+ cqgroupby
+                View "public.cqgroupby"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ k0     | text(0) |           | extended | 
+ k1     | integer |           | plain    | 
+ count  | bigint  |           | plain    | 
+View definition:
+ SELECT cqgroupby_pdb.k0,
+    cqgroupby_pdb.k1,
+    cqgroupby_pdb.count
+   FROM cqgroupby_pdb;
+
+\d+ cqgroupby_pdb;
+                     Table "public.cqgroupby_pdb"
+ Column |  Type   | Modifiers | Storage  | Stats target | Description 
+--------+---------+-----------+----------+--------------+-------------
+ k0     | text(0) |           | extended |              | 
+ k1     | integer |           | plain    |              | 
+ count  | bigint  |           | plain    |              | 
 

@@ -44,6 +44,8 @@
 bool DebugSyncStreamInsert;
 
 #define CQ_TABLE_SUFFIX "_pdb"
+#define CQ_MATREL_INDEX_TYPE "btree"
+#define DEFAULT_TYPEMOD -1
 
 /*
  * Appends a suffix to a string, ensuring that the result fits
@@ -98,6 +100,50 @@ GetCQMatRelationName(char *cvname)
 	 * be CV name suffixed with "_pdb".
 	 */
 	return append_suffix(cvname, CQ_TABLE_SUFFIX);
+}
+
+/*
+ * ExecCreateCQMatViewIndex
+ *
+ * If feasible, create an index on the new materialization table to make
+ * combine retrievals on it as efficient as possible. Sometimes this may be
+ * impossible to do automatically in a smart way, but for some queries,
+ * such as single-column GROUP BYs, it's straightforward.
+ */
+void
+CreateCQMatViewIndex(Oid matreloid, RangeVar *matrelname, SelectStmt *stmt)
+{
+	IndexStmt *index;
+	IndexElem *indexcol;
+	ColumnRef *col;
+
+	if (list_length(stmt->groupClause) != 1)
+		return;
+
+	col = linitial(stmt->groupClause);
+	indexcol = makeNode(IndexElem);
+	indexcol->name = NameListToString(col->fields);
+	indexcol->expr = NULL;
+	indexcol->indexcolname = NULL;
+	indexcol->collation = NULL;
+	indexcol->opclass = NULL;
+	indexcol->ordering = SORTBY_DEFAULT;
+	indexcol->nulls_ordering = SORTBY_NULLS_DEFAULT;
+
+	index = makeNode(IndexStmt);
+	index->idxname = NULL;
+	index->relation = matrelname;
+	index->accessMethod = CQ_MATREL_INDEX_TYPE;
+	index->tableSpace = NULL;
+	index->indexParams = list_make1(indexcol);
+	index->unique = true;
+	index->primary = false;
+	index->isconstraint = false;
+	index->deferrable = false;
+	index->initdeferred = false;
+	index->concurrent = false;
+
+	DefineIndex(matreloid, index, InvalidOid, false, false, false, false);
 }
 
 /*
@@ -168,7 +214,6 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 
 		colname = pstrdup(tle->resname);
 
-
 		/*
 		 * allowSystemTableMods is a global flag that, when true, allows certain column types
 		 * to be created. We need it set to true to create some hidden state columns. In particular,
@@ -194,7 +239,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		if (OidIsValid(hiddentype))
 		{
 			char *hiddenname = GetUniqueInternalColname(&context);
-			ColumnDef *hidden = make_cv_columndef(hiddenname, hiddentype, InvalidOid);
+			ColumnDef *hidden = make_cv_columndef(hiddenname, hiddentype, DEFAULT_TYPEMOD);
 			tableElts = lappend(tableElts, hidden);
 		}
 	}
@@ -212,6 +257,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	allowSystemTableMods = true;
 	reloid = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid);
 	CommandCounterIncrement();
+	allowSystemTableMods = saveAllowSystemTableMods;
 
 	toast_options = transformRelOptions((Datum) 0, create_stmt->options, "toast",
 			validnsps, true, false);
@@ -245,6 +291,11 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * relation.
 	 */
 	RegisterContinuousView(view, querystring);
+
+	/*
+	 * Index the materialization table smartly if we can
+	 */
+	CreateCQMatViewIndex(reloid, mat_relation, workerselect);
 }
 
 /*

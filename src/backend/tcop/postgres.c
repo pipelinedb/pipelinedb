@@ -720,6 +720,24 @@ pipeline_rewrite(List *raw_parsetree_list)
 			transformed_parsetree_list = lappend(transformed_parsetree_list,
 					new_stmt);
 		}
+		else if (IsA(node, IndexStmt))
+		{
+			IndexStmt *istmt = (IndexStmt *) node;
+
+			/*
+			 * If the user is trying to create an index on a CV, what they're really
+			 * trying to do is create it on the CV's materialization table, so rewrite
+			 * the name of the target relation if we need to.
+			 */
+			if (IsAContinuousView(istmt->relation))
+			{
+				char *s = GetCQMatRelationName(istmt->relation->relname);
+				istmt->relation = makeRangeVar(NULL, s, -1);
+			}
+
+			transformed_parsetree_list = lappend(transformed_parsetree_list,
+					node);
+		}
 		else
 		{
 			transformed_parsetree_list = lappend(transformed_parsetree_list,
