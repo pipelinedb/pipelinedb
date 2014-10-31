@@ -729,32 +729,22 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 		ColumnRef *ref = (ColumnRef *) tc->arg;
 		Form_pg_attribute attr;
 		char *colname;
-		if (onestream)
-		{
-			/* all of the inferred columns belong to this stream desc */
-			RangeVar *s = linitial(context->streams);
-			if (s->alias)
-				colname = strVal(lsecond(ref->fields));
-			else
-				colname = strVal(linitial(ref->fields));
-		}
-		else if (list_length(ref->fields) == 2)
+		if (list_length(ref->fields) == 2)
 		{
 			/* find the columns that belong to this stream desc */
 			char *colrelname = strVal(linitial(ref->fields));
 			char *relname = rv->alias ? rv->alias->aliasname : rv->relname;
 			if (strcmp(relname, colrelname) != 0)
 				continue;
-
-			colname = strVal(lsecond(ref->fields));
 		}
-		else
-		{
+
+		if ((list_length(ref->fields) == 1) && !onestream)
 			ereport(ERROR,
 					(errcode(ERRCODE_AMBIGUOUS_COLUMN),
 					 errmsg("column reference is ambiguous"),
 					 parser_errposition(context->pstate, ref->location)));
-		}
+
+		colname = FigureColname(ref);
 
 		if (strcmp(colname, ARRIVAL_TIMESTAMP) == 0)
 				sawArrivalTime = true;

@@ -142,3 +142,4 @@ ERROR:  column reference "ts" has an ambiguous type
 LINE 1: ...OUS VIEW cqanalyze43 AS SELECT date_trunc('hour', ts) AS ts ...
                                                              ^
 HINT:  Explicitly cast to the desired type. For example, ts::integer.
+CREATE CONTINUOUS VIEW cqanalyze44 AS SELECT stream.sid::integer FROM stream;
