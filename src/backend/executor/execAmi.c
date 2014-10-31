@@ -201,6 +201,10 @@ ExecReScan(PlanState *node)
 			ExecReScanNestLoop((NestLoopState *) node);
 			break;
 
+		case T_StreamTableJoinState:
+			ExecReScanNestLoop((NestLoopState *) node);
+			break;
+
 		case T_MergeJoinState:
 			ExecReScanMergeJoin((MergeJoinState *) node);
 			break;
