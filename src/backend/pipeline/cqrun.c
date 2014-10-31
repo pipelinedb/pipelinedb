@@ -22,7 +22,7 @@
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqplan.h"
 #include "pipeline/cqrun.h"
-#include "pipeline/cqslidingwindow.h"
+#include "pipeline/cqwindow.h"
 #include "pipeline/decode.h"
 #include "postmaster/bgworker.h"
 #include "storage/pmsignal.h"

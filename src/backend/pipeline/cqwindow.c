@@ -1,10 +1,10 @@
 /*-------------------------------------------------------------------------
  *
- * cqslidingwindow.c
- *	  Support for analyzing sliding window queries
+ * cqwindow.c
+ *	  Support for analyzing window queries
  *
  * IDENTIFICATION
- *	  src/backend/pipeline/cslidingwindow.c
+ *	  src/backend/pipeline/cqindow.c
  *
  *-------------------------------------------------------------------------
  */
@@ -26,7 +26,7 @@
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
 #include "pipeline/cqanalyze.h"
-#include "pipeline/cqslidingwindow.h"
+#include "pipeline/cqwindow.h"
 #include "pipeline/stream.h"
 #include "storage/lock.h"
 #include "tcop/tcopprot.h"
@@ -34,6 +34,7 @@
 #include "utils/syscache.h"
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
+#define DATE_TRUNC "date_trunc"
 #define DEFAULT_WINDOW_GRANULARITY "second"
 
 /*
@@ -159,11 +160,6 @@ get_sliding_window_expr(SelectStmt *stmt, CQAnalyzeContext *context)
 {
 	context->swExpr = NULL;
 
-	if (stmt->whereClause == NULL)
-	{
-		return NULL;
-	}
-
 	/* find the subset of the whereClause that we must match valid tuples */
 	find_clock_timestamp_expr(stmt->whereClause, context);
 
@@ -196,6 +192,29 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, CQAnalyzeContext *co
 	/*
 	 * TODO(usmanm): Ensure that context.cols[0] isn't being grouped on.
 	 */
+}
+
+/*
+ * GetColumnRefInSlidingWindowExpr
+ */
+ColumnRef *
+GetColumnRefInSlidingWindowExpr(SelectStmt *stmt)
+{
+	CQAnalyzeContext context;
+	Node *swExpr = get_sliding_window_expr(stmt, &context);
+	Node *cref;
+
+	context.cols = NIL;
+	FindColumnRefsWithTypeCasts(swExpr, &context);
+	cref = (Node *) linitial(context.cols);
+
+	if (IsA(cref, TypeCast))
+	{
+		TypeCast *tc = (TypeCast *) cref;
+		cref = tc->arg;
+	}
+
+	return (ColumnRef *) cref;
 }
 
 /*
@@ -241,10 +260,47 @@ IsSlidingWindowContinuousView(RangeVar *cvname)
 }
 
 /*
- * get_step_size
+ * DoesViewAggregate
+ *
+ * TODO(usmanm): Change name of function.
+ */
+bool
+DoesViewAggregate(SelectStmt *stmt, CQAnalyzeContext *context)
+{
+	bool hasAggsOrGroupBy = list_length(stmt->groupClause) > 0;
+	bool hasWindow = false;
+	ListCell *lc;
+
+	context->swExpr = NULL;
+	context->windowDefs = NIL;
+
+	find_clock_timestamp_expr(stmt->whereClause, context);
+	CollectAggFuncs((Node *) stmt->targetList, context);
+	hasAggsOrGroupBy |= list_length(context->funcCalls) > 0;
+
+	context->funcCalls = NIL;
+	CollectFuncs((Node *) stmt->targetList, context);
+
+	foreach(lc, context->funcCalls)
+	{
+		FuncCall *fcall = (FuncCall *) lfirst(lc);
+		hasWindow |= fcall->over != NULL;
+		if (hasWindow)
+			break;
+	}
+
+	/*
+	 * True iff has a WINDOW or has a sliding window expression in the WHERE clause
+	 * and either has a GROUP BY or an aggregate function.
+	 */
+	return (hasWindow || (context->swExpr != NULL && hasAggsOrGroupBy));
+}
+
+/*
+ * get_time_bucket_size
  */
 static bool
-get_step_size(Node *node, CQAnalyzeContext *context)
+get_time_bucket_size(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -254,6 +310,8 @@ get_step_size(Node *node, CQAnalyzeContext *context)
 
 	if (IsA(node, ColumnRef))
 	{
+		/* Default to 'second'. */
+		context->stepSize = DEFAULT_WINDOW_GRANULARITY;
 		context->stepColumn = node;
 		return true;
 	}
@@ -263,7 +321,7 @@ get_step_size(Node *node, CQAnalyzeContext *context)
 		FuncCall *fcall = (FuncCall *) node;
 		Node *truncArg;
 
-		if (pg_strcasecmp(strVal(linitial(fcall->funcname)), "date_trunc") != 0)
+		if (pg_strcasecmp(strVal(linitial(fcall->funcname)), DATE_TRUNC) != 0)
 			return false;
 
 		truncArg = linitial(fcall->args);
@@ -271,7 +329,7 @@ get_step_size(Node *node, CQAnalyzeContext *context)
 		if (!IsA(truncArg, A_Const))
 			return false;
 
-		if (!raw_expression_tree_walker(node, get_step_size, (void *) context))
+		if (!raw_expression_tree_walker(node, get_time_bucket_size, (void *) context))
 			return false;
 
 		context->stepSize = strVal(&((A_Const *) truncArg)->val);
@@ -280,26 +338,63 @@ get_step_size(Node *node, CQAnalyzeContext *context)
 		return false;
 	}
 
-	return raw_expression_tree_walker(node, get_step_size, (void *) context);
+	return raw_expression_tree_walker(node, get_time_bucket_size, (void *) context);
 }
 
 /*
- * ProjectColsAndAddGroupByForSlidingWindow
+ * get_window_defs
  */
-SelectStmt *
-AddProjectionAndAddGroupByForSlidingWindow(SelectStmt *stmt, SelectStmt *viewselect, bool hasAggOrGroupBy, CQAnalyzeContext *context)
+List *
+get_window_defs(SelectStmt *stmt, CQAnalyzeContext *context)
 {
-	Node *swExpr = copyObject(get_sliding_window_expr(stmt, context));
+	List *windows = NIL;
+	ListCell *lc;
+
+	/*
+	 * Copy over all WINDOW clauses.
+	 */
+	foreach(lc, stmt->windowClause)
+		windows = lappend(windows, lfirst(lc));
+
+	context->funcCalls = NIL;
+	CollectFuncs((Node *) stmt->targetList, context);
+
+	/*
+	 * Copy over all inline OVER clauses.
+	 */
+	foreach(lc, context->funcCalls)
+	{
+		FuncCall *fcall = (FuncCall *) lfirst(lc);
+		/*
+		 * Ignore over entries if they reference to *named*
+		 * windows. Those windows should already be copied
+		 * above.
+		 */
+		if (fcall->over == NULL || fcall->over->name != NULL)
+			continue;
+		windows = lappend(windows, fcall->over);
+	}
+
+	return windows;
+}
+
+/*
+ * AddProjectionsAndGroupBysForWindows
+ */
+void
+AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewselect, bool doesViewAggregate, CQAnalyzeContext *context)
+{
+	Node *swExpr = copyObject(get_sliding_window_expr(workerstmt, context));
 	Node *cmpCRef;
 
 	if (swExpr == NULL)
-		return stmt;
+		return;
 
 	context->cols = NIL;
 	FindColumnRefsWithTypeCasts(swExpr, context);
 	cmpCRef = (Node *) linitial(context->cols);
 
-	if (hasAggOrGroupBy)
+	if (doesViewAggregate)
 	{
 		/*
 		 * This re-writes the query to be run by worker nodes.
@@ -332,29 +427,24 @@ AddProjectionAndAddGroupByForSlidingWindow(SelectStmt *stmt, SelectStmt *viewsel
 		FuncCall *func = makeNode(FuncCall);
 		A_Const *aconst = makeNode(A_Const);
 		char *name = GetUniqueInternalColname(context);
-		char *stepSize;
 
-		/* Get step size. Default to 'second'. */
+		/* Get step size. */
 		context->stepSize = NULL;
-		get_step_size(swExpr, context);
-		if (context->stepSize != NULL)
-			stepSize = context->stepSize;
-		else
-			stepSize = DEFAULT_WINDOW_GRANULARITY;
+		get_time_bucket_size(swExpr, context);
 
 		/*
-		 * Add ResTarget for step size field.
+		 * Add ResTarget for time bucket field.
 		 */
-		aconst->val = *makeString(stepSize);
+		aconst->val = *makeString(context->stepSize);
 		aconst->location = -1;
-		func->funcname = list_make1(makeString("date_trunc"));
+		func->funcname = list_make1(makeString(DATE_TRUNC));
 		func->args = list_concat(list_make1(aconst), copyObject(context->cols));
 		func->location = -1;
 		res->name = name;
 		res->indirection = NIL;
 		res->val = (Node *) func;
 		res->location = -1;
-		stmt->targetList = lappend(stmt->targetList, res);
+		workerstmt->targetList = lappend(workerstmt->targetList, res);
 
 		/*
 		 * Add GROUP BY for step field. This is the group
@@ -362,7 +452,7 @@ AddProjectionAndAddGroupByForSlidingWindow(SelectStmt *stmt, SelectStmt *viewsel
 		 */
 		cref->fields = list_make1(makeString(name));
 		cref->location = -1;
-		stmt->groupClause = lappend(stmt->groupClause, cref);
+		workerstmt->groupClause = lappend(workerstmt->groupClause, cref);
 
 		/*
 		 * Replace date_trunc call in the sliding window expression
@@ -371,7 +461,7 @@ AddProjectionAndAddGroupByForSlidingWindow(SelectStmt *stmt, SelectStmt *viewsel
 		 */
 		memcpy(context->stepColumn, CreateColumnRefFromResTarget(res), sizeof(ColumnRef));
 	}
-	else if (!IsColumnRefInTargetList(stmt, cmpCRef))
+	else if (!IsColumnRefInTargetList(workerstmt, cmpCRef))
 	{
 		/*
 		 * The CQ is requesting raw events in the sliding window.
@@ -386,7 +476,7 @@ AddProjectionAndAddGroupByForSlidingWindow(SelectStmt *stmt, SelectStmt *viewsel
 		res->val = copyObject(cmpCRef);
 		res->location = -1;
 
-		stmt->targetList = lappend(stmt->targetList, res);
+		workerstmt->targetList = lappend(workerstmt->targetList, res);
 
 		memcpy(cmpCRef, CreateColumnRefFromResTarget(res), sizeof(ColumnRef));
 	}
@@ -395,22 +485,20 @@ AddProjectionAndAddGroupByForSlidingWindow(SelectStmt *stmt, SelectStmt *viewsel
 	 * Copy over the modified swExpr to the VIEW's SelectStmt.
 	 */
 	viewselect->whereClause = swExpr;
-
-	return stmt;
 }
 
 /*
  * TransformAggNodeForCQView
  */
 void
-TransformAggNodeForCQView(SelectStmt *viewselect, Node *node, ResTarget *aggres, bool hasAggOrGroupBy)
+TransformAggNodeForCQView(SelectStmt *viewselect, Node *node, ResTarget *aggres, bool doesViewAggregate)
 {
 	ColumnRef *cref;
 	Assert(IsA(node, FuncCall));
 
 	cref = CreateColumnRefFromResTarget(aggres);
 
-	if (hasAggOrGroupBy)
+	if (doesViewAggregate)
 	{
 		FuncCall *agg = (FuncCall *) node;
 		agg->agg_star = false;
@@ -537,7 +625,7 @@ fix_sliding_window_expr(SelectStmt *stmt, Node *swExpr, CQAnalyzeContext *contex
 			 * TODO(usmanm): Will this work in all agg/group by cases?
 			 */
 			context->stepSize = NULL;
-			get_step_size(swExpr, context);
+			get_time_bucket_size(swExpr, context);
 		}
 	}
 }

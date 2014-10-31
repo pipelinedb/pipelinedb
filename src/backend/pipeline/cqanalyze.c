@@ -26,7 +26,7 @@
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
 #include "pipeline/cqanalyze.h"
-#include "pipeline/cqslidingwindow.h"
+#include "pipeline/cqwindow.h"
 #include "pipeline/stream.h"
 #include "storage/lock.h"
 #include "tcop/tcopprot.h"
@@ -92,7 +92,6 @@ InitializeCQAnalyzeContext(SelectStmt *stmt, ParseState *pstate, CQAnalyzeContex
 	FindColNames((Node *) stmt, context);
 
 	context->cols = NIL;
-	context->colNum = 0;
 }
 
 /*
@@ -332,53 +331,6 @@ CollectAggFuncs(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * ReplaceTargetListWithColumnRefs
- */
-void
-ReplaceTargetListWithColumnRefs(SelectStmt *stmt, bool replaceAggs)
-{
-	CQAnalyzeContext context;
-	List *origTargetList = stmt->targetList;
-	ListCell *lc;
-
-	stmt->targetList = NIL;
-
-	foreach(lc, origTargetList)
-	{
-		ResTarget *origRes = lfirst(lc);
-		ResTarget *res;
-		ColumnRef *cref;
-		char *colname;
-
-		context.funcCalls = NIL;
-		CollectAggFuncs(origRes->val, &context);
-
-		if (!replaceAggs && list_length(context.funcCalls) > 0)
-		{
-			stmt->targetList = lappend(stmt->targetList, origRes);
-			continue;
-		}
-
-		if (origRes->name != NULL)
-			colname = origRes->name;
-		else
-			colname = FigureColname(origRes->val);
-
-		cref = makeNode(ColumnRef);
-		cref->fields = list_make1(makeString(colname));
-		cref->location = origRes->location;
-
-		res = makeNode(ResTarget);
-		res->name = NULL;
-		res->indirection = NIL;
-		res->val = (Node *) cref;
-		res->location = origRes->location;
-
-		stmt->targetList = lappend(stmt->targetList, res);
-	}
-}
-
-/*
  * CreateResTargetForNode
  */
 ResTarget *
@@ -491,71 +443,76 @@ add_res_target_to_view(SelectStmt *viewselect, ResTarget *res)
  * materialization table.
  */
 SelectStmt *
-GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
+GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 {
 	CQAnalyzeContext context;
-	List *newGroupClause;
-	List *newTargetList;
-	SelectStmt *vselect;
-	bool isSlidingWindow = IsSlidingWindowSelectStmt(stmt);
-	int origTargetListLen = list_length(stmt->targetList);
-	int origGroupClauseLen = list_length(stmt->groupClause);
+	SelectStmt *viewstmt;
+	SelectStmt *workerstmt;
+	List *workerGroups;
+	List *workerTargetList;
+	bool isSlidingWindow;
+	bool doesViewAggregate;
+	int origNumTargets;
+	int origNumGroups;
 	int i;
-	bool hasAggOrGroupBy = isSlidingWindow && HasAggOrGroupBy(stmt);
 
-	InitializeCQAnalyzeContext(stmt, NULL, &context);
+	workerstmt = (SelectStmt *) copyObject(stmt);
+	viewstmt = (SelectStmt *) makeNode(SelectStmt);
+	viewstmt->targetList = NIL;
+	viewstmt->groupClause = NIL;
 
-	stmt = (SelectStmt *) copyObject(stmt);
+	InitializeCQAnalyzeContext(workerstmt, NULL, &context);
 
-	vselect = (SelectStmt *) makeNode(SelectStmt);
-	vselect->targetList = NIL;
-	vselect->groupClause = NIL;
+	origNumTargets = list_length(workerstmt->targetList);
+	origNumGroups = list_length(workerstmt->groupClause);
+
+	isSlidingWindow = IsSlidingWindowSelectStmt(workerstmt);
+	doesViewAggregate = DoesViewAggregate(workerstmt, &context);
 
 	/*
-	 * Check to see if we need to project any columns
-	 * that are required to evaluate the sliding window
-	 * match expression.
+	 * Check to see if we need to project any expressions/columns
+	 * so that we can perform the necessary windowing functionality.
 	 */
-	if (isSlidingWindow)
-		stmt = AddProjectionAndAddGroupByForSlidingWindow(stmt, vselect, hasAggOrGroupBy, &context);
+	if (isSlidingWindow || doesViewAggregate)
+		AddProjectionsAndGroupBysForWindows(workerstmt, viewstmt, doesViewAggregate, &context);
 
 	/*
 	 * Rewrite the groupClause and project any group expressions that
 	 * are not already in the targetList.
 	 */
-	newGroupClause = NIL;
-	for (i = 0; i < origGroupClauseLen; i++)
+	workerGroups = NIL;
+	for (i = 0; i < origNumGroups; i++)
 	{
-		Node *node = (Node *) list_nth(stmt->groupClause, i);
+		Node *node = (Node *) list_nth(workerstmt->groupClause, i);
 		ResTarget *res;
 		ColumnRef *cref;
 
-		if (!is_column_ref(node) || !IsColumnRefInTargetList(stmt, node))
+		if (!is_column_ref(node) || !IsColumnRefInTargetList(workerstmt, node))
 		{
 			res = CreateUniqueResTargetForNode(node, &context);
-			stmt->targetList = lappend(stmt->targetList, res);
+			workerstmt->targetList = lappend(workerstmt->targetList, res);
 
 			cref = CreateColumnRefFromResTarget(res);
 			node = (Node *) cref;
 		}
 
-		newGroupClause = lappend(newGroupClause, node);
-		if(hasAggOrGroupBy)
-			vselect->groupClause = lappend(vselect->groupClause, node);
+		workerGroups = lappend(workerGroups, node);
+		if(doesViewAggregate)
+			viewstmt->groupClause = lappend(viewstmt->groupClause, node);
 	}
 
-	for (; i < list_length(stmt->groupClause); i++)
-		newGroupClause = lappend(newGroupClause, list_nth(stmt->groupClause, i));
+	for (; i < list_length(workerstmt->groupClause); i++)
+		workerGroups = lappend(workerGroups, list_nth(workerstmt->groupClause, i));
 
-	stmt->groupClause = newGroupClause;
+	workerstmt->groupClause = workerGroups;
 
 	/*
 	 * Hoist aggregates out of expressions for workers.
 	 */
-	newTargetList = NIL;
-	for (i = 0; i < origTargetListLen; i++)
+	workerTargetList = NIL;
+	for (i = 0; i < origNumTargets; i++)
 	{
-		ResTarget *res = (ResTarget *) list_nth(stmt->targetList, i);
+		ResTarget *res = (ResTarget *) list_nth(workerstmt->targetList, i);
 		FuncCall *agg;
 		ListCell *agglc;
 
@@ -564,8 +521,8 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 
 		if (list_length(context.funcCalls) == 0)
 		{
-			newTargetList = lappend(newTargetList, res);
-			add_res_target_to_view(vselect,
+			workerTargetList = lappend(workerTargetList, res);
+			add_res_target_to_view(viewstmt,
 					CreateResTargetForNode((Node *) CreateColumnRefFromResTarget(res)));
 			continue;
 		}
@@ -577,10 +534,10 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 		{
 			Assert(list_length(context.funcCalls) == 1);
 
-			newTargetList = lappend(newTargetList, copyObject(res));
-			TransformAggNodeForCQView(vselect, res->val, res, hasAggOrGroupBy);
+			workerTargetList = lappend(workerTargetList, copyObject(res));
+			TransformAggNodeForCQView(viewstmt, res->val, res, doesViewAggregate);
 
-			add_res_target_to_view(vselect, res);
+			add_res_target_to_view(viewstmt, res);
 
 			continue;
 		}
@@ -594,23 +551,29 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 		{
 			Node *node = (Node *) lfirst(agglc);
 			ResTarget *aggres = CreateUniqueResTargetForNode(node, &context);
-			newTargetList = lappend(newTargetList, aggres);
+			workerTargetList = lappend(workerTargetList, aggres);
 
-			TransformAggNodeForCQView(vselect, node, aggres, hasAggOrGroupBy);
+			TransformAggNodeForCQView(viewstmt, node, aggres, doesViewAggregate);
 		}
 
-		add_res_target_to_view(vselect, res);
+		add_res_target_to_view(viewstmt, res);
 	}
 
-	for (; i < list_length(stmt->targetList); i++)
-		newTargetList = lappend(newTargetList, list_nth(stmt->targetList, i));
+	for (; i < list_length(workerstmt->targetList); i++)
+		workerTargetList = lappend(workerTargetList, list_nth(workerstmt->targetList, i));
 
-	stmt->targetList = newTargetList;
+	workerstmt->targetList = workerTargetList;
 
-	if (viewselect != NULL)
-		*viewselect = vselect;
+	/*
+	 * Any WINDOWing cruft should be removed from the worker statement
+	 * and only left in the view stmt.
+	 * TODO(usmanm): Implement this.
+	 */
 
-	return stmt;
+	if (viewstmtptr != NULL)
+		*viewstmtptr = viewstmt;
+
+	return workerstmt;
 }
 
 /*
@@ -831,10 +794,10 @@ replace_stream_rangevar_with_streamdesc(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * collect_funcs
+ * CollectFuncs
  */
-static bool
-collect_funcs(Node *node, CQAnalyzeContext *context)
+bool
+CollectFuncs(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -842,26 +805,52 @@ collect_funcs(Node *node, CQAnalyzeContext *context)
 	if (IsA(node, FuncCall))
 		context->funcCalls = lappend(context->funcCalls, node);
 
-	return raw_expression_tree_walker(node, collect_funcs, (void *) context);
+	return raw_expression_tree_walker(node, CollectFuncs, (void *) context);
 }
 
 /*
- * validate_window
+ * validate_windowdef
  */
 static void
 validate_windowdef(WindowDef *wdef, CQAnalyzeContext *context)
 {
-	/* Should ORDER BY arrival_timestamp only */
+	pprint(wdef->orderClause);
+	elog(LOG, "len %d", wdef->orderClause->length);
 	if (wdef->orderClause == NIL)
 	{
+		/* Should ORDER BY ARRIVAL_TIMESTAMP by default */
+		ColumnRef *cref = makeNode(ColumnRef);
+		SortBy *sort = makeNode(SortBy);
 
+		cref->fields = list_make1(makeString(ARRIVAL_TIMESTAMP));
+		cref->location = -1;
+
+		sort->node = (Node *) cref;
+		sort->sortby_dir = SORTBY_DEFAULT;
+		sort->sortby_nulls = SORTBY_NULLS_DEFAULT;
+		sort->useOp = NIL;
+		sort->location = -1;
+
+		wdef->orderClause = list_make1(sort);
+	}
+	else if (list_length(wdef->orderClause) > 1)
+	{
+		/* Can't ORDER BY multiple columns. */
+		elog(ERROR, "single order by only");
 	}
 	else
 	{
-
+		/* ORDER BY must be on a time-like column/expression */
+		SortBy *sort = (SortBy *) linitial(wdef->orderClause);
+		//elog(ERROR, "implement me");
 	}
+
+//	pprint (wdef);
 }
 
+/*
+ * validate_windows
+ */
 static void
 validate_windows(SelectStmt *stmt, CQAnalyzeContext *context)
 {
@@ -874,7 +863,7 @@ validate_windows(SelectStmt *stmt, CQAnalyzeContext *context)
 	}
 
 	context->funcCalls = NIL;
-	collect_funcs((Node *) stmt->targetList, context);
+	CollectFuncs((Node *) stmt->targetList, context);
 
 	foreach(lc, context->funcCalls)
 	{
@@ -992,7 +981,7 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 			continue;
 
 		/*
-		 * If the ColRef refers to a named ResTarget then it doesn't need an explicit type.
+		 * If the ColumnRef refers to a named ResTarget then it doesn't need an explicit type.
 		 *
 		 * This doesn't work in cases where a ResTarget contains the ColumnRef
 		 * being checked against. For example:
@@ -1046,7 +1035,7 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 
 	ValidateSlidingWindowExpr(stmt, &context);
 
-	validate_windows(stmt, &context);
+	//validate_windows(stmt, &context);
 }
 
 /*

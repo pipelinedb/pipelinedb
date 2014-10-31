@@ -153,6 +153,8 @@ View definition:
 --------+-----------------------------+-----------+----------+--------------+-------------
  key    | text(0)                     |           | extended |              | 
  _0     | timestamp(0) with time zone |           | plain    |              | 
+Indexes:
+    "cqcreate5_pdb__0_idx" btree (_0)
 
 CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_queries WHERE name='cqcreate6';
@@ -179,6 +181,8 @@ View definition:
  count  | bigint                   |           | plain    |              | 
  _0     | timestamp with time zone |           | plain    |              | 
  _1     | text(0)                  |           | extended |              | 
+Indexes:
+    "cqcreate6_pdb__0_idx" btree (_0)
 
 -- These use a combine state column
 CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, AVG(y::integer) AS int_avg, AVG(ts0::timestamp - ts1::timestamp) AS internal_avg FROM stream GROUP BY key;
@@ -362,6 +366,8 @@ View definition:
  key    | text(0)                  |           | extended |              | 
  value  | bigint                   |           | plain    |              | 
  _0     | timestamp with time zone |           | plain    |              | 
+Indexes:
+    "cqaggexpr3_pdb__0_idx" btree (_0)
 
 CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM stream GROUP BY key;
 \d+ cqaggexpr4;
