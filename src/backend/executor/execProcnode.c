@@ -266,7 +266,7 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 													estate, eflags);
 			break;
 
-		case T_StreamTable:
+		case T_StreamTableJoin:
 			result = (PlanState *) ExecInitNestLoop((NestLoop *) node,
 													estate, eflags);
 			break;
@@ -521,7 +521,7 @@ ExecProcNode(PlanState *node)
 			result = ExecNestLoop((NestLoopState *) node);
 			break;
 
-		case T_StreamTableState:
+		case T_StreamTableJoinState:
 			result = ExecNestLoop((NestLoopState *) node);
 			break;
 
@@ -780,7 +780,7 @@ ExecEndNode(PlanState *node)
 			ExecEndNestLoop((NestLoopState *) node);
 			break;
 
-		case T_StreamTableState:
+		case T_StreamTableJoinState:
 			ExecEndNestLoop((NestLoopState *) node);
 			break;
 
