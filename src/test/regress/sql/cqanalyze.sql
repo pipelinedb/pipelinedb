@@ -114,3 +114,4 @@ CREATE CONTINUOUS VIEW cqanalyze42 AS SELECT COUNT(*) FROM stream WHERE arrival_
 
 -- Regression
 CREATE CONTINUOUS VIEW cqanalyze43 AS SELECT date_trunc('hour', ts) AS ts FROM stream;
+CREATE CONTINUOUS VIEW cqanalyze44 AS SELECT stream.sid::integer FROM stream;

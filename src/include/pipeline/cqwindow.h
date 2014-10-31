@@ -15,9 +15,9 @@
 
 void ValidateSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context);
 
-ColumnRef *GetColumnRefInSlidingWindowExpr(SelectStmt *stmt);
 bool IsSlidingWindowSelectStmt(SelectStmt *stmt);
 bool IsSlidingWindowContinuousView(RangeVar *cvname);
+ColumnRef *GetColumnRefInSlidingWindowExpr(SelectStmt *stmt);
 
 bool DoesViewAggregate(SelectStmt *stmt, CQAnalyzeContext *context);
 

@@ -103,7 +103,7 @@ GetCQMatRelationName(char *cvname)
 }
 
 /*
- * create_indices_of_mat_relation
+ * create_indices_on_mat_relation
  *
  * If feasible, create an index on the new materialization table to make
  * combine retrievals on it as efficient as possible. Sometimes this may be
@@ -111,14 +111,14 @@ GetCQMatRelationName(char *cvname)
  * such as single-column GROUP BYs, it's straightforward.
  */
 static void
-create_indices_of_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *workerstmt, SelectStmt *viewselect)
+create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *workerstmt, SelectStmt *viewstmt)
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
 	ColumnRef *col;
 
 	if (IsSlidingWindowSelectStmt(workerstmt))
-		col = GetColumnRefInSlidingWindowExpr(viewselect);
+		col = GetColumnRefInSlidingWindowExpr(viewstmt);
 	else if (list_length(workerstmt->groupClause) == 1)
 		col = linitial(workerstmt->groupClause);
 	else
@@ -302,7 +302,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	/*
 	 * Index the materialization table smartly if we can
 	 */
-	create_indices_of_mat_relation(reloid, mat_relation, workerselect, viewselect);
+	create_indices_on_mat_relation(reloid, mat_relation, workerselect, viewselect);
 }
 
 /*

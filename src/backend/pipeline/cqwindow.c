@@ -195,6 +195,16 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, CQAnalyzeContext *co
 }
 
 /*
+ * ValidateSlidingWindowExpr
+ */
+void
+ValidateSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context)
+{
+	Node *swExpr = get_sliding_window_expr(stmt, context);
+	validate_clock_timestamp_expr(stmt, swExpr, context);
+}
+
+/*
  * GetColumnRefInSlidingWindowExpr
  */
 ColumnRef *
@@ -217,15 +227,6 @@ GetColumnRefInSlidingWindowExpr(SelectStmt *stmt)
 	return (ColumnRef *) cref;
 }
 
-/*
- * ValidateSlidingWindowExpr
- */
-void
-ValidateSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context)
-{
-	Node *swExpr = get_sliding_window_expr(stmt, context);
-	validate_clock_timestamp_expr(stmt, swExpr, context);
-}
 
 /*
  * IsSlidingWindowSelectStmt
