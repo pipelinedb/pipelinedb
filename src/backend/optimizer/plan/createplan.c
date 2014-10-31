@@ -60,7 +60,7 @@ static SeqScan *create_seqscan_plan(PlannerInfo *root, Path *best_path,
 					List *tlist, List *scan_clauses);
 static StreamScan *create_streamscan_plan(PlannerInfo *root, Path *best_path,
 					List *tlist, List *scan_clauses, RelOptInfo *rel);
-static StreamTable *create_stream_table_join_plan(PlannerInfo *root, JoinPath *best_path,
+static StreamTableJoin *create_stream_table_join_plan(PlannerInfo *root, JoinPath *best_path,
 					 Plan *outer_plan, Plan *inner_plan);
 static Scan *create_indexscan_plan(PlannerInfo *root, IndexPath *best_path,
 					  List *tlist, List *scan_clauses, bool indexonly);
@@ -131,7 +131,7 @@ static WorkTableScan *make_worktablescan(List *qptlist, List *qpqual,
 				   Index scanrelid, int wtParam);
 static BitmapAnd *make_bitmap_and(List *bitmapplans);
 static BitmapOr *make_bitmap_or(List *bitmapplans);
-static StreamTable *make_streamtable(List *tlist,
+static StreamTableJoin *make_streamtable(List *tlist,
 			  List *joinclauses, List *otherclauses, List *nestParams,
 			  Plan *lefttree, Plan *righttree,
 			  JoinType jointype);
@@ -295,7 +295,7 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_HashJoin:
 		case T_MergeJoin:
 		case T_NestLoop:
-				plan = create_join_plan(root,
+			plan = create_join_plan(root,
 									(JoinPath *) best_path);
 			break;
 		case T_Append:
@@ -686,7 +686,7 @@ create_gating_plan(PlannerInfo *root, Plan *plan, List *quals)
 								plan);
 }
 
-static StreamTable *
+static StreamTableJoin *
 make_streamtable(List *tlist,
 			  List *joinclauses,
 			  List *otherclauses,
@@ -695,7 +695,7 @@ make_streamtable(List *tlist,
 			  Plan *righttree,
 			  JoinType jointype)
 {
-	StreamTable *node = makeNode(StreamTable);
+	StreamTableJoin *node = makeNode(StreamTableJoin);
 	Plan	   *plan = &node->join.plan;
 
 	/* cost should be inserted by caller */
@@ -715,15 +715,15 @@ make_streamtable(List *tlist,
  *    Create a join plan for joins between a stream and a table.
  *
  */
-static StreamTable*
+static StreamTableJoin*
 create_stream_table_join_plan(PlannerInfo *root, 
 							  JoinPath *best_path,
 							  Plan *outer_plan,
 							  Plan *inner_plan)
 {
-	elog(LOG,"strm table join NULL&&&&&&&&&&&&&&&&&&&&&&&&&&&\n");
+	elog(LOG,"strm table join &&&&&&&&&&&&&&&&&&&&&&&&&&&\n");
 
-	/* Essentrially duplicating what the nested join does - First pass */
+	/* XXX TODO Essentially duplicating what the nested join does - First pass */
 	NestLoop   *join_plan;
 	List	   *tlist = build_path_tlist(root, &best_path->path);
 	List	   *joinrestrictclauses = best_path->joinrestrictinfo;
@@ -743,7 +743,7 @@ create_stream_table_join_plan(PlannerInfo *root,
 	if (IS_OUTER_JOIN(best_path->jointype))
 	{
 		extract_actual_join_clauses(joinrestrictclauses,
-									&joinclauses, &otherclauses);
+			&joinclauses, &otherclauses);
 	}
 	else
 	{
@@ -777,15 +777,14 @@ create_stream_table_join_plan(PlannerInfo *root,
 			bms_is_member(nlp->paramval->varno, outerrelids))
 		{
 			root->curOuterParams = list_delete_cell(root->curOuterParams,
-													cell, prev);
+											cell, prev);
 			nestParams = lappend(nestParams, nlp);
 		}
 		else if (IsA(nlp->paramval, PlaceHolderVar) &&
 				 bms_overlap(((PlaceHolderVar *) nlp->paramval)->phrels,
 							 outerrelids) &&
 				 bms_is_subset(find_placeholder_info(root,
-											(PlaceHolderVar *) nlp->paramval,
-													 false)->ph_eval_at,
+							(PlaceHolderVar *) nlp->paramval, false)->ph_eval_at,
 							   outerrelids))
 		{
 			root->curOuterParams = list_delete_cell(root->curOuterParams,
@@ -797,16 +796,14 @@ create_stream_table_join_plan(PlannerInfo *root,
 	}
 
 	join_plan = make_streamtable(tlist,
-							  joinclauses,
-							  otherclauses,
-							  nestParams,
-							  outer_plan,
-							  inner_plan,
-							  best_path->jointype);
+						  joinclauses,
+						  otherclauses,
+						  nestParams,
+						  outer_plan,
+						  inner_plan,
+						  best_path->jointype);
 
 
-
-	/* XXX need to flesh out details */
 
 	return join_plan;
 } 
@@ -847,7 +844,7 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 	if (is_stream_table_join(outer_plan, inner_plan))
 	{ 
 		elog(LOG,"SETTING NODE TYPEoooooooooooooooooo\n");
-		best_path->path.pathtype = T_StreamTable;
+		best_path->path.pathtype = T_StreamTableJoin;
 	}
 		
 
@@ -875,7 +872,7 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 												 outer_plan,
 												 inner_plan);
 			break;
-		case T_StreamTable:
+		case T_StreamTableJoin:
 			plan = (Plan *) create_stream_table_join_plan(root,
 												 (HashPath *) best_path,
 												 outer_plan,
