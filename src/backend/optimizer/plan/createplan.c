@@ -417,6 +417,9 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 		best_path->pathtype = T_StreamScan;
 	}
 
+	Index	varno = rel->relid;
+	RangeTblEntry *rte = planner_rt_fetch(varno, root);
+
 	switch (best_path->pathtype)
 	{
 		case T_SeqScan:
@@ -427,7 +430,17 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 			break;
 
 		case T_StreamScan:
-			plan = (Plan *) create_streamscan_plan(root,
+			// Look at the relation type
+			// If the streamdesc is NULL this may be part 
+			// of a join and the plan is being created for
+			// the non streaming node. So call the create_seqscan_plan
+			if (rte->streamdesc == NULL)
+			{
+				best_path->pathtype = T_SeqScan;
+				plan = (Plan *) create_seqscan_plan(root, best_path, tlist, scan_clauses);
+			}
+			else
+				plan = (Plan *) create_streamscan_plan(root,
 												best_path,
 												tlist,
 												scan_clauses,
@@ -1373,13 +1386,6 @@ create_streamscan_plan(PlannerInfo *root, Path *best_path,
 	StreamScan    *scan_plan;
 	Index	varno = rel->relid;
 	RangeTblEntry *rte = planner_rt_fetch(varno, root);
-
-	// Look at the relation type
-	// If the streamdesc is NULL this may be part 
-	// of a join and the plan is being created for
-	// the non streaming node. So call the create_seqscan_plan
-	if (rte->streamdesc == NULL)
-		return create_seqscan_plan(root, best_path, tlist, scan_clauses);
 
 	/* Sort clauses into best execution order */
 	scan_clauses = order_qual_clauses(root, scan_clauses);
