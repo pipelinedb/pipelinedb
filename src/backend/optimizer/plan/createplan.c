@@ -202,7 +202,7 @@ Plan *
 create_plan(PlannerInfo *root, Path *best_path)
 {
 	Plan	   *plan;
-	pg_usleep(60*1000*1000);
+	//pg_usleep(60*1000*1000);
 	/* plan_params should not be in use in current query level */
 	Assert(root->plan_params == NIL);
 
@@ -769,9 +769,6 @@ create_stream_table_join_plan(PlannerInfo *root,
 	ListCell   *prev;
 	ListCell   *next;
 
-	outer_plan = create_plan_recurse(root, best_path->outerjoinpath);
-	inner_plan = create_plan_recurse(root, best_path->innerjoinpath);
-
 	/* Sort join qual clauses into best execution order */
 	joinrestrictclauses = order_qual_clauses(root, joinrestrictclauses);
 
@@ -861,6 +858,16 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 	Plan	   *plan;
 	Relids		saveOuterRels = root->curOuterRels;
 
+	/* If this is the combiner, there is no joining
+	* all that has happened on the worker already
+	* The only thing that needs to be done is the tuple
+	* store scan
+	*/
+	if (root->parse->is_combine)
+	{
+		return create_tupstorescan_plan(root, best_path);
+	}
+
 	/* Determine if this could be a StreamToTable join, set the path type
 	outer_plan = create_plan_recurse(root, best_path->outerjoinpath);
 
@@ -872,15 +879,16 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 	inner_plan = create_plan_recurse(root, best_path->innerjoinpath);
 
 	/* Check whether this could be a stream table join */
+	/*
 	if (is_stream_table_join(root, best_path))
-	{ 
+	{ */
 		/* I'd rather do this than mess with setting the 
 		 *  path.pathtype to something like T_StreamTable
 		 * at this stage as I dont know about the side effects yet.
 		 * First pass TODO XXX
 		 */
-		create_stream_table_join_plan(root, best_path, outer_plan, inner_plan);
-	}
+		/*plan = (Plan*) create_stream_table_join_plan(root, best_path, outer_plan, inner_plan);
+	}*/
 		
 
 	switch (best_path->path.pathtype)
@@ -1402,6 +1410,13 @@ create_streamscan_plan(PlannerInfo *root, Path *best_path,
 	StreamScan    *scan_plan;
 	Index	varno = rel->relid;
 	RangeTblEntry *rte = planner_rt_fetch(varno, root);
+
+	// Look at the relation type
+	// If the streamdesc is NULL this may be part 
+	// of a join and the plan is being created for
+	// the non streaming node. So call the create_seqscan_plan
+	if (rte->streamdesc == NULL)
+		return create_seqscan_plan(root, best_path, tlist, scan_clauses);
 
 	/* Sort clauses into best execution order */
 	scan_clauses = order_qual_clauses(root, scan_clauses);
