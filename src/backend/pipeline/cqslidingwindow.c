@@ -213,6 +213,30 @@ ValidateSlidingWindowExpr(SelectStmt *stmt, ParseState *pstate)
 }
 
 /*
+ * GetColumnRefInSlidingWindowExpr
+ */
+ColumnRef *
+GetColumnRefInSlidingWindowExpr(SelectStmt *stmt)
+{
+	CQAnalyzeContext context;
+	Node *swExpr = get_sliding_window_expr(stmt, &context);
+	Node *cref;
+
+	context.cols = NIL;
+	FindColumnRefsWithTypeCasts(swExpr, &context);
+	cref = (Node *) linitial(context.cols);
+
+	if (IsA(cref, TypeCast))
+	{
+		TypeCast *tc = (TypeCast *) cref;
+		cref = tc->arg;
+	}
+
+	return (ColumnRef *) cref;
+}
+
+
+/*
  * IsSlidingWindowSelectStmt
  *
  * Does the SelectStmt define a sliding window CQ? Returns true
