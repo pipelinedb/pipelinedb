@@ -580,6 +580,7 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 		case T_TuplestoreScan:
 			break;
 		case T_NestLoop:
+		case T_StreamTable:
 		case T_MergeJoin:
 		case T_HashJoin:
 			set_join_references(root, (Join *) plan, rtoffset);
