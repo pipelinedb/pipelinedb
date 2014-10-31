@@ -136,8 +136,8 @@ GetUniqueInternalColname(CQAnalyzeContext *context)
 /*
  * is_column_ref
  */
-static bool
-is_column_ref(Node *node)
+bool
+IsAColumnRef(Node *node)
 {
 	TypeCast *tc = (TypeCast *) node;
 
@@ -433,6 +433,23 @@ add_res_target_to_view(SelectStmt *viewselect, ResTarget *res)
 }
 
 /*
+ * HoistExpr
+ */
+ColumnRef *
+HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context)
+{
+	ResTarget *res;
+
+	if (IsAColumnRef(node) && IsColumnRefInTargetList(stmt, node))
+		return NULL;
+
+	res = CreateUniqueResTargetForNode(node, context);
+	stmt->targetList = lappend(stmt->targetList, res);
+
+	return CreateColumnRefFromResTarget(res);
+}
+
+/*
  * GetSelectStmtForCQWorker
  *
  * Get the SelectStmt that should be executed by the
@@ -485,16 +502,10 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	{
 		Node *node = (Node *) list_nth(workerstmt->groupClause, i);
 		ResTarget *res;
-		ColumnRef *cref;
+		ColumnRef *cref = HoistNode(workerstmt, node, &context);
 
-		if (!is_column_ref(node) || !IsColumnRefInTargetList(workerstmt, node))
-		{
-			res = CreateUniqueResTargetForNode(node, &context);
-			workerstmt->targetList = lappend(workerstmt->targetList, res);
-
-			cref = CreateColumnRefFromResTarget(res);
+		if (cref != NULL)
 			node = (Node *) cref;
-		}
 
 		workerGroups = lappend(workerGroups, node);
 		if(doesViewAggregate)
@@ -814,8 +825,6 @@ CollectFuncs(Node *node, CQAnalyzeContext *context)
 static void
 validate_windowdef(WindowDef *wdef, CQAnalyzeContext *context)
 {
-	pprint(wdef->orderClause);
-	elog(LOG, "len %d", wdef->orderClause->length);
 	if (wdef->orderClause == NIL)
 	{
 		/* Should ORDER BY ARRIVAL_TIMESTAMP by default */
@@ -842,10 +851,10 @@ validate_windowdef(WindowDef *wdef, CQAnalyzeContext *context)
 	{
 		/* ORDER BY must be on a time-like column/expression */
 		SortBy *sort = (SortBy *) linitial(wdef->orderClause);
-		//elog(ERROR, "implement me");
+		/* TODO(usmanm): Check that output type of this column is time-like */
 	}
 
-//	pprint (wdef);
+	pprint (wdef);
 }
 
 /*
@@ -1035,7 +1044,7 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 
 	ValidateSlidingWindowExpr(stmt, &context);
 
-	//validate_windows(stmt, &context);
+	validate_windows(stmt, &context);
 }
 
 /*

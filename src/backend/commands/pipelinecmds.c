@@ -186,7 +186,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 */
 	if (IsAContinuousView(view))
 		elog(ERROR, "continuous view \"%s\" already exists", view->relname);
-	pprint(stmt->query);
+
 	/*
 	 * Analyze the SelectStmt portion of the CreateContinuousViewStmt to make
 	 * sure it's well-formed.

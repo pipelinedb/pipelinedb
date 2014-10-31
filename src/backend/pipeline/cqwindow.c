@@ -344,7 +344,7 @@ get_time_bucket_size(Node *node, CQAnalyzeContext *context)
 /*
  * get_window_defs
  */
-List *
+static List *
 get_window_defs(SelectStmt *stmt, CQAnalyzeContext *context)
 {
 	List *windows = NIL;
@@ -384,12 +384,49 @@ get_window_defs(SelectStmt *stmt, CQAnalyzeContext *context)
 void
 AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewselect, bool doesViewAggregate, CQAnalyzeContext *context)
 {
-	Node *swExpr = copyObject(get_sliding_window_expr(workerstmt, context));
+	Node *swExpr = get_sliding_window_expr(workerstmt, context);
 	Node *cmpCRef;
 
+	/*
+	 * WINDOW Handling
+	 */
 	if (swExpr == NULL)
-		return;
+	{
+		List *windowDefs;
+		WindowDef *wdef;
+		ListCell *lc;
 
+		Assert(doesViewAggregate);
+		windowDefs = get_window_defs(workerstmt, context);
+
+		if (list_length(windowDefs) > 1)
+			elog(ERROR, "more than one window def");
+
+		wdef = (WindowDef *) linitial(windowDefs);
+
+		/*
+		 * Create a GROUP BY for all expressions being
+		 * PARTITION BY'd on.
+		 */
+		foreach(lc, wdef->partitionClause)
+		{
+			Node *node = lfirst(lc);
+			ColumnRef * cref = HoistNode(workerstmt, node, context);
+			if (cref == NULL)
+				continue;
+			workerstmt->groupClause = lappend(workerstmt->groupClause, cref);
+		}
+
+		/*
+		 * Create a GROUP BY on the ORDER BY expr.
+		 */
+
+	}
+
+	/*
+	 * Sliding Window Handling
+	 */
+	swExpr = copyObject(swExpr);
 	context->cols = NIL;
 	FindColumnRefsWithTypeCasts(swExpr, context);
 	cmpCRef = (Node *) linitial(context->cols);
