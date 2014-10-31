@@ -179,9 +179,8 @@ static EquivalenceMember *find_ec_member_for_tle(EquivalenceClass *ec,
 static Material *make_material(Plan *lefttree);
 
 static bool is_scan_type(NodeTag tag);
-static bool is_stream_scan_type(PlannerInfo* root, Path* path);
-static bool is_stream_table_join_pair(PlannerInfo* root, JoinPath *outer, JoinPath *inner);
-static bool is_stream_table_join(PlannerInfo* root, JoinPath *best_path);
+static bool is_stream_scan_type(NodeTag tag);
+static bool is_stream_table_join(Plan *outer, Plan *inner);
 
 /*
  * create_plan
@@ -252,53 +251,20 @@ is_scan_type(NodeTag tag)
 }
 
 static bool
-is_stream_scan_type(PlannerInfo* root, Path* path)
+is_stream_scan_type(NodeTag tag)
 {
-	RelOptInfo *rel = path->parent;
-	Index	varno = rel->relid;
- 	RangeTblEntry *rte = planner_rt_fetch(varno, root);
-
- 	if (!is_scan_type(path->pathtype))
- 		return false;
- 
-	// Look at the relation type
-	// If the streamdesc is NULL this may be part 
-	// of a join and the plan is being created for
-	// the non streaming node.
-	if (rte->streamdesc == NULL)
-		return true;
-	return false;
+	return tag == T_StreamScan;
 }
 
 static bool
-is_stream_table_join_pair(PlannerInfo* root, JoinPath *outer, JoinPath *inner)
+is_stream_table_join(Plan *outer, Plan *inner)
 {
-	if ((is_scan_type(inner->path.pathtype) && is_stream_scan_type(root, (Path*)outer)) ||
-		(is_scan_type(outer->path.pathtype) && is_stream_scan_type(root, (Path*)inner)))
+	if ((is_scan_type(inner->type) && is_stream_scan_type(outer->type)) ||
+		(is_scan_type(outer->type) && is_stream_scan_type(inner->type)))
 		return true;
 	return false;
 }
 
-static bool
-is_stream_table_join(PlannerInfo* root, JoinPath *best_path)
-{
-	/*
-	 * If outer join path is the leaf and is a scan node, AND
-	 * the scan node is a stream scan node type AND
-	 * the inner join path is a leaf node, AND is a scan node AND
-	 * the scan node IS NOT a stream scan node, but a SeqScan (More later) node
-	 * then return TRUE
-	 * OR
-	 * the reverse combination of outer and inner paths
-	 */
-
-	if (is_stream_table_join_pair(root, best_path->outerjoinpath, best_path->innerjoinpath))
-	{
-		return true;
-	}
-
-	return false;
-}
 /*
  * create_plan_recurse
  *	  Recursive guts of create_plan().
@@ -842,7 +808,7 @@ create_stream_table_join_plan(PlannerInfo *root,
 
 	/* XXX need to flesh out details */
 
-	return NULL;
+	return join_plan;
 } 
 
 /*
@@ -868,7 +834,6 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 		return create_tupstorescan_plan(root, best_path);
 	}
 
-	/* Determine if this could be a StreamToTable join, set the path type
 	outer_plan = create_plan_recurse(root, best_path->outerjoinpath);
 
 	/* For a nestloop, include outer relids in curOuterRels for inner side */
@@ -879,16 +844,11 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 	inner_plan = create_plan_recurse(root, best_path->innerjoinpath);
 
 	/* Check whether this could be a stream table join */
-	/*
-	if (is_stream_table_join(root, best_path))
-	{ */
-		/* I'd rather do this than mess with setting the 
-		 *  path.pathtype to something like T_StreamTable
-		 * at this stage as I dont know about the side effects yet.
-		 * First pass TODO XXX
-		 */
-		/*plan = (Plan*) create_stream_table_join_plan(root, best_path, outer_plan, inner_plan);
-	}*/
+	if (is_stream_table_join(outer_plan, inner_plan))
+	{ 
+		elog(LOG,"SETTING NODE TYPEoooooooooooooooooo\n");
+		best_path->path.pathtype = T_StreamTable;
+	}
 		
 
 	switch (best_path->path.pathtype)
@@ -912,6 +872,12 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 
 			plan = (Plan *) create_nestloop_plan(root,
 												 (NestPath *) best_path,
+												 outer_plan,
+												 inner_plan);
+			break;
+		case T_StreamTable:
+			plan = (Plan *) create_stream_table_join_plan(root,
+												 (HashPath *) best_path,
 												 outer_plan,
 												 inner_plan);
 			break;
