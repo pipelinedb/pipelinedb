@@ -76,6 +76,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	/* prepare the plan for execution */
 	StartTransactionCommand();
 
+	// Set the right snapshot
+	queryDesc->snapshot = GetTransactionSnapshot();	
+
 	oldcontext = MemoryContextSwitchTo(runcontext);
 	ExecutorStart(queryDesc, 0);
 	MemoryContextSwitchTo(oldcontext);
