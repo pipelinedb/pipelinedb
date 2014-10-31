@@ -574,6 +574,12 @@ typedef struct NestLoopParam
 	Var		   *paramval;		/* outer-relation Var to assign to Param */
 } NestLoopParam;
 
+typedef struct StreamTable
+{
+	Join		join;
+	/* I dont know what else we would need here at the moment */
+} StreamTable;
+
 /* ----------------
  *		merge join node
  *
