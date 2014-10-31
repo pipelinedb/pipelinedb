@@ -114,6 +114,7 @@ typedef enum NodeTag
 	T_ForeignScanState,
 	T_TuplestoreScanState,
 	T_JoinState,
+	T_StreamTableState,
 	T_NestLoopState,
 	T_MergeJoinState,
 	T_HashJoinState,
