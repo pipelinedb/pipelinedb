@@ -429,27 +429,20 @@ add_res_target_to_view(SelectStmt *viewstmt, ResTarget *res)
 }
 
 /*
- * HoistExpr
+ * HoistNode
  */
-ColumnRef *
+Node *
 HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context)
 {
 	ResTarget *res;
 
 	if (IsAColumnRef(node) && IsColumnRefInTargetList(stmt, node))
-	{
-		TypeCast *tc = (TypeCast *) node;
-
-		if (IsA(node, TypeCast))
-			node = tc->arg;
-
-		return (ColumnRef *) node;
-	}
+		return node;
 
 	res = CreateUniqueResTargetForNode(node, context);
 	stmt->targetList = lappend(stmt->targetList, res);
 
-	return CreateColumnRefFromResTarget(res);
+	return (Node *) CreateColumnRefFromResTarget(res);
 }
 
 /*
@@ -505,7 +498,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	for (i = 0; i < origNumGroups; i++)
 	{
 		Node *node = (Node *) list_nth(workerstmt->groupClause, i);
-		node = (Node *) HoistNode(workerstmt, node, &context);
+		node = HoistNode(workerstmt, node, &context);
 
 		workerGroups = lappend(workerGroups, node);
 		if(doesViewAggregate)

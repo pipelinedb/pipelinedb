@@ -555,8 +555,8 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt
 		foreach(lc, wdef->partitionClause)
 		{
 			Node *node = lfirst(lc);
-			ColumnRef * cref = HoistNode(workerstmt, node, context);
-			workerstmt->groupClause = lappend(workerstmt->groupClause, cref);
+			node = HoistNode(workerstmt, node, context);
+			workerstmt->groupClause = lappend(workerstmt->groupClause, node);
 		}
 
 		/*

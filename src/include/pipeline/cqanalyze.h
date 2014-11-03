@@ -47,7 +47,7 @@ bool FindColumnRefsWithTypeCasts(Node *node, CQAnalyzeContext *context);
 ResTarget *IsColumnRefInTargetList(SelectStmt *stmt, Node *node);
 bool IsAColumnRef(Node *node);
 bool AreColumnRefsEqual(Node *cr1, Node *cr2);
-ColumnRef *HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context);
+Node *HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context);
 bool CollectFuncs(Node *node, CQAnalyzeContext *context);
 bool CollectAggFuncs(Node *node, CQAnalyzeContext *context);
 ResTarget *CreateResTargetForNode(Node *node);
