@@ -60,8 +60,6 @@ CreateStreamTargets(void)
 	HeapScanDesc scandesc;
 	HeapTuple tup;
 	MemoryContext oldcontext;
-	elog(LOG,"WAITING ON GDB\n");
-	//pg_usleep(60 * 1000 * 1000);
 	if (targets != NULL)
 		hash_destroy(targets);
 
