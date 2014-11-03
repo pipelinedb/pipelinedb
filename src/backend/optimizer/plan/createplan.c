@@ -201,7 +201,7 @@ Plan *
 create_plan(PlannerInfo *root, Path *best_path)
 {
 	Plan	   *plan;
-	//pg_usleep(60*1000*1000);
+
 	/* plan_params should not be in use in current query level */
 	Assert(root->plan_params == NIL);
 
@@ -735,8 +735,6 @@ create_stream_table_join_plan(PlannerInfo *root,
 							  Plan *outer_plan,
 							  Plan *inner_plan)
 {
-	elog(LOG,"strm table join &&&&&&&&&&&&&&&&&&&&&&&&&&&\n");
-
 	/* XXX TODO Essentially duplicating what the nested join does - First pass */
 	NestLoop   *join_plan;
 	List	   *tlist = build_path_tlist(root, &best_path->path);
@@ -857,7 +855,6 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 	/* Check whether this could be a stream table join */
 	if (is_stream_table_join(outer_plan, inner_plan))
 	{ 
-		elog(LOG,"SETTING NODE TYPEoooooooooooooooooo\n");
 		best_path->path.pathtype = T_StreamTableJoin;
 	}
 		
