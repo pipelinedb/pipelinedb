@@ -27,7 +27,7 @@ typedef struct CQAnalyzeContext
 	List *funcCalls;
 	List *windowDefs;
 	Node *swExpr;
-	Node *stepColumn;
+	Node *stepNode;
 	int location;
 	char *stepSize;
 } CQAnalyzeContext;
@@ -44,7 +44,7 @@ Oid GetCombineStateColumnType(TargetEntry *te);
 void InitializeCQAnalyzeContext(SelectStmt *stmt, ParseState *pstate, CQAnalyzeContext *context);
 char *GetUniqueInternalColname(CQAnalyzeContext *context);
 bool FindColumnRefsWithTypeCasts(Node *node, CQAnalyzeContext *context);
-bool IsColumnRefInTargetList(SelectStmt *stmt, Node *node);
+ResTarget *IsColumnRefInTargetList(SelectStmt *stmt, Node *node);
 bool IsAColumnRef(Node *node);
 bool AreColumnRefsEqual(Node *cr1, Node *cr2);
 ColumnRef *HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context);

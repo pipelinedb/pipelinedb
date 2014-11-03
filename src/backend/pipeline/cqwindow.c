@@ -205,6 +205,83 @@ ValidateSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context)
 }
 
 /*
+ * validate_windowdef
+ */
+static void
+validate_windowdef(WindowDef *wdef, CQAnalyzeContext *context)
+{
+	if (list_length(wdef->orderClause) > 1)
+	{
+		/* Can't ORDER BY multiple columns. */
+		elog(ERROR, "single order by only");
+	}
+	else
+	{
+		/* ORDER BY must be on a time-like column/expression */
+		//SortBy *sort = (SortBy *) linitial(wdef->orderClause);
+		/* TODO(usmanm): Check that output type of this column is time-like */
+	}
+}
+
+/*
+ * get_window_defs
+ */
+static List *
+get_window_defs(SelectStmt *stmt, CQAnalyzeContext *context)
+{
+	List *windows = NIL;
+	ListCell *lc;
+
+	/*
+	 * Copy over all WINDOW clauses.
+	 */
+	foreach(lc, stmt->windowClause)
+	{
+		windows = lappend(windows, lfirst(lc));
+	}
+
+	context->funcCalls = NIL;
+	CollectFuncs((Node *) stmt->targetList, context);
+
+	/*
+	 * Copy over all inline OVER clauses.
+	 */
+	foreach(lc, context->funcCalls)
+	{
+		FuncCall *fcall = (FuncCall *) lfirst(lc);
+		/*
+		 * Ignore over entries if they reference to *named*
+		 * windows. Those windows should already be copied
+		 * above.
+		 */
+		if (fcall->over == NULL || fcall->over->name != NULL)
+			continue;
+		windows = lappend(windows, fcall->over);
+	}
+
+	return windows;
+}
+
+/*
+ * validate_windows
+ */
+void
+ValidateWindows(SelectStmt *stmt, CQAnalyzeContext *context)
+{
+	List* windows = get_window_defs(stmt, context);
+	ListCell *lc;
+
+	if (list_length(windows) > 1)
+		elog(ERROR, "Only a single WINDOW is allowed");
+
+	foreach(lc, windows)
+	{
+		WindowDef *wdef = (WindowDef *) lfirst(lc);
+		validate_windowdef(wdef, context);
+	}
+}
+
+/*
  * GetColumnRefInSlidingWindowExpr
  */
 ColumnRef *
@@ -313,7 +390,7 @@ get_time_bucket_size(Node *node, CQAnalyzeContext *context)
 	{
 		/* Default to 'second'. */
 		context->stepSize = DEFAULT_WINDOW_GRANULARITY;
-		context->stepColumn = node;
+		context->stepNode = node;
 		return true;
 	}
 
@@ -334,7 +411,7 @@ get_time_bucket_size(Node *node, CQAnalyzeContext *context)
 			return false;
 
 		context->stepSize = strVal(&((A_Const *) truncArg)->val);
-		context->stepColumn = node;
+		context->stepNode = node;
 
 		return false;
 	}
@@ -343,94 +420,16 @@ get_time_bucket_size(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * get_window_defs
+ *
  */
-static List *
-get_window_defs(SelectStmt *stmt, CQAnalyzeContext *context)
+static void
+create_group_by_for_time_bucket_field(SelectStmt *workerstmt, Node *timeNode, bool doesViewAggregate, CQAnalyzeContext *context)
 {
-	List *windows = NIL;
-	ListCell *lc;
+	Node *timeColumnRef;
 
-	/*
-	 * Copy over all WINDOW clauses.
-	 */
-	foreach(lc, stmt->windowClause)
-		windows = lappend(windows, lfirst(lc));
-
-	context->funcCalls = NIL;
-	CollectFuncs((Node *) stmt->targetList, context);
-
-	/*
-	 * Copy over all inline OVER clauses.
-	 */
-	foreach(lc, context->funcCalls)
-	{
-		FuncCall *fcall = (FuncCall *) lfirst(lc);
-		/*
-		 * Ignore over entries if they reference to *named*
-		 * windows. Those windows should already be copied
-		 * above.
-		 */
-		if (fcall->over == NULL || fcall->over->name != NULL)
-			continue;
-		windows = lappend(windows, fcall->over);
-	}
-
-	return windows;
-}
-
-/*
- * AddProjectionsAndGroupBysForWindows
- */
-void
-AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewselect, bool doesViewAggregate, CQAnalyzeContext *context)
-{
-	Node *swExpr = get_sliding_window_expr(workerstmt, context);
-	Node *cmpCRef;
-
-	/*
-	 * WINDOW Handling
-	 */
-	if (swExpr == NULL)
-	{
-		List *windowDefs;
-		WindowDef *wdef;
-		ListCell *lc;
-
-		Assert(doesViewAggregate);
-		windowDefs = get_window_defs(workerstmt, context);
-
-		if (list_length(windowDefs) > 1)
-			elog(ERROR, "more than one window def");
-
-		wdef = (WindowDef *) linitial(windowDefs);
-
-		/*
-		 * Create a GROUP BY for all expressions being
-		 * PARTITION BY'd on.
-		 */
-		foreach(lc, wdef->partitionClause)
-		{
-			Node *node = lfirst(lc);
-			ColumnRef * cref = HoistNode(workerstmt, node, context);
-			if (cref == NULL)
-				continue;
-			workerstmt->groupClause = lappend(workerstmt->groupClause, cref);
-		}
-
-		/*
-		 * Create a GROUP BY on the ORDER BY expr.
-		 */
-
-	}
-
-	/*
-	 * Sliding Window Handling
-	 */
-	swExpr = copyObject(swExpr);
 	context->cols = NIL;
-	FindColumnRefsWithTypeCasts(swExpr, context);
-	cmpCRef = (Node *) linitial(context->cols);
+	FindColumnRefsWithTypeCasts(timeNode, context);
+	timeColumnRef = (Node *) linitial(context->cols);
 
 	if (doesViewAggregate)
 	{
@@ -443,14 +442,14 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewsele
 		 * GROUP BY user;
 		 * =>
 		 * SELECT user::int, COUNT(*), date_trunc('hour', arrival_timestamp) AS _0 FROM click_stream
-		 * WHERE _0 > clock_timestamp() - interval '15 minute'
+		 * WHERE arrival_timestamp > clock_timestamp() - interval '15 minute'
 		 * GROUP BY user, _0;
 		 *
 		 * SELECT COUNT(*) FROM sream
 		 * WHERE arrival_timestamp > clock_timestamp() - interval '15 minute';
 		 * =>
 		 * SELECT COUNT(*), date_trunc('second', arrival_timestamp) AS _0 FROM stream
-		 * WHERE _0 > clock_timestamp() - interval '15 minute';
+		 * WHERE arrival_timestamp > clock_timestamp() - interval '15 minute';
 		 *
 		 * The SELECT has a GROUP BY or some aggregate
 		 * function. We reduce the materialization table
@@ -464,11 +463,12 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewsele
 		ResTarget *res = makeNode(ResTarget);
 		FuncCall *func = makeNode(FuncCall);
 		A_Const *aconst = makeNode(A_Const);
+		ResTarget *timeRes = IsColumnRefInTargetList(workerstmt, timeColumnRef);
 		char *name = GetUniqueInternalColname(context);
 
 		/* Get step size. */
 		context->stepSize = NULL;
-		get_time_bucket_size(swExpr, context);
+		get_time_bucket_size(timeNode, context);
 
 		/*
 		 * Add ResTarget for time bucket field.
@@ -476,13 +476,14 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewsele
 		aconst->val = *makeString(context->stepSize);
 		aconst->location = -1;
 		func->funcname = list_make1(makeString(DATE_TRUNC));
-		func->args = list_concat(list_make1(aconst), copyObject(context->cols));
+		func->args = list_make2(aconst, copyObject(timeColumnRef));
 		func->location = -1;
 		res->name = name;
 		res->indirection = NIL;
 		res->val = (Node *) func;
 		res->location = -1;
-		workerstmt->targetList = lappend(workerstmt->targetList, res);
+		if (timeRes == NULL)
+			workerstmt->targetList = lappend(workerstmt->targetList, res);
 
 		/*
 		 * Add GROUP BY for step field. This is the group
@@ -497,9 +498,9 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewsele
 		 * with a ColumnRef to the ResTarget we created above.
 		 * This is needed so that the VIEW can filter out disqualified tuples.
 		 */
-		memcpy(context->stepColumn, CreateColumnRefFromResTarget(res), sizeof(ColumnRef));
+		memcpy(context->stepNode, CreateColumnRefFromResTarget(res), sizeof(ColumnRef));
 	}
-	else if (!IsColumnRefInTargetList(workerstmt, cmpCRef))
+	else if (!IsColumnRefInTargetList(workerstmt, timeColumnRef))
 	{
 		/*
 		 * The CQ is requesting raw events in the sliding window.
@@ -511,18 +512,97 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewsele
 
 		res->name = name;
 		res->indirection = NIL;
-		res->val = copyObject(cmpCRef);
+		res->val = copyObject(timeColumnRef);
 		res->location = -1;
 
 		workerstmt->targetList = lappend(workerstmt->targetList, res);
 
-		memcpy(cmpCRef, CreateColumnRefFromResTarget(res), sizeof(ColumnRef));
+		/*
+		 * Replace the timeColumnRef with the new projected field's ColumnRef.
+		 */
+		memcpy(timeColumnRef, CreateColumnRefFromResTarget(res), sizeof(ColumnRef));
 	}
+}
 
-	/*
-	 * Copy over the modified swExpr to the VIEW's SelectStmt.
-	 */
-	viewselect->whereClause = swExpr;
+/*
+ * AddProjectionsAndGroupBysForWindows
+ */
+void
+AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt, bool doesViewAggregate, CQAnalyzeContext *context)
+{
+	Node *swExpr = get_sliding_window_expr(workerstmt, context);
+
+	if (swExpr == NULL)
+	{
+		/*
+		 * WINDOW Handling
+		 */
+		List *windowDefs;
+		WindowDef *wdef;
+		ListCell *lc;
+
+		Assert(doesViewAggregate);
+
+		windowDefs = get_window_defs(workerstmt, context);
+		Assert(list_length(windowDefs) > 1);
+
+		wdef = (WindowDef *) linitial(windowDefs);
+
+		/*
+		 * Create a GROUP BY for all expressions being
+		 * PARTITION BY'd on.
+		 */
+		foreach(lc, wdef->partitionClause)
+		{
+			Node *node = lfirst(lc);
+			ColumnRef * cref = HoistNode(workerstmt, node, context);
+			workerstmt->groupClause = lappend(workerstmt->groupClause, cref);
+		}
+
+		/*
+		 * By default add an ORDER BY arrival_timestamp to the WINDOW.
+		 */
+		if (list_length(wdef->orderClause) == 0)
+		{
+			ColumnRef *cref = makeNode(ColumnRef);
+			SortBy *sort = makeNode(SortBy);
+
+			cref->fields = list_make1(makeString(ARRIVAL_TIMESTAMP));
+			cref->location = -1;
+
+			sort->node = (Node *) cref;
+			sort->sortby_dir = SORTBY_DEFAULT;
+			sort->sortby_nulls = SORTBY_NULLS_DEFAULT;
+			sort->useOp = NIL;
+			sort->location = -1;
+
+			wdef->orderClause = list_make1(sort);
+		}
+
+		Assert(list_length(wdef->orderClause) == 1);
+
+		/*
+		 * Create a GROUP BY on the ORDER BY expr.
+		 */
+		foreach (lc, wdef->orderClause)
+		{
+			SortBy *sort = (SortBy *) lfirst(lc);
+			create_group_by_for_time_bucket_field(workerstmt, sort->node, doesViewAggregate, context);
+		}
+	}
+	else
+	{
+		/*
+		 * Sliding Window Handling
+		 */
+		swExpr = copyObject(swExpr);
+		create_group_by_for_time_bucket_field(workerstmt, swExpr, doesViewAggregate, context);
+
+		/*
+		 * Copy over the modified swExpr to the VIEW's SelectStmt.
+		 */
+		viewstmt->whereClause = swExpr;
+	}
 }
 
 /*

@@ -256,12 +256,11 @@ IsResTargetForColumnRef(Node *node, ColumnRef *cref)
 /*
  * IsColumnRefInTargetList
  */
-bool
+ResTarget *
 IsColumnRefInTargetList(SelectStmt *stmt, Node *node)
 {
 	ColumnRef *cref;
 	ListCell *lc;
-	bool found = false;
 
 	if (IsA(node, TypeCast))
 		node = ((TypeCast *) node)->arg;
@@ -275,13 +274,10 @@ IsColumnRefInTargetList(SelectStmt *stmt, Node *node)
 		node = lfirst(lc);
 
 		if (IsResTargetForColumnRef(node, cref))
-		{
-			found = true;
-			break;
-		}
+			return (ResTarget *) node;
 	}
 
-	return found;
+	return NULL;
 }
 
 /*
@@ -415,7 +411,7 @@ HasAggOrGroupBy(SelectStmt *stmt)
  * add_res_target_to_view
  */
 static void
-add_res_target_to_view(SelectStmt *viewselect, ResTarget *res)
+add_res_target_to_view(SelectStmt *viewstmt, ResTarget *res)
 {
 	char *colName = res->name;
 	ResTarget *newRes;
@@ -429,7 +425,7 @@ add_res_target_to_view(SelectStmt *viewselect, ResTarget *res)
 	newRes->location = res->location;
 	newRes->indirection = NIL;
 
-	viewselect->targetList = lappend(viewselect->targetList, newRes);
+	viewstmt->targetList = lappend(viewstmt->targetList, newRes);
 }
 
 /*
@@ -441,7 +437,14 @@ HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context)
 	ResTarget *res;
 
 	if (IsAColumnRef(node) && IsColumnRefInTargetList(stmt, node))
-		return NULL;
+	{
+		TypeCast *tc = (TypeCast *) node;
+
+		if (IsA(node, TypeCast))
+			node = tc->arg;
+
+		return (ColumnRef *) node;
+	}
 
 	res = CreateUniqueResTargetForNode(node, context);
 	stmt->targetList = lappend(stmt->targetList, res);
@@ -472,6 +475,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	int origNumTargets;
 	int origNumGroups;
 	int i;
+	ListCell *lc;
 
 	workerstmt = (SelectStmt *) copyObject(stmt);
 	viewstmt = (SelectStmt *) makeNode(SelectStmt);
@@ -501,11 +505,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	for (i = 0; i < origNumGroups; i++)
 	{
 		Node *node = (Node *) list_nth(workerstmt->groupClause, i);
-		ResTarget *res;
-		ColumnRef *cref = HoistNode(workerstmt, node, &context);
-
-		if (cref != NULL)
-			node = (Node *) cref;
+		node = (Node *) HoistNode(workerstmt, node, &context);
 
 		workerGroups = lappend(workerGroups, node);
 		if(doesViewAggregate)
@@ -573,13 +573,27 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	for (; i < list_length(workerstmt->targetList); i++)
 		workerTargetList = lappend(workerTargetList, list_nth(workerstmt->targetList, i));
 
-	workerstmt->targetList = workerTargetList;
-
 	/*
 	 * Any WINDOWing cruft should be removed from the worker statement
 	 * and only left in the view stmt.
-	 * TODO(usmanm): Implement this.
 	 */
+	workerstmt->targetList = NIL;
+	foreach(lc, workerTargetList)
+	{
+		ResTarget *res = (ResTarget *) copyObject(lfirst(lc));
+
+		if (IsA(res->val, FuncCall))
+		{
+			FuncCall *fcall = (FuncCall *) res->val;
+			fcall->over = NULL;
+		}
+
+		workerstmt->targetList = lappend(workerstmt->targetList, res);
+	}
+
+	viewstmt->windowClause = workerstmt->windowClause;
+	workerstmt->windowClause = NIL;
+
 
 	if (viewstmtptr != NULL)
 		*viewstmtptr = viewstmt;
@@ -718,7 +732,7 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 					 errmsg("column reference is ambiguous"),
 					 parser_errposition(context->pstate, ref->location)));
 
-		colname = FigureColname(ref);
+		colname = FigureColname((Node *) ref);
 
 		if (strcmp(colname, ARRIVAL_TIMESTAMP) == 0)
 				sawArrivalTime = true;
@@ -807,69 +821,6 @@ CollectFuncs(Node *node, CQAnalyzeContext *context)
 		context->funcCalls = lappend(context->funcCalls, node);
 
 	return raw_expression_tree_walker(node, CollectFuncs, (void *) context);
-}
-
-/*
- * validate_windowdef
- */
-static void
-validate_windowdef(WindowDef *wdef, CQAnalyzeContext *context)
-{
-	if (wdef->orderClause == NIL)
-	{
-		/* Should ORDER BY ARRIVAL_TIMESTAMP by default */
-		ColumnRef *cref = makeNode(ColumnRef);
-		SortBy *sort = makeNode(SortBy);
-
-		cref->fields = list_make1(makeString(ARRIVAL_TIMESTAMP));
-		cref->location = -1;
-
-		sort->node = (Node *) cref;
-		sort->sortby_dir = SORTBY_DEFAULT;
-		sort->sortby_nulls = SORTBY_NULLS_DEFAULT;
-		sort->useOp = NIL;
-		sort->location = -1;
-
-		wdef->orderClause = list_make1(sort);
-	}
-	else if (list_length(wdef->orderClause) > 1)
-	{
-		/* Can't ORDER BY multiple columns. */
-		elog(ERROR, "single order by only");
-	}
-	else
-	{
-		/* ORDER BY must be on a time-like column/expression */
-		SortBy *sort = (SortBy *) linitial(wdef->orderClause);
-		/* TODO(usmanm): Check that output type of this column is time-like */
-	}
-
-	pprint (wdef);
-}
-
-/*
- * validate_windows
- */
-static void
-validate_windows(SelectStmt *stmt, CQAnalyzeContext *context)
-{
-	ListCell *lc;
-
-	foreach(lc, stmt->windowClause)
-	{
-		WindowDef *wdef = (WindowDef *) lfirst(lc);
-		validate_windowdef(wdef, context);
-	}
-
-	context->funcCalls = NIL;
-	CollectFuncs((Node *) stmt->targetList, context);
-
-	foreach(lc, context->funcCalls)
-	{
-		FuncCall *fcall = (FuncCall *) lfirst(lc);
-		if (fcall->over != NULL)
-			validate_windowdef(fcall->over, context);
-	}
 }
 
 /*
@@ -1034,7 +985,7 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 
 	ValidateSlidingWindowExpr(stmt, &context);
 
-	validate_windows(stmt, &context);
+	ValidateWindows(stmt, &context);
 }
 
 /*

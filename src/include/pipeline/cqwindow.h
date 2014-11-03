@@ -14,6 +14,7 @@
 #include "parser/parse_node.h"
 
 void ValidateSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context);
+void ValidateWindows(SelectStmt *stmt, CQAnalyzeContext *context);
 
 bool IsSlidingWindowSelectStmt(SelectStmt *stmt);
 bool IsSlidingWindowContinuousView(RangeVar *cvname);
