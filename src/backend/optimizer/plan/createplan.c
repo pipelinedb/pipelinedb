@@ -430,11 +430,11 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 			break;
 
 		case T_StreamScan:
-			 /* Look at the relation type
-			  * If the streamdesc is NULL this may be part 
-			  * of a join and the plan is being created for
-			  * the non streaming node. So call the create_seqscan_plan
-			  */
+			/* Look at the relation type
+			* If the streamdesc is NULL this may be part 
+			* of a join and the plan is being created for
+			* the non streaming node. So call the create_seqscan_plan
+			*/
 			if (rte->streamdesc == NULL)
 			{
 				best_path->pathtype = T_SeqScan;

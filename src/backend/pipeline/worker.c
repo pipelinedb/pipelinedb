@@ -59,7 +59,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	MemoryContext execcontext;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
-
 	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 										ALLOCSET_DEFAULT_MINSIZE,
 										ALLOCSET_DEFAULT_INITSIZE,
@@ -76,15 +75,10 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	/* prepare the plan for execution */
 	StartTransactionCommand();
 
-	// Set the right snapshot
-	queryDesc->snapshot = GetTransactionSnapshot();	
-
 	oldcontext = MemoryContextSwitchTo(runcontext);
 	ExecutorStart(queryDesc, 0);
 	MemoryContextSwitchTo(oldcontext);
-
 	CommitTransactionCommand();
-
 	estate = queryDesc->estate;
 	operation = queryDesc->operation;
 	estate->es_exec_node_cxt = execcontext;
@@ -152,7 +146,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 		MemoryContextSwitchTo(oldcontext);
 
-		CurrentResourceOwner = save;
 		if (estate->es_processed != 0)
 		{
 			/* 
