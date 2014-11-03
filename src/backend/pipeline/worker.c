@@ -82,7 +82,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	oldcontext = MemoryContextSwitchTo(runcontext);
 	ExecutorStart(queryDesc, 0);
 	MemoryContextSwitchTo(oldcontext);
+
 	CommitTransactionCommand();
+
 	estate = queryDesc->estate;
 	operation = queryDesc->operation;
 	estate->es_exec_node_cxt = execcontext;
