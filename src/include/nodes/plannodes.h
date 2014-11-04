@@ -283,6 +283,12 @@ typedef struct Scan
  * ----------------
  */
 typedef Scan SeqScan;
+/*
+* -----------------------------
+*      stream table scan node
+* -----------------------------
+*/
+typedef Scan StreamTableScan;
 
 /*
  * ----------------

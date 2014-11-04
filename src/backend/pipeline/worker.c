@@ -80,9 +80,13 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	StartTransactionCommand();
 
 	oldcontext = MemoryContextSwitchTo(runcontext);
-	ExecutorStart(queryDesc, 0);
-	MemoryContextSwitchTo(oldcontext);
 
+	ExecutorStart(queryDesc, 0);
+
+	MemoryContextSwitchTo(oldcontext);
+	/* The relations that are tables need to be released, hold on to the stream */
+
+	//UnregisterSnapshotFromOwner(queryDesc->snapshot,owner);
 	CommitTransactionCommand();
 
 	estate = queryDesc->estate;
