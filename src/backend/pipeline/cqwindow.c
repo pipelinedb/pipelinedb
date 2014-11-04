@@ -268,8 +268,9 @@ get_window_defs(SelectStmt *stmt, CQAnalyzeContext *context)
 void
 ValidateWindows(SelectStmt *stmt, CQAnalyzeContext *context)
 {
-	get_window_defs(stmt, context);
 	ListCell *lc;
+
+	get_window_defs(stmt, context);
 
 	if (list_length(context->windows) > 1)
 		elog(ERROR, "Only a single WINDOW is allowed");
@@ -421,6 +422,7 @@ get_time_bucket_size(Node *node, CQAnalyzeContext *context)
 /*
  * replace_column_ref
  */
+static void
 replace_column_ref(Node *node, ColumnRef *from, ColumnRef *to, CQAnalyzeContext *context)
 {
 	ListCell *lc;
@@ -432,7 +434,7 @@ replace_column_ref(Node *node, ColumnRef *from, ColumnRef *to, CQAnalyzeContext 
 	{
 		Node *node = (Node *) lfirst(lc);
 		ColumnRef *cref = GetColumnRef(node);
-		if (!AreColumnRefsEqual(from, cref))
+		if (!AreColumnRefsEqual((Node *) from, (Node *) cref))
 			continue;
 
 		memcpy(cref, to, sizeof(ColumnRef));
@@ -606,7 +608,6 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt
 		/*
 		 * WINDOW Handling
 		 */
-		List *windowDefs;
 		WindowDef *wdef;
 		ListCell *lc;
 
@@ -655,8 +656,22 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt
 		foreach(lc, wdef->partitionClause)
 		{
 			Node *node = lfirst(lc);
+			ListCell *glc;
+			bool skip = false;
+
 			node = HoistNode(workerstmt, node, context);
-			workerstmt->groupClause = lappend(workerstmt->groupClause, node);
+
+			foreach(glc, workerstmt->groupClause)
+			{
+				if (AreColumnRefsEqual(node, (Node *) lfirst(glc)))
+				{
+					skip = true;
+					break;
+				}
+			}
+
+			if (!skip)
+				workerstmt->groupClause = lappend(workerstmt->groupClause, node);
 		}
 	}
 	else

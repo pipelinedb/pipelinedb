@@ -115,16 +115,27 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
+	Node *node;
 	ColumnRef *col;
 
 	if (IsSlidingWindowSelectStmt(workerstmt))
-		col = GetColumnRefInSlidingWindowExpr(viewstmt);
+		node = (Node *) GetColumnRefInSlidingWindowExpr(viewstmt);
 	else if (list_length(workerstmt->groupClause) == 1)
-		col = linitial(workerstmt->groupClause);
+		node = linitial(workerstmt->groupClause);
 	else
 		return;
 
+	if (IsA(node, TypeCast))
+	{
+		TypeCast *tc = (TypeCast *) node;
+		node = tc->arg;
+	}
+
+	Assert(IsA(node, ColumnRef));
+	col = (ColumnRef *) node;
+
 	indexcol = makeNode(IndexElem);
+
 	indexcol->name = NameListToString(col->fields);
 	indexcol->expr = NULL;
 	indexcol->indexcolname = NULL;
@@ -199,6 +210,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * that need to be created in the underlying materialization table.
 	 */
 	workerselect = GetSelectStmtForCQWorker(copyObject(stmt->query), &viewselect);
+	pprint(workerselect);
 	InitializeCQAnalyzeContext(workerselect, NULL, &context);
 
 	query = parse_analyze(copyObject(workerselect), querystring, 0, 0);
