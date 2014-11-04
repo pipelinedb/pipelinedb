@@ -702,6 +702,17 @@ add_streams(Node *node, CQAnalyzeContext *context)
 }
 
 /*
+ * compare_attrs
+ */
+static int
+compare_attrs(const void *a, const void *b)
+{
+	const Form_pg_attribute attr1 = *((const Form_pg_attribute* ) a);
+	const Form_pg_attribute attr2 = *((const Form_pg_attribute* ) b);
+	return pg_strcasecmp(NameStr(attr1->attname), NameStr(attr2->attname));
+}
+
+/*
  * make_streamdesc
  *
  * Create a StreamDesc and build and attach a TupleDesc to it
@@ -713,14 +724,13 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 	ListCell *lc;
 	StreamDesc *desc = makeNode(StreamDesc);
 	TupleDesc tupdesc;
-	bool onestream = false;
+	bool onestream = list_length(context->streams) == 1 && list_length(context->tables) == 0;
 	AttrNumber attnum = 1;
 	bool sawArrivalTime = false;
+	Form_pg_attribute *attrsArray;
+	int i;
 
 	desc->name = rv;
-
-	if (list_length(context->streams) == 1 && list_length(context->tables) == 0)
-		onestream = true;
 
 	foreach(lc, context->types)
 	{
@@ -729,12 +739,15 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 		ColumnRef *ref = (ColumnRef *) tc->arg;
 		Form_pg_attribute attr;
 		char *colname;
+		bool alreadyExists = false;
+		ListCell *lc;
+
 		if (list_length(ref->fields) == 2)
 		{
 			/* find the columns that belong to this stream desc */
 			char *colrelname = strVal(linitial(ref->fields));
 			char *relname = rv->alias ? rv->alias->aliasname : rv->relname;
-			if (strcmp(relname, colrelname) != 0)
+			if (pg_strcasecmp(relname, colrelname) != 0)
 				continue;
 		}
 
@@ -744,9 +757,23 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 					 errmsg("column reference is ambiguous"),
 					 parser_errposition(context->pstate, ref->location)));
 
-		colname = FigureColname(ref);
+		colname = FigureColname((Node *) ref);
 
-		if (strcmp(colname, ARRIVAL_TIMESTAMP) == 0)
+		/* Dedup */
+		foreach (lc, attrs)
+		{
+			Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
+			if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
+			{
+				alreadyExists = true;
+				break;
+			}
+		}
+
+		if (alreadyExists)
+			continue;
+
+		if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
 				sawArrivalTime = true;
 
 		oid = LookupTypeNameOid(NULL, tc->typeName, false);
@@ -755,7 +782,6 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 		attr->atttypid = oid;
 
 		namestrcpy(&attr->attname, colname);
-
 		attrs = lappend(attrs, attr);
 	}
 
@@ -769,17 +795,29 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 		attrs = lappend(attrs, attr);
 	}
 
-	tupdesc = CreateTemplateTupleDesc(list_length(attrs), false);
+	attrsArray = (Form_pg_attribute *) palloc(list_length(attrs) * sizeof(Form_pg_attribute));
+	i = 0;
 
 	foreach(lc, attrs)
 	{
-		Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
+		attrsArray[i] = (Form_pg_attribute) lfirst(lc);
+		i++;
+	}
+
+	qsort(attrsArray, list_length(attrs), sizeof(Form_pg_attribute), &compare_attrs);
+
+	tupdesc = CreateTemplateTupleDesc(list_length(attrs), false);
+
+	for (i = 0; i < list_length(attrs); i++)
+	{
+		Form_pg_attribute attr = attrsArray[i];
 
 		/* PipelineDB XXX: should we be able to handle non-zero dimensions here? */
 		TupleDescInitEntry(tupdesc, attr->attnum, NameStr(attr->attname),
 				attr->atttypid, InvalidOid, 0);
 	}
 
+	pfree(attrsArray);
 	desc->desc = tupdesc;
 
 	return (Node *) desc;
@@ -821,7 +859,7 @@ replace_stream_rangevar_with_streamdesc(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * AnalyzeContinuousSelectStmt
+ * AnalyzeAndValidateContinuousSelectStmt
  *
  * This is mainly to prepare a CV SELECT's FROM clause, which may involve streams
  */
