@@ -210,7 +210,6 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * that need to be created in the underlying materialization table.
 	 */
 	workerselect = GetSelectStmtForCQWorker(copyObject(stmt->query), &viewselect);
-	pprint(workerselect);
 	InitializeCQAnalyzeContext(workerselect, NULL, &context);
 
 	query = parse_analyze(copyObject(workerselect), querystring, 0, 0);

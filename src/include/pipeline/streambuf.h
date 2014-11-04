@@ -36,7 +36,7 @@ extern bool DebugPrintStreamBuffer;
 
 extern int StreamBufferBlocks;
 
-uint32 EmptyStreamBufferWaitTime;
+int EmptyStreamBufferWaitTime;
 
 /* Wraps a physical event and the queries that still need to read it */
 typedef struct StreamBufferSlot
@@ -88,7 +88,7 @@ typedef struct StreamBuffer
 	StreamBufferSlot **tail;
 	char **last;
 	int writers;
-	Latch procLatch[512];	
+	Latch procLatch[512];
 	bool empty;
 	slock_t *mutex;
 

@@ -10,6 +10,7 @@
  */
 #include "postgres.h"
 #include <time.h>
+#include <unistd.h>
 
 #include "access/htup_details.h"
 #include "access/xact.h"
@@ -33,7 +34,7 @@
 #include "utils/timestamp.h"
 
 extern StreamBuffer *GlobalStreamBuffer;
-extern uint32 EmptyStreamBufferWaitTime;
+extern int EmptyStreamBufferWaitTime;
 
 
 /*
@@ -59,6 +60,8 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	MemoryContext execcontext;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
+	TimestampTz curtime = GetCurrentTimestamp();
+	TimestampTz last_process_time = GetCurrentTimestamp();
 
 	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -115,8 +118,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	 */
 	memcpy(&GlobalStreamBuffer->procLatch[cq_id], &MyProc->procLatch, sizeof(Latch));
 
-	TimestampTz curtime = GetCurrentTimestamp();
-	TimestampTz last_process_time = GetCurrentTimestamp();
 	for (;;)
 	{
 		ResetStreamBufferLatch(cq_id);
@@ -152,7 +153,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		CurrentResourceOwner = save;
 		if (estate->es_processed != 0)
 		{
-			/* 
+			/*
 			 * If the CV query is such that the select does not return any tuples
 			 * ex: select id where id=99; and id=99 does not exist, then this reset
 			 * will fail. What will happen is that the worker will block at the latch for every
