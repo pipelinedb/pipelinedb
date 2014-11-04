@@ -218,7 +218,7 @@ get_retrieval_where_clause(Tuplestorestate *incoming, TupleDesc desc,
 
 	foreach_tuple(slot, incoming)
 	{
-		A_Expr *cnf = NULL;
+		List *cnfExprs = NIL;
 		Node *arg;
 		int i;
 
@@ -267,18 +267,19 @@ get_retrieval_where_clause(Tuplestorestate *incoming, TupleDesc desc,
 			 * Her we're creating the conjunction clauses, and we pass them all in
 			 * as a list of arguments to an OR expression at the end.
 			 */
-			if (cnf == NULL)
-				cnf = expr;
-			else
-				cnf = makeA_Expr(AEXPR_AND, NULL, (Node *) cnf, (Node *) expr, -1);
+			cnfExprs = lappend(cnfExprs, transformExpr(ps, (Node *) expr, AEXPR_OP));
 		}
 
-		arg = transformExpr(ps, (Node *) cnf, AEXPR_OP);
+		if (list_length(cnfExprs) == 1)
+			arg = (Node *) linitial(cnfExprs);
+		else
+			arg = transformExpr(ps, (Node *) makeBoolExpr(AND_EXPR, cnfExprs, -1), AEXPR_OP);
+
 		args = lappend(args, arg);
 	}
 
 	/* this is one big disjunction of conjunctions that match GROUP BY criteria */
-	dnf = (Expr *) makeBoolExpr(OR_EXPR, args, -1);
+	dnf = makeBoolExpr(OR_EXPR, args, -1);
 	assign_expr_collations(ps, (Node *) dnf);
 
 	where = transformExpr(ps, (Node *) dnf, EXPR_KIND_WHERE);
