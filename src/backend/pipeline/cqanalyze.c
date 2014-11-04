@@ -194,21 +194,38 @@ AreColumnRefsEqual(Node *cr1, Node *cr2)
 }
 
 /*
- * contains_column_ref
+ * ContainsColumnRef
  */
-static bool
-contains_column_ref(Node *node, ColumnRef *cref)
+bool
+ContainsColumnRef(Node *node, ColumnRef *cref)
 {
 	if (node == NULL)
 		return false;
 
+	if (IsA(node, WindowDef))
+		return false;
+
 	if (IsA(node, ColumnRef))
+		return AreColumnRefsEqual((Node *) cref, node);
+
+	return raw_expression_tree_walker(node, ContainsColumnRef, (void *) cref);
+}
+
+/*
+ * GetColumnRef
+ */
+ColumnRef *
+GetColumnRef(Node *node)
+{
+	if (IsA(node, TypeCast))
 	{
-		ColumnRef *cref2 = (ColumnRef *) node;
-		return AreColumnRefsEqual((Node *) cref, (Node *) cref2);
+		TypeCast *tc = (TypeCast *) node;
+		node = tc->arg;
 	}
 
-	return raw_expression_tree_walker(node, contains_column_ref, (void *) cref);
+	Assert(IsA(node, ColumnRef));
+
+	return (ColumnRef *) node;
 }
 
 /*
@@ -230,7 +247,7 @@ IsResTargetForColumnRef(Node *node, ColumnRef *cref)
 			 * Is this ResTarget overriding a column it references?
 			 * Example: substring(key::text, 1, 2) AS key
 			 */
-			if (contains_column_ref((Node *) res, cref))
+			if (ContainsColumnRef((Node *) res, cref))
 				return false;
 			return true;
 		}
@@ -240,7 +257,7 @@ IsResTargetForColumnRef(Node *node, ColumnRef *cref)
 		ColumnRef *cref2 = (ColumnRef *) node;
 		return AreColumnRefsEqual((Node *) cref, (Node *) cref2);
 	}
-	else if (IsA(node, FuncCall))
+	else if (IsA(node, FuncCall) || IsA(node, Expr))
 	{
 		/*
 		 * Even if a FuncCall has cref as an argument, its value
@@ -429,6 +446,51 @@ add_res_target_to_view(SelectStmt *viewstmt, ResTarget *res)
 }
 
 /*
+ * associate_types_to_colrefs
+ *
+ * Walk the parse tree and associate a single type with each inferred column
+ */
+static bool
+associate_types_to_colrefs(Node *node, CQAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, TypeCast))
+	{
+		TypeCast *tc = (TypeCast *) node;
+		if (IsA(tc->arg, ColumnRef))
+		{
+			ListCell* lc;
+			foreach(lc, context->types)
+			{
+				TypeCast *t = (TypeCast *) lfirst(lc);
+				if (equal(tc->arg, t->arg) && !equal(tc, t))
+				{
+					/* a column can only be assigned one type */
+					ColumnRef *cr = (ColumnRef *) tc->arg;
+					ereport(ERROR,
+							(errcode(ERRCODE_SYNTAX_ERROR),
+									errmsg("column has an ambiguous type because of a conflicting previous type cast"),
+									parser_errposition(context->pstate, cr->location)));
+				}
+			}
+			context->types = lappend(context->types, tc);
+		}
+	}
+	else if (IsA(node, ColumnRef))
+	{
+		context->cols = lappend(context->cols, (ColumnRef *) node);
+	}
+	else if (IsA(node, ResTarget))
+	{
+		context->targets = lappend(context->targets, (ResTarget *) node);
+	}
+
+	return raw_expression_tree_walker(node, associate_types_to_colrefs, (void *) context);
+}
+
+/*
  * HoistNode
  */
 Node *
@@ -471,11 +533,13 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	ListCell *lc;
 
 	workerstmt = (SelectStmt *) copyObject(stmt);
+
 	viewstmt = (SelectStmt *) makeNode(SelectStmt);
 	viewstmt->targetList = NIL;
 	viewstmt->groupClause = NIL;
 
 	InitializeCQAnalyzeContext(workerstmt, NULL, &context);
+	associate_types_to_colrefs(workerstmt, &context);
 
 	origNumTargets = list_length(workerstmt->targetList);
 	origNumGroups = list_length(workerstmt->groupClause);
@@ -519,6 +583,16 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 		ResTarget *res = (ResTarget *) list_nth(workerstmt->targetList, i);
 		FuncCall *agg;
 		ListCell *agglc;
+
+		/*
+		 * Any ResTarget with a ResTarget as a val should be ignore for the worker
+		 * stmt and the val should be taken for the view stmt.
+		 */
+		if (IsA(res->val, ResTarget))
+		{
+			viewstmt->targetList = lappend(viewstmt->targetList, res->val);
+			continue;
+		}
 
 		context.funcCalls = NIL;
 		CollectAggFuncs(res->val, &context);
@@ -591,6 +665,10 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	if (viewstmtptr != NULL)
 		*viewstmtptr = viewstmt;
 
+	pprint(workerstmt);
+	elog(LOG, "------------------------------------");
+	pprint(viewstmt);
+
 	return workerstmt;
 }
 
@@ -610,51 +688,6 @@ GetSelectStmtForCQCombiner(SelectStmt *stmt)
 	stmt->whereClause = NULL;
 
 	return stmt;
-}
-
-/*
- * find_colref_types
- *
- * Walk the parse tree and associate a single type with each inferred column
- */
-static bool
-associate_types_to_colrefs(Node *node, CQAnalyzeContext *context)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, TypeCast))
-	{
-		TypeCast *tc = (TypeCast *) node;
-		if (IsA(tc->arg, ColumnRef))
-		{
-			ListCell* lc;
-			foreach(lc, context->types)
-			{
-				TypeCast *t = (TypeCast *) lfirst(lc);
-				if (equal(tc->arg, t->arg) && !equal(tc, t))
-				{
-					/* a column can only be assigned one type */
-					ColumnRef *cr = (ColumnRef *) tc->arg;
-					ereport(ERROR,
-							(errcode(ERRCODE_SYNTAX_ERROR),
-									errmsg("column has an ambiguous type because of a conflicting previous type cast"),
-									parser_errposition(context->pstate, cr->location)));
-				}
-			}
-			context->types = lappend(context->types, tc);
-		}
-	}
-	else if (IsA(node, ColumnRef))
-	{
-		context->cols = lappend(context->cols, (ColumnRef *) node);
-	}
-	else if (IsA(node, ResTarget))
-	{
-		context->targets = lappend(context->targets, (ResTarget *) node);
-	}
-
-	return raw_expression_tree_walker(node, associate_types_to_colrefs, (void *) context);
 }
 
 /*
@@ -939,7 +972,7 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 		foreach(tlc, context.targets)
 		{
 			ResTarget *rt = (ResTarget *) lfirst(tlc);
-			if (contains_column_ref((Node *) rt, cref))
+			if (ContainsColumnRef((Node *) rt, cref))
 			{
 				needsType = true;
 				break;
