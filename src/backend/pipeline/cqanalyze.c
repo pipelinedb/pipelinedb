@@ -33,6 +33,9 @@
 #include "utils/builtins.h"
 #include "utils/syscache.h"
 
+static bool associate_types_to_colrefs(Node *node, CQAnalyzeContext *context);
+static bool type_cast_all_column_refs(Node *node, CQAnalyzeContext *context);
+
 #define INTERNAL_COLNAME_PREFIX "_"
 
 /*
@@ -504,6 +507,8 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 	bool hasAggOrGroupBy = isSlidingWindow && HasAggOrGroupBy(stmt);
 
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
+	associate_types_to_colrefs((Node *) stmt, &context);
+	type_cast_all_column_refs((Node *) stmt, &context);
 
 	stmt = (SelectStmt *) copyObject(stmt);
 
@@ -674,6 +679,89 @@ associate_types_to_colrefs(Node *node, CQAnalyzeContext *context)
 	}
 
 	return raw_expression_tree_walker(node, associate_types_to_colrefs, (void *) context);
+}
+
+static TypeCast *
+find_type_cast(ColumnRef *cref, CQAnalyzeContext *context)
+{
+	ListCell *lc;
+	foreach(lc, context->types)
+	{
+		TypeCast *tc = (TypeCast *) lfirst(lc);
+		if (AreColumnRefsEqual((Node *) tc, (Node *) cref))
+			return copyObject(tc);
+	}
+
+	return NULL;
+}
+
+static void
+replace_column_ref_with_type_cast(Node **nodeptr, CQAnalyzeContext *context)
+{
+	TypeCast *tc;
+
+	if (*nodeptr == NULL || !IsA(*nodeptr, ColumnRef))
+		return;
+
+	tc = find_type_cast((ColumnRef *) *nodeptr, context);
+	if (tc == NULL)
+		return;
+
+	*nodeptr = (Node *) tc;
+}
+
+static bool
+type_cast_all_column_refs(Node *node, CQAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, ResTarget))
+	{
+		ResTarget *res = (ResTarget *) node;
+		replace_column_ref_with_type_cast(&res->val, context);
+	}
+	else if (IsA(node, FuncCall))
+	{
+		FuncCall *fcall = (FuncCall *) node;
+		ListCell *lc;
+
+		foreach(lc, fcall->args)
+			replace_column_ref_with_type_cast((Node **) &lfirst(lc), context);
+	}
+	else if (IsA(node, SortBy))
+	{
+		SortBy *sort = (SortBy *) node;
+		replace_column_ref_with_type_cast(&sort->node, context);
+	}
+	else if (IsA(node, A_Expr))
+	{
+		A_Expr *expr = (A_Expr *) node;
+		replace_column_ref_with_type_cast(&expr->lexpr, context);
+		replace_column_ref_with_type_cast(&expr->rexpr, context);
+
+	}
+	else if (IsA(node, WindowDef))
+	{
+		WindowDef *wdef = (WindowDef *) node;
+		ListCell *lc;
+
+		foreach(lc, wdef->partitionClause)
+			replace_column_ref_with_type_cast((Node **) &lfirst(lc), context);
+
+		foreach(lc, wdef->orderClause)
+			replace_column_ref_with_type_cast((Node **) &lfirst(lc), context);
+	}
+	else if (IsA(node, SelectStmt))
+	{
+		SelectStmt *select = (SelectStmt *) node;
+		ListCell *lc;
+
+		foreach(lc, select->groupClause)
+			replace_column_ref_with_type_cast((Node **) &lfirst(lc), context);
+	}
+
+	return raw_expression_tree_walker(node, type_cast_all_column_refs, (void *) context);
 }
 
 /*
