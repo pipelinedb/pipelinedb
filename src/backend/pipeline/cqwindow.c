@@ -173,6 +173,7 @@ static void
 validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, CQAnalyzeContext *context)
 {
 	A_Expr *a_expr;
+	ListCell *lc;
 
 	if (expr == NULL)
 			return;
@@ -183,15 +184,31 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, CQAnalyzeContext *co
 	a_expr = (A_Expr *) expr;
 
 	FindColumnRefsWithTypeCasts(expr, context);
+
+	/* Only a single column can be compared to clock_timestamp */
 	if (list_length(context->cols) != 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 						errmsg("clock_timestamp can only appear in an expression containing a single column reference"),
 						parser_errposition(context->pstate, a_expr->location)));
 
-	/*
-	 * TODO(usmanm): Ensure that context.cols[0] isn't being grouped on.
-	 */
+	/* Ensure that context.cols[0] isn't being grouped on */
+	foreach(lc, stmt->groupClause)
+	{
+		Node *node = (Node *) lfirst(lc);
+
+		if (!IsAColumnRef(node))
+			continue;
+
+		if (AreColumnRefsEqual(node, (Node *) linitial(context->cols)))
+		{
+			ColumnRef *cref = GetColumnRef(node);
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+							errmsg("the column being compared to clock_timestamp cannot be in the GROUP BY clause"),
+							parser_errposition(context->pstate, cref->location)));
+		}
+	}
 }
 
 /*
@@ -213,13 +230,17 @@ validate_windowdef(WindowDef *wdef, CQAnalyzeContext *context)
 	if (list_length(wdef->orderClause) > 1)
 	{
 		/* Can't ORDER BY multiple columns. */
-		elog(ERROR, "single order by only");
+		SortBy *sort = list_nth(wdef->orderClause, 1);
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+						errmsg("only a single ORDER BY is allowed for WINDOWs"),
+						parser_errposition(context->pstate, sort->location)));
 	}
 	else
 	{
 		/* ORDER BY must be on a time-like column/expression */
 		//SortBy *sort = (SortBy *) linitial(wdef->orderClause);
-		/* TODO(usmanm): Check that output type of this column is time-like */
+		/* TODO(usmanm): Check that type of this column is time-like */
 	}
 }
 
@@ -263,7 +284,7 @@ get_window_defs(SelectStmt *stmt, CQAnalyzeContext *context)
 }
 
 /*
- * validate_windows
+ * ValidateWindows
  */
 void
 ValidateWindows(SelectStmt *stmt, CQAnalyzeContext *context)
@@ -273,7 +294,13 @@ ValidateWindows(SelectStmt *stmt, CQAnalyzeContext *context)
 	get_window_defs(stmt, context);
 
 	if (list_length(context->windows) > 1)
-		elog(ERROR, "Only a single WINDOW is allowed");
+	{
+		WindowDef *wdef = list_nth(context->windows, 1);
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+						errmsg("only a single WINDOW is allowed"),
+						parser_errposition(context->pstate, wdef->location)));
+	}
 
 	foreach(lc, context->windows)
 	{
