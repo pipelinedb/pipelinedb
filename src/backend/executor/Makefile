@@ -24,7 +24,7 @@ OBJS = execAmi.o execCurrent.o execGrouping.o execJunk.o execMain.o \
        nodeSeqscan.o nodeSetOp.o nodeSort.o nodeUnique.o \
        nodeValuesscan.o nodeCtescan.o nodeWorktablescan.o \
        nodeGroup.o nodeSubplan.o nodeSubqueryscan.o nodeTidscan.o \
-       nodeForeignscan.o nodeWindowAgg.o nodeStreamscan.o nodeTuplestoreScan.o tstoreReceiver.o spi.o \
+       nodeForeignscan.o nodeWindowAgg.o nodeStreamscan.o nodeTuplestoreScan.o nodeStreamTablescan.o tstoreReceiver.o spi.o \
        tupletableReceiver.o
 
 include $(top_srcdir)/src/backend/common.mk

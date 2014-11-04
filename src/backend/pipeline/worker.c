@@ -59,7 +59,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	MemoryContext execcontext;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
-
+	//pg_usleep(60000000);
 	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 										ALLOCSET_DEFAULT_MINSIZE,
 										ALLOCSET_DEFAULT_INITSIZE,
@@ -77,9 +77,13 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	StartTransactionCommand();
 
 	oldcontext = MemoryContextSwitchTo(runcontext);
-	ExecutorStart(queryDesc, 0);
-	MemoryContextSwitchTo(oldcontext);
 
+	ExecutorStart(queryDesc, 0);
+
+	MemoryContextSwitchTo(oldcontext);
+	/* The relations that are tables need to be released, hold on to the stream */
+
+	//UnregisterSnapshotFromOwner(queryDesc->snapshot,owner);
 	CommitTransactionCommand();
 
 	estate = queryDesc->estate;

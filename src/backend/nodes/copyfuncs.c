@@ -341,6 +341,22 @@ _copyScan(const Scan *from)
 	return newnode;
 }
 
+
+/*
+ * _copyStreamTableScan
+ */
+static StreamTableScan *
+_copyStreamTableScan(const StreamTableScan *from)
+{
+	StreamTableScan    *newnode = makeNode(StreamTableScan);
+
+	/*
+	 * copy node superclass fields
+	 */
+	CopyScanFields((const Scan *) from, (Scan *) newnode);
+
+	return newnode;
+}
 /*
  * _copySeqScan
  */
@@ -3979,6 +3995,10 @@ copyObject(const void *from)
 		case T_SeqScan:
 			retval = _copySeqScan(from);
 			break;
+		case T_StreamTableScan:
+			retval = _copyStreamTableScan(from);
+			break;
+		
 		case T_IndexScan:
 			retval = _copyIndexScan(from);
 			break;

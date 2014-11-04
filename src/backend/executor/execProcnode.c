@@ -193,6 +193,11 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 												   estate, eflags);
 			break;
 
+		case T_StreamTableScan:
+			result = (PlanState *) ExecInitStreamTableScan((StreamTableScan *) node,
+												   estate, eflags);
+			break;
+
 		case T_StreamScan:
 			result = (PlanState *) ExecInitStreamScan((StreamScan *) node,
 													 estate, eflags);
@@ -464,6 +469,10 @@ ExecProcNode(PlanState *node)
 			result = ExecSeqScan((SeqScanState *) node);
 			break;
 
+		case T_StreamTableScanState:
+			result = ExecStreamTableScan((StreamTableScanState *) node);
+			break;
+
 		case T_StreamScanState:
 			result = ExecStreamScan((StreamScanState *) node);
 			break;
@@ -719,6 +728,10 @@ ExecEndNode(PlanState *node)
 			 */
 		case T_SeqScanState:
 			ExecEndSeqScan((SeqScanState *) node);
+			break;
+
+		case T_StreamTableScanState:
+			ExecEndStreamTableScan((StreamTableScanState *) node);
 			break;
 
 		case T_StreamScanState:

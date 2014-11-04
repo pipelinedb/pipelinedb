@@ -58,6 +58,10 @@ static Material *create_material_plan(PlannerInfo *root, MaterialPath *best_path
 static Plan *create_unique_plan(PlannerInfo *root, UniquePath *best_path);
 static SeqScan *create_seqscan_plan(PlannerInfo *root, Path *best_path,
 					List *tlist, List *scan_clauses);
+
+static StreamTableScan *create_stream_table_scan_plan(PlannerInfo *root, Path *best_path,
+					List *tlist, List *scan_clauses);
+
 static StreamScan *create_streamscan_plan(PlannerInfo *root, Path *best_path,
 					List *tlist, List *scan_clauses, RelOptInfo *rel);
 static StreamTableJoin *create_stream_table_join_plan(PlannerInfo *root, JoinPath *best_path,
@@ -101,6 +105,7 @@ static List *order_qual_clauses(PlannerInfo *root, List *clauses);
 static void copy_path_costsize(Plan *dest, Path *src);
 static void copy_plan_costsize(Plan *dest, Plan *src);
 static SeqScan *make_seqscan(List *qptlist, List *qpqual, Index scanrelid);
+static StreamTableScan *make_stream_table_scan(List *qptlist, List *qpqual, Index scanrelid);
 static StreamScan *make_streamscan(List *qptlist, List *qpqual, int32 cqid);
 static IndexScan *make_indexscan(List *qptlist, List *qpqual, Index scanrelid,
 			   Oid indexid, List *indexqual, List *indexqualorig,
@@ -131,7 +136,7 @@ static WorkTableScan *make_worktablescan(List *qptlist, List *qpqual,
 				   Index scanrelid, int wtParam);
 static BitmapAnd *make_bitmap_and(List *bitmapplans);
 static BitmapOr *make_bitmap_or(List *bitmapplans);
-static StreamTableJoin *make_streamtable(List *tlist,
+static StreamTableJoin *make_streamtable_join(List *tlist,
 			  List *joinclauses, List *otherclauses, List *nestParams,
 			  Plan *lefttree, Plan *righttree,
 			  JoinType jointype);
@@ -231,17 +236,7 @@ is_scan_type(NodeTag tag)
 	bool ret = false;
 	switch (tag)
 	{
-		case T_SeqScan:
-		case T_IndexScan:
-		case T_IndexOnlyScan:
-		case T_BitmapHeapScan:
-		case T_TidScan:
-		case T_SubqueryScan:
-		case T_FunctionScan:
-		case T_ValuesScan:
-		case T_CteScan:
-		case T_WorkTableScan:
-		case T_ForeignScan:
+		case T_StreamTableScan:
 			ret = true;
 			break;
 		default:
@@ -277,6 +272,7 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 	switch (best_path->pathtype)
 	{
 		case T_SeqScan:
+		case T_StreamTableScan:
 		case T_IndexScan:
 		case T_IndexOnlyScan:
 		case T_BitmapHeapScan:
@@ -414,6 +410,7 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 
 	if (root->parse->is_continuous)
 	{
+		/* This mightneed to be set to T_StreamTableScan somehow XXX TODO */
 		best_path->pathtype = T_StreamScan;
 	}
 
@@ -435,10 +432,11 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 			* of a join and the plan is being created for
 			* the non streaming node. So call the create_seqscan_plan
 			*/
+			// This check might not be reliable, make this more solid
 			if (rte->streamdesc == NULL)
 			{
-				best_path->pathtype = T_SeqScan;
-				plan = (Plan *) create_seqscan_plan(root, best_path, tlist, scan_clauses);
+				best_path->pathtype = T_StreamTableScan;
+				plan = (Plan *) create_stream_table_scan_plan(root, best_path, tlist, scan_clauses);
 			}
 			else
 				plan = (Plan *) create_streamscan_plan(root,
@@ -701,7 +699,7 @@ create_gating_plan(PlannerInfo *root, Plan *plan, List *quals)
 }
 
 static StreamTableJoin *
-make_streamtable(List *tlist,
+make_streamtable_join(List *tlist,
 			  List *joinclauses,
 			  List *otherclauses,
 			  List *nestParams,
@@ -807,7 +805,7 @@ create_stream_table_join_plan(PlannerInfo *root,
 			prev = cell;
 	}
 
-	join_plan = make_streamtable(tlist,
+	join_plan = make_streamtable_join(tlist,
 						  joinclauses,
 						  otherclauses,
 						  nestParams,
@@ -1364,6 +1362,45 @@ create_seqscan_plan(PlannerInfo *root, Path *best_path,
 	}
 
 	scan_plan = make_seqscan(tlist,
+							 scan_clauses,
+							 scan_relid);
+
+	copy_path_costsize(&scan_plan->plan, best_path);
+
+	return scan_plan;
+}
+
+
+/*
+ * create_stream_table_scan_plan
+ *	 Returns a streamtablescan plan for the base relation scanned by 'best_path'
+ *	 with restriction clauses 'scan_clauses' and targetlist 'tlist'.
+ */
+static SeqScan *
+create_stream_table_scan_plan(PlannerInfo *root, Path *best_path,
+					List *tlist, List *scan_clauses)
+{
+	StreamTableScan    *scan_plan;
+	Index		scan_relid = best_path->parent->relid;
+
+	/* it should be a base rel... */
+	Assert(scan_relid > 0);
+	Assert(best_path->parent->rtekind == RTE_RELATION);
+
+	/* Sort clauses into best execution order */
+	scan_clauses = order_qual_clauses(root, scan_clauses);
+
+	/* Reduce RestrictInfo list to bare expressions; ignore pseudoconstants */
+	scan_clauses = extract_actual_clauses(scan_clauses, false);
+
+	/* Replace any outer-relation variables with nestloop params */
+	if (best_path->param_info)
+	{
+		scan_clauses = (List *)
+			replace_nestloop_params(root, (Node *) scan_clauses);
+	}
+
+	scan_plan = make_stream_table_scan(tlist,
 							 scan_clauses,
 							 scan_relid);
 
@@ -3504,6 +3541,24 @@ make_seqscan(List *qptlist,
 			 Index scanrelid)
 {
 	SeqScan    *node = makeNode(SeqScan);
+	Plan	   *plan = &node->plan;
+
+	/* cost should be inserted by caller */
+	plan->targetlist = qptlist;
+	plan->qual = qpqual;
+	plan->lefttree = NULL;
+	plan->righttree = NULL;
+	node->scanrelid = scanrelid;
+
+	return node;
+}
+
+static StreamTableScan *
+make_stream_table_scan(List *qptlist,
+			 List *qpqual,
+			 Index scanrelid)
+{
+	StreamTableScan    *node = makeNode(StreamTableScan);
 	Plan	   *plan = &node->plan;
 
 	/* cost should be inserted by caller */

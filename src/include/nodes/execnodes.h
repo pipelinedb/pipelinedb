@@ -1220,6 +1220,7 @@ typedef struct ScanState
  * no additional fields.
  */
 typedef ScanState SeqScanState;
+typedef ScanState StreamTableScanState;
 
 /*
  * These structs store information about index quals that don't have simple
