@@ -33,6 +33,9 @@
 #include "utils/builtins.h"
 #include "utils/syscache.h"
 
+static bool associate_types_to_colrefs(Node *node, CQAnalyzeContext *context);
+static bool type_cast_all_column_refs(Node *node, CQAnalyzeContext *context);
+
 #define INTERNAL_COLNAME_PREFIX "_"
 
 /*
@@ -504,6 +507,8 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect)
 	bool hasAggOrGroupBy = isSlidingWindow && HasAggOrGroupBy(stmt);
 
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
+	associate_types_to_colrefs((Node *) stmt, &context);
+	type_cast_all_column_refs((Node *) stmt, &context);
 
 	stmt = (SelectStmt *) copyObject(stmt);
 
@@ -676,6 +681,89 @@ associate_types_to_colrefs(Node *node, CQAnalyzeContext *context)
 	return raw_expression_tree_walker(node, associate_types_to_colrefs, (void *) context);
 }
 
+static TypeCast *
+find_type_cast(ColumnRef *cref, CQAnalyzeContext *context)
+{
+	ListCell *lc;
+	foreach(lc, context->types)
+	{
+		TypeCast *tc = (TypeCast *) lfirst(lc);
+		if (AreColumnRefsEqual((Node *) tc, (Node *) cref))
+			return copyObject(tc);
+	}
+
+	return NULL;
+}
+
+static void
+replace_column_ref_with_type_cast(Node **nodeptr, CQAnalyzeContext *context)
+{
+	TypeCast *tc;
+
+	if (*nodeptr == NULL || !IsA(*nodeptr, ColumnRef))
+		return;
+
+	tc = find_type_cast((ColumnRef *) *nodeptr, context);
+	if (tc == NULL)
+		return;
+
+	*nodeptr = (Node *) tc;
+}
+
+static bool
+type_cast_all_column_refs(Node *node, CQAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, ResTarget))
+	{
+		ResTarget *res = (ResTarget *) node;
+		replace_column_ref_with_type_cast(&res->val, context);
+	}
+	else if (IsA(node, FuncCall))
+	{
+		FuncCall *fcall = (FuncCall *) node;
+		ListCell *lc;
+
+		foreach(lc, fcall->args)
+			replace_column_ref_with_type_cast((Node **) &lfirst(lc), context);
+	}
+	else if (IsA(node, SortBy))
+	{
+		SortBy *sort = (SortBy *) node;
+		replace_column_ref_with_type_cast(&sort->node, context);
+	}
+	else if (IsA(node, A_Expr))
+	{
+		A_Expr *expr = (A_Expr *) node;
+		replace_column_ref_with_type_cast(&expr->lexpr, context);
+		replace_column_ref_with_type_cast(&expr->rexpr, context);
+
+	}
+	else if (IsA(node, WindowDef))
+	{
+		WindowDef *wdef = (WindowDef *) node;
+		ListCell *lc;
+
+		foreach(lc, wdef->partitionClause)
+			replace_column_ref_with_type_cast((Node **) &lfirst(lc), context);
+
+		foreach(lc, wdef->orderClause)
+			replace_column_ref_with_type_cast((Node **) &lfirst(lc), context);
+	}
+	else if (IsA(node, SelectStmt))
+	{
+		SelectStmt *select = (SelectStmt *) node;
+		ListCell *lc;
+
+		foreach(lc, select->groupClause)
+			replace_column_ref_with_type_cast((Node **) &lfirst(lc), context);
+	}
+
+	return raw_expression_tree_walker(node, type_cast_all_column_refs, (void *) context);
+}
+
 /*
  * add_streams
  *
@@ -702,6 +790,17 @@ add_streams(Node *node, CQAnalyzeContext *context)
 }
 
 /*
+ * compare_attrs
+ */
+static int
+compare_attrs(const void *a, const void *b)
+{
+	const Form_pg_attribute attr1 = *((const Form_pg_attribute* ) a);
+	const Form_pg_attribute attr2 = *((const Form_pg_attribute* ) b);
+	return pg_strcasecmp(NameStr(attr1->attname), NameStr(attr2->attname));
+}
+
+/*
  * make_streamdesc
  *
  * Create a StreamDesc and build and attach a TupleDesc to it
@@ -713,14 +812,13 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 	ListCell *lc;
 	StreamDesc *desc = makeNode(StreamDesc);
 	TupleDesc tupdesc;
-	bool onestream = false;
+	bool onestream = list_length(context->streams) == 1 && list_length(context->tables) == 0;
 	AttrNumber attnum = 1;
 	bool sawArrivalTime = false;
+	Form_pg_attribute *attrsArray;
+	int i;
 
 	desc->name = rv;
-
-	if (list_length(context->streams) == 1 && list_length(context->tables) == 0)
-		onestream = true;
 
 	foreach(lc, context->types)
 	{
@@ -729,34 +827,41 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 		ColumnRef *ref = (ColumnRef *) tc->arg;
 		Form_pg_attribute attr;
 		char *colname;
-		if (onestream)
-		{
-			/* all of the inferred columns belong to this stream desc */
-			RangeVar *s = linitial(context->streams);
-			if (s->alias)
-				colname = strVal(lsecond(ref->fields));
-			else
-				colname = strVal(linitial(ref->fields));
-		}
-		else if (list_length(ref->fields) == 2)
+		bool alreadyExists = false;
+		ListCell *lc;
+
+		if (list_length(ref->fields) == 2)
 		{
 			/* find the columns that belong to this stream desc */
 			char *colrelname = strVal(linitial(ref->fields));
 			char *relname = rv->alias ? rv->alias->aliasname : rv->relname;
-			if (strcmp(relname, colrelname) != 0)
+			if (pg_strcasecmp(relname, colrelname) != 0)
 				continue;
-
-			colname = strVal(lsecond(ref->fields));
 		}
-		else
-		{
+
+		if ((list_length(ref->fields) == 1) && !onestream)
 			ereport(ERROR,
 					(errcode(ERRCODE_AMBIGUOUS_COLUMN),
 					 errmsg("column reference is ambiguous"),
 					 parser_errposition(context->pstate, ref->location)));
+
+		colname = FigureColname((Node *) ref);
+
+		/* Dedup */
+		foreach (lc, attrs)
+		{
+			Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
+			if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
+			{
+				alreadyExists = true;
+				break;
+			}
 		}
 
-		if (strcmp(colname, ARRIVAL_TIMESTAMP) == 0)
+		if (alreadyExists)
+			continue;
+
+		if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
 				sawArrivalTime = true;
 
 		oid = LookupTypeNameOid(NULL, tc->typeName, false);
@@ -765,7 +870,6 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 		attr->atttypid = oid;
 
 		namestrcpy(&attr->attname, colname);
-
 		attrs = lappend(attrs, attr);
 	}
 
@@ -779,17 +883,29 @@ make_streamdesc(RangeVar *rv, CQAnalyzeContext *context)
 		attrs = lappend(attrs, attr);
 	}
 
-	tupdesc = CreateTemplateTupleDesc(list_length(attrs), false);
+	attrsArray = (Form_pg_attribute *) palloc(list_length(attrs) * sizeof(Form_pg_attribute));
+	i = 0;
 
 	foreach(lc, attrs)
 	{
-		Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
+		attrsArray[i] = (Form_pg_attribute) lfirst(lc);
+		i++;
+	}
+
+	qsort(attrsArray, list_length(attrs), sizeof(Form_pg_attribute), &compare_attrs);
+
+	tupdesc = CreateTemplateTupleDesc(list_length(attrs), false);
+
+	for (i = 0; i < list_length(attrs); i++)
+	{
+		Form_pg_attribute attr = attrsArray[i];
 
 		/* PipelineDB XXX: should we be able to handle non-zero dimensions here? */
 		TupleDescInitEntry(tupdesc, attr->attnum, NameStr(attr->attname),
 				attr->atttypid, InvalidOid, 0);
 	}
 
+	pfree(attrsArray);
 	desc->desc = tupdesc;
 
 	return (Node *) desc;
@@ -831,7 +947,7 @@ replace_stream_rangevar_with_streamdesc(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * AnalyzeContinuousSelectStmt
+ * AnalyzeAndValidateContinuousSelectStmt
  *
  * This is mainly to prepare a CV SELECT's FROM clause, which may involve streams
  */

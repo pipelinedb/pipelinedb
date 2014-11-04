@@ -103,25 +103,39 @@ GetCQMatRelationName(char *cvname)
 }
 
 /*
- * ExecCreateCQMatViewIndex
+ * create_indices_on_mat_relation
  *
  * If feasible, create an index on the new materialization table to make
  * combine retrievals on it as efficient as possible. Sometimes this may be
  * impossible to do automatically in a smart way, but for some queries,
  * such as single-column GROUP BYs, it's straightforward.
  */
-void
-CreateCQMatViewIndex(Oid matreloid, RangeVar *matrelname, SelectStmt *stmt)
+static void
+create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *workerstmt, SelectStmt *viewstmt)
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
+	Node *node;
 	ColumnRef *col;
 
-	if (list_length(stmt->groupClause) != 1)
+	if (IsSlidingWindowSelectStmt(workerstmt))
+		node = (Node *) GetColumnRefInSlidingWindowExpr(viewstmt);
+	else if (list_length(workerstmt->groupClause) == 1)
+		node = linitial(workerstmt->groupClause);
+	else
 		return;
 
-	col = linitial(stmt->groupClause);
+	if (IsA(node, TypeCast))
+	{
+		TypeCast *tc = (TypeCast *) node;
+		node = tc->arg;
+	}
+
+	Assert(IsA(node, ColumnRef));
+	col = (ColumnRef *) node;
+
 	indexcol = makeNode(IndexElem);
+
 	indexcol->name = NameListToString(col->fields);
 	indexcol->expr = NULL;
 	indexcol->indexcolname = NULL;
@@ -136,7 +150,11 @@ CreateCQMatViewIndex(Oid matreloid, RangeVar *matrelname, SelectStmt *stmt)
 	index->accessMethod = CQ_MATREL_INDEX_TYPE;
 	index->tableSpace = NULL;
 	index->indexParams = list_make1(indexcol);
-	index->unique = true;
+	/*
+	 * Index should be unique iff there is a single GROUP BY
+	 * on the worker.
+	 */
+	index->unique = list_length(workerstmt->groupClause) == 1;
 	index->primary = false;
 	index->isconstraint = false;
 	index->deferrable = false;
@@ -295,7 +313,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	/*
 	 * Index the materialization table smartly if we can
 	 */
-	CreateCQMatViewIndex(reloid, mat_relation, workerselect);
+	create_indices_on_mat_relation(reloid, mat_relation, workerselect, viewselect);
 }
 
 /*

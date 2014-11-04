@@ -17,6 +17,7 @@ void ValidateSlidingWindowExpr(SelectStmt *stmt, ParseState *pstate);
 
 bool IsSlidingWindowSelectStmt(SelectStmt *stmt);
 bool IsSlidingWindowContinuousView(RangeVar *cvname);
+ColumnRef *GetColumnRefInSlidingWindowExpr(SelectStmt *stmt);
 
 SelectStmt *AddProjectionAndAddGroupByForSlidingWindow(SelectStmt *stmt, SelectStmt *viewselect, bool hasAggOrGroupBy, CQAnalyzeContext *context);
 void TransformAggNodeForCQView(SelectStmt *viewselect, Node *agg, ResTarget *aggres, bool hasAggOrGroupBy);
