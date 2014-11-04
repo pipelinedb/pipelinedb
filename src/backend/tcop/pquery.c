@@ -1437,7 +1437,7 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	CurrentResourceOwner = resowner;
 
 	queryDesc = CreateQueryDesc(stmt, portal->sourceText,
-			GetTransactionSnapshot(), InvalidSnapshot,
+			InvalidSnapshot, InvalidSnapshot,
 								dest, portal->portalParams, 0);
 
 	queryDesc->tupDesc = ExecTypeFromTL(stmt->planTree->targetlist, false);
