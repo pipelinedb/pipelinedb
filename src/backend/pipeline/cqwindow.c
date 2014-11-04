@@ -553,7 +553,6 @@ create_group_by_for_time_bucket_field(SelectStmt *workerstmt, SelectStmt *viewst
 			foreach(lc, wdef->partitionClause)
 			{
 				Node *node = (Node *) lfirst(lc);
-				pprint(node); pprint(tcref);
 				if (!ContainsColumnRef(node, tcref))
 					continue;
 
@@ -656,10 +655,6 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt
 		foreach(lc, wdef->partitionClause)
 		{
 			Node *node = lfirst(lc);
-
-			if (IsAColumnRef(node) && IsColumnRefInTargetList(workerstmt, node))
-				continue;
-
 			node = HoistNode(workerstmt, node, context);
 			workerstmt->groupClause = lappend(workerstmt->groupClause, node);
 		}

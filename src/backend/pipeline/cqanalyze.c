@@ -665,10 +665,6 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	if (viewstmtptr != NULL)
 		*viewstmtptr = viewstmt;
 
-	pprint(workerstmt);
-	elog(LOG, "------------------------------------");
-	pprint(viewstmt);
-
 	return workerstmt;
 }
 

@@ -1,0 +1,70 @@
+CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::int) OVER (PARTITION BY key ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM stream;
+\d+ cqwindow0_pdb;
+                             Table "public.cqwindow0_pdb"
+ Column |           Type           | Modifiers | Storage  | Stats target | Description 
+--------+--------------------------+-----------+----------+--------------+-------------
+ key    | text(0)                  |           | extended |              | 
+ sum    | bigint                   |           | plain    |              | 
+ _0     | timestamp with time zone |           | plain    |              | 
+
+\d+ cqwindow0;
+                View "public.cqwindow0"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ key    | text(0) |           | extended | 
+ sum    | numeric |           | main     | 
+View definition:
+ SELECT cqwindow0_pdb.key,
+    sum(cqwindow0_pdb.sum) OVER (PARTITION BY cqwindow0_pdb.key ORDER BY cqwindow0_pdb._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
+   FROM cqwindow0_pdb;
+
+ACTIVATE cqwindow0;
+INSERT INTO stream (key, x) VALUES ('a', 1), ('b', 2);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+INSERT INTO stream (key, x) VALUES ('a', 3), ('b', 4);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+INSERT INTO stream (key, x) VALUES ('a', 5), ('b', 6);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+INSERT INTO stream (key, x) VALUES ('a', 7), ('b', 8);
+DEACTIVATE;
+SELECT key, sum FROM cqwindow0_pdb ORDER BY _0, key;
+ key | sum 
+-----+-----
+ a   |   1
+ b   |   2
+ a   |   3
+ b   |   4
+ a   |   5
+ b   |   6
+ a   |   7
+ b   |   8
+(8 rows)
+
+SELECT * FROM cqwindow0 ORDER BY key;
+ key | sum 
+-----+-----
+ a   |   4
+ a   |   9
+ a   |  15
+ a   |  12
+ b   |   6
+ b   |  12
+ b   |  18
+ b   |  14
+(8 rows)
+
