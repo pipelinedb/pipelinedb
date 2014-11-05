@@ -103,7 +103,6 @@ StreamTableRecheck(StreamTableScanState *node, TupleTableSlot *slot)
 	 * Note that unlike IndexScan, SeqScan never use keys in heap_beginscan
 	 * (and this is very bad) - so, here we do not check are keys ok or not.
 	 */
-	 // XXX TODO can we make this better for streams? (Jay)
 	return true;
 }
 
@@ -158,47 +157,6 @@ ExecStreamTableScan(StreamTableScanState *node)
 	elog(LOG,"EXECSTTBLSCAN\n");
 	TupleTableSlot* temp;
 
-	/*
-	 * initialize scan relation
-	 */
-	 //////////////////////////////////////// HACK START /////////////////////////////////
-	/*
-	 * Miscellaneous initialization
-	 *
-	 * create expression context for node
-	 */
-	//ExecAssignExprContext(global_estate, &global_scanstate->ps);
-
-	/*
-	 * initialize child expressions
-	 */
-	//global_scanstate->ps.targetlist = (List *)
-	//	ExecInitExpr(global_targetlist,
-	//				 (PlanState *) global_scanstate);
-	//global_scanstate->ps.qual = (List *)
-	//	ExecInitExpr(global_qual,
-	//				 (PlanState *) global_scanstate);
-
-    //if (!global_estate)
-    //{	// already done in the Rescan node (HACK JUST FOR THIS QUERY)
-	  	/*
-	 	* tuple table initialization
-	 	*/
-	//	ExecInitResultTupleSlot(global_estate, &global_scanstate->ps);
-	//	ExecInitScanTupleSlot(global_estate, global_scanstate);
-  	//}
-
-	//InitScanRelation(node, global_estate, global_eflags);
-
-//	node->ps.ps_TupFromTlist = false;
-
-	/*
-	* Initialize result tuple type and projection info.
-	*/
-	//ExecAssignResultTypeFromTL(&node->ps);
-	//ExecAssignScanProjectionInfo(node);
-	//pprint (node);
-////////////////////////////////////////////////////////////////////////////////////////////////// HACK END
 	temp = ExecScan((StreamTableScanState *) node,
 					(ExecScanAccessMtd) StreamTableNext,
 					(ExecScanRecheckMtd) StreamTableRecheck);
@@ -235,6 +193,8 @@ ExecInitStreamTableScan(StreamTableScan *node, EState *estate, int eflags)
 	global_targetlist = (Expr *) node->plan.targetlist;
 	global_qual = (Expr *) node->plan.qual;
 
+	/******************* POSTPONE the scan relation initialization to the ExecProc stage *************************/
+	/* to prevent tuple leaks and snapshot leaks */
 #if 0
 	/*
 	 * Miscellaneous initialization
@@ -259,7 +219,6 @@ ExecInitStreamTableScan(StreamTableScan *node, EState *estate, int eflags)
 	ExecInitResultTupleSlot(estate, &scanstate->ps);
 	ExecInitScanTupleSlot(estate, scanstate);
 
-	/******************* POSTPONE the scan relation initialization to the ExecProc stage *************************/
 	/*
 	 * initialize scan relation
 	 */
