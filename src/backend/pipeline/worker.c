@@ -150,12 +150,8 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		/*
 		 * Run plan on a microbatch
 		 */
-		PushActiveSnapshot(GetTransactionSnapshot());
-		estate->es_snapshot =  GetActiveSnapshot();
 		ExecutePlan(estate, queryDesc->planstate, operation,
 					true, batchsize, timeoutms, ForwardScanDirection, dest);
-		//PopActiveSnapshot();
-		//UnregisterSnapshot(queryDesc->snapshot);
 
 		MemoryContextSwitchTo(oldcontext);
 
