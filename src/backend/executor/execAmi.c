@@ -285,7 +285,7 @@ ExecMarkPos(PlanState *node)
 			break;
 
 		case T_StreamTableScanState:
-			ExecSeqMarkPos((StreamTableScanState *) node);
+			ExecStreamTableMarkPos((StreamTableScanState *) node);
 			break;
 
 		case T_IndexScanState:

@@ -2824,6 +2824,7 @@ _outNode(StringInfo str, const void *obj)
 				_outScan(str, obj);
 				break;
 			case T_SeqScan:
+			case T_StreamTableScan:
 				_outSeqScan(str, obj);
 				break;
 			case T_StreamScan:

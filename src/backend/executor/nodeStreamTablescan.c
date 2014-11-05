@@ -15,7 +15,7 @@
 /*
  * INTERFACE ROUTINES
  *		ExecStreamTableScan				sequentially scans a relation.
- *		ExecTreamTableNext				retrieve next tuple in sequential order.
+ *		ExecStreamTableNext				retrieve next tuple in sequential order.
  *		ExecInitStreamTableScan			creates and initializes a seqscan node.
  *		ExecEndStreamTableScan			releases any storage allocated.
  *		ExecReScanStreamTableScan		rescans the relation
@@ -32,6 +32,13 @@
 static void InitStreamTableScanRelation(StreamTableScanState *node, EState *estate, int eflags);
 static TupleTableSlot *StreamTableNext(StreamTableScanState *node);
 
+EState	   *global_estate = NULL;
+int 		global_eflags;
+StreamTableScanState *global_scanstate;
+List	   *global_targetlist;		/* target list to be computed at this node */
+List	   *global_qual;			/* implicitly-ANDed qual conditions */
+
+
 /* ----------------------------------------------------------------
  *						Scan Support
  * ----------------------------------------------------------------
@@ -46,6 +53,7 @@ static TupleTableSlot *StreamTableNext(StreamTableScanState *node);
 static TupleTableSlot *
 StreamTableNext(StreamTableScanState *node)
 {
+	elog(LOG,"NEXT\n");
 	HeapTuple	tuple;
 	HeapScanDesc scandesc;
 	EState	   *estate;
@@ -99,22 +107,7 @@ StreamTableRecheck(StreamTableScanState *node, TupleTableSlot *slot)
 	return true;
 }
 
-/* ----------------------------------------------------------------
- *		ExecStreamTableScan(node)
- *
- *		Scans the relation sequentially and returns the next qualifying
- *		tuple.
- *		We call the ExecScan() routine and pass it the appropriate
- *		access method functions.
- * ----------------------------------------------------------------
- */
-TupleTableSlot *
-ExecStreamTableScan(StreamTableScanState *node)
-{
-	return ExecScan((ScanState *) node,
-					(ExecScanAccessMtd) StreamTableNext,
-					(ExecScanRecheckMtd) StreamTableRecheck);
-}
+
 
 /* ----------------------------------------------------------------
  *		InitScanRelation
@@ -125,6 +118,7 @@ ExecStreamTableScan(StreamTableScanState *node)
 static void
 InitScanRelation(StreamTableScanState *node, EState *estate, int eflags)
 {
+	elog(LOG,"INITSCANRELATION\n");
 	Relation	currentRelation;
 	HeapScanDesc currentScanDesc;
 
@@ -149,7 +143,68 @@ InitScanRelation(StreamTableScanState *node, EState *estate, int eflags)
 	ExecAssignScanType(node, RelationGetDescr(currentRelation));
 }
 
+/* ----------------------------------------------------------------
+ *		ExecStreamTableScan(node)
+ *
+ *		Scans the relation sequentially and returns the next qualifying
+ *		tuple.
+ *		We call the ExecScan() routine and pass it the appropriate
+ *		access method functions.
+ * ----------------------------------------------------------------
+ */
+TupleTableSlot *
+ExecStreamTableScan(StreamTableScanState *node)
+{
+	elog(LOG,"EXECSTTBLSCAN\n");
+	TupleTableSlot* temp;
 
+	/*
+	 * initialize scan relation
+	 */
+	 //////////////////////////////////////// HACK START /////////////////////////////////
+	/*
+	 * Miscellaneous initialization
+	 *
+	 * create expression context for node
+	 */
+	//ExecAssignExprContext(global_estate, &global_scanstate->ps);
+
+	/*
+	 * initialize child expressions
+	 */
+	//global_scanstate->ps.targetlist = (List *)
+	//	ExecInitExpr(global_targetlist,
+	//				 (PlanState *) global_scanstate);
+	//global_scanstate->ps.qual = (List *)
+	//	ExecInitExpr(global_qual,
+	//				 (PlanState *) global_scanstate);
+
+    //if (!global_estate)
+    //{	// already done in the Rescan node (HACK JUST FOR THIS QUERY)
+	  	/*
+	 	* tuple table initialization
+	 	*/
+	//	ExecInitResultTupleSlot(global_estate, &global_scanstate->ps);
+	//	ExecInitScanTupleSlot(global_estate, global_scanstate);
+  	//}
+
+	//InitScanRelation(node, global_estate, global_eflags);
+
+//	node->ps.ps_TupFromTlist = false;
+
+	/*
+	* Initialize result tuple type and projection info.
+	*/
+	//ExecAssignResultTypeFromTL(&node->ps);
+	//ExecAssignScanProjectionInfo(node);
+	//pprint (node);
+////////////////////////////////////////////////////////////////////////////////////////////////// HACK END
+	temp = ExecScan((StreamTableScanState *) node,
+					(ExecScanAccessMtd) StreamTableNext,
+					(ExecScanRecheckMtd) StreamTableRecheck);
+	print_slot(temp);
+	return temp;
+}
 /* ----------------------------------------------------------------
  *		ExecInitStreamTableScan
  * ----------------------------------------------------------------
@@ -157,6 +212,7 @@ InitScanRelation(StreamTableScanState *node, EState *estate, int eflags)
 StreamTableScanState *
 ExecInitStreamTableScan(StreamTableScan *node, EState *estate, int eflags)
 {
+	elog(LOG,"INITSTREAMTABLSCANyy\n");
 	StreamTableScanState *scanstate;
 
 	/*
@@ -173,6 +229,13 @@ ExecInitStreamTableScan(StreamTableScan *node, EState *estate, int eflags)
 	scanstate->ps.plan = (Plan *) node;
 	scanstate->ps.state = estate;
 
+	global_estate = estate;
+	global_eflags = eflags;
+	global_scanstate = scanstate;
+	global_targetlist = (Expr *) node->plan.targetlist;
+	global_qual = (Expr *) node->plan.qual;
+
+#if 0
 	/*
 	 * Miscellaneous initialization
 	 *
@@ -196,6 +259,7 @@ ExecInitStreamTableScan(StreamTableScan *node, EState *estate, int eflags)
 	ExecInitResultTupleSlot(estate, &scanstate->ps);
 	ExecInitScanTupleSlot(estate, scanstate);
 
+	/******************* POSTPONE the scan relation initialization to the ExecProc stage *************************/
 	/*
 	 * initialize scan relation
 	 */
@@ -208,7 +272,7 @@ ExecInitStreamTableScan(StreamTableScan *node, EState *estate, int eflags)
 	 */
 	ExecAssignResultTypeFromTL(&scanstate->ps);
 	ExecAssignScanProjectionInfo(scanstate);
-
+#endif
 	return scanstate;
 }
 
@@ -221,6 +285,7 @@ ExecInitStreamTableScan(StreamTableScan *node, EState *estate, int eflags)
 void
 ExecEndStreamTableScan(StreamTableScanState *node)
 {
+	elog(LOG,"ENDSTREAMTABLESCAN\n");
 	Relation	relation;
 	HeapScanDesc scanDesc;
 
@@ -266,7 +331,45 @@ ExecEndStreamTableScan(StreamTableScanState *node)
 void
 ExecReScanStreamTableScan(StreamTableScanState *node)
 {
+	elog(LOG,"RESCAN\n");
 	HeapScanDesc scan;
+
+	/*
+	 * Miscellaneous initialization
+	 *
+	 * create expression context for node
+	 */
+	ExecAssignExprContext(global_estate, &global_scanstate->ps);
+
+	/*
+	 * initialize child expressions
+	 */
+	global_scanstate->ps.targetlist = (List *)
+		ExecInitExpr(global_targetlist,
+					 (PlanState *) global_scanstate);
+	global_scanstate->ps.qual = (List *)
+		ExecInitExpr(global_qual,
+					 (PlanState *) global_scanstate);
+
+	/*
+	 * tuple table initialization
+	 */
+	ExecInitResultTupleSlot(global_estate, &global_scanstate->ps);
+	ExecInitScanTupleSlot(global_estate, global_scanstate);
+
+	/*
+	 * initialize scan relation
+	 */
+	InitScanRelation(node, global_estate, global_eflags);
+
+	node->ps.ps_TupFromTlist = false;
+
+	/*
+	* Initialize result tuple type and projection info.
+	*/
+	ExecAssignResultTypeFromTL(&node->ps);
+	ExecAssignScanProjectionInfo(node);
+	//pprint(node);
 
 	scan = node->ss_currentScanDesc;
 
@@ -274,6 +377,7 @@ ExecReScanStreamTableScan(StreamTableScanState *node)
 				NULL);			/* new scan keys */
 
 	ExecScanReScan((ScanState *) node);
+	//ExecEndStreamTableScan(node);
 }
 
 /* ----------------------------------------------------------------
@@ -283,8 +387,9 @@ ExecReScanStreamTableScan(StreamTableScanState *node)
  * ----------------------------------------------------------------
  */
 void
-ExecSTreamTableMarkPos(StreamTableScanState *node)
+ExecStreamTableMarkPos(StreamTableScanState *node)
 {
+	elog(LOG,"MARKPOSyy\n");
 	HeapScanDesc scan = node->ss_currentScanDesc;
 
 	heap_markpos(scan);
@@ -299,6 +404,7 @@ ExecSTreamTableMarkPos(StreamTableScanState *node)
 void
 ExecStreamTableRestrPos(StreamTableScanState *node)
 {
+	elog(LOG,"RESTRPOS\n");
 	HeapScanDesc scan = node->ss_currentScanDesc;
 
 	/*
