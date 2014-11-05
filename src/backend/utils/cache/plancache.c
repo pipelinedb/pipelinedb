@@ -851,7 +851,6 @@ BuildCachedPlan(CachedPlanSource *plansource, List *qlist,
 	bool		spi_pushed;
 	MemoryContext plan_context;
 	MemoryContext oldcxt = CurrentMemoryContext;
-	ListCell *lc;
 
 	/*
 	 * Normally the querytree should be valid already, but if it's not,
@@ -1631,6 +1630,7 @@ PlanCacheComputeResultDesc(List *stmt_list)
 	{
 		case PORTAL_ONE_SELECT:
 		case PORTAL_ONE_MOD_WITH:
+		case PORTAL_CONTINUOUS_QUERY:
 			query = (Query *) linitial(stmt_list);
 			Assert(IsA(query, Query));
 			return ExecCleanTypeFromTL(query->targetList, false);

@@ -11,6 +11,7 @@
 #include "pipeline/stream.h"
 #include "pipeline/decode.h"
 #include "pipeline/streambuf.h"
+#include "postmaster/bgworker.h"
 #include "executor/tuptable.h"
 #include "nodes/print.h"
 #include "storage/lwlock.h"
@@ -197,7 +198,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 
 	SpinLockInit(&result->mutex);
 
-	/* 
+	/*
 	 * Stream event appended, now signal workers waiting on this stream
 	 * only if the buffer went from empty to not
 	 * empty
@@ -211,7 +212,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 			SetStreamBufferLatch(latchCtr);
 		}
 		bms_free(toSignal);
-		buf->empty = false; 
+		buf->empty = false;
 	}
 
 	LWLockRelease(StreamBufferAppendLock);
@@ -282,7 +283,7 @@ InitGlobalStreamBuffer(void)
 {
 	bool found;
 	Size size = StreamBufferShmemSize();
-	Size headersize = MAXALIGN(sizeof(StreamBuffer)); 
+	Size headersize = MAXALIGN(sizeof(StreamBuffer));
 
 	LWLockAcquire(StreamBufferAppendLock, LW_EXCLUSIVE);
 
@@ -461,14 +462,14 @@ PinNextStreamEvent(StreamBufferReader *reader)
 void
 UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 {
-	volatile Bitmapset *bms = slot->readby;
+	Bitmapset *bms = slot->readby;
 
 	SpinLockAcquire(&slot->mutex);
 
-	/* 
+	/*
 	 * If there is only 1 reader reading the slot AND
 	 * The reader unpinning the slot Is the above reader AND
-	 * the slot being Unpinned was the next one in line to be clobbered 
+	 * the slot being Unpinned was the next one in line to be clobbered
 	 *   Then This is the last slot being deleted in the buffer
 	 *   Which also meant that after the delete happens, the buffer is empty
 	 *   so set the flag
@@ -477,13 +478,13 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 		(bms_is_member(reader->queryid, bms)) &&
 		(*(GlobalStreamBuffer->prev) == slot))
 	{
-		/* 
-		 *  XXX can we trust atomicity of this set
+		/*
+		 *  XXX(jay) can we trust atomicity of this set?
 		 */
 		GlobalStreamBuffer->empty = true;
 	}
 
-	bms_del_member((Bitmapset *) bms, reader->queryid);
+	bms_del_member(bms, reader->queryid);
 	SpinLockRelease(&slot->mutex);
 }
 

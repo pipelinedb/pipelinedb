@@ -25,6 +25,7 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cqwindow.h"
 #include "pipeline/cvmetadata.h"
 #include "pipeline/streambuf.h"
 #include "regex/regex.h"

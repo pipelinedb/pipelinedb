@@ -1,0 +1,142 @@
+CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PARTITION BY key ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM stream;
+\d+ cqwindow0_pdb;
+                             Table "public.cqwindow0_pdb"
+ Column |           Type           | Modifiers | Storage  | Stats target | Description 
+--------+--------------------------+-----------+----------+--------------+-------------
+ key    | text(0)                  |           | extended |              | 
+ sum    | numeric                  |           | main     |              | 
+ _1     | bytea                    |           | extended |              | 
+ _0     | timestamp with time zone |           | plain    |              | 
+
+\d+ cqwindow0;
+                View "public.cqwindow0"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ key    | text(0) |           | extended | 
+ sum    | numeric |           | main     | 
+View definition:
+ SELECT cqwindow0_pdb.key,
+    sum(cqwindow0_pdb._1) OVER (PARTITION BY cqwindow0_pdb.key ORDER BY cqwindow0_pdb._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
+   FROM cqwindow0_pdb;
+
+ACTIVATE cqwindow0;
+INSERT INTO stream (key, x) VALUES ('a', 1), ('b', 2);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+INSERT INTO stream (key, x) VALUES ('a', 3), ('b', 4);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+INSERT INTO stream (key, x) VALUES ('a', 5), ('b', 6);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+INSERT INTO stream (key, x) VALUES ('a', 7), ('b', 8);
+DEACTIVATE;
+SELECT key, sum FROM cqwindow0_pdb ORDER BY _0, key;
+ key | sum 
+-----+-----
+ a   |   1
+ b   |   2
+ a   |   3
+ b   |   4
+ a   |   5
+ b   |   6
+ a   |   7
+ b   |   8
+(8 rows)
+
+SELECT * FROM cqwindow0 ORDER BY key;
+ key | sum 
+-----+-----
+ a   |   4
+ a   |   9
+ a   |  15
+ a   |  12
+ b   |   6
+ b   |  12
+ b   |  18
+ b   |  14
+(8 rows)
+
+CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITION BY key ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM stream;
+\d+ cqwindow1_pdb;
+                             Table "public.cqwindow1_pdb"
+ Column |           Type           | Modifiers | Storage  | Stats target | Description 
+--------+--------------------------+-----------+----------+--------------+-------------
+ key    | text(0)                  |           | extended |              | 
+ avg    | numeric                  |           | main     |              | 
+ _1     | bigint[]                 |           | extended |              | 
+ _0     | timestamp with time zone |           | plain    |              | 
+
+\d+ cqwindow1;
+                View "public.cqwindow1"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ key    | text(0) |           | extended | 
+ avg    | numeric |           | main     | 
+View definition:
+ SELECT cqwindow1_pdb.key,
+    avg(cqwindow1_pdb._1) OVER (PARTITION BY cqwindow1_pdb.key ORDER BY cqwindow1_pdb._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
+   FROM cqwindow1_pdb;
+
+ACTIVATE cqwindow1;
+INSERT INTO stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+INSERT INTO stream (key, x) VALUES ('a', 4), ('b', 5), ('b', 6);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+INSERT INTO stream (key, x) VALUES ('a', 7), ('b', 8), ('a', 9);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+INSERT INTO stream (key, x) VALUES ('a', 10), ('b', 11), ('b', 12);
+DEACTIVATE;
+SELECT key, avg FROM cqwindow1_pdb ORDER BY _0, key;
+ key |         avg         
+-----+---------------------
+ a   |  2.0000000000000000
+ b   |  2.0000000000000000
+ a   |  4.0000000000000000
+ b   |  5.5000000000000000
+ a   |  8.0000000000000000
+ b   |  8.0000000000000000
+ a   | 10.0000000000000000
+ b   | 11.5000000000000000
+(8 rows)
+
+SELECT * FROM cqwindow1 ORDER BY key;
+ key |        avg         
+-----+--------------------
+ a   | 2.0000000000000000
+ a   | 2.6666666666666667
+ a   | 4.8000000000000000
+ a   | 7.5000000000000000
+ b   | 2.0000000000000000
+ b   | 4.3333333333333333
+ b   | 5.2500000000000000
+ b   | 8.4000000000000000
+(8 rows)
+

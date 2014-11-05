@@ -85,64 +85,6 @@ map_field_positions(char **fields, int nfields, TupleDesc desc)
 }
 
 /*
- * get_schema
- *
- * Given an encoding OID, retrieve the corresponding attributes from pg_attribute
- */
-static TupleDesc
-get_schema(Oid encoding)
-{
-	HeapTuple	pg_attribute_tuple;
-	Relation	pg_attribute_desc;
-	SysScanDesc pg_attribute_scan;
-	ScanKeyData skey[2];
-	TupleDesc schema;
-	List *lattrs = NIL;
-	Form_pg_attribute *attrs;
-	ListCell *lc;
-	int i = 0;
-
-	ScanKeyInit(&skey[0],
-				Anum_pg_attribute_attrelid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(encoding));
-
-	ScanKeyInit(&skey[1],
-				Anum_pg_attribute_attnum,
-				BTGreaterStrategyNumber, F_INT2GT,
-				Int16GetDatum(0));
-
-	pg_attribute_desc = heap_open(AttributeRelationId, AccessShareLock);
-	pg_attribute_scan = systable_beginscan(pg_attribute_desc,
-										   AttributeRelidNumIndexId,
-										   criticalRelcachesBuilt,
-										   NULL,
-										   2, skey);
-
-	while (HeapTupleIsValid(pg_attribute_tuple = systable_getnext(pg_attribute_scan)))
-	{
-		Form_pg_attribute attp;
-		attp = (Form_pg_attribute) GETSTRUCT(pg_attribute_tuple);
-		lattrs = lappend(lattrs, attp);
-	}
-
-	systable_endscan(pg_attribute_scan);
-	heap_close(pg_attribute_desc, AccessShareLock);
-
-	attrs = palloc(list_length(lattrs) * sizeof(Form_pg_attribute));
-	foreach(lc, lattrs)
-	{
-		attrs[i++] = (Form_pg_attribute) lfirst(lc);
-	}
-
-	schema = CreateTupleDesc(list_length(lattrs), false, attrs);
-
-	pfree(lattrs);
-
-	return schema;
-}
-
-/*
  * InitDecoderCache
  *
  * Creates the hashtable that is used as the encoding-to-decoder cache

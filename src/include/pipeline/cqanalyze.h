@@ -24,9 +24,10 @@ typedef struct CQAnalyzeContext
 	List *streams;
 	List *tables;
 	List *targets;
-	List *aggCalls;
+	List *funcCalls;
 	Node *swExpr;
-	Node *stepColumn;
+	Node *stepNode;
+	List *windows;
 	int location;
 	char *stepSize;
 } CQAnalyzeContext;
@@ -35,7 +36,7 @@ TupleDesc InferStreamScanTupleDescriptor(ParseState *pstate, RangeTblEntry *rte)
 void AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
 RangeTblEntry *TransformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
-SelectStmt *GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewselect);
+SelectStmt *GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr);
 SelectStmt *GetSelectStmtForCQCombiner(SelectStmt *stmt);
 
 Oid GetCombineStateColumnType(TargetEntry *te);
@@ -43,9 +44,13 @@ Oid GetCombineStateColumnType(TargetEntry *te);
 void InitializeCQAnalyzeContext(SelectStmt *stmt, ParseState *pstate, CQAnalyzeContext *context);
 char *GetUniqueInternalColname(CQAnalyzeContext *context);
 bool FindColumnRefsWithTypeCasts(Node *node, CQAnalyzeContext *context);
-bool IsColumnRefInTargetList(SelectStmt *stmt, Node *node);
-void ReplaceTargetListWithColumnRefs(SelectStmt *stmt, bool replaceAggs);
+bool ContainsColumnRef(Node *node, ColumnRef *cref);
+ColumnRef *GetColumnRef(Node *node);
+ResTarget *IsColumnRefInTargetList(SelectStmt *stmt, Node *node);
+bool IsAColumnRef(Node *node);
 bool AreColumnRefsEqual(Node *cr1, Node *cr2);
+Node *HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context);
+bool CollectFuncs(Node *node, CQAnalyzeContext *context);
 bool CollectAggFuncs(Node *node, CQAnalyzeContext *context);
 ResTarget *CreateResTargetForNode(Node *node);
 ResTarget *CreateUniqueResTargetForNode(Node *node, CQAnalyzeContext *context);

@@ -916,6 +916,9 @@ EventTriggerSupportsObjectType(ObjectType obtype)
 		case OBJECT_EVENT_TRIGGER:
 			/* no support for event triggers on event triggers */
 			return false;
+		case OBJECT_CONTINUOUS_VIEW:
+			/* no support for continuous views (for now) */
+			return false;
 		case OBJECT_AGGREGATE:
 		case OBJECT_ATTRIBUTE:
 		case OBJECT_CAST:

@@ -29,7 +29,7 @@
 #include "nodes/pg_list.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
-#include "pipeline/cqslidingwindow.h"
+#include "pipeline/cqwindow.h"
 #include "pipeline/streambuf.h"
 #include "regex/regex.h"
 #include "utils/builtins.h"
