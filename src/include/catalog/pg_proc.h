@@ -5039,9 +5039,9 @@ DATA(insert OID = 4301 ( float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0
 DESCR("aggregate combination function");
 DATA(insert OID = 4303 ( numeric_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1231 "1231 1231" _null_ _null_ _null_ _null_ numeric_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
-DATA(insert OID = 4304 ( interval_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1187 "1187 1187" _null_ _null_ _null_ _null_ interval_combine _null_ _null_ _null_ ));
+DATA(insert OID = 4304 ( interval_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1187 "1187 1187" _null_ _null_ _null_ _null_ interval_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
-DATA(insert OID = 4305 ( int_avg_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1016 "1016 1016" _null_ _null_ _null_ _null_ int_avg_combine _null_ _null_ _null_ ));
+DATA(insert OID = 4305 ( int_avg_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1016 "1016 1016" _null_ _null_ _null_ _null_ int_avg_combine _null_ _null_ _null_ ));
 DESCR("AVG(int) combination function");
 DATA(insert OID = 4306 ( int8_sum_to_int8	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 20 "20 20" _null_ _null_ _null_ _null_ int8_sum_to_int8 _null_ _null_ _null_ ));
 DESCR("SUM(int) collection function");
@@ -5082,17 +5082,113 @@ DESCR("serializer for string aggregation transition states");
 DATA(insert OID = 4321 ( numeric_pcombine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 17" _null_ _null_ _null_ _null_ numeric_pcombine _null_ _null_ _null_ ));
 DESCR("aggregate parse and combine function");
 
-DATA(insert OID = 4322 (  avg				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 1700 "17" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4322 ( avg PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1700 "17 1700" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
 DESCR("the average (arithmetic mean) as numeric of all serialized numeric values");
-DATA(insert OID = 4323 (  avg				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 1700 "1016" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4323 ( avg PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1700 "1016 1700" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
 DESCR("the average (arithmetic mean) as numeric of all numeric[] values");
-DATA(insert OID = 4324 (  avg				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 701  "1022" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4324 ( avg PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701  "1022 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
 DESCR("the average (arithmetic mean) as numeric of all double precision[] values");
-DATA(insert OID = 4325 (  avg				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 1186 "1187" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4325 ( avg PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1186 "1187 1186" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
 DESCR("the average (arithmetic mean) as numeric of all interval[] values");
 
-DATA(insert OID = 4326 (  sum				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 1700 "17" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4326 ( sum PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1700 "17 1700" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
 DESCR("sum as numeric across all serialized numeric input values");
+
+DATA(insert OID = 4327 ( array_agg_pcombine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2277" _null_ _null_ _null_ _null_ array_agg_pcombine _null_ _null_ _null_ ));
+DESCR("aggregate parse and combine function");
+
+DATA(insert OID = 4328 ( array_agg PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 2277 "2277 2277" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("array aggregate of multiple input arrays");
+
+DATA(insert OID = 4329 ( string_agg_pcombine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 17" _null_ _null_ _null_ _null_	string_agg_pcombine _null_ _null_ _null_ ));
+DESCR("string aggregate parse and combine function");
+
+DATA(insert OID = 4330 ( string_agg PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 25 "17 25 25" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("aggregate of multiple string aggregates");
+
+DATA(insert OID = 4331 ( string_agg PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 17 "17 17 17" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("aggregate of multiple bytea aggregates");
+
+DATA(insert OID = 4332 ( json_agg PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 114 "17 114" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("aggregate of multiple json aggregates");
+
+DATA(insert OID = 4333 ( json_object_agg PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 114 "17 114 2276" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("aggregate of multiple json object aggregates");
+
+DATA(insert OID = 4334 ( json_agg_pcombine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 17" _null_ _null_ _null_ _null_	json_agg_pcombine _null_ _null_ _null_ ));
+DESCR("json aggregate parse and combine function");
+
+DATA(insert OID = 4335 ( json_object_agg_pcombine PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 17" _null_ _null_ _null_ _null_	json_object_agg_pcombine _null_ _null_ _null_ ));
+DESCR("json object aggregate parse and combine function");
+
+DATA(insert OID = 4336 ( regr_sxx PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 701 "1022 701 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4337 ( regr_syy PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 701 "1022 701 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4338 ( regr_sxy PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 701 "1022 701 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4339 ( regr_avgx PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 701 "1022 701 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4340 ( regr_avgy PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 701 "1022 701 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4341 ( regr_r2 PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 701 "1022 701 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4342 ( regr_slope PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 701 "1022 701 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4343 ( regr_intercept PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 701 "1022 701 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4344 ( covar_pop PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 701 "1022 701 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4345 ( covar_samp PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 701 "1022 701 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4346 ( corr PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 701 "1022 701 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4347 ( var_pop PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1700 "17 1700" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4348 ( var_pop PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "1022 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4349 ( var_samp PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1700 "17 1700" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4350 ( var_samp PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "1022 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4351 ( variance PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1700 "17 1700" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4352 ( variance PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "1022 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4353 ( stddev_pop PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1700 "17 1700" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4354 ( stddev_pop PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "1022 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4355 ( stddev_samp PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1700 "17 1700" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4356 ( stddev_samp PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "1022 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4357 ( stddev PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1700 "17 1700" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
+
+DATA(insert OID = 4358 ( stddev PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "1022 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("combine aggregate");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result

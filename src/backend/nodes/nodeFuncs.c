@@ -20,6 +20,7 @@
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/relation.h"
+#include "parser/parse_type.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 
@@ -227,6 +228,9 @@ exprType(const Node *expr)
 			break;
 		case T_PlaceHolderVar:
 			type = exprType((Node *) ((const PlaceHolderVar *) expr)->phexpr);
+			break;
+		case T_TypeCast:
+			type = LookupTypeNameOid(NULL, ((TypeCast *) expr)->typeName, true);
 			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d", (int) nodeTag(expr));

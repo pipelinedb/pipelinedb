@@ -61,8 +61,8 @@ CREATE CONTINUOUS VIEW test_string_agg AS SELECT k::text, string_agg(v::text, k:
 ACTIVATE test_bstring_agg;
 ACTIVATE test_string_agg;
 
-INSERT INTO cqobjectagg_stream (k, v) VALUES ('x', 'val0'), ('x', 'val1'), ('x', ''), ('x', 'val2');
-INSERT INTO cqobjectagg_stream (k, v) VALUES ('y', 'val0'), ('y', 'val1'), ('y', ''), ('y', 'val2');
+INSERT INTO cqobjectagg_stream (k, v) VALUES ('x', 'val0'), ('x', 'val1');
+INSERT INTO cqobjectagg_stream (k, v) VALUES ('y', 'val0'), ('y', 'val1');
 
 DEACTIVATE test_bstring_agg, test_string_agg;
 

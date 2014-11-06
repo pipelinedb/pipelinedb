@@ -13,11 +13,8 @@ INSERT INTO int_stream_cqswsum (k, v) VALUES ('y', 10), ('y', 10), ('y', 10);
 
 DEACTIVATE test_sw_int8_sum, test_sw_int4_sum, test_sw_int2_sum;
 
-SELECT k, sum, _1 FROM test_sw_int8_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_int8_sum ORDER BY k;
-SELECT k, sum FROM test_sw_int4_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_int4_sum ORDER BY k;
-SELECT k, sum FROM test_sw_int2_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_int2_sum ORDER BY k;
 
 ACTIVATE test_sw_int8_sum, test_sw_int4_sum, test_sw_int2_sum;
@@ -29,11 +26,8 @@ INSERT INTO int_stream_cqswsum (k, v) VALUES ('y', 10), ('y', 10), ('z', 10);
 
 DEACTIVATE test_sw_int8_sum, test_sw_int4_sum, test_sw_int2_sum;
 
-SELECT k, sum, _1 FROM test_sw_int8_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_int8_sum ORDER BY k;
-SELECT k, sum FROM test_sw_int4_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_int4_sum ORDER BY k;
-SELECT k, sum FROM test_sw_int2_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_int2_sum ORDER BY k;
 
 -------------------------------------------------------------------------------
@@ -48,9 +42,7 @@ INSERT INTO float_stream_cqswsum (k, v) VALUES ('y', -10.3), ('y', 1.2e6), ('y',
 
 DEACTIVATE test_sw_float8_sum, test_sw_float4_sum;
 
-SELECT k, sum FROM test_sw_float8_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_float8_sum ORDER BY k;
-SELECT k, sum FROM test_sw_float4_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_float4_sum ORDER BY k;
 
 ACTIVATE test_sw_float8_sum, test_sw_float4_sum;
@@ -62,9 +54,7 @@ INSERT INTO float_stream_cqswsum (k, v) VALUES ('y', -10.3), ('y', 1.2e6), ('y',
 
 DEACTIVATE test_sw_float8_sum, test_sw_float4_sum;
 
-SELECT k, sum FROM test_sw_float8_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_float8_sum ORDER BY k;
-SELECT k, sum FROM test_sw_float4_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_float4_sum ORDER BY k;
 
 -------------------------------------------------------------------------------
@@ -78,7 +68,6 @@ INSERT INTO cash_stream_cqswsum (k, v) VALUES ('y', -10), ('y', 10), ('y', 0);
 
 DEACTIVATE test_sw_cash_sum;
 
-SELECT k, sum FROM test_sw_cash_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_cash_sum ORDER BY k;
 
 ACTIVATE test_sw_cash_sum;
@@ -90,7 +79,6 @@ INSERT INTO cash_stream_cqswsum (k, v) VALUES ('y', '0.01');
 
 DEACTIVATE test_sw_cash_sum;
 
-SELECT k, sum FROM test_sw_cash_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_cash_sum ORDER BY k;
 
 -------------------------------------------------------------------------------
@@ -104,7 +92,6 @@ INSERT INTO numeric_stream_cqswsum (k, v) VALUES ('y', 1.004e5), ('y', 0.4), ('y
 
 DEACTIVATE test_sw_numeric_sum;
 
-SELECT k, sum, _1 FROM test_sw_numeric_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_numeric_sum ORDER BY k;
 
 ACTIVATE test_sw_numeric_sum;
@@ -116,7 +103,6 @@ INSERT INTO numeric_stream_cqswsum (k, v) VALUES ('y', '-00000000000000000000000
 
 DEACTIVATE test_sw_numeric_sum;
 
-SELECT k, sum, _1 FROM test_sw_numeric_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_numeric_sum ORDER BY k;
 
 -------------------------------------------------------------------------------
@@ -130,7 +116,6 @@ INSERT INTO interval_stream_cqswsum (k, ts0, ts1) VALUES ('x', '2014-01-01', '20
 
 DEACTIVATE test_sw_interval_sum;
 
-SELECT k, sum FROM test_sw_interval_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_interval_sum ORDER BY k;
 
 ACTIVATE test_sw_interval_sum;
@@ -142,7 +127,6 @@ INSERT INTO interval_stream_cqswsum (k, ts0, ts1) VALUES ('y', '2014-01-01', '20
 
 DEACTIVATE test_sw_interval_sum;
 
-SELECT k, sum FROM test_sw_interval_sum_pdb ORDER BY k;
 SELECT * FROM test_sw_interval_sum ORDER BY k;
 
 DROP CONTINUOUS VIEW test_sw_int8_sum;

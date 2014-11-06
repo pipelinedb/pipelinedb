@@ -3843,6 +3843,7 @@ stringaggstatesend(PG_FUNCTION_ARGS)
 	result = (bytea *) palloc(nbytes + VARHDRSZ);
 	SET_VARSIZE(result, nbytes + VARHDRSZ);
 
+	// it's not copying the null byte
 	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
 
 	PG_RETURN_BYTEA_P(result);
@@ -3858,7 +3859,7 @@ stringaggstaterecv(PG_FUNCTION_ARGS)
 	bytea *bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
 	StringAggState *result;
 	StringInfoData buf;
-	int nbytes = VARSIZE(bytesin);
+	int nbytes = VARSIZE(bytesin) - VARHDRSZ;
 
 	AggCheckCallContext(fcinfo, NULL);
 
@@ -3869,7 +3870,7 @@ stringaggstaterecv(PG_FUNCTION_ARGS)
 
 	result->dlen = pq_getmsgint(&buf, sizeof(int));
 	result->buf = makeStringInfo();
-	appendStringInfoString(result->buf, pq_getmsgstring(&buf));
+	appendStringInfoString(result->buf, pq_getmsgbytes(&buf, nbytes - sizeof(int)));
 
 	PG_RETURN_POINTER(result);
 }
@@ -3893,6 +3894,31 @@ string_agg_combine(PG_FUNCTION_ARGS)
 		appendStringInfoString(state->buf, incoming->buf->data);
 
 	PG_RETURN_POINTER(state);
+}
+
+/*
+ * Parse and concatenate two delimited strings
+ */
+Datum
+string_agg_pcombine(PG_FUNCTION_ARGS)
+{
+	Datum arg0;
+	Datum result;
+
+	if (!AggCheckCallContext(fcinfo, NULL))
+			elog(ERROR, "aggregate function called in non-aggregate context");
+
+	arg0 = PG_ARGISNULL(0) ? (Datum) makeStringAggState(fcinfo) : (Datum) PG_GETARG_POINTER(0);
+
+	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
+	fcinfo->nargs = 1;
+	fcinfo->arg[1] = stringaggstaterecv(fcinfo);
+	fcinfo->arg[0] = arg0;
+	fcinfo->nargs = 2;
+
+	result = string_agg_combine(fcinfo);
+
+	PG_RETURN_POINTER(result);
 }
 
 Datum

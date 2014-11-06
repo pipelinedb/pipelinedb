@@ -16,7 +16,7 @@ CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PART
  sum    | numeric |           | main     | 
 View definition:
  SELECT cqwindow0_pdb.key,
-    sum(cqwindow0_pdb._1) OVER (PARTITION BY cqwindow0_pdb.key ORDER BY cqwindow0_pdb._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
+    sum(cqwindow0_pdb._1, NULL::numeric(65535,65532)) OVER (PARTITION BY cqwindow0_pdb.key ORDER BY cqwindow0_pdb._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
    FROM cqwindow0_pdb;
 
 ACTIVATE cqwindow0;
@@ -43,19 +43,6 @@ SELECT pg_sleep(1);
 
 INSERT INTO stream (key, x) VALUES ('a', 7), ('b', 8);
 DEACTIVATE cqwindow0;
-SELECT key, sum FROM cqwindow0_pdb ORDER BY _0, key;
- key | sum 
------+-----
- a   |   1
- b   |   2
- a   |   3
- b   |   4
- a   |   5
- b   |   6
- a   |   7
- b   |   8
-(8 rows)
-
 SELECT * FROM cqwindow0 ORDER BY key;
  key | sum 
 -----+-----
@@ -87,7 +74,7 @@ CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITIO
  avg    | numeric |           | main     | 
 View definition:
  SELECT cqwindow1_pdb.key,
-    avg(cqwindow1_pdb._1) OVER (PARTITION BY cqwindow1_pdb.key ORDER BY cqwindow1_pdb._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
+    avg(cqwindow1_pdb._1, NULL::numeric(65535,65532)) OVER (PARTITION BY cqwindow1_pdb.key ORDER BY cqwindow1_pdb._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
    FROM cqwindow1_pdb;
 
 ACTIVATE cqwindow1;
@@ -114,19 +101,6 @@ SELECT pg_sleep(1);
 
 INSERT INTO stream (key, x) VALUES ('a', 10), ('b', 11), ('b', 12);
 DEACTIVATE cqwindow1;
-SELECT key, avg FROM cqwindow1_pdb ORDER BY _0, key;
- key |         avg         
------+---------------------
- a   |  2.0000000000000000
- b   |  2.0000000000000000
- a   |  4.0000000000000000
- b   |  5.5000000000000000
- a   |  8.0000000000000000
- b   |  8.0000000000000000
- a   | 10.0000000000000000
- b   | 11.5000000000000000
-(8 rows)
-
 SELECT * FROM cqwindow1 ORDER BY key;
  key |        avg         
 -----+--------------------

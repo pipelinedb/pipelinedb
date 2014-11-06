@@ -828,6 +828,7 @@ extern Datum string_agg_finalfn(PG_FUNCTION_ARGS);
 extern Datum stringaggstatesend(PG_FUNCTION_ARGS);
 extern Datum stringaggstaterecv(PG_FUNCTION_ARGS);
 extern Datum string_agg_combine(PG_FUNCTION_ARGS);
+extern Datum string_agg_pcombine(PG_FUNCTION_ARGS);
 
 extern Datum text_concat(PG_FUNCTION_ARGS);
 extern Datum text_concat_ws(PG_FUNCTION_ARGS);
@@ -1222,8 +1223,10 @@ extern Datum numeric_combine(PG_FUNCTION_ARGS);
 extern Datum numeric_avg_combine(PG_FUNCTION_ARGS);
 extern Datum array_agg_combine(PG_FUNCTION_ARGS);
 extern Datum json_agg_combine(PG_FUNCTION_ARGS);
+extern Datum json_agg_pcombine(PG_FUNCTION_ARGS);
+extern Datum json_object_agg_pcombine(PG_FUNCTION_ARGS);
 extern Datum json_object_agg_combine(PG_FUNCTION_ARGS);
-
+extern Datum array_agg_pcombine(PG_FUNCTION_ARGS);
 extern Datum numeric_pcombine(PG_FUNCTION_ARGS);
 
 #endif   /* BUILTINS_H */

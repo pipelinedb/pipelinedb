@@ -9,7 +9,6 @@ INSERT INTO cqswcount_stream (k) VALUES ('x'), ('x'), ('x'), ('x'), ('x'), ('x')
 
 DEACTIVATE test_count;
 
-SELECT k, count FROM test_count_pdb ORDER BY k;
 SELECT * FROM test_count ORDER BY k;
 
 ACTIVATE test_count;
@@ -21,7 +20,6 @@ INSERT INTO cqswcount_stream (k) VALUES ('x'), ('x'), ('x'), ('x'), ('x'), ('x')
 
 DEACTIVATE test_count;
 
-SELECT k, count FROM test_count_pdb ORDER BY k;
 SELECT * FROM test_count ORDER BY k;
 
 DROP CONTINUOUS VIEW test_count;

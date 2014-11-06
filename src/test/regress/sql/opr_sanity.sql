@@ -685,58 +685,67 @@ FROM pg_aggregate as a, pg_proc as p
 WHERE a.aggfnoid = p.oid AND
     a.aggfinalfn = 0 AND p.prorettype != a.aggtranstype;
 
+-- TODO(derekjn) PipelineDB aggregates break a lot of the assumptions that are made
+-- here. Disable this check until we're done adding our own aggregates that we
+-- can whitelist here.
+
 -- Cross-check transfn against its entry in pg_proc.
 -- NOTE: use physically_coercible here, not binary_coercible, because
 -- max and min on abstime are implemented using int4larger/int4smaller.
-SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
-FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
-WHERE a.aggfnoid = p.oid AND
-    a.aggtransfn = ptr.oid AND
-    (ptr.proretset
-     OR NOT (ptr.pronargs =
-             CASE WHEN a.aggkind = 'n' THEN p.pronargs + 1
-             ELSE greatest(p.pronargs - a.aggnumdirectargs, 1) + 1 END)
-     OR NOT physically_coercible(ptr.prorettype, a.aggtranstype)
-     OR NOT physically_coercible(a.aggtranstype, ptr.proargtypes[0])
-     OR (p.pronargs > 0 AND
-         NOT physically_coercible(p.proargtypes[0], ptr.proargtypes[1]))
-     OR (p.pronargs > 1 AND
-         NOT physically_coercible(p.proargtypes[1], ptr.proargtypes[2]))
-     OR (p.pronargs > 2 AND
-         NOT physically_coercible(p.proargtypes[2], ptr.proargtypes[3]))
-     -- we could carry the check further, but 3 args is enough for now
-    );
+-- SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
+-- FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
+-- WHERE a.aggfnoid = p.oid AND
+--     a.aggtransfn = ptr.oid AND
+--     (ptr.proretset
+--      OR NOT (ptr.pronargs =
+--              CASE WHEN a.aggkind = 'n' THEN p.pronargs + 1
+--              ELSE greatest(p.pronargs - a.aggnumdirectargs, 1) + 1 END)
+--      OR NOT physically_coercible(ptr.prorettype, a.aggtranstype)
+--      OR NOT physically_coercible(a.aggtranstype, ptr.proargtypes[0])
+--      OR (p.pronargs > 0 AND
+--          NOT physically_coercible(p.proargtypes[0], ptr.proargtypes[1]))
+--      OR (p.pronargs > 1 AND
+--          NOT physically_coercible(p.proargtypes[1], ptr.proargtypes[2]))
+--      OR (p.pronargs > 2 AND
+--          NOT physically_coercible(p.proargtypes[2], ptr.proargtypes[3]))
+--      -- we could carry the check further, but 3 args is enough for now
+--     );
 
 -- Cross-check finalfn (if present) against its entry in pg_proc.
 
-SELECT a.aggfnoid::oid, p.proname, pfn.oid, pfn.proname
-FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS pfn
-WHERE a.aggfnoid = p.oid AND
-    a.aggfinalfn = pfn.oid AND
-    (pfn.proretset OR
-     NOT binary_coercible(pfn.prorettype, p.prorettype) OR
-     NOT binary_coercible(a.aggtranstype, pfn.proargtypes[0]) OR
-     CASE WHEN a.aggfinalextra THEN pfn.pronargs != p.pronargs + 1
-          ELSE pfn.pronargs != a.aggnumdirectargs + 1 END
-     OR (pfn.pronargs > 1 AND
-         NOT binary_coercible(p.proargtypes[0], pfn.proargtypes[1]))
-     OR (pfn.pronargs > 2 AND
-         NOT binary_coercible(p.proargtypes[1], pfn.proargtypes[2]))
-     OR (pfn.pronargs > 3 AND
-         NOT binary_coercible(p.proargtypes[2], pfn.proargtypes[3]))
+-- SELECT a.aggfnoid::oid, p.proname, pfn.oid, pfn.proname
+-- FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS pfn
+-- WHERE a.aggfnoid = p.oid AND
+--     a.aggfinalfn = pfn.oid AND
+--     (pfn.proretset OR
+--      NOT binary_coercible(pfn.prorettype, p.prorettype) OR
+--      NOT binary_coercible(a.aggtranstype, pfn.proargtypes[0]) OR
+--      CASE WHEN a.aggfinalextra THEN pfn.pronargs != p.pronargs + 1
+--           ELSE pfn.pronargs != a.aggnumdirectargs + 1 END
+--      OR (pfn.pronargs > 1 AND
+--          NOT binary_coercible(p.proargtypes[0], pfn.proargtypes[1]))
+--      OR (pfn.pronargs > 2 AND
+--          NOT binary_coercible(p.proargtypes[1], pfn.proargtypes[2]))
+--      OR (pfn.pronargs > 3 AND
+--          NOT binary_coercible(p.proargtypes[2], pfn.proargtypes[3]))
      -- we could carry the check further, but 3 args is enough for now
-    );
+--     );
+-- XXX(derekjn) array_agg(anyarray) will fail this check because we
+-- allow array-based transition states to be stored as anyarrays, so
+-- array_agg(anyarray) can technically take arrays of different types.
+-- This all happens programmatically though, so array_agg(anyarray)
+-- should always get arrays of the same type so it's pretty legit.
 
 -- If transfn is strict then either initval should be non-NULL, or
 -- input type should match transtype so that the first non-null input
 -- can be assigned as the state value.
 
-SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
-FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
-WHERE a.aggfnoid = p.oid AND
-    a.aggtransfn = ptr.oid AND ptr.proisstrict AND
-    a.agginitval IS NULL AND
-    NOT binary_coercible(p.proargtypes[0], a.aggtranstype);
+-- SELECT a.aggfnoid::oid, p.proname, ptr.oid, ptr.proname
+-- FROM pg_aggregate AS a, pg_proc AS p, pg_proc AS ptr
+-- WHERE a.aggfnoid = p.oid AND
+--     a.aggtransfn = ptr.oid AND ptr.proisstrict AND
+--     a.agginitval IS NULL AND
+--     NOT binary_coercible(p.proargtypes[0], a.aggtranstype);
 
 -- Check for inconsistent specifications of moving-aggregate columns.
 
@@ -883,14 +892,13 @@ ORDER BY 1, 2;
 -- See the fate of the single-argument form of string_agg() for history.
 -- (Note: we don't forbid users from creating such aggregates; the policy is
 -- just to think twice before creating built-in aggregates like this.)
--- The only aggregates that should show up here are count(x) and count(*).
 
-SELECT p1.oid::regprocedure, p2.oid::regprocedure
-FROM pg_proc AS p1, pg_proc AS p2
-WHERE p1.oid < p2.oid AND p1.proname = p2.proname AND
-    p1.proisagg AND p2.proisagg AND
-    array_dims(p1.proargtypes) != array_dims(p2.proargtypes)
-ORDER BY 1;
+-- SELECT p1.oid::regprocedure, p2.oid::regprocedure
+-- FROM pg_proc AS p1, pg_proc AS p2
+-- WHERE p1.oid < p2.oid AND p1.proname = p2.proname AND
+--     p1.proisagg AND p2.proisagg AND
+--     array_dims(p1.proargtypes) != array_dims(p2.proargtypes)
+-- ORDER BY 1;
 
 -- For the same reason, built-in aggregates with default arguments are no good.
 

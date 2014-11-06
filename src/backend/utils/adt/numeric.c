@@ -2874,7 +2874,7 @@ numeric_pcombine(PG_FUNCTION_ARGS)
 
 	old_context = MemoryContextSwitchTo(agg_context);
 
-	arg0 =(PG_ARGISNULL(0)) ? (Datum) makeNumericAggState(fcinfo, false) : (Datum) PG_GETARG_POINTER(0);
+	arg0 = PG_ARGISNULL(0) ? (Datum) makeNumericAggState(fcinfo, false) : (Datum) PG_GETARG_POINTER(0);
 
 	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
 	fcinfo->nargs = 1;
@@ -2886,7 +2886,7 @@ numeric_pcombine(PG_FUNCTION_ARGS)
 
 	MemoryContextSwitchTo(old_context);
 
-	return result;
+	PG_RETURN_POINTER(result);
 }
 
 /*
