@@ -28,14 +28,29 @@
 #include "pipeline/cqwindow.h"
 #include "pipeline/cvmetadata.h"
 #include "pipeline/streambuf.h"
+#include "postmaster/bgworker.h"
 #include "regex/regex.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 #include "pipeline/cvmetadata.h"
 #include "miscadmin.h"
 
+#define SLEEP_TIMEOUT 5000
+
 static HTAB *cv_metadata_hash = NULL;
-static uint32 cv_metadata_hash_function(const void *key, Size keysize);
+
+/*
+ * cv_metadata_hash_function
+ *
+ * Identity hash function
+ */
+static
+uint32
+cv_metadata_hash_function(const void *key, Size keysize)
+{
+	uint32 id = *((uint32*) key);
+	return id;
+}
 
 /*
  * InitCQMetadataTable
@@ -48,20 +63,19 @@ InitCVMetadataTable(void)
 {
 	HASHCTL		info;
 	/*
-	   * Each continuous view has at least 2 concurrent processes (1 worker and 1 combiner)
-	   * num_concurrent_cv is set to half that value.
-	   * max_concurrent_processes is set as a conf parameter
+	 * Each continuous view has at least 2 concurrent processes (1 worker and 1 combiner)
+	 * num_concurrent_cv is set to half that value.
+	 * max_concurrent_processes is set as a conf parameter
 	*/
-	int32 num_concurrent_cv = max_worker_processes / 2;
+	int num_concurrent_cv = max_worker_processes / 2;
 
 	info.keysize = sizeof(uint32);
 	info.hash = cv_metadata_hash_function;
 	info.entrysize = sizeof(CVMetadata);
 
 	/*
-	 * XXX(usmanm): We don't need to acquire CVMetadataLock
-	 * lock around this because there is no initialization
-	 * work we need to do. ShmemInitHash does all of that
+	 * We don't need to acquire CVMetadataLock lock around this because there is
+	 * no initialization work we need to do. ShmemInitHash does all of that
 	 * atomically for us.
 	 */
 	cv_metadata_hash = ShmemInitHash("cv_metadata_hash",
@@ -71,13 +85,16 @@ InitCVMetadataTable(void)
 
 }
 
-uint32
+/*
+ * GetProcessGroupSizeFromCatalog
+ */
+int
 GetProcessGroupSizeFromCatalog(RangeVar* rv)
 {
 	HeapTuple tuple;
 	Form_pipeline_queries row;
 	/* Initialize the counter to 1 for the combiner proc. */
-	uint32 pg_size = 1;
+	int pg_size = 1;
 
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(rv->relname));
 
@@ -86,6 +103,7 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 				rv->relname);
 
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
+
 	/* Add number of worker processes. */
 	pg_size += row->parallelism;
 
@@ -99,13 +117,13 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 }
 
 /*
-   * GetProcessGroupSize
-   *
-   * Returns the number of processes that form
-   * the process group for a continuous query
-   *
+ * GetProcessGroupSize
+ *
+ * Returns the number of processes that form
+ * the process group for a continuous query
+ *
  */
-uint32
+int
 GetProcessGroupSize(int32 id)
 {
 	CVMetadata *entry;
@@ -116,34 +134,20 @@ GetProcessGroupSize(int32 id)
 }
 
 /*
-   * cv_metadata_hash_function
-   *
-   * Hash function used for the cv metadata
-   *
- */
-static
-uint32
-cv_metadata_hash_function(const void *key, Size keysize)
-{
-	uint32 id = *((uint32*)key);
-	return id;
-}
-
-/*
-   * EntryAlloc
-   *
-   * Allocate an entry in the shared memory
-   * hash table. Returns the entry if it exists
-   *
+ * EntryAlloc
+ *
+ * Allocate an entry in the shared memory
+ * hash table. Returns the entry if it exists
+ *
  */
 CVMetadata*
-EntryAlloc(int32 key, uint32 pg_size)
+EntryAlloc(int32 id, int pg_size)
 {
-	CVMetadata  *entry;
+	CVMetadata	*entry;
 	bool		found;
 
 	/* Find or create an entry with desired hash code */
-	entry = (CVMetadata *) hash_search(cv_metadata_hash, &key, HASH_ENTER, &found);
+	entry = (CVMetadata *) hash_search(cv_metadata_hash, &id, HASH_ENTER, &found);
 	Assert(entry);
 
 	if (found)
@@ -160,23 +164,23 @@ EntryAlloc(int32 key, uint32 pg_size)
 }
 
 /*
-   * EntryRemove
-   *
-   * Remove an entry in the shared memory
-   * hash table.
-   *
+ * EntryRemove
+ *
+ * Remove an entry in the shared memory
+ * hash table.
+ *
  */
 void
-EntryRemove(int32 key)
+EntryRemove(int32 id)
 {
 	/* Remove the entry from the hash table. */
-	hash_search(cv_metadata_hash, &key, HASH_REMOVE, NULL);
+	hash_search(cv_metadata_hash, &id, HASH_REMOVE, NULL);
 }
+
 /*
-   * GetCVMetadata(int32 id)
-   *
-   * Return the entry based on a key
-   *
+ * GetCVMetadata
+ *
+ * Return the entry based on a key
  */
 CVMetadata*
 GetCVMetadata(int32 id)
@@ -194,13 +198,13 @@ GetCVMetadata(int32 id)
 }
 
 /*
-   * GetProcessGroupCount(int32 id)
-   *
-   * Return the current
-   * process group count for the given cv
-   *
+ * GetProcessGroupCount
+ *
+ * Return the current
+ * process group count for the given cv
+ *
  */
-int32
+int
 GetProcessGroupCount(int32 id)
 {
 	CVMetadata  *entry;
@@ -214,10 +218,10 @@ GetProcessGroupCount(int32 id)
 }
 
 /*
-   * DecrementProcessGroupCount(int32 id)
-   *
-   * Decrement the process group count
-   * Called from sub processes
+ * DecrementProcessGroupCount
+ *
+ * Decrement the process group count
+ * Called from sub processes
  */
 void
 DecrementProcessGroupCount(int32 id)
@@ -231,10 +235,10 @@ DecrementProcessGroupCount(int32 id)
 }
 
 /*
-   * IncrementProcessGroupCount(int32 id)
-   *
-   * Increment the process group count
-   * Called from caller processes
+ * IncrementProcessGroupCount
+ *
+ * Increment the process group count
+ * Called from caller processes
  */
 void
 IncrementProcessGroupCount(int32 id)
@@ -252,10 +256,10 @@ IncrementProcessGroupCount(int32 id)
 }
 
 /*
-   * SetActiveFlag
-   *
-   * Sets the flag insicating whether the process is active
-   * or not
+ * SetActiveFlag
+ *
+ * Sets the flag insicating whether the process is active
+ * or not
  */
 void
 SetActiveFlag(int32 id, bool flag)
@@ -270,10 +274,10 @@ SetActiveFlag(int32 id, bool flag)
 }
 
 /*
-   * GetActiveFlag
-   *
-   * returns the flag insicating whether the process is active
-   * or not
+ * GetActiveFlag
+ *
+ * returns the flag insicating whether the process is active
+ * or not
  */
 bool
 GetActiveFlag(int32 id)
@@ -285,6 +289,9 @@ GetActiveFlag(int32 id)
 	return entry->active;
 }
 
+/*
+ * GetActiveFlagPtr
+ */
 bool *
 GetActiveFlagPtr(int32 id)
 {
@@ -296,37 +303,58 @@ GetActiveFlagPtr(int32 id)
 }
 
 /*
-   * WaitForCQProcessStart(int32 id)
-   *
-   * Block on the process group count till
-   * it reaches 0. This enables the activate cv
-   * to be synchronous
+ * WaitForCQProcessStart
+ *
+ * Block on the process group count till
+ * it reaches 0. This enables the activate cv
+ * to be synchronous
  */
-void
+bool
 WaitForCQProcessStart(int32 id)
 {
+	CVMetadata *entry = GetCVMetadata(id);
+	int err_count;
+	pid_t pid;
+	int i;
+
 	while (true)
 	{
-		if (GetProcessGroupCount(id) == GetProcessGroupSize(id))
+		err_count = 0;
+
+		if (entry->pg_count == entry->pg_size)
 			break;
-		pg_usleep(5000);
+
+		for (i = 0; i < entry->pg_size; i++)
+		{
+			if (WaitForBackgroundWorkerStartup(entry->bg_handles[i], &pid) == BGWH_STOPPED)
+				err_count++;
+		}
+
+		if (entry->pg_count + err_count == entry->pg_size)
+			break;
+
+		pg_usleep(SLEEP_TIMEOUT);
 	}
+
+	return err_count == 0;
 }
 
 /*
-   * WaitForCQProcessEnd(int32 id)
-   *
-   * Block on the process group count till
-   * it reaches pg_size. This enables the deactivate cv
-   * to be synchronous
+ * WaitForCQProcessEnd
+ *
+ * Block on the process group count till
+ * it reaches pg_size. This enables the deactivate cv
+ * to be synchronous
  */
 void
 WaitForCQProcessEnd(int32 id)
 {
+	CVMetadata *entry = GetCVMetadata(id);
+
 	while (true)
 	{
-		if (GetProcessGroupCount(id) == 0)
+		if (entry->pg_count == 0)
 			break;
-		pg_usleep(5000);
+		pg_usleep(SLEEP_TIMEOUT);
 	}
 }

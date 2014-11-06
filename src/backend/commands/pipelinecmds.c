@@ -402,30 +402,22 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 
 static
 void
-RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state)
+RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CVMetadata *cvmetadata)
 {
-	int32 id;
-	Assert(state);
-	id = state->id;
-
-	RunContinuousQueryProcess(CQCombiner, cvname, state);
-	RunContinuousQueryProcess(CQWorker, cvname, state);
-	RunContinuousQueryProcess(CQGarbageCollector, cvname, state);
-
-	/*
-	 * Spin here waiting for the number of waiting CQ related processes
-	 * to complete.
-	 */
-	WaitForCQProcessStart(id);
+	RunContinuousQueryProcess(CQCombiner, cvname, state, &cvmetadata->bg_handles[0]);
+	RunContinuousQueryProcess(CQWorker, cvname, state, &cvmetadata->bg_handles[1]);
+	RunContinuousQueryProcess(CQGarbageCollector, cvname, state, &cvmetadata->bg_handles[2]);
 }
 
 int
 ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 {
 	ListCell *lc;
+	int success = 0;
+	int fail = 0;
 	CVMetadata *entry;
-	int count = 0;
 	Relation pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
+	int i;
 
 	foreach(lc, stmt->views)
 	{
@@ -468,28 +460,38 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		/*
 		 * Initialize the metadata entry for the CV
 		 * Input would be an id (used as key) and a Process group size.
-		 *
-		 * Here we don't have to worry about racing transactions.
-		 * If we see the CV as inactive but another transaction has created
-		 * its CVMetadata entry, the next call will fail--albeit with a weird
-		 * message saying the CV is being deactivated. That's only one of the
-		 * cases when this can happen.
 		 */
 		entry = EntryAlloc(state.id, GetProcessGroupSizeFromCatalog(rv));
 
-		if (entry == NULL)
-			elog(ERROR, "continuous view \"%s\" is being deactivated",
-					rv->relname);
+		RunContinuousQueryProcs(rv->relname, &state, entry);
 
-		RunContinuousQueryProcs(rv->relname, &state);
-		count++;
+		/*
+		 * Spin here waiting for the number of waiting CQ related processes
+		 * to complete.
+		 */
+		if (WaitForCQProcessStart(state.id))
+			success++;
+		else
+		{
+			fail++;
+			/*
+			 * If some of the bg procs failed, mark the continuous view
+			 * as inactive and kill any of the remaining bg procs.
+			 */
+			MarkContinuousViewAsInactive(rv, pipeline_queries);
+			for (i = 0; i < entry->pg_size; i ++)
+				TerminateBackgroundWorker(entry->bg_handles[i]);
+		}
 	}
 
 	UpdateGlobalStreamBuffer();
 
 	heap_close(pipeline_queries, NoLock);
 
-	return count;
+	if (fail > 0)
+		elog(ERROR, "failed to activate %d continuous view(s)", fail);
+
+	return success;
 }
 
 int
@@ -510,13 +512,6 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 			continue;
 
 		GetContinousViewState(rv, &state);
-
-		/* If the another transaction which deactivated this CV hasn't
-		 * committed yet, we might still see it as active. Since there's only
-		 * one postmaster, the previous transaction's process could have
-		 * removed the CVMetadata--transactions don't protect it. */
-		if (GetCVMetadata(state.id) == NULL)
-			continue;
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id, false);
