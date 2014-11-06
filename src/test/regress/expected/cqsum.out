@@ -65,14 +65,14 @@ ACTIVATE test_float8_sum, test_float4_sum;
 INSERT INTO float_cqsum_stream (k, v) VALUES ('x', 10.2), ('x', 1.2), ('x', 0.000001);
 INSERT INTO float_cqsum_stream (k, v) VALUES ('y', -10.3), ('y', 1.2e6), ('y', '100.4');
 DEACTIVATE test_float8_sum, test_float4_sum;
-SELECT * FROM test_float8_sum_pdb ORDER BY k;
+SELECT * FROM test_float8_sum ORDER BY k;
  k |    sum    
 ---+-----------
  x | 11.400001
  y | 1200090.1
 (2 rows)
 
-SELECT * FROM test_float4_sum_pdb ORDER BY k;
+SELECT * FROM test_float4_sum ORDER BY k;
  k |     sum     
 ---+-------------
  x |        11.4
@@ -104,7 +104,7 @@ ACTIVATE test_cash_sum;
 INSERT INTO cash_cqsum_stream (k, v) VALUES ('x', 10.2), ('x', 1.2), ('x', 0.10);
 INSERT INTO cash_cqsum_stream (k, v) VALUES ('y', -10), ('y', 10), ('y', 0);
 DEACTIVATE test_cash_sum;
-SELECT * FROM test_cash_sum_pdb ORDER BY k;
+SELECT * FROM test_cash_sum ORDER BY k;
  k |  sum   
 ---+--------
  x | $11.50
@@ -129,11 +129,11 @@ ACTIVATE test_numeric_sum;
 INSERT INTO numeric_cqsum_stream (k, v) VALUES ('x', 10.0002), ('x', 0.0001), ('x', -0.10);
 INSERT INTO numeric_cqsum_stream (k, v) VALUES ('y', 1.004e5), ('y', 0.4), ('y', 0);
 DEACTIVATE test_numeric_sum;
-SELECT * FROM test_numeric_sum_pdb ORDER BY k;
- k |   sum    |                                                                    _0                                                                    
----+----------+------------------------------------------------------------------------------------------------------------------------------------------
- x |   9.9003 | \x0000000000000000030000000400000000000000020000000000000000000000020000000000000000000000040009232b00000000000000000000000000000000
- y | 100400.4 | \x000000000000000003000000010000000000000001000000000000000000000003000000010000000000000001000a01900fa000000000000000000000000000000000
+SELECT * FROM test_numeric_sum ORDER BY k;
+ k |   sum    
+---+----------
+ x |   9.9003
+ y | 100400.4
 (2 rows)
 
 ACTIVATE test_numeric_sum;
@@ -154,7 +154,7 @@ ACTIVATE test_interval_sum;
 INSERT INTO interval_cqsum_stream (k, ts0, ts1) VALUES ('x', '2014-01-01', '2014-01-02'), ('x', '2014-01-01', '2014-02-01');
 INSERT INTO interval_cqsum_stream (k, ts0, ts1) VALUES ('x', '2014-01-01', '2014-01-02'), ('x', '2014-01-01', '2014-02-01');
 DEACTIVATE test_interval_sum;
-SELECT * FROM test_interval_sum_pdb ORDER BY k;
+SELECT * FROM test_interval_sum ORDER BY k;
  k |    sum    
 ---+-----------
  x | @ 64 days
