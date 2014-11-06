@@ -41,10 +41,10 @@ INSERT INTO sw_minmax_stream
 DEACTIVATE test_sw_min_max;
 
 -- It's hard to read all of the columns of this thing at once, so SELECT a few subsets
-SELECT key, i8min, i8max, i4min, i4max, i2min, i2max FROM test_sw_min_max;
-SELECT key, omin, omax, f8min, f8max, f4min, f4max FROM test_sw_min_max;
-SELECT key, dmin, dmax, tmin, tmax, tzmin, tzmax, mmin FROM test_sw_min_max;
-SELECT key, mmax, tsmin, tsmax, tstzmin, tstzmax, intervalmin FROM test_sw_min_max;
-SELECT key, intervalmax, txtmin, txtmax, nmin, nmax, amin, amax FROM test_sw_min_max;
+SELECT key, i8min, i8max, i4min, i4max, i2min, i2max FROM test_sw_min_max ORDER BY key;
+SELECT key, omin, omax, f8min, f8max, f4min, f4max FROM test_sw_min_max ORDER BY key;
+SELECT key, dmin, dmax, tmin, tmax, tzmin, tzmax, mmin FROM test_sw_min_max ORDER BY key;
+SELECT key, mmax, tsmin, tsmax, tstzmin, tstzmax, intervalmin FROM test_sw_min_max ORDER BY key;
+SELECT key, intervalmax, txtmin, txtmax, nmin, nmax, amin, amax FROM test_sw_min_max ORDER BY key;
 
 DROP CONTINUOUS VIEW test_sw_min_max;
