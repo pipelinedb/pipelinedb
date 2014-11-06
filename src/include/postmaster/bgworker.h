@@ -74,7 +74,7 @@ typedef enum
 #define BGW_DEFAULT_RESTART_INTERVAL	60
 #define BGW_NEVER_RESTART				-1
 #define BGW_MAXLEN						64
-#define BGW_ADDITIONAL_LEN		1024
+#define BGW_ADDITIONAL_LEN				(5 * 1024)
 
 typedef struct BackgroundWorker
 {

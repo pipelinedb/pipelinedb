@@ -14,6 +14,7 @@
 #include "nodes/parsenodes.h"
 #include "nodes/primnodes.h"
 #include "pipeline/cqrun.h"
+#include "utils/relcache.h"
 
 typedef struct ContinuousViewState
 {
@@ -28,10 +29,9 @@ typedef struct ContinuousViewState
 
 List *GetAllContinuousViewNames(void);
 void RegisterContinuousView(RangeVar *name, const char *query_string);
-void DeregisterContinuousView(RangeVar *name);
-bool MarkContinuousViewAsActive(RangeVar *name);
-bool MarkContinuousViewAsInactive(RangeVar *name);
-void SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state);
+bool MarkContinuousViewAsActive(RangeVar *name, Relation pipeline_queries);
+bool MarkContinuousViewAsInactive(RangeVar *name, Relation pipeline_queries);
+void SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pipeline_queries);
 void GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state);
 bool IsContinuousViewActive(RangeVar *name);
 char *GetQueryStringOrNull(const char *cvname, bool selectonly);

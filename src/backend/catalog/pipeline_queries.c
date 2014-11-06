@@ -33,16 +33,6 @@
 
 
 /*
- * Used to pass arguments to background workers spawned by the postmaster
- */
-typedef struct RunCQArgs
-{
-	NameData name;
-	NameData dbname;
-	bool combiner;
-} RunCQArgs;
-
-/*
  * skip
  *
  * Skips to the end of a substring within another string, beginning
@@ -197,31 +187,7 @@ RegisterContinuousView(RangeVar *name, const char *query_string)
 	CommandCounterIncrement();
 
 	heap_freetuple(tup);
-	heap_close(pipeline_queries, AccessExclusiveLock);
-}
-
-/*
- * DeregisterContinuousView
- *
- * Removes the CV entry from the `pipeline_queries` catalog table.
- */
-void
-DeregisterContinuousView(RangeVar *name)
-{
-	Relation pipeline_queries;
-	HeapTuple tup;
-
-	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
-	tup = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
-
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "CONTINUOUS VIEW \"%s\" does not exist", name->relname);
-
-	simple_heap_delete(pipeline_queries, &tup->t_self);
-	CommandCounterIncrement();
-
-	ReleaseSysCache(tup);
-	heap_close(pipeline_queries, AccessExclusiveLock);
+	heap_close(pipeline_queries, NoLock);
 }
 
 /*
@@ -234,9 +200,8 @@ DeregisterContinuousView(RangeVar *name)
  * Returns whether the catalog table was updated or not.
  */
 bool
-MarkContinuousViewAsActive(RangeVar *name)
+MarkContinuousViewAsActive(RangeVar *name, Relation pipeline_queries)
 {
-	Relation pipeline_queries;
 	HeapTuple tuple;
 	HeapTuple newtuple;
 	Form_pipeline_queries row;
@@ -244,7 +209,6 @@ MarkContinuousViewAsActive(RangeVar *name)
 	bool replaces[Natts_pipeline_queries];
 	Datum values[Natts_pipeline_queries];
 
-	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
@@ -272,7 +236,6 @@ MarkContinuousViewAsActive(RangeVar *name)
 	}
 
 	ReleaseSysCache(tuple);
-	heap_close(pipeline_queries, RowExclusiveLock);
 
 	return row->state != PIPELINE_QUERY_STATE_ACTIVE;
 }
@@ -287,9 +250,8 @@ MarkContinuousViewAsActive(RangeVar *name)
  * Returns whether the catalog table was updated or not.
  */
 bool
-MarkContinuousViewAsInactive(RangeVar *name)
+MarkContinuousViewAsInactive(RangeVar *name, Relation pipeline_queries)
 {
-	Relation pipeline_queries;
 	HeapTuple tuple;
 	HeapTuple newtuple;
 	Form_pipeline_queries row;
@@ -303,7 +265,6 @@ MarkContinuousViewAsInactive(RangeVar *name)
 		elog(ERROR, "continuous view \"%s\" does not exist",
 				name->relname);
 
-	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 	row = (Form_pipeline_queries) GETSTRUCT(tuple);
 
 	if (row->state != PIPELINE_QUERY_STATE_INACTIVE)
@@ -323,7 +284,6 @@ MarkContinuousViewAsInactive(RangeVar *name)
 		CommandCounterIncrement();
 	}
 	ReleaseSysCache(tuple);
-	heap_close(pipeline_queries, RowExclusiveLock);
 
 	return row->state != PIPELINE_QUERY_STATE_INACTIVE;
 }
@@ -367,16 +327,14 @@ GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
  * catalog table by reading them from cv_state.
  */
 void
-SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
+SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pipeline_queries)
 {
-	Relation pipeline_queries;
 	HeapTuple tuple;
 	HeapTuple newtuple;
 	bool nulls[Natts_pipeline_queries];
 	bool replaces[Natts_pipeline_queries];
 	Datum values[Natts_pipeline_queries];
 
-	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
 	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
 
 	if (!HeapTupleIsValid(tuple))
@@ -408,7 +366,6 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	CommandCounterIncrement();
 
 	ReleaseSysCache(tuple);
-	heap_close(pipeline_queries, RowExclusiveLock);
 }
 
 /*
@@ -513,12 +470,10 @@ bool
 IsAContinuousView(RangeVar *name)
 {
 	HeapTuple tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(name->relname));
-	if (HeapTupleIsValid(tuple))
-	{
-		ReleaseSysCache(tuple);
-		return true;
-	}
-	return false;
+	if (!HeapTupleIsValid(tuple))
+		return false;
+	ReleaseSysCache(tuple);
+	return true;
 }
 
 /*

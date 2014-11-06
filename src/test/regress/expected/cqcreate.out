@@ -413,3 +413,20 @@ View definition:
  k1     | integer |           | plain    |              | 
  count  | bigint  |           | plain    |              | 
 
+DROP CONTINUOUS VIEW cqcreate0;
+DROP CONTINUOUS VIEW cqcreate1;
+DROP CONTINUOUS VIEW cqcreate2;
+DROP CONTINUOUS VIEW cqcreate3;
+DROP CONTINUOUS VIEW cqcreate4;
+DROP CONTINUOUS VIEW cqcreate5;
+DROP CONTINUOUS VIEW cqcreate6;
+DROP CONTINUOUS VIEW cvavg;
+DROP CONTINUOUS VIEW cvjson;
+DROP CONTINUOUS VIEW cvjsonobj;
+DROP CONTINUOUS VIEW cvcount;
+DROP CONTINUOUS VIEW cvarray;
+DROP CONTINUOUS VIEW cvtext;
+DROP CONTINUOUS VIEW cqaggexpr1;
+DROP CONTINUOUS VIEW cqaggexpr2;
+DROP CONTINUOUS VIEW cqaggexpr3;
+DROP CONTINUOUS VIEW cqaggexpr4;

@@ -111,23 +111,5 @@ test: stats
 
 # ----------
 # Another group of parallel tests
-# TODO(usmanm): Right now all CQ tests fail when run in parallel. Figure out
-# the issues and eventually merge all these tests into the same group.
 # ----------
-test: cqanalyze
-test: cqcreate
-test: cqactivate
-test: cqsanity
-test: cqsum
-test: cqswsum
-test: cqavg
-test: cqswavg
-test: cqcount
-test: cqboolagg
-test: cqlatch
-test: cqdecode
-test: cqminmax
-test: cqobjectagg
-test: cqregr
-test: cqstats
-test: cqwindow
+test: cqanalyze cqcreate cqactivate cqsanity cqsum cqswsum cqavg cqswavg cqcount cqboolagg cqlatch cqdecode cqminmax cqobjectagg cqregr cqstats cqwindow

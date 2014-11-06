@@ -8,7 +8,8 @@ DEACTIVATE cqactivate1;
 DEACTIVATE cqactivate2;
 SELECT name, query FROM pipeline_queries WHERE state='i' AND name='cqactivate1';
 SELECT name, query FROM pipeline_queries WHERE state='i' AND name='cqactivate2';
-DEACTIVATE;
+DEACTIVATE cqactivate1;
+DEACTIVATE cqactivate2;
 
 DROP CONTINUOUS VIEW cqactivate1;
 DROP CONTINUOUS VIEW cqactivate2;

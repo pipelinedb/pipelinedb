@@ -143,3 +143,63 @@ LINE 1: ...OUS VIEW cqanalyze43 AS SELECT date_trunc('hour', ts) AS ts ...
                                                              ^
 HINT:  Explicitly cast to the desired type. For example, ts::integer.
 CREATE CONTINUOUS VIEW cqanalyze44 AS SELECT stream.sid::integer FROM stream;
+DROP CONTINUOUS VIEW cqanalyze0;
+DROP CONTINUOUS VIEW cqanalyze1;
+DROP CONTINUOUS VIEW cqanalyze2;
+DROP CONTINUOUS VIEW cqanalyze3;
+DROP CONTINUOUS VIEW cqanalyze4;
+DROP CONTINUOUS VIEW cqanalyze5;
+DROP CONTINUOUS VIEW cqanalyze6;
+DROP CONTINUOUS VIEW cqanalyze7;
+ERROR:  continuous view "cqanalyze7" does not exist
+DROP CONTINUOUS VIEW cqanalyze8;
+DROP CONTINUOUS VIEW cqanalyze9;
+DROP CONTINUOUS VIEW cqanalyze10;
+DROP CONTINUOUS VIEW cqanalyze11;
+DROP CONTINUOUS VIEW cqanalyze12;
+DROP CONTINUOUS VIEW cqanalyze13;
+DROP CONTINUOUS VIEW cqanalyze14;
+DROP CONTINUOUS VIEW cqanalyze15;
+DROP CONTINUOUS VIEW cqanalyze16;
+DROP CONTINUOUS VIEW cqanalyze17;
+DROP CONTINUOUS VIEW cqanalyze18;
+DROP CONTINUOUS VIEW cqanalyze19;
+ERROR:  continuous view "cqanalyze19" does not exist
+DROP CONTINUOUS VIEW cqanalyze20;
+DROP CONTINUOUS VIEW cqanalyze21;
+DROP CONTINUOUS VIEW cqanalyze22;
+DROP CONTINUOUS VIEW cqanalyze23;
+ERROR:  continuous view "cqanalyze23" does not exist
+DROP CONTINUOUS VIEW cqanalyze24;
+ERROR:  continuous view "cqanalyze24" does not exist
+DROP CONTINUOUS VIEW cqanalyze25;
+ERROR:  continuous view "cqanalyze25" does not exist
+DROP CONTINUOUS VIEW cqanalyze26;
+ERROR:  continuous view "cqanalyze26" does not exist
+DROP CONTINUOUS VIEW cqanalyze27;
+DROP CONTINUOUS VIEW cqanalyze28;
+DROP CONTINUOUS VIEW cqanalyze29;
+DROP CONTINUOUS VIEW cqanalyze30;
+DROP CONTINUOUS VIEW cqanalyze31;
+DROP CONTINUOUS VIEW cqanalyze32;
+ERROR:  continuous view "cqanalyze32" does not exist
+DROP CONTINUOUS VIEW cqanalyze33;
+ERROR:  continuous view "cqanalyze33" does not exist
+DROP CONTINUOUS VIEW cqanalyze34;
+ERROR:  continuous view "cqanalyze34" does not exist
+DROP CONTINUOUS VIEW cqanalyze35;
+ERROR:  continuous view "cqanalyze35" does not exist
+DROP CONTINUOUS VIEW cqanalyze36;
+ERROR:  continuous view "cqanalyze36" does not exist
+DROP CONTINUOUS VIEW cqanalyze37;
+ERROR:  continuous view "cqanalyze37" does not exist
+DROP CONTINUOUS VIEW cqanalyze38;
+DROP CONTINUOUS VIEW cqanalyze39;
+DROP CONTINUOUS VIEW cqanalyze40;
+DROP CONTINUOUS VIEW cqanalyze41;
+ERROR:  continuous view "cqanalyze41" does not exist
+DROP CONTINUOUS VIEW cqanalyze42;
+ERROR:  continuous view "cqanalyze42" does not exist
+DROP CONTINUOUS VIEW cqanalyze43;
+ERROR:  continuous view "cqanalyze43" does not exist
+DROP CONTINUOUS VIEW cqanalyze44;

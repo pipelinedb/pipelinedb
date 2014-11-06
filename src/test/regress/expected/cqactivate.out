@@ -28,6 +28,7 @@ SELECT name, query FROM pipeline_queries WHERE state='i' AND name='cqactivate2';
  cqactivate2 | CREATE CONTINUOUS VIEW cqactivate2 AS SELECT id::integer FROM stream_sync_cq WHERE id=9099;
 (1 row)
 
-DEACTIVATE;
+DEACTIVATE cqactivate1;
+DEACTIVATE cqactivate2;
 DROP CONTINUOUS VIEW cqactivate1;
 DROP CONTINUOUS VIEW cqactivate2;

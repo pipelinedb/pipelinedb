@@ -47,6 +47,7 @@ typedef struct RunCQArgs
 	NameData dbname;
 	CQProcessType ptype;
 	ContinuousViewState state;
+	char query[4096];
 } RunCQArgs;
 
 static PlannedStmt *
@@ -172,7 +173,7 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	 * 1. Plan the continuous query
 	 */
 	cvname = NameStr(args.name);
-	sql = GetQueryString(cvname, true);
+	sql = pstrdup(args.query);
 
 	switch(state.ptype)
 	{
@@ -258,6 +259,7 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	BackgroundWorker worker;
 	RunCQArgs args;
 	char *procName = getCQProcessName(ptype);
+	char *query = GetQueryString(cvname, true);
 
 	memcpy(worker.bgw_name, cvname, strlen(cvname) + 1);
 	memcpy(&worker.bgw_name[strlen(cvname)], procName, strlen(procName) + 1);
@@ -274,8 +276,9 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	args.ptype = ptype;
 	namestrcpy(&args.name, cvname);
 	namestrcpy(&args.dbname, MyProcPort->database_name);
+	memcpy(args.query, query, 4096);
 
-	memcpy(worker.bgw_additional_arg, &args, sizeof(RunCQArgs));
+	memcpy(worker.bgw_additional_arg, &args, worker.bgw_additional_size);
 
 	return RegisterDynamicBackgroundWorker(&worker, NULL);
 }

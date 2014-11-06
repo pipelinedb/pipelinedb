@@ -348,7 +348,7 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 	 * Scan the pipeline_queries relation to find the OID of the views(s) to be
 	 * deleted.
 	 */
-	pipeline_queries = heap_open(PipelineQueriesRelationId, RowExclusiveLock);
+	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 
 	foreach(item, stmt->objects)
 	{
@@ -390,7 +390,7 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 	/*
 	 * Now we can clean up
 	 */
-	heap_close(pipeline_queries, RowExclusiveLock);
+	heap_close(pipeline_queries, NoLock);
 
 	/*
 	 * Remove the VIEWs and underlying materialization relations
@@ -425,13 +425,14 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	ListCell *lc;
 	CVMetadata *entry;
 	int count = 0;
+	Relation pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 
 	foreach(lc, stmt->views)
 	{
 		RangeVar *rv = lfirst(lc);
 		ListCell *lcwithOptions;
 		ContinuousViewState state;
-		bool wasInactive = MarkContinuousViewAsActive(rv);
+		bool wasInactive = MarkContinuousViewAsActive(rv, pipeline_queries);
 
 		/*
 		 * If the user tries to activate an active CV, they'll know because
@@ -462,7 +463,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 				state.parallelism = (int16) value;
 		}
 
-		SetContinousViewState(rv, &state);
+		SetContinousViewState(rv, &state, pipeline_queries);
 
 		/*
 		 * Initialize the metadata entry for the CV
@@ -484,6 +485,10 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		count++;
 	}
 
+	UpdateGlobalStreamBuffer();
+
+	heap_close(pipeline_queries, NoLock);
+
 	return count;
 }
 
@@ -492,12 +497,13 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 {
 	int count = 0;
 	ListCell *lc;
+	Relation pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
 
 	foreach(lc, stmt->views)
 	{
 		RangeVar *rv = (RangeVar *) lfirst(lc);
 		ContinuousViewState state;
-		bool wasActive = MarkContinuousViewAsInactive(rv);
+		bool wasActive = MarkContinuousViewAsInactive(rv, pipeline_queries);
 
 		/* deactivating an inactive CV is a noop */
 		if (!wasActive)
@@ -528,12 +534,16 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		EntryRemove(state.id);
 	}
 
+	UpdateGlobalStreamBuffer();
+
 	/*
 	 * This will stop the stream buffer from assigning new events to this
 	 * continuous view immediately, even if the worker procs actually take a few
 	 * more seconds to shut themselves down. This seems like the behavior we want.
 	 */
 	NotifyUpdateGlobalStreamBuffer();
+
+	heap_close(pipeline_queries, NoLock);
 
 	return count;
 }

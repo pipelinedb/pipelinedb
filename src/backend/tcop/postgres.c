@@ -1116,8 +1116,6 @@ exec_simple_query(const char *query_string)
 		{
 			InsertStmt *ins = (InsertStmt *) parsetree;
 
-			UpdateGlobalStreamBuffer();
-
 			if (InsertTargetIsStream(ins))
 			{
 				MemoryContext oldcontext;

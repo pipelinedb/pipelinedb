@@ -9,7 +9,7 @@ SELECT pg_sleep(1);
 INSERT INTO stream (key, x) VALUES ('a', 5), ('b', 6);
 SELECT pg_sleep(1);
 INSERT INTO stream (key, x) VALUES ('a', 7), ('b', 8);
-DEACTIVATE;
+DEACTIVATE cqwindow0;
 SELECT key, sum FROM cqwindow0_pdb ORDER BY _0, key;
 SELECT * FROM cqwindow0 ORDER BY key;
 
@@ -24,6 +24,6 @@ SELECT pg_sleep(1);
 INSERT INTO stream (key, x) VALUES ('a', 7), ('b', 8), ('a', 9);
 SELECT pg_sleep(1);
 INSERT INTO stream (key, x) VALUES ('a', 10), ('b', 11), ('b', 12);
-DEACTIVATE;
+DEACTIVATE cqwindow1;
 SELECT key, avg FROM cqwindow1_pdb ORDER BY _0, key;
 SELECT * FROM cqwindow1 ORDER BY key;

@@ -326,8 +326,7 @@ InitGlobalStreamBuffer(void)
 void
 UpdateGlobalStreamBuffer(void)
 {
-	if (*GlobalStreamBuffer->update)
-		UpdateStreamBuffer(GlobalStreamBuffer);
+	UpdateStreamBuffer(GlobalStreamBuffer);
 }
 
 /*
@@ -546,7 +545,7 @@ void
 WaitOnStreamBufferLatch(int32 id)
 {
 	BackgroundWorkerUnblockSignals();
-	WaitLatch((&GlobalStreamBuffer->procLatch[id]),WL_LATCH_SET, 0);
+	WaitLatch((&GlobalStreamBuffer->procLatch[id]), WL_LATCH_SET | WL_TIMEOUT, 500);
 	BackgroundWorkerBlockSignals();
 }
 
