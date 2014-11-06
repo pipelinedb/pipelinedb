@@ -22,29 +22,29 @@ FROM sw_minmax_stream GROUP BY key;
 
 ACTIVATE test_sw_min_max;
 
-INSERT INTO sw_minmax_stream 
+INSERT INTO sw_minmax_stream
 (key, i8, i4, i2, o, f8, f4, d, t, tz, m, ts, tstz, ts1, ts0, txt, n, a) VALUES
 ('x', 0, 1, 2, 443, 42.33, 80003.00001, '2014-12-31', '2014-02-28 00:00:00', '2014-02-28 00:00:00-08', 999023.39, '2014-01-01 00:00:00', '2014-01-01 00:00:01-08', '2014-01-01 00:00:00', '2014-01-02 00:00:00', 'first row', -0.00000000042, '{-1, 0, 1}');
 
-INSERT INTO sw_minmax_stream 
+INSERT INTO sw_minmax_stream
 (key, i8, i4, i2, o, f8, f4, d, t, tz, m, ts, tstz, ts1, ts0, txt, n, a) VALUES
 ('x', 10000, -1, 2, 100000, 442.33, 1e-9, '2014-12-31', '2014-02-28 00:00:00', '2014-02-28 00:00:00-08', 0.389, '2014-01-01 00:00:00', '2014-01-01 00:00:01-08', '2014-01-01 00:00:00', '2014-01-02 00:00:00', 'second row', 0.00000000042, '{-1, 0, 2, 3}');
 
-INSERT INTO sw_minmax_stream 
+INSERT INTO sw_minmax_stream
 (key, i8, i4, i2, o, f8, f4, d, t, tz, m, ts, tstz, ts1, ts0, txt, n, a) VALUES
 ('y', -1, 1, 2, 443, -0.00001, 1e12, '2010-12-31', '2014-02-28 00:00:00', '2014-02-28 00:00:00-08', -23.40, '2014-01-01 00:00:00', '2014-01-01 00:00:01-08', '2014-01-01 00:00:00', '2014-01-01 00:00:01', 'third row', -0.00000000041, '{-10}');
 
-INSERT INTO sw_minmax_stream 
+INSERT INTO sw_minmax_stream
 (key, i8, i4, i2, o, f8, f4, d, t, tz, m, ts, tstz, ts1, ts0, txt, n, a) VALUES
 ('y', 0, 1, 2, 443, 442.33, 80003.00001, '2014-12-31', '2014-02-28 00:00:00', '2014-02-28 00:00:00-08', 999023.399, '2014-01-01 00:00:00', '2014-01-01 00:00:01-08', '2014-01-01 00:00:00', '2015-01-02 00:00:00', 'fourth row', 1.00000000042, '{-1, 0, 1}');
 
 DEACTIVATE test_sw_min_max;
 
 -- It's hard to read all of the columns of this thing at once, so SELECT a few subsets
-SELECT key, i8min, i8max, i4min, i4max, i2min, i2max FROM test_sw_min_max;
-SELECT key, omin, omax, f8min, f8max, f4min, f4max FROM test_sw_min_max;
-SELECT key, dmin, dmax, tmin, tmax, tzmin, tzmax, mmin FROM test_sw_min_max;
-SELECT key, mmax, tsmin, tsmax, tstzmin, tstzmax, intervalmin FROM test_sw_min_max;
-SELECT key, intervalmax, txtmin, txtmax, nmin, nmax, amin, amax FROM test_sw_min_max;
+SELECT key, i8min, i8max, i4min, i4max, i2min, i2max FROM test_sw_min_max ORDER BY key;
+SELECT key, omin, omax, f8min, f8max, f4min, f4max FROM test_sw_min_max ORDER BY key;
+SELECT key, dmin, dmax, tmin, tmax, tzmin, tzmax, mmin FROM test_sw_min_max ORDER BY key;
+SELECT key, mmax, tsmin, tsmax, tstzmin, tstzmax, intervalmin FROM test_sw_min_max ORDER BY key;
+SELECT key, intervalmax, txtmin, txtmax, nmin, nmax, amin, amax FROM test_sw_min_max ORDER BY key;
 
 DROP CONTINUOUS VIEW test_sw_min_max;
