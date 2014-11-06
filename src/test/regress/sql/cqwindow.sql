@@ -27,3 +27,6 @@ INSERT INTO stream (key, x) VALUES ('a', 10), ('b', 11), ('b', 12);
 DEACTIVATE cqwindow1;
 SELECT key, avg FROM cqwindow1_pdb ORDER BY _0, key;
 SELECT * FROM cqwindow1 ORDER BY key;
+
+DROP CONTINUOUS VIEW cqwindow0;
+DROP CONTINUOUS VIEW cqwindow1;

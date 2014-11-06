@@ -155,6 +155,14 @@ run_cq(Datum d, char *additional, Size additionalsize)
 													ALLOCSET_DEFAULT_INITSIZE,
 													ALLOCSET_DEFAULT_MAXSIZE);
 
+	/*
+	 * XXX(usmanm): Is this kosher to do? We need this so in case of failed
+	 * ACTIVATEs, the postmaster can kill the CQ's bg procs. Previously
+	 * we would only unblock signals when waiting on the process' GlobalStreamBuffer
+	 * latch.
+	 */
+	BackgroundWorkerUnblockSignals();
+
 	memcpy(&args, additional, additionalsize);
 	state = args.state;
 	state.ptype = args.ptype;
@@ -254,15 +262,17 @@ getCQProcessName(CQProcessType ptype)
 }
 
 bool
-RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousViewState *state)
+RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousViewState *state, BackgroundWorkerHandle **bg_handle)
 {
 	BackgroundWorker worker;
 	RunCQArgs args;
 	char *procName = getCQProcessName(ptype);
 	char *query = GetQueryString(cvname, true);
 
+	/* TODO(usmanm): Make sure the name doesn't go beyond 64 bytes */
 	memcpy(worker.bgw_name, cvname, strlen(cvname) + 1);
 	memcpy(&worker.bgw_name[strlen(cvname)], procName, strlen(procName) + 1);
+
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	worker.bgw_restart_time = BGW_NEVER_RESTART;
@@ -276,9 +286,11 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	args.ptype = ptype;
 	namestrcpy(&args.name, cvname);
 	namestrcpy(&args.dbname, MyProcPort->database_name);
-	memcpy(args.query, query, 4096);
+
+	/* TODO(usmanm): Fix this jankyness */
+	memcpy(args.query, query, strlen(query) + 1);
 
 	memcpy(worker.bgw_additional_arg, &args, worker.bgw_additional_size);
 
-	return RegisterDynamicBackgroundWorker(&worker, NULL);
+	return RegisterDynamicBackgroundWorker(&worker, bg_handle);
 }

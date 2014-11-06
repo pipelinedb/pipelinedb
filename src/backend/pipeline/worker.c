@@ -103,7 +103,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	IncrementProcessGroupCount(cq_id);
 
-
 	/*
 	 * We wait until we're up and running before telling the stream buffer that
 	 * there is a new reader in order to avoid having any events being assigned
