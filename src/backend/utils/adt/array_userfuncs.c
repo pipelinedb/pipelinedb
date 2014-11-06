@@ -12,6 +12,7 @@
  */
 #include "postgres.h"
 
+#include "fmgr.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
@@ -475,8 +476,8 @@ create_singleton_array(FunctionCallInfo fcinfo,
 Datum
 array_agg_combine(PG_FUNCTION_ARGS)
 {
-	ArrayBuildState *toappend = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
-	ArrayBuildState *result = (ArrayBuildState *) PG_GETARG_POINTER(1);
+	ArrayBuildState *result = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
+	ArrayBuildState *toappend = (ArrayBuildState *) PG_GETARG_POINTER(1);
 	MemoryContext aggcontext;
 	int i;
 
@@ -499,6 +500,41 @@ array_agg_combine(PG_FUNCTION_ARGS)
 				toappend->dvalues[i], toappend->dnulls[i],
 				toappend->element_type, aggcontext);
 	}
+
+	PG_RETURN_POINTER(result);
+}
+
+/*
+ * array_agg parse and combine function
+ */
+Datum
+array_agg_pcombine(PG_FUNCTION_ARGS)
+{
+	ArrayType *arg1 = PG_GETARG_ARRAYTYPE_P(1);
+	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
+	ArrayBuildState *incoming;
+	Datum result;
+
+	if (!AggCheckCallContext(fcinfo, NULL))
+			elog(ERROR, "aggregate function called in non-aggregate context");
+
+	incoming = (ArrayBuildState *) DirectFunctionCall1(arrayaggstaterecv, (Datum) arg1);
+
+	if (state == NULL)
+	{
+		int i;
+		for (i=0; i<incoming->nelems; i++)
+		{
+			state = accumArrayResult(state, incoming->dvalues[i],
+					incoming->dnulls[i], incoming->element_type, CurrentMemoryContext);
+		}
+		PG_RETURN_POINTER(state);
+	}
+
+	fcinfo->arg[0] = (Datum) state;
+	fcinfo->arg[1] = (Datum) incoming;
+	fcinfo->nargs = 2;
+	result = array_agg_combine(fcinfo);
 
 	PG_RETURN_POINTER(result);
 }

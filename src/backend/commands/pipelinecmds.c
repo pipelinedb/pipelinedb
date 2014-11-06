@@ -199,6 +199,14 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		elog(ERROR, "continuous view \"%s\" already exists", view->relname);
 
 	/*
+	 * allowSystemTableMods is a global flag that, when true, allows certain column types
+	 * to be created. We need it set to true to create some hidden state columns. In particular,
+	 * ones with a type of anyarray.
+	 */
+	saveAllowSystemTableMods = allowSystemTableMods;
+	allowSystemTableMods = true;
+
+	/*
 	 * Analyze the SelectStmt portion of the CreateContinuousViewStmt to make
 	 * sure it's well-formed.
 	 */
@@ -233,19 +241,10 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		colname = pstrdup(tle->resname);
 
 		/*
-		 * allowSystemTableMods is a global flag that, when true, allows certain column types
-		 * to be created. We need it set to true to create some hidden state columns. In particular,
-		 * ones with a type of anyarray.
-		 */
-		saveAllowSystemTableMods = allowSystemTableMods;
-		allowSystemTableMods = true;
-
-		/*
 		 * Set typeOid and typemod. The name of the type is derived while
 		 * generating query
 		 */
 		coldef = make_cv_columndef(colname, exprType((Node *) tle->expr), exprTypmod((Node *) tle->expr));
-		allowSystemTableMods = saveAllowSystemTableMods;
 		tableElts = lappend(tableElts, coldef);
 
 		/*
@@ -272,10 +271,8 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	create_stmt->oncommit = stmt->into->onCommit;
 	create_stmt->options = stmt->into->options;
 
-	allowSystemTableMods = true;
 	reloid = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid);
 	CommandCounterIncrement();
-	allowSystemTableMods = saveAllowSystemTableMods;
 
 	toast_options = transformRelOptions((Datum) 0, create_stmt->options, "toast",
 			validnsps, true, false);
@@ -304,6 +301,8 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	view_stmt->query = (Node *) viewselect;
 	DefineView(view_stmt, querystring);
 
+	allowSystemTableMods = saveAllowSystemTableMods;
+
 	/*
 	 * Now save the underlying query in the `pipeline_queries` catalog
 	 * relation.
@@ -313,6 +312,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	/*
 	 * Index the materialization table smartly if we can
 	 */
+	allowSystemTableMods = saveAllowSystemTableMods;
 	create_indices_on_mat_relation(reloid, mat_relation, workerselect, viewselect);
 }
 

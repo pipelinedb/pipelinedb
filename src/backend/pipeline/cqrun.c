@@ -276,7 +276,7 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	args.ptype = ptype;
 	namestrcpy(&args.name, cvname);
 	namestrcpy(&args.dbname, MyProcPort->database_name);
-	memcpy(args.query, query, 4096);
+	memcpy(args.query, query, strlen(query) + 1);
 
 	memcpy(worker.bgw_additional_arg, &args, worker.bgw_additional_size);
 

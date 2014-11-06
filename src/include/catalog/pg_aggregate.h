@@ -319,6 +319,50 @@ DATA(insert ( 4325	n 0 interval_combine interval_avg 	-				-				-				f f 0	1187	
 /* sum */
 DATA(insert ( 4326	n 0 numeric_pcombine numeric_sum 	-				-				-				f f 0	2281	128 0		0	_null_ _null_ ));
 
+/* array */
+DATA(insert ( 4328	n 0 array_agg_pcombine array_agg_finalfn 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
+
+/* text */
+DATA(insert ( 4330	n 0 string_agg_pcombine string_agg_finalfn 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
+DATA(insert ( 4331	n 0 string_agg_pcombine bytea_string_agg_finalfn 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
+
+/* json */
+DATA(insert ( 4332	n 0 json_agg_pcombine json_agg_finalfn 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
+DATA(insert ( 4333	n 0 json_object_agg_pcombine json_object_agg_finalfn 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
+
+/* binary regression aggregates */
+DATA(insert ( 4336	n 0 float8_regr_combine float8_regr_sxx 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4337	n 0 float8_regr_combine float8_regr_syy 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4338	n 0 float8_regr_combine float8_regr_sxy 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4339	n 0 float8_regr_combine float8_regr_avgx 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4340	n 0 float8_regr_combine float8_regr_avgy 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4341	n 0 float8_regr_combine float8_regr_r2 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4342	n 0 float8_regr_combine float8_regr_slope 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4343	n 0 float8_regr_combine float8_regr_intercept 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4344	n 0 float8_regr_combine float8_covar_pop 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4345	n 0 float8_regr_combine float8_covar_samp 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4346	n 0 float8_regr_combine float8_corr 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+
+/* var_pop */
+DATA(insert ( 4347	n 0 numeric_pcombine numeric_var_pop 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
+DATA(insert ( 4348	n 0 float8_combine float8_var_pop 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+
+/* var_samp / variance (same thing) */
+DATA(insert ( 4349	n 0 numeric_pcombine numeric_var_samp 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
+DATA(insert ( 4350	n 0 float8_combine float8_var_samp 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4351	n 0 numeric_pcombine numeric_var_samp 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
+DATA(insert ( 4352	n 0 float8_combine float8_var_samp 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+
+/* stddev_pop */
+DATA(insert ( 4353	n 0 numeric_pcombine numeric_stddev_pop 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
+DATA(insert ( 4354	n 0 float8_combine float8_stddev_pop 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+
+/* stddev_samp / stddev (same thing) */
+DATA(insert ( 4355	n 0 numeric_pcombine numeric_stddev_samp 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
+DATA(insert ( 4356	n 0 float8_combine float8_stddev_samp 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+DATA(insert ( 4357	n 0 numeric_pcombine numeric_stddev_samp 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
+DATA(insert ( 4358	n 0 float8_combine float8_stddev_samp 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
+
 /*
  * prototypes for functions in pg_aggregate.c
  */

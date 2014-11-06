@@ -13,11 +13,8 @@ INSERT INTO int_swavg_stream (k, v) VALUES ('y', -10000), ('y', 10000), ('y', 0)
 
 DEACTIVATE test_int8_avg_sw, test_int4_avg_sw, test_int2_avg_sw;
 
-SELECT k, avg, _1 FROM test_int8_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_int8_avg_sw ORDER BY k;
-SELECT k, avg, _1 FROM test_int4_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_int4_avg_sw ORDER BY k;
-SELECT k, avg, _1 FROM test_int2_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_int2_avg_sw ORDER BY k;
 
 ACTIVATE test_int8_avg_sw, test_int4_avg_sw, test_int2_avg_sw;
@@ -29,11 +26,8 @@ INSERT INTO int_swavg_stream (k, v) VALUES ('y', 1), ('y', 10000), ('y', 2000);
 
 DEACTIVATE test_int8_avg_sw, test_int4_avg_sw, test_int2_avg_sw;
 
-SELECT k, avg, _1 FROM test_int8_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_int8_avg_sw ORDER BY k;
-SELECT k, avg, _1 FROM test_int4_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_int4_avg_sw ORDER BY k;
-SELECT k, avg, _1 FROM test_int2_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_int2_avg_sw ORDER BY k;
 
 -------------------------------------------------------------------------------
@@ -49,9 +43,7 @@ INSERT INTO float_swavg_stream (k, v) VALUES ('y', 0.0001), ('y', 0.00002), ('y'
 
 DEACTIVATE test_float8_avg_sw, test_float4_avg_sw;
 
-SELECT k, avg, _1 FROM test_float8_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_float8_avg_sw ORDER BY k;
-SELECT k, avg, _1 FROM test_float4_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_float4_avg_sw ORDER BY k;
 
 ACTIVATE test_float8_avg_sw, test_float4_avg_sw;
@@ -63,9 +55,7 @@ INSERT INTO float_swavg_stream (k, v) VALUES ('z', 42.42);
 
 DEACTIVATE test_float8_avg_sw, test_float4_avg_sw;
 
-SELECT k, avg, _1 FROM test_float8_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_float8_avg_sw ORDER BY k;
-SELECT k, avg, _1 FROM test_float4_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_float4_avg_sw ORDER BY k;
 
 -------------------------------------------------------------------------------
@@ -79,7 +69,6 @@ INSERT INTO numeric_swavg_stream (k, v) VALUES ('y', 0.1001), ('y', 0.99999999),
 
 DEACTIVATE test_numeric_avg_sw;
 
-SELECT k, avg, _1 FROM test_numeric_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_numeric_avg_sw ORDER BY k;
 
 ACTIVATE test_numeric_avg_sw;
@@ -90,7 +79,6 @@ INSERT INTO numeric_swavg_stream (k, v) VALUES ('x', 1), ('y', 2), ('z', 42.42);
 
 DEACTIVATE test_numeric_avg_sw;
 
-SELECT k, avg, _1 FROM test_numeric_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_numeric_avg_sw ORDER BY k;
 
 -------------------------------------------------------------------------------
@@ -106,7 +94,6 @@ INSERT INTO interval_swavg_stream (k, ts0, ts1) VALUES ('x', '2014-01-01 00:00:0
 DEACTIVATE test_interval_avg_sw;
 
 -- We truncated down to day, so the hours shouldn't have affected the averages
-SELECT k, avg, _1 FROM test_interval_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_interval_avg_sw ORDER BY k;
 
 ACTIVATE test_interval_avg_sw;
@@ -118,7 +105,6 @@ INSERT INTO interval_swavg_stream (k, ts0, ts1) VALUES ('y', '2014-01-01 23:00:0
 
 DEACTIVATE test_interval_avg_sw;
 
-SELECT k, avg, _1 FROM test_interval_avg_sw_pdb ORDER BY k;
 SELECT * FROM test_interval_avg_sw ORDER BY k;
 
 DROP CONTINUOUS VIEW test_int8_avg_sw;

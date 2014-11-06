@@ -10,7 +10,6 @@ INSERT INTO stream (key, x) VALUES ('a', 5), ('b', 6);
 SELECT pg_sleep(1);
 INSERT INTO stream (key, x) VALUES ('a', 7), ('b', 8);
 DEACTIVATE cqwindow0;
-SELECT key, sum FROM cqwindow0_pdb ORDER BY _0, key;
 SELECT * FROM cqwindow0 ORDER BY key;
 
 CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITION BY key ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM stream;
@@ -25,5 +24,4 @@ INSERT INTO stream (key, x) VALUES ('a', 7), ('b', 8), ('a', 9);
 SELECT pg_sleep(1);
 INSERT INTO stream (key, x) VALUES ('a', 10), ('b', 11), ('b', 12);
 DEACTIVATE cqwindow1;
-SELECT key, avg FROM cqwindow1_pdb ORDER BY _0, key;
 SELECT * FROM cqwindow1 ORDER BY key;

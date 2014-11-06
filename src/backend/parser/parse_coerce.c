@@ -20,6 +20,7 @@
 #include "catalog/pg_inherits_fn.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
+#include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_coerce.h"
@@ -1804,7 +1805,7 @@ enforce_generic_type_consistency(Oid *actual_arg_types,
 		if (!OidIsValid(array_typeid))
 		{
 			array_typeid = get_array_type(elem_typeid);
-			if (!OidIsValid(array_typeid))
+			if (!allowSystemTableMods && !OidIsValid(array_typeid))
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
 						 errmsg("could not find array type for data type %s",

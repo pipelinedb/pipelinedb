@@ -13,6 +13,7 @@
 #include "access/htup_details.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_proc.h"
+#include "catalog/pg_type.h"
 #include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_queries_fn.h"
 #include "commands/pipelinecmds.h"
@@ -31,6 +32,7 @@
 #include "storage/lock.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
+#include "utils/lsyscache.h"
 #include "utils/syscache.h"
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
@@ -730,23 +732,53 @@ TransformAggNodeForCQView(SelectStmt *viewselect, Node *node, ResTarget *aggres,
 	if (doesViewAggregate)
 	{
 		FuncCall *agg = (FuncCall *) node;
+		agg->args = list_delete_first(agg->args);
 		agg->agg_star = false;
-		agg->args = list_make1(cref);
+		agg->args = lcons(cref, agg->args);
 	}
 	else
 		memcpy(node, cref, sizeof(ColumnRef));
 }
 
 /*
- * change_agg_arg_to_hidden
+ * make_dummy_arg
+ *
+ * Create a constant with the given type
+ */
+static Const*
+make_dummy_arg(Oid type)
+{
+	int16 len = get_typlen(type);
+	bool byval = get_typbyval(type);
+	bool isnull = (len == -1 || len > 8);
+	char cat;
+	bool catpref;
+
+	/*
+	 * This allows us to use anyarray in our aggregate signature so we don't have
+	 * to have a separate aggregate function in pg_proc for every array element type.
+	 */
+	get_type_category_preferred(type, &cat, &catpref);
+	if (cat == TYPCATEGORY_ARRAY)
+		type = ANYARRAYOID;
+
+	return makeConst(type, InvalidOid, InvalidOid, len, (Datum) 0, isnull, byval);
+}
+
+/*
+ * use_hidden_signature
+ *
+ * Generate an argument list that will only match our hidden aggregates for
+ * internal transition states.
  */
 static void
-change_agg_arg_to_hidden(FuncCall *agg, Query *query, TupleDesc matdesc)
+use_hidden_signature(FuncCall *agg, Query *query, TupleDesc matdesc)
 {
 	ColumnRef *cref = linitial(agg->args);
 	char *colName = FigureColname((Node *) cref);
 	int i;
 	ListCell *lc;
+	List *args = copyObject(agg->args);
 
 	foreach(lc, query->targetList)
 	{
@@ -762,12 +794,41 @@ change_agg_arg_to_hidden(FuncCall *agg, Query *query, TupleDesc matdesc)
 
 		for (i = 0; i < matdesc->natts; i++)
 		{
+			ListCell *alc;
+
 			if (pg_strcasecmp(NameStr(matdesc->attrs[i]->attname), colName) != 0)
 				continue;
+
+			/*
+			 * In addition to the transition column, we always pass an additional constant
+			 * to these transition state aggregates whose type is the type of the corresponding
+			 * unhidden column. We also pass dummy arguments representing the types of all
+			 * remaining argument types for this aggregate call. This eliminates any ambiguity
+			 * when matching the aggregate call signature to the correct function in pg_proc.
+			 */
+			args = NIL;
+
+			/* hidden column arg */
 			cref->fields = list_make1(makeString(NameStr(matdesc->attrs[i + 1]->attname)));
+			args = lappend(args, cref);
+
+			/* return type dummy arg */
+			args = lappend(args, make_dummy_arg(matdesc->attrs[i]->atttypid));
+
+			/* dummy args for remaining agg args */
+			agg->args = list_delete_first(agg->args);
+			foreach(alc, agg->args)
+			{
+				Node *expr = (Node *) lfirst(alc);
+				Oid type = exprType(expr);
+				args = lappend(args, make_dummy_arg(type));
+			}
+
 			break;
 		}
 	}
+
+	agg->args = args;
 }
 
 /*
@@ -808,7 +869,7 @@ FixAggArgForCQView(SelectStmt *viewselect, SelectStmt *workerselect, RangeVar *m
 				agg->funcname = list_make1(makeString("sum"));
 			}
 
-			change_agg_arg_to_hidden(agg, query, matdesc);
+			use_hidden_signature(agg, query, matdesc);
 		}
 	}
 }
