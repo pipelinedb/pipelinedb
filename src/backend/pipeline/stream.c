@@ -115,7 +115,11 @@ CreateStreamTargets(void)
 				entry->tags = bms_add_member(entry->tags, catrow->id);
 
 				relname = ((RangeVar *) j->rarg)->relname;
-				entry = (StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, NULL);
+				entry = (StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, &found);
+
+				if (!found)
+					entry->tags = NULL;
+
 				entry->tags = bms_add_member(entry->tags, catrow->id);
 			}
 			else if (IsA(node, RangeVar))
@@ -311,7 +315,7 @@ InsertIntoStream(InsertStmt *ins)
 	*/
 	if (DebugSyncStreamInsert)
 	{
-		wait_for_overwrite(GlobalStreamBuffer, sbs);
+		WaitForOverwrite(GlobalStreamBuffer, sbs, 5);
 	}
 	/* Print out the binary variable that tells you how many cvs are waiting on this stream */
 

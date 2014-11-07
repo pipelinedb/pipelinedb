@@ -40,10 +40,11 @@ int StreamBufferBlocks;
  * Waits until the given slot has been read by all CQs that need to see it
  */
 void
-wait_for_overwrite(StreamBuffer *buf, StreamBufferSlot *slot)
+WaitForOverwrite(StreamBuffer *buf, StreamBufferSlot *slot, int sleepms)
 {
 	/* block until all CQs have marked this event as read */
-	while (HasPendingReads(slot));
+	while (HasPendingReads(slot))
+		pg_usleep(sleepms * 1000);
 
 	if (DebugPrintStreamBuffer)
 	{
@@ -129,7 +130,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		int chunk;
 
 		sbs = (StreamBufferSlot *) sbspos;
-		wait_for_overwrite(buf, sbs);
+		WaitForOverwrite(buf, sbs, 0);
 
 		chunk = sbs->len + sbs->nextoffset;
 		free += chunk;
@@ -312,8 +313,6 @@ InitGlobalStreamBuffer(void)
 		GlobalStreamBuffer->mutex = ShmemAlloc(sizeof(slock_t));
 		SpinLockInit(GlobalStreamBuffer->mutex);
 
-		GlobalStreamBuffer->update = ShmemAlloc(sizeof(bool));
-		*GlobalStreamBuffer->update = false;
 		GlobalStreamBuffer->empty = true;
 	}
 
@@ -330,34 +329,14 @@ UpdateGlobalStreamBuffer(void)
 }
 
 /*
- * Tell the given StreamBuffer that it needs to update itself
- */
-void
-NotifyUpdateStreamBuffer(StreamBuffer *buf)
-{
-	SpinLockAcquire(buf->mutex);
-	*buf->update = true;
-	SpinLockRelease(buf->mutex);
-}
-
-void
-NotifyUpdateGlobalStreamBuffer(void)
-{
-	NotifyUpdateStreamBuffer(GlobalStreamBuffer);
-}
-
-/*
  * Something about the environment has changed, so look for what we need to update
  * about the given buffer
  */
 void
 UpdateStreamBuffer(StreamBuffer *buf)
 {
-	if (*buf->update == false)
-		return;
 	SpinLockAcquire(buf->mutex);
 	CreateStreamTargets();
-	*buf->update = false;
 	SpinLockRelease(buf->mutex);
 }
 
