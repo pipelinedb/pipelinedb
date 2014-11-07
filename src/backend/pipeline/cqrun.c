@@ -262,12 +262,14 @@ getCQProcessName(CQProcessType ptype)
 }
 
 bool
-RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousViewState *state, BackgroundWorkerHandle **bg_handle)
+RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousViewState *state, BackgroundWorkerHandle *bg_handle)
 {
 	BackgroundWorker worker;
 	RunCQArgs args;
+	BackgroundWorkerHandle *worker_handle;
 	char *procName = getCQProcessName(ptype);
 	char *query = GetQueryString(cvname, true);
+	bool success;
 
 	/* TODO(usmanm): Make sure the name doesn't go beyond 64 bytes */
 	memcpy(worker.bgw_name, cvname, strlen(cvname) + 1);
@@ -292,5 +294,9 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 
 	memcpy(worker.bgw_additional_arg, &args, worker.bgw_additional_size);
 
-	return RegisterDynamicBackgroundWorker(&worker, bg_handle);
+	success = RegisterDynamicBackgroundWorker(&worker, &worker_handle);
+
+	*bg_handle = *worker_handle;
+
+	return success;
 }

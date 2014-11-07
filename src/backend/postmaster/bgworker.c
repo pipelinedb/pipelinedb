@@ -86,12 +86,6 @@ typedef struct BackgroundWorkerArray
 	BackgroundWorkerSlot slot[FLEXIBLE_ARRAY_MEMBER];
 } BackgroundWorkerArray;
 
-struct BackgroundWorkerHandle
-{
-	int			slot;
-	uint64		generation;
-};
-
 static BackgroundWorkerArray *BackgroundWorkerData;
 
 /*
@@ -930,6 +924,7 @@ GetBackgroundWorkerPid(BackgroundWorkerHandle *handle, pid_t *pidp)
 	 * won't be garbage, but it might be out of date by the time the caller
 	 * examines it (but that's unavoidable anyway).
 	 */
+	elog(LOG, "handle addr %d %p %p", handle->slot, handle, slot);
 	if (handle->generation != slot->generation)
 		pid = 0;
 	else

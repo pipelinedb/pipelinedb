@@ -20,6 +20,6 @@ typedef enum
 	CQGarbageCollector
 } CQProcessType;
 
-bool RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, struct ContinuousViewState *state, BackgroundWorkerHandle **bg_handle);
+bool RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, struct ContinuousViewState *state, BackgroundWorkerHandle *bg_handle);
 
 #endif

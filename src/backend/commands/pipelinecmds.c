@@ -460,8 +460,18 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		/*
 		 * Initialize the metadata entry for the CV
 		 * Input would be an id (used as key) and a Process group size.
+		 *
+		 * Here we don't have to worry about racing transactions.
+		 * If we see the CV as inactive but another transaction has created
+		 * its CVMetadata entry, the next call will fail--albeit with a weird
+		 * message saying the CV is being deactivated. That's only one of the
+		 * cases when this can happen.
 		 */
 		entry = EntryAlloc(state.id, GetProcessGroupSizeFromCatalog(rv));
+
+		if (entry == NULL)
+			elog(ERROR, "continuous view \"%s\" is being deactivated",
+					rv->relname);
 
 		RunContinuousQueryProcs(rv->relname, &state, entry);
 
@@ -480,7 +490,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 			 */
 			MarkContinuousViewAsInactive(rv, pipeline_queries);
 			for (i = 0; i < entry->pg_size; i ++)
-				TerminateBackgroundWorker(entry->bg_handles[i]);
+				TerminateBackgroundWorker(&entry->bg_handles[i]);
 		}
 	}
 
@@ -513,6 +523,13 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 			continue;
 
 		GetContinousViewState(rv, &state);
+
+		/* If the another transaction which deactivated this CV hasn't
+		 * committed yet, we might still see it as active. Since there's only
+		 * one postmaster, the previous transaction's process could have
+		 * removed the CVMetadata--transactions don't protect it. */
+		if (GetCVMetadata(state.id) == NULL)
+			continue;
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id, false);
@@ -556,6 +573,4 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 	/* Call TRUNCATE on the backing view table(s). */
 	stmt->objType = OBJECT_TABLE;
 	ExecuteTruncate(stmt);
-
-	/* TODO(usmanm): Do we need to do any other state clean up? */
 }

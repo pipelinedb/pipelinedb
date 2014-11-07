@@ -303,6 +303,21 @@ GetActiveFlagPtr(int32 id)
 }
 
 /*
+ * get_stopped_proc_count
+ */
+static int
+get_stopped_proc_count(CVMetadata *entry)
+{
+	int count = 0;
+	pid_t pid;
+	int i;
+	for (i = 0; i < entry->pg_size; i++)
+		if (WaitForBackgroundWorkerStartup(&entry->bg_handles[i], &pid) == BGWH_STOPPED)
+			count++;
+	return count;
+}
+
+/*
  * WaitForCQProcessStart
  *
  * Block on the process group count till
@@ -314,25 +329,15 @@ WaitForCQProcessStart(int32 id)
 {
 	CVMetadata *entry = GetCVMetadata(id);
 	int err_count;
-	pid_t pid;
-	int i;
 
 	while (true)
 	{
 		err_count = 0;
-
 		if (entry->pg_count == entry->pg_size)
 			break;
-
-		for (i = 0; i < entry->pg_size; i++)
-		{
-			if (WaitForBackgroundWorkerStartup(entry->bg_handles[i], &pid) == BGWH_STOPPED)
-				err_count++;
-		}
-
+		err_count = get_stopped_proc_count(entry);
 		if (entry->pg_count + err_count == entry->pg_size)
 			break;
-
 		pg_usleep(SLEEP_TIMEOUT);
 	}
 
@@ -350,10 +355,11 @@ void
 WaitForCQProcessEnd(int32 id)
 {
 	CVMetadata *entry = GetCVMetadata(id);
-
 	while (true)
 	{
 		if (entry->pg_count == 0)
+			break;
+		if (get_stopped_proc_count(entry) == entry->pg_size)
 			break;
 		pg_usleep(SLEEP_TIMEOUT);
 	}

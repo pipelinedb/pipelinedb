@@ -25,7 +25,7 @@ typedef struct CVMetadata
 	int32 pg_size;
 	bool active;
 	/* TODO(usmanm): Make this dynamic to support parallelism */
-	BackgroundWorkerHandle *bg_handles[3];
+	BackgroundWorkerHandle bg_handles[3];
 } CVMetadata;
 
 extern void InitCVMetadataTable(void);
