@@ -320,27 +320,6 @@ InitGlobalStreamBuffer(void)
 }
 
 /*
- * If the GlobalStreamBuffer needs to be updated, update it
- */
-void
-UpdateGlobalStreamBuffer(void)
-{
-	UpdateStreamBuffer(GlobalStreamBuffer);
-}
-
-/*
- * Something about the environment has changed, so look for what we need to update
- * about the given buffer
- */
-void
-UpdateStreamBuffer(StreamBuffer *buf)
-{
-	SpinLockAcquire(buf->mutex);
-	CreateStreamTargets();
-	SpinLockRelease(buf->mutex);
-}
-
-/*
  * OpenStreamBufferReader
  *
  * Opens a reader into the given stream buffer for a given continuous query

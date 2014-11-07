@@ -107,8 +107,6 @@ StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, St
 Size StreamBufferShmemSize(void);
 void InitGlobalStreamBuffer(void);
 bool IsInputStream(const char *stream);
-void UpdateStreamBuffer(StreamBuffer *buf);
-void UpdateGlobalStreamBuffer(void);
 
 StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
 void CloseStreamBufferReader(StreamBufferReader *reader);
@@ -117,7 +115,6 @@ void UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot);
 void ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, int intervalms);
 void PrintStreamBuffer(StreamBuffer *buf);
 void WaitForOverwrite(StreamBuffer *buf, StreamBufferSlot *slot, int sleepms);
-
 
 void ResetStreamBufferLatch(int32 id);
 void WaitOnStreamBufferLatch(int32 id);

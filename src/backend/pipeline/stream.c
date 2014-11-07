@@ -19,8 +19,9 @@
 #include "pipeline/decode.h"
 #include "pipeline/stream.h"
 #include "storage/ipc.h"
-#include "utils/builtins.h"
+#include "storage/spin.h"
 #include "tcop/tcopprot.h"
+#include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
@@ -31,20 +32,27 @@ typedef struct StreamTagsEntry
 	Bitmapset *tags;
 } StreamTagsEntry;
 
-static StreamTargets *targets = NULL;
+static StreamTargets *Targets = NULL;
+static slock_t *StreamTargetsLock = NULL;
 
 /* Whether or not to block till the events are consumed by a cv*/
 bool DebugSyncStreamInsert;
 
 /*
- * close_stream
- *
- * Closes datanode connections and cleans up stream state
+ * InitStreamTargetsLock
  */
 void
-CloseStream(EventStream stream)
+InitStreamTargetsLock(void)
 {
+	bool found;
 
+	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
+
+	StreamTargetsLock = (slock_t *) ShmemInitStruct("StreamTargetsLock", sizeof(slock_t) , &found);
+	if (!found)
+		SpinLockInit(StreamTargetsLock);
+
+	LWLockRelease(CVMetadataLock);
 }
 
 /*
@@ -61,8 +69,10 @@ CreateStreamTargets(void)
 	HeapTuple tup;
 	MemoryContext oldcontext;
 
-	if (targets != NULL)
-		hash_destroy(targets);
+	SpinLockAcquire(StreamTargetsLock);
+
+	if (Targets != NULL)
+		hash_destroy(Targets);
 
 	MemSet(&ctl, 0, sizeof(ctl));
 
@@ -70,7 +80,7 @@ CreateStreamTargets(void)
 	ctl.entrysize = sizeof(StreamTagsEntry);
 
 	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-	targets = hash_create("StreamTargets", 32, &ctl, HASH_ELEM);
+	Targets = hash_create("StreamTargets", 32, &ctl, HASH_ELEM);
 
 	rel = heap_open(PipelineQueriesRelationId, AccessShareLock);
 	scandesc = heap_beginscan_catalog(rel, 0, NULL);
@@ -107,7 +117,7 @@ CreateStreamTargets(void)
 				char *relname = ((RangeVar *) j->larg)->relname;
 				bool found;
 				StreamTagsEntry *entry =
-						(StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, &found);
+						(StreamTagsEntry *) hash_search(Targets, (void *) relname, HASH_ENTER, &found);
 
 				if (!found)
 					entry->tags = NULL;
@@ -115,7 +125,7 @@ CreateStreamTargets(void)
 				entry->tags = bms_add_member(entry->tags, catrow->id);
 
 				relname = ((RangeVar *) j->rarg)->relname;
-				entry = (StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, &found);
+				entry = (StreamTagsEntry *) hash_search(Targets, (void *) relname, HASH_ENTER, &found);
 
 				if (!found)
 					entry->tags = NULL;
@@ -127,7 +137,7 @@ CreateStreamTargets(void)
 				RangeVar *rv = (RangeVar *) node;
 				bool found;
 				StreamTagsEntry *entry =
-						(StreamTagsEntry *) hash_search(targets, (void *) rv->relname, HASH_ENTER, &found);
+						(StreamTagsEntry *) hash_search(Targets, (void *) rv->relname, HASH_ENTER, &found);
 
 				if (!found)
 					entry->tags = NULL;
@@ -146,6 +156,8 @@ CreateStreamTargets(void)
 	heap_endscan(scandesc);
 	heap_close(rel, NoLock);
 
+	SpinLockRelease(StreamTargetsLock);
+
 	MemoryContextSwitchTo(oldcontext);
 }
 
@@ -161,10 +173,13 @@ GetTargetsFor(const char *stream)
 	bool found = false;
 	StreamTagsEntry *entry;
 
-	if (targets == NULL)
-		CreateStreamTargets();
+	if (Targets == NULL)
+		return NULL;
 
-	entry = (StreamTagsEntry *) hash_search(targets, stream, HASH_FIND, &found);
+	SpinLockAcquire(StreamTargetsLock);
+	entry = (StreamTagsEntry *) hash_search(Targets, stream, HASH_FIND, &found);
+	SpinLockRelease(StreamTargetsLock);
+
 	if (!found)
 		return NULL;
 

@@ -495,7 +495,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	}
 
 	if (success)
-		UpdateGlobalStreamBuffer();
+		CreateStreamTargets();
 
 	heap_close(pipeline_queries, NoLock);
 
@@ -548,7 +548,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	}
 
 	if (count)
-		UpdateGlobalStreamBuffer();
+		CreateStreamTargets();
 
 	heap_close(pipeline_queries, NoLock);
 
