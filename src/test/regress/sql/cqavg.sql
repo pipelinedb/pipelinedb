@@ -13,7 +13,6 @@ INSERT INTO int_stream_cqavg (k, v) VALUES ('y', -10000), ('y', 10000), ('y', 0)
 
 DEACTIVATE test_int8_avg, test_int4_avg, test_int2_avg;;
 
-SELECT * FROM test_int8_avg_pdb ORDER BY k;
 SELECT * FROM test_int4_avg_pdb ORDER BY k;
 SELECT * FROM test_int2_avg_pdb ORDER BY k;
 
@@ -64,8 +63,6 @@ INSERT INTO numeric_stream_cqavg (k, v) VALUES ('x', 10000000000000000.233), ('x
 INSERT INTO numeric_stream_cqavg (k, v) VALUES ('y', 0.1001), ('y', 0.99999999), ('y', -999999999999999999.999999999999);
 
 DEACTIVATE test_numeric_avg;
-
-SELECT * FROM test_numeric_avg_pdb ORDER BY k;
 
 ACTIVATE test_numeric_avg;
 
