@@ -79,7 +79,7 @@ typedef HTAB StreamTargets;
 
 extern EventStream OpenStream(void);
 extern int RespondSendEvents(int numevents);
-extern void CloseStream(EventStream stream);
+extern void InitStreamTargetsLock(void);
 extern void CreateStreamTargets(void);
 extern Bitmapset *GetTargetsFor(const char *stream);
 extern void DestroyStreamTargets(StreamTargets *s);

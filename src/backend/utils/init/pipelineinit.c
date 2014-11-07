@@ -13,6 +13,7 @@
 #include "catalog/pipeline_queries_fn.h"
 #include "miscadmin.h"
 #include "pipeline/cvmetadata.h"
+#include "pipeline/stream.h"
 #include "pipeline/streambuf.h"
 #include "storage/lwlock.h"
 
@@ -45,6 +46,7 @@ init_pipeline()
 {
 	InitGlobalStreamBuffer();
 	InitCVMetadataTable();
+	InitStreamTargetsLock();
 }
 
 /*
