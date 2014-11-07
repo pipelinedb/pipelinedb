@@ -416,7 +416,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	int success = 0;
 	int fail = 0;
 	CVMetadata *entry;
-	Relation pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
+	Relation pipeline_queries = heap_open(PipelineQueriesRelationId, ExclusiveLock);
 	int i;
 
 	foreach(lc, stmt->views)
@@ -499,7 +499,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 {
 	int count = 0;
 	ListCell *lc;
-	Relation pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
+	Relation pipeline_queries = heap_open(PipelineQueriesRelationId, ExclusiveLock);
 
 	foreach(lc, stmt->views)
 	{

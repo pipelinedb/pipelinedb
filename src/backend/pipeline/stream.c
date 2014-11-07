@@ -72,7 +72,7 @@ CreateStreamTargets(void)
 	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 	targets = hash_create("StreamTargets", 32, &ctl, HASH_ELEM);
 
-	rel = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
+	rel = heap_open(PipelineQueriesRelationId, AccessShareLock);
 	scandesc = heap_beginscan_catalog(rel, 0, NULL);
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
@@ -140,7 +140,7 @@ CreateStreamTargets(void)
 	}
 
 	heap_endscan(scandesc);
-	heap_close(rel, AccessExclusiveLock);
+	heap_close(rel, NoLock);
 
 	MemoryContextSwitchTo(oldcontext);
 }
