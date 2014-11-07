@@ -103,13 +103,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	IncrementProcessGroupCount(cq_id);
 
-	/*
-	 * We wait until we're up and running before telling the stream buffer that
-	 * there is a new reader in order to avoid having any events being assigned
-	 * to a process that fails to launch properly.
-	 */
-	NotifyUpdateGlobalStreamBuffer();
-
 	CurrentResourceOwner = save;
 	/* XXX (jay)Should be able to copy pointers and maintain an array of pointers instead
 	   of an array of latches. This somehow does not work as expected and autovacuum
@@ -134,7 +127,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 				pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 			}
 		}
-
 
 		TopTransactionContext = runcontext;
 

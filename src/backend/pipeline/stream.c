@@ -115,7 +115,11 @@ CreateStreamTargets(void)
 				entry->tags = bms_add_member(entry->tags, catrow->id);
 
 				relname = ((RangeVar *) j->rarg)->relname;
-				entry = (StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, NULL);
+				entry = (StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, &found);
+
+				if (!found)
+					entry->tags = NULL;
+
 				entry->tags = bms_add_member(entry->tags, catrow->id);
 			}
 			else if (IsA(node, RangeVar))
