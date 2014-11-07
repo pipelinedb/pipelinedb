@@ -484,11 +484,12 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		}
 	}
 
-	UpdateGlobalStreamBuffer();
+	if (success)
+		UpdateGlobalStreamBuffer();
 
 	heap_close(pipeline_queries, NoLock);
 
-	if (fail > 0)
+	if (fail)
 		elog(ERROR, "failed to activate %d continuous view(s)", fail);
 
 	return success;
@@ -529,14 +530,8 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		EntryRemove(state.id);
 	}
 
-	UpdateGlobalStreamBuffer();
-
-	/*
-	 * This will stop the stream buffer from assigning new events to this
-	 * continuous view immediately, even if the worker procs actually take a few
-	 * more seconds to shut themselves down. This seems like the behavior we want.
-	 */
-	NotifyUpdateGlobalStreamBuffer();
+	if (count)
+		UpdateGlobalStreamBuffer();
 
 	heap_close(pipeline_queries, NoLock);
 

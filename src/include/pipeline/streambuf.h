@@ -83,7 +83,6 @@ typedef struct StreamBuffer
 	 * it can properly be read before being clobbered.
 	 */
 	/* mapping from streams to the continuous views that read from them */
-//	StreamTargets *targets;
 	StreamBufferSlot **prev;
 	StreamBufferSlot **tail;
 	char **last;
@@ -91,12 +90,6 @@ typedef struct StreamBuffer
 	Latch procLatch[512];
 	bool empty;
 	slock_t *mutex;
-
-	/*
-	 * Used by other procs to tell the StreamBuffer that something about the environment
-	 * has changed and it needs to update its information
-	 */
-	bool *update;
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */
@@ -116,8 +109,6 @@ void InitGlobalStreamBuffer(void);
 bool IsInputStream(const char *stream);
 void UpdateStreamBuffer(StreamBuffer *buf);
 void UpdateGlobalStreamBuffer(void);
-void NotifyUpdateStreamBuffer(StreamBuffer *buf);
-void NotifyUpdateGlobalStreamBuffer(void);
 
 StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
 void CloseStreamBufferReader(StreamBufferReader *reader);
