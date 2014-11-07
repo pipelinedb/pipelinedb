@@ -397,6 +397,11 @@ ExecEndBatch(PlanState *node)
 		case T_AggState:
 			ExecEndAggBatch((AggState *) node);
 			break;
+		case T_StreamTableScanState:
+			elog(LOG,"CALING END BATCH FOR STR TBL SCAN NODE");
+			//ExecEndStreamTableScan(node);
+			CloseHeapScan(node);
+			break;
 
 		default:
 			break;
@@ -428,7 +433,9 @@ ExecProcNode(PlanState *node)
 		InstrStartNode(node->instrument);
 
 	if (IsContinuous(node) && node->cq_batch_progress == BatchSize(node))
+	{
 		return ExecEndBatch(node);
+	}
 
 	if (node->state->es_exec_node_cxt)
 		oldcontext = MemoryContextSwitchTo(node->state->es_exec_node_cxt);
@@ -603,7 +610,9 @@ ExecProcNode(PlanState *node)
 	if (!TupIsNull(result))
 		node->cq_batch_progress++;
 	else if (IsContinuous(node))
+	{
 		return ExecEndBatch(node);
+	}
 
 	return result;
 }

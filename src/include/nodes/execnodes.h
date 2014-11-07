@@ -1213,6 +1213,7 @@ typedef struct ScanState
 	Relation	ss_currentRelation;
 	HeapScanDesc ss_currentScanDesc;
 	TupleTableSlot *ss_ScanTupleSlot;
+	bool is_heap_open;
 } ScanState;
 
 /*
