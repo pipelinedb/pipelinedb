@@ -78,11 +78,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	oldcontext = MemoryContextSwitchTo(runcontext);
 
 	/* prepare the plan for execution */
-	PushActiveSnapshot(GetTransactionSnapshot());
-	queryDesc->snapshot = GetActiveSnapshot();
 	ExecutorStart(queryDesc, 0);
-	PopActiveSnapshot();
-	UnregisterSnapshot(queryDesc->snapshot);
 	MemoryContextSwitchTo(oldcontext);
 	/* The relations that are tables need to be released, hold on to the stream */
 
@@ -183,11 +179,13 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	DecrementProcessGroupCount(cq_id);
 
+	elog(LOG,"BEFORE...");
 	/* cleanup */
 	ExecutorFinish(queryDesc);
 	ExecutorEnd(queryDesc);
 	FreeQueryDesc(queryDesc);
 
+	elog(LOG,"AFTER...");
 	MemoryContextDelete(runcontext);
 
 	if (queryDesc->totaltime)

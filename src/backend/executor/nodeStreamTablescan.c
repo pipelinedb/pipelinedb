@@ -29,7 +29,8 @@
 #include "executor/nodeStreamTablescan.h"
 #include "utils/rel.h"
 
-static void InitStreamTableScanRelation(StreamTableScanState *node, EState *estate, int eflags);
+static bool IsHeapOpen(StreamTableScanState* node);
+static void InitScanRelation(StreamTableScanState *node, EState *estate, int eflags);
 static TupleTableSlot *StreamTableNext(StreamTableScanState *node);
 
 EState	   *global_estate = NULL;
@@ -37,8 +38,14 @@ int 		global_eflags;
 StreamTableScanState *global_scanstate;
 List	   *global_targetlist;		/* target list to be computed at this node */
 List	   *global_qual;			/* implicitly-ANDed qual conditions */
+Relation	global_currentRelation;
 
-
+struct ScanInfo
+{
+	EState	   			 *estate;
+	int 				 eflags;
+	StreamTableScanState *scanstate;
+} ScanInfo;
 /* ----------------------------------------------------------------
  *						Scan Support
  * ----------------------------------------------------------------
@@ -128,6 +135,10 @@ InitScanRelation(StreamTableScanState *node, EState *estate, int eflags)
 	currentRelation = ExecOpenScanRelation(estate,
 									  ((SeqScan *) node->ps.plan)->scanrelid,
 										   eflags);
+	global_currentRelation = currentRelation;
+
+	/* Set the right snap shot */
+	estate->es_snapshot = GetTransactionSnapshot();
 
 	/* initialize a heapscan */
 	currentScanDesc = heap_beginscan(currentRelation,
@@ -135,6 +146,7 @@ InitScanRelation(StreamTableScanState *node, EState *estate, int eflags)
 									 0,
 									 NULL);
 
+	node->is_heap_open = true; //XXX find a beter place for this flag, this line should not be necessary
 	node->ss_currentRelation = currentRelation;
 	node->ss_currentScanDesc = currentScanDesc;
 
@@ -160,6 +172,7 @@ ExecStreamTableScan(StreamTableScanState *node)
 	temp = ExecScan((StreamTableScanState *) node,
 					(ExecScanAccessMtd) StreamTableNext,
 					(ExecScanRecheckMtd) StreamTableRecheck);
+
 	print_slot(temp);
 	return temp;
 }
@@ -186,6 +199,7 @@ ExecInitStreamTableScan(StreamTableScan *node, EState *estate, int eflags)
 	scanstate = makeNode(StreamTableScanState);
 	scanstate->ps.plan = (Plan *) node;
 	scanstate->ps.state = estate;
+	scanstate->is_heap_open = false;
 
 	global_estate = estate;
 	global_eflags = eflags;
@@ -195,52 +209,36 @@ ExecInitStreamTableScan(StreamTableScan *node, EState *estate, int eflags)
 
 	/******************* POSTPONE the scan relation initialization to the ExecProc stage *************************/
 	/* to prevent tuple leaks and snapshot leaks */
-#if 0
-	/*
-	 * Miscellaneous initialization
-	 *
-	 * create expression context for node
-	 */
-	ExecAssignExprContext(estate, &scanstate->ps);
-
-	/*
-	 * initialize child expressions
-	 */
-	scanstate->ps.targetlist = (List *)
-		ExecInitExpr((Expr *) node->plan.targetlist,
-					 (PlanState *) scanstate);
-	scanstate->ps.qual = (List *)
-		ExecInitExpr((Expr *) node->plan.qual,
-					 (PlanState *) scanstate);
-
-	/*
-	 * tuple table initialization
-	 */
-	ExecInitResultTupleSlot(estate, &scanstate->ps);
-	ExecInitScanTupleSlot(estate, scanstate);
-
-	/*
-	 * initialize scan relation
-	 */
-	InitScanRelation(scanstate, estate, eflags);
-
-	scanstate->ps.ps_TupFromTlist = false;
-
-	/*
-	 * Initialize result tuple type and projection info.
-	 */
-	ExecAssignResultTypeFromTL(&scanstate->ps);
-	ExecAssignScanProjectionInfo(scanstate);
-#endif
 	return scanstate;
 }
 
+
+static void
+OpenHeapScan(StreamTableScanState *node)
+{
+	HeapScanDesc currentScanDesc;
+	/* initialize a heapscan */
+	currentScanDesc = heap_beginscan(global_currentRelation,
+									 global_estate->es_snapshot,
+									 0,
+									 NULL);
+
+	node->is_heap_open = true; //XXX find a beter place for this flag, this line should not be necessary
+	node->ss_currentScanDesc = currentScanDesc;
+}
+void
+CloseHeapScan(StreamTableScanState *node)
+{
+	heap_endscan(node->ss_currentScanDesc);
+	node->is_heap_open = false;
+}
 /* ----------------------------------------------------------------
  *		ExecEndStreamTableScan
  *
  *		frees any storage allocated through C routines.
  * ----------------------------------------------------------------
  */
+
 void
 ExecEndStreamTableScan(StreamTableScanState *node)
 {
@@ -264,12 +262,15 @@ ExecEndStreamTableScan(StreamTableScanState *node)
 	 */
 	ExecClearTuple(node->ps.ps_ResultTupleSlot);
 	ExecClearTuple(node->ss_ScanTupleSlot);
-
 	/*
 	 * close heap scan
 	 */
-	heap_endscan(scanDesc);
-
+	if (IsHeapOpen(node))
+	{
+		elog(LOG,"CLOSING EVERYTHING\n");
+		heap_endscan(scanDesc);
+		node->is_heap_open = false;
+	}
 	/*
 	 * close the heap relation.
 	 */
@@ -281,6 +282,11 @@ ExecEndStreamTableScan(StreamTableScanState *node)
  * ----------------------------------------------------------------
  */
 
+static bool
+IsHeapOpen(StreamTableScanState* node)
+{
+	return (node->is_heap_open == true);
+}
 /* ----------------------------------------------------------------
  *		ExecReScanSeqScan
  *
@@ -290,16 +296,18 @@ ExecEndStreamTableScan(StreamTableScanState *node)
 void
 ExecReScanStreamTableScan(StreamTableScanState *node)
 {
-	elog(LOG,"RESCAN\n");
+	static done = false;
+	elog(LOG,"RESCAN make this work within a trasaction\n");
 	HeapScanDesc scan;
 
+	if (!done)
+	{
 	/*
 	 * Miscellaneous initialization
 	 *
 	 * create expression context for node
 	 */
 	ExecAssignExprContext(global_estate, &global_scanstate->ps);
-
 	/*
 	 * initialize child expressions
 	 */
@@ -309,34 +317,34 @@ ExecReScanStreamTableScan(StreamTableScanState *node)
 	global_scanstate->ps.qual = (List *)
 		ExecInitExpr(global_qual,
 					 (PlanState *) global_scanstate);
-
 	/*
 	 * tuple table initialization
 	 */
-	ExecInitResultTupleSlot(global_estate, &global_scanstate->ps);
-	ExecInitScanTupleSlot(global_estate, global_scanstate);
+	 ExecInitResultTupleSlot(global_estate, &global_scanstate->ps);
+	 ExecInitScanTupleSlot(global_estate, global_scanstate);
 
 	/*
 	 * initialize scan relation
 	 */
-	InitScanRelation(node, global_estate, global_eflags);
-
-	node->ps.ps_TupFromTlist = false;
-
+	 InitScanRelation(node, global_estate, global_eflags);
+	 node->ps.ps_TupFromTlist = false;
 	/*
 	* Initialize result tuple type and projection info.
 	*/
 	ExecAssignResultTypeFromTL(&node->ps);
 	ExecAssignScanProjectionInfo(node);
-	//pprint(node);
-
+	done = true;
+	} else
+	{
+		OpenHeapScan(node);
+	}
 	scan = node->ss_currentScanDesc;
 
 	heap_rescan(scan,			/* scan desc */
 				NULL);			/* new scan keys */
 
 	ExecScanReScan((ScanState *) node);
-	//ExecEndStreamTableScan(node);
+
 }
 
 /* ----------------------------------------------------------------
