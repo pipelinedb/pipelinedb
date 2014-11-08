@@ -138,17 +138,10 @@ InitScanRelation(StreamTableScanState *node, EState *estate, int eflags)
 	global_currentRelation = currentRelation;
 
 	/* Set the right snap shot */
-	estate->es_snapshot = GetTransactionSnapshot();
-
-	/* initialize a heapscan */
-	currentScanDesc = heap_beginscan(currentRelation,
-									 estate->es_snapshot,
-									 0,
-									 NULL);
-
-	node->is_heap_open = true; //XXX find a beter place for this flag, this line should not be necessary
+	//estate->es_snapshot = GetTransactionSnapshot();
 	node->ss_currentRelation = currentRelation;
-	node->ss_currentScanDesc = currentScanDesc;
+	//node->is_heap_open = true; //XXX find a beter place for this flag, this line should not be necessary
+	//node->ss_currentScanDesc = currentScanDesc;
 
 	/* and report the scan tuple slot's rowtype */
 	ExecAssignScanType(node, RelationGetDescr(currentRelation));
@@ -212,20 +205,27 @@ ExecInitStreamTableScan(StreamTableScan *node, EState *estate, int eflags)
 	return scanstate;
 }
 
-
-static void
+/*
+* Create and set a new Heap descriptor
+*/
+void
 OpenHeapScan(StreamTableScanState *node)
 {
 	HeapScanDesc currentScanDesc;
 	/* initialize a heapscan */
 	currentScanDesc = heap_beginscan(global_currentRelation,
-									 global_estate->es_snapshot,
+									 GetTransactionSnapshot(),
 									 0,
 									 NULL);
 
 	node->is_heap_open = true; //XXX find a beter place for this flag, this line should not be necessary
 	node->ss_currentScanDesc = currentScanDesc;
 }
+
+/*
+ * Close the nodes heap descriptor
+ */
+
 void
 CloseHeapScan(StreamTableScanState *node)
 {
@@ -265,12 +265,13 @@ ExecEndStreamTableScan(StreamTableScanState *node)
 	/*
 	 * close heap scan
 	 */
+	/*
 	if (IsHeapOpen(node))
 	{
 		elog(LOG,"CLOSING EVERYTHING\n");
-		heap_endscan(scanDesc);
-		node->is_heap_open = false;
+		CloseHeapScan(node);
 	}
+	*/
 	/*
 	 * close the heap relation.
 	 */
@@ -327,6 +328,7 @@ ExecReScanStreamTableScan(StreamTableScanState *node)
 	 * initialize scan relation
 	 */
 	 InitScanRelation(node, global_estate, global_eflags);
+	 OpenHeapScan(node);
 	 node->ps.ps_TupFromTlist = false;
 	/*
 	* Initialize result tuple type and projection info.

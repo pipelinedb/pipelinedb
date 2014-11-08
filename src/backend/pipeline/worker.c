@@ -132,8 +132,10 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 		TopTransactionContext = runcontext;
 
-		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+		StartTransactionCommand();
+
 		CurrentResourceOwner = owner;
+		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 
 		/*
 		 * Run plan on a microbatch
@@ -142,6 +144,8 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 					true, batchsize, timeoutms, ForwardScanDirection, dest);
 
 		MemoryContextSwitchTo(oldcontext);
+
+		CommitTransactionCommand();
 
 		if (estate->es_processed != 0)
 		{
@@ -171,6 +175,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	(*dest->rShutdown) (dest);
 
 	DecrementProcessGroupCount(cq_id);
+	CurrentResourceOwner = owner;
 
 	elog(LOG,"BEFORE...");
 	/* cleanup */
