@@ -84,25 +84,25 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		elog(ERROR, "event of size %d too big for stream buffer of size %d", (int) size, (int) buf->capacity);
 
 	LWLockAcquire(StreamBufferAppendLock, LW_EXCLUSIVE);
-	pos = *buf->pos;
+	pos = buf->pos;
 
 	if (pos + size > BufferEnd(buf))
 	{
 		/* wait for the last event to be read by all readers */
-		while (HasPendingReads(*buf->prev));
+		while (HasPendingReads(buf->prev));
 
-		*buf->pos = buf->start;
+		buf->pos = buf->start;
 
 		/* we need to make sure all readers are done reading before we begin clobbering entries */
 		LWLockAcquire(StreamBufferWrapLock, LW_EXCLUSIVE);
 
-		*buf->tail = *buf->prev;
+		buf->tail = buf->prev;
 
 		 /* the buffer got full, so start a new append cycle */
-		(*buf->prev)->nextoffset = BufferEnd(buf) - SlotEnd(*buf->prev);
-		*buf->prev = NULL;
+		buf->prev->nextoffset = BufferEnd(buf) - SlotEnd(buf->prev);
+		buf->prev = NULL;
 		free = 0;
-		pos = *buf->pos;
+		pos = buf->pos;
 
 		LWLockRelease(StreamBufferWrapLock);
 	}
@@ -115,7 +115,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		if (IsNewAppendCycle(buf) || !MustEvict(buf))
 			free = size;
 		else if (MustEvict(buf))
-			free = (*buf->prev)->nextoffset;
+			free = buf->prev->nextoffset;
 	}
 
 	sbspos = pos + free;
@@ -143,7 +143,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	 * slot, because this gap is garbage that can be consumed by the
 	 * next append. This ensures that every append is contiguous.
 	 */
-	if (*buf->tail)
+	if (buf->tail)
 	{
 		if (size < free)
 			offset = free - size;
@@ -190,12 +190,12 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	result->len = size;
 	result->nextoffset = offset;
 
-	if (*buf->prev)
-		(*buf->prev)->nextoffset = 0;
+	if (buf->prev)
+		buf->prev->nextoffset = 0;
 
-	*buf->prev = result;
-	*buf->pos = pos;
-	*buf->last = pos;
+	buf->prev = result;
+	buf->pos = pos;
+	buf->last = pos;
 
 	SpinLockInit(&result->mutex);
 
@@ -230,18 +230,18 @@ StreamBufferSlot *
 AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent ev)
 {
 	StreamBufferSlot *sbs;
-	char *prev = *buf->pos;
+	char *prev = buf->pos;
 
 	sbs = alloc_slot(stream, encoding, buf, ev);
 
 	if (DebugPrintStreamBuffer)
 	{
 		/* did we wrap around? */
-		if (prev + SlotSize(sbs) > *buf->pos)
+		if (prev + SlotSize(sbs) > buf->pos)
 			prev = buf->start;
 
 		elog(LOG, "appended %dB at [%d, %d) +%d", SlotSize(sbs),
-				BufferOffset(buf, prev), BufferOffset(buf, *buf->pos), sbs->nextoffset);
+				BufferOffset(buf, prev), BufferOffset(buf, buf->pos), sbs->nextoffset);
 	}
 
 	return sbs;
@@ -266,12 +266,7 @@ StreamBufferShmemSize(void)
 bool
 IsInputStream(const char *stream)
 {
-	bool result = false;
-
-	if (GetTargetsFor(stream))
-		result = true;
-
-	return result;
+	return GetTargetsFor(stream) != NULL;
 }
 
 /*
@@ -298,46 +293,18 @@ InitGlobalStreamBuffer(void)
 		GlobalStreamBuffer->start = (char *) ShmemAlloc(size);
 		MemSet(GlobalStreamBuffer->start, 0, size);
 
-		GlobalStreamBuffer->pos = ShmemAlloc(sizeof(char *));
-		*GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
+		GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
 
-		GlobalStreamBuffer->last = ShmemAlloc(sizeof(char *));
-		*GlobalStreamBuffer->last = NULL;
+		GlobalStreamBuffer->last = NULL;
 
-		GlobalStreamBuffer->prev = ShmemAlloc(sizeof(StreamBufferSlot *));
-		*GlobalStreamBuffer->prev = NULL;
+		GlobalStreamBuffer->prev = NULL;
 
-		GlobalStreamBuffer->tail = ShmemAlloc(sizeof(StreamBufferSlot *));
-		*GlobalStreamBuffer->tail = NULL;
-
-		GlobalStreamBuffer->mutex = ShmemAlloc(sizeof(slock_t));
-		SpinLockInit(GlobalStreamBuffer->mutex);
+		GlobalStreamBuffer->tail = NULL;
 
 		GlobalStreamBuffer->empty = true;
 	}
 
 	LWLockRelease(StreamBufferAppendLock);
-}
-
-/*
- * If the GlobalStreamBuffer needs to be updated, update it
- */
-void
-UpdateGlobalStreamBuffer(void)
-{
-	UpdateStreamBuffer(GlobalStreamBuffer);
-}
-
-/*
- * Something about the environment has changed, so look for what we need to update
- * about the given buffer
- */
-void
-UpdateStreamBuffer(StreamBuffer *buf)
-{
-	SpinLockAcquire(buf->mutex);
-	CreateStreamTargets();
-	SpinLockRelease(buf->mutex);
 }
 
 /*
@@ -364,6 +331,7 @@ CloseStreamBufferReader(StreamBufferReader *reader)
 {
 	/* currently every reader gets its own process */
 	LWLockRelease(StreamBufferWrapLock);
+	pfree(reader);
 }
 
 /*
@@ -454,7 +422,7 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 	 */
 	if ((bms_membership(bms) == BMS_SINGLETON) &&
 		(bms_is_member(reader->queryid, bms)) &&
-		(*(GlobalStreamBuffer->prev) == slot))
+		(GlobalStreamBuffer->prev == slot))
 	{
 		/*
 		 *  XXX(jay) can we trust atomicity of this set?
@@ -531,4 +499,3 @@ SetStreamBufferLatch(int32 id)
 {
 	SetLatch((&GlobalStreamBuffer->procLatch[id]));
 }
-

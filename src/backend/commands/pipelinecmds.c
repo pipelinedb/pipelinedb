@@ -30,6 +30,7 @@
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqwindow.h"
+#include "pipeline/stream.h"
 #include "pipeline/streambuf.h"
 #include "regex/regex.h"
 #include "utils/builtins.h"
@@ -495,7 +496,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	}
 
 	if (success)
-		UpdateGlobalStreamBuffer();
+		CreateStreamTargets();
 
 	heap_close(pipeline_queries, NoLock);
 
@@ -548,7 +549,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	}
 
 	if (count)
-		UpdateGlobalStreamBuffer();
+		CreateStreamTargets();
 
 	heap_close(pipeline_queries, NoLock);
 
