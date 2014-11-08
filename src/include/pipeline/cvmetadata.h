@@ -24,8 +24,11 @@ typedef struct CVMetadata
 	int32 pg_count;
 	int32 pg_size;
 	bool active;
+	BackgroundWorkerHandle combiner;
 	/* TODO(usmanm): Make this dynamic to support parallelism */
-	BackgroundWorkerHandle bg_handles[3];
+	BackgroundWorkerHandle worker;
+	BackgroundWorkerHandle gc;
+	bool worker_done;
 } CVMetadata;
 
 extern void InitCVMetadataTable(void);
@@ -36,14 +39,16 @@ extern int GetProcessGroupSizeFromCatalog(RangeVar* rv);
 extern int GetProcessGroupCount(int32 id);
 extern void DecrementProcessGroupCount(int32 id);
 extern void IncrementProcessGroupCount(int32 id);
-extern bool GetActiveFlag(int32 id);
 extern bool *GetActiveFlagPtr(int32 id);
 extern void SetActiveFlag(int32 id, bool flag);
 
 extern CVMetadata* EntryAlloc(int32 key, int pg_size);
 extern void EntryRemove(int32 key);
 
-extern bool WaitForCQProcessStart(int32 id);
-extern void WaitForCQProcessEnd(int32 id);
+extern bool WaitForCQProcessesToStart(int32 id);
+extern void WaitForCQProcessesToTerminate(int32 id);
+extern void TerminateCQProcesses(int32 id);
+extern bool DidCQWorkerCrash(int32 id);
+extern void SetCQWorkerDoneFlag(int32 cq_id);
 
 #endif   /* CVMETADATA_H */

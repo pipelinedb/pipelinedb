@@ -404,9 +404,9 @@ static
 void
 RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CVMetadata *cvmetadata)
 {
-	RunContinuousQueryProcess(CQCombiner, cvname, state, &cvmetadata->bg_handles[0]);
-	RunContinuousQueryProcess(CQWorker, cvname, state, &cvmetadata->bg_handles[1]);
-	RunContinuousQueryProcess(CQGarbageCollector, cvname, state, &cvmetadata->bg_handles[2]);
+	RunContinuousQueryProcess(CQCombiner, cvname, state, &cvmetadata->combiner);
+	RunContinuousQueryProcess(CQWorker, cvname, state, &cvmetadata->worker);
+	RunContinuousQueryProcess(CQGarbageCollector, cvname, state, &cvmetadata->gc);
 }
 
 int
@@ -417,7 +417,6 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	int fail = 0;
 	CVMetadata *entry;
 	Relation pipeline_queries = heap_open(PipelineQueriesRelationId, ExclusiveLock);
-	int i;
 
 	foreach(lc, stmt->views)
 	{
@@ -479,7 +478,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		 * Spin here waiting for the number of waiting CQ related processes
 		 * to complete.
 		 */
-		if (WaitForCQProcessStart(state.id))
+		if (WaitForCQProcessesToStart(state.id))
 			success++;
 		else
 		{
@@ -489,8 +488,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 			 * as inactive and kill any of the remaining bg procs.
 			 */
 			MarkContinuousViewAsInactive(rv, pipeline_queries);
-			for (i = 0; i < entry->pg_size; i ++)
-				TerminateBackgroundWorker(&entry->bg_handles[i]);
+			TerminateCQProcesses(state.id);
 		}
 	}
 
@@ -541,7 +539,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * Block till all the processes in the group have terminated
 		 * and remove the CVMetadata entry.
 		 */
-		WaitForCQProcessEnd(state.id);
+		WaitForCQProcessesToTerminate(state.id);
 		count++;
 
 		EntryRemove(state.id);

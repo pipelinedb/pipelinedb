@@ -162,6 +162,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			ssize_t res = write(combiner->sock, &i, sizeof(int32));
 			if (res < 0)
 				elog(ERROR, "failed to send about-to-die message to the combiner");
+			SetCQWorkerDoneFlag(cq_id);
 			break;
 		}
 	}

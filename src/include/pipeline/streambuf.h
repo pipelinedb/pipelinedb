@@ -122,4 +122,5 @@ void WaitForOverwrite(StreamBuffer *buf, StreamBufferSlot *slot, int sleepms);
 void ResetStreamBufferLatch(int32 id);
 void WaitOnStreamBufferLatch(int32 id);
 void SetStreamBufferLatch(int32 id);
+
 #endif

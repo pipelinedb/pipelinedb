@@ -35,7 +35,7 @@
 #include "pipeline/cvmetadata.h"
 #include "miscadmin.h"
 
-#define SLEEP_TIMEOUT 5000
+#define SLEEP_TIMEOUT 2000
 
 static HTAB *cv_metadata_hash = NULL;
 
@@ -247,8 +247,8 @@ IncrementProcessGroupCount(int32 id)
 
 	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
 	/*
-	   If the entry has not been created for this cv id create
-	   it before incrementing the pg_count.
+	 * If the entry has not been created for this cv id create
+	 * it before incrementing the pg_count.
 	 */
 	entry = GetCVMetadata(id);
 	entry->pg_count++;
@@ -274,22 +274,6 @@ SetActiveFlag(int32 id, bool flag)
 }
 
 /*
- * GetActiveFlag
- *
- * returns the flag insicating whether the process is active
- * or not
- */
-bool
-GetActiveFlag(int32 id)
-{
-	CVMetadata *entry;
-
-	entry = GetCVMetadata(id);
-	Assert(entry);
-	return entry->active;
-}
-
-/*
  * GetActiveFlagPtr
  */
 bool *
@@ -310,10 +294,8 @@ get_stopped_proc_count(CVMetadata *entry)
 {
 	int count = 0;
 	pid_t pid;
-	int i;
-	for (i = 0; i < entry->pg_size; i++)
-		if (WaitForBackgroundWorkerStartup(&entry->bg_handles[i], &pid) == BGWH_STOPPED)
-			count++;
+	count += WaitForBackgroundWorkerStartup(&entry->combiner, &pid) == BGWH_STOPPED;
+	count += WaitForBackgroundWorkerStartup(&entry->worker, &pid) == BGWH_STOPPED;
 	return count;
 }
 
@@ -325,7 +307,7 @@ get_stopped_proc_count(CVMetadata *entry)
  * to be synchronous
  */
 bool
-WaitForCQProcessStart(int32 id)
+WaitForCQProcessesToStart(int32 id)
 {
 	CVMetadata *entry = GetCVMetadata(id);
 	int err_count;
@@ -352,7 +334,7 @@ WaitForCQProcessStart(int32 id)
  * to be synchronous
  */
 void
-WaitForCQProcessEnd(int32 id)
+WaitForCQProcessesToTerminate(int32 id)
 {
 	CVMetadata *entry = GetCVMetadata(id);
 	while (true)
@@ -363,4 +345,37 @@ WaitForCQProcessEnd(int32 id)
 			break;
 		pg_usleep(SLEEP_TIMEOUT);
 	}
+}
+
+/*
+ * TerminateCQProcesses
+ */
+void
+TerminateCQProcesses(int32 id)
+{
+	CVMetadata *entry = GetCVMetadata(id);
+	TerminateBackgroundWorker(&entry->combiner);
+	TerminateBackgroundWorker(&entry->worker);
+	TerminateBackgroundWorker(&entry->gc);
+}
+
+/*
+ * DidCQWorkerCrash
+ */
+bool
+DidCQWorkerCrash(int32 id)
+{
+	CVMetadata *entry = GetCVMetadata(id);
+	pid_t pid;
+	return WaitForBackgroundWorkerStartup(&entry->worker, &pid) == BGWH_STOPPED && !entry->worker_done;
+}
+
+/*
+ * SetCQWorkerDoneFlag
+ */
+void
+SetCQWorkerDoneFlag(int32 id)
+{
+	CVMetadata *entry = GetCVMetadata(id);
+	entry->worker_done = true;
 }

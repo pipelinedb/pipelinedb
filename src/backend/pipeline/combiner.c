@@ -89,6 +89,9 @@ accept_worker(CombinerDesc *desc)
 		elog(ERROR, "could not set combiner recv() timeout: %m");
 }
 
+/*
+ * receive_tuple
+ */
 static bool
 receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 {
@@ -438,7 +441,6 @@ sync_combine(char *cvname, Tuplestorestate *results,
 	}
 	CQMatViewClose(ri);
 	relation_close(rel, RowExclusiveLock);
-
 }
 
 /*
@@ -530,12 +532,12 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeout = queryDesc->plannedstmt->cq_state->maxwaitms;
 	char *cvname = rv->relname;
-
 	PlannedStmt *combineplan;
 	TimestampTz lastCombineTime = GetCurrentTimestamp();
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
-	bool isWorkerAlive;
+	bool isWorkerDone;
+	bool didWorkerCrash = false;
 
 	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
 			"CombinerRunContext",
@@ -578,9 +580,10 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	for (;;)
 	{
 		bool force = false;
+
 		CurrentResourceOwner = owner;
 
-		isWorkerAlive = receive_tuple(combiner, slot);
+		isWorkerDone = !receive_tuple(combiner, slot);
 
 		/*
 		 * If we get a null tuple, we either want to combine the current batch
@@ -621,15 +624,27 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			count = 0;
 		}
 
-		/*
-		 * If the worker signaled that its about to exit,
-		 * we should abort as well.
-		 */
-		if (!isWorkerAlive)
+		/* Check the shared metadata to see if the CV has been deactivated */
+		if (!*activeFlagPtr)
 		{
-			 if (*activeFlagPtr)
-				 elog(ERROR, "worker process died even though the CQ is still active");
-			break;
+			didWorkerCrash |= DidCQWorkerCrash(cq_id);
+
+			/*
+			 * if worker sent an about-to-die message then we've already
+			 * consumed all the tuples it sent us or if no tuple was read and the worker is dead,
+			 * then it probably crashed and so we should quit too
+			 */
+			if (didWorkerCrash || (isWorkerDone && !didWorkerCrash))
+			{
+				/*
+				 * if there are tuples in the store which needs to be merged, force
+				 * merge them
+				 */
+				if (count)
+					force = true;
+				else
+					break;
+			}
 		}
 	}
 
