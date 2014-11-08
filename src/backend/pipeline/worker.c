@@ -110,7 +110,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	 */
 	NotifyUpdateGlobalStreamBuffer();
 
-	CurrentResourceOwner = save;
+	//CurrentResourceOwner = save;
 	/* XXX (jay)Should be able to copy pointers and maintain an array of pointers instead
 	   of an array of latches. This somehow does not work as expected and autovacuum
 	   seems to be obliterating the new shared array. Make this better.
@@ -140,8 +140,10 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 		TopTransactionContext = runcontext;
 
-		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+		StartTransactionCommand();
+
 		CurrentResourceOwner = owner;
+		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 
 		/*
 		 * Run plan on a microbatch
@@ -150,6 +152,8 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 					true, batchsize, timeoutms, ForwardScanDirection, dest);
 
 		MemoryContextSwitchTo(oldcontext);
+
+		CommitTransactionCommand();
 
 		if (estate->es_processed != 0)
 		{
@@ -178,6 +182,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	(*dest->rShutdown) (dest);
 
 	DecrementProcessGroupCount(cq_id);
+	CurrentResourceOwner = owner;
 
 	elog(LOG,"BEFORE...");
 	/* cleanup */
