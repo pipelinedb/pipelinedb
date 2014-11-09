@@ -73,14 +73,13 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	namestrcpy(&name, cvname);
 	CurrentResourceOwner = owner;
 
+	/* prepare the plan for execution */
 	StartTransactionCommand();
 
 	oldcontext = MemoryContextSwitchTo(runcontext);
 
-	/* prepare the plan for execution */
 	ExecutorStart(queryDesc, 0);
 	MemoryContextSwitchTo(oldcontext);
-	/* The relations that are tables need to be released, hold on to the stream */
 
 	CommitTransactionCommand();
 
@@ -110,10 +109,10 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	 */
 	NotifyUpdateGlobalStreamBuffer();
 
-	//CurrentResourceOwner = save;
-	/* XXX (jay)Should be able to copy pointers and maintain an array of pointers instead
-	   of an array of latches. This somehow does not work as expected and autovacuum
-	   seems to be obliterating the new shared array. Make this better.
+	/* 
+	 * XXX (jay)Should be able to copy pointers and maintain an array of pointers instead
+	 * of an array of latches. This somehow does not work as expected and autovacuum
+	 * seems to be obliterating the new shared array. Make this better.
 	 */
 	memcpy(&GlobalStreamBuffer->procLatch[cq_id], &MyProc->procLatch, sizeof(Latch));
 
@@ -184,13 +183,11 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	DecrementProcessGroupCount(cq_id);
 	CurrentResourceOwner = owner;
 
-	elog(LOG,"BEFORE...");
 	/* cleanup */
 	ExecutorFinish(queryDesc);
 	ExecutorEnd(queryDesc);
 	FreeQueryDesc(queryDesc);
 
-	elog(LOG,"AFTER...");
 	MemoryContextDelete(runcontext);
 
 	if (queryDesc->totaltime)
