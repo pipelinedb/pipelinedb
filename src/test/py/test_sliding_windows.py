@@ -21,15 +21,12 @@ def assert_result_changes(func, args):
     while current:    
         row = pipeline.execute('SELECT * FROM %s' % name).first()
         current = row[func]
-        if not current:
+        if current is None:
             break
         results.append(current)
         
     # Verify that we actually read something
     assert results
-    
-    # Verify that the result went away with time
-    assert current is None
     
     pipeline.drop_cv(name)
     
