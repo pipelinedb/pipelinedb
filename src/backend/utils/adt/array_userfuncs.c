@@ -477,7 +477,7 @@ Datum
 array_agg_combine(PG_FUNCTION_ARGS)
 {
 	ArrayBuildState *result = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
-	ArrayBuildState *toappend = (ArrayBuildState *) PG_GETARG_POINTER(1);
+	ArrayBuildState *toappend = PG_ARGISNULL(1) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(1);
 	MemoryContext aggcontext;
 	int i;
 
@@ -514,10 +514,13 @@ array_agg_pcombine(PG_FUNCTION_ARGS)
 	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
 	ArrayBuildState *incoming;
 	Datum result;
+	MemoryContext aggcontext;
+	MemoryContext oldcontext;
 
-	if (!AggCheckCallContext(fcinfo, NULL))
+	if (!AggCheckCallContext(fcinfo, &aggcontext))
 			elog(ERROR, "aggregate function called in non-aggregate context");
 
+	oldcontext = MemoryContextSwitchTo(aggcontext);
 	incoming = (ArrayBuildState *) DirectFunctionCall1(arrayaggstaterecv, (Datum) arg1);
 
 	if (state == NULL)
@@ -526,7 +529,7 @@ array_agg_pcombine(PG_FUNCTION_ARGS)
 		for (i=0; i<incoming->nelems; i++)
 		{
 			state = accumArrayResult(state, incoming->dvalues[i],
-					incoming->dnulls[i], incoming->element_type, CurrentMemoryContext);
+					incoming->dnulls[i], incoming->element_type, aggcontext);
 		}
 		PG_RETURN_POINTER(state);
 	}
@@ -534,6 +537,8 @@ array_agg_pcombine(PG_FUNCTION_ARGS)
 	fcinfo->arg[0] = (Datum) state;
 	fcinfo->arg[1] = (Datum) incoming;
 	fcinfo->nargs = 2;
+
+	MemoryContextSwitchTo(oldcontext);
 	result = array_agg_combine(fcinfo);
 
 	PG_RETURN_POINTER(result);

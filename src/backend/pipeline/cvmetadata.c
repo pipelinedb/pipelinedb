@@ -19,8 +19,8 @@
 #include "utils/builtins.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_class.h"
-#include "catalog/pipeline_queries.h"
-#include "catalog/pipeline_queries_fn.h"
+#include "catalog/pipeline_query.h"
+#include "catalog/pipeline_query_fn.h"
 #include "catalog/toasting.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
@@ -92,17 +92,17 @@ int
 GetProcessGroupSizeFromCatalog(RangeVar* rv)
 {
 	HeapTuple tuple;
-	Form_pipeline_queries row;
+	Form_pipeline_query row;
 	/* Initialize the counter to 1 for the combiner proc. */
 	int pg_size = 1;
 
-	tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(rv->relname));
+	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "continuous view \"%s\" does not exist",
 				rv->relname);
 
-	row = (Form_pipeline_queries) GETSTRUCT(tuple);
+	row = (Form_pipeline_query) GETSTRUCT(tuple);
 
 	/* Add number of worker processes. */
 	pg_size += row->parallelism;

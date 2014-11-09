@@ -29,6 +29,9 @@
 typedef uint32 bitmapword;		/* must be an unsigned type */
 typedef int32 signedbitmapword; /* must be the matching signed type */
 
+#define BITMAPSET_SIZE(nwords)	\
+	(offsetof(Bitmapset, words) + (nwords) * sizeof(bitmapword))
+
 typedef struct Bitmapset
 {
 	int			nwords;			/* number of words in array */

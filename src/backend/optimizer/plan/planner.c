@@ -18,7 +18,7 @@
 #include <limits.h>
 
 #include "access/htup_details.h"
-#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_query.h"
 #include "executor/executor.h"
 #include "executor/nodeAgg.h"
 #include "miscadmin.h"

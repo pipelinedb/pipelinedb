@@ -15,7 +15,7 @@
 #define PLANNODES_H
 
 #include "access/sdir.h"
-#include "catalog/pipeline_queries_fn.h"
+#include "catalog/pipeline_query_fn.h"
 #include "nodes/bitmapset.h"
 #include "nodes/primnodes.h"
 #include "pipeline/cqrun.h"

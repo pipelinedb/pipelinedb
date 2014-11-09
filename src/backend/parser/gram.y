@@ -52,7 +52,7 @@
 #include "catalog/index.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_trigger.h"
-#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_query.h"
 #include "commands/defrem.h"
 #include "commands/trigger.h"
 #include "nodes/makefuncs.h"

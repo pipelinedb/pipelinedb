@@ -1495,7 +1495,7 @@ exec_command(const char *cmd,
 	/* \| -- PipelineDB */
 	else if (strcmp(cmd, "|") == 0)
 	{
-		success = listPipelineQueries();
+		success = listPipelineQuery();
 	}
 
 	/* \! -- shell escape */

@@ -10,7 +10,7 @@
 #ifndef CQRUN_H
 #define CQRUN_H
 
-#include "catalog/pipeline_queries_fn.h"
+#include "catalog/pipeline_query_fn.h"
 #include "postmaster/bgworker.h"
 
 typedef enum

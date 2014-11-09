@@ -72,17 +72,12 @@ typedef struct EventData
 
 typedef StreamEventData *StreamEvent;
 
-typedef HTAB StreamTargets;
-
 #define STREAMEVENTSIZE sizeof(StreamEventData)
 #define ARRIVAL_TIMESTAMP "arrival_timestamp"
 
 extern EventStream OpenStream(void);
 extern int RespondSendEvents(int numevents);
 extern void CloseStream(EventStream stream);
-extern void CreateStreamTargets(void);
-extern Bitmapset *GetTargetsFor(const char *stream);
-extern void DestroyStreamTargets(StreamTargets *s);
 extern bool InsertTargetIsStream(InsertStmt *ins);
 extern int InsertIntoStream(InsertStmt *ins);
 

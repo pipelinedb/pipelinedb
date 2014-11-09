@@ -10,7 +10,7 @@
  */
 #include "postgres.h"
 
-#include "catalog/pipeline_queries_fn.h"
+#include "catalog/pipeline_query_fn.h"
 #include "miscadmin.h"
 #include "pipeline/cvmetadata.h"
 #include "pipeline/streambuf.h"

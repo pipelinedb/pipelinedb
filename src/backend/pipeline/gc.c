@@ -11,7 +11,7 @@
 #include "postgres.h"
 
 #include "access/xact.h"
-#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_query.h"
 #include "commands/pipelinecmds.h"
 #include "executor/executor.h"
 #include "miscadmin.h"

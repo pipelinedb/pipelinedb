@@ -20,7 +20,7 @@
  * List all REGISTERed PipelineDB queries
  */
 extern bool
-listPipelineQueries(void)
+listPipelineQuery(void)
 {
 
 	PQExpBufferData buf;
@@ -28,7 +28,7 @@ listPipelineQueries(void)
 	printQueryOpt myopt = pset.popt;
 
 	initPQExpBuffer(&buf);
-	printfPQExpBuffer(&buf, "SELECT * FROM pipeline_queries");
+	printfPQExpBuffer(&buf, "SELECT * FROM pipeline_query");
 
 	res = PSQLexec(buf.data, false);
 	termPQExpBuffer(&buf);

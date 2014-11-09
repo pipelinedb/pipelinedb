@@ -12,7 +12,8 @@
 
 #include "access/htup_details.h"
 #include "catalog/namespace.h"
-#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_query.h"
+#include "catalog/pipeline_stream.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "parser/analyze.h"
@@ -25,13 +26,11 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 
-typedef struct StreamTagsEntry
+typedef struct StreamTargetsEntry
 {
 	char key[NAMEDATALEN]; /* hash key --- MUST BE FIRST */
-	Bitmapset *tags;
-} StreamTagsEntry;
-
-static StreamTargets *targets = NULL;
+	Bitmapset *targets;
+} StreamTargetsEntry;
 
 /* Whether or not to block till the events are consumed by a cv*/
 bool DebugSyncStreamInsert;
@@ -45,130 +44,6 @@ void
 CloseStream(EventStream stream)
 {
 
-}
-
-/*
- * GetStreamTargets
- *
- * Builds a mapping from stream name to continuous views that need to read from the stream
- */
-void
-CreateStreamTargets(void)
-{
-	HASHCTL ctl;
-	Relation rel;
-	HeapScanDesc scandesc;
-	HeapTuple tup;
-	MemoryContext oldcontext;
-
-	if (targets != NULL)
-		hash_destroy(targets);
-
-	MemSet(&ctl, 0, sizeof(ctl));
-
-	ctl.keysize = NAMEDATALEN;
-	ctl.entrysize = sizeof(StreamTagsEntry);
-
-	oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-	targets = hash_create("StreamTargets", 32, &ctl, HASH_ELEM);
-
-	rel = heap_open(PipelineQueriesRelationId, AccessShareLock);
-	scandesc = heap_beginscan_catalog(rel, 0, NULL);
-
-	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
-	{
-		char *querystring;
-		ListCell *lc;
-		List *parsetree_list;
-		Node *parsetree;
-		CreateContinuousViewStmt *cv;
-		SelectStmt *select;
-		Datum tmp;
-		bool isnull;
-		Form_pipeline_queries catrow = (Form_pipeline_queries) GETSTRUCT(tup);
-
-		if (catrow->state != PIPELINE_QUERY_STATE_ACTIVE)
-			continue;
-
-		tmp = SysCacheGetAttr(PIPELINEQUERIESNAME, tup, Anum_pipeline_queries_query, &isnull);
-		querystring = TextDatumGetCString(tmp);
-
-		parsetree_list = pg_parse_query(querystring);
-		parsetree = (Node *) lfirst(parsetree_list->head);
-		cv = (CreateContinuousViewStmt *) parsetree;
-		select = (SelectStmt *) cv->query;
-
-		foreach(lc, select->fromClause)
-		{
-			Node *node = (Node *) lfirst(lc);
-			if (IsA(node, JoinExpr))
-			{
-				JoinExpr *j = (JoinExpr *) node;
-				char *relname = ((RangeVar *) j->larg)->relname;
-				bool found;
-				StreamTagsEntry *entry =
-						(StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, &found);
-
-				if (!found)
-					entry->tags = NULL;
-
-				entry->tags = bms_add_member(entry->tags, catrow->id);
-
-				relname = ((RangeVar *) j->rarg)->relname;
-				entry = (StreamTagsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, &found);
-
-				if (!found)
-					entry->tags = NULL;
-
-				entry->tags = bms_add_member(entry->tags, catrow->id);
-			}
-			else if (IsA(node, RangeVar))
-			{
-				RangeVar *rv = (RangeVar *) node;
-				bool found;
-				StreamTagsEntry *entry =
-						(StreamTagsEntry *) hash_search(targets, (void *) rv->relname, HASH_ENTER, &found);
-
-				if (!found)
-					entry->tags = NULL;
-
-				entry->tags = bms_add_member(entry->tags, catrow->id);
-			}
-			else
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-					errmsg("unrecognized node type found when determining stream targets: %d", nodeTag(node))));
-			}
-		}
-	}
-
-	heap_endscan(scandesc);
-	heap_close(rel, NoLock);
-
-	MemoryContextSwitchTo(oldcontext);
-}
-
-/*
- * CopyStreamTargets
- *
- * Copies the bitmap of the given stream's target CVs into the specified address.
- * This is used to load the bitmap into the stream buffer's shared memory.
- */
-Bitmapset *
-GetTargetsFor(const char *stream)
-{
-	bool found = false;
-	StreamTagsEntry *entry;
-
-	if (targets == NULL)
-		CreateStreamTargets();
-
-	entry = (StreamTagsEntry *) hash_search(targets, stream, HASH_FIND, &found);
-	if (!found)
-		return NULL;
-
-	return entry->tags;
 }
 
 /*

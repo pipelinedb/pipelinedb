@@ -3,6 +3,6 @@
 #define PIPELINE_H
 
 
-extern bool listPipelineQueries(void);
+extern bool listPipelineQuery(void);
 
 #endif   /* PIPELINE_H */
