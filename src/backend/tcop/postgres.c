@@ -1421,38 +1421,6 @@ exec_simple_query(const char *query_string)
 }
 
 /*
- * exec_proxy_events
- *
- * Send events to the appropriate datanodes, where they will be emitted
- * into the event stream for consumption (only run from a coordinator)
- *
- */
-static void
-exec_proxy_events(const char *encoding, const char *channel, StringInfo message)
-{
-	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
-
-	UpdateGlobalStreamBuffer();
-
-	while (message->cursor < message->len)
-	{
-		StreamEvent ev = (StreamEvent) palloc(STREAMEVENTSIZE);
-
-		ev->len = pq_getmsgint(message, 4);
-		ev->raw = (char *) palloc(ev->len);
-		ev->fields = NULL;
-		ev->nfields = 0;
-		memcpy(ev->raw, pq_getmsgbytes(message, ev->len), ev->len);
-
-		AppendStreamEvent(channel, encoding, GlobalStreamBuffer, ev);
-	}
-	pq_getmsgend(message);
-
-	MemoryContextSwitchTo(oldcontext);
-	MemoryContextReset(EventContext);
-}
-
-/*
  * exec_parse_message
  *
  * Execute a "Parse" protocol message.
@@ -4580,19 +4548,6 @@ PostgresMain(int argc, char *argv[],
 				 * probably got here because a COPY failed, and the frontend
 				 * is still sending data.
 				 */
-				break;
-
-			case '>': /* send events to remote nodes */
-				{
-					const char *encoding;
-					const char *channel;
-
-					encoding = pq_getmsgstring(&input_message);
-					channel = pq_getmsgstring(&input_message);
-
-					exec_proxy_events(encoding, channel, &input_message);
-					send_ready_for_query = true;
-				}
 				break;
 			default:
 				ereport(FATAL,

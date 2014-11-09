@@ -23,14 +23,14 @@
 #define SlotSize(slot) ((slot)->len)
 #define SlotEnd(slot) ((char *) (slot) + SlotSize(slot))
 
-#define ReaderNeedsWrap(buf, reader) (*(buf)->pos < (reader)->pos && !(reader)->reading)
-#define AtBufferEnd(reader) (*((reader)->buf)->last != NULL && reader->pos == *((reader)->buf)->last)
-#define HasUnreadData(reader) ((reader)->pos < *((reader)->buf)->last)
-#define BufferUnchanged(reader) ((reader)->pos == *((reader)->buf)->pos)
+#define ReaderNeedsWrap(buf, reader) ((buf)->pos < (reader)->pos && !(reader)->reading)
+#define AtBufferEnd(reader) ((reader)->buf->last != NULL && reader->pos == (reader)->buf->last)
+#define HasUnreadData(reader) ((reader)->pos < (reader)->buf->last)
+#define BufferUnchanged(reader) ((reader)->pos == (reader)->buf->pos)
 #define IsNewReadCycle(reader) (!(reader)->reading)
 #define HasPendingReads(slot) (bms_num_members((slot)->readby) > 0)
-#define IsNewAppendCycle(buf) ((*buf->prev) == NULL)
-#define MustEvict(buf) (!IsNewAppendCycle(buf) && (*buf->prev)->nextoffset != NO_SLOTS_FOLLOW)
+#define IsNewAppendCycle(buf) ((buf)->prev == NULL)
+#define MustEvict(buf) (!IsNewAppendCycle(buf) && (buf)->prev->nextoffset != NO_SLOTS_FOLLOW)
 
 extern bool DebugPrintStreamBuffer;
 
@@ -62,9 +62,9 @@ typedef struct StreamBuffer
 	/* total capacity in bytes of this buffer */
 	long capacity;
 	/* queue of events, which are wrapped by StreamBufferSlots */
-	SHM_QUEUE	buf;
+	SHM_QUEUE buf;
 	/* pointer to location in shared memory that should be consumed by the next append */
-	char **pos;
+	char *pos;
 	/* pointer to the beginning of the shared memory segment consumed by this buffer */
 	char *start;
 	/*
@@ -82,14 +82,12 @@ typedef struct StreamBuffer
 	 * after the 101st byte, but we need to know where the next event starts so that
 	 * it can properly be read before being clobbered.
 	 */
-	/* mapping from streams to the continuous views that read from them */
-	StreamBufferSlot **prev;
-	StreamBufferSlot **tail;
-	char **last;
+	StreamBufferSlot *prev;
+	StreamBufferSlot *tail;
+	char *last;
 	int writers;
-	Latch procLatch[512];
+	Latch procLatch[512]; /* XXX(usmanm): this will fail if # CVs > 512 */
 	bool empty;
-	slock_t *mutex;
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */
@@ -107,8 +105,6 @@ StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, St
 Size StreamBufferShmemSize(void);
 void InitGlobalStreamBuffer(void);
 bool IsInputStream(const char *stream);
-void UpdateStreamBuffer(StreamBuffer *buf);
-void UpdateGlobalStreamBuffer(void);
 
 StreamBufferReader *OpenStreamBufferReader(StreamBuffer *buf, int queryid);
 void CloseStreamBufferReader(StreamBufferReader *reader);
