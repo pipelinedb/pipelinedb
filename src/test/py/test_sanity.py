@@ -9,7 +9,7 @@ def test_create_drop_continuous_view(pipeline, clean_db):
     pipeline.create_cv('cv1', 'SELECT id::integer FROM stream')
     pipeline.create_cv('cv2', 'SELECT id::integer FROM stream')
     
-    result = pipeline.execute('SELECT * FROM pipeline_queries')
+    result = pipeline.execute('SELECT * FROM pipeline_query')
     names = [r['name'] for r in result]
     
     assert sorted(names) == ['cv0', 'cv1', 'cv2']
@@ -18,7 +18,7 @@ def test_create_drop_continuous_view(pipeline, clean_db):
     pipeline.drop_cv('cv1')
     pipeline.drop_cv('cv2')
     
-    result = pipeline.execute('SELECT * FROM pipeline_queries')
+    result = pipeline.execute('SELECT * FROM pipeline_query')
     names = [r['name'] for r in result]
     
     assert len(names) == 0
@@ -67,7 +67,6 @@ def test_combine(pipeline, clean_db):
     """
     Verify that partial tuples are combined with on-disk tuples
     """
-    return
     pipeline.set_sync_insert(True)
     pipeline.create_cv('combine', 'SELECT key::text, COUNT(*) FROM stream GROUP BY key')
     pipeline.activate()

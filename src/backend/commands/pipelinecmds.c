@@ -20,8 +20,9 @@
 #include "commands/view.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_class.h"
-#include "catalog/pipeline_queries.h"
-#include "catalog/pipeline_queries_fn.h"
+#include "catalog/pipeline_query.h"
+#include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "catalog/toasting.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -305,7 +306,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	allowSystemTableMods = saveAllowSystemTableMods;
 
 	/*
-	 * Now save the underlying query in the `pipeline_queries` catalog
+	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
 	RegisterContinuousView(view, querystring);
@@ -336,43 +337,43 @@ ExecDumpStmt(DumpStmt *stmt)
 /*
  * RemoveContinuousViewFromCatalog
  *
- * Drops the query row in the pipeline_queries catalog table.
+ * Drops the query row in the pipeline_query catalog table.
  */
 void
 ExecDropContinuousViewStmt(DropStmt *stmt)
 {
-	Relation pipeline_queries;
+	Relation pipeline_query;
 	List *relations = NIL;
 	ListCell *item;
 
 	/*
-	 * Scan the pipeline_queries relation to find the OID of the views(s) to be
+	 * Scan the pipeline_query relation to find the OID of the views(s) to be
 	 * deleted.
 	 */
-	pipeline_queries = heap_open(PipelineQueriesRelationId, AccessExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
 
 	foreach(item, stmt->objects)
 	{
 		RangeVar *rv = makeRangeVarFromNameList((List *) lfirst(item));
 		HeapTuple tuple;
-		Form_pipeline_queries row;
+		Form_pipeline_query row;
 
-		tuple = SearchSysCache1(PIPELINEQUERIESNAME, CStringGetDatum(rv->relname));
+		tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 		if (!HeapTupleIsValid(tuple))
 		{
 			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
 		}
 
-		row = (Form_pipeline_queries) GETSTRUCT(tuple);
+		row = (Form_pipeline_query) GETSTRUCT(tuple);
 		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
 		{
 			elog(ERROR, "continuous view \"%s\" is currently active; can't be dropped", rv->relname);
 		}
 
 		/*
-		 * Remove the view from the pipeline_queries table
+		 * Remove the view from the pipeline_query table
 		 */
-		simple_heap_delete(pipeline_queries, &tuple->t_self);
+		simple_heap_delete(pipeline_query, &tuple->t_self);
 
 		ReleaseSysCache(tuple);
 
@@ -391,7 +392,7 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 	/*
 	 * Now we can clean up
 	 */
-	heap_close(pipeline_queries, NoLock);
+	heap_close(pipeline_query, NoLock);
 
 	/*
 	 * Remove the VIEWs and underlying materialization relations
@@ -417,14 +418,14 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	int success = 0;
 	int fail = 0;
 	CVMetadata *entry;
-	Relation pipeline_queries = heap_open(PipelineQueriesRelationId, ExclusiveLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	foreach(lc, stmt->views)
 	{
 		RangeVar *rv = lfirst(lc);
 		ListCell *lcwithOptions;
 		ContinuousViewState state;
-		bool wasInactive = MarkContinuousViewAsActive(rv, pipeline_queries);
+		bool wasInactive = MarkContinuousViewAsActive(rv, pipeline_query);
 
 		/*
 		 * If the user tries to activate an active CV, they'll know because
@@ -455,7 +456,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 				state.parallelism = (int16) value;
 		}
 
-		SetContinousViewState(rv, &state, pipeline_queries);
+		SetContinousViewState(rv, &state, pipeline_query);
 
 		/*
 		 * Initialize the metadata entry for the CV
@@ -488,15 +489,15 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 			 * If some of the bg procs failed, mark the continuous view
 			 * as inactive and kill any of the remaining bg procs.
 			 */
-			MarkContinuousViewAsInactive(rv, pipeline_queries);
+			MarkContinuousViewAsInactive(rv, pipeline_query);
 			TerminateCQProcesses(state.id);
 		}
 	}
 
 	if (success)
-		CreateStreamTargets();
+		UpdateStreamTargets();
 
-	heap_close(pipeline_queries, NoLock);
+	heap_close(pipeline_query, NoLock);
 
 	if (fail)
 		elog(ERROR, "failed to activate %d continuous view(s)", fail);
@@ -509,13 +510,13 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 {
 	int count = 0;
 	ListCell *lc;
-	Relation pipeline_queries = heap_open(PipelineQueriesRelationId, ExclusiveLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	foreach(lc, stmt->views)
 	{
 		RangeVar *rv = (RangeVar *) lfirst(lc);
 		ContinuousViewState state;
-		bool wasActive = MarkContinuousViewAsInactive(rv, pipeline_queries);
+		bool wasActive = MarkContinuousViewAsInactive(rv, pipeline_query);
 
 		/* deactivating an inactive CV is a noop */
 		if (!wasActive)
@@ -547,9 +548,9 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	}
 
 	if (count)
-		CreateStreamTargets();
+		UpdateStreamTargets();
 
-	heap_close(pipeline_queries, NoLock);
+	heap_close(pipeline_query, NoLock);
 
 	return count;
 }

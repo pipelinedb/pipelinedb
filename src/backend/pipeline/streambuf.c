@@ -8,6 +8,7 @@
  *
  *-------------------------------------------------------------------------
  */
+#include "catalog/pipeline_stream_fn.h"
 #include "pipeline/stream.h"
 #include "pipeline/decode.h"
 #include "pipeline/streambuf.h"
@@ -30,9 +31,6 @@ StreamBuffer *GlobalStreamBuffer;
 
 /* Maximum size in blocks of the global stream buffer */
 int StreamBufferBlocks;
-
-#define BITMAPSET_SIZE(nwords)	\
-	(offsetof(Bitmapset, words) + (nwords) * sizeof(bitmapword))
 
 /*
  * wait_for_overwrite
@@ -197,13 +195,11 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	buf->pos = pos;
 	buf->last = pos;
 
-	SpinLockInit(&result->mutex);
-
+	SpinLockAcquire(&buf->mutex);
 	/*
 	 * Stream event appended, now signal workers waiting on this stream
-	 * only if the buffer went from empty to not
-	 * empty
-	*/
+	 * only if the buffer went from empty to not empty
+	 */
 	if (buf->empty)
 	{
 		int32 latchCtr;
@@ -215,6 +211,12 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		bms_free(toSignal);
 		buf->empty = false;
 	}
+
+	/* increment the unread counter */
+	buf->unread++;
+	SpinLockRelease(&buf->mutex);
+
+	SpinLockInit(&result->mutex);
 
 	LWLockRelease(StreamBufferAppendLock);
 
@@ -294,14 +296,14 @@ InitGlobalStreamBuffer(void)
 		MemSet(GlobalStreamBuffer->start, 0, size);
 
 		GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
-
 		GlobalStreamBuffer->last = NULL;
-
 		GlobalStreamBuffer->prev = NULL;
-
 		GlobalStreamBuffer->tail = NULL;
 
+		GlobalStreamBuffer->unread = 0;
 		GlobalStreamBuffer->empty = true;
+
+		SpinLockInit(&GlobalStreamBuffer->mutex);
 	}
 
 	LWLockRelease(StreamBufferAppendLock);
@@ -379,9 +381,10 @@ PinNextStreamEvent(StreamBufferReader *reader)
 		return NULL;
 	}
 
+	if (current == NULL)
+		return NULL;
+
 	/*
-	 * current should always be a correct pointer here
-	 *
 	 * Advance the reader to the end of the current slot. Events are appended contiguously,
 	 * so this is right where the next event will be.
 	 */
@@ -412,25 +415,24 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 
 	SpinLockAcquire(&slot->mutex);
 
+	bms_del_member(bms, reader->queryid);
+
 	/*
-	 * If there is only 1 reader reading the slot AND
-	 * The reader unpinning the slot Is the above reader AND
-	 * the slot being Unpinned was the next one in line to be clobbered
-	 *   Then This is the last slot being deleted in the buffer
-	 *   Which also meant that after the delete happens, the buffer is empty
-	 *   so set the flag
+	 * If this is the last reader that needs to read this event,
+	 * decrement the unread count.
 	 */
-	if ((bms_membership(bms) == BMS_SINGLETON) &&
-		(bms_is_member(reader->queryid, bms)) &&
-		(GlobalStreamBuffer->prev == slot))
+	if (bms_is_empty(bms))
 	{
-		/*
-		 *  XXX(jay) can we trust atomicity of this set?
-		 */
-		GlobalStreamBuffer->empty = true;
+		SpinLockAcquire(&(reader->buf->mutex));
+
+		reader->buf->unread--;
+
+		if (reader->buf->unread == 0)
+			reader->buf->empty = true;
+
+		SpinLockRelease(&(reader->buf->mutex));
 	}
 
-	bms_del_member(bms, reader->queryid);
 	SpinLockRelease(&slot->mutex);
 }
 

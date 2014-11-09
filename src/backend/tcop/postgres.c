@@ -43,8 +43,8 @@
 #include "access/transam.h"
 #include "catalog/pg_attribute.h"
 #include "catalog/pg_type.h"
-#include "catalog/pipeline_queries.h"
-#include "catalog/pipeline_queries_fn.h"
+#include "catalog/pipeline_query.h"
+#include "catalog/pipeline_query_fn.h"
 #include "commands/async.h"
 #include "commands/pipelinecmds.h"
 #include "commands/prepare.h"
@@ -605,14 +605,14 @@ pipeline_rewrite(List *raw_parsetree_list)
 
 					/*
 					 * Create SelectStmt by hand to fetch the matching
-					 * CV names from the `pipeline_queries` catalog table.
+					 * CV names from the `pipeline_query` catalog table.
 					 */
 					resTarget = makeNode(ResTarget);
 					colRef = makeNode(ColumnRef);
 					colRef->fields = lappend(colRef->fields, makeString("name"));
 					resTarget->val = (Node *) colRef;
 					selectStmt->targetList = lappend(selectStmt->targetList, (void *) resTarget);
-					selectStmt->fromClause = lappend(selectStmt->fromClause, (void *) makeRangeVar(NULL, "pipeline_queries", -1));;
+					selectStmt->fromClause = lappend(selectStmt->fromClause, (void *) makeRangeVar(NULL, "pipeline_query", -1));;
 					selectStmt->whereClause = stmt->whereClause;
 					parsetree = (Node *) selectStmt;
 
@@ -4549,6 +4549,7 @@ PostgresMain(int argc, char *argv[],
 				 * is still sending data.
 				 */
 				break;
+
 			default:
 				ereport(FATAL,
 						(errcode(ERRCODE_PROTOCOL_VIOLATION),

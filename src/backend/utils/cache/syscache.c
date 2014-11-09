@@ -64,8 +64,9 @@
 #include "catalog/pg_type.h"
 #include "catalog/pg_user_mapping.h"
 #include "catalog/pipeline_combine.h"
-#include "catalog/pipeline_queries.h"
 #include "catalog/pipeline_encoding.h"
+#include "catalog/pipeline_query.h"
+#include "catalog/pipeline_stream.h"
 #include "utils/rel.h"
 #include "utils/catcache.h"
 #include "utils/syscache.h"
@@ -568,22 +569,22 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		8
 	},
-	{PipelineQueriesRelationId,	/* PIPELINEQUERIESID */
-		PipelineQueriesIdIndexId,
-		1,
+	{PipelineCombineRelationId,	/* PIPELINECOMBINETRANSFNOID */
+		PipelineCombineTransIdIndexId,
+		2,
 		{
-			Anum_pipeline_queries_id,
-			0,
+			Anum_pipeline_combine_aggfinalfn,
+			Anum_pipeline_combine_transfn,
 			0,
 			0
 		},
 		2048
 	},
-	{PipelineQueriesRelationId,	/* PIPELINEQUERIESNAME */
-		PipelineQueriesNameIndexId,
+	{PipelineEncodingRelationId,	/* PIPELINEENCODINGOID */
+		PipelineEncodingIdIndexId,
 		1,
 		{
-			Anum_pipeline_queries_name,
+			Anum_pipeline_encoding_id,
 			0,
 			0,
 			0
@@ -601,23 +602,34 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		2048
 	},
-	{PipelineEncodingRelationId,	/* PIPELINEENCODINGOID */
-		PipelineEncodingIdIndexId,
+	{PipelineQueryRelationId,	/* PIPELINEQUERYID */
+		PipelineQueryIdIndexId,
 		1,
 		{
-			Anum_pipeline_encoding_id,
+			Anum_pipeline_query_id,
 			0,
 			0,
 			0
 		},
 		2048
 	},
-	{PipelineCombineRelationId,	/* PIPELINECOMBINETRANSFNOID */
-		PipelineCombineTransIdIndexId,
-		2,
+	{PipelineQueryRelationId,	/* PIPELINEQUERYNAME */
+		PipelineQueryNameIndexId,
+		1,
 		{
-			Anum_pipeline_combine_aggfinalfn,
-			Anum_pipeline_combine_transfn,
+			Anum_pipeline_query_name,
+			0,
+			0,
+			0
+		},
+		2048
+	},
+	{PipelineStreamRelationId,	/* PIPELINESTREAMNAME */
+		PipelineStreamNameIndexId,
+		1,
+		{
+			Anum_pipeline_stream_name,
+			0,
 			0,
 			0
 		},

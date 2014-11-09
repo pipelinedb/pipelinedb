@@ -1,15 +1,15 @@
 /*-------------------------------------------------------------------------
  *
- * pipeline_queries_fn.h
- *	 prototypes for functions in catalog/pipeline_queries.c
+ * pipeline_query_fn.h
+ *	 prototypes for functions in catalog/pipeline_query.c
  *
  *
- * src/include/catalog/pipeline_queries_fn.h
+ * src/include/catalog/pipeline_query_fn.h
  *
  *-------------------------------------------------------------------------
  */
-#ifndef PIPELINE_QUERIES_FN_H
-#define PIPELINE_QUERIES_FN_H
+#ifndef PIPELINE_QUERY_FN_H
+#define PIPELINE_QUERY_FN_H
 
 #include "nodes/parsenodes.h"
 #include "nodes/primnodes.h"
@@ -29,9 +29,9 @@ typedef struct ContinuousViewState
 
 List *GetAllContinuousViewNames(void);
 void RegisterContinuousView(RangeVar *name, const char *query_string);
-bool MarkContinuousViewAsActive(RangeVar *name, Relation pipeline_queries);
-bool MarkContinuousViewAsInactive(RangeVar *name, Relation pipeline_queries);
-void SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pipeline_queries);
+bool MarkContinuousViewAsActive(RangeVar *name, Relation pipeline_query);
+bool MarkContinuousViewAsInactive(RangeVar *name, Relation pipeline_query);
+void SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pipeline_query);
 void GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state);
 bool IsContinuousViewActive(RangeVar *name);
 char *GetQueryStringOrNull(const char *cvname, bool selectonly);

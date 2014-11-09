@@ -1,10 +1,10 @@
 /*-------------------------------------------------------------------------
  *
- * pipeline_queries.h
+ * pipeline_query.h
  *	  definition of continuous queries that have been registered
  *
  *
- * src/include/catalog/pipeline_queries.h
+ * src/include/catalog/pipeline_query.h
  *
  * NOTES
  *	  the genbki.pl script reads this file and generates .bki
@@ -12,20 +12,20 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef PIPELINE_QUERIES_H
-#define PIPELINE_QUERIES_H
+#ifndef PIPELINE_QUERY_H
+#define PIPELINE_QUERY_H
 
 #include "catalog/genbki.h"
 
 /* ----------------------------------------------------------------
- *		pipeline_queries definition.
+ *		pipeline_query definition.
  *
- *		cpp turns this into typedef struct FormData_pipeline_queries
+ *		cpp turns this into typedef struct FormData_pipeline_query
  * ----------------------------------------------------------------
  */
-#define PipelineQueriesRelationId  4242
+#define PipelineQueryRelationId  4242
 
-CATALOG(pipeline_queries,4242) BKI_WITHOUT_OIDS
+CATALOG(pipeline_query,4242) BKI_WITHOUT_OIDS
 {
 	int32		id;
 	NameData	name;
@@ -38,28 +38,28 @@ CATALOG(pipeline_queries,4242) BKI_WITHOUT_OIDS
 #ifdef CATALOG_VARLEN
 	text		query;
 #endif
-} FormData_pipeline_queries;
+} FormData_pipeline_query;
 
 /* ----------------
- *		Form_pipeline_queries corresponds to a pointer to a tuple with
- *		the format of the pipeline_queries relation.
+ *		Form_pipeline_query corresponds to a pointer to a tuple with
+ *		the format of the pipeline_query relation.
  * ----------------
  */
-typedef FormData_pipeline_queries *Form_pipeline_queries;
+typedef FormData_pipeline_query *Form_pipeline_query;
 
 /* ----------------
- *		compiler constants for pipeline_queries
+ *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_queries				8
-#define Anum_pipeline_queries_id			1
-#define Anum_pipeline_queries_name			2
-#define Anum_pipeline_queries_state 		3
-#define Anum_pipeline_queries_batchsize		4
-#define Anum_pipeline_queries_maxwaitms 	5
-#define Anum_pipeline_queries_emptysleepms 	6
-#define Anum_pipeline_queries_parallelism	7
-#define Anum_pipeline_queries_query 		8
+#define Natts_pipeline_query				8
+#define Anum_pipeline_query_id			1
+#define Anum_pipeline_query_name			2
+#define Anum_pipeline_query_state 		3
+#define Anum_pipeline_query_batchsize		4
+#define Anum_pipeline_query_maxwaitms 	5
+#define Anum_pipeline_query_emptysleepms 	6
+#define Anum_pipeline_query_parallelism	7
+#define Anum_pipeline_query_query 		8
 
 /* ----------------
  *		query states

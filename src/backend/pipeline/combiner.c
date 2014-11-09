@@ -17,8 +17,8 @@
 
 #include "access/htup_details.h"
 #include "access/xact.h"
-#include "catalog/pipeline_queries.h"
-#include "catalog/pipeline_queries_fn.h"
+#include "catalog/pipeline_query.h"
+#include "catalog/pipeline_query_fn.h"
 #include "commands/pipelinecmds.h"
 #include "executor/tupletableReceiver.h"
 #include "executor/tstoreReceiver.h"

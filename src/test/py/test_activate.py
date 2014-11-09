@@ -11,7 +11,7 @@ def test_many_continuous_views(pipeline, clean_db):
         pipeline.create_cv(name, 'SELECT col::integer FROM stream')
     
     pipeline.execute('ACTIVATE WHERE name LIKE \'%%group0%%\'')
-    result = list(pipeline.execute('SELECT * FROM pipeline_queries WHERE state = \'a\''))
+    result = list(pipeline.execute('SELECT * FROM pipeline_query WHERE state = \'a\''))
     
     assert len(result) == 50
     
@@ -21,7 +21,7 @@ def test_many_continuous_views(pipeline, clean_db):
     pipeline.deactivate()
     
     pipeline.execute('ACTIVATE WHERE name LIKE \'%%group1%%\'')
-    result = list(pipeline.execute('SELECT * FROM pipeline_queries WHERE state = \'a\''))
+    result = list(pipeline.execute('SELECT * FROM pipeline_query WHERE state = \'a\''))
     
     assert len(result) == 50
     
@@ -31,11 +31,11 @@ def test_many_continuous_views(pipeline, clean_db):
     pipeline.deactivate()
     
     pipeline.activate()
-    result = list(pipeline.execute('SELECT * FROM pipeline_queries WHERE state = \'a\''))
+    result = list(pipeline.execute('SELECT * FROM pipeline_query WHERE state = \'a\''))
     
     assert len(result) == 100
     
     pipeline.deactivate()
-    result = list(pipeline.execute('SELECT * FROM pipeline_queries WHERE state = \'a\''))
+    result = list(pipeline.execute('SELECT * FROM pipeline_query WHERE state = \'a\''))
     
     assert len(result) == 0

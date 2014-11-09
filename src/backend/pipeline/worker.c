@@ -14,7 +14,7 @@
 
 #include "access/htup_details.h"
 #include "access/xact.h"
-#include "catalog/pipeline_queries.h"
+#include "catalog/pipeline_query.h"
 #include "executor/executor.h"
 #include "miscadmin.h"
 #include "nodes/execnodes.h"

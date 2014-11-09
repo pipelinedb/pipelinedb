@@ -86,8 +86,10 @@ typedef struct StreamBuffer
 	StreamBufferSlot *tail;
 	char *last;
 	int writers;
-	Latch procLatch[512]; /* XXX(usmanm): this will fail if # CVs > 512 */
+	long unread;
+	slock_t mutex;
 	bool empty;
+	Latch procLatch[512]; /* XXX(usmanm): this will fail if # CVs > 512 */
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */
