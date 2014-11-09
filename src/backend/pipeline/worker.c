@@ -76,14 +76,13 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	namestrcpy(&name, cvname);
 	CurrentResourceOwner = owner;
 
+	/* prepare the plan for execution */
 	StartTransactionCommand();
 
 	oldcontext = MemoryContextSwitchTo(runcontext);
 
-	/* prepare the plan for execution */
 	ExecutorStart(queryDesc, 0);
 	MemoryContextSwitchTo(oldcontext);
-	/* The relations that are tables need to be released, hold on to the stream */
 
 	CommitTransactionCommand();
 
@@ -177,13 +176,11 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	DecrementProcessGroupCount(cq_id);
 	CurrentResourceOwner = owner;
 
-	elog(LOG,"BEFORE...");
 	/* cleanup */
 	ExecutorFinish(queryDesc);
 	ExecutorEnd(queryDesc);
 	FreeQueryDesc(queryDesc);
 
-	elog(LOG,"AFTER...");
 	MemoryContextDelete(runcontext);
 
 	if (queryDesc->totaltime)

@@ -183,8 +183,8 @@ static EquivalenceMember *find_ec_member_for_tle(EquivalenceClass *ec,
 					   Relids relids);
 static Material *make_material(Plan *lefttree);
 
-static bool is_scan_type(NodeTag tag);
-static bool is_stream_scan_type(NodeTag tag);
+static bool is_scan_type(Plan* plan);
+static bool is_stream_scan_type(Plan* plan);
 static bool is_stream_table_join(Plan *outer, Plan *inner);
 
 /*
@@ -231,10 +231,10 @@ create_plan(PlannerInfo *root, Path *best_path)
 }
 
 static bool
-is_scan_type(NodeTag tag)
+is_scan_type(Plan *plan)
 {
 	bool ret = false;
-	switch (tag)
+	switch (nodeTag(plan))
 	{
 		case T_StreamTableScan:
 			ret = true;
@@ -246,16 +246,16 @@ is_scan_type(NodeTag tag)
 }
 
 static bool
-is_stream_scan_type(NodeTag tag)
+is_stream_scan_type(Plan *plan)
 {
-	return tag == T_StreamScan;
+	return nodeTag(plan) == T_StreamScan;
 }
 
 static bool
 is_stream_table_join(Plan *outer, Plan *inner)
 {
-	if ((is_scan_type(inner->type) && is_stream_scan_type(outer->type)) ||
-		(is_scan_type(outer->type) && is_stream_scan_type(inner->type)))
+	if ((is_scan_type(inner) && is_stream_scan_type(outer)) ||
+		(is_scan_type(outer) && is_stream_scan_type(inner)))
 		return true;
 	return false;
 }
@@ -1375,6 +1375,7 @@ create_seqscan_plan(PlannerInfo *root, Path *best_path,
  * create_stream_table_scan_plan
  *	 Returns a streamtablescan plan for the base relation scanned by 'best_path'
  *	 with restriction clauses 'scan_clauses' and targetlist 'tlist'.
+ *   Essentially this does the same thing as create_seqscan_plan
  */
 static SeqScan *
 create_stream_table_scan_plan(PlannerInfo *root, Path *best_path,
@@ -3553,6 +3554,9 @@ make_seqscan(List *qptlist,
 	return node;
 }
 
+/* This does exactly what the make_seqscan does, only
+ * it returns a StreamTableScan pointer instead
+ */
 static StreamTableScan *
 make_stream_table_scan(List *qptlist,
 			 List *qpqual,

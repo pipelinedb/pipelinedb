@@ -380,11 +380,7 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 void
 ExecBeginBatch(PlanState *node)
 {
-	switch (nodeTag(node))
-	{
-		default:
-			break;
-	}
+
 }
 
 /* ----------------------------------------------------------------
@@ -402,8 +398,6 @@ ExecEndBatch(PlanState *node)
 			ExecEndAggBatch((AggState *) node);
 			break;
 		case T_StreamTableScanState:
-			elog(LOG,"CALING END BATCH FOR STR TBL SCAN NODE");
-			//ExecEndStreamTableScan(node);
 			CloseHeapScan(node);
 			break;
 
