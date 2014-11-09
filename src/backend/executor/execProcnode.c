@@ -380,7 +380,11 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 void
 ExecBeginBatch(PlanState *node)
 {
-
+	switch (nodeTag(node))
+	{
+		default:
+			break;
+	}
 }
 
 /* ----------------------------------------------------------------

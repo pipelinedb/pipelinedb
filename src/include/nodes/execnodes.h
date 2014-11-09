@@ -1213,7 +1213,6 @@ typedef struct ScanState
 	Relation	ss_currentRelation;
 	HeapScanDesc ss_currentScanDesc;
 	TupleTableSlot *ss_ScanTupleSlot;
-	bool is_heap_open;
 } ScanState;
 
 /*
@@ -1221,7 +1220,28 @@ typedef struct ScanState
  * no additional fields.
  */
 typedef ScanState SeqScanState;
-typedef ScanState StreamTableScanState;
+
+/*
+ * StreamTableScan works a little differently
+ * It needs to maintain a handle to the original
+ * execution state metadata to work properly
+ */
+typedef struct SavedScanInfo
+{
+	EState	   *estate;
+	int 		eflags;
+	List	   *targetlist;	
+	List	   *qual;	
+} SavedScanInfo;
+
+typedef struct StreamTableScanState
+{
+	PlanState	ps;				/* its first field is NodeTag */
+	Relation	ss_currentRelation;
+	HeapScanDesc ss_currentScanDesc;
+	TupleTableSlot *ss_ScanTupleSlot;
+	SavedScanInfo ss_savedScanInfo;
+} StreamTableScanState;
 
 /*
  * These structs store information about index quals that don't have simple
