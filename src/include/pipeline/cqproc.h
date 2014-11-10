@@ -1,24 +1,27 @@
 /*-------------------------------------------------------------------------
  *
- * cvmetadata.h
- *	  prototypes for cvmetadata.c.
+ * cqproc.h
+ *	  prototypes for cqproc.c.
  *
- * src/include/pipeline/cvmetadata.h
+ * src/include/pipeline/cqproc.h
  *
  *-------------------------------------------------------------------------
  */
 
-#ifndef CVMETADATA_H
-#define CVMETADATA_H
+#ifndef CQPROC_H
+#define CQPROC_H
 
 #include "nodes/parsenodes.h"
 #include "postmaster/bgworker.h"
 
-/*
-   CV Metadata, elements of which are stored
-   in shared memory
- */
-typedef struct CVMetadata
+typedef enum
+{
+	CQCombiner,
+	CQWorker,
+	CQGarbageCollector
+} CQProcessType;
+
+typedef struct CQProcState
 {
 	uint32 key; /* key must be the first field */
 	int32 pg_count;
@@ -29,11 +32,11 @@ typedef struct CVMetadata
 	BackgroundWorkerHandle worker;
 	BackgroundWorkerHandle gc;
 	bool worker_done;
-} CVMetadata;
+} CQProcState;
 
-extern void InitCVMetadataTable(void);
+extern void InitCQProcTable(void);
 
-extern CVMetadata* GetCVMetadata(int32 id);
+extern CQProcState* GetCQProcState(int32 id);
 extern int GetProcessGroupSize(int32 id);
 extern int GetProcessGroupSizeFromCatalog(RangeVar* rv);
 extern int GetProcessGroupCount(int32 id);
@@ -42,13 +45,15 @@ extern void IncrementProcessGroupCount(int32 id);
 extern bool *GetActiveFlagPtr(int32 id);
 extern void SetActiveFlag(int32 id, bool flag);
 
-extern CVMetadata* EntryAlloc(int32 key, int pg_size);
+extern CQProcState* EntryAlloc(int32 key, int pg_size);
 extern void EntryRemove(int32 key);
 
-extern bool WaitForCQProcessesToStart(int32 id);
-extern void WaitForCQProcessesToTerminate(int32 id);
-extern void TerminateCQProcesses(int32 id);
+extern bool WaitForCQProcsToStart(int32 id);
+extern void WaitForCQProcsToTerminate(int32 id);
+extern void TerminateCQProcs(int32 id);
 extern bool DidCQWorkerCrash(int32 id);
 extern void SetCQWorkerDoneFlag(int32 cq_id);
 
-#endif   /* CVMETADATA_H */
+bool RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, struct ContinuousViewState *state, BackgroundWorkerHandle *bg_handle);
+
+#endif   /* CQPROC_H */

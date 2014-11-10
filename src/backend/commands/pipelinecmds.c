@@ -30,6 +30,7 @@
 #include "nodes/pg_list.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
 #include "pipeline/stream.h"
 #include "pipeline/streambuf.h"
@@ -37,7 +38,6 @@
 #include "utils/builtins.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
-#include "pipeline/cvmetadata.h"
 
 /* Whether or not to block till the events are consumed by a cv
    Also used to represent whether the activate/deactivate are to be
@@ -404,7 +404,7 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 
 static
 void
-RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CVMetadata *cvmetadata)
+RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CQProcState *cvmetadata)
 {
 	RunContinuousQueryProcess(CQCombiner, cvname, state, &cvmetadata->combiner);
 	RunContinuousQueryProcess(CQWorker, cvname, state, &cvmetadata->worker);
@@ -417,7 +417,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	ListCell *lc;
 	int success = 0;
 	int fail = 0;
-	CVMetadata *entry;
+	CQProcState *entry;
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	foreach(lc, stmt->views)
@@ -480,7 +480,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		 * Spin here waiting for the number of waiting CQ related processes
 		 * to complete.
 		 */
-		if (WaitForCQProcessesToStart(state.id))
+		if (WaitForCQProcsToStart(state.id))
 			success++;
 		else
 		{
@@ -490,7 +490,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 			 * as inactive and kill any of the remaining bg procs.
 			 */
 			MarkContinuousViewAsInactive(rv, pipeline_query);
-			TerminateCQProcesses(state.id);
+			TerminateCQProcs(state.id);
 		}
 	}
 
@@ -528,7 +528,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * committed yet, we might still see it as active. Since there's only
 		 * one postmaster, the previous transaction's process could have
 		 * removed the CVMetadata--transactions don't protect it. */
-		if (GetCVMetadata(state.id) == NULL)
+		if (GetCQProcState(state.id) == NULL)
 			continue;
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */
@@ -541,7 +541,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * Block till all the processes in the group have terminated
 		 * and remove the CVMetadata entry.
 		 */
-		WaitForCQProcessesToTerminate(state.id);
+		WaitForCQProcsToTerminate(state.id);
 		count++;
 
 		EntryRemove(state.id);

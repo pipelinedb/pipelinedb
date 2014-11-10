@@ -12,7 +12,7 @@
 
 #include "catalog/pipeline_query_fn.h"
 #include "miscadmin.h"
-#include "pipeline/cvmetadata.h"
+#include "pipeline/cqproc.h"
 #include "pipeline/streambuf.h"
 #include "storage/lwlock.h"
 #include "storage/spalloc.h"
@@ -45,8 +45,8 @@ static void
 init_pipeline()
 {
 	InitGlobalStreamBuffer();
-	InitCVMetadataTable();
-	InitSPalloc();
+	InitCQProcTable();
+	InitSPallocState();
 }
 
 /*
@@ -57,7 +57,7 @@ void InitPipeline()
 	bool found = false;
 	Size shmemSize = MAXALIGN(sizeof(char));
 
-	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
+	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
 	ShmemInitStruct("IsPipelineInitialized", shmemSize, &found);
 
@@ -66,7 +66,7 @@ void InitPipeline()
 		init_pipeline_once();
 	}
 
-	LWLockRelease(CVMetadataLock);
+	LWLockRelease(PipelineMetadataLock);
 
 	init_pipeline();
 }

@@ -34,7 +34,7 @@
 #include "pipeline/combiner.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/cqplan.h"
-#include "pipeline/cvmetadata.h"
+#include "pipeline/cqproc.h"
 #include "tcop/tcopprot.h"
 #include "tcop/pquery.h"
 #include "utils/memutils.h"

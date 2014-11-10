@@ -129,12 +129,7 @@ extern PGDLLIMPORT LWLockPadded *MainLWLockArray;
 #define ReplicationSlotControlLock		(&MainLWLockArray[37].lock)
 #define StreamBufferWrapLock			(&MainLWLockArray[38].lock)
 #define StreamBufferAppendLock 		(&MainLWLockArray[39].lock)
-/*
- * XXX(usmanm): We shamelessly reuse the CQMetadataLock
- * in pipelineinit.c:InitPipeline. Keep that in mind if changing
- * anything about how this lock is used.
- */
-#define CVMetadataLock 				(&MainLWLockArray[40].lock)
+#define PipelineMetadataLock 				(&MainLWLockArray[40].lock)
 #define NUM_INDIVIDUAL_LWLOCKS		41
 
 /*

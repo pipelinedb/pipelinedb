@@ -104,9 +104,16 @@ set_prev(void *ptr, void *prev)
 	*((void **) ((intptr_t) ptr + sizeof(void *))) = prev;
 }
 
-/* Free List */
+/*
+ * Shared Memory Allocator
+ *
+ * This is just a bare bones implementation that performs a few small
+ * tricks to minimize fragmentation. But beyond that it's pretty dumb.
+ * Concurrency performance will be horrible--it can be improved alot by
+ * making locking more fine grained.
+ */
 
-typedef struct AllocatorState
+typedef struct SPallocState
 {
 	void *head;
 	void *tail;
@@ -114,9 +121,9 @@ typedef struct AllocatorState
 	int nfree;
 	Size mem_size;
 	slock_t mutex;
-} AllocatorState;
+} SPallocState;
 
-AllocatorState *ShmemAllocator = NULL;
+static SPallocState *GlobalSPallocState = NULL;
 
 static Size
 free_list_size()
@@ -124,7 +131,7 @@ free_list_size()
 	void *block;
 	Size size = 0;
 
-	block = ShmemAllocator->head;
+	block = GlobalSPallocState->head;
 	while (block)
 	{
 		size += BLOCK_SIZE(get_size(block));
@@ -145,15 +152,15 @@ print_block(void *block)
 static void
 print_allocator()
 {
-	void *block = ShmemAllocator->head;
+	void *block = GlobalSPallocState->head;
 	printf("=== ShmemAllocator ===\n");
 
-	printf("num free blocks %d\n", ShmemAllocator->nfree);
+	printf("num free blocks %d\n", GlobalSPallocState->nfree);
 	printf("total free: %zu\n", free_list_size());
-	printf("num all blocks %d\n", ShmemAllocator->nblocks);
-	printf("total resident: %zu\n", ShmemAllocator->mem_size);
-	printf("head: %p\n", ShmemAllocator->head);
-	printf("tail: %p\n", ShmemAllocator->tail);
+	printf("num all blocks %d\n", GlobalSPallocState->nblocks);
+	printf("total resident: %zu\n", GlobalSPallocState->mem_size);
+	printf("head: %p\n", GlobalSPallocState->head);
+	printf("tail: %p\n", GlobalSPallocState->tail);
 	printf("blocks:\n");
 
 	while (block)
@@ -187,8 +194,8 @@ coalesce_blocks(void *ptr1, void *ptr2)
 	*header = new_size << 1;
 	set_next(ptr1, get_next(ptr2));
 
-	ShmemAllocator->nblocks--;
-	ShmemAllocator->nfree--;
+	GlobalSPallocState->nblocks--;
+	GlobalSPallocState->nfree--;
 
 	return true;
 }
@@ -200,9 +207,9 @@ init_block(void *ptr, Size size, bool is_new)
 
 	*header = size << 1;
 
-	ShmemAllocator->nblocks++;
+	GlobalSPallocState->nblocks++;
 	if (is_new)
-		ShmemAllocator->mem_size += BLOCK_SIZE(size);
+		GlobalSPallocState->mem_size += BLOCK_SIZE(size);
 }
 
 static void
@@ -213,26 +220,26 @@ insert_block(void *ptr)
 
 	mark_free(ptr);
 
-	if (!ShmemAllocator->head)
+	if (!GlobalSPallocState->head)
 	{
-		ShmemAllocator->head = ptr;
-		ShmemAllocator->tail = ptr;
+		GlobalSPallocState->head = ptr;
+		GlobalSPallocState->tail = ptr;
 	}
 	else
 	{
-		if ((intptr_t) ptr < (intptr_t) ShmemAllocator->head)
+		if ((intptr_t) ptr < (intptr_t) GlobalSPallocState->head)
 		{
-			next = ShmemAllocator->head;
-			ShmemAllocator->head = ptr;
+			next = GlobalSPallocState->head;
+			GlobalSPallocState->head = ptr;
 		}
-		else if ((intptr_t) ptr > (intptr_t) ShmemAllocator->tail)
+		else if ((intptr_t) ptr > (intptr_t) GlobalSPallocState->tail)
 		{
-			prev = ShmemAllocator->tail;
-			ShmemAllocator->tail = ptr;
+			prev = GlobalSPallocState->tail;
+			GlobalSPallocState->tail = ptr;
 		}
 		else
 		{
-			prev = ShmemAllocator->head;
+			prev = GlobalSPallocState->head;
 			while (prev)
 			{
 				next = get_next(prev);
@@ -254,8 +261,8 @@ insert_block(void *ptr)
 		set_next(prev, ptr);
 		if (coalesce_blocks(prev, ptr))
 		{
-			if (ShmemAllocator->tail == ptr)
-				ShmemAllocator->tail = prev;
+			if (GlobalSPallocState->tail == ptr)
+				GlobalSPallocState->tail = prev;
 			ptr = prev;
 		}
 	}
@@ -266,7 +273,7 @@ insert_block(void *ptr)
 		coalesce_blocks(ptr, next);
 	}
 
-	ShmemAllocator->nfree++;
+	GlobalSPallocState->nfree++;
 }
 
 static void
@@ -289,7 +296,7 @@ get_block(Size size)
 	void *best = NULL;
 	int best_size;
 
-	block = ShmemAllocator->head;
+	block = GlobalSPallocState->head;
 	while (block)
 	{
 		Size block_size = get_size(block);
@@ -316,28 +323,19 @@ get_block(Size size)
 		next = get_next(best);
 
 		if (!prev)
-			ShmemAllocator->head = next;
+			GlobalSPallocState->head = next;
 		else
 			set_next(prev, next);
 		if (!next)
-			ShmemAllocator->tail = prev;
+			GlobalSPallocState->tail = prev;
 		else
 			set_prev(next, prev);
 
-		ShmemAllocator->nfree--;
+		GlobalSPallocState->nfree--;
 	}
 
 	return best;
 }
-
-/*
- * Shared Memory Allocator
- *
- * This is just a bare bones implementation that performs a few small
- * tricks to minimize fragmentation. But beyond that it's pretty dumb.
- * Concurrency performance will be horrible--it can be improved alot by
- * making locking more fine grained.
- */
 
 static void
 test_allocator()
@@ -361,26 +359,26 @@ test_allocator()
 }
 
 /*
- * InitSPalloc
+ * InitSPallocState
  */
 void
-InitSPalloc(void)
+InitSPallocState(void)
 {
 	bool found;
 
-	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
+	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
-	ShmemAllocator = (AllocatorState *) ShmemInitStruct("ShmemFreeList", sizeof(AllocatorState) , &found);
+	GlobalSPallocState = (SPallocState *) ShmemInitStruct("ShmemFreeList", sizeof(SPallocState) , &found);
 	if (!found)
 	{
-		ShmemAllocator->head = NULL;
-		ShmemAllocator->tail = NULL;
-		ShmemAllocator->nblocks = 0;
-		ShmemAllocator->nfree = 0;
-		SpinLockInit(&ShmemAllocator->mutex);
+		GlobalSPallocState->head = NULL;
+		GlobalSPallocState->tail = NULL;
+		GlobalSPallocState->nblocks = 0;
+		GlobalSPallocState->nfree = 0;
+		SpinLockInit(&GlobalSPallocState->mutex);
 	}
 
-	LWLockRelease(CVMetadataLock);
+	LWLockRelease(PipelineMetadataLock);
 
 	if (DEBUG)
 		test_allocator();
@@ -399,7 +397,7 @@ spalloc(Size size)
 	for (padded_size = 1; padded_size < size && padded_size <= 1024; padded_size *= 2);
 	size = MAX(size, padded_size);
 
-	SpinLockAcquire(&ShmemAllocator->mutex);
+	SpinLockAcquire(&GlobalSPallocState->mutex);
 
 	block = get_block(size);
 
@@ -427,7 +425,7 @@ spalloc(Size size)
 		print_allocator();
 	}
 
-	SpinLockRelease(&ShmemAllocator->mutex);
+	SpinLockRelease(&GlobalSPallocState->mutex);
 
 	Assert(is_allocated(block));
 
@@ -442,7 +440,7 @@ spfree(void *addr)
 {
 	Assert(is_allocated(addr));
 
-	SpinLockAcquire(&ShmemAllocator->mutex);
+	SpinLockAcquire(&GlobalSPallocState->mutex);
 
 	insert_block(addr);
 	if (DEBUG)
@@ -451,5 +449,5 @@ spfree(void *addr)
 		print_allocator();
 	}
 
-	SpinLockRelease(&ShmemAllocator->mutex);
+	SpinLockRelease(&GlobalSPallocState->mutex);
 }

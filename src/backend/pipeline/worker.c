@@ -20,7 +20,7 @@
 #include "nodes/execnodes.h"
 #include "pipeline/combiner.h"
 #include "pipeline/combinerReceiver.h"
-#include "pipeline/cvmetadata.h"
+#include "pipeline/cqproc.h"
 #include "pipeline/worker.h"
 #include "tcop/dest.h"
 #include "utils/builtins.h"
