@@ -15,6 +15,7 @@
 #include "pipeline/cvmetadata.h"
 #include "pipeline/streambuf.h"
 #include "storage/lwlock.h"
+#include "storage/spalloc.h"
 
 /*
  * init_pipeline_once
@@ -45,6 +46,7 @@ init_pipeline()
 {
 	InitGlobalStreamBuffer();
 	InitCVMetadataTable();
+	InitSPalloc();
 }
 
 /*
