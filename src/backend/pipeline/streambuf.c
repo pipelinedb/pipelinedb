@@ -493,7 +493,7 @@ ResetStreamBufferLatch(int32 id)
 void
 WaitOnStreamBufferLatch(int32 id)
 {
-	WaitLatch((&GlobalStreamBuffer->procLatch[id]), WL_LATCH_SET | WL_TIMEOUT, 500);
+	WaitLatch((&GlobalStreamBuffer->procLatch[id]), WL_LATCH_SET, 0);
 }
 
 void
