@@ -35,6 +35,7 @@
 #include "pipeline/streambuf.h"
 #include "postmaster/bgworker.h"
 #include "regex/regex.h"
+#include "storage/spalloc.h"
 #include "storage/spin.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
@@ -53,7 +54,7 @@ typedef struct CQProcArgs
 	NameData dbname;
 	CQProcessType ptype;
 	ContinuousViewState state;
-	char query[4096];
+	char *query;
 } CQProcArgs;
 
 static HTAB *CQProcTable = NULL;
@@ -517,6 +518,7 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	 */
 	cvname = NameStr(args.cvname);
 	sql = pstrdup(args.query);
+	spfree(args.query);
 
 	switch(state.ptype)
 	{
@@ -604,6 +606,7 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	BackgroundWorkerHandle *worker_handle;
 	char *procName = get_cq_proc_type_name(ptype);
 	char *query = GetQueryString(cvname, true);
+	char *shmem_query;
 	bool success;
 
 	/* TODO(usmanm): Make sure the name doesn't go beyond 64 bytes */
@@ -624,7 +627,8 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	namestrcpy(&args.cvname, cvname);
 	namestrcpy(&args.dbname, MyProcPort->database_name);
 
-	/* TODO(usmanm): Fix this jankyness */
+	shmem_query = spalloc(strlen(query) + 1);
+	args.query = shmem_query;
 	memcpy(args.query, query, strlen(query) + 1);
 
 	memcpy(worker.bgw_additional_arg, &args, worker.bgw_additional_size);

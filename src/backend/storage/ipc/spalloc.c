@@ -120,13 +120,15 @@ typedef struct SPallocState
 	int nblocks;
 	int nfree;
 	Size mem_size;
+	Size total_alloc;
+	Size total_free;
 	slock_t mutex;
 } SPallocState;
 
 static SPallocState *GlobalSPallocState = NULL;
 
 static Size
-free_list_size()
+free_blocks_size()
 {
 	void *block;
 	Size size = 0;
@@ -156,7 +158,7 @@ print_allocator()
 	printf("=== ShmemAllocator ===\n");
 
 	printf("num free blocks %d\n", GlobalSPallocState->nfree);
-	printf("total free: %zu\n", free_list_size());
+	printf("total free: %zu\n", free_blocks_size());
 	printf("num all blocks %d\n", GlobalSPallocState->nblocks);
 	printf("total resident: %zu\n", GlobalSPallocState->mem_size);
 	printf("head: %p\n", GlobalSPallocState->head);
@@ -425,6 +427,8 @@ spalloc(Size size)
 		print_allocator();
 	}
 
+	GlobalSPallocState->total_alloc += size;
+
 	SpinLockRelease(&GlobalSPallocState->mutex);
 
 	Assert(is_allocated(block));
@@ -438,16 +442,21 @@ spalloc(Size size)
 void
 spfree(void *addr)
 {
+	Size size;
+
 	Assert(is_allocated(addr));
 
 	SpinLockAcquire(&GlobalSPallocState->mutex);
 
+	size = get_size(addr);
 	insert_block(addr);
 	if (DEBUG)
 	{
 		printf("> spfree %p\n", addr);
 		print_allocator();
 	}
+
+	GlobalSPallocState->total_free += size;
 
 	SpinLockRelease(&GlobalSPallocState->mutex);
 }
