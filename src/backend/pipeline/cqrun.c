@@ -21,6 +21,7 @@
 #include "nodes/makefuncs.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqplan.h"
+#include "pipeline/cqproc.h"
 #include "pipeline/cqrun.h"
 #include "pipeline/cqwindow.h"
 #include "pipeline/decode.h"
@@ -37,7 +38,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
-#include "pipeline/cvmetadata.h"
 
 
 /* Used to pass arguments to background workers spawned by the postmaster */

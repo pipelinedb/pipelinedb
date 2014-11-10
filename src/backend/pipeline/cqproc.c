@@ -25,19 +25,20 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
-#include "pipeline/cvmetadata.h"
 #include "pipeline/streambuf.h"
 #include "postmaster/bgworker.h"
 #include "regex/regex.h"
+#include "storage/spin.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
-#include "pipeline/cvmetadata.h"
 #include "miscadmin.h"
 
 #define SLEEP_TIMEOUT 2000
 
-static HTAB *cv_metadata_hash = NULL;
+static HTAB *CQProcTable = NULL;
+static slock_t CQProcTableMutex;
 
 /*
  * cv_metadata_hash_function
@@ -46,7 +47,7 @@ static HTAB *cv_metadata_hash = NULL;
  */
 static
 uint32
-cv_metadata_hash_function(const void *key, Size keysize)
+cqproc_state_hash_function(const void *key, Size keysize)
 {
 	uint32 id = *((uint32*) key);
 	return id;
@@ -59,7 +60,7 @@ cv_metadata_hash_function(const void *key, Size keysize)
  * in each CQ process group
  */
 void
-InitCVMetadataTable(void)
+InitCQProcTable(void)
 {
 	HASHCTL		info;
 	/*
@@ -70,18 +71,23 @@ InitCVMetadataTable(void)
 	int num_concurrent_cv = max_worker_processes / 2;
 
 	info.keysize = sizeof(uint32);
-	info.hash = cv_metadata_hash_function;
-	info.entrysize = sizeof(CVMetadata);
+	info.hash = cqproc_state_hash_function;
+	info.entrysize = sizeof(CQProcState);
+
+	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
 	/*
 	 * We don't need to acquire CVMetadataLock lock around this because there is
 	 * no initialization work we need to do. ShmemInitHash does all of that
 	 * atomically for us.
 	 */
-	cv_metadata_hash = ShmemInitHash("cv_metadata_hash",
+	CQProcTable = ShmemInitHash("CQProcStateHash",
 							  num_concurrent_cv, num_concurrent_cv,
 							  &info,
 							  HASH_ELEM | HASH_FUNCTION);
+	SpinLockInit(&CQProcTableMutex);
+
+	LWLockRelease(PipelineMetadataLock);
 
 }
 
@@ -126,9 +132,9 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 int
 GetProcessGroupSize(int32 id)
 {
-	CVMetadata *entry;
+	CQProcState *entry;
 
-	entry = GetCVMetadata(id);
+	entry = GetCQProcState(id);
 	Assert(entry);
 	return entry->pg_size;
 }
@@ -140,14 +146,14 @@ GetProcessGroupSize(int32 id)
  * hash table. Returns the entry if it exists
  *
  */
-CVMetadata*
+CQProcState*
 EntryAlloc(int32 id, int pg_size)
 {
-	CVMetadata	*entry;
+	CQProcState	*entry;
 	bool		found;
 
 	/* Find or create an entry with desired hash code */
-	entry = (CVMetadata *) hash_search(cv_metadata_hash, &id, HASH_ENTER, &found);
+	entry = (CQProcState *) hash_search(CQProcTable, &id, HASH_ENTER, &found);
 	Assert(entry);
 
 	if (found)
@@ -174,7 +180,7 @@ void
 EntryRemove(int32 id)
 {
 	/* Remove the entry from the hash table. */
-	hash_search(cv_metadata_hash, &id, HASH_REMOVE, NULL);
+	hash_search(CQProcTable, &id, HASH_REMOVE, NULL);
 }
 
 /*
@@ -182,13 +188,13 @@ EntryRemove(int32 id)
  *
  * Return the entry based on a key
  */
-CVMetadata*
-GetCVMetadata(int32 id)
+CQProcState*
+GetCQProcState(int32 id)
 {
-	CVMetadata  *entry;
+	CQProcState  *entry;
 	bool found;
 
-	entry = (CVMetadata *) hash_search(cv_metadata_hash, &id, HASH_FIND, &found);
+	entry = (CQProcState *) hash_search(CQProcTable, &id, HASH_FIND, &found);
 	if (!entry)
 	{
 		elog(LOG,"entry for cvid %d not found in the metadata hash table", id);
@@ -207,9 +213,9 @@ GetCVMetadata(int32 id)
 int
 GetProcessGroupCount(int32 id)
 {
-	CVMetadata  *entry;
+	CQProcState  *entry;
 
-	entry = GetCVMetadata(id);
+	entry = GetCQProcState(id);
 	if (entry == NULL)
 	{
 		return -1;
@@ -226,12 +232,13 @@ GetProcessGroupCount(int32 id)
 void
 DecrementProcessGroupCount(int32 id)
 {
-	CVMetadata *entry;
+	CQProcState *entry;
 
-	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
-	entry = GetCVMetadata(id);
+	SpinLockAcquire(&CQProcTableMutex);
+	entry = GetCQProcState(id);
+	Assert(entry);
 	entry->pg_count--;
-	LWLockRelease(CVMetadataLock);
+	SpinLockRelease(&CQProcTableMutex);
 }
 
 /*
@@ -243,16 +250,13 @@ DecrementProcessGroupCount(int32 id)
 void
 IncrementProcessGroupCount(int32 id)
 {
-	CVMetadata *entry;
+	CQProcState *entry;
 
-	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
-	/*
-	 * If the entry has not been created for this cv id create
-	 * it before incrementing the pg_count.
-	 */
-	entry = GetCVMetadata(id);
+	SpinLockRelease(&CQProcTableMutex);
+	entry = GetCQProcState(id);
+	Assert(entry);
 	entry->pg_count++;
-	LWLockRelease(CVMetadataLock);
+	SpinLockRelease(&CQProcTableMutex);
 }
 
 /*
@@ -264,13 +268,13 @@ IncrementProcessGroupCount(int32 id)
 void
 SetActiveFlag(int32 id, bool flag)
 {
-	CVMetadata *entry;
+	CQProcState *entry;
 
-	LWLockAcquire(CVMetadataLock, LW_EXCLUSIVE);
-	entry = GetCVMetadata(id);
+	SpinLockRelease(&CQProcTableMutex);
+	entry = GetCQProcState(id);
 	Assert(entry);
 	entry->active = flag;
-	LWLockRelease(CVMetadataLock);
+	SpinLockRelease(&CQProcTableMutex);
 }
 
 /*
@@ -279,9 +283,9 @@ SetActiveFlag(int32 id, bool flag)
 bool *
 GetActiveFlagPtr(int32 id)
 {
-	CVMetadata *entry;
+	CQProcState *entry;
 
-	entry = GetCVMetadata(id);
+	entry = GetCQProcState(id);
 	Assert(entry);
 	return &entry->active;
 }
@@ -290,7 +294,7 @@ GetActiveFlagPtr(int32 id)
  * get_stopped_proc_count
  */
 static int
-get_stopped_proc_count(CVMetadata *entry)
+get_stopped_proc_count(CQProcState *entry)
 {
 	int count = 0;
 	pid_t pid;
@@ -307,9 +311,9 @@ get_stopped_proc_count(CVMetadata *entry)
  * to be synchronous
  */
 bool
-WaitForCQProcessesToStart(int32 id)
+WaitForCQProcsToStart(int32 id)
 {
-	CVMetadata *entry = GetCVMetadata(id);
+	CQProcState *entry = GetCQProcState(id);
 	int err_count;
 
 	while (true)
@@ -334,9 +338,9 @@ WaitForCQProcessesToStart(int32 id)
  * to be synchronous
  */
 void
-WaitForCQProcessesToTerminate(int32 id)
+WaitForCQProcsToTerminate(int32 id)
 {
-	CVMetadata *entry = GetCVMetadata(id);
+	CQProcState *entry = GetCQProcState(id);
 	while (true)
 	{
 		if (entry->pg_count == 0)
@@ -351,9 +355,9 @@ WaitForCQProcessesToTerminate(int32 id)
  * TerminateCQProcesses
  */
 void
-TerminateCQProcesses(int32 id)
+TerminateCQProcs(int32 id)
 {
-	CVMetadata *entry = GetCVMetadata(id);
+	CQProcState *entry = GetCQProcState(id);
 	TerminateBackgroundWorker(&entry->combiner);
 	TerminateBackgroundWorker(&entry->worker);
 	TerminateBackgroundWorker(&entry->gc);
@@ -365,7 +369,7 @@ TerminateCQProcesses(int32 id)
 bool
 DidCQWorkerCrash(int32 id)
 {
-	CVMetadata *entry = GetCVMetadata(id);
+	CQProcState *entry = GetCQProcState(id);
 	pid_t pid;
 	return WaitForBackgroundWorkerStartup(&entry->worker, &pid) == BGWH_STOPPED && !entry->worker_done;
 }
@@ -376,6 +380,6 @@ DidCQWorkerCrash(int32 id)
 void
 SetCQWorkerDoneFlag(int32 id)
 {
-	CVMetadata *entry = GetCVMetadata(id);
+	CQProcState *entry = GetCQProcState(id);
 	entry->worker_done = true;
 }
