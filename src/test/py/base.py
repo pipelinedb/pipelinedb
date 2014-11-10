@@ -207,4 +207,6 @@ def pipeline(request):
     request.module.pipeline = pdb
     pdb.run()
 
+    pdb.set_sync_insert(True)
+
     return pdb
