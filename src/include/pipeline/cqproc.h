@@ -14,10 +14,13 @@
 #include "nodes/parsenodes.h"
 #include "postmaster/bgworker.h"
 
-/*
-   CV Metadata, elements of which are stored
-   in shared memory
- */
+typedef enum
+{
+	CQCombiner,
+	CQWorker,
+	CQGarbageCollector
+} CQProcessType;
+
 typedef struct CQProcState
 {
 	uint32 key; /* key must be the first field */
@@ -50,5 +53,7 @@ extern void WaitForCQProcsToTerminate(int32 id);
 extern void TerminateCQProcs(int32 id);
 extern bool DidCQWorkerCrash(int32 id);
 extern void SetCQWorkerDoneFlag(int32 cq_id);
+
+bool RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, struct ContinuousViewState *state, BackgroundWorkerHandle *bg_handle);
 
 #endif   /* CQPROC_H */

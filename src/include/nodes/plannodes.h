@@ -18,7 +18,7 @@
 #include "catalog/pipeline_query_fn.h"
 #include "nodes/bitmapset.h"
 #include "nodes/primnodes.h"
-#include "pipeline/cqrun.h"
+#include "pipeline/cqproc.h"
 #include "utils/tuplestore.h"
 
 
