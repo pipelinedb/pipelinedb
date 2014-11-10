@@ -111,7 +111,6 @@ test: stats
 
 # ----------
 # Another group of parallel tests
-<<<<<<< HEAD
 # ----------
 test: cqanalyze cqcreate cqactivate cqsanity cqsum cqswsum cqavg cqswavg cqcount cqboolagg cqlatch cqdecode cqminmax cqobjectagg cqregr cqstats cqwindow cqswboolagg cqswminmax cqswobjectagg cqswregr cqswstats
 
