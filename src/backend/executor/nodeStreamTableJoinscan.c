@@ -26,7 +26,7 @@
 
 #include "access/relscan.h"
 #include "executor/execdebug.h"
-#include "executor/nodeStreamTablescan.h"
+#include "executor/nodeStreamTableJoinscan.h"
 #include "utils/rel.h"
 
 static bool IsHeapOpen(StreamTableScanState* node);

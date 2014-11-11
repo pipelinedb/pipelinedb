@@ -11,8 +11,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef NODESTREAMTABLESCAN_H
-#define NODESTREAMTABLESCAN_H
+#ifndef NODESTREAMTABLEJOINSCAN_H
+#define NODESTREAMTABLEJOINSCAN_H
 
 #include "nodes/execnodes.h"
 
@@ -24,4 +24,4 @@ extern void ExecStreamTableRestrPos(StreamTableScanState *node);
 extern void ExecReScanStreamTableScan(StreamTableScanState *node);
 
 
-#endif   /* NODESTREAMTABLESCAN_H */
+#endif   /* NODESTREAMTABLEJOINSCAN_H */

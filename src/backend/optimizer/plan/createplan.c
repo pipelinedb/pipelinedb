@@ -183,8 +183,6 @@ static EquivalenceMember *find_ec_member_for_tle(EquivalenceClass *ec,
 					   Relids relids);
 static Material *make_material(Plan *lefttree);
 
-static bool is_scan_type(Plan* plan);
-static bool is_stream_scan_type(Plan* plan);
 static bool is_stream_table_join(Plan *outer, Plan *inner);
 
 /*
@@ -231,31 +229,10 @@ create_plan(PlannerInfo *root, Path *best_path)
 }
 
 static bool
-is_scan_type(Plan *plan)
-{
-	bool ret = false;
-	switch (nodeTag(plan))
-	{
-		case T_StreamTableScan:
-			ret = true;
-			break;
-		default:
-			break;
-	}
-	return ret;
-}
-
-static bool
-is_stream_scan_type(Plan *plan)
-{
-	return nodeTag(plan) == T_StreamScan;
-}
-
-static bool
 is_stream_table_join(Plan *outer, Plan *inner)
 {
-	if ((is_scan_type(inner) && is_stream_scan_type(outer)) ||
-		(is_scan_type(outer) && is_stream_scan_type(inner)))
+	if ((IsA(inner, StreamTableScan) && IsA(outer, StreamScan)) ||
+		(IsA(outer, StreamTableScan) && IsA(inner, StreamScan)))
 		return true;
 	return false;
 }
@@ -432,7 +409,7 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 			* of a join and the plan is being created for
 			* the non streaming node. So call the create_seqscan_plan
 			*/
-			// This check might not be reliable, make this more solid
+			/* (Jay) XXX This check might not be reliable, make this more solid */
 			if (rte->streamdesc == NULL)
 			{
 				best_path->pathtype = T_StreamTableScan;
