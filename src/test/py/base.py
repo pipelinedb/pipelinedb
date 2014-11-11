@@ -146,7 +146,7 @@ class PipelineDB(object):
         """
         Create a table 
         """
-        self.execute('CREATE TABLE %s %s' % name, cols)
+        self.execute('CREATE TABLE %s %s' % (name, cols))
         
 
     def drop_table(self, name):
