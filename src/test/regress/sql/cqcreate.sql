@@ -1,6 +1,7 @@
 -- Simple ones
 CREATE CONTINUOUS VIEW cqcreate0 AS SELECT key::integer FROM stream;
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate0';
+SELECT gc FROM pipeline_query WHERE name='cqcreate0';
 \d+ cqcreate0;
 \d+ cqcreate0_pdb;
 CREATE CONTINUOUS VIEW cqcreate1 AS SELECT substring(url::text, 1, 2) FROM stream;
@@ -25,10 +26,12 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate4';
 -- Sliding window queries
 CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate5';
+SELECT gc FROM pipeline_query WHERE name='cqcreate5';
 \d+ cqcreate5;
 \d+ cqcreate5_pdb;
 CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate6';
+SELECT gc FROM pipeline_query WHERE name='cqcreate5';
 \d+ cqcreate6;
 \d+ cqcreate6_pdb;
 

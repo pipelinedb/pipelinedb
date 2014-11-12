@@ -6,6 +6,12 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate0';
      1
 (1 row)
 
+SELECT gc FROM pipeline_query WHERE name='cqcreate0';
+ gc 
+----
+ f
+(1 row)
+
 \d+ cqcreate0;
                View "public.cqcreate0"
  Column |  Type   | Modifiers | Storage | Description 
@@ -137,6 +143,12 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate5';
      1
 (1 row)
 
+SELECT gc FROM pipeline_query WHERE name='cqcreate5';
+ gc 
+----
+ t
+(1 row)
+
 \d+ cqcreate5;
                 View "public.cqcreate5"
  Column |  Type   | Modifiers | Storage  | Description 
@@ -161,6 +173,12 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate6';
  count 
 -------
      1
+(1 row)
+
+SELECT gc FROM pipeline_query WHERE name='cqcreate5';
+ gc 
+----
+ t
 (1 row)
 
 \d+ cqcreate6;

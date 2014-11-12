@@ -34,7 +34,7 @@ CATALOG(pipeline_query,4242) BKI_WITHOUT_OIDS
 	int32 		maxwaitms;
 	int32		emptysleepms;
 	int16		parallelism;
-
+	bool		gc;
 #ifdef CATALOG_VARLEN
 	text		query;
 #endif
@@ -51,7 +51,7 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query				8
+#define Natts_pipeline_query				9
 #define Anum_pipeline_query_id			1
 #define Anum_pipeline_query_name			2
 #define Anum_pipeline_query_state 		3
@@ -59,7 +59,8 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define Anum_pipeline_query_maxwaitms 	5
 #define Anum_pipeline_query_emptysleepms 	6
 #define Anum_pipeline_query_parallelism	7
-#define Anum_pipeline_query_query 		8
+#define Anum_pipeline_query_gc			8
+#define Anum_pipeline_query_query 		9
 
 /* ----------------
  *		query states

@@ -146,7 +146,7 @@ GetAllContinuousViewNames(void)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 void
-RegisterContinuousView(RangeVar *name, const char *query_string)
+RegisterContinuousView(RangeVar *name, const char *query_string, bool gc)
 {
 	Relation	pipeline_query;
 	HeapTuple	tup;
@@ -164,7 +164,7 @@ RegisterContinuousView(RangeVar *name, const char *query_string)
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("query is null")));
 
-	MemSet(nulls, 0, Natts_pipeline_query);
+	MemSet(nulls, 0, sizeof(nulls));
 
 	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
 
@@ -179,6 +179,9 @@ RegisterContinuousView(RangeVar *name, const char *query_string)
 	values[Anum_pipeline_query_maxwaitms - 1] = Int32GetDatum(CQ_DEFAULT_WAIT_MS);
 	values[Anum_pipeline_query_emptysleepms - 1] = Int32GetDatum(CQ_DEFAULT_SLEEP_MS);
 	values[Anum_pipeline_query_parallelism - 1] = Int16GetDatum(CQ_DEFAULT_PARALLELISM);
+
+	/* Copy gc bit */
+	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
 
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);
 

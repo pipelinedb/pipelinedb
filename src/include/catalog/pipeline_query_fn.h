@@ -28,7 +28,7 @@ typedef struct ContinuousViewState
 } ContinuousViewState;
 
 List *GetAllContinuousViewNames(void);
-void RegisterContinuousView(RangeVar *name, const char *query_string);
+void RegisterContinuousView(RangeVar *name, const char *query_string, bool gc);
 bool MarkContinuousViewAsActive(RangeVar *name, Relation pipeline_query);
 bool MarkContinuousViewAsInactive(RangeVar *name, Relation pipeline_query);
 void SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pipeline_query);

@@ -309,7 +309,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	RegisterContinuousView(view, querystring);
+	RegisterContinuousView(view, querystring, IsSlidingWindowSelectStmt(viewselect));
 
 	/*
 	 * Index the materialization table smartly if we can
