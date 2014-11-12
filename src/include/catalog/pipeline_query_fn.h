@@ -13,7 +13,7 @@
 
 #include "nodes/parsenodes.h"
 #include "nodes/primnodes.h"
-#include "pipeline/cqrun.h"
+#include "pipeline/cqproc.h"
 #include "utils/relcache.h"
 
 typedef struct ContinuousViewState

@@ -18,7 +18,7 @@
 #include "nodes/parsenodes.h"
 #include "nodes/plannodes.h"
 #include "pipeline/gc.h"
-#include "pipeline/cvmetadata.h"
+#include "pipeline/cqproc.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
 #include "utils/memutils.h"

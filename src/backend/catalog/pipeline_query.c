@@ -19,7 +19,7 @@
 #include "libpq/libpq.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
-#include "pipeline/cqrun.h"
+#include "pipeline/cqproc.h"
 #include "postmaster/bgworker.h"
 #include "storage/pmsignal.h"
 #include "storage/proc.h"
