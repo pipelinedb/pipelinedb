@@ -82,6 +82,7 @@
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "pipeline/cqvacuum.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
@@ -2739,6 +2740,12 @@ relation_needs_vacanalyze(Oid relid,
 		/* Determine if this table needs vacuum or analyze. */
 		*dovacuum = force_vacuum || (vactuples > vacthresh);
 		*doanalyze = (anltuples > anlthresh);
+
+		if (!*dovacuum && RelationNeedsCQVacuum(relid))
+		{
+			*dovacuum = true;
+			*doanalyze = true;
+		}
 	}
 	else
 	{

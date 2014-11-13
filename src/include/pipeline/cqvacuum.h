@@ -13,9 +13,20 @@
 #define CQVACUUM_H
 
 #include "postgres.h"
+#include "executor/executor.h"
 #include "utils/relcache.h"
 
-bool NeedsCQVacuum(Relation relation);
-bool CQVacuumTuple(Relation rel, HeapTupleData *tuple);
+typedef struct CQVacuumContext
+{
+	TupleTableSlot *slot;
+	EState *estate;
+	ExprContext *econtext;
+	List *predicate;
+} CQVacuumContext;
+
+bool RelationNeedsCQVacuum(Oid relid);
+CQVacuumContext *CreateCQVacuumContext(Relation relation);
+void FreeCQVacuumContext(CQVacuumContext *context);
+bool ShouldVacuumCQTuple(CQVacuumContext *context, HeapTupleData *tuple);
 
 #endif /* CQVACUUM_H */

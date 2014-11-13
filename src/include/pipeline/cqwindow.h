@@ -26,6 +26,6 @@ bool DoesViewAggregate(SelectStmt *stmt, CQAnalyzeContext *context);
 void AddProjectionsAndGroupBysForWindows(SelectStmt *stmt, SelectStmt *viewselect, bool hasAggOrGroupBy, CQAnalyzeContext *context);
 void TransformAggNodeForCQView(SelectStmt *viewselect, Node *agg, ResTarget *aggres, bool doesViewAggregate);
 void FixAggArgForCQView(SelectStmt *viewselect, SelectStmt *workerselect, RangeVar *matrelation);
-Expr* GetCQVacuumExpr(char *cvname);
+Node* GetCQVacuumExpr(char *cvname);
 
 #endif

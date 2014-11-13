@@ -437,7 +437,7 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 	BlockNumber next_not_all_visible_block;
 	bool		skipping_all_visible_blocks;
 	xl_heap_freeze_tuple *frozen;
-	bool cq_vacuum = NeedsCQVacuum(onerel);
+	CQVacuumContext *cqvcontext = CreateCQVacuumContext(onerel);
 
 	pg_rusage_init(&ru0);
 
@@ -887,7 +887,7 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 					break;
 			}
 
-			if (cq_vacuum && (tupgone = CQVacuumTuple(onerel, &tuple)))
+			if ((tupgone = ShouldVacuumCQTuple(cqvcontext, &tuple)))
 				all_visible = false;
 
 			if (tupgone)
@@ -1047,6 +1047,7 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 			RecordPageWithFreeSpace(onerel, blkno, freespace);
 	}
 
+	FreeCQVacuumContext(cqvcontext);
 	pfree(frozen);
 
 	/* save stats for use later */

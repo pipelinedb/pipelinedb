@@ -910,7 +910,7 @@ fix_sliding_window_expr(SelectStmt *stmt, Node *swExpr, CQAnalyzeContext *contex
 /*
  * GetCQVacuumExpr
  */
-Expr*
+Node*
 GetCQVacuumExpr(char *cvname)
 {
 	List *parsetree_list;
@@ -930,5 +930,5 @@ GetCQVacuumExpr(char *cvname)
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
 	fix_sliding_window_expr(stmt, expr, &context);
 
-	return (Expr *) makeA_Expr(AEXPR_NOT, NIL, NULL, expr, -1);
+	return makeA_Expr(AEXPR_NOT, NIL, NULL, expr, -1);
 }
