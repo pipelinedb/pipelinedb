@@ -27,10 +27,13 @@
 
 static HTAB *disqualification_plans;
 
-static void
+static bool
 get_cv_name(Relation rel, char* cvname)
 {
 	char *relname = get_rel_name(rel->rd_id);
+
+	if (strlen(relname) <= strlen(CQ_TABLE_SUFFIX))
+		return false;
 
 	/*
 	 * TODO(usmanm): This isn't entirely correct. We should simply
@@ -40,13 +43,15 @@ get_cv_name(Relation rel, char* cvname)
 	 */
 	memset(cvname, 0, NAMEDATALEN);
 	memcpy(cvname, relname, strlen(relname) - strlen(CQ_TABLE_SUFFIX));
+	return true;
 }
 
 bool
 NeedsCQVacuum(Relation relation)
 {
 	char cvname[NAMEDATALEN];
-	get_cv_name(relation, cvname);
+	if (!get_cv_name(relation, cvname))
+		return false;
 	return GetGCFlag(makeRangeVar(NULL, cvname, -1));
 }
 

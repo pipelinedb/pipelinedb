@@ -887,11 +887,8 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 					break;
 			}
 
-			if (cq_vacuum)
-			{
-				tupgone = CQVacuumTuple(onerel, &tuple);
+			if (cq_vacuum && (tupgone = CQVacuumTuple(onerel, &tuple)))
 				all_visible = false;
-			}
 
 			if (tupgone)
 			{
