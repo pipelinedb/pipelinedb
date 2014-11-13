@@ -478,6 +478,24 @@ IsAContinuousView(RangeVar *name)
 	ReleaseSysCache(tuple);
 	return true;
 }
+/*
+ * GetGCFlag
+ */
+bool
+GetGCFlag(RangeVar *name)
+{
+	bool gc = false;
+	HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(name->relname));
+
+	if (HeapTupleIsValid(tuple))
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
+		gc = row->gc;
+		ReleaseSysCache(tuple);
+	}
+
+	return gc;
+}
 
 /*
  * MarkAllContinuousViewsAsInactive

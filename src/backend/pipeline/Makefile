@@ -13,6 +13,6 @@ top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
 OBJS = combiner.o combinerReceiver.o cqanalyze.o cqplan.o cqproc.o cqwindow.o \
-			 decode.o gc.o stream.o streambuf.o worker.o cqmatrel.o vacuum.o
+			 decode.o gc.o stream.o streambuf.o worker.o cqmatrel.o cqvacuum.o
 
 include $(top_srcdir)/src/backend/common.mk

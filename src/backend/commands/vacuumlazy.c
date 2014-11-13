@@ -50,6 +50,7 @@
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "pipeline/cqvacuum.h"
 #include "portability/instr_time.h"
 #include "postmaster/autovacuum.h"
 #include "storage/bufmgr.h"
@@ -436,6 +437,7 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 	BlockNumber next_not_all_visible_block;
 	bool		skipping_all_visible_blocks;
 	xl_heap_freeze_tuple *frozen;
+	bool cq_vacuum = NeedsCQVacuum(onerel);
 
 	pg_rusage_init(&ru0);
 
@@ -884,6 +886,9 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 					elog(ERROR, "unexpected HeapTupleSatisfiesVacuum result");
 					break;
 			}
+
+			if (cq_vacuum)
+				tupgone = CQVacuumTuple(onerel, &tuple);
 
 			if (tupgone)
 			{

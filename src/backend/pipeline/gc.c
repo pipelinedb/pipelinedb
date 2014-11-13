@@ -75,8 +75,8 @@ ContinuousQueryGarbageCollectorRun(Portal portal, CombinerDesc *combiner, QueryD
 			estate->es_lastoid = InvalidOid;
 			estate->es_processed = 0;
 
-			ExecutePlan(estate, queryDesc->planstate, queryDesc->operation,
-						true, 0, 0, ForwardScanDirection, dest);
+//			ExecutePlan(estate, queryDesc->planstate, queryDesc->operation,
+//						true, 0, 0, ForwardScanDirection, dest);
 
 			ExecutorFinish(queryDesc);
 			ExecutorEnd(queryDesc);

@@ -1,15 +1,21 @@
 /*-------------------------------------------------------------------------
  *
- * vacuum.h
+ * cqvacuum.h
  *
  *   Support for vacuuming materialization relations for sliding window
  *   continuous views.
  *
- * src/include/pipeline/vacuum.h
+ * src/include/pipeline/cqvacuum.h
  *
  *-------------------------------------------------------------------------
  */
-#ifndef VACUUM_H
-#define VACUUM_H
+#ifndef CQVACUUM_H
+#define CQVACUUM_H
 
-#endif /* VACUUM_H */
+#include "postgres.h"
+#include "utils/relcache.h"
+
+bool NeedsCQVacuum(Relation relation);
+bool CQVacuumTuple(Relation rel, HeapTupleData *tuple);
+
+#endif /* CQVACUUM_H */
