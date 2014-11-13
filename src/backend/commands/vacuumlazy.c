@@ -1032,7 +1032,7 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 			 * This happens because the disqualified tuples aren't really *dead* tuples
 			 * and so Postgres never marks the page as containing dead tuples.
 			 */
-			if (cqvcontext && all_visible)
+			if (!cqvcontext || (cqvcontext && all_visible))
 				elog(WARNING, "page containing dead tuples is marked as all-visible in relation \"%s\" page %u",
 						relname, blkno);
 			PageClearAllVisible(page);
