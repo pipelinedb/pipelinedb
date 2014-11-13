@@ -1,16 +1,14 @@
 SET debug_sync_stream_insert = 'on';
-CREATE CONTINUOUS VIEW cqvacuum AS SELECT key::text, COUNT(*) FROM cqvacuum_stream WHERE arrival_timestamp > clock_timestamp() - interval '3 second' GROUP BY key;
+CREATE CONTINUOUS VIEW cqvacuum AS SELECT key::text, COUNT(*) FROM cqvacuum_stream WHERE arrival_timestamp > clock_timestamp() - interval '4 second' GROUP BY key;
 ACTIVATE cqvacuum;
 INSERT INTO cqvacuum_stream (key) VALUES ('a'), ('b'), ('c');
 INSERT INTO cqvacuum_stream (key) VALUES ('a'), ('b'), ('c');
-DEACTIVATE cqvacuum;
 SELECT pg_sleep(1);
  pg_sleep 
 ----------
  
 (1 row)
 
-ACTIVATE cqvacuum;
 INSERT INTO cqvacuum_stream (key) VALUES ('a'), ('b'), ('c');
 INSERT INTO cqvacuum_stream (key) VALUES ('a'), ('b'), ('c');
 DEACTIVATE cqvacuum;
@@ -33,7 +31,7 @@ SELECT key, count FROM cqvacuum_pdb ORDER BY key, count;
  c   |     2
 (6 rows)
 
-SELECT pg_sleep(3);
+SELECT pg_sleep(4);
  pg_sleep 
 ----------
  
