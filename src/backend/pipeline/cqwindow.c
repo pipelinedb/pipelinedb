@@ -908,29 +908,6 @@ fix_sliding_window_expr(SelectStmt *stmt, Node *swExpr, CQAnalyzeContext *contex
 }
 
 /*
- * GetDeleteStmtForGC
- */
-DeleteStmt *
-GetDeleteStmtForGC(char *cvname, SelectStmt *stmt)
-{
-	CQAnalyzeContext context;
-	DeleteStmt *delete_stmt;
-	Node *swExpr = GetSlidingWindowExpr(stmt, &context);
-
-	if (swExpr == NULL)
-		return NULL;
-
-	InitializeCQAnalyzeContext(stmt, NULL, &context);
-	fix_sliding_window_expr(stmt, swExpr, &context);
-
-	delete_stmt = makeNode(DeleteStmt);
-	delete_stmt->relation = makeRangeVar(NULL, GetCQMatRelationName(cvname), -1);
-	delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, swExpr, -1);
-
-	return delete_stmt;
-}
-
-/*
  * GetCQVacuumExpr
  */
 Expr*

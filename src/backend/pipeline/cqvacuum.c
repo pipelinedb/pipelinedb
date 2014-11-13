@@ -25,6 +25,8 @@
 
 #define CQ_TABLE_SUFFIX "_pdb"
 
+static HTAB *disqualification_plans;
+
 static void
 get_cv_name(Relation rel, char* cvname)
 {
@@ -63,14 +65,14 @@ CQVacuumTuple(Relation rel, HeapTuple tuple)
 	RangeTblEntry *rte;
 	List *colnames = NIL;
 	int i;
+	bool vacuum;
 
 	for (i = 0; i < RelationGetDescr(rel)->natts; i++)
 		colnames = lappend(colnames, makeString(NameStr(RelationGetDescr(rel)->attrs[i]->attname)));
 
-
 	get_cv_name(rel, cvname);
 	expr = GetCQVacuumExpr(cvname);
-	pprint(expr);
+
 	nsitem->p_cols_visible = true;
 	nsitem->p_lateral_only = false;
 	rte = makeNode(RangeTblEntry);
@@ -94,7 +96,9 @@ CQVacuumTuple(Relation rel, HeapTuple tuple)
 	slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
 	ExecStoreTuple(tuple, slot, InvalidBuffer, false);
 	econtext->ecxt_scantuple = slot;
-
 	predicate = list_make1(ExecPrepareExpr(expr, estate));
-	return ExecQual(predicate, econtext, false);
+	vacuum = ExecQual(predicate, econtext, false);
+	ExecDropSingleTupleTableSlot(slot);
+	FreeExecutorState(estate);
+	return vacuum;
 }

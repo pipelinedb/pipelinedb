@@ -404,11 +404,10 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 
 static
 void
-RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CQProcState *cvmetadata)
+RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CQProcState *procstate)
 {
-	RunContinuousQueryProcess(CQCombiner, cvname, state, &cvmetadata->combiner);
-	RunContinuousQueryProcess(CQWorker, cvname, state, &cvmetadata->worker);
-	RunContinuousQueryProcess(CQGarbageCollector, cvname, state, &cvmetadata->gc);
+	RunContinuousQueryProcess(CQCombiner, cvname, state, &procstate->combiner);
+	RunContinuousQueryProcess(CQWorker, cvname, state, &procstate->worker);
 }
 
 int

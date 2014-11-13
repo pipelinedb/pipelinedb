@@ -17,8 +17,7 @@
 typedef enum
 {
 	CQCombiner,
-	CQWorker,
-	CQGarbageCollector
+	CQWorker
 } CQProcessType;
 
 typedef struct CQProcState
@@ -30,7 +29,6 @@ typedef struct CQProcState
 	BackgroundWorkerHandle combiner;
 	/* TODO(usmanm): Make this dynamic to support parallelism */
 	BackgroundWorkerHandle worker;
-	BackgroundWorkerHandle gc;
 	bool worker_done;
 } CQProcState;
 
