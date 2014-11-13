@@ -887,8 +887,11 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 					break;
 			}
 
-			if ((tupgone = ShouldVacuumCQTuple(cqvcontext, &tuple)))
+			if (!tupgone && ShouldVacuumCQTuple(cqvcontext, &tuple))
+			{
+				tupgone = true;
 				all_visible = false;
+			}
 
 			if (tupgone)
 			{
@@ -1023,8 +1026,15 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 		 */
 		else if (PageIsAllVisible(page) && has_dead_tuples)
 		{
-			elog(WARNING, "page containing dead tuples is marked as all-visible in relation \"%s\" page %u",
-				 relname, blkno);
+			/*
+			 * XXX(usmanm): If this relation requires a CQ vacuum and we have turned
+			 * the all_visible bit off then don't spit out the warning.
+			 * This happens because the disqualified tuples aren't really *dead* tuples
+			 * and so Postgres never marks the page as containing dead tuples.
+			 */
+			if (cqvcontext && all_visible)
+				elog(WARNING, "page containing dead tuples is marked as all-visible in relation \"%s\" page %u",
+						relname, blkno);
 			PageClearAllVisible(page);
 			MarkBufferDirty(buf);
 			visibilitymap_clear(onerel, blkno, vmbuffer);
