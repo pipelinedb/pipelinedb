@@ -738,6 +738,23 @@ pipeline_rewrite(List *raw_parsetree_list)
 			transformed_parsetree_list = lappend(transformed_parsetree_list,
 					node);
 		}
+		else if (IsA(node, VacuumStmt))
+		{
+			VacuumStmt *vstmt = (VacuumStmt *) node;
+			/*
+			 * If the user is trying to vacuum a CV, what they're really
+			 * trying to do is create it on the CV's materialization table, so rewrite
+			 * the name of the target relation if we need to.
+			 */
+			if (vstmt->relation && IsAContinuousView(vstmt->relation))
+			{
+				char *s = GetMatRelationName(vstmt->relation->relname);
+				vstmt->relation = makeRangeVar(NULL, s, -1);
+			}
+
+			transformed_parsetree_list = lappend(transformed_parsetree_list,
+					node);
+		}
 		else
 		{
 			transformed_parsetree_list = lappend(transformed_parsetree_list,
