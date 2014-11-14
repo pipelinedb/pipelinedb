@@ -29,7 +29,7 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 
-#define CQ_TABLE_SUFFIX "_pdb"
+#define CQ_TABLE_SUFFIX "_mrel0"
 
 static bool
 get_cv_name(char *relname, char *cvname)
