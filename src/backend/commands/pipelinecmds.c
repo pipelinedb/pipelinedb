@@ -36,6 +36,7 @@
 #include "pipeline/streambuf.h"
 #include "regex/regex.h"
 #include "utils/builtins.h"
+#include "utils/lsyscache.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
@@ -45,26 +46,9 @@
  */
 bool DebugSyncStreamInsert;
 
-#define CQ_TABLE_SUFFIX "_pdb"
+#define CQ_TABLE_SUFFIX "_mrel"
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
-
-/*
- * Appends a suffix to a string, ensuring that the result fits
- * in a NameData
- */
-static char *
-append_suffix(char *base, char *suffix)
-{
-	char relname[NAMEDATALEN];
-
-	/* we truncate the CV name if needed */
-	int chunk = Min(strlen(base), NAMEDATALEN - strlen(suffix));
-	strcpy(relname, base);
-	strcpy(&relname[chunk], suffix);
-
-	return strdup(relname);
-}
 
 static ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)
@@ -95,13 +79,31 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
  * Returns a unique name for the given CV's underlying materialization table
  */
 static char *
-get_unique_matrel_name(char *cvname)
+get_unique_matrel_name(char *cvname, char *nspname)
 {
-	/*
-	 * The name of the underlying materialized table should
-	 * be CV name suffixed with "_pdb".
-	 */
-	return append_suffix(cvname, CQ_TABLE_SUFFIX);
+	char relname[NAMEDATALEN];
+	int i = 0;
+	StringInfoData suffix;
+	Oid nspoid;
+
+	if (nspname != NULL)
+		nspoid = GetSysCacheOid1(NAMESPACENAME, CStringGetDatum(nspname));
+	else
+		nspoid = InvalidOid;
+
+	initStringInfo(&suffix);
+	memset(relname, 0, NAMEDATALEN);
+	strcpy(relname, cvname);
+
+	while (true)
+	{
+		appendStringInfo(&suffix, "%s%d", CQ_TABLE_SUFFIX, i);
+		strcpy(&relname[Min(strlen(cvname), NAMEDATALEN - strlen(suffix.data))], suffix.data);
+		resetStringInfo(&suffix);
+		if (!OidIsValid(get_relname_relid(relname, nspoid)))
+			break;
+	}
+	return pstrdup(relname);
 }
 
 /*
@@ -192,7 +194,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	bool saveAllowSystemTableMods;
 
 	view = stmt->into->rel;
-	mat_relation = makeRangeVar(view->schemaname, get_unique_matrel_name(view->relname), -1);
+	mat_relation = makeRangeVar(view->schemaname, get_unique_matrel_name(view->relname, view->schemaname), -1);
 
 	/*
 	 * Check if CV already exists?

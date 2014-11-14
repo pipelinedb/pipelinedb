@@ -13,8 +13,8 @@ INSERT INTO int_stream_cqavg (k, v) VALUES ('y', -10000), ('y', 10000), ('y', 0)
 
 DEACTIVATE test_int8_avg, test_int4_avg, test_int2_avg;;
 
-SELECT * FROM test_int4_avg_pdb ORDER BY k;
-SELECT * FROM test_int2_avg_pdb ORDER BY k;
+SELECT * FROM test_int4_avg_mrel0 ORDER BY k;
+SELECT * FROM test_int2_avg_mrel0 ORDER BY k;
 
 ACTIVATE test_int8_avg, test_int4_avg, test_int2_avg;
 
@@ -40,8 +40,8 @@ INSERT INTO float_stream_cqavg (k, v) VALUES ('y', 0.0001), ('y', 0.00002), ('y'
 
 DEACTIVATE test_float8_avg, test_float4_avg;
 
-SELECT * FROM test_float8_avg_pdb ORDER BY k;
-SELECT * FROM test_float4_avg_pdb ORDER BY k;
+SELECT * FROM test_float8_avg_mrel0 ORDER BY k;
+SELECT * FROM test_float4_avg_mrel0 ORDER BY k;
 
 ACTIVATE test_float8_avg, test_float4_avg;
 
@@ -85,7 +85,7 @@ INSERT INTO interval_stream_cqavg (k, ts0, ts1) VALUES ('x', '2014-01-01 00:00:0
 DEACTIVATE test_interval_avg;
 
 -- We truncated down to day, so the hours shouldn't have affected the averages
-SELECT * FROM test_interval_avg_pdb ORDER BY k;
+SELECT * FROM test_interval_avg_mrel0 ORDER BY k;
 
 ACTIVATE test_interval_avg;
 

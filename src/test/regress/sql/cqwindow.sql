@@ -1,7 +1,7 @@
 SET debug_sync_stream_insert = 'on';
 
 CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PARTITION BY key ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM cqwindow_stream;
-\d+ cqwindow0_pdb;
+\d+ cqwindow0_mrel0;
 \d+ cqwindow0;
 ACTIVATE cqwindow0;
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2);
@@ -15,7 +15,7 @@ DEACTIVATE cqwindow0;
 SELECT * FROM cqwindow0 ORDER BY key;
 
 CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITION BY key ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM cqwindow_stream;
-\d+ cqwindow1_pdb;
+\d+ cqwindow1_mrel0;
 \d+ cqwindow1;
 ACTIVATE cqwindow1;
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);

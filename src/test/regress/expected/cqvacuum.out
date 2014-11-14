@@ -20,7 +20,7 @@ SELECT * FROM cqvacuum ORDER BY key;
  c   |     4
 (3 rows)
 
-SELECT key, count FROM cqvacuum_pdb ORDER BY key, count;
+SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
  key | count 
 -----+-------
  a   |     2
@@ -42,7 +42,7 @@ SELECT * FROM cqvacuum ORDER BY key;
 -----+-------
 (0 rows)
 
-SELECT key, count FROM cqvacuum_pdb ORDER BY key, count;
+SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
  key | count 
 -----+-------
  a   |     2
@@ -53,9 +53,15 @@ SELECT key, count FROM cqvacuum_pdb ORDER BY key, count;
  c   |     2
 (6 rows)
 
-VACUUM cqvacuum_pdb;
-SELECT key, count FROM cqvacuum_pdb ORDER BY key, count;
+VACUUM cqvacuum_mrel0;
+SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
  key | count 
 -----+-------
-(0 rows)
+ a   |     2
+ a   |     2
+ b   |     2
+ b   |     2
+ c   |     2
+ c   |     2
+(6 rows)
 
