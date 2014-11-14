@@ -53,15 +53,46 @@ SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
  c   |     2
 (6 rows)
 
-VACUUM cqvacuum_mrel0;
+ACTIVATE cqvacuum;
+INSERT INTO cqvacuum_stream (key) VALUES ('a'), ('b'), ('c');
+INSERT INTO cqvacuum_stream (key) VALUES ('a'), ('b'), ('c');
+DEACTIVATE cqvacuum;
+SELECT * FROM cqvacuum ORDER BY key;
+ key | count 
+-----+-------
+ a   |     2
+ b   |     2
+ c   |     2
+(3 rows)
+
 SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
  key | count 
 -----+-------
  a   |     2
  a   |     2
+ a   |     2
+ b   |     2
  b   |     2
  b   |     2
  c   |     2
  c   |     2
-(6 rows)
+ c   |     2
+(9 rows)
+
+VACUUM cqvacuum_mrel0;
+SELECT * FROM cqvacuum ORDER BY key;
+ key | count 
+-----+-------
+ a   |     2
+ b   |     2
+ c   |     2
+(3 rows)
+
+SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
+ key | count 
+-----+-------
+ a   |     2
+ b   |     2
+ c   |     2
+(3 rows)
 
