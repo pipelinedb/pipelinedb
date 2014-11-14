@@ -462,7 +462,7 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 	FmgrInfo *eq_funcs;
 	FmgrInfo *hash_funcs;
 	int num_merge_attrs = 0;
-	char *cvname = GetCQMatRelationName(plan->cq_target->relname);
+	char *matrelname = NameStr(plan->cq_state->matrelname);
 	Agg *agg = NULL;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
@@ -484,7 +484,7 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 		merge_targets = BuildTupleHashTable(num_merge_attrs, merge_attrs, eq_funcs, hash_funcs, 1000,
 				sizeof(HeapTupleEntryData), CacheMemoryContext, tmpctx);
 
-		get_tuples_to_combine_with(cvname, cvdesc, store, merge_attrs, num_merge_attrs, merge_targets);
+		get_tuples_to_combine_with(matrelname, cvdesc, store, merge_attrs, num_merge_attrs, merge_targets);
 	}
 
 	portal = CreatePortal("__merge__", true, true);
@@ -511,7 +511,7 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 
 	PopActiveSnapshot();
 
-	sync_combine(cvname, merge_output, slot, merge_targets);
+	sync_combine(matrelname, merge_output, slot, merge_targets);
 
 	if (merge_targets)
 		hash_destroy(merge_targets->hashtab);

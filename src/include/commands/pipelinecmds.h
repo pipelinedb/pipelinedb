@@ -13,7 +13,6 @@
 
 #include "nodes/parsenodes.h"
 
-char *GetCQMatRelationName(char *cvname);
 void CreateEncoding(CreateEncodingStmt *stmt);
 void ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring);
 void ExecDropContinuousViewStmt(DropStmt *stmt);

@@ -13,6 +13,6 @@
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
 
-void SetCQPlanRefs(PlannedStmt *plan);
+void SetCQPlanRefs(PlannedStmt *plan, char *matrelname);
 
 #endif

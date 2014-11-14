@@ -11,6 +11,7 @@
 #include "access/htup_details.h"
 #include "catalog/pg_aggregate.h"
 #include "catalog/pipeline_combine.h"
+#include "catalog/pipeline_query_fn.h"
 #include "commands/pipelinecmds.h"
 #include "funcapi.h"
 #include "nodes/makefuncs.h"
@@ -101,13 +102,12 @@ make_store_target(TargetEntry *tostore, char *resname, AttrNumber attno, Oid agg
  * to modify the combiner's Aggrefs accordingly.
  */
 void
-SetCQPlanRefs(PlannedStmt *pstmt)
+SetCQPlanRefs(PlannedStmt *pstmt, char* matrelname)
 {
 	Plan *plan = pstmt->planTree;
 	ListCell *lc;
 	AttrNumber attno = 1;
 	List *targetlist = NIL;
-	char *matname = GetCQMatRelationName(pstmt->cq_target->relname);
 	TupleDesc matdesc;
 	CQProcessType ptype = pstmt->cq_state->ptype;
 	int i;
@@ -118,7 +118,7 @@ SetCQPlanRefs(PlannedStmt *pstmt)
 
 	agg = (Agg *) plan;
 
-	matdesc = RelationNameGetTupleDesc(matname);
+	matdesc = RelationNameGetTupleDesc(matrelname);
 
 	/*
 	 * There are two cases we need to handle here:

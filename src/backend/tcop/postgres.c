@@ -731,7 +731,7 @@ pipeline_rewrite(List *raw_parsetree_list)
 			 */
 			if (IsAContinuousView(istmt->relation))
 			{
-				char *s = GetCQMatRelationName(istmt->relation->relname);
+				char *s = GetMatRelationName(istmt->relation->relname);
 				istmt->relation = makeRangeVar(NULL, s, -1);
 			}
 

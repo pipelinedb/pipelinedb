@@ -920,6 +920,32 @@ fix_sliding_window_expr(SelectStmt *stmt, Node *swExpr, CQAnalyzeContext *contex
 	}
 }
 
+/* TODO(usmanm): Remove when pushing the VACUUM changes */
+#define CQ_TABLE_SUFFIX "_pdb"
+
+static char *
+append_suffix(char *base, char *suffix)
+{
+	char relname[NAMEDATALEN];
+
+	/* we truncate the CV name if needed */
+	int chunk = Min(strlen(base), NAMEDATALEN - strlen(suffix));
+	strcpy(relname, base);
+	strcpy(&relname[chunk], suffix);
+
+	return strdup(relname);
+}
+
+static char *
+get_unique_matrel_name(char *cvname)
+{
+	/*
+	 * The name of the underlying materialized table should
+	 * be CV name suffixed with "_pdb".
+	 */
+	return append_suffix(cvname, CQ_TABLE_SUFFIX);
+}
+
 /*
  * GetDeleteStmtForGC
  */
@@ -937,7 +963,7 @@ GetDeleteStmtForGC(char *cvname, SelectStmt *stmt)
 	fix_sliding_window_expr(stmt, swExpr, &context);
 
 	delete_stmt = makeNode(DeleteStmt);
-	delete_stmt->relation = makeRangeVar(NULL, GetCQMatRelationName(cvname), -1);
+	delete_stmt->relation = makeRangeVar(NULL, get_unique_matrel_name(cvname), -1);
 	delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, swExpr, -1);
 
 	return delete_stmt;

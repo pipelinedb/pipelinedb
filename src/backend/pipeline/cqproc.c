@@ -485,6 +485,7 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	char *sql;
 	char completionTag[COMPLETION_TAG_BUFSIZE];
 	char *cvname;
+	char *matrelname;
 	MemoryContext planctxt = AllocSetContextCreate(TopMemoryContext,
 													"RunCQPlanContext",
 													ALLOCSET_DEFAULT_MINSIZE,
@@ -517,6 +518,7 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	 * 1. Plan the continuous query
 	 */
 	cvname = NameStr(args.cvname);
+	matrelname = NameStr(state.matrelname);
 	sql = pstrdup(args.query);
 	spfree(args.query);
 
@@ -541,7 +543,7 @@ run_cq(Datum d, char *additional, Size additionalsize)
 		return;
 	}
 
-	SetCQPlanRefs(plan);
+	SetCQPlanRefs(plan, matrelname);
 
 	/*
 	 * 2. Set up the portal to run it in
@@ -606,7 +608,6 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	BackgroundWorkerHandle *worker_handle;
 	char *procName = get_cq_proc_type_name(ptype);
 	char *query = GetQueryString(cvname, true);
-	char *shmem_query;
 	bool success;
 
 	/* TODO(usmanm): Make sure the name doesn't go beyond 64 bytes */
@@ -627,8 +628,7 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	namestrcpy(&args.cvname, cvname);
 	namestrcpy(&args.dbname, MyProcPort->database_name);
 
-	shmem_query = spalloc(strlen(query) + 1);
-	args.query = shmem_query;
+	args.query = spalloc(strlen(query) + 1);
 	memcpy(args.query, query, strlen(query) + 1);
 
 	memcpy(worker.bgw_additional_arg, &args, worker.bgw_additional_size);
