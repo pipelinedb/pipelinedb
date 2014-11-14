@@ -29,24 +29,6 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 
-#define CQ_TABLE_SUFFIX "_mrel0"
-
-static bool
-get_cv_name(char *relname, char *cvname)
-{
-	/*
-	 * TODO(usmanm): This isn't entirely correct. We should simply
-	 * store the materialization table name in the pipeline_query catalog
-	 * and look that up or iterate through the catalog and see if we have
-	 * a match.
-	 */
-	if (strlen(relname) <= strlen(CQ_TABLE_SUFFIX))
-		return false;
-	memset(cvname, 0, NAMEDATALEN);
-	memcpy(cvname, relname, strlen(relname) - strlen(CQ_TABLE_SUFFIX));
-	return true;
-}
-
 /*
  * NumCQVacuumTuples
  */
@@ -55,7 +37,7 @@ NumCQVacuumTuples(Oid relid)
 {
 	uint64_t count;
 	char *relname = get_rel_name(relid);
-	char cvname[NAMEDATALEN];
+	char *cvname;
 	SelectStmt *stmt;
 	ResTarget *res;
 	FuncCall *fcall;
@@ -74,7 +56,8 @@ NumCQVacuumTuples(Oid relid)
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	if (!get_cv_name(relname, cvname))
+	cvname = GetCVNameForMatRelationName(relname);
+	if (!cvname)
 		return 0;
 
 	if (!GetGCFlag(makeRangeVar(NULL, cvname, -1)))
@@ -156,7 +139,7 @@ CQVacuumContext *
 CreateCQVacuumContext(Relation rel)
 {
 	char *relname = RelationGetRelationName(rel);
-	char cvname[NAMEDATALEN];
+	char *cvname;
 	Expr *expr;
 	ParseState *ps;
 	ParseNamespaceItem *nsitem;
@@ -165,7 +148,8 @@ CreateCQVacuumContext(Relation rel)
 	int i;
 	CQVacuumContext *context;
 
-	if (!get_cv_name(relname, cvname))
+	cvname = GetCVNameForMatRelationName(relname);
+	if (!cvname)
 		return NULL;
 
 	if (!GetGCFlag(makeRangeVar(NULL, cvname, -1)))

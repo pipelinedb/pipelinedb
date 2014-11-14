@@ -422,7 +422,24 @@ char *GetMatRelationName(char *cvname)
 char *
 GetCVNameForMatRelationName(char *matrelname)
 {
-	return NULL;
+	char *cvname = NULL;
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowShareLock);
+	HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_query, 0, NULL);
+	HeapTuple tup;
+
+	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
+		if (strcmp(matrelname, NameStr(row->matrelname)) == 0)
+		{
+			cvname = pstrdup(NameStr(row->name));
+			break;
+		}
+	}
+
+	heap_endscan(scan_desc);
+	heap_close(pipeline_query, RowShareLock);
+	return cvname;
 }
 
 /*
