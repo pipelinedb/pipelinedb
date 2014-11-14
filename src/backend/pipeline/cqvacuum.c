@@ -63,6 +63,8 @@ NumCQVacuumTuples(Oid relid)
 	if (!GetGCFlag(makeRangeVar(NULL, cvname, -1)))
 		return 0;
 
+	oldcontext = MemoryContextSwitchTo(runctx);
+
 	fcall = makeNode(FuncCall);
 	fcall->agg_star = true;
 	fcall->funcname = list_make1(makeString("count"));
@@ -74,8 +76,6 @@ NumCQVacuumTuples(Oid relid)
 	stmt->fromClause = list_make1(makeRangeVar(NULL, relname, -1));
 	stmt->whereClause = GetCQVacuumExpr(cvname);
 	stmt->targetList = list_make1(res);
-
-	oldcontext = MemoryContextSwitchTo(runctx);
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
