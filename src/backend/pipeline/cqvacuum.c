@@ -171,8 +171,6 @@ CreateCQVacuumContext(Relation rel)
 	if (!GetGCFlag(makeRangeVar(NULL, cvname, -1)))
 		return NULL;
 
-	NumCQVacuumTuples(rel->rd_id);
-
 	/* Copy colnames from the relation's TupleDesc */
 	for (i = 0; i < RelationGetDescr(rel)->natts; i++)
 		colnames = lappend(colnames, makeString(NameStr(RelationGetDescr(rel)->attrs[i]->attname)));
