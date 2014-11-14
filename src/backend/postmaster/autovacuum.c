@@ -2721,7 +2721,7 @@ relation_needs_vacanalyze(Oid relid,
 
 	if (PointerIsValid(tabentry))
 	{
-		float4 cqvactuples = NumCQVacuumTuples(relid);
+		uint64_t cqvactuples = NumCQVacuumTuples(relid);
 		reltuples = classForm->reltuples;
 		vactuples = tabentry->n_dead_tuples + cqvactuples;
 		anltuples = tabentry->changes_since_analyze + cqvactuples;
