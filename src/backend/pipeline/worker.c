@@ -55,7 +55,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	char *cvname = rv->relname;
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
-	NameData name;
 	MemoryContext runcontext;
 	MemoryContext execcontext;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
@@ -73,7 +72,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 										ALLOCSET_DEFAULT_INITSIZE,
 										ALLOCSET_DEFAULT_MAXSIZE);
 
-	namestrcpy(&name, cvname);
 	CurrentResourceOwner = owner;
 
 	/* prepare the plan for execution */

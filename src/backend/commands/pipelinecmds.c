@@ -92,10 +92,10 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 /*
  * GetCQMatRelationName
  *
- * Returns the name of the given CV's underlying materialization table
+ * Returns a unique name for the given CV's underlying materialization table
  */
-char *
-GetCQMatRelationName(char *cvname)
+static char *
+get_unique_matrel_name(char *cvname)
 {
 	/*
 	 * The name of the underlying materialized table should
@@ -192,7 +192,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	bool saveAllowSystemTableMods;
 
 	view = stmt->into->rel;
-	mat_relation = makeRangeVar(view->schemaname, GetCQMatRelationName(view->relname), -1);
+	mat_relation = makeRangeVar(view->schemaname, get_unique_matrel_name(view->relname), -1);
 
 	/*
 	 * Check if CV already exists?
@@ -309,7 +309,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	RegisterContinuousView(view, querystring, IsSlidingWindowSelectStmt(viewselect));
+	RegisterContinuousView(view, querystring, mat_relation, IsSlidingWindowSelectStmt(viewselect));
 
 	/*
 	 * Index the materialization table smartly if we can
@@ -360,15 +360,15 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 
 		tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 		if (!HeapTupleIsValid(tuple))
-		{
 			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
-		}
-
 		row = (Form_pipeline_query) GETSTRUCT(tuple);
 		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
-		{
 			elog(ERROR, "continuous view \"%s\" is currently active; can't be dropped", rv->relname);
-		}
+
+		/*
+		 * Add object for the CQ's underlying materialization table.
+		 */
+		relations = lappend(relations, list_make1(makeString(GetMatRelationName(rv->relname))));
 
 		/*
 		 * Remove the view from the pipeline_query table
@@ -382,11 +382,6 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		 * see the changes already made.
 		 */
 		CommandCounterIncrement();
-
-		/*
-		 * Add object for the CQ's underlying materialization table.
-		 */
-		relations = lappend(relations, list_make1(makeString(GetCQMatRelationName(rv->relname))));
 	}
 
 	/*
@@ -566,7 +561,7 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 		if (!IsAContinuousView(rv))
 			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
 
-		rv->relname = GetCQMatRelationName(rv->relname);
+		rv->relname = GetMatRelationName(rv->relname);
 	}
 
 	/* Call TRUNCATE on the backing view table(s). */

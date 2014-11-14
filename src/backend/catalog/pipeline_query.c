@@ -128,7 +128,7 @@ GetAllContinuousViewNames(void)
 	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		char *s = strdup(NameStr(row->name));
+		char *s = pstrdup(NameStr(row->name));
 		RangeVar *rv = makeRangeVar(NULL, s, -1);
 
 		result = lappend(result, rv);
@@ -146,13 +146,14 @@ GetAllContinuousViewNames(void)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 void
-RegisterContinuousView(RangeVar *name, const char *query_string, bool gc)
+RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matrelname, bool gc)
 {
 	Relation	pipeline_query;
 	HeapTuple	tup;
 	bool 		nulls[Natts_pipeline_query];
 	Datum 		values[Natts_pipeline_query];
 	NameData 	name_data;
+	NameData	matrelname_data;
 
 	if (!name)
 		ereport(ERROR,
@@ -180,7 +181,11 @@ RegisterContinuousView(RangeVar *name, const char *query_string, bool gc)
 	values[Anum_pipeline_query_emptysleepms - 1] = Int32GetDatum(CQ_DEFAULT_SLEEP_MS);
 	values[Anum_pipeline_query_parallelism - 1] = Int16GetDatum(CQ_DEFAULT_PARALLELISM);
 
-	/* Copy gc bit */
+	/* Copy matrelname */
+	namestrcpy(&matrelname_data, matrelname->relname);
+	values[Anum_pipeline_query_matrelname - 1] = NameGetDatum(&matrelname_data);
+
+	/* Copy gc flag */
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
 
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);
@@ -321,6 +326,7 @@ GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	cv_state->maxwaitms = row->maxwaitms;
 	cv_state->emptysleepms = row->emptysleepms;
 	cv_state->parallelism = row->parallelism;
+	namestrcpy(&cv_state->matrelname, NameStr(row->matrelname));
 }
 
 /*
@@ -392,6 +398,31 @@ IsContinuousViewActive(RangeVar *name)
 	}
 
 	return isActive;
+}
+
+/*
+ * GetMatRelationName
+ */
+char *GetMatRelationName(char *cvname)
+{
+	HeapTuple tuple;
+	Form_pipeline_query row;
+
+	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(cvname));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "continuous view \"%s\" does not exist", cvname);
+	row = (Form_pipeline_query) GETSTRUCT(tuple);
+	ReleaseSysCache(tuple);
+	return pstrdup(NameStr(row->matrelname));
+}
+
+/*
+ * GetCVNameForMatRelationName
+ */
+char *
+GetCVNameForMatRelationName(char *matrelname)
+{
+	return NULL;
 }
 
 /*
