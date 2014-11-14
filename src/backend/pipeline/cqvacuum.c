@@ -10,17 +10,24 @@
  *-------------------------------------------------------------------------
  */
 #include "postgres.h"
-
+#include "access/htup_details.h"
+#include "access/xact.h"
 #include "catalog/pipeline_query_fn.h"
+#include "executor/tstoreReceiver.h"
+#include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_expr.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqvacuum.h"
 #include "pipeline/cqwindow.h"
+#include "tcop/pquery.h"
+#include "tcop/tcopprot.h"
 #include "utils/hsearch.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 #include "utils/rel.h"
+#include "utils/snapmgr.h"
 
 #define CQ_TABLE_SUFFIX "_pdb"
 
@@ -41,26 +48,105 @@ get_cv_name(char *relname, char *cvname)
 }
 
 /*
- * NeedsCQVacuum
+ * NumCQVacuumTuples
  */
-bool
-RelationNeedsCQVacuum(Oid relid)
+uint64_t
+NumCQVacuumTuples(Oid relid)
 {
+	uint64_t count;
 	char *relname = get_rel_name(relid);
 	char cvname[NAMEDATALEN];
+	SelectStmt *stmt;
+	ResTarget *res;
+	FuncCall *fcall;
+	CommandDest dest = DestTuplestore;
+	Tuplestorestate *store = NULL;
+	List *querytree_list;
+	PlannedStmt *plan;
+	Portal portal;
+	DestReceiver *receiver;
+	TupleTableSlot *slot;
+	QueryDesc *queryDesc;
+	MemoryContext oldcontext;
+	MemoryContext runctx = AllocSetContextCreate(CurrentMemoryContext,
+			"CQAutoVacuumContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
 
 	if (!get_cv_name(relname, cvname))
-		return false;
+		return 0;
 
 	if (!GetGCFlag(makeRangeVar(NULL, cvname, -1)))
-		return false;
+		return 0;
+
+	fcall = makeNode(FuncCall);
+	fcall->agg_star = true;
+	fcall->funcname = list_make1(makeString("count"));
+	fcall->location = -1;
+	res = makeNode(ResTarget);
+	res->val = (Node *) fcall;
+	res->location = -1;
+	stmt = makeNode(SelectStmt);
+	stmt->fromClause = list_make1(makeRangeVar(NULL, relname, -1));
+	stmt->whereClause = GetCQVacuumExpr(cvname);
+	stmt->targetList = list_make1(res);
+
+	oldcontext = MemoryContextSwitchTo(runctx);
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	querytree_list = pg_analyze_and_rewrite((Node *) stmt, NULL,
+			NULL, 0);
+	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
+
+	portal = CreatePortal("__cq_auto_vacuum__", true, true);
+	portal->visible = false;
+	PortalDefineQuery(portal,
+			NULL,
+			NULL,
+			"SELECT",
+			list_make1(plan),
+			NULL);
+
+	store = tuplestore_begin_heap(true, true, work_mem);
+	receiver = CreateDestReceiver(dest);
+	SetTuplestoreDestReceiverParams(receiver, store, PortalGetHeapMemory(portal), true);
+
+	PortalStart(portal, NULL, 0, GetActiveSnapshot());
 
 	/*
-	 * TODO(usmanm): Make this smarter. Figure out the %age of disqualified tuples
-	 * and based on that return true/false.
+	 * Run the portal to completion, and then drop it (and the receiver).
 	 */
+	(void) PortalRun(portal,
+			FETCH_ALL,
+			true,
+			receiver,
+			receiver,
+			NULL);
 
-	return true;
+	queryDesc = PortalGetQueryDesc(portal);
+	slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
+	foreach_tuple(slot, store)
+	{
+		Datum *datum;
+		bool isnull;
+
+		slot_getallattrs(slot);
+		datum = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
+		count = DatumGetInt64(datum);
+	}
+
+	(*receiver->rDestroy) (receiver);
+	tuplestore_end(store);
+	PortalDrop(portal, false);
+
+	PopActiveSnapshot();
+
+	MemoryContextReset(runctx);
+	MemoryContextSwitchTo(oldcontext);
+
+	return count;
 }
 
 /*
@@ -84,6 +170,8 @@ CreateCQVacuumContext(Relation rel)
 
 	if (!GetGCFlag(makeRangeVar(NULL, cvname, -1)))
 		return NULL;
+
+	NumCQVacuumTuples(rel->rd_id);
 
 	/* Copy colnames from the relation's TupleDesc */
 	for (i = 0; i < RelationGetDescr(rel)->natts; i++)

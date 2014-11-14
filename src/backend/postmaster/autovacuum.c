@@ -2721,9 +2721,10 @@ relation_needs_vacanalyze(Oid relid,
 
 	if (PointerIsValid(tabentry))
 	{
+		float4 cqvactuples = NumCQVacuumTuples(relid);
 		reltuples = classForm->reltuples;
-		vactuples = tabentry->n_dead_tuples;
-		anltuples = tabentry->changes_since_analyze;
+		vactuples = tabentry->n_dead_tuples + cqvactuples;
+		anltuples = tabentry->changes_since_analyze + cqvactuples;
 
 		vacthresh = (float4) vac_base_thresh + vac_scale_factor * reltuples;
 		anlthresh = (float4) anl_base_thresh + anl_scale_factor * reltuples;
@@ -2740,12 +2741,6 @@ relation_needs_vacanalyze(Oid relid,
 		/* Determine if this table needs vacuum or analyze. */
 		*dovacuum = force_vacuum || (vactuples > vacthresh);
 		*doanalyze = (anltuples > anlthresh);
-
-		if (!*dovacuum && RelationNeedsCQVacuum(relid))
-		{
-			*dovacuum = true;
-			*doanalyze = true;
-		}
 	}
 	else
 	{
