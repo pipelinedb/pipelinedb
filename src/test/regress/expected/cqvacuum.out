@@ -96,3 +96,4 @@ SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
  c   |     2
 (3 rows)
 
+DROP CONTINUOUS VIEW cqvacuum;
