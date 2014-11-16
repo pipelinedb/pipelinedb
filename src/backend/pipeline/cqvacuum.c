@@ -50,11 +50,7 @@ NumCQVacuumTuples(Oid relid)
 	TupleTableSlot *slot;
 	QueryDesc *queryDesc;
 	MemoryContext oldcontext;
-	MemoryContext runctx = AllocSetContextCreate(CurrentMemoryContext,
-			"CQAutoVacuumContext",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
+	MemoryContext runctx;
 
 	cvname = GetCVNameForMatRelationName(relname);
 	if (!cvname)
@@ -62,6 +58,12 @@ NumCQVacuumTuples(Oid relid)
 
 	if (!GetGCFlag(makeRangeVar(NULL, cvname, -1)))
 		return 0;
+
+	runctx = AllocSetContextCreate(CurrentMemoryContext,
+			"CQAutoVacuumContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
 
 	oldcontext = MemoryContextSwitchTo(runctx);
 

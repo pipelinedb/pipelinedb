@@ -930,5 +930,5 @@ GetCQVacuumExpr(char *cvname)
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
 	fix_sliding_window_expr(stmt, expr, &context);
 
-	return makeA_Expr(AEXPR_NOT, NIL, NULL, expr, -1);
+	return (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, expr, -1);
 }
