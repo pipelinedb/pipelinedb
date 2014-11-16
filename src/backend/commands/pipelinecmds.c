@@ -24,6 +24,8 @@
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "catalog/toasting.h"
+#include "executor/execdesc.h"
+#include "executor/tstoreReceiver.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -35,8 +37,15 @@
 #include "pipeline/stream.h"
 #include "pipeline/streambuf.h"
 #include "regex/regex.h"
+#include "tcop/dest.h"
+#include "tcop/pquery.h"
+#include "tcop/tcopprot.h"
 #include "utils/builtins.h"
+#include "utils/memutils.h"
+#include "utils/palloc.h"
+#include "utils/portal.h"
 #include "utils/rel.h"
+#include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
 /* Whether or not to block till the events are consumed by a cv
@@ -406,6 +415,110 @@ RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CQProcSt
 	RunContinuousQueryProcess(CQGarbageCollector, cvname, state, &cvmetadata->gc);
 }
 
+static void
+get_views(BaseContinuousViewStmt *stmt)
+{
+	CommandDest dest = DestTuplestore;
+	Tuplestorestate *store;
+	Node *parsetree;
+	List *querytree_list;
+	PlannedStmt *plan;
+	Portal portal;
+	DestReceiver *receiver;
+	ResTarget *resTarget;
+	ColumnRef *colRef;
+	SelectStmt *selectStmt;
+	TupleTableSlot *slot;
+	QueryDesc *queryDesc;
+	MemoryContext oldcontext;
+	MemoryContext runctx;
+
+	if (stmt->views != NIL)
+		return;
+
+	if (!stmt->whereClause)
+	{
+		stmt->views = GetAllContinuousViewNames();
+		return;
+	}
+
+	runctx = AllocSetContextCreate(CurrentMemoryContext,
+			"CQAutoVacuumContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	oldcontext = MemoryContextSwitchTo(runctx);
+
+	resTarget = makeNode(ResTarget);
+	colRef = makeNode(ColumnRef);
+	colRef->fields = list_make1(makeString("name"));
+	resTarget->val = (Node *) colRef;
+	selectStmt =  makeNode(SelectStmt);
+	selectStmt->targetList = list_make1(resTarget);
+	selectStmt->fromClause = list_make1(makeRangeVar(NULL, "pipeline_query", -1));;
+	selectStmt->whereClause = stmt->whereClause;
+	parsetree = (Node *) selectStmt;
+
+	querytree_list = pg_analyze_and_rewrite(parsetree, NULL,
+			NULL, 0);
+	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	portal = CreatePortal("__get_continuous_views__", true, true);
+	portal->visible = false;
+
+	store = tuplestore_begin_heap(true, true, work_mem);
+	receiver = CreateDestReceiver(dest);
+	SetTuplestoreDestReceiverParams(receiver, store, PortalGetHeapMemory(portal), true);
+
+	PortalDefineQuery(portal,
+			NULL,
+			NULL,
+			"SELECT",
+			list_make1(plan),
+			NULL);
+
+	PortalStart(portal, NULL, 0, GetActiveSnapshot());
+
+	(void) PortalRun(portal,
+			FETCH_ALL,
+			true,
+			receiver,
+			receiver,
+			NULL);
+
+	queryDesc = PortalGetQueryDesc(portal);
+	slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
+	foreach_tuple(slot, store)
+	{
+		bool isnull;
+		Datum *tmp;
+		char *viewName;
+
+		slot_getallattrs(slot);
+		tmp = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
+		/*
+		 * Must change context back to old context here, because we're going
+		 * to be using these RangeVars we create after we reset the runctx.
+		 */
+		MemoryContextSwitchTo(oldcontext);
+		viewName = pstrdup(NameStr(*DatumGetName(tmp)));
+		stmt->views = lappend(stmt->views, makeRangeVar(NULL, viewName, -1));
+		oldcontext = MemoryContextSwitchTo(runctx);
+	}
+
+	(*receiver->rDestroy) (receiver);
+	tuplestore_end(store);
+
+	PortalDrop(portal, false);
+	PopActiveSnapshot();
+
+	MemoryContextReset(runctx);
+	MemoryContextSwitchTo(oldcontext);
+}
+
 int
 ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 {
@@ -414,6 +527,8 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	int fail = 0;
 	CQProcState *entry;
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+
+	get_views((BaseContinuousViewStmt *) stmt);
 
 	foreach(lc, stmt->views)
 	{
@@ -506,6 +621,8 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	int count = 0;
 	ListCell *lc;
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+
+	get_views((BaseContinuousViewStmt *) stmt);
 
 	foreach(lc, stmt->views)
 	{

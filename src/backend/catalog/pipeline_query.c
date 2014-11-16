@@ -336,7 +336,7 @@ GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
  * catalog table by reading them from cv_state.
  */
 void
-SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pipeline_query)
+SetContinousViewState(RangeVar *rv, ContinuousViewState *cv_state, Relation pipeline_query)
 {
 	HeapTuple tuple;
 	HeapTuple newtuple;
@@ -344,11 +344,11 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pi
 	bool replaces[Natts_pipeline_query];
 	Datum values[Natts_pipeline_query];
 
-	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(name->relname));
+	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "continuous view \"%s\" does not exist",
-				name->relname);
+				rv->relname);
 
 	MemSet(values, 0, sizeof(values));
 	MemSet(nulls, false, sizeof(nulls));
@@ -365,15 +365,12 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pi
 
 	replaces[Anum_pipeline_query_parallelism - 1] = true;
 	values[Anum_pipeline_query_parallelism - 1] = Int16GetDatum(cv_state->parallelism);
-
 	newtuple = heap_modify_tuple(tuple, pipeline_query->rd_att,
 			values, nulls, replaces);
-
 	simple_heap_update(pipeline_query, &newtuple->t_self, newtuple);
 	CatalogUpdateIndexes(pipeline_query, newtuple);
 
 	CommandCounterIncrement();
-
 	ReleaseSysCache(tuple);
 }
 
