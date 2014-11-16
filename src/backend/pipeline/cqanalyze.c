@@ -1163,3 +1163,62 @@ TransformStreamEntry(ParseState *pstate, StreamDesc *stream)
 
 	return rte;
 }
+
+/*
+ * pipeline_rewrite
+ *
+ * Take the list of parsetrees returned by `pg_parse_query` and
+ * output a new list of parsetrees where any ActivateContinuousViewStmt
+ * or DeactivateContinuousViewStmt Node with multiple `views` is broken down
+ * into singular view Nodes.
+ */
+List *
+pipeline_rewrite(List *raw_parsetree_list)
+{
+	ListCell *lc;
+
+	foreach(lc, raw_parsetree_list)
+	{
+		Node *node = lfirst(lc);
+
+		if (IsA(node, ActivateContinuousViewStmt) ||
+				IsA(node, DeactivateContinuousViewStmt))
+		{
+			BaseContinuousViewStmt *stmt = (BaseContinuousViewStmt *) node;
+
+			if (stmt->views && stmt->whereClause)
+				elog(ERROR, "can't specify target list and a WHERE clause");
+		}
+		else if (IsA(node, IndexStmt))
+		{
+			IndexStmt *istmt = (IndexStmt *) node;
+
+			/*
+			 * If the user is trying to create an index on a CV, what they're really
+			 * trying to do is create it on the CV's materialization table, so rewrite
+			 * the name of the target relation if we need to.
+			 */
+			if (IsAContinuousView(istmt->relation))
+			{
+				char *s = GetMatRelationName(istmt->relation->relname);
+				istmt->relation = makeRangeVar(NULL, s, -1);
+			}
+		}
+		else if (IsA(node, VacuumStmt))
+		{
+			VacuumStmt *vstmt = (VacuumStmt *) node;
+			/*
+			 * If the user is trying to vacuum a CV, what they're really
+			 * trying to do is create it on the CV's materialization table, so rewrite
+			 * the name of the target relation if we need to.
+			 */
+			if (vstmt->relation && IsAContinuousView(vstmt->relation))
+			{
+				char *s = GetMatRelationName(vstmt->relation->relname);
+				vstmt->relation = makeRangeVar(NULL, s, -1);
+			}
+		}
+	}
+
+	return raw_parsetree_list;
+}

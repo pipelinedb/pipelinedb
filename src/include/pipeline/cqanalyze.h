@@ -57,4 +57,6 @@ ResTarget *CreateUniqueResTargetForNode(Node *node, CQAnalyzeContext *context);
 ColumnRef *CreateColumnRefFromResTarget(ResTarget *res);
 bool HasAggOrGroupBy(SelectStmt *stmt);
 
+List *pipeline_rewrite(List *raw_parsetree_list);
+
 #endif
