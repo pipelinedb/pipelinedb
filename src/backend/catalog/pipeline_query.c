@@ -365,10 +365,8 @@ SetContinousViewState(RangeVar *rv, ContinuousViewState *cv_state, Relation pipe
 
 	replaces[Anum_pipeline_query_parallelism - 1] = true;
 	values[Anum_pipeline_query_parallelism - 1] = Int16GetDatum(cv_state->parallelism);
-
 	newtuple = heap_modify_tuple(tuple, pipeline_query->rd_att,
 			values, nulls, replaces);
-
 	simple_heap_update(pipeline_query, &newtuple->t_self, newtuple);
 	CatalogUpdateIndexes(pipeline_query, newtuple);
 
