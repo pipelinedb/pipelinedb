@@ -96,4 +96,34 @@ SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
  c   |     2
 (3 rows)
 
+SELECT pg_sleep(3);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM cqvacuum ORDER BY key;
+ key | count 
+-----+-------
+(0 rows)
+
+SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
+ key | count 
+-----+-------
+ a   |     2
+ b   |     2
+ c   |     2
+(3 rows)
+
+VACUUM FULL cqvacuum_mrel0;
+SELECT * FROM cqvacuum ORDER BY key;
+ key | count 
+-----+-------
+(0 rows)
+
+SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
+ key | count 
+-----+-------
+(0 rows)
+
 DROP CONTINUOUS VIEW cqvacuum;

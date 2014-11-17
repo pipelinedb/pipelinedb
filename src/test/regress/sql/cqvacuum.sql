@@ -22,5 +22,11 @@ SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
 VACUUM cqvacuum_mrel0;
 SELECT * FROM cqvacuum ORDER BY key;
 SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
+SELECT pg_sleep(3);
+SELECT * FROM cqvacuum ORDER BY key;
+SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
+VACUUM FULL cqvacuum_mrel0;
+SELECT * FROM cqvacuum ORDER BY key;
+SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
 
 DROP CONTINUOUS VIEW cqvacuum;
