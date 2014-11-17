@@ -21,7 +21,6 @@
 typedef struct CQVacuumContext
 {
 	TupleTableSlot *slot;
-	EState *estate;
 	ExprContext *econtext;
 	List *predicate;
 } CQVacuumContext;

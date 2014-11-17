@@ -17,6 +17,7 @@
 #include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "nodes/makefuncs.h"
+#include "optimizer/planner.h"
 #include "parser/parse_expr.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqvacuum.h"
@@ -39,16 +40,18 @@ NumCQVacuumTuples(Oid relid)
 	char *relname = get_rel_name(relid);
 	char *cvname;
 	SelectStmt *stmt;
-	ResTarget *res;
-	FuncCall *fcall;
 	CommandDest dest = DestTuplestore;
 	Tuplestorestate *store = NULL;
 	List *querytree_list;
+	List *parsetree_list;
 	PlannedStmt *plan;
 	Portal portal;
 	DestReceiver *receiver;
 	TupleTableSlot *slot;
 	QueryDesc *queryDesc;
+	StringInfoData sql;
+	Datum *datum;
+	bool isnull;
 	MemoryContext oldcontext;
 	MemoryContext runctx;
 
@@ -67,17 +70,15 @@ NumCQVacuumTuples(Oid relid)
 
 	oldcontext = MemoryContextSwitchTo(runctx);
 
-	fcall = makeNode(FuncCall);
-	fcall->agg_star = true;
-	fcall->funcname = list_make1(makeString("count"));
-	fcall->location = -1;
-	res = makeNode(ResTarget);
-	res->val = (Node *) fcall;
-	res->location = -1;
-	stmt = makeNode(SelectStmt);
-	stmt->fromClause = list_make1(makeRangeVar(NULL, relname, -1));
+	initStringInfo(&sql);
+	appendStringInfo(&sql, "SELECT COUNT(*) FROM %s", relname);
+
+	parsetree_list = pg_parse_query(sql.data);
+	Assert(parsetree_list->length == 1);
+	resetStringInfo(&sql);
+
+	stmt = (SelectStmt *) linitial(parsetree_list);
 	stmt->whereClause = GetCQVacuumExpr(cvname);
-	stmt->targetList = list_make1(res);
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
@@ -99,10 +100,6 @@ NumCQVacuumTuples(Oid relid)
 	SetTuplestoreDestReceiverParams(receiver, store, PortalGetHeapMemory(portal), true);
 
 	PortalStart(portal, NULL, 0, GetActiveSnapshot());
-
-	/*
-	 * Run the portal to completion, and then drop it (and the receiver).
-	 */
 	(void) PortalRun(portal,
 			FETCH_ALL,
 			true,
@@ -112,15 +109,10 @@ NumCQVacuumTuples(Oid relid)
 
 	queryDesc = PortalGetQueryDesc(portal);
 	slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
-	foreach_tuple(slot, store)
-	{
-		Datum *datum;
-		bool isnull;
-
-		slot_getallattrs(slot);
-		datum = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
-		count = DatumGetInt64(datum);
-	}
+	tuplestore_gettupleslot(store, false, false, slot);
+	slot_getallattrs(slot);
+	datum = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
+	count = DatumGetInt64(datum);
 
 	(*receiver->rDestroy) (receiver);
 	tuplestore_end(store);
@@ -128,7 +120,7 @@ NumCQVacuumTuples(Oid relid)
 
 	PopActiveSnapshot();
 
-	MemoryContextReset(runctx);
+	MemoryContextDelete(runctx);
 	MemoryContextSwitchTo(oldcontext);
 
 	return count;
@@ -184,12 +176,11 @@ CreateCQVacuumContext(Relation rel)
 	expr = (Expr *) transformExpr(ps, GetCQVacuumExpr(cvname), EXPR_KIND_WHERE);
 
 	context = (CQVacuumContext *) palloc(sizeof(CQVacuumContext));
-	context->estate = CreateExecutorState();
 
-	context->econtext = GetPerTupleExprContext(context->estate);
+	context->econtext = CreateStandaloneExprContext();
 	context->slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
 	context->econtext->ecxt_scantuple = context->slot;
-	context->predicate = list_make1(ExecPrepareExpr(expr, context->estate));
+	context->predicate = list_make1(ExecInitExpr(expression_planner(expr), NULL));
 
 	return context;
 }
@@ -203,7 +194,6 @@ FreeCQVacuumContext(CQVacuumContext *context)
 	if (!context)
 		return;
 	ExecDropSingleTupleTableSlot(context->slot);
-	FreeExecutorState(context->estate);
 	pfree(context);
 }
 
