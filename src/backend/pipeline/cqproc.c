@@ -118,10 +118,6 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 
 	ReleaseSysCache(tuple);
 
-	/* Add GC process, if needed */
-	if (IsSlidingWindowContinuousView(rv))
-		pg_size += 1;
-
 	return pg_size;
 }
 
@@ -363,7 +359,6 @@ TerminateCQProcs(int32 id)
 	CQProcState *entry = GetCQProcState(id);
 	TerminateBackgroundWorker(&entry->combiner);
 	TerminateBackgroundWorker(&entry->worker);
-	TerminateBackgroundWorker(&entry->gc);
 }
 
 /*
@@ -415,25 +410,6 @@ get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewStat
 	memcpy(plan->cq_state, query->cq_state, sizeof(ContinuousViewState));
 
 	return plan;
-}
-
-static PlannedStmt*
-get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
-{
-	List		*parsetree_list;
-	SelectStmt	*selectstmt;
-	DeleteStmt	*delete_stmt;
-
-	parsetree_list = pg_parse_query(sql);
-	Assert(list_length(parsetree_list) == 1);
-
-	selectstmt = (SelectStmt *) linitial(parsetree_list);
-	delete_stmt = GetDeleteStmtForGC(cvname, selectstmt);
-
-	if (delete_stmt == NULL)
-		return NULL;
-
-	return get_plan_from_stmt(cvname, (Node *) delete_stmt, NULL, state, false);
 }
 
 static PlannedStmt*
@@ -530,17 +506,8 @@ run_cq(Datum d, char *additional, Size additionalsize)
 		case CQWorker:
 			plan = get_worker_plan(cvname, sql, &state);
 			break;
-		case CQGarbageCollector:
-			plan = get_gc_plan(cvname, sql, &state);
-			break;
 		default:
 			elog(ERROR, "unrecognized CQ process type: %d", state.ptype);
-	}
-
-	/* No plan? Terminate CQ process. */
-	if (plan == NULL)
-	{
-		return;
 	}
 
 	SetCQPlanRefs(plan, matrelname);
@@ -591,8 +558,6 @@ get_cq_proc_type_name(CQProcessType ptype)
 		return " [combiner]";
 	case CQWorker:
 		return " [worker]";
-	case CQGarbageCollector:
-		return " [gc]";
 	default:
 		elog(ERROR, "unknown CQProcessType %d", ptype);
 	}

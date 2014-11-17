@@ -56,7 +56,6 @@
 #include "miscadmin.h"
 #include "optimizer/clauses.h"
 #include "parser/parsetree.h"
-#include "pipeline/gc.h"
 #include "pipeline/combiner.h"
 #include "pipeline/worker.h"
 #include "postmaster/fork_process.h"
@@ -248,9 +247,6 @@ ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
 			break;
 		case CQWorker:
 			ContinuousQueryWorkerRun(portal, combiner, queryDesc, owner);
-			break;
-		case CQGarbageCollector:
-			ContinuousQueryGarbageCollectorRun(portal, combiner, queryDesc, owner);
 			break;
 		default:
 			elog(ERROR, "unrecognized CQ process type: %d", plan->cq_state->ptype);

@@ -395,6 +395,8 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
 		HeapTuple tup = (HeapTuple) lfirst(lc);
 		tuplestore_puttuple(incoming_merges, tup);
 	}
+
+	PortalDrop(portal, false);
 }
 
 /*

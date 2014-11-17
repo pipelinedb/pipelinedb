@@ -155,10 +155,10 @@ has_clock_timestamp(Node *node, void *context)
 }
 
 /*
- * get_sliding_window_expr
+ * GetSlidingWindowExpr
  */
-static Node *
-get_sliding_window_expr(SelectStmt *stmt, CQAnalyzeContext *context)
+Node *
+GetSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context)
 {
 	context->swExpr = NULL;
 
@@ -219,7 +219,7 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, CQAnalyzeContext *co
 void
 ValidateSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context)
 {
-	Node *swExpr = get_sliding_window_expr(stmt, context);
+	Node *swExpr = GetSlidingWindowExpr(stmt, context);
 	validate_clock_timestamp_expr(stmt, swExpr, context);
 }
 
@@ -318,7 +318,7 @@ ColumnRef *
 GetColumnRefInSlidingWindowExpr(SelectStmt *stmt)
 {
 	CQAnalyzeContext context;
-	Node *swExpr = get_sliding_window_expr(stmt, &context);
+	Node *swExpr = GetSlidingWindowExpr(stmt, &context);
 	Node *cref;
 
 	context.cols = NIL;
@@ -630,7 +630,7 @@ create_group_by_for_time_bucket_field(SelectStmt *workerstmt, SelectStmt *viewst
 void
 AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt, bool doesViewAggregate, CQAnalyzeContext *context)
 {
-	Node *swExpr = get_sliding_window_expr(workerstmt, context);
+	Node *swExpr = GetSlidingWindowExpr(workerstmt, context);
 
 	if (swExpr == NULL)
 	{
@@ -904,67 +904,31 @@ fix_sliding_window_expr(SelectStmt *stmt, Node *swExpr, CQAnalyzeContext *contex
 		cref->type = T_ColumnRef;
 		cref->fields = list_make1(makeString(name));
 		cref->location = -1;
-
-		if (hasAggOrGrp)
-		{
-			/*
-			 * This will swap out any date_trunc calls in the
-			 * sliding window expression with the column reference
-			 * to that field.
-			 *
-			 * TODO(usmanm): Will this work in all agg/group by cases?
-			 */
-			context->stepSize = NULL;
-			get_time_bucket_size(swExpr, context);
-		}
 	}
 }
 
-/* TODO(usmanm): Remove when pushing the VACUUM changes */
-#define CQ_TABLE_SUFFIX "_pdb"
-
-static char *
-append_suffix(char *base, char *suffix)
-{
-	char relname[NAMEDATALEN];
-
-	/* we truncate the CV name if needed */
-	int chunk = Min(strlen(base), NAMEDATALEN - strlen(suffix));
-	strcpy(relname, base);
-	strcpy(&relname[chunk], suffix);
-
-	return strdup(relname);
-}
-
-static char *
-get_unique_matrel_name(char *cvname)
-{
-	/*
-	 * The name of the underlying materialized table should
-	 * be CV name suffixed with "_pdb".
-	 */
-	return append_suffix(cvname, CQ_TABLE_SUFFIX);
-}
-
 /*
- * GetDeleteStmtForGC
+ * GetCQVacuumExpr
  */
-DeleteStmt *
-GetDeleteStmtForGC(char *cvname, SelectStmt *stmt)
+Node*
+GetCQVacuumExpr(char *cvname)
 {
+	List *parsetree_list;
+	SelectStmt *stmt;
 	CQAnalyzeContext context;
-	DeleteStmt *delete_stmt;
-	Node *swExpr = get_sliding_window_expr(stmt, &context);
+	Node *expr;
 
-	if (swExpr == NULL)
+	parsetree_list = pg_parse_query(GetQueryString(cvname, true));
+	Assert(list_length(parsetree_list) == 1);
+	stmt = (SelectStmt *) linitial(parsetree_list);
+
+	expr = GetSlidingWindowExpr(stmt, &context);
+
+	if (expr == NULL)
 		return NULL;
 
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
-	fix_sliding_window_expr(stmt, swExpr, &context);
+	fix_sliding_window_expr(stmt, expr, &context);
 
-	delete_stmt = makeNode(DeleteStmt);
-	delete_stmt->relation = makeRangeVar(NULL, get_unique_matrel_name(cvname), -1);
-	delete_stmt->whereClause = (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, swExpr, -1);
-
-	return delete_stmt;
+	return (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, expr, -1);
 }

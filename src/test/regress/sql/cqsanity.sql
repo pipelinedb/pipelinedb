@@ -9,7 +9,7 @@ INSERT INTO sanity_stream (key, value) VALUES ('x', 1), ('x', 2), ('y', 100);
 DEACTIVATE test_avg;
 
 SELECT * FROM test_avg ORDER BY key;
-SELECT * FROM test_avg_pdb ORDER BY key;
+SELECT * FROM test_avg_mrel0 ORDER BY key;
 
 ACTIVATE test_avg;
 
@@ -18,7 +18,7 @@ INSERT INTO sanity_stream (key, value) VALUES ('x', 10), ('x', 20), ('y', 200);
 DEACTIVATE test_avg;
 
 SELECT * FROM test_avg ORDER BY key;
-SELECT * FROM test_avg_pdb ORDER BY key;
+SELECT * FROM test_avg_mrel0 ORDER BY key;
 
 CREATE CONTINUOUS VIEW cv AS SELECT key::text, COUNT(*), MAX(x::integer + y::integer) FROM sanity_stream GROUP BY key;
 
