@@ -24,7 +24,7 @@
 #include "executor/execdebug.h"
 #include "executor/nodeNestloop.h"
 #include "utils/memutils.h"
-
+#define EXEC_NESTLOOPDEBUG
 
 /* ----------------------------------------------------------------
  *		ExecNestLoop(node)
@@ -110,6 +110,7 @@ ExecNestLoop(NestLoopState *node)
 	 * qualifying join tuple.
 	 */
 	ENL1_printf("entering main loop");
+	elog(LOG,"entering main loop");
 
 	for (;;)
 	{
@@ -120,7 +121,10 @@ ExecNestLoop(NestLoopState *node)
 		if (node->nl_NeedNewOuter)
 		{
 			ENL1_printf("getting new outer tuple");
+			elog(LOG,"getting new outer tuple");
 			outerTupleSlot = ExecProcNode(outerPlan);
+			elog(LOG,"OUTER TUPLE");
+			print_slot(outerTupleSlot);
 
 			/*
 			 * if there are no more outer tuples, then the join is complete..
@@ -128,10 +132,13 @@ ExecNestLoop(NestLoopState *node)
 			if (TupIsNull(outerTupleSlot))
 			{
 				ENL1_printf("no outer tuple, ending join");
+				elog(LOG,"no outer tuple, ending join");
+				ClearStreamJoinCache();
 				return NULL;
 			}
 
 			ENL1_printf("saving new outer tuple information");
+			elog(LOG,"saving new outer tuple information");
 			econtext->ecxt_outertuple = outerTupleSlot;
 			node->nl_NeedNewOuter = false;
 			node->nl_MatchedOuter = false;
@@ -163,6 +170,7 @@ ExecNestLoop(NestLoopState *node)
 			 * now rescan the inner plan
 			 */
 			ENL1_printf("rescanning inner plan");
+			elog(LOG,"rescanning inner plan");
 			ExecReScan(innerPlan);
 		}
 
@@ -170,17 +178,21 @@ ExecNestLoop(NestLoopState *node)
 		 * we have an outerTuple, try to get the next inner tuple.
 		 */
 		ENL1_printf("getting new inner tuple");
+		elog(LOG,"getting new inner tuple");
 
 		innerTupleSlot = ExecProcNode(innerPlan);
+		elog(LOG,"Inner tuple slot ");	
+		print_slot(innerTupleSlot);
 		econtext->ecxt_innertuple = innerTupleSlot;
 
 		if (TupIsNull(innerTupleSlot))
 		{
 			ENL1_printf("no inner tuple, need new outer tuple");
+			elog(LOG,"no inner tuple, need new outer tuple");
 
 			node->nl_NeedNewOuter = true;
 
-			if (!node->nl_MatchedOuter &&
+			if(!node->nl_MatchedOuter &&
 				(node->js.jointype == JOIN_LEFT ||
 				 node->js.jointype == JOIN_ANTI))
 			{
@@ -193,6 +205,7 @@ ExecNestLoop(NestLoopState *node)
 				econtext->ecxt_innertuple = node->nl_NullInnerTupleSlot;
 
 				ENL1_printf("testing qualification for outer-join tuple");
+				elog(log,"testing qualification for outer-join tuple");
 
 				if (otherqual == NIL || ExecQual(otherqual, econtext, false))
 				{
@@ -205,6 +218,7 @@ ExecNestLoop(NestLoopState *node)
 					ExprDoneCond isDone;
 
 					ENL1_printf("qualification succeeded, projecting tuple");
+					elog(LOG,"qualification succeeded, projecting tuple");
 
 					result = ExecProject(node->js.ps.ps_ProjInfo, &isDone);
 
@@ -234,6 +248,7 @@ ExecNestLoop(NestLoopState *node)
 		 * must pass to actually return the tuple.
 		 */
 		ENL1_printf("testing qualification");
+		elog(LOG,"testing qualification");
 
 		if (ExecQual(joinqual, econtext, false))
 		{
@@ -263,6 +278,7 @@ ExecNestLoop(NestLoopState *node)
 				ExprDoneCond isDone;
 
 				ENL1_printf("qualification succeeded, projecting tuple");
+				elog(LOG,"qualification succeeded, projecting tuple");
 
 				result = ExecProject(node->js.ps.ps_ProjInfo, &isDone);
 
@@ -285,6 +301,7 @@ ExecNestLoop(NestLoopState *node)
 		ResetExprContext(econtext);
 
 		ENL1_printf("qualification failed, looping");
+		elog(LOG,"qualification failed, looping");
 	}
 }
 

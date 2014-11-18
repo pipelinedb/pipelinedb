@@ -380,7 +380,8 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 void
 ExecBeginBatch(PlanState *node)
 {
-
+	//elog(LOG,"BeginBatch####################");
+	ExecBeginBatchStreamTableScan(node);
 }
 
 /* ----------------------------------------------------------------
@@ -413,7 +414,7 @@ ExecEndBatch(PlanState *node)
 /* ----------------------------------------------------------------
  *		ExecProcNode
  *
- *		Execute the given node to return a(nother) tuple.
+ *		Execute the given node to return a(nother) tuple.Is
  * ----------------------------------------------------------------
  */
 TupleTableSlot *
@@ -429,6 +430,12 @@ ExecProcNode(PlanState *node)
 
 	if (node->instrument)
 		InstrStartNode(node->instrument);
+	if (IsContinuous(node) && 
+		(node->cq_batch_progress == 0) &&
+		(nodeTag(node) == T_StreamTableScanState))
+	{
+		ExecBeginBatch(node);
+	}
 
 	if (IsContinuous(node) && node->cq_batch_progress == BatchSize(node))
 	{

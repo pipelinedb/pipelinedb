@@ -158,6 +158,10 @@ ExecReScan(PlanState *node)
 			ExecReScanStreamTableScan((StreamTableScanState *) node);
 			break;
 
+		case T_StreamScanState:
+			ExecReScanStreamScan((StreamTableScanState *) node);
+			break;
+
 		case T_IndexScanState:
 			ExecReScanIndexScan((IndexScanState *) node);
 			break;

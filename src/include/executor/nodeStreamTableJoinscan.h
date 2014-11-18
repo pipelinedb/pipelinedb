@@ -22,6 +22,7 @@ extern void ExecEndStreamTableScan(StreamTableScanState *node);
 extern void ExecStreamTableMarkPos(StreamTableScanState *node);
 extern void ExecStreamTableRestrPos(StreamTableScanState *node);
 extern void ExecReScanStreamTableScan(StreamTableScanState *node);
+extern void ExecBeginBatchStreamTableScan(StreamTableScanState *node);
 
 
 #endif   /* NODESTREAMTABLEJOINSCAN_H */

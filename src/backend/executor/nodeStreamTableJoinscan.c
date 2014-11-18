@@ -286,6 +286,22 @@ ExecEndStreamTableScan(StreamTableScanState *node)
 	 ExecInitScanTupleSlot(estate, node);
  }
 
+/*-----------------------------------------------------------------
+ *      ExecBeginBatchStreamTableScan
+ *
+ *      Initializes metadata required for the scan
+ * ----------------------------------------------------------------
+ */
+void
+ExecBeginBatchStreamTableScan(StreamTableScanState *node)
+{
+	//ExecReScanStreamTableScan(node);
+ 	InitExpressionInfo(node);
+ 	InitScanRelation(node);
+ 	InitMiscInfo(node);
+	OpenHeapScan(node);
+}
+
 /* ----------------------------------------------------------------
  *		ExecReScanSeqScan
  *
@@ -297,6 +313,7 @@ ExecReScanStreamTableScan(StreamTableScanState *node)
 {
 	static bool isFirstRescan = true;
 	HeapScanDesc scan;
+	elog(LOG,"RESCAN");
 
 	/*
 	 * Some info needs tbe initialized only

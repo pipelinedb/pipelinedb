@@ -17,5 +17,8 @@ extern StreamScanState *ExecInitStreamScan(StreamScan *node, EState *estate, int
 extern TupleTableSlot *ExecStreamScan(StreamScanState *node);
 extern void ExecEndStreamScan(StreamScanState *node);
 extern void CloseHeapScan(StreamTableScanState *node);
+extern void ExecReScanStreamScan(StreamScanState *node);
+extern bool IsScanningJoinCache();
+extern void ClearStreamJoinCache();
 
 #endif   /* NODESTREAMSCAN_H */
