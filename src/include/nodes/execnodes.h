@@ -247,6 +247,13 @@ typedef struct ProjectionInfo
 	int			pi_lastScanVar;
 } ProjectionInfo;
 
+typedef struct StreamProjectionInfo
+{
+	MemoryContext ctxt;
+	ExprContext *econtext;
+	TupleDesc desc;
+} StreamProjectionInfo;
+
 /* ----------------
  *	  JunkFilter
  *
@@ -1821,6 +1828,8 @@ typedef struct StreamScanState
 {
 	ScanState	ss;
 	StreamBufferReader *reader;
+	TupleDesc desc;
+	StreamProjectionInfo *pi;
 } StreamScanState;
 
 /* ----------------

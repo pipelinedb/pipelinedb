@@ -10,7 +10,6 @@
  */
 #include "catalog/pipeline_stream_fn.h"
 #include "pipeline/stream.h"
-#include "pipeline/decode.h"
 #include "pipeline/streambuf.h"
 #include "postmaster/bgworker.h"
 #include "executor/tuptable.h"
@@ -44,6 +43,12 @@ WaitForOverwrite(StreamBuffer *buf, StreamBufferSlot *slot, int sleepms)
 	while (HasPendingReads(slot))
 		pg_usleep(sleepms * 1000);
 
+	if (slot->event->flags & TUPLEDESC_BYVAL)
+	{
+		while (slot->event->desc->tdrefcount > 0)
+			pg_usleep(sleepms * 1000);
+	}
+
 	if (DebugPrintStreamBuffer)
 	{
 		elog(LOG, "evicted %dB at [%d, %d)", SlotSize(slot),
@@ -57,7 +62,7 @@ WaitForOverwrite(StreamBuffer *buf, StreamBufferSlot *slot, int sleepms)
  * Finds enough tombstoned slots to zero out and re-use shared memory for a new slot
  */
 static StreamBufferSlot *
-alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent event)
+alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
 {
 	char *pos;
 	char *sbspos;
@@ -66,6 +71,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	StreamEvent shared;
 	StreamBufferSlot *result;
 	Size size;
+	Size rawsize = event->raw->t_len + HEAPTUPLESIZE;
 	Bitmapset *bms = GetTargetsFor(stream);
 	StreamBufferSlot *sbs;
 
@@ -75,8 +81,19 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 		return NULL;
 	}
 
-	size = sizeof(StreamEventData) + event->len + sizeof(StreamBufferSlot) +
-			strlen(stream) + 1 + strlen(encoding) + 1 + BITMAPSET_SIZE(bms->nwords);
+	size = sizeof(StreamEventData) + rawsize + sizeof(StreamBufferSlot) +
+			strlen(stream) + 1 + BITMAPSET_SIZE(bms->nwords);
+
+	/*
+	 * If this event should contain a copy of the tuple descriptor, copy
+	 * it into the event's memory.
+	 */
+	if (event->flags & TUPLEDESC_BYVAL)
+	{
+		size += TUPLEDESC_FIXED_SIZE;
+		size += event->desc->natts * sizeof(Form_pg_attribute);
+		size += event->desc->natts * ATTRIBUTE_FIXED_PART_SIZE;
+	}
 
 	if (size > buf->capacity)
 		elog(ERROR, "event of size %d too big for stream buffer of size %d", (int) size, (int) buf->capacity);
@@ -153,27 +170,61 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	result = (StreamBufferSlot *) pos;
 	pos += sizeof(StreamBufferSlot);
 
-	MemSet(pos, 0, sizeof(StreamEventData) + event->len);
+	MemSet(pos, 0, sizeof(StreamEventData) + rawsize);
 	shared = (StreamEvent) pos;
-	shared->len = event->len;
-	shared->flags = event->flags;
-	shared->nfields = event->nfields;
-	shared->fields = event->fields;
 	shared->arrivaltime = event->arrivaltime;
 	pos += sizeof(StreamEventData);
 
-	shared->raw = pos;
-	memcpy(shared->raw, event->raw, event->len);
-	pos += event->len;
+	/*
+	 * If this event should contain a copy of the tuple descriptor, copy
+	 * it into the event's memory.
+	 */
+	if (event->flags & TUPLEDESC_BYVAL)
+	{
+		int tdi;
+
+		shared->desc = (TupleDesc) pos;
+		shared->desc->natts = event->desc->natts;
+		shared->desc->tdtypeid = event->desc->tdtypeid;
+		shared->desc->tdtypmod = event->desc->tdtypmod;
+		shared->desc->tdhasoid = event->desc->tdhasoid;
+		shared->desc->tdrefcount = event->desc->tdrefcount;
+		shared->desc->constr = NULL;
+		pos += TUPLEDESC_FIXED_SIZE;
+
+		/*
+		 * We have an array of pointers that live in shared memory and point
+		 * the the shared memory that follows them, eek!
+		 */
+		shared->desc->attrs = (Form_pg_attribute *) pos;
+		pos += sizeof(Form_pg_attribute) * shared->desc->natts;
+
+		for (tdi=0; tdi<shared->desc->natts; tdi++)
+		{
+			shared->desc->attrs[tdi] = (Form_pg_attribute) pos;
+			memcpy(shared->desc->attrs[tdi], event->desc->attrs[tdi], ATTRIBUTE_FIXED_PART_SIZE);
+			pos += ATTRIBUTE_FIXED_PART_SIZE;
+		}
+	}
+	else
+	{
+		/* descriptor is a reference to a previous event's byval copy */
+		shared->desc = event->desc;
+	}
+
+	shared->raw = (HeapTuple) pos;
+	shared->raw->t_len = event->raw->t_len;
+	shared->raw->t_self = event->raw->t_self;
+	shared->raw->t_tableOid = event->raw->t_tableOid;
+	shared->raw->t_data = (HeapTupleHeader) ((char *) shared->raw + HEAPTUPLESIZE);
+
+	memcpy(shared->raw->t_data, event->raw->t_data, event->raw->t_len);
+	pos += rawsize;
 
 	result->event = shared;
 	result->stream = pos;
 	memcpy(result->stream, stream, strlen(stream) + 1);
 	pos += strlen(stream) + 1;
-
-	result->encoding = pos;
-	memcpy(result->encoding, encoding, strlen(encoding) + 1);
-	pos += strlen(encoding) + 1;
 
 	/*
 	 * The source bitmap is allocated in local memory (in GetStreamTargets),
@@ -196,6 +247,7 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
 	buf->last = pos;
 
 	SpinLockAcquire(&buf->mutex);
+
 	/*
 	 * Stream event appended, now signal workers waiting on this stream
 	 * only if the buffer went from empty to not empty
@@ -229,12 +281,12 @@ alloc_slot(const char *stream, const char *encoding, StreamBuffer *buf, StreamEv
  * Appends a decoded event to the given stream buffer
  */
 StreamBufferSlot *
-AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent ev)
+AppendStreamEvent(const char *stream, StreamBuffer *buf, StreamEvent ev)
 {
 	StreamBufferSlot *sbs;
 	char *prev = buf->pos;
 
-	sbs = alloc_slot(stream, encoding, buf, ev);
+	sbs = alloc_slot(stream, buf, ev);
 
 	if (DebugPrintStreamBuffer)
 	{
@@ -433,55 +485,10 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 		SpinLockRelease(&(reader->buf->mutex));
 	}
 
+	if (slot->event->flags & TUPLEDESC_UNPIN)
+		slot->event->desc->tdrefcount = 0;
+
 	SpinLockRelease(&slot->mutex);
-}
-
-void
-ReadAndPrintStreamBuffer(StreamBuffer *buf, int32 queryid, int intervalms)
-{
-	StreamBufferReader *reader = OpenStreamBufferReader(buf, queryid);
-	StreamBufferSlot *sbs;
-	int count = 0;
-	int size = 0;
-
-	printf("====\n");
-	while ((sbs = PinNextStreamEvent(reader)) != NULL)
-	{
-		count++;
-		printf("size = %dB, stream = \"%s\", encoding = \"%s\" addr = %p\n",
-				(int) SlotSize(sbs), sbs->stream, sbs->encoding, &(sbs->link));
-
-		size += SlotSize(sbs);
-
-		if (intervalms > 0)
-			pg_usleep(intervalms * 1000);
-	}
-	printf("\n%d events (%dB).\n", count, size);
-	printf("^^^^\n");
-}
-
-void
-PrintStreamBuffer(StreamBuffer *buf)
-{
-	int count = 0;
-	StreamBufferSlot *sbs = (StreamBufferSlot *)
-		SHMQueueNext(&(buf->buf), &(buf->buf), offsetof(StreamBufferSlot, link));
-
-	printf("====\n");
-	LWLockAcquire(StreamBufferWrapLock, LW_EXCLUSIVE);
-	while (sbs != NULL)
-	{
-		count++;
-		printf("[%p] size = %d, stream = \"%s\", encoding = \"%s\"\n", sbs,
-				(int) SlotSize(sbs), sbs->stream, sbs->encoding);
-
-		sbs = (StreamBufferSlot *)
-				SHMQueueNext(&(buf->buf), &(sbs->link), offsetof(StreamBufferSlot, link));
-	}
-	LWLockRelease(StreamBufferWrapLock);
-
-	printf("\n%d events.\n", count);
-	printf("^^^^\n");
 }
 
 void
@@ -493,7 +500,7 @@ ResetStreamBufferLatch(int32 id)
 void
 WaitOnStreamBufferLatch(int32 id)
 {
-	WaitLatch((&GlobalStreamBuffer->procLatch[id]), WL_LATCH_SET | WL_TIMEOUT, 500);
+	WaitLatch((&GlobalStreamBuffer->procLatch[id]), WL_LATCH_SET, 0);
 }
 
 void

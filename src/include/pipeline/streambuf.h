@@ -103,7 +103,7 @@ typedef struct StreamBufferReader
 
 StreamBuffer *GlobalStreamBuffer;
 
-StreamBufferSlot *AppendStreamEvent(const char *stream, const char *encoding, StreamBuffer *buf, StreamEvent event);
+StreamBufferSlot *AppendStreamEvent(const char *stream, StreamBuffer *buf, StreamEvent event);
 Size StreamBufferShmemSize(void);
 void InitGlobalStreamBuffer(void);
 bool IsInputStream(const char *stream);
