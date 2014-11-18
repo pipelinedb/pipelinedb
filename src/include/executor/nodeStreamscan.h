@@ -13,8 +13,10 @@
 
 #include "nodes/execnodes.h"
 
+extern HeapTuple ExecStreamProject(StreamEvent event, StreamProjectionInfo *pi);
 extern StreamScanState *ExecInitStreamScan(StreamScan *node, EState *estate, int eflags);
 extern TupleTableSlot *ExecStreamScan(StreamScanState *node);
 extern void ExecEndStreamScan(StreamScanState *node);
+extern void ExecEndStreamScanBatch(StreamScanState *node);
 
 #endif   /* NODESTREAMSCAN_H */

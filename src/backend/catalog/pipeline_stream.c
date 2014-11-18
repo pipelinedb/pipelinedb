@@ -15,9 +15,10 @@
 #include "catalog/indexing.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
-#include "pipeline/decode.h"
+#include "funcapi.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
+#include "utils/rel.h"
 #include "utils/syscache.h"
 
 typedef struct StreamTargetsEntry
