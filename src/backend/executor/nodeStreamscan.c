@@ -15,16 +15,15 @@
 #include "executor/nodeStreamscan.h"
 #include "pipeline/decode.h"
 #include "pipeline/streambuf.h"
- #include "access/htup_details.h"
+#include "access/htup_details.h"
+#include "access/xact.h"
+#include "utils/memutils.h"
 
-
-int writeIdx = 0;
-int readIdx = 0;
-HeapTuple tempTupleStore[100];
-int tempIntCrap[100];
-Datum datumStore[10][10];
-HeapTuple t1,t2,t3;
+ListCell   *cachedRow;
+// Create a linnked list of Datum pointers
 bool scanning_join_cache = false;
+List	   *datumCache;
+
 bool
 IsScanningJoinCache()
 {
@@ -34,9 +33,20 @@ IsScanningJoinCache()
 void
 ClearStreamJoinCache()
 {
-	elog(LOG,"*************************** CLEARING CACHE **************************");
-	writeIdx = 0;
+	ListCell *l;
+	elog(LOG,"*************************** CLEARING JOIN CACHE **************************");
 	scanning_join_cache = false;
+	list_free_deep(datumCache);
+
+	/* Initialize the cache for the next join */
+	InitStreamJoinCache();
+}
+
+void
+InitStreamJoinCache()
+{
+	datumCache = NIL;
+	/* More init stuff goes here */
 }
 
 static TupleTableSlot *
@@ -45,46 +55,46 @@ StreamScanNext(StreamScanState *node)
 	StreamBufferSlot *sbs = PinNextStreamEvent(node->reader);
 	StreamEventDecoder *decoder;
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
-	HeapTuple slot_copy;
 	HeapTuple tup;
 	StreamScan *scan;
+	ListCell   *l;
 	PlanState* ps = (PlanState*) node;
-	elog(LOG,"SCANNEXT IDX %d writeIdx %d cqi_batch_progres %d",readIdx, writeIdx,ps->cq_batch_progress);
+	//pg_usleep(1000000);
 
-	if ((sbs == NULL) && (!IsScanningJoinCache()))
+	MemoryContext oldcontext;
+
+	if ((sbs == NULL) && (cachedRow == NIL))
 	{
-		scanning_join_cache = true;
+		elog(LOG,"RETURN NOTHING IN STREAM OR CACHE *********************************");
 		return NULL;
 	}
 
- 	// Everythin in the stream batch has been read AND 
- 	// 	there is nothing waiting in the stream
- 	// Read from the cache if there is anything there at all
- 	if ((sbs == NULL) && (readIdx <= writeIdx))
+
+ 	if ((sbs == NULL) && (cachedRow != NIL))
  	{
  		HeapTuple tempHeapTuple;	
 		TupleDesc	typeinfo = slot->tts_tupleDescriptor;
 		int			natts = typeinfo->natts;
 		bool 		nulls[natts];
 
- 		if (readIdx == writeIdx)
- 		{
- 			elog(LOG,"READ EVERYTHING IN TUPLE CACHE");
- 			return NULL;
- 		}
- 		elog(LOG,"READING FROM CACHE readIdx %d",readIdx);
+		oldcontext = MemoryContextSwitchTo(CacheMemoryContext);	
+ 		elog(LOG,"READING FROM CACHE");
 		MemSet(nulls, false, natts);
-		tempHeapTuple = heap_form_tuple(slot->tts_tupleDescriptor, datumStore[readIdx++], nulls);
+		tempHeapTuple = heap_form_tuple(slot->tts_tupleDescriptor, lfirst(cachedRow), nulls);
+		cachedRow = lnext(cachedRow);
+
+
  		ExecClearTuple(slot);
  		ExecStoreTuple(tempHeapTuple, slot, InvalidBuffer, false);
- 		//print_slot(slot);
- 		//elog(LOG,"+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
-
+		MemoryContextSwitchTo(oldcontext);	
  		return slot;
  	}	
+ 	else if ((sbs == NULL) && (cachedRow == NIL))
+ 	{
+		elog(LOG,"READ EVERYTHING IN JOIN CACHE");
+		return NULL;
+ 	}
  	
-	// Nothing in the stream, return NULL
- 	// Read from the stream
 	scan = (StreamScan *) node->ss.ps.plan;
 	decoder = GetStreamEventDecoder(sbs->encoding);
 	tup = DecodeStreamEvent(sbs->event, decoder, scan->desc);
@@ -97,7 +107,6 @@ StreamScanNext(StreamScanState *node)
 		TupleDesc	typeinfo = slot->tts_tupleDescriptor;
 		int			natts = typeinfo->natts;
 		// Copy out the slot contents
-		Datum values[natts];
 		bool nulls[natts];
 		bool replaces[natts];
 		HeapTuple newtup;
@@ -107,22 +116,28 @@ StreamScanNext(StreamScanState *node)
 		bool		isnull;
 		Oid			typoutput;
 		bool		typisvarlena;
+		Datum       *row;
 
-		// INIT	
+		oldcontext = MemoryContextSwitchTo(CacheMemoryContext);	
+
+		/* Init cache row */
 		MemSet(replaces, false, sizeof(replaces));
 		MemSet(nulls, false, natts);
-		MemSet(values, 0, sizeof(values));
-		// Set VALUES
-		slot_getallattrs(slot); // All the attr,val pairs  in the row
-		for (i = 0; i < natts; ++i)
-		{
-			datumStore[writeIdx][i] = (Datum *) heap_getattr(slot->tts_tuple, i+1, slot->tts_tupleDescriptor, &isnull);
-		}
-		writeIdx++;
-		if (writeIdx == 99)
-			elog(LOG,"ERROR tuplestore FUL #################################L");
-	}
+		row = (Datum *)palloc(natts * sizeof(Datum));
 
+		/* populate cache row */
+		slot_getallattrs(slot); // All the attr,val pairs  in the row
+		for (i = 0; i < natts; 	++i)
+		{
+			row[i] = (Datum *) heap_getattr(slot->tts_tuple, i+1, slot->tts_tupleDescriptor, &isnull);
+		}
+
+		/* Add to the cache */
+		datumCache = lappend(datumCache, row);
+		elog(LOG,"cache size %d",list_length(datumCache));
+		MemoryContextSwitchTo(oldcontext);	
+
+	}
 
 	return slot;
 }
@@ -131,7 +146,11 @@ void
 ExecReScanStreamScan(StreamScanState* node)
 {
 	elog(LOG,"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% RESCANNING TUPLE STORE");
-	readIdx = 0;
+	if (datumCache != NIL)
+	{
+		elog(LOG,"cache size %d",list_length(datumCache));
+		cachedRow =list_head(datumCache);
+	}
 }
 
 StreamScanState *
@@ -143,6 +162,7 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 	state = makeNode(StreamScanState);
 	state->ss.ps.plan = (Plan *) node;
 	state->ss.ps.state = estate;
+	InitStreamJoinCache();
 
 	/*
 	 * Miscellaneous initialization

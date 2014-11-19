@@ -20,5 +20,6 @@ extern void CloseHeapScan(StreamTableScanState *node);
 extern void ExecReScanStreamScan(StreamScanState *node);
 extern bool IsScanningJoinCache();
 extern void ClearStreamJoinCache();
+extern void InitStreamJoinCache();
 
 #endif   /* NODESTREAMSCAN_H */
