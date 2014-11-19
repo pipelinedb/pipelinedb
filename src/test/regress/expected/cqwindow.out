@@ -1,6 +1,7 @@
-CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PARTITION BY key ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM stream;
-\d+ cqwindow0_pdb;
-                             Table "public.cqwindow0_pdb"
+SET debug_sync_stream_insert = 'on';
+CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PARTITION BY key ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM cqwindow_stream;
+\d+ cqwindow0_mrel0;
+                            Table "public.cqwindow0_mrel0"
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
  key    | text(0)                  |           | extended |              | 
@@ -15,33 +16,33 @@ CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PART
  key    | text(0) |           | extended | 
  sum    | numeric |           | main     | 
 View definition:
- SELECT cqwindow0_pdb.key,
-    sum(cqwindow0_pdb._1, NULL::numeric(65535,65532)) OVER (PARTITION BY cqwindow0_pdb.key ORDER BY cqwindow0_pdb._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
-   FROM cqwindow0_pdb;
+ SELECT cqwindow0_mrel0.key,
+    sum(cqwindow0_mrel0._1, NULL::numeric(65535,65532)) OVER (PARTITION BY cqwindow0_mrel0.key ORDER BY cqwindow0_mrel0._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
+   FROM cqwindow0_mrel0;
 
 ACTIVATE cqwindow0;
-INSERT INTO stream (key, x) VALUES ('a', 1), ('b', 2);
+INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2);
 SELECT pg_sleep(1);
  pg_sleep 
 ----------
  
 (1 row)
 
-INSERT INTO stream (key, x) VALUES ('a', 3), ('b', 4);
+INSERT INTO cqwindow_stream (key, x) VALUES ('a', 3), ('b', 4);
 SELECT pg_sleep(1);
  pg_sleep 
 ----------
  
 (1 row)
 
-INSERT INTO stream (key, x) VALUES ('a', 5), ('b', 6);
+INSERT INTO cqwindow_stream (key, x) VALUES ('a', 5), ('b', 6);
 SELECT pg_sleep(1);
  pg_sleep 
 ----------
  
 (1 row)
 
-INSERT INTO stream (key, x) VALUES ('a', 7), ('b', 8);
+INSERT INTO cqwindow_stream (key, x) VALUES ('a', 7), ('b', 8);
 DEACTIVATE cqwindow0;
 SELECT * FROM cqwindow0 ORDER BY key;
  key | sum 
@@ -56,9 +57,9 @@ SELECT * FROM cqwindow0 ORDER BY key;
  b   |  14
 (8 rows)
 
-CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITION BY key ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM stream;
-\d+ cqwindow1_pdb;
-                             Table "public.cqwindow1_pdb"
+CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITION BY key ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM cqwindow_stream;
+\d+ cqwindow1_mrel0;
+                            Table "public.cqwindow1_mrel0"
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
  key    | text(0)                  |           | extended |              | 
@@ -73,33 +74,33 @@ CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITIO
  key    | text(0) |           | extended | 
  avg    | numeric |           | main     | 
 View definition:
- SELECT cqwindow1_pdb.key,
-    avg(cqwindow1_pdb._1, NULL::numeric(65535,65532)) OVER (PARTITION BY cqwindow1_pdb.key ORDER BY cqwindow1_pdb._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
-   FROM cqwindow1_pdb;
+ SELECT cqwindow1_mrel0.key,
+    avg(cqwindow1_mrel0._1, NULL::numeric(65535,65532)) OVER (PARTITION BY cqwindow1_mrel0.key ORDER BY cqwindow1_mrel0._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
+   FROM cqwindow1_mrel0;
 
 ACTIVATE cqwindow1;
-INSERT INTO stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);
+INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);
 SELECT pg_sleep(1);
  pg_sleep 
 ----------
  
 (1 row)
 
-INSERT INTO stream (key, x) VALUES ('a', 4), ('b', 5), ('b', 6);
+INSERT INTO cqwindow_stream (key, x) VALUES ('a', 4), ('b', 5), ('b', 6);
 SELECT pg_sleep(1);
  pg_sleep 
 ----------
  
 (1 row)
 
-INSERT INTO stream (key, x) VALUES ('a', 7), ('b', 8), ('a', 9);
+INSERT INTO cqwindow_stream (key, x) VALUES ('a', 7), ('b', 8), ('a', 9);
 SELECT pg_sleep(1);
  pg_sleep 
 ----------
  
 (1 row)
 
-INSERT INTO stream (key, x) VALUES ('a', 10), ('b', 11), ('b', 12);
+INSERT INTO cqwindow_stream (key, x) VALUES ('a', 10), ('b', 11), ('b', 12);
 DEACTIVATE cqwindow1;
 SELECT * FROM cqwindow1 ORDER BY key;
  key |        avg         

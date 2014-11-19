@@ -117,4 +117,9 @@ test: cqanalyze cqcreate cqactivate cqsanity cqsum cqswsum cqavg cqswavg cqcount
 # ----------
 # Another group of parallel tests
 # ----------
+test: cqvacuum
+
+# ----------
+# Another group of parallel tests
+# ----------
 test: pipeline_stream

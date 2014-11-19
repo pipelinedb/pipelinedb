@@ -30,11 +30,12 @@ CATALOG(pipeline_query,4242) BKI_WITHOUT_OIDS
 	int32		id;
 	NameData	name;
 	char		state;
+	NameData	matrelname;
+	bool		gc;
 	int32 		batchsize;
 	int32 		maxwaitms;
 	int32		emptysleepms;
 	int16		parallelism;
-
 #ifdef CATALOG_VARLEN
 	text		query;
 #endif
@@ -51,15 +52,17 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query				8
+#define Natts_pipeline_query			10
 #define Anum_pipeline_query_id			1
-#define Anum_pipeline_query_name			2
+#define Anum_pipeline_query_name		2
 #define Anum_pipeline_query_state 		3
-#define Anum_pipeline_query_batchsize		4
-#define Anum_pipeline_query_maxwaitms 	5
-#define Anum_pipeline_query_emptysleepms 	6
-#define Anum_pipeline_query_parallelism	7
-#define Anum_pipeline_query_query 		8
+#define Anum_pipeline_query_matrelname	4
+#define Anum_pipeline_query_gc			5
+#define Anum_pipeline_query_batchsize	6
+#define Anum_pipeline_query_maxwaitms 	7
+#define Anum_pipeline_query_emptysleepms 8
+#define Anum_pipeline_query_parallelism	9
+#define Anum_pipeline_query_query 		10
 
 /* ----------------
  *		query states
@@ -73,8 +76,8 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  * ----------------
  */
 #define CQ_BATCH_SIZE_KEY 	"batchsize"
-#define CQ_SLEEP_MS_KEY			"emptysleepms"
-#define CQ_WAIT_MS_KEY			"maxwaitms"
+#define CQ_SLEEP_MS_KEY		"emptysleepms"
+#define CQ_WAIT_MS_KEY		"maxwaitms"
 #define CQ_PARALLELISM_KEY	"parallelism"
 
 #define CQ_DEFAULT_BATCH_SIZE 	1000

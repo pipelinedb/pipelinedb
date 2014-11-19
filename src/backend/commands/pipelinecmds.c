@@ -24,6 +24,8 @@
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "catalog/toasting.h"
+#include "executor/execdesc.h"
+#include "executor/tstoreReceiver.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -35,8 +37,16 @@
 #include "pipeline/stream.h"
 #include "pipeline/streambuf.h"
 #include "regex/regex.h"
+#include "tcop/dest.h"
+#include "tcop/pquery.h"
+#include "tcop/tcopprot.h"
 #include "utils/builtins.h"
+#include "utils/lsyscache.h"
+#include "utils/memutils.h"
+#include "utils/palloc.h"
+#include "utils/portal.h"
 #include "utils/rel.h"
+#include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
 /* Whether or not to block till the events are consumed by a cv
@@ -45,26 +55,9 @@
  */
 bool DebugSyncStreamInsert;
 
-#define CQ_TABLE_SUFFIX "_pdb"
+#define CQ_TABLE_SUFFIX "_mrel"
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
-
-/*
- * Appends a suffix to a string, ensuring that the result fits
- * in a NameData
- */
-static char *
-append_suffix(char *base, char *suffix)
-{
-	char relname[NAMEDATALEN];
-
-	/* we truncate the CV name if needed */
-	int chunk = Min(strlen(base), NAMEDATALEN - strlen(suffix));
-	strcpy(relname, base);
-	strcpy(&relname[chunk], suffix);
-
-	return strdup(relname);
-}
 
 static ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)
@@ -92,16 +85,34 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 /*
  * GetCQMatRelationName
  *
- * Returns the name of the given CV's underlying materialization table
+ * Returns a unique name for the given CV's underlying materialization table
  */
-char *
-GetCQMatRelationName(char *cvname)
+static char *
+get_unique_matrel_name(char *cvname, char *nspname)
 {
-	/*
-	 * The name of the underlying materialized table should
-	 * be CV name suffixed with "_pdb".
-	 */
-	return append_suffix(cvname, CQ_TABLE_SUFFIX);
+	char relname[NAMEDATALEN];
+	int i = 0;
+	StringInfoData suffix;
+	Oid nspoid;
+
+	if (nspname != NULL)
+		nspoid = GetSysCacheOid1(NAMESPACENAME, CStringGetDatum(nspname));
+	else
+		nspoid = InvalidOid;
+
+	initStringInfo(&suffix);
+	memset(relname, 0, NAMEDATALEN);
+	strcpy(relname, cvname);
+
+	while (true)
+	{
+		appendStringInfo(&suffix, "%s%d", CQ_TABLE_SUFFIX, i);
+		strcpy(&relname[Min(strlen(cvname), NAMEDATALEN - strlen(suffix.data))], suffix.data);
+		resetStringInfo(&suffix);
+		if (!OidIsValid(get_relname_relid(relname, nspoid)))
+			break;
+	}
+	return pstrdup(relname);
 }
 
 /*
@@ -192,7 +203,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	bool saveAllowSystemTableMods;
 
 	view = stmt->into->rel;
-	mat_relation = makeRangeVar(view->schemaname, GetCQMatRelationName(view->relname), -1);
+	mat_relation = makeRangeVar(view->schemaname, get_unique_matrel_name(view->relname, view->schemaname), -1);
 
 	/*
 	 * Check if CV already exists?
@@ -309,7 +320,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	RegisterContinuousView(view, querystring);
+	RegisterContinuousView(view, querystring, mat_relation, IsSlidingWindowSelectStmt(viewselect));
 
 	/*
 	 * Index the materialization table smartly if we can
@@ -360,15 +371,15 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 
 		tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 		if (!HeapTupleIsValid(tuple))
-		{
 			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
-		}
-
 		row = (Form_pipeline_query) GETSTRUCT(tuple);
 		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
-		{
 			elog(ERROR, "continuous view \"%s\" is currently active; can't be dropped", rv->relname);
-		}
+
+		/*
+		 * Add object for the CQ's underlying materialization table.
+		 */
+		relations = lappend(relations, list_make1(makeString(GetMatRelationName(rv->relname))));
 
 		/*
 		 * Remove the view from the pipeline_query table
@@ -382,11 +393,6 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		 * see the changes already made.
 		 */
 		CommandCounterIncrement();
-
-		/*
-		 * Add object for the CQ's underlying materialization table.
-		 */
-		relations = lappend(relations, list_make1(makeString(GetCQMatRelationName(rv->relname))));
 	}
 
 	/*
@@ -404,11 +410,114 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 
 static
 void
-RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CQProcState *cvmetadata)
+RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CQProcState *procstate)
 {
-	RunContinuousQueryProcess(CQCombiner, cvname, state, &cvmetadata->combiner);
-	RunContinuousQueryProcess(CQWorker, cvname, state, &cvmetadata->worker);
-	RunContinuousQueryProcess(CQGarbageCollector, cvname, state, &cvmetadata->gc);
+	RunContinuousQueryProcess(CQCombiner, cvname, state, &procstate->combiner);
+	RunContinuousQueryProcess(CQWorker, cvname, state, &procstate->worker);
+}
+
+static void
+get_views(BaseContinuousViewStmt *stmt)
+{
+	CommandDest dest = DestTuplestore;
+	Tuplestorestate *store;
+	Node *parsetree;
+	List *querytree_list;
+	PlannedStmt *plan;
+	Portal portal;
+	DestReceiver *receiver;
+	ResTarget *resTarget;
+	ColumnRef *colRef;
+	SelectStmt *selectStmt;
+	TupleTableSlot *slot;
+	QueryDesc *queryDesc;
+	MemoryContext oldcontext;
+	MemoryContext runctx;
+
+	if (stmt->views != NIL)
+		return;
+
+	if (!stmt->whereClause)
+	{
+		stmt->views = GetAllContinuousViewNames();
+		return;
+	}
+
+	runctx = AllocSetContextCreate(CurrentMemoryContext,
+			"CQAutoVacuumContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	oldcontext = MemoryContextSwitchTo(runctx);
+
+	resTarget = makeNode(ResTarget);
+	colRef = makeNode(ColumnRef);
+	colRef->fields = list_make1(makeString("name"));
+	resTarget->val = (Node *) colRef;
+	selectStmt =  makeNode(SelectStmt);
+	selectStmt->targetList = list_make1(resTarget);
+	selectStmt->fromClause = list_make1(makeRangeVar(NULL, "pipeline_query", -1));;
+	selectStmt->whereClause = stmt->whereClause;
+	parsetree = (Node *) selectStmt;
+
+	querytree_list = pg_analyze_and_rewrite(parsetree, NULL,
+			NULL, 0);
+	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	portal = CreatePortal("__get_continuous_views__", true, true);
+	portal->visible = false;
+
+	store = tuplestore_begin_heap(true, true, work_mem);
+	receiver = CreateDestReceiver(dest);
+	SetTuplestoreDestReceiverParams(receiver, store, PortalGetHeapMemory(portal), true);
+
+	PortalDefineQuery(portal,
+			NULL,
+			NULL,
+			"SELECT",
+			list_make1(plan),
+			NULL);
+
+	PortalStart(portal, NULL, 0, GetActiveSnapshot());
+
+	(void) PortalRun(portal,
+			FETCH_ALL,
+			true,
+			receiver,
+			receiver,
+			NULL);
+
+	queryDesc = PortalGetQueryDesc(portal);
+	slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
+	foreach_tuple(slot, store)
+	{
+		bool isnull;
+		Datum *tmp;
+		char *viewName;
+
+		slot_getallattrs(slot);
+		tmp = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
+		/*
+		 * Must change context back to old context here, because we're going
+		 * to be using these RangeVars we create after we reset the runctx.
+		 */
+		MemoryContextSwitchTo(oldcontext);
+		viewName = pstrdup(NameStr(*DatumGetName(tmp)));
+		stmt->views = lappend(stmt->views, makeRangeVar(NULL, viewName, -1));
+		oldcontext = MemoryContextSwitchTo(runctx);
+	}
+
+	(*receiver->rDestroy) (receiver);
+	tuplestore_end(store);
+
+	PortalDrop(portal, false);
+	PopActiveSnapshot();
+
+	MemoryContextReset(runctx);
+	MemoryContextSwitchTo(oldcontext);
 }
 
 int
@@ -419,6 +528,8 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	int fail = 0;
 	CQProcState *entry;
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+
+	get_views((BaseContinuousViewStmt *) stmt);
 
 	foreach(lc, stmt->views)
 	{
@@ -512,6 +623,8 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	ListCell *lc;
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
+	get_views((BaseContinuousViewStmt *) stmt);
+
 	foreach(lc, stmt->views)
 	{
 		RangeVar *rv = (RangeVar *) lfirst(lc);
@@ -567,7 +680,7 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 		if (!IsAContinuousView(rv))
 			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
 
-		rv->relname = GetCQMatRelationName(rv->relname);
+		rv->relname = GetMatRelationName(rv->relname);
 	}
 
 	/* Call TRUNCATE on the backing view table(s). */

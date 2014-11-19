@@ -35,6 +35,7 @@
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "optimizer/planner.h"
+#include "pipeline/cqvacuum.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
 #include "storage/predicate.h"
@@ -760,6 +761,7 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 				tups_recently_dead = 0;
 	int			elevel = verbose ? INFO : DEBUG2;
 	PGRUsage	ru0;
+	CQVacuumContext *cqvcontext;
 
 	pg_rusage_init(&ru0);
 
@@ -772,6 +774,8 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 		OldIndex = index_open(OIDOldIndex, AccessExclusiveLock);
 	else
 		OldIndex = NULL;
+
+	cqvcontext = CreateCQVacuumContext(OldHeap);
 
 	/*
 	 * Their tuple descriptors should be exactly alike, but here we only need
@@ -1020,6 +1024,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
 
+		if (!isdead)
+			isdead = ShouldVacuumCQTuple(cqvcontext, tuple);
+
 		if (isdead)
 		{
 			tups_vacuumed += 1;
@@ -1097,6 +1104,7 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 					   pg_rusage_show(&ru0))));
 
 	/* Clean up */
+	FreeCQVacuumContext(cqvcontext);
 	pfree(values);
 	pfree(isnull);
 

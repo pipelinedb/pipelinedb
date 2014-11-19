@@ -82,6 +82,7 @@
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "pipeline/cqvacuum.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
@@ -2720,9 +2721,10 @@ relation_needs_vacanalyze(Oid relid,
 
 	if (PointerIsValid(tabentry))
 	{
+		uint64_t cqvactuples = NumCQVacuumTuples(relid);
 		reltuples = classForm->reltuples;
-		vactuples = tabentry->n_dead_tuples;
-		anltuples = tabentry->changes_since_analyze;
+		vactuples = tabentry->n_dead_tuples + cqvactuples;
+		anltuples = tabentry->changes_since_analyze + cqvactuples;
 
 		vacthresh = (float4) vac_base_thresh + vac_scale_factor * reltuples;
 		anlthresh = (float4) anl_base_thresh + anl_scale_factor * reltuples;

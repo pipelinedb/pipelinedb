@@ -128,7 +128,7 @@ GetAllContinuousViewNames(void)
 	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		char *s = strdup(NameStr(row->name));
+		char *s = pstrdup(NameStr(row->name));
 		RangeVar *rv = makeRangeVar(NULL, s, -1);
 
 		result = lappend(result, rv);
@@ -146,13 +146,14 @@ GetAllContinuousViewNames(void)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 void
-RegisterContinuousView(RangeVar *name, const char *query_string)
+RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matrelname, bool gc)
 {
 	Relation	pipeline_query;
 	HeapTuple	tup;
 	bool 		nulls[Natts_pipeline_query];
 	Datum 		values[Natts_pipeline_query];
 	NameData 	name_data;
+	NameData	matrelname_data;
 
 	if (!name)
 		ereport(ERROR,
@@ -164,7 +165,7 @@ RegisterContinuousView(RangeVar *name, const char *query_string)
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("query is null")));
 
-	MemSet(nulls, 0, Natts_pipeline_query);
+	MemSet(nulls, 0, sizeof(nulls));
 
 	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
 
@@ -179,6 +180,13 @@ RegisterContinuousView(RangeVar *name, const char *query_string)
 	values[Anum_pipeline_query_maxwaitms - 1] = Int32GetDatum(CQ_DEFAULT_WAIT_MS);
 	values[Anum_pipeline_query_emptysleepms - 1] = Int32GetDatum(CQ_DEFAULT_SLEEP_MS);
 	values[Anum_pipeline_query_parallelism - 1] = Int16GetDatum(CQ_DEFAULT_PARALLELISM);
+
+	/* Copy matrelname */
+	namestrcpy(&matrelname_data, matrelname->relname);
+	values[Anum_pipeline_query_matrelname - 1] = NameGetDatum(&matrelname_data);
+
+	/* Copy gc flag */
+	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
 
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);
 
@@ -318,6 +326,7 @@ GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	cv_state->maxwaitms = row->maxwaitms;
 	cv_state->emptysleepms = row->emptysleepms;
 	cv_state->parallelism = row->parallelism;
+	namestrcpy(&cv_state->matrelname, NameStr(row->matrelname));
 }
 
 /*
@@ -327,7 +336,7 @@ GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
  * catalog table by reading them from cv_state.
  */
 void
-SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pipeline_query)
+SetContinousViewState(RangeVar *rv, ContinuousViewState *cv_state, Relation pipeline_query)
 {
 	HeapTuple tuple;
 	HeapTuple newtuple;
@@ -335,11 +344,11 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pi
 	bool replaces[Natts_pipeline_query];
 	Datum values[Natts_pipeline_query];
 
-	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(name->relname));
+	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "continuous view \"%s\" does not exist",
-				name->relname);
+				rv->relname);
 
 	MemSet(values, 0, sizeof(values));
 	MemSet(nulls, false, sizeof(nulls));
@@ -356,15 +365,12 @@ SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pi
 
 	replaces[Anum_pipeline_query_parallelism - 1] = true;
 	values[Anum_pipeline_query_parallelism - 1] = Int16GetDatum(cv_state->parallelism);
-
 	newtuple = heap_modify_tuple(tuple, pipeline_query->rd_att,
 			values, nulls, replaces);
-
 	simple_heap_update(pipeline_query, &newtuple->t_self, newtuple);
 	CatalogUpdateIndexes(pipeline_query, newtuple);
 
 	CommandCounterIncrement();
-
 	ReleaseSysCache(tuple);
 }
 
@@ -389,6 +395,48 @@ IsContinuousViewActive(RangeVar *name)
 	}
 
 	return isActive;
+}
+
+/*
+ * GetMatRelationName
+ */
+char *GetMatRelationName(char *cvname)
+{
+	HeapTuple tuple;
+	Form_pipeline_query row;
+
+	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(cvname));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "continuous view \"%s\" does not exist", cvname);
+	row = (Form_pipeline_query) GETSTRUCT(tuple);
+	ReleaseSysCache(tuple);
+	return pstrdup(NameStr(row->matrelname));
+}
+
+/*
+ * GetCVNameForMatRelationName
+ */
+char *
+GetCVNameForMatRelationName(char *matrelname)
+{
+	char *cvname = NULL;
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowShareLock);
+	HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_query, 0, NULL);
+	HeapTuple tup;
+
+	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
+		if (strcmp(matrelname, NameStr(row->matrelname)) == 0)
+		{
+			cvname = pstrdup(NameStr(row->name));
+			break;
+		}
+	}
+
+	heap_endscan(scan_desc);
+	heap_close(pipeline_query, RowShareLock);
+	return cvname;
 }
 
 /*
@@ -474,6 +522,24 @@ IsAContinuousView(RangeVar *name)
 		return false;
 	ReleaseSysCache(tuple);
 	return true;
+}
+/*
+ * GetGCFlag
+ */
+bool
+GetGCFlag(RangeVar *name)
+{
+	bool gc = false;
+	HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(name->relname));
+
+	if (HeapTupleIsValid(tuple))
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
+		gc = row->gc;
+		ReleaseSysCache(tuple);
+	}
+
+	return gc;
 }
 
 /*

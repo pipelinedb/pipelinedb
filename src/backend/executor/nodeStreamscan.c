@@ -16,7 +16,7 @@
 #include "pipeline/decode.h"
 #include "pipeline/streambuf.h"
 #include "access/htup_details.h"
-#include "access/xact.h"
+//#include "access/xact.h"
 #include "utils/memutils.h"
 
 ListCell   *cachedRow;
@@ -34,7 +34,6 @@ void
 ClearStreamJoinCache()
 {
 	ListCell *l;
-	elog(LOG,"*************************** CLEARING JOIN CACHE **************************");
 	scanning_join_cache = false;
 	list_free_deep(datumCache);
 
@@ -65,7 +64,6 @@ StreamScanNext(StreamScanState *node)
 
 	if ((sbs == NULL) && (cachedRow == NIL))
 	{
-		elog(LOG,"RETURN NOTHING IN STREAM OR CACHE *********************************");
 		return NULL;
 	}
 
@@ -78,7 +76,6 @@ StreamScanNext(StreamScanState *node)
 		bool 		nulls[natts];
 
 		oldcontext = MemoryContextSwitchTo(CacheMemoryContext);	
- 		elog(LOG,"READING FROM CACHE");
 		MemSet(nulls, false, natts);
 		tempHeapTuple = heap_form_tuple(slot->tts_tupleDescriptor, lfirst(cachedRow), nulls);
 		cachedRow = lnext(cachedRow);
@@ -91,7 +88,6 @@ StreamScanNext(StreamScanState *node)
  	}	
  	else if ((sbs == NULL) && (cachedRow == NIL))
  	{
-		elog(LOG,"READ EVERYTHING IN JOIN CACHE");
 		return NULL;
  	}
  	
@@ -102,7 +98,6 @@ StreamScanNext(StreamScanState *node)
 	UnpinStreamEvent(node->reader, sbs);
 
 	// Store the entry in the join cache 
-	elog(LOG,"COPYING TO CACHE SLOT******************");
 	{
 		TupleDesc	typeinfo = slot->tts_tupleDescriptor;
 		int			natts = typeinfo->natts;
@@ -134,7 +129,6 @@ StreamScanNext(StreamScanState *node)
 
 		/* Add to the cache */
 		datumCache = lappend(datumCache, row);
-		elog(LOG,"cache size %d",list_length(datumCache));
 		MemoryContextSwitchTo(oldcontext);	
 
 	}
@@ -145,10 +139,8 @@ StreamScanNext(StreamScanState *node)
 void
 ExecReScanStreamScan(StreamScanState* node)
 {
-	elog(LOG,"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% RESCANNING TUPLE STORE");
 	if (datumCache != NIL)
 	{
-		elog(LOG,"cache size %d",list_length(datumCache));
 		cachedRow =list_head(datumCache);
 	}
 }
@@ -156,7 +148,6 @@ ExecReScanStreamScan(StreamScanState* node)
 StreamScanState *
 ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 {
-	elog(LOG,"%%%%%%%%%%%%%%%% INIT STREAM SCAN");
 	StreamScanState *state;
 
 	state = makeNode(StreamScanState);

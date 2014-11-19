@@ -6,17 +6,23 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate0';
      1
 (1 row)
 
+SELECT gc FROM pipeline_query WHERE name='cqcreate0';
+ gc 
+----
+ f
+(1 row)
+
 \d+ cqcreate0;
                View "public.cqcreate0"
  Column |  Type   | Modifiers | Storage | Description 
 --------+---------+-----------+---------+-------------
  key    | integer |           | plain   | 
 View definition:
- SELECT cqcreate0_pdb.key
-   FROM cqcreate0_pdb;
+ SELECT cqcreate0_mrel0.key
+   FROM cqcreate0_mrel0;
 
-\d+ cqcreate0_pdb;
-                    Table "public.cqcreate0_pdb"
+\d+ cqcreate0_mrel0;
+                   Table "public.cqcreate0_mrel0"
  Column |  Type   | Modifiers | Storage | Stats target | Description 
 --------+---------+-----------+---------+--------------+-------------
  key    | integer |           | plain   |              | 
@@ -34,11 +40,11 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate1';
 -----------+------+-----------+----------+-------------
  substring | text |           | extended | 
 View definition:
- SELECT cqcreate1_pdb."substring"
-   FROM cqcreate1_pdb;
+ SELECT cqcreate1_mrel0."substring"
+   FROM cqcreate1_mrel0;
 
-\d+ cqcreate1_pdb;
-                     Table "public.cqcreate1_pdb"
+\d+ cqcreate1_mrel0;
+                    Table "public.cqcreate1_mrel0"
   Column   | Type | Modifiers | Storage  | Stats target | Description 
 -----------+------+-----------+----------+--------------+-------------
  substring | text |           | extended |              | 
@@ -57,12 +63,12 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate2';
  key    | integer |           | plain    | 
  s      | text    |           | extended | 
 View definition:
- SELECT cqcreate2_pdb.key,
-    cqcreate2_pdb.s
-   FROM cqcreate2_pdb;
+ SELECT cqcreate2_mrel0.key,
+    cqcreate2_mrel0.s
+   FROM cqcreate2_mrel0;
 
-\d+ cqcreate2_pdb;
-                     Table "public.cqcreate2_pdb"
+\d+ cqcreate2_mrel0;
+                    Table "public.cqcreate2_mrel0"
  Column |  Type   | Modifiers | Storage  | Stats target | Description 
 --------+---------+-----------+----------+--------------+-------------
  key    | integer |           | plain    |              | 
@@ -84,13 +90,13 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate3';
  count  | bigint  |           | plain    | 
  sum    | numeric |           | main     | 
 View definition:
- SELECT cqcreate3_pdb.key,
-    cqcreate3_pdb.count,
-    cqcreate3_pdb.sum
-   FROM cqcreate3_pdb;
+ SELECT cqcreate3_mrel0.key,
+    cqcreate3_mrel0.count,
+    cqcreate3_mrel0.sum
+   FROM cqcreate3_mrel0;
 
-\d+ cqcreate3_pdb;
-                     Table "public.cqcreate3_pdb"
+\d+ cqcreate3_mrel0;
+                    Table "public.cqcreate3_mrel0"
  Column |  Type   | Modifiers | Storage  | Stats target | Description 
 --------+---------+-----------+----------+--------------+-------------
  key    | text(0) |           | extended |              | 
@@ -98,7 +104,7 @@ View definition:
  sum    | numeric |           | main     |              | 
  _0     | bytea   |           | extended |              | 
 Indexes:
-    "cqcreate3_pdb_key_idx" UNIQUE, btree (key)
+    "cqcreate3_mrel0_key_idx" UNIQUE, btree (key)
 
 CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value::int8) FROM stream GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate4';
@@ -114,12 +120,12 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate4';
  count  | bigint  |           | plain   | 
  sum    | numeric |           | main    | 
 View definition:
- SELECT cqcreate4_pdb.count,
-    cqcreate4_pdb.sum
-   FROM cqcreate4_pdb;
+ SELECT cqcreate4_mrel0.count,
+    cqcreate4_mrel0.sum
+   FROM cqcreate4_mrel0;
 
-\d+ cqcreate4_pdb;
-                     Table "public.cqcreate4_pdb"
+\d+ cqcreate4_mrel0;
+                    Table "public.cqcreate4_mrel0"
  Column |  Type   | Modifiers | Storage  | Stats target | Description 
 --------+---------+-----------+----------+--------------+-------------
  count  | bigint  |           | plain    |              | 
@@ -127,7 +133,7 @@ View definition:
  _1     | bytea   |           | extended |              | 
  _0     | text(0) |           | extended |              | 
 Indexes:
-    "cqcreate4_pdb__0_idx" UNIQUE, btree (_0)
+    "cqcreate4_mrel0__0_idx" UNIQUE, btree (_0)
 
 -- Sliding window queries
 CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
@@ -137,24 +143,30 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate5';
      1
 (1 row)
 
+SELECT gc FROM pipeline_query WHERE name='cqcreate5';
+ gc 
+----
+ t
+(1 row)
+
 \d+ cqcreate5;
                 View "public.cqcreate5"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | text(0) |           | extended | 
 View definition:
- SELECT cqcreate5_pdb.key
-   FROM cqcreate5_pdb
-  WHERE cqcreate5_pdb._0 > (clock_timestamp() - '@ 5 secs'::interval second);
+ SELECT cqcreate5_mrel0.key
+   FROM cqcreate5_mrel0
+  WHERE cqcreate5_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second);
 
-\d+ cqcreate5_pdb;
-                               Table "public.cqcreate5_pdb"
+\d+ cqcreate5_mrel0;
+                              Table "public.cqcreate5_mrel0"
  Column |            Type             | Modifiers | Storage  | Stats target | Description 
 --------+-----------------------------+-----------+----------+--------------+-------------
  key    | text(0)                     |           | extended |              | 
  _0     | timestamp(0) with time zone |           | plain    |              | 
 Indexes:
-    "cqcreate5_pdb__0_idx" btree (_0)
+    "cqcreate5_mrel0__0_idx" btree (_0)
 
 CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate6';
@@ -163,26 +175,32 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate6';
      1
 (1 row)
 
+SELECT gc FROM pipeline_query WHERE name='cqcreate5';
+ gc 
+----
+ t
+(1 row)
+
 \d+ cqcreate6;
                View "public.cqcreate6"
  Column |  Type   | Modifiers | Storage | Description 
 --------+---------+-----------+---------+-------------
  count  | numeric |           | main    | 
 View definition:
- SELECT sum(cqcreate6_pdb.count) AS count
-   FROM cqcreate6_pdb
-  WHERE cqcreate6_pdb._0 > (clock_timestamp() - '@ 5 secs'::interval second)
-  GROUP BY cqcreate6_pdb._1;
+ SELECT sum(cqcreate6_mrel0.count) AS count
+   FROM cqcreate6_mrel0
+  WHERE cqcreate6_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second)
+  GROUP BY cqcreate6_mrel0._1;
 
-\d+ cqcreate6_pdb;
-                             Table "public.cqcreate6_pdb"
+\d+ cqcreate6_mrel0;
+                            Table "public.cqcreate6_mrel0"
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
  count  | bigint                   |           | plain    |              | 
  _0     | timestamp with time zone |           | plain    |              | 
  _1     | text(0)                  |           | extended |              | 
 Indexes:
-    "cqcreate6_pdb__0_idx" btree (_0)
+    "cqcreate6_mrel0__0_idx" btree (_0)
 
 -- These use a combine state column
 CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, AVG(y::integer) AS int_avg, AVG(ts0::timestamp - ts1::timestamp) AS internal_avg FROM stream GROUP BY key;
@@ -195,14 +213,14 @@ CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, A
  int_avg      | numeric          |           | main     | 
  internal_avg | interval         |           | plain    | 
 View definition:
- SELECT cvavg_pdb.key,
-    cvavg_pdb.float_avg,
-    cvavg_pdb.int_avg,
-    cvavg_pdb.internal_avg
-   FROM cvavg_pdb;
+ SELECT cvavg_mrel0.key,
+    cvavg_mrel0.float_avg,
+    cvavg_mrel0.int_avg,
+    cvavg_mrel0.internal_avg
+   FROM cvavg_mrel0;
 
-\d+ cvavg_pdb;
-                               Table "public.cvavg_pdb"
+\d+ cvavg_mrel0;
+                              Table "public.cvavg_mrel0"
     Column    |        Type        | Modifiers | Storage  | Stats target | Description 
 --------------+--------------------+-----------+----------+--------------+-------------
  key          | text(0)            |           | extended |              | 
@@ -213,7 +231,7 @@ View definition:
  internal_avg | interval           |           | plain    |              | 
  _2           | interval[]         |           | extended |              | 
 Indexes:
-    "cvavg_pdb_key_idx" UNIQUE, btree (key)
+    "cvavg_mrel0_key_idx" UNIQUE, btree (key)
 
 CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM stream;
 \d+ cvjson;
@@ -222,11 +240,11 @@ CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM stre
 -----------+------+-----------+----------+-------------
  count_col | json |           | extended | 
 View definition:
- SELECT cvjson_pdb.count_col
-   FROM cvjson_pdb;
+ SELECT cvjson_mrel0.count_col
+   FROM cvjson_mrel0;
 
-\d+ cvjson_pdb;
-                       Table "public.cvjson_pdb"
+\d+ cvjson_mrel0;
+                      Table "public.cvjson_mrel0"
   Column   | Type  | Modifiers | Storage  | Stats target | Description 
 -----------+-------+-----------+----------+--------------+-------------
  count_col | json  |           | extended |              | 
@@ -239,11 +257,11 @@ CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::int
 -----------------+------+-----------+----------+-------------
  json_object_agg | json |           | extended | 
 View definition:
- SELECT cvjsonobj_pdb.json_object_agg
-   FROM cvjsonobj_pdb;
+ SELECT cvjsonobj_mrel0.json_object_agg
+   FROM cvjsonobj_mrel0;
 
-\d+ cvjsonobj_pdb;
-                        Table "public.cvjsonobj_pdb"
+\d+ cvjsonobj_mrel0;
+                       Table "public.cvjsonobj_mrel0"
      Column      | Type  | Modifiers | Storage  | Stats target | Description 
 -----------------+-------+-----------+----------+--------------+-------------
  json_object_agg | json  |           | extended |              | 
@@ -257,11 +275,11 @@ CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(x::integer + y::float8) AS sum_col 
 ---------+------------------+-----------+---------+-------------
  sum_col | double precision |           | plain   | 
 View definition:
- SELECT cvcount_pdb.sum_col
-   FROM cvcount_pdb;
+ SELECT cvcount_mrel0.sum_col
+   FROM cvcount_mrel0;
 
-\d+ cvcount_pdb;
-                          Table "public.cvcount_pdb"
+\d+ cvcount_mrel0;
+                         Table "public.cvcount_mrel0"
  Column  |       Type       | Modifiers | Storage | Stats target | Description 
 ---------+------------------+-----------+---------+--------------+-------------
  sum_col | double precision |           | plain   |              | 
@@ -273,11 +291,11 @@ CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM stream;
 -----------+--------+-----------+---------+-------------
  count_col | bigint |           | plain   | 
 View definition:
- SELECT cvarray_pdb.count_col
-   FROM cvarray_pdb;
+ SELECT cvarray_mrel0.count_col
+   FROM cvarray_mrel0;
 
-\d+ cvarray_pdb;
-                      Table "public.cvarray_pdb"
+\d+ cvarray_mrel0;
+                     Table "public.cvarray_mrel0"
   Column   |  Type  | Modifiers | Storage | Stats target | Description 
 -----------+--------+-----------+---------+--------------+-------------
  count_col | bigint |           | plain   |              | 
@@ -290,19 +308,19 @@ CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text,
  key        | text(0) |           | extended | 
  string_agg | text    |           | extended | 
 View definition:
- SELECT cvtext_pdb.key,
-    cvtext_pdb.string_agg
-   FROM cvtext_pdb;
+ SELECT cvtext_mrel0.key,
+    cvtext_mrel0.string_agg
+   FROM cvtext_mrel0;
 
-\d+ cvtext_pdb;
-                        Table "public.cvtext_pdb"
+\d+ cvtext_mrel0;
+                       Table "public.cvtext_mrel0"
    Column   |  Type   | Modifiers | Storage  | Stats target | Description 
 ------------+---------+-----------+----------+--------------+-------------
  key        | text(0) |           | extended |              | 
  string_agg | text    |           | extended |              | 
  _0         | bytea   |           | extended |              | 
 Indexes:
-    "cvtext_pdb_key_idx" UNIQUE, btree (key)
+    "cvtext_mrel0_key_idx" UNIQUE, btree (key)
 
 -- Check for expressions containing aggregates
 CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM stream;
@@ -312,11 +330,11 @@ CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM stream;
 ----------+--------+-----------+---------+-------------
  ?column? | bigint |           | plain   | 
 View definition:
- SELECT cqaggexpr1_pdb._0 + cqaggexpr1_pdb._1
-   FROM cqaggexpr1_pdb;
+ SELECT cqaggexpr1_mrel0._0 + cqaggexpr1_mrel0._1
+   FROM cqaggexpr1_mrel0;
 
-\d+ cqaggexpr1_pdb;
-                   Table "public.cqaggexpr1_pdb"
+\d+ cqaggexpr1_mrel0;
+                  Table "public.cqaggexpr1_mrel0"
  Column |  Type  | Modifiers | Storage | Stats target | Description 
 --------+--------+-----------+---------+--------------+-------------
  _0     | bigint |           | plain   |              | 
@@ -330,12 +348,12 @@ CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::in
  key    | text(0)          |           | extended | 
  value  | double precision |           | plain    | 
 View definition:
- SELECT cqaggexpr2_pdb.key,
-    cqaggexpr2_pdb._0 + cqaggexpr2_pdb._1::double precision AS value
-   FROM cqaggexpr2_pdb;
+ SELECT cqaggexpr2_mrel0.key,
+    cqaggexpr2_mrel0._0 + cqaggexpr2_mrel0._1::double precision AS value
+   FROM cqaggexpr2_mrel0;
 
-\d+ cqaggexpr2_pdb;
-                          Table "public.cqaggexpr2_pdb"
+\d+ cqaggexpr2_mrel0;
+                         Table "public.cqaggexpr2_mrel0"
  Column |        Type        | Modifiers | Storage  | Stats target | Description 
 --------+--------------------+-----------+----------+--------------+-------------
  key    | text(0)            |           | extended |              | 
@@ -343,7 +361,7 @@ View definition:
  _2     | double precision[] |           | extended |              | 
  _1     | integer            |           | plain    |              | 
 Indexes:
-    "cqaggexpr2_pdb_key_idx" UNIQUE, btree (key)
+    "cqaggexpr2_mrel0_key_idx" UNIQUE, btree (key)
 
 CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
 \d+ cqaggexpr3;
@@ -353,21 +371,21 @@ CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM st
  key    | text(0) |           | extended | 
  value  | numeric |           | main     | 
 View definition:
- SELECT cqaggexpr3_pdb.key,
-    sum(cqaggexpr3_pdb.value) AS value
-   FROM cqaggexpr3_pdb
-  WHERE cqaggexpr3_pdb._0 > (clock_timestamp() - '@ 5 secs'::interval second)
-  GROUP BY cqaggexpr3_pdb.key;
+ SELECT cqaggexpr3_mrel0.key,
+    sum(cqaggexpr3_mrel0.value) AS value
+   FROM cqaggexpr3_mrel0
+  WHERE cqaggexpr3_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second)
+  GROUP BY cqaggexpr3_mrel0.key;
 
-\d+ cqaggexpr3_pdb;
-                             Table "public.cqaggexpr3_pdb"
+\d+ cqaggexpr3_mrel0;
+                            Table "public.cqaggexpr3_mrel0"
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
  key    | text(0)                  |           | extended |              | 
  value  | bigint                   |           | plain    |              | 
  _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
-    "cqaggexpr3_pdb__0_idx" btree (_0)
+    "cqaggexpr3_mrel0__0_idx" btree (_0)
 
 CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM stream GROUP BY key;
 \d+ cqaggexpr4;
@@ -377,19 +395,19 @@ CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS v
  key    | text(0)          |           | extended | 
  value  | double precision |           | plain    | 
 View definition:
- SELECT cqaggexpr4_pdb.key,
-    floor(cqaggexpr4_pdb._0) AS value
-   FROM cqaggexpr4_pdb;
+ SELECT cqaggexpr4_mrel0.key,
+    floor(cqaggexpr4_mrel0._0) AS value
+   FROM cqaggexpr4_mrel0;
 
-\d+ cqaggexpr4_pdb;
-                          Table "public.cqaggexpr4_pdb"
+\d+ cqaggexpr4_mrel0;
+                         Table "public.cqaggexpr4_mrel0"
  Column |        Type        | Modifiers | Storage  | Stats target | Description 
 --------+--------------------+-----------+----------+--------------+-------------
  key    | text(0)            |           | extended |              | 
  _0     | double precision   |           | plain    |              | 
  _1     | double precision[] |           | extended |              | 
 Indexes:
-    "cqaggexpr4_pdb_key_idx" UNIQUE, btree (key)
+    "cqaggexpr4_mrel0_key_idx" UNIQUE, btree (key)
 
 CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM stream GROUP BY k0, k1;
 \d+ cqgroupby
@@ -400,13 +418,13 @@ CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM 
  k1     | integer |           | plain    | 
  count  | bigint  |           | plain    | 
 View definition:
- SELECT cqgroupby_pdb.k0,
-    cqgroupby_pdb.k1,
-    cqgroupby_pdb.count
-   FROM cqgroupby_pdb;
+ SELECT cqgroupby_mrel0.k0,
+    cqgroupby_mrel0.k1,
+    cqgroupby_mrel0.count
+   FROM cqgroupby_mrel0;
 
-\d+ cqgroupby_pdb;
-                     Table "public.cqgroupby_pdb"
+\d+ cqgroupby_mrel0;
+                    Table "public.cqgroupby_mrel0"
  Column |  Type   | Modifiers | Storage  | Stats target | Description 
 --------+---------+-----------+----------+--------------+-------------
  k0     | text(0) |           | extended |              | 

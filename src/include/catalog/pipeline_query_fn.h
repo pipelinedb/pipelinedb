@@ -24,11 +24,12 @@ typedef struct ContinuousViewState
 	int32 	maxwaitms;
 	int32	emptysleepms;
 	int16	parallelism;
+	NameData matrelname;
 	CQProcessType ptype;
 } ContinuousViewState;
 
 List *GetAllContinuousViewNames(void);
-void RegisterContinuousView(RangeVar *name, const char *query_string);
+void RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar *matrelname, bool gc);
 bool MarkContinuousViewAsActive(RangeVar *name, Relation pipeline_query);
 bool MarkContinuousViewAsInactive(RangeVar *name, Relation pipeline_query);
 void SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pipeline_query);
@@ -37,6 +38,9 @@ bool IsContinuousViewActive(RangeVar *name);
 char *GetQueryStringOrNull(const char *cvname, bool selectonly);
 char *GetQueryString(const char *cvname, bool selectonly);
 bool IsAContinuousView(RangeVar *name);
+bool GetGCFlag(RangeVar *name);
 void MarkAllContinuousViewsAsInactive(void);
+char *GetMatRelationName(char *cvname);
+char *GetCVNameForMatRelationName(char *matrelname);
 
 #endif

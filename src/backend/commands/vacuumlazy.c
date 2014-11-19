@@ -50,6 +50,7 @@
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "pipeline/cqvacuum.h"
 #include "portability/instr_time.h"
 #include "postmaster/autovacuum.h"
 #include "storage/bufmgr.h"
@@ -436,6 +437,7 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 	BlockNumber next_not_all_visible_block;
 	bool		skipping_all_visible_blocks;
 	xl_heap_freeze_tuple *frozen;
+	CQVacuumContext *cqvcontext = CreateCQVacuumContext(onerel);
 
 	pg_rusage_init(&ru0);
 
@@ -885,6 +887,12 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 					break;
 			}
 
+			if (!tupgone && ShouldVacuumCQTuple(cqvcontext, &tuple))
+			{
+				tupgone = true;
+				all_visible = false;
+			}
+
 			if (tupgone)
 			{
 				lazy_record_dead_tuple(vacrelstats, &(tuple.t_self));
@@ -1018,8 +1026,15 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 		 */
 		else if (PageIsAllVisible(page) && has_dead_tuples)
 		{
-			elog(WARNING, "page containing dead tuples is marked as all-visible in relation \"%s\" page %u",
-				 relname, blkno);
+			/*
+			 * XXX(usmanm): If this relation requires a CQ vacuum and we have turned
+			 * the all_visible bit off then don't spit out the warning.
+			 * This happens because the disqualified tuples aren't really *dead* tuples
+			 * and so Postgres never marks the page as containing dead tuples.
+			 */
+			if (!cqvcontext || (cqvcontext && all_visible))
+				elog(WARNING, "page containing dead tuples is marked as all-visible in relation \"%s\" page %u",
+						relname, blkno);
 			PageClearAllVisible(page);
 			MarkBufferDirty(buf);
 			visibilitymap_clear(onerel, blkno, vmbuffer);
@@ -1042,6 +1057,7 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 			RecordPageWithFreeSpace(onerel, blkno, freespace);
 	}
 
+	FreeCQVacuumContext(cqvcontext);
 	pfree(frozen);
 
 	/* save stats for use later */

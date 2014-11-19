@@ -8,14 +8,14 @@ ACTIVATE test_int8_avg, test_int4_avg, test_int2_avg;
 INSERT INTO int_stream_cqavg (k, v) VALUES ('x', 1), ('x', 1), ('x', 1);
 INSERT INTO int_stream_cqavg (k, v) VALUES ('y', -10000), ('y', 10000), ('y', 0);
 DEACTIVATE test_int8_avg, test_int4_avg, test_int2_avg;;
-SELECT * FROM test_int4_avg_pdb ORDER BY k;
+SELECT * FROM test_int4_avg_mrel0 ORDER BY k;
  k |          avg           |  _0   
 ---+------------------------+-------
  x | 1.00000000000000000000 | {3,3}
  y | 0.00000000000000000000 | {3,0}
 (2 rows)
 
-SELECT * FROM test_int2_avg_pdb ORDER BY k;
+SELECT * FROM test_int2_avg_mrel0 ORDER BY k;
  k |          avg           |  _0   
 ---+------------------------+-------
  x | 1.00000000000000000000 | {3,3}
@@ -55,14 +55,14 @@ ACTIVATE test_float8_avg, test_float4_avg;
 INSERT INTO float_stream_cqavg (k, v) VALUES ('x', 1e6), ('x', -1e6), ('x', 10.0000001);
 INSERT INTO float_stream_cqavg (k, v) VALUES ('y', 0.0001), ('y', 0.00002), ('y', 155321233.1);
 DEACTIVATE test_float8_avg, test_float4_avg;
-SELECT * FROM test_float8_avg_pdb ORDER BY k;
+SELECT * FROM test_float8_avg_mrel0 ORDER BY k;
  k |       avg        |                    _0                    
 ---+------------------+------------------------------------------
  x | 3.33333336666667 | {3,10.0000001,2000000000100}
  y | 51773744.3667067 | {3,155321233.10012,2.41246854517045e+16}
 (2 rows)
 
-SELECT * FROM test_float4_avg_pdb ORDER BY k;
+SELECT * FROM test_float4_avg_mrel0 ORDER BY k;
  k |       avg        |                    _0                    
 ---+------------------+------------------------------------------
  x | 3.33333333333333 | {3,10,2000000000100}
@@ -116,7 +116,7 @@ INSERT INTO interval_stream_cqavg (k, ts0, ts1) VALUES ('x', '2014-01-01 00:00:0
 INSERT INTO interval_stream_cqavg (k, ts0, ts1) VALUES ('x', '2014-01-01 00:00:00', '2014-01-02 11:00:00');
 DEACTIVATE test_interval_avg;
 -- We truncated down to day, so the hours shouldn't have affected the averages
-SELECT * FROM test_interval_avg_pdb ORDER BY k;
+SELECT * FROM test_interval_avg_mrel0 ORDER BY k;
  k |   avg   |               _0               
 ---+---------+--------------------------------
  x | @ 1 day | {"@ 3 days","@ 0.000003 secs"}

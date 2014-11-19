@@ -118,10 +118,6 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 
 	ReleaseSysCache(tuple);
 
-	/* Add GC process, if needed */
-	if (IsSlidingWindowContinuousView(rv))
-		pg_size += 1;
-
 	return pg_size;
 }
 
@@ -363,7 +359,6 @@ TerminateCQProcs(int32 id)
 	CQProcState *entry = GetCQProcState(id);
 	TerminateBackgroundWorker(&entry->combiner);
 	TerminateBackgroundWorker(&entry->worker);
-	TerminateBackgroundWorker(&entry->gc);
 }
 
 /*
@@ -418,25 +413,6 @@ get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewStat
 }
 
 static PlannedStmt*
-get_gc_plan(char *cvname, const char *sql, ContinuousViewState *state)
-{
-	List		*parsetree_list;
-	SelectStmt	*selectstmt;
-	DeleteStmt	*delete_stmt;
-
-	parsetree_list = pg_parse_query(sql);
-	Assert(list_length(parsetree_list) == 1);
-
-	selectstmt = (SelectStmt *) linitial(parsetree_list);
-	delete_stmt = GetDeleteStmtForGC(cvname, selectstmt);
-
-	if (delete_stmt == NULL)
-		return NULL;
-
-	return get_plan_from_stmt(cvname, (Node *) delete_stmt, NULL, state, false);
-}
-
-static PlannedStmt*
 get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
 {
 	List		*parsetree_list;
@@ -485,6 +461,7 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	char *sql;
 	char completionTag[COMPLETION_TAG_BUFSIZE];
 	char *cvname;
+	char *matrelname;
 	MemoryContext planctxt = AllocSetContextCreate(TopMemoryContext,
 													"RunCQPlanContext",
 													ALLOCSET_DEFAULT_MINSIZE,
@@ -517,6 +494,7 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	 * 1. Plan the continuous query
 	 */
 	cvname = NameStr(args.cvname);
+	matrelname = NameStr(state.matrelname);
 	sql = pstrdup(args.query);
 	spfree(args.query);
 
@@ -528,20 +506,11 @@ run_cq(Datum d, char *additional, Size additionalsize)
 		case CQWorker:
 			plan = get_worker_plan(cvname, sql, &state);
 			break;
-		case CQGarbageCollector:
-			plan = get_gc_plan(cvname, sql, &state);
-			break;
 		default:
 			elog(ERROR, "unrecognized CQ process type: %d", state.ptype);
 	}
 
-	/* No plan? Terminate CQ process. */
-	if (plan == NULL)
-	{
-		return;
-	}
-
-	SetCQPlanRefs(plan);
+	SetCQPlanRefs(plan, matrelname);
 
 	/*
 	 * 2. Set up the portal to run it in
@@ -589,8 +558,6 @@ get_cq_proc_type_name(CQProcessType ptype)
 		return " [combiner]";
 	case CQWorker:
 		return " [worker]";
-	case CQGarbageCollector:
-		return " [gc]";
 	default:
 		elog(ERROR, "unknown CQProcessType %d", ptype);
 	}
@@ -606,7 +573,6 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	BackgroundWorkerHandle *worker_handle;
 	char *procName = get_cq_proc_type_name(ptype);
 	char *query = GetQueryString(cvname, true);
-	char *shmem_query;
 	bool success;
 
 	/* TODO(usmanm): Make sure the name doesn't go beyond 64 bytes */
@@ -627,8 +593,7 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	namestrcpy(&args.cvname, cvname);
 	namestrcpy(&args.dbname, MyProcPort->database_name);
 
-	shmem_query = spalloc(strlen(query) + 1);
-	args.query = shmem_query;
+	args.query = spalloc(strlen(query) + 1);
 	memcpy(args.query, query, strlen(query) + 1);
 
 	memcpy(worker.bgw_additional_arg, &args, worker.bgw_additional_size);
