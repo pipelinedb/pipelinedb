@@ -24,7 +24,6 @@
 #include "executor/execdebug.h"
 #include "executor/nodeNestloop.h"
 #include "utils/memutils.h"
-#define EXEC_NESTLOOPDEBUG
 
 /* ----------------------------------------------------------------
  *		ExecNestLoop(node)
