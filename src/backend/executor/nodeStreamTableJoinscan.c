@@ -295,7 +295,6 @@ ExecEndStreamTableScan(StreamTableScanState *node)
 void
 ExecBeginBatchStreamTableScan(StreamTableScanState *node)
 {
-	//ExecReScanStreamTableScan(node);
  	InitExpressionInfo(node);
  	InitScanRelation(node);
  	InitMiscInfo(node);
@@ -313,7 +312,6 @@ ExecReScanStreamTableScan(StreamTableScanState *node)
 {
 	static bool isFirstRescan = true;
 	HeapScanDesc scan;
-	elog(LOG,"RESCAN");
 
 	/*
 	 * Some info needs tbe initialized only

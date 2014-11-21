@@ -180,7 +180,7 @@ ExecNestLoop(NestLoopState *node)
 
 			node->nl_NeedNewOuter = true;
 
-			if(!node->nl_MatchedOuter &&
+			if (!node->nl_MatchedOuter &&
 				(node->js.jointype == JOIN_LEFT ||
 				 node->js.jointype == JOIN_ANTI))
 			{
@@ -265,6 +265,7 @@ ExecNestLoop(NestLoopState *node)
 				ENL1_printf("qualification succeeded, projecting tuple");
 
 				result = ExecProject(node->js.ps.ps_ProjInfo, &isDone);
+
 				if (isDone != ExprEndResult)
 				{
 					node->js.ps.ps_TupFromTlist =

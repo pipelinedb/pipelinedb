@@ -16,25 +16,18 @@
 #include "pipeline/decode.h"
 #include "pipeline/streambuf.h"
 #include "access/htup_details.h"
-//#include "access/xact.h"
 #include "utils/memutils.h"
 
+/* Join Datum cache
+ * This is an array of Datum arrays
+ */
 ListCell   *cachedRow;
-// Create a linnked list of Datum pointers
-bool scanning_join_cache = false;
 List	   *datumCache;
-
-bool
-IsScanningJoinCache()
-{
-	return scanning_join_cache;
-}
 
 void
 ClearStreamJoinCache()
 {
 	ListCell *l;
-	scanning_join_cache = false;
 	list_free_deep(datumCache);
 
 	/* Initialize the cache for the next join */

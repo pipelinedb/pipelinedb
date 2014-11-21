@@ -380,7 +380,6 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 void
 ExecBeginBatch(PlanState *node)
 {
-	//elog(LOG,"BeginBatch####################");
 	ExecBeginBatchStreamTableScan(node);
 }
 
@@ -414,7 +413,7 @@ ExecEndBatch(PlanState *node)
 /* ----------------------------------------------------------------
  *		ExecProcNode
  *
- *		Execute the given node to return a(nother) tuple.Is
+ *		Execute the given node to return a(nother) tuple.
  * ----------------------------------------------------------------
  */
 TupleTableSlot *
