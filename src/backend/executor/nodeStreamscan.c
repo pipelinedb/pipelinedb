@@ -51,7 +51,6 @@ StreamScanNext(StreamScanState *node)
 	StreamScan *scan;
 	ListCell   *l;
 	PlanState* ps = (PlanState*) node;
-	//pg_usleep(1000000);
 
 	MemoryContext oldcontext;
 

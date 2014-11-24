@@ -435,6 +435,16 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 		case T_StreamScan:
 			break;
 		case T_StreamTableScan:
+			{
+				StreamTableScan    *splan = (StreamTableScan *) plan;
+
+				splan->scanrelid += rtoffset;
+				splan->plan.targetlist =
+					fix_scan_list(root, splan->plan.targetlist, rtoffset);
+				splan->plan.qual =
+					fix_scan_list(root, splan->plan.qual, rtoffset);
+			}
+			break;
 		case T_SeqScan:
 			{
 				SeqScan    *splan = (SeqScan *) plan;
