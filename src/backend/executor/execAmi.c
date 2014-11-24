@@ -39,6 +39,7 @@
 #include "executor/nodeRecursiveunion.h"
 #include "executor/nodeResult.h"
 #include "executor/nodeSeqscan.h"
+#include "executor/nodeStreamTableJoinscan.h"
 #include "executor/nodeSetOp.h"
 #include "executor/nodeSort.h"
 #include "executor/nodeSubplan.h"
@@ -153,6 +154,14 @@ ExecReScan(PlanState *node)
 			ExecReScanSeqScan((SeqScanState *) node);
 			break;
 
+		case T_StreamTableScanState:
+			ExecReScanStreamTableScan((StreamTableScanState *) node);
+			break;
+
+		case T_StreamScanState:
+			ExecReScanStreamScan((StreamTableScanState *) node);
+			break;
+
 		case T_IndexScanState:
 			ExecReScanIndexScan((IndexScanState *) node);
 			break;
@@ -198,6 +207,10 @@ ExecReScan(PlanState *node)
 			break;
 
 		case T_NestLoopState:
+			ExecReScanNestLoop((NestLoopState *) node);
+			break;
+
+		case T_StreamTableJoinState:
 			ExecReScanNestLoop((NestLoopState *) node);
 			break;
 
@@ -275,6 +288,10 @@ ExecMarkPos(PlanState *node)
 			ExecSeqMarkPos((SeqScanState *) node);
 			break;
 
+		case T_StreamTableScanState:
+			ExecStreamTableMarkPos((StreamTableScanState *) node);
+			break;
+
 		case T_IndexScanState:
 			ExecIndexMarkPos((IndexScanState *) node);
 			break;
@@ -332,6 +349,10 @@ ExecRestrPos(PlanState *node)
 			ExecSeqRestrPos((SeqScanState *) node);
 			break;
 
+		case T_StreamTableScanState:
+			ExecSeqRestrPos((StreamTableScanState *) node);
+			break;
+
 		case T_IndexScanState:
 			ExecIndexRestrPos((IndexScanState *) node);
 			break;
@@ -384,6 +405,7 @@ ExecSupportsMarkRestore(NodeTag plantype)
 	switch (plantype)
 	{
 		case T_SeqScan:
+		case T_StreamTableScan:
 		case T_IndexScan:
 		case T_IndexOnlyScan:
 		case T_TidScan:

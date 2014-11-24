@@ -1222,6 +1222,28 @@ typedef struct ScanState
 typedef ScanState SeqScanState;
 
 /*
+ * StreamTableScan works a little differently
+ * It needs to maintain a handle to the original
+ * execution state metadata to work properly
+ */
+typedef struct SavedScanInfo
+{
+	EState	   *estate;
+	int 		eflags;
+	List	   *targetlist;	
+	List	   *qual;	
+} SavedScanInfo;
+
+typedef struct StreamTableScanState
+{
+	PlanState	ps;				/* its first field is NodeTag */
+	Relation	ss_currentRelation;
+	HeapScanDesc ss_currentScanDesc;
+	TupleTableSlot *ss_ScanTupleSlot;
+	SavedScanInfo ss_savedScanInfo;
+} StreamTableScanState;
+
+/*
  * These structs store information about index quals that don't have simple
  * constant right-hand sides.  See comments for ExecIndexBuildScanKeys()
  * for discussion.

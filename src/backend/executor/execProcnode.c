@@ -193,6 +193,11 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 												   estate, eflags);
 			break;
 
+		case T_StreamTableScan:
+			result = (PlanState *) ExecInitStreamTableScan((StreamTableScan *) node,
+												   estate, eflags);
+			break;
+
 		case T_StreamScan:
 			result = (PlanState *) ExecInitStreamScan((StreamScan *) node,
 													 estate, eflags);
@@ -265,6 +270,12 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 			result = (PlanState *) ExecInitNestLoop((NestLoop *) node,
 													estate, eflags);
 			break;
+
+		case T_StreamTableJoin:
+			result = (PlanState *) ExecInitNestLoop((NestLoop *) node,
+													estate, eflags);
+			break;
+
 
 		case T_MergeJoin:
 			result = (PlanState *) ExecInitMergeJoin((MergeJoin *) node,
@@ -369,7 +380,7 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 void
 ExecBeginBatch(PlanState *node)
 {
-
+	ExecBeginBatchStreamTableScan(node);
 }
 
 /* ----------------------------------------------------------------
@@ -385,6 +396,9 @@ ExecEndBatch(PlanState *node)
 	{
 		case T_AggState:
 			ExecEndAggBatch((AggState *) node);
+			break;
+		case T_StreamTableScanState:
+			CloseHeapScan(node);
 			break;
 
 		default:
@@ -415,9 +429,17 @@ ExecProcNode(PlanState *node)
 
 	if (node->instrument)
 		InstrStartNode(node->instrument);
+	if (IsContinuous(node) && 
+		(node->cq_batch_progress == 0) &&
+		(nodeTag(node) == T_StreamTableScanState))
+	{
+		ExecBeginBatch(node);
+	}
 
 	if (IsContinuous(node) && node->cq_batch_progress == BatchSize(node))
+	{
 		return ExecEndBatch(node);
+	}
 
 	if (node->state->es_exec_node_cxt)
 		oldcontext = MemoryContextSwitchTo(node->state->es_exec_node_cxt);
@@ -456,6 +478,10 @@ ExecProcNode(PlanState *node)
 			 */
 		case T_SeqScanState:
 			result = ExecSeqScan((SeqScanState *) node);
+			break;
+
+		case T_StreamTableScanState:
+			result = ExecStreamTableScan((StreamTableScanState *) node);
 			break;
 
 		case T_StreamScanState:
@@ -512,6 +538,10 @@ ExecProcNode(PlanState *node)
 			 * join nodes
 			 */
 		case T_NestLoopState:
+			result = ExecNestLoop((NestLoopState *) node);
+			break;
+
+		case T_StreamTableJoinState:
 			result = ExecNestLoop((NestLoopState *) node);
 			break;
 
@@ -584,7 +614,9 @@ ExecProcNode(PlanState *node)
 	if (!TupIsNull(result))
 		node->cq_batch_progress++;
 	else if (IsContinuous(node))
+	{
 		return ExecEndBatch(node);
+	}
 
 	return result;
 }
@@ -711,6 +743,10 @@ ExecEndNode(PlanState *node)
 			ExecEndSeqScan((SeqScanState *) node);
 			break;
 
+		case T_StreamTableScanState:
+			ExecEndStreamTableScan((StreamTableScanState *) node);
+			break;
+
 		case T_StreamScanState:
 			ExecEndStreamScan((StreamScanState *) node);
 			break;
@@ -767,6 +803,10 @@ ExecEndNode(PlanState *node)
 			 * join nodes
 			 */
 		case T_NestLoopState:
+			ExecEndNestLoop((NestLoopState *) node);
+			break;
+
+		case T_StreamTableJoinState:
 			ExecEndNestLoop((NestLoopState *) node);
 			break;
 

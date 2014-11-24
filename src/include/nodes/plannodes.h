@@ -283,6 +283,12 @@ typedef struct Scan
  * ----------------
  */
 typedef Scan SeqScan;
+/*
+* -----------------------------
+*      stream table scan node
+* -----------------------------
+*/
+typedef Scan StreamTableScan;
 
 /*
  * ----------------
@@ -573,6 +579,12 @@ typedef struct NestLoopParam
 	int			paramno;		/* number of the PARAM_EXEC Param to set */
 	Var		   *paramval;		/* outer-relation Var to assign to Param */
 } NestLoopParam;
+
+typedef struct StreamTableJoin
+{
+	Join		join;
+	/* I dont know what else we would need here at the moment */
+} StreamTableJoin;
 
 /* ----------------
  *		merge join node

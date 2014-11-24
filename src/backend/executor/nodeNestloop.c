@@ -25,7 +25,6 @@
 #include "executor/nodeNestloop.h"
 #include "utils/memutils.h"
 
-
 /* ----------------------------------------------------------------
  *		ExecNestLoop(node)
  *
@@ -128,6 +127,7 @@ ExecNestLoop(NestLoopState *node)
 			if (TupIsNull(outerTupleSlot))
 			{
 				ENL1_printf("no outer tuple, ending join");
+				ClearStreamJoinCache();
 				return NULL;
 			}
 
