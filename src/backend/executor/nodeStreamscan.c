@@ -123,12 +123,11 @@ ExecStreamProject(StreamEvent event, StreamProjectionInfo *pi)
 			{
 				/*
 				 * TODO(derekjn) an easy optimization here would be to cache the result
-				 * of this conversion to avoid a subsequent function call by another reader
+				 * of this conversion to avoid extraneous function calls by another reader
 				 */
 				ExprState *estate = ExecInitExpr((Expr *) n, NULL);
 
-//				ReScanExprContext(pi->econtext);
-
+				ReScanExprContext(pi->econtext);
 				v = ExecEvalExpr(estate, pi->econtext, &nulls[outatt], NULL);
 			}
 		}

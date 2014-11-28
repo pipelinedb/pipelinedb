@@ -104,7 +104,7 @@ alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
 	if (pos + size > BufferEnd(buf))
 	{
 		/* wait for the last event to be read by all readers */
-		while (HasPendingReads(buf->prev));
+		WaitForOverwrite(buf, buf->prev, 0);
 
 		buf->pos = buf->start;
 
@@ -173,6 +173,7 @@ alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
 	MemSet(pos, 0, sizeof(StreamEventData) + rawsize);
 	shared = (StreamEvent) pos;
 	shared->arrivaltime = event->arrivaltime;
+	shared->flags = event->flags;
 	pos += sizeof(StreamEventData);
 
 	/*
@@ -188,7 +189,7 @@ alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
 		shared->desc->tdtypeid = event->desc->tdtypeid;
 		shared->desc->tdtypmod = event->desc->tdtypmod;
 		shared->desc->tdhasoid = event->desc->tdhasoid;
-		shared->desc->tdrefcount = event->desc->tdrefcount;
+		shared->desc->tdrefcount = 1;
 		shared->desc->constr = NULL;
 		pos += TUPLEDESC_FIXED_SIZE;
 
@@ -483,10 +484,10 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 			reader->buf->empty = true;
 
 		SpinLockRelease(&(reader->buf->mutex));
-	}
 
-	if (slot->event->flags & TUPLEDESC_UNPIN)
-		slot->event->desc->tdrefcount = 0;
+		if (slot->event->flags & TUPLEDESC_UNPIN)
+			slot->event->desc->tdrefcount = 0;
+	}
 
 	SpinLockRelease(&slot->mutex);
 }
@@ -500,7 +501,7 @@ ResetStreamBufferLatch(int32 id)
 void
 WaitOnStreamBufferLatch(int32 id)
 {
-	WaitLatch((&GlobalStreamBuffer->procLatch[id]), WL_LATCH_SET, 500);
+	WaitLatch((&GlobalStreamBuffer->procLatch[id]), WL_LATCH_SET | WL_TIMEOUT, 500);
 }
 
 void
