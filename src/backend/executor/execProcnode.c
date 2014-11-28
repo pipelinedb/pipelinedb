@@ -387,6 +387,10 @@ ExecEndBatch(PlanState *node)
 			ExecEndAggBatch((AggState *) node);
 			break;
 
+		case T_StreamScanState:
+			ExecEndStreamScanBatch((StreamScanState *) node);
+			break;
+
 		default:
 			break;
 	}
