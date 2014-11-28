@@ -17,6 +17,7 @@
 #include "nodes/makefuncs.h"
 #include "parser/parse_coerce.h"
 #include "pipeline/streambuf.h"
+#include "utils/lsyscache.h"
 #include "utils/memutils.h"
 
 
@@ -66,6 +67,30 @@ StreamScanNext(StreamScanState *node)
 	return slot;
 }
 
+/*
+ * Given a value, convert it to its original user input representation,
+ * then attempt to read it in as the target output type
+ */
+static Datum
+coerce_raw_input(Datum value, Oid intype, Oid outtype, Oid outtypemod)
+{
+	char *orig;
+	Oid outfn;
+	Oid infn;
+	Oid ioparam;
+	bool isvlen;
+	Datum result;
+
+	getTypeOutputInfo(intype, &outfn, &isvlen);
+
+	orig = OidOutputFunctionCall(outfn, value);
+
+	getTypeInputInfo(outtype, &infn, &ioparam);
+
+	result = OidInputFunctionCall(infn, orig, ioparam, outtypemod);
+
+	return result;
+}
 
 /*
  * ExecStreamProject
@@ -89,10 +114,10 @@ ExecStreamProject(StreamEvent event, StreamProjectionInfo *pi)
 	values = palloc0(sizeof(Datum) * desc->natts);
 	nulls = palloc0(sizeof(bool) * desc->natts);
 
-	/* TODO(derekjn) cache this */
+	/* TODO(derekjn) cache this for each new evdesc (attach it to pi) */
 	intoout = map_field_positions(event->desc, desc);
 
-	/* TODO(derekjn) cache this */
+	/* TODO(derekjn) cache this for each new evdesc (attach it to pi) */
 	evslot = MakeSingleTupleTableSlot(event->desc);
 
 	ExecStoreTuple(event->raw, evslot, InvalidBuffer, false);
@@ -141,6 +166,8 @@ ExecStreamProject(StreamEvent event, StreamProjectionInfo *pi)
 				 * Slow path, fall back to the original user input and try to
 				 * coerce that to the target type
 				 */
+				v = coerce_raw_input(v, event->desc->attrs[i]->atttypid,
+						desc->attrs[outatt]->atttypid, desc->attrs[outatt]->atttypmod);
 			}
 		}
 
