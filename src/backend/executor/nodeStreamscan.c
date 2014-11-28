@@ -108,9 +108,11 @@ ExecStreamProject(StreamEvent event, StreamProjectionInfo *pi)
 		/* this is the append-time value */
 		v = slot_getattr(evslot, i + 1, &nulls[i]);
 
+		if (nulls[i])
+			continue;
+
 		/* if the append-time value's type is different from the target type, try to coerce it */
-		if (nulls[i] == false &&
-				event->desc->attrs[i]->atttypid != desc->attrs[outatt]->atttypid)
+		if (event->desc->attrs[i]->atttypid != desc->attrs[outatt]->atttypid)
 		{
 			Form_pg_attribute attr = event->desc->attrs[i];
 			Const *c = makeConst(attr->atttypid, attr->atttypmod, attr->attcollation,
@@ -129,6 +131,13 @@ ExecStreamProject(StreamEvent event, StreamProjectionInfo *pi)
 
 				ReScanExprContext(pi->econtext);
 				v = ExecEvalExpr(estate, pi->econtext, &nulls[outatt], NULL);
+			}
+			else
+			{
+				/*
+				 * Slow path, fall back to the original user input and try to
+				 * coerce that to the target type
+				 */
 			}
 		}
 
