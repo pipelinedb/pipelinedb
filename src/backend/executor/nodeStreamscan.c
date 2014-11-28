@@ -89,9 +89,12 @@ ExecStreamProject(StreamEvent event, StreamProjectionInfo *pi)
 	values = palloc0(sizeof(Datum) * desc->natts);
 	nulls = palloc0(sizeof(bool) * desc->natts);
 
+	/* TODO(derekjn) cache this */
 	intoout = map_field_positions(event->desc, desc);
 
+	/* TODO(derekjn) cache this */
 	evslot = MakeSingleTupleTableSlot(event->desc);
+
 	ExecStoreTuple(event->raw, evslot, InvalidBuffer, false);
 
 	/*
