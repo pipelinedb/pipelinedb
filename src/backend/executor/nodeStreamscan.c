@@ -59,7 +59,7 @@ StreamScanNext(StreamScanState *node)
 	if (sbs == NULL)
 		return NULL;
 
-	tup = ExecStreamProject(sbs->event, node->pi);
+	tup = ExecStreamProject(sbs->event, node);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 
 	UnpinStreamEvent(node->reader, sbs);
@@ -98,7 +98,7 @@ coerce_raw_input(Datum value, Oid intype, Oid outtype, Oid outtypemod)
  * Project a stream event onto a physical tuple
  */
 HeapTuple
-ExecStreamProject(StreamEvent event, StreamProjectionInfo *pi)
+ExecStreamProject(StreamEvent event, StreamScanState *node)
 {
 	HeapTuple decoded;
 	MemoryContext oldcontext;
@@ -107,6 +107,7 @@ ExecStreamProject(StreamEvent event, StreamProjectionInfo *pi)
 	int i;
 	int *intoout;
 	TupleTableSlot *evslot;
+	StreamProjectionInfo *pi = node->pi;
 	TupleDesc desc = pi->desc;
 
 	oldcontext = MemoryContextSwitchTo(pi->ctxt);
@@ -187,7 +188,10 @@ ExecStreamProject(StreamEvent event, StreamProjectionInfo *pi)
 
 	MemoryContextSwitchTo(oldcontext);
 
+	/* our result tuple needs to live for the duration of this query execution */
+	oldcontext = MemoryContextSwitchTo(node->ss.ps.state->es_query_cxt);
 	decoded = heap_form_tuple(desc, values, nulls);
+	MemoryContextSwitchTo(oldcontext);
 
 	return decoded;
 }
@@ -203,7 +207,7 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 
 	state->pi = palloc(sizeof(StreamProjectionInfo));
 	state->pi->ctxt = AllocSetContextCreate(CurrentMemoryContext,
-													 "DecoderContext",
+													 "ExecProjectContext",
 													 ALLOCSET_DEFAULT_MINSIZE,
 													 ALLOCSET_DEFAULT_INITSIZE,
 													 ALLOCSET_DEFAULT_MAXSIZE);
