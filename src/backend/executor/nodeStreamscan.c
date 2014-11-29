@@ -189,9 +189,7 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 	MemoryContextSwitchTo(oldcontext);
 
 	/* our result tuple needs to live for the duration of this query execution */
-	oldcontext = MemoryContextSwitchTo(node->ss.ps.state->es_query_cxt);
 	decoded = heap_form_tuple(desc, values, nulls);
-	MemoryContextSwitchTo(oldcontext);
 
 	return decoded;
 }
