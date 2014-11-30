@@ -450,7 +450,8 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 		/*
 		 * This increment operation is safe because it will only ever happen
 		 * from a single process. Namely, the process that is the last reader
-		 * for this event.
+		 * for this event. We're incrementing it because our refcount begins
+		 * as negative for stream inserts--see comments in stream.c:InsertIntoStream.
 		 */
 		slot->event->desc->tdrefcount++;
 		if (slot->event->desc->tdrefcount == 0)
