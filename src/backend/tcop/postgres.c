@@ -938,7 +938,9 @@ exec_simple_query(const char *query_string)
 
 				BeginCommand("INSERT", dest);
 
+				PushActiveSnapshot(GetTransactionSnapshot());
 				count = InsertIntoStream(ins);
+				PopActiveSnapshot();
 
 				sprintf(buf, "INSERT 0 %d", count);
 				EndCommand(buf, dest);

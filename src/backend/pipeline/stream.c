@@ -147,6 +147,8 @@ InsertIntoStream(InsertStmt *ins)
 		commontypes[i] = select_common_type(NULL, alltypes[i], "VALUES", NULL);
 	}
 
+	assign_expr_collations(NULL, exprlists);
+
 	remaining = list_length(exprlists);
 
 	/* append each VALUES tuple to the stream buffer */

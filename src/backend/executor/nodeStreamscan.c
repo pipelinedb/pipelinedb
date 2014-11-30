@@ -115,6 +115,9 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 	values = palloc0(sizeof(Datum) * desc->natts);
 	nulls = palloc0(sizeof(bool) * desc->natts);
 
+	/* assume every element in the output tuple is null until we actually see values */
+	MemSet(nulls, true, desc->natts);
+
 	/* TODO(derekjn) cache this for each new evdesc (attach it to pi) */
 	intoout = map_field_positions(event->desc, desc);
 
@@ -130,22 +133,25 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 	for (i = 0; i < event->desc->natts; i++)
 	{
 		Datum v;
+		bool isnull;
 		int outatt = intoout[i];
 		if (outatt < 0)
 			continue;
 
 		/* this is the append-time value */
-		v = slot_getattr(evslot, i + 1, &nulls[i]);
+		v = slot_getattr(evslot, i + 1, &isnull);
 
-		if (nulls[i])
+		if (isnull)
 			continue;
+
+		nulls[outatt] = false;
 
 		/* if the append-time value's type is different from the target type, try to coerce it */
 		if (event->desc->attrs[i]->atttypid != desc->attrs[outatt]->atttypid)
 		{
 			Form_pg_attribute attr = event->desc->attrs[i];
 			Const *c = makeConst(attr->atttypid, attr->atttypmod, attr->attcollation,
-					attr->attlen, v, nulls[outatt], attr->attbyval);
+					attr->attlen, v, false, attr->attbyval);
 			Node *n = coerce_to_target_type(NULL, (Node *) c, attr->atttypid, desc->attrs[outatt]->atttypid,
 					desc->attrs[outatt]->atttypmod, COERCION_IMPLICIT, COERCE_IMPLICIT_CAST, -1);
 
@@ -182,6 +188,7 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 		if (pg_strcasecmp(NameStr(desc->attrs[i]->attname), ARRIVAL_TIMESTAMP) == 0)
 		{
 			values[i] = TimestampGetDatum(event->arrivaltime);
+			nulls[i] = false;
 			break;
 		}
 	}
