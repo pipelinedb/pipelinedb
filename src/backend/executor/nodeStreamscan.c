@@ -4,7 +4,7 @@
  *
  * Support for scanning the stream buffer
  *
- * src/include/executor/nodeStreamscan.h
+ * src/backend/executor/nodeStreamscan.c
  *
  *-------------------------------------------------------------------------
  */
@@ -82,11 +82,9 @@ coerce_raw_input(Datum value, Oid intype, Oid outtype, Oid outtypemod)
 	Datum result;
 
 	getTypeOutputInfo(intype, &outfn, &isvlen);
-
 	orig = OidOutputFunctionCall(outfn, value);
 
 	getTypeInputInfo(outtype, &infn, &ioparam);
-
 	result = OidInputFunctionCall(infn, orig, ioparam, outtypemod);
 
 	return result;

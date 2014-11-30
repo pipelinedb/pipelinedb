@@ -41,7 +41,6 @@ int EmptyStreamBufferWaitTime;
 /* Wraps a physical event and the queries that still need to read it */
 typedef struct StreamBufferSlot
 {
-	SHM_QUEUE	link;
 	/* decoded event */
 	StreamEvent event;
 	/*
@@ -50,7 +49,6 @@ typedef struct StreamBufferSlot
 	 */
 	Bitmapset *readby;
 	char *stream;
-	char *encoding;
 	int len;
 	int nextoffset;
 	slock_t mutex;

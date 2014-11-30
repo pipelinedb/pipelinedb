@@ -20,9 +20,11 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
 #include "parser/parse_coerce.h"
+#include "parser/parse_collate.h"
 #include "parser/parse_target.h"
 #include "pipeline/stream.h"
 #include "storage/ipc.h"
+#include "storage/spalloc.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
 #include "utils/memutils.h"
@@ -54,6 +56,28 @@ bool InsertTargetIsStream(InsertStmt *ins)
 	return IsInputStream(ins->relation->relname);
 }
 
+static TupleDesc
+spalloc_tupledesc(TupleDesc desc)
+{
+	// XXX(derekjn) spalloc doesn't seem to be working when called very frequently
+	// so just use a leaky ShmemAlloc until we fix it
+	Size size = TUPLEDESC_FIXED_SIZE;
+	TupleDesc shared = (TupleDesc) ShmemAlloc(size);
+	int i;
+
+	memcpy(shared, desc, TUPLEDESC_FIXED_SIZE);
+
+	shared->attrs = (Form_pg_attribute *) ShmemAlloc(desc->natts * sizeof(Form_pg_attribute));
+
+	for (i=0; i<desc->natts; i++)
+	{
+		shared->attrs[i] = ShmemAlloc(ATTRIBUTE_FIXED_PART_SIZE);
+		memcpy(shared->attrs[i], desc->attrs[i], ATTRIBUTE_FIXED_PART_SIZE);
+	}
+
+	return shared;
+}
+
 /*
  * InsertIntoStream
  *
@@ -68,12 +92,10 @@ InsertIntoStream(InsertStmt *ins)
 	int numcols = list_length(ins->cols);
 	int i;
 	int count = 0;
-	int remaining = 0;
 	ParseState *ps = make_parsestate(NULL);
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
-	TupleDesc byrefdesc = NULL;
 	Bitmapset **coltypes = NULL;
 	Oid *commontypes = NULL;
 	List *exprlists = NULL;
@@ -147,9 +169,7 @@ InsertIntoStream(InsertStmt *ins)
 		commontypes[i] = select_common_type(NULL, alltypes[i], "VALUES", NULL);
 	}
 
-	assign_expr_collations(NULL, exprlists);
-
-	remaining = list_length(exprlists);
+	assign_expr_collations(NULL, (Node *) exprlists);
 
 	/* append each VALUES tuple to the stream buffer */
 	foreach (lc, exprlists)
@@ -174,30 +194,25 @@ InsertIntoStream(InsertStmt *ins)
 
 		/*
 		 * Each tuple in an insert batch has the same descriptor,
-		 * so we only have to generate it once. All the other tuples in
-		 * this batch reference the same descriptor.
+		 * so we only have to generate it once and put it in shared
+		 * memory.
 		 */
 		if (desc == NULL)
 		{
-			desc = ExecTypeFromExprList(exprlist, colnames);
-			ev->desc = desc;
-			ev->desc->tdrefcount = 1;
-			ev->flags |= TUPLEDESC_BYVAL;
-		}
-		else
-		{
-			/* descriptor will be passed byref because we've already stored it byval */
-			ev->desc = byrefdesc;
+			TupleDesc src = ExecTypeFromExprList(exprlist, colnames);
+			desc = spalloc_tupledesc(src);
+
+			/*
+			 * We use a negative counter and consider the TupleDesc unneeded by further
+			 * events when it reaches 0. We do this because the TupleDesc is considered
+			 * refcounted when tdrefcount >= 0, which causes the refcount to be incremented
+			 * in other places, which we don't need and it complicates things for the purpose
+			 * of stream inserts.
+			 */
+			desc->tdrefcount = -list_length(exprlists);
 		}
 
-		remaining--;
-
-		/*
-		 * If this is the last event in this insert, indicate that the byref
-		 * descriptor can be unpinned when this event is done being read.
-		 */
-		if (remaining == 0)
-			ev->flags |= TUPLEDESC_UNPIN;
+		ev->desc = desc;
 
 		values = palloc0(desc->natts * sizeof(Datum));
 		nulls = palloc0(desc->natts * sizeof(bool));
@@ -215,14 +230,6 @@ InsertIntoStream(InsertStmt *ins)
 		ev->arrivaltime = GetCurrentTimestamp();
 
 		sbs = AppendStreamEvent(ins->relation->relname, GlobalStreamBuffer, ev);
-
-		/*
-		 * Instead of copying the entire attribute array into each event, we just
-		 * keep a pointer to the first array and keep it pinned until no events need
-		 * to read it anymore.
-		 */
-		if (ev->flags & TUPLEDESC_BYVAL)
-			byrefdesc = sbs->event->desc;
 
 		Assert(sbs);
 		count++;

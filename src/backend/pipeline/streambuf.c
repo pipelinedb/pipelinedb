@@ -15,6 +15,7 @@
 #include "executor/tuptable.h"
 #include "nodes/print.h"
 #include "storage/lwlock.h"
+#include "storage/spalloc.h"
 #include "storage/spin.h"
 #include "storage/proc.h"
 #include "utils/memutils.h"
@@ -31,8 +32,23 @@ StreamBuffer *GlobalStreamBuffer;
 /* Maximum size in blocks of the global stream buffer */
 int StreamBufferBlocks;
 
+static void
+spfree_tupledesc(TupleDesc desc)
+{
+// FIXME(derekjn) these spfree calls seem to be
+// causing spalloc calls from other procs to fail when
+// each is being called frequently
+//
+//	int i;
+//	for (i=0; i<desc->natts; i++)
+//		spfree(desc->attrs[i]);
+//
+//	spfree(desc->attrs);
+//	spfree(desc);
+}
+
 /*
- * wait_for_overwrite
+ * WaitForOverwrite
  *
  * Waits until the given slot has been read by all CQs that need to see it
  */
@@ -42,12 +58,6 @@ WaitForOverwrite(StreamBuffer *buf, StreamBufferSlot *slot, int sleepms)
 	/* block until all CQs have marked this event as read */
 	while (HasPendingReads(slot))
 		pg_usleep(sleepms * 1000);
-
-	if (slot->event->flags & TUPLEDESC_BYVAL)
-	{
-		while (slot->event->desc->tdrefcount > 0)
-			pg_usleep(sleepms * 1000);
-	}
 
 	if (DebugPrintStreamBuffer)
 	{
@@ -83,17 +93,6 @@ alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
 
 	size = sizeof(StreamEventData) + rawsize + sizeof(StreamBufferSlot) +
 			strlen(stream) + 1 + BITMAPSET_SIZE(bms->nwords);
-
-	/*
-	 * If this event should contain a copy of the tuple descriptor, copy
-	 * it into the event's memory.
-	 */
-	if (event->flags & TUPLEDESC_BYVAL)
-	{
-		size += TUPLEDESC_FIXED_SIZE;
-		size += event->desc->natts * sizeof(Form_pg_attribute);
-		size += event->desc->natts * ATTRIBUTE_FIXED_PART_SIZE;
-	}
 
 	if (size > buf->capacity)
 		elog(ERROR, "event of size %d too big for stream buffer of size %d", (int) size, (int) buf->capacity);
@@ -172,46 +171,9 @@ alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
 
 	MemSet(pos, 0, sizeof(StreamEventData) + rawsize);
 	shared = (StreamEvent) pos;
+	shared->desc = event->desc;
 	shared->arrivaltime = event->arrivaltime;
-	shared->flags = event->flags;
 	pos += sizeof(StreamEventData);
-
-	/*
-	 * If this event should contain a copy of the tuple descriptor, copy
-	 * it into the event's memory.
-	 */
-	if (event->flags & TUPLEDESC_BYVAL)
-	{
-		int tdi;
-
-		shared->desc = (TupleDesc) pos;
-		shared->desc->natts = event->desc->natts;
-		shared->desc->tdtypeid = event->desc->tdtypeid;
-		shared->desc->tdtypmod = event->desc->tdtypmod;
-		shared->desc->tdhasoid = event->desc->tdhasoid;
-		shared->desc->tdrefcount = 1;
-		shared->desc->constr = NULL;
-		pos += TUPLEDESC_FIXED_SIZE;
-
-		/*
-		 * We have an array of pointers that live in shared memory and point
-		 * the the shared memory that follows them, eek!
-		 */
-		shared->desc->attrs = (Form_pg_attribute *) pos;
-		pos += sizeof(Form_pg_attribute) * shared->desc->natts;
-
-		for (tdi=0; tdi<shared->desc->natts; tdi++)
-		{
-			shared->desc->attrs[tdi] = (Form_pg_attribute) pos;
-			memcpy(shared->desc->attrs[tdi], event->desc->attrs[tdi], ATTRIBUTE_FIXED_PART_SIZE);
-			pos += ATTRIBUTE_FIXED_PART_SIZE;
-		}
-	}
-	else
-	{
-		/* descriptor is a reference to a previous event's byval copy */
-		shared->desc = event->desc;
-	}
 
 	shared->raw = (HeapTuple) pos;
 	shared->raw->t_len = event->raw->t_len;
@@ -485,8 +447,14 @@ UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
 
 		SpinLockRelease(&(reader->buf->mutex));
 
-		if (slot->event->flags & TUPLEDESC_UNPIN)
-			slot->event->desc->tdrefcount = 0;
+		/*
+		 * This increment operation is safe because it will only ever happen
+		 * from a single process. Namely, the process that is the last reader
+		 * for this event.
+		 */
+		slot->event->desc->tdrefcount++;
+		if (slot->event->desc->tdrefcount == 0)
+			spfree_tupledesc(slot->event->desc);
 	}
 
 	SpinLockRelease(&slot->mutex);

@@ -26,13 +26,8 @@
 /* Whether or not to wait on the inserted event to be consumed by the CV*/
 extern bool DebugSyncStreamInsert;
 
-#define TUPLEDESC_BYVAL (1 << 0)
-#define TUPLEDESC_UNPIN (1 << 1)
-
 typedef struct EventData
 {
-	/* metadata flags */
-	char flags;
 	/* append-time values */
 	HeapTuple raw;
 	/* arrival time of the event */
