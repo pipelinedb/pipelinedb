@@ -179,7 +179,6 @@ def clean_db(request):
     Called for every test so each test gets a clean db
     """
     pdb = request.module.pipeline
-    pdb.create_db()
     request.addfinalizer(pdb.drop_db)
 
     return TEST_DBNAME
