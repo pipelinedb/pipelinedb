@@ -68,6 +68,7 @@ InsertIntoStream(InsertStmt *ins)
 	int numcols = list_length(ins->cols);
 	int i;
 	int count = 0;
+	int remaining = 0;
 	ParseState *ps = make_parsestate(NULL);
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
@@ -146,6 +147,8 @@ InsertIntoStream(InsertStmt *ins)
 		commontypes[i] = select_common_type(NULL, alltypes[i], "VALUES", NULL);
 	}
 
+	remaining = list_length(exprlists);
+
 	/* append each VALUES tuple to the stream buffer */
 	foreach (lc, exprlists)
 	{
@@ -185,6 +188,15 @@ InsertIntoStream(InsertStmt *ins)
 			ev->desc = byrefdesc;
 		}
 
+		remaining--;
+
+		/*
+		 * If this is the last event in this insert, indicate that the byref
+		 * descriptor can be unpinned when this event is done being read.
+		 */
+		if (remaining == 0)
+			ev->flags |= TUPLEDESC_UNPIN;
+
 		values = palloc0(desc->natts * sizeof(Datum));
 		nulls = palloc0(desc->natts * sizeof(bool));
 
@@ -213,12 +225,6 @@ InsertIntoStream(InsertStmt *ins)
 		Assert(sbs);
 		count++;
 	}
-
-	/*
-	 * Since this is the last event in this insert, indicate that the byref
-	 * descriptor can be unpinned when this event is done being read.
-	 */
-	sbs->event->flags |= TUPLEDESC_UNPIN;
 
 	/*
 		Wait till the last event has been consumed by a CV before returning
