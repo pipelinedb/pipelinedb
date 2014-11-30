@@ -117,8 +117,8 @@ InsertIntoStream(InsertStmt *ins)
 		List *exprlist = transformExpressionList(ps, vals, EXPR_KIND_VALUES);
 		ListCell *l;
 
-		if (list_length(vals) < numcols)
-			elog(ERROR, "VALUES tuples must have at least %d values", numcols);
+		if (list_length(vals) != numcols)
+			elog(ERROR, "VALUES tuples must have %d values", numcols);
 
 		/*
 		 * For each column in the tuple, add its type to a set of types
