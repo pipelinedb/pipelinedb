@@ -77,7 +77,7 @@ def test_combine(pipeline, clean_db):
             key = '%d%d' % (n % 10, m)
             values.append(str((key, 0)))
 
-        pipeline.execute('INSERT INTO stream (key) VALUES %s' % ','.join(values))
+        pipeline.execute('INSERT INTO stream (key, unused) VALUES %s' % ','.join(values))
 
     pipeline.deactivate()
 
