@@ -127,7 +127,7 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 	MemSet(nulls, true, desc->natts);
 
 	/* update the projection info if the event is using a new descriptor */
-	if (pi->eventdesc == NULL || pi->eventdesc != event->desc)
+	if (pi->eventdesc != event->desc)
 		init_proj_info_for_desc(pi, event->desc, desc);
 
 	ExecStoreTuple(event->raw, pi->curslot, InvalidBuffer, false);
