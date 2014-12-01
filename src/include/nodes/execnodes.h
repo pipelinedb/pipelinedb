@@ -251,7 +251,10 @@ typedef struct StreamProjectionInfo
 {
 	MemoryContext ctxt;
 	ExprContext *econtext;
-	TupleDesc desc;
+	TupleDesc eventdesc;
+	TupleDesc resultdesc;
+	TupleTableSlot *curslot;
+	int *attrmap;
 } StreamProjectionInfo;
 
 /* ----------------

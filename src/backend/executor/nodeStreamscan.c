@@ -49,6 +49,18 @@ map_field_positions(TupleDesc evdesc, TupleDesc desc)
 	return result;
 }
 
+/*
+ * Initializes the given StreamProjectionInfo for the given
+ * descriptor. This allows us to cache descriptor-level information, which
+ * may only change after many event projections.
+ */
+static void
+init_proj_info_for_desc(StreamProjectionInfo *pi, TupleDesc evdesc, TupleDesc outdesc)
+{
+	pi->attrmap = map_field_positions(evdesc, outdesc);
+	pi->curslot = MakeSingleTupleTableSlot(evdesc);
+}
+
 static TupleTableSlot *
 StreamScanNext(StreamScanState *node)
 {
@@ -103,10 +115,8 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 	Datum *values;
 	bool *nulls;
 	int i;
-	int *intoout;
-	TupleTableSlot *evslot;
 	StreamProjectionInfo *pi = node->pi;
-	TupleDesc desc = pi->desc;
+	TupleDesc desc = pi->resultdesc;
 
 	oldcontext = MemoryContextSwitchTo(pi->ctxt);
 
@@ -116,13 +126,11 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 	/* assume every element in the output tuple is null until we actually see values */
 	MemSet(nulls, true, desc->natts);
 
-	/* TODO(derekjn) cache this for each new evdesc (attach it to pi) */
-	intoout = map_field_positions(event->desc, desc);
+	/* update the projection info if the event is using a new descriptor */
+	if (pi->eventdesc == NULL || pi->eventdesc != event->desc)
+		init_proj_info_for_desc(pi, event->desc, desc);
 
-	/* TODO(derekjn) cache this for each new evdesc (attach it to pi) */
-	evslot = MakeSingleTupleTableSlot(event->desc);
-
-	ExecStoreTuple(event->raw, evslot, InvalidBuffer, false);
+	ExecStoreTuple(event->raw, pi->curslot, InvalidBuffer, false);
 
 	/*
 	 * For each field in the event, place it in the corresponding field in the
@@ -132,12 +140,12 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 	{
 		Datum v;
 		bool isnull;
-		int outatt = intoout[i];
+		int outatt = pi->attrmap[i];
 		if (outatt < 0)
 			continue;
 
 		/* this is the append-time value */
-		v = slot_getattr(evslot, i + 1, &isnull);
+		v = slot_getattr(pi->curslot, i + 1, &isnull);
 
 		if (isnull)
 			continue;
@@ -216,7 +224,7 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 													 ALLOCSET_DEFAULT_MAXSIZE);
 
 	state->pi->econtext = CreateStandaloneExprContext();
-	state->pi->desc = node->desc;
+	state->pi->resultdesc = node->desc;
 
 	/*
 	 * Miscellaneous initialization
