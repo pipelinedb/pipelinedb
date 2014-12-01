@@ -111,7 +111,6 @@ alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
 		buf->tail = buf->prev;
 		buf->prev->nextoffset = BufferEnd(buf) - SlotEnd(buf->prev);
 		buf->prev = NULL;
-		pos = buf->pos;
 		free = 0;
 	}
 	else
