@@ -106,10 +106,6 @@ alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
 		WaitForOverwrite(buf, buf->prev, 0);
 
 		buf->pos = buf->start;
-
-		/* we need to make sure all readers are done reading before we begin clobbering entries */
-		LWLockAcquire(StreamBufferWrapLock, LW_EXCLUSIVE);
-
 		buf->tail = buf->prev;
 
 		 /* the buffer got full, so start a new append cycle */
@@ -117,8 +113,6 @@ alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
 		buf->prev = NULL;
 		free = 0;
 		pos = buf->pos;
-
-		LWLockRelease(StreamBufferWrapLock);
 	}
 	else
 	{
@@ -337,17 +331,12 @@ OpenStreamBufferReader(StreamBuffer *buf, int queryid)
 	reader->buf = buf;
 	reader->pos = buf->start;
 
-	LWLockAcquire(StreamBufferWrapLock, LW_SHARED);
-	reader->reading = true;
-
 	return reader;
 }
 
 void
 CloseStreamBufferReader(StreamBufferReader *reader)
 {
-	/* currently every reader gets its own process */
-	LWLockRelease(StreamBufferWrapLock);
 	pfree(reader);
 }
 
@@ -369,17 +358,7 @@ PinNextStreamEvent(StreamBufferReader *reader)
 		return NULL;
 
 	if (ReaderNeedsWrap(buf, reader))
-	{
 		reader->pos = buf->start;
-		reader->reading = false;
-	}
-
-	if (IsNewReadCycle(reader))
-	{
-		/* new data has been added to the buffer but we don't have a read lock yet, so get one */
-		LWLockAcquire(StreamBufferWrapLock, LW_SHARED);
-		reader->reading = true;
-	}
 
 	if (HasUnreadData(reader))
 	{
@@ -389,9 +368,7 @@ PinNextStreamEvent(StreamBufferReader *reader)
 	else if (AtBufferEnd(reader))
 	{
 		/* we've consumed all the data in the buffer, wrap around to start reading from the beginning */
-		reader->reading = false;
 		reader->pos = buf->start;
-		LWLockRelease(StreamBufferWrapLock);
 
 		return NULL;
 	}

@@ -23,11 +23,10 @@
 #define SlotSize(slot) ((slot)->len)
 #define SlotEnd(slot) ((char *) (slot) + SlotSize(slot))
 
-#define ReaderNeedsWrap(buf, reader) ((buf)->pos < (reader)->pos && !(reader)->reading)
+#define ReaderNeedsWrap(buf, reader) ((buf)->pos < (reader)->pos)
 #define AtBufferEnd(reader) ((reader)->buf->last != NULL && reader->pos == (reader)->buf->last)
-#define HasUnreadData(reader) ((reader)->pos < (reader)->buf->last)
+#define HasUnreadData(reader) ((reader)->buf->unread != 0)
 #define BufferUnchanged(reader) ((reader)->pos == (reader)->buf->pos)
-#define IsNewReadCycle(reader) (!(reader)->reading)
 #define HasPendingReads(slot) (bms_num_members((slot)->readby) > 0)
 #define IsNewAppendCycle(buf) ((buf)->prev == NULL)
 #define MustEvict(buf) (!IsNewAppendCycle(buf) && (buf)->prev->nextoffset != NO_SLOTS_FOLLOW)
@@ -96,7 +95,6 @@ typedef struct StreamBufferReader
 	int queryid;
 	char *pos;
 	StreamBuffer *buf;
-	bool reading;
 } StreamBufferReader;
 
 StreamBuffer *GlobalStreamBuffer;
