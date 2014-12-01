@@ -98,21 +98,21 @@ alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
 		elog(ERROR, "event of size %d too big for stream buffer of size %d", (int) size, (int) buf->capacity);
 
 	LWLockAcquire(StreamBufferAppendLock, LW_EXCLUSIVE);
-	pos = buf->pos;
 
-	if (pos + size > BufferEnd(buf))
+	if (buf->pos + size > BufferEnd(buf))
 	{
-		/* wait for the last event to be read by all readers */
+		/*
+		 * The buffer got full, so start a new append cycle as soon
+		 * as the last event has been read.
+		 */
 		WaitForOverwrite(buf, buf->prev, 0);
 
 		buf->pos = buf->start;
 		buf->tail = buf->prev;
-
-		 /* the buffer got full, so start a new append cycle */
 		buf->prev->nextoffset = BufferEnd(buf) - SlotEnd(buf->prev);
 		buf->prev = NULL;
-		free = 0;
 		pos = buf->pos;
+		free = 0;
 	}
 	else
 	{
@@ -126,6 +126,7 @@ alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
 			free = buf->prev->nextoffset;
 	}
 
+	pos = buf->pos;
 	sbspos = pos + free;
 
 /*
