@@ -249,11 +249,29 @@ typedef struct ProjectionInfo
 
 typedef struct StreamProjectionInfo
 {
+	/*
+	 * Temporary context to use during stream projections,
+	 * reset after each stream scan batch
+	 */
 	MemoryContext ctxt;
+	/* expression context for evaluating stream event cast expressions */
 	ExprContext *econtext;
+	/*
+	 * Descriptor for the event currently being projected,
+	 * may be cached across projections
+	 */
 	TupleDesc eventdesc;
+	/*
+	 * Descriptor for the projection result, used for all projections
+	 * performed by this StreamProjectionInfo
+	 */
 	TupleDesc resultdesc;
+	/* slot to store the current stream event in, may be cached across projections */
 	TupleTableSlot *curslot;
+	/*
+	 * Mapping from event attribute to result attribute position,
+	 * may be cached across projections
+	 */
 	int *attrmap;
 } StreamProjectionInfo;
 
