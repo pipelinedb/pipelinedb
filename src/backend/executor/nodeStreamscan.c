@@ -170,7 +170,6 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 				 */
 				ExprState *estate = ExecInitExpr((Expr *) n, NULL);
 
-				ReScanExprContext(pi->econtext);
 				v = ExecEvalExpr(estate, pi->econtext, &nulls[outatt], NULL);
 			}
 			else
