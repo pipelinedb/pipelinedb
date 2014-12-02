@@ -84,7 +84,7 @@ StreamScanNext(StreamScanState *node)
  * then attempt to read it in as the target output type
  */
 static Datum
-coerce_raw_input(Datum value, Oid intype, Oid outtype, Oid outtypemod)
+coerce_raw_input(Datum value, Oid intype, Oid outtype)
 {
 	char *orig;
 	Oid outfn;
@@ -97,7 +97,7 @@ coerce_raw_input(Datum value, Oid intype, Oid outtype, Oid outtypemod)
 	orig = OidOutputFunctionCall(outfn, value);
 
 	getTypeInputInfo(outtype, &infn, &ioparam);
-	result = OidInputFunctionCall(infn, orig, ioparam, outtypemod);
+	result = OidInputFunctionCall(infn, orig, ioparam, -1);
 
 	return result;
 }
@@ -180,7 +180,7 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 				 * coerce that to the target type
 				 */
 				v = coerce_raw_input(v, event->desc->attrs[i]->atttypid,
-						desc->attrs[outatt]->atttypid, desc->attrs[outatt]->atttypmod);
+						desc->attrs[outatt]->atttypid);
 			}
 		}
 
