@@ -9,6 +9,7 @@ ACTIVATE test_stream_casts0, test_stream_casts1;
 INSERT INTO stream_casts_stream (k, v, i) VALUES ('001', 1.224, 1002);
 INSERT INTO stream_casts_stream (k, v, i) VALUES ('102', 1e15, -100);
 INSERT INTO stream_casts_stream (k, v, i) VALUES ('144', -1e-3, 1);
+INSERT INTO stream_casts_stream (k, v, i) VALUES ('042', 42.42, 0), ('42', '42.42', 1), ('144', 1, 2);
 
 DEACTIVATE test_stream_casts0, test_stream_casts1;
 
