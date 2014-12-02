@@ -55,9 +55,9 @@ map_field_positions(TupleDesc evdesc, TupleDesc desc)
  * may only change after many event projections.
  */
 static void
-init_proj_info_for_desc(StreamProjectionInfo *pi, TupleDesc evdesc, TupleDesc outdesc)
+init_proj_info_for_desc(StreamProjectionInfo *pi, TupleDesc evdesc)
 {
-	pi->attrmap = map_field_positions(evdesc, outdesc);
+	pi->attrmap = map_field_positions(evdesc, pi->resultdesc);
 	pi->curslot = MakeSingleTupleTableSlot(evdesc);
 }
 
@@ -70,6 +70,10 @@ StreamScanNext(StreamScanState *node)
 
 	if (sbs == NULL)
 		return NULL;
+
+	/* update the projection info if the event descriptor has changed */
+	if (node->pi->eventdesc != sbs->event->desc)
+		init_proj_info_for_desc(node->pi, sbs->event->desc);
 
 	tup = ExecStreamProject(sbs->event, node);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
@@ -125,10 +129,6 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 
 	/* assume every element in the output tuple is null until we actually see values */
 	MemSet(nulls, true, desc->natts);
-
-	/* update the projection info if the event is using a new descriptor */
-	if (pi->eventdesc != event->desc)
-		init_proj_info_for_desc(pi, event->desc, desc);
 
 	ExecStoreTuple(event->raw, pi->curslot, InvalidBuffer, false);
 
