@@ -31,8 +31,8 @@ CREATE CONTINUOUS VIEW test_sw_every AS SELECT k::text, every(b::boolean) FROM b
 
 ACTIVATE test_sw_bool_and, test_sw_bool_or, test_sw_every;
 
-INSERT INTO bool_test_sw_sw_stream (k, b) VALUES ('x', 't'), ('x', 't'), ('x', 1), ('x', 't'), ('x', 't'), ('x', 1), ('x', '1');
-INSERT INTO bool_test_sw_sw_stream (k, b) VALUES ('y', 0), ('y', 'f'), ('y', 'f'), ('x', '0'), ('x', 1), ('x', 1), ('x', 't');
+INSERT INTO bool_test_sw_sw_stream (k, b) VALUES ('x', 't'), ('x', 't'), ('x', true), ('x', 't'), ('x', 't'), ('x', true), ('x', true);
+INSERT INTO bool_test_sw_sw_stream (k, b) VALUES ('y', false), ('y', 'f'), ('y', 'f'), ('x', false), ('x', true), ('x', true), ('x', 't');
 
 DEACTIVATE test_sw_bool_and, test_sw_bool_or, test_sw_every;
 

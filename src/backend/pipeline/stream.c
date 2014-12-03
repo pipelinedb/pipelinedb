@@ -14,12 +14,17 @@
 #include "catalog/namespace.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
+#include "funcapi.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
+#include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
-#include "pipeline/decode.h"
+#include "parser/parse_coerce.h"
+#include "parser/parse_collate.h"
+#include "parser/parse_target.h"
 #include "pipeline/stream.h"
 #include "storage/ipc.h"
+#include "storage/spalloc.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
 #include "utils/memutils.h"
@@ -34,17 +39,6 @@ typedef struct StreamTargetsEntry
 
 /* Whether or not to block till the events are consumed by a cv*/
 bool DebugSyncStreamInsert;
-
-/*
- * close_stream
- *
- * Closes datanode connections and cleans up stream state
- */
-void
-CloseStream(EventStream stream)
-{
-
-}
 
 /*
  * InsertTargetIsStream
@@ -62,6 +56,28 @@ bool InsertTargetIsStream(InsertStmt *ins)
 	return IsInputStream(ins->relation->relname);
 }
 
+static TupleDesc
+spalloc_tupledesc(TupleDesc desc)
+{
+	// XXX(derekjn) spalloc doesn't seem to be working when called very frequently
+	// so just use a leaky ShmemAlloc until we fix it
+	Size size = TUPLEDESC_FIXED_SIZE;
+	TupleDesc shared = (TupleDesc) ShmemAlloc(size);
+	int i;
+
+	memcpy(shared, desc, TUPLEDESC_FIXED_SIZE);
+
+	shared->attrs = (Form_pg_attribute *) ShmemAlloc(desc->natts * sizeof(Form_pg_attribute));
+
+	for (i=0; i<desc->natts; i++)
+	{
+		shared->attrs[i] = ShmemAlloc(ATTRIBUTE_FIXED_PART_SIZE);
+		memcpy(shared->attrs[i], desc->attrs[i], ATTRIBUTE_FIXED_PART_SIZE);
+	}
+
+	return shared;
+}
+
 /*
  * InsertIntoStream
  *
@@ -73,23 +89,19 @@ InsertIntoStream(InsertStmt *ins)
 	SelectStmt *sel = (SelectStmt *) ins->selectStmt;
 	ListCell *lc;
 	StreamBufferSlot* sbs = NULL;
-	Size size = 0;
 	int numcols = list_length(ins->cols);
-	char **sharedfields = NULL;
 	int i;
 	int count = 0;
+	ParseState *ps = make_parsestate(NULL);
+	List *colnames = NIL;
+	TupleDesc desc = NULL;
+	ExprContext *econtext = CreateStandaloneExprContext();
+	Bitmapset **coltypes = NULL;
+	Oid *commontypes = NULL;
+	List *exprlists = NULL;
+	List **alltypes = NULL;
 
-	/* make sure all tuples are of the correct length before sending any */
-	foreach (lc, sel->valuesLists)
-	{
-		List *vals = (List *) lfirst(lc);
-		if (list_length(vals) < numcols)
-			elog(ERROR, "VALUES tuples must have at least %d values", numcols);
-	}
-
-	sharedfields = ShmemAlloc(numcols * sizeof(char *));
-
-	/* build header */
+	/* build header of column names */
 	for (i = 0; i < numcols; i++)
 	{
 		ListCell *rtc;
@@ -107,92 +119,128 @@ InsertIntoStream(InsertStmt *ins)
 		if (count > 1)
 			elog(ERROR, "column \"%s\" appears more than once in columns list", res->name);
 
-		size += strlen(res->name) + 1;
-		sharedfields[i] = ShmemAlloc(size);
-		memcpy(sharedfields[i], res->name, size);
+		colnames = lappend(colnames, makeString(res->name));
 	}
 
+	coltypes = (Bitmapset **) palloc0(numcols * sizeof(Bitmapset *));
+	alltypes = (List **) palloc0(numcols * sizeof(List *));
+	commontypes = palloc0(numcols * sizeof(Oid));
+
+	/*
+	 * For each column in each VALUE tuple, we need to figure
+	 * out what their common supertype is and coerce them to it later
+	 * if necessary. This allows us to perform the same coercion on
+	 * each column when projecting.
+	 */
 	foreach (lc, sel->valuesLists)
 	{
 		List *vals = (List *) lfirst(lc);
-		A_Const *c;
-		Value *v;
-		List *values = NIL;
-		Size size = 0;
-		StreamEvent ev = (StreamEvent) palloc(sizeof(StreamEventData));
-		ListCell *vlc;
-		int offset = 0;
+		int col = 0;
+		List *exprlist = transformExpressionList(ps, vals, EXPR_KIND_VALUES);
+		ListCell *l;
 
-		for (i = 0; i < numcols; i++)
+		if (list_length(vals) != numcols)
+			elog(ERROR, "VALUES tuples must have %d values", numcols);
+
+		/*
+		 * For each column in the tuple, add its type to a set of types
+		 * seen for that column across all tuples.
+		 */
+		foreach(l, exprlist)
 		{
-			Node *val = list_nth(vals, i);
-			char *sval;
+			Expr *expr = (Expr *) lfirst(l);
+			Bitmapset *types = coltypes[col];
+			Oid etype = exprType((Node *) expr);
 
-			if (IsA(val, TypeCast))
+			if (!bms_is_member(etype, types))
 			{
-				TypeCast *tc = (TypeCast *) val;
-				val = tc->arg;
+				bms_add_member(types, etype);
+				alltypes[col] = lappend(alltypes[col], expr);
 			}
 
-			if (IsA(val, A_Const))
-			{
-				c = (A_Const *) val;
-			}
-			else
-			{
-				/*
-				 * XXX(usmanm): For now we only allow inserting constant values into streams.
-				 * This should be fixed eventually to support arbitrary expressions.
-				 */
-				elog(ERROR, "only literal values are allowed when inserting into streams");
-			}
-
-			v = &(c->val);
-
-			if (IsA(v, Integer))
-			{
-				/* longs have a maximum of 20 digits */
-				sval = palloc(20);
-				sprintf(sval, "%ld", intVal(v));
-			}
-			else
-			{
-				sval = strVal(v);
-			}
-
-			values = lappend(values, sval);
-			size += strlen(sval) + 1;
+			col++;
 		}
 
-		ev->raw = palloc(size);
-		ev->len = size;
-		ev->fields = sharedfields;
-		ev->nfields = numcols;
+		exprlists = lappend(exprlists, exprlist);
+	}
+
+	for (i=0; i<numcols; i++)
+	{
+		commontypes[i] = select_common_type(NULL, alltypes[i], "VALUES", NULL);
+	}
+
+	assign_expr_collations(NULL, (Node *) exprlists);
+
+	/* append each VALUES tuple to the stream buffer */
+	foreach (lc, exprlists)
+	{
+		StreamEvent ev = (StreamEvent) palloc0(sizeof(StreamEventData));
+		List *exprlist = (List *) lfirst(lc);
+		List *exprstatelist;
+		ListCell *l;
+		Datum *values;
+		bool *nulls;
+		int col = 0;
+
+		/* coerce column to common supertype */
+		foreach (l, exprlist)
+		{
+			Node *n = (Node *) lfirst(l);
+			lfirst(l) = coerce_to_common_type(NULL, n, commontypes[col], "VALUES");
+			col++;
+		}
+
+		exprstatelist = (List *) ExecInitExpr((Expr *) exprlist, NULL);
+
+		/*
+		 * Each tuple in an insert batch has the same descriptor,
+		 * so we only have to generate it once and put it in shared
+		 * memory.
+		 */
+		if (desc == NULL)
+		{
+			TupleDesc src = ExecTypeFromExprList(exprlist, colnames);
+			desc = spalloc_tupledesc(src);
+
+			/*
+			 * We use a negative counter and consider the TupleDesc unneeded by further
+			 * events when it reaches 0. We do this because the TupleDesc is considered
+			 * refcounted when tdrefcount >= 0, which causes the refcount to be incremented
+			 * in other places, which we don't need and it complicates things for the purpose
+			 * of stream inserts.
+			 */
+			desc->tdrefcount = -list_length(exprlists);
+		}
+
+		ev->desc = desc;
+
+		values = palloc0(desc->natts * sizeof(Datum));
+		nulls = palloc0(desc->natts * sizeof(bool));
+
+		col = 0;
+		foreach(l, exprstatelist)
+		{
+			ExprState  *estate = (ExprState *) lfirst(l);
+
+			values[col] = ExecEvalExpr(estate, econtext, &nulls[col], NULL);
+			col++;
+		}
+
+		ev->raw = heap_form_tuple(desc, values, nulls);
 		ev->arrivaltime = GetCurrentTimestamp();
 
-		foreach (vlc, values)
-		{
-			char *value = (char *) lfirst(vlc);
-			int len = strlen(value) + 1;
+		sbs = AppendStreamEvent(ins->relation->relname, GlobalStreamBuffer, ev);
 
-			memcpy(ev->raw + offset, value, len);
-			offset += len;
-		}
-
-		sbs = AppendStreamEvent(ins->relation->relname, VALUES_ENCODING, GlobalStreamBuffer, ev);
 		Assert(sbs);
 		count++;
 	}
 
 	/*
-		#392 Wait till the last event has been consumed by a CV before returning
+		Wait till the last event has been consumed by a CV before returning
 		Used for testing, based on a config setting.
 	*/
 	if (DebugSyncStreamInsert)
-	{
 		WaitForOverwrite(GlobalStreamBuffer, sbs, 5);
-	}
-	/* Print out the binary variable that tells you how many cvs are waiting on this stream */
 
 	return count;
 }

@@ -117,21 +117,14 @@ class PipelineDB(object):
         self._tmp_dir = INSTALL_FORMAT % index
         return self._tmp_dir
 
-    def create_db(self, name=TEST_DBNAME):
-        """
-        Create a database within this PipelineDB instance
-        """
-        # We can't create a DB in a transaction block
-        self.conn.execute('commit')
-        self.execute('CREATE DATABASE %s' % name)
-
     def drop_db(self, name=TEST_DBNAME):
         """
         Drop a database within this PipelineDB instance
         """
         # We can't drop a DB in a transaction block
         self.conn.execute('commit')
-        return self.execute('DROP DATABASE %s' % name)
+        self.deactivate()
+        return self.execute('DELETE FROM pipeline_query')
 
     def create_cv(self, name, stmt, activate=False):
         """
@@ -186,7 +179,6 @@ def clean_db(request):
     Called for every test so each test gets a clean db
     """
     pdb = request.module.pipeline
-    pdb.create_db()
     request.addfinalizer(pdb.drop_db)
 
     return TEST_DBNAME

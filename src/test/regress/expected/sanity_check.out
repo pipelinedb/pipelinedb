@@ -136,7 +136,6 @@ pg_ts_template|t
 pg_type|t
 pg_user_mapping|t
 pipeline_combine|t
-pipeline_encoding|t
 pipeline_query|t
 pipeline_stream|t
 point_tbl|t

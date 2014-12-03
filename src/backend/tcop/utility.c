@@ -22,7 +22,6 @@
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "catalog/namespace.h"
-#include "catalog/pipeline_encoding_fn.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/toasting.h"
@@ -501,10 +500,6 @@ standard_ProcessUtility(Node *parsetree,
 
 		case T_CreateContinuousViewStmt:
 			ExecCreateContinuousViewStmt((CreateContinuousViewStmt *) parsetree, queryString);
-			break;
-
-		case T_CreateEncodingStmt:
-			CreateEncoding((CreateEncodingStmt *) parsetree);
 			break;
 
 		case T_DumpStmt:
@@ -2162,9 +2157,6 @@ CreateCommandTag(Node *parsetree)
 
 		case T_CreateContinuousViewStmt:
 			tag = "CREATE CONTINUOUS VIEW";
-			break;
-		case T_CreateEncodingStmt:
-			tag = "CREATE ENCODING";
 			break;
 
 		case T_CreateTableAsStmt:

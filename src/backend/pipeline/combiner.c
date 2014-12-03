@@ -579,6 +579,8 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 
 	CommitTransactionCommand();
 
+	oldcontext = MemoryContextSwitchTo(combinectx);
+
 	for (;;)
 	{
 		bool force = false;
@@ -608,19 +610,15 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 
 		if (count > 0 && (count == batchsize || force))
 		{
-			MemoryContext oldcontext;
-
 			StartTransactionCommand();
 
-			oldcontext = MemoryContextSwitchTo(combinectx);
 			combine(combineplan, workerdesc, store, tmpctx);
-			MemoryContextSwitchTo(oldcontext);
 
 			CommitTransactionCommand();
 
 			tuplestore_clear(store);
 			MemoryContextReset(combinectx);
-			MemoryContextSwitchTo(oldcontext);
+			MemoryContextReset(tmpctx);
 
 			lastCombineTime = GetCurrentTimestamp();
 			count = 0;
@@ -649,6 +647,8 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			}
 		}
 	}
+
+	MemoryContextDelete(runctx);
 
 	DecrementProcessGroupCount(cq_id);
 

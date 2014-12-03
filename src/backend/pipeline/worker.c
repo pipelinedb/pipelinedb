@@ -138,6 +138,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 					true, batchsize, timeoutms, ForwardScanDirection, dest);
 
 		MemoryContextSwitchTo(oldcontext);
+		MemoryContextReset(execcontext);
 
 		CurrentResourceOwner = save;
 		if (estate->es_processed != 0)

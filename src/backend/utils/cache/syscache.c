@@ -64,7 +64,6 @@
 #include "catalog/pg_type.h"
 #include "catalog/pg_user_mapping.h"
 #include "catalog/pipeline_combine.h"
-#include "catalog/pipeline_encoding.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
 #include "utils/rel.h"
@@ -575,28 +574,6 @@ static const struct cachedesc cacheinfo[] = {
 		{
 			Anum_pipeline_combine_aggfinalfn,
 			Anum_pipeline_combine_transfn,
-			0,
-			0
-		},
-		2048
-	},
-	{PipelineEncodingRelationId,	/* PIPELINEENCODINGOID */
-		PipelineEncodingIdIndexId,
-		1,
-		{
-			Anum_pipeline_encoding_id,
-			0,
-			0,
-			0
-		},
-		2048
-	},
-	{PipelineEncodingRelationId,	/* PIPELINEENCODINGNAME */
-		PipelineEncodingNameIndexId,
-		1,
-		{
-			Anum_pipeline_encoding_name,
-			0,
 			0,
 			0
 		},

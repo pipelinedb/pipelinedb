@@ -387,6 +387,10 @@ ExecEndBatch(PlanState *node)
 			ExecEndAggBatch((AggState *) node);
 			break;
 
+		case T_StreamScanState:
+			ExecEndStreamScanBatch((StreamScanState *) node);
+			break;
+
 		default:
 			break;
 	}
@@ -573,10 +577,7 @@ ExecProcNode(PlanState *node)
 	}
 
 	if (node->state->es_exec_node_cxt)
-	{
 		MemoryContextSwitchTo(oldcontext);
-		MemoryContextReset(node->state->es_exec_node_cxt);
-	}
 
 	if (node->instrument)
 		InstrStopNode(node->instrument, TupIsNull(result) ? 0.0 : 1.0);

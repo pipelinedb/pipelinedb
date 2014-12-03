@@ -31,8 +31,8 @@ CREATE CONTINUOUS VIEW test_every AS SELECT k::text, every(b::boolean) FROM bool
 
 ACTIVATE test_bool_and, test_bool_or, test_every;
 
-INSERT INTO bool_stream_cqboolagg (k, b) VALUES ('x', 't'), ('x', 't'), ('x', 1), ('x', 't'), ('x', 't'), ('x', 1), ('x', '1');
-INSERT INTO bool_stream_cqboolagg (k, b) VALUES ('y', 0), ('y', 'f'), ('y', 'f'), ('x', '0'), ('x', 1), ('x', 1), ('x', 't');
+INSERT INTO bool_stream_cqboolagg (k, b) VALUES ('x', 't'), ('x', 't'), ('x', true), ('x', 't'), ('x', 't'), ('x', true), ('x', true);
+INSERT INTO bool_stream_cqboolagg (k, b) VALUES ('y', false), ('y', 'f'), ('y', 'f'), ('x', false), ('x', true), ('x', 't'), ('x', 't');
 
 DEACTIVATE test_bool_and, test_bool_or, test_every;
 

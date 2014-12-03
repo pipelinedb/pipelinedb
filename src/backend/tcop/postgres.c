@@ -65,7 +65,6 @@
 #include "parser/parse_expr.h"
 #include "parser/parse_type.h"
 #include "pipeline/cqanalyze.h"
-#include "pipeline/decode.h"
 #include "pipeline/stream.h"
 #include "pipeline/streambuf.h"
 #include "pg_getopt.h"
@@ -939,7 +938,9 @@ exec_simple_query(const char *query_string)
 
 				BeginCommand("INSERT", dest);
 
+				PushActiveSnapshot(GetTransactionSnapshot());
 				count = InsertIntoStream(ins);
+				PopActiveSnapshot();
 
 				sprintf(buf, "INSERT 0 %d", count);
 				EndCommand(buf, dest);
@@ -3890,9 +3891,6 @@ PostgresMain(int argc, char *argv[],
 											ALLOCSET_DEFAULT_MINSIZE,
 											ALLOCSET_DEFAULT_INITSIZE,
 											ALLOCSET_DEFAULT_MAXSIZE);
-
-	InitDecoderCache();
-
 
 	/*
 	 * Remember stand-alone backend startup time

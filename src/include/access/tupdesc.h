@@ -80,6 +80,7 @@ typedef struct tupleDesc
 	int			tdrefcount;		/* reference count, or -1 if not counting */
 }	*TupleDesc;
 
+#define TUPLEDESC_FIXED_SIZE sizeof(struct tupleDesc)
 
 extern TupleDesc CreateTemplateTupleDesc(int natts, bool hasoid);
 
