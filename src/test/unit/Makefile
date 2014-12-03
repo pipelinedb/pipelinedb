@@ -16,7 +16,7 @@ unit_test = $(top_builddir)/$(subdir)/unit_tests
 
 OBJS_TO_TEST = ../../backend/pipeline/hll.o
 
-OBJS = $(OBJS_TO_TEST) runner.o test_hll.o test_test.o
+OBJS = $(OBJS_TO_TEST) runner.o test_hll.o
 
 LIBS += -lcheck -lpthread -lm -lrt
 
