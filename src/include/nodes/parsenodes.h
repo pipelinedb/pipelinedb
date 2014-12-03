@@ -2838,6 +2838,15 @@ typedef struct ActivateContinuousViewStmt
 
 typedef BaseContinuousViewStmt DeactivateContinuousViewStmt;
 
+typedef struct CreateEncodingStmt
+{
+	NodeTag		type;
+	RangeVar	*name;
+	List	   	*coldefs;
+	RangeVar 	*decodedby;
+	List			*args;
+} CreateEncodingStmt;
+
 typedef struct DumpStmt
 {
 	NodeTag type;

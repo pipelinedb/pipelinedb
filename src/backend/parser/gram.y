@@ -225,7 +225,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 		AlterDefaultPrivilegesStmt DefACLAction
 		AnalyzeStmt ClosePortalStmt ClusterStmt CommentStmt
 		ConstraintsSetStmt CopyStmt CreateAsStmt CreateCastStmt
-		CreateDomainStmt CreateExtensionStmt CreateGroupStmt CreateOpClassStmt
+		CreateDomainStmt CreateEncodingStmt CreateExtensionStmt CreateGroupStmt CreateOpClassStmt
 		CreateOpFamilyStmt AlterOpFamilyStmt CreatePLangStmt
 		CreateSchemaStmt CreateSeqStmt CreateStmt CreateTableSpaceStmt
 		CreateFdwStmt CreateForeignServerStmt CreateForeignTableStmt
@@ -347,7 +347,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 				execute_param_clause using_clause returning_clause
 				opt_enum_val_list enum_val_list table_func_column_list
 				create_generic_options alter_generic_options
-				relation_expr_list dostmt_opt_list
+				relation_expr_list dostmt_opt_list decode_args param_list
 				opt_qualified_name_list
 
 %type <list>	opt_fdw_options fdw_options
@@ -408,7 +408,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <node>	def_arg columnElem where_clause where_or_current_clause
 				a_expr b_expr c_expr AexprConst indirection_el
 				columnref in_expr having_clause func_table array_expr
-				ExclusionWhereClause
+				ExclusionWhereClause named_const
 %type <list>	rowsfrom_item rowsfrom_list opt_col_def_list
 %type <boolean> opt_ordinality
 %type <list>	ExclusionConstraintList ExclusionConstraintElem
@@ -752,6 +752,7 @@ stmt :
 			| CreateCastStmt
 			| CreateConversionStmt
 			| CreateDomainStmt
+			| CreateEncodingStmt
 			| CreateExtensionStmt
 			| CreateFdwStmt
 			| CreateForeignServerStmt
@@ -2679,6 +2680,63 @@ DeactivateContinuousViewStmt: DEACTIVATE opt_qualified_name_list where_clause
 
 /*****************************************************************************
  *
+ * CREATE ENCODING encoding_name
+ *
+ * PipelineDB
+ *
+ * Creates an encoding that can be used to figure out how to decode raw events
+ *
+ *****************************************************************************/
+ CreateEncodingStmt: CREATE ENCODING qualified_name '(' OptTableElementList ')'
+					{
+						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
+						n->name = $3;
+						n->coldefs = $5;
+						$$ = (Node *)n;
+					}
+				| CREATE ENCODING qualified_name '(' OptTableElementList ')'
+				DECODED BY qualified_name decode_args
+					{
+						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
+						n->name = $3;
+						n->coldefs = $5;
+						n->decodedby = $9;
+						n->args = $10;
+						$$ = (Node *)n;
+					}
+				| CREATE ENCODING qualified_name '(' OptTableElementList ')'
+				DECODED BY qualified_name
+					{
+						CreateEncodingStmt *n = makeNode(CreateEncodingStmt);
+						n->name = $3;
+						n->coldefs = $5;
+						n->decodedby = $9;
+						$$ = (Node *)n;
+					}
+			;
+
+named_const:
+			param_name COLON_EQUALS NumericOnly
+				{
+					$$ = makeDefElem($1, (Node *) $3);
+				}
+			| param_name COLON_EQUALS Sconst
+				{
+					$$ = makeDefElem($1, (Node *) makeString($3));
+				}
+		;
+
+param_list:
+			named_const			{ $$ = list_make1($1); }
+			| param_list ',' named_const		{ $$ = lappend($1, $3); }
+		;
+
+decode_args:
+		'(' param_list ')'		{ $$ = $2; }
+		;
+
+/*****************************************************************************
+ *
  * DUMP node_name
  *
  * PipelineDB
@@ -2698,7 +2756,6 @@ DumpStmt: DUMP qualified_name
 			d->name = NULL;
 			$$ = (Node *)d;
 		}
-	;
 
 /*****************************************************************************
  *
