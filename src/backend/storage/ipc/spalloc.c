@@ -74,11 +74,11 @@ mark_allocated(void *ptr)
 	*header |= 1;
 }
 
-static bool
-is_allocated(void *ptr)
-{
-	return *get_header(ptr) & 1;
-}
+//static bool
+//is_allocated(void *ptr)
+//{
+//	return *get_header(ptr) & 1;
+//}
 
 static void*
 get_next(void *ptr)

@@ -112,12 +112,12 @@ test: stats
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqanalyze cqcreate cqactivate cqsanity cqsum cqswsum cqavg cqswavg cqcount cqboolagg cqlatch cqdecode cqminmax cqobjectagg cqregr cqstats cqwindow cqswboolagg cqswminmax cqswobjectagg cqswregr cqswstats
+test: cqanalyze cqcreate cqactivate cqsanity cqsum cqswsum cqavg cqswavg cqcount cqboolagg cqminmax cqobjectagg cqregr cqstats cqwindow cqswboolagg cqswminmax cqswobjectagg cqswregr cqswstats
 
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqvacuum
+test: cqlatch cqvacuum cqdecode stream_exprs stream_casts
 
 # ----------
 # Another group of parallel tests

@@ -26,48 +26,14 @@
 /* Whether or not to wait on the inserted event to be consumed by the CV*/
 extern bool DebugSyncStreamInsert;
 
-typedef enum
-{
-	STREAM_STATE_OPEN,
-	STREAM_STATE_CLOSED
-} StreamState;
-
-typedef struct StreamData
-{
-	/* state of the stream */
-	StreamState state;
-	/* handles to remote nodes to send stream events to */
-//	PGXCNodeHandle **handles;
-	/* number of remote nodes */
-	int	handle_count;
-} EventStreamData;
-
-typedef EventStreamData *EventStream;
-
-typedef struct StreamEventField
-{
-	/* name of this field */
-	char *name;
-	/* pointer to the beginning of this field in its StreamEvent's raw bytes */
-	char *fpos;
-	/* length in bytes of the field */
-	Size flen;
-} StreamEventField;
-
 typedef struct EventData
 {
-	/* special flags for this event */
-	char flags;
-	/* length of raw event */
-	int len;
-	/* raw encoded event data */
-	char *raw;
-	/* pointer to array in shared memory of field names for this event */
-	char **fields;
-	/* number of fields comprising this event */
-	int nfields;
+	/* append-time values */
+	HeapTuple raw;
 	/* arrival time of the event */
 	TimestampTz arrivaltime;
+	/* descriptor for this event and possibly some that follow it */
+	TupleDesc desc;
 } StreamEventData;
 
 typedef StreamEventData *StreamEvent;
@@ -75,9 +41,6 @@ typedef StreamEventData *StreamEvent;
 #define STREAMEVENTSIZE sizeof(StreamEventData)
 #define ARRIVAL_TIMESTAMP "arrival_timestamp"
 
-extern EventStream OpenStream(void);
-extern int RespondSendEvents(int numevents);
-extern void CloseStream(EventStream stream);
 extern bool InsertTargetIsStream(InsertStmt *ins);
 extern int InsertIntoStream(InsertStmt *ins);
 

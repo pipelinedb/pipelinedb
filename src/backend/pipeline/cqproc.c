@@ -31,7 +31,6 @@
 #include "pipeline/cqplan.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
-#include "pipeline/decode.h"
 #include "pipeline/streambuf.h"
 #include "postmaster/bgworker.h"
 #include "regex/regex.h"
@@ -484,7 +483,6 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	 * 0. Give this process access to the database
 	 */
 	BackgroundWorkerInitializeConnection(NameStr(args.dbname), NULL);
-	InitDecoderCache();
 
 	StartTransactionCommand();
 

@@ -319,12 +319,6 @@ DECLARE_UNIQUE_INDEX(pipeline_query_name_index, 4243, on pipeline_query using bt
 DECLARE_UNIQUE_INDEX(pipeline_query_id_index, 4241, on pipeline_query using btree(id int4_ops));
 #define PipelineQueryIdIndexId					4241
 
-DECLARE_UNIQUE_INDEX(pipeline_encoding_name_index, 4245, on pipeline_encoding using btree(name name_ops));
-#define PipelineEncodingNameIndexId					4245
-
-DECLARE_UNIQUE_INDEX(pipeline_encoding_id_index, 4246, on pipeline_encoding using btree(id oid_ops));
-#define PipelineEncodingIdIndexId					4246
-
 DECLARE_UNIQUE_INDEX(pipeline_combine_transfn_index, 4248, on pipeline_combine using btree(aggfinalfn oid_ops, transfn oid_ops));
 #define PipelineCombineTransIdIndexId					4248
 
