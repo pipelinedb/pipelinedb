@@ -26,7 +26,6 @@ all: unit_tests
 
 check: all
 	$(unit_test)
-#	./unit_tests
 
 unit_tests: $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) $(export_dynamic) $(call expand_subsys,$^) $(LIBS) -o $@
