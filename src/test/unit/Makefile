@@ -210,7 +210,7 @@ $(top_builddir)/src/include/utils/probes.h: $(backend)/utils/probes.h
 utils/probes.o: utils/probes.d $(SUBDIROBJS)
 	$(DTRACE) $(DTRACEFLAGS) -C -G -s $(call expand_subsys,$^) -o $@
 
-check:
+check: all
 	$(top_builddir)/$(subdir)/unit_tests
 
 clean:
