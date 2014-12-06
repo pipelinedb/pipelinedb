@@ -13,16 +13,40 @@ subdir = src/test/unit
 top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
-SUBDIRS = ../../backend/access ../../backend/bootstrap \
-../../backend/catalog ../../backend/parser ../../backend/commands \
-../../backend/executor ../../backend/foreign ../../backend/lib \
-../../backend/libpq ../../backend/nodes ../../backend/optimizer \
-../../backend/pipeline ../../backend/port ../../backend/postmaster \
-../../backend/regex ../../backend/replication ../../backend/rewrite \
-../../backend/storage ../../backend/tcop ../../backend/tsearch ../../backend/utils \
-../../../src/timezone
+SUBDIRS = $(backend)/access $(backend)/bootstrap \
+$(backend)/catalog $(backend)/parser $(backend)/commands \
+$(backend)/executor $(backend)/foreign $(backend)/lib \
+$(backend)/libpq $(backend)/nodes $(backend)/optimizer \
+$(backend)/pipeline $(backend)/port $(backend)/postmaster \
+$(backend)/regex $(backend)/replication $(backend)/rewrite \
+$(backend)/storage $(backend)/tcop $(backend)/tsearch $(backend)/utils \
+$(top_builddir)/src/timezone
 
-include ../../../src/backend/common.mk
+subsysfilename = objfiles.txt
+
+SUBDIROBJS = $(SUBDIRS:%=%/$(subsysfilename))
+
+# top-level backend directory obviously has its own "all" target
+#ifneq ($(subdir), src/backend)
+#all: $(subsysfilename)
+#endif
+
+SUBSYS.o: $(SUBDIROBJS) $(OBJS)
+	$(LD) $(LDREL) $(LDOUT) $@ $^
+
+objfiles.txt: Makefile $(SUBDIROBJS) $(OBJS)
+# Don't rebuild the list if only the OBJS have changed.
+	$(if $(filter-out $(OBJS),$?),( $(if $(SUBDIROBJS),cat $(SUBDIROBJS); )echo $(addprefix $(subdir)/,$(OBJS)) ) >$@,touch $@)
+
+# make function to expand objfiles.txt contents
+expand_subsys = $(foreach file,$(1),$(if $(filter %/objfiles.txt,$(file)),$(patsubst ../../src/backend/%,%,$(addprefix $(top_builddir)/,$(shell cat $(file)))),$(file)))
+
+# Parallel make trickery
+$(SUBDIROBJS): $(SUBDIRS:%=%-recursive) ;
+
+.PHONY: $(SUBDIRS:%=%-recursive)
+$(SUBDIRS:%=%-recursive):
+	$(MAKE) -C $(subst -recursive,,$@) all
 
 # As of 1/2010:
 # The probes.o file is necessary for dtrace support on Solaris, and on recent
@@ -114,7 +138,7 @@ $(SUBDIRS:%=%-recursive): $(top_builddir)/src/include/parser/gram.h $(top_buildd
 
 # run this unconditionally to avoid needing to know its dependencies here:
 submake-schemapg:
-	$(MAKE) -C ../../backend/catalog schemapg.h
+	$(MAKE) -C $(backend)/catalog schemapg.h
 
 # src/port needs a convenient way to force errcodes.h to get built
 submake-errcodes: $(top_builddir)/src/include/utils/errcodes.h
@@ -136,17 +160,17 @@ postgres.o: $(OBJS)
 # the make files in our subdirectories. Note that it's important we
 # match the dependencies shown in the subdirectory makefiles!
 
-../../backend/parser/gram.h: parser/gram.y
-	$(MAKE) -C ../../backend/parser gram.h
+$(backend)/parser/gram.h: parser/gram.y
+	$(MAKE) -C $(backend)/parser gram.h
 
-../../backend/utils/fmgroids.h: ../../backend/utils/Gen_fmgrtab.pl ../../backend/catalog/Catalog.pm $(top_srcdir)/src/include/catalog/pg_proc.h
-	$(MAKE) -C ../../backend/utils fmgroids.h
+$(backend)/utils/fmgroids.h: $(backend)/utils/Gen_fmgrtab.pl $(backend)/catalog/Catalog.pm $(top_srcdir)/src/include/catalog/pg_proc.h
+	$(MAKE) -C $(backend)/utils fmgroids.h
 
-../../backend/utils/errcodes.h: ../../backend/utils/generate-errcodes.pl ../../backend/utils/errcodes.txt
-	$(MAKE) -C ../../backend/utils errcodes.h
+$(backend)/utils/errcodes.h: $(backend)/utils/generate-errcodes.pl $(backend)/utils/errcodes.txt
+	$(MAKE) -C $(backend)/utils errcodes.h
 
-../../backend/utils/probes.h: ../../backend/utils/probes.d
-	$(MAKE) -C ../../backend/utils probes.h
+$(backend)/utils/probes.h: $(backend)/utils/probes.d
+	$(MAKE) -C $(backend)/utils probes.h
 
 # Make symlinks for these headers in the include directory. That way
 # we can cut down on the -I options. Also, a symlink is automatically
@@ -159,32 +183,35 @@ postgres.o: $(OBJS)
 # will be in the build tree, so a simple ../.. reference won't work.
 # For headers generated during regular builds, we prefer a relative symlink.
 
-$(top_builddir)/src/include/parser/gram.h: ../../backend/parser/gram.h
+$(top_builddir)/src/include/parser/gram.h: $(backend)/parser/gram.h
 	prereqdir=`cd '$(dir $<)' >/dev/null && pwd` && \
 	  cd '$(dir $@)' && rm -f $(notdir $@) && \
 	  $(LN_S) "$$prereqdir/$(notdir $<)" .
 
-$(top_builddir)/src/include/catalog/schemapg.h: ../../backend/catalog/schemapg.h
+$(top_builddir)/src/include/catalog/schemapg.h: $(backend)/catalog/schemapg.h
 	prereqdir=`cd '$(dir $<)' >/dev/null && pwd` && \
 	  cd '$(dir $@)' && rm -f $(notdir $@) && \
 	  $(LN_S) "$$prereqdir/$(notdir $<)" .
 
-$(top_builddir)/src/include/utils/errcodes.h: ../../backend/utils/errcodes.h
+$(top_builddir)/src/include/utils/errcodes.h: $(backend)/utils/errcodes.h
 	prereqdir=`cd '$(dir $<)' >/dev/null && pwd` && \
 	  cd '$(dir $@)' && rm -f $(notdir $@) && \
 	  $(LN_S) "$$prereqdir/$(notdir $<)" .
 
-$(top_builddir)/src/include/utils/fmgroids.h: ../../backend/utils/fmgroids.h
+$(top_builddir)/src/include/utils/fmgroids.h: $(backend)/utils/fmgroids.h
 	prereqdir=`cd '$(dir $<)' >/dev/null && pwd` && \
 	  cd '$(dir $@)' && rm -f $(notdir $@) && \
 	  $(LN_S) "$$prereqdir/$(notdir $<)" .
 	  
-$(top_builddir)/src/include/utils/probes.h: ../../backend/utils/probes.h
+$(top_builddir)/src/include/utils/probes.h: $(backend)/utils/probes.h
 	cd '$(dir $@)' && rm -f $(notdir $@) && \
-	    $(LN_S) "../../../src/backend/utils/probes.h" .
+	    $(LN_S) "$(backend)/utils/probes.h" .
 	  
 utils/probes.o: utils/probes.d $(SUBDIROBJS)
 	$(DTRACE) $(DTRACEFLAGS) -C -G -s $(call expand_subsys,$^) -o $@
-	  
 
+check:
+	$(top_builddir)/$(subdir)/unit_tests
 
+clean:
+	rm -f $(TEST_OBJS) unit_tests
