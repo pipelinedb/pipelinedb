@@ -46,7 +46,6 @@
 #include "utils/ps_status.h"
 
 
-const char *progname;
 
 
 static void startup_hacks(const char *progname);
