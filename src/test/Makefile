@@ -12,6 +12,6 @@ subdir = src/test
 top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 
-SUBDIRS = regress isolation py
+SUBDIRS = regress isolation py unit
 
 $(recurse)

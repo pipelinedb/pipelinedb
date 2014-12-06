@@ -203,6 +203,8 @@ char	   *ListenAddresses;
  */
 int			ReservedBackends;
 
+const char *progname;
+
 /* The socket(s) we're listening to. */
 #define MAXLISTEN	64
 static pgsocket ListenSocket[MAXLISTEN];

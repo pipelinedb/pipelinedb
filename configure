@@ -16275,3 +16275,45 @@ if test -n "$ac_unrecognized_opts" && test "$enable_option_checking" != no; then
 $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
 
+# check
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lcheck" >&5
+$as_echo_n "checking for main in -lcheck... " >&6; }
+if ${ac_cv_lib_check_main+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lcheck  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+int
+main ()
+{
+return main ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_check_main=yes
+else
+  ac_cv_lib_check_main=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_check_main" >&5
+$as_echo "$ac_cv_lib_check_main" >&6; }
+if test "x$ac_cv_lib_check_main" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_LIBCHECK 1
+_ACEOF
+
+  LIBS="-lcheck $LIBS"
+
+else
+  as_fn_error $? "check library not found (http://check.sourceforge.net/web/install.html)" "$LINENO" 5
+fi
+ac_cv_lib_check=ac_cv_lib_check_main
