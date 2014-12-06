@@ -29,5 +29,7 @@ int main(void)
 	number_failed = srunner_ntests_failed(sr);
 	srunner_free(sr);
 
+	MemoryContextReset(context);
+
 	return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
