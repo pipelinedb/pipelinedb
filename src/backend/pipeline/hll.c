@@ -107,17 +107,6 @@ num_leading_zeroes(HyperLogLog *hll, void *elem, Size size, int *m)
 	int mask = (numregs - 1);
 
 	/* register index is the first p bits of the hash */
-//	*m = (h >> (64 - hll->p));
-//
-//	/* now determine how many leading zeroes follow the first p bits */
-//	h <<= hll->p;
-//
-//	while ((h & MSB_64) == 0)
-//	{
-//		h <<= 1;
-//		count ++;
-//	}
-
   index = h & mask;
   h |= ((uint64) 1 << 63);
   bit = numregs;
