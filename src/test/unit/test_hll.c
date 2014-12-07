@@ -9,33 +9,33 @@ START_TEST(test_murmurhash64a)
 	uint32 ik;
 	uint64 lk;
 	float8 fk8;
-	uint64 h = MurmurHash64A(k, strlen(k) + 1, 0);
+	uint64 h = MurmurHash64A(k, strlen(k) + 1);
 
-	ck_assert_uint_eq(h, 14613800511125978524U);
+	ck_assert_uint_eq(h, 15128288175273613228U);
 
 	k = "another key";
-	h = MurmurHash64A(k, strlen(k) + 1, 0);
-	ck_assert_uint_eq(h, 14572063269992335582U);
+	h = MurmurHash64A(k, strlen(k) + 1);
+	ck_assert_uint_eq(h, 9098300568195040227U);
 
 	fk8 = 42.42;
-	h = MurmurHash64A(&fk8, 8, 0);
-	ck_assert_uint_eq(h, 749110323020550257U);
+	h = MurmurHash64A(&fk8, 8);
+	ck_assert_uint_eq(h, 15272446282472167317U);
 
 	ik = 42;
-	h = MurmurHash64A(&ik, 4, 0);
-	ck_assert_uint_eq(h, 1957777661270593380U);
+	h = MurmurHash64A(&ik, 4);
+	ck_assert_uint_eq(h, 7164345697233736769U);
 
 	ik = 0;
-	h = MurmurHash64A(&ik, 4, 0);
-	ck_assert_uint_eq(h, 2224014147481998463U);
+	h = MurmurHash64A(&ik, 4);
+	ck_assert_uint_eq(h, 979726119277092382U);
 
 	ik = 1 << 31;
-	h = MurmurHash64A(&ik, 4, 0);
-	ck_assert_uint_eq(h, 488473488423332433U);
+	h = MurmurHash64A(&ik, 4);
+	ck_assert_uint_eq(h, 7967641002240233708U);
 
 	lk = 1UL << 63;
-	h = MurmurHash64A(&lk, 8, 0);
-	ck_assert_uint_eq(h, 4903226226401862699U);
+	h = MurmurHash64A(&lk, 8);
+	ck_assert_uint_eq(h, 6972884522371238360U);
 }
 END_TEST
 

@@ -19,6 +19,13 @@ int main(void)
 	int number_failed;
 	SRunner *sr;
 
+	/* ErrorContext must be initialized for logging to work */
+	ErrorContext = AllocSetContextCreate(NULL,
+			"ErrorContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
 	MemoryContextSwitchTo(context);
 
 	sr = srunner_create(suite_create ("main"));
