@@ -530,10 +530,7 @@ hll_dense_sum(HyperLogLog *hll, double *PE, int *ezp)
 			if (reg == 0)
 				ez++;
 			else
-			{
-//				elog(LOG, "M[%d] = %d, E += %.3f", j, reg, PE[reg]);
 				E += PE[reg]; /* precomputed 2^(-reg[j]) */
-			}
 		}
 		E += ez;
   }
