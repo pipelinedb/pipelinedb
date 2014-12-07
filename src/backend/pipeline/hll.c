@@ -24,6 +24,74 @@
 #include "utils/palloc.h"
 
 #include "utils/memutils.h"
+
+/*
+ * hll_sparse_to_dense
+ *
+ * Promote a sparse representation to a dense representation
+ */
+static HyperLogLog *
+hll_sparse_to_dense(HyperLogLog *sparse)
+{
+	HyperLogLog *dense;
+  int idx = 0;
+  int runlen;
+  int regval;
+  uint8 *pos = (uint8 *) sparse->M;
+  uint8 *end = pos + sparse->mlen;
+  Size size;
+  int m = (((1 << sparse->p) * HLL_BITS_PER_REGISTER) / 8);
+
+  if (HLL_IS_DENSE(sparse))
+		return sparse;
+
+  size = sizeof(HyperLogLog) + m + 1;
+  dense = palloc0(size);
+  dense->card = sparse->card;
+  dense->p = sparse->p;
+  dense->encoding = HLL_DENSE_CLEAN;
+  dense->mlen = m;
+
+  /*
+   * Read the sparse representation and set non-zero registers
+   * accordingly.
+   */
+  while(pos < end)
+  {
+		if (HLL_SPARSE_IS_ZERO(pos))
+		{
+			runlen = HLL_SPARSE_ZERO_LEN(pos);
+			idx += runlen;
+			pos++;
+		}
+		else if (HLL_SPARSE_IS_XZERO(pos))
+		{
+			runlen = HLL_SPARSE_XZERO_LEN(pos);
+			idx += runlen;
+			pos += 2;
+		}
+		else
+		{
+			runlen = HLL_SPARSE_VAL_LEN(pos);
+			regval = HLL_SPARSE_VAL_VALUE(pos);
+
+			while (runlen--)
+			{
+				// why is regval 32 here?
+				// that shouldn't be possible it's too big
+				// seems like an alignment issue...32 is never added in sparse_add
+				HLL_DENSE_SET_REGISTER(dense->M, idx, regval);
+				idx++;
+			}
+			pos++;
+		}
+  }
+
+  pfree(sparse);
+
+  return dense;
+}
+
 /*
  * Returns the number of leading zeroes for the hash code of the
  * given element. The value of m is set to the register
@@ -32,21 +100,62 @@ static uint8
 num_leading_zeroes(HyperLogLog *hll, void *elem, Size size, int *m)
 {
 	uint64 h = MurmurHash64A(elem, size);
+	uint64 index;
+	uint64 bit;
 	uint8 count = 0;
+	int numregs = (1 << hll->p);
+	int mask = (numregs - 1);
 
 	/* register index is the first p bits of the hash */
-	*m = (h >> (64 - hll->p));
+//	*m = (h >> (64 - hll->p));
+//
+//	/* now determine how many leading zeroes follow the first p bits */
+//	h <<= hll->p;
+//
+//	while ((h & MSB_64) == 0)
+//	{
+//		h <<= 1;
+//		count ++;
+//	}
 
-	/* now determine how many leading zeroes follow the first p bits */
-	h <<= hll->p;
+  index = h & mask;
+  h |= ((uint64) 1 << 63);
+  bit = numregs;
+  count = 1;
 
-	while ((h & MSB_64) == 0)
-	{
-		h <<= 1;
-		count ++;
-	}
+  while((h & bit) == 0) {
+		count++;
+		bit <<= 1;
+  }
+
+  *m = (int) index;
 
 	return count;
+}
+
+static HyperLogLog *
+hll_dense_add(HyperLogLog *hll, void *elem, Size size, int *result)
+{
+  uint8 oldleading;
+  uint8 leading;
+  int index;
+
+  /* update the register if this element produced a longer run of zeroes */
+  leading = num_leading_zeroes(hll, elem, size, &index);
+
+  HLL_DENSE_GET_REGISTER(oldleading, hll->M, index);
+  if (leading > oldleading)
+  {
+		HLL_DENSE_SET_REGISTER(hll->M, index, leading);
+
+		*result = 1;
+  }
+  else
+  {
+		*result = 0;
+  }
+
+  return hll;
 }
 
 /*
@@ -80,7 +189,13 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 
 	leading = num_leading_zeroes(hll, elem, size, &m);
 
-	// upgrade?10
+	if (leading > 32)
+	{
+		/* the sparse representation can only represent 32-bit cardinalities */
+		hll = hll_sparse_to_dense(hll);
+
+		return hll_dense_add(hll, elem, size, result);
+	}
 
   /*
    * When updating a sparse representation, we may need to enlarge
@@ -193,6 +308,8 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 		/* case B */
 		if (runlen == 1)
 		{
+			if (leading == 32)
+				elog(LOG, "LEADING=%d", leading);
 			HLL_SPARSE_VAL_SET(pos, leading, 1);
 			hll->encoding = HLL_SPARSE_DIRTY;
 		}
@@ -300,8 +417,12 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
   oldlen = isxzero ? 2 : 1;
   deltalen = seqlen - oldlen;
 
-//   if (deltalen > 0 &&
-//       sdslen(o->ptr)+deltalen > server.hll_sparse_max_bytes) goto promote;
+	if (deltalen > 0 && hll->mlen + deltalen > HLL_MAX_SPARSE_BYTES)
+	{
+		hll = hll_sparse_to_dense(hll);
+
+		return hll_dense_add(hll, elem, size, result);
+	}
 
   /* we already repalloc'd enough space to do this */
 	if (deltalen && next)
@@ -353,12 +474,81 @@ hll_sparse_sum(HyperLogLog *hll, double *PE, int *ezp)
 			runlen = HLL_SPARSE_VAL_LEN(pos);
 			regval = HLL_SPARSE_VAL_VALUE(pos);
 			idx += runlen;
-			E += PE[regval]*runlen;
+			E += PE[regval] * runlen;
 			pos++;
 		}
   }
 
   E += ez;
+  *ezp = ez;
+
+  return E;
+}
+
+/*
+ * hll_dense_sum
+ */
+static double
+hll_dense_sum(HyperLogLog *hll, double *PE, int *ezp)
+{
+  double E = 0;
+  int j;
+  int ez = 0;
+  int m = 1 << hll->p;
+
+  if (m == (1 << 14) && HLL_BITS == 6)
+  {
+		/* fast path when p == 14 */
+		uint8 *r = hll->M;
+		unsigned long r0, r1, r2, r3, r4, r5, r6, r7, r8, r9,
+									r10, r11, r12, r13, r14, r15;
+		for (j = 0; j < 1024; j++)
+		{
+			/* handle 16 registers per iteration.*/
+			r0 = r[0] & 63; if (r0 == 0) ez++;
+			r1 = (r[0] >> 6 | r[1] << 2) & 63; if (r1 == 0) ez++;
+			r2 = (r[1] >> 4 | r[2] << 4) & 63; if (r2 == 0) ez++;
+			r3 = (r[2] >> 2) & 63; if (r3 == 0) ez++;
+
+			r4 = r[3] & 63; if (r4 == 0) ez++;
+			r5 = (r[3] >> 6 | r[4] << 2) & 63; if (r5 == 0) ez++;
+			r6 = (r[4] >> 4 | r[5] << 4) & 63; if (r6 == 0) ez++;
+			r7 = (r[5] >> 2) & 63; if (r7 == 0) ez++;
+
+			r8 = r[6] & 63; if (r8 == 0) ez++;
+			r9 = (r[6] >> 6 | r[7] << 2) & 63; if (r9 == 0) ez++;
+			r10 = (r[7] >> 4 | r[8] << 4) & 63; if (r10 == 0) ez++;
+			r11 = (r[8] >> 2) & 63; if (r11 == 0) ez++;
+
+			r12 = r[9] & 63; if (r12 == 0) ez++;
+			r13 = (r[9] >> 6 | r[10] << 2) & 63; if (r13 == 0) ez++;
+			r14 = (r[10] >> 4 | r[11] << 4) & 63; if (r14 == 0) ez++;
+			r15 = (r[11] >> 2) & 63; if (r15 == 0) ez++;
+
+			E += (PE[r0] + PE[r1]) + (PE[r2] + PE[r3]) + (PE[r4] + PE[r5]) +
+					 (PE[r6] + PE[r7]) + (PE[r8] + PE[r9]) + (PE[r10] + PE[r11]) +
+					 (PE[r12] + PE[r13]) + (PE[r14] + PE[r15]);
+
+			r += 12;
+		}
+  }
+  else
+  {
+		for (j = 0; j < m; j++) {
+			unsigned long reg;
+
+			HLL_DENSE_GET_REGISTER(reg, hll->M, j);
+			if (reg == 0)
+				ez++;
+			else
+			{
+//				elog(LOG, "M[%d] = %d, E += %.3f", j, reg, PE[reg]);
+				E += PE[reg]; /* precomputed 2^(-reg[j]) */
+			}
+		}
+		E += ez;
+  }
+
   *ezp = ez;
 
   return E;
@@ -373,14 +563,13 @@ MurmurHash64A(const void *key, Size keysize)
   static const uint64 m = 0xc6a4a7935bd1e995;
   static const int r = 47;
 
-  const uint64 *data = (const uint64 *) key;
-  const uint64 *end = data + (keysize / 8);
-  const uint8 *data2;
-  uint64 h = MURMUR_SEED ^ keysize;
+  const uint8 *data = (const uint8 *) key;
+  const uint8 *end = data + (keysize - (keysize & 7));
+  uint64 h = MURMUR_SEED ^ (keysize * m);
 
   while(data != end)
   {
-		uint64 k = *data++;
+		uint64 k = *((uint64 *) data);
 
 		k *= m;
 		k ^= k >> r;
@@ -388,19 +577,18 @@ MurmurHash64A(const void *key, Size keysize)
 
 		h ^= k;
 		h *= m;
+		data += 8;
   }
-
-  data2 = (const uint8*) data;
 
   switch(keysize & 7)
   {
-		case 7: h ^= (uint64) data2[6] << 48;
-		case 6: h ^= (uint64) data2[5] << 40;
-		case 5: h ^= (uint64) data2[4] << 32;
-		case 4: h ^= (uint64) data2[3] << 24;
-		case 3: h ^= (uint64) data2[2] << 16;
-		case 2: h ^= (uint64) data2[1] << 8;
-		case 1: h ^= (uint64) data2[0];
+		case 7: h ^= (uint64) data[6] << 48;
+		case 6: h ^= (uint64) data[5] << 40;
+		case 5: h ^= (uint64) data[4] << 32;
+		case 4: h ^= (uint64) data[3] << 24;
+		case 3: h ^= (uint64) data[2] << 16;
+		case 2: h ^= (uint64) data[1] << 8;
+		case 1: h ^= (uint64) data[0];
 						h *= m;
   };
 
@@ -463,7 +651,7 @@ HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result)
 	if (HLL_IS_SPARSE(hll))
 		return hll_sparse_add(hll, elem, len, result);
 	else
-		return NULL;
+		return hll_dense_add(hll, elem, len, result);
 }
 
 /*
@@ -477,7 +665,6 @@ HLLSize(HyperLogLog *hll)
   double m = 1 << hll->p;
   double E;
   double alpha = 0.7213 / (1 + 1.079 / m);
-
   int j;
   int ez; /* Number of registers equal to 0. */
 
@@ -494,12 +681,16 @@ HLLSize(HyperLogLog *hll)
 		for (j = 1; j < 64; j++)
 		{
 			/* 2^(-reg[j]) is the same as 1/2^reg[j]. */
-			PE[j] = 1.0/(1ULL << j);
+			PE[j] = 1.0 / (1ULL << j);
 		}
 		initialized = true;
   }
 
-  E = hll_sparse_sum(hll, PE, &ez);
+  if (HLL_IS_DENSE(hll))
+		E = hll_dense_sum(hll, PE, &ez);
+  else
+		E = hll_sparse_sum(hll, PE, &ez);
+
   E = (1 / E) * alpha * m * m;
 
   /*
@@ -513,7 +704,7 @@ HLLSize(HyperLogLog *hll)
   {
 		E = m * log(m / ez); /* LINEARCOUNTING() */
   }
-  else if (m == 16384 && E < 72000)
+  else if (m == (1 << 14) && E < 72000)
   {
 		/*
 		 * We did polynomial regression of the bias for this range, this
@@ -521,7 +712,7 @@ HLLSize(HyperLogLog *hll)
 		 * according to it. Only apply the correction for P=14 that's what
 		 * we use and the value the correction was verified with.
 		 */
-		double bias = 5.9119 * 1.0e-18 * (E * E * E *E) -
+		double bias = 5.9119 * 1.0e-18 * (E * E * E * E) -
 									1.4253 * 1.0e-12 * (E * E * E) +
 									1.2940 * 1.0e-7 * (E * E) -
 									5.2921 * 1.0e-3 * E +
