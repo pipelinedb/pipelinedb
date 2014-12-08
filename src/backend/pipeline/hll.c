@@ -307,7 +307,7 @@ hll_sparse_to_dense(HyperLogLog *sparse)
    * Read the sparse representation and set non-zero registers
    * accordingly.
    */
-  while(pos < end)
+  while (pos < end)
   {
 		if (HLL_SPARSE_IS_ZERO(pos))
 		{
@@ -360,7 +360,7 @@ num_leading_zeroes(HyperLogLog *hll, void *elem, Size size, int *m)
   bit = numregs;
   count = 1;
 
-  while((h & bit) == 0) {
+  while ((h & bit) == 0) {
 		count++;
 		bit <<= 1;
   }
@@ -800,7 +800,7 @@ MurmurHash64A(const void *key, Size keysize)
   const uint8 *end = data + (keysize - (keysize & 7));
   uint64 h = MURMUR_SEED ^ (keysize * m);
 
-  while(data != end)
+  while (data != end)
   {
 		uint64 k = *((uint64 *) data);
 
@@ -999,7 +999,79 @@ HLLSize(HyperLogLog *hll)
  * Returns the lossless union of multiple HyperLogLogs
  */
 HyperLogLog *
-HLLUnion(HyperLogLog *hll, HyperLogLog *others, ...)
+HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 {
-	return NULL;
+  int reg;
+  int m = (1 << result->p);
+  uint8 regs[m];
+
+  MemSet(regs, 0, m);
+
+  /* results always use the dense representation */
+  if (HLL_IS_SPARSE(result))
+		result = hll_sparse_to_dense(result);
+
+	if (HLL_IS_DENSE(incoming))
+	{
+		/* easy, just take the max of each HLL's registers */
+		for (reg=0; reg<m; reg++)
+		{
+			uint8 r0;
+			uint8 r1;
+
+			HLL_DENSE_GET_REGISTER(r0, result->M, reg);
+			HLL_DENSE_GET_REGISTER(r1, incoming->M, reg);
+
+			regs[reg] = Max(r0, r1);
+		}
+	}
+  else
+	{
+		/* run-length encoded, read every non-zero register value */
+		uint8 *pos = incoming->M;
+		uint8 *end = pos + incoming->mlen;
+		long runlen;
+		long regval;
+
+		reg = 0;
+		while (pos < end)
+		{
+			if (HLL_SPARSE_IS_ZERO(pos))
+			{
+				runlen = HLL_SPARSE_ZERO_LEN(pos);
+				reg += runlen;
+				pos++;
+			}
+			else if (HLL_SPARSE_IS_XZERO(pos))
+			{
+				runlen = HLL_SPARSE_XZERO_LEN(pos);
+				reg += runlen;
+				pos += 2;
+			}
+			else
+			{
+				runlen = HLL_SPARSE_VAL_LEN(pos);
+				regval = HLL_SPARSE_VAL_VALUE(pos);
+				while (runlen--)
+				{
+					regs[reg] = regval;
+					reg++;
+				}
+				pos++;
+			}
+		}
+	}
+
+  /* for each register in both HLLs, keep the max of the two */
+  for (reg=0; reg<m; reg++)
+  {
+		uint8 regval;
+
+		HLL_DENSE_GET_REGISTER(regval, result->M, reg);
+		HLL_DENSE_SET_REGISTER(result->M, reg, Max(regval, regs[reg]));
+  }
+
+  result->encoding = HLL_DENSE_DIRTY;
+
+  return result;
 }

@@ -39,6 +39,6 @@ HyperLogLog *HLLCreateWithP(int p);
 HyperLogLog *HLLCreate(void);
 HyperLogLog *HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result);
 uint64 HLLSize(HyperLogLog *hll);
-HyperLogLog *HLLUnion(HyperLogLog *hll, HyperLogLog *, ...);
+HyperLogLog *HLLUnion(HyperLogLog *result, HyperLogLog *incoming);
 
 #endif

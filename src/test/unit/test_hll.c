@@ -107,15 +107,6 @@ START_TEST(test_dense)
 }
 END_TEST
 
-START_TEST(test_union)
-{
-	/*
-	 * Verify that the cardinality of the union of multiple HLLs is correct
-	 */
-	ck_assert_int_eq(1, 1);
-}
-END_TEST
-
 START_TEST(test_card_caching)
 {
 	/*
@@ -155,6 +146,55 @@ START_TEST(test_card_caching)
 	size = HLLSize(hll);
 	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
 	ck_assert_int_eq(size, 100225);
+}
+END_TEST
+
+START_TEST(test_union)
+{
+	/*
+	 * Verify that the cardinality of the union of multiple HLLs is correct
+	 */
+	HyperLogLog *hll1 = HLLCreate();
+	HyperLogLog *hll2 = HLLCreate();
+	uint64 size;
+
+	hll1 = add_elements(hll1, 0, 1000);
+	hll2 = add_elements(hll2, 1000, 2000);
+
+	size = HLLSize(hll1);
+	ck_assert_int_eq(size, 1009);
+
+	size = HLLSize(hll2);
+	ck_assert_int_eq(size, 1000);
+
+	hll1 = HLLUnion(hll1, hll2);
+
+	/* these HLLs are disjoint, so the union should include both */
+	size = HLLSize(hll1);
+	ck_assert_int_eq(size, 2009);
+
+	hll1 = add_elements(hll1, 500, 1500);
+
+	hll1 = HLLUnion(hll1, hll2);
+	size = HLLSize(hll1);
+
+	/* no new elements, union cardinality shouldn't change */
+	ck_assert_int_eq(size, 2009);
+
+	hll1 = add_elements(hll1, 1400, 2500);
+	hll1 = HLLUnion(hll1, hll2);
+
+	size = HLLSize(hll1);
+	ck_assert_int_eq(size, 2502);
+
+	/* now add some new elements to the second HLL */
+	hll2 = add_elements(hll2, 3000, 100000);
+	ck_assert(hll2->encoding == HLL_DENSE_DIRTY);
+
+	hll1 = HLLUnion(hll1, hll2);
+	size = HLLSize(hll1);
+
+	ck_assert_int_eq(size, 99678);
 }
 END_TEST
 
