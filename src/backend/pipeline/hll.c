@@ -25,6 +25,7 @@
 
 #include "utils/memutils.h"
 
+#define HLL_DEFAULT_P 14
 #define HLL_BITS_PER_REGISTER 6
 #define HLL_MAX_SPARSE_BYTES 11000
 #define HLL_REGISTER_MAX ((1 << HLL_BITS_PER_REGISTER) - 1)
@@ -268,13 +269,9 @@
 	*(p) = (((val) - 1) << 2 | ((len) - 1)) | HLL_SPARSE_VAL_BIT; \
 } while(0)
 
-#define HLL_SPARSE_DIRTY 's'
-#define HLL_SPARSE_CLEAN 'S'
-#define HLL_DENSE_DIRTY 'd'
-#define HLL_DENSE_CLEAN 'D'
-
 #define HLL_IS_SPARSE(hll) ((hll)->encoding == HLL_SPARSE_DIRTY || (hll)->encoding == HLL_SPARSE_CLEAN)
 #define HLL_IS_DENSE(hll) ((hll)->encoding == HLL_DENSE_DIRTY || (hll)->encoding == HLL_DENSE_CLEAN)
+#define HLL_IS_CLEAN(hll) ((hll)->encoding == HLL_DENSE_CLEAN || (hll)->encoding == HLL_SPARSE_CLEAN)
 
 #define MURMUR_SEED 0xadc83b19ULL
 #define HLL_SIZE(hll) (sizeof(HyperLogLog) + (hll)->mlen)
@@ -303,7 +300,7 @@ hll_sparse_to_dense(HyperLogLog *sparse)
   dense = palloc0(size);
   dense->card = sparse->card;
   dense->p = sparse->p;
-  dense->encoding = HLL_DENSE_CLEAN;
+  dense->encoding = HLL_IS_CLEAN(sparse) ? HLL_DENSE_CLEAN : HLL_DENSE_DIRTY;
   dense->mlen = m;
 
   /*
@@ -548,8 +545,6 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 		/* case B */
 		if (runlen == 1)
 		{
-			if (leading == 32)
-				elog(LOG, "LEADING=%d", leading);
 			HLL_SPARSE_VAL_SET(pos, leading, 1);
 			hll->encoding = HLL_SPARSE_DIRTY;
 		}
@@ -573,7 +568,8 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 		return hll;
   }
 
-  /* D) General case.
+  /*
+   * D) General case
    *
    * The other cases are more complex: our register must be updated
    * and is either currently represented by a VAL opcode with len > 1,
@@ -839,10 +835,10 @@ MurmurHash64A(const void *key, Size keysize)
 /*
  * HLLCreate
  *
- * Create an empty HyperLogLog structure with the given parameters
+ * Create an empty HyperLogLog structure with the given p
  */
 HyperLogLog *
-HLLCreate(int p)
+HLLCreateWithP(int p)
 {
 	/* m = number of registers */
 	int m = 1 << p;
@@ -878,6 +874,17 @@ HLLCreate(int p)
 }
 
 /*
+ * HLLCreate
+ *
+ * Create an empty HyperLogLog structure with a default p
+ */
+HyperLogLog *
+HLLCreate(void)
+{
+	return HLLCreateWithP(HLL_DEFAULT_P);
+}
+
+/*
  * HLLAdd
  *
  * Adds an element to the given HLL
@@ -885,10 +892,17 @@ HLLCreate(int p)
 HyperLogLog *
 HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result)
 {
+	HyperLogLog *ret;
 	if (HLL_IS_SPARSE(hll))
-		return hll_sparse_add(hll, elem, len, result);
+		ret = hll_sparse_add(hll, elem, len, result);
 	else
-		return hll_dense_add(hll, elem, len, result);
+		ret = hll_dense_add(hll, elem, len, result);
+
+	/* if the cardinality changed, invalidate the cached cardinality */
+	if (*result)
+		ret->encoding = HLL_IS_SPARSE(ret) ? HLL_SPARSE_DIRTY : HLL_DENSE_DIRTY;
+
+	return ret;
 }
 
 /*
@@ -923,10 +937,23 @@ HLLSize(HyperLogLog *hll)
 		initialized = true;
   }
 
+  /*
+   * If nothing has changed since the last cardinality computation,
+   * we can just use the last result
+   */
+  if (HLL_IS_CLEAN(hll))
+		return hll->card;
+
   if (HLL_IS_DENSE(hll))
+  {
 		E = hll_dense_sum(hll, PE, &ez);
+		hll->encoding = HLL_DENSE_CLEAN;
+  }
   else
+  {
 		E = hll_sparse_sum(hll, PE, &ez);
+		hll->encoding = HLL_SPARSE_CLEAN;
+  }
 
   E = (1 / E) * alpha * m * m;
 
@@ -964,4 +991,15 @@ HLLSize(HyperLogLog *hll)
    * to approach such a value.
    */
   return (uint64) E;
+}
+
+/*
+ * HLLUnion
+ *
+ * Returns the lossless union of multiple HyperLogLogs
+ */
+HyperLogLog *
+HLLUnion(HyperLogLog *hll, HyperLogLog *others, ...)
+{
+	return NULL;
 }

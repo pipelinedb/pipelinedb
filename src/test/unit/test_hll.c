@@ -3,6 +3,22 @@
 #include "suites.h"
 #include "pipeline/hll.h"
 
+static HyperLogLog *
+add_elements(HyperLogLog *hll, int start, int end)
+{
+	int i;
+	for (i=start; i<end; i++)
+	{
+		int result;
+		char buf[10];
+
+		sprintf(buf, "%010d", i);
+		hll = HLLAdd(hll, buf, 10, &result);
+	}
+
+	return hll;
+}
+
 START_TEST(test_murmurhash64a)
 {
 	/*
@@ -69,7 +85,6 @@ START_TEST(test_sparse)
 	/*
 	 * Verify that our sparse HLL representation works
 	 */
-	ck_assert_int_eq(1, 1);
 }
 END_TEST
 
@@ -101,6 +116,48 @@ START_TEST(test_union)
 }
 END_TEST
 
+START_TEST(test_card_caching)
+{
+	/*
+	 * Verify that the cached cardinality is invalidated when the cardinality changes
+	 */
+	HyperLogLog *hll = HLLCreate();
+	uint64 size;
+
+	hll = add_elements(hll, 0, 1000);
+
+	ck_assert_int_eq(hll->encoding, HLL_SPARSE_DIRTY);
+
+	size = HLLSize(hll);
+	ck_assert_uint_eq(size, 1009);
+
+	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
+
+	/* nothing was added, so cached cardinality should remain clean */
+	size = HLLSize(hll);
+	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
+
+	/* add the same values again, cardinality shouldn't change so it should remain clean */
+	hll = add_elements(hll, 0, 1000);
+	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
+
+	/* now add new elements */
+	hll = add_elements(hll, 1000, 1010);
+
+	/* cardinality changed, cached value should have been invalidated */
+	ck_assert_int_eq(hll->encoding, HLL_SPARSE_DIRTY);
+
+	/* verify that it works with the dense representation as well */
+	hll = add_elements(hll, 1010, 100000);
+
+	ck_assert_int_eq(hll->encoding, HLL_DENSE_DIRTY);
+
+	size = HLLSize(hll);
+	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
+	ck_assert_int_eq(size, 100225);
+}
+END_TEST
+
 START_TEST(test_union_sparse_and_dense)
 {
 	/*
@@ -124,6 +181,7 @@ Suite *test_hll_suite(void)
 	tcase_add_test(tc, test_dense);
 	tcase_add_test(tc, test_union);
 	tcase_add_test(tc, test_union_sparse_and_dense);
+	tcase_add_test(tc, test_card_caching);
 	suite_add_tcase(s, tc);
 
 	return s;

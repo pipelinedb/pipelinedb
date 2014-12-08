@@ -13,6 +13,11 @@
 
 #include "c.h"
 
+#define HLL_SPARSE_DIRTY 's'
+#define HLL_SPARSE_CLEAN 'S'
+#define HLL_DENSE_DIRTY 'd'
+#define HLL_DENSE_CLEAN 'D'
+
 typedef struct HyperLogLog {
 	/* Dense or sparse, dirty or clean? See above */
   char encoding;
@@ -30,8 +35,10 @@ typedef struct HyperLogLog {
 } HyperLogLog;
 
 uint64 MurmurHash64A(const void *key, Size keysize);
-uint64 HLLSize(HyperLogLog *hll);
+HyperLogLog *HLLCreateWithP(int p);
+HyperLogLog *HLLCreate(void);
 HyperLogLog *HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result);
-HyperLogLog *HLLCreate(int p);
+uint64 HLLSize(HyperLogLog *hll);
+HyperLogLog *HLLUnion(HyperLogLog *hll, HyperLogLog *, ...);
 
 #endif
