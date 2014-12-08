@@ -4,7 +4,7 @@
 #include "pipeline/hll.h"
 
 static HyperLogLog *
-add_elements(HyperLogLog *hll, int start, int end)
+add_elements(HyperLogLog *hll, long start, long end)
 {
 	int i;
 	for (i=start; i<end; i++)
@@ -17,6 +17,17 @@ add_elements(HyperLogLog *hll, int start, int end)
 	}
 
 	return hll;
+}
+
+static void
+assert_size_for_elements(uint64 expected, long start, long end)
+{
+	HyperLogLog *hll = HLLCreate();
+	uint64 size;
+
+	hll = add_elements(hll, start, end);
+	size = HLLSize(hll);
+	ck_assert_int_eq(expected, size);
 }
 
 START_TEST(test_murmurhash64a)
@@ -85,6 +96,47 @@ START_TEST(test_sparse)
 	/*
 	 * Verify that our sparse HLL representation works
 	 */
+	HyperLogLog *hll = HLLCreate();
+	uint64 size;
+	int i;
+
+	for (i=0; i<8000; i++)
+		hll = add_elements(hll, i, i + 1);
+
+	ck_assert(hll->encoding == HLL_SPARSE_DIRTY);
+
+	size = HLLSize(hll);
+	ck_assert(hll->encoding == HLL_SPARSE_CLEAN);
+	ck_assert_int_eq(size, 7987);
+
+	assert_size_for_elements(809, 204, 1003);
+	assert_size_for_elements(1, 1, 2);
+	assert_size_for_elements(5, 1000, 1005);
+	assert_size_for_elements(399, 2000, 2400);
+	assert_size_for_elements(4228, 4747, 8999);
+}
+END_TEST
+
+START_TEST(test_dense)
+{
+	/*
+	 * Verify that our dense HLL representation works
+	 */
+	HyperLogLog *hll = HLLCreate();
+	uint64 size;
+
+	hll = add_elements(hll, 0, 10000000);
+	ck_assert(hll->encoding == HLL_DENSE_DIRTY);
+
+	size = HLLSize(hll);
+	ck_assert(hll->encoding == HLL_DENSE_CLEAN);
+	ck_assert_int_eq(size, 10021708);
+
+	assert_size_for_elements(8253, 4747, 12999);
+	assert_size_for_elements(9, 10000000, 10000009);
+	assert_size_for_elements(299501, 100223, 400000);
+	assert_size_for_elements(297162, 435423, 735423);
+	assert_size_for_elements(120304, 0, 120001);
 }
 END_TEST
 
@@ -94,16 +146,30 @@ START_TEST(test_sparse_to_dense)
 	 * Verify that the sparse HLL representation is promoted
 	 * to the dense representation when we add enough elements
 	 */
-	ck_assert_int_eq(1, 1);
-}
-END_TEST
+	HyperLogLog *hll = HLLCreate();
+	int elems = 1000;
+	uint64 size;
 
-START_TEST(test_dense)
-{
-	/*
-	 * Verify that our dense HLL representation works
-	 */
-	ck_assert_int_eq(1, 1);
+	hll = add_elements(hll, 0, elems);
+
+	ck_assert(hll->encoding == HLL_SPARSE_DIRTY);
+
+	/* keep adding elements until we pass the sparse size threshold */
+	for (;;)
+	{
+		int start = elems;
+		int end = elems + 1;
+
+		hll = add_elements(hll, start, end);
+		if (hll->mlen >= HLL_MAX_SPARSE_BYTES)
+			break;
+
+		elems = end;
+	}
+	ck_assert(hll->encoding == HLL_DENSE_DIRTY);
+
+	size = HLLSize(hll);
+	ck_assert_int_eq(size, 9083);
 }
 END_TEST
 

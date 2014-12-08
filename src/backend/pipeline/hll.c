@@ -27,7 +27,6 @@
 
 #define HLL_DEFAULT_P 14
 #define HLL_BITS_PER_REGISTER 6
-#define HLL_MAX_SPARSE_BYTES 11000
 #define HLL_REGISTER_MAX ((1 << HLL_BITS_PER_REGISTER) - 1)
 
 /* Sparse representation

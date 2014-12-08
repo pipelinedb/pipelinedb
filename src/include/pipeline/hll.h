@@ -13,6 +13,8 @@
 
 #include "c.h"
 
+#define HLL_MAX_SPARSE_BYTES 11000
+
 #define HLL_SPARSE_DIRTY 's'
 #define HLL_SPARSE_CLEAN 'S'
 #define HLL_DENSE_DIRTY 'd'
