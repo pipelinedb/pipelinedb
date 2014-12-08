@@ -111,6 +111,7 @@ def main(args):
                 shutil.copy(upstream_path, our_path)
                 print upstream_path, '->', our_path
     
+    shutil.rmtree(tmp_dir)
     print 'Cleaned up %s' % tmp_dir
     print 'Diffs for manual merging saved to directory ./diffs'
 
