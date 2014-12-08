@@ -203,7 +203,27 @@ START_TEST(test_union_sparse_and_dense)
 	/*
 	 * Verify that the union of a sparse and dense HLL is correct
 	 */
-	ck_assert_int_eq(1, 1);
+	HyperLogLog *dense = HLLCreate();
+	HyperLogLog *sparse = HLLCreate();
+	HyperLogLog *result;
+	uint64 size;
+
+	dense = add_elements(dense, 0, 100000);
+	ck_assert(dense->encoding = HLL_DENSE_DIRTY);
+
+	size = HLLSize(dense);
+	ck_assert_int_eq(size, 100225);
+
+	sparse = add_elements(sparse, 100000, 101000);
+	ck_assert(sparse->encoding = HLL_SPARSE_DIRTY);
+
+	size = HLLSize(sparse);
+	ck_assert_int_eq(size, 1002);
+
+	result = HLLUnion(dense, sparse);
+	size = HLLSize(result);
+
+	ck_assert_int_eq(size, 101157);
 }
 END_TEST
 
