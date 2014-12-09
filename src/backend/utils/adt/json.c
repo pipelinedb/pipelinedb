@@ -24,7 +24,6 @@
 #include "miscadmin.h"
 #include "parser/parse_coerce.h"
 #include "utils/array.h"
-#include "utils/bytea.h"
 #include "utils/builtins.h"
 #include "utils/date.h"
 #include "utils/datetime.h"
@@ -1856,102 +1855,6 @@ json_agg_transfn(PG_FUNCTION_ARGS)
 }
 
 /*
- * json_agg combine function
- */
-Datum
-json_agg_combine(PG_FUNCTION_ARGS)
-{
-	StringInfo state;
-	StringInfo incoming;
-	MemoryContext aggcontext;
-
-	if (!AggCheckCallContext(fcinfo, &aggcontext))
-	{
-		/* cannot be called directly because of internal-type argument */
-		elog(ERROR, "json_agg_combine called in non-aggregate context");
-	}
-
-	if (PG_ARGISNULL(0))
-	{
-		MemoryContext oldcontext;
-		/*
-		 * Make this StringInfo in a context where it will persist for the
-		 * duration of the aggregate call.  MemoryContextSwitchTo is only
-		 * needed the first time, as the StringInfo routines make sure they
-		 * use the right context to enlarge the object if necessary.
-		 */
-		oldcontext = MemoryContextSwitchTo(aggcontext);
-		state = makeStringInfo();
-		MemoryContextSwitchTo(oldcontext);
-
-		appendStringInfoChar(state, '[');
-	}
-	else
-	{
-		state = (StringInfo) PG_GETARG_POINTER(0);
-		appendStringInfoString(state, ", ");
-	}
-
-	incoming = (StringInfo) PG_GETARG_POINTER(1);
-	appendBinaryStringInfo(state, incoming->data + 1, incoming->len - 1);
-
-	PG_RETURN_POINTER(state);
-}
-
-/*
- * json_agg parse and combine function
- */
-Datum
-json_agg_pcombine(PG_FUNCTION_ARGS)
-{
-	MemoryContext aggcontext;
-	Datum arg0;
-	Datum result;
-
-	if (!AggCheckCallContext(fcinfo, &aggcontext))
-		elog(ERROR, "json_agg_pcombine called in non-aggregate context");
-
-	arg0 = PG_ARGISNULL(0) ? (Datum) makeStringInfo() :(Datum) PG_GETARG_POINTER(0);
-
-	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
-	fcinfo->nargs = 1;
-	fcinfo->arg[1] = byteatostringinfo(fcinfo);
-	fcinfo->arg[0] = arg0;
-	fcinfo->nargs = 2;
-
-	result = json_agg_combine(fcinfo);
-
-	PG_RETURN_POINTER(result);
-}
-
-/*
- * json_object_agg parse and combine function
- */
-Datum
-json_object_agg_pcombine(PG_FUNCTION_ARGS)
-{
-	MemoryContext aggcontext;
-	Datum arg0;
-	Datum result;
-
-	if (!AggCheckCallContext(fcinfo, &aggcontext))
-		elog(ERROR, "json_agg_pcombine called in non-aggregate context");
-
-	arg0 = PG_ARGISNULL(0) ? (Datum) makeStringInfo() :(Datum) PG_GETARG_POINTER(0);
-
-	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
-	fcinfo->nargs = 1;
-	fcinfo->arg[1] = byteatostringinfo(fcinfo);
-	fcinfo->arg[0] = arg0;
-	fcinfo->nargs = 2;
-
-	result = json_object_agg_combine(fcinfo);
-
-	PG_RETURN_POINTER(result);
-}
-
-
-/*
  * json_agg final function
  */
 Datum
@@ -2055,6 +1958,71 @@ json_object_agg_transfn(PG_FUNCTION_ARGS)
 }
 
 /*
+ * json_object_agg final function.
+ *
+ */
+Datum
+json_object_agg_finalfn(PG_FUNCTION_ARGS)
+{
+	StringInfo	state;
+
+	/* cannot be called directly because of internal-type argument */
+	Assert(AggCheckCallContext(fcinfo, NULL));
+
+	state = PG_ARGISNULL(0) ? NULL : (StringInfo) PG_GETARG_POINTER(0);
+
+	if (state == NULL)
+		PG_RETURN_NULL();
+
+	appendStringInfoString(state, " }");
+
+	PG_RETURN_TEXT_P(cstring_to_text_with_len(state->data, state->len));
+}
+
+/*
+ * json_agg combine function
+ */
+Datum
+json_agg_combine(PG_FUNCTION_ARGS)
+{
+	StringInfo state;
+	StringInfo incoming;
+	MemoryContext aggcontext;
+
+	if (!AggCheckCallContext(fcinfo, &aggcontext))
+	{
+		/* cannot be called directly because of internal-type argument */
+		elog(ERROR, "json_agg_combine called in non-aggregate context");
+	}
+
+	if (PG_ARGISNULL(0))
+	{
+		MemoryContext oldcontext;
+		/*
+		 * Make this StringInfo in a context where it will persist for the
+		 * duration of the aggregate call.  MemoryContextSwitchTo is only
+		 * needed the first time, as the StringInfo routines make sure they
+		 * use the right context to enlarge the object if necessary.
+		 */
+		oldcontext = MemoryContextSwitchTo(aggcontext);
+		state = makeStringInfo();
+		MemoryContextSwitchTo(oldcontext);
+
+		appendStringInfoChar(state, '[');
+	}
+	else
+	{
+		state = (StringInfo) PG_GETARG_POINTER(0);
+		appendStringInfoString(state, ", ");
+	}
+
+	incoming = (StringInfo) PG_GETARG_POINTER(1);
+	appendBinaryStringInfo(state, incoming->data + 1, incoming->len - 1);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
  *
  */
 Datum
@@ -2098,25 +2066,55 @@ json_object_agg_combine(PG_FUNCTION_ARGS)
 }
 
 /*
- * json_object_agg final function.
- *
+ * json_agg parse and combine function
  */
 Datum
-json_object_agg_finalfn(PG_FUNCTION_ARGS)
+json_agg_pcombine(PG_FUNCTION_ARGS)
 {
-	StringInfo	state;
+	MemoryContext aggcontext;
+	Datum arg0;
+	Datum result;
 
-	/* cannot be called directly because of internal-type argument */
-	Assert(AggCheckCallContext(fcinfo, NULL));
+	if (!AggCheckCallContext(fcinfo, &aggcontext))
+		elog(ERROR, "json_agg_pcombine called in non-aggregate context");
 
-	state = PG_ARGISNULL(0) ? NULL : (StringInfo) PG_GETARG_POINTER(0);
+	arg0 = PG_ARGISNULL(0) ? (Datum) makeStringInfo() :(Datum) PG_GETARG_POINTER(0);
 
-	if (state == NULL)
-		PG_RETURN_NULL();
+	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
+	fcinfo->nargs = 1;
+	fcinfo->arg[1] = byteatostringinfo(fcinfo);
+	fcinfo->arg[0] = arg0;
+	fcinfo->nargs = 2;
 
-	appendStringInfoString(state, " }");
+	result = json_agg_combine(fcinfo);
 
-	PG_RETURN_TEXT_P(cstring_to_text_with_len(state->data, state->len));
+	PG_RETURN_POINTER(result);
+}
+
+/*
+ * json_object_agg parse and combine function
+ */
+Datum
+json_object_agg_pcombine(PG_FUNCTION_ARGS)
+{
+	MemoryContext aggcontext;
+	Datum arg0;
+	Datum result;
+
+	if (!AggCheckCallContext(fcinfo, &aggcontext))
+		elog(ERROR, "json_agg_pcombine called in non-aggregate context");
+
+	arg0 = PG_ARGISNULL(0) ? (Datum) makeStringInfo() :(Datum) PG_GETARG_POINTER(0);
+
+	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
+	fcinfo->nargs = 1;
+	fcinfo->arg[1] = byteatostringinfo(fcinfo);
+	fcinfo->arg[0] = arg0;
+	fcinfo->nargs = 2;
+
+	result = json_object_agg_combine(fcinfo);
+
+	PG_RETURN_POINTER(result);
 }
 
 /*
@@ -2215,10 +2213,9 @@ json_build_array(PG_FUNCTION_ARGS)
 	int			nargs = PG_NARGS();
 	int			i;
 	Datum		arg;
-	char	   *sep = "";
+	const char *sep = "";
 	StringInfo	result;
 	Oid			val_type;
-
 
 	result = makeStringInfo();
 
@@ -2226,33 +2223,35 @@ json_build_array(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < nargs; i++)
 	{
-		val_type = get_fn_expr_argtype(fcinfo->flinfo, i);
-		arg = PG_GETARG_DATUM(i + 1);
-		/* see comments in json_build_object above */
-		if (val_type == UNKNOWNOID && get_fn_expr_arg_stable(fcinfo->flinfo, i))
-		{
-			val_type = TEXTOID;
-			if (PG_ARGISNULL(i))
-				arg = (Datum) 0;
-			else
-				arg = CStringGetTextDatum(PG_GETARG_POINTER(i));
-		}
-		else
-		{
-			arg = PG_GETARG_DATUM(i);
-		}
-		if (val_type == InvalidOid || val_type == UNKNOWNOID)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("arg %d: could not determine data type", i + 1)));
+		/*
+		 * Note: since json_build_array() is declared as taking type "any",
+		 * the parser will not do any type conversion on unknown-type literals
+		 * (that is, undecorated strings or NULLs).  Such values will arrive
+		 * here as type UNKNOWN, which fortunately does not matter to us,
+		 * since unknownout() works fine.
+		 */
 		appendStringInfoString(result, sep);
 		sep = ", ";
+
+		val_type = get_fn_expr_argtype(fcinfo->flinfo, i);
+
+		if (val_type == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("could not determine data type for argument %d",
+							i + 1)));
+
+		if (PG_ARGISNULL(i))
+			arg = (Datum) 0;
+		else
+			arg = PG_GETARG_DATUM(i);
+
 		add_json(arg, PG_ARGISNULL(i), result, val_type, false);
 	}
+
 	appendStringInfoChar(result, ']');
 
 	PG_RETURN_TEXT_P(cstring_to_text_with_len(result->data, result->len));
-
 }
 
 /*
@@ -2328,10 +2327,6 @@ json_object(PG_FUNCTION_ARGS)
 					 errmsg("null value not allowed for object key")));
 
 		v = TextDatumGetCString(in_datums[i * 2]);
-		if (v[0] == '\0')
-			ereport(ERROR,
-					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-					 errmsg("empty value not allowed for object key")));
 		if (i > 0)
 			appendStringInfoString(&result, ", ");
 		escape_json(&result, v);
@@ -2416,10 +2411,6 @@ json_object_two_arg(PG_FUNCTION_ARGS)
 					 errmsg("null value not allowed for object key")));
 
 		v = TextDatumGetCString(key_datums[i]);
-		if (v[0] == '\0')
-			ereport(ERROR,
-					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-					 errmsg("empty value not allowed for object key")));
 		if (i > 0)
 			appendStringInfoString(&result, ", ");
 		escape_json(&result, v);
