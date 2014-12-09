@@ -26,7 +26,22 @@ def _mkdirs(path):
         pass
 
 def main(args):
+    """
+    This script works as follows:
     
+    1) Download the upstream source tarball for the given version of Postgres
+
+    2) Determine all files that we've modified since the given commit hash
+
+    3) Overwrite all files that we haven't modified with the newer version
+       from the upstream source tarball
+
+    4) For every file that we've modified, generate a diff against the
+       corresponding upstream file in the downloaded source tarball.
+       Save this file to ./diffs. We also put a copy of the upstream
+       source file in ./diffs because it's useful to have when manually
+       merging.
+    """
     tmp_dir = args.tmp_dir or tempfile.mkdtemp()
     filename = 'postgresql-%s.tar.gz' % args.version
     tmp_path = os.path.join(tmp_dir, filename)
