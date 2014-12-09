@@ -18,12 +18,6 @@ except ImportError:
 
 URL_TEMPLATE = 'https://ftp.postgresql.org/pub/source/v%(version)s/postgresql-%(version)s.tar.gz'
 
-def _generate_diff(path):
-    pass
-
-def _overwrite_with_upstream_version(path):
-    pass
-
 def main(args):
     
     tmp_dir = args.tmp_dir or tempfile.mkdtemp()
@@ -50,7 +44,7 @@ def main(args):
         for f in c.stats.files:
             modified_by_us.add(f)
 
-    # Unzip!
+    tmp_dir = '/tmp/tmpcTLkgW'
     upstream_root = os.path.join(tmp_dir, 'postgresql-%s' % (args.version))
     diff_dir = os.path.join('diffs')
 
@@ -64,7 +58,6 @@ def main(args):
     print 'Generating diffs against upstream files for files we modified...'
     for our_path in sorted(modified_by_us):
 
-        # if path in modified_by_us
         upstream_path = os.path.join(upstream_root, our_path)
         if not os.path.exists(upstream_path): continue
 
@@ -111,17 +104,17 @@ def main(args):
 
     print 'Overwriting our files with upstream versions...'
     for root, subdirs, files in os.walk(upstream_root):
-        for subdir in subdirs:
-            for file in files:
-                upstream_path = os.path.join(root, file)
-                our_path = upstream_path.replace(upstream_root, '')[1:]
-                
-                # Don't overwrite files that need a manual merge
-                if our_path in need_merge: continue
+        for file in files:
+            upstream_path = os.path.join(root, file)
+            our_path = upstream_path.replace(upstream_root, '')[1:]
 
-                # Overwrite our version with the upstream version
+            # Don't overwrite files that need a manual merge
+            if our_path in need_merge: continue
+
+            # Overwrite our version with the upstream version
+            if not args.dry_run:
                 shutil.copy(upstream_path, our_path)
-                print upstream_path, '->', our_path
+            print upstream_path, '->', our_path
 
     shutil.rmtree(tmp_dir)
     print 'Cleaned up %s' % tmp_dir
@@ -135,5 +128,6 @@ if __name__ == '__main__':
                     help='Upstream version to diff against')
     parser.add_argument('--tmp-dir', action='store', dest='tmp_dir', required=False,
                     help='Temporary directory to store upstream source tree in')
+    parser.add_argument('--dry-run', action='store_true', dest='dry_run', required=False)
     args = parser.parse_args()
     main(args)
