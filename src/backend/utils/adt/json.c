@@ -25,6 +25,7 @@
 #include "parser/parse_coerce.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
+#include "utils/bytea.h"
 #include "utils/date.h"
 #include "utils/datetime.h"
 #include "utils/lsyscache.h"
