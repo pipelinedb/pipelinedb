@@ -30,19 +30,19 @@ def main(args):
     filename = 'postgresql-%s.tar.gz' % args.version
     tmp_path = os.path.join(tmp_dir, filename)
     url = URL_TEMPLATE % {'version': args.version}
-    
+
     print 'Downloading %s to %s...' % (url, tmp_path)
     urllib.urlretrieve(url, tmp_path)
     print 'Download complete'
-    
+
     our_repo = Repo('.')
     commit = our_repo.commit(args.after_commit)
     since_ts = str(datetime.datetime.utcfromtimestamp(commit.committed_date)) + ' UTC'
-    
+
     rev = '%s..HEAD' % (args.after_commit)
     commits = our_repo.iter_commits(rev)
     modified_by_us = set()
-    
+
     # Get each file we've modified since the given commit 
     # along with its earliest modification time
     print 'Determining which files we modified since %s (%s)...' % (args.after_commit[:8], since_ts)
@@ -53,53 +53,62 @@ def main(args):
     # Unzip!
     upstream_root = os.path.join(tmp_dir, 'postgresql-%s' % (args.version))
     diff_dir = os.path.join('diffs')
-    
+
+    need_merge = set()
     tar = tarfile.open(tmp_path)
     tar.extractall(path=tmp_dir)
     tar.close()
-    
+
     # Before overwriting our files with the upstream versions,
     # figure out which files we'll need to manually merge
     print 'Generating diffs against upstream files for files we modified...'
     for our_path in sorted(modified_by_us):
-        
+
         # if path in modified_by_us
         upstream_path = os.path.join(upstream_root, our_path)
         if not os.path.exists(upstream_path): continue
-        
-        lf = open(upstream_path)
-        rf = open(our_path)
-        
+
+        need_merge.add(our_path)
+        lf = open(our_path)
+        rf = open(upstream_path)
+
         # We both potentially modified this file
         left = [l.strip('\n') for l in lf.readlines()]
         right = [l.strip('\n') for l in rf.readlines()]
-        
+
         lf.close()
         rf.close()
-        
+
         diff_path = os.path.join(diff_dir, our_path) + '.diff'
         subdir, _ = os.path.split(diff_path)
-        
+
         try:
             os.makedirs(subdir)
         except OSError:
             # Directory already exists
             pass
-        
+
         diff = open(diff_path, 'wa')
         for line in difflib.unified_diff(left, right, upstream_path, our_path):
             diff.write(line + '\n')
         diff.close()
         print 'Created %s' % diff_path
-        
+
         # It's also useful when merging to have the original copy 
-        # of our file, so save it as well
-        our_copy_path = os.path.join(diff_dir, our_path)
-        our_copy = open(our_copy_path, 'wa')
+        # of upstream file, so save it as well
+        upstream_copy_path = os.path.join(diff_dir, our_path)
+        upstream_copy = open(upstream_copy_path, 'wa')
         for line in right:
-            our_copy.write(line + '\n')
-        our_copy.close()
-    
+            upstream_copy.write(line + '\n')
+        upstream_copy.close()
+
+    # It's useful to have a list of all files written to diffs/
+    # so we can check off files as we merge them
+    diff_list = open(os.path.join(diff_dir, 'files.txt'), 'wa')
+    for f in sorted(need_merge):
+        diff_list.write(f + '\n')
+    diff_list.close()
+
     print 'Overwriting our files with upstream versions...'
     for root, subdirs, files in os.walk(upstream_root):
         for subdir in subdirs:
@@ -107,10 +116,13 @@ def main(args):
                 upstream_path = os.path.join(root, file)
                 our_path = upstream_path.replace(upstream_root, '')[1:]
                 
+                # Don't overwrite files that need a manual merge
+                if our_path in need_merge: continue
+
                 # Overwrite our version with the upstream version
                 shutil.copy(upstream_path, our_path)
                 print upstream_path, '->', our_path
-    
+
     shutil.rmtree(tmp_dir)
     print 'Cleaned up %s' % tmp_dir
     print 'Diffs for manual merging saved to directory ./diffs'
