@@ -150,6 +150,7 @@ check_xact_readonly(Node *parsetree)
 		case T_AlterObjectSchemaStmt:
 		case T_AlterOwnerStmt:
 		case T_AlterSeqStmt:
+		case T_AlterTableMoveAllStmt:
 		case T_AlterTableStmt:
 		case T_RenameStmt:
 		case T_CommentStmt:
@@ -203,7 +204,6 @@ check_xact_readonly(Node *parsetree)
 		case T_AlterUserMappingStmt:
 		case T_DropUserMappingStmt:
 		case T_AlterTableSpaceOptionsStmt:
-		case T_AlterTableSpaceMoveStmt:
 		case T_CreateForeignTableStmt:
 		case T_SecLabelStmt:
 			PreventCommandIfReadOnly(CreateCommandTag(parsetree));
@@ -515,11 +515,6 @@ standard_ProcessUtility(Node *parsetree,
 		case T_AlterTableSpaceOptionsStmt:
 			/* no event triggers for global objects */
 			AlterTableSpaceOptions((AlterTableSpaceOptionsStmt *) parsetree);
-			break;
-
-		case T_AlterTableSpaceMoveStmt:
-			/* no event triggers for global objects */
-			AlterTableSpaceMove((AlterTableSpaceMoveStmt *) parsetree);
 			break;
 
 		case T_TruncateStmt:
@@ -1303,6 +1298,10 @@ ProcessUtilitySlow(Node *parsetree,
 				AlterTSConfiguration((AlterTSConfigurationStmt *) parsetree);
 				break;
 
+			case T_AlterTableMoveAllStmt:
+				AlterTableMoveAll((AlterTableMoveAllStmt *) parsetree);
+				break;
+
 			case T_DropStmt:
 				ExecDropStmt((DropStmt *) parsetree, isTopLevel);
 				break;
@@ -1819,10 +1818,6 @@ CreateCommandTag(Node *parsetree)
 			tag = "ALTER TABLESPACE";
 			break;
 
-		case T_AlterTableSpaceMoveStmt:
-			tag = "ALTER TABLESPACE";
-			break;
-
 		case T_CreateExtensionStmt:
 			tag = "CREATE EXTENSION";
 			break;
@@ -1998,6 +1993,10 @@ CreateCommandTag(Node *parsetree)
 
 		case T_AlterOwnerStmt:
 			tag = AlterObjectTypeCommandTag(((AlterOwnerStmt *) parsetree)->objectType);
+			break;
+
+		case T_AlterTableMoveAllStmt:
+			tag = AlterObjectTypeCommandTag(((AlterTableMoveAllStmt *) parsetree)->objtype);
 			break;
 
 		case T_AlterTableStmt:
@@ -2494,6 +2493,9 @@ GetCommandLogLevel(Node *parsetree)
 {
 	LogStmtLevel lev;
 
+	if (parsetree == NULL)
+		return LOGSTMT_ALL;
+
 	switch (nodeTag(parsetree))
 	{
 			/* raw plannable queries */
@@ -2539,10 +2541,6 @@ GetCommandLogLevel(Node *parsetree)
 		case T_CreateTableSpaceStmt:
 		case T_DropTableSpaceStmt:
 		case T_AlterTableSpaceOptionsStmt:
-			lev = LOGSTMT_DDL;
-			break;
-
-		case T_AlterTableSpaceMoveStmt:
 			lev = LOGSTMT_DDL;
 			break;
 
@@ -2624,6 +2622,7 @@ GetCommandLogLevel(Node *parsetree)
 			lev = LOGSTMT_DDL;
 			break;
 
+		case T_AlterTableMoveAllStmt:
 		case T_AlterTableStmt:
 			lev = LOGSTMT_DDL;
 			break;
@@ -2768,7 +2767,7 @@ GetCommandLogLevel(Node *parsetree)
 			break;
 
 		case T_AlterSystemStmt:
-			lev = LOGSTMT_ALL;
+			lev = LOGSTMT_DDL;
 			break;
 
 		case T_VariableSetStmt:

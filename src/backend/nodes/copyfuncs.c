@@ -3430,14 +3430,13 @@ _copyAlterTableSpaceOptionsStmt(const AlterTableSpaceOptionsStmt *from)
 	return newnode;
 }
 
-static AlterTableSpaceMoveStmt *
-_copyAlterTableSpaceMoveStmt(const AlterTableSpaceMoveStmt *from)
+static AlterTableMoveAllStmt *
+_copyAlterTableMoveAllStmt(const AlterTableMoveAllStmt *from)
 {
-	AlterTableSpaceMoveStmt *newnode = makeNode(AlterTableSpaceMoveStmt);
+	AlterTableMoveAllStmt *newnode = makeNode(AlterTableMoveAllStmt);
 
 	COPY_STRING_FIELD(orig_tablespacename);
 	COPY_SCALAR_FIELD(objtype);
-	COPY_SCALAR_FIELD(move_all);
 	COPY_NODE_FIELD(roles);
 	COPY_STRING_FIELD(new_tablespacename);
 	COPY_SCALAR_FIELD(nowait);
@@ -3610,7 +3609,7 @@ _copyCreateEventTrigStmt(const CreateEventTrigStmt *from)
 	CreateEventTrigStmt *newnode = makeNode(CreateEventTrigStmt);
 
 	COPY_STRING_FIELD(trigname);
-	COPY_SCALAR_FIELD(eventname);
+	COPY_STRING_FIELD(eventname);
 	COPY_NODE_FIELD(whenclause);
 	COPY_NODE_FIELD(funcname);
 
@@ -4459,8 +4458,8 @@ copyObject(const void *from)
 		case T_AlterTableSpaceOptionsStmt:
 			retval = _copyAlterTableSpaceOptionsStmt(from);
 			break;
-		case T_AlterTableSpaceMoveStmt:
-			retval = _copyAlterTableSpaceMoveStmt(from);
+		case T_AlterTableMoveAllStmt:
+			retval = _copyAlterTableMoveAllStmt(from);
 			break;
 		case T_CreateExtensionStmt:
 			retval = _copyCreateExtensionStmt(from);
