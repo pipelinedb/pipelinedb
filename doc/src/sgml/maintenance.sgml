@@ -528,7 +528,7 @@
     the <structfield>relfrozenxid</> column of a table's
     <structname>pg_class</> row contains the freeze cutoff XID that was used
     by the last whole-table <command>VACUUM</> for that table.  All rows
-    inserted by transactions with XIDs XIDs older than this cutoff XID are
+    inserted by transactions with XIDs older than this cutoff XID are
     guaranteed to have been frozen.  Similarly,
     the <structfield>datfrozenxid</> column of a database's
     <structname>pg_database</> row is a lower bound on the unfrozen XIDs
@@ -787,10 +787,13 @@ analyze threshold = analyze base threshold + analyze scale factor * number of tu
    </para>
 
    <para>
-    When multiple workers are running, the cost limit is
+    When multiple workers are running, the cost delay parameters are
     <quote>balanced</quote> among all the running workers, so that the
-    total impact on the system is the same, regardless of the number
-    of workers actually running.
+    total I/O impact on the system is the same regardless of the number
+    of workers actually running.  However, any workers processing tables whose
+    <literal>autovacuum_vacuum_cost_delay</> or
+    <literal>autovacuum_vacuum_cost_limit</> have been set are not considered
+    in the balancing algorithm.
    </para>
   </sect2>
  </sect1>

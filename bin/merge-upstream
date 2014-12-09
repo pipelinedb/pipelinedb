@@ -18,6 +18,13 @@ except ImportError:
 
 URL_TEMPLATE = 'https://ftp.postgresql.org/pub/source/v%(version)s/postgresql-%(version)s.tar.gz'
 
+def _mkdirs(path):
+    try:
+        os.makedirs(path)
+    except OSError:
+        # Directory already exists
+        pass
+
 def main(args):
     
     tmp_dir = args.tmp_dir or tempfile.mkdtemp()
@@ -75,11 +82,7 @@ def main(args):
         diff_path = os.path.join(diff_dir, our_path) + '.diff'
         subdir, _ = os.path.split(diff_path)
 
-        try:
-            os.makedirs(subdir)
-        except OSError:
-            # Directory already exists
-            pass
+        _mkdirs(subdir)
 
         diff = open(diff_path, 'wa')
         for line in difflib.unified_diff(left, right, upstream_path, our_path):
@@ -113,6 +116,7 @@ def main(args):
 
             # Overwrite our version with the upstream version
             if not args.dry_run:
+                _mkdirs(os.path.split(our_path)[0])
                 shutil.copy(upstream_path, our_path)
             print upstream_path, '->', our_path
 

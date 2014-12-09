@@ -90,11 +90,17 @@ int			sync_method = DEFAULT_SYNC_METHOD;
 int			wal_level = WAL_LEVEL_MINIMAL;
 int			CommitDelay = 0;	/* precommit delay in microseconds */
 int			CommitSiblings = 5; /* # concurrent xacts needed to sleep */
-int			num_xloginsert_locks = 8;
 
 #ifdef WAL_DEBUG
 bool		XLOG_DEBUG = false;
 #endif
+
+/*
+ * Number of WAL insertion locks to use. A higher value allows more insertions
+ * to happen concurrently, but adds some CPU overhead to flushing the WAL,
+ * which needs to iterate all the locks.
+ */
+#define NUM_XLOGINSERT_LOCKS  8
 
 /*
  * XLOGfileslop is the maximum number of preallocated future XLOG segments.
@@ -408,7 +414,7 @@ typedef struct
 typedef union WALInsertLockPadded
 {
 	WALInsertLock l;
-	char		pad[CACHE_LINE_SIZE];
+	char		pad[PG_CACHE_LINE_SIZE];
 } WALInsertLockPadded;
 
 /*
@@ -435,7 +441,7 @@ typedef struct XLogCtlInsert
 	 * read on every WAL insertion, but updated rarely, and we don't want
 	 * those reads to steal the cache line containing Curr/PrevBytePos.
 	 */
-	char		pad[CACHE_LINE_SIZE];
+	char		pad[PG_CACHE_LINE_SIZE];
 
 	/*
 	 * fullPageWrites is the master copy used by all backends to determine
@@ -1089,9 +1095,9 @@ begin:;
 	 * inserter acquires an insertion lock. In addition to just indicating that
 	 * an insertion is in progress, the lock tells others how far the inserter
 	 * has progressed. There is a small fixed number of insertion locks,
-	 * determined by the num_xloginsert_locks GUC. When an inserter crosses a
-	 * page boundary, it updates the value stored in the lock to the how far it
-	 * has inserted, to allow the previous buffer to be flushed.
+	 * determined by NUM_XLOGINSERT_LOCKS. When an inserter crosses a page
+	 * boundary, it updates the value stored in the lock to the how far it has
+	 * inserted, to allow the previous buffer to be flushed.
 	 *
 	 * Holding onto an insertion lock also protects RedoRecPtr and
 	 * fullPageWrites from changing until the insertion is finished.
@@ -1572,7 +1578,7 @@ WALInsertLockAcquire(void)
 	static int	lockToTry = -1;
 
 	if (lockToTry == -1)
-		lockToTry = MyProc->pgprocno % num_xloginsert_locks;
+		lockToTry = MyProc->pgprocno % NUM_XLOGINSERT_LOCKS;
 	MyLockNo = lockToTry;
 
 	/*
@@ -1592,7 +1598,7 @@ WALInsertLockAcquire(void)
 		 * than locks, it still helps to distribute the inserters evenly
 		 * across the locks.
 		 */
-		lockToTry = (lockToTry + 1) % num_xloginsert_locks;
+		lockToTry = (lockToTry + 1) % NUM_XLOGINSERT_LOCKS;
 	}
 }
 
@@ -1611,7 +1617,7 @@ WALInsertLockAcquireExclusive(void)
 	 * than any real XLogRecPtr value, to make sure that no-one blocks waiting
 	 * on those.
 	 */
-	for (i = 0; i < num_xloginsert_locks - 1; i++)
+	for (i = 0; i < NUM_XLOGINSERT_LOCKS - 1; i++)
 	{
 		LWLockAcquireWithVar(&WALInsertLocks[i].l.lock,
 							 &WALInsertLocks[i].l.insertingAt,
@@ -1634,7 +1640,7 @@ WALInsertLockRelease(void)
 	{
 		int			i;
 
-		for (i = 0; i < num_xloginsert_locks; i++)
+		for (i = 0; i < NUM_XLOGINSERT_LOCKS; i++)
 			LWLockRelease(&WALInsertLocks[i].l.lock);
 
 		holdingAllLocks = false;
@@ -1658,8 +1664,8 @@ WALInsertLockUpdateInsertingAt(XLogRecPtr insertingAt)
 		 * We use the last lock to mark our actual position, see comments in
 		 * WALInsertLockAcquireExclusive.
 		 */
-		LWLockUpdateVar(&WALInsertLocks[num_xloginsert_locks - 1].l.lock,
-					 &WALInsertLocks[num_xloginsert_locks - 1].l.insertingAt,
+		LWLockUpdateVar(&WALInsertLocks[NUM_XLOGINSERT_LOCKS - 1].l.lock,
+					 &WALInsertLocks[NUM_XLOGINSERT_LOCKS - 1].l.insertingAt,
 						insertingAt);
 	}
 	else
@@ -1726,7 +1732,7 @@ WaitXLogInsertionsToFinish(XLogRecPtr upto)
 	 * out for any insertion that's still in progress.
 	 */
 	finishedUpto = reservedUpto;
-	for (i = 0; i < num_xloginsert_locks; i++)
+	for (i = 0; i < NUM_XLOGINSERT_LOCKS; i++)
 	{
 		XLogRecPtr	insertingat = InvalidXLogRecPtr;
 
@@ -4781,7 +4787,7 @@ XLOGShmemSize(void)
 	size = sizeof(XLogCtlData);
 
 	/* WAL insertion locks, plus alignment */
-	size = add_size(size, mul_size(sizeof(WALInsertLockPadded), num_xloginsert_locks + 1));
+	size = add_size(size, mul_size(sizeof(WALInsertLockPadded), NUM_XLOGINSERT_LOCKS + 1));
 	/* xlblocks array */
 	size = add_size(size, mul_size(sizeof(XLogRecPtr), XLOGbuffers));
 	/* extra alignment padding for XLOG I/O buffers */
@@ -4815,6 +4821,11 @@ XLOGShmemInit(void)
 	{
 		/* both should be present or neither */
 		Assert(foundCFile && foundXLog);
+
+		/* Initialize local copy of WALInsertLocks and register the tranche */
+		WALInsertLocks = XLogCtl->Insert.WALInsertLocks;
+		LWLockRegisterTranche(XLogCtl->Insert.WALInsertLockTrancheId,
+							  &XLogCtl->Insert.WALInsertLockTranche);
 		return;
 	}
 	memset(XLogCtl, 0, sizeof(XLogCtlData));
@@ -4835,7 +4846,7 @@ XLOGShmemInit(void)
 		((uintptr_t) allocptr) %sizeof(WALInsertLockPadded);
 	WALInsertLocks = XLogCtl->Insert.WALInsertLocks =
 		(WALInsertLockPadded *) allocptr;
-	allocptr += sizeof(WALInsertLockPadded) * num_xloginsert_locks;
+	allocptr += sizeof(WALInsertLockPadded) * NUM_XLOGINSERT_LOCKS;
 
 	XLogCtl->Insert.WALInsertLockTrancheId = LWLockNewTrancheId();
 
@@ -4844,7 +4855,7 @@ XLOGShmemInit(void)
 	XLogCtl->Insert.WALInsertLockTranche.array_stride = sizeof(WALInsertLockPadded);
 
 	LWLockRegisterTranche(XLogCtl->Insert.WALInsertLockTrancheId, &XLogCtl->Insert.WALInsertLockTranche);
-	for (i = 0; i < num_xloginsert_locks; i++)
+	for (i = 0; i < NUM_XLOGINSERT_LOCKS; i++)
 	{
 		LWLockInitialize(&WALInsertLocks[i].l.lock,
 						 XLogCtl->Insert.WALInsertLockTrancheId);
@@ -5426,9 +5437,19 @@ getRecordTimestamp(XLogRecord *record, TimestampTz *recordXtime)
 		*recordXtime = ((xl_xact_commit *) XLogRecGetData(record))->xact_time;
 		return true;
 	}
+	if (record->xl_rmid == RM_XACT_ID && record_info == XLOG_XACT_COMMIT_PREPARED)
+	{
+		*recordXtime = ((xl_xact_commit_prepared *) XLogRecGetData(record))->crec.xact_time;
+		return true;
+	}
 	if (record->xl_rmid == RM_XACT_ID && record_info == XLOG_XACT_ABORT)
 	{
 		*recordXtime = ((xl_xact_abort *) XLogRecGetData(record))->xact_time;
+		return true;
+	}
+	if (record->xl_rmid == RM_XACT_ID && record_info == XLOG_XACT_ABORT_PREPARED)
+	{
+		*recordXtime = ((xl_xact_abort_prepared *) XLogRecGetData(record))->arec.xact_time;
 		return true;
 	}
 	return false;
@@ -5449,6 +5470,7 @@ recoveryStopsBefore(XLogRecord *record)
 	uint8		record_info;
 	bool		isCommit;
 	TimestampTz recordXtime = 0;
+	TransactionId recordXid;
 
 	/* Check if we should stop as soon as reaching consistency */
 	if (recoveryTarget == RECOVERY_TARGET_IMMEDIATE && reachedConsistency)
@@ -5467,10 +5489,27 @@ recoveryStopsBefore(XLogRecord *record)
 	if (record->xl_rmid != RM_XACT_ID)
 		return false;
 	record_info = record->xl_info & ~XLR_INFO_MASK;
+
 	if (record_info == XLOG_XACT_COMMIT_COMPACT || record_info == XLOG_XACT_COMMIT)
+	{
 		isCommit = true;
+		recordXid = record->xl_xid;
+	}
+	else if (record_info == XLOG_XACT_COMMIT_PREPARED)
+	{
+		isCommit = true;
+		recordXid = ((xl_xact_commit_prepared *) XLogRecGetData(record))->xid;
+	}
 	else if (record_info == XLOG_XACT_ABORT)
+	{
 		isCommit = false;
+		recordXid = record->xl_xid;
+	}
+	else if (record_info == XLOG_XACT_ABORT_PREPARED)
+	{
+		isCommit = false;
+		recordXid = ((xl_xact_abort_prepared *) XLogRecGetData(record))->xid;
+	}
 	else
 		return false;
 
@@ -5485,7 +5524,7 @@ recoveryStopsBefore(XLogRecord *record)
 		 * they complete. A higher numbered xid will complete before you about
 		 * 50% of the time...
 		 */
-		stopsHere = (record->xl_xid == recoveryTargetXid);
+		stopsHere = (recordXid == recoveryTargetXid);
 	}
 
 	if (recoveryTarget == RECOVERY_TARGET_TIME &&
@@ -5505,7 +5544,7 @@ recoveryStopsBefore(XLogRecord *record)
 	if (stopsHere)
 	{
 		recoveryStopAfter = false;
-		recoveryStopXid = record->xl_xid;
+		recoveryStopXid = recordXid;
 		recoveryStopTime = recordXtime;
 		recoveryStopName[0] = '\0';
 
@@ -5571,11 +5610,23 @@ recoveryStopsAfter(XLogRecord *record)
 	if (record->xl_rmid == RM_XACT_ID &&
 		(record_info == XLOG_XACT_COMMIT_COMPACT ||
 		 record_info == XLOG_XACT_COMMIT ||
-		 record_info == XLOG_XACT_ABORT))
+		 record_info == XLOG_XACT_COMMIT_PREPARED ||
+		 record_info == XLOG_XACT_ABORT ||
+		 record_info == XLOG_XACT_ABORT_PREPARED))
 	{
+		TransactionId recordXid;
+
 		/* Update the last applied transaction timestamp */
 		if (getRecordTimestamp(record, &recordXtime))
 			SetLatestXTime(recordXtime);
+
+		/* Extract the XID of the committed/aborted transaction */
+		if (record_info == XLOG_XACT_COMMIT_PREPARED)
+			recordXid = ((xl_xact_commit_prepared *) XLogRecGetData(record))->xid;
+		else if (record_info == XLOG_XACT_ABORT_PREPARED)
+			recordXid = ((xl_xact_abort_prepared *) XLogRecGetData(record))->xid;
+		else
+			recordXid = record->xl_xid;
 
 		/*
 		 * There can be only one transaction end record with this exact
@@ -5587,21 +5638,24 @@ recoveryStopsAfter(XLogRecord *record)
 		 * 50% of the time...
 		 */
 		if (recoveryTarget == RECOVERY_TARGET_XID && recoveryTargetInclusive &&
-			record->xl_xid == recoveryTargetXid)
+			recordXid == recoveryTargetXid)
 		{
 			recoveryStopAfter = true;
-			recoveryStopXid = record->xl_xid;
+			recoveryStopXid = recordXid;
 			recoveryStopTime = recordXtime;
 			recoveryStopName[0] = '\0';
 
-			if (record_info == XLOG_XACT_COMMIT_COMPACT || record_info == XLOG_XACT_COMMIT)
+			if (record_info == XLOG_XACT_COMMIT_COMPACT ||
+				record_info == XLOG_XACT_COMMIT ||
+				record_info == XLOG_XACT_COMMIT_PREPARED)
 			{
 				ereport(LOG,
 						(errmsg("recovery stopping after commit of transaction %u, time %s",
 								recoveryStopXid,
 								timestamptz_to_str(recoveryStopTime))));
 			}
-			else if (record_info == XLOG_XACT_ABORT)
+			else if (record_info == XLOG_XACT_ABORT ||
+					 record_info == XLOG_XACT_ABORT_PREPARED)
 			{
 				ereport(LOG,
 						(errmsg("recovery stopping after abort of transaction %u, time %s",
@@ -5714,7 +5768,8 @@ recoveryApplyDelay(XLogRecord *record)
 	record_info = record->xl_info & ~XLR_INFO_MASK;
 	if (!(record->xl_rmid == RM_XACT_ID &&
 		  (record_info == XLOG_XACT_COMMIT_COMPACT ||
-		   record_info == XLOG_XACT_COMMIT)))
+		   record_info == XLOG_XACT_COMMIT ||
+		   record_info == XLOG_XACT_COMMIT_PREPARED)))
 		return false;
 
 	if (!getRecordTimestamp(record, &xtime))
@@ -7594,11 +7649,6 @@ InitXLOGAccess(void)
 	/* ThisTimeLineID doesn't change so we need no lock to copy it */
 	ThisTimeLineID = XLogCtl->ThisTimeLineID;
 	Assert(ThisTimeLineID != 0 || IsBootstrapProcessingMode());
-
-	/* Initialize our copy of WALInsertLocks and register the tranche */
-	WALInsertLocks = XLogCtl->Insert.WALInsertLocks;
-	LWLockRegisterTranche(XLogCtl->Insert.WALInsertLockTrancheId,
-						  &XLogCtl->Insert.WALInsertLockTranche);
 
 	/* Use GetRedoRecPtr to copy the RedoRecPtr safely */
 	(void) GetRedoRecPtr();

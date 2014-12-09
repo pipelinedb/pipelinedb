@@ -56,7 +56,7 @@ static XLogRecPtr output_written_lsn = InvalidXLogRecPtr;
 static XLogRecPtr output_fsync_lsn = InvalidXLogRecPtr;
 
 static void usage(void);
-static void StreamLog();
+static void StreamLogicalLog(void);
 static void disconnect_and_exit(int code);
 
 static void
@@ -91,9 +91,9 @@ usage(void)
 			 "                         time between status packets sent to server (default: %d)\n"), (standby_message_timeout / 1000));
 	printf(_("  -S, --slot=SLOT        name of the logical replication slot\n"));
 	printf(_("\nAction to be performed:\n"));
-	printf(_("      --create           create a new replication slot (for the slot's name see --slot)\n"));
+	printf(_("      --create-slot      create a new replication slot (for the slot's name see --slot)\n"));
+	printf(_("      --drop-slot        drop the replication slot (for the slot's name see --slot)\n"));
 	printf(_("      --start            start streaming in a replication slot (for the slot's name see --slot)\n"));
-	printf(_("      --drop             drop the replication slot (for the slot's name see --slot)\n"));
 	printf(_("\nReport bugs to <pgsql-bugs@postgresql.org>.\n"));
 }
 
@@ -194,7 +194,7 @@ OutputFsync(int64 now)
  * Start the log streaming
  */
 static void
-StreamLog(void)
+StreamLogicalLog(void)
 {
 	PGresult   *res;
 	char	   *copybuf = NULL;
@@ -619,9 +619,9 @@ main(int argc, char **argv)
 		{"status-interval", required_argument, NULL, 's'},
 		{"slot", required_argument, NULL, 'S'},
 /* action */
-		{"create", no_argument, NULL, 1},
+		{"create-slot", no_argument, NULL, 1},
 		{"start", no_argument, NULL, 2},
-		{"drop", no_argument, NULL, 3},
+		{"drop-slot", no_argument, NULL, 3},
 		{NULL, 0, NULL, 0}
 	};
 	int			c;
@@ -814,15 +814,15 @@ main(int argc, char **argv)
 
 	if (do_drop_slot && (do_create_slot || do_start_slot))
 	{
-		fprintf(stderr, _("%s: cannot use --init or --start together with --stop\n"), progname);
+		fprintf(stderr, _("%s: cannot use --create-slot or --start together with --drop-slot\n"), progname);
 		fprintf(stderr, _("Try \"%s --help\" for more information.\n"),
 				progname);
 		exit(1);
 	}
 
-	if (startpos && (do_create_slot || do_drop_slot))
+	if (startpos != InvalidXLogRecPtr && (do_create_slot || do_drop_slot))
 	{
-		fprintf(stderr, _("%s: cannot use --init or --stop together with --startpos\n"), progname);
+		fprintf(stderr, _("%s: cannot use --create-slot or --drop-slot together with --startpos\n"), progname);
 		fprintf(stderr, _("Try \"%s --help\" for more information.\n"),
 				progname);
 		exit(1);
@@ -868,7 +868,7 @@ main(int argc, char **argv)
 
 
 	/*
-	 * stop a replication slot
+	 * drop a replication slot
 	 */
 	if (do_drop_slot)
 	{
@@ -876,7 +876,7 @@ main(int argc, char **argv)
 
 		if (verbose)
 			fprintf(stderr,
-					_("%s: freeing replication slot \"%s\"\n"),
+					_("%s: dropping replication slot \"%s\"\n"),
 					progname, replication_slot);
 
 		snprintf(query, sizeof(query), "DROP_REPLICATION_SLOT \"%s\"",
@@ -892,8 +892,8 @@ main(int argc, char **argv)
 		if (PQntuples(res) != 0 || PQnfields(res) != 0)
 		{
 			fprintf(stderr,
-					_("%s: could not stop logical replication: got %d rows and %d fields, expected %d rows and %d fields\n"),
-					progname, PQntuples(res), PQnfields(res), 0, 0);
+					_("%s: could not drop replication slot \"%s\": got %d rows and %d fields, expected %d rows and %d fields\n"),
+					progname, replication_slot, PQntuples(res), PQnfields(res), 0, 0);
 			disconnect_and_exit(1);
 		}
 
@@ -902,7 +902,7 @@ main(int argc, char **argv)
 	}
 
 	/*
-	 * init a replication slot
+	 * create a replication slot
 	 */
 	if (do_create_slot)
 	{
@@ -910,7 +910,7 @@ main(int argc, char **argv)
 
 		if (verbose)
 			fprintf(stderr,
-					_("%s: initializing replication slot \"%s\"\n"),
+					_("%s: creating replication slot \"%s\"\n"),
 					progname, replication_slot);
 
 		snprintf(query, sizeof(query), "CREATE_REPLICATION_SLOT \"%s\" LOGICAL \"%s\"",
@@ -927,8 +927,8 @@ main(int argc, char **argv)
 		if (PQntuples(res) != 1 || PQnfields(res) != 4)
 		{
 			fprintf(stderr,
-					_("%s: could not init logical replication: got %d rows and %d fields, expected %d rows and %d fields\n"),
-					progname, PQntuples(res), PQnfields(res), 1, 4);
+					_("%s: could not create replication slot \"%s\": got %d rows and %d fields, expected %d rows and %d fields\n"),
+					progname, replication_slot, PQntuples(res), PQnfields(res), 1, 4);
 			disconnect_and_exit(1);
 		}
 
@@ -951,7 +951,7 @@ main(int argc, char **argv)
 
 	while (true)
 	{
-		StreamLog();
+		StreamLogicalLog();
 		if (time_to_abort)
 		{
 			/*

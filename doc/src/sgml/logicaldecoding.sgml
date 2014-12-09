@@ -114,7 +114,7 @@ postgres=# SELECT * FROM pg_logical_slot_peek_changes('regression_slot', NULL, N
  0/16E0B90 | 690 | COMMIT 690
 (3 rows)
 
-postgres=# -- You can also peek ahead in the change stream without consuming changes
+postgres=# -- The next call to pg_logical_slot_peek_changes() returns the same changes again
 postgres=# SELECT * FROM pg_logical_slot_peek_changes('regression_slot', NULL, NULL);
  location  | xid |                     data
 -----------+-----+-----------------------------------------------
@@ -149,7 +149,7 @@ postgres=# SELECT pg_drop_replication_slot('regression_slot');
     another connection.
    </para>
 <programlisting>
-# pg_recvlogical -d postgres --slot test --create
+# pg_recvlogical -d postgres --slot test --create-slot
 # pg_recvlogical -d postgres --slot test --start -f -
 CTRL-Z
 # psql -d postgres -c "INSERT INTO data(data) VALUES('4');"
@@ -158,7 +158,7 @@ BEGIN 693
 table public.data: INSERT: id[integer]:4 data[text]:'4'
 COMMIT 693
 CTRL-C
-# pg_recvlogical -d postgres --slot test --drop
+# pg_recvlogical -d postgres --slot test --drop-slot
 </programlisting>
   </sect1>
   <sect1 id="logicaldecoding-explanation">
@@ -355,6 +355,24 @@ CREATE TABLE another_catalog_table(data text) WITH (user_catalog_table = true);
     </para>
    </sect2>
 
+   <sect2 id="logicaldecoding-output-mode">
+    <title>Output Modes</title>
+    <para>
+     Output plugin callbacks can pass data to the consumer in nearly arbitrary
+     formats. For some use cases, like viewing the changes via SQL, returning
+     data in a datatype that can contain arbitrary data (i.e. bytea) is
+     cumbersome. If the output plugin only outputs textual data in the
+     server's encoding it can declare that by
+     setting <literal>OutputPluginOptions.output_mode</>
+     to <literal>OUTPUT_PLUGIN_TEXTUAL_OUTPUT</> instead
+     of <literal>OUTPUT_PLUGIN_BINARY_OUTPUT</> in
+     the <link linkend="logicaldecoding-output-plugin-startup">startup
+     callback</>. In that case all the data has to be in the server's encoding
+     so a <type>text</> can contain it. This is checked in assertion enabled
+     builds.
+    </para>
+   </sect2>
+
    <sect2 id="logicaldecoding-output-plugin-callbacks">
     <title>Output Plugin Callbacks</title>
     <para>
@@ -405,7 +423,8 @@ typedef struct OutputPluginOptions
 </programlisting>
       <literal>output_type</literal> has to either be set to
       <literal>OUTPUT_PLUGIN_TEXTUAL_OUTPUT</literal>
-      or <literal>OUTPUT_PLUGIN_BINARY_OUTPUT</literal>.
+      or <literal>OUTPUT_PLUGIN_BINARY_OUTPUT</literal>. See also
+      <xref linkend="logicaldecoding-output-mode"/>.
      </para>
      <para>
       The startup callback should validate the options present in
