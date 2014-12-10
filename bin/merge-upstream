@@ -28,7 +28,7 @@ def _mkdirs(path):
 def main(args):
     """
     This script works as follows:
-    
+
     1) Download the upstream source tarball for the given version of Postgres
 
     2) Determine all files that we've modified since the given commit hash
@@ -59,7 +59,7 @@ def main(args):
     commits = our_repo.iter_commits(rev)
     modified_by_us = set()
 
-    # Get each file we've modified since the given commit 
+    # Get each file we've modified since the given commit
     # along with its earliest modification time
     print 'Determining which files we modified since %s (%s)...' % (args.after_commit[:8], since_ts)
     for c in commits:
@@ -105,7 +105,7 @@ def main(args):
         diff.close()
         print 'Created %s' % diff_path
 
-        # It's also useful when merging to have the original copy 
+        # It's also useful when merging to have the original copy
         # of upstream file, so save it as well
         upstream_copy_path = os.path.join(diff_dir, our_path)
         upstream_copy = open(upstream_copy_path, 'wa')
