@@ -1490,6 +1490,8 @@ DetermineSleepTime(struct timeval * timeout)
 
 /*
  * Main idle loop of postmaster
+ *
+ * NB: Needs to be called with signals blocked
  */
 static int
 ServerLoop(void)
@@ -1511,34 +1513,38 @@ ServerLoop(void)
 		/*
 		 * Wait for a connection request to arrive.
 		 *
+		 * We block all signals except while sleeping. That makes it safe for
+		 * signal handlers, which again block all signals while executing, to
+		 * do nontrivial work.
+		 *
 		 * If we are in PM_WAIT_DEAD_END state, then we don't want to accept
-		 * any new connections, so we don't call select() at all; just sleep
-		 * for a little bit with signals unblocked.
+		 * any new connections, so we don't call select(), and just sleep.
 		 */
 		memcpy((char *) &rmask, (char *) &readmask, sizeof(fd_set));
 
-		PG_SETMASK(&UnBlockSig);
-
 		if (pmState == PM_WAIT_DEAD_END)
 		{
+			PG_SETMASK(&UnBlockSig);
+
 			pg_usleep(100000L); /* 100 msec seems reasonable */
 			selres = 0;
+
+			PG_SETMASK(&BlockSig);
 		}
 		else
 		{
 			/* must set timeout each time; some OSes change it! */
 			struct timeval timeout;
 
+			/* Needs to run with blocked signals! */
 			DetermineSleepTime(&timeout);
 
-			selres = select(nSockets, &rmask, NULL, NULL, &timeout);
-		}
+			PG_SETMASK(&UnBlockSig);
 
-		/*
-		 * Block all signals until we wait again.  (This makes it safe for our
-		 * signal handlers to do nontrivial work.)
-		 */
-		PG_SETMASK(&BlockSig);
+			selres = select(nSockets, &rmask, NULL, NULL, &timeout);
+
+			PG_SETMASK(&BlockSig);
+		}
 
 		/* Now check the select() result */
 		if (selres < 0)
@@ -4693,6 +4699,9 @@ SubPostmasterMain(int argc, char *argv[])
 	{
 		int			shmem_slot;
 
+		/* do this as early as possible; in particular, before InitProcess() */
+		IsBackgroundWorker = true;
+
 		/* Close the postmaster's sockets */
 		ClosePostmasterPorts(false);
 
@@ -4769,7 +4778,6 @@ static void
 sigusr1_handler(SIGNAL_ARGS)
 {
 	int			save_errno = errno;
-	bool		start_bgworker = false;
 
 	PG_SETMASK(&BlockSig);
 
@@ -4777,7 +4785,7 @@ sigusr1_handler(SIGNAL_ARGS)
 	if (CheckPostmasterSignal(PMSIGNAL_BACKGROUND_WORKER_CHANGE))
 	{
 		BackgroundWorkerStateChange();
-		start_bgworker = true;
+		StartWorkerNeeded = true;
 	}
 
 	/*
@@ -4818,10 +4826,10 @@ sigusr1_handler(SIGNAL_ARGS)
 
 		pmState = PM_HOT_STANDBY;
 		/* Some workers may be scheduled to start now */
-		start_bgworker = true;
+		StartWorkerNeeded = true;
 	}
 
-	if (start_bgworker)
+	if (StartWorkerNeeded || HaveCrashedWorker)
 		maybe_start_bgworker();
 
 	if (CheckPostmasterSignal(PMSIGNAL_WAKEN_ARCHIVER) &&

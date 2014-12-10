@@ -271,7 +271,7 @@ exec_command(const char *cmd,
 			pw = getpwuid(user_id);
 			if (!pw)
 			{
-				psql_error("could not get home directory for user id %ld: %s\n",
+				psql_error("could not get home directory for user ID %ld: %s\n",
 						   (long) user_id,
 						 errno ? strerror(errno) : _("user does not exist"));
 				exit(EXIT_FAILURE);
@@ -1089,20 +1089,8 @@ exec_command(const char *cmd,
 		char	   *fname = psql_scan_slash_option(scan_state,
 												   OT_NORMAL, NULL, true);
 
-#if defined(WIN32) && !defined(__CYGWIN__)
-
-		/*
-		 * XXX This does not work for all terminal environments or for output
-		 * containing non-ASCII characters; see comments in simple_prompt().
-		 */
-#define DEVTTY	"con"
-#else
-#define DEVTTY	"/dev/tty"
-#endif
-
 		expand_tilde(&fname);
-		/* This scrolls off the screen when using /dev/tty */
-		success = saveHistory(fname ? fname : DEVTTY, -1, false, false);
+		success = printHistory(fname, pset.popt.topt.pager);
 		if (success && !pset.quiet && fname)
 			printf(_("Wrote history to file \"%s\".\n"), fname);
 		if (!fname)
@@ -2516,7 +2504,7 @@ printPsetInfo(const char *param, struct printQueryOpt *popt)
 		if (popt->topt.default_footer)
 			printf(_("Default footer (%s) is on.\n"), param);
 		else
-			printf(_("Default footer (%s) is off."), param);
+			printf(_("Default footer (%s) is off.\n"), param);
 	}
 
 	/* show format */

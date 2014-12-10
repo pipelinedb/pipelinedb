@@ -211,6 +211,7 @@ typedef struct ParseCallbackState
 	ErrorContextCallback errcallback;
 } ParseCallbackState;
 
+
 extern ParseState *make_parsestate(ParseState *parentParseState);
 extern void free_parsestate(ParseState *pstate);
 extern int	parser_errposition(ParseState *pstate, int location);

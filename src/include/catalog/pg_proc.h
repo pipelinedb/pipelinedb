@@ -4054,7 +4054,7 @@ DATA(insert OID = 2774 (  ginqueryarrayextract	PGNSP PGUID 12 1 0 0 0 f f f f t 
 DESCR("GIN array support");
 DATA(insert OID = 2744 (  ginarrayconsistent	PGNSP PGUID 12 1 0 0 0 f f f f t f i 8 0 16 "2281 21 2277 23 2281 2281 2281 2281" _null_ _null_ _null_ _null_ ginarrayconsistent _null_ _null_ _null_ ));
 DESCR("GIN array support");
-DATA(insert OID = 3920 (  ginarraytriconsistent PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 16 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ ginarraytriconsistent _null_ _null_ _null_ ));
+DATA(insert OID = 3920 (  ginarraytriconsistent PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 18 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ ginarraytriconsistent _null_ _null_ _null_ ));
 DESCR("GIN array support");
 DATA(insert OID = 3076 (  ginarrayextract	 PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2281 "2277 2281" _null_ _null_ _null_ _null_	ginarrayextract_2args _null_ _null_ _null_ ));
 DESCR("GIN array support (obsolete)");
@@ -4218,9 +4218,9 @@ DESCR("build a json object from pairwise key/value inputs");
 DATA(insert OID = 3201 (  json_build_object    PGNSP PGUID 12 1 0 0 0 f f f f f f s 0 0 114  "" _null_ _null_ _null_ _null_ json_build_object_noargs _null_ _null_ _null_ ));
 DESCR("build an empty json object");
 DATA(insert OID = 3202 (  json_object	 PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 114 "1009" _null_ _null_ _null_ _null_ json_object _null_ _null_ _null_ ));
-DESCR("map text arrayof key value pais to json object");
+DESCR("map text array of key value pairs to json object");
 DATA(insert OID = 3203 (  json_object	 PGNSP PGUID 12 1 0 0 0 f f f f t f s 2 0 114 "1009 1009" _null_ _null_ _null_ _null_ json_object_two_arg _null_ _null_ _null_ ));
-DESCR("map text arrayof key value pais to json object");
+DESCR("map text arrays of keys and values to json object");
 DATA(insert OID = 3176 (  to_json	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 114 "2283" _null_ _null_ _null_ _null_ to_json _null_ _null_ _null_ ));
 DESCR("map input to json");
 
@@ -4401,7 +4401,7 @@ DATA(insert OID = 3657 (  gin_extract_tsquery	PGNSP PGUID 12 1 0 0 0 f f f f t f
 DESCR("GIN tsvector support");
 DATA(insert OID = 3658 (  gin_tsquery_consistent PGNSP PGUID 12 1 0 0 0 f f f f t f i 8 0 16 "2281 21 3615 23 2281 2281 2281 2281" _null_ _null_ _null_ _null_	gin_tsquery_consistent _null_ _null_ _null_ ));
 DESCR("GIN tsvector support");
-DATA(insert OID = 3921 (  gin_tsquery_triconsistent PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 16 "2281 21 3615 23 2281 2281 2281" _null_ _null_ _null_ _null_	gin_tsquery_triconsistent _null_ _null_ _null_ ));
+DATA(insert OID = 3921 (  gin_tsquery_triconsistent PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 18 "2281 21 3615 23 2281 2281 2281" _null_ _null_ _null_ _null_	gin_tsquery_triconsistent _null_ _null_ _null_ ));
 DESCR("GIN tsvector support");
 DATA(insert OID = 3724 (  gin_cmp_tslexeme		PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 23 "25 25" _null_ _null_ _null_ _null_ gin_cmp_tslexeme _null_ _null_ _null_ ));
 DESCR("GIN tsvector support");
@@ -4643,7 +4643,7 @@ DATA(insert OID = 3483 (  gin_extract_jsonb_query  PGNSP PGUID 12 1 0 0 0 f f f 
 DESCR("GIN support");
 DATA(insert OID = 3484 (  gin_consistent_jsonb	PGNSP PGUID 12 1 0 0 0 f f f f t f i 8 0 16 "2281 21 2277 23 2281 2281 2281 2281" _null_ _null_ _null_ _null_ gin_consistent_jsonb _null_ _null_ _null_ ));
 DESCR("GIN support");
-DATA(insert OID = 3488 (  gin_triconsistent_jsonb	PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 16 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ gin_triconsistent_jsonb _null_ _null_ _null_ ));
+DATA(insert OID = 3488 (  gin_triconsistent_jsonb	PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 18 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ gin_triconsistent_jsonb _null_ _null_ _null_ ));
 DESCR("GIN support");
 DATA(insert OID = 3485 (  gin_extract_jsonb_path  PGNSP PGUID 12 1 0 0 0 f f f f t f i 3 0 2281 "2281 2281 2281" _null_ _null_ _null_ _null_ gin_extract_jsonb_path _null_ _null_ _null_ ));
 DESCR("GIN support");
@@ -4651,7 +4651,7 @@ DATA(insert OID = 3486 (  gin_extract_jsonb_query_path	PGNSP PGUID 12 1 0 0 0 f 
 DESCR("GIN support");
 DATA(insert OID = 3487 (  gin_consistent_jsonb_path  PGNSP PGUID 12 1 0 0 0 f f f f t f i 8 0 16 "2281 21 2277 23 2281 2281 2281 2281" _null_ _null_ _null_ _null_ gin_consistent_jsonb_path _null_ _null_ _null_ ));
 DESCR("GIN support");
-DATA(insert OID = 3489 (  gin_triconsistent_jsonb_path	PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 16 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ gin_triconsistent_jsonb_path _null_ _null_ _null_ ));
+DATA(insert OID = 3489 (  gin_triconsistent_jsonb_path	PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 18 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ gin_triconsistent_jsonb_path _null_ _null_ _null_ ));
 DESCR("GIN support");
 
 /* txid */

@@ -364,7 +364,7 @@ typedef enum NodeTag
 	T_AlterUserMappingStmt,
 	T_DropUserMappingStmt,
 	T_AlterTableSpaceOptionsStmt,
-	T_AlterTableSpaceMoveStmt,
+	T_AlterTableMoveAllStmt,
 	T_SecLabelStmt,
 	T_CreateForeignTableStmt,
 	T_CreateExtensionStmt,

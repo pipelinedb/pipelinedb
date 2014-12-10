@@ -626,6 +626,7 @@ ReceiveXlogStream(PGconn *conn, XLogRecPtr startpos, uint32 timeline,
 				fprintf(stderr,
 				   _("%s: unexpected termination of replication stream: %s"),
 						progname, PQresultErrorMessage(res));
+				PQclear(res);
 				goto error;
 			}
 			PQclear(res);
@@ -640,6 +641,8 @@ ReceiveXlogStream(PGconn *conn, XLogRecPtr startpos, uint32 timeline,
 		}
 		else if (PQresultStatus(res) == PGRES_COMMAND_OK)
 		{
+			PQclear(res);
+
 			/*
 			 * End of replication (ie. controlled shut down of the server).
 			 *
@@ -661,6 +664,7 @@ ReceiveXlogStream(PGconn *conn, XLogRecPtr startpos, uint32 timeline,
 			fprintf(stderr,
 					_("%s: unexpected termination of replication stream: %s"),
 					progname, PQresultErrorMessage(res));
+			PQclear(res);
 			goto error;
 		}
 	}
@@ -871,6 +875,7 @@ HandleCopyStream(PGconn *conn, XLogRecPtr startpos, uint32 timeline,
 						PQclear(res);
 						goto error;
 					}
+					PQclear(res);
 					res = PQgetResult(conn);
 				}
 				still_sending = false;
@@ -1028,7 +1033,7 @@ HandleCopyStream(PGconn *conn, XLogRecPtr startpos, uint32 timeline,
 
 					xlogoff = 0;
 
-					if (still_sending && stream_stop(blockpos, timeline, false))
+					if (still_sending && stream_stop(blockpos, timeline, true))
 					{
 						if (PQputCopyEnd(conn, NULL) <= 0 || PQflush(conn))
 						{

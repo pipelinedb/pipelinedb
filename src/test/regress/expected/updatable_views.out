@@ -151,11 +151,11 @@ DETAIL:  Views containing HAVING are not automatically updatable.
 HINT:  To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.
 DELETE FROM ro_view4;
 ERROR:  cannot delete from view "ro_view4"
-DETAIL:  Views that return aggregate functions are not automatically updatable
+DETAIL:  Views that return aggregate functions are not automatically updatable.
 HINT:  To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.
 DELETE FROM ro_view5;
 ERROR:  cannot delete from view "ro_view5"
-DETAIL:  Views that return window functions are not automatically updatable
+DETAIL:  Views that return window functions are not automatically updatable.
 HINT:  To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.
 DELETE FROM ro_view6;
 ERROR:  cannot delete from view "ro_view6"
@@ -1497,7 +1497,7 @@ SELECT * FROM base_tbl;
 
 ALTER VIEW rw_view1 SET (check_option=here); -- invalid
 ERROR:  invalid value for "check_option" option
-DETAIL:  Valid values are "local", and "cascaded".
+DETAIL:  Valid values are "local" and "cascaded".
 ALTER VIEW rw_view1 SET (check_option=local);
 INSERT INTO rw_view2 VALUES (-20); -- should fail
 ERROR:  new row violates WITH CHECK OPTION for view "rw_view1"
@@ -1567,6 +1567,26 @@ NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to view rw_view1
 drop cascades to view rw_view2
 drop cascades to view rw_view3
+-- WITH CHECK OPTION with scalar array ops
+CREATE TABLE base_tbl (a int, b int[]);
+CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a = ANY (b)
+  WITH CHECK OPTION;
+INSERT INTO rw_view1 VALUES (1, ARRAY[1,2,3]); -- ok
+INSERT INTO rw_view1 VALUES (10, ARRAY[4,5]); -- should fail
+ERROR:  new row violates WITH CHECK OPTION for view "rw_view1"
+DETAIL:  Failing row contains (10, {4,5}).
+UPDATE rw_view1 SET b[2] = -b[2] WHERE a = 1; -- ok
+UPDATE rw_view1 SET b[1] = -b[1] WHERE a = 1; -- should fail
+ERROR:  new row violates WITH CHECK OPTION for view "rw_view1"
+DETAIL:  Failing row contains (1, {-1,-2,3}).
+PREPARE ins(int, int[]) AS INSERT INTO rw_view1 VALUES($1, $2);
+EXECUTE ins(2, ARRAY[1,2,3]); -- ok
+EXECUTE ins(10, ARRAY[4,5]); -- should fail
+ERROR:  new row violates WITH CHECK OPTION for view "rw_view1"
+DETAIL:  Failing row contains (10, {4,5}).
+DEALLOCATE PREPARE ins;
+DROP TABLE base_tbl CASCADE;
+NOTICE:  drop cascades to view rw_view1
 -- WITH CHECK OPTION with subquery
 CREATE TABLE base_tbl (a int);
 CREATE TABLE ref_tbl (a int PRIMARY KEY);
@@ -2051,10 +2071,10 @@ UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a = 3;
                ->  Append
                      ->  Seq Scan on public.t12
                            Output: t12.a
-                           Filter: (t1_5.a = t12.a)
+                           Filter: (t12.a = 3)
                      ->  Seq Scan on public.t111
                            Output: t111.a
-                           Filter: (t1_5.a = t111.a)
+                           Filter: (t111.a = 3)
    ->  Subquery Scan on t1_1
          Output: 100, t1_1.b, t1_1.c, t1_1.d, t1_1.ctid
          Filter: snoop(t1_1.a)
@@ -2066,10 +2086,10 @@ UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a = 3;
                ->  Append
                      ->  Seq Scan on public.t12 t12_1
                            Output: t12_1.a
-                           Filter: (t11.a = t12_1.a)
+                           Filter: (t12_1.a = 3)
                      ->  Seq Scan on public.t111 t111_1
                            Output: t111_1.a
-                           Filter: (t11.a = t111_1.a)
+                           Filter: (t111_1.a = 3)
    ->  Subquery Scan on t1_2
          Output: 100, t1_2.b, t1_2.c, t1_2.e, t1_2.ctid
          Filter: snoop(t1_2.a)
@@ -2081,10 +2101,10 @@ UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a = 3;
                ->  Append
                      ->  Seq Scan on public.t12 t12_3
                            Output: t12_3.a
-                           Filter: (t12_2.a = t12_3.a)
+                           Filter: (t12_3.a = 3)
                      ->  Seq Scan on public.t111 t111_2
                            Output: t111_2.a
-                           Filter: (t12_2.a = t111_2.a)
+                           Filter: (t111_2.a = 3)
    ->  Subquery Scan on t1_3
          Output: 100, t1_3.b, t1_3.c, t1_3.d, t1_3.e, t1_3.ctid
          Filter: snoop(t1_3.a)
@@ -2096,10 +2116,10 @@ UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a = 3;
                ->  Append
                      ->  Seq Scan on public.t12 t12_4
                            Output: t12_4.a
-                           Filter: (t111_3.a = t12_4.a)
+                           Filter: (t12_4.a = 3)
                      ->  Seq Scan on public.t111 t111_4
                            Output: t111_4.a
-                           Filter: (t111_3.a = t111_4.a)
+                           Filter: (t111_4.a = 3)
 (61 rows)
 
 UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a = 3;
@@ -2129,10 +2149,10 @@ UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
                ->  Append
                      ->  Seq Scan on public.t12
                            Output: t12.a
-                           Filter: (t1_5.a = t12.a)
+                           Filter: (t12.a = 8)
                      ->  Seq Scan on public.t111
                            Output: t111.a
-                           Filter: (t1_5.a = t111.a)
+                           Filter: (t111.a = 8)
    ->  Subquery Scan on t1_1
          Output: (t1_1.a + 1), t1_1.b, t1_1.c, t1_1.d, t1_1.ctid
          Filter: snoop(t1_1.a)
@@ -2144,10 +2164,10 @@ UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
                ->  Append
                      ->  Seq Scan on public.t12 t12_1
                            Output: t12_1.a
-                           Filter: (t11.a = t12_1.a)
+                           Filter: (t12_1.a = 8)
                      ->  Seq Scan on public.t111 t111_1
                            Output: t111_1.a
-                           Filter: (t11.a = t111_1.a)
+                           Filter: (t111_1.a = 8)
    ->  Subquery Scan on t1_2
          Output: (t1_2.a + 1), t1_2.b, t1_2.c, t1_2.e, t1_2.ctid
          Filter: snoop(t1_2.a)
@@ -2159,10 +2179,10 @@ UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
                ->  Append
                      ->  Seq Scan on public.t12 t12_3
                            Output: t12_3.a
-                           Filter: (t12_2.a = t12_3.a)
+                           Filter: (t12_3.a = 8)
                      ->  Seq Scan on public.t111 t111_2
                            Output: t111_2.a
-                           Filter: (t12_2.a = t111_2.a)
+                           Filter: (t111_2.a = 8)
    ->  Subquery Scan on t1_3
          Output: (t1_3.a + 1), t1_3.b, t1_3.c, t1_3.d, t1_3.e, t1_3.ctid
          Filter: snoop(t1_3.a)
@@ -2174,10 +2194,10 @@ UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
                ->  Append
                      ->  Seq Scan on public.t12 t12_4
                            Output: t12_4.a
-                           Filter: (t111_3.a = t12_4.a)
+                           Filter: (t12_4.a = 8)
                      ->  Seq Scan on public.t111 t111_4
                            Output: t111_4.a
-                           Filter: (t111_3.a = t111_4.a)
+                           Filter: (t111_4.a = 8)
 (61 rows)
 
 UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
