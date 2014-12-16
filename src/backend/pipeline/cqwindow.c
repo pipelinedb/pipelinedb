@@ -732,7 +732,19 @@ TransformAggNodeForCQView(SelectStmt *viewselect, Node *node, ResTarget *aggres,
 	if (doesViewAggregate)
 	{
 		FuncCall *agg = (FuncCall *) node;
-		agg->args = list_delete_first(agg->args);
+		/*
+		 * Remove all variadic args for hypothetical-set aggs, as we must
+		 * deterministically generate a signature to use for matching the
+		 * correct agg to use for the view over the matrel. For regular aggs,
+		 * just remove the first argument.
+		 */
+		int toremove = agg->agg_order ? list_length(agg->agg_order) : 1;
+
+		while (toremove > 0)
+		{
+			agg->args = list_delete_first(agg->args);
+			toremove--;
+		}
 		agg->agg_star = false;
 		agg->args = lcons(cref, agg->args);
 	}
@@ -862,6 +874,20 @@ FixAggArgForCQView(SelectStmt *viewselect, SelectStmt *workerselect, RangeVar *m
 		foreach(alc, context.funcCalls)
 		{
 			FuncCall *agg = (FuncCall *) lfirst(alc);
+
+			/*
+			 * The ColRefs in agg_order haven't been renamed to point to
+			 * the hidden transition state columns for ordered and hypothetical
+			 * set aggregates. However, views on these aggregates don't need
+			 * an agg_order anymore because only their transition states will be
+			 * stored in the matrel, which have already been built using
+			 * the agg_order. Thus we can just rip it out.
+			 */
+			if (agg->agg_order)
+			{
+				agg->agg_order = NIL;
+				agg->agg_within_group = false;
+			}
 
 			if (pg_strcasecmp(NameListToString(agg->funcname), "count") == 0)
 			{

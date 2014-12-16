@@ -3832,8 +3832,6 @@ stringaggstatesend(PG_FUNCTION_ARGS)
 	bytea *result;
 	int nbytes;
 
-	AggCheckCallContext(fcinfo, NULL);
-
 	initStringInfo(&buf);
 
 	pq_sendint(&buf, state->dlen, sizeof(int));
@@ -3843,7 +3841,6 @@ stringaggstatesend(PG_FUNCTION_ARGS)
 	result = (bytea *) palloc(nbytes + VARHDRSZ);
 	SET_VARSIZE(result, nbytes + VARHDRSZ);
 
-	// it's not copying the null byte
 	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
 
 	PG_RETURN_BYTEA_P(result);
@@ -3860,8 +3857,6 @@ stringaggstaterecv(PG_FUNCTION_ARGS)
 	StringAggState *result;
 	StringInfoData buf;
 	int nbytes = VARSIZE(bytesin) - VARHDRSZ;
-
-	AggCheckCallContext(fcinfo, NULL);
 
 	result = (StringAggState *) palloc0(sizeof(StringAggState));
 

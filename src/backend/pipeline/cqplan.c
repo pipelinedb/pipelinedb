@@ -186,6 +186,9 @@ SetCQPlanRefs(PlannedStmt *pstmt, char* matrelname)
 			}
 
 			aggref->aggtype = transtype;
+
+			/* CQs have their own way have handling DISTINCT */
+			aggref->aggdistinct = NIL;
 		}
 		else
 		{
@@ -243,7 +246,7 @@ SetCQPlanRefs(PlannedStmt *pstmt, char* matrelname)
 	 * able to work with any ordering of attributes as long as they're all present. Then,
 	 * when combining with on-disk tuples, we could reorder attributes as necessary if
 	 * we detect different orderings. Another option is to have strong guarantees about
-	 * attribute ordering when creating materializtion tables which we can rely on here.
+	 * attribute ordering when creating materialization tables which we can rely on here.
 	 *
 	 * For now, let's just explode if there is an
 	 * inconsistency detected here. This would be a shitty error for a user to get though,

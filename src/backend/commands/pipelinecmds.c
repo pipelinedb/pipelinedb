@@ -297,7 +297,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 
 	/*
 	 * Create a VIEW over the CQ materialization relation which exposes
-	 * only the columns that users expect. This is needed primarily for two
+	 * only the columns that users expect. This is needed primarily for three
 	 * reasons:
 	 *
 	 * 1. Sliding window queries. For such queries, this VIEW filters events out
@@ -312,8 +312,8 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
-	DefineView(view_stmt, querystring);
 
+	DefineView(view_stmt, querystring);
 	allowSystemTableMods = saveAllowSystemTableMods;
 
 	/*

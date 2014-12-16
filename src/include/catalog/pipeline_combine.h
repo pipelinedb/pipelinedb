@@ -158,4 +158,13 @@ DATA(insert (numeric_stddev_samp numeric_accum naggstatesend naggstaterecv numer
 DATA(insert (float8_stddev_samp float8_accum 0 0 float8_combine t 1022));
 DATA(insert (float8_stddev_samp float4_accum 0 0 float8_combine t 1022));
 
+/* hypothetical-set rank */
+DATA(insert (cq_rank_final cq_hypothetical_set_transition_multi 0 0 cq_hypothetical_set_combine_multi t 1016));
+DATA(insert (cq_percent_rank_final cq_hypothetical_set_transition_multi 0 0 cq_hypothetical_set_combine_multi t 1016));
+DATA(insert (cq_cume_dist_final cq_hypothetical_set_transition_multi 0 0 cq_hypothetical_set_combine_multi t 1016));
+DATA(insert (hll_dense_rank_final hll_hypothetical_set_transition_multi hllsend hllrecv hll_hypothetical_set_combine_multi t 17));
+
+/* HyperLogLog count distinct */
+DATA(insert (hll_count_distinct_final hll_count_distinct_transition hllsend hllrecv hll_count_distinct_combine t 17));
+
 #endif
