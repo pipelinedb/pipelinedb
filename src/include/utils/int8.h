@@ -126,4 +126,9 @@ extern Datum oidtoi8(PG_FUNCTION_ARGS);
 extern Datum generate_series_int8(PG_FUNCTION_ARGS);
 extern Datum generate_series_step_int8(PG_FUNCTION_ARGS);
 
+extern Datum hll_count_distinct_transition(PG_FUNCTION_ARGS);
+extern Datum hll_count_distinct_combine(PG_FUNCTION_ARGS);
+extern Datum hll_count_distinct_pcombine(PG_FUNCTION_ARGS);
+extern Datum hll_count_distinct_final(PG_FUNCTION_ARGS);
+
 #endif   /* INT8_H */

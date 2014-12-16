@@ -1,4 +1,4 @@
-/*-------------------------------------------------------------------------
+	/*-------------------------------------------------------------------------
  *
  * cqanalyze.c
  *	  Support for analyzing continuous view statements, mainly to support
@@ -33,6 +33,22 @@
 #include "utils/builtins.h"
 #include "utils/syscache.h"
 
+/*
+ * Maps hypothetical set aggregates to their streaming variants
+ *
+ * Perhaps we'll use a catalog for this one day, but this seems
+ * sufficient for now, for simplicity's sake.
+ */
+static char *StreamingVariants[][2] = {
+		{"rank", "cq_rank"},
+		{"dense_rank", "hll_dense_rank"},
+		{"percent_rank", "cq_percent_rank"},
+		{"cume_dist", "cq_cume_dist"},
+		{"count", "hll_count_distinct"}
+};
+
+static void replace_hypothetical_set_aggs(SelectStmt *stmt);
+static char *get_streaming_agg(FuncCall *fn);
 static bool associate_types_to_colrefs(Node *node, CQAnalyzeContext *context);
 static bool type_cast_all_column_refs(Node *node, CQAnalyzeContext *context);
 
@@ -319,7 +335,7 @@ CollectAggFuncs(Node *node, CQAnalyzeContext *context)
 		bool is_agg = false;
 		FuncCandidateList clist;
 
-		clist = FuncnameGetCandidates(fn->funcname, list_length(fn->args), NIL, false, false, true);
+		clist = FuncnameGetCandidates(fn->funcname, list_length(fn->args), NIL, true, false, true);
 
 		while (clist != NULL)
 		{
@@ -466,6 +482,83 @@ HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context)
 }
 
 /*
+ * Looks up the streaming hypothetical set variant for the given function
+ */
+static char *
+get_streaming_agg(FuncCall *fn)
+{
+	int i;
+	int len = sizeof(StreamingVariants) / sizeof(char *) / 2;
+	char *name = NameListToString(fn->funcname);
+
+	/* if the agg is count, we only need a streaming variant if it's DISTINCT */
+	if (strcmp(name, "count") == 0 && fn->agg_distinct == false)
+		return NULL;
+
+	for (i=0; i<len; i++)
+	{
+		char *k = StreamingVariants[i][0];
+		char *v = StreamingVariants[i][1];
+
+		if (strcmp(k, name) == 0)
+			return v;
+	}
+
+	return NULL;
+}
+
+/*
+ * replace_hypothetical_set_aggs
+ *
+ * Replaces hypothetical set aggregate functions with their streaming
+ * variants if possible, since we can't use the sorting approach that
+ * the standard functions use.
+ */
+static void
+replace_hypothetical_set_aggs(SelectStmt *stmt)
+{
+	ListCell *lc;
+
+	foreach(lc, stmt->targetList)
+	{
+		ResTarget *res = (ResTarget *) lfirst(lc);
+		CQAnalyzeContext context;
+		ListCell *fnlc;
+		char *prevname = NULL;
+		char *newname = NULL;
+
+		context.funcCalls = NIL;
+		CollectAggFuncs((Node *) res, &context);
+
+		/*
+		 * For each agg in this ResTarget, replace any function names
+		 * with the names of their streaming variants.
+		 */
+		foreach(fnlc, context.funcCalls)
+		{
+			FuncCall *fn = (FuncCall *) lfirst(fnlc);
+
+			prevname = NameListToString(fn->funcname);
+			newname = get_streaming_agg(fn);
+			if (newname != NULL)
+				fn->funcname = list_make1(makeString(newname));
+		}
+
+		/*
+		 * If there is only one function call and the ResTarget
+		 * wasn't already named, give it the name of the replaced
+		 * function because that's the expected name of the column
+		 * in the CV.
+		 */
+		if (res->name == NULL && prevname != NULL &&
+				list_length(context.funcCalls) == 1)
+		{
+			res->name = prevname;
+		}
+	}
+}
+
+/*
  * GetSelectStmtForCQWorker
  *
  * Get the SelectStmt that should be executed by the
@@ -511,6 +604,13 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	 */
 	if (isSlidingWindow || doesViewAggregate)
 		AddProjectionsAndGroupBysForWindows(workerstmt, viewstmt, doesViewAggregate, &context);
+
+	/*
+	 * We can't use the standard hypothetical set aggregate functions because
+	 * they require sorting the input set, so replace them with their
+	 * streaming variants if possible.
+	 */
+	replace_hypothetical_set_aggs(workerstmt);
 
 	/*
 	 * Rewrite the groupClause and project any group expressions that
@@ -618,7 +718,6 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 
 	viewstmt->windowClause = workerstmt->windowClause;
 	workerstmt->windowClause = NIL;
-
 
 	if (viewstmtptr != NULL)
 		*viewstmtptr = viewstmt;

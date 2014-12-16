@@ -2290,6 +2290,7 @@ ExecEndAggBatch(AggState *node)
 	clear_hash_table(node);
 	node->table_filled = false;
 	node->agg_done = false;
+	ExecClearTuple(node->ss.ss_ScanTupleSlot);
 }
 
 void

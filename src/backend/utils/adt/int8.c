@@ -19,6 +19,8 @@
 
 #include "funcapi.h"
 #include "libpq/pqformat.h"
+#include "pipeline/hll.h"
+#include "utils/datum.h"
 #include "utils/int8.h"
 #include "utils/builtins.h"
 
@@ -1536,4 +1538,134 @@ generate_series_step_int8(PG_FUNCTION_ARGS)
 	else
 		/* do when there is no more left */
 		SRF_RETURN_DONE(funcctx);
+}
+
+static HyperLogLog *
+hll_count_distinct_startup(PG_FUNCTION_ARGS)
+{
+	if (fcinfo->flinfo->fn_extra == NULL)
+	{
+		MemoryContext old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+		Aggref *aggref = AggGetAggref(fcinfo);
+		TupleDesc desc = ExecTypeFromTL(aggref->args, false);
+
+		/* count distinct can only have one column in the target list */
+		if (desc->natts != 1)
+			elog(ERROR, "COUNT DISTINCT cannot be used on multiple columns");
+
+		fcinfo->flinfo->fn_extra = (void *) desc->attrs[0];
+
+		MemoryContextSwitchTo(old);
+	}
+
+	return HLLCreate();
+}
+
+/*
+ * COUNT DISTINCT support functions for streaming inputs,
+ * using HyperLogLog to determine input uniqueness
+ */
+Datum
+hll_count_distinct_transition(PG_FUNCTION_ARGS)
+{
+	MemoryContext old;
+	MemoryContext context;
+	HyperLogLog *hll;
+	Datum incoming;
+	StringInfo buf = makeStringInfo();
+	Form_pg_attribute attr;
+	Size size;
+	int result;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+			elog(ERROR, "aggregate function called in non-aggregate context");
+
+	old = MemoryContextSwitchTo(context);
+
+	if (PG_ARGISNULL(0))
+		hll = hll_count_distinct_startup(fcinfo);
+	else
+		hll = (HyperLogLog *) PG_GETARG_POINTER(0);
+
+	attr = (Form_pg_attribute) fcinfo->flinfo->fn_extra;
+
+	incoming = PG_GETARG_DATUM(1);
+	size = datumGetSize(incoming, attr->attbyval, attr->attlen);
+
+	if (attr->attbyval)
+		appendBinaryStringInfo(buf, (char *) &incoming, size);
+	else
+		appendBinaryStringInfo(buf, DatumGetPointer(incoming), size);
+
+	hll = HLLAdd(hll, buf->data, size, &result);
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(hll);
+}
+
+/*
+ * Take the union of two HLL transition states
+ */
+Datum
+hll_count_distinct_combine(PG_FUNCTION_ARGS)
+{
+	HyperLogLog *state;
+	HyperLogLog *incoming = (HyperLogLog *) PG_GETARG_POINTER(1);
+
+	if (!AggCheckCallContext(fcinfo, NULL))
+			elog(ERROR, "aggregate function called in non-aggregate context");
+
+	if (PG_ARGISNULL(0))
+	{
+		state = HLLCreateFromRaw(incoming->M, incoming->mlen, incoming->p, incoming->encoding);
+		PG_RETURN_POINTER(state);
+	}
+
+	state = (HyperLogLog *) PG_GETARG_POINTER(0);
+	state = HLLUnion(state, incoming);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
+ * recv a serialized HyperLogLog and send it to the
+ * combine function
+ */
+Datum
+hll_count_distinct_pcombine(PG_FUNCTION_ARGS)
+{
+	Datum arg0;
+	Datum result;
+
+	if (!AggCheckCallContext(fcinfo, NULL))
+			elog(ERROR, "aggregate function called in non-aggregate context");
+
+	arg0 = PG_ARGISNULL(0) ? (Datum) NULL : (Datum) PG_GETARG_POINTER(0);
+
+	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
+	fcinfo->nargs = 1;
+	fcinfo->arg[1] = hllrecv(fcinfo);
+	fcinfo->arg[0] = arg0;
+	fcinfo->nargs = 2;
+
+	result = hll_count_distinct_combine(fcinfo);
+
+	PG_RETURN_POINTER(result);
+}
+
+/*
+ * Returns the cardinality of the final HyperLogLog
+ */
+Datum
+hll_count_distinct_final(PG_FUNCTION_ARGS)
+{
+	HyperLogLog *hll;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_INT64(0);
+
+	hll = (HyperLogLog *) PG_GETARG_POINTER(0);
+
+	PG_RETURN_INT64(HLLSize(hll));
 }

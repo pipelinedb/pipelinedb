@@ -116,6 +116,23 @@ CREATE CONTINUOUS VIEW cqanalyze42 AS SELECT COUNT(*) FROM stream WHERE arrival_
 CREATE CONTINUOUS VIEW cqanalyze43 AS SELECT date_trunc('hour', ts) AS ts FROM stream;
 CREATE CONTINUOUS VIEW cqanalyze44 AS SELECT stream.sid::integer FROM stream;
 
+-- Hypothetical-set aggregates
+CREATE CONTINUOUS VIEW cqanalyze45 AS SELECT g::integer, percent_rank(1 + 3, 2, substring('xxx', 1, 2)) WITHIN GROUP (ORDER BY x::integer, y::integer, z::text) + rank(4, 5, 'x') WITHIN GROUP (ORDER BY x, y, substring(z, 1, 2))  FROM stream GROUP BY g;
+
+CREATE CONTINUOUS VIEW cqanalyze46 AS SELECT rank(0, 1) WITHIN GROUP (ORDER BY x::integer, y::integer) + rank(0) WITHIN GROUP (ORDER BY x) FROM stream;
+
+-- Number of arguments to HS function is inconsistent with the number of GROUP columns
+CREATE CONTINUOUS VIEW error_not_created AS SELECT percent_rank(1) WITHIN GROUP (ORDER BY x::integer, y::integer, z::integer) FROM stream;
+
+-- Types of arguments to HS function are inconsistent with GROUP column types
+CREATE CONTINUOUS VIEW error_not_created AS SELECT g::integer, dense_rank(2, 3, 4) WITHIN GROUP (ORDER BY x::integer, y::integer, z::text) FROM stream GROUP BY g;
+
+CREATE CONTINUOUS VIEW cqanalyze47 AS SELECT g::integer, rank(2, 3, 4) WITHIN GROUP (ORDER BY x::integer, y::integer, z::integer), sum(x + y + z) FROM stream GROUP BY g;
+
+-- Sliding windows
+CREATE CONTINUOUS VIEW cqanalyze48 AS SELECT cume_dist(2) WITHIN GROUP (ORDER BY x::integer DESC) FROM stream WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
+CREATE CONTINUOUS VIEW cqanalyze49 AS SELECT percent_rank(2) WITHIN GROUP (ORDER BY x::integer DESC), rank(2) WITHIN GROUP (ORDER BY x) FROM stream WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
+
 DROP CONTINUOUS VIEW cqanalyze0;
 DROP CONTINUOUS VIEW cqanalyze1;
 DROP CONTINUOUS VIEW cqanalyze2;
@@ -161,3 +178,8 @@ DROP CONTINUOUS VIEW cqanalyze41;
 DROP CONTINUOUS VIEW cqanalyze42;
 DROP CONTINUOUS VIEW cqanalyze43;
 DROP CONTINUOUS VIEW cqanalyze44;
+DROP CONTINUOUS VIEW cqanalyze45;
+DROP CONTINUOUS VIEW cqanalyze46;
+DROP CONTINUOUS VIEW cqanalyze47;
+DROP CONTINUOUS VIEW cqanalyze48;
+DROP CONTINUOUS VIEW cqanalyze49;

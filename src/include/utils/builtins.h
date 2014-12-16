@@ -534,6 +534,19 @@ extern Datum hypothetical_percent_rank_final(PG_FUNCTION_ARGS);
 extern Datum hypothetical_cume_dist_final(PG_FUNCTION_ARGS);
 extern Datum hypothetical_dense_rank_final(PG_FUNCTION_ARGS);
 
+extern Datum hllsend(PG_FUNCTION_ARGS);
+extern Datum hllrecv(PG_FUNCTION_ARGS);
+extern Datum hll_hypothetical_set_transition_multi(PG_FUNCTION_ARGS);
+extern Datum hll_hypothetical_set_combine_multi(PG_FUNCTION_ARGS);
+extern Datum hll_hypothetical_set_pcombine(PG_FUNCTION_ARGS);
+extern Datum hll_hypothetical_dense_rank_final(PG_FUNCTION_ARGS);
+extern Datum cq_hypothetical_set_transition_multi(PG_FUNCTION_ARGS);
+extern Datum cq_hypothetical_set_combine_multi(PG_FUNCTION_ARGS);
+extern Datum cq_hypothetical_set_pcombine(PG_FUNCTION_ARGS);
+extern Datum cq_hypothetical_rank_final(PG_FUNCTION_ARGS);
+extern Datum cq_hypothetical_percent_rank_final(PG_FUNCTION_ARGS);
+extern Datum cq_hypothetical_cume_dist_final(PG_FUNCTION_ARGS);
+
 /* pseudotypes.c */
 extern Datum cstring_in(PG_FUNCTION_ARGS);
 extern Datum cstring_out(PG_FUNCTION_ARGS);

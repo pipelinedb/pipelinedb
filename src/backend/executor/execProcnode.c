@@ -576,16 +576,16 @@ ExecProcNode(PlanState *node)
 			break;
 	}
 
-	if (node->state->es_exec_node_cxt)
-		MemoryContextSwitchTo(oldcontext);
-
 	if (node->instrument)
 		InstrStopNode(node->instrument, TupIsNull(result) ? 0.0 : 1.0);
 
 	if (!TupIsNull(result))
 		node->cq_batch_progress++;
 	else if (IsContinuous(node))
-		return ExecEndBatch(node);
+		result = ExecEndBatch(node);
+
+	if (node->state->es_exec_node_cxt)
+		MemoryContextSwitchTo(oldcontext);
 
 	return result;
 }
