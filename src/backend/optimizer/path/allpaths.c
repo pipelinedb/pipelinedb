@@ -1553,7 +1553,10 @@ make_rel_from_joinlist(PlannerInfo *root, List *joinlist)
 		/*
 		 * Single joinlist node, so we're done.
 		 */
-		return (RelOptInfo *) linitial(initial_rels);
+		if (join_search_hook)
+			return (*join_search_hook) (root, levels_needed, initial_rels);
+		else
+			return (RelOptInfo *) linitial(initial_rels);
 	}
 	else
 	{

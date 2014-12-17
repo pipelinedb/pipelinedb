@@ -16,6 +16,7 @@
 #include "funcapi.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
+#include "optimizer/pathnode.h"
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
 #include "pipeline/cqanalyze.h"
@@ -270,4 +271,31 @@ SetCQPlanRefs(PlannedStmt *pstmt, char* matrelname)
 	 */
 	if (IsA(plan->lefttree, TuplestoreScan))
 		plan->lefttree->targetlist = targetlist;
+}
+
+/*
+ * GetCombinerJoinRel
+ *
+ * Gets the input rel for a combine plan, which only ever needs to read from a TuplestoreScan
+ * because the workers have already done most of the work
+ */
+RelOptInfo *
+GetCombinerJoinRel(PlannerInfo *root, int levels_needed, List *initial_rels)
+{
+	RelOptInfo *rel;
+	Path *path;
+
+	/* discard any existing input rels, we're only going to need a single TuplestoreScan */
+	pfree(root->simple_rel_array);
+	pfree(root->simple_rte_array);
+
+	setup_simple_rel_arrays(root);
+
+	rel = build_simple_rel(root, 1, RELOPT_BASEREL);
+	path =  create_tuplestore_scan_path(rel);
+
+	add_path(rel, path);
+	set_cheapest(rel);
+
+	return rel;
 }

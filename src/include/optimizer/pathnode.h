@@ -129,6 +129,7 @@ extern Path *reparameterize_path(PlannerInfo *root, Path *path,
 					double loop_count);
 
 extern Path *create_streamscan_path(PlannerInfo *root, RelOptInfo *rel, Relids required_outer);
+extern Path *create_tuplestore_scan_path(RelOptInfo *parent);
 
 extern StreamTableJoinPath *create_stream_table_join_path(PlannerInfo *root,
 					RelOptInfo *joinrel,

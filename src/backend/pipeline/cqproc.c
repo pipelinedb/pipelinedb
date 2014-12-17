@@ -26,6 +26,7 @@
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/plannodes.h"
+#include "optimizer/paths.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqplan.h"
@@ -432,15 +433,21 @@ get_combiner_plan(char *cvname, const char *sql, ContinuousViewState *state)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
+	PlannedStmt *result;
+	join_search_hook_type save = join_search_hook;
 
 	parsetree_list = pg_parse_query(sql);
 	Assert(list_length(parsetree_list) == 1);
 
+	join_search_hook = GetCombinerJoinRel;
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt = GetSelectStmtForCQCombiner(selectstmt);
 	selectstmt->forContinuousView = true;
 
-	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, true);
+	result = get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, true);
+	join_search_hook = save;
+
+	return result;
 }
 
 /*
@@ -599,11 +606,6 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	success = RegisterDynamicBackgroundWorker(&worker, &worker_handle);
 
 	*bg_handle = *worker_handle;
-//	PlannedStmt *stmt = get_worker_plan(cvname, query, state);
-
-//	pprint(stmt);
-
-//	exit(0);
 
 	return success;
 }

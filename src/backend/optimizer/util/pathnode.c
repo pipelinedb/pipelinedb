@@ -2101,6 +2101,26 @@ create_streamscan_path(PlannerInfo *root, RelOptInfo *rel, Relids required_outer
 }
 
 /*
+ * create_tuplestore_scan_path
+ *	  Creates a path corresponding to a tuplestore scan, returning the
+ *	  pathnode.
+ */
+Path *
+create_tuplestore_scan_path(RelOptInfo *parent)
+{
+	Path	   *pathnode = makeNode(Path);
+
+	pathnode->pathtype = T_TuplestoreScan;
+	pathnode->parent = parent;
+	pathnode->param_info = NULL;
+	pathnode->pathkeys = NIL;
+	pathnode->startup_cost = 0;
+	pathnode->total_cost = 0;
+
+	return pathnode;
+}
+
+/*
  * create_stream_table_join_path
  *	  Creates a pathnode corresponding to a join between a stream and a table.
  *

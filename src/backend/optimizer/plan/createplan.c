@@ -43,7 +43,7 @@
 
 
 static Plan *create_plan_recurse(PlannerInfo *root, Path *best_path);
-static Plan *create_tupstorescan_plan(PlannerInfo *root, Path *best_path);
+static Plan *create_tuplestorescan_plan(PlannerInfo *root, Path *best_path);
 
 static Plan *create_scan_plan(PlannerInfo *root, Path *best_path);
 static List *build_path_tlist(PlannerInfo *root, Path *path);
@@ -241,10 +241,8 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_WorkTableScan:
 		case T_ForeignScan:
 		case T_StreamScan:
-			if (root->parse->is_combine)
-				plan = create_tupstorescan_plan(root, best_path);
-			else
-				plan = create_scan_plan(root, best_path);
+		case T_TuplestoreScan:
+			plan = create_scan_plan(root, best_path);
 			break;
 		case T_HashJoin:
 		case T_MergeJoin:
@@ -284,11 +282,11 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 }
 
 /*
- *  create_tupstorescan_plan
- *  	Create a plan that simply scans a tuplestore
+ *  create_tuplestorescan_plan
+ *  	Create a plan that simply scans a Tuplestore
  */
 static Plan *
-create_tupstorescan_plan(PlannerInfo *root, Path *best_path)
+create_tuplestorescan_plan(PlannerInfo *root, Path *best_path)
 {
 	TuplestoreScan *scan = makeNode(TuplestoreScan);
 	RelOptInfo *rel = best_path->parent;
@@ -382,6 +380,10 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 												tlist,
 												scan_clauses,
 												rel);
+			break;
+
+		case T_TuplestoreScan:
+			plan = (Plan *) create_tuplestorescan_plan(root, best_path);
 			break;
 
 		case T_IndexScan:

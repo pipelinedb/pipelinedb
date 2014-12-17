@@ -14,5 +14,6 @@
 #include "nodes/relation.h"
 
 void SetCQPlanRefs(PlannedStmt *plan, char *matrelname);
+RelOptInfo *GetCombinerJoinRel(PlannerInfo *root, int levels_needed, List *initial_rels);
 
 #endif
