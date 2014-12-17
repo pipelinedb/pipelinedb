@@ -390,7 +390,7 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	required_outer = rel->lateral_relids;
 
 	/* if this is a stream, there's only one access path */
-	if (planner_rt_fetch(rel->relid, root)->streamdesc)
+	if (IS_STREAM_RTE(rel->relid, root))
 	{
 		add_path(rel, create_streamscan_path(root, rel, required_outer));
 		set_cheapest(rel);

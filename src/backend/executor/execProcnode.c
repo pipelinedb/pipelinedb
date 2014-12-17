@@ -276,6 +276,11 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 													estate, eflags);
 			break;
 
+		case T_StreamTableJoin:
+			result = NULL;
+
+			break;
+
 			/*
 			 * materialization nodes
 			 */

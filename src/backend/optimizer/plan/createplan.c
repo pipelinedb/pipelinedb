@@ -2618,7 +2618,35 @@ create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
 					 Plan *outer_plan, Plan *inner_plan)
 {
 
-	return NULL;
+	StreamTableJoin *join = makeNode(StreamTableJoin);
+	List *joinrestrictclauses = best_path->joinrestrictinfo;
+	List *joinclauses;
+	List *otherclauses;
+
+	joinrestrictclauses = order_qual_clauses(root, joinrestrictclauses);
+
+	/* Get the join qual clauses (in plain expression form) */
+	/* Any pseudoconstant clauses are ignored here */
+	if (IS_OUTER_JOIN(best_path->jointype))
+	{
+		extract_actual_join_clauses(joinrestrictclauses,
+									&joinclauses, &otherclauses);
+	}
+	else
+	{
+		/* We can treat all clauses alike for an inner join */
+		joinclauses = extract_actual_clauses(joinrestrictclauses, false);
+		otherclauses = NIL;
+	}
+
+	join->plan.targetlist = build_path_tlist(root, &best_path->path);
+	join->plan.qual = otherclauses;
+	join->plan.lefttree = outer_plan;
+	join->plan.righttree = inner_plan;
+	join->jointype = best_path->jointype;
+	join->joinqual = joinclauses;
+
+	return join;
 }
 
 /*****************************************************************************

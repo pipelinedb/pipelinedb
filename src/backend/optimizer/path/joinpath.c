@@ -20,7 +20,7 @@
 #include "optimizer/cost.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
-#include "parser/parsetree.h"
+#include "optimizer/planner.h"
 
 
 #define PATH_PARAM_BY_REL(path, rel)  \
@@ -95,7 +95,7 @@ add_paths_to_joinrel(PlannerInfo *root,
 	 * If this is a stream-table join, then there is only one
 	 * join path so bail early if that's the case
 	 */
-	if (planner_rt_fetch(outerrel->relid, root)->streamdesc)
+	if (IS_STREAM_RTE(outerrel->relid, root))
 	{
 		StreamTableJoinPath *path;
 		Path *outerpath = outerrel->cheapest_total_path;

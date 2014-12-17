@@ -639,6 +639,14 @@ _outHashJoin(StringInfo str, const HashJoin *node)
 }
 
 static void
+_outStreamTableJoin(StringInfo str, const StreamTableJoin *node)
+{
+	WRITE_NODE_TYPE("STREAMTABLEJOIN");
+
+	_outJoinPlanInfo(str, (const Join *) node);
+}
+
+static void
 _outAgg(StringInfo str, const Agg *node)
 {
 	int			i;
@@ -2876,6 +2884,9 @@ _outNode(StringInfo str, const void *obj)
 				break;
 			case T_HashJoin:
 				_outHashJoin(str, obj);
+				break;
+			case T_StreamTableJoin:
+				_outStreamTableJoin(str, obj);
 				break;
 			case T_Agg:
 				_outAgg(str, obj);

@@ -17,7 +17,7 @@
 #include "optimizer/joininfo.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
-#include "parser/parsetree.h"
+#include "optimizer/planner.h"
 #include "utils/memutils.h"
 
 
@@ -559,7 +559,7 @@ join_is_legal(PlannerInfo *root, RelOptInfo *rel1, RelOptInfo *rel2,
 	 * If this is a stream-table join, we always want the stream
 	 * on the outer side of the join
 	 */
-	if (planner_rt_fetch(rel2->relid, root)->streamdesc)
+	if (IS_STREAM_RTE(rel2->relid, root))
 		reversed = true;
 
 	/* Otherwise, it's a valid join */
