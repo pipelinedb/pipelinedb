@@ -412,7 +412,7 @@ static
 void
 RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CQProcState *procstate)
 {
-	RunContinuousQueryProcess(CQCombiner, cvname, state, &procstate->combiner);
+//	RunContinuousQueryProcess(CQCombiner, cvname, state, &procstate->combiner);
 	RunContinuousQueryProcess(CQWorker, cvname, state, &procstate->worker);
 }
 

@@ -87,6 +87,8 @@ static MergeJoin *create_mergejoin_plan(PlannerInfo *root, MergePath *best_path,
 					  Plan *outer_plan, Plan *inner_plan);
 static HashJoin *create_hashjoin_plan(PlannerInfo *root, HashPath *best_path,
 					 Plan *outer_plan, Plan *inner_plan);
+static StreamTableJoin *create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
+					 Plan *outer_plan, Plan *inner_plan);
 static Node *replace_nestloop_params(PlannerInfo *root, Node *expr);
 static Node *replace_nestloop_params_mutator(Node *node, PlannerInfo *root);
 static void process_subquery_nestloop_params(PlannerInfo *root,
@@ -238,6 +240,7 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_CteScan:
 		case T_WorkTableScan:
 		case T_ForeignScan:
+		case T_StreamScan:
 			if (root->parse->is_combine)
 				plan = create_tupstorescan_plan(root, best_path);
 			else
@@ -246,6 +249,7 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_HashJoin:
 		case T_MergeJoin:
 		case T_NestLoop:
+		case T_StreamTableJoin:
 			plan = create_join_plan(root,
 									(JoinPath *) best_path);
 			break;
@@ -362,11 +366,6 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 	if (best_path->param_info)
 		scan_clauses = list_concat(list_copy(scan_clauses),
 								   best_path->param_info->ppi_clauses);
-
-	if (root->parse->is_continuous)
-	{
-		best_path->pathtype = T_StreamScan;
-	}
 
 	switch (best_path->pathtype)
 	{
@@ -682,6 +681,12 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 												 (NestPath *) best_path,
 												 outer_plan,
 												 inner_plan);
+			break;
+		case T_StreamTableJoin:
+			plan = (Plan *) create_stream_table_join_plan(root,
+												(StreamTableJoinPath *) best_path,
+												outer_plan,
+												inner_plan);
 			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d",
@@ -2608,6 +2613,13 @@ create_hashjoin_plan(PlannerInfo *root,
 	return join_plan;
 }
 
+static StreamTableJoin *
+create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
+					 Plan *outer_plan, Plan *inner_plan)
+{
+
+	return NULL;
+}
 
 /*****************************************************************************
  *

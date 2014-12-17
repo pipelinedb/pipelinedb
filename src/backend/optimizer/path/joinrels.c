@@ -17,6 +17,7 @@
 #include "optimizer/joininfo.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
+#include "parser/parsetree.h"
 #include "utils/memutils.h"
 
 
@@ -553,6 +554,13 @@ join_is_legal(PlannerInfo *root, RelOptInfo *rel1, RelOptInfo *rel2,
 				return false;	/* not implementable as nestloop */
 		}
 	}
+
+	/*
+	 * If this is a stream-table join, we always want the stream
+	 * on the outer side of the join
+	 */
+	if (planner_rt_fetch(rel2->relid, root)->streamdesc)
+		reversed = true;
 
 	/* Otherwise, it's a valid join */
 	*sjinfo_p = match_sjinfo;

@@ -20,6 +20,7 @@
 #include "optimizer/cost.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
+#include "parser/parsetree.h"
 
 
 #define PATH_PARAM_BY_REL(path, rel)  \
@@ -89,6 +90,25 @@ add_paths_to_joinrel(PlannerInfo *root,
 	Relids		param_source_rels = NULL;
 	Relids		extra_lateral_rels = NULL;
 	ListCell   *lc;
+
+	/*
+	 * If this is a stream-table join, then there is only one
+	 * join path so bail early if that's the case
+	 */
+	if (planner_rt_fetch(outerrel->relid, root)->streamdesc)
+	{
+		StreamTableJoinPath *path;
+		Path *outerpath = outerrel->cheapest_total_path;
+		Path *innerpath = innerrel->cheapest_total_path;
+		Relids requiredouter = calc_non_nestloop_required_outer(outerpath, innerpath);
+
+		path = create_stream_table_join_path(root, joinrel, jointype,
+				outerpath, innerpath, restrictlist, requiredouter);
+
+		add_path(joinrel, (Path *) path);
+
+		return;
+	}
 
 	/*
 	 * Find potential mergejoin clauses.  We can skip this if we are not

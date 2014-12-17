@@ -2078,3 +2078,60 @@ reparameterize_path(PlannerInfo *root, Path *path,
 	}
 	return NULL;
 }
+
+/*
+ * create_streamscan_path
+ *	  Creates a path corresponding to a stream scan, returning the
+ *	  pathnode.
+ */
+Path *
+create_streamscan_path(PlannerInfo *root, RelOptInfo *rel, Relids required_outer)
+{
+	Path	   *pathnode = makeNode(Path);
+
+	pathnode->pathtype = T_StreamScan;
+	pathnode->parent = rel;
+	pathnode->param_info = get_baserel_parampathinfo(root, rel,
+													 required_outer);
+	pathnode->pathkeys = NIL;
+	pathnode->startup_cost = 0;
+	pathnode->total_cost = 0;
+
+	return pathnode;
+}
+
+/*
+ * create_stream_table_join_path
+ *	  Creates a pathnode corresponding to a join between a stream and a table.
+ *
+ * 'joinrel' is the join relation
+ * 'jointype' is the type of join required
+ * 'outer_path' is the cheapest outer path
+ * 'inner_path' is the cheapest inner path
+ * 'restrict_clauses' are the RestrictInfo nodes to apply at the join
+ * 'required_outer' is the set of required outer rels
+ */
+StreamTableJoinPath *
+create_stream_table_join_path(PlannerInfo *root,
+		 RelOptInfo *joinrel,
+		 JoinType jointype,
+		 Path *outer_path,
+		 Path *inner_path,
+		 List *restrict_clauses,
+		 Relids required_outer)
+{
+	StreamTableJoinPath *pathnode = makeNode(StreamTableJoinPath);
+
+	pathnode->path.pathtype = T_StreamTableJoin;
+	pathnode->path.parent = joinrel;
+	pathnode->path.param_info = get_baserel_parampathinfo(root, joinrel,
+													 required_outer);
+	pathnode->path.pathkeys = NIL;
+	pathnode->path.startup_cost = 0;
+	pathnode->path.total_cost = 0;
+
+	pathnode->outerjoinpath = outer_path;
+	pathnode->innerjoinpath = inner_path;
+
+	return pathnode;
+}

@@ -607,6 +607,12 @@ typedef struct HashJoin
 } HashJoin;
 
 /* ----------------
+ * stream-table node
+ * ----------------
+ */
+typedef struct Join StreamTableJoin;
+
+/* ----------------
  *		materialization node
  * ----------------
  */
