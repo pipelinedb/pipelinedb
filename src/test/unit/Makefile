@@ -60,7 +60,7 @@ LOCALOBJS += utils/probes.o
 endif
 endif
 
-TEST_OBJS = test_hll.o runner.o
+TEST_OBJS = test_hll.o test_tdigest.o runner.o
 
 OBJS = $(SUBDIROBJS) $(LOCALOBJS) $(top_builddir)/src/port/libpgport_srv.a \
        $(top_builddir)/src/common/libpgcommon_srv.a \
@@ -202,11 +202,11 @@ $(top_builddir)/src/include/utils/fmgroids.h: $(backend)/utils/fmgroids.h
 	prereqdir=`cd '$(dir $<)' >/dev/null && pwd` && \
 	  cd '$(dir $@)' && rm -f $(notdir $@) && \
 	  $(LN_S) "$$prereqdir/$(notdir $<)" .
-	  
+
 $(top_builddir)/src/include/utils/probes.h: $(backend)/utils/probes.h
 	cd '$(dir $@)' && rm -f $(notdir $@) && \
 	    $(LN_S) "$(backend)/utils/probes.h" .
-	  
+
 utils/probes.o: utils/probes.d $(SUBDIROBJS)
 	$(DTRACE) $(DTRACEFLAGS) -C -G -s $(call expand_subsys,$^) -o $@
 
