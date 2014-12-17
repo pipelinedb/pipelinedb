@@ -16,6 +16,7 @@
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "funcapi.h"
+#include "pipeline/cqanalyze.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
 #include "utils/rel.h"
@@ -63,6 +64,7 @@ streams_to_cq_ids(Relation pipeline_query)
 		Datum tmp;
 		bool isnull;
 		Form_pipeline_query catrow = (Form_pipeline_query) GETSTRUCT(tup);
+		CQAnalyzeContext context;
 
 		if (catrow->state != PIPELINE_QUERY_STATE_ACTIVE)
 			continue;
@@ -75,48 +77,21 @@ streams_to_cq_ids(Relation pipeline_query)
 		cv = (CreateContinuousViewStmt *) parsetree;
 		select = (SelectStmt *) cv->query;
 
-		foreach(lc, select->fromClause)
+		context.tables = NIL;
+		context.streams = NIL;
+		AddStreams((Node *) select->fromClause, &context);
+
+		foreach(lc, context.streams)
 		{
-			Node *node = (Node *) lfirst(lc);
-			if (IsA(node, JoinExpr))
-			{
-				JoinExpr *j = (JoinExpr *) node;
-				char *relname = ((RangeVar *) j->larg)->relname;
-				bool found;
+			RangeVar *rv = (RangeVar *) lfirst(lc);
+			bool found;
 
-				entry = (StreamTargetsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, &found);
+			entry = (StreamTargetsEntry *) hash_search(targets, (void *) rv->relname, HASH_ENTER, &found);
 
-				if (!found)
-					entry->targets = NULL;
+			if (!found)
+				entry->targets = NULL;
 
-				entry->targets = bms_add_member(entry->targets, catrow->id);
-
-				relname = ((RangeVar *) j->rarg)->relname;
-				entry = (StreamTargetsEntry *) hash_search(targets, (void *) relname, HASH_ENTER, &found);
-
-				if (!found)
-					entry->targets = NULL;
-
-				entry->targets = bms_add_member(entry->targets, catrow->id);
-			}
-			else if (IsA(node, RangeVar))
-			{
-				RangeVar *rv = (RangeVar *) node;
-				bool found;
-
-				entry = (StreamTargetsEntry *) hash_search(targets, (void *) rv->relname, HASH_ENTER, &found);
-
-				if (!found)
-					entry->targets = NULL;
-
-				entry->targets = bms_add_member(entry->targets, catrow->id);
-			}
-			else
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-					errmsg("unrecognized node type found when determining stream targets: %d", nodeTag(node))));
-			}
+			entry->targets = bms_add_member(entry->targets, catrow->id);
 		}
 	}
 

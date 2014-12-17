@@ -872,12 +872,12 @@ type_cast_all_column_refs(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * add_streams
+ * AddStreams
  *
  * Figure out which relations are streams that we'll need to infer types for
  */
-static bool
-add_streams(Node *node, CQAnalyzeContext *context)
+bool
+AddStreams(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -893,7 +893,7 @@ add_streams(Node *node, CQAnalyzeContext *context)
 		return false;
 	}
 
-	return raw_expression_tree_walker(node, add_streams, (void *) context);
+	return raw_expression_tree_walker(node, AddStreams, (void *) context);
 }
 
 /*
@@ -1096,7 +1096,7 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 	associate_types_to_colrefs((Node *) stmt, &context);
 
 	/* now indicate which relations are actually streams */
-	add_streams((Node *) stmt->fromClause, &context);
+	AddStreams((Node *) stmt->fromClause, &context);
 
 	foreach(lc, context.cols)
 	{

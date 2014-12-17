@@ -56,7 +56,7 @@ ResTarget *CreateResTargetForNode(Node *node);
 ResTarget *CreateUniqueResTargetForNode(Node *node, CQAnalyzeContext *context);
 ColumnRef *CreateColumnRefFromResTarget(ResTarget *res);
 bool HasAggOrGroupBy(SelectStmt *stmt);
-
+bool AddStreams(Node *node, CQAnalyzeContext *context);
 List *pipeline_rewrite(List *raw_parsetree_list);
 
 #endif
