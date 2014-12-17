@@ -2618,10 +2618,17 @@ create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
 					 Plan *outer_plan, Plan *inner_plan)
 {
 
-	StreamTableJoin *join = makeNode(StreamTableJoin);
+	StreamTableJoin *node = makeNode(StreamTableJoin);
+	Plan *plan = &node->join.plan;
+
 	List *joinrestrictclauses = best_path->joinrestrictinfo;
 	List *joinclauses;
 	List *otherclauses;
+	Relids outerrelids;
+	List *params;
+	ListCell *lc;
+	ListCell *prev;
+	ListCell *next;
 
 	joinrestrictclauses = order_qual_clauses(root, joinrestrictclauses);
 
@@ -2639,14 +2646,57 @@ create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
 		otherclauses = NIL;
 	}
 
-	join->plan.targetlist = build_path_tlist(root, &best_path->path);
-	join->plan.qual = otherclauses;
-	join->plan.lefttree = outer_plan;
-	join->plan.righttree = inner_plan;
-	join->jointype = best_path->jointype;
-	join->joinqual = joinclauses;
+	/* Replace any outer-relation variables with nestloop params */
+	if (best_path->path.param_info)
+	{
+		joinclauses = (List *)
+			replace_nestloop_params(root, (Node *) joinclauses);
+		otherclauses = (List *)
+			replace_nestloop_params(root, (Node *) otherclauses);
+	}
 
-	return join;
+	/*
+	 * Identify any parameters that should be supplied by this join
+	 * node, and move them from root->curOuterParams to the nestParams list.
+	 */
+	outerrelids = best_path->outerjoinpath->parent->relids;
+	for (lc = list_head(root->curOuterParams); lc; lc = next)
+	{
+		NestLoopParam *nlp = (NestLoopParam *) lfirst(lc);
+
+		next = lnext(lc);
+		if (IsA(nlp->paramval, Var) &&
+			bms_is_member(nlp->paramval->varno, outerrelids))
+		{
+			root->curOuterParams = list_delete_cell(root->curOuterParams, lc, prev);
+			params = lappend(params, nlp);
+		}
+		else if (IsA(nlp->paramval, PlaceHolderVar) &&
+				 bms_overlap(((PlaceHolderVar *) nlp->paramval)->phrels,
+							 outerrelids) &&
+				 bms_is_subset(find_placeholder_info(root,
+											(PlaceHolderVar *) nlp->paramval,
+													 false)->ph_eval_at,
+							   outerrelids))
+		{
+			root->curOuterParams = list_delete_cell(root->curOuterParams, lc, prev);
+			params = lappend(params, nlp);
+		}
+		else
+		{
+			prev = lc;
+		}
+	}
+
+	plan->targetlist = build_path_tlist(root, &best_path->path);
+	plan->qual = otherclauses;
+	plan->lefttree = outer_plan;
+	plan->righttree = inner_plan;
+	node->join.jointype = best_path->jointype;
+	node->join.joinqual = joinclauses;
+	node->nestParams = params;
+
+	return node;
 }
 
 /*****************************************************************************

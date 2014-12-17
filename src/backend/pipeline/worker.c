@@ -78,7 +78,11 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	StartTransactionCommand();
 
 	oldcontext = MemoryContextSwitchTo(runcontext);
+
+	queryDesc->snapshot = GetTransactionSnapshot();
+
 	ExecutorStart(queryDesc, 0);
+
 	MemoryContextSwitchTo(oldcontext);
 
 	CommitTransactionCommand();

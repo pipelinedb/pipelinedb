@@ -105,6 +105,7 @@
 #include "executor/nodeSetOp.h"
 #include "executor/nodeSort.h"
 #include "executor/nodeStreamscan.h"
+#include "executor/nodeStreamTablejoin.h"
 #include "executor/nodeSubplan.h"
 #include "executor/nodeSubqueryscan.h"
 #include "executor/nodeTidscan.h"
@@ -277,7 +278,8 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 			break;
 
 		case T_StreamTableJoin:
-			result = NULL;
+			result = (PlanState *) ExecInitStreamTableJoin((StreamTableJoin *) node,
+													estate, eflags);
 
 			break;
 
@@ -530,6 +532,10 @@ ExecProcNode(PlanState *node)
 
 		case T_HashJoinState:
 			result = ExecHashJoin((HashJoinState *) node);
+			break;
+
+		case T_StreamTableJoinState:
+			result = ExecStreamTableJoin((StreamTableJoinState *) node);
 			break;
 
 			/*

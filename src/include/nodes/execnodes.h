@@ -1686,6 +1686,14 @@ typedef struct HashJoinState
 	bool		hj_OuterNotEmpty;
 } HashJoinState;
 
+typedef struct StreamTableJoinState
+{
+	JoinState	js;
+	bool nl_NeedNewOuter;
+	bool nl_MatchedOuter;
+	TupleTableSlot *nl_NullInnerTupleSlot;
+} StreamTableJoinState;
+
 
 /* ----------------------------------------------------------------
  *				 Materialization State Information

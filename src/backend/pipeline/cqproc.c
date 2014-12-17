@@ -599,6 +599,11 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	success = RegisterDynamicBackgroundWorker(&worker, &worker_handle);
 
 	*bg_handle = *worker_handle;
+//	PlannedStmt *stmt = get_worker_plan(cvname, query, state);
+
+//	pprint(stmt);
+
+//	exit(0);
 
 	return success;
 }

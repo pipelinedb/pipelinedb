@@ -116,6 +116,7 @@ typedef enum NodeTag
 	T_NestLoopState,
 	T_MergeJoinState,
 	T_HashJoinState,
+	T_StreamTableJoinState,
 	T_MaterialState,
 	T_SortState,
 	T_GroupState,

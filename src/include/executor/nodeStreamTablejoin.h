@@ -12,9 +12,9 @@
 
 #include "nodes/execnodes.h"
 
-//extern NestLoopState *ExecInitNestLoop(NestLoop *node, EState *estate, int eflags);
-//extern TupleTableSlot *ExecNestLoop(NestLoopState *node);
-//extern void ExecEndNestLoop(NestLoopState *node);
-//extern void ExecReScanNestLoop(NestLoopState *node);
+extern StreamTableJoinState *ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags);
+extern TupleTableSlot *ExecStreamTableJoin(StreamTableJoinState *node);
+extern void ExecEndStreamTableJoin(StreamTableJoinState *node);
+extern void ExecReScanStreamTableJoin(StreamTableJoinState *node);
 
 #endif   /* NODE_STREAM_TABLE_JOIN_H */

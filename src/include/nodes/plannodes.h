@@ -610,7 +610,7 @@ typedef struct HashJoin
  * stream-table node
  * ----------------
  */
-typedef struct Join StreamTableJoin;
+typedef struct NestLoop StreamTableJoin;
 
 /* ----------------
  *		materialization node
