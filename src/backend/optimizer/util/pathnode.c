@@ -2149,9 +2149,9 @@ create_stream_table_join_path(PlannerInfo *root,
 	pathnode->path.pathkeys = NIL;
 	pathnode->path.startup_cost = 0;
 	pathnode->path.total_cost = 0;
-
 	pathnode->outerjoinpath = outer_path;
 	pathnode->innerjoinpath = inner_path;
+	pathnode->joinrestrictinfo = restrict_clauses;
 
 	return pathnode;
 }
