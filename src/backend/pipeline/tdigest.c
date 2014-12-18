@@ -7,6 +7,7 @@
  * src/backend/pipeline/tdigest.h
  *
  */
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 
@@ -14,9 +15,11 @@
 #include "nodes/pg_list.h"
 #include "utils/elog.h"
 #include "utils/palloc.h"
-
 #include "utils/memutils.h"
 
+// TODO(usmanm): Add some ref-counting to Centroids to avoid mindless copying and destroying.
+
+#define DEFAULT_TDIGEST_COMPRESSION 100
 #define AVLNodeDepth(node) (Max((node)->left->depth, (node)->right->depth) + 1)
 
 Centroid *
@@ -156,6 +159,12 @@ AVLNodeDestroy(AVLNode *node)
 		return;
 	CentroidDestroy(node->leaf);
 	pfree(node);
+}
+
+void
+AVLNodeDestroyTree(AVLNode *root)
+{
+
 }
 
 void
@@ -396,4 +405,318 @@ AVLNodeNext(AVLNodeIterator *it)
 		return r->leaf;
 
 	return NULL;
+}
+
+TDigest *
+TDigestCreate(void)
+{
+	return TDigestCreateWithCompression(DEFAULT_TDIGEST_COMPRESSION);
+}
+
+TDigest *
+TDigestCreateWithCompression(int compression)
+{
+	TDigest *t = palloc(sizeof(TDigest));
+	t->compression = compression;
+	t->count = 0;
+	t->summary = AVLNodeCreate(NULL, NULL, NULL);
+	return t;
+}
+
+void
+TDigestAdd(TDigest *t, double x, int w)
+{
+	Centroid *c;
+	Centroid *start;
+	AVLNodeIterator *it;
+	double min_dist;
+	int last_neighbor;
+	int i;
+	Centroid *closest;
+	int sum;
+	int count;
+	float n;
+	double z;
+
+	c = CentroidCreateWithId(0);
+	CentroidAdd(c, x, w);
+
+	start = AVLNodeFloor(t->summary, c);
+	if (start == NULL)
+		start = AVLNodeCeiling(t->summary, c);
+
+	if (start == NULL)
+	{
+		c->id = rand();
+		AVLNodeAdd(t->summary, c);
+		t->count = c->count;
+		CentroidDestroy(c);
+		return;
+	}
+
+	CentroidDestroy(c);
+
+	it = AVLNodeIteratorCreate(t->summary, start);
+	min_dist = DBL_MAX;
+	last_neighbor = 0;
+	count = AVLNodeHeadCount(t->summary, start);
+	i = count;
+
+	while (true)
+	{
+		c = AVLNodeNext(it);
+		if (c == NULL)
+			break;
+
+		z = fabs(c->mean - x);
+		if (z <= min_dist)
+		{
+			min_dist = z;
+			last_neighbor = i;
+		}
+		else
+			break;
+		i++;
+	}
+
+	AVLNodeIteratorDestroy(it);
+
+	it = AVLNodeIteratorCreate(t->summary, start);
+	closest = NULL;
+	sum = AVLNodeHeadSum(t->summary, start);
+	i = count;
+	n = 1;
+
+	while (true)
+	{
+		double q, k;
+
+		c = AVLNodeNext(it);
+		if (i > last_neighbor)
+			break;
+		z = fabs(c->mean - x);
+		q = (sum + c->count / 2.0) / t->count;
+		k = 4 * t->count * q * (1 - q) / t->compression;
+
+		if (z == min_dist && c->count + w <= k)
+		{
+			if (((float) rand() / (float) RAND_MAX) < 1 / n)
+				closest = c;
+			n++;
+		}
+
+		sum += c->count;
+		i++;
+	}
+
+	AVLNodeIteratorDestroy(it);
+
+	if (closest == NULL)
+		c = CentroidCreate();
+	else
+	{
+		c = CentroidCopy(c);
+		AVLNodeRemove(t->summary, c);
+	}
+
+	CentroidAdd(c, x, w);
+	AVLNodeAdd(t->summary, c);
+	CentroidDestroy(c);
+
+	t->count += w;
+
+	if (t->summary->size > 100 * t->compression)
+		TDigestCompress(t);
+}
+
+void
+TDigestAddSingle(TDigest *t, double x)
+{
+	TDigestAdd(t, x, 1);
+}
+
+static void
+shuffle(Centroid **array, int n)
+{
+    if (n > 1)
+    {
+        int i;
+        for (i = 0; i < n - 1; i++)
+        {
+          int j = i + rand() / (RAND_MAX / (n - i) + 1);
+          Centroid *ptr = array[j];
+          array[j] = array[i];
+          array[i] = ptr;
+        }
+    }
+}
+
+void
+TDigestCompress(TDigest *t)
+{
+	TDigest *t_tmp = TDigestCreateWithCompression(t->compression);
+	int size = t->summary->size;
+	Centroid **centroids = palloc(sizeof(Centroid *) * size);
+	Centroid *c;
+	int i;
+	AVLNodeIterator *it = AVLNodeIteratorCreate(t->summary, NULL);
+
+	for (i = 0; i < size; i++)
+		centroids[i] = AVLNodeNext(it);
+
+	AVLNodeIteratorDestroy(it);
+
+	shuffle(centroids, size);
+
+	for (i = 0; i < size; i++)
+	{
+		c = centroids[i];
+		TDigestAdd(t_tmp, c->mean, c->count);
+	}
+
+	AVLNodeDestroyTree(t->summary);
+	t->summary = t_tmp->summary;
+	pfree(centroids);
+	pfree(t_tmp);
+}
+
+TDigest *
+TDigestMerge(TDigest *t1, TDigest *t2)
+{
+	TDigest *t = TDigestCreateWithCompression(Max(t1->compression, t2->compression));
+	int count = t1->summary->count + t2->summary->count;
+	Centroid **centroids = palloc(sizeof(Centroid *) * count);
+	Centroid *c;
+	int i;
+	int j = 0;
+	AVLNodeIterator *it;
+
+	it = AVLNodeIteratorCreate(t1->summary, NULL);
+
+	for (i = 0; i < t1->summary->count; i++)
+	{
+		centroids[j] = AVLNodeNext(it);
+		j++;
+	}
+
+	AVLNodeIteratorDestroy(it);
+
+	it = AVLNodeIteratorCreate(t2->summary, NULL);
+
+	for (i = 0; i < t2->summary->count; i++)
+	{
+		centroids[j] = AVLNodeNext(it);
+		j++;
+	}
+
+	AVLNodeIteratorDestroy(it);
+
+	shuffle(centroids, count);
+
+	for (i = 0; i < count; i++)
+	{
+		c = centroids[i];
+		TDigestAdd(t, c->mean, c->count);
+	}
+
+	pfree(centroids);
+
+	return t;
+}
+
+static double
+interpolate(double x, double x0, double x1)
+{
+	return (x - x0) / (x1 - x0);
+}
+
+double
+TDigestCDF(TDigest *t, double x)
+{
+	AVLNode *summary = t->summary;
+	double r = 0;
+	AVLNodeIterator *it;
+	Centroid *a, *b, *next;
+	double left, right;
+
+	if (summary->size == 0)
+		return NAN;
+	else if (summary->size == 1)
+		return x < AVLNodeFirst(summary)->mean ? 0: 1;
+
+	it = AVLNodeIteratorCreate(summary, NULL);
+	a = AVLNodeNext(it);
+	b = AVLNodeNext(it);
+	left = (b->mean - a->mean) / 2;
+	right = left;
+
+	while ((next = AVLNodeNext(it)))
+	{
+		if (x < a->mean + right)
+			return (r + a->count * interpolate(x, a->mean - left, a->mean + right)) / t->count;
+		r += a->count;
+		a = b;
+		b = next;
+		left = right;
+		right = (b->mean - a->mean) / 2;
+	}
+
+	left = right;
+	a = b;
+	if (x < a->mean + right)
+		return (r + a->count * interpolate(x, a->mean - left, a->mean + right)) / t->count;
+
+	return 1;
+}
+
+double
+TDigestQuantile(TDigest *t, double q)
+{
+	AVLNode *summary = t->summary;
+	AVLNodeIterator *it;
+	Centroid *center, *leading, *next;
+	double left, right, r;
+
+	if (summary->size <= 1)
+		return NAN;
+
+	it = AVLNodeIteratorCreate(summary, NULL);
+	center = AVLNodeNext(it);
+	leading = AVLNodeNext(it);
+	next = AVLNodeNext(it);
+	right = (leading->mean - center->mean) / 2;
+
+	if (next == NULL)
+	{
+
+		if (q > 0.75)
+			return leading->mean + right * (4 * q - 3);
+		else
+			return center->mean + right * (4 * q - 1);
+	}
+
+	q *= t->count;
+	left = right;
+	r = center->count;
+
+	do
+	{
+		if (r + center->count / 2 >= q)
+			return center->mean - left * 2.0 * (q - r) / center->count;
+		if (r + leading->count >= q)
+			return center->mean + right * 2.0 * (center->count - (q - r)) / center->count;
+		r += center->count;
+		center = leading;
+		leading = next;
+		left = right;
+		right = (leading->mean - center->mean) / 2;
+	} while ((next = AVLNodeNext(it)));
+
+	center = leading;
+	left = right;
+
+	if (r + center->count / 2 >= q)
+		return center->mean - left * 2.0 * (q - r) / center->count;
+
+	return center->mean + right * 2.0 * (center->count - (q - r)) / center->count;
 }

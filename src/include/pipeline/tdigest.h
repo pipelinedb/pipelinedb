@@ -48,6 +48,7 @@ typedef struct AVLNodeIterator
 
 AVLNode *AVLNodeCreate(AVLNode *left, AVLNode *right, Centroid *leaf);
 void AVLNodeDestroy(AVLNode *node);
+void AVLNodeDestroyTree(AVLNode *root);
 void AVLNodeAdd(AVLNode *node, Centroid *c);
 void AVLNodeRemove(AVLNode *node, Centroid *c);
 int AVLNodeHeadCount(AVLNode *node, Centroid *c);
@@ -66,5 +67,14 @@ typedef struct TDigest
 	double compression;
 	AVLNode *summary;
 } TDigest;
+
+TDigest *TDigestCreate(void);
+TDigest *TDigestCreateWithCompression(int compression);
+void TDigestAdd(TDigest *t, double x, int w);
+void TDigestAddSingle(TDigest *t, double x);
+void TDigestCompress(TDigest *t);
+TDigest *TDigestMerge(TDigest *t1, TDigest *t2);
+double TDigestCDF(TDigest *t, double x);
+double TDigestQuantile(TDigest *t, double q);
 
 #endif
