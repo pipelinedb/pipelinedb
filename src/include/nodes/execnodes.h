@@ -1689,9 +1689,9 @@ typedef struct HashJoinState
 typedef struct StreamTableJoinState
 {
 	JoinState	js;
-	bool nl_NeedNewOuter;
-	bool nl_MatchedOuter;
-	TupleTableSlot *nl_NullInnerTupleSlot;
+	bool stj_NeedNewOuter;
+	bool stj_MatchedOuter;
+	TupleTableSlot *stj_NullInnerTupleSlot;
 } StreamTableJoinState;
 
 

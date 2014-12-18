@@ -67,7 +67,7 @@ ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 			break;
 		case JOIN_LEFT:
 		case JOIN_ANTI:
-			state->nl_NullInnerTupleSlot =
+			state->stj_NullInnerTupleSlot =
 				ExecInitNullTupleSlot(estate,
 								 ExecGetResultType(innerPlanState(state)));
 			break;
@@ -83,8 +83,8 @@ ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 	ExecAssignProjectionInfo(&state->js.ps, NULL);
 
 	state->js.ps.ps_TupFromTlist = false;
-	state->nl_NeedNewOuter = true;
-	state->nl_MatchedOuter = false;
+	state->stj_NeedNewOuter = true;
+	state->stj_MatchedOuter = false;
 
 	return state;
 }
@@ -139,7 +139,7 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 		 * If we don't have an outer tuple, get the next one and reset the
 		 * inner scan.
 		 */
-		if (node->nl_NeedNewOuter)
+		if (node->stj_NeedNewOuter)
 		{
 			outerTupleSlot = ExecProcNode(outerPlan);
 
@@ -147,8 +147,8 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 				return NULL;
 
 			econtext->ecxt_outertuple = outerTupleSlot;
-			node->nl_NeedNewOuter = false;
-			node->nl_MatchedOuter = false;
+			node->stj_NeedNewOuter = false;
+			node->stj_MatchedOuter = false;
 
 			/*
 			 * Fetch the values of any outer Vars that must be passed to the
@@ -178,9 +178,9 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 
 		if (TupIsNull(innerTupleSlot))
 		{
-			node->nl_NeedNewOuter = true;
+			node->stj_NeedNewOuter = true;
 
-			if (!node->nl_MatchedOuter &&
+			if (!node->stj_MatchedOuter &&
 				(node->js.jointype == JOIN_LEFT ||
 				 node->js.jointype == JOIN_ANTI))
 			{
@@ -190,7 +190,7 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 				 * nulls for the inner tuple, and return it if it passes the
 				 * non-join quals.
 				 */
-				econtext->ecxt_innertuple = node->nl_NullInnerTupleSlot;
+				econtext->ecxt_innertuple = node->stj_NullInnerTupleSlot;
 
 				if (otherqual == NIL || ExecQual(otherqual, econtext, false))
 				{
@@ -233,12 +233,12 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 		 */
 		if (ExecQual(joinqual, econtext, false))
 		{
-			node->nl_MatchedOuter = true;
+			node->stj_MatchedOuter = true;
 
 			/* In an antijoin, we never return a matched tuple */
 			if (node->js.jointype == JOIN_ANTI)
 			{
-				node->nl_NeedNewOuter = true;
+				node->stj_NeedNewOuter = true;
 				continue;		/* return to top of loop */
 			}
 
@@ -247,7 +247,7 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 			 * after that we're done with this outer tuple.
 			 */
 			if (node->js.jointype == JOIN_SEMI)
-				node->nl_NeedNewOuter = true;
+				node->stj_NeedNewOuter = true;
 
 			if (otherqual == NIL || ExecQual(otherqual, econtext, false))
 			{
