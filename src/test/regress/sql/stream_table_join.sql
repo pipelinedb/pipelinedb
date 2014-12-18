@@ -91,15 +91,6 @@ INSERT INTO test_stj_stream (id, val) VALUES (5, 0.52);
 
 DEACTIVATE test_stj4;
 
-SELECT * FROM test_stj4 ORDER BY id;
-
--- Verify that tables in stream-table joins don't affect the stream targets catalog
-ACTIVATE test_stj0, test_stj1, test_stj2, test_stj3, test_stj4;
-
-SELECT * FROM pipeline_stream WHERE name LIKE '%test_stj%' ORDER BY name;
-
-DEACTIVATE test_stj0, test_stj1, test_stj2, test_stj3, test_stj4;
-
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;
