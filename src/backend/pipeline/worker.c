@@ -75,6 +75,21 @@ start_executor(QueryDesc *queryDesc, MemoryContext context, ResourceOwner owner)
 	CurrentResourceOwner = save;
 }
 
+static void
+set_snapshot(EState *estate, ResourceOwner owner)
+{
+	estate->es_snapshot = GetTransactionSnapshot();
+	estate->es_snapshot->active_count++;
+	estate->es_snapshot->copied = true;
+	RegisterSnapshotOnOwner(estate->es_snapshot, owner);
+}
+
+static void
+unset_snapshot(EState *estate, ResourceOwner owner)
+{
+	UnregisterSnapshotFromOwner(estate->es_snapshot, owner);
+}
+
 /*
  * ContinuousQueryWorkerStartup
  *
@@ -142,6 +157,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	 */
 	memcpy(&GlobalStreamBuffer->procLatch[cq_id], &MyProc->procLatch, sizeof(Latch));
 
+	pg_usleep(6*1000*1000);
 	for (;;)
 	{
 		ResetStreamBufferLatch(cq_id);
@@ -163,6 +179,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		TopTransactionContext = runcontext;
 
 		StartTransactionCommand();
+		set_snapshot(estate, cqowner);
 
 		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 
@@ -172,6 +189,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		ExecutePlan(estate, queryDesc->planstate, operation,
 					true, batchsize, timeoutms, ForwardScanDirection, dest);
 
+		unset_snapshot(estate, cqowner);
 		CommitTransactionCommand();
 
 		CurrentResourceOwner = cqowner;
