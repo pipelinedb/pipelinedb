@@ -157,7 +157,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	 */
 	memcpy(&GlobalStreamBuffer->procLatch[cq_id], &MyProc->procLatch, sizeof(Latch));
 
-	pg_usleep(6*1000*1000);
 	for (;;)
 	{
 		ResetStreamBufferLatch(cq_id);
