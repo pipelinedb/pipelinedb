@@ -287,7 +287,8 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 void
 ExecEndStreamTableJoin(StreamTableJoinState *node)
 {
-
+	ExecEndNode(outerPlanState(node));
+	ExecEndNode(innerPlanState(node));
 }
 
 void

@@ -790,6 +790,10 @@ ExecEndNode(PlanState *node)
 			ExecEndHashJoin((HashJoinState *) node);
 			break;
 
+		case T_StreamTableJoinState:
+			ExecEndStreamTableJoin((StreamTableJoinState *) node);
+			break;
+
 			/*
 			 * materialization nodes
 			 */
