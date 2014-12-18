@@ -99,6 +99,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	TimestampTz curtime = GetCurrentTimestamp();
 	TimestampTz last_process_time = GetCurrentTimestamp();
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
+	bool savereadonly = XactReadOnly;
 
 	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -112,6 +113,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 
 	start_executor(queryDesc, runcontext, cqowner);
+
+	/* workers only need read-only transactions */
+	XactReadOnly = true;
 
 	CurrentResourceOwner = cqowner;
 
@@ -213,6 +217,8 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	ExecutorEnd(queryDesc);
 
 	MemoryContextDelete(runcontext);
+
+	XactReadOnly = savereadonly;
 
 	if (queryDesc->totaltime)
 		InstrStopNode(queryDesc->totaltime, estate->es_processed);
