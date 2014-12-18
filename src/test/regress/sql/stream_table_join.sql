@@ -96,7 +96,7 @@ SELECT * FROM test_stj4 ORDER BY id;
 -- Verify that tables in stream-table joins don't affect the stream targets catalog
 ACTIVATE test_stj0, test_stj1, test_stj2, test_stj3, test_stj4;
 
-SELECT * FROM pipeline_stream ORDER BY name;
+SELECT * FROM pipeline_stream WHERE name LIKE '%test_stj%' ORDER BY name;
 
 DEACTIVATE test_stj0, test_stj1, test_stj2, test_stj3, test_stj4;
 
