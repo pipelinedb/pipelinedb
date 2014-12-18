@@ -1,10 +1,28 @@
 #include <check.h>
+#include <math.h>
+#include <time.h>
 
 #include "suites.h"
 #include "pipeline/tdigest.h"
 #include "utils/elog.h"
+#include "utils/palloc.h"
 
 #define DEBUG 0
+
+static int
+int_cmp(const void * a, const void * b)
+{
+	return *(int *) a - *(int *) b;
+}
+
+static int
+double_cmp(const void * a, const void * b)
+{
+	double diff = *(double *) a - *(double *) b;
+	if (diff < 0)
+		return -1;
+	return diff > 0 ? 1 : 0;
+}
 
 static int
 centroid_cmp(Centroid *a, Centroid *b)
@@ -65,12 +83,6 @@ print_inorder(AVLNode *node)
 	if (node->right)
 		print_inorder(node->right);
 	printf("%*s==\n", node->depth, "");
-}
-
-static int
-int_cmp(const void * a, const void * b)
-{
-   return *(int *) a - *(int *) b;
 }
 
 START_TEST(test_tree_adds)
@@ -310,51 +322,117 @@ START_TEST(test_tree_rand_balancing)
 	if (DEBUG)
 		print_centroids(root);
 
-	 qsort(values, 1001, sizeof(int), int_cmp);
+	qsort(values, 1001, sizeof(int), int_cmp);
 
-	 it = AVLNodeIteratorCreate(root, NULL);
+	it = AVLNodeIteratorCreate(root, NULL);
 
-	 for (i = 0; i <= 1000; i++)
-	 {
-		 c = AVLNodeNext(it);
-		 ck_assert_int_eq(c->mean, values[i]);
-	 }
+	for (i = 0; i <= 1000; i++)
+	{
+		c = AVLNodeNext(it);
+		ck_assert_int_eq(c->mean, values[i]);
+	}
 
-	 c = AVLNodeNext(it);
-	 ck_assert_ptr_eq(c, NULL);
+	c = AVLNodeNext(it);
+	ck_assert_ptr_eq(c, NULL);
 
-	 AVLNodeIteratorDestroy(it);
+	AVLNodeIteratorDestroy(it);
 
-	 for (i = 0; i <= 100; i++)
-	 {
-		 int r = rand() % (1001 - i);
-		 c = CentroidCreateWithId(0);
-		 CentroidAddSingle(c, values[r]);
-		 c = AVLNodeCeiling(root, c);
-		 AVLNodeRemove(root, c);
-		 CentroidDestroy(c);
-		 values[r] = -1;
-	 }
+	for (i = 0; i <= 100; i++)
+	{
+		int r = rand() % (1001 - i);
+		c = CentroidCreateWithId(0);
+		CentroidAddSingle(c, values[r]);
+		c = AVLNodeCeiling(root, c);
+		AVLNodeRemove(root, c);
+		CentroidDestroy(c);
+		values[r] = -1;
+	}
 
-	 if (DEBUG)
-		 print_centroids(root);
+	if (DEBUG)
+		print_centroids(root);
 
-	 check_balance(root);
-	 qsort(values, 1001, sizeof(int), int_cmp);
+	check_balance(root);
+	qsort(values, 1001, sizeof(int), int_cmp);
 
-	 it = AVLNodeIteratorCreate(root, NULL);
+	it = AVLNodeIteratorCreate(root, NULL);
 
-	 for (i = 101; i <= 1000; i++)
-	 {
-		 ck_assert_int_ge(values[i], 0);
-		 c = AVLNodeNext(it);
-		 ck_assert_int_eq(c->mean, values[i]);
-	 }
+	for (i = 101; i <= 1000; i++)
+	{
+		ck_assert_int_ge(values[i], 0);
+		c = AVLNodeNext(it);
+		ck_assert_int_eq(c->mean, values[i]);
+	}
 
-	 c = AVLNodeNext(it);
-	 ck_assert_ptr_eq(c, NULL);
+	c = AVLNodeNext(it);
+	ck_assert_ptr_eq(c, NULL);
 
-	 AVLNodeIteratorDestroy(it);
+	AVLNodeIteratorDestroy(it);
+}
+END_TEST
+
+static double
+cdf(double x, double *data, int n)
+{
+	int n1 = 0;
+	int n2 = 0;
+	int i;
+
+	for (i = 0; i < n; i++)
+	{
+		double v = data[i];
+		n1 += (v < x) ? 1 : 0;
+		n2 += (v <= x) ? 1 : 0;
+	}
+	return (n1 + n2) / 2.0 / n;
+}
+
+START_TEST(test_tdigest_uniform)
+{
+	TDigest *t = TDigestCreate();
+	double quantiles[] = {0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999};
+	double x_values[7];
+	double *data = (double *) palloc(sizeof(double) * 100000);
+	int i;
+	int soft_errors = 0;
+
+	srand(time(NULL));
+
+	for (i = 0; i < 100000; i++)
+	{
+		data[i] = rand() / ((float) rand() / (float) RAND_MAX);
+		TDigestAddSingle(t, data[i]);
+	}
+
+	TDigestCompress(t);
+	qsort(data, 100000, sizeof(double), double_cmp);
+
+	for (i = 0; i < 7; i++)
+	{
+		double ix = 100000 * quantiles[i] - 0.5;
+		int index = (int) floor(ix);
+		double p = ix - index;
+		x_values[i] = data[index] * (1 - p) + data[index + 1] * p;
+	}
+
+	ck_assert_int_lt(t->summary->size, 10 * t->compression);
+
+	for (i = 0; i < 7; i++)
+	{
+		double q = quantiles[i];
+		double x = x_values[i];
+		double estimate_q = TDigestCDF(t, x);
+		double estimate_x = TDigestQuantile(t, q);
+		double q_diff = fabs(q - estimate_q);
+
+		ck_assert(q_diff < 0.005);
+
+		if (fabs(cdf(estimate_x, data, 100000) - q) > 0.005)
+			soft_errors++;
+	}
+
+	ck_assert_int_lt(soft_errors, 3);
+
+	pfree(data);
 }
 END_TEST
 
@@ -371,6 +449,7 @@ Suite *test_avltree_suite(void)
 	tcase_add_test(tc, test_tree_iterator);
 	tcase_add_test(tc, test_tree_remove_and_sums);
 	tcase_add_test(tc, test_tree_rand_balancing);
+	tcase_add_test(tc, test_tdigest_uniform);
 	suite_add_tcase(s, tc);
 
 	return s;

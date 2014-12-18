@@ -87,13 +87,13 @@ rotate(AVLNode *node, AVLNode *a, AVLNode *b, AVLNode *c, AVLNode *d)
 		AVLNodeDestroy(node->left);
 	if (node->right != d)
 		AVLNodeDestroy(node->right);
-    node->left = AVLNodeCreate(a, b, NULL);
-    node->right = AVLNodeCreate(c, d, NULL);
-    node->count = node->left->count + node->right->count;
-    node->size = node->left->size + node->right->size;
-    node->depth = AVLNodeDepth(node);
-    CentroidDestroy(node->leaf);
-    node->leaf = CentroidCopy(AVLNodeFirst(node->right));
+	node->left = AVLNodeCreate(a, b, NULL);
+	node->right = AVLNodeCreate(c, d, NULL);
+	node->count = node->left->count + node->right->count;
+	node->size = node->left->size + node->right->size;
+	node->depth = AVLNodeDepth(node);
+	CentroidDestroy(node->leaf);
+	node->leaf = CentroidCopy(AVLNodeFirst(node->right));
 }
 
 static void
@@ -538,17 +538,17 @@ TDigestAddSingle(TDigest *t, double x)
 static void
 shuffle(Centroid **array, int n)
 {
-    if (n > 1)
-    {
-        int i;
-        for (i = 0; i < n - 1; i++)
-        {
-          int j = i + rand() / (RAND_MAX / (n - i) + 1);
-          Centroid *ptr = array[j];
-          array[j] = array[i];
-          array[i] = ptr;
-        }
-    }
+	if (n > 1)
+	{
+		int i;
+		for (i = 0; i < n - 1; i++)
+		{
+			int j = i + rand() / (RAND_MAX / (n - i) + 1);
+			Centroid *ptr = array[j];
+			array[j] = array[i];
+			array[i] = ptr;
+		}
+	}
 }
 
 void
