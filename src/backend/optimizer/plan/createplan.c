@@ -2662,6 +2662,7 @@ create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
 	 * node, and move them from root->curOuterParams to the nestParams list.
 	 */
 	outerrelids = best_path->outerjoinpath->parent->relids;
+	params = NIL;
 	for (lc = list_head(root->curOuterParams); lc; lc = next)
 	{
 		NestLoopParam *nlp = (NestLoopParam *) lfirst(lc);
