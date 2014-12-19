@@ -386,7 +386,8 @@ cdf(double x, double *data, int n)
 	return (n1 + n2) / 2.0 / n;
 }
 
-START_TEST(test_tdigest_uniform)
+static void
+run_tdigest_test_on_distribution(double (*dist)(void))
 {
 	TDigest *t = TDigestCreate();
 	double quantiles[] = {0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999};
@@ -395,11 +396,9 @@ START_TEST(test_tdigest_uniform)
 	int i;
 	int soft_errors = 0;
 
-	srand(time(NULL));
-
 	for (i = 0; i < 100000; i++)
 	{
-		data[i] = rand() / ((float) rand() / (float) RAND_MAX);
+		data[i] = dist();
 		TDigestAddSingle(t, data[i]);
 	}
 
@@ -433,6 +432,55 @@ START_TEST(test_tdigest_uniform)
 	ck_assert_int_lt(soft_errors, 3);
 
 	pfree(data);
+}
+
+static double
+uniform()
+{
+	return (float) rand() / ((float) rand() / (float) RAND_MAX);
+}
+
+/*
+ * From: http://phoxis.org/2013/05/04/generating-random-numbers-from-normal-distribution-in-c/
+ */
+static double
+normal()
+{
+	double U1, U2, W, mult;
+	static double X1, X2;
+	static int call = 0;
+	double mu = 0;
+	double sigma = 1;
+
+	if (call == 1)
+	{
+		call = !call;
+		return (mu + sigma * (double) X2);
+	}
+
+	do
+	{
+		U1 = -1 + ((double) rand () / RAND_MAX) * 2;
+		U2 = -1 + ((double) rand () / RAND_MAX) * 2;
+		W = pow (U1, 2) + pow (U2, 2);
+	}
+	while (W >= 1 || W == 0);
+
+	mult = sqrt ((-2 * log (W)) / W);
+	X1 = U1 * mult;
+	X2 = U2 * mult;
+
+	call = !call;
+
+	return (mu + sigma * (double) X1) * rand();
+}
+
+START_TEST(test_tdigest)
+{
+	srand(time(NULL));
+
+	run_tdigest_test_on_distribution(uniform);
+	run_tdigest_test_on_distribution(normal);
 }
 END_TEST
 
