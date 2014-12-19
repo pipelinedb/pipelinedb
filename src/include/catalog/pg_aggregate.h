@@ -363,6 +363,22 @@ DATA(insert ( 4356	n 0 float8_combine float8_stddev_samp 	-				-				-				f f 0	1
 DATA(insert ( 4357	n 0 numeric_pcombine numeric_stddev_samp 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
 DATA(insert ( 4358	n 0 float8_combine float8_stddev_samp 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
 
+/* PipelineDB streaming hypothetical-set aggregates */
+DATA(insert ( 3999	h 1 cq_hypothetical_set_transition_multi	cq_rank_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
+DATA(insert ( 5000	n 0 cq_hypothetical_set_pcombine	cq_rank_final	-	-	-	f f 0	1016	0	0	0	_null_ _null_ ));
+
+DATA(insert ( 5002	h 1 cq_hypothetical_set_transition_multi	cq_percent_rank_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
+DATA(insert ( 5003	n 0 cq_hypothetical_set_pcombine	cq_percent_rank_final	-	-	-	f f 0	1016	0	0	0	_null_ _null_ ));
+
+DATA(insert ( 5005	h 1 cq_hypothetical_set_transition_multi	cq_cume_dist_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
+DATA(insert ( 5006	n 0 cq_hypothetical_set_pcombine	cq_cume_dist_final	-	-	-	f f 0	1016	0	0	0	_null_ _null_ ));
+
+DATA(insert ( 5011	h 1 hll_hypothetical_set_transition_multi	hll_dense_rank_final	-	-	-	t f 0	2281	0	0	0	_null_ _null_ ));
+DATA(insert ( 5012	n 0 hll_hypothetical_set_pcombine	hll_dense_rank_final	-	-	-	f f 0	2281	0	0	0	_null_ _null_ ));
+
+DATA(insert ( 5014	n 0 hll_count_distinct_transition	hll_count_distinct_final	-	-	-	t f 0	2281	0	0	0	_null_ _null_ ));
+DATA(insert ( 5015	n 0 hll_count_distinct_pcombine	hll_count_distinct_final	-	-	-	f f 0	2281	0	0	0	_null_ _null_ ));
+
 /*
  * prototypes for functions in pg_aggregate.c
  */

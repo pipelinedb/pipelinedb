@@ -98,7 +98,7 @@ test: event_trigger
 # ----------
 # Another group of parallel tests
 # ----------
-test: select_views portals_p2 foreign_key cluster dependency guc bitmapops combocid tsearch tsdicts foreign_data window xmlmap functional_deps advisory_lock json jsonb indirect_toast
+test: select_views portals_p2 foreign_key cluster dependency guc bitmapops combocid tsearch tsdicts foreign_data window xmlmap functional_deps advisory_lock json jsonb indirect_toast equivclass
 # ----------
 # Another group of parallel tests
 # NB: temp.sql does a reconnect which transiently uses 2 connections,
@@ -117,9 +117,14 @@ test: cqanalyze cqcreate cqactivate cqsanity cqsum cqswsum cqavg cqswavg cqcount
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqlatch cqvacuum cqdecode stream_exprs stream_casts
+test: cqvacuum cqdecode stream_exprs stream_casts cqhsagg cqswhsagg cqdistinct
 
 # ----------
 # Another group of parallel tests
 # ----------
 test: pipeline_stream
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: cqlatch

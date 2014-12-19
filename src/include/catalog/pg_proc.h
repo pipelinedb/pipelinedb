@@ -4054,7 +4054,7 @@ DATA(insert OID = 2774 (  ginqueryarrayextract	PGNSP PGUID 12 1 0 0 0 f f f f t 
 DESCR("GIN array support");
 DATA(insert OID = 2744 (  ginarrayconsistent	PGNSP PGUID 12 1 0 0 0 f f f f t f i 8 0 16 "2281 21 2277 23 2281 2281 2281 2281" _null_ _null_ _null_ _null_ ginarrayconsistent _null_ _null_ _null_ ));
 DESCR("GIN array support");
-DATA(insert OID = 3920 (  ginarraytriconsistent PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 16 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ ginarraytriconsistent _null_ _null_ _null_ ));
+DATA(insert OID = 3920 (  ginarraytriconsistent PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 18 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ ginarraytriconsistent _null_ _null_ _null_ ));
 DESCR("GIN array support");
 DATA(insert OID = 3076 (  ginarrayextract	 PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2281 "2277 2281" _null_ _null_ _null_ _null_	ginarrayextract_2args _null_ _null_ _null_ ));
 DESCR("GIN array support (obsolete)");
@@ -4218,9 +4218,9 @@ DESCR("build a json object from pairwise key/value inputs");
 DATA(insert OID = 3201 (  json_build_object    PGNSP PGUID 12 1 0 0 0 f f f f f f s 0 0 114  "" _null_ _null_ _null_ _null_ json_build_object_noargs _null_ _null_ _null_ ));
 DESCR("build an empty json object");
 DATA(insert OID = 3202 (  json_object	 PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 114 "1009" _null_ _null_ _null_ _null_ json_object _null_ _null_ _null_ ));
-DESCR("map text arrayof key value pais to json object");
+DESCR("map text array of key value pairs to json object");
 DATA(insert OID = 3203 (  json_object	 PGNSP PGUID 12 1 0 0 0 f f f f t f s 2 0 114 "1009 1009" _null_ _null_ _null_ _null_ json_object_two_arg _null_ _null_ _null_ ));
-DESCR("map text arrayof key value pais to json object");
+DESCR("map text arrays of keys and values to json object");
 DATA(insert OID = 3176 (  to_json	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 114 "2283" _null_ _null_ _null_ _null_ to_json _null_ _null_ _null_ ));
 DESCR("map input to json");
 
@@ -4401,7 +4401,7 @@ DATA(insert OID = 3657 (  gin_extract_tsquery	PGNSP PGUID 12 1 0 0 0 f f f f t f
 DESCR("GIN tsvector support");
 DATA(insert OID = 3658 (  gin_tsquery_consistent PGNSP PGUID 12 1 0 0 0 f f f f t f i 8 0 16 "2281 21 3615 23 2281 2281 2281 2281" _null_ _null_ _null_ _null_	gin_tsquery_consistent _null_ _null_ _null_ ));
 DESCR("GIN tsvector support");
-DATA(insert OID = 3921 (  gin_tsquery_triconsistent PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 16 "2281 21 3615 23 2281 2281 2281" _null_ _null_ _null_ _null_	gin_tsquery_triconsistent _null_ _null_ _null_ ));
+DATA(insert OID = 3921 (  gin_tsquery_triconsistent PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 18 "2281 21 3615 23 2281 2281 2281" _null_ _null_ _null_ _null_	gin_tsquery_triconsistent _null_ _null_ _null_ ));
 DESCR("GIN tsvector support");
 DATA(insert OID = 3724 (  gin_cmp_tslexeme		PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 23 "25 25" _null_ _null_ _null_ _null_ gin_cmp_tslexeme _null_ _null_ _null_ ));
 DESCR("GIN tsvector support");
@@ -4643,7 +4643,7 @@ DATA(insert OID = 3483 (  gin_extract_jsonb_query  PGNSP PGUID 12 1 0 0 0 f f f 
 DESCR("GIN support");
 DATA(insert OID = 3484 (  gin_consistent_jsonb	PGNSP PGUID 12 1 0 0 0 f f f f t f i 8 0 16 "2281 21 2277 23 2281 2281 2281 2281" _null_ _null_ _null_ _null_ gin_consistent_jsonb _null_ _null_ _null_ ));
 DESCR("GIN support");
-DATA(insert OID = 3488 (  gin_triconsistent_jsonb	PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 16 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ gin_triconsistent_jsonb _null_ _null_ _null_ ));
+DATA(insert OID = 3488 (  gin_triconsistent_jsonb	PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 18 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ gin_triconsistent_jsonb _null_ _null_ _null_ ));
 DESCR("GIN support");
 DATA(insert OID = 3485 (  gin_extract_jsonb_path  PGNSP PGUID 12 1 0 0 0 f f f f t f i 3 0 2281 "2281 2281 2281" _null_ _null_ _null_ _null_ gin_extract_jsonb_path _null_ _null_ _null_ ));
 DESCR("GIN support");
@@ -4651,7 +4651,7 @@ DATA(insert OID = 3486 (  gin_extract_jsonb_query_path	PGNSP PGUID 12 1 0 0 0 f 
 DESCR("GIN support");
 DATA(insert OID = 3487 (  gin_consistent_jsonb_path  PGNSP PGUID 12 1 0 0 0 f f f f t f i 8 0 16 "2281 21 2277 23 2281 2281 2281 2281" _null_ _null_ _null_ _null_ gin_consistent_jsonb_path _null_ _null_ _null_ ));
 DESCR("GIN support");
-DATA(insert OID = 3489 (  gin_triconsistent_jsonb_path	PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 16 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ gin_triconsistent_jsonb_path _null_ _null_ _null_ ));
+DATA(insert OID = 3489 (  gin_triconsistent_jsonb_path	PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 18 "2281 21 2277 23 2281 2281 2281" _null_ _null_ _null_ _null_ gin_triconsistent_jsonb_path _null_ _null_ _null_ ));
 DESCR("GIN support");
 
 /* txid */
@@ -5031,8 +5031,67 @@ DESCR("rank of hypothetical row without gaps");
 DATA(insert OID = 3993 ( dense_rank_final	PGNSP PGUID 12 1 0 2276 0 f f f f f f i 2 0 20 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_	hypothetical_dense_rank_final _null_ _null_ _null_ ));
 DESCR("aggregate final function");
 
-DATA(insert OID = 4300 (  decode_delimited   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1009 "17 25" _null_ _null_ "{$,delimiter}" _null_ text_to_array _null_ _null_ _null_ ));
-DESCR("split a string with a delimiter");
+/* PipelineDB streaming hypothetical-set aggregates */
+DATA(insert OID = 3994 (hllsend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ hllsend _null_ _null_ _null_ ));
+DESCR("serializer for HyperLogLog aggregation transition states");
+DATA(insert OID = 3995 (hllrecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "2281" _null_ _null_ _null_ _null_ hllrecv _null_ _null_ _null_ ));
+DESCR("deserializer for HyperLogLog aggregation transition states");
+
+DATA(insert OID = 3996 ( cq_hypothetical_set_transition_multi	PGNSP PGUID 12 1 0 2276 0 f f f f f f i 2 0 1016 "1016 2276" "{1016,2276}" "{i,v}" _null_ _null_ cq_hypothetical_set_transition_multi _null_ _null_ _null_ ));
+DESCR("aggregate transition function");
+DATA(insert OID = 3997 ( cq_hypothetical_set_combine_multi	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1016 "1016 1016" _null_ _null_ _null_ _null_ cq_hypothetical_set_combine_multi _null_ _null_ _null_ ));
+DESCR("aggregate combination function");
+DATA(insert OID = 3998 ( cq_hypothetical_set_pcombine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 1016 "1016 1016" _null_ _null_ _null_ _null_ cq_hypothetical_set_pcombine _null_ _null_ _null_ ));
+DESCR("aggregate parse and combine function");
+
+DATA(insert OID = 3999 ( cq_rank				PGNSP PGUID 12 1 0 2276 0 t f f f f f i 1 0 20 "2276" "{2276}" "{v}" _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("rank of hypothetical row, using hyperloglog");
+DATA(insert OID = 5000 ( cq_rank				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 20 "1016 20" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("rank of hypothetical row, using hyperloglog");
+DATA(insert OID = 5001 ( cq_rank_final			PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 20 "1016 2276" _null_ _null_ _null_ _null_	cq_hypothetical_rank_final _null_ _null_ _null_ ));
+DESCR("aggregate final function");
+
+DATA(insert OID = 5002 ( cq_percent_rank				PGNSP PGUID 12 1 0 2276 0 t f f f f f i 1 0 701 "2276" "{2276}" "{v}" _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("rank of hypothetical row, using hyperloglog");
+DATA(insert OID = 5003 ( cq_percent_rank				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "1016 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("rank of hypothetical row, using hyperloglog");
+DATA(insert OID = 5004 ( cq_percent_rank_final			PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_	cq_hypothetical_percent_rank_final _null_ _null_ _null_ ));
+DESCR("aggregate final function");
+
+DATA(insert OID = 5005 ( cq_cume_dist				PGNSP PGUID 12 1 0 2276 0 t f f f f f i 1 0 701 "2276" "{2276}" "{v}" _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("rank of hypothetical row, using hyperloglog");
+DATA(insert OID = 5006 ( cq_cume_dist				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "1016 701" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("rank of hypothetical row, using hyperloglog");
+DATA(insert OID = 5007 ( cq_cume_dist_final			PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_	cq_hypothetical_cume_dist_final _null_ _null_ _null_ ));
+DESCR("aggregate final function");
+
+DATA(insert OID = 5008 ( hll_hypothetical_set_transition_multi	PGNSP PGUID 12 1 0 2276 0 f f f f f f i 2 0 2281 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_ hll_hypothetical_set_transition_multi _null_ _null_ _null_ ));
+DESCR("aggregate transition function");
+DATA(insert OID = 5009 ( hll_hypothetical_set_combine_multi	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ hll_hypothetical_set_combine_multi _null_ _null_ _null_ ));
+DESCR("aggregate combination function");
+DATA(insert OID = 5010 ( hll_hypothetical_set_pcombine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 17" _null_ _null_ _null_ _null_ hll_hypothetical_set_pcombine _null_ _null_ _null_ ));
+DESCR("aggregate parse and combine function");
+
+DATA(insert OID = 5011 ( hll_dense_rank				PGNSP PGUID 12 1 0 2276 0 t f f f f f i 1 0 20 "2276" "{2276}" "{v}" _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("rank of hypothetical row, using hyperloglog");
+DATA(insert OID = 5012 ( hll_dense_rank				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 20 "17 20" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("rank of hypothetical row, using hyperloglog");
+DATA(insert OID = 5013 ( hll_dense_rank_final			PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 20 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_	hll_hypothetical_dense_rank_final _null_ _null_ _null_ ));
+DESCR("aggregate final function");
+
+/* streaming count distinct using HyperLogLog */
+DATA(insert OID = 5014 ( hll_count_distinct				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 20 "2276" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("distinct count, using hyperloglog");
+DATA(insert OID = 5015 ( hll_count_distinct				PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 20 "17 20" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("distinct count, using hyperloglog");
+DATA(insert OID = 5016 ( hll_count_distinct_transition	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_ hll_count_distinct_transition _null_ _null_ _null_ ));
+DESCR("aggregate transition function");
+DATA(insert OID = 5017 ( hll_count_distinct_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ hll_count_distinct_combine _null_ _null_ _null_ ));
+DESCR("aggregate combination function");
+DATA(insert OID = 5018 ( hll_count_distinct_pcombine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 17" _null_ _null_ _null_ _null_ hll_count_distinct_pcombine _null_ _null_ _null_ ));
+DESCR("aggregate parse and combine function");
+DATA(insert OID = 5019 ( hll_count_distinct_final			PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 20 "2281" _null_ _null_ _null_ _null_	hll_count_distinct_final _null_ _null_ _null_ ));
+DESCR("aggregate final function");
 
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
 DATA(insert OID = 4301 ( float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1022 "1022 1022" _null_ _null_ _null_ _null_ float8_combine _null_ _null_ _null_ ));

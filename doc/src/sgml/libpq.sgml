@@ -7043,17 +7043,17 @@ version:1
 dn:cn=mydatabase,dc=mycompany,dc=com
 changetype:add
 objectclass:top
-objectclass:groupOfUniqueNames
+objectclass:device
 cn:mydatabase
-uniqueMember:host=dbserver.mycompany.com
-uniqueMember:port=5439
-uniqueMember:dbname=mydb
-uniqueMember:user=mydb_user
-uniqueMember:sslmode=require
+description:host=dbserver.mycompany.com
+description:port=5439
+description:dbname=mydb
+description:user=mydb_user
+description:sslmode=require
 </programlisting>
    might be queried with the following LDAP URL:
 <programlisting>
-ldap://ldap.mycompany.com/dc=mycompany,dc=com?uniqueMember?one?(cn=mydatabase)
+ldap://ldap.mycompany.com/dc=mycompany,dc=com?description?one?(cn=mydatabase)
 </programlisting>
   </para>
 
@@ -7158,7 +7158,7 @@ ldap://ldap.acme.com/cn=dbserver,cn=hosts?pgconnectinfo?base?(objectclass=*)
     For backwards compatibility with earlier versions of PostgreSQL, if a
     root CA file exists, the behavior of
     <literal>sslmode</literal>=<literal>require</literal> will be the same
-    as that of <literal>verify-ca</literal>, meaning the sever certificate
+    as that of <literal>verify-ca</literal>, meaning the server certificate
     is validated against the CA. Relying on this behavior is discouraged,
     and applications that need certificate validation should always use
     <literal>verify-ca</literal> or <literal>verify-full</literal>.

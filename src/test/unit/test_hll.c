@@ -187,6 +187,7 @@ START_TEST(test_card_caching)
 
 	size = HLLSize(hll);
 	ck_assert_uint_eq(size, 1009);
+	ck_assert_int_eq(size, hll->card);
 
 	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
 
@@ -212,6 +213,7 @@ START_TEST(test_card_caching)
 	size = HLLSize(hll);
 	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
 	ck_assert_int_eq(size, 100225);
+	ck_assert_int_eq(size, hll->card);
 }
 END_TEST
 
@@ -293,6 +295,37 @@ START_TEST(test_union_sparse_and_dense)
 }
 END_TEST
 
+START_TEST(test_create_from_raw)
+{
+	/*
+	 * Verify that we can create an HLL with raw input params
+	 */
+	HyperLogLog *hll = HLLCreate();
+	HyperLogLog *copy;
+
+	hll = add_elements(hll, 1, 10002);
+	ck_assert_int_eq(10035, HLLSize(hll));
+
+	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
+
+	copy = HLLCreateFromRaw(hll->M, hll->mlen, hll->p, hll->encoding);
+
+	ck_assert_int_eq(copy->encoding, HLL_DENSE_DIRTY);
+	ck_assert_int_eq(10035, HLLSize(copy));
+
+	hll = HLLCreate();
+	hll = add_elements(hll, 0, 10);
+	ck_assert_int_eq(10, HLLSize(hll));
+
+	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
+
+	copy = HLLCreateFromRaw(hll->M, hll->mlen, hll->p, hll->encoding);
+
+	ck_assert_int_eq(copy->encoding, HLL_SPARSE_DIRTY);
+	ck_assert_int_eq(10, HLLSize(copy));
+}
+END_TEST
+
 Suite *test_hll_suite(void)
 {
 	Suite *s;
@@ -308,6 +341,7 @@ Suite *test_hll_suite(void)
 	tcase_add_test(tc, test_union);
 	tcase_add_test(tc, test_union_sparse_and_dense);
 	tcase_add_test(tc, test_card_caching);
+	tcase_add_test(tc, test_create_from_raw);
 	suite_add_tcase(s, tc);
 
 	return s;

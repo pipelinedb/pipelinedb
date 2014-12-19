@@ -912,6 +912,31 @@ HLLCreate(void)
 }
 
 /*
+ * HLLCreateFromRaw
+ *
+ * Creates a HyperLogLog with the given raw data
+ */
+HyperLogLog *
+HLLCreateFromRaw(uint8 *M, int mlen, uint8 p, char encoding)
+{
+	Size size;
+	HyperLogLog *hll;
+
+	size = sizeof(HyperLogLog) + mlen;
+
+	hll = palloc0(size);
+	hll->p = p;
+	hll->encoding = encoding;
+	hll->mlen = mlen;
+
+	memcpy(hll->M, M, mlen);
+
+	hll->encoding = HLL_IS_SPARSE(hll) ? HLL_SPARSE_DIRTY : HLL_DENSE_DIRTY;
+
+	return hll;
+}
+
+/*
  * HLLAdd
  *
  * Adds an element to the given HLL
@@ -1017,7 +1042,9 @@ HLLSize(HyperLogLog *hll)
    * 1/30 of 2^64 is not needed since it would require a huge set
    * to approach such a value.
    */
-  return (uint64) E;
+  hll->card = (uint64) E;
+
+  return hll->card;
 }
 
 /*
