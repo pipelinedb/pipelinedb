@@ -437,14 +437,14 @@ run_tdigest_test_on_distribution(double (*dist)(void))
 static double
 uniform()
 {
-	return (float) rand() / ((float) rand() / (float) RAND_MAX);
+	return (float) rand() * ((float) rand() / (float) RAND_MAX);
 }
 
 /*
  * From: http://phoxis.org/2013/05/04/generating-random-numbers-from-normal-distribution-in-c/
  */
 static double
-normal()
+gaussian()
 {
 	double U1, U2, W, mult;
 	static double X1, X2;
@@ -472,7 +472,7 @@ normal()
 
 	call = !call;
 
-	return (mu + sigma * (double) X1) * rand();
+	return rand() * (mu + sigma * (double) X1);
 }
 
 START_TEST(test_tdigest)
@@ -480,7 +480,7 @@ START_TEST(test_tdigest)
 	srand(time(NULL));
 
 	run_tdigest_test_on_distribution(uniform);
-	run_tdigest_test_on_distribution(normal);
+	run_tdigest_test_on_distribution(gaussian);
 }
 END_TEST
 
@@ -497,7 +497,7 @@ Suite *test_avltree_suite(void)
 	tcase_add_test(tc, test_tree_iterator);
 	tcase_add_test(tc, test_tree_remove_and_sums);
 	tcase_add_test(tc, test_tree_rand_balancing);
-	tcase_add_test(tc, test_tdigest_uniform);
+	tcase_add_test(tc, test_tdigest);
 	suite_add_tcase(s, tc);
 
 	return s;
