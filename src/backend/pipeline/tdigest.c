@@ -529,7 +529,7 @@ TDigestAdd(TDigest *t, float8 x, int w)
 
 	t->count += w;
 
-	if (t->summary->size > 100 * t->compression)
+	if (t->summary->size > 20 * t->compression)
 		TDigestCompress(t);
 }
 
