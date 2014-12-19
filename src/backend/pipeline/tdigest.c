@@ -46,14 +46,14 @@ CentroidDestroy(Centroid *c)
 }
 
 void
-CentroidAdd(Centroid *c, double x, int w)
+CentroidAdd(Centroid *c, float8 x, int w)
 {
 	c->count += w;
 	c->mean += w * (x - c->mean) / c->count;
 }
 
 void
-CentroidAddSingle(Centroid *c, double x)
+CentroidAddSingle(Centroid *c, float8 x)
 {
 	CentroidAdd(c, x, 1);
 }
@@ -424,19 +424,19 @@ TDigestCreateWithCompression(int compression)
 }
 
 void
-TDigestAdd(TDigest *t, double x, int w)
+TDigestAdd(TDigest *t, float8 x, int w)
 {
 	Centroid *c;
 	Centroid *start;
 	AVLNodeIterator *it;
-	double min_dist;
+	float8 min_dist;
 	int last_neighbor;
 	int i;
 	Centroid *closest;
 	int sum;
 	int count;
 	float n;
-	double z;
+	float8 z;
 
 	c = CentroidCreateWithId(0);
 	CentroidAdd(c, x, w);
@@ -489,7 +489,7 @@ TDigestAdd(TDigest *t, double x, int w)
 
 	while (true)
 	{
-		double q, k;
+		float8 q, k;
 
 		c = AVLNodeNext(it);
 		if (i > last_neighbor)
@@ -530,7 +530,7 @@ TDigestAdd(TDigest *t, double x, int w)
 }
 
 void
-TDigestAddSingle(TDigest *t, double x)
+TDigestAddSingle(TDigest *t, float8 x)
 {
 	TDigestAdd(t, x, 1);
 }
@@ -624,20 +624,20 @@ TDigestMerge(TDigest *t1, TDigest *t2)
 	return t;
 }
 
-static double
-interpolate(double x, double x0, double x1)
+static float8
+interpolate(float8 x, float8 x0, float8 x1)
 {
 	return (x - x0) / (x1 - x0);
 }
 
-double
-TDigestCDF(TDigest *t, double x)
+float8
+TDigestCDF(TDigest *t, float8 x)
 {
 	AVLNode *summary = t->summary;
-	double r = 0;
+	float8 r = 0;
 	AVLNodeIterator *it;
 	Centroid *a, *b, *next;
-	double left, right;
+	float8 left, right;
 
 	if (summary->size == 0)
 		return NAN;
@@ -669,13 +669,13 @@ TDigestCDF(TDigest *t, double x)
 	return 1;
 }
 
-double
-TDigestQuantile(TDigest *t, double q)
+float8
+TDigestQuantile(TDigest *t, float8 q)
 {
 	AVLNode *summary = t->summary;
 	AVLNodeIterator *it;
 	Centroid *center, *leading, *next;
-	double left, right, r;
+	float8 left, right, r;
 
 	if (summary->size <= 1)
 		return NAN;

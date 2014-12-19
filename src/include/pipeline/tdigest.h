@@ -17,15 +17,15 @@
 typedef struct Centroid
 {
 	int count;
-	double mean;
+	float8 mean;
 	int id;
 } Centroid;
 
 Centroid *CentroidCreate(void);
 Centroid *CentroidCreateWithId(int id);
 void CentroidDestroy(Centroid *c);
-void CentroidAdd(Centroid *c, double x, int w);
-void CentroidAddSingle(Centroid *c, double x);
+void CentroidAdd(Centroid *c, float8 x, int w);
+void CentroidAddSingle(Centroid *c, float8 x);
 Centroid *CentroidCopy(Centroid *c);
 
 typedef struct AVLNode
@@ -64,17 +64,17 @@ Centroid *AVLNodeNext(AVLNodeIterator *it);
 typedef struct TDigest
 {
 	int count;
-	double compression;
+	float8 compression;
 	AVLNode *summary;
 } TDigest;
 
 TDigest *TDigestCreate(void);
 TDigest *TDigestCreateWithCompression(int compression);
-void TDigestAdd(TDigest *t, double x, int w);
-void TDigestAddSingle(TDigest *t, double x);
+void TDigestAdd(TDigest *t, float8 x, int w);
+void TDigestAddSingle(TDigest *t, float8 x);
 void TDigestCompress(TDigest *t);
 TDigest *TDigestMerge(TDigest *t1, TDigest *t2);
-double TDigestCDF(TDigest *t, double x);
-double TDigestQuantile(TDigest *t, double q);
+float8 TDigestCDF(TDigest *t, float8 x);
+float8 TDigestQuantile(TDigest *t, float8 q);
 
 #endif
