@@ -164,7 +164,11 @@ AVLNodeDestroy(AVLNode *node)
 void
 AVLNodeDestroyTree(AVLNode *root)
 {
-
+	if (root->left)
+		AVLNodeDestroyTree(root->left);
+	if (root->right)
+		AVLNodeDestroyTree(root->right);
+	AVLNodeDestroy(root);
 }
 
 void
