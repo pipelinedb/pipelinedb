@@ -584,8 +584,8 @@ TDigest *
 TDigestMerge(TDigest *t1, TDigest *t2)
 {
 	TDigest *t = TDigestCreateWithCompression(Max(t1->compression, t2->compression));
-	int count = t1->summary->count + t2->summary->count;
-	Centroid **centroids = palloc(sizeof(Centroid *) * count);
+	int size = t1->summary->size + t2->summary->size;
+	Centroid **centroids = palloc(sizeof(Centroid *) * size);
 	Centroid *c;
 	int i;
 	int j = 0;
@@ -593,7 +593,7 @@ TDigestMerge(TDigest *t1, TDigest *t2)
 
 	it = AVLNodeIteratorCreate(t1->summary, NULL);
 
-	for (i = 0; i < t1->summary->count; i++)
+	for (i = 0; i < t1->summary->size; i++)
 	{
 		centroids[j] = AVLNodeNext(it);
 		j++;
@@ -603,7 +603,7 @@ TDigestMerge(TDigest *t1, TDigest *t2)
 
 	it = AVLNodeIteratorCreate(t2->summary, NULL);
 
-	for (i = 0; i < t2->summary->count; i++)
+	for (i = 0; i < t2->summary->size; i++)
 	{
 		centroids[j] = AVLNodeNext(it);
 		j++;
@@ -611,9 +611,9 @@ TDigestMerge(TDigest *t1, TDigest *t2)
 
 	AVLNodeIteratorDestroy(it);
 
-	shuffle(centroids, count);
+	shuffle(centroids, size);
 
-	for (i = 0; i < count; i++)
+	for (i = 0; i < size; i++)
 	{
 		c = centroids[i];
 		TDigestAdd(t, c->mean, c->count);

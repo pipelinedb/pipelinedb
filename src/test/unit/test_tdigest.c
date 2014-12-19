@@ -16,9 +16,9 @@ int_cmp(const void * a, const void * b)
 }
 
 static int
-double_cmp(const void * a, const void * b)
+float8_cmp(const void * a, const void * b)
 {
-	double diff = *(double *) a - *(double *) b;
+	float8 diff = *(float8 *) a - *(float8 *) b;
 	if (diff < 0)
 		return -1;
 	return diff > 0 ? 1 : 0;
@@ -370,8 +370,8 @@ START_TEST(test_tree_rand_balancing)
 }
 END_TEST
 
-static double
-cdf(double x, double *data, int n)
+static float8
+cdf(float8 x, float8 *data, int n)
 {
 	int n1 = 0;
 	int n2 = 0;
@@ -379,7 +379,7 @@ cdf(double x, double *data, int n)
 
 	for (i = 0; i < n; i++)
 	{
-		double v = data[i];
+		float8 v = data[i];
 		n1 += (v < x) ? 1 : 0;
 		n2 += (v <= x) ? 1 : 0;
 	}
@@ -387,12 +387,12 @@ cdf(double x, double *data, int n)
 }
 
 static void
-run_tdigest_test_on_distribution(double (*dist)(void))
+run_tdigest_test_on_distribution(float8 (*dist)(void))
 {
 	TDigest *t = TDigestCreate();
-	double quantiles[] = {0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999};
-	double x_values[7];
-	double *data = (double *) palloc(sizeof(double) * 100000);
+	float8 quantiles[] = {0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999};
+	float8 x_values[7];
+	float8 *data = (float8 *) palloc(sizeof(float8) * 100000);
 	int i;
 	int soft_errors = 0;
 
@@ -403,13 +403,13 @@ run_tdigest_test_on_distribution(double (*dist)(void))
 	}
 
 	TDigestCompress(t);
-	qsort(data, 100000, sizeof(double), double_cmp);
+	qsort(data, 100000, sizeof(float8), float8_cmp);
 
 	for (i = 0; i < 7; i++)
 	{
-		double ix = 100000 * quantiles[i] - 0.5;
+		float8 ix = 100000 * quantiles[i] - 0.5;
 		int index = (int) floor(ix);
-		double p = ix - index;
+		float8 p = ix - index;
 		x_values[i] = data[index] * (1 - p) + data[index + 1] * p;
 	}
 
@@ -417,11 +417,11 @@ run_tdigest_test_on_distribution(double (*dist)(void))
 
 	for (i = 0; i < 7; i++)
 	{
-		double q = quantiles[i];
-		double x = x_values[i];
-		double estimate_q = TDigestCDF(t, x);
-		double estimate_x = TDigestQuantile(t, q);
-		double q_diff = fabs(q - estimate_q);
+		float8 q = quantiles[i];
+		float8 x = x_values[i];
+		float8 estimate_q = TDigestCDF(t, x);
+		float8 estimate_x = TDigestQuantile(t, q);
+		float8 q_diff = fabs(q - estimate_q);
 
 		ck_assert(q_diff < 0.005);
 
@@ -434,7 +434,7 @@ run_tdigest_test_on_distribution(double (*dist)(void))
 	pfree(data);
 }
 
-static double
+static float8
 uniform()
 {
 	return (float) rand() * ((float) rand() / (float) RAND_MAX);
@@ -443,25 +443,25 @@ uniform()
 /*
  * From: http://phoxis.org/2013/05/04/generating-random-numbers-from-normal-distribution-in-c/
  */
-static double
+static float8
 gaussian()
 {
-	double U1, U2, W, mult;
-	static double X1, X2;
+	float8 U1, U2, W, mult;
+	static float8 X1, X2;
 	static int call = 0;
-	double mu = 0;
-	double sigma = 1;
+	float8 mu = 0;
+	float8 sigma = 1;
 
 	if (call == 1)
 	{
 		call = !call;
-		return (mu + sigma * (double) X2);
+		return (mu + sigma * (float8) X2);
 	}
 
 	do
 	{
-		U1 = -1 + ((double) rand () / RAND_MAX) * 2;
-		U2 = -1 + ((double) rand () / RAND_MAX) * 2;
+		U1 = -1 + ((float8) rand () / RAND_MAX) * 2;
+		U2 = -1 + ((float8) rand () / RAND_MAX) * 2;
 		W = pow (U1, 2) + pow (U2, 2);
 	}
 	while (W >= 1 || W == 0);
@@ -472,7 +472,7 @@ gaussian()
 
 	call = !call;
 
-	return rand() * (mu + sigma * (double) X1);
+	return rand() * (mu + sigma * (float8) X1);
 }
 
 START_TEST(test_tdigest)
@@ -484,13 +484,46 @@ START_TEST(test_tdigest)
 }
 END_TEST
 
-Suite *test_avltree_suite(void)
+START_TEST(test_tdigest_merge)
+{
+	TDigest *t0 = TDigestCreate();
+	TDigest *t1 = TDigestCreate();
+	TDigest *t2 = TDigestCreate();
+	TDigest *t3;
+	int i;
+	float8 x;
+
+	for (i = 0; i < 50000; i++)
+	{
+		x = rand();
+		TDigestAddSingle(t0, x);
+		TDigestAddSingle(t1, x);
+	}
+
+	for (i = 0; i < 50000; i++)
+	{
+		x = rand();
+		TDigestAddSingle(t0, x);
+		TDigestAddSingle(t2, x);
+	}
+
+	t3 = TDigestMerge(t1, t2);
+
+	for (i = 0; i < 100; i++)
+	{
+		x = rand();
+		ck_assert(fabs(TDigestCDF(t0, x) - TDigestCDF(t3, x)) < 0.005);
+	}
+}
+END_TEST
+
+Suite *test_tdigest_suite(void)
 {
 	Suite *s;
 	TCase *tc;
 
-	s = suite_create("test_avltree");
-	tc = tcase_create("test_avltree");
+	s = suite_create("test_tdigest");
+	tc = tcase_create("test_tdigest");
 	tcase_set_timeout(tc, 10);
 	tcase_add_test(tc, test_tree_adds);
 	tcase_add_test(tc, test_tree_balancing);
@@ -498,6 +531,7 @@ Suite *test_avltree_suite(void)
 	tcase_add_test(tc, test_tree_remove_and_sums);
 	tcase_add_test(tc, test_tree_rand_balancing);
 	tcase_add_test(tc, test_tdigest);
+	tcase_add_test(tc, test_tdigest_merge);
 	suite_add_tcase(s, tc);
 
 	return s;
