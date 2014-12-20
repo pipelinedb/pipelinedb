@@ -557,9 +557,9 @@ join_is_legal(PlannerInfo *root, RelOptInfo *rel1, RelOptInfo *rel2,
 
 	/*
 	 * If this is a stream-table join, we always want the stream
-	 * on the outer side of the join
+	 * on the inner side of the join
 	 */
-	if (IS_STREAM_RTE(rel2->relid, root))
+	if (IS_STREAM_RTE(rel1->relid, root))
 		reversed = true;
 
 	/* Otherwise, it's a valid join */

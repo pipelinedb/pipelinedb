@@ -2693,8 +2693,8 @@ create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
 
 	plan->targetlist = build_path_tlist(root, &best_path->path);
 	plan->qual = otherclauses;
-	plan->lefttree = outer_plan;
-	plan->righttree = inner_plan;
+	plan->lefttree = inner_plan;
+	plan->righttree = outer_plan;
 	node->join.jointype = best_path->jointype;
 	node->join.joinqual = joinclauses;
 	node->nestParams = params;

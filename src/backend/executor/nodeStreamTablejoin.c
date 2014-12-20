@@ -67,7 +67,7 @@ ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 			break;
 		case JOIN_LEFT:
 		case JOIN_ANTI:
-			state->stj_NullInnerTupleSlot =
+			state->nullslot =
 				ExecInitNullTupleSlot(estate,
 								 ExecGetResultType(innerPlanState(state)));
 			break;
@@ -83,10 +83,57 @@ ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 	ExecAssignProjectionInfo(&state->js.ps, NULL);
 
 	state->js.ps.ps_TupFromTlist = false;
-	state->stj_NeedNewOuter = true;
-	state->stj_MatchedOuter = false;
+	state->needouter = true;
+	state->matchedouter = false;
+
+	/* 10kB per event seems like a reasonable amount of memory to reserve for a batch */
+	state->streambatch = tuplestore_begin_heap(false, true, 10 * 1024 * estate->cq_batch_size);
+	state->batchsize = 0;
 
 	return state;
+}
+
+static TupleTableSlot *
+stream_batch_next(StreamTableJoinState *node)
+{
+	PlanState *inner = innerPlanState(node);
+	TupleTableSlot *slot = inner->ps_ResultTupleSlot;
+
+	if (!tuplestore_gettupleslot(node->streambatch, true, false, slot))
+		ExecClearTuple(slot);
+
+	return slot;
+}
+
+static int
+has_stream_batch(StreamTableJoinState *node)
+{
+	PlanState *inner = innerPlanState(node);
+	TupleTableSlot *slot;
+
+	if (node->batchsize)
+		return node->batchsize;
+
+	for (;;)
+	{
+		slot = ExecProcNode(inner);
+		if (TupIsNull(slot))
+			break;
+
+		tuplestore_puttupleslot(node->streambatch, slot);
+		node->batchsize++;
+	}
+
+	tuplestore_rescan(node->streambatch);
+
+	return node->batchsize;
+}
+
+static void
+batch_done(StreamTableJoinState *node)
+{
+	tuplestore_clear(node->streambatch);
+	node->batchsize = 0;
 }
 
 TupleTableSlot *
@@ -133,22 +180,31 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 	 */
 	ResetExprContext(econtext);
 
+	/* make sure we have a full stream batch to scan in the inner loop */
+	if (!has_stream_batch(node))
+		return NULL;
+
 	for (;;)
 	{
 		/*
 		 * If we don't have an outer tuple, get the next one and reset the
 		 * inner scan.
 		 */
-		if (node->stj_NeedNewOuter)
+		if (node->needouter)
 		{
 			outerTupleSlot = ExecProcNode(outerPlan);
 
 			if (TupIsNull(outerTupleSlot))
+			{
+				ExecReScan(outerPlan);
+				batch_done(node);
+
 				return NULL;
+			}
 
 			econtext->ecxt_outertuple = outerTupleSlot;
-			node->stj_NeedNewOuter = false;
-			node->stj_MatchedOuter = false;
+			node->needouter = false;
+			node->matchedouter = false;
 
 			/*
 			 * Fetch the values of any outer Vars that must be passed to the
@@ -169,18 +225,18 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 													 paramno);
 			}
 
-			 /* rescan the inner plan */
-			ExecReScan(innerPlan);
+			 /* rescan the stream batch */
+			 tuplestore_rescan(node->streambatch);
 		}
 
-		innerTupleSlot = ExecProcNode(innerPlan);
+		innerTupleSlot = stream_batch_next(node);
 		econtext->ecxt_innertuple = innerTupleSlot;
 
 		if (TupIsNull(innerTupleSlot))
 		{
-			node->stj_NeedNewOuter = true;
+			node->needouter = true;
 
-			if (!node->stj_MatchedOuter &&
+			if (!node->matchedouter &&
 				(node->js.jointype == JOIN_LEFT ||
 				 node->js.jointype == JOIN_ANTI))
 			{
@@ -190,7 +246,7 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 				 * nulls for the inner tuple, and return it if it passes the
 				 * non-join quals.
 				 */
-				econtext->ecxt_innertuple = node->stj_NullInnerTupleSlot;
+				econtext->ecxt_innertuple = node->nullslot;
 
 				if (otherqual == NIL || ExecQual(otherqual, econtext, false))
 				{
@@ -233,12 +289,12 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 		 */
 		if (ExecQual(joinqual, econtext, false))
 		{
-			node->stj_MatchedOuter = true;
+			node->matchedouter = true;
 
 			/* In an antijoin, we never return a matched tuple */
 			if (node->js.jointype == JOIN_ANTI)
 			{
-				node->stj_NeedNewOuter = true;
+				node->needouter = true;
 				continue;		/* return to top of loop */
 			}
 
@@ -247,7 +303,7 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 			 * after that we're done with this outer tuple.
 			 */
 			if (node->js.jointype == JOIN_SEMI)
-				node->stj_NeedNewOuter = true;
+				node->needouter = true;
 
 			if (otherqual == NIL || ExecQual(otherqual, econtext, false))
 			{
