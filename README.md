@@ -1,3 +1,5 @@
+# PipelineDB ![Build Status](https://circleci.com/gh/pipelinedb/pipelinedb.png?circle-token=db1a70c164cd6d96544d8eb38b279c48dea24709)
+
 ## Getting started
 
 
