@@ -26,6 +26,7 @@
 #include "nodes/nodeFuncs.h"
 #include "optimizer/tlist.h"
 #include "pipeline/hll.h"
+#include "pipeline/tdigest.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"
@@ -1915,4 +1916,78 @@ hll_hypothetical_dense_rank_final(PG_FUNCTION_ARGS)
 	hll = (HyperLogLog *) PG_GETARG_POINTER(0);
 
 	PG_RETURN_INT64(HLLSize(hll) + 1);
+}
+
+/*
+ * tdigestsend
+ *
+ * Output function for a t-digest.
+ */
+Datum
+tdigestsend(PG_FUNCTION_ARGS)
+{
+	TDigest *t = (TDigest *) PG_GETARG_POINTER(0);
+	StringInfoData buf;
+	bytea *result;
+	int nbytes;
+	int i;
+	AVLNodeIterator *it;
+	Centroid *c;
+
+	initStringInfo(&buf);
+
+	pq_sendfloat8(&buf, t->compression);
+	pq_sendint(&buf, t->summary->size, 4);
+
+	it = AVLNodeIteratorCreate(t->summary, NULL);
+
+	for (i = 0; i < t->summary->size; i++)
+	{
+		c = AVLNodeNext(it);
+		pq_sendfloat8(&buf, c->mean);
+		pq_sendint(&buf, c->count, 4);
+	}
+
+	AVLNodeIteratorDestroy(it);
+
+	nbytes = buf.len - buf.cursor;
+	result = (bytea *) palloc(nbytes + VARHDRSZ);
+	SET_VARSIZE(result, nbytes + VARHDRSZ);
+
+	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
+
+	PG_RETURN_BYTEA_P(result);
+}
+
+/*
+ * tdigestrecv
+ *
+ * Input function for a t-digest.
+ */
+Datum
+tdigestrecv(PG_FUNCTION_ARGS)
+{
+	bytea *bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
+	TDigest *t;
+	StringInfoData buf;
+	int nbytes = VARSIZE(bytesin) - VARHDRSZ;
+	int count;
+	int i;
+	float8 x;
+	int w;
+
+	initStringInfo(&buf);
+	appendBinaryStringInfo(&buf, VARDATA(bytesin), nbytes);
+
+	t = TDigestCreateWithCompression(pq_getmsgfloat8(&buf));
+	count = pq_getmsgint(&buf, 4);
+
+	for (i = 0; i < count; i++)
+	{
+		x = pq_getmsgfloat8(&buf);
+		w = pq_getmsgint(&buf, 4);
+		TDigestAdd(t, x, w);
+	}
+
+	PG_RETURN_POINTER(t);
 }

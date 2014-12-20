@@ -546,6 +546,8 @@ extern Datum cq_hypothetical_set_pcombine(PG_FUNCTION_ARGS);
 extern Datum cq_hypothetical_rank_final(PG_FUNCTION_ARGS);
 extern Datum cq_hypothetical_percent_rank_final(PG_FUNCTION_ARGS);
 extern Datum cq_hypothetical_cume_dist_final(PG_FUNCTION_ARGS);
+extern Datum tdigestsend(PG_FUNCTION_ARGS);
+extern Datum tdigestrecv(PG_FUNCTION_ARGS);
 
 /* pseudotypes.c */
 extern Datum cstring_in(PG_FUNCTION_ARGS);
