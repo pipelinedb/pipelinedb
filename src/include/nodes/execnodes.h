@@ -399,7 +399,6 @@ typedef struct EState
 
 	/* Other working state: */
 	MemoryContext es_query_cxt; /* per-query context in which EState lives */
-	MemoryContext es_exec_node_cxt; /* context that is reset on each call to ExecProcNode */
 
 	List	   *es_tupleTable;	/* List of TupleTableSlots */
 

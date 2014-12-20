@@ -417,7 +417,6 @@ TupleTableSlot *
 ExecProcNode(PlanState *node)
 {
 	TupleTableSlot *result;
-	MemoryContext oldcontext;
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -429,9 +428,6 @@ ExecProcNode(PlanState *node)
 
 	if (IsContinuous(node) && node->cq_batch_progress == BatchSize(node))
 		return ExecEndBatch(node);
-
-	if (node->state->es_exec_node_cxt)
-		oldcontext = MemoryContextSwitchTo(node->state->es_exec_node_cxt);
 
 	switch (nodeTag(node))
 	{
@@ -594,9 +590,6 @@ ExecProcNode(PlanState *node)
 		node->cq_batch_progress++;
 	else if (IsContinuous(node))
 		result = ExecEndBatch(node);
-
-	if (node->state->es_exec_node_cxt)
-		MemoryContextSwitchTo(oldcontext);
 
 	return result;
 }

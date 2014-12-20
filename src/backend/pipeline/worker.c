@@ -108,7 +108,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
 	MemoryContext runcontext;
-	MemoryContext execcontext;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
 	TimestampTz curtime = GetCurrentTimestamp();
@@ -121,12 +120,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 										ALLOCSET_DEFAULT_INITSIZE,
 										ALLOCSET_DEFAULT_MAXSIZE);
 
-	execcontext = AllocSetContextCreate(runcontext, "ExecProcNodeContext",
-										ALLOCSET_DEFAULT_MINSIZE,
-										ALLOCSET_DEFAULT_INITSIZE,
-										ALLOCSET_DEFAULT_MAXSIZE);
-
-
 	start_executor(queryDesc, runcontext, cqowner);
 
 	/* workers only need read-only transactions */
@@ -136,7 +129,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	estate = queryDesc->estate;
 	operation = queryDesc->operation;
-	estate->es_exec_node_cxt = execcontext;
 
 	/*
 	 * startup tuple receiver, if we will be emitting tuples
@@ -194,7 +186,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		CurrentResourceOwner = cqowner;
 
 		MemoryContextSwitchTo(oldcontext);
-		MemoryContextReset(execcontext);
 
 		if (estate->es_processed != 0)
 		{
