@@ -281,3 +281,9 @@ ExecEndStreamScanBatch(StreamScanState *node)
 {
 	MemoryContextReset(node->pi->ctxt);
 }
+
+void
+ExecReScanStreamScan(StreamScanState *node)
+{
+
+}

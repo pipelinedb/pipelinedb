@@ -14,6 +14,61 @@
 #include "executor/nodeStreamTablejoin.h"
 #include "utils/memutils.h"
 
+
+static List *
+get_rescan_nodes(PlanState *root)
+{
+	List *result = NIL;
+
+	result = lappend(result, root);
+
+	if (outerPlanState(root))
+		result = list_concat(result, get_rescan_nodes(outerPlanState(root)));
+	if (innerPlanState(root))
+		result = list_concat(result, get_rescan_nodes(innerPlanState(root)));
+
+	return result;
+}
+
+static TupleTableSlot *
+stream_batch_next(StreamTableJoinState *node)
+{
+	PlanState *inner = innerPlanState(node);
+	TupleTableSlot *slot = inner->ps_ResultTupleSlot;
+
+	if (!tuplestore_gettupleslot(node->streambatch, true, false, slot))
+		ExecClearTuple(slot);
+
+	return slot;
+}
+
+static bool
+has_inner_batch(StreamTableJoinState *node)
+{
+	PlanState *inner = innerPlanState(node);
+	TupleTableSlot *slot;
+
+	if (!node->needinner)
+		return true;
+
+	for (;;)
+	{
+		slot = ExecProcNode(inner);
+		if (TupIsNull(slot))
+			break;
+
+		tuplestore_puttupleslot(node->streambatch, slot);
+		node->needinner = false;
+	}
+
+	tuplestore_rescan(node->streambatch);
+	ExecReScan((PlanState *) node);
+
+	node->needouter = true;
+
+	return true;
+}
+
 StreamTableJoinState *
 ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 {
@@ -83,57 +138,19 @@ ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 	ExecAssignProjectionInfo(&state->js.ps, NULL);
 
 	state->js.ps.ps_TupFromTlist = false;
+	state->needinner = true;
 	state->needouter = true;
 	state->matchedouter = false;
 
-	/* 10kB per event seems like a reasonable amount of memory to reserve for a batch */
-	state->streambatch = tuplestore_begin_heap(false, true, 10 * 1024 * estate->cq_batch_size);
-	state->batchsize = 0;
+	/* 1kB per event seems like a reasonable amount of memory to reserve for a batch */
+	state->streambatch = tuplestore_begin_heap(false, true, 1 * 1024 * estate->cq_batch_size);
+	state->rescannodes = get_rescan_nodes((PlanState *) state);
+
+	// we need to make it work without changing batch size
+	// but join has to happen only in a SINGLE ExecutePlan call, that's the key
+	outerPlanState(state)->state->cq_batch_size = 0;
 
 	return state;
-}
-
-static TupleTableSlot *
-stream_batch_next(StreamTableJoinState *node)
-{
-	PlanState *inner = innerPlanState(node);
-	TupleTableSlot *slot = inner->ps_ResultTupleSlot;
-
-	if (!tuplestore_gettupleslot(node->streambatch, true, false, slot))
-		ExecClearTuple(slot);
-
-	return slot;
-}
-
-static int
-has_stream_batch(StreamTableJoinState *node)
-{
-	PlanState *inner = innerPlanState(node);
-	TupleTableSlot *slot;
-
-	if (node->batchsize)
-		return node->batchsize;
-
-	for (;;)
-	{
-		slot = ExecProcNode(inner);
-		if (TupIsNull(slot))
-			break;
-
-		tuplestore_puttupleslot(node->streambatch, slot);
-		node->batchsize++;
-	}
-
-	tuplestore_rescan(node->streambatch);
-
-	return node->batchsize;
-}
-
-static void
-batch_done(StreamTableJoinState *node)
-{
-	tuplestore_clear(node->streambatch);
-	node->batchsize = 0;
 }
 
 TupleTableSlot *
@@ -181,7 +198,7 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 	ResetExprContext(econtext);
 
 	/* make sure we have a full stream batch to scan in the inner loop */
-	if (!has_stream_batch(node))
+	if (!has_inner_batch(node))
 		return NULL;
 
 	for (;;)
@@ -196,8 +213,8 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 
 			if (TupIsNull(outerTupleSlot))
 			{
-				ExecReScan(outerPlan);
-				batch_done(node);
+				tuplestore_clear(node->streambatch);
+				node->needinner = true;
 
 				return NULL;
 			}
@@ -338,6 +355,8 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 		 */
 		ResetExprContext(econtext);
 	}
+
+	return NULL;
 }
 
 void
@@ -347,8 +366,26 @@ ExecEndStreamTableJoin(StreamTableJoinState *node)
 	ExecEndNode(innerPlanState(node));
 }
 
+/*
+ * ExecReScanStreamTableJoin
+ *
+ * Certain child nodes only call ReScan under certain conditions,
+ * so we call it ourselves on all relevant nodes to make sure that
+ * it's not skipped.
+ */
 void
 ExecReScanStreamTableJoin(StreamTableJoinState *node)
 {
+	ListCell *lc;
+	PlanState *ps = (PlanState *) node;
+	List *nodes = list_concat(get_rescan_nodes(outerPlanState(ps)),
+			get_rescan_nodes(innerPlanState(ps)));
 
+	foreach(lc, nodes)
+	{
+		ps = (PlanState *) lfirst(lc);
+		ExecReScan(ps);
+	}
+
+	list_free(nodes);
 }

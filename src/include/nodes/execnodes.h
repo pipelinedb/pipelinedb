@@ -1690,9 +1690,10 @@ typedef struct StreamTableJoinState
 	JoinState	js;
 	bool needouter;
 	bool matchedouter;
+	bool needinner;
 	TupleTableSlot *nullslot;
 	Tuplestorestate *streambatch;
-	int batchsize;
+	List *rescannodes;
 } StreamTableJoinState;
 
 

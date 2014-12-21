@@ -105,7 +105,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	MemoryContext oldcontext;
 	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	char *cvname = rv->relname;
-	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
 	MemoryContext runcontext;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
@@ -172,13 +171,14 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		StartTransactionCommand();
 		set_snapshot(estate, cqowner);
 
+		CurrentResourceOwner = cqowner;
 		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 
 		/*
 		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
-					true, batchsize, timeoutms, ForwardScanDirection, dest);
+					true, 0, timeoutms, ForwardScanDirection, dest);
 
 		unset_snapshot(estate, cqowner);
 		CommitTransactionCommand();
