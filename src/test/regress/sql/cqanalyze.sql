@@ -26,6 +26,7 @@ CREATE CONTINUOUS VIEW cqanalyze15 AS SELECT s0.a::integer, s1.b::integer, s2.c:
 CREATE TABLE t0 (id INTEGER);
 CREATE CONTINUOUS VIEW cqanalyze16 AS SELECT s0.id::integer AS s0_id, t0.id AS t0_id FROM s0 JOIN t0 ON s0.id = t0.id;
 CREATE CONTINUOUS VIEW cqanalyze17 AS SELECT s.x::integer, t0.id FROM stream s JOIN t0 ON s.x = t0.id;
+DROP TABLE t0;
 
 -- Stream-stream JOINs
 CREATE CONTINUOUS VIEW cqanalyze18 AS SELECT s0.id::integer as id0, s1.id::integer as id1 FROM s0 JOIN s1 ON s0.id = s1.id;
@@ -36,6 +37,7 @@ CREATE table sts (id INTEGER);
 CREATE CONTINUOUS VIEW cqanalyze20 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM s0 JOIN sts ON s0.id = sts.id JOIN s1 ON sts.id = s1.x;
 CREATE CONTINUOUS VIEW cqanalyze21 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM stream s0 JOIN sts ON s0.id = sts.id JOIN s1 ON sts.id = s1.id::integer WHERE sts.id > 42;
 CREATE CONTINUOUS VIEW cqanalyze22 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM stream s0 INNER JOIN sts ON s0.id = sts.id RIGHT OUTER JOIN s1 ON sts.id = s1.id::integer WHERE sts.id > 42;
+DROP TABLE sts;
 
 -- Now let's verify our error handling and messages
 -- Stream column doesn't have a type
@@ -132,6 +134,11 @@ CREATE CONTINUOUS VIEW cqanalyze47 AS SELECT g::integer, rank(2, 3, 4) WITHIN GR
 -- Sliding windows
 CREATE CONTINUOUS VIEW cqanalyze48 AS SELECT cume_dist(2) WITHIN GROUP (ORDER BY x::integer DESC) FROM stream WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
 CREATE CONTINUOUS VIEW cqanalyze49 AS SELECT percent_rank(2) WITHIN GROUP (ORDER BY x::integer DESC), rank(2) WITHIN GROUP (ORDER BY x) FROM stream WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
+
+-- Verify that we get an error if we try to create a CV that only selects from tables
+CREATE TABLE cqanalyze_table (id integer);
+CREATE CONTINUOUS VIEW error_not_created AS SELECT cqanalyze_table.id::integer FROM cqanalyze_table;
+DROP TABLE cqanalyze_table;
 
 DROP CONTINUOUS VIEW cqanalyze0;
 DROP CONTINUOUS VIEW cqanalyze1;

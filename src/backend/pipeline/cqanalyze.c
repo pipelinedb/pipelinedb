@@ -111,6 +111,8 @@ InitializeCQAnalyzeContext(SelectStmt *stmt, ParseState *pstate, CQAnalyzeContex
 	FindColNames((Node *) stmt, context);
 
 	context->cols = NIL;
+	context->tables = NIL;
+	context->streams = NIL;
 }
 
 /*
@@ -1097,6 +1099,16 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 
 	/* now indicate which relations are actually streams */
 	add_streams((Node *) stmt->fromClause, &context);
+
+	if (context.tables != NIL && context.streams == NIL)
+	{
+		RangeVar *t = (RangeVar *) linitial(context.tables);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						errmsg("continuous queries must include a stream in the FROM clause"),
+						errhint("To include a table in a continuous query, JOIN it with a stream."),
+						parser_errposition(pstate, t->location)));
+	}
 
 	foreach(lc, context.cols)
 	{
