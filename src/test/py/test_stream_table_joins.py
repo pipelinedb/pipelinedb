@@ -24,23 +24,20 @@ def _generate_row(n):
 def _generate_rows(num_cols, max_rows):
     return [_generate_row(num_cols) for n in range(1, max_rows)]
 
-def test_simple_join(pipeline, clean_db):
-    """
-    Verify that nested-loop joins work as the outer 
-    node of a stream-table join
-    """
 
 def test_join_with_aggs(pipeline, clean_db):
     """
     Verify that joins involving aggregates referencing columns from
     multiple tables work
     """
-    return
     num_cols = 4
     join_cols = [1]
     q = """
-    SELECT sum(s.col0::integer) AS s0, sum(a0.col0::integer) AS s1, 
-    sum(a0.col0::integer) AS s2 FROM a1 JOIN a0 ON a1.col1 = a0.col1 
+    SELECT
+    sum(s.col0::integer) AS s0,
+    sum(a0.col0::integer) AS s1,
+    sum(a1.col0::integer) AS s2
+    FROM a1 JOIN a0 ON a1.col1 = a0.col1
     JOIN stream s ON s.col1::integer = a0.col1
     """
     a0_cols = dict([('col%d' % n, 'integer') for n in range(num_cols)])
@@ -63,15 +60,15 @@ def test_join_with_aggs(pipeline, clean_db):
     pipeline.deactivate()
     
     expected = _join(a1, _join(a0, s, join_cols), join_cols)
-    result = pipeline.execute('SELECT * FROM test_agg_join')
+    result = pipeline.execute('SELECT * FROM test_agg_join').first()
     
     # sum of col0 from stream
     s0_expected = sum([r[num_cols * 2] for r in expected])
     
-    # sum of col0 from t0
+    # sum of col0 from a0
     s1_expected = sum([r[num_cols * 1] for r in expected])
     
-    # sum of col0 from t1
+    # sum of col0 from a1
     s2_expected = sum([r[num_cols * 0] for r in expected])
     
     assert s0_expected == result['s0']
@@ -80,8 +77,16 @@ def test_join_with_aggs(pipeline, clean_db):
     
 def test_join_with_where(pipeline, clean_db):
     """
+    Verify that stream-table joins using a WHERE clause work properly
     """
     
+def test_join_ordering(pipeline, clean_db):
+    """
+    Verify that the correct plan is generated regardless of the ordering of
+    streams and tables.
+    """
+    # Create multiple orderings of same CQ and verify that all outputs are the same as expected
+
 def test_join_across_batches(pipeline, clean_db):
     """
     Verify that stream-table joins are properly built when they
