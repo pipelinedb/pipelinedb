@@ -156,12 +156,30 @@ SELECT * FROM test_stj5 ORDER BY id;
   5 | joined | 52.52
 (3 rows)
 
+CREATE TABLE test_stj_t3 (col0 integer, col1 integer, col2 integer, col3 integer);
+CREATE CONTINUOUS VIEW test_stj6 AS SELECT t.col2, sum(s.col0::integer + t.col3) FROM test_stj_stream s JOIN test_stj_t3 t ON s.col1::integer = t.col1 GROUP BY t.col2;
+ACTIVATE test_stj6;
+INSERT INTO test_stj_t3 (col0, col1, col2, col3) VALUES (0, 0, 0, 42);
+INSERT INTO test_stj_t3 (col0, col1, col2, col3) VALUES (0, 1, 1, 1000);
+INSERT INTO test_stj_stream (col0, col1, col2) VALUES (400, 1, 0);
+INSERT INTO test_stj_stream (col0, col1, col2) VALUES (0, 0, 0);
+INSERT INTO test_stj_stream (col0, col1, col2) VALUES (-1200, 1, 0);
+DEACTIVATE test_stj6;
+SELECT * FROM test_stj6 ORDER BY col2;
+ col2 | sum  
+------+------
+    0 |   42
+    1 | 1200
+(2 rows)
+
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;
 DROP CONTINUOUS VIEW test_stj3;
 DROP CONTINUOUS VIEW test_stj4;
 DROP CONTINUOUS VIEW test_stj5;
+DROP CONTINUOUS VIEW test_stj6;
 DROP TABLE test_stj_t0;
 DROP TABLE test_stj_t1;
 DROP TABLE test_stj_t2;
+DROP TABLE test_stj_t3;

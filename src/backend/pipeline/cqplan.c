@@ -16,6 +16,7 @@
 #include "funcapi.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
+#include "optimizer/paths.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
@@ -284,26 +285,14 @@ GetCombinerJoinRel(PlannerInfo *root, int levels_needed, List *initial_rels)
 {
 	RelOptInfo *rel;
 	Path *path;
-	ListCell *lc;
-	List *vars = pull_vars_of_level((Node *) root->parse, 0);
 
-	/* discard any existing input rels, we're only going to need a single TuplestoreScan */
-	pfree(root->simple_rel_array);
-	pfree(root->simple_rte_array);
-	setup_simple_rel_arrays(root);
+	rel = standard_join_search(root, levels_needed, initial_rels);
+	rel->pathlist = NIL;
 
-	rel = build_simple_rel(root, 1, RELOPT_BASEREL);
 	path =  create_tuplestore_scan_path(rel);
 
 	add_path(rel, path);
 	set_cheapest(rel);
-
-	/* all Vars should now point to the TuplestoreScan */
-	foreach(lc, vars)
-	{
-		Var *v =  (Var *) lfirst(lc);
-		v->varno = 1;
-	}
 
 	return rel;
 }
