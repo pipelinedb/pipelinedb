@@ -135,6 +135,19 @@ class PipelineDB(object):
             result = self.activate(name)
         return result
 
+    def create_table(self, name, **cols):
+        """
+        Create a table
+        """
+        cols = ', '.join(['%s %s' % (k, v) for k, v in cols.iteritems()])
+        self.execute('CREATE TABLE %s (%s)' % (name, cols))
+
+    def drop_table(self, name):
+        """
+        Drop a table
+        """
+        self.execute('DROP TABLE %s' % name)
+
     def drop_cv(self, name):
         """
         Drop a continuous view

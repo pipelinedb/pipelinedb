@@ -66,7 +66,18 @@ has_inner_batch(StreamTableJoinState *node)
 
 	node->needouter = true;
 
-	return true;
+	return !node->needinner;
+}
+
+static void
+set_modified_estate(PlanState *root, EState *estate)
+{
+	if (root == NULL)
+		return;
+
+	root->state = estate;
+	set_modified_estate(root->lefttree, estate);
+	set_modified_estate(root->righttree, estate);
 }
 
 StreamTableJoinState *
@@ -146,9 +157,14 @@ ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 	state->streambatch = tuplestore_begin_heap(false, true, 1 * 1024 * estate->cq_batch_size);
 	state->rescannodes = get_rescan_nodes((PlanState *) state);
 
-	// we need to make it work without changing batch size
-	// but join has to happen only in a SINGLE ExecutePlan call, that's the key
-	outerPlanState(state)->state->cq_batch_size = 0;
+	PlanState *outer = outerPlanState(state);
+	EState *modified = (EState *) palloc(sizeof(EState));
+
+	// do this in the planner/setrefs
+	memcpy(modified, outer->state, sizeof(EState));
+	modified->cq_batch_size = 0;
+
+	set_modified_estate(outer, modified);
 
 	return state;
 }
