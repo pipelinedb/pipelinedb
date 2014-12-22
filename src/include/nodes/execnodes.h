@@ -1699,7 +1699,6 @@ typedef struct StreamTableJoinState
 	bool needinner;
 	TupleTableSlot *nullslot;
 	Tuplestorestate *streambatch;
-	List *rescannodes;
 } StreamTableJoinState;
 
 

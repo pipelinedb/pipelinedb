@@ -43,6 +43,27 @@ stream_batch_next(StreamTableJoinState *node)
 	return slot;
 }
 
+/*
+ * unpin_stream_events
+ *
+ * We don't unpin events until they're actually done being joined
+ * against the outer node. This prevents races and guarantees that
+ * our events are always valid.
+ */
+static void
+unpin_stream_events(StreamTableJoinState *node)
+{
+	StreamScanState *scan = (StreamScanState *) innerPlanState(node);
+	ListCell *lc;
+	foreach(lc, scan->pinned)
+	{
+		StreamBufferSlot *sbs = (StreamBufferSlot *) lfirst(lc);
+		UnpinStreamEvent(scan->reader, sbs);
+	}
+	list_free(scan->pinned);
+	scan->pinned = NIL;
+}
+
 static bool
 has_inner_batch(StreamTableJoinState *node)
 {
@@ -52,6 +73,7 @@ has_inner_batch(StreamTableJoinState *node)
 	if (!node->needinner)
 		return true;
 
+	unpin_stream_events(node);
 	for (;;)
 	{
 		slot = ExecProcNode(inner);
@@ -86,35 +108,6 @@ disable_batching(PlanState *root)
 
 	disable_batching(root->lefttree);
 	disable_batching(root->righttree);
-}
-
-/*
- * unpin_stream_events
- *
- * We don't unpin events until they're actually done being joined
- * against the outer node. This prevents races and guarantees that
- * our events are always valid.
- */
-static void
-unpin_stream_events(StreamTableJoinState *node)
-{
-	StreamScanState *scan = (StreamScanState *) innerPlanState(node);
-	ListCell *lc;
-	foreach(lc, scan->pinned)
-	{
-		StreamBufferSlot *sbs = (StreamBufferSlot *) lfirst(lc);
-		UnpinStreamEvent(scan->reader, sbs);
-	}
-	list_free(scan->pinned);
-	scan->pinned = NIL;
-}
-
-static void
-inner_done(StreamTableJoinState *node)
-{
-	tuplestore_clear(node->streambatch);
-	unpin_stream_events(node);
-	node->needinner = true;
 }
 
 StreamTableJoinState *
@@ -193,7 +186,6 @@ ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 
 	/* 1kB per event seems like a reasonable amount of memory to reserve for a batch */
 	state->streambatch = tuplestore_begin_heap(false, true, 1 * 1024 * estate->cq_batch_size);
-	state->rescannodes = get_rescan_nodes((PlanState *) state);
 
 	sscan = (StreamScanState *) innerPlanState(state);
 	sscan->unpin = false;
@@ -264,7 +256,9 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 
 			if (TupIsNull(outerTupleSlot))
 			{
-				inner_done(node);
+				tuplestore_clear(node->streambatch);
+				node->needinner = true;
+
 				return NULL;
 			}
 

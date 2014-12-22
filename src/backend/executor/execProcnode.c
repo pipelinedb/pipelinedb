@@ -388,6 +388,7 @@ ExecBeginBatch(PlanState *node)
 TupleTableSlot *
 ExecEndBatch(PlanState *node)
 {
+
 	switch (nodeTag(node))
 	{
 		case T_AggState:
@@ -586,10 +587,13 @@ ExecProcNode(PlanState *node)
 	if (node->instrument)
 		InstrStopNode(node->instrument, TupIsNull(result) ? 0.0 : 1.0);
 
-	if (!TupIsNull(result))
-		node->cq_batch_progress++;
-	else if (IsContinuous(node))
-		result = ExecEndBatch(node);
+	if (IsContinuous(node))
+	{
+		if (!TupIsNull(result))
+			node->cq_batch_progress++;
+		else
+			result = ExecEndBatch(node);
+	}
 
 	return result;
 }
