@@ -110,9 +110,15 @@ NumCQVacuumTuples(Oid relid)
 	queryDesc = PortalGetQueryDesc(portal);
 	slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
 	tuplestore_gettupleslot(store, false, false, slot);
-	slot_getallattrs(slot);
-	datum = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
-	count = DatumGetInt64(datum);
+
+	if (TupIsNull(slot))
+		count = 0;
+	else
+	{
+		slot_getallattrs(slot);
+		datum = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
+		count = DatumGetInt64(datum);
+	}
 
 	(*receiver->rDestroy) (receiver);
 	tuplestore_end(store);
