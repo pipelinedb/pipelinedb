@@ -154,14 +154,19 @@ class PipelineDB(object):
         """
         return self.execute('DROP CONTINUOUS VIEW %s' % name)
 
-    def activate(self, name=None):
+    def activate(self, name=None, **kw):
         """
         Activate a continuous view, or all of them if no name is given
         """
+        args = ''
+        if kw:
+            args = ','.join('%s = %s' % (k, (str(v))) for k, v in kw.iteritems())
+            args = ' WITH (%s)' % args
+            
         if name:
-            return self.execute('ACTIVATE %s' % name)
+            return self.execute('ACTIVATE %s %s' % (name, args))
         else:
-            return self.execute('ACTIVATE')
+            return self.execute('ACTIVATE %s' % args)
 
     def deactivate(self, name=None):
         """
