@@ -79,13 +79,90 @@ def test_join_with_where(pipeline, clean_db):
     """
     Verify that stream-table joins using a WHERE clause work properly
     """
-    
+    num_cols = 4
+    q = """
+    SELECT s.col0::integer FROM stream s, wt WHERE s.col0 = 1 AND wt.col0 = 1
+    """
+    wt_cols = dict([('col%d' % n, 'integer') for n in range(num_cols)])
+
+    pipeline.create_table('wt', **wt_cols)
+    pipeline.create_table('wt_s', **wt_cols)
+    pipeline.create_cv('test_join_where', q)
+
+    wt = _generate_rows(num_cols, 64)
+    s = _generate_rows(num_cols, 64)
+
+    pipeline.activate()
+
+    _insert(pipeline, 'wt', wt)
+    _insert(pipeline, 'wt_s', s)
+    _insert(pipeline, 'stream', s)
+
+    pipeline.deactivate()
+
+    expected = pipeline.execute('SELECT COUNT(*) FROM wt_s s, wt WHERE s.col0 = 1 AND wt.col0 = 1').first()
+    result = pipeline.execute('SELECT COUNT(*) FROM test_join_where').first()
+
+    assert result['count'] == expected['count']
+
 def test_join_ordering(pipeline, clean_db):
     """
     Verify that the correct plan is generated regardless of the ordering of
     streams and tables.
     """
-    # Create multiple orderings of same CQ and verify that all outputs are the same as expected
+    num_cols = 8
+    join_cols = [0]
+    ordering0_cols = dict([('col%d' % n, 'integer') for n in range(num_cols)])
+    ordering1_cols = dict([('col%d' % n, 'integer') for n in range(num_cols)])
+
+    pipeline.create_table('ordering0', **ordering0_cols)
+    pipeline.create_table('ordering1', **ordering1_cols)
+
+    # stream, table, table
+    q0 = """
+    SELECT s.col0::integer, ordering0.col3, ordering1.col4 FROM
+    stream s JOIN ordering0 ON s.col0 = ordering0.col0
+    JOIN ordering1 ON ordering0.col0 = ordering1.col0
+    """
+    pipeline.create_cv('test_ordering0', q0)
+
+    # table, stream, table
+    q1 = """
+    SELECT s.col0::integer, ordering0.col3, ordering1.col4 FROM
+    ordering0 JOIN stream s ON s.col0 = ordering0.col0
+    JOIN ordering1 ON ordering0.col0 = ordering1.col0
+    """
+    pipeline.create_cv('test_ordering1', q1)
+
+    # table, table, stream
+    q2 = """
+    SELECT s.col0::integer, ordering0.col3, ordering1.col4 FROM
+    ordering0 JOIN ordering1 ON ordering0.col0 = ordering1.col0
+    JOIN stream s ON s.col0 = ordering0.col0
+    """
+    pipeline.create_cv('test_ordering2', q2)
+
+    ordering0 = _generate_rows(num_cols, 64)
+    ordering1 = _generate_rows(num_cols, 64)
+    s = _generate_rows(num_cols, 64)
+
+    pipeline.activate()
+
+    _insert(pipeline, 'ordering0', ordering0)
+    _insert(pipeline, 'ordering1', ordering1)
+    _insert(pipeline, 'stream', s)
+
+    pipeline.deactivate()
+
+    expected = _join(ordering0, _join(ordering1, s, join_cols), join_cols)
+
+    result0 = pipeline.execute('SELECT COUNT(*) FROM test_ordering0').first()
+    result1 = pipeline.execute('SELECT COUNT(*) FROM test_ordering1').first()
+    result2 = pipeline.execute('SELECT COUNT(*) FROM test_ordering2').first()
+
+    assert result0['count'] == len(expected)
+    assert result1['count'] == len(expected)
+    assert result2['count'] == len(expected)
 
 def test_join_across_batches(pipeline, clean_db):
     """
