@@ -78,7 +78,14 @@ StreamScanNext(StreamScanState *node)
 	tup = ExecStreamProject(sbs->event, node);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 
-	UnpinStreamEvent(node->reader, sbs);
+	/*
+	 * We don't necessarily know when parent nodes will be done with this
+	 * event, so only unpin it if we're configured to do so.
+	 */
+	if (node->unpin)
+		UnpinStreamEvent(node->reader, sbs);
+	else
+		node->pinned = lappend(node->pinned, sbs);
 
 	return slot;
 }
@@ -224,6 +231,8 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 
 	state->pi->econtext = CreateStandaloneExprContext();
 	state->pi->resultdesc = node->desc;
+	state->unpin = true;
+	state->pinned = NIL;
 
 	/*
 	 * Miscellaneous initialization

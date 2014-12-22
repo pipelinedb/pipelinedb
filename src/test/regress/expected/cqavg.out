@@ -99,11 +99,11 @@ DEACTIVATE test_numeric_avg;
 ACTIVATE test_numeric_avg;
 INSERT INTO numeric_stream_cqavg (k, v) VALUES ('x', 1), ('y', 2), ('z', 42.42);
 DEACTIVATE test_numeric_avg;
-SELECT * FROM test_numeric_avg;
+SELECT * FROM test_numeric_avg ORDER BY k;
  k |               avg                
 ---+----------------------------------
- y | -249999999999999999.224975002500
  x |    2500000000000000.058249999919
+ y | -249999999999999999.224975002500
  z |              42.4200000000000000
 (3 rows)
 

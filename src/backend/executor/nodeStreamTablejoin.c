@@ -12,6 +12,7 @@
 
 #include "executor/execdebug.h"
 #include "executor/nodeStreamTablejoin.h"
+#include "nodes/execnodes.h"
 #include "utils/memutils.h"
 
 
@@ -69,21 +70,58 @@ has_inner_batch(StreamTableJoinState *node)
 	return !node->needinner;
 }
 
+/*
+ * disable_batching
+ *
+ * We disable batching semantics on the outer node of stream-table joins
+ * because it doesn't make sense for tables.
+ */
 static void
-set_modified_estate(PlanState *root, EState *estate)
+disable_batching(PlanState *root)
 {
 	if (root == NULL)
 		return;
 
-	root->state = estate;
-	set_modified_estate(root->lefttree, estate);
-	set_modified_estate(root->righttree, estate);
+	DisableBatching(root);
+
+	disable_batching(root->lefttree);
+	disable_batching(root->righttree);
+}
+
+/*
+ * unpin_stream_events
+ *
+ * We don't unpin events until they're actually done being joined
+ * against the outer node. This prevents races and guarantees that
+ * our events are always valid.
+ */
+static void
+unpin_stream_events(StreamTableJoinState *node)
+{
+	StreamScanState *scan = (StreamScanState *) innerPlanState(node);
+	ListCell *lc;
+	foreach(lc, scan->pinned)
+	{
+		StreamBufferSlot *sbs = (StreamBufferSlot *) lfirst(lc);
+		UnpinStreamEvent(scan->reader, sbs);
+	}
+	list_free(scan->pinned);
+	scan->pinned = NIL;
+}
+
+static void
+inner_done(StreamTableJoinState *node)
+{
+	tuplestore_clear(node->streambatch);
+	unpin_stream_events(node);
+	node->needinner = true;
 }
 
 StreamTableJoinState *
 ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 {
 	StreamTableJoinState *state;
+	StreamScanState *sscan;
 
 	state = makeNode(StreamTableJoinState);
 	state->js.ps.plan = (Plan *) node;
@@ -157,14 +195,11 @@ ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 	state->streambatch = tuplestore_begin_heap(false, true, 1 * 1024 * estate->cq_batch_size);
 	state->rescannodes = get_rescan_nodes((PlanState *) state);
 
-	PlanState *outer = outerPlanState(state);
-	EState *modified = (EState *) palloc(sizeof(EState));
+	sscan = (StreamScanState *) innerPlanState(state);
+	sscan->unpin = false;
 
-	// do this in the planner/setrefs
-	memcpy(modified, outer->state, sizeof(EState));
-	modified->cq_batch_size = 0;
-
-	set_modified_estate(outer, modified);
+	/* the table side of the join shouldn't use batching semantics */
+	disable_batching(outerPlanState(state));
 
 	return state;
 }
@@ -229,9 +264,7 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 
 			if (TupIsNull(outerTupleSlot))
 			{
-				tuplestore_clear(node->streambatch);
-				node->needinner = true;
-
+				inner_done(node);
 				return NULL;
 			}
 

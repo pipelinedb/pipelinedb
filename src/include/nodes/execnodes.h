@@ -1057,8 +1057,14 @@ typedef struct PlanState
 /*
  * CQ helper macros
  */
-#define BatchSize(node)				(((PlanState *)(node))->state->cq_batch_size)
-#define IsContinuous(node)			(((PlanState *)(node))->state && BatchSize(node) > 0)
+
+#define DisableBatching(node) ((node)->cq_batch_progress = -1)
+
+#define BatchSize(node) (((PlanState *)(node))->cq_batch_progress >= 0 && \
+		((PlanState *)(node))->state->cq_batch_size)
+
+#define IsContinuous(node) (((PlanState *)(node))->cq_batch_progress >= 0 && \
+		((PlanState *)(node))->state && BatchSize(node) > 0)
 
 /* ----------------
  *	these are defined to avoid confusion problems with "left"
@@ -1861,6 +1867,8 @@ typedef struct StreamScanState
 	StreamBufferReader *reader;
 	TupleDesc desc;
 	StreamProjectionInfo *pi;
+	bool unpin;
+	List *pinned;
 } StreamScanState;
 
 /* ----------------

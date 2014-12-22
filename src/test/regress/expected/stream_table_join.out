@@ -148,6 +148,14 @@ INSERT INTO test_stj_stream (id, val) VALUES (4, 2000.201);
 INSERT INTO test_stj_t2 (id, str, val) VALUES (5, 'joined', 52.0);
 INSERT INTO test_stj_stream (id, val) VALUES (5, 0.52);
 DEACTIVATE test_stj5;
+SELECT * FROM test_stj5 ORDER BY id;
+ id |  str   |  sum  
+----+--------+-------
+  0 | str0   |     0
+  1 | str1   |     0
+  5 | joined | 52.52
+(3 rows)
+
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;

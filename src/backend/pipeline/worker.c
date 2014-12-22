@@ -93,46 +93,6 @@ unset_snapshot(EState *estate, ResourceOwner owner)
 }
 
 /*
- * Allow nodes to block the deactivation process while they're still working,
- * up to a reasonable timeout.
- */
-static bool
-is_busy(PlanState *node)
-{
-	bool busy = false;
-
-	if (node == NULL)
-		return false;
-
-	switch (nodeTag(node))
-	{
-		case T_StreamTableJoinState:
-			/*
-			 * Stream-table joins repeatedly use a batch of stream events, which
-			 * are already marked as read by whatever StreamScan returned them.
-			 * However, they're not technically done being used until the outer
-			 * node of the stream-table join has been completely joined against
-			 * them, so mark the node as busy until that's the case.
-			 *
-			 * TODO(derekjn) A more elegant approach to this problem would be
-			 * to support attaching an optional callback to StreamScan nodes
-			 * that is responsible for marking a stream event as read by its
-			 * parent node. This seems sufficient for now, as it's only really
-			 * an issue for testing.
-			 */
-			busy = !(((StreamTableJoinState *) node)->needinner);
-			break;
-
-		default:
-			break;
-	}
-
-	busy = busy || is_busy(node->lefttree) || is_busy(node->righttree);
-
-	return busy;
-}
-
-/*
  * ContinuousQueryWorkerStartup
  *
  * Launches a CQ worker, which continuously generates partial query results to send
@@ -155,7 +115,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	TimestampTz last_process_time = GetCurrentTimestamp();
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
 	bool savereadonly = XactReadOnly;
-	TimestampTz deactivate_start_time = 0;
 
 	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 										ALLOCSET_DEFAULT_MINSIZE,
@@ -246,27 +205,8 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		/* Check the shared metadata to see if the CV has been deactivated */
 		if (!*activeFlagPtr)
 		{
-			bool canblock;
-			int32 i;
-			ssize_t res;
-
-			/*
-			 * Give the plan a small amount of time to finish anything
-			 * it's currently working on. This is mostly useful for eliminating
-			 * races during tests in which CQs are activated and deactivated
-			 * in a short period of time.
-			 */
-			if (!deactivate_start_time)
-				deactivate_start_time = GetCurrentTimestamp();
-
-			canblock = !TimestampDifferenceExceeds(deactivate_start_time,
-					GetCurrentTimestamp(), NODE_BUSY_TIMEOUT * 1000);
-
-			if (canblock && is_busy(queryDesc->planstate))
-				continue;
-
-			i = -1;
-			res = write(combiner->sock, &i, sizeof(int32));
+			int32 i = -1;
+			ssize_t res = write(combiner->sock, &i, sizeof(int32));
 			if (res < 0)
 				elog(ERROR, "failed to send about-to-die message to the combiner");
 			SetCQWorkerDoneFlag(cq_id);

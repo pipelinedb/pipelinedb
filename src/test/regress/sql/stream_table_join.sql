@@ -94,6 +94,8 @@ INSERT INTO test_stj_stream (id, val) VALUES (5, 0.52);
 
 DEACTIVATE test_stj5;
 
+SELECT * FROM test_stj5 ORDER BY id;
+
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;

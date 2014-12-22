@@ -70,7 +70,7 @@ INSERT INTO numeric_stream_cqavg (k, v) VALUES ('x', 1), ('y', 2), ('z', 42.42);
 
 DEACTIVATE test_numeric_avg;
 
-SELECT * FROM test_numeric_avg;
+SELECT * FROM test_numeric_avg ORDER BY k;
 
 -------------------------------------------------------------------------------
 -- Interval averages
