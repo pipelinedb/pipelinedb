@@ -45,7 +45,7 @@ SELECT * FROM test_float4_avg_mrel0 ORDER BY k;
 
 ACTIVATE test_float8_avg, test_float4_avg;
 
-INSERT INTO float_stream_cqavg (k, v) VALUES ('x', -1e6), ('x', 1e6), ('x', -10.0000001);
+INSERT INTO float_stream_cqavg (k, v) VALUES ('x', -1e5), ('x', 1e6), ('x', -10.0000001);
 INSERT INTO float_stream_cqavg (k, v) VALUES ('z', 42.42);
 
 DEACTIVATE test_float8_avg, test_float4_avg;
