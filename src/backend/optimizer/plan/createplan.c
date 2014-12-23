@@ -43,7 +43,7 @@
 
 
 static Plan *create_plan_recurse(PlannerInfo *root, Path *best_path);
-static Plan *create_tupstorescan_plan(PlannerInfo *root, Path *best_path);
+static Plan *create_tuplestorescan_plan(PlannerInfo *root, Path *best_path);
 
 static Plan *create_scan_plan(PlannerInfo *root, Path *best_path);
 static List *build_path_tlist(PlannerInfo *root, Path *path);
@@ -86,6 +86,8 @@ static NestLoop *create_nestloop_plan(PlannerInfo *root, NestPath *best_path,
 static MergeJoin *create_mergejoin_plan(PlannerInfo *root, MergePath *best_path,
 					  Plan *outer_plan, Plan *inner_plan);
 static HashJoin *create_hashjoin_plan(PlannerInfo *root, HashPath *best_path,
+					 Plan *outer_plan, Plan *inner_plan);
+static StreamTableJoin *create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
 					 Plan *outer_plan, Plan *inner_plan);
 static Node *replace_nestloop_params(PlannerInfo *root, Node *expr);
 static Node *replace_nestloop_params_mutator(Node *node, PlannerInfo *root);
@@ -238,14 +240,14 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 		case T_CteScan:
 		case T_WorkTableScan:
 		case T_ForeignScan:
-			if (root->parse->is_combine)
-				plan = create_tupstorescan_plan(root, best_path);
-			else
-				plan = create_scan_plan(root, best_path);
+		case T_StreamScan:
+		case T_TuplestoreScan:
+			plan = create_scan_plan(root, best_path);
 			break;
 		case T_HashJoin:
 		case T_MergeJoin:
 		case T_NestLoop:
+		case T_StreamTableJoin:
 			plan = create_join_plan(root,
 									(JoinPath *) best_path);
 			break;
@@ -280,11 +282,11 @@ create_plan_recurse(PlannerInfo *root, Path *best_path)
 }
 
 /*
- *  create_tupstorescan_plan
- *  	Create a plan that simply scans a tuplestore
+ *  create_tuplestorescan_plan
+ *  	Create a plan that simply scans a Tuplestore
  */
 static Plan *
-create_tupstorescan_plan(PlannerInfo *root, Path *best_path)
+create_tuplestorescan_plan(PlannerInfo *root, Path *best_path)
 {
 	TuplestoreScan *scan = makeNode(TuplestoreScan);
 	RelOptInfo *rel = best_path->parent;
@@ -363,11 +365,6 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 		scan_clauses = list_concat(list_copy(scan_clauses),
 								   best_path->param_info->ppi_clauses);
 
-	if (root->parse->is_continuous)
-	{
-		best_path->pathtype = T_StreamScan;
-	}
-
 	switch (best_path->pathtype)
 	{
 		case T_SeqScan:
@@ -383,6 +380,10 @@ create_scan_plan(PlannerInfo *root, Path *best_path)
 												tlist,
 												scan_clauses,
 												rel);
+			break;
+
+		case T_TuplestoreScan:
+			plan = (Plan *) create_tuplestorescan_plan(root, best_path);
 			break;
 
 		case T_IndexScan:
@@ -682,6 +683,12 @@ create_join_plan(PlannerInfo *root, JoinPath *best_path)
 												 (NestPath *) best_path,
 												 outer_plan,
 												 inner_plan);
+			break;
+		case T_StreamTableJoin:
+			plan = (Plan *) create_stream_table_join_plan(root,
+												(StreamTableJoinPath *) best_path,
+												outer_plan,
+												inner_plan);
 			break;
 		default:
 			elog(ERROR, "unrecognized node type: %d",
@@ -2608,6 +2615,92 @@ create_hashjoin_plan(PlannerInfo *root,
 	return join_plan;
 }
 
+static StreamTableJoin *
+create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
+					 Plan *outer_plan, Plan *inner_plan)
+{
+
+	StreamTableJoin *node = makeNode(StreamTableJoin);
+	Plan *plan = &node->join.plan;
+
+	List *joinrestrictclauses = best_path->joinrestrictinfo;
+	List *joinclauses;
+	List *otherclauses;
+	Relids outerrelids;
+	List *params;
+	ListCell *lc;
+	ListCell *prev;
+	ListCell *next;
+
+	joinrestrictclauses = order_qual_clauses(root, joinrestrictclauses);
+
+	/* Get the join qual clauses (in plain expression form) */
+	/* Any pseudoconstant clauses are ignored here */
+	if (IS_OUTER_JOIN(best_path->jointype))
+	{
+		extract_actual_join_clauses(joinrestrictclauses,
+									&joinclauses, &otherclauses);
+	}
+	else
+	{
+		/* We can treat all clauses alike for an inner join */
+		joinclauses = extract_actual_clauses(joinrestrictclauses, false);
+		otherclauses = NIL;
+	}
+
+	/* Replace any outer-relation variables with nestloop params */
+	if (best_path->path.param_info)
+	{
+		joinclauses = (List *)
+			replace_nestloop_params(root, (Node *) joinclauses);
+		otherclauses = (List *)
+			replace_nestloop_params(root, (Node *) otherclauses);
+	}
+
+	/*
+	 * Identify any parameters that should be supplied by this join
+	 * node, and move them from root->curOuterParams to the nestParams list.
+	 */
+	outerrelids = best_path->outerjoinpath->parent->relids;
+	params = NIL;
+	for (lc = list_head(root->curOuterParams); lc; lc = next)
+	{
+		NestLoopParam *nlp = (NestLoopParam *) lfirst(lc);
+
+		next = lnext(lc);
+		if (IsA(nlp->paramval, Var) &&
+			bms_is_member(nlp->paramval->varno, outerrelids))
+		{
+			root->curOuterParams = list_delete_cell(root->curOuterParams, lc, prev);
+			params = lappend(params, nlp);
+		}
+		else if (IsA(nlp->paramval, PlaceHolderVar) &&
+				 bms_overlap(((PlaceHolderVar *) nlp->paramval)->phrels,
+							 outerrelids) &&
+				 bms_is_subset(find_placeholder_info(root,
+											(PlaceHolderVar *) nlp->paramval,
+													 false)->ph_eval_at,
+							   outerrelids))
+		{
+			root->curOuterParams = list_delete_cell(root->curOuterParams, lc, prev);
+			params = lappend(params, nlp);
+		}
+		else
+		{
+			prev = lc;
+		}
+	}
+
+	plan->targetlist = build_path_tlist(root, &best_path->path);
+	plan->qual = otherclauses;
+	plan->lefttree = inner_plan;
+	plan->righttree = outer_plan;
+	node->join.jointype = best_path->jointype;
+	node->join.joinqual = joinclauses;
+	node->nestParams = params;
+
+	return node;
+}
 
 /*****************************************************************************
  *

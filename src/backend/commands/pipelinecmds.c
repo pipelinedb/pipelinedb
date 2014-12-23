@@ -149,7 +149,12 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *
 
 	indexcol = makeNode(IndexElem);
 
-	indexcol->name = NameListToString(col->fields);
+	char *namespace;
+	char *name;
+
+	DeconstructQualifiedName(col->fields, &namespace, &name);
+
+	indexcol->name = name;
 	indexcol->expr = NULL;
 	indexcol->indexcolname = NULL;
 	indexcol->collation = NULL;

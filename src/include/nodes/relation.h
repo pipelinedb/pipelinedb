@@ -993,6 +993,8 @@ typedef struct JoinPath
 
 typedef JoinPath NestPath;
 
+typedef JoinPath StreamTableJoinPath;
+
 /*
  * A mergejoin path has these fields.
  *

@@ -41,6 +41,8 @@
 #include "executor/nodeSeqscan.h"
 #include "executor/nodeSetOp.h"
 #include "executor/nodeSort.h"
+#include "executor/nodeStreamscan.h"
+#include "executor/nodeStreamTablejoin.h"
 #include "executor/nodeSubplan.h"
 #include "executor/nodeSubqueryscan.h"
 #include "executor/nodeTidscan.h"
@@ -153,6 +155,10 @@ ExecReScan(PlanState *node)
 			ExecReScanSeqScan((SeqScanState *) node);
 			break;
 
+		case T_StreamScanState:
+			ExecReScanStreamScan((StreamScanState *) node);
+			break;
+
 		case T_IndexScanState:
 			ExecReScanIndexScan((IndexScanState *) node);
 			break;
@@ -203,6 +209,10 @@ ExecReScan(PlanState *node)
 
 		case T_MergeJoinState:
 			ExecReScanMergeJoin((MergeJoinState *) node);
+			break;
+
+		case T_StreamTableJoinState:
+			ExecReScanStreamTableJoin((StreamTableJoinState *) node);
 			break;
 
 		case T_HashJoinState:

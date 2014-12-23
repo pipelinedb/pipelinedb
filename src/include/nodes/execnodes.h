@@ -399,7 +399,6 @@ typedef struct EState
 
 	/* Other working state: */
 	MemoryContext es_query_cxt; /* per-query context in which EState lives */
-	MemoryContext es_exec_node_cxt; /* context that is reset on each call to ExecProcNode */
 
 	List	   *es_tupleTable;	/* List of TupleTableSlots */
 
@@ -1058,8 +1057,14 @@ typedef struct PlanState
 /*
  * CQ helper macros
  */
-#define BatchSize(node)				(((PlanState *)(node))->state->cq_batch_size)
-#define IsContinuous(node)			(((PlanState *)(node))->state && BatchSize(node) > 0)
+
+#define DisableBatching(node) ((node)->cq_batch_progress = -1)
+
+#define BatchSize(node) (((PlanState *)(node))->cq_batch_progress >= 0 && \
+		((PlanState *)(node))->state->cq_batch_size)
+
+#define IsContinuous(node) (((PlanState *)(node))->cq_batch_progress >= 0 && \
+		((PlanState *)(node))->state && BatchSize(node) > 0)
 
 /* ----------------
  *	these are defined to avoid confusion problems with "left"
@@ -1686,6 +1691,16 @@ typedef struct HashJoinState
 	bool		hj_OuterNotEmpty;
 } HashJoinState;
 
+typedef struct StreamTableJoinState
+{
+	JoinState	js;
+	bool stj_NeedNewOuter;
+	bool stj_MatchedOuter;
+	bool stj_NeedNewInner;
+	TupleTableSlot *stj_NullInnerTupleSlot;
+	Tuplestorestate *stj_StreamBatch;
+} StreamTableJoinState;
+
 
 /* ----------------------------------------------------------------
  *				 Materialization State Information
@@ -1851,6 +1866,8 @@ typedef struct StreamScanState
 	StreamBufferReader *reader;
 	TupleDesc desc;
 	StreamProjectionInfo *pi;
+	bool unpin;
+	List *pinned;
 } StreamScanState;
 
 /* ----------------
