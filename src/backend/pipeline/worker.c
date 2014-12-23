@@ -219,12 +219,15 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	DecrementProcessGroupCount(cq_id);
 
 	/*
-	 * The cleanup functions below expected this thing to be registered */
+	 * The cleanup functions below expect these things to be registered */
 	RegisterSnapshotOnOwner(estate->es_snapshot, cqowner);
+	RegisterSnapshotOnOwner(queryDesc->snapshot, cqowner);
+	RegisterSnapshotOnOwner(queryDesc->crosscheck_snapshot, cqowner);
 
 	/* cleanup */
 	ExecutorFinish(queryDesc);
 	ExecutorEnd(queryDesc);
+	FreeQueryDesc(queryDesc);
 
 	MemoryContextDelete(runcontext);
 
@@ -232,4 +235,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	if (queryDesc->totaltime)
 		InstrStopNode(queryDesc->totaltime, estate->es_processed);
+
+	CurrentResourceOwner = owner;
 }

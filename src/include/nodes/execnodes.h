@@ -1694,11 +1694,11 @@ typedef struct HashJoinState
 typedef struct StreamTableJoinState
 {
 	JoinState	js;
-	bool needouter;
-	bool matchedouter;
-	bool needinner;
-	TupleTableSlot *nullslot;
-	Tuplestorestate *streambatch;
+	bool stj_NeedNewOuter;
+	bool stj_MatchedOuter;
+	bool stj_NeedNewInner;
+	TupleTableSlot *stj_NullInnerTupleSlot;
+	Tuplestorestate *stj_StreamBatch;
 } StreamTableJoinState;
 
 
