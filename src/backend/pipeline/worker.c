@@ -33,9 +33,64 @@
 #include "pgstat.h"
 #include "utils/timestamp.h"
 
+#define NODE_BUSY_TIMEOUT 10 /* ms */
+
 extern StreamBuffer *GlobalStreamBuffer;
 extern int EmptyStreamBufferWaitTime;
 
+
+/*
+ * We keep some resources across transactions, so we attach everything to a
+ * long-lived ResourceOwner, which prevents the below commit from thinking that
+ * there are reference leaks
+ */
+static void
+start_executor(QueryDesc *queryDesc, MemoryContext context, ResourceOwner owner)
+{
+	MemoryContext old;
+	ResourceOwner save;
+
+	StartTransactionCommand();
+
+	old = MemoryContextSwitchTo(context);
+
+	save = CurrentResourceOwner;
+	CurrentResourceOwner = owner;
+
+	queryDesc->snapshot = GetTransactionSnapshot();
+	queryDesc->snapshot->copied = true;
+
+	RegisterSnapshotOnOwner(queryDesc->snapshot, owner);
+
+	ExecutorStart(queryDesc, 0);
+
+	queryDesc->snapshot->active_count++;
+	UnregisterSnapshotFromOwner(queryDesc->snapshot, owner);
+	UnregisterSnapshotFromOwner(queryDesc->estate->es_snapshot, owner);
+
+	CurrentResourceOwner = TopTransactionResourceOwner;
+
+	MemoryContextSwitchTo(old);
+
+	CommitTransactionCommand();
+
+	CurrentResourceOwner = save;
+}
+
+static void
+set_snapshot(EState *estate, ResourceOwner owner)
+{
+	estate->es_snapshot = GetTransactionSnapshot();
+	estate->es_snapshot->active_count++;
+	estate->es_snapshot->copied = true;
+	RegisterSnapshotOnOwner(estate->es_snapshot, owner);
+}
+
+static void
+unset_snapshot(EState *estate, ResourceOwner owner)
+{
+	UnregisterSnapshotFromOwner(estate->es_snapshot, owner);
+}
 
 /*
  * ContinuousQueryWorkerStartup
@@ -50,42 +105,31 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	DestReceiver *dest;
 	CmdType		operation;
 	MemoryContext oldcontext;
-	ResourceOwner save = CurrentResourceOwner;
 	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	char *cvname = rv->relname;
-	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
 	MemoryContext runcontext;
-	MemoryContext execcontext;
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
 	TimestampTz curtime = GetCurrentTimestamp();
 	TimestampTz last_process_time = GetCurrentTimestamp();
+	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
+	bool savereadonly = XactReadOnly;
 
 	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 										ALLOCSET_DEFAULT_MINSIZE,
 										ALLOCSET_DEFAULT_INITSIZE,
 										ALLOCSET_DEFAULT_MAXSIZE);
 
-	execcontext = AllocSetContextCreate(runcontext, "ExecProcNodeContext",
-										ALLOCSET_DEFAULT_MINSIZE,
-										ALLOCSET_DEFAULT_INITSIZE,
-										ALLOCSET_DEFAULT_MAXSIZE);
+	start_executor(queryDesc, runcontext, cqowner);
 
-	CurrentResourceOwner = owner;
+	/* workers only need read-only transactions */
+	XactReadOnly = true;
 
-	/* prepare the plan for execution */
-	StartTransactionCommand();
-
-	oldcontext = MemoryContextSwitchTo(runcontext);
-	ExecutorStart(queryDesc, 0);
-	MemoryContextSwitchTo(oldcontext);
-
-	CommitTransactionCommand();
+	CurrentResourceOwner = cqowner;
 
 	estate = queryDesc->estate;
 	operation = queryDesc->operation;
-	estate->es_exec_node_cxt = execcontext;
 
 	/*
 	 * startup tuple receiver, if we will be emitting tuples
@@ -100,8 +144,6 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
 
 	IncrementProcessGroupCount(cq_id);
-
-	CurrentResourceOwner = save;
 	/* XXX (jay)Should be able to copy pointers and maintain an array of pointers instead
 	   of an array of latches. This somehow does not work as expected and autovacuum
 	   seems to be obliterating the new shared array. Make this better.
@@ -128,19 +170,25 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 		TopTransactionContext = runcontext;
 
+		StartTransactionCommand();
+		set_snapshot(estate, cqowner);
+
+		CurrentResourceOwner = cqowner;
 		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
-		CurrentResourceOwner = owner;
 
 		/*
 		 * Run plan on a microbatch
 		 */
 		ExecutePlan(estate, queryDesc->planstate, operation,
-					true, batchsize, timeoutms, ForwardScanDirection, dest);
+					true, 0, timeoutms, ForwardScanDirection, dest);
+
+		unset_snapshot(estate, cqowner);
+		CommitTransactionCommand();
+
+		CurrentResourceOwner = cqowner;
 
 		MemoryContextSwitchTo(oldcontext);
-		MemoryContextReset(execcontext);
 
-		CurrentResourceOwner = save;
 		if (estate->es_processed != 0)
 		{
 			/*
@@ -170,6 +218,12 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	DecrementProcessGroupCount(cq_id);
 
+	/*
+	 * The cleanup functions below expect these things to be registered */
+	RegisterSnapshotOnOwner(estate->es_snapshot, cqowner);
+	RegisterSnapshotOnOwner(queryDesc->snapshot, cqowner);
+	RegisterSnapshotOnOwner(queryDesc->crosscheck_snapshot, cqowner);
+
 	/* cleanup */
 	ExecutorFinish(queryDesc);
 	ExecutorEnd(queryDesc);
@@ -177,6 +231,10 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	MemoryContextDelete(runcontext);
 
+	XactReadOnly = savereadonly;
+
 	if (queryDesc->totaltime)
 		InstrStopNode(queryDesc->totaltime, estate->es_processed);
+
+	CurrentResourceOwner = owner;
 }

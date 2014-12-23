@@ -135,20 +135,38 @@ class PipelineDB(object):
             result = self.activate(name)
         return result
 
+    def create_table(self, name, **cols):
+        """
+        Create a table
+        """
+        cols = ', '.join(['%s %s' % (k, v) for k, v in cols.iteritems()])
+        self.execute('CREATE TABLE %s (%s)' % (name, cols))
+
+    def drop_table(self, name):
+        """
+        Drop a table
+        """
+        self.execute('DROP TABLE %s' % name)
+
     def drop_cv(self, name):
         """
         Drop a continuous view
         """
         return self.execute('DROP CONTINUOUS VIEW %s' % name)
 
-    def activate(self, name=None):
+    def activate(self, name=None, **kw):
         """
         Activate a continuous view, or all of them if no name is given
         """
+        args = ''
+        if kw:
+            args = ','.join('%s = %s' % (k, (str(v))) for k, v in kw.iteritems())
+            args = ' WITH (%s)' % args
+            
         if name:
-            return self.execute('ACTIVATE %s' % name)
+            return self.execute('ACTIVATE %s %s' % (name, args))
         else:
-            return self.execute('ACTIVATE')
+            return self.execute('ACTIVATE %s' % args)
 
     def deactivate(self, name=None):
         """

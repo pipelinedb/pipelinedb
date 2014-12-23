@@ -389,6 +389,15 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	 */
 	required_outer = rel->lateral_relids;
 
+	/* if this is a stream, there's only one access path */
+	if (IS_STREAM_RTE(rel->relid, root))
+	{
+		add_path(rel, create_streamscan_path(root, rel, required_outer));
+		set_cheapest(rel);
+
+		return;
+	}
+
 	/* Consider sequential scan */
 	add_path(rel, create_seqscan_path(root, rel, required_outer));
 
@@ -1544,7 +1553,10 @@ make_rel_from_joinlist(PlannerInfo *root, List *joinlist)
 		/*
 		 * Single joinlist node, so we're done.
 		 */
-		return (RelOptInfo *) linitial(initial_rels);
+		if (join_search_hook)
+			return (*join_search_hook) (root, levels_needed, initial_rels);
+		else
+			return (RelOptInfo *) linitial(initial_rels);
 	}
 	else
 	{

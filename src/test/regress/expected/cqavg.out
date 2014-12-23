@@ -70,13 +70,13 @@ SELECT * FROM test_float4_avg_mrel0 ORDER BY k;
 (2 rows)
 
 ACTIVATE test_float8_avg, test_float4_avg;
-INSERT INTO float_stream_cqavg (k, v) VALUES ('x', -1e6), ('x', 1e6), ('x', -10.0000001);
+INSERT INTO float_stream_cqavg (k, v) VALUES ('x', -1e5), ('x', 1e6), ('x', -10.0000001);
 INSERT INTO float_stream_cqavg (k, v) VALUES ('z', 42.42);
 DEACTIVATE test_float8_avg, test_float4_avg;
 SELECT * FROM test_float8_avg ORDER BY k;
  k |       avg        
 ---+------------------
- x |                0
+ x |           150000
  y | 51773744.3667067
  z |            42.42
 (3 rows)
@@ -84,7 +84,7 @@ SELECT * FROM test_float8_avg ORDER BY k;
 SELECT * FROM test_float4_avg ORDER BY k;
  k |       avg        
 ---+------------------
- x |                0
+ x |           150000
  y |   51773744.00004
  z | 42.4199981689453
 (3 rows)
@@ -99,11 +99,11 @@ DEACTIVATE test_numeric_avg;
 ACTIVATE test_numeric_avg;
 INSERT INTO numeric_stream_cqavg (k, v) VALUES ('x', 1), ('y', 2), ('z', 42.42);
 DEACTIVATE test_numeric_avg;
-SELECT * FROM test_numeric_avg;
+SELECT * FROM test_numeric_avg ORDER BY k;
  k |               avg                
 ---+----------------------------------
- y | -249999999999999999.224975002500
  x |    2500000000000000.058249999919
+ y | -249999999999999999.224975002500
  z |              42.4200000000000000
 (3 rows)
 
