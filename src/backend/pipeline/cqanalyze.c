@@ -1089,7 +1089,7 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 	{
 		SortBy *sortby = (SortBy *) linitial(stmt->sortClause);
 		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						errmsg("continuous queries don't support ORDER BY"),
 						parser_errposition(pstate, sortby->location)));
 	}
@@ -1222,11 +1222,63 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 
 		if (needsType && !hasType)
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-					 errmsg("column reference \"%s\" has an ambiguous type", NameListToString(cref->fields)),
-					 errhint("Explicitly cast to the desired type. For example, %s::integer.", NameListToString(cref->fields)),
-					 parser_errposition(pstate, cref->location)));
+			/*
+			 * If it's a stream-table join, try to do some extra work to make the error
+			 * informative, as the user may be trying to join against a nonexistent table.
+			 */
+			bool hasJoin = false;
+			RangeVar *table = NULL;
+			foreach(lc, stmt->fromClause)
+			{
+				Node *n = (Node *) lfirst(lc);
+				if (IsA(n, JoinExpr))
+				{
+					hasJoin = true;
+					break;
+				}
+			}
+
+			if (list_length(cref->fields) > 1)
+			{
+				Value *alias = linitial(cref->fields);
+				foreach(lc, context.streams)
+				{
+					RangeVar *rv = (RangeVar *) lfirst(lc);
+					if (equal(rv->relname, strVal(alias)) || pg_strcasecmp(rv->alias->aliasname, strVal(alias)) == 0)
+					{
+						table = rv;
+						break;
+					}
+				}
+			}
+
+			if (hasJoin)
+			{
+				if (table)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+							 errmsg("column reference \"%s\" has an ambiguous type", NameListToString(cref->fields)),
+							 errhint("Explicitly cast to the desired type. For example, %s::integer. "
+									 "If \"%s\" is supposed to be a table, create it first.", NameListToString(cref->fields), table->relname),
+							 parser_errposition(pstate, cref->location)));
+				}
+				else
+					ereport(ERROR,
+							(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+							 errmsg("column reference \"%s\" has an ambiguous type", NameListToString(cref->fields)),
+							 errhint("Explicitly cast to the desired type. For example, %s::integer. "
+									 "If %s is supposed to belong to a table, create the table first.", NameListToString(cref->fields), NameListToString(cref->fields)),
+							 parser_errposition(pstate, cref->location)));
+			}
+			else
+			{
+					ereport(ERROR,
+							(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+							 errmsg("column reference \"%s\" has an ambiguous type", NameListToString(cref->fields)),
+							 errhint("Explicitly cast to the desired type. For example, %s::integer.", NameListToString(cref->fields)),
+							 parser_errposition(pstate, cref->location)));
+			}
 		}
 	}
 

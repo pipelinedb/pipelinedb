@@ -140,6 +140,10 @@ CREATE TABLE cqanalyze_table (id integer);
 CREATE CONTINUOUS VIEW error_not_created AS SELECT cqanalyze_table.id::integer FROM cqanalyze_table;
 DROP TABLE cqanalyze_table;
 
+-- Verify that for stream-table joins, the correct error message is generated when the table is missing
+CREATE CONTINUOUS VIEW  error_not_created AS SELECT s.id::integer, t.tid FROM stream s JOIN not_a_table t ON s.id = t.tid;
+CREATE CONTINUOUS VIEW  error_not_created AS SELECT s.id::integer, tid FROM stream s JOIN not_a_table ON s.id = tid;
+
 DROP CONTINUOUS VIEW cqanalyze0;
 DROP CONTINUOUS VIEW cqanalyze1;
 DROP CONTINUOUS VIEW cqanalyze2;
