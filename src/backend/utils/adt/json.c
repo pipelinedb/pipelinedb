@@ -2067,58 +2067,6 @@ json_object_agg_combine(PG_FUNCTION_ARGS)
 }
 
 /*
- * json_agg parse and combine function
- */
-Datum
-json_agg_pcombine(PG_FUNCTION_ARGS)
-{
-	MemoryContext aggcontext;
-	Datum arg0;
-	Datum result;
-
-	if (!AggCheckCallContext(fcinfo, &aggcontext))
-		elog(ERROR, "json_agg_pcombine called in non-aggregate context");
-
-	arg0 = PG_ARGISNULL(0) ? (Datum) makeStringInfo() :(Datum) PG_GETARG_POINTER(0);
-
-	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
-	fcinfo->nargs = 1;
-	fcinfo->arg[1] = byteatostringinfo(fcinfo);
-	fcinfo->arg[0] = arg0;
-	fcinfo->nargs = 2;
-
-	result = json_agg_combine(fcinfo);
-
-	PG_RETURN_POINTER(result);
-}
-
-/*
- * json_object_agg parse and combine function
- */
-Datum
-json_object_agg_pcombine(PG_FUNCTION_ARGS)
-{
-	MemoryContext aggcontext;
-	Datum arg0;
-	Datum result;
-
-	if (!AggCheckCallContext(fcinfo, &aggcontext))
-		elog(ERROR, "json_agg_pcombine called in non-aggregate context");
-
-	arg0 = PG_ARGISNULL(0) ? (Datum) makeStringInfo() :(Datum) PG_GETARG_POINTER(0);
-
-	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
-	fcinfo->nargs = 1;
-	fcinfo->arg[1] = byteatostringinfo(fcinfo);
-	fcinfo->arg[0] = arg0;
-	fcinfo->nargs = 2;
-
-	result = json_object_agg_combine(fcinfo);
-
-	PG_RETURN_POINTER(result);
-}
-
-/*
  * SQL function json_build_object(variadic "any")
  */
 Datum

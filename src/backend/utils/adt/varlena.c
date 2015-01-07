@@ -3769,10 +3769,7 @@ makeStringAggState(FunctionCallInfo fcinfo)
 	MemoryContext oldcontext;
 
 	if (!AggCheckCallContext(fcinfo, &aggcontext))
-	{
-		/* cannot be called directly because of internal-type argument */
-		elog(ERROR, "string_agg_transfn called in non-aggregate context");
-	}
+		aggcontext = fcinfo->flinfo->fn_mcxt;
 
 	/*
 	 * Create state in aggregate context.  It'll stay there across subsequent
@@ -3889,31 +3886,6 @@ string_agg_combine(PG_FUNCTION_ARGS)
 		appendStringInfoString(state->buf, incoming->buf->data);
 
 	PG_RETURN_POINTER(state);
-}
-
-/*
- * Parse and concatenate two delimited strings
- */
-Datum
-string_agg_pcombine(PG_FUNCTION_ARGS)
-{
-	Datum arg0;
-	Datum result;
-
-	if (!AggCheckCallContext(fcinfo, NULL))
-			elog(ERROR, "aggregate function called in non-aggregate context");
-
-	arg0 = PG_ARGISNULL(0) ? (Datum) makeStringAggState(fcinfo) : (Datum) PG_GETARG_POINTER(0);
-
-	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
-	fcinfo->nargs = 1;
-	fcinfo->arg[1] = stringaggstaterecv(fcinfo);
-	fcinfo->arg[0] = arg0;
-	fcinfo->nargs = 2;
-
-	result = string_agg_combine(fcinfo);
-
-	PG_RETURN_POINTER(result);
 }
 
 Datum

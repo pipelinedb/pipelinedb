@@ -598,6 +598,7 @@ assign_collations_walker(Node *node, assign_collations_context *context)
 							switch (aggref->aggkind)
 							{
 								case AGGKIND_NORMAL:
+								case AGGKIND_USER_COMBINE:
 									assign_aggregate_collations(aggref,
 																&loccontext);
 									break;

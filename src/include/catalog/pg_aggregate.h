@@ -123,11 +123,13 @@ typedef FormData_pg_aggregate *Form_pg_aggregate;
  * aggregation overhead.
  */
 #define AGGKIND_STORE 's'
+#define AGGKIND_USER_COMBINE 'c'
 
 #define AGGKIND_IS_STORE(kind) ((kind) == AGGKIND_STORE)
+#define AGGKIND_IS_USER_COMBINE(kind) ((kind) == AGGKIND_USER_COMBINE)
 
 /* Use this macro to test for "ordered-set agg including hypothetical case" */
-#define AGGKIND_IS_ORDERED_SET(kind)  ((kind) != AGGKIND_NORMAL)
+#define AGGKIND_IS_ORDERED_SET(kind)  ((kind) != AGGKIND_NORMAL && (kind) != AGGKIND_USER_COMBINE)
 
 
 /* ----------------
@@ -308,76 +310,12 @@ DATA(insert ( 3988	h 1 ordered_set_transition_multi	percent_rank_final						-		-
 DATA(insert ( 3990	h 1 ordered_set_transition_multi	cume_dist_final							-		-		-		t f 0	2281	0	0		0	_null_ _null_ ));
 DATA(insert ( 3992	h 1 ordered_set_transition_multi	dense_rank_final						-		-		-		t f 0	2281	0	0		0	_null_ _null_ ));
 
-/* PipelineDB Sliding Window Aggregates */
-
-/* avg */
-DATA(insert ( 4322	n 0 numeric_pcombine numeric_avg 	-				-				-				f f 0	2281	128 0		0	_null_ _null_ ));
-DATA(insert ( 4323	n 0 int_avg_combine int8_avg	 	-				-				-				f f 0	1016	128 0		0	"{0,0}" _null_ ));
-DATA(insert ( 4324	n 0 float8_combine  float8_avg	 	-				-				-				f f 0	1022	128 0		0	"{0,0,0}" _null_ ));
-DATA(insert ( 4325	n 0 interval_combine interval_avg 	-				-				-				f f 0	1187	128 0		0	"{0 second,0 second}" _null_ ));
-
-/* sum */
-DATA(insert ( 4326	n 0 numeric_pcombine numeric_sum 	-				-				-				f f 0	2281	128 0		0	_null_ _null_ ));
-
-/* array */
-DATA(insert ( 4328	n 0 array_agg_pcombine array_agg_finalfn 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
-
-/* text */
-DATA(insert ( 4330	n 0 string_agg_pcombine string_agg_finalfn 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
-DATA(insert ( 4331	n 0 string_agg_pcombine bytea_string_agg_finalfn 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
-
-/* json */
-DATA(insert ( 4332	n 0 json_agg_pcombine json_agg_finalfn 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
-DATA(insert ( 4333	n 0 json_object_agg_pcombine json_object_agg_finalfn 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
-
-/* binary regression aggregates */
-DATA(insert ( 4336	n 0 float8_regr_combine float8_regr_sxx 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4337	n 0 float8_regr_combine float8_regr_syy 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4338	n 0 float8_regr_combine float8_regr_sxy 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4339	n 0 float8_regr_combine float8_regr_avgx 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4340	n 0 float8_regr_combine float8_regr_avgy 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4341	n 0 float8_regr_combine float8_regr_r2 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4342	n 0 float8_regr_combine float8_regr_slope 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4343	n 0 float8_regr_combine float8_regr_intercept 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4344	n 0 float8_regr_combine float8_covar_pop 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4345	n 0 float8_regr_combine float8_covar_samp 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4346	n 0 float8_regr_combine float8_corr 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-
-/* var_pop */
-DATA(insert ( 4347	n 0 numeric_pcombine numeric_var_pop 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
-DATA(insert ( 4348	n 0 float8_combine float8_var_pop 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-
-/* var_samp / variance (same thing) */
-DATA(insert ( 4349	n 0 numeric_pcombine numeric_var_samp 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
-DATA(insert ( 4350	n 0 float8_combine float8_var_samp 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4351	n 0 numeric_pcombine numeric_var_samp 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
-DATA(insert ( 4352	n 0 float8_combine float8_var_samp 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-
-/* stddev_pop */
-DATA(insert ( 4353	n 0 numeric_pcombine numeric_stddev_pop 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
-DATA(insert ( 4354	n 0 float8_combine float8_stddev_pop 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-
-/* stddev_samp / stddev (same thing) */
-DATA(insert ( 4355	n 0 numeric_pcombine numeric_stddev_samp 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
-DATA(insert ( 4356	n 0 float8_combine float8_stddev_samp 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-DATA(insert ( 4357	n 0 numeric_pcombine numeric_stddev_samp 	-				-				-				f f 0	2281	0 0		0	_null_ _null_ ));
-DATA(insert ( 4358	n 0 float8_combine float8_stddev_samp 	-				-				-				f f 0	1022	0 0		0	_null_ _null_ ));
-
 /* PipelineDB streaming hypothetical-set aggregates */
 DATA(insert ( 3999	h 1 cq_hypothetical_set_transition_multi	cq_rank_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
-DATA(insert ( 5000	n 0 cq_hypothetical_set_pcombine	cq_rank_final	-	-	-	f f 0	1016	0	0	0	_null_ _null_ ));
-
 DATA(insert ( 5002	h 1 cq_hypothetical_set_transition_multi	cq_percent_rank_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
-DATA(insert ( 5003	n 0 cq_hypothetical_set_pcombine	cq_percent_rank_final	-	-	-	f f 0	1016	0	0	0	_null_ _null_ ));
-
 DATA(insert ( 5005	h 1 cq_hypothetical_set_transition_multi	cq_cume_dist_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
-DATA(insert ( 5006	n 0 cq_hypothetical_set_pcombine	cq_cume_dist_final	-	-	-	f f 0	1016	0	0	0	_null_ _null_ ));
-
 DATA(insert ( 5011	h 1 hll_hypothetical_set_transition_multi	hll_dense_rank_final	-	-	-	t f 0	2281	0	0	0	_null_ _null_ ));
-DATA(insert ( 5012	n 0 hll_hypothetical_set_pcombine	hll_dense_rank_final	-	-	-	f f 0	2281	0	0	0	_null_ _null_ ));
-
 DATA(insert ( 5014	n 0 hll_count_distinct_transition	hll_count_distinct_final	-	-	-	t f 0	2281	0	0	0	_null_ _null_ ));
-DATA(insert ( 5015	n 0 hll_count_distinct_pcombine	hll_count_distinct_final	-	-	-	f f 0	2281	0	0	0	_null_ _null_ ));
 
 /*
  * prototypes for functions in pg_aggregate.c

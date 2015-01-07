@@ -17,21 +17,25 @@
 #include "utils/syscache.h"
 
 /*
- * GetCombineStateType
+ * GetCombineInfo
  *
- * Given an aggregate function oid, determine the type of its transition state
+ * Get all the pipeline_combine information associated with the given aggregate function
  */
-Oid GetCombineStateType(Oid aggfnoid)
+void
+GetCombineInfo(Oid aggfnoid, Oid *combinefn, Oid *combineinfn, Oid *statetype)
 {
-	Oid result = InvalidOid;
 	HeapTuple	aggtup;
 	HeapTuple combtup;
 	Form_pg_aggregate aggform;
 	Form_pipeline_combine combform;
 
+	*combinefn = InvalidOid;
+	*combineinfn = InvalidOid;
+	*statetype = InvalidOid;
+
 	aggtup = SearchSysCache1(AGGFNOID, ObjectIdGetDatum(aggfnoid));
 	if (!HeapTupleIsValid(aggtup))
-		return result;
+		return;
 
 	aggform = (Form_pg_aggregate) GETSTRUCT(aggtup);
 	ReleaseSysCache(aggtup);
@@ -40,15 +44,32 @@ Oid GetCombineStateType(Oid aggfnoid)
 			ObjectIdGetDatum(aggform->aggfinalfn), ObjectIdGetDatum(aggform->aggtransfn));
 
 	if (!HeapTupleIsValid(combtup))
-		return result;
+		return;
 
 	combform = (Form_pipeline_combine) GETSTRUCT(combtup);
 
+	*combinefn = combform->combinefn;
+	*combineinfn = combform->combineinfn;
+
 	/* we only have a state type if we're actually storing state in tables */
 	if (combform->storestate)
-		result = combform->transouttype;
+		*statetype = combform->transouttype;
 
 	ReleaseSysCache(combtup);
+}
+
+/*
+ * GetCombineStateType
+ *
+ * Given an aggregate function oid, determine the type of its transition state
+ */
+Oid GetCombineStateType(Oid aggfnoid)
+{
+	Oid combinefn;
+	Oid combineinfn;
+	Oid result;
+
+	GetCombineInfo(aggfnoid, &combinefn, &combineinfn, &result);
 
 	return result;
 }

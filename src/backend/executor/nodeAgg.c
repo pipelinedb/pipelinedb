@@ -1656,6 +1656,32 @@ agg_retrieve_hash_table(AggState *aggstate)
 	return NULL;
 }
 
+static AttrNumber
+get_aggref_resno(Aggref *aggref, List *targetlist)
+{
+	ListCell *lc;
+	foreach(lc, targetlist)
+	{
+		TargetEntry *te = (TargetEntry *) lfirst(lc);
+		Aggref *ar;
+
+		if (!IsA(te->expr, Aggref))
+			continue;
+
+		/*
+		 * We're using pointer equality instead of equal() here because
+		 * we want the resno of the actual Aggref that the caller gave us,
+		 * not simply any Aggref equal() to it.
+		 *
+		 */
+		ar = (Aggref *) te->expr;
+		if (aggref == ar)
+			return te->resno;
+	}
+
+	return InvalidAttrNumber;
+}
+
 /* -----------------
  * ExecInitAgg
  *
@@ -1866,7 +1892,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		Oid			transoutfn_oid = InvalidOid;
 		Oid			combineinfn_oid = InvalidOid;
 		Oid			combinefn_oid = InvalidOid;
-		TargetEntry *parent = NULL;
+		AttrNumber resno;
 
 		/* Planner should have assigned aggregate to correct level */
 		Assert(aggref->agglevelsup == 0);
@@ -1882,16 +1908,15 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		{
 			/* Found a match to an existing entry, so just mark it */
 			aggrefstate->aggno = i;
-			continue;
+			if (!IsContinuous(aggstate))
+				continue;
 		}
 
 		/* Nope, so assign a new PerAgg record */
 		peraggstate = &peragg[++aggno];
 
-		parent = tlist_member((Node *) aggref, ((Plan *) node)->targetlist);
-
-		if (parent)
-			aggstate->resno_to_aggno[parent->resno - 1] = aggno;
+		resno = get_aggref_resno(aggref, ((Plan *) node)->targetlist);
+		aggstate->resno_to_aggno[resno - 1] = aggno;
 
 		/* Mark Aggref state node with assigned index in the result array */
 		aggrefstate->aggno = aggno;
@@ -1919,6 +1944,24 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 		peraggstate->transfn_oid = transfn_oid = aggform->aggtransfn;
 		peraggstate->finalfn_oid = finalfn_oid = aggform->aggfinalfn;
+
+		/*
+		 * If it's a user combine, we dynamically load the transition function
+		 * based on what's in pipeline_combine
+		 */
+		if (AGGKIND_IS_USER_COMBINE(aggref->aggkind))
+		{
+			combTuple = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
+					ObjectIdGetDatum(finalfn_oid),
+					ObjectIdGetDatum(transfn_oid));
+
+			if (HeapTupleIsValid(combTuple))
+			{
+				combform = (Form_pipeline_combine) GETSTRUCT(combTuple);
+				peraggstate->transfn_oid = transfn_oid = combform->combinefn;
+				ReleaseSysCache(combTuple);
+			}
+		}
 
 		/*
 		 * If we are only computing transition results, we may need to

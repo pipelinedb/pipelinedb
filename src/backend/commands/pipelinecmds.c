@@ -130,6 +130,8 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *
 	IndexElem *indexcol;
 	Node *node;
 	ColumnRef *col;
+	char *namespace;
+	char *name;
 
 	if (IsSlidingWindowSelectStmt(workerstmt))
 		node = (Node *) GetColumnRefInSlidingWindowExpr(viewstmt);
@@ -148,9 +150,6 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *
 	col = (ColumnRef *) node;
 
 	indexcol = makeNode(IndexElem);
-
-	char *namespace;
-	char *name;
 
 	DeconstructQualifiedName(col->fields, &namespace, &name);
 
@@ -270,7 +269,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		 * column isn't in the target list, it won't be visible when selecting from this CV,
 		 * which will have an overlay view that only exposes target list columns.
 		 */
-		hiddentype = GetCombineStateColumnType(tle);
+		hiddentype = GetCombineStateColumnType(tle->expr);
 		if (OidIsValid(hiddentype))
 		{
 			char *hiddenname = GetUniqueInternalColname(&context);
@@ -301,6 +300,13 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	AlterTableCreateToastTable(reloid, toast_options, AccessExclusiveLock);
 
 	/*
+	 * Now save the underlying query in the `pipeline_query` catalog
+	 * relation.
+	 */
+	RegisterContinuousView(view, querystring, mat_relation, IsSlidingWindowSelectStmt(viewselect));
+	CommandCounterIncrement();
+
+	/*
 	 * Create a VIEW over the CQ materialization relation which exposes
 	 * only the columns that users expect. This is needed primarily for three
 	 * reasons:
@@ -312,7 +318,6 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 *    columns.
 	 * 3. View also computes expressions on aggregates.
 	 */
-	FixAggArgForCQView(viewselect, workerselect, mat_relation);
 	viewselect->fromClause = list_make1(mat_relation);
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
@@ -320,12 +325,6 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 
 	DefineView(view_stmt, querystring);
 	allowSystemTableMods = saveAllowSystemTableMods;
-
-	/*
-	 * Now save the underlying query in the `pipeline_query` catalog
-	 * relation.
-	 */
-	RegisterContinuousView(view, querystring, mat_relation, IsSlidingWindowSelectStmt(viewselect));
 
 	/*
 	 * Index the materialization table smartly if we can

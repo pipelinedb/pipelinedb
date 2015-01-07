@@ -14,5 +14,6 @@
 #include "catalog/pipeline_combine.h"
 
 Oid GetCombineStateType(Oid aggfnoid);
+void GetCombineInfo(Oid aggfnoid, Oid *combinefn, Oid *combineinfn, Oid *statetype);
 
 #endif

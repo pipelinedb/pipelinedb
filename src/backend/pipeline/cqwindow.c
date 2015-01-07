@@ -471,12 +471,43 @@ replace_column_ref(Node *node, ColumnRef *from, ColumnRef *to, CQAnalyzeContext 
 }
 
 /*
+ * get_time_attr_number
+ *
+ * Determine the timestamp colref's position in the target list if it's present.
+ * This allows us to preserve the target list ordering of columns as much as possible
+ * when we eventually create the matrel.
+ */
+static AttrNumber
+get_time_attr_number(SelectStmt *workerstmt, Node *timeCRefWithTC)
+{
+	ListCell *lc;
+	AttrNumber timeAttr = 1;
+
+	foreach(lc, workerstmt->targetList)
+	{
+		/*
+		 * If the time colref is top-level, it will have its own attribute
+		 * in the eventual matrel, so figure out where we should keep it.
+		 */
+		ResTarget *rt = (ResTarget *) lfirst(lc);
+		if (IsAColumnRef(rt->val) && AreColumnRefsEqual(rt->val, timeCRefWithTC))
+			return timeAttr;
+
+		timeAttr++;
+	}
+
+	return InvalidAttrNumber;
+}
+
+/*
  * create_group_by_for_time_bucket_field
  */
-static void
-create_group_by_for_time_bucket_field(SelectStmt *workerstmt, SelectStmt *viewstmt, Node *timeNode, bool doesViewAggregate, CQAnalyzeContext *context)
+static ResTarget *
+create_group_by_for_time_bucket_field(SelectStmt *workerstmt, SelectStmt *viewstmt,
+		Node *timeNode, bool doesViewAggregate, CQAnalyzeContext *context, AttrNumber *timeAttr)
 {
 	Node *timeCRefWithTC;
+	ResTarget *timeRes;
 
 	context->cols = NIL;
 	FindColumnRefsWithTypeCasts(timeNode, context);
@@ -495,6 +526,8 @@ create_group_by_for_time_bucket_field(SelectStmt *workerstmt, SelectStmt *viewst
 			}
 		}
 	}
+
+	*timeAttr = get_time_attr_number(workerstmt, timeCRefWithTC);
 
 	if (doesViewAggregate)
 	{
@@ -591,7 +624,7 @@ create_group_by_for_time_bucket_field(SelectStmt *workerstmt, SelectStmt *viewst
 			}
 		}
 
-		workerstmt->targetList = lappend(workerstmt->targetList, res);
+		timeRes = res;
 
 		/*
 		 * Replace date_trunc call in the stepNode
@@ -615,22 +648,27 @@ create_group_by_for_time_bucket_field(SelectStmt *workerstmt, SelectStmt *viewst
 		res->val = copyObject(timeCRefWithTC);
 		res->location = -1;
 
-		workerstmt->targetList = lappend(workerstmt->targetList, res);
+		timeRes = res;
 
 		/*
 		 * Replace the timeColumnRef with the new projected field's ColumnRef.
 		 */
 		memcpy(timeCRefWithTC, CreateColumnRefFromResTarget(res), sizeof(ColumnRef));
 	}
+
+	return timeRes;
 }
 
 /*
  * AddProjectionsAndGroupBysForWindows
  */
-void
-AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt, bool doesViewAggregate, CQAnalyzeContext *context)
+ResTarget *
+AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt,
+		bool doesViewAggregate, CQAnalyzeContext *context, AttrNumber *timeAttr)
 {
 	Node *swExpr = GetSlidingWindowExpr(workerstmt, context);
+	ResTarget *timeRes;
+	AttrNumber timeResAttr;
 
 	if (swExpr == NULL)
 	{
@@ -639,6 +677,7 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt
 		 */
 		WindowDef *wdef;
 		ListCell *lc;
+		SortBy *sort;
 
 		Assert(doesViewAggregate);
 
@@ -672,11 +711,9 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt
 		/*
 		 * Create a GROUP BY on the ORDER BY expr.
 		 */
-		foreach (lc, wdef->orderClause)
-		{
-			SortBy *sort = (SortBy *) lfirst(lc);
-			create_group_by_for_time_bucket_field(workerstmt, viewstmt, sort->node, doesViewAggregate, context);
-		}
+		sort = (SortBy *) linitial(wdef->orderClause);
+		timeRes = create_group_by_for_time_bucket_field(workerstmt, viewstmt,
+				sort->node, doesViewAggregate, context, &timeResAttr);
 
 		/*
 		 * Create a GROUP BY for all expressions being
@@ -709,13 +746,18 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt
 		 * Sliding Window Handling
 		 */
 		swExpr = copyObject(swExpr);
-		create_group_by_for_time_bucket_field(workerstmt, viewstmt, swExpr, doesViewAggregate, context);
+		timeRes = create_group_by_for_time_bucket_field(workerstmt, viewstmt,
+				swExpr, doesViewAggregate, context, &timeResAttr);
 
 		/*
 		 * Copy over the modified swExpr to the VIEW's SelectStmt.
 		 */
 		viewstmt->whereClause = swExpr;
 	}
+
+	*timeAttr = timeResAttr;
+
+	return timeRes;
 }
 
 /*
@@ -725,179 +767,21 @@ void
 TransformAggNodeForCQView(SelectStmt *viewselect, Node *node, ResTarget *aggres, bool doesViewAggregate)
 {
 	ColumnRef *cref;
-	Assert(IsA(node, FuncCall));
 
+	Assert(IsA(node, FuncCall));
 	cref = CreateColumnRefFromResTarget(aggres);
 
 	if (doesViewAggregate)
 	{
 		FuncCall *agg = (FuncCall *) node;
-		/*
-		 * Remove all variadic args for hypothetical-set aggs, as we must
-		 * deterministically generate a signature to use for matching the
-		 * correct agg to use for the view over the matrel. For regular aggs,
-		 * just remove the first argument.
-		 */
-		int toremove = agg->agg_order ? list_length(agg->agg_order) : 1;
-
-		while (toremove > 0)
-		{
-			agg->args = list_delete_first(agg->args);
-			toremove--;
-		}
+		agg->funcname = list_make1(makeString(USER_COMBINE));
 		agg->agg_star = false;
-		agg->args = lcons(cref, agg->args);
+		agg->args = list_make1(cref);
+		agg->agg_order = NIL;
+		agg->agg_within_group = false;
 	}
 	else
 		memcpy(node, cref, sizeof(ColumnRef));
-}
-
-/*
- * make_dummy_arg
- *
- * Create a constant with the given type
- */
-static Const*
-make_dummy_arg(Oid type)
-{
-	int16 len = get_typlen(type);
-	bool byval = get_typbyval(type);
-	bool isnull = (len == -1 || len > 8);
-	char cat;
-	bool catpref;
-
-	/*
-	 * This allows us to use anyarray in our aggregate signature so we don't have
-	 * to have a separate aggregate function in pg_proc for every array element type.
-	 */
-	get_type_category_preferred(type, &cat, &catpref);
-	if (cat == TYPCATEGORY_ARRAY)
-		type = ANYARRAYOID;
-
-	return makeConst(type, InvalidOid, InvalidOid, len, (Datum) 0, isnull, byval);
-}
-
-/*
- * use_hidden_signature
- *
- * Generate an argument list that will only match our hidden aggregates for
- * internal transition states.
- */
-static void
-use_hidden_signature(FuncCall *agg, Query *query, TupleDesc matdesc)
-{
-	ColumnRef *cref = linitial(agg->args);
-	char *colName = FigureColname((Node *) cref);
-	int i;
-	ListCell *lc;
-	List *args = copyObject(agg->args);
-
-	foreach(lc, query->targetList)
-	{
-		TargetEntry *te = (TargetEntry *) lfirst(lc);
-
-		if (pg_strcasecmp(te->resname, colName) != 0)
-			continue;
-
-		Assert(IsA(te->expr, Aggref));
-
-		if (!OidIsValid(GetCombineStateColumnType(te)))
-			break;
-
-		for (i = 0; i < matdesc->natts; i++)
-		{
-			ListCell *alc;
-
-			if (pg_strcasecmp(NameStr(matdesc->attrs[i]->attname), colName) != 0)
-				continue;
-
-			/*
-			 * In addition to the transition column, we always pass an additional constant
-			 * to these transition state aggregates whose type is the type of the corresponding
-			 * unhidden column. We also pass dummy arguments representing the types of all
-			 * remaining argument types for this aggregate call. This eliminates any ambiguity
-			 * when matching the aggregate call signature to the correct function in pg_proc.
-			 */
-			args = NIL;
-
-			/* hidden column arg */
-			cref->fields = list_make1(makeString(NameStr(matdesc->attrs[i + 1]->attname)));
-			args = lappend(args, cref);
-
-			/* return type dummy arg */
-			args = lappend(args, make_dummy_arg(matdesc->attrs[i]->atttypid));
-
-			/* dummy args for remaining agg args */
-			agg->args = list_delete_first(agg->args);
-			foreach(alc, agg->args)
-			{
-				Node *expr = (Node *) lfirst(alc);
-				Oid type = exprType(expr);
-				args = lappend(args, make_dummy_arg(type));
-			}
-
-			break;
-		}
-	}
-
-	agg->args = args;
-}
-
-/*
- * FixAggregatesForCQView
- */
-void
-FixAggArgForCQView(SelectStmt *viewselect, SelectStmt *workerselect, RangeVar *matrelation)
-{
-	ListCell *lc;
-	CQAnalyzeContext context;
-	Query *query;
-	TupleDesc matdesc;
-
-	if (!HasAggOrGroupBy(workerselect))
-		return;
-
-	query = parse_analyze(copyObject(workerselect), NULL, 0, 0);
-	matdesc = RelationNameGetTupleDesc(matrelation->relname);
-
-	foreach(lc, viewselect->targetList)
-	{
-		ResTarget *res = (ResTarget *) lfirst(lc);
-		ListCell *alc;
-
-		context.funcCalls = NIL;
-		CollectAggFuncs((Node *) res, &context);
-
-		if (list_length(context.funcCalls) == 0)
-			continue;
-
-		foreach(alc, context.funcCalls)
-		{
-			FuncCall *agg = (FuncCall *) lfirst(alc);
-
-			/*
-			 * The ColRefs in agg_order haven't been renamed to point to
-			 * the hidden transition state columns for ordered and hypothetical
-			 * set aggregates. However, views on these aggregates don't need
-			 * an agg_order anymore because only their transition states will be
-			 * stored in the matrel, which have already been built using
-			 * the agg_order. Thus we can just rip it out.
-			 */
-			if (agg->agg_order)
-			{
-				agg->agg_order = NIL;
-				agg->agg_within_group = false;
-			}
-
-			if (pg_strcasecmp(NameListToString(agg->funcname), "count") == 0)
-			{
-				/* All COUNT(?) functions are re-written to SUM(count column) */
-				agg->funcname = list_make1(makeString("sum"));
-			}
-
-			use_hidden_signature(agg, query, matdesc);
-		}
-	}
 }
 
 /*

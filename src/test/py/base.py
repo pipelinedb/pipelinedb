@@ -183,6 +183,15 @@ class PipelineDB(object):
         """
         return self.conn.execute(stmt)
 
+    def insert(self, target, desc, rows):
+        """
+        Insert a batch of rows
+        """
+        header = ', '.join(desc)
+        values = ', '.join([str(r) for r in rows])
+
+        return self.execute('INSERT INTO %s (%s) VALUES %s' % (target, header, values))
+
     def set_sync_insert(self, on):
         """
         Sets the flag that makes stream INSERTs synchronous or not

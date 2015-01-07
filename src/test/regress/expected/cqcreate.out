@@ -183,11 +183,11 @@ SELECT gc FROM pipeline_query WHERE name='cqcreate5';
 
 \d+ cqcreate6;
                View "public.cqcreate6"
- Column |  Type   | Modifiers | Storage | Description 
---------+---------+-----------+---------+-------------
- count  | numeric |           | main    | 
+ Column |  Type  | Modifiers | Storage | Description 
+--------+--------+-----------+---------+-------------
+ count  | bigint |           | plain   | 
 View definition:
- SELECT sum(cqcreate6_mrel0.count) AS count
+ SELECT combine(cqcreate6_mrel0.count) AS count
    FROM cqcreate6_mrel0
   WHERE cqcreate6_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second)
   GROUP BY cqcreate6_mrel0._1;
@@ -197,8 +197,8 @@ View definition:
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
  count  | bigint                   |           | plain    |              | 
- _0     | timestamp with time zone |           | plain    |              | 
  _1     | text(0)                  |           | extended |              | 
+ _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
     "cqcreate6_mrel0__0_idx" btree (_0)
 
@@ -369,10 +369,10 @@ CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM st
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | text(0) |           | extended | 
- value  | numeric |           | main     | 
+ value  | bigint  |           | plain    | 
 View definition:
  SELECT cqaggexpr3_mrel0.key,
-    sum(cqaggexpr3_mrel0.value) AS value
+    combine(cqaggexpr3_mrel0.value) AS value
    FROM cqaggexpr3_mrel0
   WHERE cqaggexpr3_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second)
   GROUP BY cqaggexpr3_mrel0.key;
