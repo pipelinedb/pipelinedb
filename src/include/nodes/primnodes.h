@@ -298,6 +298,7 @@ typedef struct WindowFunc
 	bool		winstar;		/* TRUE if argument list was really '*' */
 	bool		winagg;			/* is function a simple aggregate? */
 	int			location;		/* token location, or -1 if unknown */
+	char 		winaggkind; /* aggregate kind (see pg_aggregate.h) */
 } WindowFunc;
 
 /* ----------------

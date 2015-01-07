@@ -11,18 +11,25 @@
  */
 #include "postgres.h"
 
+#include "access/heapam.h"
 #include "access/htup_details.h"
 #include "catalog/namespace.h"
+#include "catalog/pg_aggregate.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pipeline_combine_fn.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
+#include "funcapi.h"
 #include "lib/stringinfo.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/print.h"
+#include "optimizer/var.h"
+#include "parser/parse_agg.h"
+#include "parser/parse_expr.h"
 #include "parser/parse_func.h"
 #include "parser/parse_node.h"
+#include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
 #include "pipeline/cqanalyze.h"
@@ -31,6 +38,8 @@
 #include "storage/lock.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
+#include "utils/lsyscache.h"
+#include "utils/rel.h"
 #include "utils/syscache.h"
 
 /*
@@ -47,12 +56,30 @@ static char *StreamingVariants[][2] = {
 		{"count", "hll_count_distinct"}
 };
 
-static void replace_hypothetical_set_aggs(SelectStmt *stmt);
 static char *get_streaming_agg(FuncCall *fn);
 static bool associate_types_to_colrefs(Node *node, CQAnalyzeContext *context);
 static bool type_cast_all_column_refs(Node *node, CQAnalyzeContext *context);
 
 #define INTERNAL_COLNAME_PREFIX "_"
+
+/*
+ * GetHiddenAttrNumber
+ *
+ * Returns the hidden attribute associated with the given
+ * visible column, if any
+ */
+AttrNumber
+GetHiddenAttrNumber(char *attname, TupleDesc matrel)
+{
+	int i;
+	for (i=0; i<matrel->natts; i++)
+	{
+		if (strcmp(NameStr(matrel->attrs[i]->attname), attname) == 0)
+			return i + 1 + 1;
+	}
+
+	return InvalidAttrNumber;
+}
 
 /*
  * GetCombineStateColumnType
@@ -61,18 +88,468 @@ static bool type_cast_all_column_refs(Node *node, CQAnalyzeContext *context);
  * required to store transition states for the given target entry
  */
 Oid
-GetCombineStateColumnType(TargetEntry *te)
+GetCombineStateColumnType(Expr *expr)
 {
 	Oid result = InvalidOid;
 
-	if (IsA(te->expr, Aggref))
-	{
-		Aggref *agg = (Aggref *) te->expr;
-
-		result = GetCombineStateType(agg->aggfnoid);
-	}
+	if (IsA(expr, Aggref))
+		result = GetCombineStateType(((Aggref *) expr)->aggfnoid);
+	else if (IsA(expr, WindowFunc))
+		result = GetCombineStateType(((WindowFunc *) expr)->winfnoid);
 
 	return result;
+}
+
+/*
+ * IsUserCombine
+ *
+ * Determines if the given pg_proc entry is the user combine function
+ */
+bool
+IsUserCombine(NameData proname)
+{
+	return strcmp(NameStr(proname), USER_COMBINE) == 0;
+}
+
+/*
+ * locate_aggs
+ *
+ * Given an analyzed targetlist, maps aggregate nodes to their attributes
+ * in a matrel. This is necessary because aggregates can be hoisted out of
+ * CV expressions and given their own columns, so we can't just look at the
+ * aggregate's position in the targetlist to get its matrel attribute position.
+ *
+ * The mapping is encoding within two parallel lists
+ */
+static void
+locate_aggs(List *targetlist, List **aggs, List **atts)
+{
+	ListCell *lc;
+	AttrNumber pos = 1;
+
+	*aggs = NIL;
+	*atts = NIL;
+
+	foreach(lc, targetlist)
+	{
+		TargetEntry *te = (TargetEntry *) lfirst(lc);
+		Expr *expr = te->expr;
+
+		if (IsA(expr, Aggref) || IsA(expr, WindowFunc))
+		{
+			*aggs = lappend(*aggs, expr);
+			*atts = lappend_int(*atts, pos);
+			pos++;
+			if (OidIsValid(GetCombineStateColumnType(expr)))
+				pos++;
+		}
+		else
+		{
+			List *nodes = pull_var_clause((Node *) expr,
+						PVC_INCLUDE_AGGREGATES, PVC_INCLUDE_PLACEHOLDERS);
+			ListCell *nlc;
+			AttrNumber startpos = pos;
+
+			foreach(nlc, nodes)
+			{
+				Expr *e = (Expr *) lfirst(nlc);
+				if (!IsA(e, Aggref) && !IsA(e, WindowFunc))
+					continue;
+
+				*aggs = lappend(*aggs, e);
+				*atts = lappend_int(*atts, pos);
+				pos++;
+				if (OidIsValid(GetCombineStateColumnType(e)))
+					pos++;
+			}
+
+			if (startpos == pos)
+				pos++;
+		}
+	}
+}
+
+/*
+ * agg_to_attr
+ *
+ * Given an aggregate node, returns the matrel attribute that the node belongs to
+ */
+static AttrNumber
+agg_to_attr(Node *agg, List *aggrefs, List *attrs)
+{
+	ListCell *agglc;
+	ListCell *attlc;
+
+	forboth(agglc, aggrefs, attlc, attrs)
+	{
+		if (lfirst(agglc) == agg)
+			return lfirst_int(attlc);
+	}
+
+	elog(ERROR, "aggregate attribute not found for node of type %d", nodeTag(agg));
+
+	return InvalidAttrNumber;
+}
+
+/*
+ * attr_to_agg
+ *
+ * Given a matrel attribute, returns the aggregate node that it corresponds to
+ */
+static Node *
+attr_to_agg(AttrNumber attr, List *aggs, List *atts)
+{
+	ListCell *agglc;
+	ListCell *attlc;
+
+	forboth(agglc, aggs, attlc, atts)
+	{
+		if (lfirst_int(attlc) == attr)
+			return lfirst(agglc);
+	}
+
+	elog(ERROR, "no aggregate node found for attribute %d", attr);
+
+	return NULL;
+}
+
+/*
+ * make_combine_args
+ *
+ * Possibly wraps the target argument in a recv function call to deserialize
+ * hidden state before calling combine()
+ */
+static List *
+make_combine_args(ParseState *pstate, Oid combineinfn, Var *var)
+{
+	List *args;
+
+	if (OidIsValid(combineinfn))
+	{
+		FuncCall *fn = makeNode(FuncCall);
+		fn->funcname = list_make1(makeString(get_func_name(combineinfn)));
+		fn->args = list_make1(var);
+		args = list_make1(transformFuncCall(pstate, fn));
+	}
+	else
+	{
+		/* transition state is stored as a first-class type, no deserialization needed */
+		args = list_make1(var);
+	}
+
+	return args;
+}
+
+/*
+ * make_combine_agg_for_viewdef
+ *
+ * Creates a combine aggregate for a view definition against a matrel
+ */
+static Node *
+make_combine_agg_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var,
+		 List *order, WindowDef *over)
+{
+	List *aggs;
+	List *atts;
+	List *args;
+	Node *result;
+	Oid fnoid;
+	Oid combinefn;
+	Oid combineinfn;
+	Oid statetype;
+	Query *q = GetContinuousQuery(cvrv);
+
+	locate_aggs(q->targetList, &aggs, &atts);
+
+	result = attr_to_agg(var->varattno, aggs, atts);
+
+	if (IsA(result, Aggref))
+	{
+		Aggref *agg = (Aggref *) result;
+
+		agg->aggkind = AGGKIND_USER_COMBINE;
+		fnoid = agg->aggfnoid;
+	}
+	else
+	{
+		WindowFunc *w = (WindowFunc *) result;
+
+		w->winaggkind = AGGKIND_USER_COMBINE;
+		fnoid = w->winfnoid;
+	}
+
+	GetCombineInfo(fnoid, &combinefn, &combineinfn, &statetype);
+
+	/* combine state is always adjacent to its visible column */
+	if (OidIsValid(statetype))
+	{
+		var->varattno++;
+		var->vartype = statetype;
+	}
+
+	args = make_combine_args(pstate, combineinfn, var);
+
+	if (IsA(result, Aggref))
+	{
+		transformAggregateCall(pstate, (Aggref *) result, args, order, false);
+	}
+	else
+	{
+		((WindowFunc *) result)->args = args;
+		transformWindowFuncCall(pstate, (WindowFunc *) result, over);
+	}
+
+	return (Node *) result;
+}
+
+/*
+ * combine_target_belongs_to_cv
+ *
+ * Verify that the given combine target actually belongs to a continuous view.
+ * This allows us to run combines on complex range tables such as joins, as long
+ * as the target combine column is from a CV.
+ */
+static bool
+combine_target_belongs_to_cv(Var *target, List *rangetable, RangeVar **cv)
+{
+	RangeTblEntry *targetrte;
+	ListCell *lc;
+	Value *colname;
+
+	if (list_length(rangetable) < target->varno)
+	{
+		elog(ERROR, "range table entry %d not in range table of length %d",
+				target->varno, list_length(rangetable));
+	}
+
+	targetrte = (RangeTblEntry *) list_nth(rangetable, target->varno - 1);
+
+	if (list_length(targetrte->eref->colnames) < target->varattno)
+	{
+		elog(ERROR, "attribute %d not column list of length %d",
+						target->varattno, list_length(targetrte->eref->colnames));
+	}
+
+	colname = (Value *) list_nth(targetrte->eref->colnames, target->varattno - 1);
+
+	foreach(lc, rangetable)
+	{
+		ListCell *clc;
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
+
+		if (rte->relkind != RELKIND_VIEW)
+			continue;
+
+		foreach(clc, rte->eref->colnames)
+		{
+			Value *c = (Value *) lfirst(clc);
+			Relation rel;
+			RangeVar *rv;
+			char *cvname;
+
+			if (!equal(colname, c))
+				continue;
+
+			/*
+			 * The view contains a column name that matches the target column,
+			 * so we just need to verify that it's actually a continuous view.
+			 */
+			rel = heap_open(rte->relid, NoLock);
+			cvname = RelationGetRelationName(rel);
+			relation_close(rel, NoLock);
+			rv = makeRangeVar(NULL, cvname, -1);
+
+			if (IsAContinuousView(rv))
+			{
+				*cv = rv;
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/*
+ * find_attr_from_joinlist
+ *
+ * Given a join list and a variable within it, finds the attribute position of that variable
+ * in its matrel's descriptor.
+ *
+ * This also sets the given Var's varno to the varno of the continuous view RTE in the range
+ * table, because it simplifies things if we're not selecting directly from the messy join RTE.
+ */
+static AttrNumber
+find_attr_from_joinlist(ParseState *pstate, RangeVar *cvrv, RangeTblEntry *joinrte, Var *var)
+{
+	RangeTblEntry *cvrte;
+	ListCell *lc;
+	Value *colname = (Value *) list_nth(joinrte->eref->colnames, var->varattno - 1);
+	Oid relid = RangeVarGetRelid(cvrv, NoLock, false);
+	int i = 0;
+	int varno = 0;
+
+	foreach(lc, pstate->p_rtable)
+	{
+		varno++;
+		cvrte = (RangeTblEntry *) lfirst(lc);
+		if (cvrte->relid == relid)
+			break;
+	}
+
+	foreach(lc, cvrte->eref->colnames)
+	{
+		Value *c = (Value *) lfirst(lc);
+		i++;
+		if (equal(colname, c))
+		{
+			var->varno = varno;
+			return i;
+		}
+	}
+
+	elog(ERROR, "could not find column \"%s\" in continuous view range table entry", strVal(colname));
+
+	return InvalidAttrNumber;
+}
+
+/*
+ * ParseCombineFuncCall
+ *
+ * Builds an expression for a combine() call on an aggregate CV column.
+ * This may involve deserializing the column transition state.
+ */
+Node *
+ParseCombineFuncCall(ParseState *pstate, List *fargs,
+		List *order, Expr *filter, WindowDef *over, int location)
+{
+	Node *arg;
+	ListCell *lc;
+	Var *var;
+	List *args;
+	Oid combinefn;
+	Oid combineinfn;
+	Oid statetype;
+	RangeVar *rv;
+	bool ismatrel;
+	Query *q;
+	TargetEntry *target;
+	List *nodes;
+	List *aggs;
+	List *atts;
+	RangeTblEntry *rte;
+	AttrNumber cvatt = InvalidAttrNumber;
+
+	if (list_length(fargs) != 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+				 errmsg("combine called with %d arguments", list_length(fargs)),
+				 errhint("combine must be called with a single column reference as its argument.")));
+	}
+
+	arg = linitial(fargs);
+
+	if (!IsA(arg, Var))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+				 errmsg("combine called with an invalid expression"),
+				 errhint("combine must be called with a single column reference as its argument.")));
+	}
+
+	var = (Var *) arg;
+
+	if (!combine_target_belongs_to_cv(var, pstate->p_rtable, &rv))
+	{
+		RangeVar *matrelrv;
+		RangeVar *cvrv;
+		Relation rel;
+		RangeTblEntry *rte = list_nth(pstate->p_rtable, var->varno - 1);
+
+		rel = heap_open(rte->relid, NoLock);
+		matrelrv = makeRangeVar(NULL, RelationGetRelationName(rel), -1);
+		relation_close(rel, NoLock);
+
+		/*
+		 * Sliding-window CQ's use combine aggregates in their
+		 * view definition, so when they're created we can also
+		 * end up here. We do this check second because it's slow.
+		 */
+		ismatrel = IsAMatRel(matrelrv, &cvrv);
+		if (!ismatrel)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("\"%s\" is not a continuous view", matrelrv->relname),
+					 errhint("Only aggregate continuous view columns can be combined.")));
+		}
+
+		return make_combine_agg_for_viewdef(pstate, cvrv, var, order, over);
+	}
+
+	/* ok, it's a user combine query against an existing continuous view */
+	q = GetContinuousQuery(rv);
+	locate_aggs(q->targetList, &aggs, &atts);
+
+	rte = (RangeTblEntry *) list_nth(pstate->p_rtable, var->varno - 1);
+	cvatt = var->varattno;
+	/*
+	 * If this is a join, our varattno will point to the position of the target
+	 * combine column within the joined target list, so we need to pull out the
+	 * table-level var that will point us to the CQ's target list
+	 */
+	if (rte->rtekind == RTE_JOIN)
+		cvatt = find_attr_from_joinlist(pstate, rv, rte, var);
+
+	/*
+	 * Find the aggregate node in the CQ that corresponds
+	 * to the target combine column
+	 */
+	target = (TargetEntry *) list_nth(q->targetList, cvatt - 1);
+	nodes = pull_var_clause((Node *) target->expr,
+			PVC_INCLUDE_AGGREGATES, PVC_INCLUDE_PLACEHOLDERS);
+
+	foreach(lc, nodes)
+	{
+		Node *n = (Node *) lfirst(lc);
+		Var *v;
+		AttrNumber att;
+		Oid fnoid;
+
+		if (IsA(n, Aggref))
+			fnoid = ((Aggref *) n)->aggfnoid;
+		else if (IsA(n, WindowFunc))
+			fnoid = ((WindowFunc *) n)->winfnoid;
+		else
+			continue;
+
+		GetCombineInfo(fnoid, &combinefn, &combineinfn, &statetype);
+
+		/* combine state is always adjacent to its visible column */
+		att = agg_to_attr(n, aggs, atts);
+		if (OidIsValid(statetype))
+			att++;
+
+		v = makeVar(var->varno, att, statetype, InvalidOid, InvalidOid, InvalidOid);
+		args = make_combine_args(pstate, combineinfn, v);
+
+		if (IsA(n, Aggref))
+		{
+			Aggref *agg = (Aggref *) n;
+			agg->aggkind = AGGKIND_USER_COMBINE;
+			transformAggregateCall(pstate, agg, args, order, false);
+		}
+		else if (IsA(n, WindowFunc))
+		{
+			WindowFunc *w = (WindowFunc *) n;
+			w->args = args;
+			w->winaggkind = AGGKIND_USER_COMBINE;
+			transformWindowFuncCall(pstate, w, over);
+		}
+	}
+
+	return copyObject((Node *) target->expr);
 }
 
 /*
@@ -155,7 +632,7 @@ GetUniqueInternalColname(CQAnalyzeContext *context)
 }
 
 /*
- * is_column_ref
+ * IsAColumnRef
  */
 bool
 IsAColumnRef(Node *node)
@@ -187,6 +664,7 @@ FindColumnRefsWithTypeCasts(Node *node, CQAnalyzeContext *context)
 	}
 	else if (IsA(node, ColumnRef))
 	{
+
 		context->cols = lappend(context->cols, node);
 	}
 
@@ -510,14 +988,14 @@ get_streaming_agg(FuncCall *fn)
 }
 
 /*
- * replace_hypothetical_set_aggs
+ * RewriteStreamingAggs
  *
  * Replaces hypothetical set aggregate functions with their streaming
  * variants if possible, since we can't use the sorting approach that
  * the standard functions use.
  */
-static void
-replace_hypothetical_set_aggs(SelectStmt *stmt)
+void
+RewriteStreamingAggs(SelectStmt *stmt)
 {
 	ListCell *lc;
 
@@ -584,6 +1062,9 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	int origNumGroups;
 	int i;
 	ListCell *lc;
+	ResTarget *timeRes;
+	AttrNumber timeAttr;
+	AttrNumber curAttr;
 
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
 	associate_types_to_colrefs((Node *) stmt, &context);
@@ -605,14 +1086,14 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	 * so that we can perform the necessary windowing functionality.
 	 */
 	if (isSlidingWindow || doesViewAggregate)
-		AddProjectionsAndGroupBysForWindows(workerstmt, viewstmt, doesViewAggregate, &context);
+		timeRes = AddProjectionsAndGroupBysForWindows(workerstmt, viewstmt, doesViewAggregate, &context, &timeAttr);
 
 	/*
 	 * We can't use the standard hypothetical set aggregate functions because
 	 * they require sorting the input set, so replace them with their
 	 * streaming variants if possible.
 	 */
-	replace_hypothetical_set_aggs(workerstmt);
+	RewriteStreamingAggs(workerstmt);
 
 	/*
 	 * Rewrite the groupClause and project any group expressions that
@@ -704,6 +1185,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	 * Any WINDOWing cruft should be removed from the worker statement
 	 * and only left in the view stmt.
 	 */
+	curAttr = 1;
 	workerstmt->targetList = NIL;
 	foreach(lc, workerTargetList)
 	{
@@ -715,8 +1197,25 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 			fcall->over = NULL;
 		}
 
+		/*
+		 * If applicable, put the time-based ResTarget where it
+		 * originated in the original target list to maintain order
+		 * between the input target list and the columns of the matrel
+		 * we'll ultimately create.
+		 */
+		if (curAttr == timeAttr)
+		{
+			workerstmt->targetList = lappend(workerstmt->targetList, timeRes);
+			curAttr++;
+		}
+
 		workerstmt->targetList = lappend(workerstmt->targetList, res);
+		curAttr++;
 	}
+
+	/* time ResTarget wasn't in the target list, so just add it on to the end */
+	if (!AttributeNumberIsValid(timeAttr))
+		workerstmt->targetList = lappend(workerstmt->targetList, timeRes);
 
 	viewstmt->windowClause = workerstmt->windowClause;
 	workerstmt->windowClause = NIL;
@@ -1071,6 +1570,21 @@ CollectFuncs(Node *node, CQAnalyzeContext *context)
 }
 
 /*
+ * CollectAggrefs
+ */
+bool
+CollectAggrefs(Node *node, CQAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, Aggref))
+		context->funcCalls = lappend(context->funcCalls, node);
+
+	return raw_expression_tree_walker(node, CollectAggrefs, (void *) context);
+}
+
+/*
  * AnalyzeAndValidateContinuousSelectStmt
  *
  * This is mainly to prepare a CV SELECT's FROM clause, which may involve streams
@@ -1384,4 +1898,84 @@ pipeline_rewrite(List *raw_parsetree_list)
 	}
 
 	return raw_parsetree_list;
+}
+
+/*
+ * RewriteContinuousViewSelect
+ *
+ * Possibly modify a continuous view's SELECT rule before it's applied.
+ * This is mainly used for including hidden columns in the view's subselect
+ * query when they are needed by functions in the target list.
+ */
+Query *
+RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv)
+{
+	RangeVar *rv = makeRangeVar(NULL, RelationGetRelationName(cv), -1);
+	ListCell *lc;
+	List *targets = NIL;
+	List *targetlist = NIL;
+	AttrNumber matrelvarno = InvalidAttrNumber;
+	TupleDesc matreldesc;
+	bool needshidden = false;
+	char *matrelname;
+	int i;
+
+	/* try to bail early because this gets called from a hot path */
+	if (!IsAContinuousView(rv))
+		return rule;
+
+	matrelname = GetMatRelationName(RelationGetRelationName(cv));
+	matreldesc = RelationNameGetTupleDesc(matrelname);
+
+	targets = pull_var_clause((Node *) rule->targetList,
+			PVC_RECURSE_AGGREGATES, PVC_INCLUDE_PLACEHOLDERS);
+
+	foreach(lc, targets)
+	{
+		Node *n = (Node *) lfirst(lc);
+		if (IsA(n, Var))
+		{
+			matrelvarno = ((Var *) n)->varno;
+			break;
+		}
+	}
+
+	/* is there anything to do? */
+	if (!AttributeNumberIsValid(matrelvarno))
+		return rule;
+
+	targets = pull_var_clause((Node *) query->targetList,
+			PVC_INCLUDE_AGGREGATES, PVC_INCLUDE_PLACEHOLDERS);
+
+	/* pull out all the user combine aggregates */
+	foreach(lc, targets)
+	{
+		Node *n = (Node *) lfirst(lc);
+		if (IsA(n, Aggref) && AGGKIND_IS_USER_COMBINE(((Aggref *) n)->aggkind))
+		{
+			needshidden = true;
+			break;
+		}
+	}
+
+	if (!needshidden)
+		return rule;
+
+	/* we have user combines, so expose hidden columns */
+	for (i=0; i<matreldesc->natts; i++)
+	{
+		Var *tev;
+		TargetEntry *te;
+		Form_pg_attribute attr = matreldesc->attrs[i];
+
+		tev = makeVar(matrelvarno, attr->attnum, attr->atttypid,
+				attr->atttypmod, attr->attcollation, 0);
+
+		te = makeTargetEntry((Expr *) tev, tev->varattno, NULL, false);
+		targetlist = lappend(targetlist, te);
+	}
+
+	rule->targetList = targetlist;
+
+	return rule;
 }

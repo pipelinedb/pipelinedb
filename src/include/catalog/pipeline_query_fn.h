@@ -38,9 +38,12 @@ bool IsContinuousViewActive(RangeVar *name);
 char *GetQueryStringOrNull(const char *cvname, bool selectonly);
 char *GetQueryString(const char *cvname, bool selectonly);
 bool IsAContinuousView(RangeVar *name);
+bool IsAMatRel(RangeVar *name, RangeVar **cvname);
 bool GetGCFlag(RangeVar *name);
 void MarkAllContinuousViewsAsInactive(void);
 char *GetMatRelationName(char *cvname);
 char *GetCVNameForMatRelationName(char *matrelname);
+Query *GetContinuousQuery(RangeVar *rv);
+void InvalidateContinuousQuery(RangeVar *rv);
 
 #endif

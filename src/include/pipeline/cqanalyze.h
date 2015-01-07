@@ -32,14 +32,20 @@ typedef struct CQAnalyzeContext
 	char *stepSize;
 } CQAnalyzeContext;
 
+#define USER_COMBINE "combine"
+
 TupleDesc InferStreamScanTupleDescriptor(ParseState *pstate, RangeTblEntry *rte);
 void AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
 RangeTblEntry *TransformStreamEntry(ParseState *pstate, StreamDesc *stream);
 
+void RewriteStreamingAggs(SelectStmt *stmt);
 SelectStmt *GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr);
 SelectStmt *GetSelectStmtForCQCombiner(SelectStmt *stmt);
 
-Oid GetCombineStateColumnType(TargetEntry *te);
+AttrNumber GetHiddenAttrNumber(char *attname, TupleDesc matrel);
+Oid GetCombineStateColumnType(Expr *expr);
+bool IsUserCombine(NameData proname);
+Node *ParseCombineFuncCall(ParseState *pstate, List *args, List *order, Expr *filter, WindowDef *over, int location);
 
 void InitializeCQAnalyzeContext(SelectStmt *stmt, ParseState *pstate, CQAnalyzeContext *context);
 char *GetUniqueInternalColname(CQAnalyzeContext *context);
@@ -51,6 +57,7 @@ bool IsAColumnRef(Node *node);
 bool AreColumnRefsEqual(Node *cr1, Node *cr2);
 Node *HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context);
 bool CollectFuncs(Node *node, CQAnalyzeContext *context);
+bool CollectAggrefs(Node *node, CQAnalyzeContext *context);
 bool CollectAggFuncs(Node *node, CQAnalyzeContext *context);
 ResTarget *CreateResTargetForNode(Node *node);
 ResTarget *CreateUniqueResTargetForNode(Node *node, CQAnalyzeContext *context);
@@ -58,5 +65,6 @@ ColumnRef *CreateColumnRefFromResTarget(ResTarget *res);
 bool HasAggOrGroupBy(SelectStmt *stmt);
 bool AddStreams(Node *node, CQAnalyzeContext *context);
 List *pipeline_rewrite(List *raw_parsetree_list);
+Query *RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv);
 
 #endif

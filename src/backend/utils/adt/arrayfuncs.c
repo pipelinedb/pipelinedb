@@ -1511,8 +1511,17 @@ Datum
 arrayaggstaterecv(PG_FUNCTION_ARGS)
 {
 	ArrayType *vals = (ArrayType *) PG_GETARG_ARRAYTYPE_P(0);
-	ArrayBuildState *result = (ArrayBuildState *) palloc0(sizeof(ArrayBuildState));
+	ArrayBuildState *result;
 
+	MemoryContext old;
+	MemoryContext context;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		context = fcinfo->flinfo->fn_mcxt;
+
+	old = MemoryContextSwitchTo(context);
+
+	result = (ArrayBuildState *) palloc0(sizeof(ArrayBuildState));
 	result->mcontext = CurrentMemoryContext;
 	result->element_type = ARR_ELEMTYPE(vals);
 
@@ -1526,6 +1535,8 @@ arrayaggstaterecv(PG_FUNCTION_ARGS)
 			&result->dvalues, &result->dnulls, &result->nelems);
 
 	result->alen = result->nelems;
+
+	MemoryContextSwitchTo(old);
 
 	PG_RETURN_POINTER(result);
 }

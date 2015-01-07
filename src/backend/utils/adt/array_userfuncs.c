@@ -505,46 +505,6 @@ array_agg_combine(PG_FUNCTION_ARGS)
 }
 
 /*
- * array_agg parse and combine function
- */
-Datum
-array_agg_pcombine(PG_FUNCTION_ARGS)
-{
-	ArrayType *arg1 = PG_GETARG_ARRAYTYPE_P(1);
-	ArrayBuildState *state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
-	ArrayBuildState *incoming;
-	Datum result;
-	MemoryContext aggcontext;
-	MemoryContext oldcontext;
-
-	if (!AggCheckCallContext(fcinfo, &aggcontext))
-			elog(ERROR, "aggregate function called in non-aggregate context");
-
-	oldcontext = MemoryContextSwitchTo(aggcontext);
-	incoming = (ArrayBuildState *) DirectFunctionCall1(arrayaggstaterecv, (Datum) arg1);
-
-	if (state == NULL)
-	{
-		int i;
-		for (i=0; i<incoming->nelems; i++)
-		{
-			state = accumArrayResult(state, incoming->dvalues[i],
-					incoming->dnulls[i], incoming->element_type, aggcontext);
-		}
-		PG_RETURN_POINTER(state);
-	}
-
-	fcinfo->arg[0] = (Datum) state;
-	fcinfo->arg[1] = (Datum) incoming;
-	fcinfo->nargs = 2;
-
-	MemoryContextSwitchTo(oldcontext);
-	result = array_agg_combine(fcinfo);
-
-	PG_RETURN_POINTER(result);
-}
-
-/*
  * ARRAY_AGG aggregate function
  */
 Datum

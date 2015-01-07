@@ -1610,11 +1610,15 @@ hll_count_distinct_transition(PG_FUNCTION_ARGS)
 Datum
 hll_count_distinct_combine(PG_FUNCTION_ARGS)
 {
+	MemoryContext old;
+	MemoryContext context;
 	HyperLogLog *state;
 	HyperLogLog *incoming = (HyperLogLog *) PG_GETARG_POINTER(1);
 
-	if (!AggCheckCallContext(fcinfo, NULL))
+	if (!AggCheckCallContext(fcinfo, &context))
 			elog(ERROR, "aggregate function called in non-aggregate context");
+
+	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
 	{
@@ -1625,33 +1629,9 @@ hll_count_distinct_combine(PG_FUNCTION_ARGS)
 	state = (HyperLogLog *) PG_GETARG_POINTER(0);
 	state = HLLUnion(state, incoming);
 
+	MemoryContextSwitchTo(old);
+
 	PG_RETURN_POINTER(state);
-}
-
-/*
- * recv a serialized HyperLogLog and send it to the
- * combine function
- */
-Datum
-hll_count_distinct_pcombine(PG_FUNCTION_ARGS)
-{
-	Datum arg0;
-	Datum result;
-
-	if (!AggCheckCallContext(fcinfo, NULL))
-			elog(ERROR, "aggregate function called in non-aggregate context");
-
-	arg0 = PG_ARGISNULL(0) ? (Datum) NULL : (Datum) PG_GETARG_POINTER(0);
-
-	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
-	fcinfo->nargs = 1;
-	fcinfo->arg[1] = hllrecv(fcinfo);
-	fcinfo->arg[0] = arg0;
-	fcinfo->nargs = 2;
-
-	result = hll_count_distinct_combine(fcinfo);
-
-	PG_RETURN_POINTER(result);
 }
 
 /*

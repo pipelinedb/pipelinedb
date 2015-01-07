@@ -22,6 +22,7 @@
 #include "parser/analyze.h"
 #include "parser/parse_coerce.h"
 #include "parser/parsetree.h"
+#include "pipeline/cqanalyze.h"
 #include "pipeline/stream.h"
 #include "rewrite/rewriteDefine.h"
 #include "rewrite/rewriteHandler.h"
@@ -1443,6 +1444,13 @@ ApplyRetrieveRule(Query *parsetree,
 	 * Recursively expand any view references inside the view.
 	 */
 	rule_action = fireRIRrules(rule_action, activeRIRs, forUpdatePushedDown);
+
+	/*
+	 * If we're selecting from a continuous view, some functions in the
+	 * target list may need access to columns that aren't in the view's
+	 * target list.
+	 */
+	RewriteContinuousViewSelect(parsetree, rule_action, relation);
 
 	/*
 	 * Now, plug the view query in as a subselect, replacing the relation's

@@ -525,6 +525,7 @@ _readWindowFunc(void)
 	READ_UINT_FIELD(winref);
 	READ_BOOL_FIELD(winstar);
 	READ_BOOL_FIELD(winagg);
+	READ_CHAR_FIELD(winaggkind);
 	READ_LOCATION_FIELD(location);
 
 	READ_DONE();

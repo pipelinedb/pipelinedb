@@ -17,7 +17,7 @@ CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PART
  sum    | numeric |           | main     | 
 View definition:
  SELECT cqwindow0_mrel0.key,
-    sum(cqwindow0_mrel0._1, NULL::numeric(65535,65532)) OVER (PARTITION BY cqwindow0_mrel0.key ORDER BY cqwindow0_mrel0._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
+    pg_catalog.sum(naggstaterecv(cqwindow0_mrel0._1)) OVER (PARTITION BY cqwindow0_mrel0.key ORDER BY cqwindow0_mrel0._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
    FROM cqwindow0_mrel0;
 
 ACTIVATE cqwindow0;
@@ -75,7 +75,7 @@ CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITIO
  avg    | numeric |           | main     | 
 View definition:
  SELECT cqwindow1_mrel0.key,
-    avg(cqwindow1_mrel0._1, NULL::numeric(65535,65532)) OVER (PARTITION BY cqwindow1_mrel0.key ORDER BY cqwindow1_mrel0._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
+    pg_catalog.avg(cqwindow1_mrel0._1) OVER (PARTITION BY cqwindow1_mrel0.key ORDER BY cqwindow1_mrel0._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
    FROM cqwindow1_mrel0;
 
 ACTIVATE cqwindow1;

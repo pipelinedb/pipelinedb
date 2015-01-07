@@ -29,6 +29,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
+#include "pipeline/cqanalyze.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
@@ -241,6 +242,10 @@ ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 							   &funcid, &rettype, &retset,
 							   &nvargs, &vatype,
 							   &declared_arg_types, &argdefaults);
+
+	if (fdresult == FUNCDETAIL_COMBINE)
+		return ParseCombineFuncCall(pstate, fargs, agg_order, agg_filter, over, location);
+
 	if (fdresult == FUNCDETAIL_COERCION)
 	{
 		/*
@@ -705,6 +710,7 @@ ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 		wfunc->winstar = agg_star;
 		wfunc->winagg = (fdresult == FUNCDETAIL_AGGREGATE);
 		wfunc->aggfilter = agg_filter;
+		wfunc->winaggkind = aggkind ? aggkind : AGGKIND_NORMAL;
 		wfunc->location = location;
 
 		/*
@@ -1477,10 +1483,19 @@ func_get_detail(List *funcname,
 		if (!HeapTupleIsValid(ftup))	/* should not happen */
 			elog(ERROR, "cache lookup failed for function %u",
 				 best_candidate->oid);
+
 		pform = (Form_pg_proc) GETSTRUCT(ftup);
+
 		*rettype = pform->prorettype;
 		*retset = pform->proretset;
 		*vatype = pform->provariadic;
+
+		if (IsUserCombine(pform->proname))
+		{
+			ReleaseSysCache(ftup);
+			return FUNCDETAIL_COMBINE;
+		}
+
 		/* fetch default args if caller wants 'em */
 		if (argdefaults && best_candidate->ndargs > 0)
 		{

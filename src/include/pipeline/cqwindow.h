@@ -23,9 +23,9 @@ Node *GetSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context);
 
 bool DoesViewAggregate(SelectStmt *stmt, CQAnalyzeContext *context);
 
-void AddProjectionsAndGroupBysForWindows(SelectStmt *stmt, SelectStmt *viewselect, bool hasAggOrGroupBy, CQAnalyzeContext *context);
+ResTarget *AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt,
+		bool doesViewAggregate, CQAnalyzeContext *context, AttrNumber *timeAttr);
 void TransformAggNodeForCQView(SelectStmt *viewselect, Node *agg, ResTarget *aggres, bool doesViewAggregate);
-void FixAggArgForCQView(SelectStmt *viewselect, SelectStmt *workerselect, RangeVar *matrelation);
 Node* GetCQVacuumExpr(char *cvname);
 
 #endif

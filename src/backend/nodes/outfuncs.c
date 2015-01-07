@@ -1011,6 +1011,7 @@ _outWindowFunc(StringInfo str, const WindowFunc *node)
 	WRITE_UINT_FIELD(winref);
 	WRITE_BOOL_FIELD(winstar);
 	WRITE_BOOL_FIELD(winagg);
+	WRITE_CHAR_FIELD(winaggkind);
 	WRITE_LOCATION_FIELD(location);
 }
 
