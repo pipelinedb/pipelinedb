@@ -19,18 +19,20 @@
 #include "libpq/libpq.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
+#include "parser/analyze.h"
+#include "pipeline/cqanalyze.h"
 #include "pipeline/cqproc.h"
 #include "postmaster/bgworker.h"
 #include "storage/pmsignal.h"
 #include "storage/proc.h"
 #include "storage/shmem.h"
 #include "tcop/dest.h"
+#include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/portal.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
-
 
 /*
  * skip
@@ -511,7 +513,7 @@ GetQueryString(const char *cvname, bool select_only)
 /*
  * IsContinuousView
  *
- * Returns if the RangeVar represents a registered
+ * Returns true if the RangeVar represents a registered
  * continuous view.
  */
 bool
@@ -523,6 +525,46 @@ IsAContinuousView(RangeVar *name)
 	ReleaseSysCache(tuple);
 	return true;
 }
+
+/*
+ * IsAMatRel
+ *
+ * Returns true if the RangeVar represents a materialization table,
+ * and also assigns the given string (if it's non-NULL) to the name
+ * of the corresponding continuous view
+ */
+bool
+IsAMatRel(RangeVar *name, RangeVar **cvname)
+{
+	Relation pipeline_query;
+	HeapScanDesc scandesc;
+	HeapTuple tup;
+	bool ismatrel = false;
+	NameData cv;
+
+	pipeline_query = heap_open(PipelineQueryRelationId, NoLock);
+	scandesc = heap_beginscan_catalog(pipeline_query, 0, NULL);
+
+	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
+		if (strcmp(NameStr(row->matrelname), name->relname) == 0)
+		{
+			cv = row->name;
+			ismatrel = true;
+			break;
+		}
+	}
+
+	heap_endscan(scandesc);
+	heap_close(pipeline_query, NoLock);
+
+	if (cvname)
+		*cvname = makeRangeVar(NULL, pstrdup(NameStr(cv)), -1);
+
+	return ismatrel;
+}
+
 /*
  * GetGCFlag
  */
@@ -590,4 +632,27 @@ MarkAllContinuousViewsAsInactive(void)
 
 	heap_endscan(scandesc);
 	heap_close(pipeline_query, AccessExclusiveLock);
+}
+
+/*
+ * GetContinuousQuery
+ *
+ * Returns an analyzed continuous query
+ */
+Query *
+GetContinuousQuery(RangeVar *rv)
+{
+	char *sql;
+	List *parsetree_list;
+	SelectStmt *sel;
+
+	sql = GetQueryString(rv->relname, true);
+	parsetree_list = pg_parse_query(sql);
+	sel = linitial(parsetree_list);
+
+	RewriteStreamingAggs(sel);
+
+	sel->forContinuousView = true;
+
+	return parse_analyze((Node *) sel, sql, 0, 0);
 }

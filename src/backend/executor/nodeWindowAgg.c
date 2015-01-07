@@ -37,6 +37,7 @@
 #include "catalog/objectaccess.h"
 #include "catalog/pg_aggregate.h"
 #include "catalog/pg_proc.h"
+#include "catalog/pipeline_combine.h"
 #include "executor/executor.h"
 #include "executor/nodeWindowAgg.h"
 #include "miscadmin.h"
@@ -2156,6 +2157,22 @@ initialize_peragg(WindowAggState *winstate, WindowFunc *wfunc,
 		finalextra = aggform->aggfinalextra;
 		aggtranstype = aggform->aggtranstype;
 		initvalAttNo = Anum_pg_aggregate_agginitval;
+	}
+
+	if (AGGKIND_IS_USER_COMBINE(wfunc->winaggkind))
+	{
+		HeapTuple combTuple = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
+				ObjectIdGetDatum(finalfn_oid),
+				ObjectIdGetDatum(transfn_oid));
+
+		peraggstate->invtransfn_oid = invtransfn_oid = InvalidOid;
+
+		if (HeapTupleIsValid(combTuple))
+		{
+			Form_pipeline_combine combform = (Form_pipeline_combine) GETSTRUCT(combTuple);
+			peraggstate->transfn_oid = transfn_oid = combform->combinefn;
+			ReleaseSysCache(combTuple);
+		}
 	}
 
 	/*

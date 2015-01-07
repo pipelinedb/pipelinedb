@@ -47,6 +47,7 @@
 #include "parser/parse_oper.h"
 #include "parser/parser.h"
 #include "parser/parsetree.h"
+#include "pipeline/cqanalyze.h"
 #include "rewrite/rewriteHandler.h"
 #include "rewrite/rewriteManip.h"
 #include "rewrite/rewriteSupport.h"
@@ -7662,18 +7663,21 @@ get_agg_expr(Aggref *aggref, deparse_context *context)
 	StringInfo	buf = context->buf;
 	Oid			argtypes[FUNC_MAX_ARGS];
 	int			nargs;
+	char 		*funcname;
 	bool		use_variadic;
 
 	/* Extract the argument types as seen by the parser */
 	nargs = get_aggregate_argtypes(aggref, argtypes);
 
+	if (AGGKIND_IS_USER_COMBINE(aggref->aggkind))
+		funcname = USER_COMBINE;
+	else
+		funcname = generate_function_name(aggref->aggfnoid, nargs,
+				NIL, argtypes, aggref->aggvariadic, &use_variadic);
+
 	/* Print the aggregate name, schema-qualified if needed */
-	appendStringInfo(buf, "%s(%s",
-					 generate_function_name(aggref->aggfnoid, nargs,
-											NIL, argtypes,
-											aggref->aggvariadic,
-											&use_variadic),
-					 (aggref->aggdistinct != NIL) ? "DISTINCT " : "");
+	appendStringInfo(buf, "%s(%s", funcname,
+			(aggref->aggdistinct != NIL) ? "DISTINCT " : "");
 
 	if (AGGKIND_IS_ORDERED_SET(aggref->aggkind))
 	{
@@ -7691,7 +7695,7 @@ get_agg_expr(Aggref *aggref, deparse_context *context)
 	else
 	{
 		/* aggstar can be set only in zero-argument aggregates */
-		if (aggref->aggstar)
+		if (!AGGKIND_IS_USER_COMBINE(aggref->aggkind) && aggref->aggstar)
 			appendStringInfoChar(buf, '*');
 		else
 		{

@@ -224,7 +224,8 @@ ORDER BY 1, 2;
 SELECT p1.oid, p1.proname
 FROM pg_proc as p1
 WHERE p1.prorettype = 'internal'::regtype AND NOT
-    'internal'::regtype = ANY (p1.proargtypes);
+    'internal'::regtype = ANY (p1.proargtypes) AND
+	p1.oid NOT IN (SELECT combineinfn FROM pipeline_combine);
 
 -- Look for functions that return a polymorphic type and do not have any
 -- polymorphic argument.  Calls of such functions would be unresolvable
@@ -676,7 +677,8 @@ WHERE a.aggfnoid = p.oid AND
 SELECT oid, proname
 FROM pg_proc as p
 WHERE p.proisagg AND
-    NOT EXISTS (SELECT 1 FROM pg_aggregate a WHERE a.aggfnoid = p.oid);
+    NOT EXISTS (SELECT 1 FROM pg_aggregate a WHERE a.aggfnoid = p.oid)
+	AND p.proname != 'combine';
 
 -- If there is no finalfn then the output type must be the transtype.
 
@@ -912,7 +914,7 @@ WHERE proisagg AND proargdefaults IS NOT NULL;
 
 SELECT p.oid, proname
 FROM pg_proc AS p JOIN pg_aggregate AS a ON a.aggfnoid = p.oid
-WHERE proisagg AND provariadic != 0 AND a.aggkind = 'n';
+WHERE proisagg AND provariadic != 0 AND a.aggkind = 'n' AND p.proname != 'combine';
 
 -- **************** pg_opfamily ****************
 

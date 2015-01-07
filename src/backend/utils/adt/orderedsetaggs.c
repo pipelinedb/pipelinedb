@@ -1423,6 +1423,8 @@ hllsend(PG_FUNCTION_ARGS)
 Datum
 hllrecv(PG_FUNCTION_ARGS)
 {
+	MemoryContext context;
+	MemoryContext old;
 	bytea *bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
 	HyperLogLog *hll;
 	StringInfoData buf;
@@ -1431,6 +1433,11 @@ hllrecv(PG_FUNCTION_ARGS)
 	char encoding;
 	uint8 p;
 	uint8 *M;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		context = fcinfo->flinfo->fn_mcxt;
+
+	old = MemoryContextSwitchTo(context);
 
 	initStringInfo(&buf);
 	appendBinaryStringInfo(&buf, VARDATA(bytesin), nbytes);
@@ -1441,6 +1448,8 @@ hllrecv(PG_FUNCTION_ARGS)
 	encoding = pq_getmsgbyte(&buf);
 
 	hll = HLLCreateFromRaw(M, mlen, p, encoding);
+
+	MemoryContextSwitchTo(old);
 
 	PG_RETURN_POINTER(hll);
 }
@@ -1635,11 +1644,15 @@ hll_hypothetical_set_transition_multi(PG_FUNCTION_ARGS)
 Datum
 hll_hypothetical_set_combine_multi(PG_FUNCTION_ARGS)
 {
+	MemoryContext context;
+	MemoryContext old;
 	HyperLogLog *state;
 	HyperLogLog *incoming = (HyperLogLog *) PG_GETARG_POINTER(1);
 
-	if (!AggCheckCallContext(fcinfo, NULL))
-			elog(ERROR, "aggregate function called in non-aggregate context");
+	if (!AggCheckCallContext(fcinfo, &context))
+		context = fcinfo->flinfo->fn_mcxt;
+
+	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
 	{
@@ -1650,29 +1663,9 @@ hll_hypothetical_set_combine_multi(PG_FUNCTION_ARGS)
 	state = (HyperLogLog *) PG_GETARG_POINTER(0);
 	state = HLLUnion(state, incoming);
 
+	MemoryContextSwitchTo(old);
+
 	PG_RETURN_POINTER(state);
-}
-
-Datum
-hll_hypothetical_set_pcombine(PG_FUNCTION_ARGS)
-{
-	Datum arg0;
-	Datum result;
-
-	if (!AggCheckCallContext(fcinfo, NULL))
-			elog(ERROR, "aggregate function called in non-aggregate context");
-
-	arg0 = PG_ARGISNULL(0) ? (Datum) NULL : (Datum) PG_GETARG_POINTER(0);
-
-	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
-	fcinfo->nargs = 1;
-	fcinfo->arg[1] = hllrecv(fcinfo);
-	fcinfo->arg[0] = arg0;
-	fcinfo->nargs = 2;
-
-	result = hll_hypothetical_set_combine_multi(fcinfo);
-
-	PG_RETURN_POINTER(result);
 }
 
 static int
@@ -1799,26 +1792,6 @@ cq_hypothetical_set_combine_multi(PG_FUNCTION_ARGS)
 	state[2] += incoming[2];
 
 	PG_RETURN_POINTER(statearr);
-}
-
-/*
- * We need this as a very thin wrapper around cq_hypothetical_set_combine_multi
- * because we need a separate non-hypothetical-set aggregate for sliding window
- * views. This is because these views don't use a WITHIN GROUP clause, which is
- * required by the aggregates we would otherwise use directly on the view's
- * underlying matrel.
- */
-Datum
-cq_hypothetical_set_pcombine(PG_FUNCTION_ARGS)
-{
-	Datum result;
-
-	if (!AggCheckCallContext(fcinfo, NULL))
-			elog(ERROR, "aggregate function called in non-aggregate context");
-
-	result = cq_hypothetical_set_combine_multi(fcinfo);
-
-	PG_RETURN_POINTER(result);
 }
 
 /*

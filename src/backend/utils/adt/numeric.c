@@ -465,12 +465,23 @@ static NumericAggState *makeNumericAggState(FunctionCallInfo fcinfo, bool calcSu
 Datum
 naggstaterecv(PG_FUNCTION_ARGS)
 {
-	bytea *bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
-	NumericAggState *result = (NumericAggState *) palloc0(sizeof(NumericAggState));
+	MemoryContext context;
+	MemoryContext old;
+	bytea *bytesin;
+	NumericAggState *result;
 	StringInfoData buf;
-	int nbytes = VARSIZE(bytesin);
+	int nbytes;
 	int digitssize;
 	int i;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		context = fcinfo->flinfo->fn_mcxt;
+
+	old = MemoryContextSwitchTo(context);
+
+	bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
+	result = (NumericAggState *) palloc0(sizeof(NumericAggState));
+	nbytes = VARSIZE(bytesin);
 
 	initStringInfo(&buf);
 	appendBinaryStringInfo(&buf, VARDATA(bytesin), nbytes);
@@ -499,6 +510,8 @@ naggstaterecv(PG_FUNCTION_ARGS)
 	result->sumX2.digits = palloc0(digitssize);
 	for (i=0; i<result->sumX2.ndigits; i++)
 		result->sumX2.digits[i] = pq_getmsgint(&buf, sizeof(NumericDigit));
+
+	MemoryContextSwitchTo(old);
 
 	PG_RETURN_POINTER(result);
 }
@@ -2843,9 +2856,12 @@ numeric_combine(PG_FUNCTION_ARGS)
 {
 	NumericAggState  *state = PG_ARGISNULL(0) ? NULL : (NumericAggState *) PG_GETARG_POINTER(0);
 	NumericAggState	 *incoming = (NumericAggState *) PG_GETARG_POINTER(1);
+	MemoryContext old;
 
 	if (state == NULL)
 		state = makeNumericAggState(fcinfo, false);
+
+	old = MemoryContextSwitchTo(state->agg_context);
 
 	state->N += incoming->N;
 	state->maxScale = Max(state->maxScale, incoming->maxScale);
@@ -2855,38 +2871,9 @@ numeric_combine(PG_FUNCTION_ARGS)
 	add_var(&(state->sumX), &(incoming->sumX), &(state->sumX));
 	add_var(&(state->sumX2), &(incoming->sumX2), &(state->sumX2));
 
+	MemoryContextSwitchTo(old);
+
 	PG_RETURN_POINTER(state);
-}
-
-/*
- * Parses the arg1 NumericAggState and combines it with the arg0 one.
- */
-Datum
-numeric_pcombine(PG_FUNCTION_ARGS)
-{
-	MemoryContext old_context;
-	MemoryContext agg_context;
-	Datum arg0;
-	Datum result;
-
-	if (!AggCheckCallContext(fcinfo, &agg_context))
-			elog(ERROR, "aggregate function called in non-aggregate context");
-
-	old_context = MemoryContextSwitchTo(agg_context);
-
-	arg0 = PG_ARGISNULL(0) ? (Datum) makeNumericAggState(fcinfo, false) : (Datum) PG_GETARG_POINTER(0);
-
-	fcinfo->arg[0] = (Datum) PG_GETARG_POINTER(1);
-	fcinfo->nargs = 1;
-	fcinfo->arg[1] = naggstaterecv(fcinfo);
-	fcinfo->arg[0] = arg0;
-	fcinfo->nargs = 2;
-
-	result = numeric_combine(fcinfo);
-
-	MemoryContextSwitchTo(old_context);
-
-	PG_RETURN_POINTER(result);
 }
 
 /*

@@ -75,6 +75,9 @@ CATALOG(pipeline_combine,4247) BKI_WITHOUT_OIDS
 
 typedef FormData_pipeline_combine *Form_pipeline_combine;
 
+#define COMBINE_OID 4300
+#define IS_COMBINE_AGG(oid) (oid == COMBINE_OID)
+
 #define Natts_pipeline_combine							7
 #define Anum_pipeline_combine_aggfinalfn		1
 #define Anum_pipeline_combine_transfn 			2

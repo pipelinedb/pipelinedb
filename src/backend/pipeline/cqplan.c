@@ -148,7 +148,7 @@ SetCQPlanRefs(PlannedStmt *pstmt, char* matrelname)
 		if (IsA(expr, Aggref))
 		{
 			Aggref *aggref = (Aggref *) expr;
-			Oid hiddentype = GetCombineStateColumnType(te);
+			Oid hiddentype = GetCombineStateColumnType(te->expr);
 			AttrNumber hidden = 0;
 			Oid transtype;
 
