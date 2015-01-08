@@ -83,7 +83,6 @@ def main(args):
         upstream_path = os.path.join(upstream_root, our_path)
         if not os.path.exists(upstream_path): continue
 
-        need_merge.add(our_path)
         lf = open(our_path)
         rf = open(upstream_path)
 
@@ -99,10 +98,19 @@ def main(args):
 
         _mkdirs(subdir)
 
+        lines = 0
+        diff_lines = list(difflib.unified_diff(left, right, upstream_path, our_path))
+        
+        if not diff_lines:
+            continue
+        
         diff = open(diff_path, 'wa')
-        for line in difflib.unified_diff(left, right, upstream_path, our_path):
+        for line in diff_lines:
             diff.write(line + '\n')
+            lines += 1
         diff.close()
+    
+        need_merge.add(our_path)
         print 'Created %s' % diff_path
 
         # It's also useful when merging to have the original copy

@@ -1822,14 +1822,14 @@ autovac_balance_cost(void)
 			worker->wi_cost_limit = Max(Min(limit,
 											worker->wi_cost_limit_base),
 										1);
-
-			if (worker->wi_proc != NULL)
-				elog(DEBUG2, "autovac_balance_cost(pid=%u db=%u, rel=%u, dobalance=%s cost_limit=%d, cost_limit_base=%d, cost_delay=%d)",
-					 worker->wi_proc->pid, worker->wi_dboid, worker->wi_tableoid,
-					 worker->wi_dobalance ? "yes" : "no",
-					 worker->wi_cost_limit, worker->wi_cost_limit_base,
-					 worker->wi_cost_delay);
 		}
+
+		if (worker->wi_proc != NULL)
+			elog(DEBUG2, "autovac_balance_cost(pid=%u db=%u, rel=%u, dobalance=%s cost_limit=%d, cost_limit_base=%d, cost_delay=%d)",
+				 worker->wi_proc->pid, worker->wi_dboid, worker->wi_tableoid,
+				 worker->wi_dobalance ? "yes" : "no",
+				 worker->wi_cost_limit, worker->wi_cost_limit_base,
+				 worker->wi_cost_delay);
 	}
 }
 

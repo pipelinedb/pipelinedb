@@ -521,8 +521,8 @@ make
         --with-system-tzdata=DIRECTORY
                 PostgreSQL includes its own time zone database, which it
                 requires for date and time operations. This time zone
-                database is in fact compatible with the "zoneinfo" time
-                zone database provided by many operating systems such as
+                database is in fact compatible with the IANA time zone
+                database provided by many operating systems such as
                 FreeBSD, Linux, and Solaris, so it would be redundant to
                 install it again. When this option is used, the
                 system-supplied time zone database in "DIRECTORY" is used
@@ -619,6 +619,10 @@ make
 
 ./configure CC='/opt/SUNWspro/bin/cc -xtarget=native64' --enable-dtrace DTRACEFL
 AGS='-64' ...
+
+        --enable-tap-tests
+                Enable tests using the Perl TAP tools. This requires a
+                Perl installation and the Perl module IPC::Run.
 
        If you prefer a C compiler different from the one "configure"
        picks, you can set the environment variable CC to the program of
@@ -964,13 +968,12 @@ psql testdb
 
    PostgreSQL can be expected to work on these operating systems: Linux
    (all recent distributions), Windows (Win2000 SP4 and later), FreeBSD,
-   OpenBSD, NetBSD, OS X, AIX, HP/UX, Solaris, Tru64 Unix, FreeBSD,
-   OpenBSD, NetBSD, OS X, AIX, HP/UX, Solaris, and UnixWare. Other
-   Unix-like systems may also work but are not currently being tested. In
-   most cases, all CPU architectures supported by a given operating system
-   will work. Look in the the Section called Platform-specific Notes below
-   to see if there is information specific to your operating system,
-   particularly if using an older system.
+   OpenBSD, NetBSD, OS X, AIX, HP/UX, Solaris, Tru64 Unix, and UnixWare.
+   Other Unix-like systems may also work but are not currently being
+   tested. In most cases, all CPU architectures supported by a given
+   operating system will work. Look in the the Section called
+   Platform-specific Notes below to see if there is information specific
+   to your operating system, particularly if using an older system.
 
    If you have installation problems on a platform that is known to be
    supported according to recent build farm results, please report it to

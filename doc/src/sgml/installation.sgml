@@ -1108,7 +1108,7 @@ su - postgres
         <para>
          <productname>PostgreSQL</> includes its own time zone database,
          which it requires for date and time operations.  This time zone
-         database is in fact compatible with the <quote>zoneinfo</> time zone
+         database is in fact compatible with the IANA time zone
          database provided by many operating systems such as FreeBSD,
          Linux, and Solaris, so it would be redundant to install it again.
          When this option is used, the system-supplied time zone database
@@ -1271,6 +1271,16 @@ su - postgres
        </listitem>
       </varlistentry>
 
+      <varlistentry>
+       <term><option>--enable-tap-tests</option></term>
+       <listitem>
+        <para>
+         Enable tests using the Perl TAP tools.  This requires a Perl
+         installation and the Perl module <literal>IPC::Run</literal>.
+         <![%standalone-ignore;[See <xref linkend="regress-tap"> for more information.]]>
+        </para>
+       </listitem>
+      </varlistentry>
      </variablelist>
     </para>
 
@@ -1992,7 +2002,6 @@ kill `cat /usr/local/pgsql/data/postmaster.pid`
    <productname>PostgreSQL</> can be expected to work on these operating
    systems: Linux (all recent distributions), Windows (Win2000 SP4 and later),
    FreeBSD, OpenBSD, NetBSD, OS X, AIX, HP/UX, Solaris, Tru64 Unix,
-   FreeBSD, OpenBSD, NetBSD, OS X, AIX, HP/UX, Solaris,
    and UnixWare.  Other Unix-like systems may also work but are not currently
    being tested.  In most cases, all CPU architectures supported by
    a given operating system will work.  Look in

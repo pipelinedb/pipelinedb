@@ -166,7 +166,6 @@ EXPORTS
     _lo_tell64                 @ 163
     _lo_truncate64             @ 164
     _PQconninfo                @ 165
-    _PQhostaddr                @ 166
 
 ; Aliases for MS compatible names
     PQconnectdb               = _PQconnectdb
@@ -334,4 +333,3 @@ EXPORTS
     lo_tell64                 = _lo_tell64
     lo_truncate64             = _lo_truncate64
     PQconninfo                = _PQconninfo
-    PQhostaddr                = _PQhostaddr
