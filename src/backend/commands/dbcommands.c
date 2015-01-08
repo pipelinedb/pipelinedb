@@ -527,15 +527,17 @@ createdb(const CreatedbStmt *stmt)
 	InvokeObjectPostCreateHook(DatabaseRelationId, dboid, 0);
 
 	/*
-	 * Force a checkpoint before starting the copy. This will force dirty
-	 * buffers out to disk, to ensure source database is up-to-date on disk
-	 * for the copy. FlushDatabaseBuffers() would suffice for that, but we
-	 * also want to process any pending unlink requests. Otherwise, if a
-	 * checkpoint happened while we're copying files, a file might be deleted
-	 * just when we're about to copy it, causing the lstat() call in copydir()
-	 * to fail with ENOENT.
+	 * Force a checkpoint before starting the copy. This will force all dirty
+	 * buffers, including those of unlogged tables, out to disk, to ensure
+	 * source database is up-to-date on disk for the copy.
+	 * FlushDatabaseBuffers() would suffice for that, but we also want
+	 * to process any pending unlink requests. Otherwise, if a checkpoint
+	 * happened while we're copying files, a file might be deleted just when
+	 * we're about to copy it, causing the lstat() call in copydir() to fail
+	 * with ENOENT.
 	 */
-	RequestCheckpoint(CHECKPOINT_IMMEDIATE | CHECKPOINT_FORCE | CHECKPOINT_WAIT);
+	RequestCheckpoint(CHECKPOINT_IMMEDIATE | CHECKPOINT_FORCE | CHECKPOINT_WAIT
+					  | CHECKPOINT_FLUSH_ALL);
 
 	/*
 	 * Once we start copying subdirectories, we need to be able to clean 'em
@@ -817,7 +819,7 @@ dropdb(const char *dbname, bool missing_ok)
 	if (ReplicationSlotsCountDBSlots(db_id, &nslots, &nslots_active))
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_IN_USE),
-				 errmsg("database \"%s\" is used by a logical decoding slot",
+				 errmsg("database \"%s\" is used by a logical replication slot",
 						dbname),
 				 errdetail_plural("There is %d slot, %d of them active.",
 								  "There are %d slots, %d of them active.",
@@ -1116,8 +1118,9 @@ movedb(const char *dbname, const char *tblspcname)
 	dst_dbpath = GetDatabasePath(db_id, dst_tblspcoid);
 
 	/*
-	 * Force a checkpoint before proceeding. This will force dirty buffers out
-	 * to disk, to ensure source database is up-to-date on disk for the copy.
+	 * Force a checkpoint before proceeding. This will force all dirty
+	 * buffers, including those of unlogged tables, out to disk, to ensure
+	 * source database is up-to-date on disk for the copy.
 	 * FlushDatabaseBuffers() would suffice for that, but we also want to
 	 * process any pending unlink requests. Otherwise, the check for existing
 	 * files in the target directory might fail unnecessarily, not to mention
@@ -1125,7 +1128,25 @@ movedb(const char *dbname, const char *tblspcname)
 	 * On Windows, this also ensures that background procs don't hold any open
 	 * files, which would cause rmdir() to fail.
 	 */
-	RequestCheckpoint(CHECKPOINT_IMMEDIATE | CHECKPOINT_FORCE | CHECKPOINT_WAIT);
+	RequestCheckpoint(CHECKPOINT_IMMEDIATE | CHECKPOINT_FORCE | CHECKPOINT_WAIT
+					  | CHECKPOINT_FLUSH_ALL);
+
+	/*
+	 * Now drop all buffers holding data of the target database; they should
+	 * no longer be dirty so DropDatabaseBuffers is safe.
+	 *
+	 * It might seem that we could just let these buffers age out of shared
+	 * buffers naturally, since they should not get referenced anymore.  The
+	 * problem with that is that if the user later moves the database back to
+	 * its original tablespace, any still-surviving buffers would appear to
+	 * contain valid data again --- but they'd be missing any changes made in
+	 * the database while it was in the new tablespace.  In any case, freeing
+	 * buffers that should never be used again seems worth the cycles.
+	 *
+	 * Note: it'd be sufficient to get rid of buffers matching db_id and
+	 * src_tblspcoid, but bufmgr.c presently provides no API for that.
+	 */
+	DropDatabaseBuffers(db_id);
 
 	/*
 	 * Check for existence of files in the target directory, i.e., objects of

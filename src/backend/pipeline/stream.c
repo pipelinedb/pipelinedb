@@ -199,7 +199,9 @@ InsertIntoStream(InsertStmt *ins)
 		 */
 		if (desc == NULL)
 		{
-			TupleDesc src = ExecTypeFromExprList(exprlist, colnames);
+			TupleDesc src = ExecTypeFromExprList(exprlist);
+
+			ExecTypeSetColNames(src, colnames);
 			desc = spalloc_tupledesc(src);
 
 			/*

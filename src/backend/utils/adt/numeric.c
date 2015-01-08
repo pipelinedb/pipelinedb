@@ -749,15 +749,17 @@ numeric_out_sci(Numeric num, int scale)
 /*
  * numeric_normalize() -
  *
- *	Output function for numeric data type without trailing zeroes.
+ *	Output function for numeric data type, suppressing insignificant trailing
+ *	zeroes and then any trailing decimal point.  The intent of this is to
+ *	produce strings that are equal if and only if the input numeric values
+ *	compare equal.
  */
 char *
 numeric_normalize(Numeric num)
 {
 	NumericVar	x;
 	char	   *str;
-	int			orig,
-				last;
+	int			last;
 
 	/*
 	 * Handle NaN
@@ -769,18 +771,24 @@ numeric_normalize(Numeric num)
 
 	str = get_str_from_var(&x);
 
-	orig = last = strlen(str) - 1;
-
-	for (;;)
+	/* If there's no decimal point, there's certainly nothing to remove. */
+	if (strchr(str, '.') != NULL)
 	{
-		if (last == 0 || str[last] != '0')
-			break;
+		/*
+		 * Back up over trailing fractional zeroes.  Since there is a decimal
+		 * point, this loop will terminate safely.
+		 */
+		last = strlen(str) - 1;
+		while (str[last] == '0')
+			last--;
 
-		last--;
+		/* We want to get rid of the decimal point too, if it's now last. */
+		if (str[last] == '.')
+			last--;
+
+		/* Delete whatever we backed up over. */
+		str[last + 1] = '\0';
 	}
-
-	if (last > 0 && last != orig)
-		str[last] = '\0';
 
 	return str;
 }
@@ -816,6 +824,8 @@ numeric_recv(PG_FUNCTION_ARGS)
 	alloc_var(&value, len);
 
 	value.weight = (int16) pq_getmsgint(buf, sizeof(int16));
+	/* we allow any int16 for weight --- OK? */
+
 	value.sign = (uint16) pq_getmsgint(buf, sizeof(uint16));
 	if (!(value.sign == NUMERIC_POS ||
 		  value.sign == NUMERIC_NEG ||
@@ -825,6 +835,11 @@ numeric_recv(PG_FUNCTION_ARGS)
 				 errmsg("invalid sign in external \"numeric\" value")));
 
 	value.dscale = (uint16) pq_getmsgint(buf, sizeof(uint16));
+	if ((value.dscale & NUMERIC_DSCALE_MASK) != value.dscale)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
+				 errmsg("invalid scale in external \"numeric\" value")));
+
 	for (i = 0; i < len; i++)
 	{
 		NumericDigit d = pq_getmsgint(buf, sizeof(NumericDigit));
@@ -835,6 +850,14 @@ numeric_recv(PG_FUNCTION_ARGS)
 					 errmsg("invalid digit in external \"numeric\" value")));
 		value.digits[i] = d;
 	}
+
+	/*
+	 * If the given dscale would hide any digits, truncate those digits away.
+	 * We could alternatively throw an error, but that would take a bunch of
+	 * extra code (about as much as trunc_var involves), and it might cause
+	 * client compatibility issues.
+	 */
+	trunc_var(&value, value.dscale);
 
 	apply_typmod(&value, typmod);
 

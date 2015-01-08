@@ -95,6 +95,7 @@ static void datum_to_json(Datum val, bool is_null, StringInfo result,
 			  bool key_scalar);
 static void add_json(Datum val, bool is_null, StringInfo result,
 		 Oid val_type, bool key_scalar);
+static text *catenate_stringinfo_string(StringInfo buffer, const char *addon);
 
 /* the null action object used for pure validation */
 static JsonSemAction nullSemAction =
@@ -173,6 +174,36 @@ lex_expect(JsonParseContext ctx, JsonLexContext *lex, JsonTokenType token)
 	 ((c) >= '0' && (c) <= '9') || \
 	 (c) == '_' || \
 	 IS_HIGHBIT_SET(c))
+
+/* utility function to check if a string is a valid JSON number */
+extern bool
+IsValidJsonNumber(const char *str, int len)
+{
+	bool		numeric_error;
+	JsonLexContext dummy_lex;
+
+
+	/*
+	 * json_lex_number expects a leading  '-' to have been eaten already.
+	 *
+	 * having to cast away the constness of str is ugly, but there's not much
+	 * easy alternative.
+	 */
+	if (*str == '-')
+	{
+		dummy_lex.input = (char *) str + 1;
+		dummy_lex.input_length = len - 1;
+	}
+	else
+	{
+		dummy_lex.input = (char *) str;
+		dummy_lex.input_length = len;
+	}
+
+	json_lex_number(&dummy_lex, dummy_lex.input, &numeric_error);
+
+	return !numeric_error;
+}
 
 /*
  * Input.
@@ -1343,7 +1374,7 @@ datum_to_json(Datum val, bool is_null, StringInfo result,
 	JsonLexContext dummy_lex;
 
 	/* callers are expected to ensure that null keys are not passed in */
-	Assert( ! (key_scalar && is_null));
+	Assert(!(key_scalar && is_null));
 
 	if (is_null)
 	{
@@ -1377,25 +1408,15 @@ datum_to_json(Datum val, bool is_null, StringInfo result,
 			break;
 		case JSONTYPE_NUMERIC:
 			outputstr = OidOutputFunctionCall(outfuncoid, val);
-			if (key_scalar)
-			{
-				/* always quote keys */
-				escape_json(result, outputstr);
-			}
+
+			/*
+			 * Don't call escape_json for a non-key if it's a valid JSON
+			 * number.
+			 */
+			if (!key_scalar && IsValidJsonNumber(outputstr, strlen(outputstr)))
+				appendStringInfoString(result, outputstr);
 			else
-			{
-				/*
-				 * Don't call escape_json for a non-key if it's a valid JSON
-				 * number.
-				 */
-				dummy_lex.input = *outputstr == '-' ? outputstr + 1 : outputstr;
-				dummy_lex.input_length = strlen(dummy_lex.input);
-				json_lex_number(&dummy_lex, dummy_lex.input, &numeric_error);
-				if (!numeric_error)
-					appendStringInfoString(result, outputstr);
-				else
-					escape_json(result, outputstr);
-			}
+				escape_json(result, outputstr);
 			pfree(outputstr);
 			break;
 		case JSONTYPE_DATE:
@@ -1868,18 +1889,18 @@ json_agg_finalfn(PG_FUNCTION_ARGS)
 
 	state = PG_ARGISNULL(0) ? NULL : (StringInfo) PG_GETARG_POINTER(0);
 
+	/* NULL result for no rows in, as is standard with aggregates */
 	if (state == NULL)
 		PG_RETURN_NULL();
 
-	appendStringInfoChar(state, ']');
-
-	PG_RETURN_TEXT_P(cstring_to_text_with_len(state->data, state->len));
+	/* Else return state with appropriate array terminator added */
+	PG_RETURN_TEXT_P(catenate_stringinfo_string(state, "]"));
 }
 
 /*
  * json_object_agg transition function.
  *
- * aggregate two input columns as a single json value.
+ * aggregate two input columns as a single json object value.
  */
 Datum
 json_object_agg_transfn(PG_FUNCTION_ARGS)
@@ -1893,7 +1914,7 @@ json_object_agg_transfn(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &aggcontext))
 	{
 		/* cannot be called directly because of internal-type argument */
-		elog(ERROR, "json_agg_transfn called in non-aggregate context");
+		elog(ERROR, "json_object_agg_transfn called in non-aggregate context");
 	}
 
 	if (PG_ARGISNULL(0))
@@ -1972,12 +1993,12 @@ json_object_agg_finalfn(PG_FUNCTION_ARGS)
 
 	state = PG_ARGISNULL(0) ? NULL : (StringInfo) PG_GETARG_POINTER(0);
 
+	/* NULL result for no rows in, as is standard with aggregates */
 	if (state == NULL)
 		PG_RETURN_NULL();
 
-	appendStringInfoString(state, " }");
-
-	PG_RETURN_TEXT_P(cstring_to_text_with_len(state->data, state->len));
+	/* Else return state with appropriate object terminator added */
+	PG_RETURN_TEXT_P(catenate_stringinfo_string(state, " }"));
 }
 
 /*
@@ -2064,6 +2085,26 @@ json_object_agg_combine(PG_FUNCTION_ARGS)
 	appendBinaryStringInfo(state, incoming->data + 1, strlen(incoming->data) - 1);
 
 	PG_RETURN_POINTER(state);
+}
+
+/*
+ * Helper function for aggregates: return given StringInfo's contents plus
+ * specified trailing string, as a text datum.  We need this because aggregate
+ * final functions are not allowed to modify the aggregate state.
+ */
+static text *
+catenate_stringinfo_string(StringInfo buffer, const char *addon)
+{
+	/* custom version of cstring_to_text_with_len */
+	int			buflen = buffer->len;
+	int			addlen = strlen(addon);
+	text	   *result = (text *) palloc(buflen + addlen + VARHDRSZ);
+
+	SET_VARSIZE(result, buflen + addlen + VARHDRSZ);
+	memcpy(VARDATA(result), buffer->data, buflen);
+	memcpy(VARDATA(result) + buflen, addon, addlen);
+
+	return result;
 }
 
 /*

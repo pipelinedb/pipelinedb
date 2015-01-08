@@ -301,7 +301,6 @@ extern char *PQdb(const PGconn *conn);
 extern char *PQuser(const PGconn *conn);
 extern char *PQpass(const PGconn *conn);
 extern char *PQhost(const PGconn *conn);
-extern char *PQhostaddr(const PGconn *conn);
 extern char *PQport(const PGconn *conn);
 extern char *PQtty(const PGconn *conn);
 extern char *PQoptions(const PGconn *conn);
@@ -561,9 +560,6 @@ extern int	lo_export(PGconn *conn, Oid lobjId, const char *filename);
 
 /* Get the version of the libpq library in use */
 extern int	PQlibVersion(void);
-
-/* Send events to PipelineDB */
-extern int PQsendEvents(const char *encoding, const char *stream, const char *data, size_t len, PGconn *conn);
 
 /* Determine length of multibyte encoded char at *s */
 extern int	PQmblen(const char *s, int encoding);

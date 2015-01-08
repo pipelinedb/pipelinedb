@@ -17,7 +17,7 @@ dnl Read the Autoconf manual for details.
 dnl
 m4_pattern_forbid(^PGAC_)dnl to catch undefined macros
 
-AC_INIT([PostgreSQL], [9.4beta3], [pgsql-bugs@postgresql.org])
+AC_INIT([PostgreSQL], [9.4.0], [pgsql-bugs@postgresql.org])
 
 m4_if(m4_defn([m4_PACKAGE_VERSION]), [2.69], [], [m4_fatal([Autoconf version 2.69 is required.
 Untested combinations of 'autoconf' and PostgreSQL versions are not
@@ -222,6 +222,13 @@ if test -z "$DTRACE"; then
 fi
 AC_SUBST(DTRACEFLAGS)])
 AC_SUBST(enable_dtrace)
+
+#
+# TAP tests
+#
+PGAC_ARG_BOOL(enable, tap-tests, no,
+              [enable TAP tests (requires Perl and IPC::Run)])
+AC_SUBST(enable_tap_tests)
 
 #
 # Block size
@@ -1908,7 +1915,15 @@ AC_CHECK_PROGS(OSX, [osx sgml2xml sx])
 #
 # Check for test tools
 #
-AC_CHECK_PROGS(PROVE, prove)
+if test "$enable_tap_tests" = yes; then
+  AC_CHECK_PROGS(PROVE, prove)
+  if test -z "$PROVE"; then
+    AC_MSG_ERROR([prove not found])
+  fi
+  if test -z "$PERL"; then
+    AC_MSG_ERROR([Perl not found])
+  fi
+fi
 
 # Thread testing
 

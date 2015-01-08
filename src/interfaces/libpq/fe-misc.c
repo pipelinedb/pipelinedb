@@ -75,37 +75,6 @@ PQlibVersion(void)
 }
 
 /*
- * PQsendEvent: send an arbitrary event
- *
- * Returns 0 on success, EOF on error
- */
-int
-PQsendEvents(const char *encoding, const char *stream, const char *data,
-		size_t len, PGconn *conn)
-{
-	PGresult   *result;
-	if (pqPutMsgStart('>', false, conn) != 0 ||
-			pqPuts(encoding, conn) ||
-			pqPuts(stream, conn) ||
-			pqPutMsgBytes(data, len, conn) != 0 ||
-			pqPutMsgEnd(conn) != 0 ||
-			pqFlush(conn) != 0)
-	{
-		return 1;
-	}
-
-	conn->asyncStatus = PGASYNC_BUSY;
-
-	while ((result = PQgetResult(conn)) != NULL)
-	{
-		if (conn->status == CONNECTION_BAD)
-			break;
-	}
-
-	return 0;
-}
-
-/*
  * fputnbytes: print exactly N bytes to a file
  *
  * We avoid using %.*s here because it can misbehave if the data
@@ -794,12 +763,8 @@ retry3:
 			/* ready for read */
 			break;
 		default:
-			printfPQExpBuffer(&conn->errorMessage,
-							  libpq_gettext(
-								"server closed the connection unexpectedly\n"
-				   "\tThis probably means the server terminated abnormally\n"
-							 "\tbefore or while processing the request.\n"));
-			goto definitelyFailed;
+			/* we override pqReadReady's message with something more useful */
+			goto definitelyEOF;
 	}
 
 	/*
@@ -838,9 +803,16 @@ retry4:
 
 	/*
 	 * OK, we are getting a zero read even though select() says ready. This
-	 * means the connection has been closed.  Cope.  Note that errorMessage
-	 * has been set already.
+	 * means the connection has been closed.  Cope.
 	 */
+definitelyEOF:
+	printfPQExpBuffer(&conn->errorMessage,
+					  libpq_gettext(
+								"server closed the connection unexpectedly\n"
+				   "\tThis probably means the server terminated abnormally\n"
+							 "\tbefore or while processing the request.\n"));
+
+	/* Come here if lower-level code already set a suitable errorMessage */
 definitelyFailed:
 	pqDropConnection(conn);
 	conn->status = CONNECTION_BAD;		/* No more connection to backend */

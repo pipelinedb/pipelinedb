@@ -145,10 +145,19 @@ StartupDecodingContext(List *output_plugin_options,
 	 * logical decoding backend which doesn't need to be checked individually
 	 * when computing the xmin horizon because the xmin is enforced via
 	 * replication slots.
+	 *
+	 * We can only do so if we're outside of a transaction (i.e. the case when
+	 * streaming changes via walsender), otherwise a already setup
+	 * snapshot/xid would end up being ignored. That's not a particularly
+	 * bothersome restriction since the SQL interface can't be used for
+	 * streaming anyway.
 	 */
-	LWLockAcquire(ProcArrayLock, LW_EXCLUSIVE);
-	MyPgXact->vacuumFlags |= PROC_IN_LOGICAL_DECODING;
-	LWLockRelease(ProcArrayLock);
+	if (!IsTransactionOrTransactionBlock())
+	{
+		LWLockAcquire(ProcArrayLock, LW_EXCLUSIVE);
+		MyPgXact->vacuumFlags |= PROC_IN_LOGICAL_DECODING;
+		LWLockRelease(ProcArrayLock);
+	}
 
 	ctx->slot = slot;
 
@@ -218,7 +227,7 @@ CreateInitDecodingContext(char *plugin,
 	if (slot->data.database == InvalidOid)
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("cannot use physical replication slot created for logical decoding")));
+				 errmsg("cannot use physical replication slot for logical decoding")));
 
 	if (slot->data.database != MyDatabaseId)
 		ereport(ERROR,
@@ -410,7 +419,7 @@ CreateDecodingContext(XLogRecPtr start_lsn,
 	MemoryContextSwitchTo(old_context);
 
 	ereport(LOG,
-			(errmsg("starting logical decoding for slot %s",
+			(errmsg("starting logical decoding for slot \"%s\"",
 					NameStr(slot->data.name)),
 			 errdetail("streaming transactions committing after %X/%X, reading WAL from %X/%X",
 					   (uint32) (slot->data.confirmed_flush >> 32),

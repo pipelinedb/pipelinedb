@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use TestLib;
-use Test::More tests => 8;
+use Test::More tests => 18;
 
 program_help_ok('vacuumdb');
 program_version_ok('vacuumdb');
@@ -29,4 +29,4 @@ issues_sql_like(
 issues_sql_like(
 	[ 'vacuumdb', '-Z', 'postgres' ],
 	qr/statement: ANALYZE;/,
-	'vacuumdb -z');
+	'vacuumdb -Z');
