@@ -1061,8 +1061,8 @@ typedef struct PlanState
 
 #define DisableBatching(node) ((node)->cq_batch_progress = -1)
 
-#define BatchSize(node) (((PlanState *)(node))->cq_batch_progress >= 0 && \
-		((PlanState *)(node))->state->cq_batch_size)
+#define BatchSize(node) (((PlanState *)(node))->cq_batch_progress >= 0 ? \
+		((PlanState *)(node))->state->cq_batch_size : 0)
 
 #define IsContinuous(node) (((PlanState *)(node))->cq_batch_progress >= 0 && \
 		((PlanState *)(node))->state && BatchSize(node) > 0)
