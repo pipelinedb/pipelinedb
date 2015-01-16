@@ -1,0 +1,218 @@
+SET debug_sync_stream_insert = 'on';
+CREATE CONTINUOUS VIEW test_hll_agg0 AS SELECT k::text, hll_agg(x::integer) FROM test_hll_agg_stream GROUP BY k;
+CREATE CONTINUOUS VIEW test_hll_agg1 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(y::text)) FROM test_hll_agg_stream GROUP BY k;
+CREATE CONTINUOUS VIEW test_hll_agg2 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(substring(y::text, 1, 1))) FROM test_hll_agg_stream GROUP BY k;
+CREATE CONTINUOUS VIEW test_sw_hll_agg0 AS SELECT k::text, hll_agg(x::integer) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour') GROUP BY k;
+CREATE CONTINUOUS VIEW test_sw_hll_agg1 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(y::text)) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour')  GROUP BY k;
+CREATE CONTINUOUS VIEW test_sw_hll_agg2 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(substring(y::text, 1, 1))) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour')  GROUP BY k;
+ACTIVATE test_hll_agg0, test_hll_agg1, test_hll_agg2, test_sw_hll_agg0, test_sw_hll_agg1, test_sw_hll_agg2;
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 0, '0');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 1, '100');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('2', 2, '200');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('3', 3, '300');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('4', 4, '400');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('5', 5, '500');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('6', 6, '600');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('7', 7, '700');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('8', 8, '800');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('9', 9, '900');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 10, '1000');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 11, '1100');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('2', 12, '1200');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('3', 13, '1300');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('4', 14, '1400');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('5', 15, '1500');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('6', 16, '1600');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('7', 17, '1700');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('8', 18, '1800');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('9', 19, '1900');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 20, '2000');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 21, '2100');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('2', 22, '2200');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('3', 23, '2300');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('4', 24, '2400');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('5', 25, '2500');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('6', 26, '2600');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('7', 27, '2700');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('8', 28, '2800');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('9', 29, '2900');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 30, '3000');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 31, '3100');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('2', 32, '3200');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('3', 33, '3300');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('4', 34, '3400');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('5', 35, '3500');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('6', 36, '3600');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('7', 37, '3700');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('8', 38, '3800');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('9', 39, '3900');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 40, '4000');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 41, '4100');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('2', 42, '4200');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('3', 43, '4300');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('4', 44, '4400');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('5', 45, '4500');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('6', 46, '4600');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('7', 47, '4700');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('8', 48, '4800');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('9', 49, '4900');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 50, '5000');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 51, '5100');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('2', 52, '5200');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('3', 53, '5300');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('4', 54, '5400');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('5', 55, '5500');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('6', 56, '5600');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('7', 57, '5700');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('8', 58, '5800');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('9', 59, '5900');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 60, '6000');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 61, '6100');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('2', 62, '6200');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('3', 63, '6300');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('4', 64, '6400');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('5', 65, '6500');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('6', 66, '6600');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('7', 67, '6700');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('8', 68, '6800');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('9', 69, '6900');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 70, '7000');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 71, '7100');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('2', 72, '7200');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('3', 73, '7300');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('4', 74, '7400');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('5', 75, '7500');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('6', 76, '7600');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('7', 77, '7700');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('8', 78, '7800');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('9', 79, '7900');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 80, '8000');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 81, '8100');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('2', 82, '8200');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('3', 83, '8300');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('4', 84, '8400');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('5', 85, '8500');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('6', 86, '8600');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('7', 87, '8700');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('8', 88, '8800');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('9', 89, '8900');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 90, '9000');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 91, '9100');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('2', 92, '9200');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('3', 93, '9300');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('4', 94, '9400');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('5', 95, '9500');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('6', 96, '9600');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('7', 97, '9700');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('8', 98, '9800');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('9', 99, '9900');
+INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 0, '0'), ('1', 1, '100'), ('2', 2, '200'), ('3', 3, '300'), ('4', 4, '400'), ('5', 5, '500'), ('6', 6, '600'), ('7', 7, '700'), ('8', 8, '800'), ('9', 9, '900'), ('0', 10, '1000'), ('1', 11, '1100'), ('2', 12, '1200'), ('3', 13, '1300'), ('4', 14, '1400'), ('5', 15, '1500'), ('6', 16, '1600'), ('7', 17, '1700'), ('8', 18, '1800'), ('9', 19, '1900'), ('0', 20, '2000'), ('1', 21, '2100'), ('2', 22, '2200'), ('3', 23, '2300'), ('4', 24, '2400'), ('5', 25, '2500'), ('6', 26, '2600'), ('7', 27, '2700'), ('8', 28, '2800'), ('9', 29, '2900'), ('0', 30, '3000'), ('1', 31, '3100'), ('2', 32, '3200'), ('3', 33, '3300'), ('4', 34, '3400'), ('5', 35, '3500'), ('6', 36, '3600'), ('7', 37, '3700'), ('8', 38, '3800'), ('9', 39, '3900'), ('0', 40, '4000'), ('1', 41, '4100'), ('2', 42, '4200'), ('3', 43, '4300'), ('4', 44, '4400'), ('5', 45, '4500'), ('6', 46, '4600'), ('7', 47, '4700'), ('8', 48, '4800'), ('9', 49, '4900'), ('0', 50, '5000'), ('1', 51, '5100'), ('2', 52, '5200'), ('3', 53, '5300'), ('4', 54, '5400'), ('5', 55, '5500'), ('6', 56, '5600'), ('7', 57, '5700'), ('8', 58, '5800'), ('9', 59, '5900'), ('0', 60, '6000'), ('1', 61, '6100'), ('2', 62, '6200'), ('3', 63, '6300'), ('4', 64, '6400'), ('5', 65, '6500'), ('6', 66, '6600'), ('7', 67, '6700'), ('8', 68, '6800'), ('9', 69, '6900'), ('0', 70, '7000'), ('1', 71, '7100'), ('2', 72, '7200'), ('3', 73, '7300'), ('4', 74, '7400'), ('5', 75, '7500'), ('6', 76, '7600'), ('7', 77, '7700'), ('8', 78, '7800'), ('9', 79, '7900'), ('0', 80, '8000'), ('1', 81, '8100'), ('2', 82, '8200'), ('3', 83, '8300'), ('4', 84, '8400'), ('5', 85, '8500'), ('6', 86, '8600'), ('7', 87, '8700'), ('8', 88, '8800'), ('9', 89, '8900'), ('0', 90, '9000'), ('1', 91, '9100'), ('2', 92, '9200'), ('3', 93, '9300'), ('4', 94, '9400'), ('5', 95, '9500'), ('6', 96, '9600'), ('7', 97, '9700'), ('8', 98, '9800'), ('9', 99, '9900');
+DEACTIVATE test_hll_agg0, test_hll_agg1, test_hll_agg2, test_sw_hll_agg0, test_sw_hll_agg1, test_sw_hll_agg2;
+SELECT * FROM test_hll_agg0 ORDER BY k;
+ k |                          hll_agg                           
+---+------------------------------------------------------------
+ 0 | \x13ae7f2df8242c81467814d1c15c18690a81a6cc1b0fc1c57c1ecd02
+ 1 | \x13ae7f1f10123d012c202644026f5447f2c892081987c1ef403f3c81
+ 2 | \x13ae7f781018200190601b7f01bd4c3cdc42cf901da941e2182fcac6
+ 3 | \x13ae7f34488476015a081a3442a7bc2aec83b7783c3482cee01e8281
+ 4 | \x13ae7f009c1551c7618418210197ac2a2082ae703b8e05c4944db901
+ 5 | \x13ae7f0e6c1228412900374c02836418f606937c2b98c3e83c4e8d81
+ 6 | \x13ae7f0f2c21068227d412f58159a4295e41b1d03b75c1cdb04f9801
+ 7 | \x13ae7f2e782401c2469c15470266301a84c1b8484d6381e3e81eed02
+ 8 | \x13ae7f108411cd4134e0135d8177a8486e4498002dc6c1e63c1f3882
+ 9 | \x13ae7f002833d7c45530157a817238174e828d9c1c2981d2241e93c2
+(10 rows)
+
+SELECT * FROM test_hll_agg1 ORDER BY k;
+ k | ?column? 
+---+----------
+ 0 |       20
+ 1 |       20
+ 2 |       20
+ 3 |       20
+ 4 |       20
+ 5 |       20
+ 6 |       20
+ 7 |       20
+ 8 |       20
+ 9 |       20
+(10 rows)
+
+SELECT * FROM test_hll_agg2 ORDER BY k;
+ k | ?column? 
+---+----------
+ 0 |       20
+ 1 |       19
+ 2 |       19
+ 3 |       19
+ 4 |       19
+ 5 |       19
+ 6 |       19
+ 7 |       19
+ 8 |       19
+ 9 |       19
+(10 rows)
+
+SELECT * FROM test_sw_hll_agg0 ORDER BY k;
+ k |                          hll_agg                           
+---+------------------------------------------------------------
+ 0 | \x13ae7f2df8242c81467814d1c15c18690a81a6cc1b0fc1c57c1ecd02
+ 1 | \x13ae7f1f10123d012c202644026f5447f2c892081987c1ef403f3c81
+ 2 | \x13ae7f781018200190601b7f01bd4c3cdc42cf901da941e2182fcac6
+ 3 | \x13ae7f34488476015a081a3442a7bc2aec83b7783c3482cee01e8281
+ 4 | \x13ae7f009c1551c7618418210197ac2a2082ae703b8e05c4944db901
+ 5 | \x13ae7f0e6c1228412900374c02836418f606937c2b98c3e83c4e8d81
+ 6 | \x13ae7f0f2c21068227d412f58159a4295e41b1d03b75c1cdb04f9801
+ 7 | \x13ae7f2e782401c2469c15470266301a84c1b8484d6381e3e81eed02
+ 8 | \x13ae7f108411cd4134e0135d8177a8486e4498002dc6c1e63c1f3882
+ 9 | \x13ae7f002833d7c45530157a817238174e828d9c1c2981d2241e93c2
+(10 rows)
+
+SELECT * FROM test_sw_hll_agg1 ORDER BY k;
+ k | ?column? 
+---+----------
+ 0 |       20
+ 1 |       20
+ 2 |       20
+ 3 |       20
+ 4 |       20
+ 5 |       20
+ 6 |       20
+ 7 |       20
+ 8 |       20
+ 9 |       20
+(10 rows)
+
+SELECT * FROM test_sw_hll_agg2 ORDER BY k;
+ k | ?column? 
+---+----------
+ 0 |       20
+ 1 |       19
+ 2 |       19
+ 3 |       19
+ 4 |       19
+ 5 |       19
+ 6 |       19
+ 7 |       19
+ 8 |       19
+ 9 |       19
+(10 rows)
+
+SELECT combine(hll_agg) FROM test_hll_agg0;
+                                                                                                                                                                                                                                                           combine                                                                                                                                                                                                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ \x13ae7f00283009c10e6c10f2c210682108411cd411f1012284123d0127d41290032c2022df822e7822f5813448834e0135d813d7c4401c242c8146781469c1476014d1c154702551c75530157a8159a425a0815c1866184164402663016f5447238174c0274e8277a84781017f2c882001821018364186e448d9c18f6069060190a8192081937c295e4197ac298002987c1a2082a3442a6cc1a7bc2a84c1ae703aec83b0fc1b1d03b75c1b7783b7f01b8484b8e05b98c3bd4c3c2981c3482c4944c57c1cdb04cdc42cee01cf901d2241d6381da941db901dc6c1e2182e3e81e63c1e8281e83c4e8d81e93c2ecd02eed02ef403f3882f3c81f9801fcac6
+(1 row)
+
+SELECT hll_cardinality(combine(hll_agg)) FROM test_hll_agg0;
+ hll_cardinality 
+-----------------
+             100
+(1 row)
+
+DROP CONTINUOUS VIEW test_hll_agg0;
+DROP CONTINUOUS VIEW test_hll_agg1;
+DROP CONTINUOUS VIEW test_hll_agg2;
+DROP CONTINUOUS VIEW test_sw_hll_agg0;
+DROP CONTINUOUS VIEW test_sw_hll_agg1;
+DROP CONTINUOUS VIEW test_sw_hll_agg2;
