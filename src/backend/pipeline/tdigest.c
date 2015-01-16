@@ -47,7 +47,7 @@ CentroidDestroy(Centroid *c)
 }
 
 void
-CentroidAdd(Centroid *c, float8 x, int w)
+CentroidAdd(Centroid *c, float8 x, int64 w)
 {
 	c->count += w;
 	c->mean += w * (x - c->mean) / c->count;
@@ -285,7 +285,7 @@ AVLNodeHeadCount(AVLNode *node, Centroid *c)
 	return node->left->size + AVLNodeHeadCount(node->right, c);
 }
 
-int
+int64
 AVLNodeHeadSum(AVLNode *node, Centroid *c)
 {
 	if (c == NULL)
@@ -429,7 +429,14 @@ TDigestCreateWithCompression(int compression)
 }
 
 void
-TDigestAdd(TDigest *t, float8 x, int w)
+TDigestDestroy(TDigest *t)
+{
+	AVLNodeDestroyTree(t->summary);
+	pfree(t);
+}
+
+void
+TDigestAdd(TDigest *t, float8 x, int64 w)
 {
 	Centroid *c;
 	Centroid *start;
@@ -438,7 +445,7 @@ TDigestAdd(TDigest *t, float8 x, int w)
 	int last_neighbor;
 	int i;
 	Centroid *closest;
-	int sum;
+	int64 sum;
 	int count;
 	float n;
 	float8 z;
@@ -693,7 +700,6 @@ TDigestQuantile(TDigest *t, float8 q)
 
 	if (next == NULL)
 	{
-
 		if (q > 0.75)
 			return leading->mean + right * (4 * q - 3);
 		else

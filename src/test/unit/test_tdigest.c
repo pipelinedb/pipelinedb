@@ -4,7 +4,6 @@
 
 #include "suites.h"
 #include "pipeline/tdigest.h"
-#include "utils/elog.h"
 #include "utils/palloc.h"
 
 #define DEBUG 0

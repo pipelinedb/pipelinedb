@@ -17,7 +17,7 @@
 
 typedef struct Centroid
 {
-	int count;
+	int64 count;
 	float8 mean;
 	int id;
 } Centroid;
@@ -25,13 +25,13 @@ typedef struct Centroid
 Centroid *CentroidCreate(void);
 Centroid *CentroidCreateWithId(int id);
 void CentroidDestroy(Centroid *c);
-void CentroidAdd(Centroid *c, float8 x, int w);
+void CentroidAdd(Centroid *c, float8 x, int64 w);
 void CentroidAddSingle(Centroid *c, float8 x);
 Centroid *CentroidCopy(Centroid *c);
 
 typedef struct AVLNode
 {
-	int count;
+	int64 count;
 	int size;
 	int depth;
 	struct AVLNode *left;
@@ -53,7 +53,7 @@ void AVLNodeDestroyTree(AVLNode *root);
 void AVLNodeAdd(AVLNode *node, Centroid *c);
 void AVLNodeRemove(AVLNode *node, Centroid *c);
 int AVLNodeHeadCount(AVLNode *node, Centroid *c);
-int AVLNodeHeadSum(AVLNode *node, Centroid *c);
+int64 AVLNodeHeadSum(AVLNode *node, Centroid *c);
 Centroid *AVLNodeFirst(AVLNode *node);
 Centroid *AVLNodeLast(AVLNode *node);
 Centroid *AVLNodeFloor(AVLNode *node, Centroid *c);
@@ -64,14 +64,15 @@ Centroid *AVLNodeNext(AVLNodeIterator *it);
 
 typedef struct TDigest
 {
-	int count;
+	int64 count;
 	float8 compression;
 	AVLNode *summary;
 } TDigest;
 
 TDigest *TDigestCreate(void);
 TDigest *TDigestCreateWithCompression(int compression);
-void TDigestAdd(TDigest *t, float8 x, int w);
+void TDigestDestroy(TDigest *t);
+void TDigestAdd(TDigest *t, float8 x, int64 w);
 void TDigestAddSingle(TDigest *t, float8 x);
 void TDigestCompress(TDigest *t);
 TDigest *TDigestMerge(TDigest *t1, TDigest *t2);
