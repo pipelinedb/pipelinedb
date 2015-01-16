@@ -310,10 +310,12 @@ DATA(insert ( 3988	h 1 ordered_set_transition_multi	percent_rank_final						-		-
 DATA(insert ( 3990	h 1 ordered_set_transition_multi	cume_dist_final							-		-		-		t f 0	2281	0	0		0	_null_ _null_ ));
 DATA(insert ( 3992	h 1 ordered_set_transition_multi	dense_rank_final						-		-		-		t f 0	2281	0	0		0	_null_ _null_ ));
 
-/* PipelineDB streaming hypothetical-set aggregates */
+/* PipelineDB streaming ordered-set and hypothetical-set aggregates */
 DATA(insert ( 3999	h 1 cq_hypothetical_set_transition_multi	cq_rank_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
 DATA(insert ( 5002	h 1 cq_hypothetical_set_transition_multi	cq_percent_rank_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
 DATA(insert ( 5005	h 1 cq_hypothetical_set_transition_multi	cq_cume_dist_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
+DATA(insert ( 5022	o 1 cq_percentile_cont_float8_transition		cq_percentile_cont_float8_final	-		-		-		f f 0	2281	0	0		0	_null_ _null_ ));
+DATA(insert ( 5023	o 1 cq_percentile_cont_float8_transition_multi	cq_percentile_cont_float8_final	-		-		-		f f 0	2281	0	0		0	_null_ _null_ ));
 
 /*
  * prototypes for functions in pg_aggregate.c

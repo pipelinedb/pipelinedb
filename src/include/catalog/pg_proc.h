@@ -5052,6 +5052,25 @@ DESCR("rank of hypothetical row, using hyperloglog");
 DATA(insert OID = 5007 ( cq_cume_dist_final			PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_	cq_hypothetical_cume_dist_final _null_ _null_ _null_ ));
 DESCR("aggregate final function");
 
+/* PipelineDB streaming ordered-set aggregates */
+DATA(insert OID = 5020 (cqosastatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ cqosastatesend _null_ _null_ _null_ ));
+DESCR("serializer for streaming ordered-set aggregation transition states");
+DATA(insert OID = 5021 (cqosastaterecv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ cqosastaterecv _null_ _null_ _null_ ));
+DESCR("deserializer for streaming ordered-set aggregation transition states");
+
+DATA(insert OID = 5022 ( cq_percentile_cont		PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 701 "701 701" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("continuous distribution percentile using t-digest");
+DATA(insert OID = 5023 ( cq_percentile_cont		PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 1022 "1022 701" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("multiple continuous percentiles using t-digest");
+DATA(insert OID = 5024 ( cq_percentile_cont_float8_transition		PGNSP PGUID 12 1 0 2276 0 f f f f f f i 2 0 2281 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_ cq_percentile_cont_float8_transition _null_ _null_ _null_ ));
+DESCR("aggregate transition function");
+DATA(insert OID = 5025 ( cq_percentile_cont_float8_transition_multi	PGNSP PGUID 12 1 0 2276 0 f f f f f f i 2 0 2281 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_ cq_percentile_cont_float8_transition_multi _null_ _null_ _null_ ));
+DESCR("aggregate transition function");
+DATA(insert OID = 5026 ( cq_percentile_cont_float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ cq_percentile_cont_float8_combine _null_ _null_ _null_ ));
+DESCR("aggregate combination function");
+DATA(insert OID = 5027 ( cq_percentile_cont_float8_final	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "2281 701" _null_ _null_ _null_ _null_ cq_percentile_cont_float8_final _null_ _null_ _null_ ));
+DESCR("aggregate final function");
+
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
 DATA(insert OID = 4301 ( float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1022 "1022 1022" _null_ _null_ _null_ _null_ float8_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");

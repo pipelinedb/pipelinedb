@@ -58,6 +58,8 @@
  * combinefn			function that combines multiple transition states into
  * 								a single, final result
  *
+ * storestate		should the state be stored in a hidden column?
+ *
  * transouttype		type returned by transition out function
  *
  * ----------------------------------------------------------------
@@ -160,6 +162,10 @@ DATA(insert (numeric_stddev_samp int2_accum naggstatesend naggstaterecv numeric_
 DATA(insert (numeric_stddev_samp numeric_accum naggstatesend naggstaterecv numeric_combine t 17));
 DATA(insert (float8_stddev_samp float8_accum 0 0 float8_combine t 1022));
 DATA(insert (float8_stddev_samp float4_accum 0 0 float8_combine t 1022));
+
+/* ordered-set rank */
+DATA(insert (cq_percentile_cont_float8_final cq_percentile_cont_float8_transition cqosastatesend cqosastaterecv cq_percentile_cont_float8_combine t 17));
+DATA(insert (cq_percentile_cont_float8_final cq_percentile_cont_float8_transition_multi cqosastatesend cqosastaterecv cq_percentile_cont_float8_combine t 17));
 
 /* hypothetical-set rank */
 DATA(insert (cq_rank_final cq_hypothetical_set_transition_multi 0 0 cq_hypothetical_set_combine_multi t 1016));

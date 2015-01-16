@@ -53,7 +53,8 @@ static char *StreamingVariants[][2] = {
 		{"dense_rank", "hll_dense_rank"},
 		{"percent_rank", "cq_percent_rank"},
 		{"cume_dist", "cq_cume_dist"},
-		{"count", "hll_count_distinct"}
+		{"count", "hll_count_distinct"},
+		{"percentile_cont", "cq_percentile_cont"}
 };
 
 static char *get_streaming_agg(FuncCall *fn);
@@ -812,28 +813,30 @@ CollectAggFuncs(Node *node, CQAnalyzeContext *context)
 		FuncCall *fn = (FuncCall *) node;
 		HeapTuple ftup;
 		Form_pg_proc pform;
-		bool is_agg = false;
+		bool is_agg = fn->agg_within_group;
 		FuncCandidateList clist;
 
-		clist = FuncnameGetCandidates(fn->funcname, list_length(fn->args), NIL, true, false, true);
-
-		while (clist != NULL)
+		if (!fn->agg_within_group)
 		{
-			ftup = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
-			if (!HeapTupleIsValid(ftup))
-				break;
+			clist = FuncnameGetCandidates(fn->funcname, list_length(fn->args), NIL, true, false, true);
+			while (clist != NULL)
+			{
+				ftup = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
+				if (!HeapTupleIsValid(ftup))
+					break;
 
-			pform = (Form_pg_proc) GETSTRUCT(ftup);
-			is_agg = pform->proisagg;
-			ReleaseSysCache(ftup);
+				pform = (Form_pg_proc) GETSTRUCT(ftup);
+				is_agg = pform->proisagg;
+				ReleaseSysCache(ftup);
 
-			if (is_agg)
-				break;
+				if (is_agg)
+					break;
 
-			clist = clist->next;
+				clist = clist->next;
+			}
 		}
 
-		if (is_agg && context)
+		if (fn->agg_within_group || (is_agg && context))
 		{
 			context->funcCalls = lappend(context->funcCalls, fn);
 		}
@@ -1029,6 +1032,8 @@ RewriteStreamingAggs(SelectStmt *stmt)
 		 * wasn't already named, give it the name of the replaced
 		 * function because that's the expected name of the column
 		 * in the CV.
+		 *
+		 * TODO(usmanm): The list_length check isn't entirely correct. Fix later.
 		 */
 		if (res->name == NULL && prevname != NULL &&
 				list_length(context.funcCalls) == 1)
