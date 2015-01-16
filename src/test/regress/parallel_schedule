@@ -117,7 +117,7 @@ test: cqanalyze cqcreate cqactivate cqsanity cqsum cqswsum cqavg cqswavg cqcount
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqvacuum cqdecode stream_exprs stream_casts cqhsagg cqswhsagg cqdistinct stream_table_join user_combine
+test: cqvacuum cqdecode stream_exprs stream_casts cqhsagg cqswhsagg cqdistinct stream_table_join user_combine cqhllagg
 
 # ----------
 # Another group of parallel tests

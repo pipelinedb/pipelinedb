@@ -2310,6 +2310,31 @@ load_plpgsql(void)
 }
 
 /*
+ * load PipelineDB extensions HyperLogLog support
+ */
+static void
+load_pipeline_extensions(void)
+{
+	PG_CMD_DECL;
+
+	fputs(_("loading PipelineDB extensions ... "), stdout);
+	fflush(stdout);
+
+	snprintf(cmd, sizeof(cmd),
+			 "\"%s\" %s template1 >%s",
+			 backend_exec, backend_options,
+			 DEVNULL);
+
+	PG_CMD_OPEN;
+
+	PG_CMD_PUTS("CREATE EXTENSION hll;\n");
+
+	PG_CMD_CLOSE;
+
+	check_ok();
+}
+
+/*
  * clean everything up in template1
  */
 static void
@@ -3535,6 +3560,8 @@ initialize_data_directory(void)
 	setup_schema();
 
 	load_plpgsql();
+
+	load_pipeline_extensions();
 
 	vacuum_db();
 

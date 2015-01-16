@@ -314,8 +314,6 @@ DATA(insert ( 3992	h 1 ordered_set_transition_multi	dense_rank_final						-		-		
 DATA(insert ( 3999	h 1 cq_hypothetical_set_transition_multi	cq_rank_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
 DATA(insert ( 5002	h 1 cq_hypothetical_set_transition_multi	cq_percent_rank_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
 DATA(insert ( 5005	h 1 cq_hypothetical_set_transition_multi	cq_cume_dist_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
-DATA(insert ( 5011	h 1 hll_hypothetical_set_transition_multi	hll_dense_rank_final	-	-	-	t f 0	2281	0	0	0	_null_ _null_ ));
-DATA(insert ( 5014	n 0 hll_count_distinct_transition	hll_count_distinct_final	-	-	-	t f 0	2281	0	0	0	_null_ _null_ ));
 
 /*
  * prototypes for functions in pg_aggregate.c
