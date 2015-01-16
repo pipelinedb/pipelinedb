@@ -1635,7 +1635,6 @@ cq_hypothetical_percent_rank_final(PG_FUNCTION_ARGS)
 	PG_RETURN_FLOAT8(result);
 }
 
-
 /*
  * cume_dist()  - streaming cume_dist of hypothetical row
  */
@@ -1668,21 +1667,30 @@ cq_hypothetical_cume_dist_final(PG_FUNCTION_ARGS)
 	PG_RETURN_FLOAT8(result);
 }
 
+typedef struct CQOSAAggState
+{
+	TDigest *tdigest;
+	bool is_multiple;
+	bool is_descending;
+	int num_percentiles;
+	float8 *percentiles;
+	bool *nulls;
+} CQOSAAggState;
+
 /*
- * tdigestsend
- *
- * Output function for a t-digest.
+ * cqosastatesend
  */
 Datum
-tdigestsend(PG_FUNCTION_ARGS)
+cqosastatesend(PG_FUNCTION_ARGS)
 {
-	TDigest *t = (TDigest *) PG_GETARG_POINTER(0);
+	CQOSAAggState *state = (CQOSAAggState *) PG_GETARG_POINTER(0);
+	TDigest *t = state->tdigest;
 	StringInfoData buf;
 	bytea *result;
 	int nbytes;
-	int i;
 	AVLNodeIterator *it;
 	Centroid *c;
+	int i;
 
 	initStringInfo(&buf);
 
@@ -1691,14 +1699,25 @@ tdigestsend(PG_FUNCTION_ARGS)
 
 	it = AVLNodeIteratorCreate(t->summary, NULL);
 
-	for (i = 0; i < t->summary->size; i++)
+
+	while ((c = AVLNodeNext(it)))
 	{
-		c = AVLNodeNext(it);
 		pq_sendfloat8(&buf, c->mean);
-		pq_sendint(&buf, c->count, 4);
+		pq_sendint64(&buf, c->count);
 	}
 
 	AVLNodeIteratorDestroy(it);
+
+	pq_sendint(&buf, state->is_multiple, 1);
+	pq_sendint(&buf, state->is_descending, 1);
+	pq_sendint(&buf, state->num_percentiles, 4);
+
+	for (i = 0; i < state->num_percentiles; i++)
+	{
+		pq_sendfloat8(&buf, state->percentiles[i]);
+		pq_sendint(&buf, state->nulls[i], 1);
+	}
+
 
 	nbytes = buf.len - buf.cursor;
 	result = (bytea *) palloc(nbytes + VARHDRSZ);
@@ -1710,12 +1729,10 @@ tdigestsend(PG_FUNCTION_ARGS)
 }
 
 /*
- * tdigestrecv
- *
- * Input function for a t-digest.
+ * cqosastaterecv
  */
 Datum
-tdigestrecv(PG_FUNCTION_ARGS)
+cqosastaterecv(PG_FUNCTION_ARGS)
 {
 	bytea *bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
 	TDigest *t;
@@ -1725,6 +1742,7 @@ tdigestrecv(PG_FUNCTION_ARGS)
 	int i;
 	float8 x;
 	int w;
+	CQOSAAggState *state = palloc(sizeof(CQOSAAggState));
 
 	initStringInfo(&buf);
 	appendBinaryStringInfo(&buf, VARDATA(bytesin), nbytes);
@@ -1735,9 +1753,254 @@ tdigestrecv(PG_FUNCTION_ARGS)
 	for (i = 0; i < count; i++)
 	{
 		x = pq_getmsgfloat8(&buf);
-		w = pq_getmsgint(&buf, 4);
+		w = pq_getmsgint64(&buf);
 		TDigestAdd(t, x, w);
 	}
 
-	PG_RETURN_POINTER(t);
+	state->tdigest = t;
+	state->is_multiple = pq_getmsgint(&buf, 1);
+	state->is_descending = pq_getmsgint(&buf, 1);
+	state->num_percentiles = pq_getmsgint(&buf, 4);
+	state->percentiles = palloc(sizeof(float8) * state->num_percentiles);
+	state->nulls = palloc(sizeof(bool) * state->num_percentiles);
+
+	for (i = 0; i < state->num_percentiles; i++)
+	{
+		state->percentiles[i] = pq_getmsgfloat8(&buf);
+		state->nulls[i] = pq_getmsgint(&buf, 1);
+	}
+
+	PG_RETURN_POINTER(state);
+}
+
+static CQOSAAggState *
+cq_percentile_cont_float8_startup(PG_FUNCTION_ARGS, bool is_multiple)
+{
+	CQOSAAggState *aggstate;
+	MemoryContext old;
+	Aggref *aggref = AggGetAggref(fcinfo);
+	Datum value;
+	bool isnull;
+	ExprContext *econtext;
+	ExprState *expr;
+	SortGroupClause *sortcl = (SortGroupClause *) linitial(aggref->aggorder);
+
+	/* our state needs to live for the duration of the query */
+	old = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+
+	/*
+	 * We need to store the arguments to this aggregate function in the AggState because
+	 * only the transition state is passed to the final_fn for CQ aggregates. Unlike regular
+	 * aggregates where we can just read the incoming directargs in the final_fn.
+	 */
+	aggstate = palloc0(sizeof(CQOSAAggState));
+	aggstate->tdigest = TDigestCreate();
+	aggstate->is_multiple = is_multiple;
+	/* HACK: nulls_first implies descending */
+	aggstate->is_descending = sortcl->nulls_first;
+
+	econtext = CreateStandaloneExprContext();
+	expr = (ExprState *) linitial((List *) ExecInitExpr((Expr *) aggref->aggdirectargs, NULL));
+	value = ExecEvalExpr(expr, econtext, &isnull, NULL);
+
+	if (isnull)
+		aggstate->num_percentiles = 0;
+	else if (is_multiple)
+	{
+		ArrayType *param = DatumGetArrayTypeP(value);
+		Datum *percentiles_datum;
+		int i;
+
+		deconstruct_array(param, FLOAT8OID,
+				/* hard-wired info on type float8 */
+				8, FLOAT8PASSBYVAL, 'd',
+				&percentiles_datum,
+				&aggstate->nulls,
+				&aggstate->num_percentiles);
+
+		aggstate->percentiles = (float8 *) palloc(sizeof(float8) * aggstate->num_percentiles);
+		aggstate->nulls = (bool *) palloc(sizeof(bool) * aggstate->num_percentiles);
+
+		for (i = 0; i < aggstate->num_percentiles; i++)
+			aggstate->percentiles[i] = DatumGetFloat8(percentiles_datum[i]);
+	}
+	else
+	{
+		aggstate->num_percentiles = 1;
+		aggstate->percentiles = (float8 *) palloc(sizeof(float8));
+		aggstate->nulls = (bool *) palloc(sizeof(bool));
+		aggstate->percentiles[0] = DatumGetFloat8(value);
+		aggstate->nulls[0] = false;
+	}
+
+	MemoryContextSwitchTo(old);
+
+	return aggstate;
+}
+
+/*
+ * Transition function for percentile_cont aggregates with a single
+ * numeric column. It uses t-digest to estimate quantiles.
+ */
+static Datum
+cq_percentile_cont_float8_transition_common(PG_FUNCTION_ARGS, bool is_multiple)
+{
+	MemoryContext old;
+	MemoryContext context;
+	CQOSAAggState *state;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		elog(ERROR, "aggregate function called in non-aggregate context");
+
+	old = MemoryContextSwitchTo(context);
+
+	if (PG_ARGISNULL(0))
+		state = cq_percentile_cont_float8_startup(fcinfo, is_multiple);
+	else
+		state = (CQOSAAggState *)  PG_GETARG_POINTER(0);
+
+	if (!PG_ARGISNULL(1))
+	{
+		Datum d = PG_GETARG_DATUM(1);
+		TDigestAddSingle(state->tdigest, DatumGetFloat8(d));
+	}
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(state);
+}
+
+Datum
+cq_percentile_cont_float8_transition(PG_FUNCTION_ARGS)
+{
+	return cq_percentile_cont_float8_transition_common(fcinfo, false);
+}
+
+Datum
+cq_percentile_cont_float8_transition_multi(PG_FUNCTION_ARGS)
+{
+	return cq_percentile_cont_float8_transition_common(fcinfo, true);
+}
+
+/*
+ * combines multiple t-digest transition states into one
+ */
+Datum
+cq_percentile_cont_float8_combine(PG_FUNCTION_ARGS)
+{
+	MemoryContext context;
+	MemoryContext old;
+	CQOSAAggState *state;
+	CQOSAAggState *incoming = (CQOSAAggState *) PG_GETARG_POINTER(1);
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		context = fcinfo->flinfo->fn_mcxt;
+
+	old = MemoryContextSwitchTo(context);
+
+	if (PG_ARGISNULL(0))
+	{
+		AVLNodeIterator *it = AVLNodeIteratorCreate(incoming->tdigest->summary, NULL);
+		TDigest *t = TDigestCreateWithCompression(incoming->tdigest->compression);
+		Centroid *c;
+
+		while ((c = AVLNodeNext(it)))
+			TDigestAdd(t, c->mean, c->count);
+
+		AVLNodeIteratorDestroy(it);
+
+		state = (CQOSAAggState *) palloc0(sizeof(CQOSAAggState));
+		state->tdigest = t;
+		state->is_multiple = incoming->is_multiple;
+		state->is_descending = incoming->is_descending;
+		state->num_percentiles = incoming->num_percentiles;
+		state->percentiles = (float8 *) palloc(sizeof(float8) * state->num_percentiles);
+		state->nulls = (bool *) palloc(sizeof(bool) * state->num_percentiles);
+
+		memcpy(state->percentiles, incoming->percentiles, sizeof(float8) * state->num_percentiles);
+		memcpy(state->nulls, incoming->nulls, sizeof(bool) * state->num_percentiles);
+	}
+	else
+	{
+		state = (CQOSAAggState *) PG_GETARG_POINTER(0);
+		state->tdigest = TDigestMerge(state->tdigest, incoming->tdigest);
+	}
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
+  * percentile_cont(float8) within group (float8) - streaming continuous percentile
+ */
+Datum
+cq_percentile_cont_float8_final(PG_FUNCTION_ARGS)
+{
+	CQOSAAggState *state;
+	float8 percentile;
+	int i;
+	Datum *result_datum;
+
+	Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
+
+	/* If there were no regular rows, the result is NULL */
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	state = (CQOSAAggState *) PG_GETARG_POINTER(0);
+
+	/* number_of_rows could be zero if we only saw NULL input values */
+	if (state->tdigest->count == 0)
+		PG_RETURN_NULL();
+
+	if (state->num_percentiles == 0)
+	{
+		if (state->is_multiple)
+			PG_RETURN_POINTER(construct_empty_array(FLOAT8OID));
+		else
+			PG_RETURN_NULL();
+	}
+
+	result_datum = (Datum *) palloc(state->num_percentiles * sizeof(Datum));
+
+	for (i = 0; i < state->num_percentiles; i++)
+	{
+		percentile = state->percentiles[i];
+
+		if (percentile < 0 || percentile > 1 || isnan(percentile))
+			ereport(ERROR,
+					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+							errmsg("percentile value %g is not between 0 and 1",
+									percentile)));
+
+		if (state->is_descending)
+			percentile = 1.0 - percentile;
+
+		if (state->nulls[i])
+			continue;
+
+		result_datum[i] = Float8GetDatum(TDigestQuantile(state->tdigest, percentile));
+	}
+
+	if (state->is_multiple)
+	{
+		/* We make the output array the same shape as the input;
+		 * hard-wired info on type float8 */
+		int dims[1];
+		int lbs[1];
+		dims[0] = state->num_percentiles;
+		lbs[0] = 1;
+		PG_RETURN_POINTER(construct_md_array(result_datum, state->nulls,
+											 1,
+											 dims,
+											 lbs,
+											 FLOAT8OID,
+											 8,
+											 FLOAT8PASSBYVAL,
+											 'd'));
+
+	}
+
+	PG_RETURN_DATUM(result_datum[0]);
 }

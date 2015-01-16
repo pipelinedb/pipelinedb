@@ -144,6 +144,19 @@ DROP TABLE cqanalyze_table;
 CREATE CONTINUOUS VIEW  error_not_created AS SELECT s.id::integer, t.tid FROM stream s JOIN not_a_table t ON s.id = t.tid;
 CREATE CONTINUOUS VIEW  error_not_created AS SELECT s.id::integer, tid FROM stream s JOIN not_a_table ON s.id = tid;
 
+-- Ordered-set aggregates
+CREATE CONTINUOUS VIEW cqanalyze50 AS SELECT g::integer, percentile_cont(ARRAY[0.2, 0.8]) WITHIN GROUP (ORDER BY x::float), percentile_cont(0.9) WITHIN GROUP (ORDER BY y::integer) + percentile_cont(0.1) WITHIN GROUP (ORDER BY z::numeric) AS col FROM stream GROUP BY g;
+
+CREATE CONTINUOUS VIEW cqanalyze51 AS SELECT g::integer, percentile_cont(0.1) WITHIN GROUP (ORDER BY x::float + y::integer) FROM stream GROUP BY g;
+
+-- Can only sort on a numeric expression
+CREATE CONTINUOUS VIEW error_not_created AS SELECT percentile_cont(0.1) WITHIN GROUP (ORDER BY x::text) FROM stream;
+
+-- Sliding windows
+CREATE CONTINUOUS VIEW cqanalyze52 AS SELECT g::integer, percentile_cont(ARRAY[0.2, 0.8]) WITHIN GROUP (ORDER BY x::float), percentile_cont(0.9) WITHIN GROUP (ORDER BY y::integer) + percentile_cont(0.1) WITHIN GROUP (ORDER BY z::numeric) AS col FROM stream WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes') GROUP BY g;
+
+CREATE CONTINUOUS VIEW cqanalyze53 AS SELECT percentile_cont(0.1) WITHIN GROUP (ORDER BY x::float + y::integer) FROM stream WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
+
 DROP CONTINUOUS VIEW cqanalyze0;
 DROP CONTINUOUS VIEW cqanalyze1;
 DROP CONTINUOUS VIEW cqanalyze2;
@@ -194,3 +207,7 @@ DROP CONTINUOUS VIEW cqanalyze46;
 DROP CONTINUOUS VIEW cqanalyze47;
 DROP CONTINUOUS VIEW cqanalyze48;
 DROP CONTINUOUS VIEW cqanalyze49;
+DROP CONTINUOUS VIEW cqanalyze50;
+DROP CONTINUOUS VIEW cqanalyze51;
+DROP CONTINUOUS VIEW cqanalyze52;
+DROP CONTINUOUS VIEW cqanalyze53;

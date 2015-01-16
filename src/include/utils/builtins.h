@@ -545,8 +545,13 @@ extern Datum cq_hypothetical_set_combine_multi(PG_FUNCTION_ARGS);
 extern Datum cq_hypothetical_rank_final(PG_FUNCTION_ARGS);
 extern Datum cq_hypothetical_percent_rank_final(PG_FUNCTION_ARGS);
 extern Datum cq_hypothetical_cume_dist_final(PG_FUNCTION_ARGS);
-extern Datum tdigestsend(PG_FUNCTION_ARGS);
-extern Datum tdigestrecv(PG_FUNCTION_ARGS);
+extern Datum cqosastatesend(PG_FUNCTION_ARGS);
+extern Datum cqosastaterecv(PG_FUNCTION_ARGS);
+extern Datum cq_percentile_cont_float8_transition(PG_FUNCTION_ARGS);
+extern Datum cq_percentile_cont_float8_transition_multi(PG_FUNCTION_ARGS);
+extern Datum cq_percentile_cont_float8_combine(PG_FUNCTION_ARGS);
+extern Datum cq_percentile_cont_float8_final(PG_FUNCTION_ARGS);
+extern Datum cq_percentile_cont_float8_multi_final(PG_FUNCTION_ARGS);
 
 /* pseudotypes.c */
 extern Datum cstring_in(PG_FUNCTION_ARGS);
