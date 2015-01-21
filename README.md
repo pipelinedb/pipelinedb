@@ -3,7 +3,7 @@
 ## Getting started
 
 
-#### Build PipelineDB from source (with debug symbols)
+#### Build the PipelineDB core (with debug symbols)
 ```
 ./configure CFLAGS="-g -O0" --prefix=/path/to/dev/installation
 make
@@ -13,6 +13,22 @@ make install
 #### Add your dev installation path to the PATH environment variable
 ```
 export PATH=/path/to/dev/installation/bin:$PATH
+```
+
+#### Build the PipelineDB GIS module
+
+First, install its dependencies:
+
+    sudo apt-get install libxml2-dev libgeos-dev libproj-dev libgdal-dev
+
+Now it can be built:
+
+```
+cd src/gis
+./autogen.sh
+./configure # Note that the --prefix argument isn't necessary here
+make
+make install
 ```
 
 #### Bootstrap the PipelineDB environment
