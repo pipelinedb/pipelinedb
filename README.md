@@ -25,7 +25,7 @@ export PATH=/path/to/dev/installation/bin:$PATH
 
 First, install its dependencies:
 
-    sudo apt-get install libxml2-dev libgeos-dev libproj-dev libgdal-dev
+    sudo apt-get install libxml2-dev libgeos-dev libproj-dev libgdal-dev xsltproc autoconf libtool
 
 Now it can be built:
 
