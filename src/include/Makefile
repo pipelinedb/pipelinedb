@@ -22,7 +22,7 @@ SUBDIRS = access bootstrap catalog commands common datatype executor foreign \
 	rewrite storage tcop snowball snowball/libstemmer tsearch \
 	tsearch/dicts utils port port/win32 port/win32_msvc \
 	port/win32_msvc/sys port/win32/arpa port/win32/netinet \
-	port/win32/sys portability
+	port/win32/sys portability pipeline
 
 # Install all headers
 install: all installdirs

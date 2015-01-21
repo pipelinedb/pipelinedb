@@ -64,6 +64,7 @@ int8_tbl|f
 interval_tbl|f
 iportaltest|f
 kd_point_tbl|t
+layer|t
 line_tbl|f
 log_table|f
 lseg_tbl|f
@@ -149,6 +150,7 @@ reltime_tbl|f
 road|t
 shighway|t
 slow_emp4000|f
+spatial_ref_sys|t
 sql_features|f
 sql_implementation_info|f
 sql_languages|f
@@ -171,6 +173,7 @@ timestamp_tbl|f
 timestamptz_tbl|f
 timetz_tbl|f
 tinterval_tbl|f
+topology|t
 varchar_tbl|f
 -- restore normal output mode
 \a\t

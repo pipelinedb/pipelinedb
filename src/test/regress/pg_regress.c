@@ -95,6 +95,7 @@ static _stringlist *extra_tests = NULL;
 static char *temp_install = NULL;
 static char *temp_config = NULL;
 static char *top_builddir = NULL;
+static char *gis_builddir = NULL;
 static bool nolocale = false;
 static bool use_existing = false;
 static char *hostname = NULL;
@@ -1982,6 +1983,7 @@ help(void)
 	printf(_("  --port=PORT               start postmaster on PORT\n"));
 	printf(_("  --temp-config=FILE        append contents of FILE to temporary config\n"));
 	printf(_("  --top-builddir=DIR        (relative) path to top level build directory\n"));
+	printf(_("  --gis-builddir=DIR        (relative) path to GIS build directory\n"));
 	printf(_("\n"));
 	printf(_("Options for using an existing installation:\n"));
 	printf(_("  --host=HOST               use postmaster running on HOST\n"));
@@ -2023,6 +2025,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		{"launcher", required_argument, NULL, 21},
 		{"load-extension", required_argument, NULL, 22},
 		{"extra-install", required_argument, NULL, 23},
+		{"gis-builddir", required_argument, NULL, 24},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -2137,6 +2140,9 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 			case 23:
 				add_stringlist_item(&extra_install, optarg);
 				break;
+			case 24:
+				gis_builddir = strdup(optarg);
+				break;
 			default:
 				/* getopt_long already emitted a complaint */
 				fprintf(stderr, _("\nTry \"%s -h\" for more information.\n"),
@@ -2227,6 +2233,16 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		if (system(buf))
 		{
 			fprintf(stderr, _("\n%s: installation failed\nExamine %s/log/install.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
+			exit(2);
+		}
+
+		/* make install GIS */
+		snprintf(buf, sizeof(buf),
+				 "\"%s\" -C \"%s\" DESTDIR=\"%s/install\" install > \"%s/log/install.log\" 2>&1",
+				 makeprog, gis_builddir, temp_install, outputdir);
+		if (system(buf))
+		{
+			fprintf(stderr, _("\n%s: gis installation failed\nExamine %s/log/install.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
 			exit(2);
 		}
 

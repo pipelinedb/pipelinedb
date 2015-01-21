@@ -576,8 +576,8 @@ SELECT name(equipment(p.hobbies)), name(p.hobbies), p.name FROM person* p;
 
 SELECT user_relns() AS user_relns
    ORDER BY user_relns;
-     user_relns      
----------------------
+         user_relns          
+-----------------------------
  a
  a_star
  abstime_tbl
@@ -620,6 +620,7 @@ SELECT user_relns() AS user_relns
  float4_tbl
  float8_tbl
  func_index_heap
+ getfaceedges_returntype
  hash_f8_heap
  hash_i4_heap
  hash_name_heap
@@ -638,6 +639,7 @@ SELECT user_relns() AS user_relns
  interval_tbl
  iportaltest
  kd_point_tbl
+ layer
  line_tbl
  log_table
  lseg_tbl
@@ -689,6 +691,9 @@ SELECT user_relns() AS user_relns
  tinterval_tbl
  tm
  tmm
+ topogeometry
+ topology
+ topology_id_seq
  toyemp
  tv
  tvm
@@ -696,9 +701,10 @@ SELECT user_relns() AS user_relns
  tvv
  tvvm
  tvvmv
+ validatetopology_returntype
  varchar_tbl
  xacttest
-(120 rows)
+(126 rows)
 
 SELECT name(equipment(hobby_construct(text 'skywalking', text 'mer')));
  name 

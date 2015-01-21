@@ -1068,8 +1068,8 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	int origNumGroups;
 	int i;
 	ListCell *lc;
-	ResTarget *timeRes;
-	AttrNumber timeAttr;
+	ResTarget *timeRes = NULL;
+	AttrNumber timeAttr = InvalidAttrNumber;
 	AttrNumber curAttr;
 
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
@@ -1246,7 +1246,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	}
 
 	/* time ResTarget wasn't in the target list, so just add it on to the end */
-	if (!AttributeNumberIsValid(timeAttr))
+	if (!AttributeNumberIsValid(timeAttr) && timeRes != NULL)
 		workerstmt->targetList = lappend(workerstmt->targetList, timeRes);
 
 	viewstmt->windowClause = workerstmt->windowClause;
