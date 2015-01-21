@@ -2,6 +2,12 @@
 
 ## Getting started
 
+#### Sync all submodules
+This only needs to be done once for fresh checkouts.
+```
+git submodule sync
+git submodule update --init
+```
 
 #### Build the PipelineDB core (with debug symbols)
 ```
