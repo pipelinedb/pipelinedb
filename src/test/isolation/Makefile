@@ -55,7 +55,7 @@ installcheck: all
 	./pg_isolation_regress --psqldir='$(PSQLDIR)' $(EXTRA_REGRESS_OPTS) --inputdir=$(srcdir) --schedule=$(srcdir)/isolation_schedule
 
 check: all
-	./pg_isolation_regress --temp-install=./tmp_check --inputdir=$(srcdir) --top-builddir=$(top_builddir) $(EXTRA_REGRESS_OPTS) --schedule=$(srcdir)/isolation_schedule
+	./pg_isolation_regress --temp-install=./tmp_check --inputdir=$(srcdir) --top-builddir=$(top_builddir) --gis-builddir=$(top_builddir)/src/gis $(EXTRA_REGRESS_OPTS) --schedule=$(srcdir)/isolation_schedule
 
 # Versions of the check tests that include the prepared_transactions test
 # It only makes sense to run these if set up to use prepared transactions,

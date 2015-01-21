@@ -1,3 +1,7 @@
+[submodule "src/gis"]
+	path = src/gis
+	url = git@github.com:pipelinedb/pipeline-gis.git
+	branch = svn-trunk
 [submodule "src/hll"]
 	path = src/hll
 	url = git@github.com:pipelinedb/pipeline-hll.git

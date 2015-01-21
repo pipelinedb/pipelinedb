@@ -41,9 +41,9 @@ DROP TABLE tmp;
 --
 -- copy
 --
-COPY onek TO '@abs_builddir@/results/onek.data';
+COPY onek TO '/home/derek/projects/pipelinedb/src/test/regress/results/onek.data';
 DELETE FROM onek;
-COPY onek FROM '@abs_builddir@/results/onek.data';
+COPY onek FROM '/home/derek/projects/pipelinedb/src/test/regress/results/onek.data';
 SELECT unique1 FROM onek WHERE unique1 < 2 ORDER BY unique1;
  unique1 
 ---------
@@ -52,7 +52,7 @@ SELECT unique1 FROM onek WHERE unique1 < 2 ORDER BY unique1;
 (2 rows)
 
 DELETE FROM onek2;
-COPY onek2 FROM '@abs_builddir@/results/onek.data';
+COPY onek2 FROM '/home/derek/projects/pipelinedb/src/test/regress/results/onek.data';
 SELECT unique1 FROM onek2 WHERE unique1 < 2 ORDER BY unique1;
  unique1 
 ---------
@@ -60,9 +60,9 @@ SELECT unique1 FROM onek2 WHERE unique1 < 2 ORDER BY unique1;
        1
 (2 rows)
 
-COPY BINARY stud_emp TO '@abs_builddir@/results/stud_emp.data';
+COPY BINARY stud_emp TO '/home/derek/projects/pipelinedb/src/test/regress/results/stud_emp.data';
 DELETE FROM stud_emp;
-COPY BINARY stud_emp FROM '@abs_builddir@/results/stud_emp.data';
+COPY BINARY stud_emp FROM '/home/derek/projects/pipelinedb/src/test/regress/results/stud_emp.data';
 SELECT * FROM stud_emp;
  name  | age |  location  | salary | manager | gpa | percent 
 -------+-----+------------+--------+---------+-----+---------
@@ -576,8 +576,8 @@ SELECT name(equipment(p.hobbies)), name(p.hobbies), p.name FROM person* p;
 
 SELECT user_relns() AS user_relns
    ORDER BY user_relns;
-     user_relns      
----------------------
+         user_relns          
+-----------------------------
  a
  a_star
  abstime_tbl
@@ -620,6 +620,7 @@ SELECT user_relns() AS user_relns
  float4_tbl
  float8_tbl
  func_index_heap
+ getfaceedges_returntype
  hash_f8_heap
  hash_i4_heap
  hash_name_heap
@@ -638,6 +639,7 @@ SELECT user_relns() AS user_relns
  interval_tbl
  iportaltest
  kd_point_tbl
+ layer
  line_tbl
  log_table
  lseg_tbl
@@ -689,6 +691,9 @@ SELECT user_relns() AS user_relns
  tinterval_tbl
  tm
  tmm
+ topogeometry
+ topology
+ topology_id_seq
  toyemp
  tv
  tvm
@@ -696,9 +701,10 @@ SELECT user_relns() AS user_relns
  tvv
  tvvm
  tvvmv
+ validatetopology_returntype
  varchar_tbl
  xacttest
-(120 rows)
+(126 rows)
 
 SELECT name(equipment(hobby_construct(text 'skywalking', text 'mer')));
  name 

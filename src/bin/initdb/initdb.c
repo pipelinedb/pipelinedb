@@ -2328,6 +2328,8 @@ load_pipeline_extensions(void)
 	PG_CMD_OPEN;
 
 	PG_CMD_PUTS("CREATE EXTENSION hll;\n");
+	PG_CMD_PUTS("CREATE EXTENSION postgis;\n");
+	PG_CMD_PUTS("CREATE EXTENSION postgis_topology;\n");
 
 	PG_CMD_CLOSE;
 
