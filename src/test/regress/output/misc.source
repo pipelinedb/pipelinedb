@@ -41,9 +41,9 @@ DROP TABLE tmp;
 --
 -- copy
 --
-COPY onek TO '/home/derek/projects/pipelinedb/src/test/regress/results/onek.data';
+COPY onek TO '@abs_builddir@/results/onek.data';
 DELETE FROM onek;
-COPY onek FROM '/home/derek/projects/pipelinedb/src/test/regress/results/onek.data';
+COPY onek FROM '@abs_builddir@/results/onek.data';
 SELECT unique1 FROM onek WHERE unique1 < 2 ORDER BY unique1;
  unique1 
 ---------
@@ -52,7 +52,7 @@ SELECT unique1 FROM onek WHERE unique1 < 2 ORDER BY unique1;
 (2 rows)
 
 DELETE FROM onek2;
-COPY onek2 FROM '/home/derek/projects/pipelinedb/src/test/regress/results/onek.data';
+COPY onek2 FROM '@abs_builddir@/results/onek.data';
 SELECT unique1 FROM onek2 WHERE unique1 < 2 ORDER BY unique1;
  unique1 
 ---------
@@ -60,9 +60,9 @@ SELECT unique1 FROM onek2 WHERE unique1 < 2 ORDER BY unique1;
        1
 (2 rows)
 
-COPY BINARY stud_emp TO '/home/derek/projects/pipelinedb/src/test/regress/results/stud_emp.data';
+COPY BINARY stud_emp TO '@abs_builddir@/results/stud_emp.data';
 DELETE FROM stud_emp;
-COPY BINARY stud_emp FROM '/home/derek/projects/pipelinedb/src/test/regress/results/stud_emp.data';
+COPY BINARY stud_emp FROM '@abs_builddir@/results/stud_emp.data';
 SELECT * FROM stud_emp;
  name  | age |  location  | salary | manager | gpa | percent 
 -------+-----+------------+--------+---------+-----+---------
