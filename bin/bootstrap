@@ -7,6 +7,7 @@ import subprocess
 import time
 import getpass
 import signal
+import sys
 
 
 DATA_DIR = 'data'
@@ -16,6 +17,11 @@ def main(args):
     root = os.path.expandvars(args.root)
     if not os.path.exists(root):
         print 'Root directory %s does not exist. Did you run `make install`?' % root
+        sys.exit(1)
+
+    gis = os.path.join(root, 'share', 'postgresql', 'extension', 'postgis.control')
+    if not os.path.exists(gis):
+        print 'GIS has not been installed. Did you run `make install` from the GIS root (probably src/gis)?'
         sys.exit(1)
 
     root = os.path.expanduser(root)

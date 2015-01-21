@@ -176,7 +176,8 @@ ORDER BY 1, 2;
         1114 |        1184
         1560 |        1562
         2277 |        2283
-(5 rows)
+        2281 |       12883
+(6 rows)
 
 SELECT DISTINCT p1.proargtypes[1], p2.proargtypes[1]
 FROM pg_proc AS p1, pg_proc AS p2
@@ -821,9 +822,10 @@ WHERE p1.oprcom = p2.oid AND
      p1.oprright != p2.oprleft OR
      p1.oprresult != p2.oprresult OR
      p1.oid != p2.oprcom);
- oid | oprcode | oid | oprcode 
------+---------+-----+---------
-(0 rows)
+  oid  |           oprcode            |  oid  |         oprcode         
+-------+------------------------------+-------+-------------------------
+ 13300 | raster_contained_by_geometry | 13299 | geometry_raster_contain
+(1 row)
 
 -- Look for negatory operators that don't agree.
 -- DEFINITIONAL NOTE: If A.oprnegate = B, then both A and B must yield
@@ -885,9 +887,11 @@ WHERE amopopr = p1.oid
   AND amopmethod = (SELECT oid FROM pg_am WHERE amname = 'btree')
   AND amopstrategy = 3
   AND NOT p1.oprcanmerge;
- oid | oprname | amopfamily 
------+---------+------------
-(0 rows)
+  oid  | oprname | amopfamily 
+-------+---------+------------
+ 12186 | =       |      12187
+ 12770 | =       |      12771
+(2 rows)
 
 -- Hashable operators should appear as members of hash index opfamilies.
 SELECT p1.oid, p1.oprname
@@ -906,9 +910,10 @@ FROM pg_operator AS p1, pg_amop p
 WHERE amopopr = p1.oid
   AND amopmethod = (SELECT oid FROM pg_am WHERE amname = 'hash')
   AND NOT p1.oprcanhash;
- oid | oprname | amopfamily 
------+---------+------------
-(0 rows)
+  oid  | oprname | amopfamily 
+-------+---------+------------
+ 13263 | =       |      13264
+(1 row)
 
 -- Check that each operator defined in pg_operator matches its oprcode entry
 -- in pg_proc.  Easiest to do this separately for each oprkind.
@@ -994,9 +999,12 @@ WHERE p1.oprjoin = p2.oid AND
      p2.proargtypes[2] != 'internal'::regtype OR
      p2.proargtypes[3] != 'int2'::regtype OR
      p2.proargtypes[4] != 'internal'::regtype);
- oid | oprname | oid | proname 
------+---------+-----+---------
-(0 rows)
+  oid  | oprname |  oid  |           proname           
+-------+---------+-------+-----------------------------
+ 12211 | &&      | 12208 | gserialized_gist_joinsel_2d
+ 12270 | &&&     | 12209 | gserialized_gist_joinsel_nd
+ 12749 | &&      | 12209 | gserialized_gist_joinsel_nd
+(3 rows)
 
 -- Insist that all built-in pg_operator entries have descriptions
 SELECT p1.oid, p1.oprname
@@ -1545,19 +1553,24 @@ ORDER BY 1, 2, 3;
         783 |            1 | @@
         783 |            2 | &<
         783 |            3 | &&
+        783 |            3 | &&&
         783 |            4 | &>
         783 |            5 | >>
         783 |            6 | -|-
         783 |            6 | ~=
         783 |            7 | @>
+        783 |            7 | ~
         783 |            8 | <@
+        783 |            8 | @
         783 |            9 | &<|
         783 |           10 | <<|
         783 |           10 | <^
         783 |           11 | >^
         783 |           11 | |>>
         783 |           12 | |&>
+        783 |           13 | <->
         783 |           13 | ~
+        783 |           14 | <#>
         783 |           14 | @
         783 |           15 | <->
         783 |           16 | @>
@@ -1606,7 +1619,7 @@ ORDER BY 1, 2, 3;
        4000 |           15 | >
        4000 |           16 | @>
        4000 |           18 | =
-(80 rows)
+(85 rows)
 
 -- Check that all opclass search operators have selectivity estimators.
 -- This is not absolutely required, but it seems a reasonable thing
@@ -1817,9 +1830,59 @@ WHERE p1.amprocfamily = p3.oid AND p4.amprocfamily = p6.oid AND
     p3.opfmethod = p6.opfmethod AND p1.amprocnum = p4.amprocnum AND
     p1.amproc = p2.oid AND p4.amproc = p5.oid AND
     (p2.proretset OR p5.proretset OR p2.pronargs != p5.pronargs);
- amprocfamily | amprocnum | oid | proname | opfname | amprocfamily | amprocnum | oid | proname | opfname 
---------------+-----------+-----+---------+---------+--------------+-----------+-----+---------+---------
-(0 rows)
+ amprocfamily | amprocnum |  oid  |           proname           |       opfname        | amprocfamily | amprocnum |  oid  |           proname           |       opfname        
+--------------+-----------+-------+-----------------------------+----------------------+--------------+-----------+-------+-----------------------------+----------------------
+         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops           |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
+         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops           |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
+         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops           |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
+         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops             |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
+         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops             |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
+         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops             |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
+        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops
+        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops
+        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         3550 |         1 |  3553 | inet_gist_consistent        | network_ops
+        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         1029 |         1 |  2179 | gist_point_consistent       | point_ops
+        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         2593 |         1 |  2578 | gist_box_consistent         | box_ops
+        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         3919 |         1 |  3875 | range_gist_consistent       | range_ops
+        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops
+        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd |         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops
+         3550 |         1 |  3553 | inet_gist_consistent        | network_ops          |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
+         3550 |         1 |  3553 | inet_gist_consistent        | network_ops          |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
+         3550 |         1 |  3553 | inet_gist_consistent        | network_ops          |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
+         1029 |         1 |  2179 | gist_point_consistent       | point_ops            |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
+         1029 |         1 |  2179 | gist_point_consistent       | point_ops            |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
+         1029 |         1 |  2179 | gist_point_consistent       | point_ops            |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
+         2593 |         1 |  2578 | gist_box_consistent         | box_ops              |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
+         2593 |         1 |  2578 | gist_box_consistent         | box_ops              |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
+         2593 |         1 |  2578 | gist_box_consistent         | box_ops              |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
+         3919 |         1 |  3875 | range_gist_consistent       | range_ops            |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
+         3919 |         1 |  3875 | range_gist_consistent       | range_ops            |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
+         3919 |         1 |  3875 | range_gist_consistent       | range_ops            |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
+        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops
+        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops
+        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         3550 |         1 |  3553 | inet_gist_consistent        | network_ops
+        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         1029 |         1 |  2179 | gist_point_consistent       | point_ops
+        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         2593 |         1 |  2578 | gist_box_consistent         | box_ops
+        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         3919 |         1 |  3875 | range_gist_consistent       | range_ops
+        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops
+        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops   |         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops
+         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops          |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
+         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops          |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
+         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops          |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
+         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops         |        12271 |         1 | 12262 | geometry_gist_consistent_nd | gist_geometry_ops_nd
+         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops         |        12750 |         1 | 12741 | geography_gist_consistent   | gist_geography_ops
+         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops         |        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d
+        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         2595 |         1 |  2591 | gist_circle_consistent      | circle_ops
+        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         2594 |         1 |  2585 | gist_poly_consistent        | poly_ops
+        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         3550 |         1 |  3553 | inet_gist_consistent        | network_ops
+        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         1029 |         1 |  2179 | gist_point_consistent       | point_ops
+        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         2593 |         1 |  2578 | gist_box_consistent         | box_ops
+        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         3919 |         1 |  3875 | range_gist_consistent       | range_ops
+        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         3702 |         1 |  3701 | gtsquery_consistent         | tsquery_ops
+        12238 |         1 | 12196 | geometry_gist_consistent_2d | gist_geometry_ops_2d |         3655 |         1 |  3654 | gtsvector_consistent        | tsvector_ops
+         1029 |         8 |  3064 | gist_point_distance         | point_ops            |        12238 |         8 | 12195 | geometry_gist_distance_2d   | gist_geometry_ops_2d
+        12238 |         8 | 12195 | geometry_gist_distance_2d   | gist_geometry_ops_2d |         1029 |         8 |  3064 | gist_point_distance         | point_ops
+(50 rows)
 
 -- For btree, though, we can do better since we know the support routines
 -- must be of the form cmp(lefttype, righttype) returns int4
@@ -1898,9 +1961,31 @@ FROM pg_amproc AS p1, pg_proc AS p2
 WHERE p1.amproc = p2.oid AND
     p1.amproclefttype = p1.amprocrighttype AND
     p2.provolatile != 'i';
- amprocfamily | amproc | prosrc 
---------------+--------+--------
-(0 rows)
+ amprocfamily |           amproc            |             prosrc             
+--------------+-----------------------------+--------------------------------
+        12238 | geometry_gist_distance_2d   | gserialized_gist_distance_2d
+        12238 | geometry_gist_consistent_2d | gserialized_gist_consistent_2d
+        12238 | geometry_gist_union_2d      | gserialized_gist_union_2d
+        12238 | geometry_gist_compress_2d   | gserialized_gist_compress_2d
+        12238 | geometry_gist_decompress_2d | gserialized_gist_decompress_2d
+        12238 | geometry_gist_penalty_2d    | gserialized_gist_penalty_2d
+        12238 | geometry_gist_picksplit_2d  | gserialized_gist_picksplit_2d
+        12238 | geometry_gist_same_2d       | gserialized_gist_same_2d
+        12271 | geometry_gist_consistent_nd | gserialized_gist_consistent
+        12271 | geometry_gist_union_nd      | gserialized_gist_union
+        12271 | geometry_gist_compress_nd   | gserialized_gist_compress
+        12271 | geometry_gist_decompress_nd | gserialized_gist_decompress
+        12271 | geometry_gist_penalty_nd    | gserialized_gist_penalty
+        12271 | geometry_gist_picksplit_nd  | gserialized_gist_picksplit
+        12271 | geometry_gist_same_nd       | gserialized_gist_same
+        12750 | geography_gist_consistent   | gserialized_gist_consistent
+        12750 | geography_gist_union        | gserialized_gist_union
+        12750 | geography_gist_compress     | gserialized_gist_compress
+        12750 | geography_gist_decompress   | gserialized_gist_decompress
+        12750 | geography_gist_penalty      | gserialized_gist_penalty
+        12750 | geography_gist_picksplit    | gserialized_gist_picksplit
+        12750 | geography_gist_same         | gserialized_gist_same
+(22 rows)
 
 SELECT p1.amprocfamily, p1.amproc, p2.prosrc
 FROM pg_amproc AS p1, pg_proc AS p2

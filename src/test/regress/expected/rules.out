@@ -1279,6 +1279,30 @@ drop table cchild;
 -- temporarily disable fancy output, so view changes create less diff noise
 \a\t
 SELECT viewname, definition FROM pg_views WHERE schemaname <> 'information_schema' ORDER BY viewname;
+geography_columns| SELECT current_database() AS f_table_catalog,
+    n.nspname AS f_table_schema,
+    c.relname AS f_table_name,
+    a.attname AS f_geography_column,
+    postgis_typmod_dims(a.atttypmod) AS coord_dimension,
+    postgis_typmod_srid(a.atttypmod) AS srid,
+    postgis_typmod_type(a.atttypmod) AS type
+   FROM pg_class c,
+    pg_attribute a,
+    pg_type t,
+    pg_namespace n
+  WHERE (((((((t.typname = 'geography'::name) AND (a.attisdropped = false)) AND (a.atttypid = t.oid)) AND (a.attrelid = c.oid)) AND (c.relnamespace = n.oid)) AND (NOT pg_is_other_temp_schema(c.relnamespace))) AND has_table_privilege(c.oid, 'SELECT'::text));
+geometry_columns| SELECT (current_database())::character varying(256) AS f_table_catalog,
+    (n.nspname)::character varying(256) AS f_table_schema,
+    (c.relname)::character varying(256) AS f_table_name,
+    (a.attname)::character varying(256) AS f_geometry_column,
+    COALESCE(NULLIF(postgis_typmod_dims(a.atttypmod), 2), postgis_constraint_dims((n.nspname)::text, (c.relname)::text, (a.attname)::text), 2) AS coord_dimension,
+    COALESCE(NULLIF(postgis_typmod_srid(a.atttypmod), 0), postgis_constraint_srid((n.nspname)::text, (c.relname)::text, (a.attname)::text), 0) AS srid,
+    (replace(replace(COALESCE(NULLIF(upper(postgis_typmod_type(a.atttypmod)), 'GEOMETRY'::text), (postgis_constraint_type((n.nspname)::text, (c.relname)::text, (a.attname)::text))::text, 'GEOMETRY'::text), 'ZM'::text, ''::text), 'Z'::text, ''::text))::character varying(30) AS type
+   FROM pg_class c,
+    pg_attribute a,
+    pg_type t,
+    pg_namespace n
+  WHERE (((((((((t.typname = 'geometry'::name) AND (a.attisdropped = false)) AND (a.atttypid = t.oid)) AND (a.attrelid = c.oid)) AND (c.relnamespace = n.oid)) AND ((((c.relkind = 'r'::"char") OR (c.relkind = 'v'::"char")) OR (c.relkind = 'm'::"char")) OR (c.relkind = 'f'::"char"))) AND (NOT pg_is_other_temp_schema(c.relnamespace))) AND (NOT ((n.nspname = 'public'::name) AND (c.relname = 'raster_columns'::name)))) AND has_table_privilege(c.oid, 'SELECT'::text));
 iexit| SELECT ih.name,
     ih.thepath,
     interpt_pp(ih.thepath, r.thepath) AS exit
@@ -2064,6 +2088,43 @@ pg_views| SELECT n.nspname AS schemaname,
    FROM (pg_class c
      LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
   WHERE (c.relkind = 'v'::"char");
+raster_columns| SELECT current_database() AS r_table_catalog,
+    n.nspname AS r_table_schema,
+    c.relname AS r_table_name,
+    a.attname AS r_raster_column,
+    COALESCE(_raster_constraint_info_srid(n.nspname, c.relname, a.attname), ( SELECT st_srid('010100000000000000000000000000000000000000'::geometry) AS st_srid)) AS srid,
+    _raster_constraint_info_scale(n.nspname, c.relname, a.attname, 'x'::bpchar) AS scale_x,
+    _raster_constraint_info_scale(n.nspname, c.relname, a.attname, 'y'::bpchar) AS scale_y,
+    _raster_constraint_info_blocksize(n.nspname, c.relname, a.attname, 'width'::text) AS blocksize_x,
+    _raster_constraint_info_blocksize(n.nspname, c.relname, a.attname, 'height'::text) AS blocksize_y,
+    COALESCE(_raster_constraint_info_alignment(n.nspname, c.relname, a.attname), false) AS same_alignment,
+    COALESCE(_raster_constraint_info_regular_blocking(n.nspname, c.relname, a.attname), false) AS regular_blocking,
+    _raster_constraint_info_num_bands(n.nspname, c.relname, a.attname) AS num_bands,
+    _raster_constraint_info_pixel_types(n.nspname, c.relname, a.attname) AS pixel_types,
+    _raster_constraint_info_nodata_values(n.nspname, c.relname, a.attname) AS nodata_values,
+    _raster_constraint_info_out_db(n.nspname, c.relname, a.attname) AS out_db,
+    _raster_constraint_info_extent(n.nspname, c.relname, a.attname) AS extent,
+    COALESCE(_raster_constraint_info_index(n.nspname, c.relname, a.attname), false) AS spatial_index
+   FROM pg_class c,
+    pg_attribute a,
+    pg_type t,
+    pg_namespace n
+  WHERE (((((((t.typname = 'raster'::name) AND (a.attisdropped = false)) AND (a.atttypid = t.oid)) AND (a.attrelid = c.oid)) AND (c.relnamespace = n.oid)) AND ((c.relkind)::text = ANY ((ARRAY['r'::character(1), 'v'::character(1), 'm'::character(1), 'f'::character(1)])::text[]))) AND (NOT pg_is_other_temp_schema(c.relnamespace)));
+raster_overviews| SELECT current_database() AS o_table_catalog,
+    n.nspname AS o_table_schema,
+    c.relname AS o_table_name,
+    a.attname AS o_raster_column,
+    current_database() AS r_table_catalog,
+    (split_part(split_part(s.consrc, '''::name'::text, 1), ''''::text, 2))::name AS r_table_schema,
+    (split_part(split_part(s.consrc, '''::name'::text, 2), ''''::text, 2))::name AS r_table_name,
+    (split_part(split_part(s.consrc, '''::name'::text, 3), ''''::text, 2))::name AS r_raster_column,
+    (btrim(split_part(s.consrc, ','::text, 2)))::integer AS overview_factor
+   FROM pg_class c,
+    pg_attribute a,
+    pg_type t,
+    pg_namespace n,
+    pg_constraint s
+  WHERE ((((((((((t.typname = 'raster'::name) AND (a.attisdropped = false)) AND (a.atttypid = t.oid)) AND (a.attrelid = c.oid)) AND (c.relnamespace = n.oid)) AND ((c.relkind)::text = ANY ((ARRAY['r'::character(1), 'v'::character(1), 'm'::character(1), 'f'::character(1)])::text[]))) AND (s.connamespace = n.oid)) AND (s.conrelid = c.oid)) AND (s.consrc ~~ '%_overview_constraint(%'::text)) AND (NOT pg_is_other_temp_schema(c.relnamespace)));
 rtest_v1| SELECT rtest_t1.a,
     rtest_t1.b
    FROM rtest_t1;
@@ -2166,6 +2227,12 @@ tvvmv| SELECT tvvm.grandtot
    FROM tvvm;
 SELECT tablename, rulename, definition FROM pg_rules
 	ORDER BY tablename, rulename;
+geometry_columns|geometry_columns_delete|CREATE RULE geometry_columns_delete AS
+    ON DELETE TO geometry_columns DO INSTEAD NOTHING;
+geometry_columns|geometry_columns_insert|CREATE RULE geometry_columns_insert AS
+    ON INSERT TO geometry_columns DO INSTEAD NOTHING;
+geometry_columns|geometry_columns_update|CREATE RULE geometry_columns_update AS
+    ON UPDATE TO geometry_columns DO INSTEAD NOTHING;
 pg_settings|pg_settings_n|CREATE RULE pg_settings_n AS
     ON UPDATE TO pg_settings DO INSTEAD NOTHING;
 pg_settings|pg_settings_u|CREATE RULE pg_settings_u AS
