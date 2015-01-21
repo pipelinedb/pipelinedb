@@ -26,7 +26,7 @@ Now it can be built:
 ```
 cd src/gis
 ./autogen.sh
-./configure # Note that the --prefix argument isn't necessary here
+./configure CFLAGS="-g -O0" # Note that the --prefix argument isn't necessary here
 make
 make install
 ```
