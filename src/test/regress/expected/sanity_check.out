@@ -138,6 +138,7 @@ pg_user_mapping|t
 pipeline_combine|t
 pipeline_query|t
 pipeline_stream|t
+pipeline_tstate|t
 point_tbl|t
 polygon_tbl|t
 quad_point_tbl|t

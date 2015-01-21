@@ -1061,6 +1061,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	SelectStmt *workerstmt;
 	List *workerGroups;
 	List *workerTargetList;
+	List *workerDistinct;
 	bool isSlidingWindow;
 	bool doesViewAggregate;
 	int origNumTargets;
@@ -1085,6 +1086,19 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 
 	isSlidingWindow = IsSlidingWindowSelectStmt(workerstmt);
 	doesViewAggregate = DoesViewAggregate(workerstmt, &context);
+
+	/* SELECT DISTINCT x, ... => SELECT DISTINCT ON (x, ...) x, ... */
+	if (equal(workerstmt->distinctClause, lcons(NIL, NIL)))
+	{
+		ListCell *lc;
+		workerstmt->distinctClause = NIL;
+
+		foreach(lc, workerstmt->targetList)
+		{
+			ResTarget *res = (ResTarget *) lfirst(lc);
+			workerstmt->distinctClause = lappend(workerstmt->distinctClause, res->val);
+		}
+	}
 
 	/*
 	 * Check to see if we need to project any expressions/columns
@@ -1119,6 +1133,19 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 		workerGroups = lappend(workerGroups, list_nth(workerstmt->groupClause, i));
 
 	workerstmt->groupClause = workerGroups;
+
+	/*
+	 * Rewrite the distinctClause and project and distinct expressions that
+	 * are not in the targetList
+	 */
+	workerDistinct = NIL;
+	foreach(lc, workerstmt->distinctClause)
+	{
+		Node *node = (Node *) lfirst(lc);
+		node = HoistNode(workerstmt, node, &context);
+		workerDistinct = lappend(workerDistinct, node);
+	}
+	workerstmt->distinctClause = workerDistinct;
 
 	/*
 	 * Hoist aggregates out of expressions for workers.
@@ -1224,19 +1251,6 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 
 	viewstmt->windowClause = workerstmt->windowClause;
 	workerstmt->windowClause = NIL;
-
-	/* SELECT DISTINCT x, ... => SELECT DISTINCT ON (x, ...) x, ... */
-	if (equal(workerstmt->distinctClause, lcons(NIL, NIL)))
-	{
-		ListCell *lc;
-		workerstmt->distinctClause = NIL;
-
-		foreach(lc, workerstmt->targetList)
-		{
-			ResTarget *res = (ResTarget *) lfirst(lc);
-			workerstmt->distinctClause = lappend(workerstmt->distinctClause, res->val);
-		}
-	}
 
 	if (viewstmtptr != NULL)
 		*viewstmtptr = viewstmt;

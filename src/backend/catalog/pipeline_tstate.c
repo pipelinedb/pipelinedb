@@ -91,7 +91,7 @@ void
 UpdateDistinctMultiset(char *cvname, multiset_t *distinct_ms)
 {
 	Relation pipeline_tstate = heap_open(PipelineTStateRelationId, RowExclusiveLock);
-	HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(cvname));
+	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
 	bool nulls[Natts_pipeline_tstate];
 	bool replaces[Natts_pipeline_tstate];
 	Datum values[Natts_pipeline_tstate];
@@ -123,7 +123,7 @@ GetDistinctMultiset(char *cvname)
 	multiset_t *distinct_ms = (multiset_t *) palloc0(sizeof(multiset_t));
 	bool isnull;
 	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
-	Datum datum = SysCacheGetAttr(PIPELINEQUERYNAME, tuple, Anum_pipeline_tstate_distinct, &isnull);
+	Datum datum = SysCacheGetAttr(PIPELINETSTATENAME, tuple, Anum_pipeline_tstate_distinct, &isnull);
 
 	if (isnull)
 		multiset_init(distinct_ms);
