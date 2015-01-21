@@ -38,11 +38,6 @@ CATALOG(pipeline_query,4242) BKI_WITHOUT_OIDS
 	int16		parallelism;
 #ifdef CATALOG_VARLEN
 	text		query;
-	/*
-	 * This is actually an hll field, but we can't reference
-	 * extensions here.
-	 */
-	bytea		distinct;
 #endif
 } FormData_pipeline_query;
 
@@ -57,7 +52,7 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query			11
+#define Natts_pipeline_query			10
 #define Anum_pipeline_query_id			1
 #define Anum_pipeline_query_name		2
 #define Anum_pipeline_query_state 		3
@@ -68,7 +63,6 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define Anum_pipeline_query_emptysleepms 8
 #define Anum_pipeline_query_parallelism	9
 #define Anum_pipeline_query_query 		10
-#define Anum_pipeline_query_distinct 	11
 
 /* ----------------
  *		query states

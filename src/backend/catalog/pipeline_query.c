@@ -16,6 +16,7 @@
 #include "catalog/indexing.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_tstate_fn.h"
 #include "libpq/libpq.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -190,14 +191,14 @@ RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matre
 	/* Copy gc flag */
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
 
-	/* Mark distinct as null */
-	nulls[Anum_pipeline_query_distinct - 1] = true;
-
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);
 
 	simple_heap_insert(pipeline_query, tup);
 	CatalogUpdateIndexes(pipeline_query, tup);
 	CommandCounterIncrement();
+
+	/* Create transition state entry */
+	CreateTStateEntry(name->relname);
 
 	heap_freetuple(tup);
 	heap_close(pipeline_query, NoLock);

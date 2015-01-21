@@ -24,6 +24,7 @@
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "catalog/pipeline_tstate_fn.h"
 #include "catalog/toasting.h"
 #include "executor/execdesc.h"
 #include "executor/tstoreReceiver.h"
@@ -400,6 +401,9 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		 * see the changes already made.
 		 */
 		CommandCounterIncrement();
+
+		/* Remove transition state entry */
+		RemoveTStateEntry(rv->relname);
 	}
 
 	/*
@@ -682,6 +686,8 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 	Relation pipeline_query;
 	List *views = NIL;
 
+	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+
 	/* Ensure that all *relations* are CQs. */
 	foreach(lc, stmt->relations)
 	{
@@ -693,36 +699,13 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 		rv->relname = GetMatRelationName(rv->relname);
 	}
 
+	/* Reset all CQ level transition state */
+	foreach(lc, views)
+		ResetTStateEntry((char *) lfirst(lc));
+
 	/* Call TRUNCATE on the backing view table(s). */
 	stmt->objType = OBJECT_TABLE;
 	ExecuteTruncate(stmt);
-
-	/* Set the distinct HLL field to null */
-	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
-
-	foreach(lc, views)
-	{
-		HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(lfirst(lc)));
-		bool nulls[Natts_pipeline_query];
-		bool replaces[Natts_pipeline_query];
-		Datum values[Natts_pipeline_query];
-		HeapTuple newtuple;
-
-		MemSet(values, 0, sizeof(values));
-		MemSet(nulls, false, sizeof(nulls));
-		MemSet(replaces, false, sizeof(replaces));
-
-		replaces[Anum_pipeline_query_distinct - 1] = true;
-		nulls[Anum_pipeline_query_distinct - 1] = true;
-
-		newtuple = heap_modify_tuple(tuple, pipeline_query->rd_att,
-				values, nulls, replaces);
-		simple_heap_update(pipeline_query, &newtuple->t_self, newtuple);
-		CatalogUpdateIndexes(pipeline_query, newtuple);
-
-		CommandCounterIncrement();
-		ReleaseSysCache(tuple);
-	}
 
 	heap_close(pipeline_query, NoLock);
 }

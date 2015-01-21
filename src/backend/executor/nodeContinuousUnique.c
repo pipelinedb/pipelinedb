@@ -14,7 +14,7 @@
 #include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/indexing.h"
-#include "catalog/pipeline_query.h"
+#include "catalog/pipeline_tstate_fn.h"
 #include "executor/executor.h"
 #include "executor/nodeContinuousUnique.h"
 #include "utils/builtins.h"
@@ -56,24 +56,6 @@ hash_tuple(TupleTableSlot *slot, Unique *unique)
 	MurmurHash3_x64_128((void *) buf->data, len, 0xdeadbeef, out);
 	resetStringInfo(buf);
 	return out[0];
-}
-
-static void
-load_distinct_multiset(ContinuousUniqueState *node)
-{
-	bool isnull;
-	HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, NameGetDatum(&node->cvname));
-	Datum datum = SysCacheGetAttr(PIPELINEQUERYNAME, tuple, Anum_pipeline_query_distinct, &isnull);
-
-	if (isnull)
-		multiset_init(node->distinct_ms);
-	else
-	{
-		bytea *raw = DatumGetByteaP(datum);
-		multiset_unpack(node->distinct_ms, (uint8_t *) VARDATA(raw), VARSIZE(raw) - VARHDRSZ, NULL);
-	}
-
-	ReleaseSysCache(tuple);
 }
 
 /* ----------------------------------------------------------------
@@ -171,7 +153,7 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 	/*
 	 * Load the multiset from pipeline_query.
 	 */
-	load_distinct_multiset(state);
+	state->distinct_ms = GetDistinctMultiset(NameStr(state->cvname));
 	state->orig_card = state->card = (uint64_t) multiset_card(state->distinct_ms);
 
 	return state;
@@ -189,36 +171,7 @@ ExecEndContinuousUnique(ContinuousUniqueState *node)
 {
 	/* Only update the distinct column if the cardinality has changed */
 	if (node->card > node->orig_card)
-	{
-		Relation pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
-		HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, NameGetDatum(&node->cvname));
-		bool nulls[Natts_pipeline_query];
-		bool replaces[Natts_pipeline_query];
-		Datum values[Natts_pipeline_query];
-		HeapTuple newtuple;
-	    size_t packed_sz = multiset_packed_size(node->distinct_ms);
-	    bytea *raw = (bytea *) palloc(VARHDRSZ + packed_sz);
-	    SET_VARSIZE(raw, VARHDRSZ + packed_sz);
-
-	    multiset_pack(node->distinct_ms, (uint8_t *) VARDATA(raw), packed_sz);
-
-		MemSet(values, 0, sizeof(values));
-		MemSet(nulls, false, sizeof(nulls));
-		MemSet(replaces, false, sizeof(replaces));
-
-		replaces[Anum_pipeline_query_distinct - 1] = true;
-		values[Anum_pipeline_query_distinct - 1] = PointerGetDatum(raw);
-
-		newtuple = heap_modify_tuple(tuple, pipeline_query->rd_att,
-					values, nulls, replaces);
-		simple_heap_update(pipeline_query, &newtuple->t_self, newtuple);
-		CatalogUpdateIndexes(pipeline_query, newtuple);
-
-		CommandCounterIncrement();
-		ReleaseSysCache(tuple);
-
-		heap_close(pipeline_query, RowExclusiveLock);
-	}
+		UpdateDistinctMultiset(NameStr(node->cvname), node->distinct_ms);
 
 	ExecClearTuple(node->ps.ps_ResultTupleSlot);
 	pfree(node->distinct_ms);
@@ -237,6 +190,6 @@ ExecReScanContinuousUnique(ContinuousUniqueState *node)
 	if (node->distinct_ms)
 	{
 		pfree(node->distinct_ms);
-		load_distinct_multiset(node);
+		node->distinct_ms = GetDistinctMultiset(NameStr(node->cvname));
 	}
 }
