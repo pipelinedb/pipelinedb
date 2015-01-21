@@ -22,10 +22,9 @@
 #include "optimizer/var.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqplan.h"
+#include "tcop/tcopprot.h"
+#include "utils/builtins.h"
 #include "utils/syscache.h"
-
-#define AGGKIND_IS_CQ_COMBINER(aggkind) ((aggkind) == AGGKIND_CQ_COMBINER)
-#define AGGKIND_IS_CQ_WORKER(aggkind) ((aggkind) == AGGKIND_CQ_WORKER)
 
 
 static Oid
@@ -100,11 +99,34 @@ make_store_target(TargetEntry *tostore, char *resname, AttrNumber attno, Oid agg
 }
 
 /*
+ * get_combiner_join_rel
+ *
+ * Gets the input rel for a combine plan, which only ever needs to read from a TuplestoreScan
+ * because the workers have already done most of the work
+ */
+static RelOptInfo *
+get_combiner_join_rel(PlannerInfo *root, int levels_needed, List *initial_rels)
+{
+	RelOptInfo *rel;
+	Path *path;
+
+	rel = standard_join_search(root, levels_needed, initial_rels);
+	rel->pathlist = NIL;
+
+	path =  create_tuplestore_scan_path(rel);
+
+	add_path(rel, path);
+	set_cheapest(rel);
+
+	return rel;
+}
+
+/*
  * CQ combiners expect transition values from worker processes, so we need
  * to modify the combiner's Aggrefs accordingly.
  */
-void
-SetCQPlanRefs(PlannedStmt *pstmt, char* matrelname)
+static void
+set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 {
 	Plan *plan = pstmt->planTree;
 	ListCell *lc;
@@ -274,25 +296,111 @@ SetCQPlanRefs(PlannedStmt *pstmt, char* matrelname)
 		plan->lefttree->targetlist = targetlist;
 }
 
-/*
- * GetCombinerJoinRel
- *
- * Gets the input rel for a combine plan, which only ever needs to read from a TuplestoreScan
- * because the workers have already done most of the work
- */
-RelOptInfo *
-GetCombinerJoinRel(PlannerInfo *root, int levels_needed, List *initial_rels)
+static PlannedStmt *
+get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewState *state, bool is_combine)
 {
-	RelOptInfo *rel;
-	Path *path;
+	List		*querytree_list;
+	List		*plantree_list;
+	Query		*query;
+	PlannedStmt	*plan;
 
-	rel = standard_join_search(root, levels_needed, initial_rels);
-	rel->pathlist = NIL;
+	querytree_list = pg_analyze_and_rewrite(node, sql, NULL, 0);
+	Assert(list_length(querytree_list) == 1);
 
-	path =  create_tuplestore_scan_path(rel);
+	query = linitial(querytree_list);
 
-	add_path(rel, path);
-	set_cheapest(rel);
+	query->is_continuous = IsA(node, SelectStmt);
+	query->is_combine = is_combine;
+	query->cq_target = makeRangeVar(NULL, cvname, -1);
+	query->cq_state = state;
 
-	return rel;
+	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
+	Assert(list_length(plantree_list) == 1);
+	plan = (PlannedStmt *) linitial(plantree_list);
+
+	plan->is_continuous = true;
+	plan->cq_target = makeRangeVar(NULL, cvname, -1);
+	plan->cq_state = palloc(sizeof(ContinuousViewState));
+	memcpy(plan->cq_state, query->cq_state, sizeof(ContinuousViewState));
+
+	return plan;
+}
+
+static PlannedStmt*
+get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
+{
+	List		*parsetree_list;
+	SelectStmt	*selectstmt;
+
+	parsetree_list = pg_parse_query(sql);
+	Assert(list_length(parsetree_list) == 1);
+
+	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	selectstmt = GetSelectStmtForCQWorker(selectstmt, NULL);
+	selectstmt->forContinuousView = true;
+
+	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, false);
+}
+
+static PlannedStmt*
+get_combiner_plan(char *cvname, const char *sql, ContinuousViewState *state)
+{
+	List		*parsetree_list;
+	SelectStmt	*selectstmt;
+	PlannedStmt *result;
+	join_search_hook_type save = join_search_hook;
+
+	parsetree_list = pg_parse_query(sql);
+	Assert(list_length(parsetree_list) == 1);
+
+	join_search_hook = get_combiner_join_rel;
+	selectstmt = (SelectStmt *) linitial(parsetree_list);
+	selectstmt = GetSelectStmtForCQCombiner(selectstmt);
+	selectstmt->forContinuousView = true;
+
+	result = get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, true);
+	join_search_hook = save;
+
+	/*
+	 * Unique plans get transformed into ContinuousUnique plans for
+	 * combiner processes. This combiner does the necessary unique-fying by
+	 * looking at the distinct HLL stored in pipeline_query.
+	 */
+	if (IsA(result->planTree, Unique))
+	{
+		ContinuousUnique *cunique = makeNode(ContinuousUnique);
+		Unique *unique = (Unique *) result->planTree;
+		memcpy((char *) &cunique->unique, (char *) unique, sizeof(Unique));
+		namestrcpy(&cunique->cvName, cvname);
+		cunique->unique.plan.type = T_ContinuousUnique;
+		result->planTree = (Plan *) cunique;
+
+		Assert(IsA(result->planTree->lefttree, Sort));
+		/* Strip out the sort since its not needed */
+		result->planTree->lefttree = result->planTree->lefttree->lefttree;
+	}
+
+	return result;
+}
+
+PlannedStmt *
+GetCQPlan(char *cvname, const char *sql, ContinuousViewState *state, char *matrelname)
+{
+	PlannedStmt *plan;
+
+	switch(state->ptype)
+	{
+		case CQCombiner:
+			plan = get_combiner_plan(cvname, sql, state);
+			break;
+		case CQWorker:
+			plan = get_worker_plan(cvname, sql, state);
+			break;
+		default:
+			elog(ERROR, "unrecognized CQ proc type: %d", state->ptype);
+	}
+
+	set_plan_refs(plan, matrelname);
+
+	return plan;
 }

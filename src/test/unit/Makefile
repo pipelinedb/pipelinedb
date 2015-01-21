@@ -64,6 +64,7 @@ TEST_OBJS = test_tdigest.o runner.o
 
 OBJS = $(SUBDIROBJS) $(LOCALOBJS) $(top_builddir)/src/port/libpgport_srv.a \
        $(top_builddir)/src/common/libpgcommon_srv.a \
+       $(top_builddir)/src/hll/hll.so \
        $(TEST_OBJS)
 
 # We put libpgport and libpgcommon into OBJS, so remove it from LIBS; also add

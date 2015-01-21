@@ -20,6 +20,7 @@
 #include "nodes/params.h"
 #include "nodes/plannodes.h"
 #include "pipeline/streambuf.h"
+#include "pipeline/multiset_t.h"
 #include "utils/reltrigger.h"
 #include "utils/sortsupport.h"
 #include "utils/tuplestore.h"
@@ -1888,6 +1889,18 @@ typedef struct UniqueState
 	FmgrInfo   *eqfunctions;	/* per-field lookup data for equality fns */
 	MemoryContext tempContext;	/* short-term context for comparisons */
 } UniqueState;
+
+/*
+ * ContinuousUniqueState
+ */
+typedef struct ContinuousUniqueState
+{
+	PlanState ps;
+	multiset_t *distinct_ms;
+	NameData cvname;
+	uint64_t orig_card;
+	uint64_t card;
+} ContinuousUniqueState;
 
 /* ----------------
  *	 HashState information

@@ -190,6 +190,9 @@ RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matre
 	/* Copy gc flag */
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
 
+	/* Mark distinct as null */
+	nulls[Anum_pipeline_query_distinct - 1] = true;
+
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);
 
 	simple_heap_insert(pipeline_query, tup);
@@ -448,13 +451,11 @@ char *
 GetQueryStringOrNull(const char *cvname, bool select_only)
 {
 	HeapTuple tuple;
-	NameData name;
 	Datum tmp;
 	bool isnull;
 	char *result;
 
-	namestrcpy(&name, cvname);
-	tuple = SearchSysCache1(PIPELINEQUERYNAME, NameGetDatum(&name));
+	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(cvname));
 
 	if (!HeapTupleIsValid(tuple))
 		return NULL;

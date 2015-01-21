@@ -18,6 +18,7 @@
 #include "commands/pipelinecmds.h"
 #include "commands/tablecmds.h"
 #include "commands/view.h"
+#include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_class.h"
 #include "catalog/pipeline_query.h"
@@ -179,6 +180,7 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *
 	index->concurrent = false;
 
 	DefineIndex(matreloid, index, InvalidOid, false, false, false, false);
+	CommandCounterIncrement();
 }
 
 /*
@@ -324,6 +326,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	view_stmt->query = (Node *) viewselect;
 
 	DefineView(view_stmt, querystring);
+	CommandCounterIncrement();
 	allowSystemTableMods = saveAllowSystemTableMods;
 
 	/*
@@ -676,6 +679,8 @@ void
 ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 {
 	ListCell *lc;
+	Relation pipeline_query;
+	List *views = NIL;
 
 	/* Ensure that all *relations* are CQs. */
 	foreach(lc, stmt->relations)
@@ -684,10 +689,40 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 		if (!IsAContinuousView(rv))
 			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
 
+		views = lappend(views, rv->relname);
 		rv->relname = GetMatRelationName(rv->relname);
 	}
 
 	/* Call TRUNCATE on the backing view table(s). */
 	stmt->objType = OBJECT_TABLE;
 	ExecuteTruncate(stmt);
+
+	/* Set the distinct HLL field to null */
+	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+
+	foreach(lc, views)
+	{
+		HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(lfirst(lc)));
+		bool nulls[Natts_pipeline_query];
+		bool replaces[Natts_pipeline_query];
+		Datum values[Natts_pipeline_query];
+		HeapTuple newtuple;
+
+		MemSet(values, 0, sizeof(values));
+		MemSet(nulls, false, sizeof(nulls));
+		MemSet(replaces, false, sizeof(replaces));
+
+		replaces[Anum_pipeline_query_distinct - 1] = true;
+		nulls[Anum_pipeline_query_distinct - 1] = true;
+
+		newtuple = heap_modify_tuple(tuple, pipeline_query->rd_att,
+				values, nulls, replaces);
+		simple_heap_update(pipeline_query, &newtuple->t_self, newtuple);
+		CatalogUpdateIndexes(pipeline_query, newtuple);
+
+		CommandCounterIncrement();
+		ReleaseSysCache(tuple);
+	}
+
+	heap_close(pipeline_query, NoLock);
 }

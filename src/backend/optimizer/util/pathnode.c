@@ -22,6 +22,7 @@
 #include "optimizer/cost.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
+#include "optimizer/planner.h"
 #include "optimizer/restrictinfo.h"
 #include "optimizer/tlist.h"
 #include "parser/parsetree.h"
@@ -1149,7 +1150,8 @@ create_unique_path(PlannerInfo *root, RelOptInfo *rel, Path *subpath,
 	in_operators = NIL;
 	uniq_exprs = NIL;
 	all_btree = true;
-	all_hash = enable_hashagg;	/* don't consider hash if not enabled */
+	/* don't consider hash if not enabled or is a CQ */
+	all_hash = enable_hashagg && !IS_STREAM_RTE(rel->relid, root);
 	foreach(lc, sjinfo->join_quals)
 	{
 		OpExpr	   *op = (OpExpr *) lfirst(lc);

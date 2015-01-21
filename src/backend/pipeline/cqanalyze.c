@@ -1225,6 +1225,19 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	viewstmt->windowClause = workerstmt->windowClause;
 	workerstmt->windowClause = NIL;
 
+	/* SELECT DISTINCT x, ... => SELECT DISTINCT ON (x, ...) x, ... */
+	if (equal(workerstmt->distinctClause, lcons(NIL, NIL)))
+	{
+		ListCell *lc;
+		workerstmt->distinctClause = NIL;
+
+		foreach(lc, workerstmt->targetList)
+		{
+			ResTarget *res = (ResTarget *) lfirst(lc);
+			workerstmt->distinctClause = lappend(workerstmt->distinctClause, res->val);
+		}
+	}
+
 	if (viewstmtptr != NULL)
 		*viewstmtptr = viewstmt;
 

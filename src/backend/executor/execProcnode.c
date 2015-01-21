@@ -84,6 +84,7 @@
 #include "executor/nodeBitmapHeapscan.h"
 #include "executor/nodeBitmapIndexscan.h"
 #include "executor/nodeBitmapOr.h"
+#include "executor/nodeContinuousUnique.h"
 #include "executor/nodeCtescan.h"
 #include "executor/nodeForeignscan.h"
 #include "executor/nodeFunctionscan.h"
@@ -313,6 +314,11 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 
 		case T_Unique:
 			result = (PlanState *) ExecInitUnique((Unique *) node,
+												  estate, eflags);
+			break;
+
+		case T_ContinuousUnique:
+			result = (PlanState *) ExecInitContinuousUnique((ContinuousUnique *) node,
 												  estate, eflags);
 			break;
 
@@ -560,6 +566,10 @@ ExecProcNode(PlanState *node)
 
 		case T_UniqueState:
 			result = ExecUnique((UniqueState *) node);
+			break;
+
+		case T_ContinuousUniqueState:
+			result = ExecContinuousUnique((ContinuousUniqueState *) node);
 			break;
 
 		case T_HashState:
@@ -816,6 +826,10 @@ ExecEndNode(PlanState *node)
 
 		case T_UniqueState:
 			ExecEndUnique((UniqueState *) node);
+			break;
+
+		case T_ContinuousUniqueState:
+			ExecEndContinuousUnique((ContinuousUniqueState *) node);
 			break;
 
 		case T_HashState:

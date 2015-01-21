@@ -761,11 +761,9 @@ _outSort(StringInfo str, const Sort *node)
 }
 
 static void
-_outUnique(StringInfo str, const Unique *node)
+_out_base_unique(StringInfo str, const Unique *node)
 {
 	int			i;
-
-	WRITE_NODE_TYPE("UNIQUE");
 
 	_outPlanInfo(str, (const Plan *) node);
 
@@ -778,6 +776,22 @@ _outUnique(StringInfo str, const Unique *node)
 	appendStringInfoString(str, " :uniqOperators");
 	for (i = 0; i < node->numCols; i++)
 		appendStringInfo(str, " %u", node->uniqOperators[i]);
+}
+
+static void
+_outUnique(StringInfo str, const Unique *node)
+{
+	WRITE_NODE_TYPE("UNIQUE");
+	_out_base_unique(str, node);
+}
+
+static void
+_outContinuousUnique(StringInfo str, const ContinuousUnique *node)
+{
+	WRITE_NODE_TYPE("CONTINUOUSUNIQUE");
+	_out_base_unique(str, (Unique *) node);
+	appendStringInfoString(str, " :cvName");
+	appendStringInfo(str, " %s", NameStr(node->cvName));
 }
 
 static void
@@ -2909,6 +2923,9 @@ _outNode(StringInfo str, const void *obj)
 				break;
 			case T_Unique:
 				_outUnique(str, obj);
+				break;
+			case T_ContinuousUnique:
+				_outContinuousUnique(str, obj);
 				break;
 			case T_Hash:
 				_outHash(str, obj);
