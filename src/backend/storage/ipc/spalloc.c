@@ -19,18 +19,19 @@
 
 /* Memory Blocks */
 
-#if (__WORDSIZE == 8)
-typedef uint64_t Header;
-#else
-typedef uint32_t Header;
-#endif
-
 #define IS_ALIGNED(ptr) ((BlockInfo) ptr % __WORDSIZE == 0)
 #define ALIGN(size) (((size) + __WORDSIZE - 1) & ~(__WORDSIZE - 1))
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define BLOCK_SIZE(size) ((size) + sizeof(Header))
-#define IS_ALLOCATED(ptr) (*get_header((ptr)) & 1)
+#define MAGIC 0x1CEB00DA /* Yeeeeah, ICE BOODA! */
+
+typedef struct Header
+{
+	int32_t magic;
+	Size size;
+	bool is_allocated;
+} Header;
 
 typedef struct MemoryBlock
 {
@@ -41,7 +42,7 @@ typedef struct MemoryBlock
 } MemoryBlock;
 
 #define MIN_BLOCK_SIZE ALIGN(sizeof(MemoryBlock))
-#define MIN_ALLOC_SIZE ALIGN(sizeof(void *) * 2)
+#define MIN_ALLOC_SIZE ALIGN(sizeof(void **) * 2)
 
 static Header *
 get_header(void *ptr)
@@ -52,7 +53,7 @@ get_header(void *ptr)
 static Size
 get_size(void *ptr)
 {
-	return *get_header(ptr) >> 1;
+	return get_header(ptr)->size;
 }
 
 static void *
@@ -65,14 +66,14 @@ static void
 mark_free(void *ptr)
 {
 	Header *header = get_header(ptr);
-	*header &= ~1;
+	header->is_allocated = false;
 }
 
 static void
 mark_allocated(void *ptr)
 {
 	Header *header = get_header(ptr);
-	*header |= 1;
+	header->is_allocated = true;
 }
 
 static void*
@@ -97,6 +98,13 @@ static void
 set_prev(void *ptr, void *prev)
 {
 	*((void **) ((intptr_t) ptr + sizeof(void *))) = prev;
+}
+
+static bool
+is_allocated(void *ptr)
+{
+	Header *header = get_header(ptr);
+	return header->is_allocated && header->magic == MAGIC;
 }
 
 /*
@@ -174,7 +182,6 @@ coalesce_blocks(void *ptr1, void *ptr2)
 {
 	void *tmpptr = MIN(ptr1, ptr2);
 	Size new_size;
-	Header *header;
 
 	ptr2 = MAX(ptr1, ptr2);
 	ptr1 = tmpptr;
@@ -183,12 +190,13 @@ coalesce_blocks(void *ptr1, void *ptr2)
 		return false;
 
 	Assert(get_next(ptr1) == ptr2);
-	Assert(!IS_ALLOCATED(ptr1));
-	Assert(!IS_ALLOCATED(ptr2));
+	Assert(!is_allocated(ptr1));
+	Assert(!is_allocated(ptr2));
 
 	new_size = get_size(ptr1) + BLOCK_SIZE(get_size(ptr2));
-	header = get_header(ptr1);
-	*header = new_size << 1;
+	get_header(ptr1)->size = new_size;
+	/* Mark ptr2 as no longer an ICE BOODA. */
+	get_header(ptr2)->magic = 0;
 	set_next(ptr1, get_next(ptr2));
 
 	GlobalSPallocState->nblocks--;
@@ -201,8 +209,8 @@ static void
 init_block(void *ptr, Size size, bool is_new)
 {
 	Header *header = get_header(ptr);
-
-	*header = size << 1;
+	header->size = size;
+	header->magic = MAGIC;
 
 	GlobalSPallocState->nblocks++;
 	if (is_new)
@@ -283,7 +291,8 @@ split_block(void *ptr, Size size)
 	init_block(new_block, orig_size - size - sizeof(Header), false);
 	insert_block(new_block);
 
-	*header = size << 1 | 1;
+	header->size = size;
+	header->is_allocated = true;
 }
 
 static void *
@@ -426,7 +435,7 @@ spalloc(Size size)
 
 	SpinLockRelease(&GlobalSPallocState->mutex);
 
-	Assert(IS_ALLOCATED(block));
+	Assert(is_allocated(block));
 
 	return block;
 }
@@ -439,7 +448,8 @@ spfree(void *addr)
 {
 	Size size;
 
-	Assert(IS_ALLOCATED(addr));
+	if (!is_allocated(addr))
+		elog(ERROR, "spfree: invalid/double freeing %p", addr);
 
 	SpinLockAcquire(&GlobalSPallocState->mutex);
 

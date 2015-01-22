@@ -495,8 +495,10 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	worker.bgw_main = run_cq;
 	worker.bgw_notify_pid = MyProcPid;
-	worker.bgw_restart_time = BGW_NEVER_RESTART;
-	worker.bgw_let_crash = true;
+//	worker.bgw_restart_time = BGW_NEVER_RESTART;
+//	worker.bgw_let_crash = true;
+	worker.bgw_restart_time = 10;
+	worker.bgw_let_crash = false;
 	worker.bgw_additional_size = sizeof(CQProcRunArgs);
 	worker.bgw_cvid = state->id;
 
