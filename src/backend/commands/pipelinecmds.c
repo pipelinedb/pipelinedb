@@ -421,7 +421,7 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 
 static
 void
-RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CQProcState *procstate)
+RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CQProcTableEntry *procstate)
 {
 	RunContinuousQueryProcess(CQCombiner, cvname, state, &procstate->combiner);
 	RunContinuousQueryProcess(CQWorker, cvname, state, &procstate->worker);
@@ -537,7 +537,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	ListCell *lc;
 	int success = 0;
 	int fail = 0;
-	CQProcState *entry;
+	CQProcTableEntry *entry;
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	get_views((BaseContinuousViewStmt *) stmt);

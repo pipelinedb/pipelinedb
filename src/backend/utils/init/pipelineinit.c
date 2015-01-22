@@ -45,8 +45,8 @@ static void
 init_pipeline()
 {
 	InitGlobalStreamBuffer();
-	InitCQProcTable();
-	InitSPallocState();
+	InitCQProcState();
+	InitSPalloc();
 }
 
 /*

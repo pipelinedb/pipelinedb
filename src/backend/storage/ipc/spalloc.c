@@ -30,6 +30,7 @@ typedef uint32_t Header;
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define BLOCK_SIZE(size) ((size) + sizeof(Header))
+#define IS_ALLOCATED(ptr) (*get_header((ptr)) & 1)
 
 typedef struct MemoryBlock
 {
@@ -73,12 +74,6 @@ mark_allocated(void *ptr)
 	Header *header = get_header(ptr);
 	*header |= 1;
 }
-
-//static bool
-//is_allocated(void *ptr)
-//{
-//	return *get_header(ptr) & 1;
-//}
 
 static void*
 get_next(void *ptr)
@@ -188,8 +183,8 @@ coalesce_blocks(void *ptr1, void *ptr2)
 		return false;
 
 	Assert(get_next(ptr1) == ptr2);
-	Assert(!is_allocated(ptr1));
-	Assert(!is_allocated(ptr2));
+	Assert(!IS_ALLOCATED(ptr1));
+	Assert(!IS_ALLOCATED(ptr2));
 
 	new_size = get_size(ptr1) + BLOCK_SIZE(get_size(ptr2));
 	header = get_header(ptr1);
@@ -364,13 +359,13 @@ test_allocator()
  * InitSPallocState
  */
 void
-InitSPallocState(void)
+InitSPalloc(void)
 {
 	bool found;
 
 	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
-	GlobalSPallocState = (SPallocState *) ShmemInitStruct("ShmemFreeList", sizeof(SPallocState) , &found);
+	GlobalSPallocState = (SPallocState *) ShmemInitStruct("SPallocState", sizeof(SPallocState) , &found);
 	if (!found)
 	{
 		GlobalSPallocState->head = NULL;
@@ -431,7 +426,7 @@ spalloc(Size size)
 
 	SpinLockRelease(&GlobalSPallocState->mutex);
 
-	Assert(is_allocated(block));
+	Assert(IS_ALLOCATED(block));
 
 	return block;
 }
@@ -444,7 +439,7 @@ spfree(void *addr)
 {
 	Size size;
 
-	Assert(is_allocated(addr));
+	Assert(IS_ALLOCATED(addr));
 
 	SpinLockAcquire(&GlobalSPallocState->mutex);
 

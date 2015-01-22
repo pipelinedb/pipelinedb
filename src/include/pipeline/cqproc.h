@@ -20,7 +20,7 @@ typedef enum
 	CQWorker
 } CQProcessType;
 
-typedef struct CQProcState
+typedef struct CQProcTableEntry
 {
 	uint32 key; /* key must be the first field */
 	int32 pg_count;
@@ -30,11 +30,11 @@ typedef struct CQProcState
 	/* TODO(usmanm): Make this dynamic to support parallelism */
 	BackgroundWorkerHandle worker;
 	bool worker_done;
-} CQProcState;
+} CQProcTableEntry;
 
-extern void InitCQProcTable(void);
+extern void InitCQProcState(void);
 
-extern CQProcState* GetCQProcState(int32 id);
+extern CQProcTableEntry* GetCQProcState(int32 id);
 extern int GetProcessGroupSize(int32 id);
 extern int GetProcessGroupSizeFromCatalog(RangeVar* rv);
 extern int GetProcessGroupCount(int32 id);
@@ -43,7 +43,7 @@ extern void IncrementProcessGroupCount(int32 id);
 extern bool *GetActiveFlagPtr(int32 id);
 extern void SetActiveFlag(int32 id, bool flag);
 
-extern CQProcState* EntryAlloc(int32 key, int pg_size);
+extern CQProcTableEntry* EntryAlloc(int32 key, int pg_size);
 extern void EntryRemove(int32 key);
 
 extern bool WaitForCQProcsToStart(int32 id);
