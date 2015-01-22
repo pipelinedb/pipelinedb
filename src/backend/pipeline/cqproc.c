@@ -196,7 +196,7 @@ GetCQProcState(int32 id)
 	entry = (CQProcTableEntry *) hash_search(CQProcTable, &id, HASH_FIND, &found);
 	if (!entry)
 	{
-		elog(LOG,"entry for cvid %d not found in the metadata hash table", id);
+		elog(LOG,"entry for CQ %d not found in the CQProcTable", id);
 		return NULL;
 	}
 	return entry;
@@ -216,9 +216,7 @@ GetProcessGroupCount(int32 id)
 
 	entry = GetCQProcState(id);
 	if (entry == NULL)
-	{
 		return -1;
-	}
 	return entry->pg_count;
 }
 
@@ -362,24 +360,14 @@ TerminateCQProcs(int32 id)
 }
 
 /*
- * DidCQWorkerCrash
+ * IsCQWorkerDone
  */
 bool
-DidCQWorkerCrash(int32 id)
+IsCQWorkerDone(int32 id)
 {
 	CQProcTableEntry *entry = GetCQProcState(id);
 	pid_t pid;
-	return WaitForBackgroundWorkerStartup(&entry->worker, &pid) == BGWH_STOPPED && !entry->worker_done;
-}
-
-/*
- * SetCQWorkerDoneFlag
- */
-void
-SetCQWorkerDoneFlag(int32 id)
-{
-	CQProcTableEntry *entry = GetCQProcState(id);
-	entry->worker_done = true;
+	return WaitForBackgroundWorkerStartup(&entry->worker, &pid) == BGWH_STOPPED;
 }
 
 /*

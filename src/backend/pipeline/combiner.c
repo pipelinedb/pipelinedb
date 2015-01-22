@@ -54,6 +54,7 @@ accept_worker(CombinerDesc *desc)
   struct sockaddr_un remote;
   struct timeval to;
   socklen_t addrlen;
+  bool linger = true;
 
   local.sun_family = AF_UNIX;
   strcpy(local.sun_path, desc->name);
@@ -85,6 +86,7 @@ accept_worker(CombinerDesc *desc)
 		to.tv_usec = (desc->recvtimeoutms - (to.tv_sec * 1000)) * 1000;
 	}
 
+	setsockopt(desc->sock, SOL_SOCKET, SO_LINGER, &linger, sizeof(bool));
 	if (setsockopt(desc->sock, SOL_SOCKET, SO_RCVTIMEO, (char *) &to, sizeof(struct timeval)) == -1)
 		elog(ERROR, "could not set combiner recv() timeout: %m");
 }
@@ -121,18 +123,9 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 		elog(ERROR, "combiner failed to receive tuple length: %m");
 	}
 	else if (read == 0)
-	{
-		return true;
-	}
+		return false;
 
 	len = ntohl(len);
-
-	/*
-	 * The worker sends a negative int32 to the combiner
-	 * to signal it is done and about to die.
-	 */
-	if (len < 0)
-		return false;
 
 	tup = (HeapTuple) palloc0(HEAPTUPLESIZE + len);
 	tup->t_len = len;
@@ -536,8 +529,8 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 	TimestampTz lastCombineTime = GetCurrentTimestamp();
 	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
 	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
-	bool isWorkerDone;
-	bool didWorkerCrash = false;
+	bool is_worker_done = false;
+	bool found_tuple = false;
 
 	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
 			"CombinerRunContext",
@@ -585,7 +578,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 
 		CurrentResourceOwner = owner;
 
-		isWorkerDone = !receive_tuple(combiner, slot);
+		found_tuple = receive_tuple(combiner, slot);
 
 		/*
 		 * If we get a null tuple, we either want to combine the current batch
@@ -622,27 +615,38 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			count = 0;
 		}
 
-		/* Check the shared metadata to see if the CV has been deactivated */
+		/*
+		 * If we received a tuple in this iteration, poll the socket again.
+		 */
+		if (found_tuple)
+			continue;
+
+		/* Has the CQ been deactivated? */
 		if (!*activeFlagPtr)
 		{
-			didWorkerCrash |= DidCQWorkerCrash(cq_id);
+			/*
+			 * Ensure that the worker has terminated. There is a continue here
+			 * because we wanna poll the socket one last time after the worker has
+			 * terminated.
+			 */
+			if (!is_worker_done)
+			{
+				is_worker_done = IsCQWorkerDone(cq_id);
+				continue;
+			}
 
 			/*
-			 * if worker sent an about-to-die message then we've already
-			 * consumed all the tuples it sent us or if no tuple was read and the worker is dead,
-			 * then it probably crashed and so we should quit too
+			 * By this point the worker process has terminated and
+			 * we received no new tuples in the previous iteration.
+			 * If there are some unmerged tuples, force merge them.
 			 */
-			if (didWorkerCrash || (isWorkerDone && !didWorkerCrash))
+			if (count)
 			{
-				/*
-				 * if there are tuples in the store which needs to be merged, force
-				 * merge them
-				 */
-				if (count)
-					force = true;
-				else
-					break;
+				force = true;
+				continue;
 			}
+
+			break;
 		}
 	}
 

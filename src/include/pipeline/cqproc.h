@@ -29,7 +29,6 @@ typedef struct CQProcTableEntry
 	BackgroundWorkerHandle combiner;
 	/* TODO(usmanm): Make this dynamic to support parallelism */
 	BackgroundWorkerHandle worker;
-	bool worker_done;
 } CQProcTableEntry;
 
 extern void InitCQProcState(void);
@@ -49,8 +48,7 @@ extern void EntryRemove(int32 key);
 extern bool WaitForCQProcsToStart(int32 id);
 extern void WaitForCQProcsToTerminate(int32 id);
 extern void TerminateCQProcs(int32 id);
-extern bool DidCQWorkerCrash(int32 id);
-extern void SetCQWorkerDoneFlag(int32 cq_id);
+extern bool IsCQWorkerDone(int32 id);
 
 bool RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, struct ContinuousViewState *state, BackgroundWorkerHandle *bg_handle);
 
