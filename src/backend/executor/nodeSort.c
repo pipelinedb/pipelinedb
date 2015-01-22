@@ -18,6 +18,7 @@
 #include "executor/execdebug.h"
 #include "executor/nodeSort.h"
 #include "miscadmin.h"
+#include "pipeline/cqplan.h"
 #include "utils/tuplesort.h"
 
 
@@ -119,7 +120,7 @@ ExecSort(SortState *node)
 		estate->es_direction = dir;
 
 		/*
-		 * finally set the sorted flag to true
+		 * finally set the sorted flag to true iff its not a stream scan.
 		 */
 		node->sort_Done = true;
 		node->bounded_Done = node->bounded;
@@ -138,6 +139,10 @@ ExecSort(SortState *node)
 	(void) tuplesort_gettupleslot(tuplesortstate,
 								  ScanDirectionIsForward(dir),
 								  slot);
+
+	if (TupIsNull(slot) && IS_STREAM_TREE(node->ss.ps.plan->lefttree))
+		node->sort_Done = false;
+
 	return slot;
 }
 

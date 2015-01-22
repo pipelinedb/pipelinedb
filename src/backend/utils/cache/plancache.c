@@ -1650,6 +1650,7 @@ PlanCacheComputeResultDesc(List *stmt_list)
 			return UtilityTupleDescriptor(query->utilityStmt);
 
 		case PORTAL_MULTI_QUERY:
+		case PORTAL_CONTINUOUS_QUERY:
 			/* will not return tuples */
 			break;
 	}

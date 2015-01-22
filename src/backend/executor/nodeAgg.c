@@ -2330,7 +2330,7 @@ ExecEndAgg(AggState *node)
 }
 
 void
-ExecEndAggBatch(AggState *node)
+ExecEndBatchAgg(AggState *node)
 {
 	clear_hash_table(node);
 	node->table_filled = false;
