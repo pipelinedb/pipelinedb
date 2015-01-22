@@ -56,13 +56,8 @@ typedef struct CQProcArgs
 	char *query;
 } CQProcRunArgs;
 
-typedef struct CQProcState
-{
-	HTAB *table;
-	slock_t mutex;
-} CQProcState;
-
-static CQProcState *GlobalCQProcState = NULL;
+static HTAB *CQProcTable = NULL;
+static slock_t *CQProcMutex = NULL;
 
 /*
  * InitCQProcState
@@ -87,14 +82,14 @@ InitCQProcState(void)
 
 	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
-	GlobalCQProcState = ShmemInitStruct("CQProcState", sizeof(CQProcState), &found);
-	GlobalCQProcState->table = ShmemInitHash("CQProcTable",
+	CQProcTable = ShmemInitHash("CQProcTable",
 			num_concurrent_cv, num_concurrent_cv,
 			&info,
 			HASH_ELEM);
+	CQProcMutex = ShmemInitStruct("CQProcMutex", sizeof(slock_t), &found);
 
 	if (!found)
-		SpinLockInit(&GlobalCQProcState->mutex);
+		SpinLockInit(CQProcMutex);
 
 	LWLockRelease(PipelineMetadataLock);
 }
@@ -157,7 +152,7 @@ EntryAlloc(int32 id, int pg_size)
 	bool		found;
 
 	/* Find or create an entry with desired hash code */
-	entry = (CQProcTableEntry *) hash_search(GlobalCQProcState->table, &id, HASH_ENTER, &found);
+	entry = (CQProcTableEntry *) hash_search(CQProcTable, &id, HASH_ENTER, &found);
 	Assert(entry);
 
 	if (found)
@@ -184,7 +179,7 @@ void
 EntryRemove(int32 id)
 {
 	/* Remove the entry from the hash table. */
-	hash_search(GlobalCQProcState->table, &id, HASH_REMOVE, NULL);
+	hash_search(CQProcTable, &id, HASH_REMOVE, NULL);
 }
 
 /*
@@ -198,7 +193,7 @@ GetCQProcState(int32 id)
 	CQProcTableEntry  *entry;
 	bool found;
 
-	entry = (CQProcTableEntry *) hash_search(GlobalCQProcState->table, &id, HASH_FIND, &found);
+	entry = (CQProcTableEntry *) hash_search(CQProcTable, &id, HASH_FIND, &found);
 	if (!entry)
 	{
 		elog(LOG,"entry for cvid %d not found in the metadata hash table", id);
@@ -238,11 +233,11 @@ DecrementProcessGroupCount(int32 id)
 {
 	CQProcTableEntry *entry;
 
-	SpinLockAcquire(&GlobalCQProcState->mutex);
+	SpinLockAcquire(CQProcMutex);
 	entry = GetCQProcState(id);
 	Assert(entry);
 	entry->pg_count--;
-	SpinLockRelease(&GlobalCQProcState->mutex);
+	SpinLockRelease(CQProcMutex);
 }
 
 /*
@@ -256,11 +251,11 @@ IncrementProcessGroupCount(int32 id)
 {
 	CQProcTableEntry *entry;
 
-	SpinLockRelease(&GlobalCQProcState->mutex);
+	SpinLockRelease(CQProcMutex);
 	entry = GetCQProcState(id);
 	Assert(entry);
 	entry->pg_count++;
-	SpinLockRelease(&GlobalCQProcState->mutex);
+	SpinLockRelease(CQProcMutex);
 }
 
 /*
@@ -274,11 +269,11 @@ SetActiveFlag(int32 id, bool flag)
 {
 	CQProcTableEntry *entry;
 
-	SpinLockRelease(&GlobalCQProcState->mutex);
+	SpinLockRelease(CQProcMutex);
 	entry = GetCQProcState(id);
 	Assert(entry);
 	entry->active = flag;
-	SpinLockRelease(&GlobalCQProcState->mutex);
+	SpinLockRelease(CQProcMutex);
 }
 
 /*
