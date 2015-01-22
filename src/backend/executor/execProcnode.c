@@ -398,11 +398,15 @@ ExecEndBatch(PlanState *node)
 	switch (nodeTag(node))
 	{
 		case T_AggState:
-			ExecEndAggBatch((AggState *) node);
+			ExecEndBatchAgg((AggState *) node);
 			break;
 
 		case T_StreamScanState:
-			ExecEndStreamScanBatch((StreamScanState *) node);
+			ExecEndBatchStreamScan((StreamScanState *) node);
+			break;
+
+		case T_ContinuousUnique:
+			ExecEndBatchContinuousUnique((ContinuousUniqueState *) node);
 			break;
 
 		default:

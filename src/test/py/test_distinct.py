@@ -12,13 +12,14 @@ def test_distinct(pipeline, clean_db):
   pipeline.activate()
 
   uniques = {}
+  values = []
   for _ in xrange(2000):
     x, y, z = random.randint(0, 20), random.randint(0, 20), random.randint(0, 20)
-    pipeline.execute('INSERT INTO stream (x, y, z) VALUES (%d, %d, %d)' %
-                     (x, y, z))
+    values.append((x, y, z))
     if (x, y - z) not in uniques:
       uniques[(x, y - z)] = y
 
+  pipeline.insert('stream', ['x', 'y', 'z'], values)
   pipeline.deactivate()
 
   expected = len(uniques)

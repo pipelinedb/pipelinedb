@@ -17,7 +17,7 @@ extern HeapTuple ExecStreamProject(StreamEvent event, StreamScanState *node);
 extern StreamScanState *ExecInitStreamScan(StreamScan *node, EState *estate, int eflags);
 extern TupleTableSlot *ExecStreamScan(StreamScanState *node);
 extern void ExecEndStreamScan(StreamScanState *node);
-extern void ExecEndStreamScanBatch(StreamScanState *node);
+extern void ExecEndBatchStreamScan(StreamScanState *node);
 extern void ExecReScanStreamScan(StreamScanState *node);
 
 #endif   /* NODESTREAMSCAN_H */

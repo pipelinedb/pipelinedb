@@ -1898,7 +1898,7 @@ typedef struct ContinuousUniqueState
 	PlanState ps;
 	multiset_t *distinct_ms;
 	NameData cvname;
-	uint64_t orig_card;
+	uint64_t init_card;
 	uint64_t card;
 } ContinuousUniqueState;
 

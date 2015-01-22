@@ -15,5 +15,6 @@ extern ContinuousUniqueState *ExecInitContinuousUnique(ContinuousUnique *node, E
 extern TupleTableSlot *ExecContinuousUnique(ContinuousUniqueState *node);
 extern void ExecEndContinuousUnique(ContinuousUniqueState *node);
 extern void ExecReScanContinuousUnique(ContinuousUniqueState *node);
+extern void ExecEndBatchContinuousUnique(ContinuousUniqueState *node);
 
 #endif   /* NODECONTINUOUSUNIQUE_H */

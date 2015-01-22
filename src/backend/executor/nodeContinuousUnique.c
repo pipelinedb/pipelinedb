@@ -23,40 +23,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-static uint64_t
-hash_tuple(TupleTableSlot *slot, Unique *unique)
-{
-	TupleDesc desc = slot->tts_tupleDescriptor;
-	StringInfo buf = makeStringInfo();
-	Size len = 0;
-	int i;
-	uint64_t out[2];
-
-	for (i = 0; i < unique->numCols; i++)
-	{
-		bool isnull;
-		int attno = unique->uniqColIdx[i];
-		Form_pg_attribute att = desc->attrs[attno - 1];
-		Datum d = slot_getattr(slot, attno, &isnull);
-		Size size;
-
-		if (isnull)
-			continue;
-
-		size = datumGetSize(d, att->attbyval, att->attlen);
-
-		if (att->attbyval)
-			appendBinaryStringInfo(buf, (char *) &d, size);
-		else
-			appendBinaryStringInfo(buf, DatumGetPointer(d), size);
-
-		len += size;
-	}
-
-	MurmurHash3_x64_128((void *) buf->data, len, 0xdeadbeef, out);
-	resetStringInfo(buf);
-	return out[0];
-}
 
 /* ----------------------------------------------------------------
  *		ExecContinuousUnique
@@ -96,7 +62,7 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 		}
 
 		/* Did the tuple increase the distinct multiset size? */
-		multiset_add(node->distinct_ms, hash_tuple(slot, plannode));
+		multiset_add(node->distinct_ms, hash_tuple(slot, plannode->numCols, plannode->uniqColIdx));
 		if (multiset_card(node->distinct_ms) > node->card)
 		{
 			node->card++;
@@ -154,7 +120,7 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 	 * Load the multiset from pipeline_query.
 	 */
 	state->distinct_ms = GetDistinctMultiset(NameStr(state->cvname));
-	state->orig_card = state->card = (uint64_t) multiset_card(state->distinct_ms);
+	state->init_card = state->card = (uint64_t) multiset_card(state->distinct_ms);
 
 	return state;
 }
@@ -170,9 +136,11 @@ void
 ExecEndContinuousUnique(ContinuousUniqueState *node)
 {
 	/* Only update the distinct column if the cardinality has changed */
-	if (node->card > node->orig_card)
+	if (node->card > node->init_card)
+	{
 		UpdateDistinctMultiset(NameStr(node->cvname), node->distinct_ms);
-
+		node->init_card = node->card;
+	}
 	ExecClearTuple(node->ps.ps_ResultTupleSlot);
 	pfree(node->distinct_ms);
 	ExecEndNode(outerPlanState(node));
@@ -192,4 +160,15 @@ ExecReScanContinuousUnique(ContinuousUniqueState *node)
 		pfree(node->distinct_ms);
 		node->distinct_ms = GetDistinctMultiset(NameStr(node->cvname));
 	}
+}
+
+void
+ExecEndBatchContinuousUnique(ContinuousUniqueState *node)
+{
+//	/* Only update the distinct column if the cardinality has changed */
+//	if (node->card > node->init_card)
+//	{
+//		UpdateDistinctMultiset(NameStr(node->cvname), node->distinct_ms);
+//		node->init_card = node->card;
+//	}
 }

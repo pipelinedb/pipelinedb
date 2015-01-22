@@ -14,6 +14,8 @@
 #ifndef MULTISET_T_H
 #define MULTISET_T_H
 
+#include "executor/tuptable.h"
+
 void MurmurHash3_x64_128 ( const void * key, int len, uint32_t seed, void * out );
 
 typedef struct
@@ -67,5 +69,7 @@ size_t multiset_packed_size(multiset_t const * i_msp);
 void multiset_init(multiset_t * o_msp);
 void multiset_add(multiset_t * o_msp, uint64_t element);
 double multiset_card(multiset_t const * i_msp);
+
+uint64_t hash_tuple(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs);
 
 #endif   /* MULTISET_T_H */
