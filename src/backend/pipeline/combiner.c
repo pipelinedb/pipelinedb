@@ -179,7 +179,7 @@ prepare_combine_plan(PlannedStmt *plan, Tuplestorestate *store, TupleDesc *desc)
 
 	/*
 	 * Mark plan as not continuous now because we'll be repeatedly
-	 * executing it in a new portal.We also need to set its batch
+	 * executing it in a new portal. We also need to set its batch
 	 * size to 0 so that TuplestoreScans don't return early. Since
 	 * they're not being executed continuously, they'd never
 	 * see anything after the first batch was consumed.
@@ -193,7 +193,7 @@ prepare_combine_plan(PlannedStmt *plan, Tuplestorestate *store, TupleDesc *desc)
 	else if (IsA(plan->planTree->lefttree, TuplestoreScan))
 		scan = (TuplestoreScan *) plan->planTree->lefttree;
 	else
-		elog(ERROR, "couldn't find TuplestoreScan node");
+		elog(ERROR, "couldn't find TuplestoreScan node in combiner's plan");
 
 	scan->store = store;
 
@@ -482,10 +482,8 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 	if (agg != NULL)
 	{
 		execTuplesHashPrepare(num_merge_attrs, merge_attr_ops, &eq_funcs, &hash_funcs);
-		/* XXX(usmanm): Shouldn't num_buckets be the same as num_merge_attrs? */
 		merge_targets = BuildTupleHashTable(num_merge_attrs, merge_attrs, eq_funcs, hash_funcs, 1000,
 				sizeof(HeapTupleEntryData), CacheMemoryContext, tmpctx);
-
 		get_tuples_to_combine_with(matrelname, cvdesc, store, merge_attrs, num_merge_attrs, merge_targets);
 	}
 

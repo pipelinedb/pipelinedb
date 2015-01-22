@@ -324,6 +324,9 @@ DECLARE_UNIQUE_INDEX(pipeline_combine_transfn_index, 4248, on pipeline_combine u
 
 DECLARE_UNIQUE_INDEX(pipeline_stream_name_index, 4250, on pipeline_stream using btree(name name_ops));
 #define PipelineStreamNameIndexId					4250
+
+DECLARE_UNIQUE_INDEX(pipeline_tstate_name_index, 4252, on pipeline_tstate using btree(name name_ops));
+#define PipelineTStateNameIndexId					4252
 /* last step of initialization script: build the indexes declared above */
 BUILD_INDICES
 
