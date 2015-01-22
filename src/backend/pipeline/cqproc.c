@@ -493,9 +493,9 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
-	worker.bgw_restart_time = BGW_NEVER_RESTART;
 	worker.bgw_main = run_cq;
 	worker.bgw_notify_pid = MyProcPid;
+	worker.bgw_restart_time = BGW_NEVER_RESTART;
 	worker.bgw_let_crash = true;
 	worker.bgw_additional_size = sizeof(CQProcRunArgs);
 	worker.bgw_cvid = state->id;
