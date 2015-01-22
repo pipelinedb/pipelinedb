@@ -135,6 +135,13 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 void
 ExecEndContinuousUnique(ContinuousUniqueState *node)
 {
+	/* Only update the distinct column if the cardinality has changed */
+	if (node->card > node->init_card)
+	{
+		UpdateDistinctMultiset(NameStr(node->cvname), node->distinct_ms);
+		node->init_card = node->card;
+	}
+
 	ExecClearTuple(node->ps.ps_ResultTupleSlot);
 	pfree(node->distinct_ms);
 	ExecEndNode(outerPlanState(node));
@@ -153,16 +160,5 @@ ExecReScanContinuousUnique(ContinuousUniqueState *node)
 	{
 		pfree(node->distinct_ms);
 		node->distinct_ms = GetDistinctMultiset(NameStr(node->cvname));
-	}
-}
-
-void
-ExecEndBatchContinuousUnique(ContinuousUniqueState *node)
-{
-	/* Only update the distinct column if the cardinality has changed */
-	if (node->card > node->init_card)
-	{
-		UpdateDistinctMultiset(NameStr(node->cvname), node->distinct_ms);
-		node->init_card = node->card;
 	}
 }

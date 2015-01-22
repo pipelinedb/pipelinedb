@@ -77,6 +77,7 @@ ResetTStateEntry(char *cvname)
 	/* Set everything to NULL */
 	MemSet(nulls, true, sizeof(nulls));
 	MemSet(replaces, true, sizeof(replaces));
+	replaces[Anum_pipeline_tstate_name - 1] = false;
 
 	newtuple = heap_modify_tuple(tuple, pipeline_tstate->rd_att,
 			values, nulls, replaces);

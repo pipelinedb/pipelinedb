@@ -394,7 +394,6 @@ ExecBeginBatch(PlanState *node)
 TupleTableSlot *
 ExecEndBatch(PlanState *node)
 {
-
 	switch (nodeTag(node))
 	{
 		case T_AggState:
@@ -403,10 +402,6 @@ ExecEndBatch(PlanState *node)
 
 		case T_StreamScanState:
 			ExecEndBatchStreamScan((StreamScanState *) node);
-			break;
-
-		case T_ContinuousUnique:
-			ExecEndBatchContinuousUnique((ContinuousUniqueState *) node);
 			break;
 
 		default:
