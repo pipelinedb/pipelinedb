@@ -9,6 +9,7 @@
  *-------------------------------------------------------------------------
  */
 #include "c.h"
+#include "miscadmin.h"
 #include "storage/lwlock.h"
 #include "storage/spalloc.h"
 #include "storage/shmem.h"
@@ -91,7 +92,7 @@ set_next(void *ptr, void *next)
 static void*
 get_prev(void *ptr)
 {
-	return *((void **) ((intptr_t) ptr + sizeof(void *)));
+	return *((void **) ((intptr_t) ptr + sizeof(void **)));
 }
 
 static void
@@ -151,22 +152,22 @@ print_block(void *block)
 {
 	if (!block)
 		return;
-	printf("  addr: %p, end: %p, prev: %p, next: %p, size: %zu\n", block, get_end(block), get_prev(block), get_next(block), get_size(block));
+	elog(LOG, "  addr: %p, end: %p, prev: %p, next: %p, size: %zu", block, get_end(block), get_prev(block), get_next(block), get_size(block));
 }
 
 static void
 print_allocator()
 {
 	void *block = GlobalSPallocState->head;
-	printf("=== ShmemAllocator ===\n");
+	elog(LOG, "=== ShmemAllocator ===\n");
 
-	printf("num free blocks %d\n", GlobalSPallocState->nfree);
-	printf("total free: %zu\n", free_blocks_size());
-	printf("num all blocks %d\n", GlobalSPallocState->nblocks);
-	printf("total resident: %zu\n", GlobalSPallocState->mem_size);
-	printf("head: %p\n", GlobalSPallocState->head);
-	printf("tail: %p\n", GlobalSPallocState->tail);
-	printf("blocks:\n");
+	elog(LOG, "num free blocks %d", GlobalSPallocState->nfree);
+	elog(LOG, "total free: %zu", free_blocks_size());
+	elog(LOG, "num all blocks %d", GlobalSPallocState->nblocks);
+	elog(LOG, "total resident: %zu", GlobalSPallocState->mem_size);
+	elog(LOG, "head: %p", GlobalSPallocState->head);
+	elog(LOG, "tail: %p", GlobalSPallocState->tail);
+	elog(LOG, "blocks:");
 
 	while (block)
 	{
@@ -174,7 +175,7 @@ print_allocator()
 		block = get_next(block);
 	}
 
-	printf("======================\n");
+	elog(LOG, "======================");
 }
 
 static bool
@@ -182,6 +183,7 @@ coalesce_blocks(void *ptr1, void *ptr2)
 {
 	void *tmpptr = MIN(ptr1, ptr2);
 	Size new_size;
+	void *next;
 
 	ptr2 = MAX(ptr1, ptr2);
 	ptr1 = tmpptr;
@@ -197,7 +199,13 @@ coalesce_blocks(void *ptr1, void *ptr2)
 	get_header(ptr1)->size = new_size;
 	/* Mark ptr2 as no longer an ICE BOODA. */
 	get_header(ptr2)->magic = 0;
-	set_next(ptr1, get_next(ptr2));
+
+	next = get_next(ptr2);
+	set_next(ptr1, next);
+
+	if (next)
+		set_prev(next, ptr1);
+
 
 	GlobalSPallocState->nblocks--;
 	GlobalSPallocState->nfree--;
@@ -251,7 +259,7 @@ insert_block(void *ptr)
 				if (((intptr_t) ptr > (intptr_t) prev) &&
 						((intptr_t) ptr < (intptr_t) next))
 					break;
-				prev = get_next(prev);
+				prev = next;
 			}
 			Assert(prev != NULL);
 			Assert(next != NULL);
@@ -449,7 +457,7 @@ spfree(void *addr)
 	Size size;
 
 	if (!is_allocated(addr))
-		elog(ERROR, "spfree: invalid/double freeing %p", addr);
+		elog(ERROR, "spfree: invalid/double freeing (%p)", addr);
 
 	SpinLockAcquire(&GlobalSPallocState->mutex);
 

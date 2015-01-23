@@ -47,7 +47,7 @@
 
 #define SLEEP_TIMEOUT 2000
 
-typedef struct CQProcArgs
+typedef struct CQProcRunArgs
 {
 	NameData cvname;
 	NameData dbname;
@@ -165,6 +165,8 @@ EntryAlloc(int32 id, int pg_size)
 	/* New entry, and is active the moment this entry is created */
 	entry->active = true;
 
+	entry->shm_query = NULL;
+
 	return entry;
 }
 
@@ -178,6 +180,11 @@ EntryAlloc(int32 id, int pg_size)
 void
 EntryRemove(int32 id)
 {
+	CQProcTableEntry *entry = GetCQProcState(id);
+
+	if (entry && entry->shm_query)
+		spfree(entry->shm_query);
+
 	/* Remove the entry from the hash table. */
 	hash_search(CQProcTable, &id, HASH_REMOVE, NULL);
 }
@@ -194,7 +201,7 @@ GetCQProcState(int32 id)
 	bool found;
 
 	entry = (CQProcTableEntry *) hash_search(CQProcTable, &id, HASH_FIND, &found);
-	if (!entry)
+	if (!found)
 	{
 		elog(LOG,"entry for CQ %d not found in the CQProcTable", id);
 		return NULL;
@@ -349,7 +356,7 @@ WaitForCQProcsToTerminate(int32 id)
 }
 
 /*
- * TerminateCQProcesses
+ * TerminateCQProcs
  */
 void
 TerminateCQProcs(int32 id)
@@ -371,16 +378,16 @@ IsCQWorkerDone(int32 id)
 }
 
 /*
- * Run CQ combiner or worker in a background process with the postmaster as its parent
+ * cq_bg_main
  */
 static void
-run_cq(Datum d, char *additional, Size additionalsize)
+cq_bg_main(Datum d, char *additional, Size additionalsize)
 {
 	MemoryContext oldcontext;
 	CommandDest dest = DestRemote;
 	DestReceiver *receiver;
 	Portal portal;
-	CQProcRunArgs args;
+	CQProcRunArgs *args;
 	int16 format;
 	PlannedStmt *plan;
 	ContinuousViewState state;
@@ -402,14 +409,15 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	 */
 	BackgroundWorkerUnblockSignals();
 
-	memcpy(&args, additional, additionalsize);
-	state = args.state;
-	state.ptype = args.ptype;
+	args = (CQProcRunArgs *) additional;
+
+	state = args->state;
+	state.ptype = args->ptype;
 
 	/*
 	 * 0. Give this process access to the database
 	 */
-	BackgroundWorkerInitializeConnection(NameStr(args.dbname), NULL);
+	BackgroundWorkerInitializeConnection(NameStr(args->dbname), NULL);
 
 	StartTransactionCommand();
 
@@ -418,10 +426,10 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	/*
 	 * 1. Plan the continuous query
 	 */
-	cvname = NameStr(args.cvname);
+	cvname = NameStr(args->cvname);
 	matrelname = NameStr(state.matrelname);
-	sql = pstrdup(args.query);
-	spfree(args.query);
+
+	sql = pstrdup(args->query);
 	plan = GetCQPlan(cvname, sql, &state, matrelname);
 
 	/*
@@ -477,14 +485,13 @@ get_cq_proc_type_name(CQProcessType ptype)
 	return NULL;
 }
 
-bool
-RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousViewState *state, BackgroundWorkerHandle *bg_handle)
+static bool
+run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state, BackgroundWorkerHandle *bg_handle, char *query)
 {
 	BackgroundWorker worker;
 	CQProcRunArgs args;
 	BackgroundWorkerHandle *worker_handle;
 	char *procName = get_cq_proc_type_name(ptype);
-	char *query = GetQueryString(cvname, true);
 	bool success;
 
 	/* TODO(usmanm): Make sure the name doesn't go beyond 64 bytes */
@@ -493,12 +500,12 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
-	worker.bgw_main = run_cq;
+	worker.bgw_main = cq_bg_main;
 	worker.bgw_notify_pid = MyProcPid;
-//	worker.bgw_restart_time = BGW_NEVER_RESTART;
-//	worker.bgw_let_crash = true;
-	worker.bgw_restart_time = 10;
-	worker.bgw_let_crash = false;
+	worker.bgw_restart_time = BGW_NEVER_RESTART;
+	worker.bgw_let_crash = true;
+//	worker.bgw_restart_time = 3;
+//	worker.bgw_let_crash = false;
 	worker.bgw_additional_size = sizeof(CQProcRunArgs);
 	worker.bgw_cvid = state->id;
 
@@ -507,8 +514,7 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	namestrcpy(&args.cvname, cvname);
 	namestrcpy(&args.dbname, MyProcPort->database_name);
 
-	args.query = spalloc(strlen(query) + 1);
-	memcpy(args.query, query, strlen(query) + 1);
+	args.query = query;
 
 	memcpy(worker.bgw_additional_arg, &args, worker.bgw_additional_size);
 
@@ -517,4 +523,21 @@ RunContinuousQueryProcess(CQProcessType ptype, const char *cvname, ContinuousVie
 	*bg_handle = *worker_handle;
 
 	return success;
+}
+
+void
+RunContinuousQueryProcs(const char *cvname, void *_state, CQProcTableEntry *procentry)
+{
+	ContinuousViewState *state = (ContinuousViewState *) _state;
+
+	if (procentry->shm_query == NULL)
+	{
+		char *q = GetQueryString(cvname, true);
+		procentry->shm_query = spalloc(strlen(q) + 1);
+		strcpy(procentry->shm_query, q);
+		//elog(LOG, "XXX: spalloc success!");
+	}
+
+	run_cq_proc(CQCombiner, cvname, state, &procentry->combiner, procentry->shm_query);
+	run_cq_proc(CQWorker, cvname, state, &procentry->worker, procentry->shm_query);
 }

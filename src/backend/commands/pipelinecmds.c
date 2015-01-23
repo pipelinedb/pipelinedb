@@ -419,14 +419,6 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 	RemoveObjects(stmt);
 }
 
-static
-void
-RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CQProcTableEntry *procstate)
-{
-	RunContinuousQueryProcess(CQCombiner, cvname, state, &procstate->combiner);
-	RunContinuousQueryProcess(CQWorker, cvname, state, &procstate->worker);
-}
-
 static void
 get_views(BaseContinuousViewStmt *stmt)
 {
@@ -613,6 +605,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 			 */
 			MarkContinuousViewAsInactive(rv, pipeline_query);
 			TerminateCQProcs(state.id);
+			EntryRemove(state.id);
 		}
 	}
 

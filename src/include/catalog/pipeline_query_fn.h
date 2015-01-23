@@ -18,12 +18,12 @@
 
 typedef struct ContinuousViewState
 {
-	int32	id;
-	char	state;
-	int32 	batchsize;
-	int32 	maxwaitms;
-	int32	emptysleepms;
-	int16	parallelism;
+	int32 id;
+	char state;
+	int32 batchsize;
+	int32 maxwaitms;
+	int32 emptysleepms;
+	int16 parallelism;
 	NameData matrelname;
 	CQProcessType ptype;
 } ContinuousViewState;
