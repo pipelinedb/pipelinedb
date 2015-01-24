@@ -135,6 +135,8 @@ WaitForBackgroundWorkerStartup(BackgroundWorkerHandle *
 /* Terminate a bgworker */
 extern void TerminateBackgroundWorker(BackgroundWorkerHandle *handle);
 
+extern void ChangeBackgroundWorkerRestartState(BackgroundWorkerHandle *handle, bool let_crash, int restart_time);
+
 /* This is valid in a running worker */
 extern PGDLLIMPORT BackgroundWorker *MyBgworkerEntry;
 

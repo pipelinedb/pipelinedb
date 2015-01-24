@@ -529,7 +529,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	ListCell *lc;
 	int success = 0;
 	int fail = 0;
-	CQProcTableEntry *entry;
+	CQProcEntry *entry;
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	get_views((BaseContinuousViewStmt *) stmt);
@@ -588,14 +588,17 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 			elog(ERROR, "continuous view \"%s\" is being deactivated",
 					rv->relname);
 
-		RunContinuousQueryProcs(rv->relname, &state, entry);
+		RunCQProcs(rv->relname, &state, entry);
 
 		/*
 		 * Spin here waiting for the number of waiting CQ related processes
 		 * to complete.
 		 */
 		if (WaitForCQProcsToStart(state.id))
+		{
 			success++;
+			EnableCQProcsRecovery(state.id);
+		}
 		else
 		{
 			fail++;
@@ -645,7 +648,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * committed yet, we might still see it as active. Since there's only
 		 * one postmaster, the previous transaction's process could have
 		 * removed the CVMetadata--transactions don't protect it. */
-		if (GetCQProcState(state.id) == NULL)
+		if (GetCQProcEntry(state.id) == NULL)
 			continue;
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */

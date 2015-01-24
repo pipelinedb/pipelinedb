@@ -46,6 +46,7 @@
 #include "utils/syscache.h"
 
 #define SLEEP_TIMEOUT 2000
+#define RECOVERY_TIME 1
 
 typedef struct CQProcRunArgs
 {
@@ -78,7 +79,7 @@ InitCQProcState(void)
 	int num_concurrent_cv = max_worker_processes / 2;
 
 	info.keysize = sizeof(uint32);
-	info.entrysize = sizeof(CQProcTableEntry);
+	info.entrysize = sizeof(CQProcEntry);
 
 	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
@@ -131,9 +132,9 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 int
 GetProcessGroupSize(int32 id)
 {
-	CQProcTableEntry *entry;
+	CQProcEntry *entry;
 
-	entry = GetCQProcState(id);
+	entry = GetCQProcEntry(id);
 	Assert(entry);
 	return entry->pg_size;
 }
@@ -145,14 +146,14 @@ GetProcessGroupSize(int32 id)
  * hash table. Returns the entry if it exists
  *
  */
-CQProcTableEntry*
+CQProcEntry*
 EntryAlloc(int32 id, int pg_size)
 {
-	CQProcTableEntry	*entry;
+	CQProcEntry	*entry;
 	bool		found;
 
 	/* Find or create an entry with desired hash code */
-	entry = (CQProcTableEntry *) hash_search(CQProcTable, &id, HASH_ENTER, &found);
+	entry = (CQProcEntry *) hash_search(CQProcTable, &id, HASH_ENTER, &found);
 	Assert(entry);
 
 	if (found)
@@ -180,7 +181,7 @@ EntryAlloc(int32 id, int pg_size)
 void
 EntryRemove(int32 id)
 {
-	CQProcTableEntry *entry = GetCQProcState(id);
+	CQProcEntry *entry = GetCQProcEntry(id);
 
 	if (entry && entry->shm_query)
 		spfree(entry->shm_query);
@@ -194,13 +195,13 @@ EntryRemove(int32 id)
  *
  * Return the entry based on a key
  */
-CQProcTableEntry*
-GetCQProcState(int32 id)
+CQProcEntry*
+GetCQProcEntry(int32 id)
 {
-	CQProcTableEntry  *entry;
+	CQProcEntry  *entry;
 	bool found;
 
-	entry = (CQProcTableEntry *) hash_search(CQProcTable, &id, HASH_FIND, &found);
+	entry = (CQProcEntry *) hash_search(CQProcTable, &id, HASH_FIND, &found);
 	if (!found)
 	{
 		elog(LOG,"entry for CQ %d not found in the CQProcTable", id);
@@ -219,9 +220,9 @@ GetCQProcState(int32 id)
 int
 GetProcessGroupCount(int32 id)
 {
-	CQProcTableEntry  *entry;
+	CQProcEntry  *entry;
 
-	entry = GetCQProcState(id);
+	entry = GetCQProcEntry(id);
 	if (entry == NULL)
 		return -1;
 	return entry->pg_count;
@@ -236,10 +237,10 @@ GetProcessGroupCount(int32 id)
 void
 DecrementProcessGroupCount(int32 id)
 {
-	CQProcTableEntry *entry;
+	CQProcEntry *entry;
 
 	SpinLockAcquire(CQProcMutex);
-	entry = GetCQProcState(id);
+	entry = GetCQProcEntry(id);
 	Assert(entry);
 	entry->pg_count--;
 	SpinLockRelease(CQProcMutex);
@@ -254,10 +255,10 @@ DecrementProcessGroupCount(int32 id)
 void
 IncrementProcessGroupCount(int32 id)
 {
-	CQProcTableEntry *entry;
+	CQProcEntry *entry;
 
 	SpinLockRelease(CQProcMutex);
-	entry = GetCQProcState(id);
+	entry = GetCQProcEntry(id);
 	Assert(entry);
 	entry->pg_count++;
 	SpinLockRelease(CQProcMutex);
@@ -272,10 +273,10 @@ IncrementProcessGroupCount(int32 id)
 void
 SetActiveFlag(int32 id, bool flag)
 {
-	CQProcTableEntry *entry;
+	CQProcEntry *entry;
 
 	SpinLockRelease(CQProcMutex);
-	entry = GetCQProcState(id);
+	entry = GetCQProcEntry(id);
 	Assert(entry);
 	entry->active = flag;
 	SpinLockRelease(CQProcMutex);
@@ -287,9 +288,9 @@ SetActiveFlag(int32 id, bool flag)
 bool *
 GetActiveFlagPtr(int32 id)
 {
-	CQProcTableEntry *entry;
+	CQProcEntry *entry;
 
-	entry = GetCQProcState(id);
+	entry = GetCQProcEntry(id);
 	Assert(entry);
 	return &entry->active;
 }
@@ -298,7 +299,7 @@ GetActiveFlagPtr(int32 id)
  * get_stopped_proc_count
  */
 static int
-get_stopped_proc_count(CQProcTableEntry *entry)
+get_stopped_proc_count(CQProcEntry *entry)
 {
 	int count = 0;
 	pid_t pid;
@@ -308,7 +309,7 @@ get_stopped_proc_count(CQProcTableEntry *entry)
 }
 
 /*
- * WaitForCQProcessStart
+ * WaitForCQProcsToStart
  *
  * Block on the process group count till
  * it reaches 0. This enables the activate cv
@@ -317,7 +318,7 @@ get_stopped_proc_count(CQProcTableEntry *entry)
 bool
 WaitForCQProcsToStart(int32 id)
 {
-	CQProcTableEntry *entry = GetCQProcState(id);
+	CQProcEntry *entry = GetCQProcEntry(id);
 	int err_count;
 
 	while (true)
@@ -335,7 +336,7 @@ WaitForCQProcsToStart(int32 id)
 }
 
 /*
- * WaitForCQProcessEnd
+ * WaitForCQProcsToTerminate
  *
  * Block on the process group count till
  * it reaches pg_size. This enables the deactivate cv
@@ -344,7 +345,7 @@ WaitForCQProcsToStart(int32 id)
 void
 WaitForCQProcsToTerminate(int32 id)
 {
-	CQProcTableEntry *entry = GetCQProcState(id);
+	CQProcEntry *entry = GetCQProcEntry(id);
 	while (true)
 	{
 		if (entry->pg_count == 0)
@@ -361,20 +362,31 @@ WaitForCQProcsToTerminate(int32 id)
 void
 TerminateCQProcs(int32 id)
 {
-	CQProcTableEntry *entry = GetCQProcState(id);
+	CQProcEntry *entry = GetCQProcEntry(id);
 	TerminateBackgroundWorker(&entry->combiner);
 	TerminateBackgroundWorker(&entry->worker);
 }
 
 /*
- * IsCQWorkerDone
+ * IsCQWorkerTerminated
  */
 bool
-IsCQWorkerDone(int32 id)
+IsCQWorkerTerminated(int32 id)
 {
-	CQProcTableEntry *entry = GetCQProcState(id);
+	CQProcEntry *entry = GetCQProcEntry(id);
 	pid_t pid;
 	return WaitForBackgroundWorkerStartup(&entry->worker, &pid) == BGWH_STOPPED;
+}
+
+/*
+ * EnableCQProcsRecovery
+ */
+void
+EnableCQProcsRecovery(int32 id)
+{
+	CQProcEntry *entry = GetCQProcEntry(id);
+	ChangeBackgroundWorkerRestartState(&entry->combiner, false, RECOVERY_TIME);
+	ChangeBackgroundWorkerRestartState(&entry->worker, false, RECOVERY_TIME);
 }
 
 /*
@@ -504,8 +516,6 @@ run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state,
 	worker.bgw_notify_pid = MyProcPid;
 	worker.bgw_restart_time = BGW_NEVER_RESTART;
 	worker.bgw_let_crash = true;
-//	worker.bgw_restart_time = 3;
-//	worker.bgw_let_crash = false;
 	worker.bgw_additional_size = sizeof(CQProcRunArgs);
 	worker.bgw_cvid = state->id;
 
@@ -526,7 +536,7 @@ run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state,
 }
 
 void
-RunContinuousQueryProcs(const char *cvname, void *_state, CQProcTableEntry *procentry)
+RunCQProcs(const char *cvname, void *_state, CQProcEntry *procentry)
 {
 	ContinuousViewState *state = (ContinuousViewState *) _state;
 
@@ -535,7 +545,6 @@ RunContinuousQueryProcs(const char *cvname, void *_state, CQProcTableEntry *proc
 		char *q = GetQueryString(cvname, true);
 		procentry->shm_query = spalloc(strlen(q) + 1);
 		strcpy(procentry->shm_query, q);
-		//elog(LOG, "XXX: spalloc success!");
 	}
 
 	run_cq_proc(CQCombiner, cvname, state, &procentry->combiner, procentry->shm_query);
