@@ -16,7 +16,46 @@
 #include "executor/executor.h"
 #include "nodes/execnodes.h"
 #include "pipeline/cqmatrel.h"
+#include "pipeline/miscutils.h"
 #include "utils/rel.h"
+#include "utils/lsyscache.h"
+#include "utils/palloc.h"
+#include "utils/syscache.h"
+
+#define CQ_TABLE_SUFFIX "_mrel"
+
+/*
+ * GetUniqueMatRelName
+ *
+ * Returns a unique name for the given CV's underlying materialization table
+ */
+char *
+GetUniqueMatRelName(char *cvname, char* nspname)
+{
+	char *relname = palloc0(NAMEDATALEN);
+	int i = 0;
+	StringInfoData suffix;
+	Oid nspoid;
+
+	if (nspname != NULL)
+		nspoid = GetSysCacheOid1(NAMESPACENAME, CStringGetDatum(nspname));
+	else
+		nspoid = InvalidOid;
+
+	initStringInfo(&suffix);
+	strcpy(relname, cvname);
+
+	while (true)
+	{
+		appendStringInfo(&suffix, "%s%d", CQ_TABLE_SUFFIX, i);
+		append_suffix(relname, suffix.data, NAMEDATALEN);
+		resetStringInfo(&suffix);
+		if (!OidIsValid(get_relname_relid(relname, nspoid)))
+			break;
+	}
+
+	return relname;
+}
 
 /*
  * CQMatViewOpen

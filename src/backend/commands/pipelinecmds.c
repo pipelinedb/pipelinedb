@@ -34,6 +34,7 @@
 #include "nodes/pg_list.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cqmatrel.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
 #include "pipeline/stream.h"
@@ -57,7 +58,6 @@
  */
 bool DebugSyncStreamInsert;
 
-#define CQ_TABLE_SUFFIX "_mrel"
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
 
@@ -82,39 +82,6 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 	result->typeName = typename;
 
 	return result;
-}
-
-/*
- * GetCQMatRelationName
- *
- * Returns a unique name for the given CV's underlying materialization table
- */
-static char *
-get_unique_matrel_name(char *cvname, char *nspname)
-{
-	char relname[NAMEDATALEN];
-	int i = 0;
-	StringInfoData suffix;
-	Oid nspoid;
-
-	if (nspname != NULL)
-		nspoid = GetSysCacheOid1(NAMESPACENAME, CStringGetDatum(nspname));
-	else
-		nspoid = InvalidOid;
-
-	initStringInfo(&suffix);
-	memset(relname, 0, NAMEDATALEN);
-	strcpy(relname, cvname);
-
-	while (true)
-	{
-		appendStringInfo(&suffix, "%s%d", CQ_TABLE_SUFFIX, i);
-		strcpy(&relname[Min(strlen(cvname), NAMEDATALEN - strlen(suffix.data))], suffix.data);
-		resetStringInfo(&suffix);
-		if (!OidIsValid(get_relname_relid(relname, nspoid)))
-			break;
-	}
-	return pstrdup(relname);
 }
 
 /*
@@ -210,7 +177,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	bool saveAllowSystemTableMods;
 
 	view = stmt->into->rel;
-	mat_relation = makeRangeVar(view->schemaname, get_unique_matrel_name(view->relname, view->schemaname), -1);
+	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
 
 	/*
 	 * Check if CV already exists?
@@ -582,7 +549,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		 * message saying the CV is being deactivated. That's only one of the
 		 * cases when this can happen.
 		 */
-		entry = EntryAlloc(state.id, GetProcessGroupSizeFromCatalog(rv));
+		entry = CQProcEntryCreate(state.id, GetProcessGroupSizeFromCatalog(rv));
 
 		if (entry == NULL)
 			elog(ERROR, "continuous view \"%s\" is being deactivated",
@@ -608,7 +575,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 			 */
 			MarkContinuousViewAsInactive(rv, pipeline_query);
 			TerminateCQProcs(state.id);
-			EntryRemove(state.id);
+			CQProcEntryRemove(state.id);
 		}
 	}
 
@@ -664,7 +631,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		WaitForCQProcsToTerminate(state.id);
 		count++;
 
-		EntryRemove(state.id);
+		CQProcEntryRemove(state.id);
 	}
 
 	if (count)

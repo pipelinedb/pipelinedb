@@ -32,6 +32,7 @@
 #include "pipeline/cqplan.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
+#include "pipeline/miscutils.h"
 #include "pipeline/streambuf.h"
 #include "postmaster/bgworker.h"
 #include "regex/regex.h"
@@ -147,7 +148,7 @@ GetProcessGroupSize(int32 id)
  *
  */
 CQProcEntry*
-EntryAlloc(int32 id, int pg_size)
+CQProcEntryCreate(int32 id, int pg_size)
 {
 	CQProcEntry	*entry;
 	bool		found;
@@ -168,6 +169,8 @@ EntryAlloc(int32 id, int pg_size)
 
 	entry->shm_query = NULL;
 
+	entry->workers = spalloc(sizeof(BackgroundWorkerHandle) * (pg_size - 1));
+
 	return entry;
 }
 
@@ -179,12 +182,16 @@ EntryAlloc(int32 id, int pg_size)
  *
  */
 void
-EntryRemove(int32 id)
+CQProcEntryRemove(int32 id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 
-	if (entry && entry->shm_query)
-		spfree(entry->shm_query);
+	if (entry)
+	{
+		spfree(entry->workers);
+		if (entry->shm_query)
+			spfree(entry->shm_query);
+	}
 
 	/* Remove the entry from the hash table. */
 	hash_search(CQProcTable, &id, HASH_REMOVE, NULL);
@@ -288,9 +295,7 @@ SetActiveFlag(int32 id, bool flag)
 bool *
 GetActiveFlagPtr(int32 id)
 {
-	CQProcEntry *entry;
-
-	entry = GetCQProcEntry(id);
+	CQProcEntry *entry = GetCQProcEntry(id);
 	Assert(entry);
 	return &entry->active;
 }
@@ -302,9 +307,13 @@ static int
 get_stopped_proc_count(CQProcEntry *entry)
 {
 	int count = 0;
+	int i;
 	pid_t pid;
+
 	count += WaitForBackgroundWorkerStartup(&entry->combiner, &pid) == BGWH_STOPPED;
-	count += WaitForBackgroundWorkerStartup(&entry->worker, &pid) == BGWH_STOPPED;
+	for (i = 0; i < entry->pg_size - 1; i++)
+		count += WaitForBackgroundWorkerStartup(&entry->workers[i], &pid) == BGWH_STOPPED;
+
 	return count;
 }
 
@@ -363,8 +372,11 @@ void
 TerminateCQProcs(int32 id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
+	int i;
+
 	TerminateBackgroundWorker(&entry->combiner);
-	TerminateBackgroundWorker(&entry->worker);
+	for (i = 0; i < entry->pg_size - 1; i++)
+		TerminateBackgroundWorker(&entry->workers[i]);
 }
 
 /*
@@ -375,7 +387,13 @@ IsCQWorkerTerminated(int32 id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 	pid_t pid;
-	return WaitForBackgroundWorkerStartup(&entry->worker, &pid) == BGWH_STOPPED;
+	int i;
+
+	for (i = 0; i < entry->pg_size - 1; i++)
+		if (WaitForBackgroundWorkerStartup(&entry->workers[i], &pid) != BGWH_STOPPED)
+			return false;
+
+	return true;
 }
 
 /*
@@ -385,8 +403,11 @@ void
 EnableCQProcsRecovery(int32 id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
+	int i;
+
 	ChangeBackgroundWorkerRestartState(&entry->combiner, false, RECOVERY_TIME);
-	ChangeBackgroundWorkerRestartState(&entry->worker, false, RECOVERY_TIME);
+	for (i = 0; i < entry->pg_size - 1; i++)
+		ChangeBackgroundWorkerRestartState(&entry->workers[i], false, RECOVERY_TIME);
 }
 
 /*
@@ -507,8 +528,8 @@ run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state,
 	bool success;
 
 	/* TODO(usmanm): Make sure the name doesn't go beyond 64 bytes */
-	memcpy(worker.bgw_name, cvname, strlen(cvname) + 1);
-	memcpy(&worker.bgw_name[strlen(cvname)], procName, strlen(procName) + 1);
+	strcpy(worker.bgw_name, cvname);
+	append_suffix(worker.bgw_name, procName, NAMEDATALEN);
 
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
@@ -535,18 +556,33 @@ run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state,
 	return success;
 }
 
+/*
+ * RunCQProcs
+ */
 void
-RunCQProcs(const char *cvname, void *_state, CQProcEntry *procentry)
+RunCQProcs(const char *cvname, void *_state, CQProcEntry *entry)
 {
 	ContinuousViewState *state = (ContinuousViewState *) _state;
+	int i;
 
-	if (procentry->shm_query == NULL)
+	if (entry->shm_query == NULL)
 	{
-		char *q = GetQueryString(cvname, true);
-		procentry->shm_query = spalloc(strlen(q) + 1);
-		strcpy(procentry->shm_query, q);
+		char *q = GetQueryString((char *) cvname, true);
+		entry->shm_query = spalloc(strlen(q) + 1);
+		strcpy(entry->shm_query, q);
 	}
 
-	run_cq_proc(CQCombiner, cvname, state, &procentry->combiner, procentry->shm_query);
-	run_cq_proc(CQWorker, cvname, state, &procentry->worker, procentry->shm_query);
+	run_cq_proc(CQCombiner, cvname, state, &entry->combiner, entry->shm_query);
+	for (i = 0; i < entry->pg_size - 1; i++)
+		run_cq_proc(CQWorker, cvname, state, &entry->workers[i], entry->shm_query);
+}
+
+/*
+ * GetSocketDesc
+ */
+SocketDesc *
+GetSocketDesc(int32 id)
+{
+	CQProcEntry *entry = GetCQProcEntry(id);
+	return &entry->socket_desc;
 }

@@ -631,7 +631,7 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 			 */
 			if (!is_worker_done)
 			{
-				is_worker_done = IsCQWorkerTerminated(cq_id);
+				is_worker_done = AreCQWorkerStopped(cq_id);
 				continue;
 			}
 

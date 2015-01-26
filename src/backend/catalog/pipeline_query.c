@@ -23,6 +23,7 @@
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqproc.h"
+#include "pipeline/miscutils.h"
 #include "postmaster/bgworker.h"
 #include "storage/pmsignal.h"
 #include "storage/proc.h"
@@ -34,24 +35,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
-
-/*
- * skip
- *
- * Skips to the end of a substring within another string, beginning
- * at the given position
- */
-static int
-skip(const char *needle, const char *haystack, int pos)
-{
-	while(pg_strncasecmp(needle, &haystack[pos++], strlen(needle)) != 0 &&
-			pos < strlen(haystack));
-
-	if (pos == strlen(haystack))
-		return -1;
-
-	return pos + strlen(needle);
-}
 
 /*
  * compare_int32s
@@ -449,7 +432,7 @@ GetCVNameForMatRelationName(char *matrelname)
  * GetQueryStringOrNull
  */
 char *
-GetQueryStringOrNull(const char *cvname, bool select_only)
+GetQueryStringOrNull(char *cvname, bool select_only)
 {
 	HeapTuple tuple;
 	Datum tmp;
@@ -478,11 +461,11 @@ GetQueryStringOrNull(const char *cvname, bool select_only)
 		 */
 		int trimmedlen;
 		char *trimmed;
-		int pos = skip("CREATE", result, 0);
-		pos = skip("CONTINUOUS", result, pos);
-		pos = skip("VIEW", result, pos);
-		pos = skip(cvname, result, pos);
-		pos = skip("AS", result, pos);
+		int pos = skip_substring(result, "CREATE", 0);
+		pos = skip_substring(result, "CONTINUOUS", pos);
+		pos = skip_substring(result, "VIEW", pos);
+		pos = skip_substring(result, cvname, pos);
+		pos = skip_substring(result, "AS", pos);
 
 		trimmedlen = strlen(result) - pos + 1;
 		trimmed = palloc(trimmedlen);
@@ -504,7 +487,7 @@ GetQueryStringOrNull(const char *cvname, bool select_only)
  * of the query string is returned.
  */
 char *
-GetQueryString(const char *cvname, bool select_only)
+GetQueryString(char *cvname, bool select_only)
 {
 	char *result = GetQueryStringOrNull(cvname, select_only);
 	if (result == NULL)
