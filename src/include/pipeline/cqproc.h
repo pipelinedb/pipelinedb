@@ -59,7 +59,7 @@ extern SocketDesc *GetSocketDesc(int32 id);
 extern bool WaitForCQProcsToStart(int32 id);
 extern void WaitForCQProcsToTerminate(int32 id);
 extern void TerminateCQProcs(int32 id);
-extern bool AreCQWorkerStopped(int32 id);
+extern bool AreCQWorkersStopped(int32 id);
 extern void EnableCQProcsRecovery(int32 id);
 
 extern void RunCQProcs(const char *cvname, void *state, CQProcEntry *procentry);

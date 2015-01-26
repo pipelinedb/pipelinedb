@@ -380,10 +380,10 @@ TerminateCQProcs(int32 id)
 }
 
 /*
- * IsCQWorkerTerminated
+ * AreCQWorkersStopped
  */
 bool
-IsCQWorkerTerminated(int32 id)
+AreCQWorkersStopped(int32 id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 	pid_t pid;
