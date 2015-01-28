@@ -19,12 +19,12 @@
 
 typedef struct ContinuousViewState
 {
-	int32	id;
-	char	state;
-	int32 	batchsize;
-	int32 	maxwaitms;
-	int32	emptysleepms;
-	int16	parallelism;
+	int32 id;
+	char state;
+	int32 batchsize;
+	int32 maxwaitms;
+	int32 emptysleepms;
+	int16 parallelism;
 	NameData matrelname;
 	CQProcessType ptype;
 } ContinuousViewState;
@@ -36,8 +36,8 @@ bool MarkContinuousViewAsInactive(RangeVar *name, Relation pipeline_query);
 void SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pipeline_query);
 void GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state);
 bool IsContinuousViewActive(RangeVar *name);
-char *GetQueryStringOrNull(const char *cvname, bool selectonly);
-char *GetQueryString(const char *cvname, bool selectonly);
+char *GetQueryStringOrNull(char *cvname, bool selectonly);
+char *GetQueryString(char *cvname, bool selectonly);
 bool IsAContinuousView(RangeVar *name);
 bool IsAMatRel(RangeVar *name, RangeVar **cvname);
 bool GetGCFlag(RangeVar *name);

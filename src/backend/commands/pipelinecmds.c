@@ -35,6 +35,7 @@
 #include "nodes/pg_list.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cqmatrel.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
 #include "pipeline/stream.h"
@@ -58,7 +59,6 @@
  */
 bool DebugSyncStreamInsert;
 
-#define CQ_TABLE_SUFFIX "_mrel"
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
 
@@ -83,39 +83,6 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 	result->typeName = typename;
 
 	return result;
-}
-
-/*
- * GetCQMatRelationName
- *
- * Returns a unique name for the given CV's underlying materialization table
- */
-static char *
-get_unique_matrel_name(char *cvname, char *nspname)
-{
-	char relname[NAMEDATALEN];
-	int i = 0;
-	StringInfoData suffix;
-	Oid nspoid;
-
-	if (nspname != NULL)
-		nspoid = GetSysCacheOid1(NAMESPACENAME, CStringGetDatum(nspname));
-	else
-		nspoid = InvalidOid;
-
-	initStringInfo(&suffix);
-	memset(relname, 0, NAMEDATALEN);
-	strcpy(relname, cvname);
-
-	while (true)
-	{
-		appendStringInfo(&suffix, "%s%d", CQ_TABLE_SUFFIX, i);
-		strcpy(&relname[Min(strlen(cvname), NAMEDATALEN - strlen(suffix.data))], suffix.data);
-		resetStringInfo(&suffix);
-		if (!OidIsValid(get_relname_relid(relname, nspoid)))
-			break;
-	}
-	return pstrdup(relname);
 }
 
 /*
@@ -211,7 +178,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	bool saveAllowSystemTableMods;
 
 	view = stmt->into->rel;
-	mat_relation = makeRangeVar(view->schemaname, get_unique_matrel_name(view->relname, view->schemaname), -1);
+	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
 
 	/*
 	 * Check if CV already exists?
@@ -420,14 +387,6 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 	RemoveObjects(stmt);
 }
 
-static
-void
-RunContinuousQueryProcs(const char *cvname, ContinuousViewState *state, CQProcState *procstate)
-{
-	RunContinuousQueryProcess(CQCombiner, cvname, state, &procstate->combiner);
-	RunContinuousQueryProcess(CQWorker, cvname, state, &procstate->worker);
-}
-
 static void
 get_views(BaseContinuousViewStmt *stmt)
 {
@@ -538,7 +497,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	ListCell *lc;
 	int success = 0;
 	int fail = 0;
-	CQProcState *entry;
+	CQProcEntry *entry;
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	get_views((BaseContinuousViewStmt *) stmt);
@@ -591,20 +550,23 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		 * message saying the CV is being deactivated. That's only one of the
 		 * cases when this can happen.
 		 */
-		entry = EntryAlloc(state.id, GetProcessGroupSizeFromCatalog(rv));
+		entry = CQProcEntryCreate(state.id, GetProcessGroupSizeFromCatalog(rv));
 
 		if (entry == NULL)
 			elog(ERROR, "continuous view \"%s\" is being deactivated",
 					rv->relname);
 
-		RunContinuousQueryProcs(rv->relname, &state, entry);
+		RunCQProcs(rv->relname, &state, entry);
 
 		/*
 		 * Spin here waiting for the number of waiting CQ related processes
 		 * to complete.
 		 */
 		if (WaitForCQProcsToStart(state.id))
+		{
 			success++;
+			EnableCQProcsRecovery(state.id);
+		}
 		else
 		{
 			fail++;
@@ -614,6 +576,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 			 */
 			MarkContinuousViewAsInactive(rv, pipeline_query);
 			TerminateCQProcs(state.id);
+			CQProcEntryRemove(state.id);
 		}
 	}
 
@@ -653,7 +616,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * committed yet, we might still see it as active. Since there's only
 		 * one postmaster, the previous transaction's process could have
 		 * removed the CVMetadata--transactions don't protect it. */
-		if (GetCQProcState(state.id) == NULL)
+		if (GetCQProcEntry(state.id) == NULL)
 			continue;
 
 		/* Indicate to the child processes that this CV has been marked for inactivation */
@@ -669,7 +632,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		WaitForCQProcsToTerminate(state.id);
 		count++;
 
-		EntryRemove(state.id);
+		CQProcEntryRemove(state.id);
 	}
 
 	if (count)

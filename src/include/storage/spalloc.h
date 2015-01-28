@@ -11,7 +11,7 @@
 #ifndef SPALLOC_H
 #define SPALLOC_H
 
-extern void InitSPallocState(void);
+extern void InitSPalloc(void);
 
 extern void *spalloc(Size size);
 extern void spfree(void *addr);
