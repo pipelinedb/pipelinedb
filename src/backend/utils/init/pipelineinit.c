@@ -8,6 +8,8 @@
  *
  *-------------------------------------------------------------------------
  */
+#include <time.h>
+#include <stdlib.h>
 #include "postgres.h"
 
 #include "catalog/pipeline_query_fn.h"
@@ -44,9 +46,10 @@ init_pipeline_once()
 static void
 init_pipeline()
 {
+	srand(time(NULL));
 	InitGlobalStreamBuffer();
-	InitCQProcTable();
-	InitSPallocState();
+	InitCQProcState();
+	InitSPalloc();
 }
 
 /*

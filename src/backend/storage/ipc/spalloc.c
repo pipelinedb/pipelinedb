@@ -9,6 +9,7 @@
  *-------------------------------------------------------------------------
  */
 #include "c.h"
+#include "miscadmin.h"
 #include "storage/lwlock.h"
 #include "storage/spalloc.h"
 #include "storage/shmem.h"
@@ -19,17 +20,19 @@
 
 /* Memory Blocks */
 
-#if (__WORDSIZE == 8)
-typedef uint64_t Header;
-#else
-typedef uint32_t Header;
-#endif
-
 #define IS_ALIGNED(ptr) ((BlockInfo) ptr % __WORDSIZE == 0)
 #define ALIGN(size) (((size) + __WORDSIZE - 1) & ~(__WORDSIZE - 1))
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define BLOCK_SIZE(size) ((size) + sizeof(Header))
+#define MAGIC 0x1CEB00DA /* Yeeeeah, ICE BOODA! */
+
+typedef struct Header
+{
+	int32_t magic;
+	Size size;
+	bool is_allocated;
+} Header;
 
 typedef struct MemoryBlock
 {
@@ -40,7 +43,7 @@ typedef struct MemoryBlock
 } MemoryBlock;
 
 #define MIN_BLOCK_SIZE ALIGN(sizeof(MemoryBlock))
-#define MIN_ALLOC_SIZE ALIGN(sizeof(void *) * 2)
+#define MIN_ALLOC_SIZE ALIGN(sizeof(void **) * 2)
 
 static Header *
 get_header(void *ptr)
@@ -51,7 +54,7 @@ get_header(void *ptr)
 static Size
 get_size(void *ptr)
 {
-	return *get_header(ptr) >> 1;
+	return get_header(ptr)->size;
 }
 
 static void *
@@ -64,21 +67,15 @@ static void
 mark_free(void *ptr)
 {
 	Header *header = get_header(ptr);
-	*header &= ~1;
+	header->is_allocated = false;
 }
 
 static void
 mark_allocated(void *ptr)
 {
 	Header *header = get_header(ptr);
-	*header |= 1;
+	header->is_allocated = true;
 }
-
-//static bool
-//is_allocated(void *ptr)
-//{
-//	return *get_header(ptr) & 1;
-//}
 
 static void*
 get_next(void *ptr)
@@ -95,13 +92,20 @@ set_next(void *ptr, void *next)
 static void*
 get_prev(void *ptr)
 {
-	return *((void **) ((intptr_t) ptr + sizeof(void *)));
+	return *((void **) ((intptr_t) ptr + sizeof(void **)));
 }
 
 static void
 set_prev(void *ptr, void *prev)
 {
 	*((void **) ((intptr_t) ptr + sizeof(void *))) = prev;
+}
+
+static bool
+is_allocated(void *ptr)
+{
+	Header *header = get_header(ptr);
+	return header->is_allocated && header->magic == MAGIC;
 }
 
 /*
@@ -148,22 +152,22 @@ print_block(void *block)
 {
 	if (!block)
 		return;
-	printf("  addr: %p, end: %p, prev: %p, next: %p, size: %zu\n", block, get_end(block), get_prev(block), get_next(block), get_size(block));
+	elog(LOG, "  addr: %p, end: %p, prev: %p, next: %p, size: %zu", block, get_end(block), get_prev(block), get_next(block), get_size(block));
 }
 
 static void
 print_allocator()
 {
 	void *block = GlobalSPallocState->head;
-	printf("=== ShmemAllocator ===\n");
+	elog(LOG, "=== ShmemAllocator ===\n");
 
-	printf("num free blocks %d\n", GlobalSPallocState->nfree);
-	printf("total free: %zu\n", free_blocks_size());
-	printf("num all blocks %d\n", GlobalSPallocState->nblocks);
-	printf("total resident: %zu\n", GlobalSPallocState->mem_size);
-	printf("head: %p\n", GlobalSPallocState->head);
-	printf("tail: %p\n", GlobalSPallocState->tail);
-	printf("blocks:\n");
+	elog(LOG, "num free blocks %d", GlobalSPallocState->nfree);
+	elog(LOG, "total free: %zu", free_blocks_size());
+	elog(LOG, "num all blocks %d", GlobalSPallocState->nblocks);
+	elog(LOG, "total resident: %zu", GlobalSPallocState->mem_size);
+	elog(LOG, "head: %p", GlobalSPallocState->head);
+	elog(LOG, "tail: %p", GlobalSPallocState->tail);
+	elog(LOG, "blocks:");
 
 	while (block)
 	{
@@ -171,7 +175,7 @@ print_allocator()
 		block = get_next(block);
 	}
 
-	printf("======================\n");
+	elog(LOG, "======================");
 }
 
 static bool
@@ -179,7 +183,7 @@ coalesce_blocks(void *ptr1, void *ptr2)
 {
 	void *tmpptr = MIN(ptr1, ptr2);
 	Size new_size;
-	Header *header;
+	void *next;
 
 	ptr2 = MAX(ptr1, ptr2);
 	ptr1 = tmpptr;
@@ -192,9 +196,16 @@ coalesce_blocks(void *ptr1, void *ptr2)
 	Assert(!is_allocated(ptr2));
 
 	new_size = get_size(ptr1) + BLOCK_SIZE(get_size(ptr2));
-	header = get_header(ptr1);
-	*header = new_size << 1;
-	set_next(ptr1, get_next(ptr2));
+	get_header(ptr1)->size = new_size;
+	/* Mark ptr2 as no longer an ICE BOODA. */
+	get_header(ptr2)->magic = 0;
+
+	next = get_next(ptr2);
+	set_next(ptr1, next);
+
+	if (next)
+		set_prev(next, ptr1);
+
 
 	GlobalSPallocState->nblocks--;
 	GlobalSPallocState->nfree--;
@@ -206,8 +217,8 @@ static void
 init_block(void *ptr, Size size, bool is_new)
 {
 	Header *header = get_header(ptr);
-
-	*header = size << 1;
+	header->size = size;
+	header->magic = MAGIC;
 
 	GlobalSPallocState->nblocks++;
 	if (is_new)
@@ -248,7 +259,7 @@ insert_block(void *ptr)
 				if (((intptr_t) ptr > (intptr_t) prev) &&
 						((intptr_t) ptr < (intptr_t) next))
 					break;
-				prev = get_next(prev);
+				prev = next;
 			}
 			Assert(prev != NULL);
 			Assert(next != NULL);
@@ -288,7 +299,8 @@ split_block(void *ptr, Size size)
 	init_block(new_block, orig_size - size - sizeof(Header), false);
 	insert_block(new_block);
 
-	*header = size << 1 | 1;
+	header->size = size;
+	header->is_allocated = true;
 }
 
 static void *
@@ -364,13 +376,13 @@ test_allocator()
  * InitSPallocState
  */
 void
-InitSPallocState(void)
+InitSPalloc(void)
 {
 	bool found;
 
 	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
-	GlobalSPallocState = (SPallocState *) ShmemInitStruct("ShmemFreeList", sizeof(SPallocState) , &found);
+	GlobalSPallocState = (SPallocState *) ShmemInitStruct("SPallocState", sizeof(SPallocState) , &found);
 	if (!found)
 	{
 		GlobalSPallocState->head = NULL;
@@ -444,7 +456,8 @@ spfree(void *addr)
 {
 	Size size;
 
-	Assert(is_allocated(addr));
+	if (!is_allocated(addr))
+		elog(ERROR, "spfree: invalid/double freeing (%p)", addr);
 
 	SpinLockAcquire(&GlobalSPallocState->mutex);
 

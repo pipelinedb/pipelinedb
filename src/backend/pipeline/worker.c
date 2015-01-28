@@ -160,9 +160,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			curtime = GetCurrentTimestamp();
 			if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
 			{
-				pgstat_report_activity(STATE_WORKER_WAIT_ON_LATCH, queryDesc->sourceText);
+				pgstat_report_activity(STATE_WORKER_WAIT, queryDesc->sourceText);
 				WaitOnStreamBufferLatch(cq_id);
-				pgstat_report_activity(STATE_WORKER_CONTINUE, queryDesc->sourceText);
+				pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
 			}
 			else
 			{
@@ -204,16 +204,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		}
 		estate->es_processed = 0;
 
-		/* Check the shared metadata to see if the CV has been deactivated */
+		/* Has the CQ been deactivated? */
 		if (!*activeFlagPtr)
-		{
-			int32 i = -1;
-			ssize_t res = write(combiner->sock, &i, sizeof(int32));
-			if (res < 0)
-				elog(ERROR, "failed to send about-to-die message to the combiner");
-			SetCQWorkerDoneFlag(cq_id);
 			break;
-		}
 	}
 
 	(*dest->rShutdown) (dest);

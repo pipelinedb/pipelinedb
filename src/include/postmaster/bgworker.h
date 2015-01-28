@@ -74,7 +74,7 @@ typedef enum
 #define BGW_DEFAULT_RESTART_INTERVAL	60
 #define BGW_NEVER_RESTART				-1
 #define BGW_MAXLEN						64
-#define BGW_ADDITIONAL_LEN				(5 * 1024)
+#define BGW_ADDITIONAL_LEN				512
 
 typedef struct BackgroundWorker
 {
@@ -134,6 +134,8 @@ WaitForBackgroundWorkerStartup(BackgroundWorkerHandle *
 
 /* Terminate a bgworker */
 extern void TerminateBackgroundWorker(BackgroundWorkerHandle *handle);
+
+extern void ChangeBackgroundWorkerRestartState(BackgroundWorkerHandle *handle, bool let_crash, int restart_time);
 
 /* This is valid in a running worker */
 extern PGDLLIMPORT BackgroundWorker *MyBgworkerEntry;
