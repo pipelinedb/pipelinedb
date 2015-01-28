@@ -2,7 +2,11 @@
  *
  * pipeline_combine.h
  *		Definition of the pipeline_combine catalog table, which contains
- *		information about how to combine partial aggregation results
+ *		information about how to combine partial aggregation results.
+ *
+ *		Note: combine information for aggregates defined in extensions is
+ *		not known at compile time and thus must be determined at bootstrap
+ *		time. See src/gis/postgis/pipeline_gis.sql.in for examples.
  *
  * src/include/catalog/pipeline_combine.h
  *

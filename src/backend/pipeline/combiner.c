@@ -44,6 +44,7 @@
 
 #define NAME_PREFIX "combiner_"
 #define WORKER_BACKLOG 32
+#define RECV_TIMEOUT 10 * 1000 /* ms */
 
 
 static void
@@ -100,6 +101,9 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 	HeapTuple tup;
 	int32 len;
 	ssize_t read;
+	int32 remaining;
+	int32 offset = 0;
+	TimestampTz start = GetCurrentTimestamp();
 
 	ExecClearTuple(slot);
 
@@ -107,7 +111,7 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 	 * This socket has a receive timeout set on it, so if we get an EAGAIN it just
 	 * means that no new data has arrived.
 	 */
-	read = recv(combiner->sock, &len, sizeof(int32), 0);
+	read = recv(combiner->sock, &len, sizeof(int32), MSG_WAITALL);
 	if (read < 0)
 	{
 		/* no new data yet, we'll try again on the next call */
@@ -126,14 +130,27 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 		return false;
 
 	len = ntohl(len);
+	remaining = len;
 
 	tup = (HeapTuple) palloc0(HEAPTUPLESIZE + len);
 	tup->t_len = len;
 	tup->t_data = (HeapTupleHeader) ((char *) tup + HEAPTUPLESIZE);
 
-	read = recv(combiner->sock, tup->t_data, tup->t_len, 0);
-	if (read < 0)
-		elog(ERROR, "combiner failed to receive tuple data");
+	while (remaining > 0 && !TimestampDifferenceExceeds(start, GetCurrentTimestamp(), RECV_TIMEOUT))
+	{
+		read = recv(combiner->sock, (char *) tup->t_data + offset, remaining, 0);
+		if (read < 0)
+		{
+			if (errno == EAGAIN || errno == EINTR)
+				continue;
+			elog(ERROR, "combiner failed to receive tuple data: %m");
+		}
+		remaining -= read;
+		offset += read;
+	}
+
+	if (remaining > 0)
+		elog(ERROR, "combiner only read %d of %d expected bytes", (len - remaining), len);
 
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 	return true;
