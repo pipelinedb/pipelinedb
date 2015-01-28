@@ -11,6 +11,8 @@
 #ifndef CQMATVIEW_H
 #define CQMATVIEW_H
 
+char *GetUniqueMatRelName(char *cvname, char* nspname);
+
 ResultRelInfo *CQMatViewOpen(Relation matrel);
 void CQMatViewClose(ResultRelInfo *rinfo);
 void ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot);
