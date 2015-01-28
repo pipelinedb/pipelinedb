@@ -113,22 +113,62 @@ test: stats
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqanalyze cqcreate cqactivate cqsanity cqsum cqswsum cqavg cqswavg cqcount cqboolagg cqminmax cqobjectagg cqregr cqstats cqwindow cqswboolagg cqswminmax cqswobjectagg cqswregr cqswstats cqhsagg cqswhsagg cqdistinct stream_table_join user_combine cqhllagg cqosagg cqswosagg
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: cqdecode stream_exprs stream_casts
-
-# ----------
-# Another group of parallel tests
-# ----------
 test: pipeline_stream
 
 # ----------
 # Another group of parallel tests
 # ----------
 test: cqvacuum
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: cqanalyze cqcreate cqactivate cqsanity cqwindow
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: cqsum cqswsum cqavg cqswavg cqcount
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: cqboolagg cqminmax cqobjectagg cqregr cqstats
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: cqswboolagg cqswminmax cqswobjectagg cqswregr cqswstats
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: cqhsagg cqswhsagg cqdistinct  cqhllagg cqosagg cqswosagg
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: stream_table_join user_combine
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: cqdecode stream_exprs
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: stream_casts
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: cont_gis_geom
+
+# ----------
+# Another group of parallel tests
+# ----------
+test:  cont_gis_raster
 
 # ----------
 # Another group of parallel tests

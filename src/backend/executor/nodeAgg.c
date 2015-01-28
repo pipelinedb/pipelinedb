@@ -460,6 +460,7 @@ advance_combine_function(TupleTableSlot *slot, AggState *aggstate,
 	{
 		FunctionCallInfo fcinfo = &peraggstate->combinefn_fcinfo;
 
+		fcinfo->isnull = false;
 		fcinfo->arg[0] = pergroupstate->transValue;
 		fcinfo->argnull[0] = pergroupstate->transValueIsNull;
 		fcinfo->arg[1] = combineinput;
