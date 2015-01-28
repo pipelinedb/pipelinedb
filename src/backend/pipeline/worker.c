@@ -85,11 +85,13 @@ set_snapshot(EState *estate, ResourceOwner owner)
 	estate->es_snapshot->active_count++;
 	estate->es_snapshot->copied = true;
 	RegisterSnapshotOnOwner(estate->es_snapshot, owner);
+	PushActiveSnapshot(estate->es_snapshot);
 }
 
 static void
 unset_snapshot(EState *estate, ResourceOwner owner)
 {
+	PopActiveSnapshot();
 	UnregisterSnapshotFromOwner(estate->es_snapshot, owner);
 }
 

@@ -2311,7 +2311,7 @@ load_plpgsql(void)
 }
 
 /*
- * load PipelineDB extensions HyperLogLog support
+ * load PipelineDB extensions
  */
 static void
 load_pipeline_extensions(void)
