@@ -76,8 +76,8 @@ accept_worker(CombinerDesc *desc)
 	if (desc->recvtimeoutms == 0)
 	{
 		/* 0 means a blocking recv(), which we don't want, so use a reasonable default */
-		to.tv_sec = 0;
-		to.tv_usec = 1000;
+		to.tv_sec = 1;
+		to.tv_usec = 0;
 	}
 	else
 	{
@@ -105,7 +105,7 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 	 * This socket has a receive timeout set on it, so if we get an EAGAIN it just
 	 * means that no new data has arrived.
 	 */
-	read = recv(combiner->sock, &len, sizeof(int32), 0);
+	read = recv(combiner->sock, &len, sizeof(int32), MSG_WAITALL);
 	if (read < 0)
 	{
 		/* no new data yet, we'll try again on the next call */
@@ -138,9 +138,11 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 	tup->t_len = len;
 	tup->t_data = (HeapTupleHeader) ((char *) tup + HEAPTUPLESIZE);
 
-	read = recv(combiner->sock, tup->t_data, tup->t_len, 0);
+	read = recv(combiner->sock, tup->t_data, tup->t_len, MSG_WAITALL);
 	if (read < 0)
 		elog(ERROR, "combiner failed to receive tuple data");
+	else if (read < tup->t_len)
+		elog(ERROR, "combiner only received %d of %d expected bytes before socket timeout", read, tup->t_len);
 
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 	return true;
