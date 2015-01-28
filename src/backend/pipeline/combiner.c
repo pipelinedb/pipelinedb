@@ -45,6 +45,7 @@
 
 #define NAME_PREFIX "combiner_"
 #define WORKER_BACKLOG 32
+#define RECV_TIMEOUT 10 * 1000 /* ms */
 
 
 static void
@@ -77,8 +78,8 @@ accept_worker(CombinerDesc *desc)
 	if (desc->recvtimeoutms == 0)
 	{
 		/* 0 means a blocking recv(), which we don't want, so use a reasonable default */
-		to.tv_sec = 1;
-		to.tv_usec = 0;
+		to.tv_sec = 0;
+		to.tv_usec = 1000;
 	}
 	else
 	{
@@ -99,6 +100,9 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 	HeapTuple tup;
 	int32 len;
 	ssize_t read;
+	int32 remaining;
+	int32 offset = 0;
+	TimestampTz start = GetCurrentTimestamp();
 
 	ExecClearTuple(slot);
 
@@ -135,15 +139,26 @@ receive_tuple(CombinerDesc *combiner, TupleTableSlot *slot)
 	if (len < 0)
 		return false;
 
+	remaining = len;
 	tup = (HeapTuple) palloc0(HEAPTUPLESIZE + len);
 	tup->t_len = len;
 	tup->t_data = (HeapTupleHeader) ((char *) tup + HEAPTUPLESIZE);
 
-	read = recv(combiner->sock, tup->t_data, tup->t_len, MSG_WAITALL);
-	if (read < 0)
-		elog(ERROR, "combiner failed to receive tuple data");
-	else if (read < tup->t_len)
-		elog(ERROR, "combiner only received %d of %d expected bytes before socket timeout", read, tup->t_len);
+	while (remaining > 0 && !TimestampDifferenceExceeds(start, GetCurrentTimestamp(), RECV_TIMEOUT))
+	{
+		read = recv(combiner->sock, (char *) tup->t_data + offset, remaining, 0);
+		if (read < 0)
+		{
+			if (errno == EAGAIN || errno == EINTR)
+				continue;
+			elog(ERROR, "combiner failed to receive tuple data: %m");
+		}
+		remaining -= read;
+		offset += read;
+	}
+
+	if (remaining > 0)
+		elog(ERROR, "combiner only read %d of %d expected bytes", (len - remaining), len);
 
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 	return true;
