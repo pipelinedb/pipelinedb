@@ -111,8 +111,9 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "continuous view \"%s\" does not exist",
-				rv->relname);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view \"%s\" does not exist", rv->relname)));
 
 	row = (Form_pipeline_query) GETSTRUCT(tuple);
 

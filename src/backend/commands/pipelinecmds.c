@@ -184,7 +184,9 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Check if CV already exists?
 	 */
 	if (IsAContinuousView(view))
-		elog(ERROR, "continuous view \"%s\" already exists", view->relname);
+		ereport(ERROR,
+				(errcode(ERRCODE_DUPLICATE_CONTINUOUS_VIEW),
+				errmsg("continuous view \"%s\" already exists", view->relname)));
 
 	/*
 	 * allowSystemTableMods is a global flag that, when true, allows certain column types
@@ -347,10 +349,15 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 
 		tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 		if (!HeapTupleIsValid(tuple))
-			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+					errmsg("continuous view \"%s\" does not exist", rv->relname)));
 		row = (Form_pipeline_query) GETSTRUCT(tuple);
 		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
-			elog(ERROR, "continuous view \"%s\" is currently active; can't be dropped", rv->relname);
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_CONTINUOUS_VIEW_STATE),
+					 errmsg("continuous view \"%s\" is active", rv->relname),
+					 errhint("only inactive continuous views can be dropped.")));
 
 		/*
 		 * Add object for the CQ's underlying materialization table.
@@ -656,8 +663,20 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 	foreach(lc, stmt->relations)
 	{
 		RangeVar *rv = (RangeVar *) lfirst(lc);
-		if (!IsAContinuousView(rv))
-			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
+		HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
+		Form_pipeline_query row;
+
+		if (!HeapTupleIsValid(tuple))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+					errmsg("continuous view \"%s\" does not exist", rv->relname)));
+
+		row = (Form_pipeline_query) GETSTRUCT(tuple);
+		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_CONTINUOUS_VIEW_STATE),
+					 errmsg("continuous view \"%s\" is active", rv->relname),
+					 errhint("only inactive continuous views can be truncated.")));
 
 		views = lappend(views, rv->relname);
 		rv->relname = GetMatRelationName(rv->relname);
