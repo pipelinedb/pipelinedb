@@ -461,3 +461,10 @@ Section: Class XX - Internal Error
 XX000    E    ERRCODE_INTERNAL_ERROR                                         internal_error
 XX001    E    ERRCODE_DATA_CORRUPTED                                         data_corrupted
 XX002    E    ERRCODE_INDEX_CORRUPTED                                        index_corrupted
+
+Section: Class PD - PipelineDB
+
+# this is for all PipelineDB specific errors
+PD000    E    ERRCODE_UNDEFINED_CONTINUOUS_VIEW                              undefined_continuous_view
+PD001    E    ERRCODE_INVALID_CONTINUOUS_VIEW_STATE                          invalid_continuous_view_state
+PD002    E    ERRCODE_DUPLICATE_CONTINUOUS_VIEW                              duplicate_continuous_view

@@ -13,7 +13,7 @@ HINT:  combine must be called with a single column reference as its argument.
 -- combine isn't allowed on tables
 SELECT combine(v) FROM test_uc_table;
 ERROR:  "test_uc_table" is not a continuous view
-HINT:  Only aggregate continuous view columns can be combined.
+HINT:  only aggregate continuous view columns can be combined.
 -- combine is only allowed on aggregate columns
 SELECT combine(k) FROM test_uc_validation;
  combine 

@@ -197,7 +197,7 @@ RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matre
  * Returns whether the catalog table was updated or not.
  */
 bool
-MarkContinuousViewAsActive(RangeVar *name, Relation pipeline_query)
+MarkContinuousViewAsActive(RangeVar *rv, Relation pipeline_query)
 {
 	HeapTuple tuple;
 	HeapTuple newtuple;
@@ -206,11 +206,12 @@ MarkContinuousViewAsActive(RangeVar *name, Relation pipeline_query)
 	bool replaces[Natts_pipeline_query];
 	Datum values[Natts_pipeline_query];
 
-	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(name->relname));
+	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "continuous view \"%s\" does not exist",
-				name->relname);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view \"%s\" does not exist", rv->relname)));
 
 	row = (Form_pipeline_query) GETSTRUCT(tuple);
 
@@ -247,7 +248,7 @@ MarkContinuousViewAsActive(RangeVar *name, Relation pipeline_query)
  * Returns whether the catalog table was updated or not.
  */
 bool
-MarkContinuousViewAsInactive(RangeVar *name, Relation pipeline_query)
+MarkContinuousViewAsInactive(RangeVar *rv, Relation pipeline_query)
 {
 	HeapTuple tuple;
 	HeapTuple newtuple;
@@ -256,11 +257,12 @@ MarkContinuousViewAsInactive(RangeVar *name, Relation pipeline_query)
 	bool replaces[Natts_pipeline_query];
 	Datum values[Natts_pipeline_query];
 
-	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(name->relname));
+	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "continuous view \"%s\" does not exist",
-				name->relname);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view \"%s\" does not exist", rv->relname)));
 
 	row = (Form_pipeline_query) GETSTRUCT(tuple);
 
@@ -291,7 +293,7 @@ MarkContinuousViewAsInactive(RangeVar *name, Relation pipeline_query)
  * Fetch the parameters for the CV from the `pipeline_query` catalog table.
  */
 void
-GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
+GetContinousViewState(RangeVar *rv, ContinuousViewState *cv_state)
 {
 	HeapTuple tuple;
 	Form_pipeline_query row;
@@ -299,11 +301,12 @@ GetContinousViewState(RangeVar *name, ContinuousViewState *cv_state)
 	if (!cv_state)
 		return;
 
-	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(name->relname));
+	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "continuous view \"%s\" does not exist",
-				name->relname);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view \"%s\" does not exist", rv->relname)));
 
 	row = (Form_pipeline_query) GETSTRUCT(tuple);
 
@@ -336,8 +339,9 @@ SetContinousViewState(RangeVar *rv, ContinuousViewState *cv_state, Relation pipe
 	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "continuous view \"%s\" does not exist",
-				rv->relname);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view \"%s\" does not exist", rv->relname)));
 
 	MemSet(values, 0, sizeof(values));
 	MemSet(nulls, false, sizeof(nulls));
@@ -396,7 +400,9 @@ char *GetMatRelationName(char *cvname)
 
 	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(cvname));
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "continuous view \"%s\" does not exist", cvname);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view \"%s\" does not exist", cvname)));
 	row = (Form_pipeline_query) GETSTRUCT(tuple);
 	ReleaseSysCache(tuple);
 	return pstrdup(NameStr(row->matrelname));
@@ -491,7 +497,9 @@ GetQueryString(char *cvname, bool select_only)
 {
 	char *result = GetQueryStringOrNull(cvname, select_only);
 	if (result == NULL)
-		elog(ERROR, "continuous view \"%s\" does not exist", cvname);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view \"%s\" does not exist", cvname)));
 	return result;
 }
 
