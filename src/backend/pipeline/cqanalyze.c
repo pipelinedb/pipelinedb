@@ -484,7 +484,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 					 errmsg("\"%s\" is not a continuous view", matrelrv->relname),
-					 errhint("Only aggregate continuous view columns can be combined.")));
+					 errhint("only aggregate continuous view columns can be combined.")));
 		}
 
 		return make_combine_agg_for_viewdef(pstate, cvrv, var, order, over);
