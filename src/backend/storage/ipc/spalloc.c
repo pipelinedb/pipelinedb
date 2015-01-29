@@ -209,8 +209,9 @@ coalesce_blocks(void *ptr1, void *ptr2)
 		set_prev(next, ptr1);
 
 
-	GlobalSPallocState->nblocks--;
-	GlobalSPallocState->nfree--;
+	if (DEBUG)
+		GlobalSPallocState->nblocks--;
+		GlobalSPallocState->nfree--;
 
 	return true;
 }
