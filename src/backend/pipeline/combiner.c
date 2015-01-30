@@ -579,6 +579,11 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 
 	oldcontext = MemoryContextSwitchTo(runctx);
 
+	/*
+	 * Create tuple store and slot outside of combinectx and tmpctx,
+	 * so that we don't lose received tuples in case of errors in the loop
+	 * below.
+	 */
 	store = tuplestore_begin_heap(true, true, work_mem);
 	combineplan = prepare_combine_plan(queryDesc->plannedstmt, store, &workerdesc);
 	slot = MakeSingleTupleTableSlot(workerdesc);

@@ -184,12 +184,11 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
-		unset_snapshot(estate, cqowner);
-		CommitTransactionCommand();
-
+		MemoryContextSwitchTo(oldcontext);
 		CurrentResourceOwner = cqowner;
 
-		MemoryContextSwitchTo(oldcontext);
+		unset_snapshot(estate, cqowner);
+		CommitTransactionCommand();
 
 		if (estate->es_processed != 0)
 		{
