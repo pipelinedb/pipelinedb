@@ -11,7 +11,6 @@
 #define PIPELINE_CUCKOOFILTER_H
 
 #include "c.h"
-#include "nodes/pg_list.h"
 
 
 #endif
