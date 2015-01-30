@@ -33,7 +33,7 @@
 #include "pgstat.h"
 #include "utils/timestamp.h"
 
-#define NODE_BUSY_TIMEOUT 10 /* ms */
+#define COMBINER_WAIT_TIMEOUT (100 * 1000)
 
 extern StreamBuffer *GlobalStreamBuffer;
 extern int EmptyStreamBufferWaitTime;
@@ -101,7 +101,7 @@ unset_snapshot(EState *estate, ResourceOwner owner)
  * back to the combiner process.
  */
 void
-ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner)
+ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *queryDesc, ResourceOwner owner)
 {
 	EState	   *estate;
 	DestReceiver *dest;
@@ -112,10 +112,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	MemoryContext runcontext_child;
 	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	char *cvname = rv->relname;
-	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
+	int timeoutms = state->maxwaitms;
 	MemoryContext runcontext;
-	int32 cq_id = queryDesc->plannedstmt->cq_state->id;
-	bool *activeFlagPtr = GetActiveFlagPtr(cq_id);
+	bool *activeFlagPtr = GetActiveFlagPtr(MyCQId);
 	TimestampTz curtime = GetCurrentTimestamp();
 	TimestampTz last_process_time = GetCurrentTimestamp();
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
@@ -143,17 +142,21 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	estate->es_lastoid = InvalidOid;
 
 	dest = CreateDestReceiver(DestCombiner);
-	SetCombinerDestReceiverParams(dest, combiner);
+	SetCombinerDestReceiverParams(dest, GetSocketName(MyCQId));
 
 	(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 	elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
 
-	IncrementProcessGroupCount(cq_id);
+	MarkWorkerAsRunning(MyCQId, MyWorkerId);
+
+	while (!IsCombinerRunning(MyCQId))
+		pg_usleep(COMBINER_WAIT_TIMEOUT);
+
 	/* XXX (jay)Should be able to copy pointers and maintain an array of pointers instead
 	   of an array of latches. This somehow does not work as expected and autovacuum
 	   seems to be obliterating the new shared array. Make this better.
 	 */
-	memcpy(&GlobalStreamBuffer->procLatch[cq_id], &MyProc->procLatch, sizeof(Latch));
+	memcpy(&GlobalStreamBuffer->procLatch[MyCQId], &MyProc->procLatch, sizeof(Latch));
 
 	es_query_child_cxt = AllocSetContextCreate(estate->es_query_cxt, "es_query_ctx child",
 			ALLOCSET_DEFAULT_MINSIZE,
@@ -173,14 +176,16 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 		PG_TRY();
 		{
 			elog(LOG, "starting");
-			ResetStreamBufferLatch(cq_id);
+			ResetStreamBufferLatch(MyCQId);
 			if (GlobalStreamBuffer->empty)
+
 			{
+
 				curtime = GetCurrentTimestamp();
 				if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
 				{
 					pgstat_report_activity(STATE_WORKER_WAIT, queryDesc->sourceText);
-					WaitOnStreamBufferLatch(cq_id);
+					WaitOnStreamBufferLatch(MyCQId);
 					pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
 				}
 				else
@@ -201,7 +206,7 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 			 * Run plan on a microbatch
 			 */
 			ExecutePlan(estate, queryDesc->planstate, operation,
-						true, 0, timeoutms, ForwardScanDirection, dest);
+					true, 0, timeoutms, ForwardScanDirection, dest);
 
 			MemoryContextSwitchTo(oldcontext);
 			CurrentResourceOwner = cqowner;
@@ -247,10 +252,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 
 	(*dest->rShutdown) (dest);
 
-	DecrementProcessGroupCount(cq_id);
-
 	/*
-	 * The cleanup functions below expect these things to be registered */
+	 * The cleanup functions below expect these things to be registered
+	 */
 	RegisterSnapshotOnOwner(estate->es_snapshot, cqowner);
 	RegisterSnapshotOnOwner(queryDesc->snapshot, cqowner);
 	RegisterSnapshotOnOwner(queryDesc->crosscheck_snapshot, cqowner);
