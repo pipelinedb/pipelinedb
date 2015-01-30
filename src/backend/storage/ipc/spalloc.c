@@ -27,6 +27,7 @@
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define BLOCK_SIZE(size) ((size) + sizeof(Header))
 #define MAGIC 0x1CEB00DA /* Yeeeeah, ICE BOODA! */
+#define MIN_SHMEM_ALLOC_SIZE 1024
 
 typedef struct Header
 {
@@ -122,12 +123,13 @@ typedef struct SPallocState
 {
 	void *head;
 	void *tail;
+	slock_t mutex;
+	/* DEBUG metadata */
 	int nblocks;
 	int nfree;
 	Size mem_size;
 	Size total_alloc;
 	Size total_free;
-	slock_t mutex;
 } SPallocState;
 
 static SPallocState *GlobalSPallocState = NULL;
@@ -208,8 +210,9 @@ coalesce_blocks(void *ptr1, void *ptr2)
 		set_prev(next, ptr1);
 
 
-	GlobalSPallocState->nblocks--;
-	GlobalSPallocState->nfree--;
+	if (DEBUG)
+		GlobalSPallocState->nblocks--;
+		GlobalSPallocState->nfree--;
 
 	return true;
 }
@@ -221,9 +224,14 @@ init_block(void *ptr, Size size, bool is_new)
 	header->size = size;
 	header->magic = MAGIC;
 
-	GlobalSPallocState->nblocks++;
-	if (is_new)
-		GlobalSPallocState->mem_size += BLOCK_SIZE(size);
+	if (DEBUG)
+	{
+		SpinLockAcquire(&GlobalSPallocState->mutex);
+		GlobalSPallocState->nblocks++;
+		if (is_new)
+			GlobalSPallocState->mem_size += BLOCK_SIZE(size);
+		SpinLockRelease(&GlobalSPallocState->mutex);
+	}
 }
 
 static void
@@ -233,6 +241,8 @@ insert_block(void *ptr)
 	void *prev = NULL;
 
 	mark_free(ptr);
+
+	SpinLockAcquire(&GlobalSPallocState->mutex);
 
 	if (!GlobalSPallocState->head)
 	{
@@ -287,7 +297,10 @@ insert_block(void *ptr)
 		coalesce_blocks(ptr, next);
 	}
 
-	GlobalSPallocState->nfree++;
+	if (DEBUG)
+		GlobalSPallocState->nfree++;
+
+	SpinLockRelease(&GlobalSPallocState->mutex);
 }
 
 static void
@@ -310,6 +323,8 @@ get_block(Size size)
 	void *block;
 	void *best = NULL;
 	int best_size;
+
+	SpinLockAcquire(&GlobalSPallocState->mutex);
 
 	block = GlobalSPallocState->head;
 	while (block)
@@ -346,8 +361,11 @@ get_block(Size size)
 		else
 			set_prev(next, prev);
 
-		GlobalSPallocState->nfree--;
+		if (DEBUG)
+			GlobalSPallocState->nfree--;
 	}
+
+	SpinLockRelease(&GlobalSPallocState->mutex);
 
 	return best;
 }
@@ -412,8 +430,6 @@ spalloc(Size size)
 	for (padded_size = 1; padded_size < size && padded_size <= 1024; padded_size *= 2);
 	size = MAX(size, padded_size);
 
-	SpinLockAcquire(&GlobalSPallocState->mutex);
-
 	block = get_block(size);
 
 	if (block == NULL)
@@ -423,7 +439,7 @@ spalloc(Size size)
 		 * The more contiguous memory we have, the better we
 		 * can combat fragmentation.
 		 */
-		Size alloc_size = MAX(size, 1024);
+		Size alloc_size = MAX(size, MIN_SHMEM_ALLOC_SIZE);
 		block = ShmemAlloc(BLOCK_SIZE(alloc_size));
 		memset(block, 0, BLOCK_SIZE(alloc_size));
 		block = (void *) ((intptr_t) block + sizeof(Header));
@@ -436,13 +452,14 @@ spalloc(Size size)
 
 	if (DEBUG)
 	{
+		SpinLockAcquire(&GlobalSPallocState->mutex);
+
+		GlobalSPallocState->total_alloc += size;
 		printf("> spalloc %zu\n", size);
 		print_allocator();
+
+		SpinLockRelease(&GlobalSPallocState->mutex);
 	}
-
-	GlobalSPallocState->total_alloc += size;
-
-	SpinLockRelease(&GlobalSPallocState->mutex);
 
 	Assert(is_allocated(block));
 
@@ -460,17 +477,17 @@ spfree(void *addr)
 	if (!is_allocated(addr))
 		elog(ERROR, "spfree: invalid/double freeing (%p)", addr);
 
-	SpinLockAcquire(&GlobalSPallocState->mutex);
-
 	size = get_size(addr);
 	insert_block(addr);
+
 	if (DEBUG)
 	{
+		SpinLockAcquire(&GlobalSPallocState->mutex);
+
 		printf("> spfree %p\n", addr);
 		print_allocator();
+		GlobalSPallocState->total_free += size;
+
+		SpinLockRelease(&GlobalSPallocState->mutex);
 	}
-
-	GlobalSPallocState->total_free += size;
-
-	SpinLockRelease(&GlobalSPallocState->mutex);
 }
