@@ -47,8 +47,10 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#define SLEEP_TIMEOUT 2000
+#define SOCKET_PREFIX "pipeline_"
+#define SLEEP_TIMEOUT (2 * 1000)
 #define RECOVERY_TIME 1
+#define NUM_WORKERS(entry) ((entry)->pg_size - 1)
 
 typedef struct CQProcRunArgs
 {
@@ -57,6 +59,7 @@ typedef struct CQProcRunArgs
 	CQProcessType ptype;
 	ContinuousViewState state;
 	char *query;
+	int worker_id;
 } CQProcRunArgs;
 
 static HTAB *CQProcTable = NULL;
@@ -80,7 +83,7 @@ InitCQProcState(void)
 	*/
 	int num_concurrent_cv = max_worker_processes / 2;
 
-	info.keysize = sizeof(uint32);
+	info.keysize = sizeof(int);
 	info.entrysize = sizeof(CQProcEntry);
 
 	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
@@ -105,6 +108,7 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
 {
 	HeapTuple tuple;
 	Form_pipeline_query row;
+
 	/* Initialize the counter to 1 for the combiner proc. */
 	int pg_size = 1;
 
@@ -133,7 +137,7 @@ GetProcessGroupSizeFromCatalog(RangeVar* rv)
  *
  */
 int
-GetProcessGroupSize(int32 id)
+GetProcessGroupSize(int id)
 {
 	CQProcEntry *entry;
 
@@ -150,7 +154,7 @@ GetProcessGroupSize(int32 id)
  *
  */
 CQProcEntry*
-CQProcEntryCreate(int32 id, int pg_size)
+CQProcEntryCreate(int id, int pg_size)
 {
 	CQProcEntry	*entry;
 	bool		found;
@@ -164,14 +168,17 @@ CQProcEntryCreate(int32 id, int pg_size)
 
 	/* New entry, initialize it with the process group size */
 	entry->pg_size = pg_size;
-	/* New entry, No processes are active on creation */
-	entry->pg_count = 0;
 	/* New entry, and is active the moment this entry is created */
 	entry->active = true;
 
 	entry->shm_query = NULL;
 
-	entry->workers = spalloc(sizeof(BackgroundWorkerHandle) * (pg_size - 1));
+	entry->combiner.last_pid = 0;
+	entry->workers = spalloc0(sizeof(CQBackgroundWorkerHandle) * NUM_WORKERS(entry));
+
+	/* socket names are "pipeline_<hex>" */
+	strcpy(entry->sock_name, SOCKET_PREFIX);
+	strcpy(&entry->sock_name[strlen(SOCKET_PREFIX)], random_hex(10));
 
 	return entry;
 }
@@ -184,15 +191,14 @@ CQProcEntryCreate(int32 id, int pg_size)
  *
  */
 void
-CQProcEntryRemove(int32 id)
+CQProcEntryRemove(int id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 
 	if (entry)
 	{
 		spfree(entry->workers);
-		if (entry->shm_query)
-			spfree(entry->shm_query);
+		spfree(entry->shm_query);
 	}
 
 	/* Remove the entry from the hash table. */
@@ -205,72 +211,10 @@ CQProcEntryRemove(int32 id)
  * Return the entry based on a key
  */
 CQProcEntry*
-GetCQProcEntry(int32 id)
+GetCQProcEntry(int id)
 {
-	CQProcEntry  *entry;
 	bool found;
-
-	entry = (CQProcEntry *) hash_search(CQProcTable, &id, HASH_FIND, &found);
-	if (!found)
-	{
-		elog(LOG,"entry for CQ %d not found in the CQProcTable", id);
-		return NULL;
-	}
-	return entry;
-}
-
-/*
- * GetProcessGroupCount
- *
- * Return the current
- * process group count for the given cv
- *
- */
-int
-GetProcessGroupCount(int32 id)
-{
-	CQProcEntry  *entry;
-
-	entry = GetCQProcEntry(id);
-	if (entry == NULL)
-		return -1;
-	return entry->pg_count;
-}
-
-/*
- * DecrementProcessGroupCount
- *
- * Decrement the process group count
- * Called from sub processes
- */
-void
-DecrementProcessGroupCount(int32 id)
-{
-	CQProcEntry *entry;
-
-	SpinLockAcquire(CQProcMutex);
-	entry = GetCQProcEntry(id);
-	Assert(entry);
-	entry->pg_count--;
-	SpinLockRelease(CQProcMutex);
-}
-
-/*
- * IncrementProcessGroupCount
- *
- * Increment the process group count
- * Called from caller processes
- */
-void
-IncrementProcessGroupCount(int32 id)
-{
-	CQProcEntry *entry;
-
-	SpinLockRelease(CQProcMutex);
-	entry = GetCQProcEntry(id);
-	Assert(entry);
-	entry->pg_count++;
-	SpinLockRelease(CQProcMutex);
+	return (CQProcEntry *) hash_search(CQProcTable, &id, HASH_FIND, &found);
 }
 
 /*
@@ -280,11 +224,11 @@ IncrementProcessGroupCount(int32 id)
  * or not
  */
 void
-SetActiveFlag(int32 id, bool flag)
+SetActiveFlag(int id, bool flag)
 {
 	CQProcEntry *entry;
 
-	SpinLockRelease(CQProcMutex);
+	SpinLockAcquire(CQProcMutex);
 	entry = GetCQProcEntry(id);
 	Assert(entry);
 	entry->active = flag;
@@ -295,11 +239,25 @@ SetActiveFlag(int32 id, bool flag)
  * GetActiveFlagPtr
  */
 bool *
-GetActiveFlagPtr(int32 id)
+GetActiveFlagPtr(int id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 	Assert(entry);
 	return &entry->active;
+}
+
+void
+MarkCombinerAsRunning(int id)
+{
+	CQProcEntry *entry = GetCQProcEntry(id);
+	entry->combiner.last_pid = MyProcPid;
+}
+
+void
+MarkWorkerAsRunning(int id, int worker_id)
+{
+	CQProcEntry *entry = GetCQProcEntry(id);
+	entry->workers[worker_id].last_pid = MyProcPid;
 }
 
 /*
@@ -312,9 +270,9 @@ get_stopped_proc_count(CQProcEntry *entry)
 	int i;
 	pid_t pid;
 
-	count += WaitForBackgroundWorkerStartup(&entry->combiner, &pid) == BGWH_STOPPED;
-	for (i = 0; i < entry->pg_size - 1; i++)
-		count += WaitForBackgroundWorkerStartup(&entry->workers[i], &pid) == BGWH_STOPPED;
+	count += WaitForBackgroundWorkerStartup((BackgroundWorkerHandle *) &entry->combiner, &pid) == BGWH_STOPPED;
+	for (i = 0; i < NUM_WORKERS(entry); i++)
+		count += WaitForBackgroundWorkerStartup((BackgroundWorkerHandle *) &entry->workers[i], &pid) == BGWH_STOPPED;
 
 	return count;
 }
@@ -323,23 +281,37 @@ get_stopped_proc_count(CQProcEntry *entry)
  * WaitForCQProcsToStart
  *
  * Block on the process group count till
- * it reaches 0. This enables the activate cv
+ * it reaches 0. This enables the ACTIVATE
  * to be synchronous
  */
 bool
-WaitForCQProcsToStart(int32 id)
+WaitForCQProcsToStart(int id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 	int err_count;
+	int succ_count;
+	pid_t *worker_pids;
+	int i;
 
 	while (true)
 	{
-		err_count = 0;
-		if (entry->pg_count == entry->pg_size)
+		err_count = succ_count = 0;
+		succ_count += GetCombinerPid(id) == entry->combiner.last_pid;
+		worker_pids = GetWorkerPids(id);
+
+		for (i = 0; i < NUM_WORKERS(entry); i++)
+			succ_count += worker_pids[i] == entry->workers[i].last_pid;
+
+		pfree(worker_pids);
+
+		if (succ_count == entry->pg_size)
 			break;
+
 		err_count = get_stopped_proc_count(entry);
-		if (entry->pg_count + err_count == entry->pg_size)
+
+		if (err_count + succ_count == entry->pg_size)
 			break;
+
 		pg_usleep(SLEEP_TIMEOUT);
 	}
 
@@ -350,17 +322,15 @@ WaitForCQProcsToStart(int32 id)
  * WaitForCQProcsToTerminate
  *
  * Block on the process group count till
- * it reaches pg_size. This enables the deactivate cv
+ * it reaches pg_size. This enables the DEACTIVATE
  * to be synchronous
  */
 void
-WaitForCQProcsToTerminate(int32 id)
+WaitForCQProcsToTerminate(int id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 	while (true)
 	{
-		if (entry->pg_count == 0)
-			break;
 		if (get_stopped_proc_count(entry) == entry->pg_size)
 			break;
 		pg_usleep(SLEEP_TIMEOUT);
@@ -371,28 +341,41 @@ WaitForCQProcsToTerminate(int32 id)
  * TerminateCQProcs
  */
 void
-TerminateCQProcs(int32 id)
+TerminateCQProcs(int id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 	int i;
 
-	TerminateBackgroundWorker(&entry->combiner);
-	for (i = 0; i < entry->pg_size - 1; i++)
-		TerminateBackgroundWorker(&entry->workers[i]);
+	TerminateBackgroundWorker((BackgroundWorkerHandle *) &entry->combiner);
+	for (i = 0; i < NUM_WORKERS(entry); i++)
+		TerminateBackgroundWorker((BackgroundWorkerHandle *) &entry->workers[i]);
+}
+
+/*
+ * IsCombinerRunning
+ */
+bool
+IsCombinerRunning(int id)
+{
+	CQProcEntry *entry = GetCQProcEntry(id);
+	pid_t pid;
+	if (WaitForBackgroundWorkerStartup((BackgroundWorkerHandle *) &entry->combiner, &pid) != BGWH_STARTED)
+		return false;
+	return pid == entry->combiner.last_pid;
 }
 
 /*
  * AreCQWorkersStopped
  */
 bool
-AreCQWorkersStopped(int32 id)
+AreCQWorkersStopped(int id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 	pid_t pid;
 	int i;
 
-	for (i = 0; i < entry->pg_size - 1; i++)
-		if (WaitForBackgroundWorkerStartup(&entry->workers[i], &pid) != BGWH_STOPPED)
+	for (i = 0; i < NUM_WORKERS(entry); i++)
+		if (WaitForBackgroundWorkerStartup((BackgroundWorkerHandle *) &entry->workers[i], &pid) != BGWH_STOPPED)
 			return false;
 
 	return true;
@@ -402,14 +385,28 @@ AreCQWorkersStopped(int32 id)
  * EnableCQProcsRecovery
  */
 void
-EnableCQProcsRecovery(int32 id)
+EnableCQProcsRecovery(int id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 	int i;
 
-	ChangeBackgroundWorkerRestartState(&entry->combiner, false, RECOVERY_TIME);
-	for (i = 0; i < entry->pg_size - 1; i++)
-		ChangeBackgroundWorkerRestartState(&entry->workers[i], false, RECOVERY_TIME);
+	ChangeBackgroundWorkerRestartState((BackgroundWorkerHandle *) &entry->combiner, false, RECOVERY_TIME);
+	for (i = 0; i < NUM_WORKERS(entry); i++)
+		ChangeBackgroundWorkerRestartState((BackgroundWorkerHandle *) &entry->workers[i], false, RECOVERY_TIME);
+}
+
+/*
+ * DisableCQProcsRecovery
+ */
+void
+DisableCQProcsRecovery(int id)
+{
+	CQProcEntry *entry = GetCQProcEntry(id);
+	int i;
+
+	ChangeBackgroundWorkerRestartState((BackgroundWorkerHandle *) &entry->combiner, true, 0);
+	for (i = 0; i < NUM_WORKERS(entry); i++)
+		ChangeBackgroundWorkerRestartState((BackgroundWorkerHandle *) &entry->workers[i], true, 0);
 }
 
 /*
@@ -425,7 +422,6 @@ cq_bg_main(Datum d, char *additional, Size additionalsize)
 	CQProcRunArgs *args;
 	int16 format;
 	PlannedStmt *plan;
-	ContinuousViewState state;
 	char *sql;
 	char completionTag[COMPLETION_TAG_BUFSIZE];
 	char *cvname;
@@ -436,6 +432,21 @@ cq_bg_main(Datum d, char *additional, Size additionalsize)
 													ALLOCSET_DEFAULT_INITSIZE,
 													ALLOCSET_DEFAULT_MAXSIZE);
 
+	args = (CQProcRunArgs *) additional;
+
+	/*
+	 * This will happen when the BG worker is being respawned after a full
+	 * reset cycle.
+	 */
+	if (!IsValidSPallocMemory(args->query))
+		return;
+
+	/* Set all globals variables */
+	IsCombiner = args->ptype == CQCombiner;
+	IsWorker = args->ptype == CQWorker;
+	MyCQId = args->state.id;
+	MyWorkerId = args->worker_id;
+
 	/*
 	 * XXX(usmanm): Is this kosher to do? We need this so in case of failed
 	 * ACTIVATEs, the postmaster can kill the CQ's bg procs. Previously
@@ -443,11 +454,6 @@ cq_bg_main(Datum d, char *additional, Size additionalsize)
 	 * latch.
 	 */
 	BackgroundWorkerUnblockSignals();
-
-	args = (CQProcRunArgs *) additional;
-
-	state = args->state;
-	state.ptype = args->ptype;
 
 	/*
 	 * 0. Give this process access to the database
@@ -462,10 +468,10 @@ cq_bg_main(Datum d, char *additional, Size additionalsize)
 	 * 1. Plan the continuous query
 	 */
 	cvname = NameStr(args->cvname);
-	matrelname = NameStr(state.matrelname);
+	matrelname = NameStr(args->state.matrelname);
 
 	sql = pstrdup(args->query);
-	plan = GetCQPlan(cvname, sql, &state, matrelname);
+	plan = GetCQPlan(cvname, sql, &args->state, matrelname);
 
 	/*
 	 * 2. Set up the portal to run it in
@@ -521,7 +527,7 @@ get_cq_proc_type_name(CQProcessType ptype)
 }
 
 static bool
-run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state, BackgroundWorkerHandle *bg_handle, char *query)
+run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state, BackgroundWorkerHandle *bg_handle, char *query, int worker_id)
 {
 	BackgroundWorker worker;
 	CQProcRunArgs args;
@@ -529,7 +535,6 @@ run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state,
 	char *procName = get_cq_proc_type_name(ptype);
 	bool success;
 
-	/* TODO(usmanm): Make sure the name doesn't go beyond 64 bytes */
 	strcpy(worker.bgw_name, cvname);
 	append_suffix(worker.bgw_name, procName, NAMEDATALEN);
 
@@ -542,12 +547,13 @@ run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state,
 	worker.bgw_additional_size = sizeof(CQProcRunArgs);
 	worker.bgw_cvid = state->id;
 
+	args.ptype = state->ptype = ptype;
 	args.state = *state;
-	args.ptype = ptype;
 	namestrcpy(&args.cvname, cvname);
 	namestrcpy(&args.dbname, MyProcPort->database_name);
 
 	args.query = query;
+	args.worker_id = worker_id;
 
 	memcpy(worker.bgw_additional_arg, &args, worker.bgw_additional_size);
 
@@ -574,17 +580,45 @@ RunCQProcs(const char *cvname, void *_state, CQProcEntry *entry)
 		strcpy(entry->shm_query, q);
 	}
 
-	run_cq_proc(CQCombiner, cvname, state, &entry->combiner, entry->shm_query);
-	for (i = 0; i < entry->pg_size - 1; i++)
-		run_cq_proc(CQWorker, cvname, state, &entry->workers[i], entry->shm_query);
+	run_cq_proc(CQCombiner, cvname, state, (BackgroundWorkerHandle *) &entry->combiner, entry->shm_query, -1);
+	for (i = 0; i < NUM_WORKERS(entry); i++)
+		run_cq_proc(CQWorker, cvname, state, (BackgroundWorkerHandle *) &entry->workers[i], entry->shm_query, i);
 }
 
 /*
- * GetSocketDesc
+ * GetSocketName
  */
-SocketDesc *
-GetSocketDesc(int32 id)
+char *
+GetSocketName(int id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
-	return &entry->socket_desc;
+	return entry->sock_name;
+}
+
+/*
+ * GetCombinerPid
+ */
+pid_t
+GetCombinerPid(int id)
+{
+	CQProcEntry *entry = GetCQProcEntry(id);
+	pid_t pid;
+	GetBackgroundWorkerPid((BackgroundWorkerHandle *) &entry->combiner, &pid);
+	return pid;
+}
+
+/*
+ * GetWorkerPids
+ */
+pid_t *
+GetWorkerPids(int id)
+{
+	int i;
+	CQProcEntry *entry = GetCQProcEntry(id);
+	pid_t *pids = palloc0(NUM_WORKERS(entry) * sizeof(pid_t));
+
+	for (i = 0; i < NUM_WORKERS(entry); i++)
+		GetBackgroundWorkerPid((BackgroundWorkerHandle *) &entry->workers[i], &pids[i]);
+
+	return pids;
 }

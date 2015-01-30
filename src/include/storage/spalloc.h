@@ -14,6 +14,8 @@
 extern void InitSPalloc(void);
 
 extern void *spalloc(Size size);
+extern void *spalloc0(Size size);
 extern void spfree(void *addr);
+extern bool IsValidSPallocMemory(void *);
 
 #endif   /* SPALLOC_H */

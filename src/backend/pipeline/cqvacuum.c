@@ -56,6 +56,9 @@ NumCQVacuumTuples(Oid relid)
 	MemoryContext oldcontext;
 	MemoryContext runctx;
 
+	if (!relname)
+		return 0;
+
 	cvname = GetCVNameForMatRelationName(relname);
 	if (!cvname)
 		return 0;
