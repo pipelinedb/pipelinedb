@@ -17,15 +17,6 @@
 #include "utils/portal.h"
 #include "utils/resowner.h"
 
-
-typedef struct CombinerDesc
-{
-	char *name;
-	int sock;
-	int recvtimeoutms;
-} CombinerDesc;
-
-CombinerDesc *CreateCombinerDesc(QueryDesc *query);
-void ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *queryDesc, ResourceOwner owner);
+void ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc *queryDesc, ResourceOwner owner);
 
 #endif /* COMBINER_H */

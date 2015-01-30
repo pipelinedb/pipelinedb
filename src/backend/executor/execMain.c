@@ -232,7 +232,6 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
 void
 ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
 {
-	CombinerDesc *combiner = CreateCombinerDesc(queryDesc);
 	PlannedStmt *plan = queryDesc->plannedstmt;
 
 	/* sanity checks */
@@ -244,10 +243,10 @@ ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
 	switch(plan->cq_state->ptype)
 	{
 		case CQCombiner:
-			ContinuousQueryCombinerRun(portal, combiner, queryDesc, owner);
+			ContinuousQueryCombinerRun(portal, plan->cq_state, queryDesc, owner);
 			break;
 		case CQWorker:
-			ContinuousQueryWorkerRun(portal, combiner, queryDesc, owner);
+			ContinuousQueryWorkerRun(portal, plan->cq_state, queryDesc, owner);
 			break;
 		default:
 			elog(ERROR, "unrecognized CQ process type: %d", plan->cq_state->ptype);

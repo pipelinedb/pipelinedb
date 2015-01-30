@@ -13,10 +13,10 @@
 #ifndef COMBINER_RECEIVER_H
 #define COMBINER_RECEIVER_H
 
-#include "pipeline/combiner.h"
+#include "pipeline/cqproc.h"
 #include "tcop/dest.h"
 
 extern DestReceiver *CreateCombinerDestReceiver(void);
-extern void SetCombinerDestReceiverParams(DestReceiver *self, CombinerDesc *combiner);
+extern void SetCombinerDestReceiverParams(DestReceiver *self, char *sock_name);
 
 #endif

@@ -29,8 +29,10 @@ skip_substring(char *str, char* substr, int start)
 char *
 random_hex(int len)
 {
-	char *buf = palloc(len);
-	while (len)
-		buf[--len] = rand() % 256;
+	int i = 0;
+	char *buf = palloc(len + 1);
+	while (i < len) {
+		sprintf(&buf[i++], "%x", rand() % 16);
+	}
 	return buf;
 }
