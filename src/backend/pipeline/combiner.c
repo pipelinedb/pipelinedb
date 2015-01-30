@@ -790,7 +790,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 					continue;
 				}
 
-				break;
+				goto exit_loop;
 			}
 		}
 		PG_CATCH();
@@ -804,6 +804,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 		PG_END_TRY();
 	}
 
+exit_loop:
 	MemoryContextDelete(runctx);
 
 	CurrentResourceOwner = save;

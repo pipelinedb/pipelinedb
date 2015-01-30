@@ -175,7 +175,6 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	{
 		PG_TRY();
 		{
-			elog(LOG, "starting");
 			ResetStreamBufferLatch(MyCQId);
 			if (GlobalStreamBuffer->empty)
 
@@ -229,26 +228,22 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 
 			/* Has the CQ been deactivated? */
 			if (!*activeFlagPtr)
-			{
-				elog(LOG, "breaking!");
-				break;
-			}
+				goto exit_loop;
 		}
 		PG_CATCH();
 		{
-			elog(LOG, "catch 1");
 			EmitErrorReport();
-			elog(LOG, "catch 2");
 			FlushErrorState();
-			elog(LOG, "catch 3");
+
 			MemoryContextResetAndDeleteChildren(estate->es_query_cxt);
-			elog(LOG, "catch 4");
 			MemoryContextResetAndDeleteChildren(runcontext_child);
 		}
 		PG_END_TRY();
 	}
-	elog(LOG, "done breaking");
+
+exit_loop:
 	estate->es_query_cxt = es_query_cxt;
+	CurrentResourceOwner = cqowner;
 
 	(*dest->rShutdown) (dest);
 
