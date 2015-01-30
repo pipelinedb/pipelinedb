@@ -60,7 +60,7 @@ bool DebugSyncStreamInsert;
 
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
-#define ENABLE_RECOVERY 1
+#define ENABLE_RECOVERY 0
 
 static ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)

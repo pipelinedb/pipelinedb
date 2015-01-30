@@ -94,6 +94,22 @@ unset_snapshot(EState *estate, ResourceOwner owner)
 	UnregisterSnapshotFromOwner(estate->es_snapshot, owner);
 }
 
+static void
+reset_cached_scans(PlanState *plan)
+{
+	if (!plan)
+		return;
+
+	if (IsA(plan, SortState))
+	{
+		SortState *sort = (SortState *) plan;
+		sort->sort_Done = false;
+	}
+
+	reset_cached_scans(plan->lefttree);
+	reset_cached_scans(plan->righttree);
+}
+
 /*
  * ContinuousQueryWorkerStartup
  *
@@ -211,6 +227,9 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 			 */
 			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
+
+			reset_cached_scans(queryDesc->planstate);
+			ExecReScan(queryDesc->planstate);
 
 			MemoryContextReset(estate->es_query_cxt);
 			MemoryContextSwitchTo(oldcontext);
