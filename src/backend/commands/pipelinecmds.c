@@ -60,6 +60,7 @@ bool DebugSyncStreamInsert;
 
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
+#define ENABLE_RECOVERY 1
 
 static ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)
@@ -546,21 +547,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 
 		SetContinousViewState(rv, &state, pipeline_query);
 
-		/*
-		 * Initialize the metadata entry for the CV
-		 * Input would be an id (used as key) and a Process group size.
-		 *
-		 * Here we don't have to worry about racing transactions.
-		 * If we see the CV as inactive but another transaction has created
-		 * its CVMetadata entry, the next call will fail--albeit with a weird
-		 * message saying the CV is being deactivated. That's only one of the
-		 * cases when this can happen.
-		 */
 		entry = CQProcEntryCreate(state.id, GetProcessGroupSizeFromCatalog(rv));
-
-		if (entry == NULL)
-			elog(ERROR, "continuous view \"%s\" is being deactivated",
-					rv->relname);
 
 		RunCQProcs(rv->relname, &state, entry);
 
@@ -571,7 +558,8 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		if (WaitForCQProcsToStart(state.id))
 		{
 			success++;
-			EnableCQProcsRecovery(state.id);
+			if (ENABLE_RECOVERY)
+				EnableCQProcsRecovery(state.id);
 		}
 		else
 		{
@@ -580,9 +568,9 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 			 * If some of the bg procs failed, mark the continuous view
 			 * as inactive and kill any of the remaining bg procs.
 			 */
-			MarkContinuousViewAsInactive(rv, pipeline_query);
 			TerminateCQProcs(state.id);
 			CQProcEntryRemove(state.id);
+			MarkContinuousViewAsInactive(rv, pipeline_query);
 		}
 	}
 
@@ -592,7 +580,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	heap_close(pipeline_query, NoLock);
 
 	if (fail)
-		elog(ERROR, "failed to activate %d continuous view(s)", fail);
+		elog(LOG, "failed to activate %d continuous view(s)", fail);
 
 	return success;
 }
@@ -625,6 +613,11 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		if (GetCQProcEntry(state.id) == NULL)
 			continue;
 
+		/* Disable recovery and wait for any recovering processes to recover */
+		if (ENABLE_RECOVERY)
+			DisableCQProcsRecovery(state.id);
+		WaitForCQProcsToStart(state.id);
+
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id, false);
 
@@ -636,6 +629,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * and remove the CVMetadata entry.
 		 */
 		WaitForCQProcsToTerminate(state.id);
+
 		count++;
 
 		CQProcEntryRemove(state.id);

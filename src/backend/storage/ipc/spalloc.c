@@ -465,6 +465,14 @@ spalloc(Size size)
 	return block;
 }
 
+void *
+spalloc0(Size size)
+{
+	char *addr = spalloc(size);
+	memset(addr, 0, size);
+	return addr;
+}
+
 /*
  * spfree
  */
@@ -489,4 +497,10 @@ spfree(void *addr)
 
 		SpinLockRelease(&GlobalSPallocState->mutex);
 	}
+}
+
+bool
+IsValidSPallocMemory(void *addr)
+{
+	return is_allocated(addr);
 }

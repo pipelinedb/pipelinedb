@@ -159,6 +159,14 @@ extern char pkglib_path[];
 extern char postgres_exec_path[];
 #endif
 
+/* PipelineDB globals */
+extern int MyCQId;
+extern bool IsCombiner;
+extern bool IsWorker;
+extern int MyWorkerId;
+#define IsCQBackgroundProcess (IsCombiner || IsWorker)
+#define PIPELINE_PY_TEST "PIPELINE_PY_TESTS"
+
 /*
  * done in storage/backendid.h for now.
  *

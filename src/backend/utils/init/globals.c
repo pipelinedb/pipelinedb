@@ -123,3 +123,9 @@ int			VacuumPageDirty = 0;
 
 int			VacuumCostBalance = 0;		/* working state for vacuum */
 bool		VacuumCostActive = false;
+
+/* PipelineDB */
+int MyCQId = -1;
+bool IsCombiner = false;
+bool IsWorker = false;
+int MyWorkerId = -1;
