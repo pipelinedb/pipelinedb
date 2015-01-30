@@ -107,6 +107,9 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	DestReceiver *dest;
 	CmdType		operation;
 	MemoryContext oldcontext;
+	MemoryContext es_query_cxt;
+	MemoryContext es_query_child_cxt;
+	MemoryContext runcontext_child;
 	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	char *cvname = rv->relname;
 	int timeoutms = queryDesc->plannedstmt->cq_state->maxwaitms;
@@ -152,61 +155,95 @@ ContinuousQueryWorkerRun(Portal portal, CombinerDesc *combiner, QueryDesc *query
 	 */
 	memcpy(&GlobalStreamBuffer->procLatch[cq_id], &MyProc->procLatch, sizeof(Latch));
 
+	es_query_child_cxt = AllocSetContextCreate(estate->es_query_cxt, "es_query_ctx child",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	es_query_cxt = estate->es_query_cxt;
+	estate->es_query_cxt = es_query_child_cxt;
+
+	runcontext_child = AllocSetContextCreate(runcontext, "runcontext child",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
 	for (;;)
 	{
-		ResetStreamBufferLatch(cq_id);
-		if (GlobalStreamBuffer->empty)
+		PG_TRY();
 		{
-			curtime = GetCurrentTimestamp();
-			if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
+			elog(LOG, "starting");
+			ResetStreamBufferLatch(cq_id);
+			if (GlobalStreamBuffer->empty)
 			{
-				pgstat_report_activity(STATE_WORKER_WAIT, queryDesc->sourceText);
-				WaitOnStreamBufferLatch(cq_id);
-				pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
+				curtime = GetCurrentTimestamp();
+				if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
+				{
+					pgstat_report_activity(STATE_WORKER_WAIT, queryDesc->sourceText);
+					WaitOnStreamBufferLatch(cq_id);
+					pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
+				}
+				else
+				{
+					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
+				}
 			}
-			else
-			{
-				pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
-			}
-		}
 
-		TopTransactionContext = runcontext;
+			TopTransactionContext = runcontext_child;
 
-		StartTransactionCommand();
-		set_snapshot(estate, cqowner);
+			StartTransactionCommand();
+			set_snapshot(estate, cqowner);
 
-		CurrentResourceOwner = cqowner;
-		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+			CurrentResourceOwner = cqowner;
+			oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
 
-		/*
-		 * Run plan on a microbatch
-		 */
-		ExecutePlan(estate, queryDesc->planstate, operation,
-					true, 0, timeoutms, ForwardScanDirection, dest);
-
-		MemoryContextSwitchTo(oldcontext);
-		CurrentResourceOwner = cqowner;
-
-		unset_snapshot(estate, cqowner);
-		CommitTransactionCommand();
-
-		if (estate->es_processed != 0)
-		{
 			/*
-			 * If the CV query is such that the select does not return any tuples
-			 * ex: select id where id=99; and id=99 does not exist, then this reset
-			 * will fail. What will happen is that the worker will block at the latch for every
-			 * allocated slot, TILL a cv returns a non-zero tuple, at which point
-			 * the worker will resume a simple sleep for the threshold time.
+			 * Run plan on a microbatch
 			 */
-			last_process_time = GetCurrentTimestamp();
-		}
-		estate->es_processed = 0;
+			ExecutePlan(estate, queryDesc->planstate, operation,
+						true, 0, timeoutms, ForwardScanDirection, dest);
 
-		/* Has the CQ been deactivated? */
-		if (!*activeFlagPtr)
-			break;
+			MemoryContextSwitchTo(oldcontext);
+			CurrentResourceOwner = cqowner;
+
+			unset_snapshot(estate, cqowner);
+			CommitTransactionCommand();
+
+			if (estate->es_processed != 0)
+			{
+				/*
+				 * If the CV query is such that the select does not return any tuples
+				 * ex: select id where id=99; and id=99 does not exist, then this reset
+				 * will fail. What will happen is that the worker will block at the latch for every
+				 * allocated slot, TILL a cv returns a non-zero tuple, at which point
+				 * the worker will resume a simple sleep for the threshold time.
+				 */
+				last_process_time = GetCurrentTimestamp();
+			}
+			estate->es_processed = 0;
+
+			/* Has the CQ been deactivated? */
+			if (!*activeFlagPtr)
+			{
+				elog(LOG, "breaking!");
+				break;
+			}
+		}
+		PG_CATCH();
+		{
+			elog(LOG, "catch 1");
+			EmitErrorReport();
+			elog(LOG, "catch 2");
+			FlushErrorState();
+			elog(LOG, "catch 3");
+			MemoryContextResetAndDeleteChildren(estate->es_query_cxt);
+			elog(LOG, "catch 4");
+			MemoryContextResetAndDeleteChildren(runcontext_child);
+		}
+		PG_END_TRY();
 	}
+	elog(LOG, "done breaking");
+	estate->es_query_cxt = es_query_cxt;
 
 	(*dest->rShutdown) (dest);
 
