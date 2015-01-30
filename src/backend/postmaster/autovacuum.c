@@ -81,6 +81,7 @@
 #include "lib/ilist.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
+#include "nodes/print.h"
 #include "pgstat.h"
 #include "pipeline/cqvacuum.h"
 #include "postmaster/autovacuum.h"
@@ -458,6 +459,11 @@ AutoVacLauncherMain(int argc, char *argv[])
 	pqsignal(SIGUSR2, avl_sigusr2_handler);
 	pqsignal(SIGFPE, FloatExceptionHandler);
 	pqsignal(SIGCHLD, SIG_DFL);
+
+#define BACKTRACE_SEGFAULTS
+#ifdef BACKTRACE_SEGFAULTS
+	pqsignal(SIGSEGV, debug_segfault);
+#endif
 
 	/* Early initialization */
 	BaseInit();
@@ -1533,6 +1539,11 @@ AutoVacWorkerMain(int argc, char *argv[])
 	pqsignal(SIGUSR2, SIG_IGN);
 	pqsignal(SIGFPE, FloatExceptionHandler);
 	pqsignal(SIGCHLD, SIG_DFL);
+
+#define BACKTRACE_SEGFAULTS
+#ifdef BACKTRACE_SEGFAULTS
+	pqsignal(SIGSEGV, debug_segfault);
+#endif
 
 	/* Early initialization */
 	BaseInit();
