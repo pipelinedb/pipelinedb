@@ -158,6 +158,11 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	 */
 	memcpy(&GlobalStreamBuffer->procLatch[MyCQId], &MyProc->procLatch, sizeof(Latch));
 
+	/*
+	 * Create children contexts for all memory contexts that are used in the for loop,
+	 * so we can reset them in case of errors while still preserving data in memory that
+	 * is expected to persist across iterations of the loop.
+	 */
 	es_query_child_cxt = AllocSetContextCreate(estate->es_query_cxt, "es_query_ctx child",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
@@ -225,10 +230,6 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 				last_process_time = GetCurrentTimestamp();
 			}
 			estate->es_processed = 0;
-
-			/* Has the CQ been deactivated? */
-			if (!*activeFlagPtr)
-				goto exit_loop;
 		}
 		PG_CATCH();
 		{
@@ -239,9 +240,12 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 			MemoryContextResetAndDeleteChildren(runcontext_child);
 		}
 		PG_END_TRY();
+
+		/* Has the CQ been deactivated? */
+		if (!*activeFlagPtr)
+			break;
 	}
 
-exit_loop:
 	estate->es_query_cxt = es_query_cxt;
 	CurrentResourceOwner = cqowner;
 

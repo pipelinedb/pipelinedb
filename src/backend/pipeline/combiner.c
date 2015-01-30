@@ -668,6 +668,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	CQProcEntry *entry = GetCQProcEntry(cq_id);
 	bool is_worker_done = false;
 	bool found_tuple = false;
+	bool force = false;
 
 	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
 			"CombinerRunContext",
@@ -716,9 +717,11 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 
 	for (;;)
 	{
+loop_start:
+		force = false;
+
 		PG_TRY();
 		{
-			bool force = false;
 
 			CurrentResourceOwner = owner;
 
@@ -732,8 +735,9 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 			{
 				if (timeout > 0)
 				{
+					/* We need a goto here because PG_TRY() macros are defined as do while loops. */
 					if (!TimestampDifferenceExceeds(lastCombineTime, GetCurrentTimestamp(), timeout))
-						continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
+						goto loop_start; /* timeout not reached yet, keep scanning for new tuples to arrive */
 				}
 				force = true;
 			}
@@ -758,40 +762,6 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 				lastCombineTime = GetCurrentTimestamp();
 				count = 0;
 			}
-
-			/*
-			 * If we received a tuple in this iteration, poll the socket again.
-			 */
-			if (found_tuple)
-				continue;
-
-			/* Has the CQ been deactivated? */
-			if (!entry->active)
-			{
-				/*
-				 * Ensure that the worker has terminated. There is a continue here
-				 * because we wanna poll the socket one last time after the worker has
-				 * terminated.
-				 */
-				if (!is_worker_done)
-				{
-					is_worker_done = AreCQWorkersStopped(cq_id);
-					continue;
-				}
-
-				/*
-				 * By this point the worker process has terminated and
-				 * we received no new tuples in the previous iteration.
-				 * If there are some unmerged tuples, force merge them.
-				 */
-				if (count)
-				{
-					force = true;
-					continue;
-				}
-
-				goto exit_loop;
-			}
 		}
 		PG_CATCH();
 		{
@@ -802,9 +772,42 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 			MemoryContextResetAndDeleteChildren(tmpctx);
 		}
 		PG_END_TRY();
+
+		/*
+		 * If we received a tuple in this iteration, poll the socket again.
+		 */
+		if (found_tuple)
+			continue;
+
+		/* Has the CQ been deactivated? */
+		if (!entry->active)
+		{
+			/*
+			 * Ensure that the worker has terminated. There is a continue here
+			 * because we wanna poll the socket one last time after the worker has
+			 * terminated.
+			 */
+			if (!is_worker_done)
+			{
+				is_worker_done = AreCQWorkersStopped(cq_id);
+				continue;
+			}
+
+			/*
+			 * By this point the worker process has terminated and
+			 * we received no new tuples in the previous iteration.
+			 * If there are some unmerged tuples, force merge them.
+			 */
+			if (count)
+			{
+				force = true;
+				continue;
+			}
+
+			break;
+		}
 	}
 
-exit_loop:
 	MemoryContextDelete(runctx);
 
 	CurrentResourceOwner = save;
