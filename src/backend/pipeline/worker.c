@@ -212,11 +212,13 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
+			MemoryContextReset(estate->es_query_cxt);
 			MemoryContextSwitchTo(oldcontext);
 			CurrentResourceOwner = cqowner;
 
 			unset_snapshot(estate, cqowner);
 			CommitTransactionCommand();
+			MemoryContextReset(runcontext_child);
 
 			if (estate->es_processed != 0)
 			{
