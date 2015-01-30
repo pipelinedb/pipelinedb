@@ -591,80 +591,92 @@ ContinuousQueryCombinerRun(Portal portal, CombinerDesc *combiner, QueryDesc *que
 
 	for (;;)
 	{
-		bool force = false;
-
-		CurrentResourceOwner = owner;
-
-		found_tuple = receive_tuple(combiner, slot);
-
-		/*
-		 * If we get a null tuple, we either want to combine the current batch
-		 * or wait a little while longer for more tuples before forcing the batch
-		 */
-		if (TupIsNull(slot))
+		PG_TRY();
 		{
-			if (timeout > 0)
-			{
-				if (!TimestampDifferenceExceeds(lastCombineTime, GetCurrentTimestamp(), timeout))
-					continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
-			}
-			force = true;
-		}
-		else
-		{
-			tuplestore_puttupleslot(store, slot);
-			count++;
-		}
+			bool force = false;
 
-		if (count > 0 && (count == batchsize || force))
-		{
-			StartTransactionCommand();
+			CurrentResourceOwner = owner;
 
-			combine(combineplan, workerdesc, store, tmpctx);
-
-			CommitTransactionCommand();
-
-			tuplestore_clear(store);
-			MemoryContextReset(combinectx);
-			MemoryContextReset(tmpctx);
-
-			lastCombineTime = GetCurrentTimestamp();
-			count = 0;
-		}
-
-		/*
-		 * If we received a tuple in this iteration, poll the socket again.
-		 */
-		if (found_tuple)
-			continue;
-
-		/* Has the CQ been deactivated? */
-		if (!*activeFlagPtr)
-		{
-			/*
-			 * Ensure that the worker has terminated. There is a continue here
-			 * because we wanna poll the socket one last time after the worker has
-			 * terminated.
-			 */
-			if (!is_worker_done)
-			{
-				is_worker_done = AreCQWorkersStopped(cq_id);
-				continue;
-			}
+			found_tuple = receive_tuple(combiner, slot);
 
 			/*
-			 * By this point the worker process has terminated and
-			 * we received no new tuples in the previous iteration.
-			 * If there are some unmerged tuples, force merge them.
+			 * If we get a null tuple, we either want to combine the current batch
+			 * or wait a little while longer for more tuples before forcing the batch
 			 */
-			if (count)
+			if (TupIsNull(slot))
 			{
+				if (timeout > 0)
+				{
+					if (!TimestampDifferenceExceeds(lastCombineTime, GetCurrentTimestamp(), timeout))
+						continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
+				}
 				force = true;
-				continue;
+			}
+			else
+			{
+				tuplestore_puttupleslot(store, slot);
+				count++;
 			}
 
-			break;
+			if (count > 0 && (count == batchsize || force))
+			{
+				StartTransactionCommand();
+
+				combine(combineplan, workerdesc, store, tmpctx);
+
+				CommitTransactionCommand();
+
+				tuplestore_clear(store);
+				MemoryContextResetAndDeleteChildren(combinectx);
+				MemoryContextResetAndDeleteChildren(tmpctx);
+
+				lastCombineTime = GetCurrentTimestamp();
+				count = 0;
+			}
+
+			/*
+			 * If we received a tuple in this iteration, poll the socket again.
+			 */
+			if (found_tuple)
+				continue;
+
+			/* Has the CQ been deactivated? */
+			if (!*activeFlagPtr)
+			{
+				/*
+				 * Ensure that the worker has terminated. There is a continue here
+				 * because we wanna poll the socket one last time after the worker has
+				 * terminated.
+				 */
+				if (!is_worker_done)
+				{
+					is_worker_done = AreCQWorkersStopped(cq_id);
+					continue;
+				}
+
+				/*
+				 * By this point the worker process has terminated and
+				 * we received no new tuples in the previous iteration.
+				 * If there are some unmerged tuples, force merge them.
+				 */
+				if (count)
+				{
+					force = true;
+					continue;
+				}
+
+				break;
+			}
 		}
+		PG_CATCH();
+		{
+			EmitErrorReport();
+			FlushErrorState();
+
+			MemoryContextResetAndDeleteChildren(combinectx);
+			MemoryContextResetAndDeleteChildren(tmpctx);
+		}
+		PG_END_TRY();
 	}
 
 	MemoryContextDelete(runctx);
