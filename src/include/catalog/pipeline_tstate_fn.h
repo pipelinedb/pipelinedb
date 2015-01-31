@@ -13,14 +13,14 @@
 
 #include "postgres.h"
 
+#include "pipeline/hll.h"
 #include "catalog/pipeline_tstate.h"
-#include "pipeline/multiset_t.h"
 
 extern void CreateTStateEntry(char *cvname);
 extern void RemoveTStateEntry(char *cvname);
 extern void ResetTStateEntry(char *cvname);
 
-extern void UpdateDistinctMultiset(char *cvname, multiset_t *distinct_ms);
-extern multiset_t *GetDistinctMultiset(char *cvname);
+extern void UpdateDistinctHLL(char *cvname, HyperLogLog *distinct);
+extern HyperLogLog *GetDistinctHLL(char *cvname);
 
 #endif

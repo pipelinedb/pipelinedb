@@ -20,19 +20,30 @@
 #include "catalog/pg_operator.h"
 #include "catalog/pg_type.h"
 #include "executor/executor.h"
+#include "executor/nodeContinuousUnique.h"
 #include "miscadmin.h"
 #include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/tlist.h"
+#include "pipeline/hll.h"
 #include "pipeline/tdigest.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/lsyscache.h"
-#include "utils/orderedsetaggs.h"
 #include "utils/timestamp.h"
 #include "utils/tuplesort.h"
+
+
+typedef struct CQHSPerQueryState
+{
+	/* slot for inserting elements into the HLL */
+	TupleTableSlot *curslot;
+	/* slot containing the tuple representing the direct args to this HS agg */
+	TupleTableSlot *directslot;
+	SortSupport sort;
+} CQHSPerQueryState;
 
 
 /*
@@ -98,6 +109,7 @@ typedef struct OSAPerGroupState
 } OSAPerGroupState;
 
 static void ordered_set_shutdown(Datum arg);
+static int compare_slots(TupleTableSlot *s0, TupleTableSlot *s1, SortSupport sort);
 
 /*
  * Set up working state for an ordered-set aggregate
@@ -1386,8 +1398,8 @@ hypothetical_dense_rank_final(PG_FUNCTION_ARGS)
 /*
  * Set up query-level working state for continuous hypothetical-set aggregates
  */
-CQHSPerQueryState *
-CQHSPerQueryStartup(FunctionCallInfo fcinfo)
+static CQHSPerQueryState *
+cq_hypothetical_set_per_query_startup(FunctionCallInfo fcinfo)
 {
 	CQHSPerQueryState *qstate;
 	MemoryContext old;
@@ -1459,8 +1471,96 @@ CQHSPerQueryStartup(FunctionCallInfo fcinfo)
 	return qstate;
 }
 
-int
-CompareSlots(TupleTableSlot *s0, TupleTableSlot *s1, SortSupport sort)
+static ArrayType *
+cq_hypothetical_set_startup(FunctionCallInfo fcinfo)
+{
+	ArrayType *state;
+	CQHSPerQueryState *qstate;
+	Datum *values = palloc0(3 * sizeof(Datum));
+
+	qstate = (CQHSPerQueryState *) fcinfo->flinfo->fn_extra;
+
+	if (qstate == NULL)
+		qstate = cq_hypothetical_set_per_query_startup(fcinfo);
+
+	state = construct_array(values, 3, 20, 8, true, 'i');
+
+	return state;
+}
+
+static HyperLogLog *
+hll_hypothetical_set_startup(FunctionCallInfo fcinfo)
+{
+	CQHSPerQueryState *qstate;
+
+	qstate = (CQHSPerQueryState *) fcinfo->flinfo->fn_extra;
+
+	if (qstate == NULL)
+		qstate = cq_hypothetical_set_per_query_startup(fcinfo);
+
+	return HLLCreate();
+}
+
+/*
+ * Transition function for streaming ordered-set aggregates
+ * with (potentially) multiple input columns. It uses HyperLogLog
+ * instead of actually sorting the input to determine input value uniqueness.
+ */
+Datum
+hll_hypothetical_set_transition_multi(PG_FUNCTION_ARGS)
+{
+	MemoryContext old;
+	MemoryContext context;
+	HyperLogLog *hll;
+	CQHSPerQueryState *qstate;
+	int nargs;
+	int i;
+	int result;
+
+	if (!AggCheckCallContext(fcinfo, &context))
+			elog(ERROR, "aggregate function called in non-aggregate context");
+
+	old = MemoryContextSwitchTo(context);
+
+	if (PG_ARGISNULL(0))
+		hll = hll_hypothetical_set_startup(fcinfo);
+	else
+		hll = (HyperLogLog *)  PG_GETARG_POINTER(0);
+
+	/* this is created once by the first call to cq_hypothetical_set_startup */
+	qstate = (CQHSPerQueryState *) fcinfo->flinfo->fn_extra;
+
+	/* load the input values into our slot and add it to our HLL */
+	ExecClearTuple(qstate->curslot);
+	nargs = PG_NARGS() - 1;
+	for (i = 0; i < nargs; i++)
+	{
+		qstate->curslot->tts_values[i] = PG_GETARG_DATUM(i + 1);
+		qstate->curslot->tts_isnull[i] = PG_ARGISNULL(i + 1);
+	}
+	ExecStoreVirtualTuple(qstate->curslot);
+
+	result = compare_slots(qstate->curslot, qstate->directslot, qstate->sort);
+
+	if (result < 0)
+	{
+		int unique;
+		/*
+		 * dense rank is only increased once for each lower-ranking tuple we see,
+		 * so that the step size to the next highest-ranking tuple is always 1.
+		 */
+		hll = HLLAddSlot(hll, qstate->curslot, -1, NULL, &unique);
+	}
+
+	SET_VARSIZE(hll, sizeof(HyperLogLog) + hll->mlen);
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(hll);
+}
+
+static int
+compare_slots(TupleTableSlot *s0, TupleTableSlot *s1, SortSupport sort)
 {
 	int i;
 	for (i=0; i<s0->tts_tupleDescriptor->natts; i++)
@@ -1479,23 +1579,6 @@ CompareSlots(TupleTableSlot *s0, TupleTableSlot *s1, SortSupport sort)
 
 	/* they must be equal */
 	return 0;
-}
-
-static ArrayType *
-cq_hypothetical_set_startup(FunctionCallInfo fcinfo)
-{
-	ArrayType *state;
-	CQHSPerQueryState *qstate;
-	Datum *values = palloc0(3 * sizeof(Datum));
-
-	qstate = (CQHSPerQueryState *) fcinfo->flinfo->fn_extra;
-
-	if (qstate == NULL)
-		qstate = CQHSPerQueryStartup(fcinfo);
-
-	state = construct_array(values, 3, 20, 8, true, 'i');
-
-	return state;
 }
 
 /*
@@ -1539,7 +1622,7 @@ cq_hypothetical_set_transition_multi(PG_FUNCTION_ARGS)
 
 	MemoryContextSwitchTo(old);
 
-	result = CompareSlots(qstate->curslot, qstate->directslot, qstate->sort);
+	result = compare_slots(qstate->curslot, qstate->directslot, qstate->sort);
 	transvalues = (uint64 *) ARR_DATA_PTR(state);
 
 	/* row count */
@@ -1663,6 +1746,22 @@ cq_hypothetical_cume_dist_final(PG_FUNCTION_ARGS)
 	result = (double) (rank) / (double) (rowcount + 1);
 
 	PG_RETURN_FLOAT8(result);
+}
+
+/*
+ * hll_dense_rank()  - dense rank of hypothetical row using HyperLogLog
+ */
+Datum
+hll_hypothetical_dense_rank_final(PG_FUNCTION_ARGS)
+{
+	HyperLogLog *hll;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_INT64(1);
+
+	hll = (HyperLogLog *) PG_GETARG_POINTER(0);
+
+	PG_RETURN_INT64(HLLSize(hll) + 1);
 }
 
 typedef struct CQOSAAggState
