@@ -155,10 +155,13 @@ test: stream_table_join user_combine
 # ----------
 test: cqdecode stream_exprs
 
-# ----------
-# Another group of parallel tests
-# ----------
-test: stream_casts
+# These are run in serial because they each activate many CVs.
+# If they are run in parallel the CPU can potentially get starved.
+test: stream_casts0
+test: stream_casts1
+test: stream_casts2
+test: stream_casts3
+test: stream_casts4
 
 # ----------
 # Another group of parallel tests

@@ -43,6 +43,7 @@ CREATE CONTINUOUS VIEW test_float8_to_int4 AS SELECT x::float8 FROM float8_strea
 CREATE CONTINUOUS VIEW test_float8_to_float4 AS SELECT x::float8 FROM float8_stream;
 CREATE CONTINUOUS VIEW test_float8_to_numeric AS SELECT x::float8 FROM float8_stream;
 CREATE CONTINUOUS VIEW test_numeric_to_int8 AS SELECT x::numeric FROM numeric_stream;
+
 CREATE CONTINUOUS VIEW test_numeric_to_int2 AS SELECT x::numeric FROM numeric_stream;
 CREATE CONTINUOUS VIEW test_numeric_to_int4 AS SELECT x::numeric FROM numeric_stream;
 CREATE CONTINUOUS VIEW test_numeric_to_float4 AS SELECT x::numeric FROM numeric_stream;
@@ -68,6 +69,7 @@ CREATE CONTINUOUS VIEW test_int2_to_regprocedure AS SELECT x::int2 FROM int2_str
 CREATE CONTINUOUS VIEW test_int4_to_regprocedure AS SELECT x::int4 FROM int4_stream;
 CREATE CONTINUOUS VIEW test_oid_to_regoper AS SELECT x::oid FROM oid_stream;
 CREATE CONTINUOUS VIEW test_int8_to_regoper AS SELECT x::int8 FROM int8_stream;
+
 CREATE CONTINUOUS VIEW test_int2_to_regoper AS SELECT x::int2 FROM int2_stream;
 CREATE CONTINUOUS VIEW test_int4_to_regoper AS SELECT x::int4 FROM int4_stream;
 CREATE CONTINUOUS VIEW test_oid_to_regoperator AS SELECT x::oid FROM oid_stream;
@@ -97,6 +99,7 @@ CREATE CONTINUOUS VIEW test_text_to_varchar AS SELECT x::text FROM text_stream;
 CREATE CONTINUOUS VIEW test_varchar_to_text AS SELECT x::varchar FROM varchar_stream;
 CREATE CONTINUOUS VIEW test_varchar_to_bpchar AS SELECT x::varchar FROM varchar_stream;
 CREATE CONTINUOUS VIEW test_char_to_text AS SELECT x::char FROM char_stream;
+
 CREATE CONTINUOUS VIEW test_char_to_bpchar AS SELECT x::char FROM char_stream;
 CREATE CONTINUOUS VIEW test_char_to_varchar AS SELECT x::char FROM char_stream;
 CREATE CONTINUOUS VIEW test_name_to_text AS SELECT x::name FROM name_stream;
@@ -128,6 +131,7 @@ CREATE CONTINUOUS VIEW test_int4_to_abstime AS SELECT x::int4 FROM int4_stream;
 CREATE CONTINUOUS VIEW test_int4_to_reltime AS SELECT x::int4 FROM int4_stream;
 CREATE CONTINUOUS VIEW test_lseg_to_point AS SELECT x::lseg FROM lseg_stream;
 CREATE CONTINUOUS VIEW test_path_to_point AS SELECT x::path FROM path_stream;
+
 CREATE CONTINUOUS VIEW test_path_to_polygon AS SELECT x::path FROM path_stream;
 CREATE CONTINUOUS VIEW test_box_to_point AS SELECT x::box FROM box_stream;
 CREATE CONTINUOUS VIEW test_box_to_lseg AS SELECT x::box FROM box_stream;
@@ -186,6 +190,7 @@ ACTIVATE test_float8_to_int4;
 ACTIVATE test_float8_to_float4;
 ACTIVATE test_float8_to_numeric;
 ACTIVATE test_numeric_to_int8;
+
 ACTIVATE test_numeric_to_int2;
 ACTIVATE test_numeric_to_int4;
 ACTIVATE test_numeric_to_float4;
@@ -211,6 +216,7 @@ ACTIVATE test_int2_to_regprocedure;
 ACTIVATE test_int4_to_regprocedure;
 ACTIVATE test_oid_to_regoper;
 ACTIVATE test_int8_to_regoper;
+
 ACTIVATE test_int2_to_regoper;
 ACTIVATE test_int4_to_regoper;
 ACTIVATE test_oid_to_regoperator;
@@ -240,6 +246,7 @@ ACTIVATE test_text_to_varchar;
 ACTIVATE test_varchar_to_text;
 ACTIVATE test_varchar_to_bpchar;
 ACTIVATE test_char_to_text;
+
 ACTIVATE test_char_to_bpchar;
 ACTIVATE test_char_to_varchar;
 ACTIVATE test_name_to_text;
@@ -271,6 +278,7 @@ ACTIVATE test_int4_to_abstime;
 ACTIVATE test_int4_to_reltime;
 ACTIVATE test_lseg_to_point;
 ACTIVATE test_path_to_point;
+
 ACTIVATE test_path_to_polygon;
 ACTIVATE test_box_to_point;
 ACTIVATE test_box_to_lseg;
@@ -474,6 +482,7 @@ DEACTIVATE test_float8_to_int4;
 DEACTIVATE test_float8_to_float4;
 DEACTIVATE test_float8_to_numeric;
 DEACTIVATE test_numeric_to_int8;
+
 DEACTIVATE test_numeric_to_int2;
 DEACTIVATE test_numeric_to_int4;
 DEACTIVATE test_numeric_to_float4;
@@ -499,6 +508,7 @@ DEACTIVATE test_int2_to_regprocedure;
 DEACTIVATE test_int4_to_regprocedure;
 DEACTIVATE test_oid_to_regoper;
 DEACTIVATE test_int8_to_regoper;
+
 DEACTIVATE test_int2_to_regoper;
 DEACTIVATE test_int4_to_regoper;
 DEACTIVATE test_oid_to_regoperator;
@@ -528,6 +538,7 @@ DEACTIVATE test_text_to_varchar;
 DEACTIVATE test_varchar_to_text;
 DEACTIVATE test_varchar_to_bpchar;
 DEACTIVATE test_char_to_text;
+
 DEACTIVATE test_char_to_bpchar;
 DEACTIVATE test_char_to_varchar;
 DEACTIVATE test_name_to_text;
@@ -559,6 +570,7 @@ DEACTIVATE test_int4_to_abstime;
 DEACTIVATE test_int4_to_reltime;
 DEACTIVATE test_lseg_to_point;
 DEACTIVATE test_path_to_point;
+
 DEACTIVATE test_path_to_polygon;
 DEACTIVATE test_box_to_point;
 DEACTIVATE test_box_to_lseg;
@@ -617,6 +629,7 @@ SELECT x FROM test_float8_to_int4;
 SELECT x FROM test_float8_to_float4;
 SELECT x FROM test_float8_to_numeric;
 SELECT x FROM test_numeric_to_int8;
+
 SELECT x FROM test_numeric_to_int2;
 SELECT x FROM test_numeric_to_int4;
 SELECT x FROM test_numeric_to_float4;
@@ -642,6 +655,7 @@ SELECT x FROM test_int2_to_regprocedure;
 SELECT x FROM test_int4_to_regprocedure;
 SELECT x FROM test_oid_to_regoper;
 SELECT x FROM test_int8_to_regoper;
+
 SELECT x FROM test_int2_to_regoper;
 SELECT x FROM test_int4_to_regoper;
 SELECT x FROM test_oid_to_regoperator;
@@ -671,6 +685,7 @@ SELECT x FROM test_text_to_varchar;
 SELECT x FROM test_varchar_to_text;
 SELECT x FROM test_varchar_to_bpchar;
 SELECT x FROM test_char_to_text;
+
 SELECT x FROM test_char_to_bpchar;
 SELECT x FROM test_char_to_varchar;
 SELECT x FROM test_name_to_text;
@@ -702,6 +717,7 @@ SELECT x FROM test_int4_to_abstime;
 SELECT x FROM test_int4_to_reltime;
 SELECT x FROM test_lseg_to_point;
 SELECT x FROM test_path_to_point;
+
 SELECT x FROM test_path_to_polygon;
 SELECT x FROM test_box_to_point;
 SELECT x FROM test_box_to_lseg;
@@ -762,6 +778,7 @@ DROP CONTINUOUS VIEW test_float8_to_int4;
 DROP CONTINUOUS VIEW test_float8_to_float4;
 DROP CONTINUOUS VIEW test_float8_to_numeric;
 DROP CONTINUOUS VIEW test_numeric_to_int8;
+
 DROP CONTINUOUS VIEW test_numeric_to_int2;
 DROP CONTINUOUS VIEW test_numeric_to_int4;
 DROP CONTINUOUS VIEW test_numeric_to_float4;
@@ -787,6 +804,7 @@ DROP CONTINUOUS VIEW test_int2_to_regprocedure;
 DROP CONTINUOUS VIEW test_int4_to_regprocedure;
 DROP CONTINUOUS VIEW test_oid_to_regoper;
 DROP CONTINUOUS VIEW test_int8_to_regoper;
+
 DROP CONTINUOUS VIEW test_int2_to_regoper;
 DROP CONTINUOUS VIEW test_int4_to_regoper;
 DROP CONTINUOUS VIEW test_oid_to_regoperator;
@@ -816,6 +834,7 @@ DROP CONTINUOUS VIEW test_text_to_varchar;
 DROP CONTINUOUS VIEW test_varchar_to_text;
 DROP CONTINUOUS VIEW test_varchar_to_bpchar;
 DROP CONTINUOUS VIEW test_char_to_text;
+
 DROP CONTINUOUS VIEW test_char_to_bpchar;
 DROP CONTINUOUS VIEW test_char_to_varchar;
 DROP CONTINUOUS VIEW test_name_to_text;
@@ -847,6 +866,7 @@ DROP CONTINUOUS VIEW test_int4_to_abstime;
 DROP CONTINUOUS VIEW test_int4_to_reltime;
 DROP CONTINUOUS VIEW test_lseg_to_point;
 DROP CONTINUOUS VIEW test_path_to_point;
+
 DROP CONTINUOUS VIEW test_path_to_polygon;
 DROP CONTINUOUS VIEW test_box_to_point;
 DROP CONTINUOUS VIEW test_box_to_lseg;
