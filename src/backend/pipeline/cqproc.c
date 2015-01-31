@@ -52,6 +52,8 @@
 #define RECOVERY_TIME 1
 #define NUM_WORKERS(entry) ((entry)->pg_size - 1)
 
+bool ContinuousQueryCrashRecovery;
+
 typedef struct CQProcRunArgs
 {
 	NameData cvname;
