@@ -48,6 +48,7 @@ combiner_shutdown(DestReceiver *self)
 	CombinerState *c = (CombinerState *) self;
 	if (c->sock != -1)
 		close(c->sock);
+	c->sock = -1;
 }
 
 static void
