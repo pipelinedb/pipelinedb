@@ -111,6 +111,7 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	char *cvname = rv->relname;
 	int timeoutms = state->maxwaitms;
 	MemoryContext runcontext;
+	MemoryContext xactcontext;
 	bool *activeFlagPtr = GetActiveFlagPtr(MyCQId);
 	TimestampTz curtime = GetCurrentTimestamp();
 	TimestampTz last_process_time = GetCurrentTimestamp();
@@ -130,6 +131,10 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 
 	oldcontext = MemoryContextSwitchTo(runcontext);
 
+	xactcontext = TopTransactionContext;
+	TopTransactionContext = runcontext;
+
+retry:
 	PG_TRY();
 	{
 		start_executor(queryDesc, runcontext, cqowner);
@@ -181,7 +186,7 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 				}
 			}
 
-			TopTransactionContext = runcontext;
+
 
 			StartTransactionCommand();
 			set_snapshot(estate, cqowner);
@@ -222,8 +227,6 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 
 		CurrentResourceOwner = cqowner;
 
-		(*dest->rShutdown) (dest);
-
 		/*
 		 * The cleanup functions below expect these things to be registered
 		 */
@@ -241,9 +244,18 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 		EmitErrorReport();
 		FlushErrorState();
 
+		if (IsTransactionState())
+			AbortCurrentTransaction();
+
 		MemoryContextResetAndDeleteChildren(runcontext);
+
+		goto retry;
 	}
 	PG_END_TRY();
+
+	(*dest->rShutdown) (dest);
+
+	TopTransactionContext = xactcontext;
 
 	MemoryContextDelete(runcontext);
 	MemoryContextSwitchTo(oldcontext);
