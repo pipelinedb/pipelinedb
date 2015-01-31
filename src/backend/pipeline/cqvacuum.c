@@ -12,6 +12,7 @@
 #include "postgres.h"
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "executor/tstoreReceiver.h"
 #include "miscadmin.h"
@@ -22,6 +23,7 @@
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqvacuum.h"
 #include "pipeline/cqwindow.h"
+#include "storage/lmgr.h"
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "utils/hsearch.h"
@@ -54,8 +56,18 @@ NumCQVacuumTuples(Oid relid)
 	bool isnull;
 	MemoryContext oldcontext;
 	MemoryContext runctx;
+	bool locked;
+
+	if (!relname)
+		return 0;
+
+	locked = ConditionalLockRelationOid(PipelineQueryRelationId, RowShareLock);
+	if (!locked)
+		return 0;
 
 	cvname = GetCVNameForMatRelationName(relname);
+	UnlockRelationOid(PipelineQueryRelationId, RowShareLock);
+
 	if (!cvname)
 		return 0;
 

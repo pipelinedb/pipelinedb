@@ -534,6 +534,20 @@ bgworker_quickdie(SIGNAL_ARGS)
 static void
 bgworker_die(SIGNAL_ARGS)
 {
+#ifdef PIPELINE_PY_TEST
+	/*
+	 * XXX(usmanm): This is a hack which disables the SIGTERM handler
+	 * for CQ background workers if they're in a critical section.
+	 * This ensures that we'll never experience a full system reset
+	 * while trying to test for recovery.
+	 */
+	if (IsCQBackgroundProcess && CritSectionCount && getenv(PIPELINE_PY_TEST))
+	{
+		elog(LOG, "ignoring SIGTERM signal");
+		return;
+	}
+#endif
+
 	PG_SETMASK(&BlockSig);
 
 	ereport(FATAL,

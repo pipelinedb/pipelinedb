@@ -179,7 +179,7 @@ SELECT * FROM test_dense_rank1;
 SELECT * FROM test_dense_rank2;
  dense_rank | rank 
 ------------+------
-         31 |   51
+         30 |   51
 (1 row)
 
 DROP CONTINUOUS VIEW test_rank0;

@@ -21,46 +21,51 @@ typedef enum
 	CQWorker
 } CQProcessType;
 
-typedef struct SocketDesc
+typedef struct
 {
-	NameData name;
-	TimestampTz created_at;
-	bool conn_waiting;
-} SocketDesc;
+	BackgroundWorkerHandle handle;
+	pid_t last_pid;
+} CQBackgroundWorkerHandle;
 
-typedef struct CQProcTableEntry
+typedef struct
 {
-	uint32 key; /* key must be the first field */
-	int32 pg_count;
-	int32 pg_size;
+	int id;
+	int pg_size;
 	bool active;
-	BackgroundWorkerHandle combiner;
-	BackgroundWorkerHandle *workers;
+	CQBackgroundWorkerHandle combiner;
+	CQBackgroundWorkerHandle *workers;
 	char *shm_query;
-	SocketDesc socket_desc;
+	char sock_name[20];
 } CQProcEntry;
+
+extern bool ContinuousQueryCrashRecovery;
 
 extern void InitCQProcState(void);
 
-extern CQProcEntry* GetCQProcEntry(int32 id);
-extern int GetProcessGroupSize(int32 id);
+extern CQProcEntry* GetCQProcEntry(int id);
+extern int GetProcessGroupSize(int id);
 extern int GetProcessGroupSizeFromCatalog(RangeVar* rv);
-extern int GetProcessGroupCount(int32 id);
-extern void DecrementProcessGroupCount(int32 id);
-extern void IncrementProcessGroupCount(int32 id);
-extern bool *GetActiveFlagPtr(int32 id);
-extern void SetActiveFlag(int32 id, bool flag);
+extern bool *GetActiveFlagPtr(int id);
+extern void SetActiveFlag(int id, bool flag);
+extern void MarkCombinerAsRunning(int id);
+extern void MarkWorkerAsRunning(int id, int worker_id);
 
-extern CQProcEntry* CQProcEntryCreate(int32 key, int pg_size);
-extern void CQProcEntryRemove(int32 key);
+extern CQProcEntry* CQProcEntryCreate(int key, int pg_size);
+extern void CQProcEntryRemove(int key);
 
-extern SocketDesc *GetSocketDesc(int32 id);
+/* IPC */
+extern char *GetSocketName(int id);
+extern pid_t GetCombinerPid(int id);
+extern pid_t *GetWorkerPids(int id);
 
-extern bool WaitForCQProcsToStart(int32 id);
-extern void WaitForCQProcsToTerminate(int32 id);
-extern void TerminateCQProcs(int32 id);
-extern bool AreCQWorkersStopped(int32 id);
-extern void EnableCQProcsRecovery(int32 id);
+/* Resource Management */
+extern bool WaitForCQProcsToStart(int id);
+extern void WaitForCQProcsToTerminate(int id);
+extern void TerminateCQProcs(int id);
+extern bool IsCombinerRunning(int id);
+extern bool AreCQWorkersStopped(int id);
+extern void EnableCQProcsRecovery(int id);
+extern void DisableCQProcsRecovery(int id);
 
 extern void RunCQProcs(const char *cvname, void *state, CQProcEntry *procentry);
 

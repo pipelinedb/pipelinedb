@@ -17,6 +17,7 @@
 #include "catalog/indexing.h"
 #include "catalog/pipeline_tstate.h"
 #include "catalog/pipeline_tstate_fn.h"
+#include "pipeline/hll.h"
 #include "storage/lock.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
@@ -89,7 +90,7 @@ ResetTStateEntry(char *cvname)
 }
 
 void
-UpdateDistinctMultiset(char *cvname, multiset_t *distinct_ms)
+UpdateDistinctHLL(char *cvname, HyperLogLog *distinct)
 {
 	Relation pipeline_tstate = heap_open(PipelineTStateRelationId, RowExclusiveLock);
 	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
@@ -97,16 +98,14 @@ UpdateDistinctMultiset(char *cvname, multiset_t *distinct_ms)
 	bool replaces[Natts_pipeline_tstate];
 	Datum values[Natts_pipeline_tstate];
 	HeapTuple newtuple;
-	size_t packed_sz = multiset_packed_size(distinct_ms);
-	bytea *raw = (bytea *) palloc(VARHDRSZ + packed_sz);
-	SET_VARSIZE(raw, VARHDRSZ + packed_sz);
-	multiset_pack(distinct_ms, (uint8_t *) VARDATA(raw), packed_sz);
+
+	SET_VARSIZE(distinct, sizeof(HyperLogLog) + distinct->mlen);
 
 	MemSet(values, 0, sizeof(values));
 	MemSet(nulls, false, sizeof(nulls));
 	MemSet(replaces, false, sizeof(replaces));
 	replaces[Anum_pipeline_tstate_distinct - 1] = true;
-	values[Anum_pipeline_tstate_distinct - 1] = PointerGetDatum(raw);
+	values[Anum_pipeline_tstate_distinct - 1] = PointerGetDatum(distinct);
 
 	newtuple = heap_modify_tuple(tuple, pipeline_tstate->rd_att,
 				values, nulls, replaces);
@@ -118,23 +117,22 @@ UpdateDistinctMultiset(char *cvname, multiset_t *distinct_ms)
 	heap_close(pipeline_tstate, RowExclusiveLock);
 }
 
-multiset_t *
-GetDistinctMultiset(char *cvname)
+HyperLogLog *
+GetDistinctHLL(char *cvname)
 {
-	multiset_t *distinct_ms = (multiset_t *) palloc0(sizeof(multiset_t));
+	HyperLogLog *hll;
 	bool isnull;
 	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
 	Datum datum = SysCacheGetAttr(PIPELINETSTATENAME, tuple, Anum_pipeline_tstate_distinct, &isnull);
 
 	if (isnull)
-		multiset_init(distinct_ms);
+		hll = HLLCreate();
 	else
 	{
-		bytea *raw = DatumGetByteaP(datum);
-		multiset_unpack(distinct_ms, (uint8_t *) VARDATA(raw), VARSIZE(raw) - VARHDRSZ, NULL);
+		hll = (HyperLogLog *) PG_DETOAST_DATUM(datum);
 	}
 
 	ReleaseSysCache(tuple);
 
-	return distinct_ms;
+	return HLLCopy(hll);
 }

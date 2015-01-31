@@ -51,6 +51,7 @@
 #include "parser/parser.h"
 #include "parser/scansup.h"
 #include "pgstat.h"
+#include "pipeline/cqproc.h"
 #include "pipeline/streambuf.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
@@ -1510,16 +1511,6 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"debug_print_stream_buffer", PGC_USERSET, LOGGING_WHAT,
-			gettext_noop("Print the state of the stream buffer as it changes."),
-			NULL,
-		},
-		&DebugPrintStreamBuffer,
-		false,
-		NULL, NULL, NULL
-	},
-
-	{
 		{"data_checksums", PGC_INTERNAL, PRESET_OPTIONS,
 			gettext_noop("Shows whether data checksums are turned on for this cluster."),
 			NULL,
@@ -1531,12 +1522,32 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
+		{"debug_print_stream_buffer", PGC_USERSET, LOGGING_WHAT,
+			gettext_noop("Print the state of the stream buffer as it changes."),
+			NULL,
+		},
+		&DebugPrintStreamBuffer,
+		false,
+		NULL, NULL, NULL
+	},
+
+	{
 		{"debug_sync_stream_insert", PGC_USERSET, DEVELOPER_OPTIONS,
 			gettext_noop("Makes INSERTS into streams synchronous."),
 			NULL,
 		},
 		&DebugSyncStreamInsert,
 		false,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_query_crash_recovery", PGC_USERSET, DEVELOPER_OPTIONS,
+			gettext_noop("Recover from errors and crashes in continuous query processes."),
+			NULL,
+		},
+		&ContinuousQueryCrashRecovery,
+		true,
 		NULL, NULL, NULL
 	},
 

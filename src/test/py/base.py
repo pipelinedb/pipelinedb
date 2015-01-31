@@ -16,7 +16,7 @@ INSTALL_FORMAT = './.pdb-%d'
 SERVER = os.path.join(ROOT, 'src', 'backend', 'postgres')
 TEST_DBNAME = 'pipelinedb_test'
 CONNSTR_TEMPLATE = 'postgres://%s@localhost:%d/postgres'
-
+TEST_ENV_VAR = 'PIPELINE_PY_TESTS'
 
 class PipelineDB(object):
     def __init__(self):
@@ -81,8 +81,11 @@ class PipelineDB(object):
         # Let's hope someone doesn't take our port before we try to bind
         # PipelineDB to it
         sock.close()
-        self.proc = subprocess.Popen([SERVER, '-D', self.data_dir, '-p',
-                                      str(self.port)])
+
+        env = os.environ.copy()
+        env[TEST_ENV_VAR] = '1'
+        self.proc = subprocess.Popen([SERVER, '-D', self.data_dir,
+                                      '-p', str(self.port)], env=env)
 
         connstr = CONNSTR_TEMPLATE % (getpass.getuser(), self.port)
         self.engine = create_engine(connstr)
@@ -195,7 +198,13 @@ class PipelineDB(object):
         Insert a batch of rows
         """
         header = ', '.join(desc)
-        values = ', '.join([str(r) for r in rows])
+        values = []
+        for r in rows:
+          if len(r) == 1:
+            values.append('(%s)' % r[0])
+          else:
+            values.append(str(r))
+        values = ', '.join(values)
 
         return self.execute('INSERT INTO %s (%s) VALUES %s' % (target, header, values))
 

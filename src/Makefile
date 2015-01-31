@@ -16,7 +16,6 @@ SUBDIRS = \
 	common \
 	port \
 	timezone \
-	hll \
 	backend \
 	backend/utils/mb/conversion_procs \
 	backend/snowball \

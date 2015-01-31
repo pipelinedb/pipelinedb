@@ -21,11 +21,7 @@ CATALOG(pipeline_tstate,4251) BKI_WITHOUT_OIDS
 {
 	NameData name;
 #ifdef CATALOG_VARLEN
-	/*
-	 * This is actually an hll field, but we can't reference
-	 * extensions here.
-	 */
-	bytea distinct;
+	hll distinct;
 #endif
 } FormData_pipeline_tstate;
 
