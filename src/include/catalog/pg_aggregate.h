@@ -314,9 +314,16 @@ DATA(insert ( 3992	h 1 ordered_set_transition_multi	dense_rank_final						-		-		
 DATA(insert ( 3999	h 1 cq_hypothetical_set_transition_multi	cq_rank_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
 DATA(insert ( 5002	h 1 cq_hypothetical_set_transition_multi	cq_percent_rank_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
 DATA(insert ( 5005	h 1 cq_hypothetical_set_transition_multi	cq_cume_dist_final	-	-	-	t f 0	1016	0	0	0	_null_ _null_ ));
+DATA(insert ( 5011	h 1 hll_hypothetical_set_transition_multi	hll_dense_rank_final	-	-	-	t f 0	2281	0	0	0	_null_ _null_ ));
+DATA(insert ( 5014	n 0 hll_count_distinct_transition	hll_count_distinct_final	-	-	-	t f 0	2281	0	0	0	_null_ _null_ ));
 
 DATA(insert ( 5022	o 1 cq_percentile_cont_float8_transition		cq_percentile_cont_float8_final	-		-		-		f f 0	2281	0	0		0	_null_ _null_ ));
 DATA(insert ( 5023	o 1 cq_percentile_cont_float8_transition_multi	cq_percentile_cont_float8_final	-		-		-		f f 0	2281	0	0		0	_null_ _null_ ));
+
+/* HyperLogLog aggregates */
+DATA(insert ( 4321	n 0 hll_agg_trans	-			-				-				-				f f 0	3998	0	0		0	_null_ _null_ ));
+DATA(insert ( 4322	n 0 hll_agg_transp	-			-				-				-				f f 0	3998	0	0		0	_null_ _null_ ));
+DATA(insert ( 4326	n 0 hll_union_agg_trans	-			-				-				-				f f 0	3998	0	0		0	_null_ _null_ ));
 
 /*
  * prototypes for functions in pg_aggregate.c

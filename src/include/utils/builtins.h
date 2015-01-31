@@ -534,8 +534,6 @@ extern Datum hypothetical_percent_rank_final(PG_FUNCTION_ARGS);
 extern Datum hypothetical_cume_dist_final(PG_FUNCTION_ARGS);
 extern Datum hypothetical_dense_rank_final(PG_FUNCTION_ARGS);
 
-extern Datum hllsend(PG_FUNCTION_ARGS);
-extern Datum hllrecv(PG_FUNCTION_ARGS);
 extern Datum hll_hypothetical_set_transition_multi(PG_FUNCTION_ARGS);
 extern Datum hll_hypothetical_set_combine_multi(PG_FUNCTION_ARGS);
 extern Datum hll_hypothetical_dense_rank_final(PG_FUNCTION_ARGS);
