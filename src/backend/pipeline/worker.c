@@ -249,7 +249,8 @@ retry:
 
 		MemoryContextResetAndDeleteChildren(runcontext);
 
-		goto retry;
+		if (ENABLE_CQ_RECOVERY)
+			goto retry;
 	}
 	PG_END_TRY();
 

@@ -60,7 +60,6 @@ bool DebugSyncStreamInsert;
 
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
-#define ENABLE_RECOVERY 0
 
 static ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)
@@ -558,7 +557,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		if (WaitForCQProcsToStart(state.id))
 		{
 			success++;
-			if (ENABLE_RECOVERY)
+			if (ENABLE_CQ_RECOVERY)
 				EnableCQProcsRecovery(state.id);
 		}
 		else
@@ -614,7 +613,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 			continue;
 
 		/* Disable recovery and wait for any recovering processes to recover */
-		if (ENABLE_RECOVERY)
+		if (ENABLE_CQ_RECOVERY)
 			DisableCQProcsRecovery(state.id);
 		WaitForCQProcsToStart(state.id);
 

@@ -833,7 +833,8 @@ retry:
 		MemoryContextResetAndDeleteChildren(combinectx);
 		MemoryContextResetAndDeleteChildren(tmpctx);
 
-		goto retry;
+		if (ENABLE_CQ_RECOVERY)
+			goto retry;
 	}
 	PG_END_TRY();
 

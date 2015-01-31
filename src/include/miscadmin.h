@@ -166,6 +166,7 @@ extern bool IsWorker;
 extern int MyWorkerId;
 #define IsCQBackgroundProcess (IsCombiner || IsWorker)
 #define PIPELINE_PY_TEST "PIPELINE_PY_TESTS"
+#define ENABLE_CQ_RECOVERY true
 
 /*
  * done in storage/backendid.h for now.
