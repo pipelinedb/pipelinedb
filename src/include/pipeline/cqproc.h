@@ -39,6 +39,8 @@ typedef struct
 	char sock_name[20];
 } CQProcEntry;
 
+extern bool ContinuousQueryCrashRecovery;
+
 extern void InitCQProcState(void);
 
 extern CQProcEntry* GetCQProcEntry(int id);

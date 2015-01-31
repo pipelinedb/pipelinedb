@@ -102,6 +102,21 @@ ipc_init(CQProcEntry *entry, int recvtimeoutms)
 	serv->max_fd = serv->sock;
 }
 
+static void
+close_ipc()
+{
+	int i;
+
+	if (serv->sock)
+		close(serv->sock);
+
+	for (i = 0; i < serv->num_workers; i++)
+		if (serv->workers[i].sock)
+			close(serv->workers[i].sock);
+
+	pfree(serv);
+}
+
 static pid_t
 do_handshake(int sock)
 {
@@ -667,8 +682,6 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	TimestampTz lastCombineTime = GetCurrentTimestamp();
 	int32 cq_id = state->id;
 	CQProcEntry *entry = GetCQProcEntry(cq_id);
-	bool is_worker_done = false;
-	bool found_tuple = false;
 
 	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
 			"CombinerRunContext",
@@ -692,14 +705,19 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 
 	elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
 
-	MarkCombinerAsRunning(MyCQId);
-
-	ipc_init(entry, queryDesc->plannedstmt->cq_state->maxwaitms);
-
 	StartTransactionCommand();
 
 	oldcontext = MemoryContextSwitchTo(runctx);
 
+	ipc_init(entry, queryDesc->plannedstmt->cq_state->maxwaitms);
+
+	MarkCombinerAsRunning(MyCQId);
+
+	/*
+	 * Create tuple store and slot outside of combinectx and tmpctx,
+	 * so that we don't lose received tuples in case of errors in the loop
+	 * below.
+	 */
 	store = tuplestore_begin_heap(true, true, work_mem);
 	combineplan = prepare_combine_plan(queryDesc->plannedstmt, store, &workerdesc);
 	slot = MakeSingleTupleTableSlot(workerdesc);
@@ -708,87 +726,123 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 
 	CommitTransactionCommand();
 
-	oldcontext = MemoryContextSwitchTo(combinectx);
+	MemoryContextSwitchTo(combinectx);
 
-	for (;;)
+retry:
+	PG_TRY();
 	{
-		bool force = false;
+		bool is_worker_done = false;
 
-		CurrentResourceOwner = owner;
+		for (;;)
+		{
 
-		found_tuple = receive_tuple(slot, count > 0);
+			bool force = false;
+			bool found_tuple;
+
+
+			CurrentResourceOwner = owner;
+
+			found_tuple = receive_tuple(slot, count > 0);
+
+			/*
+			 * If we get a null tuple, we either want to combine the current batch
+			 * or wait a little while longer for more tuples before forcing the batch
+			 */
+			if (TupIsNull(slot))
+			{
+				if (timeout > 0)
+				{
+					/* We need a goto here because PG_TRY() macros are defined as do while loops. */
+					if (!TimestampDifferenceExceeds(lastCombineTime, GetCurrentTimestamp(), timeout))
+						continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
+				}
+				force = true;
+			}
+			else
+			{
+				tuplestore_puttupleslot(store, slot);
+				count++;
+			}
+
+			if (count > 0 && (count == batchsize || force))
+			{
+				StartTransactionCommand();
+				combine(combineplan, workerdesc, store, tmpctx);
+				CommitTransactionCommand();
+
+				tuplestore_clear(store);
+				MemoryContextResetAndDeleteChildren(combinectx);
+				MemoryContextResetAndDeleteChildren(tmpctx);
+
+				lastCombineTime = GetCurrentTimestamp();
+				count = 0;
+			}
+
+
+			/*
+			 * If we received a tuple in this iteration, poll the socket again.
+			 */
+			if (found_tuple)
+				continue;
+
+			/* Has the CQ been deactivated? */
+			if (!entry->active)
+			{
+				/*
+				 * Ensure that the worker has terminated. There is a continue here
+				 * because we wanna poll the socket one last time after the worker has
+				 * terminated.
+				 */
+				if (!is_worker_done)
+				{
+					is_worker_done = AreCQWorkersStopped(cq_id);
+					continue;
+				}
+
+				/*
+				 * By this point the worker process has terminated and
+				 * we received no new tuples in the previous iteration.
+				 * If there are some unmerged tuples, force merge them.
+				 */
+				if (count)
+				{
+					force = true;
+					continue;
+				}
+
+				break;
+			}
+		}
+	}
+	PG_CATCH();
+	{
+		EmitErrorReport();
+		FlushErrorState();
 
 		/*
-		 * If we get a null tuple, we either want to combine the current batch
-		 * or wait a little while longer for more tuples before forcing the batch
+		 * If we were in a transaction state, then abort it and dump
+		 * anything in this batch.
 		 */
-		if (TupIsNull(slot))
+		if (IsTransactionState())
 		{
-			if (timeout > 0)
-			{
-				if (!TimestampDifferenceExceeds(lastCombineTime, GetCurrentTimestamp(), timeout))
-					continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
-			}
-			force = true;
-		}
-		else
-		{
-			tuplestore_puttupleslot(store, slot);
-			count++;
-		}
-
-		if (count > 0 && (count == batchsize || force))
-		{
-			StartTransactionCommand();
-
-			combine(combineplan, workerdesc, store, tmpctx);
-
-			CommitTransactionCommand();
-
+			AbortCurrentTransaction();
+			ExecClearTuple(slot);
 			tuplestore_clear(store);
-			MemoryContextReset(combinectx);
-			MemoryContextReset(tmpctx);
-
-			lastCombineTime = GetCurrentTimestamp();
 			count = 0;
 		}
 
-		/*
-		 * If we received a tuple in this iteration, poll the socket again.
-		 */
-		if (found_tuple)
-			continue;
+		MemoryContextResetAndDeleteChildren(combinectx);
+		MemoryContextResetAndDeleteChildren(tmpctx);
 
-		/* Has the CQ been deactivated? */
-		if (!entry->active)
-		{
-			/*
-			 * Ensure that the worker has terminated. There is a continue here
-			 * because we wanna poll the socket one last time after the worker has
-			 * terminated.
-			 */
-			if (!is_worker_done)
-			{
-				is_worker_done = AreCQWorkersStopped(cq_id);
-				continue;
-			}
-
-			/*
-			 * By this point the worker process has terminated and
-			 * we received no new tuples in the previous iteration.
-			 * If there are some unmerged tuples, force merge them.
-			 */
-			if (count)
-			{
-				force = true;
-				continue;
-			}
-
-			break;
-		}
+		if (ContinuousQueryCrashRecovery)
+			goto retry;
 	}
+	PG_END_TRY();
+
+	close_ipc();
 
 	MemoryContextDelete(runctx);
+	MemoryContextSwitchTo(oldcontext);
 
 	CurrentResourceOwner = save;
 }
