@@ -671,6 +671,8 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 					 errmsg("continuous view \"%s\" is active", rv->relname),
 					 errhint("only inactive continuous views can be truncated.")));
 
+		ReleaseSysCache(tuple);
+
 		views = lappend(views, rv->relname);
 		rv->relname = GetMatRelationName(rv->relname);
 	}

@@ -94,22 +94,6 @@ unset_snapshot(EState *estate, ResourceOwner owner)
 	UnregisterSnapshotFromOwner(estate->es_snapshot, owner);
 }
 
-static void
-reset_cached_scans(PlanState *plan)
-{
-	if (!plan)
-		return;
-
-	if (IsA(plan, SortState))
-	{
-		SortState *sort = (SortState *) plan;
-		sort->sort_Done = false;
-	}
-
-	reset_cached_scans(plan->lefttree);
-	reset_cached_scans(plan->righttree);
-}
-
 /*
  * ContinuousQueryWorkerStartup
  *
@@ -123,9 +107,6 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	DestReceiver *dest;
 	CmdType		operation;
 	MemoryContext oldcontext;
-	MemoryContext es_query_cxt;
-	MemoryContext es_query_child_cxt;
-	MemoryContext runcontext_child;
 	RangeVar *rv = queryDesc->plannedstmt->cq_target;
 	char *cvname = rv->relname;
 	int timeoutms = state->maxwaitms;
@@ -136,66 +117,52 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
 	bool savereadonly = XactReadOnly;
 
-	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
-										ALLOCSET_DEFAULT_MINSIZE,
-										ALLOCSET_DEFAULT_INITSIZE,
-										ALLOCSET_DEFAULT_MAXSIZE);
-
-	start_executor(queryDesc, runcontext, cqowner);
+	dest = CreateDestReceiver(DestCombiner);
+	SetCombinerDestReceiverParams(dest, GetSocketName(MyCQId));
 
 	/* workers only need read-only transactions */
 	XactReadOnly = true;
 
-	CurrentResourceOwner = cqowner;
-
-	estate = queryDesc->estate;
-	operation = queryDesc->operation;
-
-	/*
-	 * startup tuple receiver, if we will be emitting tuples
-	 */
-	estate->es_processed = 0;
-	estate->es_lastoid = InvalidOid;
-
-	dest = CreateDestReceiver(DestCombiner);
-	SetCombinerDestReceiverParams(dest, GetSocketName(MyCQId));
-
-	(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
-	elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
-
-	MarkWorkerAsRunning(MyCQId, MyWorkerId);
-
-	while (!IsCombinerRunning(MyCQId))
-		pg_usleep(COMBINER_WAIT_TIMEOUT);
-
-	/* XXX (jay)Should be able to copy pointers and maintain an array of pointers instead
-	   of an array of latches. This somehow does not work as expected and autovacuum
-	   seems to be obliterating the new shared array. Make this better.
-	 */
-	memcpy(&GlobalStreamBuffer->procLatch[MyCQId], &MyProc->procLatch, sizeof(Latch));
-
-	/*
-	 * Create children contexts for all memory contexts that are used in the for loop,
-	 * so we can reset them in case of errors while still preserving data in memory that
-	 * is expected to persist across iterations of the loop.
-	 */
-	es_query_child_cxt = AllocSetContextCreate(estate->es_query_cxt, "es_query_ctx child",
+	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	es_query_cxt = estate->es_query_cxt;
-	estate->es_query_cxt = es_query_child_cxt;
+	oldcontext = MemoryContextSwitchTo(runcontext);
 
-	runcontext_child = AllocSetContextCreate(runcontext, "runcontext child",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-
-	for (;;)
+	PG_TRY();
 	{
-		PG_TRY();
+		start_executor(queryDesc, runcontext, cqowner);
+
+		CurrentResourceOwner = cqowner;
+
+		estate = queryDesc->estate;
+		operation = queryDesc->operation;
+
+		/*
+		 * startup tuple receiver, if we will be emitting tuples
+		 */
+		estate->es_processed = 0;
+		estate->es_lastoid = InvalidOid;
+
+		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
+		elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
+
+		MarkWorkerAsRunning(MyCQId, MyWorkerId);
+
+		while (!IsCombinerRunning(MyCQId))
+			pg_usleep(COMBINER_WAIT_TIMEOUT);
+
+		/*
+		 * XXX (jay): Should be able to copy pointers and maintain an array of pointers instead
+		 * of an array of latches. This somehow does not work as expected and autovacuum
+		 * seems to be obliterating the new shared array. Make this better.
+		 */
+		memcpy(&GlobalStreamBuffer->procLatch[MyCQId], &MyProc->procLatch, sizeof(Latch));
+
+		for (;;)
 		{
+
 			ResetStreamBufferLatch(MyCQId);
 			if (GlobalStreamBuffer->empty)
 
@@ -214,13 +181,13 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 				}
 			}
 
-			TopTransactionContext = runcontext_child;
+			TopTransactionContext = runcontext;
 
 			StartTransactionCommand();
 			set_snapshot(estate, cqowner);
 
 			CurrentResourceOwner = cqowner;
-			oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+			MemoryContextSwitchTo(estate->es_query_cxt);
 
 			/*
 			 * Run plan on a microbatch
@@ -228,16 +195,11 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
-			reset_cached_scans(queryDesc->planstate);
-			ExecReScan(queryDesc->planstate);
-
-			MemoryContextReset(estate->es_query_cxt);
-			MemoryContextSwitchTo(oldcontext);
+			MemoryContextSwitchTo(runcontext);
 			CurrentResourceOwner = cqowner;
 
 			unset_snapshot(estate, cqowner);
 			CommitTransactionCommand();
-			MemoryContextReset(runcontext_child);
 
 			if (estate->es_processed != 0)
 			{
@@ -251,40 +213,40 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 				last_process_time = GetCurrentTimestamp();
 			}
 			estate->es_processed = 0;
-		}
-		PG_CATCH();
-		{
-			EmitErrorReport();
-			FlushErrorState();
 
-			MemoryContextResetAndDeleteChildren(estate->es_query_cxt);
-			MemoryContextResetAndDeleteChildren(runcontext_child);
-		}
-		PG_END_TRY();
 
-		/* Has the CQ been deactivated? */
-		if (!*activeFlagPtr)
-			break;
+			/* Has the CQ been deactivated? */
+			if (!*activeFlagPtr)
+				break;
+		}
+
+		CurrentResourceOwner = cqowner;
+
+		(*dest->rShutdown) (dest);
+
+		/*
+		 * The cleanup functions below expect these things to be registered
+		 */
+		RegisterSnapshotOnOwner(estate->es_snapshot, cqowner);
+		RegisterSnapshotOnOwner(queryDesc->snapshot, cqowner);
+		RegisterSnapshotOnOwner(queryDesc->crosscheck_snapshot, cqowner);
+
+		/* cleanup */
+		ExecutorFinish(queryDesc);
+		ExecutorEnd(queryDesc);
+		FreeQueryDesc(queryDesc);
 	}
+	PG_CATCH();
+	{
+		EmitErrorReport();
+		FlushErrorState();
 
-	estate->es_query_cxt = es_query_cxt;
-	CurrentResourceOwner = cqowner;
-
-	(*dest->rShutdown) (dest);
-
-	/*
-	 * The cleanup functions below expect these things to be registered
-	 */
-	RegisterSnapshotOnOwner(estate->es_snapshot, cqowner);
-	RegisterSnapshotOnOwner(queryDesc->snapshot, cqowner);
-	RegisterSnapshotOnOwner(queryDesc->crosscheck_snapshot, cqowner);
-
-	/* cleanup */
-	ExecutorFinish(queryDesc);
-	ExecutorEnd(queryDesc);
-	FreeQueryDesc(queryDesc);
+		MemoryContextResetAndDeleteChildren(runcontext);
+	}
+	PG_END_TRY();
 
 	MemoryContextDelete(runcontext);
+	MemoryContextSwitchTo(oldcontext);
 
 	XactReadOnly = savereadonly;
 

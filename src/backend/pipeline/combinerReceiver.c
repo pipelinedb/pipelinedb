@@ -61,6 +61,14 @@ combiner_startup(DestReceiver *self, int operation,
 	bool connected = false;
 	struct timeval timeout;
 
+	/*
+	 * In case we're recovering from an error in the worker
+	 * PG_TRY/PG_CATCH block, we don't need to reconnect to
+	 * the combiner.
+	 */
+	if (combiner->sock != -1)
+		return;
+
 	if (combiner->failed_handshakes >= 100)
 		elog(ERROR, "worker handshakes failed more than 100 times");
 

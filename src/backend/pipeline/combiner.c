@@ -101,6 +101,21 @@ ipc_init(CQProcEntry *entry, int recvtimeoutms)
 	serv->max_fd = serv->sock;
 }
 
+static void
+close_ipc()
+{
+	int i;
+
+	if (serv->sock)
+		close(serv->sock);
+
+	for (i = 0; i < serv->num_workers; i++)
+		if (serv->workers[i].sock)
+			close(serv->workers[i].sock);
+
+	pfree(serv);
+}
+
 static pid_t
 do_handshake(int sock)
 {
@@ -666,9 +681,6 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	TimestampTz lastCombineTime = GetCurrentTimestamp();
 	int32 cq_id = state->id;
 	CQProcEntry *entry = GetCQProcEntry(cq_id);
-	bool is_worker_done = false;
-	bool found_tuple = false;
-	bool force = false;
 
 	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
 			"CombinerRunContext",
@@ -692,13 +704,13 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 
 	elog(LOG, "\"%s\" combiner %d running", cvname, MyProcPid);
 
-	MarkCombinerAsRunning(MyCQId);
-
-	ipc_init(entry, queryDesc->plannedstmt->cq_state->maxwaitms);
-
 	StartTransactionCommand();
 
 	oldcontext = MemoryContextSwitchTo(runctx);
+
+	ipc_init(entry, queryDesc->plannedstmt->cq_state->maxwaitms);
+
+	MarkCombinerAsRunning(MyCQId);
 
 	/*
 	 * Create tuple store and slot outside of combinectx and tmpctx,
@@ -713,15 +725,19 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 
 	CommitTransactionCommand();
 
-	oldcontext = MemoryContextSwitchTo(combinectx);
+	MemoryContextSwitchTo(combinectx);
 
-	for (;;)
+retry:
+	PG_TRY();
 	{
-loop_start:
-		force = false;
+		bool is_worker_done = false;
 
-		PG_TRY();
+		for (;;)
 		{
+
+			bool force = false;
+			bool found_tuple;
+
 
 			CurrentResourceOwner = owner;
 
@@ -737,7 +753,7 @@ loop_start:
 				{
 					/* We need a goto here because PG_TRY() macros are defined as do while loops. */
 					if (!TimestampDifferenceExceeds(lastCombineTime, GetCurrentTimestamp(), timeout))
-						goto loop_start; /* timeout not reached yet, keep scanning for new tuples to arrive */
+						continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
 				}
 				force = true;
 			}
@@ -750,9 +766,7 @@ loop_start:
 			if (count > 0 && (count == batchsize || force))
 			{
 				StartTransactionCommand();
-
 				combine(combineplan, workerdesc, store, tmpctx);
-
 				CommitTransactionCommand();
 
 				tuplestore_clear(store);
@@ -762,53 +776,71 @@ loop_start:
 				lastCombineTime = GetCurrentTimestamp();
 				count = 0;
 			}
-		}
-		PG_CATCH();
-		{
-			EmitErrorReport();
-			FlushErrorState();
 
-			MemoryContextResetAndDeleteChildren(combinectx);
-			MemoryContextResetAndDeleteChildren(tmpctx);
-		}
-		PG_END_TRY();
-
-		/*
-		 * If we received a tuple in this iteration, poll the socket again.
-		 */
-		if (found_tuple)
-			continue;
-
-		/* Has the CQ been deactivated? */
-		if (!entry->active)
-		{
-			/*
-			 * Ensure that the worker has terminated. There is a continue here
-			 * because we wanna poll the socket one last time after the worker has
-			 * terminated.
-			 */
-			if (!is_worker_done)
-			{
-				is_worker_done = AreCQWorkersStopped(cq_id);
-				continue;
-			}
 
 			/*
-			 * By this point the worker process has terminated and
-			 * we received no new tuples in the previous iteration.
-			 * If there are some unmerged tuples, force merge them.
+			 * If we received a tuple in this iteration, poll the socket again.
 			 */
-			if (count)
-			{
-				force = true;
+			if (found_tuple)
 				continue;
-			}
 
-			break;
+			/* Has the CQ been deactivated? */
+			if (!entry->active)
+			{
+				/*
+				 * Ensure that the worker has terminated. There is a continue here
+				 * because we wanna poll the socket one last time after the worker has
+				 * terminated.
+				 */
+				if (!is_worker_done)
+				{
+					is_worker_done = AreCQWorkersStopped(cq_id);
+					continue;
+				}
+
+				/*
+				 * By this point the worker process has terminated and
+				 * we received no new tuples in the previous iteration.
+				 * If there are some unmerged tuples, force merge them.
+				 */
+				if (count)
+				{
+					force = true;
+					continue;
+				}
+
+				break;
+			}
 		}
 	}
+	PG_CATCH();
+	{
+		EmitErrorReport();
+		FlushErrorState();
+
+		/*
+		 * If we were in a transaction state, then abort it and dump
+		 * anything in this batch.
+		 */
+		if (IsTransactionState())
+		{
+			AbortCurrentTransaction();
+			ExecClearTuple(slot);
+			tuplestore_clear(store);
+			count = 0;
+		}
+
+		MemoryContextResetAndDeleteChildren(combinectx);
+		MemoryContextResetAndDeleteChildren(tmpctx);
+
+		goto retry;
+	}
+	PG_END_TRY();
+
+	close_ipc();
 
 	MemoryContextDelete(runctx);
+	MemoryContextSwitchTo(oldcontext);
 
 	CurrentResourceOwner = save;
 }
