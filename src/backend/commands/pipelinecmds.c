@@ -52,12 +52,6 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
-/* Whether or not to block till the events are consumed by a cv
-   Also used to represent whether the activate/deactivate are to be
-   synchronous
- */
-bool DebugSyncStreamInsert;
-
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
 
@@ -557,7 +551,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		if (WaitForCQProcsToStart(state.id))
 		{
 			success++;
-			if (ENABLE_CQ_RECOVERY)
+			if (ContinuousQueryCrashRecovery)
 				EnableCQProcsRecovery(state.id);
 		}
 		else
@@ -613,7 +607,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 			continue;
 
 		/* Disable recovery and wait for any recovering processes to recover */
-		if (ENABLE_CQ_RECOVERY)
+		if (ContinuousQueryCrashRecovery)
 			DisableCQProcsRecovery(state.id);
 		WaitForCQProcsToStart(state.id);
 

@@ -248,7 +248,7 @@ retry:
 
 		MemoryContextResetAndDeleteChildren(runcontext);
 
-		if (ENABLE_CQ_RECOVERY)
+		if (ContinuousQueryCrashRecovery)
 			goto retry;
 	}
 	PG_END_TRY();
