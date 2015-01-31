@@ -103,7 +103,7 @@ unset_snapshot(EState *estate, ResourceOwner owner)
 void
 ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *queryDesc, ResourceOwner owner)
 {
-	EState	   *estate;
+	EState	   *estate = NULL;
 	DestReceiver *dest;
 	CmdType		operation;
 	MemoryContext oldcontext;
@@ -111,122 +111,154 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	char *cvname = rv->relname;
 	int timeoutms = state->maxwaitms;
 	MemoryContext runcontext;
+	MemoryContext xactcontext;
 	bool *activeFlagPtr = GetActiveFlagPtr(MyCQId);
 	TimestampTz curtime = GetCurrentTimestamp();
 	TimestampTz last_process_time = GetCurrentTimestamp();
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
 	bool savereadonly = XactReadOnly;
 
-	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
-										ALLOCSET_DEFAULT_MINSIZE,
-										ALLOCSET_DEFAULT_INITSIZE,
-										ALLOCSET_DEFAULT_MAXSIZE);
-
-	start_executor(queryDesc, runcontext, cqowner);
+	dest = CreateDestReceiver(DestCombiner);
+	SetCombinerDestReceiverParams(dest, GetSocketName(MyCQId));
 
 	/* workers only need read-only transactions */
 	XactReadOnly = true;
 
-	CurrentResourceOwner = cqowner;
+	runcontext = AllocSetContextCreate(TopMemoryContext, "CQRunContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
 
-	estate = queryDesc->estate;
-	operation = queryDesc->operation;
+	oldcontext = MemoryContextSwitchTo(runcontext);
 
-	/*
-	 * startup tuple receiver, if we will be emitting tuples
-	 */
-	estate->es_processed = 0;
-	estate->es_lastoid = InvalidOid;
+	xactcontext = TopTransactionContext;
+	TopTransactionContext = runcontext;
 
-	dest = CreateDestReceiver(DestCombiner);
-	SetCombinerDestReceiverParams(dest, GetSocketName(MyCQId));
-
-	(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
-	elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
-
-	MarkWorkerAsRunning(MyCQId, MyWorkerId);
-
-	while (!IsCombinerRunning(MyCQId))
-		pg_usleep(COMBINER_WAIT_TIMEOUT);
-
-	/* XXX (jay)Should be able to copy pointers and maintain an array of pointers instead
-	   of an array of latches. This somehow does not work as expected and autovacuum
-	   seems to be obliterating the new shared array. Make this better.
-	 */
-	memcpy(&GlobalStreamBuffer->procLatch[MyCQId], &MyProc->procLatch, sizeof(Latch));
-
-	for (;;)
+retry:
+	PG_TRY();
 	{
-		ResetStreamBufferLatch(MyCQId);
-		if (GlobalStreamBuffer->empty)
-		{
-			curtime = GetCurrentTimestamp();
-			if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
-			{
-				pgstat_report_activity(STATE_WORKER_WAIT, queryDesc->sourceText);
-				WaitOnStreamBufferLatch(MyCQId);
-				pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
-			}
-			else
-			{
-				pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
-			}
-		}
-
-		TopTransactionContext = runcontext;
-
-		StartTransactionCommand();
-		set_snapshot(estate, cqowner);
+		start_executor(queryDesc, runcontext, cqowner);
 
 		CurrentResourceOwner = cqowner;
-		oldcontext = MemoryContextSwitchTo(estate->es_query_cxt);
+
+		estate = queryDesc->estate;
+		operation = queryDesc->operation;
 
 		/*
-		 * Run plan on a microbatch
+		 * startup tuple receiver, if we will be emitting tuples
 		 */
-		ExecutePlan(estate, queryDesc->planstate, operation,
+		estate->es_processed = 0;
+		estate->es_lastoid = InvalidOid;
+
+		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
+		elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
+
+		MarkWorkerAsRunning(MyCQId, MyWorkerId);
+
+		while (!IsCombinerRunning(MyCQId))
+			pg_usleep(COMBINER_WAIT_TIMEOUT);
+
+		/*
+		 * XXX (jay): Should be able to copy pointers and maintain an array of pointers instead
+		 * of an array of latches. This somehow does not work as expected and autovacuum
+		 * seems to be obliterating the new shared array. Make this better.
+		 */
+		memcpy(&GlobalStreamBuffer->procLatch[MyCQId], &MyProc->procLatch, sizeof(Latch));
+
+		for (;;)
+		{
+			ResetStreamBufferLatch(MyCQId);
+			if (GlobalStreamBuffer->empty)
+
+			{
+
+				curtime = GetCurrentTimestamp();
+				if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
+				{
+					pgstat_report_activity(STATE_WORKER_WAIT, queryDesc->sourceText);
+					WaitOnStreamBufferLatch(MyCQId);
+					pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
+				}
+				else
+				{
+					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
+				}
+			}
+
+			StartTransactionCommand();
+			set_snapshot(estate, cqowner);
+
+			CurrentResourceOwner = cqowner;
+			MemoryContextSwitchTo(estate->es_query_cxt);
+
+			/*
+			 * Run plan on a microbatch
+			 */
+			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
-		unset_snapshot(estate, cqowner);
-		CommitTransactionCommand();
+			MemoryContextSwitchTo(runcontext);
+			CurrentResourceOwner = cqowner;
+
+			unset_snapshot(estate, cqowner);
+			CommitTransactionCommand();
+
+			if (estate->es_processed != 0)
+			{
+				/*
+				 * If the CV query is such that the select does not return any tuples
+				 * ex: select id where id=99; and id=99 does not exist, then this reset
+				 * will fail. What will happen is that the worker will block at the latch for every
+				 * allocated slot, TILL a cv returns a non-zero tuple, at which point
+				 * the worker will resume a simple sleep for the threshold time.
+				 */
+				last_process_time = GetCurrentTimestamp();
+			}
+			estate->es_processed = 0;
+
+			/* Has the CQ been deactivated? */
+			if (!*activeFlagPtr)
+				break;
+		}
 
 		CurrentResourceOwner = cqowner;
 
-		MemoryContextSwitchTo(oldcontext);
+		/*
+		 * The cleanup functions below expect these things to be registered
+		 */
+		RegisterSnapshotOnOwner(estate->es_snapshot, cqowner);
+		RegisterSnapshotOnOwner(queryDesc->snapshot, cqowner);
+		RegisterSnapshotOnOwner(queryDesc->crosscheck_snapshot, cqowner);
 
-		if (estate->es_processed != 0)
-		{
-			/*
-			 * If the CV query is such that the select does not return any tuples
-			 * ex: select id where id=99; and id=99 does not exist, then this reset
-			 * will fail. What will happen is that the worker will block at the latch for every
-			 * allocated slot, TILL a cv returns a non-zero tuple, at which point
-			 * the worker will resume a simple sleep for the threshold time.
-			 */
-			last_process_time = GetCurrentTimestamp();
-		}
-		estate->es_processed = 0;
-
-		/* Has the CQ been deactivated? */
-		if (!*activeFlagPtr)
-			break;
+		/* cleanup */
+		ExecutorFinish(queryDesc);
+		ExecutorEnd(queryDesc);
+		FreeQueryDesc(queryDesc);
 	}
+	PG_CATCH();
+	{
+		EmitErrorReport();
+		FlushErrorState();
+
+		/* Since the worker is read-only, we can simply commit the transaction. */
+		if (ActiveSnapshotSet())
+			unset_snapshot(estate, cqowner);
+		if (IsTransactionState())
+			CommitTransactionCommand();
+
+		MemoryContextResetAndDeleteChildren(runcontext);
+
+		if (ContinuousQueryCrashRecovery)
+			goto retry;
+	}
+	PG_END_TRY();
 
 	(*dest->rShutdown) (dest);
 
-	/*
-	 * The cleanup functions below expect these things to be registered
-	 */
-	RegisterSnapshotOnOwner(estate->es_snapshot, cqowner);
-	RegisterSnapshotOnOwner(queryDesc->snapshot, cqowner);
-	RegisterSnapshotOnOwner(queryDesc->crosscheck_snapshot, cqowner);
-
-	/* cleanup */
-	ExecutorFinish(queryDesc);
-	ExecutorEnd(queryDesc);
-	FreeQueryDesc(queryDesc);
+	TopTransactionContext = xactcontext;
 
 	MemoryContextDelete(runcontext);
+	MemoryContextSwitchTo(oldcontext);
 
 	XactReadOnly = savereadonly;
 
