@@ -103,7 +103,7 @@ unset_snapshot(EState *estate, ResourceOwner owner)
 void
 ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *queryDesc, ResourceOwner owner)
 {
-	EState	   *estate;
+	EState	   *estate = NULL;
 	DestReceiver *dest;
 	CmdType		operation;
 	MemoryContext oldcontext;
