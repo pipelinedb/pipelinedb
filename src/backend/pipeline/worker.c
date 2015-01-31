@@ -167,7 +167,6 @@ retry:
 
 		for (;;)
 		{
-
 			ResetStreamBufferLatch(MyCQId);
 			if (GlobalStreamBuffer->empty)
 
@@ -185,8 +184,6 @@ retry:
 					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 				}
 			}
-
-
 
 			StartTransactionCommand();
 			set_snapshot(estate, cqowner);
@@ -219,7 +216,6 @@ retry:
 			}
 			estate->es_processed = 0;
 
-
 			/* Has the CQ been deactivated? */
 			if (!*activeFlagPtr)
 				break;
@@ -244,8 +240,11 @@ retry:
 		EmitErrorReport();
 		FlushErrorState();
 
+		/* Since the worker is read-only, we can simply commit the transaction. */
+		if (ActiveSnapshotSet())
+			unset_snapshot(estate, cqowner);
 		if (IsTransactionState())
-			AbortCurrentTransaction();
+			CommitTransactionCommand();
 
 		MemoryContextResetAndDeleteChildren(runcontext);
 
