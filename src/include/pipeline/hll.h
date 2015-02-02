@@ -41,7 +41,6 @@ typedef struct HyperLogLog {
   uint8 M[1];
 } HyperLogLog;
 
-uint64 MurmurHash64A(const void *key, Size keysize);
 HyperLogLog *HLLCreateWithP(int p);
 HyperLogLog *HLLCreate(void);
 HyperLogLog *HLLCreateFromRaw(uint8 *M, int mlen, uint8 p, char encoding);

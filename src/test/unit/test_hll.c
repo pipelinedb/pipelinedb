@@ -1,6 +1,7 @@
 #include <check.h>
 
 #include "suites.h"
+#include "pipeline/miscutils.h"
 #include "pipeline/hll.h"
 
 static HyperLogLog *
