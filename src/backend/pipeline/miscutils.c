@@ -41,15 +41,15 @@ random_hex(int len)
 /*
  * MurmurHash - 64-bit version
  */
-uint64
-MurmurHash64A(const void *key, Size keysize)
+uint64_t
+MurmurHash64AWithSeed(const void *key, Size keysize, uint64_t seed)
 {
-  static const uint64 m = 0xc6a4a7935bd1e995;
+  static const uint64_t m = 0xc6a4a7935bd1e995;
   static const int r = 47;
 
-  const uint8 *data = (const uint8 *) key;
-  const uint8 *end = data + (keysize - (keysize & 7));
-  uint64 h = MURMUR_SEED ^ (keysize * m);
+  const uint8_t *data = (const uint8_t *) key;
+  const uint8_t *end = data + (keysize - (keysize & 7));
+  uint64_t h = seed ^ (keysize * m);
 
   while (data != end)
   {
@@ -83,3 +83,8 @@ MurmurHash64A(const void *key, Size keysize)
   return h;
 }
 
+uint64_t
+MurmurHash64A(const void *key, Size keysize)
+{
+	return MurmurHash64AWithSeed(key, keysize, MURMUR_SEED);
+}
