@@ -23,8 +23,8 @@ typedef struct
 extern BloomFilter *BloomFilterCreateWithPAndN(float8 p, int64_t n);
 extern BloomFilter *BloomFilterCreate(void);
 
-extern void BloomFilterAdd(BloomFilter *bf, uint64_t key);
-extern bool BloomFilterContains(BloomFilter *bf, uint64_t key);
+extern void BloomFilterAdd(BloomFilter *bf, void *key, Size size);
+extern bool BloomFilterContains(BloomFilter *bf, void *key, Size size);
 extern BloomFilter *BloomFilterUnion(BloomFilter *result, BloomFilter *incoming);
 extern uint64_t BloomFilterCardinality(BloomFilter *bf);
 extern Size BloomFilterSize(BloomFilter *bf);

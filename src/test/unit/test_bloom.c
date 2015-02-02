@@ -18,11 +18,11 @@ START_TEST(test_basic)
 	{
 		int key = rand();
 		keys[i] = key;
-		BloomFilterAdd(bf, key);
+		BloomFilterAdd(bf, &key, sizeof(int));
 	}
 
 	for (i = 0; i < num_keys; i++)
-		ck_assert(BloomFilterContains(bf, keys[i]));
+		ck_assert(BloomFilterContains(bf, &keys[i], sizeof(int)));
 }
 END_TEST
 
@@ -40,14 +40,14 @@ START_TEST(test_union)
 		int k2 = rand();
 		keys[i] = k1;
 		keys[num_keys + i] = k2;
-		BloomFilterAdd(bf1, k1);
-		BloomFilterAdd(bf2, k2);
+		BloomFilterAdd(bf1, &k1, sizeof(int));
+		BloomFilterAdd(bf2, &k2, sizeof(int));
 	}
 
 	bf1 = BloomFilterUnion(bf1, bf2);
 
 	for (i = 0; i < num_keys * 2; i++)
-		ck_assert(BloomFilterContains(bf1, keys[i]));
+		ck_assert(BloomFilterContains(bf1, &keys[i], sizeof(int)));
 }
 END_TEST
 
