@@ -13,7 +13,6 @@
 #include "access/htup.h"
 #include "access/htup_details.h"
 #include "access/heapam.h"
-#include "access/tuptoaster.h"
 #include "access/xact.h"
 #include "catalog/indexing.h"
 #include "catalog/pipeline_tstate.h"

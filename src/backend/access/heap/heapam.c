@@ -3034,7 +3034,7 @@ simple_heap_delete(Relation relation, ItemPointer tid)
 			break;
 	}
 }
-#include "executor/tuptable.h"
+
 /*
  *	heap_update - replace a tuple
  *
