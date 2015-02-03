@@ -329,6 +329,7 @@ DATA(insert ( 4326	n 0 hll_union_agg_trans	-		-				-				-				f f 0	3998	0	0		0	_
 DATA(insert ( 4329	n 0 bloom_agg_trans			-	-				-				-				f f 0	5030	0	0		0	_null_ _null_ ));
 DATA(insert ( 4330	n 0 bloom_agg_transp		-	-				-				-				f f 0	5030	0	0		0	_null_ _null_ ));
 DATA(insert ( 4333	n 0 bloom_union_agg_trans	-	-				-				-				f f 0	5030	0	0		0	_null_ _null_ ));
+DATA(insert ( 4335	n 0 bloom_intersection_agg_trans	-	-		-				-				f f 0	5030	0	0		0	_null_ _null_ ));
 
 /*
  * prototypes for functions in pg_aggregate.c

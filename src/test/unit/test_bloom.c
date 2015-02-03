@@ -4,6 +4,7 @@
 
 #include "suites.h"
 #include "pipeline/bloom.h"
+#include "pipeline/miscutils.h"
 #include "utils/elog.h"
 #include "utils/palloc.h"
 
@@ -51,6 +52,26 @@ START_TEST(test_union)
 }
 END_TEST
 
+START_TEST(test_false_positives)
+{
+	float p = 0.001;
+	int n = 1000000;
+	BloomFilter *bf = BloomFilterCreateWithPAndN(p, n);
+	int num_insert = 8000;
+	int num_found = 0;
+	int i;
+
+	for (i = 0; i < num_insert; i++)
+		BloomFilterAdd(bf, &i, sizeof(int));
+
+	for (i = 0; i < n; i++)
+		if (BloomFilterContains(bf, &i, sizeof(int)))
+			num_found++;
+
+	elog(LOG, "FOUND %d %d %d %d", num_found, bf->m, bf->k, BloomFilterCardinality(bf));
+}
+END_TEST
+
 Suite *test_bloom_suite(void)
 {
 	Suite *s;
@@ -60,6 +81,7 @@ Suite *test_bloom_suite(void)
 	tc = tcase_create("test_bloom");
 	tcase_add_test(tc, test_basic);
 	tcase_add_test(tc, test_union);
+	tcase_add_test(tc, test_false_positives);
 	suite_add_tcase(s, tc);
 
 	return s;

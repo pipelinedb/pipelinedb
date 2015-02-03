@@ -32,7 +32,7 @@ bloom_out(PG_FUNCTION_ARGS)
 	BloomFilter *bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "{ k = %d, m = %ld, size = %ldk }", bloom->k, bloom->m, BloomFilterSize(bloom) / 1024);
+	appendStringInfo(&buf, "{ k = %d, m = %d, size = %ldk }", bloom->k, bloom->m, BloomFilterSize(bloom) / 1024);
 
 	PG_RETURN_CSTRING(buf.data);
 }
@@ -158,6 +158,36 @@ bloom_union_agg_trans(PG_FUNCTION_ARGS)
 		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 
 	state = BloomFilterUnion(state, incoming);
+
+	MemoryContextSwitchTo(old);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
+ * bloom_intersection_agg transition function -
+ *
+ * 	returns the intersection of the transition state and the given Bloom Filter
+ */
+Datum
+bloom_intersection_agg_trans(PG_FUNCTION_ARGS)
+{
+	MemoryContext old;
+	MemoryContext context;
+	BloomFilter *state;
+	BloomFilter *incoming = (BloomFilter *) PG_GETARG_VARLENA_P(1);
+
+	if (!AggCheckCallContext(fcinfo, &context))
+		elog(ERROR, "bloom_union_agg_trans called in non-aggregate context");
+
+	old = MemoryContextSwitchTo(context);
+
+	if (PG_ARGISNULL(0))
+		state = bloom_startup(fcinfo, incoming->m, incoming->k, 0, 0);
+	else
+		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
+
+	state = BloomFilterIntersection(state, incoming);
 
 	MemoryContextSwitchTo(old);
 
