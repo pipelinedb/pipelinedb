@@ -25,20 +25,20 @@
 #define HLL_DENSE_CLEAN 'D'
 
 typedef struct HyperLogLog {
-	int32	vl_len_;
+	uint32	vl_len_;
 	/* Dense or sparse, dirty or clean? See above */
-  char encoding;
-  /*
-   * Last computed cardinality, can be reused until new data is added.
-   * That is, if the encoding is *_CLEAN.
-   */
-  long card;
-  /* number of leading bits of hash values to use for determining register */
-  uint8 p;
-  /* number of bytes allocated for M */
-  int mlen;
-  /* substream registers */
-  uint8 M[1];
+	char encoding;
+	/*
+	 * Last computed cardinality, can be reused until new data is added.
+	 * That is, if the encoding is *_CLEAN.
+	 */
+	long card;
+	/* number of leading bits of hash values to use for determining register */
+	uint8 p;
+	/* number of bytes allocated for M */
+	int mlen;
+	/* substream registers */
+	uint8 M[1];
 } HyperLogLog;
 
 HyperLogLog *HLLCreateWithP(int p);

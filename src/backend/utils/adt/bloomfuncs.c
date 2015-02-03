@@ -32,7 +32,7 @@ bloom_out(PG_FUNCTION_ARGS)
 	BloomFilter *bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "{ p = %d, m = %ld, cardinality = %ld }", bloom->k, bloom->m, BloomFilterCardinality(bloom));
+	appendStringInfo(&buf, "{ k = %d, m = %ld, size = %ldk }", bloom->k, bloom->m, BloomFilterSize(bloom) / 1024);
 
 	PG_RETURN_CSTRING(buf.data);
 }

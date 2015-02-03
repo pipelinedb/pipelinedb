@@ -14,10 +14,11 @@
 
 typedef struct
 {
+	uint32	vl_len_;
 	uint64_t m;
 	uint16_t k;
-	uint64_t num_bytes;
-	char *bytea;
+	uint64_t blen;
+	uint8_t b[1];
 } BloomFilter;
 
 extern BloomFilter *BloomFilterCreateWithMAndK(uint64_t m, uint16_t k);

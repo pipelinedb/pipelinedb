@@ -5092,9 +5092,9 @@ DESCR("HyperLogLog out function");
 DATA(insert OID = 5029 (hll_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3998 "2275" _null_ _null_ _null_ _null_ hll_in  _null_ _null_ _null_ ));
 DESCR("HyperLogLog in function");
 
-DATA(insert OID = 5032 (hll_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5030" _null_ _null_ _null_ _null_ bloom_out _null_ _null_ _null_ ));
+DATA(insert OID = 5032 (bloom_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5030" _null_ _null_ _null_ _null_ bloom_out _null_ _null_ _null_ ));
 DESCR("Bloom Filter out function");
-DATA(insert OID = 5033 (hll_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5030 "2275" _null_ _null_ _null_ _null_ bloom_in  _null_ _null_ _null_ ));
+DATA(insert OID = 5033 (bloom_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5030 "2275" _null_ _null_ _null_ _null_ bloom_in  _null_ _null_ _null_ ));
 DESCR("Bloom Filter in function");
 
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
