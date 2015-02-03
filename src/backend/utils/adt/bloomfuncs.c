@@ -165,7 +165,7 @@ bloom_union_agg_trans(PG_FUNCTION_ARGS)
 }
 
 /*
- * Returns the cardinality of the given BloomFilter
+ * Returns the cardinality of the given Bloom Filter
  */
 Datum
 bloom_cardinality(PG_FUNCTION_ARGS)
@@ -178,6 +178,39 @@ bloom_cardinality(PG_FUNCTION_ARGS)
 	bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 
 	PG_RETURN_INT64(BloomFilterCardinality(bloom));
+}
+
+/*
+ * Returns whether the Bloom Filter contains the item or not
+ */
+Datum
+bloom_contains(PG_FUNCTION_ARGS)
+{
+	BloomFilter *bloom;
+	Datum elem = PG_GETARG_DATUM(1);
+	bool contains = false;
+	Oid	val_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	TypeCacheEntry *typ;
+	Size size;
+
+	if (val_type == InvalidOid)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("could not determine input data type")));
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_BOOL(contains);
+
+	bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
+	typ = lookup_type_cache(val_type, 0);
+	size = datumGetSize(elem, typ->typbyval, typ->typlen);
+
+	if (typ->typbyval)
+		contains = BloomFilterContains(bloom, (char *) &elem, size);
+	else
+		contains = BloomFilterContains(bloom, DatumGetPointer(elem), size);
+
+	PG_RETURN_BOOL(contains);
 }
 
 Datum

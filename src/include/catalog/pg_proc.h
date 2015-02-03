@@ -5198,9 +5198,14 @@ DESCR("Bloom Filter union aggregate");
 DATA(insert OID = 4334 ( bloom_union_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "5030 5030" _null_ _null_ _null_ _null_ bloom_union_agg_trans _null_ _null_ _null_ ));
 DESCR("Bloom Filter union aggregate");
 
-/* Bloom Filter union aggregate transition function */
+/* Bloom Filter cardinality function */
 DATA(insert OID = 4335 ( bloom_cardinality	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 20 "5030" _null_ _null_ _null_ _null_ bloom_cardinality _null_ _null_ _null_ ));
 DESCR("Bloom Filter cardinality");
+
+/* Bloom Filter contains function */
+DATA(insert OID = 4336 ( bloom_contains	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 16 "5030 2283" _null_ _null_ _null_ _null_ bloom_contains _null_ _null_ _null_ ));
+DESCR("Bloom Filter contains item?");
+
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result
