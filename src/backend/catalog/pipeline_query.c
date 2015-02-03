@@ -107,7 +107,7 @@ get_next_id(Relation rel)
 List *
 GetAllContinuousViewNames(void)
 {
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowShareLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
 	HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_query, 0, NULL);
 	HeapTuple tup;
 	List *result = NIL;
@@ -122,7 +122,7 @@ GetAllContinuousViewNames(void)
 	}
 
 	heap_endscan(scan_desc);
-	heap_close(pipeline_query, RowShareLock);
+	heap_close(pipeline_query, AccessShareLock);
 
 	return result;
 }
@@ -416,7 +416,7 @@ char *
 GetCVNameForMatRelationName(char *matrelname)
 {
 	char *cvname = NULL;
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, RowShareLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
 	HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_query, 0, NULL);
 	HeapTuple tup;
 
@@ -431,7 +431,7 @@ GetCVNameForMatRelationName(char *matrelname)
 	}
 
 	heap_endscan(scan_desc);
-	heap_close(pipeline_query, RowShareLock);
+	heap_close(pipeline_query, AccessShareLock);
 	return cvname;
 }
 
