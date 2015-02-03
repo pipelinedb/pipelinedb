@@ -54,10 +54,10 @@ END_TEST
 
 START_TEST(test_false_positives)
 {
-	float p = 0.001;
-	int n = 1000000;
+	float p = 0.01;
+	int n = 10000;
 	BloomFilter *bf = BloomFilterCreateWithPAndN(p, n);
-	int num_insert = 8000;
+	int num_insert = 5000;
 	int num_found = 0;
 	int i;
 

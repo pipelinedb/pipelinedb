@@ -19,6 +19,8 @@
 #define BYTE_IDX(bf, i) (((idx) / 8) % (bf)->blen)
 #define BIT_MASK(i) (1 << ((i) % 8))
 
+#define MURMUR_SEED 0x99496f1ddc863e6fL
+
 /*
  * Murmur is faster than an SHA-based approach and provides as-good collision
  * resistance.  The combinatorial generation approach described in
@@ -45,7 +47,7 @@ BloomFilter *
 BloomFilterCreateWithPAndN(float8 p, uint32_t n)
 {
 	/* Determine m and k from p and n */
-	uint32_t m = ceil(n * log(1 / p) / (pow(log(2), 2)));
+	uint32_t m = -1 * ceil(n * log(p) / (pow(log(2), 2)));
 	uint16_t k = round(log(2.0) * m / n);
 	return BloomFilterCreateWithMAndK(m, k);
 }
@@ -69,14 +71,13 @@ void
 BloomFilterAdd(BloomFilter *bf, void *key, Size size)
 {
 	uint32_t i;
-	uint64_t hash = MurmurHash64A(key, size);
-	uint32_t hash1 = hash >> 32;
-	uint32_t hash2 = hash && 0xffffffff;
+	uint64_t hash[2];
+	MurmurHash3_128(key, size, MURMUR_SEED, &hash);
 
 	for (i = 0; i < bf->k; i++)
 	{
-		uint32_t hash = hash1 + (i * hash2);
-		uint32_t idx = hash % bf->m;
+		uint64_t h = hash[0] + (i * hash[1]);
+		uint32_t idx = h % bf->m;
 		bf->b[BYTE_IDX(bf, idx)] |= BIT_MASK(idx);
 	}
 }
@@ -85,14 +86,13 @@ bool
 BloomFilterContains(BloomFilter *bf, void *key, Size size)
 {
 	uint32_t i;
-	uint64_t hash = MurmurHash64A(key, size);
-	uint32_t hash1 = hash >> 32;
-	uint32_t hash2 = hash && 0xffffffff;
+	uint64_t hash[2];
+	MurmurHash3_128(key, size, MURMUR_SEED, &hash);
 
 	for (i = 0; i < bf->k; i++)
 	{
-		uint64_t hash = hash1 + (i * hash2);
-		uint64_t idx = hash % bf->m;
+		uint64_t h = hash[0] + (i * hash[1]);
+		uint32_t idx = h % bf->m;
 		if (!(bf->b[BYTE_IDX(bf, idx)] && BIT_MASK(idx)))
 			return false;
 	}

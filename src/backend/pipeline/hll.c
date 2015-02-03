@@ -303,6 +303,8 @@
 
 #define HLL_SIZE(hll) (sizeof(HyperLogLog) + (hll)->mlen)
 
+#define MURMUR_SEED 0xbee5bf4112801383L
+
 /*
  * hll_sparse_to_dense
  *
@@ -374,7 +376,7 @@ hll_sparse_to_dense(HyperLogLog *sparse)
 static uint8
 num_leading_zeroes(HyperLogLog *hll, void *elem, Size size, int *m)
 {
-	uint64 h = MurmurHash64A(elem, size);
+	uint64 h = MurmurHash3_64(elem, size, MURMUR_SEED);
 	uint64 index;
 	uint64 bit;
 	uint8 count = 0;

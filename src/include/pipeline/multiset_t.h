@@ -16,7 +16,7 @@
 
 #include "executor/tuptable.h"
 
-void MurmurHash3_x64_128 ( const void * key, int len, uint32_t seed, void * out );
+void MurmurHash3_128 ( const void * key, int len, uint32_t seed, void * out );
 
 typedef struct
 {
