@@ -74,6 +74,7 @@
 #include "storage/ipc.h"
 #include "storage/proc.h"
 #include "tcop/tcopprot.h"
+#include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
@@ -3204,6 +3205,29 @@ send_message_to_frontend(ErrorData *edata)
  * Support routines for formatting error messages.
  */
 
+/*
+ * sanitize_fmt_string --- replace certain substrings within the format string
+ */
+static char *
+sanitize_fmt_string(const char *fmt)
+{
+	Datum sanitized = CStringGetTextDatum(fmt);
+
+	sanitized = DirectFunctionCall3(replace_text,
+			sanitized, CStringGetTextDatum("postgresql"), CStringGetTextDatum("pipelinedb"));
+
+	sanitized = DirectFunctionCall3(replace_text,
+			sanitized, CStringGetTextDatum("PostgreSQL"), CStringGetTextDatum("PipelineDB"));
+
+	sanitized = DirectFunctionCall3(replace_text,
+			sanitized, CStringGetTextDatum("postgres"), CStringGetTextDatum("pipeline"));
+
+	sanitized = DirectFunctionCall3(replace_text,
+			sanitized, CStringGetTextDatum("Postgres"), CStringGetTextDatum("Pipeline"));
+
+
+	return TextDatumGetCString(sanitized);
+}
 
 /*
  * expand_fmt_string --- process special format codes in a format string
@@ -3218,6 +3242,7 @@ expand_fmt_string(const char *fmt, ErrorData *edata)
 {
 	StringInfoData buf;
 	const char *cp;
+	char *result;
 
 	initStringInfo(&buf);
 
@@ -3254,7 +3279,19 @@ expand_fmt_string(const char *fmt, ErrorData *edata)
 			appendStringInfoCharMacro(&buf, *cp);
 	}
 
-	return buf.data;
+	result = buf.data;
+
+/* we don't while testing because it would needlessly break a bunch of tests */
+#ifdef PIPELINE_DISABLE_SANITIZE
+	if (getenv(PIPELINE_DISABLE_SANITIZE))
+		return result;
+#endif
+
+	result = sanitize_fmt_string(buf.data);
+
+	pfree(buf.data);
+
+	return result;
 }
 
 

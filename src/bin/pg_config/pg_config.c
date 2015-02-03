@@ -425,7 +425,7 @@ static const InfoItem info_items[] = {
 static void
 help(void)
 {
-	printf(_("\n%s provides information about the installed version of PostgreSQL.\n\n"), progname);
+	printf(_("\n%s provides information about the installed version of PipelineDB.\n\n"), progname);
 	printf(_("Usage:\n"));
 	printf(_("  %s [OPTION]...\n\n"), progname);
 	printf(_("Options:\n"));
@@ -444,19 +444,18 @@ help(void)
 	printf(_("  --sysconfdir          show location of system-wide configuration files\n"));
 	printf(_("  --pgxs                show location of extension makefile\n"));
 	printf(_("  --configure           show options given to \"configure\" script when\n"
-			 "                        PostgreSQL was built\n"));
-	printf(_("  --cc                  show CC value used when PostgreSQL was built\n"));
-	printf(_("  --cppflags            show CPPFLAGS value used when PostgreSQL was built\n"));
-	printf(_("  --cflags              show CFLAGS value used when PostgreSQL was built\n"));
-	printf(_("  --cflags_sl           show CFLAGS_SL value used when PostgreSQL was built\n"));
-	printf(_("  --ldflags             show LDFLAGS value used when PostgreSQL was built\n"));
-	printf(_("  --ldflags_ex          show LDFLAGS_EX value used when PostgreSQL was built\n"));
-	printf(_("  --ldflags_sl          show LDFLAGS_SL value used when PostgreSQL was built\n"));
-	printf(_("  --libs                show LIBS value used when PostgreSQL was built\n"));
-	printf(_("  --version             show the PostgreSQL version\n"));
+			 "                        PipelineDB was built\n"));
+	printf(_("  --cc                  show CC value used when PipelineDB was built\n"));
+	printf(_("  --cppflags            show CPPFLAGS value used when PipelineDB was built\n"));
+	printf(_("  --cflags              show CFLAGS value used when PipelineDB was built\n"));
+	printf(_("  --cflags_sl           show CFLAGS_SL value used when PipelineDB was built\n"));
+	printf(_("  --ldflags             show LDFLAGS value used when PipelineDB was built\n"));
+	printf(_("  --ldflags_ex          show LDFLAGS_EX value used when PipelineDB was built\n"));
+	printf(_("  --ldflags_sl          show LDFLAGS_SL value used when PipelineDB was built\n"));
+	printf(_("  --libs                show LIBS value used when PipelineDB was built\n"));
+	printf(_("  --version             show the PipelineDB version\n"));
 	printf(_("  -?, --help            show this help, then exit\n"));
 	printf(_("\nWith no arguments, all known items are shown.\n\n"));
-	printf(_("Report bugs to <pgsql-bugs@postgresql.org>.\n"));
 }
 
 static void

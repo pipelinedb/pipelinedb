@@ -1,5 +1,5 @@
 # -----------------------------
-# PostgreSQL configuration file
+# PipelineDB configuration file
 # -----------------------------
 #
 # This file consists of lines of the form:
@@ -16,12 +16,12 @@
 #
 # This file is read on server startup and when the server receives a SIGHUP
 # signal.  If you edit the file on a running system, you have to SIGHUP the
-# server for the changes to take effect, or use "pg_ctl reload".  Some
+# server for the changes to take effect, or use "pipeline-ctl reload".  Some
 # parameters, which are marked below, require a server shutdown and restart to
 # take effect.
 #
 # Any parameter can also be given as a command-line option to the server, e.g.,
-# "postgres -c log_connections=on".  Some parameters can be changed at run time
+# "pipeline-server -c log_connections=on".  Some parameters can be changed at run time
 # with the "SET" SQL command.
 #
 # Memory units:  kB = kilobytes        Time units:  ms  = milliseconds
@@ -324,9 +324,9 @@
 					# (change requires restart)
 
 # These are only used if logging_collector is on:
-#log_directory = 'pg_log'		# directory where log files are written,
+#log_directory = 'log'		# directory where log files are written,
 					# can be absolute or relative to PGDATA
-#log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'	# log file name pattern,
+#log_filename = 'pipelinedb-%Y-%m-%d_%H%M%S.log'	# log file name pattern,
 					# can include strftime() escapes
 #log_file_mode = 0600			# creation mode for log files,
 					# begin with 0 to use octal notation
@@ -346,10 +346,10 @@
 
 # These are relevant when logging to syslog:
 #syslog_facility = 'LOCAL0'
-#syslog_ident = 'postgres'
+#syslog_ident = 'pipeline'
 
 # This is only relevant when logging to eventlog (win32):
-#event_source = 'PostgreSQL'
+#event_source = 'PipelineDB'
 
 # - When to Log -
 
@@ -521,7 +521,7 @@
 # - Locale and Formatting -
 
 #datestyle = 'iso, mdy'
-#intervalstyle = 'postgres'
+#intervalstyle = 'pipeline'
 #timezone = 'GMT'
 #timezone_abbreviations = 'Default'     # Select the set of available time zone
 					# abbreviations.  Currently, there are
@@ -569,8 +569,6 @@
 # VERSION/PLATFORM COMPATIBILITY
 #------------------------------------------------------------------------------
 
-# - Previous PostgreSQL Versions -
-
 #array_nulls = on
 #backslash_quote = safe_encoding	# on, off, or safe_encoding
 #default_with_oids = off
@@ -606,7 +604,7 @@
 #------------------------------------------------------------------------------
 
 # These options allow settings to be loaded from files other than the
-# default postgresql.conf.
+# default pipelinedb.conf.
 
 #include_dir = 'conf.d'			# include files ending in '.conf' from
 					# directory 'conf.d'
