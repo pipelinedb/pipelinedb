@@ -20,9 +20,11 @@ typedef struct
 	char *bytea;
 } BloomFilter;
 
-extern BloomFilter *BloomFilterCreateWithPAndN(float8 p, int64_t n);
+extern BloomFilter *BloomFilterCreateWithMAndK(uint64_t m, uint16_t k);
+extern BloomFilter *BloomFilterCreateWithPAndN(float8 p, uint64_t n);
 extern BloomFilter *BloomFilterCreate(void);
 
+extern BloomFilter *BloomFilterCopy(BloomFilter *bf);
 extern void BloomFilterAdd(BloomFilter *bf, void *key, Size size);
 extern bool BloomFilterContains(BloomFilter *bf, void *key, Size size);
 extern BloomFilter *BloomFilterUnion(BloomFilter *result, BloomFilter *incoming);

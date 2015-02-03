@@ -31,25 +31,42 @@
  */
 
 BloomFilter *
-BloomFilterCreateWithPAndN(float8 p, int64_t n)
+BloomFilterCreateWithMAndK(uint64_t m, uint16_t k)
 {
-	BloomFilter *bf = palloc(sizeof(BloomFilter));
+	BloomFilter *bf;
+	uint32_t num_bytes = ceil(m / 8.0); /* round m up to nearest byte limit */
 
-	/* Determine m and k from p and n */
-	bf->m = ceil((n * log(p)) / log(1.0 / (pow(2.0, log(2.0)))));
-	bf->k = round(log(2.0) * bf->m / n);
-
-	/* Round m up to nearest byte limit */
-	bf->num_bytes = ceil(bf->m / 8.0);
-	bf->bytea = palloc0(sizeof(char) * bf->num_bytes);
+	bf = palloc0(sizeof(BloomFilter) + num_bytes);
+	bf->m = m;
+	bf->k = k;
+	bf->num_bytes = num_bytes;
+	bf->bytea = ((char *) bf) + sizeof(BloomFilter);
 
 	return bf;
+}
+
+BloomFilter *
+BloomFilterCreateWithPAndN(float8 p, uint64_t n)
+{
+	/* Determine m and k from p and n */
+	uint64_t m = ceil((n * log(p)) / log(1.0 / (pow(2.0, log(2.0)))));
+	uint16_t k = round(log(2.0) * m / n);
+	return BloomFilterCreateWithMAndK(m, k);
 }
 
 BloomFilter *
 BloomFilterCreate(void)
 {
 	return BloomFilterCreateWithPAndN(DEFAULT_P, DEFAULT_N);
+}
+
+BloomFilter *
+BloomFilterCopy(BloomFilter *bf)
+{
+	Size size = BloomFilterSize(bf);
+	char *new = palloc(size);
+	memcpy(new, (char *) bf, size);
+	return (BloomFilter *) new;
 }
 
 void
@@ -102,7 +119,7 @@ BloomFilterUnion(BloomFilter *result, BloomFilter *incoming)
 Size
 BloomFilterSize(BloomFilter *bf)
 {
-	return sizeof(BloomFilter) + (sizeof(char) * ceil(bf->m / 8.0));
+	return sizeof(BloomFilter) + (sizeof(char) * bf->num_bytes);
 }
 
 uint64_t

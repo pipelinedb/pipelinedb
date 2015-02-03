@@ -184,4 +184,8 @@ DATA(insert (hll_count_distinct_final hll_count_distinct_transition 0 0 hll_unio
 DATA(insert (0 hll_agg_trans 0 0 hll_union_agg_trans t 3998));
 DATA(insert (0 hll_agg_transp 0 0 hll_union_agg_trans t 3998));
 
+/* bloom_agg */
+DATA(insert (0 bloom_agg_trans  0 0 bloom_union_agg_trans t 5030));
+DATA(insert (0 bloom_agg_transp 0 0 bloom_union_agg_trans t 5030));
+
 #endif
