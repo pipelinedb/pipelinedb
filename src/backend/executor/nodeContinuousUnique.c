@@ -23,6 +23,34 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
+static void
+get_bytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf)
+{
+	TupleDesc desc = slot->tts_tupleDescriptor;
+	int i;
+
+	num_attrs = num_attrs == -1 ? desc->natts : num_attrs;
+
+	for (i = 0; i < num_attrs; i++)
+	{
+		bool isnull;
+		AttrNumber attno = attrs == NULL ? i + 1 : attrs[i];
+		Form_pg_attribute att = slot->tts_tupleDescriptor->attrs[attno - 1];
+		Datum d = slot_getattr(slot, attno, &isnull);
+		Size size;
+
+		if (isnull)
+			continue;
+
+		size = datumGetSize(d, att->attbyval, att->attlen);
+
+		if (att->attbyval)
+			appendBinaryStringInfo(buf, (char *) &d, size);
+		else
+			appendBinaryStringInfo(buf, DatumGetPointer(d), size);
+	}
+}
+
 
 /* ----------------------------------------------------------------
  *		ExecContinuousUnique
@@ -35,7 +63,6 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 	TupleTableSlot *resultTupleSlot;
 	TupleTableSlot *slot;
 	PlanState  *outerPlan;
-	int unique;
 
 	/*
 	 * get information from the node
@@ -50,6 +77,11 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 	 */
 	for (;;)
 	{
+		StringInfoData buf;
+		bool missing;
+
+		initStringInfo(&buf);
+
 		/*
 		 * fetch a tuple from the outer subplan
 		 */
@@ -62,13 +94,17 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 			return NULL;
 		}
 
-		/* Did the tuple increase the distinct multiset size? */
-		node->distinct = HLLAddSlot(node->distinct, slot, plannode->numCols, plannode->uniqColIdx, &unique);
-		if (unique)
+		get_bytes(slot, plannode->numCols, plannode->uniqColIdx, &buf);
+		missing = !BloomFilterContains(node->distinct, buf.data, buf.len);
+
+		if (missing)
 		{
-			node->card++;
+			BloomFilterAdd(node->distinct, buf.data, buf.len);
+			node->dirty = true;
 			break;
 		}
+
+		resetStringInfo(&buf);
 	}
 
 	/*
@@ -118,8 +154,7 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 	/*
 	 * Load the multiset from pipeline_query.
 	 */
-	state->distinct = GetDistinctHLL(NameStr(state->cvname));
-	state->init_card = state->card = HLLSize(state->distinct);
+	state->distinct = GetDistinctBloomFilter(NameStr(state->cvname));
 
 	return state;
 }
@@ -134,11 +169,10 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 void
 ExecEndContinuousUnique(ContinuousUniqueState *node)
 {
-	/* Only update the distinct column if the cardinality has changed */
-	if (node->card > node->init_card)
+	if (node->dirty)
 	{
-		UpdateDistinctHLL(NameStr(node->cvname), node->distinct);
-		node->init_card = node->card;
+		UpdateDistinctBloomFilter(NameStr(node->cvname), node->distinct);
+		node->dirty = false;
 	}
 
 	ExecClearTuple(node->ps.ps_ResultTupleSlot);
@@ -158,6 +192,7 @@ ExecReScanContinuousUnique(ContinuousUniqueState *node)
 	if (node->distinct)
 	{
 		pfree(node->distinct);
-		node->distinct = GetDistinctHLL(NameStr(node->cvname));
+		node->distinct = GetDistinctBloomFilter(NameStr(node->cvname));
+		node->dirty = false;
 	}
 }

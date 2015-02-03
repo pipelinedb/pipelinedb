@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * toasting.h
@@ -62,5 +63,10 @@ DECLARE_TOAST(pg_shdescription, 2846, 2847);
 DECLARE_TOAST(pg_db_role_setting, 2966, 2967);
 #define PgDbRoleSettingToastTable 2966
 #define PgDbRoleSettingToastIndex 2967
+
+/* pipeline catalogs */
+DECLARE_TOAST(pipeline_query, 6000, 6001);
+DECLARE_TOAST(pipeline_stream, 6002, 6003);
+DECLARE_TOAST(pipeline_tstate, 6004, 6005);
 
 #endif   /* TOASTING_H */

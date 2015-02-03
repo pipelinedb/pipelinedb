@@ -13,14 +13,14 @@
 
 #include "postgres.h"
 
-#include "pipeline/hll.h"
+#include "pipeline/bloom.h"
 #include "catalog/pipeline_tstate.h"
 
 extern void CreateTStateEntry(char *cvname);
 extern void RemoveTStateEntry(char *cvname);
 extern void ResetTStateEntry(char *cvname);
 
-extern void UpdateDistinctHLL(char *cvname, HyperLogLog *distinct);
-extern HyperLogLog *GetDistinctHLL(char *cvname);
+extern void UpdateDistinctBloomFilter(char *cvname, BloomFilter *distinct);
+extern BloomFilter *GetDistinctBloomFilter(char *cvname);
 
 #endif

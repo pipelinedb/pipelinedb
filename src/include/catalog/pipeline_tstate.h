@@ -21,7 +21,7 @@ CATALOG(pipeline_tstate,4251) BKI_WITHOUT_OIDS
 {
 	NameData name;
 #ifdef CATALOG_VARLEN
-	hll distinct;
+	bloom distinct;
 #endif
 } FormData_pipeline_tstate;
 
