@@ -638,10 +638,17 @@ DESCR("range of bigints");
 DATA(insert OID = 3927 ( _int8range		PGNSP PGUID  -1 f b A f t \054 0 3926 0 array_in array_out array_recv array_send - - array_typanalyze d x f 0 -1 0 0 _null_ _null_ _null_ ));
 
 /* HyperLogLog */
-DATA(insert OID = 3998 ( hll	   PGNSP PGUID	-1 f b U f t \054 0	 0 5000 hll_in   hll_out   - - - - - i x f 0 -1 0 0 _null_ _null_ _null_ ));
+DATA(insert OID = 3998 ( hll	PGNSP PGUID	-1 f b U f t \054 0	 0 5000 hll_in   hll_out   - - - - - i x f 0 -1 0 0 _null_ _null_ _null_ ));
 DESCR("HyperLogLog");
-DATA(insert OID = 5000 (  _hll        PGNSP PGUID -1 f b A f t \054 0        3998 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
+DATA(insert OID = 5000 ( _hll	PGNSP PGUID -1 f b A f t \054 0  3998 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
 DESCR("HyperLogLog array");
+
+/* Bloom Filter */
+DATA(insert OID = 5030 ( bloom	PGNSP PGUID	-1 f b U f t \054 0	 0 5031 bloom_in	bloom_out   - - - - - i x f 0 -1 0 0 _null_ _null_ _null_ ));
+DESCR("Bloom Filter");
+DATA(insert OID = 5031 ( _bloom	PGNSP PGUID -1 f b A f t \054 0  5030 0 array_in	array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
+DESCR("Bloom Filter array");
+
 /*
  * pseudo-types
  *

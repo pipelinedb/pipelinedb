@@ -48,6 +48,7 @@
 #include <math.h>
 
 #include "pipeline/hll.h"
+#include "pipeline/miscutils.h"
 #include "utils/elog.h"
 #include "utils/palloc.h"
 
@@ -300,8 +301,9 @@
 #define HLL_IS_DENSE(hll) ((hll)->encoding == HLL_DENSE_DIRTY || (hll)->encoding == HLL_DENSE_CLEAN)
 #define HLL_IS_CLEAN(hll) ((hll)->encoding == HLL_DENSE_CLEAN || (hll)->encoding == HLL_SPARSE_CLEAN)
 
-#define MURMUR_SEED 0xadc83b19ULL
 #define HLL_SIZE(hll) (sizeof(HyperLogLog) + (hll)->mlen)
+
+#define MURMUR_SEED 0xbee5bf4112801383L
 
 /*
  * hll_sparse_to_dense
@@ -374,7 +376,7 @@ hll_sparse_to_dense(HyperLogLog *sparse)
 static uint8
 num_leading_zeroes(HyperLogLog *hll, void *elem, Size size, int *m)
 {
-	uint64 h = MurmurHash64A(elem, size);
+	uint64 h = MurmurHash3_64(elem, size, MURMUR_SEED);
 	uint64 index;
 	uint64 bit;
 	uint8 count = 0;
@@ -812,51 +814,6 @@ hll_dense_sum(HyperLogLog *hll, double *PE, int *ezp)
   *ezp = ez;
 
   return E;
-}
-
-/*
- * MurmurHash - 64-bit version
- */
-uint64
-MurmurHash64A(const void *key, Size keysize)
-{
-  static const uint64 m = 0xc6a4a7935bd1e995;
-  static const int r = 47;
-
-  const uint8 *data = (const uint8 *) key;
-  const uint8 *end = data + (keysize - (keysize & 7));
-  uint64 h = MURMUR_SEED ^ (keysize * m);
-
-  while (data != end)
-  {
-		uint64 k = *((uint64 *) data);
-
-		k *= m;
-		k ^= k >> r;
-		k *= m;
-
-		h ^= k;
-		h *= m;
-		data += 8;
-  }
-
-  switch(keysize & 7)
-  {
-		case 7: h ^= (uint64) data[6] << 48;
-		case 6: h ^= (uint64) data[5] << 40;
-		case 5: h ^= (uint64) data[4] << 32;
-		case 4: h ^= (uint64) data[3] << 24;
-		case 3: h ^= (uint64) data[2] << 16;
-		case 2: h ^= (uint64) data[1] << 8;
-		case 1: h ^= (uint64) data[0];
-						h *= m;
-  };
-
-  h ^= h >> r;
-  h *= m;
-  h ^= h >> r;
-
-  return h;
 }
 
 /*
