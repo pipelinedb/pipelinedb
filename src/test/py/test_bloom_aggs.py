@@ -122,7 +122,7 @@ def test_bloom_contains(pipeline, clean_db):
   """
 
   desc = ('x')
-  pipeline.create_cv('test_bloom_intersection', q)
+  pipeline.create_cv('test_bloom_contains', q)
 
   rows = []
   for i in range(10000):
@@ -137,7 +137,7 @@ def test_bloom_contains(pipeline, clean_db):
   cvq = """
   SELECT bloom_contains(bloom_agg, 0), bloom_contains(bloom_agg, 5000),
   bloom_contains(bloom_agg, 1), bloom_contains(bloom_agg, 5001)
-  FROM test_bloom_intersection
+  FROM test_bloom_contains
   """
 
   result = list(pipeline.execute(cvq))
