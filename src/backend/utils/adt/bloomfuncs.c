@@ -153,10 +153,12 @@ bloom_union_agg_trans(PG_FUNCTION_ARGS)
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
-		state = bloom_startup(fcinfo, incoming->m, incoming->k, 0, 0);
-	else
-		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
+	{
+		state = BloomFilterCopy(incoming);
+		PG_RETURN_POINTER(state);
+	}
 
+	state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 	state = BloomFilterUnion(state, incoming);
 
 	MemoryContextSwitchTo(old);
@@ -183,10 +185,12 @@ bloom_intersection_agg_trans(PG_FUNCTION_ARGS)
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
-		state = bloom_startup(fcinfo, incoming->m, incoming->k, 0, 0);
-	else
-		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
+	{
+		state = BloomFilterCopy(incoming);
+		PG_RETURN_POINTER(state);
+	}
 
+	state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 	state = BloomFilterIntersection(state, incoming);
 
 	MemoryContextSwitchTo(old);
