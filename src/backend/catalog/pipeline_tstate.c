@@ -17,7 +17,7 @@
 #include "catalog/indexing.h"
 #include "catalog/pipeline_tstate.h"
 #include "catalog/pipeline_tstate_fn.h"
-#include "pipeline/hll.h"
+#include "pipeline/bloom.h"
 #include "storage/lock.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
@@ -90,7 +90,7 @@ ResetTStateEntry(char *cvname)
 }
 
 void
-UpdateDistinctHLL(char *cvname, HyperLogLog *distinct)
+UpdateDistinctBloomFilter(char *cvname, BloomFilter *distinct)
 {
 	Relation pipeline_tstate = heap_open(PipelineTStateRelationId, RowExclusiveLock);
 	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
@@ -99,7 +99,7 @@ UpdateDistinctHLL(char *cvname, HyperLogLog *distinct)
 	Datum values[Natts_pipeline_tstate];
 	HeapTuple newtuple;
 
-	SET_VARSIZE(distinct, sizeof(HyperLogLog) + distinct->mlen);
+	SET_VARSIZE(distinct, BloomFilterSize(distinct));
 
 	MemSet(values, 0, sizeof(values));
 	MemSet(nulls, false, sizeof(nulls));
@@ -117,22 +117,22 @@ UpdateDistinctHLL(char *cvname, HyperLogLog *distinct)
 	heap_close(pipeline_tstate, RowExclusiveLock);
 }
 
-HyperLogLog *
-GetDistinctHLL(char *cvname)
+BloomFilter *
+GetDistinctBloomFilter(char *cvname)
 {
-	HyperLogLog *hll;
+	BloomFilter *bloom;
 	bool isnull;
 	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
 	Datum datum = SysCacheGetAttr(PIPELINETSTATENAME, tuple, Anum_pipeline_tstate_distinct, &isnull);
 
 	if (isnull)
-		hll = HLLCreate();
+		bloom = BloomFilterCreate();
 	else
 	{
-		hll = (HyperLogLog *) PG_DETOAST_DATUM(datum);
+		bloom = (BloomFilter *) PG_DETOAST_DATUM(datum);
 	}
 
 	ReleaseSysCache(tuple);
 
-	return HLLCopy(hll);
+	return bloom;
 }
