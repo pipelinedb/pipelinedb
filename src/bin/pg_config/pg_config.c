@@ -379,7 +379,7 @@ show_version(bool all)
 {
 	if (all)
 		printf("VERSION = ");
-	printf("PipelineDB " PG_VERSION "\n");
+	printf("PostgreSQL " PG_VERSION "\n");
 }
 
 
