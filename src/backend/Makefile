@@ -10,7 +10,7 @@
 #
 #-------------------------------------------------------------------------
 
-PGFILEDESC = "PostgreSQL Server"
+PGFILEDESC = "PipelineDB Server"
 # This is a daemon process, which is why it is not labeled as an executable
 #PGAPPICON=win32
 
@@ -48,13 +48,13 @@ LIBS := $(filter-out -lz -lreadline -ledit -ltermcap -lncurses -lcurses, $(LIBS)
 
 ##########################################################################
 
-all: submake-libpgport submake-schemapg postgres $(POSTGRES_IMP)
+all: submake-libpgport submake-schemapg pipeline-server $(POSTGRES_IMP)
 
 ifneq ($(PORTNAME), cygwin)
 ifneq ($(PORTNAME), win32)
 ifneq ($(PORTNAME), aix)
 
-postgres: $(OBJS)
+pipeline-server: $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) $(export_dynamic) $(call expand_subsys,$^) $(LIBS) -o $@
 
 endif
@@ -63,7 +63,7 @@ endif
 
 ifeq ($(PORTNAME), cygwin)
 
-postgres: $(OBJS)
+pipeline-server: $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) $(export_dynamic) -Wl,--stack,$(WIN32_STACK_RLIMIT) -Wl,--export-all-symbols -Wl,--out-implib=libpostgres.a $(call expand_subsys,$^) $(LIBS) -o $@
 
 # There is no correct way to write a rule that generates two files.
@@ -72,23 +72,23 @@ postgres: $(OBJS)
 # make, we must chain the dependencies like this.  The semicolon is
 # important, otherwise make will choose some built-in rule.
 
-libpostgres.a: postgres ;
+libpostgres.a: pipeline-server ;
 
 endif # cygwin
 
 ifeq ($(PORTNAME), win32)
 LIBS += -lsecur32
 
-postgres: $(OBJS) $(WIN32RES)
+pipeline-server: $(OBJS) $(WIN32RES)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) -Wl,--stack=$(WIN32_STACK_RLIMIT) -Wl,--export-all-symbols -Wl,--out-implib=libpostgres.a $(call expand_subsys,$(OBJS)) $(WIN32RES) $(LIBS) -o $@$(X)
 
-libpostgres.a: postgres ;
+libpostgres.a: pipeline-server ;
 
 endif # win32
 
 ifeq ($(PORTNAME), aix)
 
-postgres: $(POSTGRES_IMP)
+pipeline-server: $(POSTGRES_IMP)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) $(call expand_subsys,$(OBJS)) -Wl,-bE:$(top_builddir)/src/backend/$(POSTGRES_IMP) $(LIBS) -o $@
 
 $(POSTGRES_IMP): $(OBJS)
@@ -215,16 +215,16 @@ endif
 	$(MAKE) -C tsearch install-data
 	$(INSTALL_DATA) $(srcdir)/libpq/pg_hba.conf.sample '$(DESTDIR)$(datadir)/pg_hba.conf.sample'
 	$(INSTALL_DATA) $(srcdir)/libpq/pg_ident.conf.sample '$(DESTDIR)$(datadir)/pg_ident.conf.sample'
-	$(INSTALL_DATA) $(srcdir)/utils/misc/postgresql.conf.sample '$(DESTDIR)$(datadir)/postgresql.conf.sample'
+	$(INSTALL_DATA) $(srcdir)/utils/misc/pipelinedb.conf.sample '$(DESTDIR)$(datadir)/pipelinedb.conf.sample'
 	$(INSTALL_DATA) $(srcdir)/access/transam/recovery.conf.sample '$(DESTDIR)$(datadir)/recovery.conf.sample'
 
-install-bin: postgres $(POSTGRES_IMP) installdirs
-	$(INSTALL_PROGRAM) postgres$(X) '$(DESTDIR)$(bindir)/postgres$(X)'
+install-bin: pipeline-server $(POSTGRES_IMP) installdirs
+	$(INSTALL_PROGRAM) pipeline-server$(X) '$(DESTDIR)$(bindir)/pipeline-server$(X)'
 ifneq ($(PORTNAME), win32)
 	@rm -f '$(DESTDIR)$(bindir)/postmaster$(X)'
-	ln -s postgres$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
+	ln -s pipeline-server$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
 else
-	$(INSTALL_PROGRAM) postgres$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
+	$(INSTALL_PROGRAM) pipeline-server$(X) '$(DESTDIR)$(bindir)/postmaster$(X)'
 endif
 ifeq ($(MAKE_EXPORTS), true)
 	$(INSTALL_DATA) $(POSTGRES_IMP) '$(DESTDIR)$(pkglibdir)/$(POSTGRES_IMP)'
@@ -254,7 +254,7 @@ endif
 ##########################################################################
 
 uninstall:
-	rm -f '$(DESTDIR)$(bindir)/postgres$(X)' '$(DESTDIR)$(bindir)/postmaster'
+	rm -f '$(DESTDIR)$(bindir)/pipeline-server$(X)' '$(DESTDIR)$(bindir)/postmaster'
 ifeq ($(MAKE_EXPORTS), true)
 	rm -f '$(DESTDIR)$(pkglibdir)/$(POSTGRES_IMP)'
 	rm -f '$(DESTDIR)$(pgxsdir)/$(MKLDEXPORT_DIR)/mkldexport.sh'
@@ -273,14 +273,14 @@ endif
 	$(MAKE) -C tsearch uninstall-data
 	rm -f '$(DESTDIR)$(datadir)/pg_hba.conf.sample' \
 	      '$(DESTDIR)$(datadir)/pg_ident.conf.sample' \
-              '$(DESTDIR)$(datadir)/postgresql.conf.sample' \
+              '$(DESTDIR)$(datadir)/pipelinedb.conf.sample' \
 	      '$(DESTDIR)$(datadir)/recovery.conf.sample'
 
 
 ##########################################################################
 
 clean:
-	rm -f $(LOCALOBJS) postgres$(X) $(POSTGRES_IMP) \
+	rm -f $(LOCALOBJS) pipeline-server$(X) $(POSTGRES_IMP) \
 		$(top_builddir)/src/include/parser/gram.h \
 		$(top_builddir)/src/include/catalog/schemapg.h \
 		$(top_builddir)/src/include/utils/fmgroids.h \
@@ -323,4 +323,4 @@ maintainer-clean: distclean
 # are up to date.  It saves the time of doing all the submakes.
 .PHONY: quick
 quick: $(OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) $(export_dynamic) $(call expand_subsys,$^) $(LIBS) -o postgres
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_EX) $(export_dynamic) $(call expand_subsys,$^) $(LIBS) -o pipeline-server

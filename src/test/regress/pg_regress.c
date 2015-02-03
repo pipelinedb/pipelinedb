@@ -302,7 +302,7 @@ stop_postmaster(void)
 		fflush(stderr);
 
 		snprintf(buf, sizeof(buf),
-				 "\"%s/pg_ctl\" stop -D \"%s/data\" -s -m fast",
+				 "\"%s/pipeline-ctl\" stop -D \"%s/data\" -s -m fast",
 				 bindir, temp_install);
 		r = system(buf);
 		if (r != 0)
@@ -1884,7 +1884,7 @@ static void
 drop_database_if_exists(const char *dbname)
 {
 	header(_("dropping database \"%s\""), dbname);
-	psql_command("postgres", "DROP DATABASE IF EXISTS \"%s\"", dbname);
+	psql_command("pipeline", "DROP DATABASE IF EXISTS \"%s\"", dbname);
 }
 
 static void
@@ -1898,10 +1898,10 @@ create_database(const char *dbname)
 	 */
 	header(_("creating database \"%s\""), dbname);
 	if (encoding)
-		psql_command("postgres", "CREATE DATABASE \"%s\" TEMPLATE=template0 ENCODING='%s'%s", dbname, encoding,
+		psql_command("pipeline", "CREATE DATABASE \"%s\" TEMPLATE=template0 ENCODING='%s'%s", dbname, encoding,
 					 (nolocale) ? " LC_COLLATE='C' LC_CTYPE='C'" : "");
 	else
-		psql_command("postgres", "CREATE DATABASE \"%s\" TEMPLATE=template0%s", dbname,
+		psql_command("pipeline", "CREATE DATABASE \"%s\" TEMPLATE=template0%s", dbname,
 					 (nolocale) ? " LC_COLLATE='C' LC_CTYPE='C'" : "");
 	psql_command(dbname,
 				 "ALTER DATABASE \"%s\" SET lc_messages TO 'C';"
@@ -1936,17 +1936,17 @@ static void
 drop_role_if_exists(const char *rolename)
 {
 	header(_("dropping role \"%s\""), rolename);
-	psql_command("postgres", "DROP ROLE IF EXISTS \"%s\"", rolename);
+	psql_command("pipeline", "DROP ROLE IF EXISTS \"%s\"", rolename);
 }
 
 static void
 create_role(const char *rolename, const _stringlist *granted_dbs)
 {
 	header(_("creating role \"%s\""), rolename);
-	psql_command("postgres", "CREATE ROLE \"%s\" WITH LOGIN", rolename);
+	psql_command("pipeline", "CREATE ROLE \"%s\" WITH LOGIN", rolename);
 	for (; granted_dbs != NULL; granted_dbs = granted_dbs->next)
 	{
-		psql_command("postgres", "GRANT ALL ON DATABASE \"%s\" TO \"%s\"",
+		psql_command("pipeline", "GRANT ALL ON DATABASE \"%s\" TO \"%s\"",
 					 granted_dbs->str, rolename);
 	}
 }
@@ -2221,6 +2221,12 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		if (!directory_exists(buf))
 			make_directory(buf);
 
+		/*
+		 * We disable log sanitization while testing tests because it would
+		 * needlessly break too many tests
+		 */
+		doputenv("PIPELINE_DISABLE_SANITIZE", "1");
+
 		/* "make install" */
 #ifndef WIN32_ONLY_COMPILER
 		snprintf(buf, sizeof(buf),
@@ -2268,14 +2274,14 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		/* initdb */
 		header(_("initializing database system"));
 		snprintf(buf, sizeof(buf),
-				 "\"%s/initdb\" -D \"%s/data\" -L \"%s\" --noclean --nosync%s%s > \"%s/log/initdb.log\" 2>&1",
+				 "\"%s/pipeline-init\" -D \"%s/data\" -L \"%s\" --noclean --nosync%s%s > \"%s/log/initdb.log\" 2>&1",
 				 bindir, temp_install, datadir,
 				 debug ? " --debug" : "",
 				 nolocale ? " --no-locale" : "",
 				 outputdir);
 		if (system(buf))
 		{
-			fprintf(stderr, _("\n%s: initdb failed\nExamine %s/log/initdb.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
+			fprintf(stderr, _("\n%s: pipeline-init failed\nExamine %s/log/initdb.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
 			exit(2);
 		}
 
@@ -2287,7 +2293,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		 * don't set max_prepared_transactions any higher than actually needed
 		 * by the prepared_xacts regression test.)
 		 */
-		snprintf(buf, sizeof(buf), "%s/data/postgresql.conf", temp_install);
+		snprintf(buf, sizeof(buf), "%s/data/pipelinedb.conf", temp_install);
 		pg_conf = fopen(buf, "a");
 		if (pg_conf == NULL)
 		{
@@ -2319,7 +2325,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		 * Check if there is a postmaster running already.
 		 */
 		snprintf(buf2, sizeof(buf2),
-				 "\"%s/psql\" -X postgres <%s 2>%s",
+				 "\"%s/psql\" -X pipeline <%s 2>%s",
 				 bindir, DEVNULL, DEVNULL);
 
 		for (i = 0; i < 16; i++)
@@ -2351,7 +2357,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		 */
 		header(_("starting postmaster"));
 		snprintf(buf, sizeof(buf),
-				 "\"%s/postgres\" -D \"%s/data\" -F%s "
+				 "\"%s/pipeline-server\" -D \"%s/data\" -F%s "
 				 "-c \"listen_addresses=%s\" -k \"%s\" "
 				 "> \"%s/log/postmaster.log\" 2>&1",
 				 bindir, temp_install, debug ? " -d 5" : "",
