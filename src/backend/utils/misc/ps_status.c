@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*--------------------------------------------------------------------
  * ps_status.c
  *
@@ -269,7 +270,7 @@ init_ps_display(const char *username, const char *dbname,
 			 username, dbname, host_info);
 #else
 	snprintf(ps_buffer, ps_buffer_size,
-			 "postgres: %s %s %s ",
+			 "pipeline: %s %s %s ",
 			 username, dbname, host_info);
 #endif
 

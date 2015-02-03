@@ -11,7 +11,7 @@
  * all its data, create the files that hold the global tables, create
  * a few other control files for it, and create three databases: the
  * template databases "template0" and "template1", and a default user
- * database "postgres".
+ * database "pipeline".
  *
  * The template databases are ordinary PostgreSQL databases.  template0
  * is never supposed to change after initdb, whereas template1 can be
@@ -20,7 +20,7 @@
  *
  * For largely-historical reasons, the template1 database is the one built
  * by the basic bootstrap process.  After it is complete, template0 and
- * the default database, postgres, are made just by copying template1.
+ * the default database, pipeline, are made just by copying template1.
  *
  * To create template1, we run the postgres (backend) program in bootstrap
  * mode and feed it data from the postgres.bki library file.  After this
@@ -1077,7 +1077,7 @@ set_null_conf(void)
 	FILE	   *conf_file;
 	char	   *path;
 
-	path = psprintf("%s/postgresql.conf", pg_data);
+	path = psprintf("%s/pipelinedb.conf", pg_data);
 	conf_file = fopen(path, PG_BINARY_W);
 	if (conf_file == NULL)
 	{
@@ -1340,7 +1340,7 @@ setup_config(void)
 	conflines = replace_token(conflines, "#dynamic_shared_memory_type = posix",
 							  repltok);
 
-	snprintf(path, sizeof(path), "%s/postgresql.conf", pg_data);
+	snprintf(path, sizeof(path), "%s/pipelinedb.conf", pg_data);
 
 	writefile(path, conflines);
 	if (chmod(path, S_IRUSR | S_IWUSR) != 0)
@@ -1360,7 +1360,7 @@ setup_config(void)
 	autoconflines[1] = pg_strdup("# It will be overwritten by the ALTER SYSTEM command.\n");
 	autoconflines[2] = NULL;
 
-	sprintf(path, "%s/postgresql.auto.conf", pg_data);
+	sprintf(path, "%s/pipelinedb.auto.conf", pg_data);
 
 	writefile(path, autoconflines);
 	if (chmod(path, S_IRUSR | S_IWUSR) != 0)
@@ -2427,12 +2427,12 @@ make_postgres(void)
 	PG_CMD_DECL;
 	const char **line;
 	static const char *postgres_setup[] = {
-		"CREATE DATABASE postgres;\n",
-		"COMMENT ON DATABASE postgres IS 'default administrative connection database';\n",
+		"CREATE DATABASE pipeline;\n",
+		"COMMENT ON DATABASE pipeline IS 'default administrative connection database';\n",
 		NULL
 	};
 
-	fputs(_("copying template1 to postgres ... "), stdout);
+	fputs(_("copying template1 to pipeline ... "), stdout);
 	fflush(stdout);
 
 	snprintf(cmd, sizeof(cmd),
@@ -2893,7 +2893,7 @@ CreateRestrictedProcess(char *cmd, PROCESS_INFORMATION *processInfo)
 static void
 usage(const char *progname)
 {
-	printf(_("%s initializes a PostgreSQL database cluster.\n\n"), progname);
+	printf(_("%s initializes a PipelineDB database cluster.\n\n"), progname);
 	printf(_("Usage:\n"));
 	printf(_("  %s [OPTION]... [DATADIR]\n"), progname);
 	printf(_("\nOptions:\n"));
@@ -2927,7 +2927,6 @@ usage(const char *progname)
 	printf(_("  -?, --help                show this help, then exit\n"));
 	printf(_("\nIf the data directory is not specified, the environment variable PGDATA\n"
 			 "is used.\n"));
-	printf(_("\nReport bugs to <pgsql-bugs@postgresql.org>.\n"));
 }
 
 static void
@@ -2936,7 +2935,7 @@ check_authmethod_unspecified(const char **authmethod)
 	if (*authmethod == NULL || strlen(*authmethod) == 0)
 	{
 		authwarning = _("\nWARNING: enabling \"trust\" authentication for local connections\n"
-						"You can change this by editing pg_hba.conf or using the option -A, or\n"
+						"You can change this by editing pipeline-hba.conf or using the option -A, or\n"
 			"--auth-local and --auth-host, the next time you run initdb.\n");
 		*authmethod = "trust";
 	}
@@ -3073,7 +3072,7 @@ setup_bin_paths(const char *argv0)
 {
 	int			ret;
 
-	if ((ret = find_other_exec(argv0, "postgres", PG_BACKEND_VERSIONSTR,
+	if ((ret = find_other_exec(argv0, "pipeline-server", PG_BACKEND_VERSIONSTR,
 							   backend_exec)) < 0)
 	{
 		char		full_path[MAXPGPATH];
@@ -3083,14 +3082,14 @@ setup_bin_paths(const char *argv0)
 
 		if (ret == -1)
 			fprintf(stderr,
-					_("The program \"postgres\" is needed by %s "
+					_("The program \"pipeline-server\" is needed by %s "
 					  "but was not found in the\n"
 					  "same directory as \"%s\".\n"
 					  "Check your installation.\n"),
 					progname, full_path);
 		else
 			fprintf(stderr,
-					_("The program \"postgres\" was found by \"%s\"\n"
+					_("The program \"pipeline-server\" was found by \"%s\"\n"
 					  "but was not the same version as %s.\n"
 					  "Check your installation.\n"),
 					full_path, progname);
@@ -3213,7 +3212,7 @@ setup_data_file_paths(void)
 	set_input(&shdesc_file, "postgres.shdescription");
 	set_input(&hba_file, "pg_hba.conf.sample");
 	set_input(&ident_file, "pg_ident.conf.sample");
-	set_input(&conf_file, "postgresql.conf.sample");
+	set_input(&conf_file, "pipelinedb.conf.sample");
 	set_input(&conversion_file, "conversion_create.sql");
 	set_input(&dictionary_file, "snowball_create.sql");
 	set_input(&info_schema_file, "information_schema.sql");
@@ -3831,9 +3830,9 @@ main(int argc, char *argv[])
 	get_parent_directory(bin_dir);
 
 	printf(_("\nSuccess. You can now start the database server using:\n\n"
-			 "    %s%s%spostgres%s -D %s%s%s\n"
+			 "    %s%s%spipeline-server%s -D %s%s%s\n"
 			 "or\n"
-			 "    %s%s%spg_ctl%s -D %s%s%s -l logfile start\n\n"),
+			 "    %s%s%spipeline-ctl%s -D %s%s%s -l logfile start\n\n"),
 	   QUOTE_PATH, bin_dir, (strlen(bin_dir) > 0) ? DIR_SEP : "", QUOTE_PATH,
 		   QUOTE_PATH, pgdata_native, QUOTE_PATH,
 	   QUOTE_PATH, bin_dir, (strlen(bin_dir) > 0) ? DIR_SEP : "", QUOTE_PATH,

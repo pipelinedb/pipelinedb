@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*--------------------------------------------------------------------
  * guc.h
  *
@@ -23,7 +24,7 @@
  * This file will be used to store values of configuration parameters
  * set by ALTER SYSTEM command.
  */
-#define PG_AUTOCONF_FILENAME		"postgresql.auto.conf"
+#define PG_AUTOCONF_FILENAME		"pipelinedb.auto.conf"
 
 /*
  * Certain options can only be set at certain times. The rules are

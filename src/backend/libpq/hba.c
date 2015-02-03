@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * hba.c
@@ -910,7 +911,7 @@ parse_hba_line(List *line, int line_num, char *raw_line)
 				ereport(LOG,
 						(errcode(ERRCODE_CONFIG_FILE_ERROR),
 						 errmsg("hostssl requires SSL to be turned on"),
-						 errhint("Set ssl = on in postgresql.conf."),
+						 errhint("Set ssl = on in pipelinedb.conf."),
 						 errcontext("line %d of configuration file \"%s\"",
 									line_num, HbaFileName)));
 				return NULL;
