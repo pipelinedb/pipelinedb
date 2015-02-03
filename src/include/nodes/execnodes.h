@@ -21,7 +21,6 @@
 #include "nodes/plannodes.h"
 #include "pipeline/hll.h"
 #include "pipeline/streambuf.h"
-#include "pipeline/multiset_t.h"
 #include "utils/reltrigger.h"
 #include "utils/sortsupport.h"
 #include "utils/tuplestore.h"
