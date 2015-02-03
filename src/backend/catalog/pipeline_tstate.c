@@ -13,6 +13,7 @@
 #include "access/htup.h"
 #include "access/htup_details.h"
 #include "access/heapam.h"
+#include "access/tuptoaster.h"
 #include "access/xact.h"
 #include "catalog/indexing.h"
 #include "catalog/pipeline_tstate.h"
@@ -39,11 +40,10 @@ CreateTStateEntry(char *cvname)
 	namestrcpy(&name_data, cvname);
 	values[Anum_pipeline_tstate_name - 1] = NameGetDatum(&name_data);
 
-	/* distinct multiset should be NULL */
+	/* distinct Bloom filter should be NULL */
 	nulls[Anum_pipeline_tstate_distinct - 1] = true;
 
 	tup = heap_form_tuple(pipeline_tstate->rd_att, values, nulls);
-
 	simple_heap_insert(pipeline_tstate, tup);
 	CatalogUpdateIndexes(pipeline_tstate, tup);
 	CommandCounterIncrement();
@@ -126,11 +126,15 @@ GetDistinctBloomFilter(char *cvname)
 	Datum datum = SysCacheGetAttr(PIPELINETSTATENAME, tuple, Anum_pipeline_tstate_distinct, &isnull);
 
 	if (isnull)
-		bloom = BloomFilterCreate();
-	else
 	{
-		bloom = (BloomFilter *) PG_DETOAST_DATUM(datum);
+		/*
+		 * TODO(usmanm): We should probably pick some reasonable defaults here and
+		 * allow users to specify them
+		 */
+		bloom = BloomFilterCreate();
 	}
+	else
+		bloom = (BloomFilter *) PG_DETOAST_DATUM(datum);
 
 	ReleaseSysCache(tuple);
 
