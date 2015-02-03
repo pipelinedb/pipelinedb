@@ -17,7 +17,7 @@
 #include "catalog/indexing.h"
 #include "catalog/pipeline_tstate.h"
 #include "catalog/pipeline_tstate_fn.h"
-#include "pipeline/hll.h"
+#include "pipeline/bloom.h"
 #include "storage/lock.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
@@ -39,11 +39,10 @@ CreateTStateEntry(char *cvname)
 	namestrcpy(&name_data, cvname);
 	values[Anum_pipeline_tstate_name - 1] = NameGetDatum(&name_data);
 
-	/* distinct multiset should be NULL */
+	/* distinct Bloom filter should be NULL */
 	nulls[Anum_pipeline_tstate_distinct - 1] = true;
 
 	tup = heap_form_tuple(pipeline_tstate->rd_att, values, nulls);
-
 	simple_heap_insert(pipeline_tstate, tup);
 	CatalogUpdateIndexes(pipeline_tstate, tup);
 	CommandCounterIncrement();
@@ -90,7 +89,7 @@ ResetTStateEntry(char *cvname)
 }
 
 void
-UpdateDistinctHLL(char *cvname, HyperLogLog *distinct)
+UpdateDistinctBloomFilter(char *cvname, BloomFilter *distinct)
 {
 	Relation pipeline_tstate = heap_open(PipelineTStateRelationId, RowExclusiveLock);
 	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
@@ -99,7 +98,7 @@ UpdateDistinctHLL(char *cvname, HyperLogLog *distinct)
 	Datum values[Natts_pipeline_tstate];
 	HeapTuple newtuple;
 
-	SET_VARSIZE(distinct, sizeof(HyperLogLog) + distinct->mlen);
+	SET_VARSIZE(distinct, BloomFilterSize(distinct));
 
 	MemSet(values, 0, sizeof(values));
 	MemSet(nulls, false, sizeof(nulls));
@@ -117,22 +116,26 @@ UpdateDistinctHLL(char *cvname, HyperLogLog *distinct)
 	heap_close(pipeline_tstate, RowExclusiveLock);
 }
 
-HyperLogLog *
-GetDistinctHLL(char *cvname)
+BloomFilter *
+GetDistinctBloomFilter(char *cvname)
 {
-	HyperLogLog *hll;
+	BloomFilter *bloom;
 	bool isnull;
 	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
 	Datum datum = SysCacheGetAttr(PIPELINETSTATENAME, tuple, Anum_pipeline_tstate_distinct, &isnull);
 
 	if (isnull)
-		hll = HLLCreate();
-	else
 	{
-		hll = (HyperLogLog *) PG_DETOAST_DATUM(datum);
+		/*
+		 * TODO(usmanm): We should probably pick some reasonable defaults here and
+		 * allow users to specify them
+		 */
+		bloom = BloomFilterCreate();
 	}
+	else
+		bloom = (BloomFilter *) PG_DETOAST_DATUM(datum);
 
 	ReleaseSysCache(tuple);
 
-	return HLLCopy(hll);
+	return bloom;
 }

@@ -103,12 +103,19 @@ BloomFilterContains(BloomFilter *bf, void *key, Size size)
 BloomFilter *
 BloomFilterUnion(BloomFilter *result, BloomFilter *incoming)
 {
-	int i;
+	uint32_t i;
+	uint32_t num_64 = result->blen / 8;
+	uint32_t bit_start = num_64 * 8;
+	uint64_t *b1 = (uint64_t *) result->b;
+	uint64_t *b2 = (uint64_t *) incoming->b;
 
 	Assert(result->m == incoming->m);
 	Assert(result->k == incoming->k);
 
-	for (i = 0; i < result->blen; i++)
+	for (i = 0; i < num_64; i++)
+		b1[i] |= b2[i];
+
+	for (i = bit_start; i < result->blen; i++)
 		result->b[i] |= incoming->b[i];
 
 	return result;
@@ -117,12 +124,19 @@ BloomFilterUnion(BloomFilter *result, BloomFilter *incoming)
 BloomFilter *
 BloomFilterIntersection(BloomFilter *result, BloomFilter *incoming)
 {
-	int i;
+	uint32_t i;
+	uint32_t num_64 = result->blen / 8;
+	uint32_t bit_start = num_64 * 8;
+	uint64_t *b1 = (uint64_t *) result->b;
+	uint64_t *b2 = (uint64_t *) incoming->b;
 
 	Assert(result->m == incoming->m);
 	Assert(result->k == incoming->k);
 
-	for (i = 0; i < result->blen; i++)
+	for (i = 0; i < num_64; i++)
+		b1[i] &= b2[i];
+
+	for (i = bit_start; i < result->blen; i++)
 		result->b[i] &= incoming->b[i];
 
 	return result;
