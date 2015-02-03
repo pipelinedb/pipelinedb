@@ -526,6 +526,17 @@ int			postmaster_alive_fds[2] = {-1, -1};
 HANDLE		PostmasterHandle;
 #endif
 
+static void
+splash(void)
+{
+	printf("    ____  _            ___            ____  ____\n");
+	printf("   / __ \\(_)___  ___  / (_)___  ___  / __ \\/ __ )\n");
+	printf("  / /_/ / / __ \\/ _ \\/ / / __ \\/ _ \\/ / / / __  |\n");
+	printf(" / ____/ / /_/ /  __/ / / / / /  __/ /_/ / /_/ /\n");
+	printf("/_/   /_/ .___/\\___/_/_/_/ /_/\\___/_____/_____/\n");
+	printf("       /_/\n\n");
+}
+
 /*
  * Postmaster main entry point
  */
@@ -1221,6 +1232,8 @@ PostmasterMain(int argc, char *argv[])
 	StartupPID = StartupDataBase();
 	Assert(StartupPID != 0);
 	pmState = PM_STARTUP;
+
+	splash();
 
 	/* Some workers may be scheduled to start now */
 	maybe_start_bgworker();
