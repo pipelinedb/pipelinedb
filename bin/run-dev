@@ -82,15 +82,6 @@ def main(args):
             print p
         sys.exit(1)
 
-    print """\
-    ____  _            ___            ____  ____
-   / __ \(_)___  ___  / (_)___  ___  / __ \/ __ )
-  / /_/ / / __ \/ _ \/ / / __ \/ _ \/ / / / __  |
- / ____/ / /_/ /  __/ / / / / /  __/ /_/ / /_/ /
-/_/   /_/ .___/\___/_/_/_/ /_/\___/_____/_____/
-       /_/
-"""
-
     data_dir = os.path.join(root, DATA_DIR)
     PROCS.append(subprocess.Popen([SERVER, '-D' , data_dir, '-p', args.port]))
     if args.stmts:
