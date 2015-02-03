@@ -57,18 +57,20 @@ START_TEST(test_false_positives)
 	float p = 0.01;
 	int n = 10000;
 	BloomFilter *bf = BloomFilterCreateWithPAndN(p, n);
-	int num_insert = 5000;
-	int num_found = 0;
+	float fp = 0;
 	int i;
 
-	for (i = 0; i < num_insert; i++)
+	for (i = 0; i < n; i++)
 		BloomFilterAdd(bf, &i, sizeof(int));
 
 	for (i = 0; i < n; i++)
-		if (BloomFilterContains(bf, &i, sizeof(int)))
-			num_found++;
+	{
+		int r = rand();
+		if (BloomFilterContains(bf, &r, sizeof(int)))
+			fp++;
+	}
 
-	elog(LOG, "FOUND %d %d %d %d", num_found, bf->m, bf->k, BloomFilterCardinality(bf));
+	ck_assert_int_le(fp / n, p);
 }
 END_TEST
 

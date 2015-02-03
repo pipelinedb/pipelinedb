@@ -21,7 +21,7 @@
 Datum
 bloom_in(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "user-specified Bloom Filters are not supported");
+	elog(ERROR, "user-specified Bloom filters are not supported");
 	PG_RETURN_NULL();
 }
 
@@ -75,7 +75,7 @@ bloom_add(FunctionCallInfo fcinfo, BloomFilter *bloom, Datum elem)
 
 /*
  * bloom_agg transition function -
- * 	adds the given element to the transition Bloom Filter
+ * 	adds the given element to the transition Bloom filter
  */
 Datum
 bloom_agg_trans(PG_FUNCTION_ARGS)
@@ -137,7 +137,7 @@ bloom_agg_transp(PG_FUNCTION_ARGS)
 /*
  * bloom_union_agg transition function -
  *
- * 	returns the union of the transition state and the given Bloom Filter
+ * 	returns the union of the transition state and the given Bloom filter
  */
 Datum
 bloom_union_agg_trans(PG_FUNCTION_ARGS)
@@ -167,7 +167,7 @@ bloom_union_agg_trans(PG_FUNCTION_ARGS)
 /*
  * bloom_intersection_agg transition function -
  *
- * 	returns the intersection of the transition state and the given Bloom Filter
+ * 	returns the intersection of the transition state and the given Bloom filter
  */
 Datum
 bloom_intersection_agg_trans(PG_FUNCTION_ARGS)
@@ -195,7 +195,7 @@ bloom_intersection_agg_trans(PG_FUNCTION_ARGS)
 }
 
 /*
- * Returns the cardinality of the given Bloom Filter
+ * Returns the cardinality of the given Bloom filter
  */
 Datum
 bloom_cardinality(PG_FUNCTION_ARGS)
@@ -211,7 +211,7 @@ bloom_cardinality(PG_FUNCTION_ARGS)
 }
 
 /*
- * Returns whether the Bloom Filter contains the item or not
+ * Returns whether the Bloom filter contains the item or not
  */
 Datum
 bloom_contains(PG_FUNCTION_ARGS)
@@ -252,7 +252,7 @@ bloom_combine(PG_FUNCTION_ARGS)
 	BloomFilter *incoming = (BloomFilter *) PG_GETARG_VARLENA_P(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
-			elog(ERROR, "aggregate function called in non-aggregate context");
+			elog(ERROR, "bloom_combine called in non-aggregate context");
 
 	old = MemoryContextSwitchTo(context);
 

@@ -93,7 +93,7 @@ BloomFilterContains(BloomFilter *bf, void *key, Size size)
 	{
 		uint64_t h = hash[0] + (i * hash[1]);
 		uint32_t idx = h % bf->m;
-		if (!(bf->b[BYTE_IDX(bf, idx)] && BIT_MASK(idx)))
+		if (!(bf->b[BYTE_IDX(bf, idx)] & BIT_MASK(idx)))
 			return false;
 	}
 
