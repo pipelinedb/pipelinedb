@@ -13,9 +13,9 @@ from sqlalchemy.exc import OperationalError
 BOOTSTRAPPED_BASE = './.pdbbase'
 ROOT = '../../../'
 INSTALL_FORMAT = './.pdb-%d'
-SERVER = os.path.join(ROOT, 'src', 'backend', 'postgres')
+SERVER = os.path.join(ROOT, 'src', 'backend', 'pipeline-server')
 TEST_DBNAME = 'pipelinedb_test'
-CONNSTR_TEMPLATE = 'postgres://%s@localhost:%d/postgres'
+CONNSTR_TEMPLATE = 'postgres://%s@localhost:%d/pipeline'
 TEST_ENV_VAR = 'PIPELINE_PY_TESTS'
 
 class PipelineDB(object):
@@ -55,7 +55,7 @@ class PipelineDB(object):
         install_data_dir = os.path.join(install_root, 'data')
 
         if do_initdb:
-            initdb = os.path.join(install_bin_dir, 'initdb')
+            initdb = os.path.join(install_bin_dir, 'pipeline-init')
             out, err = subprocess.Popen([initdb, '-D',
                                          install_data_dir]).communicate()
 
