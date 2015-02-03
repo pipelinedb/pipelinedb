@@ -9,7 +9,7 @@
 #
 #-------------------------------------------------------------------------
 
-PGFILEDESC = "initdb - initialize a new database cluster"
+PGFILEDESC = "pipeline-init - initialize a new database cluster"
 PGAPPICON=win32
 
 subdir = src/bin/initdb
@@ -25,9 +25,9 @@ endif
 
 OBJS=	initdb.o findtimezone.o localtime.o encnames.o $(WIN32RES)
 
-all: initdb
+all: pipeline-init
 
-initdb: $(OBJS) | submake-libpgport
+pipeline-init: $(OBJS) | submake-libpgport
 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
 
 # We used to pull in all of libpq to get encnames.c, but that
@@ -43,13 +43,13 @@ localtime.c: % : $(top_srcdir)/src/timezone/%
 	rm -f $@ && $(LN_S) $< .
 
 install: all installdirs
-	$(INSTALL_PROGRAM) initdb$(X) '$(DESTDIR)$(bindir)/initdb$(X)'
+	$(INSTALL_PROGRAM) pipeline-init$(X) '$(DESTDIR)$(bindir)/pipeline-init$(X)'
 
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(bindir)'
 
 uninstall:
-	rm -f '$(DESTDIR)$(bindir)/initdb$(X)'
+	rm -f '$(DESTDIR)$(bindir)/pipeline-init$(X)'
 
 clean distclean maintainer-clean:
 	rm -f initdb$(X) $(OBJS) encnames.c localtime.c

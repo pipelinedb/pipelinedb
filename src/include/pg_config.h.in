@@ -266,6 +266,9 @@
 /* Define to 1 if you have the <ldap.h> header file. */
 #undef HAVE_LDAP_H
 
+/* Define to 1 if you have the `check' library (-lcheck). */
+#undef HAVE_LIBCHECK
+
 /* Define to 1 if you have the `crypto' library (-lcrypto). */
 #undef HAVE_LIBCRYPTO
 
