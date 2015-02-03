@@ -61,12 +61,12 @@ NumCQVacuumTuples(Oid relid)
 	if (!relname)
 		return 0;
 
-	locked = ConditionalLockRelationOid(PipelineQueryRelationId, RowShareLock);
+	locked = ConditionalLockRelationOid(PipelineQueryRelationId, AccessShareLock);
 	if (!locked)
 		return 0;
 
 	cvname = GetCVNameForMatRelationName(relname);
-	UnlockRelationOid(PipelineQueryRelationId, RowShareLock);
+	UnlockRelationOid(PipelineQueryRelationId, AccessShareLock);
 
 	if (!cvname)
 		return 0;
