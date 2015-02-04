@@ -309,6 +309,7 @@ pg_lock_status(PG_FUNCTION_ARGS)
 			values[11] = Int32GetDatum(instance->pid);
 		else
 			nulls[11] = true;
+
 		values[12] = CStringGetTextDatum(GetLockmodeName(instance->locktag.locktag_lockmethodid, mode));
 		values[13] = BoolGetDatum(granted);
 		values[14] = BoolGetDatum(instance->fastpath);
