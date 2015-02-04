@@ -8,7 +8,7 @@ from subprocess import check_output, CalledProcessError
 
 def _get_pid(grep_str):
   try:
-    out = check_output('ps aux | grep "postgres" | grep "%s"' % grep_str,
+    out = check_output('ps aux | grep "pipeline" | grep "%s"' % grep_str,
                        shell=True).split('\n')
   except CalledProcessError:
     return -1
@@ -96,9 +96,9 @@ def test_concurrent_crash(pipeline, clean_db):
   def kill(n):
     for _ in xrange(n):
       r = random.random()
-      if r > 0.9:
+      if r > 0.85:
         killed[0] += kill_combiner('test_concurrent_crash')
-      if r < 0.1:
+      if r < 0.15:
         killed[0] += kill_worker('test_concurrent_crash')
       time.sleep(0.1)
 
