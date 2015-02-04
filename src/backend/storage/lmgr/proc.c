@@ -1041,7 +1041,7 @@ ProcSleep(LOCALLOCK *locallock, LockMethod lockMethodTable)
 		 * ACTIVATE statement, don't wait. That leads to dead locks.
 		 */
 		if ((lockmode == AccessShareLock) &&
-			(lock->grantMask == LOCKBIT_ON(CQExclusiveLock)) &&
+			(lock->grantMask & LOCKBIT_ON(CQExclusiveLock)) &&
 			IsCQBackgroundProcess)
 		{
 			Assert(LockCheckConflicts(lockMethodTable, lockmode, lock, proclock) == STATUS_OK);
