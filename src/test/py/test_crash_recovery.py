@@ -8,7 +8,7 @@ from subprocess import check_output, CalledProcessError
 
 def _get_pid(grep_str):
   try:
-    out = check_output('ps aux | grep "postgres" | grep "%s"' % grep_str,
+    out = check_output('ps aux | grep "pipeline" | grep "%s"' % grep_str,
                        shell=True).split('\n')
   except CalledProcessError:
     return -1
