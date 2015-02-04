@@ -59,20 +59,21 @@ bool InsertTargetIsStream(InsertStmt *ins)
 static TupleDesc
 spalloc_tupledesc(TupleDesc desc)
 {
-	// XXX(derekjn) spalloc doesn't seem to be working when called very frequently
-	// so just use a leaky ShmemAlloc until we fix it
-	Size size = TUPLEDESC_FIXED_SIZE;
-	TupleDesc shared = (TupleDesc) ShmemAlloc(size);
+	Size size = TUPLEDESC_FIXED_SIZE + (desc->natts * sizeof(Form_pg_attribute)) + (desc->natts * ATTRIBUTE_FIXED_PART_SIZE);
+	char *addr = spalloc(size);
+	char *attr_addr = addr + TUPLEDESC_FIXED_SIZE + (desc->natts * sizeof(Form_pg_attribute));
+	TupleDesc shared = (TupleDesc) addr;
 	int i;
 
-	memcpy(shared, desc, TUPLEDESC_FIXED_SIZE);
+	memcpy(addr, desc, TUPLEDESC_FIXED_SIZE);
 
-	shared->attrs = (Form_pg_attribute *) ShmemAlloc(desc->natts * sizeof(Form_pg_attribute));
+	shared->attrs = (Form_pg_attribute *) (addr + TUPLEDESC_FIXED_SIZE);
 
-	for (i=0; i<desc->natts; i++)
+	for (i = 0; i < desc->natts; i++)
 	{
-		shared->attrs[i] = ShmemAlloc(ATTRIBUTE_FIXED_PART_SIZE);
+		shared->attrs[i] = (Form_pg_attribute) attr_addr;
 		memcpy(shared->attrs[i], desc->attrs[i], ATTRIBUTE_FIXED_PART_SIZE);
+		attr_addr += ATTRIBUTE_FIXED_PART_SIZE;
 	}
 
 	return shared;

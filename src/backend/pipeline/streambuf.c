@@ -35,16 +35,7 @@ int StreamBufferBlocks;
 static void
 spfree_tupledesc(TupleDesc desc)
 {
-// FIXME(derekjn) these spfree calls seem to be
-// causing spalloc calls from other procs to fail when
-// each is being called frequently
-//
-//	int i;
-//	for (i=0; i<desc->natts; i++)
-//		spfree(desc->attrs[i]);
-//
-//	spfree(desc->attrs);
-//	spfree(desc);
+	spfree(desc);
 }
 
 /*
