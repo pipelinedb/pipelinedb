@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * proc.c
@@ -1033,6 +1034,26 @@ ProcSleep(LOCALLOCK *locallock, LockMethod lockMethodTable)
 	}
 	else
 	{
+		/*
+		 * If we're a CQ background process trying to acquire an AccessShareLock
+		 * on the pipeline_query table while a CQExclusiveLock is being held by
+		 * the parent process executing the ACTIVATE statement, don't wait. That
+		 * leads to dead locks.
+		 */
+		if ((lockmode == AccessShareLock) &&
+			(lock->grantMask & LOCKBIT_ON(CQExclusiveLock)) &&
+			IsCQBackgroundProcess)
+		{
+			Assert(LockCheckConflicts(lockMethodTable, lockmode, lock, proclock) == STATUS_OK);
+			Assert(lock->tag->locktag_type == LOCKTAG_RELATION);
+			Assert(lock->tag->locktag_field2 == PipelineQueryRelationId);
+
+			/* Skip the wait and just grant myself the lock. */
+			GrantLock(lock, proclock, lockmode);
+			GrantAwaitedLock();
+			return STATUS_OK;
+		}
+
 		/* I hold no locks, so I can't push in front of anyone. */
 		proc = (PGPROC *) &(waitQueue->links);
 	}

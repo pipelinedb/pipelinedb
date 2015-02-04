@@ -28,8 +28,8 @@ CATALOG(pipeline_stream,4249) BKI_WITHOUT_OIDS
 
 typedef FormData_pipeline_stream *Form_pipeline_stream;
 
-#define Natts_pipeline_stream								2
-#define Anum_pipeline_stream_name						1
+#define Natts_pipeline_stream						2
+#define Anum_pipeline_stream_name					1
 #define Anum_pipeline_stream_targets 				2
 
 #endif
