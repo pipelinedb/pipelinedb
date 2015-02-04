@@ -690,8 +690,13 @@ TDigestQuantile(TDigest *t, float8 q)
 	Centroid *center, *leading, *next;
 	float8 left, right, r;
 
-	if (summary->size <= 1)
+	if (q < 0 || q > 1)
+		elog(ERROR, "q should be in [0, 1], got %f", q);
+
+	if (summary->size == 0)
 		return NAN;
+	else if (summary->size == 1)
+		return AVLNodeFirst(summary)->mean;
 
 	it = AVLNodeIteratorCreate(summary, NULL);
 	center = AVLNodeNext(it);

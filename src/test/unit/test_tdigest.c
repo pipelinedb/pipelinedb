@@ -511,7 +511,7 @@ START_TEST(test_tdigest_merge)
 	for (i = 0; i < 100; i++)
 	{
 		x = rand();
-		ck_assert(fabs(TDigestCDF(t0, x) - TDigestCDF(t3, x)) < 0.005);
+		ck_assert(fabs(TDigestCDF(t0, x) - TDigestCDF(t3, x)) < 0.01);
 	}
 }
 END_TEST
