@@ -19,6 +19,7 @@
 #include "miscadmin.h"
 
 #define RETRY_TIMEOUT (100 * 1000)
+#define SEND_LOOP_TIMEOUT 10 * 1000 /* ms */
 
 typedef struct
 {
@@ -131,29 +132,40 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	CombinerState *combiner = (CombinerState *) self;
 	HeapTuple tup = ExecMaterializeSlot(slot);
 	uint32 nlen = htonl(tup->t_len);
+	TimestampTz start;
 	char *buf = palloc0(4 + tup->t_len);
+	int sent;
+	int remaining = 4 + tup->t_len;
+	int offset = 0;
 
 	memcpy(buf, &nlen, 4);
 	memcpy(buf + 4, tup->t_data, tup->t_len);
 
-	while (send(combiner->sock, buf, 4 + tup->t_len, 0) == -1)
+	start = GetCurrentTimestamp();
+
+	while (remaining > 0 && !TimestampDifferenceExceeds(start, GetCurrentTimestamp(), SEND_LOOP_TIMEOUT))
 	{
-		pid_t combiner_pid;
+		while ((sent = send(combiner->sock, buf + offset, remaining, 0)) == -1)
+		{
+			pid_t combiner_pid;
 
-		elog(LOG, "worker sending tuple failed: %m");
+			elog(LOG, "worker sending tuple failed: %m");
 
-		/*
-		 * Ensure that the combiner has a valid pid. This won't be true if
-		 * the combiner is in the process of starting up.
-		 */
-		while ((combiner_pid = GetCombinerPid(MyCQId)) == 0)
-			pg_usleep(RETRY_TIMEOUT);
+			/*
+			 * Ensure that the combiner has a valid pid. This won't be true if
+			 * the combiner is in the process of starting up.
+			 */
+			while ((combiner_pid = GetCombinerPid(MyCQId)) == 0)
+				pg_usleep(RETRY_TIMEOUT);
 
-		if (combiner->pid == combiner_pid)
-			elog(ERROR, "could not send tuple to combiner: %m");
+			if (combiner->pid == combiner_pid)
+				elog(ERROR, "could not send tuple to combiner: %m");
 
-		combiner_shutdown(self);
-		combiner_startup(self, -1, NULL);
+			combiner_shutdown(self);
+			combiner_startup(self, -1, NULL);
+		}
+		remaining -= sent;
+		offset += sent;
 	}
 }
 
