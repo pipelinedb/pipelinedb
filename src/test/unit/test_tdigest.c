@@ -92,8 +92,8 @@ START_TEST(test_tree_adds)
 
 	ck_assert_ptr_eq(AVLNodeFloor(root, c), NULL);
 	ck_assert_ptr_eq(AVLNodeCeiling(root, c), NULL);
+	ck_assert_int_eq(AVLNodeHeadSize(root, NULL), 0);
 	ck_assert_int_eq(AVLNodeHeadCount(root, NULL), 0);
-	ck_assert_int_eq(AVLNodeHeadSum(root, NULL), 0);
 
 	c = CentroidCreate();
 	CentroidAddSingle(c, 1);
@@ -259,42 +259,42 @@ START_TEST(test_tree_remove_and_sums)
 
 	check_balance(root);
 
+	ck_assert_int_eq(0, AVLNodeHeadSize(root, NULL));
 	ck_assert_int_eq(0, AVLNodeHeadCount(root, NULL));
-	ck_assert_int_eq(0, AVLNodeHeadSum(root, NULL));
 
 	c = CentroidCreateWithId(0);
 	CentroidAddSingle(c, 0);
 
+	ck_assert_int_eq(0, AVLNodeHeadSize(root, c));
 	ck_assert_int_eq(0, AVLNodeHeadCount(root, c));
-	ck_assert_int_eq(0, AVLNodeHeadSum(root, c));
 
 	CentroidDestroy(c);
 	c = CentroidCreateWithId(0);
 	CentroidAddSingle(c, 1);
 
+	ck_assert_int_eq(2, AVLNodeHeadSize(root, c));
 	ck_assert_int_eq(2, AVLNodeHeadCount(root, c));
-	ck_assert_int_eq(2, AVLNodeHeadSum(root, c));
 
 	CentroidDestroy(c);
 	c = CentroidCreateWithId(0);
 	CentroidAddSingle(c, 2.1);
 
+	ck_assert_int_eq(5, AVLNodeHeadSize(root, c));
 	ck_assert_int_eq(5, AVLNodeHeadCount(root, c));
-	ck_assert_int_eq(5, AVLNodeHeadSum(root, c));
 
 	CentroidDestroy(c);
 	c = CentroidCreateWithId(0);
 	CentroidAddSingle(c, 2.7);
 
-	ck_assert_int_eq(6, AVLNodeHeadCount(root, c));
-	ck_assert_int_eq(7, AVLNodeHeadSum(root, c));
+	ck_assert_int_eq(6, AVLNodeHeadSize(root, c));
+	ck_assert_int_eq(7, AVLNodeHeadCount(root, c));
 
 	CentroidDestroy(c);
 	c = CentroidCreateWithId(0);
 	CentroidAddSingle(c, 200);
 
-	ck_assert_int_eq(101, AVLNodeHeadCount(root, c));
-	ck_assert_int_eq(102, AVLNodeHeadSum(root, c));
+	ck_assert_int_eq(101, AVLNodeHeadSize(root, c));
+	ck_assert_int_eq(102, AVLNodeHeadCount(root, c));
 
 	CentroidDestroy(c);
 }

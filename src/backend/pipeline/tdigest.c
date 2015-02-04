@@ -271,7 +271,7 @@ AVLNodeRemove(AVLNode *node, Centroid *c)
 }
 
 int
-AVLNodeHeadCount(AVLNode *node, Centroid *c)
+AVLNodeHeadSize(AVLNode *node, Centroid *c)
 {
 	if (c == NULL)
 		c = AVLNodeFirst(node);
@@ -280,12 +280,12 @@ AVLNodeHeadCount(AVLNode *node, Centroid *c)
 	if (node->left == NULL)
 		return centroid_cmp(node->leaf, c) < 0 ? node->size : 0;
 	if (centroid_cmp(c, node->leaf) < 0)
-		return AVLNodeHeadCount(node->left, c);
-	return node->left->size + AVLNodeHeadCount(node->right, c);
+		return AVLNodeHeadSize(node->left, c);
+	return node->left->size + AVLNodeHeadSize(node->right, c);
 }
 
 int64
-AVLNodeHeadSum(AVLNode *node, Centroid *c)
+AVLNodeHeadCount(AVLNode *node, Centroid *c)
 {
 	if (c == NULL)
 		c = AVLNodeFirst(node);
@@ -294,8 +294,8 @@ AVLNodeHeadSum(AVLNode *node, Centroid *c)
 	if (node->left == NULL)
 		return centroid_cmp(node->leaf, c) < 0 ? node->count : 0;
 	if (centroid_cmp(c, node->leaf) < 0)
-		return AVLNodeHeadSum(node->left, c);
-	return node->left->count + AVLNodeHeadSum(node->right, c);
+		return AVLNodeHeadCount(node->left, c);
+	return node->left->count + AVLNodeHeadCount(node->right, c);
 }
 
 Centroid *
@@ -470,7 +470,7 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 	it = AVLNodeIteratorCreate(t->summary, start);
 	min_dist = DBL_MAX;
 	last_neighbor = 0;
-	count = AVLNodeHeadCount(t->summary, start);
+	count = AVLNodeHeadSize(t->summary, start);
 	i = count;
 
 	while (true)
@@ -497,8 +497,8 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 
 	it = AVLNodeIteratorCreate(t->summary, start);
 	closest = NULL;
-	sum = AVLNodeHeadSum(t->summary, start);
-	i = AVLNodeHeadCount(t->summary, start);
+	sum = AVLNodeHeadCount(t->summary, start);
+	i = AVLNodeHeadSize(t->summary, start);
 	n = 1;
 
 	while (true)
