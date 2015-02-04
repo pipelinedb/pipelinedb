@@ -147,7 +147,6 @@ retry:
 		/*
 		 * startup tuple receiver, if we will be emitting tuples
 		 */
-		estate->es_processed = 0;
 		estate->es_lastoid = InvalidOid;
 
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
@@ -169,9 +168,7 @@ retry:
 		{
 			ResetStreamBufferLatch(MyCQId);
 			if (GlobalStreamBuffer->empty)
-
 			{
-
 				curtime = GetCurrentTimestamp();
 				if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
 				{
@@ -191,6 +188,9 @@ retry:
 			CurrentResourceOwner = cqowner;
 			MemoryContextSwitchTo(estate->es_query_cxt);
 
+			estate->es_processed = 0;
+			estate->es_filtered = 0;
+
 			/*
 			 * Run plan on a microbatch
 			 */
@@ -203,7 +203,7 @@ retry:
 			unset_snapshot(estate, cqowner);
 			CommitTransactionCommand();
 
-			if (estate->es_processed != 0)
+			if (estate->es_processed + estate->es_filtered != 0)
 			{
 				/*
 				 * If the CV query is such that the select does not return any tuples
@@ -214,7 +214,6 @@ retry:
 				 */
 				last_process_time = GetCurrentTimestamp();
 			}
-			estate->es_processed = 0;
 
 			/* Has the CQ been deactivated? */
 			if (!*activeFlagPtr)

@@ -220,7 +220,10 @@ ExecScan(ScanState *node,
 			}
 		}
 		else
+		{
+			node->ps.state->es_filtered++;
 			InstrCountFiltered1(node, 1);
+		}
 
 		/*
 		 * Tuple fails qual, so free per-tuple memory and try again.

@@ -439,6 +439,9 @@ typedef struct EState
 	bool	   *es_epqScanDone; /* true if EPQ tuple has been fetched */
 
 	int cq_batch_size;
+
+	/* number of rows filtered by leaf nodes */
+	uint32 es_filtered;
 } EState;
 
 
