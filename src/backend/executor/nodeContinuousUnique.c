@@ -17,6 +17,7 @@
 #include "catalog/pipeline_tstate_fn.h"
 #include "executor/executor.h"
 #include "executor/nodeContinuousUnique.h"
+#include "miscadmin.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/memutils.h"
@@ -169,7 +170,7 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 void
 ExecEndContinuousUnique(ContinuousUniqueState *node)
 {
-	if (node->dirty)
+	if (IsCombiner && node->dirty)
 	{
 		UpdateDistinctBloomFilter(NameStr(node->cvname), node->distinct);
 		node->dirty = false;

@@ -324,6 +324,25 @@ get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewStat
 	plan->cq_state = palloc(sizeof(ContinuousViewState));
 	memcpy(plan->cq_state, query->cq_state, sizeof(ContinuousViewState));
 
+	/*
+	 * Unique plans get transformed into ContinuousUnique plans for
+	 * combiner processes. This combiner does the necessary unique-fying by
+	 * looking at the distinct HLL stored in pipeline_query.
+	 */
+	if (IsA(plan->planTree, Unique))
+	{
+		ContinuousUnique *cunique = makeNode(ContinuousUnique);
+		Unique *unique = (Unique *) plan->planTree;
+		memcpy((char *) &cunique->unique, (char *) unique, sizeof(Unique));
+		namestrcpy(&cunique->cvName, cvname);
+		cunique->unique.plan.type = T_ContinuousUnique;
+		plan->planTree = (Plan *) cunique;
+
+		Assert(IsA(result->planTree->lefttree, Sort));
+		/* Strip out the sort since its not needed */
+		plan->planTree->lefttree = plan->planTree->lefttree->lefttree;
+	}
+
 	return plan;
 }
 
@@ -361,25 +380,6 @@ get_combiner_plan(char *cvname, const char *sql, ContinuousViewState *state)
 
 	result = get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, true);
 	join_search_hook = save;
-
-	/*
-	 * Unique plans get transformed into ContinuousUnique plans for
-	 * combiner processes. This combiner does the necessary unique-fying by
-	 * looking at the distinct HLL stored in pipeline_query.
-	 */
-	if (IsA(result->planTree, Unique))
-	{
-		ContinuousUnique *cunique = makeNode(ContinuousUnique);
-		Unique *unique = (Unique *) result->planTree;
-		memcpy((char *) &cunique->unique, (char *) unique, sizeof(Unique));
-		namestrcpy(&cunique->cvName, cvname);
-		cunique->unique.plan.type = T_ContinuousUnique;
-		result->planTree = (Plan *) cunique;
-
-		Assert(IsA(result->planTree->lefttree, Sort));
-		/* Strip out the sort since its not needed */
-		result->planTree->lefttree = result->planTree->lefttree->lefttree;
-	}
 
 	return result;
 }
