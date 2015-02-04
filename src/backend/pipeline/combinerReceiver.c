@@ -40,6 +40,8 @@ attempt_handshake(CombinerState *combiner)
 	if (send(combiner->sock, &MyProcPid, sizeof(pid_t), 0) == -1)
 		return false;
 
+	elog(LOG, "worker %d connected to combiner", MyProcPid);
+
 	return true;
 }
 

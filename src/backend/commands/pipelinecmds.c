@@ -498,7 +498,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	int success = 0;
 	int fail = 0;
 	CQProcEntry *entry;
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, CQExclusiveLock);
 
 	get_views((BaseContinuousViewStmt *) stmt);
 
@@ -583,7 +583,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 {
 	int count = 0;
 	ListCell *lc;
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+	Relation pipeline_query = heap_open(PipelineQueryRelationId, CQExclusiveLock);
 
 	get_views((BaseContinuousViewStmt *) stmt);
 
