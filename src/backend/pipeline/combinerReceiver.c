@@ -170,6 +170,9 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 		remaining -= sent;
 		offset += sent;
 	}
+
+	if (remaining > 0)
+		elog(LOG, "worker only sent %d/%d bytes of tuple data", 4 + tup->t_len - remaining, 4 + tup->t_len);
 }
 
 static void combiner_destroy(DestReceiver *self)
