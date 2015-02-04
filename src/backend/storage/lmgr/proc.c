@@ -1021,7 +1021,6 @@ ProcSleep(LOCALLOCK *locallock, LockMethod lockMethodTable)
 				/* Break out of loop to put myself before him */
 				break;
 			}
-
 			/* Nope, so advance to next waiter */
 			aheadRequests |= LOCKBIT_ON(proc->waitLockMode);
 			proc = (PGPROC *) proc->links.next;
