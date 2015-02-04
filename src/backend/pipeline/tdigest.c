@@ -480,13 +480,16 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 			break;
 
 		z = fabs(c->mean - x);
-		if (z <= min_dist)
+		if (z < min_dist)
 		{
 			min_dist = z;
-			last_neighbor = i;
+			start = c;
 		}
-		else
+		else if (z > min_dist)
+		{
+			last_neighbor = i;
 			break;
+		}
 		i++;
 	}
 
@@ -495,7 +498,7 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 	it = AVLNodeIteratorCreate(t->summary, start);
 	closest = NULL;
 	sum = AVLNodeHeadSum(t->summary, start);
-	i = count;
+	i = AVLNodeHeadCount(t->summary, start);
 	n = 1;
 
 	while (true)
@@ -505,11 +508,10 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 		c = AVLNodeNext(it);
 		if (i > last_neighbor)
 			break;
-		z = fabs(c->mean - x);
-		q = (sum + c->count / 2.0) / t->count;
+		q = t->count == 1 ? 0.5 : (sum + (c->count - 1) / 2.0) / (t->count -1 );
 		k = 4 * t->count * q * (1 - q) / t->compression;
 
-		if (z == min_dist && c->count + w <= k)
+		if (c->count + w <= k)
 		{
 			if (((float) rand() / (float) RAND_MAX) < 1 / n)
 				closest = c;
