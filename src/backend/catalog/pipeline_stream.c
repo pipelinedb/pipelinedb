@@ -238,7 +238,7 @@ UpdateStreamTargets(void)
 	targets = streams_to_cq_ids(pipeline_query);
 	heap_close(pipeline_query, NoLock);
 
-	pipeline_stream = heap_open(PipelineStreamRelationId, AccessExclusiveLock);
+	pipeline_stream = heap_open(PipelineStreamRelationId, ExclusiveLock);
 	added = cache_stream_targets(pipeline_stream, targets);
 	delete_nonexistent_streams(pipeline_stream, added);
 	heap_close(pipeline_stream, NoLock);

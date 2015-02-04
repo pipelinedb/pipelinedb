@@ -220,7 +220,7 @@ receive_tuple(TupleTableSlot *slot, bool need_merge)
 
 	memcpy(&readset, &serv->readset, sizeof(fd_set));
 
-	if (need_merge)
+	if (need_merge || serv->max_fd == serv->sock)
 	{
 		struct timeval timeout;
 		memcpy(&timeout, &serv->timeout, sizeof(struct timeval));

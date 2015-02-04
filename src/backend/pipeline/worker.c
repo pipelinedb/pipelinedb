@@ -34,8 +34,6 @@
 #include "pgstat.h"
 #include "utils/timestamp.h"
 
-#define COMBINER_WAIT_TIMEOUT (100 * 1000)
-
 extern StreamBuffer *GlobalStreamBuffer;
 extern int EmptyStreamBufferWaitTime;
 
@@ -108,8 +106,6 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	DestReceiver *dest;
 	CmdType		operation;
 	MemoryContext oldcontext;
-	RangeVar *rv = queryDesc->plannedstmt->cq_target;
-	char *cvname = rv->relname;
 	int timeoutms = state->maxwaitms;
 	MemoryContext runcontext;
 	MemoryContext xactcontext;
@@ -151,12 +147,8 @@ retry:
 		estate->es_lastoid = InvalidOid;
 
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
-		elog(LOG, "\"%s\" worker %d connected to combiner", cvname, MyProcPid);
 
 		MarkWorkerAsRunning(MyCQId, MyWorkerId);
-
-		while (!IsCombinerRunning(MyCQId))
-			pg_usleep(COMBINER_WAIT_TIMEOUT);
 
 		/*
 		 * XXX (jay): Should be able to copy pointers and maintain an array of pointers instead
