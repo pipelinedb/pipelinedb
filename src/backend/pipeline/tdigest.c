@@ -19,17 +19,17 @@
 
 // TODO(usmanm): Add some ref-counting to Centroids to avoid mindless copying and destroying.
 
-#define DEFAULT_TDIGEST_COMPRESSION 100
+#define DEFAULT_TDIGEST_COMPRESSION 200 /* max t-digest size will be 94k, avg will be 4.7k */
 #define AVLNodeDepth(node) (Max((node)->left->depth, (node)->right->depth) + 1)
 
 Centroid *
 CentroidCreate(void)
 {
-	return CentroidCreateWithId(rand());
+	return CentroidCreateWithId(rand() % 256);
 }
 
 Centroid *
-CentroidCreateWithId(int id)
+CentroidCreateWithId(uint8 id)
 {
 	Centroid *c = (Centroid *) palloc(sizeof(Centroid));
 	c->count = c->mean = 0;
@@ -271,7 +271,7 @@ AVLNodeRemove(AVLNode *node, Centroid *c)
 }
 
 int
-AVLNodeHeadCount(AVLNode *node, Centroid *c)
+AVLNodeHeadSize(AVLNode *node, Centroid *c)
 {
 	if (c == NULL)
 		c = AVLNodeFirst(node);
@@ -280,12 +280,12 @@ AVLNodeHeadCount(AVLNode *node, Centroid *c)
 	if (node->left == NULL)
 		return centroid_cmp(node->leaf, c) < 0 ? node->size : 0;
 	if (centroid_cmp(c, node->leaf) < 0)
-		return AVLNodeHeadCount(node->left, c);
-	return node->left->size + AVLNodeHeadCount(node->right, c);
+		return AVLNodeHeadSize(node->left, c);
+	return node->left->size + AVLNodeHeadSize(node->right, c);
 }
 
 int64
-AVLNodeHeadSum(AVLNode *node, Centroid *c)
+AVLNodeHeadCount(AVLNode *node, Centroid *c)
 {
 	if (c == NULL)
 		c = AVLNodeFirst(node);
@@ -294,8 +294,8 @@ AVLNodeHeadSum(AVLNode *node, Centroid *c)
 	if (node->left == NULL)
 		return centroid_cmp(node->leaf, c) < 0 ? node->count : 0;
 	if (centroid_cmp(c, node->leaf) < 0)
-		return AVLNodeHeadSum(node->left, c);
-	return node->left->count + AVLNodeHeadSum(node->right, c);
+		return AVLNodeHeadCount(node->left, c);
+	return node->left->count + AVLNodeHeadCount(node->right, c);
 }
 
 Centroid *
@@ -470,7 +470,7 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 	it = AVLNodeIteratorCreate(t->summary, start);
 	min_dist = DBL_MAX;
 	last_neighbor = 0;
-	count = AVLNodeHeadCount(t->summary, start);
+	count = AVLNodeHeadSize(t->summary, start);
 	i = count;
 
 	while (true)
@@ -480,13 +480,16 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 			break;
 
 		z = fabs(c->mean - x);
-		if (z <= min_dist)
+		if (z < min_dist)
 		{
 			min_dist = z;
-			last_neighbor = i;
+			start = c;
 		}
-		else
+		else if (z > min_dist)
+		{
+			last_neighbor = i;
 			break;
+		}
 		i++;
 	}
 
@@ -494,8 +497,8 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 
 	it = AVLNodeIteratorCreate(t->summary, start);
 	closest = NULL;
-	sum = AVLNodeHeadSum(t->summary, start);
-	i = count;
+	sum = AVLNodeHeadCount(t->summary, start);
+	i = AVLNodeHeadSize(t->summary, start);
 	n = 1;
 
 	while (true)
@@ -505,11 +508,10 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 		c = AVLNodeNext(it);
 		if (i > last_neighbor)
 			break;
-		z = fabs(c->mean - x);
-		q = (sum + c->count / 2.0) / t->count;
+		q = t->count == 1 ? 0.5 : (sum + (c->count - 1) / 2.0) / (t->count -1 );
 		k = 4 * t->count * q * (1 - q) / t->compression;
 
-		if (z == min_dist && c->count + w <= k)
+		if (c->count + w <= k)
 		{
 			if (((float) rand() / (float) RAND_MAX) < 1 / n)
 				closest = c;
@@ -686,10 +688,15 @@ TDigestQuantile(TDigest *t, float8 q)
 	AVLNode *summary = t->summary;
 	AVLNodeIterator *it;
 	Centroid *center, *leading, *next;
-	float8 left, right, r;
+	float8 left, right, count;
 
-	if (summary->size <= 1)
+	if (q < 0 || q > 1)
+		elog(ERROR, "q should be in [0, 1], got %f", q);
+
+	if (summary->size == 0)
 		return NAN;
+	else if (summary->size == 1)
+		return AVLNodeFirst(summary)->mean;
 
 	it = AVLNodeIteratorCreate(summary, NULL);
 	center = AVLNodeNext(it);
@@ -706,16 +713,18 @@ TDigestQuantile(TDigest *t, float8 q)
 	}
 
 	q *= t->count;
-	left = right;
-	r = center->count;
+	left = center->mean / 2;
+	count = 0;
 
 	do
 	{
-		if (r + center->count / 2 >= q)
-			return center->mean - left * 2.0 * (q - r) / center->count;
-		if (r + leading->count >= q)
-			return center->mean + right * 2.0 * (center->count - (q - r)) / center->count;
-		r += center->count;
+		/* LHS of center */
+		if (count + center->count / 2 >= q)
+			return center->mean - left * (1 - (2.0 * (q - count) / center->count));
+		/* RHS of center but LHS of next one */
+		if (count + center->count >= q)
+			return center->mean + right * ((2.0 * (q - count) / center->count) - 1);
+		count += center->count;
 		center = leading;
 		leading = next;
 		left = right;
@@ -725,8 +734,8 @@ TDigestQuantile(TDigest *t, float8 q)
 	center = leading;
 	left = right;
 
-	if (r + center->count / 2 >= q)
-		return center->mean - left * 2.0 * (q - r) / center->count;
+	if (count + center->count / 2 >= q)
+		return center->mean - left * (1 - (2.0 * (q - count) / center->count));
 
-	return center->mean + right * 2.0 * (center->count - (q - r)) / center->count;
+	return center->mean + right * 2.0 * ((2.0 * (q - count) / center->count) - 1);
 }

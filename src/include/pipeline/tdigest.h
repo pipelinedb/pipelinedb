@@ -18,11 +18,11 @@ typedef struct Centroid
 {
 	int64 count;
 	float8 mean;
-	int id;
+	uint8 id;
 } Centroid;
 
 Centroid *CentroidCreate(void);
-Centroid *CentroidCreateWithId(int id);
+Centroid *CentroidCreateWithId(uint8 id);
 void CentroidDestroy(Centroid *c);
 void CentroidAdd(Centroid *c, float8 x, int64 w);
 void CentroidAddSingle(Centroid *c, float8 x);
@@ -51,8 +51,8 @@ void AVLNodeDestroy(AVLNode *node);
 void AVLNodeDestroyTree(AVLNode *root);
 void AVLNodeAdd(AVLNode *node, Centroid *c);
 void AVLNodeRemove(AVLNode *node, Centroid *c);
-int AVLNodeHeadCount(AVLNode *node, Centroid *c);
-int64 AVLNodeHeadSum(AVLNode *node, Centroid *c);
+int AVLNodeHeadSize(AVLNode *node, Centroid *c);
+int64 AVLNodeHeadCount(AVLNode *node, Centroid *c);
 Centroid *AVLNodeFirst(AVLNode *node);
 Centroid *AVLNodeLast(AVLNode *node);
 Centroid *AVLNodeFloor(AVLNode *node, Centroid *c);
