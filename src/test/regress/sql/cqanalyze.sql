@@ -114,10 +114,6 @@ CREATE CONTINUOUS VIEW cqanalyze40 AS SELECT COUNT(*) FROM stream WHERE NOT arri
 CREATE CONTINUOUS VIEW cqanalyze41 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour' OR key::text='pipelinedb';
 CREATE CONTINUOUS VIEW cqanalyze42 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour' AND arrival_timestamp > clock_timestamp() - interval '5 hour';
 
--- Regression
-CREATE CONTINUOUS VIEW cqanalyze43 AS SELECT date_trunc('hour', ts) AS ts FROM stream;
-CREATE CONTINUOUS VIEW cqanalyze44 AS SELECT stream.sid::integer FROM stream;
-
 -- Hypothetical-set aggregates
 CREATE CONTINUOUS VIEW cqanalyze45 AS SELECT g::integer, percent_rank(1 + 3, 2, substring('xxx', 1, 2)) WITHIN GROUP (ORDER BY x::integer, y::integer, z::text) + rank(4, 5, 'x') WITHIN GROUP (ORDER BY x, y, substring(z, 1, 2))  FROM stream GROUP BY g;
 
@@ -200,8 +196,6 @@ DROP CONTINUOUS VIEW cqanalyze39;
 DROP CONTINUOUS VIEW cqanalyze40;
 DROP CONTINUOUS VIEW cqanalyze41;
 DROP CONTINUOUS VIEW cqanalyze42;
-DROP CONTINUOUS VIEW cqanalyze43;
-DROP CONTINUOUS VIEW cqanalyze44;
 DROP CONTINUOUS VIEW cqanalyze45;
 DROP CONTINUOUS VIEW cqanalyze46;
 DROP CONTINUOUS VIEW cqanalyze47;
@@ -211,3 +205,12 @@ DROP CONTINUOUS VIEW cqanalyze50;
 DROP CONTINUOUS VIEW cqanalyze51;
 DROP CONTINUOUS VIEW cqanalyze52;
 DROP CONTINUOUS VIEW cqanalyze53;
+
+-- Regression
+CREATE CONTINUOUS VIEW cqregress1 AS SELECT id::integer + avg(id) FROM stream GROUP BY id;
+CREATE CONTINUOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts FROM stream;
+CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::integer FROM stream;
+
+DROP CONTINUOUS VIEW cqregress1;
+DROP CONTINUOUS VIEW cqregress2;
+DROP CONTINUOUS VIEW cqregress3;
