@@ -57,17 +57,18 @@ check_balance(AVLNode *node)
 static void
 print_centroid(Centroid *c)
 {
-	printf("Centroid: %f [%d]\n", c->mean, c->id);
+	int id = c->id;
+	printf("Centroid: %f [%d]\n", c->mean, id);
 }
 
 static void
 print_centroids(AVLNode *node)
 {
 	AVLNodeIterator *it = AVLNodeIteratorCreate(node, NULL);
-	int i;
+	Centroid *c;
 
-	for (i = 0; i < node->count; i++)
-		print_centroid(AVLNodeNext(it));
+	while ((c = AVLNodeNext(it)))
+		print_centroid(c);
 
 	AVLNodeIteratorDestroy(it);
 }

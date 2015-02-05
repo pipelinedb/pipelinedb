@@ -19,17 +19,17 @@
 
 // TODO(usmanm): Add some ref-counting to Centroids to avoid mindless copying and destroying.
 
-#define DEFAULT_TDIGEST_COMPRESSION 100
+#define DEFAULT_TDIGEST_COMPRESSION 200 /* max t-digest size will be 94k, avg will be 4.7k */
 #define AVLNodeDepth(node) (Max((node)->left->depth, (node)->right->depth) + 1)
 
 Centroid *
 CentroidCreate(void)
 {
-	return CentroidCreateWithId(rand());
+	return CentroidCreateWithId(rand() % 256);
 }
 
 Centroid *
-CentroidCreateWithId(int id)
+CentroidCreateWithId(int8 id)
 {
 	Centroid *c = (Centroid *) palloc(sizeof(Centroid));
 	c->count = c->mean = 0;
@@ -688,7 +688,7 @@ TDigestQuantile(TDigest *t, float8 q)
 	AVLNode *summary = t->summary;
 	AVLNodeIterator *it;
 	Centroid *center, *leading, *next;
-	float8 left, right, r;
+	float8 left, right, count;
 
 	if (q < 0 || q > 1)
 		elog(ERROR, "q should be in [0, 1], got %f", q);
@@ -713,16 +713,18 @@ TDigestQuantile(TDigest *t, float8 q)
 	}
 
 	q *= t->count;
-	left = right;
-	r = center->count;
+	left = center->mean / 2;
+	count = 0;
 
 	do
 	{
-		if (r + center->count / 2 >= q)
-			return center->mean - left * 2.0 * (q - r) / center->count;
-		if (r + leading->count >= q)
-			return center->mean + right * 2.0 * (center->count - (q - r)) / center->count;
-		r += center->count;
+		/* LHS of center */
+		if (count + center->count / 2 >= q)
+			return center->mean - left * (1 - (2.0 * (q - count) / center->count));
+		/* RHS of center but LHS of next one */
+		if (count + center->count >= q)
+			return center->mean + right * ((2.0 * (q - count) / center->count) - 1);
+		count += center->count;
 		center = leading;
 		leading = next;
 		left = right;
@@ -732,8 +734,8 @@ TDigestQuantile(TDigest *t, float8 q)
 	center = leading;
 	left = right;
 
-	if (r + center->count / 2 >= q)
-		return center->mean - left * 2.0 * (q - r) / center->count;
+	if (count + center->count / 2 >= q)
+		return center->mean - left * (1 - (2.0 * (q - count) / center->count));
 
-	return center->mean + right * 2.0 * (center->count - (q - r)) / center->count;
+	return center->mean + right * 2.0 * ((2.0 * (q - count) / center->count) - 1);
 }
