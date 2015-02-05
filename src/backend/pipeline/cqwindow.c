@@ -634,7 +634,7 @@ create_group_by_for_time_bucket_field(SelectStmt *workerstmt, SelectStmt *viewst
 		 */
 		memcpy(context->stepNode, cref, sizeof(ColumnRef));
 	}
-	else if (!IsColumnRefInTargetList(workerstmt, timeCRefWithTC))
+	else if (!IsColumnRefInTargetList(workerstmt->targetList, timeCRefWithTC))
 	{
 		/*
 		 * The CQ is requesting raw events in the sliding window.
@@ -797,7 +797,7 @@ fix_sliding_window_expr(SelectStmt *stmt, Node *swExpr, CQAnalyzeContext *contex
 	FindColumnRefsWithTypeCasts(swExpr, context);
 	cmpCRef = (Node *) linitial(context->cols);
 
-	if (hasAggOrGrp || !IsColumnRefInTargetList(stmt, cmpCRef))
+	if (hasAggOrGrp || !IsColumnRefInTargetList(stmt->targetList, cmpCRef))
 	{
 		/*
 		 * Find the name we picked for the column we're
