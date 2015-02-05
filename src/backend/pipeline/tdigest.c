@@ -29,7 +29,7 @@ CentroidCreate(void)
 }
 
 Centroid *
-CentroidCreateWithId(int8 id)
+CentroidCreateWithId(uint8 id)
 {
 	Centroid *c = (Centroid *) palloc(sizeof(Centroid));
 	c->count = c->mean = 0;

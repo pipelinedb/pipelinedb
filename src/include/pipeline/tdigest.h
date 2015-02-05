@@ -18,11 +18,11 @@ typedef struct Centroid
 {
 	int64 count;
 	float8 mean;
-	int8 id;
+	uint8 id;
 } Centroid;
 
 Centroid *CentroidCreate(void);
-Centroid *CentroidCreateWithId(int8 id);
+Centroid *CentroidCreateWithId(uint8 id);
 void CentroidDestroy(Centroid *c);
 void CentroidAdd(Centroid *c, float8 x, int64 w);
 void CentroidAddSingle(Centroid *c, float8 x);

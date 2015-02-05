@@ -8,52 +8,6 @@
 
 #define DEBUG 0
 
-static int
-int_cmp(const void * a, const void * b)
-{
-	return *(int *) a - *(int *) b;
-}
-
-static int
-float8_cmp(const void * a, const void * b)
-{
-	float8 diff = *(float8 *) a - *(float8 *) b;
-	if (diff < 0)
-		return -1;
-	return diff > 0 ? 1 : 0;
-}
-
-static int
-centroid_cmp(Centroid *a, Centroid *b)
-{
-	if (a->mean > b->mean)
-		return 1;
-	if (a->mean < b->mean)
-		return -1;
-	if (a->id > b->id)
-		return 1;
-	return 0;
-}
-
-static void
-check_balance(AVLNode *node)
-{
-	int l, r;
-	if (node->left == NULL)
-		return;
-	l = node->left->depth;
-	r = node->right->depth;
-
-	ck_assert_int_le(Max(l, r) - Min(l, r), 1);
-	ck_assert_int_eq(node->left->count + node->right->count, node->count);
-	ck_assert_int_eq(node->left->size + node->right->size, node->size);
-	ck_assert_int_eq(Max(l, r) + 1, node->depth);
-	ck_assert_int_eq(centroid_cmp(node->leaf, AVLNodeFirst(node->right)), 0);
-	ck_assert_int_le(centroid_cmp(node->left->leaf, node->right->leaf), 0);
-	check_balance(node->left);
-	check_balance(node->right);
-}
-
 static void
 print_centroid(Centroid *c)
 {
@@ -83,6 +37,57 @@ print_inorder(AVLNode *node)
 	if (node->right)
 		print_inorder(node->right);
 	printf("%*s==\n", node->depth, "");
+}
+
+static int
+int_cmp(const void * a, const void * b)
+{
+	return *(int *) a - *(int *) b;
+}
+
+static int
+float8_cmp(const void * a, const void * b)
+{
+	float8 diff = *(float8 *) a - *(float8 *) b;
+	if (diff < 0)
+		return -1;
+	return diff > 0 ? 1 : 0;
+}
+
+static int
+centroid_cmp(Centroid *a, Centroid *b)
+{
+	if (a->mean > b->mean)
+		return 1;
+	if (a->mean < b->mean)
+		return -1;
+	if (a->id > b->id)
+		return 1;
+	if (a->id < b->id)
+		return -1;
+	return 0;
+}
+
+static void
+check_balance(AVLNode *node)
+{
+	int l, r;
+	if (node->left == NULL)
+		return;
+	l = node->left->depth;
+	r = node->right->depth;
+
+	ck_assert_int_le(Max(l, r) - Min(l, r), 1);
+	ck_assert_int_eq(node->left->count + node->right->count, node->count);
+	ck_assert_int_eq(node->left->size + node->right->size, node->size);
+	ck_assert_int_eq(Max(l, r) + 1, node->depth);
+	ck_assert_int_eq(centroid_cmp(node->leaf, AVLNodeFirst(node->right)), 0);
+
+
+
+	ck_assert_int_le(centroid_cmp(node->left->leaf, node->right->leaf), 0);
+	check_balance(node->left);
+	check_balance(node->right);
 }
 
 START_TEST(test_tree_adds)
