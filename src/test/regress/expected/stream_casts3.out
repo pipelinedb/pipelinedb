@@ -498,3 +498,16 @@ DROP CONTINUOUS VIEW test_int4_to_abstime;
 DROP CONTINUOUS VIEW test_int4_to_reltime;
 DROP CONTINUOUS VIEW test_lseg_to_point;
 DROP CONTINUOUS VIEW test_path_to_point;
+CREATE CONTINUOUS VIEW test_bool_inputs AS SELECT b::boolean FROM cqdecode_stream;
+ACTIVATE test_bool_inputs;
+INSERT INTO cqdecode_stream (b) VALUES (TRUE), (true), ('true'), ('t'), ('y'), ('on'), ('1'::boolean), (1::boolean);
+INSERT INTO cqdecode_stream (b) VALUES (FALSE), (false), ('false'), ('f'), ('n'), ('off'), ('0'::boolean), (0::boolean);
+DEACTIVATE test_bool_inputs;
+SELECT b, COUNT(*) FROM test_bool_inputs GROUP BY b;
+ b | count 
+---+-------
+ f |     8
+ t |     8
+(2 rows)
+
+DROP CONTINUOUS VIEW test_bool_inputs;

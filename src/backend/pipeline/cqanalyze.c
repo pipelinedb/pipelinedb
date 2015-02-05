@@ -672,6 +672,28 @@ FindColumnRefsWithTypeCasts(Node *node, CQAnalyzeContext *context)
 	return raw_expression_tree_walker(node, FindColumnRefsWithTypeCasts, (void *) context);
 }
 
+static void
+find_top_level_column_refs(Node *node, CQAnalyzeContext *context)
+{
+	if (node == NULL)
+		return;
+
+	if (IsA(node, TypeCast))
+	{
+		TypeCast *tc = (TypeCast *) node;
+		if (IsA(tc->arg, ColumnRef))
+			context->cols = lappend(context->cols, node);
+	}
+	else if (IsA(node, ColumnRef))
+		context->cols = lappend(context->cols, node);
+	else if (IsA(node, A_Expr))
+	{
+		A_Expr *expr = (A_Expr *) node;
+		find_top_level_column_refs(expr->lexpr, context);
+		find_top_level_column_refs(expr->rexpr, context);
+	}
+}
+
 /*
  * AreColumnRefsEqual
  */
@@ -740,8 +762,7 @@ IsResTargetForColumnRef(Node *node, ColumnRef *cref)
 	if (IsA(node, ResTarget))
 	{
 		ResTarget *res = (ResTarget *) node;
-		if (res->name != NULL &&
-				strcmp(res->name, FigureColname((Node *) cref)) == 0)
+		if (res->name != NULL && strcmp(res->name, FigureColname((Node *) cref)) == 0)
 		{
 			/*
 			 * Is this ResTarget overriding a column it references?
@@ -757,7 +778,7 @@ IsResTargetForColumnRef(Node *node, ColumnRef *cref)
 		ColumnRef *cref2 = (ColumnRef *) node;
 		return AreColumnRefsEqual((Node *) cref, (Node *) cref2);
 	}
-	else if (IsA(node, FuncCall) || IsA(node, Expr))
+	else if (IsA(node, FuncCall) || IsA(node, Expr) || (IsA(node, A_Expr)))
 	{
 		/*
 		 * Even if a FuncCall has cref as an argument, its value
@@ -774,7 +795,7 @@ IsResTargetForColumnRef(Node *node, ColumnRef *cref)
  * IsColumnRefInTargetList
  */
 ResTarget *
-IsColumnRefInTargetList(SelectStmt *stmt, Node *node)
+IsColumnRefInTargetList(List *targetList, Node *node)
 {
 	ColumnRef *cref;
 	ListCell *lc;
@@ -786,7 +807,7 @@ IsColumnRefInTargetList(SelectStmt *stmt, Node *node)
 
 	cref = (ColumnRef *) node;
 
-	foreach(lc, stmt->targetList)
+	foreach(lc, targetList)
 	{
 		node = lfirst(lc);
 
@@ -954,8 +975,7 @@ Node *
 HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context)
 {
 	ResTarget *res;
-
-	if (IsAColumnRef(node) && IsColumnRefInTargetList(stmt, node))
+	if (IsAColumnRef(node) && IsColumnRefInTargetList(stmt->targetList, node))
 		return node;
 
 	res = CreateUniqueResTargetForNode(node, context);
@@ -1155,7 +1175,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	{
 		ResTarget *res = (ResTarget *) list_nth(workerstmt->targetList, i);
 		FuncCall *agg;
-		ListCell *agglc;
+		ListCell *lc;
 
 		/*
 		 * Any ResTarget with a ResTarget as a val should be ignore for the worker
@@ -1194,13 +1214,25 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 		}
 
 		/*
+		 * Hoist columns out of expressions.
+		 */
+		context.cols = NIL;
+		find_top_level_column_refs(res->val, &context);
+		foreach(lc, context.cols)
+		{
+			Node *node = (Node *) lfirst(lc);
+			if (!IsColumnRefInTargetList(workerTargetList, node))
+				workerTargetList = lappend(workerTargetList, CreateResTargetForNode(node));
+		}
+
+		/*
 		 * Hoist each agg function call into a new hidden column
 		 * and reference that hidden column in the expression which
 		 * is evaluated by the view.
 		 */
-		foreach(agglc, context.funcCalls)
+		foreach(lc, context.funcCalls)
 		{
-			Node *node = (Node *) lfirst(agglc);
+			Node *node = (Node *) lfirst(lc);
 			ResTarget *aggres = CreateUniqueResTargetForNode(node, &context);
 			workerTargetList = lappend(workerTargetList, aggres);
 

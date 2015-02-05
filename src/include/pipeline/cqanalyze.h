@@ -52,7 +52,7 @@ char *GetUniqueInternalColname(CQAnalyzeContext *context);
 bool FindColumnRefsWithTypeCasts(Node *node, CQAnalyzeContext *context);
 bool ContainsColumnRef(Node *node, ColumnRef *cref);
 ColumnRef *GetColumnRef(Node *node);
-ResTarget *IsColumnRefInTargetList(SelectStmt *stmt, Node *node);
+ResTarget *IsColumnRefInTargetList(List *targetList, Node *node);
 bool IsAColumnRef(Node *node);
 bool AreColumnRefsEqual(Node *cr1, Node *cr2);
 Node *HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context);
