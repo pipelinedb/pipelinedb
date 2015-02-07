@@ -2019,7 +2019,7 @@ adjust_data_dir(void)
 		return;
 
 	/* If there is no postgresql.conf, it can't be a config-only dir */
-	snprintf(filename, sizeof(filename), "%s/postgresql.conf", pg_config);
+	snprintf(filename, sizeof(filename), "%s/pipelinedb.conf", pg_config);
 	if ((fd = fopen(filename, "r")) == NULL)
 		return;
 	fclose(fd);
