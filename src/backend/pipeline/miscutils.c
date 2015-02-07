@@ -153,3 +153,23 @@ MurmurHash3_64(const void *key, const Size len, const uint64_t seed)
 	MurmurHash3_128(key, len, MURMUR_SEED, &hash);
 	return hash[1];
 }
+
+/*
+ * JumpConsistenHash
+ *
+ * A fast, minimal, consistent hash algorithm.
+ *   http://arxiv.org/pdf/1406.2294.pdf
+ */
+uint32_t
+JumpConsistentHash(uint64_t key, uint32_t num_buckets)
+{
+	int64_t b = -1;
+	int64_t j = 0;
+	while (j < num_buckets)
+	{
+		b = j;
+		key = key * 2862933555777941757ULL + 1;
+		j = (b + 1) * (float8) (1LL << 31) * (float8) ((key >> 33) + 1);
+	}
+	return b;
+}

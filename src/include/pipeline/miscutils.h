@@ -12,7 +12,9 @@ extern void append_suffix(char *str, char *suffix, int max_len);
 extern int skip_substring(char *str, char* substr, int start);
 extern char *random_hex(int len);
 
+/* hash functions */
 extern void MurmurHash3_128(const void *key, const Size len, const uint64_t seed, void *out);
 extern uint64_t MurmurHash3_64(const void *key, const Size len, const uint64_t seed);
+extern uint32_t JumpConsistentHash(uint64_t key, uint32_t num_buckets);
 
 #endif   /* MISCUTILS_H */

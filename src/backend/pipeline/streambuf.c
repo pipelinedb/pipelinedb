@@ -307,12 +307,8 @@ PinNextStreamBufferSlot(StreamBufferReader *reader)
 			return NULL;
 		}
 
-		/*
-		 * TODO(usmanm): Substitute with faster hash function. We don't really care that much
-		 * about uniform distribution here--all about perf.
-		 */
 		if (bms_is_member(reader->cq_id, reader->slot->readby) &&
-				((MurmurHash3_64(reader->slot, sizeof(StreamBufferSlot *), MURMUR_SEED) % reader->num_workers) == reader->worker_id))
+				(JumpConsistentHash((uint64_t) reader->slot, reader->num_workers) == reader->worker_id))
 			break;
 
 		reader->slot = SlotNext(reader->slot);
