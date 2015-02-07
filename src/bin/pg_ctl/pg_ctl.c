@@ -850,7 +850,7 @@ do_start(void)
 		pgdata_opt = "";
 
 	if (exec_path == NULL)
-		exec_path = find_other_exec_or_die(argv0, "postgres", PG_BACKEND_VERSIONSTR);
+		exec_path = find_other_exec_or_die(argv0, "pipeline-server", PG_BACKEND_VERSIONSTR);
 
 #if defined(HAVE_GETRLIMIT) && defined(RLIMIT_CORE)
 	if (allow_core_files)
