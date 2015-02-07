@@ -88,4 +88,6 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define CQ_INACTIVE_CHECK_MS 2000
 #define CQ_GC_SLEEP_MS 5000
 
+#define MAX_PARALLELISM 16
+
 #endif   /* PIPELINE_QUERIES_H */

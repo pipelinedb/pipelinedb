@@ -30,7 +30,7 @@ typedef struct StreamBufferSlot
 	int32_t magic;
 	Size size;
 	StreamEvent *event;
-	Bitmapset *readers;
+	Bitmapset *readby;
 	char *stream;
 	slock_t mutex;
 } StreamBufferSlot;
@@ -45,13 +45,15 @@ typedef struct StreamBuffer
 	int64_t nonce;
 	slock_t mutex;
 	Bitmapset *waiters;
-	Latch *latches;
+	Latch **latches;
 } StreamBuffer;
 
 /* Pointer into a stream buffer from the perspective of a continuous query */
 typedef struct StreamBufferReader
 {
-	int32_t id;
+	int32_t cq_id;
+	int8_t worker_id;
+	int8_t num_workers;
 	int64_t nonce;
 	bool read;
 	StreamBufferSlot *slot;
@@ -63,12 +65,12 @@ extern void StreamBufferInit(void);
 extern Size StreamBufferShmemSize(void);
 extern StreamBufferSlot *StreamBufferInsert(const char *stream, StreamEvent *event);
 extern bool StreamBufferIsEmpty(void);
-extern void StreamBufferWait(int32_t id);
+extern void StreamBufferWait(int32_t cq_id, int8_t worker_id);
 extern void StreamBufferNotifyAllAndClearWaiters(void);
-extern void StreamBufferResetNotify(int32_t id);
-extern void StreamBufferNotify(int32_t id);
+extern void StreamBufferResetNotify(int32_t cq_id, int8_t worker_id);
+extern void StreamBufferNotify(int32_t cq_id);
 
-extern StreamBufferReader *OpenStreamBufferReader(int id);
+extern StreamBufferReader *OpenStreamBufferReader(int32_t cq_id, int8_t worker_id);
 extern void CloseStreamBufferReader(StreamBufferReader *reader);
 extern StreamBufferSlot *PinNextStreamBufferSlot(StreamBufferReader *reader);
 extern void UnpinStreamBufferSlot(StreamBufferReader *reader, StreamBufferSlot *slot);
