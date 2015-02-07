@@ -151,5 +151,5 @@ MurmurHash3_64(const void *key, const Size len, const uint64_t seed)
 {
 	uint64_t hash[2];
 	MurmurHash3_128(key, len, MURMUR_SEED, &hash);
-	return hash[1];
+	return hash[0];
 }
