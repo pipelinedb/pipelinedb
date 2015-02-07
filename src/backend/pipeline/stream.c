@@ -14,6 +14,7 @@
 #include "catalog/namespace.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "funcapi.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
@@ -31,12 +32,6 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 
-typedef struct StreamTargetsEntry
-{
-	char key[NAMEDATALEN]; /* hash key --- MUST BE FIRST */
-	Bitmapset *targets;
-} StreamTargetsEntry;
-
 /* Whether or not to block till the events are consumed by a cv*/
 bool DebugSyncStreamInsert;
 
@@ -46,7 +41,8 @@ bool DebugSyncStreamInsert;
  * Is the given INSERT statements target relation a stream?
  * We assume it is if the relation doesn't exist in the catalog as a normal relation.
  */
-bool InsertTargetIsStream(InsertStmt *ins)
+bool
+InsertTargetIsStream(InsertStmt *ins)
 {
 	Oid reloid = RangeVarGetRelid(ins->relation, NoLock, true);
 
@@ -54,6 +50,17 @@ bool InsertTargetIsStream(InsertStmt *ins)
 		return false;
 
 	return IsInputStream(ins->relation->relname);
+}
+
+/*
+ * IsInputStream
+ *
+ * Returns true if at least one continuous query is reading from the given stream
+ */
+bool
+IsInputStream(const char *stream)
+{
+	return GetTargetsFor(stream) != NULL;
 }
 
 static TupleDesc
@@ -175,7 +182,7 @@ InsertIntoStream(InsertStmt *ins)
 	/* append each VALUES tuple to the stream buffer */
 	foreach (lc, exprlists)
 	{
-		StreamEvent ev = (StreamEvent) palloc0(sizeof(StreamEventData));
+		StreamEvent *ev = (StreamEvent *) palloc0(sizeof(StreamEvent));
 		List *exprlist = (List *) lfirst(lc);
 		List *exprstatelist;
 		ListCell *l;
@@ -229,21 +236,20 @@ InsertIntoStream(InsertStmt *ins)
 			col++;
 		}
 
-		ev->raw = heap_form_tuple(desc, values, nulls);
+		ev->tuple = heap_form_tuple(desc, values, nulls);
 		ev->arrivaltime = GetCurrentTimestamp();
 
-		sbs = AppendStreamEvent(ins->relation->relname, GlobalStreamBuffer, ev);
+		sbs = StreamBufferInsert(ins->relation->relname, ev);
 
 		Assert(sbs);
 		count++;
 	}
 
 	/*
-		Wait till the last event has been consumed by a CV before returning
-		Used for testing, based on a config setting.
-	*/
+	 * Wait till the last event has been consumed by a CV before returning.
+	 */
 	if (DebugSyncStreamInsert)
-		WaitForOverwrite(GlobalStreamBuffer, sbs, 5);
+		WaitForUnpinningStreamBufferSlot(sbs, 5);
 
 	return count;
 }

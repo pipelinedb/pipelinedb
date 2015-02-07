@@ -864,7 +864,7 @@ exec_simple_query(const char *query_string)
 	/*
 	 * Report query to various monitoring facilities.
 	 */
-	debug_query_string = query_string;
+	debug_query_string = NULL;//query_string;
 
 	pgstat_report_activity(STATE_RUNNING, query_string);
 
