@@ -1858,7 +1858,7 @@ do_advice(void)
 static void
 do_help(void)
 {
-	printf(_("%s is a utility to initialize, start, stop, or control a PostgreSQL server.\n\n"), progname);
+	printf(_("%s is a utility to initialize, start, stop, or control a PipelineDB server.\n\n"), progname);
 	printf(_("Usage:\n"));
 	printf(_("  %s init[db]               [-D DATADIR] [-s] [-o \"OPTIONS\"]\n"), progname);
 	printf(_("  %s start   [-w] [-t SECS] [-D DATADIR] [-s] [-l FILENAME] [-o \"OPTIONS\"]\n"), progname);
@@ -1895,7 +1895,7 @@ do_help(void)
 	printf(_("  -l, --log=FILENAME     write (or append) server log to FILENAME\n"));
 	printf(_("  -o OPTIONS             command line options to pass to postgres\n"
 	 "                         (PostgreSQL server executable) or initdb\n"));
-	printf(_("  -p PATH-TO-POSTGRES    normally not necessary\n"));
+	printf(_("  -p PATH-TO-PIPELINEDB    normally not necessary\n"));
 	printf(_("\nOptions for stop or restart:\n"));
 	printf(_("  -m, --mode=MODE        MODE can be \"smart\", \"fast\", or \"immediate\"\n"));
 
