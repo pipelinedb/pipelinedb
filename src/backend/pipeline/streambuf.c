@@ -307,6 +307,8 @@ StreamBufferPinNextSlot(StreamBufferReader *reader)
 
 	LWLockRelease(StreamBufferTailLock);
 
+	Assert(reader->slot->magic == MAGIC);
+
 	if (DebugPrintStreamBuffer)
 		elog(LOG, "[%d] pinned event at [%d, %d)",
 				reader->id, BufferOffset(reader->slot), BufferOffset(SlotEnd(reader->slot)));
@@ -324,6 +326,8 @@ StreamBufferPinNextSlot(StreamBufferReader *reader)
 void
 StreamBufferUnpinSlot(StreamBufferReader *reader, StreamBufferSlot *slot)
 {
+	Assert(reader->slot->magic == MAGIC);
+
 	SpinLockAcquire(&slot->mutex);
 	bms_del_member(slot->readers, reader->id);
 	SpinLockRelease(&slot->mutex);
