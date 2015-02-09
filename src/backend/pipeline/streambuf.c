@@ -108,7 +108,7 @@ StreamBufferInsert(const char *stream, StreamEvent *event)
 	LWLockAcquire(StreamBufferHeadLock, LW_EXCLUSIVE);
 	LWLockAcquire(StreamBufferTailLock, LW_SHARED);
 
-	/* If buffer is empty, start consuming it from the start again. */
+	 /* If buffer is empty, start consuming it from the start again. */
 	if (StreamBufferIsEmpty())
 		start = GlobalStreamBuffer->start;
 	else
@@ -247,7 +247,7 @@ OpenStreamBufferReader(int32_t cq_id, int8_t worker_id)
 	reader->num_workers = NUM_WORKERS(GetCQProcEntry(cq_id));
 	reader->slot = GlobalStreamBuffer->tail;
 	reader->nonce = GlobalStreamBuffer->nonce;
-	reader->read = false;
+	reader->retry_slot = true;
 	return reader;
 }
 
@@ -273,7 +273,7 @@ PinNextStreamBufferSlot(StreamBufferReader *reader)
 
 	if (NoUnreadSlots(reader))
 	{
-		reader->read = false;
+		reader->retry_slot = true;
 		return NULL;
 	}
 
@@ -294,7 +294,7 @@ PinNextStreamBufferSlot(StreamBufferReader *reader)
 	 */
 	if (reader->slot < GlobalStreamBuffer->tail)
 		reader->slot = GlobalStreamBuffer->tail;
-	else if (reader->read)
+	else if (!reader->retry_slot)
 		reader->slot = SlotNext(reader->slot);
 
 	/* Return the first event in the buffer that we need to read from */
@@ -302,7 +302,7 @@ PinNextStreamBufferSlot(StreamBufferReader *reader)
 	{
 		if (NoUnreadSlots(reader))
 		{
-			reader->read = false;
+			reader->retry_slot = true;
 			LWLockRelease(StreamBufferTailLock);
 			return NULL;
 		}
@@ -320,7 +320,7 @@ PinNextStreamBufferSlot(StreamBufferReader *reader)
 		elog(LOG, "[%d] pinned event at [%d, %d)",
 				reader->cq_id, BufferOffset(reader->slot), BufferOffset(SlotEnd(reader->slot)));
 
-	reader->read = true;
+	reader->retry_slot = false;
 	return reader->slot;
 }
 

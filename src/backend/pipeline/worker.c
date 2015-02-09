@@ -169,9 +169,7 @@ retry:
 					pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
 				}
 				else
-				{
 					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
-				}
 			}
 
 			StartTransactionCommand();

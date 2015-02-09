@@ -55,7 +55,7 @@ typedef struct StreamBufferReader
 	int8_t worker_id;
 	int8_t num_workers;
 	int64_t nonce;
-	bool read;
+	bool retry_slot;
 	StreamBufferSlot *slot;
 } StreamBufferReader;
 
