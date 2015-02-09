@@ -247,7 +247,7 @@ StreamBufferOpenReader(int id)
 	reader->cq_id = id;
 	reader->slot = GlobalStreamBuffer->tail;
 	reader->nonce = GlobalStreamBuffer->nonce;
-	reader->retry_slot = false;
+	reader->retry_slot = true;
 	return reader;
 }
 
