@@ -39,6 +39,14 @@ StreamBuffer *GlobalStreamBuffer;
 /* Maximum size in blocks of the global stream buffer */
 int StreamBufferBlocks;
 
+static List *MyPinnedSlots = NIL;
+
+typedef struct
+{
+	int32_t cq_id;
+	StreamBufferSlot *slot;
+} MyPinnedSlotEntry;
+
 static void
 spfree_tupledesc(TupleDesc desc)
 {
@@ -236,7 +244,7 @@ StreamBufferReader *
 StreamBufferOpenReader(int id)
 {
 	StreamBufferReader *reader = (StreamBufferReader *) palloc(sizeof(StreamBufferReader));
-	reader->id = id;
+	reader->cq_id = id;
 	reader->slot = GlobalStreamBuffer->tail;
 	reader->nonce = GlobalStreamBuffer->nonce;
 	reader->retry_slot = false;
@@ -260,6 +268,8 @@ StreamBufferCloseReader(StreamBufferReader *reader)
 StreamBufferSlot *
 StreamBufferPinNextSlot(StreamBufferReader *reader)
 {
+	MyPinnedSlotEntry *entry;
+
 	if (StreamBufferIsEmpty())
 		return NULL;
 
@@ -299,7 +309,7 @@ StreamBufferPinNextSlot(StreamBufferReader *reader)
 			return NULL;
 		}
 
-		if (bms_is_member(reader->id, reader->slot->readers))
+		if (bms_is_member(reader->cq_id, reader->slot->readers))
 			break;
 
 		reader->slot = SlotNext(reader->slot);
@@ -311,30 +321,29 @@ StreamBufferPinNextSlot(StreamBufferReader *reader)
 
 	if (DebugPrintStreamBuffer)
 		elog(LOG, "[%d] pinned event at [%d, %d)",
-				reader->id, BufferOffset(reader->slot), BufferOffset(SlotEnd(reader->slot)));
+				reader->cq_id, BufferOffset(reader->slot), BufferOffset(SlotEnd(reader->slot)));
+
+	entry = palloc0(sizeof(MyPinnedSlotEntry));
+	entry->slot = reader->slot;
+	entry->cq_id = reader->cq_id;
+	MyPinnedSlots = lappend(MyPinnedSlots, entry);
 
 	reader->retry_slot = false;
 	return reader->slot;
 }
 
-/*
- * StreamBufferUnpinSlot
- *
- * Marks the given slot as read by the given reader. Once all open readers
- * have unpinned a slot, it is freed.
- */
-void
-StreamBufferUnpinSlot(StreamBufferReader *reader, StreamBufferSlot *slot)
+static void
+unpin_slot(int32_t cq_id, StreamBufferSlot *slot)
 {
 	Assert(reader->slot->magic == MAGIC);
 
 	SpinLockAcquire(&slot->mutex);
-	bms_del_member(slot->readers, reader->id);
+	bms_del_member(slot->readers, cq_id);
 	SpinLockRelease(&slot->mutex);
 
 	if (DebugPrintStreamBuffer)
 		elog(LOG, "[%d] unpinned event at [%d, %d); readers %d",
-				reader->id, BufferOffset(slot), BufferOffset(SlotEnd(slot)), bms_num_members(slot->readers));
+				cq_id, BufferOffset(slot), BufferOffset(SlotEnd(slot)), bms_num_members(slot->readers));
 
 	if (!bms_is_empty(slot->readers))
 		return;
@@ -361,6 +370,18 @@ StreamBufferUnpinSlot(StreamBufferReader *reader, StreamBufferSlot *slot)
 	}
 
 	LWLockRelease(StreamBufferTailLock);
+}
+
+/*
+ * StreamBufferUnpinSlot
+ *
+ * Marks the given slot as read by the given reader. Once all open readers
+ * have unpinned a slot, it is freed.
+ */
+void
+StreamBufferUnpinSlot(StreamBufferReader *reader, StreamBufferSlot *slot)
+{
+	unpin_slot(reader->cq_id, slot);
 }
 
 /*
@@ -438,4 +459,32 @@ void
 StreamBufferNotify(int32_t id)
 {
 	SetLatch((&GlobalStreamBuffer->latches[id]));
+}
+
+/*
+ * StreamBufferUnpinAllPinnedSlots
+ */
+void
+StreamBufferUnpinAllPinnedSlots(void)
+{
+	ListCell *lc;
+
+	if (!MyPinnedSlots)
+		return;
+
+	foreach(lc, MyPinnedSlots)
+	{
+		MyPinnedSlotEntry *entry = (MyPinnedSlotEntry *) lfirst(lc);
+		unpin_slot(entry->cq_id, entry->slot);
+	}
+}
+
+/*
+ * StreamBufferClearPinnedSlots
+ */
+void
+StreamBufferClearPinnedSlots(void)
+{
+	list_free_deep(MyPinnedSlots);
+	MyPinnedSlots = NIL;
 }

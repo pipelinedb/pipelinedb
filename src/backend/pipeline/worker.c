@@ -178,6 +178,7 @@ retry:
 			set_snapshot(estate, cqowner);
 
 			CurrentResourceOwner = cqowner;
+
 			MemoryContextSwitchTo(estate->es_query_cxt);
 
 			estate->es_processed = 0;
@@ -188,6 +189,8 @@ retry:
 			 */
 			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
+
+			StreamBufferClearPinnedSlots();
 
 			MemoryContextSwitchTo(runcontext);
 			CurrentResourceOwner = cqowner;
@@ -236,6 +239,8 @@ retry:
 			unset_snapshot(estate, cqowner);
 		if (IsTransactionState())
 			CommitTransactionCommand();
+
+		StreamBufferUnpinAllPinnedSlots();
 
 		MemoryContextResetAndDeleteChildren(runcontext);
 
