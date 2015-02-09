@@ -249,7 +249,7 @@ InsertIntoStream(InsertStmt *ins)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (DebugSyncStreamInsert)
-		WaitForUnpinningStreamBufferSlot(sbs, 5);
+		StreamBufferWaitOnSlot(sbs, 5);
 
 	return count;
 }

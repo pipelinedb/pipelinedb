@@ -53,7 +53,7 @@ typedef struct StreamBufferReader
 {
 	int32_t id;
 	int64_t nonce;
-	bool read;
+	bool retry_slot;
 	StreamBufferSlot *slot;
 } StreamBufferReader;
 
@@ -67,11 +67,10 @@ extern void StreamBufferWait(int32_t id);
 extern void StreamBufferNotifyAllAndClearWaiters(void);
 extern void StreamBufferResetNotify(int32_t id);
 extern void StreamBufferNotify(int32_t id);
-
-extern StreamBufferReader *OpenStreamBufferReader(int id);
-extern void CloseStreamBufferReader(StreamBufferReader *reader);
-extern StreamBufferSlot *PinNextStreamBufferSlot(StreamBufferReader *reader);
-extern void UnpinStreamBufferSlot(StreamBufferReader *reader, StreamBufferSlot *slot);
-extern void WaitForUnpinningStreamBufferSlot(StreamBufferSlot *slot, int sleepms);
+extern StreamBufferReader *StreamBufferOpenReader(int id);
+extern void StreamBufferCloseReader(StreamBufferReader *reader);
+extern StreamBufferSlot *StreamBufferPinNextSlot(StreamBufferReader *reader);
+extern void StreamBufferUnpinSlot(StreamBufferReader *reader, StreamBufferSlot *slot);
+extern void StreamBufferWaitOnSlot(StreamBufferSlot *slot, int sleepms);
 
 #endif

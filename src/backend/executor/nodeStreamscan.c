@@ -64,7 +64,7 @@ init_proj_info_for_desc(StreamProjectionInfo *pi, TupleDesc evdesc)
 static TupleTableSlot *
 StreamScanNext(StreamScanState *node)
 {
-	StreamBufferSlot *sbs = PinNextStreamBufferSlot(node->reader);
+	StreamBufferSlot *sbs = StreamBufferPinNextSlot(node->reader);
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 	HeapTuple tup;
 
@@ -83,7 +83,7 @@ StreamScanNext(StreamScanState *node)
 	 * event, so only unpin it if we're configured to do so.
 	 */
 	if (node->unpin)
-		UnpinStreamBufferSlot(node->reader, sbs);
+		StreamBufferUnpinSlot(node->reader, sbs);
 	else
 		node->pinned = lappend(node->pinned, sbs);
 
@@ -265,7 +265,7 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 	ExecAssignResultTypeFromTL(&state->ss.ps);
 	ExecAssignScanProjectionInfo(&state->ss);
 
-	state->reader = OpenStreamBufferReader(node->cqid);
+	state->reader = StreamBufferOpenReader(node->cqid);
 
 	return state;
 }
@@ -282,7 +282,7 @@ ExecStreamScan(StreamScanState *node)
 void
 ExecEndStreamScan(StreamScanState *node)
 {
-	CloseStreamBufferReader(node->reader);
+	StreamBufferCloseReader(node->reader);
 }
 
 void
