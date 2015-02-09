@@ -66,7 +66,7 @@ extern Size StreamBufferShmemSize(void);
 extern StreamBufferSlot *StreamBufferInsert(const char *stream, StreamEvent *event);
 extern bool StreamBufferIsEmpty(void);
 extern void StreamBufferWait(int32_t cq_id, int8_t worker_id);
-extern void StreamBufferNotifyAllAndClearWaiters(void);
+extern void StreamBufferNotifyAndClearWaiters(void);
 extern void StreamBufferResetNotify(int32_t cq_id, int8_t worker_id);
 extern void StreamBufferNotify(int32_t cq_id);
 

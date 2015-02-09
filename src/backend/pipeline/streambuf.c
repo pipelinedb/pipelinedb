@@ -173,7 +173,7 @@ StreamBufferInsert(const char *stream, StreamEvent *event)
 		GlobalStreamBuffer->nonce++;
 
 		/* Wake up all readers */
-		StreamBufferNotifyAllAndClearWaiters();
+		StreamBufferNotifyAndClearWaiters();
 	}
 
 	LWLockRelease(StreamBufferTailLock);
@@ -405,7 +405,7 @@ StreamBufferWait(int32_t cq_id, int8_t worker_id)
 }
 
 void
-StreamBufferNotifyAllAndClearWaiters(void)
+StreamBufferNotifyAndClearWaiters(void)
 {
 	Bitmapset *waiters;
 
