@@ -5060,7 +5060,7 @@ DESCR("rank of hypothetical row, using hyperloglog");
 DATA(insert OID = 5013 ( hll_dense_rank_final			PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 20 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_	hll_hypothetical_dense_rank_final _null_ _null_ _null_ ));
 DESCR("aggregate final function");
 
-/* streaming count distinct using HyperLogLog */
+/* streaming count distinct using hyperloglog */
 DATA(insert OID = 5014 ( hll_count_distinct				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 20 "2276" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
 DESCR("distinct count, using hyperloglog");
 DATA(insert OID = 5016 ( hll_count_distinct_transition	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_ hll_count_distinct_transition _null_ _null_ _null_ ));
@@ -5088,14 +5088,19 @@ DATA(insert OID = 5027 ( cq_percentile_cont_float8_final	PGNSP PGUID 12 1 0 0 0 
 DESCR("aggregate final function");
 
 DATA(insert OID = 5028 (hll_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "3998" _null_ _null_ _null_ _null_ hll_out _null_ _null_ _null_ ));
-DESCR("HyperLogLog out function");
+DESCR("hyperloglog out function");
 DATA(insert OID = 5029 (hll_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3998 "2275" _null_ _null_ _null_ _null_ hll_in  _null_ _null_ _null_ ));
-DESCR("HyperLogLog in function");
+DESCR("hyperloglog in function");
 
 DATA(insert OID = 5032 (bloom_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5030" _null_ _null_ _null_ _null_ bloom_out _null_ _null_ _null_ ));
-DESCR("Bloom Filter out function");
+DESCR("bloom filter out function");
 DATA(insert OID = 5033 (bloom_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5030 "2275" _null_ _null_ _null_ _null_ bloom_in  _null_ _null_ _null_ ));
-DESCR("Bloom Filter in function");
+DESCR("bloom filter in function");
+
+DATA(insert OID = 5032 (tdigest_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5034" _null_ _null_ _null_ _null_ tdigest_out _null_ _null_ _null_ ));
+DESCR("t-digest out function");
+DATA(insert OID = 5033 (tdigest_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5034 "2275" _null_ _null_ _null_ _null_ tdigest_in  _null_ _null_ _null_ ));
+DESCR("t-digest in function");
 
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
 DATA(insert OID = 4301 ( float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1022 "1022 1022" _null_ _null_ _null_ _null_ float8_combine _null_ _null_ _null_ ));
@@ -5146,74 +5151,105 @@ DESCR("serializer for string aggregation transition states");
 DATA(insert OID = 4300 ( combine	PGNSP PGUID 12 1 0 2283 0 t f f f t f i 1 0 2283 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("generic user combine function");
 
-/* HyperLogLog aggregate */
+/* hyperloglog aggregate */
 DATA(insert OID = 4321 ( hll_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 3998 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("HyperLogLog aggregate");
+DESCR("hyperloglog aggregate");
 
-/* HyperLogLog aggregate with user-supplied p */
+/* hyperloglog aggregate with user-supplied p */
 DATA(insert OID = 4322 ( hll_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 3998 "2283 23" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("HyperLogLog aggregate");
+DESCR("hyperloglog aggregate");
 
-/* HyperLogLog aggregate transition function */
+/* hyperloglog aggregate transition function */
 DATA(insert OID = 4323 ( hll_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 3998 "3998 2283" _null_ _null_ _null_ _null_ hll_agg_trans _null_ _null_ _null_ ));
-DESCR("HyperLogLog union aggregate");
+DESCR("hyperloglog union aggregate");
 
-/* HyperLogLog aggregate with p transition function */
+/* hyperloglog aggregate with p transition function */
 DATA(insert OID = 4324 ( hll_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 3998 "3998 2283 23" _null_ _null_ _null_ _null_ hll_agg_transp _null_ _null_ _null_ ));
-DESCR("HyperLogLog union aggregate");
+DESCR("hyperloglog union aggregate");
 
-/* HyperLogLog union aggregate */
+/* hyperloglog union aggregate */
 DATA(insert OID = 4326 ( hll_union_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 3998 "3998" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("HyperLogLog union aggregate");
+DESCR("hyperloglog union aggregate");
 
-/* HyperLogLog union aggregate transition function */
+/* hyperloglog union aggregate transition function */
 DATA(insert OID = 4327 ( hll_union_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 3998 "3998 3998" _null_ _null_ _null_ _null_ hll_union_agg_trans _null_ _null_ _null_ ));
-DESCR("HyperLogLog union aggregate");
+DESCR("hyperloglog union aggregate");
 
-/* HyperLogLog union aggregate transition function */
+/* hyperloglog union aggregate transition function */
 DATA(insert OID = 4328 ( hll_cardinality	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 20 "3998" _null_ _null_ _null_ _null_ hll_cardinality _null_ _null_ _null_ ));
-DESCR("HyperLogLog cardinality");
+DESCR("hyperloglog cardinality");
 
-/* Bloom Filter aggregate */
+/* bloom filter aggregate */
 DATA(insert OID = 4329 ( bloom_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5030 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("Bloom Filter aggregate");
+DESCR("bloom filter aggregate");
 
-/* Bloom Filter aggregate with user-supplied p and n */
+/* bloom filter aggregate with user-supplied p and n */
 DATA(insert OID = 4330 ( bloom_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5030 "2283 701 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("Bloom Filter aggregate");
+DESCR("bloom filter aggregate");
 
-/* Bloom Filter aggregate transition function */
+/* bloom filter aggregate transition function */
 DATA(insert OID = 4331 ( bloom_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "5030 2283" _null_ _null_ _null_ _null_ bloom_agg_trans _null_ _null_ _null_ ));
-DESCR("Bloom Filter union aggregate");
+DESCR("bloom filter union aggregate");
 
-/* Bloom Filter aggregate with p and n transition function */
+/* bloom filter aggregate with p and n transition function */
 DATA(insert OID = 4332 ( bloom_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "5030 2283 701 20" _null_ _null_ _null_ _null_ bloom_agg_transp _null_ _null_ _null_ ));
-DESCR("Bloom Filter union aggregate");
+DESCR("bloom filter union aggregate");
 
-/* Bloom Filter union aggregate */
+/* bloom filter union aggregate */
 DATA(insert OID = 4333 ( bloom_union_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5030 "5030" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("Bloom Filter union aggregate");
+DESCR("bloom filter union aggregate");
 
-/* Bloom Filter union aggregate transition function */
+/* bloom filter union aggregate transition function */
 DATA(insert OID = 4334 ( bloom_union_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "5030 5030" _null_ _null_ _null_ _null_ bloom_union_agg_trans _null_ _null_ _null_ ));
-DESCR("Bloom Filter union aggregate");
+DESCR("bloom filter union aggregate");
 
-/* Bloom Filter intersection aggregate */
+/* bloom filter intersection aggregate */
 DATA(insert OID = 4335 ( bloom_intersection_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5030 "5030" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("Bloom Filter intersection aggregate");
+DESCR("bloom filter intersection aggregate");
 
-/* Bloom Filter intersection aggregate transition function */
+/* bloom filter intersection aggregate transition function */
 DATA(insert OID = 4336 ( bloom_intersection_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "5030 5030" _null_ _null_ _null_ _null_ bloom_intersection_agg_trans _null_ _null_ _null_ ));
-DESCR("Bloom Filter intersection aggregate");
+DESCR("bloom filter intersection aggregate");
 
-/* Bloom Filter cardinality function */
+/* bloom filter cardinality function */
 DATA(insert OID = 4337 ( bloom_cardinality	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 20 "5030" _null_ _null_ _null_ _null_ bloom_cardinality _null_ _null_ _null_ ));
-DESCR("Bloom Filter cardinality");
+DESCR("bloom filter cardinality");
 
-/* Bloom Filter contains function */
+/* bloom filter contains function */
 DATA(insert OID = 4338 ( bloom_contains	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 16 "5030 2283" _null_ _null_ _null_ _null_ bloom_contains _null_ _null_ _null_ ));
-DESCR("Bloom Filter contains item?");
+DESCR("bloom filter contains item?");
 
+/* t-digest aggregate */
+DATA(insert OID = 4339 ( tdigest_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5034 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("t-digest aggregate");
+
+/* t-digest aggregate with user-supplied compression */
+DATA(insert OID = 4340 ( tdigest_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5034 "2283 23" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("t-digest aggregate");
+
+/* t-digest aggregate transition function */
+DATA(insert OID = 4341 ( tdigest_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5034 "5034 2283" _null_ _null_ _null_ _null_ tdigest_agg_trans _null_ _null_ _null_ ));
+DESCR("bloom filter union aggregate");
+
+/* t-digest aggregate with compression */
+DATA(insert OID = 4342 ( tdigest_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5034 "5034 2283 23" _null_ _null_ _null_ _null_ tdigest_agg_transp _null_ _null_ _null_ ));
+DESCR("bloom filter union aggregate");
+
+/* t-digest union aggregate */
+DATA(insert OID = 4343 ( tdigest_merge_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5034 "5034" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("t-digest merge aggregate");
+
+/* t-digest merge aggregate transition function */
+DATA(insert OID = 4344 ( tdigest_merge_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5034 "5034 5034" _null_ _null_ _null_ _null_ tdigest_merge_agg_trans _null_ _null_ _null_ ));
+DESCR("t-digest merge aggregate");
+
+/* t-digest cdf function */
+DATA(insert OID = 4345 ( tdigest_cdf	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 20 "5034 2283" _null_ _null_ _null_ _null_ tdigest_cdf _null_ _null_ _null_ ));
+DESCR("t-digest cdf");
+
+/* t-digest quantile function */
+DATA(insert OID = 4346 ( tdigest_quantile	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 16 "5034 2283" _null_ _null_ _null_ _null_ tdigest_quantile _null_ _null_ _null_ ));
+DESCR("t-digest quantile");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result

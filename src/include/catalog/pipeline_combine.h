@@ -188,4 +188,8 @@ DATA(insert (0 hll_agg_transp 0 0 hll_union_agg_trans t 3998));
 DATA(insert (0 bloom_agg_trans  0 0 bloom_union_agg_trans t 5030));
 DATA(insert (0 bloom_agg_transp 0 0 bloom_union_agg_trans t 5030));
 
+/* tdigest_agg */
+DATA(insert (0 tdigest_agg_trans  0 0 tdigest_merge_agg_trans t 5034));
+DATA(insert (0 tdigest_agg_transp 0 0 tdigest_merge_union_agg_trans t 5034));
+
 #endif
