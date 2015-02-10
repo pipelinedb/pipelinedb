@@ -77,4 +77,7 @@ extern StreamBufferSlot *StreamBufferPinNextSlot(StreamBufferReader *reader);
 extern void StreamBufferUnpinSlot(StreamBufferReader *reader, StreamBufferSlot *slot);
 extern void StreamBufferWaitOnSlot(StreamBufferSlot *slot, int sleepms);
 
+extern void StreamBufferUnpinAllPinnedSlots(void);
+extern void StreamBufferClearPinnedSlots(void);
+
 #endif
