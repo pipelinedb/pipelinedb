@@ -217,6 +217,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		ColumnDef   *coldef;
 		char		*colname;
 		Oid			hiddentype;
+		Oid type;
 
 		/* Ignore junk columns from the targetlist */
 		if (tle->resjunk)
@@ -228,7 +229,13 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		 * Set typeOid and typemod. The name of the type is derived while
 		 * generating query
 		 */
-		coldef = make_cv_columndef(colname, exprType((Node *) tle->expr), exprTypmod((Node *) tle->expr));
+		type = exprType((Node *) tle->expr);
+		/*
+		 * TODO(usmanm): Check for pseudo-types and replace with a char type.
+		 */
+		if (type == 2278)
+			type = 18;
+		coldef = make_cv_columndef(colname, type, exprTypmod((Node *) tle->expr));
 		tableElts = lappend(tableElts, coldef);
 
 		/*
@@ -600,13 +607,6 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 
 		GetContinousViewState(rv, &state);
 
-		/* If the another transaction which deactivated this CV hasn't
-		 * committed yet, we might still see it as active. Since there's only
-		 * one postmaster, the previous transaction's process could have
-		 * removed the CVMetadata--transactions don't protect it. */
-		if (GetCQProcEntry(state.id) == NULL)
-			continue;
-
 		/* Disable recovery and wait for any recovering processes to recover */
 		if (ContinuousQueryCrashRecovery)
 			DisableCQProcsRecovery(state.id);
@@ -616,7 +616,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		SetActiveFlag(state.id, false);
 
 		/* This should be a good place to release the waiting latch on the worker */
-		SetStreamBufferLatch(state.id);
+		StreamBufferNotify(state.id);
 
 		/*
 		 * Block till all the processes in the group have terminated

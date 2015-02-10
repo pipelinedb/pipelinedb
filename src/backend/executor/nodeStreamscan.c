@@ -65,7 +65,7 @@ init_proj_info_for_desc(StreamProjectionInfo *pi, TupleDesc evdesc)
 static TupleTableSlot *
 StreamScanNext(StreamScanState *node)
 {
-	StreamBufferSlot *sbs = PinNextStreamEvent(node->reader);
+	StreamBufferSlot *sbs = StreamBufferPinNextSlot(node->reader);
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 	HeapTuple tup;
 
@@ -84,7 +84,7 @@ StreamScanNext(StreamScanState *node)
 	 * event, so only unpin it if we're configured to do so.
 	 */
 	if (node->unpin)
-		UnpinStreamEvent(node->reader, sbs);
+		StreamBufferUnpinSlot(node->reader, sbs);
 	else
 		node->pinned = lappend(node->pinned, sbs);
 
@@ -120,7 +120,7 @@ coerce_raw_input(Datum value, Oid intype, Oid outtype)
  * Project a stream event onto a physical tuple
  */
 HeapTuple
-ExecStreamProject(StreamEvent event, StreamScanState *node)
+ExecStreamProject(StreamEvent *event, StreamScanState *node)
 {
 	HeapTuple decoded;
 	MemoryContext oldcontext;
@@ -138,7 +138,7 @@ ExecStreamProject(StreamEvent event, StreamScanState *node)
 	/* assume every element in the output tuple is null until we actually see values */
 	MemSet(nulls, true, desc->natts);
 
-	ExecStoreTuple(event->raw, pi->curslot, InvalidBuffer, false);
+	ExecStoreTuple(event->tuple, pi->curslot, InvalidBuffer, false);
 
 	/*
 	 * For each field in the event, place it in the corresponding field in the
@@ -266,7 +266,7 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 	ExecAssignResultTypeFromTL(&state->ss.ps);
 	ExecAssignScanProjectionInfo(&state->ss);
 
-	state->reader = OpenStreamBufferReader(GlobalStreamBuffer, node->cqid);
+	state->reader = StreamBufferOpenReader(node->cqid);
 
 	return state;
 }
@@ -283,7 +283,7 @@ ExecStreamScan(StreamScanState *node)
 void
 ExecEndStreamScan(StreamScanState *node)
 {
-	CloseStreamBufferReader(node->reader);
+	StreamBufferCloseReader(node->reader);
 }
 
 void

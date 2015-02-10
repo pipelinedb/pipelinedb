@@ -14,6 +14,7 @@
 #include "pipeline/streambuf.h"
 #include "postmaster/bgworker.h"
 #include "executor/tuptable.h"
+#include "nodes/bitmapset.h"
 #include "nodes/print.h"
 #include "storage/lwlock.h"
 #include "storage/spalloc.h"
@@ -22,7 +23,13 @@
 #include "utils/memutils.h"
 #include "miscadmin.h"
 
-#define NO_SLOTS_FOLLOW -1
+#define MAGIC 0xDEADBABE /* x_x */
+#define MAX_CQS 128 /* TODO(usmanm): Make this dynamic */
+
+#define BufferOffset(ptr) ((int32) ((char *) (ptr) - GlobalStreamBuffer->start))
+#define SlotEnd(slot) ((char *) (slot) + (slot)->size)
+#define SlotNext(slot) ((StreamBufferSlot *) SlotEnd(slot))
+#define NoUnreadSlots(reader) ((reader)->slot == GlobalStreamBuffer->head && (reader)->nonce == GlobalStreamBuffer->nonce)
 
 /* Whether or not to print the state of the stream buffer as it changes */
 bool DebugPrintStreamBuffer;
@@ -45,183 +52,24 @@ spfree_tupledesc(TupleDesc desc)
  * Waits until the given slot has been read by all CQs that need to see it
  */
 void
-WaitForOverwrite(StreamBuffer *buf, StreamBufferSlot *slot, int sleepms)
+StreamBufferWaitOnSlot(StreamBufferSlot *slot, int sleepms)
 {
-	/* block until all CQs have marked this event as read */
-	while (HasPendingReads(slot))
+	while (true)
+	{
+		/* Was slot overwritten? */
+		if (slot->magic != MAGIC)
+			break;
+		/* Has the slot been read by all events? */
+		if (slot < GlobalStreamBuffer->tail || bms_is_empty(slot->readers))
+			break;
 		pg_usleep(sleepms * 1000);
+	}
 
 	if (DebugPrintStreamBuffer)
 	{
-		elog(LOG, "evicted %dB at [%d, %d)", SlotSize(slot),
-				BufferOffset(buf, slot), BufferOffset(buf, slot) + SlotSize(slot));
+		elog(LOG, "evicted %zu bytes at [%d, %d)", slot->size,
+				BufferOffset(slot), BufferOffset(SlotEnd(slot)));
 	}
-}
-
-/*
- * alloc_slot
- *
- * Finds enough tombstoned slots to zero out and re-use shared memory for a new slot
- */
-static StreamBufferSlot *
-alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
-{
-	char *pos;
-	char *sbspos;
-	long free = 0;
-	long offset = NO_SLOTS_FOLLOW;
-	StreamEvent shared;
-	StreamBufferSlot *result;
-	Size size;
-	Size rawsize = event->raw->t_len + HEAPTUPLESIZE;
-	Bitmapset *bms = GetTargetsFor(stream);
-	StreamBufferSlot *sbs;
-
-	if (bms == NULL)
-	{
-		/* nothing is reading from this stream, so it's a noop */
-		return NULL;
-	}
-
-	size = sizeof(StreamEventData) + rawsize + sizeof(StreamBufferSlot) +
-			strlen(stream) + 1 + BITMAPSET_SIZE(bms->nwords);
-
-	if (size > buf->capacity)
-		elog(ERROR, "event of size %d too big for stream buffer of size %d", (int) size, (int) buf->capacity);
-
-	LWLockAcquire(StreamBufferAppendLock, LW_EXCLUSIVE);
-
-	if (buf->pos + size > BufferEnd(buf))
-	{
-		/*
-		 * The buffer got full, so start a new append cycle as soon
-		 * as the last event has been read.
-		 */
-		WaitForOverwrite(buf, buf->prev, 0);
-
-		buf->pos = buf->start;
-		buf->tail = buf->prev;
-		buf->prev->nextoffset = BufferEnd(buf) - SlotEnd(buf->prev);
-		buf->prev = NULL;
-		free = 0;
-	}
-	else
-	{
-		/*
-		 * The current append cycle has enough room for this event, so append
-		 * it directly after the previous event.
-		 */
-		if (IsNewAppendCycle(buf) || !MustEvict(buf))
-			free = size;
-		else if (MustEvict(buf))
-			free = buf->prev->nextoffset;
-	}
-
-	pos = buf->pos;
-	sbspos = pos + free;
-
-/*
- * Scan for queued events that we can clobber to make room for the incoming event.
- * Note that the incoming event may need to clobber more than one
- * to fit, so we have to look at entire events before overwriting them
- */
-	while (free < size)
-	{
-		int chunk;
-
-		sbs = (StreamBufferSlot *) sbspos;
-		WaitForOverwrite(buf, sbs, 0);
-
-		chunk = sbs->len + sbs->nextoffset;
-		free += chunk;
-		sbspos += chunk;
-	}
-
-	/*
-	 * If there is an event beyond the one we're about to append,
-	 * we need to know how far it will be from the incoming event's
-	 * slot, because this gap is garbage that can be consumed by the
-	 * next append. This ensures that every append is contiguous.
-	 */
-	if (buf->tail)
-	{
-		if (size < free)
-			offset = free - size;
-		else
-			offset = 0;
-	}
-
-	MemSet(pos, 0, free);
-	result = (StreamBufferSlot *) pos;
-	pos += sizeof(StreamBufferSlot);
-
-	MemSet(pos, 0, sizeof(StreamEventData) + rawsize);
-	shared = (StreamEvent) pos;
-	shared->desc = event->desc;
-	shared->arrivaltime = event->arrivaltime;
-	pos += sizeof(StreamEventData);
-
-	shared->raw = (HeapTuple) pos;
-	shared->raw->t_len = event->raw->t_len;
-	shared->raw->t_self = event->raw->t_self;
-	shared->raw->t_tableOid = event->raw->t_tableOid;
-	shared->raw->t_data = (HeapTupleHeader) ((char *) shared->raw + HEAPTUPLESIZE);
-
-	memcpy(shared->raw->t_data, event->raw->t_data, event->raw->t_len);
-	pos += rawsize;
-
-	result->event = shared;
-	result->stream = pos;
-	memcpy(result->stream, stream, strlen(stream) + 1);
-	pos += strlen(stream) + 1;
-
-	/*
-	 * The source bitmap is allocated in local memory (in GetStreamTargets),
-	 * but the delete operations that will be performed on it should never
-	 * free anything, so it's safe (although a bit sketchy) to copy it into
-	 * shared memory.
-	 */
-	result->readby = (Bitmapset *) pos;
-	memcpy(result->readby, bms, BITMAPSET_SIZE(bms->nwords));
-	pos += BITMAPSET_SIZE(bms->nwords);
-
-	result->len = size;
-	result->nextoffset = offset;
-
-	if (buf->prev)
-		buf->prev->nextoffset = 0;
-
-	buf->prev = result;
-	buf->pos = pos;
-	buf->last = pos;
-
-	SpinLockAcquire(&buf->mutex);
-
-	/*
-	 * Stream event appended, now signal workers waiting on this stream
-	 * only if the buffer went from empty to not empty
-	 */
-	if (buf->empty)
-	{
-		int32 latchCtr;
-		Bitmapset* toSignal = bms_copy(bms);
- 		while ((latchCtr = bms_first_member(toSignal)) >= 0)
-		{
-			SetStreamBufferLatch(latchCtr);
-		}
-		bms_free(toSignal);
-		buf->empty = false;
-	}
-
-	/* increment the unread counter */
-	buf->unread++;
-	SpinLockRelease(&buf->mutex);
-
-	SpinLockInit(&result->mutex);
-
-	LWLockRelease(StreamBufferAppendLock);
-
-	return result;
 }
 
 /*
@@ -230,28 +78,112 @@ alloc_slot(const char *stream, StreamBuffer *buf, StreamEvent event)
  * Appends a decoded event to the given stream buffer
  */
 StreamBufferSlot *
-AppendStreamEvent(const char *stream, StreamBuffer *buf, StreamEvent ev)
+StreamBufferInsert(const char *stream, StreamEvent *event)
 {
-	StreamBufferSlot *sbs;
-	char *prev = buf->pos;
+	char *start;
+	char *pos;
+	char *end = GlobalStreamBuffer->start + GlobalStreamBuffer->size;
+	Bitmapset *bms = GetTargetsFor(stream);
+	StreamBufferSlot *slot;
+	Size size;
+	Size tupsize;
 
-	sbs = alloc_slot(stream, buf, ev);
-
-	if (DebugPrintStreamBuffer)
+	if (bms == NULL)
 	{
-		/* did we wrap around? */
-		if (prev + SlotSize(sbs) > buf->pos)
-			prev = buf->start;
-
-		elog(LOG, "appended %dB at [%d, %d) +%d", SlotSize(sbs),
-				BufferOffset(buf, prev), BufferOffset(buf, buf->pos), sbs->nextoffset);
+		/* nothing is reading from this stream, so it's a noop */
+		return NULL;
 	}
 
-	return sbs;
+	tupsize = event->tuple->t_len + HEAPTUPLESIZE;
+	size = sizeof(StreamBufferSlot) + sizeof(StreamEvent) + tupsize +
+			strlen(stream) + 1 + BITMAPSET_SIZE(bms->nwords);
+
+	if (size > GlobalStreamBuffer->size)
+		elog(ERROR, "event of size %zu too big for stream buffer of size %zu", size, GlobalStreamBuffer->size);
+
+	LWLockAcquire(StreamBufferHeadLock, LW_EXCLUSIVE);
+	LWLockAcquire(StreamBufferTailLock, LW_SHARED);
+
+	/* If buffer is empty, start consuming it from the start again. */
+	if (StreamBufferIsEmpty())
+		start = GlobalStreamBuffer->start;
+	else
+		start = (char *) GlobalStreamBuffer->head;
+
+	/*
+	 * Not enough size at the end? Wait till all events in the buffer
+	 * are read and then wrap around.
+	 */
+	if (size > end - start)
+	{
+		while (!StreamBufferIsEmpty())
+		{
+			LWLockRelease(StreamBufferTailLock);
+			pg_usleep(500); /* 0.5ms */
+			LWLockAcquire(StreamBufferTailLock, LW_SHARED);
+		}
+
+		start = GlobalStreamBuffer->start;
+	}
+
+	pos = start;
+
+	/* Initialize the newly allocated slot and copy data into it. */
+	MemSet(pos, 0, size);
+	slot = (StreamBufferSlot *) pos;
+	slot->magic = MAGIC;
+	slot->size = size;
+	SpinLockInit(&slot->mutex);
+
+	pos += sizeof(StreamBufferSlot);
+	slot->event = (StreamEvent *) pos;
+	slot->event->desc = event->desc;
+	slot->event->arrivaltime = event->arrivaltime;
+
+	pos += sizeof(StreamEvent);
+	slot->event->tuple = (HeapTuple) pos;
+	slot->event->tuple->t_len = event->tuple->t_len;
+	slot->event->tuple->t_self = event->tuple->t_self;
+	slot->event->tuple->t_tableOid = event->tuple->t_tableOid;
+	slot->event->tuple->t_data = (HeapTupleHeader) ((char *) slot->event->tuple + HEAPTUPLESIZE);
+	memcpy(slot->event->tuple->t_data, event->tuple->t_data, event->tuple->t_len);
+
+	pos += tupsize;
+	slot->stream = pos;
+	strcpy(slot->stream, stream);
+
+	pos += strlen(stream) + 1;
+	slot->readers = (Bitmapset *) pos;
+	memcpy(slot->readers, bms, BITMAPSET_SIZE(bms->nwords));
+
+	/* Move head forward */
+	GlobalStreamBuffer->head = SlotNext(slot);
+
+	/* Did we wrap around? */
+	if (start == GlobalStreamBuffer->start)
+	{
+		LWLockRelease(StreamBufferTailLock);
+		LWLockAcquire(StreamBufferTailLock, LW_EXCLUSIVE);
+
+		GlobalStreamBuffer->tail = slot;
+		GlobalStreamBuffer->nonce++;
+
+		/* Wake up all readers */
+		StreamBufferNotifyAllAndClearWaiters();
+	}
+
+	LWLockRelease(StreamBufferTailLock);
+	LWLockRelease(StreamBufferHeadLock);
+
+	if (DebugPrintStreamBuffer)
+		elog(LOG, "appended %zu bytes at [%d, %d); readers: %d", slot->size,
+				BufferOffset(slot), BufferOffset(SlotEnd(slot)), bms_num_members(slot->readers));
+
+	return slot;
 }
 
 /*
- * StreamBufferSize
+ * StreamBufferShmemSize
  *
  * Retrieves the size in bytes of the stream buffer
  */
@@ -262,188 +194,249 @@ StreamBufferShmemSize(void)
 }
 
 /*
- * StreamIsBeingRead
- *
- * Returns true if at least one continuous query is reading from the given stream
- */
-bool
-IsInputStream(const char *stream)
-{
-	return GetTargetsFor(stream) != NULL;
-}
-
-/*
- * InitGlobalStreamBuffer
+ * StreamBufferInit
  *
  * Initialize global shared-memory buffer that all decoded events are appended to
  */
 void
-InitGlobalStreamBuffer(void)
+StreamBufferInit(void)
 {
 	bool found;
 	Size size = StreamBufferShmemSize();
 	Size headersize = MAXALIGN(sizeof(StreamBuffer));
 
-	LWLockAcquire(StreamBufferAppendLock, LW_EXCLUSIVE);
+	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
 	GlobalStreamBuffer = ShmemInitStruct("GlobalStreamBuffer", headersize , &found);
-	GlobalStreamBuffer->capacity = size;
 
 	if (!found)
 	{
-		SHMQueueInit(&(GlobalStreamBuffer->buf));
-
 		GlobalStreamBuffer->start = (char *) ShmemAlloc(size);
+		GlobalStreamBuffer->size = size;
 		MemSet(GlobalStreamBuffer->start, 0, size);
 
-		GlobalStreamBuffer->pos = GlobalStreamBuffer->start;
-		GlobalStreamBuffer->last = NULL;
-		GlobalStreamBuffer->prev = NULL;
-		GlobalStreamBuffer->tail = NULL;
+		GlobalStreamBuffer->head = (StreamBufferSlot *) GlobalStreamBuffer->start;
+		GlobalStreamBuffer->tail = GlobalStreamBuffer->head;
 
-		GlobalStreamBuffer->unread = 0;
-		GlobalStreamBuffer->empty = true;
+		GlobalStreamBuffer->latches = (Latch *) spalloc0(sizeof(Latch) * MAX_CQS);
+		GlobalStreamBuffer->waiters = (Bitmapset *) spalloc0(BITMAPSET_SIZE(MAX_CQS / BITS_PER_BITMAPWORD));
+		GlobalStreamBuffer->waiters->nwords = MAX_CQS / BITS_PER_BITMAPWORD;
 
 		SpinLockInit(&GlobalStreamBuffer->mutex);
 	}
 
-	LWLockRelease(StreamBufferAppendLock);
+	LWLockRelease(PipelineMetadataLock);
 }
 
 /*
- * OpenStreamBufferReader
+ * StreamBufferOpenReader
  *
  * Opens a reader into the given stream buffer for a given continuous query
  */
 StreamBufferReader *
-OpenStreamBufferReader(StreamBuffer *buf, int queryid)
+StreamBufferOpenReader(int id)
 {
 	StreamBufferReader *reader = (StreamBufferReader *) palloc(sizeof(StreamBufferReader));
-	reader->queryid = queryid;
-	reader->buf = buf;
-	reader->pos = buf->start;
-
+	reader->id = id;
+	reader->slot = GlobalStreamBuffer->tail;
+	reader->nonce = GlobalStreamBuffer->nonce;
+	reader->retry_slot = true;
 	return reader;
 }
 
+/*
+ * StreamBufferCloseReader
+ */
 void
-CloseStreamBufferReader(StreamBufferReader *reader)
+StreamBufferCloseReader(StreamBufferReader *reader)
 {
 	pfree(reader);
 }
 
 /*
- * PinNextStreamEvent
+ * StreamBufferPinNextSlot
  *
  * Returns the next event for the given reader, or NULL if there aren't any new events.
- * If this is the last reader that needs to see a given event, the event is deleted
- * from the stream buffer.
  */
 StreamBufferSlot *
-PinNextStreamEvent(StreamBufferReader *reader)
+StreamBufferPinNextSlot(StreamBufferReader *reader)
 {
-	StreamBuffer *buf = reader->buf;
-	StreamBufferSlot *result = NULL;
-	StreamBufferSlot *current = NULL;
-
-	if (BufferUnchanged(reader))
+	if (StreamBufferIsEmpty())
 		return NULL;
 
-	if (ReaderNeedsWrap(buf, reader))
-		reader->pos = buf->start;
-
-	if (HasUnreadData(reader))
+	if (NoUnreadSlots(reader))
 	{
-		/* new data since last read */
-		current = (StreamBufferSlot *) reader->pos;
-	}
-	else if (AtBufferEnd(reader))
-	{
-		/* we've consumed all the data in the buffer, wrap around to start reading from the beginning */
-		reader->pos = buf->start;
-
+		reader->retry_slot = true;
 		return NULL;
 	}
 
-	if (current == NULL)
-		return NULL;
+	LWLockAcquire(StreamBufferTailLock, LW_SHARED);
+
+	/* Did the stream buffer wrapped around? */
+	if (reader->nonce < GlobalStreamBuffer->nonce)
+	{
+		reader->nonce = GlobalStreamBuffer->nonce;
+		reader->slot = NULL;
+	}
 
 	/*
-	 * Advance the reader to the end of the current slot. Events are appended contiguously,
-	 * so this is right where the next event will be.
+	 * If we're behind the tail, then pick tail as the next
+	 * event, otherwise follow pointer to the next element.
+	 * If the current_slot is NULL, then it automatically goes
+	 * into the first check.
 	 */
-	reader->pos += current->len;
+	if (reader->slot < GlobalStreamBuffer->tail)
+		reader->slot = GlobalStreamBuffer->tail;
+	else if (!reader->retry_slot)
+		reader->slot = SlotNext(reader->slot);
 
-	if (bms_is_member(reader->queryid, current->readby))
-		result = current;
-
-	if (result && DebugPrintStreamBuffer)
+	/* Return the first event in the buffer that we need to read from */
+	while (true)
 	{
-		elog(LOG, "read event at [%d, %d)", BufferOffset(reader->buf, result),
-				BufferOffset(reader->buf, reader->pos));
+		if (NoUnreadSlots(reader))
+		{
+			reader->retry_slot = true;
+			LWLockRelease(StreamBufferTailLock);
+			return NULL;
+		}
+
+		if (bms_is_member(reader->id, reader->slot->readers))
+			break;
+
+		reader->slot = SlotNext(reader->slot);
 	}
 
-	return result;
+	LWLockRelease(StreamBufferTailLock);
+
+	Assert(reader->slot->magic == MAGIC);
+
+	if (DebugPrintStreamBuffer)
+		elog(LOG, "[%d] pinned event at [%d, %d)",
+				reader->id, BufferOffset(reader->slot), BufferOffset(SlotEnd(reader->slot)));
+
+	reader->retry_slot = false;
+	return reader->slot;
 }
 
 /*
- * UnpinStreamEvent
+ * StreamBufferUnpinSlot
  *
  * Marks the given slot as read by the given reader. Once all open readers
- * have unpinned a slot, it can be freed.
+ * have unpinned a slot, it is freed.
  */
 void
-UnpinStreamEvent(StreamBufferReader *reader, StreamBufferSlot *slot)
+StreamBufferUnpinSlot(StreamBufferReader *reader, StreamBufferSlot *slot)
 {
-	Bitmapset *bms = slot->readby;
+	Assert(reader->slot->magic == MAGIC);
 
 	SpinLockAcquire(&slot->mutex);
+	bms_del_member(slot->readers, reader->id);
+	SpinLockRelease(&slot->mutex);
 
-	bms_del_member(bms, reader->queryid);
+	if (DebugPrintStreamBuffer)
+		elog(LOG, "[%d] unpinned event at [%d, %d); readers %d",
+				reader->id, BufferOffset(slot), BufferOffset(SlotEnd(slot)), bms_num_members(slot->readers));
+
+	if (!bms_is_empty(slot->readers))
+		return;
+
+	LWLockAcquire(StreamBufferTailLock, LW_EXCLUSIVE);
 
 	/*
-	 * If this is the last reader that needs to read this event,
-	 * decrement the unread count.
+	 * We're incrementing it because our refcount begins as negative
+	 * for stream inserts--see comments in stream.c:InsertIntoStream.
 	 */
-	if (bms_is_empty(bms))
+	if (++slot->event->desc->tdrefcount == 0)
+		spfree_tupledesc(slot->event->desc);
+
+	/*
+	 * If this slot was the tail, move tail ahead to the next slot that is not fully
+	 * unpinned.
+	 */
+	if (GlobalStreamBuffer->tail == slot)
 	{
-		SpinLockAcquire(&(reader->buf->mutex));
-
-		reader->buf->unread--;
-
-		if (reader->buf->unread == 0)
-			reader->buf->empty = true;
-
-		SpinLockRelease(&(reader->buf->mutex));
-
-		/*
-		 * This increment operation is safe because it will only ever happen
-		 * from a single process. Namely, the process that is the last reader
-		 * for this event. We're incrementing it because our refcount begins
-		 * as negative for stream inserts--see comments in stream.c:InsertIntoStream.
-		 */
-		slot->event->desc->tdrefcount++;
-		if (slot->event->desc->tdrefcount == 0)
-			spfree_tupledesc(slot->event->desc);
+		do
+		{
+			GlobalStreamBuffer->tail = SlotNext(GlobalStreamBuffer->tail);
+		} while (!StreamBufferIsEmpty() && bms_is_empty(GlobalStreamBuffer->tail->readers));
 	}
 
-	SpinLockRelease(&slot->mutex);
+	LWLockRelease(StreamBufferTailLock);
 }
 
-void
-ResetStreamBufferLatch(int32 id)
+/*
+ * StreamBufferIsEmpty
+ */
+bool
+StreamBufferIsEmpty(void)
 {
-	ResetLatch((&GlobalStreamBuffer->procLatch[id]));
+	return (GlobalStreamBuffer->tail == GlobalStreamBuffer->head);
 }
 
-void
-WaitOnStreamBufferLatch(int32 id)
+static void
+clear_readers(Bitmapset *readers)
 {
-	WaitLatch((&GlobalStreamBuffer->procLatch[id]), WL_LATCH_SET | WL_TIMEOUT, 500);
+	int i;
+	for (i = 0; i < readers->nwords; i++)
+		readers->words[i] = 0;
 }
 
-void
-SetStreamBufferLatch(int32 id)
+static void
+notify_readers(Bitmapset *readers)
 {
-	SetLatch((&GlobalStreamBuffer->procLatch[id]));
+	int32 id;
+	while ((id = bms_first_member(readers)) >= 0)
+		SetLatch((&GlobalStreamBuffer->latches[id]));
+}
+
+/*
+ * StreamBufferWait
+ */
+void
+StreamBufferWait(int32_t id)
+{
+	if (!StreamBufferIsEmpty())
+		return;
+
+	SpinLockAcquire(&GlobalStreamBuffer->mutex);
+	bms_add_member(GlobalStreamBuffer->waiters, id);
+	ResetLatch((&GlobalStreamBuffer->latches[id]));
+	SpinLockRelease(&GlobalStreamBuffer->mutex);
+
+	WaitLatch((&GlobalStreamBuffer->latches[id]), WL_LATCH_SET, 0);
+}
+
+/*
+ * StreamBufferNotifyAllAndClearWaiters
+ */
+void
+StreamBufferNotifyAllAndClearWaiters(void)
+{
+	Bitmapset *waiters;
+
+	SpinLockAcquire(&GlobalStreamBuffer->mutex);
+	waiters = bms_copy(GlobalStreamBuffer->waiters);
+	clear_readers(GlobalStreamBuffer->waiters);
+	SpinLockRelease(&GlobalStreamBuffer->mutex);
+
+	notify_readers(waiters);
+	bms_free(waiters);
+}
+
+/*
+ * StreamBufferResetNotify
+ */
+void
+StreamBufferResetNotify(int32_t id)
+{
+	ResetLatch((&GlobalStreamBuffer->latches[id]));
+}
+
+/*
+ * StreamBufferNotify
+ */
+void
+StreamBufferNotify(int32_t id)
+{
+	SetLatch((&GlobalStreamBuffer->latches[id]));
 }
