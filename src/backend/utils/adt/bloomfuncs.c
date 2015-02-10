@@ -244,9 +244,3 @@ bloom_contains(PG_FUNCTION_ARGS)
 
 	PG_RETURN_BOOL(contains);
 }
-
-Datum
-bloom_combine(PG_FUNCTION_ARGS)
-{
-	return bloom_union_agg_trans(fcinfo);
-}
