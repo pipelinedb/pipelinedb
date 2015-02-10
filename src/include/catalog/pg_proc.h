@@ -5097,9 +5097,9 @@ DESCR("bloom filter out function");
 DATA(insert OID = 5033 (bloom_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5030 "2275" _null_ _null_ _null_ _null_ bloom_in  _null_ _null_ _null_ ));
 DESCR("bloom filter in function");
 
-DATA(insert OID = 5032 (tdigest_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5034" _null_ _null_ _null_ _null_ tdigest_out _null_ _null_ _null_ ));
+DATA(insert OID = 5036 (tdigest_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5034" _null_ _null_ _null_ _null_ tdigest_out _null_ _null_ _null_ ));
 DESCR("t-digest out function");
-DATA(insert OID = 5033 (tdigest_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5034 "2275" _null_ _null_ _null_ _null_ tdigest_in  _null_ _null_ _null_ ));
+DATA(insert OID = 5037 (tdigest_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5034 "2275" _null_ _null_ _null_ _null_ tdigest_in  _null_ _null_ _null_ ));
 DESCR("t-digest in function");
 
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
