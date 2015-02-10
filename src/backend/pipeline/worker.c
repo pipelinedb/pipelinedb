@@ -154,30 +154,30 @@ retry:
 		 * of an array of latches. This somehow does not work as expected and autovacuum
 		 * seems to be obliterating the new shared array. Make this better.
 		 */
-		memcpy(&GlobalStreamBuffer->latches[MyCQId], &MyProc->procLatch, sizeof(Latch));
+		memcpy(&GlobalStreamBuffer->latches[MyCQId][MyWorkerId], &MyProc->procLatch, sizeof(Latch));
 
 		for (;;)
 		{
-			StreamBufferResetNotify(MyCQId);
+			StreamBufferResetNotify(MyCQId, MyWorkerId);
+
 			if (StreamBufferIsEmpty())
 			{
 				curtime = GetCurrentTimestamp();
 				if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
 				{
 					pgstat_report_activity(STATE_WORKER_WAIT, queryDesc->sourceText);
-					StreamBufferWait(MyCQId);
+					StreamBufferWait(MyCQId, MyWorkerId);
 					pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
 				}
 				else
-				{
 					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
-				}
 			}
 
 			StartTransactionCommand();
 			set_snapshot(estate, cqowner);
 
 			CurrentResourceOwner = cqowner;
+
 			MemoryContextSwitchTo(estate->es_query_cxt);
 
 			estate->es_processed = 0;
@@ -188,6 +188,8 @@ retry:
 			 */
 			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
+
+			StreamBufferClearPinnedSlots();
 
 			MemoryContextSwitchTo(runcontext);
 			CurrentResourceOwner = cqowner;
@@ -236,6 +238,8 @@ retry:
 			unset_snapshot(estate, cqowner);
 		if (IsTransactionState())
 			CommitTransactionCommand();
+
+		StreamBufferUnpinAllPinnedSlots();
 
 		MemoryContextResetAndDeleteChildren(runcontext);
 
