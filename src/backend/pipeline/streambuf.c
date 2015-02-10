@@ -51,12 +51,12 @@ spfree_tupledesc(TupleDesc desc)
 }
 
 /*
- * WaitForUnpinningStreamBufferSlot
+ * StreamBufferWaitOnSlot
  *
  * Waits until the given slot has been read by all CQs that need to see it
  */
 void
-WaitForUnpinningStreamBufferSlot(StreamBufferSlot *slot, int sleepms)
+StreamBufferWaitOnSlot(StreamBufferSlot *slot, int sleepms)
 {
 	while (true)
 	{
@@ -108,7 +108,7 @@ StreamBufferInsert(const char *stream, StreamEvent *event)
 	LWLockAcquire(StreamBufferHeadLock, LW_EXCLUSIVE);
 	LWLockAcquire(StreamBufferTailLock, LW_SHARED);
 
-	 /* If buffer is empty, start consuming it from the start again. */
+	/* If buffer is empty, start consuming it from the start again. */
 	if (StreamBufferIsEmpty())
 		start = GlobalStreamBuffer->start;
 	else
@@ -223,7 +223,6 @@ StreamBufferInit(void)
 		GlobalStreamBuffer->tail = GlobalStreamBuffer->head;
 
 		GlobalStreamBuffer->latches = (Latch **) spalloc0(sizeof(Latch *) * MAX_CQS);
-
 		GlobalStreamBuffer->waiters = (Bitmapset *) spalloc0(BITMAPSET_SIZE(MAX_CQS / BITS_PER_BITMAPWORD));
 		GlobalStreamBuffer->waiters->nwords = MAX_CQS / BITS_PER_BITMAPWORD;
 
@@ -234,12 +233,12 @@ StreamBufferInit(void)
 }
 
 /*
- * OpenStreamBufferReader
+ * StreamBufferOpenReader
  *
  * Opens a reader into the given stream buffer for a given continuous query
  */
 StreamBufferReader *
-OpenStreamBufferReader(int32_t cq_id, int8_t worker_id)
+StreamBufferOpenReader(int32_t cq_id, int8_t worker_id)
 {
 	StreamBufferReader *reader = (StreamBufferReader *) palloc(sizeof(StreamBufferReader));
 	reader->cq_id = cq_id;
@@ -252,21 +251,21 @@ OpenStreamBufferReader(int32_t cq_id, int8_t worker_id)
 }
 
 /*
- * CloseStreamBufferReader
+ * StreamBufferCloseReader
  */
 void
-CloseStreamBufferReader(StreamBufferReader *reader)
+StreamBufferCloseReader(StreamBufferReader *reader)
 {
 	pfree(reader);
 }
 
 /*
- * PinNextStreamBufferSlot
+ * StreamBufferPinNextSlot
  *
  * Returns the next event for the given reader, or NULL if there aren't any new events.
  */
 StreamBufferSlot *
-PinNextStreamBufferSlot(StreamBufferReader *reader)
+StreamBufferPinNextSlot(StreamBufferReader *reader)
 {
 	if (StreamBufferIsEmpty())
 		return NULL;
@@ -316,6 +315,8 @@ PinNextStreamBufferSlot(StreamBufferReader *reader)
 
 	LWLockRelease(StreamBufferTailLock);
 
+	Assert(reader->slot->magic == MAGIC);
+
 	if (DebugPrintStreamBuffer)
 		elog(LOG, "[%d] pinned event at [%d, %d)",
 				reader->cq_id, BufferOffset(reader->slot), BufferOffset(SlotEnd(reader->slot)));
@@ -325,14 +326,16 @@ PinNextStreamBufferSlot(StreamBufferReader *reader)
 }
 
 /*
- * UnpinStreamBufferSlot
+ * StreamBufferUnpinSlot
  *
  * Marks the given slot as read by the given reader. Once all open readers
  * have unpinned a slot, it is freed.
  */
 void
-UnpinStreamBufferSlot(StreamBufferReader *reader, StreamBufferSlot *slot)
+StreamBufferUnpinSlot(StreamBufferReader *reader, StreamBufferSlot *slot)
 {
+	Assert(reader->slot->magic == MAGIC);
+
 	SpinLockAcquire(&slot->mutex);
 	bms_del_member(slot->readby, reader->cq_id);
 	SpinLockRelease(&slot->mutex);
@@ -368,6 +371,9 @@ UnpinStreamBufferSlot(StreamBufferReader *reader, StreamBufferSlot *slot)
 	LWLockRelease(StreamBufferTailLock);
 }
 
+/*
+ * StreamBufferIsEmpty
+ */
 bool
 StreamBufferIsEmpty(void)
 {
@@ -390,6 +396,9 @@ notify_readers(Bitmapset *readers)
 		StreamBufferNotify(id);
 }
 
+/*
+ * StreamBufferWait
+ */
 void
 StreamBufferWait(int32_t cq_id, int8_t worker_id)
 {
@@ -404,6 +413,9 @@ StreamBufferWait(int32_t cq_id, int8_t worker_id)
 	WaitLatch((&GlobalStreamBuffer->latches[cq_id][worker_id]), WL_LATCH_SET, 0);
 }
 
+/*
+ * StreamBufferNotifyAndClearWaiters
+ */
 void
 StreamBufferNotifyAndClearWaiters(void)
 {
@@ -418,12 +430,18 @@ StreamBufferNotifyAndClearWaiters(void)
 	bms_free(waiters);
 }
 
+/*
+ * StreamBufferResetNotify
+ */
 void
 StreamBufferResetNotify(int32_t cq_id, int8_t worker_id)
 {
 	ResetLatch((&GlobalStreamBuffer->latches[cq_id][worker_id]));
 }
 
+/*
+ * StreamBufferNotify
+ */
 void
 StreamBufferNotify(int32_t cq_id)
 {

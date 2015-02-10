@@ -159,6 +159,7 @@ retry:
 		for (;;)
 		{
 			StreamBufferResetNotify(MyCQId, MyWorkerId);
+
 			if (StreamBufferIsEmpty())
 			{
 				curtime = GetCurrentTimestamp();

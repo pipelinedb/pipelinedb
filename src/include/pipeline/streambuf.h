@@ -70,10 +70,10 @@ extern void StreamBufferNotifyAndClearWaiters(void);
 extern void StreamBufferResetNotify(int32_t cq_id, int8_t worker_id);
 extern void StreamBufferNotify(int32_t cq_id);
 
-extern StreamBufferReader *OpenStreamBufferReader(int32_t cq_id, int8_t worker_id);
-extern void CloseStreamBufferReader(StreamBufferReader *reader);
-extern StreamBufferSlot *PinNextStreamBufferSlot(StreamBufferReader *reader);
-extern void UnpinStreamBufferSlot(StreamBufferReader *reader, StreamBufferSlot *slot);
-extern void WaitForUnpinningStreamBufferSlot(StreamBufferSlot *slot, int sleepms);
+extern StreamBufferReader *StreamBufferOpenReader(int32_t cq_id, int8_t worker_id);
+extern void StreamBufferCloseReader(StreamBufferReader *reader);
+extern StreamBufferSlot *StreamBufferPinNextSlot(StreamBufferReader *reader);
+extern void StreamBufferUnpinSlot(StreamBufferReader *reader, StreamBufferSlot *slot);
+extern void StreamBufferWaitOnSlot(StreamBufferSlot *slot, int sleepms);
 
 #endif
