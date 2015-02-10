@@ -15,6 +15,7 @@
 #include "access/htup_details.h"
 #include "executor/executor.h"
 #include "executor/nodeStreamscan.h"
+#include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_coerce.h"
 #include "pipeline/streambuf.h"
@@ -266,7 +267,7 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 	ExecAssignResultTypeFromTL(&state->ss.ps);
 	ExecAssignScanProjectionInfo(&state->ss);
 
-	state->reader = StreamBufferOpenReader(node->cqid);
+	state->reader = StreamBufferOpenReader(node->cqid, MyWorkerId);
 
 	return state;
 }
