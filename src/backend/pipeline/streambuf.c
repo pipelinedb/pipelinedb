@@ -335,7 +335,8 @@ StreamBufferPinNextSlot(StreamBufferReader *reader)
 static void
 unpin_slot(int32_t cq_id, StreamBufferSlot *slot)
 {
-	Assert(reader->slot->magic == MAGIC);
+	if (slot->magic != MAGIC || slot < GlobalStreamBuffer->tail)
+		return;
 
 	SpinLockAcquire(&slot->mutex);
 	bms_del_member(slot->readers, cq_id);
