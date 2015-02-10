@@ -38,7 +38,7 @@ bloom_out(PG_FUNCTION_ARGS)
 }
 
 static BloomFilter *
-bloom_startup(FunctionCallInfo fcinfo, uint64_t m, uint16_t k, float8 p, uint64_t n)
+bloom_startup(FunctionCallInfo fcinfo, float8 p, uint64_t n)
 {
 	Aggref *aggref = AggGetAggref(fcinfo);
 	TargetEntry *te = (TargetEntry *) linitial(aggref->args);
@@ -47,9 +47,7 @@ bloom_startup(FunctionCallInfo fcinfo, uint64_t m, uint16_t k, float8 p, uint64_
 
 	fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
 
-	if (m && k)
-		bloom = BloomFilterCreateWithMAndK(m, k);
-	else if (p && n)
+	if (p && n)
 		bloom = BloomFilterCreateWithPAndN(p, n);
 	else
 		bloom = BloomFilterCreate();
@@ -91,7 +89,7 @@ bloom_agg_trans(PG_FUNCTION_ARGS)
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
-		state = bloom_startup(fcinfo, 0, 0, 0, 0);
+		state = bloom_startup(fcinfo, 0, 0);
 	else
 		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 
@@ -123,7 +121,7 @@ bloom_agg_transp(PG_FUNCTION_ARGS)
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
-		state = bloom_startup(fcinfo, 0, 0, p, n);
+		state = bloom_startup(fcinfo, p, n);
 	else
 		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 
@@ -250,26 +248,5 @@ bloom_contains(PG_FUNCTION_ARGS)
 Datum
 bloom_combine(PG_FUNCTION_ARGS)
 {
-	MemoryContext old;
-	MemoryContext context;
-	BloomFilter *state;
-	BloomFilter *incoming = (BloomFilter *) PG_GETARG_VARLENA_P(1);
-
-	if (!AggCheckCallContext(fcinfo, &context))
-			elog(ERROR, "bloom_combine called in non-aggregate context");
-
-	old = MemoryContextSwitchTo(context);
-
-	if (PG_ARGISNULL(0))
-	{
-		state = BloomFilterCopy(incoming);
-		PG_RETURN_POINTER(state);
-	}
-
-	state = (BloomFilter *) PG_GETARG_POINTER(0);
-	state = BloomFilterUnion(state, incoming);
-
-	MemoryContextSwitchTo(old);
-
-	PG_RETURN_POINTER(state);
+	return bloom_union_agg_trans(fcinfo);
 }

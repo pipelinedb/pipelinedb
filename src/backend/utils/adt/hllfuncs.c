@@ -188,32 +188,3 @@ hll_cardinality(PG_FUNCTION_ARGS)
 
 	PG_RETURN_INT64(HLLSize(hll));
 }
-
-Datum
-hll_combine(PG_FUNCTION_ARGS)
-{
-	MemoryContext old;
-	MemoryContext context;
-	HyperLogLog *state;
-	HyperLogLog *incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
-
-	if (!AggCheckCallContext(fcinfo, &context))
-			elog(ERROR, "aggregate function called in non-aggregate context");
-
-	old = MemoryContextSwitchTo(context);
-
-	if (PG_ARGISNULL(0))
-	{
-		state = HLLCreateFromRaw(incoming->M, incoming->mlen, incoming->p, incoming->encoding);
-		PG_RETURN_POINTER(state);
-	}
-
-	state = (HyperLogLog *) PG_GETARG_POINTER(0);
-	state = HLLUnion(state, incoming);
-
-	MemoryContextSwitchTo(old);
-
-	SET_VARSIZE(state, sizeof(HyperLogLog) + state->mlen);
-
-	PG_RETURN_POINTER(state);
-}
