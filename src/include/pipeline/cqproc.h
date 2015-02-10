@@ -15,6 +15,8 @@
 #include "nodes/parsenodes.h"
 #include "postmaster/bgworker.h"
 
+#define NUM_WORKERS(entry) ((entry)->pg_size - 1)
+
 typedef enum
 {
 	CQCombiner,
