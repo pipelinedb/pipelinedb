@@ -470,7 +470,7 @@ void *
 spalloc0(Size size)
 {
 	char *addr = spalloc(size);
-	memset(addr, 0, size);
+	memset(addr, 0, get_size(addr));
 	return addr;
 }
 

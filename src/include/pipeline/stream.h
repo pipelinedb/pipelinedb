@@ -22,27 +22,23 @@
 #define QueryIsStreaming(query) ((query)->is_continuous)
 #define QueryIsCombine(query) ((query)->is_combine)
 #define PlanIsStreaming(stmt) ((stmt)->is_continuous || false)
-
+#define ARRIVAL_TIMESTAMP "arrival_timestamp"
 
 /* Whether or not to wait on the inserted event to be consumed by the CV*/
 extern bool DebugSyncStreamInsert;
 
-typedef struct EventData
+typedef struct StreamEvent
 {
 	/* append-time values */
-	HeapTuple raw;
+	HeapTuple tuple;
 	/* arrival time of the event */
 	TimestampTz arrivaltime;
 	/* descriptor for this event and possibly some that follow it */
 	TupleDesc desc;
-} StreamEventData;
-
-typedef StreamEventData *StreamEvent;
-
-#define STREAMEVENTSIZE sizeof(StreamEventData)
-#define ARRIVAL_TIMESTAMP "arrival_timestamp"
+} StreamEvent;
 
 extern bool InsertTargetIsStream(InsertStmt *ins);
 extern int InsertIntoStream(InsertStmt *ins);
+extern bool IsInputStream(const char *stream);
 
 #endif

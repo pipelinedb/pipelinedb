@@ -155,18 +155,18 @@ retry:
 		 * of an array of latches. This somehow does not work as expected and autovacuum
 		 * seems to be obliterating the new shared array. Make this better.
 		 */
-		memcpy(&GlobalStreamBuffer->procLatch[MyCQId], &MyProc->procLatch, sizeof(Latch));
+		memcpy(&GlobalStreamBuffer->latches[MyCQId], &MyProc->procLatch, sizeof(Latch));
 
 		for (;;)
 		{
-			ResetStreamBufferLatch(MyCQId);
-			if (GlobalStreamBuffer->empty)
+			StreamBufferResetNotify(MyCQId);
+			if (StreamBufferIsEmpty())
 			{
 				curtime = GetCurrentTimestamp();
 				if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
 				{
 					pgstat_report_activity(STATE_WORKER_WAIT, queryDesc->sourceText);
-					WaitOnStreamBufferLatch(MyCQId);
+					StreamBufferWait(MyCQId);
 					pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
 				}
 				else

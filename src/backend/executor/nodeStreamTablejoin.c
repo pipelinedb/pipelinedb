@@ -59,7 +59,7 @@ unpin_stream_events(StreamTableJoinState *node)
 	foreach(lc, scan->pinned)
 	{
 		StreamBufferSlot *sbs = (StreamBufferSlot *) lfirst(lc);
-		UnpinStreamEvent(scan->reader, sbs);
+		StreamBufferUnpinSlot(scan->reader, sbs);
 	}
 	list_free(scan->pinned);
 	scan->pinned = NIL;

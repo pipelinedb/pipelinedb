@@ -48,9 +48,9 @@ static void
 init_pipeline()
 {
 	srand(time(NULL));
-	InitGlobalStreamBuffer();
-	InitCQProcState();
 	InitSPalloc();
+	StreamBufferInit();
+	InitCQProcState();
 }
 
 /*
