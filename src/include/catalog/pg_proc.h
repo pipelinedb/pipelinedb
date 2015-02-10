@@ -5254,9 +5254,6 @@ DESCR("t-digest quantile");
 DATA(insert OID = 4347 (tdigest_send PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "5034" _null_ _null_ _null_ _null_ tdigest_send _null_ _null_ _null_ ));
 DESCR("t-digest serialize");
 
-DATA(insert OID = 4348 (tdigest_recv PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5034 "17" _null_ _null_ _null_ _null_ tdigest_recv _null_ _null_ _null_ ));
-DESCR("t-digest deserialize");
-
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

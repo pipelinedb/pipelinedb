@@ -43,9 +43,10 @@ tdigest_unpack(bytea *bytes)
 	return t;
 }
 
-static bytea *
-tdigest_pack(TDigest *t)
+Datum
+tdigest_send(PG_FUNCTION_ARGS)
 {
+	TDigest *t = (TDigest *) PG_GETARG_POINTER(0);
 	StringInfoData buf;
 	bytea *result;
 	int nbytes;
@@ -74,20 +75,7 @@ tdigest_pack(TDigest *t)
 
 	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
 
-	return result;
-}
-
-Datum
-tdigest_recv(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_POINTER(tdigest_unpack(PG_GETARG_BYTEA_P(0)));
-}
-
-Datum
-tdigest_send(PG_FUNCTION_ARGS)
-{
-	TDigest *t = (TDigest *) PG_GETARG_POINTER(0);
-	PG_RETURN_POINTER(tdigest_pack(t));
+	PG_RETURN_POINTER(result);
 }
 
 Datum
