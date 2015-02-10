@@ -21,7 +21,7 @@
 Datum
 bloom_in(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "user-specified Bloom filters are not supported");
+	elog(ERROR, "user-specified bloom filters are not supported");
 	PG_RETURN_NULL();
 }
 

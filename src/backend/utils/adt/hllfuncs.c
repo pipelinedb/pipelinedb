@@ -21,7 +21,7 @@
 Datum
 hll_in(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "user-specified HyperLogLogs are not supported");
+	elog(ERROR, "user-specified hyperloglogs are not supported");
 	PG_RETURN_NULL();
 }
 

@@ -181,15 +181,15 @@ DATA(insert (hll_dense_rank_final hll_hypothetical_set_transition_multi 0 0 hll_
 DATA(insert (hll_count_distinct_final hll_count_distinct_transition 0 0 hll_union_agg_trans t 3998));
 
 /* hll_agg */
-DATA(insert (0 hll_agg_trans 0 0 hll_union_agg_trans t 3998));
-DATA(insert (0 hll_agg_transp 0 0 hll_union_agg_trans t 3998));
+DATA(insert (0 hll_agg_trans 0 0 hll_union_agg_trans f 3998));
+DATA(insert (0 hll_agg_transp 0 0 hll_union_agg_trans f 3998));
 
 /* bloom_agg */
-DATA(insert (0 bloom_agg_trans  0 0 bloom_union_agg_trans t 5030));
-DATA(insert (0 bloom_agg_transp 0 0 bloom_union_agg_trans t 5030));
+DATA(insert (0 bloom_agg_trans  0 0 bloom_union_agg_trans f 5030));
+DATA(insert (0 bloom_agg_transp 0 0 bloom_union_agg_trans f 5030));
 
 /* tdigest_agg */
-DATA(insert (0 tdigest_agg_trans  0 0 tdigest_merge_agg_trans t 5034));
-DATA(insert (0 tdigest_agg_transp 0 0 tdigest_merge_agg_trans t 5034));
+DATA(insert (tdigest_send tdigest_agg_trans  0 0 tdigest_merge_agg_trans f 5034));
+DATA(insert (tdigest_send tdigest_agg_transp 0 0 tdigest_merge_agg_trans f 5034));
 
 #endif

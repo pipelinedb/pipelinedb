@@ -477,10 +477,13 @@ advance_combine_function(TupleTableSlot *slot, AggState *aggstate,
 	{
 		if (!isnull)
 		{
-			MemoryContextSwitchTo(aggstate->aggcontext);
-			combineoutput = datumCopy(combineoutput,
-							   peraggstate->transtypeByVal,
-							   peraggstate->transtypeLen);
+			if (!MemoryContextContains(aggstate->aggcontext, (void *) DatumGetPointer(combineoutput)))
+			{
+				MemoryContextSwitchTo(aggstate->aggcontext);
+				combineoutput = datumCopy(combineoutput,
+						peraggstate->transtypeByVal,
+						peraggstate->transtypeLen);
+			}
 		}
 		if (!pergroupstate->transValueIsNull)
 			pfree(DatumGetPointer(pergroupstate->transValue));
