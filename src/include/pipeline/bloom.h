@@ -7,12 +7,12 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef PIPELINE_BLOOMFILTER_H
-#define PIPELINE_BLOOMFILTER_H
+#ifndef PIPELINE_BLOOM_H
+#define PIPELINE_BLOOM_H
 
 #include "c.h"
 
-typedef struct
+typedef struct BloomFilter
 {
 	uint32	vl_len_;
 	uint32_t m;
@@ -24,6 +24,7 @@ typedef struct
 extern BloomFilter *BloomFilterCreateWithMAndK(uint32_t m, uint16_t k);
 extern BloomFilter *BloomFilterCreateWithPAndN(float8 p, uint32_t n);
 extern BloomFilter *BloomFilterCreate(void);
+extern void BloomFilterDestroy(BloomFilter *bf);
 
 extern BloomFilter *BloomFilterCopy(BloomFilter *bf);
 extern void BloomFilterAdd(BloomFilter *bf, void *key, Size size);
