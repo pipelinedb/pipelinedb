@@ -8,7 +8,11 @@
  *
  *-------------------------------------------------------------------------
  */
+#include "postgres.h"
+#include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "pipeline/cqproc.h"
+#include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "pipeline/streambuf.h"
 #include "postmaster/bgworker.h"
@@ -24,6 +28,7 @@
 
 #define MAGIC 0xDEADBABE /* x_x */
 #define MAX_CQS 128 /* TODO(usmanm): Make this dynamic */
+#define MURMUR_SEED 0x9eaca8149c92387e
 
 #define BufferOffset(ptr) ((int32) ((char *) (ptr) - GlobalStreamBuffer->start))
 #define SlotEnd(slot) ((char *) (slot) + (slot)->size)
@@ -54,7 +59,7 @@ spfree_tupledesc(TupleDesc desc)
 }
 
 /*
- * WaitForOverwrite
+ * StreamBufferWaitOnSlot
  *
  * Waits until the given slot has been read by all CQs that need to see it
  */
@@ -67,7 +72,7 @@ StreamBufferWaitOnSlot(StreamBufferSlot *slot, int sleepms)
 		if (slot->magic != MAGIC)
 			break;
 		/* Has the slot been read by all events? */
-		if (slot < GlobalStreamBuffer->tail || bms_is_empty(slot->readers))
+		if (slot < GlobalStreamBuffer->tail || bms_is_empty(slot->readby))
 			break;
 		pg_usleep(sleepms * 1000);
 	}
@@ -80,7 +85,7 @@ StreamBufferWaitOnSlot(StreamBufferSlot *slot, int sleepms)
 }
 
 /*
- * AppendStreamEvent
+ * StreamBufferInsert
  *
  * Appends a decoded event to the given stream buffer
  */
@@ -160,8 +165,8 @@ StreamBufferInsert(const char *stream, StreamEvent *event)
 	strcpy(slot->stream, stream);
 
 	pos += strlen(stream) + 1;
-	slot->readers = (Bitmapset *) pos;
-	memcpy(slot->readers, bms, BITMAPSET_SIZE(bms->nwords));
+	slot->readby = (Bitmapset *) pos;
+	memcpy(slot->readby, bms, BITMAPSET_SIZE(bms->nwords));
 
 	/* Move head forward */
 	GlobalStreamBuffer->head = SlotNext(slot);
@@ -176,7 +181,7 @@ StreamBufferInsert(const char *stream, StreamEvent *event)
 		GlobalStreamBuffer->nonce++;
 
 		/* Wake up all readers */
-		StreamBufferNotifyAllAndClearWaiters();
+		StreamBufferNotifyAndClearWaiters();
 	}
 
 	LWLockRelease(StreamBufferTailLock);
@@ -184,7 +189,7 @@ StreamBufferInsert(const char *stream, StreamEvent *event)
 
 	if (DebugPrintStreamBuffer)
 		elog(LOG, "appended %zu bytes at [%d, %d); readers: %d", slot->size,
-				BufferOffset(slot), BufferOffset(SlotEnd(slot)), bms_num_members(slot->readers));
+				BufferOffset(slot), BufferOffset(SlotEnd(slot)), bms_num_members(slot->readby));
 
 	return slot;
 }
@@ -225,7 +230,7 @@ StreamBufferInit(void)
 		GlobalStreamBuffer->head = (StreamBufferSlot *) GlobalStreamBuffer->start;
 		GlobalStreamBuffer->tail = GlobalStreamBuffer->head;
 
-		GlobalStreamBuffer->latches = (Latch *) spalloc0(sizeof(Latch) * MAX_CQS);
+		GlobalStreamBuffer->latches = (Latch **) spalloc0(sizeof(Latch *) * MAX_CQS);
 		GlobalStreamBuffer->waiters = (Bitmapset *) spalloc0(BITMAPSET_SIZE(MAX_CQS / BITS_PER_BITMAPWORD));
 		GlobalStreamBuffer->waiters->nwords = MAX_CQS / BITS_PER_BITMAPWORD;
 
@@ -241,10 +246,12 @@ StreamBufferInit(void)
  * Opens a reader into the given stream buffer for a given continuous query
  */
 StreamBufferReader *
-StreamBufferOpenReader(int id)
+StreamBufferOpenReader(int32_t cq_id, int8_t worker_id)
 {
 	StreamBufferReader *reader = (StreamBufferReader *) palloc(sizeof(StreamBufferReader));
-	reader->cq_id = id;
+	reader->cq_id = cq_id;
+	reader->worker_id = worker_id;
+	reader->num_workers = NUM_WORKERS(GetCQProcEntry(cq_id));
 	reader->slot = GlobalStreamBuffer->tail;
 	reader->nonce = GlobalStreamBuffer->nonce;
 	reader->retry_slot = true;
@@ -309,7 +316,7 @@ StreamBufferPinNextSlot(StreamBufferReader *reader)
 			return NULL;
 		}
 
-		if (bms_is_member(reader->cq_id, reader->slot->readers))
+		if (bms_is_member(reader->cq_id, reader->slot->readby))
 			break;
 
 		reader->slot = SlotNext(reader->slot);
@@ -339,14 +346,14 @@ unpin_slot(int32_t cq_id, StreamBufferSlot *slot)
 		return;
 
 	SpinLockAcquire(&slot->mutex);
-	bms_del_member(slot->readers, cq_id);
+	bms_del_member(slot->readby, cq_id);
 	SpinLockRelease(&slot->mutex);
 
 	if (DebugPrintStreamBuffer)
 		elog(LOG, "[%d] unpinned event at [%d, %d); readers %d",
-				cq_id, BufferOffset(slot), BufferOffset(SlotEnd(slot)), bms_num_members(slot->readers));
+				cq_id, BufferOffset(slot), BufferOffset(SlotEnd(slot)), bms_num_members(slot->readby));
 
-	if (!bms_is_empty(slot->readers))
+	if (!bms_is_empty(slot->readby))
 		return;
 
 	LWLockAcquire(StreamBufferTailLock, LW_EXCLUSIVE);
@@ -367,7 +374,7 @@ unpin_slot(int32_t cq_id, StreamBufferSlot *slot)
 		do
 		{
 			GlobalStreamBuffer->tail = SlotNext(GlobalStreamBuffer->tail);
-		} while (!StreamBufferIsEmpty() && bms_is_empty(GlobalStreamBuffer->tail->readers));
+		} while (!StreamBufferIsEmpty() && bms_is_empty(GlobalStreamBuffer->tail->readby));
 	}
 
 	LWLockRelease(StreamBufferTailLock);
@@ -392,74 +399,6 @@ bool
 StreamBufferIsEmpty(void)
 {
 	return (GlobalStreamBuffer->tail == GlobalStreamBuffer->head);
-}
-
-static void
-clear_readers(Bitmapset *readers)
-{
-	int i;
-	for (i = 0; i < readers->nwords; i++)
-		readers->words[i] = 0;
-}
-
-static void
-notify_readers(Bitmapset *readers)
-{
-	int32 id;
-	while ((id = bms_first_member(readers)) >= 0)
-		SetLatch((&GlobalStreamBuffer->latches[id]));
-}
-
-/*
- * StreamBufferWait
- */
-void
-StreamBufferWait(int32_t id)
-{
-	if (!StreamBufferIsEmpty())
-		return;
-
-	SpinLockAcquire(&GlobalStreamBuffer->mutex);
-	bms_add_member(GlobalStreamBuffer->waiters, id);
-	ResetLatch((&GlobalStreamBuffer->latches[id]));
-	SpinLockRelease(&GlobalStreamBuffer->mutex);
-
-	WaitLatch((&GlobalStreamBuffer->latches[id]), WL_LATCH_SET, 0);
-}
-
-/*
- * StreamBufferNotifyAllAndClearWaiters
- */
-void
-StreamBufferNotifyAllAndClearWaiters(void)
-{
-	Bitmapset *waiters;
-
-	SpinLockAcquire(&GlobalStreamBuffer->mutex);
-	waiters = bms_copy(GlobalStreamBuffer->waiters);
-	clear_readers(GlobalStreamBuffer->waiters);
-	SpinLockRelease(&GlobalStreamBuffer->mutex);
-
-	notify_readers(waiters);
-	bms_free(waiters);
-}
-
-/*
- * StreamBufferResetNotify
- */
-void
-StreamBufferResetNotify(int32_t id)
-{
-	ResetLatch((&GlobalStreamBuffer->latches[id]));
-}
-
-/*
- * StreamBufferNotify
- */
-void
-StreamBufferNotify(int32_t id)
-{
-	SetLatch((&GlobalStreamBuffer->latches[id]));
 }
 
 /*
@@ -488,4 +427,79 @@ StreamBufferClearPinnedSlots(void)
 {
 	list_free_deep(MyPinnedSlots);
 	MyPinnedSlots = NIL;
+}
+
+static void
+clear_readers(Bitmapset *readers)
+{
+	int i;
+	for (i = 0; i < readers->nwords; i++)
+		readers->words[i] = 0;
+}
+
+static void
+notify_readers(Bitmapset *readers)
+{
+	int32 id;
+	while ((id = bms_first_member(readers)) >= 0)
+		StreamBufferNotify(id);
+}
+
+/*
+ * StreamBufferWait
+ */
+void
+StreamBufferWait(int32_t cq_id, int8_t worker_id)
+{
+	if (!StreamBufferIsEmpty())
+		return;
+
+	SpinLockAcquire(&GlobalStreamBuffer->mutex);
+	bms_add_member(GlobalStreamBuffer->waiters, cq_id);
+	ResetLatch((&GlobalStreamBuffer->latches[cq_id][worker_id]));
+	SpinLockRelease(&GlobalStreamBuffer->mutex);
+
+	WaitLatch((&GlobalStreamBuffer->latches[cq_id][worker_id]), WL_LATCH_SET, 0);
+}
+
+/*
+ * StreamBufferNotifyAndClearWaiters
+ */
+void
+StreamBufferNotifyAndClearWaiters(void)
+{
+	Bitmapset *waiters;
+
+	SpinLockAcquire(&GlobalStreamBuffer->mutex);
+	waiters = bms_copy(GlobalStreamBuffer->waiters);
+	clear_readers(GlobalStreamBuffer->waiters);
+	SpinLockRelease(&GlobalStreamBuffer->mutex);
+
+	notify_readers(waiters);
+	bms_free(waiters);
+}
+
+/*
+ * StreamBufferResetNotify
+ */
+void
+StreamBufferResetNotify(int32_t cq_id, int8_t worker_id)
+{
+	ResetLatch((&GlobalStreamBuffer->latches[cq_id][worker_id]));
+}
+
+/*
+ * StreamBufferNotify
+ */
+void
+StreamBufferNotify(int32_t cq_id)
+{
+	int i;
+	for (i = 0; i < MAX_PARALLELISM; i++)
+	{
+		Latch *l = &GlobalStreamBuffer->latches[cq_id][i];
+		if (!l->owner_pid)
+			break;
+		SetLatch(l);
+	}
 }

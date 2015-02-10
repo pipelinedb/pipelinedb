@@ -49,7 +49,6 @@
 #define SOCKET_PREFIX "pipeline_"
 #define SLEEP_TIMEOUT (2 * 1000)
 #define RECOVERY_TIME 1
-#define NUM_WORKERS(entry) ((entry)->pg_size - 1)
 
 bool ContinuousQueryCrashRecovery;
 
@@ -180,6 +179,13 @@ CQProcEntryCreate(int id, int pg_size)
 	/* socket names are "pipeline_<hex>" */
 	strcpy(entry->sock_name, SOCKET_PREFIX);
 	strcpy(&entry->sock_name[strlen(SOCKET_PREFIX)], random_hex(10));
+
+	/*
+	 * Allocate shared memory for latches neeed by this CQs workers, in case
+	 * we haven't already done it.
+	 */
+	if (GlobalStreamBuffer->latches[id] == NULL)
+		GlobalStreamBuffer->latches[id] = spalloc0(sizeof(Latch) * MAX_PARALLELISM);
 
 	return entry;
 }
