@@ -49,7 +49,6 @@ tdigest_send(PG_FUNCTION_ARGS)
 	TDigest *t = (TDigest *) PG_GETARG_POINTER(0);
 	StringInfoData buf;
 	bytea *result;
-	int nbytes;
 	AVLNodeIterator *it;
 	Centroid *c;
 
@@ -69,11 +68,10 @@ tdigest_send(PG_FUNCTION_ARGS)
 
 	AVLNodeIteratorDestroy(it);
 
-	nbytes = buf.len - buf.cursor;
-	result = (bytea *) palloc(nbytes + VARHDRSZ);
-	SET_VARSIZE(result, nbytes + VARHDRSZ);
+	result = (bytea *) palloc0(buf.len + VARHDRSZ);
+	SET_VARSIZE(result, buf.len + VARHDRSZ);
 
-	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
+	pq_copymsgbytes(&buf, VARDATA(result), buf.len);
 
 	PG_RETURN_POINTER(result);
 }
@@ -100,18 +98,7 @@ tdigest_out(PG_FUNCTION_ARGS)
 static TDigest *
 tdigest_startup(FunctionCallInfo fcinfo, uint32_t k)
 {
-	Aggref *aggref = AggGetAggref(fcinfo);
-	TargetEntry *te = (TargetEntry *) linitial(aggref->args);
 	TDigest *t;
-	Oid type = exprType((Node *) te->expr);
-	TypeCacheEntry *typ = lookup_type_cache(type, 0);
-
-	fcinfo->flinfo->fn_extra = typ;
-
-	if (!typ->typbyval)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						errmsg("invalid input data type for t-digests")));
 
 	if (k)
 		t = TDigestCreateWithCompression(k);
