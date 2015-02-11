@@ -38,7 +38,7 @@
 #include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
 #include "pipeline/stream.h"
-#include "pipeline/streambuf.h"
+#include "pipeline/tuplebuf.h"
 #include "regex/regex.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
@@ -615,7 +615,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		SetActiveFlag(state.id, false);
 
 		/* This should be a good place to release the waiting latch on the worker */
-		StreamBufferNotify(state.id);
+		TupleBufferNotify(WorkerTupleBuffer, state.id);
 
 		/*
 		 * Block till all the processes in the group have terminated

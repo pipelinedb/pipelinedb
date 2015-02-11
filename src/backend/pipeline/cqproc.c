@@ -33,7 +33,7 @@
 #include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
 #include "pipeline/miscutils.h"
-#include "pipeline/streambuf.h"
+#include "pipeline/tuplebuf.h"
 #include "postmaster/bgworker.h"
 #include "regex/regex.h"
 #include "storage/spalloc.h"
@@ -184,8 +184,8 @@ CQProcEntryCreate(int id, int pg_size)
 	 * Allocate shared memory for latches neeed by this CQs workers, in case
 	 * we haven't already done it.
 	 */
-	if (GlobalStreamBuffer->latches[id] == NULL)
-		GlobalStreamBuffer->latches[id] = spalloc0(sizeof(Latch) * MAX_PARALLELISM);
+	if (WorkerTupleBuffer->latches[id] == NULL)
+		WorkerTupleBuffer->latches[id] = spalloc0(sizeof(Latch) * MAX_PARALLELISM);
 
 	return entry;
 }

@@ -21,6 +21,7 @@
 #include "pipeline/combiner.h"
 #include "pipeline/combinerReceiver.h"
 #include "pipeline/cqproc.h"
+#include "pipeline/tuplebuf.h"
 #include "pipeline/worker.h"
 #include "tcop/dest.h"
 #include "utils/builtins.h"
@@ -32,10 +33,6 @@
 #include "storage/proc.h"
 #include "pgstat.h"
 #include "utils/timestamp.h"
-
-extern StreamBuffer *GlobalStreamBuffer;
-extern int EmptyStreamBufferWaitTime;
-
 
 /*
  * We keep some resources across transactions, so we attach everything to a
@@ -154,19 +151,19 @@ retry:
 		 * of an array of latches. This somehow does not work as expected and autovacuum
 		 * seems to be obliterating the new shared array. Make this better.
 		 */
-		memcpy(&GlobalStreamBuffer->latches[MyCQId][MyWorkerId], &MyProc->procLatch, sizeof(Latch));
+		memcpy(&WorkerTupleBuffer->latches[MyCQId][MyWorkerId], &MyProc->procLatch, sizeof(Latch));
 
 		for (;;)
 		{
-			StreamBufferResetNotify(MyCQId, MyWorkerId);
+			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);
 
-			if (StreamBufferIsEmpty())
+			if (TupleBufferIsEmpty(WorkerTupleBuffer))
 			{
 				curtime = GetCurrentTimestamp();
-				if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
+				if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyTupleBufferWaitTime * 1000))
 				{
 					pgstat_report_activity(STATE_WORKER_WAIT, queryDesc->sourceText);
-					StreamBufferWait(MyCQId, MyWorkerId);
+					TupleBufferWait(WorkerTupleBuffer, MyCQId, MyWorkerId);
 					pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
 				}
 				else
@@ -189,7 +186,7 @@ retry:
 			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
-			StreamBufferClearPinnedSlots();
+			TupleBufferClearPinnedSlots();
 
 			MemoryContextSwitchTo(runcontext);
 			CurrentResourceOwner = cqowner;
@@ -239,7 +236,7 @@ retry:
 		if (IsTransactionState())
 			CommitTransactionCommand();
 
-		StreamBufferUnpinAllPinnedSlots();
+		TupleBufferUnpinAllPinnedSlots();
 
 		MemoryContextResetAndDeleteChildren(runcontext);
 
