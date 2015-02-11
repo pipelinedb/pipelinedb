@@ -53,12 +53,6 @@ typedef struct
 	TupleBufferSlot *slot;
 } MyPinnedSlotEntry;
 
-static void
-spfree_tupledesc(TupleDesc desc)
-{
-	spfree(desc);
-}
-
 /*
  * MakeTuple
  */
@@ -394,8 +388,9 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	 * We're incrementing it because our refcount begins as negative
 	 * for stream inserts--see comments in stream.c:InsertIntoStream.
 	 */
-	if (++slot->tuple->desc->tdrefcount == 0)
-		spfree_tupledesc(slot->tuple->desc);
+	if (slot->tuple->desc)
+		if (++slot->tuple->desc->tdrefcount == 0)
+			spfree(slot->tuple->desc);
 
 	/*
 	 * If this slot was the tail, move tail ahead to the next slot that is not fully
@@ -500,13 +495,10 @@ TupleBufferNotify(TupleBuffer *buf, int32_t cq_id)
 {
 	int i;
 
-	if (buf->latches[cq_id] == NULL)
-		return;
-
-	for (i = 0; i < MAX_PARALLELISM; i++)
+	for (i = 0; i < buf->max_readers; i++)
 	{
 		Latch *l = &buf->latches[cq_id][i];
-		if (!l->owner_pid)
+		if (!l || !l->owner_pid)
 			break;
 		SetLatch(l);
 	}

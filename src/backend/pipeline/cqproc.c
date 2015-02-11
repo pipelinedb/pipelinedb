@@ -186,6 +186,8 @@ CQProcEntryCreate(int id, int pg_size)
 	 */
 	if (WorkerTupleBuffer->latches[id] == NULL)
 		WorkerTupleBuffer->latches[id] = spalloc0(sizeof(Latch) * MAX_PARALLELISM);
+	if (CombinerTupleBuffer->latches[id] == NULL)
+		CombinerTupleBuffer->latches[id] = spalloc0(sizeof(Latch));
 
 	return entry;
 }
