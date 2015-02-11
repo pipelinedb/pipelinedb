@@ -45,6 +45,8 @@ TupleBuffer *CombinerTupleBuffer = NULL;
 /* Maximum size in blocks of the global stream buffer */
 int TupleBufferBlocks;
 
+int EmptyTupleBufferWaitTime;
+
 static List *MyPinnedSlots = NIL;
 
 typedef struct
