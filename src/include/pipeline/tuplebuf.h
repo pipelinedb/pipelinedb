@@ -81,7 +81,7 @@ extern Tuple *MakeTuple(HeapTuple heaptup, TupleDesc desc);
 extern void TupleBuffersInit(void);
 
 extern TupleBuffer *TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, int8_t max_readers);
-extern Size TupleBufferShmemSize(void);
+extern Size TupleBuffersShmemSize(void);
 extern TupleBufferSlot *TupleBufferInsert(TupleBuffer *buf, Tuple *event, Bitmapset *readers);
 extern bool TupleBufferIsEmpty(TupleBuffer *buf);
 extern void TupleBufferWait(TupleBuffer *buf, int32_t cq_id, int8_t reader_id);

@@ -199,22 +199,28 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	return slot;
 }
 
+static Size
+buffer_size()
+{
+	return (TupleBufferBlocks * BLCKSZ) + sizeof(TupleBuffer);
+}
+
 /*
- * TupleBufferShmemSize
+ * TupleBuffersShmemSize
  *
  * Retrieves the size in bytes of the stream buffer
  */
 Size
-TupleBufferShmemSize(void)
+TupleBuffersShmemSize(void)
 {
-	return (TupleBufferBlocks * BLCKSZ) + sizeof(TupleBuffer);
+	return buffer_size() + buffer_size() / 4;
 }
 
 void
 TupleBuffersInit(void)
 {
-	WorkerTupleBuffer = TupleBufferInit("WorkerTupleBuffer", TupleBufferShmemSize(), WorkerBufferHeadLock, WorkerBufferTailLock, MAX_PARALLELISM);
-	CombinerTupleBuffer = TupleBufferInit("CombinerTupleBuffer", TupleBufferShmemSize() / 4, CombinerBufferHeadLock, CombinerBufferTailLock, 1);
+	WorkerTupleBuffer = TupleBufferInit("WorkerTupleBuffer", buffer_size(), WorkerBufferHeadLock, WorkerBufferTailLock, MAX_PARALLELISM);
+	CombinerTupleBuffer = TupleBufferInit("CombinerTupleBuffer", buffer_size() / 4, CombinerBufferHeadLock, CombinerBufferTailLock, 1);
 }
 
 /*

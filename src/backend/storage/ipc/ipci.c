@@ -147,7 +147,7 @@ CreateSharedMemoryAndSemaphores(bool makePrivate, int port)
 		/* might as well round it off to a multiple of a typical page size */
 		size = add_size(size, 8192 - (size % 8192));
 
-		size = add_size(size, TupleBufferShmemSize());
+		size = add_size(size, TupleBuffersShmemSize());
 
 		elog(DEBUG3, "invoking IpcMemoryCreate(size=%zu)", size);
 
