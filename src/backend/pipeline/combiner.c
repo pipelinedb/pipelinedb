@@ -516,7 +516,7 @@ retry:
 			 * If we get a null tuple, we either want to combine the current batch
 			 * or wait a little while longer for more tuples before forcing the batch
 			 */
-			if (TupIsNull(slot))
+			if (!found_tuple)
 			{
 				if (timeout > 0)
 				{
