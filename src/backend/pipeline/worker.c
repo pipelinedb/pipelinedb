@@ -126,6 +126,8 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	xactcontext = TopTransactionContext;
 	TopTransactionContext = runcontext;
 
+	elog(LOG, "\"%s\" worker %d running", queryDesc->plannedstmt->cq_target->relname, MyProcPid);
+
 retry:
 	PG_TRY();
 	{
@@ -145,12 +147,7 @@ retry:
 
 		MarkWorkerAsRunning(MyCQId, MyWorkerId);
 
-		/*
-		 * XXX (jay): Should be able to copy pointers and maintain an array of pointers instead
-		 * of an array of latches. This somehow does not work as expected and autovacuum
-		 * seems to be obliterating the new shared array. Make this better.
-		 */
-		memcpy(&WorkerTupleBuffer->latches[MyCQId][MyWorkerId], &MyProc->procLatch, sizeof(Latch));
+		TupleBufferInitLatch(WorkerTupleBuffer, MyCQId, MyWorkerId, &MyProc->procLatch);
 
 		for (;;)
 		{

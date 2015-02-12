@@ -464,7 +464,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 
 	MarkCombinerAsRunning(MyCQId);
 
-	memcpy(&CombinerTupleBuffer->latches[MyCQId][0], &MyProc->procLatch, sizeof(Latch));
+	TupleBufferInitLatch(CombinerTupleBuffer, MyCQId, 0, &MyProc->procLatch);
 	reader = TupleBufferOpenReader(CombinerTupleBuffer, MyCQId, 0, 1);
 
 	/*

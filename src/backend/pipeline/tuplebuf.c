@@ -430,6 +430,12 @@ TupleBufferIsEmpty(TupleBuffer *buf)
 	return (buf->tail == buf->head);
 }
 
+void
+TupleBufferInitLatch(TupleBuffer *buf, int32_t cq_id, int8_t reader_id, Latch *proclatch)
+{
+	memcpy(&buf->latches[cq_id][reader_id], proclatch, sizeof(Latch));
+}
+
 static void
 clear_readers(Bitmapset *readers)
 {

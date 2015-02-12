@@ -84,6 +84,7 @@ extern TupleBuffer *TupleBufferInit(char *name, Size size, LWLock *head_lock, LW
 extern Size TupleBuffersShmemSize(void);
 extern TupleBufferSlot *TupleBufferInsert(TupleBuffer *buf, Tuple *event, Bitmapset *readers);
 extern bool TupleBufferIsEmpty(TupleBuffer *buf);
+extern void TupleBufferInitLatch(TupleBuffer *buf, int32_t cq_id, int8_t reader_id, Latch *proclatch);
 extern void TupleBufferWait(TupleBuffer *buf, int32_t cq_id, int8_t reader_id);
 extern void TupleBufferNotifyAndClearWaiters(TupleBuffer *buf);
 extern void TupleBufferResetNotify(TupleBuffer *buf, int32_t cq_id, int8_t reader_id);
