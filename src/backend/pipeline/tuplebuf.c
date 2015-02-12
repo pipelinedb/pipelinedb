@@ -346,17 +346,6 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 			return NULL;
 		}
 
-		/*
-		 * This can happen if the buffer is being wrapped around and the slot
-		 * was zeroed out. We need to yield here because the insert process is
-		 * waiting to acquire an exclusive lock on it.
-		 */
-		if (!SlotIsValid(reader->slot))
-		{
-			LWLockRelease(reader->buf->tail_lock);
-			return NULL;
-		}
-
 		if (bms_is_member(reader->cq_id, reader->slot->readby) &&
 				(JumpConsistentHash((uint64_t) reader->slot, reader->num_readers) == reader->reader_id))
 			break;
