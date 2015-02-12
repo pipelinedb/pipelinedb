@@ -281,7 +281,7 @@ TupleBufferOpenReader(TupleBuffer *buf, int32_t cq_id, int8_t reader_id, int8_t 
 	reader->buf = buf;
 	reader->cq_id = cq_id;
 	reader->reader_id = reader_id;
-	reader->num_readers = NUM_WORKERS(GetCQProcEntry(cq_id));
+	reader->num_readers = num_readers;
 	reader->slot = buf->tail;
 	reader->nonce = buf->nonce;
 	reader->retry_slot = true;

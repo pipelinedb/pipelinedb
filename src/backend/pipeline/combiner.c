@@ -66,7 +66,7 @@ receive_tuple(TupleTableSlot *slot)
 	if (tbs == NULL)
 		return false;
 
-	ExecStoreTuple(tbs->tuple->heaptup, slot, InvalidBuffer, false);
+	ExecStoreTuple(heap_copytuple(tbs->tuple->heaptup), slot, InvalidBuffer, false);
 	TupleBufferUnpinSlot(reader, tbs);
 	return true;
 }
