@@ -41,7 +41,6 @@ typedef struct TupleBufferSlot
 	Size size;
 	Tuple *tuple;
 	Bitmapset *readby;
-	char *stream;
 	slock_t mutex;
 } TupleBufferSlot;
 
@@ -83,7 +82,7 @@ extern void TupleBuffersInit(void);
 
 extern TupleBuffer *TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, int8_t max_readers);
 extern Size TupleBufferShmemSize(void);
-extern TupleBufferSlot *TupleBufferInsert(TupleBuffer *buf, const char *stream, Tuple *event);
+extern TupleBufferSlot *TupleBufferInsert(TupleBuffer *buf, Tuple *event, Bitmapset *readers);
 extern bool TupleBufferIsEmpty(TupleBuffer *buf);
 extern void TupleBufferWait(TupleBuffer *buf, int32_t cq_id, int8_t reader_id);
 extern void TupleBufferNotifyAndClearWaiters(TupleBuffer *buf);

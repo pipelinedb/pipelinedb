@@ -106,13 +106,12 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	MemoryContext runcontext;
 	MemoryContext xactcontext;
 	bool *activeFlagPtr = GetActiveFlagPtr(MyCQId);
-	TimestampTz curtime = GetCurrentTimestamp();
 	TimestampTz last_process_time = GetCurrentTimestamp();
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
 	bool savereadonly = XactReadOnly;
 
 	dest = CreateDestReceiver(DestCombiner);
-	SetCombinerDestReceiverParams(dest, GetSocketName(MyCQId));
+	SetCombinerDestReceiverParams(dest, MyCQId);
 
 	/* workers only need read-only transactions */
 	XactReadOnly = true;
@@ -159,12 +158,11 @@ retry:
 
 			if (TupleBufferIsEmpty(WorkerTupleBuffer))
 			{
-				curtime = GetCurrentTimestamp();
-				if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyTupleBufferWaitTime * 1000))
+				if (TimestampDifferenceExceeds(last_process_time, GetCurrentTimestamp(), EmptyTupleBufferWaitTime * 1000))
 				{
-					pgstat_report_activity(STATE_WORKER_WAIT, queryDesc->sourceText);
+					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
 					TupleBufferWait(WorkerTupleBuffer, MyCQId, MyWorkerId);
-					pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
+					pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
 				}
 				else
 					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);

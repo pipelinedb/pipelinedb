@@ -100,12 +100,11 @@ TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms)
  * Appends a decoded event to the given stream buffer
  */
 TupleBufferSlot *
-TupleBufferInsert(TupleBuffer *buf, const char *stream, Tuple *event)
+TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 {
 	char *start;
 	char *pos;
 	char *end = buf->start + buf->size;
-	Bitmapset *bms = GetTargetsFor(stream);
 	TupleBufferSlot *slot;
 	Size size;
 	Size tupsize;
@@ -116,9 +115,8 @@ TupleBufferInsert(TupleBuffer *buf, const char *stream, Tuple *event)
 		return NULL;
 	}
 
-	tupsize = event->heaptup->t_len + HEAPTUPLESIZE;
-	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize +
-			strlen(stream) + 1 + BITMAPSET_SIZE(bms->nwords);
+	tupsize = tuple->heaptup->t_len + HEAPTUPLESIZE;
+	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(bms->nwords);
 
 	if (size > buf->size)
 		elog(ERROR, "event of size %zu too big for stream buffer of size %zu", size, WorkerTupleBuffer->size);
@@ -145,7 +143,7 @@ TupleBufferInsert(TupleBuffer *buf, const char *stream, Tuple *event)
 			LWLockAcquire(buf->tail_lock, LW_SHARED);
 		}
 
-		start = WorkerTupleBuffer->start;
+		start = buf->start;
 	}
 
 	pos = start;
@@ -160,22 +158,18 @@ TupleBufferInsert(TupleBuffer *buf, const char *stream, Tuple *event)
 
 	pos += sizeof(TupleBufferSlot);
 	slot->tuple = (Tuple *) pos;
-	slot->tuple->desc = event->desc;
-	slot->tuple->arrivaltime = event->arrivaltime;
+	slot->tuple->desc = tuple->desc;
+	slot->tuple->arrivaltime = tuple->arrivaltime;
 
 	pos += sizeof(Tuple);
 	slot->tuple->heaptup = (HeapTuple) pos;
-	slot->tuple->heaptup->t_len = event->heaptup->t_len;
-	slot->tuple->heaptup->t_self = event->heaptup->t_self;
-	slot->tuple->heaptup->t_tableOid = event->heaptup->t_tableOid;
+	slot->tuple->heaptup->t_len = tuple->heaptup->t_len;
+	slot->tuple->heaptup->t_self = tuple->heaptup->t_self;
+	slot->tuple->heaptup->t_tableOid = tuple->heaptup->t_tableOid;
 	slot->tuple->heaptup->t_data = (HeapTupleHeader) ((char *) slot->tuple->heaptup + HEAPTUPLESIZE);
-	memcpy(slot->tuple->heaptup->t_data, event->heaptup->t_data, event->heaptup->t_len);
+	memcpy(slot->tuple->heaptup->t_data, tuple->heaptup->t_data, tuple->heaptup->t_len);
 
 	pos += tupsize;
-	slot->stream = pos;
-	strcpy(slot->stream, stream);
-
-	pos += strlen(stream) + 1;
 	slot->readby = (Bitmapset *) pos;
 	memcpy(slot->readby, bms, BITMAPSET_SIZE(bms->nwords));
 
@@ -188,8 +182,8 @@ TupleBufferInsert(TupleBuffer *buf, const char *stream, Tuple *event)
 		LWLockRelease(buf->tail_lock);
 		LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
 
-		WorkerTupleBuffer->tail = slot;
-		WorkerTupleBuffer->nonce++;
+		buf->tail = slot;
+		buf->nonce++;
 
 		/* Wake up all readers */
 		TupleBufferNotifyAndClearWaiters(buf);
@@ -220,7 +214,7 @@ void
 TupleBuffersInit(void)
 {
 	WorkerTupleBuffer = TupleBufferInit("WorkerTupleBuffer", TupleBufferShmemSize(), StreamBufferHeadLock, StreamBufferTailLock, MAX_PARALLELISM);
-	CombinerTupleBuffer = TupleBufferInit("CombinerTupleBuffer", TupleBufferShmemSize(), StreamBufferHeadLock, StreamBufferTailLock, 1);
+	CombinerTupleBuffer = TupleBufferInit("CombinerTupleBuffer", TupleBufferShmemSize() / 4, StreamBufferHeadLock, StreamBufferTailLock, 1);
 }
 
 /*

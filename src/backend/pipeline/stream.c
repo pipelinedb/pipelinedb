@@ -233,7 +233,7 @@ InsertIntoStream(InsertStmt *ins)
 			col++;
 		}
 
-		tbs = TupleBufferInsert(WorkerTupleBuffer, ins->relation->relname, MakeTuple(heap_form_tuple(desc, values, nulls), desc));
+		tbs = TupleBufferInsert(WorkerTupleBuffer, MakeTuple(heap_form_tuple(desc, values, nulls), desc), GetTargetsFor(ins->relation->relname));
 
 		Assert(tbs);
 		count++;
