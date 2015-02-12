@@ -616,6 +616,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 
 		/* This should be a good place to release the waiting latch on the worker */
 		TupleBufferNotify(WorkerTupleBuffer, state.id);
+		TupleBufferNotify(CombinerTupleBuffer, state.id);
 
 		/*
 		 * Block till all the processes in the group have terminated

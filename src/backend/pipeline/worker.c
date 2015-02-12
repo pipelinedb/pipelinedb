@@ -105,7 +105,7 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	int timeoutms = state->maxwaitms;
 	MemoryContext runcontext;
 	MemoryContext xactcontext;
-	bool *activeFlagPtr = GetActiveFlagPtr(MyCQId);
+	CQProcEntry *entry = GetCQProcEntry(MyCQId);
 	TimestampTz last_process_time = GetCurrentTimestamp();
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
 	bool savereadonly = XactReadOnly;
@@ -205,7 +205,7 @@ retry:
 			}
 
 			/* Has the CQ been deactivated? */
-			if (!*activeFlagPtr)
+			if (!entry->active)
 				break;
 		}
 

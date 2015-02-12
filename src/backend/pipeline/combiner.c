@@ -434,8 +434,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	int timeout = queryDesc->plannedstmt->cq_state->maxwaitms;
 	char *cvname = rv->relname;
 	PlannedStmt *combineplan;
-	int32 cq_id = state->id;
-	CQProcEntry *entry = GetCQProcEntry(cq_id);
+	CQProcEntry *entry = GetCQProcEntry(MyCQId);
 
 	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
 			"CombinerRunContext",
@@ -486,7 +485,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 retry:
 	PG_TRY();
 	{
-		bool is_worker_done = false;
+		bool workers_done = false;
 		TimestampTz lastCombineTime = GetCurrentTimestamp();
 		TimestampTz lastReceiveTime = GetCurrentTimestamp();
 
@@ -497,7 +496,7 @@ retry:
 
 			TupleBufferResetNotify(CombinerTupleBuffer, MyCQId, 0);
 
-			if (count == 0 && TupleBufferIsEmpty(CombinerTupleBuffer))
+			if (count == 0 && entry->active && TupleBufferIsEmpty(CombinerTupleBuffer))
 			{
 				if (TimestampDifferenceExceeds(lastReceiveTime, GetCurrentTimestamp(), EmptyTupleBufferWaitTime * 1000))
 				{
@@ -540,6 +539,7 @@ retry:
 				CommitTransactionCommand();
 
 				tuplestore_clear(store);
+				TupleBufferClearPinnedSlots();
 				MemoryContextResetAndDeleteChildren(combinectx);
 				MemoryContextResetAndDeleteChildren(tmpctx);
 
@@ -562,14 +562,14 @@ retry:
 				 * because we wanna poll the socket one last time after the worker has
 				 * terminated.
 				 */
-				if (!is_worker_done)
+				if (!workers_done)
 				{
-					is_worker_done = AreCQWorkersStopped(cq_id);
+					workers_done = AreCQWorkersStopped(MyCQId);
 					continue;
 				}
 
 				/*
-				 * By this point the worker process has terminated and
+				 * By this point the worker processes have terminated and
 				 * we received no new tuples in the previous iteration.
 				 * If there are some unmerged tuples, force merge them.
 				 */
@@ -599,6 +599,8 @@ retry:
 			tuplestore_clear(store);
 			count = 0;
 		}
+
+		TupleBufferUnpinAllPinnedSlots();
 
 		MemoryContextResetAndDeleteChildren(combinectx);
 		MemoryContextResetAndDeleteChildren(tmpctx);

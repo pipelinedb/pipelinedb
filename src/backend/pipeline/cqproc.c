@@ -244,17 +244,6 @@ SetActiveFlag(int id, bool flag)
 	SpinLockRelease(CQProcMutex);
 }
 
-/*
- * GetActiveFlagPtr
- */
-bool *
-GetActiveFlagPtr(int id)
-{
-	CQProcEntry *entry = GetCQProcEntry(id);
-	Assert(entry);
-	return &entry->active;
-}
-
 void
 MarkCombinerAsRunning(int id)
 {

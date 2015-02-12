@@ -47,7 +47,6 @@ extern void InitCQProcState(void);
 extern CQProcEntry* GetCQProcEntry(int id);
 extern int GetProcessGroupSize(int id);
 extern int GetProcessGroupSizeFromCatalog(RangeVar* rv);
-extern bool *GetActiveFlagPtr(int id);
 extern void SetActiveFlag(int id, bool flag);
 extern void MarkCombinerAsRunning(int id);
 extern void MarkWorkerAsRunning(int id, int worker_id);
