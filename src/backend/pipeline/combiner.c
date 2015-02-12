@@ -55,6 +55,9 @@ receive_tuple(TupleTableSlot *slot)
 {
 	TupleBufferSlot *tbs;
 
+	if (!reader)
+		reader = TupleBufferOpenReader(CombinerTupleBuffer, MyCQId, 0, 1);
+
 	if (!TupIsNull(slot))
 		ExecClearTuple(slot);
 
@@ -465,7 +468,6 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	MarkCombinerAsRunning(MyCQId);
 
 	TupleBufferInitLatch(CombinerTupleBuffer, MyCQId, 0, &MyProc->procLatch);
-	reader = TupleBufferOpenReader(CombinerTupleBuffer, MyCQId, 0, 1);
 
 	/*
 	 * Create tuple store and slot outside of combinectx and tmpctx,

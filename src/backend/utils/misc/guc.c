@@ -2583,7 +2583,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_BLOCKS
 		},
 		&TupleBufferBlocks,
-		1024, 0, INT_MAX,
+		4096, 0, INT_MAX,
 		NULL, NULL, NULL
 	},
 

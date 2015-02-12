@@ -34,7 +34,7 @@
 #define SlotEnd(slot) ((char *) (slot) + (slot)->size)
 #define SlotNext(slot) ((TupleBufferSlot *) SlotEnd(slot))
 #define NoUnreadSlots(reader) ((reader)->slot == (reader)->buf->head && (reader)->nonce == (reader)->buf->nonce)
-#define SlotIsValid(slot) ((slot)->magic == MAGIC)
+#define SlotIsValid(slot) ((slot) && (slot)->magic == MAGIC)
 
 /* Whether or not to print the state of the stream buffer as it changes */
 bool DebugPrintTupleBuffer;
@@ -127,7 +127,12 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 
 	/* If buffer is empty, start consuming it from the start again. */
 	if (TupleBufferIsEmpty(buf))
+	{
 		start = buf->start;
+
+		LWLockRelease(buf->tail_lock);
+		LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
+	}
 	else
 		start = (char *) buf->head;
 
@@ -180,9 +185,6 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	/* Did we wrap around? */
 	if (start == buf->start)
 	{
-		LWLockRelease(buf->tail_lock);
-		LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
-
 		buf->tail = slot;
 		buf->nonce++;
 
@@ -214,14 +216,14 @@ buffer_size()
 Size
 TupleBuffersShmemSize(void)
 {
-	return buffer_size() + buffer_size() / 4;
+	return buffer_size() * 2;
 }
 
 void
 TupleBuffersInit(void)
 {
 	WorkerTupleBuffer = TupleBufferInit("WorkerTupleBuffer", buffer_size(), WorkerBufferHeadLock, WorkerBufferTailLock, MAX_PARALLELISM);
-	CombinerTupleBuffer = TupleBufferInit("CombinerTupleBuffer", buffer_size() / 4, CombinerBufferHeadLock, CombinerBufferTailLock, 1);
+	CombinerTupleBuffer = TupleBufferInit("CombinerTupleBuffer", buffer_size(), CombinerBufferHeadLock, CombinerBufferTailLock, 1);
 }
 
 /*
