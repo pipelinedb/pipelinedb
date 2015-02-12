@@ -528,6 +528,7 @@ retry:
 			}
 			else
 			{
+				lastReceiveTime = GetCurrentTimestamp();
 				tuplestore_puttupleslot(store, slot);
 				count++;
 			}

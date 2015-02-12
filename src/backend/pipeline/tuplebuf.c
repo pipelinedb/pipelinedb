@@ -34,6 +34,7 @@
 #define SlotEnd(slot) ((char *) (slot) + (slot)->size)
 #define SlotNext(slot) ((TupleBufferSlot *) SlotEnd(slot))
 #define NoUnreadSlots(reader) ((reader)->slot == (reader)->buf->head && (reader)->nonce == (reader)->buf->nonce)
+#define SlotIsValid(slot) ((slot)->magic == MAGIC)
 
 /* Whether or not to print the state of the stream buffer as it changes */
 bool DebugPrintTupleBuffer;
@@ -79,7 +80,7 @@ TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms)
 	while (true)
 	{
 		/* Was slot overwritten? */
-		if (slot->magic != MAGIC)
+		if (!SlotIsValid(slot))
 			break;
 		/* Has the slot been read by all events? */
 		if (slot < slot->buf->tail || bms_is_empty(slot->readby))
@@ -343,6 +344,17 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 			return NULL;
 		}
 
+		/*
+		 * This can happen if the buffer is being wrapped around and the slot
+		 * was zeroed out. We need to yield here because the insert process is
+		 * waiting to acquire an exclusive lock on it.
+		 */
+		if (!SlotIsValid(reader->slot))
+		{
+			LWLockRelease(reader->buf->tail_lock);
+			return NULL;
+		}
+
 		if (bms_is_member(reader->cq_id, reader->slot->readby) &&
 				(JumpConsistentHash((uint64_t) reader->slot, reader->num_readers) == reader->reader_id))
 			break;
@@ -352,7 +364,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 
 	LWLockRelease(reader->buf->tail_lock);
 
-	Assert(reader->slot->magic == MAGIC);
+	Assert(SlotIsValid(slot));
 
 	if (DebugPrintTupleBuffer)
 		elog(LOG, "[%d] pinned event at [%d, %d)",
@@ -370,7 +382,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 static void
 unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 {
-	if (slot->magic != MAGIC || slot < slot->buf->tail)
+	if (!SlotIsValid(slot) || slot < slot->buf->tail)
 		return;
 
 	SpinLockAcquire(&slot->mutex);
