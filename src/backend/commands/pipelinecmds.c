@@ -614,7 +614,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id, false);
 
-		/* This should be a good place to release the waiting latch on the worker */
+		/* This should be a good place to release the waiting latch on the background procs */
 		TupleBufferNotify(WorkerTupleBuffer, state.id);
 		TupleBufferNotify(CombinerTupleBuffer, state.id);
 

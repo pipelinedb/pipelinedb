@@ -500,7 +500,7 @@ TupleBufferNotify(TupleBuffer *buf, int32_t cq_id)
 	for (i = 0; i < buf->max_readers; i++)
 	{
 		Latch *l = &buf->latches[cq_id][i];
-		if (!l || !l->owner_pid)
+		if (!l->owner_pid)
 			break;
 		SetLatch(l);
 	}

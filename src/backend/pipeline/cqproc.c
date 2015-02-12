@@ -46,7 +46,6 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-#define SOCKET_PREFIX "pipeline_"
 #define SLEEP_TIMEOUT (2 * 1000)
 #define RECOVERY_TIME 1
 
@@ -63,7 +62,6 @@ typedef struct CQProcRunArgs
 } CQProcRunArgs;
 
 static HTAB *CQProcTable = NULL;
-static slock_t *CQProcMutex = NULL;
 
 /*
  * InitCQProcState
@@ -75,7 +73,7 @@ void
 InitCQProcState(void)
 {
 	HASHCTL info;
-	bool found;
+
 	/*
 	 * Each continuous view has at least 2 concurrent processes (1 worker and 1 combiner)
 	 * num_concurrent_cv is set to half that value.
@@ -92,10 +90,6 @@ InitCQProcState(void)
 			num_concurrent_cv, num_concurrent_cv,
 			&info,
 			HASH_ELEM);
-	CQProcMutex = ShmemInitStruct("CQProcMutex", sizeof(slock_t), &found);
-
-	if (!found)
-		SpinLockInit(CQProcMutex);
 
 	LWLockRelease(PipelineMetadataLock);
 }
@@ -176,10 +170,6 @@ CQProcEntryCreate(int id, int pg_size)
 	entry->combiner.last_pid = 0;
 	entry->workers = spalloc0(sizeof(CQBackgroundWorkerHandle) * NUM_WORKERS(entry));
 
-	/* socket names are "pipeline_<hex>" */
-	strcpy(entry->sock_name, SOCKET_PREFIX);
-	strcpy(&entry->sock_name[strlen(SOCKET_PREFIX)], random_hex(10));
-
 	/*
 	 * Allocate shared memory for latches neeed by this CQs workers, in case
 	 * we haven't already done it.
@@ -235,13 +225,9 @@ GetCQProcEntry(int id)
 void
 SetActiveFlag(int id, bool flag)
 {
-	CQProcEntry *entry;
-
-	SpinLockAcquire(CQProcMutex);
-	entry = GetCQProcEntry(id);
+	CQProcEntry *entry = GetCQProcEntry(id);
 	Assert(entry);
 	entry->active = flag;
-	SpinLockRelease(CQProcMutex);
 }
 
 void
@@ -581,16 +567,6 @@ RunCQProcs(const char *cvname, void *_state, CQProcEntry *entry)
 	run_cq_proc(CQCombiner, cvname, state, (BackgroundWorkerHandle *) &entry->combiner, entry->shm_query, -1);
 	for (i = 0; i < NUM_WORKERS(entry); i++)
 		run_cq_proc(CQWorker, cvname, state, (BackgroundWorkerHandle *) &entry->workers[i], entry->shm_query, i);
-}
-
-/*
- * GetSocketName
- */
-char *
-GetSocketName(int id)
-{
-	CQProcEntry *entry = GetCQProcEntry(id);
-	return entry->sock_name;
 }
 
 /*
