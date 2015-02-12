@@ -213,8 +213,8 @@ TupleBufferShmemSize(void)
 void
 TupleBuffersInit(void)
 {
-	WorkerTupleBuffer = TupleBufferInit("WorkerTupleBuffer", TupleBufferShmemSize(), StreamBufferHeadLock, StreamBufferTailLock, MAX_PARALLELISM);
-	CombinerTupleBuffer = TupleBufferInit("CombinerTupleBuffer", TupleBufferShmemSize() / 4, StreamBufferHeadLock, StreamBufferTailLock, 1);
+	WorkerTupleBuffer = TupleBufferInit("WorkerTupleBuffer", TupleBufferShmemSize(), WorkerBufferHeadLock, WorkerBufferTailLock, MAX_PARALLELISM);
+	CombinerTupleBuffer = TupleBufferInit("CombinerTupleBuffer", TupleBufferShmemSize() / 4, CombinerBufferHeadLock, CombinerBufferTailLock, 1);
 }
 
 /*
