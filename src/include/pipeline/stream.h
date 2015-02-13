@@ -26,16 +26,6 @@
 /* Whether or not to wait on the inserted event to be consumed by the CV*/
 extern bool DebugSyncStreamInsert;
 
-typedef struct StreamEvent
-{
-	/* append-time values */
-	HeapTuple tuple;
-	/* arrival time of the event */
-	TimestampTz arrivaltime;
-	/* descriptor for this event and possibly some that follow it */
-	TupleDesc desc;
-} StreamEvent;
-
 extern bool InsertTargetIsStream(InsertStmt *ins);
 extern int InsertIntoStream(InsertStmt *ins);
 extern bool IsInputStream(const char *stream);

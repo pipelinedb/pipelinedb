@@ -66,7 +66,7 @@
 #include "parser/parse_type.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/stream.h"
-#include "pipeline/streambuf.h"
+#include "pipeline/tuplebuf.h"
 #include "pg_getopt.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/postmaster.h"
