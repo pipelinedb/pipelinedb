@@ -107,7 +107,7 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	MemoryContext runcontext;
 	MemoryContext xactcontext;
 	CQProcEntry *entry = GetCQProcEntry(MyCQId);
-	TimestampTz last_process_time = GetCurrentTimestamp();
+	TimestampTz last_process = GetCurrentTimestamp();
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
 	bool savereadonly = XactReadOnly;
 
@@ -156,7 +156,7 @@ retry:
 
 			if (TupleBufferIsEmpty(WorkerTupleBuffer))
 			{
-				if (TimestampDifferenceExceeds(last_process_time, GetCurrentTimestamp(), EmptyTupleBufferWaitTime * 1000))
+				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), EmptyTupleBufferWaitTime * 1000))
 				{
 					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
 					TupleBufferWait(WorkerTupleBuffer, MyCQId, MyWorkerId);
@@ -190,7 +190,7 @@ retry:
 			unset_snapshot(estate, cqowner);
 			CommitTransactionCommand();
 
-			if (estate->es_processed + estate->es_filtered != 0)
+			if (estate->es_processed || estate->es_filtered)
 			{
 				/*
 				 * If the CV query is such that the select does not return any tuples
@@ -199,7 +199,7 @@ retry:
 				 * allocated slot, TILL a cv returns a non-zero tuple, at which point
 				 * the worker will resume a simple sleep for the threshold time.
 				 */
-				last_process_time = GetCurrentTimestamp();
+				last_process = GetCurrentTimestamp();
 			}
 
 			/* Has the CQ been deactivated? */
