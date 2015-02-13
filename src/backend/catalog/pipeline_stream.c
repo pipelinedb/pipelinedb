@@ -211,6 +211,7 @@ delete_nonexistent_streams(Relation pipeline_stream, List *added)
 		{
 			simple_heap_delete(pipeline_stream, &tup->t_self);
 			deleted++;
+			CommandCounterIncrement();
 		}
 	}
 
