@@ -38,7 +38,7 @@
 #include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
 #include "pipeline/stream.h"
-#include "pipeline/streambuf.h"
+#include "pipeline/tuplebuf.h"
 #include "regex/regex.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
@@ -614,8 +614,9 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id, false);
 
-		/* This should be a good place to release the waiting latch on the worker */
-		StreamBufferNotify(state.id);
+		/* This should be a good place to release the waiting latch on the background procs */
+		TupleBufferNotify(WorkerTupleBuffer, state.id);
+		TupleBufferNotify(CombinerTupleBuffer, state.id);
 
 		/*
 		 * Block till all the processes in the group have terminated

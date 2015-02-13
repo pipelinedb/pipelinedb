@@ -699,12 +699,6 @@ pg_stat_get_activity(PG_FUNCTION_ARGS)
 				case STATE_DISABLED:
 					values[4] = CStringGetTextDatum("disabled");
 					break;
-				case STATE_WORKER_WAIT:
-					values[4] = CStringGetTextDatum("worker waiting");
-					break;
-				case STATE_WORKER_RUNNING:
-					values[4] = CStringGetTextDatum("worker active");
-					break;
 				case STATE_UNDEFINED:
 					nulls[4] = true;
 					break;

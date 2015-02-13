@@ -52,7 +52,7 @@
 #include "parser/scansup.h"
 #include "pgstat.h"
 #include "pipeline/cqproc.h"
-#include "pipeline/streambuf.h"
+#include "pipeline/tuplebuf.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
 #include "postmaster/bgwriter.h"
@@ -1526,7 +1526,7 @@ static struct config_bool ConfigureNamesBool[] =
 			gettext_noop("Print the state of the stream buffer as it changes."),
 			NULL,
 		},
-		&DebugPrintStreamBuffer,
+		&DebugPrintTupleBuffer,
 		false,
 		NULL, NULL, NULL
 	},
@@ -2582,8 +2582,8 @@ static struct config_int ConfigureNamesInt[] =
 			NULL,
 			GUC_UNIT_BLOCKS
 		},
-		&StreamBufferBlocks,
-		1024, 0, INT_MAX,
+		&TupleBufferBlocks,
+		4096, 0, INT_MAX,
 		NULL, NULL, NULL
 	},
 
@@ -2593,7 +2593,7 @@ static struct config_int ConfigureNamesInt[] =
 			NULL,
 			GUC_UNIT_S
 		},
-		&EmptyStreamBufferWaitTime,
+		&EmptyTupleBufferWaitTime,
 		2, 0, INT_MAX,
 		NULL, NULL, NULL
 	},
