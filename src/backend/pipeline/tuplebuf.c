@@ -125,22 +125,14 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	LWLockAcquire(buf->head_lock, LW_EXCLUSIVE);
 	LWLockAcquire(buf->tail_lock, LW_SHARED);
 
-	/* If buffer is empty, start consuming it from the start again. */
-	if (TupleBufferIsEmpty(buf))
-	{
-		start = buf->start;
-
-		LWLockRelease(buf->tail_lock);
-		LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
-	}
-	else
-		start = (char *) buf->head;
+	start = (char *) buf->head;
 
 	/*
-	 * Not enough size at the end? Wait till all events in the buffer
+	 * Wrap around if buffer is empty. Or if there isn't
+	 * enough space at the end, wait till all events in the buffer
 	 * are read and then wrap around.
 	 */
-	if (size > end - start)
+	if (TupleBufferIsEmpty(buf) || size > end - start)
 	{
 		while (!TupleBufferIsEmpty(buf))
 		{
@@ -150,6 +142,13 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 		}
 
 		start = buf->start;
+
+		/*
+		 * Since we're wrapping around, we'll be resetting the tail and
+		 * so should upgrade the tail_lock to EXCLUSIVE.
+		 */
+		LWLockRelease(buf->tail_lock);
+		LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
 	}
 
 	pos = start;
