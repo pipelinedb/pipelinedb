@@ -19,8 +19,9 @@ def test_tdigest_type(pipeline, clean_db):
 
     pipeline.activate()
     pipeline.insert('test_tdigest_stream', desc, rows)
+    print '===== DEACTIVATING'
     pipeline.deactivate()
-
+    print '===== DEACTIVATING DONE'
     result = pipeline.execute(
       'SELECT tdigest_quantile(t, 0.1) FROM test_tdigest_agg')
     assert len(result) == 2
