@@ -588,7 +588,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 int
 ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 {
-	int count = 0;
+	List *deactivated_cq_ids = NIL;
 	ListCell *lc;
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, CQExclusiveLock);
 
@@ -624,17 +624,43 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 */
 		WaitForCQProcsToTerminate(state.id);
 
-		count++;
+		deactivated_cq_ids = lappend_int(deactivated_cq_ids, state.id);
 
 		CQProcEntryRemove(state.id);
 	}
 
-	if (count)
+	if (deactivated_cq_ids)
+	{
+		/*
+		 * In case some CQs were deactivated, we should update the pipeline_stream catalog
+		 * table and commit right now. After the commit any insert into a stream
+		 * will see the correct version of the pipeline_stream catalog table. The only thing
+		 * left to do after that is to unpin any slots in the WorkerTupleBuffer which
+		 * might have a reader bit set for a now deactivated CQ.
+		 */
 		UpdateStreamTargets();
+		heap_close(pipeline_query, NoLock);
+		CommitTransactionCommand();
 
-	heap_close(pipeline_query, NoLock);
+		foreach(lc, deactivated_cq_ids)
+		{
+			TupleBufferReader *reader = TupleBufferOpenReader(WorkerTupleBuffer, lfirst_int(lc), 0, 1);
+			TupleBufferSlot *tbs;
+			while ((tbs = TupleBufferPinNextSlot(reader)))
+				TupleBufferUnpinSlot(reader, tbs);
+			TupleBufferCloseReader(reader);
+		}
 
-	return count;
+		/*
+		 * We need to restart a transaction because the executor expects us to be in a
+		 * transaction.
+		 */
+		StartTransactionCommand();
+	}
+	else
+		heap_close(pipeline_query, NoLock);
+
+	return list_length(deactivated_cq_ids);
 }
 
 void
