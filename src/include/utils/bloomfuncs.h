@@ -21,6 +21,5 @@ extern Datum bloom_union_agg_trans(PG_FUNCTION_ARGS);
 extern Datum bloom_intersection_agg_trans(PG_FUNCTION_ARGS);
 extern Datum bloom_cardinality(PG_FUNCTION_ARGS);
 extern Datum bloom_contains(PG_FUNCTION_ARGS);
-extern Datum bloom_combine(PG_FUNCTION_ARGS);
 
 #endif

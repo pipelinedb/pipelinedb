@@ -996,7 +996,7 @@ get_streaming_agg(FuncCall *fn)
 	char *name = NameListToString(fn->funcname);
 
 	/* if the agg is count, we only need a streaming variant if it's DISTINCT */
-	if (strcmp(name, "count") == 0 && fn->agg_distinct == false)
+	if (pg_strcasecmp(name, "count") == 0 && fn->agg_distinct == false)
 		return NULL;
 
 	for (i=0; i<len; i++)
@@ -1060,6 +1060,29 @@ RewriteStreamingAggs(SelectStmt *stmt)
 				list_length(context.funcCalls) == 1)
 		{
 			res->name = prevname;
+		}
+	}
+}
+
+static void
+add_forced_types(SelectStmt *stmt, CQAnalyzeContext *context)
+{
+	ListCell *lc;
+
+	context->funcCalls = NIL;
+	CollectAggFuncs((Node *) stmt->targetList, context);
+
+	foreach(lc, context->funcCalls)
+	{
+		FuncCall *fn = (FuncCall *) lfirst(lc);
+		char *name = NameListToString(fn->funcname);
+
+		if (pg_strcasecmp(name, "tdigest_agg") == 0)
+		{
+			FuncCall *cast = makeNode(FuncCall);
+			cast->funcname = list_make1(makeString("float8"));
+			cast->args = list_make1(linitial(fn->args));
+			fn->args = list_make1(cast);
 		}
 	}
 }
@@ -1287,6 +1310,8 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 
 	if (viewstmtptr != NULL)
 		*viewstmtptr = viewstmt;
+
+	add_forced_types(workerstmt, &context);
 
 	return workerstmt;
 }
