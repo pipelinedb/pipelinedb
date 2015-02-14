@@ -6,7 +6,7 @@ def test_tdigest_type(pipeline, clean_db):
     Test tdigest_agg, tdigest_merge_agg, tdigest_cdf, tdigest_quantile
     """
     q = """
-    SELECT k::integer, tdigest_agg(x::integer) AS t FROM test_tdigest_stream
+    SELECT k::integer, tdigest_agg(x::float8) AS t FROM test_tdigest_stream
     GROUP BY k
     """
     desc = ('k', 'x')
@@ -19,27 +19,26 @@ def test_tdigest_type(pipeline, clean_db):
 
     pipeline.activate()
     pipeline.insert('test_tdigest_stream', desc, rows)
-    print '===== DEACTIVATING'
     pipeline.deactivate()
-    print '===== DEACTIVATING DONE'
-    result = pipeline.execute(
-      'SELECT tdigest_quantile(t, 0.1) FROM test_tdigest_agg')
+
+    result = list(pipeline.execute(
+      'SELECT tdigest_quantile(t, 0.1) FROM test_tdigest_agg').fetchall())
     assert len(result) == 2
-    assert result[0]['tdigest_quantile'] == 100
-    assert result[1]['tdigest_quantile'] == 600
+    assert int(result[0]['tdigest_quantile']) == 99
+    assert int(result[1]['tdigest_quantile']) == 599
 
-    result = pipeline.execute(
-      'SELECT tdigest_quantile(combine(t), 1) FROM test_tdigest_agg')
+    result = list(pipeline.execute(
+      'SELECT tdigest_quantile(combine(t), 0.1) FROM test_tdigest_agg').fetchall())
     assert len(result) == 1
-    assert result[0]['tdigest_quantile'] == 200
+    assert abs(int(result[0]['tdigest_quantile']) - 200) < 3
 
-    result = pipeline.execute(
-      'SELECT tdigest_cdf(t, 600) FROM test_tdigest_agg')
+    result = list(pipeline.execute(
+      'SELECT tdigest_cdf(t, 600) FROM test_tdigest_agg').fetchall())
     assert len(result) == 2
-    assert result[0]['tdigest_cdf'] == 0.6
-    assert result[1]['tdigest_cdf'] == 0.1
+    assert round(result[0]['tdigest_cdf'], 2) == 0.6
+    assert round(result[1]['tdigest_cdf'], 2) == 0.1
 
-    result = pipeline.execute(
-      'SELECT tdigest_cdf(combine(t), 600) FROM test_tdigest_agg')
+    result = list(pipeline.execute(
+      'SELECT tdigest_cdf(combine(t), 600) FROM test_tdigest_agg').fetchall())
     assert len(result) == 1
-    assert result[0]['tdigest_cdf'] == 200
+    assert round(result[0]['tdigest_cdf'], 2) == 0.35
