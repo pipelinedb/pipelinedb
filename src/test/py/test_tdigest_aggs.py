@@ -6,7 +6,7 @@ def test_tdigest_type(pipeline, clean_db):
     Test tdigest_agg, tdigest_merge_agg, tdigest_cdf, tdigest_quantile
     """
     q = """
-    SELECT k::integer, tdigest_agg(x::float8) AS t FROM test_tdigest_stream
+    SELECT k::integer, tdigest_agg(x::int) AS t FROM test_tdigest_stream
     GROUP BY k
     """
     desc = ('k', 'x')

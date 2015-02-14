@@ -13,7 +13,6 @@
 #include "fmgr.h"
 
 extern Datum tdigest_send(PG_FUNCTION_ARGS);
-extern Datum tdigest_recv(PG_FUNCTION_ARGS);
 extern Datum tdigest_in(PG_FUNCTION_ARGS);
 extern Datum tdigest_out(PG_FUNCTION_ARGS);
 extern Datum tdigest_agg_trans(PG_FUNCTION_ARGS);
