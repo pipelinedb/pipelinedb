@@ -637,17 +637,23 @@ DATA(insert OID = 3926 ( int8range		PGNSP PGUID  -1 f r R f t \054 0 0 3927 rang
 DESCR("range of bigints");
 DATA(insert OID = 3927 ( _int8range		PGNSP PGUID  -1 f b A f t \054 0 3926 0 array_in array_out array_recv array_send - - array_typanalyze d x f 0 -1 0 0 _null_ _null_ _null_ ));
 
-/* HyperLogLog */
+/* hyperloglog */
 DATA(insert OID = 3998 ( hll	PGNSP PGUID	-1 f b U f t \054 0	 0 5000 hll_in   hll_out   - - - - - i x f 0 -1 0 0 _null_ _null_ _null_ ));
-DESCR("HyperLogLog");
+DESCR("hyperloglog");
 DATA(insert OID = 5000 ( _hll	PGNSP PGUID -1 f b A f t \054 0  3998 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
-DESCR("HyperLogLog array");
+DESCR("hyperloglog array");
 
-/* Bloom Filter */
+/* bloom filter */
 DATA(insert OID = 5030 ( bloom	PGNSP PGUID	-1 f b U f t \054 0	 0 5031 bloom_in	bloom_out   - - - - - i x f 0 -1 0 0 _null_ _null_ _null_ ));
-DESCR("Bloom Filter");
+DESCR("bloom filter");
 DATA(insert OID = 5031 ( _bloom	PGNSP PGUID -1 f b A f t \054 0  5030 0 array_in	array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
-DESCR("Bloom Filter array");
+DESCR("bloom filter array");
+
+/* t-digest */
+DATA(insert OID = 5034 ( tdigest	PGNSP PGUID	-1 f b U f t \054 0	 0 5035 tdigest_in	tdigest_out   - - - - - i x f 0 -1 0 0 _null_ _null_ _null_ ));
+DESCR("t-digest");
+DATA(insert OID = 5035 ( _tdigest	PGNSP PGUID -1 f b A f t \054 0  5034 0 array_in	array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
+DESCR("t-digest array");
 
 /*
  * pseudo-types

@@ -18,6 +18,5 @@ extern Datum hll_agg_trans(PG_FUNCTION_ARGS);
 extern Datum hll_agg_transp(PG_FUNCTION_ARGS);
 extern Datum hll_union_agg_trans(PG_FUNCTION_ARGS);
 extern Datum hll_cardinality(PG_FUNCTION_ARGS);
-extern Datum hll_combine(PG_FUNCTION_ARGS);
 
 #endif
