@@ -213,6 +213,7 @@ FreeCQVacuumContext(CQVacuumContext *context)
 	if (!context)
 		return;
 	ExecDropSingleTupleTableSlot(context->slot);
+	FreeExprContext(context->econtext, false);
 	pfree(context);
 }
 
