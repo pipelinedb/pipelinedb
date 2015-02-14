@@ -1468,6 +1468,8 @@ cq_hypothetical_set_per_query_startup(FunctionCallInfo fcinfo)
 	fcinfo->flinfo->fn_extra = (void *) qstate;
 	MemoryContextSwitchTo(old);
 
+	FreeExprContext(econtext, false);
+
 	return qstate;
 }
 
@@ -1930,6 +1932,8 @@ cq_percentile_cont_float8_startup(PG_FUNCTION_ARGS, bool is_multiple)
 	}
 
 	MemoryContextSwitchTo(old);
+
+	FreeExprContext(econtext, false);
 
 	return aggstate;
 }

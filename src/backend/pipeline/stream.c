@@ -239,6 +239,8 @@ InsertIntoStream(InsertStmt *ins)
 		count++;
 	}
 
+	FreeExprContext(econtext, false);
+
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
