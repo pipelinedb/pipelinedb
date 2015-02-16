@@ -38,7 +38,7 @@
 #include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
 #include "pipeline/stream.h"
-#include "pipeline/streambuf.h"
+#include "pipeline/tuplebuf.h"
 #include "regex/regex.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
@@ -216,6 +216,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		ColumnDef   *coldef;
 		char		*colname;
 		Oid			hiddentype;
+		Oid type;
 
 		/* Ignore junk columns from the targetlist */
 		if (tle->resjunk)
@@ -227,7 +228,13 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		 * Set typeOid and typemod. The name of the type is derived while
 		 * generating query
 		 */
-		coldef = make_cv_columndef(colname, exprType((Node *) tle->expr), exprTypmod((Node *) tle->expr));
+		type = exprType((Node *) tle->expr);
+		/*
+		 * TODO(usmanm): Check for pseudo-types and replace with a char type.
+		 */
+		if (type == 2278)
+			type = 18;
+		coldef = make_cv_columndef(colname, type, exprTypmod((Node *) tle->expr));
 		tableElts = lappend(tableElts, coldef);
 
 		/*
@@ -581,7 +588,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 int
 ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 {
-	int count = 0;
+	List *deactivated_cq_ids = NIL;
 	ListCell *lc;
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, CQExclusiveLock);
 
@@ -599,13 +606,6 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 
 		GetContinousViewState(rv, &state);
 
-		/* If the another transaction which deactivated this CV hasn't
-		 * committed yet, we might still see it as active. Since there's only
-		 * one postmaster, the previous transaction's process could have
-		 * removed the CVMetadata--transactions don't protect it. */
-		if (GetCQProcEntry(state.id) == NULL)
-			continue;
-
 		/* Disable recovery and wait for any recovering processes to recover */
 		if (ContinuousQueryCrashRecovery)
 			DisableCQProcsRecovery(state.id);
@@ -614,8 +614,9 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		/* Indicate to the child processes that this CV has been marked for inactivation */
 		SetActiveFlag(state.id, false);
 
-		/* This should be a good place to release the waiting latch on the worker */
-		SetStreamBufferLatch(state.id);
+		/* This should be a good place to release the waiting latch on the background procs */
+		TupleBufferNotify(WorkerTupleBuffer, state.id);
+		TupleBufferNotify(CombinerTupleBuffer, state.id);
 
 		/*
 		 * Block till all the processes in the group have terminated
@@ -623,17 +624,43 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 */
 		WaitForCQProcsToTerminate(state.id);
 
-		count++;
+		deactivated_cq_ids = lappend_int(deactivated_cq_ids, state.id);
 
 		CQProcEntryRemove(state.id);
 	}
 
-	if (count)
+	if (deactivated_cq_ids)
+	{
+		/*
+		 * In case some CQs were deactivated, we should update the pipeline_stream catalog
+		 * table and commit right now. After the commit any insert into a stream
+		 * will see the correct version of the pipeline_stream catalog table. The only thing
+		 * left to do after that is to unpin any slots in the WorkerTupleBuffer which
+		 * might have a reader bit set for a now deactivated CQ.
+		 */
 		UpdateStreamTargets();
+		heap_close(pipeline_query, NoLock);
+		CommitTransactionCommand();
 
-	heap_close(pipeline_query, NoLock);
+		foreach(lc, deactivated_cq_ids)
+		{
+			TupleBufferReader *reader = TupleBufferOpenReader(WorkerTupleBuffer, lfirst_int(lc), 0, 1);
+			TupleBufferSlot *tbs;
+			while ((tbs = TupleBufferPinNextSlot(reader)))
+				TupleBufferUnpinSlot(reader, tbs);
+			TupleBufferCloseReader(reader);
+		}
 
-	return count;
+		/*
+		 * We need to restart a transaction because the executor expects us to be in a
+		 * transaction.
+		 */
+		StartTransactionCommand();
+	}
+	else
+		heap_close(pipeline_query, NoLock);
+
+	return list_length(deactivated_cq_ids);
 }
 
 void

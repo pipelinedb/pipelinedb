@@ -127,9 +127,12 @@ extern PGDLLIMPORT LWLockPadded *MainLWLockArray;
 #define AutoFileLock				(&MainLWLockArray[35].lock)
 #define ReplicationSlotAllocationLock	(&MainLWLockArray[36].lock)
 #define ReplicationSlotControlLock		(&MainLWLockArray[37].lock)
-#define StreamBufferAppendLock 		(&MainLWLockArray[38].lock)
-#define PipelineMetadataLock 				(&MainLWLockArray[39].lock)
-#define NUM_INDIVIDUAL_LWLOCKS		40
+#define WorkerBufferHeadLock 		(&MainLWLockArray[38].lock)
+#define WorkerBufferTailLock 		(&MainLWLockArray[39].lock)
+#define CombinerBufferHeadLock		(&MainLWLockArray[40].lock)
+#define CombinerBufferTailLock		(&MainLWLockArray[41].lock)
+#define PipelineMetadataLock 		(&MainLWLockArray[42].lock)
+#define NUM_INDIVIDUAL_LWLOCKS		43
 
 /*
  * It's a bit odd to declare NUM_BUFFER_PARTITIONS and NUM_LOCK_PARTITIONS

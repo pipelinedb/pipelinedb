@@ -21,6 +21,7 @@
 #include "pipeline/combiner.h"
 #include "pipeline/combinerReceiver.h"
 #include "pipeline/cqproc.h"
+#include "pipeline/tuplebuf.h"
 #include "pipeline/worker.h"
 #include "tcop/dest.h"
 #include "utils/builtins.h"
@@ -32,10 +33,6 @@
 #include "storage/proc.h"
 #include "pgstat.h"
 #include "utils/timestamp.h"
-
-extern StreamBuffer *GlobalStreamBuffer;
-extern int EmptyStreamBufferWaitTime;
-
 
 /*
  * We keep some resources across transactions, so we attach everything to a
@@ -108,14 +105,13 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	int timeoutms = state->maxwaitms;
 	MemoryContext runcontext;
 	MemoryContext xactcontext;
-	bool *activeFlagPtr = GetActiveFlagPtr(MyCQId);
-	TimestampTz curtime = GetCurrentTimestamp();
-	TimestampTz last_process_time = GetCurrentTimestamp();
+	CQProcEntry *entry = GetCQProcEntry(MyCQId);
+	TimestampTz last_process = GetCurrentTimestamp();
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
 	bool savereadonly = XactReadOnly;
 
 	dest = CreateDestReceiver(DestCombiner);
-	SetCombinerDestReceiverParams(dest, GetSocketName(MyCQId));
+	SetCombinerDestReceiverParams(dest, MyCQId);
 
 	/* workers only need read-only transactions */
 	XactReadOnly = true;
@@ -129,6 +125,8 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 
 	xactcontext = TopTransactionContext;
 	TopTransactionContext = runcontext;
+
+	elog(LOG, "\"%s\" worker %d running", queryDesc->plannedstmt->cq_target->relname, MyProcPid);
 
 retry:
 	PG_TRY();
@@ -149,35 +147,29 @@ retry:
 
 		MarkWorkerAsRunning(MyCQId, MyWorkerId);
 
-		/*
-		 * XXX (jay): Should be able to copy pointers and maintain an array of pointers instead
-		 * of an array of latches. This somehow does not work as expected and autovacuum
-		 * seems to be obliterating the new shared array. Make this better.
-		 */
-		memcpy(&GlobalStreamBuffer->procLatch[MyCQId], &MyProc->procLatch, sizeof(Latch));
+		TupleBufferInitLatch(WorkerTupleBuffer, MyCQId, MyWorkerId, &MyProc->procLatch);
 
 		for (;;)
 		{
-			ResetStreamBufferLatch(MyCQId);
-			if (GlobalStreamBuffer->empty)
+			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);
+
+			if (TupleBufferIsEmpty(WorkerTupleBuffer))
 			{
-				curtime = GetCurrentTimestamp();
-				if (TimestampDifferenceExceeds(last_process_time, curtime, EmptyStreamBufferWaitTime * 1000))
+				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), EmptyTupleBufferWaitTime * 1000))
 				{
-					pgstat_report_activity(STATE_WORKER_WAIT, queryDesc->sourceText);
-					WaitOnStreamBufferLatch(MyCQId);
-					pgstat_report_activity(STATE_WORKER_RUNNING, queryDesc->sourceText);
+					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
+					TupleBufferWait(WorkerTupleBuffer, MyCQId, MyWorkerId);
+					pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
 				}
 				else
-				{
 					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
-				}
 			}
 
 			StartTransactionCommand();
 			set_snapshot(estate, cqowner);
 
 			CurrentResourceOwner = cqowner;
+
 			MemoryContextSwitchTo(estate->es_query_cxt);
 
 			estate->es_processed = 0;
@@ -189,13 +181,15 @@ retry:
 			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
+			TupleBufferClearPinnedSlots();
+
 			MemoryContextSwitchTo(runcontext);
 			CurrentResourceOwner = cqowner;
 
 			unset_snapshot(estate, cqowner);
 			CommitTransactionCommand();
 
-			if (estate->es_processed + estate->es_filtered != 0)
+			if (estate->es_processed || estate->es_filtered)
 			{
 				/*
 				 * If the CV query is such that the select does not return any tuples
@@ -204,11 +198,11 @@ retry:
 				 * allocated slot, TILL a cv returns a non-zero tuple, at which point
 				 * the worker will resume a simple sleep for the threshold time.
 				 */
-				last_process_time = GetCurrentTimestamp();
+				last_process = GetCurrentTimestamp();
 			}
 
 			/* Has the CQ been deactivated? */
-			if (!*activeFlagPtr)
+			if (!entry->active)
 				break;
 		}
 
@@ -236,6 +230,8 @@ retry:
 			unset_snapshot(estate, cqowner);
 		if (IsTransactionState())
 			CommitTransactionCommand();
+
+		TupleBufferUnpinAllPinnedSlots();
 
 		MemoryContextResetAndDeleteChildren(runcontext);
 

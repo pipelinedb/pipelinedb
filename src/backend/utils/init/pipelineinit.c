@@ -15,7 +15,7 @@
 #include "catalog/pipeline_query_fn.h"
 #include "miscadmin.h"
 #include "pipeline/cqproc.h"
-#include "pipeline/streambuf.h"
+#include "pipeline/tuplebuf.h"
 #include "storage/lwlock.h"
 #include "storage/spalloc.h"
 
@@ -47,9 +47,9 @@ static void
 init_pipeline()
 {
 	srand(time(NULL));
-	InitGlobalStreamBuffer();
-	InitCQProcState();
 	InitSPalloc();
+	TupleBuffersInit();
+	InitCQProcState();
 }
 
 /*

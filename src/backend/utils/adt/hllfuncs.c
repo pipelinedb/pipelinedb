@@ -21,7 +21,7 @@
 Datum
 hll_in(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "user-specified HyperLogLogs are not supported");
+	elog(ERROR, "user-specified hyperloglogs are not supported");
 	PG_RETURN_NULL();
 }
 
@@ -187,33 +187,4 @@ hll_cardinality(PG_FUNCTION_ARGS)
 	hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
 	PG_RETURN_INT64(HLLSize(hll));
-}
-
-Datum
-hll_combine(PG_FUNCTION_ARGS)
-{
-	MemoryContext old;
-	MemoryContext context;
-	HyperLogLog *state;
-	HyperLogLog *incoming = (HyperLogLog *) PG_GETARG_VARLENA_P(1);
-
-	if (!AggCheckCallContext(fcinfo, &context))
-			elog(ERROR, "aggregate function called in non-aggregate context");
-
-	old = MemoryContextSwitchTo(context);
-
-	if (PG_ARGISNULL(0))
-	{
-		state = HLLCreateFromRaw(incoming->M, incoming->mlen, incoming->p, incoming->encoding);
-		PG_RETURN_POINTER(state);
-	}
-
-	state = (HyperLogLog *) PG_GETARG_POINTER(0);
-	state = HLLUnion(state, incoming);
-
-	MemoryContextSwitchTo(old);
-
-	SET_VARSIZE(state, sizeof(HyperLogLog) + state->mlen);
-
-	PG_RETURN_POINTER(state);
 }
