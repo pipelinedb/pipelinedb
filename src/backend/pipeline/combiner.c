@@ -262,7 +262,7 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
 					  list_make1(plan),
 					  NULL);
 
-	SetTupleTableDestReceiverParams(dest, merge_targets, CacheMemoryContext, true);
+	SetTupleTableDestReceiverParams(dest, merge_targets, CurrentMemoryContext, true);
 
 	PortalStart(portal, NULL, 0, GetActiveSnapshot());
 
@@ -384,7 +384,7 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 	{
 		execTuplesHashPrepare(num_merge_attrs, merge_attr_ops, &eq_funcs, &hash_funcs);
 		merge_targets = BuildTupleHashTable(num_merge_attrs, merge_attrs, eq_funcs, hash_funcs, 1000,
-				sizeof(HeapTupleEntryData), CacheMemoryContext, tmpctx);
+				sizeof(HeapTupleEntryData), CurrentMemoryContext, tmpctx);
 		get_tuples_to_combine_with(matrelname, cvdesc, store, merge_attrs, num_merge_attrs, merge_targets);
 	}
 
@@ -399,7 +399,7 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 					  NULL);
 
 	merge_output = tuplestore_begin_heap(true, true, work_mem);
-	SetTuplestoreDestReceiverParams(dest, merge_output, PortalGetHeapMemory(portal), true);
+	SetTuplestoreDestReceiverParams(dest, merge_output, CurrentMemoryContext, true);
 
 	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, GetActiveSnapshot());
 
@@ -416,6 +416,8 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 
 	if (merge_targets)
 		hash_destroy(merge_targets->hashtab);
+
+	PortalDrop(portal, false);
 }
 
 /*
@@ -535,9 +537,17 @@ retry:
 
 			if (count > 0 && (count == batchsize || force))
 			{
+				/*
+				 * Start/CommitTransactionCommand put us in TopTransactionContext,
+				 * so we need to immediately switch back to the combine context
+				 */
 				StartTransactionCommand();
+				MemoryContextSwitchTo(combinectx);
+
 				combine(combineplan, workerdesc, store, tmpctx);
+
 				CommitTransactionCommand();
+				MemoryContextSwitchTo(combinectx);
 
 				tuplestore_clear(store);
 				TupleBufferClearPinnedSlots();
