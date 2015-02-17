@@ -22,6 +22,7 @@
 typedef struct CountMinSketch
 {
 	uint32	vl_len_;
+	uint32_t count;
 	uint32_t d;
 	uint32_t w;
 	uint32_t table[1];

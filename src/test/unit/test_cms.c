@@ -8,49 +8,101 @@
 #include "utils/elog.h"
 #include "utils/palloc.h"
 
+#define EPS 0.002
+#define P 0.995
+
 START_TEST(test_basic)
 {
-	CountMinSketch *cms = CountMinSketchCreate();
-	int num_keys = 1000;
-	int *keys = palloc(sizeof(int) * num_keys);
-	int *counts = palloc(sizeof(int) * num_keys);
+	CountMinSketch *cms = CountMinSketchCreateWithEpsAndP(EPS, P);
+	int num_keys = 5000;
+	int *keys = palloc0(sizeof(int) * num_keys);
+	int *counts = palloc0(sizeof(int) * num_keys);
 	int i;
 
 	for (i = 0; i < num_keys; i++)
-	{
-		int key = rand();
-		keys[i] = key;
-		counts[i] = 0;
-	}
+		keys[i] = rand();
 
-	for (i = 0; i < 10 * num_keys; i++)
+	for (i = 0; i < num_keys; i++)
 	{
-		int idx = rand() % num_keys;
-		int c = rand() % 10;
-		counts[idx] += c;
-		CountMinSketchAdd(cms, &keys[idx], sizeof(int), c);
+		int c = rand() % 100;
+		counts[i] += c;
+		CountMinSketchAdd(cms, &keys[i], sizeof(int), c);
 	}
 
 	for (i = 0; i < num_keys; i++)
 	{
-		int idx = rand() % num_keys;
-		int c = CountMinSketchEstimateCount(cms, &keys[idx], sizeof(int));
+		float diff = CountMinSketchEstimateCount(cms, &keys[i], sizeof(int)) - counts[i];
+		ck_assert(diff / cms->count < EPS);
 	}
 
-	for (i = 0; i < cms->d * cms->w; i++)
-		elog(LOG, "count %d", cms->table[i]);
 }
 END_TEST
 
 START_TEST(test_union)
 {
+	CountMinSketch *cms1 = CountMinSketchCreateWithEpsAndP(EPS, P);
+	CountMinSketch *cms2 = CountMinSketchCreateWithEpsAndP(EPS, P);
+	CountMinSketch *cms;
+	int num_keys = 5000;
+	int *keys = palloc(sizeof(int) * num_keys * 2);
+	int *counts = palloc0(sizeof(int) * num_keys * 2);
+	int i;
 
+	for (i = 0; i < num_keys; i++)
+	{
+		keys[i] = rand();
+		keys[num_keys + i] = rand();
+	}
+
+	for (i = 0; i < num_keys; i++)
+	{
+		counts[i] += rand() % 100;
+		counts[num_keys + i] = rand() % 100;
+		CountMinSketchAdd(cms1, &keys[i], sizeof(int), counts[i]);
+		CountMinSketchAdd(cms2, &keys[num_keys + i], sizeof(int), counts[num_keys + i]);
+	}
+
+	cms = CountMinSketchMerge(cms1, cms2);
+
+	for (i = 0; i < num_keys * 2; i++)
+	{
+		float diff = CountMinSketchEstimateCount(cms, &keys[i], sizeof(int)) - counts[i];
+		ck_assert(diff / cms->count < EPS);
+	}
 }
 END_TEST
 
 START_TEST(test_false_positives)
 {
+	CountMinSketch *cms = CountMinSketchCreateWithEpsAndP(EPS, P);
+	int range = 1 << 20;
+	int num_keys = 1 << 16;
+	int *counts = palloc0(sizeof(int) * range);
+	int *keys = palloc(sizeof(int) * num_keys);
+	int i;
+	float num_errors = 0;
 
+	for (i = 0; i < num_keys; i++)
+		keys[i] = rand() % range;
+
+	for (i = 0; i < num_keys; i++)
+	{
+		int c = rand() % 100;
+		counts[keys[i]] += c;
+		CountMinSketchAdd(cms, &keys[i], sizeof(int), c);
+	}
+
+	for (i = 0; i < range; i++)
+	{
+		float diff = 1.0 * abs(CountMinSketchEstimateCount(cms, &i, sizeof(int)) - counts[i]);
+		if (diff / cms->count > EPS)
+			num_errors++;
+	}
+
+	pfree(counts);
+	pfree(keys);
+
+	ck_assert(num_errors / range < (1 - P));
 }
 END_TEST
 

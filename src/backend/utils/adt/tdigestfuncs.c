@@ -90,7 +90,7 @@ tdigest_out(PG_FUNCTION_ARGS)
 	TDigest *t = tdigest_unpack(PG_GETARG_BYTEA_P(0));
 
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "{ c = %ld, k = %d }", t->count, (int) t->compression);
+	appendStringInfo(&buf, "{ count = %ld, k = %d, centroids: %d }", t->count, (int) t->compression, t->summary->size);
 
 	PG_RETURN_CSTRING(buf.data);
 }

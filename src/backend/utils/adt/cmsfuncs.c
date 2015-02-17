@@ -32,7 +32,7 @@ cms_out(PG_FUNCTION_ARGS)
 	CountMinSketch *cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "{ d = %d, w = %d, size = %ldk }", cms->w, cms->d, CountMinSketchSize(cms) / 1024);
+	appendStringInfo(&buf, "{ d = %d, w = %d, count = %d, size = %ldkB }", cms->d, cms->w, cms->count, CountMinSketchSize(cms) / 1024);
 
 	PG_RETURN_CSTRING(buf.data);
 }
