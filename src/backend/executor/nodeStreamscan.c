@@ -58,25 +58,42 @@ map_field_positions(TupleDesc evdesc, TupleDesc desc)
 static void
 init_proj_info_for_desc(StreamProjectionInfo *pi, TupleDesc evdesc)
 {
+	MemoryContext old;
+
+	MemoryContextReset(pi->ctxt);
+
+	old = MemoryContextSwitchTo(pi->ctxt);
+
 	pi->attrmap = map_field_positions(evdesc, pi->resultdesc);
 	pi->curslot = MakeSingleTupleTableSlot(evdesc);
+
+	MemoryContextSwitchTo(old);
 }
 
 static TupleTableSlot *
 StreamScanNext(StreamScanState *node)
 {
-	TupleBufferSlot *sbs = TupleBufferPinNextSlot(node->reader);
+	TupleBufferSlot *tbs;
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 	HeapTuple tup;
+	MemoryContext old;
 
-	if (sbs == NULL)
+	/*
+	 * The TupleBuffer needs this slot until it gets unpinned, which we don't
+	 * know when will happen so we need to keep it around for a full CQ execution.
+	 */
+	old = MemoryContextSwitchTo(CQWorkerExecutionContext);
+	tbs = TupleBufferPinNextSlot(node->reader);
+	MemoryContextSwitchTo(old);
+
+	if (tbs == NULL)
 		return NULL;
 
 	/* update the projection info if the event descriptor has changed */
-	if (node->pi->eventdesc != sbs->tuple->desc)
-		init_proj_info_for_desc(node->pi, sbs->tuple->desc);
+	if (node->pi->eventdesc != tbs->tuple->desc)
+		init_proj_info_for_desc(node->pi, tbs->tuple->desc);
 
-	tup = ExecStreamProject(sbs->tuple, node);
+	tup = ExecStreamProject(tbs->tuple, node);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 
 	/*
@@ -84,9 +101,9 @@ StreamScanNext(StreamScanState *node)
 	 * event, so only unpin it if we're configured to do so.
 	 */
 	if (node->unpin)
-		TupleBufferUnpinSlot(node->reader, sbs);
+		TupleBufferUnpinSlot(node->reader, tbs);
 	else
-		node->pinned = lappend(node->pinned, sbs);
+		node->pinned = lappend(node->pinned, tbs);
 
 	return slot;
 }
@@ -206,10 +223,12 @@ ExecStreamProject(Tuple *event, StreamScanState *node)
 		}
 	}
 
-	MemoryContextSwitchTo(oldcontext);
+	MemoryContextSwitchTo(CQWorkerExecutionContext);
 
 	/* our result tuple needs to live for the duration of this query execution */
 	decoded = heap_form_tuple(desc, values, nulls);
+
+	MemoryContextSwitchTo(oldcontext);
 
 	return decoded;
 }

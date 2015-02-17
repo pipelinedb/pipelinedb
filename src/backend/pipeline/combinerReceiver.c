@@ -18,6 +18,7 @@
 #include "pipeline/combinerReceiver.h"
 #include "pipeline/tuplebuf.h"
 #include "miscadmin.h"
+#include "utils/memutils.h"
 
 typedef struct
 {
@@ -42,7 +43,11 @@ static void
 combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 {
 	CombinerState *c = (CombinerState *) self;
+	MemoryContext old = MemoryContextSwitchTo(CQWorkerExecutionContext);
+
 	TupleBufferInsert(CombinerTupleBuffer, MakeTuple(ExecMaterializeSlot(slot), NULL), c->readers);
+
+	MemoryContextSwitchTo(old);
 }
 
 static void combiner_destroy(DestReceiver *self)
