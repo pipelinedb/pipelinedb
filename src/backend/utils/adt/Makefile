@@ -34,7 +34,7 @@ OBJS = acl.o arrayfuncs.o array_selfuncs.o array_typanalyze.o \
 	tsquery_op.o tsquery_rewrite.o tsquery_util.o tsrank.o \
 	tsvector.o tsvector_op.o tsvector_parser.o \
 	txid.o uuid.o varbit.o varchar.o varlena.o version.o \
-	windowfuncs.o xid.o xml.o hllfuncs.o bloomfuncs.o tdigestfuncs.o
+	windowfuncs.o xid.o xml.o hllfuncs.o bloomfuncs.o tdigestfuncs.o cmsfuncs.o
 
 like.o: like.c like_match.c
 

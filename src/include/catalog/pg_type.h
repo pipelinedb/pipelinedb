@@ -655,6 +655,12 @@ DESCR("t-digest");
 DATA(insert OID = 5035 ( _tdigest	PGNSP PGUID -1 f b A f t \054 0  5034 0 array_in	array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
 DESCR("t-digest array");
 
+/* count-min sketch */
+DATA(insert OID = 5038 ( cms	PGNSP PGUID	-1 f b U f t \054 0	 0 5039 cms_in	cms_out   - - - - - i x f 0 -1 0 0 _null_ _null_ _null_ ));
+DESCR("count-min sketch");
+DATA(insert OID = 5039 ( _cms	PGNSP PGUID -1 f b A f t \054 0  5038 0 array_in	array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
+DESCR("count-min sketch array");
+
 /*
  * pseudo-types
  *
