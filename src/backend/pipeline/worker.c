@@ -140,6 +140,15 @@ retry:
 		operation = queryDesc->operation;
 
 		/*
+		 * Initialize context that lives for the duration of a single iteration
+		 * of the main worker loop
+		 */
+		CQWorkerExecutionContext = AllocSetContextCreate(estate->es_query_cxt, "CQWorkerExecutionContext",
+				ALLOCSET_DEFAULT_MINSIZE,
+				ALLOCSET_DEFAULT_INITSIZE,
+				ALLOCSET_DEFAULT_MAXSIZE);
+
+		/*
 		 * startup tuple receiver, if we will be emitting tuples
 		 */
 		estate->es_lastoid = InvalidOid;
@@ -202,6 +211,8 @@ retry:
 				last_process = GetCurrentTimestamp();
 			}
 
+			MemoryContextReset(CQWorkerExecutionContext);
+
 			/* Has the CQ been deactivated? */
 			if (!entry->active)
 				break;
@@ -235,6 +246,7 @@ retry:
 		TupleBufferUnpinAllPinnedSlots();
 
 		MemoryContextResetAndDeleteChildren(runcontext);
+		MemoryContextResetAndDeleteChildren(CQWorkerExecutionContext);
 
 		if (ContinuousQueryCrashRecovery)
 			goto retry;
