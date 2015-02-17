@@ -54,13 +54,13 @@ START_TEST(test_false_positives)
 }
 END_TEST
 
-Suite *test_cmsketch_suite(void)
+Suite *test_cms_suite(void)
 {
 	Suite *s;
 	TCase *tc;
 
-	s = suite_create("test_cmsketch");
-	tc = tcase_create("test_cmsketch");
+	s = suite_create("test_cms");
+	tc = tcase_create("test_cms");
 	tcase_add_test(tc, test_basic);
 	tcase_add_test(tc, test_union);
 	tcase_add_test(tc, test_false_positives);
