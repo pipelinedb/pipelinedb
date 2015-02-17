@@ -135,7 +135,7 @@ cms_agg_transp(PG_FUNCTION_ARGS)
 /*
  * cms_merge_agg transition function -
  *
- * 	returns the union of the transition state and the given cms
+ * 	returns the merge of the transition state and the given cms
  */
 Datum
 cms_merge_agg_trans(PG_FUNCTION_ARGS)
@@ -146,7 +146,7 @@ cms_merge_agg_trans(PG_FUNCTION_ARGS)
 	CountMinSketch *incoming = (CountMinSketch *) PG_GETARG_VARLENA_P(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		elog(ERROR, "cms_union_agg_trans called in non-aggregate context");
+		elog(ERROR, "cms_merge_agg_trans called in non-aggregate context");
 
 	old = MemoryContextSwitchTo(context);
 
