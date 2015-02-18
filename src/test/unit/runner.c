@@ -36,7 +36,7 @@ int main(void)
 	srunner_add_suite(sr, test_tdigest_suite());
 	srunner_add_suite(sr, test_hll_suite());
 	srunner_add_suite(sr, test_bloom_suite());
-	srunner_add_suite(sr, test_cms_suite());
+	srunner_add_suite(sr, test_cmsketch_suite());
 
 	srunner_run_all(sr, CK_VERBOSE);
 	number_failed = srunner_ntests_failed(sr);

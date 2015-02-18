@@ -1,15 +1,15 @@
 /*-------------------------------------------------------------------------
  *
- * cms.c
+ * cmsketch.c
  *	  Count-Min Sketch implementation.
  *
- * src/backend/pipeline/cms.c
+ * src/backend/pipeline/cmsketch.c
  *
  *-------------------------------------------------------------------------
  */
 #include <limits.h>
 #include <math.h>
-#include "pipeline/cms.h"
+#include "pipeline/cmsketch.h"
 #include "pipeline/miscutils.h"
 #include "utils/elog.h"
 #include "utils/palloc.h"

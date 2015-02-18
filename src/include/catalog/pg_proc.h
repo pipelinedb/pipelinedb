@@ -5102,9 +5102,9 @@ DESCR("t-digest out function");
 DATA(insert OID = 5037 (tdigest_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5034 "2275" _null_ _null_ _null_ _null_ tdigest_in  _null_ _null_ _null_ ));
 DESCR("t-digest in function");
 
-DATA(insert OID = 5040 (cms_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5038" _null_ _null_ _null_ _null_ cms_out _null_ _null_ _null_ ));
+DATA(insert OID = 5040 (cmsketch_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5038" _null_ _null_ _null_ _null_ cmsketch_out _null_ _null_ _null_ ));
 DESCR("count-min sketch out function");
-DATA(insert OID = 5041 (cms_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5038 "2275" _null_ _null_ _null_ _null_ cms_in  _null_ _null_ _null_ ));
+DATA(insert OID = 5041 (cmsketch_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5038 "2275" _null_ _null_ _null_ _null_ cmsketch_in  _null_ _null_ _null_ ));
 DESCR("count-min sketch in function");
 
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
@@ -5261,31 +5261,31 @@ DATA(insert OID = 4347 (tdigest_send PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17
 DESCR("t-digest serialize");
 
 /* count-min sketch aggregate */
-DATA(insert OID = 4348 ( cms_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5038 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4348 ( cmsketch_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5038 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("count-min sketch aggregate");
 
 /* count-min sketch aggregate with user-supplied eps and p */
-DATA(insert OID = 4349 ( cms_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5038 "2283 701 701" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4349 ( cmsketch_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5038 "2283 701 701" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("count-min sketch aggregate");
 
 /* count-min sketch aggregate transition function */
-DATA(insert OID = 4350 ( cms_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 2283" _null_ _null_ _null_ _null_ cms_agg_trans _null_ _null_ _null_ ));
+DATA(insert OID = 4350 ( cmsketch_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_agg_trans _null_ _null_ _null_ ));
 DESCR("count-min sketch aggregate");
 
 /* count-min sketch aggregate with eps and p transition function */
-DATA(insert OID = 4351 ( cms_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 2283 701 701" _null_ _null_ _null_ _null_ cms_agg_transp _null_ _null_ _null_ ));
+DATA(insert OID = 4351 ( cmsketch_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 2283 701 701" _null_ _null_ _null_ _null_ cmsketch_agg_transp _null_ _null_ _null_ ));
 DESCR("count-min sketch aggregate");
 
 /* count-min sketch merge aggregate */
-DATA(insert OID = 4352 ( cms_merge_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5038 "5038" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4352 ( cmsketch_merge_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5038 "5038" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("count-min sketch merge aggregate");
 
 /* count-min sketch merge aggregate transition function */
-DATA(insert OID = 4353 ( cms_merge_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 5038" _null_ _null_ _null_ _null_ cms_merge_agg_trans _null_ _null_ _null_ ));
+DATA(insert OID = 4353 ( cmsketch_merge_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 5038" _null_ _null_ _null_ _null_ cmsketch_merge_agg_trans _null_ _null_ _null_ ));
 DESCR("count-min sketch merge aggregate");
 
 /* count-min sketch count function */
-DATA(insert OID = 4354 ( cms_count	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 2283" _null_ _null_ _null_ _null_ cms_count _null_ _null_ _null_ ));
+DATA(insert OID = 4354 ( cmsketch_count	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_count _null_ _null_ _null_ ));
 DESCR("count-min sketch estimate count");
 
 /*

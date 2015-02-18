@@ -3,7 +3,7 @@
 #include <time.h>
 
 #include "suites.h"
-#include "pipeline/cms.h"
+#include "pipeline/cmsketch.h"
 #include "pipeline/miscutils.h"
 #include "utils/elog.h"
 #include "utils/palloc.h"
@@ -106,7 +106,7 @@ START_TEST(test_false_positives)
 }
 END_TEST
 
-Suite *test_cms_suite(void)
+Suite *test_cmsketch_suite(void)
 {
 	Suite *s;
 	TCase *tc;

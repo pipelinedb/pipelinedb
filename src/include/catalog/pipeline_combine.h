@@ -192,8 +192,8 @@ DATA(insert (0 bloom_agg_transp 0 0 bloom_union_agg_trans f 5030));
 DATA(insert (tdigest_send tdigest_agg_trans  tdigest_send 0 tdigest_merge_agg_trans f 5034));
 DATA(insert (tdigest_send tdigest_agg_transp tdigest_send 0 tdigest_merge_agg_trans f 5034));
 
-/* cms_agg */
-DATA(insert (0 cms_agg_trans  0 0 cms_merge_agg_trans f 5038));
-DATA(insert (0 cms_agg_transp 0 0 cms_merge_agg_trans f 5038));
+/* cmsketch_agg */
+DATA(insert (0 cmsketch_agg_trans  0 0 cmsketch_merge_agg_trans f 5038));
+DATA(insert (0 cmsketch_agg_transp 0 0 cmsketch_merge_agg_trans f 5038));
 
 #endif

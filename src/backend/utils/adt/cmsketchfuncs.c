@@ -1,10 +1,10 @@
 /*-------------------------------------------------------------------------
  *
- * cmsfuncs.c
+ * cmsketchfuncs.c
  *		Count-Min Sketch Filter functions
  *
  * IDENTIFICATION
- *	  src/backend/utils/adt/cmsfuncs.c
+ *	  src/backend/utils/adt/cmsketchfuncs.c
  *
  *-------------------------------------------------------------------------
  */
@@ -13,20 +13,20 @@
 #include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
-#include "pipeline/cms.h"
+#include "pipeline/cmsketch.h"
 #include "utils/datum.h"
-#include "utils/cmsfuncs.h"
+#include "utils/cmsketchfuncs.h"
 #include "utils/typcache.h"
 
 Datum
-cms_in(PG_FUNCTION_ARGS)
+cmsketch_in(PG_FUNCTION_ARGS)
 {
 	elog(ERROR, "user-specified count-min sketches are not supported");
 	PG_RETURN_NULL();
 }
 
 Datum
-cms_out(PG_FUNCTION_ARGS)
+cmsketch_out(PG_FUNCTION_ARGS)
 {
 	StringInfoData buf;
 	CountMinSketch *cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
@@ -38,7 +38,7 @@ cms_out(PG_FUNCTION_ARGS)
 }
 
 static CountMinSketch *
-cms_startup(FunctionCallInfo fcinfo, float8 eps, float8 p)
+cmsketch_startup(FunctionCallInfo fcinfo, float8 eps, float8 p)
 {
 	Aggref *aggref = AggGetAggref(fcinfo);
 	TargetEntry *te = (TargetEntry *) linitial(aggref->args);
@@ -58,7 +58,7 @@ cms_startup(FunctionCallInfo fcinfo, float8 eps, float8 p)
 }
 
 static CountMinSketch *
-cms_add(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem)
+cmsketch_add(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem)
 {
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 	Size size = datumGetSize(elem, typ->typbyval, typ->typlen);
@@ -72,11 +72,11 @@ cms_add(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem)
 }
 
 /*
- * cms_agg transition function -
- * 	adds the given element to the transition cms
+ * cmsketch_agg transition function -
+ * 	adds the given element to the transition cmsketch
  */
 Datum
-cms_agg_trans(PG_FUNCTION_ARGS)
+cmsketch_agg_trans(PG_FUNCTION_ARGS)
 {
 	MemoryContext old;
 	MemoryContext context;
@@ -84,16 +84,16 @@ cms_agg_trans(PG_FUNCTION_ARGS)
 	Datum incoming = PG_GETARG_DATUM(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		elog(ERROR, "cms_agg_trans called in non-aggregate context");
+		elog(ERROR, "cmsketch_agg_trans called in non-aggregate context");
 
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
-		state = cms_startup(fcinfo, 0, 0);
+		state = cmsketch_startup(fcinfo, 0, 0);
 	else
 		state = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 
-	state = cms_add(fcinfo, state, incoming);
+	state = cmsketch_add(fcinfo, state, incoming);
 
 	MemoryContextSwitchTo(old);
 
@@ -101,12 +101,12 @@ cms_agg_trans(PG_FUNCTION_ARGS)
 }
 
 /*
- * cms_agg transition function -
+ * cmsketch_agg transition function -
  *
- * 	adds the given element to the transition cms using the given value for p and n
+ * 	adds the given element to the transition cmsketch using the given value for p and n
  */
 Datum
-cms_agg_transp(PG_FUNCTION_ARGS)
+cmsketch_agg_transp(PG_FUNCTION_ARGS)
 {
 	MemoryContext old;
 	MemoryContext context;
@@ -116,16 +116,16 @@ cms_agg_transp(PG_FUNCTION_ARGS)
 	float8 p = PG_GETARG_FLOAT8(3);
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		elog(ERROR, "cms_agg_transp called in non-aggregate context");
+		elog(ERROR, "cmsketch_agg_transp called in non-aggregate context");
 
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
-		state = cms_startup(fcinfo, eps, p);
+		state = cmsketch_startup(fcinfo, eps, p);
 	else
 		state = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 
-	state = cms_add(fcinfo, state, incoming);
+	state = cmsketch_add(fcinfo, state, incoming);
 
 	MemoryContextSwitchTo(old);
 
@@ -133,12 +133,12 @@ cms_agg_transp(PG_FUNCTION_ARGS)
 }
 
 /*
- * cms_merge_agg transition function -
+ * cmsketch_merge_agg transition function -
  *
- * 	returns the merge of the transition state and the given cms
+ * 	returns the merge of the transition state and the given cmsketch
  */
 Datum
-cms_merge_agg_trans(PG_FUNCTION_ARGS)
+cmsketch_merge_agg_trans(PG_FUNCTION_ARGS)
 {
 	MemoryContext old;
 	MemoryContext context;
@@ -146,7 +146,7 @@ cms_merge_agg_trans(PG_FUNCTION_ARGS)
 	CountMinSketch *incoming = (CountMinSketch *) PG_GETARG_VARLENA_P(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		elog(ERROR, "cms_merge_agg_trans called in non-aggregate context");
+		elog(ERROR, "cmsketch_merge_agg_trans called in non-aggregate context");
 
 	old = MemoryContextSwitchTo(context);
 
@@ -168,7 +168,7 @@ cms_merge_agg_trans(PG_FUNCTION_ARGS)
  * Returns the estimate count of the item
  */
 Datum
-cms_count(PG_FUNCTION_ARGS)
+cmsketch_count(PG_FUNCTION_ARGS)
 {
 	CountMinSketch *cms;
 	Datum elem = PG_GETARG_DATUM(1);

@@ -1,14 +1,14 @@
 /*-------------------------------------------------------------------------
  *
- * cms.h
+ * cmsketch.h
  *	  Interface for Count-Min Sketch support
  *
- * src/include/pipeline/cms.h
+ * src/include/pipeline/cmsketch.h
  *
  *-------------------------------------------------------------------------
  */
-#ifndef PIPELINE_CMS_H
-#define PIPELINE_CMS_H
+#ifndef PIPELINE_CMSKETCH_H
+#define PIPELINE_CMSKETCH_H
 
 #include "c.h"
 
