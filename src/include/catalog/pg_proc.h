@@ -5103,6 +5103,11 @@ DESCR("t-digest out function");
 DATA(insert OID = 5037 (tdigest_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5034 "2275" _null_ _null_ _null_ _null_ tdigest_in  _null_ _null_ _null_ ));
 DESCR("t-digest in function");
 
+DATA(insert OID = 5040 (cmsketch_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5038" _null_ _null_ _null_ _null_ cmsketch_out _null_ _null_ _null_ ));
+DESCR("count-min sketch out function");
+DATA(insert OID = 5041 (cmsketch_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5038 "2275" _null_ _null_ _null_ _null_ cmsketch_in  _null_ _null_ _null_ ));
+DESCR("count-min sketch in function");
+
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
 DATA(insert OID = 4301 ( float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1022 "1022 1022" _null_ _null_ _null_ _null_ float8_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
@@ -5252,8 +5257,37 @@ DESCR("t-digest cdf");
 DATA(insert OID = 4346 ( tdigest_quantile	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "5034 701" _null_ _null_ _null_ _null_ tdigest_quantile _null_ _null_ _null_ ));
 DESCR("t-digest quantile");
 
+/* t-digest serialize */
 DATA(insert OID = 4347 (tdigest_send PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "5034" _null_ _null_ _null_ _null_ tdigest_send _null_ _null_ _null_ ));
 DESCR("t-digest serialize");
+
+/* count-min sketch aggregate */
+DATA(insert OID = 4348 ( cmsketch_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5038 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("count-min sketch aggregate");
+
+/* count-min sketch aggregate with user-supplied eps and p */
+DATA(insert OID = 4349 ( cmsketch_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5038 "2283 701 701" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("count-min sketch aggregate");
+
+/* count-min sketch aggregate transition function */
+DATA(insert OID = 4350 ( cmsketch_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_agg_trans _null_ _null_ _null_ ));
+DESCR("count-min sketch aggregate");
+
+/* count-min sketch aggregate with eps and p transition function */
+DATA(insert OID = 4351 ( cmsketch_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 2283 701 701" _null_ _null_ _null_ _null_ cmsketch_agg_transp _null_ _null_ _null_ ));
+DESCR("count-min sketch aggregate");
+
+/* count-min sketch merge aggregate */
+DATA(insert OID = 4352 ( cmsketch_merge_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5038 "5038" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("count-min sketch merge aggregate");
+
+/* count-min sketch merge aggregate transition function */
+DATA(insert OID = 4353 ( cmsketch_merge_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 5038" _null_ _null_ _null_ _null_ cmsketch_merge_agg_trans _null_ _null_ _null_ ));
+DESCR("count-min sketch merge aggregate");
+
+/* count-min sketch count function */
+DATA(insert OID = 4354 ( cmsketch_count	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_count _null_ _null_ _null_ ));
+DESCR("count-min sketch estimate count");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result
