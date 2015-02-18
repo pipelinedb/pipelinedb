@@ -148,7 +148,7 @@ test: cqhsagg cqswhsagg cqdistinct  cqhllagg cqosagg cqswosagg
 # ----------
 # Another group of parallel tests
 # ----------
-test: stream_table_join user_combine
+test: stream_table_join user_combine cqlimit
 
 # ----------
 # Another group of parallel tests
