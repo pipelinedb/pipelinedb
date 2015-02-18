@@ -102,7 +102,7 @@ if __name__ == '__main__':
                     help='Prevent the given node from being launched')
     parser.add_argument('--stmt', action='append', dest='stmts', required=False,
                     help='SQL statements to run after all daemons are running')
-    parser.add_argument('--port', action='store', dest='port', required=False, default='5432',
+    parser.add_argument('--port', action='store', dest='port', required=False, default='6543',
                     help='Server port to connect to')
     args = parser.parse_args()
     main(args)
