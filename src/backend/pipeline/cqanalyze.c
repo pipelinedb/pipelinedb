@@ -1304,8 +1304,17 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	if (!AttributeNumberIsValid(timeAttr) && timeRes != NULL)
 		workerstmt->targetList = lappend(workerstmt->targetList, timeRes);
 
+	/*
+	 * Copy over WINDOW and LIMIT clauses to the view and remove from the
+	 * worker.
+	 */
 	viewstmt->windowClause = workerstmt->windowClause;
 	workerstmt->windowClause = NIL;
+
+	viewstmt->limitCount = workerstmt->limitCount;
+	viewstmt->limitOffset = workerstmt->limitOffset;
+	workerstmt->limitCount = NULL;
+	workerstmt->limitOffset = NULL;
 
 	if (viewstmtptr != NULL)
 		*viewstmtptr = viewstmt;
