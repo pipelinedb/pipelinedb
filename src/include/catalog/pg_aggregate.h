@@ -336,6 +336,11 @@ DATA(insert ( 4339	n 0 tdigest_agg_trans		tdigest_send	-				-				-				f f 0	5034
 DATA(insert ( 4340	n 0 tdigest_agg_transp		tdigest_send	-				-				-				f f 0	5034	0	0		0	_null_ _null_ ));
 DATA(insert ( 4343	n 0 tdigest_merge_agg_trans	tdigest_send	-				-				-				f f 0	5034	0	0		0	_null_ _null_ ));
 
+/* count-min sketch aggregates */
+DATA(insert ( 4348	n 0 cmsketch_agg_trans			-	-				-				-				f f 0	5038	0	0		0	_null_ _null_ ));
+DATA(insert ( 4349	n 0 cmsketch_agg_transp			-	-				-				-				f f 0	5038	0	0		0	_null_ _null_ ));
+DATA(insert ( 4352	n 0 cmsketch_merge_agg_trans	-	-				-				-				f f 0	5038	0	0		0	_null_ _null_ ));
+
 /*
  * prototypes for functions in pg_aggregate.c
  */

@@ -58,6 +58,12 @@ BloomFilterCreate(void)
 	return BloomFilterCreateWithPAndN(DEFAULT_P, DEFAULT_N);
 }
 
+void
+BloomFilterDestroy(BloomFilter *bf)
+{
+	pfree(bf);
+}
+
 BloomFilter *
 BloomFilterCopy(BloomFilter *bf)
 {

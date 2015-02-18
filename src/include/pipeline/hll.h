@@ -24,7 +24,8 @@
 #define HLL_DENSE_DIRTY 'd'
 #define HLL_DENSE_CLEAN 'D'
 
-typedef struct HyperLogLog {
+typedef struct HyperLogLog
+{
 	uint32	vl_len_;
 	/* Dense or sparse, dirty or clean? See above */
 	char encoding;

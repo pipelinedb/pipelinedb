@@ -1080,7 +1080,7 @@ add_forced_types(SelectStmt *stmt, CQAnalyzeContext *context)
 		{
 			FuncCall *cast = makeNode(FuncCall);
 			cast->funcname = list_make1(makeString("float8"));
-			cast->args = list_make1(linitial(fn->args));
+			cast->args = fn->args;
 			fn->args = list_make1(cast);
 		}
 	}
