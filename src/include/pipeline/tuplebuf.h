@@ -36,7 +36,8 @@ typedef struct Tuple
 /* Wraps a physical event and the queries that still need to read it */
 typedef struct TupleBufferSlot
 {
-	int32_t magic;
+	uint32_t magic;
+	uint64_t nonce;
 	struct TupleBuffer *buf;
 	Size size;
 	Tuple *tuple;
@@ -50,12 +51,12 @@ typedef struct TupleBuffer
 	char *name;
 	LWLock *head_lock;
 	LWLock *tail_lock;
-	int8_t max_readers;
+	uint8_t max_readers;
 	Size size;
 	char *start;
 	TupleBufferSlot *head;
 	TupleBufferSlot *tail;
-	int64_t nonce;
+	uint64_t nonce;
 	slock_t mutex;
 	Bitmapset *waiters;
 	Latch **latches;
@@ -65,10 +66,10 @@ typedef struct TupleBuffer
 typedef struct TupleBufferReader
 {
 	TupleBuffer *buf;
-	int32_t cq_id;
-	int8_t reader_id;
-	int8_t num_readers;
-	int64_t nonce;
+	uint32_t cq_id;
+	uint8_t reader_id;
+	uint8_t num_readers;
+	uint64_t nonce;
 	bool retry_slot;
 	TupleBufferSlot *slot;
 } TupleBufferReader;
@@ -80,17 +81,17 @@ extern Tuple *MakeTuple(HeapTuple heaptup, TupleDesc desc);
 
 extern void TupleBuffersInit(void);
 
-extern TupleBuffer *TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, int8_t max_readers);
+extern TupleBuffer *TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, uint8_t max_readers);
 extern Size TupleBuffersShmemSize(void);
 extern TupleBufferSlot *TupleBufferInsert(TupleBuffer *buf, Tuple *event, Bitmapset *readers);
 extern bool TupleBufferIsEmpty(TupleBuffer *buf);
-extern void TupleBufferInitLatch(TupleBuffer *buf, int32_t cq_id, int8_t reader_id, Latch *proclatch);
-extern void TupleBufferWait(TupleBuffer *buf, int32_t cq_id, int8_t reader_id);
+extern void TupleBufferInitLatch(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, Latch *proclatch);
+extern void TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id);
 extern void TupleBufferNotifyAndClearWaiters(TupleBuffer *buf);
-extern void TupleBufferResetNotify(TupleBuffer *buf, int32_t cq_id, int8_t reader_id);
-extern void TupleBufferNotify(TupleBuffer *buf, int32_t cq_id);
+extern void TupleBufferResetNotify(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id);
+extern void TupleBufferNotify(TupleBuffer *buf, uint32_t cq_id);
 
-extern TupleBufferReader *TupleBufferOpenReader(TupleBuffer *buf, int32_t cq_id, int8_t reader_id, int8_t num_readers);
+extern TupleBufferReader *TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers);
 extern void TupleBufferCloseReader(TupleBufferReader *reader);
 extern TupleBufferSlot *TupleBufferPinNextSlot(TupleBufferReader *reader);
 extern void TupleBufferUnpinSlot(TupleBufferReader *reader, TupleBufferSlot *slot);
