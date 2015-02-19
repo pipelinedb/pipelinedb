@@ -270,6 +270,7 @@ make_combine_agg_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var,
 		Aggref *agg = (Aggref *) result;
 
 		agg->aggkind = AGGKIND_USER_COMBINE;
+		agg->aggfilter = NULL;
 		fnoid = agg->aggfnoid;
 	}
 	else
@@ -1312,10 +1313,14 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	viewstmt->windowClause = workerstmt->windowClause;
 	workerstmt->windowClause = NIL;
 
+<<<<<<< HEAD
 	viewstmt->limitCount = workerstmt->limitCount;
 	viewstmt->limitOffset = workerstmt->limitOffset;
 	workerstmt->limitCount = NULL;
 	workerstmt->limitOffset = NULL;
+=======
+	viewstmt->forContinuousView = false;
+>>>>>>> 625-coverage
 
 	if (viewstmtptr != NULL)
 		*viewstmtptr = viewstmt;
@@ -1331,14 +1336,27 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 SelectStmt *
 GetSelectStmtForCQCombiner(SelectStmt *stmt)
 {
+	CQAnalyzeContext context;
+	ListCell *lc;
+
+	InitializeCQAnalyzeContext(stmt, NULL, &context);
 	stmt = GetSelectStmtForCQWorker(stmt, NULL);
 
 	/*
-	 * Combiner shouldn't have to check for the
-	 * whereClause conditionals. The worker has already
-	 * done that.
+	 * Combiner shouldn't have to re-do the filtering work
+	 * of the WHERE clause.
 	 */
 	stmt->whereClause = NULL;
+
+	/* Remove any FILTER clauses */
+	context.funcCalls = NIL;
+	CollectAggFuncs((Node *) stmt->targetList, &context);
+
+	foreach(lc, context.funcCalls)
+	{
+		FuncCall *fcall = (FuncCall *) lfirst(lc);
+		fcall->agg_filter = NULL;
+	}
 
 	return stmt;
 }
