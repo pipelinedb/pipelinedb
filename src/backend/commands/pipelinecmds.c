@@ -296,7 +296,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
 
-	DefineView(view_stmt, querystring);
+	DefineView(view_stmt, NULL);
 	CommandCounterIncrement();
 	allowSystemTableMods = saveAllowSystemTableMods;
 
