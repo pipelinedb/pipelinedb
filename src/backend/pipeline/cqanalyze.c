@@ -1313,14 +1313,12 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	viewstmt->windowClause = workerstmt->windowClause;
 	workerstmt->windowClause = NIL;
 
-<<<<<<< HEAD
 	viewstmt->limitCount = workerstmt->limitCount;
 	viewstmt->limitOffset = workerstmt->limitOffset;
 	workerstmt->limitCount = NULL;
 	workerstmt->limitOffset = NULL;
-=======
+
 	viewstmt->forContinuousView = false;
->>>>>>> 625-coverage
 
 	if (viewstmtptr != NULL)
 		*viewstmtptr = viewstmt;
