@@ -631,6 +631,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 
 	if (deactivated_cq_ids)
 	{
+		bool was_snapshot_set = false;
 		/*
 		 * In case some CQs were deactivated, we should update the pipeline_stream catalog
 		 * table and commit right now. After the commit any insert into a stream
@@ -640,7 +641,16 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 */
 		UpdateStreamTargets();
 		heap_close(pipeline_query, NoLock);
-		PopActiveSnapshot();
+
+		/*
+		 * We can get here from the extended or simple query protocols, which may
+		 * or may not have set a snapshot at this point, so we need to check.
+		 */
+		if (ActiveSnapshotSet())
+		{
+			was_snapshot_set = true;
+			PopActiveSnapshot();
+		}
 		CommitTransactionCommand();
 
 		foreach(lc, deactivated_cq_ids)
@@ -657,7 +667,8 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * transaction.
 		 */
 		StartTransactionCommand();
-		PushActiveSnapshot(GetTransactionSnapshot());
+		if (was_snapshot_set)
+			PushActiveSnapshot(GetTransactionSnapshot());
 	}
 	else
 		heap_close(pipeline_query, NoLock);
