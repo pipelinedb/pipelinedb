@@ -309,14 +309,13 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	if (TupleBufferIsEmpty(reader->buf))
 		return NULL;
 
-	LWLockAcquire(reader->buf->tail_lock, LW_SHARED);
-
 	if (NoUnreadSlots(reader))
 	{
 		reader->retry_slot = true;
-		LWLockRelease(reader->buf->tail_lock);
 		return NULL;
 	}
+
+	LWLockAcquire(reader->buf->tail_lock, LW_SHARED);
 
 	/* Did the stream buffer wrapped around? */
 	if (reader->nonce < reader->buf->nonce)
@@ -403,8 +402,9 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	 */
 	if (SlotEqualsTail(slot))
 	{
-		while (!TupleBufferIsEmpty(slot->buf) && bms_is_empty(slot->buf->tail->readby))
+		do
 			slot->buf->tail = SlotNext(slot->buf->tail);
+		while (!TupleBufferIsEmpty(slot->buf) && bms_is_empty(slot->buf->tail->readby));
 	}
 
 	LWLockRelease(slot->buf->tail_lock);
