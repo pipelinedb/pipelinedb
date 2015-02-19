@@ -18,6 +18,8 @@
 #define NUM_SEEDS 128
 #define BYTE_IDX(bf, i) (((idx) / 8) % (bf)->blen)
 #define BIT_MASK(i) (1 << ((i) % 8))
+/* Bit counting algorithm from: http://www.inwap.com/pdp10/hbaker/hakmem/hacks.html#item167 */
+#define BIT_COUNT(byte) (((byte) * 01001001001ULL & 042104210421ULL) % 017)
 
 #define MURMUR_SEED 0x99496f1ddc863e6fL
 
@@ -160,10 +162,22 @@ BloomFilterCardinality(BloomFilter *bf)
 	uint32_t i;
 	float8 x = 0;
 
-	/* Bit counting algorithm from: http://www.inwap.com/pdp10/hbaker/hakmem/hacks.html#item167 */
 	for (i = 0; i < bf->blen; i++)
-		x += (bf->b[i] * 01001001001ULL & 042104210421ULL) % 017;
+		x += BIT_COUNT(bf->b[i]);
 
 	/* From: http://en.wikipedia.org/wiki/Bloom_filter#Approximating_the_number_of_items_in_a_Bloom_filter */
 	return -1.0 * bf->m * log(1 - (x / bf->m)) / bf->k;
+}
+
+float8
+BloomFilterFillRatio(BloomFilter *bf)
+{
+	uint32_t i;
+	uint64_t x = 0;
+
+
+	for (i = 0; i < bf->blen; i++)
+		x += BIT_COUNT(bf->b[i]);
+
+	return x / (bf->blen * 8.0);
 }

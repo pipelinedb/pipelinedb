@@ -32,6 +32,7 @@ extern bool BloomFilterContains(BloomFilter *bf, void *key, Size size);
 extern BloomFilter *BloomFilterUnion(BloomFilter *result, BloomFilter *incoming);
 extern BloomFilter *BloomFilterIntersection(BloomFilter *result, BloomFilter *incoming);
 extern uint64_t BloomFilterCardinality(BloomFilter *bf);
+extern float8 BloomFilterFillRatio(BloomFilter *bf);
 extern Size BloomFilterSize(BloomFilter *bf);
 
 #endif
