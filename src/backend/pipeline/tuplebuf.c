@@ -35,6 +35,8 @@
 #define SlotNext(slot) ((TupleBufferSlot *) SlotEnd(slot))
 #define NoUnreadSlots(reader) ((reader)->slot == (reader)->buf->head && (reader)->nonce == (reader)->buf->nonce)
 #define SlotIsValid(slot) ((slot) && (slot)->magic == MAGIC)
+#define SlotBehindTail(slot) (!(slot) || (slot) < (slot)->buf->tail || (slot)->nonce < (slot)->buf->nonce)
+#define SlotEqualsTail(slot) ((slot) == (slot)->buf->tail && (slot)->nonce == (slot)->buf->nonce)
 
 /* Whether or not to print the state of the stream buffer as it changes */
 bool DebugPrintTupleBuffer;
@@ -83,7 +85,7 @@ TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms)
 		if (!SlotIsValid(slot))
 			break;
 		/* Has the slot been read by all events? */
-		if (slot < slot->buf->tail || bms_is_empty(slot->readby))
+		if (SlotBehindTail(slot) || bms_is_empty(slot->readby))
 			break;
 		pg_usleep(sleepms * 1000);
 	}
@@ -149,6 +151,9 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 		 */
 		LWLockRelease(buf->tail_lock);
 		LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
+
+		buf->tail = (TupleBufferSlot *) start;
+		buf->nonce++;
 	}
 
 	pos = start;
@@ -157,6 +162,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	MemSet(pos, 0, size);
 	slot = (TupleBufferSlot *) pos;
 	slot->magic = MAGIC;
+	slot->nonce = buf->nonce;
 	slot->size = size;
 	slot->buf = buf;
 	SpinLockInit(&slot->mutex);
@@ -181,15 +187,9 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	/* Move head forward */
 	buf->head = SlotNext(slot);
 
-	/* Did we wrap around? */
+	/* Wake up all waiters if we wrapped around. */
 	if (start == buf->start)
-	{
-		buf->tail = slot;
-		buf->nonce++;
-
-		/* Wake up all readers */
 		TupleBufferNotifyAndClearWaiters(buf);
-	}
 
 	LWLockRelease(buf->tail_lock);
 	LWLockRelease(buf->head_lock);
@@ -231,7 +231,7 @@ TupleBuffersInit(void)
  * Initialize global shared-memory buffer that all decoded events are appended to
  */
 TupleBuffer *
-TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, int8_t max_readers)
+TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, uint8_t max_readers)
 {
 	bool found;
 	Size headersize = MAXALIGN(sizeof(TupleBuffer));
@@ -274,7 +274,7 @@ TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, int
  * Opens a reader into the given stream buffer for a given continuous query
  */
 TupleBufferReader *
-TupleBufferOpenReader(TupleBuffer *buf, int32_t cq_id, int8_t reader_id, int8_t num_readers)
+TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers)
 {
 	TupleBufferReader *reader = (TupleBufferReader *) palloc(sizeof(TupleBufferReader));
 	reader->buf = buf;
@@ -309,13 +309,14 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	if (TupleBufferIsEmpty(reader->buf))
 		return NULL;
 
+	LWLockAcquire(reader->buf->tail_lock, LW_SHARED);
+
 	if (NoUnreadSlots(reader))
 	{
 		reader->retry_slot = true;
+		LWLockRelease(reader->buf->tail_lock);
 		return NULL;
 	}
-
-	LWLockAcquire(reader->buf->tail_lock, LW_SHARED);
 
 	/* Did the stream buffer wrapped around? */
 	if (reader->nonce < reader->buf->nonce)
@@ -330,7 +331,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	 * If the current_slot is NULL, then it automatically goes
 	 * into the first check.
 	 */
-	if (reader->slot < reader->buf->tail)
+	if (SlotBehindTail(reader->slot))
 		reader->slot = reader->buf->tail;
 	else if (!reader->retry_slot)
 		reader->slot = SlotNext(reader->slot);
@@ -372,7 +373,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 static void
 unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 {
-	if (!SlotIsValid(slot) || slot < slot->buf->tail)
+	if (!SlotIsValid(slot) || SlotBehindTail(slot))
 		return;
 
 	SpinLockAcquire(&slot->mutex);
@@ -400,12 +401,10 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	 * If this slot was the tail, move tail ahead to the next slot that is not fully
 	 * unpinned.
 	 */
-	if (slot->buf->tail == slot)
+	if (SlotEqualsTail(slot))
 	{
-		do
-		{
+		while (!TupleBufferIsEmpty(slot->buf) && bms_is_empty(slot->buf->tail->readby))
 			slot->buf->tail = SlotNext(slot->buf->tail);
-		} while (!TupleBufferIsEmpty(slot->buf) && bms_is_empty(slot->buf->tail->readby));
 	}
 
 	LWLockRelease(slot->buf->tail_lock);
@@ -433,7 +432,7 @@ TupleBufferIsEmpty(TupleBuffer *buf)
 }
 
 void
-TupleBufferInitLatch(TupleBuffer *buf, int32_t cq_id, int8_t reader_id, Latch *proclatch)
+TupleBufferInitLatch(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, Latch *proclatch)
 {
 	memcpy(&buf->latches[cq_id][reader_id], proclatch, sizeof(Latch));
 }
@@ -458,12 +457,16 @@ notify_readers(TupleBuffer *buf, Bitmapset *readers)
  * TupleBufferWait
  */
 void
-TupleBufferWait(TupleBuffer *buf, int32_t cq_id, int8_t reader_id)
+TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 {
-	if (!TupleBufferIsEmpty(buf))
-		return;
-
 	SpinLockAcquire(&buf->mutex);
+
+	if (!TupleBufferIsEmpty(buf))
+	{
+		SpinLockRelease(&buf->mutex);
+		return;
+	}
+
 	bms_add_member(buf->waiters, cq_id);
 	ResetLatch((&buf->latches[cq_id][reader_id]));
 	SpinLockRelease(&buf->mutex);
@@ -492,7 +495,7 @@ TupleBufferNotifyAndClearWaiters(TupleBuffer *buf)
  * TupleBufferResetNotify
  */
 void
-TupleBufferResetNotify(TupleBuffer *buf, int32_t cq_id, int8_t reader_id)
+TupleBufferResetNotify(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 {
 	ResetLatch((&buf->latches[cq_id][reader_id]));
 }
@@ -501,7 +504,7 @@ TupleBufferResetNotify(TupleBuffer *buf, int32_t cq_id, int8_t reader_id)
  * TupleBufferNotify
  */
 void
-TupleBufferNotify(TupleBuffer *buf, int32_t cq_id)
+TupleBufferNotify(TupleBuffer *buf, uint32_t cq_id)
 {
 	int i;
 
