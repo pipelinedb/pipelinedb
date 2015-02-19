@@ -779,6 +779,7 @@ TransformAggNodeForCQView(SelectStmt *viewselect, Node *node, ResTarget *aggres,
 		agg->args = list_make1(cref);
 		agg->agg_order = NIL;
 		agg->agg_within_group = false;
+		agg->agg_filter = NULL;
 	}
 	else
 		memcpy(node, cref, sizeof(ColumnRef));
