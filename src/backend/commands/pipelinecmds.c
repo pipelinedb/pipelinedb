@@ -640,6 +640,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 */
 		UpdateStreamTargets();
 		heap_close(pipeline_query, NoLock);
+		PopActiveSnapshot();
 		CommitTransactionCommand();
 
 		foreach(lc, deactivated_cq_ids)
@@ -656,6 +657,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * transaction.
 		 */
 		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 	else
 		heap_close(pipeline_query, NoLock);
