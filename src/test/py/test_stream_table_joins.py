@@ -1,5 +1,6 @@
 from base import pipeline, clean_db
 import random
+import time
 
 
 def _match(r0, r1, cols):
@@ -13,10 +14,12 @@ def _join(left, right, cols):
                 result.append(l + r)
     return result
 
-def _insert(pipeline, table, rows):
+def _insert(pipeline, table, rows, sleep=0):
     cols = ', '.join(['col%d' % c for c in range(len(rows[0]))])
     values = ', '.join([str(row) for row in rows])
     pipeline.execute('INSERT INTO %s (%s) VALUES %s' % (table, cols, values))
+    if sleep:
+        time.sleep(sleep)
 
 def _generate_row(n):
     return tuple(random.choice([1, 0]) for n in range(n))
@@ -53,8 +56,8 @@ def test_join_with_aggs(pipeline, clean_db):
 
     pipeline.activate()
 
-    _insert(pipeline, 'a0', a0)
-    _insert(pipeline, 'a1', a1)
+    _insert(pipeline, 'a0', a0, 0.1)
+    _insert(pipeline, 'a1', a1, 0.1)
     _insert(pipeline, 'stream', s)
 
     pipeline.deactivate()
@@ -94,8 +97,8 @@ def test_join_with_where(pipeline, clean_db):
 
     pipeline.activate()
 
-    _insert(pipeline, 'wt', wt)
-    _insert(pipeline, 'wt_s', s)
+    _insert(pipeline, 'wt', wt, 0.1)
+    _insert(pipeline, 'wt_s', s, 0.1)
     _insert(pipeline, 'stream', s)
 
     pipeline.deactivate()
@@ -148,8 +151,8 @@ def test_join_ordering(pipeline, clean_db):
 
     pipeline.activate()
 
-    _insert(pipeline, 'ordering0', ordering0)
-    _insert(pipeline, 'ordering1', ordering1)
+    _insert(pipeline, 'ordering0', ordering0, 0.1)
+    _insert(pipeline, 'ordering1', ordering1, 0.1)
     _insert(pipeline, 'stream', s)
 
     pipeline.deactivate()
@@ -181,7 +184,7 @@ def test_join_across_batches(pipeline, clean_db):
     pipeline.activate(batchsize=1)
 
     t = _generate_rows(num_cols, 64)
-    _insert(pipeline, 'batch', t)
+    _insert(pipeline, 'batch', t, 0.1)
 
     s = _generate_rows(num_cols, 64)
     _insert(pipeline, 'stream', s)
@@ -250,7 +253,7 @@ def test_join_multiple_tables(pipeline, clean_db):
     pipeline.activate()
 
     # Now insert some table rows after activation
-    _insert(pipeline, 't0', t0)
+    _insert(pipeline, 't0', t0, 0.1)
     _insert(pipeline, 'stream', s)
 
     pipeline.deactivate()
