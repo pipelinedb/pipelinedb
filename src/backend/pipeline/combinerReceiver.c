@@ -44,7 +44,7 @@ static void
 combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 {
 	CombinerState *c = (CombinerState *) self;
-	MemoryContext old = MemoryContextSwitchTo(CQWorkerExecutionContext);
+	MemoryContext old = MemoryContextSwitchTo(CQExecutionContext);
 
 	TupleBufferInsert(CombinerTupleBuffer, MakeTuple(ExecMaterializeSlot(slot), NULL), c->readers);
 

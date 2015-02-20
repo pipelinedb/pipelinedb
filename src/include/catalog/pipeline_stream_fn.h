@@ -16,8 +16,9 @@
 
 #include "catalog/pipeline_stream.h"
 #include "nodes/bitmapset.h"
+#include "utils/relcache.h"
 
-extern void UpdateStreamTargets(void);
+extern void UpdateStreamTargets(Relation pipeline_query);
 extern Bitmapset *GetTargetsFor(const char *stream);
 
 #endif
