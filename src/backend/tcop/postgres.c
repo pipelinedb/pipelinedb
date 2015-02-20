@@ -1349,6 +1349,11 @@ exec_parse_message(const char *query_string,	/* string to execute */
 
 		if (IsA(raw_parse_tree, InsertStmt) && InsertTargetIsStream((InsertStmt *) raw_parse_tree))
 		{
+			if (numParams > 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								errmsg("prepared stream insertions are currently not supported")));
+
 			MemoryContextSwitchTo(oldcontext);
 
 			/* cache these so the following BIND and EXECUTE stages have access to them */
