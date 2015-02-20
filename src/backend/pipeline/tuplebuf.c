@@ -29,12 +29,12 @@
 #define MAGIC 0xDEADBABE /* x_x */
 #define MAX_CQS 128 /* TODO(usmanm): Make this dynamic */
 #define MURMUR_SEED 0x9eaca8149c92387e
+#define INSERT_SLEEP_MS 1
 
 #define BufferOffset(buf, ptr) ((int32) ((char *) (ptr) - (buf)->start))
 #define BufferEnd(buf) ((buf)->start + (buf)->size)
 #define SlotEnd(slot) ((char *) (slot) + (slot)->size)
 #define SlotNext(slot) ((TupleBufferSlot *) SlotEnd(slot))
-
 #define NoUnreadSlots(reader) ((reader)->slot_id == (reader)->buf->head_id)
 #define SlotIsValid(slot) ((slot) && (slot)->magic == MAGIC)
 #define SlotBehindTail(slot) ((slot)->id < (slot)->buf->tail_id)
@@ -164,7 +164,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 		while (size > end - start)
 		{
 			LWLockRelease(buf->tail_lock);
-			pg_usleep(500); /* 0.5ms */
+			pg_usleep(INSERT_SLEEP_MS * 1000);
 			LWLockAcquire(buf->tail_lock, LW_SHARED);
 
 			if (TupleBufferIsEmpty(buf))
