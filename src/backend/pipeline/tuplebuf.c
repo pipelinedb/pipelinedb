@@ -305,6 +305,7 @@ TupleBufferSlot *
 TupleBufferPinNextSlot(TupleBufferReader *reader)
 {
 	MyPinnedSlotEntry *entry;
+	MemoryContext oldcontext;
 
 	if (TupleBufferIsEmpty(reader->buf))
 		return NULL;
@@ -360,10 +361,14 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 		elog(LOG, "[%d] pinned event at [%d, %d)",
 				reader->cq_id, BufferOffset(reader->buf, reader->slot), BufferOffset(reader->buf, SlotEnd(reader->slot)));
 
+	oldcontext = MemoryContextSwitchTo(CQExecutionContext);
+
 	entry = palloc0(sizeof(MyPinnedSlotEntry));
 	entry->slot = reader->slot;
 	entry->cq_id = reader->cq_id;
 	MyPinnedSlots = lappend(MyPinnedSlots, entry);
+
+	MemoryContextSwitchTo(oldcontext);
 
 	reader->retry_slot = false;
 	return reader->slot;
@@ -533,6 +538,8 @@ TupleBufferUnpinAllPinnedSlots(void)
 		MyPinnedSlotEntry *entry = (MyPinnedSlotEntry *) lfirst(lc);
 		unpin_slot(entry->cq_id, entry->slot);
 	}
+
+	MyPinnedSlots = NIL;
 }
 
 /*
@@ -541,6 +548,10 @@ TupleBufferUnpinAllPinnedSlots(void)
 void
 TupleBufferClearPinnedSlots(void)
 {
+	MemoryContext oldcontext = MemoryContextSwitchTo(CQExecutionContext);
+
 	list_free_deep(MyPinnedSlots);
 	MyPinnedSlots = NIL;
+
+	MemoryContextSwitchTo(oldcontext);
 }

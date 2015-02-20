@@ -438,7 +438,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	char *cvname = rv->relname;
 	PlannedStmt *combineplan;
 	CQProcEntry *entry = GetCQProcEntry(MyCQId);
-
+	MemoryContext oldcontext;
 	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
 			"CombinerRunContext",
 			ALLOCSET_DEFAULT_MINSIZE,
@@ -455,7 +455,10 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	MemoryContext oldcontext;
+	CQExecutionContext = AllocSetContextCreate(runctx, "CQExecutionContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
 
 	CurrentResourceOwner = owner;
 
@@ -554,6 +557,7 @@ retry:
 				TupleBufferClearPinnedSlots();
 				MemoryContextResetAndDeleteChildren(combinectx);
 				MemoryContextResetAndDeleteChildren(tmpctx);
+				MemoryContextResetAndDeleteChildren(CQExecutionContext);
 
 				last_combine = GetCurrentTimestamp();
 				count = 0;
@@ -616,6 +620,7 @@ retry:
 
 		MemoryContextResetAndDeleteChildren(combinectx);
 		MemoryContextResetAndDeleteChildren(tmpctx);
+		MemoryContextResetAndDeleteChildren(CQExecutionContext);
 
 		if (ContinuousQueryCrashRecovery)
 			goto retry;

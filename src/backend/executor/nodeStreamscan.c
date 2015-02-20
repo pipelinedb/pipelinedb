@@ -83,7 +83,7 @@ StreamScanNext(StreamScanState *node)
 	 * The TupleBuffer needs this slot until it gets unpinned, which we don't
 	 * know when will happen so we need to keep it around for a full CQ execution.
 	 */
-	old = MemoryContextSwitchTo(CQWorkerExecutionContext);
+	old = MemoryContextSwitchTo(CQExecutionContext);
 	tbs = TupleBufferPinNextSlot(node->reader);
 	MemoryContextSwitchTo(old);
 
@@ -224,7 +224,7 @@ ExecStreamProject(Tuple *event, StreamScanState *node)
 		}
 	}
 
-	MemoryContextSwitchTo(CQWorkerExecutionContext);
+	MemoryContextSwitchTo(CQExecutionContext);
 
 	/* our result tuple needs to live for the duration of this query execution */
 	decoded = heap_form_tuple(desc, values, nulls);

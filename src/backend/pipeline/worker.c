@@ -143,7 +143,7 @@ retry:
 		 * Initialize context that lives for the duration of a single iteration
 		 * of the main worker loop
 		 */
-		CQWorkerExecutionContext = AllocSetContextCreate(estate->es_query_cxt, "CQWorkerExecutionContext",
+		CQExecutionContext = AllocSetContextCreate(estate->es_query_cxt, "CQExecutionContext",
 				ALLOCSET_DEFAULT_MINSIZE,
 				ALLOCSET_DEFAULT_INITSIZE,
 				ALLOCSET_DEFAULT_MAXSIZE);
@@ -211,7 +211,7 @@ retry:
 				last_process = GetCurrentTimestamp();
 			}
 
-			MemoryContextReset(CQWorkerExecutionContext);
+			MemoryContextReset(CQExecutionContext);
 
 			/* Has the CQ been deactivated? */
 			if (!entry->active)
@@ -245,8 +245,8 @@ retry:
 
 		TupleBufferUnpinAllPinnedSlots();
 
+		/* This resets the es_query_ctx and in turn the CQExecutionContext */
 		MemoryContextResetAndDeleteChildren(runcontext);
-		MemoryContextResetAndDeleteChildren(CQWorkerExecutionContext);
 
 		if (ContinuousQueryCrashRecovery)
 			goto retry;
