@@ -575,7 +575,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	}
 
 	if (success)
-		UpdateStreamTargets();
+		UpdateStreamTargets(pipeline_query);
 
 	heap_close(pipeline_query, NoLock);
 
@@ -632,6 +632,12 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	if (deactivated_cq_ids)
 	{
 		bool was_snapshot_set = false;
+
+		CQExecutionContext = AllocSetContextCreate(TopTransactionContext, "CQExecutionContext",
+				ALLOCSET_DEFAULT_MINSIZE,
+				ALLOCSET_DEFAULT_INITSIZE,
+				ALLOCSET_DEFAULT_MAXSIZE);
+
 		/*
 		 * In case some CQs were deactivated, we should update the pipeline_stream catalog
 		 * table and commit right now. After the commit any insert into a stream
@@ -639,7 +645,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * left to do after that is to unpin any slots in the WorkerTupleBuffer which
 		 * might have a reader bit set for a now deactivated CQ.
 		 */
-		UpdateStreamTargets();
+		UpdateStreamTargets(pipeline_query);
 		heap_close(pipeline_query, NoLock);
 
 		/*

@@ -227,16 +227,13 @@ delete_nonexistent_streams(Relation pipeline_stream, List *added)
  * read from.
  */
 void
-UpdateStreamTargets(void)
+UpdateStreamTargets(Relation pipeline_query)
 {
-	Relation pipeline_query;
 	Relation pipeline_stream;
 	List *added = NIL;
 	HTAB *targets;
 
-	pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
 	targets = streams_to_cq_ids(pipeline_query);
-	heap_close(pipeline_query, NoLock);
 
 	pipeline_stream = heap_open(PipelineStreamRelationId, ExclusiveLock);
 	added = cache_stream_targets(pipeline_stream, targets);
