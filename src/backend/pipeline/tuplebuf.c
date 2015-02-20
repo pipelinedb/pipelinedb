@@ -35,7 +35,7 @@
 #define SlotEnd(slot) ((char *) (slot) + (slot)->size)
 #define SlotNext(slot) ((TupleBufferSlot *) SlotEnd(slot))
 
-#define NoUnreadSlots(reader) ((reader)->slot_id == (reader)->buf->count)
+#define NoUnreadSlots(reader) ((reader)->slot_id == (reader)->buf->head_id)
 #define SlotIsValid(slot) ((slot) && (slot)->magic == MAGIC)
 #define SlotBehindTail(slot) ((slot)->id < (slot)->buf->tail_id)
 #define SlotEqualsTail(slot) ((slot) == (slot)->buf->tail && (slot)->id == (slot)->buf->tail_id)
@@ -190,7 +190,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	MemSet(pos, 0, size);
 	slot = (TupleBufferSlot *) pos;
 	slot->magic = MAGIC;
-	slot->id = ++buf->count;
+	slot->id = buf->head_id + 1;
 	slot->next = NULL;
 	slot->buf = buf;
 	slot->size = size;
@@ -227,6 +227,8 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 		buf->tail = slot;
 		buf->tail_id = slot->id;
 	}
+
+	buf->head_id = buf->head->id;
 
 	/* Notify all readers if we were empty. */
 	if (was_empty)
@@ -364,7 +366,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 
 	/*
 	 * If we're behind the tail, then pick tail as the next
-	 * event, otherwise follow pointer to the next element.
+	 * slot, otherwise follow pointer to the next slot.
 	 */
 	if (reader->slot_id < reader->buf->tail_id)
 		reader->slot = reader->buf->tail;

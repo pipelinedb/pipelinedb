@@ -57,8 +57,8 @@ typedef struct TupleBuffer
 	char *start;
 	TupleBufferSlot *head;
 	TupleBufferSlot *tail;
+	uint64_t head_id;
 	uint64_t tail_id;
-	uint64_t count;
 	slock_t mutex;
 	Bitmapset *waiters;
 	Latch **latches;
