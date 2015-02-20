@@ -37,7 +37,8 @@ typedef struct Tuple
 typedef struct TupleBufferSlot
 {
 	uint32_t magic;
-	uint64_t nonce;
+	uint64_t id;
+	struct TupleBufferSlot *next;
 	struct TupleBuffer *buf;
 	Size size;
 	Tuple *tuple;
@@ -69,9 +70,9 @@ typedef struct TupleBufferReader
 	uint32_t cq_id;
 	uint8_t reader_id;
 	uint8_t num_readers;
-	uint64_t nonce;
-	bool retry_slot;
+	uint64_t slot_id;
 	TupleBufferSlot *slot;
+	bool retry_slot;
 } TupleBufferReader;
 
 extern TupleBuffer *WorkerTupleBuffer;
