@@ -515,7 +515,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		ListCell *lcwithOptions;
 		ContinuousViewState state;
 		bool wasInactive = MarkContinuousViewAsActive(rv, pipeline_query);
-
+		elog(LOG, "DONT FUCK this %s    %d", rv->relname, wasInactive);
 		/*
 		 * If the user tries to activate an active CV, they'll know because
 		 * the count of CVs that were activated will be less than they
@@ -575,7 +575,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 	}
 
 	if (success)
-		UpdateStreamTargets();
+		UpdateStreamTargets(pipeline_query);
 
 	heap_close(pipeline_query, NoLock);
 
@@ -598,6 +598,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	{
 		RangeVar *rv = (RangeVar *) lfirst(lc);
 		ContinuousViewState state;
+		CQProcEntry *entry;
 		bool wasActive = MarkContinuousViewAsInactive(rv, pipeline_query);
 
 		/* deactivating an inactive CV is a noop */
@@ -606,6 +607,11 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 
 		GetContinousViewState(rv, &state);
 
+		entry = GetCQProcEntry(state.id);
+		if (!entry)
+			continue;
+
+		elog(LOG, "FUCK this %s", rv->relname);
 		/* Disable recovery and wait for any recovering processes to recover */
 		if (ContinuousQueryCrashRecovery)
 			DisableCQProcsRecovery(state.id);
@@ -632,6 +638,12 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	if (deactivated_cq_ids)
 	{
 		bool was_snapshot_set = false;
+
+		CQExecutionContext = AllocSetContextCreate(TopTransactionContext, "CQExecutionContext",
+				ALLOCSET_DEFAULT_MINSIZE,
+				ALLOCSET_DEFAULT_INITSIZE,
+				ALLOCSET_DEFAULT_MAXSIZE);
+
 		/*
 		 * In case some CQs were deactivated, we should update the pipeline_stream catalog
 		 * table and commit right now. After the commit any insert into a stream
@@ -639,7 +651,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * left to do after that is to unpin any slots in the WorkerTupleBuffer which
 		 * might have a reader bit set for a now deactivated CQ.
 		 */
-		UpdateStreamTargets();
+		UpdateStreamTargets(pipeline_query);
 		heap_close(pipeline_query, NoLock);
 
 		/*
