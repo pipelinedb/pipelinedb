@@ -34,10 +34,11 @@
 #define BufferEnd(buf) ((buf)->start + (buf)->size)
 #define SlotEnd(slot) ((char *) (slot) + (slot)->size)
 #define SlotNext(slot) ((TupleBufferSlot *) SlotEnd(slot))
-#define NoUnreadSlots(reader) ((reader)->slot == (reader)->buf->head && (reader)->slot_id == (reader)->buf->nonce)
+
+#define NoUnreadSlots(reader) ((reader)->slot_id == (reader)->buf->count)
 #define SlotIsValid(slot) ((slot) && (slot)->magic == MAGIC)
-#define SlotBehindTail(slot) (!(slot) || (slot) < (slot)->buf->tail || (slot)->id < (slot)->buf->nonce)
-#define SlotEqualsTail(slot) ((slot) == (slot)->buf->tail && (slot)->id == (slot)->buf->nonce)
+#define SlotBehindTail(slot) ((slot)->id < (slot)->buf->tail_id)
+#define SlotEqualsTail(slot) ((slot) == (slot)->buf->tail && (slot)->id == (slot)->buf->tail_id)
 
 /* Whether or not to print the state of the stream buffer as it changes */
 bool DebugPrintTupleBuffer;
@@ -146,7 +147,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 
 		/* If the tail is infront of us, then don't go beyond it. */
 		if (buf->tail > buf->head)
-			end = buf->tail;
+			end = (char *) buf->tail;
 		else
 		{
 			end = BufferEnd(buf);
@@ -155,7 +156,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 			if (size > end - start)
 			{
 				start = buf->start;
-				end = buf->tail;
+				end = (char *) buf->tail;
 			}
 		}
 
@@ -177,7 +178,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 				end = BufferEnd(buf);
 			}
 			else
-				end = buf->tail;
+				end = (char *) buf->tail;
 		}
 	}
 
@@ -189,7 +190,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	MemSet(pos, 0, size);
 	slot = (TupleBufferSlot *) pos;
 	slot->magic = MAGIC;
-	slot->id = ++buf->nonce;
+	slot->id = ++buf->count;
 	slot->next = NULL;
 	slot->buf = buf;
 	slot->size = size;
@@ -224,6 +225,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 
 		buf->head = slot;
 		buf->tail = slot;
+		buf->tail_id = slot->id;
 	}
 
 	/* Notify all readers if we were empty. */
@@ -322,7 +324,6 @@ TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8
 	reader->num_readers = num_readers;
 	reader->slot = NULL;
 	reader->slot_id = 0;
-	reader->retry_slot = false;
 	return reader;
 }
 
@@ -346,50 +347,50 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	MyPinnedSlotEntry *entry;
 	MemoryContext oldcontext;
 
+	if (NoUnreadSlots(reader))
+		return NULL;
+
 	if (TupleBufferIsEmpty(reader->buf))
 		return NULL;
 
-	if (NoUnreadSlots(reader))
-	{
-		reader->retry_slot = true;
-		return NULL;
-	}
-
 	LWLockAcquire(reader->buf->tail_lock, LW_SHARED);
 
-	/* Did the stream buffer wrapped around? */
-	if (reader->nonce < reader->buf->nonce)
+	/* Maybe the buffer became empty while we were trying to acquire the tail_lock? */
+	if (TupleBufferIsEmpty(reader->buf))
 	{
-		reader->nonce = reader->buf->nonce;
-		reader->slot = NULL;
+		LWLockRelease(reader->buf->tail_lock);
+		return NULL;
 	}
 
 	/*
 	 * If we're behind the tail, then pick tail as the next
 	 * event, otherwise follow pointer to the next element.
-	 * If the current_slot is NULL, then it automatically goes
-	 * into the first check.
 	 */
-	if (SlotBehindTail(reader->slot))
+	if (reader->slot_id < reader->buf->tail_id)
 		reader->slot = reader->buf->tail;
-	else if (!reader->retry_slot)
-		reader->slot = SlotNext(reader->slot);
+	else
+		reader->slot = reader->slot->next;
+
+	/* Update slot_id to the most recent slot we've considered */
+	reader->slot_id = reader->slot->id;
 
 	/* Return the first event in the buffer that we need to read from */
 	while (true)
 	{
-		if (NoUnreadSlots(reader))
-		{
-			reader->retry_slot = true;
-			LWLockRelease(reader->buf->tail_lock);
-			return NULL;
-		}
-
+		/* Is this a slot for me? */
 		if (bms_is_member(reader->cq_id, reader->slot->readby) &&
 				(JumpConsistentHash((uint64_t) reader->slot, reader->num_readers) == reader->reader_id))
 			break;
 
-		reader->slot = SlotNext(reader->slot);
+		if (NoUnreadSlots(reader))
+		{
+			LWLockRelease(reader->buf->tail_lock);
+			return NULL;
+		}
+
+		/* Move over to the next slot. */
+		reader->slot = reader->slot->next;
+		reader->slot_id = reader->slot->id;
 	}
 
 	LWLockRelease(reader->buf->tail_lock);
@@ -409,7 +410,6 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 
 	MemoryContextSwitchTo(oldcontext);
 
-	reader->retry_slot = false;
 	return reader->slot;
 }
 
@@ -447,8 +447,15 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	if (SlotEqualsTail(slot))
 	{
 		do
+		{
 			slot->buf->tail = slot->buf->tail->next;
-		while (!TupleBufferIsEmpty(slot->buf) && bms_is_empty(slot->buf->tail->readby));
+
+			if (TupleBufferIsEmpty(slot->buf))
+				break;
+
+			slot->buf->tail_id = slot->buf->tail->id;
+		}
+		while (bms_is_empty(slot->buf->tail->readby));
 	}
 
 	LWLockRelease(slot->buf->tail_lock);
