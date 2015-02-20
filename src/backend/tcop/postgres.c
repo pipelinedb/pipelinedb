@@ -175,6 +175,13 @@ static bool ignore_till_sync = false;
  */
 static CachedPlanSource *unnamed_stmt_psrc = NULL;
 
+/*
+ * Used for passing stream insertions between the BIND and EXECUTE
+ * stages of the extended query protocol, since they bypass all of
+ * the regular portal creation and caching.
+ */
+static List *stream_inserts = NULL;
+
 /* assorted command-line switches */
 static const char *userDoption = NULL;	/* -D switch */
 
@@ -841,6 +848,30 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 	return stmt_list;
 }
 
+static void
+exec_stream_inserts(InsertStmt *ins)
+{
+	CommandDest dest = whereToSendOutput;
+	MemoryContext oldcontext;
+	int count = 0;
+	char buf[32];
+
+	oldcontext = MemoryContextSwitchTo(EventContext);
+
+	BeginCommand("INSERT", dest);
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+	count = InsertIntoStream(ins);
+	PopActiveSnapshot();
+
+	sprintf(buf, "INSERT 0 %d", count);
+	EndCommand(buf, dest);
+
+	MemoryContextSwitchTo(oldcontext);
+	MemoryContextReset(EventContext);
+
+	stream_inserts = NULL;
+}
 
 /*
  * exec_simple_query
@@ -930,24 +961,7 @@ exec_simple_query(const char *query_string)
 
 			if (InsertTargetIsStream(ins))
 			{
-				MemoryContext oldcontext;
-				int count = 0;
-				char buf[32];
-
-				oldcontext = MemoryContextSwitchTo(EventContext);
-
-				BeginCommand("INSERT", dest);
-
-				PushActiveSnapshot(GetTransactionSnapshot());
-				count = InsertIntoStream(ins);
-				PopActiveSnapshot();
-
-				sprintf(buf, "INSERT 0 %d", count);
-				EndCommand(buf, dest);
-
-				MemoryContextSwitchTo(oldcontext);
-				MemoryContextReset(EventContext);
-
+				exec_stream_inserts(ins);
 				continue;
 			}
 		}
@@ -1331,6 +1345,28 @@ exec_parse_message(const char *query_string,	/* string to execute */
 
 	if (parsetree_list != NIL)
 	{
+		raw_parse_tree = (Node *) linitial(parsetree_list);
+
+		if (IsA(raw_parse_tree, InsertStmt) && InsertTargetIsStream((InsertStmt *) raw_parse_tree))
+		{
+			if (numParams > 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								errmsg("prepared stream insertions are currently not supported")));
+
+			MemoryContextSwitchTo(oldcontext);
+
+			/* cache these so the following BIND and EXECUTE stages have access to them */
+			oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
+			stream_inserts = copyObject(parsetree_list);
+			MemoryContextSwitchTo(oldcontext);
+
+			return;
+		}
+	}
+
+	if (parsetree_list != NIL)
+	{
 		Query	   *query;
 		bool		snapshot_set = false;
 		int			i;
@@ -1527,6 +1563,12 @@ exec_bind_message(StringInfo input_message)
 	/* Get the fixed part of the message */
 	portal_name = pq_getmsgstring(input_message);
 	stmt_name = pq_getmsgstring(input_message);
+
+	if (stream_inserts != NULL)
+	{
+		/* fast path, nothing to but pass execution along to the EXECUTE stage */
+		return;
+	}
 
 	ereport(DEBUG2,
 			(errmsg("bind %s to %s",
@@ -1906,6 +1948,30 @@ exec_execute_message(const char *portal_name, long max_rows)
 	dest = whereToSendOutput;
 	if (dest == DestRemote)
 		dest = DestRemoteExecute;
+
+	/*
+	 * If we're INSERT into a stream, short circuit everything
+	 */
+	if (stream_inserts)
+	{
+		ListCell *lc;
+
+		/*
+		 * PARSE should have already put us in a transaction, but this is a noop in that case
+		 * so we might as well make sure
+		 */
+		start_xact_command();
+
+		foreach(lc, stream_inserts)
+		{
+			InsertStmt *ins = (InsertStmt *) lfirst(lc);
+			exec_stream_inserts(ins);
+		}
+
+		finish_xact_command();
+
+		return;
+	}
 
 	portal = GetPortalByName(portal_name);
 	if (!PortalIsValid(portal))
@@ -2431,6 +2497,12 @@ static void
 exec_describe_portal_message(const char *portal_name)
 {
 	Portal		portal;
+
+	if (stream_inserts)
+	{
+		pq_putemptymessage('n');	/* NoData */
+		return;
+	}
 
 	/*
 	 * Start up a transaction command. (Note that this will normally change

@@ -3849,6 +3849,40 @@ _copyAlterTSConfigurationStmt(const AlterTSConfigurationStmt *from)
 	return newnode;
 }
 
+static CreateContinuousViewStmt *
+_copyCreateContinuousViewStmt(const CreateContinuousViewStmt *from)
+{
+	CreateContinuousViewStmt *newnode = makeNode(CreateContinuousViewStmt);
+
+	COPY_NODE_FIELD(into);
+	COPY_NODE_FIELD(query);
+
+	return newnode;
+}
+
+static ActivateContinuousViewStmt *
+_copyActivateContinuousViewStmt(const ActivateContinuousViewStmt *from)
+{
+	ActivateContinuousViewStmt *newnode = makeNode(ActivateContinuousViewStmt);
+
+	COPY_NODE_FIELD(views);
+	COPY_NODE_FIELD(whereClause);
+	COPY_NODE_FIELD(withOptions);
+
+	return newnode;
+}
+
+static DeactivateContinuousViewStmt *
+_copyDeactivateContinuousViewStmt(const DeactivateContinuousViewStmt *from)
+{
+	DeactivateContinuousViewStmt *newnode = makeNode(DeactivateContinuousViewStmt);
+
+	COPY_NODE_FIELD(views);
+	COPY_NODE_FIELD(whereClause);
+
+	return newnode;
+}
+
 /* ****************************************************************
  *					pg_list.h copy functions
  * ****************************************************************
@@ -4560,6 +4594,19 @@ copyObject(const void *from)
 			break;
 		case T_AlterTSConfigurationStmt:
 			retval = _copyAlterTSConfigurationStmt(from);
+			break;
+
+			/*
+			 * PipelineDB
+			 */
+		case T_CreateContinuousViewStmt:
+			retval = _copyCreateContinuousViewStmt(from);
+			break;
+		case T_ActivateContinuousViewStmt:
+			retval = _copyActivateContinuousViewStmt(from);
+			break;
+		case T_DeactivateContinuousViewStmt:
+			retval = _copyDeactivateContinuousViewStmt(from);
 			break;
 
 		case T_A_Expr:

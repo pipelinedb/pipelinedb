@@ -842,6 +842,20 @@ standard_ProcessUtility(Node *parsetree,
 			}
 			break;
 
+		case T_ActivateContinuousViewStmt:
+			{
+				int count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree);
+				sprintf(completionTag, "ACTIVATE %d", count);
+			}
+			break;
+
+		case T_DeactivateContinuousViewStmt:
+			{
+				int count = ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
+				sprintf(completionTag, "DEACTIVATE %d", count);
+			}
+			break;
+
 		default:
 			/* All other statement types have event trigger support */
 			ProcessUtilitySlow(parsetree, queryString,
