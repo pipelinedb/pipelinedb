@@ -515,7 +515,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		ListCell *lcwithOptions;
 		ContinuousViewState state;
 		bool wasInactive = MarkContinuousViewAsActive(rv, pipeline_query);
-		elog(LOG, "DONT FUCK this %s    %d", rv->relname, wasInactive);
+
 		/*
 		 * If the user tries to activate an active CV, they'll know because
 		 * the count of CVs that were activated will be less than they
@@ -611,7 +611,6 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		if (!entry)
 			continue;
 
-		elog(LOG, "FUCK this %s", rv->relname);
 		/* Disable recovery and wait for any recovering processes to recover */
 		if (ContinuousQueryCrashRecovery)
 			DisableCQProcsRecovery(state.id);
