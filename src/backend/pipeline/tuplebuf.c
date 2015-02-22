@@ -456,6 +456,7 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	{
 		do
 		{
+			slot->buf->tail->magic = 0;
 			slot->buf->tail = slot->buf->tail->next;
 
 			if (TupleBufferIsEmpty(slot->buf))
