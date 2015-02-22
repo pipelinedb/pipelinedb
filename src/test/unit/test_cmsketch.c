@@ -111,8 +111,8 @@ Suite *test_cmsketch_suite(void)
 	Suite *s;
 	TCase *tc;
 
-	s = suite_create("test_cms");
-	tc = tcase_create("test_cms");
+	s = suite_create("test_cmsketch");
+	tc = tcase_create("test_cmsketch");
 	tcase_add_test(tc, test_basic);
 	tcase_add_test(tc, test_union);
 	tcase_add_test(tc, test_false_positives);
