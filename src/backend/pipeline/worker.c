@@ -131,6 +131,8 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 retry:
 	PG_TRY();
 	{
+		uint64_t i;
+
 		start_executor(queryDesc, runcontext, cqowner);
 
 		CurrentResourceOwner = cqowner;
@@ -158,7 +160,7 @@ retry:
 
 		TupleBufferInitLatch(WorkerTupleBuffer, MyCQId, MyWorkerId, &MyProc->procLatch);
 
-		for (;;)
+		for (i = 0;; i++)
 		{
 			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);
 
@@ -178,6 +180,9 @@ retry:
 			set_snapshot(estate, cqowner);
 
 			CurrentResourceOwner = cqowner;
+
+			if (i > 0)
+				estate->es_query_cxt = CQExecutionContext;
 
 			MemoryContextSwitchTo(estate->es_query_cxt);
 
