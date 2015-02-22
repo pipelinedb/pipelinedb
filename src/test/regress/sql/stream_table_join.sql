@@ -34,7 +34,7 @@ INSERT INTO test_stj_stream (id, data) VALUES (0, '{"key": 4}');
 INSERT INTO test_stj_stream (id, data) VALUES (1, '4');
 INSERT INTO test_stj_stream (id, data) VALUES (2, '[1, 0]');
 INSERT INTO test_stj_stream (id, data) VALUES (2, '{ "key": [0, 1] }');
-INSERT INTO test_stj_stream (id, data) VALUES (3, 42);
+INSERT INTO test_stj_stream (id, data) VALUES (3, '42');
 INSERT INTO test_stj_stream (id, data) VALUES (4, '"matched"');
 
 DEACTIVATE test_stj0, test_stj1, test_stj2, test_stj3;

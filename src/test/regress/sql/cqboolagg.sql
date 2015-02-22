@@ -6,8 +6,8 @@ CREATE CONTINUOUS VIEW test_bit_or AS SELECT k::text, bit_or(b::bit) FROM bit_st
 
 ACTIVATE test_bit_and, test_bit_or;
 
-INSERT INTO bit_stream_cqboolagg (k, b) VALUES ('x', 1), ('x', '1'), ('x', 1), ('x', 1), ('x', 1), ('x', 1), ('x', 1);
-INSERT INTO bit_stream_cqboolagg (k, b) VALUES ('y', 0), ('y', 1), ('y', 0), ('x', 1), ('x', 1), ('x', 1), ('x', 1);
+INSERT INTO bit_stream_cqboolagg (k, b) VALUES ('x', 1::bit), ('x', '1'::bit), ('x', 1::bit), ('x', 1::bit), ('x', 1::bit), ('x', 1::bit), ('x', 1::bit);
+INSERT INTO bit_stream_cqboolagg (k, b) VALUES ('y', 0::bit), ('y', 1::bit), ('y', 0::bit), ('x', 1::bit), ('x', 1::bit), ('x', 1::bit), ('x', 1::bit);
 
 DEACTIVATE test_bit_and, test_bit_or;
 
@@ -16,8 +16,8 @@ SELECT * FROM test_bit_or ORDER BY k DESC;
 
 ACTIVATE test_bit_and, test_bit_or;
 
-INSERT INTO bit_stream_cqboolagg (k, b) VALUES ('x', 1), ('x', 0);
-INSERT INTO bit_stream_cqboolagg (k, b) VALUES ('y', 0);
+INSERT INTO bit_stream_cqboolagg (k, b) VALUES ('x', 1::bit), ('x', 0::bit);
+INSERT INTO bit_stream_cqboolagg (k, b) VALUES ('y', 0::bit);
 
 DEACTIVATE test_bit_and, test_bit_or;
 
