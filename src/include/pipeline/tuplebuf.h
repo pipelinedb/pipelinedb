@@ -25,12 +25,11 @@ extern int EmptyTupleBufferWaitTime;
 
 typedef struct Tuple
 {
+	bytea *desc;
 	/* append-time values */
 	HeapTuple heaptup;
 	/* arrival time of the event */
 	TimestampTz arrivaltime;
-	/* descriptor for this event and possibly some that follow it */
-	TupleDesc desc;
 } Tuple;
 
 /* Wraps a physical event and the queries that still need to read it */
@@ -99,5 +98,8 @@ extern void TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms);
 
 extern void TupleBufferUnpinAllPinnedSlots(void);
 extern void TupleBufferClearPinnedSlots(void);
+
+extern TupleDesc TupleHeaderUnpack(char *raw);
+extern char *TupleHeaderPack(TupleDesc desc);
 
 #endif

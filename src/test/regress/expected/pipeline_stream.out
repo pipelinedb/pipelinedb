@@ -5,73 +5,73 @@ CREATE CONTINUOUS VIEW ps3 AS SELECT id::integer FROM stream3;
 CREATE CONTINUOUS VIEW ps4 AS SELECT stream4.id::integer FROM stream4, stream5;
 ACTIVATE ps0, ps1, ps2, ps3, ps4;
 SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  targets   
----------+------------
- stream0 | \x03000000
- stream1 | \x02000000
- stream2 | \x04000000
- stream3 | \x08000000
- stream4 | \x10000000
- stream5 | \x10000000
+  name   |  targets   |                   desc                   
+---------+------------+------------------------------------------
+ stream0 | \x03000000 | \x0000000169640000000017ffffffff00000000
+ stream1 | \x02000000 | \x0000000169640000000017ffffffff00000000
+ stream2 | \x04000000 | \x0000000169640000000017ffffffff00000000
+ stream3 | \x08000000 | \x0000000169640000000017ffffffff00000000
+ stream4 | \x10000000 | \x0000000169640000000017ffffffff00000000
+ stream5 | \x10000000 | \x0000000169640000000017ffffffff00000000
 (6 rows)
 
 DEACTIVATE ps1;
 SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  targets   
----------+------------
- stream0 | \x01000000
- stream2 | \x04000000
- stream3 | \x08000000
- stream4 | \x10000000
- stream5 | \x10000000
+  name   |  targets   |                   desc                   
+---------+------------+------------------------------------------
+ stream0 | \x01000000 | \x0000000169640000000017ffffffff00000000
+ stream2 | \x04000000 | \x0000000169640000000017ffffffff00000000
+ stream3 | \x08000000 | \x0000000169640000000017ffffffff00000000
+ stream4 | \x10000000 | \x0000000169640000000017ffffffff00000000
+ stream5 | \x10000000 | \x0000000169640000000017ffffffff00000000
 (5 rows)
 
 DEACTIVATE ps2;
 SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  targets   
----------+------------
- stream0 | \x01000000
- stream3 | \x08000000
- stream4 | \x10000000
- stream5 | \x10000000
+  name   |  targets   |                   desc                   
+---------+------------+------------------------------------------
+ stream0 | \x01000000 | \x0000000169640000000017ffffffff00000000
+ stream3 | \x08000000 | \x0000000169640000000017ffffffff00000000
+ stream4 | \x10000000 | \x0000000169640000000017ffffffff00000000
+ stream5 | \x10000000 | \x0000000169640000000017ffffffff00000000
 (4 rows)
 
 DEACTIVATE ps3;
 SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  targets   
----------+------------
- stream0 | \x01000000
- stream4 | \x10000000
- stream5 | \x10000000
+  name   |  targets   |                   desc                   
+---------+------------+------------------------------------------
+ stream0 | \x01000000 | \x0000000169640000000017ffffffff00000000
+ stream4 | \x10000000 | \x0000000169640000000017ffffffff00000000
+ stream5 | \x10000000 | \x0000000169640000000017ffffffff00000000
 (3 rows)
 
 DEACTIVATE ps4;
 SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  targets   
----------+------------
- stream0 | \x01000000
+  name   |  targets   |                   desc                   
+---------+------------+------------------------------------------
+ stream0 | \x01000000 | \x0000000169640000000017ffffffff00000000
 (1 row)
 
 DEACTIVATE ps0;
 SELECT * FROM pipeline_stream ORDER BY name;
- name | targets 
-------+---------
+ name | targets | desc 
+------+---------+------
 (0 rows)
 
 ACTIVATE ps0;
 SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  targets   
----------+------------
- stream0 | \x01000000
+  name   |  targets   |                   desc                   
+---------+------------+------------------------------------------
+ stream0 | \x01000000 | \x0000000169640000000017ffffffff00000000
 (1 row)
 
 ACTIVATE ps4;
 SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  targets   
----------+------------
- stream0 | \x01000000
- stream4 | \x10000000
- stream5 | \x10000000
+  name   |  targets   |                   desc                   
+---------+------------+------------------------------------------
+ stream0 | \x01000000 | \x0000000169640000000017ffffffff00000000
+ stream4 | \x10000000 | \x0000000169640000000017ffffffff00000000
+ stream5 | \x10000000 | \x0000000169640000000017ffffffff00000000
 (3 rows)
 
 DEACTIVATE ps0, ps4;
