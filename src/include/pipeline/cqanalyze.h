@@ -42,6 +42,7 @@ RangeTblEntry *TransformStreamEntry(ParseState *pstate, StreamDesc *stream);
 void RewriteStreamingAggs(SelectStmt *stmt);
 SelectStmt *GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr);
 SelectStmt *GetSelectStmtForCQCombiner(SelectStmt *stmt);
+bool AssociateTypesToColumRefs(Node *node, CQAnalyzeContext *context);
 
 AttrNumber GetHiddenAttrNumber(char *attname, TupleDesc matrel);
 Oid GetCombineStateColumnType(Expr *expr);

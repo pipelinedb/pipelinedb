@@ -1,21 +1,17 @@
 SET debug_sync_stream_insert = 'on';
-CREATE CONTINUOUS VIEW test_stream_casts0 AS SELECT k::text, SUM(v::float8) AS fsum, SUM(i::int8) AS isum, COUNT(*) FROM stream_casts_stream GROUP BY k;
 CREATE CONTINUOUS VIEW test_stream_casts1 AS SELECT k::integer, SUM(v::float4) AS fsum, SUM(i::int4) AS isum, COUNT(*) FROM stream_casts_stream GROUP BY k;
+CREATE CONTINUOUS VIEW test_stream_casts0 AS SELECT SUM(v::float8) AS fsum, SUM(i::int8) AS isum, COUNT(*) FROM stream_casts_stream;
 ACTIVATE test_stream_casts0, test_stream_casts1;
 INSERT INTO stream_casts_stream (k, v, i) VALUES ('001', 1.224, 1002);
 INSERT INTO stream_casts_stream (k, v, i) VALUES ('102', 1e15, -100);
 INSERT INTO stream_casts_stream (k, v, i) VALUES ('144', -1e-3, 1);
 INSERT INTO stream_casts_stream (k, v, i) VALUES ('042', 42.42, 0), ('42', '42.42', 1), ('144', 1, 2);
 DEACTIVATE test_stream_casts0, test_stream_casts1;
-SELECT * FROM test_stream_casts0 ORDER BY k;
-  k  | fsum  | isum | count 
------+-------+------+-------
- 001 | 1.224 | 1002 |     1
- 042 | 42.42 |    0 |     1
- 102 | 1e+15 | -100 |     1
- 144 | 0.999 |    3 |     2
- 42  | 42.42 |    1 |     1
-(5 rows)
+SELECT * FROM test_stream_casts0;
+         fsum         | isum | count 
+----------------------+------+-------
+ 1.00000000000009e+15 |  906 |     6
+(1 row)
 
 SELECT * FROM test_stream_casts1 ORDER BY k;
   k  | fsum  | isum | count 

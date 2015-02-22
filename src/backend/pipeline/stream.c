@@ -61,30 +61,7 @@ InsertTargetIsStream(InsertStmt *ins)
 bool
 IsInputStream(const char *stream)
 {
-	return GetTargetsFor(stream) != NULL;
-}
-
-static TupleDesc
-spalloc_tupledesc(TupleDesc desc)
-{
-	Size size = TUPLEDESC_FIXED_SIZE + (desc->natts * sizeof(Form_pg_attribute)) + (desc->natts * ATTRIBUTE_FIXED_PART_SIZE);
-	char *addr = spalloc(size);
-	char *attr_addr = addr + TUPLEDESC_FIXED_SIZE + (desc->natts * sizeof(Form_pg_attribute));
-	TupleDesc shared = (TupleDesc) addr;
-	int i;
-
-	memcpy(addr, desc, TUPLEDESC_FIXED_SIZE);
-
-	shared->attrs = (Form_pg_attribute *) (addr + TUPLEDESC_FIXED_SIZE);
-
-	for (i = 0; i < desc->natts; i++)
-	{
-		shared->attrs[i] = (Form_pg_attribute) attr_addr;
-		memcpy(shared->attrs[i], desc->attrs[i], ATTRIBUTE_FIXED_PART_SIZE);
-		attr_addr += ATTRIBUTE_FIXED_PART_SIZE;
-	}
-
-	return shared;
+	return GetStreamTargets(stream) != NULL;
 }
 
 /*
@@ -105,10 +82,7 @@ InsertIntoStream(InsertStmt *ins)
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
-	Bitmapset **coltypes = NULL;
-	Oid *commontypes = NULL;
-	List *exprlists = NULL;
-	List **alltypes = NULL;
+	Bitmapset *targets = GetStreamTargets(ins->relation->relname);
 
 	/* build header of column names */
 	for (i = 0; i < numcols; i++)
@@ -131,100 +105,66 @@ InsertIntoStream(InsertStmt *ins)
 		colnames = lappend(colnames, makeString(res->name));
 	}
 
-	coltypes = (Bitmapset **) palloc0(numcols * sizeof(Bitmapset *));
-	alltypes = (List **) palloc0(numcols * sizeof(List *));
-	commontypes = palloc0(numcols * sizeof(Oid));
-
-	/*
-	 * For each column in each VALUE tuple, we need to figure
-	 * out what their common supertype is and coerce them to it later
-	 * if necessary. This allows us to perform the same coercion on
-	 * each column when projecting.
-	 */
-	foreach (lc, sel->valuesLists)
-	{
-		List *vals = (List *) lfirst(lc);
-		int col = 0;
-		List *exprlist = transformExpressionList(ps, vals, EXPR_KIND_VALUES);
-		ListCell *l;
-
-		if (list_length(vals) != numcols)
-			elog(ERROR, "VALUES tuples must have %d values", numcols);
-
-		/*
-		 * For each column in the tuple, add its type to a set of types
-		 * seen for that column across all tuples.
-		 */
-		foreach(l, exprlist)
-		{
-			Expr *expr = (Expr *) lfirst(l);
-			Bitmapset *types = coltypes[col];
-			Oid etype = exprType((Node *) expr);
-
-			if (!bms_is_member(etype, types))
-			{
-				bms_add_member(types, etype);
-				alltypes[col] = lappend(alltypes[col], expr);
-			}
-
-			col++;
-		}
-
-		exprlists = lappend(exprlists, exprlist);
-	}
-
-	for (i=0; i<numcols; i++)
-	{
-		commontypes[i] = select_common_type(NULL, alltypes[i], "VALUES", NULL);
-	}
-
-	assign_expr_collations(NULL, (Node *) exprlists);
+	desc = GetStreamTupleDesc(ins->relation->relname, colnames);
 
 	/* append each VALUES tuple to the stream buffer */
-	foreach (lc, exprlists)
+	foreach (lc, sel->valuesLists)
 	{
-		List *exprlist = (List *) lfirst(lc);
+		List *raw = (List *) lfirst(lc);
+		List *exprlist = transformExpressionList(ps, raw, EXPR_KIND_VALUES);
 		List *exprstatelist;
 		ListCell *l;
 		Datum *values;
 		bool *nulls;
 		int col = 0;
+		int attindex = 0;
+		int evindex = 0;
+		List *filteredvals = NIL;
+		List *filteredcols = NIL;
+		Tuple *tuple;
 
-		/* coerce column to common supertype */
-		foreach (l, exprlist)
-		{
-			Node *n = (Node *) lfirst(l);
-			lfirst(l) = coerce_to_common_type(NULL, n, commontypes[col], "VALUES");
-			col++;
-		}
-
-		exprstatelist = (List *) ExecInitExpr((Expr *) exprlist, NULL);
+		assign_expr_collations(NULL, (Node *) exprlist);
 
 		/*
-		 * Each tuple in an insert batch has the same descriptor,
-		 * so we only have to generate it once and put it in shared
-		 * memory.
+		 * Extract all fields from the current tuple that are actually being
+		 * read by something.
 		 */
-		if (desc == NULL)
+		while (attindex < desc->natts && evindex < list_length(exprlist))
 		{
-			TupleDesc src = ExecTypeFromExprList(exprlist);
+			Value *colname = (Value *) list_nth(colnames, evindex);
+			Node *n = (Node *) list_nth(exprlist, evindex);
 
-			ExecTypeSetColNames(src, colnames);
-			desc = spalloc_tupledesc(src);
+			if (strcmp(strVal(colname), NameStr(desc->attrs[attindex]->attname)) == 0)
+			{
+				/* coerce column to common supertype */
+				Node *c = coerce_to_specific_type(NULL, n, desc->attrs[attindex]->atttypid, "VALUES");
 
-			/*
-			 * We use a negative counter and consider the TupleDesc unneeded by further
-			 * events when it reaches 0. We do this because the TupleDesc is considered
-			 * refcounted when tdrefcount >= 0, which causes the refcount to be incremented
-			 * in other places, which we don't need and it complicates things for the purpose
-			 * of stream inserts.
-			 */
-			desc->tdrefcount = -list_length(exprlists);
+				filteredvals = lappend(filteredvals, c);
+				filteredcols = lappend(filteredcols, strVal(colname));
+				attindex++;
+			}
+			evindex++;
 		}
 
-		values = palloc0(desc->natts * sizeof(Datum));
-		nulls = palloc0(desc->natts * sizeof(bool));
+		/*
+		 * If we haven't read any fields then we need to add the last one
+		 * available because a COUNT(*) might need it (annoying). We arbitrarily
+		 * use the first value in the INSERT tuple in this case.
+		 */
+		if (!filteredvals)
+		{
+			filteredvals = lappend(filteredvals, linitial(exprlist));
+			filteredcols = lappend(filteredcols, strVal(linitial(colnames)));
+		}
 
+		exprstatelist = (List *) ExecInitExpr((Expr *) filteredvals, NULL);
+
+		values = palloc0(list_length(exprstatelist) * sizeof(Datum));
+		nulls = palloc0(list_length(exprstatelist) * sizeof(bool));
+
+		/*
+		 * Eval expressions to create a tuple of constants
+		 */
 		col = 0;
 		foreach(l, exprstatelist)
 		{
@@ -234,7 +174,11 @@ InsertIntoStream(InsertStmt *ins)
 			col++;
 		}
 
-		tbs = TupleBufferInsert(WorkerTupleBuffer, MakeTuple(heap_form_tuple(desc, values, nulls), desc), GetTargetsFor(ins->relation->relname));
+		/*
+		 * Now write the tuple of constants to the TupleBuffer
+		 */
+		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc);
+		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		Assert(tbs);
 		count++;

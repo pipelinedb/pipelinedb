@@ -59,7 +59,6 @@ static char *StreamingVariants[][2] = {
 };
 
 static char *get_streaming_agg(FuncCall *fn);
-static bool associate_types_to_colrefs(Node *node, CQAnalyzeContext *context);
 static bool type_cast_all_column_refs(Node *node, CQAnalyzeContext *context);
 
 #define INTERNAL_COLNAME_PREFIX "_"
@@ -1118,7 +1117,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	AttrNumber curAttr;
 
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
-	associate_types_to_colrefs((Node *) stmt, &context);
+	AssociateTypesToColumRefs((Node *) stmt, &context);
 	type_cast_all_column_refs((Node *) stmt, &context);
 
 	workerstmt = (SelectStmt *) copyObject(stmt);
@@ -1364,8 +1363,8 @@ GetSelectStmtForCQCombiner(SelectStmt *stmt)
  *
  * Walk the parse tree and associate a single type with each inferred column
  */
-static bool
-associate_types_to_colrefs(Node *node, CQAnalyzeContext *context)
+bool
+AssociateTypesToColumRefs(Node *node, CQAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -1401,7 +1400,7 @@ associate_types_to_colrefs(Node *node, CQAnalyzeContext *context)
 		context->targets = lappend(context->targets, (ResTarget *) node);
 	}
 
-	return raw_expression_tree_walker(node, associate_types_to_colrefs, (void *) context);
+	return raw_expression_tree_walker(node, AssociateTypesToColumRefs, (void *) context);
 }
 
 static TypeCast *
@@ -1724,7 +1723,7 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 	}
 
 	/* make sure that we can infer types for every column that appears anywhere in the statement */
-	associate_types_to_colrefs((Node *) stmt, &context);
+	AssociateTypesToColumRefs((Node *) stmt, &context);
 
 	/* now indicate which relations are actually streams */
 	AddStreams((Node *) stmt->fromClause, &context);

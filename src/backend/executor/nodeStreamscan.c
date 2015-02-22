@@ -18,6 +18,7 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_coerce.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "pipeline/tuplebuf.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
@@ -53,11 +54,11 @@ map_field_positions(TupleDesc evdesc, TupleDesc desc)
 
 /*
  * Initializes the given StreamProjectionInfo for the given
- * descriptor. This allows us to cache descriptor-level information, which
+ * Tuple. This allows us to cache descriptor-level information, which
  * may only change after many event projections.
  */
 static void
-init_proj_info_for_desc(StreamProjectionInfo *pi, TupleDesc evdesc)
+init_proj_info(StreamProjectionInfo *pi, Tuple *tuple)
 {
 	MemoryContext old;
 
@@ -65,8 +66,9 @@ init_proj_info_for_desc(StreamProjectionInfo *pi, TupleDesc evdesc)
 
 	old = MemoryContextSwitchTo(pi->ctxt);
 
-	pi->attrmap = map_field_positions(evdesc, pi->resultdesc);
-	pi->curslot = MakeSingleTupleTableSlot(evdesc);
+	pi->eventdesc = UnpackTupleDesc(tuple->desc);
+	pi->attrmap = map_field_positions(pi->eventdesc, pi->resultdesc);
+	pi->curslot = MakeSingleTupleTableSlot(pi->eventdesc);
 
 	MemoryContextSwitchTo(old);
 }
@@ -91,8 +93,7 @@ StreamScanNext(StreamScanState *node)
 		return NULL;
 
 	/* update the projection info if the event descriptor has changed */
-	if (node->pi->eventdesc != tbs->tuple->desc)
-		init_proj_info_for_desc(node->pi, tbs->tuple->desc);
+	init_proj_info(node->pi, tbs->tuple);
 
 	tup = ExecStreamProject(tbs->tuple, node);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
@@ -146,6 +147,7 @@ ExecStreamProject(Tuple *event, StreamScanState *node)
 	bool *nulls;
 	int i;
 	StreamProjectionInfo *pi = node->pi;
+	TupleDesc evdesc = pi->eventdesc;
 	TupleDesc desc = pi->resultdesc;
 
 	oldcontext = MemoryContextSwitchTo(pi->ctxt);
@@ -162,11 +164,13 @@ ExecStreamProject(Tuple *event, StreamScanState *node)
 	 * For each field in the event, place it in the corresponding field in the
 	 * output tuple, coercing types if necessary.
 	 */
-	for (i = 0; i < event->desc->natts; i++)
+	for (i = 0; i < evdesc->natts; i++)
 	{
 		Datum v;
 		bool isnull;
 		int outatt = pi->attrmap[i];
+		Form_pg_attribute evatt;
+
 		if (outatt < 0)
 			continue;
 
@@ -176,16 +180,16 @@ ExecStreamProject(Tuple *event, StreamScanState *node)
 		if (isnull)
 			continue;
 
+		evatt = evdesc->attrs[i];
 		nulls[outatt] = false;
 
 		/* if the append-time value's type is different from the target type, try to coerce it */
-		if (event->desc->attrs[i]->atttypid != desc->attrs[outatt]->atttypid)
+		if (evatt->atttypid != desc->attrs[outatt]->atttypid)
 		{
-			Form_pg_attribute attr = event->desc->attrs[i];
-			Const *c = makeConst(attr->atttypid, attr->atttypmod, attr->attcollation,
-					attr->attlen, v, false, attr->attbyval);
-			Node *n = coerce_to_target_type(NULL, (Node *) c, attr->atttypid, desc->attrs[outatt]->atttypid,
-					desc->attrs[outatt]->atttypmod, COERCION_IMPLICIT, COERCE_IMPLICIT_CAST, -1);
+			Const *c = makeConst(evatt->atttypid, evatt->atttypmod, evatt->attcollation,
+					evatt->attlen, v, false, evatt->attbyval);
+			Node *n = coerce_to_target_type(NULL, (Node *) c, evatt->atttypid, desc->attrs[outatt]->atttypid,
+					desc->attrs[outatt]->atttypmod, COERCION_ASSIGNMENT, COERCE_IMPLICIT_CAST, -1);
 
 			/* if the coercion is possible, do it */
 			if (n != NULL)
@@ -204,7 +208,7 @@ ExecStreamProject(Tuple *event, StreamScanState *node)
 				 * Slow path, fall back to the original user input and try to
 				 * coerce that to the target type
 				 */
-				v = coerce_raw_input(v, event->desc->attrs[i]->atttypid,
+				v = coerce_raw_input(v, evatt->atttypid,
 						desc->attrs[outatt]->atttypid);
 			}
 		}
