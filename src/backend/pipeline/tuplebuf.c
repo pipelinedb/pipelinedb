@@ -11,6 +11,7 @@
 #include "postgres.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "libpq/pqformat.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
@@ -66,7 +67,7 @@ MakeTuple(HeapTuple heaptup, TupleDesc desc)
 {
 	Tuple *t = palloc0(sizeof(Tuple));
 	t->heaptup = heaptup;
-	t->desc = desc;
+	t->desc = PackTupleDesc(desc);
 	t->arrivaltime = GetCurrentTimestamp();
 	return t;
 }
@@ -111,6 +112,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	TupleBufferSlot *slot;
 	Size size;
 	Size tupsize;
+	int desclen = tuple->desc ? VARSIZE(tuple->desc) : 0;
 
 	if (bms == NULL)
 	{
@@ -119,7 +121,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	}
 
 	tupsize = tuple->heaptup->t_len + HEAPTUPLESIZE;
-	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(bms->nwords);
+	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(bms->nwords) + desclen;
 
 	if (size > buf->size)
 		elog(ERROR, "event of size %zu too big for stream buffer of size %zu", size, WorkerTupleBuffer->size);
@@ -169,10 +171,16 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 
 	pos += sizeof(TupleBufferSlot);
 	slot->tuple = (Tuple *) pos;
-	slot->tuple->desc = tuple->desc;
 	slot->tuple->arrivaltime = tuple->arrivaltime;
-
 	pos += sizeof(Tuple);
+
+	if (tuple->desc)
+	{
+		slot->tuple->desc = (bytea *) pos;
+		memcpy(slot->tuple->desc, tuple->desc, desclen);
+		pos += desclen;
+	}
+
 	slot->tuple->heaptup = (HeapTuple) pos;
 	slot->tuple->heaptup->t_len = tuple->heaptup->t_len;
 	slot->tuple->heaptup->t_self = tuple->heaptup->t_self;
@@ -392,14 +400,6 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 		return;
 
 	LWLockAcquire(slot->buf->tail_lock, LW_EXCLUSIVE);
-
-	/*
-	 * We're incrementing it because our refcount begins as negative
-	 * for stream inserts--see comments in stream.c:InsertIntoStream.
-	 */
-	if (slot->tuple->desc)
-		if (++slot->tuple->desc->tdrefcount == 0)
-			spfree(slot->tuple->desc);
 
 	/*
 	 * If this slot was the tail, move tail ahead to the next slot that is not fully
