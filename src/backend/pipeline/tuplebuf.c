@@ -434,6 +434,12 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 
 	LWLockAcquire(slot->buf->tail_lock, LW_EXCLUSIVE);
 
+	if (!SlotIsValid(slot) || SlotBehindTail(slot))
+	{
+		LWLockRelease(slot->buf->tail_lock);
+		return;
+	}
+
 	/*
 	 * We're incrementing it because our refcount begins as negative
 	 * for stream inserts--see comments in stream.c:InsertIntoStream.
