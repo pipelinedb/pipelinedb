@@ -128,10 +128,14 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 
 	elog(LOG, "\"%s\" worker %d running", queryDesc->plannedstmt->cq_target->relname, MyProcPid);
 
+	MarkWorkerAsRunning(MyCQId, MyWorkerId);
+
+	TupleBufferInitLatch(WorkerTupleBuffer, MyCQId, MyWorkerId, &MyProc->procLatch);
+
 retry:
 	PG_TRY();
 	{
-		uint64_t i;
+		MemoryContext es_query_cxt;
 
 		start_executor(queryDesc, runcontext, cqowner);
 
@@ -149,6 +153,9 @@ retry:
 				ALLOCSET_DEFAULT_INITSIZE,
 				ALLOCSET_DEFAULT_MAXSIZE);
 
+		es_query_cxt = estate->es_query_cxt;
+		estate->es_query_cxt = CQExecutionContext;
+
 		/*
 		 * startup tuple receiver, if we will be emitting tuples
 		 */
@@ -156,11 +163,7 @@ retry:
 
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
-		MarkWorkerAsRunning(MyCQId, MyWorkerId);
-
-		TupleBufferInitLatch(WorkerTupleBuffer, MyCQId, MyWorkerId, &MyProc->procLatch);
-
-		for (i = 0;; i++)
+		for (;;)
 		{
 			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);
 
@@ -180,9 +183,6 @@ retry:
 			set_snapshot(estate, cqowner);
 
 			CurrentResourceOwner = cqowner;
-
-			if (i > 0)
-				estate->es_query_cxt = CQExecutionContext;
 
 			MemoryContextSwitchTo(estate->es_query_cxt);
 
@@ -223,6 +223,8 @@ retry:
 		}
 
 		CurrentResourceOwner = cqowner;
+
+		estate->es_query_cxt = es_query_cxt;
 
 		/*
 		 * The cleanup functions below expect these things to be registered

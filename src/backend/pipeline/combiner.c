@@ -443,18 +443,20 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
-	MemoryContext combinectx = AllocSetContextCreate(runctx,
+	MemoryContext combinectx;
+	MemoryContext tmpctx;
+
+	CQExecutionContext = AllocSetContextCreate(runctx, "CQExecutionContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+	combinectx = AllocSetContextCreate(CQExecutionContext,
 			"CombineContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
-	MemoryContext tmpctx = AllocSetContextCreate(runctx,
+	tmpctx = AllocSetContextCreate(CQExecutionContext,
 			"CombineTmpContext",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-
-	CQExecutionContext = AllocSetContextCreate(runctx, "CQExecutionContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
@@ -554,9 +556,8 @@ retry:
 
 				tuplestore_clear(store);
 				TupleBufferClearPinnedSlots();
-				MemoryContextResetAndDeleteChildren(combinectx);
-				MemoryContextResetAndDeleteChildren(tmpctx);
-				MemoryContextResetAndDeleteChildren(CQExecutionContext);
+
+				MemoryContextReset(CQExecutionContext);
 
 				last_combine = GetCurrentTimestamp();
 				count = 0;
@@ -617,9 +618,7 @@ retry:
 
 		TupleBufferUnpinAllPinnedSlots();
 
-		MemoryContextResetAndDeleteChildren(combinectx);
-		MemoryContextResetAndDeleteChildren(tmpctx);
-		MemoryContextResetAndDeleteChildren(CQExecutionContext);
+		MemoryContextReset(CQExecutionContext);
 
 		if (ContinuousQueryCrashRecovery)
 			goto retry;
