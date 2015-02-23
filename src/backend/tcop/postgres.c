@@ -849,8 +849,8 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 	return stmt_list;
 }
 
-static void
-exec_stream_inserts(InsertStmt *ins)
+void
+exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *values)
 {
 	CommandDest dest = whereToSendOutput;
 	MemoryContext oldcontext;
@@ -862,7 +862,16 @@ exec_stream_inserts(InsertStmt *ins)
 	BeginCommand("INSERT", dest);
 
 	PushActiveSnapshot(GetTransactionSnapshot());
-	count = InsertIntoStream(ins);
+	if (pstmt)
+	{
+		count = InsertIntoStreamPrepared(pstmt);
+	}
+	else
+	{
+		List *vals = values ? values : ((SelectStmt *) ins->selectStmt)->valuesLists;
+
+		count = InsertIntoStream(ins, vals);
+	}
 	PopActiveSnapshot();
 
 	sprintf(buf, "INSERT 0 %d", count);
@@ -896,7 +905,7 @@ exec_simple_query(const char *query_string)
 	/*
 	 * Report query to various monitoring facilities.
 	 */
-	debug_query_string = NULL;//query_string;
+	debug_query_string = query_string;
 
 	pgstat_report_activity(STATE_RUNNING, query_string);
 
@@ -962,7 +971,7 @@ exec_simple_query(const char *query_string)
 
 			if (InsertTargetIsStream(ins))
 			{
-				exec_stream_inserts(ins);
+				exec_stream_inserts(ins, NULL, NIL);
 				continue;
 			}
 		}
@@ -1270,6 +1279,7 @@ exec_parse_message(const char *query_string,	/* string to execute */
 	bool		is_named;
 	bool		save_log_statement_stats = log_statement_stats;
 	char		msec_str[32];
+	bool stream_insert = false;
 
 	/*
 	 * Report query to various monitoring facilities.
@@ -1344,25 +1354,38 @@ exec_parse_message(const char *query_string,	/* string to execute */
 				(errcode(ERRCODE_SYNTAX_ERROR),
 		errmsg("cannot insert multiple commands into a prepared statement")));
 
+
 	if (parsetree_list != NIL)
 	{
 		raw_parse_tree = (Node *) linitial(parsetree_list);
+		stream_insert = IsA(raw_parse_tree, InsertStmt) && InsertTargetIsStream((InsertStmt *) raw_parse_tree);
 
-		if (IsA(raw_parse_tree, InsertStmt) && InsertTargetIsStream((InsertStmt *) raw_parse_tree))
+		if (stream_insert)
 		{
-			if (numParams > 0)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								errmsg("prepared stream insertions are currently not supported")));
-
+			InsertStmt *ins = (InsertStmt *) raw_parse_tree;
+			/*
+			 * If there aren't any parameters then we can bail early and insert into the stream now.
+			 * When we have params, a little more work is required for stream insertions.
+			 */
 			MemoryContextSwitchTo(oldcontext);
 
 			/* cache these so the following BIND and EXECUTE stages have access to them */
 			oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
 			stream_inserts = copyObject(parsetree_list);
-			MemoryContextSwitchTo(oldcontext);
 
-			return;
+			if (numParams == 0)
+			{
+				parsetree_list = NIL;
+			}
+			else
+			{
+				/*
+				 * We'll add the Eval'd params to this during BIND
+				 */
+				StorePreparedStreamInsert(stmt_name, ins->relation->relname, ins->cols);
+			}
+
+			MemoryContextSwitchTo(oldcontext);
 		}
 	}
 
@@ -1440,7 +1463,10 @@ exec_parse_message(const char *query_string,	/* string to execute */
 		if (log_parser_stats)
 			ShowUsage("PARSE ANALYSIS STATISTICS");
 
-		querytree_list = pg_rewrite_query(query);
+		if (!stream_insert)
+			querytree_list = pg_rewrite_query(query);
+		else
+			querytree_list = NIL;
 
 		/* Done with the snapshot used for parsing */
 		if (snapshot_set)
@@ -1560,16 +1586,12 @@ exec_bind_message(StringInfo input_message)
 	bool		save_log_statement_stats = log_statement_stats;
 	bool		snapshot_set = false;
 	char		msec_str[32];
+	MemoryContext param_context;
+	PreparedStreamInsertStmt *stream_insert_stmt = NULL;
 
 	/* Get the fixed part of the message */
 	portal_name = pq_getmsgstring(input_message);
 	stmt_name = pq_getmsgstring(input_message);
-
-	if (stream_inserts != NULL)
-	{
-		/* fast path, nothing to but pass execution along to the EXECUTE stage */
-		return;
-	}
 
 	ereport(DEBUG2,
 			(errmsg("bind %s to %s",
@@ -1594,14 +1616,23 @@ exec_bind_message(StringInfo input_message)
 					 errmsg("unnamed prepared statement does not exist")));
 	}
 
+	if (psrc && psrc->raw_parse_tree && IsA(psrc->raw_parse_tree, InsertStmt))
+		stream_insert_stmt = FetchPreparedStreamInsert(portal_name);
+
+	if (!stream_insert_stmt && stream_inserts != NULL)
+	{
+		/*
+		 * It's a stream PREPARE/EXECUTE stream INSERT without a prepared statement
+		 */
+		return;
+	}
+
 	/*
 	 * Report query to various monitoring facilities.
 	 */
 	debug_query_string = psrc->query_string;
 
 	pgstat_report_activity(STATE_RUNNING, psrc->query_string);
-
-	set_ps_display("BIND", false);
 
 	if (save_log_statement_stats)
 		ResetUsage();
@@ -1668,13 +1699,16 @@ exec_bind_message(StringInfo input_message)
 	else
 		portal = CreatePortal(portal_name, false, false);
 
+
 	/*
 	 * Prepare to copy stuff into the portal's memory context.  We do all this
 	 * copying first, because it could possibly fail (out-of-memory) and we
 	 * don't want a failure to occur between GetCachedPlan and
 	 * PortalDefineQuery; that would result in leaking our plancache refcount.
 	 */
-	oldContext = MemoryContextSwitchTo(PortalGetHeapMemory(portal));
+	param_context = stream_insert_stmt ? EventContext : PortalGetHeapMemory(portal);
+
+	oldContext = MemoryContextSwitchTo(param_context);
 
 	/* Copy the plan's query string into the portal */
 	query_string = pstrdup(psrc->query_string);
@@ -1692,9 +1726,9 @@ exec_bind_message(StringInfo input_message)
 	 * snapshot active till we're done, so that plancache.c doesn't have to
 	 * take new ones.
 	 */
-	if (numParams > 0 ||
+	if (!stream_insert_stmt && (numParams > 0 ||
 		(psrc->raw_parse_tree &&
-		 analyze_requires_snapshot(psrc->raw_parse_tree)))
+		 analyze_requires_snapshot(psrc->raw_parse_tree))))
 	{
 		PushActiveSnapshot(GetTransactionSnapshot());
 		snapshot_set = true;
@@ -1874,9 +1908,17 @@ exec_bind_message(StringInfo input_message)
 					  cplan->stmt_list,
 					  cplan);
 
+
 	/* Done with the snapshot used for parameter I/O and parsing/planning */
 	if (snapshot_set)
 		PopActiveSnapshot();
+
+	if (stream_insert_stmt)
+	{
+		AddPreparedStreamInsert(stream_insert_stmt, params);
+
+		return;
+	}
 
 	/*
 	 * And we're ready to start portal execution.
@@ -1944,29 +1986,40 @@ exec_execute_message(const char *portal_name, long max_rows)
 	bool		execute_is_fetch;
 	bool		was_logged = false;
 	char		msec_str[32];
+	PreparedStreamInsertStmt *stream_insert_stmt;
 
 	/* Adjust destination to tell printtup.c what to do */
 	dest = whereToSendOutput;
 	if (dest == DestRemote)
 		dest = DestRemoteExecute;
 
+	stream_insert_stmt = FetchPreparedStreamInsert(portal_name);
 	/*
-	 * If we're INSERT into a stream, short circuit everything
+	 * If we're INSERTing into a stream, short circuit everything
 	 */
-	if (stream_inserts)
+	if (HasPendingInserts(stream_insert_stmt) || stream_inserts)
 	{
 		ListCell *lc;
-
 		/*
 		 * PARSE should have already put us in a transaction, but this is a noop in that case
 		 * so we might as well make sure
 		 */
 		start_xact_command();
 
-		foreach(lc, stream_inserts)
+		if (stream_insert_stmt)
 		{
-			InsertStmt *ins = (InsertStmt *) lfirst(lc);
-			exec_stream_inserts(ins);
+			/* we already have the eval'd values */
+			exec_stream_inserts(NULL, stream_insert_stmt, NIL);
+		}
+		else
+		{
+			/* we have parsed expressions and they still need to be eval'd */
+			foreach(lc, stream_inserts)
+			{
+				InsertStmt *ins = (InsertStmt *) lfirst(lc);
+				exec_stream_inserts(ins, NULL, NIL);
+			}
+			stream_inserts = NULL;
 		}
 
 		finish_xact_command();
@@ -2499,7 +2552,7 @@ exec_describe_portal_message(const char *portal_name)
 {
 	Portal		portal;
 
-	if (stream_inserts)
+	if (stream_inserts || HasPendingInserts(FetchPreparedStreamInsert(portal_name)))
 	{
 		pq_putemptymessage('n');	/* NoData */
 		return;
