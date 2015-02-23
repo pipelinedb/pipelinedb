@@ -185,7 +185,7 @@ ExecEndBatchContinuousUnique(ContinuousUniqueState *node)
 {
 	ExecClearTuple(node->ps.ps_ResultTupleSlot);
 
-	if (node->distinct)
+	if (IsWorker && node->distinct)
 	{
 		pfree(node->distinct);
 		node->distinct = GetDistinctBloomFilter(NameStr(node->cvname));
