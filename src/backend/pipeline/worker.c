@@ -128,6 +128,10 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 
 	elog(LOG, "\"%s\" worker %d running", queryDesc->plannedstmt->cq_target->relname, MyProcPid);
 
+	MarkWorkerAsRunning(MyCQId, MyWorkerId);
+
+	TupleBufferInitLatch(WorkerTupleBuffer, MyCQId, MyWorkerId, &MyProc->procLatch);
+
 retry:
 	PG_TRY();
 	{
@@ -153,10 +157,6 @@ retry:
 		estate->es_lastoid = InvalidOid;
 
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
-
-		MarkWorkerAsRunning(MyCQId, MyWorkerId);
-
-		TupleBufferInitLatch(WorkerTupleBuffer, MyCQId, MyWorkerId, &MyProc->procLatch);
 
 		for (;;)
 		{
@@ -191,6 +191,7 @@ retry:
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
 			TupleBufferClearPinnedSlots();
+			MemoryContextReset(CQExecutionContext);
 
 			MemoryContextSwitchTo(runcontext);
 			CurrentResourceOwner = cqowner;
@@ -210,7 +211,7 @@ retry:
 				last_process = GetCurrentTimestamp();
 			}
 
-			MemoryContextReset(CQExecutionContext);
+
 
 			/* Has the CQ been deactivated? */
 			if (!entry->active)
