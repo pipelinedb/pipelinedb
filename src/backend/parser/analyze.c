@@ -30,6 +30,7 @@
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -46,6 +47,7 @@
 #include "parser/parse_target.h"
 #include "parser/parsetree.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/stream.h"
 #include "rewrite/rewriteManip.h"
 #include "tcop/tcopprot.h"
 #include "miscadmin.h"
@@ -431,6 +433,7 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	ListCell   *icols;
 	ListCell   *attnos;
 	ListCell   *lc;
+	bool isStream = InsertTargetIsStream(stmt);
 
 	/* There can't be any outer WITH to worry about */
 	Assert(pstate->p_ctenamespace == NIL);
@@ -490,8 +493,21 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	 * mentioned in the SELECT part.  Note that the target table is not added
 	 * to the joinlist or namespace.
 	 */
-	qry->resultRelation = setTargetTable(pstate, stmt->relation,
-										 false, false, ACL_INSERT);
+	if (isStream)
+	{
+		Relation stream = (Relation) palloc0(sizeof(RelationData));
+
+		stream->rd_att = GetStreamTupleDesc(stmt->relation->relname, stmt->cols);
+		stream->rd_rel = palloc0(sizeof(FormData_pg_class));
+		stream->rd_rel->relnatts = stream->rd_att->natts;
+
+		pstate->p_target_relation = stream;
+	}
+	else
+	{
+		qry->resultRelation = setTargetTable(pstate, stmt->relation,
+											 false, false, ACL_INSERT);
+	}
 
 	/* Validate stmt->cols list, or build default list if no list given */
 	icolumns = checkInsertTargets(pstate, stmt->cols, &attrnos);
@@ -745,8 +761,9 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 							  false);
 		qry->targetList = lappend(qry->targetList, tle);
 
-		rte->modifiedCols = bms_add_member(rte->modifiedCols,
-							  attr_num - FirstLowInvalidHeapAttributeNumber);
+		if (!isStream)
+			rte->modifiedCols = bms_add_member(rte->modifiedCols,
+									attr_num - FirstLowInvalidHeapAttributeNumber);
 
 		icols = lnext(icols);
 		attnos = lnext(attnos);
@@ -774,6 +791,13 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	qry->hasSubLinks = pstate->p_hasSubLinks;
 
 	assign_query_collations(pstate, qry);
+
+	if (isStream)
+	{
+		pfree(pstate->p_target_relation->rd_rel);
+		pfree(pstate->p_target_relation);
+		pstate->p_target_relation = NULL;
+	}
 
 	return qry;
 }
@@ -1931,7 +1955,7 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	}
 
 	qry->resultRelation = setTargetTable(pstate, stmt->relation,
-								  interpretInhOption(stmt->relation->inhOpt),
+									interpretInhOption(stmt->relation->inhOpt),
 										 true,
 										 ACL_UPDATE);
 
