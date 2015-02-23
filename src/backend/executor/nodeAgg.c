@@ -1532,28 +1532,6 @@ agg_fill_hash_table(AggState *aggstate)
 	}
 }
 
-static void
-clear_hash_table(AggState *aggstate)
-{
-	AggHashEntry entry;
-	TupleTableSlot *firstSlot = aggstate->ss.ss_ScanTupleSlot;
-
-	if (aggstate->hashtable == NULL)
-		return;
-
-	ResetTupleHashIterator(aggstate->hashtable, &aggstate->hashiter);
-	for (;;)
-	{
-		entry = (AggHashEntry) ScanTupleHashTable(&aggstate->hashiter);
-		if (entry == NULL)
-			break;
-
-		ExecStoreMinimalTuple(entry->shared.firstTuple, firstSlot, false);
-		RemoveTupleHashEntry(aggstate->hashtable, firstSlot);
-	}
-	hash_unfreeze(aggstate->hashtable->hashtab);
-}
-
 /*
  * ExecAgg for hashed case: phase 2, retrieving groups from hash table
  */
