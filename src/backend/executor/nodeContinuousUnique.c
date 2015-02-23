@@ -166,7 +166,7 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 							  ALLOCSET_DEFAULT_MAXSIZE);
 
 	/*
-	 * Load the multiset from pipeline_query.
+	 * Load the DISTINCT bloom filter from pipeline_tstate.
 	 */
 	oldcontext = MemoryContextSwitchTo(state->tmpContext);
 	state->distinct = GetDistinctBloomFilter(NameStr(state->cvname));
