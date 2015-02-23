@@ -52,7 +52,6 @@ get_bytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf
 	}
 }
 
-
 /* ----------------------------------------------------------------
  *		ExecContinuousUnique
  * ----------------------------------------------------------------

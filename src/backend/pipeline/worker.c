@@ -135,8 +135,6 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 retry:
 	PG_TRY();
 	{
-		MemoryContext es_query_cxt;
-
 		start_executor(queryDesc, runcontext, cqowner);
 
 		CurrentResourceOwner = cqowner;
@@ -152,9 +150,6 @@ retry:
 				ALLOCSET_DEFAULT_MINSIZE,
 				ALLOCSET_DEFAULT_INITSIZE,
 				ALLOCSET_DEFAULT_MAXSIZE);
-
-		es_query_cxt = estate->es_query_cxt;
-//		estate->es_query_cxt = CQExecutionContext;
 
 		/*
 		 * startup tuple receiver, if we will be emitting tuples
@@ -195,7 +190,10 @@ retry:
 			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
+			ExecutorRewind(queryDesc);
+
 			TupleBufferClearPinnedSlots();
+			MemoryContextReset(CQExecutionContext);
 
 			MemoryContextSwitchTo(runcontext);
 			CurrentResourceOwner = cqowner;
@@ -215,7 +213,7 @@ retry:
 				last_process = GetCurrentTimestamp();
 			}
 
-			MemoryContextReset(CQExecutionContext);
+
 
 			/* Has the CQ been deactivated? */
 			if (!entry->active)
@@ -223,8 +221,6 @@ retry:
 		}
 
 		CurrentResourceOwner = cqowner;
-
-		estate->es_query_cxt = es_query_cxt;
 
 		/*
 		 * The cleanup functions below expect these things to be registered
