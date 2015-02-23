@@ -31,9 +31,84 @@
 #include "utils/memutils.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
+#include "utils/typcache.h"
 
 /* Whether or not to block till the events are consumed by a cv*/
 bool DebugSyncStreamInsert;
+
+static HTAB *prepared_stream_inserts = NULL;
+
+/*
+ * StorePreparedStreamInsert
+ *
+ * Create a PreparedStreamInsertStmt with the given column names
+ */
+PreparedStreamInsertStmt *
+StorePreparedStreamInsert(const char *name, const char *stream, List *cols)
+{
+	PreparedStreamInsertStmt *result;
+	bool found;
+
+	if (prepared_stream_inserts == NULL)
+	{
+		HASHCTL ctl;
+
+		MemSet(&ctl, 0, sizeof(ctl));
+
+		ctl.keysize = NAMEDATALEN;
+		ctl.entrysize = sizeof(PreparedStreamInsertStmt);
+
+		prepared_stream_inserts = hash_create("prepared_stream_inserts", 2, &ctl, HASH_ELEM);
+	}
+
+	result = (PreparedStreamInsertStmt *)
+			hash_search(prepared_stream_inserts, (void *) name, HASH_ENTER, &found);
+
+	result->inserts = NIL;
+	result->stream = (char *) stream;
+	result->cols = cols;
+	result->desc = GetStreamTupleDesc(stream, cols);
+
+	return result;
+}
+
+/*
+ * AddPreparedStreamInsert
+ *
+ * Add a Datum tuple to the PreparedStreamInsertStmt
+ */
+void
+AddPreparedStreamInsert(PreparedStreamInsertStmt *stmt, ParamListInfoData *params)
+{
+	stmt->inserts = lappend(stmt->inserts, params);
+}
+
+/*
+ * FetchPreparedStreamInsert
+ *
+ * Retrieve the given PreparedStreamInsertStmt, or NULL of it doesn't exist
+ */
+PreparedStreamInsertStmt *
+FetchPreparedStreamInsert(const char *name)
+{
+	if (prepared_stream_inserts == NULL)
+		return NULL;
+
+	return (PreparedStreamInsertStmt *)
+			hash_search(prepared_stream_inserts, (void *) name, HASH_FIND, NULL);
+}
+
+/*
+ * DropPreparedStreamInsert
+ *
+ * Remove a PreparedStreamInsertStmt
+ */
+void
+DropPreparedStreamInsert(const char *name)
+{
+	if (prepared_stream_inserts)
+		hash_search(prepared_stream_inserts, (void *) name, HASH_REMOVE, NULL);
+}
 
 /*
  * InsertTargetIsStream
@@ -64,14 +139,66 @@ IsInputStream(const char *stream)
 }
 
 /*
+ * InsertIntoStreamPrepared
+ *
+ * Send Datum-encoded events to the given stream
+ */
+int
+InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
+{
+	ListCell *lc;
+	int count;
+	Bitmapset *targets = GetStreamTargets(pstmt->stream);
+	TupleBufferSlot* tbs = NULL;
+	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
+
+	foreach(lc, pstmt->inserts)
+	{
+		int i;
+		ParamListInfoData *params = (ParamListInfoData *) lfirst(lc);
+		Datum *values = palloc0(params->numParams * sizeof(Datum));
+		bool *nulls = palloc0(params->numParams * sizeof(bool));
+		Tuple *tuple;
+
+		for (i=0; i<params->numParams; i++)
+		{
+			TypeCacheEntry *type = lookup_type_cache(params->params[i].ptype, 0);
+			/*
+			 * The incoming param may have a different but cast-compatible type with
+			 * the target, so we change the TupleDesc before it gets physically packed
+			 * in with the event. Eventually it will be casted to the correct type.
+			 */
+			desc->attrs[i]->atttypid = params->params[i].ptype;
+			desc->attrs[i]->attbyval = type->typbyval;
+			desc->attrs[i]->attalign = type->typalign;
+			desc->attrs[i]->attlen = type->typlen;
+
+			values[i] = params->params[i].value;
+			nulls[i] = params->params[i].isnull;
+		}
+
+		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc);
+		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+
+		count++;
+	}
+
+	if (DebugSyncStreamInsert)
+		TupleBufferWaitOnSlot(tbs, 5);
+
+	pstmt->inserts = NIL;
+
+	return count;
+}
+
+/*
  * InsertIntoStream
  *
  * Send INSERT-encoded events to the given stream
  */
 int
-InsertIntoStream(InsertStmt *ins)
+InsertIntoStream(InsertStmt *ins, List *values)
 {
-	SelectStmt *sel = (SelectStmt *) ins->selectStmt;
 	ListCell *lc;
 	TupleBufferSlot* tbs = NULL;
 	int numcols = list_length(ins->cols);
@@ -107,7 +234,7 @@ InsertIntoStream(InsertStmt *ins)
 	desc = GetStreamTupleDesc(ins->relation->relname, colnames);
 
 	/* append each VALUES tuple to the stream buffer */
-	foreach (lc, sel->valuesLists)
+	foreach (lc, values)
 	{
 		List *raw = (List *) lfirst(lc);
 		List *exprlist = transformExpressionList(ps, raw, EXPR_KIND_VALUES);
