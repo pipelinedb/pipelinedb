@@ -180,6 +180,18 @@ ExecEndContinuousUnique(ContinuousUniqueState *node)
 	ExecEndNode(outerPlanState(node));
 }
 
+void
+ExecEndBatchContinuousUnique(ContinuousUniqueState *node)
+{
+	ExecClearTuple(node->ps.ps_ResultTupleSlot);
+
+	if (node->distinct)
+	{
+		pfree(node->distinct);
+		node->distinct = GetDistinctBloomFilter(NameStr(node->cvname));
+		node->dirty = false;
+	}
+}
 
 void
 ExecReScanContinuousUnique(ContinuousUniqueState *node)

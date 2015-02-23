@@ -429,5 +429,6 @@ ExecReScanStreamTableJoin(StreamTableJoinState *node)
 	}
 
 	node->stj_NeedNewOuter = true;
+	node->stj_NeedNewInner = true;
 	list_free(nodes);
 }
