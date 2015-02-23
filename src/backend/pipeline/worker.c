@@ -190,7 +190,7 @@ retry:
 			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
-			ExecutorRewind(queryDesc);
+//			ExecutorRewind(queryDesc);
 
 			TupleBufferClearPinnedSlots();
 			MemoryContextReset(CQExecutionContext);
