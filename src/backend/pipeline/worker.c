@@ -154,7 +154,7 @@ retry:
 				ALLOCSET_DEFAULT_MAXSIZE);
 
 		es_query_cxt = estate->es_query_cxt;
-		estate->es_query_cxt = CQExecutionContext;
+//		estate->es_query_cxt = CQExecutionContext;
 
 		/*
 		 * startup tuple receiver, if we will be emitting tuples
