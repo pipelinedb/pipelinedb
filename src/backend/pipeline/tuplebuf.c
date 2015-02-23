@@ -426,8 +426,12 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 static void
 unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 {
+	TupleBuffer *buf;
+
 	if (!SlotIsValid(slot) || SlotBehindTail(slot))
 		return;
+
+	buf = slot->buf;
 
 	SpinLockAcquire(&slot->mutex);
 	bms_del_member(slot->readby, cq_id);
@@ -435,16 +439,16 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 
 	if (DebugPrintTupleBuffer)
 		elog(LOG, "[%d] unpinned event at [%d, %d); readers %d",
-				cq_id, BufferOffset(slot->buf, slot), BufferOffset(slot->buf, SlotEnd(slot)), bms_num_members(slot->readby));
+				cq_id, BufferOffset(buf, slot), BufferOffset(buf, SlotEnd(slot)), bms_num_members(slot->readby));
 
 	if (!bms_is_empty(slot->readby))
 		return;
 
-	LWLockAcquire(slot->buf->tail_lock, LW_EXCLUSIVE);
+	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
 
 	if (!SlotIsValid(slot) || SlotBehindTail(slot))
 	{
-		LWLockRelease(slot->buf->tail_lock);
+		LWLockRelease(buf->tail_lock);
 		return;
 	}
 
@@ -456,18 +460,18 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	{
 		do
 		{
-			slot->buf->tail->magic = 0;
-			slot->buf->tail = slot->buf->tail->next;
+			buf->tail->magic = 0;
+			buf->tail = buf->tail->next;
 
-			if (TupleBufferIsEmpty(slot->buf))
+			if (TupleBufferIsEmpty(buf))
 				break;
 
-			slot->buf->tail_id = slot->buf->tail->id;
+			buf->tail_id = buf->tail->id;
 		}
-		while (bms_is_empty(slot->buf->tail->readby));
+		while (bms_is_empty(buf->tail->readby));
 	}
 
-	LWLockRelease(slot->buf->tail_lock);
+	LWLockRelease(buf->tail_lock);
 }
 
 /*
