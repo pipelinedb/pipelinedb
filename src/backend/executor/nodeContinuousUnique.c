@@ -83,7 +83,6 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 	 */
 	for (;;)
 	{
-		StringInfoData buf;
 		bool missing;
 
 		/*
