@@ -506,7 +506,7 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 		float8 q, k;
 
 		c = AVLNodeNext(it);
-		if (i > last_neighbor)
+		if (!c || i > last_neighbor)
 			break;
 		q = t->count == 1 ? 0.5 : (sum + (c->count - 1) / 2.0) / (t->count -1 );
 		k = 4 * t->count * q * (1 - q) / t->compression;
@@ -528,7 +528,7 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 		c = CentroidCreate();
 	else
 	{
-		c = CentroidCopy(c);
+		c = CentroidCopy(closest);
 		AVLNodeRemove(t->summary, c);
 	}
 
