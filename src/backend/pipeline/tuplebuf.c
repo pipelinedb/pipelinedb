@@ -11,6 +11,7 @@
 #include "postgres.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "libpq/pqformat.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
@@ -29,14 +30,16 @@
 #define MAGIC 0xDEADBABE /* x_x */
 #define MAX_CQS 128 /* TODO(usmanm): Make this dynamic */
 #define MURMUR_SEED 0x9eaca8149c92387e
+#define INSERT_SLEEP_MS 1
 
 #define BufferOffset(buf, ptr) ((int32) ((char *) (ptr) - (buf)->start))
+#define BufferEnd(buf) ((buf)->start + (buf)->size)
 #define SlotEnd(slot) ((char *) (slot) + (slot)->size)
 #define SlotNext(slot) ((TupleBufferSlot *) SlotEnd(slot))
-#define NoUnreadSlots(reader) ((reader)->slot == (reader)->buf->head && (reader)->nonce == (reader)->buf->nonce)
+#define NoUnreadSlots(reader) ((reader)->slot_id == (reader)->buf->head_id)
 #define SlotIsValid(slot) ((slot) && (slot)->magic == MAGIC)
-#define SlotBehindTail(slot) (!(slot) || (slot) < (slot)->buf->tail || (slot)->nonce < (slot)->buf->nonce)
-#define SlotEqualsTail(slot) ((slot) == (slot)->buf->tail && (slot)->nonce == (slot)->buf->nonce)
+#define SlotBehindTail(slot) ((slot)->id < (slot)->buf->tail_id)
+#define SlotEqualsTail(slot) ((slot) == (slot)->buf->tail && (slot)->id == (slot)->buf->tail_id)
 
 /* Whether or not to print the state of the stream buffer as it changes */
 bool DebugPrintTupleBuffer;
@@ -66,7 +69,7 @@ MakeTuple(HeapTuple heaptup, TupleDesc desc)
 {
 	Tuple *t = palloc0(sizeof(Tuple));
 	t->heaptup = heaptup;
-	t->desc = desc;
+	t->desc = PackTupleDesc(desc);
 	t->arrivaltime = GetCurrentTimestamp();
 	return t;
 }
@@ -107,10 +110,12 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 {
 	char *start;
 	char *pos;
-	char *end = buf->start + buf->size;
+	char *end;
+	bool was_empty;
 	TupleBufferSlot *slot;
 	Size size;
 	Size tupsize;
+	int desclen = tuple->desc ? VARSIZE(tuple->desc) : 0;
 
 	if (bms == NULL)
 	{
@@ -119,7 +124,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	}
 
 	tupsize = tuple->heaptup->t_len + HEAPTUPLESIZE;
-	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(bms->nwords);
+	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(bms->nwords) + desclen;
 
 	if (size > buf->size)
 		elog(ERROR, "event of size %zu too big for stream buffer of size %zu", size, WorkerTupleBuffer->size);
@@ -127,34 +132,59 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	LWLockAcquire(buf->head_lock, LW_EXCLUSIVE);
 	LWLockAcquire(buf->tail_lock, LW_SHARED);
 
-	start = (char *) buf->head;
-
-	/*
-	 * Wrap around if buffer is empty. Or if there isn't
-	 * enough space at the end, wait till all events in the buffer
-	 * are read and then wrap around.
-	 */
-	if (TupleBufferIsEmpty(buf) || size > end - start)
+	/* If the buffer is empty, we'll have to reset the tail, so upgrade to an EXCLUSIVE lock. */
+	if (TupleBufferIsEmpty(buf))
 	{
-		while (!TupleBufferIsEmpty(buf))
-		{
-			LWLockRelease(buf->tail_lock);
-			pg_usleep(500); /* 0.5ms */
-			LWLockAcquire(buf->tail_lock, LW_SHARED);
-		}
-
-		start = buf->start;
-
-		/*
-		 * Since we're wrapping around, we'll be resetting the tail and
-		 * so should upgrade the tail_lock to EXCLUSIVE.
-		 */
 		LWLockRelease(buf->tail_lock);
 		LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
 
-		buf->tail = (TupleBufferSlot *) start;
-		buf->nonce++;
+		buf->head = NULL;
+
+		start = buf->start;
+		end = BufferEnd(buf);
 	}
+	else
+	{
+		start = SlotEnd(buf->head);
+
+		/* If the tail is infront of us, then don't go beyond it. */
+		if (buf->tail > buf->head)
+			end = (char *) buf->tail;
+		else
+		{
+			end = BufferEnd(buf);
+
+			/* If there is not enough space left in the buffer, wrap around. */
+			if (size > end - start)
+			{
+				start = buf->start;
+				end = (char *) buf->tail;
+			}
+		}
+
+		/* If there isn't enough space, then wait for the tail to move on till there is enough. */
+		while (size > end - start)
+		{
+			LWLockRelease(buf->tail_lock);
+			pg_usleep(INSERT_SLEEP_MS * 1000);
+			LWLockAcquire(buf->tail_lock, LW_SHARED);
+
+			if (TupleBufferIsEmpty(buf))
+			{
+				LWLockRelease(buf->tail_lock);
+				LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
+
+				buf->head = NULL;
+
+				start = buf->start;
+				end = BufferEnd(buf);
+			}
+			else
+				end = (char *) buf->tail;
+		}
+	}
+
+	was_empty = TupleBufferIsEmpty(buf);
 
 	pos = start;
 
@@ -162,17 +192,24 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	MemSet(pos, 0, size);
 	slot = (TupleBufferSlot *) pos;
 	slot->magic = MAGIC;
-	slot->nonce = buf->nonce;
-	slot->size = size;
+	slot->id = buf->head_id + 1;
+	slot->next = NULL;
 	slot->buf = buf;
+	slot->size = size;
 	SpinLockInit(&slot->mutex);
 
 	pos += sizeof(TupleBufferSlot);
 	slot->tuple = (Tuple *) pos;
-	slot->tuple->desc = tuple->desc;
 	slot->tuple->arrivaltime = tuple->arrivaltime;
-
 	pos += sizeof(Tuple);
+
+	if (tuple->desc)
+	{
+		slot->tuple->desc = (bytea *) pos;
+		memcpy(slot->tuple->desc, tuple->desc, desclen);
+		pos += desclen;
+	}
+
 	slot->tuple->heaptup = (HeapTuple) pos;
 	slot->tuple->heaptup->t_len = tuple->heaptup->t_len;
 	slot->tuple->heaptup->t_self = tuple->heaptup->t_self;
@@ -185,10 +222,24 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	memcpy(slot->readby, bms, BITMAPSET_SIZE(bms->nwords));
 
 	/* Move head forward */
-	buf->head = SlotNext(slot);
+	if (buf->head)
+	{
+		buf->head->next = slot;
+		buf->head = slot;
+	}
+	else
+	{
+		Assert(TupleBufferIsEmpty(buf));
 
-	/* Wake up all waiters if we wrapped around. */
-	if (start == buf->start)
+		buf->head = slot;
+		buf->tail = slot;
+		buf->tail_id = slot->id;
+	}
+
+	buf->head_id = buf->head->id;
+
+	/* Notify all readers if we were empty. */
+	if (was_empty)
 		TupleBufferNotifyAndClearWaiters(buf);
 
 	LWLockRelease(buf->tail_lock);
@@ -253,8 +304,8 @@ TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, uin
 		buf->size = size;
 		MemSet(buf->start, 0, size);
 
-		buf->head = (TupleBufferSlot *) buf->start;
-		buf->tail = buf->head;
+		buf->head = NULL;
+		buf->tail = NULL;
 
 		buf->latches = (Latch **) spalloc0(sizeof(Latch *) * MAX_CQS);
 		buf->waiters = (Bitmapset *) spalloc0(BITMAPSET_SIZE(MAX_CQS / BITS_PER_BITMAPWORD));
@@ -281,9 +332,8 @@ TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8
 	reader->cq_id = cq_id;
 	reader->reader_id = reader_id;
 	reader->num_readers = num_readers;
-	reader->slot = buf->tail;
-	reader->nonce = buf->nonce;
-	reader->retry_slot = true;
+	reader->slot = NULL;
+	reader->slot_id = 0;
 	return reader;
 }
 
@@ -307,50 +357,50 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	MyPinnedSlotEntry *entry;
 	MemoryContext oldcontext;
 
+	if (NoUnreadSlots(reader))
+		return NULL;
+
 	if (TupleBufferIsEmpty(reader->buf))
 		return NULL;
 
-	if (NoUnreadSlots(reader))
-	{
-		reader->retry_slot = true;
-		return NULL;
-	}
-
 	LWLockAcquire(reader->buf->tail_lock, LW_SHARED);
 
-	/* Did the stream buffer wrapped around? */
-	if (reader->nonce < reader->buf->nonce)
+	/* Maybe the buffer became empty while we were trying to acquire the tail_lock? */
+	if (TupleBufferIsEmpty(reader->buf))
 	{
-		reader->nonce = reader->buf->nonce;
-		reader->slot = NULL;
+		LWLockRelease(reader->buf->tail_lock);
+		return NULL;
 	}
 
 	/*
 	 * If we're behind the tail, then pick tail as the next
-	 * event, otherwise follow pointer to the next element.
-	 * If the current_slot is NULL, then it automatically goes
-	 * into the first check.
+	 * slot, otherwise follow pointer to the next slot.
 	 */
-	if (SlotBehindTail(reader->slot))
+	if (reader->slot_id < reader->buf->tail_id)
 		reader->slot = reader->buf->tail;
-	else if (!reader->retry_slot)
-		reader->slot = SlotNext(reader->slot);
+	else
+		reader->slot = reader->slot->next;
+
+	/* Update slot_id to the most recent slot we've considered */
+	reader->slot_id = reader->slot->id;
 
 	/* Return the first event in the buffer that we need to read from */
 	while (true)
 	{
-		if (NoUnreadSlots(reader))
-		{
-			reader->retry_slot = true;
-			LWLockRelease(reader->buf->tail_lock);
-			return NULL;
-		}
-
+		/* Is this a slot for me? */
 		if (bms_is_member(reader->cq_id, reader->slot->readby) &&
 				(JumpConsistentHash((uint64_t) reader->slot, reader->num_readers) == reader->reader_id))
 			break;
 
-		reader->slot = SlotNext(reader->slot);
+		if (NoUnreadSlots(reader))
+		{
+			LWLockRelease(reader->buf->tail_lock);
+			return NULL;
+		}
+
+		/* Move over to the next slot. */
+		reader->slot = reader->slot->next;
+		reader->slot_id = reader->slot->id;
 	}
 
 	LWLockRelease(reader->buf->tail_lock);
@@ -370,7 +420,6 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 
 	MemoryContextSwitchTo(oldcontext);
 
-	reader->retry_slot = false;
 	return reader->slot;
 }
 
@@ -393,13 +442,11 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 
 	LWLockAcquire(slot->buf->tail_lock, LW_EXCLUSIVE);
 
-	/*
-	 * We're incrementing it because our refcount begins as negative
-	 * for stream inserts--see comments in stream.c:InsertIntoStream.
-	 */
-	if (slot->tuple->desc)
-		if (++slot->tuple->desc->tdrefcount == 0)
-			spfree(slot->tuple->desc);
+	if (!SlotIsValid(slot) || SlotBehindTail(slot))
+	{
+		LWLockRelease(slot->buf->tail_lock);
+		return;
+	}
 
 	/*
 	 * If this slot was the tail, move tail ahead to the next slot that is not fully
@@ -408,8 +455,16 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	if (SlotEqualsTail(slot))
 	{
 		do
-			slot->buf->tail = SlotNext(slot->buf->tail);
-		while (!TupleBufferIsEmpty(slot->buf) && bms_is_empty(slot->buf->tail->readby));
+		{
+			slot->buf->tail->magic = 0;
+			slot->buf->tail = slot->buf->tail->next;
+
+			if (TupleBufferIsEmpty(slot->buf))
+				break;
+
+			slot->buf->tail_id = slot->buf->tail->id;
+		}
+		while (bms_is_empty(slot->buf->tail->readby));
 	}
 
 	LWLockRelease(slot->buf->tail_lock);
@@ -433,7 +488,7 @@ TupleBufferUnpinSlot(TupleBufferReader *reader, TupleBufferSlot *slot)
 bool
 TupleBufferIsEmpty(TupleBuffer *buf)
 {
-	return (buf->tail == buf->head);
+	return (buf->tail == NULL);
 }
 
 void
