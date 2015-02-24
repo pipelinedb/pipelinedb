@@ -133,7 +133,7 @@ GetDistinctBloomFilter(char *cvname)
 		bloom = BloomFilterCreate();
 	}
 	else
-		bloom = (BloomFilter *) PG_DETOAST_DATUM(datum);
+		bloom = BloomFilterCopy((BloomFilter *) PG_DETOAST_DATUM(datum));
 
 	ReleaseSysCache(tuple);
 
