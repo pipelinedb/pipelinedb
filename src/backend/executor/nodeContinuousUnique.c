@@ -18,39 +18,12 @@
 #include "executor/executor.h"
 #include "executor/nodeContinuousUnique.h"
 #include "miscadmin.h"
+#include "pipeline/miscutils.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
-
-static void
-get_bytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf)
-{
-	TupleDesc desc = slot->tts_tupleDescriptor;
-	int i;
-
-	num_attrs = num_attrs == -1 ? desc->natts : num_attrs;
-
-	for (i = 0; i < num_attrs; i++)
-	{
-		bool isnull;
-		AttrNumber attno = attrs == NULL ? i + 1 : attrs[i];
-		Form_pg_attribute att = slot->tts_tupleDescriptor->attrs[attno - 1];
-		Datum d = slot_getattr(slot, attno, &isnull);
-		Size size;
-
-		if (isnull)
-			continue;
-
-		size = datumGetSize(d, att->attbyval, att->attlen);
-
-		if (att->attbyval)
-			appendBinaryStringInfo(buf, (char *) &d, size);
-		else
-			appendBinaryStringInfo(buf, DatumGetPointer(d), size);
-	}
-}
 
 /* ----------------------------------------------------------------
  *		ExecContinuousUnique
@@ -98,7 +71,7 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 		}
 
 		oldcontext = MemoryContextSwitchTo(node->tmpContext);
-		get_bytes(slot, plannode->numCols, plannode->uniqColIdx, &buf);
+		GetBytesToHash(slot, plannode->numCols, plannode->uniqColIdx, &buf);
 		MemoryContextSwitchTo(oldcontext);
 
 		missing = !BloomFilterContains(node->distinct, buf.data, buf.len);

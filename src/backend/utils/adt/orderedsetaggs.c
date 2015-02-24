@@ -28,6 +28,7 @@
 #include "nodes/nodeFuncs.h"
 #include "optimizer/tlist.h"
 #include "pipeline/hll.h"
+#include "pipeline/miscutils.h"
 #include "pipeline/tdigest.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
@@ -1548,11 +1549,15 @@ hll_hypothetical_set_transition_multi(PG_FUNCTION_ARGS)
 	if (result < 0)
 	{
 		int unique;
+		StringInfo buf = makeStringInfo();
+
+		GetBytesToHash(qstate->curslot, -1, NULL, buf);
+
 		/*
 		 * dense rank is only increased once for each lower-ranking tuple we see,
 		 * so that the step size to the next highest-ranking tuple is always 1.
 		 */
-		hll = HLLAddSlot(hll, qstate->curslot, -1, NULL, &unique);
+		hll = HLLAdd(hll, buf->data, buf->len, &unique);
 	}
 
 	SET_VARSIZE(hll, sizeof(HyperLogLog) + hll->mlen);
