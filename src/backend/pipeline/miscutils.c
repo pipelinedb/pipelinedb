@@ -6,6 +6,7 @@
 #include "postgres.h"
 #include "pipeline/miscutils.h"
 #include "port.h"
+#include "utils/datum.h"
 
 #define MURMUR_SEED 0xadc83b19ULL
 
@@ -175,4 +176,40 @@ JumpConsistentHash(uint64_t key, int32_t num_buckets)
 	}
 
 	return (int32_t) b % num_buckets;
+}
+
+/*
+ * GetBytesToHash
+ */
+void
+GetBytesToHash(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf)
+{
+	TupleDesc desc = slot->tts_tupleDescriptor;
+	int i;
+
+	num_attrs = num_attrs == -1 ? desc->natts : num_attrs;
+
+	for (i = 0; i < num_attrs; i++)
+	{
+		bool isnull;
+		AttrNumber attno = attrs == NULL ? i + 1 : attrs[i];
+		Form_pg_attribute att = slot->tts_tupleDescriptor->attrs[attno - 1];
+		Datum d = slot_getattr(slot, attno, &isnull);
+		Size size;
+
+		if (isnull)
+		{
+			appendStringInfoChar(buf, '0');
+			continue;
+		}
+
+		appendStringInfoChar(buf, '1');
+
+		size = datumGetSize(d, att->attbyval, att->attlen);
+
+		if (att->attbyval)
+			appendBinaryStringInfo(buf, (char *) &d, size);
+		else
+			appendBinaryStringInfo(buf, DatumGetPointer(d), size);
+	}
 }
