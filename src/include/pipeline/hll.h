@@ -49,6 +49,5 @@ HyperLogLog *HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result);
 HyperLogLog *HLLCopy(HyperLogLog *src);
 uint64 HLLSize(HyperLogLog *hll);
 HyperLogLog *HLLUnion(HyperLogLog *result, HyperLogLog *incoming);
-HyperLogLog *HLLAddSlot(HyperLogLog *hll, TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, int *result);
 
 #endif
