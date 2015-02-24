@@ -405,6 +405,10 @@ ExecEndBatch(PlanState *node)
 			ExecEndBatchStreamScan((StreamScanState *) node);
 			break;
 
+		case T_ContinuousUniqueState:
+			ExecEndBatchContinuousUnique((ContinuousUniqueState *) node);
+			break;
+
 		default:
 			break;
 	}

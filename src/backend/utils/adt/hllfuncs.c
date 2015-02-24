@@ -32,7 +32,7 @@ hll_out(PG_FUNCTION_ARGS)
 	HyperLogLog *hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "{ p = %d, cardinality = %ld, size = %dB }", hll->p, HLLSize(hll), hll->mlen);
+	appendStringInfo(&buf, "{ p = %d, cardinality = %ld, size = %dkB }", hll->p, HLLSize(hll), hll->mlen / 1024);
 
 	PG_RETURN_CSTRING(buf.data);
 }
