@@ -117,3 +117,16 @@ DROP CONTINUOUS VIEW test_distinct;
 DROP CONTINUOUS VIEW test_distinct_on;
 DROP CONTINUOUS VIEW test_distinct_sw;
 DROP CONTINUOUS VIEW test_distinct_on_sw;
+
+CREATE CONTINUOUS VIEW test_distinct_regress AS SELECT DISTINCT x::int, y::int FROM test_distinct_stream;
+
+ACTIVATE test_distinct_regress;
+
+INSERT INTO test_distinct_stream (x) VALUES (1);
+INSERT INTO test_distinct_stream (y) VALUES (1);
+
+DEACTIVATE test_distinct_regress;
+
+SELECT * FROM test_distinct_regress;
+
+DROP CONTINUOUS VIEW test_distinct_regress;
