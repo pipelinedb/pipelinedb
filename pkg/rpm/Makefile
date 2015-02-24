@@ -39,7 +39,7 @@ gis:
 		--with-pgconfig=$(PREFIX)/bin/pipeline-config \
 		--with-geosconfig=$(PREFIX)/bin/geos-config \
 		--with-gdalconfig=$(PREFIX)/bin/gdal-config \
-		--with-projdir=$(PREFIX)/lib)
+		--with-projdir=$(PREFIX))
 	(cd $(TOP_BUILDDIR)/src/gis && make && make install)	
 
 fpm:
