@@ -1902,6 +1902,7 @@ typedef struct ContinuousUniqueState
 	BloomFilter *distinct;
 	NameData cvname;
 	bool dirty;
+	MemoryContext tmpContext;
 } ContinuousUniqueState;
 
 /* ----------------

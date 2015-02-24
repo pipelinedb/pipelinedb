@@ -52,7 +52,6 @@ get_bytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf
 	}
 }
 
-
 /* ----------------------------------------------------------------
  *		ExecContinuousUnique
  * ----------------------------------------------------------------
@@ -64,12 +63,18 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 	TupleTableSlot *resultTupleSlot;
 	TupleTableSlot *slot;
 	PlanState  *outerPlan;
+	MemoryContext oldcontext;
+	StringInfoData buf;
 
 	/*
 	 * get information from the node
 	 */
 	outerPlan = outerPlanState(node);
 	resultTupleSlot = node->ps.ps_ResultTupleSlot;
+
+	oldcontext = MemoryContextSwitchTo(node->tmpContext);
+	initStringInfo(&buf);
+	MemoryContextSwitchTo(oldcontext);
 
 	/*
 	 * now loop, returning only non-duplicate tuples. We assume that the
@@ -78,10 +83,7 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 	 */
 	for (;;)
 	{
-		StringInfoData buf;
 		bool missing;
-
-		initStringInfo(&buf);
 
 		/*
 		 * fetch a tuple from the outer subplan
@@ -95,7 +97,10 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 			return NULL;
 		}
 
+		oldcontext = MemoryContextSwitchTo(node->tmpContext);
 		get_bytes(slot, plannode->numCols, plannode->uniqColIdx, &buf);
+		MemoryContextSwitchTo(oldcontext);
+
 		missing = !BloomFilterContains(node->distinct, buf.data, buf.len);
 
 		if (missing)
@@ -128,6 +133,7 @@ ContinuousUniqueState *
 ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 {
 	ContinuousUniqueState *state;
+	MemoryContext oldcontext;
 
 	state = makeNode(ContinuousUniqueState);
 	namecpy(&state->cvname, &node->cvName);
@@ -152,10 +158,19 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 	ExecAssignResultTypeFromTL(&state->ps);
 	state->ps.ps_ProjInfo = NULL;
 
+	state->tmpContext =
+		AllocSetContextCreate(CurrentMemoryContext,
+							  "ContinuousUnique",
+							  ALLOCSET_DEFAULT_MINSIZE,
+							  ALLOCSET_DEFAULT_INITSIZE,
+							  ALLOCSET_DEFAULT_MAXSIZE);
+
 	/*
-	 * Load the multiset from pipeline_query.
+	 * Load the DISTINCT bloom filter from pipeline_tstate.
 	 */
+	oldcontext = MemoryContextSwitchTo(state->tmpContext);
 	state->distinct = GetDistinctBloomFilter(NameStr(state->cvname));
+	MemoryContextSwitchTo(oldcontext);
 
 	return state;
 }
@@ -177,23 +192,38 @@ ExecEndContinuousUnique(ContinuousUniqueState *node)
 	}
 
 	ExecClearTuple(node->ps.ps_ResultTupleSlot);
-	pfree(node->distinct);
+	MemoryContextDelete(node->tmpContext);
+
 	ExecEndNode(outerPlanState(node));
 }
 
+void
+ExecEndBatchContinuousUnique(ContinuousUniqueState *node)
+{
+	MemoryContext oldcontext;
+
+	ExecClearTuple(node->ps.ps_ResultTupleSlot);
+	MemoryContextReset(node->tmpContext);
+
+	oldcontext = MemoryContextSwitchTo(node->tmpContext);
+	node->distinct = GetDistinctBloomFilter(NameStr(node->cvname));
+	MemoryContextSwitchTo(oldcontext);
+}
 
 void
 ExecReScanContinuousUnique(ContinuousUniqueState *node)
 {
+	MemoryContext oldcontext;
+
 	ExecClearTuple(node->ps.ps_ResultTupleSlot);
+	MemoryContextReset(node->tmpContext);
 
 	if (node->ps.lefttree->chgParam == NULL)
 		ExecReScan(node->ps.lefttree);
 
-	if (node->distinct)
-	{
-		pfree(node->distinct);
-		node->distinct = GetDistinctBloomFilter(NameStr(node->cvname));
-		node->dirty = false;
-	}
+	node->dirty = false;
+
+	oldcontext = MemoryContextSwitchTo(node->tmpContext);
+	node->distinct = GetDistinctBloomFilter(NameStr(node->cvname));
+	MemoryContextSwitchTo(oldcontext);
 }
