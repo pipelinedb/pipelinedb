@@ -665,19 +665,13 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		CommitTransactionCommand();
 
 		foreach(lc, deactivated_cq_ids)
-		{
-			TupleBufferReader *reader = TupleBufferOpenReader(WorkerTupleBuffer, lfirst_int(lc), 0, 1);
-			TupleBufferSlot *tbs;
-			while ((tbs = TupleBufferPinNextSlot(reader)))
-				TupleBufferUnpinSlot(reader, tbs);
-			TupleBufferCloseReader(reader);
-		}
+			TupleBufferDrain(WorkerTupleBuffer, lfirst_int(lc), 0, 1);
 
 		/*
 		 * We need to restart a transaction because the executor expects us to be in a
 		 * transaction.
 		 */
-		StartTransactionCommand();
+ 		StartTransactionCommand();
 		if (was_snapshot_set)
 			PushActiveSnapshot(GetTransactionSnapshot());
 	}
