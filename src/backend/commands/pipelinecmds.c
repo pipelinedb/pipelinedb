@@ -638,10 +638,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 	{
 		bool was_snapshot_set = false;
 
-		CQExecutionContext = AllocSetContextCreate(TopTransactionContext, "CQExecutionContext",
-				ALLOCSET_DEFAULT_MINSIZE,
-				ALLOCSET_DEFAULT_INITSIZE,
-				ALLOCSET_DEFAULT_MAXSIZE);
+		CQExecutionContext = TopTransactionContext;
 
 		/*
 		 * In case some CQs were deactivated, we should update the pipeline_stream catalog
@@ -663,6 +660,13 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 			PopActiveSnapshot();
 		}
 		CommitTransactionCommand();
+
+		/*
+		 * TODO(usmanm): If any of the CQs needs to be drained from the WorkerTupleBuffer,
+		 * then deactivated_cq_ids is somehow corrupted during in the TupleBufferDrain
+		 * call. This is an extremely weird bug--for now fix it by making a copy of the list.
+		 */
+		deactivated_cq_ids = list_copy(deactivated_cq_ids);
 
 		foreach(lc, deactivated_cq_ids)
 			TupleBufferDrain(WorkerTupleBuffer, lfirst_int(lc), 0, 1);
