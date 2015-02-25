@@ -134,25 +134,37 @@ get_retrieval_where_clause(Tuplestorestate *incoming, TupleDesc desc,
 			ColumnRef *cref;
 			Type typeinfo;
 			int length;
-			A_Expr *expr;
+			Expr *expr;
 			bool isnull;
 			Datum d;
 			Const *c;
+			NullTest *null = makeNode(NullTest);
+
+			null->argisrow = false;
+			null->nulltesttype = IS_NULL;
 
 			typeinfo = typeidType(attr->atttypid);
 			length = typeLen(typeinfo);
 			ReleaseSysCache((HeapTuple) typeinfo);
 
 			d = slot_getattr(slot, merge_attr, &isnull);
-			c = makeConst(attr->atttypid, attr->atttypmod,
-					attr->attcollation, length, d, isnull, attr->attbyval);
 
 			cref = makeNode(ColumnRef);
 			cref->fields = list_make1(makeString(NameStr(attr->attname)));
 			cref->location = -1;
 
-			expr = makeA_Expr(AEXPR_OP, name, (Node *) cref, (Node *) c, -1);
+			if (isnull)
+			{
+				null->arg = (Expr *) cref;
+				expr = (Expr *) copyObject(null);
+			}
+			else
+			{
+				c = makeConst(attr->atttypid, attr->atttypmod,
+						attr->attcollation, length, d, isnull, attr->attbyval);
 
+				expr = (Expr *) makeA_Expr(AEXPR_OP, name, (Node *) cref, (Node *) c, -1);
+			}
 			/*
 			 * If we're grouping on multiple columns, the WHERE predicate must
 			 * include a conjunction of all GROUP BY column values for each incoming
