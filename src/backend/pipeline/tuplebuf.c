@@ -38,7 +38,6 @@
 #define SlotNext(slot) ((TupleBufferSlot *) SlotEnd(slot))
 #define NoUnreadSlots(reader) ((reader)->slot_id == (reader)->buf->head_id)
 #define SlotIsValid(slot) ((slot) && (slot)->magic == MAGIC)
-#define SlotBehindTail(slot) ((slot)->id < (slot)->buf->tail_id)
 #define SlotEqualsTail(slot) ((slot) == (slot)->buf->tail && (slot)->id == (slot)->buf->tail_id)
 
 /* Whether or not to print the state of the stream buffer as it changes */
@@ -88,7 +87,7 @@ TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms)
 		if (!SlotIsValid(slot))
 			break;
 		/* Has the slot been read by all events? */
-		if (SlotBehindTail(slot) || bms_is_empty(slot->readby))
+		if (bms_is_empty(slot->readby))
 			break;
 		pg_usleep(sleepms * 1000);
 	}
@@ -428,7 +427,7 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 {
 	TupleBuffer *buf;
 
-	if (!SlotIsValid(slot) || SlotBehindTail(slot))
+	if (!SlotIsValid(slot))
 		return;
 
 	buf = slot->buf;
@@ -446,7 +445,7 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 
 	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
 
-	if (!SlotIsValid(slot) || SlotBehindTail(slot))
+	if (!SlotIsValid(slot))
 	{
 		LWLockRelease(buf->tail_lock);
 		return;
@@ -613,4 +612,17 @@ TupleBufferClearPinnedSlots(void)
 	MyPinnedSlots = NIL;
 
 	MemoryContextSwitchTo(oldcontext);
+}
+
+/*
+ * TupleBufferDrain
+ */
+void
+TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers)
+{
+	TupleBufferReader *reader = TupleBufferOpenReader(buf, cq_id, reader_id, num_readers);
+	TupleBufferSlot *tbs;
+	while ((tbs = TupleBufferPinNextSlot(reader)))
+		TupleBufferUnpinSlot(reader, tbs);
+	TupleBufferCloseReader(reader);
 }
