@@ -90,6 +90,7 @@ extern void TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 extern void TupleBufferNotifyAndClearWaiters(TupleBuffer *buf);
 extern void TupleBufferResetNotify(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id);
 extern void TupleBufferNotify(TupleBuffer *buf, uint32_t cq_id);
+extern void TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers);
 
 extern TupleBufferReader *TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers);
 extern void TupleBufferCloseReader(TupleBufferReader *reader);
