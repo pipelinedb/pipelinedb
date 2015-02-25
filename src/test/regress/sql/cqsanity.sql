@@ -90,6 +90,21 @@ DEACTIVATE cv_agg_expr;
 
 SELECT * FROM cv_agg_expr ORDER BY k;
 
+CREATE CONTINUOUS VIEW test_null_group AS SELECT x::int, y::int FROM sanity_stream GROUP BY x, y;
+
+ACTIVATE test_null_group;
+
+INSERT INTO sanity_stream (z) VALUES (1);
+INSERT INTO sanity_stream (z) VALUES (1);
+INSERT INTO sanity_stream (x) VALUES (1);
+INSERT INTO sanity_stream (x) VALUES (1);
+INSERT INTO sanity_stream (y) VALUES (1);
+INSERT INTO sanity_stream (y) VALUES (1);
+
+DEACTIVATE test_null_group;
+
+SELECT * FROM test_null_group;
+
 DROP CONTINUOUS VIEW test_avg;
 DROP CONTINUOUS VIEW cv;
 DROP CONTINUOUS VIEW cv_weird_tl;
@@ -97,3 +112,4 @@ DROP CONTINUOUS VIEW cv_no_grp;
 DROP CONTINUOUS VIEW cv_grp_expr;
 DROP CONTINUOUS VIEW cv_multi_grp;
 DROP CONTINUOUS VIEW cv_agg_expr;
+DROP CONTINUOUS VIEW test_null_group;
