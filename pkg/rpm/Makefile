@@ -9,6 +9,9 @@ PREFIX = $(shell pwd)/staging
 TOP_BUILDDIR = ../../
 FPM = fpm -s dir -t rpm -n pipelinedb -v $(VERSION) --epoch 0 --prefix=/opt/pipelinedb --after-install post-install . 
 
+all: geos gdal proj pipeline gis fpm
+	echo "Successfully built RPM package `ls *.rpm`"
+
 geos:
 	mkdir -p $(TMP_BUILD)
 	wget -P $(TMP_BUILD) http://download.osgeo.org/geos/$(GEOS).tar.bz2
@@ -48,9 +51,6 @@ fpm:
 	(cd $(PREFIX) && $(FPM))
 	mv $(PREFIX)/*.rpm .
 
-all: geos gdal proj pipeline gis fpm	
-	echo "Successfully built RPM package `ls *.rpm`"
-	
 clean:
 	rm -rf $(GEOS)* $(GDAL)* $(PROJ)*
 	rm -rf $(TMP_BUILD)
