@@ -1683,21 +1683,6 @@ CollectFuncs(Node *node, CQAnalyzeContext *context)
 }
 
 /*
- * CollectAggrefs
- */
-bool
-CollectAggrefs(Node *node, CQAnalyzeContext *context)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, Aggref))
-		context->funcCalls = lappend(context->funcCalls, node);
-
-	return raw_expression_tree_walker(node, CollectAggrefs, (void *) context);
-}
-
-/*
  * AnalyzeAndValidateContinuousSelectStmt
  *
  * This is mainly to prepare a CV SELECT's FROM clause, which may involve streams
@@ -1958,9 +1943,7 @@ TransformStreamEntry(ParseState *pstate, StreamDesc *stream)
  * pipeline_rewrite
  *
  * Take the list of parsetrees returned by `pg_parse_query` and
- * output a new list of parsetrees where any ActivateContinuousViewStmt
- * or DeactivateContinuousViewStmt Node with multiple `views` is broken down
- * into singular view Nodes.
+ * output a new list of parsetrees.
  */
 List *
 pipeline_rewrite(List *raw_parsetree_list)
