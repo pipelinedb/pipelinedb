@@ -188,7 +188,7 @@ ExecStreamProject(Tuple *event, StreamScanState *node)
 		{
 			Const *c = makeConst(evatt->atttypid, evatt->atttypmod, evatt->attcollation,
 					evatt->attlen, v, false, evatt->attbyval);
-			Node *n = coerce_to_target_type(NULL, (Node *) c, evatt->atttypid, desc->attrs[outatt]->atttypid,
+			Node *n = coerce_to_target_type(NULL, (Node *) copyObject(c), evatt->atttypid, desc->attrs[outatt]->atttypid,
 					desc->attrs[outatt]->atttypmod, COERCION_ASSIGNMENT, COERCE_IMPLICIT_CAST, -1);
 
 			/* if the coercion is possible, do it */
