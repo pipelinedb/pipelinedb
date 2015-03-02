@@ -118,37 +118,37 @@ test: pipeline_stream
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqvacuum
+test: sw_vacuum
 
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqanalyze cqcreate cqactivate cqsanity cqwindow
+test: analyze_cont_view create_cont_view activate_cont_view cont_view_sanity cont_window
 
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqsum cqswsum cqavg cqswavg cqcount
+test: cont_sum cont_sw_sum cont_avg cont_sw_avg cont_count
 
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqboolagg cqminmax cqobjectagg cqregr cqstats
+test: cont_bool_agg cont_min_max cont_object_agg cont_regr cont_stats
 
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqswboolagg cqswminmax cqswobjectagg cqswregr cqswstats
+test: cont_sw_bool_agg cont_sw_min_max cont_sw_object_agg cont_sw_regr cont_sw_stats
 
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqhsagg cqswhsagg cqdistinct  cqhllagg cqosagg cqswosagg
+test: cont_hs_agg cont_sw_hs_agg cont_count_distinct  cont_hll_agg cont_os_agg cont_sw_os_agg cont_sw_count
 
 # ----------
 # Another group of parallel tests
 # ----------
-test: stream_table_join user_combine cqlimit
+test: stream_table_join user_combine cont_limit
 
 # ----------
 # Another group of parallel tests
@@ -176,4 +176,4 @@ test:  cont_gis_raster
 # ----------
 # Another group of parallel tests
 # ----------
-test: cqlatch
+test: cont_proc_latch
