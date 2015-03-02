@@ -23,7 +23,10 @@ def test_prepared_inserts(pipeline, clean_db):
     row = (n % 100, random.random())
     db.execute('EXECUTE ins (%s, %s)' % row)
 
+  time.sleep(0.1)
+
   db.execute('DEACTIVATE')
+  conn.commit()
 
   result = list(pipeline.execute('SELECT * FROM test_prepared0 ORDER BY x'))
 
@@ -31,3 +34,12 @@ def test_prepared_inserts(pipeline, clean_db):
 
   for n in range(100):
     assert result[n]['count'] == 100
+
+  result = list(pipeline.execute('SELECT * FROM test_prepared1 ORDER BY x'))
+
+  assert len(result) == 100
+
+  for n in range(100):
+    assert result[n]['count'] == 100
+
+  conn.close()
