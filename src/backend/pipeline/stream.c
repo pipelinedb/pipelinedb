@@ -147,7 +147,7 @@ int
 InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
-	int count;
+	int count = 0;
 	Bitmapset *targets = GetStreamTargets(pstmt->stream);
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
