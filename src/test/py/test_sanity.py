@@ -29,9 +29,9 @@ def test_simple_insert(pipeline, clean_db):
     """
     pipeline.create_cv('cv', 'SELECT key::integer, COUNT(*) FROM stream GROUP BY key', activate=True)
     
-    for n in range(1000):
-        pipeline.execute('INSERT INTO stream (key) VALUES (%d)' % (n % 10))
+    rows = [(n % 10,) for n in range(1000)]
     
+    pipeline.insert('stream', ('key',), rows)
     pipeline.deactivate('cv')
     
     result = list(pipeline.execute('SELECT * FROM cv ORDER BY key'))
@@ -49,11 +49,11 @@ def test_multiple(pipeline, clean_db):
     pipeline.create_cv('cv1', 'SELECT s::text FROM stream WHERE s LIKE \'%%this%%\'')
     pipeline.activate()
 
-    for n in range(1000):
-        pipeline.execute('INSERT INTO stream (n, s, unused) VALUES (%.6f, \'this\', 100)' % (n + 10))
-
+    rows = [(float(n + 10), 'this', 100) for n in range(1000)]
     for n in range(10):
-        pipeline.execute('INSERT INTO stream (n, s, unused) VALUES (%.6f, \'not a match\', 0)' % (-n))
+        rows.append((float(n), 'not a match', -n))
+
+    pipeline.insert('stream', ('n', 's', 'unused'), rows)
 
     pipeline.deactivate()
 
@@ -71,13 +71,14 @@ def test_combine(pipeline, clean_db):
     pipeline.create_cv('combine', 'SELECT key::text, COUNT(*) FROM stream GROUP BY key')
     pipeline.activate()
 
+    rows = []
     for n in range(100):
         values = []
         for m in range(100):
             key = '%d%d' % (n % 10, m)
-            values.append(str((key, 0)))
+            rows.append((key, 0))
 
-        pipeline.execute('INSERT INTO stream (key, unused) VALUES %s' % ','.join(values))
+    pipeline.insert('stream', ('key', 'unused'), rows)
 
     pipeline.deactivate()
 
