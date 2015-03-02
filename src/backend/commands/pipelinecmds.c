@@ -276,7 +276,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	RegisterContinuousView(view, querystring, mat_relation, IsSlidingWindowSelectStmt(viewselect), SelectsFromStreamOnly(workerselect));
+	RegisterContinuousView(view, querystring, mat_relation, IsSlidingWindowSelectStmt(viewselect), !SelectsFromStreamOnly(workerselect));
 	CommandCounterIncrement();
 
 	/*
