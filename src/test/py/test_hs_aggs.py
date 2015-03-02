@@ -1,5 +1,6 @@
 from base import pipeline, clean_db
 import random
+import time
 
 
 def _rank(n, values):
@@ -17,15 +18,15 @@ def _dense_rank(n, values):
     return _rank(n, set(values))
 
 def _test_hs_agg(pipeline, agg):
-    values = [random.randint(-100, 100) for n in range(1000)] 
+    values = [random.randint(-100, 100) for n in range(1000)]
     h = random.choice(values) + random.randint(-10, 10)
     
     cq = 'SELECT %s(%d) WITHIN GROUP (ORDER BY x::integer) FROM stream' % (agg, h)
     pipeline.create_cv('test_%s' % agg, cq)
     pipeline.activate()
     
-    for v in values:
-        pipeline.execute('INSERT INTO stream (x) VALUES (%d)' % v)
+    pipeline.insert('stream', ('x',), [(v,) for v in values])
+    time.sleep(0.1)
 
     pipeline.deactivate()
     result = pipeline.execute('SELECT %s FROM test_%s' % (agg, agg)).first()
