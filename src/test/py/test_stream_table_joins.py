@@ -15,9 +15,8 @@ def _join(left, right, cols):
     return result
 
 def _insert(pipeline, table, rows, sleep=0):
-    cols = ', '.join(['col%d' % c for c in range(len(rows[0]))])
-    values = ', '.join([str(row) for row in rows])
-    pipeline.execute('INSERT INTO %s (%s) VALUES %s' % (table, cols, values))
+    cols = ['col%d' % c for c in range(len(rows[0]))]
+    pipeline.insert(table, cols, rows)
     if sleep:
         time.sleep(sleep)
 

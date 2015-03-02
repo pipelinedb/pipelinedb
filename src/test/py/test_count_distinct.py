@@ -10,10 +10,10 @@ def test_hll_count_distinct(pipeline, clean_db):
     pipeline.create_cv('test_count_distinct', q)
     pipeline.activate()
     
-    values = [random.randint(1, 1024) for n in range(1000)]
-    for v in values:
-        pipeline.execute('INSERT INTO stream (x) VALUES (%d)' % v)
+    desc = ('x',)
+    values = [(random.randint(1, 1024),) for n in range(1000)]
         
+    pipeline.insert('stream', desc, values)
     pipeline.deactivate()
     
     expected = len(set(values))
