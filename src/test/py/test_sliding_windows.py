@@ -11,8 +11,8 @@ def assert_result_changes(func, args):
                        "SELECT %s(%s) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds'" % (func, args))
     pipeline.activate(name)
     
-    for n in range(1000):
-        pipeline.execute('INSERT INTO stream (x, y, z) VALUES (%d, \'%s\', %d)' % (n, str(n), n + 1))
+    rows = [(n, str(n), n + 1) for n in range(1000)]
+    pipeline.insert('stream', ('x', 'y', 'z'), rows)
     
     pipeline.deactivate(name)
     current = 1

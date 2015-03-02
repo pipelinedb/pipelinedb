@@ -5,11 +5,10 @@ import random
 def test_percentile_cont_agg(pipeline, clean_db):
   q = [0.0, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 1.0]
 
-  values = []
+  batches = []
   for _ in xrange(10):
-    v = [random.randint(0, 1000) for _ in xrange(5000)]
-    v = ', '.join(map(lambda x: '(%d)' % x, v))
-    values.append(v)
+    b = [(random.randint(0, 1000),) for _ in xrange(5000)]
+    batches.append(b)
 
   query = '''SELECT
   percentile_cont(ARRAY[%s])
@@ -21,9 +20,9 @@ def test_percentile_cont_agg(pipeline, clean_db):
 
   pipeline.activate()
 
-  for v in values:
-    pipeline.execute('INSERT INTO test_stream (x) VALUES %s' % v)
-    pipeline.execute('INSERT INTO test_percentile_cont (x) VALUES %s' % v)
+  for b in batches:
+    pipeline.insert('test_stream', ('x',), b)
+    pipeline.insert('test_percentile_cont', ('x',), b)
 
   pipeline.deactivate()
 
@@ -43,8 +42,8 @@ def test_percentile_cont_agg(pipeline, clean_db):
   assert diff[-1] == 0
 
   # 1st and 99th percentile should be within 0.1%.
-  assert diff[1] < 0.001 * 1000
-  assert diff[-2] < 0.001 * 1000
+  assert diff[1] <= 0.001 * 1000
+  assert diff[-2] <= 0.001 * 1000
 
   # All percentiles should be within 1%.
-  assert all(x < 0.01 * 1000 for x in diff)
+  assert all(x <= 0.01 * 1000 for x in diff)

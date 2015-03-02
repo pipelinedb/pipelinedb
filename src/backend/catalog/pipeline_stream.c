@@ -13,10 +13,12 @@
 #include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/indexing.h"
+#include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
+#include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_coerce.h"
 #include "parser/parse_target.h"
@@ -24,8 +26,12 @@
 #include "pipeline/cqanalyze.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
+#include "utils/lsyscache.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
+#include "utils/typcache.h"
+
+#define NUMERIC_OID 1700
 
 typedef struct StreamColumnsEntry
 {
@@ -56,14 +62,27 @@ infer_tupledesc(StreamTargetsEntry *stream)
 	List *types = NIL;
 	List *mods = NIL;
 	List *collations = NIL;
+	Const *preferred = makeConst(NUMERIC_OID, -1, 0, -1, 0, false, false);
 
 	hash_seq_init(&status, stream->colstotypes);
 	while ((entry = (StreamColumnsEntry *) hash_seq_search(&status)) != NULL)
 	{
 		char err[128];
 		Oid supertype;
+		char category;
+		bool typispreferred;
+		Oid t = exprType(linitial(entry->types));
 
-		sprintf(err, "type conflict with stream \"%s\": ", stream->key);
+		/*
+		 * If there are any numeric types in our target types, we prepend a float8
+		 * to the list of types to select from, as that is our preferred type when
+		 * there is any ambiguity about how to interpret numeric types.
+		 */
+		get_type_category_preferred(t, &category, &typispreferred);
+		if (category == TYPCATEGORY_NUMERIC)
+			entry->types = lcons(preferred, entry->types);
+
+		sprintf(err, "type conflict with stream \"%s\":", stream->key);
 		supertype = select_common_type(NULL, entry->types, err, NULL);
 
 		names = lappend(names, makeString(entry->name));
