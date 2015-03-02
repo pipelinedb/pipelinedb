@@ -51,10 +51,10 @@ def test_dense_rank(pipeline, clean_db):
     _, dense_rank, _, _, result = _test_hs_agg(pipeline, 'dense_rank')
     
     # We use HLL for dense_rank, so there may be a small margin of error, 
-    # but it should never be larger than 3%
+    # but it should never be larger than 4%
     delta = abs(dense_rank - result)
     
-    assert delta / float(dense_rank) <= 0.03
+    assert delta / float(dense_rank) <= 0.04
 
 def test_percent_rank(pipeline, clean_db):
     """
