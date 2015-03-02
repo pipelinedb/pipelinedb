@@ -20,6 +20,7 @@ typedef struct ContinuousViewState
 {
 	int32 id;
 	char state;
+	bool wxact;
 	int32 batchsize;
 	int32 maxwaitms;
 	int32 emptysleepms;
@@ -29,7 +30,7 @@ typedef struct ContinuousViewState
 } ContinuousViewState;
 
 List *GetAllContinuousViewNames(void);
-void RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar *matrelname, bool gc);
+void RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar *matrelname, bool gc, bool wxact);
 bool MarkContinuousViewAsActive(RangeVar *name, Relation pipeline_query);
 bool MarkContinuousViewAsInactive(RangeVar *name, Relation pipeline_query);
 void SetContinousViewState(RangeVar *name, ContinuousViewState *cv_state, Relation pipeline_query);

@@ -174,8 +174,11 @@ retry:
 					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 			}
 
-			StartTransactionCommand();
-			set_snapshot(estate, cqowner);
+			if (state->wxact)
+			{
+				StartTransactionCommand();
+				set_snapshot(estate, cqowner);
+			}
 
 			CurrentResourceOwner = cqowner;
 
@@ -196,8 +199,11 @@ retry:
 			MemoryContextSwitchTo(runcontext);
 			CurrentResourceOwner = cqowner;
 
-			unset_snapshot(estate, cqowner);
-			CommitTransactionCommand();
+			if (state->wxact)
+			{
+				unset_snapshot(estate, cqowner);
+				CommitTransactionCommand();
+			}
 
 			if (estate->es_processed || estate->es_filtered)
 			{
