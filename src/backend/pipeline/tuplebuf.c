@@ -188,9 +188,10 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	pos = start;
 
 	/* Initialize the newly allocated slot and copy data into it. */
+	if (pos > BufferEnd(buf))
+		elog(LOG, "I AM FUCKED %p", pos);
 	MemSet(pos, 0, size);
 	slot = (TupleBufferSlot *) pos;
-	slot->magic = MAGIC;
 	slot->id = buf->head_id + 1;
 	slot->next = NULL;
 	slot->buf = buf;
@@ -235,6 +236,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 		buf->tail_id = slot->id;
 	}
 
+	slot->magic = MAGIC;
 	buf->head_id = buf->head->id;
 
 	/* Notify all readers if we were empty. */
