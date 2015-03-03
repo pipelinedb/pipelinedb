@@ -3035,7 +3035,7 @@ static struct config_string ConfigureNamesString[] =
 			GUC_SUPERUSER_ONLY
 		},
 		&Log_directory,
-		"pg_log",
+		"log",
 		check_canonical_path, NULL, NULL
 	},
 	{
