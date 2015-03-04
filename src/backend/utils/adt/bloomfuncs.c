@@ -61,7 +61,12 @@ static BloomFilter *
 bloom_add(FunctionCallInfo fcinfo, BloomFilter *bloom, Datum elem)
 {
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
-	Size size = datumGetSize(elem, typ->typbyval, typ->typlen);
+	Size size;
+
+	if (!typ->typbyval && !elem)
+		return bloom;
+
+	size = datumGetSize(elem, typ->typbyval, typ->typlen);
 
 	if (typ->typbyval)
 		BloomFilterAdd(bloom, (char *) &elem, size);
