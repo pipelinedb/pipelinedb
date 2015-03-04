@@ -71,7 +71,7 @@ hll_add(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
 	Size size;
 	int result;
 
-	if (!elem)
+	if (!typ->typbyval && !elem)
 		return hll;
 
 	size = datumGetSize(elem, typ->typbyval, typ->typlen);

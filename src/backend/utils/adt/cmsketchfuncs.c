@@ -63,7 +63,7 @@ cmsketch_add(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem)
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 	Size size;
 
-	if (!elem)
+	if (!typ->typbyval && !elem)
 		return cms;
 
 	size = datumGetSize(elem, typ->typbyval, typ->typlen);
