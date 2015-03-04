@@ -430,6 +430,7 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 	if (merge_targets)
 		hash_destroy(merge_targets->hashtab);
 
+	tuplestore_clear(merge_output);
 	PortalDrop(portal, false);
 }
 
