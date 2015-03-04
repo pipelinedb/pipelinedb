@@ -189,8 +189,6 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	pos = start;
 
 	/* Initialize the newly allocated slot and copy data into it. */
-	if (pos > BufferEnd(buf))
-		abort();
 	MemSet(pos, 0, size);
 	slot = (TupleBufferSlot *) pos;
 	slot->id = buf->head_id + 1;
