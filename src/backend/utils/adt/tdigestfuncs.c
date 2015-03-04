@@ -119,10 +119,6 @@ tdigest_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	TDigest *state;
-	/*
-	 * TODO(usmanm): This doesn't work if the arg is not a float.
-	 * Do some typecast magic.
-	 */
 	float8 incoming = PG_GETARG_FLOAT8(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
