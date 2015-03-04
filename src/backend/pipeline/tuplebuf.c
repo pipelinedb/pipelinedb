@@ -39,7 +39,7 @@
 #define NoUnreadSlots(reader) ((reader)->slot_id == (reader)->buf->head_id)
 #define SlotIsValid(slot) ((slot) && (slot)->magic == MAGIC)
 #define SlotEqualsTail(slot) ((slot) == (slot)->buf->tail && (slot)->id == (slot)->buf->tail_id)
-#define SizeBetween(start, end) ((int64_t) end - (int64_t) start)
+#define HasEnoughSize(start, end, size) ((int64_t) size <= ((int64_t) end - (int64_t) start))
 
 /* Whether or not to print the state of the stream buffer as it changes */
 bool DebugPrintTupleBuffer;
@@ -155,7 +155,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 			end = BufferEnd(buf);
 
 			/* If there is not enough space left in the buffer, wrap around. */
-			if (size > SizeBetween(start, end))
+			if (!HasEnoughSize(start, end, size))
 			{
 				start = buf->start;
 				end = (char *) buf->tail;
@@ -163,7 +163,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 		}
 
 		/* If there isn't enough space, then wait for the tail to move on till there is enough. */
-		while (size > SizeBetween(start, end))
+		while (!HasEnoughSize(start, end, size))
 		{
 			LWLockRelease(buf->tail_lock);
 			pg_usleep(INSERT_SLEEP_MS * 1000);
