@@ -28,7 +28,7 @@
 #include "miscadmin.h"
 
 #define MAGIC 0xDEADBABE /* x_x */
-#define MAX_CQS 128 /* TODO(usmanm): Make this dynamic */
+#define INIT_CQS BITS_PER_BITMAPWORD
 #define MURMUR_SEED 0x9eaca8149c92387e
 #define INSERT_SLEEP_MS 1
 
@@ -307,9 +307,8 @@ TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, uin
 		buf->head = NULL;
 		buf->tail = NULL;
 
-		buf->latches = (Latch **) spalloc0(sizeof(Latch *) * MAX_CQS);
-		buf->waiters = (Bitmapset *) spalloc0(BITMAPSET_SIZE(MAX_CQS / BITS_PER_BITMAPWORD));
-		buf->waiters->nwords = MAX_CQS / BITS_PER_BITMAPWORD;
+		buf->max_cqs = 0;
+		TupleBufferExpandLatchArray(buf, INIT_CQS);
 
 		SpinLockInit(&buf->mutex);
 	}
@@ -579,6 +578,58 @@ TupleBufferNotify(TupleBuffer *buf, uint32_t cq_id)
 			break;
 		SetLatch(l);
 	}
+}
+
+/*
+ * TupleBufferExpandLatchArray
+ */
+void
+TupleBufferExpandLatchArray(TupleBuffer *buf, uint32_t cq_id)
+{
+	Latch **latches;
+	Bitmapset *waiters;
+	Latch **tmp_latches;
+	Bitmapset *tmp_waiters;
+	uint16_t max_cqs = buf->max_cqs;
+
+	if (buf->max_cqs == 0)
+		buf->max_cqs = INIT_CQS;
+
+	while (cq_id > buf->max_cqs)
+		buf->max_cqs *= 2;
+
+	if (max_cqs == buf->max_cqs)
+		return;
+
+	latches = (Latch **) spalloc0(sizeof(Latch *) * buf->max_cqs);
+	waiters = (Bitmapset *) spalloc0(BITMAPSET_SIZE(buf->max_cqs / BITS_PER_BITMAPWORD));
+	waiters->nwords = buf->max_cqs / BITS_PER_BITMAPWORD;
+
+	if (max_cqs)
+	{
+		uint16_t i;
+
+		memcpy(latches, buf->latches, sizeof(Latch *) * max_cqs);
+		for (i = 1; i <= max_cqs; i++)
+			if (bms_is_member(i, buf->waiters))
+				waiters = bms_add_member(waiters, i);
+	}
+
+	SpinLockAcquire(&buf->mutex);
+
+	tmp_latches = buf->latches;
+	tmp_waiters = buf->waiters;
+
+	buf->latches = latches;
+	buf->waiters = waiters;
+
+	if (max_cqs)
+	{
+		spfree(tmp_latches);
+		spfree(tmp_waiters);
+	}
+
+	SpinLockRelease(&buf->mutex);
 }
 
 /*
