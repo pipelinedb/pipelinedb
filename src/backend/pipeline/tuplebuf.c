@@ -39,7 +39,7 @@
 #define NoUnreadSlots(reader) ((reader)->slot_id == (reader)->buf->head_id)
 #define SlotIsValid(slot) ((slot) && (slot)->magic == MAGIC)
 #define SlotEqualsTail(slot) ((slot) == (slot)->buf->tail && (slot)->id == (slot)->buf->tail_id)
-#define HasEnoughSize(start, end, size) ((int64_t) size <= ((int64_t) end - (int64_t) start))
+#define HasEnoughSize(start, end, size) ((intptr_t) size <= ((intptr_t) end - (intptr_t) start))
 
 /* Whether or not to print the state of the stream buffer as it changes */
 bool DebugPrintTupleBuffer;
