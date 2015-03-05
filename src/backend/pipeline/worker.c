@@ -129,6 +129,7 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	elog(LOG, "\"%s\" worker %d running", queryDesc->plannedstmt->cq_target->relname, MyProcPid);
 
 	MarkWorkerAsRunning(MyCQId, MyWorkerId);
+	pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
 
 	TupleBufferInitLatch(WorkerTupleBuffer, MyCQId, MyWorkerId, &MyProc->procLatch);
 
@@ -160,11 +161,9 @@ retry:
 
 		for (;;)
 		{
-			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);
-
-			if (TupleBufferIsEmpty(WorkerTupleBuffer))
+			if (!TupleBufferHasUnreadSlots())
 			{
-				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), EmptyTupleBufferWaitTime * 1000))
+				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), EmptyTupleBufferWaitTime))
 				{
 					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
 					TupleBufferWait(WorkerTupleBuffer, MyCQId, MyWorkerId);
@@ -173,6 +172,8 @@ retry:
 				else
 					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 			}
+
+			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);
 
 			if (state->wxact)
 			{
@@ -250,6 +251,7 @@ retry:
 			CommitTransactionCommand();
 
 		TupleBufferUnpinAllPinnedSlots();
+		TupleBufferClearReaders();
 
 		/* This resets the es_query_ctx and in turn the CQExecutionContext */
 		MemoryContextResetAndDeleteChildren(runcontext);

@@ -28,9 +28,9 @@
 #include "miscadmin.h"
 
 #define MAGIC 0xDEADBABE /* x_x */
-#define MAX_CQS 128 /* TODO(usmanm): Make this dynamic */
+#define INIT_CQS BITS_PER_BITMAPWORD
 #define MURMUR_SEED 0x9eaca8149c92387e
-#define INSERT_SLEEP_MS 1
+#define INSERT_SLEEP_MS 5
 
 #define BufferOffset(buf, ptr) ((int32) ((char *) (ptr) - (buf)->start))
 #define BufferEnd(buf) ((buf)->start + (buf)->size)
@@ -54,6 +54,7 @@ int TupleBufferBlocks;
 int EmptyTupleBufferWaitTime;
 
 static List *MyPinnedSlots = NIL;
+static List *MyReaders = NIL;
 
 typedef struct
 {
@@ -111,11 +112,11 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	char *start;
 	char *pos;
 	char *end;
-	bool was_empty;
 	TupleBufferSlot *slot;
 	Size size;
 	Size tupsize;
 	int desclen = tuple->desc ? VARSIZE(tuple->desc) : 0;
+	TimestampTz start_wait;
 
 	if (bms == NULL)
 	{
@@ -131,6 +132,8 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 
 	LWLockAcquire(buf->head_lock, LW_EXCLUSIVE);
 	LWLockAcquire(buf->tail_lock, LW_SHARED);
+
+	memcpy(&buf->writer_latch, &MyProc->procLatch, sizeof(Latch));
 
 	/* If the buffer is empty, we'll have to reset the tail, so upgrade to an EXCLUSIVE lock. */
 	if (TupleBufferIsEmpty(buf))
@@ -162,11 +165,18 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 			}
 		}
 
+		start_wait = GetCurrentTimestamp();
+
 		/* If there isn't enough space, then wait for the tail to move on till there is enough. */
 		while (!HasEnoughSize(start, end, size))
 		{
 			LWLockRelease(buf->tail_lock);
-			pg_usleep(INSERT_SLEEP_MS * 1000);
+
+			if (TimestampDifferenceExceeds(start_wait, GetCurrentTimestamp(), EmptyTupleBufferWaitTime))
+				pg_usleep(INSERT_SLEEP_MS * 1000);
+			else
+				WaitLatch((&buf->writer_latch), WL_LATCH_SET, 0);
+
 			LWLockAcquire(buf->tail_lock, LW_SHARED);
 
 			if (TupleBufferIsEmpty(buf))
@@ -183,8 +193,6 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 				end = (char *) buf->tail;
 		}
 	}
-
-	was_empty = TupleBufferIsEmpty(buf);
 
 	pos = start;
 
@@ -238,9 +246,28 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	slot->magic = MAGIC;
 	buf->head_id = buf->head->id;
 
-	/* Notify all readers if we were empty. */
-	if (was_empty)
-		TupleBufferNotifyAndClearWaiters(buf);
+	/* Notify any readers waiting for a CQ that is set for this slot. */
+	SpinLockAcquire(&buf->mutex);
+	if (!bms_is_empty(buf->waiters))
+	{
+		Bitmapset *notify = bms_intersect(slot->readby, buf->waiters);
+
+		if (!bms_is_empty(notify))
+		{
+			int i;
+
+			buf->waiters = bms_del_members(buf->waiters, notify);
+
+			while ((i = bms_first_member(notify)) >= 0)
+				TupleBufferNotify(buf, i);
+		}
+
+		bms_free(notify);
+	}
+	SpinLockRelease(&buf->mutex);
+
+	/* Mark this latch as invalid. */
+	buf->writer_latch.owner_pid = 0;
 
 	LWLockRelease(buf->tail_lock);
 	LWLockRelease(buf->head_lock);
@@ -307,11 +334,12 @@ TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, uin
 		buf->head = NULL;
 		buf->tail = NULL;
 
-		buf->latches = (Latch **) spalloc0(sizeof(Latch *) * MAX_CQS);
-		buf->waiters = (Bitmapset *) spalloc0(BITMAPSET_SIZE(MAX_CQS / BITS_PER_BITMAPWORD));
-		buf->waiters->nwords = MAX_CQS / BITS_PER_BITMAPWORD;
+		buf->max_cqs = 0;
+		TupleBufferExpandLatchArray(buf, INIT_CQS);
 
 		SpinLockInit(&buf->mutex);
+
+		MemSet(&buf->writer_latch, 0, sizeof(Latch));
 	}
 
 	LWLockRelease(PipelineMetadataLock);
@@ -334,6 +362,9 @@ TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8
 	reader->num_readers = num_readers;
 	reader->slot = NULL;
 	reader->slot_id = 0;
+
+	MyReaders = lappend(MyReaders, reader);
+
 	return reader;
 }
 
@@ -343,6 +374,7 @@ TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8
 void
 TupleBufferCloseReader(TupleBufferReader *reader)
 {
+	MyReaders = list_delete(MyReaders, reader);
 	pfree(reader);
 }
 
@@ -466,6 +498,9 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 			if (TupleBufferIsEmpty(buf))
 				break;
 
+			if (buf->writer_latch.owner_pid)
+				SetLatch(&buf->writer_latch);
+
 			buf->tail_id = buf->tail->id;
 		}
 		while (bms_is_empty(buf->tail->readby));
@@ -501,22 +536,6 @@ TupleBufferInitLatch(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, Latch 
 	memcpy(&buf->latches[cq_id][reader_id], proclatch, sizeof(Latch));
 }
 
-static void
-clear_readers(Bitmapset *readers)
-{
-	int i;
-	for (i = 0; i < readers->nwords; i++)
-		readers->words[i] = 0;
-}
-
-static void
-notify_readers(TupleBuffer *buf, Bitmapset *readers)
-{
-	int32 id;
-	while ((id = bms_first_member(readers)) >= 0)
-		TupleBufferNotify(buf, id);
-}
-
 /*
  * TupleBufferWait
  */
@@ -524,35 +543,11 @@ void
 TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 {
 	SpinLockAcquire(&buf->mutex);
-
-	if (!TupleBufferIsEmpty(buf))
-	{
-		SpinLockRelease(&buf->mutex);
-		return;
-	}
-
 	bms_add_member(buf->waiters, cq_id);
 	ResetLatch((&buf->latches[cq_id][reader_id]));
 	SpinLockRelease(&buf->mutex);
 
 	WaitLatch((&buf->latches[cq_id][reader_id]), WL_LATCH_SET, 0);
-}
-
-/*
- * TupleBufferNotifyAndClearWaiters
- */
-void
-TupleBufferNotifyAndClearWaiters(TupleBuffer *buf)
-{
-	Bitmapset *waiters;
-
-	SpinLockAcquire(&buf->mutex);
-	waiters = bms_copy(buf->waiters);
-	clear_readers(buf->waiters);
-	SpinLockRelease(&buf->mutex);
-
-	notify_readers(buf, waiters);
-	bms_free(waiters);
 }
 
 /*
@@ -575,10 +570,60 @@ TupleBufferNotify(TupleBuffer *buf, uint32_t cq_id)
 	for (i = 0; i < buf->max_readers; i++)
 	{
 		Latch *l = &buf->latches[cq_id][i];
-		if (!l->owner_pid)
+		if (!l || !l->owner_pid)
 			break;
 		SetLatch(l);
 	}
+}
+
+/*
+ * TupleBufferExpandLatchArray
+ */
+void
+TupleBufferExpandLatchArray(TupleBuffer *buf, uint32_t cq_id)
+{
+	Latch **latches;
+	Bitmapset *waiters;
+	Latch **tmp_latches;
+	Bitmapset *tmp_waiters;
+	uint16_t max_cqs = buf->max_cqs;
+
+	if (buf->max_cqs == 0)
+		buf->max_cqs = INIT_CQS;
+
+	while (cq_id >= buf->max_cqs)
+		buf->max_cqs *= 2;
+
+	if (max_cqs == buf->max_cqs)
+		return;
+
+	latches = (Latch **) spalloc0(sizeof(Latch *) * buf->max_cqs);
+	waiters = (Bitmapset *) spalloc0(BITMAPSET_SIZE(buf->max_cqs / BITS_PER_BITMAPWORD));
+	waiters->nwords = buf->max_cqs / BITS_PER_BITMAPWORD;
+
+	if (max_cqs)
+		memcpy(latches, buf->latches, sizeof(Latch *) * max_cqs);
+
+	SpinLockAcquire(&buf->mutex);
+
+	tmp_latches = buf->latches;
+	tmp_waiters = buf->waiters;
+
+	buf->latches = latches;
+	buf->waiters = waiters;
+
+	if (max_cqs)
+	{
+		uint16_t i;
+		for (i = 1; i <= max_cqs; i++)
+			if (bms_is_member(i, tmp_waiters))
+				waiters = bms_add_member(waiters, i);
+
+		spfree(tmp_latches);
+		spfree(tmp_waiters);
+	}
+
+	SpinLockRelease(&buf->mutex);
 }
 
 /*
@@ -613,6 +658,35 @@ TupleBufferClearPinnedSlots(void)
 	MyPinnedSlots = NIL;
 
 	MemoryContextSwitchTo(oldcontext);
+}
+
+/*
+ * TupleBufferHasUnreadSlots
+ */
+bool
+TupleBufferHasUnreadSlots(void)
+{
+	ListCell *lc;
+
+	foreach(lc, MyReaders)
+	{
+		TupleBufferReader *reader = (TupleBufferReader *) lfirst(lc);
+
+		if (!NoUnreadSlots(reader) && !TupleBufferIsEmpty(reader->buf))
+			return true;
+	}
+
+	return false;
+}
+
+/*
+ * TupleBufferClearReaders
+ */
+void
+TupleBufferClearReaders(void)
+{
+	list_free_deep(MyReaders);
+	MyReaders = NIL;
 }
 
 /*
