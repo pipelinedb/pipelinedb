@@ -574,7 +574,7 @@ TupleBufferNotify(TupleBuffer *buf, uint32_t cq_id)
 	for (i = 0; i < buf->max_readers; i++)
 	{
 		Latch *l = &buf->latches[cq_id][i];
-		if (!l->owner_pid)
+		if (!l || !l->owner_pid)
 			break;
 		SetLatch(l);
 	}
@@ -595,7 +595,7 @@ TupleBufferExpandLatchArray(TupleBuffer *buf, uint32_t cq_id)
 	if (buf->max_cqs == 0)
 		buf->max_cqs = INIT_CQS;
 
-	while (cq_id > buf->max_cqs)
+	while (cq_id >= buf->max_cqs)
 		buf->max_cqs *= 2;
 
 	if (max_cqs == buf->max_cqs)
