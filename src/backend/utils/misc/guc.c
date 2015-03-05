@@ -2578,24 +2578,24 @@ static struct config_int ConfigureNamesInt[] =
 
 
 	{
-		{"stream_buffer_size", PGC_BACKEND, RESOURCES_MEM,
-			gettext_noop("Sets the maximum size of the stream buffer."),
+		{"tuple_buffer_size", PGC_BACKEND, RESOURCES_MEM,
+			gettext_noop("Sets the maximum size of the tuple buffer."),
 			NULL,
 			GUC_UNIT_BLOCKS
 		},
 		&TupleBufferBlocks,
-		4096, 0, INT_MAX,
+		8192, 0, INT_MAX,
 		NULL, NULL, NULL
 	},
 
 	{
-		{"empty_stream_buffer_wait_time", PGC_BACKEND, RESOURCES_MEM,
-			gettext_noop("Wait time in seconds that the worker waits for on an empty buffer before going to sleep."),
+		{"empty_tuple_buffer_wait_time", PGC_BACKEND, RESOURCES_MEM,
+			gettext_noop("Time in milliseconds that the worker waits for on an empty tuple buffer before going to sleep."),
 			NULL,
 			GUC_UNIT_S
 		},
 		&EmptyTupleBufferWaitTime,
-		2, 0, INT_MAX,
+		250, 0, INT_MAX,
 		NULL, NULL, NULL
 	},
 
