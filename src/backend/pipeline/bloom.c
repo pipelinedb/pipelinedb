@@ -15,11 +15,8 @@
 
 #define DEFAULT_P 0.02
 #define DEFAULT_N (2 << 17)
-#define NUM_SEEDS 128
-#define BYTE_IDX(bf, i) (((idx) / 8) % (bf)->blen)
-#define BIT_MASK(i) (1 << ((i) % 8))
-/* Bit counting algorithm from: http://www.inwap.com/pdp10/hbaker/hakmem/hacks.html#item167 */
-#define BIT_COUNT(byte) (((byte) * 01001001001ULL & 042104210421ULL) % 017)
+#define BUCKET_IDX(bf, i) (((idx) / 64) % (bf)->blen)
+#define BIT_MASK(i) (1 << ((i) % 64))
 
 #define MURMUR_SEED 0x99496f1ddc863e6fL
 
@@ -35,9 +32,9 @@ BloomFilter *
 BloomFilterCreateWithMAndK(uint32_t m, uint16_t k)
 {
 	BloomFilter *bf;
-	uint32_t blen = ceil(m / 8.0); /* round m up to nearest byte limit */
+	uint32_t blen = ceil(m / 64.0); /* round m up to nearest uint64_t limit */
 
-	bf = palloc0(sizeof(BloomFilter) + blen);
+	bf = palloc0(sizeof(BloomFilter) + (sizeof(uint64_t) * blen));
 	bf->m = m;
 	bf->k = k;
 	bf->blen = blen;
@@ -86,7 +83,7 @@ BloomFilterAdd(BloomFilter *bf, void *key, Size size)
 	{
 		uint64_t h = hash[0] + (i * hash[1]);
 		uint32_t idx = h % bf->m;
-		bf->b[BYTE_IDX(bf, idx)] |= BIT_MASK(idx);
+		bf->b[BUCKET_IDX(bf, idx)] |= BIT_MASK(idx);
 	}
 }
 
@@ -101,7 +98,7 @@ BloomFilterContains(BloomFilter *bf, void *key, Size size)
 	{
 		uint64_t h = hash[0] + (i * hash[1]);
 		uint32_t idx = h % bf->m;
-		if (!(bf->b[BYTE_IDX(bf, idx)] & BIT_MASK(idx)))
+		if (!(bf->b[BUCKET_IDX(bf, idx)] & BIT_MASK(idx)))
 			return false;
 	}
 
@@ -112,18 +109,11 @@ BloomFilter *
 BloomFilterUnion(BloomFilter *result, BloomFilter *incoming)
 {
 	uint32_t i;
-	uint32_t num_64 = result->blen / 8;
-	uint32_t bit_start = num_64 * 8;
-	uint64_t *b1 = (uint64_t *) result->b;
-	uint64_t *b2 = (uint64_t *) incoming->b;
 
 	Assert(result->m == incoming->m);
 	Assert(result->k == incoming->k);
 
-	for (i = 0; i < num_64; i++)
-		b1[i] |= b2[i];
-
-	for (i = bit_start; i < result->blen; i++)
+	for (i = 0; i < result->blen; i++)
 		result->b[i] |= incoming->b[i];
 
 	return result;
@@ -133,18 +123,11 @@ BloomFilter *
 BloomFilterIntersection(BloomFilter *result, BloomFilter *incoming)
 {
 	uint32_t i;
-	uint32_t num_64 = result->blen / 8;
-	uint32_t bit_start = num_64 * 8;
-	uint64_t *b1 = (uint64_t *) result->b;
-	uint64_t *b2 = (uint64_t *) incoming->b;
 
 	Assert(result->m == incoming->m);
 	Assert(result->k == incoming->k);
 
-	for (i = 0; i < num_64; i++)
-		b1[i] &= b2[i];
-
-	for (i = bit_start; i < result->blen; i++)
+	for (i = 0; i < result->blen; i++)
 		result->b[i] &= incoming->b[i];
 
 	return result;
@@ -153,7 +136,7 @@ BloomFilterIntersection(BloomFilter *result, BloomFilter *incoming)
 Size
 BloomFilterSize(BloomFilter *bf)
 {
-	return sizeof(BloomFilter) + (sizeof(char) * bf->blen);
+	return sizeof(BloomFilter) + (sizeof(uint64_t) * bf->blen);
 }
 
 uint64_t
@@ -163,7 +146,7 @@ BloomFilterCardinality(BloomFilter *bf)
 	float8 x = 0;
 
 	for (i = 0; i < bf->blen; i++)
-		x += BIT_COUNT(bf->b[i]);
+		x += __builtin_popcount(bf->b[i]);
 
 	/* From: http://en.wikipedia.org/wiki/Bloom_filter#Approximating_the_number_of_items_in_a_Bloom_filter */
 	return -1.0 * bf->m * log(1 - (x / bf->m)) / bf->k;
@@ -177,7 +160,7 @@ BloomFilterFillRatio(BloomFilter *bf)
 
 
 	for (i = 0; i < bf->blen; i++)
-		x += BIT_COUNT(bf->b[i]);
+		x += __builtin_popcount(bf->b[i]);
 
 	return x / (bf->blen * 8.0);
 }

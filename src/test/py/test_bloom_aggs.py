@@ -34,10 +34,10 @@ def test_user_low_and_high_card(pipeline, clean_db):
     assert result[0] == 4
 
     result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) FROM test_bloom_agg WHERE k in (2, 3)').first()
-    assert result[0] == 10001
+    assert result[0] == 9870
 
     result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) FROM test_bloom_agg').first()
-    assert result[0] == 10005
+    assert result[0] == 9874
 
 
 def test_bloom_agg_hashing(pipeline, clean_db):
@@ -73,9 +73,9 @@ def test_bloom_agg_hashing(pipeline, clean_db):
 
     result = result[0]
 
-    assert result[0] == 10001
-    assert result[1] == 19991
-    assert result[2] == 10002
+    assert result[0] == 9870
+    assert result[1] == 19436
+    assert result[2] == 9857
 
 
 def test_bloom_intersection(pipeline, clean_db):
@@ -111,7 +111,7 @@ def test_bloom_intersection(pipeline, clean_db):
 
   result = result[0]
 
-  assert result[0] == 5071
+  assert result[0] == 5101
 
 def test_bloom_contains(pipeline, clean_db):
   """
