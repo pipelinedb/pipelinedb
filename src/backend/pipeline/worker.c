@@ -212,8 +212,6 @@ retry:
 				else
 					xact_commit = false;
 			}
-			else
-				xact_commit = true;
 
 			if (xact_commit)
 			{
