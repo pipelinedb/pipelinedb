@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include "postgres.h"
 
+#include "access/xlog.h"
 #include "catalog/pipeline_query_fn.h"
 #include "miscadmin.h"
 #include "pipeline/cqproc.h"
@@ -35,7 +36,11 @@
 static void
 init_pipeline_once()
 {
-	MarkAllContinuousViewsAsInactive();
+	/*
+	 * If we're a hot stand-by / slave, don't mark all continuous views as active.
+	 */
+	if (!RecoveryInProgress())
+		MarkAllContinuousViewsAsInactive();
 }
 
 /*
