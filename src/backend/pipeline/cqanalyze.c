@@ -1872,7 +1872,8 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 				foreach(lc, context.streams)
 				{
 					RangeVar *rv = (RangeVar *) lfirst(lc);
-					if (pg_strcasecmp(rv->relname, strVal(alias)) == 0 || pg_strcasecmp(rv->alias->aliasname, strVal(alias)) == 0)
+					if (pg_strcasecmp(rv->relname, strVal(alias)) == 0 ||
+							(rv->alias && pg_strcasecmp(rv->alias->aliasname, strVal(alias)) == 0))
 					{
 						table = rv;
 						break;
