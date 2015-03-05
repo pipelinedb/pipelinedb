@@ -483,6 +483,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	oldcontext = MemoryContextSwitchTo(runctx);
 
 	MarkCombinerAsRunning(MyCQId);
+	pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
 
 	TupleBufferInitLatch(CombinerTupleBuffer, MyCQId, 0, &MyProc->procLatch);
 	reader = TupleBufferOpenReader(CombinerTupleBuffer, MyCQId, 0, 1);
@@ -514,11 +515,9 @@ retry:
 			bool force = false;
 			bool found_tuple;
 
-			TupleBufferResetNotify(CombinerTupleBuffer, MyCQId, 0);
-
-			if (count == 0 && entry->active && TupleBufferIsEmpty(CombinerTupleBuffer))
+			if (count == 0 && entry->active && !TupleBufferHasUnreadSlots())
 			{
-				if (TimestampDifferenceExceeds(last_receive, GetCurrentTimestamp(), EmptyTupleBufferWaitTime * 1000))
+				if (TimestampDifferenceExceeds(last_receive, GetCurrentTimestamp(), EmptyTupleBufferWaitTime))
 				{
 					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
 					TupleBufferWait(CombinerTupleBuffer, MyCQId, 0);
@@ -527,6 +526,8 @@ retry:
 				else
 					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 			}
+
+			TupleBufferResetNotify(CombinerTupleBuffer, MyCQId, 0);
 
 			CurrentResourceOwner = owner;
 
@@ -639,6 +640,7 @@ retry:
 	PG_END_TRY();
 
 	TupleBufferCloseReader(reader);
+	TupleBufferClearReaders();
 
 	MemoryContextDelete(runctx);
 	MemoryContextSwitchTo(oldcontext);
