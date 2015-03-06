@@ -34,7 +34,7 @@
 #include "utils/typcache.h"
 
 /* Whether or not to block till the events are consumed by a cv*/
-bool DebugSyncStreamInsert;
+bool debug_sync_stream_insert;
 
 static HTAB *prepared_stream_inserts = NULL;
 
@@ -183,7 +183,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 		count++;
 	}
 
-	if (DebugSyncStreamInsert)
+	if (debug_sync_stream_insert)
 		TupleBufferWaitOnSlot(tbs, 5);
 
 	pstmt->inserts = NIL;
@@ -315,7 +315,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
-	if (DebugSyncStreamInsert)
+	if (debug_sync_stream_insert)
 		TupleBufferWaitOnSlot(tbs, 5);
 
 	return count;
