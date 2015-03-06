@@ -17,6 +17,8 @@
 #include "utils/portal.h"
 #include "utils/resowner.h"
 
+extern int combiner_work_mem;
+
 void ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc *queryDesc, ResourceOwner owner);
 
 #endif /* COMBINER_H */

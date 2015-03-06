@@ -19,9 +19,10 @@
 #include "storage/latch.h"
 #include "storage/lwlock.h"
 
-extern bool DebugPrintTupleBuffer;
-extern int TupleBufferBlocks;
-extern int EmptyTupleBufferWaitTime;
+/* GUC parameters */
+extern bool debug_tuple_stream_buffer;
+extern int tuple_buffer_blocks;
+extern int empty_tuple_buffer_wait_time;
 
 typedef struct Tuple
 {
