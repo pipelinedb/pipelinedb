@@ -52,6 +52,7 @@
 #include "parser/parser.h"
 #include "parser/scansup.h"
 #include "pgstat.h"
+#include "pipeline/combiner.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/tuplebuf.h"
 #include "postmaster/autovacuum.h"
@@ -2607,7 +2608,7 @@ static struct config_int ConfigureNamesInt[] =
 						 "temporary disk files."),
 			GUC_UNIT_KB
 		},
-		&work_mem,
+		&combiner_work_mem,
 		262144, 16384, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},
