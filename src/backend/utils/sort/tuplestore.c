@@ -182,14 +182,8 @@ struct Tuplestorestate
 #define WRITETUP(state,tup) ((*(state)->writetup) (state, tup))
 #define READTUP(state,len)	((*(state)->readtup) (state, len))
 #define LACKMEM(state)		((state)->availMem < 0)
-#define USEMEM(state,amt) do { \
-	(state)->availMem -= (amt); \
-	(state)->totalMem += (amt); \
-} while (0)
-#define FREEMEM(state,amt)  do { \
-	(state)->availMem += (amt); \
-	(state)->totalMem -= (amt); \
-} while (0)
+#define USEMEM(state,amt)	((state)->availMem -= (amt))
+#define FREEMEM(state,amt)	((state)->availMem += (amt))
 
 /*--------------------
  *
