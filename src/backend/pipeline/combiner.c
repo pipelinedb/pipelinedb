@@ -47,6 +47,8 @@
 
 static TupleBufferReader *reader = NULL;
 
+int combiner_work_mem = 16384;
+
 /*
  * receive_tuple
  */
@@ -65,6 +67,7 @@ receive_tuple(TupleTableSlot *slot)
 
 	ExecStoreTuple(heap_copytuple(tbs->tuple->heaptup), slot, InvalidBuffer, false);
 	TupleBufferUnpinSlot(reader, tbs);
+
 	return true;
 }
 
@@ -226,9 +229,6 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
 	char base_select[14 + strlen(cvname) + 1];
 	HASH_SEQ_STATUS status;
 	HeapTupleEntry entry;
-	TupleTableSlot *slot = MakeSingleTupleTableSlot(desc);
-	List *tups = NIL;
-	ListCell *lc;
 
 	sprintf(base_select, "SELECT * FROM %s", cvname);
 
@@ -286,12 +286,6 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
 					 NULL);
 
 	tuplestore_rescan(incoming_merges);
-	foreach_tuple(slot, incoming_merges)
-	{
-		HeapTuple tup = ExecCopySlotTuple(slot);
-		tups = lappend(tups, tup);
-	}
-	tuplestore_clear(incoming_merges);
 
 	/*
 	 * Now add the merge targets that already exist in the continuous view's table
@@ -299,15 +293,7 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
 	 */
 	hash_seq_init(&status, merge_targets->hashtab);
 	while ((entry = (HeapTupleEntry) hash_seq_search(&status)) != NULL)
-	{
 		tuplestore_puttuple(incoming_merges, entry->tuple);
-	}
-
-	foreach(lc, tups)
-	{
-		HeapTuple tup = (HeapTuple) lfirst(lc);
-		tuplestore_puttuple(incoming_merges, tup);
-	}
 
 	PortalDrop(portal, false);
 }
@@ -410,7 +396,7 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 					  list_make1(plan),
 					  NULL);
 
-	merge_output = tuplestore_begin_heap(true, true, work_mem);
+	merge_output = tuplestore_begin_heap(true, true, combiner_work_mem);
 	SetTuplestoreDestReceiverParams(dest, merge_output, CurrentMemoryContext, true);
 
 	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, GetActiveSnapshot());
@@ -423,6 +409,8 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 					 NULL);
 
 	PopActiveSnapshot();
+
+	tuplestore_clear(store);
 
 	sync_combine(matrelname, merge_output, slot, merge_targets);
 
@@ -493,7 +481,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	 * so that we don't lose received tuples in case of errors in the loop
 	 * below.
 	 */
-	store = tuplestore_begin_heap(true, true, work_mem);
+	store = tuplestore_begin_heap(true, true, combiner_work_mem);
 	combineplan = prepare_combine_plan(queryDesc->plannedstmt, store, &workerdesc);
 	slot = MakeSingleTupleTableSlot(workerdesc);
 
@@ -517,7 +505,7 @@ retry:
 
 			if (count == 0 && entry->active && !TupleBufferHasUnreadSlots())
 			{
-				if (TimestampDifferenceExceeds(last_receive, GetCurrentTimestamp(), EmptyTupleBufferWaitTime))
+				if (TimestampDifferenceExceeds(last_receive, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
 				{
 					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
 					TupleBufferWait(CombinerTupleBuffer, MyCQId, 0);
@@ -568,7 +556,6 @@ retry:
 				CommitTransactionCommand();
 				MemoryContextSwitchTo(combinectx);
 
-				tuplestore_clear(store);
 				TupleBufferClearPinnedSlots();
 
 				MemoryContextReset(CQExecutionContext);
@@ -634,7 +621,7 @@ retry:
 
 		MemoryContextReset(CQExecutionContext);
 
-		if (ContinuousQueryCrashRecovery)
+		if (continuous_query_crash_recovery)
 			goto retry;
 	}
 	PG_END_TRY();

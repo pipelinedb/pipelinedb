@@ -107,6 +107,7 @@ struct Tuplestorestate
 	bool		truncated;		/* tuplestore_trim has removed tuples? */
 	int64		availMem;		/* remaining memory available, in bytes */
 	int64		allowedMem;		/* total memory allowed, in bytes */
+	int64		totalMem;		/* total memory consumed by ALL tuples in the store */
 	BufFile    *myfile;			/* underlying file, or NULL if none */
 	MemoryContext context;		/* memory context for holding tuples */
 	ResourceOwner resowner;		/* resowner for holding temp files */
@@ -181,8 +182,14 @@ struct Tuplestorestate
 #define WRITETUP(state,tup) ((*(state)->writetup) (state, tup))
 #define READTUP(state,len)	((*(state)->readtup) (state, len))
 #define LACKMEM(state)		((state)->availMem < 0)
-#define USEMEM(state,amt)	((state)->availMem -= (amt))
-#define FREEMEM(state,amt)	((state)->availMem += (amt))
+#define USEMEM(state,amt) do { \
+	(state)->availMem -= (amt); \
+	(state)->totalMem += (amt); \
+} while (0)
+#define FREEMEM(state,amt)  do { \
+	(state)->availMem += (amt); \
+	(state)->totalMem -= (amt); \
+} while (0)
 
 /*--------------------
  *

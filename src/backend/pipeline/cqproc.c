@@ -49,7 +49,8 @@
 #define SLEEP_TIMEOUT (2 * 1000)
 #define RECOVERY_TIME 1
 
-bool ContinuousQueryCrashRecovery;
+/* GUC parameters */
+bool continuous_query_crash_recovery;
 
 typedef struct CQProcRunArgs
 {
