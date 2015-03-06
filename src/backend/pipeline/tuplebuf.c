@@ -41,17 +41,13 @@
 #define SlotEqualsTail(slot) ((slot) == (slot)->buf->tail && (slot)->id == (slot)->buf->tail_id)
 #define HasEnoughSize(start, end, size) ((intptr_t) size <= ((intptr_t) end - (intptr_t) start))
 
-/* Whether or not to print the state of the stream buffer as it changes */
-bool DebugPrintTupleBuffer;
-
-/* Global stream buffer that lives in shared memory. All stream events are appended to this */
 TupleBuffer *WorkerTupleBuffer = NULL;
 TupleBuffer *CombinerTupleBuffer = NULL;
 
-/* Maximum size in blocks of the global stream buffer */
-int TupleBufferBlocks;
-
-int EmptyTupleBufferWaitTime;
+/* GUC parameters */
+bool debug_tuple_stream_buffer;
+int tuple_buffer_blocks;
+int empty_tuple_buffer_wait_time;
 
 static List *MyPinnedSlots = NIL;
 static List *MyReaders = NIL;
@@ -94,7 +90,7 @@ TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms)
 		pg_usleep(sleepms * 1000);
 	}
 
-	if (DebugPrintTupleBuffer)
+	if (debug_tuple_stream_buffer)
 	{
 		elog(LOG, "evicted %zu bytes at [%d, %d)", slot->size,
 				BufferOffset(slot->buf, slot), BufferOffset(slot->buf, SlotEnd(slot)));
@@ -172,7 +168,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 		{
 			LWLockRelease(buf->tail_lock);
 
-			if (TimestampDifferenceExceeds(start_wait, GetCurrentTimestamp(), EmptyTupleBufferWaitTime))
+			if (TimestampDifferenceExceeds(start_wait, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
 				pg_usleep(INSERT_SLEEP_MS * 1000);
 			else
 				WaitLatch((&buf->writer_latch), WL_LATCH_SET, 0);
@@ -272,7 +268,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	LWLockRelease(buf->tail_lock);
 	LWLockRelease(buf->head_lock);
 
-	if (DebugPrintTupleBuffer)
+	if (debug_tuple_stream_buffer)
 		elog(LOG, "appended %zu bytes at [%d, %d); readers: %d", slot->size,
 				BufferOffset(buf, slot), BufferOffset(buf, SlotEnd(slot)), bms_num_members(slot->readby));
 
@@ -282,7 +278,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 static Size
 buffer_size()
 {
-	return (TupleBufferBlocks * BLCKSZ) + sizeof(TupleBuffer);
+	return (tuple_buffer_blocks * BLCKSZ) + sizeof(TupleBuffer);
 }
 
 /*
@@ -439,7 +435,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 
 	Assert(SlotIsValid(slot));
 
-	if (DebugPrintTupleBuffer)
+	if (debug_tuple_stream_buffer)
 		elog(LOG, "[%d] pinned event at [%d, %d)",
 				reader->cq_id, BufferOffset(reader->buf, reader->slot), BufferOffset(reader->buf, SlotEnd(reader->slot)));
 
@@ -469,7 +465,7 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	bms_del_member(slot->readby, cq_id);
 	SpinLockRelease(&slot->mutex);
 
-	if (DebugPrintTupleBuffer)
+	if (debug_tuple_stream_buffer)
 		elog(LOG, "[%d] unpinned event at [%d, %d); readers %d",
 				cq_id, BufferOffset(buf, slot), BufferOffset(buf, SlotEnd(slot)), bms_num_members(slot->readby));
 

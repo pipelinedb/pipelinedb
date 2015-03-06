@@ -1523,11 +1523,11 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"debug_print_stream_buffer", PGC_USERSET, LOGGING_WHAT,
-			gettext_noop("Print the state of the stream buffer as it changes."),
+		{"debug_tuple_stream_buffer", PGC_USERSET, LOGGING_WHAT,
+			gettext_noop("Print the state of the tuple buffers as they change."),
 			NULL,
 		},
-		&DebugPrintTupleBuffer,
+		&debug_tuple_stream_buffer,
 		false,
 		NULL, NULL, NULL
 	},
@@ -1537,7 +1537,7 @@ static struct config_bool ConfigureNamesBool[] =
 			gettext_noop("Makes INSERTS into streams synchronous."),
 			NULL,
 		},
-		&DebugSyncStreamInsert,
+		&debug_sync_stream_insert,
 		false,
 		NULL, NULL, NULL
 	},
@@ -1547,7 +1547,7 @@ static struct config_bool ConfigureNamesBool[] =
 			gettext_noop("Recover from errors and crashes in continuous query processes."),
 			NULL,
 		},
-		&ContinuousQueryCrashRecovery,
+		&continuous_query_crash_recovery,
 		true,
 		NULL, NULL, NULL
 	},
@@ -2578,24 +2578,37 @@ static struct config_int ConfigureNamesInt[] =
 
 
 	{
-		{"tuple_buffer_size", PGC_BACKEND, RESOURCES_MEM,
-			gettext_noop("Sets the maximum size of the tuple buffer."),
+		{"tuple_buffer_blocks", PGC_BACKEND, RESOURCES_MEM,
+			gettext_noop("Sets the maximum number of blocks in the tuple buffer."),
 			NULL,
 			GUC_UNIT_BLOCKS
 		},
-		&TupleBufferBlocks,
+		&tuple_buffer_blocks,
 		8192, 0, INT_MAX,
 		NULL, NULL, NULL
 	},
 
 	{
 		{"empty_tuple_buffer_wait_time", PGC_BACKEND, RESOURCES_MEM,
-			gettext_noop("Time in milliseconds that the worker waits for on an empty tuple buffer before going to sleep."),
+			gettext_noop("Time in milliseconds that the continuous query process spins on an empty tuple buffer before sleeping."),
 			NULL,
 			GUC_UNIT_S
 		},
-		&EmptyTupleBufferWaitTime,
+		&empty_tuple_buffer_wait_time,
 		250, 0, INT_MAX,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"combiner_work_mem", PGC_USERSET, RESOURCES_MEM,
+			gettext_noop("Sets the maximum memory to be used for combining partial results for continuous queries."),
+			gettext_noop("This much memory can be used by each combiner processes's internal "
+						 "sort operation and hash table before switching to "
+						 "temporary disk files."),
+			GUC_UNIT_KB
+		},
+		&work_mem,
+		262144, 16384, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},
 

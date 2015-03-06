@@ -41,7 +41,8 @@ typedef struct
 	char *shm_query;
 } CQProcEntry;
 
-extern bool ContinuousQueryCrashRecovery;
+/* GUC parameters */
+extern bool continuous_query_crash_recovery;
 
 extern void InitCQProcState(void);
 

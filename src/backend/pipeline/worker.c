@@ -164,7 +164,7 @@ retry:
 		{
 			if (!TupleBufferHasUnreadSlots())
 			{
-				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), EmptyTupleBufferWaitTime))
+				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
 				{
 					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
 					TupleBufferWait(WorkerTupleBuffer, MyCQId, MyWorkerId);
@@ -251,7 +251,7 @@ retry:
 		/* This resets the es_query_ctx and in turn the CQExecutionContext */
 		MemoryContextResetAndDeleteChildren(runcontext);
 
-		if (ContinuousQueryCrashRecovery)
+		if (continuous_query_crash_recovery)
 			goto retry;
 	}
 	PG_END_TRY();
