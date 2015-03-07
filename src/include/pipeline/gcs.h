@@ -11,12 +11,15 @@
 #define PIPELINE_GCS_H
 
 #include "c.h"
+#include "nodes/pg_list.h"
 
 typedef struct GolombCodedSet
 {
 	uint32	vl_len_;
 	float8 p;
 	uint32_t n;
+	uint32_t nvals;
+	List *vals;
 	uint32_t blen;
 	uint8_t b[1];
 } GolombCodedSet;
@@ -32,5 +35,6 @@ extern GolombCodedSet *GolombCodedSetUnion(GolombCodedSet *result, GolombCodedSe
 extern GolombCodedSet *GolombCodedSetIntersection(GolombCodedSet *result, GolombCodedSet *incoming);
 extern float8 GolombCodedSetFillRatio(GolombCodedSet *gcs);
 extern Size GolombCodedSetSize(GolombCodedSet *gcs);
+extern GolombCodedSet *GolombCodedSetCompress(GolombCodedSet *gcs);
 
 #endif
