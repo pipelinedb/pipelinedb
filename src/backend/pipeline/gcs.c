@@ -21,25 +21,17 @@
 
 #define MURMUR_SEED 0xb8160b979d3087fcL
 
-typedef struct
+BitReader *
+BitReaderCreate(uint8_t *bytes, uint32_t len)
 {
-	uint8_t *bytes;
-	uint32_t len;
-	uint32_t accum;
-	uint8_t naccum;
-} bit_reader;
-
-static bit_reader *
-bit_reader_create(uint8_t *bytes, uint32_t len)
-{
-	bit_reader *r = palloc0(sizeof(bit_reader));
+	BitReader *r = palloc0(sizeof(BitReader));
 	r->bytes = bytes;
 	r->len = len;
 	return r;
 }
 
-static uint32_t
-bit_reader_read(bit_reader *r, uint8_t nbits)
+uint32_t
+BitReaderRead(BitReader *r, uint8_t nbits)
 {
 	uint32_t ret = 0;
 	uint8_t nread;
@@ -82,23 +74,22 @@ bit_reader_read(bit_reader *r, uint8_t nbits)
 	return ret;
 }
 
-typedef struct
+void
+BitReaderDestroy(BitReader *r)
 {
-	StringInfoData buf;
-	uint64_t accum;
-	uint8_t naccum;
-} bit_writer;
+	pfree(r);
+}
 
-static bit_writer *
-bit_writer_create(void)
+BitWriter *
+BitWriterCreate(void)
 {
-	bit_writer *w = palloc0(sizeof(bit_writer));
+	BitWriter *w = palloc0(sizeof(BitWriter));
 	initStringInfo(&w->buf);
 	return w;
 }
 
-static void
-bit_writer_write(bit_writer *w, uint8_t nbits, uint64_t val)
+void
+BitWriterWrite(BitWriter *w, uint8_t nbits, uint64_t val)
 {
 	uint8_t nwrite;
 
@@ -121,8 +112,8 @@ bit_writer_write(bit_writer *w, uint8_t nbits, uint64_t val)
 	}
 }
 
-static void
-bit_writer_flush(bit_writer *w)
+void
+BitWriterFlush(BitWriter *w)
 {
 	if (w->naccum > 0)
 	{
@@ -133,89 +124,84 @@ bit_writer_flush(bit_writer *w)
 	}
 }
 
-typedef struct
+void
+BitWriterDestroy(BitWriter *w)
 {
-	bit_reader *bit_reader;
-	GolombCodedSet *gcs;
-	uint32_t logp;
-} gcs_reader;
+	resetStringInfo(&w->buf);
+	pfree(w->buf.data);
+	pfree(w);
+}
 
-static gcs_reader *
-gcs_reader_create(GolombCodedSet *gcs)
+GCSReader *
+GCSReaderCreate(GolombCodedSet *gcs)
 {
-	gcs_reader *r = palloc0(sizeof(gcs_reader));
+	GCSReader *r = palloc0(sizeof(GCSReader));
 	r->gcs = gcs;
-	r->bit_reader = bit_reader_create((uint8_t *) gcs->b, gcs->blen);
+	r->BitReader = BitReaderCreate((uint8_t *) gcs->b, gcs->blen);
 	r->logp = (uint32_t) floor(log(gcs->p) / log(2));
 	return r;
 }
 
-static int32_t
-gcs_reader_next(gcs_reader *r)
+int32_t
+GCSReaderNext(GCSReader *r)
 {
 	int32_t val;
 
-	if (!r->bit_reader->len)
+	if (!r->BitReader->len)
 		return -1;
 
-	while (bit_reader_read(r->bit_reader, 1))
+	while (BitReaderRead(r->BitReader, 1))
 	{
 		val += r->gcs->p;
-		if (!r->bit_reader->len)
+		if (!r->BitReader->len)
 			return -1;
 	}
 
-	val += bit_reader_read(r->bit_reader, r->logp);
+	val += BitReaderRead(r->BitReader, r->logp);
 	return val;
 }
 
 void
-gcs_reader_destroy(gcs_reader *r)
+GCSReaderDestroy(GCSReader *r)
 {
+	BitReaderDestroy(r->BitReader);
 	pfree(r);
 }
 
-typedef struct
+GCSWriter *
+GCSWriterCreate(GolombCodedSet *gcs)
 {
-	bit_writer *bit_writer;
-	GolombCodedSet *gcs;
-	uint32_t logp;
-} gcs_writer;
-
-static gcs_writer *
-gcs_writer_create(GolombCodedSet *gcs)
-{
-	gcs_writer *r = palloc0(sizeof(gcs_writer));
+	GCSWriter *r = palloc0(sizeof(GCSWriter));
 	r->gcs = gcs;
-	r->bit_writer = bit_writer_create();
+	r->BitWriter = BitWriterCreate();
 	r->logp = (uint32_t) floor(log(gcs->p) / log(2));
 	return r;
 }
 
-static void
-gcs_writer_write(gcs_writer *w, uint32_t val)
+void
+GCSWriterWrite(GCSWriter *w, uint32_t val)
 {
 	uint32_t q = val / w->gcs->p;
 	uint32_t r = val - q * w->gcs->p;
 
-	bit_writer_write(w->bit_writer, q + 1, BITMASK(q) << 1);
-	bit_writer_write(w->bit_writer, w->logp, r);
+	BitWriterWrite(w->BitWriter, q + 1, BITMASK(q) << 1);
+	BitWriterWrite(w->BitWriter, w->logp, r);
 }
 
-static void
-gcs_writer_flush(gcs_writer *w)
+void
+GCSWriterFlush(GCSWriter *w)
 {
-	bit_writer_flush(w->bit_writer);
+	BitWriterFlush(w->BitWriter);
 }
 
-static GolombCodedSet *
-gcs_writer_generate_gcs(gcs_writer *w)
+GolombCodedSet *
+GCSWriterGenerateGCS(GCSWriter *w)
 {
 
 }
 
-static void
-gcs_writer_destroy(gcs_writer *w)
+void
+GCSWriterDestroy(GCSWriter *w)
 {
 
 }
@@ -295,8 +281,8 @@ GolombCodedSetCompress(GolombCodedSet *gcs)
 	int32_t *vals;
 	ListCell *lc;
 	uint32_t vlen = list_length(gcs->vals);
-	gcs_reader *reader;
-	gcs_writer *writer;
+	GCSReader *reader;
+	GCSWriter *writer;
 	int32_t l_val;
 	int32_t c_val;
 	int32_t prev_val = -1;
@@ -314,19 +300,19 @@ GolombCodedSetCompress(GolombCodedSet *gcs)
 
 	qsort(vals, vlen, sizeof(uint32_t), int_cmp);
 
-	reader = gcs_reader_create(gcs);
-	writer = gcs_writer_create(gcs);
+	reader = GCSReaderCreate(gcs);
+	writer = GCSWriterCreate(gcs);
 
 	i = 0;
 	l_val = vals[i++];
-	c_val = gcs_reader_next(reader);
+	c_val = GCSReaderNext(reader);
 
 	while (c_val >= 0 || l_val >= 0)
 	{
 		if (c_val == -1)
 		{
 			if (l_val != prev_val)
-				gcs_writer_write(writer, l_val);
+				GCSWriterWrite(writer, l_val);
 			if (i == vlen)
 				l_val = -1;
 			else
@@ -335,21 +321,21 @@ GolombCodedSetCompress(GolombCodedSet *gcs)
 		else if (l_val == -1)
 		{
 			if (c_val != prev_val)
-				gcs_writer_write(writer, c_val);
-			c_val = gcs_reader_next(reader);
+				GCSWriterWrite(writer, c_val);
+			c_val = GCSReaderNext(reader);
 		}
 		else
 		{
 			if (c_val <= l_val)
 			{
 				if (c_val != prev_val)
-					gcs_writer_write(writer, c_val);
-				c_val = gcs_reader_next(reader);
+					GCSWriterWrite(writer, c_val);
+				c_val = GCSReaderNext(reader);
 			}
 			else
 			{
 				if (l_val != prev_val)
-					gcs_writer_write(writer, l_val);
+					GCSWriterWrite(writer, l_val);
 				if (i == vlen)
 					l_val = -1;
 				else
@@ -358,11 +344,11 @@ GolombCodedSetCompress(GolombCodedSet *gcs)
 		}
 	}
 
-	gcs_writer_flush(writer);
-	new = gcs_writer_generate_gcs(writer);
+	GCSWriterFlush(writer);
+	new = GCSWriterGenerateGCS(writer);
 
-	gcs_reader_destroy(reader);
-	gcs_writer_destroy(writer);
+	GCSReaderDestroy(reader);
+	GCSWriterDestroy(writer);
 	GolombCodedSetDestroy(gcs);
 
 	return new;

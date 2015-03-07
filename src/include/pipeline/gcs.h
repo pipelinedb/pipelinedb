@@ -11,7 +11,32 @@
 #define PIPELINE_GCS_H
 
 #include "c.h"
+#include "lib/stringinfo.h"
 #include "nodes/pg_list.h"
+
+typedef struct BitReader
+{
+	uint8_t *bytes;
+	uint32_t len;
+	uint32_t accum;
+	uint8_t naccum;
+} BitReader;
+
+extern BitReader *BitReaderCreate(uint8_t *bytes, uint32_t len);
+extern uint32_t BitReaderRead(BitReader *r, uint8_t nbits);
+extern void BitReaderDestroy(BitReader *r);
+
+typedef struct BitWriter
+{
+	StringInfoData buf;
+	uint64_t accum;
+	uint8_t naccum;
+} BitWriter;
+
+extern BitWriter *BitWriterCreate(void);
+extern void BitWriterWrite(BitWriter *w, uint8_t nbits, uint64_t val);
+extern void BitWriterFlush(BitWriter *w);
+extern void BitWriterDestroy(BitWriter *r);
 
 typedef struct GolombCodedSet
 {
@@ -36,5 +61,29 @@ extern GolombCodedSet *GolombCodedSetIntersection(GolombCodedSet *result, Golomb
 extern float8 GolombCodedSetFillRatio(GolombCodedSet *gcs);
 extern Size GolombCodedSetSize(GolombCodedSet *gcs);
 extern GolombCodedSet *GolombCodedSetCompress(GolombCodedSet *gcs);
+
+typedef struct GCSReader
+{
+	BitReader *BitReader;
+	GolombCodedSet *gcs;
+	uint32_t logp;
+} GCSReader;
+
+extern GCSReader *GCSReaderCreate(GolombCodedSet *gcs);
+extern int32_t GCSReaderNext(GCSReader *r);
+extern void GCSReaderDestroy(GCSReader *r);
+
+typedef struct GCSWriter
+{
+	BitWriter *BitWriter;
+	GolombCodedSet *gcs;
+	uint32_t logp;
+} GCSWriter;
+
+extern GCSWriter *GCSWriterCreate(GolombCodedSet *gcs);
+extern void GCSWriterWrite(GCSWriter *w, uint32_t val);
+extern void GCSWriterFlush(GCSWriter *w);
+extern GolombCodedSet *GCSWriterGenerateGCS(GCSWriter *w);
+extern void GCSWriterDestroy(GCSWriter *w);
 
 #endif
