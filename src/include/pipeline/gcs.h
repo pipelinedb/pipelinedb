@@ -36,7 +36,7 @@ typedef struct BitWriter
 extern BitWriter *BitWriterCreate(void);
 extern void BitWriterWrite(BitWriter *w, uint8_t nbits, uint64_t val);
 extern void BitWriterFlush(BitWriter *w);
-extern void BitWriterDestroy(BitWriter *r);
+extern void BitWriterDestroy(BitWriter *w);
 
 typedef struct GolombCodedSet
 {

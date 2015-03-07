@@ -203,7 +203,8 @@ GCSWriterGenerateGCS(GCSWriter *w)
 void
 GCSWriterDestroy(GCSWriter *w)
 {
-
+	BitWriterDestroy(w->BitWriter);
+	pfree(w);
 }
 
 GolombCodedSet *
@@ -243,6 +244,7 @@ GolombCodedSetAdd(GolombCodedSet *gcs, void *key, Size size)
 {
 	int32_t hash = MurmurHash3_64(key, size, MURMUR_SEED) % RANGE_END(gcs);
 	gcs->vals = lappend_int(gcs->vals, hash);
+	gcs->nvals++;
 }
 
 bool

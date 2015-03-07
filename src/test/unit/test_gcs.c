@@ -10,19 +10,21 @@
 
 START_TEST(test_compression)
 {
-//	GCSReaderNext *gcs = GolombCodedSetCreate();
-//	int num_keys = 25000;
-//	int i;
-//	List *vals;
-//	ListCell *lc;
-//
-//	for (i = 0; i < num_keys; i++)
-//	{
-//		int key = rand();
-//		GolombCodedSetAdd(gcs, &key, sizeof(int));
-//	}
-//
-//	vals = list_copy(gcs->vals);
+	GolombCodedSet *gcs = GolombCodedSetCreate();
+	int num_keys = 25000;
+	int i;
+	List *vals;
+	ListCell *lc;
+
+	for (i = 0; i < num_keys; i++)
+	{
+		int key = rand();
+		GolombCodedSetAdd(gcs, &key, sizeof(int));
+	}
+
+	vals = list_copy(gcs->vals);
+
+	gcs = GolombCodedSetCompress(gcs);
 }
 END_TEST
 
