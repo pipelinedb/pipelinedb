@@ -10,7 +10,7 @@ ln -s $INSTALL_PREFIX/bin/pipeline-init /usr/bin/pipeline-init
 ln -s $INSTALL_PREFIX/bin/psql /usr/bin/psql
 ln -s /usr/bin/psql /usr/bin/pipeline
 
-rm $INSTALL_PREFIX/post-install
+rm $INSTALL_PREFIX/postinst
 
 echo "
     ____  _            ___            ____  ____
