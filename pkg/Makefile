@@ -1,15 +1,14 @@
 VERSION = 0.1a
 
-TMP_BUILD = ./tmp_build
+TMP_BUILD = ./tmp
 GEOS = geos-3.4.2
 GDAL = gdal-1.11.2
 PROJ = proj-4.8.0
 PREFIX = $(shell pwd)/staging
-TOP_BUILDDIR = ../../
-FPM = fpm -s dir -t rpm -n pipelinedb -v $(VERSION) --epoch 0 --prefix=/opt/pipelinedb --after-install post-install . 
+TOP_BUILDDIR = ../
 
-all: geos gdal proj pipeline gis fpm
-	echo "Successfully built RPM package `ls *.rpm`"
+all: geos gdal proj pipeline gis
+	echo "PipelineDB binaries successfully built and ready for packaging."
 
 geos:
 	mkdir -p $(TMP_BUILD)
@@ -33,7 +32,7 @@ proj:
 	(cd $(TMP_BUILD)/$(PROJ) && make && make install)
 
 pipeline:
-	(cd $(TOP_BUILDDIR) && ./configure --prefix=$(PREFIX) CFLAGS="-O0")
+	(cd $(TOP_BUILDDIR) && ./configure --prefix=$(PREFIX) CFLAGS="$(CFLAGS)")
 	(cd $(TOP_BUILDDIR) && make && make install)
 
 gis:
@@ -45,13 +44,12 @@ gis:
 		--with-projdir=$(PREFIX))
 	(cd $(TOP_BUILDDIR)/src/gis && make && make install)	
 
-fpm:
-	cp post-install $(PREFIX)/
-	(cd $(PREFIX) && $(FPM))
-	mv $(PREFIX)/*.rpm .
+deb: all
+	(cd $(PREFIX) && fpm -s dir -t deb -n pipelinedb -v $(VERSION) --prefix=/opt/pipelinedb --after-install postinst .)
+	
+rpm: all
+	(cd $(PREFIX) && fpm -s dir -t rpm -n pipelinedb -v $(VERSION) --epoch 0 --prefix=/opt/pipelinedb --after-install post-install .)
 
 clean:
-	rm -rf $(GEOS)* $(GDAL)* $(PROJ)*
-	rm -rf $(TMP_BUILD)
-	rm -rf $(PREFIX)
-	rm -rf *.rpm
+	rm -rf $(GEOS)* $(GDAL)* $(PROJ)* $(TMP_BUILD) $(PREFIX)
+	rm -rf *.deb *.rpm
