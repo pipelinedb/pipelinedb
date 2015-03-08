@@ -22,7 +22,52 @@ gdal:
 	mkdir -p $(TMP_BUILD)
 	wget -P $(TMP_BUILD) ftp://ftp.remotesensing.org/gdal/1.11.2/$(GDAL).tar.gz
 	(cd $(TMP_BUILD) && tar -xf $(GDAL).tar.gz)
-	(cd $(TMP_BUILD)/$(GDAL) && ./configure --prefix=$(PREFIX))
+	(cd $(TMP_BUILD)/$(GDAL) && ./configure --prefix=$(PREFIX) \
+            --with-threads \
+            --with-ogr \
+            --with-geos \
+            --without-libtool \
+            --with-libz=internal \
+            --with-libtiff=internal \
+            --with-geotiff=internal \
+            --without-gif \
+            --without-pg \
+            --without-grass \
+            --without-libgrass \
+            --without-cfitsio \
+            --without-pcraster \
+            --without-netcdf \
+            --without-png \
+            --without-jpeg \
+            --without-gif \
+            --without-ogdi \
+            --without-fme \
+            --without-hdf4 \
+            --without-hdf5 \
+            --without-jasper \
+            --without-ecw \
+            --without-kakadu \
+            --without-mrsid \
+            --without-jp2mrsid \
+            --without-bsb \
+            --without-grib \
+            --without-mysql \
+            --without-ingres \
+            --without-xerces \
+            --without-expat \
+            --without-odbc \
+            --without-curl \
+            --without-sqlite3 \
+            --without-dwgdirect \
+            --without-panorama \
+            --without-idb \
+            --without-sde \
+            --without-perl \
+            --without-php \
+            --without-ruby \
+            --without-python \
+            --without-ogpython \
+            --with-hide-internal-symbols)
 	(cd $(TMP_BUILD)/$(GDAL) && make && make install)
 
 proj:
