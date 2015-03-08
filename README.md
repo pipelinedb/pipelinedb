@@ -17,7 +17,7 @@ git submodule update --init
 
 #### Build the PipelineDB core (with debug symbols)
 ```
-./configure CFLAGS="-g -O0" --prefix=/path/to/dev/installation
+./configure CFLAGS="-g -O0" --prefix=</path/to/dev/installation>
 make
 make install
 ```
