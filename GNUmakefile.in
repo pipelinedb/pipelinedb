@@ -137,4 +137,10 @@ distcheck: dist
 	rm -rf $(distdir) $(dummy)
 	@echo "Distribution integrity checks out."
 
+.PHONY: deb rpm
+
+deb rpm:
+	$(MAKE) -C pkg $@
+	mv pkg/*.$@ .
+
 .PHONY: dist distdir distcheck docs install-docs world check-world install-world installcheck-world

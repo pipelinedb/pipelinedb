@@ -212,8 +212,6 @@ retry:
 				last_process = GetCurrentTimestamp();
 			}
 
-
-
 			/* Has the CQ been deactivated? */
 			if (!entry->active)
 				break;
