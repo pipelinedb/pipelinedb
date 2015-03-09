@@ -31,6 +31,7 @@ typedef struct BitWriter
 	StringInfoData buf;
 	uint64_t accum;
 	uint8_t naccum;
+	uint32_t nbits;
 } BitWriter;
 
 extern BitWriter *BitWriterCreate(void);
@@ -38,13 +39,18 @@ extern void BitWriterWrite(BitWriter *w, uint8_t nbits, uint64_t val);
 extern void BitWriterFlush(BitWriter *w);
 extern void BitWriterDestroy(BitWriter *w);
 
+/*
+ * All GolombCodedSets MUST be compressed before writing them out to disk
+ * as bytea structures.
+ */
 typedef struct GolombCodedSet
 {
 	uint32	vl_len_;
-	float8 p;
+	uint32_t p;
 	uint32_t n;
+	List *vals; /* for dirty storage */
 	uint32_t nvals;
-	List *vals;
+	uint32_t nbits;
 	uint32_t blen;
 	uint8_t b[1];
 } GolombCodedSet;
@@ -64,9 +70,10 @@ extern GolombCodedSet *GolombCodedSetCompress(GolombCodedSet *gcs);
 
 typedef struct GCSReader
 {
-	BitReader *BitReader;
+	BitReader *bit_reader;
 	GolombCodedSet *gcs;
 	uint32_t logp;
+	int32_t prev;
 } GCSReader;
 
 extern GCSReader *GCSReaderCreate(GolombCodedSet *gcs);
@@ -75,13 +82,13 @@ extern void GCSReaderDestroy(GCSReader *r);
 
 typedef struct GCSWriter
 {
-	BitWriter *BitWriter;
+	BitWriter *bit_writer;
 	GolombCodedSet *gcs;
 	uint32_t logp;
 } GCSWriter;
 
 extern GCSWriter *GCSWriterCreate(GolombCodedSet *gcs);
-extern void GCSWriterWrite(GCSWriter *w, uint32_t val);
+extern void GCSWriterWrite(GCSWriter *w, int32_t val);
 extern void GCSWriterFlush(GCSWriter *w);
 extern GolombCodedSet *GCSWriterGenerateGCS(GCSWriter *w);
 extern void GCSWriterDestroy(GCSWriter *w);
