@@ -538,12 +538,17 @@ TupleBufferInitLatch(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, Latch 
 void
 TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 {
+	bool should_wait = false;
 	SpinLockAcquire(&buf->mutex);
-	bms_add_member(buf->waiters, cq_id);
-	ResetLatch((&buf->latches[cq_id][reader_id]));
+	if (!TupleBufferHasUnreadSlots())
+	{
+		bms_add_member(buf->waiters, cq_id);
+		should_wait = true;
+	}
 	SpinLockRelease(&buf->mutex);
 
-	WaitLatch((&buf->latches[cq_id][reader_id]), WL_LATCH_SET, 0);
+	if (should_wait)
+		WaitLatch((&buf->latches[cq_id][reader_id]), WL_LATCH_SET, 0);
 }
 
 /*
