@@ -141,5 +141,6 @@ distcheck: dist
 
 deb rpm:
 	$(MAKE) -C pkg $@
+	mv pkg/*.$@ .
 
 .PHONY: dist distdir distcheck docs install-docs world check-world install-world installcheck-world
