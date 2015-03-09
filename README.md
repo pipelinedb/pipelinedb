@@ -138,7 +138,7 @@ is actually due to the `generate-inserts` script (Python) doing a large number o
     
 ## Distributing PipelineDB
 
-To build the PipelineDB Debian, run:
+To build the PipelineDB Debian package, run:
 
     make deb
     
