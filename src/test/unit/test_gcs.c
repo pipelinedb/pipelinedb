@@ -86,6 +86,49 @@ START_TEST(test_encoding)
 }
 END_TEST
 
+START_TEST(test_basic)
+{
+	GolombCodedSet *gcs = GolombCodedSetCreate();
+	int num_keys = 2500;
+	int *keys = palloc(sizeof(int) * num_keys);
+	int i;
+
+	for (i = 0; i < num_keys; i++)
+	{
+		int key = rand();
+		keys[i] = key;
+		GolombCodedSetAdd(gcs, &key, sizeof(int));
+	}
+
+	gcs = GolombCodedSetCompress(gcs);
+
+	for (i = 0; i < num_keys; i++)
+		ck_assert(GolombCodedSetContains(gcs, &keys[i], sizeof(int)));
+}
+END_TEST
+
+START_TEST(test_union)
+{
+	GolombCodedSet *gcs1 = GolombCodedSetCreate();
+	GolombCodedSet *gcs2 = GolombCodedSetCreate();
+	int num_keys = 25000;
+	int *keys = palloc(sizeof(int) * num_keys * 2);
+	int i;
+
+	for (i = 0; i < num_keys; i++)
+	{
+		int k1 = rand();
+		int k2 = rand();
+		keys[i] = k1;
+		keys[num_keys + i] = k2;
+		GolombCodedSetAdd(gcs1, &k1, sizeof(int));
+		GolombCodedSetAdd(gcs2, &k2, sizeof(int));
+	}
+
+	gcs1 = GolombCodedSetUnion(gcs1, gcs2);
+}
+END_TEST
+
 Suite *test_gcs_suite(void)
 {
 	Suite *s;
@@ -93,7 +136,10 @@ Suite *test_gcs_suite(void)
 
 	s = suite_create("test_gcs");
 	tc = tcase_create("test_gcs");
+	tcase_set_timeout(tc, 10);
 	tcase_add_test(tc, test_encoding);
+	tcase_add_test(tc, test_basic);
+	tcase_add_test(tc, test_union);
 	suite_add_tcase(s, tc);
 
 	return s;

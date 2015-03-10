@@ -292,7 +292,17 @@ GolombCodedSetAdd(GolombCodedSet *gcs, void *key, Size size)
 bool
 GolombCodedSetContains(GolombCodedSet *gcs, void *key, Size size)
 {
+	GCSReader *reader;
+	int32_t hash = MurmurHash3_64(key, size, MURMUR_SEED) % RANGE_END(gcs);
+	int32_t val;
+
 	gcs = GolombCodedSetCompress(gcs);
+	reader = GCSReaderCreate(gcs);
+
+	while ((val = GCSReaderNext(reader)) != -1)
+		if (val == hash)
+			return true;
+
 	return false;
 }
 
