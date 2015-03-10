@@ -1,0 +1,36 @@
+#! /bin/bash
+
+INSTALL_PREFIX=/opt/pipelinedb
+echo "$INSTALL_PREFIX/lib" > /etc/ld.so.conf.d/pipelinedb.conf
+ldconfig
+
+ln -s $INSTALL_PREFIX/bin/pipeline-server /usr/bin/pipeline-server
+ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pipeline-ctl
+ln -s $INSTALL_PREFIX/bin/pipeline-init /usr/bin/pipeline-init
+ln -s $INSTALL_PREFIX/bin/psql /usr/bin/psql
+ln -s /usr/bin/psql /usr/bin/pipeline
+
+rm $INSTALL_PREFIX/postinst
+
+echo "
+    ____  _            ___            ____  ____
+   / __ \(_)___  ___  / (_)___  ___  / __ \/ __ )
+  / /_/ / / __ \/ _ \/ / / __ \/ _ \/ / / / __  |
+ / ____/ / /_/ /  __/ / / / / /  __/ /_/ / /_/ /
+/_/   /_/ .___/\___/_/_/_/ /_/\___/_____/_____/
+       /_/
+
+PipelineDB successfully installed. To get started, initialize a
+database directory:
+
+pipeline-init -D <data directory>
+
+where <data directory> is a nonexistent directory where you'd
+like all of your database files to live. 
+
+You can find the PipelineDB documentation at:
+
+http://docs.pipelinedb.com
+ 
+"
+
