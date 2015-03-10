@@ -2094,3 +2094,18 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv)
 
 	return rule;
 }
+
+/*
+ * SelectsFromStreamOnly
+ */
+bool
+SelectsFromStreamOnly(SelectStmt *stmt)
+{
+	CQAnalyzeContext context;
+
+	context.tables = NIL;
+	context.streams = NIL;
+	AddStreams((Node *) stmt->fromClause, &context);
+
+	return context.tables == NIL;
+}

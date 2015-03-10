@@ -36,6 +36,8 @@
 #include "pgstat.h"
 #include "utils/timestamp.h"
 
+#define LONG_RUNNING_XACT_DURATION 5000 /* 5s */
+
 /*
  * We keep some resources across transactions, so we attach everything to a
  * long-lived ResourceOwner, which prevents the below commit from thinking that
@@ -108,7 +110,6 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	MemoryContext runcontext;
 	MemoryContext xactcontext;
 	CQProcEntry *entry = GetCQProcEntry(MyCQId);
-	TimestampTz last_process = GetCurrentTimestamp();
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
 	bool savereadonly = XactReadOnly;
 
@@ -140,6 +141,10 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 retry:
 	PG_TRY();
 	{
+		bool xact_commit = true;
+		TimestampTz last_process = GetCurrentTimestamp();
+		TimestampTz last_commit = GetCurrentTimestamp();
+
 		start_executor(queryDesc, runcontext, cqowner);
 
 		CurrentResourceOwner = cqowner;
@@ -182,8 +187,11 @@ retry:
 
 			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);
 
-			StartTransactionCommand();
-			set_snapshot(estate, cqowner);
+			if (xact_commit)
+			{
+				StartTransactionCommand();
+				set_snapshot(estate, cqowner);
+			}
 
 			CurrentResourceOwner = cqowner;
 
@@ -206,8 +214,21 @@ retry:
 			MemoryContextSwitchTo(runcontext);
 			CurrentResourceOwner = cqowner;
 
-			unset_snapshot(estate, cqowner);
-			CommitTransactionCommand();
+			if (state->long_xact)
+			{
+				if (TimestampDifferenceExceeds(last_commit, GetCurrentTimestamp(), LONG_RUNNING_XACT_DURATION))
+					xact_commit = true;
+				else
+					xact_commit = false;
+			}
+
+			if (xact_commit)
+			{
+				unset_snapshot(estate, cqowner);
+				CommitTransactionCommand();
+
+				last_commit = GetCurrentTimestamp();
+			}
 
 			if (estate->es_processed || estate->es_filtered)
 			{
