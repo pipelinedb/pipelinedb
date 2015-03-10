@@ -66,6 +66,8 @@ receive_tuple(TupleTableSlot *slot)
 	if (tbs == NULL)
 		return false;
 
+	IncrementCQRead(1, tbs->size);
+
 	ExecStoreTuple(heap_copytuple(tbs->tuple->heaptup), slot, InvalidBuffer, false);
 	TupleBufferUnpinSlot(reader, tbs);
 
@@ -349,11 +351,13 @@ sync_combine(char *cvname, Tuplestorestate *results,
 
 			ExecStoreTuple(updated, slot, InvalidBuffer, false);
 			ExecCQMatRelUpdate(ri, slot);
+			IncrementCQUpdate(1, HEAPTUPLESIZE + updated->t_len);
 		}
 		else
 		{
 			/* No existing tuple found, so it's an INSERT */
 			ExecCQMatRelInsert(ri, slot);
+			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 	}
 	CQMatViewClose(ri);
@@ -463,6 +467,8 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	MemoryContext combinectx;
 	MemoryContext tmpctx;
 
+	cq_stat_initialize(state->viewid, MyProcPid);
+
 	CQExecutionContext = AllocSetContextCreate(runctx, "CQExecutionContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
@@ -523,6 +529,9 @@ retry:
 			{
 				if (TimestampDifferenceExceeds(last_receive, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
 				{
+					/* force stats flush */
+					cq_stat_report(true);
+
 					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
 					TupleBufferWait(CombinerTupleBuffer, MyCQId, 0);
 					pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
@@ -578,6 +587,13 @@ retry:
 
 				last_combine = GetCurrentTimestamp();
 				count = 0;
+
+				IncrementCQExecutions(1);
+
+				/*
+				 * Send stats to the collector
+				 */
+				cq_stat_report(false);
 			}
 
 
@@ -637,6 +653,8 @@ retry:
 
 		MemoryContextReset(CQExecutionContext);
 
+		IncrementCQErrors(1);
+
 		if (continuous_query_crash_recovery)
 			goto retry;
 	}
@@ -647,6 +665,12 @@ retry:
 
 	MemoryContextDelete(runctx);
 	MemoryContextSwitchTo(oldcontext);
+
+	/*
+	 * Remove proc-level stats
+	 */
+	cq_stat_report(true);
+	cq_stat_send_purge(state->viewid, MyProcPid, CQ_STAT_COMBINER);
 
 	CurrentResourceOwner = save;
 }

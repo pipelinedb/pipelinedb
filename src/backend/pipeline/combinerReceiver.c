@@ -14,6 +14,7 @@
 #include <sys/un.h>
 
 #include "postgres.h"
+#include "pgstat.h"
 
 #include "access/printtup.h"
 #include "pipeline/combinerReceiver.h"
@@ -45,8 +46,10 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 {
 	CombinerState *c = (CombinerState *) self;
 	MemoryContext old = MemoryContextSwitchTo(CQExecutionContext);
+	TupleBufferSlot *tbs;
 
-	TupleBufferInsert(CombinerTupleBuffer, MakeTuple(ExecMaterializeSlot(slot), NULL), c->readers);
+	tbs = TupleBufferInsert(CombinerTupleBuffer, MakeTuple(ExecMaterializeSlot(slot), NULL), c->readers);
+	IncrementCQWrite(1, tbs->size);
 
 	MemoryContextSwitchTo(old);
 }

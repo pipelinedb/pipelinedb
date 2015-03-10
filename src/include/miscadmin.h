@@ -165,6 +165,7 @@ extern int MyCQId;
 extern bool IsCombiner;
 extern bool IsWorker;
 extern int MyWorkerId;
+
 #define IsCQBackgroundProcess (IsCombiner || IsWorker)
 #define PIPELINE_PY_TEST "PIPELINE_PY_TESTS"
 #define PIPELINE_DISABLE_SANITIZE "PIPELINE_DISABLE_SANITIZE"

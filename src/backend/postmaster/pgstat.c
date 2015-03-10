@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /* ----------
  * pgstat.c
  *
@@ -124,6 +125,11 @@ char	   *pgstat_stat_tmpname = NULL;
  */
 PgStat_MsgBgWriter BgWriterStats;
 
+/*
+ * If we're a CQ process, this tracks our various runtime stats
+ */
+CQStatEntry MyCQStats;
+
 /* ----------
  * Local data
  * ----------
@@ -171,6 +177,8 @@ static HTAB *pgStatFunctions = NULL;
  * sent to the collector.
  */
 static bool have_function_stats = false;
+
+CQStatEntry MyCQStats;
 
 /*
  * Tuple insertion/deletion counts for an open transaction can't be propagated
@@ -260,7 +268,7 @@ static PgStat_StatTabEntry *pgstat_get_tab_entry(PgStat_StatDBEntry *dbentry,
 static void pgstat_write_statsfiles(bool permanent, bool allDbs);
 static void pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent);
 static HTAB *pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep);
-static void pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, bool permanent);
+static void pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *cont_queries, bool permanent);
 static void backend_read_statsfile(void);
 static void pgstat_read_current_status(void);
 
@@ -295,6 +303,9 @@ static void pgstat_recv_funcpurge(PgStat_MsgFuncpurge *msg, int len);
 static void pgstat_recv_recoveryconflict(PgStat_MsgRecoveryConflict *msg, int len);
 static void pgstat_recv_deadlock(PgStat_MsgDeadlock *msg, int len);
 static void pgstat_recv_tempfile(PgStat_MsgTempFile *msg, int len);
+
+static void cq_stat_recv(CQStatMsg *msg, int len);
+static void cq_stat_recv_purge(CQStatPurgeMsg *msg, int len);
 
 /* ------------------------------------------------------------
  * Public functions called from postmaster follow
@@ -3373,6 +3384,14 @@ PgstatCollectorMain(int argc, char *argv[])
 					pgstat_recv_tempfile((PgStat_MsgTempFile *) &msg, len);
 					break;
 
+				case PGSTAT_MTYPE_CQ:
+					cq_stat_recv((CQStatMsg *) &msg, len);
+					break;
+
+				case PGSTAT_MTYPE_CQ_PURGE:
+					cq_stat_recv_purge((CQStatPurgeMsg *) &msg, len);
+					break;
+
 				default:
 					break;
 			}
@@ -3493,6 +3512,12 @@ reset_dbentry_counters(PgStat_StatDBEntry *dbentry)
 									 PGSTAT_FUNCTION_HASH_SIZE,
 									 &hash_ctl,
 									 HASH_ELEM | HASH_FUNCTION);
+
+	hash_ctl.keysize = sizeof(int64);
+	hash_ctl.entrysize = sizeof(CQStatEntry);
+	hash_ctl.hash = tag_hash;
+	dbentry->cont_queries = hash_create("Per-CQ", 256, &hash_ctl,
+					   HASH_ELEM | HASH_FUNCTION);
 }
 
 /*
@@ -3765,8 +3790,10 @@ pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent)
 {
 	HASH_SEQ_STATUS tstat;
 	HASH_SEQ_STATUS fstat;
+	HASH_SEQ_STATUS qstat;
 	PgStat_StatTabEntry *tabentry;
 	PgStat_StatFuncEntry *funcentry;
+	CQStatEntry *cqentry;
 	FILE	   *fpout;
 	int32		format_id;
 	Oid			dbid = dbentry->databaseid;
@@ -3818,6 +3845,17 @@ pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent)
 	{
 		fputc('F', fpout);
 		rc = fwrite(funcentry, sizeof(PgStat_StatFuncEntry), 1, fpout);
+		(void) rc;				/* we'll check for error with ferror */
+	}
+
+	/*
+	 * Walk through the database's continuous query stats table.
+	 */
+	hash_seq_init(&qstat, dbentry->cont_queries);
+	while ((cqentry = (CQStatEntry *) hash_seq_search(&qstat)) != NULL)
+	{
+		fputc('Q', fpout);
+		rc = fwrite(cqentry, sizeof(CQStatEntry), 1, fpout);
 		(void) rc;				/* we'll check for error with ferror */
 	}
 
@@ -4039,6 +4077,13 @@ pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep)
 												 &hash_ctl,
 								   HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
 
+				hash_ctl.keysize = sizeof(int64);
+				hash_ctl.entrysize = sizeof(CQStatEntry);
+				hash_ctl.hash = tag_hash;
+				hash_ctl.hcxt = pgStatLocalContext;
+				dbentry->cont_queries = hash_create("Per-CQ", 256, &hash_ctl,
+								   HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
+
 				/*
 				 * If requested, read the data from the database-specific
 				 * file. If there was onlydb specified (!= InvalidOid), we
@@ -4049,6 +4094,7 @@ pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep)
 					pgstat_read_db_statsfile(dbentry->databaseid,
 											 dbentry->tables,
 											 dbentry->functions,
+											 dbentry->cont_queries,
 											 permanent);
 
 				break;
@@ -4089,13 +4135,16 @@ done:
  * ----------
  */
 static void
-pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash,
+pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *cont_queries,
 						 bool permanent)
 {
 	PgStat_StatTabEntry *tabentry;
 	PgStat_StatTabEntry tabbuf;
 	PgStat_StatFuncEntry funcbuf;
 	PgStat_StatFuncEntry *funcentry;
+	CQStatEntry cqbuf;
+	CQStatEntry *cqentry;
+
 	FILE	   *fpin;
 	int32		format_id;
 	bool		found;
@@ -4207,6 +4256,38 @@ pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash,
 				}
 
 				memcpy(funcentry, &funcbuf, sizeof(funcbuf));
+				break;
+
+				/*
+				 * 'Q'	A CQStatEntry follows.
+				 */
+			case 'Q':
+				if (fread(&cqbuf, 1, sizeof(CQStatEntry), fpin) != sizeof(CQStatEntry))
+				{
+					ereport(pgStatRunningInCollector ? LOG : WARNING,
+							(errmsg("corrupted statistics file \"%s\"",
+									statfile)));
+					goto done;
+				}
+
+				/*
+				 * Skip if CQ belongs to a not requested database.
+				 */
+				if (cont_queries == NULL)
+					break;
+
+				cqentry = (CQStatEntry *) hash_search(cont_queries,
+												(void *) &cqbuf.key, HASH_ENTER, &found);
+
+				if (found)
+				{
+					ereport(pgStatRunningInCollector ? LOG : WARNING,
+							(errmsg("corrupted statistics file \"%s\"",
+									statfile)));
+					goto done;
+				}
+
+				memcpy(cqentry, &cqbuf, sizeof(cqbuf));
 				break;
 
 				/*
@@ -4777,6 +4858,8 @@ pgstat_recv_dropdb(PgStat_MsgDropdb *msg, int len)
 			hash_destroy(dbentry->tables);
 		if (dbentry->functions != NULL)
 			hash_destroy(dbentry->functions);
+		if (dbentry->cont_queries != NULL)
+			hash_destroy(dbentry->cont_queries);
 
 		if (hash_search(pgStatDBHash,
 						(void *) &dbid,
@@ -5213,4 +5296,201 @@ pgstat_db_requested(Oid databaseid)
 	}
 
 	return false;
+}
+
+/*
+ * cq_stat_fetch_all
+ *
+ * Get all stats, which includes proc-level CQ-level stats
+ */
+HTAB *
+cq_stat_fetch_all(void)
+{
+	PgStat_StatDBEntry *dbentry;
+	/*
+	 * If not done for this transaction, read the statistics collector stats
+	 * file into some hash tables.
+	 */
+	backend_read_statsfile();
+
+	dbentry = pgstat_get_db_entry(MyDatabaseId, true);
+	if (!dbentry)
+		return NULL;
+
+	return dbentry->cont_queries;
+}
+
+
+/*
+ * cq_stat_initialize
+ *
+ * Create a new stats instance for the given CQ proc
+ */
+void
+cq_stat_initialize(Oid viewid, int32 pid)
+{
+	MemSet(&MyCQStats, 0, sizeof(CQStatEntry));
+
+	MyCQStats.start_ts = GetCurrentTimestamp();
+
+	SetCQStatView(MyCQStats.key, viewid);
+	SetCQStatProcPid(MyCQStats.key, pid);
+	SetCQStatProcType(MyCQStats.key, IsWorker ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+}
+
+/*
+ * cq_stat_report
+ *
+ * Send PipelineDB CQ stats
+ */
+void
+cq_stat_report(bool force)
+{
+	static TimestampTz last_report = 0;
+	TimestampTz now;
+	CQStatMsg msg;
+
+	/*
+	 * Don't send a message unless it's been at least PGSTAT_STAT_INTERVAL
+	 * msec since we last sent one, or the caller wants to force stats out.
+	 */
+	now = GetCurrentTimestamp();
+	if (!force &&
+		!TimestampDifferenceExceeds(last_report, now, PGSTAT_STAT_INTERVAL))
+		return;
+	last_report = now;
+
+	MemSet(&msg, 0, sizeof(CQStatMsg));
+	msg.m_entry = MyCQStats;
+	msg.m_databaseid = MyDatabaseId;
+
+	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_CQ);
+	pgstat_send(&msg, sizeof(msg));
+
+	MyCQStats.input_rows = 0;
+	MyCQStats.output_rows = 0;
+	MyCQStats.updates = 0;
+	MyCQStats.input_bytes = 0;
+	MyCQStats.output_bytes = 0;
+	MyCQStats.updated_bytes = 0;
+	MyCQStats.executions = 0;
+	MyCQStats.errors = 0;
+}
+
+/*
+ * cq_stat_get_entry
+ *
+ * Retrieve a CQ stats entry matching the given parameters
+ */
+CQStatEntry *
+cq_stat_get_entry(PgStat_StatDBEntry *dbentry, Oid viewoid, int pid, int ptype)
+{
+	CQStatEntry *result;
+	bool found;
+	int64 key = 0;
+
+	SetCQStatView(key, viewoid);
+	SetCQStatProcPid(key, pid);
+	SetCQStatProcType(key, ptype);
+
+	result = (CQStatEntry *) hash_search(dbentry->cont_queries, (void *) &key, HASH_ENTER, &found);
+	if (!found)
+	{
+		MemSet(result, 0, sizeof(CQStatEntry));
+		result->key = key;
+	}
+
+	return result;
+}
+
+/*
+ * cq_stat_recv
+ *
+ * Receive PipelineDB CQ stats
+ */
+static void
+cq_stat_recv(CQStatMsg *msg, int len)
+{
+	CQStatEntry stats = msg->m_entry;
+	CQStatEntry *existing;
+	PgStat_StatDBEntry *db;
+	Oid viewid = GetCQStatView(stats.key);
+	int pid = GetCQStatProcPid(stats.key);
+	int ptype = GetCQStatProcType(stats.key);
+
+	db = pgstat_get_db_entry(msg->m_databaseid, false);
+
+	/*
+	 * Aggregate the process-level stats
+	 */
+	existing = cq_stat_get_entry(db, viewid, pid, ptype);
+	if (!existing->start_ts)
+		existing->start_ts = stats.start_ts;
+
+	existing->input_rows += stats.input_rows;
+	existing->output_rows += stats.output_rows;
+	existing->input_bytes += stats.input_bytes;
+	existing->output_bytes += stats.output_bytes;
+	existing->updates += stats.updates;
+	existing->updated_bytes += stats.updated_bytes;
+	existing->executions += stats.executions;
+	existing->errors += stats.errors;
+
+	/*
+	 * Now aggregate the CQ-level stats across all procs of this type
+	 */
+	existing = cq_stat_get_entry(db, viewid, 0, ptype);
+	existing->input_rows += stats.input_rows;
+	existing->output_rows += stats.output_rows;
+	existing->input_bytes += stats.input_bytes;
+	existing->output_bytes += stats.output_bytes;
+	existing->updates += stats.updates;
+	existing->updated_bytes += stats.updated_bytes;
+	existing->errors += stats.errors;
+}
+
+/*
+ * cq_stat_send_purge
+ *
+ * Send a message to the collector indicating that the given CQ proc's
+ * stats can be discarded
+ */
+void
+cq_stat_send_purge(Oid viewid, int pid, int64 ptype)
+{
+	CQStatPurgeMsg msg;
+
+	MemSet(&msg, 0, sizeof(CQStatPurgeMsg));
+
+	SetCQStatView(msg.m_key, viewid);
+	SetCQStatProcPid(msg.m_key, pid);
+	SetCQStatProcType(msg.m_key, IsWorker ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+
+	msg.m_databaseid = MyDatabaseId;
+
+	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_CQ_PURGE);
+	pgstat_send(&msg, sizeof(msg));
+}
+
+/*
+ * cq_stat_recv_purge
+ *
+ * Remove an obsolete CQ proc's stats
+ */
+static void
+cq_stat_recv_purge(CQStatPurgeMsg *msg, int len)
+{
+	PgStat_StatDBEntry *dbentry;
+
+
+	dbentry = pgstat_get_db_entry(msg->m_databaseid, false);
+
+	/*
+	 * No need to purge if we don't even know the database.
+	 */
+	if (!dbentry || !dbentry->cont_queries)
+		return;
+
+	/* Remove from hashtable if present; we don't care if it's not. */
+	(void) hash_search(dbentry->cont_queries, (void *) &msg->m_key, HASH_REMOVE, NULL);
 }
