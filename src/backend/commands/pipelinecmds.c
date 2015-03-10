@@ -10,6 +10,7 @@
  */
 
 #include "postgres.h"
+#include "pgstat.h"
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/reloptions.h"
@@ -276,7 +277,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	RegisterContinuousView(view, querystring, mat_relation, IsSlidingWindowSelectStmt(viewselect));
+	RegisterContinuousView(view, querystring, mat_relation, IsSlidingWindowSelectStmt(viewselect), SelectsFromStreamOnly(workerselect));
 	CommandCounterIncrement();
 
 	/*
