@@ -19,6 +19,7 @@
 #include "catalog/pipeline_tstate_fn.h"
 #include "libpq/libpq.h"
 #include "miscadmin.h"
+#include "catalog/namespace.h"
 #include "nodes/makefuncs.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
@@ -318,6 +319,8 @@ GetContinousViewState(RangeVar *rv, ContinuousViewState *cv_state)
 	cv_state->maxwaitms = row->maxwaitms;
 	cv_state->emptysleepms = row->emptysleepms;
 	cv_state->parallelism = row->parallelism;
+	cv_state->viewid = RangeVarGetRelid(rv, NoLock, false);
+
 	namestrcpy(&cv_state->matrelname, NameStr(row->matrelname));
 }
 
