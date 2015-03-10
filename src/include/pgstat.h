@@ -63,7 +63,9 @@ typedef enum StatMsgType
 	PGSTAT_MTYPE_FUNCPURGE,
 	PGSTAT_MTYPE_RECOVERYCONFLICT,
 	PGSTAT_MTYPE_TEMPFILE,
-	PGSTAT_MTYPE_DEADLOCK
+	PGSTAT_MTYPE_DEADLOCK,
+	PGSTAT_MTYPE_CQ,
+	PGSTAT_MTYPE_CQ_PURGE
 } StatMsgType;
 
 /* ----------
@@ -585,6 +587,11 @@ typedef struct PgStat_StatDBEntry
 	 */
 	HTAB	   *tables;
 	HTAB	   *functions;
+
+	/*
+	 * PipelineDB CQ stats
+	 */
+	HTAB	   *cont_queries;
 } PgStat_StatDBEntry;
 
 
@@ -637,7 +644,6 @@ typedef struct PgStat_StatFuncEntry
 	PgStat_Counter f_total_time;	/* times in microseconds */
 	PgStat_Counter f_self_time;
 } PgStat_StatFuncEntry;
-
 
 /*
  * Archiver statistics kept in the stats collector
@@ -951,5 +957,108 @@ extern PgStat_StatFuncEntry *pgstat_fetch_stat_funcentry(Oid funcid);
 extern int	pgstat_fetch_stat_numbackends(void);
 extern PgStat_ArchiverStats *pgstat_fetch_stat_archiver(void);
 extern PgStat_GlobalStats *pgstat_fetch_global(void);
+
+/*
+ *	QQ stats process type
+ */
+typedef enum CQStatsType
+{
+	CQ_STAT_COMBINER,
+	CQ_STAT_WORKER,
+} CQStatsType;
+
+/*
+ * PipelineDB stats for continuous queries
+ */
+/*
+ * The collector's data per continuous-query
+ */
+typedef struct CQStatEntry
+{
+	/*
+	 * Three values are packed into this key:
+	 *
+	 * [00:32]: Continuous view Oid
+	 * [32:63]: Continuous query process id (all 0's for view-level stats)
+	 *
+	 *  Note: pids can only be a maximum of 2^22, so we don't actually need
+	 * 	all 32 bits here which is why we can use the last bit for proc type
+	 *
+	 * [63:64]: Continuous query process type, as defined by the above CQ_STAT_*
+	 *
+	 * This compound key format allows us to keep process-level and query-level
+	 * statistics in the same hashtable without having to add much complexity
+	 * to the current stats de/serialization scheme, which expects a single-level
+	 * hashtable having fixed-size entries.
+	 */
+	int64 key;
+
+	TimestampTz start_ts;
+	PgStat_Counter input_rows;
+	PgStat_Counter output_rows;
+	PgStat_Counter updates;
+	PgStat_Counter input_bytes;
+	PgStat_Counter output_bytes;
+	PgStat_Counter updated_bytes;
+	PgStat_Counter executions;
+	PgStat_Counter errors;
+} CQStatEntry;
+
+/*
+ * Message for procs to wrap stats data in
+ */
+typedef struct CQStatMsg
+{
+	PgStat_MsgHdr m_hdr;
+	Oid m_databaseid;
+	CQStatEntry m_entry;
+} CQStatMsg;
+
+/*
+ * Message for dying CQ procs to send to the collector for cleanup
+ */
+typedef struct CQStatPurgeMsg
+{
+	PgStat_MsgHdr m_hdr;
+	int64 m_key;
+	Oid m_databaseid;
+} CQStatPurgeMsg;
+
+extern CQStatEntry MyCQStats;
+
+#define SetCQStatView(key, view) ((key) |= (int64) (view))
+#define SetCQStatProcPid(key, pid) ((key) |= ((int64 ) (pid) << 30L))
+#define SetCQStatProcType(key, type) ((key) |= ((int64) (type) << 63L))
+
+#define GetCQStatView(key) (0xFFFF & (key))
+#define GetCQStatProcPid(key) (0xFFFF & (key >> 30L))
+#define GetCQStatProcType(key) (0x1 & (key >> 63L))
+
+#define IncrementCQRead(rows, nbytes) \
+	do { \
+			MyCQStats.input_rows += (rows); \
+			MyCQStats.input_bytes += (nbytes); \
+	} while(0)
+
+#define IncrementCQWrite(rows, nbytes) \
+	do { \
+			MyCQStats.output_rows += (rows); \
+			MyCQStats.output_bytes += (nbytes); \
+	} while(0)
+
+#define IncrementCQUpdate(count, nbytes) \
+	do { \
+			MyCQStats.updates += (count); \
+			MyCQStats.updated_bytes += (nbytes); \
+	} while(0)
+
+#define IncrementCQExecutions(n) (MyCQStats.executions += (n))
+#define IncrementCQErrors(n) (MyCQStats.errors += (n))
+
+HTAB *cq_stat_fetch_all(void);
+void cq_stat_initialize(Oid viewid, int32 pid);
+void cq_stat_report(bool force);
+void cq_stat_send_purge(Oid viewid, int pid, int64 ptype);
+CQStatEntry *cq_stat_get_entry(PgStat_StatDBEntry *dbentry, Oid viewoid, int pid, int ptype);
 
 #endif   /* PGSTAT_H */

@@ -11,6 +11,7 @@
  */
 
 #include "postgres.h"
+#include "pgstat.h"
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/reloptions.h"

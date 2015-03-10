@@ -15,6 +15,7 @@
 
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/namespace.h"
 #include "catalog/pipeline_query.h"
 #include "executor/executor.h"
 #include "miscadmin.h"
@@ -111,6 +112,8 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
 	bool savereadonly = XactReadOnly;
 
+	cq_stat_initialize(state->viewid, MyProcPid);
+
 	dest = CreateDestReceiver(DestCombiner);
 	SetCombinerDestReceiverParams(dest, MyCQId);
 
@@ -166,6 +169,9 @@ retry:
 			{
 				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
 				{
+					/* force stats flush */
+					cq_stat_report(true);
+
 					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
 					TupleBufferWait(WorkerTupleBuffer, MyCQId, MyWorkerId);
 					pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
@@ -192,6 +198,8 @@ retry:
 			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
+			IncrementCQExecutions(1);
+
 			TupleBufferClearPinnedSlots();
 			MemoryContextReset(CQExecutionContext);
 
@@ -211,6 +219,11 @@ retry:
 				 * the worker will resume a simple sleep for the threshold time.
 				 */
 				last_process = GetCurrentTimestamp();
+
+				/*
+				 * Send stats to the collector
+				 */
+				cq_stat_report(false);
 			}
 
 			/* Has the CQ been deactivated? */
@@ -249,6 +262,8 @@ retry:
 		/* This resets the es_query_ctx and in turn the CQExecutionContext */
 		MemoryContextResetAndDeleteChildren(runcontext);
 
+		IncrementCQErrors(1);
+
 		if (continuous_query_crash_recovery)
 			goto retry;
 	}
@@ -265,6 +280,12 @@ retry:
 
 	if (queryDesc->totaltime)
 		InstrStopNode(queryDesc->totaltime, estate->es_processed);
+
+	/*
+	 * Remove proc-level stats
+	 */
+	cq_stat_report(true);
+	cq_stat_send_purge(state->viewid, MyProcPid, CQ_STAT_WORKER);
 
 	CurrentResourceOwner = owner;
 }
