@@ -1,6 +1,6 @@
 /*-------------------------------------------------------------------------
  *
- * bloom.h
+ * gcs.h
  *	  Interface for Golomb-coded Set support
  *
  * src/include/pipeline/gcs.h
@@ -31,7 +31,6 @@ typedef struct BitWriter
 	StringInfoData buf;
 	uint64_t accum;
 	uint8_t naccum;
-	uint32_t nbits;
 } BitWriter;
 
 extern BitWriter *BitWriterCreate(void);
@@ -50,7 +49,6 @@ typedef struct GolombCodedSet
 	uint32_t n;
 	List *vals; /* for dirty storage */
 	uint32_t nvals;
-	uint32_t nbits;
 	uint32_t blen;
 	uint8_t b[1];
 } GolombCodedSet;
