@@ -959,7 +959,7 @@ extern PgStat_ArchiverStats *pgstat_fetch_stat_archiver(void);
 extern PgStat_GlobalStats *pgstat_fetch_global(void);
 
 /*
- *	QQ stats process type
+ *	CQ stats process type
  */
 typedef enum CQStatsType
 {
