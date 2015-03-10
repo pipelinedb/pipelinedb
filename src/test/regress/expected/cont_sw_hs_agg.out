@@ -183,7 +183,7 @@ SELECT * FROM test_sw_dense_rank2;
          31 |   51
 (1 row)
 
--- Now use a small windoww to verify that sliding window results change over time
+-- Now use a small window to verify that sliding window results change over time
 CREATE CONTINUOUS VIEW test_sw_hs_change AS SELECT 
 rank(5, -5) WITHIN GROUP (ORDER BY x::integer, y::integer),
 dense_rank(5, -5) WITHIN GROUP (ORDER BY x, y),

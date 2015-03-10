@@ -26,6 +26,7 @@ typedef struct ContinuousViewState
 	int16 parallelism;
 	NameData matrelname;
 	CQProcessType ptype;
+	Oid viewid;
 } ContinuousViewState;
 
 List *GetAllContinuousViewNames(void);
