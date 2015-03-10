@@ -261,7 +261,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 			Value *colname = (Value *) list_nth(colnames, evindex);
 			Node *n = (Node *) list_nth(exprlist, evindex);
 
-			if (strcmp(strVal(colname), NameStr(desc->attrs[attindex]->attname)) == 0)
+			if (pg_strcasecmp(strVal(colname), NameStr(desc->attrs[attindex]->attname)) == 0)
 			{
 				/* coerce column to common supertype */
 				Node *c = coerce_to_specific_type(NULL, n, desc->attrs[attindex]->atttypid, "VALUES");

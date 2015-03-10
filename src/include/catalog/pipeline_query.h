@@ -33,6 +33,7 @@ CATALOG(pipeline_query,4242) BKI_WITHOUT_OIDS
 	char		state;
 	NameData	matrelname;
 	bool		gc;
+	bool		long_xact;
 	int32 		batchsize;
 	int32 		maxwaitms;
 	int32		emptysleepms;
@@ -53,17 +54,18 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query			10
+#define Natts_pipeline_query			11
 #define Anum_pipeline_query_id			1
 #define Anum_pipeline_query_name		2
 #define Anum_pipeline_query_state 		3
 #define Anum_pipeline_query_matrelname	4
 #define Anum_pipeline_query_gc			5
-#define Anum_pipeline_query_batchsize	6
-#define Anum_pipeline_query_maxwaitms 	7
-#define Anum_pipeline_query_emptysleepms 8
-#define Anum_pipeline_query_parallelism	9
-#define Anum_pipeline_query_query 		10
+#define Anum_pipeline_query_long_xact		6
+#define Anum_pipeline_query_batchsize	7
+#define Anum_pipeline_query_maxwaitms 	8
+#define Anum_pipeline_query_emptysleepms 9
+#define Anum_pipeline_query_parallelism	10
+#define Anum_pipeline_query_query 		11
 
 /* ----------------
  *		query states
