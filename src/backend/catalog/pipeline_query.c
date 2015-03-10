@@ -133,7 +133,7 @@ GetAllContinuousViewNames(void)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 void
-RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matrelname, bool gc)
+RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matrelname, bool gc, bool long_xact)
 {
 	Relation	pipeline_query;
 	HeapTuple	tup;
@@ -172,8 +172,9 @@ RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matre
 	namestrcpy(&matrelname_data, matrelname->relname);
 	values[Anum_pipeline_query_matrelname - 1] = NameGetDatum(&matrelname_data);
 
-	/* Copy gc flag */
+	/* Copy flags */
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
+	values[Anum_pipeline_query_long_xact - 1] = BoolGetDatum(long_xact);
 
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);
 
@@ -315,6 +316,7 @@ GetContinousViewState(RangeVar *rv, ContinuousViewState *cv_state)
 
 	cv_state->id = row->id;
 	cv_state->state = row->state;
+	cv_state->long_xact = row->long_xact;
 	cv_state->batchsize = row->batchsize;
 	cv_state->maxwaitms = row->maxwaitms;
 	cv_state->emptysleepms = row->emptysleepms;
