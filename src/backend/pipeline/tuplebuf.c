@@ -615,10 +615,10 @@ TupleBufferExpandLatchArray(TupleBuffer *buf, uint32_t cq_id)
 
 	if (max_cqs)
 	{
-		uint16_t i;
-		for (i = 1; i <= max_cqs; i++)
-			if (bms_is_member(i, tmp_waiters))
-				waiters = bms_add_member(waiters, i);
+		int i;
+
+		while ((i = bms_first_member(tmp_waiters)) >= 0)
+			waiters = bms_add_member(waiters, i);
 
 		spfree(tmp_latches);
 		spfree(tmp_waiters);
