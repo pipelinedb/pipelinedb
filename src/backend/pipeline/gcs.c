@@ -7,6 +7,7 @@
  *
  *-------------------------------------------------------------------------
  */
+#include <limits.h>
 #include <math.h>
 #include "pipeline/gcs.h"
 #include "pipeline/miscutils.h"
@@ -20,6 +21,12 @@
 #define ACCUM_BITS(x) (sizeof((x)->accum) * 8)
 
 #define MURMUR_SEED 0xb8160b979d3087fcL
+
+static int
+int_cmp(const void * a, const void * b)
+{
+	return *(int32_t *) a - *(int32_t *) b;
+}
 
 BitReader *
 BitReaderCreate(uint8_t *bytes, uint32_t len)
@@ -149,25 +156,19 @@ int32_t
 GCSReaderNext(GCSReader *r)
 {
 	int32_t val = 0;
-	int i = 0;
-	int r_;
 
 	if (!r->bit_reader->len && r->bit_reader->naccum < r->logp)
-		return -1;
+		return INT_MAX;
 
 	while (BitReaderRead(r->bit_reader, 1) == 1)
-	{
 		val += r->gcs->p;
-		i++;
-	}
 
 	if (!r->bit_reader->len && r->bit_reader->naccum < r->logp)
-		return -1;
+		return INT_MAX;
 
-	r_ = BitReaderRead(r->bit_reader, r->logp);
-	val += r_;
-
+	val += BitReaderRead(r->bit_reader, r->logp);
 	val += r->prev;
+
 	r->prev = val;
 
 	return val;
@@ -223,6 +224,8 @@ GCSWriterWrite(GCSWriter *w, int32_t val)
 		BitWriterWrite(w->bit_writer, q + 1, BITMASK(q) << 1);
 
 	BitWriterWrite(w->bit_writer, w->logp, r);
+
+	w->nvals++;
 }
 
 void
@@ -239,6 +242,7 @@ GCSWriterGenerateGCS(GCSWriter *w)
 	gcs->vals = NULL;
 	gcs->blen = w->bit_writer->buf.len;
 	memcpy(gcs->b, w->bit_writer->buf.data, gcs->blen);
+	gcs->nvals = w->nvals;
 	return gcs;
 }
 
@@ -286,7 +290,6 @@ GolombCodedSetAdd(GolombCodedSet *gcs, void *key, Size size)
 {
 	int32_t hash = MurmurHash3_64(key, size, MURMUR_SEED) % RANGE_END(gcs);
 	gcs->vals = lappend_int(gcs->vals, hash);
-	gcs->nvals++;
 }
 
 bool
@@ -309,25 +312,82 @@ GolombCodedSetContains(GolombCodedSet *gcs, void *key, Size size)
 GolombCodedSet *
 GolombCodedSetUnion(GolombCodedSet *result, GolombCodedSet *incoming)
 {
-	result = GolombCodedSetCompress(result);
-	result = GolombCodedSetCompress(incoming);
+	int32_t *vals;
+	ListCell *lc;
+	uint32_t vlen = list_length(result->vals) + list_length(incoming->vals);
+	GCSReader *r1, *r2;
+	GCSWriter *writer;
+	int32_t v0, v1, v2;
+	int32_t prev = -1;
+	int i = 0;
+	GolombCodedSet *new;
 
-	return result;
+	if (result->n != incoming->n || result->p != incoming->p)
+		elog(ERROR, "cannot merge Golomb-coded Sets of different hash ranges");
+
+	if (!vlen && !incoming->nvals)
+		return result;
+
+	vals = palloc(sizeof(int32_t) * vlen);
+	foreach(lc, result->vals)
+		vals[i++] = lfirst_int(lc);
+	foreach(lc, incoming->vals)
+		vals[i++] = lfirst_int(lc);
+	list_free(result->vals);
+	result->vals = NIL;
+	list_free(incoming->vals);
+	incoming->vals = NIL;
+
+	qsort(vals, vlen, sizeof(int32_t), int_cmp);
+
+	r1 = GCSReaderCreate(result);
+	r2 = GCSReaderCreate(incoming);
+	writer = GCSWriterCreate(result);
+
+	i = 0;
+	v0 = vals[i++];
+	v1 = GCSReaderNext(r1);
+	v2 = GCSReaderNext(r2);
+
+	while (v2 < INT_MAX || v1 < INT_MAX || v0 < INT_MAX)
+	{
+		int32_t min = Min(v0, Min(v1, v2));
+
+		if (v0 == min)
+			v0 = i >= vlen ? INT_MAX : vals[i++];
+		else if (v1 == min)
+			v1 = GCSReaderNext(r1);
+		else
+			v2 = GCSReaderNext(r2);
+
+		if (prev == min)
+			continue;
+
+		if (prev != -1)
+			GCSWriterWrite(writer, min - prev);
+		else
+			GCSWriterWrite(writer, min);
+
+		prev = min;
+	}
+
+	GCSWriterFlush(writer);
+	new = GCSWriterGenerateGCS(writer);
+
+	GCSReaderDestroy(r1);
+	GCSWriterDestroy(writer);
+	GolombCodedSetDestroy(result);
+	GolombCodedSetDestroy(incoming);
+
+	return new;
 }
 
 GolombCodedSet *
 GolombCodedSetIntersection(GolombCodedSet *result, GolombCodedSet *incoming)
 {
-	result = GolombCodedSetCompress(result);
-	result = GolombCodedSetCompress(incoming);
+	elog(ERROR, "unsupported operation");
 
 	return result;
-}
-
-static int
-int_cmp(const void * a, const void * b)
-{
-	return *(int32_t *) a - *(int32_t *) b;
 }
 
 GolombCodedSet *
@@ -338,16 +398,16 @@ GolombCodedSetCompress(GolombCodedSet *gcs)
 	uint32_t vlen = list_length(gcs->vals);
 	GCSReader *reader;
 	GCSWriter *writer;
-	int32_t l_val;
-	int32_t c_val;
+	int32_t v1;
+	int32_t v2;
 	int32_t prev = -1;
-	int i;
+	int i = 0;
 	GolombCodedSet *new;
 
 	if (!vlen)
 		return gcs;
 
-	vals = palloc(sizeof(uint32_t) * vlen);
+	vals = palloc(sizeof(int32_t) * vlen);
 	foreach(lc, gcs->vals)
 		vals[i++] = lfirst_int(lc);
 	list_free(gcs->vals);
@@ -359,52 +419,27 @@ GolombCodedSetCompress(GolombCodedSet *gcs)
 	writer = GCSWriterCreate(gcs);
 
 	i = 0;
-	l_val = vals[i++];
-	c_val = GCSReaderNext(reader);
+	v1 = vals[i++];
+	v2 = GCSReaderNext(reader);
 
-	while (c_val >= 0 || l_val >= 0)
+	while (v2 < INT_MAX || v1 < INT_MAX)
 	{
-		int32_t to_write;
+		int32_t min = Min(v1, v2);
 
-		if (c_val == -1)
-		{
-			to_write = l_val;
-			if (i == vlen)
-				l_val = -1;
-			else
-				l_val = vals[i++];
-		}
-		else if (l_val == -1)
-		{
-			to_write = c_val;
-			c_val = GCSReaderNext(reader);
-		}
+		if (v1 == min)
+			v1 = i >= vlen ? INT_MAX : vals[i++];
 		else
-		{
-			if (c_val <= l_val)
-			{
-				to_write = c_val;
-				c_val = GCSReaderNext(reader);
-			}
-			else
-			{
-				to_write = l_val;
-				if (i == vlen)
-					l_val = -1;
-				else
-					l_val = vals[i++];
-			}
-		}
+			v2 = GCSReaderNext(reader);
 
-		if (prev == to_write)
+		if (prev == min)
 			continue;
 
 		if (prev != -1)
-			GCSWriterWrite(writer, to_write - prev);
+			GCSWriterWrite(writer, min - prev);
 		else
-			GCSWriterWrite(writer, to_write);
+			GCSWriterWrite(writer, min);
 
-		prev = to_write;
+		prev = min;
 	}
 
 	GCSWriterFlush(writer);

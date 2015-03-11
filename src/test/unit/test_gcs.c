@@ -20,6 +20,7 @@ START_TEST(test_encoding)
 	int num_keys = 15000;
 	int *keys = palloc(sizeof(int) * num_keys * 2);
 	int i;
+	int j;
 	GCSReader *reader;
 	ListCell *lc;
 	int prev = -1;
@@ -41,16 +42,19 @@ START_TEST(test_encoding)
 	gcs = GolombCodedSetCompress(gcs);
 	reader = GCSReaderCreate(gcs);
 
-	ck_assert_int_eq(gcs->nvals, num_keys);
 	ck_assert_ptr_eq(gcs->vals, NIL);
 
+	j = 0;
 	for (i = 0; i < num_keys; i++)
 	{
 		if (keys[i] == prev)
 			continue;
 		ck_assert_int_eq(GCSReaderNext(reader), keys[i]);
 		prev = keys[i];
+		j++;
 	}
+
+	ck_assert_int_eq(gcs->nvals, j);
 
 	/*
 	 * Check that encoding works fine when keys are split between the compressed
@@ -73,16 +77,19 @@ START_TEST(test_encoding)
 	gcs = GolombCodedSetCompress(gcs);
 	reader = GCSReaderCreate(gcs);
 
-	ck_assert_int_eq(gcs->nvals, 2 * num_keys);
 	ck_assert_ptr_eq(gcs->vals, NIL);
 
+	j = 0;
 	for (i = 0; i < 2 * num_keys; i++)
 	{
 		if (keys[i] == prev)
 			continue;
 		ck_assert_int_eq(GCSReaderNext(reader), keys[i]);
 		prev = keys[i];
+		j++;
 	}
+
+	ck_assert_int_eq(gcs->nvals, j);
 }
 END_TEST
 
@@ -111,7 +118,7 @@ START_TEST(test_union)
 {
 	GolombCodedSet *gcs1 = GolombCodedSetCreate();
 	GolombCodedSet *gcs2 = GolombCodedSetCreate();
-	int num_keys = 25000;
+	int num_keys = 2500;
 	int *keys = palloc(sizeof(int) * num_keys * 2);
 	int i;
 
@@ -126,6 +133,9 @@ START_TEST(test_union)
 	}
 
 	gcs1 = GolombCodedSetUnion(gcs1, gcs2);
+
+	for (i = 0; i < 2* num_keys; i++)
+		ck_assert(GolombCodedSetContains(gcs1, &keys[i], sizeof(int)));
 }
 END_TEST
 

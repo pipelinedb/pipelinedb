@@ -84,6 +84,7 @@ typedef struct GCSWriter
 	BitWriter *bit_writer;
 	GolombCodedSet *gcs;
 	uint32_t logp;
+	uint32_t nvals;
 } GCSWriter;
 
 extern GCSWriter *GCSWriterCreate(GolombCodedSet *gcs);
