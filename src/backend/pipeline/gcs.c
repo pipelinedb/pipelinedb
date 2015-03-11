@@ -302,7 +302,7 @@ GolombCodedSetContains(GolombCodedSet *gcs, void *key, Size size)
 	gcs = GolombCodedSetCompress(gcs);
 	reader = GCSReaderCreate(gcs);
 
-	while ((val = GCSReaderNext(reader)) != -1)
+	while ((val = GCSReaderNext(reader)) != INT_MAX)
 		if (val == hash)
 			return true;
 
@@ -323,7 +323,7 @@ GolombCodedSetUnion(GolombCodedSet *result, GolombCodedSet *incoming)
 	GolombCodedSet *new;
 
 	if (result->n != incoming->n || result->p != incoming->p)
-		elog(ERROR, "cannot merge Golomb-coded Sets of different hash ranges");
+		elog(ERROR, "cannot union Golomb-coded Sets of different hash ranges");
 
 	if (!vlen && !incoming->nvals)
 		return result;
@@ -385,9 +385,85 @@ GolombCodedSetUnion(GolombCodedSet *result, GolombCodedSet *incoming)
 GolombCodedSet *
 GolombCodedSetIntersection(GolombCodedSet *result, GolombCodedSet *incoming)
 {
-	elog(ERROR, "unsupported operation");
+	int32_t *vals1, *vals2;
+	ListCell *lc;
+	uint32_t vlen1, vlen2;
+	GCSReader *r1, *r2;
+	GCSWriter *writer;
+	int32_t v1, v2, v3, v4;
+	int32_t prev = -1;
+	int i = 0, j = 0;
+	GolombCodedSet *new;
 
-	return result;
+	if (result->n != incoming->n || result->p != incoming->p)
+		elog(ERROR, "cannot instersect Golomb-coded Sets of different hash ranges");
+
+	vlen1 = list_length(result->vals);
+	vlen2 = list_length(incoming->vals);
+
+	if (!vlen2 && !incoming->nvals)
+		return GolombCodedSetCreateWithPAndN(1.0 / result->p, result->n);
+
+	vals1 = palloc(sizeof(int32_t) * vlen1);
+	foreach(lc, result->vals)
+		vals1[i++] = lfirst_int(lc);
+	list_free(result->vals);
+	result->vals = NIL;
+
+	vals2 = palloc(sizeof(int32_t) * vlen2);
+	foreach(lc, incoming->vals)
+		vals2[j++] = lfirst_int(lc);
+	list_free(incoming->vals);
+	incoming->vals = NIL;
+
+	qsort(vals1, vlen1, sizeof(int32_t), int_cmp);
+	qsort(vals2, vlen2, sizeof(int32_t), int_cmp);
+
+	r1 = GCSReaderCreate(result);
+	r2 = GCSReaderCreate(incoming);
+	writer = GCSWriterCreate(result);
+
+	i = j = 0;
+	v1 = GCSReaderNext(r1);
+	v2 = GCSReaderNext(r2);
+	v3 = vals1[i++];
+	v4 = vals2[j++];
+
+	while ((v1 < INT_MAX || v3 < INT_MAX) && (v2 < INT_MAX || v4 < INT_MAX))
+	{
+		int32_t min1 = Min(v1, v3);
+		int32_t min2 = Min(v2, v4);
+		int32_t min = Min(min1, min2);
+		bool eq = min1 == min2;
+
+		if (v1 == min)
+			v1 = GCSReaderNext(r1);
+		if (v3 == min)
+			v3 = i >= vlen1 ? INT_MAX : vals1[i++];
+		if (v2 == min)
+			v2 = GCSReaderNext(r2);
+		if (v4 == min)
+			v4 = j >= vlen2 ? INT_MAX : vals2[j++];
+
+		if (eq && prev != min)
+		{
+			if (prev != -1)
+				GCSWriterWrite(writer, min - prev);
+			else
+				GCSWriterWrite(writer, min);
+			prev = min;
+		}
+	}
+
+	GCSWriterFlush(writer);
+	new = GCSWriterGenerateGCS(writer);
+
+	GCSReaderDestroy(r1);
+	GCSWriterDestroy(writer);
+	GolombCodedSetDestroy(result);
+	GolombCodedSetDestroy(incoming);
+
+	return new;
 }
 
 GolombCodedSet *
@@ -455,7 +531,7 @@ GolombCodedSetCompress(GolombCodedSet *gcs)
 float8
 GolombCodedSetFillRatio(GolombCodedSet *gcs)
 {
-	return ((1.0 * gcs->nvals) / RANGE_END(gcs));
+	return ((1.0 * gcs->nvals + list_length(gcs->vals)) / RANGE_END(gcs));
 }
 
 Size
