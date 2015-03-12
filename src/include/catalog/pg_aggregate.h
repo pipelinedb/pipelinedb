@@ -342,6 +342,12 @@ DATA(insert ( 4348	n 0 cmsketch_agg_trans			-	-				-				-				f f 0	5038	0	0		0	_
 DATA(insert ( 4349	n 0 cmsketch_agg_transp			-	-				-				-				f f 0	5038	0	0		0	_null_ _null_ ));
 DATA(insert ( 4352	n 0 cmsketch_merge_agg_trans	-	-				-				-				f f 0	5038	0	0		0	_null_ _null_ ));
 
+/* golomb-coded set aggregates */
+DATA(insert ( 4357	n 0 gcs_agg_trans				gcs_send	-		-				-			f f 0	5042	0	0		0	_null_ _null_ ));
+DATA(insert ( 4358	n 0 gcs_agg_transp				gcs_send	-		-				-			f f 0	5042	0	0		0	_null_ _null_ ));
+DATA(insert ( 4361	n 0 gcs_union_agg_trans			gcs_send	-		-				-			f f 0	5042	0	0		0	_null_ _null_ ));
+DATA(insert ( 4363	n 0 gcs_intersection_agg_trans	gcs_send	-		-				-			f f 0	5042	0	0		0	_null_ _null_ ));
+
 /*
  * prototypes for functions in pg_aggregate.c
  */

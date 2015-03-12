@@ -249,7 +249,13 @@ retry:
 
 			/* Has the CQ been deactivated? */
 			if (!entry->active)
+			{
+				if (ActiveSnapshotSet())
+					unset_snapshot(estate, cqowner);
+				if (IsTransactionState())
+					CommitTransactionCommand();
 				break;
+			}
 		}
 
 		CurrentResourceOwner = cqowner;

@@ -19,7 +19,7 @@ typedef struct BloomFilter
 	uint32_t m;
 	uint16_t k;
 	uint32_t blen;
-	uint8_t b[1];
+	uint64_t b[1];
 } BloomFilter;
 
 extern BloomFilter *BloomFilterCreateWithMAndK(uint32_t m, uint16_t k);

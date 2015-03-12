@@ -60,7 +60,8 @@ LOCALOBJS += utils/probes.o
 endif
 endif
 
-TEST_OBJS = test_tdigest.o test_hll.o test_bloom.o test_cmsketch.o runner.o
+TEST_OBJS = test_tdigest.o test_hll.o test_bloom.o test_cmsketch.o \
+            test_gcs.o runner.o
 
 OBJS = $(SUBDIROBJS) $(LOCALOBJS) $(top_builddir)/src/port/libpgport_srv.a \
        $(top_builddir)/src/common/libpgcommon_srv.a \
