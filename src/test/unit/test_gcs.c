@@ -96,7 +96,7 @@ END_TEST
 START_TEST(test_basic)
 {
 	GolombCodedSet *gcs = GolombCodedSetCreate();
-	int num_keys = 2500;
+	int num_keys = 10000;
 	int *keys = palloc(sizeof(int) * num_keys);
 	int i;
 
@@ -118,7 +118,7 @@ START_TEST(test_union)
 {
 	GolombCodedSet *gcs1 = GolombCodedSetCreate();
 	GolombCodedSet *gcs2 = GolombCodedSetCreate();
-	int num_keys = 2500;
+	int num_keys = 10000;
 	int *keys = palloc(sizeof(int) * num_keys * 2);
 	int i;
 
@@ -150,10 +150,10 @@ START_TEST(test_intersection)
 	for (i = 0; i < num_keys; i++)
 	{
 		int k1 = rand();
-		int k2 = i % 2 ? k1 : rand();
 		keys[i] = k1;
 		GolombCodedSetAdd(gcs1, &k1, sizeof(int));
-		GolombCodedSetAdd(gcs2, &k2, sizeof(int));
+		if (i % 2)
+			GolombCodedSetAdd(gcs2, &k1, sizeof(int));
 	}
 
 	gcs1 = GolombCodedSetIntersection(gcs1, gcs2);
