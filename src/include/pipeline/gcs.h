@@ -54,7 +54,7 @@ typedef struct GolombCodedSet
 	List *vals; /* for dirty storage */
 	uint32_t nvals;
 	bool indexed;
-	uint32_t idx[INDEX_SIZE][2]; /* TODO(usmanm): Index the compressed array for fast containment checks */
+	uint32_t idx[INDEX_SIZE][2];
 	uint32_t blen;
 	uint8_t b[1];
 } GolombCodedSet;

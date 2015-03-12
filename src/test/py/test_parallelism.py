@@ -21,8 +21,6 @@ def test_parallelism(pipeline, clean_db):
   pipeline.set_sync_insert(True)
   pipeline.insert('stream', ('x', ), values[:4])
   t1 = time.time() - start
-  # TODO(usmanm): Remove this when DEACTIVATE drains the buffer.
-  time.sleep(2.0)
   pipeline.deactivate()
 
   q = 'SELECT COUNT(*) FROM test_parallelism'
