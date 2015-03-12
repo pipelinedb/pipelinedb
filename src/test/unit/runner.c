@@ -33,10 +33,10 @@ int main(void)
 
 	sr = srunner_create(suite_create ("main"));
 
-//	srunner_add_suite(sr, test_tdigest_suite());
-//	srunner_add_suite(sr, test_hll_suite());
-//	srunner_add_suite(sr, test_bloom_suite());
-//	srunner_add_suite(sr, test_cmsketch_suite());
+	srunner_add_suite(sr, test_tdigest_suite());
+	srunner_add_suite(sr, test_hll_suite());
+	srunner_add_suite(sr, test_bloom_suite());
+	srunner_add_suite(sr, test_cmsketch_suite());
 	srunner_add_suite(sr, test_gcs_suite());
 
 	srunner_run_all(sr, CK_VERBOSE);
