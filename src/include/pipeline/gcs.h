@@ -65,6 +65,7 @@ extern void GolombCodedSetDestroy(GolombCodedSet *gcs);
 extern GolombCodedSet *GolombCodedSetCopy(GolombCodedSet *gcs);
 extern void GolombCodedSetAdd(GolombCodedSet *gcs, void *key, Size size);
 extern bool GolombCodedSetContains(GolombCodedSet *gcs, void *key, Size size);
+extern GolombCodedSet *GolombCodedSetShallowUnion(GolombCodedSet *result, GolombCodedSet *incoming);
 extern GolombCodedSet *GolombCodedSetUnion(GolombCodedSet *result, GolombCodedSet *incoming);
 extern GolombCodedSet *GolombCodedSetIntersection(GolombCodedSet *result, GolombCodedSet *incoming);
 extern float8 GolombCodedSetFillRatio(GolombCodedSet *gcs);

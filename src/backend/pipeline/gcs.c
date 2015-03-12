@@ -341,6 +341,19 @@ GolombCodedSetContains(GolombCodedSet *gcs, void *key, Size size)
 }
 
 GolombCodedSet *
+GolombCodedSetShallowUnion(GolombCodedSet *result, GolombCodedSet *incoming)
+{
+	GCSReader *reader = GCSReaderCreate(incoming);
+	int32_t val;
+
+	while ((val = GCSReaderNext(reader)) != INT_MAX)
+		result->vals = lappend_int(result->vals, val);
+	result->vals = list_union_int(result->vals, incoming->vals);
+
+	return result;
+}
+
+GolombCodedSet *
 GolombCodedSetUnion(GolombCodedSet *result, GolombCodedSet *incoming)
 {
 	int32_t *vals;
@@ -364,10 +377,6 @@ GolombCodedSetUnion(GolombCodedSet *result, GolombCodedSet *incoming)
 		vals[i++] = lfirst_int(lc);
 	foreach(lc, incoming->vals)
 		vals[i++] = lfirst_int(lc);
-	list_free(result->vals);
-	result->vals = NIL;
-	list_free(incoming->vals);
-	incoming->vals = NIL;
 
 	qsort(vals, vlen, sizeof(int32_t), int_cmp);
 
@@ -407,8 +416,6 @@ GolombCodedSetUnion(GolombCodedSet *result, GolombCodedSet *incoming)
 
 	GCSReaderDestroy(r1);
 	GCSWriterDestroy(writer);
-	GolombCodedSetDestroy(result);
-	GolombCodedSetDestroy(incoming);
 
 	GolombCodedSetIndex(new);
 	return new;
@@ -439,14 +446,10 @@ GolombCodedSetIntersection(GolombCodedSet *result, GolombCodedSet *incoming)
 	vals1 = palloc(sizeof(int32_t) * vlen1);
 	foreach(lc, result->vals)
 		vals1[i++] = lfirst_int(lc);
-	list_free(result->vals);
-	result->vals = NIL;
 
 	vals2 = palloc(sizeof(int32_t) * vlen2);
 	foreach(lc, incoming->vals)
 		vals2[j++] = lfirst_int(lc);
-	list_free(incoming->vals);
-	incoming->vals = NIL;
 
 	qsort(vals1, vlen1, sizeof(int32_t), int_cmp);
 	qsort(vals2, vlen2, sizeof(int32_t), int_cmp);
@@ -492,8 +495,6 @@ GolombCodedSetIntersection(GolombCodedSet *result, GolombCodedSet *incoming)
 
 	GCSReaderDestroy(r1);
 	GCSWriterDestroy(writer);
-	GolombCodedSetDestroy(result);
-	GolombCodedSetDestroy(incoming);
 
 	GolombCodedSetIndex(new);
 	return new;
@@ -519,8 +520,6 @@ GolombCodedSetCompress(GolombCodedSet *gcs)
 	vals = palloc(sizeof(int32_t) * vlen);
 	foreach(lc, gcs->vals)
 		vals[i++] = lfirst_int(lc);
-	list_free(gcs->vals);
-	gcs->vals = NIL;
 
 	qsort(vals, vlen, sizeof(int32_t), int_cmp);
 
@@ -556,7 +555,6 @@ GolombCodedSetCompress(GolombCodedSet *gcs)
 
 	GCSReaderDestroy(reader);
 	GCSWriterDestroy(writer);
-	GolombCodedSetDestroy(gcs);
 
 	GolombCodedSetIndex(new);
 	return new;
