@@ -334,6 +334,8 @@ GolombCodedSetContains(GolombCodedSet *gcs, void *key, Size size)
 	while ((val = GCSReaderNext(reader)) != INT_MAX)
 		if (val == hash)
 			return true;
+		if (val > hash)
+			return false;
 
 	return false;
 }

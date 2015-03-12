@@ -8,6 +8,10 @@
 #include "utils/elog.h"
 #include "utils/palloc.h"
 
+/* Must be same as in gcs.c */
+#define MURMUR_SEED 0xb8160b979d3087fcL
+#define RANGE_END(gcs) ((uint32_t) ceil((gcs)->p * (gcs)->n))
+
 static int
 int_cmp(const void * a, const void * b)
 {
@@ -143,18 +147,39 @@ START_TEST(test_intersection)
 {
 	GolombCodedSet *gcs1 = GolombCodedSetCreate();
 	GolombCodedSet *gcs2 = GolombCodedSetCreate();
-	int num_keys = 2500;
+	int num_keys = 10000;
 	int *keys = palloc(sizeof(int) * num_keys);
+	int *hashes = palloc(sizeof(int32_t) * num_keys);
 	int i;
 
 	for (i = 0; i < num_keys; i++)
 	{
-		int k1 = rand();
-		keys[i] = k1;
-		GolombCodedSetAdd(gcs1, &k1, sizeof(int));
+		int j;
+		bool skip = false;
+		int key = rand();
+		int32_t hash = MurmurHash3_64(&key, sizeof(int), MURMUR_SEED) % RANGE_END(gcs1);
+
+		for (j = 0; j < i; j++)
+			if (hash == hashes[j])
+			{
+				skip = true;
+				break;
+			}
+
+		if (skip)
+		{
+			i--;
+			continue;
+		}
+
+		keys[i] = key;
+		hashes[i] = hash;
+		GolombCodedSetAdd(gcs1, &key, sizeof(int));
 		if (i % 2)
-			GolombCodedSetAdd(gcs2, &k1, sizeof(int));
+			GolombCodedSetAdd(gcs2, &key, sizeof(int));
 	}
+
+	ck_assert_int_eq(list_length(list_intersection_int(gcs1->vals, gcs2->vals)), 5000);
 
 	gcs1 = GolombCodedSetIntersection(gcs1, gcs2);
 
