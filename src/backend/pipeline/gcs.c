@@ -45,6 +45,8 @@ BitReaderRead(BitReader *r, uint8_t nbits)
 
 	Assert(nbits < 32);
 
+	r->nbits += nbits;
+
 	while (nbits)
 	{
 		if (!r->naccum)
@@ -302,6 +304,33 @@ GolombCodedSetContains(GolombCodedSet *gcs, void *key, Size size)
 	gcs = GolombCodedSetCompress(gcs);
 	reader = GCSReaderCreate(gcs);
 
+	if (gcs->indexed)
+	{
+		int i;
+		int32_t nbits = 0;
+		int32_t prev = 0;
+		int32_t nbits_8;
+		int32_t nbits_r;
+
+		for (i = 0; i < INDEX_SIZE; i++)
+		{
+			if (gcs->idx[i][0] == hash)
+				return true;
+			if (gcs->idx[i][0] > hash)
+				break;
+			prev = gcs->idx[i][0];
+			nbits = gcs->idx[i][1];
+		}
+
+		nbits_8 = nbits / 8;
+		nbits_r = nbits % 8;
+
+		reader->bit_reader->bytes += nbits_8;
+		reader->bit_reader->len -= nbits_8;
+		reader->prev = prev;
+		BitReaderRead(reader->bit_reader, nbits_r);
+	}
+
 	while ((val = GCSReaderNext(reader)) != INT_MAX)
 		if (val == hash)
 			return true;
@@ -323,7 +352,7 @@ GolombCodedSetUnion(GolombCodedSet *result, GolombCodedSet *incoming)
 	GolombCodedSet *new;
 
 	if (result->n != incoming->n || result->p != incoming->p)
-		elog(ERROR, "cannot union Golomb-coded Sets of different hash ranges");
+		elog(ERROR, "cannot union Golomb-coded sets of different hash ranges");
 
 	if (!vlen && !incoming->nvals)
 		return result;
@@ -379,6 +408,7 @@ GolombCodedSetUnion(GolombCodedSet *result, GolombCodedSet *incoming)
 	GolombCodedSetDestroy(result);
 	GolombCodedSetDestroy(incoming);
 
+	GolombCodedSetIndex(new);
 	return new;
 }
 
@@ -396,7 +426,7 @@ GolombCodedSetIntersection(GolombCodedSet *result, GolombCodedSet *incoming)
 	GolombCodedSet *new;
 
 	if (result->n != incoming->n || result->p != incoming->p)
-		elog(ERROR, "cannot instersect Golomb-coded Sets of different hash ranges");
+		elog(ERROR, "cannot instersect Golomb-coded sets of different hash ranges");
 
 	vlen1 = list_length(result->vals);
 	vlen2 = list_length(incoming->vals);
@@ -463,6 +493,7 @@ GolombCodedSetIntersection(GolombCodedSet *result, GolombCodedSet *incoming)
 	GolombCodedSetDestroy(result);
 	GolombCodedSetDestroy(incoming);
 
+	GolombCodedSetIndex(new);
 	return new;
 }
 
@@ -525,7 +556,47 @@ GolombCodedSetCompress(GolombCodedSet *gcs)
 	GCSWriterDestroy(writer);
 	GolombCodedSetDestroy(gcs);
 
+	GolombCodedSetIndex(new);
 	return new;
+}
+
+void
+GolombCodedSetIndex(GolombCodedSet *gcs)
+{
+	int32_t width;
+	GCSReader *reader;
+	int32_t val = 0;
+	int32_t i = 0;
+	int32_t j = 0;
+
+	if (gcs->vals)
+		elog(ERROR, "only compressed Golomb-coded sets can be indexed");
+
+	width = Max(1, gcs->nvals / INDEX_SIZE);
+	reader = GCSReaderCreate(gcs);
+
+	memset(gcs->idx, 0, 2 * INDEX_SIZE);
+
+	while (val != INT_MAX)
+	{
+		if (i % width == 0 && j < INDEX_SIZE)
+		{
+			gcs->idx[j][0] = val;
+			gcs->idx[j][1] = reader->bit_reader->nbits;
+			j++;
+		}
+
+		val = GCSReaderNext(reader);
+		i++;
+	}
+
+	if (j < INDEX_SIZE)
+	{
+		gcs->idx[j][0] = INT_MAX;
+		gcs->idx[j][1] = reader->bit_reader->nbits;
+	}
+
+	gcs->indexed = true;
 }
 
 float8

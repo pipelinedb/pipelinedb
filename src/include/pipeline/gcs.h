@@ -14,12 +14,15 @@
 #include "lib/stringinfo.h"
 #include "nodes/pg_list.h"
 
+#define INDEX_SIZE 64
+
 typedef struct BitReader
 {
 	uint8_t *bytes;
 	uint32_t len;
 	uint32_t accum;
 	uint8_t naccum;
+	uint32_t nbits;
 } BitReader;
 
 extern BitReader *BitReaderCreate(uint8_t *bytes, uint32_t len);
@@ -49,7 +52,8 @@ typedef struct GolombCodedSet
 	uint32_t n;
 	List *vals; /* for dirty storage */
 	uint32_t nvals;
-	uint32_t idx[64][2]; /* TODO(usmanm): Index the compressed array for fast containment checks */
+	bool indexed;
+	uint32_t idx[INDEX_SIZE][2]; /* TODO(usmanm): Index the compressed array for fast containment checks */
 	uint32_t blen;
 	uint8_t b[1];
 } GolombCodedSet;
@@ -66,6 +70,7 @@ extern GolombCodedSet *GolombCodedSetIntersection(GolombCodedSet *result, Golomb
 extern float8 GolombCodedSetFillRatio(GolombCodedSet *gcs);
 extern Size GolombCodedSetSize(GolombCodedSet *gcs);
 extern GolombCodedSet *GolombCodedSetCompress(GolombCodedSet *gcs);
+extern void GolombCodedSetIndex(GolombCodedSet *gcs);
 
 typedef struct GCSReader
 {
