@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * list.c
@@ -816,6 +817,32 @@ list_intersection(const List *list1, const List *list2)
 	{
 		if (list_member(list2, lfirst(cell)))
 			result = lappend(result, lfirst(cell));
+	}
+
+	check_list_invariants(result);
+	return result;
+}
+
+/*
+ * This variant of list_intersection() operates upon lists of integers.
+ */
+List *
+list_intersection_int(const List *list1, const List *list2)
+{
+	List	   *result;
+	const ListCell *cell;
+
+	if (list1 == NIL || list2 == NIL)
+		return NIL;
+
+	Assert(IsPointerList(list1));
+	Assert(IsPointerList(list2));
+
+	result = NIL;
+	foreach(cell, list1)
+	{
+		if (list_member_int(list2, lfirst_int(cell)))
+			result = lappend_int(result, lfirst_int(cell));
 	}
 
 	check_list_invariants(result);

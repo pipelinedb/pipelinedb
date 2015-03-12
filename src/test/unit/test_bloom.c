@@ -11,7 +11,7 @@
 START_TEST(test_basic)
 {
 	BloomFilter *bf = BloomFilterCreate();
-	int num_keys = 100000;
+	int num_keys = 25000;
 	int *keys = palloc(sizeof(int) * num_keys);
 	int i;
 
@@ -31,7 +31,7 @@ START_TEST(test_union)
 {
 	BloomFilter *bf1 = BloomFilterCreate();
 	BloomFilter *bf2 = BloomFilterCreate();
-	int num_keys = 100000;
+	int num_keys = 25000;
 	int *keys = palloc(sizeof(int) * num_keys * 2);
 	int i;
 
