@@ -1871,7 +1871,8 @@ AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **topselec
 				foreach(lc, context.streams)
 				{
 					RangeVar *rv = (RangeVar *) lfirst(lc);
-					if (equal(rv->relname, strVal(alias)) || pg_strcasecmp(rv->alias->aliasname, strVal(alias)) == 0)
+					if (pg_strcasecmp(rv->relname, strVal(alias)) == 0 ||
+							(rv->alias && pg_strcasecmp(rv->alias->aliasname, strVal(alias)) == 0))
 					{
 						table = rv;
 						break;
@@ -2091,4 +2092,19 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv)
 	rule->targetList = targetlist;
 
 	return rule;
+}
+
+/*
+ * SelectsFromStreamOnly
+ */
+bool
+SelectsFromStreamOnly(SelectStmt *stmt)
+{
+	CQAnalyzeContext context;
+
+	context.tables = NIL;
+	context.streams = NIL;
+	AddStreams((Node *) stmt->fromClause, &context);
+
+	return context.tables == NIL;
 }

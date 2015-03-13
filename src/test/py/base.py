@@ -215,6 +215,18 @@ class PipelineDB(object):
         s = on and 'on' or 'off'
         return self.execute('SET debug_sync_stream_insert = %s' % s)
 
+    def begin(self):
+        """
+        Begin a transaction
+        """
+        return self.execute('BEGIN')
+
+    def commit(self):
+        """
+        Commit a transaction
+        """
+        return self.execute('COMMIT')
+
 
 @pytest.fixture
 def clean_db(request):

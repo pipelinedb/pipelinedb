@@ -78,7 +78,7 @@ SELECT * FROM test_sw_dense_rank0;
 SELECT * FROM test_sw_dense_rank1;
 SELECT * FROM test_sw_dense_rank2;
 
--- Now use a small windoww to verify that sliding window results change over time
+-- Now use a small window to verify that sliding window results change over time
 CREATE CONTINUOUS VIEW test_sw_hs_change AS SELECT 
 rank(5, -5) WITHIN GROUP (ORDER BY x::integer, y::integer),
 dense_rank(5, -5) WITHIN GROUP (ORDER BY x, y),

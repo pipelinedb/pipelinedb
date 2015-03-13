@@ -10,6 +10,7 @@
  */
 
 #include "postgres.h"
+#include "pgstat.h"
 
 #include "access/htup_details.h"
 #include "executor/executor.h"
@@ -96,6 +97,8 @@ StreamScanNext(StreamScanState *node)
 
 	tup = ExecStreamProject(tbs->tuple, node);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
+
+	IncrementCQRead(1, tbs->size);
 
 	/*
 	 * We don't necessarily know when parent nodes will be done with this
