@@ -49,7 +49,8 @@
 #define SLEEP_TIMEOUT (2 * 1000)
 #define RECOVERY_TIME 1
 
-bool ContinuousQueryCrashRecovery;
+/* GUC parameters */
+bool continuous_query_crash_recovery;
 
 typedef struct CQProcRunArgs
 {
@@ -169,6 +170,10 @@ CQProcEntryCreate(int id, int pg_size)
 
 	entry->combiner.last_pid = 0;
 	entry->workers = spalloc0(sizeof(CQBackgroundWorkerHandle) * NUM_WORKERS(entry));
+
+	/* Expand Latch arrays on TupleBuffers, if needed. */
+	TupleBufferExpandLatchArray(WorkerTupleBuffer, id);
+	TupleBufferExpandLatchArray(CombinerTupleBuffer, id);
 
 	/*
 	 * Allocate shared memory for latches neeed by this CQs workers, in case

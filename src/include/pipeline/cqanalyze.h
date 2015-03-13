@@ -67,4 +67,6 @@ bool AddStreams(Node *node, CQAnalyzeContext *context);
 List *pipeline_rewrite(List *raw_parsetree_list);
 Query *RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv);
 
+bool SelectsFromStreamOnly(SelectStmt *stmt);
+
 #endif

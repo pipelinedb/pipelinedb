@@ -17,7 +17,7 @@ git submodule update --init
 
 #### Build the PipelineDB core (with debug symbols)
 ```
-./configure CFLAGS="-g -O0" --prefix=/path/to/dev/installation
+./configure CFLAGS="-g -O0" --prefix=</path/to/dev/installation>
 make
 make install
 ```
@@ -135,3 +135,15 @@ is actually due to the `generate-inserts` script (Python) doing a large number o
 
     ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 > inserts.sql
     pipeline -f inserts.sql
+    
+## Distributing PipelineDB
+
+To build the PipelineDB Debian package, run:
+
+    make deb
+    
+Similarly, to build the RPM package:
+
+    make rpm
+
+

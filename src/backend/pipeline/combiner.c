@@ -47,6 +47,8 @@
 
 static TupleBufferReader *reader = NULL;
 
+int combiner_work_mem = 16384;
+
 /*
  * receive_tuple
  */
@@ -63,8 +65,11 @@ receive_tuple(TupleTableSlot *slot)
 	if (tbs == NULL)
 		return false;
 
+	IncrementCQRead(1, tbs->size);
+
 	ExecStoreTuple(heap_copytuple(tbs->tuple->heaptup), slot, InvalidBuffer, false);
 	TupleBufferUnpinSlot(reader, tbs);
+
 	return true;
 }
 
@@ -299,9 +304,7 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
 	 */
 	hash_seq_init(&status, merge_targets->hashtab);
 	while ((entry = (HeapTupleEntry) hash_seq_search(&status)) != NULL)
-	{
 		tuplestore_puttuple(incoming_merges, entry->tuple);
-	}
 
 	foreach(lc, tups)
 	{
@@ -347,11 +350,13 @@ sync_combine(char *cvname, Tuplestorestate *results,
 
 			ExecStoreTuple(updated, slot, InvalidBuffer, false);
 			ExecCQMatRelUpdate(ri, slot);
+			IncrementCQUpdate(1, HEAPTUPLESIZE + updated->t_len);
 		}
 		else
 		{
 			/* No existing tuple found, so it's an INSERT */
 			ExecCQMatRelInsert(ri, slot);
+			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 	}
 	CQMatViewClose(ri);
@@ -410,7 +415,7 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 					  list_make1(plan),
 					  NULL);
 
-	merge_output = tuplestore_begin_heap(true, true, work_mem);
+	merge_output = tuplestore_begin_heap(true, true, combiner_work_mem);
 	SetTuplestoreDestReceiverParams(dest, merge_output, CurrentMemoryContext, true);
 
 	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, GetActiveSnapshot());
@@ -424,11 +429,14 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 
 	PopActiveSnapshot();
 
+	tuplestore_clear(store);
+
 	sync_combine(matrelname, merge_output, slot, merge_targets);
 
 	if (merge_targets)
 		hash_destroy(merge_targets->hashtab);
 
+	tuplestore_end(merge_output);
 	PortalDrop(portal, false);
 }
 
@@ -458,6 +466,8 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	MemoryContext combinectx;
 	MemoryContext tmpctx;
 
+	cq_stat_initialize(state->viewid, MyProcPid);
+
 	CQExecutionContext = AllocSetContextCreate(runctx, "CQExecutionContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
@@ -482,6 +492,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	oldcontext = MemoryContextSwitchTo(runctx);
 
 	MarkCombinerAsRunning(MyCQId);
+	pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
 
 	TupleBufferInitLatch(CombinerTupleBuffer, MyCQId, 0, &MyProc->procLatch);
 	reader = TupleBufferOpenReader(CombinerTupleBuffer, MyCQId, 0, 1);
@@ -491,7 +502,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	 * so that we don't lose received tuples in case of errors in the loop
 	 * below.
 	 */
-	store = tuplestore_begin_heap(true, true, work_mem);
+	store = tuplestore_begin_heap(true, true, combiner_work_mem);
 	combineplan = prepare_combine_plan(queryDesc->plannedstmt, store, &workerdesc);
 	slot = MakeSingleTupleTableSlot(workerdesc);
 
@@ -513,12 +524,13 @@ retry:
 			bool force = false;
 			bool found_tuple;
 
-			TupleBufferResetNotify(CombinerTupleBuffer, MyCQId, 0);
-
-			if (count == 0 && entry->active && TupleBufferIsEmpty(CombinerTupleBuffer))
+			if (count == 0 && entry->active && !TupleBufferHasUnreadSlots())
 			{
-				if (TimestampDifferenceExceeds(last_receive, GetCurrentTimestamp(), EmptyTupleBufferWaitTime * 1000))
+				if (TimestampDifferenceExceeds(last_receive, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
 				{
+					/* force stats flush */
+					cq_stat_report(true);
+
 					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
 					TupleBufferWait(CombinerTupleBuffer, MyCQId, 0);
 					pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
@@ -526,6 +538,8 @@ retry:
 				else
 					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 			}
+
+			TupleBufferResetNotify(CombinerTupleBuffer, MyCQId, 0);
 
 			CurrentResourceOwner = owner;
 
@@ -566,13 +580,19 @@ retry:
 				CommitTransactionCommand();
 				MemoryContextSwitchTo(combinectx);
 
-				tuplestore_clear(store);
 				TupleBufferClearPinnedSlots();
 
 				MemoryContextReset(CQExecutionContext);
 
 				last_combine = GetCurrentTimestamp();
 				count = 0;
+
+				IncrementCQExecutions(1);
+
+				/*
+				 * Send stats to the collector
+				 */
+				cq_stat_report(false);
 			}
 
 
@@ -632,15 +652,24 @@ retry:
 
 		MemoryContextReset(CQExecutionContext);
 
-		if (ContinuousQueryCrashRecovery)
+		IncrementCQErrors(1);
+
+		if (continuous_query_crash_recovery)
 			goto retry;
 	}
 	PG_END_TRY();
 
 	TupleBufferCloseReader(reader);
+	TupleBufferClearReaders();
 
 	MemoryContextDelete(runctx);
 	MemoryContextSwitchTo(oldcontext);
+
+	/*
+	 * Remove proc-level stats
+	 */
+	cq_stat_report(true);
+	cq_stat_send_purge(state->viewid, MyProcPid, CQ_STAT_COMBINER);
 
 	CurrentResourceOwner = save;
 }

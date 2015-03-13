@@ -14,6 +14,7 @@
 
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/namespace.h"
 #include "catalog/pipeline_query.h"
 #include "executor/executor.h"
 #include "miscadmin.h"
@@ -33,6 +34,8 @@
 #include "storage/proc.h"
 #include "pgstat.h"
 #include "utils/timestamp.h"
+
+#define LONG_RUNNING_XACT_DURATION 5000 /* 5s */
 
 /*
  * We keep some resources across transactions, so we attach everything to a
@@ -106,9 +109,10 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	MemoryContext runcontext;
 	MemoryContext xactcontext;
 	CQProcEntry *entry = GetCQProcEntry(MyCQId);
-	TimestampTz last_process = GetCurrentTimestamp();
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
 	bool savereadonly = XactReadOnly;
+
+	cq_stat_initialize(state->viewid, MyProcPid);
 
 	dest = CreateDestReceiver(DestCombiner);
 	SetCombinerDestReceiverParams(dest, MyCQId);
@@ -129,12 +133,17 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	elog(LOG, "\"%s\" worker %d running", queryDesc->plannedstmt->cq_target->relname, MyProcPid);
 
 	MarkWorkerAsRunning(MyCQId, MyWorkerId);
+	pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
 
 	TupleBufferInitLatch(WorkerTupleBuffer, MyCQId, MyWorkerId, &MyProc->procLatch);
 
 retry:
 	PG_TRY();
 	{
+		bool xact_commit = true;
+		TimestampTz last_process = GetCurrentTimestamp();
+		TimestampTz last_commit = GetCurrentTimestamp();
+
 		start_executor(queryDesc, runcontext, cqowner);
 
 		CurrentResourceOwner = cqowner;
@@ -160,12 +169,13 @@ retry:
 
 		for (;;)
 		{
-			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);
-
-			if (TupleBufferIsEmpty(WorkerTupleBuffer))
+			if (!TupleBufferHasUnreadSlots())
 			{
-				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), EmptyTupleBufferWaitTime * 1000))
+				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
 				{
+					/* force stats flush */
+					cq_stat_report(true);
+
 					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
 					TupleBufferWait(WorkerTupleBuffer, MyCQId, MyWorkerId);
 					pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
@@ -174,8 +184,13 @@ retry:
 					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
 			}
 
-			StartTransactionCommand();
-			set_snapshot(estate, cqowner);
+			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);
+
+			if (xact_commit)
+			{
+				StartTransactionCommand();
+				set_snapshot(estate, cqowner);
+			}
 
 			CurrentResourceOwner = cqowner;
 
@@ -190,14 +205,29 @@ retry:
 			ExecutePlan(estate, queryDesc->planstate, operation,
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
+			IncrementCQExecutions(1);
+
 			TupleBufferClearPinnedSlots();
 			MemoryContextReset(CQExecutionContext);
 
 			MemoryContextSwitchTo(runcontext);
 			CurrentResourceOwner = cqowner;
 
-			unset_snapshot(estate, cqowner);
-			CommitTransactionCommand();
+			if (state->long_xact)
+			{
+				if (TimestampDifferenceExceeds(last_commit, GetCurrentTimestamp(), LONG_RUNNING_XACT_DURATION))
+					xact_commit = true;
+				else
+					xact_commit = false;
+			}
+
+			if (xact_commit)
+			{
+				unset_snapshot(estate, cqowner);
+				CommitTransactionCommand();
+
+				last_commit = GetCurrentTimestamp();
+			}
 
 			if (estate->es_processed || estate->es_filtered)
 			{
@@ -209,13 +239,22 @@ retry:
 				 * the worker will resume a simple sleep for the threshold time.
 				 */
 				last_process = GetCurrentTimestamp();
+
+				/*
+				 * Send stats to the collector
+				 */
+				cq_stat_report(false);
 			}
-
-
 
 			/* Has the CQ been deactivated? */
 			if (!entry->active)
+			{
+				if (ActiveSnapshotSet())
+					unset_snapshot(estate, cqowner);
+				if (IsTransactionState())
+					CommitTransactionCommand();
 				break;
+			}
 		}
 
 		CurrentResourceOwner = cqowner;
@@ -244,11 +283,14 @@ retry:
 			CommitTransactionCommand();
 
 		TupleBufferUnpinAllPinnedSlots();
+		TupleBufferClearReaders();
 
 		/* This resets the es_query_ctx and in turn the CQExecutionContext */
 		MemoryContextResetAndDeleteChildren(runcontext);
 
-		if (ContinuousQueryCrashRecovery)
+		IncrementCQErrors(1);
+
+		if (continuous_query_crash_recovery)
 			goto retry;
 	}
 	PG_END_TRY();
@@ -264,6 +306,12 @@ retry:
 
 	if (queryDesc->totaltime)
 		InstrStopNode(queryDesc->totaltime, estate->es_processed);
+
+	/*
+	 * Remove proc-level stats
+	 */
+	cq_stat_report(true);
+	cq_stat_send_purge(state->viewid, MyProcPid, CQ_STAT_WORKER);
 
 	CurrentResourceOwner = owner;
 }

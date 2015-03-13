@@ -68,8 +68,13 @@ static HyperLogLog *
 hll_add(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
 {
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
-	Size size = datumGetSize(elem, typ->typbyval, typ->typlen);
+	Size size;
 	int result;
+
+	if (!typ->typbyval && !elem)
+		return hll;
+
+	size = datumGetSize(elem, typ->typbyval, typ->typlen);
 
 	if (typ->typbyval)
 		hll = HLLAdd(hll, (char *) &elem, size, &result);

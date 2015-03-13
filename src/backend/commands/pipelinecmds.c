@@ -10,6 +10,7 @@
  */
 
 #include "postgres.h"
+#include "pgstat.h"
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/reloptions.h"
@@ -278,7 +279,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	RegisterContinuousView(view, querystring, mat_relation, IsSlidingWindowSelectStmt(viewselect));
+	RegisterContinuousView(view, querystring, mat_relation, IsSlidingWindowSelectStmt(viewselect), SelectsFromStreamOnly(workerselect));
 	CommandCounterIncrement();
 
 	/*
@@ -560,7 +561,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt)
 		if (WaitForCQProcsToStart(state.id))
 		{
 			success++;
-			if (ContinuousQueryCrashRecovery)
+			if (continuous_query_crash_recovery)
 				EnableCQProcsRecovery(state.id);
 		}
 		else
@@ -614,7 +615,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 			continue;
 
 		/* Disable recovery and wait for any recovering processes to recover */
-		if (ContinuousQueryCrashRecovery)
+		if (continuous_query_crash_recovery)
 			DisableCQProcsRecovery(state.id);
 		WaitForCQProcsToStart(state.id);
 
