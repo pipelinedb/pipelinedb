@@ -10,7 +10,7 @@
 #ifndef CQPARSE_H
 #define CQPARSE_H
 
-typedef struct CQParseState
+typedef struct ContAnalyzeContext
 {
 	ParseState *pstate;
 	int colno;
@@ -21,10 +21,11 @@ typedef struct CQParseState
 	List *rels;
 	List *streams;
 	List *funcs;
-} CQParseContext;
+	List *windows;
+} ContAnalyzeContext;
 
 
-extern CQParseContext *MakeCQParseContext(ParseState *pstate, SelectStmt *select);
-extern void ValidateContinuousQuery(SelectStmt *select, const char *sql);
+extern ContAnalyzeContext *MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select);
+extern void ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql);
 
 #endif

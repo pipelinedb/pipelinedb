@@ -10,14 +10,17 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "catalog/namespace.h"
+#include "catalog/pg_proc.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/parsenodes.h"
 #include "parser/parse_node.h"
 #include "parser/parse_target.h"
-#include "pipeline/cqparse.h"
+#include "pipeline/cont_analyze.h"
 #include "pipeline/stream.h"
 #include "storage/lock.h"
+#include "utils/syscache.h"
 
 #define INTERNAL_COLUMN_PREFIX "_"
 
@@ -28,7 +31,7 @@ typedef struct ColumRefWithTypeCast
 } ColumnRefWithTypeCast;
 
 static bool
-collect_column_names(Node *node, CQParseContext *context)
+collect_column_names(Node *node, ContAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -45,10 +48,10 @@ collect_column_names(Node *node, CQParseContext *context)
 	return raw_expression_tree_walker(node, collect_column_names, (void *) context);
 }
 
-CQParseContext *
-MakeCQParseContext(ParseState *pstate, SelectStmt *select)
+ContAnalyzeContext *
+MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select)
 {
-	CQParseContext *context = palloc0(sizeof(CQParseContext));
+	ContAnalyzeContext *context = palloc0(sizeof(ContAnalyzeContext));
 
 	context->pstate = pstate;
 
@@ -62,7 +65,7 @@ MakeCQParseContext(ParseState *pstate, SelectStmt *select)
 }
 
 static bool
-collect_rels_and_streams(Node *node, CQParseContext *context)
+collect_rels_and_streams(Node *node, ContAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -82,7 +85,7 @@ collect_rels_and_streams(Node *node, CQParseContext *context)
 }
 
 static bool
-collect_types_and_cols(Node *node, CQParseContext *context)
+collect_types_and_cols(Node *node, ContAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -120,7 +123,7 @@ collect_types_and_cols(Node *node, CQParseContext *context)
 static bool
 contains_node(Node *node, Node *child)
 {
-	if (node == NULL)
+	if (node == NULL || child == NULL)
 		return false;
 
 	if (equal(node, child))
@@ -130,39 +133,96 @@ contains_node(Node *node, Node *child)
 }
 
 static bool
-collect_agg_funcs(Node *node, CQParseContext *context)
+collect_agg_funcs(Node *node, ContAnalyzeContext *context)
 {
 	if (node == NULL)
 		return false;
 
-	return raw_expression_tree_walker(node, contains_node, (void *) context);
+	if (IsA(node, FuncCall))
+	{
+		FuncCall *func = (FuncCall *) node;
+		HeapTuple ftup;
+		Form_pg_proc pform;
+		bool is_agg = func->agg_within_group;
+		FuncCandidateList clist;
+
+		if (!func->agg_within_group)
+		{
+			clist = FuncnameGetCandidates(func->funcname, list_length(func->args), NIL, true, false, true);
+			while (clist)
+			{
+				ftup = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
+				if (!HeapTupleIsValid(ftup))
+					break;
+
+				pform = (Form_pg_proc) GETSTRUCT(ftup);
+				is_agg = pform->proisagg;
+				ReleaseSysCache(ftup);
+
+				if (is_agg)
+					break;
+
+				clist = clist->next;
+			}
+		}
+
+		if (is_agg)
+			context->funcs = lappend(context->funcs, func);
+	}
+
+	return raw_expression_tree_walker(node, collect_agg_funcs, context);
+}
+
+static void
+collect_windows(SelectStmt *stmt, ContAnalyzeContext *context)
+{
+	List *windows = NIL;
+	ListCell *lc;
+
+	/*
+	 * Copy over all WINDOW clauses.
+	 */
+	foreach(lc, stmt->windowClause)
+	{
+		windows = lappend(windows, lfirst(lc));
+	}
+
+	context->funcs = NIL;
+	collect_agg_funcs((Node *) stmt->targetList, context);
+
+	/*
+	 * Copy over all inline OVER clauses.
+	 */
+	foreach(lc, context->funcs)
+	{
+		FuncCall *func = (FuncCall *) lfirst(lc);
+		/*
+		 * Ignore entries that reference names windows. Such
+		 * windows should already be copied in the above loop.
+		 */
+		if (func->over == NULL || func->over->name != NULL)
+			continue;
+		windows = lappend(windows, func->over);
+	}
+
+	context->windows = windows;
 }
 
 /*
  * ValidateContinuousQuery
  */
 void
-ValidateContinuousQuery(SelectStmt *select, const char *sql)
+ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql)
 {
-	CQParseContext *context = MakeCQParseContext(make_parsestate(NULL), select);
+	SelectStmt *select = (SelectStmt *) stmt->query;
+	ContAnalyzeContext *context = MakeContAnalyzeContext(make_parsestate(NULL), select);
 	ListCell *lc;
 
 	context->pstate->p_sourcetext = sql;
 
-	collect_rels_and_streams((Node *) select->targetList, context);
+	collect_rels_and_streams((Node *) select->fromClause, context);
 	collect_types_and_cols((Node *) select, context);
 	collect_agg_funcs((Node *) select, context);
-
-	/*
-	 * Ensure that the SELECT isn't a simple projection. The entire point of CQs is to
-	 * reduce the cardinality of the incoming stream
-	 */
-	if (!context->funcs && !select->distinctClause && !select->groupClause)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				errmsg("continuous queries must contain an aggregate function, a GROUP BY clause or a DISTINCT clause"),
-				errhint("To include a relation in a continuous query, JOIN it with a stream.")));
-
 
 	/* Ensure that we're reading from at least one stream */
 	if (!context->streams)
@@ -175,6 +235,18 @@ ValidateContinuousQuery(SelectStmt *select, const char *sql)
 						parser_errposition(context->pstate, t->location)));
 	}
 
+	/* Ensure that we're not trying to read from ourselves, which right now would be treated as a stream. */
+	foreach(lc, context->streams)
+	{
+		RangeVar *rv = (RangeVar *) lfirst(lc);
+		if (equal(rv, stmt->into->rel))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("continuous queries cannot read from themselves"),
+					errhint("Remove \"%s\" from the FROM clause.", rv->relname),
+					parser_errposition(context->pstate, rv->location)));
+	}
+
 	/* Ensure that each column being read from a stream is type-casted */
 	foreach(lc, context->cols)
 	{
@@ -182,12 +254,14 @@ ValidateContinuousQuery(SelectStmt *select, const char *sql)
 		ColumnRef *cref = lfirst(lc);
 		bool needs_type = true;
 		bool has_type = false;
-		bool refs_target = false;
+		bool refs_target;
 		char *colname = FigureColname((Node *) cref);
 		char *qualname = NameListToString(cref->fields);
 
 		/*
-		 * ARRIVAL_TIMESTAMP doesn't require an explicit type cast.
+		 * ARRIVAL_TIMESTAMP doesn't require an explicit type cast. We don't care about the
+		 * qualified name because even if it's a column for a table, we don't need an explicit
+		 * type.
 		 */
 		if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
 			continue;
@@ -207,8 +281,8 @@ ValidateContinuousQuery(SelectStmt *select, const char *sql)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-					 errmsg("can't select %s", qualname),
-					 errhint("Explicitly state the columns you want to SELECT"),
+					 errmsg("can't select \"%s\"", qualname),
+					 errhint("Explicitly state the columns you want to SELECT."),
 					 parser_errposition(context->pstate, cref->location)));
 		}
 
@@ -262,6 +336,7 @@ ValidateContinuousQuery(SelectStmt *select, const char *sql)
 		 * In both these examples we need an explicit cast for `x`.
 		 */
 		needs_type = false;
+		refs_target = false;
 
 		foreach(lc2, select->targetList)
 		{
@@ -339,4 +414,27 @@ ValidateContinuousQuery(SelectStmt *select, const char *sql)
 						parser_errposition(context->pstate, cref->location)));
 		}
 	}
+
+	/* Ensure that any WINDOWs are legal */
+	collect_windows(select, context);
+	foreach(lc, context->windows)
+	{
+		WindowDef *window = (WindowDef *) lfirst(lc);
+
+		if (list_length(window->orderClause) > 1)
+		{
+			/* Can't ORDER BY multiple columns. */
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					errmsg("only a single ORDER BY is allowed for WINDOWs"),
+					parser_errposition(context->pstate, window->location)));
+		}
+		else if (list_length(window->orderClause) == 1)
+		{
+			/* ORDER BY must be on a time-like column/expression */
+			/* TODO(usmanm): Check that type of this column is time-like */
+		}
+	}
+
+	/* Ensure that the sliding window is legal */
 }
