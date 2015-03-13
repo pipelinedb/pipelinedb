@@ -61,6 +61,7 @@
 #include "postmaster/postmaster.h"
 #include "postmaster/syslogger.h"
 #include "postmaster/walwriter.h"
+#include "postmaster/license.h"
 #include "replication/slot.h"
 #include "replication/syncrep.h"
 #include "replication/walreceiver.h"
@@ -3324,6 +3325,18 @@ static struct config_string ConfigureNamesString[] =
 		"",
 		check_application_name, assign_application_name, NULL
 	},
+
+	{
+		{"license_key", PGC_POSTMASTER, CONN_AUTH_SECURITY,
+			gettext_noop("License key for the PipelineDB instance."),
+			NULL,
+			0
+		},
+		&license_key,
+		NULL,
+		NULL, NULL, NULL,
+	},
+
 
 	/* End-of-list marker */
 	{

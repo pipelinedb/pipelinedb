@@ -71,6 +71,7 @@
 #include "pg_getopt.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/postmaster.h"
+#include "postmaster/license.h"
 #include "replication/slot.h"
 #include "replication/walsender.h"
 #include "rewrite/rewriteHandler.h"
@@ -1077,6 +1078,17 @@ exec_simple_query(const char *query_string)
 
 			continue;
 		}
+
+		/*
+		 * Read-time license check--we still allow users to ingest data with an
+		 * expired license, but we block reads.
+		 */
+#ifdef REQUIRE_LICENSE
+		if (IsA(parsetree, SelectStmt))
+		{
+			CheckLicense(true);
+		}
+#endif
 
 		/*
 		 * Set up a snapshot if parse analysis/planning will need one.

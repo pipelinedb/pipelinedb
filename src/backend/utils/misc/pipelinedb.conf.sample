@@ -56,6 +56,7 @@
 
 # - Connection Settings -
 
+#license_key = '' # PipelineDB-issued license key
 #listen_addresses = 'localhost'		# what IP address(es) to listen on;
 					# comma-separated list of addresses;
 					# defaults to 'localhost'; use '*' for all
