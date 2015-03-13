@@ -1,0 +1,51 @@
+#! /usr/bin/python
+
+import argparse
+from Crypto.Cipher import AES
+from Crypto import Random
+
+import calendar
+import datetime
+from datetime import timedelta
+
+import binascii
+
+__all__ = ['encode', 'decode']
+
+key = 'THEPIPELINEKEY00'
+pad = lambda s: s + (16 - len(s) % 16) * ' '
+
+def encode(d):
+    j = pad(d)
+    iv = Random.new().read(AES.block_size)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    return binascii.hexlify(iv + cipher.encrypt(j))
+
+def decode(d):
+    enc = binascii.unhexlify(str(d))
+    iv = enc[:16]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    return unpad(cipher.decrypt(enc[16:]))
+
+def get_utc_timestamp():
+    return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
+
+def generate_license_key(start_ts=None, end_ts=None, days=30):
+    if not start_ts:
+        start_ts = get_utc_timestamp()
+    if not end_ts:
+        end_ts = start_ts + days * 86400
+
+    s = '%d:%d' % (start_ts, end_ts)
+    end_ts = datetime.datetime.utcfromtimestamp(long(end_ts))
+    return encode(s), end_ts
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--days', action='store', dest='days', required=True, type=int,
+                    help='Duration in days until the key expires')
+    args = parser.parse_args()
+    key, expires = generate_license_key(days=args.days)
+    print key
+    print 'valid until', expires
+
