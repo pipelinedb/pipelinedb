@@ -18,6 +18,7 @@
 #include "commands/tablecmds.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_class.h"
+#include "catalog/pg_database.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/toasting.h"
@@ -60,6 +61,7 @@ typedef struct CQProcRunArgs
 	ContinuousViewState state;
 	char *query;
 	int worker_id;
+	Oid dboid;
 } CQProcRunArgs;
 
 static HTAB *CQProcTable = NULL;
@@ -436,18 +438,15 @@ cq_bg_main(Datum d, char *additional, Size additionalsize)
 	MyCQId = args->state.id;
 	MyWorkerId = args->worker_id;
 
-	/*
-	 * XXX(usmanm): Is this kosher to do? We need this so in case of failed
-	 * ACTIVATEs, the postmaster can kill the CQ's bg procs. Previously
-	 * we would only unblock signals when waiting on the process' GlobalStreamBuffer
-	 * latch.
-	 */
 	BackgroundWorkerUnblockSignals();
 
 	/*
 	 * 0. Give this process access to the database
 	 */
-	BackgroundWorkerInitializeConnection(NameStr(args->dbname), NULL);
+	if (args->dboid != InvalidOid)
+		BackgroundWorkerInitializeConnection(NULL, args->dboid, NULL);
+	else
+		BackgroundWorkerInitializeConnection(NameStr(args->dbname), InvalidOid, NULL);
 
 	StartTransactionCommand();
 
@@ -516,7 +515,8 @@ get_cq_proc_type_name(CQProcessType ptype)
 }
 
 static bool
-run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state, BackgroundWorkerHandle *bg_handle, char *query, int worker_id)
+run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state, BackgroundWorkerHandle *bg_handle, char *query, int worker_id,
+	Oid dboid)
 {
 	BackgroundWorker worker;
 	CQProcRunArgs args;
@@ -539,7 +539,9 @@ run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state,
 	args.ptype = state->ptype = ptype;
 	args.state = *state;
 	namestrcpy(&args.cvname, cvname);
-	namestrcpy(&args.dbname, MyProcPort->database_name);
+	if (MyProcPort)
+		namestrcpy(&args.dbname, MyProcPort->database_name);
+	args.dboid = dboid;
 
 	args.query = query;
 	args.worker_id = worker_id;
@@ -557,7 +559,7 @@ run_cq_proc(CQProcessType ptype, const char *cvname, ContinuousViewState *state,
  * RunCQProcs
  */
 void
-RunCQProcs(const char *cvname, void *_state, CQProcEntry *entry)
+RunCQProcs(const char *cvname, void *_state, CQProcEntry *entry, Oid dboid)
 {
 	ContinuousViewState *state = (ContinuousViewState *) _state;
 	int i;
@@ -569,9 +571,9 @@ RunCQProcs(const char *cvname, void *_state, CQProcEntry *entry)
 		strcpy(entry->shm_query, q);
 	}
 
-	run_cq_proc(CQCombiner, cvname, state, (BackgroundWorkerHandle *) &entry->combiner, entry->shm_query, -1);
+	run_cq_proc(CQCombiner, cvname, state, (BackgroundWorkerHandle *) &entry->combiner, entry->shm_query, -1, dboid);
 	for (i = 0; i < NUM_WORKERS(entry); i++)
-		run_cq_proc(CQWorker, cvname, state, (BackgroundWorkerHandle *) &entry->workers[i], entry->shm_query, i);
+		run_cq_proc(CQWorker, cvname, state, (BackgroundWorkerHandle *) &entry->workers[i], entry->shm_query, i, dboid);
 }
 
 /*
@@ -600,4 +602,68 @@ GetWorkerPids(int id)
 		GetBackgroundWorkerPid((BackgroundWorkerHandle *) &entry->workers[i], &pids[i]);
 
 	return pids;
+}
+
+static void
+restart_bg_main(Datum d, char *data, Size len)
+{
+	Relation pipeline_query;
+	HeapScanDesc scandesc;
+	HeapTuple tup;
+	List *views = NIL;
+	Oid *dboid = (Oid *) data;
+	ActivateContinuousViewStmt *stmt = makeNode(ActivateContinuousViewStmt);
+
+	BackgroundWorkerUnblockSignals();
+	BackgroundWorkerInitializeConnection(NULL, *dboid, NULL);
+
+	StartTransactionCommand();
+
+	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
+	scandesc = heap_beginscan_catalog(pipeline_query, 0, NULL);
+
+	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
+		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
+			views = lappend(views, makeRangeVar(NULL, NameStr(row->name), -1));
+	}
+
+	stmt->views = views;
+	stmt->dboid = *dboid;
+
+	ExecActivateContinuousViewStmt(stmt, false);
+
+	heap_endscan(scandesc);
+	heap_close(pipeline_query, NoLock);
+
+	CommitTransactionCommand();
+}
+
+/*
+ * RestartContinuousQueryProcs
+ */
+void
+RestartContinuousQueryProcs(List *databases)
+{
+	ListCell *lc;
+
+	foreach(lc, databases)
+	{
+		Oid dboid = lfirst_int(lc);
+		BackgroundWorker worker;
+
+		strcpy(worker.bgw_name, "restart_cq_procs");
+		worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
+		worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
+		worker.bgw_main = restart_bg_main;
+		worker.bgw_notify_pid = MyProcPid;
+		worker.bgw_restart_time = BGW_NEVER_RESTART;
+		worker.bgw_let_crash = true;
+		worker.bgw_additional_size = sizeof(Oid);
+		worker.bgw_cvid = -1;
+		memcpy(worker.bgw_additional_arg, &dboid, sizeof(Oid));
+
+		RegisterDynamicBackgroundWorker(&worker, NULL);
+	}
 }

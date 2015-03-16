@@ -1057,17 +1057,12 @@ exec_simple_query(const char *query_string)
 			if (IsA(parsetree, ActivateContinuousViewStmt))
 			{
 				tag = "ACTIVATE %d";
-				count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree);
-			}
-			else if (IsA(parsetree, DeactivateContinuousViewStmt))
-			{
-				tag = "DEACTIVATE %d";
-				count = ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
+				count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree, true);
 			}
 			else
 			{
-				/* this would be really weird if this happened, but we want to know if it does */
-				elog(ERROR, "unknown BaseContinuousViewStmt received");
+				tag = "DEACTIVATE %d";
+				count = ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
 			}
 
 			appendStringInfo(buf, tag, count);
