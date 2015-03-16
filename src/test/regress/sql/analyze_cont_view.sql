@@ -210,7 +210,9 @@ DROP CONTINUOUS VIEW cqanalyze53;
 CREATE CONTINUOUS VIEW cqregress1 AS SELECT id::integer + avg(id) FROM stream GROUP BY id;
 CREATE CONTINUOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts FROM stream;
 CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::integer FROM stream;
+CREATE CONTINUOUS VIEW cqregress4 AS SELECT x::int FROM cqregress4;
 
 DROP CONTINUOUS VIEW cqregress1;
 DROP CONTINUOUS VIEW cqregress2;
 DROP CONTINUOUS VIEW cqregress3;
+DROP CONTINUOUS VIEW cqregress4;

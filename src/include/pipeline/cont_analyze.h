@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------------------
  *
- * cqparse.h
+ * cont_analyze.h
  *	  Interface for for parsing and analyzing continuous queries
  *
- * src/include/catalog/pipeline/cqparser.h
+ * src/include/catalog/pipeline/cont_analyze.h
  *
  *-------------------------------------------------------------------------
  */

@@ -1,10 +1,10 @@
 	/*-------------------------------------------------------------------------
  *
- * cqparse.c
+ * cont_analyze.c
  *	  Support for parsing and analyzing continuous queries
  *
  * IDENTIFICATION
- *	  src/backend/pipeline/cqparse.c
+ *	  src/backend/pipeline/cont_analyze.c
  *
  *-------------------------------------------------------------------------
  */
