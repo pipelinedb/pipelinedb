@@ -358,8 +358,8 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_CONTINUOUS_VIEW_STATE),
-					 errmsg("continuous view \"%s\" is active", rv->relname),
-					 errhint("only inactive continuous views can be dropped.")));
+					 errmsg("continuous view \"%s\" is currently active", rv->relname),
+					 errhint("only inactive continuous views can be dropped, which requires deactivating them. For example, DEACTIVATE %s", rv->relname)));
 
 		/*
 		 * Add object for the CQ's underlying materialization table.
@@ -715,8 +715,8 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_CONTINUOUS_VIEW_STATE),
-					 errmsg("continuous view \"%s\" is active", rv->relname),
-					 errhint("only inactive continuous views can be truncated.")));
+					 errmsg("continuous view \"%s\" is currently active", rv->relname),
+					 errhint("only inactive continuous views can be truncated, which requires deactivating them. For example, DEACTIVATE %s", rv->relname)));
 
 		ReleaseSysCache(tuple);
 
