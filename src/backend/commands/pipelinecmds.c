@@ -310,23 +310,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 }
 
 /*
- * DumpState
- *
- * Dumps the state of a given object by sending tuples which describe
- * the state back to the client
- */
-void
-ExecDumpStmt(DumpStmt *stmt)
-{
-	char *name = NULL;
-	if (stmt->name)
-		name = stmt->name->relname;
-
-	elog(LOG, "DUMP \"%s\"", name);
-}
-
-/*
- * RemoveContinuousViewFromCatalog
+ * ExecDropContinuousViewStmt
  *
  * Drops the query row in the pipeline_query catalog table.
  */
@@ -358,8 +342,8 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_CONTINUOUS_VIEW_STATE),
-					 errmsg("continuous view \"%s\" is active", rv->relname),
-					 errhint("only inactive continuous views can be dropped.")));
+					 errmsg("continuous view \"%s\" is currently active", rv->relname),
+					 errhint("only inactive continuous views can be dropped, which requires deactivating them. For example, DEACTIVATE %s", rv->relname)));
 
 		/*
 		 * Add object for the CQ's underlying materialization table.
@@ -722,8 +706,8 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_CONTINUOUS_VIEW_STATE),
-					 errmsg("continuous view \"%s\" is active", rv->relname),
-					 errhint("only inactive continuous views can be truncated.")));
+					 errmsg("continuous view \"%s\" is currently active", rv->relname),
+					 errhint("only inactive continuous views can be truncated, which requires deactivating them. For example, DEACTIVATE %s", rv->relname)));
 
 		ReleaseSysCache(tuple);
 

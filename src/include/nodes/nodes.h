@@ -300,7 +300,6 @@ typedef enum NodeTag
 	T_DefineStmt,
 	T_DeactivateContinuousViewStmt,
 	T_DropStmt,
-	T_DumpStmt,
 	T_TruncateStmt,
 	T_CommentStmt,
 	T_FetchStmt,

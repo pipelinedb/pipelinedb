@@ -105,6 +105,17 @@ DEACTIVATE test_null_group;
 
 SELECT * FROM test_null_group;
 
+CREATE CONTINUOUS VIEW cv_drop_active AS SELECT COUNT(*) FROM stream;
+
+ACTIVATE cv_drop_active;
+
+DROP CONTINUOUS VIEW cv_drop_active;
+TRUNCATE CONTINUOUS VIEW cv_drop_active;
+
+DEACTIVATE cv_drop_active;
+
+TRUNCATE CONTINUOUS VIEW cv_drop_active;
+
 DROP CONTINUOUS VIEW test_avg;
 DROP CONTINUOUS VIEW cv;
 DROP CONTINUOUS VIEW cv_weird_tl;
@@ -113,3 +124,4 @@ DROP CONTINUOUS VIEW cv_grp_expr;
 DROP CONTINUOUS VIEW cv_multi_grp;
 DROP CONTINUOUS VIEW cv_agg_expr;
 DROP CONTINUOUS VIEW test_null_group;
+DROP CONTINUOUS VIEW cv_drop_active;
