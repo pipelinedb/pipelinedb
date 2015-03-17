@@ -100,15 +100,21 @@ class PipelineDB(object):
         else:
           raise Exception('Failed to start up PipelineDB')
 
+    def stop(self):
+      """
+      Stops the PipelineDB instance
+      """
+      self.conn.close()
+      if self.proc:
+        self.proc.send_signal(signal.SIGINT)
+        self.proc.wait()
+
     def destroy(self):
         """
         Cleans up resources used by this PipelineDB instance
         """
         self.deactivate()
-        self.conn.close()
-        if self.proc:
-            self.proc.send_signal(signal.SIGINT)
-            self.proc.wait()
+        self.stop()
         shutil.rmtree(self.tmp_dir)
 
     @property
