@@ -167,7 +167,6 @@ extern int MyWorkerId;
 
 #define IsCQBackgroundProcess (IsCombiner || IsWorker)
 #define PIPELINE_PY_TEST "PIPELINE_PY_TESTS"
-#define PIPELINE_DISABLE_SANITIZE "PIPELINE_DISABLE_SANITIZE"
 
 /*
  * done in storage/backendid.h for now.
