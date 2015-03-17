@@ -3280,14 +3280,6 @@ expand_fmt_string(const char *fmt, ErrorData *edata)
 			appendStringInfoCharMacro(&buf, *cp);
 	}
 
-	result = buf.data;
-
-/* we don't while testing because it would needlessly break a bunch of tests */
-#ifdef PIPELINE_DISABLE_SANITIZE
-	if (getenv(PIPELINE_DISABLE_SANITIZE))
-		return result;
-#endif
-
 	result = sanitize_fmt_string(buf.data);
 
 	pfree(buf.data);
