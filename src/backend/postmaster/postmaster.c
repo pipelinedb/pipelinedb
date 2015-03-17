@@ -5328,7 +5328,7 @@ MaxLivePostmasterChildren(void)
  * Connect background worker to a database.
  */
 void
-BackgroundWorkerInitializeConnection(char *dbname, char *username)
+BackgroundWorkerInitializeConnection(char *dbname, Oid dboid, char *username)
 {
 	BackgroundWorker *worker = MyBgworkerEntry;
 
@@ -5338,7 +5338,7 @@ BackgroundWorkerInitializeConnection(char *dbname, char *username)
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("database connection requirement not indicated during registration")));
 
-	InitPostgres(dbname, InvalidOid, username, NULL);
+	InitPostgres(dbname, dboid, username, NULL);
 
 	/* it had better not gotten out of "init" mode yet */
 	if (!IsInitProcessingMode())

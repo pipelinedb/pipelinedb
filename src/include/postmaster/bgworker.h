@@ -150,7 +150,7 @@ extern PGDLLIMPORT BackgroundWorker *MyBgworkerEntry;
  * If dbname is NULL, connection is made to no specific database;
  * only shared catalogs can be accessed.
  */
-extern void BackgroundWorkerInitializeConnection(char *dbname, char *username);
+extern void BackgroundWorkerInitializeConnection(char *dbname, Oid dboid, char *username);
 
 /* Block/unblock signals in a background worker process */
 extern void BackgroundWorkerBlockSignals(void);
