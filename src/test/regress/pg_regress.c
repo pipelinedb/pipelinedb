@@ -2221,12 +2221,6 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		if (!directory_exists(buf))
 			make_directory(buf);
 
-		/*
-		 * We disable log sanitization while testing tests because it would
-		 * needlessly break too many tests
-		 */
-		doputenv("PIPELINE_DISABLE_SANITIZE", "1");
-
 		/* "make install" */
 #ifndef WIN32_ONLY_COMPILER
 		snprintf(buf, sizeof(buf),

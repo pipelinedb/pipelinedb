@@ -35,7 +35,7 @@ CREATE OPERATOR => (
    procedure = numeric_fac
 );
 WARNING:  => is deprecated as an operator name
-DETAIL:  This name may be disallowed altogether in future versions of PostgreSQL.
+DETAIL:  This name may be disallowed altogether in future versions of PipelineDB.
 -- Should fail. CREATE OPERATOR requires USAGE on SCHEMA
 BEGIN TRANSACTION;
 CREATE ROLE regress_rol_op1;
