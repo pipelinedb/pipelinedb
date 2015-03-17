@@ -2831,19 +2831,4 @@ typedef struct ActivateContinuousViewStmt
 	Oid 	dboid;
 } ActivateContinuousViewStmt;
 
-<<<<<<< HEAD
-typedef struct DumpStmt
-{
-	NodeTag type;
-
-	/*
-	 * Name of the node whose state should be dumped,
-	 * or NULL if no node name was given
-	 */
-	RangeVar *name;
-} DumpStmt;
-=======
-typedef BaseContinuousViewStmt DeactivateContinuousViewStmt;
->>>>>>> master
-
 #endif   /* PARSENODES_H */
