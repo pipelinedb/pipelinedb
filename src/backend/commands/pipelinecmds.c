@@ -309,23 +309,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 }
 
 /*
- * DumpState
- *
- * Dumps the state of a given object by sending tuples which describe
- * the state back to the client
- */
-void
-ExecDumpStmt(DumpStmt *stmt)
-{
-	char *name = NULL;
-	if (stmt->name)
-		name = stmt->name->relname;
-
-	elog(LOG, "DUMP \"%s\"", name);
-}
-
-/*
- * RemoveContinuousViewFromCatalog
+ * ExecDropContinuousViewStmt
  *
  * Drops the query row in the pipeline_query catalog table.
  */
