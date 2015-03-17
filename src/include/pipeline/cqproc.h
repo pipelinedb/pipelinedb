@@ -68,6 +68,7 @@ extern bool AreCQWorkersStopped(int id);
 extern void EnableCQProcsRecovery(int id);
 extern void DisableCQProcsRecovery(int id);
 
-extern void RunCQProcs(const char *cvname, void *state, CQProcEntry *procentry);
+extern void RunCQProcs(const char *cvname, void *state, CQProcEntry *procentry, Oid dboid);
+extern void RestartContinuousQueryProcs(List *databases);
 
 #endif   /* CQPROC_H */
