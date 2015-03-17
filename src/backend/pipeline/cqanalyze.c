@@ -1976,10 +1976,14 @@ pipeline_rewrite(List *raw_parsetree_list)
 		if (IsA(node, ActivateContinuousViewStmt) ||
 				IsA(node, DeactivateContinuousViewStmt))
 		{
-			BaseContinuousViewStmt *stmt = (BaseContinuousViewStmt *) node;
+			/*
+			 * We can type cast as DeactivateContinuousViewStmt because ActivateContinuousViewStmt
+			 * extends it.
+			 */
+			DeactivateContinuousViewStmt *stmt = (DeactivateContinuousViewStmt *) node;
 
 			if (stmt->views && stmt->whereClause)
-				elog(ERROR, "can't specify target list and a WHERE clause");
+				elog(ERROR, "can't specify views list and a WHERE clause");
 		}
 		else if (IsA(node, IndexStmt))
 		{

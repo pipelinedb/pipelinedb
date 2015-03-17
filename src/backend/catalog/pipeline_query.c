@@ -584,56 +584,6 @@ GetGCFlag(RangeVar *name)
 }
 
 /*
- * MarkAllContinuousViewsAsInactive
- *
- * Marks all registered continuous views as inactive.
-  *
- * This is used on server restart which implies that
- * in case of server restart users will have to activate
- * all the required views manually.
- */
-void
-MarkAllContinuousViewsAsInactive(void)
-{
-	Relation		pipeline_query;
-	HeapScanDesc	scandesc;
-	HeapTuple		tup;
-
-	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
-	scandesc = heap_beginscan_catalog(pipeline_query, 0, NULL);
-
-	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
-	{
-		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		HeapTuple newtuple;
-		bool nulls[Natts_pipeline_query];
-		bool replaces[Natts_pipeline_query];
-		Datum values[Natts_pipeline_query];
-
-		if (row->state != PIPELINE_QUERY_STATE_INACTIVE)
-		{
-			MemSet(values, 0, sizeof(values));
-			MemSet(nulls, false, sizeof(nulls));
-			MemSet(replaces, false, sizeof(replaces));
-
-			replaces[Anum_pipeline_query_state - 1] = true;
-			values[Anum_pipeline_query_state - 1] = CharGetDatum(PIPELINE_QUERY_STATE_INACTIVE);
-
-			newtuple = heap_modify_tuple(tup, pipeline_query->rd_att,
-					values, nulls, replaces);
-
-			simple_heap_update(pipeline_query, &newtuple->t_self, newtuple);
-			CatalogUpdateIndexes(pipeline_query, newtuple);
-
-			CommandCounterIncrement();
-		}
-	}
-
-	heap_endscan(scandesc);
-	heap_close(pipeline_query, AccessExclusiveLock);
-}
-
-/*
  * GetContinuousQuery
  *
  * Returns an analyzed continuous query

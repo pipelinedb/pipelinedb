@@ -16,7 +16,7 @@
 
 void ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring);
 void ExecDropContinuousViewStmt(DropStmt *stmt);
-int ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt);
+int ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skipActive);
 int ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt);
 void ExecTruncateContinuousViewStmt(TruncateStmt *stmt);
 
