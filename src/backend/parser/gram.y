@@ -236,7 +236,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 		DropGroupStmt DropOpClassStmt DropOpFamilyStmt DropPLangStmt DropStmt
 		DropAssertStmt DropTrigStmt DropRuleStmt DropCastStmt DropRoleStmt
 		DropUserStmt DropdbStmt DropTableSpaceStmt DropFdwStmt
-		DropForeignServerStmt DropUserMappingStmt DumpStmt ExplainStmt FetchStmt
+		DropForeignServerStmt DropUserMappingStmt ExplainStmt FetchStmt
 		GrantStmt GrantRoleStmt IndexStmt InsertStmt ListenStmt LoadStmt
 		LockStmt NotifyStmt ExplainableStmt PreparableStmt
 		CreateFunctionStmt AlterFunctionStmt ReindexStmt RemoveAggrStmt
@@ -543,7 +543,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 
 	DATA_P DATABASE DAY_P DEACTIVATE DEALLOCATE DEC DECIMAL_P DECLARE DECODED DEFAULT DEFAULTS
 	DEFERRABLE DEFERRED DEFINER DELETE_P DELIMITER DELIMITERS DESC
-	DICTIONARY DISABLE_P DISCARD DISTINCT DO DOCUMENT_P DOMAIN_P DOUBLE_P DROP DUMP
+	DICTIONARY DISABLE_P DISCARD DISTINCT DO DOCUMENT_P DOMAIN_P DOUBLE_P DROP
 
 	EACH ELSE ENABLE_P ENCODING ENCRYPTED END_P ENUM_P ESCAPE EVENT EXCEPT
 	EXCLUDE EXCLUDING EXCLUSIVE EXECUTE EXISTS EXPLAIN
@@ -799,7 +799,6 @@ stmt :
 			| DropUserStmt
 			| DropUserMappingStmt
 			| DropdbStmt
-			| DumpStmt
 			| ExecuteStmt
 			| ExplainStmt
 			| FetchStmt
@@ -2752,29 +2751,6 @@ DeactivateContinuousViewStmt: DEACTIVATE opt_qualified_name_list where_clause
 					$$ = (Node *)s;
 				}
 		;
-
-/*****************************************************************************
- *
- * DUMP node_name
- *
- * PipelineDB
- *
- * Dumps the state of the given object
- *
- *****************************************************************************/
-DumpStmt: DUMP qualified_name
-		{
-			DumpStmt *d = makeNode(DumpStmt);
-			d->name = $2;
-			$$ = (Node *)d;
-		}
-	|	DUMP
-		{
-			DumpStmt *d = makeNode(DumpStmt);
-			d->name = NULL;
-			$$ = (Node *)d;
-		}
-	;
 
 /*****************************************************************************
  *
@@ -12945,7 +12921,6 @@ unreserved_keyword:
 			| DOMAIN_P
 			| DOUBLE_P
 			| DROP
-			| DUMP
 			| EACH
 			| ENABLE_P
 			| ENCODING

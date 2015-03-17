@@ -2838,15 +2838,4 @@ typedef struct ActivateContinuousViewStmt
 
 typedef BaseContinuousViewStmt DeactivateContinuousViewStmt;
 
-typedef struct DumpStmt
-{
-	NodeTag type;
-
-	/*
-	 * Name of the node whose state should be dumped,
-	 * or NULL if no node name was given
-	 */
-	RangeVar *name;
-} DumpStmt;
-
 #endif   /* PARSENODES_H */
