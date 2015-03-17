@@ -132,6 +132,16 @@ SELECT * FROM test_null_group;
    | 1
 (3 rows)
 
+CREATE CONTINUOUS VIEW cv_drop_active AS SELECT COUNT(*) FROM stream;
+ACTIVATE cv_drop_active;
+DROP CONTINUOUS VIEW cv_drop_active;
+ERROR:  continuous view "cv_drop_active" is currently active
+HINT:  only inactive continuous views can be dropped, which requires deactivating them. For example, DEACTIVATE cv_drop_active
+TRUNCATE CONTINUOUS VIEW cv_drop_active;
+ERROR:  continuous view "cv_drop_active" is currently active
+HINT:  only inactive continuous views can be truncated, which requires deactivating them. For example, DEACTIVATE cv_drop_active
+DEACTIVATE cv_drop_active;
+TRUNCATE CONTINUOUS VIEW cv_drop_active;
 DROP CONTINUOUS VIEW test_avg;
 DROP CONTINUOUS VIEW cv;
 DROP CONTINUOUS VIEW cv_weird_tl;
@@ -140,3 +150,4 @@ DROP CONTINUOUS VIEW cv_grp_expr;
 DROP CONTINUOUS VIEW cv_multi_grp;
 DROP CONTINUOUS VIEW cv_agg_expr;
 DROP CONTINUOUS VIEW test_null_group;
+DROP CONTINUOUS VIEW cv_drop_active;
