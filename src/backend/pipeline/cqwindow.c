@@ -224,29 +224,6 @@ ValidateSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context)
 }
 
 /*
- * validate_windowdef
- */
-static void
-validate_windowdef(WindowDef *wdef, CQAnalyzeContext *context)
-{
-	if (list_length(wdef->orderClause) > 1)
-	{
-		/* Can't ORDER BY multiple columns. */
-		SortBy *sort = list_nth(wdef->orderClause, 1);
-		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
-						errmsg("only a single ORDER BY is allowed for WINDOWs"),
-						parser_errposition(context->pstate, sort->location)));
-	}
-	else
-	{
-		/* ORDER BY must be on a time-like column/expression */
-		//SortBy *sort = (SortBy *) linitial(wdef->orderClause);
-		/* TODO(usmanm): Check that type of this column is time-like */
-	}
-}
-
-/*
  * get_window_defs
  */
 static void
@@ -283,32 +260,6 @@ get_window_defs(SelectStmt *stmt, CQAnalyzeContext *context)
 	}
 
 	context->windows = windows;
-}
-
-/*
- * ValidateWindows
- */
-void
-ValidateWindows(SelectStmt *stmt, CQAnalyzeContext *context)
-{
-	ListCell *lc;
-
-	get_window_defs(stmt, context);
-
-	if (list_length(context->windows) > 1)
-	{
-		WindowDef *wdef = list_nth(context->windows, 1);
-		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
-						errmsg("only a single WINDOW is allowed"),
-						parser_errposition(context->pstate, wdef->location)));
-	}
-
-	foreach(lc, context->windows)
-	{
-		WindowDef *wdef = (WindowDef *) lfirst(lc);
-		validate_windowdef(wdef, context);
-	}
 }
 
 /*

@@ -224,6 +224,15 @@ ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql)
 	collect_types_and_cols((Node *) select, context);
 	collect_agg_funcs((Node *) select, context);
 
+	if (list_length(select->sortClause) > 0)
+	{
+		SortBy *sortby = (SortBy *) linitial(select->sortClause);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						errmsg("continuous queries don't support ORDER BY"),
+						parser_errposition(context->pstate, sortby->location)));
+	}
+
 	/* Ensure that we're reading from at least one stream */
 	if (!context->streams)
 	{
