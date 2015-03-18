@@ -665,3 +665,27 @@ GetStreamTupleDesc(const char *stream, List *colnames)
 
 	return CreateTupleDesc(list_length(attlist), false, attrs);
 }
+
+/*
+ * IsStream
+ */
+bool IsStream(char *stream)
+{
+	HeapTuple tup = SearchSysCache1(PIPELINESTREAMNAME, CStringGetDatum(stream));
+
+	if (HeapTupleIsValid(tup))
+	{
+		ReleaseSysCache(tup);
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * IsWritableStream
+ */
+bool IsWritableStream(char *stream)
+{
+	return GetStreamReaders(stream) != NULL;
+}

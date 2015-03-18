@@ -124,18 +124,7 @@ InsertTargetIsStream(InsertStmt *ins)
 	if (reloid != InvalidOid)
 		return false;
 
-	return IsInputStream(ins->relation->relname);
-}
-
-/*
- * IsInputStream
- *
- * Returns true if at least one continuous query is reading from the given stream
- */
-bool
-IsInputStream(const char *stream)
-{
-	return GetStreamReaders(stream) != NULL;
+	return IsStream(ins->relation->relname);
 }
 
 /*

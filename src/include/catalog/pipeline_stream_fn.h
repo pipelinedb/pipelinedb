@@ -25,4 +25,7 @@ extern TupleDesc GetStreamTupleDesc(const char *stream, List *colnames);
 extern bytea *PackTupleDesc(TupleDesc desc);
 extern TupleDesc UnpackTupleDesc(bytea *bytes);
 
+extern bool IsStream(char *stream);
+extern bool IsWritableStream(char *stream);
+
 #endif
