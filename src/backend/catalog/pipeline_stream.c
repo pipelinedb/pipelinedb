@@ -132,7 +132,7 @@ add_coltypes(StreamTargetsEntry *stream, List *targetlist)
  * A mapping from stream name to this metadata is returned.
  */
 static HTAB *
-streams_to_meta(Relation pipeline_query)
+streams_to_targets_and_desc(Relation pipeline_query)
 {
 	HeapScanDesc scandesc;
 	HASHCTL ctl;
@@ -146,7 +146,7 @@ streams_to_meta(Relation pipeline_query)
 	ctl.keysize = NAMEDATALEN;
 	ctl.entrysize = sizeof(StreamTargetsEntry);
 
-	targets = hash_create("streams_to_meta", 32, &ctl, HASH_ELEM);
+	targets = hash_create("streams_to_targets_and_desc", 32, &ctl, HASH_ELEM);
 	scandesc = heap_beginscan_catalog(pipeline_query, 0, NULL);
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
@@ -293,43 +293,177 @@ PackTupleDesc(TupleDesc desc)
 }
 
 /*
- * update_pipeline_stream_cat_entry
+ * update_pipeline_stream_targets_and_desc
  *
  * Serializes the given stream-to-queries mapping into the
  * pipeline_stream catalog table along with the given stream TupleDesc.
- * Existing streams are updated, and new streams are inserted.
+ */
+static void
+update_pipeline_stream_targets_and_desc(Relation pipeline_stream, HTAB *hash)
+{
+	StreamTargetsEntry *entry;
+	HeapScanDesc scandesc;
+	HeapTuple tup;
+
+	scandesc = heap_beginscan_catalog(pipeline_stream, 0, NULL);
+
+	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
+	{
+		HeapTuple newtup;
+		Datum values[Natts_pipeline_stream];
+		bool nulls[Natts_pipeline_stream];
+		bool replaces[Natts_pipeline_stream];
+		bool found;
+		Form_pipeline_stream row = (Form_pipeline_stream) GETSTRUCT(tup);
+
+		MemSet(values, 0, Natts_pipeline_stream);
+		MemSet(nulls, false, Natts_pipeline_stream);
+		MemSet(replaces, false, Natts_pipeline_stream);
+
+		entry = (StreamTargetsEntry *) hash_search(hash, (void *) NameStr(row->name), HASH_FIND, &found);
+
+		replaces[Anum_pipeline_stream_readers - 1] = true;
+		replaces[Anum_pipeline_stream_desc - 1] = true;
+
+		if (!found || bms_is_empty(entry->targets))
+		{
+			nulls[Anum_pipeline_stream_readers - 1] = true;
+			nulls[Anum_pipeline_stream_desc - 1] = true;
+		}
+		else
+		{
+			Bitmapset *targets = entry->targets;
+			Size targetssize = targets->nwords * sizeof(bitmapword) + VARHDRSZ;
+			bytea *targetsbytes = palloc0(targetssize);
+
+			memcpy(VARDATA(targetsbytes), targets->words, targets->nwords * sizeof(bitmapword));
+			SET_VARSIZE(targetsbytes, targetssize);
+
+			values[Anum_pipeline_stream_readers - 1] = PointerGetDatum(targetsbytes);
+			values[Anum_pipeline_stream_desc - 1] = PointerGetDatum(PackTupleDesc(entry->desc));
+		}
+
+		newtup = heap_modify_tuple(tup, pipeline_stream->rd_att,
+				values, nulls, replaces);
+
+		simple_heap_update(pipeline_stream, &newtup->t_self, newtup);
+		CatalogUpdateIndexes(pipeline_stream, newtup);
+
+		CommandCounterIncrement();
+	}
+
+	heap_endscan(scandesc);
+}
+
+/*
+ * UpdateStreamReaders
+ *
+ * Updates the pipeline_stream catalog to reflect which continuous queries
+ * are reading from each stream, and removes any streams that aren't being
+ * read from.
+ */
+void
+UpdateStreamReaders(Relation pipeline_query)
+{
+	Relation pipeline_stream;
+	HTAB *hash;
+
+	hash = streams_to_targets_and_desc(pipeline_query);
+
+	pipeline_stream = heap_open(PipelineStreamRelationId, ExclusiveLock);
+	update_pipeline_stream_targets_and_desc(pipeline_stream, hash);
+	heap_close(pipeline_stream, NoLock);
+
+	hash_destroy(hash);
+}
+
+/*
+ * update_pipeline_stream_targets_and_desc
+ *
+ * Serializes the given stream-to-queries mapping into the
+ * pipeline_stream catalog table along with the given stream TupleDesc.
  */
 static List *
-update_pipeline_stream_cat_entry(Relation pipeline_stream, HTAB *targets)
+update_pipeline_stream_queries(Relation pipeline_stream, Relation pipeline_query)
 {
-	HASH_SEQ_STATUS scan;
+	HeapScanDesc scandesc;
+	HASHCTL ctl;
+	HTAB *hash;
 	StreamTargetsEntry *entry;
-	List *names = NIL;
+	HeapTuple tup;
+	HASH_SEQ_STATUS scan;
+	List *streams = NIL;
 
-	hash_seq_init(&scan, targets);
+	MemSet(&ctl, 0, sizeof(ctl));
+
+	ctl.keysize = NAMEDATALEN;
+	ctl.entrysize = sizeof(StreamTargetsEntry);
+
+	hash = hash_create("streams_to_queries", 32, &ctl, HASH_ELEM);
+	scandesc = heap_beginscan_catalog(pipeline_query, 0, NULL);
+
+	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
+	{
+		char *querystring;
+		ListCell *lc;
+		List *parsetree_list;
+		Node *parsetree;
+		CreateContinuousViewStmt *cv;
+		SelectStmt *sel;
+		Datum tmp;
+		bool isnull;
+		Form_pipeline_query catrow = (Form_pipeline_query) GETSTRUCT(tup);
+		CQAnalyzeContext context;
+
+		tmp = SysCacheGetAttr(PIPELINEQUERYNAME, tup, Anum_pipeline_query_query, &isnull);
+		querystring = TextDatumGetCString(tmp);
+
+		parsetree_list = pg_parse_query(querystring);
+		parsetree = (Node *) lfirst(parsetree_list->head);
+		cv = (CreateContinuousViewStmt *) parsetree;
+		sel = (SelectStmt *) cv->query;
+
+		context.tables = NIL;
+		context.streams = NIL;
+		AddStreams((Node *) sel->fromClause, &context);
+
+		foreach(lc, context.streams)
+		{
+			RangeVar *rv = (RangeVar *) lfirst(lc);
+			bool found;
+
+			entry = (StreamTargetsEntry *) hash_search(hash, (void *) rv->relname, HASH_ENTER, &found);
+
+			if (!found)
+				entry->targets = NULL;
+
+			entry->targets = bms_add_member(entry->targets, catrow->id);
+		}
+	}
+
+	heap_endscan(scandesc);
+
+	hash_seq_init(&scan, hash);
 	while ((entry = (StreamTargetsEntry *) hash_seq_search(&scan)) != NULL)
 	{
 		char *sname = entry->key;
-		Bitmapset *bms = entry->targets;
-		Size targetssize = bms->nwords * sizeof(bitmapword) + VARHDRSZ;
+		Bitmapset *targets = entry->targets;
+		Size targetssize = targets->nwords * sizeof(bitmapword) + VARHDRSZ;
 		bytea *targetsbytes = palloc0(targetssize);
 		HeapTuple tup;
 		Datum values[Natts_pipeline_stream];
 		bool nulls[Natts_pipeline_stream];
 
-		if (bms_is_empty(bms))
-			continue;
-
-		MemSet(values, 0, sizeof(values));
+		MemSet(values, 0, Natts_pipeline_stream);
 		MemSet(nulls, false, Natts_pipeline_stream);
 
-		memcpy(VARDATA(targetsbytes), bms->words, bms->nwords * sizeof(bitmapword));
+		memcpy(VARDATA(targetsbytes), targets->words, targets->nwords * sizeof(bitmapword));
 		SET_VARSIZE(targetsbytes, targetssize);
 
-		values[Anum_pipeline_stream_targets - 1] = PointerGetDatum(targetsbytes);
-		values[Anum_pipeline_stream_desc - 1] = PointerGetDatum(PackTupleDesc(entry->desc));
+		values[Anum_pipeline_stream_queries - 1] = PointerGetDatum(targetsbytes);
 
 		tup = SearchSysCache1(PIPELINESTREAMNAME, CStringGetDatum(sname));
+
 		if (HeapTupleIsValid(tup))
 		{
 			/* catalog entry exists, update it */
@@ -338,8 +472,7 @@ update_pipeline_stream_cat_entry(Relation pipeline_stream, HTAB *targets)
 
 			MemSet(replaces, false, sizeof(replaces));
 
-			replaces[Anum_pipeline_stream_targets - 1] = true;
-			replaces[Anum_pipeline_stream_desc - 1] = true;
+			replaces[Anum_pipeline_stream_queries - 1] = true;
 
 			newtup = heap_modify_tuple(tup, pipeline_stream->rd_att,
 					values, nulls, replaces);
@@ -357,6 +490,9 @@ update_pipeline_stream_cat_entry(Relation pipeline_stream, HTAB *targets)
 			namestrcpy(&name, sname);
 			values[Anum_pipeline_stream_name - 1] = NameGetDatum(&name);
 
+			nulls[Anum_pipeline_stream_readers - 1] = true;
+			nulls[Anum_pipeline_stream_desc - 1] = true;
+
 			tup = heap_form_tuple(pipeline_stream->rd_att, values, nulls);
 
 			simple_heap_insert(pipeline_stream, tup);
@@ -364,17 +500,18 @@ update_pipeline_stream_cat_entry(Relation pipeline_stream, HTAB *targets)
 		}
 
 		CommandCounterIncrement();
-		names = lappend(names, sname);
+
+		streams = lappend(streams, sname);
 	}
 
-	return names;
+	return streams;
 }
 
 /*
  * delete_nonexistent_streams
  */
 static int
-delete_nonexistent_streams(Relation pipeline_stream, List *added)
+delete_nonexistent_streams(Relation pipeline_stream, List *streams)
 {
 	HeapScanDesc scandesc;
 	HeapTuple tup;
@@ -388,10 +525,10 @@ delete_nonexistent_streams(Relation pipeline_stream, List *added)
 		bool found = false;
 		Form_pipeline_stream row = (Form_pipeline_stream) GETSTRUCT(tup);
 
-		foreach(lc, added)
+		foreach(lc, streams)
 		{
 			char *name = (char *) lfirst(lc);
-			if (strcmp(name, NameStr(row->name)) == 0)
+			if (pg_strcasecmp(name, NameStr(row->name)) == 0)
 			{
 				found = true;
 				break;
@@ -412,37 +549,28 @@ delete_nonexistent_streams(Relation pipeline_stream, List *added)
 }
 
 /*
- * UpdateStreamTargets
- *
- * Updates the pipeline_stream catalog to reflect which continuous queries
- * are reading from each stream, and removes any streams that aren't being
- * read from.
+ * UpdateStreamQueries
  */
 void
-UpdateStreamTargets(Relation pipeline_query)
+UpdateStreamQueries(Relation pipeline_query)
 {
 	Relation pipeline_stream;
-	List *added = NIL;
-	HTAB *targets;
-
-	targets = streams_to_meta(pipeline_query);
+	List *streams = NIL;
 
 	pipeline_stream = heap_open(PipelineStreamRelationId, ExclusiveLock);
-	added = update_pipeline_stream_cat_entry(pipeline_stream, targets);
-	delete_nonexistent_streams(pipeline_stream, added);
+	streams = update_pipeline_stream_queries(pipeline_stream, pipeline_query);
+	delete_nonexistent_streams(pipeline_stream, streams);
 	heap_close(pipeline_stream, NoLock);
-
-	hash_destroy(targets);
 }
 
 /*
- * GetStreamTargets
+ * GetStreamReaders
  *
  * Gets a bitmap indexed by continuous query id that represents which
  * queries are reading from the given stream.
  */
 Bitmapset *
-GetStreamTargets(const char *stream)
+GetStreamReaders(const char *stream)
 {
 	HeapTuple tup = SearchSysCache1(PIPELINESTREAMNAME, CStringGetDatum(stream));
 	bool isnull;
@@ -455,7 +583,7 @@ GetStreamTargets(const char *stream)
 	if (!HeapTupleIsValid(tup))
 		return NULL;
 
-	raw = SysCacheGetAttr(PIPELINESTREAMNAME, tup, Anum_pipeline_stream_targets, &isnull);
+	raw = SysCacheGetAttr(PIPELINESTREAMNAME, tup, Anum_pipeline_stream_readers, &isnull);
 
 	if (isnull)
 	{

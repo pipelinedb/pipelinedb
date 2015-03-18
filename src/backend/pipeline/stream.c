@@ -135,7 +135,7 @@ InsertTargetIsStream(InsertStmt *ins)
 bool
 IsInputStream(const char *stream)
 {
-	return GetStreamTargets(stream) != NULL;
+	return GetStreamReaders(stream) != NULL;
 }
 
 /*
@@ -148,7 +148,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
-	Bitmapset *targets = GetStreamTargets(pstmt->stream);
+	Bitmapset *targets = GetStreamReaders(pstmt->stream);
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
 
@@ -208,7 +208,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
-	Bitmapset *targets = GetStreamTargets(ins->relation->relname);
+	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
 
 	/* build header of column names */
 	for (i = 0; i < numcols; i++)

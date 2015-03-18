@@ -17,8 +17,9 @@
 #include "nodes/bitmapset.h"
 #include "utils/relcache.h"
 
-extern void UpdateStreamTargets(Relation pipeline_query);
-extern Bitmapset *GetStreamTargets(const char *stream);
+extern void UpdateStreamReaders(Relation pipeline_query);
+extern void UpdateStreamQueries(Relation pipeline_query);
+extern Bitmapset *GetStreamReaders(const char *stream);
 extern TupleDesc GetStreamTupleDesc(const char *stream, List *colnames);
 
 extern bytea *PackTupleDesc(TupleDesc desc);
