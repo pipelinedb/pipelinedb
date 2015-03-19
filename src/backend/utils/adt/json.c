@@ -1371,8 +1371,6 @@ datum_to_json(Datum val, bool is_null, StringInfo result,
 {
 	char	   *outputstr;
 	text	   *jsontext;
-	bool		numeric_error;
-	JsonLexContext dummy_lex;
 
 	/* callers are expected to ensure that null keys are not passed in */
 	Assert(!(key_scalar && is_null));
