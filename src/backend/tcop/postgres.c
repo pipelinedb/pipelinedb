@@ -45,6 +45,7 @@
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/async.h"
 #include "commands/pipelinecmds.h"
 #include "commands/prepare.h"
