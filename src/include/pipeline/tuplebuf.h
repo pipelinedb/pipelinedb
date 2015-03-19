@@ -42,7 +42,7 @@ typedef struct TupleBufferSlot
 	struct TupleBuffer *buf;
 	Size size;
 	Tuple *tuple;
-	Bitmapset *readby;
+	Bitmapset *readers;
 	slock_t mutex;
 } TupleBufferSlot;
 
