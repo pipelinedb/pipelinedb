@@ -465,7 +465,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId)
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_STREAM),
 				 errmsg("\"%s\" is being used as a stream", relname),
-				 errhint("streams and relations cannot have the same name.")));
+				 errhint("Streams and relations cannot have the same name.")));
 
 	/*
 	 * Check consistency of arguments
