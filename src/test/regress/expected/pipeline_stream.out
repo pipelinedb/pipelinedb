@@ -136,3 +136,22 @@ SELECT * FROM pipeline_stream ORDER BY name;
 ------+---------+---------+------
 (0 rows)
 
+INSERT INTO stream0 (x) VALUES (1);
+ERROR:  relation "stream0" does not exist
+LINE 1: INSERT INTO stream0 (x) VALUES (1);
+                    ^
+CREATE CONTINUOUS VIEW ps5 AS SELECT x::int FROM stream0;
+INSERT INTO stream0 (x) VALUES (1);
+ERROR:  stream "stream0" is currently not being read
+HINT:  Activate some continuous view reading from "stream0".
+ACTIVATE ps5;
+INSERT INTO stream0 (x) VALUES (1);
+DEACTIVATE ps5;
+INSERT INTO stream0 (x) VALUES (1);
+ERROR:  stream "stream0" is currently not being read
+HINT:  Activate some continuous view reading from "stream0".
+DROP CONTINUOUS VIEW ps5;
+INSERT INTO stream0 (x) VALUES (1);
+ERROR:  relation "stream0" does not exist
+LINE 1: INSERT INTO stream0 (x) VALUES (1);
+                    ^
