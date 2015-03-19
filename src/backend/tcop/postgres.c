@@ -856,6 +856,13 @@ exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *valu
 	MemoryContext oldcontext;
 	int count = 0;
 	char buf[32];
+	char *sname = ins->relation->relname;
+
+	if (!IsWritableStream(sname))
+		ereport(ERROR,
+				(errcode(ERRCODE_INACTIVE_STREAM),
+				errmsg("stream \"%s\" is currently not being read", sname),
+				errhint("Activate some continuous view reading from \"%s\".", sname)));
 
 	oldcontext = MemoryContextSwitchTo(EventContext);
 

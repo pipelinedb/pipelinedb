@@ -367,6 +367,8 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		RemoveTStateEntry(rv->relname);
 	}
 
+	UpdateStreamQueries(pipeline_query);
+
 	/*
 	 * Now we can clean up
 	 */
@@ -567,7 +569,7 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skipActive
 	}
 
 	if (success)
-		UpdateStreamTargets(pipeline_query);
+		UpdateStreamReaders(pipeline_query);
 
 	heap_close(pipeline_query, NoLock);
 
@@ -639,7 +641,7 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		 * left to do after that is to unpin any slots in the WorkerTupleBuffer which
 		 * might have a reader bit set for a now deactivated CQ.
 		 */
-		UpdateStreamTargets(pipeline_query);
+		UpdateStreamReaders(pipeline_query);
 		heap_close(pipeline_query, NoLock);
 
 		/*
