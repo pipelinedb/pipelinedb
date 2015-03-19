@@ -862,7 +862,7 @@ exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *valu
 		ereport(ERROR,
 				(errcode(ERRCODE_INACTIVE_STREAM),
 				errmsg("stream \"%s\" is currently not being read", sname),
-				errhint("activate some continuous view reading from \"%s\".", sname)));
+				errhint("Activate some continuous view reading from \"%s\".", sname)));
 
 	oldcontext = MemoryContextSwitchTo(EventContext);
 

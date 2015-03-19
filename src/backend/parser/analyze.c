@@ -501,7 +501,7 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 			ereport(ERROR,
 					(errcode(ERRCODE_INACTIVE_STREAM),
 					errmsg("stream \"%s\" is currently not being read", sname),
-					errhint("activate some continuous view reading from \"%s\".", sname),
+					errhint("Activate some continuous view reading from \"%s\".", sname),
 					parser_errposition(pstate, stmt->relation->location)));
 
 		stream = (Relation) palloc0(sizeof(RelationData));
