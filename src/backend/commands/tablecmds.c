@@ -41,6 +41,7 @@
 #include "catalog/pg_trigger.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_type_fn.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "catalog/storage.h"
 #include "catalog/toasting.h"
 #include "commands/cluster.h"
@@ -459,6 +460,12 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId)
 	 * parser should have done this already).
 	 */
 	StrNCpy(relname, stmt->relation->relname, NAMEDATALEN);
+
+	if (IsStream(relname))
+		ereport(ERROR,
+				(errcode(ERRCODE_DUPLICATE_STREAM),
+				 errmsg("\"%s\" is being used as a stream", relname),
+				 errhint("streams and relations cannot have the same name.")));
 
 	/*
 	 * Check consistency of arguments
