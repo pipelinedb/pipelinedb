@@ -470,3 +470,4 @@ PD000    E    ERRCODE_UNDEFINED_CONTINUOUS_VIEW                              und
 PD001    E    ERRCODE_INVALID_CONTINUOUS_VIEW_STATE                          invalid_continuous_view_state
 PD002    E    ERRCODE_DUPLICATE_CONTINUOUS_VIEW                              duplicate_continuous_view
 PD003    E    ERRCODE_INACTIVE_STREAM                                        inactive_stream
+PD004    E    ERRCODE_DUPLICATE_STREAM                                       duplicate_stream
