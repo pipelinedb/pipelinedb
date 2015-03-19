@@ -17,6 +17,7 @@
 #include "catalog/indexing.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "catalog/pipeline_tstate_fn.h"
 #include "libpq/libpq.h"
 #include "miscadmin.h"
@@ -187,6 +188,9 @@ RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matre
 	CreateTStateEntry(name->relname);
 
 	heap_freetuple(tup);
+
+	UpdateStreamQueries(pipeline_query);
+
 	heap_close(pipeline_query, NoLock);
 }
 

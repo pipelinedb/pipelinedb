@@ -51,6 +51,5 @@ extern void DropPreparedStreamInsert(const char *name);
 extern bool InsertTargetIsStream(InsertStmt *ins);
 extern int InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt);
 extern int InsertIntoStream(InsertStmt *ins, List *values);
-extern bool IsInputStream(const char *stream);
 
 #endif

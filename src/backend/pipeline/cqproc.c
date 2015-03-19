@@ -630,10 +630,13 @@ restart_bg_main(Datum d, char *data, Size len)
 			views = lappend(views, makeRangeVar(NULL, NameStr(row->name), -1));
 	}
 
-	stmt->views = views;
-	stmt->dboid = *dboid;
+	if (views)
+	{
+		stmt->views = views;
+		stmt->dboid = *dboid;
 
-	ExecActivateContinuousViewStmt(stmt, false);
+		ExecActivateContinuousViewStmt(stmt, false);
+	}
 
 	heap_endscan(scandesc);
 	heap_close(pipeline_query, NoLock);
