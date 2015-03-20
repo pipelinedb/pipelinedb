@@ -20,16 +20,21 @@ SELECT * FROM cqvacuum ORDER BY key;
  c   |     4
 (3 rows)
 
-SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
- key | count 
------+-------
- a   |     2
- a   |     2
- b   |     2
- b   |     2
- c   |     2
- c   |     2
-(6 rows)
+-- Just verify that the mrel has more rows, as we can't gaurantee which time bucket the
+-- rows will fall in which makes it tricky to compare this result to a predetermined result
+SELECT (SELECT COUNT(*) FROM cqvacuum) < (SELECT COUNT(*) FROM cqvacuum_mrel0);
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT DISTINCT key FROM cqvacuum_mrel0 ORDER BY key;
+ key 
+-----
+ a
+ b
+ c
+(3 rows)
 
 SELECT pg_sleep(3);
  pg_sleep 
@@ -65,19 +70,19 @@ SELECT * FROM cqvacuum ORDER BY key;
  c   |     2
 (3 rows)
 
-SELECT key, count FROM cqvacuum_mrel0 ORDER BY key, count;
- key | count 
------+-------
- a   |     2
- a   |     2
- a   |     2
- b   |     2
- b   |     2
- b   |     2
- c   |     2
- c   |     2
- c   |     2
-(9 rows)
+SELECT (SELECT COUNT(*) FROM cqvacuum) < (SELECT COUNT(*) FROM cqvacuum_mrel0);
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT DISTINCT key FROM cqvacuum_mrel0 ORDER BY key;
+ key 
+-----
+ a
+ b
+ c
+(3 rows)
 
 VACUUM cqvacuum_mrel0;
 SELECT * FROM cqvacuum ORDER BY key;
