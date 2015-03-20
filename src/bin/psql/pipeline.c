@@ -28,19 +28,26 @@ listPipelineQuery(void)
 	printQueryOpt myopt = pset.popt;
 
 	initPQExpBuffer(&buf);
-	printfPQExpBuffer(&buf, "SELECT * FROM pipeline_query");
+	printfPQExpBuffer(&buf, "SELECT id, name, query FROM pipeline_query");
 
 	res = PSQLexec(buf.data, false);
 	termPQExpBuffer(&buf);
 	if (!res)
 		return false;
 
-	myopt.nullPrint = NULL;
-	myopt.title = _("List of continuous views");
-	myopt.translate_header = true;
+	if (PQntuples(res) == 0 && !pset.quiet)
+	{
+		fprintf(pset.queryFout, _("No continuous views found.\n"));
+	}
+	else
+	{
+		myopt.nullPrint = NULL;
+		myopt.title = _("List of continuous views");
+		myopt.translate_header = true;
 
-	printQuery(res, &myopt, pset.queryFout, pset.logfile);
+		printQuery(res, &myopt, pset.queryFout, pset.logfile);
+	}
+
 	PQclear(res);
-
 	return true;
 }
