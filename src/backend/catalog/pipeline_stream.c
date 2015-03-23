@@ -616,6 +616,7 @@ GetStreamTupleDesc(const char *stream, List *colnames)
 	ListCell *lc;
 	List *attlist = NIL;
 	Form_pg_attribute *attrs;
+	AttrNumber attno = InvalidAttrNumber;
 	int i;
 
 	if (!HeapTupleIsValid(tup))
@@ -638,6 +639,7 @@ GetStreamTupleDesc(const char *stream, List *colnames)
 	 * Now we need to build a new TupleDesc based on the subset and
 	 * ordering of the columns we're interested in
 	 */
+	attno = 1;
 	foreach(lc, colnames)
 	{
 		Value *name = (Value *) lfirst(lc);
@@ -650,7 +652,9 @@ GetStreamTupleDesc(const char *stream, List *colnames)
 			 */
 			if (strcmp(strVal(name), NameStr(alldesc->attrs[i]->attname)) == 0)
 			{
-				attlist = lappend(attlist, alldesc->attrs[i]);
+				Form_pg_attribute att = (Form_pg_attribute) alldesc->attrs[i];
+				att->attnum = attno++;
+				attlist = lappend(attlist, att);
 				break;
 			}
 		}
