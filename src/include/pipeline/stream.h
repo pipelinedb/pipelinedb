@@ -51,5 +51,6 @@ extern void DropPreparedStreamInsert(const char *name);
 extern bool InsertTargetIsStream(InsertStmt *ins);
 extern int InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt);
 extern int InsertIntoStream(InsertStmt *ins, List *values);
+extern uint64 CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
 
 #endif
