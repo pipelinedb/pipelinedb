@@ -136,10 +136,10 @@ CREATE CONTINUOUS VIEW cv_drop_active AS SELECT COUNT(*) FROM stream;
 ACTIVATE cv_drop_active;
 DROP CONTINUOUS VIEW cv_drop_active;
 ERROR:  continuous view "cv_drop_active" is currently active
-HINT:  only inactive continuous views can be dropped, which requires deactivating them. For example, DEACTIVATE cv_drop_active
+HINT:  Only inactive continuous views can be dropped, which requires deactivating them. For example, DEACTIVATE cv_drop_active
 TRUNCATE CONTINUOUS VIEW cv_drop_active;
 ERROR:  continuous view "cv_drop_active" is currently active
-HINT:  only inactive continuous views can be truncated, which requires deactivating them. For example, DEACTIVATE cv_drop_active
+HINT:  Only inactive continuous views can be truncated, which requires deactivating them. For example, DEACTIVATE cv_drop_active
 DEACTIVATE cv_drop_active;
 TRUNCATE CONTINUOUS VIEW cv_drop_active;
 DROP CONTINUOUS VIEW test_avg;

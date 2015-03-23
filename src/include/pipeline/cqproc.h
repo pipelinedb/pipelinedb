@@ -63,7 +63,6 @@ extern pid_t *GetWorkerPids(int id);
 extern bool WaitForCQProcsToStart(int id);
 extern void WaitForCQProcsToTerminate(int id);
 extern void TerminateCQProcs(int id);
-extern bool IsCombinerRunning(int id);
 extern bool AreCQWorkersStopped(int id);
 extern void EnableCQProcsRecovery(int id);
 extern void DisableCQProcsRecovery(int id);
