@@ -179,6 +179,7 @@ test: cont_sw_count
 test: stream_table_join
 test: user_combine
 test: cont_limit
+test: cont_alter
 test: stream_exprs
 test: schema_inference
 test: prepared_stream_insert
