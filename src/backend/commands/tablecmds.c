@@ -2498,6 +2498,18 @@ Oid
 RenameRelation(RenameStmt *stmt)
 {
 	Oid			relid;
+	RangeVar 	*cv;
+
+	if (stmt->renameType == OBJECT_TABLE && IsAMatRel(stmt->relation, &cv))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot rename materialization table \"%s\" for continuous view \"%s\"",
+						stmt->relation->relname, cv->relname)));
+	else if (stmt->renameType == OBJECT_VIEW && IsAContinuousView(stmt->relation))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot rename continuous view \"%s\"",
+						stmt->relation->relname)));
 
 	/*
 	 * Grab an exclusive lock on the target table, index, sequence, view,
@@ -2717,6 +2729,18 @@ void
 AlterTable(Oid relid, LOCKMODE lockmode, AlterTableStmt *stmt)
 {
 	Relation	rel;
+	RangeVar	*cv;
+
+	if (stmt->relkind == OBJECT_TABLE && IsAMatRel(stmt->relation, &cv))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot alter materialization table \"%s\" for continuous view \"%s\"",
+						stmt->relation->relname, cv->relname)));
+	else if (stmt->relkind == OBJECT_VIEW  && IsAContinuousView(stmt->relation))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot alter continuous view \"%s\"",
+						stmt->relation->relname)));
 
 	/* Caller is required to provide an adequate lock. */
 	rel = relation_open(relid, NoLock);
