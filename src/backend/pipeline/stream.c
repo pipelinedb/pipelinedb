@@ -309,3 +309,36 @@ InsertIntoStream(InsertStmt *ins, List *values)
 
 	return count;
 }
+
+/*
+ * CopyIntoStream
+ *
+ * COPY events to a stream from an input source
+ */
+uint64
+CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
+{
+	Bitmapset *targets = GetStreamReaders(stream);
+	TupleBufferSlot* tbs = NULL;
+	uint64 count = 0;
+	int i;
+
+	for (i=0; i<ntuples; i++)
+	{
+		HeapTuple htup = tuples[i];
+		Tuple *tuple;
+
+		tuple = MakeTuple(htup, desc);
+		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+
+		count++;
+	}
+
+	/*
+	 * Wait till the last event has been consumed by a CV before returning.
+	 */
+	if (debug_sync_stream_insert)
+		TupleBufferWaitOnSlot(tbs, 5);
+
+	return count;
+}

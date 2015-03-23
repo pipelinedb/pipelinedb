@@ -25,6 +25,7 @@
 #include "access/sysattr.h"
 #include "access/xact.h"
 #include "catalog/namespace.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "catalog/pg_type.h"
 #include "commands/copy.h"
 #include "commands/defrem.h"
@@ -198,6 +199,13 @@ typedef struct CopyStateData
 	char	   *raw_buf;
 	int			raw_buf_index;	/* next byte to process */
 	int			raw_buf_len;	/* total # of bytes stored */
+
+	/*
+	 * State for copying to a stream
+	 */
+	bool to_stream;
+	MemoryContext to_stream_ctxt;
+
 } CopyStateData;
 
 /* DestReceiver for COPY (SELECT) TO */
@@ -812,9 +820,34 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 
 		Assert(!stmt->query);
 
-		/* Open and lock the relation, using the appropriate lock type. */
-		rel = heap_openrv(stmt->relation,
-						  (is_from ? RowExclusiveLock : AccessShareLock));
+		if (IsStream(stmt->relation->relname))
+		{
+			if (!IsWritableStream(stmt->relation->relname))
+				ereport(ERROR,
+						(errcode(ERRCODE_INACTIVE_STREAM),
+						errmsg("stream \"%s\" is currently not being read", stmt->relation->relname),
+						errhint("Activate some continuous view reading from \"%s\".", stmt->relation->relname)));
+
+			if (!stmt->attlist)
+				ereport(ERROR,
+						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+						errmsg("column names must be explicitly given when copying into a stream"),
+						errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
+
+			rel = (Relation) palloc0(sizeof(RelationData));
+			rel->rd_att = GetStreamTupleDesc(stmt->relation->relname, stmt->attlist);
+			rel->rd_rel = palloc0(sizeof(FormData_pg_class));
+			rel->rd_rel->relnatts = rel->rd_att->natts;
+			rel->rd_rel->relkind = RELKIND_RELATION;
+
+			namestrcpy(&rel->rd_rel->relname, stmt->relation->relname);
+		}
+		else
+		{
+			/* Open and lock the relation, using the appropriate lock type. */
+			rel = heap_openrv(stmt->relation,
+								(is_from ? RowExclusiveLock : AccessShareLock));
+		}
 
 		relid = RelationGetRelid(rel);
 
@@ -826,17 +859,22 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 
 		tupDesc = RelationGetDescr(rel);
 		attnums = CopyGetAttnums(tupDesc, rel, stmt->attlist);
-		foreach(cur, attnums)
-		{
-			int			attno = lfirst_int(cur) -
-			FirstLowInvalidHeapAttributeNumber;
 
-			if (is_from)
-				rte->modifiedCols = bms_add_member(rte->modifiedCols, attno);
-			else
-				rte->selectedCols = bms_add_member(rte->selectedCols, attno);
+		/* if it's an actual relation, we need to check permissions */
+		if (!IsStream(stmt->relation->relname))
+		{
+			foreach(cur, attnums)
+			{
+				int			attno = lfirst_int(cur) -
+				FirstLowInvalidHeapAttributeNumber;
+
+				if (is_from)
+					rte->modifiedCols = bms_add_member(rte->modifiedCols, attno);
+				else
+					rte->selectedCols = bms_add_member(rte->selectedCols, attno);
+			}
+			ExecCheckRTPerms(list_make1(rte), true);
 		}
-		ExecCheckRTPerms(list_make1(rte), true);
 	}
 	else
 	{
@@ -861,6 +899,11 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	}
 	else
 	{
+		if (rel && IsStream(stmt->relation->relname))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("cannot COPY data out of streams")));
+
 		cstate = BeginCopyTo(rel, stmt->query, queryString,
 							 stmt->filename, stmt->is_program,
 							 stmt->attlist, stmt->options);
@@ -873,7 +916,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	 * got; if writing, we should hold the lock until end of transaction to
 	 * ensure that updates will be committed before lock is released.
 	 */
-	if (rel != NULL)
+	if (!cstate->to_stream && rel != NULL)
 		heap_close(rel, (is_from ? NoLock : AccessShareLock));
 
 	return relid;
@@ -1260,6 +1303,17 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
+	cstate->to_stream = rel ? IsWritableStream(RelationGetRelationName(rel)) : false;
+
+	if (cstate->to_stream)
+	{
+		cstate->to_stream_ctxt = AllocSetContextCreate(CurrentMemoryContext,
+														"CopyToStream",
+														ALLOCSET_DEFAULT_MINSIZE,
+														ALLOCSET_DEFAULT_INITSIZE,
+														ALLOCSET_DEFAULT_MAXSIZE);
+	}
+
 	oldcontext = MemoryContextSwitchTo(cstate->copycontext);
 
 	/* Extract options from the statement node tree */
@@ -1520,6 +1574,9 @@ EndCopy(CopyState cstate)
 	}
 
 	MemoryContextDelete(cstate->copycontext);
+	if (cstate->to_stream)
+		MemoryContextDelete(cstate->to_stream_ctxt);
+
 	pfree(cstate);
 }
 
@@ -2316,10 +2373,26 @@ CopyFrom(CopyState cstate)
 				if (nBufferedTuples == MAX_BUFFERED_TUPLES ||
 					bufferedTuplesSize > 65535)
 				{
-					CopyFromInsertBatch(cstate, estate, mycid, hi_options,
-										resultRelInfo, myslot, bistate,
-										nBufferedTuples, bufferedTuples,
-										firstBufferedLineNo);
+					/*
+					 * Note: stream inserts will always use batching, so this is the only
+					 * path we need to handle for them.
+					 */
+					if (cstate->to_stream)
+					{
+						oldcontext = MemoryContextSwitchTo(cstate->to_stream_ctxt);
+						CopyIntoStream(NameStr(cstate->rel->rd_rel->relname), tupDesc,
+								bufferedTuples, nBufferedTuples);
+						MemoryContextReset(cstate->to_stream_ctxt);
+						MemoryContextSwitchTo(oldcontext);
+					}
+					else
+					{
+
+						CopyFromInsertBatch(cstate, estate, mycid, hi_options,
+											resultRelInfo, myslot, bistate,
+											nBufferedTuples, bufferedTuples,
+											firstBufferedLineNo);
+					}
 					nBufferedTuples = 0;
 					bufferedTuplesSize = 0;
 				}
@@ -2353,10 +2426,23 @@ CopyFrom(CopyState cstate)
 
 	/* Flush any remaining buffered tuples */
 	if (nBufferedTuples > 0)
-		CopyFromInsertBatch(cstate, estate, mycid, hi_options,
-							resultRelInfo, myslot, bistate,
-							nBufferedTuples, bufferedTuples,
-							firstBufferedLineNo);
+	{
+		if (cstate->to_stream)
+		{
+			oldcontext = MemoryContextSwitchTo(cstate->to_stream_ctxt);
+			CopyIntoStream(NameStr(cstate->rel->rd_rel->relname), tupDesc,
+					bufferedTuples, nBufferedTuples);
+			MemoryContextReset(cstate->to_stream_ctxt);
+			MemoryContextSwitchTo(oldcontext);
+		}
+		else
+		{
+			CopyFromInsertBatch(cstate, estate, mycid, hi_options,
+								resultRelInfo, myslot, bistate,
+								nBufferedTuples, bufferedTuples,
+								firstBufferedLineNo);
+		}
+	}
 
 	/* Done, clean up */
 	error_context_stack = errcallback.previous;
@@ -2805,7 +2891,7 @@ NextCopyFrom(CopyState cstate, ExprContext *econtext,
 			return false;
 
 		/* check for overflowing fields */
-		if (nfields > 0 && fldct > nfields)
+		if (!cstate->to_stream && (nfields > 0 && fldct > nfields))
 			ereport(ERROR,
 					(errcode(ERRCODE_BAD_COPY_FILE_FORMAT),
 					 errmsg("extra data after last expected column")));
@@ -2852,6 +2938,13 @@ NextCopyFrom(CopyState cstate, ExprContext *econtext,
 						 errmsg("missing data for column \"%s\"",
 								NameStr(attr[m]->attname))));
 			string = field_strings[fieldno++];
+
+			/*
+			 * If we're copying to a stream, columns that nothing is reading are indicated
+			 * by invalid attribute numbers and are ignored
+			 */
+			if (!AttributeNumberIsValid(attnum))
+				continue;
 
 			if (cstate->convert_select_flags &&
 				!cstate->convert_select_flags[m])
@@ -4239,7 +4332,7 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 					break;
 				}
 			}
-			if (attnum == InvalidAttrNumber)
+			if (attnum == InvalidAttrNumber && !IsWritableStream(NameStr(rel->rd_rel->relname)))
 			{
 				if (rel != NULL)
 					ereport(ERROR,
@@ -4253,7 +4346,7 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 									name)));
 			}
 			/* Check for duplicates */
-			if (list_member_int(attnums, attnum))
+			if (AttributeNumberIsValid(attnum) && list_member_int(attnums, attnum))
 				ereport(ERROR,
 						(errcode(ERRCODE_DUPLICATE_COLUMN),
 						 errmsg("column \"%s\" specified more than once",
