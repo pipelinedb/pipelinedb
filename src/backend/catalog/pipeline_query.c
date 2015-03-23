@@ -72,7 +72,7 @@ get_next_id(Relation rel)
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		idsList = lappend(idsList, (void *) Int32GetDatum(row->id));
+		idsList = lappend_int(idsList, row->id);
 	}
 
 	heap_endscan(scandesc);
@@ -83,7 +83,7 @@ get_next_id(Relation rel)
 		int i = 0;
 		foreach(lc, idsList)
 		{
-			ids[i] = DatumGetInt32(lfirst(lc));
+			ids[i] = lfirst_int(lc);
 			i++;
 		}
 
@@ -92,9 +92,7 @@ get_next_id(Relation rel)
 		for (id = 0; id < idsList->length; id++)
 		{
 			if (ids[id] > id)
-			{
 				break;
-			}
 		}
 	}
 
@@ -551,7 +549,7 @@ IsAMatRel(RangeVar *name, RangeVar **cvname)
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		if (strcmp(NameStr(row->matrelname), name->relname) == 0)
+		if (pg_strcasecmp(NameStr(row->matrelname), name->relname) == 0)
 		{
 			cv = row->name;
 			ismatrel = true;

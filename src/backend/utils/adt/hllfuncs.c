@@ -21,7 +21,9 @@
 Datum
 hll_in(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "user-specified hyperloglogs are not supported");
+	ereport(ERROR,
+			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+			errmsg("user-specified hyperloglogs are not supported")));
 	PG_RETURN_NULL();
 }
 
@@ -50,14 +52,14 @@ hll_startup(FunctionCallInfo fcinfo, int p)
 	if (p > 0)
 	{
 		if (p > 14)
-			elog(ERROR, "p must be in [1, 14]");
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("p must be in [1, 14]")));
 
 		hll = HLLCreateWithP(p);
 	}
 	else
-	{
 		hll = HLLCreate();
-	}
 
 	SET_VARSIZE(hll, sizeof(HyperLogLog) + hll->mlen);
 

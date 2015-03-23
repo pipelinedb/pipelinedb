@@ -80,7 +80,9 @@ tdigest_send(PG_FUNCTION_ARGS)
 Datum
 tdigest_in(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "user-specified t-digests are not supported");
+	ereport(ERROR,
+			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+			errmsg("user-specified t-digests are not supported")));
 	PG_RETURN_NULL();
 }
 

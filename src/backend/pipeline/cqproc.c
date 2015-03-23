@@ -344,19 +344,6 @@ TerminateCQProcs(int id)
 }
 
 /*
- * IsCombinerRunning
- */
-bool
-IsCombinerRunning(int id)
-{
-	CQProcEntry *entry = GetCQProcEntry(id);
-	pid_t pid;
-	if (WaitForBackgroundWorkerStartup((BackgroundWorkerHandle *) &entry->combiner, &pid) != BGWH_STARTED)
-		return false;
-	return pid == entry->combiner.last_pid;
-}
-
-/*
  * AreCQWorkersStopped
  */
 bool

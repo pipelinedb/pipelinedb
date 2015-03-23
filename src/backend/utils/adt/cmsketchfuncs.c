@@ -22,7 +22,9 @@
 Datum
 cmsketch_in(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "user-specified count-min sketches are not supported");
+	ereport(ERROR,
+			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+			errmsg("user-specified count-min sketches are not supported")));
 	PG_RETURN_NULL();
 }
 
