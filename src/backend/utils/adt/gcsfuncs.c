@@ -31,7 +31,9 @@ gcs_send(PG_FUNCTION_ARGS)
 Datum
 gcs_in(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "user-specified golomb-coded sets are not supported");
+	ereport(ERROR,
+			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+			errmsg("user-specified golomb-coded sets are not supported")));
 	PG_RETURN_NULL();
 }
 
