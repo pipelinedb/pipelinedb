@@ -41,6 +41,7 @@
 #include "catalog/pg_trigger.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_type_fn.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "catalog/storage.h"
 #include "catalog/toasting.h"
 #include "commands/cluster.h"
@@ -459,6 +460,12 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId)
 	 * parser should have done this already).
 	 */
 	StrNCpy(relname, stmt->relation->relname, NAMEDATALEN);
+
+	if (IsStream(relname))
+		ereport(ERROR,
+				(errcode(ERRCODE_DUPLICATE_STREAM),
+				 errmsg("\"%s\" is being used as a stream", relname),
+				 errhint("Streams and relations cannot have the same name.")));
 
 	/*
 	 * Check consistency of arguments
@@ -2490,6 +2497,18 @@ Oid
 RenameRelation(RenameStmt *stmt)
 {
 	Oid			relid;
+	RangeVar 	*cv;
+
+	if (stmt->renameType == OBJECT_TABLE && IsAMatRel(stmt->relation, &cv))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot rename materialization table \"%s\" for continuous view \"%s\"",
+						stmt->relation->relname, cv->relname)));
+	else if (stmt->renameType == OBJECT_VIEW && IsAContinuousView(stmt->relation))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot rename continuous view \"%s\"",
+						stmt->relation->relname)));
 
 	/*
 	 * Grab an exclusive lock on the target table, index, sequence, view,
@@ -2709,6 +2728,18 @@ void
 AlterTable(Oid relid, LOCKMODE lockmode, AlterTableStmt *stmt)
 {
 	Relation	rel;
+	RangeVar	*cv;
+
+	if (stmt->relkind == OBJECT_TABLE && IsAMatRel(stmt->relation, &cv))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot alter materialization table \"%s\" for continuous view \"%s\"",
+						stmt->relation->relname, cv->relname)));
+	else if (stmt->relkind == OBJECT_VIEW  && IsAContinuousView(stmt->relation))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot alter continuous view \"%s\"",
+						stmt->relation->relname)));
 
 	/* Caller is required to provide an adequate lock. */
 	rel = relation_open(relid, NoLock);

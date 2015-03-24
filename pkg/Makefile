@@ -77,7 +77,7 @@ proj:
 	(cd $(TMP_BUILD)/$(PROJ) && make && make install)
 
 pipeline:
-	(cd $(TOP_BUILDDIR) && ./configure --prefix=$(PREFIX) CFLAGS="$(CFLAGS)")
+	(cd $(TOP_BUILDDIR) && ./configure --prefix=$(PREFIX) CFLAGS="$(PIPELINE_CFLAGS)")
 	(cd $(TOP_BUILDDIR) && make && make install)
 
 gis:

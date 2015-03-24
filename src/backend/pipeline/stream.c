@@ -124,18 +124,7 @@ InsertTargetIsStream(InsertStmt *ins)
 	if (reloid != InvalidOid)
 		return false;
 
-	return IsInputStream(ins->relation->relname);
-}
-
-/*
- * IsInputStream
- *
- * Returns true if at least one continuous query is reading from the given stream
- */
-bool
-IsInputStream(const char *stream)
-{
-	return GetStreamTargets(stream) != NULL;
+	return IsStream(ins->relation->relname);
 }
 
 /*
@@ -148,7 +137,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
-	Bitmapset *targets = GetStreamTargets(pstmt->stream);
+	Bitmapset *targets = GetStreamReaders(pstmt->stream);
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
 
@@ -208,7 +197,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
-	Bitmapset *targets = GetStreamTargets(ins->relation->relname);
+	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
 
 	/* build header of column names */
 	for (i = 0; i < numcols; i++)
@@ -311,6 +300,39 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	}
 
 	FreeExprContext(econtext, false);
+
+	/*
+	 * Wait till the last event has been consumed by a CV before returning.
+	 */
+	if (debug_sync_stream_insert)
+		TupleBufferWaitOnSlot(tbs, 5);
+
+	return count;
+}
+
+/*
+ * CopyIntoStream
+ *
+ * COPY events to a stream from an input source
+ */
+uint64
+CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
+{
+	Bitmapset *targets = GetStreamReaders(stream);
+	TupleBufferSlot* tbs = NULL;
+	uint64 count = 0;
+	int i;
+
+	for (i=0; i<ntuples; i++)
+	{
+		HeapTuple htup = tuples[i];
+		Tuple *tuple;
+
+		tuple = MakeTuple(htup, desc);
+		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+
+		count++;
+	}
 
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.

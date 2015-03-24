@@ -45,6 +45,7 @@
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/async.h"
 #include "commands/pipelinecmds.h"
 #include "commands/prepare.h"
@@ -856,6 +857,13 @@ exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *valu
 	MemoryContext oldcontext;
 	int count = 0;
 	char buf[32];
+	char *sname = ins->relation->relname;
+
+	if (!IsWritableStream(sname))
+		ereport(ERROR,
+				(errcode(ERRCODE_INACTIVE_STREAM),
+				errmsg("stream \"%s\" is currently not being read", sname),
+				errhint("Activate some continuous view reading from \"%s\".", sname)));
 
 	oldcontext = MemoryContextSwitchTo(EventContext);
 
@@ -1058,17 +1066,12 @@ exec_simple_query(const char *query_string)
 			if (IsA(parsetree, ActivateContinuousViewStmt))
 			{
 				tag = "ACTIVATE %d";
-				count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree);
-			}
-			else if (IsA(parsetree, DeactivateContinuousViewStmt))
-			{
-				tag = "DEACTIVATE %d";
-				count = ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
+				count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree, true);
 			}
 			else
 			{
-				/* this would be really weird if this happened, but we want to know if it does */
-				elog(ERROR, "unknown BaseContinuousViewStmt received");
+				tag = "DEACTIVATE %d";
+				count = ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
 			}
 
 			appendStringInfo(buf, tag, count);

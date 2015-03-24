@@ -502,10 +502,6 @@ standard_ProcessUtility(Node *parsetree,
 			ExecCreateContinuousViewStmt((CreateContinuousViewStmt *) parsetree, queryString);
 			break;
 
-		case T_DumpStmt:
-			ExecDumpStmt((DumpStmt *) parsetree);
-			break;
-
 		case T_DropTableSpaceStmt:
 			/* no event triggers for global objects */
 			PreventTransactionChain(isTopLevel, "DROP TABLESPACE");
@@ -844,7 +840,7 @@ standard_ProcessUtility(Node *parsetree,
 
 		case T_ActivateContinuousViewStmt:
 			{
-				int count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree);
+				int count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree, true);
 				sprintf(completionTag, "ACTIVATE %d", count);
 			}
 			break;
@@ -2478,9 +2474,6 @@ CreateCommandTag(Node *parsetree)
 			break;
 		case T_DeactivateContinuousViewStmt:
 			tag = "DEACTIVATE";
-			break;
-		case T_DumpStmt:
-			tag = "DUMP";
 			break;
 
 		default:

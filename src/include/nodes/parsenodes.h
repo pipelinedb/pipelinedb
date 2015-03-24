@@ -2815,37 +2815,20 @@ typedef struct CreateContinuousViewStmt
 
 } CreateContinuousViewStmt;
 
-typedef struct BaseContinuousViewStmt
+typedef struct DeactivateContinuousViewStmt
 {
 	NodeTag	type;
 	List	*views;
 	Node	*whereClause;
-} BaseContinuousViewStmt;
+} DeactivateContinuousViewStmt;
 
-/* This extends `BaseContinuousViewStmt` so
- * keep the order of fields such that all fields
- * in BaseContinuousViewStmt appear in-order in the
- * beginning.
- */
 typedef struct ActivateContinuousViewStmt
 {
 	NodeTag	type;
 	List	*views;
 	Node	*whereClause;
 	List	*withOptions;
+	Oid 	dboid;
 } ActivateContinuousViewStmt;
-
-typedef BaseContinuousViewStmt DeactivateContinuousViewStmt;
-
-typedef struct DumpStmt
-{
-	NodeTag type;
-
-	/*
-	 * Name of the node whose state should be dumped,
-	 * or NULL if no node name was given
-	 */
-	RangeVar *name;
-} DumpStmt;
 
 #endif   /* PARSENODES_H */

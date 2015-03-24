@@ -85,16 +85,14 @@ TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms)
 		if (!SlotIsValid(slot))
 			break;
 		/* Has the slot been read by all events? */
-		if (bms_is_empty(slot->readby))
+		if (bms_is_empty(slot->readers))
 			break;
 		pg_usleep(sleepms * 1000);
 	}
 
 	if (debug_tuple_stream_buffer)
-	{
 		elog(LOG, "evicted %zu bytes at [%d, %d)", slot->size,
 				BufferOffset(slot->buf, slot), BufferOffset(slot->buf, SlotEnd(slot)));
-	}
 }
 
 /*
@@ -103,7 +101,7 @@ TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms)
  * Appends a decoded event to the given stream buffer
  */
 TupleBufferSlot *
-TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
+TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 {
 	char *start;
 	char *pos;
@@ -114,14 +112,14 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	int desclen = tuple->desc ? VARSIZE(tuple->desc) : 0;
 	TimestampTz start_wait;
 
-	if (bms == NULL)
+	if (readers == NULL)
 	{
 		/* nothing is reading from this stream, so it's a noop */
 		return NULL;
 	}
 
 	tupsize = tuple->heaptup->t_len + HEAPTUPLESIZE;
-	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(bms->nwords) + desclen;
+	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(readers->nwords) + desclen;
 
 	if (size > buf->size)
 		elog(ERROR, "event of size %zu too big for stream buffer of size %zu", size, WorkerTupleBuffer->size);
@@ -221,8 +219,8 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	memcpy(slot->tuple->heaptup->t_data, tuple->heaptup->t_data, tuple->heaptup->t_len);
 
 	pos += tupsize;
-	slot->readby = (Bitmapset *) pos;
-	memcpy(slot->readby, bms, BITMAPSET_SIZE(bms->nwords));
+	slot->readers = (Bitmapset *) pos;
+	memcpy(slot->readers, readers, BITMAPSET_SIZE(readers->nwords));
 
 	/* Move head forward */
 	if (buf->head)
@@ -246,7 +244,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 	SpinLockAcquire(&buf->mutex);
 	if (!bms_is_empty(buf->waiters))
 	{
-		Bitmapset *notify = bms_intersect(slot->readby, buf->waiters);
+		Bitmapset *notify = bms_intersect(slot->readers, buf->waiters);
 
 		if (!bms_is_empty(notify))
 		{
@@ -270,7 +268,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *bms)
 
 	if (debug_tuple_stream_buffer)
 		elog(LOG, "appended %zu bytes at [%d, %d); readers: %d", slot->size,
-				BufferOffset(buf, slot), BufferOffset(buf, SlotEnd(slot)), bms_num_members(slot->readby));
+				BufferOffset(buf, slot), BufferOffset(buf, SlotEnd(slot)), bms_num_members(slot->readers));
 
 	return slot;
 }
@@ -416,7 +414,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	while (true)
 	{
 		/* Is this a slot for me? */
-		if (bms_is_member(reader->cq_id, reader->slot->readby) &&
+		if (bms_is_member(reader->cq_id, reader->slot->readers) &&
 				(JumpConsistentHash((uint64_t) reader->slot, reader->num_readers) == reader->reader_id))
 			break;
 
@@ -462,14 +460,14 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	buf = slot->buf;
 
 	SpinLockAcquire(&slot->mutex);
-	bms_del_member(slot->readby, cq_id);
+	bms_del_member(slot->readers, cq_id);
 	SpinLockRelease(&slot->mutex);
 
 	if (debug_tuple_stream_buffer)
 		elog(LOG, "[%d] unpinned event at [%d, %d); readers %d",
-				cq_id, BufferOffset(buf, slot), BufferOffset(buf, SlotEnd(slot)), bms_num_members(slot->readby));
+				cq_id, BufferOffset(buf, slot), BufferOffset(buf, SlotEnd(slot)), bms_num_members(slot->readers));
 
-	if (!bms_is_empty(slot->readby))
+	if (!bms_is_empty(slot->readers))
 		return;
 
 	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
@@ -499,7 +497,7 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 
 			buf->tail_id = buf->tail->id;
 		}
-		while (bms_is_empty(buf->tail->readby));
+		while (bms_is_empty(buf->tail->readers));
 	}
 
 	LWLockRelease(buf->tail_lock);

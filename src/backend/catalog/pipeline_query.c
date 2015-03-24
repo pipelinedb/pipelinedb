@@ -16,6 +16,7 @@
 #include "catalog/indexing.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "catalog/pipeline_tstate_fn.h"
 #include "libpq/libpq.h"
 #include "miscadmin.h"
@@ -70,7 +71,7 @@ get_next_id(Relation rel)
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		idsList = lappend(idsList, (void *) Int32GetDatum(row->id));
+		idsList = lappend_int(idsList, row->id);
 	}
 
 	heap_endscan(scandesc);
@@ -81,7 +82,7 @@ get_next_id(Relation rel)
 		int i = 0;
 		foreach(lc, idsList)
 		{
-			ids[i] = DatumGetInt32(lfirst(lc));
+			ids[i] = lfirst_int(lc);
 			i++;
 		}
 
@@ -90,9 +91,7 @@ get_next_id(Relation rel)
 		for (id = 0; id < idsList->length; id++)
 		{
 			if (ids[id] > id)
-			{
 				break;
-			}
 		}
 	}
 
@@ -186,6 +185,9 @@ RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matre
 	CreateTStateEntry(name->relname);
 
 	heap_freetuple(tup);
+
+	UpdateStreamQueries(pipeline_query);
+
 	heap_close(pipeline_query, NoLock);
 }
 
@@ -546,7 +548,7 @@ IsAMatRel(RangeVar *name, RangeVar **cvname)
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		if (strcmp(NameStr(row->matrelname), name->relname) == 0)
+		if (pg_strcasecmp(NameStr(row->matrelname), name->relname) == 0)
 		{
 			cv = row->name;
 			ismatrel = true;
@@ -580,56 +582,6 @@ GetGCFlag(RangeVar *name)
 	}
 
 	return gc;
-}
-
-/*
- * MarkAllContinuousViewsAsInactive
- *
- * Marks all registered continuous views as inactive.
-  *
- * This is used on server restart which implies that
- * in case of server restart users will have to activate
- * all the required views manually.
- */
-void
-MarkAllContinuousViewsAsInactive(void)
-{
-	Relation		pipeline_query;
-	HeapScanDesc	scandesc;
-	HeapTuple		tup;
-
-	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
-	scandesc = heap_beginscan_catalog(pipeline_query, 0, NULL);
-
-	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
-	{
-		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		HeapTuple newtuple;
-		bool nulls[Natts_pipeline_query];
-		bool replaces[Natts_pipeline_query];
-		Datum values[Natts_pipeline_query];
-
-		if (row->state != PIPELINE_QUERY_STATE_INACTIVE)
-		{
-			MemSet(values, 0, sizeof(values));
-			MemSet(nulls, false, sizeof(nulls));
-			MemSet(replaces, false, sizeof(replaces));
-
-			replaces[Anum_pipeline_query_state - 1] = true;
-			values[Anum_pipeline_query_state - 1] = CharGetDatum(PIPELINE_QUERY_STATE_INACTIVE);
-
-			newtuple = heap_modify_tuple(tup, pipeline_query->rd_att,
-					values, nulls, replaces);
-
-			simple_heap_update(pipeline_query, &newtuple->t_self, newtuple);
-			CatalogUpdateIndexes(pipeline_query, newtuple);
-
-			CommandCounterIncrement();
-		}
-	}
-
-	heap_endscan(scandesc);
-	heap_close(pipeline_query, AccessExclusiveLock);
 }
 
 /*
