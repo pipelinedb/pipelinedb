@@ -91,11 +91,13 @@ gis:
 
 deb: all
 	cp postinst $(PREFIX)
-	(cd $(PREFIX) && fpm -s dir -t deb -n pipelinedb -v $(VERSION) --prefix=/opt/pipelinedb --after-install postinst .)
+	find $(PREFIX) -type d -exec chmod 755 {} +
+	(cd $(PREFIX) && fpm -s dir -t deb -n pipelinedb -v $(VERSION) --prefix=/opt/pipelinedb --after-install postinst --deb-use-file-permissions .)
 	cp $(PREFIX)/*.deb .
 	
 rpm: all
 	cp post-install $(PREFIX)
+	find $(PREFIX) -type d -exec chmod 755 {} +
 	(cd $(PREFIX) && fpm -s dir -t rpm -n pipelinedb -v $(VERSION) --epoch 0 --prefix=/opt/pipelinedb --after-install post-install .)
 	cp $(PREFIX)/*.rpm .
 
