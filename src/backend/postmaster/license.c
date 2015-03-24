@@ -33,7 +33,6 @@ decode_license_key(LicenseKey *key, bool fail)
 	memset(out, 0, 1024);
 
 	hex_decode(license_key, strlen(license_key), in);
-	in[strlen(license_key)/2 + 1] = '\0';
 
 	AES_set_decrypt_key(pipeline_key, 128, &wctx);
 	AES_cbc_encrypt((unsigned char *) in+16, (unsigned char *) out, strlen(license_key) - 16, &wctx, (unsigned char *) in, AES_DECRYPT);
