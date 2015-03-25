@@ -66,7 +66,7 @@ ColumnRef *CreateColumnRefFromResTarget(ResTarget *res);
 bool HasAggOrGroupBy(SelectStmt *stmt);
 bool AddStreams(Node *node, CQAnalyzeContext *context);
 List *pipeline_rewrite(List *raw_parsetree_list);
-Query *RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv);
+Query *RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex);
 
 bool SelectsFromStreamOnly(SelectStmt *stmt);
 

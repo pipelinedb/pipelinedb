@@ -32,6 +32,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
+#include "parser/parsetree.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqwindow.h"
 #include "pipeline/stream.h"
@@ -2026,7 +2027,7 @@ pipeline_rewrite(List *raw_parsetree_list)
  * query when they are needed by functions in the target list.
  */
 Query *
-RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv)
+RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 {
 	RangeVar *rv = makeRangeVar(NULL, RelationGetRelationName(cv), -1);
 	ListCell *lc;
@@ -2037,6 +2038,8 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv)
 	bool needshidden = false;
 	char *matrelname;
 	int i;
+	RangeTblEntry *rte;
+	List *colnames = NIL;
 
 	/* try to bail early because this gets called from a hot path */
 	if (!IsAContinuousView(rv))
@@ -2085,14 +2088,33 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv)
 		Var *tev;
 		TargetEntry *te;
 		Form_pg_attribute attr = matreldesc->attrs[i];
+		ListCell *tlc;
 
 		tev = makeVar(matrelvarno, attr->attnum, attr->atttypid,
 				attr->atttypmod, attr->attcollation, 0);
 
 		te = makeTargetEntry((Expr *) tev, tev->varattno, NULL, false);
+		te->resname = NameStr(attr->attname);
+		colnames = lappend(colnames, makeString(te->resname));
+
+		/*
+		 * Preserve the sortgrouprefs. Note that nonzero sortgrouprefs
+		 * don't correspond to anything in the target list. They just
+		 * need to be unique so we can just copy the old one into the
+		 * new target entry.
+		 */
+		foreach(tlc, rule->targetList)
+		{
+			TargetEntry *rte = (TargetEntry *) lfirst(tlc);
+			if (pg_strcasecmp(rte->resname, te->resname) == 0)
+				te->ressortgroupref = rte->ressortgroupref;
+		}
+
 		targetlist = lappend(targetlist, te);
 	}
 
+	rte = rt_fetch(rtindex, query->rtable);
+	rte->eref->colnames = colnames;
 	rule->targetList = targetlist;
 
 	return rule;
