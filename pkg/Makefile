@@ -101,7 +101,7 @@ rpm: all
 	cp post-install $(PREFIX)
 	find $(PREFIX) -type d -exec chmod 775 {} +
 	find $(PREFIX)/share/pipelinedb/timezone -type f -exec chmod 644 {} +
-	(cd $(PREFIX) && fpm -s dir -t rpm -n pipelinedb -v $(VERSION) --epoch 0 --prefix=/opt/pipelinedb --after-install post-install --rpm-use-file-permissions.)
+	(cd $(PREFIX) && fpm -s dir -t rpm -n pipelinedb -v $(VERSION) --epoch 0 --prefix=/opt/pipelinedb --after-install post-install --rpm-use-file-permissions .)
 	cp $(PREFIX)/*.rpm .
 
 clean:
