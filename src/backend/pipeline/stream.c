@@ -199,6 +199,12 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	ExprContext *econtext = CreateStandaloneExprContext();
 	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
 
+	if (!numcols)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("stream inserts require a header"),
+				 errhint("For example, INSERT INTO %s (x, y, z) VALUES (0, 1, 2)", ins->relation->relname)));
+
 	/* build header of column names */
 	for (i = 0; i < numcols; i++)
 	{
