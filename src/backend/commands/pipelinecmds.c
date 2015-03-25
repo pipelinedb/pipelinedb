@@ -174,6 +174,11 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	bool saveAllowSystemTableMods;
 
 	view = stmt->into->rel;
+	if (view->schemaname)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_SCHEMA_NAME),
+				errmsg("continuous views cannot be given a namespace")));
+
 	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
 
 	/*

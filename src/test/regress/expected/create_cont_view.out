@@ -431,6 +431,9 @@ View definition:
  k1     | integer |           | plain    |              | 
  count  | bigint  |           | plain    |              | 
 
+CREATE SCHEMA test_create_cont_view;
+CREATE CONTINUOUS VIEW test_create_cont_view.error AS SELECT k0::text FROM stream;
+ERROR:  continuous views cannot be given a namespace
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;
