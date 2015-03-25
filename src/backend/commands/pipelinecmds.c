@@ -192,11 +192,6 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
 
-	/*
-	 * Analyze the SelectStmt portion of the CreateContinuousViewStmt to make
-	 * sure it's well-formed.
-	 */
-	query = parse_analyze(copyObject(stmt->query), querystring, 0, 0);
 	ValidateContinuousQuery(stmt, querystring);
 
 	/*

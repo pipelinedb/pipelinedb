@@ -169,61 +169,6 @@ GetSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context)
 }
 
 /*
- * validate_clock_timestamp_expr
- */
-static void
-validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, CQAnalyzeContext *context)
-{
-	A_Expr *a_expr;
-	ListCell *lc;
-
-	if (expr == NULL)
-			return;
-
-	context->cols = NIL;
-
-	Assert(IsA(expr, A_Expr));
-	a_expr = (A_Expr *) expr;
-
-	FindColumnRefsWithTypeCasts(expr, context);
-
-	/* Only a single column can be compared to clock_timestamp */
-	if (list_length(context->cols) != 1)
-		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
-						errmsg("clock_timestamp can only appear in an expression containing a single column reference"),
-						parser_errposition(context->pstate, a_expr->location)));
-
-	/* Ensure that context.cols[0] isn't being grouped on */
-	foreach(lc, stmt->groupClause)
-	{
-		Node *node = (Node *) lfirst(lc);
-
-		if (!IsAColumnRef(node))
-			continue;
-
-		if (AreColumnRefsEqual(node, (Node *) linitial(context->cols)))
-		{
-			ColumnRef *cref = GetColumnRef(node);
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-							errmsg("the column being compared to clock_timestamp cannot be in the GROUP BY clause"),
-							parser_errposition(context->pstate, cref->location)));
-		}
-	}
-}
-
-/*
- * ValidateSlidingWindowExpr
- */
-void
-ValidateSlidingWindowExpr(SelectStmt *stmt, CQAnalyzeContext *context)
-{
-	Node *swExpr = GetSlidingWindowExpr(stmt, context);
-	validate_clock_timestamp_expr(stmt, swExpr, context);
-}
-
-/*
  * get_window_defs
  */
 static void

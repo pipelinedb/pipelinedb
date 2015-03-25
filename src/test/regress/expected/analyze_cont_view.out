@@ -102,25 +102,25 @@ CREATE CONTINUOUS VIEW cqanalyze30 AS SELECT key::text FROM test_stream WHERE ar
 CREATE CONTINUOUS VIEW cqanalyze31 AS SELECT key::text, arrival_timestamp::timestamptz FROM test_stream;
 -- Verify that we can't do wildcard selections from streams
 CREATE CONTINUOUS VIEW cqanalyze32 AS SELECT * from stream;
-ERROR:  can't select *
+ERROR:  can't select "*"
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze32 AS SELECT * from stream;
                                                      ^
-HINT:  Explicitly state the fields you want to select
+HINT:  Explicitly state the columns you want to SELECT.
 CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from stream, t0;
-ERROR:  can't select *
+ERROR:  can't select "*"
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from stream, ...
                                                      ^
-HINT:  Explicitly state the fields you want to select
+HINT:  Explicitly state the columns you want to SELECT.
 CREATE CONTINUOUS VIEW cqanalyze34 AS SELECT t0.* from stream, t0;
-ERROR:  can't select t0.*
+ERROR:  can't select "t0.*"
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze34 AS SELECT t0.* from strea...
                                                      ^
-HINT:  Explicitly state the fields you want to select
+HINT:  Explicitly state the columns you want to SELECT.
 CREATE CONTINUOUS VIEW cqanalyze35 AS SELECT stream.* from stream, t0;
-ERROR:  can't select stream.*
+ERROR:  can't select "stream.*"
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze35 AS SELECT stream.* from s...
                                                      ^
-HINT:  Explicitly state the fields you want to select
+HINT:  Explicitly state the columns you want to SELECT.
 -- Disallow sorting streams
 CREATE CONTINUOUS VIEW cqanalyze36 AS SELECT key::text from stream ORDER BY key;
 ERROR:  continuous queries don't support ORDER BY
@@ -162,19 +162,19 @@ CREATE CONTINUOUS VIEW error_not_created AS SELECT cqanalyze_table.id::integer F
 ERROR:  continuous queries must include a stream in the FROM clause
 LINE 1: ...reated AS SELECT cqanalyze_table.id::integer FROM cqanalyze_...
                                                              ^
-HINT:  To include a table in a continuous query, JOIN it with a stream.
+HINT:  To include a relation in a continuous query, JOIN it with a stream.
 DROP TABLE cqanalyze_table;
 -- Verify that for stream-table joins, the correct error message is generated when the table is missing
 CREATE CONTINUOUS VIEW  error_not_created AS SELECT s.id::integer, t.tid FROM stream s JOIN not_a_table t ON s.id = t.tid;
 ERROR:  column reference "t.tid" has an ambiguous type
 LINE 1: ... VIEW  error_not_created AS SELECT s.id::integer, t.tid FROM...
                                                              ^
-HINT:  Explicitly cast to the desired type. For example, t.tid::integer. If "not_a_table" is supposed to be a table, create it first.
+HINT:  Explicitly cast to the desired type. For example, t.tid::integer. If "not_a_table" is supposed to be a relation, create it first.
 CREATE CONTINUOUS VIEW  error_not_created AS SELECT s.id::integer, tid FROM stream s JOIN not_a_table ON s.id = tid;
 ERROR:  column reference "tid" has an ambiguous type
 LINE 1: ... VIEW  error_not_created AS SELECT s.id::integer, tid FROM s...
                                                              ^
-HINT:  Explicitly cast to the desired type. For example, tid::integer. If tid is supposed to belong to a table, create the table first.
+HINT:  Explicitly cast to the desired type. For example, tid::integer. If "tid" is supposed to belong to a relation, create the relation first.
 -- Ordered-set aggregates
 CREATE CONTINUOUS VIEW cqanalyze50 AS SELECT g::integer, percentile_cont(ARRAY[0.2, 0.8]) WITHIN GROUP (ORDER BY x::float), percentile_cont(0.9) WITHIN GROUP (ORDER BY y::integer) + percentile_cont(0.1) WITHIN GROUP (ORDER BY z::numeric) AS col FROM stream GROUP BY g;
 CREATE CONTINUOUS VIEW cqanalyze51 AS SELECT g::integer, percentile_cont(0.1) WITHIN GROUP (ORDER BY x::float + y::integer) FROM stream GROUP BY g;

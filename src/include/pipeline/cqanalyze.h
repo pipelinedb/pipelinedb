@@ -34,10 +34,6 @@ typedef struct CQAnalyzeContext
 
 #define USER_COMBINE "combine"
 
-TupleDesc InferStreamScanTupleDescriptor(ParseState *pstate, RangeTblEntry *rte);
-void AnalyzeAndValidateContinuousSelectStmt(ParseState *pstate, SelectStmt **stmt);
-RangeTblEntry *TransformStreamEntry(ParseState *pstate, StreamDesc *stream);
-
 void RewriteStreamingAggs(SelectStmt *stmt);
 SelectStmt *GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr);
 SelectStmt *GetSelectStmtForCQCombiner(SelectStmt *stmt);

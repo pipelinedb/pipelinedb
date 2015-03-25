@@ -45,7 +45,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parsetree.h"
-#include "pipeline/cqanalyze.h"
+#include "pipeline/cont_analyze.h"
 #include "pipeline/stream.h"
 #include "rewrite/rewriteManip.h"
 #include "tcop/tcopprot.h"
@@ -976,7 +976,7 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 	pstate->p_windowdefs = stmt->windowClause;
 
 	if (stmt->forContinuousView)
-		AnalyzeAndValidateContinuousSelectStmt(pstate, &stmt);
+		transformContinuousSelectStmt(pstate, stmt);
 
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);
