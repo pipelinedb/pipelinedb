@@ -4,8 +4,6 @@ INSTALL_PREFIX=/opt/pipelinedb
 echo "$INSTALL_PREFIX/lib" > /etc/ld.so.conf.d/pipelinedb.conf
 ldconfig
 
-find $INSTALL_PREFIX -type d -exec chmod 755 {} +
-
 ln -s $INSTALL_PREFIX/bin/pipeline-server /usr/bin/pipeline-server
 ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pipeline-ctl
 ln -s $INSTALL_PREFIX/bin/pipeline-init /usr/bin/pipeline-init
