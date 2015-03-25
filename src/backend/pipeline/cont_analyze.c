@@ -30,12 +30,6 @@
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
 
-typedef struct ColumRefWithTypeCast
-{
-	ColumnRef cref;
-	TypeCast tc;
-} ColumnRefWithTypeCast;
-
 static bool
 collect_column_names(Node *node, ContAnalyzeContext *context)
 {
@@ -784,7 +778,7 @@ ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql)
 				if (!(type == 1082 || type == 1114 || type == 1184))
 					ereport(ERROR,
 							(errcode(ERRCODE_SYNTAX_ERROR),
-							errmsg("ORDER BY expression for WINDOWs must have a timestamp result type"),
+							errmsg("ORDER BY expression for WINDOWs must have a timestamp-like result type"),
 							parser_errposition(context->pstate, sort->location)));
 			}
 		}

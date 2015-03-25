@@ -14,8 +14,9 @@ CREATE CONTINUOUS VIEW cqanalyze9 AS SELECT a::integer, b::integer FROM stream W
 -- Windows
 CREATE CONTINUOUS VIEW cqanalyze10 AS SELECT ts::timestamp, SUM(val::numeric) OVER (ORDER BY ts) FROM stream;
 CREATE CONTINUOUS VIEW cqanalyze11 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY ts) FROM stream;
-CREATE CONTINUOUS VIEW cqanalyze12 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY ts) FROM stream;
-CREATE CONTINUOUS VIEW cqanalyze13 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY ts) FROM stream;
+CREATE CONTINUOUS VIEW cqanalyze12 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY (ts + INTERVAL '1 day')) FROM stream;
+CREATE CONTINUOUS VIEW cqanalyze13 AS SELECT ts::text, AVG(val::numeric) OVER (ORDER BY ts) FROM stream;
+ERROR:  ORDER BY expression for WINDOWs must have a timestamp-like result type
 -- Multiple streams
 CREATE CONTINUOUS VIEW cqanalyze14 AS SELECT s0.a::integer, s1.b::integer FROM s0, s1;
 CREATE CONTINUOUS VIEW cqanalyze15 AS SELECT s0.a::integer, s1.b::integer, s2.c::text FROM s0, s1, s2;
@@ -202,6 +203,7 @@ DROP CONTINUOUS VIEW cqanalyze10;
 DROP CONTINUOUS VIEW cqanalyze11;
 DROP CONTINUOUS VIEW cqanalyze12;
 DROP CONTINUOUS VIEW cqanalyze13;
+ERROR:  continuous view "cqanalyze13" does not exist
 DROP CONTINUOUS VIEW cqanalyze14;
 DROP CONTINUOUS VIEW cqanalyze15;
 DROP CONTINUOUS VIEW cqanalyze16;

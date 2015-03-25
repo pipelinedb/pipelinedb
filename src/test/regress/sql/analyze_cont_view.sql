@@ -15,8 +15,8 @@ CREATE CONTINUOUS VIEW cqanalyze9 AS SELECT a::integer, b::integer FROM stream W
 -- Windows
 CREATE CONTINUOUS VIEW cqanalyze10 AS SELECT ts::timestamp, SUM(val::numeric) OVER (ORDER BY ts) FROM stream;
 CREATE CONTINUOUS VIEW cqanalyze11 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY ts) FROM stream;
-CREATE CONTINUOUS VIEW cqanalyze12 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY ts) FROM stream;
-CREATE CONTINUOUS VIEW cqanalyze13 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY ts) FROM stream;
+CREATE CONTINUOUS VIEW cqanalyze12 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY (ts + INTERVAL '1 day')) FROM stream;
+CREATE CONTINUOUS VIEW cqanalyze13 AS SELECT ts::text, AVG(val::numeric) OVER (ORDER BY ts) FROM stream;
 
 -- Multiple streams
 CREATE CONTINUOUS VIEW cqanalyze14 AS SELECT s0.a::integer, s1.b::integer FROM s0, s1;
