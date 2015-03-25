@@ -26,18 +26,24 @@ decode_license_key(LicenseKey *key, bool fail)
 	char in[1024];
 	char out[1024];
 	char tmp[11];
-	int colon, end;
+	char *iv;
+	char *payload;
+	int ctlen;
+	int payloadlen;
+	int colon;
 	AES_KEY wctx;
 	int level = fail ? ERROR : WARNING;
 
 	memset(out, 0, 1024);
 
-	hex_decode(license_key, strlen(license_key), in);
+	ctlen = hex_decode(license_key, strlen(license_key), in);
+
+	payloadlen = ctlen - 16;
+	iv = pnstrdup(in, 16);
+	payload = pnstrdup(in + 16, payloadlen);
 
 	AES_set_decrypt_key(pipeline_key, 128, &wctx);
-	AES_cbc_encrypt((unsigned char *) in+16, (unsigned char *) out, strlen(license_key) - 16, &wctx, (unsigned char *) in, AES_DECRYPT);
-
-	out[strlen(in)-16+1] = '\0';
+	AES_cbc_encrypt((unsigned char *) payload, (unsigned char *) out, payloadlen, &wctx, (unsigned char *) iv, AES_DECRYPT);
 
 	/* time start */
 	colon = strchr(out, ':') - out;
@@ -53,9 +59,8 @@ decode_license_key(LicenseKey *key, bool fail)
 	key->start_time = atoi(tmp);
 
 	/* time end */
-	end = strchr(out, '\0') - out;
-	strncpy(tmp, out + colon + 1, end-colon);
-	tmp[end-colon] = '\0';
+	strncpy(tmp, out + colon + 1, 10);
+	tmp[10] = '\0';
 
 	key->end_time = atoi(tmp);
 }
