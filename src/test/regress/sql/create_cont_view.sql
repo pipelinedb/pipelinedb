@@ -82,6 +82,9 @@ CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM 
 \d+ cqgroupby
 \d+ cqgroupby_mrel0;
 
+CREATE SCHEMA test_create_cont_view;
+CREATE CONTINUOUS VIEW test_create_cont_view.error AS SELECT k0::text FROM stream;
+
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;
