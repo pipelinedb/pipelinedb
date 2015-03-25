@@ -1450,7 +1450,7 @@ ApplyRetrieveRule(Query *parsetree,
 	 * target list may need access to columns that aren't in the view's
 	 * target list.
 	 */
-	RewriteContinuousViewSelect(parsetree, rule_action, relation);
+	RewriteContinuousViewSelect(parsetree, rule_action, relation, rt_index);
 
 	/*
 	 * Now, plug the view query in as a subselect, replacing the relation's
