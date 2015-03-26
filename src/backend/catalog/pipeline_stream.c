@@ -24,7 +24,7 @@
 #include "parser/parse_coerce.h"
 #include "parser/parse_target.h"
 #include "parser/analyze.h"
-#include "pipeline/cqanalyze.h"
+#include "pipeline/cont_analyze.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
 #include "utils/lsyscache.h"
@@ -161,7 +161,7 @@ streams_to_targets_and_desc(Relation pipeline_query)
 		Datum tmp;
 		bool isnull;
 		Form_pipeline_query catrow = (Form_pipeline_query) GETSTRUCT(tup);
-		CQAnalyzeContext context;
+		ContAnalyzeContext *context;
 
 		if (catrow->state != PIPELINE_QUERY_STATE_ACTIVE)
 			continue;
@@ -174,16 +174,11 @@ streams_to_targets_and_desc(Relation pipeline_query)
 		cv = (CreateContinuousViewStmt *) parsetree;
 		sel = (SelectStmt *) cv->query;
 
-		context.tables = NIL;
-		context.streams = NIL;
-		AddStreams((Node *) sel->fromClause, &context);
+		context = MakeContAnalyzeContext(make_parsestate(NULL), sel);
+		collect_rels_and_streams((Node *) sel->fromClause, context);
+		collect_types_and_cols((Node *) sel, context);
 
-		context.cols = NIL;
-		context.targets = NIL;
-		context.types = NIL;
-		AssociateTypesToColumRefs((Node *) sel, &context);
-
-		foreach(lc, context.streams)
+		foreach(lc, context->streams)
 		{
 			RangeVar *rv = (RangeVar *) lfirst(lc);
 			bool found;
@@ -202,7 +197,7 @@ streams_to_targets_and_desc(Relation pipeline_query)
 				entry->targets = NULL;
 			}
 
-			add_coltypes(entry, context.types);
+			add_coltypes(entry, context->types);
 			entry->targets = bms_add_member(entry->targets, catrow->id);
 		}
 	}
@@ -414,7 +409,7 @@ update_pipeline_stream_queries(Relation pipeline_stream, Relation pipeline_query
 		Datum tmp;
 		bool isnull;
 		Form_pipeline_query catrow = (Form_pipeline_query) GETSTRUCT(tup);
-		CQAnalyzeContext context;
+		ContAnalyzeContext *context;
 
 		tmp = SysCacheGetAttr(PIPELINEQUERYNAME, tup, Anum_pipeline_query_query, &isnull);
 		querystring = TextDatumGetCString(tmp);
@@ -424,11 +419,10 @@ update_pipeline_stream_queries(Relation pipeline_stream, Relation pipeline_query
 		cv = (CreateContinuousViewStmt *) parsetree;
 		sel = (SelectStmt *) cv->query;
 
-		context.tables = NIL;
-		context.streams = NIL;
-		AddStreams((Node *) sel->fromClause, &context);
+		context = MakeContAnalyzeContext(make_parsestate(NULL), sel);
+		collect_rels_and_streams((Node *) sel->fromClause, context);
 
-		foreach(lc, context.streams)
+		foreach(lc, context->streams)
 		{
 			RangeVar *rv = (RangeVar *) lfirst(lc);
 			bool found;
