@@ -15,8 +15,8 @@ CREATE CONTINUOUS VIEW cqanalyze9 AS SELECT a::integer, b::integer FROM stream W
 -- Windows
 CREATE CONTINUOUS VIEW cqanalyze10 AS SELECT ts::timestamp, SUM(val::numeric) OVER (ORDER BY ts) FROM stream;
 CREATE CONTINUOUS VIEW cqanalyze11 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY ts) FROM stream;
-CREATE CONTINUOUS VIEW cqanalyze12 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY ts) FROM stream;
-CREATE CONTINUOUS VIEW cqanalyze13 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY ts) FROM stream;
+CREATE CONTINUOUS VIEW cqanalyze12 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY (ts + INTERVAL '1 day')) FROM stream;
+CREATE CONTINUOUS VIEW cqanalyze13 AS SELECT ts::text, AVG(val::numeric) OVER (ORDER BY ts) FROM stream;
 
 -- Multiple streams
 CREATE CONTINUOUS VIEW cqanalyze14 AS SELECT s0.a::integer, s1.b::integer FROM s0, s1;
@@ -210,7 +210,9 @@ DROP CONTINUOUS VIEW cqanalyze53;
 CREATE CONTINUOUS VIEW cqregress1 AS SELECT id::integer + avg(id) FROM stream GROUP BY id;
 CREATE CONTINUOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts FROM stream;
 CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::integer FROM stream;
+CREATE CONTINUOUS VIEW cqregress4 AS SELECT x::int FROM cqregress4;
 
 DROP CONTINUOUS VIEW cqregress1;
 DROP CONTINUOUS VIEW cqregress2;
 DROP CONTINUOUS VIEW cqregress3;
+DROP CONTINUOUS VIEW cqregress4;

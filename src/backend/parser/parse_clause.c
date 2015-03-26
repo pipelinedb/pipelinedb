@@ -34,7 +34,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
-#include "pipeline/cqanalyze.h"
+#include "pipeline/cont_analyze.h"
 #include "rewrite/rewriteManip.h"
 #include "utils/builtins.h"
 #include "utils/guc.h"
@@ -1133,7 +1133,7 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 		RangeTblEntry *rte;
 		int rtindex;
 
-		rte = TransformStreamEntry(pstate, desc);
+		rte = transformStreamDesc(pstate, desc);
 
 		/* assume new rte is at end */
 		rtindex = list_length(pstate->p_rtable);

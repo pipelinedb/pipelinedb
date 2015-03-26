@@ -37,6 +37,7 @@
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqmatrel.h"
+#include "pipeline/cont_analyze.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
 #include "pipeline/stream.h"
@@ -196,11 +197,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
 
-	/*
-	 * Analyze the SelectStmt portion of the CreateContinuousViewStmt to make
-	 * sure it's well-formed.
-	 */
-	query = parse_analyze(copyObject(stmt->query), querystring, 0, 0);
+	ValidateContinuousQuery(stmt, querystring);
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
