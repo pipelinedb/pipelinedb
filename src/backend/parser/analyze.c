@@ -50,6 +50,7 @@
 #include "rewrite/rewriteManip.h"
 #include "tcop/tcopprot.h"
 #include "miscadmin.h"
+#include "utils/builtins.h"
 #include "utils/rel.h"
 
 
@@ -508,6 +509,7 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 		stream->rd_att = GetStreamTupleDesc(sname, stmt->cols);
 		stream->rd_rel = palloc0(sizeof(FormData_pg_class));
 		stream->rd_rel->relnatts = stream->rd_att->natts;
+		namestrcpy(&stream->rd_rel->relname, sname);
 
 		pstate->p_target_relation = stream;
 	}
