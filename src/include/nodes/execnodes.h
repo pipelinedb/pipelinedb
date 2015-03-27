@@ -274,6 +274,12 @@ typedef struct StreamProjectionInfo
 	 * may be cached across projections
 	 */
 	int *attrmap;
+
+	/*
+	 * Serialized event descriptor used to detect when a new event descriptor
+	 * has arrived without having to fully unpack it
+	 */
+	bytea *raweventdesc;
 } StreamProjectionInfo;
 
 /* ----------------
