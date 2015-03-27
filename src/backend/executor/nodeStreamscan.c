@@ -63,13 +63,14 @@ init_proj_info(StreamProjectionInfo *pi, Tuple *tuple)
 {
 	MemoryContext old;
 
-	MemoryContextReset(pi->ctxt);
-
 	old = MemoryContextSwitchTo(pi->ctxt);
 
 	pi->eventdesc = UnpackTupleDesc(tuple->desc);
 	pi->attrmap = map_field_positions(pi->eventdesc, pi->resultdesc);
 	pi->curslot = MakeSingleTupleTableSlot(pi->eventdesc);
+
+	pi->raweventdesc = palloc0(VARSIZE(tuple->desc) + VARHDRSZ);
+	memcpy(pi->raweventdesc, tuple->desc, VARSIZE(tuple->desc) + VARHDRSZ);
 
 	MemoryContextSwitchTo(old);
 }
@@ -81,6 +82,8 @@ StreamScanNext(StreamScanState *node)
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 	HeapTuple tup;
 	MemoryContext old;
+	bytea *piraw;
+	bytea *tupraw;
 
 	/*
 	 * The TupleBuffer needs this slot until it gets unpinned, which we don't
@@ -93,8 +96,18 @@ StreamScanNext(StreamScanState *node)
 	if (tbs == NULL)
 		return NULL;
 
-	/* update the projection info if the event descriptor has changed */
-	init_proj_info(node->pi, tbs->tuple);
+	/*
+	 * Check if the incoming event descriptor is different from the one we're
+	 * currently using before fully unpacking it.
+	 */
+	piraw = node->pi->raweventdesc;
+	tupraw = tbs->tuple->desc;
+
+	if (piraw == NULL || VARSIZE(piraw) != VARSIZE(tupraw) ||
+			memcmp(VARDATA(piraw), VARDATA(tupraw), VARSIZE(piraw)))
+	{
+		init_proj_info(node->pi, tbs->tuple);
+	}
 
 	tup = ExecStreamProject(tbs->tuple, node);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
@@ -259,6 +272,7 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 
 	state->pi->econtext = CreateStandaloneExprContext();
 	state->pi->resultdesc = node->desc;
+	state->pi->raweventdesc = NULL;
 	state->unpin = true;
 	state->pinned = NIL;
 
@@ -317,6 +331,9 @@ void
 ExecEndBatchStreamScan(StreamScanState *node)
 {
 	MemoryContextReset(node->pi->ctxt);
+
+	/* the next event's descriptor will be used if this is NULL */
+	node->pi->raweventdesc = NULL;
 }
 
 void
