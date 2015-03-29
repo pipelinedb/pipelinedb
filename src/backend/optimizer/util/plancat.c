@@ -111,7 +111,12 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 	{
 		List *vars = pull_var_clause((Node *) root->parse->targetList,
 				PVC_RECURSE_AGGREGATES, PVC_INCLUDE_PLACEHOLDERS);
-		max_attr = list_length(vars);
+
+		/*
+		 * If we're selecting COUNT(*) from a stream, there won't be any Vars
+		 * in the TL, so make sure we have room for at least one attribute.
+		 */
+		max_attr = Max(1, list_length(vars));
 	}
 
 	rel->min_attr = FirstLowInvalidHeapAttributeNumber + 1;
