@@ -120,6 +120,16 @@ DEACTIVATE test_stj6;
 
 SELECT * FROM test_stj6 ORDER BY col2;
 
+CREATE CONTINUOUS VIEW stj_no_tl AS SELECT COUNT(*)
+FROM test_stj_stream JOIN test_stj_t0 ON test_stj_stream.id::integer = test_stj_t0.tid;
+
+ACTIVATE stj_no_tl;
+
+INSERT INTO test_stj_stream (id) VALUES (0);
+SELECT * FROM stj_no_tl;
+
+DEACTIVATE stj_no_tl;
+
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;
@@ -127,6 +137,7 @@ DROP CONTINUOUS VIEW test_stj3;
 DROP CONTINUOUS VIEW test_stj4;
 DROP CONTINUOUS VIEW test_stj5;
 DROP CONTINUOUS VIEW test_stj6;
+DROP CONTINUOUS VIEW stj_no_tl;
 DROP TABLE test_stj_t0;
 DROP TABLE test_stj_t1;
 DROP TABLE test_stj_t2;
