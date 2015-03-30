@@ -43,10 +43,8 @@ cmsketch_out(PG_FUNCTION_ARGS)
 static CountMinSketch *
 cmsketch_startup(FunctionCallInfo fcinfo, float8 eps, float8 p)
 {
-	Aggref *aggref = AggGetAggref(fcinfo);
-	TargetEntry *te = (TargetEntry *) linitial(aggref->args);
 	CountMinSketch *cms;
-	Oid type = exprType((Node *) te->expr);
+	Oid type = AggGetInitialArgType(fcinfo);
 
 	fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
 

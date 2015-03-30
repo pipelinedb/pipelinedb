@@ -555,12 +555,21 @@ ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql)
 	/* Ensure that we're reading from at least one stream */
 	if (!context->streams)
 	{
-		RangeVar *t = (RangeVar *) linitial(context->rels);
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						errmsg("continuous queries must include a stream in the FROM clause"),
-						errhint("To include a relation in a continuous query, JOIN it with a stream."),
-						parser_errposition(context->pstate, t->location)));
+		if (context->rels)
+		{
+			RangeVar *t = (RangeVar *) linitial(context->rels);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							errmsg("continuous queries must include a stream in the FROM clause"),
+							errhint("To include a relation in a continuous query, JOIN it with a stream."),
+							parser_errposition(context->pstate, t->location)));
+		}
+		else
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							errmsg("continuous queries must include a stream in the FROM clause")));
+		}
 	}
 
 	/* Ensure that we're not trying to read from ourselves, which right now would be treated as a stream. */

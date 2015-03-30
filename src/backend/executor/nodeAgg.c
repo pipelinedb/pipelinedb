@@ -2512,8 +2512,7 @@ AggCheckCallContext(FunctionCallInfo fcinfo, MemoryContext *aggcontext)
  * return the Aggref node for the aggregate call.  Otherwise, return NULL.
  *
  * Note that if an aggregate is being used as a window function, this will
- * return NULL.  We could provide a similar function to return the relevant
- * WindowFunc node in such cases, but it's not needed yet.
+ * return NULL. The analog for window functions is nodeWindowAgg.c:AggGetWindowFunc.
  */
 Aggref *
 AggGetAggref(FunctionCallInfo fcinfo)
@@ -2526,6 +2525,33 @@ AggGetAggref(FunctionCallInfo fcinfo)
 			return curperagg->aggref;
 	}
 	return NULL;
+}
+
+/*
+ * Get the intial argument type of the aggregate function currently
+ * being executed. This works for regular and windowed aggregates.
+ */
+Oid AggGetInitialArgType(FunctionCallInfo fcinfo)
+{
+	List *args;
+	Oid type;
+	Node *node;
+
+	if (fcinfo->context == NULL)
+		return InvalidOid;
+
+	if (AggGetAggref(fcinfo))
+		args = AggGetAggref(fcinfo)->args;
+	else if (AggGetWindowFunc(fcinfo))
+		args = AggGetWindowFunc(fcinfo)->args;
+
+	node = linitial(args);
+	if (IsA(node, TargetEntry))
+		type = exprType((Node *) ((TargetEntry *) node)->expr);
+	else
+		type = exprType(node);
+
+	return type;
 }
 
 /*

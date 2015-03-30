@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * fmgr.h
@@ -21,6 +22,8 @@
 /* We don't want to include primnodes.h here, so make some stub references */
 typedef struct Node *fmNodePtr;
 typedef struct Aggref *fmAggrefPtr;
+typedef struct WindowFunc *fmWindowFuncPtr;
+typedef struct List *fmListPtr;
 
 /* Likewise, avoid including execnodes.h here */
 typedef void (*fmExprContextCallbackFunction) (Datum arg);
@@ -656,10 +659,12 @@ extern void **find_rendezvous_variable(const char *varName);
 extern int AggCheckCallContext(FunctionCallInfo fcinfo,
 					MemoryContext *aggcontext);
 extern fmAggrefPtr AggGetAggref(FunctionCallInfo fcinfo);
+extern fmWindowFuncPtr AggGetWindowFunc(FunctionCallInfo fcinfo);
 extern MemoryContext AggGetTempMemoryContext(FunctionCallInfo fcinfo);
 extern void AggRegisterCallback(FunctionCallInfo fcinfo,
 					fmExprContextCallbackFunction func,
 					Datum arg);
+extern Oid AggGetInitialArgType(FunctionCallInfo fcinfo);
 
 /*
  * We allow plugin modules to hook function entry/exit.  This is intended

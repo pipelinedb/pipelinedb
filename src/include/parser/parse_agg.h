@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * parse_agg.h
@@ -23,7 +24,7 @@ extern void transformWindowFuncCall(ParseState *pstate, WindowFunc *wfunc,
 
 extern void parseCheckAggregates(ParseState *pstate, Query *qry);
 
-extern int	get_aggregate_argtypes(Aggref *aggref, Oid *inputTypes);
+extern int	get_aggregate_argtypes(Aggref *agg, Oid *inputTypes);
 
 extern Oid resolve_aggregate_transtype(Oid aggfuncid,
 							Oid aggtranstype,
