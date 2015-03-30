@@ -43,10 +43,8 @@ bloom_out(PG_FUNCTION_ARGS)
 static BloomFilter *
 bloom_startup(FunctionCallInfo fcinfo, float8 p, uint64_t n)
 {
-	Aggref *aggref = AggGetAggref(fcinfo);
-	TargetEntry *te = (TargetEntry *) linitial(aggref->args);
 	BloomFilter *bloom;
-	Oid type = exprType((Node *) te->expr);
+	Oid type = AggGetInitialArgType(fcinfo);
 
 	fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
 

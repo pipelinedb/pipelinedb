@@ -156,6 +156,9 @@ typedef struct WindowStatePerAggData
 
 	/* Data local to eval_windowaggregates() */
 	bool		restart;		/* need to restart this agg in this cycle? */
+
+	/* WindowFunc that this working state belongs to */
+	WindowFunc *wfunc;
 } WindowStatePerAggData;
 
 static void initialize_windowaggregate(WindowAggState *winstate,
@@ -342,8 +345,10 @@ advance_windowaggregate(WindowAggState *winstate,
 	fcinfo->arg[0] = peraggstate->transValue;
 	fcinfo->argnull[0] = peraggstate->transValueIsNull;
 	winstate->curaggcontext = peraggstate->aggcontext;
+	winstate->curperagg = peraggstate;
 	newVal = FunctionCallInvoke(fcinfo);
 	winstate->curaggcontext = NULL;
+	winstate->curperagg = NULL;
 
 	/*
 	 * Moving-aggregate transition functions must not return null, see
@@ -370,14 +375,17 @@ advance_windowaggregate(WindowAggState *winstate,
 	if (!peraggstate->transtypeByVal &&
 		DatumGetPointer(newVal) != DatumGetPointer(peraggstate->transValue))
 	{
-		if (!fcinfo->isnull)
+		if (!fcinfo->isnull &&
+				!MemoryContextContains(peraggstate->aggcontext, (void *) DatumGetPointer(newVal)))
 		{
 			MemoryContextSwitchTo(peraggstate->aggcontext);
 			newVal = datumCopy(newVal,
 							   peraggstate->transtypeByVal,
 							   peraggstate->transtypeLen);
 		}
-		if (!peraggstate->transValueIsNull)
+
+		if (!peraggstate->transValueIsNull &&
+				MemoryContextContains(CurrentMemoryContext, (void *) DatumGetPointer(peraggstate->transValue)))
 			pfree(DatumGetPointer(peraggstate->transValue));
 	}
 
@@ -498,8 +506,10 @@ advance_windowaggregate_base(WindowAggState *winstate,
 	fcinfo->arg[0] = peraggstate->transValue;
 	fcinfo->argnull[0] = peraggstate->transValueIsNull;
 	winstate->curaggcontext = peraggstate->aggcontext;
+	winstate->curperagg = peraggstate;
 	newVal = FunctionCallInvoke(fcinfo);
 	winstate->curaggcontext = NULL;
+	winstate->curperagg = NULL;
 
 	/*
 	 * If the function returns NULL, report failure, forcing a restart.
@@ -1966,6 +1976,7 @@ ExecInitWindowAgg(WindowAgg *node, EState *estate, int eflags)
 			peraggstate = &winstate->peragg[aggno];
 			initialize_peragg(winstate, wfunc, peraggstate);
 			peraggstate->wfuncno = wfuncno;
+			peraggstate->wfunc = wfunc;
 		}
 		else
 		{
@@ -2829,4 +2840,26 @@ WinGetFuncArgCurrent(WindowObject winobj, int argno, bool *isnull)
 	econtext->ecxt_outertuple = winstate->ss.ss_ScanTupleSlot;
 	return ExecEvalExpr((ExprState *) list_nth(winobj->argstates, argno),
 						econtext, isnull, NULL);
+}
+
+/*
+ * AggGetWindowFunc - allow a window aggregate support function to get its WindowFunc
+ *
+ * If the function is being called as an aggregate support function,
+ * return the WindowFunc node for the aggregate call.  Otherwise, return NULL.
+
+ * Note that if an aggregate is not being used as a window function, this will
+ * return NULL. The analog for non-windowed functions is nodeAgg.c:AggGetAggref.
+ */
+WindowFunc *
+AggGetWindowFunc(FunctionCallInfo fcinfo)
+{
+	if (fcinfo->context && IsA(fcinfo->context, WindowAggState))
+	{
+		WindowStatePerAgg curperagg = ((WindowAggState *) fcinfo->context)->curperagg;
+
+		if (curperagg)
+			return curperagg->wfunc;
+	}
+	return NULL;
 }

@@ -31,6 +31,7 @@ typedef struct CQAnalyzeContext
 	List *windows;
 	int location;
 	char *stepSize;
+	List *combines;
 } CQAnalyzeContext;
 
 #define USER_COMBINE "combine"
@@ -63,7 +64,7 @@ bool HasAggOrGroupBy(SelectStmt *stmt);
 bool AddStreams(Node *node, CQAnalyzeContext *context);
 List *pipeline_rewrite(List *raw_parsetree_list);
 Query *RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex);
-
+bool CollectUserCombines(Node *node, CQAnalyzeContext *context);
 bool SelectsFromStreamOnly(SelectStmt *stmt);
 
 #endif
