@@ -52,10 +52,8 @@ gcs_out(PG_FUNCTION_ARGS)
 static GolombCodedSet *
 gcs_startup(FunctionCallInfo fcinfo, float8 p, uint64_t n)
 {
-	Aggref *aggref = AggGetAggref(fcinfo);
-	TargetEntry *te = (TargetEntry *) linitial(aggref->args);
 	GolombCodedSet *gcs;
-	Oid type = exprType((Node *) te->expr);
+	Oid type = AggGetInitialArgType(fcinfo);
 
 	fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
 

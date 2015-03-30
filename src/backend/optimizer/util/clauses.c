@@ -2408,6 +2408,13 @@ eval_const_expressions_mutator(Node *node,
 				WindowFunc *newexpr;
 
 				/*
+				 * combine arguments will always be a single column
+				 * so there's nothing else to do for them here.
+				 */
+				if (AGGKIND_IS_USER_COMBINE(expr->winaggkind))
+					return (Node *) expr;
+
+				/*
 				 * We can't really simplify a WindowFunc node, but we mustn't
 				 * just fall through to the default processing, because we
 				 * have to apply expand_function_arguments to its argument

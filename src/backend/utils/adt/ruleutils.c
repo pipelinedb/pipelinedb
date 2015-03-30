@@ -7746,12 +7746,14 @@ get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context)
 	int			nargs;
 	List	   *argnames;
 	ListCell   *l;
+	char 		*funcname;
 
 	if (list_length(wfunc->args) > FUNC_MAX_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_TOO_MANY_ARGUMENTS),
 				 errmsg("too many arguments")));
 	nargs = 0;
+
 	argnames = NIL;
 	foreach(l, wfunc->args)
 	{
@@ -7763,10 +7765,15 @@ get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context)
 		nargs++;
 	}
 
-	appendStringInfo(buf, "%s(",
-					 generate_function_name(wfunc->winfnoid, nargs,
-											argnames, argtypes,
-											false, NULL));
+	if (AGGKIND_IS_USER_COMBINE(wfunc->winaggkind))
+		funcname = USER_COMBINE;
+	else
+		funcname = generate_function_name(wfunc->winfnoid, nargs,
+								argnames, argtypes,
+								false, NULL);
+
+	appendStringInfo(buf, "%s(", funcname);
+
 	/* winstar can be set only in zero-argument aggregates */
 	if (wfunc->winstar)
 		appendStringInfoChar(buf, '*');

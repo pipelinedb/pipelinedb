@@ -1865,6 +1865,9 @@ typedef struct WindowAggState
 	TupleTableSlot *agg_row_slot;
 	TupleTableSlot *temp_slot_1;
 	TupleTableSlot *temp_slot_2;
+
+	/* currently active aggregate */
+	WindowStatePerAgg curperagg;
 } WindowAggState;
 
 /* ----------------

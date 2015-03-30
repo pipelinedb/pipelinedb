@@ -539,8 +539,32 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 		if (IsA(n, Aggref))
 		{
 			Aggref *agg = (Aggref *) n;
-			agg->aggkind = AGGKIND_USER_COMBINE;
-			transformAggregateCall(pstate, agg, args, order, false);
+
+			if (over)
+			{
+				/*
+				 * We're doing a windowed combine over a non-windowed aggregate, so
+				 * we need to transform the regular agg into a windowed agg.
+				 */
+				WindowFunc *wfunc = makeNode(WindowFunc);
+
+				wfunc->winfnoid = agg->aggfnoid;
+				wfunc->wintype = agg->aggtype;
+				wfunc->args = args;
+				wfunc->winstar = agg->aggstar;
+				wfunc->winagg = true;
+				wfunc->aggfilter = agg->aggfilter;
+				wfunc->winaggkind = AGGKIND_USER_COMBINE;
+
+				transformWindowFuncCall(pstate, wfunc, over);
+
+				return (Node *) wfunc;
+			}
+			else
+			{
+				agg->aggkind = AGGKIND_USER_COMBINE;
+				transformAggregateCall(pstate, agg, args, order, false);
+			}
 		}
 		else if (IsA(n, WindowFunc))
 		{
@@ -946,6 +970,31 @@ HasAggOrGroupBy(SelectStmt *stmt)
 	}
 
 	return false;
+}
+
+/*
+ * CollectUserCombines
+ *
+ * Collect all combine aggregate calls
+ */
+bool
+CollectUserCombines(Node *node, CQAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, Aggref))
+	{
+		if (AGGKIND_IS_USER_COMBINE(((Aggref *) node)->aggkind))
+			context->combines = lappend(context->combines, node);
+	}
+	else if (IsA(node, WindowFunc))
+	{
+		if (AGGKIND_IS_USER_COMBINE(((WindowFunc *) node)->winaggkind))
+			context->combines = lappend(context->combines, node);
+	}
+
+	return expression_tree_walker(node, CollectUserCombines, context);
 }
 
 /*
@@ -1603,11 +1652,11 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 	List *targetlist = NIL;
 	AttrNumber matrelvarno = InvalidAttrNumber;
 	TupleDesc matreldesc;
-	bool needshidden = false;
 	char *matrelname;
 	int i;
 	RangeTblEntry *rte;
 	List *colnames = NIL;
+	CQAnalyzeContext context;
 
 	/* try to bail early because this gets called from a hot path */
 	if (!IsAContinuousView(rv))
@@ -1636,21 +1685,13 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 	targets = pull_var_clause((Node *) query->targetList,
 			PVC_INCLUDE_AGGREGATES, PVC_INCLUDE_PLACEHOLDERS);
 
-	/* pull out all the user combine aggregates */
-	foreach(lc, targets)
-	{
-		Node *n = (Node *) lfirst(lc);
-		if (IsA(n, Aggref) && AGGKIND_IS_USER_COMBINE(((Aggref *) n)->aggkind))
-		{
-			needshidden = true;
-			break;
-		}
-	}
+	context.combines = NIL;
+	CollectUserCombines((Node *) query->targetList, &context);
 
-	if (!needshidden)
+	if (!context.combines)
 		return rule;
 
-	/* we have user combines, so expose hidden columns */
+	/* we're scanning a matrel, so include hidden columns */
 	for (i=0; i<matreldesc->natts; i++)
 	{
 		Var *tev;

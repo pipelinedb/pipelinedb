@@ -42,10 +42,8 @@ hll_out(PG_FUNCTION_ARGS)
 static HyperLogLog *
 hll_startup(FunctionCallInfo fcinfo, int p)
 {
-	Aggref *aggref = AggGetAggref(fcinfo);
-	TargetEntry *te = (TargetEntry *) linitial(aggref->args);
 	HyperLogLog *hll;
-	Oid type = exprType((Node *) te->expr);
+	Oid type = AggGetInitialArgType(fcinfo);
 
 	fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
 

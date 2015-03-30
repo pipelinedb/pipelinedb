@@ -21,7 +21,6 @@ extern TupleTableSlot *ExecAgg(AggState *node);
 extern void ExecEndAgg(AggState *node);
 extern void ExecReScanAgg(AggState *node);
 extern void ExecEndBatchAgg(AggState *node);
-
 extern Size hash_agg_entry_size(int numAggs);
 extern void build_hash_table(AggState *aggstate);
 
