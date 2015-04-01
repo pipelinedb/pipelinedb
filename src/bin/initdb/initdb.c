@@ -2934,8 +2934,8 @@ check_authmethod_unspecified(const char **authmethod)
 	if (*authmethod == NULL || strlen(*authmethod) == 0)
 	{
 		authwarning = _("\nWARNING: enabling \"trust\" authentication for local connections\n"
-						"You can change this by editing pipeline-hba.conf or using the option -A, or\n"
-			"--auth-local and --auth-host, the next time you run initdb.\n");
+						"You can change this by editing pg_hba.conf or using the option -A, or\n"
+			"--auth-local and --auth-host, the next time you run pipeline-init.\n");
 		*authmethod = "trust";
 	}
 }
