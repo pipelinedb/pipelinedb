@@ -994,8 +994,6 @@ typedef struct JoinPath
 
 typedef JoinPath NestPath;
 
-typedef JoinPath StreamTableJoinPath;
-
 /*
  * A mergejoin path has these fields.
  *
@@ -1048,6 +1046,8 @@ typedef struct HashPath
 	List	   *path_hashclauses;		/* join clauses used for hashing */
 	int			num_batches;	/* number of batches expected */
 } HashPath;
+
+typedef HashPath StreamTableJoinPath;
 
 /*
  * Restriction clause info.

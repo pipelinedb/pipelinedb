@@ -2133,6 +2133,8 @@ create_tuplestore_scan_path(RelOptInfo *parent)
  * 'inner_path' is the cheapest inner path
  * 'restrict_clauses' are the RestrictInfo nodes to apply at the join
  * 'required_outer' is the set of required outer rels
+ * 'hashclauses' are the RestrictInfo nodes to use as hash clauses
+ *		(this should be a subset of the restrict_clauses list)
  */
 StreamTableJoinPath *
 create_stream_table_join_path(PlannerInfo *root,
@@ -2141,20 +2143,22 @@ create_stream_table_join_path(PlannerInfo *root,
 		 Path *outer_path,
 		 Path *inner_path,
 		 List *restrict_clauses,
-		 Relids required_outer)
+		 Relids required_outer,
+		 List *hash_clauses)
 {
 	StreamTableJoinPath *pathnode = makeNode(StreamTableJoinPath);
 
-	pathnode->path.pathtype = T_StreamTableJoin;
-	pathnode->path.parent = joinrel;
-	pathnode->path.param_info = get_baserel_parampathinfo(root, joinrel,
+	pathnode->jpath.path.pathtype = T_StreamTableJoin;
+	pathnode->jpath.path.parent = joinrel;
+	pathnode->jpath.path.param_info = get_baserel_parampathinfo(root, joinrel,
 													 required_outer);
-	pathnode->path.pathkeys = NIL;
-	pathnode->path.startup_cost = 0;
-	pathnode->path.total_cost = 0;
-	pathnode->outerjoinpath = outer_path;
-	pathnode->innerjoinpath = inner_path;
-	pathnode->joinrestrictinfo = restrict_clauses;
+	pathnode->jpath.path.pathkeys = NIL;
+	pathnode->jpath.path.startup_cost = 0;
+	pathnode->jpath.path.total_cost = 0;
+	pathnode->jpath.outerjoinpath = outer_path;
+	pathnode->jpath.innerjoinpath = inner_path;
+	pathnode->jpath.joinrestrictinfo = restrict_clauses;
+	pathnode->path_hashclauses = hash_clauses;
 
 	return pathnode;
 }

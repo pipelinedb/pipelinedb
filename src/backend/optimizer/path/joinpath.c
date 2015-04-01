@@ -51,7 +51,9 @@ static List *select_mergejoin_clauses(PlannerInfo *root,
 						 List *restrictlist,
 						 JoinType jointype,
 						 bool *mergejoin_allowed);
-
+static inline bool
+clause_sides_match_join(RestrictInfo *rinfo, RelOptInfo *outerrel,
+						RelOptInfo *innerrel);
 
 /*
  * add_paths_to_joinrel
@@ -103,8 +105,35 @@ add_paths_to_joinrel(PlannerInfo *root,
 		Path *innerpath = innerrel->cheapest_total_path;
 		Relids requiredouter = calc_non_nestloop_required_outer(outerpath, innerpath);
 
+		ListCell *lc;
+		List *hashclauses = NIL;
+
+		foreach(lc, restrictlist)
+		{
+			RestrictInfo *restrictinfo = (RestrictInfo *) lfirst(lc);
+
+			/*
+			 * If processing an outer join, only use its own join clauses for
+			 * hashing.  For inner joins we need not be so picky.
+			 */
+			if (IS_OUTER_JOIN(jointype) && restrictinfo->is_pushed_down)
+				continue;
+
+			if (!restrictinfo->can_join ||
+				restrictinfo->hashjoinoperator == InvalidOid)
+				continue;			/* not hashjoinable */
+
+			/*
+			 * Check if clause has the form "outer op inner" or "inner op outer".
+			 */
+			if (!clause_sides_match_join(restrictinfo, outerrel, innerrel))
+				continue;			/* no good for these input relations */
+
+			hashclauses = lappend(hashclauses, restrictinfo);
+		}
+
 		path = create_stream_table_join_path(root, joinrel, jointype,
-				outerpath, innerpath, restrictlist, requiredouter);
+				outerpath, innerpath, restrictlist, requiredouter, hashclauses);
 
 		add_path(joinrel, (Path *) path);
 
