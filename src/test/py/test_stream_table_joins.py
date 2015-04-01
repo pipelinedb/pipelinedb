@@ -148,10 +148,11 @@ def test_join_ordering(pipeline, clean_db):
     ordering1 = _generate_rows(num_cols, 64)
     s = _generate_rows(num_cols, 64)
 
-    pipeline.activate()
-
     _insert(pipeline, 'ordering0', ordering0, 0.1)
     _insert(pipeline, 'ordering1', ordering1, 0.1)
+    
+    pipeline.activate()
+
     _insert(pipeline, 'stream', s)
 
     pipeline.deactivate()
