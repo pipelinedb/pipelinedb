@@ -137,7 +137,8 @@ extern StreamTableJoinPath *create_stream_table_join_path(PlannerInfo *root,
 					Path *outer_path,
 					Path *inner_path,
 					List *restrict_clauses,
-					Relids required_outer);
+					Relids required_outer,
+					List *hash_clauses);
 
 /*
  * prototypes for relnode.c
