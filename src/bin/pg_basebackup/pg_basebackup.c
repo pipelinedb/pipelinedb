@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pg_basebackup.c - receive a base backup using streaming replication protocol
@@ -55,7 +56,7 @@ static char *basedir = NULL;
 static TablespaceList tablespace_dirs = {NULL, NULL};
 static char *xlog_dir = "";
 static char format = 'p';		/* p(lain)/t(ar) */
-static char *label = "pg_basebackup base backup";
+static char *label = "pipeline-basebackup base backup";
 static bool showprogress = false;
 static int	verbose = 0;
 static int	compresslevel = 0;
