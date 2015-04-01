@@ -27,7 +27,7 @@ INSERT INTO test_stj_t0 (tid, data, val) VALUES (7, '[0, 1]', -6.7);
 INSERT INTO test_stj_t0 (tid, data, val) VALUES (7, '"0"', -6.7);
 INSERT INTO test_stj_t0 (tid, data, val) VALUES (7, '"1"', -6.7);
 
-SELECT pg_sleep(0.1);
+SELECT pg_sleep(0.5);
 
 INSERT INTO test_stj_stream (id, data) VALUES (0, '[0, 1]');
 INSERT INTO test_stj_stream (id, data) VALUES (0, '{"key": 4}');
@@ -64,7 +64,7 @@ INSERT INTO test_stj_t1 (jid, data) VALUES ('[]', '[{}, {}]');
 INSERT INTO test_stj_t1 (jid, data) VALUES ('"0"', '[[]]');
 INSERT INTO test_stj_t1 (jid, data) VALUES ('"1"', '[32, 64, 128]');
 
-SELECT pg_sleep(0.1);
+SELECT pg_sleep(0.5);
 
 INSERT INTO test_stj_stream (id, data) VALUES (0, '[0, 1]');
 INSERT INTO test_stj_stream (id, data) VALUES (0, '{"key": 4}');
@@ -94,7 +94,7 @@ INSERT INTO test_stj_stream (id, val) VALUES (1, -202.2);
 INSERT INTO test_stj_stream (id, val) VALUES (4, 2000.201);
 INSERT INTO test_stj_t2 (id, str, val) VALUES (5, 'joined', 52.0);
 
-SELECT pg_sleep(0.1);
+SELECT pg_sleep(0.5);
 
 INSERT INTO test_stj_stream (id, val) VALUES (5, 0.52);
 
@@ -110,7 +110,7 @@ ACTIVATE test_stj6;
 INSERT INTO test_stj_t3 (col0, col1, col2, col3) VALUES (0, 0, 0, 42);
 INSERT INTO test_stj_t3 (col0, col1, col2, col3) VALUES (0, 1, 1, 1000);
 
-SELECT pg_sleep(0.1);
+SELECT pg_sleep(0.5);
 
 INSERT INTO test_stj_stream (col0, col1, col2) VALUES (400, 1, 0);
 INSERT INTO test_stj_stream (col0, col1, col2) VALUES (0, 0, 0);
