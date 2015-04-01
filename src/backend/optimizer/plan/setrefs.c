@@ -1288,7 +1288,7 @@ set_join_references(PlannerInfo *root, Join *join, int rtoffset)
 										 (Index) 0,
 										 rtoffset);
 	}
-	else if (IsA(join, HashJoin))
+	else if (IsA(join, HashJoin) || IsA(join, StreamTableJoin))
 	{
 		HashJoin   *hj = (HashJoin *) join;
 

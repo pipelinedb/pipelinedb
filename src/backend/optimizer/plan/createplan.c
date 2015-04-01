@@ -2644,21 +2644,17 @@ create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
 
 	StreamTableJoin *node = makeNode(StreamTableJoin);
 	Plan *plan = &node->join.plan;
-
-	List *joinrestrictclauses = best_path->joinrestrictinfo;
+	List *joinrestrictclauses = best_path->jpath.joinrestrictinfo;
 	List *joinclauses;
 	List *otherclauses;
-	Relids outerrelids;
-	List *params;
-	ListCell *lc;
-	ListCell *prev;
-	ListCell *next;
+	Hash *hash_plan;
+	List *hashclauses;
 
 	joinrestrictclauses = order_qual_clauses(root, joinrestrictclauses);
 
 	/* Get the join qual clauses (in plain expression form) */
 	/* Any pseudoconstant clauses are ignored here */
-	if (IS_OUTER_JOIN(best_path->jointype))
+	if (IS_OUTER_JOIN(best_path->jpath.jointype))
 	{
 		extract_actual_join_clauses(joinrestrictclauses,
 									&joinclauses, &otherclauses);
@@ -2670,8 +2666,14 @@ create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
 		otherclauses = NIL;
 	}
 
-	/* Replace any outer-relation variables with nestloop params */
-	if (best_path->path.param_info)
+	hashclauses = get_actual_clauses(best_path->path_hashclauses);
+	joinclauses = list_difference(joinclauses, hashclauses);
+
+	/*
+	 * Replace any outer-relation variables with nestloop params.  There
+	 * should not be any in the hashclauses.
+	 */
+	if (best_path->jpath.path.param_info)
 	{
 		joinclauses = (List *)
 			replace_nestloop_params(root, (Node *) joinclauses);
@@ -2680,46 +2682,27 @@ create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
 	}
 
 	/*
-	 * Identify any parameters that should be supplied by this join
-	 * node, and move them from root->curOuterParams to the nestParams list.
+	 * Rearrange hashclauses, if needed, so that the outer variable is always
+	 * on the left.
 	 */
-	outerrelids = best_path->outerjoinpath->parent->relids;
-	params = NIL;
-	for (lc = list_head(root->curOuterParams); lc; lc = next)
-	{
-		NestLoopParam *nlp = (NestLoopParam *) lfirst(lc);
+	hashclauses = get_switched_clauses(best_path->path_hashclauses,
+							 best_path->jpath.innerjoinpath->parent->relids);
 
-		next = lnext(lc);
-		if (IsA(nlp->paramval, Var) &&
-			bms_is_member(nlp->paramval->varno, outerrelids))
-		{
-			root->curOuterParams = list_delete_cell(root->curOuterParams, lc, prev);
-			params = lappend(params, nlp);
-		}
-		else if (IsA(nlp->paramval, PlaceHolderVar) &&
-				 bms_overlap(((PlaceHolderVar *) nlp->paramval)->phrels,
-							 outerrelids) &&
-				 bms_is_subset(find_placeholder_info(root,
-											(PlaceHolderVar *) nlp->paramval,
-													 false)->ph_eval_at,
-							   outerrelids))
-		{
-			root->curOuterParams = list_delete_cell(root->curOuterParams, lc, prev);
-			params = lappend(params, nlp);
-		}
-		else
-		{
-			prev = lc;
-		}
-	}
+	/* We don't want any excess columns in the hashed tuples */
+	disuse_physical_tlist(root, inner_plan, best_path->jpath.innerjoinpath);
 
-	plan->targetlist = build_path_tlist(root, &best_path->path);
+	/*
+	 * Build the hash node and hash join node.
+	 */
+	hash_plan = make_hash(outer_plan, 0, 0, 0, 0, 0);
+
+	plan->targetlist = build_path_tlist(root, &best_path->jpath.path);
 	plan->qual = otherclauses;
 	plan->lefttree = inner_plan;
-	plan->righttree = outer_plan;
-	node->join.jointype = best_path->jointype;
+	plan->righttree = (Plan *) hash_plan;
+	node->join.jointype = best_path->jpath.jointype;
 	node->join.joinqual = joinclauses;
-	node->nestParams = params;
+	node->hashclauses = hashclauses;
 
 	return node;
 }
