@@ -18,6 +18,7 @@
 #include "utils/resowner.h"
 
 extern int combiner_work_mem;
+extern int combiner_synchronous_commit;
 
 void ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc *queryDesc, ResourceOwner owner);
 
