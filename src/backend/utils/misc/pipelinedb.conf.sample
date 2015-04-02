@@ -593,12 +593,18 @@
 #restart_after_crash = on		# reinitialize after backend crash?
 
 #------------------------------------------------------------------------------
-# STREAMS/EVENTS OPTIONS
+# CONTINUOUS VIEW OPTIONS
 #------------------------------------------------------------------------------
 
-#stream_buffer_size = 128MB
-#debug_print_stream_buffer = on
-#debug_sync_stream_insert = off
+#tuple_buffer_blocks = 128MB  # size of the buffer for storing unread
+                              # stream tuples
+#empty_tuple_buffer_wait_time = 250   # time in milliseconds that continuous
+                                      # queries will keep trying to read from
+                                      # an empty tuple buffer before sleeping
+#combiner_synchronous_commit = off # synchronization level for combiner
+                                   # commits; off, local, remote_write, or on
+#combiner_work_mem = 256MB  # maximum amount of memory to use for combiner
+                            # query executions
 
 #------------------------------------------------------------------------------
 # CONFIG FILE INCLUDES

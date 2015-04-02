@@ -2594,7 +2594,7 @@ static struct config_int ConfigureNamesInt[] =
 		{"empty_tuple_buffer_wait_time", PGC_BACKEND, RESOURCES_MEM,
 			gettext_noop("Time in milliseconds that the continuous query process spins on an empty tuple buffer before sleeping."),
 			NULL,
-			GUC_UNIT_S
+			GUC_UNIT_MS
 		},
 		&empty_tuple_buffer_wait_time,
 		250, 0, INT_MAX,
@@ -3572,6 +3572,16 @@ static struct config_enum ConfigureNamesEnum[] =
 		&huge_pages,
 		HUGE_PAGES_TRY, huge_pages_options,
 		NULL, NULL, NULL
+	},
+
+	{
+		{"combiner_synchronous_commit", PGC_USERSET, WAL_SETTINGS,
+			gettext_noop("Sets the transaction synchronization level for combiner commits."),
+			NULL
+		},
+		&combiner_synchronous_commit,
+		SYNCHRONOUS_COMMIT_OFF, synchronous_commit_options,
+		NULL, assign_synchronous_commit, NULL
 	},
 
 	/* End-of-list marker */
