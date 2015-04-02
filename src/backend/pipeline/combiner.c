@@ -48,6 +48,7 @@
 static TupleBufferReader *reader = NULL;
 
 int combiner_work_mem = 16384;
+int combiner_synchronous_commit = SYNCHRONOUS_COMMIT_OFF;
 
 /*
  * receive_tuple
@@ -568,6 +569,7 @@ retry:
 
 			if (count > 0 && (count == batchsize || force))
 			{
+				SyncCommitLevel save = synchronous_commit;
 				/*
 				 * Start/CommitTransactionCommand put us in TopTransactionContext,
 				 * so we need to immediately switch back to the combine context
@@ -577,7 +579,11 @@ retry:
 
 				combine(combineplan, workerdesc, store, tmpctx);
 
+				/* commit asynchronously for better performance */
+				synchronous_commit = combiner_synchronous_commit;
 				CommitTransactionCommand();
+				synchronous_commit = save;
+
 				MemoryContextSwitchTo(combinectx);
 
 				TupleBufferClearPinnedSlots();
