@@ -5340,6 +5340,25 @@ DESCR("golomb-coded set contains item?");
 DATA(insert OID = 4366 (gcs_send PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "5042" _null_ _null_ _null_ _null_ gcs_send _null_ _null_ _null_ ));
 DESCR("golomb-coded set serialize");
 
+/* date truncation convenience functions */
+DATA(insert OID = 4367 (  year	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 1184 "1184" _null_ _null_ _null_ _null_ timestamptz_year _null_ _null_ _null_ ));
+DESCR("truncate timestamp with time zone to year");
+
+DATA(insert OID = 4368 (  month	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 1184 "1184" _null_ _null_ _null_ _null_ timestamptz_month _null_ _null_ _null_ ));
+DESCR("truncate timestamp with time zone to month");
+
+DATA(insert OID = 4369 (  day	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 1184 "1184" _null_ _null_ _null_ _null_ timestamptz_day _null_ _null_ _null_ ));
+DESCR("truncate timestamp with time zone to day");
+
+DATA(insert OID = 4370 (  hour	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 1184 "1184" _null_ _null_ _null_ _null_ timestamptz_hour _null_ _null_ _null_ ));
+DESCR("truncate timestamp with time zone to hour");
+
+DATA(insert OID = 4371 (  minute	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 1184 "1184" _null_ _null_ _null_ _null_ timestamptz_minute _null_ _null_ _null_ ));
+DESCR("truncate timestamp with time zone to minute");
+
+DATA(insert OID = 4372 (  second	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 1184 "1184" _null_ _null_ _null_ _null_ timestamptz_second _null_ _null_ _null_ ));
+DESCR("truncate timestamp with time zone to second");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
