@@ -187,7 +187,7 @@ SELECT gc FROM pipeline_query WHERE name='cqcreate5';
 --------+--------+-----------+---------+-------------
  count  | bigint |           | plain   | 
 View definition:
- SELECT combine(cqcreate6_mrel0.count) AS count
+ SELECT combine(cqcreate6_mrel0.1) AS count
    FROM cqcreate6_mrel0
   WHERE cqcreate6_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second)
   GROUP BY cqcreate6_mrel0._1;
@@ -372,7 +372,7 @@ CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM st
  value  | bigint  |           | plain    | 
 View definition:
  SELECT cqaggexpr3_mrel0.key,
-    combine(cqaggexpr3_mrel0.value) AS value
+    combine(cqaggexpr3_mrel0.2) AS value
    FROM cqaggexpr3_mrel0
   WHERE cqaggexpr3_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second)
   GROUP BY cqaggexpr3_mrel0.key;

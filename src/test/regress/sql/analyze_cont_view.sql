@@ -153,6 +153,19 @@ CREATE CONTINUOUS VIEW cqanalyze52 AS SELECT g::integer, percentile_cont(ARRAY[0
 
 CREATE CONTINUOUS VIEW cqanalyze53 AS SELECT percentile_cont(0.1) WITHIN GROUP (ORDER BY x::float + y::integer) FROM stream WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
 
+CREATE CONTINUOUS VIEW over_1m AS
+SELECT date_trunc('minute', t::timestamptz) AS minute, avg(queue_length::float) AS load_avg
+FROM sysstat
+WHERE arrival_timestamp > clock_timestamp() - interval '1 hour'
+GROUP BY minute;
+
+CREATE OR REPLACE VIEW over_5m AS
+SELECT first_value(minute) OVER w AS minute, combine(load_avg) OVER w AS load_avg
+FROM over_1m
+WINDOW w AS (ORDER BY minute DESC ROWS 4 PRECEDING);
+
+\d+ over_5m;
+
 DROP CONTINUOUS VIEW cqanalyze0;
 DROP CONTINUOUS VIEW cqanalyze1;
 DROP CONTINUOUS VIEW cqanalyze2;
