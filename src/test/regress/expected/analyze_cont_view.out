@@ -188,6 +188,27 @@ HINT:  No function matches the given name and argument types. You might need to 
 -- Sliding windows
 CREATE CONTINUOUS VIEW cqanalyze52 AS SELECT g::integer, percentile_cont(ARRAY[0.2, 0.8]) WITHIN GROUP (ORDER BY x::float), percentile_cont(0.9) WITHIN GROUP (ORDER BY y::integer) + percentile_cont(0.1) WITHIN GROUP (ORDER BY z::numeric) AS col FROM stream WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes') GROUP BY g;
 CREATE CONTINUOUS VIEW cqanalyze53 AS SELECT percentile_cont(0.1) WITHIN GROUP (ORDER BY x::float + y::integer) FROM stream WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
+CREATE CONTINUOUS VIEW over_1m AS
+SELECT date_trunc('minute', t::timestamptz) AS minute, avg(queue_length::float) AS load_avg
+FROM sysstat
+WHERE arrival_timestamp > clock_timestamp() - interval '1 hour'
+GROUP BY minute;
+CREATE OR REPLACE VIEW over_5m AS
+SELECT first_value(minute) OVER w AS minute, combine(load_avg) OVER w AS load_avg
+FROM over_1m
+WINDOW w AS (ORDER BY minute DESC ROWS 4 PRECEDING);
+\d+ over_5m;
+                          View "public.over_5m"
+  Column  |           Type           | Modifiers | Storage | Description 
+----------+--------------------------+-----------+---------+-------------
+ minute   | timestamp with time zone |           | plain   | 
+ load_avg | double precision         |           | plain   | 
+View definition:
+ SELECT first_value(over_1m.minute) OVER w AS minute,
+    combine(over_1m.3) OVER w AS load_avg
+   FROM over_1m
+  WINDOW w AS (ORDER BY over_1m.minute DESC ROWS 4 PRECEDING);
+
 DROP CONTINUOUS VIEW cqanalyze0;
 DROP CONTINUOUS VIEW cqanalyze1;
 DROP CONTINUOUS VIEW cqanalyze2;
