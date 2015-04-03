@@ -103,6 +103,7 @@ typedef struct
 	int			wrapColumn;		/* max line length, or -1 for no limit */
 	int			indentLevel;	/* current indent level for prettyprint */
 	bool		varprefix;		/* TRUE to print prefixes on Vars */
+	bool		iscombine; 		/* TRUE if a combine aggregate is currently being processed */
 } deparse_context;
 
 /*
@@ -870,6 +871,7 @@ pg_get_triggerdef_worker(Oid trigid, bool pretty)
 		context.prettyFlags = pretty ? PRETTYFLAG_PAREN | PRETTYFLAG_INDENT : PRETTYFLAG_INDENT;
 		context.wrapColumn = WRAP_COLUMN_DEFAULT;
 		context.indentLevel = PRETTYINDENT_STD;
+		context.iscombine = false;
 
 		get_rule_expr(qual, &context, false);
 
@@ -2476,6 +2478,7 @@ deparse_expression_pretty(Node *expr, List *dpcontext,
 	context.prettyFlags = prettyFlags;
 	context.wrapColumn = WRAP_COLUMN_DEFAULT;
 	context.indentLevel = startIndent;
+	context.iscombine = false;
 
 	get_rule_expr(expr, &context, showimplicit);
 
@@ -4046,6 +4049,7 @@ make_ruledef(StringInfo buf, HeapTuple ruletup, TupleDesc rulettc,
 		context.prettyFlags = prettyFlags;
 		context.wrapColumn = WRAP_COLUMN_DEFAULT;
 		context.indentLevel = PRETTYINDENT_STD;
+		context.iscombine = false;
 
 		set_deparse_for_query(&dpns, query, NIL);
 
@@ -4197,6 +4201,7 @@ get_query_def(Query *query, StringInfo buf, List *parentnamespace,
 	context.prettyFlags = prettyFlags;
 	context.wrapColumn = wrapColumn;
 	context.indentLevel = startIndent;
+	context.iscombine = false;
 
 	set_deparse_for_query(&dpns, query, parentnamespace);
 
@@ -5610,7 +5615,8 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 	{
 		/* Get column name to use from the colinfo struct */
 		Assert(attnum <= colinfo->num_cols);
-		attname = colinfo->colnames[attnum - 1];
+		if (!context->iscombine)
+			attname = colinfo->colnames[attnum - 1];
 		Assert(attname != NULL);
 	}
 	else
@@ -5624,7 +5630,9 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 		appendStringInfoString(buf, quote_identifier(refname));
 		appendStringInfoChar(buf, '.');
 	}
-	if (attname)
+	if (context->iscombine)
+		appendStringInfo(buf, "%d", attnum);
+	else if (attname)
 		appendStringInfoString(buf, quote_identifier(attname));
 	else
 	{
@@ -7670,10 +7678,15 @@ get_agg_expr(Aggref *aggref, deparse_context *context)
 	nargs = get_aggregate_argtypes(aggref, argtypes);
 
 	if (AGGKIND_IS_USER_COMBINE(aggref->aggkind))
+	{
 		funcname = USER_COMBINE;
+		context->iscombine = true;
+	}
 	else
+	{
 		funcname = generate_function_name(aggref->aggfnoid, nargs,
 				NIL, argtypes, aggref->aggvariadic, &use_variadic);
+	}
 
 	/* Print the aggregate name, schema-qualified if needed */
 	appendStringInfo(buf, "%s(%s", funcname,
@@ -7695,7 +7708,7 @@ get_agg_expr(Aggref *aggref, deparse_context *context)
 	else
 	{
 		/* aggstar can be set only in zero-argument aggregates */
-		if (!AGGKIND_IS_USER_COMBINE(aggref->aggkind) && aggref->aggstar)
+		if (!context->iscombine && aggref->aggstar)
 			appendStringInfoChar(buf, '*');
 		else
 		{
@@ -7732,6 +7745,7 @@ get_agg_expr(Aggref *aggref, deparse_context *context)
 		get_rule_expr((Node *) aggref->aggfilter, context, false);
 	}
 
+	context->iscombine = false;
 	appendStringInfoChar(buf, ')');
 }
 
@@ -7766,16 +7780,21 @@ get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context)
 	}
 
 	if (AGGKIND_IS_USER_COMBINE(wfunc->winaggkind))
+	{
 		funcname = USER_COMBINE;
+		context->iscombine = true;
+	}
 	else
+	{
 		funcname = generate_function_name(wfunc->winfnoid, nargs,
 								argnames, argtypes,
 								false, NULL);
+	}
 
 	appendStringInfo(buf, "%s(", funcname);
 
 	/* winstar can be set only in zero-argument aggregates */
-	if (wfunc->winstar)
+	if (!context->iscombine && wfunc->winstar)
 		appendStringInfoChar(buf, '*');
 	else
 		get_rule_expr((Node *) wfunc->args, context, true);
@@ -7813,6 +7832,8 @@ get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context)
 		 */
 		appendStringInfoString(buf, "(?)");
 	}
+
+	context->iscombine = false;
 }
 
 /* ----------
