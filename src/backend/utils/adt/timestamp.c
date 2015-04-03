@@ -4100,6 +4100,65 @@ timestamptz_trunc(PG_FUNCTION_ARGS)
 	PG_RETURN_TIMESTAMPTZ(result);
 }
 
+static Datum
+timestamptz_truncate_by(const char *units, PG_FUNCTION_ARGS)
+{
+	Datum arg = PG_GETARG_TIMESTAMPTZ(0);
+	Datum result = DirectFunctionCall2(timestamptz_trunc,
+			(Datum) CStringGetTextDatum(units), arg);
+
+	PG_RETURN_TIMESTAMPTZ(result);
+}
+
+/*
+ * Truncate to year
+ */
+Datum
+timestamptz_year(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("year", fcinfo);
+}
+
+/*
+ * Truncate to month
+ */
+Datum timestamptz_month(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("month", fcinfo);
+}
+
+/*
+ * Truncate to day
+ */
+Datum timestamptz_day(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("day", fcinfo);
+}
+
+/*
+ * Truncate to hour
+ */
+Datum timestamptz_hour(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("hour", fcinfo);
+}
+
+/*
+ * Truncate to minute
+ */
+Datum timestamptz_minute(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("minute", fcinfo);
+}
+
+/*
+ * Truncate to second
+ */
+Datum timestamptz_second(PG_FUNCTION_ARGS)
+{
+	return timestamptz_truncate_by("second", fcinfo);
+}
+
 /* interval_trunc()
  * Extract specified field from interval.
  */
