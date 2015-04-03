@@ -199,6 +199,13 @@ extern Datum timestamptz_age(PG_FUNCTION_ARGS);
 extern Datum timestamptz_trunc(PG_FUNCTION_ARGS);
 extern Datum timestamptz_part(PG_FUNCTION_ARGS);
 
+extern Datum timestamptz_year(PG_FUNCTION_ARGS);
+extern Datum timestamptz_month(PG_FUNCTION_ARGS);
+extern Datum timestamptz_day(PG_FUNCTION_ARGS);
+extern Datum timestamptz_hour(PG_FUNCTION_ARGS);
+extern Datum timestamptz_minute(PG_FUNCTION_ARGS);
+extern Datum timestamptz_second(PG_FUNCTION_ARGS);
+
 extern Datum now(PG_FUNCTION_ARGS);
 extern Datum statement_timestamp(PG_FUNCTION_ARGS);
 extern Datum clock_timestamp(PG_FUNCTION_ARGS);
