@@ -21,6 +21,7 @@
 #include "optimizer/pathnode.h"
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
+#include "parser/parse_oper.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqplan.h"
 #include "tcop/tcopprot.h"
@@ -241,15 +242,23 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 				}
 
 				var->varattno = attno;
+				var->vartype = matdesc->attrs[attno - 1]->atttypid;
 				te->expr = (Expr *) var;
 
 				/* Fix grpColIdx to reflect the index in the tuple from worker */
 				if (AttributeNumberIsValid(oldVarAttNo) && oldVarAttNo != var->varattno)
 				{
+					Oid eq;
+
 					for (i = 0; i < agg->numCols; i++)
 					{
-						if (agg->grpColIdx[i] == oldVarAttNo)
-							agg->grpColIdx[i] = var->varattno;
+						if (agg->grpColIdx[i] != oldVarAttNo)
+							continue;
+
+						get_sort_group_operators(exprType((Node *) var),
+								false, true, false, NULL, &eq, NULL, NULL);
+						agg->grpColIdx[i] = var->varattno;
+						agg->grpOperators[i] = eq;
 					}
 				}
 			}
