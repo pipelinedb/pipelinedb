@@ -207,6 +207,61 @@ SELECT * FROM stj_no_tl;
 (1 row)
 
 DEACTIVATE stj_no_tl;
+CREATE TABLE test_stj_location (locid integer);
+CREATE TABLE test_stj_blocks (locid integer, ip inet);
+INSERT INTO test_stj_location (locid) VALUES (42);
+INSERT INTO test_stj_blocks (locid, ip) VALUES (42, '0.0.0.0');
+CREATE CONTINUOUS VIEW test_stj7 AS
+SELECT (test_stj_stream.data::jsonb->>'key')::text, avg((test_stj_stream.data::jsonb->>'value')::decimal), test_stj_location.locid
+FROM test_stj_stream, test_stj_blocks JOIN test_stj_location USING(locid)
+WHERE test_stj_blocks.ip = (test_stj_stream.data::jsonb->>'ip')::inet
+GROUP BY  (test_stj_stream.data::jsonb->>'key')::text, test_stj_location.locid;
+ACTIVATE test_stj7;
+INSERT INTO test_stj_stream (data) VALUES ('{"key": "1", "value": 42.42, "ip": "0.0.0.0"}');
+INSERT INTO test_stj_stream (data) VALUES ('{"key": "1", "value": 420.42, "ip": "0.0.0.0"}');
+INSERT INTO test_stj_stream (data) VALUES ('{"key": "2", "value": 4200.42, "ip": "0.0.0.0"}');
+INSERT INTO test_stj_stream (data) VALUES ('{"key": "2", "value": 42020.42, "ip": "0.0.0.0"}');
+SELECT pg_sleep(0.1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+DEACTIVATE test_stj7;
+SELECT * FROM test_stj7;
+ text |         avg          | locid 
+------+----------------------+-------
+ 1    | 231.4200000000000000 |    42
+ 2    |   23110.420000000000 |    42
+(2 rows)
+
+CREATE CONTINUOUS VIEW test_stj8 AS
+SELECT
+(test_stj_stream.data::jsonb#>>'{header,game}')::text as game,
+(test_stj_stream.data::jsonb#>>'{body,peripheryID}')::text as peripheryID,
+to_timestamp((test_stj_stream.data::jsonb#>>'{body,time}')::int) as created_at,
+avg((test_stj_stream.data::jsonb#>>'{body,avgRoundTripTime}')::decimal) as avgrtt,
+test_stj_location.locid
+FROM test_stj_stream, test_stj_blocks JOIN test_stj_location USING(locid)
+WHERE test_stj_blocks.ip = (test_stj_stream.data::jsonb#>>'{body,clientIP}')::inet
+GROUP BY game, peripheryID, created_at, test_stj_location.locid;
+ACTIVATE test_stj8;
+INSERT INTO test_stj_stream (data) VALUES ('{"header": {"ver": 1, "op_type": 402, "op_asset": null, "spa_id": 6333813, "game": "wot", "creation_time": 1427713483, "reserved1": null, "reserved2": null}, "body": {"peripheryID": 101, "arenaID": 2128201, "arenaGeometryID": 24, "arenaGameplayID": 1, "time": 1427712977, "clientIP": "0.0.0.0", "packetsReceived": 6264, "packetsSent": 5059, "packetsResent": 4, "minRoundTripTime": 0.043896623, "maxRoundTripTime": 0.68855155, "avgRoundTripTime": 10}}');
+INSERT INTO test_stj_stream (data) VALUES ('{"header": {"ver": 1, "op_type": 402, "op_asset": null, "spa_id": 6333813, "game": "wot", "creation_time": 1427713483, "reserved1": null, "reserved2": null}, "body": {"peripheryID": 101, "arenaID": 2128201, "arenaGeometryID": 24, "arenaGameplayID": 1, "time": 1427712977, "clientIP": "0.0.0.0", "packetsReceived": 6264, "packetsSent": 5059, "packetsResent": 4, "minRoundTripTime": 0.043896623, "maxRoundTripTime": 0.68855155, "avgRoundTripTime": 20}}');
+INSERT INTO test_stj_stream (data) VALUES ('{"header": {"ver": 1, "op_type": 402, "op_asset": null, "spa_id": 6333813, "game": "wot", "creation_time": 1427713483, "reserved1": null, "reserved2": null}, "body": {"peripheryID": 101, "arenaID": 2128201, "arenaGeometryID": 24, "arenaGameplayID": 1, "time": 1427712977, "clientIP": "0.0.0.0", "packetsReceived": 6264, "packetsSent": 5059, "packetsResent": 4, "minRoundTripTime": 0.043896623, "maxRoundTripTime": 0.68855155, "avgRoundTripTime": 30}}');
+SELECT pg_sleep(0.1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+DEACTIVATE test_stj8;
+SELECT * FROM test_stj8;
+ game | peripheryid |          created_at          |       avgrtt        | locid 
+------+-------------+------------------------------+---------------------+-------
+ wot  | 101         | Mon Mar 30 03:56:17 2015 PDT | 20.0000000000000000 |    42
+(1 row)
+
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;
@@ -214,8 +269,12 @@ DROP CONTINUOUS VIEW test_stj3;
 DROP CONTINUOUS VIEW test_stj4;
 DROP CONTINUOUS VIEW test_stj5;
 DROP CONTINUOUS VIEW test_stj6;
+DROP CONTINUOUS VIEW test_stj7;
+DROP CONTINUOUS VIEW test_stj8;
 DROP CONTINUOUS VIEW stj_no_tl;
 DROP TABLE test_stj_t0;
 DROP TABLE test_stj_t1;
 DROP TABLE test_stj_t2;
 DROP TABLE test_stj_t3;
+DROP TABLE test_stj_location;
+DROP TABLE test_stj_blocks;

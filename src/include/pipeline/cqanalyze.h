@@ -54,6 +54,7 @@ ResTarget *IsColumnRefInTargetList(List *targetList, Node *node);
 bool IsAColumnRef(Node *node);
 bool AreColumnRefsEqual(Node *cr1, Node *cr2);
 Node *HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context);
+bool IsNodeInTargetList(List *targetlist, Node *node);
 bool CollectFuncs(Node *node, CQAnalyzeContext *context);
 bool CollectAggFuncs(Node *node, CQAnalyzeContext *context);
 ResTarget *CreateResTargetForNode(Node *node);

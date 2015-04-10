@@ -1019,13 +1019,34 @@ add_res_target_to_view(SelectStmt *viewstmt, ResTarget *res)
 }
 
 /*
+ * IsNodeInTargetList
+ */
+bool
+IsNodeInTargetList(List *targetlist, Node *node)
+{
+	ListCell *lc;
+
+	foreach(lc, targetlist)
+	{
+		ResTarget *res = lfirst(lc);
+		if (equal(res->val, node))
+			return true;
+	}
+
+	return false;
+}
+
+/*
  * HoistNode
  */
 Node *
 HoistNode(SelectStmt *stmt, Node *node, CQAnalyzeContext *context)
 {
 	ResTarget *res;
+
 	if (IsAColumnRef(node) && IsColumnRefInTargetList(stmt->targetList, node))
+		return node;
+	else if (IsNodeInTargetList(stmt->targetList, node))
 		return node;
 
 	res = CreateUniqueResTargetForNode(node, context);
