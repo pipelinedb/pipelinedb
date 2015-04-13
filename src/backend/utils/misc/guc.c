@@ -2102,7 +2102,7 @@ static struct config_int ConfigureNamesInt[] =
 			NULL
 		},
 		&CheckPointSegments,
-		3, 1, INT_MAX,
+		100, 1, INT_MAX,
 		NULL, NULL, NULL
 	},
 
@@ -2750,7 +2750,7 @@ static struct config_real ConfigureNamesReal[] =
 			NULL
 		},
 		&CheckPointCompletionTarget,
-		0.5, 0.0, 1.0,
+		1.0, 0.0, 1.0,
 		NULL, NULL, NULL
 	},
 
