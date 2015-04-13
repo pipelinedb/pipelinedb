@@ -648,6 +648,13 @@ _outStreamTableJoin(StringInfo str, const StreamTableJoin *node)
 }
 
 static void
+_outPhysicalGroupLookup(StringInfo str, const PhysicalGroupLookup *node)
+{
+	WRITE_NODE_TYPE("PHYSICALGROUPLOOKUP");
+	_outPlanInfo(str, (const Plan *) node);
+}
+
+static void
 _outAgg(StringInfo str, const Agg *node)
 {
 	int			i;
@@ -2906,6 +2913,9 @@ _outNode(StringInfo str, const void *obj)
 				break;
 			case T_StreamTableJoin:
 				_outStreamTableJoin(str, obj);
+				break;
+			case T_PhysicalGroupLookup:
+				_outPhysicalGroupLookup(str, obj);
 				break;
 			case T_Agg:
 				_outAgg(str, obj);

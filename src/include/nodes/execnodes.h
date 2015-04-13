@@ -1997,4 +1997,14 @@ typedef struct LimitState
 	TupleTableSlot *subSlot;	/* tuple last obtained from subplan */
 } LimitState;
 
+/* ---------------------------
+ *	 PhysicalGroupLookupState
+ * ---------------------------
+ */
+typedef struct PhysicalGroupLookupState
+{
+	PlanState ps;
+	TupleTableSlot *slot;
+} PhysicalGroupLookupState;
+
 #endif   /* EXECNODES_H */
