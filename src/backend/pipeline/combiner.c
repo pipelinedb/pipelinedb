@@ -46,10 +46,43 @@
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 
+/* duration in seconds after which to replan the cached groups retrieval plan */
+#define GROUPS_PLAN_LIFESPAN 10
+
 static TupleBufferReader *reader = NULL;
 
 int combiner_work_mem = 16384;
 int combiner_synchronous_commit = SYNCHRONOUS_COMMIT_OFF;
+
+typedef struct CombineState
+{
+	/* combine plan */
+	PlannedStmt *plan;
+	/* plan for selecting existing groups */
+	PlannedStmt *groupsplan;
+	/* timestamp of the last time groupsplan was generated */
+	TimestampTz lastgroupsplan;
+	/* continuous view this combiner is running for */
+	RangeVar *cv;
+	/* materialization that this combiner is updating */
+	RangeVar *matrel;
+	/* descriptor of the materialization table */
+	TupleDesc cvdesc;
+	/* temporary context for combiner */
+	MemoryContext tmpcontext;
+	/* context that lives for the duration of the combiner proc */
+	MemoryContext context;
+	/* true if the combine plan aggregates */
+	bool isagg;
+	/* slot for combine plan result tuples */
+	TupleTableSlot *resultslot;
+	/* number of attributes the combine plan is grouping on */
+	int ngroupatts;
+	/* attribute numbers that the combine plan is grouping on */
+	AttrNumber *groupatts;
+	/* equality operators for group attributes */
+	Oid *groupops;
+} CombineState;
 
 /*
  * receive_tuple
@@ -116,37 +149,29 @@ prepare_combine_plan(PlannedStmt *plan, Tuplestorestate *store, TupleDesc *desc)
 }
 
 /*
- * get_groups
+ * get_values
  *
- * Given a tuplestore containing incoming tuples to combine with
- * on-disk tuples, generates a VALUES list that can be joined
- * against with on-disk tuples.
+ * Given an incoming batch, returns a VALUES clause containing each tuple's
+ * group columns that can be joined against with the matrel's existing groups.
  */
-static Node*
-get_groups(Tuplestorestate *incoming, TupleDesc desc,
-		AttrNumber *merge_attrs, int num_merge_attrs, ParseState *ps)
+static List *
+get_values(CombineState *cstate, Tuplestorestate *batch)
 {
-	Node *where;
-	TupleTableSlot *slot = MakeSingleTupleTableSlot(desc);
+	TupleTableSlot *slot = cstate->resultslot;
 	List *values = NIL;
-	SubLink *sub = makeNode(SubLink);
-	SelectStmt *sel = makeNode(SelectStmt);
-	RowExpr *row = makeNode(RowExpr);
 	int i;
 
 	/*
 	 * Generate a VALUES list of the incoming groups
 	 */
-	sel->valuesLists = NIL;
-
-	foreach_tuple(slot, incoming)
+	foreach_tuple(slot, batch)
 	{
 		List *tup = NIL;
 
-		for (i = 0; i < num_merge_attrs; i++)
+		for (i = 0; i < cstate->ngroupatts; i++)
 		{
-			AttrNumber merge_attr = merge_attrs[i];
-			Form_pg_attribute attr = desc->attrs[merge_attr - 1];
+			AttrNumber groupattr = cstate->groupatts[i];
+			Form_pg_attribute attr = cstate->cvdesc->attrs[groupattr - 1];
 			Type typeinfo;
 			bool isnull;
 			Datum d;
@@ -157,15 +182,68 @@ get_groups(Tuplestorestate *incoming, TupleDesc desc,
 			length = typeLen(typeinfo);
 			ReleaseSysCache((HeapTuple) typeinfo);
 
-			d = slot_getattr(slot, merge_attr, &isnull);
+			d = slot_getattr(slot, groupattr, &isnull);
 			c = makeConst(attr->atttypid, attr->atttypmod,
 					attr->attcollation, length, d, isnull, attr->attbyval);
 
 			tup = lappend(tup, c);
 		}
 
-		sel->valuesLists = lappend(sel->valuesLists, tup);
+		values = lappend(values, tup);
 	}
+
+	assign_expr_collations(NULL, (Node *) values);
+
+	return values;
+}
+
+/*
+ * set_values
+ *
+ * Given an existing group retrieval plan, attach the VALLUES list that
+ * contains the groups to be looked up in the matrel.
+ */
+static void
+set_values(PlannedStmt *plan, List *values)
+{
+	PhysicalGroupLookup *lookup;
+	NestLoop *nl;
+	ValuesScan *scan;
+
+	if (!IsA(plan->planTree, PhysicalGroupLookup))
+		elog(ERROR, "unexpected group retrieval plan: %d", nodeTag(plan->planTree));
+
+	lookup = (PhysicalGroupLookup *) plan->planTree;
+
+	if (!IsA(lookup->plan.lefttree, NestLoop))
+		elog(ERROR, "unexpected join type found in group retrieval plan: %d", nodeTag(lookup->plan.lefttree));
+
+	nl = (NestLoop *) lookup->plan.lefttree;
+
+	if (!IsA(nl->join.plan.lefttree, ValuesScan))
+		elog(ERROR, "could not find values scan in group retrieval plan");
+
+	scan = (ValuesScan *) nl->join.plan.lefttree;
+	scan->values_lists = values;
+}
+
+/*
+ * get_groups
+ *
+ * Given a tuplestore containing incoming tuples to combine with
+ * on-disk tuples, generates a VALUES list that can be joined
+ * against with on-disk tuples.
+ */
+static Node*
+get_groups(CombineState *cstate, List *values, ParseState *ps)
+{
+	Node *where;
+	SubLink *sub = makeNode(SubLink);
+	SelectStmt *sel = makeNode(SelectStmt);
+	RowExpr *row = makeNode(RowExpr);
+	int i;
+
+	sel->valuesLists = values;
 
 	/*
 	 * Now create a subquery to join the matrel against, which
@@ -173,10 +251,10 @@ get_groups(Tuplestorestate *incoming, TupleDesc desc,
 	 */
 	row->args = NIL;
 
-	for (i = 0; i < num_merge_attrs; i++)
+	for (i = 0; i < cstate->ngroupatts; i++)
 	{
-		AttrNumber merge_attr = merge_attrs[i];
-		Form_pg_attribute attr = desc->attrs[merge_attr - 1];
+		AttrNumber groupattr = cstate->groupatts[i];
+		Form_pg_attribute attr = cstate->cvdesc->attrs[groupattr - 1];
 		ColumnRef *cref = makeNode(ColumnRef);
 
 		cref->fields = list_make1(makeString(NameStr(attr->attname)));
@@ -189,10 +267,82 @@ get_groups(Tuplestorestate *incoming, TupleDesc desc,
 	sub->operName = list_make1(makeString("="));
 	sub->subselect = (Node *) sel;
 
-	assign_expr_collations(ps, (Node *) values);
 	where = transformExpr(ps, (Node *) sub, EXPR_KIND_WHERE);
 
 	return (Node *) where;
+}
+
+/*
+ * get_cached_groups_plan
+ *
+ * Plans and caches the combiner's existing groups retrieval plan,
+ * or simply returns the cached plan if it's still valid.
+ */
+static PlannedStmt *
+get_cached_groups_plan(CombineState *cstate, List *values)
+{
+	MemoryContext old;
+	ParseState *ps;
+	Query *query;
+	List *qlist;
+	SelectStmt *sel;
+	ResTarget *res;
+	A_Star *star;
+	ColumnRef *cref;
+	PlannedStmt *plan;
+
+	if (cstate->groupsplan != NULL &&
+			!TimestampDifferenceExceeds(cstate->lastgroupsplan, GetCurrentTimestamp(), GROUPS_PLAN_LIFESPAN * 1000))
+	{
+		if (values)
+			set_values(cstate->groupsplan, values);
+
+		/* use a fresh copy of the plan, as it may be modified by the executor */
+		old = MemoryContextSwitchTo(cstate->context);
+		plan = copyObject(cstate->groupsplan);
+		MemoryContextSwitchTo(old);
+
+		return plan;
+	}
+
+	/* cache miss, plan the query */
+
+	if (cstate->groupsplan != NULL)
+		pfree(cstate->groupsplan);
+
+	sel = makeNode(SelectStmt);
+	res = makeNode(ResTarget);
+	star = makeNode(A_Star);
+	cref = makeNode(ColumnRef);
+
+	cref->fields = list_make1(star);
+	res->val = (Node *) cref;
+	sel->targetList = list_make1(res);
+	sel->fromClause = list_make1(cstate->matrel);
+
+	/* populate the ParseState's p_varnamespace member */
+	ps = make_parsestate(NULL);
+	transformFromClause(ps, sel->fromClause);
+
+	qlist = pg_analyze_and_rewrite((Node *) sel, NULL, NULL, 0);
+	query = (Query *) linitial(qlist);
+
+	if (cstate->ngroupatts > 0)
+	{
+		Node *groups = get_groups(cstate, values, ps);
+		query->jointree = makeFromExpr(query->jointree->fromlist, groups);
+		query->hasSubLinks = true;
+	}
+
+	plan = pg_plan_query(query, 0, NULL);
+
+	old = MemoryContextSwitchTo(cstate->context);
+	cstate->groupsplan = copyObject(plan);
+	MemoryContextSwitchTo(old);
+
+	cstate->lastgroupsplan = GetCurrentTimestamp();
+
+	return plan;
 }
 
 /*
@@ -201,47 +351,27 @@ get_groups(Tuplestorestate *incoming, TupleDesc desc,
  * Adds all existing groups in the matrel to the combine input set
  */
 static void
-select_existing_groups(char *cvname, TupleDesc desc,
-		Tuplestorestate *incoming_merges, AttrNumber *merge_attrs,
-		int num_merge_attrs, TupleHashTable merge_targets)
+select_existing_groups(CombineState *cstate, Tuplestorestate *batch, TupleHashTable existing)
 {
-	List *query_list;
-	PlannedStmt *plan;
-	Query *query;
+	PlannedStmt *plan = NULL;
 	Portal portal;
-	ParseState *ps;
 	DestReceiver *dest;
 	HASH_SEQ_STATUS status;
 	HeapTupleEntry entry;
-	TupleTableSlot *slot = MakeSingleTupleTableSlot(desc);
+	TupleTableSlot *slot = cstate->resultslot;
 	List *tups = NIL;
 	ListCell *lc;
-	SelectStmt *sel = makeNode(SelectStmt);
-	ResTarget *res = makeNode(ResTarget);
-	A_Star *star = makeNode(A_Star);
-	ColumnRef *cref = makeNode(ColumnRef);
+	List *values = NIL;
 
-	cref->fields = list_make1(star);
-	res->val = (Node *) cref;
-	sel->targetList = list_make1(res);
-	sel->fromClause = list_make1(makeRangeVar(NULL, cvname, -1));
+	/*
+	 * If we're not grouping on any columns, then there's only one row to look up
+	 * so we don't need to do a VALUES-matrel join.
+	 */
+	if (cstate->isagg && cstate->ngroupatts > 0)
+		values = get_values(cstate, batch);
 
-	/* populate the ParseState's p_varnamespace member */
-	ps = make_parsestate(NULL);
-	transformFromClause(ps, sel->fromClause);
 
-	query_list = pg_analyze_and_rewrite((Node *) sel, NULL, NULL, 0);
-	query = (Query *) linitial(query_list);
-
-	if (num_merge_attrs > 0)
-	{
-		Node *groups = get_groups(incoming_merges, desc, merge_attrs,
-				num_merge_attrs, ps);
-		query->jointree = makeFromExpr(query->jointree->fromlist, groups);
-		query->hasSubLinks = true;
-	}
-
-	plan = pg_plan_query(query, 0, NULL);
+	plan = get_cached_groups_plan(cstate, values);
 
 	/*
 	 * Now run the query that retrieves existing tuples to merge this merge request with.
@@ -258,7 +388,7 @@ select_existing_groups(char *cvname, TupleDesc desc,
 					  NULL);
 
 	dest = CreateDestReceiver(DestTupleTable);
-	SetTupleTableDestReceiverParams(dest, merge_targets, CurrentMemoryContext, true);
+	SetTupleTableDestReceiverParams(dest, existing, CurrentMemoryContext, true);
 
 	PortalStart(portal, NULL, 0, GetActiveSnapshot());
 
@@ -269,26 +399,26 @@ select_existing_groups(char *cvname, TupleDesc desc,
 					 dest,
 					 NULL);
 
-	tuplestore_rescan(incoming_merges);
-	foreach_tuple(slot, incoming_merges)
+	tuplestore_rescan(batch);
+	foreach_tuple(slot, batch)
 	{
 		HeapTuple tup = ExecCopySlotTuple(slot);
 		tups = lappend(tups, tup);
 	}
-	tuplestore_clear(incoming_merges);
+	tuplestore_clear(batch);
 
 	/*
 	 * Now add the merge targets that already exist in the continuous view's table
 	 * to the input of the final merge query
 	 */
-	hash_seq_init(&status, merge_targets->hashtab);
+	hash_seq_init(&status, existing->hashtab);
 	while ((entry = (HeapTupleEntry) hash_seq_search(&status)) != NULL)
-		tuplestore_puttuple(incoming_merges, entry->tuple);
+		tuplestore_puttuple(batch, entry->tuple);
 
 	foreach(lc, tups)
 	{
 		HeapTuple tup = (HeapTuple) lfirst(lc);
-		tuplestore_puttuple(incoming_merges, tup);
+		tuplestore_puttuple(batch, tup);
 	}
 
 	PortalDrop(portal, false);
@@ -301,10 +431,10 @@ select_existing_groups(char *cvname, TupleDesc desc,
  * UPDATES or INSERTS as necessary
  */
 static void
-sync_combine(char *cvname, Tuplestorestate *results,
-		TupleTableSlot *slot, TupleHashTable merge_targets)
+sync_combine(CombineState *cstate, Tuplestorestate *results, TupleHashTable existing)
 {
-	Relation rel = heap_openrv(makeRangeVar(NULL, cvname, -1), RowExclusiveLock);
+	TupleTableSlot *slot = cstate->resultslot;
+	Relation rel = heap_openrv(cstate->matrel, RowExclusiveLock);
 	int size = sizeof(bool) * slot->tts_tupleDescriptor->natts;
 	bool *replace_all = palloc0(size);
 	ResultRelInfo *ri = CQMatViewOpen(rel);
@@ -316,8 +446,8 @@ sync_combine(char *cvname, Tuplestorestate *results,
 		HeapTupleEntry update = NULL;
 		slot_getallattrs(slot);
 
-		if (merge_targets)
-			update = (HeapTupleEntry) LookupTupleHashEntry(merge_targets, slot, NULL);
+		if (existing)
+			update = (HeapTupleEntry) LookupTupleHashEntry(existing, slot, NULL);
 
 		if (update)
 		{
@@ -348,40 +478,24 @@ sync_combine(char *cvname, Tuplestorestate *results,
  * Combines partial results of a continuous query with existing rows in the continuous view
  */
 static void
-combine(PlannedStmt *plan, TupleDesc cvdesc,
-		Tuplestorestate *store, MemoryContext tmpctx)
+combine(CombineState *cstate, Tuplestorestate *batch)
 {
-	TupleTableSlot *slot;
 	Portal portal;
 	DestReceiver *dest = CreateDestReceiver(DestTuplestore);
-	Tuplestorestate *merge_output = NULL;
-	AttrNumber *merge_attrs = NULL;
-	Oid *merge_attr_ops;
-	TupleHashTable merge_targets = NULL;
-	FmgrInfo *eq_funcs;
-	FmgrInfo *hash_funcs;
-	int num_merge_attrs = 0;
-	char *matrelname = NameStr(plan->cq_state->matrelname);
-	Agg *agg = NULL;
+	Tuplestorestate *result = NULL;
+	TupleHashTable existing = NULL;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	slot = MakeSingleTupleTableSlot(cvdesc);
-
-	if (IsA(plan->planTree, Agg))
+	if (cstate->isagg)
 	{
-		agg = (Agg *) plan->planTree;
-		merge_attrs = agg->grpColIdx;
-		num_merge_attrs = agg->numCols;
-		merge_attr_ops = agg->grpOperators;
-	}
+		FmgrInfo *eq_funcs;
+		FmgrInfo *hash_funcs;
 
-	if (agg != NULL)
-	{
-		execTuplesHashPrepare(num_merge_attrs, merge_attr_ops, &eq_funcs, &hash_funcs);
-		merge_targets = BuildTupleHashTable(num_merge_attrs, merge_attrs, eq_funcs, hash_funcs, 1000,
-				sizeof(HeapTupleEntryData), CurrentMemoryContext, tmpctx);
-		select_existing_groups(matrelname, cvdesc, store, merge_attrs, num_merge_attrs, merge_targets);
+		execTuplesHashPrepare(cstate->ngroupatts, cstate->groupops, &eq_funcs, &hash_funcs);
+		existing = BuildTupleHashTable(cstate->ngroupatts, cstate->groupatts, eq_funcs, hash_funcs, 1000,
+				sizeof(HeapTupleEntryData), CurrentMemoryContext, cstate->tmpcontext);
+		select_existing_groups(cstate, batch, existing);
 	}
 
 	portal = CreatePortal("", true, true);
@@ -391,11 +505,11 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 					  NULL,
 					  NULL,
 					  "SELECT",
-					  list_make1(plan),
+					  list_make1(cstate->plan),
 					  NULL);
 
-	merge_output = tuplestore_begin_heap(true, true, combiner_work_mem);
-	SetTuplestoreDestReceiverParams(dest, merge_output, CurrentMemoryContext, true);
+	result = tuplestore_begin_heap(true, true, combiner_work_mem);
+	SetTuplestoreDestReceiverParams(dest, result, CurrentMemoryContext, true);
 
 	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, GetActiveSnapshot());
 
@@ -408,15 +522,47 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 
 	PopActiveSnapshot();
 
-	tuplestore_clear(store);
+	tuplestore_clear(batch);
 
-	sync_combine(matrelname, merge_output, slot, merge_targets);
+	sync_combine(cstate, result, existing);
 
-	if (merge_targets)
-		hash_destroy(merge_targets->hashtab);
+	if (existing)
+		hash_destroy(existing->hashtab);
 
-	tuplestore_end(merge_output);
+	tuplestore_end(result);
 	PortalDrop(portal, false);
+}
+
+/*
+ * init_combine_state
+ *
+ * Initialize state to be used by repeated calls to combine
+ */
+static void
+init_combine_state(CombineState *cstate, char *cvname, PlannedStmt *plan,
+		TupleDesc desc, MemoryContext context, MemoryContext tmpcontext)
+{
+	MemSet(cstate, 0, sizeof(CombineState));
+
+	cstate->plan = plan;
+	cstate->cv = plan->cq_target;
+	cstate->matrel = makeRangeVar(NULL, NameStr(plan->cq_state->matrelname), -1);
+	cstate->cvdesc = desc;
+	cstate->context = context;
+	cstate->tmpcontext = tmpcontext;
+	cstate->resultslot = MakeSingleTupleTableSlot(cstate->cvdesc);
+	cstate->isagg = false;
+	cstate->groupsplan = NULL;
+
+	if (IsA(plan->planTree, Agg))
+	{
+		Agg *agg = (Agg *) plan->planTree;
+
+		cstate->groupatts = agg->grpColIdx;
+		cstate->ngroupatts = agg->numCols;
+		cstate->groupops = agg->grpOperators;
+		cstate->isagg = true;
+	}
 }
 
 /*
@@ -429,7 +575,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	ResourceOwner save = CurrentResourceOwner;
 	TupleTableSlot *slot;
 	TupleDesc workerdesc;
-	Tuplestorestate *store;
+	Tuplestorestate *batch;
 	long count = 0;
 	int batchsize = queryDesc->plannedstmt->cq_state->batchsize;
 	int timeout = queryDesc->plannedstmt->cq_state->maxwaitms;
@@ -444,6 +590,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 			ALLOCSET_DEFAULT_MAXSIZE);
 	MemoryContext combinectx;
 	MemoryContext tmpctx;
+	CombineState cstate;
 
 	cq_stat_initialize(state->viewid, MyProcPid);
 
@@ -481,9 +628,10 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	 * so that we don't lose received tuples in case of errors in the loop
 	 * below.
 	 */
-	store = tuplestore_begin_heap(true, true, combiner_work_mem);
-	combineplan = prepare_combine_plan(queryDesc->plannedstmt, store, &workerdesc);
+	batch = tuplestore_begin_heap(true, true, combiner_work_mem);
+	combineplan = prepare_combine_plan(queryDesc->plannedstmt, batch, &workerdesc);
 	slot = MakeSingleTupleTableSlot(workerdesc);
+	init_combine_state(&cstate, cvname, combineplan, workerdesc, runctx, tmpctx);
 
 	MemoryContextSwitchTo(oldcontext);
 
@@ -541,7 +689,7 @@ retry:
 			else
 			{
 				last_receive = GetCurrentTimestamp();
-				tuplestore_puttupleslot(store, slot);
+				tuplestore_puttupleslot(batch, slot);
 				count++;
 			}
 
@@ -555,7 +703,7 @@ retry:
 				StartTransactionCommand();
 				MemoryContextSwitchTo(combinectx);
 
-				combine(combineplan, workerdesc, store, tmpctx);
+				combine(&cstate, batch);
 
 				/* commit asynchronously for better performance */
 				synchronous_commit = combiner_synchronous_commit;
@@ -628,7 +776,7 @@ retry:
 		{
 			AbortCurrentTransaction();
 			ExecClearTuple(slot);
-			tuplestore_clear(store);
+			tuplestore_clear(batch);
 			count = 0;
 		}
 
