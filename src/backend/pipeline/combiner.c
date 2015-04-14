@@ -297,9 +297,7 @@ get_cached_groups_plan(CombineState *cstate, List *values)
 			set_values(cstate->groupsplan, values);
 
 		/* use a fresh copy of the plan, as it may be modified by the executor */
-		old = MemoryContextSwitchTo(cstate->context);
 		plan = copyObject(cstate->groupsplan);
-		MemoryContextSwitchTo(old);
 
 		return plan;
 	}
