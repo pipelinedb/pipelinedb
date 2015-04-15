@@ -107,6 +107,22 @@ DEACTIVATE test_interval_avg_sw;
 
 SELECT * FROM test_interval_avg_sw ORDER BY k;
 
+CREATE CONTINUOUS VIEW avg_heart_rates AS
+SELECT patient_id::integer, avg(value::float) FROM heart_rates_stream
+WHERE description::text = 'HR' AND value > 85
+AND (arrival_timestamp > clock_timestamp() - interval '5 minutes') GROUP BY patient_id;
+
+ACTIVATE avg_heart_rates;
+
+INSERT INTO heart_rates_stream (patient_id, value, description) VALUES (0, 86, 'HR');
+INSERT INTO heart_rates_stream (patient_id, value, description) VALUES (0, 87, 'HR');
+INSERT INTO heart_rates_stream (patient_id, value, description) VALUES (0, 85, 'HR');
+INSERT INTO heart_rates_stream (patient_id, value, description) VALUES (0, 86, 'HZ');
+
+DEACTIVATE avg_heart_rates;
+
+SELECT * FROM avg_heart_rates ORDER BY patient_id;
+
 DROP CONTINUOUS VIEW test_int8_avg_sw;
 DROP CONTINUOUS VIEW test_int4_avg_sw;
 DROP CONTINUOUS VIEW test_int2_avg_sw;
