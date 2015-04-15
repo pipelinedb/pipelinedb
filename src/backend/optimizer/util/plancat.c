@@ -119,7 +119,7 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 		max_attr = Max(1, list_length(vars));
 	}
 
-	rel->min_attr = FirstLowInvalidHeapAttributeNumber + 1;
+	rel->min_attr = relation ? FirstLowInvalidHeapAttributeNumber + 1 : 0;
 	rel->max_attr = relation ? RelationGetNumberOfAttributes(relation) : max_attr;
 	rel->reltablespace = relation ? RelationGetForm(relation)->reltablespace : InvalidOid;
 
