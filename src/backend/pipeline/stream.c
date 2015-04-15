@@ -202,7 +202,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	if (!numcols)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("stream inserts require a header"),
+				 errmsg("stream inserts require a row descriptor"),
 				 errhint("For example, INSERT INTO %s (x, y, z) VALUES (0, 1, 2)", ins->relation->relname)));
 
 	/* build header of column names */
