@@ -909,6 +909,29 @@ RegisterDynamicBackgroundWorker(BackgroundWorker *worker,
 }
 
 /*
+ * Returns the number of registered dynamic background workers
+ */
+int 
+GetNumberOfDynamicBackgroundWorkers()
+{
+    int num_of_workers = 0;
+    int slotno = 0;
+    
+    LWLockAcquire(BackgroundWorkerLock, LW_SHARED);
+    
+	for (slotno = 0; slotno < BackgroundWorkerData->total_slots; ++slotno){
+	    BackgroundWorkerSlot *slot = &BackgroundWorkerData->slot[slotno];
+	    if(slot->in_use){
+	        num_of_workers++;
+	    }
+	}
+	
+	LWLockRelease(BackgroundWorkerLock);
+	
+	return num_of_workers;
+}
+
+/*
  * Get the PID of a dynamically-registered background worker.
  *
  * If the worker is determined to be running, the return value will be

@@ -203,8 +203,8 @@ CQProcEntryRemove(int id)
 
 	if (entry)
 	{
-		spfree(entry->workers);
-		spfree(entry->shm_query);
+		if(entry->workers){ spfree(entry->workers);}
+		if(entry->shm_query){ spfree(entry->shm_query);}
 	}
 
 	/* Remove the entry from the hash table. */

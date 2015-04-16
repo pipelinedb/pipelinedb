@@ -573,14 +573,24 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skipActive
 		/* CQ procs are already running */
 		if (entry == NULL)
 			continue;
-
-		RunCQProcs(rv->relname, &state, entry, dboid);
-
+        // Check to see if the number of processes that are needed for the activation of 
+        // the CVs is no larger than max_worker_processes
+        int new_num_of_workers = 1 + state.parallelism + GetNumberOfDynamicBackgroundWorkers();
+        bool enough_workers = new_num_of_workers <= max_worker_processes;
+        
+        if(enough_workers){
+            RunCQProcs(rv->relname, &state, entry, dboid);
+        }
+        else
+        {
+            elog(LOG, "activating continuous views would require too many processes - please increase max_worker_processes");
+        }
+        
 		/*
 		 * Spin here waiting for the number of waiting CQ related processes
 		 * to complete.
 		 */
-		if (WaitForCQProcsToStart(state.id))
+		if (enough_workers && WaitForCQProcsToStart(state.id))
 		{
 			success++;
 			if (continuous_query_crash_recovery)
