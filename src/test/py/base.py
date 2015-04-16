@@ -212,6 +212,7 @@ class PipelineDB(object):
           else:
             values.append(str(r))
         values = ', '.join(values)
+        values = values.replace("'null'", 'null')
 
         return self.execute('INSERT INTO %s (%s) VALUES %s' % (target, header, values))
 

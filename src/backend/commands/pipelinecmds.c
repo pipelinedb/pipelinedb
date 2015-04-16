@@ -91,36 +91,65 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
  * such as single-column GROUP BYs, it's straightforward.
  */
 static void
-create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *workerstmt, SelectStmt *viewstmt)
+create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *workerstmt, SelectStmt *viewstmt, Query *query)
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
-	Node *node;
-	ColumnRef *col;
-	char *namespace;
-	char *name;
+	char *indexcolname = NULL;
 
 	if (IsSlidingWindowSelectStmt(workerstmt))
-		node = (Node *) GetColumnRefInSlidingWindowExpr(viewstmt);
-	else if (list_length(workerstmt->groupClause) == 1)
-		node = linitial(workerstmt->groupClause);
-	else
-		return;
-
-	if (IsA(node, TypeCast))
 	{
-		TypeCast *tc = (TypeCast *) node;
-		node = tc->arg;
+		ColumnRef *col;
+		Node *node = NULL;
+		char *namespace;
+
+		node = (Node *) GetColumnRefInSlidingWindowExpr(viewstmt);
+
+		if (!IsA(node, ColumnRef))
+			elog(ERROR, "unexpected sliding window expression type found: %d", nodeTag(node));
+
+		col = (ColumnRef *) node;
+		DeconstructQualifiedName(col->fields, &namespace, &indexcolname);
+	}
+	else if (query->groupClause)
+	{
+		/*
+		 * Choose the lowest-cardinality type as the index column,
+		 * as that's the best we can hope to do at this point.
+		 */
+		ListCell *lc;
+		int16 len;
+		int16 best = -1;
+
+		foreach(lc, query->groupClause)
+		{
+			ListCell *tc;
+			SortGroupClause *g = (SortGroupClause *) lfirst(lc);
+			TargetEntry *te;
+
+			foreach(tc, query->targetList)
+			{
+				te = (TargetEntry *) lfirst(tc);
+				if (te->ressortgroupref == g->tleSortGroupRef)
+					break;
+			}
+
+			len = get_typlen(exprType((Node *) te->expr));
+
+			if (best == -1 || (len > 0 && len < best))
+			{
+				best = len;
+				indexcolname = te->resname;
+			}
+
+		}
 	}
 
-	Assert(IsA(node, ColumnRef));
-	col = (ColumnRef *) node;
+	if (indexcolname == NULL)
+		return;
 
 	indexcol = makeNode(IndexElem);
-
-	DeconstructQualifiedName(col->fields, &namespace, &name);
-
-	indexcol->name = name;
+	indexcol->name = indexcolname;
 	indexcol->expr = NULL;
 	indexcol->indexcolname = NULL;
 	indexcol->collation = NULL;
@@ -309,7 +338,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Index the materialization table smartly if we can
 	 */
 	allowSystemTableMods = saveAllowSystemTableMods;
-	create_indices_on_mat_relation(reloid, mat_relation, workerselect, viewselect);
+	create_indices_on_mat_relation(reloid, mat_relation, workerselect, viewselect, query);
 }
 
 /*

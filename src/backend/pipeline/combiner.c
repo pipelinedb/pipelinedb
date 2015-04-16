@@ -324,6 +324,7 @@ get_cached_groups_plan(CombineState *cstate, List *values)
 
 	qlist = pg_analyze_and_rewrite((Node *) sel, NULL, NULL, 0);
 	query = (Query *) linitial(qlist);
+	query->is_combine_lookup = true;
 
 	if (cstate->ngroupatts > 0)
 	{

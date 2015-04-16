@@ -430,10 +430,46 @@ View definition:
  k0     | text(0) |           | extended |              | 
  k1     | integer |           | plain    |              | 
  count  | bigint  |           | plain    |              | 
+Indexes:
+    "cqgroupby_mrel0_k1_idx" btree (k1)
 
 CREATE SCHEMA test_create_cont_view;
 CREATE CONTINUOUS VIEW test_create_cont_view.error AS SELECT k0::text FROM stream;
 ERROR:  continuous views cannot be given a namespace
+CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM stream
+GROUP BY a, b, c, d, e;
+\d+ multigroupindex;
+                 View "public.multigroupindex"
+ Column |       Type       | Modifiers | Storage  | Description 
+--------+------------------+-----------+----------+-------------
+ a      | text(0)          |           | extended | 
+ b      | bigint           |           | plain    | 
+ c      | integer          |           | plain    | 
+ d      | smallint         |           | plain    | 
+ e      | double precision |           | plain    | 
+ count  | bigint           |           | plain    | 
+View definition:
+ SELECT multigroupindex_mrel0.a,
+    multigroupindex_mrel0.b,
+    multigroupindex_mrel0.c,
+    multigroupindex_mrel0.d,
+    multigroupindex_mrel0.e,
+    multigroupindex_mrel0.count
+   FROM multigroupindex_mrel0;
+
+\d+ multigroupindex_mrel0;
+                     Table "public.multigroupindex_mrel0"
+ Column |       Type       | Modifiers | Storage  | Stats target | Description 
+--------+------------------+-----------+----------+--------------+-------------
+ a      | text(0)          |           | extended |              | 
+ b      | bigint           |           | plain    |              | 
+ c      | integer          |           | plain    |              | 
+ d      | smallint         |           | plain    |              | 
+ e      | double precision |           | plain    |              | 
+ count  | bigint           |           | plain    |              | 
+Indexes:
+    "multigroupindex_mrel0_d_idx" btree (d)
+
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;
@@ -452,3 +488,4 @@ DROP CONTINUOUS VIEW cqaggexpr2;
 DROP CONTINUOUS VIEW cqaggexpr3;
 DROP CONTINUOUS VIEW cqaggexpr4;
 DROP CONTINUOUS VIEW cqgroupby;
+DROP CONTINUOUS VIEW multigroupindex;

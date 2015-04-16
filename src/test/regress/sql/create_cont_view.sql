@@ -85,6 +85,12 @@ CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM 
 CREATE SCHEMA test_create_cont_view;
 CREATE CONTINUOUS VIEW test_create_cont_view.error AS SELECT k0::text FROM stream;
 
+CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM stream
+GROUP BY a, b, c, d, e;
+
+\d+ multigroupindex;
+\d+ multigroupindex_mrel0;
+
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;
@@ -103,3 +109,4 @@ DROP CONTINUOUS VIEW cqaggexpr2;
 DROP CONTINUOUS VIEW cqaggexpr3;
 DROP CONTINUOUS VIEW cqaggexpr4;
 DROP CONTINUOUS VIEW cqgroupby;
+DROP CONTINUOUS VIEW multigroupindex;
