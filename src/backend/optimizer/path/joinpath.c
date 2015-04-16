@@ -173,9 +173,6 @@ add_paths_to_joinrel(PlannerInfo *root,
 	Relids		param_source_rels = NULL;
 	Relids		extra_lateral_rels = NULL;
 	ListCell   *lc;
-	RangeTblEntry *outer = planner_rt_fetch(outerrel->relid, root);
-	RangeTblEntry *inner = planner_rt_fetch(innerrel->relid, root);
-	bool group_lookup = false;
 
 	/*
 	 * If this is a stream-table join, then there is only one
@@ -346,27 +343,7 @@ add_paths_to_joinrel(PlannerInfo *root,
 	 * this so that we can predictably control performance and take advantage of
 	 * certain assumptions we can make about matrels and their indices.
 	 */
-	if (IsCombiner && (outer && inner) &&
-			((outer->rtekind == RTE_VALUES && inner->rtekind == RTE_RELATION) ||
-			(inner->rtekind == RTE_VALUES && outer->rtekind == RTE_RELATION)))
-	{
-		RangeVar *matrelrv;
-		Relation rel;
-		Oid relid = outer->rtekind == RTE_RELATION ? outer->relid : inner->relid;
-
-		rel = heap_open(relid, NoLock);
-		matrelrv = makeRangeVar(NULL, RelationGetRelationName(rel), -1);
-		relation_close(rel, NoLock);
-
-		if (IsAMatRel(matrelrv, NULL))
-			group_lookup = true;
-	}
-
-	/*
-	 * If we're doing a lookup of physical matrel tuples, there's only
-	 * one plan to consider.
-	 */
-	if (group_lookup)
+	if (root->parse->is_combine_lookup)
 	{
 		physical_group_lookup(root, joinrel, outerrel, innerrel,
 							param_source_rels, extra_lateral_rels,
