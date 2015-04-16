@@ -15,6 +15,7 @@
 #include "postgres.h"
 
 #include "catalog/pg_type.h"
+#include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/clauses.h"
 #include "optimizer/joininfo.h"
@@ -72,6 +73,7 @@ static bool check_redundant_nullability_qual(PlannerInfo *root, Node *clause);
 static void check_mergejoinable(RestrictInfo *restrictinfo);
 static void check_hashjoinable(RestrictInfo *restrictinfo);
 
+static Node *allow_null_equality(Node *n);
 
 /*****************************************************************************
  *
@@ -1309,6 +1311,9 @@ distribute_qual_to_rels(PlannerInfo *root, Node *clause,
 	 */
 	relids = pull_varnos(clause);
 
+	if (root->parse->is_combine_lookup)
+		clause = allow_null_equality(clause);
+
 	/*
 	 * In ordinary SQL, a WHERE or JOIN/ON clause can't reference any rels
 	 * that aren't within its syntactic scope; however, if we pulled up a
@@ -2121,4 +2126,55 @@ check_hashjoinable(RestrictInfo *restrictinfo)
 	if (op_hashjoinable(opno, exprType(leftarg)) &&
 		!contain_volatile_functions((Node *) clause))
 		restrictinfo->hashjoinoperator = opno;
+}
+
+/*
+ * set_null_equality
+ * 		We join a VALUES list against a matrel to look up the groupings that
+ * 		need to be physically updated by a combiner. Without modification, this
+ * 		join will only check for equality of the group columns between the VALUES
+ * 		list and matrel between the VALUES list and matrel. This is insufficient
+ * 		for groupings containing nulls, because (null == null) is not true.
+ *
+ * 		Here we add an additional predicate that will cause our join to correctly
+ * 		return a row when the outer and inner column are both null. That is, this
+ * 		join considers two null columns equal.
+ *
+ * 		This is congruent with the SQL standard, which specifies that grouping
+ * 		on null will collect all rows to a single null group.
+ */
+static Node *
+allow_null_equality(Node *clause)
+{
+	OpExpr *op;
+	Expr *left;
+	Expr *right;
+	NullTest *leftnull;
+	NullTest *rightnull;
+	Expr *bothnull;
+
+	op = (OpExpr *) clause;
+
+	if (list_length(op->args) != 2)
+		elog(ERROR, "unexpected number of join qual arguments: %d", list_length(op->args));
+
+	left = linitial(op->args);
+	right = lsecond(op->args);
+
+	leftnull = makeNode(NullTest);
+	leftnull->arg = left;
+	leftnull->nulltesttype = IS_NULL;
+
+	rightnull = makeNode(NullTest);
+	rightnull->arg = right;
+	rightnull->nulltesttype = IS_NULL;
+
+	/*
+	 * qual is now of the form:
+	 *
+	 * (left.col = right.col) OR (left.col is null AND right.col is null)
+	 */
+	bothnull = makeBoolExpr(AND_EXPR, list_make2(leftnull, rightnull), -1);
+
+	return (Node *) makeBoolExpr(OR_EXPR, list_make2(op, bothnull), -1);
 }

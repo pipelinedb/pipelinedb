@@ -157,22 +157,13 @@ typedef struct Query
 	/*
 	 * Continuous query fields
 	 */
-	bool		is_continuous; /* should this be executed continuously? */
-
-	/*
-	 * The original ACTIVATE statement that activated this query. It's useful to
-	 * keep this around because an ACTIVATE query gets rewritten as the target CQ,
-	 * and then flagged as continuous. However, we don't want to send this rewritten
-	 * query to the datanodes when running a RemoteQuery, because we want them to
-	 * know that it's a CQ. So for CQs, we send the original ACTIVATE to the datanodes.
-	 */
-	char		*cq_activate_stmt;
-
-	RangeVar	*cq_target; /* output relation of this CQ, if any */
-
-	bool		is_combine; /* is this query being run as a merge query? */
+	bool is_continuous; /* should this be executed continuously? */
+	RangeVar *cq_target; /* output relation of this CQ, if any */
+	bool is_combine; /* is this query being run as a merge query? */
+	bool is_combine_lookup; /* is this query a combiner looking up groups to combine with? */
 
 	struct ContinuousViewState	*cq_state; /* put `struct` here to avoid circular dependency */
+
 } Query;
 
 
