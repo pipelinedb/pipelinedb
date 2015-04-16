@@ -29,7 +29,8 @@ listPipelineQuery(void)
 	printQueryOpt myopt = pset.popt;
 
 	initPQExpBuffer(&buf);
-	printfPQExpBuffer(&buf, "SELECT id, name, query FROM pipeline_query");
+	printfPQExpBuffer(&buf,
+			"SELECT id, CASE WHEN state = 'a' THEN 'active' ELSE 'inactive' END AS state, name, query FROM pipeline_query");
 
 	res = PSQLexec(buf.data, false);
 	termPQExpBuffer(&buf);
