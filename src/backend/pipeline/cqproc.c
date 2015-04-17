@@ -289,12 +289,19 @@ WaitForCQProcsToStart(int id)
 
 	while (true)
 	{
+		pid_t combiner_pid;
+
 		err_count = succ_count = 0;
-		succ_count += GetCombinerPid(id) == entry->combiner.last_pid;
+
+		combiner_pid = GetCombinerPid(id);
+		if (combiner_pid)
+			succ_count += combiner_pid == entry->combiner.last_pid;
+
 		worker_pids = GetWorkerPids(id);
 
 		for (i = 0; i < NUM_WORKERS(entry); i++)
-			succ_count += worker_pids[i] == entry->workers[i].last_pid;
+			if (worker_pids[i])
+				succ_count += worker_pids[i] == entry->workers[i].last_pid;
 
 		pfree(worker_pids);
 
