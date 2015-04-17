@@ -17,7 +17,7 @@ def test_null_groups(pipeline, clean_db):
     rows = []
     for n in range(10000):
         vals = list(random.randint(0, 10) for n in range(3))
-        vals = map(lambda n: random.random() < 0.1 and 'null' or n, vals)
+        vals = map(lambda n: random.random() < 0.1 and None or n, vals)
         rows.append(tuple(vals))
 
     pipeline.activate()

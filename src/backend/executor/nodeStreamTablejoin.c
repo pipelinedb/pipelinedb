@@ -372,6 +372,7 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 					if (TupIsNull(node->hj_FirstOuterTupleSlot))
 					{
 						node->hj_OuterNotEmpty = false;
+						ExecReScan((PlanState *) node);
 						return NULL;
 					}
 					else
