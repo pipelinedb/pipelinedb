@@ -909,26 +909,26 @@ RegisterDynamicBackgroundWorker(BackgroundWorker *worker,
 }
 
 /*
- * Returns the number of registered dynamic background workers
+ * Returns the number of background worker slots currently in use.
  */
 int
-GetNumberOfDynamicBackgroundWorkers()
+GetNumOfBackgroundWorkerSlotsInUse()
 {
-    int num_in_use = 0;
-    int slotno;
+	int num_in_use = 0;
+	int slotno;
 
-    LWLockAcquire(BackgroundWorkerLock, LW_SHARED);
+	LWLockAcquire(BackgroundWorkerLock, LW_SHARED);
 
-    for (slotno = 0; slotno < BackgroundWorkerData->total_slots; slotno++) {
-    	BackgroundWorkerSlot *slot = &BackgroundWorkerData->slot[slotno];
+	for (slotno = 0; slotno < BackgroundWorkerData->total_slots; slotno++) {
+		BackgroundWorkerSlot *slot = &BackgroundWorkerData->slot[slotno];
 
-    	if(slot->in_use)
-    		num_in_use++;
-    }
+		if(slot->in_use)
+			num_in_use++;
+	}
 
-    LWLockRelease(BackgroundWorkerLock);
+	LWLockRelease(BackgroundWorkerLock);
 
-    return num_in_use;
+	return num_in_use;
 }
 
 /*

@@ -577,13 +577,13 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skip_activ
 		if (entry == NULL)
 			continue;
 
-        /* Ensure that we have enough background worker slots */
-        enough_worker_slots = (num_procs + GetNumOfBackgroundWorkerSlotsInUse()) <= max_worker_processes;
+		/* Ensure that we have enough background worker slots */
+		enough_worker_slots = (num_procs + GetNumOfBackgroundWorkerSlotsInUse()) <= max_worker_processes;
 
-        if (enough_worker_slots)
-            RunCQProcs(rv->relname, &state, entry, dboid);
-        else
-            elog(LOG, "not enough bgworker slots to activate continuous view; increase max_worker_processes guc");
+		if (enough_worker_slots)
+			RunCQProcs(rv->relname, &state, entry, dboid);
+		else
+			elog(LOG, "not enough bgworker slots to activate continuous view; increase max_worker_processes guc");
 
 		/*
 		 * Spin here waiting for the number of waiting CQ related processes
