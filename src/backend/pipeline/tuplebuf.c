@@ -12,6 +12,7 @@
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "libpq/pqformat.h"
+#include "pipeline/cont_xact.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
@@ -30,7 +31,7 @@
 #define MAGIC 0xDEADBABE /* x_x */
 #define INIT_CQS BITS_PER_BITMAPWORD
 #define MURMUR_SEED 0x9eaca8149c92387e
-#define INSERT_SLEEP_MS 5
+#define WAIT_SLEEP_MS 5
 
 #define BufferOffset(buf, ptr) ((int32) ((char *) (ptr) - (buf)->start))
 #define BufferEnd(buf) ((buf)->start + (buf)->size)
@@ -49,6 +50,7 @@ bool debug_tuple_stream_buffer;
 int tuple_buffer_blocks;
 int empty_tuple_buffer_wait_time;
 
+List *MyBatchIds = NIL;
 static List *MyPinnedSlots = NIL;
 static List *MyReaders = NIL;
 
@@ -62,32 +64,38 @@ typedef struct
  * MakeTuple
  */
 Tuple *
-MakeTuple(HeapTuple heaptup, TupleDesc desc)
+MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_batches, int *batches)
 {
 	Tuple *t = palloc0(sizeof(Tuple));
 	t->heaptup = heaptup;
 	t->desc = PackTupleDesc(desc);
 	t->arrivaltime = GetCurrentTimestamp();
+	t->num_batches = num_batches;
+	t->batches = batches;
 	return t;
 }
 
 /*
  * TupleBufferWaitOnSlot
  *
- * Waits until the given slot has been read by all CQs that need to see it
+ * Waits until the tail has passed this slot. This guarantees that any tuples inserted uptill
+ * (and including) this slot have been unpinned.
  */
 void
-TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms)
+TupleBufferWaitOnSlot(TupleBuffer *buf, TupleBufferSlot *slot)
 {
 	while (true)
 	{
-		/* Was slot overwritten? */
+		/* TODO(usmanm): Could this result in a live lock if slot is repeatedly equal to tail? */
 		if (!SlotIsValid(slot))
 			break;
-		/* Has the slot been read by all events? */
-		if (bms_is_empty(slot->readers))
+		if ((intptr_t) slot < (intptr_t) buf->tail)
 			break;
-		pg_usleep(sleepms * 1000);
+		if ((intptr_t) slot >= (intptr_t) buf->head)
+			break;
+		if (slot->id < buf->tail->id)
+			break;
+		pg_usleep(WAIT_SLEEP_MS * 1000);
 	}
 
 	if (debug_tuple_stream_buffer)
@@ -109,6 +117,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	TupleBufferSlot *slot;
 	Size size;
 	Size tupsize;
+	Size batches_size;
 	int desclen = tuple->desc ? VARSIZE(tuple->desc) : 0;
 	TimestampTz start_wait;
 
@@ -119,7 +128,8 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	}
 
 	tupsize = tuple->heaptup->t_len + HEAPTUPLESIZE;
-	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(readers->nwords) + desclen;
+	batches_size = sizeof(int) * tuple->num_batches;
+	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(readers->nwords) + desclen + batches_size;
 
 	if (size > buf->size)
 		elog(ERROR, "event of size %zu too big for stream buffer of size %zu", size, WorkerTupleBuffer->size);
@@ -167,7 +177,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 			LWLockRelease(buf->tail_lock);
 
 			if (TimestampDifferenceExceeds(start_wait, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
-				pg_usleep(INSERT_SLEEP_MS * 1000);
+				pg_usleep(WAIT_SLEEP_MS * 1000);
 			else
 				WaitLatch((&buf->writer_latch), WL_LATCH_SET, 0);
 
@@ -201,7 +211,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 
 	pos += sizeof(TupleBufferSlot);
 	slot->tuple = (Tuple *) pos;
-	slot->tuple->arrivaltime = tuple->arrivaltime;
+	memcpy(slot->tuple, tuple, sizeof(Tuple));
 	pos += sizeof(Tuple);
 
 	if (tuple->desc)
@@ -217,8 +227,12 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	slot->tuple->heaptup->t_tableOid = tuple->heaptup->t_tableOid;
 	slot->tuple->heaptup->t_data = (HeapTupleHeader) ((char *) slot->tuple->heaptup + HEAPTUPLESIZE);
 	memcpy(slot->tuple->heaptup->t_data, tuple->heaptup->t_data, tuple->heaptup->t_len);
-
 	pos += tupsize;
+
+	slot->tuple->batches = (int *) pos;
+	memcpy(slot->tuple->batches, tuple->batches, batches_size);
+	pos += batches_size;
+
 	slot->readers = (Bitmapset *) pos;
 	memcpy(slot->readers, readers, BITMAPSET_SIZE(readers->nwords));
 
@@ -381,6 +395,8 @@ TupleBufferSlot *
 TupleBufferPinNextSlot(TupleBufferReader *reader)
 {
 	MyPinnedSlotEntry *entry;
+	int i;
+	int *batches;
 	MemoryContext oldcontext;
 
 	if (NoUnreadSlots(reader))
@@ -443,6 +459,25 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	entry->slot = reader->slot;
 	entry->cq_id = reader->cq_id;
 	MyPinnedSlots = lappend(MyPinnedSlots, entry);
+
+	batches = entry->slot->tuple->batches;
+	for (i = 0; i < entry->slot->tuple->num_batches; i++) {
+		int batch_id = batches[i];
+		bool found = false;
+		ListCell *lc;
+
+		foreach(lc, MyBatchIds) {
+			if (batch_id == lfirst_int(lc)) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			MyBatchIds = lappend_int(MyBatchIds, batch_id);
+			BatchEntryIncrementProcessors(batch_id);
+		}
+	}
 
 	MemoryContextSwitchTo(oldcontext);
 

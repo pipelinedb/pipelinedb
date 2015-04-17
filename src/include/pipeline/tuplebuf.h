@@ -31,6 +31,8 @@ typedef struct Tuple
 	HeapTuple heaptup;
 	/* arrival time of the event */
 	TimestampTz arrivaltime;
+	int num_batches;
+	int *batches;
 } Tuple;
 
 /* Wraps a physical event and the queries that still need to read it */
@@ -77,10 +79,12 @@ typedef struct TupleBufferReader
 	TupleBufferSlot *slot;
 } TupleBufferReader;
 
+extern List *MyBatchIds;
+
 extern TupleBuffer *WorkerTupleBuffer;
 extern TupleBuffer *CombinerTupleBuffer;
 
-extern Tuple *MakeTuple(HeapTuple heaptup, TupleDesc desc);
+extern Tuple *MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_batches, int *batches);
 
 extern void TupleBuffersInit(void);
 
@@ -100,7 +104,7 @@ extern TupleBufferReader *TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id
 extern void TupleBufferCloseReader(TupleBufferReader *reader);
 extern TupleBufferSlot *TupleBufferPinNextSlot(TupleBufferReader *reader);
 extern void TupleBufferUnpinSlot(TupleBufferReader *reader, TupleBufferSlot *slot);
-extern void TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms);
+extern void TupleBufferWaitOnSlot(TupleBuffer *buf, TupleBufferSlot *slot);
 extern void TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers);
 
 extern void TupleBufferUnpinAllPinnedSlots(void);

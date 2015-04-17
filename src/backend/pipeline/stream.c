@@ -23,6 +23,7 @@
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
 #include "parser/parse_target.h"
+#include "pipeline/cont_xact.h"
 #include "pipeline/stream.h"
 #include "storage/ipc.h"
 #include "storage/spalloc.h"
@@ -140,6 +141,10 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	Bitmapset *targets = GetStreamReaders(pstmt->stream);
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
+	int batches[1];
+	CQBatchEntry *entry = BatchEntryCreate();
+
+	batches[0] = entry->id;
 
 	foreach(lc, pstmt->inserts)
 	{
@@ -166,14 +171,16 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 			nulls[i] = params->params[i].isnull;
 		}
 
-		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc);
+		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, 1, batches);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
 	}
 
 	if (debug_sync_stream_insert)
-		TupleBufferWaitOnSlot(tbs, 5);
+		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
+
+	BatchEntryWaitAndRemove(entry);
 
 	pstmt->inserts = NIL;
 
@@ -198,6 +205,10 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
 	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
+	int batches[1];
+	CQBatchEntry *entry = BatchEntryCreate();
+
+	batches[0] = entry->id;
 
 	if (!numcols)
 		ereport(ERROR,
@@ -298,7 +309,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		/*
 		 * Now write the tuple of constants to the TupleBuffer
 		 */
-		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc);
+		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, 1, batches);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		Assert(tbs);
@@ -311,7 +322,9 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (debug_sync_stream_insert)
-		TupleBufferWaitOnSlot(tbs, 5);
+		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
+
+	BatchEntryWaitAndRemove(entry);
 
 	return count;
 }
@@ -328,13 +341,17 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	TupleBufferSlot* tbs = NULL;
 	uint64 count = 0;
 	int i;
+	int batches[1];
+	CQBatchEntry *entry = BatchEntryCreate();
+
+	batches[0] = entry->id;
 
 	for (i=0; i<ntuples; i++)
 	{
 		HeapTuple htup = tuples[i];
 		Tuple *tuple;
 
-		tuple = MakeTuple(htup, desc);
+		tuple = MakeTuple(htup, desc, 1, batches);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
@@ -344,7 +361,9 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (debug_sync_stream_insert)
-		TupleBufferWaitOnSlot(tbs, 5);
+		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
+
+	BatchEntryWaitAndRemove(entry);
 
 	return count;
 }

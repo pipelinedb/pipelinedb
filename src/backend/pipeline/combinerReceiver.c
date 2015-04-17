@@ -46,16 +46,27 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	CombinerState *c = (CombinerState *) self;
 	MemoryContext old = MemoryContextSwitchTo(CQExecutionContext);
 	TupleBufferSlot *tbs;
+	int *batches = palloc(sizeof(int) * list_length(MyBatchIds));
+	ListCell *lc;
+	int i = 0;
 
-	tbs = TupleBufferInsert(CombinerTupleBuffer, MakeTuple(ExecMaterializeSlot(slot), NULL), c->readers);
+	foreach(lc, MyBatchIds) {
+		batches[i++] = lfirst_int(lc);
+	}
+
+	tbs = TupleBufferInsert(CombinerTupleBuffer, MakeTuple(ExecMaterializeSlot(slot), NULL, list_length(MyBatchIds), batches), c->readers);
 	IncrementCQWrite(1, tbs->size);
+
+	pfree(batches);
 
 	MemoryContextSwitchTo(old);
 }
 
 static void combiner_destroy(DestReceiver *self)
 {
-	pfree(self);
+	CombinerState *c = (CombinerState *) self;
+	bms_free(c->readers);
+	pfree(c);
 }
 
 DestReceiver *

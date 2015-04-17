@@ -13,6 +13,7 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
+#include "pipeline/cont_xact.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/tuplebuf.h"
 #include "storage/spalloc.h"
@@ -28,4 +29,5 @@ void InitPipeline()
 	InitSPalloc();
 	TupleBuffersInit();
 	InitCQProcState();
+	InitCQBatchState();
 }
