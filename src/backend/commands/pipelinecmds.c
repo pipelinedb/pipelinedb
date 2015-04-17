@@ -515,7 +515,7 @@ get_views(Node *where)
 }
 
 int
-ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skipActive)
+ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skip_active)
 {
 	ListCell *lc;
 	int success = 0;
@@ -535,14 +535,16 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skipActive
 		RangeVar *rv = lfirst(lc);
 		ListCell *lcwithOptions;
 		ContinuousViewState state;
-		bool wasInactive = MarkContinuousViewAsActive(rv, pipeline_query);
+		bool was_inactive = MarkContinuousViewAsActive(rv, pipeline_query);
+		bool enough_worker_slots;
+		int num_procs;
 
 		/*
 		 * If the user tries to activate an active CV, they'll know because
 		 * the count of CVs that were activated will be less than they
 		 * expected. We only count CVs that go from inactive to active here.
 		 */
-		if (!wasInactive && skipActive)
+		if (!was_inactive && skip_active)
 			continue;
 
 		GetContinousViewState(rv, &state);
@@ -568,29 +570,26 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skipActive
 
 		SetContinousViewState(rv, &state, pipeline_query);
 
-		entry = CQProcEntryCreate(state.id, GetProcessGroupSizeFromCatalog(rv));
+		num_procs = GetProcessGroupSizeFromCatalog(rv);
+		entry = CQProcEntryCreate(state.id, num_procs);
 
 		/* CQ procs are already running */
 		if (entry == NULL)
 			continue;
-        // Check to see if the number of processes that are needed for the activation of 
-        // the CVs is no larger than max_worker_processes
-        int new_num_of_workers = 1 + state.parallelism + GetNumberOfDynamicBackgroundWorkers();
-        bool enough_workers = new_num_of_workers <= max_worker_processes;
-        
-        if(enough_workers){
+
+        /* Ensure that we have enough background worker slots */
+        enough_worker_slots = (num_procs + GetNumOfBackgroundWorkerSlotsInUse()) <= max_worker_processes;
+
+        if (enough_worker_slots)
             RunCQProcs(rv->relname, &state, entry, dboid);
-        }
         else
-        {
-            elog(LOG, "activating continuous views would require too many processes - please increase max_worker_processes");
-        }
-        
+            elog(LOG, "not enough bgworker slots to activate continuous view; increase max_worker_processes guc");
+
 		/*
 		 * Spin here waiting for the number of waiting CQ related processes
 		 * to complete.
 		 */
-		if (enough_workers && WaitForCQProcsToStart(state.id))
+		if (enough_worker_slots && WaitForCQProcsToStart(state.id))
 		{
 			success++;
 			if (continuous_query_crash_recovery)
@@ -635,10 +634,10 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		RangeVar *rv = (RangeVar *) lfirst(lc);
 		ContinuousViewState state;
 		CQProcEntry *entry;
-		bool wasActive = MarkContinuousViewAsInactive(rv, pipeline_query);
+		bool was_active = MarkContinuousViewAsInactive(rv, pipeline_query);
 
 		/* deactivating an inactive CV is a noop */
-		if (!wasActive)
+		if (!was_active)
 			continue;
 
 		GetContinousViewState(rv, &state);

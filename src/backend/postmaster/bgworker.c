@@ -911,24 +911,24 @@ RegisterDynamicBackgroundWorker(BackgroundWorker *worker,
 /*
  * Returns the number of registered dynamic background workers
  */
-int 
+int
 GetNumberOfDynamicBackgroundWorkers()
 {
-    int num_of_workers = 0;
-    int slotno = 0;
-    
+    int num_in_use = 0;
+    int slotno;
+
     LWLockAcquire(BackgroundWorkerLock, LW_SHARED);
-    
-	for (slotno = 0; slotno < BackgroundWorkerData->total_slots; ++slotno){
-	    BackgroundWorkerSlot *slot = &BackgroundWorkerData->slot[slotno];
-	    if(slot->in_use){
-	        num_of_workers++;
-	    }
-	}
-	
-	LWLockRelease(BackgroundWorkerLock);
-	
-	return num_of_workers;
+
+    for (slotno = 0; slotno < BackgroundWorkerData->total_slots; slotno++) {
+    	BackgroundWorkerSlot *slot = &BackgroundWorkerData->slot[slotno];
+
+    	if(slot->in_use)
+    		num_in_use++;
+    }
+
+    LWLockRelease(BackgroundWorkerLock);
+
+    return num_in_use;
 }
 
 /*

@@ -144,7 +144,7 @@ GetProcessGroupSize(int id)
 }
 
 /*
- * EntryAlloc
+ * CQProcEntryCreate
  *
  * Allocate an entry in the shared memory
  * hash table. Returns the entry if it exists
@@ -190,7 +190,7 @@ CQProcEntryCreate(int id, int pg_size)
 }
 
 /*
- * EntryRemove
+ * CQProcEntryRemove
  *
  * Remove an entry in the shared memory
  * hash table.
@@ -203,8 +203,10 @@ CQProcEntryRemove(int id)
 
 	if (entry)
 	{
-		if(entry->workers){ spfree(entry->workers);}
-		if(entry->shm_query){ spfree(entry->shm_query);}
+		if (entry->workers)
+			spfree(entry->workers);
+		if (entry->shm_query)
+			spfree(entry->shm_query);
 	}
 
 	/* Remove the entry from the hash table. */
