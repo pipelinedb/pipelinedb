@@ -125,6 +125,8 @@ extern void RegisterBackgroundWorker(BackgroundWorker *worker);
 extern bool RegisterDynamicBackgroundWorker(BackgroundWorker *worker,
 								BackgroundWorkerHandle **handle);
 
+extern int GetNumOfBackgroundWorkerSlotsInUse();
+
 /* Query the status of a bgworker */
 extern BgwHandleStatus GetBackgroundWorkerPid(BackgroundWorkerHandle *handle,
 					   pid_t *pidp);
