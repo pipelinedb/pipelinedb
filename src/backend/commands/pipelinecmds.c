@@ -582,8 +582,6 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skip_activ
 
 		if (enough_worker_slots)
 			RunCQProcs(rv->relname, &state, entry, dboid);
-		else
-			elog(LOG, "not enough bgworker slots to activate continuous view; increase max_worker_processes guc");
 
 		/*
 		 * Spin here waiting for the number of waiting CQ related processes
@@ -597,6 +595,15 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skip_activ
 		}
 		else
 		{
+			if (!enough_worker_slots)
+				ereport(NOTICE,
+						(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+						errmsg("not enough worker processes available to activate \"%s\"", rv->relname),
+						errhint("Increase the max_worker_processes configuration parameter")));
+			else
+				ereport(NOTICE,
+						(errmsg("failed to activate \"%s\"", rv->relname)));
+
 			fail++;
 			/*
 			 * If some of the bg procs failed, mark the continuous view
