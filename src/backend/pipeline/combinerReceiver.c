@@ -49,12 +49,14 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	int *batches = palloc(sizeof(int) * list_length(MyBatchIds));
 	ListCell *lc;
 	int i = 0;
+	Tuple *tup;
 
 	foreach(lc, MyBatchIds) {
 		batches[i++] = lfirst_int(lc);
 	}
 
-	tbs = TupleBufferInsert(CombinerTupleBuffer, MakeTuple(ExecMaterializeSlot(slot), NULL, list_length(MyBatchIds), batches), c->readers);
+	tup = MakeTuple(ExecMaterializeSlot(slot), NULL, list_length(MyBatchIds), batches);
+	tbs = TupleBufferInsert(CombinerTupleBuffer, tup, c->readers);
 	IncrementCQWrite(1, tbs->size);
 
 	pfree(batches);

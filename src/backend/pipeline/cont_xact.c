@@ -48,6 +48,7 @@ CQBatchEntry *BatchEntryCreate(void)
 		entry = (CQBatchEntry *) hash_search(CQBatchTable, &id, HASH_ENTER, &found);
 
 	entry->id = id;
+	entry->touched = false;
 	entry->num_processing = 0;
 	SpinLockInit(&entry->mutex);
 
@@ -56,7 +57,7 @@ CQBatchEntry *BatchEntryCreate(void)
 
 void BatchEntryWaitAndRemove(CQBatchEntry *entry)
 {
-	while (entry->num_processing)
+	while (!entry->touched || entry->num_processing)
 		pg_usleep(SLEEP_MS * 1000);
 	hash_search(CQBatchTable, &entry->id, HASH_REMOVE, NULL);
 }
@@ -67,6 +68,7 @@ void BatchEntryIncrementProcessors(int id)
 	CQBatchEntry *entry = (CQBatchEntry *) hash_search(CQBatchTable, &id, HASH_FIND, &found);
 	SpinLockAcquire(&entry->mutex);
 	entry->num_processing++;
+	entry->touched = true;
 	SpinLockRelease(&entry->mutex);
 }
 
@@ -78,4 +80,3 @@ void BatchEntryDecrementProcessors(int id)
 	entry->num_processing--;
 	SpinLockRelease(&entry->mutex);
 }
-

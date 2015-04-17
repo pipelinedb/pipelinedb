@@ -590,8 +590,8 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skip_activ
 		if (enough_worker_slots && WaitForCQProcsToStart(state.id))
 		{
 			success++;
-			if (continuous_query_crash_recovery)
-				EnableCQProcsRecovery(state.id);
+//			if (continuous_query_crash_recovery)
+//				EnableCQProcsRecovery(state.id);
 		}
 		else
 		{

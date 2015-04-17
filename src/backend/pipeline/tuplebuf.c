@@ -677,7 +677,7 @@ TupleBufferUnpinAllPinnedSlots(void)
 		unpin_slot(entry->cq_id, entry->slot);
 	}
 
-	MyPinnedSlots = NIL;
+	TupleBufferClearPinnedSlots();
 }
 
 /*
@@ -687,9 +687,17 @@ void
 TupleBufferClearPinnedSlots(void)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(CQExecutionContext);
+	ListCell *lc;
 
 	list_free_deep(MyPinnedSlots);
 	MyPinnedSlots = NIL;
+
+	foreach(lc, MyBatchIds) {
+		BatchEntryDecrementProcessors(lfirst_int(lc));
+	}
+
+	list_free(MyBatchIds);
+	MyBatchIds = NIL;
 
 	MemoryContextSwitchTo(oldcontext);
 }

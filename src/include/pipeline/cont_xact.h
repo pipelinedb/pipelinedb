@@ -15,6 +15,7 @@
 
 typedef struct CQBatchEntry {
 	int id;
+	bool touched;
 	int num_processing;
 	slock_t mutex;
 } CQBatchEntry;
