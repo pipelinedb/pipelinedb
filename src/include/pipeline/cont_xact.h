@@ -20,14 +20,17 @@ typedef struct StreamBatch {
 
 typedef struct StreamBatchEntry {
 	int id;
-	int num_processed;
-	int total;
+	int num_wacks;
+	int num_cacks;
+	int total_wacks;
+	int total_cacks;
 	slock_t mutex;
 } StreamBatchEntry;
 
 extern void InitStreamBatchState(void);
 extern StreamBatchEntry *StreamBatchEntryCreate(int num_readers, int num_tuples);
 extern void StreamBatchEntryWaitAndRemove(StreamBatchEntry *entry);
-extern void StreamBatchEntryMarkProcessed(StreamBatch *batch);
+extern void StreamBatchEntryIncrementTotalCAcks(StreamBatch *batch);
+extern void StreamBatchEntryMarkProcessed(StreamBatch *batch, bool is_worker);
 
 #endif

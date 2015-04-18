@@ -481,6 +481,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 			MyBatches = lappend(MyBatches, batch2);
 		}
 	}
+
 	MemoryContextSwitchTo(oldcontext);
 
 	return reader->slot;
@@ -694,11 +695,8 @@ TupleBufferClearPinnedSlots(void)
 	list_free_deep(MyPinnedSlots);
 	MyPinnedSlots = NIL;
 
-	if (IsCombiner) {
-		foreach(lc, MyBatches) {
-			StreamBatchEntryMarkProcessed(lfirst(lc));
-		}
-	}
+	foreach(lc, MyBatches)
+		StreamBatchEntryMarkProcessed(lfirst(lc), IsWorker);
 
 	list_free_deep(MyBatches);
 	MyBatches = NIL;

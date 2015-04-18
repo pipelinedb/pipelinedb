@@ -51,8 +51,14 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	int i = 0;
 	Tuple *tup;
 
-	foreach(lc, MyBatches)
-		memcpy(&batches[i++], lfirst(lc), sizeof(StreamBatch));
+	foreach(lc, MyBatches) {
+		StreamBatch *batch = lfirst(lc);
+
+		StreamBatchEntryIncrementTotalCAcks(batch);
+
+		batches[i].id = batch->id;
+		batches[i].count = 1;
+	}
 
 	tup = MakeTuple(ExecMaterializeSlot(slot), NULL, list_length(MyBatches), batches);
 	tbs = TupleBufferInsert(CombinerTupleBuffer, tup, c->readers);

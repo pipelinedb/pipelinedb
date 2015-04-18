@@ -51,8 +51,10 @@ StreamBatchEntry *StreamBatchEntryCreate(int num_readers, int num_tuples)
 	}
 
 	entry->id = id;
-	entry->num_processed = 0;
-	entry->total = num_readers * num_tuples;
+	entry->num_wacks = 0;
+	entry->num_cacks = 0;
+	entry->total_wacks = num_readers * num_tuples;
+	entry->total_cacks = 0;
 	SpinLockInit(&entry->mutex);
 
 	return entry;
@@ -60,16 +62,28 @@ StreamBatchEntry *StreamBatchEntryCreate(int num_readers, int num_tuples)
 
 void StreamBatchEntryWaitAndRemove(StreamBatchEntry *entry)
 {
-	while (entry->num_processed < entry->total)
+	while (entry->num_wacks < entry->total_wacks || entry->num_cacks < entry->total_cacks)
 		pg_usleep(SLEEP_MS * 1000);
 	hash_search(CQBatchTable, &entry->id, HASH_REMOVE, NULL);
 }
 
-void StreamBatchEntryMarkProcessed(StreamBatch *batch)
+void StreamBatchEntryIncrementTotalCAcks(StreamBatch *batch)
 {
 	bool found;
 	StreamBatchEntry *entry = (StreamBatchEntry *) hash_search(CQBatchTable, &batch->id, HASH_FIND, &found);
 	SpinLockAcquire(&entry->mutex);
-	entry->num_processed += batch->count;
+	entry->total_cacks++;
+	SpinLockRelease(&entry->mutex);
+}
+
+void StreamBatchEntryMarkProcessed(StreamBatch *batch, bool is_worker)
+{
+	bool found;
+	StreamBatchEntry *entry = (StreamBatchEntry *) hash_search(CQBatchTable, &batch->id, HASH_FIND, &found);
+	SpinLockAcquire(&entry->mutex);
+	if (is_worker)
+		entry->num_wacks += batch->count;
+	else
+		entry->num_cacks += batch->count;
 	SpinLockRelease(&entry->mutex);
 }
