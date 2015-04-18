@@ -41,7 +41,6 @@ def test_stream_buffer(pipeline, clean_db):
   pipeline.insert('stream1', ('x', 'string'), values)
   pipeline.insert('stream2', ('x', 'string'), values)
 
-  time.sleep(0.75)
   pipeline.deactivate()
 
   q = 'SELECT COUNT(*) FROM test_sbuf_%d'
