@@ -696,7 +696,7 @@ TupleBufferClearPinnedSlots(void)
 	MyPinnedSlots = NIL;
 
 	foreach(lc, MyBatches)
-		StreamBatchEntryMarkProcessed(lfirst(lc), IsWorker);
+		StreamBatchEntryMarkProcessed(lfirst(lc));
 
 	list_free_deep(MyBatches);
 	MyBatches = NIL;

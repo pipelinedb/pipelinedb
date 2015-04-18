@@ -76,12 +76,12 @@ void StreamBatchEntryIncrementTotalCAcks(StreamBatch *batch)
 	SpinLockRelease(&entry->mutex);
 }
 
-void StreamBatchEntryMarkProcessed(StreamBatch *batch, bool is_worker)
+void StreamBatchEntryMarkProcessed(StreamBatch *batch)
 {
 	bool found;
 	StreamBatchEntry *entry = (StreamBatchEntry *) hash_search(CQBatchTable, &batch->id, HASH_FIND, &found);
 	SpinLockAcquire(&entry->mutex);
-	if (is_worker)
+	if (IsWorker)
 		entry->num_wacks += batch->count;
 	else
 		entry->num_cacks += batch->count;

@@ -31,6 +31,6 @@ extern void InitStreamBatchState(void);
 extern StreamBatchEntry *StreamBatchEntryCreate(int num_readers, int num_tuples);
 extern void StreamBatchEntryWaitAndRemove(StreamBatchEntry *entry);
 extern void StreamBatchEntryIncrementTotalCAcks(StreamBatch *batch);
-extern void StreamBatchEntryMarkProcessed(StreamBatch *batch, bool is_worker);
+extern void StreamBatchEntryMarkProcessed(StreamBatch *batch);
 
 #endif
