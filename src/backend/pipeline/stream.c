@@ -142,7 +142,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
 	StreamBatch batches[1];
-	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets));
+	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets), list_length(pstmt->inserts));
 
 	batches[0].id = entry->id;
 	batches[0].count = 1;
@@ -207,7 +207,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	ExprContext *econtext = CreateStandaloneExprContext();
 	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
 	StreamBatch batches[1];
-	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets));
+	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets), list_length(values));
 
 	batches[0].id = entry->id;
 	batches[0].count = 1;
@@ -344,7 +344,7 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	uint64 count = 0;
 	int i;
 	StreamBatch batches[1];
-	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets));
+	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets), ntuples);
 
 	batches[0].id = entry->id;
 	batches[0].count = 1;

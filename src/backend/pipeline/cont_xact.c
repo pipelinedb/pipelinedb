@@ -38,7 +38,7 @@ void InitStreamBatchState(void)
 	LWLockRelease(PipelineMetadataLock);
 }
 
-StreamBatchEntry *StreamBatchEntryCreate(int num_readers)
+StreamBatchEntry *StreamBatchEntryCreate(int num_readers, int num_tuples)
 {
 	int id;
 	StreamBatchEntry *entry;
@@ -52,7 +52,7 @@ StreamBatchEntry *StreamBatchEntryCreate(int num_readers)
 
 	entry->id = id;
 	entry->num_processed = 0;
-	entry->total = num_readers;
+	entry->total = num_readers * num_tuples;
 	SpinLockInit(&entry->mutex);
 
 	return entry;

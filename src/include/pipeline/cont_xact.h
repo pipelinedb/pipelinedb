@@ -26,7 +26,7 @@ typedef struct StreamBatchEntry {
 } StreamBatchEntry;
 
 extern void InitStreamBatchState(void);
-extern StreamBatchEntry *StreamBatchEntryCreate(int total);
+extern StreamBatchEntry *StreamBatchEntryCreate(int num_readers, int num_tuples);
 extern void StreamBatchEntryWaitAndRemove(StreamBatchEntry *entry);
 extern void StreamBatchEntryMarkProcessed(StreamBatch *batch);
 
