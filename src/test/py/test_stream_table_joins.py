@@ -262,3 +262,31 @@ def test_join_multiple_tables(pipeline, clean_db):
     result = pipeline.execute('SELECT COUNT(*) FROM test_join_multi').first()
 
     assert result['count'] == len(expected)
+
+def test_indexed(pipeline, clean_db):
+    """
+    Verify that stream-table joins involving indexed tables work
+    """
+    q = """
+    SELECT stream.x::integer, count(*) FROM stream
+    JOIN test_indexed_t t ON stream.x = t.x GROUP BY stream.x
+    """
+    pipeline.create_table('test_indexed_t', x='integer', y='integer')
+    pipeline.execute('CREATE INDEX idx ON test_indexed_t(x)')
+    pipeline.create_cv('test_indexed', q)
+
+    t = _generate_rows(2, 1000)
+    s = _generate_rows(2, 1000)
+
+    pipeline.insert('test_indexed_t', ('x', 'y'), t)
+
+    pipeline.activate()
+
+    pipeline.insert('stream', ('x', 'y'), s)
+
+    pipeline.deactivate()
+
+    expected = _join(s, t, [0])
+    result = pipeline.execute('SELECT sum(count) FROM test_indexed').first()
+
+    assert result['sum'] == len(expected)
