@@ -2709,6 +2709,16 @@ choose_hashed_grouping(PlannerInfo *root,
 	Path		sorted_p;
 
 	/*
+	 * PipelineDB: because we munge target lists to add hidden state columns
+	 * for combine queries, it's much simpler to always just use hashed grouping
+	 * to avoid having to deal with target lists in additional nodes used by
+	 * sorted grouping plans. Combine queries run on relatively small input sets
+	 * anyways, so using the optimal plan isn't much of a concern.
+	 */
+	if (parse->is_combine)
+		return true;
+
+	/*
 	 * Executor doesn't support hashed aggregation with DISTINCT or ORDER BY
 	 * aggregates.  (Doing so would imply storing *all* the input values in
 	 * the hash table, and/or running many sorts in parallel, either of which

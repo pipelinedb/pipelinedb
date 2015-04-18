@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * subselect.c
@@ -2398,6 +2399,7 @@ finalize_plan(PlannerInfo *root, Plan *plan, Bitmapset *valid_params,
 		case T_SetOp:
 		case T_Group:
 		case T_PhysicalGroupLookup:
+		case T_StreamScan:
 			break;
 
 		default:
