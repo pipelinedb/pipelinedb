@@ -50,7 +50,7 @@ bool debug_tuple_stream_buffer;
 int tuple_buffer_blocks;
 int empty_tuple_buffer_wait_time;
 
-List *MyBatchIds = NIL;
+List *MyBatches = NIL;
 static List *MyPinnedSlots = NIL;
 static List *MyReaders = NIL;
 
@@ -64,7 +64,7 @@ typedef struct
  * MakeTuple
  */
 Tuple *
-MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_batches, int *batches)
+MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_batches, StreamBatch *batches)
 {
 	Tuple *t = palloc0(sizeof(Tuple));
 	t->heaptup = heaptup;
@@ -128,7 +128,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	}
 
 	tupsize = tuple->heaptup->t_len + HEAPTUPLESIZE;
-	batches_size = sizeof(int) * tuple->num_batches;
+	batches_size = sizeof(StreamBatch) * tuple->num_batches;
 	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(readers->nwords) + desclen + batches_size;
 
 	if (size > buf->size)
@@ -229,7 +229,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	memcpy(slot->tuple->heaptup->t_data, tuple->heaptup->t_data, tuple->heaptup->t_len);
 	pos += tupsize;
 
-	slot->tuple->batches = (int *) pos;
+	slot->tuple->batches = (StreamBatch *) pos;
 	memcpy(slot->tuple->batches, tuple->batches, batches_size);
 	pos += batches_size;
 
@@ -396,7 +396,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 {
 	MyPinnedSlotEntry *entry;
 	int i;
-	int *batches;
+	StreamBatch *batches;
 	MemoryContext oldcontext;
 
 	if (NoUnreadSlots(reader))
@@ -461,24 +461,26 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	MyPinnedSlots = lappend(MyPinnedSlots, entry);
 
 	batches = entry->slot->tuple->batches;
-	for (i = 0; i < entry->slot->tuple->num_batches; i++) {
-		int batch_id = batches[i];
-		bool found = false;
-		ListCell *lc;
 
-		foreach(lc, MyBatchIds) {
-			if (batch_id == lfirst_int(lc)) {
+	for (i = 0; i < entry->slot->tuple->num_batches; i++) {
+		StreamBatch batch = batches[i];
+		ListCell *lc;
+		bool found = false;
+
+		foreach(lc, MyBatches) {
+			StreamBatch *batch2 = lfirst(lc);
+			if (batch.id == batch2->id) {
+				batch2->count += batch.count;
 				found = true;
-				break;
 			}
 		}
 
 		if (!found) {
-			MyBatchIds = lappend_int(MyBatchIds, batch_id);
-			BatchEntryIncrementProcessors(batch_id);
+			StreamBatch *batch2 = (StreamBatch *) palloc(sizeof(StreamBatch));
+			memcpy(batch2, &batch, sizeof(StreamBatch));
+			MyBatches = lappend(MyBatches, batch2);
 		}
 	}
-
 	MemoryContextSwitchTo(oldcontext);
 
 	return reader->slot;
@@ -692,12 +694,14 @@ TupleBufferClearPinnedSlots(void)
 	list_free_deep(MyPinnedSlots);
 	MyPinnedSlots = NIL;
 
-	foreach(lc, MyBatchIds) {
-		BatchEntryDecrementProcessors(lfirst_int(lc));
+	if (IsCombiner) {
+		foreach(lc, MyBatches) {
+			StreamBatchEntryMarkProcessed(lfirst(lc));
+		}
 	}
 
-	list_free(MyBatchIds);
-	MyBatchIds = NIL;
+	list_free_deep(MyBatches);
+	MyBatches = NIL;
 
 	MemoryContextSwitchTo(oldcontext);
 }
@@ -742,4 +746,6 @@ TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t nu
 	while ((tbs = TupleBufferPinNextSlot(reader)))
 		TupleBufferUnpinSlot(reader, tbs);
 	TupleBufferCloseReader(reader);
+
+	TupleBufferClearPinnedSlots();
 }

@@ -13,6 +13,7 @@
 
 #include "postgres.h"
 #include "nodes/bitmapset.h"
+#include "pipeline/cont_xact.h"
 #include "pipeline/stream.h"
 #include "storage/s_lock.h"
 #include "storage/shmem.h"
@@ -32,7 +33,7 @@ typedef struct Tuple
 	/* arrival time of the event */
 	TimestampTz arrivaltime;
 	int num_batches;
-	int *batches;
+	StreamBatch *batches;
 } Tuple;
 
 /* Wraps a physical event and the queries that still need to read it */
@@ -79,12 +80,12 @@ typedef struct TupleBufferReader
 	TupleBufferSlot *slot;
 } TupleBufferReader;
 
-extern List *MyBatchIds;
+extern List *MyBatches;
 
 extern TupleBuffer *WorkerTupleBuffer;
 extern TupleBuffer *CombinerTupleBuffer;
 
-extern Tuple *MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_batches, int *batches);
+extern Tuple *MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_batches, StreamBatch *batches);
 
 extern void TupleBuffersInit(void);
 

@@ -141,10 +141,11 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	Bitmapset *targets = GetStreamReaders(pstmt->stream);
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
-	int batches[1];
-	CQBatchEntry *entry = BatchEntryCreate();
+	StreamBatch batches[1];
+	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets));
 
-	batches[0] = entry->id;
+	batches[0].id = entry->id;
+	batches[0].count = 1;
 
 	foreach(lc, pstmt->inserts)
 	{
@@ -180,7 +181,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	if (debug_sync_stream_insert)
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
 
-	BatchEntryWaitAndRemove(entry);
+	StreamBatchEntryWaitAndRemove(entry);
 
 	pstmt->inserts = NIL;
 
@@ -205,10 +206,11 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
 	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
-	int batches[1];
-	CQBatchEntry *entry = BatchEntryCreate();
+	StreamBatch batches[1];
+	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets));
 
-	batches[0] = entry->id;
+	batches[0].id = entry->id;
+	batches[0].count = 1;
 
 	if (!numcols)
 		ereport(ERROR,
@@ -324,7 +326,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	if (debug_sync_stream_insert)
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
 
-	BatchEntryWaitAndRemove(entry);
+	StreamBatchEntryWaitAndRemove(entry);
 
 	return count;
 }
@@ -341,10 +343,11 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	TupleBufferSlot* tbs = NULL;
 	uint64 count = 0;
 	int i;
-	int batches[1];
-	CQBatchEntry *entry = BatchEntryCreate();
+	StreamBatch batches[1];
+	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets));
 
-	batches[0] = entry->id;
+	batches[0].id = entry->id;
+	batches[0].count = 1;
 
 	for (i=0; i<ntuples; i++)
 	{
@@ -363,7 +366,7 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	if (debug_sync_stream_insert)
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
 
-	BatchEntryWaitAndRemove(entry);
+	StreamBatchEntryWaitAndRemove(entry);
 
 	return count;
 }

@@ -46,16 +46,15 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	CombinerState *c = (CombinerState *) self;
 	MemoryContext old = MemoryContextSwitchTo(CQExecutionContext);
 	TupleBufferSlot *tbs;
-	int *batches = palloc(sizeof(int) * list_length(MyBatchIds));
+	StreamBatch *batches = (StreamBatch *) palloc(sizeof(StreamBatch) * list_length(MyBatches));
 	ListCell *lc;
 	int i = 0;
 	Tuple *tup;
 
-	foreach(lc, MyBatchIds) {
-		batches[i++] = lfirst_int(lc);
-	}
+	foreach(lc, MyBatches)
+		memcpy(&batches[i++], lfirst(lc), sizeof(StreamBatch));
 
-	tup = MakeTuple(ExecMaterializeSlot(slot), NULL, list_length(MyBatchIds), batches);
+	tup = MakeTuple(ExecMaterializeSlot(slot), NULL, list_length(MyBatches), batches);
 	tbs = TupleBufferInsert(CombinerTupleBuffer, tup, c->readers);
 	IncrementCQWrite(1, tbs->size);
 

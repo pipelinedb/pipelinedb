@@ -13,17 +13,21 @@
 
 #include "storage/spin.h"
 
-typedef struct CQBatchEntry {
+typedef struct StreamBatch {
 	int id;
-	bool touched;
-	int num_processing;
-	slock_t mutex;
-} CQBatchEntry;
+	int count;
+} StreamBatch;
 
-extern void InitCQBatchState(void);
-extern CQBatchEntry *BatchEntryCreate(void);
-extern void BatchEntryWaitAndRemove(CQBatchEntry *entry);
-extern void BatchEntryIncrementProcessors(int id);
-extern void BatchEntryDecrementProcessors(int id);
+typedef struct StreamBatchEntry {
+	int id;
+	int num_processed;
+	int total;
+	slock_t mutex;
+} StreamBatchEntry;
+
+extern void InitStreamBatchState(void);
+extern StreamBatchEntry *StreamBatchEntryCreate(int total);
+extern void StreamBatchEntryWaitAndRemove(StreamBatchEntry *entry);
+extern void StreamBatchEntryMarkProcessed(StreamBatch *batch);
 
 #endif

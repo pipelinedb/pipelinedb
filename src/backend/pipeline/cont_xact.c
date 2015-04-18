@@ -21,12 +21,12 @@
 
 static HTAB *CQBatchTable = NULL;
 
-void InitCQBatchState(void)
+void InitStreamBatchState(void)
 {
 	HASHCTL info;
 
 	info.keysize = sizeof(int);
-	info.entrysize = sizeof(CQBatchEntry);
+	info.entrysize = sizeof(StreamBatchEntry);
 
 	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
@@ -38,45 +38,38 @@ void InitCQBatchState(void)
 	LWLockRelease(PipelineMetadataLock);
 }
 
-CQBatchEntry *BatchEntryCreate(void)
+StreamBatchEntry *StreamBatchEntryCreate(int num_readers)
 {
-	int id = rand();
-	CQBatchEntry *entry;
+	int id;
+	StreamBatchEntry *entry;
 	bool found = true;
 
 	while (found)
-		entry = (CQBatchEntry *) hash_search(CQBatchTable, &id, HASH_ENTER, &found);
+	{
+		id = rand();
+		entry = (StreamBatchEntry *) hash_search(CQBatchTable, &id, HASH_ENTER, &found);
+	}
 
 	entry->id = id;
-	entry->touched = false;
-	entry->num_processing = 0;
+	entry->num_processed = 0;
+	entry->total = num_readers;
 	SpinLockInit(&entry->mutex);
 
 	return entry;
 }
 
-void BatchEntryWaitAndRemove(CQBatchEntry *entry)
+void StreamBatchEntryWaitAndRemove(StreamBatchEntry *entry)
 {
-	while (!entry->touched || entry->num_processing)
+	while (entry->num_processed < entry->total)
 		pg_usleep(SLEEP_MS * 1000);
 	hash_search(CQBatchTable, &entry->id, HASH_REMOVE, NULL);
 }
 
-void BatchEntryIncrementProcessors(int id)
+void StreamBatchEntryMarkProcessed(StreamBatch *batch)
 {
 	bool found;
-	CQBatchEntry *entry = (CQBatchEntry *) hash_search(CQBatchTable, &id, HASH_FIND, &found);
+	StreamBatchEntry *entry = (StreamBatchEntry *) hash_search(CQBatchTable, &batch->id, HASH_FIND, &found);
 	SpinLockAcquire(&entry->mutex);
-	entry->num_processing++;
-	entry->touched = true;
-	SpinLockRelease(&entry->mutex);
-}
-
-void BatchEntryDecrementProcessors(int id)
-{
-	bool found;
-	CQBatchEntry *entry = (CQBatchEntry *) hash_search(CQBatchTable, &id, HASH_FIND, &found);
-	SpinLockAcquire(&entry->mutex);
-	entry->num_processing--;
+	entry->num_processed += batch->count;
 	SpinLockRelease(&entry->mutex);
 }

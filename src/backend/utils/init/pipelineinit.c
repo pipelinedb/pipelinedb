@@ -29,5 +29,5 @@ void InitPipeline()
 	InitSPalloc();
 	TupleBuffersInit();
 	InitCQProcState();
-	InitCQBatchState();
+	InitStreamBatchState();
 }
