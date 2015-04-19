@@ -89,12 +89,6 @@ TupleBufferWaitOnSlot(TupleBuffer *buf, TupleBufferSlot *slot)
 		/* TODO(usmanm): Could this result in a live lock if slot is repeatedly equal to tail? */
 		if (!SlotIsValid(slot))
 			break;
-		if ((intptr_t) slot < (intptr_t) buf->tail)
-			break;
-		if ((intptr_t) slot >= (intptr_t) buf->head)
-			break;
-		if (slot->id < buf->tail->id)
-			break;
 		pg_usleep(WAIT_SLEEP_MS * 1000);
 	}
 
