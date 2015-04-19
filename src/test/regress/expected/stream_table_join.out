@@ -4,6 +4,7 @@ CREATE TABLE test_stj_t0 (tid integer, data text, val float8);
 CREATE CONTINUOUS VIEW test_stj0 AS SELECT s.id::integer, t.tid, t.data FROM test_stj_stream s JOIN test_stj_t0 t ON s.id = t.tid;
 CREATE CONTINUOUS VIEW test_stj1 AS SELECT s.id::integer, t.tid, t.data, s.data as jdata FROM test_stj_t0 t JOIN test_stj_stream s ON s.id = t.tid WHERE s.data::jsonb = '[0, 1]';
 CREATE CONTINUOUS VIEW test_stj2 AS SELECT test_stj_stream.id::integer, test_stj_t0.val FROM test_stj_t0, test_stj_stream WHERE test_stj_t0.tid = 0;
+NOTICE:  consider creating an index on test_stj_t0.tid for optimal stream-table join performance
 CREATE CONTINUOUS VIEW test_stj3 AS SELECT s.id::integer, t.val, s.data::json FROM test_stj_t0 t JOIN test_stj_stream s ON s.id = t.tid AND s.id = t.val;
 INSERT INTO test_stj_t0 (tid, data, val) VALUES (0, '0', 0.1);
 INSERT INTO test_stj_t0 (tid, data, val) VALUES (0, '1', 1.2);
@@ -198,6 +199,7 @@ SELECT * FROM test_stj6 ORDER BY col2;
 
 CREATE CONTINUOUS VIEW stj_no_tl AS SELECT COUNT(*)
 FROM test_stj_stream JOIN test_stj_t0 ON test_stj_stream.id::integer = test_stj_t0.tid;
+NOTICE:  consider creating an index on test_stj_t0.tid for optimal stream-table join performance
 ACTIVATE stj_no_tl;
 INSERT INTO test_stj_stream (id) VALUES (0);
 SELECT * FROM stj_no_tl;
@@ -209,6 +211,7 @@ SELECT * FROM stj_no_tl;
 DEACTIVATE stj_no_tl;
 CREATE TABLE test_stj_location (locid integer);
 CREATE TABLE test_stj_blocks (locid integer, ip inet);
+CREATE INDEX loc_index ON test_stj_location(locid);
 INSERT INTO test_stj_location (locid) VALUES (42);
 INSERT INTO test_stj_blocks (locid, ip) VALUES (42, '0.0.0.0');
 CREATE CONTINUOUS VIEW test_stj7 AS
@@ -216,6 +219,7 @@ SELECT (test_stj_stream.data::jsonb->>'key')::text, avg((test_stj_stream.data::j
 FROM test_stj_stream, test_stj_blocks JOIN test_stj_location USING(locid)
 WHERE test_stj_blocks.ip = (test_stj_stream.data::jsonb->>'ip')::inet
 GROUP BY  (test_stj_stream.data::jsonb->>'key')::text, test_stj_location.locid;
+NOTICE:  consider creating an index on test_stj_blocks.ip for optimal stream-table join performance
 ACTIVATE test_stj7;
 INSERT INTO test_stj_stream (data) VALUES ('{"key": "1", "value": 42.42, "ip": "0.0.0.0"}');
 INSERT INTO test_stj_stream (data) VALUES ('{"key": "1", "value": 420.42, "ip": "0.0.0.0"}');
@@ -245,6 +249,7 @@ test_stj_location.locid
 FROM test_stj_stream, test_stj_blocks JOIN test_stj_location USING(locid)
 WHERE test_stj_blocks.ip = (test_stj_stream.data::jsonb#>>'{body,clientIP}')::inet
 GROUP BY game, peripheryID, created_at, test_stj_location.locid;
+NOTICE:  consider creating an index on test_stj_blocks.ip for optimal stream-table join performance
 ACTIVATE test_stj8;
 INSERT INTO test_stj_stream (data) VALUES ('{"header": {"ver": 1, "op_type": 402, "op_asset": null, "spa_id": 6333813, "game": "wot", "creation_time": 1427713483, "reserved1": null, "reserved2": null}, "body": {"peripheryID": 101, "arenaID": 2128201, "arenaGeometryID": 24, "arenaGameplayID": 1, "time": 1427712977, "clientIP": "0.0.0.0", "packetsReceived": 6264, "packetsSent": 5059, "packetsResent": 4, "minRoundTripTime": 0.043896623, "maxRoundTripTime": 0.68855155, "avgRoundTripTime": 10}}');
 INSERT INTO test_stj_stream (data) VALUES ('{"header": {"ver": 1, "op_type": 402, "op_asset": null, "spa_id": 6333813, "game": "wot", "creation_time": 1427713483, "reserved1": null, "reserved2": null}, "body": {"peripheryID": 101, "arenaID": 2128201, "arenaGeometryID": 24, "arenaGameplayID": 1, "time": 1427712977, "clientIP": "0.0.0.0", "packetsReceived": 6264, "packetsSent": 5059, "packetsResent": 4, "minRoundTripTime": 0.043896623, "maxRoundTripTime": 0.68855155, "avgRoundTripTime": 20}}');

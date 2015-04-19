@@ -33,7 +33,7 @@ CREATE CONTINUOUS VIEW cqanalyze18 AS SELECT s0.id::integer as id0, s1.id::integ
 CREATE CONTINUOUS VIEW cqanalyze19 AS SELECT s0.id::integer AS id0, s1.id::integer AS id1 FROM stream s0 JOIN another_stream s1 ON s0.id = s1.id WHERE s0.id > 10 ORDER BY s1.id DESC;
 
 -- Stream-table-stream JOINs
-CREATE table sts (id INTEGER);
+CREATE TABLE sts (id INTEGER);
 CREATE CONTINUOUS VIEW cqanalyze20 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM s0 JOIN sts ON s0.id = sts.id JOIN s1 ON sts.id = s1.x;
 CREATE CONTINUOUS VIEW cqanalyze21 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM stream s0 JOIN sts ON s0.id = sts.id JOIN s1 ON sts.id = s1.id::integer WHERE sts.id > 42;
 CREATE CONTINUOUS VIEW cqanalyze22 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM stream s0 INNER JOIN sts ON s0.id = sts.id RIGHT OUTER JOIN s1 ON sts.id = s1.id::integer WHERE sts.id > 42;
@@ -51,6 +51,21 @@ CREATE CONTINUOUS VIEW cqanalyze25 AS SELECT id::integer AS id0, id::text AS id1
 
 -- Another untyped column with an aliased stream
 CREATE CONTINUOUS VIEW cqanalyze26 AS SELECT s.id FROM stream s WHERE s.id < 10;
+
+-- Verify that NOTICEs are properly shown when joining on unindexed columns
+CREATE TABLE tnotice (x integer, y integer);
+CREATE CONTINUOUS VIEW cvnotice0 AS SELECT stream.x::integer FROM stream JOIN tnotice ON stream.x = tnotice.x;
+
+-- tnotice.x NOTICE should only be shown once
+CREATE CONTINUOUS VIEW cvnotice1 AS SELECT stream.x::integer FROM stream JOIN tnotice ON stream.x = tnotice.x AND stream.x = tnotice.x;
+CREATE CONTINUOUS VIEW cvnotice2 AS SELECT stream.x::integer FROM stream, tnotice WHERE tnotice.x = stream.x;
+
+CREATE INDEX tnotice_idx ON tnotice(x);
+
+-- No NOTICE should be given now that an index exists
+CREATE CONTINUOUS VIEW cvnotice3 AS SELECT stream.x::integer FROM stream, tnotice WHERE tnotice.x = stream.x;
+
+DROP TABLE tnotice;
 
 -- Verify all relevant types are recognized
 CREATE CONTINUOUS VIEW cqanalyze27 AS SELECT
@@ -218,6 +233,10 @@ DROP CONTINUOUS VIEW cqanalyze50;
 DROP CONTINUOUS VIEW cqanalyze51;
 DROP CONTINUOUS VIEW cqanalyze52;
 DROP CONTINUOUS VIEW cqanalyze53;
+DROP CONTINUOUS VIEW cvnotice0;
+DROP CONTINUOUS VIEW cvnotice1;
+DROP CONTINUOUS VIEW cvnotice2;
+DROP CONTINUOUS VIEW cvnotice3;
 
 -- Regression
 CREATE CONTINUOUS VIEW cqregress1 AS SELECT id::integer + avg(id) FROM stream GROUP BY id;

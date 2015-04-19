@@ -10,7 +10,9 @@
  */
 #include "postgres.h"
 
+#include "access/heapam.h"
 #include "access/htup_details.h"
+#include "access/sysattr.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_proc.h"
 #include "nodes/makefuncs.h"
@@ -26,6 +28,7 @@
 #include "pipeline/stream.h"
 #include "storage/lock.h"
 #include "utils/builtins.h"
+#include "utils/rel.h"
 #include "utils/syscache.h"
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
@@ -527,6 +530,95 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, ContAnalyzeContext *
 }
 
 /*
+ * col_has_index
+ *
+ * Checks if the column of the given relation belongs to an index
+ */
+static bool
+col_has_index(RangeVar *rv, ColumnRef *col)
+{
+	Relation rel = heap_openrv(rv, NoLock);
+	Bitmapset *indexed = RelationGetIndexAttrBitmap(rel, INDEX_ATTR_BITMAP_ALL);
+	TupleDesc desc = RelationGetDescr(rel);
+	char *table;
+	char *colname;
+	int i;
+
+	heap_close(rel, NoLock);
+	DeconstructQualifiedName(col->fields, &table, &colname);
+
+	for (i=0; i<desc->natts; i++)
+	{
+		AttrNumber attno = desc->attrs[i]->attnum - FirstLowInvalidHeapAttributeNumber;
+		if (pg_strcasecmp(NameStr(desc->attrs[i]->attname), colname) == 0 &&
+				bms_is_member(attno, indexed))
+			return true;
+	}
+
+	return false;
+}
+
+/*
+ * warn_unindexed_join
+ *
+ * Check for any stream-table joins on unindexed table columns. If we find any,
+ * log a NOTICE that communicates the potential performance implications.
+ */
+static void
+warn_unindexed_join(SelectStmt *stmt, ContAnalyzeContext *context)
+{
+	ListCell *lc;
+	ContAnalyzeContext local;
+	List *set = NIL;
+
+	MemSet(&local, 0, sizeof(ContAnalyzeContext));
+
+	collect_types_and_cols((Node *) stmt->fromClause, &local);
+	collect_types_and_cols((Node *) stmt->whereClause, &local);
+
+	/* we only want to log one notice per column, so dedupe */
+	foreach(lc, local.cols)
+	{
+		Node *n = (Node *) lfirst(lc);
+		ListCell *l;
+		bool unique = true;
+
+		foreach(l, set)
+		{
+			if (equal((Node *) lfirst(l), n))
+			{
+				unique = false;
+				break;
+			}
+		}
+
+		if (unique)
+			set = lappend(set, n);
+	}
+
+	foreach(lc, set)
+	{
+		ListCell *rc;
+		ColumnRef *col = (ColumnRef *) lfirst(lc);
+
+		foreach(rc, context->rels)
+		{
+			RangeVar *rv = (RangeVar *) lfirst(rc);
+			char *table;
+			char *colname;
+
+			DeconstructQualifiedName(col->fields, &table, &colname);
+			if (pg_strcasecmp(table, rv->relname) != 0)
+				continue;
+
+			/* log the notice if the column doesn't have an index */
+			if (!col_has_index(rv, col))
+				elog(NOTICE, "consider creating an index on %s for optimal stream-table join performance", NameListToString(col->fields));
+		}
+	}
+}
+
+/*
  * ValidateContinuousQuery
  */
 void
@@ -797,6 +889,9 @@ ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql)
 	/* Ensure that the sliding window is legal */
 	if (find_clock_timestamp_expr(select->whereClause, context))
 		validate_clock_timestamp_expr(select, context->expr, context);
+
+	/* Warn the user if it's a stream-table join with an unindexed join qual */
+	warn_unindexed_join(select, context);
 
 	/* Pass it to the analyzer to make sure all function definitions, etc. are correct */
 	parse_analyze((Node *) select, sql, NULL, 0);
