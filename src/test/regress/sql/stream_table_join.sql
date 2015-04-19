@@ -132,6 +132,7 @@ DEACTIVATE stj_no_tl;
 
 CREATE TABLE test_stj_location (locid integer);
 CREATE TABLE test_stj_blocks (locid integer, ip inet);
+CREATE INDEX loc_index ON test_stj_location(locid);
 
 INSERT INTO test_stj_location (locid) VALUES (42);
 INSERT INTO test_stj_blocks (locid, ip) VALUES (42, '0.0.0.0');
