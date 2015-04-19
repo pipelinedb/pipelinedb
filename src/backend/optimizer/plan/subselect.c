@@ -2353,6 +2353,7 @@ finalize_plan(PlannerInfo *root, Plan *plan, Bitmapset *valid_params,
 							  &context);
 			break;
 
+		case T_StreamTableJoin:
 		case T_HashJoin:
 			finalize_primnode((Node *) ((Join *) plan)->joinqual,
 							  &context);
