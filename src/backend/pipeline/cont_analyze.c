@@ -613,7 +613,7 @@ warn_unindexed_join(SelectStmt *stmt, ContAnalyzeContext *context)
 
 			/* log the notice if the column doesn't have an index */
 			if (!col_has_index(rv, col))
-				elog(NOTICE, "consider creating an index on %s for optimal stream-table join performance", NameListToString(col->fields));
+				elog(NOTICE, "consider creating an index on %s for improved stream-table join performance", NameListToString(col->fields));
 		}
 	}
 }
