@@ -62,7 +62,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 
 			StreamBatchEntryIncrementTotalCAcks(batch);
 
-			batches[i].id = batch->id;
+			batches[i].entry = batch->entry;
 			batches[i].count = 1;
 			i++;
 		}

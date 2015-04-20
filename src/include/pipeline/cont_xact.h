@@ -13,11 +13,6 @@
 
 #include "storage/spin.h"
 
-typedef struct StreamBatch {
-	int id;
-	int count;
-} StreamBatch;
-
 typedef struct StreamBatchEntry {
 	int id;
 	int num_wacks;
@@ -27,7 +22,11 @@ typedef struct StreamBatchEntry {
 	slock_t mutex;
 } StreamBatchEntry;
 
-extern void InitStreamBatchState(void);
+typedef struct StreamBatch {
+	StreamBatchEntry *entry;
+	int count;
+} StreamBatch;
+
 extern StreamBatchEntry *StreamBatchEntryCreate(int num_readers, int num_tuples);
 extern void StreamBatchEntryWaitAndRemove(StreamBatchEntry *entry);
 extern void StreamBatchEntryIncrementTotalCAcks(StreamBatch *batch);

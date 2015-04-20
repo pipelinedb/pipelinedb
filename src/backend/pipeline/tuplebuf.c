@@ -464,7 +464,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 
 			foreach(lc, MyBatches) {
 				StreamBatch *batch2 = lfirst(lc);
-				if (batch.id == batch2->id) {
+				if (batch.entry == batch2->entry) {
 					batch2->count += batch.count;
 					found = true;
 				}

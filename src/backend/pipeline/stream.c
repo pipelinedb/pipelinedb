@@ -150,7 +150,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 		entry = StreamBatchEntryCreate(bms_num_members(targets), list_length(pstmt->inserts));
 		num_batches = 1;
 
-		batches[0].id = entry->id;
+		batches[0].entry = entry;
 		batches[0].count = 1;
 	}
 
@@ -223,7 +223,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		entry = StreamBatchEntryCreate(bms_num_members(targets), list_length(values));
 		num_batches = 1;
 
-		batches[0].id = entry->id;
+		batches[0].entry = entry;
 		batches[0].count = 1;
 	}
 
@@ -368,7 +368,7 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 		entry = StreamBatchEntryCreate(bms_num_members(targets), ntuples);
 		num_batches = 1;
 
-		batches[0].id = entry->id;
+		batches[0].entry = entry;
 		batches[0].count = 1;
 	}
 
