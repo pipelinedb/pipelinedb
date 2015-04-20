@@ -599,6 +599,49 @@ GetStreamReaders(const char *stream)
 	return result;
 }
 
+
+
+Bitmapset *
+GetStreamReadersMasked(const char *stream, const char *targets)
+{
+	Bitmapset *query_bitmap = GetStreamReaders(stream);
+
+	if (targets != NULL) 
+	{
+		Bitmapset *targets_bitmap = palloc0(BITMAPSET_SIZE(query_bitmap->nwords));//TODO palloc not needed
+		int ptr = 0;
+		char* view_name = pallac0(strlen(targets) + 1);
+		while (ptr < strlen(targets))
+		{
+			char* commo_ptr = strchr(targets + ptr, ',');
+			int len;
+			if (commo_ptr == NULL)
+				len = strlen(targets);
+			else
+				len = commo_ptr - targets + ptr;
+
+			memcpy(view_name, targets + ptr, len);
+			view_name[len] = '\0';
+			ptr += len + 1;
+printf ("Hello: view_name: %s\n", view_name);
+			HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(view_name));
+
+			if (!HeapTupleIsValid(tuple))
+                		ereport(ERROR,
+                                		(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+						errmsg("continuous view \"%s\" does not exist", view_name)));
+
+			Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
+			bms_add_member (targets_bitmap, row->id);
+		}
+		free(view_name);
+
+		query_bitmap = bms_intersect(query_bitmap, targets_bitmap);
+		//TODO free targets bitmap
+	}
+	return query_bitmap;
+}
+
 TupleDesc
 GetStreamTupleDesc(const char *stream, List *colnames)
 {

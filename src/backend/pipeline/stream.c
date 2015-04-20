@@ -32,6 +32,7 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 #include "utils/typcache.h"
+#include "utils/guc.h"
 
 /* Whether or not to block till the events are consumed by a cv*/
 bool debug_sync_stream_insert;
@@ -197,7 +198,10 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
-	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
+printf ("Hello %s\n", stream_targets);//TODO if null call the other func
+	Bitmapset *targets = GetStreamReadersMasked(ins->relation->relname, stream_targets);
+
+
 
 	if (!numcols)
 		ereport(ERROR,

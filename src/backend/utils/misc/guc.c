@@ -467,6 +467,8 @@ int			tcp_keepalives_idle;
 int			tcp_keepalives_interval;
 int			tcp_keepalives_count;
 
+char	   *stream_targets;
+
 /*
  * This really belongs in pg_shmem.c, but is defined here so that it doesn't
  * need to be duplicated in all the different implementations of pg_shmem.c.
@@ -3332,6 +3334,16 @@ static struct config_string ConfigureNamesString[] =
 			0
 		},
 		&license_key,
+		NULL,
+		NULL, NULL, NULL,
+	},
+	{
+		{"stream_targets", PGC_USERSET, QUERY_TUNING_OTHER,
+			gettext_noop("List of continuous views that will be affected when inserting into an stream."),
+			NULL,
+			0
+		},
+		&stream_targets,
 		NULL,
 		NULL, NULL, NULL,
 	},

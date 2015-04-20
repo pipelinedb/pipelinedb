@@ -239,6 +239,8 @@ extern char *external_pid_file;
 
 extern char *application_name;
 
+extern char *stream_targets;
+
 extern int	tcp_keepalives_idle;
 extern int	tcp_keepalives_interval;
 extern int	tcp_keepalives_count;
