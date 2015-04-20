@@ -454,25 +454,27 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	entry->cq_id = reader->cq_id;
 	MyPinnedSlots = lappend(MyPinnedSlots, entry);
 
-	batches = entry->slot->tuple->batches;
+	if (sync_stream_insert) {
+		batches = entry->slot->tuple->batches;
 
-	for (i = 0; i < entry->slot->tuple->num_batches; i++) {
-		StreamBatch batch = batches[i];
-		ListCell *lc;
-		bool found = false;
+		for (i = 0; i < entry->slot->tuple->num_batches; i++) {
+			StreamBatch batch = batches[i];
+			ListCell *lc;
+			bool found = false;
 
-		foreach(lc, MyBatches) {
-			StreamBatch *batch2 = lfirst(lc);
-			if (batch.id == batch2->id) {
-				batch2->count += batch.count;
-				found = true;
+			foreach(lc, MyBatches) {
+				StreamBatch *batch2 = lfirst(lc);
+				if (batch.id == batch2->id) {
+					batch2->count += batch.count;
+					found = true;
+				}
 			}
-		}
 
-		if (!found) {
-			StreamBatch *batch2 = (StreamBatch *) palloc(sizeof(StreamBatch));
-			memcpy(batch2, &batch, sizeof(StreamBatch));
-			MyBatches = lappend(MyBatches, batch2);
+			if (!found) {
+				StreamBatch *batch2 = (StreamBatch *) palloc(sizeof(StreamBatch));
+				memcpy(batch2, &batch, sizeof(StreamBatch));
+				MyBatches = lappend(MyBatches, batch2);
+			}
 		}
 	}
 
@@ -689,11 +691,14 @@ TupleBufferClearPinnedSlots(void)
 	list_free_deep(MyPinnedSlots);
 	MyPinnedSlots = NIL;
 
-	foreach(lc, MyBatches)
-		StreamBatchEntryMarkProcessed(lfirst(lc));
+	if (sync_stream_insert)
+	{
+		foreach(lc, MyBatches)
+			StreamBatchEntryMarkProcessed(lfirst(lc));
 
-	list_free_deep(MyBatches);
-	MyBatches = NIL;
+		list_free_deep(MyBatches);
+		MyBatches = NIL;
+	}
 
 	MemoryContextSwitchTo(oldcontext);
 }

@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 CREATE CONTINUOUS VIEW test_char_to_bpchar AS SELECT x::char FROM char_stream;
 CREATE CONTINUOUS VIEW test_char_to_varchar AS SELECT x::char FROM char_stream;
 CREATE CONTINUOUS VIEW test_name_to_text AS SELECT x::name FROM name_stream;

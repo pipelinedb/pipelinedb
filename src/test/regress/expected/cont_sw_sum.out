@@ -1,4 +1,3 @@
-SET debug_sync_stream_insert = 'on';
 -------------------------------------------------------------------------------
 -- Integer sums
 CREATE CONTINUOUS VIEW test_sw_int8_sum AS SELECT k::text, SUM(v::int8) FROM int_stream_cqswsum WHERE arrival_timestamp > clock_timestamp() - interval '5 hour' GROUP BY k;

@@ -1534,12 +1534,12 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"debug_sync_stream_insert", PGC_USERSET, DEVELOPER_OPTIONS,
-			gettext_noop("Makes INSERTS into streams synchronous."),
+		{"sync_stream_insert", PGC_SIGHUP, QUERY_TUNING,
+			gettext_noop("Makes INSERTs into streams synchronous."),
 			NULL,
 		},
-		&debug_sync_stream_insert,
-		false,
+		&sync_stream_insert,
+		true,
 		NULL, NULL, NULL
 	},
 

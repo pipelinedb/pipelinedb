@@ -35,7 +35,7 @@
 #include "utils/typcache.h"
 
 /* Whether or not to block till the events are consumed by a cv*/
-bool debug_sync_stream_insert;
+bool sync_stream_insert;
 
 static HTAB *prepared_stream_inserts = NULL;
 
@@ -142,10 +142,17 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
 	StreamBatch batches[1];
-	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets), list_length(pstmt->inserts));
+	StreamBatchEntry *entry = NULL;
+	int num_batches = 0;
 
-	batches[0].id = entry->id;
-	batches[0].count = 1;
+	if (sync_stream_insert)
+	{
+		entry = StreamBatchEntryCreate(bms_num_members(targets), list_length(pstmt->inserts));
+		num_batches = 1;
+
+		batches[0].id = entry->id;
+		batches[0].count = 1;
+	}
 
 	foreach(lc, pstmt->inserts)
 	{
@@ -172,16 +179,17 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 			nulls[i] = params->params[i].isnull;
 		}
 
-		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, 1, batches);
+		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, batches);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
 	}
 
-	if (debug_sync_stream_insert)
+	if (sync_stream_insert)
+	{
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
-
-	StreamBatchEntryWaitAndRemove(entry);
+		StreamBatchEntryWaitAndRemove(entry);
+	}
 
 	pstmt->inserts = NIL;
 
@@ -207,10 +215,17 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	ExprContext *econtext = CreateStandaloneExprContext();
 	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
 	StreamBatch batches[1];
-	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets), list_length(values));
+	StreamBatchEntry *entry = NULL;
+	int num_batches = 0;
 
-	batches[0].id = entry->id;
-	batches[0].count = 1;
+	if (sync_stream_insert)
+	{
+		entry = StreamBatchEntryCreate(bms_num_members(targets), list_length(values));
+		num_batches = 1;
+
+		batches[0].id = entry->id;
+		batches[0].count = 1;
+	}
 
 	if (!numcols)
 		ereport(ERROR,
@@ -311,7 +326,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		/*
 		 * Now write the tuple of constants to the TupleBuffer
 		 */
-		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, 1, batches);
+		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, batches);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		Assert(tbs);
@@ -323,10 +338,11 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
-	if (debug_sync_stream_insert)
+	if (sync_stream_insert)
+	{
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
-
-	StreamBatchEntryWaitAndRemove(entry);
+		StreamBatchEntryWaitAndRemove(entry);
+	}
 
 	return count;
 }
@@ -344,17 +360,24 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	uint64 count = 0;
 	int i;
 	StreamBatch batches[1];
-	StreamBatchEntry *entry = StreamBatchEntryCreate(bms_num_members(targets), ntuples);
+	StreamBatchEntry *entry = NULL;
+	int num_batches = 0;
 
-	batches[0].id = entry->id;
-	batches[0].count = 1;
+	if (sync_stream_insert)
+	{
+		entry = StreamBatchEntryCreate(bms_num_members(targets), ntuples);
+		num_batches = 1;
+
+		batches[0].id = entry->id;
+		batches[0].count = 1;
+	}
 
 	for (i=0; i<ntuples; i++)
 	{
 		HeapTuple htup = tuples[i];
 		Tuple *tuple;
 
-		tuple = MakeTuple(htup, desc, 1, batches);
+		tuple = MakeTuple(htup, desc, num_batches, batches);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
@@ -363,10 +386,12 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
-	if (debug_sync_stream_insert)
+	if (sync_stream_insert)
+	{
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
 
-	StreamBatchEntryWaitAndRemove(entry);
+		StreamBatchEntryWaitAndRemove(entry);
+	}
 
 	return count;
 }

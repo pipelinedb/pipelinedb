@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 -- Verify some validation
 CREATE CONTINUOUS VIEW test_uc_validation AS SELECT k::text, avg(x::integer) FROM test_uc_stream GROUP BY k;
 CREATE TABLE test_uc_table (v numeric);
@@ -16,12 +14,12 @@ SELECT combine(v) FROM test_uc_table;
 SELECT combine(k) FROM test_uc_validation;
 
 -- Column doesn't exist
-SELECT combine(nothere) FROM test_uc_validation; 
+SELECT combine(nothere) FROM test_uc_validation;
 
 DROP TABLE test_uc_table;
 DROP CONTINUOUS VIEW test_uc_validation;
 
-CREATE CONTINUOUS VIEW test_uc0 AS SELECT 
+CREATE CONTINUOUS VIEW test_uc0 AS SELECT
 s::text,
 avg(x::integer) + avg(y::integer) AS avg_sum,
 sum(x) + (count(*) + (avg(x) * sum(y))) AS expr,
@@ -198,7 +196,7 @@ SELECT s, combine(expr0) FROM test_uc1 WHERE s < '25' GROUP BY s ORDER BY s;
 SELECT s, combine(expr1) FROM test_uc1 WHERE s < '25' GROUP BY s ORDER BY s;
 
 -- Verify that combines work with CV-CV joins
-SELECT combine(avg_sum), 
+SELECT combine(avg_sum),
 combine(expr),
 combine(max),
 combine(min),
@@ -208,7 +206,7 @@ FROM test_uc0 v0 JOIN test_uc1 v1 ON v0.s = v1.s;
 
 -- Verify that combines work with subsets of CV-CV joins
 SELECT v0.s,
-combine(avg_sum), 
+combine(avg_sum),
 combine(expr),
 combine(max),
 combine(min),
@@ -218,7 +216,7 @@ FROM test_uc0 v0 JOIN test_uc1 v1 ON v0.s = v1.s WHERE v0.s IN ('0', '1', '2') A
 GROUP BY v0.s;
 
 -- Verify that combines work on CV-table joins
-SELECT combine(avg_sum), 
+SELECT combine(avg_sum),
 combine(expr),
 combine(max),
 combine(min),
@@ -229,7 +227,7 @@ sum(y)
 FROM test_uc0 v0 JOIN test_uc1 v1 ON v0.s = v1.s JOIN test_uc_table1 t0 ON v0.s = t0.s;
 
 -- Verify that combines work on subsets of CV-table joins
-SELECT v0.s, combine(expr0), combine(avg_sum) FROM test_uc0 v0 
+SELECT v0.s, combine(expr0), combine(avg_sum) FROM test_uc0 v0
 JOIN test_uc1 v1 ON v0.s = v1.s JOIN test_uc_table1 t0 ON v0.s = t0.s
 WHERE v0.s > '25' GROUP BY v0.s;
 

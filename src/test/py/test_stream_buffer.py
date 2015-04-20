@@ -1,6 +1,5 @@
 from base import pipeline, clean_db
 import threading
-import time
 
 
 def test_stream_buffer(pipeline, clean_db):
@@ -18,7 +17,6 @@ def test_stream_buffer(pipeline, clean_db):
                      'SELECT x::int, pg_sleep(0.002) FROM stream2')
 
   pipeline.activate()
-  pipeline.set_sync_insert(False)
 
   num_per_batch = 5000
   num_batches = 6
@@ -37,7 +35,6 @@ def test_stream_buffer(pipeline, clean_db):
   map(lambda t: t.start(), threads)
   map(lambda t: t.join(), threads)
 
-  pipeline.set_sync_insert(True)
   pipeline.insert('stream1', ('x', 'string'), values)
   pipeline.insert('stream2', ('x', 'string'), values)
 

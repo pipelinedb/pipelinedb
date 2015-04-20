@@ -1,4 +1,3 @@
-SET debug_sync_stream_insert = 'on';
 -- Simple joins
 CREATE TABLE test_stj_t0 (tid integer, data text, val float8);
 CREATE CONTINUOUS VIEW test_stj0 AS SELECT s.id::integer, t.tid, t.data FROM test_stj_stream s JOIN test_stj_t0 t ON s.id = t.tid;
@@ -110,7 +109,7 @@ SELECT * FROM test_stj3 ORDER BY id;
 
 -- Stream-table joins involving multiple tables
 CREATE TABLE test_stj_t1 (jid jsonb, data jsonb);
-CREATE CONTINUOUS VIEW test_stj4 AS SELECT t1.jid, s.data::jsonb AS stream_data, t0.data as table_data FROM test_stj_t1 t1 JOIN test_stj_stream s ON t1.jid = s.data JOIN test_stj_t0 t0 ON t0.data::jsonb = t1.jid; 
+CREATE CONTINUOUS VIEW test_stj4 AS SELECT t1.jid, s.data::jsonb AS stream_data, t0.data as table_data FROM test_stj_t1 t1 JOIN test_stj_stream s ON t1.jid = s.data JOIN test_stj_t0 t0 ON t0.data::jsonb = t1.jid;
 INSERT INTO test_stj_t1 (jid, data) VALUES ('[0, 1]', '"json string"');
 INSERT INTO test_stj_t1 (jid, data) VALUES ('"0"', '71');
 INSERT INTO test_stj_t1 (jid, data) VALUES ('"1"', '[1, 2, 4, 8, 16]');

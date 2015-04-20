@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 -- percentile_cont
 CREATE CONTINUOUS VIEW test_sw_pc0 AS SELECT percentile_cont(0.23) WITHIN GROUP (ORDER BY x::integer) FROM test_sw_os_stream WHERE (arrival_timestamp > clock_timestamp() - interval '60 second');
 CREATE CONTINUOUS VIEW test_sw_pc1 AS SELECT g::integer, percentile_cont(ARRAY[0, 0.2, 0.4, 0.6, 0.8, 1.0]) WITHIN GROUP (ORDER BY x::integer - y::integer) FROM test_sw_os_stream WHERE (arrival_timestamp > clock_timestamp() - interval '60 second') GROUP BY g;

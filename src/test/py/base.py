@@ -216,13 +216,6 @@ class PipelineDB(object):
 
         return self.execute('INSERT INTO %s (%s) VALUES %s' % (target, header, values))
 
-    def set_sync_insert(self, on):
-        """
-        Sets the flag that makes stream INSERTs synchronous or not
-        """
-        s = on and 'on' or 'off'
-        return self.execute('SET debug_sync_stream_insert = %s' % s)
-
     def begin(self):
         """
         Begin a transaction
@@ -261,7 +254,5 @@ def pipeline(request):
     # Attach it to the module so we can access it with test-scoped fixtures
     request.module.pipeline = pdb
     pdb.run()
-
-    pdb.set_sync_insert(True)
 
     return pdb

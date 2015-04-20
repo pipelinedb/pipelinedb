@@ -1,4 +1,3 @@
-SET debug_sync_stream_insert = 'on';
 CREATE CONTINUOUS VIEW infer_v0 AS SELECT x::int8, y::bigint FROM infer_stream;
 CREATE CONTINUOUS VIEW infer_v1 AS SELECT x::int4, y::real FROM infer_stream;
 CREATE CONTINUOUS VIEW infer_v2 AS SELECT x::int2, y::integer FROM infer_stream;

@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 CREATE CONTINUOUS VIEW test_stream_casts1 AS SELECT k::integer, SUM(v::float4) AS fsum, SUM(i::int4) AS isum, COUNT(*) FROM stream_casts_stream GROUP BY k;
 CREATE CONTINUOUS VIEW test_stream_casts0 AS SELECT SUM(v::float8) AS fsum, SUM(i::int8) AS isum, COUNT(*) FROM stream_casts_stream;
 
@@ -219,4 +217,3 @@ DROP CONTINUOUS VIEW test_float8_to_int4;
 DROP CONTINUOUS VIEW test_float8_to_float4;
 DROP CONTINUOUS VIEW test_float8_to_numeric;
 DROP CONTINUOUS VIEW test_numeric_to_int8;
-
