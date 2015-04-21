@@ -186,7 +186,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 		count++;
 	}
 
-	heap_close(pipeline_stream, RowShareLock);
+	heap_close(pipeline_stream, NoLock);
 
 	if (sync_stream_insert)
 	{
@@ -339,7 +339,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 
 	FreeExprContext(econtext, false);
 
-	heap_close(pipeline_stream, RowShareLock);
+	heap_close(pipeline_stream, NoLock);
 
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
@@ -390,7 +390,7 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 		count++;
 	}
 
-	heap_close(pipeline_stream, RowShareLock);
+	heap_close(pipeline_stream, NoLock);
 
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
