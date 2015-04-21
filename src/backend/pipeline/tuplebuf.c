@@ -736,9 +736,9 @@ TupleBufferClearReaders(void)
  * TupleBufferDrain
  */
 void
-TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers)
+TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id)
 {
-	TupleBufferReader *reader = TupleBufferOpenReader(buf, cq_id, reader_id, num_readers);
+	TupleBufferReader *reader = TupleBufferOpenReader(buf, cq_id, 0, 1);
 	TupleBufferSlot *tbs;
 	while ((tbs = TupleBufferPinNextSlot(reader)))
 		TupleBufferUnpinSlot(reader, tbs);

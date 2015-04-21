@@ -106,7 +106,7 @@ extern void TupleBufferCloseReader(TupleBufferReader *reader);
 extern TupleBufferSlot *TupleBufferPinNextSlot(TupleBufferReader *reader);
 extern void TupleBufferUnpinSlot(TupleBufferReader *reader, TupleBufferSlot *slot);
 extern void TupleBufferWaitOnSlot(TupleBuffer *buf, TupleBufferSlot *slot);
-extern void TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers);
+extern void TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id);
 
 extern void TupleBufferUnpinAllPinnedSlots(void);
 extern void TupleBufferClearPinnedSlots(void);
