@@ -912,7 +912,7 @@ RegisterDynamicBackgroundWorker(BackgroundWorker *worker,
  * Returns the number of background worker slots currently in use.
  */
 int
-GetNumOfBackgroundWorkerSlotsInUse()
+GetNumOfBackgroundWorkerSlotsInUse(void)
 {
 	int num_in_use = 0;
 	int slotno;

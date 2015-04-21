@@ -37,7 +37,8 @@
 #include "pipeline/tuplebuf.h"
 #include "postmaster/bgworker.h"
 #include "regex/regex.h"
-#include "storage/spalloc.h"
+#include "storage/dsm_alloc.h"
+#include "storage/dsm_array.h"
 #include "storage/spin.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
@@ -171,20 +172,11 @@ CQProcEntryCreate(int id, int pg_size)
 	entry->shm_query = NULL;
 
 	entry->combiner.last_pid = 0;
-	entry->workers = spalloc0(sizeof(CQBackgroundWorkerHandle) * NUM_WORKERS(entry));
+	entry->workers = dsm_alloc0(sizeof(CQBackgroundWorkerHandle) * NUM_WORKERS(entry));
 
 	/* Expand Latch arrays on TupleBuffers, if needed. */
-	TupleBufferExpandLatchArray(WorkerTupleBuffer, id);
-	TupleBufferExpandLatchArray(CombinerTupleBuffer, id);
-
-	/*
-	 * Allocate shared memory for latches neeed by this CQs workers, in case
-	 * we haven't already done it.
-	 */
-	if (WorkerTupleBuffer->latches[id] == NULL)
-		WorkerTupleBuffer->latches[id] = spalloc0(sizeof(Latch) * MAX_PARALLELISM);
-	if (CombinerTupleBuffer->latches[id] == NULL)
-		CombinerTupleBuffer->latches[id] = spalloc0(sizeof(Latch));
+	dsm_array_set(WorkerTupleBuffer->latches, id, NULL);
+	dsm_array_set(CombinerTupleBuffer->latches, id, NULL);
 
 	return entry;
 }
@@ -204,9 +196,9 @@ CQProcEntryRemove(int id)
 	if (entry)
 	{
 		if (entry->workers)
-			spfree(entry->workers);
+			dsm_free(entry->workers);
 		if (entry->shm_query)
-			spfree(entry->shm_query);
+			dsm_free(entry->shm_query);
 	}
 
 	/* Remove the entry from the hash table. */
@@ -425,7 +417,7 @@ cq_bg_main(Datum d, char *additional, Size additionalsize)
 	 * This will happen when the BG worker is being respawned after a full
 	 * reset cycle.
 	 */
-	if (!IsValidSPallocMemory(args->query))
+	if (!dsm_valid_ptr(args->query))
 		return;
 
 	/* Set all globals variables */
@@ -563,7 +555,7 @@ RunCQProcs(const char *cvname, void *_state, CQProcEntry *entry, Oid dboid)
 	if (entry->shm_query == NULL)
 	{
 		char *q = GetQueryString((char *) cvname, true);
-		entry->shm_query = spalloc(strlen(q) + 1);
+		entry->shm_query = dsm_alloc(strlen(q) + 1);
 		strcpy(entry->shm_query, q);
 	}
 
