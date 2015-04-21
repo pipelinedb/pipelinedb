@@ -138,6 +138,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
+	Relation pipeline_stream = heap_open(PipelineStreamRelationId, AccessShareLock);
 	Bitmapset *targets = GetStreamReaders(pstmt->stream);
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
@@ -185,6 +186,8 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 		count++;
 	}
 
+	heap_close(pipeline_stream, NoLock);
+
 	if (sync_stream_insert)
 	{
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
@@ -213,6 +216,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
+	Relation pipeline_stream = heap_open(PipelineStreamRelationId, AccessShareLock);
 	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
 	StreamBatch batches[1];
 	StreamBatchEntry *entry = NULL;
@@ -335,6 +339,8 @@ InsertIntoStream(InsertStmt *ins, List *values)
 
 	FreeExprContext(econtext, false);
 
+	heap_close(pipeline_stream, NoLock);
+
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
@@ -355,6 +361,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 uint64
 CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
+	Relation pipeline_stream = heap_open(PipelineStreamRelationId, AccessShareLock);
 	Bitmapset *targets = GetStreamReaders(stream);
 	TupleBufferSlot* tbs = NULL;
 	uint64 count = 0;
@@ -383,13 +390,14 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 		count++;
 	}
 
+	heap_close(pipeline_stream, NoLock);
+
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (sync_stream_insert)
 	{
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
-
 		StreamBatchEntryWaitAndRemove(entry);
 	}
 
