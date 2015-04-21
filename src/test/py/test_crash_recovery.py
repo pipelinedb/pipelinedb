@@ -85,33 +85,39 @@ def test_concurrent_crash(pipeline, clean_db):
   pipeline.create_cv('test_concurrent_crash', q)
   pipeline.activate()
 
-  def insert(n):
-    for _ in xrange(n):
+  desc = [0, 0, False]
+
+  def insert():
+    while True:
         pipeline.insert('stream', ['x'], [(1, ), (1, )])
-        time.sleep(0.1)
+        time.sleep(0.01)
+        desc[1] += 2
+        if desc[2]:
+          break
 
-  killed = [0]
-  n = 100
-
-  def kill(n):
-    for _ in xrange(n):
+  def kill():
+    for _ in xrange(100):
       r = random.random()
       if r > 0.85:
-        killed[0] += kill_combiner('test_concurrent_crash')
+        desc[0] += kill_combiner('test_concurrent_crash')
       if r < 0.15:
-        killed[0] += kill_worker('test_concurrent_crash')
+        desc[0] += kill_worker('test_concurrent_crash')
       time.sleep(0.1)
 
-  threads = [threading.Thread(target=insert, args=(n, )),
-             threading.Thread(target=kill, args=(n, ))]
+    desc[2] = True
+
+  threads = [threading.Thread(target=insert),
+             threading.Thread(target=kill)]
   map(lambda t: t.start(), threads)
   map(lambda t: t.join(), threads)
 
-  killed = killed[0]
+  num_killed = desc[0]
+  num_inserted = desc[1]
 
   pipeline.deactivate()
 
   result = pipeline.execute('SELECT * FROM test_concurrent_crash').first()
-  assert killed > 0
-  assert result['count'] >= (100 - killed) * 2
-  assert result['count'] <= 100 * 2
+  assert num_killed > 0
+  print result['count'], num_inserted, num_killed
+  assert result['count'] >= num_inserted - (num_killed * 2)
+  assert result['count'] <= num_inserted

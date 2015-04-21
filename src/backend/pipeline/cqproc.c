@@ -173,6 +173,8 @@ CQProcEntryCreate(int id, int pg_size)
 	entry->combiner.last_pid = 0;
 	entry->workers = spalloc0(sizeof(CQBackgroundWorkerHandle) * NUM_WORKERS(entry));
 
+	SpinLockInit(&entry->mutex);
+
 	/* Expand Latch arrays on TupleBuffers, if needed. */
 	TupleBufferExpandLatchArray(WorkerTupleBuffer, id);
 	TupleBufferExpandLatchArray(CombinerTupleBuffer, id);

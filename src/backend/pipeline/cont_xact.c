@@ -12,6 +12,7 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
+#include "nodes/bitmapset.h"
 #include "pipeline/cont_xact.h"
 #include "storage/shmem.h"
 #include "storage/spalloc.h"
@@ -20,12 +21,12 @@
 
 List *MyAcks = NIL;
 
-StreamBatch *StreamBatchCreate(int num_readers, int num_tuples)
+StreamBatch *StreamBatchCreate(Bitmapset *readers, int num_tuples)
 {
 	StreamBatch *entry = spalloc0(sizeof(StreamBatch));
 
 	entry->id = MyProcPid;
-	entry->total_wacks = num_readers * num_tuples;
+	entry->num_wtups = bms_num_members(readers) * num_tuples;
 	SpinLockInit(&entry->mutex);
 
 	return entry;
@@ -33,15 +34,25 @@ StreamBatch *StreamBatchCreate(int num_readers, int num_tuples)
 
 void StreamBatchWaitAndRemove(StreamBatch *batch)
 {
-	while (batch->num_wacks < batch->total_wacks || batch->num_cacks < batch->total_cacks)
+	while (batch->num_wacks < batch->num_wtups || batch->num_cacks < batch->num_ctups)
 		pg_usleep(SLEEP_MS * 1000);
 	spfree(batch);
 }
 
-void StreamBatchIncrementTotalCAcks(StreamBatch *batch)
+void StreamBatchIncrementNumCTuples(StreamBatch *batch)
 {
 	SpinLockAcquire(&batch->mutex);
-	batch->total_cacks++;
+	batch->num_ctups++;
+	SpinLockRelease(&batch->mutex);
+}
+
+void StreamBatchIncrementNumReads(StreamBatch *batch)
+{
+	SpinLockAcquire(&batch->mutex);
+	if (IsWorker)
+		batch->num_wacks++;
+	else
+		batch->num_cacks++;
 	SpinLockRelease(&batch->mutex);
 }
 

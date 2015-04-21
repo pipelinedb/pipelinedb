@@ -60,7 +60,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 		{
 			StreamBatchAck *ack = lfirst(lc);
 
-			StreamBatchIncrementTotalCAcks(ack->batch);
+			StreamBatchIncrementNumCTuples(ack->batch);
 
 			acks[i].batch = ack->batch;
 			acks[i].count = 1;

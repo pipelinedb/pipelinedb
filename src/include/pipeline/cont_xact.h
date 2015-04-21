@@ -21,10 +21,10 @@ typedef struct StreamBatch {
 	int num_wacks;
 	/* Number of acks from combiners */
 	int num_cacks;
-	/* Total number of acks expected from workers */
-	int total_wacks;
-	/* Total number of acks expected from combiners */
-	int total_cacks;
+	/* Total number of tuples sent to workers */
+	int num_wtups;
+	/* Total number of tuples sent to combiners */
+	int num_ctups;
 	slock_t mutex;
 } StreamBatch;
 
@@ -38,7 +38,7 @@ extern List *MyAcks;
 
 extern StreamBatch *StreamBatchCreate(int num_readers, int num_tuples);
 extern void StreamBatchWaitAndRemove(StreamBatch *batch);
-extern void StreamBatchIncrementTotalCAcks(StreamBatch *batch);
+extern void StreamBatchIncrementNumCTuples(StreamBatch *batch);
 extern void StreamBatchMarkAcked(StreamBatchAck *batch);
 
 #endif
