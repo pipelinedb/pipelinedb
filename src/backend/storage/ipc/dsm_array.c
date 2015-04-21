@@ -39,7 +39,7 @@ DynArray *dsm_array_new(Size size)
 	return array;
 }
 
-static void **get_idx_addr(DynArray *array, int idx)
+static void *get_idx_addr(DynArray *array, int idx)
 {
 	int offset;
 	int seg_num;
@@ -56,11 +56,13 @@ static void **get_idx_addr(DynArray *array, int idx)
 		segment = segment->next;
 
 	offset = offset * array->size;
-	return (void **) &segment->bytes[offset];
+	return (void *) &segment->bytes[offset];
 }
 
-void dsm_array_set(DynArray *array, int idx, void *addr)
+void dsm_array_set(DynArray *array, int idx, void *value)
 {
+	void *addr;
+
 	if (idx >= array->length)
 	{
 		SpinLockAcquire(&array->mutex);
@@ -83,11 +85,16 @@ void dsm_array_set(DynArray *array, int idx, void *addr)
 		SpinLockRelease(&array->mutex);
 	}
 
-	memcpy(*get_idx_addr(array, idx), addr, array->size);
+	addr = get_idx_addr(array, idx);
+
+	if (value)
+		memcpy(addr, value, array->size);
+	else
+		MemSet(addr, 0, array->size);
 }
 
 void *dsm_array_get(DynArray *array, int idx)
 {
-	void **addr = get_idx_addr(array, idx);
-	return addr ? *addr : NULL;
+	void *addr = get_idx_addr(array, idx);
+	return addr ? addr : NULL;
 }

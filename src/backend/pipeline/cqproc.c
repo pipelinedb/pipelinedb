@@ -38,6 +38,7 @@
 #include "postmaster/bgworker.h"
 #include "regex/regex.h"
 #include "storage/dsm_alloc.h"
+#include "storage/dsm_array.h"
 #include "storage/spin.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
@@ -174,17 +175,8 @@ CQProcEntryCreate(int id, int pg_size)
 	entry->workers = dsm_alloc0(sizeof(CQBackgroundWorkerHandle) * NUM_WORKERS(entry));
 
 	/* Expand Latch arrays on TupleBuffers, if needed. */
-	TupleBufferExpandLatchArray(WorkerTupleBuffer, id);
-	TupleBufferExpandLatchArray(CombinerTupleBuffer, id);
-
-	/*
-	 * Allocate shared memory for latches neeed by this CQs workers, in case
-	 * we haven't already done it.
-	 */
-	if (WorkerTupleBuffer->latches[id] == NULL)
-		WorkerTupleBuffer->latches[id] = dsm_alloc0(sizeof(Latch) * MAX_PARALLELISM);
-	if (CombinerTupleBuffer->latches[id] == NULL)
-		CombinerTupleBuffer->latches[id] = dsm_alloc0(sizeof(Latch));
+	dsm_array_set(WorkerTupleBuffer->latches, id, NULL);
+	dsm_array_set(CombinerTupleBuffer->latches, id, NULL);
 
 	return entry;
 }
