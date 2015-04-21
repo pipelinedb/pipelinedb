@@ -339,7 +339,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 
 	FreeExprContext(econtext, false);
 
-	heap_close(pipeline_stream, NoLock);
+	heap_close(pipeline_stream, RowShareLock);
 
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
