@@ -85,7 +85,9 @@ class PipelineDB(object):
         env = os.environ.copy()
         env[TEST_ENV_VAR] = '1'
         self.proc = subprocess.Popen([SERVER, '-D', self.data_dir,
-                                      '-p', str(self.port)], env=env)
+                                      '-p', str(self.port),
+                                      '-c', 'sync_stream_insert=true'],
+                                     env=env)
 
         connstr = CONNSTR_TEMPLATE % (getpass.getuser(), self.port)
         self.engine = create_engine(connstr)
