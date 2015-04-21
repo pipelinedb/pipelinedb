@@ -98,3 +98,22 @@ void *dsm_array_get(DynArray *array, int idx)
 	void *addr = get_idx_addr(array, idx);
 	return addr ? addr : NULL;
 }
+
+void dsm_array_delete(DynArray *array)
+{
+	DynArraySegment *segment;
+
+	if (!array)
+		return;
+
+	segment = array->segment.next;
+
+	while (segment)
+	{
+		DynArraySegment *next = segment->next;
+		dsm_free(segment);
+		segment = next;
+	}
+
+	dsm_free(array);
+}
