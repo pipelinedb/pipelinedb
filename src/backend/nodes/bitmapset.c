@@ -887,7 +887,7 @@ Bitmapset *dsm_bms_add_member(Bitmapset *bms, int x)
 
 		if (old)
 		{
-			memcpy(bms->words, old->words, nwords);
+			memcpy(bms->words, old->words, nwords * sizeof(bitmapword));
 			dsm_free(old);
 		}
 	}
