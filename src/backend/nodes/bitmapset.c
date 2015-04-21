@@ -21,6 +21,7 @@
 #include "postgres.h"
 
 #include "access/hash.h"
+#include "storage/dsm_alloc.h"
 
 
 #define WORDNUM(x)	((x) / BITS_PER_BITMAPWORD)
@@ -861,4 +862,42 @@ bms_hash_value(const Bitmapset *a)
 		return 0;				/* All empty sets hash to 0 */
 	return DatumGetUInt32(hash_any((const unsigned char *) a->words,
 								   (lastword + 1) * sizeof(bitmapword)));
+}
+
+Bitmapset *dsm_bms_add_member(Bitmapset *bms, int x)
+{
+	int	wordnum, bitnum, nwords;
+
+	if (x < 0)
+		elog(ERROR, "negative bitmapset member not allowed");
+
+	wordnum = WORDNUM(x);
+	bitnum = BITNUM(x);
+
+	nwords = bms ? bms->nwords : 0;
+
+	/* enlarge the set if necessary */
+	if (wordnum >= nwords)
+	{
+		Bitmapset *old;
+
+		old = bms;
+		bms = (Bitmapset *) dsm_alloc0(BITMAPSET_SIZE(wordnum + 1));
+		bms->nwords = wordnum + 1;
+
+		if (old)
+		{
+			memcpy(bms->words, old->words, nwords);
+			dsm_free(old);
+		}
+	}
+
+	bms->words[wordnum] |= ((bitmapword) 1 << bitnum);
+	return bms;
+}
+
+void dsm_bms_free(Bitmapset *bms)
+{
+	if (bms)
+		dsm_free(bms);
 }

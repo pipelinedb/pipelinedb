@@ -17,5 +17,4 @@ extern void *dsm_array_get(DynArray *array, int idx);
 extern void dsm_array_set(DynArray *array, int idx, void *val);
 extern void dsm_array_delete(DynArray *array);
 
-
 #endif   /* DSM_ARRAY_H */
