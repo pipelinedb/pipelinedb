@@ -20,8 +20,8 @@
 #include "executor/tuptable.h"
 #include "nodes/bitmapset.h"
 #include "nodes/print.h"
+#include "storage/dsm_alloc.h"
 #include "storage/lwlock.h"
-#include "storage/spalloc.h"
 #include "storage/spin.h"
 #include "storage/proc.h"
 #include "utils/memutils.h"
@@ -596,8 +596,8 @@ TupleBufferExpandLatchArray(TupleBuffer *buf, uint32_t cq_id)
 	if (max_cqs == buf->max_cqs)
 		return;
 
-	latches = (Latch **) spalloc0(sizeof(Latch *) * buf->max_cqs);
-	waiters = (Bitmapset *) spalloc0(BITMAPSET_SIZE(buf->max_cqs / BITS_PER_BITMAPWORD));
+	latches = (Latch **) dsm_alloc0(sizeof(Latch *) * buf->max_cqs);
+	waiters = (Bitmapset *) dsm_alloc0(BITMAPSET_SIZE(buf->max_cqs / BITS_PER_BITMAPWORD));
 	waiters->nwords = buf->max_cqs / BITS_PER_BITMAPWORD;
 
 	if (max_cqs)
@@ -618,8 +618,8 @@ TupleBufferExpandLatchArray(TupleBuffer *buf, uint32_t cq_id)
 		while ((i = bms_first_member(tmp_waiters)) >= 0)
 			waiters = bms_add_member(waiters, i);
 
-		spfree(tmp_latches);
-		spfree(tmp_waiters);
+		dsm_free(tmp_latches);
+		dsm_free(tmp_waiters);
 	}
 
 	SpinLockRelease(&buf->mutex);
