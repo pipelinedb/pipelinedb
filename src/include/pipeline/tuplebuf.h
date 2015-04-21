@@ -32,8 +32,10 @@ typedef struct Tuple
 	HeapTuple heaptup;
 	/* arrival time of the event */
 	TimestampTz arrivaltime;
-	int num_batches;
-	StreamBatch *batches;
+	/* length of the batches array */
+	int num_acks;
+	/* the batches and number of tuples this single tuple represents */
+	StreamBatchAck *acks;
 } Tuple;
 
 /* Wraps a physical event and the queries that still need to read it */
@@ -80,12 +82,10 @@ typedef struct TupleBufferReader
 	TupleBufferSlot *slot;
 } TupleBufferReader;
 
-extern List *MyBatches;
-
 extern TupleBuffer *WorkerTupleBuffer;
 extern TupleBuffer *CombinerTupleBuffer;
 
-extern Tuple *MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_batches, StreamBatch *batches);
+extern Tuple *MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, StreamBatchAck *acks);
 
 extern void TupleBuffersInit(void);
 

@@ -142,17 +142,17 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	Bitmapset *targets = GetStreamReaders(pstmt->stream);
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
-	StreamBatch batches[1];
-	StreamBatchEntry *entry = NULL;
+	StreamBatchAck acks[1];
+	StreamBatch *batch = NULL;
 	int num_batches = 0;
 
 	if (sync_stream_insert)
 	{
-		entry = StreamBatchEntryCreate(bms_num_members(targets), list_length(pstmt->inserts));
+		batch = StreamBatchCreate(bms_num_members(targets), list_length(pstmt->inserts));
 		num_batches = 1;
 
-		batches[0].entry = entry;
-		batches[0].count = 1;
+		acks[0].batch = batch;
+		acks[0].count = 1;
 	}
 
 	foreach(lc, pstmt->inserts)
@@ -180,7 +180,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 			nulls[i] = params->params[i].isnull;
 		}
 
-		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, batches);
+		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, acks);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
@@ -191,7 +191,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	if (sync_stream_insert)
 	{
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
-		StreamBatchEntryWaitAndRemove(entry);
+		StreamBatchWaitAndRemove(batch);
 	}
 
 	pstmt->inserts = NIL;
@@ -218,17 +218,17 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	ExprContext *econtext = CreateStandaloneExprContext();
 	Relation pipeline_stream = heap_open(PipelineStreamRelationId, RowShareLock);
 	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
-	StreamBatch batches[1];
-	StreamBatchEntry *entry = NULL;
+	StreamBatchAck acks[1];
+	StreamBatch *batch = NULL;
 	int num_batches = 0;
 
 	if (sync_stream_insert)
 	{
-		entry = StreamBatchEntryCreate(bms_num_members(targets), list_length(values));
+		batch = StreamBatchCreate(bms_num_members(targets), list_length(values));
 		num_batches = 1;
 
-		batches[0].entry = entry;
-		batches[0].count = 1;
+		acks[0].batch = batch;
+		acks[0].count = 1;
 	}
 
 	if (!numcols)
@@ -330,7 +330,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		/*
 		 * Now write the tuple of constants to the TupleBuffer
 		 */
-		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, batches);
+		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, acks);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		Assert(tbs);
@@ -347,7 +347,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	if (sync_stream_insert)
 	{
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
-		StreamBatchEntryWaitAndRemove(entry);
+		StreamBatchWaitAndRemove(batch);
 	}
 
 	return count;
@@ -366,17 +366,17 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	TupleBufferSlot* tbs = NULL;
 	uint64 count = 0;
 	int i;
-	StreamBatch batches[1];
-	StreamBatchEntry *entry = NULL;
+	StreamBatchAck acks[1];
+	StreamBatch *batch = NULL;
 	int num_batches = 0;
 
 	if (sync_stream_insert)
 	{
-		entry = StreamBatchEntryCreate(bms_num_members(targets), ntuples);
+		batch = StreamBatchCreate(bms_num_members(targets), ntuples);
 		num_batches = 1;
 
-		batches[0].entry = entry;
-		batches[0].count = 1;
+		acks[0].batch = batch;
+		acks[0].count = 1;
 	}
 
 	for (i=0; i<ntuples; i++)
@@ -384,7 +384,7 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 		HeapTuple htup = tuples[i];
 		Tuple *tuple;
 
-		tuple = MakeTuple(htup, desc, num_batches, batches);
+		tuple = MakeTuple(htup, desc, num_batches, acks);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
@@ -398,7 +398,7 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	if (sync_stream_insert)
 	{
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
-		StreamBatchEntryWaitAndRemove(entry);
+		StreamBatchWaitAndRemove(batch);
 	}
 
 	return count;

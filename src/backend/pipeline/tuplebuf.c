@@ -50,7 +50,6 @@ bool debug_tuple_stream_buffer;
 int tuple_buffer_blocks;
 int empty_tuple_buffer_wait_time;
 
-List *MyBatches = NIL;
 static List *MyPinnedSlots = NIL;
 static List *MyReaders = NIL;
 
@@ -64,14 +63,14 @@ typedef struct
  * MakeTuple
  */
 Tuple *
-MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_batches, StreamBatch *batches)
+MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, StreamBatchAck *acks)
 {
 	Tuple *t = palloc0(sizeof(Tuple));
 	t->heaptup = heaptup;
 	t->desc = PackTupleDesc(desc);
 	t->arrivaltime = GetCurrentTimestamp();
-	t->num_batches = num_batches;
-	t->batches = batches;
+	t->num_acks = num_acks;
+	t->acks = acks;
 	return t;
 }
 
@@ -111,7 +110,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	TupleBufferSlot *slot;
 	Size size;
 	Size tupsize;
-	Size batches_size;
+	Size acks_size;
 	int desclen = tuple->desc ? VARSIZE(tuple->desc) : 0;
 	TimestampTz start_wait;
 
@@ -122,8 +121,8 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	}
 
 	tupsize = tuple->heaptup->t_len + HEAPTUPLESIZE;
-	batches_size = sizeof(StreamBatch) * tuple->num_batches;
-	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(readers->nwords) + desclen + batches_size;
+	acks_size = sizeof(StreamBatchAck) * tuple->num_acks;
+	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(readers->nwords) + desclen + acks_size;
 
 	if (size > buf->size)
 		elog(ERROR, "event of size %zu too big for stream buffer of size %zu", size, WorkerTupleBuffer->size);
@@ -223,9 +222,9 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	memcpy(slot->tuple->heaptup->t_data, tuple->heaptup->t_data, tuple->heaptup->t_len);
 	pos += tupsize;
 
-	slot->tuple->batches = (StreamBatch *) pos;
-	memcpy(slot->tuple->batches, tuple->batches, batches_size);
-	pos += batches_size;
+	slot->tuple->acks = (StreamBatchAck *) pos;
+	memcpy(slot->tuple->acks, tuple->acks, acks_size);
+	pos += acks_size;
 
 	slot->readers = (Bitmapset *) pos;
 	memcpy(slot->readers, readers, BITMAPSET_SIZE(readers->nwords));
@@ -390,7 +389,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 {
 	MyPinnedSlotEntry *entry;
 	int i;
-	StreamBatch *batches;
+	StreamBatchAck *acks;
 	MemoryContext oldcontext;
 
 	if (NoUnreadSlots(reader))
@@ -454,27 +453,25 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	entry->cq_id = reader->cq_id;
 	MyPinnedSlots = lappend(MyPinnedSlots, entry);
 
-	if (sync_stream_insert) {
-		batches = entry->slot->tuple->batches;
+	acks = entry->slot->tuple->acks;
 
-		for (i = 0; i < entry->slot->tuple->num_batches; i++) {
-			StreamBatch batch = batches[i];
-			ListCell *lc;
-			bool found = false;
+	for (i = 0; i < entry->slot->tuple->num_acks; i++) {
+		StreamBatchAck ack = acks[i];
+		ListCell *lc;
+		bool found = false;
 
-			foreach(lc, MyBatches) {
-				StreamBatch *batch2 = lfirst(lc);
-				if (batch.entry == batch2->entry) {
-					batch2->count += batch.count;
-					found = true;
-				}
+		foreach(lc, MyAcks) {
+			StreamBatchAck *ack2 = lfirst(lc);
+			if (ack.batch == ack2->batch) {
+				ack2->count += ack.count;
+				found = true;
 			}
+		}
 
-			if (!found) {
-				StreamBatch *batch2 = (StreamBatch *) palloc(sizeof(StreamBatch));
-				memcpy(batch2, &batch, sizeof(StreamBatch));
-				MyBatches = lappend(MyBatches, batch2);
-			}
+		if (!found) {
+			StreamBatchAck *ack2 = (StreamBatchAck *) palloc(sizeof(StreamBatchAck));
+			memcpy(ack2, &ack, sizeof(StreamBatchAck));
+			MyAcks = lappend(MyAcks, ack2);
 		}
 	}
 
@@ -691,14 +688,11 @@ TupleBufferClearPinnedSlots(void)
 	list_free_deep(MyPinnedSlots);
 	MyPinnedSlots = NIL;
 
-	if (sync_stream_insert)
-	{
-		foreach(lc, MyBatches)
-			StreamBatchEntryMarkProcessed(lfirst(lc));
+	foreach(lc, MyAcks)
+		StreamBatchMarkAcked(lfirst(lc));
 
-		list_free_deep(MyBatches);
-		MyBatches = NIL;
-	}
+	list_free_deep(MyAcks);
+	MyAcks = NIL;
 
 	MemoryContextSwitchTo(oldcontext);
 }

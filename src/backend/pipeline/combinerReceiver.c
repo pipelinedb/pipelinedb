@@ -47,32 +47,32 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	MemoryContext old = MemoryContextSwitchTo(CQExecutionContext);
 	TupleBufferSlot *tbs;
 	Tuple *tup;
-	StreamBatch *batches = NULL;
+	StreamBatchAck *acks = NULL;
 
 	if (sync_stream_insert)
 	{
 		ListCell *lc;
 		int i = 0;
 
-		batches = (StreamBatch *) palloc(sizeof(StreamBatch) * list_length(MyBatches));
+		acks = (StreamBatchAck *) palloc(sizeof(StreamBatchAck) * list_length(MyAcks));
 
-		foreach(lc, MyBatches)
+		foreach(lc, MyAcks)
 		{
-			StreamBatch *batch = lfirst(lc);
+			StreamBatchAck *ack = lfirst(lc);
 
-			StreamBatchEntryIncrementTotalCAcks(batch);
+			StreamBatchIncrementTotalCAcks(ack->batch);
 
-			batches[i].entry = batch->entry;
-			batches[i].count = 1;
+			acks[i].batch = ack->batch;
+			acks[i].count = 1;
 			i++;
 		}
 	}
 
-	tup = MakeTuple(ExecMaterializeSlot(slot), NULL, list_length(MyBatches), batches);
+	tup = MakeTuple(ExecMaterializeSlot(slot), NULL, list_length(MyAcks), acks);
 	tbs = TupleBufferInsert(CombinerTupleBuffer, tup, c->readers);
 	IncrementCQWrite(1, tbs->size);
 
-	pfree(batches);
+	pfree(acks);
 
 	MemoryContextSwitchTo(old);
 }

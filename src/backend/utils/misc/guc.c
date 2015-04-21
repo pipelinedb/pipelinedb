@@ -1539,7 +1539,7 @@ static struct config_bool ConfigureNamesBool[] =
 			NULL,
 		},
 		&sync_stream_insert,
-		true,
+		false,
 		NULL, NULL, NULL
 	},
 

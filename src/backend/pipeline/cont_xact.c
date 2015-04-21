@@ -18,9 +18,11 @@
 
 #define SLEEP_MS 5
 
-StreamBatchEntry *StreamBatchEntryCreate(int num_readers, int num_tuples)
+List *MyAcks = NIL;
+
+StreamBatch *StreamBatchCreate(int num_readers, int num_tuples)
 {
-	StreamBatchEntry *entry = spalloc0(sizeof(StreamBatchEntry));
+	StreamBatch *entry = spalloc0(sizeof(StreamBatch));
 
 	entry->id = MyProcPid;
 	entry->total_wacks = num_readers * num_tuples;
@@ -29,26 +31,26 @@ StreamBatchEntry *StreamBatchEntryCreate(int num_readers, int num_tuples)
 	return entry;
 }
 
-void StreamBatchEntryWaitAndRemove(StreamBatchEntry *entry)
+void StreamBatchWaitAndRemove(StreamBatch *batch)
 {
-	while (entry->num_wacks < entry->total_wacks || entry->num_cacks < entry->total_cacks)
+	while (batch->num_wacks < batch->total_wacks || batch->num_cacks < batch->total_cacks)
 		pg_usleep(SLEEP_MS * 1000);
-	spfree(entry);
+	spfree(batch);
 }
 
-void StreamBatchEntryIncrementTotalCAcks(StreamBatch *batch)
+void StreamBatchIncrementTotalCAcks(StreamBatch *batch)
 {
-	SpinLockAcquire(&batch->entry->mutex);
-	batch->entry->total_cacks++;
-	SpinLockRelease(&batch->entry->mutex);
+	SpinLockAcquire(&batch->mutex);
+	batch->total_cacks++;
+	SpinLockRelease(&batch->mutex);
 }
 
-void StreamBatchEntryMarkProcessed(StreamBatch *batch)
+void StreamBatchMarkAcked(StreamBatchAck *ack)
 {
-	SpinLockAcquire(&batch->entry->mutex);
+	SpinLockAcquire(&ack->batch->mutex);
 	if (IsWorker)
-		batch->entry->num_wacks += batch->count;
+		ack->batch->num_wacks += ack->count;
 	else
-		batch->entry->num_cacks += batch->count;
-	SpinLockRelease(&batch->entry->mutex);
+		ack->batch->num_cacks += ack->count;
+	SpinLockRelease(&ack->batch->mutex);
 }
