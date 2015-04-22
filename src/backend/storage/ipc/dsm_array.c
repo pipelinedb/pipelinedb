@@ -17,33 +17,33 @@
 #define DEBUG 0
 #define ARRAY_SEGMENT_SIZE 32
 
-typedef struct DynArraySegment {
-	struct DynArraySegment *next;
+typedef struct DSMArraySegment {
+	struct DSMArraySegment *next;
 	uint8_t bytes[1];
-} DynArraySegment;
+} DSMArraySegment;
 
-struct DynArray {
-	DynArraySegment *tail;
+struct DSMArray {
+	DSMArraySegment *tail;
 	int length;
 	Size size;
 	slock_t mutex;
-	DynArraySegment segment;
+	DSMArraySegment segment;
 };
 
-DynArray *dsm_array_new(Size size)
+DSMArray *dsm_array_new(Size size)
 {
-	DynArray *array = dsm_alloc0(sizeof(DynArray) + (size * ARRAY_SEGMENT_SIZE));
+	DSMArray *array = dsm_alloc0(sizeof(DSMArray) + (size * ARRAY_SEGMENT_SIZE));
 	array->length = ARRAY_SEGMENT_SIZE;
 	array->size = size;
 	SpinLockInit(&array->mutex);
 	return array;
 }
 
-static void *get_idx_addr(DynArray *array, int idx)
+static void *get_idx_addr(DSMArray *array, int idx)
 {
 	int offset;
 	int seg_num;
-	DynArraySegment *segment;
+	DSMArraySegment *segment;
 
 	if (idx >= array->length)
 		return NULL;
@@ -59,7 +59,7 @@ static void *get_idx_addr(DynArray *array, int idx)
 	return (void *) &segment->bytes[offset];
 }
 
-void dsm_array_set(DynArray *array, int idx, void *value)
+void dsm_array_set(DSMArray *array, int idx, void *value)
 {
 	void *addr;
 
@@ -69,8 +69,8 @@ void dsm_array_set(DynArray *array, int idx, void *value)
 
 		while (idx >= array->length)
 		{
-			DynArraySegment *tail;
-			DynArraySegment *new = dsm_alloc0(sizeof(DynArraySegment) * (array->size * ARRAY_SEGMENT_SIZE));
+			DSMArraySegment *tail;
+			DSMArraySegment *new = dsm_alloc0(sizeof(DSMArraySegment) * (array->size * ARRAY_SEGMENT_SIZE));
 
 			if (array->tail == NULL)
 				tail = &array->segment;
@@ -93,15 +93,15 @@ void dsm_array_set(DynArray *array, int idx, void *value)
 		MemSet(addr, 0, array->size);
 }
 
-void *dsm_array_get(DynArray *array, int idx)
+void *dsm_array_get(DSMArray *array, int idx)
 {
 	void *addr = get_idx_addr(array, idx);
 	return addr ? addr : NULL;
 }
 
-void dsm_array_delete(DynArray *array)
+void dsm_array_delete(DSMArray *array)
 {
-	DynArraySegment *segment;
+	DSMArraySegment *segment;
 
 	if (!array)
 		return;
@@ -110,7 +110,7 @@ void dsm_array_delete(DynArray *array)
 
 	while (segment)
 	{
-		DynArraySegment *next = segment->next;
+		DSMArraySegment *next = segment->next;
 		dsm_free(segment);
 		segment = next;
 	}

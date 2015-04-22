@@ -54,6 +54,7 @@
 #include "pgstat.h"
 #include "pipeline/combiner.h"
 #include "pipeline/cqproc.h"
+#include "pipeline/stream.h"
 #include "pipeline/tuplebuf.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
@@ -3333,6 +3334,16 @@ static struct config_string ConfigureNamesString[] =
 			0
 		},
 		&license_key,
+		NULL,
+		NULL, NULL, NULL,
+	},
+	{
+		{"stream_targets", PGC_USERSET, QUERY_TUNING_OTHER,
+			gettext_noop("List of continuous views that will be affected when inserting into an stream."),
+			NULL,
+			0
+		},
+		&stream_targets,
 		NULL,
 		NULL, NULL, NULL,
 	},
