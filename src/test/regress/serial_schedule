@@ -181,6 +181,7 @@ test: user_combine
 test: cont_limit
 test: cont_alter
 test: stream_exprs
+test: stream_targets
 test: schema_inference
 test: prepared_stream_insert
 test: stream_casts0
