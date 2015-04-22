@@ -16,6 +16,7 @@
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "fmgr.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
 #include "nodes/makefuncs.h"
@@ -610,30 +611,20 @@ GetLocalStreamReaders(const char *stream)
 		Bitmapset *local_readers = NULL;
 		HeapTuple tuple;
 		Form_pipeline_query row;
-		int ptr = 0;
-		char* view_name = palloc0(strlen(stream_targets) + 1);
+		int i = 0;
+		Datum str = PointerGetDatum(cstring_to_text(stream_targets));
+		Datum split = PointerGetDatum(cstring_to_text(","));
 
-		while (ptr < strlen(stream_targets))
+		while (++i)
 		{
-			char* commo_ptr;
-			int len;
+			Datum view_datum = DirectFunctionCall3(split_text, str, split, Int32GetDatum(i));
+			char *view_name = text_to_cstring((const text *) DatumGetPointer(view_datum));
 
-			if (stream_targets[ptr] == ' ')
-			{
-				ptr++;
-				continue;
-			}
+			if (!strlen(view_name))
+				break;
 
-			commo_ptr = strchr(stream_targets + ptr, ',');
-
-			if (commo_ptr == NULL)
-				len = strlen(stream_targets);
-			else
-				len = commo_ptr - stream_targets + ptr;
-
-			memcpy(view_name, stream_targets + ptr, len);
-			view_name[len] = '\0';
-			ptr += len + 1;
+			view_datum = DirectFunctionCall1(btrim1, view_datum);
+			view_name = text_to_cstring((const text *) DatumGetPointer(view_datum));
 
 			tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(view_name));
 
@@ -647,8 +638,6 @@ GetLocalStreamReaders(const char *stream)
 
 			ReleaseSysCache(tuple);
 		}
-
-		pfree(view_name);
 
 		readers = bms_intersect(readers, local_readers);
 		bms_free(local_readers);
