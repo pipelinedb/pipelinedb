@@ -32,9 +32,11 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 #include "utils/typcache.h"
+#include "utils/guc.h"
 
 /* Whether or not to block till the events are consumed by a cv*/
 bool debug_sync_stream_insert;
+char *stream_targets = NULL;
 
 static HTAB *prepared_stream_inserts = NULL;
 
@@ -137,7 +139,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
-	Bitmapset *targets = GetStreamReaders(pstmt->stream);
+	Bitmapset *targets = GetAllStreamReaders(pstmt->stream);
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
 
@@ -197,7 +199,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
-	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
+	Bitmapset *targets = GetLocalStreamReaders(ins->relation->relname);
 
 	if (!numcols)
 		ereport(ERROR,
@@ -324,7 +326,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 uint64
 CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
-	Bitmapset *targets = GetStreamReaders(stream);
+	Bitmapset *targets = GetAllStreamReaders(stream);
 	TupleBufferSlot* tbs = NULL;
 	uint64 count = 0;
 	int i;

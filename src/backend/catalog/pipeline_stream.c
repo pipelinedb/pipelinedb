@@ -16,6 +16,7 @@
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "fmgr.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
 #include "nodes/makefuncs.h"
@@ -26,6 +27,7 @@
 #include "pipeline/cont_analyze.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
+#include "utils/guc.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
@@ -564,7 +566,7 @@ UpdateStreamQueries(Relation pipeline_query)
  * queries are reading from the given stream.
  */
 Bitmapset *
-GetStreamReaders(const char *stream)
+GetAllStreamReaders(const char *stream)
 {
 	HeapTuple tup = SearchSysCache1(PIPELINESTREAMNAME, CStringGetDatum(stream));
 	bool isnull;
@@ -597,6 +599,51 @@ GetStreamReaders(const char *stream)
 	ReleaseSysCache(tup);
 
 	return result;
+}
+
+Bitmapset *
+GetLocalStreamReaders(const char *stream)
+{
+	Bitmapset *readers = GetAllStreamReaders(stream);
+
+	if (stream_targets != NULL)
+	{
+		Bitmapset *local_readers = NULL;
+		HeapTuple tuple;
+		Form_pipeline_query row;
+		int i = 0;
+		Datum str = PointerGetDatum(cstring_to_text(stream_targets));
+		Datum split = PointerGetDatum(cstring_to_text(","));
+
+		while (++i)
+		{
+			Datum view_datum = DirectFunctionCall3(split_text, str, split, Int32GetDatum(i));
+			char *view_name = text_to_cstring((const text *) DatumGetPointer(view_datum));
+
+			if (!strlen(view_name))
+				break;
+
+			view_datum = DirectFunctionCall1(btrim1, view_datum);
+			view_name = text_to_cstring((const text *) DatumGetPointer(view_datum));
+
+			tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(view_name));
+
+			if (!HeapTupleIsValid(tuple))
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+						errmsg("continuous view \"%s\" does not exist", view_name)));
+
+			row = (Form_pipeline_query) GETSTRUCT(tuple);
+			local_readers = bms_add_member(local_readers, row->id);
+
+			ReleaseSysCache(tuple);
+		}
+
+		readers = bms_intersect(readers, local_readers);
+		bms_free(local_readers);
+	}
+
+	return readers;
 }
 
 TupleDesc
@@ -685,5 +732,5 @@ bool IsStream(char *stream)
  */
 bool IsWritableStream(char *stream)
 {
-	return GetStreamReaders(stream) != NULL;
+	return GetAllStreamReaders(stream) != NULL;
 }
