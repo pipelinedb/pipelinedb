@@ -2352,6 +2352,7 @@ finalize_plan(PlannerInfo *root, Plan *plan, Bitmapset *valid_params,
 							  &context);
 			break;
 
+		case T_StreamTableJoin:
 		case T_HashJoin:
 			finalize_primnode((Node *) ((Join *) plan)->joinqual,
 							  &context);
@@ -2398,6 +2399,7 @@ finalize_plan(PlannerInfo *root, Plan *plan, Bitmapset *valid_params,
 		case T_SetOp:
 		case T_Group:
 		case T_PhysicalGroupLookup:
+		case T_StreamScan:
 			break;
 
 		default:

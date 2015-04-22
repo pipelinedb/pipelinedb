@@ -96,4 +96,8 @@ extern int	bms_first_member(Bitmapset *a);
 /* support for hashtables using Bitmapsets as keys: */
 extern uint32 bms_hash_value(const Bitmapset *a);
 
+/* shared memory bms */
+extern Bitmapset *dsm_bms_add_member(Bitmapset *bms, int x);
+extern void dsm_bms_free(Bitmapset *bms);
+
 #endif   /* BITMAPSET_H */

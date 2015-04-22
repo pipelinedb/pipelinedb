@@ -2096,8 +2096,9 @@ create_streamscan_path(PlannerInfo *root, RelOptInfo *rel, Relids required_outer
 	pathnode->param_info = get_baserel_parampathinfo(root, rel,
 													 required_outer);
 	pathnode->pathkeys = NIL;
-	pathnode->startup_cost = 0;
-	pathnode->total_cost = 0;
+	pathnode->startup_cost = 1;
+	pathnode->total_cost = 1;
+	pathnode->rows = 1.0;
 
 	return pathnode;
 }
@@ -2152,8 +2153,10 @@ create_stream_table_join_path(PlannerInfo *root,
 	pathnode->jpath.path.param_info = get_baserel_parampathinfo(root, joinrel,
 													 required_outer);
 	pathnode->jpath.path.pathkeys = NIL;
+
+	/* we only care about the cost of the table side of a stream-table join */
 	pathnode->jpath.path.startup_cost = 0;
-	pathnode->jpath.path.total_cost = 0;
+	pathnode->jpath.path.total_cost = inner_path->total_cost;
 	pathnode->jpath.outerjoinpath = outer_path;
 	pathnode->jpath.innerjoinpath = inner_path;
 	pathnode->jpath.joinrestrictinfo = restrict_clauses;
@@ -2161,4 +2164,3 @@ create_stream_table_join_path(PlannerInfo *root,
 
 	return pathnode;
 }
-

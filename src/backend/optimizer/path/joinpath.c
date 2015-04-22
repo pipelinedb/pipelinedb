@@ -71,6 +71,15 @@ try_physical_group_lookup_path(PlannerInfo *root,
 				  List *pathkeys);
 
 static void
+try_stream_index_join_path(PlannerInfo *root,
+						RelOptInfo *joinrel,
+						JoinType jointype,
+						SpecialJoinInfo *sjinfo,
+						Path *outer_path,
+						Path *inner_path,
+						List *restrict_clauses);
+
+static void
 physical_group_lookup(PlannerInfo *root,
 					RelOptInfo *joinrel,
 					RelOptInfo *outerrel,
@@ -183,7 +192,6 @@ add_paths_to_joinrel(PlannerInfo *root,
 		Path *outerpath = outerrel->cheapest_total_path;
 		Path *innerpath = innerrel->cheapest_total_path;
 		Relids requiredouter = calc_non_nestloop_required_outer(outerpath, innerpath);
-
 		ListCell *lc;
 		List *hashclauses = NIL;
 
@@ -216,6 +224,25 @@ add_paths_to_joinrel(PlannerInfo *root,
 
 		add_path(joinrel, (Path *) path);
 
+		/*
+		 * If the inner relation has any index paths for this join, those are
+		 * going to be faster on large tables so we try them.
+		 */
+		foreach(lc, innerrel->pathlist)
+		{
+			innerpath = (Path *) lfirst(lc);
+			try_stream_index_join_path(root, joinrel, jointype, sjinfo,
+					outerpath, innerpath, restrictlist);
+		}
+
+		foreach(lc, innerrel->cheapest_parameterized_paths)
+		{
+			innerpath = (Path *) lfirst(lc);
+			try_stream_index_join_path(root, joinrel, jointype, sjinfo,
+					outerpath, innerpath, restrictlist);
+		}
+
+		set_cheapest(joinrel);
 		return;
 	}
 
@@ -513,6 +540,39 @@ try_physical_group_lookup_path(PlannerInfo *root,
 	path = (Path *) linitial(joinrel->pathlist);
 	path->type = T_PhysicalGroupLookupPath;
 	path->pathtype = T_PhysicalGroupLookup;
+}
+
+/*
+ * try_stream_index_join_path
+ * 		Consider nestloop join of a stream scan and an indexed table
+ */
+static void
+try_stream_index_join_path(PlannerInfo *root,
+						RelOptInfo *joinrel,
+						JoinType jointype,
+						SpecialJoinInfo *sjinfo,
+						Path *outer_path,
+						Path *inner_path,
+						List *restrict_clauses)
+{
+	Relids required_outer = calc_nestloop_required_outer(outer_path, inner_path);
+	JoinCostWorkspace workspace;
+	List *pathkeys = build_join_pathkeys(root, joinrel, jointype, outer_path->pathkeys);
+	NestPath *path;
+
+	/* if there's no index path, we'll use the stream-table hashjoin */
+	if (inner_path->pathtype == T_SeqScan)
+		return;
+
+	path = create_nestloop_path(root, joinrel, jointype, &workspace,
+									  sjinfo, NULL, outer_path, inner_path, restrict_clauses,
+									  pathkeys, required_outer);
+
+	/* we only care about the cost of the table side of a stream-table join */
+	path->path.startup_cost = 0;
+	path->path.total_cost = inner_path->total_cost;
+	add_path(joinrel, (Path *) path);
+
 }
 
 /*
