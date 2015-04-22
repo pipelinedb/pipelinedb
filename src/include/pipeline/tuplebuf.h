@@ -62,7 +62,7 @@ typedef struct TupleBuffer
 	uint64_t tail_id;
 	slock_t mutex;
 	Bitmapset *waiters;
-	DynArray *latches;
+	DSMArray *latches;
 	Latch writer_latch;
 } TupleBuffer;
 

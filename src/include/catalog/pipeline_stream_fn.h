@@ -20,7 +20,8 @@
 
 extern void UpdateStreamReaders(Relation pipeline_query);
 extern void UpdateStreamQueries(Relation pipeline_query);
-extern Bitmapset *GetStreamReaders(const char *stream);
+extern Bitmapset *GetAllStreamReaders(const char *stream);
+extern Bitmapset *GetLocalStreamReaders(const char *stream);
 extern TupleDesc GetStreamTupleDesc(const char *stream, List *colnames);
 
 extern bytea *PackTupleDesc(TupleDesc desc);
