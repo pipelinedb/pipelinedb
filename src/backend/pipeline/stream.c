@@ -36,6 +36,7 @@
 
 /* Whether or not to block till the events are consumed by a cv*/
 bool debug_sync_stream_insert;
+char *stream_targets = NULL;
 
 static HTAB *prepared_stream_inserts = NULL;
 
@@ -138,7 +139,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
-	Bitmapset *targets = GetStreamReaders(pstmt->stream);
+	Bitmapset *targets = GetAllStreamReaders(pstmt->stream);
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
 
@@ -198,10 +199,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
-printf ("Hello %s\n", stream_targets);//TODO if null call the other func
-	Bitmapset *targets = GetStreamReadersMasked(ins->relation->relname, stream_targets);
-
-
+	Bitmapset *targets = GetLocalStreamReaders(ins->relation->relname);
 
 	if (!numcols)
 		ereport(ERROR,
@@ -328,7 +326,7 @@ printf ("Hello %s\n", stream_targets);//TODO if null call the other func
 uint64
 CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
-	Bitmapset *targets = GetStreamReaders(stream);
+	Bitmapset *targets = GetAllStreamReaders(stream);
 	TupleBufferSlot* tbs = NULL;
 	uint64 count = 0;
 	int i;

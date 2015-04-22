@@ -42,6 +42,7 @@ typedef struct PreparedStreamInsertStmt
 
 /* Whether or not to wait on the inserted event to be consumed by the CV*/
 extern bool debug_sync_stream_insert;
+extern char *stream_targets;
 
 extern PreparedStreamInsertStmt *StorePreparedStreamInsert(const char *name, const char *stream, List *cols);
 extern void AddPreparedStreamInsert(PreparedStreamInsertStmt *stmt, ParamListInfoData *params);

@@ -53,6 +53,7 @@
 #include "pgstat.h"
 #include "pipeline/combiner.h"
 #include "pipeline/cqproc.h"
+#include "pipeline/stream.h"
 #include "pipeline/tuplebuf.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
@@ -466,8 +467,6 @@ char	   *application_name;
 int			tcp_keepalives_idle;
 int			tcp_keepalives_interval;
 int			tcp_keepalives_count;
-
-char	   *stream_targets;
 
 /*
  * This really belongs in pg_shmem.c, but is defined here so that it doesn't

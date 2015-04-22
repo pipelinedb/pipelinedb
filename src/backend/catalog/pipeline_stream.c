@@ -26,6 +26,7 @@
 #include "pipeline/cont_analyze.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
+#include "utils/guc.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
@@ -564,7 +565,7 @@ UpdateStreamQueries(Relation pipeline_query)
  * queries are reading from the given stream.
  */
 Bitmapset *
-GetStreamReaders(const char *stream)
+GetAllStreamReaders(const char *stream)
 {
 	HeapTuple tup = SearchSysCache1(PIPELINESTREAMNAME, CStringGetDatum(stream));
 	bool isnull;
@@ -599,47 +600,53 @@ GetStreamReaders(const char *stream)
 	return result;
 }
 
-
-
 Bitmapset *
-GetStreamReadersMasked(const char *stream, const char *targets)
+GetLocalStreamReaders(const char *stream)
 {
-	Bitmapset *query_bitmap = GetStreamReaders(stream);
+	Bitmapset *readers = GetAllStreamReaders(stream);
 
-	if (targets != NULL) 
+	if (stream_targets != NULL)
 	{
-		Bitmapset *targets_bitmap = palloc0(BITMAPSET_SIZE(query_bitmap->nwords));//TODO palloc not needed
+		Bitmapset *local_readers = NULL;
+		HeapTuple tuple;
+		Form_pipeline_query row;
 		int ptr = 0;
-		char* view_name = pallac0(strlen(targets) + 1);
-		while (ptr < strlen(targets))
-		{
-			char* commo_ptr = strchr(targets + ptr, ',');
-			int len;
-			if (commo_ptr == NULL)
-				len = strlen(targets);
-			else
-				len = commo_ptr - targets + ptr;
+		char* view_name = palloc0(strlen(stream_targets) + 1);
 
-			memcpy(view_name, targets + ptr, len);
+		while (ptr < strlen(stream_targets))
+		{
+			char* commo_ptr = strchr(stream_targets + ptr, ',');
+			int len;
+
+			if (commo_ptr == NULL)
+				len = strlen(stream_targets);
+			else
+				len = commo_ptr - stream_targets + ptr;
+
+			memcpy(view_name, stream_targets + ptr, len);
 			view_name[len] = '\0';
 			ptr += len + 1;
-printf ("Hello: view_name: %s\n", view_name);
-			HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(view_name));
+
+			tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(view_name));
 
 			if (!HeapTupleIsValid(tuple))
-                		ereport(ERROR,
-                                		(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
 						errmsg("continuous view \"%s\" does not exist", view_name)));
 
-			Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
-			bms_add_member (targets_bitmap, row->id);
-		}
-		free(view_name);
+			row = (Form_pipeline_query) GETSTRUCT(tuple);
+			local_readers = bms_add_member(local_readers, row->id);
 
-		query_bitmap = bms_intersect(query_bitmap, targets_bitmap);
-		//TODO free targets bitmap
+			ReleaseSysCache(tuple);
+		}
+
+		pfree(view_name);
+
+		readers = bms_intersect(readers, local_readers);
+		bms_free(local_readers);
 	}
-	return query_bitmap;
+
+	return readers;
 }
 
 TupleDesc
@@ -728,5 +735,5 @@ bool IsStream(char *stream)
  */
 bool IsWritableStream(char *stream)
 {
-	return GetStreamReaders(stream) != NULL;
+	return GetAllStreamReaders(stream) != NULL;
 }
