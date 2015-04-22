@@ -500,7 +500,7 @@ dsm_free(void *addr)
 }
 
 bool
-dsm_valid_ptr(void *addr)
+dsm_is_valid_ptr(void *addr)
 {
 	return is_allocated(addr);
 }

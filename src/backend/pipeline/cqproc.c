@@ -65,7 +65,7 @@ typedef struct CQProcRunArgs
 	Oid dboid;
 } CQProcRunArgs;
 
-static DynArray **CQProcArray = NULL;
+static DSMArray **CQProcArray = NULL;
 
 /*
  * InitCQProcState
@@ -80,10 +80,10 @@ InitCQProcState(void)
 
 	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
-	CQProcArray = (DynArray **) ShmemInitStruct("CQProcArray", sizeof(DynArray *), &found);
+	CQProcArray = (DSMArray **) ShmemInitStruct("CQProcArray", sizeof(DSMArray *), &found);
 
 	if (!found)
-		*CQProcArray = (DynArray *) dsm_array_new(sizeof(CQProcEntry *));
+		*CQProcArray = (DSMArray *) dsm_array_new(sizeof(CQProcEntry *));
 
 	LWLockRelease(PipelineMetadataLock);
 }
@@ -401,7 +401,7 @@ cq_bg_main(Datum d, char *additional, Size additionalsize)
 	 * This will happen when the BG worker is being respawned after a full
 	 * reset cycle.
 	 */
-	if (!dsm_valid_ptr(args->query))
+	if (!dsm_is_valid_ptr(args->query))
 		return;
 
 	/* Set all globals variables */
