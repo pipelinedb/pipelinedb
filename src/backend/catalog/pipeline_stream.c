@@ -615,8 +615,16 @@ GetLocalStreamReaders(const char *stream)
 
 		while (ptr < strlen(stream_targets))
 		{
-			char* commo_ptr = strchr(stream_targets + ptr, ',');
+			char* commo_ptr;
 			int len;
+
+			if (stream_targets[ptr] == ' ')
+			{
+				ptr++;
+				continue;
+			}
+
+			commo_ptr = strchr(stream_targets + ptr, ',');
 
 			if (commo_ptr == NULL)
 				len = strlen(stream_targets);
