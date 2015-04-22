@@ -14,6 +14,7 @@
 #include "postgres.h"
 #include "nodes/bitmapset.h"
 #include "pipeline/stream.h"
+#include "storage/dsm_array.h"
 #include "storage/s_lock.h"
 #include "storage/shmem.h"
 #include "storage/latch.h"
@@ -60,9 +61,8 @@ typedef struct TupleBuffer
 	uint64_t head_id;
 	uint64_t tail_id;
 	slock_t mutex;
-	uint16_t max_cqs;
 	Bitmapset *waiters;
-	Latch **latches;
+	DynArray *latches;
 	Latch writer_latch;
 } TupleBuffer;
 
@@ -93,7 +93,6 @@ extern void TupleBufferInitLatch(TupleBuffer *buf, uint32_t cq_id, uint8_t reade
 extern void TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id);
 extern void TupleBufferNotifyAndClearWaiters(TupleBuffer *buf);
 extern void TupleBufferResetNotify(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id);
-extern void TupleBufferExpandLatchArray(TupleBuffer *buf, uint32_t cq_id);
 extern void TupleBufferNotify(TupleBuffer *buf, uint32_t cq_id);
 
 extern TupleBufferReader *TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers);

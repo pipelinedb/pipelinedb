@@ -20,15 +20,14 @@
 #include "executor/tuptable.h"
 #include "nodes/bitmapset.h"
 #include "nodes/print.h"
+#include "storage/dsm_alloc.h"
 #include "storage/lwlock.h"
-#include "storage/spalloc.h"
 #include "storage/spin.h"
 #include "storage/proc.h"
 #include "utils/memutils.h"
 #include "miscadmin.h"
 
 #define MAGIC 0xDEADBABE /* x_x */
-#define INIT_CQS BITS_PER_BITMAPWORD
 #define MURMUR_SEED 0x9eaca8149c92387e
 #define INSERT_SLEEP_MS 5
 
@@ -328,8 +327,8 @@ TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, uin
 		buf->head = NULL;
 		buf->tail = NULL;
 
-		buf->max_cqs = 0;
-		TupleBufferExpandLatchArray(buf, INIT_CQS);
+		buf->waiters = NULL;
+		buf->latches = dsm_array_new(sizeof(Latch) * max_readers);
 
 		SpinLockInit(&buf->mutex);
 
@@ -527,7 +526,8 @@ TupleBufferIsEmpty(TupleBuffer *buf)
 void
 TupleBufferInitLatch(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, Latch *proclatch)
 {
-	memcpy(&buf->latches[cq_id][reader_id], proclatch, sizeof(Latch));
+	Latch *latches = dsm_array_get(buf->latches, cq_id);
+	memcpy(&latches[reader_id], proclatch, sizeof(Latch));
 }
 
 /*
@@ -537,16 +537,20 @@ void
 TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 {
 	bool should_wait = false;
+
 	SpinLockAcquire(&buf->mutex);
 	if (!TupleBufferHasUnreadSlots())
 	{
-		bms_add_member(buf->waiters, cq_id);
+		buf->waiters = dsm_bms_add_member(buf->waiters, cq_id);
 		should_wait = true;
 	}
 	SpinLockRelease(&buf->mutex);
 
 	if (should_wait)
-		WaitLatch((&buf->latches[cq_id][reader_id]), WL_LATCH_SET, 0);
+	{
+		Latch *latches = dsm_array_get(buf->latches, cq_id);
+		WaitLatch((&latches[reader_id]), WL_LATCH_SET, 0);
+	}
 }
 
 /*
@@ -555,7 +559,8 @@ TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 void
 TupleBufferResetNotify(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 {
-	ResetLatch((&buf->latches[cq_id][reader_id]));
+	Latch *latches = dsm_array_get(buf->latches, cq_id);
+	ResetLatch((&latches[reader_id]));
 }
 
 /*
@@ -565,64 +570,15 @@ void
 TupleBufferNotify(TupleBuffer *buf, uint32_t cq_id)
 {
 	int i;
+	Latch *latches = dsm_array_get(buf->latches, cq_id);
 
 	for (i = 0; i < buf->max_readers; i++)
 	{
-		Latch *l = &buf->latches[cq_id][i];
+		Latch *l = &latches[i];
 		if (!l || !l->owner_pid)
 			break;
 		SetLatch(l);
 	}
-}
-
-/*
- * TupleBufferExpandLatchArray
- */
-void
-TupleBufferExpandLatchArray(TupleBuffer *buf, uint32_t cq_id)
-{
-	Latch **latches;
-	Bitmapset *waiters;
-	Latch **tmp_latches;
-	Bitmapset *tmp_waiters;
-	uint16_t max_cqs = buf->max_cqs;
-
-	if (buf->max_cqs == 0)
-		buf->max_cqs = INIT_CQS;
-
-	while (cq_id >= buf->max_cqs)
-		buf->max_cqs *= 2;
-
-	if (max_cqs == buf->max_cqs)
-		return;
-
-	latches = (Latch **) spalloc0(sizeof(Latch *) * buf->max_cqs);
-	waiters = (Bitmapset *) spalloc0(BITMAPSET_SIZE(buf->max_cqs / BITS_PER_BITMAPWORD));
-	waiters->nwords = buf->max_cqs / BITS_PER_BITMAPWORD;
-
-	if (max_cqs)
-		memcpy(latches, buf->latches, sizeof(Latch *) * max_cqs);
-
-	SpinLockAcquire(&buf->mutex);
-
-	tmp_latches = buf->latches;
-	tmp_waiters = buf->waiters;
-
-	buf->latches = latches;
-	buf->waiters = waiters;
-
-	if (max_cqs)
-	{
-		int i;
-
-		while ((i = bms_first_member(tmp_waiters)) >= 0)
-			waiters = bms_add_member(waiters, i);
-
-		spfree(tmp_latches);
-		spfree(tmp_waiters);
-	}
-
-	SpinLockRelease(&buf->mutex);
 }
 
 /*
