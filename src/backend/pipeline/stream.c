@@ -139,7 +139,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
-	Bitmapset *targets = GetAllStreamReaders(pstmt->stream);
+	Bitmapset *targets = GetLocalStreamReaders(pstmt->stream);
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
 
@@ -326,7 +326,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 uint64
 CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
-	Bitmapset *targets = GetAllStreamReaders(stream);
+	Bitmapset *targets = GetLocalStreamReaders(stream);
 	TupleBufferSlot* tbs = NULL;
 	uint64 count = 0;
 	int i;
