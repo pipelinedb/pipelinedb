@@ -65,7 +65,7 @@ typedef struct CQProcRunArgs
 	Oid dboid;
 } CQProcRunArgs;
 
-static HTAB *CQProcTable = NULL;
+static DynArray **CQProcArray = NULL;
 
 /*
  * InitCQProcState
@@ -76,24 +76,14 @@ static HTAB *CQProcTable = NULL;
 void
 InitCQProcState(void)
 {
-	HASHCTL info;
-
-	/*
-	 * Each continuous view has at least 2 concurrent processes (1 worker and 1 combiner)
-	 * num_concurrent_cv is set to half that value.
-	 * max_concurrent_processes is set as a conf parameter
-	*/
-	int num_concurrent_cv = max_worker_processes / 2;
-
-	info.keysize = sizeof(int);
-	info.entrysize = sizeof(CQProcEntry);
+	bool found;
 
 	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
-	CQProcTable = ShmemInitHash("CQProcTable",
-			num_concurrent_cv, num_concurrent_cv,
-			&info,
-			HASH_ELEM);
+	CQProcArray = (DynArray **) ShmemInitStruct("CQProcArray", sizeof(DynArray *), &found);
+
+	if (!found)
+		*CQProcArray = (DynArray *) dsm_array_new(sizeof(CQProcEntry *));
 
 	LWLockRelease(PipelineMetadataLock);
 }
@@ -154,16 +144,9 @@ GetProcessGroupSize(int id)
 CQProcEntry*
 CQProcEntryCreate(int id, int pg_size)
 {
-	CQProcEntry	*entry;
-	bool		found;
+	CQProcEntry	*entry = (CQProcEntry *) dsm_alloc0(sizeof(CQProcArray));
 
-	/* Find or create an entry with desired hash code */
-	entry = (CQProcEntry *) hash_search(CQProcTable, &id, HASH_ENTER, &found);
-	Assert(entry);
-
-	if (found)
-		return NULL;
-
+	entry->id = id;
 	/* New entry, initialize it with the process group size */
 	entry->pg_size = pg_size;
 	/* New entry, and is active the moment this entry is created */
@@ -175,6 +158,8 @@ CQProcEntryCreate(int id, int pg_size)
 	entry->workers = dsm_alloc0(sizeof(CQBackgroundWorkerHandle) * NUM_WORKERS(entry));
 
 	SpinLockInit(&entry->mutex);
+
+	dsm_array_set(*CQProcArray, id, &entry);
 
 	/* Expand Latch arrays on TupleBuffers, if needed. */
 	dsm_array_set(WorkerTupleBuffer->latches, id, NULL);
@@ -203,8 +188,8 @@ CQProcEntryRemove(int id)
 			dsm_free(entry->shm_query);
 	}
 
-	/* Remove the entry from the hash table. */
-	hash_search(CQProcTable, &id, HASH_REMOVE, NULL);
+	dsm_free(entry);
+	dsm_array_set(*CQProcArray, id, NULL);
 }
 
 /*
@@ -215,8 +200,7 @@ CQProcEntryRemove(int id)
 CQProcEntry*
 GetCQProcEntry(int id)
 {
-	bool found;
-	return (CQProcEntry *) hash_search(CQProcTable, &id, HASH_FIND, &found);
+	return *(CQProcEntry **) dsm_array_get(*CQProcArray, id);
 }
 
 /*
