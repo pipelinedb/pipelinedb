@@ -14,19 +14,18 @@
 #include "miscadmin.h"
 #include "nodes/bitmapset.h"
 #include "pipeline/cont_xact.h"
-#include "storage/shmem.h"
-#include "storage/spalloc.h"
+#include "storage/dsm_alloc.h"
 
 #define SLEEP_MS 5
 
 List *MyAcks = NIL;
 
-StreamBatch *StreamBatchCreate(Bitmapset *readers, int num_tuples)
+StreamBatch *StreamBatchCreate(int num_readers, int num_tuples)
 {
-	StreamBatch *entry = spalloc0(sizeof(StreamBatch));
+	StreamBatch *entry = dsm_alloc0(sizeof(StreamBatch));
 
 	entry->id = MyProcPid;
-	entry->num_wtups = bms_num_members(readers) * num_tuples;
+	entry->num_wtups = num_readers * num_tuples;
 	SpinLockInit(&entry->mutex);
 
 	return entry;
@@ -36,7 +35,7 @@ void StreamBatchWaitAndRemove(StreamBatch *batch)
 {
 	while (batch->num_wacks < batch->num_wtups || batch->num_cacks < batch->num_ctups)
 		pg_usleep(SLEEP_MS * 1000);
-	spfree(batch);
+	dsm_free(batch);
 }
 
 void StreamBatchIncrementNumCTuples(StreamBatch *batch)
@@ -46,15 +45,15 @@ void StreamBatchIncrementNumCTuples(StreamBatch *batch)
 	SpinLockRelease(&batch->mutex);
 }
 
-void StreamBatchIncrementNumReads(StreamBatch *batch)
-{
-	SpinLockAcquire(&batch->mutex);
-	if (IsWorker)
-		batch->num_wacks++;
-	else
-		batch->num_cacks++;
-	SpinLockRelease(&batch->mutex);
-}
+//void StreamBatchIncrementNumReads(StreamBatch *batch)
+//{
+//	SpinLockAcquire(&batch->mutex);
+//	if (IsWorker)
+//		batch->num_wacks++;
+//	else
+//		batch->num_cacks++;
+//	SpinLockRelease(&batch->mutex);
+//}
 
 void StreamBatchMarkAcked(StreamBatchAck *ack)
 {

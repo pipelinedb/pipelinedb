@@ -15,6 +15,7 @@
 #include "nodes/parsenodes.h"
 #include "postmaster/bgworker.h"
 #include "signal.h"
+#include "storage/spin.h"
 
 #define NUM_WORKERS(entry) ((entry)->pg_size - 1)
 
