@@ -34,7 +34,7 @@ typedef struct
 {
 	int id;
 	int pg_size;
-	sig_atomic_t active;
+	bool active;
 	CQBackgroundWorkerHandle combiner;
 	CQBackgroundWorkerHandle *workers;
 	char *shm_query;
