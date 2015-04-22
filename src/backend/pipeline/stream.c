@@ -23,6 +23,7 @@
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
 #include "parser/parse_target.h"
+#include "pipeline/cont_xact.h"
 #include "pipeline/stream.h"
 #include "storage/dsm_alloc.h"
 #include "storage/ipc.h"
@@ -34,7 +35,7 @@
 #include "utils/typcache.h"
 
 /* Whether or not to block till the events are consumed by a cv*/
-bool debug_sync_stream_insert;
+bool sync_stream_insert;
 
 static HTAB *prepared_stream_inserts = NULL;
 
@@ -137,9 +138,22 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
+	Relation pipeline_stream = heap_open(PipelineStreamRelationId, RowShareLock);
 	Bitmapset *targets = GetStreamReaders(pstmt->stream);
 	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
+	StreamBatchAck acks[1];
+	StreamBatch *batch = NULL;
+	int num_batches = 0;
+
+	if (sync_stream_insert)
+	{
+		batch = StreamBatchCreate(bms_num_members(targets), list_length(pstmt->inserts));
+		num_batches = 1;
+
+		acks[0].batch = batch;
+		acks[0].count = 1;
+	}
 
 	foreach(lc, pstmt->inserts)
 	{
@@ -166,14 +180,19 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 			nulls[i] = params->params[i].isnull;
 		}
 
-		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc);
+		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, acks);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
 	}
 
-	if (debug_sync_stream_insert)
-		TupleBufferWaitOnSlot(tbs, 5);
+	heap_close(pipeline_stream, NoLock);
+
+	if (sync_stream_insert)
+	{
+		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
+		StreamBatchWaitAndRemove(batch);
+	}
 
 	pstmt->inserts = NIL;
 
@@ -197,7 +216,20 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
+	Relation pipeline_stream = heap_open(PipelineStreamRelationId, RowShareLock);
 	Bitmapset *targets = GetStreamReaders(ins->relation->relname);
+	StreamBatchAck acks[1];
+	StreamBatch *batch = NULL;
+	int num_batches = 0;
+
+	if (sync_stream_insert)
+	{
+		batch = StreamBatchCreate(bms_num_members(targets), list_length(values));
+		num_batches = 1;
+
+		acks[0].batch = batch;
+		acks[0].count = 1;
+	}
 
 	if (!numcols)
 		ereport(ERROR,
@@ -298,7 +330,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		/*
 		 * Now write the tuple of constants to the TupleBuffer
 		 */
-		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc);
+		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, acks);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		Assert(tbs);
@@ -307,11 +339,16 @@ InsertIntoStream(InsertStmt *ins, List *values)
 
 	FreeExprContext(econtext, false);
 
+	heap_close(pipeline_stream, NoLock);
+
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
-	if (debug_sync_stream_insert)
-		TupleBufferWaitOnSlot(tbs, 5);
+	if (sync_stream_insert)
+	{
+		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
+		StreamBatchWaitAndRemove(batch);
+	}
 
 	return count;
 }
@@ -324,27 +361,45 @@ InsertIntoStream(InsertStmt *ins, List *values)
 uint64
 CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
+	Relation pipeline_stream = heap_open(PipelineStreamRelationId, RowShareLock);
 	Bitmapset *targets = GetStreamReaders(stream);
 	TupleBufferSlot* tbs = NULL;
 	uint64 count = 0;
 	int i;
+	StreamBatchAck acks[1];
+	StreamBatch *batch = NULL;
+	int num_batches = 0;
+
+	if (sync_stream_insert)
+	{
+		batch = StreamBatchCreate(bms_num_members(targets), ntuples);
+		num_batches = 1;
+
+		acks[0].batch = batch;
+		acks[0].count = 1;
+	}
 
 	for (i=0; i<ntuples; i++)
 	{
 		HeapTuple htup = tuples[i];
 		Tuple *tuple;
 
-		tuple = MakeTuple(htup, desc);
+		tuple = MakeTuple(htup, desc, num_batches, acks);
 		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
 	}
 
+	heap_close(pipeline_stream, NoLock);
+
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
-	if (debug_sync_stream_insert)
-		TupleBufferWaitOnSlot(tbs, 5);
+	if (sync_stream_insert)
+	{
+		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
+		StreamBatchWaitAndRemove(batch);
+	}
 
 	return count;
 }

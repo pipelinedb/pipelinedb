@@ -1,4 +1,3 @@
-SET debug_sync_stream_insert = 'on';
 -- bit_and, bit_or
 CREATE CONTINUOUS VIEW test_bit_and AS SELECT k::text, bit_and(b::bit) FROM bit_stream_cqboolagg GROUP BY k;
 CREATE CONTINUOUS VIEW test_bit_or AS SELECT k::text, bit_or(b::bit) FROM bit_stream_cqboolagg GROUP BY k;

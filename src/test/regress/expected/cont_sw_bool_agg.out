@@ -1,4 +1,3 @@
-SET debug_sync_stream_insert = 'on';
 -- bit_and, bit_or
 CREATE CONTINUOUS VIEW test_sw_bit_and AS SELECT k::text, bit_and(b::bit) FROM bit_test_sw_sw_stream GROUP BY k;
 CREATE CONTINUOUS VIEW test_sw_bit_or AS SELECT k::text, bit_or(b::bit) FROM bit_test_sw_sw_stream WHERE arrival_timestamp > clock_timestamp() - interval '1 hour'  GROUP BY k;

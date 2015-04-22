@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 CREATE CONTINUOUS VIEW test_path_to_polygon AS SELECT x::path FROM path_stream;
 CREATE CONTINUOUS VIEW test_box_to_point AS SELECT x::box FROM box_stream;
 CREATE CONTINUOUS VIEW test_box_to_lseg AS SELECT x::box FROM box_stream;
@@ -227,4 +225,3 @@ DROP CONTINUOUS VIEW test_inet_to_bpchar;
 DROP CONTINUOUS VIEW test_bool_to_bpchar;
 DROP CONTINUOUS VIEW test_json_to_jsonb;
 DROP CONTINUOUS VIEW test_jsonb_to_json;
-

@@ -1,4 +1,3 @@
-SET debug_sync_stream_insert = 'on';
 -- rank
 CREATE CONTINUOUS VIEW test_rank0 AS SELECT rank(7, 47, '47') WITHIN GROUP (ORDER BY x::integer, y::integer, z::text) FROM test_hs_stream;
 CREATE CONTINUOUS VIEW test_rank1 AS SELECT g::integer, rank(5, 5) WITHIN GROUP (ORDER BY g, x::integer) FROM test_hs_stream GROUP BY g;

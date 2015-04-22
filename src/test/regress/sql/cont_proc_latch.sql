@@ -1,4 +1,3 @@
-set debug_sync_stream_insert = on;
 CREATE CONTINUOUS VIEW cqlatch AS SELECT id::integer FROM stream_latch;
 ACTIVATE cqlatch;
 -- Wait at least 3 seconds till the worker latch is actually blocked
