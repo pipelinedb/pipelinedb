@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 -- First use big windows to verify that we get the same results as identical queries without sliding windows
 -- rank
 CREATE CONTINUOUS VIEW test_sw_rank0 AS SELECT rank(7, 47, '47') WITHIN GROUP (ORDER BY x::integer, y::integer, z::text) FROM test_sw_hs_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
@@ -79,7 +77,7 @@ SELECT * FROM test_sw_dense_rank1;
 SELECT * FROM test_sw_dense_rank2;
 
 -- Now use a small window to verify that sliding window results change over time
-CREATE CONTINUOUS VIEW test_sw_hs_change AS SELECT 
+CREATE CONTINUOUS VIEW test_sw_hs_change AS SELECT
 rank(5, -5) WITHIN GROUP (ORDER BY x::integer, y::integer),
 dense_rank(5, -5) WITHIN GROUP (ORDER BY x, y),
 percent_rank(10, -10) WITHIN GROUP (ORDER BY x, y),

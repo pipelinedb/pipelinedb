@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 CREATE CONTINUOUS VIEW test_sw_min_max AS SELECT
 key::text,
 min(i8::int8) AS i8min, max(i8) AS i8max,

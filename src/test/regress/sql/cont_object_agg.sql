@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 -- json_agg
 CREATE CONTINUOUS VIEW test_json_agg AS SELECT key::text, json_agg(tval::text) AS j0, json_agg(fval::float8) AS j1, json_agg(ival::integer) AS j2 FROM cqobjectagg_stream GROUP BY key;
 

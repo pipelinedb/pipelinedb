@@ -712,9 +712,12 @@ ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
 		CommitTransactionCommand();
 
 		CQExecutionContext = TopMemoryContext;
+		IsWorker = true;
 
 		foreach(lc, deactivated_cq_ids)
-			TupleBufferDrain(WorkerTupleBuffer, lfirst_int(lc), 0, 1);
+			TupleBufferDrain(WorkerTupleBuffer, lfirst_int(lc));
+
+		IsWorker = false;
 
 		/*
 		 * We need to restart a transaction because the executor expects us to be in a

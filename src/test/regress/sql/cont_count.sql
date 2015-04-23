@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 CREATE CONTINUOUS VIEW test_count AS SELECT k::text, COUNT(*) FROM stream_cqcount GROUP BY k;
 
 ACTIVATE test_count;

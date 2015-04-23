@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 -------------------------------------------------------------------------------
 -- Integer sums
 CREATE CONTINUOUS VIEW test_int8_sum AS SELECT k::text, SUM(v::int8) FROM int_cqsum_stream GROUP BY k;
