@@ -158,6 +158,8 @@ CQProcEntryCreate(int id, int pg_size)
 	entry->combiner.last_pid = 0;
 	entry->workers = dsm_alloc0(sizeof(CQBackgroundWorkerHandle) * NUM_WORKERS(entry));
 
+	SpinLockInit(&entry->mutex);
+
 	dsm_array_set(*CQProcArray, id, &entry);
 
 	/* Expand Latch arrays on TupleBuffers, if needed. */
@@ -221,6 +223,10 @@ MarkCombinerAsRunning(int id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 	entry->combiner.last_pid = MyProcPid;
+
+	SpinLockAcquire(&entry->mutex);
+	entry->proc_runs++;
+	SpinLockRelease(&entry->mutex);
 }
 
 void
@@ -228,6 +234,10 @@ MarkWorkerAsRunning(int id, int worker_id)
 {
 	CQProcEntry *entry = GetCQProcEntry(id);
 	entry->workers[worker_id].last_pid = MyProcPid;
+
+	SpinLockAcquire(&entry->mutex);
+	entry->proc_runs++;
+	SpinLockRelease(&entry->mutex);
 }
 
 /*

@@ -1,4 +1,3 @@
-SET debug_sync_stream_insert = 'on';
 -- json_agg
 CREATE CONTINUOUS VIEW test_sw_json_agg AS SELECT key::text, json_agg(tval::text) AS j0, json_agg(fval::float8) AS j1, json_agg(ival::integer) AS j2 FROM cqswobjectagg_stream WHERE arrival_timestamp > clock_timestamp() - interval '1 hour' GROUP BY key;
 ACTIVATE test_sw_json_agg;

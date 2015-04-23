@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 CREATE CONTINUOUS VIEW test_cont_alter AS SELECT x::int FROM stream;
 
 ALTER VIEW test_cont_alter RENAME TO lolcat;

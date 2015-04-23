@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 CREATE CONTINUOUS VIEW test_avg AS SELECT key::text, avg(value::float8) FROM sanity_stream GROUP BY key;
 
 ACTIVATE test_avg;

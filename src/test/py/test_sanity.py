@@ -8,19 +8,19 @@ def test_create_drop_continuous_view(pipeline, clean_db):
     pipeline.create_cv('cv0', 'SELECT id::integer FROM stream')
     pipeline.create_cv('cv1', 'SELECT id::integer FROM stream')
     pipeline.create_cv('cv2', 'SELECT id::integer FROM stream')
-    
+
     result = pipeline.execute('SELECT * FROM pipeline_query')
     names = [r['name'] for r in result]
-    
+
     assert sorted(names) == ['cv0', 'cv1', 'cv2']
-    
+
     pipeline.drop_cv('cv0')
     pipeline.drop_cv('cv1')
     pipeline.drop_cv('cv2')
-    
+
     result = pipeline.execute('SELECT * FROM pipeline_query')
     names = [r['name'] for r in result]
-    
+
     assert len(names) == 0
 
 def test_simple_insert(pipeline, clean_db):
@@ -28,14 +28,14 @@ def test_simple_insert(pipeline, clean_db):
     Verify that we can insert some rows and count some stuff
     """
     pipeline.create_cv('cv', 'SELECT key::integer, COUNT(*) FROM stream GROUP BY key', activate=True)
-    
+
     rows = [(n % 10,) for n in range(1000)]
-    
+
     pipeline.insert('stream', ('key',), rows)
     pipeline.deactivate('cv')
-    
+
     result = list(pipeline.execute('SELECT * FROM cv ORDER BY key'))
-    
+
     assert len(result) == 10
     for i, row in enumerate(result):
         assert row['key'] == i
@@ -62,12 +62,11 @@ def test_multiple(pipeline, clean_db):
 
     result = list(pipeline.execute('SELECT * FROM cv1'))
     assert len(result) == 1000
-    
+
 def test_combine(pipeline, clean_db):
     """
     Verify that partial tuples are combined with on-disk tuples
     """
-    pipeline.set_sync_insert(True)
     pipeline.create_cv('combine', 'SELECT key::text, COUNT(*) FROM stream GROUP BY key')
     pipeline.activate()
 

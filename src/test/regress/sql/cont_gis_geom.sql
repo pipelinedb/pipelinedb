@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 -- ST_Extent(geometry)
 CREATE CONTINUOUS VIEW test_st_extent AS SELECT id::integer, ST_Extent(g::geometry) FROM test_gis_geom_stream GROUP BY id;
 CREATE CONTINUOUS VIEW test_sw_st_extent AS SELECT id::integer, ST_Extent(g::geometry) FROM test_gis_geom_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour') GROUP BY id;
@@ -276,4 +274,3 @@ DROP CONTINUOUS VIEW test_sw_st_collect;
 DROP CONTINUOUS VIEW test_sw_st_polygonize;
 DROP CONTINUOUS VIEW test_sw_st_makeline;
 DROP CONTINUOUS VIEW test_sw_topo_agg;
-

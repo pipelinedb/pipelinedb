@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 -- ST_SummaryStatsAgg(raster, integer, boolean)
 -- ST_SummaryStatsAgg(raster, boolean, double)
 -- ST_SummaryStatsAgg(raster, integer, boolean, double)

@@ -12,6 +12,7 @@
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "libpq/pqformat.h"
+#include "pipeline/cont_xact.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
@@ -29,7 +30,7 @@
 
 #define MAGIC 0xDEADBABE /* x_x */
 #define MURMUR_SEED 0x9eaca8149c92387e
-#define INSERT_SLEEP_MS 5
+#define WAIT_SLEEP_MS 5
 
 #define BufferOffset(buf, ptr) ((int32) ((char *) (ptr) - (buf)->start))
 #define BufferEnd(buf) ((buf)->start + (buf)->size)
@@ -61,32 +62,74 @@ typedef struct
  * MakeTuple
  */
 Tuple *
-MakeTuple(HeapTuple heaptup, TupleDesc desc)
+MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, StreamBatchAck *acks)
 {
 	Tuple *t = palloc0(sizeof(Tuple));
 	t->heaptup = heaptup;
 	t->desc = PackTupleDesc(desc);
 	t->arrivaltime = GetCurrentTimestamp();
+	t->num_acks = num_acks;
+	t->acks = acks;
 	return t;
+}
+
+static void try_move_tail(TupleBuffer *buf, TupleBufferSlot *slot)
+{
+	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
+
+	if (!SlotIsValid(slot))
+	{
+		LWLockRelease(buf->tail_lock);
+		return;
+	}
+
+	/*
+	 * If this slot was the tail, move tail ahead to the next slot that is not fully
+	 * unpinned.
+	 */
+	if (SlotEqualsTail(slot))
+	{
+		do
+		{
+			buf->tail->magic = 0;
+			buf->tail = buf->tail->next;
+
+			if (TupleBufferIsEmpty(buf))
+				break;
+
+			if (buf->writer_latch.owner_pid)
+				SetLatch(&buf->writer_latch);
+
+			buf->tail_id = buf->tail->id;
+		}
+		while (bms_is_empty(buf->tail->readers));
+	}
+
+	LWLockRelease(buf->tail_lock);
 }
 
 /*
  * TupleBufferWaitOnSlot
  *
- * Waits until the given slot has been read by all CQs that need to see it
+ * Waits until the tail has passed this slot. This guarantees that any tuples inserted uptill
+ * (and including) this slot have been unpinned.
  */
 void
-TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms)
+TupleBufferWaitOnSlot(TupleBuffer *buf, TupleBufferSlot *slot)
 {
 	while (true)
 	{
-		/* Was slot overwritten? */
+		TupleBufferSlot *tail;
+
+		/* TODO(usmanm): Could this result in a live lock if slot is repeatedly equal to tail? */
 		if (!SlotIsValid(slot))
 			break;
-		/* Has the slot been read by all events? */
-		if (bms_is_empty(slot->readers))
-			break;
-		pg_usleep(sleepms * 1000);
+
+		tail = buf->tail;
+		if (SlotIsValid(tail) && bms_is_empty(tail->readers))
+			try_move_tail(buf, tail);
+
+		pg_usleep(WAIT_SLEEP_MS * 1000);
 	}
 
 	if (debug_tuple_stream_buffer)
@@ -108,6 +151,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	TupleBufferSlot *slot;
 	Size size;
 	Size tupsize;
+	Size acks_size;
 	int desclen = tuple->desc ? VARSIZE(tuple->desc) : 0;
 	TimestampTz start_wait;
 
@@ -118,7 +162,8 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	}
 
 	tupsize = tuple->heaptup->t_len + HEAPTUPLESIZE;
-	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(readers->nwords) + desclen;
+	acks_size = sizeof(StreamBatchAck) * tuple->num_acks;
+	size = sizeof(TupleBufferSlot) + sizeof(Tuple) + tupsize + BITMAPSET_SIZE(readers->nwords) + desclen + acks_size;
 
 	if (size > buf->size)
 		elog(ERROR, "event of size %zu too big for stream buffer of size %zu", size, WorkerTupleBuffer->size);
@@ -166,7 +211,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 			LWLockRelease(buf->tail_lock);
 
 			if (TimestampDifferenceExceeds(start_wait, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
-				pg_usleep(INSERT_SLEEP_MS * 1000);
+				pg_usleep(WAIT_SLEEP_MS * 1000);
 			else
 				WaitLatch((&buf->writer_latch), WL_LATCH_SET, 0);
 
@@ -200,7 +245,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 
 	pos += sizeof(TupleBufferSlot);
 	slot->tuple = (Tuple *) pos;
-	slot->tuple->arrivaltime = tuple->arrivaltime;
+	memcpy(slot->tuple, tuple, sizeof(Tuple));
 	pos += sizeof(Tuple);
 
 	if (tuple->desc)
@@ -216,8 +261,12 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	slot->tuple->heaptup->t_tableOid = tuple->heaptup->t_tableOid;
 	slot->tuple->heaptup->t_data = (HeapTupleHeader) ((char *) slot->tuple->heaptup + HEAPTUPLESIZE);
 	memcpy(slot->tuple->heaptup->t_data, tuple->heaptup->t_data, tuple->heaptup->t_len);
-
 	pos += tupsize;
+
+	slot->tuple->acks = (StreamBatchAck *) pos;
+	memcpy(slot->tuple->acks, tuple->acks, acks_size);
+	pos += acks_size;
+
 	slot->readers = (Bitmapset *) pos;
 	memcpy(slot->readers, readers, BITMAPSET_SIZE(readers->nwords));
 
@@ -324,8 +373,8 @@ TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, uin
 		buf->size = size;
 		MemSet(buf->start, 0, size);
 
-		buf->head = NULL;
-		buf->tail = NULL;
+		buf->head_id = buf->tail_id = 0;
+		buf->head = buf->tail = NULL;
 
 		buf->waiters = NULL;
 		buf->latches = dsm_array_new(sizeof(Latch) * max_readers);
@@ -380,6 +429,8 @@ TupleBufferSlot *
 TupleBufferPinNextSlot(TupleBufferReader *reader)
 {
 	MyPinnedSlotEntry *entry;
+	int i;
+	StreamBatchAck *acks;
 	MemoryContext oldcontext;
 
 	if (NoUnreadSlots(reader))
@@ -443,6 +494,31 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	entry->cq_id = reader->cq_id;
 	MyPinnedSlots = lappend(MyPinnedSlots, entry);
 
+	acks = entry->slot->tuple->acks;
+
+	for (i = 0; i < entry->slot->tuple->num_acks; i++) {
+		StreamBatchAck ack = acks[i];
+		ListCell *lc;
+		bool found = false;
+
+		if (!dsm_is_valid_ptr(ack.batch) || ack.batch_id != ack.batch->id)
+			continue;
+
+		foreach(lc, MyAcks) {
+			StreamBatchAck *ack2 = lfirst(lc);
+			if (ack.batch_id == ack2->batch_id) {
+				ack2->count += ack.count;
+				found = true;
+			}
+		}
+
+		if (!found) {
+			StreamBatchAck *ack2 = (StreamBatchAck *) palloc(sizeof(StreamBatchAck));
+			memcpy(ack2, &ack, sizeof(StreamBatchAck));
+			MyAcks = lappend(MyAcks, ack2);
+		}
+	}
+
 	MemoryContextSwitchTo(oldcontext);
 
 	return reader->slot;
@@ -452,6 +528,7 @@ static void
 unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 {
 	TupleBuffer *buf;
+	int i;
 
 	if (!SlotIsValid(slot))
 		return;
@@ -462,6 +539,9 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	bms_del_member(slot->readers, cq_id);
 	SpinLockRelease(&slot->mutex);
 
+	for (i = 0; i < slot->tuple->num_acks; i++)
+		StreamBatchIncrementNumReads(slot->tuple->acks[i].batch);
+
 	if (debug_tuple_stream_buffer)
 		elog(LOG, "[%d] unpinned event at [%d, %d); readers %d",
 				cq_id, BufferOffset(buf, slot), BufferOffset(buf, SlotEnd(slot)), bms_num_members(slot->readers));
@@ -469,37 +549,7 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	if (!bms_is_empty(slot->readers))
 		return;
 
-	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
-
-	if (!SlotIsValid(slot))
-	{
-		LWLockRelease(buf->tail_lock);
-		return;
-	}
-
-	/*
-	 * If this slot was the tail, move tail ahead to the next slot that is not fully
-	 * unpinned.
-	 */
-	if (SlotEqualsTail(slot))
-	{
-		do
-		{
-			buf->tail->magic = 0;
-			buf->tail = buf->tail->next;
-
-			if (TupleBufferIsEmpty(buf))
-				break;
-
-			if (buf->writer_latch.owner_pid)
-				SetLatch(&buf->writer_latch);
-
-			buf->tail_id = buf->tail->id;
-		}
-		while (bms_is_empty(buf->tail->readers));
-	}
-
-	LWLockRelease(buf->tail_lock);
+	try_move_tail(buf, slot);
 }
 
 /*
@@ -598,7 +648,7 @@ TupleBufferUnpinAllPinnedSlots(void)
 		unpin_slot(entry->cq_id, entry->slot);
 	}
 
-	MyPinnedSlots = NIL;
+	TupleBufferClearPinnedSlots();
 }
 
 /*
@@ -608,9 +658,16 @@ void
 TupleBufferClearPinnedSlots(void)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(CQExecutionContext);
+	ListCell *lc;
 
 	list_free_deep(MyPinnedSlots);
 	MyPinnedSlots = NIL;
+
+	foreach(lc, MyAcks)
+		StreamBatchMarkAcked(lfirst(lc));
+
+	list_free_deep(MyAcks);
+	MyAcks = NIL;
 
 	MemoryContextSwitchTo(oldcontext);
 }
@@ -648,11 +705,13 @@ TupleBufferClearReaders(void)
  * TupleBufferDrain
  */
 void
-TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers)
+TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id)
 {
-	TupleBufferReader *reader = TupleBufferOpenReader(buf, cq_id, reader_id, num_readers);
+	TupleBufferReader *reader = TupleBufferOpenReader(buf, cq_id, 0, 1);
 	TupleBufferSlot *tbs;
 	while ((tbs = TupleBufferPinNextSlot(reader)))
 		TupleBufferUnpinSlot(reader, tbs);
 	TupleBufferCloseReader(reader);
+
+	TupleBufferClearPinnedSlots();
 }

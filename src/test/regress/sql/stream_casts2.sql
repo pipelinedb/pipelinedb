@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 CREATE CONTINUOUS VIEW test_int2_to_regoper AS SELECT x::int2 FROM int2_stream;
 CREATE CONTINUOUS VIEW test_int4_to_regoper AS SELECT x::int4 FROM int4_stream;
 CREATE CONTINUOUS VIEW test_oid_to_regoperator AS SELECT x::oid FROM oid_stream;
@@ -226,4 +224,3 @@ DROP CONTINUOUS VIEW test_text_to_varchar;
 DROP CONTINUOUS VIEW test_varchar_to_text;
 DROP CONTINUOUS VIEW test_varchar_to_bpchar;
 DROP CONTINUOUS VIEW test_char_to_text;
-

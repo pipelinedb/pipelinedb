@@ -1,4 +1,3 @@
-SET debug_sync_stream_insert = 'on';
 CREATE CONTINUOUS VIEW test_stream_targets0 AS SELECT COUNT(*) FROM test_stream_targets_stream;
 CREATE CONTINUOUS VIEW test_stream_targets1 AS SELECT COUNT(*) FROM test_stream_targets_stream;
 CREATE CONTINUOUS VIEW test_stream_targets2 AS SELECT COUNT(*) FROM test_stream_targets_stream;

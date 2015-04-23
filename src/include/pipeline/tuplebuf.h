@@ -13,6 +13,7 @@
 
 #include "postgres.h"
 #include "nodes/bitmapset.h"
+#include "pipeline/cont_xact.h"
 #include "pipeline/stream.h"
 #include "storage/dsm_array.h"
 #include "storage/s_lock.h"
@@ -32,6 +33,10 @@ typedef struct Tuple
 	HeapTuple heaptup;
 	/* arrival time of the event */
 	TimestampTz arrivaltime;
+	/* length of the batches array */
+	int num_acks;
+	/* the batches and number of tuples this single tuple represents */
+	StreamBatchAck *acks;
 } Tuple;
 
 /* Wraps a physical event and the queries that still need to read it */
@@ -80,7 +85,7 @@ typedef struct TupleBufferReader
 extern TupleBuffer *WorkerTupleBuffer;
 extern TupleBuffer *CombinerTupleBuffer;
 
-extern Tuple *MakeTuple(HeapTuple heaptup, TupleDesc desc);
+extern Tuple *MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, StreamBatchAck *acks);
 
 extern void TupleBuffersInit(void);
 
@@ -99,8 +104,8 @@ extern TupleBufferReader *TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id
 extern void TupleBufferCloseReader(TupleBufferReader *reader);
 extern TupleBufferSlot *TupleBufferPinNextSlot(TupleBufferReader *reader);
 extern void TupleBufferUnpinSlot(TupleBufferReader *reader, TupleBufferSlot *slot);
-extern void TupleBufferWaitOnSlot(TupleBufferSlot *slot, int sleepms);
-extern void TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers);
+extern void TupleBufferWaitOnSlot(TupleBuffer *buf, TupleBufferSlot *slot);
+extern void TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id);
 
 extern void TupleBufferUnpinAllPinnedSlots(void);
 extern void TupleBufferClearPinnedSlots(void);

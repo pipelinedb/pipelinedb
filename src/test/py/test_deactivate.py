@@ -10,7 +10,6 @@ def test_drain(pipeline, clean_db):
   """
   pipeline.create_cv('test_drain', 'SELECT COUNT(*) FROM stream')
   pipeline.activate()
-  pipeline.set_sync_insert(False)
 
   values = [(i, ) for i in xrange(1000)]
   desc = ('x', )

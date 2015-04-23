@@ -129,4 +129,4 @@ bool		VacuumCostActive = false;
 int MyCQId = -1;
 bool IsCombiner = false;
 bool IsWorker = false;
-int MyWorkerId = -1;
+int MyWorkerId = 0;

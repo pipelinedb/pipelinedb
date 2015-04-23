@@ -324,6 +324,17 @@ ExecStreamScan(StreamScanState *node)
 void
 ExecEndStreamScan(StreamScanState *node)
 {
+	ListCell *lc;
+
+	foreach(lc, node->pinned)
+	{
+		TupleBufferSlot *sbs = (TupleBufferSlot *) lfirst(lc);
+		TupleBufferUnpinSlot(node->reader, sbs);
+	}
+
+	list_free(node->pinned);
+	node->pinned = NIL;
+
 	TupleBufferCloseReader(node->reader);
 }
 

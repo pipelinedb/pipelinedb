@@ -16,6 +16,7 @@
 #include "nodes/parsenodes.h"
 #include "postmaster/bgworker.h"
 #include "signal.h"
+#include "storage/spin.h"
 
 #define NUM_WORKERS(entry) ((entry)->pg_size - 1)
 
@@ -35,10 +36,12 @@ typedef struct
 {
 	int id;
 	int pg_size;
-	bool active;
+	int proc_runs;
+	sig_atomic_t active;
 	CQBackgroundWorkerHandle combiner;
 	CQBackgroundWorkerHandle *workers;
 	char *shm_query;
+	slock_t mutex;
 } CQProcEntry;
 
 /* GUC parameters */
