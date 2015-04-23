@@ -1,4 +1,3 @@
-SET debug_sync_stream_insert = 'on';
 -------------------------------------------------------------------------------
 -- Integer averages
 CREATE CONTINUOUS VIEW test_int8_avg AS SELECT k::text, AVG(v::int8) FROM int_stream_cqavg GROUP BY k;

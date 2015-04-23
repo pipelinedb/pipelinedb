@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 CREATE CONTINUOUS VIEW test_stream_exprs AS SELECT b::boolean, t::text, n::numeric FROM test_exprs_stream;
 
 ACTIVATE test_stream_exprs;

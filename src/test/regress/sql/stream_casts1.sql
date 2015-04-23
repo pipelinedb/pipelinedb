@@ -1,5 +1,3 @@
-SET debug_sync_stream_insert = 'on';
-
 CREATE CONTINUOUS VIEW test_numeric_to_int2 AS SELECT x::numeric FROM numeric_stream;
 CREATE CONTINUOUS VIEW test_numeric_to_int4 AS SELECT x::numeric FROM numeric_stream;
 CREATE CONTINUOUS VIEW test_numeric_to_float4 AS SELECT x::numeric FROM numeric_stream;
@@ -178,4 +176,3 @@ DROP CONTINUOUS VIEW test_int2_to_regprocedure;
 DROP CONTINUOUS VIEW test_int4_to_regprocedure;
 DROP CONTINUOUS VIEW test_oid_to_regoper;
 DROP CONTINUOUS VIEW test_int8_to_regoper;
-
