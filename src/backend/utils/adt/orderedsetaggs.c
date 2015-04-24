@@ -1789,45 +1789,22 @@ cqosastatesend(PG_FUNCTION_ARGS)
 {
 	CQOSAAggState *state = (CQOSAAggState *) PG_GETARG_POINTER(0);
 	TDigest *t = state->tdigest;
-	StringInfoData buf;
 	bytea *result;
 	int nbytes;
-	AVLNodeIterator *it;
-	Centroid *c;
-	int i;
-
-	initStringInfo(&buf);
-
-	pq_sendfloat8(&buf, t->compression);
-	pq_sendint(&buf, t->summary->size, 4);
-
-	it = AVLNodeIteratorCreate(t->summary, NULL);
+	char *pos;
 
 
-	while ((c = AVLNodeNext(it)))
-	{
-		pq_sendfloat8(&buf, c->mean);
-		pq_sendint64(&buf, c->count);
-	}
 
-	AVLNodeIteratorDestroy(it);
-
-	pq_sendint(&buf, state->is_multiple, 1);
-	pq_sendint(&buf, state->is_descending, 1);
-	pq_sendint(&buf, state->num_percentiles, 4);
-
-	for (i = 0; i < state->num_percentiles; i++)
-	{
-		pq_sendfloat8(&buf, state->percentiles[i]);
-		pq_sendint(&buf, state->nulls[i], 1);
-	}
-
-
-	nbytes = buf.len - buf.cursor;
-	result = (bytea *) palloc(nbytes + VARHDRSZ);
+	nbytes = sizeof(CQOSAAggState) + sizeof(TDigest) + sizeof(Centroid) * t->num_centroids;
+	result = (bytea *) palloc0(nbytes + VARHDRSZ);
 	SET_VARSIZE(result, nbytes + VARHDRSZ);
 
-	pq_copymsgbytes(&buf, VARDATA(result), nbytes);
+	pos = VARDATA(result);
+	memcpy(pos, state, sizeof(CQOSAAggState));
+	pos += sizeof(CQOSAAggState);
+	memcpy(pos, t, sizeof(TDigest));
+	pos += sizeof(TDigest);
+	memcpy(pos, t->centroids, sizeof(Centroid) * t->num_centroids);
 
 	PG_RETURN_BYTEA_P(result);
 }
@@ -1838,41 +1815,18 @@ cqosastatesend(PG_FUNCTION_ARGS)
 Datum
 cqosastaterecv(PG_FUNCTION_ARGS)
 {
-	bytea *bytesin = (bytea *) PG_GETARG_BYTEA_P(0);
-	TDigest *t;
-	StringInfoData buf;
-	int nbytes = VARSIZE(bytesin) - VARHDRSZ;
-	int count;
-	int i;
-	float8 x;
-	int w;
+	bytea *bytes = (bytea *) PG_GETARG_BYTEA_P(0);
+	char *pos = VARDATA(bytes);
 	CQOSAAggState *state = palloc(sizeof(CQOSAAggState));
+	TDigest *t = palloc(sizeof(TDigest));
 
-	initStringInfo(&buf);
-	appendBinaryStringInfo(&buf, VARDATA(bytesin), nbytes);
-
-	t = TDigestCreateWithCompression(pq_getmsgfloat8(&buf));
-	count = pq_getmsgint(&buf, 4);
-
-	for (i = 0; i < count; i++)
-	{
-		x = pq_getmsgfloat8(&buf);
-		w = pq_getmsgint64(&buf);
-		TDigestAdd(t, x, w);
-	}
-
+	memcpy(state, pos, sizeof(CQOSAAggState));
+	pos += sizeof(CQOSAAggState);
 	state->tdigest = t;
-	state->is_multiple = pq_getmsgint(&buf, 1);
-	state->is_descending = pq_getmsgint(&buf, 1);
-	state->num_percentiles = pq_getmsgint(&buf, 4);
-	state->percentiles = palloc(sizeof(float8) * state->num_percentiles);
-	state->nulls = palloc(sizeof(bool) * state->num_percentiles);
-
-	for (i = 0; i < state->num_percentiles; i++)
-	{
-		state->percentiles[i] = pq_getmsgfloat8(&buf);
-		state->nulls[i] = pq_getmsgint(&buf, 1);
-	}
+	memcpy(t, pos, sizeof(TDigest));
+	pos += sizeof(TDigest);
+	t->centroids = palloc0(sizeof(Centroid) * t->size);
+	memcpy(t->centroids, pos, sizeof(Centroid) * t->num_centroids);
 
 	PG_RETURN_POINTER(state);
 }
@@ -1967,7 +1921,7 @@ cq_percentile_cont_float8_transition_common(PG_FUNCTION_ARGS, bool is_multiple)
 	if (!PG_ARGISNULL(1))
 	{
 		Datum d = PG_GETARG_DATUM(1);
-		TDigestAddSingle(state->tdigest, DatumGetFloat8(d));
+		TDigestAdd(state->tdigest, DatumGetFloat8(d), 1);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -2005,14 +1959,9 @@ cq_percentile_cont_float8_combine(PG_FUNCTION_ARGS)
 
 	if (PG_ARGISNULL(0))
 	{
-		AVLNodeIterator *it = AVLNodeIteratorCreate(incoming->tdigest->summary, NULL);
 		TDigest *t = TDigestCreateWithCompression(incoming->tdigest->compression);
-		Centroid *c;
-
-		while ((c = AVLNodeNext(it)))
-			TDigestAdd(t, c->mean, c->count);
-
-		AVLNodeIteratorDestroy(it);
+		memcpy(t, incoming->tdigest, sizeof(TDigest));
+		memcpy(t->centroids, incoming->tdigest->centroids, sizeof(Centroid) * incoming->tdigest->num_centroids);
 
 		state = (CQOSAAggState *) palloc0(sizeof(CQOSAAggState));
 		state->tdigest = t;
@@ -2028,7 +1977,7 @@ cq_percentile_cont_float8_combine(PG_FUNCTION_ARGS)
 	else
 	{
 		state = (CQOSAAggState *) PG_GETARG_POINTER(0);
-		state->tdigest = TDigestMerge(state->tdigest, incoming->tdigest);
+		TDigestMerge(state->tdigest, incoming->tdigest);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -2056,7 +2005,7 @@ cq_percentile_cont_float8_final(PG_FUNCTION_ARGS)
 	state = (CQOSAAggState *) PG_GETARG_POINTER(0);
 
 	/* number_of_rows could be zero if we only saw NULL input values */
-	if (state->tdigest->count == 0)
+	if (state->tdigest->total_weight == 0)
 		PG_RETURN_NULL();
 
 	if (state->num_percentiles == 0)
