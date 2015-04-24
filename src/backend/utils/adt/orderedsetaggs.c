@@ -1793,15 +1793,23 @@ cqosastatesend(PG_FUNCTION_ARGS)
 	int nbytes;
 	char *pos;
 
+	TDigestCompress(t);
 
+	nbytes = (sizeof(CQOSAAggState) + sizeof(float8) * state->num_percentiles + sizeof(bool) * state->num_percentiles +
+			sizeof(TDigest) + sizeof(Centroid) * t->num_centroids);
 
-	nbytes = sizeof(CQOSAAggState) + sizeof(TDigest) + sizeof(Centroid) * t->num_centroids;
 	result = (bytea *) palloc0(nbytes + VARHDRSZ);
 	SET_VARSIZE(result, nbytes + VARHDRSZ);
 
 	pos = VARDATA(result);
 	memcpy(pos, state, sizeof(CQOSAAggState));
 	pos += sizeof(CQOSAAggState);
+
+	memcpy(pos, state->percentiles, sizeof(float8) * state->num_percentiles);
+	pos += sizeof(float8) * state->num_percentiles;
+	memcpy(pos, state->nulls, sizeof(bool) * state->num_percentiles);
+	pos += sizeof(bool) * state->num_percentiles;
+
 	memcpy(pos, t, sizeof(TDigest));
 	pos += sizeof(TDigest);
 	memcpy(pos, t->centroids, sizeof(Centroid) * t->num_centroids);
@@ -1822,11 +1830,21 @@ cqosastaterecv(PG_FUNCTION_ARGS)
 
 	memcpy(state, pos, sizeof(CQOSAAggState));
 	pos += sizeof(CQOSAAggState);
+
+	state->percentiles = palloc0(sizeof(float8) * state->num_percentiles);
+	memcpy(state->percentiles, pos, sizeof(float8) * state->num_percentiles);
+	pos += sizeof(float8) * state->num_percentiles;
+	state->nulls = palloc0(sizeof(bool) * state->num_percentiles);
+	memcpy(state->nulls, pos, sizeof(bool) * state->num_percentiles);
+	pos += sizeof(bool) * state->num_percentiles;
+
 	state->tdigest = t;
 	memcpy(t, pos, sizeof(TDigest));
+
 	pos += sizeof(TDigest);
 	t->centroids = palloc0(sizeof(Centroid) * t->size);
 	memcpy(t->centroids, pos, sizeof(Centroid) * t->num_centroids);
+
 
 	PG_RETURN_POINTER(state);
 }

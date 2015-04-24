@@ -23,6 +23,7 @@
 
 #define interpolate(x, x0, x1) (((x) - (x0)) / ((x1) - (x0)))
 #define integrated_location(compression, q) ((compression) * (asin(2 * (q) - 1) + M_PI / 2) / M_PI)
+#define float_eq(f1, f2) (fabs((f1) - (f2)) <= FLT_EPSILON)
 
 static uint32 estimate_compression_threshold(int compression)
 {
@@ -42,7 +43,7 @@ TDigest *TDigestCreateWithCompression(int compression)
 	t->compression = 1.0 * compression;
 	t->threshold = estimate_compression_threshold(compression);
 	// TODO(usmanm): Should only need ceil(compression * M_PI / 2); double the allocation for now for safety.
-	t->size = (uint32) ceil(compression * M_PI) + 1;
+	t->size = ceil(compression * M_PI) + 1;
 
 	t->centroids = palloc0(sizeof(Centroid) * t->size);
 
@@ -219,7 +220,7 @@ float8 TDigestCDF(TDigest *t, float8 x)
 
 	if (t->num_centroids == 1)
 	{
-		if (fabs(t->max - t->min) <= DBL_EPSILON)
+		if (float_eq(t->max, t->min))
 			return 0.5;
 
 		return interpolate(x, t->min, t->max);
@@ -272,6 +273,12 @@ float8 TDigestQuantile(TDigest *t, float8 q)
 
 	if (t->num_centroids == 1)
 		return t->centroids[0].mean;
+
+	if (float_eq(q, 0.0))
+		return 0.0;
+
+	if (float_eq(q, 1.0))
+		return t->max;
 
 	idx = q * t->total_weight;
 

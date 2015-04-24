@@ -38,6 +38,8 @@ tdigest_send(PG_FUNCTION_ARGS)
 	int nbytes;
 	char *pos;
 
+	TDigestCompress(t);
+
 	nbytes = sizeof(TDigest) + sizeof(Centroid) * t->num_centroids;
 	result = (bytea *) palloc0(nbytes + VARHDRSZ);
 	SET_VARSIZE(result, nbytes + VARHDRSZ);
