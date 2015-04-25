@@ -42,10 +42,9 @@ TDigest *TDigestCreateWithCompression(int compression)
 
 	t->compression = 1.0 * compression;
 	t->threshold = estimate_compression_threshold(compression);
-	// TODO(usmanm): Should only need ceil(compression * M_PI / 2); double the allocation for now for safety.
-	t->size = ceil(compression * M_PI) + 1;
-
+	t->size = ceil(compression * M_PI / 2) + 1;
 	t->centroids = palloc0(sizeof(Centroid) * t->size);
+	t->min = INFINITY;
 
 	return t;
 }
@@ -275,7 +274,7 @@ float8 TDigestQuantile(TDigest *t, float8 q)
 		return t->centroids[0].mean;
 
 	if (float_eq(q, 0.0))
-		return 0.0;
+		return t->min;
 
 	if (float_eq(q, 1.0))
 		return t->max;

@@ -34,7 +34,6 @@ def test_percentile_cont_agg(pipeline, clean_db):
 
   assert len(actual) == len(result)
   assert result == sorted(result)
-
   diff = [abs(actual[i] - result[i]) for i in xrange(len(actual))]
 
   # 0th and 100th percentile should be accurate.
