@@ -49,7 +49,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 	Tuple *tup;
 	StreamBatchAck *acks = NULL;
 
-	if (sync_stream_insert)
+	if (synchronous_stream_insert)
 	{
 		ListCell *lc;
 		int i = 0;

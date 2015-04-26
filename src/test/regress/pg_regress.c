@@ -2351,7 +2351,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		header(_("starting postmaster"));
 		snprintf(buf, sizeof(buf),
 				 "\"%s/pipeline-server\" -D \"%s/data\" -F%s "
-				 "-c \"listen_addresses=%s\" -c \"sync_stream_insert=true\" -k \"%s\" "
+				 "-c \"listen_addresses=%s\" -c \"synchronous_stream_insert=true\" -k \"%s\" "
 				 "> \"%s/log/postmaster.log\" 2>&1",
 				 bindir, temp_install, debug ? " -d 5" : "",
 				 hostname ? hostname : "", sockdir ? sockdir : "",

@@ -36,7 +36,7 @@
 #include "utils/guc.h"
 
 /* Whether or not to block till the events are consumed by a cv*/
-bool sync_stream_insert;
+bool synchronous_stream_insert;
 char *stream_targets = NULL;
 
 static HTAB *prepared_stream_inserts = NULL;
@@ -147,7 +147,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	StreamBatch *batch = NULL;
 	int num_batches = 0;
 
-	if (sync_stream_insert)
+	if (synchronous_stream_insert)
 	{
 		batch = StreamBatchCreate(targets, list_length(pstmt->inserts));
 		num_batches = 1;
@@ -188,7 +188,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 		count++;
 	}
 
-	if (sync_stream_insert)
+	if (synchronous_stream_insert)
 	{
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
 		StreamBatchWaitAndRemove(batch);
@@ -221,7 +221,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	StreamBatch *batch = NULL;
 	int num_batches = 0;
 
-	if (sync_stream_insert)
+	if (synchronous_stream_insert)
 	{
 		batch = StreamBatchCreate(targets, list_length(values));
 		num_batches = 1;
@@ -342,7 +342,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
-	if (sync_stream_insert)
+	if (synchronous_stream_insert)
 	{
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
 		StreamBatchWaitAndRemove(batch);
@@ -367,7 +367,7 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	StreamBatch *batch = NULL;
 	int num_batches = 0;
 
-	if (sync_stream_insert)
+	if (synchronous_stream_insert)
 	{
 		batch = StreamBatchCreate(targets, ntuples);
 		num_batches = 1;
@@ -391,7 +391,7 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
-	if (sync_stream_insert)
+	if (synchronous_stream_insert)
 	{
 		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
 		StreamBatchWaitAndRemove(batch);

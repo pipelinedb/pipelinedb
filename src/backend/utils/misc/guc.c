@@ -1525,11 +1525,11 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"sync_stream_insert", PGC_BACKEND, QUERY_TUNING,
+		{"synchronous_stream_insert", PGC_BACKEND, QUERY_TUNING,
 			gettext_noop("Makes INSERTs into streams synchronous."),
 			NULL,
 		},
-		&sync_stream_insert,
+		&synchronous_stream_insert,
 		false,
 		NULL, NULL, NULL
 	},
