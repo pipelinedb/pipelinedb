@@ -22,7 +22,6 @@
 #include "storage/lwlock.h"
 
 /* GUC parameters */
-extern bool debug_tuple_buffer;
 extern int tuple_buffer_blocks;
 
 typedef struct Tuple

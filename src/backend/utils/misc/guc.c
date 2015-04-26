@@ -1525,16 +1525,6 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"debug_tuple_buffer", PGC_BACKEND, LOGGING_WHAT,
-			gettext_noop("Print the state of the tuple buffers as they change."),
-			NULL,
-		},
-		&debug_tuple_buffer,
-		false,
-		NULL, NULL, NULL
-	},
-
-	{
 		{"sync_stream_insert", PGC_BACKEND, QUERY_TUNING,
 			gettext_noop("Makes INSERTs into streams synchronous."),
 			NULL,
