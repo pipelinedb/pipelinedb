@@ -13,7 +13,8 @@ def test_tdigest_type(pipeline, clean_db):
     pipeline.create_cv('test_tdigest_agg', q)
 
     rows = []
-    for n in range(1000):
+    for _ in range(10):
+      for n in range(1000):
         rows.append((0, n))
         rows.append((1, n + 500))
 

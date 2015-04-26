@@ -48,4 +48,3 @@ if __name__ == '__main__':
     key, expires = generate_license_key(days=args.days)
     print key
     print 'valid until', expires
-
