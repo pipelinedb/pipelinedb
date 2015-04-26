@@ -81,7 +81,7 @@ run_tdigest_test_on_distribution(float8 (*dist)(void))
 static float8
 uniform()
 {
-	return 1.0 * rand();
+	return 1.0 * (rand() % 100000);
 }
 
 /*

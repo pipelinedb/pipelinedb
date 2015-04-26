@@ -1977,18 +1977,11 @@ cq_percentile_cont_float8_combine(PG_FUNCTION_ARGS)
 
 	if (PG_ARGISNULL(0))
 	{
-		TDigest *t = TDigestCreateWithCompression(incoming->tdigest->compression);
-		memcpy(t, incoming->tdigest, sizeof(TDigest));
-		memcpy(t->centroids, incoming->tdigest->centroids, sizeof(Centroid) * incoming->tdigest->num_centroids);
-
 		state = (CQOSAAggState *) palloc0(sizeof(CQOSAAggState));
-		state->tdigest = t;
-		state->is_multiple = incoming->is_multiple;
-		state->is_descending = incoming->is_descending;
-		state->num_percentiles = incoming->num_percentiles;
+		memcpy(state, incoming, sizeof(CQOSAAggState));
+		state->tdigest = TDigestCopy(incoming->tdigest);
 		state->percentiles = (float8 *) palloc(sizeof(float8) * state->num_percentiles);
 		state->nulls = (bool *) palloc(sizeof(bool) * state->num_percentiles);
-
 		memcpy(state->percentiles, incoming->percentiles, sizeof(float8) * state->num_percentiles);
 		memcpy(state->nulls, incoming->nulls, sizeof(bool) * state->num_percentiles);
 	}

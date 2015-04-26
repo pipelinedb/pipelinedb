@@ -191,6 +191,7 @@ void TDigestMerge(TDigest *t1, TDigest *t2)
 
 	TDigestCompress(t2);
 
+	// TODO(usmanm): Shuffle these?
 	for (i = 0; i < t2->num_centroids; i++)
 	{
 		Centroid *c = &t2->centroids[i];
@@ -316,4 +317,17 @@ float8 TDigestQuantile(TDigest *t, float8 q)
 	}
 
 	return t->max;
+}
+
+TDigest *TDigestCopy(TDigest *t)
+{
+	TDigest *cpy = palloc(sizeof(TDigest));
+
+	TDigestCompress(t);
+
+	memcpy(cpy, t, sizeof(TDigest));
+	cpy->centroids = palloc0(sizeof(Centroid) * t->size);
+	memcpy(cpy->centroids, t->centroids, sizeof(Centroid) * t->num_centroids);
+
+	return cpy;
 }

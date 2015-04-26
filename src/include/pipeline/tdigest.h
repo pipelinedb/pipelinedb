@@ -38,6 +38,7 @@ typedef struct TDigest {
 extern TDigest *TDigestCreate(void);
 extern TDigest *TDigestCreateWithCompression(int compression);
 extern void TDigestDestroy(TDigest *t);
+extern TDigest *TDigestCopy(TDigest *t);
 
 extern void TDigestAdd(TDigest *t, float8 x, int64 w);
 extern void TDigestCompress(TDigest *t);
