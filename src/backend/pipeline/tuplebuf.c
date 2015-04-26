@@ -73,11 +73,11 @@ MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, StreamBatchAck *acks)
 	return t;
 }
 
-static void try_move_tail(TupleBuffer *buf, TupleBufferSlot *slot)
+static void try_move_tail(TupleBuffer *buf, TupleBufferSlot *tail)
 {
 	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
 
-	if (!SlotIsValid(slot))
+	if (!SlotIsValid(tail))
 	{
 		LWLockRelease(buf->tail_lock);
 		return;
@@ -87,7 +87,7 @@ static void try_move_tail(TupleBuffer *buf, TupleBufferSlot *slot)
 	 * If this slot was the tail, move tail ahead to the next slot that is not fully
 	 * unpinned.
 	 */
-	if (SlotEqualsTail(slot))
+	if (SlotEqualsTail(tail))
 	{
 		do
 		{

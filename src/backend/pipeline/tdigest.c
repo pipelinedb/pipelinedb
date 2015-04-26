@@ -4,6 +4,8 @@
  *
  *	  t-digest implementation based on: https://github.com/tdunning/t-digest
  *
+ * Implementation is based on: https://github.com/tdunning/t-digest/blob/master/src/main/java/com/tdunning/math/stats/MergingDigest.java
+ *
  * src/backend/pipeline/tdigest.h
  *
  */
@@ -12,730 +14,320 @@
 #include <stdlib.h>
 
 #include "pipeline/tdigest.h"
-#include "nodes/pg_list.h"
 #include "utils/elog.h"
 #include "utils/palloc.h"
-#include "utils/memutils.h"
 
-// TODO(usmanm): Add some ref-counting to Centroids to avoid mindless copying and destroying.
+#define DEFAULT_COMPRESSION 200
+#define MIN_COMPRESSION 20
+#define MAX_COMPRESSION 1000
 
-#define DEFAULT_TDIGEST_COMPRESSION 200 /* max t-digest size will be 94k, avg will be 4.7k */
-#define AVLNodeDepth(node) (Max((node)->left->depth, (node)->right->depth) + 1)
+#define interpolate(x, x0, x1) (((x) - (x0)) / ((x1) - (x0)))
+#define integrated_location(compression, q) ((compression) * (asin(2 * (q) - 1) + M_PI / 2) / M_PI)
+#define float_eq(f1, f2) (fabs((f1) - (f2)) <= FLT_EPSILON)
 
-Centroid *
-CentroidCreate(void)
+static uint32 estimate_compression_threshold(int compression)
 {
-	return CentroidCreateWithId(rand() % 256);
+	compression = Min(1000, Max(20, compression));
+	return (uint32) (7.5 + 0.37 * compression - 2e-4 * compression * compression);
 }
 
-Centroid *
-CentroidCreateWithId(uint8 id)
+TDigest *TDigestCreate(void)
 {
-	Centroid *c = (Centroid *) palloc(sizeof(Centroid));
-	c->count = c->mean = 0;
-	c->id = id;
-	return c;
+	return TDigestCreateWithCompression(DEFAULT_COMPRESSION);
 }
 
-void
-CentroidDestroy(Centroid *c)
+TDigest *TDigestCreateWithCompression(int compression)
 {
-	if (c == NULL)
-		return;
-	pfree(c);
-}
+	TDigest *t = palloc0(sizeof(TDigest));
 
-void
-CentroidAdd(Centroid *c, float8 x, int64 w)
-{
-	c->count += w;
-	c->mean += w * (x - c->mean) / c->count;
-}
+	t->compression = 1.0 * compression;
+	t->threshold = estimate_compression_threshold(compression);
+	t->size = ceil(compression * M_PI / 2) + 1;
+	t->centroids = palloc0(sizeof(Centroid) * t->size);
+	t->min = INFINITY;
 
-void
-CentroidAddSingle(Centroid *c, float8 x)
-{
-	CentroidAdd(c, x, 1);
-}
-
-Centroid *
-CentroidCopy(Centroid *c)
-{
-	Centroid *cpy = (Centroid *) palloc(sizeof(Centroid));
-	memcpy(cpy, c, sizeof(Centroid));
-	return cpy;
-}
-
-static int
-centroid_cmp(Centroid *a, Centroid *b)
-{
-	if (a->mean > b->mean)
-		return 1;
-	if (a->mean < b->mean)
-		return -1;
-	if (a->id > b->id)
-		return 1;
-	if (a->id < b->id)
-		return -1;
-	return 0;
-}
-
-static void
-rotate(AVLNode *node, AVLNode *a, AVLNode *b, AVLNode *c, AVLNode *d)
-{
-	if (node->left != a)
-		AVLNodeDestroy(node->left);
-	if (node->right != d)
-		AVLNodeDestroy(node->right);
-	node->left = AVLNodeCreate(a, b, NULL);
-	node->right = AVLNodeCreate(c, d, NULL);
-	node->count = node->left->count + node->right->count;
-	node->size = node->left->size + node->right->size;
-	node->depth = AVLNodeDepth(node);
-	CentroidDestroy(node->leaf);
-	node->leaf = CentroidCopy(AVLNodeFirst(node->right));
-}
-
-static void
-rebalance(AVLNode *node)
-{
-	int l = node->left->depth;
-	int r = node->right->depth;
-	if (l > r + 1)
-	{
-		if (node->left->left->depth > node->left->right->depth)
-			rotate(node, node->left->left->left, node->left->left->right, node->left->right, node->right);
-		else
-			rotate(node, node->left->left, node->left->right->left, node->left->right->right, node->right);
-	}
-	else if (r > l + 1)
-	{
-		if (node->right->left->depth > node->right->right->depth)
-			rotate(node, node->left, node->right->left->left, node->right->left->right, node->right->right);
-		else
-			rotate(node, node->left, node->right->left, node->right->right->left, node->right->right->right);
-	}
-
-	node->depth = AVLNodeDepth(node);
-}
-
-AVLNode *
-AVLNodeCreate(AVLNode *left, AVLNode *right, Centroid *leaf)
-{
-	AVLNode *node = (AVLNode *) palloc(sizeof(AVLNode));
-
-	if (left != NULL)
-	{
-		node->left = left;
-		node->right = right;
-		node->count = left->count + right->count;
-		node->size = left->size + right->size;
-		node->depth = AVLNodeDepth(node);
-		node->leaf = CentroidCopy(AVLNodeFirst(right));
-		rebalance(node);
-	}
-	else if (leaf != NULL)
-	{
-		Assert(left == right == NULL);
-		node->count = leaf->count;
-		node->depth = node->size = 1;
-		node->left = node->right = NULL;
-		node->leaf = CentroidCopy(leaf);
-	}
-	else
-	{
-		node->count = node->depth = node->size = 0;
-		node->left = node->right = NULL;
-		node->leaf = NULL;
-	}
-
-	return node;
-}
-
-void
-AVLNodeDestroy(AVLNode *node)
-{
-	if (node == NULL)
-		return;
-	CentroidDestroy(node->leaf);
-	pfree(node);
-}
-
-void
-AVLNodeDestroyTree(AVLNode *root)
-{
-	if (root->left)
-		AVLNodeDestroyTree(root->left);
-	if (root->right)
-		AVLNodeDestroyTree(root->right);
-	AVLNodeDestroy(root);
-}
-
-void
-AVLNodeAdd(AVLNode *node, Centroid *c)
-{
-	c = CentroidCopy(c);
-	if (node->size == 0)
-	{
-		node->leaf = c;
-		node->count = c->count;
-		node->size = node->depth = 1;
-		return;
-	}
-
-	if (node->size == 1)
-	{
-		int cmp = centroid_cmp(c, node->leaf);
-		if (cmp < 0)
-		{
-			node->left = AVLNodeCreate(NULL, NULL, c);
-			node->right = AVLNodeCreate(NULL, NULL, CentroidCopy(node->leaf));
-		}
-		else
-		{
-			node->left = AVLNodeCreate(NULL, NULL, node->leaf);
-			node->right = AVLNodeCreate(NULL, NULL, c);
-			node->leaf = CentroidCopy(c);
-		}
-	}
-	else if (centroid_cmp(c, node->leaf) < 0)
-		AVLNodeAdd(node->left, c);
-	else
-		AVLNodeAdd(node->right, c);
-
-	node->count += c->count;
-	node->size++;
-	node->depth = AVLNodeDepth(node);
-	rebalance(node);
-}
-
-void
-AVLNodeRemove(AVLNode *node, Centroid *c)
-{
-	if (node->size == 0)
-		elog(ERROR, "trying to remove centroid from empty tree");
-	if (node->size == 1)
-	{
-		if (centroid_cmp(node->leaf, c) != 0)
-			elog(ERROR, "trying to remove centroid that is not present");
-		node->count = node->size = node->depth = 0;
-		node->leaf = NULL;
-	}
-	else
-	{
-		int size;
-
-		if (centroid_cmp(c, node->leaf) < 0)
-		{
-			size = node->left->size;
-			AVLNodeRemove(node->left, c);
-
-			if (size > 1)
-			{
-				node->count -= c->count;
-				node->size--;
-				rebalance(node);
-			}
-			else
-			{
-				AVLNode *right = node->right;
-				AVLNodeDestroy(node->left);
-				memcpy(node, right, sizeof(AVLNode));
-				node->leaf = CentroidCopy(right->leaf);
-				AVLNodeDestroy(right);
-			}
-		}
-		else
-		{
-			size = node->right->size;
-			AVLNodeRemove(node->right, c);
-
-			if (size > 1)
-			{
-				CentroidDestroy(node->leaf);
-				node->leaf = CentroidCopy(AVLNodeFirst(node->right));
-				node->count -= c->count;
-				node->size--;
-				rebalance(node);
-			}
-			else
-			{
-				AVLNode *left = node->left;
-				AVLNodeDestroy(node->right);
-				memcpy(node, left, sizeof(AVLNode));
-				node->leaf = CentroidCopy(left->leaf);
-				AVLNodeDestroy(left);
-			}
-		}
-	}
-}
-
-int
-AVLNodeHeadSize(AVLNode *node, Centroid *c)
-{
-	if (c == NULL)
-		c = AVLNodeFirst(node);
-	if (node->size == 0)
-		return 0;
-	if (node->left == NULL)
-		return centroid_cmp(node->leaf, c) < 0 ? node->size : 0;
-	if (centroid_cmp(c, node->leaf) < 0)
-		return AVLNodeHeadSize(node->left, c);
-	return node->left->size + AVLNodeHeadSize(node->right, c);
-}
-
-int64
-AVLNodeHeadCount(AVLNode *node, Centroid *c)
-{
-	if (c == NULL)
-		c = AVLNodeFirst(node);
-	if (node->size == 0)
-		return 0;
-	if (node->left == NULL)
-		return centroid_cmp(node->leaf, c) < 0 ? node->count : 0;
-	if (centroid_cmp(c, node->leaf) < 0)
-		return AVLNodeHeadCount(node->left, c);
-	return node->left->count + AVLNodeHeadCount(node->right, c);
-}
-
-Centroid *
-AVLNodeFirst(AVLNode *node)
-{
-	if (node->left == NULL)
-		return node->leaf;
-	return AVLNodeFirst(node->left);
-}
-
-Centroid *
-AVLNodeLast(AVLNode *node)
-{
-	if (node->right == NULL)
-		return node->leaf;
-	return AVLNodeLast(node->right);
-}
-
-Centroid *
-AVLNodeFloor(AVLNode *node, Centroid *c)
-{
-	Centroid *floor;
-	if (node->size == 0)
-		return NULL;
-	if (node->size == 1)
-		return centroid_cmp(c, node->leaf) >= 0 ? node->leaf : NULL;
-	if (centroid_cmp(c, node->leaf) < 0)
-		return AVLNodeFloor(node->left, c);
-	floor = AVLNodeFloor(node->right, c);
-	if (floor != NULL)
-		return floor;
-	return AVLNodeLast(node->left);
-}
-
-Centroid *
-AVLNodeCeiling(AVLNode *node, Centroid *c)
-{
-	Centroid *ceil;
-	if (node->size == 0)
-		return NULL;
-	if (node->size == 1)
-		return centroid_cmp(c, node->leaf) <= 0 ? node->leaf : NULL;
-	if (centroid_cmp(c, node->leaf) >= 0)
-		return AVLNodeCeiling(node->right, c);
-	ceil = AVLNodeCeiling(node->left, c);
-	if (ceil != NULL)
-		return ceil;
-	return AVLNodeFirst(node->right);
-}
-
-AVLNodeIterator *
-AVLNodeIteratorCreate(AVLNode *node, Centroid *start)
-{
-	AVLNodeIterator *it = (AVLNodeIterator *) palloc(sizeof(AVLNodeIterator));
-	it->initialized = false;
-	it->stack = NIL;
-	it->node = node;
-	it->start = start ? CentroidCopy(start) : NULL;
-	return it;
-}
-
-void
-AVLNodeIteratorDestroy(AVLNodeIterator *it)
-{
-	list_free(it->stack);
-	pfree(it);
-}
-
-static void
-push(AVLNode *node, Centroid *c, AVLNodeIterator *it)
-{
-	while (node->left != NULL)
-	{
-		if (c == NULL || centroid_cmp(c, node->leaf) <= 0)
-		{
-			it->stack = list_concat(list_make1(node->right), it->stack);
-			node = node->left;
-		}
-		else
-			node = node->right;
-	}
-
-	if (c == NULL || centroid_cmp(c, node->leaf) <= 0)
-		it->stack = list_concat(list_make1(node), it->stack);
-}
-
-Centroid *
-AVLNodeNext(AVLNodeIterator *it)
-{
-	AVLNode *r = NULL;
-
-	if (it->node->size == 0)
-		return NULL;
-
-	if (!it->initialized)
-	{
-		push(it->node, it->start, it);
-		it->initialized = true;
-	}
-
-	while (list_length(it->stack) > 0)
-	{
-		r = (AVLNode *) linitial(it->stack);
-		it->stack = list_delete(it->stack, r);
-		if (r->left == NULL)
-			break;
-		push(r, it->start, it);
-	}
-
-	if (r != NULL)
-		return r->leaf;
-
-	return NULL;
-}
-
-TDigest *
-TDigestCreate(void)
-{
-	return TDigestCreateWithCompression(DEFAULT_TDIGEST_COMPRESSION);
-}
-
-TDigest *
-TDigestCreateWithCompression(int compression)
-{
-	TDigest *t = palloc(sizeof(TDigest));
-	t->compression = compression;
-	t->count = 0;
-	t->summary = AVLNodeCreate(NULL, NULL, NULL);
 	return t;
 }
 
-void
-TDigestDestroy(TDigest *t)
+void TDigestDestroy(TDigest *t)
 {
-	AVLNodeDestroyTree(t->summary);
+	list_free_deep(t->unmerged_centroids);
+	pfree(t->centroids);
 	pfree(t);
 }
 
-void
-TDigestAdd(TDigest *t, float8 x, int64 w)
+void TDigestAdd(TDigest *t, float8 x, int64 w)
 {
 	Centroid *c;
-	Centroid *start;
-	AVLNodeIterator *it;
-	float8 min_dist;
-	int last_neighbor;
-	int i;
-	Centroid *closest;
-	int64 sum;
-	int count;
-	float n;
-	float8 z;
 
-	c = CentroidCreateWithId(0);
-	CentroidAdd(c, x, w);
-
-	start = AVLNodeFloor(t->summary, c);
-	if (start == NULL)
-		start = AVLNodeCeiling(t->summary, c);
-
-	if (start == NULL)
-	{
-		c->id = rand();
-		AVLNodeAdd(t->summary, c);
-		t->count = c->count;
-		CentroidDestroy(c);
-		return;
-	}
-
-	CentroidDestroy(c);
-
-	it = AVLNodeIteratorCreate(t->summary, start);
-	min_dist = DBL_MAX;
-	last_neighbor = 0;
-	count = AVLNodeHeadSize(t->summary, start);
-	i = count;
-
-	while (true)
-	{
-		c = AVLNodeNext(it);
-		if (c == NULL)
-			break;
-
-		z = fabs(c->mean - x);
-		if (z < min_dist)
-		{
-			min_dist = z;
-			start = c;
-		}
-		else if (z > min_dist)
-		{
-			last_neighbor = i;
-			break;
-		}
-		i++;
-	}
-
-	AVLNodeIteratorDestroy(it);
-
-	it = AVLNodeIteratorCreate(t->summary, start);
-	closest = NULL;
-	sum = AVLNodeHeadCount(t->summary, start);
-	i = AVLNodeHeadSize(t->summary, start);
-	n = 1;
-
-	while (true)
-	{
-		float8 q, k;
-
-		c = AVLNodeNext(it);
-		if (!c || i > last_neighbor)
-			break;
-		q = t->count == 1 ? 0.5 : (sum + (c->count - 1) / 2.0) / (t->count -1 );
-		k = 4 * t->count * q * (1 - q) / t->compression;
-
-		if (c->count + w <= k)
-		{
-			if (((float) rand() / (float) RAND_MAX) < 1 / n)
-				closest = c;
-			n++;
-		}
-
-		sum += c->count;
-		i++;
-	}
-
-	AVLNodeIteratorDestroy(it);
-
-	if (closest == NULL)
-		c = CentroidCreate();
-	else
-	{
-		c = CentroidCopy(closest);
-		AVLNodeRemove(t->summary, c);
-	}
-
-	CentroidAdd(c, x, w);
-	AVLNodeAdd(t->summary, c);
-	CentroidDestroy(c);
-
-	t->count += w;
-
-	if (t->summary->size > 20 * t->compression)
+	if (list_length(t->unmerged_centroids) > t->threshold)
 		TDigestCompress(t);
+
+	c = palloc0(sizeof(Centroid));
+	c->weight = w;
+	c->mean = x;
+
+	t->unmerged_centroids = lappend(t->unmerged_centroids, c);
 }
 
-void
-TDigestAddSingle(TDigest *t, float8 x)
+static int centroid_cmp(const void *a, const void *b)
 {
-	TDigestAdd(t, x, 1);
+	Centroid *c1 = (Centroid *) a;
+	Centroid *c2 = (Centroid *) b;
+	if (c1->mean < c2->mean)
+		return -1;
+	if (c1->mean > c2->mean)
+		return 1;
+	return 0;
 }
 
-static void
-shuffle(Centroid **array, int n)
+typedef struct MergeArgs
 {
-	if (n > 1)
+	TDigest *t;
+	Centroid *centroids;
+	int idx;
+	float8 weight_so_far;
+	float8 k1;
+} MergeArgs;
+
+static void merge_centroid(MergeArgs *args, Centroid *merge)
+{
+	float8 k2;
+	Centroid *c = &args->centroids[args->idx];
+
+	args->weight_so_far += merge->weight;
+	k2 = integrated_location(args->t->compression,
+			args->weight_so_far / args->t->total_weight);
+
+	if (k2 - args->k1 > 1 && c->weight > 0)
 	{
-		int i;
-		for (i = 0; i < n - 1; i++)
+		args->idx++;
+		args->k1 = integrated_location(args->t->compression,
+				(args->weight_so_far - merge->weight) / args->t->total_weight);
+	}
+
+	c = &args->centroids[args->idx];
+	c->weight += merge->weight;
+	c->mean += (merge->mean - c->mean) * merge->weight / c->weight;
+}
+
+void TDigestCompress(TDigest *t)
+{
+	int num_unmerged = list_length(t->unmerged_centroids);
+	Centroid *unmerged_centroids;
+	ListCell *lc;
+	int i, j;
+	MergeArgs *args;
+
+	if (!num_unmerged)
+		return;
+
+	unmerged_centroids = palloc(sizeof(Centroid) * num_unmerged);
+
+	i = 0;
+	foreach(lc, t->unmerged_centroids)
+	{
+		Centroid *c = (Centroid *) lfirst(lc);
+		memcpy(&unmerged_centroids[i], c, sizeof(Centroid));
+		t->total_weight += c->weight;
+		i++;
+	}
+
+	list_free_deep(t->unmerged_centroids);
+	t->unmerged_centroids = NIL;
+
+	qsort(unmerged_centroids, num_unmerged, sizeof(Centroid), centroid_cmp);
+
+	args = palloc0(sizeof(MergeArgs));
+	args->centroids = palloc0(sizeof(Centroid) * t->size);
+	args->t = t;
+
+	i = 0;
+	j = 0;
+	while (i < num_unmerged && j < t->num_centroids)
+	{
+		Centroid *a = &unmerged_centroids[i];
+		Centroid *b = &t->centroids[j];
+
+		if (a->mean <= b->mean)
 		{
-			int j = i + rand() / (RAND_MAX / (n - i) + 1);
-			Centroid *ptr = array[j];
-			array[j] = array[i];
-			array[i] = ptr;
+			merge_centroid(args, a);
+			i++;
+		}
+		else
+		{
+			merge_centroid(args, b);
+			j++;
 		}
 	}
+
+	while (i < num_unmerged)
+		merge_centroid(args, &unmerged_centroids[i++]);
+
+	pfree(unmerged_centroids);
+
+	while (j < t->num_centroids)
+		merge_centroid(args, &t->centroids[j++]);
+
+	if (t->total_weight > 0)
+	{
+		t->min = Min(t->min, args->centroids[0].mean);
+
+		if (args->centroids[args->idx].weight <= 0)
+			args->idx--;
+
+		t->num_centroids = args->idx + 1;
+		t->max = Max(t->max, args->centroids[args->idx].mean);
+	}
+
+	pfree(t->centroids);
+	t->centroids = args->centroids;
+	pfree(args);
 }
 
-void
-TDigestCompress(TDigest *t)
+void TDigestMerge(TDigest *t1, TDigest *t2)
 {
-	TDigest *t_tmp = TDigestCreateWithCompression(t->compression);
-	int size = t->summary->size;
-	Centroid **centroids = palloc(sizeof(Centroid *) * size);
-	Centroid *c;
 	int i;
-	AVLNodeIterator *it = AVLNodeIteratorCreate(t->summary, NULL);
 
-	for (i = 0; i < size; i++)
-		centroids[i] = AVLNodeNext(it);
+	TDigestCompress(t2);
 
-	AVLNodeIteratorDestroy(it);
-
-	shuffle(centroids, size);
-
-	for (i = 0; i < size; i++)
+	// TODO(usmanm): Shuffle these?
+	for (i = 0; i < t2->num_centroids; i++)
 	{
-		c = centroids[i];
-		TDigestAdd(t_tmp, c->mean, c->count);
+		Centroid *c = &t2->centroids[i];
+		TDigestAdd(t1, c->mean, c->weight);
 	}
 
-	AVLNodeDestroyTree(t->summary);
-	t->summary = t_tmp->summary;
-	pfree(centroids);
-	pfree(t_tmp);
+	TDigestCompress(t1);
 }
 
-TDigest *
-TDigestMerge(TDigest *t1, TDigest *t2)
+float8 TDigestCDF(TDigest *t, float8 x)
 {
-	TDigest *t = TDigestCreateWithCompression(Max(t1->compression, t2->compression));
-	int size = t1->summary->size + t2->summary->size;
-	Centroid **centroids = palloc(sizeof(Centroid *) * size);
-	Centroid *c;
 	int i;
-	int j = 0;
-	AVLNodeIterator *it;
-
-	it = AVLNodeIteratorCreate(t1->summary, NULL);
-
-	for (i = 0; i < t1->summary->size; i++)
-	{
-		centroids[j] = AVLNodeNext(it);
-		j++;
-	}
-
-	AVLNodeIteratorDestroy(it);
-
-	it = AVLNodeIteratorCreate(t2->summary, NULL);
-
-	for (i = 0; i < t2->summary->size; i++)
-	{
-		centroids[j] = AVLNodeNext(it);
-		j++;
-	}
-
-	AVLNodeIteratorDestroy(it);
-
-	shuffle(centroids, size);
-
-	for (i = 0; i < size; i++)
-	{
-		c = centroids[i];
-		TDigestAdd(t, c->mean, c->count);
-	}
-
-	pfree(centroids);
-
-	return t;
-}
-
-static float8
-interpolate(float8 x, float8 x0, float8 x1)
-{
-	return (x - x0) / (x1 - x0);
-}
-
-float8
-TDigestCDF(TDigest *t, float8 x)
-{
-	AVLNode *summary = t->summary;
-	float8 r = 0;
-	AVLNodeIterator *it;
-	Centroid *a, *b, *next;
 	float8 left, right;
+	uint64 weight_so_far;
+	Centroid *a, *b, tmp;
 
-	if (summary->size == 0)
+	TDigestCompress(t);
+
+	if (t->num_centroids == 0)
 		return NAN;
-	else if (summary->size == 1)
-		return x < AVLNodeFirst(summary)->mean ? 0: 1;
 
-	it = AVLNodeIteratorCreate(summary, NULL);
-	a = AVLNodeNext(it);
-	b = AVLNodeNext(it);
-	left = (b->mean - a->mean) / 2;
-	right = left;
+	if (x < t->min)
+		return 0;
+	if (x > t->max)
+		return 1;
 
-	while ((next = AVLNodeNext(it)))
+	if (t->num_centroids == 1)
 	{
-		if (x < a->mean + right)
-			return (r + a->count * interpolate(x, a->mean - left, a->mean + right)) / t->count;
-		r += a->count;
-		a = b;
-		b = next;
-		left = right;
-		right = (b->mean - a->mean) / 2;
+		if (float_eq(t->max, t->min))
+			return 0.5;
+
+		return interpolate(x, t->min, t->max);
 	}
 
-	left = right;
+	weight_so_far = 0;
+	a = b = &tmp;
+	b->mean = t->min;
+	b->weight = 0;
+	right = 0;
+
+	for (i = 0; i < t->num_centroids; i++)
+	{
+		Centroid *c = &t->centroids[i];
+
+		left = b->mean - (a->mean + right);
+		a = b;
+		b = c;
+		right = (b->mean - a->mean) * a->weight / (a->weight + b->weight);
+		if (x < a->mean + right)
+			return Max((weight_so_far + a->weight * interpolate(x, a->mean - left, a->mean + right)) / t->total_weight, 0.0);
+
+		weight_so_far += a->weight;
+	}
+
+	left = b->mean - (a->mean + right);
 	a = b;
+	right = t->max - a->mean;
+
 	if (x < a->mean + right)
-		return (r + a->count * interpolate(x, a->mean - left, a->mean + right)) / t->count;
+		return (weight_so_far + a->weight * interpolate(x, a->mean - left, a->mean + right)) / t->total_weight;
 
 	return 1;
 }
 
-float8
-TDigestQuantile(TDigest *t, float8 q)
+float8 TDigestQuantile(TDigest *t, float8 q)
 {
-	AVLNode *summary = t->summary;
-	AVLNodeIterator *it;
-	Centroid *center, *leading, *next;
-	float8 left, right, count;
+	int i;
+	float8 left, right, idx;
+	uint64 weight_so_far;
+	Centroid *a, *b, tmp;
+
+	TDigestCompress(t);
 
 	if (q < 0 || q > 1)
 		elog(ERROR, "q should be in [0, 1], got %f", q);
 
-	if (summary->size == 0)
+	if (t->num_centroids == 0)
 		return NAN;
-	else if (summary->size == 1)
-		return AVLNodeFirst(summary)->mean;
 
-	it = AVLNodeIteratorCreate(summary, NULL);
-	center = AVLNodeNext(it);
-	leading = AVLNodeNext(it);
-	next = AVLNodeNext(it);
-	right = (leading->mean - center->mean) / 2;
+	if (t->num_centroids == 1)
+		return t->centroids[0].mean;
 
-	if (next == NULL)
+	if (float_eq(q, 0.0))
+		return t->min;
+
+	if (float_eq(q, 1.0))
+		return t->max;
+
+	idx = q * t->total_weight;
+
+	weight_so_far = 0;
+	b = &tmp;
+	b->mean = t->min;
+	b->weight = 0;
+	right = t->min;
+
+	for (i = 1; i < t->num_centroids; i++)
 	{
-		if (q > 0.75)
-			return leading->mean + right * (4 * q - 3);
-		else
-			return center->mean + right * (4 * q - 1);
+		Centroid *c = &t->centroids[i];
+		a = b;
+		left = right;
+
+		b = c;
+		right = (b->weight * a->mean + a->weight * b->mean) / (a->weight + b->weight);
+
+		if (idx < weight_so_far + a->weight)
+		{
+			float8 p = (idx - weight_so_far) / a->weight;
+			return left * (1 - p) + right * p;
+		}
+
+		weight_so_far += a->weight;
 	}
 
-	q *= t->count;
-	left = center->mean / 2;
-	count = 0;
-
-	do
-	{
-		/* LHS of center */
-		if (count + center->count / 2 >= q)
-			return center->mean - left * (1 - (2.0 * (q - count) / center->count));
-		/* RHS of center but LHS of next one */
-		if (count + center->count >= q)
-			return center->mean + right * ((2.0 * (q - count) / center->count) - 1);
-		count += center->count;
-		center = leading;
-		leading = next;
-		left = right;
-		right = (leading->mean - center->mean) / 2;
-	} while ((next = AVLNodeNext(it)));
-
-	center = leading;
 	left = right;
+	a = b;
+	right = t->max;
 
-	if (count + center->count / 2 >= q)
-		return center->mean - left * (1 - (2.0 * (q - count) / center->count));
+	if (idx < weight_so_far + a->weight)
+	{
+		float8 p = (idx - weight_so_far) / a->weight;
+		return left * (1 - p) + right * p;
+	}
 
-	return center->mean + right * 2.0 * ((2.0 * (q - count) / center->count) - 1);
+	return t->max;
+}
+
+TDigest *TDigestCopy(TDigest *t)
+{
+	TDigest *cpy = palloc(sizeof(TDigest));
+
+	TDigestCompress(t);
+
+	memcpy(cpy, t, sizeof(TDigest));
+	cpy->centroids = palloc0(sizeof(Centroid) * t->size);
+	memcpy(cpy->centroids, t->centroids, sizeof(Centroid) * t->num_centroids);
+
+	return cpy;
 }
