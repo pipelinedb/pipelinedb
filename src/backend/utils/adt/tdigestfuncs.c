@@ -22,25 +22,12 @@
 static TDigest *
 tdigest_unpack(bytea *bytes)
 {
-	StringInfoData buf;
-	float8 x;
-	int64_t w;
-	int64_t count;
-	TDigest *t;
-
-	initStringInfo(&buf);
-	appendBinaryStringInfo(&buf, VARDATA(bytes), VARSIZE(bytes) - VARHDRSZ);
-
-	t = TDigestCreateWithCompression(pq_getmsgfloat8(&buf));
-	count = pq_getmsgint(&buf, 4);
-
-	while(count--)
-	{
-		x = pq_getmsgfloat8(&buf);
-		w = pq_getmsgint64(&buf);
-		TDigestAdd(t, x, w);
-	}
-
+	char *pos = VARDATA(bytes);
+	TDigest *t = palloc(sizeof(TDigest));
+	memcpy(t, pos, sizeof(TDigest));
+	pos += sizeof(TDigest);
+	t->centroids = palloc0(sizeof(Centroid) * t->size);
+	memcpy(t->centroids, pos, sizeof(Centroid) * t->num_centroids);
 	return t;
 }
 
@@ -48,31 +35,20 @@ Datum
 tdigest_send(PG_FUNCTION_ARGS)
 {
 	TDigest *t = (TDigest *) PG_GETARG_POINTER(0);
-	StringInfoData buf;
 	bytea *result;
-	AVLNodeIterator *it;
-	Centroid *c;
+	int nbytes;
+	char *pos;
 
-	initStringInfo(&buf);
+	TDigestCompress(t);
 
-	pq_sendfloat8(&buf, t->compression);
-	pq_sendint(&buf, t->summary->size, 4);
+	nbytes = sizeof(TDigest) + sizeof(Centroid) * t->num_centroids;
+	result = (bytea *) palloc0(nbytes + VARHDRSZ);
+	SET_VARSIZE(result, nbytes + VARHDRSZ);
 
-	it = AVLNodeIteratorCreate(t->summary, NULL);
-
-
-	while ((c = AVLNodeNext(it)))
-	{
-		pq_sendfloat8(&buf, c->mean);
-		pq_sendint64(&buf, c->count);
-	}
-
-	AVLNodeIteratorDestroy(it);
-
-	result = (bytea *) palloc0(buf.len + VARHDRSZ);
-	SET_VARSIZE(result, buf.len + VARHDRSZ);
-
-	pq_copymsgbytes(&buf, VARDATA(result), buf.len);
+	pos = VARDATA(result);
+	memcpy(pos, t, sizeof(TDigest));
+	pos += sizeof(TDigest);
+	memcpy(pos, t->centroids, sizeof(Centroid) * t->num_centroids);
 
 	PG_RETURN_POINTER(result);
 }
@@ -93,7 +69,7 @@ tdigest_out(PG_FUNCTION_ARGS)
 	TDigest *t = tdigest_unpack(PG_GETARG_BYTEA_P(0));
 
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "{ count = %ld, k = %d, centroids: %d }", t->count, (int) t->compression, t->summary->size);
+	appendStringInfo(&buf, "{ count = %ld, k = %d, centroids: %d }", t->total_weight, (int) t->compression, t->num_centroids);
 
 	PG_RETURN_CSTRING(buf.data);
 }
@@ -133,7 +109,7 @@ tdigest_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (TDigest *) PG_GETARG_POINTER(0);
 
-	TDigestAddSingle(state, incoming);
+	TDigestAdd(state, incoming, 1);
 
 	MemoryContextSwitchTo(old);
 
@@ -164,7 +140,7 @@ tdigest_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = (TDigest *) PG_GETARG_POINTER(0);
 
-	TDigestAddSingle(state, incoming);
+	TDigestAdd(state, incoming, 1);
 
 	MemoryContextSwitchTo(old);
 
@@ -194,7 +170,7 @@ tdigest_merge_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (TDigest *) PG_GETARG_POINTER(0);
 
-	state = TDigestMerge(state, incoming);
+	TDigestMerge(state, incoming);
 
 	MemoryContextSwitchTo(old);
 
