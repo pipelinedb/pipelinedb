@@ -171,7 +171,7 @@ retry:
 		{
 			if (!TupleBufferHasUnreadSlots())
 			{
-				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
+				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), state->emptysleepms))
 				{
 					/* force stats flush */
 					cq_stat_report(true);
@@ -181,7 +181,7 @@ retry:
 					pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
 				}
 				else
-					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
+					pg_usleep(CQ_DEFAULT_EMPTY_SLEEP_MS * 1000);
 			}
 
 			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);

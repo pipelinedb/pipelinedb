@@ -651,7 +651,7 @@ retry:
 
 			if (count == 0 && entry->active && !TupleBufferHasUnreadSlots())
 			{
-				if (TimestampDifferenceExceeds(last_receive, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
+				if (TimestampDifferenceExceeds(last_receive, GetCurrentTimestamp(), state->emptysleepms))
 				{
 					/* force stats flush */
 					cq_stat_report(true);
@@ -661,7 +661,7 @@ retry:
 					pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
 				}
 				else
-					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
+					pg_usleep(CQ_DEFAULT_EMPTY_SLEEP_MS * 1000);
 			}
 
 			TupleBufferResetNotify(CombinerTupleBuffer, MyCQId, 0);
