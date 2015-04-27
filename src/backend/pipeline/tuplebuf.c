@@ -31,7 +31,6 @@
 #define MAGIC 0xDEADBABE /* x_x */
 #define MURMUR_SEED 0x9eaca8149c92387e
 #define WAIT_SLEEP_MS 5
-#define WAIT_LATCH_MS 25
 
 #define BufferOffset(buf, ptr) ((int32) ((char *) (ptr) - (buf)->start))
 #define BufferEnd(buf) ((buf)->start + (buf)->size)
@@ -205,7 +204,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 		{
 			LWLockRelease(buf->tail_lock);
 
-			if (TimestampDifferenceExceeds(start_wait, GetCurrentTimestamp(), WAIT_LATCH_MS))
+			if (TimestampDifferenceExceeds(start_wait, GetCurrentTimestamp(), CQ_DEFAULT_EMPTY_SLEEP_MS))
 				pg_usleep(WAIT_SLEEP_MS * 1000);
 			else
 				WaitLatch((&buf->writer_latch), WL_LATCH_SET, 0);
