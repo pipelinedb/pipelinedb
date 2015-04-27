@@ -1066,7 +1066,7 @@ exec_simple_query(const char *query_string)
 			if (IsA(parsetree, ActivateContinuousViewStmt))
 			{
 				tag = "ACTIVATE %d";
-				count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree, true);
+				count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree, false);
 			}
 			else
 			{

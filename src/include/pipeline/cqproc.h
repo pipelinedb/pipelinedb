@@ -50,12 +50,11 @@ extern void InitCQProcState(void);
 
 extern CQProcEntry* GetCQProcEntry(int id);
 extern int GetProcessGroupSize(int id);
-extern int GetProcessGroupSizeFromCatalog(RangeVar* rv);
 extern void SetActiveFlag(int id, bool flag);
 extern void MarkCombinerAsRunning(int id);
 extern void MarkWorkerAsRunning(int id, int worker_id);
 
-extern CQProcEntry* CQProcEntryCreate(int key, int pg_size);
+extern CQProcEntry* CQProcEntryCreate(int key, int parallelism);
 extern void CQProcEntryRemove(int key);
 
 /* IPC */
