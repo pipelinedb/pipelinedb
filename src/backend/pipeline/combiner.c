@@ -47,6 +47,7 @@
 
 /* duration in seconds after which to replan the cached groups retrieval plan */
 #define GROUPS_PLAN_LIFESPAN 10
+#define WAIT_SLEEP_MS 5
 
 static TupleBufferReader *reader = NULL;
 
@@ -661,7 +662,7 @@ retry:
 					pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
 				}
 				else
-					pg_usleep(CQ_DEFAULT_EMPTY_SLEEP_MS * 1000);
+					pg_usleep(Min(WAIT_SLEEP_MS, state->emptysleepms) * 1000);
 			}
 
 			TupleBufferResetNotify(CombinerTupleBuffer, MyCQId, 0);
