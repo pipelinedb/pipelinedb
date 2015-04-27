@@ -111,14 +111,19 @@ static void merge_centroid(mergeArgs *args, Centroid *merge)
 	c = &args->centroids[args->idx];
 	c->weight += merge->weight;
 	c->mean += (merge->mean - c->mean) * merge->weight / c->weight;
-	args->min = Min(merge->mean, args->min);
-	args->max = Max(merge->mean, args->max);
+
+	if (merge->weight > 0)
+	{
+		args->min = Min(merge->mean, args->min);
+		args->max = Max(merge->mean, args->max);
+	}
 }
 
 void TDigestCompress(TDigest *t)
 {
 	int num_unmerged = list_length(t->unmerged_centroids);
 	Centroid *unmerged_centroids;
+	uint64_t unmerged_weight = 0;
 	ListCell *lc;
 	int i, j;
 	mergeArgs *args;
@@ -133,19 +138,24 @@ void TDigestCompress(TDigest *t)
 	{
 		Centroid *c = (Centroid *) lfirst(lc);
 		memcpy(&unmerged_centroids[i], c, sizeof(Centroid));
-		t->total_weight += c->weight;
+		unmerged_weight += c->weight;
 		i++;
 	}
 
 	list_free_deep(t->unmerged_centroids);
 	t->unmerged_centroids = NIL;
 
+	if (unmerged_weight == 0)
+		return;
+
+	t->total_weight += unmerged_weight;
+
 	qsort(unmerged_centroids, num_unmerged, sizeof(Centroid), centroid_cmp);
 
 	args = palloc0(sizeof(mergeArgs));
 	args->centroids = palloc0(sizeof(Centroid) * t->size);
 	args->t = t;
-	t->min = INFINITY;
+	args->min = INFINITY;
 
 	i = 0;
 	j = 0;
