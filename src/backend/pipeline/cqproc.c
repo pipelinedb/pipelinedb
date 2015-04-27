@@ -89,35 +89,6 @@ InitCQProcState(void)
 }
 
 /*
- * GetProcessGroupSizeFromCatalog
- */
-int
-GetProcessGroupSizeFromCatalog(RangeVar* rv)
-{
-	HeapTuple tuple;
-	Form_pipeline_query row;
-
-	/* Initialize the counter to 1 for the combiner proc. */
-	int pg_size = 1;
-
-	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
-
-	if (!HeapTupleIsValid(tuple))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
-				errmsg("continuous view \"%s\" does not exist", rv->relname)));
-
-	row = (Form_pipeline_query) GETSTRUCT(tuple);
-
-	/* Add number of worker processes. */
-	pg_size += row->parallelism;
-
-	ReleaseSysCache(tuple);
-
-	return pg_size;
-}
-
-/*
  * GetProcessGroupSize
  *
  * Returns the number of processes that form
@@ -142,13 +113,13 @@ GetProcessGroupSize(int id)
  *
  */
 CQProcEntry*
-CQProcEntryCreate(int id, int pg_size)
+CQProcEntryCreate(int id, int parallelism)
 {
 	CQProcEntry	*entry = (CQProcEntry *) dsm_alloc0(sizeof(CQProcArray));
 
 	entry->id = id;
 	/* New entry, initialize it with the process group size */
-	entry->pg_size = pg_size;
+	entry->pg_size = 1 + parallelism;
 	/* New entry, and is active the moment this entry is created */
 	entry->active = true;
 
@@ -616,7 +587,7 @@ restart_bg_main(Datum d, char *data, Size len)
 		stmt->views = views;
 		stmt->dboid = *dboid;
 
-		ExecActivateContinuousViewStmt(stmt, false);
+		ExecActivateContinuousViewStmt(stmt, true);
 	}
 
 	heap_endscan(scandesc);

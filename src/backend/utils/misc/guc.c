@@ -1525,27 +1525,17 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"debug_tuple_stream_buffer", PGC_USERSET, LOGGING_WHAT,
-			gettext_noop("Print the state of the tuple buffers as they change."),
-			NULL,
-		},
-		&debug_tuple_stream_buffer,
-		false,
-		NULL, NULL, NULL
-	},
-
-	{
-		{"sync_stream_insert", PGC_SIGHUP, QUERY_TUNING,
+		{"synchronous_stream_insert", PGC_BACKEND, QUERY_TUNING,
 			gettext_noop("Makes INSERTs into streams synchronous."),
 			NULL,
 		},
-		&sync_stream_insert,
+		&synchronous_stream_insert,
 		false,
 		NULL, NULL, NULL
 	},
 
 	{
-		{"continuous_query_crash_recovery", PGC_USERSET, DEVELOPER_OPTIONS,
+		{"continuous_query_crash_recovery", PGC_BACKEND, DEVELOPER_OPTIONS,
 			gettext_noop("Recover from errors and crashes in continuous query processes."),
 			NULL,
 		},
@@ -2578,7 +2568,6 @@ static struct config_int ConfigureNamesInt[] =
 		NULL, NULL, NULL
 	},
 
-
 	{
 		{"tuple_buffer_blocks", PGC_BACKEND, RESOURCES_MEM,
 			gettext_noop("Sets the maximum number of blocks in the tuple buffer."),
@@ -2591,18 +2580,7 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"empty_tuple_buffer_wait_time", PGC_BACKEND, RESOURCES_MEM,
-			gettext_noop("Time in milliseconds that the continuous query process spins on an empty tuple buffer before sleeping."),
-			NULL,
-			GUC_UNIT_MS
-		},
-		&empty_tuple_buffer_wait_time,
-		250, 0, INT_MAX,
-		NULL, NULL, NULL
-	},
-
-	{
-		{"combiner_work_mem", PGC_USERSET, RESOURCES_MEM,
+		{"combiner_work_mem", PGC_BACKEND, RESOURCES_MEM,
 			gettext_noop("Sets the maximum memory to be used for combining partial results for continuous queries."),
 			gettext_noop("This much memory can be used by each combiner processes's internal "
 						 "sort operation and hash table before switching to "
@@ -3585,7 +3563,7 @@ static struct config_enum ConfigureNamesEnum[] =
 	},
 
 	{
-		{"combiner_synchronous_commit", PGC_USERSET, WAL_SETTINGS,
+		{"combiner_synchronous_commit", PGC_BACKEND, WAL_SETTINGS,
 			gettext_noop("Sets the transaction synchronization level for combiner commits."),
 			NULL
 		},

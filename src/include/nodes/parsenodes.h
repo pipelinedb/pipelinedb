@@ -2818,7 +2818,7 @@ typedef struct ActivateContinuousViewStmt
 	NodeTag	type;
 	List	*views;
 	Node	*whereClause;
-	List	*withOptions;
+	List	*withParameters;
 	Oid 	dboid;
 } ActivateContinuousViewStmt;
 
