@@ -81,16 +81,18 @@ static int centroid_cmp(const void *a, const void *b)
 	return 0;
 }
 
-typedef struct MergeArgs
+typedef struct mergeArgs
 {
 	TDigest *t;
 	Centroid *centroids;
 	int idx;
 	float8 weight_so_far;
 	float8 k1;
-} MergeArgs;
+	float8 min;
+	float8 max;
+} mergeArgs;
 
-static void merge_centroid(MergeArgs *args, Centroid *merge)
+static void merge_centroid(mergeArgs *args, Centroid *merge)
 {
 	float8 k2;
 	Centroid *c = &args->centroids[args->idx];
@@ -109,15 +111,22 @@ static void merge_centroid(MergeArgs *args, Centroid *merge)
 	c = &args->centroids[args->idx];
 	c->weight += merge->weight;
 	c->mean += (merge->mean - c->mean) * merge->weight / c->weight;
+
+	if (merge->weight > 0)
+	{
+		args->min = Min(merge->mean, args->min);
+		args->max = Max(merge->mean, args->max);
+	}
 }
 
 void TDigestCompress(TDigest *t)
 {
 	int num_unmerged = list_length(t->unmerged_centroids);
 	Centroid *unmerged_centroids;
+	uint64_t unmerged_weight = 0;
 	ListCell *lc;
 	int i, j;
-	MergeArgs *args;
+	mergeArgs *args;
 
 	if (!num_unmerged)
 		return;
@@ -129,18 +138,24 @@ void TDigestCompress(TDigest *t)
 	{
 		Centroid *c = (Centroid *) lfirst(lc);
 		memcpy(&unmerged_centroids[i], c, sizeof(Centroid));
-		t->total_weight += c->weight;
+		unmerged_weight += c->weight;
 		i++;
 	}
 
 	list_free_deep(t->unmerged_centroids);
 	t->unmerged_centroids = NIL;
 
+	if (unmerged_weight == 0)
+		return;
+
+	t->total_weight += unmerged_weight;
+
 	qsort(unmerged_centroids, num_unmerged, sizeof(Centroid), centroid_cmp);
 
-	args = palloc0(sizeof(MergeArgs));
+	args = palloc0(sizeof(mergeArgs));
 	args->centroids = palloc0(sizeof(Centroid) * t->size);
 	args->t = t;
+	args->min = INFINITY;
 
 	i = 0;
 	j = 0;
@@ -171,13 +186,13 @@ void TDigestCompress(TDigest *t)
 
 	if (t->total_weight > 0)
 	{
-		t->min = Min(t->min, args->centroids[0].mean);
+		t->min = Min(t->min, args->min);
 
 		if (args->centroids[args->idx].weight <= 0)
 			args->idx--;
 
 		t->num_centroids = args->idx + 1;
-		t->max = Max(t->max, args->centroids[args->idx].mean);
+		t->max = Max(t->max, args->max);
 	}
 
 	pfree(t->centroids);
