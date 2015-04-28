@@ -37,6 +37,7 @@
 #include "utils/timestamp.h"
 
 #define LONG_RUNNING_XACT_DURATION 5000 /* 5s */
+#define WAIT_SLEEP_MS 5
 
 /*
  * We keep some resources across transactions, so we attach everything to a
@@ -172,7 +173,7 @@ retry:
 		{
 			if (!TupleBufferHasUnreadSlots())
 			{
-				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
+				if (TimestampDifferenceExceeds(last_process, GetCurrentTimestamp(), state->emptysleepms))
 				{
 					/* force stats flush */
 					cq_stat_report(true);
@@ -182,7 +183,7 @@ retry:
 					pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
 				}
 				else
-					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
+					pg_usleep(Min(WAIT_SLEEP_MS, state->emptysleepms) * 1000);
 			}
 
 			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);

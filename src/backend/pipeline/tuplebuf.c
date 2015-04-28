@@ -45,9 +45,7 @@ TupleBuffer *WorkerTupleBuffer = NULL;
 TupleBuffer *CombinerTupleBuffer = NULL;
 
 /* GUC parameters */
-bool debug_tuple_stream_buffer;
 int tuple_buffer_blocks;
-int empty_tuple_buffer_wait_time;
 
 static List *MyPinnedSlots = NIL;
 static List *MyReaders = NIL;
@@ -131,10 +129,6 @@ TupleBufferWaitOnSlot(TupleBuffer *buf, TupleBufferSlot *slot)
 
 		pg_usleep(WAIT_SLEEP_MS * 1000);
 	}
-
-	if (debug_tuple_stream_buffer)
-		elog(LOG, "evicted %zu bytes at [%d, %d)", slot->size,
-				BufferOffset(slot->buf, slot), BufferOffset(slot->buf, SlotEnd(slot)));
 }
 
 /*
@@ -210,7 +204,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 		{
 			LWLockRelease(buf->tail_lock);
 
-			if (TimestampDifferenceExceeds(start_wait, GetCurrentTimestamp(), empty_tuple_buffer_wait_time))
+			if (TimestampDifferenceExceeds(start_wait, GetCurrentTimestamp(), CQ_DEFAULT_EMPTY_SLEEP_MS))
 				pg_usleep(WAIT_SLEEP_MS * 1000);
 			else
 				WaitLatch((&buf->writer_latch), WL_LATCH_SET, 0);
@@ -313,10 +307,6 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 
 	LWLockRelease(buf->tail_lock);
 	LWLockRelease(buf->head_lock);
-
-	if (debug_tuple_stream_buffer)
-		elog(LOG, "appended %zu bytes at [%d, %d); readers: %d", slot->size,
-				BufferOffset(buf, slot), BufferOffset(buf, SlotEnd(slot)), bms_num_members(slot->readers));
 
 	return slot;
 }
@@ -483,10 +473,6 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 
 	Assert(SlotIsValid(slot));
 
-	if (debug_tuple_stream_buffer)
-		elog(LOG, "[%d] pinned event at [%d, %d)",
-				reader->cq_id, BufferOffset(reader->buf, reader->slot), BufferOffset(reader->buf, SlotEnd(reader->slot)));
-
 	oldcontext = MemoryContextSwitchTo(CQExecutionContext);
 
 	entry = palloc0(sizeof(MyPinnedSlotEntry));
@@ -541,10 +527,6 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 
 	for (i = 0; i < slot->tuple->num_acks; i++)
 		StreamBatchIncrementNumReads(slot->tuple->acks[i].batch);
-
-	if (debug_tuple_stream_buffer)
-		elog(LOG, "[%d] unpinned event at [%d, %d); readers %d",
-				cq_id, BufferOffset(buf, slot), BufferOffset(buf, SlotEnd(slot)), bms_num_members(slot->readers));
 
 	if (!bms_is_empty(slot->readers))
 		return;

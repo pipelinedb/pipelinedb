@@ -164,8 +164,8 @@ RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matre
 	/* Use default values for state and tuning parameters. */
 	values[Anum_pipeline_query_state - 1] = CharGetDatum(PIPELINE_QUERY_STATE_INACTIVE);
 	values[Anum_pipeline_query_batchsize - 1] = Int64GetDatum(CQ_DEFAULT_BATCH_SIZE);
-	values[Anum_pipeline_query_maxwaitms - 1] = Int32GetDatum(CQ_DEFAULT_WAIT_MS);
-	values[Anum_pipeline_query_emptysleepms - 1] = Int32GetDatum(CQ_DEFAULT_SLEEP_MS);
+	values[Anum_pipeline_query_maxwaitms - 1] = Int32GetDatum(CQ_DEFAULT_MAX_WAIT_MS);
+	values[Anum_pipeline_query_emptysleepms - 1] = Int32GetDatum(CQ_DEFAULT_EMPTY_SLEEP_MS);
 	values[Anum_pipeline_query_parallelism - 1] = Int16GetDatum(CQ_DEFAULT_PARALLELISM);
 
 	/* Copy matrelname */
