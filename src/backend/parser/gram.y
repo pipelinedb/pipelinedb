@@ -2737,7 +2737,7 @@ ActivateContinuousViewStmt: ACTIVATE opt_qualified_name_list opt_reloptions wher
 				{
 					ActivateContinuousViewStmt *s = makeNode(ActivateContinuousViewStmt);
 					s->views = (List *) $2;
-					s->withOptions = (List *) $3;
+					s->withParameters = (List *) $3;
 					s->whereClause = (Node *) $4;
 					$$ = (Node *) s;
 				}

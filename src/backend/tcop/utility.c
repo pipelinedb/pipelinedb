@@ -841,7 +841,7 @@ standard_ProcessUtility(Node *parsetree,
 
 		case T_ActivateContinuousViewStmt:
 			{
-				int count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree, true);
+				int count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree, false);
 				sprintf(completionTag, "ACTIVATE %d", count);
 			}
 			break;

@@ -516,7 +516,7 @@ get_views(Node *where)
 }
 
 int
-ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skip_active)
+ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool recovery)
 {
 	ListCell *lc;
 	int success = 0;
@@ -534,29 +534,36 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skip_activ
 	foreach(lc, stmt->views)
 	{
 		RangeVar *rv = lfirst(lc);
-		ListCell *lcwithOptions;
+		ListCell *lc_opt;
 		ContinuousViewState state;
 		bool was_inactive = MarkContinuousViewAsActive(rv, pipeline_query);
 		bool enough_worker_slots;
-		int num_procs;
 
 		/*
 		 * If the user tries to activate an active CV, they'll know because
 		 * the count of CVs that were activated will be less than they
 		 * expected. We only count CVs that go from inactive to active here.
 		 */
-		if (!was_inactive && skip_active)
+		if (!was_inactive && !recovery)
 			continue;
 
 		GetContinousViewState(rv, &state);
+
+		if (!recovery)
+		{
+			state.batchsize = CQ_DEFAULT_BATCH_SIZE;
+			state.emptysleepms = CQ_DEFAULT_EMPTY_SLEEP_MS;
+			state.maxwaitms = CQ_DEFAULT_MAX_WAIT_MS;
+			state.parallelism = CQ_DEFAULT_PARALLELISM;
+		}
 
 		/*
 		 * Update any tuning parameters passed in with the ACTIVATE
 		 * command.
 		 */
-		foreach(lcwithOptions, stmt->withOptions)
+		foreach(lc_opt, stmt->withParameters)
 		{
-			DefElem *elem = (DefElem *) lfirst(lcwithOptions);
+			DefElem *elem = (DefElem *) lfirst(lc_opt);
 			int64 value = intVal(elem->arg);
 
 			if (pg_strcasecmp(elem->defname, CQ_BATCH_SIZE_KEY) == 0)
@@ -571,15 +578,14 @@ ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool skip_activ
 
 		SetContinousViewState(rv, &state, pipeline_query);
 
-		num_procs = GetProcessGroupSizeFromCatalog(rv);
-		entry = CQProcEntryCreate(state.id, num_procs);
+		entry = CQProcEntryCreate(state.id, state.parallelism);
 
 		/* CQ procs are already running */
 		if (entry == NULL)
 			continue;
 
 		/* Ensure that we have enough background worker slots */
-		enough_worker_slots = (num_procs + GetNumOfBackgroundWorkerSlotsInUse()) <= max_worker_processes;
+		enough_worker_slots = (1 + state.parallelism + GetNumOfBackgroundWorkerSlotsInUse()) <= max_worker_processes;
 
 		if (enough_worker_slots)
 			RunCQProcs(rv->relname, &state, entry, dboid);

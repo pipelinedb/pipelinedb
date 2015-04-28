@@ -1,7 +1,7 @@
 CREATE CONTINUOUS VIEW cqlatch AS SELECT id::integer FROM stream_latch;
-ACTIVATE cqlatch;
--- Wait at least 3 seconds till the worker latch is actually blocked
-SELECT pg_sleep_for('3 seconds');
+ACTIVATE cqlatch WITH (emptysleepms=500);
+-- Wait 1 second till the worker latch is actually blocked
+SELECT pg_sleep_for('1 second');
  pg_sleep_for 
 --------------
  
