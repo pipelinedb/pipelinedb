@@ -3879,7 +3879,7 @@ _copyActivateContinuousViewStmt(const ActivateContinuousViewStmt *from)
 
 	COPY_NODE_FIELD(views);
 	COPY_NODE_FIELD(whereClause);
-	COPY_NODE_FIELD(withOptions);
+	COPY_NODE_FIELD(withParameters);
 
 	return newnode;
 }
