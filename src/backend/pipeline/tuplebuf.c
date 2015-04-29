@@ -73,6 +73,9 @@ MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, StreamBatchAck *acks)
 
 static void try_move_tail(TupleBuffer *buf, TupleBufferSlot *tail)
 {
+	if (!SlotIsValid(tail) || tail->unread)
+		return;
+
 	LWLockAcquire(buf->tail_lock, LW_EXCLUSIVE);
 
 	if (!SlotIsValid(tail))
@@ -100,7 +103,7 @@ static void try_move_tail(TupleBuffer *buf, TupleBufferSlot *tail)
 
 			buf->tail_id = buf->tail->id;
 		}
-		while (bms_is_empty(buf->tail->readers));
+		while (!buf->tail->unread);
 	}
 
 	LWLockRelease(buf->tail_lock);
@@ -115,19 +118,21 @@ static void try_move_tail(TupleBuffer *buf, TupleBufferSlot *tail)
 void
 TupleBufferWaitOnSlot(TupleBuffer *buf, TupleBufferSlot *slot)
 {
+	TupleBufferSlot *tail;
+
 	while (true)
 	{
-		TupleBufferSlot *tail;
-
 		/* TODO(usmanm): Could this result in a live lock if slot is repeatedly equal to tail? */
 		if (!SlotIsValid(slot))
 			break;
 
 		tail = buf->tail;
-		if (SlotIsValid(tail) && bms_is_empty(tail->readers))
-			try_move_tail(buf, tail);
 
 		pg_usleep(WAIT_SLEEP_MS * 1000);
+
+		// If tail was unchanged, try moving it.
+		if (tail == buf->tail)
+			try_move_tail(buf, buf->tail);
 	}
 }
 
@@ -149,11 +154,9 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	int desclen = tuple->desc ? VARSIZE(tuple->desc) : 0;
 	TimestampTz start_wait;
 
-	if (readers == NULL)
-	{
-		/* nothing is reading from this stream, so it's a noop */
+	/* no one is going to read this tuple, so it's a noop */
+	if (bms_is_empty(readers))
 		return NULL;
-	}
 
 	tupsize = tuple->heaptup->t_len + HEAPTUPLESIZE;
 	acks_size = sizeof(StreamBatchAck) * tuple->num_acks;
@@ -204,6 +207,8 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 		{
 			LWLockRelease(buf->tail_lock);
 
+			try_move_tail(buf, buf->tail);
+
 			if (TimestampDifferenceExceeds(start_wait, GetCurrentTimestamp(), CQ_DEFAULT_EMPTY_SLEEP_MS))
 				pg_usleep(WAIT_SLEEP_MS * 1000);
 			else
@@ -232,6 +237,7 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	MemSet(pos, 0, size);
 	slot = (TupleBufferSlot *) pos;
 	slot->id = buf->head_id + 1;
+	slot->unread = true;
 	slot->next = NULL;
 	slot->buf = buf;
 	slot->size = size;
@@ -257,9 +263,14 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	memcpy(slot->tuple->heaptup->t_data, tuple->heaptup->t_data, tuple->heaptup->t_len);
 	pos += tupsize;
 
-	slot->tuple->acks = (StreamBatchAck *) pos;
-	memcpy(slot->tuple->acks, tuple->acks, acks_size);
-	pos += acks_size;
+	if (synchronous_stream_insert)
+	{
+		slot->tuple->acks = (StreamBatchAck *) pos;
+		memcpy(slot->tuple->acks, tuple->acks, acks_size);
+		pos += acks_size;
+	}
+	else
+		slot->tuple->acks = NULL;
 
 	slot->readers = (Bitmapset *) pos;
 	memcpy(slot->readers, readers, BITMAPSET_SIZE(readers->nwords));
@@ -480,28 +491,31 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	entry->cq_id = reader->cq_id;
 	MyPinnedSlots = lappend(MyPinnedSlots, entry);
 
-	acks = entry->slot->tuple->acks;
+	if (synchronous_stream_insert)
+	{
+		acks = entry->slot->tuple->acks;
 
-	for (i = 0; i < entry->slot->tuple->num_acks; i++) {
-		StreamBatchAck ack = acks[i];
-		ListCell *lc;
-		bool found = false;
+		for (i = 0; i < entry->slot->tuple->num_acks; i++) {
+			StreamBatchAck ack = acks[i];
+			ListCell *lc;
+			bool found = false;
 
-		if (!dsm_is_valid_ptr(ack.batch) || ack.batch_id != ack.batch->id)
-			continue;
+			if (!dsm_is_valid_ptr(ack.batch) || ack.batch_id != ack.batch->id)
+				continue;
 
-		foreach(lc, MyAcks) {
-			StreamBatchAck *ack2 = lfirst(lc);
-			if (ack.batch_id == ack2->batch_id) {
-				ack2->count += ack.count;
-				found = true;
+			foreach(lc, MyAcks) {
+				StreamBatchAck *ack2 = lfirst(lc);
+				if (ack.batch_id == ack2->batch_id) {
+					ack2->count += ack.count;
+					found = true;
+				}
 			}
-		}
 
-		if (!found) {
-			StreamBatchAck *ack2 = (StreamBatchAck *) palloc(sizeof(StreamBatchAck));
-			memcpy(ack2, &ack, sizeof(StreamBatchAck));
-			MyAcks = lappend(MyAcks, ack2);
+			if (!found) {
+				StreamBatchAck *ack2 = (StreamBatchAck *) palloc(sizeof(StreamBatchAck));
+				memcpy(ack2, &ack, sizeof(StreamBatchAck));
+				MyAcks = lappend(MyAcks, ack2);
+			}
 		}
 	}
 
@@ -523,15 +537,20 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 
 	SpinLockAcquire(&slot->mutex);
 	bms_del_member(slot->readers, cq_id);
+	slot->unread = !bms_is_empty(slot->readers);
 	SpinLockRelease(&slot->mutex);
 
-	for (i = 0; i < slot->tuple->num_acks; i++)
-		StreamBatchIncrementNumReads(slot->tuple->acks[i].batch);
+	if (synchronous_stream_insert)
+	{
+		for (i = 0; i < slot->tuple->num_acks; i++)
+			StreamBatchIncrementNumReads(slot->tuple->acks[i].batch);
+	}
 
-	if (!bms_is_empty(slot->readers))
+	if (slot->unread)
 		return;
 
-	try_move_tail(buf, slot);
+	if (SlotEqualsTail(slot))
+		try_move_tail(buf, slot);
 }
 
 /*
@@ -645,11 +664,14 @@ TupleBufferClearPinnedSlots(void)
 	list_free_deep(MyPinnedSlots);
 	MyPinnedSlots = NIL;
 
-	foreach(lc, MyAcks)
-		StreamBatchMarkAcked(lfirst(lc));
+	if (synchronous_stream_insert)
+	{
+		foreach(lc, MyAcks)
+			StreamBatchMarkAcked(lfirst(lc));
 
-	list_free_deep(MyAcks);
-	MyAcks = NIL;
+		list_free_deep(MyAcks);
+		MyAcks = NIL;
+	}
 
 	MemoryContextSwitchTo(oldcontext);
 }
