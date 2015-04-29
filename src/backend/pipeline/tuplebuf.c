@@ -90,7 +90,7 @@ static void try_move_tail(TupleBuffer *buf, TupleBufferSlot *tail)
 	 */
 	if (SlotEqualsTail(tail))
 	{
-		do
+		while (!buf->tail->unread)
 		{
 			buf->tail->magic = 0;
 			buf->tail = buf->tail->next;
@@ -103,7 +103,6 @@ static void try_move_tail(TupleBuffer *buf, TupleBufferSlot *tail)
 
 			buf->tail_id = buf->tail->id;
 		}
-		while (!buf->tail->unread);
 	}
 
 	LWLockRelease(buf->tail_lock);
@@ -284,7 +283,6 @@ TupleBufferInsert(TupleBuffer *buf, Tuple *tuple, Bitmapset *readers)
 	else
 	{
 		Assert(TupleBufferIsEmpty(buf));
-
 		buf->head = slot;
 		buf->tail = slot;
 		buf->tail_id = slot->id;
@@ -535,10 +533,13 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 
 	buf = slot->buf;
 
-	SpinLockAcquire(&slot->mutex);
-	bms_del_member(slot->readers, cq_id);
-	slot->unread = !bms_is_empty(slot->readers);
-	SpinLockRelease(&slot->mutex);
+	if (!slot->unread)
+	{
+		if (SlotEqualsTail(slot))
+			try_move_tail(buf, slot);
+
+		return;
+	}
 
 	if (synchronous_stream_insert)
 	{
@@ -546,10 +547,12 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 			StreamBatchIncrementNumReads(slot->tuple->acks[i].batch);
 	}
 
-	if (slot->unread)
-		return;
+	SpinLockAcquire(&slot->mutex);
+	bms_del_member(slot->readers, cq_id);
+	slot->unread = !bms_is_empty(slot->readers);
+	SpinLockRelease(&slot->mutex);
 
-	if (SlotEqualsTail(slot))
+	if (!slot->unread && SlotEqualsTail(slot))
 		try_move_tail(buf, slot);
 }
 
