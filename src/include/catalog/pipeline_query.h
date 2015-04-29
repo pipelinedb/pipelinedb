@@ -84,7 +84,7 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 
 #define CQ_DEFAULT_BATCH_SIZE 		10000
 #define CQ_DEFAULT_EMPTY_SLEEP_MS 	10
-#define CQ_DEFAULT_MAX_WAIT_MS		5
+#define CQ_DEFAULT_MAX_WAIT_MS		10
 #define CQ_DEFAULT_PARALLELISM		1
 
 #define MAX_PARALLELISM 16
