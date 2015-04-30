@@ -42,6 +42,7 @@ typedef struct TupleBufferSlot
 {
 	uint32_t magic;
 	uint64_t id;
+	sig_atomic_t unread;
 	struct TupleBufferSlot *next;
 	struct TupleBuffer *buf;
 	Size size;
