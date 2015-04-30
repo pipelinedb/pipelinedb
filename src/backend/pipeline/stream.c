@@ -25,7 +25,7 @@
 #include "parser/parse_target.h"
 #include "pipeline/cont_xact.h"
 #include "pipeline/stream.h"
-#include "storage/dsm_alloc.h"
+#include "storage/shm_alloc.h"
 #include "storage/ipc.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
