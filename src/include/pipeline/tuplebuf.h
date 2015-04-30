@@ -15,7 +15,7 @@
 #include "nodes/bitmapset.h"
 #include "pipeline/cont_xact.h"
 #include "pipeline/stream.h"
-#include "storage/dsm_array.h"
+#include "storage/shm_array.h"
 #include "storage/s_lock.h"
 #include "storage/shmem.h"
 #include "storage/latch.h"
@@ -66,7 +66,7 @@ typedef struct TupleBuffer
 	uint64_t tail_id;
 	slock_t mutex;
 	Bitmapset *waiters;
-	DSMArray *latches;
+	ShmemArray *latches;
 	Latch writer_latch;
 } TupleBuffer;
 

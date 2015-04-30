@@ -10,11 +10,11 @@
 #ifndef DSM_ARRAY_H
 #define DSM_ARRAY_H
 
-typedef struct DSMArray DSMArray;
+typedef struct ShmemArray ShmemArray;
 
-extern DSMArray *dsm_array_new(Size size);
-extern void *dsm_array_get(DSMArray *array, int idx);
-extern void dsm_array_set(DSMArray *array, int idx, void *val);
-extern void dsm_array_delete(DSMArray *array);
+extern ShmemArray *ShmemArrayInit(Size size);
+extern void *ShmemArrayGet(ShmemArray *array, int idx);
+extern void ShmemArraySet(ShmemArray *array, int idx, void *val);
+extern void ShmemArrayDestroy(ShmemArray *array);
 
 #endif   /* DSM_ARRAY_H */

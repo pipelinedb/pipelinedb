@@ -12,12 +12,10 @@
 #include "c.h"
 #include "miscadmin.h"
 #include "storage/lwlock.h"
-#include "storage/dsm_alloc.h"
+#include "storage/shm_alloc.h"
 #include "storage/shmem.h"
 #include "storage/spin.h"
 #include "utils/elog.h"
-
-#define DEBUG 0
 
 /* Memory Blocks */
 
@@ -119,67 +117,14 @@ is_allocated(void *ptr)
  * making locking more fine grained.
  */
 
-typedef struct SPallocState
+typedef struct ShemDynAllocState
 {
 	void *head;
 	void *tail;
 	slock_t mutex;
-	/* DEBUG metadata */
-	int nblocks;
-	int nfree;
-	Size mem_size;
-	Size total_alloc;
-	Size total_free;
-} SPallocState;
+} ShemDynAllocState;
 
-static SPallocState *GlobalSPallocState = NULL;
-
-static Size
-free_blocks_size()
-{
-	void *block;
-	Size size = 0;
-
-	block = GlobalSPallocState->head;
-	while (block)
-	{
-		size += BLOCK_SIZE(get_size(block));
-		block = get_next(block);
-	}
-
-	return size;
-}
-
-static void
-print_block(void *block)
-{
-	if (!block)
-		return;
-	elog(LOG, "  addr: %p, end: %p, prev: %p, next: %p, size: %zu", block, get_end(block), get_prev(block), get_next(block), get_size(block));
-}
-
-static void
-print_allocator()
-{
-	void *block = GlobalSPallocState->head;
-	elog(LOG, "=== ShmemAllocator ===\n");
-
-	elog(LOG, "num free blocks %d", GlobalSPallocState->nfree);
-	elog(LOG, "total free: %zu", free_blocks_size());
-	elog(LOG, "num all blocks %d", GlobalSPallocState->nblocks);
-	elog(LOG, "total resident: %zu", GlobalSPallocState->mem_size);
-	elog(LOG, "head: %p", GlobalSPallocState->head);
-	elog(LOG, "tail: %p", GlobalSPallocState->tail);
-	elog(LOG, "blocks:");
-
-	while (block)
-	{
-		print_block(block);
-		block = get_next(block);
-	}
-
-	elog(LOG, "======================");
-}
+static ShemDynAllocState *GlobalShemDynAllocState = NULL;
 
 static bool
 coalesce_blocks(void *ptr1, void *ptr2)
@@ -209,11 +154,6 @@ coalesce_blocks(void *ptr1, void *ptr2)
 	if (next)
 		set_prev(next, ptr1);
 
-
-	if (DEBUG)
-		GlobalSPallocState->nblocks--;
-		GlobalSPallocState->nfree--;
-
 	return true;
 }
 
@@ -223,15 +163,6 @@ init_block(void *ptr, Size size, bool is_new)
 	Header *header = get_header(ptr);
 	header->size = size;
 	header->magic = MAGIC;
-
-	if (DEBUG)
-	{
-		SpinLockAcquire(&GlobalSPallocState->mutex);
-		GlobalSPallocState->nblocks++;
-		if (is_new)
-			GlobalSPallocState->mem_size += BLOCK_SIZE(size);
-		SpinLockRelease(&GlobalSPallocState->mutex);
-	}
 }
 
 static void
@@ -242,28 +173,28 @@ insert_block(void *ptr)
 
 	mark_free(ptr);
 
-	SpinLockAcquire(&GlobalSPallocState->mutex);
+	SpinLockAcquire(&GlobalShemDynAllocState->mutex);
 
-	if (!GlobalSPallocState->head)
+	if (!GlobalShemDynAllocState->head)
 	{
-		GlobalSPallocState->head = ptr;
-		GlobalSPallocState->tail = ptr;
+		GlobalShemDynAllocState->head = ptr;
+		GlobalShemDynAllocState->tail = ptr;
 	}
 	else
 	{
-		if ((intptr_t) ptr < (intptr_t) GlobalSPallocState->head)
+		if ((intptr_t) ptr < (intptr_t) GlobalShemDynAllocState->head)
 		{
-			next = GlobalSPallocState->head;
-			GlobalSPallocState->head = ptr;
+			next = GlobalShemDynAllocState->head;
+			GlobalShemDynAllocState->head = ptr;
 		}
-		else if ((intptr_t) ptr > (intptr_t) GlobalSPallocState->tail)
+		else if ((intptr_t) ptr > (intptr_t) GlobalShemDynAllocState->tail)
 		{
-			prev = GlobalSPallocState->tail;
-			GlobalSPallocState->tail = ptr;
+			prev = GlobalShemDynAllocState->tail;
+			GlobalShemDynAllocState->tail = ptr;
 		}
 		else
 		{
-			prev = GlobalSPallocState->head;
+			prev = GlobalShemDynAllocState->head;
 			while (prev)
 			{
 				next = get_next(prev);
@@ -285,8 +216,8 @@ insert_block(void *ptr)
 		set_next(prev, ptr);
 		if (coalesce_blocks(prev, ptr))
 		{
-			if (GlobalSPallocState->tail == ptr)
-				GlobalSPallocState->tail = prev;
+			if (GlobalShemDynAllocState->tail == ptr)
+				GlobalShemDynAllocState->tail = prev;
 			ptr = prev;
 		}
 	}
@@ -297,10 +228,7 @@ insert_block(void *ptr)
 		coalesce_blocks(ptr, next);
 	}
 
-	if (DEBUG)
-		GlobalSPallocState->nfree++;
-
-	SpinLockRelease(&GlobalSPallocState->mutex);
+	SpinLockRelease(&GlobalShemDynAllocState->mutex);
 }
 
 static void
@@ -324,9 +252,9 @@ get_block(Size size)
 	void *best = NULL;
 	int best_size;
 
-	SpinLockAcquire(&GlobalSPallocState->mutex);
+	SpinLockAcquire(&GlobalShemDynAllocState->mutex);
 
-	block = GlobalSPallocState->head;
+	block = GlobalShemDynAllocState->head;
 	while (block)
 	{
 		Size block_size = get_size(block);
@@ -353,75 +281,46 @@ get_block(Size size)
 		next = get_next(best);
 
 		if (!prev)
-			GlobalSPallocState->head = next;
+			GlobalShemDynAllocState->head = next;
 		else
 			set_next(prev, next);
 		if (!next)
-			GlobalSPallocState->tail = prev;
+			GlobalShemDynAllocState->tail = prev;
 		else
 			set_prev(next, prev);
-
-		if (DEBUG)
-			GlobalSPallocState->nfree--;
 	}
 
-	SpinLockRelease(&GlobalSPallocState->mutex);
+	SpinLockRelease(&GlobalShemDynAllocState->mutex);
 
 	return best;
 }
 
-static void
-test_allocator()
-{
-	void *a;
-	void *b;
-
-	print_allocator();
-	a = dsm_alloc(23);
-	b = dsm_alloc(500);
-	dsm_free(a);
-	dsm_free(b);
-	a = dsm_alloc(250);
-	b = dsm_alloc(120);
-	dsm_free(a);
-	dsm_free(b);
-	a = dsm_alloc(sizeof(void *) * 10);
-	b = dsm_alloc(sizeof(Header));
-	dsm_free(a);
-	dsm_free(b);
-}
-
 /*
- * InitSPallocState
+ * InitShmemDynAllocator
  */
 void
-InitDSMAlloc(void)
+InitShmemDynAllocator(void)
 {
 	bool found;
 
 	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
-	GlobalSPallocState = (SPallocState *) ShmemInitStruct("SPallocState", sizeof(SPallocState) , &found);
+	GlobalShemDynAllocState = (ShemDynAllocState *) ShmemInitStruct("SPallocState", sizeof(ShemDynAllocState) , &found);
 	if (!found)
 	{
-		GlobalSPallocState->head = NULL;
-		GlobalSPallocState->tail = NULL;
-		GlobalSPallocState->nblocks = 0;
-		GlobalSPallocState->nfree = 0;
-		SpinLockInit(&GlobalSPallocState->mutex);
+		GlobalShemDynAllocState->head = NULL;
+		GlobalShemDynAllocState->tail = NULL;
+		SpinLockInit(&GlobalShemDynAllocState->mutex);
 	}
 
 	LWLockRelease(PipelineMetadataLock);
-
-	if (DEBUG)
-		test_allocator();
 }
 
 /*
- * dsm_alloc
+ * ShmemDynAlloc
  */
 void *
-dsm_alloc(Size size)
+ShmemDynAlloc(Size size)
 {
 	void *block;
 	Size padded_size;
@@ -450,58 +349,33 @@ dsm_alloc(Size size)
 	if (get_size(block) - size >= MIN_BLOCK_SIZE)
 		split_block(block, size);
 
-	if (DEBUG)
-	{
-		SpinLockAcquire(&GlobalSPallocState->mutex);
-
-		GlobalSPallocState->total_alloc += size;
-		printf("> dsm_alloc %zu\n", size);
-		print_allocator();
-
-		SpinLockRelease(&GlobalSPallocState->mutex);
-	}
-
 	Assert(is_allocated(block));
 
 	return block;
 }
 
 void *
-dsm_alloc0(Size size)
+ShmemDynAlloc0(Size size)
 {
-	char *addr = dsm_alloc(size);
+	char *addr = ShmemDynAlloc(size);
 	MemSet(addr, 0, get_size(addr));
 	return addr;
 }
 
 /*
- * spfree
+ * ShmemDynFree
  */
 void
-dsm_free(void *addr)
+ShmemDynFree(void *addr)
 {
-	Size size;
+	if (!ShmemDynAddrIsValid(addr))
+		elog(ERROR, "ShmemDynFree: invalid/double freeing (%p)", addr);
 
-	if (!is_allocated(addr))
-		elog(ERROR, "spfree: invalid/double freeing (%p)", addr);
-
-	size = get_size(addr);
 	insert_block(addr);
-
-	if (DEBUG)
-	{
-		SpinLockAcquire(&GlobalSPallocState->mutex);
-
-		printf("> spfree %p\n", addr);
-		print_allocator();
-		GlobalSPallocState->total_free += size;
-
-		SpinLockRelease(&GlobalSPallocState->mutex);
-	}
 }
 
 bool
-dsm_is_valid_ptr(void *addr)
+ShmemDynAddrIsValid(void *addr)
 {
-	return is_allocated(addr);
+	return ShmemAddrIsValid(addr) && is_allocated(addr);
 }
