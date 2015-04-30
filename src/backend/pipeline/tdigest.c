@@ -206,7 +206,6 @@ void TDigestMerge(TDigest *t1, TDigest *t2)
 
 	TDigestCompress(t2);
 
-	// TODO(usmanm): Shuffle these?
 	for (i = 0; i < t2->num_centroids; i++)
 	{
 		Centroid *c = &t2->centroids[i];
