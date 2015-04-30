@@ -23,6 +23,7 @@
 #include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_class.h"
+#include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
@@ -263,11 +264,9 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 		 * generating query
 		 */
 		type = exprType((Node *) tle->expr);
-		/*
-		 * TODO(usmanm): Check for pseudo-types and replace with a char type.
-		 */
-		if (type == 2278)
-			type = 18;
+		/* Replace void type with a bool type. We need this because of the use of pg_sleep in some CQ tests */
+		if (type == VOIDOID)
+			type = BOOLOID;
 		coldef = make_cv_columndef(colname, type, exprTypmod((Node *) tle->expr));
 		tableElts = lappend(tableElts, coldef);
 

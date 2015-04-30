@@ -266,8 +266,6 @@ IsSlidingWindowContinuousView(RangeVar *cvname)
 
 /*
  * DoesViewAggregate
- *
- * TODO(usmanm): Change name of function.
  */
 bool
 DoesViewAggregate(SelectStmt *stmt, CQAnalyzeContext *context)
