@@ -593,10 +593,6 @@ AutoVacLauncherMain(int argc, char *argv[])
 	 */
 	rebuild_database_list(InvalidOid);
 
-	/*
-	 * TODO(usmanm): Move this outside of the autovacuumer main process. For now
-	 * let's just piggy back on this because we have access to pg_database.
-	 */
 	{
 		Relation rel;
 		HeapScanDesc scan;

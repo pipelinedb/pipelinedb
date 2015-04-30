@@ -125,13 +125,7 @@ GetDistinctBloomFilter(char *cvname)
 	Datum datum = SysCacheGetAttr(PIPELINETSTATENAME, tuple, Anum_pipeline_tstate_distinct, &isnull);
 
 	if (isnull)
-	{
-		/*
-		 * TODO(usmanm): We should probably pick some reasonable defaults here and
-		 * allow users to specify them
-		 */
 		bloom = BloomFilterCreate();
-	}
 	else
 		bloom = BloomFilterCopy((BloomFilter *) PG_DETOAST_DATUM(datum));
 
