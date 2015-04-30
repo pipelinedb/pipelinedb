@@ -210,12 +210,7 @@ ExecStreamProject(Tuple *event, StreamScanState *node)
 			/* if the coercion is possible, do it */
 			if (n != NULL)
 			{
-				/*
-				 * TODO(derekjn) an easy optimization here would be to cache the result
-				 * of this conversion to avoid extraneous function calls by another reader
-				 */
 				ExprState *estate = ExecInitExpr((Expr *) n, NULL);
-
 				v = ExecEvalExpr(estate, pi->econtext, &nulls[outatt], NULL);
 			}
 			else

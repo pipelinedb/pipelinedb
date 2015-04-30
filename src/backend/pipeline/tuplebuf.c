@@ -118,11 +118,11 @@ void
 TupleBufferWaitOnSlot(TupleBuffer *buf, TupleBufferSlot *slot)
 {
 	TupleBufferSlot *tail;
+	uint64_t id = slot->id;
 
 	while (true)
 	{
-		/* TODO(usmanm): Could this result in a live lock if slot is repeatedly equal to tail? */
-		if (!SlotIsValid(slot))
+		if (!SlotIsValid(slot) || slot->id != id)
 			break;
 
 		tail = buf->tail;
