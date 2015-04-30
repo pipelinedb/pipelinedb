@@ -1123,8 +1123,6 @@ RewriteStreamingAggs(SelectStmt *stmt)
 		 * wasn't already named, give it the name of the replaced
 		 * function because that's the expected name of the column
 		 * in the CV.
-		 *
-		 * TODO(usmanm): The list_length check isn't entirely correct. Fix later.
 		 */
 		if (res->name == NULL && prevname != NULL &&
 				list_length(context.funcCalls) == 1)
