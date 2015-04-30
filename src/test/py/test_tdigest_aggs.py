@@ -23,7 +23,8 @@ def test_tdigest_type(pipeline, clean_db):
     pipeline.deactivate()
 
     result = list(pipeline.execute(
-      'SELECT tdigest_quantile(t, 0.1) FROM test_tdigest_agg').fetchall())
+      'SELECT tdigest_quantile(t, 0.1) FROM test_tdigest_agg ORDER BY k')
+                  .fetchall())
     assert len(result) == 2
     assert abs(int(result[0]['tdigest_quantile']) - 99) <= 1
     assert abs(int(result[1]['tdigest_quantile']) - 599) <= 1
@@ -35,7 +36,8 @@ def test_tdigest_type(pipeline, clean_db):
     assert abs(int(result[0]['tdigest_quantile']) - 200) <= 3
 
     result = list(pipeline.execute(
-      'SELECT tdigest_cdf(t, 600) FROM test_tdigest_agg').fetchall())
+      'SELECT tdigest_cdf(t, 600) FROM test_tdigest_agg ORDER BY k')
+                  .fetchall())
     assert len(result) == 2
     assert round(result[0]['tdigest_cdf'], 2) == 0.6
     assert round(result[1]['tdigest_cdf'], 2) == 0.1
