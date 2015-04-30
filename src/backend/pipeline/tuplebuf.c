@@ -21,7 +21,7 @@
 #include "executor/tuptable.h"
 #include "nodes/bitmapset.h"
 #include "nodes/print.h"
-#include "storage/dsm_alloc.h"
+#include "storage/shm_alloc.h"
 #include "storage/lwlock.h"
 #include "storage/spin.h"
 #include "storage/proc.h"
@@ -376,7 +376,7 @@ TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, uin
 		buf->head = buf->tail = NULL;
 
 		buf->waiters = NULL;
-		buf->latches = dsm_array_new(sizeof(Latch) * max_readers);
+		buf->latches = ShmemArrayInit(sizeof(Latch) * max_readers);
 
 		SpinLockInit(&buf->mutex);
 
@@ -498,7 +498,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 			ListCell *lc;
 			bool found = false;
 
-			if (!dsm_is_valid_ptr(ack.batch) || ack.batch_id != ack.batch->id)
+			if (!ShmemDynAddrIsValid(ack.batch) || ack.batch_id != ack.batch->id)
 				continue;
 
 			foreach(lc, MyAcks) {
@@ -580,7 +580,7 @@ TupleBufferIsEmpty(TupleBuffer *buf)
 void
 TupleBufferInitLatch(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, Latch *proclatch)
 {
-	Latch *latches = dsm_array_get(buf->latches, cq_id);
+	Latch *latches = ShmemArrayGet(buf->latches, cq_id);
 	memcpy(&latches[reader_id], proclatch, sizeof(Latch));
 }
 
@@ -595,14 +595,14 @@ TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 	SpinLockAcquire(&buf->mutex);
 	if (!TupleBufferHasUnreadSlots())
 	{
-		buf->waiters = dsm_bms_add_member(buf->waiters, cq_id);
+		buf->waiters = shm_bms_add_member(buf->waiters, cq_id);
 		should_wait = true;
 	}
 	SpinLockRelease(&buf->mutex);
 
 	if (should_wait)
 	{
-		Latch *latches = dsm_array_get(buf->latches, cq_id);
+		Latch *latches = ShmemArrayGet(buf->latches, cq_id);
 		WaitLatch((&latches[reader_id]), WL_LATCH_SET, 0);
 	}
 }
@@ -613,7 +613,7 @@ TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 void
 TupleBufferResetNotify(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 {
-	Latch *latches = dsm_array_get(buf->latches, cq_id);
+	Latch *latches = ShmemArrayGet(buf->latches, cq_id);
 	ResetLatch((&latches[reader_id]));
 }
 
@@ -624,7 +624,7 @@ void
 TupleBufferNotify(TupleBuffer *buf, uint32_t cq_id)
 {
 	int i;
-	Latch *latches = dsm_array_get(buf->latches, cq_id);
+	Latch *latches = ShmemArrayGet(buf->latches, cq_id);
 
 	for (i = 0; i < buf->max_readers; i++)
 	{

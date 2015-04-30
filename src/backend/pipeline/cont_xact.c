@@ -16,7 +16,7 @@
 #include "nodes/bitmapset.h"
 #include "pipeline/cont_xact.h"
 #include "pipeline/cqproc.h"
-#include "storage/dsm_alloc.h"
+#include "storage/shm_alloc.h"
 
 #define SLEEP_MS 5
 #define CHECK_CRASH_CYCLES 5
@@ -28,7 +28,7 @@ List *MyAcks = NIL;
 
 StreamBatch *StreamBatchCreate(Bitmapset *readers, int num_tuples)
 {
-	char *ptr = dsm_alloc0(sizeof(StreamBatch) + BITMAPSET_SIZE(readers->nwords) + (bms_num_members(readers) * sizeof(int)));
+	char *ptr = ShmemDynAlloc0(sizeof(StreamBatch) + BITMAPSET_SIZE(readers->nwords) + (bms_num_members(readers) * sizeof(int)));
 	StreamBatch *batch = (StreamBatch *) ptr;
 	int cq_id;
 	int i = 0;
@@ -107,7 +107,7 @@ void StreamBatchWaitAndRemove(StreamBatch *batch)
 		cycle++;
 	}
 
-	dsm_free(batch);
+	ShmemDynFree(batch);
 }
 
 void StreamBatchIncrementNumCTuples(StreamBatch *batch)

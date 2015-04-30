@@ -16,7 +16,7 @@
 #include "miscadmin.h"
 #include "pipeline/cqproc.h"
 #include "pipeline/tuplebuf.h"
-#include "storage/dsm_alloc.h"
+#include "storage/shm_alloc.h"
 
 /*
  * InitPipeline
@@ -26,7 +26,7 @@
 void InitPipeline()
 {
 	srand(time(NULL));
-	InitDSMAlloc();
+	InitShmemDynAllocator();
 	TupleBuffersInit();
 	InitCQProcState();
 }
