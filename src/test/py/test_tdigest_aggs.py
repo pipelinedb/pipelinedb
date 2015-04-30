@@ -25,11 +25,12 @@ def test_tdigest_type(pipeline, clean_db):
     result = list(pipeline.execute(
       'SELECT tdigest_quantile(t, 0.1) FROM test_tdigest_agg').fetchall())
     assert len(result) == 2
-    assert int(result[0]['tdigest_quantile']) == 99
-    assert int(result[1]['tdigest_quantile']) == 599
+    assert abs(int(result[0]['tdigest_quantile']) - 99) <= 1
+    assert abs(int(result[1]['tdigest_quantile']) - 599) <= 1
 
     result = list(pipeline.execute(
-      'SELECT tdigest_quantile(combine(t), 0.1) FROM test_tdigest_agg').fetchall())
+      'SELECT tdigest_quantile(combine(t), 0.1) FROM test_tdigest_agg')
+                  .fetchall())
     assert len(result) == 1
     assert abs(int(result[0]['tdigest_quantile']) - 200) <= 3
 
