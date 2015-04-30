@@ -37,8 +37,8 @@
 #include "pipeline/tuplebuf.h"
 #include "postmaster/bgworker.h"
 #include "regex/regex.h"
-#include "storage/dsm_alloc.h"
-#include "storage/dsm_array.h"
+#include "storage/shm_alloc.h"
+#include "storage/shm_array.h"
 #include "storage/spin.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
@@ -65,7 +65,7 @@ typedef struct CQProcRunArgs
 	Oid dboid;
 } CQProcRunArgs;
 
-static DSMArray **CQProcArray = NULL;
+static ShmemArray **CQProcArray = NULL;
 
 /*
  * InitCQProcState
@@ -80,10 +80,10 @@ InitCQProcState(void)
 
 	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
 
-	CQProcArray = (DSMArray **) ShmemInitStruct("CQProcArray", sizeof(DSMArray *), &found);
+	CQProcArray = (ShmemArray **) ShmemInitStruct("CQProcArray", sizeof(ShmemArray *), &found);
 
 	if (!found)
-		*CQProcArray = (DSMArray *) dsm_array_new(sizeof(CQProcEntry *));
+		*CQProcArray = (ShmemArray *) ShmemArrayInit(sizeof(CQProcEntry *));
 
 	LWLockRelease(PipelineMetadataLock);
 }
@@ -115,7 +115,7 @@ GetProcessGroupSize(int id)
 CQProcEntry*
 CQProcEntryCreate(int id, int parallelism)
 {
-	CQProcEntry	*entry = (CQProcEntry *) dsm_alloc0(sizeof(CQProcArray));
+	CQProcEntry	*entry = (CQProcEntry *) ShmemDynAlloc0(sizeof(CQProcArray));
 
 	entry->id = id;
 	/* New entry, initialize it with the process group size */
@@ -126,15 +126,15 @@ CQProcEntryCreate(int id, int parallelism)
 	entry->shm_query = NULL;
 
 	entry->combiner.last_pid = 0;
-	entry->workers = dsm_alloc0(sizeof(CQBackgroundWorkerHandle) * NUM_WORKERS(entry));
+	entry->workers = ShmemDynAlloc0(sizeof(CQBackgroundWorkerHandle) * NUM_WORKERS(entry));
 
 	SpinLockInit(&entry->mutex);
 
-	dsm_array_set(*CQProcArray, id, &entry);
+	ShmemArraySet(*CQProcArray, id, &entry);
 
 	/* Expand Latch arrays on TupleBuffers, if needed. */
-	dsm_array_set(WorkerTupleBuffer->latches, id, NULL);
-	dsm_array_set(CombinerTupleBuffer->latches, id, NULL);
+	ShmemArraySet(WorkerTupleBuffer->latches, id, NULL);
+	ShmemArraySet(CombinerTupleBuffer->latches, id, NULL);
 
 	return entry;
 }
@@ -154,13 +154,13 @@ CQProcEntryRemove(int id)
 	if (entry)
 	{
 		if (entry->workers)
-			dsm_free(entry->workers);
+			ShmemDynFree(entry->workers);
 		if (entry->shm_query)
-			dsm_free(entry->shm_query);
+			ShmemDynFree(entry->shm_query);
 	}
 
-	dsm_free(entry);
-	dsm_array_set(*CQProcArray, id, NULL);
+	ShmemDynFree(entry);
+	ShmemArraySet(*CQProcArray, id, NULL);
 }
 
 /*
@@ -171,7 +171,7 @@ CQProcEntryRemove(int id)
 CQProcEntry*
 GetCQProcEntry(int id)
 {
-	return *(CQProcEntry **) dsm_array_get(*CQProcArray, id);
+	return *(CQProcEntry **) ShmemArrayGet(*CQProcArray, id);
 }
 
 /*
@@ -382,7 +382,7 @@ cq_bg_main(Datum d, char *additional, Size additionalsize)
 	 * This will happen when the BG worker is being respawned after a full
 	 * reset cycle.
 	 */
-	if (!dsm_is_valid_ptr(args->query))
+	if (!ShmemDynAddrIsValid(args->query))
 		return;
 
 	/* Set all globals variables */
@@ -520,7 +520,7 @@ RunCQProcs(const char *cvname, void *_state, CQProcEntry *entry, Oid dboid)
 	if (entry->shm_query == NULL)
 	{
 		char *q = GetQueryString((char *) cvname, true);
-		entry->shm_query = dsm_alloc(strlen(q) + 1);
+		entry->shm_query = ShmemDynAlloc(strlen(q) + 1);
 		strcpy(entry->shm_query, q);
 	}
 

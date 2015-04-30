@@ -21,7 +21,7 @@
 #include "postgres.h"
 
 #include "access/hash.h"
-#include "storage/dsm_alloc.h"
+#include "storage/shm_alloc.h"
 
 
 #define WORDNUM(x)	((x) / BITS_PER_BITMAPWORD)
@@ -864,7 +864,7 @@ bms_hash_value(const Bitmapset *a)
 								   (lastword + 1) * sizeof(bitmapword)));
 }
 
-Bitmapset *dsm_bms_add_member(Bitmapset *bms, int x)
+Bitmapset *shm_bms_add_member(Bitmapset *bms, int x)
 {
 	int	wordnum, bitnum, nwords;
 
@@ -882,13 +882,13 @@ Bitmapset *dsm_bms_add_member(Bitmapset *bms, int x)
 		Bitmapset *old;
 
 		old = bms;
-		bms = (Bitmapset *) dsm_alloc0(BITMAPSET_SIZE(wordnum + 1));
+		bms = (Bitmapset *) ShmemDynAlloc0(BITMAPSET_SIZE(wordnum + 1));
 		bms->nwords = wordnum + 1;
 
 		if (old)
 		{
 			memcpy(bms->words, old->words, nwords * sizeof(bitmapword));
-			dsm_free(old);
+			ShmemDynFree(old);
 		}
 	}
 
@@ -896,8 +896,8 @@ Bitmapset *dsm_bms_add_member(Bitmapset *bms, int x)
 	return bms;
 }
 
-void dsm_bms_free(Bitmapset *bms)
+void shm_bms_free(Bitmapset *bms)
 {
 	if (bms)
-		dsm_free(bms);
+		ShmemDynFree(bms);
 }
