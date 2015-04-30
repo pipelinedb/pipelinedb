@@ -864,7 +864,7 @@ bms_hash_value(const Bitmapset *a)
 								   (lastword + 1) * sizeof(bitmapword)));
 }
 
-Bitmapset *dsm_bms_add_member(Bitmapset *bms, int x)
+Bitmapset *shm_bms_add_member(Bitmapset *bms, int x)
 {
 	int	wordnum, bitnum, nwords;
 
@@ -896,7 +896,7 @@ Bitmapset *dsm_bms_add_member(Bitmapset *bms, int x)
 	return bms;
 }
 
-void dsm_bms_free(Bitmapset *bms)
+void shm_bms_free(Bitmapset *bms)
 {
 	if (bms)
 		ShmemDynFree(bms);

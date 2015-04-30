@@ -595,7 +595,7 @@ TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id)
 	SpinLockAcquire(&buf->mutex);
 	if (!TupleBufferHasUnreadSlots())
 	{
-		buf->waiters = dsm_bms_add_member(buf->waiters, cq_id);
+		buf->waiters = shm_bms_add_member(buf->waiters, cq_id);
 		should_wait = true;
 	}
 	SpinLockRelease(&buf->mutex);
