@@ -625,6 +625,7 @@ void
 ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql)
 {
 	SelectStmt *select = (SelectStmt *) copyObject(stmt->query);
+	SelectStmt *copy;
 	ContAnalyzeContext *context = MakeContAnalyzeContext(make_parsestate(NULL), select);
 	ListCell *lc;
 
@@ -890,11 +891,13 @@ ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql)
 	if (find_clock_timestamp_expr(select->whereClause, context))
 		validate_clock_timestamp_expr(select, context->expr, context);
 
-	/* Warn the user if it's a stream-table join with an unindexed join qual */
-	warn_unindexed_join(select, context);
+	copy = copyObject(select);
 
 	/* Pass it to the analyzer to make sure all function definitions, etc. are correct */
 	parse_analyze((Node *) select, sql, NULL, 0);
+
+	/* Warn the user if it's a stream-table join with an unindexed join qual */
+	warn_unindexed_join(copy, context);
 }
 
 /*
