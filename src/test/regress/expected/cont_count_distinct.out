@@ -68,7 +68,7 @@ SELECT * FROM test_distinct_sw_count;
  _1     | hll                      |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
-    "test_distinct_sw_count_mrel0__0_idx" UNIQUE, btree (_0)
+    "test_distinct_sw_count_mrel0_expr_idx" btree (hash_group(_0))
 
 SELECT pg_sleep(1);
  pg_sleep 

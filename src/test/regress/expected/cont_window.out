@@ -8,7 +8,7 @@ CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PART
  _1     | bytea                    |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
-    "cqwindow0_mrel0__0_idx" btree (_0)
+    "cqwindow0_mrel0_expr_idx" btree (hash_group(_0, key))
 
 \d+ cqwindow0;
                 View "public.cqwindow0"
@@ -68,7 +68,7 @@ CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITIO
  _1     | bigint[]                 |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
-    "cqwindow1_mrel0__0_idx" btree (_0)
+    "cqwindow1_mrel0_expr_idx" btree (hash_group(_0, key))
 
 \d+ cqwindow1;
                 View "public.cqwindow1"

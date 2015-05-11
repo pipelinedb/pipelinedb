@@ -96,7 +96,7 @@ CQMatViewClose(ResultRelInfo *rinfo)
  * This is a trimmed-down version of ExecInsertIndexTuples
  */
 void
-ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot)
+ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot, EState *estate)
 {
 	int			i;
 	int			numIndexes;
@@ -132,7 +132,14 @@ ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot)
 		if (!indexInfo->ii_ReadyForInserts)
 			continue;
 
-		FormIndexDatum(indexInfo, slot, NULL, values, isnull);
+		/* Index expressions need an EState to be eval'd in */
+		if (indexInfo->ii_Expressions)
+		{
+			ExprContext *econtext = GetPerTupleExprContext(estate);
+			econtext->ecxt_scantuple = slot;
+		}
+
+		FormIndexDatum(indexInfo, slot, estate, values, isnull);
 
 		index_insert(relationDescs[i], values, isnull, &(tup->t_self),
 				heapRelation, relationDescs[i]->rd_index->indisunique ? UNIQUE_CHECK_YES : UNIQUE_CHECK_NO);
@@ -144,12 +151,12 @@ ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot)
  *
  * Update an existing row of a CV materialization table.
  */
-void ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot)
+void ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 {
 	HeapTuple tup = ExecMaterializeSlot(slot);
 
 	simple_heap_update(ri->ri_RelationDesc, &tup->t_self, tup);
-	ExecInsertCQMatRelIndexTuples(ri, slot);
+	ExecInsertCQMatRelIndexTuples(ri, slot, estate);
 }
 
 /*
@@ -157,10 +164,10 @@ void ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot)
  *
  * Insert a new row into a CV materialization table
  */
-void ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot)
+void ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 {
 	HeapTuple tup = ExecMaterializeSlot(slot);
 
 	heap_insert(ri->ri_RelationDesc, tup, GetCurrentCommandId(true), 0, NULL);
-	ExecInsertCQMatRelIndexTuples(ri, slot);
+	ExecInsertCQMatRelIndexTuples(ri, slot, estate);
 }
