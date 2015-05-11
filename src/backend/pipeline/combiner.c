@@ -17,6 +17,8 @@
 
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/pg_proc.h"
+#include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "commands/pipelinecmds.h"
@@ -82,6 +84,8 @@ typedef struct CombineState
 	AttrNumber *groupatts;
 	/* equality operators for group attributes */
 	Oid *groupops;
+	/* hash function expression used by the matrel, or NULL if no grouping is used */
+	FuncExpr *hashfunc;
 } CombineState;
 
 /*
@@ -163,10 +167,17 @@ get_values(CombineState *cstate, Tuplestorestate *batch)
 
 	/*
 	 * Generate a VALUES list of the incoming groups
+	 *
+	 * We wrap each incoming group in a call to hash_group because that's
+	 * what we index matrels on. This gives the index entries a high cardinality
+	 * without having to know anything about the actual selectivity of the groups,
+	 * which keeps the matrel index fast.
 	 */
 	foreach_tuple(slot, batch)
 	{
 		List *tup = NIL;
+		FuncExpr *hash;
+		List *args = NIL;
 
 		for (i = 0; i < cstate->ngroupatts; i++)
 		{
@@ -186,10 +197,12 @@ get_values(CombineState *cstate, Tuplestorestate *batch)
 			c = makeConst(attr->atttypid, attr->atttypmod,
 					attr->attcollation, length, d, isnull, attr->attbyval);
 
+			args = lappend(args, c);
 			tup = lappend(tup, c);
 		}
 
-		values = lappend(values, tup);
+		hash = makeFuncExpr(HASH_GROUP_OID, INT4OID, args, 0, 0, COERCE_EXPLICIT_CALL);
+		values = lappend(values, list_make1(hash));
 	}
 
 	assign_expr_collations(NULL, (Node *) values);
@@ -240,8 +253,9 @@ get_groups(CombineState *cstate, List *values, ParseState *ps)
 	Node *where;
 	SubLink *sub = makeNode(SubLink);
 	SelectStmt *sel = makeNode(SelectStmt);
-	RowExpr *row = makeNode(RowExpr);
 	int i;
+	FuncExpr *func;
+	List *args = NIL;
 
 	sel->valuesLists = values;
 
@@ -249,21 +263,33 @@ get_groups(CombineState *cstate, List *values, ParseState *ps)
 	 * Now create a subquery to join the matrel against, which
 	 * will result in a retrieval of existing groups to update.
 	 */
-	row->args = NIL;
-
-	for (i = 0; i < cstate->ngroupatts; i++)
+	if (cstate->hashfunc)
 	{
-		AttrNumber groupattr = cstate->groupatts[i];
-		Form_pg_attribute attr = cstate->cvdesc->attrs[groupattr - 1];
-		ColumnRef *cref = makeNode(ColumnRef);
+		func = copyObject(cstate->hashfunc);
+	}
+	else
+	{
+		/*
+		 * In the event that something strange happened, such as a user
+		 * deleting the hash index, we can still try our best to rebuild
+		 * it here.
+		 */
+		for (i=0; i<cstate->ngroupatts; i++)
+		{
+			AttrNumber groupattr = cstate->groupatts[i];
+			Form_pg_attribute attr = cstate->cvdesc->attrs[groupattr - 1];
 
-		cref->fields = list_make1(makeString(NameStr(attr->attname)));
-		cref->location = -1;
-		row->args = lappend(row->args, cref);
+			Var *v = makeVar(1, groupattr, attr->atttypid,
+					attr->atttypmod, attr->attcollation, 0);
+
+			args = lappend(args, v);
+		}
+
+		func = makeFuncExpr(HASH_GROUP_OID, INT4OID, args, 0, 0, COERCE_EXPLICIT_CALL);
 	}
 
 	sub->subLinkType = ANY_SUBLINK;
-	sub->testexpr = (Node *) row;
+	sub->testexpr = (Node *) func;
 	sub->operName = list_make1(makeString("="));
 	sub->subselect = (Node *) sel;
 
@@ -345,6 +371,32 @@ get_cached_groups_plan(CombineState *cstate, List *values)
 }
 
 /*
+ * hash_groups
+ *
+ * Stores all of the tuples in the given tuplestore into a hashtable, keyed
+ * by their grouping columns
+ */
+static TupleHashTable
+hash_groups(CombineState *cstate, Tuplestorestate *batch, TupleHashTable existing)
+{
+	TupleHashTable groups = NULL;
+	bool isnew = false;
+	TupleTableSlot *slot = cstate->resultslot;
+
+	groups = BuildTupleHashTable(existing->numCols, existing->keyColIdx,
+			existing->tab_eq_funcs, existing->tab_hash_funcs, 1000,
+			existing->entrysize, existing->tablecxt, existing->tempcxt);
+
+	foreach_tuple(slot, batch)
+	{
+		LookupTupleHashEntry(groups, slot, &isnew);
+	}
+	tuplestore_rescan(batch);
+
+	return groups;
+}
+
+/*
  * select_existing_groups
  *
  * Adds all existing groups in the matrel to the combine input set
@@ -361,6 +413,7 @@ select_existing_groups(CombineState *cstate, Tuplestorestate *batch, TupleHashTa
 	List *tups = NIL;
 	ListCell *lc;
 	List *values = NIL;
+	TupleHashTable batchgroups = hash_groups(cstate, batch, existing);
 
 	/*
 	 * If we're not grouping on any columns, then there's only one row to look up
@@ -368,7 +421,6 @@ select_existing_groups(CombineState *cstate, Tuplestorestate *batch, TupleHashTa
 	 */
 	if (cstate->isagg && cstate->ngroupatts > 0)
 		values = get_values(cstate, batch);
-
 
 	plan = get_cached_groups_plan(cstate, values);
 
@@ -407,12 +459,21 @@ select_existing_groups(CombineState *cstate, Tuplestorestate *batch, TupleHashTa
 	tuplestore_clear(batch);
 
 	/*
-	 * Now add the merge targets that already exist in the continuous view's table
-	 * to the input of the final merge query
+	 * Now add the existing rows to the input of the final combine query
 	 */
 	hash_seq_init(&status, existing->hashtab);
 	while ((entry = (HeapTupleEntry) hash_seq_search(&status)) != NULL)
-		tuplestore_puttuple(batch, entry->tuple);
+	{
+		/*
+		 * Our index can potentially have collisions, so we filter out any
+		 * tuples that were returned that aren't related to the batch we're
+		 * currently processing. This is just a matter of intersecting the
+		 * retrieved groups with the batch's groups.
+		 */
+		ExecStoreTuple(entry->tuple, slot, InvalidBuffer, false);
+		if (LookupTupleHashEntry(batchgroups, slot, NULL))
+			tuplestore_puttuple(batch, entry->tuple);
+	}
 
 	foreach(lc, tups)
 	{
@@ -437,6 +498,7 @@ sync_combine(CombineState *cstate, Tuplestorestate *results, TupleHashTable exis
 	int size = sizeof(bool) * slot->tts_tupleDescriptor->natts;
 	bool *replace_all = palloc0(size);
 	ResultRelInfo *ri = CQMatViewOpen(rel);
+	EState *estate = CreateExecutorState();
 
 	MemSet(replace_all, true, size);
 
@@ -457,15 +519,17 @@ sync_combine(CombineState *cstate, Tuplestorestate *results, TupleHashTable exis
 					slot->tts_values, slot->tts_isnull, replace_all);
 
 			ExecStoreTuple(updated, slot, InvalidBuffer, false);
-			ExecCQMatRelUpdate(ri, slot);
+			ExecCQMatRelUpdate(ri, slot, estate);
 			IncrementCQUpdate(1, HEAPTUPLESIZE + updated->t_len);
 		}
 		else
 		{
 			/* No existing tuple found, so it's an INSERT */
-			ExecCQMatRelInsert(ri, slot);
+			ExecCQMatRelInsert(ri, slot, estate);
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
+
+		ResetPerTupleExprContext(estate);
 	}
 	CQMatViewClose(ri);
 	relation_close(rel, RowExclusiveLock);
@@ -556,11 +620,48 @@ init_combine_state(CombineState *cstate, char *cvname, PlannedStmt *plan,
 	if (IsA(plan->planTree, Agg))
 	{
 		Agg *agg = (Agg *) plan->planTree;
+		Relation matrel;
+		ResultRelInfo *ri;
+		int i;
 
 		cstate->groupatts = agg->grpColIdx;
 		cstate->ngroupatts = agg->numCols;
 		cstate->groupops = agg->grpOperators;
 		cstate->isagg = true;
+
+		/*
+		 * In order for the hashed group index to be usable, we must use an expression
+		 * that is equivalent to the index expression in the group lookup. The best way
+		 * to do this is to just copy the actual index expression. If something strange
+		 * happens, such as a user deleting the hash index, we still try our best to
+		 * reconstruct this expression later.
+		 */
+		matrel = heap_openrv(cstate->matrel, NoLock);
+		ri = CQMatViewOpen(matrel);
+
+		for (i=0; i<ri->ri_NumIndices; i++)
+		{
+			IndexInfo *idx = ri->ri_IndexRelationInfo[i];
+			Node *n;
+			FuncExpr *func;
+
+			if (!idx->ii_Expressions || list_length(idx->ii_Expressions) != 1)
+				continue;
+
+			n = linitial(idx->ii_Expressions);
+			if (!IsA(n, FuncExpr))
+				continue;
+
+			func = (FuncExpr *) n;
+			if (func->funcid != HASH_GROUP_OID || list_length(func->args) != cstate->ngroupatts)
+				continue;
+
+			cstate->hashfunc = copyObject(func);
+			break;
+		}
+
+		heap_close(matrel, NoLock);
+		CQMatViewClose(ri);
 	}
 }
 
@@ -725,7 +826,6 @@ retry:
 				 */
 				cq_stat_report(false);
 			}
-
 
 			/*
 			 * If we received a tuple in this iteration, poll the buffer again.
