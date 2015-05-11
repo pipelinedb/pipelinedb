@@ -22,6 +22,7 @@
 #include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_class.h"
+#include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
@@ -35,6 +36,7 @@
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/pg_list.h"
+#include "optimizer/tlist.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqmatrel.h"
@@ -83,6 +85,60 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 }
 
 /*
+ * make_hashed_index_expr
+ *
+ * Create an index expression that hashes the grouping columns into a single
+ * 32-bit value
+ */
+static Node *
+make_hashed_index_expr(Query *query, TupleDesc desc)
+{
+	ListCell *lc;
+	List *args = NIL;
+	FuncExpr *hash;
+
+	foreach(lc, query->groupClause)
+	{
+		SortGroupClause *g = (SortGroupClause *) lfirst(lc);
+		TargetEntry *te = (TargetEntry *) get_sortgroupref_tle(g->tleSortGroupRef, query->targetList);
+		Form_pg_attribute attr;
+		Var *var;
+		bool found = false;
+		int i;
+
+		/*
+		 * Instead of using the expression itself as an argument, we use a variable that
+		 * points to the column that stores the result of the expression.
+		 */
+		for (i=0; i<desc->natts; i++)
+		{
+			attr = (Form_pg_attribute) desc->attrs[i];
+			if (pg_strcasecmp(te->resname, NameStr(attr->attname)) == 0)
+			{
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+			elog(ERROR, "could not find index attribute in tuple descriptor");
+
+		var = makeVar(1, attr->attnum, attr->atttypid, attr->atttypmod,
+				attr->attcollation, 0);
+
+		args = lappend(args, var);
+	}
+
+	/*
+	 * We can only index on expressions having immutable results, so if any of the
+	 * grouping expressions are mutable, we can't use a hashed index.
+	 */
+	hash = makeFuncExpr(HASH_GROUP_OID, INT4OID, args, 0, 0, COERCE_EXPLICIT_CALL);
+
+	return (Node *) hash;
+}
+
+/*
  * create_indices_on_mat_relation
  *
  * If feasible, create an index on the new materialization table to make
@@ -91,14 +147,25 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
  * such as single-column GROUP BYs, it's straightforward.
  */
 static void
-create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *workerstmt, SelectStmt *viewstmt, Query *query)
+create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
+		SelectStmt *workerstmt, SelectStmt *viewstmt)
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
+	Node *expr = NULL;
+	bool sliding = IsSlidingWindowSelectStmt(workerstmt);
 	char *indexcolname = NULL;
 
-	if (IsSlidingWindowSelectStmt(workerstmt))
+	if (query->groupClause == NIL && !sliding)
+		return;
+
+	if (query->groupClause == NIL && sliding)
 	{
+		/*
+		 * We still want an index on the timestamp column for sliding window
+		 * queries without any grouping, because there is an implicit WHERE clause
+		 * used in queries against sliding window CVs.
+		 */
 		ColumnRef *col;
 		Node *node = NULL;
 		char *namespace;
@@ -111,46 +178,17 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *
 		col = (ColumnRef *) node;
 		DeconstructQualifiedName(col->fields, &namespace, &indexcolname);
 	}
-	else if (query->groupClause)
+	else
 	{
-		/*
-		 * Choose the lowest-cardinality type as the index column,
-		 * as that's the best we can hope to do at this point.
-		 */
-		ListCell *lc;
-		int16 len;
-		int16 best = -1;
+		Relation matrel = heap_open(matreloid, NoLock);
 
-		foreach(lc, query->groupClause)
-		{
-			ListCell *tc;
-			SortGroupClause *g = (SortGroupClause *) lfirst(lc);
-			TargetEntry *te;
-
-			foreach(tc, query->targetList)
-			{
-				te = (TargetEntry *) lfirst(tc);
-				if (te->ressortgroupref == g->tleSortGroupRef)
-					break;
-			}
-
-			len = get_typlen(exprType((Node *) te->expr));
-
-			if (best == -1 || (len > 0 && len < best))
-			{
-				best = len;
-				indexcolname = te->resname;
-			}
-
-		}
+		expr = make_hashed_index_expr(query, RelationGetDescr(matrel));
+		heap_close(matrel, NoLock);
 	}
-
-	if (indexcolname == NULL)
-		return;
 
 	indexcol = makeNode(IndexElem);
 	indexcol->name = indexcolname;
-	indexcol->expr = NULL;
+	indexcol->expr = expr;
 	indexcol->indexcolname = NULL;
 	indexcol->collation = NULL;
 	indexcol->opclass = NULL;
@@ -163,11 +201,7 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *
 	index->accessMethod = CQ_MATREL_INDEX_TYPE;
 	index->tableSpace = NULL;
 	index->indexParams = list_make1(indexcol);
-	/*
-	 * Index should be unique iff there is a single GROUP BY
-	 * on the worker.
-	 */
-	index->unique = list_length(workerstmt->groupClause) == 1;
+	index->unique = false;
 	index->primary = false;
 	index->isconstraint = false;
 	index->deferrable = false;
@@ -336,7 +370,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Index the materialization table smartly if we can
 	 */
 	allowSystemTableMods = saveAllowSystemTableMods;
-	create_indices_on_mat_relation(reloid, mat_relation, workerselect, viewselect, query);
+	create_indices_on_mat_relation(reloid, mat_relation, query, workerselect, viewselect);
 }
 
 /*

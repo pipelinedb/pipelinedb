@@ -104,7 +104,7 @@ View definition:
  sum    | numeric |           | main     |              | 
  _0     | bytea   |           | extended |              | 
 Indexes:
-    "cqcreate3_mrel0_key_idx" UNIQUE, btree (key)
+    "cqcreate3_mrel0_expr_idx" btree (hash_group(key))
 
 CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value::int8) FROM stream GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate4';
@@ -133,7 +133,7 @@ View definition:
  _1     | bytea   |           | extended |              | 
  _0     | text(0) |           | extended |              | 
 Indexes:
-    "cqcreate4_mrel0__0_idx" UNIQUE, btree (_0)
+    "cqcreate4_mrel0_expr_idx" btree (hash_group(_0))
 
 -- Sliding window queries
 CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
@@ -200,7 +200,7 @@ View definition:
  _1     | text(0)                  |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
-    "cqcreate6_mrel0__0_idx" btree (_0)
+    "cqcreate6_mrel0_expr_idx" btree (hash_group(_1, _0))
 
 -- These use a combine state column
 CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, AVG(y::integer) AS int_avg, AVG(ts0::timestamp - ts1::timestamp) AS internal_avg FROM stream GROUP BY key;
@@ -231,7 +231,7 @@ View definition:
  internal_avg | interval           |           | plain    |              | 
  _2           | interval[]         |           | extended |              | 
 Indexes:
-    "cvavg_mrel0_key_idx" UNIQUE, btree (key)
+    "cvavg_mrel0_expr_idx" btree (hash_group(key))
 
 CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM stream;
 \d+ cvjson;
@@ -320,7 +320,7 @@ View definition:
  string_agg | text    |           | extended |              | 
  _0         | bytea   |           | extended |              | 
 Indexes:
-    "cvtext_mrel0_key_idx" UNIQUE, btree (key)
+    "cvtext_mrel0_expr_idx" btree (hash_group(key))
 
 -- Check for expressions containing aggregates
 CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM stream;
@@ -361,7 +361,7 @@ View definition:
  _2     | double precision[] |           | extended |              | 
  _1     | integer            |           | plain    |              | 
 Indexes:
-    "cqaggexpr2_mrel0_key_idx" UNIQUE, btree (key)
+    "cqaggexpr2_mrel0_expr_idx" btree (hash_group(key))
 
 CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
 \d+ cqaggexpr3;
@@ -385,7 +385,7 @@ View definition:
  value  | bigint                   |           | plain    |              | 
  _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
-    "cqaggexpr3_mrel0__0_idx" btree (_0)
+    "cqaggexpr3_mrel0_expr_idx" btree (hash_group(key, _0))
 
 CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM stream GROUP BY key;
 \d+ cqaggexpr4;
@@ -407,7 +407,7 @@ View definition:
  _0     | double precision   |           | plain    |              | 
  _1     | double precision[] |           | extended |              | 
 Indexes:
-    "cqaggexpr4_mrel0_key_idx" UNIQUE, btree (key)
+    "cqaggexpr4_mrel0_expr_idx" btree (hash_group(key))
 
 CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM stream GROUP BY k0, k1;
 \d+ cqgroupby
@@ -431,7 +431,7 @@ View definition:
  k1     | integer |           | plain    |              | 
  count  | bigint  |           | plain    |              | 
 Indexes:
-    "cqgroupby_mrel0_k1_idx" btree (k1)
+    "cqgroupby_mrel0_expr_idx" btree (hash_group(k0, k1))
 
 CREATE SCHEMA test_create_cont_view;
 CREATE CONTINUOUS VIEW test_create_cont_view.error AS SELECT k0::text FROM stream;
@@ -468,7 +468,7 @@ View definition:
  e      | double precision |           | plain    |              | 
  count  | bigint           |           | plain    |              | 
 Indexes:
-    "multigroupindex_mrel0_d_idx" btree (d)
+    "multigroupindex_mrel0_expr_idx" btree (hash_group(a, b, c, d, e))
 
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;

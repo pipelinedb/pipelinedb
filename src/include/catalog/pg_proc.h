@@ -5358,6 +5358,10 @@ DESCR("truncate timestamp with time zone to minute");
 DATA(insert OID = 4372 (  second	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 1184 "1184" _null_ _null_ _null_ _null_ timestamptz_second _null_ _null_ _null_ ));
 DESCR("truncate timestamp with time zone to second");
 
+DATA(insert OID = 4373 (  hash_group	   PGNSP PGUID 12 1 0 2276 0 f f f f f f i 1 0 23 "2276" "{2276}" "{v}" _null_ _null_ hash_group _null_ _null_ _null_ ));
+DESCR("hash one or more values into a 32-bit integer");
+#define HASH_GROUP_OID 4373
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
