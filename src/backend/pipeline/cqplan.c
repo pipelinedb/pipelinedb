@@ -149,10 +149,10 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 	/*
 	 * There are two cases we need to handle here:
 	 *
-	 * 1. If we're a worker process, we need to set any aggref output types
+	 * 1. If we're a worker process, we need to set any Aggref output types
 	 *    to the type of their transition out function, if the agg has one.
 	 *
-	 * 2. If we're a combiner process, we need to set the aggref's input
+	 * 2. If we're a combiner process, we need to set the A	ggref's input
 	 *    type to the output type of worker processes.
 	 */
 	foreach(lc, plan->targetlist)
@@ -176,7 +176,7 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 			AttrNumber hidden = 0;
 			Oid transtype;
 
-			/* The hidden column is always stored adjacent to the column for the aggref */
+			/* The hidden column is always stored adjacent to the column for the Aggref */
 			if (OidIsValid(hiddentype))
 				hidden = attno + 1;
 
@@ -213,7 +213,7 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 
 			aggref->aggtype = transtype;
 
-			/* CQs have their own way have handling DISTINCT */
+			/* CQs have their own way of handling DISTINCT */
 			aggref->aggdistinct = NIL;
 		}
 		else
@@ -221,10 +221,9 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 			if (ptype == CQCombiner)
 			{
 				/*
-				 * Replace any non-Aggref expression with a Var
-				 * which has the same type and this TargetEntry's expr
-				 * and its varattno is equal to the resno of this
-				 * TargetEntry.
+				 * Replace any non-Aggref expression with a Var which has the same type
+				 * as this TargetEntry's expr and its varattno is equal to the resno of
+				 * this TargetEntry.
 				 */
 				Var *var;
 				AttrNumber oldVarAttNo = 0;
@@ -238,7 +237,8 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 				{
 					Oid type = exprType((Node *) expr);
 					int32 typmod = exprTypmod((Node *) expr);
-					var = makeVar(OUTER_VAR, toappend->resno, type, typmod, InvalidOid, 0);
+					Oid typcoll = exprCollation((Node *) expr);
+					var = makeVar(1, toappend->resno, type, typmod, typcoll, 0);
 				}
 
 				var->varattno = attno;
@@ -257,6 +257,7 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 
 						get_sort_group_operators(exprType((Node *) var),
 								false, true, false, NULL, &eq, NULL, NULL);
+
 						agg->grpColIdx[i] = var->varattno;
 						agg->grpOperators[i] = eq;
 					}
@@ -282,9 +283,8 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 	 * we detect different orderings. Another option is to have strong guarantees about
 	 * attribute ordering when creating materialization tables which we can rely on here.
 	 *
-	 * For now, let's just explode if there is an
-	 * inconsistency detected here. This would be a shitty error for a user to get though,
-	 * because there's nothing they can do about it.
+	 * For now, let's just explode if there is an inconsistency detected here. This would
+	 * be a bad error for a user to get though, because there's nothing they can do about it.
 	 */
 	if (list_length(targetlist) != matdesc->natts)
 		elog(ERROR, "continuous query target list is inconsistent with materialization table schema");
