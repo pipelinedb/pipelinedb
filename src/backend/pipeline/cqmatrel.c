@@ -150,7 +150,8 @@ ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot, ESt
  *
  * Update an existing row of a CV materialization table.
  */
-void ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
+void
+ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 {
 	HeapTuple tup = ExecMaterializeSlot(slot);
 
@@ -163,7 +164,8 @@ void ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
  *
  * Insert a new row into a CV materialization table
  */
-void ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
+void
+ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 {
 	HeapTuple tup = ExecMaterializeSlot(slot);
 
