@@ -2592,6 +2592,17 @@ static struct config_int ConfigureNamesInt[] =
 		NULL, NULL, NULL
 	},
 
+	{
+		{"combiner_cache_mem", PGC_BACKEND, RESOURCES_MEM,
+			gettext_noop("Sets the maximum memory to be used by the combiner for caching. This is independent of combiner_work_mem."),
+			NULL,
+			GUC_UNIT_KB
+		},
+		&combiner_cache_mem,
+		32768, 0, MAX_KILOBYTES,
+		NULL, NULL, NULL
+	},
+
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, 0, 0, 0, NULL, NULL, NULL

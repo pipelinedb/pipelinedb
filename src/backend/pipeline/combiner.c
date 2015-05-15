@@ -39,6 +39,7 @@
 #include "pipeline/cqmatrel.h"
 #include "pipeline/cqplan.h"
 #include "pipeline/cqproc.h"
+#include "pipeline/groupcache.h"
 #include "pipeline/tuplebuf.h"
 #include "storage/proc.h"
 #include "tcop/tcopprot.h"
@@ -55,7 +56,10 @@
 static TupleBufferReader *reader = NULL;
 
 int combiner_work_mem = 16384;
+int combiner_cache_mem = 0;
 int combiner_synchronous_commit = SYNCHRONOUS_COMMIT_OFF;
+
+static GroupCache *cache = NULL;
 
 typedef struct CombineState
 {
@@ -160,7 +164,7 @@ prepare_combine_plan(PlannedStmt *plan, Tuplestorestate *store, TupleDesc *desc)
  * group columns that can be joined against with the matrel's existing groups.
  */
 static List *
-get_values(CombineState *cstate, Tuplestorestate *batch)
+get_values(CombineState *cstate, Tuplestorestate *batch, TupleHashTable existing)
 {
 	TupleTableSlot *slot = cstate->resultslot;
 	List *values = NIL;
@@ -179,6 +183,24 @@ get_values(CombineState *cstate, Tuplestorestate *batch)
 		List *tup = NIL;
 		FuncExpr *hash;
 		List *args = NIL;
+
+		/*
+		 * If we already have the physical tuple cached from a previous combine
+		 * call, then we don't need to look for it on disk. Instead, just add it
+		 * to the output that the on-disk tuples will eventually go to.
+		 */
+		if (cache)
+		{
+			bool isnew;
+			HeapTuple cached = GroupCacheGet(cache, slot);
+			if (cached)
+			{
+				HeapTupleEntry ex = (HeapTupleEntry) LookupTupleHashEntry(existing, slot, &isnew);
+
+				ex->tuple = cached;
+				continue;
+			}
+		}
 
 		for (i = 0; i < cstate->ngroupatts; i++)
 		{
@@ -353,7 +375,7 @@ get_cached_groups_plan(CombineState *cstate, List *values)
 	query = (Query *) linitial(qlist);
 	query->is_combine_lookup = true;
 
-	if (cstate->ngroupatts > 0)
+	if (cstate->ngroupatts > 0 && values)
 	{
 		Node *groups = get_groups(cstate, values, ps);
 		query->jointree = makeFromExpr(query->jointree->fromlist, groups);
@@ -406,7 +428,7 @@ static void
 select_existing_groups(CombineState *cstate, Tuplestorestate *batch, TupleHashTable existing)
 {
 	PlannedStmt *plan = NULL;
-	Portal portal;
+	Portal portal = NULL;
 	DestReceiver *dest;
 	HASH_SEQ_STATUS status;
 	HeapTupleEntry entry;
@@ -421,7 +443,15 @@ select_existing_groups(CombineState *cstate, Tuplestorestate *batch, TupleHashTa
 	 * so we don't need to do a VALUES-matrel join.
 	 */
 	if (cstate->isagg && cstate->ngroupatts > 0)
-		values = get_values(cstate, batch);
+	{
+		values = get_values(cstate, batch, existing);
+		/*
+		 * If we're grouping and there aren't any uncached values to look up,
+		 * there is no need to execute a query.
+		 */
+		if (!values)
+			goto finish;
+	}
 
 	plan = get_cached_groups_plan(cstate, values);
 
@@ -433,11 +463,11 @@ select_existing_groups(CombineState *cstate, Tuplestorestate *batch, TupleHashTa
 	portal->visible = false;
 
 	PortalDefineQuery(portal,
-					  NULL,
-					  NULL,
-					  "SELECT",
-					  list_make1(plan),
-					  NULL);
+						NULL,
+						NULL,
+						"SELECT",
+						list_make1(plan),
+						NULL);
 
 	dest = CreateDestReceiver(DestTupleTable);
 	SetTupleTableDestReceiverParams(dest, existing, CurrentMemoryContext, true);
@@ -450,6 +480,10 @@ select_existing_groups(CombineState *cstate, Tuplestorestate *batch, TupleHashTa
 					 dest,
 					 dest,
 					 NULL);
+
+	PortalDrop(portal, false);
+
+finish:
 
 	tuplestore_rescan(batch);
 	foreach_tuple(slot, batch)
@@ -481,8 +515,6 @@ select_existing_groups(CombineState *cstate, Tuplestorestate *batch, TupleHashTa
 		HeapTuple tup = (HeapTuple) lfirst(lc);
 		tuplestore_puttuple(batch, tup);
 	}
-
-	PortalDrop(portal, false);
 }
 
 /*
@@ -506,6 +538,8 @@ sync_combine(CombineState *cstate, Tuplestorestate *results, TupleHashTable exis
 	foreach_tuple(slot, results)
 	{
 		HeapTupleEntry update = NULL;
+		HeapTuple tup = NULL;
+
 		slot_getallattrs(slot);
 
 		if (existing)
@@ -516,22 +550,27 @@ sync_combine(CombineState *cstate, Tuplestorestate *results, TupleHashTable exis
 			/*
 			 * The slot has the updated values, so store them in the updatable physical tuple
 			 */
-			HeapTuple updated = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
+			tup = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
 					slot->tts_values, slot->tts_isnull, replace_all);
 
-			ExecStoreTuple(updated, slot, InvalidBuffer, false);
+			ExecStoreTuple(tup, slot, InvalidBuffer, false);
 			ExecCQMatRelUpdate(ri, slot, estate);
-			IncrementCQUpdate(1, HEAPTUPLESIZE + updated->t_len);
+			IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
 		}
 		else
 		{
+
 			/* No existing tuple found, so it's an INSERT */
 			ExecCQMatRelInsert(ri, slot, estate);
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 
+		if (cache)
+			GroupCachePut(cache, slot);
+
 		ResetPerTupleExprContext(estate);
 	}
+
 	CQMatViewClose(ri);
 	relation_close(rel, RowExclusiveLock);
 }
@@ -604,7 +643,7 @@ combine(CombineState *cstate, Tuplestorestate *batch)
  */
 static void
 init_combine_state(CombineState *cstate, char *cvname, PlannedStmt *plan,
-		TupleDesc desc, MemoryContext context, MemoryContext tmpcontext)
+		TupleDesc desc, TupleTableSlot *slot, MemoryContext context, MemoryContext tmpcontext)
 {
 	MemSet(cstate, 0, sizeof(CombineState));
 
@@ -663,6 +702,8 @@ init_combine_state(CombineState *cstate, char *cvname, PlannedStmt *plan,
 
 		heap_close(matrel, NoLock);
 		CQMatViewClose(ri);
+		cache = GroupCacheCreate(combiner_cache_mem * 1024, cstate->ngroupatts, cstate->groupatts,
+				cstate->groupops, slot, CurrentMemoryContext, cstate->tmpcontext);
 	}
 }
 
@@ -732,7 +773,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	batch = tuplestore_begin_heap(true, true, combiner_work_mem);
 	combineplan = prepare_combine_plan(queryDesc->plannedstmt, batch, &workerdesc);
 	slot = MakeSingleTupleTableSlot(workerdesc);
-	init_combine_state(&cstate, cvname, combineplan, workerdesc, runctx, tmpctx);
+	init_combine_state(&cstate, cvname, combineplan, workerdesc, slot, runctx, tmpctx);
 
 	MemoryContextSwitchTo(oldcontext);
 
