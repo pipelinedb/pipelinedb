@@ -5362,6 +5362,10 @@ DATA(insert OID = 4373 (  hash_group	   PGNSP PGUID 12 1 0 2276 0 f f f f f f i 
 DESCR("hash one or more values into a 32-bit integer");
 #define HASH_GROUP_OID 4373
 
+DATA(insert OID = 4374 (  ls_hash_group	   PGNSP PGUID 12 1 0 2276 0 f f f f f f i 1 0 20 "2276" "{2276}" "{v}" _null_ _null_ ls_hash_group _null_ _null_ _null_ ));
+DESCR("hash one or more values into a 64-bit integer using locality sensitive hashing");
+#define LS_HASH_GROUP_OID 4374
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
