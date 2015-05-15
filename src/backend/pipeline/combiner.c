@@ -31,6 +31,7 @@
 #include "optimizer/planner.h"
 #include "optimizer/tlist.h"
 #include "parser/parse_clause.h"
+#include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
 #include "parser/parse_expr.h"
 #include "parser/parse_type.h"
@@ -44,6 +45,7 @@
 #include "storage/proc.h"
 #include "tcop/tcopprot.h"
 #include "tcop/pquery.h"
+#include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
@@ -183,6 +185,7 @@ get_values(CombineState *cstate, Tuplestorestate *batch, TupleHashTable existing
 		List *tup = NIL;
 		FuncExpr *hash;
 		List *args = NIL;
+		Oid hashoid = HASH_GROUP_OID;
 
 		/*
 		 * If we already have the physical tuple cached from a previous combine
@@ -216,6 +219,9 @@ get_values(CombineState *cstate, Tuplestorestate *batch, TupleHashTable existing
 			length = typeLen(typeinfo);
 			ReleaseSysCache((HeapTuple) typeinfo);
 
+			if (TypeCategory(attr->atttypid) == TYPCATEGORY_DATETIME)
+				hashoid = LS_HASH_GROUP_OID;
+
 			d = slot_getattr(slot, groupattr, &isnull);
 			c = makeConst(attr->atttypid, attr->atttypmod,
 					attr->attcollation, length, d, isnull, attr->attbyval);
@@ -224,7 +230,7 @@ get_values(CombineState *cstate, Tuplestorestate *batch, TupleHashTable existing
 			tup = lappend(tup, c);
 		}
 
-		hash = makeFuncExpr(HASH_GROUP_OID, INT4OID, args, 0, 0, COERCE_EXPLICIT_CALL);
+		hash = makeFuncExpr(hashoid, get_func_rettype(hashoid), args, 0, 0, COERCE_EXPLICIT_CALL);
 		values = lappend(values, list_make1(hash));
 	}
 
@@ -693,7 +699,8 @@ init_combine_state(CombineState *cstate, char *cvname, PlannedStmt *plan,
 				continue;
 
 			func = (FuncExpr *) n;
-			if (func->funcid != HASH_GROUP_OID || list_length(func->args) != cstate->ngroupatts)
+			if ((func->funcid != HASH_GROUP_OID && func->funcid != LS_HASH_GROUP_OID) ||
+					list_length(func->args) != cstate->ngroupatts)
 				continue;
 
 			cstate->hashfunc = copyObject(func);

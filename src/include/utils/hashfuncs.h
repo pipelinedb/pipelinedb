@@ -15,5 +15,6 @@
 #include "fmgr.h"
 
 extern Datum hash_group(PG_FUNCTION_ARGS);
+extern Datum ls_hash_group(PG_FUNCTION_ARGS);
 
 #endif

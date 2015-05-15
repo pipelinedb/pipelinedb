@@ -39,6 +39,7 @@
 #include "nodes/pg_list.h"
 #include "optimizer/tlist.h"
 #include "parser/analyze.h"
+#include "parser/parse_coerce.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/cont_analyze.h"
@@ -142,6 +143,7 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
 	ListCell *lc;
 	List *args = NIL;
 	FuncExpr *hash;
+	Oid hashoid = HASH_GROUP_OID;
 
 	foreach(lc, query->groupClause)
 	{
@@ -169,6 +171,9 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
 		if (!found)
 			elog(ERROR, "could not find index attribute in tuple descriptor");
 
+		if (TypeCategory(attr->atttypid) == TYPCATEGORY_DATETIME)
+			hashoid = LS_HASH_GROUP_OID;
+
 		var = makeVar(1, attr->attnum, attr->atttypid, attr->atttypmod,
 				attr->attcollation, 0);
 
@@ -179,7 +184,7 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
 	 * We can only index on expressions having immutable results, so if any of the
 	 * grouping expressions are mutable, we can't use a hashed index.
 	 */
-	hash = makeFuncExpr(HASH_GROUP_OID, INT4OID, args, 0, 0, COERCE_EXPLICIT_CALL);
+	hash = makeFuncExpr(hashoid, get_func_rettype(hashoid), args, 0, 0, COERCE_EXPLICIT_CALL);
 
 	return (Node *) hash;
 }
