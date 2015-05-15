@@ -88,6 +88,9 @@ CREATE CONTINUOUS VIEW test_create_cont_view.error AS SELECT k0::text FROM strea
 CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM stream
 GROUP BY a, b, c, d, e;
 
+--A user-specified fillfactor should override the default
+CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM stream;
+
 \d+ multigroupindex;
 \d+ multigroupindex_mrel0;
 
