@@ -38,7 +38,7 @@
 #define SlotNext(slot) ((TupleBufferSlot *) SlotEnd(slot))
 #define NoUnreadSlots(reader) ((reader)->slot_id == (reader)->buf->head_id)
 #define SlotIsValid(slot) ((slot) && (slot)->magic == MAGIC)
-#define SlotEqualsTail(slot) ((slot) == (slot)->buf->tail && (slot)->id == (slot)->buf->tail_id)
+#define SlotEqualsTail(buf, slot) ((slot) == (buf)->tail && (slot)->id == (buf)->tail_id)
 #define HasEnoughSize(start, end, size) ((intptr_t) size <= ((intptr_t) end - (intptr_t) start))
 
 TupleBuffer *WorkerTupleBuffer = NULL;
@@ -88,7 +88,7 @@ static void try_move_tail(TupleBuffer *buf, TupleBufferSlot *tail)
 	 * If this slot was the tail, move tail ahead to the next slot that is not fully
 	 * unpinned.
 	 */
-	if (SlotEqualsTail(tail))
+	if (SlotEqualsTail(buf, tail))
 	{
 		while (!buf->tail->unread)
 		{
@@ -535,7 +535,7 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 
 	if (!slot->unread)
 	{
-		if (SlotEqualsTail(slot))
+		if (SlotEqualsTail(buf, slot))
 			try_move_tail(buf, slot);
 
 		return;
@@ -552,7 +552,7 @@ unpin_slot(int32_t cq_id, TupleBufferSlot *slot)
 	slot->unread = !bms_is_empty(slot->readers);
 	SpinLockRelease(&slot->mutex);
 
-	if (!slot->unread && SlotEqualsTail(slot))
+	if (!slot->unread && SlotEqualsTail(buf, slot))
 		try_move_tail(buf, slot);
 }
 
