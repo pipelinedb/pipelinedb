@@ -608,6 +608,9 @@
 #combiner_cache_mem = 32MB  # maximum memory to be used by the combiner for
                             # caching; this is independent of combiner_work_mem
 
+#continuous_view_fillfactor = 50 # Sets the default fillfactor to use for
+                                 # continuous views
+
 #------------------------------------------------------------------------------
 # CONFIG FILE INCLUDES
 #------------------------------------------------------------------------------
