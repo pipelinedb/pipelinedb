@@ -8318,10 +8318,11 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 		;
 
 create_cv_target:
-		qualified_name
+		qualified_name opt_reloptions
 				{
 					$$ = makeNode(IntoClause);
 					$$->rel = $1;
+					$$->options = $2;
 				}
 
 opt_check_option:

@@ -32,6 +32,7 @@
 #include "access/xact.h"
 #include "catalog/namespace.h"
 #include "commands/async.h"
+#include "commands/pipelinecmds.h"
 #include "commands/prepare.h"
 #include "commands/vacuum.h"
 #include "commands/variable.h"
@@ -2599,6 +2600,17 @@ static struct config_int ConfigureNamesInt[] =
 		},
 		&combiner_cache_mem,
 		32768, 0, MAX_KILOBYTES,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_view_fillfactor", PGC_BACKEND, QUERY_TUNING_OTHER,
+			gettext_noop("Sets the default fillfactor to use for continuous views. Defaults to 50."),
+			NULL,
+			GUC_UNIT_KB
+		},
+		&continuous_view_fillfactor,
+		50, 1, 100,
 		NULL, NULL, NULL
 	},
 
