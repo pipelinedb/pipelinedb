@@ -148,7 +148,7 @@ test: cont_hs_agg cont_sw_hs_agg cont_count_distinct  cont_hll_agg cont_os_agg c
 # ----------
 # Another group of parallel tests
 # ----------
-test: stream_table_join user_combine cont_limit cont_alter stream_targets
+test: stream_table_join user_combine cont_limit cont_alter stream_targets hash_group
 
 # ----------
 # Another group of parallel tests

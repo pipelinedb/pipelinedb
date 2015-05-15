@@ -206,7 +206,7 @@ View definition:
  _1     | text(0)                  |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
-    "cqcreate6_mrel0_expr_idx" btree (hash_group(_1, _0))
+    "cqcreate6_mrel0_expr_idx" btree (ls_hash_group(_1, _0))
 Options: fillfactor=50
 
 -- These use a combine state column
@@ -400,7 +400,7 @@ View definition:
  value  | bigint                   |           | plain    |              | 
  _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
-    "cqaggexpr3_mrel0_expr_idx" btree (hash_group(key, _0))
+    "cqaggexpr3_mrel0_expr_idx" btree (ls_hash_group(key, _0))
 Options: fillfactor=50
 
 CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM stream GROUP BY key;
