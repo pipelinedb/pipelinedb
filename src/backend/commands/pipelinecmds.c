@@ -61,6 +61,11 @@
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
 
+#define DEFAULT_FILLFACTOR 50
+#define OPTION_FILLFACTOR "fillfactor"
+
+int continuous_view_fillfactor = DEFAULT_FILLFACTOR;
+
 static ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)
 {
@@ -82,6 +87,46 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 	result->typeName = typename;
 
 	return result;
+}
+
+/*
+ * has_fillfactor
+ *
+ * Returns true if a fillfactor option is included in the given WITH options
+ */
+static bool
+has_fillfactor(List *options)
+{
+	ListCell *lc;
+
+	foreach(lc, options)
+	{
+		DefElem *de;
+
+		if (!IsA(lfirst(lc), DefElem))
+			continue;
+
+		de = (DefElem *) lfirst(lc);
+		if (de->defname && pg_strcasecmp(de->defname, OPTION_FILLFACTOR) == 0)
+			return true;
+	}
+
+	return false;
+}
+
+/*
+ * make_default_fillfactor
+ *
+ * Return a fillfactor DefElem with the default fillfactor
+ */
+static List *
+add_default_fillfactor(List *options)
+{
+	DefElem *ff = makeDefElem(OPTION_FILLFACTOR, (Node *) makeInteger(continuous_view_fillfactor));
+
+	options = lappend(options, (Node *) ff);
+
+	return options;
 }
 
 /*
@@ -316,6 +361,9 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 			tableElts = lappend(tableElts, hidden);
 		}
 	}
+
+	if (!has_fillfactor(stmt->into->options))
+		stmt->into->options = add_default_fillfactor(stmt->into->options);
 
 	/*
 	 * Create the actual underlying materialzation relation.
