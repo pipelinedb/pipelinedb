@@ -297,7 +297,7 @@ SELECT * FROM test_st_astwkbagg3 ORDER BY id;
   9 | \x238a01751406c2538823c00a06bf41a31d9701068654fa25bd03068d5dc006920806dc16dd1c630682069a04f30106a82aa40fd705068d0aab178a03068511e416860406cb20ba10cb0406b64ff11bdf0506cb01e515800806e702d61ab70706f91bd419d40c06e13efc03c70d06ca5ea31ba00406cd0711a10406a0099d1a0d06f9168e2a7a06f814ab2dbe03
 (10 rows)
 
-SELECT id, array_length("topology.topoelementarray_agg", 1) FROM test_topo_agg ORDER BY id;
+SELECT id, array_length(topoelementarray_agg, 1) FROM test_topo_agg ORDER BY id;
  id | array_length 
 ----+--------------
   0 |           10
@@ -398,7 +398,7 @@ SELECT * FROM test_sw_st_3dextent ORDER BY id;
   9 | BOX3D(2.91021644 3.69842634 1.21797543,65.32102229 40.62696069 9.97659494)
 (10 rows)
 
-SELECT id, array_length("topology.topoelementarray_agg", 1) FROM test_sw_topo_agg ORDER BY id;
+SELECT id, array_length(topoelementarray_agg, 1) FROM test_sw_topo_agg ORDER BY id;
  id | array_length 
 ----+--------------
   0 |           10
