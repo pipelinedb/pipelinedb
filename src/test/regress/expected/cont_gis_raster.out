@@ -401,49 +401,49 @@ SELECT * FROM test_sw_st_samealignment;
 (1 row)
 
 SELECT * FROM test_st_union_raster0;
-        st_union        
+         box3d          
 ------------------------
  BOX3D(0 -9.9 0,10 0 0)
 (1 row)
 
 SELECT * FROM test_st_union_raster1;
-        st_union        
+         box3d          
 ------------------------
  BOX3D(0 -9.9 0,10 0 0)
 (1 row)
 
 SELECT * FROM test_st_union_raster2;
-        st_union        
+         box3d          
 ------------------------
  BOX3D(0 -9.9 0,10 0 0)
 (1 row)
 
 SELECT * FROM test_st_union_raster3;
-        st_union        
+         box3d          
 ------------------------
  BOX3D(0 -9.9 0,10 0 0)
 (1 row)
 
 SELECT * FROM  test_sw_st_union_raster0;
-        st_union        
+         box3d          
 ------------------------
  BOX3D(0 -9.9 0,10 0 0)
 (1 row)
 
 SELECT * FROM  test_sw_st_union_raster1;
-        st_union        
+         box3d          
 ------------------------
  BOX3D(0 -9.9 0,10 0 0)
 (1 row)
 
 SELECT * FROM  test_sw_st_union_raster2;
-        st_union        
+         box3d          
 ------------------------
  BOX3D(0 -9.9 0,10 0 0)
 (1 row)
 
 SELECT * FROM  test_sw_st_union_raster3;
-        st_union        
+         box3d          
 ------------------------
  BOX3D(0 -9.9 0,10 0 0)
 (1 row)
