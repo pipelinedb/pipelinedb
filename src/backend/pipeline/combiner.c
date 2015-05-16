@@ -521,6 +521,8 @@ finish:
 		HeapTuple tup = (HeapTuple) lfirst(lc);
 		tuplestore_puttuple(batch, tup);
 	}
+
+	hash_destroy(batchgroups->hashtab);
 }
 
 /*
@@ -577,6 +579,7 @@ sync_combine(CombineState *cstate, Tuplestorestate *results, TupleHashTable exis
 		ResetPerTupleExprContext(estate);
 	}
 
+	FreeExecutorState(estate);
 	CQMatViewClose(ri);
 	relation_close(rel, RowExclusiveLock);
 }
