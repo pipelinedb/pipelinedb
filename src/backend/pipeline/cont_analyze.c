@@ -770,6 +770,7 @@ ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql)
 		foreach(lc2, select->targetList)
 		{
 			ResTarget *res = (ResTarget *) lfirst(lc2);
+			char *name = res->name ? res->name : FigureColname(res->val);
 
 			if (contains_node((Node *) res, (Node *) cref))
 			{
@@ -777,7 +778,7 @@ ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql)
 				break;
 			}
 
-			if (res->name && pg_strcasecmp(qualname, res->name) == 0)
+			if (pg_strcasecmp(qualname, name) == 0)
 				refs_target = true;
 		}
 

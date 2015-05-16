@@ -787,7 +787,7 @@ IsResTargetForColumnRef(Node *node, ColumnRef *cref)
 	if (IsA(node, ResTarget))
 	{
 		ResTarget *res = (ResTarget *) node;
-		if (res->name != NULL && strcmp(res->name, FigureColname((Node *) cref)) == 0)
+		if (res->name != NULL && pg_strcasecmp(res->name, FigureColname((Node *) cref)) == 0)
 		{
 			/*
 			 * Is this ResTarget overriding a column it references?
@@ -1156,6 +1156,23 @@ add_forced_types(SelectStmt *stmt, CQAnalyzeContext *context)
 }
 
 /*
+ * name_res_targets
+ *
+ * Give each ResTarget in the targetlist a name if it doesn't already have one
+ */
+static void
+name_res_targets(List *tlist)
+{
+	ListCell *lc;
+	foreach(lc, tlist)
+	{
+		ResTarget *res = (ResTarget *) lfirst(lc);
+		if (res->name == NULL)
+			res->name = FigureColname(res->val);
+	}
+}
+
+/*
  * GetSelectStmtForCQWorker
  *
  * Get the SelectStmt that should be executed by the
@@ -1187,6 +1204,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	InitializeCQAnalyzeContext(stmt, NULL, &context);
 	AssociateTypesToColumRefs((Node *) stmt, &context);
 	type_cast_all_column_refs((Node *) stmt, &context);
+	name_res_targets(stmt->targetList);
 
 	workerstmt = (SelectStmt *) copyObject(stmt);
 	viewstmt = (SelectStmt *) makeNode(SelectStmt);
