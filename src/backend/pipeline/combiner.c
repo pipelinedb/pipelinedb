@@ -77,10 +77,12 @@ typedef struct CombineState
 	RangeVar *matrel;
 	/* descriptor of the materialization table */
 	TupleDesc cvdesc;
-	/* temporary context for combiner */
-	MemoryContext tmpcontext;
 	/* context that lives for the duration of the combiner proc */
 	MemoryContext context;
+	/* context to keep the cached lookup plan in */
+	MemoryContext plancontext;
+	/* temporary context for combiner */
+	MemoryContext tmpcontext;
 	/* true if the combine plan aggregates */
 	bool isagg;
 	/* slot for combine plan result tuples */
@@ -182,7 +184,6 @@ get_values(CombineState *cstate, Tuplestorestate *batch, TupleHashTable existing
 	 */
 	foreach_tuple(slot, batch)
 	{
-		List *tup = NIL;
 		FuncExpr *hash;
 		List *args = NIL;
 		Oid hashoid = HASH_GROUP_OID;
@@ -227,7 +228,6 @@ get_values(CombineState *cstate, Tuplestorestate *batch, TupleHashTable existing
 					attr->attcollation, length, d, isnull, attr->attbyval);
 
 			args = lappend(args, c);
-			tup = lappend(tup, c);
 		}
 
 		hash = makeFuncExpr(hashoid, get_func_rettype(hashoid), args, 0, 0, COERCE_EXPLICIT_CALL);
@@ -360,9 +360,6 @@ get_cached_groups_plan(CombineState *cstate, List *values)
 
 	/* cache miss, plan the query */
 
-	if (cstate->groupsplan != NULL)
-		pfree(cstate->groupsplan);
-
 	sel = makeNode(SelectStmt);
 	res = makeNode(ResTarget);
 	star = makeNode(A_Star);
@@ -389,6 +386,8 @@ get_cached_groups_plan(CombineState *cstate, List *values)
 	}
 
 	plan = pg_plan_query(query, 0, NULL);
+
+	MemoryContextReset(cstate->context);
 
 	old = MemoryContextSwitchTo(cstate->context);
 	cstate->groupsplan = copyObject(plan);
@@ -652,7 +651,7 @@ combine(CombineState *cstate, Tuplestorestate *batch)
  */
 static void
 init_combine_state(CombineState *cstate, char *cvname, PlannedStmt *plan,
-		TupleDesc desc, TupleTableSlot *slot, MemoryContext context, MemoryContext tmpcontext)
+		TupleDesc desc, TupleTableSlot *slot, MemoryContext tmpcontext)
 {
 	MemSet(cstate, 0, sizeof(CombineState));
 
@@ -660,11 +659,15 @@ init_combine_state(CombineState *cstate, char *cvname, PlannedStmt *plan,
 	cstate->cv = plan->cq_target;
 	cstate->matrel = makeRangeVar(NULL, NameStr(plan->cq_state->matrelname), -1);
 	cstate->cvdesc = desc;
-	cstate->context = context;
 	cstate->tmpcontext = tmpcontext;
 	cstate->resultslot = MakeSingleTupleTableSlot(cstate->cvdesc);
 	cstate->isagg = false;
 	cstate->groupsplan = NULL;
+	cstate->context = AllocSetContextCreate(CurrentMemoryContext,
+			"CombinerStateContext",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
 
 	if (IsA(plan->planTree, Agg))
 	{
@@ -783,7 +786,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	batch = tuplestore_begin_heap(true, true, combiner_work_mem);
 	combineplan = prepare_combine_plan(queryDesc->plannedstmt, batch, &workerdesc);
 	slot = MakeSingleTupleTableSlot(workerdesc);
-	init_combine_state(&cstate, cvname, combineplan, workerdesc, slot, runctx, tmpctx);
+	init_combine_state(&cstate, cvname, combineplan, workerdesc, slot, tmpctx);
 
 	MemoryContextSwitchTo(oldcontext);
 
