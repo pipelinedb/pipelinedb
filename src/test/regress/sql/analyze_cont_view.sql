@@ -181,6 +181,8 @@ WINDOW w AS (ORDER BY minute DESC ROWS 4 PRECEDING);
 
 \d+ over_5m;
 
+CREATE CONTINUOUS VIEW funcs AS SELECT floor(x::float8), date_trunc('day', arrival_timestamp), COUNT(*) FROM stream GROUP BY floor, date_trunc;
+
 DROP CONTINUOUS VIEW cqanalyze0;
 DROP CONTINUOUS VIEW cqanalyze1;
 DROP CONTINUOUS VIEW cqanalyze2;
@@ -237,6 +239,7 @@ DROP CONTINUOUS VIEW cvnotice0;
 DROP CONTINUOUS VIEW cvnotice1;
 DROP CONTINUOUS VIEW cvnotice2;
 DROP CONTINUOUS VIEW cvnotice3;
+DROP CONTINUOUS VIEW funcs;
 
 -- Regression
 CREATE CONTINUOUS VIEW cqregress1 AS SELECT id::integer + avg(id) FROM stream GROUP BY id;
