@@ -38,6 +38,7 @@
 
 #include "access/transam.h"
 #include "access/twophase.h"
+#include "catalog/pipeline_query.h"
 #include "access/xact.h"
 #include "miscadmin.h"
 #include "postmaster/autovacuum.h"
@@ -1045,8 +1046,8 @@ ProcSleep(LOCALLOCK *locallock, LockMethod lockMethodTable)
 			IsCQBackgroundProcess)
 		{
 			Assert(LockCheckConflicts(lockMethodTable, lockmode, lock, proclock) == STATUS_OK);
-			Assert(lock->tag->locktag_type == LOCKTAG_RELATION);
-			Assert(lock->tag->locktag_field2 == PipelineQueryRelationId);
+			Assert(lock->tag.locktag_type == LOCKTAG_RELATION);
+			Assert(lock->tag.locktag_field2 == PipelineQueryRelationId);
 
 			/* Skip the wait and just grant myself the lock. */
 			GrantLock(lock, proclock, lockmode);

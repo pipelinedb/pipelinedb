@@ -577,7 +577,7 @@ AddProjectionsAndGroupBysForWindows(SelectStmt *workerstmt, SelectStmt *viewstmt
 		Assert(doesViewAggregate);
 
 		get_window_defs(workerstmt, context);
-		Assert(list_length(context->windows) > 1);
+		Assert(list_length(context->windows) > 0);
 
 		wdef = (WindowDef *) linitial(context->windows);
 

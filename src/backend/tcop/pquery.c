@@ -1455,6 +1455,8 @@ PortalRunContinuous(Portal portal, bool isTopLevel,
 	/* run the plan fo-eva */
 	ExecutorRunContinuous(portal, queryDesc, resowner);
 
+	MemoryContextSwitchTo(PortalGetHeapMemory(portal));
+
 	Assert(PortalGetHeapMemory(portal) == CurrentMemoryContext);
 	MemoryContextDeleteChildren(PortalGetHeapMemory(portal));
 }
