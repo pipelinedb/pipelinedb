@@ -973,10 +973,15 @@ exec_simple_query(const char *query_string)
 	{
 		Node *parsetree = (Node *) lfirst(parsetree_item);
 
+		if (IsAbortedTransactionBlockState() && !IsTransactionExitStmt(parsetree))
+		{
+			tmp_list = parsetree_list;
+			break;
+		}
+
 		if (IsA(parsetree, InsertStmt))
 		{
 			InsertStmt *ins = (InsertStmt *) parsetree;
-
 			if (InsertTargetIsStream(ins))
 			{
 				exec_stream_inserts(ins, NULL, NIL);
@@ -1061,7 +1066,7 @@ exec_simple_query(const char *query_string)
 		{
 			char *tag;
 			int count = 0;
-			StringInfo buf = makeStringInfo();
+			StringInfo buf;
 
 			if (IsA(parsetree, ActivateContinuousViewStmt))
 			{
@@ -1074,6 +1079,7 @@ exec_simple_query(const char *query_string)
 				count = ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
 			}
 
+			buf = makeStringInfo();
 			appendStringInfo(buf, tag, count);
 			EndCommand(buf->data, dest);
 			finish_xact_command();

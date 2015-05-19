@@ -109,7 +109,6 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 	MemoryContext oldcontext;
 	int timeoutms = state->maxwaitms;
 	MemoryContext runcontext;
-	MemoryContext xactcontext;
 	CQProcEntry *entry = GetCQProcEntry(MyCQId);
 	ResourceOwner cqowner = ResourceOwnerCreate(NULL, "CQResourceOwner");
 	bool savereadonly = XactReadOnly;
@@ -127,17 +126,13 @@ ContinuousQueryWorkerRun(Portal portal, ContinuousViewState *state, QueryDesc *q
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	oldcontext = MemoryContextSwitchTo(runcontext);
-
-	xactcontext = TopTransactionContext;
-	TopTransactionContext = runcontext;
-
 	elog(LOG, "\"%s\" worker %d running", queryDesc->plannedstmt->cq_target->relname, MyProcPid);
-
 	MarkWorkerAsRunning(MyCQId, MyWorkerId);
 	pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
 
 	TupleBufferInitLatch(WorkerTupleBuffer, MyCQId, MyWorkerId, &MyProc->procLatch);
+
+	oldcontext = MemoryContextSwitchTo(runcontext);
 
 retry:
 	PG_TRY();
@@ -162,11 +157,11 @@ retry:
 				ALLOCSET_DEFAULT_INITSIZE,
 				ALLOCSET_DEFAULT_MAXSIZE);
 
-		/*
-		 * startup tuple receiver, if we will be emitting tuples
-		 */
 		estate->es_lastoid = InvalidOid;
 
+		/*
+		 * Startup combiner receiver
+		 */
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
 		for (;;)
@@ -189,13 +184,10 @@ retry:
 			TupleBufferResetNotify(WorkerTupleBuffer, MyCQId, MyWorkerId);
 
 			if (xact_commit)
-			{
 				StartTransactionCommand();
-				set_snapshot(estate, cqowner);
-			}
 
+			set_snapshot(estate, cqowner);
 			CurrentResourceOwner = cqowner;
-
 			MemoryContextSwitchTo(estate->es_query_cxt);
 
 			estate->es_processed = 0;
@@ -208,12 +200,7 @@ retry:
 					true, 0, timeoutms, ForwardScanDirection, dest);
 
 			IncrementCQExecutions(1);
-
 			TupleBufferClearPinnedSlots();
-			MemoryContextReset(CQExecutionContext);
-
-			MemoryContextSwitchTo(runcontext);
-			CurrentResourceOwner = cqowner;
 
 			if (state->long_xact)
 			{
@@ -223,13 +210,16 @@ retry:
 					xact_commit = false;
 			}
 
+			unset_snapshot(estate, cqowner);
 			if (xact_commit)
 			{
-				unset_snapshot(estate, cqowner);
 				CommitTransactionCommand();
-
 				last_commit = GetCurrentTimestamp();
 			}
+
+			MemoryContextResetAndDeleteChildren(CQExecutionContext);
+			MemoryContextSwitchTo(runcontext);
+			CurrentResourceOwner = cqowner;
 
 			if (estate->es_processed || estate->es_filtered)
 			{
@@ -299,15 +289,10 @@ retry:
 
 	(*dest->rShutdown) (dest);
 
-	TopTransactionContext = xactcontext;
-
-	MemoryContextDelete(runcontext);
 	MemoryContextSwitchTo(oldcontext);
+	MemoryContextDelete(runcontext);
 
 	XactReadOnly = savereadonly;
-
-	if (queryDesc->totaltime)
-		InstrStopNode(queryDesc->totaltime, estate->es_processed);
 
 	/*
 	 * Remove proc-level stats

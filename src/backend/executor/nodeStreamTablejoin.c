@@ -358,8 +358,6 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 				/*
 				 * First time through: build hash table for inner relation.
 				 */
-				Assert(hashtable == NULL);
-
 				if (HJ_FILL_INNER(node))
 				{
 					/* no chance to not build the hash table */

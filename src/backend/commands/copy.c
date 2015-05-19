@@ -917,7 +917,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	 * got; if writing, we should hold the lock until end of transaction to
 	 * ensure that updates will be committed before lock is released.
 	 */
-	if (!cstate->to_stream && rel != NULL)
+	if (rel != NULL && rel->rd_refcnt > 0)
 		heap_close(rel, (is_from ? NoLock : AccessShareLock));
 
 	return relid;

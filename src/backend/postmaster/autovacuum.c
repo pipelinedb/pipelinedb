@@ -617,10 +617,10 @@ AutoVacLauncherMain(int argc, char *argv[])
 		heap_endscan(scan);
 		heap_close(rel, AccessShareLock);
 
-		CommitTransactionCommand();
-
 		/* activate all continuous views marked as active */
 		RestartContinuousQueryProcs(databases);
+
+		CommitTransactionCommand();
 	}
 
 	for (;;)

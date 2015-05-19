@@ -193,3 +193,4 @@ DROP CONTINUOUS VIEW test_float8_avg_sw;
 DROP CONTINUOUS VIEW test_float4_avg_sw;
 DROP CONTINUOUS VIEW test_numeric_avg_sw;
 DROP CONTINUOUS VIEW test_interval_avg_sw;
+DROP CONTINUOUS VIEW avg_heart_rates;

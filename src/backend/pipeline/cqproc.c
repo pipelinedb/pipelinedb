@@ -47,6 +47,7 @@
 #include "utils/memutils.h"
 #include "utils/portal.h"
 #include "utils/rel.h"
+#include "utils/snapmgr.h"
 #include "utils/syscache.h"
 
 #define SLEEP_TIMEOUT (2 * 1000)
@@ -412,8 +413,12 @@ cq_bg_main(Datum d, char *additional, Size additionalsize)
 	cvname = NameStr(args->cvname);
 	matrelname = NameStr(args->state.matrelname);
 
+	PushActiveSnapshot(GetTransactionSnapshot());
+
 	sql = pstrdup(args->query);
 	plan = GetCQPlan(cvname, sql, &args->state, matrelname);
+
+	PopActiveSnapshot();
 
 	/*
 	 * 2. Set up the portal to run it in

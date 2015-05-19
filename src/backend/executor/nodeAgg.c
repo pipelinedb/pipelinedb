@@ -1665,7 +1665,6 @@ get_aggref_resno(Aggref *aggref, List *targetlist)
 		 * We're using pointer equality instead of equal() here because
 		 * we want the resno of the actual Aggref that the caller gave us,
 		 * not simply any Aggref equal() to it.
-		 *
 		 */
 		ar = (Aggref *) te->expr;
 		if (aggref == ar)
@@ -1909,7 +1908,9 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		peraggstate = &peragg[++aggno];
 
 		resno = get_aggref_resno(aggref, ((Plan *) node)->targetlist);
-		aggstate->resno_to_aggno[resno - 1] = aggno;
+
+		if (AttributeNumberIsValid(resno))
+			aggstate->resno_to_aggno[resno - 1] = aggno;
 
 		/* Mark Aggref state node with assigned index in the result array */
 		aggrefstate->aggno = aggno;
