@@ -373,7 +373,7 @@ get_cached_groups_plan(CombineState *cstate, List *values)
 	ps = make_parsestate(NULL);
 	transformFromClause(ps, sel->fromClause);
 
-	qlist = pg_analyze_and_rewrite((Node *) sel, NULL, NULL, 0);
+	qlist = pg_analyze_and_rewrite((Node *) sel, cstate->matrel->relname, NULL, 0);
 	query = (Query *) linitial(qlist);
 	query->is_combine_lookup = true;
 
@@ -468,7 +468,7 @@ select_existing_groups(CombineState *cstate, Tuplestorestate *batch, TupleHashTa
 
 	PortalDefineQuery(portal,
 						NULL,
-						NULL,
+						cstate->matrel->relname,
 						"SELECT",
 						list_make1(plan),
 						NULL);
@@ -613,7 +613,7 @@ combine(CombineState *cstate, Tuplestorestate *batch)
 
 	PortalDefineQuery(portal,
 					  NULL,
-					  NULL,
+					  cstate->matrel->relname,
 					  "SELECT",
 					  list_make1(cstate->plan),
 					  NULL);
@@ -947,8 +947,8 @@ retry:
 	TupleBufferCloseReader(reader);
 	TupleBufferClearReaders();
 
-	MemoryContextDelete(runctx);
 	MemoryContextSwitchTo(oldcontext);
+	MemoryContextDelete(runctx);
 
 	/*
 	 * Remove proc-level stats

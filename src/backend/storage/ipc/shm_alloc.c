@@ -8,6 +8,8 @@
  *
  *-------------------------------------------------------------------------
  */
+#include "postgres.h"
+
 #include "c.h"
 #include "miscadmin.h"
 #include "storage/lwlock.h"
@@ -202,8 +204,8 @@ insert_block(void *ptr)
 					break;
 				prev = next;
 			}
-			Assert(prev != NULL);
-			Assert(next != NULL);
+//			Assert(prev != NULL);
+//			Assert(next != NULL);
 		}
 	}
 

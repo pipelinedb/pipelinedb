@@ -346,7 +346,7 @@ get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewStat
 		cunique->unique.plan.type = T_ContinuousUnique;
 		plan->planTree = (Plan *) cunique;
 
-		Assert(IsA(result->planTree->lefttree, Sort));
+		Assert(IsA(plan->planTree->lefttree, Sort));
 		/* Strip out the sort since its not needed */
 		plan->planTree->lefttree = plan->planTree->lefttree->lefttree;
 	}

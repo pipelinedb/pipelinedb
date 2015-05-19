@@ -5609,14 +5609,13 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 		Assert(refname == NULL);
 	}
 
-	if (attnum == InvalidAttrNumber)
+	if (attnum == InvalidAttrNumber || context->iscombine)
 		attname = NULL;
 	else if (attnum > 0)
 	{
 		/* Get column name to use from the colinfo struct */
 		Assert(attnum <= colinfo->num_cols);
-		if (!context->iscombine)
-			attname = colinfo->colnames[attnum - 1];
+		attname = colinfo->colnames[attnum - 1];
 		Assert(attname != NULL);
 	}
 	else

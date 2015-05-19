@@ -109,14 +109,10 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 	}
 	else
 	{
-		List *vars = pull_var_clause((Node *) root->parse->targetList,
-				PVC_RECURSE_AGGREGATES, PVC_INCLUDE_PLACEHOLDERS);
+		/* it's a stream, get the stream's RTE to look at the number of inferred attributes */
+		RangeTblEntry *rte = root->simple_rte_array[rel->relid];
 
-		/*
-		 * If we're selecting COUNT(*) from a stream, there won't be any Vars
-		 * in the TL, so make sure we have room for at least one attribute.
-		 */
-		max_attr = Max(1, list_length(vars));
+		max_attr = rte->streamdesc->desc->natts;
 	}
 
 	rel->min_attr = relation ? FirstLowInvalidHeapAttributeNumber + 1 : 0;
