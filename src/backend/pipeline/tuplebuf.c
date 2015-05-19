@@ -415,7 +415,7 @@ TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8
 void
 TupleBufferCloseReader(TupleBufferReader *reader)
 {
-	MyReaders = list_delete(MyReaders, reader);
+	MyReaders = list_delete_ptr(MyReaders, reader);
 	pfree(reader);
 }
 
@@ -480,7 +480,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 
 	LWLockRelease(reader->buf->tail_lock);
 
-	Assert(SlotIsValid(slot));
+	Assert(SlotIsValid(reader->slot));
 
 	oldcontext = MemoryContextSwitchTo(CQExecutionContext);
 
