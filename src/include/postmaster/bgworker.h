@@ -59,7 +59,7 @@
 #define BGWORKER_BACKEND_DATABASE_CONNECTION		0x0002
 
 
-typedef void (*bgworker_main_type) (Datum main_arg, char *additionalarg, Size additionalsize);
+typedef void (*bgworker_main_type) (Datum main_arg);
 
 /*
  * Points in time at which a bgworker can request to be started
@@ -86,15 +86,8 @@ typedef struct BackgroundWorker
 	char		bgw_library_name[BGW_MAXLEN];	/* only if bgw_main is NULL */
 	char		bgw_function_name[BGW_MAXLEN];	/* only if bgw_main is NULL */
 	Datum		bgw_main_arg;
-	char		bgw_additional_arg[BGW_ADDITIONAL_LEN];
-	Size		bgw_additional_size;
 	pid_t		bgw_notify_pid; /* SIGUSR1 this backend on start/stop */
 
-	/*
-	   Continuous view id. This is used to index
-	   into a hash table of CV meta data.
-	 */
-	int32 bgw_cvid;
 	/*
 	 * Don't try to restart this worker if it crashes
 	 *

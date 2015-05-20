@@ -495,17 +495,8 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	 */
 	if (isStream)
 	{
-		Relation stream;
 		char *sname = stmt->relation->relname;
-
-		if (!IsWritableStream(sname))
-			ereport(ERROR,
-					(errcode(ERRCODE_INACTIVE_STREAM),
-					errmsg("stream \"%s\" is currently not being read", sname),
-					errhint("Activate some continuous view reading from \"%s\".", sname),
-					parser_errposition(pstate, stmt->relation->location)));
-
-		stream = (Relation) palloc0(sizeof(RelationData));
+		Relation stream = (Relation) palloc0(sizeof(RelationData));
 		stream->rd_att = GetStreamTupleDesc(sname, stmt->cols);
 		stream->rd_rel = palloc0(sizeof(FormData_pg_class));
 		stream->rd_rel->relnatts = stream->rd_att->natts;

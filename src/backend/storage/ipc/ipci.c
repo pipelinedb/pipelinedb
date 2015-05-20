@@ -40,6 +40,7 @@
 #include "storage/proc.h"
 #include "storage/procarray.h"
 #include "storage/procsignal.h"
+#include "storage/shm_alloc.h"
 #include "storage/sinvaladt.h"
 #include "storage/spin.h"
 
@@ -144,10 +145,10 @@ CreateSharedMemoryAndSemaphores(bool makePrivate, int port)
 		addin_request_allowed = false;
 		size = add_size(size, total_addin_request);
 
+		size = add_size(size, TupleBuffersShmemSize());
+
 		/* might as well round it off to a multiple of a typical page size */
 		size = add_size(size, 8192 - (size % 8192));
-
-		size = add_size(size, TupleBuffersShmemSize());
 
 		elog(DEBUG3, "invoking IpcMemoryCreate(size=%zu)", size);
 
@@ -266,4 +267,7 @@ CreateSharedMemoryAndSemaphores(bool makePrivate, int port)
 	 */
 	if (shmem_startup_hook)
 		shmem_startup_hook();
+
+	/* Initialize PipelineDB modules that need shared memory space */
+	PipelineShmemInit();
 }

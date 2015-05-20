@@ -123,7 +123,7 @@ test: sw_vacuum
 # ----------
 # Another group of parallel tests
 # ----------
-test: analyze_cont_view create_cont_view activate_cont_view cont_view_sanity cont_window
+test: analyze_cont_view create_cont_view cont_view_sanity cont_window
 
 # ----------
 # Another group of parallel tests
@@ -143,7 +143,7 @@ test: cont_sw_bool_agg cont_sw_min_max cont_sw_object_agg cont_sw_regr cont_sw_s
 # ----------
 # Another group of parallel tests
 # ----------
-test: cont_hs_agg cont_sw_hs_agg cont_count_distinct  cont_hll_agg cont_os_agg cont_sw_os_agg cont_sw_count
+test: cont_hs_agg cont_sw_hs_agg cont_distinct cont_hll_agg cont_os_agg cont_sw_os_agg cont_sw_count
 
 # ----------
 # Another group of parallel tests
@@ -172,8 +172,3 @@ test: cont_gis_geom
 # Another group of parallel tests
 # ----------
 test:  cont_gis_raster
-
-# ----------
-# Another group of parallel tests
-# ----------
-test: cont_proc_latch

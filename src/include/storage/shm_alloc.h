@@ -10,7 +10,7 @@
 #ifndef SHM_ALLOC_H
 #define SHM_ALLOC_H
 
-extern void InitShmemDynAllocator(void);
+extern void ShmemDynAllocShmemInit(void);
 
 extern void *ShmemDynAlloc(Size size);
 extern void *ShmemDynAlloc0(Size size);

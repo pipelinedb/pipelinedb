@@ -44,31 +44,31 @@ START_TEST(test_murmurhash64a)
 	float8 fk8;
 	uint64 h = MurmurHash3_64(k, strlen(k) + 1, MURMUR_SEED);
 
-	ck_assert_uint_eq(h, 5413312395049998591);
+	ck_assert_uint_eq(h, 12492017329703566690U);
 
 	k = "another key";
 	h = MurmurHash3_64(k, strlen(k) + 1, MURMUR_SEED);
-	ck_assert_uint_eq(h, 1315362163169748446U);
+	ck_assert_uint_eq(h, 9755190654619219245U);
 
 	fk8 = 42.42;
 	h = MurmurHash3_64(&fk8, 8, MURMUR_SEED);
-	ck_assert_uint_eq(h, 758775358900077568U);
+	ck_assert_uint_eq(h, 8641623225819217255U);
 
 	ik = 42;
 	h = MurmurHash3_64(&ik, 4, MURMUR_SEED);
-	ck_assert_uint_eq(h, 13462425845129963738U);
+	ck_assert_uint_eq(h, 7381808292743968275U);
 
 	ik = 0;
 	h = MurmurHash3_64(&ik, 4, MURMUR_SEED);
-	ck_assert_uint_eq(h, 11930621527264735852U);
+	ck_assert_uint_eq(h, 12830615003719739504U);
 
 	ik = 1 << 31;
 	h = MurmurHash3_64(&ik, 4, MURMUR_SEED);
-	ck_assert_uint_eq(h, 4456853593563623847U);
+	ck_assert_uint_eq(h, 9419030371136511660U);
 
 	lk = 1UL << 63;
 	h = MurmurHash3_64(&lk, 8, MURMUR_SEED);
-	ck_assert_uint_eq(h, 15646792638355482678U);
+	ck_assert_uint_eq(h, 12604183304546475368U);
 }
 END_TEST
 
@@ -82,15 +82,15 @@ START_TEST(test_murmurhash64a_varlen)
 	/* exclude the NULL byte */
 	uint64 h = MurmurHash3_64(k, strlen(k), MURMUR_SEED);
 
-	ck_assert_uint_eq(h, 4579875563451280355);
+	ck_assert_uint_eq(h, 16128310523266676924U);
 
 	/* truncate the last byte and the NULL byte */
 	h = MurmurHash3_64(k, strlen(k) - 1, MURMUR_SEED);
-	ck_assert_uint_eq(h, 12571778299612594037U);
+	ck_assert_uint_eq(h, 8637276610791313299U);
 
 	/* include the NULL byte */
 	h = MurmurHash3_64(k, strlen(k) + 1, MURMUR_SEED);
-	ck_assert_uint_eq(h, 5413312395049998591U);
+	ck_assert_uint_eq(h, 12492017329703566690U);
 }
 END_TEST
 
@@ -110,13 +110,13 @@ START_TEST(test_sparse)
 
 	size = HLLSize(hll);
 	ck_assert(hll->encoding == HLL_SPARSE_CLEAN);
-	ck_assert_int_eq(size, 8076);
+	ck_assert_int_eq(size, 8017);
 
-	assert_size_for_elements(797, 204, 1003);
+	assert_size_for_elements(803, 204, 1003);
 	assert_size_for_elements(1, 1, 2);
 	assert_size_for_elements(5, 1000, 1005);
 	assert_size_for_elements(398, 2000, 2400);
-	assert_size_for_elements(4253, 4747, 8999);
+	assert_size_for_elements(4235, 4747, 8999);
 }
 END_TEST
 
@@ -133,13 +133,13 @@ START_TEST(test_dense)
 
 	size = HLLSize(hll);
 	ck_assert(hll->encoding == HLL_DENSE_CLEAN);
-	ck_assert_int_eq(size, 9895714);
+	ck_assert_int_eq(size, 10096564);
 
-	assert_size_for_elements(8283, 4747, 12999);
+	assert_size_for_elements(8233, 4747, 12999);
 	assert_size_for_elements(9, 10000000, 10000009);
-	assert_size_for_elements(300807, 100223, 400000);
-	assert_size_for_elements(301270, 435423, 735423);
-	assert_size_for_elements(118974, 0, 120001);
+	assert_size_for_elements(298814, 100223, 400000);
+	assert_size_for_elements(302357, 435423, 735423);
+	assert_size_for_elements(118017, 0, 120001);
 }
 END_TEST
 
@@ -173,7 +173,7 @@ START_TEST(test_sparse_to_dense)
 	ck_assert(hll->encoding == HLL_DENSE_DIRTY);
 
 	size = HLLSize(hll);
-	ck_assert_int_eq(size, 9033);
+	ck_assert_int_eq(size, 9055);
 }
 END_TEST
 
@@ -190,7 +190,7 @@ START_TEST(test_card_caching)
 	ck_assert_int_eq(hll->encoding, HLL_SPARSE_DIRTY);
 
 	size = HLLSize(hll);
-	ck_assert_uint_eq(size, 998);
+	ck_assert_uint_eq(size, 999);
 	ck_assert_int_eq(size, hll->card);
 
 	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
@@ -216,7 +216,7 @@ START_TEST(test_card_caching)
 
 	size = HLLSize(hll);
 	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
-	ck_assert_int_eq(size, 99527);
+	ck_assert_int_eq(size, 98511);
 	ck_assert_int_eq(size, hll->card);
 }
 END_TEST
@@ -234,7 +234,7 @@ START_TEST(test_union)
 	hll2 = add_elements(hll2, 1000, 2000);
 
 	size = HLLSize(hll1);
-	ck_assert_int_eq(size, 998);
+	ck_assert_int_eq(size, 999);
 
 	size = HLLSize(hll2);
 	ck_assert_int_eq(size, 1002);
@@ -243,7 +243,7 @@ START_TEST(test_union)
 
 	/* these HLLs are disjoint, so the union should include both */
 	size = HLLSize(hll1);
-	ck_assert_int_eq(size, 1998);
+	ck_assert_int_eq(size, 2003);
 
 	hll1 = add_elements(hll1, 500, 1500);
 
@@ -251,7 +251,7 @@ START_TEST(test_union)
 	size = HLLSize(hll1);
 
 	/* no new elements, union cardinality shouldn't change */
-	ck_assert_int_eq(size, 1998);
+	ck_assert_int_eq(size, 2003);
 
 	hll1 = add_elements(hll1, 1400, 2500);
 	hll1 = HLLUnion(hll1, hll2);
@@ -266,7 +266,7 @@ START_TEST(test_union)
 	hll1 = HLLUnion(hll1, hll2);
 	size = HLLSize(hll1);
 
-	ck_assert_int_eq(size, 99003);
+	ck_assert_int_eq(size, 98067);
 }
 END_TEST
 
@@ -284,18 +284,18 @@ START_TEST(test_union_sparse_and_dense)
 	ck_assert(dense->encoding = HLL_DENSE_DIRTY);
 
 	size = HLLSize(dense);
-	ck_assert_int_eq(size, 99527);
+	ck_assert_int_eq(size, 98511);
 
 	sparse = add_elements(sparse, 100000, 101000);
 	ck_assert(sparse->encoding = HLL_SPARSE_DIRTY);
 
 	size = HLLSize(sparse);
-	ck_assert_int_eq(size, 1005);
+	ck_assert_int_eq(size, 998);
 
 	result = HLLUnion(dense, sparse);
 	size = HLLSize(result);
 
-	ck_assert_int_eq(size, 100486);
+	ck_assert_int_eq(size, 99340);
 }
 END_TEST
 
@@ -308,14 +308,14 @@ START_TEST(test_create_from_raw)
 	HyperLogLog *copy;
 
 	hll = add_elements(hll, 1, 10002);
-	ck_assert_int_eq(10101, HLLSize(hll));
+	ck_assert_int_eq(9956, HLLSize(hll));
 
 	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
 
 	copy = HLLCreateFromRaw(hll->M, hll->mlen, hll->p, hll->encoding);
 
 	ck_assert_int_eq(copy->encoding, HLL_DENSE_DIRTY);
-	ck_assert_int_eq(10101, HLLSize(copy));
+	ck_assert_int_eq(9956, HLLSize(copy));
 
 	hll = HLLCreate();
 	hll = add_elements(hll, 0, 10);

@@ -19,7 +19,7 @@
  */
 CATALOG(pipeline_tstate,4251) BKI_WITHOUT_OIDS
 {
-	NameData name;
+	int32 id;
 #ifdef CATALOG_VARLEN
 	bloom distinct;
 #endif
@@ -27,8 +27,8 @@ CATALOG(pipeline_tstate,4251) BKI_WITHOUT_OIDS
 
 typedef FormData_pipeline_tstate *Form_pipeline_tstate;
 
-#define Natts_pipeline_tstate						2
-#define Anum_pipeline_tstate_name					1
-#define Anum_pipeline_tstate_distinct 				2
+#define Natts_pipeline_tstate			2
+#define Anum_pipeline_tstate_id			1
+#define Anum_pipeline_tstate_distinct	2
 
 #endif

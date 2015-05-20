@@ -1001,6 +1001,7 @@ typedef struct CQStatEntry
 	PgStat_Counter updated_bytes;
 	PgStat_Counter executions;
 	PgStat_Counter errors;
+	TimestampTz last_report;
 } CQStatEntry;
 
 /*
@@ -1023,7 +1024,8 @@ typedef struct CQStatPurgeMsg
 	Oid m_databaseid;
 } CQStatPurgeMsg;
 
-extern CQStatEntry MyCQStats;
+extern CQStatEntry MyProcCQStats;
+extern CQStatEntry *MyCQStats;
 
 #define SetCQStatView(key, view) ((key) |= (int64) (view))
 #define SetCQStatProcPid(key, pid) ((key) |= ((int64 ) (pid) << 30L))
@@ -1035,29 +1037,44 @@ extern CQStatEntry MyCQStats;
 
 #define IncrementCQRead(rows, nbytes) \
 	do { \
-			MyCQStats.input_rows += (rows); \
-			MyCQStats.input_bytes += (nbytes); \
+		MyProcCQStats.input_rows += (rows); \
+		MyProcCQStats.input_bytes += (nbytes); \
+		MyCQStats->input_rows += (rows); \
+		MyCQStats->input_bytes += (nbytes); \
 	} while(0)
 
 #define IncrementCQWrite(rows, nbytes) \
 	do { \
-			MyCQStats.output_rows += (rows); \
-			MyCQStats.output_bytes += (nbytes); \
+		MyProcCQStats.output_rows += (rows); \
+		MyProcCQStats.output_bytes += (nbytes); \
+		MyCQStats->output_rows += (rows); \
+		MyCQStats->output_bytes += (nbytes); \
 	} while(0)
 
 #define IncrementCQUpdate(count, nbytes) \
 	do { \
-			MyCQStats.updates += (count); \
-			MyCQStats.updated_bytes += (nbytes); \
+		MyProcCQStats.updates += (count); \
+		MyProcCQStats.updated_bytes += (nbytes); \
+		MyCQStats->updates += (count); \
+		MyCQStats->updated_bytes += (nbytes); \
 	} while(0)
 
-#define IncrementCQExecutions(n) (MyCQStats.executions += (n))
-#define IncrementCQErrors(n) (MyCQStats.errors += (n))
+#define IncrementCQExecutions(n) \
+	do { \
+		MyProcCQStats.executions += (n); \
+		MyCQStats->executions += (n); \
+	} while(0)
 
-HTAB *cq_stat_fetch_all(void);
-void cq_stat_initialize(Oid viewid, int32 pid);
-void cq_stat_report(bool force);
-void cq_stat_send_purge(Oid viewid, int pid, int64 ptype);
-CQStatEntry *cq_stat_get_entry(PgStat_StatDBEntry *dbentry, Oid viewoid, int pid, int ptype);
+#define IncrementCQErrors(n) \
+	do { \
+		MyProcCQStats.errors += (n); \
+		MyCQStats->errors += (n); \
+	} while(0)
+
+extern void cq_stat_init(CQStatEntry *entry, Oid viewid, pid_t pid);
+extern HTAB *cq_stat_fetch_all(void);
+extern void cq_stat_report(bool force);
+extern void cq_stat_send_purge(Oid viewid, int pid, int64 ptype);
+extern CQStatEntry *cq_stat_get_entry(PgStat_StatDBEntry *dbentry, Oid viewoid, int pid, int ptype);
 
 #endif   /* PGSTAT_H */

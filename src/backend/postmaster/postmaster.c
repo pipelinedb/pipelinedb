@@ -244,6 +244,7 @@ static pid_t StartupPID = 0,
 			CheckpointerPID = 0,
 			WalWriterPID = 0,
 			WalReceiverPID = 0,
+			ContQuerySchedulerPID = 0,
 			AutoVacPID = 0,
 			PgArchPID = 0,
 			PgStatPID = 0,
@@ -1644,6 +1645,9 @@ ServerLoop(void)
 				start_autovac_launcher = false; /* signal processed */
 		}
 
+		if (ContQuerySchedulerPID == 0 && pmState == PM_RUN)
+			ContQuerySchedulerPID = StartContQueryScheduler();
+
 		/* If we have lost the archiver, try to start a new one */
 		if (XLogArchivingActive() && PgArchPID == 0 && pmState == PM_RUN)
 			PgArchPID = pgarch_start();
@@ -2357,6 +2361,8 @@ SIGHUP_handler(SIGNAL_ARGS)
 			signal_child(SysLoggerPID, SIGHUP);
 		if (PgStatPID != 0)
 			signal_child(PgStatPID, SIGHUP);
+		if (ContQuerySchedulerPID != 0)
+			signal_child(ContQuerySchedulerPID, SIGHUP);
 
 		/* Reload authentication config files too */
 		if (!load_hba())
@@ -2425,6 +2431,8 @@ pmdie(SIGNAL_ARGS)
 				/* and the walwriter too */
 				if (WalWriterPID != 0)
 					signal_child(WalWriterPID, SIGTERM);
+				if (ContQuerySchedulerPID != 0)
+					signal_child(ContQuerySchedulerPID, SIGTERM);
 
 				/*
 				 * If we're in recovery, we can't kill the startup process
@@ -2496,6 +2504,8 @@ pmdie(SIGNAL_ARGS)
 				/* and the walwriter too */
 				if (WalWriterPID != 0)
 					signal_child(WalWriterPID, SIGTERM);
+				if (ContQuerySchedulerPID != 0)
+					signal_child(ContQuerySchedulerPID, SIGTERM);
 				pmState = PM_WAIT_BACKENDS;
 			}
 
@@ -2759,6 +2769,15 @@ reaper(SIGNAL_ARGS)
 			if (!EXIT_STATUS_0(exitstatus))
 				HandleChildCrash(pid, exitstatus,
 								 _("autovacuum launcher process"));
+			continue;
+		}
+
+		if (pid == ContQuerySchedulerPID)
+		{
+			ContQuerySchedulerPID = 0;
+			if (!EXIT_STATUS_0(exitstatus))
+				HandleChildCrash(pid, exitstatus,
+								 _("continuous query scheduler process"));
 			continue;
 		}
 
@@ -3227,6 +3246,15 @@ HandleChildCrash(int pid, int exitstatus, const char *procname)
 								 (SendStop ? "SIGSTOP" : "SIGQUIT"),
 								 (int) AutoVacPID)));
 		signal_child(AutoVacPID, (SendStop ? SIGSTOP : SIGQUIT));
+	}
+
+	if (pid == ContQuerySchedulerPID)
+		ContQuerySchedulerPID = 0;
+	else if (ContQuerySchedulerPID != 0 && take_action)
+	{
+		ereport(DEBUG2,
+				(errmsg_internal("sending %s to process %d", (SendStop ? "SIGSTOP" : "SIGQUIT"), (int) ContQuerySchedulerPID)));
+		signal_child(ContQuerySchedulerPID, (SendStop ? SIGSTOP : SIGQUIT));
 	}
 
 	/*
@@ -3730,6 +3758,8 @@ TerminateChildren(int signal)
 		signal_child(PgArchPID, signal);
 	if (PgStatPID != 0)
 		signal_child(PgStatPID, signal);
+	if (ContQuerySchedulerPID != 0)
+		signal_child(ContQuerySchedulerPID, signal);
 	SignalUnconnectedWorkers(signal);
 }
 
@@ -4572,6 +4602,7 @@ SubPostmasterMain(int argc, char *argv[])
 	if (strcmp(argv[1], "--forkbackend") == 0 ||
 		strcmp(argv[1], "--forkavlauncher") == 0 ||
 		strcmp(argv[1], "--forkavworker") == 0 ||
+		strcmp(argv[1], "--forkcqscheduler") == 0 ||
 		strcmp(argv[1], "--forkboot") == 0 ||
 		strncmp(argv[1], "--forkbgworker=", 15) == 0)
 		PGSharedMemoryReAttach();
@@ -4581,6 +4612,8 @@ SubPostmasterMain(int argc, char *argv[])
 		AutovacuumLauncherIAm();
 	if (strcmp(argv[1], "--forkavworker") == 0)
 		AutovacuumWorkerIAm();
+	if (strcmp(argv[1] == "--forkcqscheduler") == 0)
+		ContQuerySchedulerIAm();
 
 	/*
 	 * Start our win32 signal implementation. This has to be done after we
@@ -4707,6 +4740,22 @@ SubPostmasterMain(int argc, char *argv[])
 		CreateSharedMemoryAndSemaphores(false, 0);
 
 		AutoVacWorkerMain(argc - 2, argv + 2);	/* does not return */
+	}
+	if (strcmp(argv[1], "--forkcqscheduler") == 0)
+	{
+		/* Close the postmaster's sockets */
+		ClosePostmasterPorts(false);
+
+		/* Restore basic shared memory pointers */
+		InitShmemAccess(UsedShmemSegAddr);
+
+		/* Need a PGPROC to run CreateSharedMemoryAndSemaphores */
+		InitProcess();
+
+		/* Attach process to shared data structures */
+		CreateSharedMemoryAndSemaphores(false, 0);
+
+		ContQuerySchedulerMain(argc - 2, argv + 2);	/* does not return */
 	}
 	if (strncmp(argv[1], "--forkbgworker=", 15) == 0)
 	{
@@ -5100,7 +5149,7 @@ StartChildProcess(AuxProcType type)
 	/*
 	 * Set up command-line arguments for subprocess
 	 */
-	av[ac++] = "postgres";
+	av[ac++] = "pipeline-server";
 
 #ifdef EXEC_BACKEND
 	av[ac++] = "--forkboot";

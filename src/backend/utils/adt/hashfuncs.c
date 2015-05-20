@@ -12,6 +12,7 @@
 #include "catalog/pg_type.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/primnodes.h"
+#include "parser/parse_coerce.h"
 #include "pipeline/miscutils.h"
 #include "utils/datum.h"
 #include "utils/hashfuncs.h"

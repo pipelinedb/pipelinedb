@@ -109,7 +109,7 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 	MemoryContext oldcontext;
 
 	state = makeNode(ContinuousUniqueState);
-	namecpy(&state->cvname, &node->cvName);
+	state->cq_id = node->cq_id;
 
 	state->ps.plan = (Plan *) node;
 	state->ps.state = estate;
@@ -142,7 +142,7 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 	 * Load the DISTINCT bloom filter from pipeline_tstate.
 	 */
 	oldcontext = MemoryContextSwitchTo(state->tmpContext);
-	state->distinct = GetDistinctBloomFilter(NameStr(state->cvname));
+	state->distinct = GetDistinctBloomFilter(state->cq_id);
 	MemoryContextSwitchTo(oldcontext);
 
 	return state;
@@ -158,9 +158,9 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 void
 ExecEndContinuousUnique(ContinuousUniqueState *node)
 {
-	if (IsCombiner && node->dirty)
+	if (IsContQueryCombinerProcess() && node->dirty)
 	{
-		UpdateDistinctBloomFilter(NameStr(node->cvname), node->distinct);
+		UpdateDistinctBloomFilter(node->cq_id, node->distinct);
 		node->dirty = false;
 	}
 
@@ -179,7 +179,7 @@ ExecEndBatchContinuousUnique(ContinuousUniqueState *node)
 	MemoryContextReset(node->tmpContext);
 
 	oldcontext = MemoryContextSwitchTo(node->tmpContext);
-	node->distinct = GetDistinctBloomFilter(NameStr(node->cvname));
+	node->distinct = GetDistinctBloomFilter(node->cq_id);
 	MemoryContextSwitchTo(oldcontext);
 }
 
@@ -197,6 +197,6 @@ ExecReScanContinuousUnique(ContinuousUniqueState *node)
 	node->dirty = false;
 
 	oldcontext = MemoryContextSwitchTo(node->tmpContext);
-	node->distinct = GetDistinctBloomFilter(NameStr(node->cvname));
+	node->distinct = GetDistinctBloomFilter(node->cq_id);
 	MemoryContextSwitchTo(oldcontext);
 }

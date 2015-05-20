@@ -1,5 +1,5 @@
 -- Simple ones
-CREATE CONTINUOUS VIEW cqcreate0 AS SELECT key::integer FROM stream;
+CREATE CONTINUOUS VIEW cqcreate0 AS SELECT key::integer FROM create_cont_stream1;
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate0';
  count 
 -------
@@ -28,7 +28,7 @@ View definition:
  key    | integer |           | plain   |              | 
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cqcreate1 AS SELECT substring(url::text, 1, 2) FROM stream;
+CREATE CONTINUOUS VIEW cqcreate1 AS SELECT substring(url::text, 1, 2) FROM create_cont_stream1;
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate1';
  count 
 -------
@@ -51,7 +51,7 @@ View definition:
  substring | text |           | extended |              | 
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cqcreate2 AS SELECT key::integer, substring(value::text, 1, 2) AS s FROM stream;
+CREATE CONTINUOUS VIEW cqcreate2 AS SELECT key::integer, substring(value::text, 1, 2) AS s FROM create_cont_stream1;
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate2';
  count 
 -------
@@ -78,7 +78,7 @@ View definition:
 Options: fillfactor=50
 
 -- Group by projections
-CREATE CONTINUOUS VIEW cqcreate3 AS SELECT key::text, COUNT(*), SUM(value::int8) FROM stream GROUP BY key;
+CREATE CONTINUOUS VIEW cqcreate3 AS SELECT key::text, COUNT(*), SUM(value::int8) FROM cont_create_stream2 GROUP BY key;
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate3';
  count 
 -------
@@ -110,7 +110,7 @@ Indexes:
     "cqcreate3_mrel0_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value::int8) FROM stream GROUP BY key::text;
+CREATE CONTINUOUS VIEW cqcreate4 AS SELECT COUNT(*), SUM(value::int8) FROM cont_create_stream2 GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate4';
  count 
 -------
@@ -141,7 +141,7 @@ Indexes:
 Options: fillfactor=50
 
 -- Sliding window queries
-CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
+CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate5';
  count 
 -------
@@ -174,7 +174,7 @@ Indexes:
     "cqcreate5_mrel0__0_idx" btree (_0)
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key::text;
+CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate6';
  count 
 -------
@@ -210,7 +210,7 @@ Indexes:
 Options: fillfactor=50
 
 -- These use a combine state column
-CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, AVG(y::integer) AS int_avg, AVG(ts0::timestamp - ts1::timestamp) AS internal_avg FROM stream GROUP BY key;
+CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, AVG(y::integer) AS int_avg, AVG(ts0::timestamp - ts1::timestamp) AS internal_avg FROM cont_create_stream2 GROUP BY key;
 \d+ cvavg;
                          View "public.cvavg"
     Column    |       Type       | Modifiers | Storage  | Description 
@@ -241,7 +241,7 @@ Indexes:
     "cvavg_mrel0_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM stream;
+CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM create_cont_stream1;
 \d+ cvjson;
                  View "public.cvjson"
   Column   | Type | Modifiers | Storage  | Description 
@@ -259,7 +259,7 @@ View definition:
  _0        | bytea |           | extended |              | 
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM stream;
+CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM cont_create_stream2;
 \d+ cvjsonobj;
                    View "public.cvjsonobj"
      Column      | Type | Modifiers | Storage  | Description 
@@ -278,7 +278,7 @@ View definition:
 Options: fillfactor=50
 
 -- But these aggregates don't
-CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(x::integer + y::float8) AS sum_col FROM stream;
+CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(x::integer + y::float8) AS sum_col FROM cont_create_stream2;
 \d+ cvcount;
                      View "public.cvcount"
  Column  |       Type       | Modifiers | Storage | Description 
@@ -295,7 +295,7 @@ View definition:
  sum_col | double precision |           | plain   |              | 
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM stream;
+CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_stream1;
 \d+ cvarray;
                  View "public.cvarray"
   Column   |  Type  | Modifiers | Storage | Description 
@@ -312,7 +312,7 @@ View definition:
  count_col | bigint |           | plain   |              | 
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text, 1, 2), ',') FROM stream GROUP BY key;
+CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text, 1, 2), ',') FROM cont_create_stream2 GROUP BY key;
 \d+ cvtext;
                    View "public.cvtext"
    Column   |  Type   | Modifiers | Storage  | Description 
@@ -336,7 +336,7 @@ Indexes:
 Options: fillfactor=50
 
 -- Check for expressions containing aggregates
-CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM stream;
+CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM cont_create_stream2;
 \d+ cqaggexpr1;
                View "public.cqaggexpr1"
   Column  |  Type  | Modifiers | Storage | Description 
@@ -354,7 +354,7 @@ View definition:
  _1     | bigint |           | plain   |              | 
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::integer) AS value FROM stream GROUP BY key;
+CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::integer) AS value FROM cont_create_stream2 GROUP BY key;
 \d+ cqaggexpr2;
                     View "public.cqaggexpr2"
  Column |       Type       | Modifiers | Storage  | Description 
@@ -378,7 +378,7 @@ Indexes:
     "cqaggexpr2_mrel0_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM stream WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
+CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
 \d+ cqaggexpr3;
                View "public.cqaggexpr3"
  Column |  Type   | Modifiers | Storage  | Description 
@@ -403,7 +403,7 @@ Indexes:
     "cqaggexpr3_mrel0_expr_idx" btree (ls_hash_group(key, _0))
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM stream GROUP BY key;
+CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM cont_create_stream2 GROUP BY key;
 \d+ cqaggexpr4;
                     View "public.cqaggexpr4"
  Column |       Type       | Modifiers | Storage  | Description 
@@ -426,7 +426,7 @@ Indexes:
     "cqaggexpr4_mrel0_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
 
-CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM stream GROUP BY k0, k1;
+CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM create_cont_stream1 GROUP BY k0, k1;
 \d+ cqgroupby
                 View "public.cqgroupby"
  Column |  Type   | Modifiers | Storage  | Description 
@@ -452,9 +452,9 @@ Indexes:
 Options: fillfactor=50
 
 CREATE SCHEMA test_create_cont_view;
-CREATE CONTINUOUS VIEW test_create_cont_view.error AS SELECT k0::text FROM stream;
+CREATE CONTINUOUS VIEW test_create_cont_view.error AS SELECT k0::text FROM create_cont_stream1;
 ERROR:  continuous views cannot be given a namespace
-CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM stream
+CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM create_cont_stream1
 GROUP BY a, b, c, d, e;
 --A user-specified fillfactor should override the default
 CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM stream;

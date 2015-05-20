@@ -13,7 +13,7 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
-#include "pipeline/cqproc.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/tuplebuf.h"
 #include "storage/shm_alloc.h"
 
@@ -22,10 +22,11 @@
  *
  * This is called whenever a new backend is starting up.
  */
-void InitPipeline()
+void PipelineShmemInit()
 {
-	srand(time(NULL));
-	InitShmemDynAllocator();
-	TupleBuffersInit();
-	InitCQProcState();
+	srand(time(NULL) ^ MyProcPid);
+
+	ShmemDynAllocShmemInit();
+	ContQuerySchedulerShmemInit();
+	TupleBuffersShmemInit();
 }

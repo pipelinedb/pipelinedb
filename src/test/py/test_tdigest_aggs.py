@@ -18,9 +18,7 @@ def test_tdigest_type(pipeline, clean_db):
         rows.append((0, n))
         rows.append((1, n + 500))
 
-    pipeline.activate()
     pipeline.insert('test_tdigest_stream', desc, rows)
-    pipeline.deactivate()
 
     result = list(pipeline.execute(
       'SELECT tdigest_quantile(t, 0.1) FROM test_tdigest_agg ORDER BY k')

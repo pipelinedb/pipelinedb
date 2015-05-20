@@ -16,12 +16,14 @@
 
 #define ARRAY_SEGMENT_SIZE 32
 
-typedef struct DSMArraySegment {
-	struct DSMArraySegment *next;
+typedef struct ShmemArraySegment
+{
+	struct ShmemArraySegment *next;
 	uint8_t bytes[1];
 } ShmemArraySegment;
 
-struct ShmemArray {
+struct ShmemArray
+{
 	ShmemArraySegment *tail;
 	int length;
 	Size size;
@@ -98,7 +100,7 @@ void *ShmemArrayGet(ShmemArray *array, int idx)
 	return addr ? addr : NULL;
 }
 
-void ShmemArrayDelete(ShmemArray *array)
+void ShmemArrayDestroy(ShmemArray *array)
 {
 	ShmemArraySegment *segment;
 

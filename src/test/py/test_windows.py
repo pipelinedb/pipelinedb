@@ -1,6 +1,5 @@
 from base import pipeline, clean_db
 from datetime import datetime, timedelta
-import json
 import random
 
 
@@ -20,12 +19,8 @@ def _test_agg(pipeline, agg, check_fn=None):
         row = ts, n % 10, random.randint(1, 256), random.randint(1, 256), random.randint(1, 256)
         rows.append(row)
 
-    pipeline.activate()
-
     pipeline.insert('stream', desc, rows)
     pipeline.insert(table_name, desc, rows)
-
-    pipeline.deactivate()
 
     if check_fn:
         return check_fn(pipeline)

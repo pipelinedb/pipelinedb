@@ -58,7 +58,7 @@ map_field_positions(TupleDesc evdesc, TupleDesc desc)
  * may only change after many event projections.
  */
 static void
-init_proj_info(StreamProjectionInfo *pi, Tuple *tuple)
+init_proj_info(StreamProjectionInfo *pi, StreamTuple *tuple)
 {
 	MemoryContext old;
 
@@ -80,7 +80,6 @@ StreamScanNext(StreamScanState *node)
 	TupleBufferSlot *tbs;
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 	HeapTuple tup;
-	MemoryContext old;
 	bytea *piraw;
 	bytea *tupraw;
 
@@ -88,12 +87,12 @@ StreamScanNext(StreamScanState *node)
 	 * The TupleBuffer needs this slot until it gets unpinned, which we don't
 	 * know when will happen so we need to keep it around for a full CQ execution.
 	 */
-	old = MemoryContextSwitchTo(CQExecutionContext);
-	tbs = TupleBufferPinNextSlot(node->reader);
-	MemoryContextSwitchTo(old);
+	tbs = TupleBufferBatchReaderNext(node->reader);
 
 	if (tbs == NULL)
 		return NULL;
+
+	IncrementCQRead(1, tbs->size);
 
 	/*
 	 * Check if the incoming event descriptor is different from the one we're
@@ -110,17 +109,6 @@ StreamScanNext(StreamScanState *node)
 
 	tup = ExecStreamProject(tbs->tuple, node);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
-
-	IncrementCQRead(1, tbs->size);
-
-	/*
-	 * We don't necessarily know when parent nodes will be done with this
-	 * event, so only unpin it if we're configured to do so.
-	 */
-	if (node->unpin)
-		TupleBufferUnpinSlot(node->reader, tbs);
-	else
-		node->pinned = lappend(node->pinned, tbs);
 
 	return slot;
 }
@@ -154,7 +142,7 @@ coerce_raw_input(Datum value, Oid intype, Oid outtype)
  * Project a stream event onto a physical tuple
  */
 HeapTuple
-ExecStreamProject(Tuple *event, StreamScanState *node)
+ExecStreamProject(StreamTuple *event, StreamScanState *node)
 {
 	HeapTuple decoded;
 	MemoryContext oldcontext;
@@ -238,7 +226,7 @@ ExecStreamProject(Tuple *event, StreamScanState *node)
 		}
 	}
 
-	MemoryContextSwitchTo(CQExecutionContext);
+	MemoryContextSwitchTo(ContQueryBatchContext);
 
 	/* our result tuple needs to live for the duration of this query execution */
 	decoded = heap_form_tuple(desc, values, nulls);
@@ -267,8 +255,6 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 	state->pi->econtext = CreateStandaloneExprContext();
 	state->pi->resultdesc = node->desc;
 	state->pi->raweventdesc = NULL;
-	state->unpin = true;
-	state->pinned = NIL;
 
 	/*
 	 * Miscellaneous initialization
@@ -301,8 +287,6 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 	ExecAssignResultTypeFromTL(&state->ss.ps);
 	ExecAssignScanProjectionInfo(&state->ss);
 
-	state->reader = TupleBufferOpenReader(WorkerTupleBuffer, node->cqid, MyWorkerId, NUM_WORKERS(GetCQProcEntry(node->cqid)));
-
 	return state;
 }
 
@@ -318,18 +302,7 @@ ExecStreamScan(StreamScanState *node)
 void
 ExecEndStreamScan(StreamScanState *node)
 {
-	ListCell *lc;
 
-	foreach(lc, node->pinned)
-	{
-		TupleBufferSlot *sbs = (TupleBufferSlot *) lfirst(lc);
-		TupleBufferUnpinSlot(node->reader, sbs);
-	}
-
-	list_free(node->pinned);
-	node->pinned = NIL;
-
-	TupleBufferCloseReader(node->reader);
 }
 
 void

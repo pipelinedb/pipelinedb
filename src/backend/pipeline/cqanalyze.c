@@ -1627,34 +1627,7 @@ pipeline_rewrite(List *raw_parsetree_list)
 	{
 		Node *node = lfirst(lc);
 
-		if (IsA(node, ActivateContinuousViewStmt) ||
-				IsA(node, DeactivateContinuousViewStmt))
-		{
-			/*
-			 * We can type cast as DeactivateContinuousViewStmt because ActivateContinuousViewStmt
-			 * extends it.
-			 */
-			DeactivateContinuousViewStmt *stmt = (DeactivateContinuousViewStmt *) node;
-
-			if (stmt->views && stmt->whereClause)
-				elog(ERROR, "can't specify views list and a WHERE clause");
-		}
-		else if (IsA(node, IndexStmt))
-		{
-			IndexStmt *istmt = (IndexStmt *) node;
-
-			/*
-			 * If the user is trying to create an index on a CV, what they're really
-			 * trying to do is create it on the CV's materialization table, so rewrite
-			 * the name of the target relation if we need to.
-			 */
-			if (IsAContinuousView(istmt->relation))
-			{
-				char *s = GetMatRelationName(istmt->relation->relname);
-				istmt->relation = makeRangeVar(NULL, s, -1);
-			}
-		}
-		else if (IsA(node, VacuumStmt))
+		if (IsA(node, VacuumStmt))
 		{
 			VacuumStmt *vstmt = (VacuumStmt *) node;
 			/*

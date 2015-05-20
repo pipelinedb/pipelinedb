@@ -1,157 +1,55 @@
 CREATE CONTINUOUS VIEW ps0 AS SELECT id::integer FROM stream0;
-CREATE CONTINUOUS VIEW ps1 AS SELECT stream0.id::integer FROM stream0, stream1;
 SELECT * FROM pipeline_stream ORDER BY name;
-  name   | readers |  queries   | desc 
----------+---------+------------+------
- stream0 |         | \x03000000 | 
- stream1 |         | \x02000000 | 
+  name   |  queries   |                   desc                   
+---------+------------+------------------------------------------
+ stream0 | \x02000000 | \x00000001696400000006a4ffffffff00000000
+(1 row)
+
+CREATE CONTINUOUS VIEW ps1 AS SELECT id::integer, val::text FROM stream0;
+SELECT * FROM pipeline_stream ORDER BY name;
+  name   |  queries   |                                   desc                                   
+---------+------------+--------------------------------------------------------------------------
+ stream0 | \x06000000 | \x00000002696400000006a4ffffffff0000000076616c0000000019ffffffff00000000
+(1 row)
+
+CREATE CONTINUOUS VIEW ps2 AS SELECT id::float FROM stream0;
+CREATE CONTINUOUS VIEW ps3 AS SELECT x::integer, y::timestamp FROM stream1;
+SELECT * FROM pipeline_stream ORDER BY name;
+  name   |  queries   |                                   desc                                   
+---------+------------+--------------------------------------------------------------------------
+ stream0 | \x0e000000 | \x00000002696400000002bdffffffff0000000076616c0000000019ffffffff00000000
+ stream1 | \x10000000 | \x0000000279000000045affffffff000000007800000006a4ffffffff00000000
 (2 rows)
 
-CREATE CONTINUOUS VIEW ps2 AS SELECT id::integer FROM stream2;
-CREATE CONTINUOUS VIEW ps3 AS SELECT id::integer FROM stream3;
-CREATE CONTINUOUS VIEW ps4 AS SELECT stream4.id::integer FROM stream4, stream5;
+CREATE CONTINUOUS VIEW ps4 AS SELECT id::text FROM stream0;
+ERROR:  type conflict with stream "stream0": types double precision and text cannot be matched
 SELECT * FROM pipeline_stream ORDER BY name;
-  name   | readers |  queries   | desc 
----------+---------+------------+------
- stream0 |         | \x03000000 | 
- stream1 |         | \x02000000 | 
- stream2 |         | \x04000000 | 
- stream3 |         | \x08000000 | 
- stream4 |         | \x10000000 | 
- stream5 |         | \x10000000 | 
-(6 rows)
+  name   |  queries   |                                   desc                                   
+---------+------------+--------------------------------------------------------------------------
+ stream0 | \x0e000000 | \x00000002696400000002bdffffffff0000000076616c0000000019ffffffff00000000
+ stream1 | \x10000000 | \x0000000279000000045affffffff000000007800000006a4ffffffff00000000
+(2 rows)
 
-ACTIVATE ps0, ps1, ps2, ps3, ps4;
-SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  readers   |  queries   |                   desc                   
----------+------------+------------+------------------------------------------
- stream0 | \x03000000 | \x03000000 | \x00000001696400000006a4ffffffff00000000
- stream1 | \x02000000 | \x02000000 | \x00000001696400000006a4ffffffff00000000
- stream2 | \x04000000 | \x04000000 | \x00000001696400000006a4ffffffff00000000
- stream3 | \x08000000 | \x08000000 | \x00000001696400000006a4ffffffff00000000
- stream4 | \x10000000 | \x10000000 | \x00000001696400000006a4ffffffff00000000
- stream5 | \x10000000 | \x10000000 | \x00000001696400000006a4ffffffff00000000
-(6 rows)
-
-DEACTIVATE ps1;
-SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  readers   |  queries   |                   desc                   
----------+------------+------------+------------------------------------------
- stream0 | \x01000000 | \x03000000 | \x00000001696400000006a4ffffffff00000000
- stream1 |            | \x02000000 | 
- stream2 | \x04000000 | \x04000000 | \x00000001696400000006a4ffffffff00000000
- stream3 | \x08000000 | \x08000000 | \x00000001696400000006a4ffffffff00000000
- stream4 | \x10000000 | \x10000000 | \x00000001696400000006a4ffffffff00000000
- stream5 | \x10000000 | \x10000000 | \x00000001696400000006a4ffffffff00000000
-(6 rows)
-
-DEACTIVATE ps2;
-SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  readers   |  queries   |                   desc                   
----------+------------+------------+------------------------------------------
- stream0 | \x01000000 | \x03000000 | \x00000001696400000006a4ffffffff00000000
- stream1 |            | \x02000000 | 
- stream2 |            | \x04000000 | 
- stream3 | \x08000000 | \x08000000 | \x00000001696400000006a4ffffffff00000000
- stream4 | \x10000000 | \x10000000 | \x00000001696400000006a4ffffffff00000000
- stream5 | \x10000000 | \x10000000 | \x00000001696400000006a4ffffffff00000000
-(6 rows)
-
-DEACTIVATE ps3;
-SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  readers   |  queries   |                   desc                   
----------+------------+------------+------------------------------------------
- stream0 | \x01000000 | \x03000000 | \x00000001696400000006a4ffffffff00000000
- stream1 |            | \x02000000 | 
- stream2 |            | \x04000000 | 
- stream3 |            | \x08000000 | 
- stream4 | \x10000000 | \x10000000 | \x00000001696400000006a4ffffffff00000000
- stream5 | \x10000000 | \x10000000 | \x00000001696400000006a4ffffffff00000000
-(6 rows)
-
-DEACTIVATE ps4;
-SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  readers   |  queries   |                   desc                   
----------+------------+------------+------------------------------------------
- stream0 | \x01000000 | \x03000000 | \x00000001696400000006a4ffffffff00000000
- stream1 |            | \x02000000 | 
- stream2 |            | \x04000000 | 
- stream3 |            | \x08000000 | 
- stream4 |            | \x10000000 | 
- stream5 |            | \x10000000 | 
-(6 rows)
-
-DEACTIVATE ps0;
-SELECT * FROM pipeline_stream ORDER BY name;
-  name   | readers |  queries   | desc 
----------+---------+------------+------
- stream0 |         | \x03000000 | 
- stream1 |         | \x02000000 | 
- stream2 |         | \x04000000 | 
- stream3 |         | \x08000000 | 
- stream4 |         | \x10000000 | 
- stream5 |         | \x10000000 | 
-(6 rows)
-
-ACTIVATE ps0;
-SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  readers   |  queries   |                   desc                   
----------+------------+------------+------------------------------------------
- stream0 | \x01000000 | \x03000000 | \x00000001696400000006a4ffffffff00000000
- stream1 |            | \x02000000 | 
- stream2 |            | \x04000000 | 
- stream3 |            | \x08000000 | 
- stream4 |            | \x10000000 | 
- stream5 |            | \x10000000 | 
-(6 rows)
-
-ACTIVATE ps4;
-SELECT * FROM pipeline_stream ORDER BY name;
-  name   |  readers   |  queries   |                   desc                   
----------+------------+------------+------------------------------------------
- stream0 | \x01000000 | \x03000000 | \x00000001696400000006a4ffffffff00000000
- stream1 |            | \x02000000 | 
- stream2 |            | \x04000000 | 
- stream3 |            | \x08000000 | 
- stream4 | \x10000000 | \x10000000 | \x00000001696400000006a4ffffffff00000000
- stream5 | \x10000000 | \x10000000 | \x00000001696400000006a4ffffffff00000000
-(6 rows)
-
-DEACTIVATE ps0, ps4;
 DROP CONTINUOUS VIEW ps0;
-DROP CONTINUOUS VIEW ps1;
-DROP CONTINUOUS VIEW ps2;
 SELECT * FROM pipeline_stream ORDER BY name;
-  name   | readers |  queries   | desc 
----------+---------+------------+------
- stream3 |         | \x08000000 | 
- stream4 |         | \x10000000 | 
- stream5 |         | \x10000000 | 
-(3 rows)
+  name   |  queries   |                                   desc                                   
+---------+------------+--------------------------------------------------------------------------
+ stream0 | \x0c000000 | \x00000002696400000002bdffffffff0000000076616c0000000019ffffffff00000000
+ stream1 | \x10000000 | \x0000000279000000045affffffff000000007800000006a4ffffffff00000000
+(2 rows)
 
-DROP CONTINUOUS VIEW ps3;
-DROP CONTINUOUS VIEW ps4;
+DROP CONTINUOUS VIEW ps1;
 SELECT * FROM pipeline_stream ORDER BY name;
- name | readers | queries | desc 
-------+---------+---------+------
+  name   |  queries   |                                desc                                
+---------+------------+--------------------------------------------------------------------
+ stream0 | \x08000000 | \x00000001696400000002bdffffffff00000000
+ stream1 | \x10000000 | \x0000000279000000045affffffff000000007800000006a4ffffffff00000000
+(2 rows)
+
+DROP CONTINUOUS VIEW ps2;
+DROP CONTINUOUS VIEW ps3;
+SELECT * FROM pipeline_stream ORDER BY name;
+ name | queries | desc 
+------+---------+------
 (0 rows)
 
-INSERT INTO stream0 (x) VALUES (1);
-ERROR:  relation "stream0" does not exist
-LINE 1: INSERT INTO stream0 (x) VALUES (1);
-                    ^
-CREATE CONTINUOUS VIEW ps5 AS SELECT x::int FROM stream0;
-INSERT INTO stream0 (x) VALUES (1);
-ERROR:  stream "stream0" is currently not being read
-HINT:  Activate some continuous view reading from "stream0".
-ACTIVATE ps5;
-INSERT INTO stream0 (x) VALUES (1);
-DEACTIVATE ps5;
-INSERT INTO stream0 (x) VALUES (1);
-ERROR:  stream "stream0" is currently not being read
-HINT:  Activate some continuous view reading from "stream0".
-DROP CONTINUOUS VIEW ps5;
-INSERT INTO stream0 (x) VALUES (1);
-ERROR:  relation "stream0" does not exist
-LINE 1: INSERT INTO stream0 (x) VALUES (1);
-                    ^

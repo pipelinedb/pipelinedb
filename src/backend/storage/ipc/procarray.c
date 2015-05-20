@@ -52,6 +52,7 @@
 #include "access/twophase.h"
 #include "catalog/catalog.h"
 #include "miscadmin.h"
+#include "pipeline/cont_scheduler.h"
 #include "storage/proc.h"
 #include "storage/procarray.h"
 #include "storage/spin.h"
@@ -2609,6 +2610,8 @@ CountOtherDBBackends(Oid databaseId, int *nbackends, int *nprepared)
 #define MAXAUTOVACPIDS	10		/* max autovacs to SIGTERM per iteration */
 	int			autovac_pids[MAXAUTOVACPIDS];
 	int			tries;
+
+	SignalContQuerySchedulerTerminate(databaseId);
 
 	/* 50 tries with 100ms sleep between tries makes 5 sec total wait */
 	for (tries = 0; tries < 50; tries++)

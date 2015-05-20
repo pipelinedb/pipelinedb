@@ -17,11 +17,7 @@ def test_gcs_contains(pipeline, clean_db):
   for i in range(10000):
     rows.append((2 * i, ))
 
-  pipeline.activate()
-
   pipeline.insert('test_gcs_stream', desc, rows)
-
-  pipeline.deactivate()
 
   cvq = """
   SELECT gcs_contains(gcs_agg, 0), gcs_contains(gcs_agg, 5000),

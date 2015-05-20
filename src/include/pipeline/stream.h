@@ -15,6 +15,7 @@
 #include "nodes/bitmapset.h"
 #include "nodes/params.h"
 #include "nodes/parsenodes.h"
+#include "storage/spin.h"
 #include "utils/hsearch.h"
 #include "utils/timestamp.h"
 
@@ -52,5 +53,38 @@ extern bool InsertTargetIsStream(InsertStmt *ins);
 extern int InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt);
 extern int InsertIntoStream(InsertStmt *ins, List *values);
 extern uint64 CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
+
+/* Represents a single batch of inserts made into a stream. */
+typedef struct InsertBatch {
+	int id;
+	/* CQ ids that need to read this batch */
+	Bitmapset *readers;
+	/* Num tuples */
+	int num_tups;
+	/* Worker processed had an error? */
+	/* Number of acks from workers */
+	int num_wacks;
+	/* Number of acks from combiners */
+	int num_cacks;
+	/* Total number of tuples sent to workers */
+	int num_wtups;
+	/* Total number of tuples sent to combiners */
+	int num_ctups;
+	slock_t mutex;
+} InsertBatch;
+
+/* Represents the number of tuples processed for the stream batch. */
+typedef struct InsertBatchAck {
+	int batch_id;
+	InsertBatch *batch;
+	int count;
+} InsertBatchAck;
+
+extern InsertBatch *InsertBatchCreate(Bitmapset *readers, int num_tuples);
+extern void InsertBatchWaitAndRemove(InsertBatch *batch);
+extern void InsertBatchIncrementNumCTuples(InsertBatch *batch);
+extern void InsertBatchIncrementNumReads(InsertBatch* batch);
+extern void InsertBatchMarkAcked(InsertBatchAck *ack);
+
 
 #endif

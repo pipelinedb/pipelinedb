@@ -22,13 +22,9 @@ def test_percentile_cont_agg(pipeline, clean_db):
   pipeline.create_cv('test_cq_percentile_cont', query % 'test_stream')
   pipeline.create_table('test_percentile_cont', x='integer')
 
-  pipeline.activate()
-
   for b in batches:
     pipeline.insert('test_stream', ('x',), b)
     pipeline.insert('test_percentile_cont', ('x',), b)
-
-  pipeline.deactivate()
 
   actual = pipeline.execute(query % 'test_percentile_cont')
   result = pipeline.execute('SELECT * FROM test_cq_percentile_cont')

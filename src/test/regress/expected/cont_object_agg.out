@@ -1,183 +1,245 @@
+-- array_sort function
+DROP FUNCTION IF EXISTS array_sort(anyarray);
+NOTICE:  function array_sort(anyarray) does not exist, skipping
+CREATE FUNCTION
+  array_sort(
+      array_vals_to_sort anyarray
+  )
+  RETURNS TABLE (
+    sorted_array anyarray
+  )
+  AS $BODY$
+    BEGIN
+      RETURN QUERY SELECT
+        ARRAY_AGG(val) AS sorted_array
+      FROM
+        (
+          SELECT
+            UNNEST(array_vals_to_sort) AS val
+          ORDER BY
+            val
+        ) AS sorted_vals
+      ;
+    END;
+  $BODY$
+LANGUAGE plpgsql;
+-- json_to_array function
+DROP FUNCTION IF EXISTS json_to_array(json);
+NOTICE:  function json_to_array(json) does not exist, skipping
+CREATE FUNCTION
+  json_to_array(
+      json_array json
+  )
+  RETURNS TABLE (
+      pg_array text[]
+  )
+  AS $BODY$
+    BEGIN
+      RETURN QUERY SELECT
+        ARRAY_AGG(val) AS pg_array
+      FROM
+        (
+          SELECT
+            json_array_elements(json_array)::text AS val
+          ORDER BY
+            val
+        ) AS json_elements
+      ;
+    END;
+  $BODY$
+LANGUAGE plpgsql;
+-- json_keys_array function
+DROP FUNCTION IF EXISTS json_keys_array(json);
+NOTICE:  function json_keys_array(json) does not exist, skipping
+CREATE FUNCTION
+  json_keys_array(
+      json_object json
+  )
+  RETURNS TABLE (
+      pg_array text[]
+  )
+  AS $BODY$
+    BEGIN
+      RETURN QUERY SELECT
+        ARRAY_AGG(val) AS pg_array
+      FROM
+        (
+          SELECT
+            json_object_keys(json_object)::text AS val
+          ORDER BY
+            val
+        ) AS json_elements
+      ;
+    END;
+  $BODY$
+LANGUAGE plpgsql;
 -- json_agg
 CREATE CONTINUOUS VIEW test_json_agg AS SELECT key::text, json_agg(tval::text) AS j0, json_agg(fval::float8) AS j1, json_agg(ival::integer) AS j2 FROM cqobjectagg_stream GROUP BY key;
-ACTIVATE test_json_agg;
 INSERT INTO cqobjectagg_stream (key, tval, fval, ival) VALUES ('x', 'text', 0.01, 42), ('x', 'more text', 0.01, 42), ('x', 'blaahhhh', 0.01, 42);
 INSERT INTO cqobjectagg_stream (key, tval, fval, ival) VALUES ('y', '4.2', 1.01, 42), ('z', '\"quoted\"', 2.01, 42), ('x', '', 0.01, 42), ('z', '2', '3', '4');
-DEACTIVATE test_json_agg;
-SELECT key, j0 FROM test_json_agg ORDER BY key;
- key |                  j0                   
------+---------------------------------------
- x   | ["text", "more text", "blaahhhh", ""]
- y   | ["4.2"]
- z   | ["\\\"quoted\\\"", "2"]
+SELECT key, array_sort(json_to_array(j0)) FROM test_json_agg ORDER BY key;
+ key |                     array_sort                     
+-----+----------------------------------------------------
+ x   | {"\"\"","\"blaahhhh\"","\"more text\"","\"text\""}
+ y   | {"\"4.2\""}
+ z   | {"\"2\"","\"\\\\\\\"quoted\\\\\\\"\""}
 (3 rows)
 
-SELECT key, j1 FROM test_json_agg ORDER BY key;
- key |            j1            
------+--------------------------
- x   | [0.01, 0.01, 0.01, 0.01]
- y   | [1.01]
- z   | [2.01, 3]
+SELECT key, array_sort(json_to_array(j1)) FROM test_json_agg ORDER BY key;
+ key |      array_sort       
+-----+-----------------------
+ x   | {0.01,0.01,0.01,0.01}
+ y   | {1.01}
+ z   | {2.01,3}
 (3 rows)
 
-SELECT key, j2 FROM test_json_agg ORDER BY key;
- key |        j2        
------+------------------
- x   | [42, 42, 42, 42]
- y   | [42]
- z   | [42, 4]
+SELECT key, array_sort(json_to_array(j2)) FROM test_json_agg ORDER BY key;
+ key |  array_sort   
+-----+---------------
+ x   | {42,42,42,42}
+ y   | {42}
+ z   | {4,42}
 (3 rows)
 
-ACTIVATE test_json_agg;
 INSERT INTO cqobjectagg_stream (key, tval, fval, ival) VALUES ('x', 'text', 0.01, 42), ('y', 'more text', 0.01, 42), ('z', 'blaahhhh', 0.01, 42);
-DEACTIVATE test_json_agg;
-SELECT j0 FROM test_json_agg ORDER BY key;
-                      j0                       
------------------------------------------------
- ["text", "more text", "blaahhhh", "", "text"]
- ["4.2", "more text"]
- ["\\\"quoted\\\"", "2", "blaahhhh"]
+SELECT key, array_sort(json_to_array(j0)) FROM test_json_agg ORDER BY key;
+ key |                          array_sort                           
+-----+---------------------------------------------------------------
+ x   | {"\"\"","\"blaahhhh\"","\"more text\"","\"text\"","\"text\""}
+ y   | {"\"4.2\"","\"more text\""}
+ z   | {"\"2\"","\"blaahhhh\"","\"\\\\\\\"quoted\\\\\\\"\""}
 (3 rows)
 
-SELECT j1 FROM test_json_agg ORDER BY key;
-               j1               
---------------------------------
- [0.01, 0.01, 0.01, 0.01, 0.01]
- [1.01, 0.01]
- [2.01, 3, 0.01]
+SELECT key, array_sort(json_to_array(j1)) FROM test_json_agg ORDER BY key;
+ key |         array_sort         
+-----+----------------------------
+ x   | {0.01,0.01,0.01,0.01,0.01}
+ y   | {0.01,1.01}
+ z   | {0.01,2.01,3}
 (3 rows)
 
-SELECT j2 FROM test_json_agg ORDER BY key;
-          j2          
-----------------------
- [42, 42, 42, 42, 42]
- [42, 42]
- [42, 4, 42]
+SELECT key, array_sort(json_to_array(j2)) FROM test_json_agg ORDER BY key;
+ key |    array_sort    
+-----+------------------
+ x   | {42,42,42,42,42}
+ y   | {42,42}
+ z   | {4,42,42}
 (3 rows)
 
+DROP CONTINUOUS VIEW test_json_agg;
 -- json_object_agg
 CREATE CONTINUOUS VIEW test_object_agg0 AS SELECT n, json_object_agg(n::text, v::integer) FROM cqobjectagg_stream GROUP BY n;
 CREATE CONTINUOUS VIEW test_object_agg1 AS SELECT n, json_object_agg(n::text, t::text) FROM cqobjectagg_stream GROUP BY n;
-ACTIVATE test_object_agg0;
-ACTIVATE test_object_agg1;
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 1, '1');
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 2, '2');
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k1', 3, '3');
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k2', 4, '4');
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k3', 5, '5'), ('k3', 6, '6');
-DEACTIVATE test_object_agg0, test_object_agg1;
-SELECT * FROM test_object_agg0 ORDER BY n;
- n  |    json_object_agg     
-----+------------------------
- k0 | { "k0" : 1, "k0" : 2 }
- k1 | { "k1" : 3 }
- k2 | { "k2" : 4 }
- k3 | { "k3" : 5, "k3" : 6 }
+SELECT n, array_sort(json_keys_array(json_object_agg)) FROM test_object_agg0 ORDER BY n;
+ n  | array_sort 
+----+------------
+ k0 | {k0,k0}
+ k1 | {k1}
+ k2 | {k2}
+ k3 | {k3,k3}
 (4 rows)
 
-SELECT * FROM test_object_agg1 ORDER BY n;
- n  |      json_object_agg       
-----+----------------------------
- k0 | { "k0" : "1", "k0" : "2" }
- k1 | { "k1" : "3" }
- k2 | { "k2" : "4" }
- k3 | { "k3" : "5", "k3" : "6" }
+SELECT n, array_sort(json_keys_array(json_object_agg)) FROM test_object_agg1 ORDER BY n;
+ n  | array_sort 
+----+------------
+ k0 | {k0,k0}
+ k1 | {k1}
+ k2 | {k2}
+ k3 | {k3,k3}
 (4 rows)
 
-ACTIVATE test_object_agg0;
-ACTIVATE test_object_agg1;
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 1, '1');
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k0', 2, '2');
 INSERT INTO cqobjectagg_stream (n, v, t) VALUES ('k1', 3, '3');
-DEACTIVATE test_object_agg0, test_object_agg1;
-SELECT * FROM test_object_agg0 ORDER BY n;
- n  |              json_object_agg               
-----+--------------------------------------------
- k0 | { "k0" : 1, "k0" : 2, "k0" : 1, "k0" : 2 }
- k1 | { "k1" : 3, "k1" : 3 }
- k2 | { "k2" : 4 }
- k3 | { "k3" : 5, "k3" : 6 }
+SELECT n, array_sort(json_keys_array(json_object_agg)) FROM test_object_agg0 ORDER BY n;
+ n  |  array_sort   
+----+---------------
+ k0 | {k0,k0,k0,k0}
+ k1 | {k1,k1}
+ k2 | {k2}
+ k3 | {k3,k3}
 (4 rows)
 
-SELECT * FROM test_object_agg1 ORDER BY n;
- n  |                  json_object_agg                   
-----+----------------------------------------------------
- k0 | { "k0" : "1", "k0" : "2", "k0" : "1", "k0" : "2" }
- k1 | { "k1" : "3", "k1" : "3" }
- k2 | { "k2" : "4" }
- k3 | { "k3" : "5", "k3" : "6" }
+SELECT n, array_sort(json_keys_array(json_object_agg)) FROM test_object_agg1 ORDER BY n;
+ n  |  array_sort   
+----+---------------
+ k0 | {k0,k0,k0,k0}
+ k1 | {k1,k1}
+ k2 | {k2}
+ k3 | {k3,k3}
 (4 rows)
 
+DROP CONTINUOUS VIEW test_object_agg0;
+DROP CONTINUOUS VIEW test_object_agg1;
 -- bytea_string_agg, string_agg
-CREATE CONTINUOUS VIEW test_bstring_agg AS SELECT k::text, string_agg(v::bytea, '00000') FROM cqobjectagg_stream GROUP by k;
-CREATE CONTINUOUS VIEW test_string_agg AS SELECT k::text, string_agg(v::text, k::text) FROM cqobjectagg_text_stream GROUP by k;
-ACTIVATE test_bstring_agg;
-ACTIVATE test_string_agg;
+CREATE CONTINUOUS VIEW test_bstring_agg AS SELECT k::text, string_agg(v::bytea, '@') FROM cqobjectagg_stream GROUP by k;
+CREATE CONTINUOUS VIEW test_string_agg AS SELECT k::text, string_agg(v::text, '@') FROM cqobjectagg_text_stream GROUP by k;
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('x', 'val0'), ('x', 'val1');
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('y', 'val0'), ('y', 'val1');
 INSERT INTO cqobjectagg_text_stream (k, v) VALUES ('x', 'val0'), ('x', 'val1');
 INSERT INTO cqobjectagg_text_stream (k, v) VALUES ('y', 'val0'), ('y', 'val1');
-DEACTIVATE test_bstring_agg, test_string_agg;
-SELECT * FROM test_bstring_agg ORDER BY k;
- k |          string_agg          
----+------------------------------
- x | \x76616c30303030303076616c31
- y | \x76616c30303030303076616c31
+SELECT k, array_sort(regexp_split_to_array(encode(string_agg, 'escape'), '@')) FROM test_bstring_agg ORDER BY k;
+ k | array_sort  
+---+-------------
+ x | {val0,val1}
+ y | {val0,val1}
 (2 rows)
 
-SELECT * FROM test_string_agg ORDER BY k;
- k | string_agg 
----+------------
- x | val0xval1
- y | val0yval1
+SELECT k, array_sort(regexp_split_to_array(string_agg, '@')) FROM test_string_agg ORDER BY k;
+ k | array_sort  
+---+-------------
+ x | {val0,val1}
+ y | {val0,val1}
 (2 rows)
 
-ACTIVATE test_bstring_agg;
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('x', 'val3');
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('z', 'val4');
-DEACTIVATE test_bstring_agg;
-SELECT * FROM test_bstring_agg ORDER BY k;
- k |                   string_agg                   
----+------------------------------------------------
- x | \x76616c30303030303076616c31303030303076616c33
- y | \x76616c30303030303076616c31
- z | \x76616c34
+INSERT INTO cqobjectagg_text_stream (k, v) VALUES ('x', 'val3');
+INSERT INTO cqobjectagg_text_stream (k, v) VALUES ('z', 'val4');
+SELECT k, array_sort(regexp_split_to_array(encode(string_agg, 'escape'), '@')) FROM test_bstring_agg ORDER BY k;
+ k |    array_sort    
+---+------------------
+ x | {val0,val1,val3}
+ y | {val0,val1}
+ z | {val4}
 (3 rows)
 
-SELECT * FROM test_string_agg ORDER BY k;
- k | string_agg 
----+------------
- x | val0xval1
- y | val0yval1
-(2 rows)
+SELECT k, array_sort(regexp_split_to_array(string_agg, '@')) FROM test_string_agg ORDER BY k;
+ k |    array_sort    
+---+------------------
+ x | {val0,val1,val3}
+ y | {val0,val1}
+ z | {val4}
+(3 rows)
 
+DROP CONTINUOUS VIEW test_bstring_agg;
+DROP CONTINUOUS VIEW test_string_agg;
 -- array_agg
 CREATE CONTINUOUS VIEW test_array_agg AS SELECT k::text, array_agg(v::integer) FROM cqobjectagg_stream GROUP BY k;
-ACTIVATE test_array_agg;
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('x', 0), ('x', 1), ('x', 2), ('x', 3);
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('y', 0), ('y', 1);
-DEACTIVATE test_array_agg;
-SELECT * FROM test_array_agg ORDER BY k;
- k | array_agg 
----+-----------
+SELECT k, array_sort(array_agg) FROM test_array_agg ORDER BY k;
+ k | array_sort 
+---+------------
  x | {0,1,2,3}
  y | {0,1}
 (2 rows)
 
-ACTIVATE test_array_agg;
 INSERT INTO cqobjectagg_stream (k, v) VALUES ('x', 4), ('y', 2), ('z', 10), ('z', 20);
-DEACTIVATE test_array_agg;
-SELECT * FROM test_array_agg ORDER BY k;
- k |  array_agg  
+SELECT k, array_sort(array_agg) FROM test_array_agg ORDER BY k;
+ k | array_sort  
 ---+-------------
  x | {0,1,2,3,4}
  y | {0,1,2}
  z | {10,20}
 (3 rows)
 
-DROP CONTINUOUS VIEW test_json_agg;
-DROP CONTINUOUS VIEW test_object_agg0;
-DROP CONTINUOUS VIEW test_object_agg1;
-DROP CONTINUOUS VIEW test_bstring_agg;
-DROP CONTINUOUS VIEW test_string_agg;
 DROP CONTINUOUS VIEW test_array_agg;
+DROP FUNCTION array_sort(anyarray);
+DROP FUNCTION json_to_array(json);
+DROP FUNCTION json_keys_array(json);

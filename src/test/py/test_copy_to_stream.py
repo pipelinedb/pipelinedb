@@ -32,11 +32,7 @@ def test_copy_to_stream(pipeline, clean_db):
 
     pipeline.execute('COPY test_copy_to_stream_t (x, y, z) FROM \'%s\' HEADER CSV' % path)
 
-    pipeline.activate()
-
     pipeline.execute('COPY stream (x, y, z) FROM \'%s\' HEADER CSV' % path)
-
-    pipeline.deactivate()
 
     expected = pipeline.execute('SELECT sum(x::integer) AS s0, sum(y::float8) AS s1, avg(z::numeric) FROM test_copy_to_stream_t').first()
     result = list(pipeline.execute('SELECT * FROM test_copy_to_stream'))
@@ -69,11 +65,7 @@ def test_colums_superset(pipeline, clean_db):
 
     pipeline.execute('COPY test_copy_superset_t (t, x, y, z) FROM \'%s\' HEADER CSV' % path)
 
-    pipeline.activate()
-
     pipeline.execute('COPY stream (t, x, y, z) FROM \'%s\' HEADER CSV' % path)
-
-    pipeline.deactivate()
 
     expected = pipeline.execute('SELECT sum(x::integer) AS s0, sum(y::float8) AS s1, avg(z::numeric) FROM test_copy_superset_t').first()
     result = list(pipeline.execute('SELECT * FROM test_copy_superset'))
@@ -106,11 +98,7 @@ def test_colums_subset(pipeline, clean_db):
 
     pipeline.execute('COPY test_copy_subset_t (x, y, z) FROM \'%s\' HEADER CSV' % path)
 
-    pipeline.activate()
-
     pipeline.execute('COPY stream (x, y, z) FROM \'%s\' HEADER CSV' % path)
-
-    pipeline.deactivate()
 
     expected = pipeline.execute('SELECT sum(x::integer) AS s0, sum(y::float8) AS s1, avg(z::numeric) FROM test_copy_subset_t').first()
     result = list(pipeline.execute('SELECT s0, s1, avg FROM test_copy_subset'))

@@ -5293,7 +5293,7 @@ DESCR("count-min sketch merge aggregate");
 DATA(insert OID = 4354 ( cmsketch_count	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_count _null_ _null_ _null_ ));
 DESCR("count-min sketch estimate count");
 
-DATA(insert OID = 4355 ( cq_stat_proc_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,23,1184,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o,o}" "{name,type,pid,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors}" _null_ cq_stat_proc_get _null_ _null_ _null_ ));
+DATA(insert OID = 4355 ( cq_stat_proc_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,23,1184,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o}" "{type,pid,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors}" _null_ cq_stat_proc_get _null_ _null_ _null_ ));
 DESCR("get CQ process-level stats");
 
 DATA(insert OID = 4356 ( cq_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o}" "{name,type,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,errors}" _null_ cq_stat_get _null_ _null_ _null_ ));

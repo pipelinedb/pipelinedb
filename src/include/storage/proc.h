@@ -218,8 +218,10 @@ extern PGPROC *PreparedXactProcs;
  * Background writer, checkpointer and WAL writer run during normal operation.
  * Startup process and WAL receiver also consume 2 slots, but WAL writer is
  * launched only after startup has exited, so we only need 4 slots.
+ *
+ * We also add one slot for the continuous query launcher process.
  */
-#define NUM_AUXILIARY_PROCS		4
+#define NUM_AUXILIARY_PROCS		(4 + 1)
 
 
 /* configurable options */

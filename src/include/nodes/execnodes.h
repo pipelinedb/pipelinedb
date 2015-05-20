@@ -444,7 +444,7 @@ typedef struct EState
 	bool	   *es_epqTupleSet; /* true if EPQ tuple is provided */
 	bool	   *es_epqScanDone; /* true if EPQ tuple has been fetched */
 
-	int cq_batch_size;
+	bool es_continuous;
 
 	/* number of rows filtered by leaf nodes */
 	uint32 es_filtered;
@@ -1061,21 +1061,12 @@ typedef struct PlanState
 	ProjectionInfo *ps_ProjInfo;	/* info for doing tuple projection */
 	bool		ps_TupFromTlist;/* state flag for processing set-valued
 								 * functions in targetlist */
-
-	int cq_batch_progress;
 } PlanState;
 
 /*
  * CQ helper macros
  */
-
-#define DisableBatching(node) ((node)->cq_batch_progress = -1)
-
-#define BatchSize(node) (((PlanState *)(node))->cq_batch_progress >= 0 ? \
-		((PlanState *)(node))->state->cq_batch_size : 0)
-
-#define IsContinuous(node) (((PlanState *)(node))->cq_batch_progress >= 0 && \
-		((PlanState *)(node))->state && BatchSize(node) > 0)
+#define IsContinuous(node) (((PlanState *)(node))->state && ((PlanState *)(node))->state->es_continuous)
 
 /* ----------------
  *	these are defined to avoid confusion problems with "left"
@@ -1869,11 +1860,9 @@ typedef struct WindowAggState
 typedef struct StreamScanState
 {
 	ScanState	ss;
-	TupleBufferReader *reader;
+	TupleBufferBatchReader *reader;
 	TupleDesc desc;
 	StreamProjectionInfo *pi;
-	bool unpin;
-	List *pinned;
 } StreamScanState;
 
 /* ----------------
@@ -1901,7 +1890,7 @@ typedef struct ContinuousUniqueState
 {
 	PlanState ps;
 	BloomFilter *distinct;
-	NameData cvname;
+	Oid cq_id;
 	bool dirty;
 	MemoryContext tmpContext;
 } ContinuousUniqueState;
