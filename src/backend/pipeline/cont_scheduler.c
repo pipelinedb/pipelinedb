@@ -139,10 +139,10 @@ GetContQueryProcName(ContQueryProc *proc)
 	switch (proc->type)
 	{
 	case Combiner:
-		sprintf(buf, "%s", "combiner");
+		sprintf(buf, "%s [%d]", "combiner", proc->db_oid);
 		break;
 	case Worker:
-		sprintf(buf, "%s", "worker");
+		sprintf(buf, "%s [%d]", "worker", proc->db_oid);
 		break;
 	case Scheduler:
 		return "scheduler";

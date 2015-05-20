@@ -54,7 +54,7 @@ def test_simple_crash(pipeline, clean_db):
   # we should either see an increment from the previous count of 4 or 6.
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
-  kill_worker(oid)
+  assert kill_worker(oid)
 
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
@@ -63,7 +63,7 @@ def test_simple_crash(pipeline, clean_db):
 
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
-  kill_combiner(oid)
+  assert kill_combiner(oid)
 
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
