@@ -495,8 +495,6 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		 */
 		simple_heap_delete(pipeline_query, &tuple->t_self);
 
-		ReleaseSysCache(tuple);
-
 		/*
 		 * Advance command counter so that later iterations of this loop will
 		 * see the changes already made.
@@ -505,6 +503,8 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 
 		/* Remove transition state entry */
 		RemoveTStateEntry(row->id);
+
+		ReleaseSysCache(tuple);
 	}
 
 	UpdateStreamQueries(pipeline_query);

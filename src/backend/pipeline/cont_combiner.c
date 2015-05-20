@@ -737,6 +737,8 @@ get_query_state(ContQueryCombinerState **states, Oid id, MemoryContext context)
 		StartTransactionCommand();
 	}
 
+	PushActiveSnapshot(GetTransactionSnapshot());
+
 	tuple = SearchSysCache1(PIPELINEQUERYID, Int32GetDatum(id));
 
 	/* Was the continuous view removed? */
@@ -767,6 +769,8 @@ get_query_state(ContQueryCombinerState **states, Oid id, MemoryContext context)
 		states[id] = state;
 		MemoryContextSwitchTo(old_cxt);
 	}
+
+	PopActiveSnapshot();
 
 	MyCQStats = &state->stats;
 

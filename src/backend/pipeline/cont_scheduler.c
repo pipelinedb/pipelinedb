@@ -25,6 +25,7 @@
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
 #include "storage/ipc.h"
+#include "storage/pmsignal.h"
 #include "storage/proc.h"
 #include "storage/shmem.h"
 #include "storage/shm_alloc.h"
@@ -511,6 +512,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 
 	/* reset MyProcPid */
 	MyProcPid = getpid();
+	MyPMChildSlot = AssignPostmasterChildSlot();
 
 	/* record Start Time for logging */
 	MyStartTime = time(NULL);
