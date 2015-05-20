@@ -3,7 +3,7 @@
  * cont_combiner.c
  *
  * IDENTIFICATION
- *    src/include/pipeline/cont_worker.c
+ *    src/include/pipeline/cont_combiner.c
  *
  *-------------------------------------------------------------------------
  */

@@ -10,6 +10,7 @@
 
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
@@ -147,8 +148,6 @@ get_query_state(ContQueryWorkerState **states, Oid id, MemoryContext context, Re
 {
 	ContQueryWorkerState *state = states[id];
 	HeapTuple tuple;
-	Datum tmp;
-	bool isnull;
 
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
@@ -171,8 +170,8 @@ get_query_state(ContQueryWorkerState **states, Oid id, MemoryContext context, Re
 	if (state != NULL)
 	{
 		/* Was the continuous view modified? In our case this means remove the old view and add a new one */
-		tmp = SysCacheGetAttr(PIPELINEQUERYNAME, tuple, Anum_pipeline_query_query, &isnull);
-		if (strcmp(state->view->query, TextDatumGetCString(tmp)) != 0)
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tuple);
+		if (row->hash != state->view->hash)
 		{
 			cleanup_query_state(states, id);
 			state = NULL;
