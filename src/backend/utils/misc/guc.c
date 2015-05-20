@@ -2638,10 +2638,8 @@ static struct config_int ConfigureNamesInt[] =
 
 	{
 		{"continuous_query_num_combiners", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
-			gettext_noop("Sets the maximum memory to be used for combining partial results for continuous queries."),
-			gettext_noop("This much memory can be used by each combiner processes's internal "
-						 "sort operation and hash table before switching to "
-						 "temporary disk files.")
+			gettext_noop("Sets the number of parallel continuous query combiner processes to use for each database."),
+			gettext_noop("A higher number will utilize multiple cores and increase throughput.")
 		},
 		&continuous_query_num_combiners,
 		1, 1, MAX_BACKENDS,
@@ -2650,10 +2648,8 @@ static struct config_int ConfigureNamesInt[] =
 
 	{
 		{"continuous_query_num_workers", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
-			gettext_noop("Sets the maximum memory to be used for combining partial results for continuous queries."),
-			gettext_noop("This much memory can be used by each combiner processes's internal "
-						 "sort operation and hash table before switching to "
-						 "temporary disk files.")
+			gettext_noop("Sets the number of parallel continuous query worker processes to use for each database."),
+			gettext_noop("A higher number will utilize multiple cores and increase throughput.")
 		},
 		&continuous_query_num_workers,
 		1, 1, MAX_BACKENDS,
