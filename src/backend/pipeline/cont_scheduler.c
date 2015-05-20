@@ -719,9 +719,21 @@ ContQuerySchedulerMain(int argc, char *argv[])
 			hash_seq_init(&status, ContQuerySchedulerShmem->proc_table);
 			while ((grp = (ContQueryProcGroup *) hash_seq_search(&status)) != NULL)
 			{
+				ListCell *lc;
+
 				if (!grp->terminate)
 					continue;
-				dbs = list_delete_oid(dbs, grp->db_oid);
+
+				foreach(lc, dbs)
+				{
+					DatabaseEntry *entry = lfirst(lc);
+					if (entry->oid == grp->db_oid)
+					{
+						dbs = list_delete(dbs, entry);
+						break;
+					}
+				}
+
 				terminate_group(grp);
 			}
 		}
