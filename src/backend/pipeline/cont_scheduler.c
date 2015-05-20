@@ -45,6 +45,11 @@
 #define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners)
 #define MAX_WAIT_TERMINATE_MS 250
 
+typedef struct {
+	Oid oid;
+	NameData name;
+} DatabaseEntry;
+
 /* per proc structures */
 ContQueryProc *MyContQueryProc = NULL;
 
@@ -139,10 +144,10 @@ GetContQueryProcName(ContQueryProc *proc)
 	switch (proc->type)
 	{
 	case Combiner:
-		sprintf(buf, "%s [%d]", "combiner", proc->db_oid);
+		sprintf(buf, "%s [%s]", "combiner", NameStr(proc->db_name));
 		break;
 	case Worker:
-		sprintf(buf, "%s [%d]", "worker", proc->db_oid);
+		sprintf(buf, "%s [%s]", "worker", NameStr(proc->db_name));
 		break;
 	case Scheduler:
 		return "scheduler";
@@ -296,7 +301,7 @@ sigint_handler(SIGNAL_ARGS)
  * Returns a list of all database OIDs found in pg_database.
  */
 static List *
-get_database_oids(void)
+get_database_list(void)
 {
 	List *dbs = NIL;
 	Relation rel;
@@ -325,6 +330,7 @@ get_database_oids(void)
 	{
 		MemoryContext oldcxt;
 		Form_pg_database pgdatabase = (Form_pg_database) GETSTRUCT(tup);
+		DatabaseEntry *db_entry;
 
 		/* Ignore template databases or ones that don't allow connections. */
 		if (pgdatabase->datistemplate || !pgdatabase->datallowconn)
@@ -338,7 +344,10 @@ get_database_oids(void)
 		 */
 		oldcxt = MemoryContextSwitchTo(resultcxt);
 
-		dbs = lappend_oid(dbs, HeapTupleGetOid(tup));
+		db_entry = palloc0(sizeof(DatabaseEntry));
+		db_entry->oid = HeapTupleGetOid(tup);
+		StrNCpy(NameStr(db_entry->name), NameStr(pgdatabase->datname), NAMEDATALEN);
+		dbs = lappend(dbs, db_entry);
 
 		MemoryContextSwitchTo(oldcxt);
 	}
@@ -358,7 +367,7 @@ cq_bgproc_main(Datum arg)
 	MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
 
 	BackgroundWorkerUnblockSignals();
-	BackgroundWorkerInitializeConnection(NULL, MyContQueryProc->db_oid, NULL);
+	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->db_name), NULL);
 
 	/* if we got a cancel signal in prior command, quit */
 	CHECK_FOR_INTERRUPTS();
@@ -425,7 +434,7 @@ run_background_proc(ContQueryProc *proc)
 }
 
 static void
-start_group_procs(ContQueryProcGroup *grp)
+start_group(ContQueryProcGroup *grp)
 {
 	int slot_idx;
 	int group_id;
@@ -440,6 +449,7 @@ start_group_procs(ContQueryProcGroup *grp)
 
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
+		StrNCpy(NameStr(proc->db_name), NameStr(grp->db_name), NAMEDATALEN);
 		proc->db_oid = grp->db_oid;
 		proc->type = Worker;
 		proc->group_id = group_id;
@@ -455,6 +465,7 @@ start_group_procs(ContQueryProcGroup *grp)
 
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
+		StrNCpy(NameStr(proc->db_name), NameStr(grp->db_name), NAMEDATALEN);
 		proc->db_oid = grp->db_oid;
 		proc->type = Combiner;
 		proc->group_id = group_id;
@@ -639,7 +650,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 
 	ContQuerySchedulerShmem->scheduler_pid = MyProcPid;
 
-	dbs = get_database_oids();
+	dbs = get_database_list();
 
 	/* Loop forever */
 	for (;;)
@@ -649,15 +660,17 @@ ContQuerySchedulerMain(int argc, char *argv[])
 
 		foreach(lc, dbs)
 		{
-			Oid dboid = lfirst_oid(lc);
+			DatabaseEntry *db_entry = lfirst(lc);
 			bool found;
-			ContQueryProcGroup *grp = hash_search(ContQuerySchedulerShmem->proc_table, &dboid, HASH_ENTER, &found);
+			ContQueryProcGroup *grp = hash_search(ContQuerySchedulerShmem->proc_table, &db_entry->oid, HASH_ENTER, &found);
 
 			/* If we don't have an entry for this dboid, initialize a new one and fire off bg procs */
 			if (!found)
 			{
-				grp->db_oid = dboid;
-				start_group_procs(grp);
+				grp->db_oid = db_entry->oid;
+				StrNCpy(NameStr(grp->db_name), NameStr(db_entry->name), NAMEDATALEN);
+
+				start_group(grp);
 			}
 		}
 
@@ -716,8 +729,8 @@ ContQuerySchedulerMain(int argc, char *argv[])
 		/* refresh db list? */
 		if (got_SIGINT)
 		{
-			list_free(dbs);
-			dbs = get_database_oids();
+			list_free_deep(dbs);
+			dbs = get_database_list();
 		}
 	}
 

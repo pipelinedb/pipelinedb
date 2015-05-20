@@ -28,6 +28,7 @@ typedef struct ContQueryProcGroup ContQueryProcGroup;
 typedef struct
 {
 	Oid db_oid;
+	NameData db_name;
 	ContQueryProcType type;
 	int id; /* unique across all cont query processes */
 	int group_id; /* unqiue [0, n) for each db_oid, type pair */
@@ -39,6 +40,7 @@ typedef struct
 struct ContQueryProcGroup
 {
 	Oid db_oid;
+	NameData db_name;
 	sig_atomic_t active;
 	sig_atomic_t terminate;
 	ContQueryProc procs[1]; /* number of slots is equal to continuous_query_num_combiners + continuous_query_num_workers */

@@ -25,22 +25,16 @@ def _kill(pid):
   os.kill(pid, signal.SIGTERM)
   return True
 
-def kill_worker(db_oid):
-  return _kill(_get_pid('worker \[%d\]' % db_oid))
+def kill_worker():
+  return _kill(_get_pid('worker \[pipeline\]'))
 
-def kill_combiner(db_oid):
-  return _kill(_get_pid('combiner \[%d\]' % db_oid))
-
-def get_db_oid(pipeline):
-  result = pipeline.execute("SELECT oid FROM pg_database WHERE datname='pipeline'").first()
-  return int(result['oid'])
+def kill_combiner():
+  return _kill(_get_pid('combiner \[pipeline\]'))
 
 def test_simple_crash(pipeline, clean_db):
   """
   Test simple worker and combiner crashes.
   """
-  oid = get_db_oid(pipeline)
-
   q = 'SELECT COUNT(*) FROM stream'
   pipeline.create_cv('test_simple_crash', q)
 
@@ -54,7 +48,7 @@ def test_simple_crash(pipeline, clean_db):
   # we should either see an increment from the previous count of 4 or 6.
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
-  assert kill_worker(oid)
+  assert kill_worker()
 
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
@@ -63,7 +57,7 @@ def test_simple_crash(pipeline, clean_db):
 
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
-  assert kill_combiner(oid)
+  assert kill_combiner()
 
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
@@ -74,8 +68,6 @@ def test_concurrent_crash(pipeline, clean_db):
   """
   Test simple worker and combiner crashes.
   """
-  oid = get_db_oid(pipeline)
-
   q = 'SELECT COUNT(*) FROM stream'
   pipeline.create_cv('test_concurrent_crash', q)
 
@@ -93,9 +85,9 @@ def test_concurrent_crash(pipeline, clean_db):
     for _ in xrange(30):
       r = random.random()
       if r > 0.85:
-        desc[0] += kill_combiner(oid)
+        desc[0] += kill_combiner()
       if r < 0.15:
-        desc[0] += kill_worker(oid)
+        desc[0] += kill_worker()
       time.sleep(0.1)
 
     desc[2] = True
