@@ -37,8 +37,8 @@ SELECT pg_sleep(1);
 INSERT INTO float_swavg_stream (k, v) VALUES ('x', -1e6), ('x', 1e6), ('x', -10.0000001);
 INSERT INTO float_swavg_stream (k, v) VALUES ('z', 42.42);
 
-SELECT * FROM test_float8_avg_sw ORDER BY k;
-SELECT * FROM test_float4_avg_sw ORDER BY k;
+SELECT k, round(avg::numeric, 5) FROM test_float8_avg_sw ORDER BY k;
+SELECT k, round(avg::numeric, 5) FROM test_float4_avg_sw ORDER BY k;
 
 -------------------------------------------------------------------------------
 -- Numeric averages

@@ -32,8 +32,8 @@ SELECT k, round(avg::numeric, 5) FROM test_float4_avg ORDER BY k;
 INSERT INTO float_stream_cqavg (k, v) VALUES ('x', -1e5), ('x', 1e6), ('x', -10.0000001);
 INSERT INTO float_stream_cqavg (k, v) VALUES ('z', 42.42);
 
-SELECT * FROM test_float8_avg ORDER BY k;
-SELECT * FROM test_float4_avg ORDER BY k;
+SELECT k, round(avg::numeric, 5) FROM test_float8_avg ORDER BY k;
+SELECT k, round(avg::numeric, 5) FROM test_float4_avg ORDER BY k;
 
 -------------------------------------------------------------------------------
 -- Numeric averages
