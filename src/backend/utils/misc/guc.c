@@ -2644,7 +2644,7 @@ static struct config_int ConfigureNamesInt[] =
 						 "temporary disk files.")
 		},
 		&continuous_query_num_combiners,
-		2, 1, MAX_BACKENDS,
+		1, 1, MAX_BACKENDS,
 		NULL, NULL, NULL
 	},
 
@@ -2656,7 +2656,7 @@ static struct config_int ConfigureNamesInt[] =
 						 "temporary disk files.")
 		},
 		&continuous_query_num_workers,
-		4, 1, MAX_BACKENDS,
+		1, 1, MAX_BACKENDS,
 		NULL, NULL, NULL
 	},
 
