@@ -563,7 +563,8 @@ combine(ContQueryCombinerState *state)
 
 		execTuplesHashPrepare(state->ngroupatts, state->groupops, &eq_funcs, &hash_funcs);
 		existing = BuildTupleHashTable(state->ngroupatts, state->groupatts, eq_funcs, hash_funcs, 1000,
-				sizeof(HeapTupleEntryData), state->tmp_cxt, hash_tmp_cxt);
+				sizeof(HeapTupleEntryData), CurrentMemoryContext, hash_tmp_cxt);
+
 		select_existing_groups(state, existing);
 	}
 
@@ -610,6 +611,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 	PlannedStmt *pstmt;
 	MemoryContext exec_cxt;
 	MemoryContext old_cxt;
+	MemoryContext cache_tmp_cxt;
 
 	MemSet(state, 0, sizeof(ContQueryCombinerState));
 
@@ -621,13 +623,17 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 	old_cxt = MemoryContextSwitchTo(exec_cxt);
 
 	state->view_id = id;
-
 	state->exec_cxt = exec_cxt;
 	state->tmp_cxt = AllocSetContextCreate(exec_cxt, "CombinerQueryTmpCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 	state->plan_cache_cxt = AllocSetContextCreate(exec_cxt, "CombinerQueryPlanCacheCxt",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
+
+	cache_tmp_cxt = AllocSetContextCreate(exec_cxt, "CombinerQueryTmpCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
@@ -690,10 +696,8 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		heap_close(matrel, NoLock);
 		CQMatViewClose(ri);
 
-		state->cache = NULL;
-		/* TODO(usmanm): Fix this caching stuff to work under the new scheduler model. */
-//		state->cache = GroupCacheCreate(continuous_query_combiner_cache_mem * 1024, state->ngroupatts, state->groupatts,
-//				state->groupops, state->slot, exec_cxt, state->tmp_cxt);
+		state->cache = GroupCacheCreate(continuous_query_combiner_cache_mem * 1024, state->ngroupatts, state->groupatts,
+				state->groupops, state->slot, exec_cxt, cache_tmp_cxt);
 	}
 
 	cq_stat_init(&state->stats, state->view->id, 0);
@@ -744,6 +748,7 @@ get_query_state(ContQueryCombinerState **states, Oid id, MemoryContext context)
 	/* Was the continuous view removed? */
 	if (!HeapTupleIsValid(tuple))
 	{
+		PopActiveSnapshot();
 		cleanup_query_state(states, id);
 		return NULL;
 	}
