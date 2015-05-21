@@ -114,9 +114,16 @@ def test_restart_recovery(pipeline, clean_db):
   result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
   assert result['count'] == 2
 
+  # Need to sleep here, otherwise on restart the materialization table is
+  # empty. Not sure why.
+  time.sleep(0.1)
+
   # Restart.
   pipeline.stop()
   pipeline.run()
+
+  result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
+  assert result['count'] == 2
 
   pipeline.insert('stream', ['x'], [(1, ), (1, )])
 
