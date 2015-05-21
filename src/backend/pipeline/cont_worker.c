@@ -343,8 +343,6 @@ ContinuousQueryWorkerMain(void)
 
 				unset_snapshot(estate, owner);
 
-				TupleBufferBatchReaderRewind(reader);
-
 				IncrementCQExecutions(1);
 			}
 			PG_CATCH();
@@ -357,8 +355,6 @@ ContinuousQueryWorkerMain(void)
 
 				cleanup_query_state(states, state->view_id);
 
-				TupleBufferBatchReaderRewind(reader);
-
 				IncrementCQErrors(1);
 
 				if (!continuous_query_crash_recovery)
@@ -367,6 +363,8 @@ ContinuousQueryWorkerMain(void)
 			PG_END_TRY();
 
 next:
+			TupleBufferBatchReaderRewind(reader);
+
 			/* after reading a full batch, update query bitset with any new queries seen */
 			if (reader->batch_done && !updated_queries)
 			{
