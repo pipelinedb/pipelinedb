@@ -16,8 +16,6 @@ def test_stream_buffer(pipeline, clean_db):
   pipeline.create_cv('test_sbuf_4',
                      'SELECT x::int, pg_sleep(0.002) FROM stream2')
 
-  pipeline.activate()
-
   num_per_batch = 5000
   num_batches = 6
   # We're sending this 2k string with each event just to consume
@@ -37,8 +35,6 @@ def test_stream_buffer(pipeline, clean_db):
 
   pipeline.insert('stream1', ('x', 'string'), values)
   pipeline.insert('stream2', ('x', 'string'), values)
-
-  pipeline.deactivate()
 
   q = 'SELECT COUNT(*) FROM test_sbuf_%d'
   r1 = pipeline.execute(q % 1).first()[0]

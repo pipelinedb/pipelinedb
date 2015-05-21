@@ -864,6 +864,29 @@ bms_hash_value(const Bitmapset *a)
 								   (lastword + 1) * sizeof(bitmapword)));
 }
 
+char *
+bms_print(const Bitmapset *a)
+{
+	Bitmapset *tmp = bms_copy(a);
+	StringInfo s = makeStringInfo();
+	int x;
+	char *str;
+
+	appendStringInfo(s, "{ ");
+
+	while ((x = bms_first_member(tmp)) >= 0)
+		appendStringInfo(s, "%d ", x);
+
+	appendStringInfo(s, "}");
+
+	str = s->data;
+	pfree(s);
+
+	bms_free(tmp);
+
+	return str;
+}
+
 Bitmapset *shm_bms_add_member(Bitmapset *bms, int x)
 {
 	int	wordnum, bitnum, nwords;

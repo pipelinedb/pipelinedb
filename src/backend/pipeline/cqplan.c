@@ -134,7 +134,6 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 	AttrNumber attno = 1;
 	List *targetlist = NIL;
 	TupleDesc matdesc;
-	CQProcessType ptype = pstmt->cq_state->ptype;
 	int i;
 	Agg *agg;
 
@@ -201,7 +200,7 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 			 * If we're a combiner, this Aggref will take one argument whose type is
 			 * the transition output type of this Aggref on the worker.
 			 */
-			if (ptype == CQCombiner)
+			if (pstmt->is_combine)
 			{
 				Var *v = makeVar(OUTER_VAR, attno, transtype, InvalidOid, InvalidOid, 0);
 				TargetEntry *arte = makeTargetEntry((Expr *) v, 1, toappend->resname, false);
@@ -217,7 +216,7 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 		}
 		else
 		{
-			if (ptype == CQCombiner)
+			if (pstmt->is_combine)
 			{
 				/*
 				 * Replace any non-Aggref expression with a Var which has the same type
@@ -306,7 +305,7 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 }
 
 static PlannedStmt *
-get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewState *state, bool is_combine)
+get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 {
 	List		*querytree_list;
 	List		*plantree_list;
@@ -320,17 +319,14 @@ get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewStat
 
 	query->is_continuous = IsA(node, SelectStmt);
 	query->is_combine = is_combine;
-	query->cq_target = makeRangeVar(NULL, cvname, -1);
-	query->cq_state = state;
+	query->cq_id = id;
 
 	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
 	Assert(list_length(plantree_list) == 1);
 	plan = (PlannedStmt *) linitial(plantree_list);
-
 	plan->is_continuous = true;
-	plan->cq_target = makeRangeVar(NULL, cvname, -1);
-	plan->cq_state = palloc(sizeof(ContinuousViewState));
-	memcpy(plan->cq_state, query->cq_state, sizeof(ContinuousViewState));
+	plan->cq_id = id;
+	plan->is_combine = is_combine;
 
 	/*
 	 * Unique plans get transformed into ContinuousUnique plans for
@@ -342,7 +338,7 @@ get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewStat
 		ContinuousUnique *cunique = makeNode(ContinuousUnique);
 		Unique *unique = (Unique *) plan->planTree;
 		memcpy((char *) &cunique->unique, (char *) unique, sizeof(Unique));
-		namestrcpy(&cunique->cvName, cvname);
+		cunique->cq_id = id;
 		cunique->unique.plan.type = T_ContinuousUnique;
 		plan->planTree = (Plan *) cunique;
 
@@ -355,7 +351,7 @@ get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewStat
 }
 
 static PlannedStmt*
-get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
+get_worker_plan(Oid id, const char *sql)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
@@ -367,11 +363,11 @@ get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	selectstmt = GetSelectStmtForCQWorker(selectstmt, NULL);
 	selectstmt->forContinuousView = true;
 
-	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, false);
+	return get_plan_from_stmt(id, (Node *) selectstmt, sql, false);
 }
 
 static PlannedStmt*
-get_combiner_plan(char *cvname, const char *sql, ContinuousViewState *state)
+get_combiner_plan(Oid id, const char *sql)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
@@ -386,28 +382,23 @@ get_combiner_plan(char *cvname, const char *sql, ContinuousViewState *state)
 	selectstmt = GetSelectStmtForCQCombiner(selectstmt);
 	selectstmt->forContinuousView = true;
 
-	result = get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, true);
+	result = get_plan_from_stmt(id, (Node *) selectstmt, sql, true);
 	join_search_hook = save;
 
 	return result;
 }
 
 PlannedStmt *
-GetCQPlan(char *cvname, const char *sql, ContinuousViewState *state, char *matrelname)
+GetCQPlan(Oid id, const char *sql, char *matrelname)
 {
 	PlannedStmt *plan;
 
-	switch(state->ptype)
-	{
-		case CQCombiner:
-			plan = get_combiner_plan(cvname, sql, state);
-			break;
-		case CQWorker:
-			plan = get_worker_plan(cvname, sql, state);
-			break;
-		default:
-			elog(ERROR, "unrecognized CQ proc type: %d", state->ptype);
-	}
+	if (IsContQueryWorkerProcess())
+		plan = get_worker_plan(id, sql);
+	else if (IsContQueryCombinerProcess())
+		plan = get_combiner_plan(id, sql);
+	else
+		ereport(ERROR, (errmsg("only continuous query processes can generate continuous query plans")));
 
 	set_plan_refs(plan, matrelname);
 

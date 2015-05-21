@@ -118,14 +118,14 @@ is_allocated(void *ptr)
  * making locking more fine grained.
  */
 
-typedef struct ShemDynAllocState
+typedef struct
 {
 	void *head;
 	void *tail;
 	slock_t mutex;
-} ShemDynAllocState;
+} ShemDynAllocShmemStruct;
 
-static ShemDynAllocState *GlobalShemDynAllocState = NULL;
+static ShemDynAllocShmemStruct *ShemDynAllocShmem = NULL;
 
 static bool
 coalesce_blocks(void *ptr1, void *ptr2)
@@ -174,28 +174,32 @@ insert_block(void *ptr)
 
 	mark_free(ptr);
 
-	SpinLockAcquire(&GlobalShemDynAllocState->mutex);
+#ifdef CLOBBER_FREED_MEMORY
+	memset(ptr, 0x7F, get_size(ptr));
+#endif
 
-	if (!GlobalShemDynAllocState->head)
+	SpinLockAcquire(&ShemDynAllocShmem->mutex);
+
+	if (!ShemDynAllocShmem->head)
 	{
-		GlobalShemDynAllocState->head = ptr;
-		GlobalShemDynAllocState->tail = ptr;
+		ShemDynAllocShmem->head = ptr;
+		ShemDynAllocShmem->tail = ptr;
 	}
 	else
 	{
-		if ((intptr_t) ptr < (intptr_t) GlobalShemDynAllocState->head)
+		if ((intptr_t) ptr < (intptr_t) ShemDynAllocShmem->head)
 		{
-			next = GlobalShemDynAllocState->head;
-			GlobalShemDynAllocState->head = ptr;
+			next = ShemDynAllocShmem->head;
+			ShemDynAllocShmem->head = ptr;
 		}
-		else if ((intptr_t) ptr > (intptr_t) GlobalShemDynAllocState->tail)
+		else if ((intptr_t) ptr > (intptr_t) ShemDynAllocShmem->tail)
 		{
-			prev = GlobalShemDynAllocState->tail;
-			GlobalShemDynAllocState->tail = ptr;
+			prev = ShemDynAllocShmem->tail;
+			ShemDynAllocShmem->tail = ptr;
 		}
 		else
 		{
-			prev = GlobalShemDynAllocState->head;
+			prev = ShemDynAllocShmem->head;
 			while (prev)
 			{
 				next = get_next(prev);
@@ -217,8 +221,8 @@ insert_block(void *ptr)
 		set_next(prev, ptr);
 		if (coalesce_blocks(prev, ptr))
 		{
-			if (GlobalShemDynAllocState->tail == ptr)
-				GlobalShemDynAllocState->tail = prev;
+			if (ShemDynAllocShmem->tail == ptr)
+				ShemDynAllocShmem->tail = prev;
 			ptr = prev;
 		}
 	}
@@ -229,7 +233,7 @@ insert_block(void *ptr)
 		coalesce_blocks(ptr, next);
 	}
 
-	SpinLockRelease(&GlobalShemDynAllocState->mutex);
+	SpinLockRelease(&ShemDynAllocShmem->mutex);
 }
 
 static void
@@ -253,9 +257,9 @@ get_block(Size size)
 	void *best = NULL;
 	int best_size;
 
-	SpinLockAcquire(&GlobalShemDynAllocState->mutex);
+	SpinLockAcquire(&ShemDynAllocShmem->mutex);
 
-	block = GlobalShemDynAllocState->head;
+	block = ShemDynAllocShmem->head;
 	while (block)
 	{
 		Size block_size = get_size(block);
@@ -282,16 +286,16 @@ get_block(Size size)
 		next = get_next(best);
 
 		if (!prev)
-			GlobalShemDynAllocState->head = next;
+			ShemDynAllocShmem->head = next;
 		else
 			set_next(prev, next);
 		if (!next)
-			GlobalShemDynAllocState->tail = prev;
+			ShemDynAllocShmem->tail = prev;
 		else
 			set_prev(next, prev);
 	}
 
-	SpinLockRelease(&GlobalShemDynAllocState->mutex);
+	SpinLockRelease(&ShemDynAllocShmem->mutex);
 
 	return best;
 }
@@ -300,21 +304,18 @@ get_block(Size size)
  * InitShmemDynAllocator
  */
 void
-InitShmemDynAllocator(void)
+ShmemDynAllocShmemInit(void)
 {
 	bool found;
 
-	LWLockAcquire(PipelineMetadataLock, LW_EXCLUSIVE);
+	ShemDynAllocShmem = (ShemDynAllocShmemStruct *) ShmemInitStruct("ShemDynAllocState", sizeof(ShemDynAllocShmemStruct) , &found);
 
-	GlobalShemDynAllocState = (ShemDynAllocState *) ShmemInitStruct("SPallocState", sizeof(ShemDynAllocState) , &found);
 	if (!found)
 	{
-		GlobalShemDynAllocState->head = NULL;
-		GlobalShemDynAllocState->tail = NULL;
-		SpinLockInit(&GlobalShemDynAllocState->mutex);
+		ShemDynAllocShmem->head = NULL;
+		ShemDynAllocShmem->tail = NULL;
+		SpinLockInit(&ShemDynAllocShmem->mutex);
 	}
-
-	LWLockRelease(PipelineMetadataLock);
 }
 
 /*
@@ -323,7 +324,7 @@ InitShmemDynAllocator(void)
 void *
 ShmemDynAlloc(Size size)
 {
-	void *block;
+	void *block = NULL;
 	Size padded_size;
 
 	size = MAX(ALIGN(size), MIN_ALLOC_SIZE);
@@ -341,6 +342,7 @@ ShmemDynAlloc(Size size)
 		 */
 		Size alloc_size = MAX(size, MIN_SHMEM_ALLOC_SIZE);
 		block = ShmemAlloc(BLOCK_SIZE(alloc_size));
+
 		memset(block, 0, BLOCK_SIZE(alloc_size));
 		block = (void *) ((intptr_t) block + sizeof(Header));
 		init_block(block, alloc_size, true);

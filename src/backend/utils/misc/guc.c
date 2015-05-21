@@ -52,8 +52,7 @@
 #include "parser/parser.h"
 #include "parser/scansup.h"
 #include "pgstat.h"
-#include "pipeline/combiner.h"
-#include "pipeline/cqproc.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
 #include "pipeline/tuplebuf.h"
 #include "postmaster/autovacuum.h"
@@ -2285,7 +2284,7 @@ static struct config_int ConfigureNamesInt[] =
 			NULL,
 		},
 		&max_worker_processes,
-		512, 1, MAX_BACKENDS,
+		128, 1, MAX_BACKENDS,
 		check_max_worker_processes, NULL, NULL
 	},
 
@@ -2580,26 +2579,80 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"combiner_work_mem", PGC_BACKEND, RESOURCES_MEM,
+		{"continuous_query_combiner_work_mem", PGC_BACKEND, RESOURCES_MEM,
 			gettext_noop("Sets the maximum memory to be used for combining partial results for continuous queries."),
 			gettext_noop("This much memory can be used by each combiner processes's internal "
 						 "sort operation and hash table before switching to "
 						 "temporary disk files."),
 			GUC_UNIT_KB
 		},
-		&combiner_work_mem,
+		&continuous_query_combiner_work_mem,
 		262144, 16384, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},
 
 	{
-		{"combiner_cache_mem", PGC_BACKEND, RESOURCES_MEM,
+		{"continuous_query_empty_sleep", PGC_SIGHUP, QUERY_TUNING,
+			gettext_noop("Sets the time a continuous query process will wait for new data to arrive before going to sleep."),
+			gettext_noop("A higher value may cause a continuous query worker process to waste CPU cycles but it will sleep "
+					"less often."),
+			GUC_UNIT_MS
+		},
+		&continuous_query_empty_sleep,
+		5, 1, 60000,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_query_combiner_cache_mem", PGC_BACKEND, RESOURCES_MEM,
 			gettext_noop("Sets the maximum memory to be used by the combiner for caching. This is independent of combiner_work_mem."),
 			NULL,
 			GUC_UNIT_KB
 		},
-		&combiner_cache_mem,
-		32768, 0, MAX_KILOBYTES,
+		&continuous_query_combiner_cache_mem,
+		16384, 0, MAX_KILOBYTES,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_query_max_wait", PGC_SIGHUP, QUERY_TUNING,
+			gettext_noop("Sets the time a continuous query process will wait for a batch to accumulate."),
+			gettext_noop("A higher value usually yields less frequent continuous view updates, but adversly affects "
+					"latency."),
+			GUC_UNIT_MS
+		},
+		&continuous_query_max_wait,
+		5, 1, 60000,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_query_batch_size", PGC_SIGHUP, QUERY_TUNING,
+			gettext_noop("Sets the maximum number of events to accumulate before executing a continuous query plan on them."),
+			gettext_noop("A higher value usually yields less frequent continuous view updates.")
+		},
+		&continuous_query_batch_size,
+		10000, 10, INT_MAX,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_query_num_combiners", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
+			gettext_noop("Sets the number of parallel continuous query combiner processes to use for each database."),
+			gettext_noop("A higher number will utilize multiple cores and increase throughput.")
+		},
+		&continuous_query_num_combiners,
+		2, 1, MAX_BACKENDS,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_query_num_workers", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
+			gettext_noop("Sets the number of parallel continuous query worker processes to use for each database."),
+			gettext_noop("A higher number will utilize multiple cores and increase throughput.")
+		},
+		&continuous_query_num_workers,
+		2, 1, MAX_BACKENDS,
 		NULL, NULL, NULL
 	},
 
@@ -3575,11 +3628,11 @@ static struct config_enum ConfigureNamesEnum[] =
 	},
 
 	{
-		{"combiner_synchronous_commit", PGC_BACKEND, WAL_SETTINGS,
-			gettext_noop("Sets the transaction synchronization level for combiner commits."),
+		{"continuous_query_combiner_synchronous_commit", PGC_POSTMASTER, WAL_SETTINGS,
+			gettext_noop("Sets the transaction synchronization level for continuous query combiner commits."),
 			NULL
 		},
-		&combiner_synchronous_commit,
+		&continuous_query_combiner_synchronous_commit,
 		SYNCHRONOUS_COMMIT_OFF, synchronous_commit_options,
 		NULL, assign_synchronous_commit, NULL
 	},

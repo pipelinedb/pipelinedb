@@ -17,7 +17,6 @@
 #include "nodes/bitmapset.h"
 #include "utils/relcache.h"
 
-extern void UpdateStreamReaders(Relation pipeline_query);
 extern void UpdateStreamQueries(Relation pipeline_query);
 extern Bitmapset *GetAllStreamReaders(const char *stream);
 extern Bitmapset *GetLocalStreamReaders(const char *stream);
@@ -27,6 +26,5 @@ extern bytea *PackTupleDesc(TupleDesc desc);
 extern TupleDesc UnpackTupleDesc(bytea *bytes);
 
 extern bool IsStream(char *stream);
-extern bool IsWritableStream(char *stream);
 
 #endif

@@ -14,9 +14,8 @@ BOOTSTRAPPED_BASE = './.pdbbase'
 ROOT = '../../../'
 INSTALL_FORMAT = './.pdb-%d'
 SERVER = os.path.join(ROOT, 'src', 'backend', 'pipeline-server')
-TEST_DBNAME = 'pipelinedb_test'
 CONNSTR_TEMPLATE = 'postgres://%s@localhost:%d/pipeline'
-TEST_ENV_VAR = 'PIPELINE_PY_TESTS'
+
 
 class PipelineDB(object):
     def __init__(self):
@@ -82,12 +81,9 @@ class PipelineDB(object):
         # PipelineDB to it
         sock.close()
 
-        env = os.environ.copy()
-        env[TEST_ENV_VAR] = '1'
         self.proc = subprocess.Popen([SERVER, '-D', self.data_dir,
                                       '-p', str(self.port),
-                                      '-c', 'synchronous_stream_insert=true'],
-                                     env=env)
+                                      '-c', 'synchronous_stream_insert=true'])
 
         connstr = CONNSTR_TEMPLATE % (getpass.getuser(), self.port)
         self.engine = create_engine(connstr)
@@ -110,12 +106,12 @@ class PipelineDB(object):
       if self.proc:
         self.proc.send_signal(signal.SIGINT)
         self.proc.wait()
+        self.proc = None
 
     def destroy(self):
         """
         Cleans up resources used by this PipelineDB instance
         """
-        self.deactivate()
         self.stop()
         shutil.rmtree(self.tmp_dir)
 
@@ -135,22 +131,21 @@ class PipelineDB(object):
         self._tmp_dir = INSTALL_FORMAT % index
         return self._tmp_dir
 
-    def drop_db(self, name=TEST_DBNAME):
+    def drop_all_views(self):
         """
         Drop a database within this PipelineDB instance
         """
         # We can't drop a DB in a transaction block
         self.conn.execute('commit')
-        self.deactivate()
-        return self.execute('DELETE FROM pipeline_query')
+        views = self.execute('SELECT name FROM pipeline_query')
+        for view in views:
+          self.execute('DROP CONTINUOUS VIEW %s' % view['name'])
 
-    def create_cv(self, name, stmt, activate=False):
+    def create_cv(self, name, stmt):
         """
         Create a continuous view
         """
         result = self.execute('CREATE CONTINUOUS VIEW %s AS %s' % (name, stmt))
-        if activate:
-            result = self.activate(name)
         return result
 
     def create_table(self, name, **cols):
@@ -171,30 +166,6 @@ class PipelineDB(object):
         Drop a continuous view
         """
         return self.execute('DROP CONTINUOUS VIEW %s' % name)
-
-    def activate(self, name=None, **kw):
-        """
-        Activate a continuous view, or all of them if no name is given
-        """
-        args = ''
-        kw.setdefault('batchsize', 1000)
-        if kw:
-            args = ','.join('%s = %s' % (k, (str(v))) for k, v in kw.iteritems())
-            args = ' WITH (%s)' % args
-
-        if name:
-            return self.execute('ACTIVATE %s %s' % (name, args))
-        else:
-            return self.execute('ACTIVATE %s' % args)
-
-    def deactivate(self, name=None):
-        """
-        Deactivate a continuous view, or all of them if no name is given
-        """
-        if name:
-            return self.execute('DEACTIVATE %s' % name)
-        else:
-            return self.execute('DEACTIVATE')
 
     def execute(self, stmt):
         """
@@ -237,9 +208,7 @@ def clean_db(request):
     Called for every test so each test gets a clean db
     """
     pdb = request.module.pipeline
-    request.addfinalizer(pdb.drop_db)
-
-    return TEST_DBNAME
+    request.addfinalizer(pdb.drop_all_views)
 
 
 @pytest.fixture(scope='module')

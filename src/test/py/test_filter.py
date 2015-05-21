@@ -19,9 +19,7 @@ def test_filter_clause(pipeline, clean_db):
     for n in range(1000):
         rows.append((n, ))
 
-    pipeline.activate()
     pipeline.insert('test_filter_stream', desc, rows)
-    pipeline.deactivate()
 
     sum2 = sum(filter(lambda x: x % 2 == 0, map(lambda x: x[0], rows)))
     sum3 = sum(filter(lambda x: x % 3 == 0, map(lambda x: x[0], rows)))

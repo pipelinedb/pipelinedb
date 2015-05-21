@@ -191,4 +191,3 @@ test: stream_casts3
 test: stream_casts4
 test: cont_gis_geom
 test: cont_gis_raster
-test: cont_proc_latch

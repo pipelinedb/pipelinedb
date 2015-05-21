@@ -23,11 +23,9 @@ def _test_hs_agg(pipeline, agg):
 
     cq = 'SELECT %s(%d) WITHIN GROUP (ORDER BY x::integer) FROM stream' % (agg, h)
     pipeline.create_cv('test_%s' % agg, cq)
-    pipeline.activate()
 
     pipeline.insert('stream', ('x',), [(v,) for v in values])
 
-    pipeline.deactivate()
     result = pipeline.execute('SELECT %s FROM test_%s' % (agg, agg)).first()
 
     rank, peers = _rank(h, values)

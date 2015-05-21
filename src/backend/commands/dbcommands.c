@@ -44,6 +44,7 @@
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "pipeline/cont_scheduler.h"
 #include "postmaster/bgwriter.h"
 #include "replication/slot.h"
 #include "storage/copydir.h"
@@ -661,6 +662,8 @@ createdb(const CreatedbStmt *stmt)
 	PG_END_ENSURE_ERROR_CLEANUP(createdb_failure_callback,
 								PointerGetDatum(&fparms));
 
+	SignalContQuerySchedulerRefresh();
+
 	return dboid;
 }
 
@@ -911,6 +914,8 @@ dropdb(const char *dbname, bool missing_ok)
 	 * according to pg_database, which is not good.
 	 */
 	ForceSyncCommit();
+
+	SignalContQuerySchedulerRefresh();
 }
 
 
@@ -1323,6 +1328,8 @@ movedb(const char *dbname, const char *tblspcname)
 	/* Now it's safe to release the database lock */
 	UnlockSharedObjectForSession(DatabaseRelationId, db_id, 0,
 								 AccessExclusiveLock);
+
+	SignalContQuerySchedulerRefresh();
 }
 
 /* Error cleanup callback for movedb */

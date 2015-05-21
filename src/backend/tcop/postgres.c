@@ -856,13 +856,6 @@ exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *valu
 	MemoryContext oldcontext;
 	int count = 0;
 	char buf[32];
-	char *sname = ins->relation->relname;
-
-	if (!IsWritableStream(sname))
-		ereport(ERROR,
-				(errcode(ERRCODE_INACTIVE_STREAM),
-				errmsg("stream \"%s\" is currently not being read", sname),
-				errhint("Activate some continuous view reading from \"%s\".", sname)));
 
 	oldcontext = MemoryContextSwitchTo(EventContext);
 
@@ -1061,26 +1054,22 @@ exec_simple_query(const char *query_string)
 		 * in the worker processes that ultimately get forked after
 		 * we activate, so short circuit the analyzer/planner
 		 */
-		if (IsA(parsetree, ActivateContinuousViewStmt) || IsA(parsetree, DeactivateContinuousViewStmt))
+		if (IsA(parsetree, ActivateStmt) || IsA(parsetree, DeactivateStmt))
 		{
 			char *tag;
-			int count = 0;
-			StringInfo buf;
 
-			if (IsA(parsetree, ActivateContinuousViewStmt))
+			if (IsA(parsetree, ActivateStmt))
 			{
-				tag = "ACTIVATE %d";
-				count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree, false);
+				tag = "ACTIVATE";
+				ExecActivateStmt((ActivateStmt *) parsetree);
 			}
 			else
 			{
-				tag = "DEACTIVATE %d";
-				count = ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
+				tag = "DEACTIVATE";
+				ExecDeactivateStmt((DeactivateStmt *) parsetree);
 			}
 
-			buf = makeStringInfo();
-			appendStringInfo(buf, tag, count);
-			EndCommand(buf->data, dest);
+			EndCommand(tag, dest);
 			finish_xact_command();
 
 			continue;

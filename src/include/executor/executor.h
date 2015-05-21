@@ -178,7 +178,6 @@ extern void ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void standard_ExecutorStart(QueryDesc *queryDesc, int eflags);
 extern void ExecutorRun(QueryDesc *queryDesc,
 			ScanDirection direction, long count);
-extern void ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner);
 extern void ExecutePlan(EState *estate, PlanState *planstate,
 					CmdType operation, bool sendTuples, long numberTuples, int timeoutms,
 					ScanDirection direction, DestReceiver *dest);
@@ -229,7 +228,6 @@ extern PlanState *ExecInitNode(Plan *node, EState *estate, int eflags);
 extern TupleTableSlot *ExecProcNode(PlanState *node);
 extern Node *MultiExecProcNode(PlanState *node);
 extern void ExecEndNode(PlanState *node);
-extern void ExecBeginBatch(PlanState *node);
 extern TupleTableSlot *ExecEndBatch(PlanState *node);
 
 /*

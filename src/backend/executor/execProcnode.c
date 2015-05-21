@@ -374,21 +374,7 @@ ExecInitNode(Plan *node, EState *estate, int eflags)
 	if (estate->es_instrument)
 		result->instrument = InstrAlloc(1, estate->es_instrument);
 
-	result->cq_batch_progress = 0;
-
 	return result;
-}
-
-/* ----------------------------------------------------------------
- *		ExecBeginBatch
- *
- *		Prepare a node for a new batch
- * ----------------------------------------------------------------
- */
-void
-ExecBeginBatch(PlanState *node)
-{
-
 }
 
 /* ----------------------------------------------------------------
@@ -418,8 +404,6 @@ ExecEndBatch(PlanState *node)
 			break;
 	}
 
-	node->cq_batch_progress = 0;
-
 	return NULL;
 }
 
@@ -441,9 +425,6 @@ ExecProcNode(PlanState *node)
 
 	if (node->instrument)
 		InstrStartNode(node->instrument);
-
-	if (IsContinuous(node) && node->cq_batch_progress == BatchSize(node))
-		return ExecEndBatch(node);
 
 	switch (nodeTag(node))
 	{
@@ -610,13 +591,8 @@ ExecProcNode(PlanState *node)
 	if (node->instrument)
 		InstrStopNode(node->instrument, TupIsNull(result) ? 0.0 : 1.0);
 
-	if (IsContinuous(node))
-	{
-		if (!TupIsNull(result))
-			node->cq_batch_progress++;
-		else
-			result = ExecEndBatch(node);
-	}
+	if (IsContinuous(node) && TupIsNull(result))
+		result = ExecEndBatch(node);
 
 	return result;
 }

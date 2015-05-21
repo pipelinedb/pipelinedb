@@ -42,8 +42,8 @@
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/cont_analyze.h"
-#include "pipeline/cqproc.h"
 #include "pipeline/cqwindow.h"
+#include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "pipeline/tuplebuf.h"
 #include "regex/regex.h"
@@ -262,6 +262,32 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query
 	CommandCounterIncrement();
 }
 
+static char *
+get_query_string(char *cvname, const char *sql)
+{
+	/*
+	 * Technically the CV could be named "create" or "continuous",
+	 * so it's not enough to simply advance to the CV name. We need
+	 * to skip past the keywords first. Note that these find() calls
+	 * should never return -1 for this string since it's already been
+	 * validated.
+	 */
+	int trimmedlen;
+	char *trimmed;
+	int pos = skip_substring(sql, "CREATE", 0);
+	pos = skip_substring(sql, "CONTINUOUS", pos);
+	pos = skip_substring(sql, "VIEW", pos);
+	pos = skip_substring(sql, cvname, pos);
+	pos = skip_substring(sql, "AS", pos);
+
+	trimmedlen = strlen(sql) - pos + 1;
+	trimmed = palloc(trimmedlen);
+
+	memcpy(trimmed, &sql[pos], trimmedlen);
+
+	return trimmed;
+}
+
 /*
  * CreateContinuousView
  *
@@ -395,7 +421,8 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	RegisterContinuousView(view, querystring, mat_relation, IsSlidingWindowSelectStmt(viewselect), SelectsFromStreamOnly(workerselect));
+	CreateContinuousView(view, get_query_string(view->relname, querystring),
+			mat_relation, IsSlidingWindowSelectStmt(viewselect), !SelectsFromStreamOnly(workerselect));
 	CommandCounterIncrement();
 
 	/*
@@ -442,7 +469,7 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 	 * Scan the pipeline_query relation to find the OID of the views(s) to be
 	 * deleted.
 	 */
-	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
 
 	foreach(item, stmt->objects)
 	{
@@ -455,12 +482,8 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
 					errmsg("continuous view \"%s\" does not exist", rv->relname)));
+
 		row = (Form_pipeline_query) GETSTRUCT(tuple);
-		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_CONTINUOUS_VIEW_STATE),
-					 errmsg("continuous view \"%s\" is currently active", rv->relname),
-					 errhint("Only inactive continuous views can be dropped, which requires deactivating them. For example, DEACTIVATE %s", rv->relname)));
 
 		/*
 		 * Add object for the CQ's underlying materialization table.
@@ -472,8 +495,6 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		 */
 		simple_heap_delete(pipeline_query, &tuple->t_self);
 
-		ReleaseSysCache(tuple);
-
 		/*
 		 * Advance command counter so that later iterations of this loop will
 		 * see the changes already made.
@@ -481,7 +502,9 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		CommandCounterIncrement();
 
 		/* Remove transition state entry */
-		RemoveTStateEntry(rv->relname);
+		RemoveTStateEntry(row->id);
+
+		ReleaseSysCache(tuple);
 	}
 
 	UpdateStreamQueries(pipeline_query);
@@ -497,332 +520,6 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 	 */
 	stmt->objects = list_concat(stmt->objects, relations);
 	RemoveObjects(stmt);
-}
-
-static List *
-get_views(Node *where)
-{
-	CommandDest dest = DestTuplestore;
-	Tuplestorestate *store;
-	Node *parsetree;
-	List *querytree_list;
-	PlannedStmt *plan;
-	Portal portal;
-	DestReceiver *receiver;
-	ResTarget *resTarget;
-	ColumnRef *colRef;
-	SelectStmt *selectStmt;
-	TupleTableSlot *slot;
-	QueryDesc *queryDesc;
-	MemoryContext oldcontext;
-	MemoryContext runctx;
-	List *views = NIL;
-
-	if (!where)
-		return GetAllContinuousViewNames();
-
-	runctx = AllocSetContextCreate(CurrentMemoryContext,
-			"CQAutoVacuumContext",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-
-	oldcontext = MemoryContextSwitchTo(runctx);
-
-	resTarget = makeNode(ResTarget);
-	colRef = makeNode(ColumnRef);
-	colRef->fields = list_make1(makeString("name"));
-	resTarget->val = (Node *) colRef;
-	selectStmt =  makeNode(SelectStmt);
-	selectStmt->targetList = list_make1(resTarget);
-	selectStmt->fromClause = list_make1(makeRangeVar(NULL, "pipeline_query", -1));;
-	selectStmt->whereClause = where;
-	parsetree = (Node *) selectStmt;
-
-	querytree_list = pg_analyze_and_rewrite(parsetree, NULL,
-			NULL, 0);
-	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
-
-	PushActiveSnapshot(GetTransactionSnapshot());
-
-	portal = CreatePortal("__get_continuous_views__", true, true);
-	portal->visible = false;
-
-	store = tuplestore_begin_heap(true, true, work_mem);
-	receiver = CreateDestReceiver(dest);
-	SetTuplestoreDestReceiverParams(receiver, store, PortalGetHeapMemory(portal), true);
-
-	PortalDefineQuery(portal,
-			NULL,
-			NULL,
-			"SELECT",
-			list_make1(plan),
-			NULL);
-
-	PortalStart(portal, NULL, 0, GetActiveSnapshot());
-
-	(void) PortalRun(portal,
-			FETCH_ALL,
-			true,
-			receiver,
-			receiver,
-			NULL);
-
-	queryDesc = PortalGetQueryDesc(portal);
-	slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
-	foreach_tuple(slot, store)
-	{
-		bool isnull;
-		Datum *tmp;
-		char *viewName;
-
-		slot_getallattrs(slot);
-		tmp = (Datum *) heap_getattr(slot->tts_tuple, 1, slot->tts_tupleDescriptor, &isnull);
-		/*
-		 * Must change context back to old context here, because we're going
-		 * to be using these RangeVars we create after we reset the runctx.
-		 */
-		MemoryContextSwitchTo(oldcontext);
-		viewName = pstrdup(NameStr(*DatumGetName(tmp)));
-		views = lappend(views, makeRangeVar(NULL, viewName, -1));
-		oldcontext = MemoryContextSwitchTo(runctx);
-	}
-
-	(*receiver->rDestroy) (receiver);
-	tuplestore_end(store);
-
-	PortalDrop(portal, false);
-	PopActiveSnapshot();
-
-	MemoryContextReset(runctx);
-	MemoryContextSwitchTo(oldcontext);
-
-	return views;
-}
-
-int
-ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool recovery)
-{
-	ListCell *lc;
-	int success = 0;
-	int fail = 0;
-	CQProcEntry *entry;
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, CQExclusiveLock);
-	Oid dboid = InvalidOid;
-
-	if (stmt->dboid)
-		dboid = stmt->dboid;
-
-	if (!stmt->views)
-		stmt->views = get_views(stmt->whereClause);
-
-	foreach(lc, stmt->views)
-	{
-		RangeVar *rv = lfirst(lc);
-		ListCell *lc_opt;
-		ContinuousViewState state;
-		bool was_inactive = MarkContinuousViewAsActive(rv, pipeline_query);
-		bool enough_worker_slots;
-
-		/*
-		 * If the user tries to activate an active CV, they'll know because
-		 * the count of CVs that were activated will be less than they
-		 * expected. We only count CVs that go from inactive to active here.
-		 */
-		if (!was_inactive && !recovery)
-			continue;
-
-		GetContinousViewState(rv, &state);
-
-		if (!recovery)
-		{
-			state.batchsize = CQ_DEFAULT_BATCH_SIZE;
-			state.emptysleepms = CQ_DEFAULT_EMPTY_SLEEP_MS;
-			state.maxwaitms = CQ_DEFAULT_MAX_WAIT_MS;
-			state.parallelism = CQ_DEFAULT_PARALLELISM;
-		}
-
-		/*
-		 * Update any tuning parameters passed in with the ACTIVATE
-		 * command.
-		 */
-		foreach(lc_opt, stmt->withParameters)
-		{
-			DefElem *elem = (DefElem *) lfirst(lc_opt);
-			int64 value = intVal(elem->arg);
-
-			if (pg_strcasecmp(elem->defname, CQ_BATCH_SIZE_KEY) == 0)
-				state.batchsize = value;
-			else if (pg_strcasecmp(elem->defname, CQ_WAIT_MS_KEY) == 0)
-				state.maxwaitms = (int32) value;
-			else if (pg_strcasecmp(elem->defname, CQ_SLEEP_MS_KEY) == 0)
-				state.emptysleepms = (int32) value;
-			else if (pg_strcasecmp(elem->defname, CQ_PARALLELISM_KEY) == 0)
-				state.parallelism = (int16) value;
-		}
-
-		SetContinousViewState(rv, &state, pipeline_query);
-
-		entry = CQProcEntryCreate(state.id, state.parallelism);
-
-		/* CQ procs are already running */
-		if (entry == NULL)
-			continue;
-
-		/* Ensure that we have enough background worker slots */
-		enough_worker_slots = (1 + state.parallelism + GetNumOfBackgroundWorkerSlotsInUse()) <= max_worker_processes;
-
-		if (enough_worker_slots)
-			RunCQProcs(rv->relname, &state, entry, dboid);
-
-		/*
-		 * Spin here waiting for the number of waiting CQ related processes
-		 * to complete.
-		 */
-		if (enough_worker_slots && WaitForCQProcsToStart(state.id))
-		{
-			success++;
-			if (continuous_query_crash_recovery)
-				EnableCQProcsRecovery(state.id);
-		}
-		else
-		{
-			if (!enough_worker_slots)
-				ereport(NOTICE,
-						(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-						errmsg("not enough worker processes available to activate \"%s\"", rv->relname),
-						errhint("Increase the max_worker_processes configuration parameter")));
-			else
-				ereport(NOTICE,
-						(errmsg("failed to activate \"%s\"", rv->relname)));
-
-			fail++;
-			/*
-			 * If some of the bg procs failed, mark the continuous view
-			 * as inactive and kill any of the remaining bg procs.
-			 */
-			TerminateCQProcs(state.id);
-			CQProcEntryRemove(state.id);
-			MarkContinuousViewAsInactive(rv, pipeline_query);
-		}
-	}
-
-	if (success)
-		UpdateStreamReaders(pipeline_query);
-
-	heap_close(pipeline_query, NoLock);
-
-	if (fail)
-		elog(LOG, "failed to activate %d continuous view(s)", fail);
-
-	return success;
-}
-
-int
-ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt)
-{
-	List *deactivated_cq_ids = NIL;
-	ListCell *lc;
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, CQExclusiveLock);
-
-	if (!stmt->views)
-		stmt->views = get_views(stmt->whereClause);
-
-	foreach(lc, stmt->views)
-	{
-		RangeVar *rv = (RangeVar *) lfirst(lc);
-		ContinuousViewState state;
-		CQProcEntry *entry;
-		bool was_active = MarkContinuousViewAsInactive(rv, pipeline_query);
-
-		/* deactivating an inactive CV is a noop */
-		if (!was_active)
-			continue;
-
-		GetContinousViewState(rv, &state);
-
-		entry = GetCQProcEntry(state.id);
-		if (!entry)
-			continue;
-
-		/* Disable recovery and wait for any recovering processes to recover */
-		if (continuous_query_crash_recovery)
-			DisableCQProcsRecovery(state.id);
-		WaitForCQProcsToStart(state.id);
-
-		/* Indicate to the child processes that this CV has been marked for inactivation */
-		SetActiveFlag(state.id, false);
-
-		/* This should be a good place to release the waiting latch on the background procs */
-		TupleBufferNotify(WorkerTupleBuffer, state.id);
-		TupleBufferNotify(CombinerTupleBuffer, state.id);
-
-		/*
-		 * Block till all the processes in the group have terminated
-		 * and remove the CVMetadata entry.
-		 */
-		WaitForCQProcsToTerminate(state.id);
-
-		deactivated_cq_ids = lappend_int(deactivated_cq_ids, state.id);
-
-		CQProcEntryRemove(state.id);
-	}
-
-	if (deactivated_cq_ids)
-	{
-		MemoryContext oldcontext;
-		bool was_snapshot_set = false;
-
-		/*
-		 * In case some CQs were deactivated, we should update the pipeline_stream catalog
-		 * table and commit right now. After the commit any insert into a stream
-		 * will see the correct version of the pipeline_stream catalog table. The only thing
-		 * left to do after that is to unpin any slots in the WorkerTupleBuffer which
-		 * might have a reader bit set for a now deactivated CQ.
-		 */
-		UpdateStreamReaders(pipeline_query);
-		heap_close(pipeline_query, NoLock);
-
-		/*
-		 * We can get here from the extended or simple query protocols, which may
-		 * or may not have set a snapshot at this point, so we need to check.
-		 */
-		if (ActiveSnapshotSet())
-		{
-			was_snapshot_set = true;
-			PopActiveSnapshot();
-		}
-
-		/*
-		 * CommitTransactionCommand deletes the TopTransactionContext, so we need to copy
-		 * this list into the TopMemoryContext.
-		 */
-		oldcontext = MemoryContextSwitchTo(TopMemoryContext);
-		deactivated_cq_ids = list_copy(deactivated_cq_ids);
-		MemoryContextSwitchTo(oldcontext);
-
-		CommitTransactionCommand();
-
-		CQExecutionContext = TopMemoryContext;
-		IsWorker = true;
-
-		foreach(lc, deactivated_cq_ids)
-			TupleBufferDrain(WorkerTupleBuffer, lfirst_int(lc));
-
-		IsWorker = false;
-
-		/*
-		 * We need to restart a transaction because the executor expects us to be in a
-		 * transaction.
-		 */
- 		StartTransactionCommand();
-		if (was_snapshot_set)
-			PushActiveSnapshot(GetTransactionSnapshot());
-	}
-	else
-		heap_close(pipeline_query, NoLock);
-
-	return list_length(deactivated_cq_ids);
 }
 
 void
@@ -847,25 +544,32 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 					errmsg("continuous view \"%s\" does not exist", rv->relname)));
 
 		row = (Form_pipeline_query) GETSTRUCT(tuple);
-		if (row->state == PIPELINE_QUERY_STATE_ACTIVE)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_CONTINUOUS_VIEW_STATE),
-					 errmsg("continuous view \"%s\" is currently active", rv->relname),
-					 errhint("Only inactive continuous views can be truncated, which requires deactivating them. For example, DEACTIVATE %s", rv->relname)));
 
 		ReleaseSysCache(tuple);
 
-		views = lappend(views, rv->relname);
+		views = lappend_oid(views, row->id);
 		rv->relname = GetMatRelationName(rv->relname);
 	}
 
 	/* Reset all CQ level transition state */
 	foreach(lc, views)
-		ResetTStateEntry((char *) lfirst(lc));
+		ResetTStateEntry(lfirst_oid(lc));
 
 	/* Call TRUNCATE on the backing view table(s). */
 	stmt->objType = OBJECT_TABLE;
 	ExecuteTruncate(stmt);
 
 	heap_close(pipeline_query, NoLock);
+}
+
+void
+ExecActivateStmt(ActivateStmt *stmt)
+{
+
+}
+
+void
+ExecDeactivateStmt(DeactivateStmt *stmt)
+{
+
 }

@@ -158,12 +158,9 @@ typedef struct Query
 	 * Continuous query fields
 	 */
 	bool is_continuous; /* should this be executed continuously? */
-	RangeVar *cq_target; /* output relation of this CQ, if any */
+	Oid  cq_id; /* continuous query id, valid only if is_continuous is true */
 	bool is_combine; /* is this query being run as a merge query? */
 	bool is_combine_lookup; /* is this query a combiner looking up groups to combine with? */
-
-	struct ContinuousViewState	*cq_state; /* put `struct` here to avoid circular dependency */
-
 } Query;
 
 
@@ -2806,20 +2803,14 @@ typedef struct CreateContinuousViewStmt
 
 } CreateContinuousViewStmt;
 
-typedef struct DeactivateContinuousViewStmt
+typedef struct DeactivateStmt
 {
 	NodeTag	type;
-	List	*views;
-	Node	*whereClause;
-} DeactivateContinuousViewStmt;
+} DeactivateStmt;
 
-typedef struct ActivateContinuousViewStmt
+typedef struct ActivateStmt
 {
 	NodeTag	type;
-	List	*views;
-	Node	*whereClause;
-	List	*withParameters;
-	Oid 	dboid;
-} ActivateContinuousViewStmt;
+} ActivateStmt;
 
 #endif   /* PARSENODES_H */
