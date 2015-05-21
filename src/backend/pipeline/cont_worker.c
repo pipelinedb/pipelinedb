@@ -73,7 +73,6 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 	PlannedStmt *pstmt;
 	MemoryContext exec_cxt;
 	MemoryContext old_cxt;
-	ResourceOwner old_owner;
 
 	MemSet(state, 0, sizeof(ContQueryWorkerState));
 
@@ -83,8 +82,6 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 			ALLOCSET_DEFAULT_MAXSIZE);
 
 	old_cxt = MemoryContextSwitchTo(exec_cxt);
-	old_owner = CurrentResourceOwner;
-	CurrentResourceOwner = owner;
 
 	state->view_id = id;
 
@@ -103,17 +100,16 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 
 	ExecutorStart(state->query_desc, 0);
 
-	set_reader(state->query_desc->planstate, reader);
-
 	state->query_desc->snapshot->active_count++;
 	UnregisterSnapshotFromOwner(state->query_desc->snapshot, owner);
 	UnregisterSnapshotFromOwner(state->query_desc->estate->es_snapshot, owner);
+	state->query_desc->snapshot = NULL;
+
+	set_reader(state->query_desc->planstate, reader);
 
 	state->query_desc->estate->es_lastoid = InvalidOid;
 
 	(*state->dest->rStartup) (state->dest, state->query_desc->operation, state->query_desc->tupDesc);
-
-	CurrentResourceOwner = old_owner;
 
 	cq_stat_init(&state->stats, state->view->id, 0);
 
@@ -148,6 +144,7 @@ get_query_state(ContQueryWorkerState **states, Oid id, MemoryContext context, Re
 {
 	ContQueryWorkerState *state = states[id];
 	HeapTuple tuple;
+	ResourceOwner old_owner;
 
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
@@ -155,6 +152,9 @@ get_query_state(ContQueryWorkerState **states, Oid id, MemoryContext context, Re
 		CommitTransactionCommand();
 		StartTransactionCommand();
 	}
+
+	old_owner = CurrentResourceOwner;
+	CurrentResourceOwner = owner;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
@@ -191,6 +191,8 @@ get_query_state(ContQueryWorkerState **states, Oid id, MemoryContext context, Re
 
 	PopActiveSnapshot();
 
+	CurrentResourceOwner = old_owner;
+
 	MyCQStats = &state->stats;
 
 	return state;
@@ -211,6 +213,8 @@ unset_snapshot(EState *estate, ResourceOwner owner)
 {
 	PopActiveSnapshot();
 	UnregisterSnapshotFromOwner(estate->es_snapshot, owner);
+
+	estate->es_snapshot = NULL;
 }
 
 static bool
@@ -323,8 +327,7 @@ ContinuousQueryWorkerMain(void)
 				set_snapshot(estate, owner);
 				CurrentResourceOwner = owner;
 
-				estate->es_processed = 0;
-				estate->es_filtered = 0;
+				estate->es_processed = estate->es_filtered = 0;
 
 				/*
 				 * We pass a timeout of 0 because the underlying TupleBufferBatchReader takes care of
@@ -333,11 +336,10 @@ ContinuousQueryWorkerMain(void)
 				ExecutePlan(estate, state->query_desc->planstate, state->query_desc->operation,
 						true, 0, 0, ForwardScanDirection, state->dest);
 
-				num_processed += estate->es_processed;
-				num_processed += estate->es_filtered;
+				num_processed += estate->es_processed + estate->es_filtered;
 
 				MemoryContextSwitchTo(state->exec_cxt);
-				CurrentResourceOwner = owner;
+
 				unset_snapshot(estate, owner);
 
 				TupleBufferBatchReaderRewind(reader);
@@ -402,6 +404,8 @@ next:
 		MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 	}
 
+	StartTransactionCommand();
+
 	for (id = 0; id < MAX_CQS; id++)
 	{
 		ContQueryWorkerState *state = states[id];
@@ -419,7 +423,6 @@ next:
 		/* The cleanup functions below expect these things to be registered. */
 		RegisterSnapshotOnOwner(estate->es_snapshot, owner);
 		RegisterSnapshotOnOwner(query_desc->snapshot, owner);
-		RegisterSnapshotOnOwner(query_desc->crosscheck_snapshot, owner);
 
 		CurrentResourceOwner = owner;
 
@@ -434,6 +437,8 @@ next:
 		MyCQStats = &state->stats;
 		cq_stat_report(true);
 	}
+
+	CommitTransactionCommand();
 
 	TupleBufferCloseBatchReader(reader);
 	pfree(states);
