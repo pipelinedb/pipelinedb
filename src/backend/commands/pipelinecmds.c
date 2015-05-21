@@ -469,7 +469,7 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 	 * Scan the pipeline_query relation to find the OID of the views(s) to be
 	 * deleted.
 	 */
-	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
 
 	foreach(item, stmt->objects)
 	{
