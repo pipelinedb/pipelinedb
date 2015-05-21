@@ -748,6 +748,7 @@ get_query_state(ContQueryCombinerState **states, Oid id, MemoryContext context)
 	/* Was the continuous view removed? */
 	if (!HeapTupleIsValid(tuple))
 	{
+		PopActiveSnapshot();
 		cleanup_query_state(states, id);
 		return NULL;
 	}
