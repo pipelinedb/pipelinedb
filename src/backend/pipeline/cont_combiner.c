@@ -944,8 +944,6 @@ ContinuousQueryCombinerMain(void)
 
 				cleanup_query_state(states, state->view_id);
 
-
-
 				IncrementCQErrors(1);
 
 				if (!continuous_query_crash_recovery)
