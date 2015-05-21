@@ -226,6 +226,7 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 	MemSet(pos, 0, size);
 	slot = (TupleBufferSlot *) pos;
 	slot->id = buf->head_id + 1;
+	slot->db_oid = MyDatabaseId;
 	slot->unread = true;
 	slot->next = NULL;
 	slot->buf = buf;
@@ -293,7 +294,7 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 			TupleBufferReader *reader = buf->readers[i];
 
 			/* can never wake up waiters that are not connected to the same database */
-			if (reader->proc->db_oid != MyDatabaseId)
+			if (reader->proc->db_oid != slot->db_oid)
 				continue;
 
 			/* wake up reader only if it will read this slot */
@@ -459,7 +460,7 @@ TupleBufferPinNextSlot(TupleBufferReader *reader)
 	while (true)
 	{
 		/* Is this a slot for me? */
-		if (reader->should_read_fn(reader, reader->slot))
+		if (reader->proc->db_oid == reader->slot->db_oid && reader->should_read_fn(reader, reader->slot))
 			break;
 
 		if (NoUnreadSlots(reader))

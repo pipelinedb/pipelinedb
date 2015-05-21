@@ -104,3 +104,21 @@ def test_concurrent_crash(pipeline, clean_db):
 
   assert num_killed > 0
   assert result['count'] >= num_inserted
+
+def test_restart_recovery(pipeline, clean_db):
+  q = 'SELECT COUNT(*) FROM stream'
+  pipeline.create_cv('test_restart_recovery', q)
+
+  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+
+  result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
+  assert result['count'] == 2
+
+  # Restart.
+  pipeline.stop()
+  pipeline.run()
+
+  pipeline.insert('stream', ['x'], [(1, ), (1, )])
+
+  result = pipeline.execute('SELECT * FROM test_restart_recovery').first()
+  assert result['count'] == 4
