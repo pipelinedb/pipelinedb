@@ -7,10 +7,8 @@ def test_cq_stats(pipeline, clean_db):
     """
     Verify that CQ statistics collection works
     """
-    pipeline.begin()
     num_combiners = int(pipeline.execute('SHOW continuous_query_num_combiners').first()['continuous_query_num_combiners'])
     num_workers = int(pipeline.execute('SHOW continuous_query_num_workers').first()['continuous_query_num_workers'])
-    pipeline.commit()
 
     # 10 rows
     q = 'SELECT x::integer %% 10 AS g, COUNT(*) FROM stream GROUP BY g'
@@ -27,10 +25,11 @@ def test_cq_stats(pipeline, clean_db):
     time.sleep(0.5)
     pipeline.insert('stream', ('x',), values)
 
-    pipeline.begin()
+    # Sleep a little so the stats collector flushes all the stats.
+    time.sleep(0.5)
+
     proc_result = pipeline.execute('SELECT * FROM pipeline_proc_stats')
     cq_result = pipeline.execute('SELECT * FROM pipeline_query_stats')
-    pipeline.commit()
 
     proc_rows = len(list(proc_result))
     cq_rows = len(list(cq_result))
