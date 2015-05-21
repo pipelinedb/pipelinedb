@@ -2373,6 +2373,8 @@ ExecEndBatchAgg(AggState *node)
 		MemSet(node->pergroup, 0,
 			   sizeof(AggStatePerGroupData) * node->numaggs);
 	}
+
+	ExecEndNode(outerPlanState(node));
 }
 
 void

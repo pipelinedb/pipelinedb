@@ -181,6 +181,8 @@ ExecEndBatchContinuousUnique(ContinuousUniqueState *node)
 	oldcontext = MemoryContextSwitchTo(node->tmpContext);
 	node->distinct = GetDistinctBloomFilter(node->cq_id);
 	MemoryContextSwitchTo(oldcontext);
+
+	ExecEndBatch(outerPlanState(node));
 }
 
 void
