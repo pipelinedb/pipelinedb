@@ -595,21 +595,41 @@
 # CONTINUOUS VIEW OPTIONS
 #------------------------------------------------------------------------------
 
-#tuple_buffer_blocks = 128MB  # size of the buffer for storing unread
-                              # stream tuples
-#empty_tuple_buffer_wait_time = 250   # time in milliseconds that continuous
-                                      # queries will keep trying to read from
-                                      # an empty tuple buffer before sleeping
-#combiner_synchronous_commit = off # synchronization level for combiner
-                                   # commits; off, local, remote_write, or on
-#combiner_work_mem = 256MB  # maximum amount of memory to use for combiner
-                            # query executions
+# size of the buffer for storing unread stream tuples
+#tuple_buffer_blocks = 128MB
 
-#combiner_cache_mem = 32MB  # maximum memory to be used by the combiner for
-                            # caching; this is independent of combiner_work_mem
+# time in milliseconds that a continuous query process will wait for new data
+# to arrive before going to sleep
+#continuous_query_empty_sleep = 250
 
-#continuous_view_fillfactor = 50 # Sets the default fillfactor to use for
-                                 # continuous views
+# synchronization level for combiner commits; off, local, remote_write, or on
+#continuous_query_combiner_synchronous_commit = off
+
+# maximum amount of memory to use for combiner query executions
+#continuous_query_combiner_work_mem = 256MB
+
+# maximum memory to be used by the combiner for caching; this is independent
+# of combiner_work_mem
+#continuous_query_combiner_cache_mem = 32MB
+
+# the default fillfactor to use for continuous views
+#continuous_view_fillfactor = 50
+
+# the time in milliseconds a continuous query process will wait for a batch
+# to accumulate
+# continuous_query_max_wait = 5
+
+# the maximum number of events to accumulate before executing a continuous query
+# plan on them
+#continuous_query_batch_size = 10000
+
+# the number of parallel continuous query combiner processes to use for
+# each database
+#continuous_query_num_combiners = 2
+
+# the number of parallel continuous query worker processes to use for
+# each database
+#continuous_query_num_workers = 2
 
 #------------------------------------------------------------------------------
 # CONFIG FILE INCLUDES
