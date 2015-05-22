@@ -31,7 +31,7 @@ def test_tdigest_type(pipeline, clean_db):
       'SELECT tdigest_quantile(combine(t), 0.1) FROM test_tdigest_agg')
                   .fetchall())
     assert len(result) == 1
-    assert abs(int(result[0]['tdigest_quantile']) - 200) <= 3
+    assert abs(int(result[0]['tdigest_quantile']) - 200) <= 4
 
     result = list(pipeline.execute(
       'SELECT tdigest_cdf(t, 600) FROM test_tdigest_agg ORDER BY k')
