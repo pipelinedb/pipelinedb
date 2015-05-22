@@ -322,6 +322,21 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 					node->hj_FirstOuterTupleSlot = ExecProcNode(outerNode);
 					if (TupIsNull(node->hj_FirstOuterTupleSlot))
 					{
+						/*
+						 * The table has no tuples that we can join with, so bail early.
+						 * However, we still need to *read* the batch from the stream so
+						 * it can be marked as read by the worker.
+						 */
+						PlanState *innerNode = outerPlanState(hashNode);
+						TupleTableSlot *slot;
+
+						for (;;)
+						{
+							slot = ExecProcNode(innerNode);
+							if (TupIsNull(slot))
+								break;
+						}
+
 						node->hj_OuterNotEmpty = false;
 						ExecReScan((PlanState *) node);
 						return NULL;

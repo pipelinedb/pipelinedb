@@ -149,6 +149,14 @@ SELECT pg_sleep(0.1);
 
 SELECT * FROM test_stj8;
 
+-- Regression test for join with empty table.
+CREATE TABLE test_stj_empty (x int);
+CREATE CONTINUOUS VIEW test_stj_empty_join AS SELECT test_stj_empty_stream.x::int FROM test_stj_empty_stream JOIN test_stj_empty ON test_stj_empty_stream.x = test_stj_empty.x;
+
+INSERT INTO test_stj_empty_stream (x) VALUES (0);
+
+SELECT * FROM test_stj_empty_join;
+
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;
@@ -159,9 +167,11 @@ DROP CONTINUOUS VIEW test_stj6;
 DROP CONTINUOUS VIEW test_stj7;
 DROP CONTINUOUS VIEW test_stj8;
 DROP CONTINUOUS VIEW stj_no_tl;
+DROP CONTINUOUS VIEW test_stj_empty_join;
 DROP TABLE test_stj_t0;
 DROP TABLE test_stj_t1;
 DROP TABLE test_stj_t2;
 DROP TABLE test_stj_t3;
 DROP TABLE test_stj_location;
 DROP TABLE test_stj_blocks;
+DROP TABLE test_stj_empty;

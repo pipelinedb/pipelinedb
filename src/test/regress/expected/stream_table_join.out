@@ -252,6 +252,16 @@ SELECT * FROM test_stj8;
  wot  | 101         | Mon Mar 30 03:56:17 2015 PDT | 20.0000000000000000 |    42
 (1 row)
 
+-- Regression test for join with empty table.
+CREATE TABLE test_stj_empty (x int);
+CREATE CONTINUOUS VIEW test_stj_empty_join AS SELECT test_stj_empty_stream.x::int FROM test_stj_empty_stream JOIN test_stj_empty ON test_stj_empty_stream.x = test_stj_empty.x;
+NOTICE:  consider creating an index on test_stj_empty.x for improved stream-table join performance
+INSERT INTO test_stj_empty_stream (x) VALUES (0);
+SELECT * FROM test_stj_empty_join;
+ x 
+---
+(0 rows)
+
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;
@@ -262,9 +272,11 @@ DROP CONTINUOUS VIEW test_stj6;
 DROP CONTINUOUS VIEW test_stj7;
 DROP CONTINUOUS VIEW test_stj8;
 DROP CONTINUOUS VIEW stj_no_tl;
+DROP CONTINUOUS VIEW test_stj_empty_join;
 DROP TABLE test_stj_t0;
 DROP TABLE test_stj_t1;
 DROP TABLE test_stj_t2;
 DROP TABLE test_stj_t3;
 DROP TABLE test_stj_location;
 DROP TABLE test_stj_blocks;
+DROP TABLE test_stj_empty;
