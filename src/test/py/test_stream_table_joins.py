@@ -53,8 +53,8 @@ def test_join_with_aggs(pipeline, clean_db):
     a1 = _generate_rows(num_cols, 64)
     s = _generate_rows(num_cols, 64)
 
-    _insert(pipeline, 'a0', a0, 0.1)
-    _insert(pipeline, 'a1', a1, 0.1)
+    _insert(pipeline, 'a0', a0, 0.25)
+    _insert(pipeline, 'a1', a1, 0.25)
     _insert(pipeline, 'stream', s)
 
     expected = _join(a1, _join(a0, s, join_cols), join_cols)
@@ -90,8 +90,8 @@ def test_join_with_where(pipeline, clean_db):
     wt = _generate_rows(num_cols, 64)
     s = _generate_rows(num_cols, 64)
 
-    _insert(pipeline, 'wt', wt, 0.1)
-    _insert(pipeline, 'wt_s', s, 0.1)
+    _insert(pipeline, 'wt', wt, 0.25)
+    _insert(pipeline, 'wt_s', s, 0.25)
     _insert(pipeline, 'stream', s)
 
     expected = pipeline.execute('SELECT COUNT(*) FROM wt_s s, wt WHERE s.col0 = 1 AND wt.col0 = 1').first()
@@ -140,8 +140,8 @@ def test_join_ordering(pipeline, clean_db):
     ordering1 = _generate_rows(num_cols, 64)
     s = _generate_rows(num_cols, 64)
 
-    _insert(pipeline, 'ordering0', ordering0, 0.1)
-    _insert(pipeline, 'ordering1', ordering1, 0.1)
+    _insert(pipeline, 'ordering0', ordering0, 0.25)
+    _insert(pipeline, 'ordering1', ordering1, 0.25)
 
     _insert(pipeline, 'stream', s)
 
@@ -171,7 +171,7 @@ def test_join_across_batches(pipeline, clean_db):
     pipeline.create_cv('test_batched_join', q)
 
     t = _generate_rows(num_cols, 64)
-    _insert(pipeline, 'batch', t, 0.1)
+    _insert(pipeline, 'batch', t, 0.25)
 
     s = _generate_rows(num_cols, 64)
     _insert(pipeline, 'stream', s)
@@ -234,7 +234,7 @@ def test_join_multiple_tables(pipeline, clean_db):
     _insert(pipeline, 't1', t1)
 
     # Now insert some table rows after activation
-    _insert(pipeline, 't0', t0, 0.1)
+    _insert(pipeline, 't0', t0, 0.25)
     _insert(pipeline, 'stream', s)
 
     expected = _join(t0, _join(s, t1, join_cols), join_cols)

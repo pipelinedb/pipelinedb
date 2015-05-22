@@ -762,6 +762,9 @@ yield:
 void
 TupleBufferBatchReaderRewind(TupleBufferBatchReader *reader)
 {
+	if (reader->cq_id == InvalidOid)
+		return;
+
 	reader->cq_id = InvalidOid;
 
 	if (!reader->started)
