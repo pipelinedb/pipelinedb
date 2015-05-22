@@ -42,6 +42,7 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/resowner.h"
+#include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
@@ -339,7 +340,9 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 		query->hasSubLinks = true;
 	}
 
+	PushActiveSnapshot(GetTransactionSnapshot());
 	plan = pg_plan_query(query, 0, NULL);
+	PopActiveSnapshot();
 
 	old_cxt = MemoryContextSwitchTo(state->plan_cache_cxt);
 	state->groups_plan = copyObject(plan);
@@ -429,7 +432,7 @@ select_existing_groups(ContQueryCombinerState *state, TupleHashTable existing)
 	dest = CreateDestReceiver(DestTupleTable);
 	SetTupleTableDestReceiverParams(dest, existing, CurrentMemoryContext, true);
 
-	PortalStart(portal, NULL, 0, GetActiveSnapshot());
+	PortalStart(portal, NULL, 0, NULL);
 
 	(void) PortalRun(portal,
 					 FETCH_ALL,
@@ -550,8 +553,6 @@ combine(ContQueryCombinerState *state)
 	Tuplestorestate *result;
 	TupleHashTable existing = NULL;
 
-	PushActiveSnapshot(GetTransactionSnapshot());
-
 	if (state->isagg)
 	{
 		FmgrInfo *eq_funcs;
@@ -582,7 +583,7 @@ combine(ContQueryCombinerState *state)
 	dest = CreateDestReceiver(DestTuplestore);
 	SetTuplestoreDestReceiverParams(dest, result, state->tmp_cxt, true);
 
-	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, GetActiveSnapshot());
+	PortalStart(portal, NULL, EXEC_FLAG_COMBINE, NULL);
 
 	(void) PortalRun(portal,
 					 FETCH_ALL,
@@ -590,8 +591,6 @@ combine(ContQueryCombinerState *state)
 					 dest,
 					 dest,
 					 NULL);
-
-	PopActiveSnapshot();
 
 	tuplestore_clear(state->batch);
 
@@ -834,7 +833,7 @@ ContinuousQueryCombinerMain(void)
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 	ContQueryCombinerState **states = init_query_states_array(run_cxt);
-	ContQueryCombinerState *state;
+	ContQueryCombinerState *state = NULL;
 	Bitmapset *queries;
 	TimestampTz last_processed = GetCurrentTimestamp();
 	bool has_queries;
@@ -942,7 +941,11 @@ ContinuousQueryCombinerMain(void)
 				EmitErrorReport();
 				FlushErrorState();
 
-				cleanup_query_state(states, state->view_id);
+				if (ActiveSnapshotSet())
+					PopActiveSnapshot();
+
+				if (state)
+					cleanup_query_state(states, state->view_id);
 
 				IncrementCQErrors(1);
 
