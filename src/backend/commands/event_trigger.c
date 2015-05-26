@@ -972,6 +972,9 @@ EventTriggerSupportsObjectClass(ObjectClass objclass)
 		case OCLASS_EVENT_TRIGGER:
 			/* no support for event triggers on event triggers */
 			return false;
+		case OCLASS_CONTINUOUS_VIEW:
+			/* no support for continuous views (for now) */
+			return false;
 		case OCLASS_CLASS:
 		case OCLASS_PROC:
 		case OCLASS_TYPE:

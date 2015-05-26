@@ -452,8 +452,9 @@ Indexes:
 Options: fillfactor=50
 
 CREATE SCHEMA test_create_cont_view;
-CREATE CONTINUOUS VIEW test_create_cont_view.error AS SELECT k0::text FROM create_cont_stream1;
-ERROR:  continuous views cannot be given a namespace
+CREATE CONTINUOUS VIEW test_create_cont_view.legit AS SELECT k0::text FROM create_cont_stream1;
+DROP SCHEMA test_create_cont_view CASCADE;
+NOTICE:  drop cascades to view test_create_cont_view.legit
 CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM create_cont_stream1
 GROUP BY a, b, c, d, e;
 --A user-specified fillfactor should override the default

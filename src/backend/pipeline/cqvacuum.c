@@ -41,7 +41,9 @@ NumCQVacuumTuples(Oid relid)
 {
 	uint64_t count;
 	char *relname = get_rel_name(relid);
-	char *cvname;
+	char *namespace = get_namespace_name(get_rel_namespace(relid));
+	RangeVar *matrel = makeRangeVar(namespace, relname, -1);
+	RangeVar *cvname;
 	SelectStmt *stmt;
 	CommandDest dest = DestTuplestore;
 	Tuplestorestate *store = NULL;
@@ -66,13 +68,13 @@ NumCQVacuumTuples(Oid relid)
 	if (!locked)
 		return 0;
 
-	cvname = GetCVNameForMatRelationName(relname);
+	cvname = GetCVNameFromMatRelName(matrel);
 	UnlockRelationOid(PipelineQueryRelationId, AccessShareLock);
 
 	if (!cvname)
 		return 0;
 
-	if (!GetGCFlag(makeRangeVar(NULL, cvname, -1)))
+	if (!GetGCFlag(cvname))
 		return 0;
 
 	runctx = AllocSetContextCreate(CurrentMemoryContext,
@@ -151,8 +153,10 @@ NumCQVacuumTuples(Oid relid)
 CQVacuumContext *
 CreateCQVacuumContext(Relation rel)
 {
+	char *namespace = get_namespace_name(RelationGetNamespace(rel));
 	char *relname = RelationGetRelationName(rel);
-	char *cvname;
+	RangeVar *cvname;
+	RangeVar *matrel = makeRangeVar(namespace, relname, -1);
 	Expr *expr;
 	ParseState *ps;
 	ParseNamespaceItem *nsitem;
@@ -161,11 +165,11 @@ CreateCQVacuumContext(Relation rel)
 	int i;
 	CQVacuumContext *context;
 
-	cvname = GetCVNameForMatRelationName(relname);
+	cvname = GetCVNameFromMatRelName(matrel);
 	if (!cvname)
 		return NULL;
 
-	if (!GetGCFlag(makeRangeVar(NULL, cvname, -1)))
+	if (!GetGCFlag(cvname))
 		return NULL;
 
 	/* Copy colnames from the relation's TupleDesc */

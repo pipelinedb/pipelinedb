@@ -14,6 +14,7 @@
 #include "access/htup_details.h"
 #include "access/xact.h"
 #include "catalog/indexing.h"
+#include "catalog/namespace.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
@@ -164,7 +165,7 @@ streams_to_meta(Relation pipeline_query)
 		Form_pipeline_query catrow = (Form_pipeline_query) GETSTRUCT(tup);
 		ContAnalyzeContext *context;
 
-		tmp = SysCacheGetAttr(PIPELINEQUERYNAME, tup, Anum_pipeline_query_query, &isnull);
+		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
 		querystring = TextDatumGetCString(tmp);
 
 		parsetree_list = pg_parse_query(querystring);
@@ -476,6 +477,9 @@ GetLocalStreamReaders(const char *stream)
 		{
 			Datum view_datum = DirectFunctionCall3(split_text, str, split, Int32GetDatum(i));
 			char *view_name = text_to_cstring((const text *) DatumGetPointer(view_datum));
+			RangeVar *rv;
+			List *name = NIL;
+			int j = 0;
 
 			if (!strlen(view_name))
 				break;
@@ -483,7 +487,21 @@ GetLocalStreamReaders(const char *stream)
 			view_datum = DirectFunctionCall1(btrim1, view_datum);
 			view_name = text_to_cstring((const text *) DatumGetPointer(view_datum));
 
-			tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(view_name));
+			/* deconstruct possible qualifiers */
+			while (++j)
+			{
+				Datum qual_split = PointerGetDatum(cstring_to_text("."));
+				Datum quals_datum = DirectFunctionCall3(split_text, view_datum, qual_split, Int32GetDatum(j));
+				char *qual = text_to_cstring((const text *) DatumGetPointer(quals_datum));
+
+				if (!strlen(qual))
+					break;
+
+				name = lappend(name, makeString(qual));
+			}
+
+			rv = makeRangeVarFromNameList(name);
+			tuple = GetPipelineQueryTuple(rv);
 
 			if (!HeapTupleIsValid(tuple))
 				ereport(ERROR,

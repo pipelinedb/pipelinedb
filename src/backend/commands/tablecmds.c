@@ -246,6 +246,12 @@ static const struct dropmsgstrings dropmsgstringarray[] = {
 		gettext_noop("foreign table \"%s\" does not exist, skipping"),
 		gettext_noop("\"%s\" is not a foreign table"),
 	gettext_noop("Use DROP FOREIGN TABLE to remove a foreign table.")},
+	{RELKIND_CONTINUOUS_VIEW,
+		ERRCODE_UNDEFINED_OBJECT,
+		gettext_noop("continuous view \"%s\" does not exist"),
+		gettext_noop("continuous view  \"%s\" does not exist, skipping"),
+		gettext_noop("\"%s\" is not a continuous view "),
+	gettext_noop("Use DROP CONTINUOUS VIEW to remove a continuous view.")},
 	{'\0', 0, NULL, NULL, NULL, NULL}
 };
 
@@ -836,7 +842,7 @@ RemoveRelations(DropStmt *drop)
 			break;
 
 		case OBJECT_CONTINUOUS_VIEW:
-			relkind = RELKIND_CONTINUOUS_VIEW;
+			relkind = RELKIND_VIEW;
 			break;
 
 		default:
@@ -880,7 +886,16 @@ RemoveRelations(DropStmt *drop)
 		/* Not there? */
 		if (!OidIsValid(relOid))
 		{
+			/*
+			 * We use a regular relkind of 'v' for continuous views' virtual relations
+			 * because that's what they are, which keeps things simple. However, we do
+			 * want a specific error message if this is a continuous view.
+			 */
+			char save = relkind;
+			if (drop->removeType == OBJECT_CONTINUOUS_VIEW)
+				relkind = RELKIND_CONTINUOUS_VIEW;
 			DropErrorMsgNonExistent(rel, relkind, drop->missing_ok);
+			relkind = save;
 			continue;
 		}
 
@@ -7969,6 +7984,7 @@ ATExecAlterColumnType(AlteredTableInfo *tab, Relation rel,
 			case OCLASS_USER_MAPPING:
 			case OCLASS_DEFACL:
 			case OCLASS_EXTENSION:
+			case OCLASS_CONTINUOUS_VIEW:
 
 				/*
 				 * We don't expect any of these sorts of objects to depend on

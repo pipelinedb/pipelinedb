@@ -26,6 +26,7 @@
 #include "pipeline/cqplan.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
+#include "utils/rel.h"
 #include "utils/syscache.h"
 
 
@@ -128,13 +129,14 @@ get_combiner_join_rel(PlannerInfo *root, int levels_needed, List *initial_rels)
  * to modify the combiner's Aggrefs accordingly.
  */
 static void
-set_plan_refs(PlannedStmt *pstmt, char* matrelname)
+set_plan_refs(PlannedStmt *pstmt, ContinuousView *view)
 {
 	Plan *plan = pstmt->planTree;
 	ListCell *lc;
 	AttrNumber attno = 1;
 	List *targetlist = NIL;
 	TupleDesc matdesc;
+	Relation matrel;
 	int i;
 	Agg *agg;
 
@@ -143,7 +145,9 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 
 	agg = (Agg *) plan;
 
-	matdesc = RelationNameGetTupleDesc(matrelname);
+	matrel = heap_openrv(view->matrel, NoLock);
+	matdesc = CreateTupleDescCopyConstr(RelationGetDescr(matrel));
+	heap_close(matrel, NoLock);
 
 	/*
 	 * There are two cases we need to handle here:
@@ -291,7 +295,7 @@ set_plan_refs(PlannedStmt *pstmt, char* matrelname)
 	for (i = 0; i < matdesc->natts; i++)
 	{
 		TargetEntry *te = list_nth(targetlist, i);
-		if (strcmp(te->resname, NameStr(matdesc->attrs[i]->attname)) != 0)
+		if (pg_strcasecmp(te->resname, NameStr(matdesc->attrs[i]->attname)) != 0)
 			elog(ERROR, "continuous query target list is inconsistent with materialization table schema");
 	}
 
@@ -352,30 +356,30 @@ get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 }
 
 static PlannedStmt*
-get_worker_plan(Oid id, const char *sql)
+get_worker_plan(ContinuousView *view)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
 
-	parsetree_list = pg_parse_query(sql);
+	parsetree_list = pg_parse_query(view->query);
 	Assert(list_length(parsetree_list) == 1);
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt = GetSelectStmtForCQWorker(selectstmt, NULL);
 	selectstmt->forContinuousView = true;
 
-	return get_plan_from_stmt(id, (Node *) selectstmt, sql, false);
+	return get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, false);
 }
 
 static PlannedStmt*
-get_combiner_plan(Oid id, const char *sql)
+get_combiner_plan(ContinuousView *view)
 {
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
 	PlannedStmt *result;
 	join_search_hook_type save = join_search_hook;
 
-	parsetree_list = pg_parse_query(sql);
+	parsetree_list = pg_parse_query(view->query);
 	Assert(list_length(parsetree_list) == 1);
 
 	join_search_hook = get_combiner_join_rel;
@@ -383,25 +387,25 @@ get_combiner_plan(Oid id, const char *sql)
 	selectstmt = GetSelectStmtForCQCombiner(selectstmt);
 	selectstmt->forContinuousView = true;
 
-	result = get_plan_from_stmt(id, (Node *) selectstmt, sql, true);
+	result = get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, true);
 	join_search_hook = save;
 
 	return result;
 }
 
 PlannedStmt *
-GetCQPlan(Oid id, const char *sql, char *matrelname)
+GetCQPlan(ContinuousView *view)
 {
 	PlannedStmt *plan;
 
 	if (IsContQueryWorkerProcess())
-		plan = get_worker_plan(id, sql);
+		plan = get_worker_plan(view);
 	else if (IsContQueryCombinerProcess())
-		plan = get_combiner_plan(id, sql);
+		plan = get_combiner_plan(view);
 	else
 		ereport(ERROR, (errmsg("only continuous query processes can generate continuous query plans")));
 
-	set_plan_refs(plan, matrelname);
+	set_plan_refs(plan, view);
 
 	return plan;
 }

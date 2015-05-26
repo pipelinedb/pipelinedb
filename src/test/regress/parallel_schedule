@@ -153,7 +153,7 @@ test: stream_table_join user_combine cont_limit cont_alter stream_targets hash_g
 # ----------
 # Another group of parallel tests
 # ----------
-test: stream_exprs schema_inference prepared_stream_insert
+test: stream_exprs schema_inference prepared_stream_insert cont_view_namespace
 
 # These are run in serial because they each activate many CVs.
 # If they are run in parallel the CPU can potentially get starved.

@@ -84,14 +84,13 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 	old_cxt = MemoryContextSwitchTo(exec_cxt);
 
 	state->view_id = id;
-
 	state->exec_cxt = exec_cxt;
 	state->view = GetContinuousView(id);
-
 	state->dest = CreateDestReceiver(DestCombiner);
+
 	SetCombinerDestReceiverParams(state->dest, reader, id);
 
-	pstmt = GetCQPlan(id, state->view->query, NameStr(state->view->matrelname));
+	pstmt = GetCQPlan(state->view);
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot, InvalidSnapshot, state->dest, NULL, 0);
 	state->query_desc->snapshot = GetTransactionSnapshot();
 	state->query_desc->snapshot->copied = true;
@@ -425,13 +424,13 @@ next:
 
 		CurrentResourceOwner = owner;
 
+		if (query_desc->totaltime)
+			InstrStopNode(query_desc->totaltime, estate->es_processed);
+
 		/* Clean up. */
 		ExecutorFinish(query_desc);
 		ExecutorEnd(query_desc);
 		FreeQueryDesc(query_desc);
-
-		if (query_desc->totaltime)
-			InstrStopNode(query_desc->totaltime, estate->es_processed);
 
 		MyCQStats = &state->stats;
 		cq_stat_report(true);

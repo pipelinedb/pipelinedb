@@ -18,7 +18,6 @@
 extern int continuous_view_fillfactor;
 
 extern void ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring);
-extern void ExecDropContinuousViewStmt(DropStmt *stmt);
 extern void ExecTruncateContinuousViewStmt(TruncateStmt *stmt);
 
 extern void ExecActivateStmt(ActivateStmt *stmt);
