@@ -26,9 +26,10 @@
  */
 #define PipelineQueryRelationId  4242
 
-CATALOG(pipeline_query,4242) BKI_WITHOUT_OIDS
+CATALOG(pipeline_query,4242)
 {
 	int32		id;
+	Oid namespace;
 	NameData	name;
 	NameData	matrelname;
 	bool		gc;
@@ -50,13 +51,14 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query			7
+#define Natts_pipeline_query			8
 #define Anum_pipeline_query_id			1
-#define Anum_pipeline_query_name		2
-#define Anum_pipeline_query_matrelname	3
-#define Anum_pipeline_query_gc			4
-#define Anum_pipeline_query_needs_xact	5
-#define Anum_pipeline_query_hash		6
-#define Anum_pipeline_query_query 		7
+#define Anum_pipeline_query_namespace		2
+#define Anum_pipeline_query_name		3
+#define Anum_pipeline_query_matrelname	4
+#define Anum_pipeline_query_gc			5
+#define Anum_pipeline_query_needs_xact	6
+#define Anum_pipeline_query_hash		7
+#define Anum_pipeline_query_query 		8
 
 #endif   /* PIPELINE_QUERIES_H */

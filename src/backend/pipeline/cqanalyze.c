@@ -348,6 +348,7 @@ combine_target_belongs_to_cv(Var *target, List *rangetable, RangeVar **cv)
 			Relation rel;
 			RangeVar *rv;
 			char *cvname;
+			char *namespace;
 
 			if (!equal(colname, c))
 				continue;
@@ -357,9 +358,10 @@ combine_target_belongs_to_cv(Var *target, List *rangetable, RangeVar **cv)
 			 * so we just need to verify that it's actually a continuous view.
 			 */
 			rel = heap_open(rte->relid, NoLock);
+			namespace = get_namespace_name(RelationGetNamespace(rel));
 			cvname = RelationGetRelationName(rel);
 			relation_close(rel, NoLock);
-			rv = makeRangeVar(NULL, cvname, -1);
+			rv = makeRangeVar(namespace, cvname, -1);
 
 			if (IsAContinuousView(rv))
 			{
@@ -470,7 +472,7 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 		RangeTblEntry *rte = list_nth(pstate->p_rtable, var->varno - 1);
 
 		rel = heap_open(rte->relid, NoLock);
-		matrelrv = makeRangeVar(NULL, RelationGetRelationName(rel), -1);
+		matrelrv = makeRangeVar(get_namespace_name(RelationGetNamespace(rel)), RelationGetRelationName(rel), -1);
 		relation_close(rel, NoLock);
 
 		/*
@@ -1636,10 +1638,7 @@ pipeline_rewrite(List *raw_parsetree_list)
 			 * the name of the target relation if we need to.
 			 */
 			if (vstmt->relation && IsAContinuousView(vstmt->relation))
-			{
-				char *s = GetMatRelationName(vstmt->relation->relname);
-				vstmt->relation = makeRangeVar(NULL, s, -1);
-			}
+				vstmt->relation = GetMatRelationName(vstmt->relation);
 		}
 	}
 
@@ -1656,13 +1655,14 @@ pipeline_rewrite(List *raw_parsetree_list)
 Query *
 RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 {
-	RangeVar *rv = makeRangeVar(NULL, RelationGetRelationName(cv), -1);
+	RangeVar *rv = makeRangeVar(get_namespace_name(RelationGetNamespace(cv)), RelationGetRelationName(cv), -1);
 	ListCell *lc;
 	List *targets = NIL;
 	List *targetlist = NIL;
 	AttrNumber matrelvarno = InvalidAttrNumber;
 	TupleDesc matreldesc;
-	char *matrelname;
+	RangeVar *matrelname;
+	Relation matrel;
 	int i;
 	RangeTblEntry *rte;
 	List *colnames = NIL;
@@ -1672,8 +1672,10 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 	if (!IsAContinuousView(rv))
 		return rule;
 
-	matrelname = GetMatRelationName(RelationGetRelationName(cv));
-	matreldesc = RelationNameGetTupleDesc(matrelname);
+	matrelname = GetMatRelationName(rv);
+	matrel = heap_openrv(matrelname, NoLock);
+	matreldesc = CreateTupleDescCopyConstr(RelationGetDescr(matrel));
+	heap_close(matrel, NoLock);
 
 	targets = pull_var_clause((Node *) rule->targetList,
 			PVC_RECURSE_AGGREGATES, PVC_INCLUDE_PLACEHOLDERS);

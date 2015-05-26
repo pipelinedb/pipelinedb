@@ -53,6 +53,7 @@
 #include "catalog/pg_ts_template.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_user_mapping.h"
+#include "catalog/pipeline_query.h"
 #include "commands/comment.h"
 #include "commands/defrem.h"
 #include "commands/event_trigger.h"
@@ -1249,6 +1250,10 @@ doDeletion(const ObjectAddress *object, int flags)
 			RemoveEventTriggerById(object->objectId);
 			break;
 
+		case OCLASS_CONTINUOUS_VIEW:
+			RemoveContinuousViewById(object->objectId);
+			break;
+
 		default:
 			elog(ERROR, "unrecognized object class: %u",
 				 object->classId);
@@ -2354,6 +2359,9 @@ getObjectClass(const ObjectAddress *object)
 
 		case EventTriggerRelationId:
 			return OCLASS_EVENT_TRIGGER;
+
+		case PipelineQueryRelationId:
+			return OCLASS_CONTINUOUS_VIEW;
 	}
 
 	/* shouldn't get here */
