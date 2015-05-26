@@ -55,6 +55,9 @@ RemoveTStateEntry(Oid id)
 	Relation pipeline_tstate = heap_open(PipelineTStateRelationId, RowExclusiveLock);
 	HeapTuple tuple = SearchSysCache1(PIPELINETSTATEID, Int32GetDatum(id));
 
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for continuous view %u transition state", id);
+
 	simple_heap_delete(pipeline_tstate, &tuple->t_self);
 	ReleaseSysCache(tuple);
 	CommandCounterIncrement();
@@ -66,11 +69,15 @@ void
 ResetTStateEntry(Oid id)
 {
 	Relation pipeline_tstate = heap_open(PipelineTStateRelationId, RowExclusiveLock);
-	HeapTuple tuple = SearchSysCache1(PIPELINETSTATEID, Int32GetDatum(id));
+	HeapTuple tuple;
 	bool nulls[Natts_pipeline_tstate];
 	bool replaces[Natts_pipeline_tstate];
 	Datum values[Natts_pipeline_tstate];
 	HeapTuple newtuple;
+
+	tuple = SearchSysCache1(PIPELINETSTATEID, Int32GetDatum(id));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for continuous view %u transition state", id);
 
 	/* Set everything to NULL */
 	MemSet(nulls, true, sizeof(nulls));
@@ -90,11 +97,15 @@ void
 UpdateDistinctBloomFilter(Oid id, BloomFilter *distinct)
 {
 	Relation pipeline_tstate = heap_open(PipelineTStateRelationId, RowExclusiveLock);
-	HeapTuple tuple = SearchSysCache1(PIPELINETSTATEID, Int32GetDatum(id));
+	HeapTuple tuple;
 	bool nulls[Natts_pipeline_tstate];
 	bool replaces[Natts_pipeline_tstate];
 	Datum values[Natts_pipeline_tstate];
 	HeapTuple newtuple;
+
+	tuple = SearchSysCache1(PIPELINETSTATEID, Int32GetDatum(id));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for continuous view %u transition state", id);
 
 	SET_VARSIZE(distinct, BloomFilterSize(distinct));
 

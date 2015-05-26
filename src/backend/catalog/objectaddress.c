@@ -52,6 +52,7 @@
 #include "catalog/pg_ts_template.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_user_mapping.h"
+#include "catalog/pipeline_query.h"
 #include "commands/dbcommands.h"
 #include "commands/defrem.h"
 #include "commands/event_trigger.h"
@@ -2180,6 +2181,21 @@ getObjectDescription(const ObjectAddress *object)
 				break;
 			}
 
+		case OCLASS_CONTINUOUS_VIEW:
+			{
+				HeapTuple	tup;
+
+				tup = SearchSysCache1(PIPELINEQUERYOID,
+									  ObjectIdGetDatum(object->objectId));
+				if (!HeapTupleIsValid(tup))
+					elog(ERROR, "cache lookup failed for continuous view %u",
+						 object->objectId);
+				appendStringInfo(&buffer, _("continuous view %s"),
+				 NameStr(((Form_pipeline_query) GETSTRUCT(tup))->name));
+				ReleaseSysCache(tup);
+				break;
+			}
+
 		default:
 			appendStringInfo(&buffer, "unrecognized object %u %u %d",
 							 object->classId,
@@ -2589,6 +2605,10 @@ getObjectTypeDescription(const ObjectAddress *object)
 
 		case OCLASS_EVENT_TRIGGER:
 			appendStringInfoString(&buffer, "event trigger");
+			break;
+
+		case OCLASS_CONTINUOUS_VIEW:
+			appendStringInfoString(&buffer, "continuous view");
 			break;
 
 		default:
@@ -3340,6 +3360,26 @@ getObjectIdentity(const ObjectAddress *object)
 				trigForm = (Form_pg_event_trigger) GETSTRUCT(tup);
 				appendStringInfoString(&buffer,
 							   quote_identifier(NameStr(trigForm->evtname)));
+				ReleaseSysCache(tup);
+				break;
+			}
+
+		case OCLASS_CONTINUOUS_VIEW:
+			{
+				HeapTuple	tup;
+				Form_pipeline_query row;
+				char *schema;
+
+				tup = SearchSysCache1(PIPELINEQUERYOID,
+									  ObjectIdGetDatum(object->objectId));
+				if (!HeapTupleIsValid(tup))
+					elog(ERROR, "cache lookup failed for continuous view %u",
+						 object->objectId);
+				row = (Form_pipeline_query) GETSTRUCT(tup);
+				schema = get_namespace_name(row->namespace);
+				appendStringInfoString(&buffer,
+									   quote_qualified_identifier(schema, NameStr(row->name)));
+
 				ReleaseSysCache(tup);
 				break;
 			}

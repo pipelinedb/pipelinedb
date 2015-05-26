@@ -1,0 +1,52 @@
+CREATE CONTINUOUS VIEW test_cvn0 AS SELECT COUNT(*) FROM stream;
+CREATE CONTINUOUS VIEW nonexistent.cv AS SELECT COUNT(*) FROM stream;
+ERROR:  schema "nonexistent" does not exist
+CREATE SCHEMA test_cvn_schema0;
+CREATE CONTINUOUS VIEW test_cvn_schema0.test_cvn0 AS SELECT COUNT(*) FROM stream;
+CREATE SCHEMA test_cvn_schema1;
+CREATE CONTINUOUS VIEW test_cvn_schema1.test_cvn0 AS SELECT COUNT(*) FROM stream;
+SELECT n.nspname, pq.name FROM pipeline_query pq JOIN pg_namespace n ON pq.namespace = n.oid WHERE pq.name LIKE '%test_cvn%' ORDER BY n.nspname, pq.name;
+     nspname      |   name    
+------------------+-----------
+ public           | test_cvn0
+ test_cvn_schema0 | test_cvn0
+ test_cvn_schema1 | test_cvn0
+(3 rows)
+
+ALTER SCHEMA test_cvn_schema0 RENAME TO test_cvn_schema0_new;
+CREATE CONTINUOUS VIEW test_cvn_schema0_new.test_cvn0 AS SELECT COUNT(*) FROM stream;
+ERROR:  continuous view "test_cvn0" already exists
+CREATE CONTINUOUS VIEW test_cvn_schema0_new.test_cvn1 AS SELECT COUNT(*) FROM stream;
+SELECT n.nspname, pq.name FROM pipeline_query pq JOIN pg_namespace n ON pq.namespace = n.oid WHERE pq.name LIKE '%test_cvn%' ORDER BY n.nspname, pq.name;
+       nspname        |   name    
+----------------------+-----------
+ public               | test_cvn0
+ test_cvn_schema0_new | test_cvn0
+ test_cvn_schema0_new | test_cvn1
+ test_cvn_schema1     | test_cvn0
+(4 rows)
+
+DROP SCHEMA test_cvn_schema0_new;
+ERROR:  cannot drop schema test_cvn_schema0_new because other objects depend on it
+DETAIL:  view test_cvn_schema0_new.test_cvn0 depends on schema test_cvn_schema0_new
+view test_cvn_schema0_new.test_cvn1 depends on schema test_cvn_schema0_new
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+DROP SCHEMA test_cvn_schema0_new CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to view test_cvn_schema0_new.test_cvn0
+drop cascades to view test_cvn_schema0_new.test_cvn1
+SELECT n.nspname, pq.name FROM pipeline_query pq JOIN pg_namespace n ON pq.namespace = n.oid WHERE pq.name LIKE '%test_cvn%' ORDER BY n.nspname, pq.name;
+     nspname      |   name    
+------------------+-----------
+ public           | test_cvn0
+ test_cvn_schema1 | test_cvn0
+(2 rows)
+
+DROP CONTINUOUS VIEW test_cvn0;
+DROP SCHEMA test_cvn_schema1 CASCADE;
+NOTICE:  drop cascades to view test_cvn_schema1.test_cvn0
+SELECT n.nspname, pq.name FROM pipeline_query pq JOIN pg_namespace n ON pq.namespace = n.oid WHERE pq.name LIKE '%test_cvn%' ORDER BY n.nspname, pq.name;
+ nspname | name 
+---------+------
+(0 rows)
+

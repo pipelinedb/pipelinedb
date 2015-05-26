@@ -63,7 +63,6 @@ typedef struct {
 	PlannedStmt *combine_plan;
 	PlannedStmt *groups_plan;
 	TimestampTz last_groups_plan;
-	RangeVar *matrel;
 	TupleDesc desc;
 	MemoryContext exec_cxt;
 	MemoryContext plan_cache_cxt;
@@ -324,13 +323,13 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 	cref->fields = list_make1(star);
 	res->val = (Node *) cref;
 	sel->targetList = list_make1(res);
-	sel->fromClause = list_make1(state->matrel);
+	sel->fromClause = list_make1(state->view->matrel);
 
 	/* populate the ParseState's p_varnamespace member */
 	ps = make_parsestate(NULL);
 	transformFromClause(ps, sel->fromClause);
 
-	qlist = pg_analyze_and_rewrite((Node *) sel, state->matrel->relname, NULL, 0);
+	qlist = pg_analyze_and_rewrite((Node *) sel, state->view->matrel->relname, NULL, 0);
 	query = (Query *) linitial(qlist);
 	query->is_combine_lookup = true;
 
@@ -425,7 +424,7 @@ select_existing_groups(ContQueryCombinerState *state, TupleHashTable existing)
 
 	PortalDefineQuery(portal,
 			NULL,
-			state->matrel->relname,
+			state->view->matrel->relname,
 			"SELECT",
 			list_make1(plan),
 			NULL);
@@ -492,7 +491,7 @@ static void
 sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashTable existing)
 {
 	TupleTableSlot *slot = state->slot;
-	Relation rel = heap_openrv(state->matrel, RowExclusiveLock);
+	Relation rel = heap_openrv(state->view->matrel, RowExclusiveLock);
 	int size = sizeof(bool) * slot->tts_tupleDescriptor->natts;
 	bool *replace_all = palloc0(size);
 	ResultRelInfo *ri = CQMatViewOpen(rel);
@@ -575,7 +574,7 @@ combine(ContQueryCombinerState *state)
 
 	PortalDefineQuery(portal,
 					  NULL,
-					  state->matrel->relname,
+					  state->view->matrel->relname,
 					  "SELECT",
 					  list_make1(state->combine_plan),
 					  NULL);
@@ -640,13 +639,12 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 
 	state->view = GetContinuousView(id);
 
-	pstmt = GetCQPlan(id, state->view->query, NameStr(state->view->matrelname));
+	pstmt = GetCQPlan(state->view);
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
 	/* this also sets the state's desc field */
 	prepare_combine_plan(state, pstmt);
 	state->slot = MakeSingleTupleTableSlot(state->desc);
-	state->matrel = makeRangeVar(NULL, NameStr(state->view->matrelname), -1);
 	state->groups_plan = NULL;
 
 	if (IsA(state->combine_plan->planTree, Agg))
@@ -668,7 +666,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		 * happens, such as a user deleting the hash index, we still try our best to
 		 * reconstruct this expression later.
 		 */
-		matrel = heap_openrv(state->matrel, NoLock);
+		matrel = heap_openrv(state->view->matrel, NoLock);
 		ri = CQMatViewOpen(matrel);
 
 		for (i = 0; i < ri->ri_NumIndices; i++)
@@ -944,6 +942,8 @@ ContinuousQueryCombinerMain(void)
 
 				if (ActiveSnapshotSet())
 					PopActiveSnapshot();
+
+				MemoryContextSwitchTo(ContQueryBatchContext);
 
 				if (state)
 					cleanup_query_state(states, state->view_id);
