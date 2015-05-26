@@ -1379,10 +1379,8 @@ ExecDropStmt(DropStmt *stmt, bool isTopLevel)
 		case OBJECT_VIEW:
 		case OBJECT_MATVIEW:
 		case OBJECT_FOREIGN_TABLE:
-			RemoveRelations(stmt);
-			break;
 		case OBJECT_CONTINUOUS_VIEW:
-			ExecDropContinuousViewStmt(stmt);
+			RemoveRelations(stmt);
 			break;
 		default:
 			RemoveObjects(stmt);

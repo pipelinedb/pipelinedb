@@ -305,20 +305,19 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	List *tableElts = NIL;
 	List *tlist;
 	ListCell *col;
-	Oid reloid;
+	Oid matreloid;
+	Oid viewoid;
+	Oid cvoid;
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *workerselect;
 	SelectStmt *viewselect;
 	CQAnalyzeContext context;
 	bool saveAllowSystemTableMods;
+	ObjectAddress dependent;
+	ObjectAddress on_me;
 
 	view = stmt->into->rel;
-	if (view->schemaname)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_SCHEMA_NAME),
-				errmsg("continuous views cannot be given a namespace")));
-
 	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
 
 	/*
@@ -406,7 +405,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	create_stmt->oncommit = stmt->into->onCommit;
 	create_stmt->options = stmt->into->options;
 
-	reloid = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid);
+	matreloid = DefineRelation(create_stmt, RELKIND_RELATION, InvalidOid);
 	CommandCounterIncrement();
 
 	toast_options = transformRelOptions((Datum) 0, create_stmt->options, "toast",
@@ -415,13 +414,13 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options,
 						   true);
 
-	AlterTableCreateToastTable(reloid, toast_options, AccessExclusiveLock);
+	AlterTableCreateToastTable(matreloid, toast_options, AccessExclusiveLock);
 
 	/*
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	CreateContinuousView(view, get_query_string(view->relname, querystring),
+	cvoid = DefineContinuousView(view, get_query_string(view->relname, querystring),
 			mat_relation, IsSlidingWindowSelectStmt(viewselect), !SelectsFromStreamOnly(workerselect));
 	CommandCounterIncrement();
 
@@ -442,84 +441,45 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
 
-	DefineView(view_stmt, querystring);
+	viewoid = DefineView(view_stmt, querystring);
 	CommandCounterIncrement();
 	allowSystemTableMods = saveAllowSystemTableMods;
+
+	/*
+	 * Record a dependency between the matrel and the view, so when we drop the view
+	 * the matrel is automatically dropped as well. The user will enter the view name
+	 * when dropping, so the alternative is to rewrite the drop target to the matrel.
+	 * This seems simpler.
+	 */
+	dependent.classId = RelationRelationId;
+	dependent.objectId = matreloid;
+	dependent.objectSubId = 0;
+
+	on_me.classId = RelationRelationId;
+	on_me.objectId = viewoid;
+	on_me.objectSubId = 0;
+
+	recordDependencyOn(&dependent, &on_me, DEPENDENCY_INTERNAL);
+
+	/*
+	 * Record a dependency between the matrel and a pipeline_query entry so that when
+	 * the matrel is dropped the pipeline_query metadata cleanup hook is invoked.
+	 */
+	dependent.classId = PipelineQueryRelationId;
+	dependent.objectId = cvoid;
+	dependent.objectSubId = 0;
+
+	on_me.classId = RelationRelationId;
+	on_me.objectId = viewoid;
+	on_me.objectSubId = 0;
+
+	recordDependencyOn(&dependent, &on_me, DEPENDENCY_INTERNAL);
 
 	/*
 	 * Index the materialization table smartly if we can
 	 */
 	allowSystemTableMods = saveAllowSystemTableMods;
-	create_indices_on_mat_relation(reloid, mat_relation, query, workerselect, viewselect);
-}
-
-/*
- * ExecDropContinuousViewStmt
- *
- * Drops the query row in the pipeline_query catalog table.
- */
-void
-ExecDropContinuousViewStmt(DropStmt *stmt)
-{
-	Relation pipeline_query;
-	List *relations = NIL;
-	ListCell *item;
-
-	/*
-	 * Scan the pipeline_query relation to find the OID of the views(s) to be
-	 * deleted.
-	 */
-	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
-
-	foreach(item, stmt->objects)
-	{
-		RangeVar *rv = makeRangeVarFromNameList((List *) lfirst(item));
-		HeapTuple tuple;
-		Form_pipeline_query row;
-
-		tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
-		if (!HeapTupleIsValid(tuple))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
-					errmsg("continuous view \"%s\" does not exist", rv->relname)));
-
-		row = (Form_pipeline_query) GETSTRUCT(tuple);
-
-		/*
-		 * Add object for the CQ's underlying materialization table.
-		 */
-		relations = lappend(relations, list_make1(makeString(GetMatRelationName(rv->relname))));
-
-		/*
-		 * Remove the view from the pipeline_query table
-		 */
-		simple_heap_delete(pipeline_query, &tuple->t_self);
-
-		/*
-		 * Advance command counter so that later iterations of this loop will
-		 * see the changes already made.
-		 */
-		CommandCounterIncrement();
-
-		/* Remove transition state entry */
-		RemoveTStateEntry(row->id);
-
-		ReleaseSysCache(tuple);
-	}
-
-	UpdateStreamQueries(pipeline_query);
-
-	/*
-	 * Now we can clean up
-	 */
-	heap_close(pipeline_query, NoLock);
-
-	/*
-	 * Remove the VIEWs and underlying materialization relations
-	 * of all CVs.
-	 */
-	stmt->objects = list_concat(stmt->objects, relations);
-	RemoveObjects(stmt);
+	create_indices_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);
 }
 
 void
@@ -535,7 +495,8 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 	foreach(lc, stmt->relations)
 	{
 		RangeVar *rv = (RangeVar *) lfirst(lc);
-		HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(rv->relname));
+		RangeVar *matrel;
+		HeapTuple tuple = GetPipelineQueryTuple(rv);
 		Form_pipeline_query row;
 
 		if (!HeapTupleIsValid(tuple))
@@ -548,7 +509,9 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 		ReleaseSysCache(tuple);
 
 		views = lappend_oid(views, row->id);
-		rv->relname = GetMatRelationName(rv->relname);
+		matrel = GetMatRelationName(rv);
+
+		rv->relname = matrel->relname;
 	}
 
 	/* Reset all CQ level transition state */

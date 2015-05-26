@@ -248,22 +248,6 @@ IsSlidingWindowSelectStmt(SelectStmt *stmt)
 }
 
 /*
- * IsSlidingWindowContinuousView
- */
-bool
-IsSlidingWindowContinuousView(RangeVar *cvname)
-{
-	char *sql = GetQueryString(cvname->relname);
-	List *parsetree_list = pg_parse_query(sql);
-	SelectStmt	*select_stmt;
-
-	Assert(list_length(parsetree_list) == 1);
-
-	select_stmt = (SelectStmt *) linitial(parsetree_list);
-	return IsSlidingWindowSelectStmt(select_stmt);
-}
-
-/*
  * DoesViewAggregate
  */
 bool
@@ -716,7 +700,7 @@ fix_sliding_window_expr(SelectStmt *stmt, Node *swExpr, CQAnalyzeContext *contex
  * GetCQVacuumExpr
  */
 Node*
-GetCQVacuumExpr(char *cvname)
+GetCQVacuumExpr(RangeVar *cvname)
 {
 	List *parsetree_list;
 	SelectStmt *stmt;

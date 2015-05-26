@@ -18,6 +18,6 @@
 #define IS_STREAM_TREE(plan) (IsA((plan), StreamScan) || \
 		IsA((plan), StreamTableJoin))
 
-PlannedStmt *GetCQPlan(Oid id, const char *sql, char *matrelname);
+PlannedStmt *GetCQPlan(ContinuousView *view);
 
 #endif

@@ -32,6 +32,7 @@
 #include "tcop/dest.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
+#include "utils/lsyscache.h"
 #include "utils/portal.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
@@ -101,13 +102,35 @@ get_next_id(Relation rel)
 	return id;
 }
 
+
 /*
- * CreateContinuousView
+ * Lookup a raw tuple from pipeline_query from the given continuous view name
+ */
+HeapTuple
+GetPipelineQueryTuple(RangeVar *name)
+{
+	HeapTuple tuple;
+	Oid namespace;
+
+	if (name->schemaname == NULL)
+		namespace = RangeVarGetCreationNamespace(name);
+	else
+		namespace = get_namespace_oid(name->schemaname, false);
+
+	Assert(OidIsValid(namespace));
+
+	tuple = SearchSysCache2(PIPELINEQUERYNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(name->relname));
+
+	return tuple;
+}
+
+/*
+ * DefineContinuousView
  *
  * Adds a CV to the `pipeline_query` catalog table.
  */
-void
-CreateContinuousView(RangeVar *name, const char *query_string, RangeVar* matrelname, bool gc, bool needs_xact)
+Oid
+DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matrelname, bool gc, bool needs_xact)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -117,6 +140,8 @@ CreateContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	NameData matrelname_data;
 	Oid id;
 	uint64_t hash;
+	Oid namespace;
+	Oid result;
 
 	if (!name)
 		ereport(ERROR,
@@ -128,7 +153,11 @@ CreateContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("query is null")));
 
-	MemSet(nulls, 0, sizeof(nulls));
+	/*
+	 * This should have already been done by the caller when creating the matrel,
+	 * but just to be safe...
+	 */
+	namespace = RangeVarGetAndCheckCreationNamespace(name, NoLock, NULL);
 
 	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
 
@@ -138,6 +167,7 @@ CreateContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	values[Anum_pipeline_query_id - 1] = Int32GetDatum(id);
 	values[Anum_pipeline_query_name - 1] = NameGetDatum(&name_data);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_string);
+	values[Anum_pipeline_query_namespace - 1] = ObjectIdGetDatum(namespace);
 
 	/* Copy matrelname */
 	namestrcpy(&matrelname_data, matrelname->relname);
@@ -150,9 +180,10 @@ CreateContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	hash = MurmurHash3_64(name->relname, strlen(name->relname), MURMUR_SEED) ^ MurmurHash3_64(query_string, strlen(query_string), MURMUR_SEED);
 	values[Anum_pipeline_query_hash - 1] = Int32GetDatum(hash);
 
+	MemSet(nulls, 0, sizeof(nulls));
 	tup = heap_form_tuple(pipeline_query->rd_att, values, nulls);
 
-	simple_heap_insert(pipeline_query, tup);
+	result = simple_heap_insert(pipeline_query, tup);
 	CatalogUpdateIndexes(pipeline_query, tup);
 	CommandCounterIncrement();
 
@@ -164,41 +195,53 @@ CreateContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	UpdateStreamQueries(pipeline_query);
 
 	heap_close(pipeline_query, NoLock);
+
+	return result;
 }
 
 /*
  * GetMatRelationName
  */
-char *GetMatRelationName(char *cvname)
+RangeVar *
+GetMatRelationName(RangeVar *cvname)
 {
 	HeapTuple tuple;
 	Form_pipeline_query row;
+	char *namespace;
+	RangeVar *result;
 
-	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(cvname));
+	tuple = GetPipelineQueryTuple(cvname);
 	if (!HeapTupleIsValid(tuple))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
-				errmsg("continuous view \"%s\" does not exist", cvname)));
+				errmsg("continuous view \"%s\" does not exist", cvname->relname)));
+
 	row = (Form_pipeline_query) GETSTRUCT(tuple);
+	namespace = get_namespace_name(row->namespace);
+	result = makeRangeVar(namespace, pstrdup(NameStr(row->matrelname)), -1);
+
 	ReleaseSysCache(tuple);
-	return pstrdup(NameStr(row->matrelname));
+
+	return result;
 }
 
 /*
- * GetCVNameForMatRelationName
+ * GetCVNameFromMatRelName
  */
-char *
-GetCVNameForMatRelationName(char *matrelname)
+RangeVar *
+GetCVNameFromMatRelName(RangeVar *matrel)
 {
 	char *cvname = NULL;
 	Relation pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
 	HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_query, 0, NULL);
 	HeapTuple tup;
+	Oid namespace = get_namespace_oid(matrel->schemaname, false);
 
 	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		if (strcmp(matrelname, NameStr(row->matrelname)) == 0)
+		if (namespace == row->namespace &&
+				pg_strcasecmp(matrel->relname, NameStr(row->matrelname)) == 0)
 		{
 			cvname = pstrdup(NameStr(row->name));
 			break;
@@ -207,7 +250,11 @@ GetCVNameForMatRelationName(char *matrelname)
 
 	heap_endscan(scan_desc);
 	heap_close(pipeline_query, AccessShareLock);
-	return cvname;
+
+	if (!cvname)
+		return NULL;
+
+	return makeRangeVar(matrel->schemaname, cvname, -1);
 }
 
 /*
@@ -218,21 +265,21 @@ GetCVNameForMatRelationName(char *matrelname)
  * of the query string is returned.
  */
 char *
-GetQueryString(char *cvname)
+GetQueryString(RangeVar *cvname)
 {
 	HeapTuple tuple;
 	bool isnull;
 	Datum tmp;
 	char *result = NULL;
 
-	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(cvname));
+	tuple = GetPipelineQueryTuple(cvname);
 
 	if (!HeapTupleIsValid(tuple))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
-				errmsg("continuous view \"%s\" does not exist", cvname)));
+				errmsg("continuous view \"%s\" does not exist", cvname->relname)));
 
-	tmp = SysCacheGetAttr(PIPELINEQUERYNAME, tuple, Anum_pipeline_query_query, &isnull);
+	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
 	result = TextDatumGetCString(tmp);
 
 	ReleaseSysCache(tuple);
@@ -249,7 +296,7 @@ GetQueryString(char *cvname)
 bool
 IsAContinuousView(RangeVar *name)
 {
-	HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(name->relname));
+	HeapTuple tuple = GetPipelineQueryTuple(name);
 	if (!HeapTupleIsValid(tuple))
 		return false;
 	ReleaseSysCache(tuple);
@@ -290,7 +337,7 @@ IsAMatRel(RangeVar *name, RangeVar **cvname)
 	heap_close(pipeline_query, NoLock);
 
 	if (cvname)
-		*cvname = makeRangeVar(NULL, pstrdup(NameStr(cv)), -1);
+		*cvname = makeRangeVar(name->schemaname, pstrdup(NameStr(cv)), -1);
 
 	return ismatrel;
 }
@@ -302,7 +349,7 @@ bool
 GetGCFlag(RangeVar *name)
 {
 	bool gc = false;
-	HeapTuple tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(name->relname));
+	HeapTuple tuple = GetPipelineQueryTuple(name);
 
 	if (HeapTupleIsValid(tuple))
 	{
@@ -326,7 +373,7 @@ GetContinuousQuery(RangeVar *rv)
 	List *parsetree_list;
 	SelectStmt *sel;
 
-	sql = GetQueryString(rv->relname);
+	sql = GetQueryString(rv);
 	parsetree_list = pg_parse_query(sql);
 	sel = linitial(parsetree_list);
 
@@ -348,20 +395,24 @@ GetContinuousView(Oid id)
 	Form_pipeline_query row;
 	Datum tmp;
 	bool isnull;
+	char *namespace;
 
 	if (!HeapTupleIsValid(tuple))
 		return NULL;
 
-	view = palloc(sizeof(ContinuousView));
+	view = palloc0(sizeof(ContinuousView));
 	row = (Form_pipeline_query) GETSTRUCT(tuple);
 
 	view->id = id;
+
+	namespace = get_namespace_name(row->namespace);
+	view->matrel = makeRangeVar(namespace, pstrdup(NameStr(row->matrelname)), -1);
+
 	namestrcpy(&view->name, NameStr(row->name));
-	namestrcpy(&view->matrelname, NameStr(row->matrelname));
 	view->needs_xact = row->needs_xact;
 	view->hash = row->hash;
 
-	tmp = SysCacheGetAttr(PIPELINEQUERYNAME, tuple, Anum_pipeline_query_query, &isnull);
+	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
 	view->query = TextDatumGetCString(tmp);
 
 	ReleaseSysCache(tuple);
@@ -391,4 +442,37 @@ GetAllContinuousViewIds(void)
 	heap_close(pipeline_query, AccessShareLock);
 
 	return result;
+}
+
+/*
+ * RemoveContinuousViewById
+ *
+ * Remove a row from pipeline_query along with its associated transition state
+ */
+void
+RemoveContinuousViewById(Oid oid)
+{
+	Relation pipeline_query;
+	HeapTuple tuple;
+	Form_pipeline_query row;
+
+	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+
+	tuple = SearchSysCache1(PIPELINEQUERYOID, ObjectIdGetDatum(oid));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for continuous view with OID %u", oid);
+
+	row = (Form_pipeline_query) GETSTRUCT(tuple);
+
+	/* Remove transition state entry */
+	RemoveTStateEntry(row->id);
+
+	simple_heap_delete(pipeline_query, &tuple->t_self);
+
+	ReleaseSysCache(tuple);
+
+	CommandCounterIncrement();
+	UpdateStreamQueries(pipeline_query);
+
+	heap_close(pipeline_query, NoLock);
 }
