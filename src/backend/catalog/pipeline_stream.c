@@ -618,7 +618,19 @@ RangeVarIsForStream(RangeVar *stream)
 bool
 PipelineStreamCatalogEntryExists(Oid namespace, char *stream)
 {
-	HeapTuple tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(stream));
+	HeapTuple tup;
+
+	/* If an invalid namespace OID is passed, use the currently active namespace */
+	if (namespace == InvalidOid)
+	{
+		RangeVar *rv = makeNode(RangeVar);
+		rv->relname = stream;
+		rv->schemaname = NULL;
+		namespace = RangeVarGetCreationNamespace(rv);
+		pfree(rv);
+	}
+
+	tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(stream));
 
 	if (!HeapTupleIsValid(tup))
 		return false;
