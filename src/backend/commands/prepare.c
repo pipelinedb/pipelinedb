@@ -153,7 +153,7 @@ PrepareQuery(PrepareStmt *stmt, const char *queryString)
 	{
 		InsertStmt *ins = (InsertStmt *) stmt->query;
 
-		StorePreparedStreamInsert(stmt->name, ins->relation->relname, ins->cols);
+		StorePreparedStreamInsert(stmt->name, ins->relation, ins->cols);
 	}
 	else
 	{

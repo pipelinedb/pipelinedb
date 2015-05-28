@@ -36,6 +36,12 @@
 
 #define NUMERIC_OID 1700
 
+typedef struct Key
+{
+	Oid namespace;
+	char name[NAMEDATALEN];
+} Key;
+
 typedef struct StreamColumnsEntry
 {
 	char name[NAMEDATALEN];
@@ -44,7 +50,7 @@ typedef struct StreamColumnsEntry
 
 typedef struct StreamTargetsEntry
 {
-	char key[NAMEDATALEN]; /* hash key --- MUST BE FIRST */
+	Key key; /* hash key --- MUST BE FIRST */
 	Bitmapset *queries;
 	HTAB *colstotypes;
 	TupleDesc desc;
@@ -85,7 +91,7 @@ infer_tupledesc(StreamTargetsEntry *stream)
 		if (category == TYPCATEGORY_NUMERIC)
 			entry->types = lcons(preferred, entry->types);
 
-		sprintf(err, "type conflict with stream \"%s\":", stream->key);
+		sprintf(err, "type conflict with stream \"%s\":", stream->key.name);
 		supertype = select_common_type(NULL, entry->types, err, NULL);
 
 		names = lappend(names, makeString(entry->name));
@@ -146,10 +152,12 @@ streams_to_meta(Relation pipeline_query)
 
 	MemSet(&ctl, 0, sizeof(ctl));
 
-	ctl.keysize = NAMEDATALEN;
+	ctl.keysize = sizeof(Key);
 	ctl.entrysize = sizeof(StreamTargetsEntry);
+	ctl.match = memcmp;
+	ctl.keycopy = memcpy;
 
-	targets = hash_create("streams_to_targets_and_desc", 32, &ctl, HASH_ELEM);
+	targets = hash_create("streams_to_targets_and_desc", 32, &ctl, HASH_ELEM | HASH_COMPARE | HASH_KEYCOPY);
 	scandesc = heap_beginscan_catalog(pipeline_query, 0, NULL);
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
@@ -179,8 +187,13 @@ streams_to_meta(Relation pipeline_query)
 		{
 			RangeVar *rv = (RangeVar *) lfirst(lc);
 			bool found;
+			Key key;
 
-			entry = (StreamTargetsEntry *) hash_search(targets, (void *) rv->relname, HASH_ENTER, &found);
+			MemSet(&key, 0, sizeof(Key));
+			key.namespace = catrow->namespace;
+			strcpy(key.name, rv->relname);
+
+			entry = (StreamTargetsEntry *) hash_search(targets, &key, HASH_ENTER, &found);
 
 			if (!found)
 			{
@@ -296,12 +309,13 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 {
 	StreamTargetsEntry *entry;
 	HASH_SEQ_STATUS scan;
-	List *streams = NIL;
+	List *keys = NIL;
 
 	hash_seq_init(&scan, hash);
 	while ((entry = (StreamTargetsEntry *) hash_seq_search(&scan)) != NULL)
 	{
-		char *sname = entry->key;
+		Oid namespace = entry->key.namespace;
+		char *sname = entry->key.name;
 		Bitmapset *queries = entry->queries;
 		Size targetssize = queries->nwords * sizeof(bitmapword) + VARHDRSZ;
 		bytea *targetsbytes = palloc0(targetssize);
@@ -318,7 +332,7 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 		values[Anum_pipeline_stream_queries - 1] = PointerGetDatum(targetsbytes);
 		values[Anum_pipeline_stream_desc - 1] = PointerGetDatum(PackTupleDesc(entry->desc));
 
-		tup = SearchSysCache1(PIPELINESTREAMNAME, CStringGetDatum(sname));
+		tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(sname));
 
 		if (HeapTupleIsValid(tup))
 		{
@@ -345,6 +359,7 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 			NameData name;
 
 			namestrcpy(&name, sname);
+			values[Anum_pipeline_stream_namespace - 1] = ObjectIdGetDatum(namespace);
 			values[Anum_pipeline_stream_name - 1] = NameGetDatum(&name);
 
 			tup = heap_form_tuple(pipeline_stream->rd_att, values, nulls);
@@ -355,17 +370,17 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 
 		CommandCounterIncrement();
 
-		streams = lappend(streams, sname);
+		keys = lappend(keys, &entry->key);
 	}
 
-	return streams;
+	return keys;
 }
 
 /*
  * delete_nonexistent_streams
  */
 static int
-delete_nonexistent_streams(Relation pipeline_stream, List *streams)
+delete_nonexistent_streams(Relation pipeline_stream, List *keys)
 {
 	HeapScanDesc scandesc;
 	HeapTuple tup;
@@ -379,10 +394,10 @@ delete_nonexistent_streams(Relation pipeline_stream, List *streams)
 		bool found = false;
 		Form_pipeline_stream row = (Form_pipeline_stream) GETSTRUCT(tup);
 
-		foreach(lc, streams)
+		foreach(lc, keys)
 		{
-			char *name = (char *) lfirst(lc);
-			if (pg_strcasecmp(name, NameStr(row->name)) == 0)
+			Key *key = lfirst(lc);
+			if (key->namespace == row->namespace && pg_strcasecmp(key->name, NameStr(row->name)) == 0)
 			{
 				found = true;
 				break;
@@ -403,20 +418,20 @@ delete_nonexistent_streams(Relation pipeline_stream, List *streams)
 }
 
 /*
- * UpdateStreamQueries
+ * UpdatePipelineStreamCatalog
  */
 void
-UpdateStreamQueries(Relation pipeline_query)
+UpdatePipelineStreamCatalog(Relation pipeline_query)
 {
 	Relation pipeline_stream;
 	HTAB *hash;
-	List *streams = NIL;
+	List *keys = NIL;
 
 	hash = streams_to_meta(pipeline_query);
 
 	pipeline_stream = heap_open(PipelineStreamRelationId, ExclusiveLock);
-	streams = update_pipeline_stream_catalog(pipeline_stream, hash);
-	delete_nonexistent_streams(pipeline_stream, streams);
+	keys = update_pipeline_stream_catalog(pipeline_stream, hash);
+	delete_nonexistent_streams(pipeline_stream, keys);
 	heap_close(pipeline_stream, NoLock);
 }
 
@@ -427,9 +442,10 @@ UpdateStreamQueries(Relation pipeline_query)
  * queries are reading from the given stream.
  */
 Bitmapset *
-GetAllStreamReaders(const char *stream)
+GetAllStreamReaders(RangeVar *stream)
 {
-	HeapTuple tup = SearchSysCache1(PIPELINESTREAMNAME, CStringGetDatum(stream));
+	Oid namespace = RangeVarGetCreationNamespace(stream);
+	HeapTuple tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(stream->relname));
 	bool isnull;
 	Datum raw;
 	bytea *bytes;
@@ -440,7 +456,7 @@ GetAllStreamReaders(const char *stream)
 	if (!HeapTupleIsValid(tup))
 		return NULL;
 
-	raw = SysCacheGetAttr(PIPELINESTREAMNAME, tup, Anum_pipeline_stream_queries, &isnull);
+	raw = SysCacheGetAttr(PIPELINESTREAMNAMESPACENAME, tup, Anum_pipeline_stream_queries, &isnull);
 
 	Assert(!isnull);
 
@@ -459,7 +475,7 @@ GetAllStreamReaders(const char *stream)
 }
 
 Bitmapset *
-GetLocalStreamReaders(const char *stream)
+GetLocalStreamReaders(RangeVar *stream)
 {
 	Bitmapset *readers = GetAllStreamReaders(stream);
 
@@ -521,9 +537,10 @@ GetLocalStreamReaders(const char *stream)
 }
 
 TupleDesc
-GetStreamTupleDesc(const char *stream, List *colnames)
+GetStreamTupleDesc(RangeVar *stream, List *colnames)
 {
-	HeapTuple tup = SearchSysCache1(PIPELINESTREAMNAME, CStringGetDatum(stream));
+	Oid namespace = RangeVarGetCreationNamespace(stream);
+	HeapTuple tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(stream->relname));
 	bool isnull;
 	Datum raw;
 	bytea *bytes;
@@ -537,7 +554,7 @@ GetStreamTupleDesc(const char *stream, List *colnames)
 	if (!HeapTupleIsValid(tup))
 		return NULL;
 
-	raw = SysCacheGetAttr(PIPELINESTREAMNAME, tup, Anum_pipeline_stream_desc, &isnull);
+	raw = SysCacheGetAttr(PIPELINESTREAMNAMESPACENAME, tup, Anum_pipeline_stream_desc, &isnull);
 
 	if (isnull)
 	{
@@ -586,17 +603,38 @@ GetStreamTupleDesc(const char *stream, List *colnames)
 }
 
 /*
- * IsStream
+ * RangeVarIsForStream
  */
-bool IsStream(char *stream)
+bool
+RangeVarIsForStream(RangeVar *stream)
 {
-	HeapTuple tup = SearchSysCache1(PIPELINESTREAMNAME, CStringGetDatum(stream));
+	Oid namespace = RangeVarGetCreationNamespace(stream);
+	return PipelineStreamCatalogEntryExists(namespace, stream->relname);
+}
 
-	if (HeapTupleIsValid(tup))
+/*
+ * PipelineStreamCatalogEntryExists
+ */
+bool
+PipelineStreamCatalogEntryExists(Oid namespace, char *stream)
+{
+	HeapTuple tup;
+
+	/* If an invalid namespace OID is passed, use the currently active namespace */
+	if (namespace == InvalidOid)
 	{
-		ReleaseSysCache(tup);
-		return true;
+		RangeVar *rv = makeNode(RangeVar);
+		rv->relname = stream;
+		rv->schemaname = NULL;
+		namespace = RangeVarGetCreationNamespace(rv);
+		pfree(rv);
 	}
 
-	return false;
+	tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(stream));
+
+	if (!HeapTupleIsValid(tup))
+		return false;
+
+	ReleaseSysCache(tup);
+	return true;
 }

@@ -29,6 +29,7 @@
 #include "storage/ipc.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
+#include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
@@ -51,7 +52,7 @@ static HTAB *prepared_stream_inserts = NULL;
  * Create a PreparedStreamInsertStmt with the given column names
  */
 PreparedStreamInsertStmt *
-StorePreparedStreamInsert(const char *name, const char *stream, List *cols)
+StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
 {
 	PreparedStreamInsertStmt *result;
 	bool found;
@@ -72,7 +73,7 @@ StorePreparedStreamInsert(const char *name, const char *stream, List *cols)
 			hash_search(prepared_stream_inserts, (void *) name, HASH_ENTER, &found);
 
 	result->inserts = NIL;
-	result->stream = (char *) stream;
+	result->stream = stream;
 	result->cols = cols;
 	result->desc = GetStreamTupleDesc(stream, cols);
 
@@ -131,7 +132,7 @@ InsertTargetIsStream(InsertStmt *ins)
 	if (reloid != InvalidOid)
 		return false;
 
-	return IsStream(ins->relation->relname);
+	return RangeVarIsForStream(ins->relation);
 }
 
 /*
@@ -215,7 +216,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
-	Bitmapset *targets = GetLocalStreamReaders(ins->relation->relname);
+	Bitmapset *targets = GetLocalStreamReaders(ins->relation);
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
@@ -257,7 +258,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		colnames = lappend(colnames, makeString(res->name));
 	}
 
-	desc = GetStreamTupleDesc(ins->relation->relname, colnames);
+	desc = GetStreamTupleDesc(ins->relation, colnames);
 
 	/* append each VALUES tuple to the stream buffer */
 	foreach (lc, values)
@@ -352,14 +353,20 @@ InsertIntoStream(InsertStmt *ins, List *values)
  * COPY events to a stream from an input source
  */
 uint64
-CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
+CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
-	Bitmapset *targets = GetLocalStreamReaders(stream);
+	RangeVar *rv = makeNode(RangeVar);
+	Bitmapset *targets;
 	uint64 count = 0;
 	int i;
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
+
+	rv->relname = stream;
+	rv->schemaname = get_namespace_name(namespace);
+
+	targets = GetLocalStreamReaders(rv);
 
 	if (synchronous_stream_insert)
 	{
