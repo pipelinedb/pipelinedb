@@ -1,4 +1,4 @@
-	/*-------------------------------------------------------------------------
+/*-------------------------------------------------------------------------
  *
  * cont_analyze.c
  *	  Support for parsing and analyzing continuous queries
@@ -622,7 +622,7 @@ warn_unindexed_join(SelectStmt *stmt, ContAnalyzeContext *context)
  * ValidateContinuousQuery
  */
 void
-ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql)
+ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 {
 	SelectStmt *select = (SelectStmt *) copyObject(stmt->query);
 	SelectStmt *copy;
@@ -905,7 +905,7 @@ ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql)
  * transformContinuousSelectStmt
  */
 void
-transformContinuousSelectStmt(ParseState *pstate, SelectStmt *select)
+transformContSelectStmt(ParseState *pstate, SelectStmt *select)
 {
 	ContAnalyzeContext *context = MakeContAnalyzeContext(pstate, select);
 	ListCell *lc;

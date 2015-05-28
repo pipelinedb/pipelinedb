@@ -15,15 +15,44 @@ append_suffix(char *str, char *suffix, int max_len)
 }
 
 int
-skip_substring(const char *str, char* substr, int start)
+skip_token(const char *str, char* token, int start)
 {
-	while(pg_strncasecmp(substr, &str[start++], strlen(substr)) != 0 &&
-			start < strlen(str) - strlen(substr));
+	while(start < strlen(str) - strlen(token))
+	{
+		if (pg_strncasecmp(token, &str[start], strlen(token)) == 0)
+		{
+			/* If the match isn't the tail of the string, make sure it's followed by white space. */
+			if (start < strlen(str) - strlen(token) - 1)
+			{
+				char next = str[start + strlen(token)];
+				if (next != ' ' && next != '\n' && next != '\t')
+				{
+					start++;
+					continue;
+				}
+			}
 
-	if (start == strlen(str) - strlen(substr))
+			/* If the match isn't at the head of the string, make sure it's preceeded by white space. */
+			if (start != 0)
+			{
+				char prev = str[start - 1];
+				if (prev != ' ' && prev != '\n' && prev != '\t')
+				{
+					start++;
+					continue;
+				}
+			}
+
+			break; /* match found */
+		}
+
+		start++;
+	}
+
+	if (start ==strlen(str) - strlen(token))
 		return -1;
 
-	return start + strlen(substr);
+	return start + strlen(token);
 }
 
 char *

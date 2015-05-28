@@ -249,6 +249,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 		DropOwnedStmt ReassignOwnedStmt
 		AlterTSConfigurationStmt AlterTSDictionaryStmt
 		CreateMatViewStmt RefreshMatViewStmt
+		CreateContViewStmt ExplainContViewStmt
 
 %type <node>	select_no_parens select_with_parens select_clause
 				simple_select values_clause
@@ -750,6 +751,7 @@ stmt :
 			| CreateAsStmt
 			| CreateAssertStmt
 			| CreateCastStmt
+			| CreateContViewStmt
 			| CreateConversionStmt
 			| CreateDomainStmt
 			| CreateExtensionStmt
@@ -799,6 +801,7 @@ stmt :
 			| DropdbStmt
 			| ExecuteStmt
 			| ExplainStmt
+			| ExplainContViewStmt
 			| FetchStmt
 			| GrantStmt
 			| GrantRoleStmt
@@ -2713,11 +2716,63 @@ copy_generic_opt_arg_list_item:
 
 /*****************************************************************************
  *
- * ( ACTIVATE | DEACTIVATE )
+ *		QUERY :
+ *				CREATE CONTINUOUS VIEW qualified_name AS SelectStmt
  *
- * PipelineDB
+ *****************************************************************************/
+
+CreateContViewStmt: CREATE CONTINUOUS VIEW create_cv_target AS SelectStmt
+				{
+					CreateContViewStmt *n = makeNode(CreateContViewStmt);
+					n->into = $4;
+					n->query = $6;
+					((SelectStmt *) n->query)->forContinuousView = true;
+					$$ = (Node *) n;
+				}
+		;
+
+create_cv_target:
+		qualified_name opt_reloptions OptTableSpace
+				{
+					$$ = makeNode(IntoClause);
+					$$->rel = $1;
+					$$->options = $2;
+					$$->tableSpaceName = $3;
+				}
+		;
+
+/*****************************************************************************
  *
- * Activates/deactivates continuous views
+ *		QUERY:
+ *				EXPLAIN CONTINUOUS VIEW [VERBOSE] qualified_name
+ *				EXPLAIN CONTINUOUS VIEW ( options ) qualified_name
+ *
+ *****************************************************************************/
+
+ExplainContViewStmt:
+		EXPLAIN CONTINUOUS VIEW opt_verbose qualified_name
+				{
+					ExplainContViewStmt *n = makeNode(ExplainContViewStmt);
+					n->view = $5;
+					n->options = NIL;
+					if ($4)
+						n->options = lappend(n->options,
+											 makeDefElem("verbose", NULL));
+					$$ = (Node *) n;
+				}
+		| EXPLAIN CONTINUOUS VIEW '(' explain_option_list ')' qualified_name
+				{
+					ExplainContViewStmt *n = makeNode(ExplainContViewStmt);
+					n->view = $7;
+					n->options = $5;
+					$$ = (Node *) n;
+				}
+		;
+
+/*****************************************************************************
+ *
+ *		QUERY :
+ *				ACTIVATE
  *
  *****************************************************************************/
 
@@ -2727,6 +2782,13 @@ ActivateStmt: ACTIVATE
 					$$ = (Node *) s;
 				}
 		;
+
+/*****************************************************************************
+ *
+ *		QUERY :
+ *				DEACTIVATE
+ *
+ *****************************************************************************/
 
 DeactivateStmt: DEACTIVATE
 				{
@@ -8291,23 +8353,7 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 								 parser_errposition(@14)));
 					$$ = (Node *) n;
 				}
-		| CREATE CONTINUOUS VIEW create_cv_target AS SelectStmt
-				{
-					CreateContinuousViewStmt *n = makeNode(CreateContinuousViewStmt);
-					n->into = $4;
-					n->query = $6;
-					((SelectStmt *) n->query)->forContinuousView = true;
-					$$ = (Node *) n;
-				}
 		;
-
-create_cv_target:
-		qualified_name opt_reloptions
-				{
-					$$ = makeNode(IntoClause);
-					$$->rel = $1;
-					$$->options = $2;
-				}
 
 opt_check_option:
 		WITH CHECK OPTION				{ $$ = CASCADED_CHECK_OPTION; }
