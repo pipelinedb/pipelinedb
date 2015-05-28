@@ -32,7 +32,7 @@ typedef struct PreparedStreamInsertStmt
 {
 	char name[NAMEDATALEN];
 	/* destination stream for INSERTs */
-	char *stream;
+	RangeVar *stream;
 	/* column names for INSERTs */
 	List *cols;
 	/* List of ParamListInfoData for the INSERT */
@@ -45,14 +45,14 @@ typedef struct PreparedStreamInsertStmt
 extern bool synchronous_stream_insert;
 extern char *stream_targets;
 
-extern PreparedStreamInsertStmt *StorePreparedStreamInsert(const char *name, const char *stream, List *cols);
+extern PreparedStreamInsertStmt *StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols);
 extern void AddPreparedStreamInsert(PreparedStreamInsertStmt *stmt, ParamListInfoData *params);
 extern PreparedStreamInsertStmt *FetchPreparedStreamInsert(const char *name);
 extern void DropPreparedStreamInsert(const char *name);
 extern bool InsertTargetIsStream(InsertStmt *ins);
 extern int InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt);
 extern int InsertIntoStream(InsertStmt *ins, List *values);
-extern uint64 CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
+extern uint64 CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
 
 /* Represents a single batch of inserts made into a stream. */
 typedef struct InsertBatch {
