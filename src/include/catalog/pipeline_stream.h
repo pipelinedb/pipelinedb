@@ -19,6 +19,7 @@
  */
 CATALOG(pipeline_stream,4249) BKI_WITHOUT_OIDS
 {
+	Oid namespace;
 	NameData name;
 #ifdef CATALOG_VARLEN
 	bytea queries;

@@ -872,14 +872,18 @@ AS 'make_interval';
 -- PipelineDB system views
 --
 
--- CQ process-level stats
+-- continuous query process stats
 CREATE VIEW pipeline_proc_stats AS
 	SELECT type, pid, start_time,
 		input_rows, output_rows, updates, input_bytes,
-		output_bytes, updated_bytes, executions, errors FROM cq_stat_proc_get();
+		output_bytes, updated_bytes, executions, errors FROM cq_proc_stat_get();
 
--- Global CQ stats
+-- continuous query stats
 CREATE VIEW pipeline_query_stats AS
 	SELECT name, type, input_rows, output_rows, updates, input_bytes,
 		output_bytes, updated_bytes, errors FROM cq_stat_get();
 
+-- stream stats
+CREATE VIEW pipeline_stream_stats AS
+	SELECT name, schema, input_rows, input_batches, input_bytes
+		FROM stream_stat_get();

@@ -5293,11 +5293,11 @@ DESCR("count-min sketch merge aggregate");
 DATA(insert OID = 4354 ( cmsketch_count	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_count _null_ _null_ _null_ ));
 DESCR("count-min sketch estimate count");
 
-DATA(insert OID = 4355 ( cq_stat_proc_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,23,1184,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o}" "{type,pid,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors}" _null_ cq_stat_proc_get _null_ _null_ _null_ ));
-DESCR("get CQ process-level stats");
+DATA(insert OID = 4355 ( cq_proc_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,23,1184,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o}" "{type,pid,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors}" _null_ cq_proc_stat_get _null_ _null_ _null_ ));
+DESCR("get continuous query process stats");
 
 DATA(insert OID = 4356 ( cq_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o}" "{name,type,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,errors}" _null_ cq_stat_get _null_ _null_ _null_ ));
-DESCR("get CQ-level stats");
+DESCR("get continuous query stats");
 
 /* golomb-coded set aggregate */
 DATA(insert OID = 4357 ( gcs_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5042 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
@@ -5365,6 +5365,9 @@ DESCR("hash one or more values into a 32-bit integer");
 DATA(insert OID = 4374 (  ls_hash_group	   PGNSP PGUID 12 1 0 2276 0 f f f f f f i 1 0 20 "2276" "{2276}" "{v}" _null_ _null_ ls_hash_group _null_ _null_ _null_ ));
 DESCR("hash one or more values into a 64-bit integer using locality sensitive hashing");
 #define LS_HASH_GROUP_OID 4374
+
+DATA(insert OID = 4375 ( stream_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,20,20,20}" "{o,o,o,o,o}" "{name,schema,input_rows,input_batches,input_bytes}" _null_ stream_stat_get _null_ _null_ _null_ ));
+DESCR("get stream stats");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result
