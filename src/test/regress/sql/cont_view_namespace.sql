@@ -25,5 +25,3 @@ DROP CONTINUOUS VIEW test_cvn0;
 DROP SCHEMA test_cvn_schema1 CASCADE;
 
 SELECT n.nspname, pq.name FROM pipeline_query pq JOIN pg_namespace n ON pq.namespace = n.oid WHERE pq.name LIKE '%test_cvn%' ORDER BY n.nspname, pq.name;
-
-

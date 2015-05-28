@@ -157,10 +157,10 @@ typedef struct Query
 	/*
 	 * Continuous query fields
 	 */
-	bool is_continuous; /* should this be executed continuously? */
+	bool isContinuous; /* should this be executed continuously? */
 	Oid  cq_id; /* continuous query id, valid only if is_continuous is true */
-	bool is_combine; /* is this query being run as a merge query? */
-	bool is_combine_lookup; /* is this query a combiner looking up groups to combine with? */
+	bool isCombine; /* is this query being run as a merge query? */
+	bool isCombineLookup; /* is this query a combiner looking up groups to combine with? */
 } Query;
 
 
@@ -2795,13 +2795,20 @@ typedef struct AlterTSConfigurationStmt
 	bool		missing_ok;		/* for DROP - skip error if missing? */
 } AlterTSConfigurationStmt;
 
-typedef struct CreateContinuousViewStmt
+typedef struct CreateContViewStmt
 {
 	NodeTag			type;
 	IntoClause 		*into;
 	Node 			*query;
 
-} CreateContinuousViewStmt;
+} CreateContViewStmt;
+
+typedef struct ExplainContViewStmt
+{
+	NodeTag		type;
+	RangeVar 	*view;
+	List 		*options;
+} ExplainContViewStmt;
 
 typedef struct DeactivateStmt
 {

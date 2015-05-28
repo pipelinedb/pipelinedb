@@ -1,4 +1,5 @@
 /constraints.sql
+/cont_view_tablespace.sql
 /copy.sql
 /create_function_1.sql
 /create_function_2.sql
