@@ -184,6 +184,8 @@ test: stream_exprs
 test: stream_targets
 test: schema_inference
 test: prepared_stream_insert
+test: cont_view_namespace
+test: cont_view_tablespace
 test: stream_casts0
 test: stream_casts1
 test: stream_casts2

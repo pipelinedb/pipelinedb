@@ -1311,7 +1311,7 @@ distribute_qual_to_rels(PlannerInfo *root, Node *clause,
 	 */
 	relids = pull_varnos(clause);
 
-	if (root->parse->is_combine_lookup)
+	if (root->parse->isCombineLookup)
 		clause = allow_null_equality(clause);
 
 	/*

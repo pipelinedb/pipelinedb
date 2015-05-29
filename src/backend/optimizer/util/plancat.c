@@ -883,7 +883,7 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 				desc = rte->streamdesc->desc;
 				numattrs = desc->natts;
 			}
-			else if (root->parse->is_combine)
+			else if (root->parse->isCombine)
 			{
 				/* XXX PipelineDB: why is rte NULL here for merge queries? */
 				return NIL;
