@@ -19,6 +19,7 @@
 
 typedef struct {
 	Oid id;
+	Oid namespace;
 	NameData name;
 	RangeVar *matrel;
 	char *query;

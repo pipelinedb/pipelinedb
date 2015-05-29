@@ -192,7 +192,7 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 
 	heap_freetuple(tup);
 
-	UpdateStreamQueries(pipeline_query);
+	UpdatePipelineStreamCatalog(pipeline_query);
 
 	heap_close(pipeline_query, NoLock);
 
@@ -472,7 +472,7 @@ RemoveContinuousViewById(Oid oid)
 	ReleaseSysCache(tuple);
 
 	CommandCounterIncrement();
-	UpdateStreamQueries(pipeline_query);
+	UpdatePipelineStreamCatalog(pipeline_query);
 
 	heap_close(pipeline_query, NoLock);
 }
