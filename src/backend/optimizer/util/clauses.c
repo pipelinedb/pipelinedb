@@ -495,7 +495,7 @@ count_agg_clauses_walker(Node *node, count_agg_clauses_context *context)
 		 * Continuous queries don't actually do any sorting for ordered-set
 		 * aggs, so only count it if it's not a CQ.
 		 */
-		if (context->root->parse->is_continuous == false &&
+		if (context->root->parse->isContinuous == false &&
 				(aggref->aggorder != NIL || aggref->aggdistinct != NIL))
 			costs->numOrderedAggs++;
 

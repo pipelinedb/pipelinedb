@@ -2519,8 +2519,9 @@ _copyQuery(const Query *from)
 	COPY_NODE_FIELD(rowMarks);
 	COPY_NODE_FIELD(setOperations);
 	COPY_NODE_FIELD(constraintDeps);
-	COPY_SCALAR_FIELD(is_continuous);
-	COPY_SCALAR_FIELD(is_combine);
+	COPY_SCALAR_FIELD(isContinuous);
+	COPY_SCALAR_FIELD(isCombine);
+	COPY_SCALAR_FIELD(isCombineLookup);
 
 	return newnode;
 }
@@ -3852,10 +3853,10 @@ _copyAlterTSConfigurationStmt(const AlterTSConfigurationStmt *from)
 	return newnode;
 }
 
-static CreateContinuousViewStmt *
-_copyCreateContinuousViewStmt(const CreateContinuousViewStmt *from)
+static CreateContViewStmt *
+_copyCreateContViewStmt(const CreateContViewStmt *from)
 {
-	CreateContinuousViewStmt *newnode = makeNode(CreateContinuousViewStmt);
+	CreateContViewStmt *newnode = makeNode(CreateContViewStmt);
 
 	COPY_NODE_FIELD(into);
 	COPY_NODE_FIELD(query);
@@ -4596,8 +4597,8 @@ copyObject(const void *from)
 			/*
 			 * PipelineDB
 			 */
-		case T_CreateContinuousViewStmt:
-			retval = _copyCreateContinuousViewStmt(from);
+		case T_CreateContViewStmt:
+			retval = _copyCreateContViewStmt(from);
 			break;
 		case T_ActivateStmt:
 			retval = _copyActivateStmt(from);

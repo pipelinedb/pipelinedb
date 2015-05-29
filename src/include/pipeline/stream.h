@@ -20,9 +20,9 @@
 #include "utils/timestamp.h"
 
 #define EventStreamNeedsOpen(stream) (stream->state != STREAM_STATE_OPEN)
-#define QueryIsStreaming(query) ((query)->is_continuous)
-#define QueryIsCombine(query) ((query)->is_combine)
-#define PlanIsStreaming(stmt) ((stmt)->is_continuous || false)
+#define QueryIsStreaming(query) ((query)->isContinuous)
+#define QueryIsCombine(query) ((query)->isCombine)
+#define PlanIsStreaming(stmt) ((stmt)->is_continuous)
 #define ARRIVAL_TIMESTAMP "arrival_timestamp"
 
 /* returns true if the given PreparedStreamInsertStmt has pending inserts */

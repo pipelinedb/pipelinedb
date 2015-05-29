@@ -18,7 +18,7 @@
 #include "executor/execdebug.h"
 #include "executor/nodeSort.h"
 #include "miscadmin.h"
-#include "pipeline/cqplan.h"
+#include "pipeline/cont_plan.h"
 #include "utils/tuplesort.h"
 
 

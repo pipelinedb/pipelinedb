@@ -19,8 +19,8 @@
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "pipeline/combinerReceiver.h"
+#include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
-#include "pipeline/cqplan.h"
 #include "pipeline/tuplebuf.h"
 #include "utils/builtins.h"
 #include "utils/hsearch.h"
@@ -90,7 +90,7 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 
 	SetCombinerDestReceiverParams(state->dest, reader, id);
 
-	pstmt = GetCQPlan(state->view);
+	pstmt = GetContPlan(state->view);
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot, InvalidSnapshot, state->dest, NULL, 0);
 	state->query_desc->snapshot = GetTransactionSnapshot();
 	state->query_desc->snapshot->copied = true;

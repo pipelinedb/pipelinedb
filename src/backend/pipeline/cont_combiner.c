@@ -29,9 +29,9 @@
 #include "parser/parse_type.h"
 #include "pgstat.h"
 #include "pipeline/combinerReceiver.h"
+#include "pipeline/cont_plan.h"
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
-#include "pipeline/cqplan.h"
 #include "pipeline/groupcache.h"
 #include "pipeline/tuplebuf.h"
 #include "tcop/dest.h"
@@ -330,7 +330,7 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 
 	qlist = pg_analyze_and_rewrite((Node *) sel, state->view->matrel->relname, NULL, 0);
 	query = (Query *) linitial(qlist);
-	query->is_combine_lookup = true;
+	query->isCombineLookup = true;
 
 	if (state->ngroupatts > 0 && list_length(values))
 	{
@@ -638,7 +638,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 
 	state->view = GetContinuousView(id);
 
-	pstmt = GetCQPlan(state->view);
+	pstmt = GetContPlan(state->view);
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
 	/* this also sets the state's desc field */
