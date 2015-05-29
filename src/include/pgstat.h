@@ -1081,7 +1081,7 @@ extern CQStatEntry *cq_stat_get_entry(PgStat_StatDBEntry *dbentry, Oid viewoid, 
 
 typedef struct StreamStatEntry
 {
-	Oid namespace;
+	Oid namespace; /* composite key of (namespace, name) */
 	NameData name;
 	PgStat_Counter input_rows;
 	PgStat_Counter input_batches;
@@ -1095,6 +1095,6 @@ typedef struct StreamStatMsg
 	StreamStatEntry m_entry;
 } StreamStatMsg;
 
-extern void stream_stat_report(RangeVar *stream, int ntups, int nbatches, int nbytes);
+extern void stream_stat_report(Oid namespace, char *name, int ntups, int nbatches, int nbytes);
 
 #endif   /* PGSTAT_H */

@@ -267,7 +267,7 @@ static PgStat_StatTabEntry *pgstat_get_tab_entry(PgStat_StatDBEntry *dbentry,
 static void pgstat_write_statsfiles(bool permanent, bool allDbs);
 static void pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent);
 static HTAB *pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep);
-static void pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *cont_queries, bool permanent);
+static void pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *cont_queries, HTAB *streams, bool permanent);
 static void backend_read_statsfile(void);
 static void pgstat_read_current_status(void);
 
@@ -305,6 +305,7 @@ static void pgstat_recv_tempfile(PgStat_MsgTempFile *msg, int len);
 
 static void cq_stat_recv(CQStatMsg *msg, int len);
 static void cq_stat_recv_purge(CQStatPurgeMsg *msg, int len);
+static void stream_stat_recv(StreamStatMsg *msg, int len);
 
 /* ------------------------------------------------------------
  * Public functions called from postmaster follow
@@ -3391,6 +3392,10 @@ PgstatCollectorMain(int argc, char *argv[])
 					cq_stat_recv_purge((CQStatPurgeMsg *) &msg, len);
 					break;
 
+				case PGSTAT_MTYPE_STREAM:
+					stream_stat_recv((StreamStatMsg *) &msg, len);
+					break;
+
 				default:
 					break;
 			}
@@ -3517,6 +3522,14 @@ reset_dbentry_counters(PgStat_StatDBEntry *dbentry)
 	hash_ctl.hash = tag_hash;
 	dbentry->cont_queries = hash_create("Per-CQ", 256, &hash_ctl,
 					   HASH_ELEM | HASH_FUNCTION);
+
+	hash_ctl.keysize = sizeof(Oid) + NAMEDATALEN;
+	hash_ctl.entrysize = sizeof(StreamStatEntry);
+	hash_ctl.hash = tag_hash;
+	hash_ctl.match = memcmp;
+	hash_ctl.keycopy = memcpy;
+	dbentry->streams = hash_create("Per-stream", 256, &hash_ctl,
+						   HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_KEYCOPY);
 }
 
 /*
@@ -4094,6 +4107,7 @@ pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep)
 											 dbentry->tables,
 											 dbentry->functions,
 											 dbentry->cont_queries,
+											 dbentry->streams,
 											 permanent);
 
 				break;
@@ -4134,7 +4148,7 @@ done:
  * ----------
  */
 static void
-pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *cont_queries,
+pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *cont_queries, HTAB *streams,
 						 bool permanent)
 {
 	PgStat_StatTabEntry *tabentry;
@@ -5501,4 +5515,13 @@ cq_stat_recv_purge(CQStatPurgeMsg *msg, int len)
 
 	/* Remove from hashtable if present; we don't care if it's not. */
 	(void) hash_search(dbentry->cont_queries, (void *) &msg->m_key, HASH_REMOVE, NULL);
+}
+
+/*
+ * stream_stat_recv
+ */
+static void
+stream_stat_recv(StreamStatMsg *msg, int len)
+{
+
 }
