@@ -1083,6 +1083,18 @@ typedef struct StreamStatEntry
 {
 	Oid namespace;
 	NameData name;
+	PgStat_Counter input_rows;
+	PgStat_Counter input_batches;
+	PgStat_Counter input_bytes;
 } StreamStatEntry;
+
+typedef struct StreamStatMsg
+{
+	PgStat_MsgHdr m_hdr;
+	Oid m_databaseid;
+	StreamStatEntry m_entry;
+} StreamStatMsg;
+
+extern void stream_stat_report(RangeVar *stream, int ntups, int nbatches, int nbytes);
 
 #endif   /* PGSTAT_H */
