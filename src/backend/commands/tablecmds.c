@@ -468,7 +468,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId)
 	 */
 	StrNCpy(relname, stmt->relation->relname, NAMEDATALEN);
 
-	if (IsStream(relname))
+	if (RangeVarIsForStream(stmt->relation))
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_STREAM),
 				 errmsg("\"%s\" is being used as a stream", relname),

@@ -35,7 +35,7 @@ INSERT INTO test_stj_stream (id, data) VALUES (4, '"matched"');
 
 SELECT * FROM test_stj0 ORDER BY id;
 SELECT * FROM test_stj1 ORDER BY id;
-SELECT * FROM test_stj2 ORDER BY val;
+SELECT * FROM test_stj2 ORDER BY id, val;
 SELECT * FROM test_stj3 ORDER BY id;
 
 -- Stream-table joins involving multiple tables

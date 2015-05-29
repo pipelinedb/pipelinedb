@@ -1380,7 +1380,7 @@ exec_parse_message(const char *query_string,	/* string to execute */
 				/*
 				 * We'll add the Eval'd params to this during BIND
 				 */
-				StorePreparedStreamInsert(stmt_name, ins->relation->relname, ins->cols);
+				StorePreparedStreamInsert(stmt_name, ins->relation, ins->cols);
 			}
 
 			MemoryContextSwitchTo(oldcontext);
