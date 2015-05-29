@@ -29,5 +29,6 @@ extern TupleDesc UnpackTupleDesc(bytea *bytes);
 
 extern bool IsStream(Oid namespace, char *stream);
 extern bool RangeVarIsForStream(RangeVar *stream);
+extern Oid GetDefaultStreamNamespace(char *stream);
 
 #endif

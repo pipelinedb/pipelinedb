@@ -374,6 +374,9 @@ CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, i
 	int num_batches = 0;
 	Size size = 0;
 
+	if (namespace == InvalidOid)
+		namespace = GetDefaultStreamNamespace(stream);
+
 	targets = GetLocalStreamReaders(namespace, stream);
 
 	if (synchronous_stream_insert)

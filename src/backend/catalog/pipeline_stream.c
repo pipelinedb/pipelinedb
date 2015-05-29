@@ -618,15 +618,8 @@ IsStream(Oid namespace, char *name)
 {
 	HeapTuple tup;
 
-	/* If an invalid namespace OID is passed, use the currently active namespace */
 	if (namespace == InvalidOid)
-	{
-		RangeVar *rv = makeNode(RangeVar);
-		rv->relname = name;
-		rv->schemaname = NULL;
-		namespace = RangeVarGetCreationNamespace(rv);
-		pfree(rv);
-	}
+		namespace = GetDefaultStreamNamespace(name);
 
 	tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(name));
 
@@ -635,4 +628,19 @@ IsStream(Oid namespace, char *name)
 
 	ReleaseSysCache(tup);
 	return true;
+}
+
+/*
+ *
+ */
+Oid
+GetDefaultStreamNamespace(char *stream)
+{
+	Oid namespace;
+	RangeVar *rv = makeNode(RangeVar);
+	rv->relname = stream;
+	rv->schemaname = NULL;
+	namespace = RangeVarGetCreationNamespace(rv);
+	pfree(rv);
+	return namespace;
 }
