@@ -821,7 +821,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 
 		Assert(!stmt->query);
 
-		if (IsStream(stmt->relation->relname))
+		if (RangeVarIsForStream(stmt->relation))
 		{
 			if (!stmt->attlist)
 				ereport(ERROR,
@@ -830,7 +830,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 						errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
 
 			rel = (Relation) palloc0(sizeof(RelationData));
-			rel->rd_att = GetStreamTupleDesc(stmt->relation->relname, stmt->attlist);
+			rel->rd_att = GetStreamTupleDesc(stmt->relation, stmt->attlist);
 			rel->rd_rel = palloc0(sizeof(FormData_pg_class));
 			rel->rd_rel->relnatts = rel->rd_att->natts;
 			rel->rd_rel->relkind = RELKIND_RELATION;
@@ -856,7 +856,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		attnums = CopyGetAttnums(tupDesc, rel, stmt->attlist);
 
 		/* if it's an actual relation, we need to check permissions */
-		if (!IsStream(stmt->relation->relname))
+		if (!RangeVarIsForStream(stmt->relation))
 		{
 			foreach(cur, attnums)
 			{
@@ -894,7 +894,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	}
 	else
 	{
-		if (rel && IsStream(stmt->relation->relname))
+		if (rel && RangeVarIsForStream(stmt->relation))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("cannot COPY data out of streams")));
@@ -1298,7 +1298,7 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
-	cstate->to_stream = rel ? IsStream(RelationGetRelationName(rel)) : false;
+	cstate->to_stream = rel ? PipelineStreamCatalogEntryExists(RelationGetNamespace(rel), RelationGetRelationName(rel)) : false;
 
 	if (cstate->to_stream)
 	{
@@ -2375,7 +2375,7 @@ CopyFrom(CopyState cstate)
 					if (cstate->to_stream)
 					{
 						oldcontext = MemoryContextSwitchTo(cstate->to_stream_ctxt);
-						CopyIntoStream(NameStr(cstate->rel->rd_rel->relname), tupDesc,
+						CopyIntoStream(cstate->rel->rd_rel->relnamespace, NameStr(cstate->rel->rd_rel->relname), tupDesc,
 								bufferedTuples, nBufferedTuples);
 						MemoryContextReset(cstate->to_stream_ctxt);
 						MemoryContextSwitchTo(oldcontext);
@@ -2425,7 +2425,7 @@ CopyFrom(CopyState cstate)
 		if (cstate->to_stream)
 		{
 			oldcontext = MemoryContextSwitchTo(cstate->to_stream_ctxt);
-			CopyIntoStream(NameStr(cstate->rel->rd_rel->relname), tupDesc,
+			CopyIntoStream(cstate->rel->rd_rel->relnamespace, NameStr(cstate->rel->rd_rel->relname), tupDesc,
 					bufferedTuples, nBufferedTuples);
 			MemoryContextReset(cstate->to_stream_ctxt);
 			MemoryContextSwitchTo(oldcontext);
@@ -4327,7 +4327,8 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 					break;
 				}
 			}
-			if (attnum == InvalidAttrNumber && !IsStream(NameStr(rel->rd_rel->relname)))
+			if (attnum == InvalidAttrNumber &&
+					!PipelineStreamCatalogEntryExists(RelationGetNamespace(rel), RelationGetRelationName(rel)))
 			{
 				if (rel != NULL)
 					ereport(ERROR,

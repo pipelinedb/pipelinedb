@@ -16,16 +16,18 @@
 
 #include "catalog/pipeline_stream.h"
 #include "nodes/bitmapset.h"
+#include "nodes/primnodes.h"
 #include "utils/relcache.h"
 
-extern void UpdateStreamQueries(Relation pipeline_query);
-extern Bitmapset *GetAllStreamReaders(const char *stream);
-extern Bitmapset *GetLocalStreamReaders(const char *stream);
-extern TupleDesc GetStreamTupleDesc(const char *stream, List *colnames);
+extern void UpdatePipelineStreamCatalog(Relation pipeline_query);
+extern Bitmapset *GetAllStreamReaders(RangeVar *stream);
+extern Bitmapset *GetLocalStreamReaders(RangeVar *stream);
+extern TupleDesc GetStreamTupleDesc(RangeVar *stream, List *colnames);
 
 extern bytea *PackTupleDesc(TupleDesc desc);
 extern TupleDesc UnpackTupleDesc(bytea *bytes);
 
-extern bool IsStream(char *stream);
+extern bool PipelineStreamCatalogEntryExists(Oid namespace, char *stream);
+extern bool RangeVarIsForStream(RangeVar *stream);
 
 #endif

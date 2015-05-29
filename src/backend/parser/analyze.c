@@ -498,7 +498,7 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	{
 		char *sname = stmt->relation->relname;
 		Relation stream = (Relation) palloc0(sizeof(RelationData));
-		stream->rd_att = GetStreamTupleDesc(sname, stmt->cols);
+		stream->rd_att = GetStreamTupleDesc(stmt->relation, stmt->cols);
 		stream->rd_rel = palloc0(sizeof(FormData_pg_class));
 		stream->rd_rel->relnatts = stream->rd_att->natts;
 		namestrcpy(&stream->rd_rel->relname, sname);
