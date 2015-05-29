@@ -5366,7 +5366,7 @@ DATA(insert OID = 4374 (  ls_hash_group	   PGNSP PGUID 12 1 0 2276 0 f f f f f f
 DESCR("hash one or more values into a 64-bit integer using locality sensitive hashing");
 #define LS_HASH_GROUP_OID 4374
 
-DATA(insert OID = 4375 ( stream_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,20,20,20}" "{o,o,o,o,o}" "{name,schema,input_rows,input_batches,input_bytes}" _null_ stream_stat_get _null_ _null_ _null_ ));
+DATA(insert OID = 4375 ( stream_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{26,25,20,20,20}" "{o,o,o,o,o}" "{namespace,name,input_rows,input_batches,input_bytes}" _null_ stream_stat_get _null_ _null_ _null_ ));
 DESCR("get stream stats");
 
 /*

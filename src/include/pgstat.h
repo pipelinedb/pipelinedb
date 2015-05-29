@@ -1095,6 +1095,7 @@ typedef struct StreamStatMsg
 	StreamStatEntry m_entry;
 } StreamStatMsg;
 
-extern void stream_stat_report(Oid namespace, char *name, int ntups, int nbatches, int nbytes);
+extern HTAB *stream_stat_fetch_all(void);
+extern void stream_stat_report(Oid namespace, char *name, int ntups, int nbatches, Size nbytes);
 
 #endif   /* PGSTAT_H */

@@ -225,7 +225,7 @@ stream_stat_get(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
 	HTAB *stats;
-	CQStatEntry *entry;
+	StreamStatEntry *entry;
 	HASH_SEQ_STATUS *iter;
 
 	if (SRF_IS_FIRSTCALL())
@@ -241,15 +241,15 @@ stream_stat_get(PG_FUNCTION_ARGS)
 
 		/* build tupdesc for result tuples */
 		tupdesc = CreateTemplateTupleDesc(5, false);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "name", TEXTOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "schema", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "namespace", OIDOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "name", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "input_rows", INT8OID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "input_batches", INT8OID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "input_bytes", INT8OID, -1, 0);
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
-		stats = cq_stat_fetch_all();
+		stats = stream_stat_fetch_all();
 		if (!stats)
 			SRF_RETURN_DONE(funcctx);
 
@@ -264,39 +264,21 @@ stream_stat_get(PG_FUNCTION_ARGS)
 	funcctx = (FuncCallContext *) fcinfo->flinfo->fn_extra;
 	iter = (HASH_SEQ_STATUS *) funcctx->user_fctx;
 
-	while ((entry = (CQStatEntry *) hash_seq_search(iter)) != NULL)
+	while ((entry = (StreamStatEntry *) hash_seq_search(iter)) != NULL)
 	{
-		Datum values[9];
-		bool nulls[9];
+		Datum values[5];
+		bool nulls[5];
 		HeapTuple tup;
 		Datum result;
-		Oid viewid = GetCQStatView(entry->key);
-		ContinuousView *cv;
-		char *viewname;
-
-		/* keep scanning if it's a proc-level stats entry */
-		if (!viewid)
-			continue;
-
-		/* just ignore stale stats entries */
-		cv = GetContinuousView(viewid);
-		if (!cv)
-			continue;
-
-		viewname = NameStr(cv->name);
 
 		MemSet(values, 0, sizeof(values));
 		MemSet(nulls, 0, sizeof(nulls));
 
-		values[0] = CStringGetTextDatum(viewname);
-		values[1] = CStringGetTextDatum((GetCQStatProcType(entry->key) == CQ_STAT_WORKER ? "worker" : "combiner"));
+		values[0] = ObjectIdGetDatum(entry->namespace);
+		values[1] = CStringGetTextDatum(NameStr(entry->name));
 		values[2] = Int64GetDatum(entry->input_rows);
-		values[3] = Int64GetDatum(entry->output_rows);
-		values[4] = Int64GetDatum(entry->updates);
-		values[5] = Int64GetDatum(entry->input_bytes);
-		values[6] = Int64GetDatum(entry->output_bytes);
-		values[7] = Int64GetDatum(entry->updated_bytes);
-		values[8] = Int64GetDatum(entry->errors);
+		values[3] = Int64GetDatum(entry->input_batches);
+		values[4] = Int64GetDatum(entry->input_bytes);
 
 		tup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(tup);

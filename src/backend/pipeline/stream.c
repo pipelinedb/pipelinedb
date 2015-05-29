@@ -24,6 +24,7 @@
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
 #include "parser/parse_target.h"
+#include "pgstat.h"
 #include "pipeline/stream.h"
 #include "storage/shm_alloc.h"
 #include "storage/ipc.h"
@@ -151,6 +152,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
+	Size size = 0;
 
 	if (synchronous_stream_insert)
 	{
@@ -191,12 +193,15 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
+		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
 	}
+
+	pstmt->inserts = NIL;
+
+	stream_stat_report(pstmt->namespace, pstmt->stream, count, 1, size);
 
 	if (synchronous_stream_insert)
 		InsertBatchWaitAndRemove(batch);
-
-	pstmt->inserts = NIL;
 
 	return count;
 }
@@ -222,6 +227,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
+	Size size = 0;
 
 	if (synchronous_stream_insert)
 	{
@@ -336,9 +342,12 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
+		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
 	}
 
 	FreeExprContext(econtext, false);
+
+	stream_stat_report(namespace, ins->relation->relname, count, 1, size);
 
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
@@ -363,6 +372,7 @@ CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, i
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
+	Size size = 0;
 
 	targets = GetLocalStreamReaders(namespace, stream);
 
@@ -385,7 +395,10 @@ CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, i
 		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
+		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
 	}
+
+	stream_stat_report(namespace, stream, count, 1, size);
 
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
