@@ -1,12 +1,12 @@
 /* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
- * cqvacuum.c
+ * sw_vacuum.c
  *
- *   Support for vacuuming materialization relations for sliding window
+ *   Support for vacuuming discarded tuples for sliding window
  *   continuous views.
  *
- * src/backend/pipeline/cqvacuum.c
+ * src/backend/pipeline/sw_vacuum.c
  *
  *-------------------------------------------------------------------------
  */
@@ -22,8 +22,8 @@
 #include "optimizer/planner.h"
 #include "parser/parse_expr.h"
 #include "pipeline/cqanalyze.h"
-#include "pipeline/cqvacuum.h"
 #include "pipeline/cqwindow.h"
+#include "pipeline/sw_vacuum.h"
 #include "storage/lmgr.h"
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
@@ -34,10 +34,10 @@
 #include "utils/snapmgr.h"
 
 /*
- * NumCQVacuumTuples
+ * NumSWVacuumTuples
  */
 uint64_t
-NumCQVacuumTuples(Oid relid)
+NumSWVacuumTuples(Oid relid)
 {
 	uint64_t count;
 	char *relname = get_rel_name(relid);
@@ -148,10 +148,10 @@ NumCQVacuumTuples(Oid relid)
 }
 
 /*
- * CreateCQVacuumContext
+ * CreateSWVacuumContext
  */
-CQVacuumContext *
-CreateCQVacuumContext(Relation rel)
+SWVacuumContext *
+CreateSWVacuumContext(Relation rel)
 {
 	char *namespace = get_namespace_name(RelationGetNamespace(rel));
 	char *relname = RelationGetRelationName(rel);
@@ -163,7 +163,7 @@ CreateCQVacuumContext(Relation rel)
 	RangeTblEntry *rte;
 	List *colnames = NIL;
 	int i;
-	CQVacuumContext *context;
+	SWVacuumContext *context;
 
 	cvname = GetCVNameFromMatRelName(matrel);
 	if (!cvname)
@@ -198,7 +198,7 @@ CreateCQVacuumContext(Relation rel)
 
 	expr = (Expr *) transformExpr(ps, GetCQVacuumExpr(cvname), EXPR_KIND_WHERE);
 
-	context = (CQVacuumContext *) palloc(sizeof(CQVacuumContext));
+	context = (SWVacuumContext *) palloc(sizeof(SWVacuumContext));
 
 	context->econtext = CreateStandaloneExprContext();
 	context->slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
@@ -209,23 +209,24 @@ CreateCQVacuumContext(Relation rel)
 }
 
 /*
- * FreeCQVacuumContext
+ * FreeSWVacuumContext
  */
 void
-FreeCQVacuumContext(CQVacuumContext *context)
+FreeSWVacuumContext(SWVacuumContext *context)
 {
 	if (!context)
 		return;
+
 	ExecDropSingleTupleTableSlot(context->slot);
 	FreeExprContext(context->econtext, false);
 	pfree(context);
 }
 
 /*
- * ShouldVacuumCQTuple
+ * ShouldVacuumSWTuple
  */
 bool
-ShouldVacuumCQTuple(CQVacuumContext *context, HeapTupleData *tuple)
+ShouldVacuumSWTuple(SWVacuumContext *context, HeapTupleData *tuple)
 {
 	bool vacuum;
 
@@ -235,5 +236,6 @@ ShouldVacuumCQTuple(CQVacuumContext *context, HeapTupleData *tuple)
 	ExecStoreTuple(tuple, context->slot, InvalidBuffer, false);
 	vacuum = ExecQual(context->predicate, context->econtext, false);
 	ExecClearTuple(context->slot);
+
 	return vacuum;
 }
