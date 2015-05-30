@@ -83,7 +83,7 @@
 #include "miscadmin.h"
 #include "nodes/print.h"
 #include "pgstat.h"
-#include "pipeline/cqvacuum.h"
+#include "pipeline/sw_vacuum.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
@@ -2756,10 +2756,10 @@ relation_needs_vacanalyze(Oid relid,
 	 */
 	if (PointerIsValid(tabentry) && AutoVacuumingActive())
 	{
-		uint64_t cqvactuples = NumCQVacuumTuples(relid);
+		uint64_t swvactuples = NumSWVacuumTuples(relid);
 		reltuples = classForm->reltuples;
-		vactuples = tabentry->n_dead_tuples + cqvactuples;
-		anltuples = tabentry->changes_since_analyze + cqvactuples;
+		vactuples = tabentry->n_dead_tuples + swvactuples;
+		anltuples = tabentry->changes_since_analyze + swvactuples;
 
 		vacthresh = (float4) vac_base_thresh + vac_scale_factor * reltuples;
 		anlthresh = (float4) anl_base_thresh + anl_scale_factor * reltuples;

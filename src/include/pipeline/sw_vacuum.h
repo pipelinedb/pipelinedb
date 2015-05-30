@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * cqvacuum.h
+ * sw_vacuum.h
  *
- *   Support for vacuuming materialization relations for sliding window
+ *   Support for vacuuming discarded tuples for sliding window
  *   continuous views.
  *
- * src/include/pipeline/cqvacuum.h
+ * src/include/pipeline/sw_vacuum.h
  *
  *-------------------------------------------------------------------------
  */
@@ -18,16 +18,16 @@
 #include "pgstat.h"
 #include "utils/relcache.h"
 
-typedef struct CQVacuumContext
+typedef struct SWVacuumContext
 {
 	TupleTableSlot *slot;
 	ExprContext *econtext;
 	List *predicate;
-} CQVacuumContext;
+} SWVacuumContext;
 
-uint64_t NumCQVacuumTuples(Oid relid);
-CQVacuumContext *CreateCQVacuumContext(Relation relation);
-void FreeCQVacuumContext(CQVacuumContext *context);
-bool ShouldVacuumCQTuple(CQVacuumContext *context, HeapTupleData *tuple);
+extern uint64_t NumSWVacuumTuples(Oid relid);
+extern SWVacuumContext *CreateSWVacuumContext(Relation relation);
+extern void FreeSWVacuumContext(SWVacuumContext *context);
+extern bool ShouldVacuumSWTuple(SWVacuumContext *context, HeapTupleData *tuple);
 
 #endif /* CQVACUUM_H */

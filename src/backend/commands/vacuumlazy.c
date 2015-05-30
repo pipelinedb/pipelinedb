@@ -50,7 +50,7 @@
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "pgstat.h"
-#include "pipeline/cqvacuum.h"
+#include "pipeline/sw_vacuum.h"
 #include "portability/instr_time.h"
 #include "postmaster/autovacuum.h"
 #include "storage/bufmgr.h"
@@ -438,7 +438,7 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 	BlockNumber next_not_all_visible_block;
 	bool		skipping_all_visible_blocks;
 	xl_heap_freeze_tuple *frozen;
-	CQVacuumContext *cqvcontext = CreateCQVacuumContext(onerel);
+	SWVacuumContext *cqvcontext = CreateSWVacuumContext(onerel);
 
 	pg_rusage_init(&ru0);
 
@@ -888,7 +888,7 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 					break;
 			}
 
-			if (!tupgone && ShouldVacuumCQTuple(cqvcontext, &tuple))
+			if (!tupgone && ShouldVacuumSWTuple(cqvcontext, &tuple))
 			{
 				tupgone = true;
 				all_visible = false;
@@ -1058,7 +1058,7 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 			RecordPageWithFreeSpace(onerel, blkno, freespace);
 	}
 
-	FreeCQVacuumContext(cqvcontext);
+	FreeSWVacuumContext(cqvcontext);
 	pfree(frozen);
 
 	/* save stats for use later */
