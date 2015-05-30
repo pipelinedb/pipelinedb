@@ -9,10 +9,13 @@
 #ifndef CQSTATFUNCS_H
 #define CQSTATFUNCS_H
 
-/* CQ process-level stats */
-extern Datum cq_stat_proc_get(PG_FUNCTION_ARGS);
+/* continuous query process stats */
+extern Datum cq_proc_stat_get(PG_FUNCTION_ARGS);
 
-/* CQ all-time stats */
+/* continuous query stats */
 extern Datum cq_stat_get(PG_FUNCTION_ARGS);
+
+/* stream stats */
+extern Datum stream_stat_get(PG_FUNCTION_ARGS);
 
 #endif

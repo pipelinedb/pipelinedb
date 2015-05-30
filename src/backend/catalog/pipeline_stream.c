@@ -442,10 +442,9 @@ UpdatePipelineStreamCatalog(Relation pipeline_query)
  * queries are reading from the given stream.
  */
 Bitmapset *
-GetAllStreamReaders(RangeVar *stream)
+GetAllStreamReaders(Oid namespace, char *name)
 {
-	Oid namespace = RangeVarGetCreationNamespace(stream);
-	HeapTuple tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(stream->relname));
+	HeapTuple tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(name));
 	bool isnull;
 	Datum raw;
 	bytea *bytes;
@@ -475,9 +474,9 @@ GetAllStreamReaders(RangeVar *stream)
 }
 
 Bitmapset *
-GetLocalStreamReaders(RangeVar *stream)
+GetLocalStreamReaders(Oid namespace, char *name)
 {
-	Bitmapset *readers = GetAllStreamReaders(stream);
+	Bitmapset *readers = GetAllStreamReaders(namespace, name);
 
 	if (stream_targets != NULL)
 	{
@@ -537,10 +536,9 @@ GetLocalStreamReaders(RangeVar *stream)
 }
 
 TupleDesc
-GetStreamTupleDesc(RangeVar *stream, List *colnames)
+GetStreamTupleDesc(Oid namespace, char *name, List *colnames)
 {
-	Oid namespace = RangeVarGetCreationNamespace(stream);
-	HeapTuple tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(stream->relname));
+	HeapTuple tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(name));
 	bool isnull;
 	Datum raw;
 	bytea *bytes;
@@ -608,33 +606,41 @@ GetStreamTupleDesc(RangeVar *stream, List *colnames)
 bool
 RangeVarIsForStream(RangeVar *stream)
 {
-	Oid namespace = RangeVarGetCreationNamespace(stream);
-	return PipelineStreamCatalogEntryExists(namespace, stream->relname);
+	Oid namespace = RangeVarGetAndCheckCreationNamespace(stream, NoLock, NULL);
+	return IsStream(namespace, stream->relname);
 }
 
 /*
  * PipelineStreamCatalogEntryExists
  */
 bool
-PipelineStreamCatalogEntryExists(Oid namespace, char *stream)
+IsStream(Oid namespace, char *name)
 {
 	HeapTuple tup;
 
-	/* If an invalid namespace OID is passed, use the currently active namespace */
 	if (namespace == InvalidOid)
-	{
-		RangeVar *rv = makeNode(RangeVar);
-		rv->relname = stream;
-		rv->schemaname = NULL;
-		namespace = RangeVarGetCreationNamespace(rv);
-		pfree(rv);
-	}
+		namespace = GetDefaultStreamNamespace(name);
 
-	tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(stream));
+	tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(name));
 
 	if (!HeapTupleIsValid(tup))
 		return false;
 
 	ReleaseSysCache(tup);
 	return true;
+}
+
+/*
+ *
+ */
+Oid
+GetDefaultStreamNamespace(char *stream)
+{
+	Oid namespace;
+	RangeVar *rv = makeNode(RangeVar);
+	rv->relname = stream;
+	rv->schemaname = NULL;
+	namespace = RangeVarGetCreationNamespace(rv);
+	pfree(rv);
+	return namespace;
 }

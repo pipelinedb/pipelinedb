@@ -59,6 +59,7 @@
 #include "storage/procsignal.h"
 #include "storage/sinvaladt.h"
 #include "utils/ascii.h"
+#include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
@@ -267,7 +268,7 @@ static PgStat_StatTabEntry *pgstat_get_tab_entry(PgStat_StatDBEntry *dbentry,
 static void pgstat_write_statsfiles(bool permanent, bool allDbs);
 static void pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent);
 static HTAB *pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep);
-static void pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *cont_queries, bool permanent);
+static void pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *cont_queries, HTAB *streams, bool permanent);
 static void backend_read_statsfile(void);
 static void pgstat_read_current_status(void);
 
@@ -305,6 +306,7 @@ static void pgstat_recv_tempfile(PgStat_MsgTempFile *msg, int len);
 
 static void cq_stat_recv(CQStatMsg *msg, int len);
 static void cq_stat_recv_purge(CQStatPurgeMsg *msg, int len);
+static void stream_stat_recv(StreamStatMsg *msg, int len);
 
 /* ------------------------------------------------------------
  * Public functions called from postmaster follow
@@ -3391,6 +3393,10 @@ PgstatCollectorMain(int argc, char *argv[])
 					cq_stat_recv_purge((CQStatPurgeMsg *) &msg, len);
 					break;
 
+				case PGSTAT_MTYPE_STREAM:
+					stream_stat_recv((StreamStatMsg *) &msg, len);
+					break;
+
 				default:
 					break;
 			}
@@ -3517,6 +3523,14 @@ reset_dbentry_counters(PgStat_StatDBEntry *dbentry)
 	hash_ctl.hash = tag_hash;
 	dbentry->cont_queries = hash_create("Per-CQ", 256, &hash_ctl,
 					   HASH_ELEM | HASH_FUNCTION);
+
+	hash_ctl.keysize = sizeof(Oid) + NAMEDATALEN;
+	hash_ctl.entrysize = sizeof(StreamStatEntry);
+	hash_ctl.hash = tag_hash;
+	hash_ctl.match = memcmp;
+	hash_ctl.keycopy = memcpy;
+	dbentry->streams = hash_create("Per-stream", 256, &hash_ctl,
+						   HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_KEYCOPY);
 }
 
 /*
@@ -3790,9 +3804,11 @@ pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent)
 	HASH_SEQ_STATUS tstat;
 	HASH_SEQ_STATUS fstat;
 	HASH_SEQ_STATUS qstat;
+	HASH_SEQ_STATUS sstat;
 	PgStat_StatTabEntry *tabentry;
 	PgStat_StatFuncEntry *funcentry;
 	CQStatEntry *cqentry;
+	StreamStatEntry *streamentry;
 	FILE	   *fpout;
 	int32		format_id;
 	Oid			dbid = dbentry->databaseid;
@@ -3855,6 +3871,17 @@ pgstat_write_db_statsfile(PgStat_StatDBEntry *dbentry, bool permanent)
 	{
 		fputc('Q', fpout);
 		rc = fwrite(cqentry, sizeof(CQStatEntry), 1, fpout);
+		(void) rc;				/* we'll check for error with ferror */
+	}
+
+	/*
+	 * Walk through the database's stream stats table.
+	 */
+	hash_seq_init(&sstat, dbentry->streams);
+	while ((streamentry = (StreamStatEntry *) hash_seq_search(&sstat)) != NULL)
+	{
+		fputc('S', fpout);
+		rc = fwrite(streamentry, sizeof(StreamStatEntry), 1, fpout);
 		(void) rc;				/* we'll check for error with ferror */
 	}
 
@@ -4083,6 +4110,14 @@ pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep)
 				dbentry->cont_queries = hash_create("Per-CQ", 256, &hash_ctl,
 								   HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
 
+				hash_ctl.keysize = sizeof(Oid) + NAMEDATALEN;
+				hash_ctl.entrysize = sizeof(StreamStatEntry);
+				hash_ctl.hash = tag_hash;
+				hash_ctl.match = memcmp;
+				hash_ctl.keycopy = memcpy;
+				dbentry->streams = hash_create("Per-stream", 256, &hash_ctl,
+									   HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_KEYCOPY);
+
 				/*
 				 * If requested, read the data from the database-specific
 				 * file. If there was onlydb specified (!= InvalidOid), we
@@ -4094,6 +4129,7 @@ pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep)
 											 dbentry->tables,
 											 dbentry->functions,
 											 dbentry->cont_queries,
+											 dbentry->streams,
 											 permanent);
 
 				break;
@@ -4134,7 +4170,7 @@ done:
  * ----------
  */
 static void
-pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *cont_queries,
+pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *cont_queries, HTAB *streams,
 						 bool permanent)
 {
 	PgStat_StatTabEntry *tabentry;
@@ -4143,6 +4179,8 @@ pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *co
 	PgStat_StatFuncEntry *funcentry;
 	CQStatEntry cqbuf;
 	CQStatEntry *cqentry;
+	StreamStatEntry streambuf;
+	StreamStatEntry *streamentry;
 
 	FILE	   *fpin;
 	int32		format_id;
@@ -4287,6 +4325,38 @@ pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *co
 				}
 
 				memcpy(cqentry, &cqbuf, sizeof(cqbuf));
+				break;
+
+				/*
+				 * 'S'	A StreamStatEntry follows.
+				 */
+			case 'S':
+				if (fread(&streambuf, 1, sizeof(StreamStatEntry), fpin) != sizeof(StreamStatEntry))
+				{
+					ereport(pgStatRunningInCollector ? LOG : WARNING,
+							(errmsg("corrupted statistics file \"%s\"",
+									statfile)));
+					goto done;
+				}
+
+				/*
+				 * Skip if stream belongs to a not requested database.
+				 */
+				if (streams == NULL)
+					break;
+
+				streamentry = (StreamStatEntry *) hash_search(streams,
+												(void *) &streambuf.namespace, HASH_ENTER, &found);
+
+				if (found)
+				{
+					ereport(pgStatRunningInCollector ? LOG : WARNING,
+							(errmsg("corrupted statistics file \"%s\"",
+									statfile)));
+					goto done;
+				}
+
+				memcpy(streamentry, &streambuf, sizeof(streambuf));
 				break;
 
 				/*
@@ -4859,6 +4929,8 @@ pgstat_recv_dropdb(PgStat_MsgDropdb *msg, int len)
 			hash_destroy(dbentry->functions);
 		if (dbentry->cont_queries != NULL)
 			hash_destroy(dbentry->cont_queries);
+		if (dbentry->streams != NULL)
+			hash_destroy(dbentry->streams);
 
 		if (hash_search(pgStatDBHash,
 						(void *) &dbid,
@@ -5501,4 +5573,71 @@ cq_stat_recv_purge(CQStatPurgeMsg *msg, int len)
 
 	/* Remove from hashtable if present; we don't care if it's not. */
 	(void) hash_search(dbentry->cont_queries, (void *) &msg->m_key, HASH_REMOVE, NULL);
+}
+
+/*
+ * stream_stat_fetch_all
+ */
+HTAB *
+stream_stat_fetch_all(void)
+{
+	PgStat_StatDBEntry *dbentry;
+	/*
+	 * If not done for this transaction, read the statistics collector stats
+	 * file into some hash tables.
+	 */
+	backend_read_statsfile();
+
+	dbentry = pgstat_get_db_entry(MyDatabaseId, true);
+	if (!dbentry)
+		return NULL;
+
+	return dbentry->streams;
+}
+
+/*
+ * stream_stat_recv
+ */
+static void
+stream_stat_recv(StreamStatMsg *msg, int len)
+{
+	StreamStatEntry stats = msg->m_entry;
+	StreamStatEntry *existing;
+	PgStat_StatDBEntry *db;
+	bool found;
+
+	db = pgstat_get_db_entry(msg->m_databaseid, true);
+
+	existing = (StreamStatEntry *) hash_search(db->streams, (void *) &stats.namespace, HASH_ENTER, &found);
+	if (!found)
+	{
+		MemSet(existing, 0, sizeof(CQStatEntry));
+		existing->namespace = stats.namespace;
+		namestrcpy(&existing->name, NameStr(stats.name));
+	}
+
+	existing->input_rows += stats.input_rows;
+	existing->input_batches += stats.input_batches;
+	existing->input_bytes += stats.input_bytes;
+}
+
+/*
+ * stream_stat_report
+ */
+void
+stream_stat_report(Oid namespace, char *name, int ntups, int nbatches, Size nbytes)
+{
+	StreamStatMsg msg;
+
+	MemSet(&msg, 0, sizeof(StreamStatMsg));
+	msg.m_entry.namespace = namespace;
+	namestrcpy(&msg.m_entry.name, name);
+	msg.m_entry.input_rows = ntups;
+	msg.m_entry.input_batches = nbatches;
+	msg.m_entry.input_bytes = nbytes;
+
+	msg.m_databaseid = MyDatabaseId;
+
+	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_STREAM);
+	pgstat_send(&msg, sizeof(msg));
 }
