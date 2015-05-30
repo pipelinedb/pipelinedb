@@ -22,8 +22,6 @@
 
 #define IS_ALIGNED(ptr) ((BlockInfo) ptr % __WORDSIZE == 0)
 #define ALIGN(size) (((size) + __WORDSIZE - 1) & ~(__WORDSIZE - 1))
-#define MAX(x, y) (((x) > (y)) ? (x) : (y))
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define BLOCK_SIZE(size) ((size) + sizeof(Header))
 #define MAGIC 0x1CEB00DA /* Yeeeeah, ICE BOODA! */
 #define MIN_SHMEM_ALLOC_SIZE 1024
@@ -130,11 +128,11 @@ static ShemDynAllocShmemStruct *ShemDynAllocShmem = NULL;
 static bool
 coalesce_blocks(void *ptr1, void *ptr2)
 {
-	void *tmpptr = MIN(ptr1, ptr2);
+	void *tmpptr = Min(ptr1, ptr2);
 	Size new_size;
 	void *next;
 
-	ptr2 = MAX(ptr1, ptr2);
+	ptr2 = Max(ptr1, ptr2);
 	ptr1 = tmpptr;
 
 	if (get_end(ptr1) != get_header(ptr2))
@@ -327,9 +325,9 @@ ShmemDynAlloc(Size size)
 	void *block = NULL;
 	Size padded_size;
 
-	size = MAX(ALIGN(size), MIN_ALLOC_SIZE);
+	size = Max(ALIGN(size), MIN_ALLOC_SIZE);
 	for (padded_size = 1; padded_size < size && padded_size <= 1024; padded_size *= 2);
-	size = MAX(size, padded_size);
+	size = Max(size, padded_size);
 
 	block = get_block(size);
 
@@ -340,7 +338,7 @@ ShmemDynAlloc(Size size)
 		 * The more contiguous memory we have, the better we
 		 * can combat fragmentation.
 		 */
-		Size alloc_size = MAX(size, MIN_SHMEM_ALLOC_SIZE);
+		Size alloc_size = Max(size, MIN_SHMEM_ALLOC_SIZE);
 		block = ShmemAlloc(BLOCK_SIZE(alloc_size));
 
 		memset(block, 0, BLOCK_SIZE(alloc_size));
