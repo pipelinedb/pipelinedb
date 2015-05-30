@@ -34,6 +34,7 @@
 #include "storage/spin.h"
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
+#include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "utils/portal.h"
 #include "utils/ps_status.h"
@@ -45,7 +46,8 @@
 #define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners)
 #define MAX_WAIT_TERMINATE_MS 250
 
-typedef struct {
+typedef struct
+{
 	Oid oid;
 	NameData name;
 } DatabaseEntry;
@@ -144,10 +146,10 @@ GetContQueryProcName(ContQueryProc *proc)
 	switch (proc->type)
 	{
 	case Combiner:
-		sprintf(buf, "%s [%s]", "combiner", NameStr(proc->db_name));
+		sprintf(buf, "%s [%s]", "combiner", NameStr(proc->group->db_name));
 		break;
 	case Worker:
-		sprintf(buf, "%s [%s]", "worker", NameStr(proc->db_name));
+		sprintf(buf, "%s [%s]", "worker", NameStr(proc->group->db_name));
 		break;
 	case Scheduler:
 		return "scheduler";
@@ -367,7 +369,7 @@ cq_bgproc_main(Datum arg)
 	MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
 
 	BackgroundWorkerUnblockSignals();
-	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->db_name), NULL);
+	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->group->db_name), NULL);
 
 	/* if we got a cancel signal in prior command, quit */
 	CHECK_FOR_INTERRUPTS();
@@ -449,8 +451,6 @@ start_group(ContQueryProcGroup *grp)
 
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		StrNCpy(NameStr(proc->db_name), NameStr(grp->db_name), NAMEDATALEN);
-		proc->db_oid = grp->db_oid;
 		proc->type = Worker;
 		proc->group_id = group_id;
 		proc->group = grp;
@@ -465,8 +465,6 @@ start_group(ContQueryProcGroup *grp)
 
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		StrNCpy(NameStr(proc->db_name), NameStr(grp->db_name), NAMEDATALEN);
-		proc->db_oid = grp->db_oid;
 		proc->type = Combiner;
 		proc->group_id = group_id;
 		proc->group = grp;
@@ -668,7 +666,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 			if (!found)
 			{
 				grp->db_oid = db_entry->oid;
-				StrNCpy(NameStr(grp->db_name), NameStr(db_entry->name), NAMEDATALEN);
+				namestrcpy(&grp->db_name, NameStr(db_entry->name));
 
 				start_group(grp);
 			}

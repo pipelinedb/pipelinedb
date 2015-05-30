@@ -27,8 +27,6 @@ typedef struct ContQueryProcGroup ContQueryProcGroup;
 
 typedef struct
 {
-	Oid db_oid;
-	NameData db_name;
 	ContQueryProcType type;
 	int id; /* unique across all cont query processes */
 	int group_id; /* unqiue [0, n) for each db_oid, type pair */
