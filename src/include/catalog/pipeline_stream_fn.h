@@ -19,14 +19,16 @@
 #include "utils/relcache.h"
 
 extern void UpdatePipelineStreamCatalog(Relation pipeline_query);
-extern Bitmapset *GetAllStreamReaders(RangeVar *stream);
-extern Bitmapset *GetLocalStreamReaders(RangeVar *stream);
-extern TupleDesc GetStreamTupleDesc(RangeVar *stream, List *colnames);
+
+extern Bitmapset *GetAllStreamReaders(Oid namespace, char *stream);
+extern Bitmapset *GetLocalStreamReaders(Oid namespace, char *stream);
+extern TupleDesc GetStreamTupleDesc(Oid namespace, char *stream, List *colnames);
 
 extern bytea *PackTupleDesc(TupleDesc desc);
 extern TupleDesc UnpackTupleDesc(bytea *bytes);
 
-extern bool PipelineStreamCatalogEntryExists(Oid namespace, char *stream);
+extern bool IsStream(Oid namespace, char *stream);
 extern bool RangeVarIsForStream(RangeVar *stream);
+extern Oid GetDefaultStreamNamespace(char *stream);
 
 #endif
