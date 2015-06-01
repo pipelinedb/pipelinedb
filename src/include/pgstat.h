@@ -65,7 +65,8 @@ typedef enum StatMsgType
 	PGSTAT_MTYPE_TEMPFILE,
 	PGSTAT_MTYPE_DEADLOCK,
 	PGSTAT_MTYPE_CQ,
-	PGSTAT_MTYPE_CQ_PURGE
+	PGSTAT_MTYPE_CQ_PURGE,
+	PGSTAT_MTYPE_STREAM
 } StatMsgType;
 
 /* ----------
@@ -592,6 +593,7 @@ typedef struct PgStat_StatDBEntry
 	 * PipelineDB CQ stats
 	 */
 	HTAB	   *cont_queries;
+	HTAB	   *streams;
 } PgStat_StatDBEntry;
 
 
@@ -1077,5 +1079,24 @@ extern HTAB *cq_stat_fetch_all(void);
 extern void cq_stat_report(bool force);
 extern void cq_stat_send_purge(Oid viewid, int pid, int64 ptype);
 extern CQStatEntry *cq_stat_get_entry(PgStat_StatDBEntry *dbentry, Oid viewoid, int pid, int ptype);
+
+typedef struct StreamStatEntry
+{
+	Oid namespace; /* composite key of (namespace, name) */
+	NameData name;
+	PgStat_Counter input_rows;
+	PgStat_Counter input_batches;
+	PgStat_Counter input_bytes;
+} StreamStatEntry;
+
+typedef struct StreamStatMsg
+{
+	PgStat_MsgHdr m_hdr;
+	Oid m_databaseid;
+	StreamStatEntry m_entry;
+} StreamStatMsg;
+
+extern HTAB *stream_stat_fetch_all(void);
+extern void stream_stat_report(Oid namespace, char *name, int ntups, int nbatches, Size nbytes);
 
 #endif   /* PGSTAT_H */

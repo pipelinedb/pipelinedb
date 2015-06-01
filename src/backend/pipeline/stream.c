@@ -25,6 +25,7 @@
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
 #include "parser/parse_target.h"
+#include "pgstat.h"
 #include "pipeline/stream.h"
 #include "storage/shm_alloc.h"
 #include "storage/ipc.h"
@@ -74,9 +75,10 @@ StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
 			hash_search(prepared_stream_inserts, (void *) name, HASH_ENTER, &found);
 
 	result->inserts = NIL;
-	result->stream = stream;
+	result->namespace = RangeVarGetAndCheckCreationNamespace(stream, NoLock, NULL);
+	result->stream = stream->relname;
 	result->cols = cols;
-	result->desc = GetStreamTupleDesc(stream, cols);
+	result->desc = GetStreamTupleDesc(result->namespace, stream->relname, cols);
 
 	return result;
 }
@@ -146,11 +148,12 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
-	Bitmapset *targets = GetLocalStreamReaders(pstmt->stream);
-	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
+	Bitmapset *targets = GetLocalStreamReaders(pstmt->namespace, pstmt->stream);
+	TupleDesc desc = GetStreamTupleDesc(pstmt->namespace, pstmt->stream, pstmt->cols);
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
+	Size size = 0;
 
 	if (synchronous_stream_insert)
 	{
@@ -191,12 +194,15 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
+		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
 	}
+
+	pstmt->inserts = NIL;
+
+	stream_stat_report(pstmt->namespace, pstmt->stream, count, 1, size);
 
 	if (synchronous_stream_insert)
 		InsertBatchWaitAndRemove(batch);
-
-	pstmt->inserts = NIL;
 
 	return count;
 }
@@ -217,10 +223,12 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
-	Bitmapset *targets = GetLocalStreamReaders(ins->relation);
+	Oid namespace = RangeVarGetCreationNamespace(ins->relation);
+	Bitmapset *targets = GetLocalStreamReaders(namespace, ins->relation->relname);
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
+	Size size = 0;
 
 	if (synchronous_stream_insert)
 	{
@@ -259,7 +267,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		colnames = lappend(colnames, makeString(res->name));
 	}
 
-	desc = GetStreamTupleDesc(ins->relation, colnames);
+	desc = GetStreamTupleDesc(namespace, ins->relation->relname, colnames);
 
 	/* append each VALUES tuple to the stream buffer */
 	foreach (lc, values)
@@ -335,9 +343,12 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
+		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
 	}
 
 	FreeExprContext(econtext, false);
+
+	stream_stat_report(namespace, ins->relation->relname, count, 1, size);
 
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
@@ -356,18 +367,18 @@ InsertIntoStream(InsertStmt *ins, List *values)
 uint64
 CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
-	RangeVar *rv = makeNode(RangeVar);
 	Bitmapset *targets;
 	uint64 count = 0;
 	int i;
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
+	Size size = 0;
 
-	rv->relname = stream;
-	rv->schemaname = get_namespace_name(namespace);
+	if (namespace == InvalidOid)
+		namespace = GetDefaultStreamNamespace(stream);
 
-	targets = GetLocalStreamReaders(rv);
+	targets = GetLocalStreamReaders(namespace, stream);
 
 	if (synchronous_stream_insert)
 	{
@@ -388,7 +399,10 @@ CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, i
 		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
+		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
 	}
+
+	stream_stat_report(namespace, stream, count, 1, size);
 
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.

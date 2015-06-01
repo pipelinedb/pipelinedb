@@ -830,7 +830,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 						errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
 
 			rel = (Relation) palloc0(sizeof(RelationData));
-			rel->rd_att = GetStreamTupleDesc(stmt->relation, stmt->attlist);
+			rel->rd_att = GetStreamTupleDesc(RangeVarGetCreationNamespace(stmt->relation), stmt->relation->relname, stmt->attlist);
 			rel->rd_rel = palloc0(sizeof(FormData_pg_class));
 			rel->rd_rel->relnatts = rel->rd_att->natts;
 			rel->rd_rel->relkind = RELKIND_RELATION;
@@ -1298,7 +1298,7 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
-	cstate->to_stream = rel ? PipelineStreamCatalogEntryExists(RelationGetNamespace(rel), RelationGetRelationName(rel)) : false;
+	cstate->to_stream = rel ? IsStream(RelationGetNamespace(rel), RelationGetRelationName(rel)) : false;
 
 	if (cstate->to_stream)
 	{
@@ -4328,7 +4328,7 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 				}
 			}
 			if (attnum == InvalidAttrNumber &&
-					!PipelineStreamCatalogEntryExists(RelationGetNamespace(rel), RelationGetRelationName(rel)))
+					!IsStream(RelationGetNamespace(rel), RelationGetRelationName(rel)))
 			{
 				if (rel != NULL)
 					ereport(ERROR,

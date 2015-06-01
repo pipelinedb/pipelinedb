@@ -153,7 +153,6 @@ PrepareQuery(PrepareStmt *stmt, const char *queryString)
 	if (IsA(stmt->query, InsertStmt) && InsertTargetIsStream((InsertStmt *) stmt->query))
 	{
 		InsertStmt *ins = (InsertStmt *) stmt->query;
-
 		StorePreparedStreamInsert(stmt->name, ins->relation, ins->cols);
 	}
 	else

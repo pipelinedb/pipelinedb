@@ -20,14 +20,14 @@
 #include "utils/rel.h"
 
 /*
- * cq_stat_proc_get
+ * cq_proc_stat_get
  *
  * Look up CQ process-level stats in the stats hashtables
  * and return them in the form of rows so that we can use
  * this function as a data source in views
  */
 Datum
-cq_stat_proc_get(PG_FUNCTION_ARGS)
+cq_proc_stat_get(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
 	HTAB *stats;
@@ -209,6 +209,77 @@ cq_stat_get(PG_FUNCTION_ARGS)
 		values[6] = Int64GetDatum(entry->output_bytes);
 		values[7] = Int64GetDatum(entry->updated_bytes);
 		values[8] = Int64GetDatum(entry->errors);
+
+		tup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
+		result = HeapTupleGetDatum(tup);
+		SRF_RETURN_NEXT(funcctx, result);
+	}
+
+	SRF_RETURN_DONE(funcctx);
+}
+
+/*
+ * stream_stat_get
+ */
+Datum
+stream_stat_get(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	HTAB *stats;
+	StreamStatEntry *entry;
+	HASH_SEQ_STATUS *iter;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+
+		TupleDesc	tupdesc;
+		MemoryContext oldcontext;
+
+		/* create a function context for cross-call persistence */
+		funcctx = SRF_FIRSTCALL_INIT();
+
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		/* build tupdesc for result tuples */
+		tupdesc = CreateTemplateTupleDesc(5, false);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "namespace", OIDOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "name", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "input_rows", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "input_batches", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "input_bytes", INT8OID, -1, 0);
+
+		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+
+		stats = stream_stat_fetch_all();
+		if (!stats)
+			SRF_RETURN_DONE(funcctx);
+
+		iter = palloc0(sizeof(HASH_SEQ_STATUS));
+		hash_seq_init(iter, stats);
+
+		funcctx->user_fctx = (void *) iter;
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = (FuncCallContext *) fcinfo->flinfo->fn_extra;
+	iter = (HASH_SEQ_STATUS *) funcctx->user_fctx;
+
+	while ((entry = (StreamStatEntry *) hash_seq_search(iter)) != NULL)
+	{
+		Datum values[5];
+		bool nulls[5];
+		HeapTuple tup;
+		Datum result;
+
+		MemSet(values, 0, sizeof(values));
+		MemSet(nulls, 0, sizeof(nulls));
+
+		values[0] = ObjectIdGetDatum(entry->namespace);
+		values[1] = CStringGetTextDatum(NameStr(entry->name));
+		values[2] = Int64GetDatum(entry->input_rows);
+		values[3] = Int64GetDatum(entry->input_batches);
+		values[4] = Int64GetDatum(entry->input_bytes);
 
 		tup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(tup);

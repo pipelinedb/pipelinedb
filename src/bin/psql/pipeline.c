@@ -16,7 +16,7 @@
 #include "pipeline.h"
 
 #define SELECT_CONTINUOUS_VIEWS \
-"SELECT pipeline_query.id AS Id, pg_namespace.nspname AS Namespace, pipeline_query.name AS Name, pipeline_query.query AS Query "\
+"SELECT pipeline_query.id AS Id, pg_namespace.nspname AS Schema, pipeline_query.name AS Name, pipeline_query.query AS Query "\
 "  FROM pipeline_query JOIN pg_namespace ON pipeline_query.namespace = pg_namespace.oid"
 
 /*
