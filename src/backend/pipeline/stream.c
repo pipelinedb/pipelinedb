@@ -434,7 +434,9 @@ InsertBatchCreate(Bitmapset *readers, int num_tuples)
 void
 InsertBatchWaitAndRemove(InsertBatch *batch)
 {
-	while (!StreamBatchAllAcked(batch))
+	bool *active = ContQueryGetActiveFlag();
+
+	while (!StreamBatchAllAcked(batch) && *active)
 	{
 		pg_usleep(SLEEP_MS * 1000);
 		CHECK_FOR_INTERRUPTS();

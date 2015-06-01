@@ -95,6 +95,7 @@ extern void ContinuousQueryWorkerMain(void);
 
 extern void sleep_if_deactivated(void);
 extern bool ContQuerySetStateAndWait(bool state, int waitms);
+extern bool *ContQueryGetActiveFlag(void);
 
 extern void SignalContQuerySchedulerTerminate(Oid db_oid);
 extern void SignalContQuerySchedulerRefresh(void);

@@ -836,6 +836,21 @@ ContQuerySetStateAndWait(bool state, int waitms)
 	return num_affected == TOTAL_SLOTS;
 }
 
+/*
+ * ContQueryGetActiveFlag
+ */
+bool *ContQueryGetActiveFlag(void)
+{
+	bool found;
+	ContQueryProcGroup *grp = (ContQueryProcGroup *) hash_search(ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	if (!found)
+		ereport(ERROR,
+				(errmsg("couldn't find entry for database %d", MyDatabaseId)));
+
+	return &grp->active;
+}
+
 static void
 signal_cont_query_scheduler(int signal)
 {
