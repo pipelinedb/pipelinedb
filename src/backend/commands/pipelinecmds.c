@@ -548,21 +548,129 @@ ExecTruncateContViewStmt(TruncateStmt *stmt)
 	heap_close(pipeline_query, NoLock);
 }
 
+/*
+ * ExecActivateStmt
+ */
 void
 ExecActivateStmt(ActivateStmt *stmt)
 {
 	/* TODO */
 }
 
+/*
+ * ExecDeactivateStmt
+ */
 void
 ExecDeactivateStmt(DeactivateStmt *stmt)
 {
 	/* TODO */
 }
 
+static void
+explain_cont_plan(char *name, PlannedStmt *plan, ExplainState *base_es, TupleDesc desc, DestReceiver *dest)
+{
+	TupOutputState *tstate;
+	ExplainState es;
+
+	memcpy(&es, base_es, sizeof(ExplainState));
+	es.str = makeStringInfo();
+	es.indent = 2;
+	appendStringInfoString(es.str, name);
+	appendStringInfoString(es.str, ":\n");
+
+	/* emit opening boilerplate */
+	ExplainBeginOutput(&es);
+
+	/* TODO(usmanm): explain plan here */
+
+	/* emit closing boilerplate */
+	ExplainEndOutput(&es);
+	Assert(es.indent == 2);
+
+	/* Non text formats only return single line inputs so do have a new line at the end */
+	if (es.format != EXPLAIN_FORMAT_TEXT)
+		appendStringInfoChar(es.str, '\n');
+
+	/* output tuples */
+	tstate = begin_tup_output_tupdesc(dest, desc);
+	do_text_output_multiline(tstate, es.str->data);
+	end_tup_output(tstate);
+
+	pfree(es.str->data);
+	pfree(es.str);
+}
+
+/*
+ * ExplainContViewResultDesc
+ */
+TupleDesc
+ExplainContViewResultDesc(ExplainContViewStmt *stmt)
+{
+	ExplainStmt *explain = makeNode(ExplainStmt);
+	TupleDesc desc;
+
+	explain->options = stmt->options;
+	desc = ExplainResultDesc(explain);
+	pfree(explain);
+
+	Assert(desc->natts == 1);
+	namestrcpy(&(desc->attrs[0]->attname), "CONTINUOUS QUERY PLANS");
+
+	return desc;
+}
+
+/*
+ * ExecExplainContViewStmt
+ */
 void
 ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 			 ParamListInfo params, DestReceiver *dest)
 {
-	/* TODO */
+	ExplainState es;
+	ListCell *lc;
+	TupleDesc desc;
+
+	/* Initialize ExplainState. */
+	ExplainInitState(&es);
+	pfree(es.str);
+
+	/* Parse options list. */
+	foreach(lc, stmt->options)
+	{
+		DefElem *opt = (DefElem *) lfirst(lc);
+
+		if (strcmp(opt->defname, "verbose") == 0)
+			es.verbose = defGetBoolean(opt);
+		else if (strcmp(opt->defname, "costs") == 0)
+			es.costs = defGetBoolean(opt);
+		else if (strcmp(opt->defname, "format") == 0)
+		{
+			char *p = defGetString(opt);
+
+			if (strcmp(p, "text") == 0)
+				es.format = EXPLAIN_FORMAT_TEXT;
+			else if (strcmp(p, "xml") == 0)
+				es.format = EXPLAIN_FORMAT_XML;
+			else if (strcmp(p, "json") == 0)
+				es.format = EXPLAIN_FORMAT_JSON;
+			else if (strcmp(p, "yaml") == 0)
+				es.format = EXPLAIN_FORMAT_YAML;
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						errmsg("unrecognized value for EXPLAIN option \"%s\": \"%s\"",
+								opt->defname, p)));
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("unrecognized EXPLAIN CONTINUOUS VIEW option \"%s\"",
+							opt->defname)));
+	}
+
+	desc = ExplainContViewResultDesc(stmt);
+
+	explain_cont_plan("Worker Plan", NULL, &es, desc, dest);
+	explain_cont_plan("Combiner Plan", NULL, &es, desc, dest);
+	explain_cont_plan("Combiner Lookup Plan", NULL, &es, desc, dest);
 }
