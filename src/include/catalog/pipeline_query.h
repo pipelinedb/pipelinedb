@@ -30,7 +30,7 @@
 CATALOG(pipeline_query,4242)
 {
 	int32		id;
-	Oid namespace;
+	Oid			namespace;
 	NameData	name;
 	NameData	matrelname;
 	bool		gc;

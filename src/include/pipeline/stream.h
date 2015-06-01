@@ -32,8 +32,9 @@
 typedef struct PreparedStreamInsertStmt
 {
 	char name[NAMEDATALEN];
+	Oid namespace;
 	/* destination stream for INSERTs */
-	RangeVar *stream;
+	char *stream;
 	/* column names for INSERTs */
 	List *cols;
 	/* List of ParamListInfoData for the INSERT */

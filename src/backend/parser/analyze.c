@@ -27,6 +27,7 @@
 
 #include "access/htup_details.h"
 #include "access/sysattr.h"
+#include "catalog/namespace.h"
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
@@ -497,8 +498,9 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	if (isStream)
 	{
 		char *sname = stmt->relation->relname;
+		Oid namespace = RangeVarGetCreationNamespace(stmt->relation);
 		Relation stream = (Relation) palloc0(sizeof(RelationData));
-		stream->rd_att = GetStreamTupleDesc(stmt->relation, stmt->cols);
+		stream->rd_att = GetStreamTupleDesc(namespace, stmt->relation->relname, stmt->cols);
 		stream->rd_rel = palloc0(sizeof(FormData_pg_class));
 		stream->rd_rel->relnatts = stream->rd_att->natts;
 		namestrcpy(&stream->rd_rel->relname, sname);
