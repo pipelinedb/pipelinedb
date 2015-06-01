@@ -441,6 +441,9 @@ start_group(ContQueryProcGroup *grp)
 	int slot_idx;
 	int group_id;
 
+	SpinLockInit(&grp->mutex);
+	SpinLockAcquire(&grp->mutex);
+
 	grp->active = true;
 	grp->terminate = false;
 
@@ -471,6 +474,8 @@ start_group(ContQueryProcGroup *grp)
 
 		run_background_proc(proc);
 	}
+
+	SpinLockRelease(&grp->mutex);
 }
 
 static void
@@ -756,17 +761,79 @@ ContQuerySchedulerMain(int argc, char *argv[])
  * sleep_if_cqs_deactivated
  */
 void
-sleep_if_cqs_deactivated(void)
+sleep_if_deactivated(void)
 {
-	pgstat_report_activity(STATE_IDLE, GetContQueryProcName(MyContQueryProc));
+	pgstat_report_activity(STATE_DISABLED, GetContQueryProcName(MyContQueryProc));
 
 	while (!MyContQueryProc->group->active)
 	{
+		MyContQueryProc->active = false;
 		WaitLatch(&MyProc->procLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
+
+		MyContQueryProc->active = true;
 		ResetLatch(&MyProc->procLatch);
 	}
 
 	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(MyContQueryProc));
+}
+
+/*
+ * ContQuerySetStateAndWait
+ */
+bool
+ContQuerySetStateAndWait(bool state, int waitms)
+{
+	TimestampTz start = GetCurrentTimestamp();
+	bool found;
+	ContQueryProcGroup *grp = (ContQueryProcGroup *) hash_search(ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+	int i;
+	int num_affected = 0;
+
+	if (!found)
+		ereport(ERROR,
+				(errmsg("couldn't find entry for database %d", MyDatabaseId)));
+
+	/* Already in the right state? Noop. */
+	if (grp->active == state)
+		return true;
+
+	SpinLockAcquire(&grp->mutex);
+
+	grp->active = state;
+
+	/* Set latches so any sleeping processes wake up and see the unsetting of the active flag. */
+	for (i = 0; i < TOTAL_SLOTS; i++)
+		SetLatch(grp->procs[i].latch);
+
+	while (!TimestampDifferenceExceeds(start, GetCurrentTimestamp(), waitms) && num_affected != TOTAL_SLOTS)
+	{
+		num_affected = 0;
+
+		for (i = 0; i < TOTAL_SLOTS; i++)
+		{
+			if (grp->procs[i].active == state)
+				num_affected++;
+		}
+	}
+
+	/* If all processes failed to register state, reset to old state. */
+	if (num_affected != TOTAL_SLOTS)
+	{
+		grp->active = !state;
+		for (i = 0; i < TOTAL_SLOTS; i++)
+			SetLatch(grp->procs[i].latch);
+	}
+
+	SpinLockRelease(&grp->mutex);
+
+	if (num_affected == TOTAL_SLOTS && !state)
+	{
+		/* Successful deactivation? Drain the tuple buffers. */
+		TupleBufferDrain(WorkerTupleBuffer, MyDatabaseId);
+		TupleBufferDrain(CombinerTupleBuffer, MyDatabaseId);
+	}
+
+	return num_affected == TOTAL_SLOTS;
 }
 
 static void

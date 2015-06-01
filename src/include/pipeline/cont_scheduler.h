@@ -13,6 +13,7 @@
 
 #include "storage/latch.h"
 #include "postmaster/bgworker.h"
+#include "storage/spin.h"
 
 #define MAX_CQS 1024
 
@@ -31,6 +32,7 @@ typedef struct
 	int id; /* unique across all cont query processes */
 	int group_id; /* unqiue [0, n) for each db_oid, type pair */
 	Latch *latch;
+	sig_atomic_t active;
 	BackgroundWorkerHandle handle;
 	ContQueryProcGroup *group;
 } ContQueryProc;
@@ -39,6 +41,7 @@ struct ContQueryProcGroup
 {
 	Oid db_oid;
 	NameData db_name;
+	slock_t mutex;
 	sig_atomic_t active;
 	sig_atomic_t terminate;
 	ContQueryProc procs[1]; /* number of slots is equal to continuous_query_num_combiners + continuous_query_num_workers */
@@ -90,7 +93,8 @@ extern void ContQuerySchedulerMain(int argc, char *argv[]) __attribute__((noretu
 extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
 
-extern void sleep_if_cqs_deactivated(void);
+extern void sleep_if_deactivated(void);
+extern bool ContQuerySetStateAndWait(bool state, int waitms);
 
 extern void SignalContQuerySchedulerTerminate(Oid db_oid);
 extern void SignalContQuerySchedulerRefresh(void);
