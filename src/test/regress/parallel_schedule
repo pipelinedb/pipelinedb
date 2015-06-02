@@ -172,3 +172,8 @@ test: cont_gis_geom
 # Another group of parallel tests
 # ----------
 test:  cont_gis_raster
+
+# ----------
+# Another group of parallel tests
+# ----------
+test:  cont_activate

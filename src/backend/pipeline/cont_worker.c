@@ -265,7 +265,7 @@ ContinuousQueryWorkerMain(void)
 		Bitmapset *tmp;
 		bool updated_queries = false;
 
-		sleep_if_cqs_deactivated();
+		sleep_if_deactivated();
 
 		TupleBufferBatchReaderTrySleep(reader, last_processed);
 
