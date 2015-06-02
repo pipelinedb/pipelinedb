@@ -793,11 +793,14 @@ ContQuerySetStateAndWait(bool state, int waitms)
 		ereport(ERROR,
 				(errmsg("couldn't find entry for database %d", MyDatabaseId)));
 
+	SpinLockAcquire(&grp->mutex);
+
 	/* Already in the right state? Noop. */
 	if (grp->active == state)
+	{
+		SpinLockRelease(&grp->mutex);
 		return true;
-
-	SpinLockAcquire(&grp->mutex);
+	}
 
 	grp->active = state;
 

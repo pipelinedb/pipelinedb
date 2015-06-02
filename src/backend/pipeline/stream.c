@@ -46,6 +46,7 @@ bool synchronous_stream_insert;
 char *stream_targets = NULL;
 
 static HTAB *prepared_stream_inserts = NULL;
+static bool *cont_queries_active = NULL;
 
 /*
  * StorePreparedStreamInsert
@@ -434,9 +435,10 @@ InsertBatchCreate(Bitmapset *readers, int num_tuples)
 void
 InsertBatchWaitAndRemove(InsertBatch *batch)
 {
-	bool *active = ContQueryGetActiveFlag();
+	if (cont_queries_active ==  NULL)
+		cont_queries_active = ContQueryGetActiveFlag();
 
-	while (!StreamBatchAllAcked(batch) && *active)
+	while (!StreamBatchAllAcked(batch) && *cont_queries_active)
 	{
 		pg_usleep(SLEEP_MS * 1000);
 		CHECK_FOR_INTERRUPTS();
