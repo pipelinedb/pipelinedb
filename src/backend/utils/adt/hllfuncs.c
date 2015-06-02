@@ -40,6 +40,17 @@ hll_out(PG_FUNCTION_ARGS)
 }
 
 static HyperLogLog *
+hll_create(int p)
+{
+	if (p > 14 || p < 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("p must be in [1, 14]")));
+
+	return HLLCreateWithP(p);
+}
+
+static HyperLogLog *
 hll_startup(FunctionCallInfo fcinfo, int p)
 {
 	HyperLogLog *hll;
@@ -48,14 +59,7 @@ hll_startup(FunctionCallInfo fcinfo, int p)
 	fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
 
 	if (p > 0)
-	{
-		if (p > 14)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("p must be in [1, 14]")));
-
-		hll = HLLCreateWithP(p);
-	}
+		hll = hll_create(p);
 	else
 		hll = HLLCreate();
 
@@ -65,7 +69,7 @@ hll_startup(FunctionCallInfo fcinfo, int p)
 }
 
 static HyperLogLog *
-hll_add(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
+hll_add_datum(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
 {
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 	Size size;
@@ -108,7 +112,7 @@ hll_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
-	state = hll_add(fcinfo, state, incoming);
+	state = hll_add_datum(fcinfo, state, incoming);
 
 	MemoryContextSwitchTo(old);
 
@@ -139,7 +143,7 @@ hll_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
-	state = hll_add(fcinfo, state, incoming);
+	state = hll_add_datum(fcinfo, state, incoming);
 
 	MemoryContextSwitchTo(old);
 
@@ -192,4 +196,32 @@ hll_cardinality(PG_FUNCTION_ARGS)
 	hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
 	PG_RETURN_INT64(HLLSize(hll));
+}
+
+Datum
+hll_empty(PG_FUNCTION_ARGS)
+{
+	HyperLogLog *hll = HLLCreate();
+	SET_VARSIZE(hll, sizeof(HyperLogLog) + hll->mlen);
+	PG_RETURN_POINTER(hll);
+}
+
+
+Datum
+hll_emptyp(PG_FUNCTION_ARGS)
+{
+	int p = PG_GETARG_INT32(0);
+	HyperLogLog *hll = hll_create(p);
+	SET_VARSIZE(hll, sizeof(HyperLogLog) + hll->mlen);
+	PG_RETURN_POINTER(hll);
+}
+
+
+Datum
+hll_add(PG_FUNCTION_ARGS)
+{
+	HyperLogLog *hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
+	fcinfo->flinfo->fn_extra = lookup_type_cache(get_fn_expr_argtype(fcinfo->flinfo, 1), 0);
+	hll = hll_add_datum(fcinfo, hll, PG_GETARG_DATUM(1));
+	PG_RETURN_POINTER(hll);
 }
