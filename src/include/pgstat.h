@@ -1042,36 +1042,47 @@ extern CQStatEntry *MyCQStats;
 	do { \
 		MyProcCQStats.input_rows += (rows); \
 		MyProcCQStats.input_bytes += (nbytes); \
-		MyCQStats->input_rows += (rows); \
-		MyCQStats->input_bytes += (nbytes); \
+		if (MyCQStats) \
+		{ \
+			MyCQStats->input_rows += (rows); \
+			MyCQStats->input_bytes += (nbytes); \
+		} \
 	} while(0)
 
 #define IncrementCQWrite(rows, nbytes) \
 	do { \
 		MyProcCQStats.output_rows += (rows); \
 		MyProcCQStats.output_bytes += (nbytes); \
-		MyCQStats->output_rows += (rows); \
-		MyCQStats->output_bytes += (nbytes); \
+		if (MyCQStats) \
+		{ \
+			MyCQStats->output_rows += (rows); \
+			MyCQStats->output_bytes += (nbytes); \
+		} \
 	} while(0)
 
 #define IncrementCQUpdate(count, nbytes) \
 	do { \
 		MyProcCQStats.updates += (count); \
 		MyProcCQStats.updated_bytes += (nbytes); \
-		MyCQStats->updates += (count); \
-		MyCQStats->updated_bytes += (nbytes); \
+		if (MyCQStats) \
+		{ \
+			MyCQStats->updates += (count); \
+			MyCQStats->updated_bytes += (nbytes); \
+		} \
 	} while(0)
 
 #define IncrementCQExecutions(n) \
 	do { \
 		MyProcCQStats.executions += (n); \
-		MyCQStats->executions += (n); \
+		if (MyCQStats) \
+			MyCQStats->executions += (n); \
 	} while(0)
 
 #define IncrementCQErrors(n) \
 	do { \
 		MyProcCQStats.errors += (n); \
-		MyCQStats->errors += (n); \
+		if (MyCQStats) \
+			MyCQStats->errors += (n); \
 	} while(0)
 
 extern void cq_stat_init(CQStatEntry *entry, Oid viewid, pid_t pid);
