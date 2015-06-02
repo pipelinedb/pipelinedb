@@ -145,6 +145,8 @@ get_query_state(ContQueryWorkerState **states, Oid id, MemoryContext context, Re
 	HeapTuple tuple;
 	ResourceOwner old_owner;
 
+	MyCQStats = NULL;
+
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
 	{
