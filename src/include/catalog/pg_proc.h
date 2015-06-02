@@ -5107,11 +5107,6 @@ DESCR("count-min sketch out function");
 DATA(insert OID = 5041 (cmsketch_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5038 "2275" _null_ _null_ _null_ _null_ cmsketch_in  _null_ _null_ _null_ ));
 DESCR("count-min sketch in function");
 
-DATA(insert OID = 5044 (gcs_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5042" _null_ _null_ _null_ _null_ gcs_out _null_ _null_ _null_ ));
-DESCR("golomb-coded set out function");
-DATA(insert OID = 5045 (gcs_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5042 "2275" _null_ _null_ _null_ _null_ gcs_in  _null_ _null_ _null_ ));
-DESCR("golomb-coded set in function");
-
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
 DATA(insert OID = 4301 ( float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1022 "1022 1022" _null_ _null_ _null_ _null_ float8_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
@@ -5298,46 +5293,6 @@ DESCR("get continuous query process stats");
 
 DATA(insert OID = 4356 ( cq_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o}" "{name,type,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,errors}" _null_ cq_stat_get _null_ _null_ _null_ ));
 DESCR("get continuous query stats");
-
-/* golomb-coded set aggregate */
-DATA(insert OID = 4357 ( gcs_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5042 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("golomb-coded set aggregate");
-
-/* golomb-coded set aggregate with user-supplied p and n */
-DATA(insert OID = 4358 ( gcs_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5042 "2283 701 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("golomb-coded set aggregate");
-
-/* golomb-coded set aggregate transition function */
-DATA(insert OID = 4359 ( gcs_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5042 "5042 2283" _null_ _null_ _null_ _null_ gcs_agg_trans _null_ _null_ _null_ ));
-DESCR("golomb-coded set aggregate");
-
-/* golomb-coded set aggregate with p and n transition function */
-DATA(insert OID = 4360 ( gcs_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5042 "5042 2283 701 20" _null_ _null_ _null_ _null_ gcs_agg_transp _null_ _null_ _null_ ));
-DESCR("golomb-coded set aggregate");
-
-/* golomb-coded set union aggregate */
-DATA(insert OID = 4361 ( gcs_union_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5042 "5042" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("golomb-coded set union aggregate");
-
-/* golomb-coded set union aggregate transition function */
-DATA(insert OID = 4362 ( gcs_union_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5042 "5042 5042" _null_ _null_ _null_ _null_ gcs_union_agg_trans _null_ _null_ _null_ ));
-DESCR("golomb-coded set union aggregate");
-
-/* golomb-coded set intersection aggregate */
-DATA(insert OID = 4363 ( gcs_intersection_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5042 "5042" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("golomb-coded set intersection aggregate");
-
-/* golomb-coded set intersection aggregate transition function */
-DATA(insert OID = 4364 ( gcs_intersection_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5042 "5042 5042" _null_ _null_ _null_ _null_ gcs_intersection_agg_trans _null_ _null_ _null_ ));
-DESCR("golomb-coded set intersection aggregate");
-
-/* golomb-coded set contains function */
-DATA(insert OID = 4365 ( gcs_contains	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 16 "5042 2283" _null_ _null_ _null_ _null_ gcs_contains _null_ _null_ _null_ ));
-DESCR("golomb-coded set contains item?");
-
-/* golomb-coded set serialize */
-DATA(insert OID = 4366 (gcs_send PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "5042" _null_ _null_ _null_ _null_ gcs_send _null_ _null_ _null_ ));
-DESCR("golomb-coded set serialize");
 
 /* date truncation convenience functions */
 DATA(insert OID = 4367 (  year	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 1184 "1184" _null_ _null_ _null_ _null_ timestamptz_year _null_ _null_ _null_ ));
