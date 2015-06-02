@@ -83,8 +83,6 @@ Now let's generate some test data and stream it into a simple continuous view. F
     pipeline
     =# CREATE CONTINUOUS VIEW test_view AS SELECT key::text, COUNT(*) FROM test_stream GROUP BY key;
     CREATE CONTINUOUS VIEW
-    =# ACTIVATE test_view;
-    ACTIVATE 1
 
 Events can be emitted to PipelineDB streams using regular SQL `INSERTS`. Any `INSERT` target that isn't a table is considered a stream by PipelineDB, meaning streams don't need to have a schema created in advance. Let's emit a single event into the `test_stream` stream since our continuous view is reading from it:
 
