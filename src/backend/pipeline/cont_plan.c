@@ -391,13 +391,24 @@ PlannedStmt *
 GetContPlan(ContinuousView *view)
 {
 	PlannedStmt *plan;
+	ContQueryProcType type;
 
-	if (IsContQueryWorkerProcess())
-		plan = get_worker_plan(view);
-	else if (IsContQueryCombinerProcess())
-		plan = get_combiner_plan(view);
+	if (MyContQueryProc)
+		type = MyContQueryProc->type;
 	else
+		type = Scheduler; /* dummy invalid type */
+
+	switch (type)
+	{
+	case Combiner:
+		plan = get_combiner_plan(view);
+		break;
+	case Worker:
+		plan = get_worker_plan(view);
+		break;
+	default:
 		ereport(ERROR, (errmsg("only continuous query processes can generate continuous query plans")));
+	}
 
 	set_plan_refs(plan, view);
 

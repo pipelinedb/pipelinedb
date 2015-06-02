@@ -43,6 +43,7 @@
 #include "pipeline/cqanalyze.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/cont_analyze.h"
+#include "pipeline/cont_plan.h"
 #include "pipeline/cqwindow.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
@@ -574,14 +575,15 @@ explain_cont_plan(char *name, PlannedStmt *plan, ExplainState *base_es, TupleDes
 
 	memcpy(&es, base_es, sizeof(ExplainState));
 	es.str = makeStringInfo();
-	es.indent = 2;
+	es.indent = 1;
 	appendStringInfoString(es.str, name);
 	appendStringInfoString(es.str, ":\n");
 
 	/* emit opening boilerplate */
 	ExplainBeginOutput(&es);
 
-	/* TODO(usmanm): explain plan here */
+	if (plan)
+		ExplainOnePlan(plan, NULL, &es, NULL, NULL, NULL);
 
 	/* emit closing boilerplate */
 	ExplainEndOutput(&es);
@@ -629,6 +631,20 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 	ExplainState es;
 	ListCell *lc;
 	TupleDesc desc;
+	ContQueryProc cq_proc;
+	ContinuousView *view;
+	HeapTuple tuple = GetPipelineQueryTuple(stmt->view);
+	Oid cq_id;
+	Form_pipeline_query row;
+
+	if (!HeapTupleIsValid(tuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_CONTINUOUS_VIEW),
+				errmsg("continuous view \"%s\" does not exist", stmt->view->relname)));
+
+	row = (Form_pipeline_query) GETSTRUCT(tuple);
+	cq_id = row->id;
+	ReleaseSysCache(tuple);
 
 	/* Initialize ExplainState. */
 	ExplainInitState(&es);
@@ -670,7 +686,16 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 
 	desc = ExplainContViewResultDesc(stmt);
 
-	explain_cont_plan("Worker Plan", NULL, &es, desc, dest);
+	view = GetContinuousView(cq_id);
+
+	MyContQueryProc = &cq_proc;
+	MyContQueryProc->type = Worker;
+	explain_cont_plan("Worker Plan", GetContPlan(view), &es, desc, dest);
+
+	MyContQueryProc = &cq_proc;
+	MyContQueryProc->type = Combiner;
 	explain_cont_plan("Combiner Plan", NULL, &es, desc, dest);
+	MyContQueryProc = NULL;
+
 	explain_cont_plan("Combiner Lookup Plan", NULL, &es, desc, dest);
 }

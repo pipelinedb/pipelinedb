@@ -907,6 +907,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
 		case T_SeqScan:
 			pname = sname = "Seq Scan";
 			break;
+		case T_StreamScan:
+			pname = sname = "Stream Scan";
+			break;
 		case T_IndexScan:
 			pname = sname = "Index Scan";
 			break;
