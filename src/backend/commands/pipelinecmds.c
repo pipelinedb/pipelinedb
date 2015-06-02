@@ -552,13 +552,17 @@ ExecTruncateContViewStmt(TruncateStmt *stmt)
 void
 ExecActivateStmt(ActivateStmt *stmt)
 {
-	/* TODO */
+	if (!ContQuerySetStateAndWait(true, 1000))
+		ereport(ERROR,
+				(errmsg("failed to activate continuous views")));
 }
 
 void
 ExecDeactivateStmt(DeactivateStmt *stmt)
 {
-	/* TODO */
+	if (!ContQuerySetStateAndWait(false, 1000))
+		ereport(ERROR,
+				(errmsg("failed to deactivate continuous views")));
 }
 
 void
