@@ -1,4 +1,6 @@
-# PipelineDB ![Build Status](https://circleci.com/gh/pipelinedb/pipelinedb.png?circle-token=db1a70c164cd6d96544d8eb38b279c48dea24709)
+# PipelineDB
+
+![Build Status](https://circleci.com/gh/pipelinedb/pipelinedb.png?style=shield&circle-token=db1a70c164cd6d96544d8eb38b279c48dea24709) [![Gitter chat](https://badges.gitter.im/pipelinedb/pipelinedb.png)](https://gitter.im/pipelinedb/pipelinedb)
 
 ## Getting started
 
