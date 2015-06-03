@@ -47,14 +47,15 @@ def test_join_with_aggs(pipeline, clean_db):
 
     pipeline.create_table('a0', **a0_cols)
     pipeline.create_table('a1', **a1_cols)
-    pipeline.create_cv('test_agg_join', q)
 
     a0 = _generate_rows(num_cols, 64)
     a1 = _generate_rows(num_cols, 64)
     s = _generate_rows(num_cols, 64)
 
-    _insert(pipeline, 'a0', a0, 0.25)
-    _insert(pipeline, 'a1', a1, 0.25)
+    _insert(pipeline, 'a0', a0, 0.1)
+    _insert(pipeline, 'a1', a1, 0.1)
+
+    pipeline.create_cv('test_agg_join', q)
     _insert(pipeline, 'stream', s)
 
     expected = _join(a1, _join(a0, s, join_cols), join_cols)
@@ -85,13 +86,14 @@ def test_join_with_where(pipeline, clean_db):
 
     pipeline.create_table('wt', **wt_cols)
     pipeline.create_table('wt_s', **wt_cols)
-    pipeline.create_cv('test_join_where', q)
 
     wt = _generate_rows(num_cols, 64)
     s = _generate_rows(num_cols, 64)
 
-    _insert(pipeline, 'wt', wt, 0.25)
-    _insert(pipeline, 'wt_s', s, 0.25)
+    _insert(pipeline, 'wt', wt, 0.1)
+    _insert(pipeline, 'wt_s', s, 0.1)
+
+    pipeline.create_cv('test_join_where', q)
     _insert(pipeline, 'stream', s)
 
     expected = pipeline.execute('SELECT COUNT(*) FROM wt_s s, wt WHERE s.col0 = 1 AND wt.col0 = 1').first()
@@ -111,6 +113,11 @@ def test_join_ordering(pipeline, clean_db):
 
     pipeline.create_table('ordering0', **ordering0_cols)
     pipeline.create_table('ordering1', **ordering1_cols)
+
+    ordering0 = _generate_rows(num_cols, 64)
+    ordering1 = _generate_rows(num_cols, 64)
+    _insert(pipeline, 'ordering0', ordering0, 0.1)
+    _insert(pipeline, 'ordering1', ordering1, 0.1)
 
     # stream, table, table
     q0 = """
@@ -136,13 +143,7 @@ def test_join_ordering(pipeline, clean_db):
     """
     pipeline.create_cv('test_ordering2', q2)
 
-    ordering0 = _generate_rows(num_cols, 64)
-    ordering1 = _generate_rows(num_cols, 64)
     s = _generate_rows(num_cols, 64)
-
-    _insert(pipeline, 'ordering0', ordering0, 0.25)
-    _insert(pipeline, 'ordering1', ordering1, 0.25)
-
     _insert(pipeline, 'stream', s)
 
     expected = _join(ordering0, _join(ordering1, s, join_cols), join_cols)
@@ -168,12 +169,12 @@ def test_join_across_batches(pipeline, clean_db):
     q = """
     SELECT s.col0::integer FROM batch JOIN stream s ON batch.col0 = s.col0
     """
-    pipeline.create_cv('test_batched_join', q)
 
     t = _generate_rows(num_cols, 64)
-    _insert(pipeline, 'batch', t, 0.25)
+    _insert(pipeline, 'batch', t, 0.1)
 
     s = _generate_rows(num_cols, 64)
+    pipeline.create_cv('test_batched_join', q)
     _insert(pipeline, 'stream', s)
 
     expected = _join(t, s, join_cols)
@@ -195,10 +196,10 @@ def test_incremental_join(pipeline, clean_db):
     SELECT s.col0::integer FROM inc JOIN stream s ON inc.col0 = s.col0
     AND inc.col1 = s.col1::integer
     """
-    pipeline.create_cv('test_join', q)
     t = _generate_rows(num_cols, 64)
-    _insert(pipeline, 'inc', t)
+    _insert(pipeline, 'inc', t, 0.1)
 
+    pipeline.create_cv('test_join', q)
     s = []
     for n in range(2):
         row = _generate_row(num_cols)
@@ -225,16 +226,15 @@ def test_join_multiple_tables(pipeline, clean_db):
     SELECT s.col0::integer FROM t0 JOIN t1 ON t0.col0 = t1.col0
     JOIN stream s ON t1.col0 = s.col0
     """
-    pipeline.create_cv('test_join_multi', q)
 
     t0 = _generate_rows(num_cols, 64)
     t1 = _generate_rows(num_cols, 64)
     s = _generate_rows(num_cols, 64)
 
-    _insert(pipeline, 't1', t1)
+    _insert(pipeline, 't1', t1, 0.1)
+    _insert(pipeline, 't0', t0, 0.1)
 
-    # Now insert some table rows after activation
-    _insert(pipeline, 't0', t0, 0.25)
+    pipeline.create_cv('test_join_multi', q)
     _insert(pipeline, 'stream', s)
 
     expected = _join(t0, _join(s, t1, join_cols), join_cols)
@@ -252,13 +252,14 @@ def test_indexed(pipeline, clean_db):
     """
     pipeline.create_table('test_indexed_t', x='integer', y='integer')
     pipeline.execute('CREATE INDEX idx ON test_indexed_t(x)')
-    pipeline.create_cv('test_indexed', q)
 
     t = _generate_rows(2, 1000)
     s = _generate_rows(2, 1000)
 
     pipeline.insert('test_indexed_t', ('x', 'y'), t)
+    time.sleep(0.1)
 
+    pipeline.create_cv('test_indexed', q)
     pipeline.insert('stream', ('x', 'y'), s)
 
     expected = _join(s, t, [0])
