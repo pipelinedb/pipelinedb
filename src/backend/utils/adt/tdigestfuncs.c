@@ -74,12 +74,22 @@ tdigest_out(PG_FUNCTION_ARGS)
 }
 
 static TDigest *
+tdigest_create(uint32_t k)
+{
+	if (k < 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("k must be non-zero")));
+	return TDigestCreateWithCompression(k);
+}
+
+static TDigest *
 tdigest_startup(FunctionCallInfo fcinfo, uint32_t k)
 {
 	TDigest *t;
 
 	if (k)
-		t = TDigestCreateWithCompression(k);
+		t = tdigest_create(k);
 	else
 		t = TDigestCreate();
 
@@ -210,4 +220,34 @@ tdigest_cdf(PG_FUNCTION_ARGS)
 	x = PG_GETARG_FLOAT8(1);
 
 	PG_RETURN_FLOAT8(TDigestCDF(t, x));
+}
+
+Datum
+tdigest_empty(PG_FUNCTION_ARGS)
+{
+	TDigest *t = TDigestCreate();
+	fcinfo->nargs = 1;
+	fcinfo->arg[0] = PointerGetDatum(t);
+	return tdigest_send(fcinfo);
+}
+
+Datum
+tdigest_emptyp(PG_FUNCTION_ARGS)
+{
+	uint64_t k = PG_GETARG_INT32(0);
+	TDigest *t = tdigest_create(k);
+	fcinfo->nargs = 1;
+	fcinfo->arg[0] = PointerGetDatum(t);
+	return tdigest_send(fcinfo);
+}
+
+Datum
+tdigest_add(PG_FUNCTION_ARGS)
+{
+	TDigest *t = tdigest_unpack(PG_GETARG_BYTEA_P(0));
+	float8 incoming = PG_GETARG_FLOAT8(1);
+	TDigestAdd(t, incoming, 1);
+	fcinfo->nargs = 1;
+	fcinfo->arg[0] = PointerGetDatum(t);
+	return tdigest_send(fcinfo);
 }
