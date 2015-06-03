@@ -221,9 +221,16 @@ Datum
 hll_add(PG_FUNCTION_ARGS)
 {
 	HyperLogLog *hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
-	HyperLogLog *cpy = palloc(HLLSize(hll));
-	memcpy(cpy, hll, HLLSize(hll));
+
+	/* Sparse representation can be repalloc'd so create a copy */
+	if (HLL_IS_SPARSE(hll))
+	{
+		HyperLogLog *cpy = palloc(HLLSize(hll));
+		memcpy(cpy, hll, HLLSize(hll));
+		hll = cpy;
+	}
+
 	fcinfo->flinfo->fn_extra = lookup_type_cache(get_fn_expr_argtype(fcinfo->flinfo, 1), 0);
-	cpy = hll_add_datum(fcinfo, cpy, PG_GETARG_DATUM(1));
-	PG_RETURN_POINTER(cpy);
+	hll = hll_add_datum(fcinfo, hll, PG_GETARG_DATUM(1));
+	PG_RETURN_POINTER(hll);
 }

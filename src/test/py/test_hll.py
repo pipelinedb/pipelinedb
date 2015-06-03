@@ -75,10 +75,11 @@ def test_hll_type(pipeline, clean_db):
   pipeline.create_table('test_hll_type', x='int', y='hll')
   pipeline.execute('INSERT INTO test_hll_type (x, y) VALUES '
                    '(1, hll_empty()), (2, hll_empty())')
-  import time; time.sleep(10);
+
   for i in xrange(1000):
     pipeline.execute('UPDATE test_hll_type SET y = hll_add(y, %d / x)' % i)
 
-  result = pipeline.execute('SELECT hll_cardinality(y) FROM test_hll_type')
-  for r in result:
-    print r
+  result = list(pipeline.execute('SELECT hll_cardinality(y) '
+                                 'FROM test_hll_type'))
+  assert result[0][0] == 497
+  assert result[1][0] == 995

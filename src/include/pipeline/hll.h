@@ -23,6 +23,7 @@
 #define HLL_SPARSE_CLEAN 'S'
 #define HLL_DENSE_DIRTY 'd'
 #define HLL_DENSE_CLEAN 'D'
+#define HLL_IS_SPARSE(hll) ((hll)->encoding == HLL_SPARSE_DIRTY || (hll)->encoding == HLL_SPARSE_CLEAN)
 #define HLLSize(hll) (sizeof(HyperLogLog) + (hll)->mlen)
 
 typedef struct HyperLogLog
