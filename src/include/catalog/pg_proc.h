@@ -5133,7 +5133,7 @@ DESCR("deserializer for array aggregation transition states");
 DATA(insert OID = 4311 (arrayaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ arrayaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for array aggregation transition states");
 
-DATA(insert OID = 4312 ( array_agg_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ array_agg_combine _null_ _null_ _null_ ));
+DATA(insert OID = 4312 (array_agg_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ array_agg_combine _null_ _null_ _null_ ));
 DESCR("array aggregation combination function");
 
 DATA(insert OID = 4313 (byteatostringinfo PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ byteatostringinfo _null_ _null_ _null_ ));
@@ -5294,6 +5294,54 @@ DESCR("get continuous query process stats");
 
 DATA(insert OID = 4356 ( cq_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o}" "{name,type,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,errors}" _null_ cq_stat_get _null_ _null_ _null_ ));
 DESCR("get continuous query stats");
+
+/* hyperloglog empty */
+DATA(insert OID = 4357 ( hll_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 3998 "" _null_ _null_ _null_ _null_ hll_empty _null_ _null_ _null_ ));
+DESCR("hyperloglog empty");
+
+/* hyperloglog empty with user-supplied p */
+DATA(insert OID = 4358 ( hll_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3998 "23" _null_ _null_ _null_ _null_ hll_emptyp _null_ _null_ _null_ ));
+DESCR("hyperloglog empty");
+
+/* hyperloglog add */
+DATA(insert OID = 4359 ( hll_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 3998 "3998 2283" _null_ _null_ _null_ _null_ hll_add _null_ _null_ _null_ ));
+DESCR("hyperloglog add");
+
+/* bloom filter empty */
+DATA(insert OID = 4360 ( bloom_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 5030 "" _null_ _null_ _null_ _null_ bloom_empty _null_ _null_ _null_ ));
+DESCR("bloom filter empty");
+
+/* bloom filter empty with user-supplied p and n */
+DATA(insert OID = 4361 ( bloom_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "701 20" _null_ _null_ _null_ _null_ bloom_emptyp _null_ _null_ _null_ ));
+DESCR("bloom filter empty");
+
+/* bloom filter add */
+DATA(insert OID = 4362 ( bloom_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "5030 2283" _null_ _null_ _null_ _null_ bloom_add _null_ _null_ _null_ ));
+DESCR("bloom filter add");
+
+/* t-digest empty */
+DATA(insert OID = 4363 ( tdigest_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 5034 "" _null_ _null_ _null_ _null_ tdigest_empty _null_ _null_ _null_ ));
+DESCR("t-digest empty");
+
+/* t-digest empty with user-supplied k */
+DATA(insert OID = 4364 ( tdigest_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5034 "23" _null_ _null_ _null_ _null_ tdigest_emptyp _null_ _null_ _null_ ));
+DESCR("t-digest empty");
+
+/* t-digest add */
+DATA(insert OID = 4365 ( tdigest_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5034 "5034 701" _null_ _null_ _null_ _null_ tdigest_add _null_ _null_ _null_ ));
+DESCR("t-digest add");
+
+/* count-min sketch empty */
+DATA(insert OID = 4366 ( cmsketch_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 5038 "" _null_ _null_ _null_ _null_ cmsketch_empty _null_ _null_ _null_ ));
+DESCR("count-min sketch empty");
+
+/* count-min sketch empty with user-supplied eps and p */
+DATA(insert OID = 4376 ( cmsketch_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "701 701" _null_ _null_ _null_ _null_ cmsketch_emptyp _null_ _null_ _null_ ));
+DESCR("count-min sketch empty");
+
+/* count-min sketch add */
+DATA(insert OID = 4377 ( cmsketch_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_add _null_ _null_ _null_ ));
+DESCR("count-min sketch add");
 
 /* date truncation convenience functions */
 DATA(insert OID = 4367 (  year	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 1184 "1184" _null_ _null_ _null_ _null_ timestamptz_year _null_ _null_ _null_ ));

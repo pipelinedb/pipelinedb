@@ -41,6 +41,21 @@ cmsketch_out(PG_FUNCTION_ARGS)
 }
 
 static CountMinSketch *
+cmsketch_create(float8 eps, float8 p)
+{
+	if (p <= 0 || p >= 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("p must be in [0, 1]")));
+	if (eps <= 0 || eps >= 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("eps must be in [0, 1]")));
+
+	return CountMinSketchCreateWithEpsAndP(eps, p);
+}
+
+static CountMinSketch *
 cmsketch_startup(FunctionCallInfo fcinfo, float8 eps, float8 p)
 {
 	CountMinSketch *cms;
@@ -49,7 +64,7 @@ cmsketch_startup(FunctionCallInfo fcinfo, float8 eps, float8 p)
 	fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
 
 	if (p && eps)
-		cms = CountMinSketchCreateWithEpsAndP(eps, p);
+		cms = cmsketch_create(eps, p);
 	else
 		cms = CountMinSketchCreate();
 
@@ -59,7 +74,7 @@ cmsketch_startup(FunctionCallInfo fcinfo, float8 eps, float8 p)
 }
 
 static CountMinSketch *
-cmsketch_add(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem)
+cmsketch_add_datum(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem)
 {
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 	Size size;
@@ -99,7 +114,7 @@ cmsketch_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 
-	state = cmsketch_add(fcinfo, state, incoming);
+	state = cmsketch_add_datum(fcinfo, state, incoming);
 
 	MemoryContextSwitchTo(old);
 
@@ -131,7 +146,7 @@ cmsketch_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 
-	state = cmsketch_add(fcinfo, state, incoming);
+	state = cmsketch_add_datum(fcinfo, state, incoming);
 
 	MemoryContextSwitchTo(old);
 
@@ -201,4 +216,31 @@ cmsketch_count(PG_FUNCTION_ARGS)
 		count = CountMinSketchEstimateCount(cms, DatumGetPointer(elem), size);
 
 	PG_RETURN_INT32(count);
+}
+
+Datum
+cmsketch_empty(PG_FUNCTION_ARGS)
+{
+	CountMinSketch *cms = CountMinSketchCreate();
+	SET_VARSIZE(cms, CountMinSketchSize(cms));
+	PG_RETURN_POINTER(cms);
+}
+
+Datum
+cmsketch_emptyp(PG_FUNCTION_ARGS)
+{
+	float8 eps = PG_GETARG_FLOAT8(0);
+	float8 p = PG_GETARG_FLOAT8(1);
+	CountMinSketch *cms = cmsketch_create(eps, p);
+	SET_VARSIZE(cms, CountMinSketchSize(cms));
+	PG_RETURN_POINTER(cms);
+}
+
+Datum
+cmsketch_add(PG_FUNCTION_ARGS)
+{
+	CountMinSketch *cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
+	fcinfo->flinfo->fn_extra = lookup_type_cache(get_fn_expr_argtype(fcinfo->flinfo, 1), 0);
+	cms = cmsketch_add_datum(fcinfo, cms, PG_GETARG_DATUM(1));
+	PG_RETURN_POINTER(cms);
 }

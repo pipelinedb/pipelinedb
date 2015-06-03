@@ -21,5 +21,8 @@ extern Datum tdigest_agg_transp(PG_FUNCTION_ARGS);
 extern Datum tdigest_merge_agg_trans(PG_FUNCTION_ARGS);
 extern Datum tdigest_cdf(PG_FUNCTION_ARGS);
 extern Datum tdigest_quantile(PG_FUNCTION_ARGS);
+extern Datum tdigest_empty(PG_FUNCTION_ARGS);
+extern Datum tdigest_emptyp(PG_FUNCTION_ARGS);
+extern Datum tdigest_add(PG_FUNCTION_ARGS);
 
 #endif

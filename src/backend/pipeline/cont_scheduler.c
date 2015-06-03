@@ -851,7 +851,7 @@ bool *ContQueryGetActiveFlag(void)
 		ereport(ERROR,
 				(errmsg("couldn't find entry for database %d", MyDatabaseId)));
 
-	return &grp->active;
+	return (bool *) &grp->active;
 }
 
 static void

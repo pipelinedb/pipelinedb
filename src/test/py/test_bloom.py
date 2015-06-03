@@ -26,14 +26,17 @@ def test_user_low_and_high_card(pipeline, clean_db):
 
     pipeline.insert('test_bloom_stream', desc, rows)
 
-    result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) FROM test_bloom_agg WHERE k in (0, 1)').first()
+    result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) '
+                              'FROM test_bloom_agg WHERE k in (0, 1)').first()
     assert result[0] == 4
 
-    result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) FROM test_bloom_agg WHERE k in (2, 3)').first()
-    assert result[0] == 9870
+    result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) '
+                              'FROM test_bloom_agg WHERE k in (2, 3)').first()
+    assert result[0] == 8879
 
-    result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) FROM test_bloom_agg').first()
-    assert result[0] == 9874
+    result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) '
+                              'FROM test_bloom_agg').first()
+    assert result[0] == 8881
 
 
 def test_bloom_agg_hashing(pipeline, clean_db):
@@ -65,9 +68,9 @@ def test_bloom_agg_hashing(pipeline, clean_db):
 
     result = result[0]
 
-    assert result[0] == 9870
-    assert result[1] == 19436
-    assert result[2] == 9857
+    assert result[0] == 8879
+    assert result[1] == 15640
+    assert result[2] == 8855
 
 
 def test_bloom_intersection(pipeline, clean_db):
@@ -99,7 +102,7 @@ def test_bloom_intersection(pipeline, clean_db):
 
   result = result[0]
 
-  assert result[0] == 5101
+  assert result[0] == 5530
 
 def test_bloom_contains(pipeline, clean_db):
   """
@@ -132,3 +135,16 @@ def test_bloom_contains(pipeline, clean_db):
   assert result[1] == True
   assert result[2] == False
   assert result[3] == False
+
+def test_bloom_type(pipeline, clean_db):
+  pipeline.create_table('test_bloom_type', x='int', y='bloom')
+  pipeline.execute('INSERT INTO test_bloom_type (x, y) VALUES '
+                   '(1, bloom_empty()), (2, bloom_empty())')
+
+  for i in xrange(1000):
+    pipeline.execute('UPDATE test_bloom_type SET y = bloom_add(y, %d / x)' % i)
+
+  result = list(pipeline.execute('SELECT bloom_cardinality(y) '
+                                 'FROM test_bloom_type ORDER BY x'))
+  assert result[0][0] == 986
+  assert result[1][0] == 495

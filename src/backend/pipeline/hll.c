@@ -298,11 +298,8 @@
 	*(p) = (((val) - 1) << 2 | ((len) - 1)) | HLL_SPARSE_VAL_BIT; \
 } while(0)
 
-#define HLL_IS_SPARSE(hll) ((hll)->encoding == HLL_SPARSE_DIRTY || (hll)->encoding == HLL_SPARSE_CLEAN)
 #define HLL_IS_DENSE(hll) ((hll)->encoding == HLL_DENSE_DIRTY || (hll)->encoding == HLL_DENSE_CLEAN)
 #define HLL_IS_CLEAN(hll) ((hll)->encoding == HLL_DENSE_CLEAN || (hll)->encoding == HLL_SPARSE_CLEAN)
-
-#define HLL_SIZE(hll) (sizeof(HyperLogLog) + (hll)->mlen)
 
 #define MURMUR_SEED 0xbee5bf4112801383L
 
@@ -468,7 +465,7 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
    * When updating a sparse representation, we may need to enlarge
    * the buffer by 3 bytes in the worst case (XZERO split into XZERO-VAL-XZERO)
    */
-	hll = repalloc(hll, HLL_SIZE(hll) + 3);
+	hll = repalloc(hll, HLLSize(hll) + 3);
 
   /*
    * Step 1:
@@ -694,7 +691,7 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 	if (deltalen && next)
 	 memmove(next + deltalen, next, end - next);
 
-	hll = repalloc(hll, HLL_SIZE(hll) + deltalen);
+	hll = repalloc(hll, HLLSize(hll) + deltalen);
 
 	memcpy(pos, seq, seqlen);
 
@@ -927,12 +924,12 @@ HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result)
 }
 
 /*
- * HLLSize
+ * HLLCardinality
  *
  * Returns the cardinality of the given HLL
  */
 uint64
-HLLSize(HyperLogLog *hll)
+HLLCardinality(HyperLogLog *hll)
 {
   double m = 1 << hll->p;
   double E;
