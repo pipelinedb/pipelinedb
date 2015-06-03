@@ -135,3 +135,16 @@ def test_bloom_contains(pipeline, clean_db):
   assert result[1] == True
   assert result[2] == False
   assert result[3] == False
+
+def test_bloom_type(pipeline, clean_db):
+  pipeline.create_table('test_bloom_type', x='int', y='bloom')
+  pipeline.execute('INSERT INTO test_bloom_type (x, y) VALUES '
+                   '(1, bloom_empty()), (2, bloom_empty())')
+
+  for i in xrange(1000):
+    pipeline.execute('UPDATE test_bloom_type SET y = bloom_add(y, %d / x)' % i)
+
+  result = list(pipeline.execute('SELECT bloom_cardinality(y) '
+                                 'FROM test_bloom_type ORDER BY x'))
+  assert result[0][0] == 986
+  assert result[1][0] == 495

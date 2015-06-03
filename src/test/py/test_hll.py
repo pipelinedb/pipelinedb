@@ -80,6 +80,6 @@ def test_hll_type(pipeline, clean_db):
     pipeline.execute('UPDATE test_hll_type SET y = hll_add(y, %d / x)' % i)
 
   result = list(pipeline.execute('SELECT hll_cardinality(y) '
-                                 'FROM test_hll_type'))
-  assert result[0][0] == 497
-  assert result[1][0] == 995
+                                 'FROM test_hll_type ORDER BY x'))
+  assert result[0][0] == 995
+  assert result[1][0] == 497

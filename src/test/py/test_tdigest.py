@@ -44,3 +44,18 @@ def test_tdigest_agg(pipeline, clean_db):
       'SELECT tdigest_cdf(combine(t), 600) FROM test_tdigest_agg').fetchall())
     assert len(result) == 1
     assert round(result[0]['tdigest_cdf'], 2) == 0.35
+
+def test_tdigest_type(pipeline, clean_db):
+  pipeline.create_table('test_tdigest_type', x='int', y='tdigest')
+  pipeline.execute('INSERT INTO test_tdigest_type (x, y) VALUES '
+                   '(1, tdigest_empty()), (2, tdigest_empty())')
+
+  for i in xrange(1000):
+    pipeline.execute('UPDATE test_tdigest_type '
+                     'SET y = tdigest_add(y, {} %% (x * 500))'.format(i))
+
+  result = list(pipeline.execute('SELECT tdigest_cdf(y, 400), '
+                                 'tdigest_quantile(y, 0.9)'
+                                 'FROM test_tdigest_type ORDER BY x'))
+  assert map(lambda x: round(x, 1), result[0]) == [0.8, 450.0]
+  assert map(lambda x: round(x, 1), result[1]) == [0.4, 900.5]

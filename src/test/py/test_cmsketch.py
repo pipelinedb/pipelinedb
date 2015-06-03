@@ -32,3 +32,18 @@ def test_cmsketch_agg(pipeline, clean_db):
       'FROM test_cmsketch_agg').fetchall())
     assert len(result) == 1
     assert tuple(result[0]) == (70, 20, 0)
+
+def test_cmsketch_type(pipeline, clean_db):
+  pipeline.create_table('test_cmsketch_type', x='int', y='cmsketch')
+  pipeline.execute('INSERT INTO test_cmsketch_type (x, y) VALUES '
+                   '(1, cmsketch_empty()), (2, cmsketch_empty())')
+
+  for i in xrange(1000):
+    pipeline.execute('UPDATE test_cmsketch_type '
+                     'SET y = cmsketch_add(y, {} %% x)'.format(i))
+
+  result = list(pipeline.execute('SELECT cmsketch_count(y, 0), '
+                                 'cmsketch_count(y, 1) '
+                                 'FROM test_cmsketch_type ORDER BY x'))
+  assert result[0] == (1000, 0)
+  assert result[1] == (500, 500)
