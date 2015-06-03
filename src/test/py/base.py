@@ -186,7 +186,6 @@ class PipelineDB(object):
             values.append(str(r))
         values = ', '.join(values)
         values = values.replace('None', 'null')
-        print 'INSERT INTO %s (%s) VALUES %s' % (target, header, values)
         return self.execute('INSERT INTO %s (%s) VALUES %s' % (target, header, values))
 
     def begin(self):
