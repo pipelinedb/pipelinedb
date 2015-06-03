@@ -34,9 +34,20 @@ hll_out(PG_FUNCTION_ARGS)
 	HyperLogLog *hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "{ p = %d, cardinality = %ld, size = %dkB }", hll->p, HLLSize(hll), hll->mlen / 1024);
+	appendStringInfo(&buf, "{ p = %d, cardinality = %ld, size = %dkB }", hll->p, HLLCardinality(hll), hll->mlen / 1024);
 
 	PG_RETURN_CSTRING(buf.data);
+}
+
+static HyperLogLog *
+hll_create(int p)
+{
+	if (p > 14 || p < 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("p must be in [1, 14]")));
+
+	return HLLCreateWithP(p);
 }
 
 static HyperLogLog *
@@ -48,24 +59,17 @@ hll_startup(FunctionCallInfo fcinfo, int p)
 	fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
 
 	if (p > 0)
-	{
-		if (p > 14)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("p must be in [1, 14]")));
-
-		hll = HLLCreateWithP(p);
-	}
+		hll = hll_create(p);
 	else
 		hll = HLLCreate();
 
-	SET_VARSIZE(hll, sizeof(HyperLogLog) + hll->mlen);
+	SET_VARSIZE(hll, HLLSize(hll));
 
 	return hll;
 }
 
 static HyperLogLog *
-hll_add(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
+hll_add_datum(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
 {
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 	Size size;
@@ -81,7 +85,7 @@ hll_add(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
 	else
 		hll = HLLAdd(hll, DatumGetPointer(elem), size, &result);
 
-	SET_VARSIZE(hll, sizeof(HyperLogLog) + hll->mlen);
+	SET_VARSIZE(hll, HLLSize(hll));
 
 	return hll;
 }
@@ -108,7 +112,7 @@ hll_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
-	state = hll_add(fcinfo, state, incoming);
+	state = hll_add_datum(fcinfo, state, incoming);
 
 	MemoryContextSwitchTo(old);
 
@@ -139,7 +143,7 @@ hll_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
-	state = hll_add(fcinfo, state, incoming);
+	state = hll_add_datum(fcinfo, state, incoming);
 
 	MemoryContextSwitchTo(old);
 
@@ -173,7 +177,7 @@ hll_union_agg_trans(PG_FUNCTION_ARGS)
 
 	MemoryContextSwitchTo(old);
 
-	SET_VARSIZE(state, sizeof(HyperLogLog) + state->mlen);
+	SET_VARSIZE(state, HLLSize(state));
 
 	PG_RETURN_POINTER(state);
 }
@@ -191,5 +195,42 @@ hll_cardinality(PG_FUNCTION_ARGS)
 
 	hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
-	PG_RETURN_INT64(HLLSize(hll));
+	PG_RETURN_INT64(HLLCardinality(hll));
+}
+
+Datum
+hll_empty(PG_FUNCTION_ARGS)
+{
+	HyperLogLog *hll = HLLCreate();
+	SET_VARSIZE(hll, HLLSize(hll));
+	PG_RETURN_POINTER(hll);
+}
+
+
+Datum
+hll_emptyp(PG_FUNCTION_ARGS)
+{
+	int p = PG_GETARG_INT32(0);
+	HyperLogLog *hll = hll_create(p);
+	SET_VARSIZE(hll, HLLSize(hll));
+	PG_RETURN_POINTER(hll);
+}
+
+
+Datum
+hll_add(PG_FUNCTION_ARGS)
+{
+	HyperLogLog *hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
+
+	/* Sparse representation can be repalloc'd so create a copy */
+	if (HLL_IS_SPARSE(hll))
+	{
+		HyperLogLog *cpy = palloc(HLLSize(hll));
+		memcpy(cpy, hll, HLLSize(hll));
+		hll = cpy;
+	}
+
+	fcinfo->flinfo->fn_extra = lookup_type_cache(get_fn_expr_argtype(fcinfo->flinfo, 1), 0);
+	hll = hll_add_datum(fcinfo, hll, PG_GETARG_DATUM(1));
+	PG_RETURN_POINTER(hll);
 }

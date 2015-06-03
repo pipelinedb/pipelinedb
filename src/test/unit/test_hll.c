@@ -29,7 +29,7 @@ assert_size_for_elements(uint64 expected, long start, long end)
 	uint64 size;
 
 	hll = add_elements(hll, start, end);
-	size = HLLSize(hll);
+	size = HLLCardinality(hll);
 	ck_assert_int_eq(expected, size);
 }
 
@@ -108,7 +108,7 @@ START_TEST(test_sparse)
 
 	ck_assert(hll->encoding == HLL_SPARSE_DIRTY);
 
-	size = HLLSize(hll);
+	size = HLLCardinality(hll);
 	ck_assert(hll->encoding == HLL_SPARSE_CLEAN);
 	ck_assert_int_eq(size, 8017);
 
@@ -131,7 +131,7 @@ START_TEST(test_dense)
 	hll = add_elements(hll, 0, 10000000);
 	ck_assert(hll->encoding == HLL_DENSE_DIRTY);
 
-	size = HLLSize(hll);
+	size = HLLCardinality(hll);
 	ck_assert(hll->encoding == HLL_DENSE_CLEAN);
 	ck_assert_int_eq(size, 10096564);
 
@@ -172,7 +172,7 @@ START_TEST(test_sparse_to_dense)
 
 	ck_assert(hll->encoding == HLL_DENSE_DIRTY);
 
-	size = HLLSize(hll);
+	size = HLLCardinality(hll);
 	ck_assert_int_eq(size, 9055);
 }
 END_TEST
@@ -189,14 +189,14 @@ START_TEST(test_card_caching)
 
 	ck_assert_int_eq(hll->encoding, HLL_SPARSE_DIRTY);
 
-	size = HLLSize(hll);
+	size = HLLCardinality(hll);
 	ck_assert_uint_eq(size, 999);
 	ck_assert_int_eq(size, hll->card);
 
 	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
 
 	/* nothing was added, so cached cardinality should remain clean */
-	size = HLLSize(hll);
+	size = HLLCardinality(hll);
 	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
 
 	/* add the same values again, cardinality shouldn't change so it should remain clean */
@@ -214,7 +214,7 @@ START_TEST(test_card_caching)
 
 	ck_assert_int_eq(hll->encoding, HLL_DENSE_DIRTY);
 
-	size = HLLSize(hll);
+	size = HLLCardinality(hll);
 	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
 	ck_assert_int_eq(size, 98511);
 	ck_assert_int_eq(size, hll->card);
@@ -233,22 +233,22 @@ START_TEST(test_union)
 	hll1 = add_elements(hll1, 0, 1000);
 	hll2 = add_elements(hll2, 1000, 2000);
 
-	size = HLLSize(hll1);
+	size = HLLCardinality(hll1);
 	ck_assert_int_eq(size, 999);
 
-	size = HLLSize(hll2);
+	size = HLLCardinality(hll2);
 	ck_assert_int_eq(size, 1002);
 
 	hll1 = HLLUnion(hll1, hll2);
 
 	/* these HLLs are disjoint, so the union should include both */
-	size = HLLSize(hll1);
+	size = HLLCardinality(hll1);
 	ck_assert_int_eq(size, 2003);
 
 	hll1 = add_elements(hll1, 500, 1500);
 
 	hll1 = HLLUnion(hll1, hll2);
-	size = HLLSize(hll1);
+	size = HLLCardinality(hll1);
 
 	/* no new elements, union cardinality shouldn't change */
 	ck_assert_int_eq(size, 2003);
@@ -256,7 +256,7 @@ START_TEST(test_union)
 	hll1 = add_elements(hll1, 1400, 2500);
 	hll1 = HLLUnion(hll1, hll2);
 
-	size = HLLSize(hll1);
+	size = HLLCardinality(hll1);
 	ck_assert_int_eq(size, 2500);
 
 	/* now add some new elements to the second HLL */
@@ -264,7 +264,7 @@ START_TEST(test_union)
 	ck_assert(hll2->encoding == HLL_DENSE_DIRTY);
 
 	hll1 = HLLUnion(hll1, hll2);
-	size = HLLSize(hll1);
+	size = HLLCardinality(hll1);
 
 	ck_assert_int_eq(size, 98067);
 }
@@ -283,17 +283,17 @@ START_TEST(test_union_sparse_and_dense)
 	dense = add_elements(dense, 0, 100000);
 	ck_assert(dense->encoding = HLL_DENSE_DIRTY);
 
-	size = HLLSize(dense);
+	size = HLLCardinality(dense);
 	ck_assert_int_eq(size, 98511);
 
 	sparse = add_elements(sparse, 100000, 101000);
 	ck_assert(sparse->encoding = HLL_SPARSE_DIRTY);
 
-	size = HLLSize(sparse);
+	size = HLLCardinality(sparse);
 	ck_assert_int_eq(size, 998);
 
 	result = HLLUnion(dense, sparse);
-	size = HLLSize(result);
+	size = HLLCardinality(result);
 
 	ck_assert_int_eq(size, 99340);
 }
@@ -308,25 +308,25 @@ START_TEST(test_create_from_raw)
 	HyperLogLog *copy;
 
 	hll = add_elements(hll, 1, 10002);
-	ck_assert_int_eq(9956, HLLSize(hll));
+	ck_assert_int_eq(9956, HLLCardinality(hll));
 
 	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
 
 	copy = HLLCreateFromRaw(hll->M, hll->mlen, hll->p, hll->encoding);
 
 	ck_assert_int_eq(copy->encoding, HLL_DENSE_DIRTY);
-	ck_assert_int_eq(9956, HLLSize(copy));
+	ck_assert_int_eq(9956, HLLCardinality(copy));
 
 	hll = HLLCreate();
 	hll = add_elements(hll, 0, 10);
-	ck_assert_int_eq(10, HLLSize(hll));
+	ck_assert_int_eq(10, HLLCardinality(hll));
 
 	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
 
 	copy = HLLCreateFromRaw(hll->M, hll->mlen, hll->p, hll->encoding);
 
 	ck_assert_int_eq(copy->encoding, HLL_SPARSE_DIRTY);
-	ck_assert_int_eq(10, HLLSize(copy));
+	ck_assert_int_eq(10, HLLCardinality(copy));
 }
 END_TEST
 
