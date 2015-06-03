@@ -31,4 +31,4 @@ We've shamelessly copied etcd's [commit message format](https://github.com/coreo
 <issue number, if applicable>
 ```
 
-Wrap all lines in the commit message around 80 characters.
+Wrap all lines in the commit message at 80 characters.
