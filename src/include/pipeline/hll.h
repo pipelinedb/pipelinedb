@@ -23,6 +23,7 @@
 #define HLL_SPARSE_CLEAN 'S'
 #define HLL_DENSE_DIRTY 'd'
 #define HLL_DENSE_CLEAN 'D'
+#define HLLSize(hll) (sizeof(HyperLogLog) + (hll)->mlen)
 
 typedef struct HyperLogLog
 {
@@ -47,7 +48,7 @@ HyperLogLog *HLLCreate(void);
 HyperLogLog *HLLCreateFromRaw(uint8 *M, int mlen, uint8 p, char encoding);
 HyperLogLog *HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result);
 HyperLogLog *HLLCopy(HyperLogLog *src);
-uint64 HLLSize(HyperLogLog *hll);
+uint64 HLLCardinality(HyperLogLog *hll);
 HyperLogLog *HLLUnion(HyperLogLog *result, HyperLogLog *incoming);
 
 #endif

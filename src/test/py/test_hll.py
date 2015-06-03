@@ -25,13 +25,16 @@ def test_user_low_and_high_card(pipeline, clean_db):
 
     pipeline.insert('test_hll_stream', desc, rows)
 
-    result = pipeline.execute('SELECT hll_cardinality(combine(hll_agg)) FROM test_hll_agg WHERE k in (0, 1)').first()
+    result = pipeline.execute('SELECT hll_cardinality(combine(hll_agg)) '
+                              'FROM test_hll_agg WHERE k in (0, 1)').first()
     assert result[0] == 4
 
-    result = pipeline.execute('SELECT hll_cardinality(combine(hll_agg)) FROM test_hll_agg WHERE k in (2, 3)').first()
+    result = pipeline.execute('SELECT hll_cardinality(combine(hll_agg)) '
+                              'FROM test_hll_agg WHERE k in (2, 3)').first()
     assert result[0] == 9976
 
-    result = pipeline.execute('SELECT hll_cardinality(combine(hll_agg)) FROM test_hll_agg').first()
+    result = pipeline.execute('SELECT hll_cardinality(combine(hll_agg)) '
+                              'FROM test_hll_agg').first()
     assert result[0] == 9983
 
 
@@ -67,3 +70,15 @@ def test_hll_agg_hashing(pipeline, clean_db):
     assert result[0] == 9976
     assert result[1] == 19981
     assert result[2] == 10062
+
+def test_hll_type(pipeline, clean_db):
+  pipeline.create_table('test_hll_type', x='int', y='hll')
+  pipeline.execute('INSERT INTO test_hll_type (x, y) VALUES '
+                   '(1, hll_empty()), (2, hll_empty())')
+  import time; time.sleep(10);
+  for i in xrange(1000):
+    pipeline.execute('UPDATE test_hll_type SET y = hll_add(y, %d / x)' % i)
+
+  result = pipeline.execute('SELECT hll_cardinality(y) FROM test_hll_type')
+  for r in result:
+    print r

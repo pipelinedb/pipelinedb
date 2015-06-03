@@ -1619,5 +1619,5 @@ hll_count_distinct_final(PG_FUNCTION_ARGS)
 
 	hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
-	PG_RETURN_INT64(HLLSize(hll));
+	PG_RETURN_INT64(HLLCardinality(hll));
 }

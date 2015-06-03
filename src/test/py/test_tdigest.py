@@ -1,7 +1,7 @@
 from base import pipeline, clean_db
 
 
-def test_tdigest_type(pipeline, clean_db):
+def test_tdigest_agg(pipeline, clean_db):
     """
     Test tdigest_agg, tdigest_merge_agg, tdigest_cdf, tdigest_quantile
     """
