@@ -1768,7 +1768,7 @@ hll_hypothetical_dense_rank_final(PG_FUNCTION_ARGS)
 
 	hll = (HyperLogLog *) PG_GETARG_POINTER(0);
 
-	PG_RETURN_INT64(HLLSize(hll) + 1);
+	PG_RETURN_INT64(HLLCardinality(hll) + 1);
 }
 
 typedef struct CQOSAAggState

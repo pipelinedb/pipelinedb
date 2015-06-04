@@ -40,6 +40,21 @@ bloom_out(PG_FUNCTION_ARGS)
 }
 
 static BloomFilter *
+bloom_create(float8 p, uint64_t n)
+{
+	if (p <= 0 || p >= 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("p must be in [0, 1]")));
+	if (n < 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("n must be non-zero")));
+
+	return BloomFilterCreateWithPAndN(p, n);
+}
+
+static BloomFilter *
 bloom_startup(FunctionCallInfo fcinfo, float8 p, uint64_t n)
 {
 	BloomFilter *bloom;
@@ -48,7 +63,9 @@ bloom_startup(FunctionCallInfo fcinfo, float8 p, uint64_t n)
 	fcinfo->flinfo->fn_extra = lookup_type_cache(type, 0);
 
 	if (p && n)
-		bloom = BloomFilterCreateWithPAndN(p, n);
+	{
+		bloom = bloom_create(p, n);
+	}
 	else
 		bloom = BloomFilterCreate();
 
@@ -58,7 +75,7 @@ bloom_startup(FunctionCallInfo fcinfo, float8 p, uint64_t n)
 }
 
 static BloomFilter *
-bloom_add(FunctionCallInfo fcinfo, BloomFilter *bloom, Datum elem)
+bloom_add_datum(FunctionCallInfo fcinfo, BloomFilter *bloom, Datum elem)
 {
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 	Size size;
@@ -98,7 +115,7 @@ bloom_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 
-	state = bloom_add(fcinfo, state, incoming);
+	state = bloom_add_datum(fcinfo, state, incoming);
 
 	MemoryContextSwitchTo(old);
 
@@ -130,7 +147,7 @@ bloom_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 
-	state = bloom_add(fcinfo, state, incoming);
+	state = bloom_add_datum(fcinfo, state, incoming);
 
 	MemoryContextSwitchTo(old);
 
@@ -248,4 +265,31 @@ bloom_contains(PG_FUNCTION_ARGS)
 		contains = BloomFilterContains(bloom, DatumGetPointer(elem), size);
 
 	PG_RETURN_BOOL(contains);
+}
+
+Datum
+bloom_empty(PG_FUNCTION_ARGS)
+{
+	BloomFilter *bloom = BloomFilterCreate();
+	SET_VARSIZE(bloom, BloomFilterSize(bloom));
+	PG_RETURN_POINTER(bloom);
+}
+
+Datum
+bloom_emptyp(PG_FUNCTION_ARGS)
+{
+	float8 p = PG_GETARG_FLOAT8(0);
+	uint64_t n = PG_GETARG_INT64(1);
+	BloomFilter *bloom = bloom_create(p, n);
+	SET_VARSIZE(bloom, BloomFilterSize(bloom));
+	PG_RETURN_POINTER(bloom);
+}
+
+Datum
+bloom_add(PG_FUNCTION_ARGS)
+{
+	BloomFilter *bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
+	fcinfo->flinfo->fn_extra = lookup_type_cache(get_fn_expr_argtype(fcinfo->flinfo, 1), 0);
+	bloom = bloom_add_datum(fcinfo, bloom, PG_GETARG_DATUM(1));
+	PG_RETURN_POINTER(bloom);
 }
