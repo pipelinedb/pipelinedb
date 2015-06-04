@@ -179,3 +179,4 @@ DROP TABLE test_stj_t3;
 DROP TABLE test_stj_location;
 DROP TABLE test_stj_blocks;
 DROP TABLE test_stj_empty;
+

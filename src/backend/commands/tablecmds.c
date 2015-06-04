@@ -41,6 +41,7 @@
 #include "catalog/pg_trigger.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_type_fn.h"
+#include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "catalog/storage.h"
 #include "catalog/toasting.h"
@@ -251,6 +252,12 @@ static const struct dropmsgstrings dropmsgstringarray[] = {
 		gettext_noop("continuous view  \"%s\" does not exist, skipping"),
 		gettext_noop("\"%s\" is not a continuous view "),
 	gettext_noop("Use DROP CONTINUOUS VIEW to remove a continuous view.")},
+	{RELKIND_STREAM,
+		ERRCODE_UNDEFINED_OBJECT,
+		gettext_noop("stream \"%s\" does not exist"),
+		gettext_noop("stream\"%s\" does not exist, skipping"),
+		gettext_noop("\"%s\" is not a stream"),
+	gettext_noop("Use DROP STREAM to remove a stream.")},
 	{'\0', 0, NULL, NULL, NULL, NULL}
 };
 
@@ -461,13 +468,16 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId)
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	Oid			ofTypeId;
 
+	if (stmt->stream)
+		relkind = RELKIND_STREAM;
+
 	/*
 	 * Truncate relname to appropriate length (probably a waste of time, as
 	 * parser should have done this already).
 	 */
 	StrNCpy(relname, stmt->relation->relname, NAMEDATALEN);
 
-	if (RangeVarIsForStream(stmt->relation))
+	if (relkind != RELKIND_STREAM && RangeVarIsForStream(stmt->relation))
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_STREAM),
 				 errmsg("\"%s\" is being used as a stream", relname),
@@ -888,11 +898,14 @@ RemoveRelations(DropStmt *drop)
 			/*
 			 * We use a regular relkind of 'v' for continuous views' virtual relations
 			 * because that's what they are, which keeps things simple. However, we do
-			 * want a specific error message if this is a continuous view.
+			 * want a specific error message if this is a continuous view. This is also
+			 * the case for streams.
 			 */
 			char save = relkind;
 			if (drop->removeType == OBJECT_CONTINUOUS_VIEW)
 				relkind = RELKIND_CONTINUOUS_VIEW;
+			else if (drop->removeType == OBJECT_STREAM)
+				relkind = RELKIND_STREAM;
 			DropErrorMsgNonExistent(rel, relkind, drop->missing_ok);
 			relkind = save;
 			continue;
@@ -2148,7 +2161,8 @@ renameatt_check(Oid myrelid, Form_pg_class classform, bool recursing)
 		relkind != RELKIND_MATVIEW &&
 		relkind != RELKIND_COMPOSITE_TYPE &&
 		relkind != RELKIND_INDEX &&
-		relkind != RELKIND_FOREIGN_TABLE)
+		relkind != RELKIND_FOREIGN_TABLE &&
+		relkind != RELKIND_STREAM)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, view, materialized view, composite type, index, or foreign table",
@@ -4131,6 +4145,7 @@ ATSimplePermissions(Relation rel, int allowed_targets)
 
 	switch (rel->rd_rel->relkind)
 	{
+		case RELKIND_STREAM:
 		case RELKIND_RELATION:
 			actual_target = ATT_TABLE;
 			break;
