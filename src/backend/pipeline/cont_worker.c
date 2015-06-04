@@ -112,6 +112,12 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 
 	cq_stat_init(&state->stats, state->view->id, 0);
 
+	/*
+	 * The main loop initializes and ends plans across plan executions, so it expects
+	 * the plan to be uninitialized
+	 */
+	ExecEndNode(state->query_desc->planstate);
+
 	MemoryContextSwitchTo(old_cxt);
 }
 
@@ -302,6 +308,7 @@ ContinuousQueryWorkerMain(void)
 		while ((id = bms_first_member(tmp)) >= 0)
 		{
 			QueryDesc *query_desc = NULL;
+			Plan *plan = NULL;
 			EState *estate = NULL;
 
 			PG_TRY();
@@ -331,12 +338,21 @@ ContinuousQueryWorkerMain(void)
 
 				estate->es_processed = estate->es_filtered = 0;
 
+				/* initialize the plan for execution within this xact */
+				plan = state->query_desc->plannedstmt->planTree;
+				state->query_desc->planstate = ExecInitNode(plan, state->query_desc->estate, 0);
+				set_reader(state->query_desc->planstate, reader);
+
 				/*
 				 * We pass a timeout of 0 because the underlying TupleBufferBatchReader takes care of
 				 * waiting for enough to read tuples from the TupleBuffer.
 				 */
 				ExecutePlan(estate, state->query_desc->planstate, state->query_desc->operation,
 						true, 0, 0, ForwardScanDirection, state->dest);
+
+				/* free up any resources used by this plan before committing */
+				ExecEndNode(state->query_desc->planstate);
+				state->query_desc->planstate = NULL;
 
 				num_processed += estate->es_processed + estate->es_filtered;
 
@@ -429,6 +445,9 @@ next:
 
 		if (query_desc->totaltime)
 			InstrStopNode(query_desc->totaltime, estate->es_processed);
+
+		if (query_desc->planstate == NULL)
+			query_desc->planstate = ExecInitNode(query_desc->plannedstmt->planTree, state->query_desc->estate, 0);
 
 		/* Clean up. */
 		ExecutorFinish(query_desc);
