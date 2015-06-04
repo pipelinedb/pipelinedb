@@ -20,6 +20,7 @@
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
 #include "miscadmin.h"
+#include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
 #include "parser/parse_coerce.h"
@@ -32,11 +33,12 @@
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
 #include "utils/lsyscache.h"
+#include "utils/guc.h"
 #include "utils/memutils.h"
+#include "utils/rel.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 #include "utils/typcache.h"
-#include "utils/guc.h"
 
 #define SLEEP_MS 2
 
@@ -123,23 +125,6 @@ DropPreparedStreamInsert(const char *name)
 }
 
 /*
- * InsertTargetIsStream
- *
- * Is the given INSERT statements target relation a stream?
- * We assume it is if the relation doesn't exist in the catalog as a normal relation.
- */
-bool
-InsertTargetIsStream(InsertStmt *ins)
-{
-	Oid reloid = RangeVarGetRelid(ins->relation, NoLock, true);
-
-	if (reloid != InvalidOid)
-		return false;
-
-	return RangeVarIsForStream(ins->relation);
-}
-
-/*
  * InsertIntoStreamPrepared
  *
  * Send Datum-encoded events to the given stream
@@ -155,6 +140,18 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
 	Size size = 0;
+	char *nspname = get_namespace_name(pstmt->namespace);
+	RangeVar *rv = makeRangeVar(nspname, pstmt->stream, -1);
+
+	/*
+	 * If it's a typed stream we can get here because technically the relation does exist.
+	 * However, we don't want to silently accept data that isn't being read by anything.
+	 */
+	if (RangeVarIsForTypedStream(rv) && targets == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("no continuous views are currently reading from stream %s", pstmt->stream),
+				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", pstmt->stream)));
 
 	if (synchronous_stream_insert)
 	{
@@ -231,6 +228,16 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	int num_batches = 0;
 	Size size = 0;
 
+	/*
+	 * If it's a typed stream we can get here because technically the relation does exist.
+	 * However, we don't want to silently accept data that isn't being read by anything.
+	 */
+	if (RangeVarIsForTypedStream(ins->relation) && targets == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("no continuous views are currently reading from stream %s", ins->relation->relname),
+				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", ins->relation->relname)));
+
 	if (synchronous_stream_insert)
 	{
 		batch = InsertBatchCreate(targets, list_length(values));
@@ -258,7 +265,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		foreach(rtc, ins->cols)
 		{
 			ResTarget *r = (ResTarget *) lfirst(rtc);
-			if (strcmp(r->name, res->name) == 0)
+			if (pg_strcasecmp(r->name, res->name) == 0)
 				count++;
 		}
 
@@ -269,6 +276,8 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	}
 
 	desc = GetStreamTupleDesc(namespace, ins->relation->relname, colnames);
+	if (desc == NULL)
+		elog(ERROR, "could not determine descriptor for stream %s", ins->relation->relname);
 
 	/* append each VALUES tuple to the stream buffer */
 	foreach (lc, values)
@@ -375,11 +384,22 @@ CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, i
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
 	Size size = 0;
+	RangeVar *rv;
 
 	if (namespace == InvalidOid)
 		namespace = GetDefaultStreamNamespace(stream);
 
+	rv = makeRangeVar(get_namespace_name(namespace), stream, -1);
 	targets = GetLocalStreamReaders(namespace, stream);
+	/*
+	 * If it's a typed stream we can get here because technically the relation does exist.
+	 * However, we don't want to silently accept data that isn't being read by anything.
+	 */
+	if (RangeVarIsForTypedStream(rv) && targets == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("no continuous views are currently reading from stream %s", stream),
+				 errhint("Use CREATE CONTINUOUS VIEW to create a continuous view that includes %s in its FROM clause.", stream)));
 
 	if (synchronous_stream_insert)
 	{

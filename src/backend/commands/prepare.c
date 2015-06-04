@@ -19,6 +19,7 @@
 
 #include "access/xact.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/createas.h"
 #include "commands/prepare.h"
 #include "miscadmin.h"
@@ -150,7 +151,7 @@ PrepareQuery(PrepareStmt *stmt, const char *queryString)
 			break;
 	}
 
-	if (IsA(stmt->query, InsertStmt) && InsertTargetIsStream((InsertStmt *) stmt->query))
+	if (IsA(stmt->query, InsertStmt) && RangeVarIsForStream(((InsertStmt *) stmt->query)->relation))
 	{
 		InsertStmt *ins = (InsertStmt *) stmt->query;
 		StorePreparedStreamInsert(stmt->name, ins->relation, ins->cols);

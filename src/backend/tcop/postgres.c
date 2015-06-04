@@ -975,7 +975,7 @@ exec_simple_query(const char *query_string)
 		if (IsA(parsetree, InsertStmt))
 		{
 			InsertStmt *ins = (InsertStmt *) parsetree;
-			if (InsertTargetIsStream(ins))
+			if (RangeVarIsForStream(ins->relation))
 			{
 				exec_stream_inserts(ins, NULL, NIL);
 				continue;
@@ -1356,7 +1356,7 @@ exec_parse_message(const char *query_string,	/* string to execute */
 	if (parsetree_list != NIL)
 	{
 		raw_parse_tree = (Node *) linitial(parsetree_list);
-		stream_insert = IsA(raw_parse_tree, InsertStmt) && InsertTargetIsStream((InsertStmt *) raw_parse_tree);
+		stream_insert = IsA(raw_parse_tree, InsertStmt) && RangeVarIsForStream(((InsertStmt *) raw_parse_tree)->relation);
 
 		if (stream_insert)
 		{

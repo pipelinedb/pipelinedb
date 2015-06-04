@@ -928,6 +928,9 @@ ProcessUtilitySlow(Node *parsetree,
 													RELKIND_RELATION,
 													InvalidOid);
 
+							if (((CreateStmt *) stmt)->stream)
+								continue;
+
 							/*
 							 * Let NewRelationCreateToastTable decide if this
 							 * one needs a secondary relation too.
@@ -1705,6 +1708,9 @@ AlterObjectTypeCommandTag(ObjectType objtype)
 		case OBJECT_MATVIEW:
 			tag = "ALTER MATERIALIZED VIEW";
 			break;
+		case OBJECT_STREAM:
+			tag = "ALTER STREAM";
+			break;
 		default:
 			tag = "???";
 			break;
@@ -1831,7 +1837,7 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_CreateStmt:
-			tag = "CREATE TABLE";
+			tag = ((CreateStmt *) parsetree)->stream ? "CREATE STREAM" : "CREATE TABLE";
 			break;
 
 		case T_CreateTableSpaceStmt:
@@ -1980,6 +1986,9 @@ CreateCommandTag(Node *parsetree)
 				case OBJECT_OPFAMILY:
 					tag = "DROP OPERATOR FAMILY";
 					break;
+				case OBJECT_STREAM:
+					tag = "DROP STREAM";
+					break;
 				default:
 					tag = "???";
 			}
@@ -2013,6 +2022,8 @@ CreateCommandTag(Node *parsetree)
 
 		case T_RenameStmt:
 			tag = AlterObjectTypeCommandTag(((RenameStmt *) parsetree)->renameType);
+			if (((RenameStmt *) parsetree)->relationType == OBJECT_STREAM)
+				tag = "ALTER STREAM";
 			break;
 
 		case T_AlterObjectSchemaStmt:

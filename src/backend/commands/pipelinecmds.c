@@ -309,6 +309,79 @@ get_select_query_sql(RangeVar *view, const char *sql)
 	return trimmed;
 }
 
+static void
+record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
+{
+	ObjectAddress parent;
+	ObjectAddress child;
+	ListCell *lc;
+	ContAnalyzeContext cxt;
+
+	MemSet(&cxt, 0, sizeof(ContAnalyzeContext));
+
+	/*
+	 * Record a dependency between the matrel and the view, so when we drop the view
+	 * the matrel is automatically dropped as well. The user will enter the view name
+	 * when dropping, so the alternative is to rewrite the drop target to the matrel.
+	 * This seems simpler.
+	 */
+	child.classId = RelationRelationId;
+	child.objectId = matreloid;
+	child.objectSubId = 0;
+
+	parent.classId = RelationRelationId;
+	parent.objectId = viewoid;
+	parent.objectSubId = 0;
+
+	recordDependencyOn(&child, &parent, DEPENDENCY_INTERNAL);
+
+	/*
+	 * Record a dependency between the matrel and a pipeline_query entry so that when
+	 * the matrel is dropped the pipeline_query metadata cleanup hook is invoked.
+	 */
+	child.classId = PipelineQueryRelationId;
+	child.objectId = cvoid;
+	child.objectSubId = 0;
+
+	parent.classId = RelationRelationId;
+	parent.objectId = viewoid;
+	parent.objectSubId = 0;
+
+	recordDependencyOn(&child, &parent, DEPENDENCY_INTERNAL);
+
+	collect_rels_and_streams((Node *) from, &cxt);
+
+	/*
+	 * Record a dependency between any typed streams and a pipeline_query object,
+	 * so that it is not possible to drop a stream that is being read by a CV.
+	 */
+	foreach(lc, cxt.streams)
+	{
+		RangeVar *rv;
+
+		if (!IsA(lfirst(lc), RangeVar))
+			continue;
+
+		rv = (RangeVar *) lfirst(lc);
+		if (RangeVarIsForTypedStream(rv))
+		{
+			Relation rel = heap_openrv(rv, AccessShareLock);
+
+			parent.classId = PipelineQueryRelationId;
+			parent.objectId = cvoid;
+			parent.objectSubId = 0;
+
+			child.classId = RelationRelationId;
+			child.objectId = rel->rd_id;
+			child.objectSubId = 0;
+
+			recordDependencyOn(&parent, &child, DEPENDENCY_NORMAL);
+
+			heap_close(rel, AccessShareLock);
+		}
+	}
+}
+
 /*
  * ExecCreateContViewStmt
  *
@@ -335,8 +408,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	SelectStmt *viewselect;
 	CQAnalyzeContext context;
 	bool saveAllowSystemTableMods;
-	ObjectAddress dependent;
-	ObjectAddress on_me;
 
 	view = stmt->into->rel;
 	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
@@ -466,38 +537,13 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	CommandCounterIncrement();
 	allowSystemTableMods = saveAllowSystemTableMods;
 
+	record_dependencies(cvoid, matreloid, viewoid, workerselect->fromClause);
+
 	/*
 	 * Record a dependency between the matrel and the view, so when we drop the view
 	 * the matrel is automatically dropped as well. The user will enter the view name
 	 * when dropping, so the alternative is to rewrite the drop target to the matrel.
 	 * This seems simpler.
-	 */
-	dependent.classId = RelationRelationId;
-	dependent.objectId = matreloid;
-	dependent.objectSubId = 0;
-
-	on_me.classId = RelationRelationId;
-	on_me.objectId = viewoid;
-	on_me.objectSubId = 0;
-
-	recordDependencyOn(&dependent, &on_me, DEPENDENCY_INTERNAL);
-
-	/*
-	 * Record a dependency between the matrel and a pipeline_query entry so that when
-	 * the matrel is dropped the pipeline_query metadata cleanup hook is invoked.
-	 */
-	dependent.classId = PipelineQueryRelationId;
-	dependent.objectId = cvoid;
-	dependent.objectSubId = 0;
-
-	on_me.classId = RelationRelationId;
-	on_me.objectId = viewoid;
-	on_me.objectSubId = 0;
-
-	recordDependencyOn(&dependent, &on_me, DEPENDENCY_INTERNAL);
-
-	/*
-	 * Index the materialization table smartly if we can
 	 */
 	allowSystemTableMods = saveAllowSystemTableMods;
 	create_indices_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);

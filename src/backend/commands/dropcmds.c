@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * dropcmds.c
@@ -26,6 +27,7 @@
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
 #include "utils/builtins.h"
+#include "utils/rel.h"
 #include "utils/syscache.h"
 
 
@@ -79,6 +81,14 @@ RemoveObjects(DropStmt *stmt)
 									 &relation,
 									 AccessExclusiveLock,
 									 stmt->missing_ok);
+
+		/*
+		 * PipelineDB TODO: support online dropping of columns
+		 */
+		if (relation && relation->rd_rel->relkind == RELKIND_STREAM)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 (errmsg("streams columns can not be dropped"))));
 
 		/*
 		 * Issue NOTICE if supplied object was not found.  Note this is only
