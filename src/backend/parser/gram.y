@@ -591,7 +591,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	SAVEPOINT SCHEMA SCROLL SEARCH SECOND_P SECURITY SELECT SEQUENCE SEQUENCES
 	SERIALIZABLE SERVER SESSION SESSION_USER SET SETOF SHARE
 	SHOW SIMILAR SIMPLE SMALLINT SNAPSHOT SOME STABLE STANDALONE_P START
-	STATEMENT STATISTICS STDIN STDOUT STORAGE STRICT_P STRIP_P SUBSTRING
+	STATEMENT STATISTICS STDIN STDOUT STORAGE STREAM STRICT_P STRIP_P SUBSTRING
 	SYMMETRIC SYSID SYSTEM_P
 
 	TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TEXT_P THEN TIME TIMESTAMP
@@ -1901,6 +1901,15 @@ AlterTableStmt:
 					n->nowait = $14;
 					$$ = (Node *)n;
 				}
+		| ALTER STREAM qualified_name alter_table_cmds
+		    {
+          AlterTableStmt *n = makeNode(AlterTableStmt);
+          n->relation = $3;
+          n->cmds = $4;
+          n->relkind = OBJECT_STREAM;
+          n->missing_ok = false;
+          $$ = (Node *)n;
+		    }
 		;
 
 alter_table_cmds:
@@ -2800,7 +2809,7 @@ DeactivateStmt: DEACTIVATE
 /*****************************************************************************
  *
  *		QUERY :
- *				CREATE TABLE relname
+ *				CREATE [ TABLE | STREAM ] relname
  *
  *****************************************************************************/
 
@@ -2867,6 +2876,19 @@ CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 					n->if_not_exists = true;
 					$$ = (Node *)n;
 				}
+    | CREATE STREAM qualified_name '(' OptTableElementList ')'
+  		  {
+          CreateStmt *n = makeNode(CreateStmt);
+          $3->relpersistence = RELPERSISTENCE_PERMANENT;
+          n->relation = $3;
+          n->tableElts = $5;
+          n->constraints = NIL;
+          n->options = NIL;
+          n->tablespacename = NULL;
+          n->if_not_exists = false;
+          n->stream = true;
+          $$ = (Node *)n;
+  		  }
 		;
 
 /*
@@ -5364,6 +5386,7 @@ DropStmt:	DROP drop_type IF_P EXISTS any_name_list opt_drop_behavior
 
 drop_type:	TABLE									{ $$ = OBJECT_TABLE; }
 			| CONTINUOUS VIEW						{ $$ = OBJECT_CONTINUOUS_VIEW; }
+			| STREAM                  { $$ = OBJECT_STREAM; }
 			| SEQUENCE								{ $$ = OBJECT_SEQUENCE; }
 			| VIEW									{ $$ = OBJECT_VIEW; }
 			| MATERIALIZED VIEW						{ $$ = OBJECT_MATVIEW; }
@@ -7580,6 +7603,27 @@ RenameStmt: ALTER AGGREGATE func_name aggr_args RENAME TO name
 					n->missing_ok = false;
 					$$ = (Node *)n;
 				}
+      | ALTER STREAM qualified_name RENAME TO name
+        {
+          RenameStmt *n = makeNode(RenameStmt);
+          n->renameType = OBJECT_STREAM;
+          n->relation = $3;
+          n->subname = NULL;
+          n->newname = $6;
+          n->missing_ok = false;
+          $$ = (Node *)n;
+        }
+      | ALTER STREAM qualified_name RENAME opt_column name TO name
+        {
+          RenameStmt *n = makeNode(RenameStmt);
+          n->renameType = OBJECT_COLUMN;
+          n->relationType = OBJECT_STREAM;
+          n->relation = $3;
+          n->subname = $6;
+          n->newname = $8;
+          n->missing_ok = false;
+          $$ = (Node *)n;
+        }
 		;
 
 opt_column: COLUMN									{ $$ = COLUMN; }
@@ -13102,6 +13146,7 @@ unreserved_keyword:
 			| STDIN
 			| STDOUT
 			| STORAGE
+      | STREAM
 			| STRICT_P
 			| STRIP_P
 			| SYSID

@@ -155,6 +155,13 @@ class PipelineDB(object):
         cols = ', '.join(['%s %s' % (k, v) for k, v in cols.iteritems()])
         self.execute('CREATE TABLE %s (%s)' % (name, cols))
 
+    def create_stream(self, name, **cols):
+        """
+        Create a stream
+        """
+        cols = ', '.join(['%s %s' % (k, v) for k, v in cols.iteritems()])
+        self.execute('CREATE STREAM %s (%s)' % (name, cols))
+
     def drop_table(self, name):
         """
         Drop a table

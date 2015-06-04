@@ -235,7 +235,7 @@ ContinuousQueryWorkerMain(void)
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 	ContQueryWorkerState **states = init_query_states_array(run_cxt);
-	ContQueryWorkerState *state;
+	ContQueryWorkerState *state = NULL;
 	Bitmapset *queries;
 	TimestampTz last_processed = GetCurrentTimestamp();
 	bool has_queries;
@@ -301,8 +301,8 @@ ContinuousQueryWorkerMain(void)
 		tmp = bms_copy(queries);
 		while ((id = bms_first_member(tmp)) >= 0)
 		{
-			QueryDesc *query_desc;
-			EState *estate;
+			QueryDesc *query_desc = NULL;
+			EState *estate = NULL;
 
 			PG_TRY();
 			{
@@ -351,10 +351,11 @@ ContinuousQueryWorkerMain(void)
 				EmitErrorReport();
 				FlushErrorState();
 
-				if (ActiveSnapshotSet())
+				if (estate && ActiveSnapshotSet())
 					unset_snapshot(estate, owner);
 
-				cleanup_query_state(states, state->view_id);
+				if (state)
+					cleanup_query_state(states, state->view_id);
 
 				IncrementCQErrors(1);
 

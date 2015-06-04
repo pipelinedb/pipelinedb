@@ -190,7 +190,13 @@ streams_to_meta(Relation pipeline_query)
 			Key key;
 
 			MemSet(&key, 0, sizeof(Key));
-			key.namespace = catrow->namespace;
+
+			/* if the stream doesn't have a namespace, assume it's in the same namespace as this CV */
+			if (rv->schemaname)
+				key.namespace = get_namespace_oid(rv->schemaname, false);
+			else
+				key.namespace = catrow->namespace;
+
 			strcpy(key.name, rv->relname);
 
 			entry = (StreamTargetsEntry *) hash_search(targets, &key, HASH_ENTER, &found);
@@ -205,9 +211,21 @@ streams_to_meta(Relation pipeline_query)
 
 				entry->colstotypes = hash_create(rv->relname, 8, &colsctl, HASH_ELEM);
 				entry->queries = NULL;
+				entry->desc = NULL;
 			}
 
-			add_coltypes(entry, context->types);
+			/* if it's a typed stream, we can just set the descriptor right away */
+			if (RangeVarIsForTypedStream(rv))
+			{
+				Relation rel = heap_openrv(rv, AccessShareLock);
+				entry->desc = CreateTupleDescCopyConstr(RelationGetDescr(rel));
+
+				heap_close(rel, AccessShareLock);
+			}
+			else
+			{
+				add_coltypes(entry, context->types);
+			}
 			entry->queries = bms_add_member(entry->queries, catrow->id);
 		}
 	}
@@ -219,7 +237,10 @@ streams_to_meta(Relation pipeline_query)
 	 */
 	hash_seq_init(&status, targets);
 	while ((entry = (StreamTargetsEntry *) hash_seq_search(&status)) != NULL)
-		infer_tupledesc(entry);
+	{
+		if (!entry->desc)
+			infer_tupledesc(entry);
+	}
 
 	return targets;
 }
@@ -550,7 +571,23 @@ GetStreamTupleDesc(Oid namespace, char *name, List *colnames)
 	int i;
 
 	if (!HeapTupleIsValid(tup))
+	{
+		RangeVar *rv = makeRangeVar(get_namespace_name(namespace), name, -1);
+		if (RangeVarIsForTypedStream(rv))
+		{
+			/*
+			 * Technically this can happen with a prepared insert against a typed stream,
+			 * which has a use for the descriptor even before the stream is being read by
+			 * anything. If the prepared insert is executed against a stream with no readers,
+			 * an error will still be thrown.
+			 */
+			Relation rel = heap_openrv(rv, NoLock);
+			alldesc = CreateTupleDescCopy(RelationGetDescr(rel));
+			heap_close(rel, NoLock);
+			return alldesc;
+		}
 		return NULL;
+	}
 
 	raw = SysCacheGetAttr(PIPELINESTREAMNAMESPACENAME, tup, Anum_pipeline_stream_desc, &isnull);
 
@@ -572,7 +609,7 @@ GetStreamTupleDesc(Oid namespace, char *name, List *colnames)
 	attno = 1;
 	foreach(lc, colnames)
 	{
-		Value *name = (Value *) lfirst(lc);
+		Value *colname = (Value *) lfirst(lc);
 		int i;
 		for (i=0; i<alldesc->natts; i++)
 		{
@@ -580,7 +617,7 @@ GetStreamTupleDesc(Oid namespace, char *name, List *colnames)
 			 * It's ok if no matching column was found in the all-streams TupleDesc,
 			 * it just means nothing is reading that column and we can ignore it
 			 */
-			if (strcmp(strVal(name), NameStr(alldesc->attrs[i]->attname)) == 0)
+			if (pg_strcasecmp(strVal(colname), NameStr(alldesc->attrs[i]->attname)) == 0)
 			{
 				Form_pg_attribute att = (Form_pg_attribute) alldesc->attrs[i];
 				att->attnum = attno++;
@@ -601,13 +638,33 @@ GetStreamTupleDesc(Oid namespace, char *name, List *colnames)
 }
 
 /*
+ * RangeVarIsTypedStream
+ *
+ * Is the given relation a typed stream (meaning it was created with CREATE STREAM)?
+ */
+bool
+RangeVarIsForTypedStream(RangeVar *rv)
+{
+	Relation rel = heap_openrv_extended(rv, AccessShareLock, true);
+	char relkind;
+
+	if (rel == NULL)
+		return false;
+
+	relkind = rel->rd_rel->relkind;
+	relation_close(rel, AccessShareLock);
+
+	return (relkind == RELKIND_STREAM);
+}
+
+/*
  * RangeVarIsForStream
  */
 bool
 RangeVarIsForStream(RangeVar *stream)
 {
 	Oid namespace = RangeVarGetAndCheckCreationNamespace(stream, NoLock, NULL);
-	return IsStream(namespace, stream->relname);
+	return RangeVarIsForTypedStream(stream) || IsStream(namespace, stream->relname);
 }
 
 /*

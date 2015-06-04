@@ -1238,6 +1238,7 @@ typedef enum ObjectType
 	OBJECT_RULE,
 	OBJECT_SCHEMA,
 	OBJECT_SEQUENCE,
+	OBJECT_STREAM,
 	OBJECT_TABLE,
 	OBJECT_TABLESPACE,
 	OBJECT_TRIGGER,
@@ -1577,6 +1578,7 @@ typedef struct CreateStmt
 	OnCommitAction oncommit;	/* what do we do at COMMIT? */
 	char	   *tablespacename; /* table space to use, or NULL */
 	bool		if_not_exists;	/* just do nothing if it already exists? */
+	bool		stream; /* true if this is a stream */
 } CreateStmt;
 
 /* ----------
