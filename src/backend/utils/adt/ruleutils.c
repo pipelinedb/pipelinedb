@@ -5824,6 +5824,7 @@ get_name_for_var_field(Var *var, int fieldno,
 	{
 		case RTE_RELATION:
 		case RTE_VALUES:
+		case RTE_STREAM:
 
 			/*
 			 * This case should not occur: a column of a table or values list
@@ -8317,6 +8318,10 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 								 only_marker(rte),
 								 generate_relation_name(rte->relid,
 														context->namespaces));
+				break;
+			case RTE_STREAM:
+				/* Stream RTE */
+				appendStringInfo(buf, "%s", rte->relname); /* TODO(usmanm): get namespace */
 				break;
 			case RTE_SUBQUERY:
 				/* Subquery RTE */

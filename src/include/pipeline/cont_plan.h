@@ -14,7 +14,7 @@
 #include "nodes/relation.h"
 
 #define IS_STREAM_RTE(relid, root) ((planner_rt_fetch(relid, root)) && \
-	((planner_rt_fetch(relid, root))->streamdesc))
+	((planner_rt_fetch(relid, root))->rtekind == RTE_STREAM))
 #define IS_STREAM_TREE(plan) (IsA((plan), StreamScan) || \
 		IsA((plan), StreamTableJoin))
 

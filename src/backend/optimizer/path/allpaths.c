@@ -264,6 +264,10 @@ set_rel_size(PlannerInfo *root, RelOptInfo *rel,
 					set_plain_rel_size(root, rel, rte);
 				}
 				break;
+			case RTE_STREAM:
+				rel->tuples = continuous_query_batch_size;
+				set_baserel_size_estimates(root, rel);
+				break;
 			case RTE_SUBQUERY:
 
 				/*
@@ -331,6 +335,11 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 					set_plain_rel_pathlist(root, rel, rte);
 				}
 				break;
+			case RTE_STREAM:
+				/* if this is a stream, there's only one access path */
+				add_path(rel, create_streamscan_path(root, rel, false));
+				set_cheapest(rel);
+				return;
 			case RTE_SUBQUERY:
 				/* Subquery --- fully handled during set_rel_size */
 				break;
@@ -388,15 +397,6 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	 * its tlist.
 	 */
 	required_outer = rel->lateral_relids;
-
-	/* if this is a stream, there's only one access path */
-	if (IS_STREAM_RTE(rel->relid, root))
-	{
-		add_path(rel, create_streamscan_path(root, rel, required_outer));
-		set_cheapest(rel);
-
-		return;
-	}
 
 	/* Consider sequential scan */
 	add_path(rel, create_seqscan_path(root, rel, required_outer));
