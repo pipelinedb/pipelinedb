@@ -5444,7 +5444,7 @@ cq_stat_report(bool force)
 	 * Don't send a message unless it's been at least PGSTAT_STAT_INTERVAL
 	 * msec since we last sent one, or the caller wants to force stats out.
 	 */
-	if (!force && !TimestampDifferenceExceeds(MyCQStats->last_report, GetCurrentTimestamp(), PGSTAT_STAT_INTERVAL))
+	if (!force && MyCQStats && !TimestampDifferenceExceeds(MyCQStats->last_report, GetCurrentTimestamp(), PGSTAT_STAT_INTERVAL))
 		return;
 
 	cq_stat_report_entry(&MyProcCQStats);
