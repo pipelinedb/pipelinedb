@@ -535,6 +535,7 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 														 objname, missing_ok);
 				break;
 			case OBJECT_TYPE:
+			case OBJECT_STREAM:
 			case OBJECT_DOMAIN:
 				address = get_object_address_type(objtype, objname, missing_ok);
 				break;

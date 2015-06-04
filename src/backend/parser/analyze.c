@@ -434,7 +434,7 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	ListCell   *icols;
 	ListCell   *attnos;
 	ListCell   *lc;
-	bool isStream = InsertTargetIsStream(stmt);
+	bool isStream = RangeVarIsForStream(stmt->relation);
 
 	/* There can't be any outer WITH to worry about */
 	Assert(pstate->p_ctenamespace == NIL);

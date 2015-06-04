@@ -2799,6 +2799,7 @@ CopyCreateStmtFields(const CreateStmt *from, CreateStmt *newnode)
 	COPY_SCALAR_FIELD(oncommit);
 	COPY_STRING_FIELD(tablespacename);
 	COPY_SCALAR_FIELD(if_not_exists);
+	COPY_SCALAR_FIELD(stream);
 }
 
 static CreateStmt *

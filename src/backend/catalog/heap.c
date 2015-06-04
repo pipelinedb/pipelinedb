@@ -284,6 +284,7 @@ heap_create(const char *relname,
 		case RELKIND_VIEW:
 		case RELKIND_COMPOSITE_TYPE:
 		case RELKIND_FOREIGN_TABLE:
+		case RELKIND_STREAM:
 			create_storage = false;
 
 			/*
@@ -1287,7 +1288,7 @@ heap_create_with_catalog(const char *relname,
 	 * Also, skip this in bootstrap mode, since we don't make dependencies
 	 * while bootstrapping.
 	 */
-	if (relkind != RELKIND_COMPOSITE_TYPE &&
+	if (relkind != RELKIND_COMPOSITE_TYPE && relkind != RELKIND_STREAM &&
 		relkind != RELKIND_TOASTVALUE &&
 		!IsBootstrapProcessingMode())
 	{

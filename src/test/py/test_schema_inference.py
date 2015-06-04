@@ -42,3 +42,4 @@ def test_schema_inference(pipeline, clean_db):
   result = pipeline.execute('SELECT * FROM test_infer3 ORDER BY x')
   for row in result:
     assert row['count']
+
