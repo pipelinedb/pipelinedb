@@ -22,6 +22,7 @@
 #include "catalog/heap.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "funcapi.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -977,6 +978,12 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 {
 	Relation	rel;
 	ParseCallbackState pcbstate;
+
+	if (RangeVarIsForTypedStream((RangeVar *) relation))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("\"%s\" is a stream", relation->relname),
+				 errhint("Streams can only be read by a continuous view's FROM clause.")));
 
 	setup_parser_errposition_callback(&pcbstate, pstate, relation->location);
 	rel = heap_openrv_extended(relation, lockmode, true);
