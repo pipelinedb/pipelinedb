@@ -91,6 +91,7 @@ static event_trigger_support_data event_trigger_support[] = {
 	{"SCHEMA", true},
 	{"SEQUENCE", true},
 	{"SERVER", true},
+	{"STREAM", true},
 	{"TABLE", true},
 	{"TABLESPACE", false},
 	{"TRIGGER", true},
@@ -943,6 +944,7 @@ EventTriggerSupportsObjectType(ObjectType obtype)
 		case OBJECT_RULE:
 		case OBJECT_SCHEMA:
 		case OBJECT_SEQUENCE:
+		case OBJECT_STREAM:
 		case OBJECT_TABLE:
 		case OBJECT_TRIGGER:
 		case OBJECT_TSCONFIGURATION:
