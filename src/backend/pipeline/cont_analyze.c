@@ -969,7 +969,7 @@ transformStreamDesc(ParseState *pstate, StreamDesc *stream)
 	RangeTblEntry *rte = makeNode(RangeTblEntry);
 	char *refname = relation->alias ? relation->alias->aliasname : relation->relname;
 
-	rte->rtekind = RTE_RELATION;
+	rte->rtekind = RTE_STREAM;
 	rte->alias = relation->alias;
 	rte->inFromCl = true;
 	rte->requiredPerms = ACL_SELECT;
@@ -979,6 +979,8 @@ transformStreamDesc(ParseState *pstate, StreamDesc *stream)
 	rte->relname = refname;
 
 	rte->eref = makeAlias(refname, NIL);
+	rte->relkind = RELKIND_STREAM;
+	rte->relid = GetStreamRelId(stream->name);
 	rte->streamdesc = stream;
 
 	if (pstate != NULL)
