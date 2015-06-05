@@ -539,7 +539,7 @@ GenerateTypeDependencies(Oid typeNamespace,
 	 * entry.  Likewise, skip for implicit arrays since we'll depend on them
 	 * through the element type.
 	 */
-	if ((!OidIsValid(relationOid) || relationKind == RELKIND_COMPOSITE_TYPE) &&
+	if ((!OidIsValid(relationOid) || relationKind == RELKIND_COMPOSITE_TYPE || relationKind == RELKIND_STREAM) &&
 		!isImplicitArray)
 	{
 		referenced.classId = NamespaceRelationId;
@@ -624,7 +624,7 @@ GenerateTypeDependencies(Oid typeNamespace,
 		referenced.objectId = relationOid;
 		referenced.objectSubId = 0;
 
-		if (relationKind != RELKIND_COMPOSITE_TYPE)
+		if (relationKind != RELKIND_COMPOSITE_TYPE && relationKind != RELKIND_STREAM)
 			recordDependencyOn(&myself, &referenced, DEPENDENCY_INTERNAL);
 		else
 			recordDependencyOn(&referenced, &myself, DEPENDENCY_INTERNAL);

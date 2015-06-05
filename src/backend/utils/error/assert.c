@@ -34,9 +34,9 @@ ExceptionalCondition(const char *conditionName,
 		write_stderr("TRAP: ExceptionalCondition: bad arguments\n");
 	else
 	{
-		write_stderr("TRAP: %s(\"%s\", File: \"%s\", Line: %d)\n",
+		write_stderr("TRAP: %s(\"%s\", File: \"%s\", Line: %d, PID: %d)\n",
 					 errorType, conditionName,
-					 fileName, lineNumber);
+					 fileName, lineNumber, getpid());
 	}
 
 	/* Usually this shouldn't be needed, but make sure the msg went out */

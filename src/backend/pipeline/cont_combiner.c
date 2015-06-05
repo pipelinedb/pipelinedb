@@ -731,6 +731,8 @@ get_query_state(ContQueryCombinerState **states, Oid id, MemoryContext context)
 	ContQueryCombinerState *state = states[id];
 	HeapTuple tuple;
 
+	MyCQStats = NULL;
+
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
 	{
@@ -862,7 +864,7 @@ ContinuousQueryCombinerMain(void)
 		int id;
 		bool updated_queries = false;
 
-		sleep_if_cqs_deactivated();
+		sleep_if_deactivated();
 
 		TupleBufferBatchReaderTrySleep(reader, last_processed);
 

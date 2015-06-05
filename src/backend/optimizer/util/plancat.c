@@ -90,33 +90,22 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 	Relation	relation = NULL;
 	bool		hasindex;
 	List	   *indexinfos = NIL;
-	int max_attr = 0;
 
 	/*
 	 * We need not lock the relation since it was already locked, either by
 	 * the rewriter or when expand_inherited_rtentry() added it to the query's
 	 * rangetable.
 	 */
-	if (OidIsValid(relationObjectId))
-	{
-		relation = heap_open(relationObjectId, NoLock);
+	relation = heap_open(relationObjectId, NoLock);
 
-		/* Temporary and unlogged relations are inaccessible during recovery. */
-		if (!RelationNeedsWAL(relation) && RecoveryInProgress())
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("cannot access temporary or unlogged relations during recovery")));
-	}
-	else
-	{
-		/* it's a stream, get the stream's RTE to look at the number of inferred attributes */
-		RangeTblEntry *rte = root->simple_rte_array[rel->relid];
+	/* Temporary and unlogged relations are inaccessible during recovery. */
+	if (!RelationNeedsWAL(relation) && RecoveryInProgress())
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("cannot access temporary or unlogged relations during recovery")));
 
-		max_attr = rte->streamdesc->desc->natts;
-	}
-
-	rel->min_attr = relation ? FirstLowInvalidHeapAttributeNumber + 1 : 0;
-	rel->max_attr = relation ? RelationGetNumberOfAttributes(relation) : max_attr;
+	rel->min_attr = FirstLowInvalidHeapAttributeNumber + 1;
+	rel->max_attr = RelationGetNumberOfAttributes(relation);
 	rel->reltablespace = relation ? RelationGetForm(relation)->reltablespace : InvalidOid;
 
 	Assert(rel->max_attr >= rel->min_attr);

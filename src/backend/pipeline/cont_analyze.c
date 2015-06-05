@@ -15,6 +15,7 @@
 #include "access/sysattr.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_proc.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/parsenodes.h"
@@ -79,10 +80,10 @@ collect_rels_and_streams(Node *node, ContAnalyzeContext *context)
 	if (IsA(node, RangeVar))
 	{
 		Oid reloid = RangeVarGetRelid((RangeVar *) node, NoLock, true);
-		if (reloid != InvalidOid)
-			context->rels = lappend(context->rels, node);
-		else
+		if (RangeVarIsForTypedStream((RangeVar *) node) || !OidIsValid(reloid))
 			context->streams = lappend(context->streams, node);
+		else
+			context->rels = lappend(context->rels, node);
 
 		return false;
 	}
@@ -248,57 +249,73 @@ make_streamdesc(RangeVar *rv, ContAnalyzeContext *context)
 
 	desc->name = rv;
 
-	foreach(lc, context->types)
+	if (RangeVarIsForTypedStream(rv))
 	{
-		Oid oid;
-		TypeCast *tc = (TypeCast *) lfirst(lc);
-		ColumnRef *ref = (ColumnRef *) tc->arg;
-		Form_pg_attribute attr;
-		char *colname;
-		bool alreadyExists = false;
-		ListCell *lc;
+		Relation rel = heap_openrv_extended(rv, AccessShareLock, false);
+		TupleDesc td = RelationGetDescr(rel);
 
-		if (list_length(ref->fields) == 2)
+		for (i = 0; i < td->natts; i++)
 		{
-			/* find the columns that belong to this stream desc */
-			char *colrelname = strVal(linitial(ref->fields));
-			char *relname = rv->alias ? rv->alias->aliasname : rv->relname;
-			if (pg_strcasecmp(relname, colrelname) != 0)
-				continue;
+			attrs = lappend(attrs, td->attrs[i]);
+			attnum++;
 		}
 
-		if ((list_length(ref->fields) == 1) && !onestream)
-			ereport(ERROR,
-					(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-					 errmsg("column reference is ambiguous"),
-					 parser_errposition(context->pstate, ref->location)));
-
-		colname = FigureColname((Node *) ref);
-
-		/* Dedup */
-		foreach (lc, attrs)
+		heap_close(rel, AccessShareLock);
+	}
+	else
+	{
+		foreach(lc, context->types)
 		{
-			Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
-			if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
+			Oid oid;
+			TypeCast *tc = (TypeCast *) lfirst(lc);
+			ColumnRef *ref = (ColumnRef *) tc->arg;
+			Form_pg_attribute attr;
+			char *colname;
+			bool alreadyExists = false;
+			ListCell *lc;
+
+			if (list_length(ref->fields) == 2)
 			{
-				alreadyExists = true;
-				break;
+				/* find the columns that belong to this stream desc */
+				char *colrelname = strVal(linitial(ref->fields));
+				char *relname = rv->alias ? rv->alias->aliasname : rv->relname;
+				if (pg_strcasecmp(relname, colrelname) != 0)
+					continue;
 			}
+
+			if ((list_length(ref->fields) == 1) && !onestream)
+				ereport(ERROR,
+						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+						 errmsg("column reference is ambiguous"),
+						 parser_errposition(context->pstate, ref->location)));
+
+			colname = FigureColname((Node *) ref);
+
+			/* Dedup */
+			foreach (lc, attrs)
+			{
+				Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
+				if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
+				{
+					alreadyExists = true;
+					break;
+				}
+			}
+
+			if (alreadyExists)
+				continue;
+
+			if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
+					sawArrivalTime = true;
+
+			oid = LookupTypeNameOid(NULL, tc->typeName, false);
+			attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
+			attr->attnum = attnum++;
+			attr->atttypid = oid;
+
+			namestrcpy(&attr->attname, colname);
+			attrs = lappend(attrs, attr);
 		}
-
-		if (alreadyExists)
-			continue;
-
-		if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
-				sawArrivalTime = true;
-
-		oid = LookupTypeNameOid(NULL, tc->typeName, false);
-		attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
-		attr->attnum = attnum++;
-		attr->atttypid = oid;
-
-		namestrcpy(&attr->attname, colname);
-		attrs = lappend(attrs, attr);
 	}
 
 	if (!sawArrivalTime)
@@ -606,9 +623,10 @@ warn_unindexed_join(SelectStmt *stmt, ContAnalyzeContext *context)
 			RangeVar *rv = (RangeVar *) lfirst(rc);
 			char *table;
 			char *colname;
+			char *aliased = rv->alias ? rv->alias->aliasname : rv->relname;
 
 			DeconstructQualifiedName(col->fields, &table, &colname);
-			if (pg_strcasecmp(table, rv->relname) != 0)
+			if (pg_strcasecmp(table, aliased) != 0)
 				continue;
 
 			/* log the notice if the column doesn't have an index */
@@ -715,20 +733,21 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 					 parser_errposition(context->pstate, cref->location)));
 		}
 
+		needs_type = false;
+
 		/*
 		 * If the column is for a relation, we don't need any explicit type case.
 		 */
 		if (list_length(cref->fields) == 2)
 		{
 			char *col_relname = strVal(linitial(cref->fields));
-			needs_type = false;
 
 			foreach(lc2, context->streams)
 			{
 				RangeVar *rv = (RangeVar *) lfirst(lc2);
 				char *streamname = rv->alias ? rv->alias->aliasname : rv->relname;
 
-				if (pg_strcasecmp(col_relname, streamname) == 0)
+				if (!RangeVarIsForTypedStream(rv) && pg_strcasecmp(col_relname, streamname) == 0)
 				{
 					needs_type = true;
 					break;
@@ -737,6 +756,19 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 
 			if (!needs_type)
 				continue;
+		}
+		else if (list_length(context->streams) == 1 && list_length(context->rels) == 0)
+		{
+			/*
+			 * If we're selecting from just one stream, the column might not be qualified so
+			 * we need to do another check to see if it's a typed stream.
+			 */
+			RangeVar *rv = linitial(context->streams);
+			if (RangeVarIsForTypedStream(rv))
+			{
+				has_type = true;
+				break;
+			}
 		}
 
 		/* Do we have a TypeCast for this ColumnRef? */
@@ -827,14 +859,14 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 							(errcode(ERRCODE_AMBIGUOUS_COLUMN),
 							 errmsg("column reference \"%s\" has an ambiguous type", qualname),
 							 errhint("Explicitly cast to the desired type. For example, %s::integer. "
-									 "If \"%s\" is supposed to be a relation, create it first.", qualname, rel->relname),
+									 "If \"%s\" is supposed to be a relation, create it first with CREATE TABLE or CREATE STREAM.", qualname, rel->relname),
 							 parser_errposition(context->pstate, cref->location)));
 				else
 					ereport(ERROR,
 							(errcode(ERRCODE_AMBIGUOUS_COLUMN),
 							 errmsg("column reference \"%s\" has an ambiguous type", qualname),
 							 errhint("Explicitly cast to the desired type. For example, %s::integer. "
-									 "If \"%s\" is supposed to belong to a relation, create the relation first.", qualname, qualname),
+									 "If \"%s\" is supposed to belong to a relation, create the relation first with CREATE TABLE or CREATE STREAM.", qualname, qualname),
 							 parser_errposition(context->pstate, cref->location)));
 			}
 			else
@@ -937,7 +969,7 @@ transformStreamDesc(ParseState *pstate, StreamDesc *stream)
 	RangeTblEntry *rte = makeNode(RangeTblEntry);
 	char *refname = relation->alias ? relation->alias->aliasname : relation->relname;
 
-	rte->rtekind = RTE_RELATION;
+	rte->rtekind = RTE_STREAM;
 	rte->alias = relation->alias;
 	rte->inFromCl = true;
 	rte->requiredPerms = ACL_SELECT;
@@ -947,6 +979,8 @@ transformStreamDesc(ParseState *pstate, StreamDesc *stream)
 	rte->relname = refname;
 
 	rte->eref = makeAlias(refname, NIL);
+	rte->relkind = RELKIND_STREAM;
+	rte->relid = GetStreamRelId(stream->name);
 	rte->streamdesc = stream;
 
 	if (pstate != NULL)

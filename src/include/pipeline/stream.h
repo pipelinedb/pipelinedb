@@ -50,7 +50,6 @@ extern PreparedStreamInsertStmt *StorePreparedStreamInsert(const char *name, Ran
 extern void AddPreparedStreamInsert(PreparedStreamInsertStmt *stmt, ParamListInfoData *params);
 extern PreparedStreamInsertStmt *FetchPreparedStreamInsert(const char *name);
 extern void DropPreparedStreamInsert(const char *name);
-extern bool InsertTargetIsStream(InsertStmt *ins);
 extern int InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt);
 extern int InsertIntoStream(InsertStmt *ins, List *values);
 extern uint64 CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples);

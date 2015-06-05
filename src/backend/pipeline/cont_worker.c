@@ -112,6 +112,12 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 
 	cq_stat_init(&state->stats, state->view->id, 0);
 
+	/*
+	 * The main loop initializes and ends plans across plan executions, so it expects
+	 * the plan to be uninitialized
+	 */
+	ExecEndNode(state->query_desc->planstate);
+
 	MemoryContextSwitchTo(old_cxt);
 }
 
@@ -144,6 +150,8 @@ get_query_state(ContQueryWorkerState **states, Oid id, MemoryContext context, Re
 	ContQueryWorkerState *state = states[id];
 	HeapTuple tuple;
 	ResourceOwner old_owner;
+
+	MyCQStats = NULL;
 
 	/* Entry missing? Start a new transaction so we read the latest pipeline_query catalog. */
 	if (state == NULL)
@@ -233,7 +241,7 @@ ContinuousQueryWorkerMain(void)
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 	ContQueryWorkerState **states = init_query_states_array(run_cxt);
-	ContQueryWorkerState *state;
+	ContQueryWorkerState *state = NULL;
 	Bitmapset *queries;
 	TimestampTz last_processed = GetCurrentTimestamp();
 	bool has_queries;
@@ -263,7 +271,7 @@ ContinuousQueryWorkerMain(void)
 		Bitmapset *tmp;
 		bool updated_queries = false;
 
-		sleep_if_cqs_deactivated();
+		sleep_if_deactivated();
 
 		TupleBufferBatchReaderTrySleep(reader, last_processed);
 
@@ -299,8 +307,9 @@ ContinuousQueryWorkerMain(void)
 		tmp = bms_copy(queries);
 		while ((id = bms_first_member(tmp)) >= 0)
 		{
-			QueryDesc *query_desc;
-			EState *estate;
+			QueryDesc *query_desc = NULL;
+			Plan *plan = NULL;
+			EState *estate = NULL;
 
 			PG_TRY();
 			{
@@ -329,12 +338,21 @@ ContinuousQueryWorkerMain(void)
 
 				estate->es_processed = estate->es_filtered = 0;
 
+				/* initialize the plan for execution within this xact */
+				plan = state->query_desc->plannedstmt->planTree;
+				state->query_desc->planstate = ExecInitNode(plan, state->query_desc->estate, 0);
+				set_reader(state->query_desc->planstate, reader);
+
 				/*
 				 * We pass a timeout of 0 because the underlying TupleBufferBatchReader takes care of
 				 * waiting for enough to read tuples from the TupleBuffer.
 				 */
 				ExecutePlan(estate, state->query_desc->planstate, state->query_desc->operation,
 						true, 0, 0, ForwardScanDirection, state->dest);
+
+				/* free up any resources used by this plan before committing */
+				ExecEndNode(state->query_desc->planstate);
+				state->query_desc->planstate = NULL;
 
 				num_processed += estate->es_processed + estate->es_filtered;
 
@@ -349,10 +367,11 @@ ContinuousQueryWorkerMain(void)
 				EmitErrorReport();
 				FlushErrorState();
 
-				if (ActiveSnapshotSet())
+				if (estate && ActiveSnapshotSet())
 					unset_snapshot(estate, owner);
 
-				cleanup_query_state(states, state->view_id);
+				if (state)
+					cleanup_query_state(states, state->view_id);
 
 				IncrementCQErrors(1);
 
@@ -426,6 +445,9 @@ next:
 
 		if (query_desc->totaltime)
 			InstrStopNode(query_desc->totaltime, estate->es_processed);
+
+		if (query_desc->planstate == NULL)
+			query_desc->planstate = ExecInitNode(query_desc->plannedstmt->planTree, state->query_desc->estate, 0);
 
 		/* Clean up. */
 		ExecutorFinish(query_desc);

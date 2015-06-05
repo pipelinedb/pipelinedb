@@ -21,6 +21,7 @@
 #include "catalog/heap.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "funcapi.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -977,6 +978,12 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 	Relation	rel;
 	ParseCallbackState pcbstate;
 
+	if (RangeVarIsForTypedStream((RangeVar *) relation))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("\"%s\" is a stream", relation->relname),
+				 errhint("Streams can only be read by a continuous view's FROM clause.")));
+
 	setup_parser_errposition_callback(&pcbstate, pstate, relation->location);
 	rel = heap_openrv_extended(relation, lockmode, true);
 	if (rel == NULL)
@@ -1828,25 +1835,19 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 
 	switch (rte->rtekind)
 	{
-	case RTE_RELATION:
-		{
-			if (rte->streamdesc)
-			{
-				/* it's for a continuous view, so use the schema inferred from the target list */
-				expandTupleDesc(rte->streamdesc->desc, rte->eref, rte->streamdesc->desc->natts, 0, rtindex,
-						sublevels_up,
-								location, include_dropped,
-								colnames, colvars);
-			}
-			else
-			{
-				/* Ordinary relation RTE */
-				expandRelation(rte->relid, rte->eref,
-								 rtindex, sublevels_up, location,
-								 include_dropped, colnames, colvars);
-			}
-		}
-		break;
+		case RTE_RELATION:
+			/* Ordinary relation RTE */
+			expandRelation(rte->relid, rte->eref,
+					rtindex, sublevels_up, location,
+					include_dropped, colnames, colvars);
+			break;
+		case RTE_STREAM:
+			/* Stream RTE */
+			Assert(rte->streamdesc);
+			expandTupleDesc(rte->streamdesc->desc, rte->eref, rte->streamdesc->desc->natts, 0, rtindex,
+					sublevels_up, location, include_dropped,
+					colnames, colvars);
+			break;
 		case RTE_SUBQUERY:
 			{
 				/* Subquery RTE */
@@ -2379,22 +2380,15 @@ get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 			{
 				/* Plain relation RTE --- get the attribute's type info */
 				HeapTuple	tp = NULL;
-				Form_pg_attribute att_tup = NULL;
+				Form_pg_attribute att_tup;
 
-				if (rte->streamdesc)
-				{
-					att_tup = rte->streamdesc->desc->attrs[attnum - 1];
-				}
-				else
-				{
-					tp = SearchSysCache2(ATTNUM,
-										 ObjectIdGetDatum(rte->relid),
-										 Int16GetDatum(attnum));
-					if (!HeapTupleIsValid(tp))		/* shouldn't happen */
-						elog(ERROR, "cache lookup failed for attribute %d of relation %u",
-							 attnum, rte->relid);
-					att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-				}
+				tp = SearchSysCache2(ATTNUM,
+						ObjectIdGetDatum(rte->relid),
+						Int16GetDatum(attnum));
+				if (!HeapTupleIsValid(tp))		/* shouldn't happen */
+					elog(ERROR, "cache lookup failed for attribute %d of relation %u",
+							attnum, rte->relid);
+				att_tup = (Form_pg_attribute) GETSTRUCT(tp);
 
 				/*
 				 * If dropped column, pretend it ain't there.  See notes in
@@ -2412,6 +2406,16 @@ get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 
 				if (tp)
 					ReleaseSysCache(tp);
+			}
+			break;
+		case RTE_STREAM:
+			{
+				/* Stream RTE --- get the attribute's type info from the streamdesc */
+				Form_pg_attribute att_tup = rte->streamdesc->desc->attrs[attnum - 1];
+
+				*vartype = att_tup->atttypid;
+				*vartypmod = att_tup->atttypmod;
+				*varcollid = att_tup->attcollation;
 			}
 			break;
 		case RTE_SUBQUERY:
@@ -2595,10 +2599,11 @@ get_rte_attribute_is_dropped(RangeTblEntry *rte, AttrNumber attnum)
 				ReleaseSysCache(tp);
 			}
 			break;
+		case RTE_STREAM:
 		case RTE_SUBQUERY:
 		case RTE_VALUES:
 		case RTE_CTE:
-			/* Subselect, Values, CTE RTEs never have dropped columns */
+			/* Subselect, Values, CTE, Stream RTEs never have dropped columns */
 			result = false;
 			break;
 		case RTE_JOIN:

@@ -34,6 +34,7 @@
 #include "storage/spin.h"
 #include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
+#include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "utils/portal.h"
 #include "utils/ps_status.h"
@@ -45,7 +46,8 @@
 #define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners)
 #define MAX_WAIT_TERMINATE_MS 250
 
-typedef struct {
+typedef struct
+{
 	Oid oid;
 	NameData name;
 } DatabaseEntry;
@@ -144,10 +146,10 @@ GetContQueryProcName(ContQueryProc *proc)
 	switch (proc->type)
 	{
 	case Combiner:
-		sprintf(buf, "%s [%s]", "combiner", NameStr(proc->db_name));
+		sprintf(buf, "%s [%s]", "combiner", NameStr(proc->group->db_name));
 		break;
 	case Worker:
-		sprintf(buf, "%s [%s]", "worker", NameStr(proc->db_name));
+		sprintf(buf, "%s [%s]", "worker", NameStr(proc->group->db_name));
 		break;
 	case Scheduler:
 		return "scheduler";
@@ -367,7 +369,7 @@ cq_bgproc_main(Datum arg)
 	MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
 
 	BackgroundWorkerUnblockSignals();
-	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->db_name), NULL);
+	BackgroundWorkerInitializeConnection(NameStr(MyContQueryProc->group->db_name), NULL);
 
 	/* if we got a cancel signal in prior command, quit */
 	CHECK_FOR_INTERRUPTS();
@@ -439,6 +441,9 @@ start_group(ContQueryProcGroup *grp)
 	int slot_idx;
 	int group_id;
 
+	SpinLockInit(&grp->mutex);
+	SpinLockAcquire(&grp->mutex);
+
 	grp->active = true;
 	grp->terminate = false;
 
@@ -449,8 +454,6 @@ start_group(ContQueryProcGroup *grp)
 
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		StrNCpy(NameStr(proc->db_name), NameStr(grp->db_name), NAMEDATALEN);
-		proc->db_oid = grp->db_oid;
 		proc->type = Worker;
 		proc->group_id = group_id;
 		proc->group = grp;
@@ -465,14 +468,14 @@ start_group(ContQueryProcGroup *grp)
 
 		MemSet(proc, 0, sizeof(ContQueryProc));
 
-		StrNCpy(NameStr(proc->db_name), NameStr(grp->db_name), NAMEDATALEN);
-		proc->db_oid = grp->db_oid;
 		proc->type = Combiner;
 		proc->group_id = group_id;
 		proc->group = grp;
 
 		run_background_proc(proc);
 	}
+
+	SpinLockRelease(&grp->mutex);
 }
 
 static void
@@ -668,7 +671,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
 			if (!found)
 			{
 				grp->db_oid = db_entry->oid;
-				StrNCpy(NameStr(grp->db_name), NameStr(db_entry->name), NAMEDATALEN);
+				namestrcpy(&grp->db_name, NameStr(db_entry->name));
 
 				start_group(grp);
 			}
@@ -758,17 +761,97 @@ ContQuerySchedulerMain(int argc, char *argv[])
  * sleep_if_cqs_deactivated
  */
 void
-sleep_if_cqs_deactivated(void)
+sleep_if_deactivated(void)
 {
-	pgstat_report_activity(STATE_IDLE, GetContQueryProcName(MyContQueryProc));
+	pgstat_report_activity(STATE_DISABLED, GetContQueryProcName(MyContQueryProc));
 
 	while (!MyContQueryProc->group->active)
 	{
+		MyContQueryProc->active = false;
 		WaitLatch(&MyProc->procLatch, WL_LATCH_SET | WL_POSTMASTER_DEATH, 0);
+
+		MyContQueryProc->active = true;
 		ResetLatch(&MyProc->procLatch);
 	}
 
 	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(MyContQueryProc));
+}
+
+/*
+ * ContQuerySetStateAndWait
+ */
+bool
+ContQuerySetStateAndWait(bool state, int waitms)
+{
+	TimestampTz start = GetCurrentTimestamp();
+	bool found;
+	ContQueryProcGroup *grp = (ContQueryProcGroup *) hash_search(ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+	int i;
+	int num_affected = 0;
+
+	if (!found)
+		ereport(ERROR,
+				(errmsg("couldn't find entry for database %d", MyDatabaseId)));
+
+	SpinLockAcquire(&grp->mutex);
+
+	/* Already in the right state? Noop. */
+	if (grp->active == state)
+	{
+		SpinLockRelease(&grp->mutex);
+		return true;
+	}
+
+	grp->active = state;
+
+	/* Set latches so any sleeping processes wake up and see the unsetting of the active flag. */
+	for (i = 0; i < TOTAL_SLOTS; i++)
+		SetLatch(grp->procs[i].latch);
+
+	while (!TimestampDifferenceExceeds(start, GetCurrentTimestamp(), waitms) && num_affected != TOTAL_SLOTS)
+	{
+		num_affected = 0;
+
+		for (i = 0; i < TOTAL_SLOTS; i++)
+		{
+			if (grp->procs[i].active == state)
+				num_affected++;
+		}
+	}
+
+	/* If all processes failed to register state, reset to old state. */
+	if (num_affected != TOTAL_SLOTS)
+	{
+		grp->active = !state;
+		for (i = 0; i < TOTAL_SLOTS; i++)
+			SetLatch(grp->procs[i].latch);
+	}
+
+	SpinLockRelease(&grp->mutex);
+
+	if (num_affected == TOTAL_SLOTS && !state)
+	{
+		/* Successful deactivation? Drain the tuple buffers. */
+		TupleBufferDrain(WorkerTupleBuffer, MyDatabaseId);
+		TupleBufferDrain(CombinerTupleBuffer, MyDatabaseId);
+	}
+
+	return num_affected == TOTAL_SLOTS;
+}
+
+/*
+ * ContQueryGetActiveFlag
+ */
+bool *ContQueryGetActiveFlag(void)
+{
+	bool found;
+	ContQueryProcGroup *grp = (ContQueryProcGroup *) hash_search(ContQuerySchedulerShmem->proc_table, &MyDatabaseId, HASH_FIND, &found);
+
+	if (!found)
+		ereport(ERROR,
+				(errmsg("couldn't find entry for database %d", MyDatabaseId)));
+
+	return (bool *) &grp->active;
 }
 
 static void

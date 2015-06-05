@@ -5107,11 +5107,6 @@ DESCR("count-min sketch out function");
 DATA(insert OID = 5041 (cmsketch_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5038 "2275" _null_ _null_ _null_ _null_ cmsketch_in  _null_ _null_ _null_ ));
 DESCR("count-min sketch in function");
 
-DATA(insert OID = 5044 (gcs_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5042" _null_ _null_ _null_ _null_ gcs_out _null_ _null_ _null_ ));
-DESCR("golomb-coded set out function");
-DATA(insert OID = 5045 (gcs_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5042 "2275" _null_ _null_ _null_ _null_ gcs_in  _null_ _null_ _null_ ));
-DESCR("golomb-coded set in function");
-
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
 DATA(insert OID = 4301 ( float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1022 "1022 1022" _null_ _null_ _null_ _null_ float8_combine _null_ _null_ _null_ ));
 DESCR("aggregate combination function");
@@ -5137,7 +5132,7 @@ DESCR("deserializer for array aggregation transition states");
 DATA(insert OID = 4311 (arrayaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ arrayaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for array aggregation transition states");
 
-DATA(insert OID = 4312 ( array_agg_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ array_agg_combine _null_ _null_ _null_ ));
+DATA(insert OID = 4312 (array_agg_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ array_agg_combine _null_ _null_ _null_ ));
 DESCR("array aggregation combination function");
 
 DATA(insert OID = 4313 (byteatostringinfo PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ byteatostringinfo _null_ _null_ _null_ ));
@@ -5299,45 +5294,53 @@ DESCR("get continuous query process stats");
 DATA(insert OID = 4356 ( cq_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o}" "{name,type,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,errors}" _null_ cq_stat_get _null_ _null_ _null_ ));
 DESCR("get continuous query stats");
 
-/* golomb-coded set aggregate */
-DATA(insert OID = 4357 ( gcs_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5042 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("golomb-coded set aggregate");
+/* hyperloglog empty */
+DATA(insert OID = 4357 ( hll_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 3998 "" _null_ _null_ _null_ _null_ hll_empty _null_ _null_ _null_ ));
+DESCR("hyperloglog empty");
 
-/* golomb-coded set aggregate with user-supplied p and n */
-DATA(insert OID = 4358 ( gcs_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5042 "2283 701 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("golomb-coded set aggregate");
+/* hyperloglog empty with user-supplied p */
+DATA(insert OID = 4358 ( hll_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3998 "23" _null_ _null_ _null_ _null_ hll_emptyp _null_ _null_ _null_ ));
+DESCR("hyperloglog empty");
 
-/* golomb-coded set aggregate transition function */
-DATA(insert OID = 4359 ( gcs_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5042 "5042 2283" _null_ _null_ _null_ _null_ gcs_agg_trans _null_ _null_ _null_ ));
-DESCR("golomb-coded set aggregate");
+/* hyperloglog add */
+DATA(insert OID = 4359 ( hll_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 3998 "3998 2283" _null_ _null_ _null_ _null_ hll_add _null_ _null_ _null_ ));
+DESCR("hyperloglog add");
 
-/* golomb-coded set aggregate with p and n transition function */
-DATA(insert OID = 4360 ( gcs_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5042 "5042 2283 701 20" _null_ _null_ _null_ _null_ gcs_agg_transp _null_ _null_ _null_ ));
-DESCR("golomb-coded set aggregate");
+/* bloom filter empty */
+DATA(insert OID = 4360 ( bloom_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 5030 "" _null_ _null_ _null_ _null_ bloom_empty _null_ _null_ _null_ ));
+DESCR("bloom filter empty");
 
-/* golomb-coded set union aggregate */
-DATA(insert OID = 4361 ( gcs_union_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5042 "5042" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("golomb-coded set union aggregate");
+/* bloom filter empty with user-supplied p and n */
+DATA(insert OID = 4361 ( bloom_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "701 20" _null_ _null_ _null_ _null_ bloom_emptyp _null_ _null_ _null_ ));
+DESCR("bloom filter empty");
 
-/* golomb-coded set union aggregate transition function */
-DATA(insert OID = 4362 ( gcs_union_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5042 "5042 5042" _null_ _null_ _null_ _null_ gcs_union_agg_trans _null_ _null_ _null_ ));
-DESCR("golomb-coded set union aggregate");
+/* bloom filter add */
+DATA(insert OID = 4362 ( bloom_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "5030 2283" _null_ _null_ _null_ _null_ bloom_add _null_ _null_ _null_ ));
+DESCR("bloom filter add");
 
-/* golomb-coded set intersection aggregate */
-DATA(insert OID = 4363 ( gcs_intersection_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5042 "5042" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
-DESCR("golomb-coded set intersection aggregate");
+/* t-digest empty */
+DATA(insert OID = 4363 ( tdigest_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 5034 "" _null_ _null_ _null_ _null_ tdigest_empty _null_ _null_ _null_ ));
+DESCR("t-digest empty");
 
-/* golomb-coded set intersection aggregate transition function */
-DATA(insert OID = 4364 ( gcs_intersection_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5042 "5042 5042" _null_ _null_ _null_ _null_ gcs_intersection_agg_trans _null_ _null_ _null_ ));
-DESCR("golomb-coded set intersection aggregate");
+/* t-digest empty with user-supplied k */
+DATA(insert OID = 4364 ( tdigest_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5034 "23" _null_ _null_ _null_ _null_ tdigest_emptyp _null_ _null_ _null_ ));
+DESCR("t-digest empty");
 
-/* golomb-coded set contains function */
-DATA(insert OID = 4365 ( gcs_contains	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 16 "5042 2283" _null_ _null_ _null_ _null_ gcs_contains _null_ _null_ _null_ ));
-DESCR("golomb-coded set contains item?");
+/* t-digest add */
+DATA(insert OID = 4365 ( tdigest_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5034 "5034 701" _null_ _null_ _null_ _null_ tdigest_add _null_ _null_ _null_ ));
+DESCR("t-digest add");
 
-/* golomb-coded set serialize */
-DATA(insert OID = 4366 (gcs_send PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "5042" _null_ _null_ _null_ _null_ gcs_send _null_ _null_ _null_ ));
-DESCR("golomb-coded set serialize");
+/* count-min sketch empty */
+DATA(insert OID = 4366 ( cmsketch_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 5038 "" _null_ _null_ _null_ _null_ cmsketch_empty _null_ _null_ _null_ ));
+DESCR("count-min sketch empty");
+
+/* count-min sketch empty with user-supplied eps and p */
+DATA(insert OID = 4376 ( cmsketch_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "701 701" _null_ _null_ _null_ _null_ cmsketch_emptyp _null_ _null_ _null_ ));
+DESCR("count-min sketch empty");
+
+/* count-min sketch add */
+DATA(insert OID = 4377 ( cmsketch_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_add _null_ _null_ _null_ ));
+DESCR("count-min sketch add");
 
 /* date truncation convenience functions */
 DATA(insert OID = 4367 (  year	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 1184 "1184" _null_ _null_ _null_ _null_ timestamptz_year _null_ _null_ _null_ ));

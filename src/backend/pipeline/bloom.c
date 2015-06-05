@@ -14,7 +14,7 @@
 #include "utils/palloc.h"
 
 #define DEFAULT_P 0.02
-#define DEFAULT_N (2 << 17)
+#define DEFAULT_N (2 << 14) /* 16384 */
 #define BUCKET_IDX(bf, i) (((idx) / 64) % (bf)->blen)
 #define BIT_MASK(i) (1 << ((i) % 64))
 

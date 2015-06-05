@@ -196,8 +196,4 @@ DATA(insert (tdigest_send tdigest_agg_transp tdigest_send 0 tdigest_merge_agg_tr
 DATA(insert (0 cmsketch_agg_trans  0 0 cmsketch_merge_agg_trans f 5038));
 DATA(insert (0 cmsketch_agg_transp 0 0 cmsketch_merge_agg_trans f 5038));
 
-/* gcs_agg */
-DATA(insert (gcs_send gcs_agg_trans  gcs_send 0 gcs_union_agg_trans f 5042));
-DATA(insert (gcs_send gcs_agg_transp gcs_send 0 gcs_union_agg_trans f 5042));
-
 #endif
