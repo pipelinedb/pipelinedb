@@ -65,6 +65,7 @@
 #include "utils/typcache.h"
 #include "utils/xml.h"
 
+
 /* ----------
  * Pretty formatting constants
  * ----------
@@ -106,7 +107,7 @@ typedef struct
 	int			indentLevel;	/* current indent level for prettyprint */
 	bool		varprefix;		/* TRUE to print prefixes on Vars */
 	bool		iscombine; 		/* TRUE if a combine aggregate is currently being processed */
-	bool		force_schema;	/* TRUE to always print the schema name */
+	bool		force_qualified_names;	/* TRUE to always deparse RTE's into their qualified names */
 } deparse_context;
 
 /*
@@ -464,7 +465,7 @@ deparse_cont_select_stmt(SelectStmt *stmt)
 	context.wrapColumn = 0;
 	context.indentLevel = 0;
 	context.iscombine = false;
-	context.force_schema = true;
+	context.force_qualified_names = true;
 
 	set_deparse_for_query(&dpns, query, NIL);
 	get_select_query_def(query, &context, NULL);
@@ -4266,7 +4267,7 @@ get_query_def(Query *query, StringInfo buf, List *parentnamespace,
 	context.wrapColumn = wrapColumn;
 	context.indentLevel = startIndent;
 	context.iscombine = false;
-	context.force_schema = false;
+	context.force_qualified_names = false;
 
 	set_deparse_for_query(&dpns, query, parentnamespace);
 
@@ -8386,7 +8387,7 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 		{
 			case RTE_RELATION:
 				/* Normal relation RTE */
-				if (context->force_schema)
+				if (context->force_qualified_names)
 					appendStringInfo(buf, "%s%s",
 							only_marker(rte),
 							generate_qualified_relation_name(rte->relid, context->namespaces));
