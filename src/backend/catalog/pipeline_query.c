@@ -175,7 +175,6 @@ DefineContinuousView(RangeVar *name, SelectStmt *stmt, const char *query_string,
 	values[Anum_pipeline_query_id - 1] = Int32GetDatum(id);
 	values[Anum_pipeline_query_name - 1] = NameGetDatum(&name_data);
 	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(nodeToString(query));
-	values[Anum_pipeline_query_select - 1] = CStringGetTextDatum(query_string);
 	values[Anum_pipeline_query_namespace - 1] = ObjectIdGetDatum(namespace);
 
 	/* Copy matrelname */
