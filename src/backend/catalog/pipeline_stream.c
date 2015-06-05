@@ -704,6 +704,10 @@ GetDefaultStreamNamespace(char *stream)
 
 /*
  * GetStreamRelId
+ *
+ * This returns the *relid* for a stream RangeVar. The relid for a static stream is
+ * the actual relid in the pg_class catalog, while the relid for an inferred stream is
+ * it's OID in the pipeline_stream catalog.
  */
 Oid
 GetStreamRelId(RangeVar *stream)
