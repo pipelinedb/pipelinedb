@@ -138,14 +138,6 @@ build_simple_rel(PlannerInfo *root, int relid, RelOptKind reloptkind)
 			get_relation_info(root, rte->relid, rte->inh, rel);
 			break;
 		case RTE_STREAM:
-			/* it's a stream, get the stream's RTE to look at the number of inferred attributes */
-			rel->min_attr = 0;
-			rel->max_attr = rte->streamdesc->desc->natts;
-			rel->reltablespace = InvalidOid;
-
-			rel->attr_needed = (Relids *) palloc0((rel->max_attr + 1) * sizeof(Relids));
-			rel->attr_widths = (int32 *) palloc0((rel->max_attr + 1) * sizeof(int32));
-			break;
 		case RTE_SUBQUERY:
 		case RTE_FUNCTION:
 		case RTE_VALUES:

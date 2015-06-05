@@ -1127,25 +1127,6 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 
 		return (Node *) j;
 	}
-	else if (IsA(n, StreamDesc))
-	{
-		StreamDesc *desc = (StreamDesc *) n;
-		RangeTblRef *rtr;
-		RangeTblEntry *rte;
-		int rtindex;
-
-		rte = transformStreamDesc(pstate, desc);
-
-		/* assume new rte is at end */
-		rtindex = list_length(pstate->p_rtable);
-		Assert(rte == rt_fetch(rtindex, pstate->p_rtable));
-		*top_rte = rte;
-		*top_rti = rtindex;
-		*namespace = list_make1(makeDefaultNSItem(rte));
-		rtr = makeNode(RangeTblRef);
-		rtr->rtindex = rtindex;
-		return (Node *) rtr;
-	}
 	else
 		elog(ERROR, "unrecognized node type: %d", (int) nodeTag(n));
 	return NULL;				/* can't get here, keep compiler quiet */
