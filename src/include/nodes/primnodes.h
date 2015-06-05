@@ -80,13 +80,6 @@ typedef struct RangeVar
 	int			location;		/* token location, or -1 if unknown */
 } RangeVar;
 
-typedef struct StreamDesc
-{
-	NodeTag type;
-	RangeVar *name;
-	TupleDesc desc;
-} StreamDesc;
-
 /*
  * IntoClause - target information for SELECT INTO, CREATE TABLE AS, and
  * CREATE MATERIALIZED VIEW

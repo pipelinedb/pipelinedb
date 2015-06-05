@@ -928,14 +928,6 @@ _outRangeVar(StringInfo str, const RangeVar *node)
 }
 
 static void
-_outStreamDesc(StringInfo str, const StreamDesc *node)
-{
-	WRITE_NODE_TYPE("STREAMDESC");
-
-	WRITE_NODE_FIELD(name);
-}
-
-static void
 _outIntoClause(StringInfo str, const IntoClause *node)
 {
 	WRITE_NODE_TYPE("INTOCLAUSE");
@@ -2968,9 +2960,6 @@ _outNode(StringInfo str, const void *obj)
 				break;
 			case T_RangeVar:
 				_outRangeVar(str, obj);
-				break;
-			case T_StreamDesc:
-				_outStreamDesc(str, obj);
 				break;
 			case T_IntoClause:
 				_outIntoClause(str, obj);

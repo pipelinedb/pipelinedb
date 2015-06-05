@@ -1861,7 +1861,6 @@ typedef struct StreamScanState
 {
 	ScanState	ss;
 	TupleBufferBatchReader *reader;
-	TupleDesc desc;
 	StreamProjectionInfo *pi;
 } StreamScanState;
 
