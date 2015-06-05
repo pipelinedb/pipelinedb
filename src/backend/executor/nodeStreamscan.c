@@ -21,6 +21,7 @@
 #include "parser/parse_coerce.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "pipeline/tuplebuf.h"
+#include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 
@@ -42,7 +43,7 @@ map_field_positions(TupleDesc evdesc, TupleDesc desc)
 		result[i] = -1;
 		for (j = 0; j < desc->natts; j++)
 		{
-			if (strcmp(NameStr(evdesc->attrs[i]->attname), NameStr(desc->attrs[j]->attname)) == 0)
+			if (pg_strcasecmp(NameStr(evdesc->attrs[i]->attname), NameStr(desc->attrs[j]->attname)) == 0)
 			{
 				result[i] = j;
 				break;
@@ -73,6 +74,27 @@ init_proj_info(StreamProjectionInfo *pi, StreamTuple *tuple)
 	memcpy(pi->raweventdesc, tuple->desc, VARSIZE(tuple->desc) + VARHDRSZ);
 
 	MemoryContextSwitchTo(old);
+}
+
+/*
+ * init_scan_desc
+ *
+ * We need to apply attribute names to the descriptor since names are how we
+ * resolve the positions of input attributes on raw events.
+ */
+static void
+init_scan_desc(TupleDesc desc, List *colnames)
+{
+	ListCell *lc;
+	int i = 0;
+
+	Assert(desc->natts == list_length(colnames));
+
+	foreach(lc, colnames)
+	{
+		Value *v = (Value *) lfirst(lc);
+		namestrcpy(&(desc->attrs[i++]->attname), strVal(v));
+	}
 }
 
 static TupleTableSlot *
@@ -254,8 +276,10 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 													 ALLOCSET_DEFAULT_MAXSIZE);
 
 	state->pi->econtext = CreateStandaloneExprContext();
-	state->pi->resultdesc = node->desc;
+	state->pi->resultdesc = ExecTypeFromTL(node->targetlist, false);
 	state->pi->raweventdesc = NULL;
+
+	init_scan_desc(state->pi->resultdesc, node->colnames);
 
 	/*
 	 * Miscellaneous initialization
@@ -280,7 +304,7 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 
 	state->ss.ps.ps_TupFromTlist = false;
 
-	ExecAssignScanType(&state->ss, node->desc);
+	ExecAssignScanType(&state->ss, state->pi->resultdesc);
 
 	/*
 	 * Initialize result tuple type and projection info.

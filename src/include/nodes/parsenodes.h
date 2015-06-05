@@ -802,18 +802,6 @@ typedef struct RangeTblEntry
 	List	   *ctecolcollations;		/* OID list of column collation OIDs */
 
 	/*
-	 * Fields valid for a stream RTE (else NULL/zero):
-	 */
-
-	/*
-	 * If this RTE represents a stream, this is its schema. We attach it here because
-	 * streams aren't required to be represented as actual relations in the catalog,
-	 * so we use this in some cases instead of looking for nonexsitent relations in
-	 * the catalog.
-	 */
-	StreamDesc *streamdesc;
-
-	/*
 	 * Fields valid in all RTEs:
 	 */
 	Alias	   *alias;			/* user-written alias clause, if any */
