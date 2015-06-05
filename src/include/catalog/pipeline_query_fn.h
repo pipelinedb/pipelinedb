@@ -41,6 +41,6 @@ extern void RemoveContinuousViewById(Oid oid);
 extern ContinuousView *GetContinuousView(Oid id);
 extern Bitmapset *GetAllContinuousViewIds(void);
 
-extern char *deparse_cont_select_stmt(SelectStmt *stmt);
+extern char *deparse_cont_select_stmt(SelectStmt *stmt, const char *querystring);
 
 #endif

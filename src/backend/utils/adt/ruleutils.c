@@ -430,12 +430,13 @@ static char *flatten_reloptions(Oid relid);
  * deparse_cont_select_stmt
  */
 char *
-deparse_cont_select_stmt(SelectStmt *stmt)
+deparse_cont_select_stmt(SelectStmt *stmt, const char *querystring)
 {
 	Query *query;
 	StringInfo buf = makeStringInfo();
 	deparse_context context;
 	deparse_namespace dpns;
+	char *sql;
 
 	Assert(stmt->forContinuousView);
 
@@ -443,7 +444,7 @@ deparse_cont_select_stmt(SelectStmt *stmt)
 	CHECK_FOR_INTERRUPTS();
 	check_stack_depth();
 
-	query = parse_analyze((Node *) stmt, NULL, NULL, 0);
+	query = parse_analyze((Node *) stmt, querystring, NULL, 0);
 
 	/*
 	 * Before we begin to examine the query, acquire locks on referenced
@@ -470,9 +471,11 @@ deparse_cont_select_stmt(SelectStmt *stmt)
 	set_deparse_for_query(&dpns, query, NIL);
 	get_select_query_def(query, &context, NULL);
 
+	sql = buf->data;
+
 	pfree(buf);
 
-	return buf->data;
+	return sql;
 }
 
 /* ----------

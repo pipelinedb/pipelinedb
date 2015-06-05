@@ -493,7 +493,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	cvoid = DefineContinuousView(view, deparse_cont_select_stmt((SelectStmt *) stmt->query),
+	cvoid = DefineContinuousView(view, deparse_cont_select_stmt((SelectStmt *) stmt->query, querystring),
 			mat_relation, IsSlidingWindowSelectStmt(viewselect), !SelectsFromStreamOnly(workerselect));
 	CommandCounterIncrement();
 
