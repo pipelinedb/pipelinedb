@@ -34,6 +34,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_trigger.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/defrem.h"
 #include "commands/tablespace.h"
 #include "executor/spi.h"
@@ -5825,6 +5826,7 @@ get_name_for_var_field(Var *var, int fieldno,
 	{
 		case RTE_RELATION:
 		case RTE_VALUES:
+		case RTE_STREAM:
 
 			/*
 			 * This case should not occur: a column of a table or values list
@@ -8318,6 +8320,19 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 								 only_marker(rte),
 								 generate_relation_name(rte->relid,
 														context->namespaces));
+				break;
+			case RTE_STREAM:
+				/* Stream RTE */
+				{
+					Oid namespace = GetStreamNamespace(rte->relid);
+					char *qualified_name;
+
+					if (namespace != InvalidOid)
+						qualified_name = quote_qualified_identifier(get_namespace_name(namespace), rte->relname);
+					else
+						qualified_name = rte->relname;
+					appendStringInfo(buf, "%s", qualified_name);
+				}
 				break;
 			case RTE_SUBQUERY:
 				/* Subquery RTE */

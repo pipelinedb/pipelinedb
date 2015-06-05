@@ -702,3 +702,79 @@ GetDefaultStreamNamespace(char *stream)
 	pfree(rv);
 	return namespace;
 }
+
+/*
+ * GetStreamRelId
+ *
+ * This returns the *relid* for a stream RangeVar. The relid for a static stream is
+ * the actual relid in the pg_class catalog, while the relid for an inferred stream is
+ * it's OID in the pipeline_stream catalog.
+ */
+Oid
+GetStreamRelId(RangeVar *stream)
+{
+	Relation rel = heap_openrv_extended(stream, AccessShareLock, true);
+	Oid namespace;
+	HeapTuple tup;
+	Oid relid;
+
+	if (rel)
+	{
+		char relkind = rel->rd_rel->relkind;
+		relid = rel->rd_id;
+
+		relation_close(rel, AccessShareLock);
+
+		Assert(relkind == RELKIND_STREAM);
+
+		return relid;
+	}
+
+	namespace = RangeVarGetAndCheckCreationNamespace(stream, NoLock, NULL);
+	tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(stream->relname));
+
+	if (!HeapTupleIsValid(tup))
+		return InvalidOid;
+
+	relid = HeapTupleGetOid(tup);
+	ReleaseSysCache(tup);
+
+	return relid;
+}
+
+/*
+ * GetStreamNamespace
+ */
+Oid
+GetStreamNamespace(Oid stream_relid)
+{
+	Oid namespace;
+	HeapTuple tup;
+
+	tup = SearchSysCache1(RELOID, ObjectIdGetDatum(stream_relid));
+
+	if (HeapTupleIsValid(tup))
+	{
+		Form_pg_class reltup;
+		reltup = (Form_pg_class) GETSTRUCT(tup);
+
+		Assert(reltup->relkind == RELKIND_STREAM);
+
+		namespace = reltup->relnamespace;
+		ReleaseSysCache(tup);
+		return namespace;
+	}
+
+	tup = SearchSysCache1(PIPELINESTREAMOID, ObjectIdGetDatum(stream_relid));
+
+	if (HeapTupleIsValid(tup))
+	{
+		Form_pipeline_stream row;
+		row = (Form_pipeline_stream) GETSTRUCT(tup);
+		namespace = row->namespace;
+		ReleaseSysCache(tup);
+		return namespace;
+	}
+
+	return InvalidOid;
+}
