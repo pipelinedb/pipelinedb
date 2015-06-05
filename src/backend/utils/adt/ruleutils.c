@@ -33,6 +33,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_trigger.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/defrem.h"
 #include "commands/tablespace.h"
 #include "executor/spi.h"
@@ -8321,7 +8322,16 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 				break;
 			case RTE_STREAM:
 				/* Stream RTE */
-				appendStringInfo(buf, "%s", rte->relname); /* TODO(usmanm): get namespace */
+				{
+					Oid namespace = GetStreamNamespace(rte->relid);
+					char *qualified_name;
+
+					if (namespace != InvalidOid)
+						qualified_name = quote_qualified_identifier(get_namespace_name(namespace), rte->relname);
+					else
+						qualified_name = rte->relname;
+					appendStringInfo(buf, "%s", qualified_name);
+				}
 				break;
 			case RTE_SUBQUERY:
 				/* Subquery RTE */

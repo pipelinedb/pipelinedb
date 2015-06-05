@@ -31,5 +31,7 @@ extern bool IsStream(Oid namespace, char *stream);
 extern bool RangeVarIsForStream(RangeVar *stream);
 extern bool RangeVarIsForTypedStream(RangeVar *rv);
 extern Oid GetDefaultStreamNamespace(char *stream);
+extern Oid GetStreamRelId(RangeVar *stream);
+extern Oid GetStreamNamespace(Oid stream_relid);
 
 #endif

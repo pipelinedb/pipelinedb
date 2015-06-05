@@ -17,7 +17,7 @@
 /* ----------------------------------------------------------------
  * ----------------------------------------------------------------
  */
-CATALOG(pipeline_stream,4249) BKI_WITHOUT_OIDS
+CATALOG(pipeline_stream,4249)
 {
 	Oid namespace;
 	NameData name;
