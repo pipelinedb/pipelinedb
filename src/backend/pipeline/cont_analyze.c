@@ -29,6 +29,7 @@
 #include "pipeline/stream.h"
 #include "storage/lock.h"
 #include "utils/builtins.h"
+#include "utils/lsyscache.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
@@ -637,6 +638,31 @@ warn_unindexed_join(SelectStmt *stmt, ContAnalyzeContext *context)
 }
 
 /*
+ * ensure_namespaces
+ */
+static bool
+ensure_namespaces(Node *node, ContAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, RangeVar))
+	{
+		RangeVar *rv = (RangeVar *) node;
+
+		if (rv->schemaname == NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+							errmsg("%s relation or stream does not have a schema specified", rv->relname),
+							parser_errposition(context->pstate, rv->location)));
+
+		return false;
+	}
+
+	return raw_expression_tree_walker(node, ensure_namespaces, (void *) context);
+}
+
+/*
  * ValidateContinuousQuery
  */
 void
@@ -646,9 +672,13 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 	SelectStmt *copy;
 	ContAnalyzeContext *context = MakeContAnalyzeContext(make_parsestate(NULL), select);
 	ListCell *lc;
+	RangeVar *view = copyObject(stmt->into->rel);
+
+	view->schemaname = get_namespace_name(RangeVarGetAndCheckCreationNamespace(stmt->into->rel, NoLock, NULL));
 
 	context->pstate->p_sourcetext = sql;
 
+	ensure_namespaces((Node *) select->fromClause, context);
 	collect_rels_and_streams((Node *) select->fromClause, context);
 	collect_types_and_cols((Node *) select, context);
 	collect_agg_funcs((Node *) select, context);
@@ -686,7 +716,7 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 	foreach(lc, context->streams)
 	{
 		RangeVar *rv = (RangeVar *) lfirst(lc);
-		if (equal(rv, stmt->into->rel))
+		if (equal(rv, view))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					errmsg("continuous queries cannot read from themselves"),

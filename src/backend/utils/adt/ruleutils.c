@@ -33,6 +33,7 @@
 #include "catalog/pg_proc.h"
 #include "catalog/pg_trigger.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "commands/defrem.h"
 #include "commands/tablespace.h"
@@ -42,6 +43,7 @@
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/tlist.h"
+#include "parser/analyze.h"
 #include "parser/keywords.h"
 #include "parser/parse_agg.h"
 #include "parser/parse_func.h"
@@ -62,7 +64,6 @@
 #include "utils/tqual.h"
 #include "utils/typcache.h"
 #include "utils/xml.h"
-
 
 /* ----------
  * Pretty formatting constants
@@ -105,6 +106,7 @@ typedef struct
 	int			indentLevel;	/* current indent level for prettyprint */
 	bool		varprefix;		/* TRUE to print prefixes on Vars */
 	bool		iscombine; 		/* TRUE if a combine aggregate is currently being processed */
+	bool		force_schema;	/* TRUE to always print the schema name */
 } deparse_context;
 
 /*
@@ -412,6 +414,7 @@ static Node *processIndirection(Node *node, deparse_context *context,
 static void printSubscripts(ArrayRef *aref, deparse_context *context);
 static char *get_relation_name(Oid relid);
 static char *generate_relation_name(Oid relid, List *namespaces);
+static char *generate_qualified_relation_name(Oid relid, List *namespaces);
 static char *generate_function_name(Oid funcid, int nargs,
 					   List *argnames, Oid *argtypes,
 					   bool has_variadic, bool *use_variadic_p);
@@ -421,6 +424,55 @@ static char *flatten_reloptions(Oid relid);
 
 #define only_marker(rte)  ((rte)->inh ? "" : "ONLY ")
 
+
+/*
+ * deparse_cont_select_stmt
+ */
+char *
+deparse_cont_select_stmt(SelectStmt *stmt)
+{
+	Query *query;
+	StringInfo buf = makeStringInfo();
+	deparse_context context;
+	deparse_namespace dpns;
+
+	Assert(stmt->forContinuousView);
+
+	/* Guard against excessively long or deeply-nested queries */
+	CHECK_FOR_INTERRUPTS();
+	check_stack_depth();
+
+	query = parse_analyze((Node *) stmt, NULL, NULL, 0);
+
+	/*
+	 * Before we begin to examine the query, acquire locks on referenced
+	 * relations, and fix up deleted columns in JOIN RTEs.  This ensures
+	 * consistent results.  Note we assume it's OK to scribble on the passed
+	 * querytree!
+	 *
+	 * We are only deparsing the query (we are not about to execute it), so we
+	 * only need AccessShareLock on the relations it mentions.
+	 */
+	AcquireRewriteLocks(query, false, false);
+
+	context.buf = buf;
+	context.namespaces = list_make1(&dpns);
+	context.windowClause = NIL;
+	context.windowTList = NIL;
+	context.varprefix = list_length(query->rtable) != 1;
+	context.prettyFlags = 0;
+	context.wrapColumn = 0;
+	context.indentLevel = 0;
+	context.iscombine = false;
+	context.force_schema = true;
+
+	set_deparse_for_query(&dpns, query, NIL);
+	get_select_query_def(query, &context, NULL);
+
+	pfree(buf);
+
+	return buf->data;
+}
 
 /* ----------
  * get_ruledef			- Do it all and return a text
@@ -3080,6 +3132,17 @@ set_relation_column_names(deparse_namespace *dpns, RangeTblEntry *rte,
 		}
 		relation_close(rel, AccessShareLock);
 	}
+	else if (rte->rtekind == RTE_STREAM)
+	{
+		/* Stream --- look at the attached tuple desc */
+		TupleDesc tupdesc = rte->streamdesc->desc;
+
+		ncolumns = tupdesc->natts;
+		real_colnames = (char **) palloc(ncolumns * sizeof(char *));
+
+		for (i = 0; i < ncolumns; i++)
+			real_colnames[i] = pstrdup(NameStr(tupdesc->attrs[i]->attname));
+	}
 	else
 	{
 		/* Otherwise use the column names from eref */
@@ -4203,6 +4266,7 @@ get_query_def(Query *query, StringInfo buf, List *parentnamespace,
 	context.wrapColumn = wrapColumn;
 	context.indentLevel = startIndent;
 	context.iscombine = false;
+	context.force_schema = false;
 
 	set_deparse_for_query(&dpns, query, parentnamespace);
 
@@ -5633,7 +5697,14 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 	if (context->iscombine)
 		appendStringInfo(buf, "%d", attnum);
 	else if (attname)
+	{
 		appendStringInfoString(buf, quote_identifier(attname));
+		/* Always print explicit type cast for stream columns */
+		if (rte->rtekind == RTE_STREAM)
+			appendStringInfo(buf, "::%s",
+							 format_type_with_typemod(var->vartype,
+													  var->vartypmod == InvalidOid ? -1 : var->vartypmod));
+	}
 	else
 	{
 		appendStringInfoChar(buf, '*');
@@ -8315,22 +8386,24 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 		{
 			case RTE_RELATION:
 				/* Normal relation RTE */
-				appendStringInfo(buf, "%s%s",
-								 only_marker(rte),
-								 generate_relation_name(rte->relid,
-														context->namespaces));
+				if (context->force_schema)
+					appendStringInfo(buf, "%s%s",
+							only_marker(rte),
+							generate_qualified_relation_name(rte->relid, context->namespaces));
+				else
+					appendStringInfo(buf, "%s%s",
+							only_marker(rte),
+							generate_relation_name(rte->relid, context->namespaces));
 				break;
 			case RTE_STREAM:
 				/* Stream RTE */
 				{
 					Oid namespace = GetStreamNamespace(rte->relid);
-					char *qualified_name;
 
-					if (namespace != InvalidOid)
-						qualified_name = quote_qualified_identifier(get_namespace_name(namespace), rte->relname);
-					else
-						qualified_name = rte->relname;
-					appendStringInfo(buf, "%s", qualified_name);
+					if (namespace == InvalidOid)
+						namespace = GetDefaultStreamNamespace(rte->relname);
+
+					appendStringInfo(buf, "%s", quote_qualified_identifier(get_namespace_name(namespace), rte->relname));
 				}
 				break;
 			case RTE_SUBQUERY:
@@ -9013,6 +9086,30 @@ generate_relation_name(Oid relid, List *namespaces)
 	else
 		nspname = NULL;
 
+	result = quote_qualified_identifier(nspname, relname);
+
+	ReleaseSysCache(tp);
+
+	return result;
+}
+
+static char *
+generate_qualified_relation_name(Oid relid, List *namespaces)
+{
+	HeapTuple	tp;
+	Form_pg_class reltup;
+	char	   *relname;
+	char	   *nspname;
+	char	   *result;
+
+	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+	if (!HeapTupleIsValid(tp))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	reltup = (Form_pg_class) GETSTRUCT(tp);
+	relname = NameStr(reltup->relname);
+
+	nspname = get_namespace_name(reltup->relnamespace);
 	result = quote_qualified_identifier(nspname, relname);
 
 	ReleaseSysCache(tp);

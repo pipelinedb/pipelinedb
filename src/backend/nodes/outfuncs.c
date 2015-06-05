@@ -2131,6 +2131,7 @@ _outSelectStmt(StringInfo str, const SelectStmt *node)
 	WRITE_NODE_FIELD(withClause);
 	WRITE_ENUM_FIELD(op, SetOperation);
 	WRITE_BOOL_FIELD(all);
+	WRITE_BOOL_FIELD(forContinuousView);
 	WRITE_NODE_FIELD(larg);
 	WRITE_NODE_FIELD(rarg);
 }

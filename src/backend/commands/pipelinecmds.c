@@ -197,21 +197,44 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
  * such as single-column GROUP BYs, it's straightforward.
  */
 static void
-create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query)
+create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
+		SelectStmt *workerstmt, SelectStmt *viewstmt)
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
 	Node *expr = NULL;
+	bool sliding = IsSlidingWindowSelectStmt(workerstmt);
 	char *indexcolname = NULL;
-	Relation matrel;
 
-	if (query->groupClause == NIL)
+	if (query->groupClause == NIL && !sliding)
 		return;
 
-	matrel = heap_open(matreloid, NoLock);
+	if (query->groupClause == NIL && sliding)
+	{
+		/*
+		 * We still want an index on the timestamp column for sliding window
+		 * queries without any grouping, because there is an implicit WHERE clause
+		 * used in queries against sliding window CVs.
+		 */
+		ColumnRef *col;
+		Node *node = NULL;
+		char *namespace;
 
-	expr = make_hashed_index_expr(query, RelationGetDescr(matrel));
-	heap_close(matrel, NoLock);
+		node = (Node *) GetColumnRefInSlidingWindowExpr(viewstmt);
+
+		if (!IsA(node, ColumnRef))
+			elog(ERROR, "unexpected sliding window expression type found: %d", nodeTag(node));
+
+		col = (ColumnRef *) node;
+		DeconstructQualifiedName(col->fields, &namespace, &indexcolname);
+	}
+	else
+	{
+		Relation matrel = heap_open(matreloid, NoLock);
+
+		expr = make_hashed_index_expr(query, RelationGetDescr(matrel));
+		heap_close(matrel, NoLock);
+	}
 
 	indexcol = makeNode(IndexElem);
 	indexcol->name = indexcolname;
@@ -237,52 +260,6 @@ create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query)
 
 	DefineIndex(matreloid, index, InvalidOid, false, false, false, false);
 	CommandCounterIncrement();
-}
-
-static char *
-get_select_query_sql(RangeVar *view, const char *sql)
-{
-	int trimmedlen;
-	char *trimmed;
-	int pos;
-	StringInfo str = makeStringInfo();
-
-	if (view->catalogname)
-	{
-		appendStringInfoString(str, view->catalogname);
-		appendStringInfoChar(str, '.');
-	}
-
-	if (view->schemaname)
-	{
-		appendStringInfoString(str, view->schemaname);
-		appendStringInfoChar(str, '.');
-	}
-
-	appendStringInfoString(str, view->relname);
-
-	/*
-	 * Technically the CV could be named "create" or "continuous",
-	 * so it's not enough to simply advance to the CV name. We need
-	 * to skip past the keywords first. Note that these find() calls
-	 * should never return -1 for this string since it's already been
-	 * validated.
-	 */
-	pos = skip_token(sql, "CREATE", 0);
-	pos = skip_token(sql, "CONTINUOUS", pos);
-	pos = skip_token(sql, "VIEW", pos);
-	pos = skip_token(sql, str->data, pos);
-	pos = skip_token(sql, "AS", pos);
-
-	trimmedlen = strlen(sql) - pos + 1;
-	trimmed = palloc(trimmedlen);
-
-	memcpy(trimmed, &sql[pos], trimmedlen);
-
-	pfree(str->data);
-	pfree(str);
-
-	return trimmed;
 }
 
 static void
@@ -359,6 +336,28 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
 }
 
 /*
+ * ensure_namespaces
+ */
+static bool
+insert_missing_schema_names(Node *node, void *state)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, RangeVar))
+	{
+		RangeVar *rv = (RangeVar *) node;
+		Oid namespace = RangeVarGetAndCheckCreationNamespace(rv, NoLock, NULL);
+
+		rv->schemaname = get_namespace_name(namespace);
+
+		return false;
+	}
+
+	return raw_expression_tree_walker(node, insert_missing_schema_names, (void *) state);
+}
+
+/*
  * ExecCreateContViewStmt
  *
  * Creates a table for backing the result of the continuous query,
@@ -385,8 +384,9 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	CQAnalyzeContext context;
 	bool saveAllowSystemTableMods;
 
+	Assert(((SelectStmt *) stmt->query)->forContinuousView);
+
 	view = stmt->into->rel;
-	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
 
 	/*
 	 * Check if CV already exists?
@@ -396,6 +396,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 				(errcode(ERRCODE_DUPLICATE_CONTINUOUS_VIEW),
 				errmsg("continuous view \"%s\" already exists", view->relname)));
 
+	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
+
 	/*
 	 * allowSystemTableMods is a global flag that, when true, allows certain column types
 	 * to be created. We need it set to true to create some hidden state columns. In particular,
@@ -403,6 +405,9 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 */
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
+
+	/* insert schema names for any relations/streams which don't have them specified */
+	insert_missing_schema_names((Node *) ((SelectStmt *) stmt->query)->fromClause, NULL);
 
 	ValidateContQuery(stmt, querystring);
 
@@ -414,7 +419,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	workerselect = GetSelectStmtForCQWorker(copyObject(stmt->query), &viewselect);
 	InitializeCQAnalyzeContext(workerselect, NULL, &context);
 
-	query = parse_analyze(copyObject(workerselect), querystring, 0, 0);
+	query = parse_analyze(copyObject(workerselect), querystring, NULL, 0);
 	tlist = query->targetList;
 
 	/*
@@ -488,7 +493,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	cvoid = DefineContinuousView(view, get_select_query_sql(view, querystring),
+	cvoid = DefineContinuousView(view, deparse_cont_select_stmt((SelectStmt *) stmt->query),
 			mat_relation, IsSlidingWindowSelectStmt(viewselect), !SelectsFromStreamOnly(workerselect));
 	CommandCounterIncrement();
 
@@ -522,7 +527,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * This seems simpler.
 	 */
 	allowSystemTableMods = saveAllowSystemTableMods;
-	create_index_on_mat_relation(matreloid, mat_relation, query);
+	create_index_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);
 }
 
 /*
