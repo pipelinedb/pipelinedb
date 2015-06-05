@@ -105,7 +105,7 @@ static List *order_qual_clauses(PlannerInfo *root, List *clauses);
 static void copy_path_costsize(Plan *dest, Path *src);
 static void copy_plan_costsize(Plan *dest, Plan *src);
 static SeqScan *make_seqscan(List *qptlist, List *qpqual, Index scanrelid);
-static StreamScan *make_streamscan(List *qptlist, List *qpqual);
+static StreamScan *make_streamscan(List *qptlist, List *colnames, List *qpqual);
 static IndexScan *make_indexscan(List *qptlist, List *qpqual, Index scanrelid,
 			   Oid indexid, List *indexqual, List *indexqualorig,
 			   List *indexorderby, List *indexorderbyorig,
@@ -534,7 +534,8 @@ use_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 		rel->rtekind != RTE_SUBQUERY &&
 		rel->rtekind != RTE_FUNCTION &&
 		rel->rtekind != RTE_VALUES &&
-		rel->rtekind != RTE_CTE)
+		rel->rtekind != RTE_CTE &&
+		rel->rtekind != RTE_STREAM)
 		return false;
 
 	/*
@@ -1195,8 +1196,7 @@ create_streamscan_plan(PlannerInfo *root, Path *best_path,
 					List *tlist, List *scan_clauses, RelOptInfo *rel)
 {
 	StreamScan    *scan_plan;
-	Index	varno = rel->relid;
-	RangeTblEntry *rte = planner_rt_fetch(varno, root);
+	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 
 	/* Sort clauses into best execution order */
 	scan_clauses = order_qual_clauses(root, scan_clauses);
@@ -1211,9 +1211,8 @@ create_streamscan_plan(PlannerInfo *root, Path *best_path,
 			replace_nestloop_params(root, (Node *) scan_clauses);
 	}
 
-	scan_plan = make_streamscan(tlist,
+	scan_plan = make_streamscan(tlist, rte->eref->colnames,
 							 scan_clauses);
-	scan_plan->desc = rte->streamdesc->desc;
 
 	copy_path_costsize(&scan_plan->scan.plan, best_path);
 
@@ -3441,7 +3440,7 @@ make_seqscan(List *qptlist,
 }
 
 static StreamScan *
-make_streamscan(List *qptlist,
+make_streamscan(List *qptlist, List *colnames,
 			 List *qpqual)
 {
 	StreamScan *node = makeNode(StreamScan);
@@ -3452,6 +3451,9 @@ make_streamscan(List *qptlist,
 	plan->qual = qpqual;
 	plan->lefttree = NULL;
 	plan->righttree = NULL;
+
+	node->targetlist = qptlist;
+	node->colnames = colnames;
 
 	return node;
 }

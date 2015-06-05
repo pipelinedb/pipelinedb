@@ -867,23 +867,10 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
-			if (rte->streamdesc)
-			{
-				desc = rte->streamdesc->desc;
-				numattrs = desc->natts;
-			}
-			else if (root->parse->isCombine)
-			{
-				/* XXX PipelineDB: why is rte NULL here for merge queries? */
-				return NIL;
-			}
-			else
-			{
-				/* Assume we already have adequate lock */
-				relation = heap_open(rte->relid, NoLock);
-				desc = relation->rd_att;
-				numattrs = RelationGetNumberOfAttributes(relation);
-			}
+			/* Assume we already have adequate lock */
+			relation = heap_open(rte->relid, NoLock);
+			desc = relation->rd_att;
+			numattrs = RelationGetNumberOfAttributes(relation);
 
 			for (attrno = 1; attrno <= numattrs; attrno++)
 			{
@@ -934,6 +921,7 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 			}
 			break;
 
+		case RTE_STREAM:
 		case RTE_FUNCTION:
 		case RTE_VALUES:
 		case RTE_CTE:
