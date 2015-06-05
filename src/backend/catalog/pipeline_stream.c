@@ -724,10 +724,9 @@ GetStreamRelId(RangeVar *stream)
 
 		relation_close(rel, AccessShareLock);
 
-		if (relkind == RELKIND_STREAM)
-			return relid;
-		else
-			return InvalidOid;
+		Assert(relkind == RELKIND_STREAM);
+
+		return relid;
 	}
 
 	namespace = RangeVarGetAndCheckCreationNamespace(stream, NoLock, NULL);
