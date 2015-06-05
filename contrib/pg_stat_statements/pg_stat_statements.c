@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pg_stat_statements.c
@@ -2228,6 +2229,7 @@ JumbleRangeTable(pgssJumbleState *jstate, List *rtable)
 		switch (rte->rtekind)
 		{
 			case RTE_RELATION:
+			case RTE_STREAM:
 				APP_JUMB(rte->relid);
 				break;
 			case RTE_SUBQUERY:
