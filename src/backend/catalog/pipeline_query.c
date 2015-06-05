@@ -161,7 +161,6 @@ DefineContinuousView(RangeVar *name, SelectStmt *stmt, const char *query_string,
 	needs_xact = !SelectsFromStreamOnly(stmt);
 	query = parse_analyze((Node *) stmt, query_string, NULL, 0);
 
-
 	/*
 	 * This should have already been done by the caller when creating the matrel,
 	 * but just to be safe...
@@ -400,7 +399,7 @@ GetContinuousQuery(RangeVar *rv)
 ContinuousView *
 GetContinuousView(Oid id)
 {
-	HeapTuple tuple = SearchSysCache1(PIPELINEQUERYID, Int32GetDatum(id));
+	HeapTuple tuple = SearchSysCache1(PIPELINEQUERYID, ObjectIdGetDatum(id));
 	ContinuousView *view;
 	Form_pipeline_query row;
 	Datum tmp;
@@ -424,6 +423,8 @@ GetContinuousView(Oid id)
 
 	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
 	view->query = deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
+
+	elog(LOG, "query %s", view->query);
 
 	ReleaseSysCache(tuple);
 

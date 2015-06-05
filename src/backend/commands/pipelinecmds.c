@@ -515,7 +515,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * relation.
 	 */
 	cvoid = DefineContinuousView(view, (SelectStmt *) stmt->query,
-				get_select_query_sql(stmt->into->rel, querystring),	mat_relation);
+				get_select_query_sql(stmt->into->rel, querystring), mat_relation);
 	CommandCounterIncrement();
 
 	/*
