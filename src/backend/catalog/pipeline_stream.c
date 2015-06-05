@@ -191,12 +191,9 @@ streams_to_meta(Relation pipeline_query)
 
 			MemSet(&key, 0, sizeof(Key));
 
-			/* if the stream doesn't have a namespace, assume it's in the same namespace as this CV */
-			if (rv->schemaname)
-				key.namespace = get_namespace_oid(rv->schemaname, false);
-			else
-				key.namespace = catrow->namespace;
+			Assert(rv->schemaname);
 
+			key.namespace = get_namespace_oid(rv->schemaname, false);
 			strcpy(key.name, rv->relname);
 
 			entry = (StreamTargetsEntry *) hash_search(targets, &key, HASH_ENTER, &found);
