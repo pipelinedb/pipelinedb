@@ -36,6 +36,7 @@ CATALOG(pipeline_query,4242)
 	bool		needs_xact;
 	int32		hash;
 #ifdef CATALOG_VARLEN
+	text		select;
 	text		query;
 #endif
 } FormData_pipeline_query;
@@ -51,7 +52,7 @@ typedef FormData_pipeline_query *Form_pipeline_query;
  *		compiler constants for pipeline_query
  * ----------------
  */
-#define Natts_pipeline_query			8
+#define Natts_pipeline_query			9
 #define Anum_pipeline_query_id			1
 #define Anum_pipeline_query_namespace		2
 #define Anum_pipeline_query_name		3
@@ -59,6 +60,7 @@ typedef FormData_pipeline_query *Form_pipeline_query;
 #define Anum_pipeline_query_gc			5
 #define Anum_pipeline_query_needs_xact	6
 #define Anum_pipeline_query_hash		7
-#define Anum_pipeline_query_query 		8
+#define Anum_pipeline_query_select 		8
+#define Anum_pipeline_query_query 		9
 
 #endif   /* PIPELINE_QUERIES_H */

@@ -27,7 +27,7 @@ typedef struct {
 	int32 hash;
 } ContinuousView;
 
-extern Oid DefineContinuousView(RangeVar *name, const char *query_string, RangeVar *matrelname, bool gc, bool long_xact);
+extern Oid DefineContinuousView(RangeVar *name, SelectStmt *stmt, const char *query_string, RangeVar* matrelname);
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern char *GetQueryString(RangeVar *name);
 extern bool IsAContinuousView(RangeVar *name);
@@ -41,6 +41,6 @@ extern void RemoveContinuousViewById(Oid oid);
 extern ContinuousView *GetContinuousView(Oid id);
 extern Bitmapset *GetAllContinuousViewIds(void);
 
-extern char *deparse_cont_select_stmt(SelectStmt *stmt, const char *querystring);
+extern char *deparse_cont_query_def(Query *query);
 
 #endif

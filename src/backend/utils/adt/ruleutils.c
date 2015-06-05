@@ -107,7 +107,6 @@ typedef struct
 	int			indentLevel;	/* current indent level for prettyprint */
 	bool		varprefix;		/* TRUE to print prefixes on Vars */
 	bool		iscombine; 		/* TRUE if a combine aggregate is currently being processed */
-	bool		force_qualified_names;	/* TRUE to always deparse RTE's into their qualified names */
 } deparse_context;
 
 /*
@@ -415,7 +414,6 @@ static Node *processIndirection(Node *node, deparse_context *context,
 static void printSubscripts(ArrayRef *aref, deparse_context *context);
 static char *get_relation_name(Oid relid);
 static char *generate_relation_name(Oid relid, List *namespaces);
-static char *generate_qualified_relation_name(Oid relid, List *namespaces);
 static char *generate_function_name(Oid funcid, int nargs,
 					   List *argnames, Oid *argtypes,
 					   bool has_variadic, bool *use_variadic_p);
@@ -427,24 +425,19 @@ static char *flatten_reloptions(Oid relid);
 
 
 /*
- * deparse_cont_select_stmt
+ * deparse_cont_query_def
  */
 char *
-deparse_cont_select_stmt(SelectStmt *stmt, const char *querystring)
+deparse_cont_query_def(Query *query)
 {
-	Query *query;
 	StringInfo buf = makeStringInfo();
 	deparse_context context;
 	deparse_namespace dpns;
 	char *sql;
 
-	Assert(stmt->forContinuousView);
-
 	/* Guard against excessively long or deeply-nested queries */
 	CHECK_FOR_INTERRUPTS();
 	check_stack_depth();
-
-	query = parse_analyze((Node *) stmt, querystring, NULL, 0);
 
 	/*
 	 * Before we begin to examine the query, acquire locks on referenced
@@ -466,7 +459,6 @@ deparse_cont_select_stmt(SelectStmt *stmt, const char *querystring)
 	context.wrapColumn = 0;
 	context.indentLevel = 0;
 	context.iscombine = false;
-	context.force_qualified_names = true;
 
 	set_deparse_for_query(&dpns, query, NIL);
 	get_select_query_def(query, &context, NULL);
@@ -4270,7 +4262,6 @@ get_query_def(Query *query, StringInfo buf, List *parentnamespace,
 	context.wrapColumn = wrapColumn;
 	context.indentLevel = startIndent;
 	context.iscombine = false;
-	context.force_qualified_names = false;
 
 	set_deparse_for_query(&dpns, query, parentnamespace);
 
@@ -8390,24 +8381,23 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 		{
 			case RTE_RELATION:
 				/* Normal relation RTE */
-				if (context->force_qualified_names)
-					appendStringInfo(buf, "%s%s",
-							only_marker(rte),
-							generate_qualified_relation_name(rte->relid, context->namespaces));
-				else
-					appendStringInfo(buf, "%s%s",
+				appendStringInfo(buf, "%s%s",
 							only_marker(rte),
 							generate_relation_name(rte->relid, context->namespaces));
 				break;
 			case RTE_STREAM:
 				/* Stream RTE */
 				{
-					Oid namespace = GetStreamNamespace(rte->relid);
+					Oid namespace;
 
-					if (namespace == InvalidOid)
-						namespace = GetDefaultStreamNamespace(rte->relname);
+					if (rte->relid == InvalidOid)
+						namespace = rte->relnamespace;
+					else
+						namespace = GetStreamNamespace(rte->relid);
 
-					appendStringInfo(buf, "%s", quote_qualified_identifier(get_namespace_name(namespace), rte->relname));
+					Assert(namespace != InvalidOid);
+					appendStringInfo(buf, "%s",
+							quote_qualified_identifier(get_namespace_name(namespace), rte->relname));
 				}
 				break;
 			case RTE_SUBQUERY:
@@ -9090,30 +9080,6 @@ generate_relation_name(Oid relid, List *namespaces)
 	else
 		nspname = NULL;
 
-	result = quote_qualified_identifier(nspname, relname);
-
-	ReleaseSysCache(tp);
-
-	return result;
-}
-
-static char *
-generate_qualified_relation_name(Oid relid, List *namespaces)
-{
-	HeapTuple	tp;
-	Form_pg_class reltup;
-	char	   *relname;
-	char	   *nspname;
-	char	   *result;
-
-	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-
-	reltup = (Form_pg_class) GETSTRUCT(tp);
-	relname = NameStr(reltup->relname);
-
-	nspname = get_namespace_name(reltup->relnamespace);
 	result = quote_qualified_identifier(nspname, relname);
 
 	ReleaseSysCache(tp);

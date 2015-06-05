@@ -24,6 +24,7 @@
 #include "nodes/makefuncs.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cqwindow.h"
 #include "pipeline/miscutils.h"
 #include "postmaster/bgworker.h"
 #include "storage/pmsignal.h"
@@ -130,7 +131,7 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matrelname, bool gc, bool needs_xact)
+DefineContinuousView(RangeVar *name, SelectStmt *stmt, const char *query_string, RangeVar* matrelname)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -142,6 +143,9 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	uint64_t hash;
 	Oid namespace;
 	Oid result;
+	bool gc;
+	bool needs_xact;
+	Query *query;
 
 	if (!name)
 		ereport(ERROR,
@@ -152,6 +156,11 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 		ereport(ERROR,
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						errmsg("query is null")));
+
+	gc = IsSlidingWindowSelectStmt(stmt);
+	needs_xact = !SelectsFromStreamOnly(stmt);
+	query = parse_analyze((Node *) stmt, query_string, NULL, 0);
+
 
 	/*
 	 * This should have already been done by the caller when creating the matrel,
@@ -166,7 +175,8 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	namestrcpy(&name_data, name->relname);
 	values[Anum_pipeline_query_id - 1] = Int32GetDatum(id);
 	values[Anum_pipeline_query_name - 1] = NameGetDatum(&name_data);
-	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(query_string);
+	values[Anum_pipeline_query_query - 1] = CStringGetTextDatum(nodeToString(query));
+	values[Anum_pipeline_query_select - 1] = CStringGetTextDatum(query_string);
 	values[Anum_pipeline_query_namespace - 1] = ObjectIdGetDatum(namespace);
 
 	/* Copy matrelname */
@@ -280,7 +290,7 @@ GetQueryString(RangeVar *cvname)
 				errmsg("continuous view \"%s\" does not exist", cvname->relname)));
 
 	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
-	result = TextDatumGetCString(tmp);
+	result = deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 	ReleaseSysCache(tuple);
 
@@ -413,7 +423,7 @@ GetContinuousView(Oid id)
 	view->hash = row->hash;
 
 	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
-	view->query = TextDatumGetCString(tmp);
+	view->query = deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 	ReleaseSysCache(tuple);
 

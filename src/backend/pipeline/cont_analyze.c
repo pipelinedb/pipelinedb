@@ -1011,6 +1011,8 @@ transformStreamDesc(ParseState *pstate, StreamDesc *stream)
 	rte->eref = makeAlias(refname, NIL);
 	rte->relkind = RELKIND_STREAM;
 	rte->relid = GetStreamRelId(stream->name);
+	rte->relnamespace = RangeVarGetCreationNamespace(stream->name);
+
 	rte->streamdesc = stream;
 
 	if (pstate != NULL)

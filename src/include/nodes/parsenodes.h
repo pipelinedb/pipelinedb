@@ -746,6 +746,7 @@ typedef struct RangeTblEntry
 	Oid			relid;			/* OID of the relation */
 	char		relkind;		/* relation kind (see pg_class.relkind) */
 	char		*relname;
+	char		relnamespace;	/* OID of namesapce -- valid only if rtekind is RTE_STREAM -- see ruleutils.c */
 
 	/*
 	 * Fields valid for a subquery RTE (else NULL):

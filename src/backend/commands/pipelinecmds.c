@@ -262,6 +262,52 @@ create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
 	CommandCounterIncrement();
 }
 
+static char *
+get_select_query_sql(RangeVar *view, const char *sql)
+{
+	int trimmedlen;
+	char *trimmed;
+	int pos;
+	StringInfo str = makeStringInfo();
+
+	if (view->catalogname)
+	{
+		appendStringInfoString(str, view->catalogname);
+		appendStringInfoChar(str, '.');
+	}
+
+	if (view->schemaname)
+	{
+		appendStringInfoString(str, view->schemaname);
+		appendStringInfoChar(str, '.');
+	}
+
+	appendStringInfoString(str, view->relname);
+
+	/*
+	 * Technically the CV could be named "create" or "continuous",
+	 * so it's not enough to simply advance to the CV name. We need
+	 * to skip past the keywords first. Note that these find() calls
+	 * should never return -1 for this string since it's already been
+	 * validated.
+	 */
+	pos = skip_token(sql, "CREATE", 0);
+	pos = skip_token(sql, "CONTINUOUS", pos);
+	pos = skip_token(sql, "VIEW", pos);
+	pos = skip_token(sql, str->data, pos);
+	pos = skip_token(sql, "AS", pos);
+
+	trimmedlen = strlen(sql) - pos + 1;
+	trimmed = palloc(trimmedlen);
+
+	memcpy(trimmed, &sql[pos], trimmedlen);
+
+	pfree(str->data);
+	pfree(str);
+
+	return trimmed;
+}
+
 static void
 record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
 {
@@ -336,28 +382,6 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
 }
 
 /*
- * ensure_namespaces
- */
-static bool
-insert_missing_schema_names(Node *node, void *state)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, RangeVar))
-	{
-		RangeVar *rv = (RangeVar *) node;
-		Oid namespace = RangeVarGetAndCheckCreationNamespace(rv, NoLock, NULL);
-
-		rv->schemaname = get_namespace_name(namespace);
-
-		return false;
-	}
-
-	return raw_expression_tree_walker(node, insert_missing_schema_names, (void *) state);
-}
-
-/*
  * ExecCreateContViewStmt
  *
  * Creates a table for backing the result of the continuous query,
@@ -405,9 +429,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 */
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
-
-	/* insert schema names for any relations/streams which don't have them specified */
-	insert_missing_schema_names((Node *) ((SelectStmt *) stmt->query)->fromClause, NULL);
 
 	ValidateContQuery(stmt, querystring);
 
@@ -493,8 +514,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	cvoid = DefineContinuousView(view, deparse_cont_select_stmt((SelectStmt *) stmt->query, querystring),
-			mat_relation, IsSlidingWindowSelectStmt(viewselect), !SelectsFromStreamOnly(workerselect));
+	cvoid = DefineContinuousView(view, (SelectStmt *) stmt->query,
+				get_select_query_sql(stmt->into->rel, querystring),	mat_relation);
 	CommandCounterIncrement();
 
 	/*

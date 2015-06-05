@@ -2432,9 +2432,13 @@ _outRangeTblEntry(StringInfo str, const RangeTblEntry *node)
 	switch (node->rtekind)
 	{
 		case RTE_RELATION:
+			WRITE_OID_FIELD(relid);
+			WRITE_CHAR_FIELD(relkind);
+			break;
 		case RTE_STREAM:
 			WRITE_OID_FIELD(relid);
 			WRITE_CHAR_FIELD(relkind);
+			WRITE_OID_FIELD(relnamespace);
 			break;
 		case RTE_SUBQUERY:
 			WRITE_NODE_FIELD(subquery);
