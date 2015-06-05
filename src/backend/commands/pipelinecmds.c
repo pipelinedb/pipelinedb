@@ -189,7 +189,7 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
 }
 
 /*
- * create_indices_on_mat_relation
+ * create_index_on_mat_relation
  *
  * If feasible, create an index on the new materialization table to make
  * combine retrievals on it as efficient as possible. Sometimes this may be
@@ -197,44 +197,21 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
  * such as single-column GROUP BYs, it's straightforward.
  */
 static void
-create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
-		SelectStmt *workerstmt, SelectStmt *viewstmt)
+create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query)
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
 	Node *expr = NULL;
-	bool sliding = IsSlidingWindowSelectStmt(workerstmt);
 	char *indexcolname = NULL;
+	Relation matrel;
 
-	if (query->groupClause == NIL && !sliding)
+	if (query->groupClause == NIL)
 		return;
 
-	if (query->groupClause == NIL && sliding)
-	{
-		/*
-		 * We still want an index on the timestamp column for sliding window
-		 * queries without any grouping, because there is an implicit WHERE clause
-		 * used in queries against sliding window CVs.
-		 */
-		ColumnRef *col;
-		Node *node = NULL;
-		char *namespace;
+	matrel = heap_open(matreloid, NoLock);
 
-		node = (Node *) GetColumnRefInSlidingWindowExpr(viewstmt);
-
-		if (!IsA(node, ColumnRef))
-			elog(ERROR, "unexpected sliding window expression type found: %d", nodeTag(node));
-
-		col = (ColumnRef *) node;
-		DeconstructQualifiedName(col->fields, &namespace, &indexcolname);
-	}
-	else
-	{
-		Relation matrel = heap_open(matreloid, NoLock);
-
-		expr = make_hashed_index_expr(query, RelationGetDescr(matrel));
-		heap_close(matrel, NoLock);
-	}
+	expr = make_hashed_index_expr(query, RelationGetDescr(matrel));
+	heap_close(matrel, NoLock);
 
 	indexcol = makeNode(IndexElem);
 	indexcol->name = indexcolname;
@@ -545,7 +522,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * This seems simpler.
 	 */
 	allowSystemTableMods = saveAllowSystemTableMods;
-	create_indices_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);
+	create_index_on_mat_relation(matreloid, mat_relation, query);
 }
 
 /*

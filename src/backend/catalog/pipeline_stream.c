@@ -719,12 +719,10 @@ GetStreamRelId(RangeVar *stream)
 
 	if (rel)
 	{
-		char relkind = rel->rd_rel->relkind;
+		Assert(rel->rd_rel->relkind == RELKIND_STREAM);
+
 		relid = rel->rd_id;
-
 		relation_close(rel, AccessShareLock);
-
-		Assert(relkind == RELKIND_STREAM);
 
 		return relid;
 	}
