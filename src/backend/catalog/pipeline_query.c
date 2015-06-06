@@ -425,8 +425,6 @@ GetContinuousView(Oid id)
 	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
 	view->query = deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
-	elog(LOG, "query %s", view->query);
-
 	ReleaseSysCache(tuple);
 
 	return view;

@@ -8385,8 +8385,12 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 						namespace = GetStreamNamespace(rte->relid);
 
 					Assert(namespace != InvalidOid);
-					appendStringInfo(buf, "%s",
-							quote_qualified_identifier(get_namespace_name(namespace), rte->relname));
+
+					if (StreamIsVisible(rte->relid, namespace, rte->relname))
+						appendStringInfo(buf, "%s", rte->relname);
+					else
+						appendStringInfo(buf, "%s",
+								quote_qualified_identifier(get_namespace_name(namespace), rte->relname));
 				}
 				break;
 			case RTE_SUBQUERY:

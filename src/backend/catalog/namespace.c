@@ -748,6 +748,85 @@ RelationIsVisible(Oid relid)
 	return visible;
 }
 
+/*
+ *
+ */
+bool
+StreamIsVisible(Oid relid, Oid namespace, char *name)
+{
+	HeapTuple reltup = NULL;
+	Oid	relnamespace;
+	char *relname;
+	bool visible;
+
+	if (relid != InvalidOid)
+		reltup = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (HeapTupleIsValid(reltup))
+	{
+		Form_pg_class relform = (Form_pg_class) GETSTRUCT(reltup);
+
+		Assert(relform->relkind == RELKIND_STREAM);
+		relnamespace = relform->relnamespace;
+		relname = NameStr(relform->relname);
+		ReleaseSysCache(reltup);
+	}
+	else
+	{
+		relnamespace = namespace;
+		relname = name;
+	}
+
+	recomputeNamespacePath();
+
+	/*
+	 * Quick check: if it ain't in the path at all, it ain't visible. Items in
+	 * the system namespace are surely in the path and so we needn't even do
+	 * list_member_oid() for them.
+	 */
+	if (relnamespace != PG_CATALOG_NAMESPACE &&
+		!list_member_oid(activeSearchPath, relnamespace))
+		visible = false;
+	else
+	{
+		/*
+		 * If it is in the path, it might still not be visible; it could be
+		 * hidden by another relation of the same name earlier in the path. So
+		 * we must do a slow check for conflicting relations.
+		 */
+		ListCell *l;
+		HeapTuple tup;
+
+		visible = false;
+		foreach(l, activeSearchPath)
+		{
+			Oid	namespaceId = lfirst_oid(l);
+
+			if (namespaceId == relnamespace)
+			{
+				/* Found it first in path */
+				visible = true;
+				break;
+			}
+
+			if (OidIsValid(get_relname_relid(relname, namespaceId)))
+			{
+				/* Found something else first in path */
+				break;
+			}
+
+			tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespaceId), CStringGetDatum(name));
+			if (HeapTupleIsValid(tup))
+			{
+				/* Found an inferred stream first in the path */
+				ReleaseSysCache(tup);
+				break;
+			}
+		}
+	}
+
+	return visible;
+}
 
 /*
  * TypenameGetTypid
