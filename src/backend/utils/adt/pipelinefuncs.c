@@ -456,7 +456,7 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		values[0] = CStringGetTextDatum(get_namespace_name(row->namespace));
 		values[1] = CStringGetTextDatum(NameStr(row->name));
 
-		tmp = SysCacheGetAttr(PIPELINESTREAMNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
+		tmp = SysCacheGetAttr(PIPELINESTREAMNAMESPACENAME, tup, Anum_pipeline_stream_queries, &isnull);
 
 		Assert(!isnull);
 
@@ -469,7 +469,7 @@ pipeline_streams(PG_FUNCTION_ARGS)
 
 		memcpy(bms->words, VARDATA(bytes), nbytes);
 
-		values[3] = CStringGetTextDatum(bms_print(bms));
+		values[2] = CStringGetTextDatum(bms_print(bms));
 
 		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(rtup);

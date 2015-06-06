@@ -191,9 +191,11 @@ streams_to_meta(Relation pipeline_query)
 
 			MemSet(&key, 0, sizeof(Key));
 
-			Assert(rv->schemaname);
+			if (rv->schemaname)
+				key.namespace = get_namespace_oid(rv->schemaname, false);
+			else
+				key.namespace = RangeVarGetCreationNamespace(rv);
 
-			key.namespace = get_namespace_oid(rv->schemaname, false);
 			strcpy(key.name, rv->relname);
 
 			entry = (StreamTargetsEntry *) hash_search(targets, &key, HASH_ENTER, &found);
