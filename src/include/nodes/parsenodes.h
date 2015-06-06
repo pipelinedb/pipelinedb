@@ -746,7 +746,7 @@ typedef struct RangeTblEntry
 	Oid			relid;			/* OID of the relation */
 	char		relkind;		/* relation kind (see pg_class.relkind) */
 	char		*relname;
-	char		relnamespace;	/* OID of namesapce -- valid only if rtekind is RTE_STREAM -- see ruleutils.c */
+	Oid			relnamespace;	/* OID of namesapce -- valid only if rtekind is RTE_STREAM -- see ruleutils.c */
 
 	/*
 	 * Fields valid for a subquery RTE (else NULL):
@@ -800,18 +800,6 @@ typedef struct RangeTblEntry
 	List	   *ctecoltypes;	/* OID list of column type OIDs */
 	List	   *ctecoltypmods;	/* integer list of column typmods */
 	List	   *ctecolcollations;		/* OID list of column collation OIDs */
-
-	/*
-	 * Fields valid for a stream RTE (else NULL/zero):
-	 */
-
-	/*
-	 * If this RTE represents a stream, this is its schema. We attach it here because
-	 * streams aren't required to be represented as actual relations in the catalog,
-	 * so we use this in some cases instead of looking for nonexsitent relations in
-	 * the catalog.
-	 */
-	StreamDesc *streamdesc;
 
 	/*
 	 * Fields valid in all RTEs:

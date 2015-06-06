@@ -147,6 +147,8 @@ DefineContinuousView(RangeVar *name, SelectStmt *stmt, const char *query_string,
 	bool needs_xact;
 	Query *query;
 
+	Assert(stmt->forContinuousView);
+
 	if (!name)
 		ereport(ERROR,
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),

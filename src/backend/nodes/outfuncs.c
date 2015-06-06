@@ -928,14 +928,6 @@ _outRangeVar(StringInfo str, const RangeVar *node)
 }
 
 static void
-_outStreamDesc(StringInfo str, const StreamDesc *node)
-{
-	WRITE_NODE_TYPE("STREAMDESC");
-
-	WRITE_NODE_FIELD(name);
-}
-
-static void
 _outIntoClause(StringInfo str, const IntoClause *node)
 {
 	WRITE_NODE_TYPE("INTOCLAUSE");
@@ -2437,8 +2429,12 @@ _outRangeTblEntry(StringInfo str, const RangeTblEntry *node)
 			break;
 		case RTE_STREAM:
 			WRITE_OID_FIELD(relid);
+			WRITE_STRING_FIELD(relname);
 			WRITE_CHAR_FIELD(relkind);
 			WRITE_OID_FIELD(relnamespace);
+			WRITE_NODE_FIELD(ctecoltypes);
+			WRITE_NODE_FIELD(ctecoltypmods);
+			WRITE_NODE_FIELD(ctecolcollations);
 			break;
 		case RTE_SUBQUERY:
 			WRITE_NODE_FIELD(subquery);
@@ -2973,9 +2969,6 @@ _outNode(StringInfo str, const void *obj)
 				break;
 			case T_RangeVar:
 				_outRangeVar(str, obj);
-				break;
-			case T_StreamDesc:
-				_outStreamDesc(str, obj);
 				break;
 			case T_IntoClause:
 				_outIntoClause(str, obj);

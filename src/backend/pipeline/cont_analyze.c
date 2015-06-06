@@ -231,166 +231,6 @@ compare_attrs(const void *a, const void *b)
 }
 
 /*
- * make_streamdesc
- *
- * Create a StreamDesc and build and attach a TupleDesc to it
- */
-static Node *
-make_streamdesc(RangeVar *rv, ContAnalyzeContext *context)
-{
-	List *attrs = NIL;
-	ListCell *lc;
-	StreamDesc *desc = makeNode(StreamDesc);
-	TupleDesc tupdesc;
-	bool onestream = list_length(context->streams) == 1 && list_length(context->rels) == 0;
-	AttrNumber attnum = 1;
-	bool sawArrivalTime = false;
-	Form_pg_attribute *attrsArray;
-	int i;
-
-	desc->name = rv;
-
-	if (RangeVarIsForTypedStream(rv))
-	{
-		Relation rel = heap_openrv_extended(rv, AccessShareLock, false);
-		TupleDesc td = RelationGetDescr(rel);
-
-		for (i = 0; i < td->natts; i++)
-		{
-			attrs = lappend(attrs, td->attrs[i]);
-			attnum++;
-		}
-
-		heap_close(rel, AccessShareLock);
-	}
-	else
-	{
-		foreach(lc, context->types)
-		{
-			Oid oid;
-			TypeCast *tc = (TypeCast *) lfirst(lc);
-			ColumnRef *ref = (ColumnRef *) tc->arg;
-			Form_pg_attribute attr;
-			char *colname;
-			bool alreadyExists = false;
-			ListCell *lc;
-
-			if (list_length(ref->fields) == 2)
-			{
-				/* find the columns that belong to this stream desc */
-				char *colrelname = strVal(linitial(ref->fields));
-				char *relname = rv->alias ? rv->alias->aliasname : rv->relname;
-				if (pg_strcasecmp(relname, colrelname) != 0)
-					continue;
-			}
-
-			if ((list_length(ref->fields) == 1) && !onestream)
-				ereport(ERROR,
-						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-						 errmsg("column reference is ambiguous"),
-						 parser_errposition(context->pstate, ref->location)));
-
-			colname = FigureColname((Node *) ref);
-
-			/* Dedup */
-			foreach (lc, attrs)
-			{
-				Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
-				if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
-				{
-					alreadyExists = true;
-					break;
-				}
-			}
-
-			if (alreadyExists)
-				continue;
-
-			if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
-					sawArrivalTime = true;
-
-			oid = LookupTypeNameOid(NULL, tc->typeName, false);
-			attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
-			attr->attnum = attnum++;
-			attr->atttypid = oid;
-
-			namestrcpy(&attr->attname, colname);
-			attrs = lappend(attrs, attr);
-		}
-	}
-
-	if (!sawArrivalTime)
-	{
-		Oid oid = LookupTypeNameOid(NULL, makeTypeName("timestamptz"), false);
-		Form_pg_attribute attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
-		attr->attnum = attnum++;
-		attr->atttypid = oid;
-		namestrcpy(&attr->attname, ARRIVAL_TIMESTAMP);
-		attrs = lappend(attrs, attr);
-	}
-
-	attrsArray = (Form_pg_attribute *) palloc(list_length(attrs) * sizeof(Form_pg_attribute));
-	i = 0;
-
-	foreach(lc, attrs)
-	{
-		attrsArray[i] = (Form_pg_attribute) lfirst(lc);
-		i++;
-	}
-
-	qsort(attrsArray, list_length(attrs), sizeof(Form_pg_attribute), &compare_attrs);
-
-	tupdesc = CreateTemplateTupleDesc(list_length(attrs), false);
-
-	for (i = 0; i < list_length(attrs); i++)
-	{
-		Form_pg_attribute attr = attrsArray[i];
-
-		/* PipelineDB XXX: should we be able to handle non-zero dimensions here? */
-		TupleDescInitEntry(tupdesc, attr->attnum, NameStr(attr->attname),
-				attr->atttypid, InvalidOid, 0);
-	}
-
-	pfree(attrsArray);
-	desc->desc = tupdesc;
-
-	return (Node *) desc;
-}
-
-/*
- * replace_stream_rangevar_with_streamdesc
- *
- * Doing this as early as possible simplifies the rest of the analyze path.
- */
-static Node*
-replace_stream_rangevar_with_streamdesc(Node *node, ContAnalyzeContext *context)
-{
-	if (IsA(node, RangeVar))
-	{
-		ListCell *lc;
-		foreach(lc, context->streams)
-		{
-			RangeVar *rv = (RangeVar *) lfirst(lc);
-			if (equal(rv, node))
-				return make_streamdesc(rv, context);
-		}
-
-		/* not a stream */
-		return node;
-	}
-	else if (IsA(node, JoinExpr))
-	{
-		JoinExpr *join = (JoinExpr *) node;
-		join->larg = replace_stream_rangevar_with_streamdesc(join->larg, context);
-		join->rarg = replace_stream_rangevar_with_streamdesc(join->rarg, context);
-
-		return (Node *) join;
-	}
-	else
-		return node;
-}
-
-/*
  * find_clock_timestamp_expr
  *
  * This function picks out the part of the where clause
@@ -883,17 +723,9 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 	collect_windows(select, context);
 	if (context->windows)
 	{
-		List *fromClause = NIL;
-
-		foreach(lc, select->fromClause)
-		{
-			Node *n = (Node *) lfirst(lc);
-			Node *newnode = replace_stream_rangevar_with_streamdesc(n, context);
-
-			fromClause = lappend(fromClause, newnode);
-		}
-
-		transformFromClause(context->pstate, fromClause);
+		context->pstate->p_is_continuous_view = true;
+		context->pstate->p_cont_view_context = context;
+		transformFromClause(context->pstate, select->fromClause);
 
 		foreach(lc, context->windows)
 		{
@@ -935,59 +767,161 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 }
 
 /*
+ * ParserGetStreamDescr
+ *
+ * Get a parse-time tuple descriptor for the given stream
+ */
+TupleDesc
+ParserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte)
+{
+	ContAnalyzeContext *context = pstate->p_cont_view_context;
+	List *attrs = NIL;
+	ListCell *lc;
+	TupleDesc tupdesc;
+	bool onestream = list_length(context->streams) == 1 && list_length(context->rels) == 0;
+	AttrNumber attnum = 1;
+	bool sawArrivalTime = false;
+	Form_pg_attribute *attrsArray;
+	int i;
+
+	/*
+	 * We cheat a little and use the CTE fields here, because they're exactly
+	 * what we need for stream type information. Eventually we can add our own
+	 * identical fields if we need to.
+	 */
+	rte->ctecoltypes = NIL;
+	rte->ctecoltypmods = NIL;
+	rte->ctecolcollations = NIL;
+
+	if (RangeVarIsForTypedStream(rv))
+	{
+		Relation rel = heap_openrv_extended(rv, AccessShareLock, false);
+		TupleDesc td = RelationGetDescr(rel);
+
+		for (i = 0; i < td->natts; i++)
+		{
+			attrs = lappend(attrs, td->attrs[i]);
+			attnum++;
+		}
+
+		heap_close(rel, AccessShareLock);
+	}
+	else
+	{
+		foreach(lc, context->types)
+		{
+			TypeCast *tc = (TypeCast *) lfirst(lc);
+			ColumnRef *ref = (ColumnRef *) tc->arg;
+			Form_pg_attribute attr;
+			char *colname;
+			bool alreadyExists = false;
+			ListCell *lc;
+			Type type;
+			int32 typemod;
+
+			if (list_length(ref->fields) == 2)
+			{
+				/* find the columns that belong to this stream desc */
+				char *colrelname = strVal(linitial(ref->fields));
+				char *relname = rv->alias ? rv->alias->aliasname : rv->relname;
+				if (pg_strcasecmp(relname, colrelname) != 0)
+					continue;
+			}
+
+			if ((list_length(ref->fields) == 1) && !onestream)
+				ereport(ERROR,
+						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+						 errmsg("column reference is ambiguous"),
+						 parser_errposition(context->pstate, ref->location)));
+
+			colname = FigureColname((Node *) ref);
+
+			/* Dedup */
+			foreach (lc, attrs)
+			{
+				Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
+				if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
+				{
+					alreadyExists = true;
+					break;
+				}
+			}
+
+			if (alreadyExists)
+				continue;
+
+			if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
+					sawArrivalTime = true;
+
+			type = typenameType(pstate, tc->typeName, &typemod);
+
+			attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
+			attr->attndims = list_length(tc->typeName->arrayBounds);
+			attr->attnum = attnum++;
+			attr->atttypid = typeTypeId(type);
+			attr->atttypmod = typemod;
+			attr->attcollation = typeTypeCollation(type);
+
+			namestrcpy(&attr->attname, colname);
+			attrs = lappend(attrs, attr);
+
+			ReleaseSysCache((HeapTuple) type);
+		}
+	}
+
+	if (!sawArrivalTime)
+	{
+		Oid oid = LookupTypeNameOid(NULL, makeTypeName("timestamptz"), false);
+		Form_pg_attribute attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
+		attr->attnum = attnum++;
+		attr->atttypid = oid;
+		attr->attndims = 1;
+		attr->atttypmod = -1;
+		attr->attcollation = InvalidOid;
+		namestrcpy(&attr->attname, ARRIVAL_TIMESTAMP);
+		attrs = lappend(attrs, attr);
+	}
+
+	attrsArray = (Form_pg_attribute *) palloc(list_length(attrs) * sizeof(Form_pg_attribute));
+	i = 0;
+
+	foreach(lc, attrs)
+	{
+		attrsArray[i] = (Form_pg_attribute) lfirst(lc);
+		rte->ctecoltypes = lappend_oid(rte->ctecoltypes, attrsArray[i]->atttypid);
+		rte->ctecoltypmods = lappend_int(rte->ctecoltypmods, attrsArray[i]->atttypmod);
+		rte->ctecolcollations = lappend_oid(rte->ctecolcollations, attrsArray[i]->attcollation);
+		i++;
+	}
+
+	qsort(attrsArray, list_length(attrs), sizeof(Form_pg_attribute), &compare_attrs);
+
+	tupdesc = CreateTemplateTupleDesc(list_length(attrs), false);
+
+	for (i = 0; i < list_length(attrs); i++)
+	{
+		Form_pg_attribute attr = attrsArray[i];
+		TupleDescInitEntry(tupdesc, attr->attnum, NameStr(attr->attname),
+				attr->atttypid, InvalidOid, attr->attndims);
+	}
+
+	pfree(attrsArray);
+
+	return tupdesc;
+}
+
+
+/*
  * transformContinuousSelectStmt
  */
 void
 transformContSelectStmt(ParseState *pstate, SelectStmt *select)
 {
 	ContAnalyzeContext *context = MakeContAnalyzeContext(pstate, select);
-	ListCell *lc;
-	List *fromClause = NIL;
 
 	collect_rels_and_streams((Node *) select->fromClause, context);
 	collect_types_and_cols((Node *) select, context);
 
-	foreach(lc, select->fromClause)
-	{
-		Node *n = (Node *) lfirst(lc);
-		Node *newnode = replace_stream_rangevar_with_streamdesc(n, context);
-
-		fromClause = lappend(fromClause, newnode);
-	}
-
-	select->fromClause = fromClause;
-}
-
-/*
- * transformStreamEntry
- *
- * Transform a StreamDesc to a RangeTblEntry
- */
-RangeTblEntry *
-transformStreamDesc(ParseState *pstate, StreamDesc *stream)
-{
-	RangeVar *relation = stream->name;
-	RangeTblEntry *rte = makeNode(RangeTblEntry);
-	char *refname = relation->alias ? relation->alias->aliasname : relation->relname;
-
-	rte->rtekind = RTE_STREAM;
-	rte->alias = relation->alias;
-	rte->inFromCl = true;
-	rte->requiredPerms = ACL_SELECT;
-	rte->checkAsUser = InvalidOid;		/* not set-uid by default, either */
-	rte->selectedCols = NULL;
-	rte->modifiedCols = NULL;
-	rte->relname = refname;
-
-	rte->eref = makeAlias(refname, NIL);
-	rte->relkind = RELKIND_STREAM;
-	rte->relid = GetStreamRelId(stream->name);
-	rte->relnamespace = RangeVarGetCreationNamespace(stream->name);
-
-	rte->streamdesc = stream;
-
-	if (pstate != NULL)
-		pstate->p_rtable = lappend(pstate->p_rtable, rte);
-
-	return rte;
+	pstate->p_cont_view_context = context;
+	pstate->p_is_continuous_view = true;
 }

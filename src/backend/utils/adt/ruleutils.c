@@ -3128,17 +3128,6 @@ set_relation_column_names(deparse_namespace *dpns, RangeTblEntry *rte,
 		}
 		relation_close(rel, AccessShareLock);
 	}
-	else if (rte->rtekind == RTE_STREAM)
-	{
-		/* Stream --- look at the attached tuple desc */
-		TupleDesc tupdesc = rte->streamdesc->desc;
-
-		ncolumns = tupdesc->natts;
-		real_colnames = (char **) palloc(ncolumns * sizeof(char *));
-
-		for (i = 0; i < ncolumns; i++)
-			real_colnames[i] = pstrdup(NameStr(tupdesc->attrs[i]->attname));
-	}
 	else
 	{
 		/* Otherwise use the column names from eref */

@@ -28,6 +28,7 @@
 #include "parser/parsetree.h"
 #include "parser/parse_relation.h"
 #include "parser/parse_type.h"
+#include "pipeline/cont_analyze.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
@@ -608,29 +609,6 @@ scanRTEForColumn(ParseState *pstate, RangeTblEntry *rte, char *colname,
 		}
 	}
 
-	/*
-	 * If the RTE represents a stream look for the column in the stream's inferred tuple descriptor
-	 */
-	if (rte->streamdesc && result == NULL)
-	{
-		Form_pg_attribute *attrs = rte->streamdesc->desc->attrs;
-		int i;
-		for (i=0; i<rte->streamdesc->desc->natts; i++)
-		{
-			if (strcmp(NameStr(attrs[i]->attname), colname) == 0)
-			{
-				AttrNumber attnum = i + 1;
-				int sublevels_up;
-				int vnum = RTERangeTablePosn(pstate, rte, &sublevels_up);
-				var = makeVar(vnum, attnum, attrs[i]->atttypid, attrs[i]->atttypmod,
-						attrs[i]->attcollation, sublevels_up);
-
-				result = (Node *) var;
-				break;
-			}
-		}
-	}
-
 	return result;
 }
 
@@ -1040,6 +1018,7 @@ addRangeTableEntry(ParseState *pstate,
 	char	   *refname = alias ? alias->aliasname : relation->relname;
 	LOCKMODE	lockmode;
 	Relation	rel;
+	TupleDesc desc;
 
 	rte->rtekind = RTE_RELATION;
 	rte->alias = alias;
@@ -1051,23 +1030,55 @@ addRangeTableEntry(ParseState *pstate,
 	 * depending on whether we're doing SELECT FOR UPDATE/SHARE.
 	 */
 	lockmode = isLockedRefname(pstate, refname) ? RowShareLock : AccessShareLock;
-	rel = parserOpenTable(pstate, relation, lockmode);
-	rte->relid = RelationGetRelid(rel);
-	rte->relkind = rel->rd_rel->relkind;
+
+	rel = heap_openrv_extended(relation, lockmode, true);
+
+	if (rel != NULL && !RangeVarIsForTypedStream(relation))
+	{
+		/* it's an actual relation */
+		heap_close(rel, lockmode);
+		rel = parserOpenTable(pstate, relation, lockmode);
+		rte->relid = RelationGetRelid(rel);
+		rte->relkind = rel->rd_rel->relkind;
+		desc = rel->rd_att;
+	}
+	else if (pstate->p_is_continuous_view)
+	{
+		/*
+		 * It could be a strongly typed stream, but even if the rel doesn't exist, assume it's a stream
+		 */
+		rte->rtekind = RTE_STREAM;
+		rte->relkind = RELKIND_STREAM;
+		rte->relid = GetStreamRelId(relation);
+		rte->relname = relation->relname;
+		rte->relnamespace = RangeVarGetCreationNamespace(relation);
+		inh = false;
+		desc = ParserGetStreamDescr(pstate, relation, rte);
+	}
+	else if (rel == NULL || RangeVarIsForTypedStream(relation))
+	{
+		/*
+		 * It's either a bad access attempt, or an attempt to access a typed stream outside of a continuous
+		 * view. Either way, throw the appropriate error.
+		 */
+		parserOpenTable(pstate, relation, lockmode);
+		Assert(false);
+	}
 
 	/*
 	 * Build the list of effective column names using user-supplied aliases
 	 * and/or actual column names.
 	 */
 	rte->eref = makeAlias(refname, NIL);
-	buildRelationAliases(rel->rd_att, alias, rte->eref);
+	buildRelationAliases(desc, alias, rte->eref);
 
 	/*
 	 * Drop the rel refcount, but keep the access lock till end of transaction
 	 * so that the table can't be deleted or have its schema modified
 	 * underneath us.
 	 */
-	heap_close(rel, NoLock);
+	if (rel)
+		heap_close(rel, NoLock);
 
 	/*
 	 * Set flags and access permissions.
@@ -1841,13 +1852,6 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 					rtindex, sublevels_up, location,
 					include_dropped, colnames, colvars);
 			break;
-		case RTE_STREAM:
-			/* Stream RTE */
-			Assert(rte->streamdesc);
-			expandTupleDesc(rte->streamdesc->desc, rte->eref, rte->streamdesc->desc->natts, 0, rtindex,
-					sublevels_up, location, include_dropped,
-					colnames, colvars);
-			break;
 		case RTE_SUBQUERY:
 			{
 				/* Subquery RTE */
@@ -2115,6 +2119,7 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 				}
 			}
 			break;
+		case RTE_STREAM:
 		case RTE_CTE:
 			{
 				ListCell   *aliasp_item = list_head(rte->eref->colnames);
@@ -2340,11 +2345,6 @@ get_rte_attribute_name(RangeTblEntry *rte, AttrNumber attnum)
 		attnum > 0 && attnum <= list_length(rte->alias->colnames))
 		return strVal(list_nth(rte->alias->colnames, attnum - 1));
 
-	if (rte->streamdesc)
-	{
-		if (attnum > 0 && attnum <= rte->streamdesc->desc->natts)
-			return NameStr(rte->streamdesc->desc->attrs[attnum - 1]->attname);
-	}
 	/*
 	 * If the RTE is a relation, go to the system catalogs not the
 	 * eref->colnames list.  This is a little slower but it will give the
@@ -2411,11 +2411,10 @@ get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 		case RTE_STREAM:
 			{
 				/* Stream RTE --- get the attribute's type info from the streamdesc */
-				Form_pg_attribute att_tup = rte->streamdesc->desc->attrs[attnum - 1];
-
-				*vartype = att_tup->atttypid;
-				*vartypmod = att_tup->atttypmod;
-				*varcollid = att_tup->attcollation;
+				Assert(attnum > 0 && attnum <= list_length(rte->ctecoltypes));
+				*vartype = list_nth_oid(rte->ctecoltypes, attnum - 1);
+				*vartypmod = list_nth_int(rte->ctecoltypmods, attnum - 1);
+				*varcollid = list_nth_oid(rte->ctecolcollations, attnum - 1);
 			}
 			break;
 		case RTE_SUBQUERY:

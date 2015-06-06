@@ -1221,8 +1221,12 @@ _readRangeTblEntry(void)
 			break;
 		case RTE_STREAM:
 			READ_OID_FIELD(relid);
+			READ_STRING_FIELD(relname);
 			READ_CHAR_FIELD(relkind);
 			READ_OID_FIELD(relnamespace);
+			READ_NODE_FIELD(ctecoltypes);
+			READ_NODE_FIELD(ctecoltypmods);
+			READ_NODE_FIELD(ctecolcollations);
 			break;
 		case RTE_SUBQUERY:
 			READ_NODE_FIELD(subquery);
