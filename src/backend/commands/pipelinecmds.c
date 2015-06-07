@@ -400,12 +400,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 				(errcode(ERRCODE_DUPLICATE_CONTINUOUS_VIEW),
 				errmsg("continuous view \"%s\" already exists", view->relname)));
 
-	cont_query = parse_analyze(stmt->query, querystring, NULL, 0);
-	cont_select_sql = deparse_cont_query_def(cont_query);
-	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
-	cont_select->forContinuousView = true;
-	stmt->query = (Node *) cont_select;
-
 	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
 
 	/*
@@ -416,7 +410,13 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
 
-	ValidateContQuery(stmt, cont_select_sql);
+	ValidateContQuery(stmt, querystring);
+
+	/* Deparse query so that workers always see the same SelectStmt */
+	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
+	cont_select_sql = deparse_cont_query_def(cont_query);
+	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
+	cont_select->forContinuousView = true;
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
@@ -521,7 +521,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
 
-	viewoid = DefineView(view_stmt, querystring);
+	viewoid = DefineView(view_stmt, cont_select_sql);
 	CommandCounterIncrement();
 	allowSystemTableMods = saveAllowSystemTableMods;
 
