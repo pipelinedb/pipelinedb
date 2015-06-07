@@ -79,8 +79,6 @@ typedef struct {
 
 /*
  * prepare_combine_plan
- *
- * Retrieves a the cached combine plan for a continuous view, creating it if necessary
  */
 static void
 prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)

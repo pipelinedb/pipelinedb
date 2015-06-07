@@ -637,7 +637,7 @@ explain_cont_plan(char *name, PlannedStmt *plan, ExplainState *base_es, TupleDes
 
 	/* emit closing boilerplate */
 	ExplainEndOutput(&es);
-	Assert(es.indent == 2);
+	Assert(es.indent == 1);
 
 	/* Non text formats only return single line inputs so do have a new line at the end */
 	if (es.format != EXPLAIN_FORMAT_TEXT)
