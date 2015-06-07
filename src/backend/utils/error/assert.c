@@ -18,6 +18,7 @@
 #include "postgres.h"
 
 #include <unistd.h>
+#include "tcop/tcopprot.h"
 
 /*
  * ExceptionalCondition - Handles the failure of an Assert()
@@ -28,16 +29,23 @@ ExceptionalCondition(const char *conditionName,
 					 const char *fileName,
 					 int lineNumber)
 {
+	void *array[32];
+	size_t size;
+
 	if (!PointerIsValid(conditionName)
 		|| !PointerIsValid(fileName)
 		|| !PointerIsValid(errorType))
 		write_stderr("TRAP: ExceptionalCondition: bad arguments\n");
 	else
 	{
-		write_stderr("TRAP: %s(\"%s\", File: \"%s\", Line: %d, PID: %d)\n",
+		write_stderr("TRAP: %s(\"%s\", File: \"%s\", Line: %d, PID: %d, Query: %s)\n",
 					 errorType, conditionName,
-					 fileName, lineNumber, getpid());
+					 fileName, lineNumber, getpid(), debug_query_string);
 	}
+
+	size = backtrace(array, 32);
+	fprintf(stderr, "segfault at:\n");
+	backtrace_symbols_fd(array, size, STDERR_FILENO);
 
 	/* Usually this shouldn't be needed, but make sure the msg went out */
 	fflush(stderr);

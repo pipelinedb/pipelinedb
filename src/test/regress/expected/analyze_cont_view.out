@@ -26,7 +26,6 @@ CREATE CONTINUOUS VIEW cqanalyze16 AS SELECT s0.id::integer AS s0_id, t0.id AS t
 NOTICE:  consider creating an index on t0.id for improved stream-table join performance
 CREATE CONTINUOUS VIEW cqanalyze17 AS SELECT s.x::integer, t0.id FROM analyze_cont_stream2 s JOIN t0 ON s.x = t0.id;
 NOTICE:  consider creating an index on t0.id for improved stream-table join performance
-DROP TABLE t0;
 -- Stream-stream JOINs
 CREATE CONTINUOUS VIEW cqanalyze18 AS SELECT s0.id::integer as id0, s1.id::integer as id1 FROM s0 JOIN s1 ON s0.id = s1.id;
 CREATE CONTINUOUS VIEW cqanalyze19 AS SELECT s0.id::integer AS id0, s1.id::integer AS id1 FROM analyze_cont_stream s0 JOIN another_stream s1 ON s0.id = s1.id WHERE s0.id > 10 ORDER BY s1.id DESC;
@@ -39,7 +38,6 @@ CREATE CONTINUOUS VIEW cqanalyze21 AS SELECT s0.id::integer AS id0, s1.x::intege
 NOTICE:  consider creating an index on sts.id for improved stream-table join performance
 CREATE CONTINUOUS VIEW cqanalyze22 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM analyze_cont_stream2 s0 INNER JOIN sts ON s0.id = sts.id RIGHT OUTER JOIN s1 ON sts.id = s1.id::integer WHERE sts.id > 42;
 NOTICE:  consider creating an index on sts.id for improved stream-table join performance
-DROP TABLE sts;
 -- Now let's verify our error handling and messages
 -- Stream column doesn't have a type
 CREATE CONTINUOUS VIEW cqanalyze23 AS SELECT col FROM analyze_cont_stream;
@@ -313,6 +311,8 @@ ERROR:  continuous view "cvnotice2" does not exist
 DROP CONTINUOUS VIEW cvnotice3;
 ERROR:  continuous view "cvnotice3" does not exist
 DROP CONTINUOUS VIEW funcs;
+DROP TABLE t0;
+DROP TABLE sts;
 -- Regression
 CREATE CONTINUOUS VIEW cqregress1 AS SELECT id::integer + avg(id) FROM analyze_cont_stream GROUP BY id;
 CREATE CONTINUOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts FROM analyze_cont_stream;

@@ -146,12 +146,10 @@ test: largeobject
 test: with
 test: xml
 test: stats
-
 test: pipeline_stream
 test: sw_vacuum
 test: analyze_cont_view
 test: create_cont_view
-test: activate_cont_view
 test: cont_view_sanity
 test: cont_window
 test: cont_sum

@@ -379,6 +379,29 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
 			heap_close(rel, AccessShareLock);
 		}
 	}
+
+	/* Record dependency between relations and continuous views if there is a stream-table join */
+	foreach(lc, cxt.rels)
+	{
+		Relation rel;
+
+		if (!IsA(lfirst(lc), RangeVar))
+			continue;
+
+		rel = heap_openrv((RangeVar *) lfirst(lc), AccessShareLock);
+
+		parent.classId = PipelineQueryRelationId;
+		parent.objectId = cvoid;
+		parent.objectSubId = 0;
+
+		child.classId = RelationRelationId;
+		child.objectId = rel->rd_id;
+		child.objectSubId = 0;
+
+		recordDependencyOn(&parent, &child, DEPENDENCY_NORMAL);
+
+		heap_close(rel, AccessShareLock);
+	}
 }
 
 /*

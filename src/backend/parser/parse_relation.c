@@ -1047,11 +1047,18 @@ addRangeTableEntry(ParseState *pstate,
 		/*
 		 * It could be a strongly typed stream, but even if the rel doesn't exist, assume it's a stream
 		 */
+		Oid namespace;
+
 		rte->rtekind = RTE_STREAM;
 		rte->relkind = RELKIND_STREAM;
 		rte->relid = GetStreamRelId(relation);
 		rte->relname = relation->relname;
-		rte->relnamespace = RangeVarGetCreationNamespace(relation);
+
+		namespace = GetStreamNamespace(rte->relid);
+		if (namespace == InvalidOid)
+			namespace = RangeVarGetCreationNamespace(relation);
+		rte->relnamespace = namespace;
+
 		inh = false;
 		desc = ParserGetStreamDescr(pstate, relation, rte);
 	}

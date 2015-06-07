@@ -173,6 +173,7 @@ streams_to_meta(Relation pipeline_query)
 		ContAnalyzeContext *context;
 
 		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
+		Assert(!isnull);
 		querystring = deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 		parsetree_list = pg_parse_query(querystring);

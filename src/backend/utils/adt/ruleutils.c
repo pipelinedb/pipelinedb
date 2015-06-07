@@ -8377,20 +8377,13 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 			case RTE_STREAM:
 				/* Stream RTE */
 				{
-					Oid namespace;
+					Assert(rte->relnamespace != InvalidOid);
 
-					if (rte->relid == InvalidOid)
-						namespace = rte->relnamespace;
-					else
-						namespace = GetStreamNamespace(rte->relid);
-
-					Assert(namespace != InvalidOid);
-
-					if (StreamIsVisible(rte->relid, namespace, rte->relname))
+					if (StreamIsVisible(rte->relid, rte->relnamespace, rte->relname))
 						appendStringInfo(buf, "%s", rte->relname);
 					else
 						appendStringInfo(buf, "%s",
-								quote_qualified_identifier(get_namespace_name(namespace), rte->relname));
+								quote_qualified_identifier(get_namespace_name(rte->relnamespace), rte->relname));
 				}
 				break;
 			case RTE_SUBQUERY:
