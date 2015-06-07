@@ -262,52 +262,6 @@ create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
 	CommandCounterIncrement();
 }
 
-static char *
-get_select_query_sql(RangeVar *view, const char *sql)
-{
-	int trimmedlen;
-	char *trimmed;
-	int pos;
-	StringInfo str = makeStringInfo();
-
-	if (view->catalogname)
-	{
-		appendStringInfoString(str, view->catalogname);
-		appendStringInfoChar(str, '.');
-	}
-
-	if (view->schemaname)
-	{
-		appendStringInfoString(str, view->schemaname);
-		appendStringInfoChar(str, '.');
-	}
-
-	appendStringInfoString(str, view->relname);
-
-	/*
-	 * Technically the CV could be named "create" or "continuous",
-	 * so it's not enough to simply advance to the CV name. We need
-	 * to skip past the keywords first. Note that these find() calls
-	 * should never return -1 for this string since it's already been
-	 * validated.
-	 */
-	pos = skip_token(sql, "CREATE", 0);
-	pos = skip_token(sql, "CONTINUOUS", pos);
-	pos = skip_token(sql, "VIEW", pos);
-	pos = skip_token(sql, str->data, pos);
-	pos = skip_token(sql, "AS", pos);
-
-	trimmedlen = strlen(sql) - pos + 1;
-	trimmed = palloc(trimmedlen);
-
-	memcpy(trimmed, &sql[pos], trimmedlen);
-
-	pfree(str->data);
-	pfree(str);
-
-	return trimmed;
-}
-
 static void
 record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
 {
@@ -428,6 +382,9 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *workerselect;
 	SelectStmt *viewselect;
+	SelectStmt *cont_select;
+	char *cont_select_sql;
+	Query *cont_query;
 	CQAnalyzeContext context;
 	bool saveAllowSystemTableMods;
 
@@ -443,6 +400,12 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 				(errcode(ERRCODE_DUPLICATE_CONTINUOUS_VIEW),
 				errmsg("continuous view \"%s\" already exists", view->relname)));
 
+	cont_query = parse_analyze(stmt->query, querystring, NULL, 0);
+	cont_select_sql = deparse_cont_query_def(cont_query);
+	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
+	cont_select->forContinuousView = true;
+	stmt->query = (Node *) cont_select;
+
 	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
 
 	/*
@@ -453,17 +416,17 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
 
-	ValidateContQuery(stmt, querystring);
+	ValidateContQuery(stmt, cont_select_sql);
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying materialization table.
 	 */
-	workerselect = GetSelectStmtForCQWorker(copyObject(stmt->query), &viewselect);
+	workerselect = GetSelectStmtForCQWorker(copyObject(cont_select), &viewselect);
 	InitializeCQAnalyzeContext(workerselect, NULL, &context);
 
-	query = parse_analyze(copyObject(workerselect), querystring, NULL, 0);
+	query = parse_analyze(copyObject(workerselect), cont_select_sql, NULL, 0);
 	tlist = query->targetList;
 
 	/*
@@ -537,8 +500,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	cvoid = DefineContinuousView(view, (SelectStmt *) stmt->query,
-				get_select_query_sql(stmt->into->rel, querystring), mat_relation);
+	cvoid = DefineContinuousView(view, cont_query, mat_relation,
+				IsSlidingWindowSelectStmt(cont_select), !SelectsFromStreamOnly(cont_select));
 	CommandCounterIncrement();
 
 	/*
