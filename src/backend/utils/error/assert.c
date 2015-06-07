@@ -18,6 +18,7 @@
 #include "postgres.h"
 
 #include <unistd.h>
+#include "execinfo.h"
 #include "tcop/tcopprot.h"
 
 /*
@@ -44,7 +45,7 @@ ExceptionalCondition(const char *conditionName,
 	}
 
 	size = backtrace(array, 32);
-	fprintf(stderr, "segfault at:\n");
+	fprintf(stderr, "assertion failure at:\n");
 	backtrace_symbols_fd(array, size, STDERR_FILENO);
 
 	/* Usually this shouldn't be needed, but make sure the msg went out */

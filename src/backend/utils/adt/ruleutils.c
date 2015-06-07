@@ -5683,8 +5683,8 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 	else if (attname)
 	{
 		appendStringInfoString(buf, quote_identifier(attname));
-		/* Always print explicit type cast for stream columns */
-		if (rte->rtekind == RTE_STREAM)
+		/* Always print explicit type cast for inferred stream columns */
+		if (rte->rtekind == RTE_STREAM && get_rel_relkind(rte->relid) != RELKIND_STREAM)
 			appendStringInfo(buf, "::%s",
 							 format_type_with_typemod(var->vartype,
 													  var->vartypmod == InvalidOid ? -1 : var->vartypmod));
