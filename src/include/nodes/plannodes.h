@@ -289,7 +289,8 @@ typedef Scan SeqScan;
 typedef struct StreamScan
 {
 	Scan scan;
-	TupleDesc desc;
+	List *colnames;
+	List *targetlist;
 } StreamScan;
 
 /* ----------------
