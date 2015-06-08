@@ -604,7 +604,7 @@ typedef struct HashJoin
 } HashJoin;
 
 /* ----------------
- * stream-table node
+ * stream-table join node
  * ----------------
  */
 typedef struct HashJoin StreamTableJoin;

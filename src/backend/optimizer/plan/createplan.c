@@ -105,7 +105,7 @@ static List *order_qual_clauses(PlannerInfo *root, List *clauses);
 static void copy_path_costsize(Plan *dest, Path *src);
 static void copy_plan_costsize(Plan *dest, Plan *src);
 static SeqScan *make_seqscan(List *qptlist, List *qpqual, Index scanrelid);
-static StreamScan *make_streamscan(List *qptlist, List *colnames, List *qpqual);
+static StreamScan *make_streamscan(List *qptlist, List *colnames, List *qpqual, Index scanrelid);
 static IndexScan *make_indexscan(List *qptlist, List *qpqual, Index scanrelid,
 			   Oid indexid, List *indexqual, List *indexqualorig,
 			   List *indexorderby, List *indexorderbyorig,
@@ -1195,8 +1195,9 @@ static StreamScan *
 create_streamscan_plan(PlannerInfo *root, Path *best_path,
 					List *tlist, List *scan_clauses, RelOptInfo *rel)
 {
-	StreamScan    *scan_plan;
+	StreamScan *scan_plan;
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+	Index scan_relid = best_path->parent->relid;
 
 	/* Sort clauses into best execution order */
 	scan_clauses = order_qual_clauses(root, scan_clauses);
@@ -1212,7 +1213,7 @@ create_streamscan_plan(PlannerInfo *root, Path *best_path,
 	}
 
 	scan_plan = make_streamscan(tlist, rte->eref->colnames,
-							 scan_clauses);
+							 scan_clauses, scan_relid);
 
 	copy_path_costsize(&scan_plan->scan.plan, best_path);
 
@@ -2701,15 +2702,17 @@ create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
 	/*
 	 * Build the hash node and hash join node.
 	 */
-	hash_plan = make_hash(outer_plan, 0, 0, 0, 0, 0);
+	hash_plan = make_hash(inner_plan, 0, 0, 0, 0, 0);
 
 	plan->targetlist = build_path_tlist(root, &best_path->jpath.path);
 	plan->qual = otherclauses;
-	plan->lefttree = inner_plan;
+	plan->lefttree = outer_plan;
 	plan->righttree = (Plan *) hash_plan;
 	node->join.jointype = best_path->jpath.jointype;
 	node->join.joinqual = joinclauses;
 	node->hashclauses = hashclauses;
+
+	copy_path_costsize(&node->join.plan, &best_path->jpath.path);
 
 	return node;
 }
@@ -3441,7 +3444,7 @@ make_seqscan(List *qptlist,
 
 static StreamScan *
 make_streamscan(List *qptlist, List *colnames,
-			 List *qpqual)
+			 List *qpqual, Index scanrelid)
 {
 	StreamScan *node = makeNode(StreamScan);
 	Plan *plan = &node->scan.plan;
@@ -3454,6 +3457,7 @@ make_streamscan(List *qptlist, List *colnames,
 
 	node->targetlist = qptlist;
 	node->colnames = colnames;
+	node->scan.scanrelid = scanrelid;
 
 	return node;
 }

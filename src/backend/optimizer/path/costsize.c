@@ -87,6 +87,7 @@
 #include "optimizer/planmain.h"
 #include "optimizer/restrictinfo.h"
 #include "parser/parsetree.h"
+#include "pipeline/cont_scheduler.h"
 #include "utils/lsyscache.h"
 #include "utils/selfuncs.h"
 #include "utils/spccache.h"
@@ -206,6 +207,35 @@ cost_seqscan(Path *path, PlannerInfo *root,
 	 * disk costs
 	 */
 	run_cost += spc_seq_page_cost * baserel->pages;
+
+	/* CPU costs */
+	get_restriction_qual_cost(root, baserel, param_info, &qpqual_cost);
+
+	startup_cost += qpqual_cost.startup;
+	cpu_per_tuple = cpu_tuple_cost + qpqual_cost.per_tuple;
+	run_cost += cpu_per_tuple * baserel->tuples;
+
+	path->startup_cost = startup_cost;
+	path->total_cost = startup_cost + run_cost;
+}
+
+/*
+ * cost_streamscan
+ */
+void
+cost_streamscan(Path *path, PlannerInfo *root,
+			 RelOptInfo *baserel, ParamPathInfo *param_info)
+{
+	Cost		startup_cost = 0;
+	Cost		run_cost = 0;
+	QualCost	qpqual_cost;
+	Cost		cpu_per_tuple;
+
+	/* Should only be applied to streams */
+	Assert(baserel->rtekind == RTE_STREAM);
+
+	/* Mark the path with the row estimate to be the same as batch_size */
+	path->rows = continuous_query_batch_size;
 
 	/* CPU costs */
 	get_restriction_qual_cost(root, baserel, param_info, &qpqual_cost);
