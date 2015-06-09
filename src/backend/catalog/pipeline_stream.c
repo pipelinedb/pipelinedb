@@ -664,7 +664,7 @@ RangeVarIsForTypedStream(RangeVar *rv)
 bool
 RangeVarIsForStream(RangeVar *stream)
 {
-	Oid namespace = RangeVarGetAndCheckCreationNamespace(stream, NoLock, NULL);
+	Oid namespace = RangeVarGetCreationNamespace(stream);
 	return RangeVarIsForTypedStream(stream) || IsStream(namespace, stream->relname);
 }
 

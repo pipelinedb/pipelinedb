@@ -957,7 +957,7 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 	Relation	rel;
 	ParseCallbackState pcbstate;
 
-	if (RangeVarIsForTypedStream((RangeVar *) relation))
+	if (RangeVarIsForStream((RangeVar *) relation))
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is a stream", relation->relname),
