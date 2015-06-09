@@ -2114,7 +2114,7 @@ CopyFrom(CopyState cstate)
 
 	Assert(cstate->rel);
 
-	if (cstate->rel->rd_rel->relkind != RELKIND_RELATION)
+	if (cstate->rel->rd_rel->relkind != RELKIND_RELATION && RelationGetRelKind(cstate->rel) != RELKIND_STREAM)
 	{
 		if (cstate->rel->rd_rel->relkind == RELKIND_VIEW)
 			ereport(ERROR,
