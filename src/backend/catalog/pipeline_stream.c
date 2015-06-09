@@ -824,3 +824,22 @@ RelIdIsForInferredStream(Oid stream_relid)
 
 	return false;
 }
+
+/*
+ * GetRelationForStream
+ */
+Relation
+GetRelationForStream(RangeVar *rv, List *cols)
+{
+	Oid stream_id = GetStreamRelId(rv);
+	Oid namespace = GetStreamNamespace(stream_id);
+	Relation rel = (Relation) palloc0(sizeof(RelationData));
+	rel->rd_att = GetStreamTupleDesc(namespace, rv->relname, cols);
+	rel->rd_rel = palloc0(sizeof(FormData_pg_class));
+	rel->rd_rel->relnatts = rel->rd_att->natts;
+	namestrcpy(&rel->rd_rel->relname, rv->relname);
+	rel->rd_rel->relkind = RELKIND_STREAM;
+	rel->rd_id = stream_id;
+	rel->rd_rel->relnamespace = namespace;
+	return rel;
+}

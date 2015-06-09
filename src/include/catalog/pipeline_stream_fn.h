@@ -36,5 +36,6 @@ extern Oid GetStreamRelId(RangeVar *stream);
 extern Oid GetStreamNamespace(Oid stream_relid);
 extern bool RelIdIsForTypedStream(Oid relid);
 extern bool RelIdIsForInferredStream(Oid relid);
+extern Relation GetRelationForStream(RangeVar *rv, List *cols);
 
 #endif
