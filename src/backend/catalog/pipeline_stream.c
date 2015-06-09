@@ -674,42 +674,15 @@ bool
 RangeVarIsForInferredStream(RangeVar *rv)
 {
 	Oid namespace = RangeVarGetCreationNamespace(rv);
-	return IsInferredStream(namespace, rv->relname);
-}
-
-/*
- * IsInferredStream
- */
-bool
-IsInferredStream(Oid namespace, char *name)
-{
 	HeapTuple tup;
 
-	if (namespace == InvalidOid)
-		namespace = GetDefaultStreamNamespace(name);
-
-	tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(name));
+	tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tup))
 		return false;
 
 	ReleaseSysCache(tup);
 	return true;
-}
-
-/*
- * GetDefaultStreamNamespace
- */
-Oid
-GetDefaultStreamNamespace(char *stream)
-{
-	Oid namespace;
-	RangeVar *rv = makeNode(RangeVar);
-	rv->relname = stream;
-	rv->schemaname = NULL;
-	namespace = RangeVarGetCreationNamespace(rv);
-	pfree(rv);
-	return namespace;
 }
 
 /*
