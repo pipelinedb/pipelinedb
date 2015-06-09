@@ -748,6 +748,32 @@ RelationIsVisible(Oid relid)
 	return visible;
 }
 
+/*
+ * StreamIsVisible
+ */
+bool
+StreamIsVisible(Oid relid, Oid namespace, char *name)
+{
+	HeapTuple reltup = NULL;
+
+	if (relid != InvalidOid)
+		reltup = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (HeapTupleIsValid(reltup))
+	{
+		Assert(((Form_pg_class) GETSTRUCT(reltup))->relkind == RELKIND_STREAM);
+		ReleaseSysCache(reltup);
+		/* this is a strong stream, so just piggy back off RelationIsVisible */
+		return RelationIsVisible(relid);
+	}
+
+	recomputeNamespacePath();
+
+	Assert(linitial_oid(activeSearchPath) == PG_CATALOG_NAMESPACE);
+
+	/* An inferred stream is only visible if it's namespace is first in the search path. */
+	return list_nth_oid(activeSearchPath, 1) == namespace;
+}
 
 /*
  * TypenameGetTypid

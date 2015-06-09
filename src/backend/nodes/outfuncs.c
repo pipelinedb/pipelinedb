@@ -2123,6 +2123,7 @@ _outSelectStmt(StringInfo str, const SelectStmt *node)
 	WRITE_NODE_FIELD(withClause);
 	WRITE_ENUM_FIELD(op, SetOperation);
 	WRITE_BOOL_FIELD(all);
+	WRITE_BOOL_FIELD(forContinuousView);
 	WRITE_NODE_FIELD(larg);
 	WRITE_NODE_FIELD(rarg);
 }
@@ -2423,9 +2424,17 @@ _outRangeTblEntry(StringInfo str, const RangeTblEntry *node)
 	switch (node->rtekind)
 	{
 		case RTE_RELATION:
-		case RTE_STREAM:
 			WRITE_OID_FIELD(relid);
 			WRITE_CHAR_FIELD(relkind);
+			break;
+		case RTE_STREAM:
+			WRITE_OID_FIELD(relid);
+			WRITE_STRING_FIELD(relname);
+			WRITE_CHAR_FIELD(relkind);
+			WRITE_OID_FIELD(relnamespace);
+			WRITE_NODE_FIELD(ctecoltypes);
+			WRITE_NODE_FIELD(ctecoltypmods);
+			WRITE_NODE_FIELD(ctecolcollations);
 			break;
 		case RTE_SUBQUERY:
 			WRITE_NODE_FIELD(subquery);

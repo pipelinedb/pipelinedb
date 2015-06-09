@@ -189,7 +189,7 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
 }
 
 /*
- * create_indices_on_mat_relation
+ * create_index_on_mat_relation
  *
  * If feasible, create an index on the new materialization table to make
  * combine retrievals on it as efficient as possible. Sometimes this may be
@@ -197,7 +197,7 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
  * such as single-column GROUP BYs, it's straightforward.
  */
 static void
-create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
+create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
 		SelectStmt *workerstmt, SelectStmt *viewstmt)
 {
 	IndexStmt *index;
@@ -260,52 +260,6 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query
 
 	DefineIndex(matreloid, index, InvalidOid, false, false, false, false);
 	CommandCounterIncrement();
-}
-
-static char *
-get_select_query_sql(RangeVar *view, const char *sql)
-{
-	int trimmedlen;
-	char *trimmed;
-	int pos;
-	StringInfo str = makeStringInfo();
-
-	if (view->catalogname)
-	{
-		appendStringInfoString(str, view->catalogname);
-		appendStringInfoChar(str, '.');
-	}
-
-	if (view->schemaname)
-	{
-		appendStringInfoString(str, view->schemaname);
-		appendStringInfoChar(str, '.');
-	}
-
-	appendStringInfoString(str, view->relname);
-
-	/*
-	 * Technically the CV could be named "create" or "continuous",
-	 * so it's not enough to simply advance to the CV name. We need
-	 * to skip past the keywords first. Note that these find() calls
-	 * should never return -1 for this string since it's already been
-	 * validated.
-	 */
-	pos = skip_token(sql, "CREATE", 0);
-	pos = skip_token(sql, "CONTINUOUS", pos);
-	pos = skip_token(sql, "VIEW", pos);
-	pos = skip_token(sql, str->data, pos);
-	pos = skip_token(sql, "AS", pos);
-
-	trimmedlen = strlen(sql) - pos + 1;
-	trimmed = palloc(trimmedlen);
-
-	memcpy(trimmed, &sql[pos], trimmedlen);
-
-	pfree(str->data);
-	pfree(str);
-
-	return trimmed;
 }
 
 static void
@@ -379,6 +333,29 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
 			heap_close(rel, AccessShareLock);
 		}
 	}
+
+	/* Record dependency between relations and continuous views if there is a stream-table join */
+	foreach(lc, cxt.rels)
+	{
+		Relation rel;
+
+		if (!IsA(lfirst(lc), RangeVar))
+			continue;
+
+		rel = heap_openrv((RangeVar *) lfirst(lc), AccessShareLock);
+
+		parent.classId = PipelineQueryRelationId;
+		parent.objectId = cvoid;
+		parent.objectSubId = 0;
+
+		child.classId = RelationRelationId;
+		child.objectId = rel->rd_id;
+		child.objectSubId = 0;
+
+		recordDependencyOn(&parent, &child, DEPENDENCY_NORMAL);
+
+		heap_close(rel, AccessShareLock);
+	}
 }
 
 /*
@@ -405,11 +382,15 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *workerselect;
 	SelectStmt *viewselect;
+	SelectStmt *cont_select;
+	char *cont_select_sql;
+	Query *cont_query;
 	CQAnalyzeContext context;
 	bool saveAllowSystemTableMods;
 
+	Assert(((SelectStmt *) stmt->query)->forContinuousView);
+
 	view = stmt->into->rel;
-	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
 
 	/*
 	 * Check if CV already exists?
@@ -418,6 +399,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_CONTINUOUS_VIEW),
 				errmsg("continuous view \"%s\" already exists", view->relname)));
+
+	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
 
 	/*
 	 * allowSystemTableMods is a global flag that, when true, allows certain column types
@@ -429,15 +412,21 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	ValidateContQuery(stmt, querystring);
 
+	/* Deparse query so that workers always see the same SelectStmt */
+	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
+	cont_select_sql = deparse_cont_query_def(cont_query);
+	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
+	cont_select->forContinuousView = true;
+
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
 	 * because the targetList of this SelectStmt contains all columns
 	 * that need to be created in the underlying materialization table.
 	 */
-	workerselect = GetSelectStmtForCQWorker(copyObject(stmt->query), &viewselect);
+	workerselect = GetSelectStmtForCQWorker(copyObject(cont_select), &viewselect);
 	InitializeCQAnalyzeContext(workerselect, NULL, &context);
 
-	query = parse_analyze(copyObject(workerselect), querystring, 0, 0);
+	query = parse_analyze(copyObject(workerselect), cont_select_sql, NULL, 0);
 	tlist = query->targetList;
 
 	/*
@@ -511,8 +500,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	cvoid = DefineContinuousView(view, get_select_query_sql(view, querystring),
-			mat_relation, IsSlidingWindowSelectStmt(viewselect), !SelectsFromStreamOnly(workerselect));
+	cvoid = DefineContinuousView(view, cont_query, mat_relation,
+				IsSlidingWindowSelectStmt(cont_select), !SelectsFromStreamOnly(cont_select));
 	CommandCounterIncrement();
 
 	/*
@@ -532,7 +521,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
 
-	viewoid = DefineView(view_stmt, querystring);
+	viewoid = DefineView(view_stmt, cont_select_sql);
 	CommandCounterIncrement();
 	allowSystemTableMods = saveAllowSystemTableMods;
 
@@ -545,7 +534,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * This seems simpler.
 	 */
 	allowSystemTableMods = saveAllowSystemTableMods;
-	create_indices_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);
+	create_index_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);
 }
 
 /*

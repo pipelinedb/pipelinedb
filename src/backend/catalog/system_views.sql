@@ -885,7 +885,5 @@ CREATE VIEW pipeline_query_stats AS
 
 -- stream stats
 CREATE VIEW pipeline_stream_stats AS
-	SELECT pg_namespace.nspname AS schema, stats.name, stats.input_rows,
-		stats.input_batches, stats.input_bytes
-		FROM stream_stat_get() AS stats JOIN pg_namespace
-		ON stats.namespace = pg_namespace.oid;
+	SELECT schema, name, input_rows, input_batches, input_bytes
+		FROM stream_stat_get();

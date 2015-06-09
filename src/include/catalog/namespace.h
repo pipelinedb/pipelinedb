@@ -64,6 +64,7 @@ extern Oid RangeVarGetAndCheckCreationNamespace(RangeVar *newRelation,
 extern void RangeVarAdjustRelationPersistence(RangeVar *newRelation, Oid nspid);
 extern Oid	RelnameGetRelid(const char *relname);
 extern bool RelationIsVisible(Oid relid);
+extern bool StreamIsVisible(Oid relid, Oid namespace, char *relname);
 
 extern Oid	TypenameGetTypid(const char *typname);
 extern bool TypeIsVisible(Oid typid);

@@ -14,10 +14,6 @@
 #include "settings.h"
 #include "pipeline.h"
 
-#define SELECT_CONTINUOUS_VIEWS \
-"SELECT pipeline_query.id AS Id, pg_namespace.nspname AS Schema, pipeline_query.name AS Name, pipeline_query.query AS Query "\
-"  FROM pipeline_query JOIN pg_namespace ON pipeline_query.namespace = pg_namespace.oid"
-
 /*
  * \zq
  *
@@ -32,7 +28,7 @@ listPipelineQuery(void)
 	printQueryOpt myopt = pset.popt;
 
 	initPQExpBuffer(&buf);
-	printfPQExpBuffer(&buf,	SELECT_CONTINUOUS_VIEWS);
+	printfPQExpBuffer(&buf,	"SELECT * FROM pipeline_queries()");
 
 	res = PSQLexec(buf.data, false);
 	termPQExpBuffer(&buf);
