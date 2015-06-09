@@ -17,9 +17,9 @@
 #include "nodes/parsenodes.h"
 #include "storage/spin.h"
 #include "utils/hsearch.h"
+#include "utils/relcache.h"
 #include "utils/timestamp.h"
 
-#define EventStreamNeedsOpen(stream) (stream->state != STREAM_STATE_OPEN)
 #define QueryIsStreaming(query) ((query)->isContinuous)
 #define QueryIsCombine(query) ((query)->isCombine)
 #define PlanIsStreaming(stmt) ((stmt)->is_continuous)
