@@ -97,7 +97,7 @@ NumSWVacuumTuples(Oid relid)
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	querytree_list = pg_analyze_and_rewrite((Node *) stmt, NULL,
+	querytree_list = pg_analyze_and_rewrite((Node *) stmt, sql.data,
 			NULL, 0);
 	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
 
@@ -105,7 +105,7 @@ NumSWVacuumTuples(Oid relid)
 	portal->visible = false;
 	PortalDefineQuery(portal,
 			NULL,
-			NULL,
+			sql.data,
 			"SELECT",
 			list_make1(plan),
 			NULL);
@@ -141,8 +141,8 @@ NumSWVacuumTuples(Oid relid)
 
 	PopActiveSnapshot();
 
-	MemoryContextDelete(runctx);
 	MemoryContextSwitchTo(oldcontext);
+	MemoryContextDelete(runctx);
 
 	return count;
 }
