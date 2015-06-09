@@ -1297,7 +1297,7 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
-	cstate->to_stream = rel ? IsStream(RelationGetNamespace(rel), RelationGetRelationName(rel)) : false;
+	cstate->to_stream = rel ? IsInferredStream(RelationGetNamespace(rel), RelationGetRelationName(rel)) : false;
 
 	if (cstate->to_stream)
 	{
@@ -4327,7 +4327,7 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 				}
 			}
 			if (attnum == InvalidAttrNumber &&
-					!IsStream(RelationGetNamespace(rel), RelationGetRelationName(rel)))
+					!IsInferredStream(RelationGetNamespace(rel), RelationGetRelationName(rel)))
 			{
 				if (rel != NULL)
 					ereport(ERROR,

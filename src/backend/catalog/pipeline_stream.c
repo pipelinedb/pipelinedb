@@ -663,15 +663,25 @@ RangeVarIsForTypedStream(RangeVar *rv)
 bool
 RangeVarIsForStream(RangeVar *stream)
 {
-	Oid namespace = RangeVarGetCreationNamespace(stream);
-	return RangeVarIsForTypedStream(stream) || IsStream(namespace, stream->relname);
+
+	return RangeVarIsForTypedStream(stream) || RangeVarIsForInferredStream(stream);
 }
 
 /*
- * IsStream
+ * RangeVarIsForInferredStream
  */
 bool
-IsStream(Oid namespace, char *name)
+RangeVarIsForInferredStream(RangeVar *rv)
+{
+	Oid namespace = RangeVarGetCreationNamespace(rv);
+	return IsInferredStream(namespace, rv->relname);
+}
+
+/*
+ * IsInferredStream
+ */
+bool
+IsInferredStream(Oid namespace, char *name)
 {
 	HeapTuple tup;
 
@@ -776,4 +786,41 @@ GetStreamNamespace(Oid stream_relid)
 	}
 
 	return InvalidOid;
+}
+
+/*
+ * RelIdIsForTypedStream
+ */
+bool
+RelIdIsForTypedStream(Oid stream_relid)
+{
+	HeapTuple	tp;
+
+	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(stream_relid));
+	if (HeapTupleIsValid(tp))
+	{
+		Assert(((Form_pg_class) GETSTRUCT(tp))->relkind == RELKIND_STREAM);
+		ReleaseSysCache(tp);
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * RelIdIsForInferredStream
+ */
+bool
+RelIdIsForInferredStream(Oid stream_relid)
+{
+	HeapTuple	tp;
+
+	tp = SearchSysCache1(PIPELINESTREAMOID, ObjectIdGetDatum(stream_relid));
+	if (HeapTupleIsValid(tp))
+	{
+		ReleaseSysCache(tp);
+		return true;
+	}
+
+	return false;
 }
