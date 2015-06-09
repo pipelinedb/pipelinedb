@@ -44,6 +44,7 @@ ExceptionalCondition(const char *conditionName,
 					 fileName, lineNumber, getpid(), debug_query_string);
 	}
 
+	/* dump stack trace */
 	size = backtrace(array, 32);
 	fprintf(stderr, "assertion failure at:\n");
 	backtrace_symbols_fd(array, size, STDERR_FILENO);
