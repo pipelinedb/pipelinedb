@@ -1291,7 +1291,7 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
-	cstate->to_stream = RelationGetRelKind(rel) == RELKIND_STREAM;
+	cstate->to_stream = rel && RelationGetRelKind(rel) == RELKIND_STREAM;
 
 	if (cstate->to_stream)
 	{
