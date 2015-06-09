@@ -2694,7 +2694,7 @@ create_stream_table_join_plan(PlannerInfo *root, StreamTableJoinPath *best_path,
 	 * on the left.
 	 */
 	hashclauses = get_switched_clauses(best_path->path_hashclauses,
-							 best_path->jpath.innerjoinpath->parent->relids);
+							 best_path->jpath.outerjoinpath->parent->relids);
 
 	/* We don't want any excess columns in the hashed tuples */
 	disuse_physical_tlist(root, inner_plan, best_path->jpath.innerjoinpath);

@@ -452,9 +452,6 @@ GetContPlan(ContinuousView *view)
 
 	set_plan_refs(plan, view);
 
-	if (type == Worker)
-		pprint(plan);
-
 	return plan;
 }
 
