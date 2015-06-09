@@ -33,5 +33,6 @@ extern bool RangeVarIsForTypedStream(RangeVar *rv);
 extern Oid GetDefaultStreamNamespace(char *stream);
 extern Oid GetStreamRelId(RangeVar *stream);
 extern Oid GetStreamNamespace(Oid stream_relid);
+extern Relation GetRelationForStream(RangeVar *rv, List *cols);
 
 #endif

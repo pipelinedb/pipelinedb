@@ -374,7 +374,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
  * COPY events to a stream from an input source
  */
 uint64
-CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
+CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
 	Bitmapset *targets;
 	uint64 count = 0;
@@ -383,13 +383,9 @@ CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, i
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
 	Size size = 0;
-	RangeVar *rv;
 
-	if (namespace == InvalidOid)
-		namespace = GetDefaultStreamNamespace(stream);
+	targets = GetLocalStreamReaders(RelationGetRelNamespace(stream), RelationGetRelName(stream));
 
-	rv = makeRangeVar(get_namespace_name(namespace), stream, -1);
-	targets = GetLocalStreamReaders(namespace, stream);
 	/*
 	 * If it's a typed stream we can get here because technically the relation does exist.
 	 * However, we don't want to silently accept data that isn't being read by anything.
@@ -422,7 +418,7 @@ CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, i
 		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
 	}
 
-	stream_stat_report(namespace, stream, count, 1, size);
+	stream_stat_report(RelationGetRelNamespace(stream), stream, count, 1, size);
 
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
