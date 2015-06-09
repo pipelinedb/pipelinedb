@@ -21,5 +21,6 @@
 
 extern PlannedStmt *GetContPlan(ContinuousView *view);
 extern TuplestoreScan *SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore);
+extern PlannedStmt *GetCombinerLookupPlan(ContinuousView *view);
 
 #endif

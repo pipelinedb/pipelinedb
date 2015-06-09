@@ -1012,6 +1012,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
 		case T_Hash:
 			pname = sname = "Hash";
 			break;
+		case T_PhysicalGroupLookup:
+			pname = sname = "Physical Group Lookup";
+			break;
 		default:
 			pname = sname = "???";
 			break;

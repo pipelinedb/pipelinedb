@@ -355,9 +355,7 @@ hash_groups(ContQueryCombinerState *state, TupleHashTable existing)
 			existing->entrysize, existing->tablecxt, existing->tempcxt);
 
 	foreach_tuple(slot, state->batch)
-	{
 		LookupTupleHashEntry(groups, slot, &isnew);
-	}
 
 	tuplestore_rescan(state->batch);
 
@@ -998,4 +996,58 @@ next:
 	pfree(states);
 	MemoryContextDelete(run_cxt);
 	MemoryContextSwitchTo(TopMemoryContext);
+}
+
+/*
+ * GetCombinerLookupPlan
+ */
+PlannedStmt *
+GetCombinerLookupPlan(ContinuousView *view)
+{
+	ContQueryCombinerState state;
+	PlannedStmt *plan;
+	List *values = NIL;
+
+	init_query_state(&state, view->id, CurrentMemoryContext);
+
+	if (state.isagg && state.ngroupatts > 0)
+	{
+		TupleHashTable existing;
+		FmgrInfo *eq_funcs;
+		FmgrInfo *hash_funcs;
+		Relation rel;
+
+		execTuplesHashPrepare(state.ngroupatts, state.groupops, &eq_funcs, &hash_funcs);
+		existing = BuildTupleHashTable(state.ngroupatts, state.groupatts, eq_funcs, hash_funcs, 1000,
+				sizeof(HeapTupleEntryData), CurrentMemoryContext, CurrentMemoryContext);
+
+		rel = heap_openrv_extended(view->matrel, AccessShareLock, true);
+
+		if (rel)
+		{
+			HeapTuple tuple;
+			HeapScanDesc scan = heap_beginscan(rel, GetActiveSnapshot(), 0, NULL);
+
+			while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+			{
+				if (!TupIsNull(state.slot))
+					ExecClearTuple(state.slot);
+
+				ExecStoreTuple(heap_copytuple(tuple), state.slot, InvalidBuffer, false);
+				tuplestore_puttupleslot(state.batch, state.slot);
+				break;
+			}
+
+			heap_endscan(scan);
+			heap_close(rel, AccessShareLock);
+		}
+
+		values = get_values(&state, existing);
+	}
+
+	plan = get_cached_groups_plan(&state, values);
+
+	tuplestore_end(state.batch);
+
+	return plan;
 }

@@ -324,9 +324,11 @@ set_plan_refs(PlannedStmt *pstmt, ContinuousView *view)
 		char *refname;
 
 
+		/* Make the TuplestoreScan's target list mimic the TupleDesc of the materialization table */
 		if (IsA(plan->lefttree, TuplestoreScan))
 			plan->lefttree->targetlist = make_tupstore_tlist(matdesc);
 
+		/* The materialization table's RTE is used as a pseudo RTE for the TuplestoreScan */
 		rte = makeNode(RangeTblEntry);
 		refname = view->matrel->relname;
 		rte->rtekind = RTE_RELATION;

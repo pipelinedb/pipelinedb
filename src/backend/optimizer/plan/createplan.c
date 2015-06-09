@@ -2738,6 +2738,8 @@ create_physical_group_lookup_plan(PlannerInfo *root, PhysicalGroupLookupPath *be
 
 	node->plan.lefttree = (Plan *) nl;
 
+	copy_path_costsize(&node->plan, &best_path->path);
+
 	return node;
 }
 

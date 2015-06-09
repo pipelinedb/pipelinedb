@@ -700,6 +700,7 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 
 	/* Initialize ExplainState. */
 	ExplainInitState(&es);
+	es.format = EXPLAIN_FORMAT_TEXT;
 	pfree(es.str);
 
 	/* Parse options list. */
@@ -715,18 +716,10 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 		{
 			char *p = defGetString(opt);
 
-			if (strcmp(p, "text") == 0)
-				es.format = EXPLAIN_FORMAT_TEXT;
-			else if (strcmp(p, "xml") == 0)
-				es.format = EXPLAIN_FORMAT_XML;
-			else if (strcmp(p, "json") == 0)
-				es.format = EXPLAIN_FORMAT_JSON;
-			else if (strcmp(p, "yaml") == 0)
-				es.format = EXPLAIN_FORMAT_YAML;
-			else
+			if (strcmp(p, "text") != 0)
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						errmsg("unrecognized value for EXPLAIN option \"%s\": \"%s\"",
+						errmsg("unrecognized value for EXPLAIN CONTINUOUS VIEW option \"%s\": \"%s\"",
 								opt->defname, p)));
 		}
 		else
@@ -753,6 +746,6 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 	explain_cont_plan("Combiner Plan", plan, &es, desc, dest);
 	tuplestore_end(tupstore);
 
-	explain_cont_plan("Combiner Lookup Plan", NULL, &es, desc, dest);
+	explain_cont_plan("Combiner Lookup Plan", GetCombinerLookupPlan(view), &es, desc, dest);
 	MyContQueryProc = NULL;
 }
