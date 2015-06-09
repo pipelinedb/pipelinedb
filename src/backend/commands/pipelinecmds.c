@@ -686,6 +686,8 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 	HeapTuple tuple = GetPipelineQueryTuple(stmt->view);
 	Oid cq_id;
 	Form_pipeline_query row;
+	PlannedStmt *plan;
+	Tuplestorestate *tupstore;
 
 	if (!HeapTupleIsValid(tuple))
 		ereport(ERROR,
@@ -744,8 +746,13 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 
 	MyContQueryProc = &cq_proc;
 	MyContQueryProc->type = Combiner;
-	explain_cont_plan("Combiner Plan", NULL, &es, desc, dest);
-	MyContQueryProc = NULL;
+
+	plan = GetContPlan(view);
+	tupstore = tuplestore_begin_heap(false, false, work_mem);
+	SetCombinerPlanTuplestorestate(plan, tupstore);
+	explain_cont_plan("Combiner Plan", plan, &es, desc, dest);
+	tuplestore_end(tupstore);
 
 	explain_cont_plan("Combiner Lookup Plan", NULL, &es, desc, dest);
+	MyContQueryProc = NULL;
 }

@@ -1048,6 +1048,7 @@ addRangeTableEntry(ParseState *pstate,
 		 * It could be a strongly typed stream, but even if the rel doesn't exist, assume it's a stream
 		 */
 		rte->rtekind = RTE_STREAM;
+		rte->relkind = RELKIND_STREAM;
 		inh = false;
 		desc = ParserGetStreamDescr(pstate, relation, rte);
 	}

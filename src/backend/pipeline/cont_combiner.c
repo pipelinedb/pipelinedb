@@ -83,7 +83,7 @@ typedef struct {
 static void
 prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 {
-	TuplestoreScan *scan = NULL;
+	TuplestoreScan *scan;
 
 	/*
 	 * Mark combine_plan as not continuous now because we'll be repeatedly
@@ -95,19 +95,7 @@ prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 	 */
 	plan->is_continuous = false;
 
-	if (IsA(plan->planTree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree;
-	else if ((IsA(plan->planTree, Agg) || IsA(plan->planTree, ContinuousUnique)) &&
-			IsA(plan->planTree->lefttree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree->lefttree;
-	else if (IsA(plan->planTree, Agg) &&
-			IsA(plan->planTree->lefttree, Sort) &&
-			IsA(plan->planTree->lefttree->lefttree, TuplestoreScan))
-		scan = (TuplestoreScan *) plan->planTree->lefttree->lefttree;
-	else
-		elog(ERROR, "couldn't find TuplestoreScan node in combiner's plan");
-
-	scan->store = state->batch;
+	scan = SetCombinerPlanTuplestorestate(plan, state->batch);
 
 	state->desc = ExecTypeFromTL(((Plan *) scan)->targetlist, false);
 	state->combine_plan = plan;

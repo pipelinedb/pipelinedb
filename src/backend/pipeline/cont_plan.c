@@ -100,6 +100,24 @@ make_store_target(TargetEntry *tostore, char *resname, AttrNumber attno, Oid agg
 	return result;
 }
 
+static List *
+make_tupstore_tlist(TupleDesc desc)
+{
+	AttrNumber attno;
+	List *tlist = NIL;
+
+	for (attno = 1; attno <= desc->natts; attno++)
+	{
+		Form_pg_attribute attr = desc->attrs[attno - 1];
+		Var *var = makeVar(1, attno, attr->atttypid, attr->atttypmod, attr->attcollation, 0);
+		TargetEntry *entry = makeTargetEntry((Expr *) var, attno, NameStr(attr->attname), false);
+
+		tlist = lappend(tlist, entry);
+	}
+
+	return tlist;
+}
+
 /*
  * get_combiner_join_rel
  *
@@ -300,12 +318,34 @@ set_plan_refs(PlannedStmt *pstmt, ContinuousView *view)
 
 	plan->targetlist = targetlist;
 
-	/*
-	 * This is where the combiner gets its input rows from, so it needs to expect whatever types
-	 * the worker is going to output
-	 */
-	if (IsA(plan->lefttree, TuplestoreScan))
-		plan->lefttree->targetlist = targetlist;
+	if (pstmt->is_combine)
+	{
+		RangeTblEntry *rte;
+		char *refname;
+
+
+		if (IsA(plan->lefttree, TuplestoreScan))
+			plan->lefttree->targetlist = make_tupstore_tlist(matdesc);
+
+		rte = makeNode(RangeTblEntry);
+		refname = view->matrel->relname;
+		rte->rtekind = RTE_RELATION;
+		rte->alias = view->matrel->alias;
+		rte->inFromCl = true;
+		rte->requiredPerms = ACL_SELECT;
+		rte->checkAsUser = InvalidOid;
+		rte->selectedCols = NULL;
+		rte->modifiedCols = NULL;
+		rte->relname = refname;
+
+		rte->eref = makeAlias(refname, NIL);
+		rte->relkind = RELKIND_RELATION;
+		rte->relid = matdesc->attrs[0]->attrelid;
+
+		/* Replace the rtable list with a single RTE for the matrel */
+		list_free_deep(pstmt->rtable);
+		pstmt->rtable = list_make1(rte);
+	}
 }
 
 static PlannedStmt *
@@ -412,5 +452,33 @@ GetContPlan(ContinuousView *view)
 
 	set_plan_refs(plan, view);
 
+	if (type == Worker)
+		pprint(plan);
+
 	return plan;
+}
+
+/*
+ * SetCombinerPlanTuplestorestate
+ */
+TuplestoreScan *
+SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore)
+{
+	TuplestoreScan *scan;
+
+	if (IsA(plan->planTree, TuplestoreScan))
+		scan = (TuplestoreScan *) plan->planTree;
+	else if ((IsA(plan->planTree, Agg) || IsA(plan->planTree, ContinuousUnique)) &&
+			IsA(plan->planTree->lefttree, TuplestoreScan))
+		scan = (TuplestoreScan *) plan->planTree->lefttree;
+	else if (IsA(plan->planTree, Agg) &&
+			IsA(plan->planTree->lefttree, Sort) &&
+			IsA(plan->planTree->lefttree->lefttree, TuplestoreScan))
+		scan = (TuplestoreScan *) plan->planTree->lefttree->lefttree;
+	else
+		elog(ERROR, "couldn't find TuplestoreScan node in combiner's plan");
+
+	scan->store = tupstore;
+
+	return scan;
 }
