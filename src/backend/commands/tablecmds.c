@@ -477,11 +477,27 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId)
 	 */
 	StrNCpy(relname, stmt->relation->relname, NAMEDATALEN);
 
-	if (relkind != RELKIND_STREAM && RangeVarIsForStream(stmt->relation))
-		ereport(ERROR,
-				(errcode(ERRCODE_DUPLICATE_STREAM),
-				 errmsg("\"%s\" is being used as a stream", relname),
-				 errhint("Streams and relations cannot have the same name.")));
+	if (RangeVarIsForStream(stmt->relation))
+	{
+
+		if (relkind == RELKIND_STREAM)
+		{
+			if (RangeVarIsForTypedStream(stmt->relation))
+				ereport(ERROR,
+						(errcode(ERRCODE_DUPLICATE_STREAM),
+						 errmsg("stream \"%s\" already exists", relname)));
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_DUPLICATE_STREAM),
+						 errmsg("\"%s\" is being used as a stream", relname),
+						 errhint("A stream cannot have the same name as an inferred stream.")));
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_DUPLICATE_STREAM),
+					 errmsg("\"%s\" is being used as a stream", relname),
+					 errhint("Streams and relations cannot have the same name.")));
+	}
 
 	/*
 	 * Check consistency of arguments
