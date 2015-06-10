@@ -436,6 +436,13 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	ListCell   *attnos;
 	ListCell   *lc;
 	bool isStream = RangeVarIsForStream(stmt->relation);
+	RangeVar *cv = NULL;
+
+	if (IsAMatRel(stmt->relation, &cv))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot insert into materialization table \"%s\" of continuous view \"%s\"",
+						 stmt->relation->relname, cv->relname)));
 
 	/* There can't be any outer WITH to worry about */
 	Assert(pstate->p_ctenamespace == NIL);
@@ -1946,6 +1953,13 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	Node	   *qual;
 	ListCell   *origTargetList;
 	ListCell   *tl;
+	RangeVar *cv = NULL;
+
+	if (IsAMatRel(stmt->relation, &cv))
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				errmsg("cannot update materialization table \"%s\" of continuous view \"%s\"",
+						stmt->relation->relname, cv->relname)));
 
 	qry->commandType = CMD_UPDATE;
 	pstate->p_is_update = true;
