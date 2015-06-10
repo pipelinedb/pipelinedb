@@ -94,7 +94,7 @@ def main(args):
      merging. A list of all these files is stored in ./mismatch_files.txt.
   """
   tmp_dir = args.tmp_dir or tempfile.mkdtemp()
-  tar_path = download_upstream(args.version, tmp_dir)
+  tar_path = '/tmp/tmph_B6JX/postgresql-9.4.3.tar.gz' # download_upstream(args.version, tmp_dir)
 
   tar = tarfile.open(tar_path)
   tar.extractall(path=tmp_dir)
@@ -116,7 +116,7 @@ def main(args):
     log_file = os.path.join(local_root, 'added_files.txt')
     print 'There are %d new files! Storing paths in %s.' % (len(added_files),
                                                             log_file)
-    with open(log_file) as f:
+    with open(log_file, 'w+') as f:
       f.write('\n'.join(added_files))
 
   # Are there any deleted files in the local branch?
@@ -125,7 +125,7 @@ def main(args):
     log_file = os.path.join(local_root, 'removed_files.txt')
     print 'There are %d removed files! Storing paths in %s.' % (len(rm_files),
                                                                 log_file)
-    with open(log_file) as f:
+    with open(log_file, 'w+') as f:
       f.write('\n'.join(rm_files))
 
   # Go through all files in the upstream branch and add, overwrite or generate
@@ -158,10 +158,6 @@ def main(args):
     lf.close()
     rf.close()
 
-    diff_path = os.path.join(diff_dir, rel_path) + '.diff'
-    subdir, _ = os.path.split(diff_path)
-    safe_mkdirs(subdir)
-
     diff_lines = list(difflib.unified_diff(left, right,
                                            local_path, upstream_path))
 
@@ -170,7 +166,11 @@ def main(args):
       shutil.copyfile(upstream_path, local_path)
       continue
 
-    with open(diff_path, 'wa') as f:
+    diff_path = os.path.join(diff_dir, rel_path) + '.diff'
+    subdir, _ = os.path.split(diff_path)
+    safe_mkdirs(subdir)
+
+    with open(diff_path, 'w+') as f:
       f.write('\n'.join(diff_lines))
 
     need_merge.append(local_path)
@@ -186,7 +186,7 @@ def main(args):
   # It's useful to have a list of all files written to diffs/
   # so we can check off files as we merge them
   mismatch_files = os.path.join(local_root, 'mismatch_files.txt')
-  with open(mismatch_files) as f:
+  with open(mismatch_files, 'w+') as f:
     f.write('\n'.join(sorted(need_merge)))
     print 'Stored all mismatching file paths in %s.' % mismatch_files
 
