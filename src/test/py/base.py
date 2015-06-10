@@ -83,7 +83,9 @@ class PipelineDB(object):
 
         self.proc = subprocess.Popen([SERVER, '-D', self.data_dir,
                                       '-p', str(self.port),
-                                      '-c', 'synchronous_stream_insert=true'])
+                                      '-c', 'synchronous_stream_insert=true',
+                                      '-c', 'continuous_query_num_combiners=2',
+                                      '-c', 'continuous_query_num_workers=4'])
 
         connstr = CONNSTR_TEMPLATE % (getpass.getuser(), self.port)
         self.engine = create_engine(connstr)
