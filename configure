@@ -1513,7 +1513,7 @@ Optional Packages:
   --with-pam              build with PAM support
   --with-ldap             build with LDAP support
   --with-bonjour          build with Bonjour support
-  --without-openssl       build without OpenSSL support
+  --with-openssl          build with OpenSSL support
   --with-selinux          build with SELinux support
   --without-readline      do not use GNU Readline nor BSD Libedit for editing
   --with-libedit-preferred
@@ -5538,9 +5538,7 @@ $as_echo "#define USE_SSL 1" >>confdefs.h
   esac
 
 else
-  with_openssl=yes
-
-$as_echo "#define USE_SSL 1" >>confdefs.h
+  with_openssl=no
 
 fi
 
@@ -16412,4 +16410,3 @@ else
   as_fn_error $? "check library not found (http://check.sourceforge.net/web/install.html)" "$LINENO" 5
 fi
 ac_cv_lib_check=ac_cv_lib_check_main
-
