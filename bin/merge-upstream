@@ -94,7 +94,7 @@ def main(args):
      merging. A list of all these files is stored in ./mismatch_files.txt.
   """
   tmp_dir = args.tmp_dir or tempfile.mkdtemp()
-  tar_path = '/tmp/tmph_B6JX/postgresql-9.4.3.tar.gz' # download_upstream(args.version, tmp_dir)
+  tar_path = download_upstream(args.version, tmp_dir)
 
   tar = tarfile.open(tar_path)
   tar.extractall(path=tmp_dir)
