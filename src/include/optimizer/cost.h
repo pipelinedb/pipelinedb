@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * cost.h
@@ -67,6 +68,8 @@ extern double clamp_row_est(double nrows);
 extern double index_pages_fetched(double tuples_fetched, BlockNumber pages,
 					double index_pages, PlannerInfo *root);
 extern void cost_seqscan(Path *path, PlannerInfo *root, RelOptInfo *baserel,
+			 ParamPathInfo *param_info);
+extern void cost_streamscan(Path *path, PlannerInfo *root, RelOptInfo *baserel,
 			 ParamPathInfo *param_info);
 extern void cost_index(IndexPath *path, PlannerInfo *root,
 		   double loop_count);

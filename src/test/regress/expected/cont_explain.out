@@ -1,0 +1,146 @@
+CREATE CONTINUOUS VIEW test_cont_explain1 AS SELECT COUNT(*) FROM test_cont_explain_stream;
+CREATE CONTINUOUS VIEW test_cont_explain2 AS SELECT x::int, COUNT(*) FROM test_cont_explain_stream GROUP BY x;
+CREATE CONTINUOUS VIEW test_cont_explain3 AS SELECT x::int, y::text, SUM(x) FROM test_cont_explain_stream GROUP BY x, y;
+EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
+               CONTINUOUS QUERY PLANS                
+-----------------------------------------------------
+ Worker Plan:
+   ->  Aggregate
+         Output: count(*)
+         ->  Stream Scan on test_cont_explain_stream
+               Output: arrival_timestamp
+ Combiner Plan:
+   ->  Aggregate
+         Output: pg_catalog.count(*)
+         ->  Tuplestore Scan
+               Output: count
+ Combiner Lookup Plan:
+   ->  Seq Scan on public.test_cont_explain1_mrel0
+         Output: count
+(13 rows)
+
+EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
+               CONTINUOUS QUERY PLANS                
+-----------------------------------------------------
+ Worker Plan:
+   ->  HashAggregate
+         Output: x, count(*)
+         Group Key: test_cont_explain_stream.x
+         ->  Stream Scan on test_cont_explain_stream
+               Output: x, arrival_timestamp
+ Combiner Plan:
+   ->  HashAggregate
+         Output: x, pg_catalog.count(*)
+         Group Key: test_cont_explain2_mrel0.x
+         ->  Tuplestore Scan
+               Output: x, count
+ Combiner Lookup Plan:
+   ->  Seq Scan on public.test_cont_explain2_mrel0
+         Output: x, count
+(15 rows)
+
+EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
+                          CONTINUOUS QUERY PLANS                           
+---------------------------------------------------------------------------
+ Worker Plan:
+   ->  HashAggregate
+         Output: x, y, sum(x)
+         Group Key: test_cont_explain_stream.x, test_cont_explain_stream.y
+         ->  Stream Scan on test_cont_explain_stream
+               Output: x, y, arrival_timestamp
+ Combiner Plan:
+   ->  HashAggregate
+         Output: x, y, pg_catalog.sum(sum)
+         Group Key: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y
+         ->  Tuplestore Scan
+               Output: x, y, sum
+ Combiner Lookup Plan:
+   ->  Seq Scan on public.test_cont_explain3_mrel0
+         Output: x, y, sum
+(15 rows)
+
+INSERT INTO test_cont_explain_stream (x, y) VALUES (1, 'hello');
+EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
+               CONTINUOUS QUERY PLANS                
+-----------------------------------------------------
+ Worker Plan:
+   ->  Aggregate
+         Output: count(*)
+         ->  Stream Scan on test_cont_explain_stream
+               Output: arrival_timestamp
+ Combiner Plan:
+   ->  Aggregate
+         Output: pg_catalog.count(*)
+         ->  Tuplestore Scan
+               Output: count
+ Combiner Lookup Plan:
+   ->  Seq Scan on public.test_cont_explain1_mrel0
+         Output: count
+(13 rows)
+
+EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
+                                                                               CONTINUOUS QUERY PLANS                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Worker Plan:
+   ->  HashAggregate
+         Output: x, count(*)
+         Group Key: test_cont_explain_stream.x
+         ->  Stream Scan on test_cont_explain_stream
+               Output: x, arrival_timestamp
+ Combiner Plan:
+   ->  HashAggregate
+         Output: x, pg_catalog.count(*)
+         Group Key: test_cont_explain2_mrel0.x
+         ->  Tuplestore Scan
+               Output: x, count
+ Combiner Lookup Plan:
+   ->  Physical Group Lookup
+         Output: test_cont_explain2_mrel0.x, test_cont_explain2_mrel0.count
+         ->  Nested Loop Semi Join
+               Output: test_cont_explain2_mrel0.x, test_cont_explain2_mrel0.count
+               ->  Values Scan on "*VALUES*"
+                     Output: "*VALUES*".column1
+               ->  Bitmap Heap Scan on public.test_cont_explain2_mrel0
+                     Output: test_cont_explain2_mrel0.x, test_cont_explain2_mrel0.count
+                     Recheck Cond: ((hash_group(test_cont_explain2_mrel0.x) = "*VALUES*".column1) OR (hash_group(test_cont_explain2_mrel0.x) IS NULL))
+                     Filter: ((hash_group(test_cont_explain2_mrel0.x) = "*VALUES*".column1) OR ((hash_group(test_cont_explain2_mrel0.x) IS NULL) AND ("*VALUES*".column1 IS NULL)))
+                     ->  BitmapOr
+                           ->  Bitmap Index Scan on test_cont_explain2_mrel0_expr_idx
+                                 Index Cond: (hash_group(test_cont_explain2_mrel0.x) = "*VALUES*".column1)
+                           ->  Bitmap Index Scan on test_cont_explain2_mrel0_expr_idx
+                                 Index Cond: (hash_group(test_cont_explain2_mrel0.x) IS NULL)
+(28 rows)
+
+EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
+                                                                                                           CONTINUOUS QUERY PLANS                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Worker Plan:
+   ->  HashAggregate
+         Output: x, y, sum(x)
+         Group Key: test_cont_explain_stream.x, test_cont_explain_stream.y
+         ->  Stream Scan on test_cont_explain_stream
+               Output: x, y, arrival_timestamp
+ Combiner Plan:
+   ->  HashAggregate
+         Output: x, y, pg_catalog.sum(sum)
+         Group Key: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y
+         ->  Tuplestore Scan
+               Output: x, y, sum
+ Combiner Lookup Plan:
+   ->  Physical Group Lookup
+         Output: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y, test_cont_explain3_mrel0.sum
+         ->  Nested Loop Semi Join
+               Output: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y, test_cont_explain3_mrel0.sum
+               ->  Values Scan on "*VALUES*"
+                     Output: "*VALUES*".column1
+               ->  Bitmap Heap Scan on public.test_cont_explain3_mrel0
+                     Output: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y, test_cont_explain3_mrel0.sum
+                     Recheck Cond: ((hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) = "*VALUES*".column1) OR (hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) IS NULL))
+                     Filter: ((hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) = "*VALUES*".column1) OR ((hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) IS NULL) AND ("*VALUES*".column1 IS NULL)))
+                     ->  BitmapOr
+                           ->  Bitmap Index Scan on test_cont_explain3_mrel0_expr_idx
+                                 Index Cond: (hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) = "*VALUES*".column1)
+                           ->  Bitmap Index Scan on test_cont_explain3_mrel0_expr_idx
+                                 Index Cond: (hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) IS NULL)
+(28 rows)
+
