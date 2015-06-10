@@ -828,13 +828,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 						errmsg("column names must be explicitly given when copying into a stream"),
 						errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
 
-			rel = (Relation) palloc0(sizeof(RelationData));
-			rel->rd_att = GetStreamTupleDesc(RangeVarGetCreationNamespace(stmt->relation), stmt->relation->relname, stmt->attlist);
-			rel->rd_rel = palloc0(sizeof(FormData_pg_class));
-			rel->rd_rel->relnatts = rel->rd_att->natts;
-			rel->rd_rel->relkind = RELKIND_RELATION;
-
-			namestrcpy(&rel->rd_rel->relname, stmt->relation->relname);
+			rel = GetRelationForStream(stmt->relation, stmt->attlist);
 		}
 		else
 		{
@@ -893,7 +887,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	}
 	else
 	{
-		if (rel && RangeVarIsForStream(stmt->relation))
+		if (rel && RelationGetRelKind(rel) == RELKIND_STREAM)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("cannot COPY data out of streams")));
@@ -1297,7 +1291,7 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
-	cstate->to_stream = rel ? IsStream(RelationGetNamespace(rel), RelationGetRelationName(rel)) : false;
+	cstate->to_stream = rel && RelationGetRelKind(rel) == RELKIND_STREAM;
 
 	if (cstate->to_stream)
 	{
@@ -2120,7 +2114,7 @@ CopyFrom(CopyState cstate)
 
 	Assert(cstate->rel);
 
-	if (cstate->rel->rd_rel->relkind != RELKIND_RELATION)
+	if (cstate->rel->rd_rel->relkind != RELKIND_RELATION && RelationGetRelKind(cstate->rel) != RELKIND_STREAM)
 	{
 		if (cstate->rel->rd_rel->relkind == RELKIND_VIEW)
 			ereport(ERROR,
@@ -2374,8 +2368,7 @@ CopyFrom(CopyState cstate)
 					if (cstate->to_stream)
 					{
 						oldcontext = MemoryContextSwitchTo(cstate->to_stream_ctxt);
-						CopyIntoStream(cstate->rel->rd_rel->relnamespace, NameStr(cstate->rel->rd_rel->relname), tupDesc,
-								bufferedTuples, nBufferedTuples);
+						CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples);
 						MemoryContextReset(cstate->to_stream_ctxt);
 						MemoryContextSwitchTo(oldcontext);
 					}
@@ -2424,8 +2417,7 @@ CopyFrom(CopyState cstate)
 		if (cstate->to_stream)
 		{
 			oldcontext = MemoryContextSwitchTo(cstate->to_stream_ctxt);
-			CopyIntoStream(cstate->rel->rd_rel->relnamespace, NameStr(cstate->rel->rd_rel->relname), tupDesc,
-					bufferedTuples, nBufferedTuples);
+			CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples);
 			MemoryContextReset(cstate->to_stream_ctxt);
 			MemoryContextSwitchTo(oldcontext);
 		}
@@ -4326,8 +4318,8 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 					break;
 				}
 			}
-			if (attnum == InvalidAttrNumber &&
-					!IsStream(RelationGetNamespace(rel), RelationGetRelationName(rel)))
+
+			if (attnum == InvalidAttrNumber && RelationGetRelKind(rel) != RELKIND_STREAM)
 			{
 				if (rel != NULL)
 					ereport(ERROR,

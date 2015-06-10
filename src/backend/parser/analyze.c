@@ -503,15 +503,8 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	 */
 	if (isStream)
 	{
-		char *sname = stmt->relation->relname;
-		Oid namespace = RangeVarGetCreationNamespace(stmt->relation);
-		Relation stream = (Relation) palloc0(sizeof(RelationData));
-		stream->rd_att = GetStreamTupleDesc(namespace, stmt->relation->relname, stmt->cols);
-		stream->rd_rel = palloc0(sizeof(FormData_pg_class));
-		stream->rd_rel->relnatts = stream->rd_att->natts;
-		namestrcpy(&stream->rd_rel->relname, sname);
-
-		pstate->p_target_relation = stream;
+		Relation rel = GetRelationForStream(stmt->relation, stmt->cols);
+		pstate->p_target_relation = rel;
 	}
 	else
 	{

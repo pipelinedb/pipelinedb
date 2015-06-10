@@ -27,11 +27,13 @@ extern TupleDesc GetStreamTupleDesc(Oid namespace, char *stream, List *colnames)
 extern bytea *PackTupleDesc(TupleDesc desc);
 extern TupleDesc UnpackTupleDesc(bytea *bytes);
 
-extern bool IsStream(Oid namespace, char *stream);
 extern bool RangeVarIsForStream(RangeVar *stream);
 extern bool RangeVarIsForTypedStream(RangeVar *rv);
-extern Oid GetDefaultStreamNamespace(char *stream);
+extern bool RangeVarIsForInferredStream(RangeVar *rv);
 extern Oid GetStreamRelId(RangeVar *stream);
 extern Oid GetStreamNamespace(Oid stream_relid);
+extern bool RelIdIsForTypedStream(Oid relid);
+extern bool RelIdIsForInferredStream(Oid relid);
+extern Relation GetRelationForStream(RangeVar *rv, List *cols);
 
 #endif
