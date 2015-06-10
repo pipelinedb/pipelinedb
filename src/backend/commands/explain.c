@@ -15,6 +15,7 @@
 
 #include "access/xact.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/createas.h"
 #include "commands/defrem.h"
 #include "commands/prepare.h"
@@ -901,11 +902,18 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			sname = "Merge Join";
 			break;
 		case T_HashJoin:
+		case T_StreamTableJoin:
 			pname = "Hash";		/* "Join" gets added by jointype switch */
 			sname = "Hash Join";
 			break;
 		case T_SeqScan:
 			pname = sname = "Seq Scan";
+			break;
+		case T_StreamScan:
+			pname = sname = "Stream Scan";
+			break;
+		case T_TuplestoreScan:
+			pname = sname = "Tuplestore Scan";
 			break;
 		case T_IndexScan:
 			pname = sname = "Index Scan";
@@ -1004,6 +1012,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
 		case T_Hash:
 			pname = sname = "Hash";
 			break;
+		case T_PhysicalGroupLookup:
+			pname = sname = "Physical Group Lookup";
+			break;
 		default:
 			pname = sname = "???";
 			break;
@@ -1054,6 +1065,7 @@ ExplainNode(PlanState *planstate, List *ancestors,
 		case T_CteScan:
 		case T_WorkTableScan:
 		case T_ForeignScan:
+		case T_StreamScan:
 			ExplainScanTarget((Scan *) plan, es);
 			break;
 		case T_IndexScan:
@@ -1094,6 +1106,7 @@ ExplainNode(PlanState *planstate, List *ancestors,
 		case T_NestLoop:
 		case T_MergeJoin:
 		case T_HashJoin:
+		case T_StreamTableJoin:
 			{
 				const char *jointype;
 
@@ -1162,6 +1175,23 @@ ExplainNode(PlanState *planstate, List *ancestors,
 					appendStringInfo(es->str, " %s", setopcmd);
 				else
 					ExplainPropertyText("Command", setopcmd, es);
+			}
+			break;
+		default:
+			break;
+	}
+
+	/* dynamic cost evaluation */
+	switch (nodeTag(plan))
+	{
+		case T_TuplestoreScan:
+			{
+				TuplestoreScan *scan = (TuplestoreScan *) plan;
+				int i;
+
+				plan->plan_width = 0;
+				for (i = 0; i < scan->desc->natts; i++)
+					plan->plan_width += scan->desc->attrs[i]->attlen;
 			}
 			break;
 		default:
@@ -1382,6 +1412,7 @@ ExplainNode(PlanState *planstate, List *ancestors,
 										   planstate, es);
 			break;
 		case T_HashJoin:
+		case T_StreamTableJoin:
 			show_upper_qual(((HashJoin *) plan)->hashclauses,
 							"Hash Cond", planstate, ancestors, es);
 			show_upper_qual(((HashJoin *) plan)->join.joinqual,
@@ -2122,6 +2153,14 @@ ExplainTargetRel(Plan *plan, Index rti, ExplainState *es)
 			if (es->verbose)
 				namespace = get_namespace_name(get_rel_namespace(rte->relid));
 			objecttag = "Relation Name";
+			break;
+		case T_StreamScan:
+			/* Assert it's on a stream */
+			Assert(rte->rtekind == RTE_STREAM);
+			objectname = rte->relname;
+			if (es->verbose)
+				namespace = get_namespace_name(GetStreamNamespace(rte->relid));
+			objecttag = "Stream Name";
 			break;
 		case T_FunctionScan:
 			{

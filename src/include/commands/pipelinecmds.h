@@ -11,6 +11,7 @@
 #ifndef PIPELINECMDS_H
 #define PIPELINECMDS_H
 
+#include "access/tupdesc.h"
 #include "nodes/params.h"
 #include "nodes/parsenodes.h"
 #include "tcop/dest.h"
@@ -24,6 +25,7 @@ extern void ExecTruncateContViewStmt(TruncateStmt *stmt);
 extern void ExecActivateStmt(ActivateStmt *stmt);
 extern void ExecDeactivateStmt(DeactivateStmt *stmt);
 
+extern TupleDesc ExplainContViewResultDesc(ExplainContViewStmt *stmt);
 extern void ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 			 ParamListInfo params, DestReceiver *dest);
 

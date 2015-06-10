@@ -38,6 +38,8 @@ ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 	ExecSetSlotDescriptor(tss->ss.ss_ScanTupleSlot, node->desc);
 	ExecSetSlotDescriptor(tss->ss.ps.ps_ResultTupleSlot, node->desc);
 
+	tss->ss.ps.targetlist = node->scan.plan.targetlist;
+
 	tuplestore_rescan(node->store);
 
 	return tss;
