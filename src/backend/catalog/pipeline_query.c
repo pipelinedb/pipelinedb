@@ -230,32 +230,31 @@ GetMatRelationName(RangeVar *cvname)
  * GetCVNameFromMatRelName
  */
 RangeVar *
-GetCVNameFromMatRelName(RangeVar *matrel)
+GetCVNameFromMatRelName(RangeVar *name)
 {
-	char *cvname = NULL;
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
-	HeapScanDesc scan_desc = heap_beginscan_catalog(pipeline_query, 0, NULL);
 	HeapTuple tup;
-	Oid namespace = get_namespace_oid(matrel->schemaname, false);
+	Oid namespace;
+	Form_pipeline_query row;
+	RangeVar *cv;
 
-	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
-	{
-		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		if (namespace == row->namespace &&
-				pg_strcasecmp(matrel->relname, NameStr(row->matrelname)) == 0)
-		{
-			cvname = pstrdup(NameStr(row->name));
-			break;
-		}
-	}
+	if (name->schemaname == NULL)
+		namespace = RangeVarGetCreationNamespace(name);
+	else
+		namespace = get_namespace_oid(name->schemaname, false);
 
-	heap_endscan(scan_desc);
-	heap_close(pipeline_query, AccessShareLock);
+	Assert(OidIsValid(namespace));
 
-	if (!cvname)
+	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL, ObjectIdGetDatum(namespace), CStringGetDatum(name->relname));
+
+	if (!HeapTupleIsValid(tup))
 		return NULL;
 
-	return makeRangeVar(matrel->schemaname, cvname, -1);
+	row = (Form_pipeline_query) GETSTRUCT(tup);
+	cv = makeRangeVar(get_namespace_name(namespace), pstrdup(NameStr(row->name)), -1);
+
+	ReleaseSysCache(tup);
+
+	return cv;
 }
 
 /*
@@ -314,33 +313,34 @@ IsAContinuousView(RangeVar *name)
 bool
 IsAMatRel(RangeVar *name, RangeVar **cvname)
 {
-	Relation pipeline_query;
-	HeapScanDesc scandesc;
 	HeapTuple tup;
-	bool ismatrel = false;
-	NameData cv;
+	Oid namespace;
+	Form_pipeline_query row;
 
-	pipeline_query = heap_open(PipelineQueryRelationId, NoLock);
-	scandesc = heap_beginscan_catalog(pipeline_query, 0, NULL);
+	if (name->schemaname == NULL)
+		namespace = RangeVarGetCreationNamespace(name);
+	else
+		namespace = get_namespace_oid(name->schemaname, false);
 
-	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
+	Assert(OidIsValid(namespace));
+
+	tup = SearchSysCache2(PIPELINEQUERYNAMESPACEMATREL, ObjectIdGetDatum(namespace), CStringGetDatum(name->relname));
+
+	if (!HeapTupleIsValid(tup))
 	{
-		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		if (pg_strcasecmp(NameStr(row->matrelname), name->relname) == 0)
-		{
-			cv = row->name;
-			ismatrel = true;
-			break;
-		}
+		if (cvname)
+			*cvname = NULL;
+		return false;
 	}
 
-	heap_endscan(scandesc);
-	heap_close(pipeline_query, NoLock);
+	row = (Form_pipeline_query) GETSTRUCT(tup);
 
 	if (cvname)
-		*cvname = makeRangeVar(name->schemaname, pstrdup(NameStr(cv)), -1);
+		*cvname = makeRangeVar(get_namespace_name(namespace), pstrdup(NameStr(row->name)), -1);
 
-	return ismatrel;
+	ReleaseSysCache(tup);
+
+	return true;
 }
 
 /*
