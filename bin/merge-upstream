@@ -220,7 +220,5 @@ if __name__ == '__main__':
   parser.add_argument('--tmp-dir', action='store', dest='tmp_dir',
                       required=False, help='Temporary directory to store '
                       'upstream source tree in')
-  parser.add_argument('--dry-run', action='store_true', dest='dry_run',
-                      required=False)
   args = parser.parse_args()
   main(args)
