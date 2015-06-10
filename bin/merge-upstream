@@ -56,22 +56,42 @@ def safe_mkdirs(path):
 
 def list_files(path):
   dirs = os.walk(path)
-  regex = re.compile('^%s/' % path)
+  regex = re.compile('^%s/?' % path)
   files = []
 
   for _dir, _, filenames in dirs:
+    _dir = regex.sub('', _dir)
+
     # Ignore any git internal files
-    if regex.sub('', _dir).startswith('.git'):
+    if _dir.startswith('.git'):
       continue
 
-    # Ignore dot files and emacs temp files.
-    filenames = filter(lambda f: not f.startswith('.') and not f.endswith('~'),
+    # Ignore any py or unit test files.
+    if _dir.startswith('src/test/py') or _dir.startswith('src/test/unit'):
+      continue
+
+    # Ignore any PipelineDB or PostGIS files.
+    if (_dir.startswith('pipeline') or
+        _dir.startswith('src/backend/pipeline') or
+        _dir.startswith('src/include/pipeline') or
+        _dir.startswith('src/gis')):
+      continue
+
+    # Ignore dot files and emacs temp files or compiled files.
+    filenames = filter(lambda f: not f.startswith('.') and not f.endswith('~')
+                       and not f.endswith('.o'),
                        filenames)
 
-    files.extend(map(lambda f: regex.sub('', os.path.join(_dir, f)),\
-                     filenames))
+    files.extend(map(lambda f: os.path.join(_dir, f).rstrip('/'), filenames))
 
   return set(files)
+
+
+def is_path_useful(path):
+  """
+  All paths that belong to documentation files are considered useless.
+  """
+  return not (path.startswith('doc/') or path.endswith('.po'))
 
 
 def main(args):
@@ -94,7 +114,7 @@ def main(args):
      merging. A list of all these files is stored in ./mismatch_files.txt.
   """
   tmp_dir = args.tmp_dir or tempfile.mkdtemp()
-  tar_path = download_upstream(args.version, tmp_dir)
+  tar_path = '/tmp/tmph_B6JX/postgresql-9.4.3.tar.gz' # download_upstream(args.version, tmp_dir)
 
   tar = tarfile.open(tar_path)
   tar.extractall(path=tmp_dir)
@@ -111,8 +131,8 @@ def main(args):
   local_files = list_files(local_root)
 
   # Are there any new files in the upstream branch?
-  if upstream_files - local_files:
-    added_files = sorted(upstream_files - local_files)
+  added_files = sorted(filter(is_path_useful, upstream_files - local_files))
+  if added_files:
     log_file = os.path.join(local_root, 'added_files.txt')
     print 'There are %d new files! Storing paths in %s.' % (len(added_files),
                                                             log_file)
@@ -120,8 +140,8 @@ def main(args):
       f.write('\n'.join(added_files))
 
   # Are there any deleted files in the local branch?
-  if local_files - upstream_files:
-    rm_files = sorted(local_files - upstream_files)
+  rm_files = sorted(filter(is_path_useful, local_files - upstream_files))
+  if rm_files:
     log_file = os.path.join(local_root, 'removed_files.txt')
     print 'There are %d removed files! Storing paths in %s.' % (len(rm_files),
                                                                 log_file)
@@ -132,9 +152,10 @@ def main(args):
   # diffs as necessary.
   print 'Generating diffs against upstream files for mismatching files...'
   need_merge = []
-  for rel_path in upstream_files:
+  progress = progressbar.ProgressBar()
+  for rel_path in progress(upstream_files):
     upstream_path = os.path.join(upstream_root, rel_path)
-    local_path = os.path.join(local_root, f)
+    local_path = os.path.join(local_root, rel_path)
 
     # File missing in local? Copy it.
     if not os.path.exists(local_path):
@@ -143,8 +164,8 @@ def main(args):
       shutil.copyfile(upstream_path, local_path)
       continue
 
-    # If it is a documentation file, overwrite.
-    if rel_path.startswith('doc/') or rel_path.endswith('.po'):
+    # Overwrite any not useful files.
+    if not is_path_useful(rel_path):
       shutil.copyfile(upstream_path, local_path)
       continue
 
@@ -174,21 +195,19 @@ def main(args):
       f.write('\n'.join(diff_lines))
 
     need_merge.append(local_path)
-    print 'Created %s' % diff_path
 
     # It's also useful when merging to have the original copy
     # of upstream file, so save it as well
     upstream_copy_path = os.path.join(diff_dir, rel_path)
-    shutil.copy_file(upstream_path, upstream_copy_path)
-
-  print 'Diffs for manual merging saved to directory %s.' % diff_dir
+    shutil.copyfile(upstream_path, upstream_copy_path)
 
   # It's useful to have a list of all files written to diffs/
   # so we can check off files as we merge them
   mismatch_files = os.path.join(local_root, 'mismatch_files.txt')
   with open(mismatch_files, 'w+') as f:
     f.write('\n'.join(sorted(need_merge)))
-    print 'Stored all mismatching file paths in %s.' % mismatch_files
+    print ('There are %d mismatching files! Storing paths in %s.' %
+           (len(mismatch_files), mismatch_files))
 
   shutil.rmtree(tmp_dir)
   print 'Cleaned up %s.' % tmp_dir
