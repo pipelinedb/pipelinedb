@@ -1,160 +1,224 @@
 #! /usr/bin/python
 
 import argparse
-import datetime
 import difflib
 import os
+import progressbar
+import re
 import shutil
 import tarfile
 import tempfile
-import urlparse
-import urllib
-
-try:
-    from git import *
-except ImportError:
-    print 'gitpython not installed -- see https://github.com/gitpython-developers/GitPython'
+import urllib2
 
 
-URL_TEMPLATE = 'https://ftp.postgresql.org/pub/source/v%(version)s/postgresql-%(version)s.tar.gz'
+def download_upstream(version, tmp_dir):
+  filename = 'postgresql-%s.tar.gz' % version
+  tar_path = os.path.join(tmp_dir, filename)
+  url = ('https://ftp.postgresql.org/pub/source/v%(version)s/'
+         'postgresql-%(version)s.tar.gz' % {'version': args.version})
 
-def _mkdirs(path):
-    try:
-        os.makedirs(path)
-    except OSError:
-        # Directory already exists
-        pass
+  print 'Downloading %s to %s...' % (url, tar_path)
+
+  req = urllib2.urlopen(url)
+
+  if (req.getcode() != 200):
+    raise Exception('Failed to download Postgres tarball! Got status code %d.'
+                    % req.getcode())
+
+  size = int(req.info()['Content-Length'])
+  progress = progressbar.ProgressBar().start()
+
+  with open(tar_path, 'wb') as f:
+    blk_sz = 8192
+    count = 0
+    while True:
+      chunk = req.read(blk_sz)
+      if not chunk:
+        break
+      f.write(chunk)
+      count += 1
+      if size > 0:
+        percent = min(int(count * blk_sz * 100.0 / size), 100)
+        progress.update(percent)
+
+  progress.finish()
+  print 'Download complete.'
+  return tar_path
+
+
+def safe_mkdirs(path):
+  try:
+    os.makedirs(path)
+  except OSError:
+    # Directory already exists
+    pass
+
+
+def list_files(path):
+  dirs = os.walk(path)
+  regex = re.compile('^%s/?' % path)
+  files = []
+
+  for _dir, _, filenames in dirs:
+    _dir = regex.sub('', _dir)
+
+    # Ignore any git internal files
+    if _dir.startswith('.git'):
+      continue
+
+    # Ignore any py or unit test files.
+    if _dir.startswith('src/test/py') or _dir.startswith('src/test/unit'):
+      continue
+
+    # Ignore any PipelineDB or PostGIS files.
+    if (_dir.startswith('pipeline') or
+        _dir.startswith('src/backend/pipeline') or
+        _dir.startswith('src/include/pipeline') or
+        _dir.startswith('src/gis')):
+      continue
+
+    # Ignore dot files and emacs temp files or compiled files.
+    filenames = filter(lambda f: not f.startswith('.') and not f.endswith('~')
+                       and not f.endswith('.o'),
+                       filenames)
+
+    files.extend(map(lambda f: os.path.join(_dir, f).rstrip('/'), filenames))
+
+  return set(files)
+
+
+def is_path_useful(path):
+  """
+  All paths that belong to documentation files are considered useless.
+  """
+  return not (path.startswith('doc/') or path.endswith('.po'))
+
 
 def main(args):
-    """
-    This script works as follows:
+  """
+  This script works as follows:
 
-    1) Download the upstream source tarball for the given version of Postgres
+  1) Download the upstream source tarball for the given version of Postgres
+  2) Overwrite all files that we haven't modified with the newer version
+     from the upstream source tarball
+  3) Mercilessly override all files in the doc/ directory and all files with
+     .po extension.
+  4) For all new files in the upstream branch copy them as is to the repo
+     directory and store their paths in ./added_files.txt.
+  5) For all files removed in the upstream branch, store their paths in
+     ./removed_files.txt.
+  3) For all mismatching files, generate a diff against the
+     corresponding upstream file in the downloaded source tarball.
+     Save this file to ./diffs. We also put a copy of the upstream
+     source file in ./diffs because it's useful to have when manually
+     merging. A list of all these files is stored in ./mismatch_files.txt.
+  """
+  tmp_dir = args.tmp_dir or tempfile.mkdtemp()
+  tar_path = download_upstream(args.version, tmp_dir)
 
-    2) Determine all files that we've modified since the given commit hash
+  tar = tarfile.open(tar_path)
+  tar.extractall(path=tmp_dir)
+  tar.close()
 
-    3) Overwrite all files that we haven't modified with the newer version
-       from the upstream source tarball
+  upstream_root = os.path.join(tmp_dir, 'postgresql-%s' % (args.version))
+  assert os.path.exists(upstream_root) and os.path.isdir(upstream_root)
+  local_root = os.curdir
 
-    4) For every file that we've modified, generate a diff against the
-       corresponding upstream file in the downloaded source tarball.
-       Save this file to ./diffs. We also put a copy of the upstream
-       source file in ./diffs because it's useful to have when manually
-       merging.
-    """
-    tmp_dir = args.tmp_dir or tempfile.mkdtemp()
-    filename = 'postgresql-%s.tar.gz' % args.version
-    tmp_path = os.path.join(tmp_dir, filename)
-    url = URL_TEMPLATE % {'version': args.version}
+  diff_dir = os.path.join(os.curdir, 'diffs')
+  safe_mkdirs(diff_dir)
 
-    print 'Downloading %s to %s...' % (url, tmp_path)
-    urllib.urlretrieve(url, tmp_path)
-    print 'Download complete'
+  upstream_files = list_files(upstream_root)
+  local_files = list_files(local_root)
 
-    our_repo = Repo('.')
-    commit = our_repo.commit(args.after_commit)
-    since_ts = str(datetime.datetime.utcfromtimestamp(commit.committed_date)) + ' UTC'
+  # Are there any new files in the upstream branch?
+  added_files = sorted(filter(is_path_useful, upstream_files - local_files))
+  if added_files:
+    log_file = os.path.join(local_root, 'added_files.txt')
+    print 'There are %d new files! Storing paths in %s.' % (len(added_files),
+                                                            log_file)
+    with open(log_file, 'w+') as f:
+      f.write('\n'.join(added_files))
 
-    rev = '%s..HEAD' % (args.after_commit)
-    commits = our_repo.iter_commits(rev)
-    modified_by_us = set()
+  # Are there any deleted files in the local branch?
+  rm_files = sorted(filter(is_path_useful, local_files - upstream_files))
+  if rm_files:
+    log_file = os.path.join(local_root, 'removed_files.txt')
+    print 'There are %d removed files! Storing paths in %s.' % (len(rm_files),
+                                                                log_file)
+    with open(log_file, 'w+') as f:
+      f.write('\n'.join(rm_files))
 
-    # Get each file we've modified since the given commit
-    # along with its earliest modification time
-    print 'Determining which files we modified since %s (%s)...' % (args.after_commit[:8], since_ts)
-    for c in commits:
-        for f in c.stats.files:
-            modified_by_us.add(f)
+  # Go through all files in the upstream branch and add, overwrite or generate
+  # diffs as necessary.
+  print 'Generating diffs against upstream files for mismatching files...'
+  need_merge = []
+  progress = progressbar.ProgressBar()
+  for rel_path in progress(upstream_files):
+    upstream_path = os.path.join(upstream_root, rel_path)
+    local_path = os.path.join(local_root, rel_path)
 
-    tmp_dir = '/tmp/tmpcTLkgW'
-    upstream_root = os.path.join(tmp_dir, 'postgresql-%s' % (args.version))
-    diff_dir = os.path.join('diffs')
+    # File missing in local? Copy it.
+    if not os.path.exists(local_path):
+      subdir, _ = os.path.split(local_path)
+      safe_mkdirs(subdir)
+      shutil.copyfile(upstream_path, local_path)
+      continue
 
-    need_merge = set()
-    tar = tarfile.open(tmp_path)
-    tar.extractall(path=tmp_dir)
-    tar.close()
+    # Overwrite any not useful files.
+    if not is_path_useful(rel_path):
+      shutil.copyfile(upstream_path, local_path)
+      continue
 
-    # Before overwriting our files with the upstream versions,
-    # figure out which files we'll need to manually merge
-    print 'Generating diffs against upstream files for files we modified...'
-    for our_path in sorted(modified_by_us):
+    lf = open(local_path)
+    rf = open(upstream_path)
 
-        upstream_path = os.path.join(upstream_root, our_path)
-        if not os.path.exists(upstream_path): continue
+    # We both potentially modified this file.
+    left = [l.strip('\n') for l in lf.readlines()]
+    right = [l.strip('\n') for l in rf.readlines()]
 
-        lf = open(our_path)
-        rf = open(upstream_path)
+    lf.close()
+    rf.close()
 
-        # We both potentially modified this file
-        left = [l.strip('\n') for l in lf.readlines()]
-        right = [l.strip('\n') for l in rf.readlines()]
+    diff_lines = list(difflib.unified_diff(left, right,
+                                           local_path, upstream_path))
 
-        lf.close()
-        rf.close()
+    # No difference? Overwrite.
+    if not diff_lines:
+      shutil.copyfile(upstream_path, local_path)
+      continue
 
-        diff_path = os.path.join(diff_dir, our_path) + '.diff'
-        subdir, _ = os.path.split(diff_path)
+    diff_path = os.path.join(diff_dir, rel_path) + '.diff'
+    subdir, _ = os.path.split(diff_path)
+    safe_mkdirs(subdir)
 
-        _mkdirs(subdir)
+    with open(diff_path, 'w+') as f:
+      f.write('\n'.join(diff_lines))
 
-        lines = 0
-        diff_lines = list(difflib.unified_diff(left, right, upstream_path, our_path))
-        
-        if not diff_lines:
-            continue
-        
-        diff = open(diff_path, 'wa')
-        for line in diff_lines:
-            diff.write(line + '\n')
-            lines += 1
-        diff.close()
-    
-        need_merge.add(our_path)
-        print 'Created %s' % diff_path
+    need_merge.append(local_path)
 
-        # It's also useful when merging to have the original copy
-        # of upstream file, so save it as well
-        upstream_copy_path = os.path.join(diff_dir, our_path)
-        upstream_copy = open(upstream_copy_path, 'wa')
-        for line in right:
-            upstream_copy.write(line + '\n')
-        upstream_copy.close()
+    # It's also useful when merging to have the original copy
+    # of upstream file, so save it as well
+    upstream_copy_path = os.path.join(diff_dir, rel_path)
+    shutil.copyfile(upstream_path, upstream_copy_path)
 
-    # It's useful to have a list of all files written to diffs/
-    # so we can check off files as we merge them
-    diff_list = open(os.path.join(diff_dir, 'files.txt'), 'wa')
-    for f in sorted(need_merge):
-        diff_list.write(f + '\n')
-    diff_list.close()
+  # It's useful to have a list of all files written to diffs/
+  # so we can check off files as we merge them
+  mismatch_files = os.path.join(local_root, 'mismatch_files.txt')
+  with open(mismatch_files, 'w+') as f:
+    f.write('\n'.join(sorted(need_merge)))
+    print ('There are %d mismatching files! Storing paths in %s.' %
+           (len(mismatch_files), mismatch_files))
 
-    print 'Overwriting our files with upstream versions...'
-    for root, subdirs, files in os.walk(upstream_root):
-        for file in files:
-            upstream_path = os.path.join(root, file)
-            our_path = upstream_path.replace(upstream_root, '')[1:]
+  shutil.rmtree(tmp_dir)
+  print 'Cleaned up %s.' % tmp_dir
 
-            # Don't overwrite files that need a manual merge
-            if our_path in need_merge: continue
-
-            # Overwrite our version with the upstream version
-            if not args.dry_run:
-                _mkdirs(os.path.split(our_path)[0])
-                shutil.copy(upstream_path, our_path)
-            print upstream_path, '->', our_path
-
-    shutil.rmtree(tmp_dir)
-    print 'Cleaned up %s' % tmp_dir
-    print 'Diffs for manual merging saved to directory ./diffs'
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--after-commit', action='store', dest='after_commit', required=True,
-                    help='Consider all commits after this commit when comparing against the upstream tree')
-    parser.add_argument('--upstream-version', action='store', dest='version', required=True,
-                    help='Upstream version to diff against')
-    parser.add_argument('--tmp-dir', action='store', dest='tmp_dir', required=False,
-                    help='Temporary directory to store upstream source tree in')
-    parser.add_argument('--dry-run', action='store_true', dest='dry_run', required=False)
-    args = parser.parse_args()
-    main(args)
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--upstream-version', action='store', dest='version',
+                      required=True, help='Upstream version to diff against')
+  parser.add_argument('--tmp-dir', action='store', dest='tmp_dir',
+                      required=False, help='Temporary directory to store '
+                      'upstream source tree in')
+  args = parser.parse_args()
+  main(args)
