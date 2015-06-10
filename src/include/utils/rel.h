@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * rel.h
@@ -369,6 +370,12 @@ typedef struct ViewOptions
  */
 #define RelationGetNamespace(relation) \
 	((relation)->rd_rel->relnamespace)
+
+/*
+ * RelationGetRelKind
+ */
+#define RelationGetRelKind(relation) \
+	((relation)->rd_rel->relkind)
 
 /*
  * RelationIsMapped

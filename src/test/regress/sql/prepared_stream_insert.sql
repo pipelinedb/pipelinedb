@@ -35,6 +35,17 @@ SELECT * FROM prep_insert0;
 SELECT * FROM prep_insert1;
 SELECT * FROM prep_insert2;
 
+-- Test non-existant columns
+CREATE CONTINUOUS VIEW prep_insert3 AS SELECT SUM(x::int) AS s1, SUM(y::int) AS s2 FROM prep_insert_stream;
+
+PREPARE prep2 AS INSERT INTO prep_insert_stream (x, not_x, y, not_y) VALUES ($1, $2, $3, $4);
+
+EXECUTE prep2(1, 2, 3, 4);
+EXECUTE prep2(1, 2, 3, 4);
+EXECUTE prep2(1, 2, 3, 4);
+
+SELECT * FROM prep_insert3;
+
 DROP CONTINUOUS VIEW prep_insert0;
 DROP CONTINUOUS VIEW prep_insert1;
 DROP CONTINUOUS VIEW prep_insert2;

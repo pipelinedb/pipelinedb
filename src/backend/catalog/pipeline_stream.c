@@ -664,43 +664,26 @@ RangeVarIsForTypedStream(RangeVar *rv)
 bool
 RangeVarIsForStream(RangeVar *stream)
 {
-	Oid namespace = RangeVarGetCreationNamespace(stream);
-	return RangeVarIsForTypedStream(stream) || IsStream(namespace, stream->relname);
+
+	return RangeVarIsForTypedStream(stream) || RangeVarIsForInferredStream(stream);
 }
 
 /*
- * IsStream
+ * RangeVarIsForInferredStream
  */
 bool
-IsStream(Oid namespace, char *name)
+RangeVarIsForInferredStream(RangeVar *rv)
 {
+	Oid namespace = RangeVarGetCreationNamespace(rv);
 	HeapTuple tup;
 
-	if (namespace == InvalidOid)
-		namespace = GetDefaultStreamNamespace(name);
-
-	tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(name));
+	tup = SearchSysCache2(PIPELINESTREAMNAMESPACENAME, ObjectIdGetDatum(namespace), CStringGetDatum(rv->relname));
 
 	if (!HeapTupleIsValid(tup))
 		return false;
 
 	ReleaseSysCache(tup);
 	return true;
-}
-
-/*
- * GetDefaultStreamNamespace
- */
-Oid
-GetDefaultStreamNamespace(char *stream)
-{
-	Oid namespace;
-	RangeVar *rv = makeNode(RangeVar);
-	rv->relname = stream;
-	rv->schemaname = NULL;
-	namespace = RangeVarGetCreationNamespace(rv);
-	pfree(rv);
-	return namespace;
 }
 
 /*
@@ -777,4 +760,60 @@ GetStreamNamespace(Oid stream_relid)
 	}
 
 	return InvalidOid;
+}
+
+/*
+ * RelIdIsForTypedStream
+ */
+bool
+RelIdIsForTypedStream(Oid stream_relid)
+{
+	HeapTuple	tp;
+
+	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(stream_relid));
+	if (HeapTupleIsValid(tp))
+	{
+		Assert(((Form_pg_class) GETSTRUCT(tp))->relkind == RELKIND_STREAM);
+		ReleaseSysCache(tp);
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * RelIdIsForInferredStream
+ */
+bool
+RelIdIsForInferredStream(Oid stream_relid)
+{
+	HeapTuple	tp;
+
+	tp = SearchSysCache1(PIPELINESTREAMOID, ObjectIdGetDatum(stream_relid));
+	if (HeapTupleIsValid(tp))
+	{
+		ReleaseSysCache(tp);
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * GetRelationForStream
+ */
+Relation
+GetRelationForStream(RangeVar *rv, List *cols)
+{
+	Oid stream_id = GetStreamRelId(rv);
+	Oid namespace = GetStreamNamespace(stream_id);
+	Relation rel = (Relation) palloc0(sizeof(RelationData));
+	rel->rd_att = GetStreamTupleDesc(namespace, rv->relname, cols);
+	rel->rd_rel = palloc0(sizeof(FormData_pg_class));
+	rel->rd_rel->relnatts = rel->rd_att->natts;
+	namestrcpy(&rel->rd_rel->relname, rv->relname);
+	rel->rd_rel->relkind = RELKIND_STREAM;
+	rel->rd_id = stream_id;
+	rel->rd_rel->relnamespace = namespace;
+	return rel;
 }

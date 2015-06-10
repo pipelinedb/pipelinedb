@@ -18,9 +18,9 @@
 #include "nodes/parsenodes.h"
 #include "storage/spin.h"
 #include "utils/hsearch.h"
+#include "utils/relcache.h"
 #include "utils/timestamp.h"
 
-#define EventStreamNeedsOpen(stream) (stream->state != STREAM_STATE_OPEN)
 #define QueryIsStreaming(query) ((query)->isContinuous)
 #define QueryIsCombine(query) ((query)->isCombine)
 #define PlanIsStreaming(stmt) ((stmt)->is_continuous)
@@ -53,7 +53,7 @@ extern PreparedStreamInsertStmt *FetchPreparedStreamInsert(const char *name);
 extern void DropPreparedStreamInsert(const char *name);
 extern int InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt);
 extern int InsertIntoStream(InsertStmt *ins, List *values);
-extern uint64 CopyIntoStream(Oid namespace, char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
+extern uint64 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
 
 /* Represents a single batch of inserts made into a stream. */
 typedef struct InsertBatch {
