@@ -3,14 +3,47 @@
 import argparse
 import difflib
 import os
+import progressbar
 import re
 import shutil
 import tarfile
 import tempfile
-import urllib
+import urllib2
 
 
-URL_TEMPLATE = 'https://ftp.postgresql.org/pub/source/v%(version)s/postgresql-%(version)s.tar.gz'
+def download_upstream(version, tmp_dir):
+  filename = 'postgresql-%s.tar.gz' % version
+  tar_path = os.path.join(tmp_dir, filename)
+  url = ('https://ftp.postgresql.org/pub/source/v%(version)s/'
+         'postgresql-%(version)s.tar.gz' % {'version': args.version})
+
+  print 'Downloading %s to %s...' % (url, tar_path)
+
+  req = urllib2.urlopen(url)
+
+  if (req.getcode() != 200):
+    raise Exception('Failed to download Postgres tarball! Got status code %d.'
+                    % req.getcode())
+
+  size = int(req.info()['Content-Length'])
+  progress = progressbar.ProgressBar().start()
+
+  with open(tar_path, 'wb') as f:
+    blk_sz = 8192
+    count = 0
+    while True:
+      chunk = req.read(blk_sz)
+      if not chunk:
+        break
+      f.write(chunk)
+      count += 1
+      if size > 0:
+        percent = min(int(count * blk_sz * 100.0 / size), 100)
+        progress.update(percent)
+
+  progress.finish()
+  print 'Download complete.'
+  return tar_path
 
 
 def safe_mkdirs(path):
@@ -61,13 +94,7 @@ def main(args):
      merging. A list of all these files is stored in ./mismatch_files.txt.
   """
   tmp_dir = args.tmp_dir or tempfile.mkdtemp()
-  filename = 'postgresql-%s.tar.gz' % args.version
-  tar_path = os.path.join(tmp_dir, filename)
-  url = URL_TEMPLATE % {'version': args.version}
-
-  print 'Downloading %s to %s...' % (url, tar_path)
-  urllib.urlretrieve(url, tar_path)
-  print 'Download complete.'
+  tar_path = download_upstream(args.version, tmp_dir)
 
   tar = tarfile.open(tar_path)
   tar.extractall(path=tmp_dir)
