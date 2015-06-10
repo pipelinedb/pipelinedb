@@ -133,13 +133,15 @@ extern Path *create_streamscan_path(PlannerInfo *root, RelOptInfo *rel, Relids r
 extern Path *create_tuplestore_scan_path(RelOptInfo *parent);
 
 extern StreamTableJoinPath *create_stream_table_join_path(PlannerInfo *root,
-					RelOptInfo *joinrel,
-					JoinType jointype,
-					Path *outer_path,
-					Path *inner_path,
-					List *restrict_clauses,
-					Relids required_outer,
-					List *hash_clauses);
+					 RelOptInfo *joinrel,
+					 JoinType jointype,
+					 SpecialJoinInfo *sjinfo,
+					 SemiAntiJoinFactors *semifactors,
+					 Path *outer_path,
+					 Path *inner_path,
+					 List *restrict_clauses,
+					 Relids required_outer,
+					 List *hash_clauses);
 
 /*
  * prototypes for relnode.c

@@ -13,12 +13,15 @@
 
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
+#include "utils/tuplestore.h"
 
 #define IS_STREAM_RTE(relid, root) ((planner_rt_fetch(relid, root)) && \
 	((planner_rt_fetch(relid, root))->rtekind == RTE_STREAM))
 #define IS_STREAM_TREE(plan) (IsA((plan), StreamScan) || \
 		IsA((plan), StreamTableJoin))
 
-PlannedStmt *GetContPlan(ContinuousView *view);
+extern PlannedStmt *GetContPlan(ContinuousView *view);
+extern TuplestoreScan *SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore);
+extern PlannedStmt *GetCombinerLookupPlan(ContinuousView *view);
 
 #endif

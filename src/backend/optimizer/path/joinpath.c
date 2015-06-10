@@ -184,10 +184,18 @@ add_paths_to_joinrel(PlannerInfo *root,
 	ListCell   *lc;
 
 	/*
-	 * If this is a stream-table join, then there is only one
-	 * join path so bail early if that's the case
+	 * If it's SEMI or ANTI join, compute correction factors for cost
+	 * estimation.  These will be the same for all paths.
 	 */
-	if (IS_STREAM_RTE(outerrel->relid, root))
+	if (jointype == JOIN_SEMI || jointype == JOIN_ANTI)
+		compute_semi_anti_join_factors(root, outerrel, innerrel,
+									   jointype, sjinfo, restrictlist,
+									   &semifactors);
+
+	/*
+	 * If this is a stream-table join, then there is only one join path so bail early if that's the case.
+	 */
+	if (IS_STREAM_RTE(innerrel->relid, root))
 	{
 		StreamTableJoinPath *path;
 		Path *outerpath = outerrel->cheapest_total_path;
@@ -220,10 +228,19 @@ add_paths_to_joinrel(PlannerInfo *root,
 			hashclauses = lappend(hashclauses, restrictinfo);
 		}
 
-		path = create_stream_table_join_path(root, joinrel, jointype,
+		path = create_stream_table_join_path(root, joinrel, jointype, sjinfo, &semifactors,
 				outerpath, innerpath, restrictlist, requiredouter, hashclauses);
 
 		add_path(joinrel, (Path *) path);
+
+		set_cheapest(joinrel);
+		return;
+	}
+
+	if (IS_STREAM_RTE(outerrel->relid, root))
+	{
+		Path *outerpath = outerrel->cheapest_total_path;
+		Path *innerpath;
 
 		/*
 		 * If the inner relation has any index paths for this join, those are
@@ -261,15 +278,6 @@ add_paths_to_joinrel(PlannerInfo *root,
 													restrictlist,
 													jointype,
 													&mergejoin_allowed);
-
-	/*
-	 * If it's SEMI or ANTI join, compute correction factors for cost
-	 * estimation.  These will be the same for all paths.
-	 */
-	if (jointype == JOIN_SEMI || jointype == JOIN_ANTI)
-		compute_semi_anti_join_factors(root, outerrel, innerrel,
-									   jointype, sjinfo, restrictlist,
-									   &semifactors);
 
 	/*
 	 * Decide whether it's sensible to generate parameterized paths for this

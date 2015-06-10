@@ -2096,10 +2096,8 @@ create_streamscan_path(PlannerInfo *root, RelOptInfo *rel, Relids required_outer
 	pathnode->parent = rel;
 	pathnode->param_info = get_baserel_parampathinfo(root, rel,
 													 required_outer);
-	pathnode->pathkeys = NIL;
-	pathnode->startup_cost = 1;
-	pathnode->total_cost = 1;
-	pathnode->rows = 1.0;
+
+	cost_streamscan(pathnode, root, rel, pathnode->param_info);
 
 	return pathnode;
 }
@@ -2139,15 +2137,22 @@ create_tuplestore_scan_path(RelOptInfo *parent)
  */
 StreamTableJoinPath *
 create_stream_table_join_path(PlannerInfo *root,
-		 RelOptInfo *joinrel,
-		 JoinType jointype,
-		 Path *outer_path,
-		 Path *inner_path,
-		 List *restrict_clauses,
-		 Relids required_outer,
-		 List *hash_clauses)
+				 RelOptInfo *joinrel,
+				 JoinType jointype,
+				 SpecialJoinInfo *sjinfo,
+				 SemiAntiJoinFactors *semifactors,
+				 Path *outer_path,
+				 Path *inner_path,
+				 List *restrict_clauses,
+				 Relids required_outer,
+				 List *hashclauses)
 {
 	StreamTableJoinPath *pathnode = makeNode(StreamTableJoinPath);
+	JoinCostWorkspace workspace;
+
+	initial_cost_hashjoin(root, &workspace, jointype, hashclauses,
+						  outer_path, inner_path,
+						  sjinfo, semifactors);
 
 	pathnode->jpath.path.pathtype = T_StreamTableJoin;
 	pathnode->jpath.path.parent = joinrel;
@@ -2155,13 +2160,12 @@ create_stream_table_join_path(PlannerInfo *root,
 													 required_outer);
 	pathnode->jpath.path.pathkeys = NIL;
 
-	/* we only care about the cost of the table side of a stream-table join */
-	pathnode->jpath.path.startup_cost = 0;
-	pathnode->jpath.path.total_cost = inner_path->total_cost;
 	pathnode->jpath.outerjoinpath = outer_path;
 	pathnode->jpath.innerjoinpath = inner_path;
 	pathnode->jpath.joinrestrictinfo = restrict_clauses;
-	pathnode->path_hashclauses = hash_clauses;
+	pathnode->path_hashclauses = hashclauses;
+
+	final_cost_hashjoin(root, pathnode, &workspace, sjinfo, semifactors);
 
 	return pathnode;
 }

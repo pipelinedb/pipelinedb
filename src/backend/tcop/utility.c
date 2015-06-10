@@ -1489,18 +1489,7 @@ UtilityTupleDescriptor(Node *parsetree)
 			return ExplainResultDesc((ExplainStmt *) parsetree);
 
 		case T_ExplainContViewStmt:
-			{
-				/* Create a dummy ExplainStmt and use that to get the descriptor */
-				ExplainContViewStmt *stmt = (ExplainContViewStmt *) parsetree;
-				ExplainStmt *explain = makeNode(ExplainStmt);
-				TupleDesc desc;
-
-				explain->options = stmt->options;
-				desc = ExplainResultDesc(explain);
-				pfree(explain);
-
-				return desc;
-			}
+			return ExplainContViewResultDesc((ExplainContViewStmt *) parsetree);
 
 		case T_VariableShowStmt:
 			{
