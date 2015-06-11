@@ -180,12 +180,12 @@ CREATE CONTINUOUS VIEW  error_not_created AS SELECT s.id::integer, t.tid FROM an
 ERROR:  continuous queries don't support stream-stream JOINs
 LINE 1: ...d::integer, t.tid FROM analyze_cont_stream s JOIN not_a_tabl...
                                                              ^
-HINT:  If t is supposed to be a relation, create it first with CREATE TABLE
+HINT:  If t is supposed to be a relation, create it first with CREATE TABLE.
 CREATE CONTINUOUS VIEW  error_not_created AS SELECT s.id::integer, tid FROM analyze_cont_stream s JOIN not_a_table ON s.id = tid;
 ERROR:  continuous queries don't support stream-stream JOINs
 LINE 1: ....id::integer, tid FROM analyze_cont_stream s JOIN not_a_tabl...
                                                              ^
-HINT:  If not_a_table is supposed to be a relation, create it first with CREATE TABLE
+HINT:  If not_a_table is supposed to be a relation, create it first with CREATE TABLE.
 -- Ordered-set aggregates
 CREATE CONTINUOUS VIEW cqanalyze50 AS SELECT g::integer, percentile_cont(ARRAY[0.2, 0.8]) WITHIN GROUP (ORDER BY x::float), percentile_cont(0.9) WITHIN GROUP (ORDER BY y::integer) + percentile_cont(0.1) WITHIN GROUP (ORDER BY z::numeric) AS col FROM analyze_cont_stream5 GROUP BY g;
 CREATE CONTINUOUS VIEW cqanalyze51 AS SELECT g::integer, percentile_cont(0.1) WITHIN GROUP (ORDER BY x::float + y::integer) FROM analyze_cont_stream3 GROUP BY g;

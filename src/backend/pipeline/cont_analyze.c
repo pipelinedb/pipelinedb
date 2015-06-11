@@ -36,6 +36,27 @@
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
 
+static List *
+lappend_missing(List *l, char *str)
+{
+	ListCell *lc;
+	bool exists = false;
+
+	foreach(lc, l)
+	{
+		if (pg_strcasecmp(str, lfirst(lc)) == 0)
+		{
+			exists = true;
+			break;
+		}
+	}
+
+	if (!exists)
+		l = lappend(l, str);
+
+	return l;
+}
+
 static bool
 collect_column_names(Node *node, ContAnalyzeContext *context)
 {
@@ -45,11 +66,10 @@ collect_column_names(Node *node, ContAnalyzeContext *context)
 	if (IsA(node, ResTarget))
 	{
 		ResTarget *res = (ResTarget *) node;
-		if (res->name != NULL)
-			context->colnames = lappend(context->colnames, res->name);
+		context->colnames = lappend_missing(context->colnames, res->name ? res->name : FigureColname(res->val));
 	}
 	else if (IsA(node, ColumnRef))
-		context->colnames = lappend(context->colnames, FigureColname(node));
+		context->colnames = lappend_missing(context->colnames, FigureColname(node));
 
 	return raw_expression_tree_walker(node, collect_column_names, (void *) context);
 }
@@ -82,7 +102,7 @@ collect_rels_and_streams(Node *node, ContAnalyzeContext *context)
 	if (IsA(node, RangeVar))
 	{
 		Oid reloid = RangeVarGetRelid((RangeVar *) node, NoLock, true);
-		if (RangeVarIsForTypedStream((RangeVar *) node) || !OidIsValid(reloid))
+		if (!OidIsValid(reloid) || RangeVarIsForTypedStream((RangeVar *) node))
 			context->streams = lappend(context->streams, node);
 		else
 			context->rels = lappend(context->rels, node);
@@ -536,7 +556,7 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				errmsg("continuous queries don't support stream-stream JOINs"),
-				errhint("If %s is supposed to be a relation, create it first with CREATE TABLE",
+				errhint("If %s is supposed to be a relation, create it first with CREATE TABLE.",
 						rv->alias ? rv->alias->aliasname : rv->relname),
 				parser_errposition(context->pstate, rv->location)));
 	}
@@ -800,7 +820,7 @@ parserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte)
 				continue;
 
 			if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
-					saw_atime = true;
+				saw_atime = true;
 
 			type = typenameType(pstate, tc->typeName, &typemod);
 
