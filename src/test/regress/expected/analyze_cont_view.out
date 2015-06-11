@@ -16,39 +16,22 @@ CREATE CONTINUOUS VIEW cqanalyze10 AS SELECT ts::timestamp, SUM(val::numeric) OV
 CREATE CONTINUOUS VIEW cqanalyze11 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY ts) FROM analyze_cont_stream;
 CREATE CONTINUOUS VIEW cqanalyze12 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY (ts + INTERVAL '1 day')) FROM analyze_cont_stream;
 CREATE CONTINUOUS VIEW cqanalyze13 AS SELECT ts::text, AVG(val::numeric) OVER (ORDER BY ts) FROM analyze_cont_stream;
-ERROR:  ORDER BY expression for WINDOWs must have a timestamp-like result type
--- Multiple streams
-CREATE CONTINUOUS VIEW cqanalyze14 AS SELECT s0.a::integer, s1.b::integer FROM s0, s1;
-CREATE CONTINUOUS VIEW cqanalyze15 AS SELECT s0.a::integer, s1.b::integer, s2.c::text FROM s0, s1, s2;
+ERROR:  ORDER BY expression for WINDOWs must evaluate to datetime type category values
 -- Stream-table JOINs
 CREATE TABLE t0 (id INTEGER);
 CREATE CONTINUOUS VIEW cqanalyze16 AS SELECT s0.id::integer AS s0_id, t0.id AS t0_id FROM s0 JOIN t0 ON s0.id = t0.id;
 NOTICE:  consider creating an index on t0.id for improved stream-table join performance
 CREATE CONTINUOUS VIEW cqanalyze17 AS SELECT s.x::integer, t0.id FROM analyze_cont_stream2 s JOIN t0 ON s.x = t0.id;
 NOTICE:  consider creating an index on t0.id for improved stream-table join performance
-DROP TABLE t0;
--- Stream-stream JOINs
-CREATE CONTINUOUS VIEW cqanalyze18 AS SELECT s0.id::integer as id0, s1.id::integer as id1 FROM s0 JOIN s1 ON s0.id = s1.id;
-CREATE CONTINUOUS VIEW cqanalyze19 AS SELECT s0.id::integer AS id0, s1.id::integer AS id1 FROM analyze_cont_stream s0 JOIN another_stream s1 ON s0.id = s1.id WHERE s0.id > 10 ORDER BY s1.id DESC;
-ERROR:  continuous queries don't support ORDER BY
--- Stream-table-stream JOINs
-CREATE TABLE sts (id INTEGER);
-CREATE CONTINUOUS VIEW cqanalyze20 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM s0 JOIN sts ON s0.id = sts.id JOIN s1 ON sts.id = s1.x;
-NOTICE:  consider creating an index on sts.id for improved stream-table join performance
-CREATE CONTINUOUS VIEW cqanalyze21 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM analyze_cont_stream2 s0 JOIN sts ON s0.id = sts.id JOIN s1 ON sts.id = s1.id::integer WHERE sts.id > 42;
-NOTICE:  consider creating an index on sts.id for improved stream-table join performance
-CREATE CONTINUOUS VIEW cqanalyze22 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM analyze_cont_stream2 s0 INNER JOIN sts ON s0.id = sts.id RIGHT OUTER JOIN s1 ON sts.id = s1.id::integer WHERE sts.id > 42;
-NOTICE:  consider creating an index on sts.id for improved stream-table join performance
-DROP TABLE sts;
 -- Now let's verify our error handling and messages
 -- Stream column doesn't have a type
 CREATE CONTINUOUS VIEW cqanalyze23 AS SELECT col FROM analyze_cont_stream;
 ERROR:  column reference "col" has an ambiguous type
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze23 AS SELECT col FROM analyz...
                                                      ^
-HINT:  Explicitly cast to the desired type. For example, col::integer.
+HINT:  Explicitly cast to the desired type, e.g. col::integer, or create the stream analyze_cont_stream with CREATE STREAM
 -- Column not qualified with a stream
-CREATE CONTINUOUS VIEW cqanalyze24 AS SELECT id::integer FROM s0, s1;
+CREATE CONTINUOUS VIEW cqanalyze24 AS SELECT id::integer FROM t0, s1;
 ERROR:  column reference is ambiguous
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze24 AS SELECT id::integer FRO...
                                                      ^
@@ -62,7 +45,7 @@ CREATE CONTINUOUS VIEW cqanalyze26 AS SELECT s.id FROM analyze_cont_stream s WHE
 ERROR:  column reference "s.id" has an ambiguous type
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze26 AS SELECT s.id FROM analy...
                                                      ^
-HINT:  Explicitly cast to the desired type. For example, s.id::integer.
+HINT:  Explicitly cast to the desired type, e.g. s.id::integer, or create the stream analyze_cont_stream with CREATE STREAM
 -- Verify that NOTICEs are properly shown when joining on unindexed columns
 CREATE TABLE tnotice (x integer, y integer);
 CREATE CONTINUOUS VIEW cvnotice0 AS SELECT stream.x::integer FROM analyze_cont_stream2 JOIN tnotice ON stream.x = tnotice.x;
@@ -128,7 +111,7 @@ CREATE CONTINUOUS VIEW cqanalyze28 AS SELECT arrival_timestamp FROM test_stream;
 CREATE CONTINUOUS VIEW cqanalyze29 AS SELECT key::text, arrival_timestamp FROM test_stream;
 CREATE CONTINUOUS VIEW cqanalyze30 AS SELECT key::text FROM test_stream WHERE arrival_timestamp < TIMESTAMP '2004-10-19 10:23:54+02';
 CREATE CONTINUOUS VIEW cqanalyze31 AS SELECT key::text, arrival_timestamp::timestamptz FROM test_stream;
--- Verify that we can't do wildcard selections from streams
+-- Verify that we can't do wildcard selections in continuous queries
 CREATE CONTINUOUS VIEW cqanalyze32 AS SELECT * from stream;
 ERROR:  can't select "*" in continuous queries
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze32 AS SELECT * from stream;
@@ -194,15 +177,15 @@ HINT:  To include a relation in a continuous query, JOIN it with a stream.
 DROP TABLE cqanalyze_table;
 -- Verify that for stream-table joins, the correct error message is generated when the table is missing
 CREATE CONTINUOUS VIEW  error_not_created AS SELECT s.id::integer, t.tid FROM analyze_cont_stream s JOIN not_a_table t ON s.id = t.tid;
-ERROR:  column reference "t.tid" has an ambiguous type
-LINE 1: ... VIEW  error_not_created AS SELECT s.id::integer, t.tid FROM...
+ERROR:  continuous queries don't support stream-stream JOINs
+LINE 1: ...d::integer, t.tid FROM analyze_cont_stream s JOIN not_a_tabl...
                                                              ^
-HINT:  Explicitly cast to the desired type. For example, t.tid::integer. If "not_a_table" is supposed to be a relation, create it first with CREATE TABLE or CREATE STREAM.
+HINT:  If t is supposed to be a relation, create it first with CREATE TABLE
 CREATE CONTINUOUS VIEW  error_not_created AS SELECT s.id::integer, tid FROM analyze_cont_stream s JOIN not_a_table ON s.id = tid;
-ERROR:  column reference "tid" has an ambiguous type
-LINE 1: ... VIEW  error_not_created AS SELECT s.id::integer, tid FROM a...
+ERROR:  continuous queries don't support stream-stream JOINs
+LINE 1: ....id::integer, tid FROM analyze_cont_stream s JOIN not_a_tabl...
                                                              ^
-HINT:  Explicitly cast to the desired type. For example, tid::integer. If "tid" is supposed to belong to a relation, create the relation first with CREATE TABLE or CREATE STREAM.
+HINT:  If not_a_table is supposed to be a relation, create it first with CREATE TABLE
 -- Ordered-set aggregates
 CREATE CONTINUOUS VIEW cqanalyze50 AS SELECT g::integer, percentile_cont(ARRAY[0.2, 0.8]) WITHIN GROUP (ORDER BY x::float), percentile_cont(0.9) WITHIN GROUP (ORDER BY y::integer) + percentile_cont(0.1) WITHIN GROUP (ORDER BY z::numeric) AS col FROM analyze_cont_stream5 GROUP BY g;
 CREATE CONTINUOUS VIEW cqanalyze51 AS SELECT g::integer, percentile_cont(0.1) WITHIN GROUP (ORDER BY x::float + y::integer) FROM analyze_cont_stream3 GROUP BY g;
@@ -253,16 +236,8 @@ DROP CONTINUOUS VIEW cqanalyze11;
 DROP CONTINUOUS VIEW cqanalyze12;
 DROP CONTINUOUS VIEW cqanalyze13;
 ERROR:  continuous view "cqanalyze13" does not exist
-DROP CONTINUOUS VIEW cqanalyze14;
-DROP CONTINUOUS VIEW cqanalyze15;
 DROP CONTINUOUS VIEW cqanalyze16;
 DROP CONTINUOUS VIEW cqanalyze17;
-DROP CONTINUOUS VIEW cqanalyze18;
-DROP CONTINUOUS VIEW cqanalyze19;
-ERROR:  continuous view "cqanalyze19" does not exist
-DROP CONTINUOUS VIEW cqanalyze20;
-DROP CONTINUOUS VIEW cqanalyze21;
-DROP CONTINUOUS VIEW cqanalyze22;
 DROP CONTINUOUS VIEW cqanalyze23;
 ERROR:  continuous view "cqanalyze23" does not exist
 DROP CONTINUOUS VIEW cqanalyze24;
@@ -313,13 +288,16 @@ ERROR:  continuous view "cvnotice2" does not exist
 DROP CONTINUOUS VIEW cvnotice3;
 ERROR:  continuous view "cvnotice3" does not exist
 DROP CONTINUOUS VIEW funcs;
+DROP CONTINUOUS VIEW over_1m CASCADE;
+NOTICE:  drop cascades to view over_5m
+DROP TABLE t0;
 -- Regression
 CREATE CONTINUOUS VIEW cqregress1 AS SELECT id::integer + avg(id) FROM analyze_cont_stream GROUP BY id;
 CREATE CONTINUOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts FROM analyze_cont_stream;
 ERROR:  column reference "ts" has an ambiguous type
 LINE 1: ...UOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts ...
                                                              ^
-HINT:  Explicitly cast to the desired type. For example, ts::integer.
+HINT:  Explicitly cast to the desired type, e.g. ts::integer, or create the stream analyze_cont_stream with CREATE STREAM
 CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::integer FROM analyze_cont_stream;
 ERROR:  missing FROM-clause entry for table "stream"
 LINE 1: CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::inte...
