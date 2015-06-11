@@ -36,8 +36,8 @@ SELECT name, "desc" FROM pipeline_stream WHERE name='test_cvn_stream' ORDER BY "
 INSERT INTO test_cvn_stream (x) VALUES (1);
 INSERT INTO test_cvn_schema0.test_cvn_stream (x, y) VALUES (2, 2), (3, 3);
 
-SELECT * FROM test_cvn0;
-SELECT * FROM test_cvn_schema0.test_cvn0;
+SELECT * FROM test_cvn0 ORDER BY X;
+SELECT * FROM test_cvn_schema0.test_cvn0 ORDER BY x;
 
 DROP CONTINUOUS VIEW test_cvn0;
 DROP SCHEMA test_cvn_schema0 CASCADE;

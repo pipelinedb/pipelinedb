@@ -62,13 +62,13 @@ SELECT name, "desc" FROM pipeline_stream WHERE name='test_cvn_stream' ORDER BY "
 
 INSERT INTO test_cvn_stream (x) VALUES (1);
 INSERT INTO test_cvn_schema0.test_cvn_stream (x, y) VALUES (2, 2), (3, 3);
-SELECT * FROM test_cvn0;
+SELECT * FROM test_cvn0 ORDER BY X;
  x 
 ---
  1
 (1 row)
 
-SELECT * FROM test_cvn_schema0.test_cvn0;
+SELECT * FROM test_cvn_schema0.test_cvn0 ORDER BY x;
  x | y 
 ---+---
  2 | 2
