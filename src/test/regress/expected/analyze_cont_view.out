@@ -29,7 +29,7 @@ CREATE CONTINUOUS VIEW cqanalyze23 AS SELECT col FROM analyze_cont_stream;
 ERROR:  column reference "col" has an ambiguous type
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze23 AS SELECT col FROM analyz...
                                                      ^
-HINT:  Explicitly cast to the desired type, e.g. col::integer, or create the stream "analyze_cont_stream" with CREATE STREAM
+HINT:  Explicitly cast to the desired type, e.g. col::integer, or create the stream "analyze_cont_stream" with CREATE STREAM.
 -- Column not qualified with a stream
 CREATE CONTINUOUS VIEW cqanalyze24 AS SELECT id::integer FROM t0, s1;
 ERROR:  column reference is ambiguous
@@ -45,7 +45,7 @@ CREATE CONTINUOUS VIEW cqanalyze26 AS SELECT s.id FROM analyze_cont_stream s WHE
 ERROR:  column reference "s.id" has an ambiguous type
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze26 AS SELECT s.id FROM analy...
                                                      ^
-HINT:  Explicitly cast to the desired type, e.g. s.id::integer, or create the stream "analyze_cont_stream" with CREATE STREAM
+HINT:  Explicitly cast to the desired type, e.g. s.id::integer, or create the stream "analyze_cont_stream" with CREATE STREAM.
 -- Verify that NOTICEs are properly shown when joining on unindexed columns
 CREATE TABLE tnotice (x integer, y integer);
 CREATE CONTINUOUS VIEW cvnotice0 AS SELECT stream.x::integer FROM analyze_cont_stream2 JOIN tnotice ON stream.x = tnotice.x;
@@ -297,7 +297,7 @@ CREATE CONTINUOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts FROM an
 ERROR:  column reference "ts" has an ambiguous type
 LINE 1: ...UOUS VIEW cqregress2 AS SELECT date_trunc('hour', ts) AS ts ...
                                                              ^
-HINT:  Explicitly cast to the desired type, e.g. ts::integer, or create the stream "analyze_cont_stream" with CREATE STREAM
+HINT:  Explicitly cast to the desired type, e.g. ts::integer, or create the stream "analyze_cont_stream" with CREATE STREAM.
 CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::integer FROM analyze_cont_stream;
 ERROR:  missing FROM-clause entry for table "stream"
 LINE 1: CREATE CONTINUOUS VIEW cqregress3 AS SELECT stream.sid::inte...

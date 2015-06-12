@@ -684,7 +684,7 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 				ereport(ERROR,
 						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
 						errmsg("column reference \"%s\" has an ambiguous type", qualname),
-						errhint("Explicitly cast to the desired type, e.g. %s::integer, or create the stream \"%s\" with CREATE STREAM",
+						errhint("Explicitly cast to the desired type, e.g. %s::integer, or create the stream \"%s\" with CREATE STREAM.",
 								qualname, stream->relname),
 						parser_errposition(context->pstate, cref->location)));
 		}
