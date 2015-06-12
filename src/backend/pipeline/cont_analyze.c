@@ -16,12 +16,14 @@
 #include "access/sysattr.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_proc.h"
+#include "catalog/pg_type.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/parsenodes.h"
 #include "parser/analyze.h"
 #include "parser/parse_clause.h"
+#include "parser/parse_coerce.h"
 #include "parser/parse_expr.h"
 #include "parser/parse_node.h"
 #include "parser/parse_target.h"
@@ -35,6 +37,27 @@
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
 
+static List *
+lappend_missing(List *l, char *str)
+{
+	ListCell *lc;
+	bool exists = false;
+
+	foreach(lc, l)
+	{
+		if (pg_strcasecmp(str, lfirst(lc)) == 0)
+		{
+			exists = true;
+			break;
+		}
+	}
+
+	if (!exists)
+		l = lappend(l, str);
+
+	return l;
+}
+
 static bool
 collect_column_names(Node *node, ContAnalyzeContext *context)
 {
@@ -44,11 +67,10 @@ collect_column_names(Node *node, ContAnalyzeContext *context)
 	if (IsA(node, ResTarget))
 	{
 		ResTarget *res = (ResTarget *) node;
-		if (res->name != NULL)
-			context->colnames = lappend(context->colnames, res->name);
+		context->colnames = lappend_missing(context->colnames, res->name ? res->name : FigureColname(res->val));
 	}
 	else if (IsA(node, ColumnRef))
-		context->colnames = lappend(context->colnames, FigureColname(node));
+		context->colnames = lappend_missing(context->colnames, FigureColname(node));
 
 	return raw_expression_tree_walker(node, collect_column_names, (void *) context);
 }
@@ -81,7 +103,7 @@ collect_rels_and_streams(Node *node, ContAnalyzeContext *context)
 	if (IsA(node, RangeVar))
 	{
 		Oid reloid = RangeVarGetRelid((RangeVar *) node, NoLock, true);
-		if (RangeVarIsForTypedStream((RangeVar *) node) || !OidIsValid(reloid))
+		if (!OidIsValid(reloid) || RangeVarIsForTypedStream((RangeVar *) node))
 			context->streams = lappend(context->streams, node);
 		else
 			context->rels = lappend(context->rels, node);
@@ -477,6 +499,12 @@ warn_unindexed_join(SelectStmt *stmt, ContAnalyzeContext *context)
 	}
 }
 
+static bool
+has_relname(RangeVar *rv, char *relname)
+{
+	return pg_strcasecmp(rv->relname, relname) == 0 || (rv->alias && pg_strcasecmp(rv->alias->aliasname, relname) == 0);
+}
+
 /*
  * ValidateContinuousQuery
  */
@@ -484,9 +512,10 @@ void
 ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 {
 	SelectStmt *select = (SelectStmt *) copyObject(stmt->query);
-	SelectStmt *copy;
 	ContAnalyzeContext *context = MakeContAnalyzeContext(make_parsestate(NULL), select);
 	ListCell *lc;
+	RangeVar *stream;
+	bool typed_stream = false;
 
 	context->pstate->p_sourcetext = sql;
 
@@ -503,8 +532,8 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 						parser_errposition(context->pstate, sortby->location)));
 	}
 
-	/* Ensure that we're reading from at least one stream */
-	if (!context->streams)
+	/* Ensure that we're reading from a stream */
+	if (list_length(context->streams) == 0)
 	{
 		if (context->rels)
 		{
@@ -516,205 +545,148 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 							parser_errposition(context->pstate, t->location)));
 		}
 		else
-		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							errmsg("continuous queries must include a stream in the FROM clause")));
-		}
 	}
 
-	/* Ensure that we're not trying to read from ourselves, which right now would be treated as a stream. */
-	foreach(lc, context->streams)
+	/* Ensure we're reading from at most one stream */
+	if (list_length(context->streams) > 1)
 	{
-		RangeVar *rv = (RangeVar *) lfirst(lc);
-		if (equal(rv, stmt->into->rel))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					errmsg("continuous queries cannot read from themselves"),
-					errhint("Remove \"%s\" from the FROM clause.", rv->relname),
-					parser_errposition(context->pstate, rv->location)));
+		RangeVar *rv = (RangeVar *) lsecond(context->streams);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("continuous queries don't support stream-stream JOINs"),
+				errhint("If %s is supposed to be a relation, create it first with CREATE TABLE.",
+						rv->alias ? rv->alias->aliasname : rv->relname),
+				parser_errposition(context->pstate, rv->location)));
 	}
 
-	/* Ensure that each column being read from a stream is type-casted */
-	foreach(lc, context->cols)
+	stream = (RangeVar *) linitial(context->streams);
+
+	if (equal(stream, stmt->into->rel))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				errmsg("continuous queries cannot read from themselves"),
+				errhint("Remove \"%s\" from the FROM clause.", stream->relname),
+				parser_errposition(context->pstate, stream->location)));
+
+	if (RangeVarIsForTypedStream(stream))
+		typed_stream = true;
+
+	/* Ensure that each column being read from an inferred stream is type-casted */
+	if (!typed_stream)
 	{
-		ListCell *lc2;
-		ColumnRef *cref = lfirst(lc);
-		bool needs_type = true;
-		bool has_type = false;
-		bool refs_target;
-		char *colname = FigureColname((Node *) cref);
-		char *qualname = NameListToString(cref->fields);
-
-		/*
-		 * ARRIVAL_TIMESTAMP doesn't require an explicit type cast. We don't care about the
-		 * qualified name because even if it's a column for a table, we don't need an explicit
-		 * type.
-		 */
-		if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
-			continue;
-
-		/*
-		 * Ensure that we have no `*` in the target list.
-		 *
-		 * We can't SELECT * from streams because we don't know the schema of
-		 * streams ahead of time.
-		 *
-		 * XXX(usmanm): The decision to disallow wildcards for relations was taken
-		 * because relations can be ALTERed in the future which would require us to
-		 * ALTER the CQ's underlying materialization table and the VIEW. This can probably
-		 * be accomplished by triggers, but lets just punt on this for now.
-		 */
-		if (IsA(lfirst(cref->fields->tail), A_Star))
+		foreach(lc, context->cols)
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-					 errmsg("can't select \"%s\" in continuous queries", qualname),
-					 errhint("Explicitly state the columns you want to SELECT."),
-					 parser_errposition(context->pstate, cref->location)));
-		}
+			ListCell *lc2;
+			ColumnRef *cref = lfirst(lc);
+			bool needs_type = true;
+			bool has_type = false;
+			bool refs_target;
+			char *colname = FigureColname((Node *) cref);
+			char *qualname = NameListToString(cref->fields);
 
-		needs_type = false;
+			/*
+			 * ARRIVAL_TIMESTAMP doesn't require an explicit type cast. We don't care about the
+			 * qualified name because even if it's a column for a table, we don't need an explicit
+			 * type.
+			 */
+			if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
+				continue;
 
-		/*
-		 * If the column is for a relation, we don't need any explicit type case.
-		 */
-		if (list_length(cref->fields) == 2)
-		{
-			char *col_relname = strVal(linitial(cref->fields));
-
-			foreach(lc2, context->streams)
+			/*
+			 * Ensure that we have no `*` in the target list.
+			 *
+			 * We can't SELECT * from streams because we don't know the schema of
+			 * streams ahead of time.
+			 *
+			 * XXX(usmanm): The decision to disallow wildcards for relations was taken
+			 * because relations can be ALTERed in the future which would require us to
+			 * ALTER the CQ's underlying materialization table and the VIEW. This can probably
+			 * be accomplished by triggers, but lets just punt on this for now.
+			 */
+			if (IsA(lfirst(cref->fields->tail), A_Star))
 			{
-				RangeVar *rv = (RangeVar *) lfirst(lc2);
-				char *streamname = rv->alias ? rv->alias->aliasname : rv->relname;
+				ereport(ERROR,
+						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+						 errmsg("can't select \"%s\" in continuous queries", qualname),
+						 errhint("Explicitly state the columns you want to SELECT."),
+						 parser_errposition(context->pstate, cref->location)));
+			}
 
-				if (!RangeVarIsForTypedStream(rv) && pg_strcasecmp(col_relname, streamname) == 0)
+			/*
+			 * If the column is for a relation, we don't need any explicit type case.
+			 */
+			if (list_length(cref->fields) == 2)
+			{
+				char *col_relname = strVal(linitial(cref->fields));
+
+				foreach(lc2, context->rels)
+				{
+					RangeVar *rv = (RangeVar *) lfirst(lc2);
+
+					if (has_relname(rv, col_relname))
+					{
+						needs_type = false;
+						break;
+					}
+				}
+
+				if (!needs_type)
+					continue;
+			}
+
+			/* Do we have a TypeCast for this ColumnRef? */
+			foreach(lc2, context->types)
+			{
+				TypeCast *tc = (TypeCast *) lfirst(lc2);
+				if (equal(tc->arg, cref))
+				{
+					has_type = true;
+					break;
+				}
+			}
+
+			if (has_type)
+				continue;
+
+			/*
+			 * If the column refers to a named target then it doesn't need an explicit type.
+			 *
+			 * This doesn't work in cases where target references the column being checked.
+			 * For example:
+			 *
+			 *   SELECT date_trunc('hour', x) AS x FROM stream
+			 *   SELECT substring(y::text, 1, 2) as x, substring(x, 1, 2) FROM stream
+			 *
+			 * In both these examples we need an explicit cast for `x`.
+			 */
+			needs_type = false;
+			refs_target = false;
+
+			foreach(lc2, select->targetList)
+			{
+				ResTarget *res = (ResTarget *) lfirst(lc2);
+				char *name = res->name ? res->name : FigureColname(res->val);
+
+				if (contains_node((Node *) res, (Node *) cref))
 				{
 					needs_type = true;
 					break;
 				}
+
+				if (pg_strcasecmp(qualname, name) == 0)
+					refs_target = true;
 			}
 
-			if (!needs_type)
-				continue;
-		}
-		else if (list_length(context->streams) == 1 && list_length(context->rels) == 0)
-		{
-			/*
-			 * If we're selecting from just one stream, the column might not be qualified so
-			 * we need to do another check to see if it's a typed stream.
-			 */
-			RangeVar *rv = linitial(context->streams);
-			if (RangeVarIsForTypedStream(rv))
-			{
-				has_type = true;
-				break;
-			}
-		}
-
-		/* Do we have a TypeCast for this ColumnRef? */
-		foreach(lc2, context->types)
-		{
-			TypeCast *tc = (TypeCast *) lfirst(lc2);
-			if (equal(tc->arg, cref))
-			{
-				has_type = true;
-				break;
-			}
-		}
-
-		if (has_type)
-			continue;
-
-		/*
-		 * If the column refers to a named target then it doesn't need an explicit type.
-		 *
-		 * This doesn't work in cases where target references the column being checked.
-		 * For example:
-		 *
-		 *   SELECT date_trunc('hour', x) AS x FROM stream
-		 *   SELECT substring(y::text, 1, 2) as x, substring(x, 1, 2) FROM stream
-		 *
-		 * In both these examples we need an explicit cast for `x`.
-		 */
-		needs_type = false;
-		refs_target = false;
-
-		foreach(lc2, select->targetList)
-		{
-			ResTarget *res = (ResTarget *) lfirst(lc2);
-			char *name = res->name ? res->name : FigureColname(res->val);
-
-			if (contains_node((Node *) res, (Node *) cref))
-			{
-				needs_type = true;
-				break;
-			}
-
-			if (pg_strcasecmp(qualname, name) == 0)
-				refs_target = true;
-		}
-
-		if (refs_target && !needs_type)
-			continue;
-
-		/* If it doesn't reference a target or is contained in a target, it needs a type */
-		if (needs_type || !refs_target)
-		{
-			/*
-			 * If it's a stream-table join, try to do some extra work to make the error
-			 * informative, as the user may be trying to join against a nonexistent table.
-			 */
-			bool has_join = false;
-			RangeVar *rel = NULL;
-
-			foreach(lc, select->fromClause)
-			{
-				Node *n = (Node *) lfirst(lc);
-				if (IsA(n, JoinExpr))
-				{
-					has_join = true;
-					break;
-				}
-			}
-
-			if (list_length(cref->fields) > 1)
-			{
-				Value *alias = linitial(cref->fields);
-				foreach(lc, context->streams)
-				{
-					RangeVar *rv = (RangeVar *) lfirst(lc);
-					if (pg_strcasecmp(rv->relname, strVal(alias)) == 0 ||
-							(rv->alias && pg_strcasecmp(rv->alias->aliasname, strVal(alias)) == 0))
-					{
-						rel = rv;
-						break;
-					}
-				}
-			}
-
-			if (has_join)
-			{
-				if (rel)
-					ereport(ERROR,
-							(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-							 errmsg("column reference \"%s\" has an ambiguous type", qualname),
-							 errhint("Explicitly cast to the desired type. For example, %s::integer. "
-									 "If \"%s\" is supposed to be a relation, create it first with CREATE TABLE or CREATE STREAM.", qualname, rel->relname),
-							 parser_errposition(context->pstate, cref->location)));
-				else
-					ereport(ERROR,
-							(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-							 errmsg("column reference \"%s\" has an ambiguous type", qualname),
-							 errhint("Explicitly cast to the desired type. For example, %s::integer. "
-									 "If \"%s\" is supposed to belong to a relation, create the relation first with CREATE TABLE or CREATE STREAM.", qualname, qualname),
-							 parser_errposition(context->pstate, cref->location)));
-			}
-			else
+			/* If it doesn't reference a target or is contained in a target, it needs a type */
+			if (needs_type || !refs_target)
 				ereport(ERROR,
 						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
 						errmsg("column reference \"%s\" has an ambiguous type", qualname),
-						errhint("Explicitly cast to the desired type. For example, %s::integer.", qualname),
+						errhint("Explicitly cast to the desired type, e.g. %s::integer, or create the stream \"%s\" with CREATE STREAM.",
+								qualname, stream->relname),
 						parser_errposition(context->pstate, cref->location)));
 		}
 	}
@@ -744,10 +716,10 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 				SortBy *sort = (SortBy *) linitial(window->orderClause);
 				Oid type = exprType(transformExpr(context->pstate, sort->node, EXPR_KIND_WHERE));
 				/* ORDER BY must be on a date, timestamp or timestamptz field */
-				if (!(type == 1082 || type == 1114 || type == 1184))
+				if (TypeCategory(type) != TYPCATEGORY_DATETIME)
 					ereport(ERROR,
 							(errcode(ERRCODE_SYNTAX_ERROR),
-							errmsg("ORDER BY expression for WINDOWs must have a timestamp-like result type"),
+							errmsg("ORDER BY expression for WINDOWs must evaluate to datetime type category values"),
 							parser_errposition(context->pstate, sort->location)));
 			}
 		}
@@ -757,22 +729,20 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 	if (find_clock_timestamp_expr(select->whereClause, context))
 		validate_clock_timestamp_expr(select, context->expr, context);
 
-	copy = copyObject(select);
-
 	/* Pass it to the analyzer to make sure all function definitions, etc. are correct */
-	parse_analyze((Node *) select, sql, NULL, 0);
+	parse_analyze((Node *) copyObject(select), sql, NULL, 0);
 
 	/* Warn the user if it's a stream-table join with an unindexed join qual */
-	warn_unindexed_join(copy, context);
+	warn_unindexed_join(select, context);
 }
 
 /*
- * ParserGetStreamDescr
+ * parserGetStreamDescr
  *
  * Get a parse-time tuple descriptor for the given stream
  */
 TupleDesc
-ParserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte)
+parserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte)
 {
 	ContAnalyzeContext *context = pstate->p_cont_view_context;
 	List *attrs = NIL;
@@ -780,7 +750,7 @@ ParserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte)
 	TupleDesc tupdesc;
 	bool onestream = list_length(context->streams) == 1 && list_length(context->rels) == 0;
 	AttrNumber attnum = 1;
-	bool sawArrivalTime = false;
+	bool saw_atime = false;
 	Form_pg_attribute *attrsArray;
 	int i;
 
@@ -851,7 +821,7 @@ ParserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte)
 				continue;
 
 			if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
-					sawArrivalTime = true;
+				saw_atime = true;
 
 			type = typenameType(pstate, tc->typeName, &typemod);
 
@@ -869,7 +839,7 @@ ParserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte)
 		}
 	}
 
-	if (!sawArrivalTime)
+	if (!saw_atime)
 	{
 		Oid oid = LookupTypeNameOid(NULL, makeTypeName("timestamptz"), false);
 		Form_pg_attribute attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
@@ -909,7 +879,6 @@ ParserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte)
 
 	return tupdesc;
 }
-
 
 /*
  * transformContinuousSelectStmt

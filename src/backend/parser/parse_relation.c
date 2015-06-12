@@ -1053,7 +1053,7 @@ addRangeTableEntry(ParseState *pstate,
 		rte->rtekind = RTE_STREAM;
 		rte->relkind = RELKIND_STREAM;
 		inh = false;
-		desc = ParserGetStreamDescr(pstate, relation, rte);
+		desc = parserGetStreamDescr(pstate, relation, rte);
 	}
 	else if (rel == NULL || RangeVarIsForTypedStream(relation))
 	{

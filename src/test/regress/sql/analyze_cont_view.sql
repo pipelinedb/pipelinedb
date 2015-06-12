@@ -18,33 +18,17 @@ CREATE CONTINUOUS VIEW cqanalyze11 AS SELECT ts::timestamp, AVG(val::numeric) OV
 CREATE CONTINUOUS VIEW cqanalyze12 AS SELECT ts::timestamp, AVG(val::numeric) OVER (PARTITION BY ts ORDER BY (ts + INTERVAL '1 day')) FROM analyze_cont_stream;
 CREATE CONTINUOUS VIEW cqanalyze13 AS SELECT ts::text, AVG(val::numeric) OVER (ORDER BY ts) FROM analyze_cont_stream;
 
--- Multiple streams
-CREATE CONTINUOUS VIEW cqanalyze14 AS SELECT s0.a::integer, s1.b::integer FROM s0, s1;
-CREATE CONTINUOUS VIEW cqanalyze15 AS SELECT s0.a::integer, s1.b::integer, s2.c::text FROM s0, s1, s2;
-
 -- Stream-table JOINs
 CREATE TABLE t0 (id INTEGER);
 CREATE CONTINUOUS VIEW cqanalyze16 AS SELECT s0.id::integer AS s0_id, t0.id AS t0_id FROM s0 JOIN t0 ON s0.id = t0.id;
 CREATE CONTINUOUS VIEW cqanalyze17 AS SELECT s.x::integer, t0.id FROM analyze_cont_stream2 s JOIN t0 ON s.x = t0.id;
-DROP TABLE t0;
-
--- Stream-stream JOINs
-CREATE CONTINUOUS VIEW cqanalyze18 AS SELECT s0.id::integer as id0, s1.id::integer as id1 FROM s0 JOIN s1 ON s0.id = s1.id;
-CREATE CONTINUOUS VIEW cqanalyze19 AS SELECT s0.id::integer AS id0, s1.id::integer AS id1 FROM analyze_cont_stream s0 JOIN another_stream s1 ON s0.id = s1.id WHERE s0.id > 10 ORDER BY s1.id DESC;
-
--- Stream-table-stream JOINs
-CREATE TABLE sts (id INTEGER);
-CREATE CONTINUOUS VIEW cqanalyze20 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM s0 JOIN sts ON s0.id = sts.id JOIN s1 ON sts.id = s1.x;
-CREATE CONTINUOUS VIEW cqanalyze21 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM analyze_cont_stream2 s0 JOIN sts ON s0.id = sts.id JOIN s1 ON sts.id = s1.id::integer WHERE sts.id > 42;
-CREATE CONTINUOUS VIEW cqanalyze22 AS SELECT s0.id::integer AS id0, s1.x::integer, sts.id AS id1 FROM analyze_cont_stream2 s0 INNER JOIN sts ON s0.id = sts.id RIGHT OUTER JOIN s1 ON sts.id = s1.id::integer WHERE sts.id > 42;
-DROP TABLE sts;
 
 -- Now let's verify our error handling and messages
 -- Stream column doesn't have a type
 CREATE CONTINUOUS VIEW cqanalyze23 AS SELECT col FROM analyze_cont_stream;
 
 -- Column not qualified with a stream
-CREATE CONTINUOUS VIEW cqanalyze24 AS SELECT id::integer FROM s0, s1;
+CREATE CONTINUOUS VIEW cqanalyze24 AS SELECT id::integer FROM t0, s1;
 
 -- Column has multiple types
 CREATE CONTINUOUS VIEW cqanalyze25 AS SELECT id::integer AS id0, id::text AS id1 FROM analyze_cont_stream;
@@ -112,7 +96,7 @@ CREATE CONTINUOUS VIEW cqanalyze29 AS SELECT key::text, arrival_timestamp FROM t
 CREATE CONTINUOUS VIEW cqanalyze30 AS SELECT key::text FROM test_stream WHERE arrival_timestamp < TIMESTAMP '2004-10-19 10:23:54+02';
 CREATE CONTINUOUS VIEW cqanalyze31 AS SELECT key::text, arrival_timestamp::timestamptz FROM test_stream;
 
--- Verify that we can't do wildcard selections from streams
+-- Verify that we can't do wildcard selections in continuous queries
 CREATE CONTINUOUS VIEW cqanalyze32 AS SELECT * from stream;
 CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from stream, t0;
 CREATE CONTINUOUS VIEW cqanalyze34 AS SELECT t0.* from stream, t0;
@@ -194,15 +178,8 @@ DROP CONTINUOUS VIEW cqanalyze10;
 DROP CONTINUOUS VIEW cqanalyze11;
 DROP CONTINUOUS VIEW cqanalyze12;
 DROP CONTINUOUS VIEW cqanalyze13;
-DROP CONTINUOUS VIEW cqanalyze14;
-DROP CONTINUOUS VIEW cqanalyze15;
 DROP CONTINUOUS VIEW cqanalyze16;
 DROP CONTINUOUS VIEW cqanalyze17;
-DROP CONTINUOUS VIEW cqanalyze18;
-DROP CONTINUOUS VIEW cqanalyze19;
-DROP CONTINUOUS VIEW cqanalyze20;
-DROP CONTINUOUS VIEW cqanalyze21;
-DROP CONTINUOUS VIEW cqanalyze22;
 DROP CONTINUOUS VIEW cqanalyze23;
 DROP CONTINUOUS VIEW cqanalyze24;
 DROP CONTINUOUS VIEW cqanalyze25;
@@ -237,6 +214,8 @@ DROP CONTINUOUS VIEW cvnotice1;
 DROP CONTINUOUS VIEW cvnotice2;
 DROP CONTINUOUS VIEW cvnotice3;
 DROP CONTINUOUS VIEW funcs;
+DROP CONTINUOUS VIEW over_1m CASCADE;
+DROP TABLE t0;
 
 -- Regression
 CREATE CONTINUOUS VIEW cqregress1 AS SELECT id::integer + avg(id) FROM analyze_cont_stream GROUP BY id;
