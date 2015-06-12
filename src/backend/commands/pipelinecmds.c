@@ -67,7 +67,7 @@
 
 #define OPTION_FILLFACTOR "fillfactor"
 
-int continuous_view_fillfactor = 50;
+int continuous_view_fillfactor;
 
 static ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)
@@ -624,6 +624,8 @@ explain_cont_plan(char *name, PlannedStmt *plan, ExplainState *base_es, TupleDes
 	TupOutputState *tstate;
 	ExplainState es;
 
+	Assert(plan);
+
 	memcpy(&es, base_es, sizeof(ExplainState));
 	es.str = makeStringInfo();
 	es.indent = 1;
@@ -633,8 +635,7 @@ explain_cont_plan(char *name, PlannedStmt *plan, ExplainState *base_es, TupleDes
 	/* emit opening boilerplate */
 	ExplainBeginOutput(&es);
 
-	if (plan)
-		ExplainOnePlan(plan, NULL, &es, NULL, NULL, NULL);
+	ExplainOnePlan(plan, NULL, &es, NULL, NULL, NULL);
 
 	/* emit closing boilerplate */
 	ExplainEndOutput(&es);
