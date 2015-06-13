@@ -428,7 +428,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
 
-	ValidateContQuery(stmt, querystring);
+	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
@@ -440,6 +440,12 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	query = parse_analyze(copyObject(workerselect), querystring, 0, 0);
 	tlist = query->targetList;
+
+	/*
+	 * Run it through the planner, so that if something goes wrong we know now
+	 * rather than finding out when the CV actually activates.
+	 */
+	pg_plan_queries(list_make1(query), 0, NULL);
 
 	/*
 	 * Build a list of columns from the SELECT statement that we

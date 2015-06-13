@@ -1175,6 +1175,24 @@ name_res_targets(List *tlist)
 }
 
 /*
+ * MakeSelectsContinuous
+ *
+ * Mark all SELECT queries as continuous. This is necessary for subqueries to be recognized
+ * as continuous, as the grammar can't determine that.
+ */
+bool
+MakeSelectsContinuous(Node *node, CQAnalyzeContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, SelectStmt))
+		((SelectStmt *) node)->forContinuousView = true;
+
+	return raw_expression_tree_walker(node, MakeSelectsContinuous, (void *) context);
+}
+
+/*
  * GetSelectStmtForCQWorker
  *
  * Get the SelectStmt that should be executed by the
@@ -1207,6 +1225,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 	AssociateTypesToColumRefs((Node *) stmt, &context);
 	type_cast_all_column_refs((Node *) stmt, &context);
 	name_res_targets(stmt->targetList);
+	MakeSelectsContinuous((Node *) stmt, &context);
 
 	workerstmt = (SelectStmt *) copyObject(stmt);
 	viewstmt = (SelectStmt *) makeNode(SelectStmt);
