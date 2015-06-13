@@ -148,12 +148,12 @@ test: cont_hs_agg cont_sw_hs_agg cont_distinct cont_hll_agg cont_os_agg cont_sw_
 # ----------
 # Another group of parallel tests
 # ----------
-test: stream_table_join user_combine cont_limit cont_alter stream_targets hash_group
+test: stream_table_join user_combine cont_limit cont_alter stream_targets hash_group stream_insert_subselect
 
 # ----------
 # Another group of parallel tests
 # ----------
-test: stream_exprs schema_inference prepared_stream_insert cont_view_namespace cont_view_tablespace typed_streams
+test: stream_exprs schema_inference prepared_stream_insert cont_view_namespace cont_view_tablespace typed_streams cont_subselect
 
 # These are run in serial because they each activate many CVs.
 # If they are run in parallel the CPU can potentially get starved.

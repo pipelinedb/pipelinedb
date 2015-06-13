@@ -1,0 +1,185 @@
+CREATE SCHEMA test_cont_subselect;
+SET search_path TO test_cont_subselect,public;
+-- Disallowed subselects
+CREATE CONTINUOUS VIEW v0 AS SELECT x FROM (SELECT COUNT(*) FROM stream) _;
+ERROR:  subqueries in continuous views cannot contain aggregates
+CREATE CONTINUOUS VIEW v0 AS SELECT x FROM
+	(SELECT COUNT(*) OVER (PARTITION BY key::text) FROM stream) _;
+ERROR:  subqueries in continuous views cannot contain window functions
+CREATE CONTINUOUS VIEW v0 AS SELECT x FROM
+	(SELECT x::integer, y::integer FROM stream GROUP BY x, y) _;
+ERROR:  subqueries in continuous views cannot contain GROUP BY clauses
+CREATE CONTINUOUS VIEW v0 AS SELECT x FROM
+	(SELECT COUNT(*) FROM stream HAVING COUNT(*) = 1) _;
+ERROR:  subqueries in continuous views cannot contain aggregates
+CREATE CONTINUOUS VIEW v0 AS SELECT x FROM
+	(SELECT x::integer FROM stream ORDER BY x) _;
+ERROR:  subqueries in continuous views cannot contain ORDER BY clauses
+CREATE CONTINUOUS VIEW v0 AS SELECT x FROM
+	(SELECT DISTINCT x::integer FROM stream) _;
+ERROR:  subqueries in continuous views cannot contain DISTINCT clauses
+CREATE CONTINUOUS VIEW v0 AS SELECT x FROM
+	(SELECT x::integer FROM stream LIMIT 10 OFFSET 2) _;
+ERROR:  subqueries in continuous views cannot contain LIMIT clauses
+-- Simple stuff
+CREATE CONTINUOUS VIEW v0 AS SELECT COUNT(*) FROM
+	(SELECT x::integer FROM stream WHERE x < 0) _;
+INSERT INTO stream (x) (SELECT generate_series(-100, 999));
+SELECT pg_sleep(0.2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM v0;
+ count 
+-------
+   100
+(1 row)
+
+CREATE CONTINUOUS VIEW v1 AS SELECT x, sum(y) FROM
+	(SELECT x::integer, y::integer FROM stream) _ GROUP by x;
+INSERT INTO stream (x, y) (SELECT x % 10, -x AS y FROM generate_series(1, 1000) AS x);
+SELECT pg_sleep(0.2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM v1 ORDER BY x;
+ x |  sum   
+---+--------
+ 0 | -50500
+ 1 | -49600
+ 2 | -49700
+ 3 | -49800
+ 4 | -49900
+ 5 | -50000
+ 6 | -50100
+ 7 | -50200
+ 8 | -50300
+ 9 | -50400
+(10 rows)
+
+-- JSON unrolling
+CREATE CONTINUOUS VIEW v2 AS SELECT (element->>'k')::integer AS value FROM
+	(SELECT json_array_elements(data::json) AS element FROM stream) _;
+INSERT INTO stream (data) (SELECT '[{"k": 1}, {"k": 1}, {"k": 1}]'::json FROM generate_series(1, 1000));
+SELECT pg_sleep(0.2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT sum(value) FROM v2;
+ sum  
+------
+ 3000
+(1 row)
+
+-- Column renames between subquery levels
+CREATE CONTINUOUS VIEW v3 AS SELECT a0, c0, b0 FROM
+	(SELECT b1 AS b0, a1 AS a0, c1 AS c0 FROM
+		(SELECT c2 AS c1, b2 AS b1, a2 AS a1 FROM 
+			(SELECT a2::text, b2::text, c2::text FROM stream) s0) s1) s2;
+INSERT INTO stream (a2, b2, c2) (SELECT x AS a2, x AS b2, x AS c2 FROM generate_series(1, 1000) AS x);
+SELECT pg_sleep(0.2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT COUNT(DISTINCT(a0, b0, c0)) FROM v3;
+ count 
+-------
+  1000
+(1 row)
+
+-- References to function calls in inner query
+CREATE CONTINUOUS VIEW v4 AS SELECT day, upper FROM
+	(SELECT day(arrival_timestamp), upper(s::text) FROM stream) _;
+INSERT INTO stream (s) (SELECT s::text FROM generate_series(1, 1000) AS s);
+SELECT pg_sleep(0.2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT COUNT(DISTINCT(day, upper)) FROM v4;
+ count 
+-------
+  1000
+(1 row)
+
+-- Deep nesting
+CREATE CONTINUOUS VIEW v5 AS SELECT x, COUNT(*) FROM
+	(SELECT x FROM
+		(SELECT x FROM
+			(SELECT x FROM
+				(SELECT x FROM
+					(SELECT x FROM
+						(SELECT x FROM
+							(SELECT x FROM
+								(SELECT x FROM
+									(SELECT x FROM
+										(SELECT x::integer FROM stream) s0) s1) s2) s3) s4) s5) s6) s7) s8) s9
+	GROUP BY x;
+INSERT INTO stream (x) (SELECT x % 10 FROM generate_series(1, 1000) AS x);
+SELECT pg_sleep(0.2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM v5 ORDER BY x;
+ x | count 
+---+-------
+ 0 |   100
+ 1 |   100
+ 2 |   100
+ 3 |   100
+ 4 |   100
+ 5 |   100
+ 6 |   100
+ 7 |   100
+ 8 |   100
+ 9 |   100
+(10 rows)
+
+DROP SCHEMA test_cont_subselect CASCADE;
+NOTICE:  drop cascades to 6 other objects
+DETAIL:  drop cascades to view v0
+drop cascades to view v1
+drop cascades to view v2
+drop cascades to view v3
+drop cascades to view v4
+drop cascades to view v5
+-- Stream-table joins in subselects
+CREATE TABLE test_cont_sub_t0 (x integer, y integer);
+INSERT INTO test_cont_sub_t0 (x, y) VALUES (0, 0);
+INSERT INTO test_cont_sub_t0 (x, y) VALUES (1, 1);
+INSERT INTO test_cont_sub_t0 (x, y) VALUES (2, 2);
+CREATE STREAM test_cont_sub_s0 (x integer, y integer);
+CREATE CONTINUOUS VIEW test_cont_sub_v6 AS SELECT COUNT(*) FROM
+	(SELECT s0.x, s0.y, t0.y FROM test_cont_sub_s0 s0 JOIN test_cont_sub_t0 t0 ON s0.x = t0.x) _;
+NOTICE:  consider creating an index on t0.x for improved stream-table join performance
+INSERT INTO test_cont_sub_s0 (x, y) VALUES (0, 0);
+INSERT INTO test_cont_sub_s0 (x, y) VALUES (0, 0);
+INSERT INTO test_cont_sub_s0 (x, y) VALUES (1, 1);
+INSERT INTO test_cont_sub_s0 (x, y) VALUES (1, 1);
+INSERT INTO test_cont_sub_s0 (x, y) (SELECT x, x AS y FROM generate_series(1, 100) AS x);
+SELECT pg_sleep(0.2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM test_cont_sub_v6;
+ count 
+-------
+     6
+(1 row)
+
+DROP CONTINUOUS VIEW test_cont_sub_v6;
+DROP TABLE test_cont_sub_t0;
+DROP STREAM test_cont_sub_s0;

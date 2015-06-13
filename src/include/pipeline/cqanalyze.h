@@ -68,4 +68,6 @@ Query *RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int r
 bool CollectUserCombines(Node *node, CQAnalyzeContext *context);
 bool SelectsFromStreamOnly(SelectStmt *stmt);
 
+bool MakeSelectsContinuous(Node *node, CQAnalyzeContext *context);
+
 #endif

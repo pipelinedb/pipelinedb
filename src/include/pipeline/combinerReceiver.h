@@ -1,15 +1,14 @@
 /* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
- * combinerReceiver.c
+ * combinerReceiver.h
  *	  An implementation of DestReceiver that that allows combiners to receive
  *	  tuples from worker processes.
  *
  * IDENTIFICATION
- *	  src/backend/pipeline/combinerReceiver.c
+ *	  src/include/pipeline/combinerReceiver.h
  *
  */
-
 #ifndef COMBINER_RECEIVER_H
 #define COMBINER_RECEIVER_H
 
