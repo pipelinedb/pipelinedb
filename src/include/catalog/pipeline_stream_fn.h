@@ -36,4 +36,6 @@ extern bool RelIdIsForTypedStream(Oid relid);
 extern bool RelIdIsForInferredStream(Oid relid);
 extern Relation GetRelationForStream(RangeVar *rv, List *cols);
 
+extern void CreatePipelineStreamCatalogEntry(CreateStreamStmt *stmt, Oid relid);
+
 #endif

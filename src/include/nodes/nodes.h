@@ -291,6 +291,7 @@ typedef enum NodeTag
 	T_AlterTableCmd,
 	T_AlterDomainStmt,
 	T_CreateContViewStmt,
+	T_CreateStreamStmt,
 	T_CreateEncodingStmt,
 	T_SetOperationStmt,
 	T_GrantStmt,

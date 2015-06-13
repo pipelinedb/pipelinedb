@@ -903,6 +903,7 @@ ProcessUtilitySlow(Node *parsetree,
 
 			case T_CreateStmt:
 			case T_CreateForeignTableStmt:
+			case T_CreateStreamStmt:
 				{
 					List	   *stmts;
 					ListCell   *l;
@@ -926,9 +927,6 @@ ProcessUtilitySlow(Node *parsetree,
 							relOid = DefineRelation((CreateStmt *) stmt,
 													RELKIND_RELATION,
 													InvalidOid);
-
-							if (((CreateStmt *) stmt)->stream)
-								continue;
 
 							/*
 							 * Let NewRelationCreateToastTable decide if this
@@ -960,6 +958,14 @@ ProcessUtilitySlow(Node *parsetree,
 													InvalidOid);
 							CreateForeignTable((CreateForeignTableStmt *) stmt,
 											   relOid);
+						}
+						else if (IsA(stmt, CreateStreamStmt))
+						{
+							/* Create the table itself */
+							relOid = DefineRelation((CreateStmt *) stmt,
+													RELKIND_STREAM,
+													InvalidOid);
+							// TODO(usmanm): Create pipeline_stream entry
 						}
 						else
 						{
@@ -1825,7 +1831,7 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_CreateStmt:
-			tag = ((CreateStmt *) parsetree)->stream ? "CREATE STREAM" : "CREATE TABLE";
+			tag = "CREATE TABLE";
 			break;
 
 		case T_CreateTableSpaceStmt:
@@ -1842,6 +1848,10 @@ CreateCommandTag(Node *parsetree)
 
 		case T_CreateExtensionStmt:
 			tag = "CREATE EXTENSION";
+			break;
+
+		case T_CreateStreamStmt:
+			tag = "CREATE STREAM";
 			break;
 
 		case T_AlterExtensionStmt:

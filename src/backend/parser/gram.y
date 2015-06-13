@@ -249,7 +249,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 		DropOwnedStmt ReassignOwnedStmt
 		AlterTSConfigurationStmt AlterTSDictionaryStmt
 		CreateMatViewStmt RefreshMatViewStmt
-		CreateContViewStmt ExplainContViewStmt
+		CreateContViewStmt ExplainContViewStmt CreateStreamStmt
 
 %type <node>	select_no_parens select_with_parens select_clause
 				simple_select values_clause
@@ -763,6 +763,7 @@ stmt :
 			| CreateMatViewStmt
 			| CreateOpClassStmt
 			| CreateOpFamilyStmt
+			| CreateStreamStmt
 			| AlterOpFamilyStmt
 			| CreatePLangStmt
 			| CreateSchemaStmt
@@ -2809,7 +2810,34 @@ DeactivateStmt: DEACTIVATE
 /*****************************************************************************
  *
  *		QUERY :
- *				CREATE [ TABLE | STREAM ] relname
+ *				CREATE STREAM relname
+ *
+ *****************************************************************************/
+
+CreateStreamStmt:	CREATE STREAM qualified_name '(' OptTableElementList ')'
+				{
+					CreateStreamStmt *n = makeNode(CreateStreamStmt);
+					n->base.relation = $3;
+					n->base.tableElts = $5;
+					n->base.if_not_exists = false;
+					n->is_inferred = false;
+					$$ = (Node *)n;
+				}
+		| CREATE STREAM IF_P NOT EXISTS qualified_name '(' OptTableElementList ')'
+				{
+					CreateStreamStmt *n = makeNode(CreateStreamStmt);
+					n->base.relation = $6;
+					n->base.tableElts = $8;
+					n->base.if_not_exists = true;
+					n->is_inferred = false;
+					$$ = (Node *)n;
+				}
+		;
+
+/*****************************************************************************
+ *
+ *		QUERY :
+ *				CREATE TABLE relname
  *
  *****************************************************************************/
 
@@ -2876,19 +2904,6 @@ CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 					n->if_not_exists = true;
 					$$ = (Node *)n;
 				}
-    | CREATE STREAM qualified_name '(' OptTableElementList ')'
-  		  {
-          CreateStmt *n = makeNode(CreateStmt);
-          $3->relpersistence = RELPERSISTENCE_PERMANENT;
-          n->relation = $3;
-          n->tableElts = $5;
-          n->constraints = NIL;
-          n->options = NIL;
-          n->tablespacename = NULL;
-          n->if_not_exists = false;
-          n->stream = true;
-          $$ = (Node *)n;
-  		  }
 		;
 
 /*

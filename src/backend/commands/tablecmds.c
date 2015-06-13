@@ -468,36 +468,11 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId)
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	Oid			ofTypeId;
 
-	if (stmt->stream)
-		relkind = RELKIND_STREAM;
-
 	/*
 	 * Truncate relname to appropriate length (probably a waste of time, as
 	 * parser should have done this already).
 	 */
 	StrNCpy(relname, stmt->relation->relname, NAMEDATALEN);
-
-	if (RangeVarIsForStream(stmt->relation))
-	{
-
-		if (relkind == RELKIND_STREAM)
-		{
-			if (RangeVarIsForTypedStream(stmt->relation))
-				ereport(ERROR,
-						(errcode(ERRCODE_DUPLICATE_STREAM),
-						 errmsg("stream \"%s\" already exists", relname)));
-			else
-				ereport(ERROR,
-						(errcode(ERRCODE_DUPLICATE_STREAM),
-						 errmsg("\"%s\" is being used as a stream", relname),
-						 errhint("A stream cannot have the same name as an inferred stream.")));
-		}
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_DUPLICATE_STREAM),
-					 errmsg("\"%s\" is being used as a stream", relname),
-					 errhint("Streams and relations cannot have the same name.")));
-	}
 
 	/*
 	 * Check consistency of arguments
