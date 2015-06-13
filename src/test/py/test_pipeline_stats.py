@@ -65,7 +65,7 @@ def test_stream_stats(pipeline, clean_db):
 
   assert result['input_rows'] == 1
   assert result['input_batches'] == 1
-  assert result['input_bytes'] == 48
+  assert result['input_bytes'] == 52
 
   pipeline.insert('test_stream_stats_stream', ('x', ), [(1, )] * 100)
   time.sleep(0.5)
@@ -73,4 +73,4 @@ def test_stream_stats(pipeline, clean_db):
   result = pipeline.execute("SELECT * FROM pipeline_stream_stats WHERE name='test_stream_stats_stream'").first()
   assert result['input_rows'] == 101
   assert result['input_batches'] == 2
-  assert result['input_bytes'] == 4848
+  assert result['input_bytes'] == 5252

@@ -51,7 +51,7 @@ extern void AddPreparedStreamInsert(PreparedStreamInsertStmt *stmt, ParamListInf
 extern PreparedStreamInsertStmt *FetchPreparedStreamInsert(const char *name);
 extern void DropPreparedStreamInsert(const char *name);
 extern int InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt);
-extern int InsertIntoStream(InsertStmt *ins, List *values);
+extern int InsertIntoStream(InsertStmt *ins, List *params);
 extern uint64 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
 
 /* Represents a single batch of inserts made into a stream. */

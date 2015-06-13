@@ -850,7 +850,7 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 }
 
 void
-exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *values)
+exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *params)
 {
 	CommandDest dest = whereToSendOutput;
 	MemoryContext oldcontext;
@@ -868,9 +868,7 @@ exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *valu
 	}
 	else
 	{
-		List *vals = values ? values : ((SelectStmt *) ins->selectStmt)->valuesLists;
-
-		count = InsertIntoStream(ins, vals);
+		count = InsertIntoStream(ins, params);
 	}
 	PopActiveSnapshot();
 

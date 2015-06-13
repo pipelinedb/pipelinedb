@@ -62,6 +62,11 @@ set_reader(PlanState *planstate, TupleBufferBatchReader *reader)
 		scan->reader = reader;
 		return;
 	}
+	else if (IsA(planstate, SubqueryScanState))
+	{
+		set_reader(((SubqueryScanState *) planstate)->subplan, reader);
+		return;
+	}
 
 	set_reader(planstate->lefttree, reader);
 	set_reader(planstate->righttree, reader);
