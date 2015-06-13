@@ -995,8 +995,8 @@ next:
 
 	TupleBufferCloseBatchReader(reader);
 	pfree(states);
-	MemoryContextDelete(run_cxt);
 	MemoryContextSwitchTo(TopMemoryContext);
+	MemoryContextDelete(run_cxt);
 }
 
 /*
