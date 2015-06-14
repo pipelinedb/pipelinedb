@@ -5,12 +5,6 @@ INSERT INTO t (SELECT generate_series(1, 100));
 CREATE CONTINUOUS VIEW v0 AS SELECT x::integer FROM stream;
 INSERT INTO stream (x) (SELECT * FROM t);
 INSERT INTO stream (x) (SELECT * FROM (SELECT x AS y FROM t) s0);
-SELECT pg_sleep(0.2);
- pg_sleep 
-----------
- 
-(1 row)
-
 SELECT COUNT(DISTINCT x) FROM v0;
  count 
 -------
@@ -19,12 +13,6 @@ SELECT COUNT(DISTINCT x) FROM v0;
 
 CREATE CONTINUOUS VIEW v1 AS SELECT x::integer, COUNT(*) FROM stream GROUP BY x;
 INSERT INTO stream (x) (SELECT generate_series(1, 1000));
-SELECT pg_sleep(0.2);
- pg_sleep 
-----------
- 
-(1 row)
-
 SELECT COUNT(DISTINCT x) FROM v1;
  count 
 -------
@@ -38,12 +26,6 @@ ERROR:  "s0" is a stream
 HINT:  Streams can only be read by a continuous view's FROM clause.
 CREATE CONTINUOUS VIEW v2 AS SELECT x::integer FROM stream;
 INSERT INTO stream (x) (SELECT generate_series(1, 1000) AS x ORDER BY random());
-SELECT pg_sleep(0.2);
- pg_sleep 
-----------
- 
-(1 row)
-
 SELECT COUNT(DISTINCT x) FROM v2;
  count 
 -------
@@ -52,12 +34,6 @@ SELECT COUNT(DISTINCT x) FROM v2;
 
 CREATE CONTINUOUS VIEW v3 AS SELECT x::integer FROM stream;
 INSERT INTO stream (x) (SELECT * FROM t WHERE x IN (SELECT generate_series(1, 20)));
-SELECT pg_sleep(0.2);
- pg_sleep 
-----------
- 
-(1 row)
-
 SELECT * FROM v3 ORDER BY x;
  x  
 ----
@@ -85,12 +61,6 @@ SELECT * FROM v3 ORDER BY x;
 
 CREATE CONTINUOUS VIEW v4 AS SELECT COUNT(*) FROM stream;
 INSERT INTO stream (price, t) SELECT 10 + random() AS price, current_timestamp - interval '1 minute' * random() AS t FROM generate_series(1, 1000);
-SELECT pg_sleep(0.2);
- pg_sleep 
-----------
- 
-(1 row)
-
 SELECT * FROM v4;
  count 
 -------
