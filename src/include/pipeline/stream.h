@@ -81,8 +81,9 @@ typedef struct InsertBatchAck {
 	int count;
 } InsertBatchAck;
 
-extern InsertBatch *InsertBatchCreate(Bitmapset *readers, int num_tuples);
+extern InsertBatch *InsertBatchCreate(Bitmapset *readers);
 extern void InsertBatchWaitAndRemove(InsertBatch *batch);
+extern void InsertBatchSetNumTuples(InsertBatch *batch, int num_tuples);
 extern void InsertBatchIncrementNumCTuples(InsertBatch *batch);
 extern void InsertBatchIncrementNumReads(InsertBatch* batch);
 extern void InsertBatchMarkAcked(InsertBatchAck *ack);
