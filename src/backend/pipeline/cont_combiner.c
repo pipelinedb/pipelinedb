@@ -905,6 +905,7 @@ ContinuousQueryCombinerMain(void)
 				if (!TupleBufferBatchReaderHasTuplesForCQId(reader, id))
 					goto next;
 
+				debug_query_string = NameStr(state->view->name);
 				MemoryContextSwitchTo(state->tmp_cxt);
 
 				TupleBufferBatchReaderSetCQId(reader, id);
@@ -971,6 +972,8 @@ next:
 				cq_stat_report(false);
 			else
 				cq_stat_send_purge(id, 0, CQ_STAT_COMBINER);
+
+			debug_query_string = NULL;
 		}
 
 		CommitTransactionCommand();
