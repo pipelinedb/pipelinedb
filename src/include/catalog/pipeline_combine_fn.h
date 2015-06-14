@@ -15,5 +15,7 @@
 
 Oid GetCombineStateType(Oid aggfnoid);
 void GetCombineInfo(Oid aggfnoid, Oid *combinefn, Oid *combineinfn, Oid *statetype);
+Oid DefineCombiner(Oid aggoid, List *name, List *args, bool oldstyle, List *parameters,
+		const char *queryString);
 
 #endif

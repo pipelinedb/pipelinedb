@@ -27,14 +27,17 @@
 #include "parser/parse_target.h"
 #include "pgstat.h"
 #include "pipeline/stream.h"
+#include "pipeline/streamReceiver.h"
 #include "storage/shm_alloc.h"
 #include "storage/ipc.h"
+#include "tcop/pquery.h"
 #include "utils/builtins.h"
 #include "tcop/tcopprot.h"
 #include "utils/lsyscache.h"
 #include "utils/guc.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
+#include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 #include "utils/typcache.h"
@@ -49,6 +52,50 @@ char *stream_targets = NULL;
 
 static HTAB *prepared_stream_inserts = NULL;
 static bool *cont_queries_active = NULL;
+
+/*
+ * get_desc
+ *
+ * Build a tuple descriptor from a query's target list
+ */
+static TupleDesc
+get_desc(List *colnames, Query *q)
+{
+	ListCell *lc;
+	TupleDesc desc = CreateTemplateTupleDesc(list_length(q->targetList), false);
+	AttrNumber attno = 1;
+	AttrNumber count = 0;
+
+	foreach(lc, q->targetList)
+	{
+		TargetEntry *te = (TargetEntry *) lfirst(lc);
+		if (!te->resjunk)
+			count++;
+	}
+
+	if (!AttributeNumberIsValid(count))
+		elog(ERROR, "could not determine tuple descriptor from target list");
+
+	desc = CreateTemplateTupleDesc(count, false);
+	foreach(lc, q->targetList)
+	{
+		TargetEntry *te = (TargetEntry *) lfirst(lc);
+
+		if (te->resjunk)
+			continue;
+
+		TupleDescInitEntry(desc, attno,
+						   strVal(list_nth(colnames, attno - 1)),
+						   exprType((Node *) te->expr),
+						   -1,
+						   0);
+		TupleDescInitEntryCollation(desc,
+				attno, exprCollation((Node *) te->expr));
+		attno++;
+	}
+
+	return desc;
+}
 
 /*
  * StorePreparedStreamInsert
@@ -154,7 +201,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate(targets, list_length(pstmt->inserts));
+		batch = InsertBatchCreate(targets);
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -199,7 +246,10 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	stream_stat_report(pstmt->namespace, pstmt->stream, count, 1, size);
 
 	if (synchronous_stream_insert)
+	{
+		InsertBatchSetNumTuples(batch, count);
 		InsertBatchWaitAndRemove(batch);
+	}
 
 	return count;
 }
@@ -210,22 +260,29 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
  * Send INSERT-encoded events to the given stream
  */
 int
-InsertIntoStream(InsertStmt *ins, List *values)
+InsertIntoStream(InsertStmt *ins, List *params)
 {
-	ListCell *lc;
 	int numcols = list_length(ins->cols);
 	int i;
 	int count = 0;
-	ParseState *ps = make_parsestate(NULL);
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
-	ExprContext *econtext = CreateStandaloneExprContext();
 	Oid namespace = RangeVarGetCreationNamespace(ins->relation);
 	Bitmapset *targets = GetLocalStreamReaders(namespace, ins->relation->relname);
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
 	Size size = 0;
+	List *queries;
+	List *plans;
+	PlannedStmt *pstmt;
+	DestReceiver *receiver;
+	Portal portal;
+	Query *query;
+	SelectStmt *stmt;
+
+	Assert(IsA(ins->selectStmt, SelectStmt));
+	stmt = ((SelectStmt *) ins->selectStmt);
 
 	/*
 	 * If it's a typed stream we can get here because technically the relation does exist.
@@ -239,7 +296,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate(targets, list_length(values));
+		batch = InsertBatchCreate(targets);
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -274,88 +331,54 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		colnames = lappend(colnames, makeString(res->name));
 	}
 
-	desc = GetStreamTupleDesc(namespace, ins->relation->relname, colnames);
-	if (desc == NULL)
-		elog(ERROR, "could not determine descriptor for stream %s", ins->relation->relname);
+	/*
+	 * If we're doing a prepared insert on this path, then params is just an eval'd tuple of
+	 * values and the simplest thing to do is to just use it as the actual values list.
+	 * InsertIntoStreamPrepared handles more complex prepared inserts.
+	 */
+	if (params)
+		stmt->valuesLists = params;
 
-	/* append each VALUES tuple to the stream buffer */
-	foreach (lc, values)
-	{
-		List *raw = (List *) lfirst(lc);
-		List *exprlist = transformExpressionList(ps, raw, EXPR_KIND_VALUES);
-		List *exprstatelist;
-		ListCell *l;
-		Datum *values;
-		bool *nulls;
-		int col = 0;
-		int attindex = 0;
-		int evindex = 0;
-		List *filteredvals = NIL;
-		List *filteredcols = NIL;
-		StreamTuple *tuple;
+	/*
+	 * Plan and execute the query being used to generate rows (usually this will be a VALUES list)
+	 */
+	queries = pg_analyze_and_rewrite(ins->selectStmt, "INSERT", NULL, 0);
+	Assert(list_length(queries) == 1);
+	query = linitial(queries);
 
-		assign_expr_collations(NULL, (Node *) exprlist);
+	plans = pg_plan_queries(queries, 0, NULL);
+	Assert(list_length(plans) == 1);
 
-		/*
-		 * Extract all fields from the current tuple that are actually being
-		 * read by something.
-		 */
-		while (attindex < desc->natts && evindex < list_length(exprlist))
-		{
-			Value *colname = (Value *) list_nth(colnames, evindex);
-			Node *n = (Node *) list_nth(exprlist, evindex);
+	pstmt = linitial(plans);
 
-			if (pg_strcasecmp(strVal(colname), NameStr(desc->attrs[attindex]->attname)) == 0)
-			{
-				/* coerce column to common supertype */
-				Node *c = coerce_to_specific_type(NULL, n, desc->attrs[attindex]->atttypid, "VALUES");
+	receiver = CreateDestReceiver(DestStream);
+	desc = get_desc(colnames, query);
+	SetStreamDestReceiverParams(receiver, targets, desc, num_batches, acks);
 
-				filteredvals = lappend(filteredvals, c);
-				filteredcols = lappend(filteredcols, strVal(colname));
-				attindex++;
-			}
-			evindex++;
-		}
+	portal = CreatePortal("__insert__", true, true);
+	portal->visible = false;
 
-		/*
-		 * If we haven't read any fields then we need to add the last one
-		 * available because a COUNT(*) might need it (annoying). We arbitrarily
-		 * use the first value in the INSERT tuple in this case.
-		 */
-		if (!filteredvals)
-		{
-			filteredvals = lappend(filteredvals, linitial(exprlist));
-			filteredcols = lappend(filteredcols, strVal(linitial(colnames)));
-		}
+	PortalDefineQuery(portal,
+					  NULL,
+					  ins->relation->relname,
+					  "INSERT",
+					  list_make1(pstmt),
+					  NULL);
 
-		exprstatelist = (List *) ExecInitExpr((Expr *) filteredvals, NULL);
+	PortalStart(portal, NULL, 0, InvalidSnapshot);
 
-		values = palloc0(list_length(exprstatelist) * sizeof(Datum));
-		nulls = palloc0(list_length(exprstatelist) * sizeof(bool));
+	(void) PortalRun(portal,
+					 FETCH_ALL,
+					 true,
+					 receiver,
+					 receiver,
+					 NULL);
 
-		/*
-		 * Eval expressions to create a tuple of constants
-		 */
-		col = 0;
-		foreach(l, exprstatelist)
-		{
-			ExprState  *estate = (ExprState *) lfirst(l);
+	count = ((StreamReceiver *) receiver)->count;
+	size = ((StreamReceiver *) receiver)->bytes;
+	(*receiver->rDestroy) (receiver);
 
-			values[col] = ExecEvalExpr(estate, econtext, &nulls[col], NULL);
-			col++;
-		}
-
-		/*
-		 * Now write the tuple of constants to the TupleBuffer
-		 */
-		tuple = MakeStreamTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, acks);
-		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
-
-		count++;
-		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
-	}
-
-	FreeExprContext(econtext, false);
+	PortalDrop(portal, false);
 
 	stream_stat_report(namespace, ins->relation->relname, count, 1, size);
 
@@ -363,7 +386,10 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
+	{
+		InsertBatchSetNumTuples(batch, count);
 		InsertBatchWaitAndRemove(batch);
+	}
 
 	return count;
 }
@@ -399,7 +425,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate(targets, ntuples);
+		batch = InsertBatchCreate(targets);
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -425,21 +451,22 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
+	{
+		InsertBatchSetNumTuples(batch, ntuples);
 		InsertBatchWaitAndRemove(batch);
+	}
 
 	return count;
 }
 
 
 InsertBatch *
-InsertBatchCreate(Bitmapset *readers, int num_tuples)
+InsertBatchCreate(Bitmapset *readers)
 {
 	char *ptr = ShmemDynAlloc0(sizeof(InsertBatch) + BITMAPSET_SIZE(readers->nwords));
 	InsertBatch *batch = (InsertBatch *) ptr;
 
 	batch->id = rand() ^ (int) MyProcPid;
-	batch->num_tups = num_tuples;
-	batch->num_wtups = bms_num_members(readers) * num_tuples;
 	SpinLockInit(&batch->mutex);
 
 	ptr += sizeof(InsertBatch);
@@ -447,6 +474,16 @@ InsertBatchCreate(Bitmapset *readers, int num_tuples)
 	memcpy(batch->readers, readers, BITMAPSET_SIZE(readers->nwords));
 
 	return batch;
+}
+
+/*
+ * InsertBatchSetNumTuples
+ */
+void
+InsertBatchSetNumTuples(InsertBatch *batch, int num_tuples)
+{
+	batch->num_tups = num_tuples;
+	batch->num_wtups = bms_num_members(batch->readers) * num_tuples;
 }
 
 void

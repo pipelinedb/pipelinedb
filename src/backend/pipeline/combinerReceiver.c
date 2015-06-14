@@ -65,7 +65,8 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 			TupleBufferSlot *tbs = lfirst(lc_slot);
 			int i;
 
-			for (i = 0; i < tbs->tuple->num_acks; i++) {
+			for (i = 0; i < tbs->tuple->num_acks; i++)
+			{
 				InsertBatchAck *ack = &tbs->tuple->acks[i];
 				bool found = false;
 

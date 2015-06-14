@@ -28,6 +28,7 @@
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
 #include "pipeline/cont_analyze.h"
+#include "pipeline/cqanalyze.h"
 #include "pipeline/stream.h"
 #include "storage/lock.h"
 #include "utils/builtins.h"
@@ -505,16 +506,109 @@ has_relname(RangeVar *rv, char *relname)
 }
 
 /*
+ * is_subquery_allowed
+ *
+ * Check if the given query is a valid subquery for a continuous view
+ */
+static bool
+is_allowed_subquery(Node *subquery)
+{
+	SelectStmt *stmt;
+	Query *q;
+	CQAnalyzeContext cxt;
+
+	/* the grammar should handle this one, but just to be safe... */
+	if (!IsA(subquery, SelectStmt))
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("subqueries in continuous views must be SELECT statements")));
+
+	stmt = (SelectStmt *) copyObject(subquery);
+
+	MemSet(&cxt, 0, sizeof(CQAnalyzeContext));
+	MakeSelectsContinuous((Node *) stmt, &cxt);
+
+	q = parse_analyze((Node *) stmt, "subquery", NULL, 0);
+
+	if (q->hasAggs)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("subqueries in continuous views cannot contain aggregates")));
+
+	if (q->hasWindowFuncs)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("subqueries in continuous views cannot contain window functions")));
+
+	if (q->groupClause)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("subqueries in continuous views cannot contain GROUP BY clauses")));
+
+	if (q->havingQual)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("subqueries in continuous views cannot contain HAVING clauses")));
+
+	if (q->sortClause)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("subqueries in continuous views cannot contain ORDER BY clauses")));
+
+	if (q->distinctClause)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("subqueries in continuous views cannot contain DISTINCT clauses")));
+
+	if (q->limitOffset || q->limitCount)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("subqueries in continuous views cannot contain LIMIT clauses")));
+
+	if (q->hasForUpdate)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("subqueries in continuous views cannot contain FOR UPDATE clauses")));
+
+	if (q->cteList)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("subqueries in continuous views cannot contain CTEs")));
+
+	return true;
+}
+
+/*
  * ValidateContinuousQuery
  */
 void
-ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
+ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 {
-	SelectStmt *select = (SelectStmt *) copyObject(stmt->query);
-	ContAnalyzeContext *context = MakeContAnalyzeContext(make_parsestate(NULL), select);
+	SelectStmt *select;
+	ContAnalyzeContext *context;
 	ListCell *lc;
 	RangeVar *stream;
 	bool typed_stream = false;
+
+	if (!IsA(node, SelectStmt))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				errmsg("continuous views can only be defined using SELECT statements")));
+
+	((SelectStmt *) node)->forContinuousView = true;
+	select = (SelectStmt *) copyObject(node);
+
+	context = MakeContAnalyzeContext(make_parsestate(NULL), select);
+
+	/* recurse for any subselects */
+	if (list_length(select->fromClause) == 1 &&IsA(linitial(select->fromClause), RangeSubselect))
+	{
+		RangeSubselect *sub = (RangeSubselect *) linitial(select->fromClause);
+
+		if (is_allowed_subquery(sub->subquery))
+			ValidateContQuery(name, sub->subquery, sql);
+		return;
+	}
 
 	context->pstate->p_sourcetext = sql;
 
@@ -563,7 +657,7 @@ ValidateContQuery(CreateContViewStmt *stmt, const char *sql)
 
 	stream = (RangeVar *) linitial(context->streams);
 
-	if (equal(stream, stmt->into->rel))
+	if (equal(stream, name))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				errmsg("continuous queries cannot read from themselves"),

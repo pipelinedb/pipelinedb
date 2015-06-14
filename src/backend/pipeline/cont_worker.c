@@ -29,6 +29,7 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "tcop/dest.h"
+#include "tcop/tcopprot.h"
 
 static bool
 should_read_fn(TupleBufferReader *reader, TupleBufferSlot *slot)
@@ -60,6 +61,11 @@ set_reader(PlanState *planstate, TupleBufferBatchReader *reader)
 	{
 		StreamScanState *scan = (StreamScanState *) planstate;
 		scan->reader = reader;
+		return;
+	}
+	else if (IsA(planstate, SubqueryScanState))
+	{
+		set_reader(((SubqueryScanState *) planstate)->subplan, reader);
 		return;
 	}
 
@@ -212,7 +218,6 @@ set_snapshot(EState *estate, ResourceOwner owner)
 	estate->es_snapshot = GetTransactionSnapshot();
 	estate->es_snapshot->active_count++;
 	estate->es_snapshot->copied = true;
-	RegisterSnapshotOnOwner(estate->es_snapshot, owner);
 	PushActiveSnapshot(estate->es_snapshot);
 }
 
@@ -220,8 +225,6 @@ static void
 unset_snapshot(EState *estate, ResourceOwner owner)
 {
 	PopActiveSnapshot();
-	UnregisterSnapshotFromOwner(estate->es_snapshot, owner);
-
 	estate->es_snapshot = NULL;
 }
 
@@ -329,6 +332,7 @@ ContinuousQueryWorkerMain(void)
 				if (!TupleBufferBatchReaderHasTuplesForCQId(reader, id))
 					goto next;
 
+				debug_query_string = NameStr(state->view->name);
 				MemoryContextSwitchTo(state->exec_cxt);
 
 				TupleBufferBatchReaderSetCQId(reader, id);
@@ -410,6 +414,8 @@ next:
 				cq_stat_report(false);
 			else
 				cq_stat_send_purge(id, 0, CQ_STAT_WORKER);
+
+			debug_query_string = NULL;
 		}
 
 		CommitTransactionCommand();
@@ -462,6 +468,6 @@ next:
 
 	TupleBufferCloseBatchReader(reader);
 	pfree(states);
-	MemoryContextDelete(run_cxt);
 	MemoryContextSwitchTo(TopMemoryContext);
+	MemoryContextDelete(run_cxt);
 }
