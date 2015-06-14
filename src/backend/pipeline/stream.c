@@ -201,7 +201,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate(targets, list_length(pstmt->inserts));
+		batch = InsertBatchCreate(targets);
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -246,7 +246,10 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	stream_stat_report(pstmt->namespace, pstmt->stream, count, 1, size);
 
 	if (synchronous_stream_insert)
+	{
+		InsertBatchSetNumTuples(batch, count);
 		InsertBatchWaitAndRemove(batch);
+	}
 
 	return count;
 }
@@ -293,7 +296,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate(targets, list_length(stmt->valuesLists));
+		batch = InsertBatchCreate(targets);
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -383,7 +386,10 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
+	{
+		InsertBatchSetNumTuples(batch, count);
 		InsertBatchWaitAndRemove(batch);
+	}
 
 	return count;
 }
@@ -419,7 +425,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate(targets, ntuples);
+		batch = InsertBatchCreate(targets);
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -445,21 +451,22 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
+	{
+		InsertBatchSetNumTuples(batch, ntuples);
 		InsertBatchWaitAndRemove(batch);
+	}
 
 	return count;
 }
 
 
 InsertBatch *
-InsertBatchCreate(Bitmapset *readers, int num_tuples)
+InsertBatchCreate(Bitmapset *readers)
 {
 	char *ptr = ShmemDynAlloc0(sizeof(InsertBatch) + BITMAPSET_SIZE(readers->nwords));
 	InsertBatch *batch = (InsertBatch *) ptr;
 
 	batch->id = rand() ^ (int) MyProcPid;
-	batch->num_tups = num_tuples;
-	batch->num_wtups = bms_num_members(readers) * num_tuples;
 	SpinLockInit(&batch->mutex);
 
 	ptr += sizeof(InsertBatch);
@@ -467,6 +474,16 @@ InsertBatchCreate(Bitmapset *readers, int num_tuples)
 	memcpy(batch->readers, readers, BITMAPSET_SIZE(readers->nwords));
 
 	return batch;
+}
+
+/*
+ * InsertBatchSetNumTuples
+ */
+void
+InsertBatchSetNumTuples(InsertBatch *batch, int num_tuples)
+{
+	batch->num_tups = num_tuples;
+	batch->num_wtups = bms_num_members(batch->readers) * num_tuples;
 }
 
 void
