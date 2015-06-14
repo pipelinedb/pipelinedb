@@ -29,6 +29,7 @@
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "tcop/dest.h"
+#include "tcop/tcopprot.h"
 
 static bool
 should_read_fn(TupleBufferReader *reader, TupleBufferSlot *slot)
@@ -331,6 +332,7 @@ ContinuousQueryWorkerMain(void)
 				if (!TupleBufferBatchReaderHasTuplesForCQId(reader, id))
 					goto next;
 
+				debug_query_string = NameStr(state->view->name);
 				MemoryContextSwitchTo(state->exec_cxt);
 
 				TupleBufferBatchReaderSetCQId(reader, id);
@@ -412,6 +414,8 @@ next:
 				cq_stat_report(false);
 			else
 				cq_stat_send_purge(id, 0, CQ_STAT_WORKER);
+
+			debug_query_string = NULL;
 		}
 
 		CommitTransactionCommand();
