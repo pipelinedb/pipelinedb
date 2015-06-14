@@ -83,7 +83,7 @@ def main(args):
         sys.exit(1)
 
     data_dir = os.path.join(root, DATA_DIR)
-    PROCS.append(subprocess.Popen([SERVER, '-D' , data_dir, '-p', args.port]))
+    PROCS.append(subprocess.Popen([SERVER, '-D' , data_dir, '-p', args.port, '-c', 'synchronous_stream_insert=true']))
     if args.stmts:
         time.sleep(0.1)
         for stmt in args.stmts:
