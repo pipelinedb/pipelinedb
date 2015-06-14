@@ -23,6 +23,7 @@
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "catalog/namespace.h"
+#include "catalog/pipeline_combine_fn.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/toasting.h"
@@ -1096,9 +1097,23 @@ ProcessUtilitySlow(Node *parsetree,
 					switch (stmt->kind)
 					{
 						case OBJECT_AGGREGATE:
-							DefineAggregate(stmt->defnames, stmt->args,
-											stmt->oldstyle, stmt->definition,
-											queryString);
+							{
+								ListCell *pl;
+								Oid oid = DefineAggregate(stmt->defnames, stmt->args,
+												stmt->oldstyle, stmt->definition,
+												queryString);
+								/* if we have a combinefunc, create the combiner too */
+								foreach(pl, stmt->definition)
+								{
+									DefElem *defel = (DefElem *) lfirst(pl);
+									if (pg_strcasecmp(defel->defname, "combinefunc") == 0)
+									{
+										DefineCombiner(oid, stmt->defnames, stmt->args,
+												stmt->oldstyle, stmt->definition, queryString);
+										break;
+									}
+								}
+							}
 							break;
 						case OBJECT_OPERATOR:
 							Assert(stmt->args == NIL);
