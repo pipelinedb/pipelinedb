@@ -165,6 +165,12 @@ DefineAggregate(List *name, List *args, bool oldstyle, List *parameters,
 			initval = defGetString(defel);
 		else if (pg_strcasecmp(defel->defname, "minitcond") == 0)
 			minitval = defGetString(defel);
+		else if (pg_strcasecmp(defel->defname, "combinefunc") == 0 ||
+				pg_strcasecmp(defel->defname, "combineinfunc") == 0 ||
+				pg_strcasecmp(defel->defname, "transoutfunc") == 0)
+		{
+			/* combiner stuff gets handled later */
+		}
 		else
 			ereport(WARNING,
 					(errcode(ERRCODE_SYNTAX_ERROR),
