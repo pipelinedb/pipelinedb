@@ -6,6 +6,7 @@ import os
 import progressbar
 import re
 import shutil
+import subprocess
 import tarfile
 import tempfile
 import urllib2
@@ -71,7 +72,8 @@ def list_files(path):
       continue
 
     # Ignore any PipelineDB or PostGIS files.
-    if (_dir.startswith('pipeline') or
+    if (_dir.startswith('bin') or
+        _dir.startswith('pipeline') or
         _dir.startswith('src/backend/pipeline') or
         _dir.startswith('src/include/pipeline') or
         _dir.startswith('src/gis')):
@@ -113,6 +115,9 @@ def main(args):
      source file in ./diffs because it's useful to have when manually
      merging. A list of all these files is stored in ./mismatch_files.txt.
   """
+  with open(os.devnull, 'w') as dnull:
+    subprocess.call(['make', 'clean'], stdout=dnull)
+
   tmp_dir = args.tmp_dir or tempfile.mkdtemp()
   tar_path = download_upstream(args.version, tmp_dir)
 
@@ -207,7 +212,7 @@ def main(args):
   with open(mismatch_files, 'w+') as f:
     f.write('\n'.join(sorted(need_merge)))
     print ('There are %d mismatching files! Storing paths in %s.' %
-           (len(mismatch_files), mismatch_files))
+           (len(need_merge), mismatch_files))
 
   shutil.rmtree(tmp_dir)
   print 'Cleaned up %s.' % tmp_dir
