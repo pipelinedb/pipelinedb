@@ -176,4 +176,9 @@ test: cont_gis_raster
 # ----------
 # Another group of parallel tests
 # ----------
-test:  cont_activate
+test: cont_activate
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: create_combinable_agg
