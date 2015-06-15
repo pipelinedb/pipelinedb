@@ -796,7 +796,7 @@ clear_query_state(ContQueryCombinerState **states, Oid id)
 
 	if (state->matrel)
 	{
-		heap_close(state->matrel, NoLock);
+		heap_close(state->matrel, RowExclusiveLock);
 		state->matrel = NULL;
 	}
 }
