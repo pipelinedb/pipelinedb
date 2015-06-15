@@ -791,6 +791,9 @@ clear_query_state(ContQueryCombinerState **states, Oid id)
 {
 	ContQueryCombinerState *state = states[id];
 
+	if (state == NULL)
+		return;
+
 	if (state->matrel)
 	{
 		heap_close(state->matrel, NoLock);
@@ -975,8 +978,7 @@ ContinuousQueryCombinerMain(void)
 			PG_END_TRY();
 
 next:
-			if (state)
-				clear_query_state(states, id);
+			clear_query_state(states, id);
 			TupleBufferBatchReaderRewind(reader);
 
 			/* after reading a full batch, update query bitset with any new queries seen */
