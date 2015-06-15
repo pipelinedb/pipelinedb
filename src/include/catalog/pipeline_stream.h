@@ -19,8 +19,8 @@
  */
 CATALOG(pipeline_stream,4249)
 {
-	Oid namespace;
-	NameData name;
+	Oid relid;
+	bool inferred;
 #ifdef CATALOG_VARLEN
 	bytea queries;
 	bytea desc;
@@ -29,10 +29,10 @@ CATALOG(pipeline_stream,4249)
 
 typedef FormData_pipeline_stream *Form_pipeline_stream;
 
-#define Natts_pipeline_stream						4
-#define Anum_pipeline_stream_namespace				1
-#define Anum_pipeline_stream_name					2
-#define Anum_pipeline_stream_queries 				3
-#define Anum_pipeline_stream_desc					4
+#define Natts_pipeline_stream			4
+#define Anum_pipeline_stream_relid		1
+#define Anum_pipeline_stream_inferred	2
+#define Anum_pipeline_stream_queries 	3
+#define Anum_pipeline_stream_desc		4
 
 #endif

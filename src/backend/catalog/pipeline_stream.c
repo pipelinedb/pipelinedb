@@ -816,3 +816,9 @@ GetRelationForStream(RangeVar *rv, List *cols)
 	rel->rd_rel->relnamespace = namespace;
 	return rel;
 }
+
+void
+CreatePipelineStreamCatalogEntry(CreateStreamStmt *stmt, Oid relid)
+{
+
+}

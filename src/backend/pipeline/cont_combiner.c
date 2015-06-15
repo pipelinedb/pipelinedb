@@ -75,6 +75,7 @@ typedef struct {
 	FuncExpr *hashfunc;
 	GroupCache *cache;
 	CQStatEntry stats;
+	Relation matrel;
 } ContQueryCombinerState;
 
 /*
@@ -474,10 +475,9 @@ static void
 sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashTable existing)
 {
 	TupleTableSlot *slot = state->slot;
-	Relation rel = heap_openrv(state->view->matrel, RowExclusiveLock);
 	int size = sizeof(bool) * slot->tts_tupleDescriptor->natts;
 	bool *replace_all = palloc0(size);
-	ResultRelInfo *ri = CQMatViewOpen(rel);
+	ResultRelInfo *ri = CQMatViewOpen(state->matrel);
 	EState *estate = CreateExecutorState();
 
 	MemSet(replace_all, true, size);
@@ -520,7 +520,6 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashT
 
 	FreeExecutorState(estate);
 	CQMatViewClose(ri);
-	relation_close(rel, RowExclusiveLock);
 }
 
 /*
@@ -629,6 +628,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 	prepare_combine_plan(state, pstmt);
 	state->slot = MakeSingleTupleTableSlot(state->desc);
 	state->groups_plan = NULL;
+	state->matrel = heap_openrv(state->view->matrel, RowExclusiveLock);
 
 	if (IsA(state->combine_plan->planTree, Agg))
 	{
@@ -649,7 +649,6 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		 * happens, such as a user deleting the hash index, we still try our best to
 		 * reconstruct this expression later.
 		 */
-		matrel = heap_openrv(state->view->matrel, NoLock);
 		ri = CQMatViewOpen(matrel);
 
 		for (i = 0; i < ri->ri_NumIndices; i++)
@@ -674,7 +673,6 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 			break;
 		}
 
-		heap_close(matrel, NoLock);
 		CQMatViewClose(ri);
 
 		state->cache = GroupCacheCreate(continuous_query_combiner_cache_mem * 1024, state->ngroupatts, state->groupatts,
@@ -684,6 +682,13 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 	cq_stat_init(&state->stats, state->view->id, 0);
 
 	MemoryContextSwitchTo(old_cxt);
+}
+
+static void
+release_query_state(ContQueryCombinerState *state)
+{
+	heap_close(state->matrel, NoLock);
+	state->matrel = NULL;
 }
 
 static void
@@ -757,6 +762,12 @@ get_query_state(ContQueryCombinerState **states, Oid id, MemoryContext context)
 		states[id] = state;
 		MemoryContextSwitchTo(old_cxt);
 	}
+	else
+	{
+		Assert(state->matrel == NULL);
+		state->matrel = heap_openrv(state->view->matrel, RowExclusiveLock);
+	}
+
 
 	PopActiveSnapshot();
 
@@ -943,6 +954,7 @@ ContinuousQueryCombinerMain(void)
 
 next:
 			TupleBufferBatchReaderRewind(reader);
+			cleanup_query_state(state);
 
 			/* after reading a full batch, update query bitset with any new queries seen */
 			if (reader->batch_done && !updated_queries)

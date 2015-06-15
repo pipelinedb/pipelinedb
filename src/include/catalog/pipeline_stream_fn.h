@@ -15,6 +15,7 @@
 
 #include "catalog/pipeline_stream.h"
 #include "nodes/bitmapset.h"
+#include "nodes/parsenodes.h"
 #include "nodes/primnodes.h"
 #include "utils/relcache.h"
 
