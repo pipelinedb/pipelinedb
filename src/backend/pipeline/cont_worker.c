@@ -92,6 +92,10 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 	state->view_id = id;
 	state->exec_cxt = exec_cxt;
 	state->view = GetContinuousView(id);
+
+	if (state->view == NULL)
+		return;
+
 	state->dest = CreateDestReceiver(DestCombiner);
 
 	SetCombinerDestReceiverParams(state->dest, reader, id);
@@ -201,6 +205,13 @@ get_query_state(ContQueryWorkerState **states, Oid id, MemoryContext context, Re
 		init_query_state(state, id, context, owner, reader);
 		states[id] = state;
 		MemoryContextSwitchTo(old_cxt);
+
+		if (state->view == NULL)
+		{
+			PopActiveSnapshot();
+			cleanup_query_state(states, id);
+			return NULL;
+		}
 	}
 
 	PopActiveSnapshot();
@@ -375,7 +386,7 @@ ContinuousQueryWorkerMain(void)
 					unset_snapshot(estate, owner);
 
 				if (state)
-					cleanup_query_state(states, state->view_id);
+					cleanup_query_state(states, id);
 
 				IncrementCQErrors(1);
 
