@@ -386,7 +386,7 @@ ContinuousQueryWorkerMain(void)
 					unset_snapshot(estate, owner);
 
 				if (state)
-					cleanup_query_state(states, state->view_id);
+					cleanup_query_state(states, id);
 
 				IncrementCQErrors(1);
 

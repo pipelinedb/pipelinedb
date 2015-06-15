@@ -783,7 +783,7 @@ get_query_state(ContQueryCombinerState **states, Oid id, MemoryContext context)
 
 	MyCQStats = &state->stats;
 
-	return states[id];
+	return state;
 }
 
 static void
