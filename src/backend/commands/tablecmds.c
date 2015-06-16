@@ -781,7 +781,7 @@ DropErrorMsgWrongType(const char *relname, char wrongkind, char rightkind)
 /*
  * RemoveRelations
  *		Implements DROP TABLE, DROP INDEX, DROP SEQUENCE, DROP VIEW,
- *		DROP MATERIALIZED VIEW, DROP FOREIGN TABLE
+ *		DROP MATERIALIZED VIEW, DROP FOREIGN TABLE, DROP STREAM
  */
 void
 RemoveRelations(DropStmt *drop)
@@ -895,8 +895,6 @@ RemoveRelations(DropStmt *drop)
 			char save = relkind;
 			if (drop->removeType == OBJECT_CONTINUOUS_VIEW)
 				relkind = RELKIND_CONTINUOUS_VIEW;
-			else if (drop->removeType == OBJECT_STREAM)
-				relkind = RELKIND_STREAM;
 			DropErrorMsgNonExistent(rel, relkind, drop->missing_ok);
 			relkind = save;
 			continue;

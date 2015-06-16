@@ -2353,8 +2353,8 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				 "\"%s/pipeline-server\" -D \"%s/data\" -F%s "
 				 "-c \"listen_addresses=%s\" "
 				 "-c \"synchronous_stream_insert=true\" "
-				 "-c \"continuous_query_num_combiners=2\" "
-				 "-c \"continuous_query_num_workers=4\" "
+				 "-c \"continuous_query_num_combiners=1\" "
+				 "-c \"continuous_query_num_workers=1\" "
 				 "-k \"%s\" "
 				 "> \"%s/log/postmaster.log\" 2>&1",
 				 bindir, temp_install, debug ? " -d 5" : "",

@@ -33,6 +33,8 @@ extern ContAnalyzeContext *MakeContAnalyzeContext(ParseState *pstate, SelectStmt
 extern void ValidateContQuery(RangeVar *name, Node *node, const char *sql);
 
 extern void transformContSelectStmt(ParseState *pstate, SelectStmt *select);
-extern TupleDesc parserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte);
+extern void transformCreateStreamStmt(CreateStreamStmt *stmt);
+
+extern TupleDesc parserGetStreamDescr(Oid relid, ContAnalyzeContext *context);
 
 #endif

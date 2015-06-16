@@ -322,14 +322,14 @@ DECLARE_UNIQUE_INDEX(pipeline_query_id_index, 4241, on pipeline_query using btre
 DECLARE_UNIQUE_INDEX(pipeline_query_oid_index, 4253, on pipeline_query using btree(oid oid_ops));
 #define PipelineQueryOidIndexId  4253
 
+DECLARE_UNIQUE_INDEX(pipeline_query_namespace_matrel_index, 4255, on pipeline_query using btree(namespace oid_ops, matrelname name_ops));
+#define PipelineQueryNamespaceMatrelIndexId					4255
+
 DECLARE_UNIQUE_INDEX(pipeline_combine_transfn_index, 4248, on pipeline_combine using btree(aggfinalfn oid_ops, transfn oid_ops));
 #define PipelineCombineTransIdIndexId					4248
 
-DECLARE_UNIQUE_INDEX(pipeline_stream_namespace_name_index, 4250, on pipeline_stream using btree(namespace oid_ops, name name_ops));
-#define PipelineStreamNamespaceNameIndexId					4250
-
-DECLARE_UNIQUE_INDEX(pipeline_query_namespace_matrel_index, 4255, on pipeline_query using btree(namespace oid_ops, matrelname name_ops));
-#define PipelineQueryNamespaceMatrelIndexId					4255
+DECLARE_UNIQUE_INDEX(pipeline_stream_relid_index, 4250, on pipeline_stream using btree(relid oid_ops));
+#define PipelineStreamRelIdIndexId					4250
 
 DECLARE_UNIQUE_INDEX(pipeline_stream_oid_index, 4254, on pipeline_stream using btree(oid oid_ops));
 #define PipelineStreamOidIndexId  4254

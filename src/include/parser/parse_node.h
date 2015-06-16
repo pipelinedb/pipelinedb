@@ -167,11 +167,12 @@ struct ParseState
 	CoerceParamHook p_coerce_param_hook;
 	void	   *p_ref_hook_state;		/* common passthrough link for above */
 
-	/* true if the root parse node is continuous */
-	bool		p_is_continuous_view;
-
+	/* true if the streams are allowed as RTEs */
+	bool		p_allow_streams;
 	/* context if this is a continuous view */
 	ContAnalyzeContext *p_cont_view_context;
+	/* context if this is a continuous view */
+	List *p_ins_cols;
 };
 
 /*

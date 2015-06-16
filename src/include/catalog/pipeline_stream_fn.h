@@ -17,26 +17,28 @@
 #include "nodes/bitmapset.h"
 #include "nodes/parsenodes.h"
 #include "nodes/primnodes.h"
+#include "parser/parse_node.h"
 #include "utils/relcache.h"
+
+#define needs_dummy_relation(rel) ((rel)->rd_rel->relkind == RELKIND_STREAM && IsInferredStream((rel)->rd_id))
 
 extern void UpdatePipelineStreamCatalog(Relation pipeline_query);
 
-extern Bitmapset *GetAllStreamReaders(Oid namespace, char *stream);
-extern Bitmapset *GetLocalStreamReaders(Oid namespace, char *stream);
-extern TupleDesc GetStreamTupleDesc(Oid namespace, char *stream, List *colnames);
+extern Bitmapset *GetAllStreamReaders(Oid relid);
+extern Bitmapset *GetLocalStreamReaders(Oid relid);
+extern TupleDesc GetInferredStreamTupleDesc(Oid relid, List *colnames);
 
 extern bytea *PackTupleDesc(TupleDesc desc);
 extern TupleDesc UnpackTupleDesc(bytea *bytes);
 
-extern bool RangeVarIsForStream(RangeVar *stream);
-extern bool RangeVarIsForTypedStream(RangeVar *rv);
-extern bool RangeVarIsForInferredStream(RangeVar *rv);
-extern Oid GetStreamRelId(RangeVar *stream);
-extern Oid GetStreamNamespace(Oid stream_relid);
-extern bool RelIdIsForTypedStream(Oid relid);
-extern bool RelIdIsForInferredStream(Oid relid);
-extern Relation GetRelationForStream(RangeVar *rv, List *cols);
+extern bool RangeVarIsForStream(RangeVar *stream, bool *is_inferred);
+extern bool IsInferredStream(Oid relid);
 
-extern void CreatePipelineStreamCatalogEntry(CreateStreamStmt *stmt, Oid relid);
+extern void CreateInferredStream(RangeVar *rv);
+extern void CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid);
+extern void RemovePipelineStreamById(Oid oid);
+
+extern Relation relation_open_dummy(ParseState *pstate, Relation rel);
+extern void relation_close_dummy(Relation rel);
 
 #endif

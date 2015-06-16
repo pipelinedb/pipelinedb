@@ -25,6 +25,7 @@
 #include "catalog/pipeline_combine_fn.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "catalog/toasting.h"
 #include "commands/alter.h"
 #include "commands/async.h"
@@ -58,6 +59,7 @@
 #include "commands/view.h"
 #include "miscadmin.h"
 #include "parser/parse_utilcmd.h"
+#include "pipeline/cont_analyze.h"
 #include "postmaster/bgwriter.h"
 #include "rewrite/rewriteDefine.h"
 #include "rewrite/rewriteRemove.h"
@@ -962,11 +964,12 @@ ProcessUtilitySlow(Node *parsetree,
 						}
 						else if (IsA(stmt, CreateStreamStmt))
 						{
+							transformCreateStreamStmt((CreateStreamStmt *) stmt);
 							/* Create the table itself */
 							relOid = DefineRelation((CreateStmt *) stmt,
 													RELKIND_STREAM,
 													InvalidOid);
-							// TODO(usmanm): Create pipeline_stream entry
+							CreatePipelineStreamEntry((CreateStreamStmt *) stmt, relOid);
 						}
 						else
 						{
@@ -1717,9 +1720,6 @@ AlterObjectTypeCommandTag(ObjectType objtype)
 		case OBJECT_MATVIEW:
 			tag = "ALTER MATERIALIZED VIEW";
 			break;
-		case OBJECT_STREAM:
-			tag = "ALTER STREAM";
-			break;
 		default:
 			tag = "???";
 			break;
@@ -2035,8 +2035,6 @@ CreateCommandTag(Node *parsetree)
 
 		case T_RenameStmt:
 			tag = AlterObjectTypeCommandTag(((RenameStmt *) parsetree)->renameType);
-			if (((RenameStmt *) parsetree)->relationType == OBJECT_STREAM)
-				tag = "ALTER STREAM";
 			break;
 
 		case T_AlterObjectSchemaStmt:

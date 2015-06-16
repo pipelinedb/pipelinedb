@@ -352,32 +352,31 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
 	collect_rels_and_streams((Node *) from, &cxt);
 
 	/*
-	 * Record a dependency between any typed streams and a pipeline_query object,
+	 * Record a dependency between any strongly typed streams and a pipeline_query object,
 	 * so that it is not possible to drop a stream that is being read by a CV.
 	 */
 	foreach(lc, cxt.streams)
 	{
 		RangeVar *rv;
+		Oid relid;
 
 		if (!IsA(lfirst(lc), RangeVar))
 			continue;
 
 		rv = (RangeVar *) lfirst(lc);
-		if (RangeVarIsForTypedStream(rv))
-		{
-			Relation rel = heap_openrv(rv, AccessShareLock);
+		relid = RangeVarGetRelid(rv, AccessShareLock, false);
 
+		if (!IsInferredStream(relid))
+		{
 			parent.classId = PipelineQueryRelationId;
 			parent.objectId = cvoid;
 			parent.objectSubId = 0;
 
 			child.classId = RelationRelationId;
-			child.objectId = rel->rd_id;
+			child.objectId = relid;
 			child.objectSubId = 0;
 
 			recordDependencyOn(&parent, &child, DEPENDENCY_NORMAL);
-
-			heap_close(rel, AccessShareLock);
 		}
 	}
 }

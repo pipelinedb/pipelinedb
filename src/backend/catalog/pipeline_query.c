@@ -159,7 +159,7 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	 */
 	namespace = RangeVarGetAndCheckCreationNamespace(name, NoLock, NULL);
 
-	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
 
 	id = get_next_id(pipeline_query);
 

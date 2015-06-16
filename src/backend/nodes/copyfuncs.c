@@ -2811,6 +2811,17 @@ _copyCreateStmt(const CreateStmt *from)
 	return newnode;
 }
 
+static CreateStreamStmt *
+_copyCreateStreamStmt(const CreateStreamStmt *from)
+{
+	CreateStreamStmt *newnode = makeNode(CreateStreamStmt);
+
+	CopyCreateStmtFields(&from->base, &newnode->base);
+	COPY_SCALAR_FIELD(is_inferred);
+
+	return newnode;
+}
+
 static TableLikeClause *
 _copyTableLikeClause(const TableLikeClause *from)
 {
@@ -4708,6 +4719,9 @@ copyObject(const void *from)
 			break;
 		case T_XmlSerialize:
 			retval = _copyXmlSerialize(from);
+			break;
+		case T_CreateStreamStmt:
+			retval = _copyCreateStreamStmt(from);
 			break;
 
 		default:

@@ -817,26 +817,13 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		RangeTblEntry *rte;
 		List	   *attnums;
 		ListCell   *cur;
+		bool is_inferred;
 
 		Assert(!stmt->query);
 
-		if (RangeVarIsForStream(stmt->relation))
-		{
-			if (!stmt->attlist)
-				ereport(ERROR,
-						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-						errmsg("column names must be explicitly given when copying into a stream"),
-						errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
-
-			rel = GetRelationForStream(stmt->relation, stmt->attlist);
-		}
-		else
-		{
-			/* Open and lock the relation, using the appropriate lock type. */
-			rel = heap_openrv(stmt->relation,
-								(is_from ? RowExclusiveLock : AccessShareLock));
-		}
-
+		/* Open and lock the relation, using the appropriate lock type. */
+		rel = heap_openrv(stmt->relation,
+							(is_from ? RowExclusiveLock : AccessShareLock));
 		relid = RelationGetRelid(rel);
 
 		rte = makeNode(RangeTblEntry);
@@ -845,11 +832,26 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		rte->relkind = rel->rd_rel->relkind;
 		rte->requiredPerms = required_access;
 
+		if (RangeVarIsForStream(stmt->relation, &is_inferred))
+		{
+			if (is_inferred)
+			{
+				if (!stmt->attlist)
+					ereport(ERROR,
+							(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+							errmsg("column names must be explicitly given when copying into a stream"),
+							errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
+
+				ReleaseTupleDesc(rel->rd_att);
+				rel->rd_att = GetInferredStreamTupleDesc(relid, stmt->attlist);
+			}
+		}
+
 		tupDesc = RelationGetDescr(rel);
 		attnums = CopyGetAttnums(tupDesc, rel, stmt->attlist);
 
 		/* if it's an actual relation, we need to check permissions */
-		if (!RangeVarIsForStream(stmt->relation))
+		if (!RangeVarIsForStream(stmt->relation, NULL))
 		{
 			foreach(cur, attnums)
 			{

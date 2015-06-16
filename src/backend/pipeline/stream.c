@@ -127,7 +127,7 @@ StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
 	result->namespace = RangeVarGetAndCheckCreationNamespace(stream, NoLock, NULL);
 	result->stream = stream->relname;
 	result->cols = cols;
-	result->desc = GetStreamTupleDesc(result->namespace, stream->relname, cols);
+	result->desc = NULL;//GetStreamTupleDesc(result->namespace, stream->relname, cols);
 
 	return result;
 }
@@ -180,8 +180,8 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 {
 	ListCell *lc;
 	int count = 0;
-	Bitmapset *targets = GetLocalStreamReaders(pstmt->namespace, pstmt->stream);
-	TupleDesc desc = GetStreamTupleDesc(pstmt->namespace, pstmt->stream, pstmt->cols);
+	Bitmapset *targets = NULL;//GetLocalStreamReaders(pstmt->namespace, pstmt->stream);
+	TupleDesc desc = NULL;//GetStreamTupleDesc(pstmt->namespace, pstmt->stream, pstmt->cols);
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
@@ -193,7 +193,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	 * If it's a typed stream we can get here because technically the relation does exist.
 	 * However, we don't want to silently accept data that isn't being read by anything.
 	 */
-	if (RangeVarIsForTypedStream(rv) && targets == NULL)
+	if (!IsInferredStream(RangeVarGetRelid(rv, AccessShareLock, false)) && targets == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("no continuous views are currently reading from stream %s", pstmt->stream),
@@ -267,8 +267,8 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	int count = 0;
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
-	Oid namespace = RangeVarGetCreationNamespace(ins->relation);
-	Bitmapset *targets = GetLocalStreamReaders(namespace, ins->relation->relname);
+	Oid relid = RangeVarGetRelid(ins->relation, AccessShareLock, false);
+	Bitmapset *targets = GetLocalStreamReaders(relid);
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
@@ -288,7 +288,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	 * If it's a typed stream we can get here because technically the relation does exist.
 	 * However, we don't want to silently accept data that isn't being read by anything.
 	 */
-	if (RangeVarIsForTypedStream(ins->relation) && targets == NULL)
+	if (IsInferredStream(relid) && targets == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("no continuous views are currently reading from stream %s", ins->relation->relname),
@@ -380,7 +380,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 
 	PortalDrop(portal, false);
 
-	stream_stat_report(namespace, ins->relation->relname, count, 1, size);
+//	stream_stat_report(namespace, ins->relation->relname, count, 1, size);
 
 	/*
 	 * Wait till the last event has been consumed by a CV before returning.
@@ -410,13 +410,13 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	int num_batches = 0;
 	Size size = 0;
 
-	targets = GetLocalStreamReaders(RelationGetNamespace(stream), RelationGetRelationName(stream));
+	targets = GetLocalStreamReaders(RelationGetRelid(stream));
 
 	/*
 	 * If it's a typed stream we can get here because technically the relation does exist.
 	 * However, we don't want to silently accept data that isn't being read by anything.
 	 */
-	if (RelIdIsForTypedStream(RelationGetRelid(stream)) && targets == NULL)
+	if (!IsInferredStream(RelationGetRelid(stream)) && targets == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("no continuous views are currently reading from stream %s", RelationGetRelationName(stream)),
