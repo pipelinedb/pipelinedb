@@ -456,7 +456,7 @@ RemoveContinuousViewById(Oid oid)
 	HeapTuple tuple;
 	Form_pipeline_query row;
 
-	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	tuple = SearchSysCache1(PIPELINEQUERYOID, ObjectIdGetDatum(oid));
 	if (!HeapTupleIsValid(tuple))

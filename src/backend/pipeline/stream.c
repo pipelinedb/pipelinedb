@@ -246,10 +246,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	stream_stat_report(pstmt->namespace, pstmt->stream, count, 1, size);
 
 	if (synchronous_stream_insert)
-	{
-		InsertBatchSetNumTuples(batch, count);
-		InsertBatchWaitAndRemove(batch);
-	}
+		InsertBatchWaitAndRemove(batch, count);
 
 	return count;
 }
@@ -288,7 +285,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	 * If it's a typed stream we can get here because technically the relation does exist.
 	 * However, we don't want to silently accept data that isn't being read by anything.
 	 */
-	if (IsInferredStream(relid) && targets == NULL)
+	if (targets == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("no continuous views are currently reading from stream %s", ins->relation->relname),
@@ -386,10 +383,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
-	{
-		InsertBatchSetNumTuples(batch, count);
-		InsertBatchWaitAndRemove(batch);
-	}
+		InsertBatchWaitAndRemove(batch, count);
 
 	return count;
 }
@@ -451,10 +445,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
-	{
-		InsertBatchSetNumTuples(batch, ntuples);
-		InsertBatchWaitAndRemove(batch);
-	}
+		InsertBatchWaitAndRemove(batch, ntuples);
 
 	return count;
 }
@@ -476,21 +467,13 @@ InsertBatchCreate(Bitmapset *readers)
 	return batch;
 }
 
-/*
- * InsertBatchSetNumTuples
- */
 void
-InsertBatchSetNumTuples(InsertBatch *batch, int num_tuples)
-{
-	batch->num_tups = num_tuples;
-	batch->num_wtups = bms_num_members(batch->readers) * num_tuples;
-}
-
-void
-InsertBatchWaitAndRemove(InsertBatch *batch)
+InsertBatchWaitAndRemove(InsertBatch *batch, int num_tups)
 {
 	if (cont_queries_active ==  NULL)
 		cont_queries_active = ContQueryGetActiveFlag();
+
+	batch->num_wtups = num_tups;
 
 	while (!StreamBatchAllAcked(batch) && *cont_queries_active)
 	{

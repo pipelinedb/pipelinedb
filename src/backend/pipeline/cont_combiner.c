@@ -593,6 +593,9 @@ combine(ContQueryCombinerState *state)
 
 	CQMatViewClose(state->ri);
 	heap_close(state->matrel, RowExclusiveLock);
+
+	state->ri = NULL;
+	state->matrel = NULL;
 }
 
 static void
@@ -655,7 +658,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 			return;
 		}
 
-		ri = CQMatViewOpen(state->matrel);
+		ri = CQMatViewOpen(matrel);
 
 		state->groupatts = agg->grpColIdx;
 		state->ngroupatts = agg->numCols;

@@ -774,20 +774,6 @@ TupleBufferBatchReaderRewind(TupleBufferBatchReader *reader)
 	reader->depleted = false;
 	reader->current = NULL;
 
-	if (synchronous_stream_insert && IsContQueryWorkerProcess())
-	{
-		ListCell *lc;
-
-		foreach(lc, reader->yielded)
-		{
-			TupleBufferSlot *slot = lfirst(lc);
-			int i;
-
-			for (i = 0; i < slot->tuple->num_acks; i++)
-				InsertBatchMarkAcked(&slot->tuple->acks[i]);
-		}
-	}
-
 	list_free(reader->yielded);
 	reader->yielded = NIL;
 }
@@ -801,7 +787,7 @@ TupleBufferBatchReaderReset(TupleBufferBatchReader *reader)
 	/* free everything that keeps track of a single batch */
 	MemoryContext old_ctx = MemoryContextSwitchTo(ContQueryBatchContext);
 
-	if (synchronous_stream_insert && IsContQueryCombinerProcess())
+	if (synchronous_stream_insert)
 	{
 		ListCell *lc;
 

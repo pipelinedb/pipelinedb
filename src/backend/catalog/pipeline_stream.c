@@ -497,7 +497,8 @@ GetAllStreamReaders(Oid relid)
 
 	raw = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
 
-	Assert(!isnull);
+	if (isnull)
+		return NULL;
 
 	bytes = (bytea *) DatumGetPointer(PG_DETOAST_DATUM(raw));
 	nbytes = VARSIZE(bytes) - VARHDRSZ;
@@ -518,7 +519,7 @@ GetLocalStreamReaders(Oid relid)
 {
 	Bitmapset *readers = GetAllStreamReaders(relid);
 
-	if (stream_targets != NULL)
+	if (stream_targets && readers)
 	{
 		Bitmapset *local_readers = NULL;
 		HeapTuple tuple;
@@ -728,7 +729,6 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 	 * Get a read lock of pipeline_query so that we obey 2PL--locks on pipeline_query
 	 * must be acquired before locks on pipeline_stream.
 	 */
-	Relation pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
 	Relation pipeline_stream = heap_open(PipelineStreamRelationId, RowExclusiveLock);
 	Datum values[Natts_pipeline_stream];
 	bool nulls[Natts_pipeline_stream];
@@ -761,8 +761,7 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 
 	CommandCounterIncrement();
 
-	heap_close(pipeline_stream, NoLock);
-	heap_close(pipeline_query, NoLock);
+	heap_close(pipeline_stream, RowExclusiveLock);
 }
 
 /*
