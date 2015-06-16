@@ -640,7 +640,6 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 	prepare_combine_plan(state, pstmt);
 	state->slot = MakeSingleTupleTableSlot(state->desc);
 	state->groups_plan = NULL;
-	state->matrel = heap_openrv(state->view->matrel, RowExclusiveLock);
 
 	if (IsA(state->combine_plan->planTree, Agg))
 	{
@@ -670,9 +669,9 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		 * happens, such as a user deleting the hash index, we still try our best to
 		 * reconstruct this expression later.
 		 */
-		for (i = 0; i < state->ri->ri_NumIndices; i++)
+		for (i = 0; i < ri->ri_NumIndices; i++)
 		{
-			IndexInfo *idx = state->ri->ri_IndexRelationInfo[i];
+			IndexInfo *idx = ri->ri_IndexRelationInfo[i];
 			Node *n;
 			FuncExpr *func;
 
@@ -775,7 +774,7 @@ get_query_state(ContQueryCombinerState **states, Oid id, MemoryContext context)
 		states[id] = state;
 		MemoryContextSwitchTo(old_cxt);
 
-		if (state->view == NULL || state->matrel == NULL)
+		if (state->view == NULL)
 		{
 			PopActiveSnapshot();
 			cleanup_query_state(states, id);
