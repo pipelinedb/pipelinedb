@@ -27,7 +27,7 @@ def main(args, keys):
         batch.append(tuple(d[k] for k in keys))
 
         if len(batch) == args.batch_size:
-            s = ', '.join([str(v) for v in batch])
+            s = ', '.join(['(%s)' % ', '.join(map(str, v)) for v in batch])
             print 'INSERT INTO %s %s VALUES %s;' % (args.stream, cols, s)
             batch = []
 
