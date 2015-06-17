@@ -408,11 +408,12 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		/* build tupdesc for result tuples */
-		tupdesc = CreateTemplateTupleDesc(4, false);
+		tupdesc = CreateTemplateTupleDesc(5, false);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "schema", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "name", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "inferred", BOOLOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "queries", OIDARRAYOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "desc", BYTEAOID, -1, 0);
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
@@ -440,8 +441,8 @@ pipeline_streams(PG_FUNCTION_ARGS)
 	while ((tup = heap_getnext(data->scan, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_stream row = (Form_pipeline_stream) GETSTRUCT(tup);
-		Datum values[4];
-		bool nulls[4];
+		Datum values[5];
+		bool nulls[5];
 		HeapTuple rtup;
 		Datum result;
 		Datum tmp;
@@ -451,7 +452,7 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		int nwords;
 		Bitmapset *bms;
 		int dims[1];
-		int lbs[] = { 0 };
+		int lbs[] = { 1 };
 		Datum *queries;
 		bool *qnulls;
 		int x;
@@ -465,31 +466,41 @@ pipeline_streams(PG_FUNCTION_ARGS)
 
 		tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
 
-		Assert(!isnull);
-
-		bytes = (bytea *) DatumGetPointer(PG_DETOAST_DATUM(tmp));
-		nbytes = VARSIZE(bytes) - VARHDRSZ;
-		nwords = nbytes / sizeof(bitmapword);
-
-		bms = palloc0(BITMAPSET_SIZE(nwords));
-		bms->nwords = nwords;
-
-		memcpy(bms->words, VARDATA(bytes), nbytes);
-
-		dims[0] = bms_num_members(bms);
-		queries = palloc0(sizeof(Datum) * dims[0]);
-		qnulls = palloc0(sizeof(bool) * dims[0]);
-
-		MemSet(qnulls, 0, dims[0]);
-		i = 0;
-
-		while ((x = bms_first_member(bms)) >= 0)
+		if (isnull)
+			nulls[3] = true;
+		else
 		{
-			queries[i] = ObjectIdGetDatum(x);
-			i++;
+			bytes = (bytea *) DatumGetPointer(PG_DETOAST_DATUM(tmp));
+			nbytes = VARSIZE(bytes) - VARHDRSZ;
+			nwords = nbytes / sizeof(bitmapword);
+
+			bms = palloc0(BITMAPSET_SIZE(nwords));
+			bms->nwords = nwords;
+
+			memcpy(bms->words, VARDATA(bytes), nbytes);
+
+			dims[0] = bms_num_members(bms);
+			queries = palloc0(sizeof(Datum) * dims[0]);
+			qnulls = palloc0(sizeof(bool) * dims[0]);
+
+			MemSet(qnulls, 0, dims[0]);
+			i = 0;
+
+			while ((x = bms_first_member(bms)) >= 0)
+			{
+				queries[i] = ObjectIdGetDatum(x);
+				i++;
+			}
+
+			values[3] = PointerGetDatum(construct_md_array(queries, qnulls, 1, dims, lbs, OIDOID, 4, true, 'i'));
 		}
 
-		values[3] = PointerGetDatum(construct_md_array(queries, qnulls, 1, dims, lbs, OIDOID, 4, true, 'i'));
+		tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_desc, &isnull);
+
+		if (isnull)
+			nulls[4] = true;
+		else
+			values[4] = tmp;
 
 		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(rtup);
