@@ -435,8 +435,7 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	ListCell   *icols;
 	ListCell   *attnos;
 	ListCell   *lc;
-	RangeVar *cv = NULL;
-	bool isStream;
+	RangeVar *cv;
 
 	if (IsAMatRel(stmt->relation, &cv))
 		ereport(ERROR,
@@ -761,9 +760,8 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 							  false);
 		qry->targetList = lappend(qry->targetList, tle);
 
-		if (!isStream)
-			rte->modifiedCols = bms_add_member(rte->modifiedCols,
-									attr_num - FirstLowInvalidHeapAttributeNumber);
+		rte->modifiedCols = bms_add_member(rte->modifiedCols,
+				attr_num - FirstLowInvalidHeapAttributeNumber);
 
 		icols = lnext(icols);
 		attnos = lnext(attnos);
@@ -791,6 +789,13 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	qry->hasSubLinks = pstate->p_hasSubLinks;
 
 	assign_query_collations(pstate, qry);
+
+	/* If it's a dummy relation, discard it eagerly */
+	if (needs_dummy_relation(pstate->p_target_relation))
+	{
+		relation_close_dummy(pstate->p_target_relation);
+		pstate->p_target_relation = NULL;
+	}
 
 	return qry;
 }
