@@ -791,9 +791,9 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	assign_query_collations(pstate, qry);
 
 	/* If it's a dummy relation, discard it eagerly */
-	if (needs_dummy_relation(pstate->p_target_relation))
+	if (needs_mock_relation(pstate->p_target_relation))
 	{
-		relation_close_dummy(pstate->p_target_relation);
+		mock_relation_close(pstate->p_target_relation);
 		pstate->p_target_relation = NULL;
 	}
 

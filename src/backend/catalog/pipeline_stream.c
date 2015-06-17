@@ -789,16 +789,16 @@ RemovePipelineStreamById(Oid oid)
 }
 
 /*
- * relation_open_dummy
+ * mock_relation_open
  */
 Relation
-relation_open_dummy(ParseState *pstate, Relation rel)
+mock_relation_open(ParseState *pstate, Relation rel)
 {
 	TupleDesc desc;
 	Relation stream_rel;
 
 	Assert(pstate->p_allow_streams);
-	Assert(needs_dummy_relation(rel));
+	Assert(needs_mock_relation(rel));
 
 	if (pstate->p_cont_view_context)
 		desc = parserGetStreamDescr(rel->rd_id, pstate->p_cont_view_context);
@@ -823,12 +823,12 @@ relation_open_dummy(ParseState *pstate, Relation rel)
 }
 
 /*
- * relation_close_dummy
+ * mock_relation_close
  */
 void
-relation_close_dummy(Relation rel)
+mock_relation_close(Relation rel)
 {
-	Assert(needs_dummy_relation(rel));
+	Assert(needs_mock_relation(rel));
 
 	pfree(rel->rd_rel);
 	pfree(rel);
