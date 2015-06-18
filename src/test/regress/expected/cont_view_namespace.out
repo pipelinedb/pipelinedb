@@ -53,11 +53,11 @@ SELECT n.nspname, pq.name FROM pipeline_query pq JOIN pg_namespace n ON pq.names
 CREATE CONTINUOUS VIEW test_cvn0 AS SELECT x::int FROM test_cvn_stream;
 CREATE SCHEMA test_cvn_schema0;
 CREATE CONTINUOUS VIEW test_cvn_schema0.test_cvn0 AS SELECT x::int, y::text FROM test_cvn_schema0.test_cvn_stream;
-SELECT schema, name, "desc" FROM pipeline_streams() WHERE name='test_cvn_stream' ORDER BY "desc";
-      schema      |      name       |                                desc                                
-------------------+-----------------+--------------------------------------------------------------------
- public           | test_cvn_stream | \x000000017800000006a4ffffffff00000000
- test_cvn_schema0 | test_cvn_stream | \x00000002790000000019ffffffff000000007800000006a4ffffffff00000000
+SELECT schema, name, "desc", array_length(queries, 1) FROM pipeline_streams() WHERE name='test_cvn_stream' ORDER BY schema;
+      schema      |      name       |                                desc                                | array_length 
+------------------+-----------------+--------------------------------------------------------------------+--------------
+ public           | test_cvn_stream | \x000000017800000006a4ffffffff00000000                             |            1
+ test_cvn_schema0 | test_cvn_stream | \x00000002790000000019ffffffff000000007800000006a4ffffffff00000000 |            1
 (2 rows)
 
 INSERT INTO test_cvn_stream (x) VALUES (1);
