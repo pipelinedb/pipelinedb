@@ -1022,9 +1022,6 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 {
   int reg;
   int m = (1 << result->p);
-  uint8 regs[m];
-
-  MemSet(regs, 0, m);
 
   /* results always use the dense representation */
   if (HLL_IS_SPARSE(result))
@@ -1040,8 +1037,7 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 
 			HLL_DENSE_GET_REGISTER(r0, result->M, reg);
 			HLL_DENSE_GET_REGISTER(r1, incoming->M, reg);
-
-			regs[reg] = Max(r0, r1);
+			HLL_DENSE_SET_REGISTER(result->M, reg, Max(r0, r1));
 		}
 	}
   else
@@ -1049,8 +1045,8 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 		/* run-length encoded, read every non-zero register value */
 		uint8 *pos = incoming->M;
 		uint8 *end = pos + incoming->mlen;
+		uint8 regval;
 		long runlen;
-		long regval;
 
 		reg = 0;
 		while (pos < end)
@@ -1073,22 +1069,16 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
 				regval = HLL_SPARSE_VAL_VALUE(pos);
 				while (runlen--)
 				{
-					regs[reg] = regval;
+					uint8 resval;
+
+					HLL_DENSE_GET_REGISTER(resval, result->M, reg);
+					HLL_DENSE_SET_REGISTER(result->M, reg, Max(resval, regval));
 					reg++;
 				}
 				pos++;
 			}
 		}
 	}
-
-  /* for each register in both HLLs, keep the max of the two */
-  for (reg=0; reg<m; reg++)
-  {
-		uint8 regval;
-
-		HLL_DENSE_GET_REGISTER(regval, result->M, reg);
-		HLL_DENSE_SET_REGISTER(result->M, reg, Max(regval, regs[reg]));
-  }
 
   result->encoding = HLL_DENSE_DIRTY;
 
