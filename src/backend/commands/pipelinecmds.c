@@ -412,6 +412,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	SelectStmt *viewselect;
 	CQAnalyzeContext context;
 	bool saveAllowSystemTableMods;
+	Relation pipeline_query;
 
 	view = stmt->into->rel;
 	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
@@ -431,6 +432,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 */
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
+
+	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
 
@@ -557,6 +560,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 */
 	allowSystemTableMods = saveAllowSystemTableMods;
 	create_indices_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);
+
+	heap_close(pipeline_query, NoLock);
 }
 
 /*

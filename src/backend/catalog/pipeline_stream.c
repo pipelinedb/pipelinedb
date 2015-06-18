@@ -461,18 +461,22 @@ delete_nonexistent_streams(Relation pipeline_stream, List *keys)
  * UpdatePipelineStreamCatalog
  */
 void
-UpdatePipelineStreamCatalog(Relation pipeline_query)
+UpdatePipelineStreamCatalog(void)
 {
+	Relation pipeline_query;
 	Relation pipeline_stream;
 	HTAB *hash;
 	List *keys = NIL;
 
-	hash = streams_to_meta(pipeline_query);
-
+	pipeline_query = heap_open(PipelineQueryRelationId, AccessShareLock);
 	pipeline_stream = heap_open(PipelineStreamRelationId, RowExclusiveLock);
+
+	hash = streams_to_meta(pipeline_query);
 	keys = update_pipeline_stream_catalog(pipeline_stream, hash);
 	delete_nonexistent_streams(pipeline_stream, keys);
+
 	heap_close(pipeline_stream, NoLock);
+	heap_close(pipeline_query, NoLock);
 }
 
 /*
@@ -725,10 +729,6 @@ CreateInferredStream(RangeVar *rv)
 void
 CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 {
-	/*
-	 * Get a read lock of pipeline_query so that we obey 2PL--locks on pipeline_query
-	 * must be acquired before locks on pipeline_stream.
-	 */
 	Relation pipeline_stream = heap_open(PipelineStreamRelationId, RowExclusiveLock);
 	Datum values[Natts_pipeline_stream];
 	bool nulls[Natts_pipeline_stream];
@@ -761,7 +761,7 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 
 	CommandCounterIncrement();
 
-	heap_close(pipeline_stream, RowExclusiveLock);
+	heap_close(pipeline_stream, NoLock);
 }
 
 /*

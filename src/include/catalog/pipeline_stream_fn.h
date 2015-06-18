@@ -22,7 +22,7 @@
 
 #define needs_mock_relation(rel) ((rel)->rd_rel->relkind == RELKIND_STREAM && IsInferredStream((rel)->rd_id))
 
-extern void UpdatePipelineStreamCatalog(Relation pipeline_query);
+extern void UpdatePipelineStreamCatalog(void);
 
 extern Bitmapset *GetAllStreamReaders(Oid relid);
 extern Bitmapset *GetLocalStreamReaders(Oid relid);
