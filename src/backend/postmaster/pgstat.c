@@ -5607,7 +5607,7 @@ stream_stat_recv(StreamStatMsg *msg, int len)
 	existing = (StreamStatEntry *) hash_search(db->streams, (void *) &stats.relid, HASH_ENTER, &found);
 	if (!found)
 	{
-		MemSet(existing, 0, sizeof(CQStatEntry));
+		MemSet(existing, 0, sizeof(StreamStatMsg));
 		existing->relid = stats.relid;
 	}
 
