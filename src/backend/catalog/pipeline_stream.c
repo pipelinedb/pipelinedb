@@ -816,6 +816,7 @@ mock_relation_open(ParseState *pstate, Relation rel)
 	stream_rel->rd_rel->relkind = RELKIND_STREAM;
 	stream_rel->rd_id = rel->rd_id;
 	stream_rel->rd_rel->relnamespace = rel->rd_rel->relnamespace;
+	stream_rel->rd_refcnt = 1; /* needs for copy */
 
 	heap_close(rel, NoLock);
 

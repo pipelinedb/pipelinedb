@@ -817,13 +817,30 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		RangeTblEntry *rte;
 		List	   *attnums;
 		ListCell   *cur;
-		bool is_inferred;
 
 		Assert(!stmt->query);
 
 		/* Open and lock the relation, using the appropriate lock type. */
 		rel = heap_openrv(stmt->relation,
 							(is_from ? RowExclusiveLock : AccessShareLock));
+
+		if (needs_mock_relation(rel))
+		{
+			ParseState *pstate;
+
+			if (!stmt->attlist)
+				ereport(ERROR,
+						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+						errmsg("column names must be explicitly given when copying into a stream"),
+						errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
+
+			pstate = make_parsestate(NULL);
+			pstate->p_allow_streams = true;
+			pstate->p_ins_cols = stmt->attlist;
+			rel = mock_relation_open(pstate, rel);
+			free_parsestate(pstate);
+		}
+
 		relid = RelationGetRelid(rel);
 
 		rte = makeNode(RangeTblEntry);
@@ -831,21 +848,6 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		rte->relid = RelationGetRelid(rel);
 		rte->relkind = rel->rd_rel->relkind;
 		rte->requiredPerms = required_access;
-
-		if (RangeVarIsForStream(stmt->relation, &is_inferred))
-		{
-			if (is_inferred)
-			{
-				if (!stmt->attlist)
-					ereport(ERROR,
-							(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-							errmsg("column names must be explicitly given when copying into a stream"),
-							errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
-
-				ReleaseTupleDesc(rel->rd_att);
-				rel->rd_att = GetInferredStreamTupleDesc(relid, stmt->attlist);
-			}
-		}
 
 		tupDesc = RelationGetDescr(rel);
 		attnums = CopyGetAttnums(tupDesc, rel, stmt->attlist);
@@ -907,7 +909,12 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	 * ensure that updates will be committed before lock is released.
 	 */
 	if (rel != NULL && rel->rd_refcnt > 0)
-		heap_close(rel, (is_from ? NoLock : AccessShareLock));
+	{
+		if (needs_mock_relation(rel))
+			mock_relation_close(rel);
+		else
+			heap_close(rel, (is_from ? NoLock : AccessShareLock));
+	}
 
 	return relid;
 }

@@ -276,12 +276,21 @@ stream_stat_get(PG_FUNCTION_ARGS)
 		bool nulls[5];
 		HeapTuple tup;
 		Datum result;
+		Relation rel = try_relation_open(entry->relid, NoLock);
+
+		if (rel == NULL || rel->rd_rel->relkind != RELKIND_STREAM)
+		{
+			/* TODO(usmanm): Purge the entry. */
+			if (rel)
+				relation_close(rel, NoLock);
+			continue;
+		}
 
 		MemSet(values, 0, sizeof(values));
 		MemSet(nulls, 0, sizeof(nulls));
 
-		values[0] = CStringGetTextDatum(get_namespace_name(entry->namespace));
-		values[1] = CStringGetTextDatum(NameStr(entry->name));
+		values[0] = CStringGetTextDatum(get_namespace_name(get_rel_namespace(entry->relid)));
+		values[1] = CStringGetTextDatum(get_rel_name(entry->relid));
 		values[2] = Int64GetDatum(entry->input_rows);
 		values[3] = Int64GetDatum(entry->input_batches);
 		values[4] = Int64GetDatum(entry->input_bytes);
