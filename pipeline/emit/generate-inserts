@@ -19,7 +19,8 @@ def main(args, keys):
             field_type = getattr(globals()['__builtins__'], getattr(args, k))
             value = None
             if field_type == str:
-                value = ''.join([random.choice(string.hexdigits) for _ in range(random.randint(1, 2))]).lower()
+                value = ''.join([random.choice(string.hexdigits)
+                                 for _ in range(random.randint(1, 2))]).lower()
             else:
                 value = field_type(random.random() * (random.randint(1, 1024)))
             d[k] = value
@@ -27,7 +28,7 @@ def main(args, keys):
         batch.append(tuple(d[k] for k in keys))
 
         if len(batch) == args.batch_size:
-            s = ', '.join(['(%s)' % ', '.join(map(str, v)) for v in batch])
+            s = ', '.join([str(v) for v in batch])
             print 'INSERT INTO %s %s VALUES %s;' % (args.stream, cols, s)
             batch = []
 
@@ -39,23 +40,26 @@ def main(args, keys):
 if __name__ == '__main__':
     """
     Generates random INSERT INTO data using the specified column names and types
-    
+
     Ex:
-    
+
     generate-inserts --stream=stream --name=str --value=float --n=2
     INSERT INTO stream (name, value) VALUES ('4cFaD78Cf2EFF9Afef9C75EaAB', 0.422222)
     INSERT INTO stream (name, value) VALUES ('4cFaD78Cf2EFF9Afef9C75EaAB', 0.422222)
-    
+
     # Generate multi insert statement
     generate-inserts --stream=stream --name=str --value=float --batchsize=3 --n=1
     INSERT INTO stream (name, value) VALUES ('aeefec', 12), ('ee45ff', 904), ('abbc00', 4323)
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--stream', action='store', dest='stream', required=True,
+    parser.add_argument('--stream', action='store', dest='stream',
+                        required=True,
                         help='Stream to insert to')
-    parser.add_argument('--n', action='store', dest='n', type=int, required=False,
+    parser.add_argument('--n', action='store', dest='n', type=int,
+                        required=False,
                         help='Number of events to generate')
-    parser.add_argument('--batchsize', action='store', dest='batch_size', type=int, required=False, default=1,
+    parser.add_argument('--batchsize', action='store', dest='batch_size',
+                        type=int, required=False, default=1,
                         help='Number of tuples to generate per INSERT statement')
     keys = []
     for arg in sys.argv[1:]:
@@ -65,8 +69,9 @@ if __name__ == '__main__':
             if k[2:] in keys:
                 print 'Duplicate field name %s' % k
                 sys.exit(1)
-            parser.add_argument(k, action='store', dest=k[2:], choices=('int', 'str', 'float'))
+            parser.add_argument(k, action='store', dest=k[2:],
+                                choices=('int', 'str', 'float'))
             keys.append(k[2:])
-            
+
     args = parser.parse_args()
     main(args, keys)
