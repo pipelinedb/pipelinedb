@@ -366,6 +366,11 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
 		rv = (RangeVar *) lfirst(lc);
 		relid = RangeVarGetRelid(rv, AccessShareLock, false);
 
+		/*
+		 * Only record a dependency if stream is not inferred. Inferred streams are dropped in the
+		 * DROP CONTINUOUS VIEW path and so this causes a cyclical delete cycle. Inferred streams
+		 * can't be dropped by users anyway, so this doesn't matter.
+		 */
 		if (!IsInferredStream(relid))
 		{
 			parent.classId = PipelineQueryRelationId;
