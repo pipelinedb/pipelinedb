@@ -3829,6 +3829,9 @@ stringaggstatesend(PG_FUNCTION_ARGS)
 	bytea *result;
 	int nbytes;
 
+	if (state == NULL)
+		state = makeStringAggState(fcinfo);
+
 	initStringInfo(&buf);
 
 	pq_sendint(&buf, state->dlen, sizeof(int));
@@ -3877,10 +3880,7 @@ string_agg_combine(PG_FUNCTION_ARGS)
 	StringAggState *incoming = PG_ARGISNULL(1) ? NULL : (StringAggState *) PG_GETARG_POINTER(1);
 
 	if (state == NULL)
-	{
 		state = makeStringAggState(fcinfo);
-		state->dlen = incoming->dlen;
-	}
 
 	if (incoming != NULL)
 		appendStringInfoString(state->buf, incoming->buf->data);

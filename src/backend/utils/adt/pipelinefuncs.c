@@ -466,11 +466,20 @@ pipeline_streams(PG_FUNCTION_ARGS)
 		bool *qnulls;
 		int x;
 		int i;
+		char *relname = get_rel_name(row->relid);
+		char *namespace;
+
+		if (!relname)
+			continue;
+
+		namespace = get_namespace_name(get_rel_namespace(row->relid));
+		if (!namespace)
+			continue;
 
 		MemSet(nulls, 0, sizeof(nulls));
 
-		values[0] = CStringGetTextDatum(get_namespace_name(get_rel_namespace(row->relid)));
-		values[1] = CStringGetTextDatum(get_rel_name(row->relid));
+		values[0] = CStringGetTextDatum(namespace);
+		values[1] = CStringGetTextDatum(relname);
 		values[2] = BoolGetDatum(row->inferred);
 
 		tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);

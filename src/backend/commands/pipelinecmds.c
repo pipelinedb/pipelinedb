@@ -433,7 +433,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
 
-	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
 
 	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
 
