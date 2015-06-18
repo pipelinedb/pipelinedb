@@ -1739,7 +1739,7 @@ DiscardStmt:
 
 /*****************************************************************************
  *
- *	ALTER [ TABLE | INDEX | SEQUENCE | VIEW | MATERIALIZED VIEW ] variations
+ *	ALTER [ TABLE | INDEX | SEQUENCE | VIEW | MATERIALIZED VIEW | STREAM ] variations
  *
  * Note: we accept all subcommands for each of the five variants, and sort
  * out what's really legal at execution time.
@@ -1900,6 +1900,15 @@ AlterTableStmt:
 					n->roles = $10;
 					n->new_tablespacename = $13;
 					n->nowait = $14;
+					$$ = (Node *)n;
+				}
+		| ALTER STREAM qualified_name alter_table_cmds
+				{
+					AlterTableStmt *n = makeNode(AlterTableStmt);
+					n->relation = $3;
+					n->cmds = $4;
+					n->relkind = OBJECT_STREAM;
+					n->missing_ok = false;
 					$$ = (Node *)n;
 				}
 		;

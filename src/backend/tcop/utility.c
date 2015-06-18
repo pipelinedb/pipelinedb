@@ -1720,6 +1720,9 @@ AlterObjectTypeCommandTag(ObjectType objtype)
 		case OBJECT_MATVIEW:
 			tag = "ALTER MATERIALIZED VIEW";
 			break;
+		case OBJECT_STREAM:
+			tag = "ALTER STREAM";
+			break;
 		default:
 			tag = "???";
 			break;
