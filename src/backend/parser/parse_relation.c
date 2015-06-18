@@ -1080,7 +1080,7 @@ addRangeTableEntry(ParseState *pstate,
 	 * underneath us.
 	 */
 	if (rel)
-			heap_close(rel, NoLock);
+		heap_close(rel, NoLock);
 
 	/*
 	 * Set flags and access permissions.

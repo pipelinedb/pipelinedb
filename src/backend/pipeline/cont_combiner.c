@@ -47,7 +47,7 @@
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 
-#define GROUPS_PLAN_LIFESPAN (1000 * 1000)
+#define GROUPS_PLAN_LIFESPAN (10 * 1000)
 
 static bool
 should_read_fn(TupleBufferReader *reader, TupleBufferSlot *slot)
