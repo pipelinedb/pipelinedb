@@ -40,4 +40,5 @@ SELECT * FROM test_cvn0 ORDER BY X;
 SELECT * FROM test_cvn_schema0.test_cvn0 ORDER BY x;
 
 DROP CONTINUOUS VIEW test_cvn0;
+DROP CONTINUOUS VIEW test_cvn_schema0.test_cvn0; -- FIXME(usmanm)
 DROP SCHEMA test_cvn_schema0 CASCADE;
