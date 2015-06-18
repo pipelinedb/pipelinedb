@@ -788,7 +788,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 	collect_windows(select, context);
 	if (context->windows)
 	{
-		context->pstate->p_is_continuous_view = true;
+		context->pstate->p_allow_streams = true;
 		context->pstate->p_cont_view_context = context;
 		transformFromClause(context->pstate, select->fromClause);
 
@@ -985,5 +985,5 @@ transformContSelectStmt(ParseState *pstate, SelectStmt *select)
 	collect_types_and_cols((Node *) select, context);
 
 	pstate->p_cont_view_context = context;
-	pstate->p_is_continuous_view = true;
+	pstate->p_allow_streams = true;
 }

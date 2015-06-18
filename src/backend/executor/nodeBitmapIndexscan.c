@@ -196,6 +196,7 @@ ExecInitBitmapIndexScan(BitmapIndexScan *node, EState *estate, int eflags)
 {
 	BitmapIndexScanState *indexstate;
 	bool		relistarget;
+	LOCKMODE lockmode;
 
 	/* check for unsupported flags */
 	Assert(!(eflags & (EXEC_FLAG_BACKWARD | EXEC_FLAG_MARK)));
@@ -243,6 +244,14 @@ ExecInitBitmapIndexScan(BitmapIndexScan *node, EState *estate, int eflags)
 	if (eflags & EXEC_FLAG_EXPLAIN_ONLY)
 		return indexstate;
 
+
+	if (eflags & EXEC_FLAG_COMBINE_LOOKUP)
+		lockmode = NoLock;
+	else if (relistarget)
+		lockmode = AccessShareLock;
+	else
+		lockmode = NoLock;
+
 	/*
 	 * Open the index relation.
 	 *
@@ -251,8 +260,7 @@ ExecInitBitmapIndexScan(BitmapIndexScan *node, EState *estate, int eflags)
 	 * taking another lock here.  Otherwise we need a normal reader's lock.
 	 */
 	relistarget = ExecRelationIsTargetRelation(estate, node->scan.scanrelid);
-	indexstate->biss_RelationDesc = index_open(node->indexid,
-									 relistarget ? NoLock : AccessShareLock);
+	indexstate->biss_RelationDesc = index_open(node->indexid, lockmode);
 
 	/*
 	 * Initialize index-specific scan state

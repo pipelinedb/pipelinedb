@@ -154,7 +154,12 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 		 * index while we hold lock on the parent rel, and neither lock type
 		 * blocks any other kind of index operation.
 		 */
-		if (rel->relid == root->parse->resultRelation)
+		if (root->parse->isCombineLookup)
+		{
+			/* If this is a plan for combiner group lookups, we already have all the locks needed. */
+			lmode = NoLock;
+		}
+		else if (rel->relid == root->parse->resultRelation)
 			lmode = RowExclusiveLock;
 		else
 			lmode = AccessShareLock;
