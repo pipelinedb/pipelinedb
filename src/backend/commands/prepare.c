@@ -150,7 +150,7 @@ PrepareQuery(PrepareStmt *stmt, const char *queryString)
 			break;
 	}
 
-	if (IsA(stmt->query, InsertStmt) && RangeVarIsForStream(((InsertStmt *) stmt->query)->relation))
+	if (IsA(stmt->query, InsertStmt) && RangeVarIsForStream(((InsertStmt *) stmt->query)->relation, NULL))
 	{
 		InsertStmt *ins = (InsertStmt *) stmt->query;
 		StorePreparedStreamInsert(stmt->name, ins->relation, ins->cols);

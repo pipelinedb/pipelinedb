@@ -1801,7 +1801,8 @@ heap_drop_with_catalog(Oid relid)
 	 */
 	if (rel->rd_rel->relkind != RELKIND_VIEW &&
 		rel->rd_rel->relkind != RELKIND_COMPOSITE_TYPE &&
-		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE)
+		rel->rd_rel->relkind != RELKIND_FOREIGN_TABLE &&
+		rel->rd_rel->relkind != RELKIND_STREAM)
 	{
 		RelationDropStorage(rel);
 	}

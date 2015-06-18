@@ -1567,7 +1567,6 @@ typedef struct CreateStmt
 	OnCommitAction oncommit;	/* what do we do at COMMIT? */
 	char	   *tablespacename; /* table space to use, or NULL */
 	bool		if_not_exists;	/* just do nothing if it already exists? */
-	bool		stream; /* true if this is a stream */
 } CreateStmt;
 
 /* ----------
@@ -2810,5 +2809,11 @@ typedef struct ActivateStmt
 {
 	NodeTag	type;
 } ActivateStmt;
+
+typedef struct CreateStreamStmt
+{
+	CreateStmt	base;
+	bool 		is_inferred;
+} CreateStreamStmt;
 
 #endif   /* PARSENODES_H */

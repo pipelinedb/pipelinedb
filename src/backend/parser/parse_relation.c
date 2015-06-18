@@ -956,12 +956,6 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 	Relation	rel;
 	ParseCallbackState pcbstate;
 
-	if (RangeVarIsForStream((RangeVar *) relation))
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("\"%s\" is a stream", relation->relname),
-				 errhint("Streams can only be read by a continuous view's FROM clause.")));
-
 	setup_parser_errposition_callback(&pcbstate, pstate, relation->location);
 	rel = heap_openrv_extended(relation, lockmode, true);
 	if (rel == NULL)
@@ -995,7 +989,45 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 		}
 	}
 	cancel_parser_errposition_callback(&pcbstate);
+
+	if (rel->rd_rel->relkind == RELKIND_STREAM)
+	{
+		if (!pstate->p_allow_streams)
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("\"%s\" is a stream", relation->relname),
+					 errhint("Streams can only be read by a continuous view's FROM clause.")));
+
+		if (needs_mock_relation(rel))
+			rel = mock_relation_open(pstate, rel);
+	}
+
 	return rel;
+}
+
+static void
+transformRelationRTEToStreamRTE(RangeTblEntry *rte, Relation rel)
+{
+	int i;
+
+	rte->rtekind = RTE_STREAM;
+
+	/*
+	 * We cheat a little and use the CTE fields here, because they're exactly
+	 * what we need for stream type information. Eventually we can add our own
+	 * identical fields if we need to.
+	 */
+	rte->ctecoltypes = NIL;
+	rte->ctecoltypmods = NIL;
+	rte->ctecolcollations = NIL;
+
+	for (i = 0; i < rel->rd_att->natts; i++)
+	{
+		Form_pg_attribute attr = rel->rd_att->attrs[i];
+		rte->ctecoltypes = lappend_oid(rte->ctecoltypes, attr->atttypid);
+		rte->ctecoltypmods = lappend_int(rte->ctecoltypmods, attr->atttypmod);
+		rte->ctecolcollations = lappend_oid(rte->ctecolcollations, attr->attcollation);
+	}
 }
 
 /*
@@ -1018,7 +1050,6 @@ addRangeTableEntry(ParseState *pstate,
 	char	   *refname = alias ? alias->aliasname : relation->relname;
 	LOCKMODE	lockmode;
 	Relation	rel;
-	TupleDesc desc;
 
 	rte->rtekind = RTE_RELATION;
 	rte->alias = alias;
@@ -1030,53 +1061,31 @@ addRangeTableEntry(ParseState *pstate,
 	 * depending on whether we're doing SELECT FOR UPDATE/SHARE.
 	 */
 	lockmode = isLockedRefname(pstate, refname) ? RowShareLock : AccessShareLock;
-
-	rel = heap_openrv_extended(relation, lockmode, true);
-
-	if (rel != NULL && !RangeVarIsForTypedStream(relation))
-	{
-		/* it's an actual relation */
-		heap_close(rel, lockmode);
-		rel = parserOpenTable(pstate, relation, lockmode);
-		rte->relid = RelationGetRelid(rel);
-		rte->relkind = rel->rd_rel->relkind;
-		desc = rel->rd_att;
-	}
-	else if (pstate->p_is_continuous_view)
-	{
-		/*
-		 * It could be a strongly typed stream, but even if the rel doesn't exist, assume it's a stream
-		 */
-		rte->relid = GetStreamRelId(relation);
-		rte->relname = relation->relname;
-		rte->rtekind = RTE_STREAM;
-		rte->relkind = RELKIND_STREAM;
-		inh = false;
-		desc = parserGetStreamDescr(pstate, relation, rte);
-	}
-	else if (rel == NULL || RangeVarIsForTypedStream(relation))
-	{
-		/*
-		 * It's either a bad access attempt, or an attempt to access a typed stream outside of a continuous
-		 * view. Either way, throw the appropriate error.
-		 */
-		parserOpenTable(pstate, relation, lockmode);
-		Assert(false);
-	}
+	rel = parserOpenTable(pstate, relation, lockmode);
+	rte->relid = RelationGetRelid(rel);
+	rte->relkind = rel->rd_rel->relkind;
 
 	/*
 	 * Build the list of effective column names using user-supplied aliases
 	 * and/or actual column names.
 	 */
 	rte->eref = makeAlias(refname, NIL);
-	buildRelationAliases(desc, alias, rte->eref);
+	buildRelationAliases(rel->rd_att, alias, rte->eref);
+
+	if (rte->relkind == RELKIND_STREAM)
+	{
+		inh = false;
+		transformRelationRTEToStreamRTE(rte, rel);
+	}
 
 	/*
 	 * Drop the rel refcount, but keep the access lock till end of transaction
 	 * so that the table can't be deleted or have its schema modified
 	 * underneath us.
 	 */
-	if (rel)
+	if (needs_mock_relation(rel))
+		mock_relation_close(rel);
+	else
 		heap_close(rel, NoLock);
 
 	/*
@@ -1131,6 +1140,12 @@ addRangeTableEntryForRelation(ParseState *pstate,
 	 */
 	rte->eref = makeAlias(refname, NIL);
 	buildRelationAliases(rel->rd_att, alias, rte->eref);
+
+	if (rte->relkind == RELKIND_STREAM)
+	{
+		inh = false;
+		transformRelationRTEToStreamRTE(rte, rel);
+	}
 
 	/*
 	 * Set flags and access permissions.

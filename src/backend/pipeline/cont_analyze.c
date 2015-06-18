@@ -103,7 +103,7 @@ collect_rels_and_streams(Node *node, ContAnalyzeContext *context)
 	if (IsA(node, RangeVar))
 	{
 		Oid reloid = RangeVarGetRelid((RangeVar *) node, NoLock, true);
-		if (!OidIsValid(reloid) || RangeVarIsForTypedStream((RangeVar *) node))
+		if (!OidIsValid(reloid) || RangeVarIsForStream((RangeVar *) node, NULL))
 			context->streams = lappend(context->streams, node);
 		else
 			context->rels = lappend(context->rels, node);
@@ -588,7 +588,8 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 	ContAnalyzeContext *context;
 	ListCell *lc;
 	RangeVar *stream;
-	bool typed_stream = false;
+	Oid stream_relid;
+	bool is_inferred;
 
 	if (!IsA(node, SelectStmt))
 		ereport(ERROR,
@@ -664,11 +665,18 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 				errhint("Remove \"%s\" from the FROM clause.", stream->relname),
 				parser_errposition(context->pstate, stream->location)));
 
-	if (RangeVarIsForTypedStream(stream))
-		typed_stream = true;
+	/* Create an inferred stream if needed */
+	stream_relid = RangeVarGetRelid(stream, AccessShareLock, true);
+	if (!OidIsValid(stream_relid))
+	{
+		CreateInferredStream(stream);
+		is_inferred = true;
+	}
+	else
+		RangeVarIsForStream(stream, &is_inferred);
 
 	/* Ensure that each column being read from an inferred stream is type-casted */
-	if (!typed_stream)
+	if (is_inferred)
 	{
 		foreach(lc, context->cols)
 		{
@@ -788,7 +796,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 	collect_windows(select, context);
 	if (context->windows)
 	{
-		context->pstate->p_is_continuous_view = true;
+		context->pstate->p_allow_streams = true;
 		context->pstate->p_cont_view_context = context;
 		transformFromClause(context->pstate, select->fromClause);
 
@@ -835,9 +843,8 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
  * Get a parse-time tuple descriptor for the given stream
  */
 TupleDesc
-parserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte)
+parserGetStreamDescr(Oid relid, ContAnalyzeContext *context)
 {
-	ContAnalyzeContext *context = pstate->p_cont_view_context;
 	List *attrs = NIL;
 	ListCell *lc;
 	TupleDesc tupdesc;
@@ -846,98 +853,73 @@ parserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte)
 	bool saw_atime = false;
 	Form_pg_attribute *attrsArray;
 	int i;
+	RangeVar *rv = (RangeVar *) linitial(context->streams); /* there is always one stream */
 
-	/*
-	 * We cheat a little and use the CTE fields here, because they're exactly
-	 * what we need for stream type information. Eventually we can add our own
-	 * identical fields if we need to.
-	 */
-	rte->ctecoltypes = NIL;
-	rte->ctecoltypmods = NIL;
-	rte->ctecolcollations = NIL;
-
-	if (RangeVarIsForTypedStream(rv))
+	foreach(lc, context->types)
 	{
-		Relation rel = heap_openrv_extended(rv, AccessShareLock, false);
-		TupleDesc td = RelationGetDescr(rel);
+		TypeCast *tc = (TypeCast *) lfirst(lc);
+		ColumnRef *ref = (ColumnRef *) tc->arg;
+		Form_pg_attribute attr;
+		char *colname;
+		bool already_exists = false;
+		ListCell *lc;
+		Type type;
+		int32 typemod;
 
-		for (i = 0; i < td->natts; i++)
+		if (list_length(ref->fields) == 2)
 		{
-			attrs = lappend(attrs, td->attrs[i]);
-			attnum++;
-		}
-
-		heap_close(rel, AccessShareLock);
-	}
-	else
-	{
-		foreach(lc, context->types)
-		{
-			TypeCast *tc = (TypeCast *) lfirst(lc);
-			ColumnRef *ref = (ColumnRef *) tc->arg;
-			Form_pg_attribute attr;
-			char *colname;
-			bool alreadyExists = false;
-			ListCell *lc;
-			Type type;
-			int32 typemod;
-
-			if (list_length(ref->fields) == 2)
-			{
-				/* find the columns that belong to this stream desc */
-				char *colrelname = strVal(linitial(ref->fields));
-				char *relname = rv->alias ? rv->alias->aliasname : rv->relname;
-				if (pg_strcasecmp(relname, colrelname) != 0)
-					continue;
-			}
-
-			if ((list_length(ref->fields) == 1) && !onestream)
-				ereport(ERROR,
-						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-						 errmsg("column reference is ambiguous"),
-						 parser_errposition(context->pstate, ref->location)));
-
-			colname = FigureColname((Node *) ref);
-
-			/* Dedup */
-			foreach (lc, attrs)
-			{
-				Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
-				if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
-				{
-					alreadyExists = true;
-					break;
-				}
-			}
-
-			if (alreadyExists)
+			/* find the columns that belong to this stream desc */
+			char *colrelname = strVal(linitial(ref->fields));
+			char *relname = rv->alias ? rv->alias->aliasname : rv->relname;
+			if (pg_strcasecmp(relname, colrelname) != 0)
 				continue;
-
-			if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
-				saw_atime = true;
-
-			type = typenameType(pstate, tc->typeName, &typemod);
-
-			attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
-			attr->attndims = list_length(tc->typeName->arrayBounds);
-			attr->attnum = attnum++;
-			attr->atttypid = typeTypeId(type);
-			attr->atttypmod = typemod;
-			attr->attcollation = typeTypeCollation(type);
-
-			namestrcpy(&attr->attname, colname);
-			attrs = lappend(attrs, attr);
-
-			ReleaseSysCache((HeapTuple) type);
 		}
+
+		if ((list_length(ref->fields) == 1) && !onestream)
+			ereport(ERROR,
+					(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+					 errmsg("column reference is ambiguous"),
+					 parser_errposition(context->pstate, ref->location)));
+
+		colname = FigureColname((Node *) ref);
+
+		/* Dedup */
+		foreach (lc, attrs)
+		{
+			Form_pg_attribute attr = (Form_pg_attribute) lfirst(lc);
+			if (pg_strcasecmp(colname, NameStr(attr->attname)) == 0)
+			{
+				already_exists = true;
+				break;
+			}
+		}
+
+		if (already_exists)
+			continue;
+
+		if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
+			saw_atime = true;
+
+		type = typenameType(NULL, tc->typeName, &typemod);
+
+		attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
+		attr->attndims = list_length(tc->typeName->arrayBounds);
+		attr->attnum = attnum++;
+		attr->atttypid = typeTypeId(type);
+		attr->atttypmod = typemod;
+		attr->attcollation = typeTypeCollation(type);
+
+		namestrcpy(&attr->attname, colname);
+		attrs = lappend(attrs, attr);
+
+		ReleaseSysCache((HeapTuple) type);
 	}
 
 	if (!saw_atime)
 	{
-		Oid oid = LookupTypeNameOid(NULL, makeTypeName("timestamptz"), false);
 		Form_pg_attribute attr = (Form_pg_attribute) palloc(sizeof(FormData_pg_attribute));
 		attr->attnum = attnum++;
-		attr->atttypid = oid;
+		attr->atttypid = TIMESTAMPTZOID;
 		attr->attndims = 1;
 		attr->atttypmod = -1;
 		attr->attcollation = InvalidOid;
@@ -951,9 +933,6 @@ parserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte)
 	foreach(lc, attrs)
 	{
 		attrsArray[i] = (Form_pg_attribute) lfirst(lc);
-		rte->ctecoltypes = lappend_oid(rte->ctecoltypes, attrsArray[i]->atttypid);
-		rte->ctecoltypmods = lappend_int(rte->ctecoltypmods, attrsArray[i]->atttypmod);
-		rte->ctecolcollations = lappend_oid(rte->ctecolcollations, attrsArray[i]->attcollation);
 		i++;
 	}
 
@@ -985,5 +964,47 @@ transformContSelectStmt(ParseState *pstate, SelectStmt *select)
 	collect_types_and_cols((Node *) select, context);
 
 	pstate->p_cont_view_context = context;
-	pstate->p_is_continuous_view = true;
+	pstate->p_allow_streams = true;
+}
+
+/*
+ * transformCreateStreamStmt
+ */
+void
+transformCreateStreamStmt(CreateStreamStmt *stmt)
+{
+	ListCell *lc;
+	bool saw_atime = false;
+
+	foreach(lc, stmt->base.tableElts)
+	{
+		ColumnDef *coldef = (ColumnDef *) lfirst(lc);
+		if (pg_strcasecmp(coldef->colname, ARRIVAL_TIMESTAMP) == 0)
+		{
+			saw_atime = true;
+			break;
+		}
+	}
+
+	if (!saw_atime)
+	{
+		ColumnDef *coldef;
+		TypeName *typename;
+
+		typename = makeNode(TypeName);
+		typename->typeOid = TIMESTAMPTZOID;
+		typename->typemod = InvalidOid;
+
+		coldef = makeNode(ColumnDef);
+		coldef->colname = ARRIVAL_TIMESTAMP;
+		coldef->inhcount = 0;
+		coldef->is_local = true;
+		coldef->is_not_null = false;
+		coldef->raw_default = NULL;
+		coldef->cooked_default = NULL;
+		coldef->constraints = NIL;
+		coldef->typeName = typename;
+
+		stmt->base.tableElts = lappend(stmt->base.tableElts, coldef);
+	}
 }

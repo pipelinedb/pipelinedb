@@ -159,7 +159,7 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	 */
 	namespace = RangeVarGetAndCheckCreationNamespace(name, NoLock, NULL);
 
-	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
 
 	id = get_next_id(pipeline_query);
 
@@ -192,7 +192,7 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 
 	heap_freetuple(tup);
 
-	UpdatePipelineStreamCatalog(pipeline_query);
+	UpdatePipelineStreamCatalog();
 
 	heap_close(pipeline_query, NoLock);
 
@@ -456,7 +456,7 @@ RemoveContinuousViewById(Oid oid)
 	HeapTuple tuple;
 	Form_pipeline_query row;
 
-	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	tuple = SearchSysCache1(PIPELINEQUERYOID, ObjectIdGetDatum(oid));
 	if (!HeapTupleIsValid(tuple))
@@ -472,7 +472,7 @@ RemoveContinuousViewById(Oid oid)
 	ReleaseSysCache(tuple);
 
 	CommandCounterIncrement();
-	UpdatePipelineStreamCatalog(pipeline_query);
+	UpdatePipelineStreamCatalog();
 
 	heap_close(pipeline_query, NoLock);
 }

@@ -2799,7 +2799,6 @@ CopyCreateStmtFields(const CreateStmt *from, CreateStmt *newnode)
 	COPY_SCALAR_FIELD(oncommit);
 	COPY_STRING_FIELD(tablespacename);
 	COPY_SCALAR_FIELD(if_not_exists);
-	COPY_SCALAR_FIELD(stream);
 }
 
 static CreateStmt *
@@ -2808,6 +2807,17 @@ _copyCreateStmt(const CreateStmt *from)
 	CreateStmt *newnode = makeNode(CreateStmt);
 
 	CopyCreateStmtFields(from, newnode);
+
+	return newnode;
+}
+
+static CreateStreamStmt *
+_copyCreateStreamStmt(const CreateStreamStmt *from)
+{
+	CreateStreamStmt *newnode = makeNode(CreateStreamStmt);
+
+	CopyCreateStmtFields(&from->base, &newnode->base);
+	COPY_SCALAR_FIELD(is_inferred);
 
 	return newnode;
 }
@@ -4709,6 +4719,9 @@ copyObject(const void *from)
 			break;
 		case T_XmlSerialize:
 			retval = _copyXmlSerialize(from);
+			break;
+		case T_CreateStreamStmt:
+			retval = _copyCreateStreamStmt(from);
 			break;
 
 		default:
