@@ -57,11 +57,6 @@ extern uint64 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples,
 /* Represents a single batch of inserts made into a stream. */
 typedef struct InsertBatch {
 	int id;
-	/* CQ ids that need to read this batch */
-	Bitmapset *readers;
-	/* Num tuples */
-	int num_tups;
-	/* Worker processed had an error? */
 	/* Number of acks from workers */
 	int num_wacks;
 	/* Number of acks from combiners */
@@ -80,9 +75,8 @@ typedef struct InsertBatchAck {
 	int count;
 } InsertBatchAck;
 
-extern InsertBatch *InsertBatchCreate(Bitmapset *readers);
-extern void InsertBatchWaitAndRemove(InsertBatch *batch);
-extern void InsertBatchSetNumTuples(InsertBatch *batch, int num_tuples);
+extern InsertBatch *InsertBatchCreate(void);
+extern void InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples);
 extern void InsertBatchIncrementNumCTuples(InsertBatch *batch);
 extern void InsertBatchIncrementNumReads(InsertBatch* batch);
 extern void InsertBatchMarkAcked(InsertBatchAck *ack);

@@ -1,7 +1,4 @@
 from base import pipeline, clean_db
-import os
-import random
-import time
 
 
 def test_online_add_column(pipeline, clean_db):
