@@ -148,6 +148,13 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 		indexoidlist = RelationGetIndexList(relation);
 
 		/*
+		 * When performing the combiner lookup query, we have already acquired a RowExclusiveLock
+		 * on the materialzation table and any indices that might be used while executing the
+		 * query. See cont_combiner.c:combine.
+		 */
+		if (root->parse->isCombineLookup)
+			lmode = NoLock;
+		/*
 		 * For each index, we get the same type of lock that the executor will
 		 * need, and do not release it.  This saves a couple of trips to the
 		 * shared lock manager while not creating any real loss of
@@ -155,7 +162,7 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 		 * index while we hold lock on the parent rel, and neither lock type
 		 * blocks any other kind of index operation.
 		 */
-		if (rel->relid == root->parse->resultRelation)
+		else if (rel->relid == root->parse->resultRelation)
 			lmode = RowExclusiveLock;
 		else
 			lmode = AccessShareLock;

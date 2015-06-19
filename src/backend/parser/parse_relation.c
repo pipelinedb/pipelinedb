@@ -1032,6 +1032,9 @@ addRangeTableEntry(ParseState *pstate,
 	 */
 	lockmode = isLockedRefname(pstate, refname) ? RowShareLock : AccessShareLock;
 
+	if (pstate->p_no_locking)
+		lockmode = NoLock;
+
 	rel = heap_openrv_extended(relation, lockmode, true);
 
 	if (rel != NULL && !RangeVarIsForTypedStream(relation))
@@ -1043,7 +1046,7 @@ addRangeTableEntry(ParseState *pstate,
 		rte->relkind = rel->rd_rel->relkind;
 		desc = rel->rd_att;
 	}
-	else if (pstate->p_is_continuous_view)
+	else if (pstate->p_allow_streams)
 	{
 		/*
 		 * It could be a strongly typed stream, but even if the rel doesn't exist, assume it's a stream
