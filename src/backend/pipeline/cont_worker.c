@@ -446,33 +446,46 @@ next:
 		QueryDesc *query_desc;
 		EState *estate;
 
-		if (state == NULL)
-			continue;
+		/*
+		 * We wrap this in a separate try/catch block because ExecInitNode call can potentially throw
+		 * an error if the state was for a stream-table join and the table has been dropped.
+		 */
+		PG_TRY();
+		{
+			if (state == NULL)
+				continue;
 
-		query_desc = state->query_desc;
-		estate = query_desc->estate;
+			query_desc = state->query_desc;
+			estate = query_desc->estate;
 
-		(*state->dest->rShutdown) (state->dest);
+			(*state->dest->rShutdown) (state->dest);
 
-		/* The cleanup functions below expect these things to be registered. */
-		RegisterSnapshotOnOwner(estate->es_snapshot, owner);
-		RegisterSnapshotOnOwner(query_desc->snapshot, owner);
+			/* The cleanup functions below expect these things to be registered. */
+			RegisterSnapshotOnOwner(estate->es_snapshot, owner);
+			RegisterSnapshotOnOwner(query_desc->snapshot, owner);
 
-		CurrentResourceOwner = owner;
+			CurrentResourceOwner = owner;
 
-		if (query_desc->totaltime)
-			InstrStopNode(query_desc->totaltime, estate->es_processed);
+			if (query_desc->totaltime)
+				InstrStopNode(query_desc->totaltime, estate->es_processed);
 
-		if (query_desc->planstate == NULL)
-			query_desc->planstate = ExecInitNode(query_desc->plannedstmt->planTree, state->query_desc->estate, 0);
+			if (query_desc->planstate == NULL)
+				query_desc->planstate = ExecInitNode(query_desc->plannedstmt->planTree, state->query_desc->estate, 0);
 
-		/* Clean up. */
-		ExecutorFinish(query_desc);
-		ExecutorEnd(query_desc);
-		FreeQueryDesc(query_desc);
+			/* Clean up. */
+			ExecutorFinish(query_desc);
+			ExecutorEnd(query_desc);
+			FreeQueryDesc(query_desc);
 
-		MyCQStats = &state->stats;
-		cq_stat_report(true);
+			MyCQStats = &state->stats;
+			cq_stat_report(true);
+		}
+		PG_CATCH();
+		{
+			EmitErrorReport();
+			FlushErrorState();
+		}
+		PG_END_TRY();
 	}
 
 	CommitTransactionCommand();
