@@ -101,6 +101,12 @@ parse_analyze(Node *parseTree, const char *sourceText,
 
 	Assert(sourceText != NULL); /* required as of 8.4 */
 
+	if (IsA(parseTree, SelectStmt))
+	{
+		SelectStmt *stmt = (SelectStmt *) parseTree;
+		pstate->p_no_locking = stmt->forCombineLookup;
+	}
+
 	pstate->p_sourcetext = sourceText;
 
 	if (numParams > 0)
@@ -112,6 +118,7 @@ parse_analyze(Node *parseTree, const char *sourceText,
 	{
 		SelectStmt *stmt = (SelectStmt *) parseTree;
 		query->isContinuous = stmt->forContinuousView;
+		query->isCombineLookup = stmt->forCombineLookup;
 	}
 
 	if (post_parse_analyze_hook)
