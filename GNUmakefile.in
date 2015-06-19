@@ -78,7 +78,7 @@ bootstrap:
 	$(bin_dir)/bootstrap --root=$(prefix)
 
 run:
-	$(bin_dir)/run-dev --root=$(prefix)
+	$(bin_dir)/run-dev --root=$(prefix) --gucs $(GUCS)
 
 GNUmakefile: GNUmakefile.in $(top_builddir)/config.status
 	./config.status $@
