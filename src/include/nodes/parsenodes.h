@@ -1138,10 +1138,13 @@ typedef struct SelectStmt
 	 */
 	SetOperation op;			/* type of set op */
 	bool		all;			/* ALL specified? */
-	bool 		forContinuousView; /* does this SELECT statement for a CREATE CONTINUOUS VIEW statement? */
 	struct SelectStmt *larg;	/* left child */
 	struct SelectStmt *rarg;	/* right child */
 	/* Eventually add fields for CORRESPONDING spec here */
+
+	/* PipelineDB */
+	bool 		forContinuousView; /* does this SELECT statement for a CREATE CONTINUOUS VIEW statement? */
+	bool		forCombineLookup; /* Is this SELECT stmt for looking up groups in the combiner? */
 } SelectStmt;
 
 
