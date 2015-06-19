@@ -201,7 +201,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate(targets);
+		batch = InsertBatchCreate();
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -293,7 +293,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate(targets);
+		batch = InsertBatchCreate();
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -419,7 +419,7 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 	if (synchronous_stream_insert)
 	{
-		batch = InsertBatchCreate(targets);
+		batch = InsertBatchCreate();
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -445,36 +445,30 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
-		InsertBatchWaitAndRemove(batch, ntuples);
+		InsertBatchWaitAndRemove(batch, count);
 
 	return count;
 }
 
-
 InsertBatch *
-InsertBatchCreate(Bitmapset *readers)
+InsertBatchCreate(void)
 {
-	char *ptr = ShmemDynAlloc0(sizeof(InsertBatch) + BITMAPSET_SIZE(readers->nwords));
+	char *ptr = ShmemDynAlloc0(sizeof(InsertBatch));
 	InsertBatch *batch = (InsertBatch *) ptr;
 
 	batch->id = rand() ^ (int) MyProcPid;
 	SpinLockInit(&batch->mutex);
 
-	ptr += sizeof(InsertBatch);
-	batch->readers = (Bitmapset *) ptr;
-	memcpy(batch->readers, readers, BITMAPSET_SIZE(readers->nwords));
-
 	return batch;
 }
 
 void
-InsertBatchWaitAndRemove(InsertBatch *batch, int num_tups)
+InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 {
 	if (cont_queries_active ==  NULL)
 		cont_queries_active = ContQueryGetActiveFlag();
 
-	batch->num_wtups = num_tups;
-
+	batch->num_wtups = num_tuples;
 	while (!StreamBatchAllAcked(batch) && *cont_queries_active)
 	{
 		pg_usleep(SLEEP_MS * 1000);

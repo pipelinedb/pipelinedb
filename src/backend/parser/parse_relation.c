@@ -1061,6 +1061,10 @@ addRangeTableEntry(ParseState *pstate,
 	 * depending on whether we're doing SELECT FOR UPDATE/SHARE.
 	 */
 	lockmode = isLockedRefname(pstate, refname) ? RowShareLock : AccessShareLock;
+
+	if (pstate->p_no_locking)
+		lockmode = NoLock;
+
 	rel = parserOpenTable(pstate, relation, lockmode);
 	rte->relid = RelationGetRelid(rel);
 	rte->relkind = rel->rd_rel->relkind;

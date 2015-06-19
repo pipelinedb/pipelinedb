@@ -157,7 +157,7 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	 * This should have already been done by the caller when creating the matrel,
 	 * but just to be safe...
 	 */
-	namespace = RangeVarGetAndCheckCreationNamespace(name, NoLock, NULL);
+	namespace = RangeVarGetCreationNamespace(name);
 
 	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
 

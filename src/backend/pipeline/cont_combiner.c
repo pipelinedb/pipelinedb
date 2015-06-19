@@ -311,14 +311,15 @@ get_cached_groups_plan(ContQueryCombinerState *state, List *values)
 	res->val = (Node *) cref;
 	sel->targetList = list_make1(res);
 	sel->fromClause = list_make1(state->view->matrel);
+	sel->forCombineLookup = true;
 
 	/* populate the ParseState's p_varnamespace member */
 	ps = make_parsestate(NULL);
+	ps->p_no_locking = true;
 	transformFromClause(ps, sel->fromClause);
 
 	qlist = pg_analyze_and_rewrite((Node *) sel, state->view->matrel->relname, NULL, 0);
 	query = (Query *) linitial(qlist);
-	query->isCombineLookup = true;
 
 	if (state->ngroupatts > 0 && list_length(values))
 	{
@@ -417,7 +418,7 @@ select_existing_groups(ContQueryCombinerState *state, TupleHashTable existing)
 	dest = CreateDestReceiver(DestTupleTable);
 	SetTupleTableDestReceiverParams(dest, existing, CurrentMemoryContext, true);
 
-	PortalStart(portal, NULL, 0, NULL);
+	PortalStart(portal, NULL, EXEC_FLAG_COMBINE_LOOKUP, NULL);
 
 	(void) PortalRun(portal,
 					 FETCH_ALL,
@@ -593,9 +594,6 @@ combine(ContQueryCombinerState *state)
 
 	CQMatViewClose(state->ri);
 	heap_close(state->matrel, RowExclusiveLock);
-
-	state->ri = NULL;
-	state->matrel = NULL;
 }
 
 static void
@@ -651,7 +649,13 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		Relation matrel;
 		ResultRelInfo *ri;
 
+		state->groupatts = agg->grpColIdx;
+		state->ngroupatts = agg->numCols;
+		state->groupops = agg->grpOperators;
+		state->isagg = true;
+
 		matrel = heap_openrv_extended(state->view->matrel, AccessShareLock, true);
+
 		if (matrel == NULL)
 		{
 			state->view = NULL;
@@ -659,11 +663,6 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		}
 
 		ri = CQMatViewOpen(matrel);
-
-		state->groupatts = agg->grpColIdx;
-		state->ngroupatts = agg->numCols;
-		state->groupops = agg->grpOperators;
-		state->isagg = true;
 
 		/*
 		 * In order for the hashed group index to be usable, we must use an expression
@@ -791,7 +790,6 @@ get_query_state(ContQueryCombinerState **states, Oid id, MemoryContext context)
 
 	return state;
 }
-
 
 static int
 read_batch(ContQueryCombinerState *state, TupleBufferBatchReader *reader)
