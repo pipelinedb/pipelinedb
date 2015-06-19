@@ -16,12 +16,14 @@ def test_concurrent_add_drop(pipeline, clean_db):
 
   stop = False
   values = map(lambda x: (x, ), xrange(1000))
+  num_inserted = [0]
 
   def insert():
     while True:
       if stop:
         break
       pipeline.insert('stream', ['x'], values)
+      num_inserted[0] += 1
       time.sleep(0.001)
 
   def add_drop(prefix):
@@ -68,3 +70,8 @@ def test_concurrent_add_drop(pipeline, clean_db):
   views = list(pipeline.execute('SELECT name FROM pipeline_query'))
   mrels = list(pipeline.execute("SELECT relname FROM pg_class WHERE relname LIKE 'cv%%_mrel0'"))
   assert len(views) == len(mrels)
+
+  counts = list(pipeline.execute('SELECT * FROM cv'))
+  assert len(counts) == 1000
+  for r in counts:
+    assert r['count'] == num_inserted[0]
