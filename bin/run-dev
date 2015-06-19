@@ -11,98 +11,109 @@ import time
 
 DATA_DIR = 'data'
 SERVER = 'src/backend/pipeline-server'
-PROCS = []
+POSTMASTER = None
 
 
 def _kill(sig):
-    out, err = subprocess.Popen(['ps', 'x'], stdout=subprocess.PIPE).communicate()
-    errprocs = []
-    for line in out.split('\n'):
-        if __file__ not in line and 'pipeline-server' in line:
-            pid = line.split()[0]
-            try:
-                os.kill(int(pid), sig)
-            except OSError: pass # It might already be dead so just ignore the exception
+  out, err = subprocess.Popen(['ps', 'x'],
+                              stdout=subprocess.PIPE).communicate()
+  errprocs = []
+  for line in out.split('\n'):
+    if __file__ not in line and 'pipeline-server' in line:
+      pid = line.split()[0]
+      try:
+        os.kill(int(pid), sig)
+      except OSError:
+        pass # It might already be dead so just ignore the exception
 
 
 def _find_root():
-    if not os.path.exists('config.status'):
-        return None
+  if not os.path.exists('config.status'):
+    return None
 
-    path = None
-    config = open('config.status')
-    lines = [l.strip() for l in config.readlines()]
-    for line in lines:
-        if line.startswith('S["prefix"]='):
-            path = line.split('=')[1][1:-1]
+  path = None
+  config = open('config.status')
+  lines = [l.strip() for l in config.readlines()]
+  for line in lines:
+    if line.startswith('S["prefix"]='):
+      path = line.split('=')[1][1:-1]
+      break
 
-    config.close()
+  config.close()
 
-    return path
+  return path
 
 
 def handle_sigint(sig, frame):
-    """
-    Ctrl+C
-    """
-    _kill(signal.SIGINT)
-    _kill(signal.SIGKILL)
-
+  """
+  Ctrl+C
+  """
+  _kill(signal.SIGINT)
+  _kill(signal.SIGKILL)
 
 signal.signal(signal.SIGINT, handle_sigint)
 
 
 def main(args):
-    if not args.root:
-        args.root = _find_root()
+  if not args.root:
+    args.root = _find_root()
 
-    if args.root is None:
-        print 'Could not find root PipelineDB installation directory. Specify it with the --root option.'
-        sys.exit(1)
+  if args.root is None:
+    print 'Could not find root PipelineDB installation directory. Specify it with the --root option.'
+    sys.exit(1)
 
-    root = os.path.expandvars(args.root)
-    root = os.path.expanduser(root)
-    skip = args.skip or []
+  root = os.path.expandvars(args.root)
+  root = os.path.expanduser(root)
 
-    # Make sure we've already bootstrapped
-    if not os.path.exists(os.path.join(root, 'data')):
-        print 'Root directory %s not bootstrapped. Did you run `make bootstrap`?' % root
-        sys.exit(1)
+  # Make sure we've already bootstrapped
+  if not os.path.exists(os.path.join(root, 'data')):
+    print ('Root directory %s not bootstrapped. Did you run `make bootstrap`?'
+           % root)
+    sys.exit(1)
 
-    # Make sure that there are no PipelineDB processes already running
-    out, err = subprocess.Popen(['ps', 'x'], stdout=subprocess.PIPE).communicate()
-    errprocs = []
-    for line in out.split('\n'):
-        if __file__ not in line and 'pipeline-server' in line:
-            errprocs.append(line)
+  # Make sure that there are no PipelineDB processes already running
+  out, err = subprocess.Popen(['ps', 'x'],
+                              stdout=subprocess.PIPE).communicate()
+  errprocs = []
+  for line in out.split('\n'):
+    if __file__ not in line and 'pipeline-server' in line:
+      errprocs.append(line)
 
-    if errprocs:
-        print 'The following processes must be terminated before running PipelineDB:'
-        for p in errprocs:
-            print p
-        sys.exit(1)
+  if errprocs:
+    print 'The following processes must be terminated before running PipelineDB:'
+    for p in errprocs:
+      print p
+    sys.exit(1)
 
-    data_dir = os.path.join(root, DATA_DIR)
-    PROCS.append(subprocess.Popen([SERVER, '-D' , data_dir, '-p', args.port, '-c', 'synchronous_stream_insert=true']))
-    if args.stmts:
-        time.sleep(0.1)
-        for stmt in args.stmts:
-            p = subprocess.Popen(['psql', '-c', stmt], stdout=subprocess.PIPE)
-            print stmt.upper()
+  cmd = [SERVER, '-D' , os.path.join(root, DATA_DIR), '-p', args.port,
+         '-c', 'synchronous_stream_insert=true']
 
-    for p in PROCS:
-        p.wait()
+  for guc in args.gucs:
+    if len(guc.split('=')) != 2:
+      print 'Invalid GUC parameter: %s' % guc
+      sys.exit(1)
+    cmd.extend(['-c', guc])
+
+  POSTMASTER = subprocess.Popen(cmd)
+  if args.stmts:
+    time.sleep(0.5)
+    for stmt in args.stmts:
+      p = subprocess.Popen(['psql', '-c', stmt], stdout=subprocess.PIPE)
+      print stmt.upper()
+
+  POSTMASTER.wait()
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--root', action='store', dest='root', required=False,
-                    help='Root directory in which PipelineDB is installed')
-    parser.add_argument('--skip', action='append', dest='skip', required=False,
-                    help='Prevent the given node from being launched')
-    parser.add_argument('--stmt', action='append', dest='stmts', required=False,
-                    help='SQL statements to run after all daemons are running')
-    parser.add_argument('--port', action='store', dest='port', required=False, default='6543',
-                    help='Server port to connect to')
-    args = parser.parse_args()
-    main(args)
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--root', action='store', dest='root', required=False,
+                      help='Root directory in which PipelineDB is installed')
+  parser.add_argument('--stmt', action='append', dest='stmts', required=False,
+                      help='SQL statements to run after all daemons are running')
+  parser.add_argument('--port', action='store', dest='port', required=False,
+                      default='6543', help='Server port to connect to')
+  parser.add_argument('--gucs', action='store', dest='gucs', required=False,
+                      nargs='*',
+                      help='GUC parameters to pass to the postmaster')
+  args = parser.parse_args()
+  main(args)
