@@ -95,10 +95,10 @@ typedef enum
 	DestIntoRel,				/* results sent to relation (SELECT INTO) */
 	DestCopyOut,				/* results sent to COPY TO code */
 	DestSQLFunction,			/* results sent to SQL-language func mgr */
-	DestTupleTable,					/* results sent to a TupleHashTable */
+	DestTupleTable,				/* results sent to a TupleHashTable */
 	DestTransientRel,			/* results sent to transient relation */
-	DestCombiner,	/* results are sent to a CQ combiner process */
-	DestStream, /* results are sent to a stream */
+	DestCombiner,				/* results are sent to the CombinerTupleBuffer */
+	DestStream, 				/* results are sent to the WorkerTupleBuffer */
 } CommandDest;
 
 /* ----------------
