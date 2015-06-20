@@ -51,7 +51,6 @@ typedef enum NodeTag
 	T_BitmapOr,
 	T_Scan,
 	T_SeqScan,
-	T_StreamScan,
 	T_IndexScan,
 	T_IndexOnlyScan,
 	T_BitmapIndexScan,
@@ -63,20 +62,16 @@ typedef enum NodeTag
 	T_CteScan,
 	T_WorkTableScan,
 	T_ForeignScan,
-	T_TuplestoreScan,
 	T_Join,
 	T_NestLoop,
 	T_MergeJoin,
 	T_HashJoin,
-	T_StreamTableJoin,
-	T_PhysicalGroupLookup,
 	T_Material,
 	T_Sort,
 	T_Group,
 	T_Agg,
 	T_WindowAgg,
 	T_Unique,
-	T_ContinuousUnique,
 	T_Hash,
 	T_SetOp,
 	T_LockRows,
@@ -101,7 +96,6 @@ typedef enum NodeTag
 	T_BitmapOrState,
 	T_ScanState,
 	T_SeqScanState,
-	T_StreamScanState,
 	T_IndexScanState,
 	T_IndexOnlyScanState,
 	T_BitmapIndexScanState,
@@ -113,20 +107,16 @@ typedef enum NodeTag
 	T_CteScanState,
 	T_WorkTableScanState,
 	T_ForeignScanState,
-	T_TuplestoreScanState,
 	T_JoinState,
 	T_NestLoopState,
 	T_MergeJoinState,
 	T_HashJoinState,
-	T_StreamTableJoinState,
-	T_PhysicalGroupLookupState,
 	T_MaterialState,
 	T_SortState,
 	T_GroupState,
 	T_AggState,
 	T_WindowAggState,
 	T_UniqueState,
-	T_ContinuousUniqueState,
 	T_HashState,
 	T_SetOpState,
 	T_LockRowsState,
@@ -181,7 +171,6 @@ typedef enum NodeTag
 	T_JoinExpr,
 	T_FromExpr,
 	T_IntoClause,
-	T_StreamDesc,
 
 	/*
 	 * TAGS FOR EXPRESSION STATE NODES (execnodes.h)
@@ -233,8 +222,6 @@ typedef enum NodeTag
 	T_NestPath,
 	T_MergePath,
 	T_HashPath,
-	T_StreamTableJoinPath,
-	T_PhysicalGroupLookupPath,
 	T_TidPath,
 	T_ForeignPath,
 	T_AppendPath,
@@ -286,12 +273,9 @@ typedef enum NodeTag
 	T_DeleteStmt,
 	T_UpdateStmt,
 	T_SelectStmt,
-	T_ActivateStmt,
 	T_AlterTableStmt,
 	T_AlterTableCmd,
 	T_AlterDomainStmt,
-	T_CreateContViewStmt,
-	T_CreateEncodingStmt,
 	T_SetOperationStmt,
 	T_GrantStmt,
 	T_GrantRoleStmt,
@@ -301,7 +285,6 @@ typedef enum NodeTag
 	T_CopyStmt,
 	T_CreateStmt,
 	T_DefineStmt,
-	T_DeactivateStmt,
 	T_DropStmt,
 	T_TruncateStmt,
 	T_CommentStmt,
@@ -323,7 +306,6 @@ typedef enum NodeTag
 	T_DropdbStmt,
 	T_VacuumStmt,
 	T_ExplainStmt,
-	T_ExplainContViewStmt,
 	T_CreateTableAsStmt,
 	T_CreateSeqStmt,
 	T_AlterSeqStmt,
@@ -449,7 +431,30 @@ typedef enum NodeTag
 	T_WindowObjectData,			/* private in nodeWindowAgg.c */
 	T_TIDBitmap,				/* in nodes/tidbitmap.h */
 	T_InlineCodeBlock,			/* in nodes/parsenodes.h */
-	T_FdwRoutine				/* in foreign/fdwapi.h */
+	T_FdwRoutine,				/* in foreign/fdwapi.h */
+
+	/*
+	 * TAGS FOR PIPELINEDB
+	 */
+	T_StreamScan = 5000,
+	T_TuplestoreScan,
+	T_StreamTableJoin,
+	T_PhysicalGroupLookup,
+	T_ContinuousUnique,
+
+	T_StreamScanState,
+	T_TuplestoreScanState,
+	T_StreamTableJoinState,
+	T_PhysicalGroupLookupState,
+	T_ContinuousUniqueState,
+
+	T_StreamTableJoinPath,
+	T_PhysicalGroupLookupPath,
+
+	T_ActivateStmt,
+	T_CreateContViewStmt,
+	T_DeactivateStmt,
+	T_ExplainContViewStmt
 } NodeTag;
 
 /*
