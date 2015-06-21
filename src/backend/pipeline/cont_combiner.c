@@ -224,9 +224,6 @@ get_groups(ContQueryCombinerState *state, List *values, ParseState *ps)
 	Node *where;
 	SubLink *sub = makeNode(SubLink);
 	SelectStmt *sel = makeNode(SelectStmt);
-	int i;
-	FuncExpr *func;
-	List *args = NIL;
 
 	sel->valuesLists = values;
 
@@ -234,33 +231,8 @@ get_groups(ContQueryCombinerState *state, List *values, ParseState *ps)
 	 * Now create a subquery to join the matrel against, which
 	 * will result in a retrieval of existing groups to update.
 	 */
-	if (state->hashfunc)
-	{
-		func = copyObject(state->hashfunc);
-	}
-	else
-	{
-		/*
-		 * In the event that something strange happened, such as a user
-		 * deleting the hash index, we can still try our best to rebuild
-		 * it here.
-		 */
-		for (i=0; i<state->ngroupatts; i++)
-		{
-			AttrNumber groupattr = state->groupatts[i];
-			Form_pg_attribute attr = state->desc->attrs[groupattr - 1];
-
-			Var *v = makeVar(1, groupattr, attr->atttypid,
-					attr->atttypmod, attr->attcollation, 0);
-
-			args = lappend(args, v);
-		}
-
-		func = makeFuncExpr(HASH_GROUP_OID, INT4OID, args, 0, 0, COERCE_EXPLICIT_CALL);
-	}
-
 	sub->subLinkType = ANY_SUBLINK;
-	sub->testexpr = (Node *) func;
+	sub->testexpr = (Node *) copyObject(state->hashfunc);
 	sub->operName = list_make1(makeString("="));
 	sub->subselect = (Node *) sel;
 
@@ -656,33 +628,36 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		matrel = heap_openrv(state->view->matrel, AccessShareLock);
 		ri = CQMatViewOpen(matrel);
 
-		/*
-		 * In order for the hashed group index to be usable, we must use an expression
-		 * that is equivalent to the index expression in the group lookup. The best way
-		 * to do this is to just copy the actual index expression. If something strange
-		 * happens, such as a user deleting the hash index, we still try our best to
-		 * reconstruct this expression later.
-		 */
-		for (i = 0; i < ri->ri_NumIndices; i++)
+		if (state->ngroupatts)
 		{
-			IndexInfo *idx = ri->ri_IndexRelationInfo[i];
-			Node *n;
-			FuncExpr *func;
+			/*
+			 * In order for the hashed group index to be usable, we must use an expression
+			 * that is equivalent to the index expression in the group lookup. The best way
+			 * to do this is to just copy the actual index expression.
+			 */
+			for (i = 0; i < ri->ri_NumIndices; i++)
+			{
+				IndexInfo *idx = ri->ri_IndexRelationInfo[i];
+				Node *n;
+				FuncExpr *func;
 
-			if (!idx->ii_Expressions || list_length(idx->ii_Expressions) != 1)
-				continue;
+				if (!idx->ii_Expressions || list_length(idx->ii_Expressions) != 1)
+					continue;
 
-			n = linitial(idx->ii_Expressions);
-			if (!IsA(n, FuncExpr))
-				continue;
+				n = linitial(idx->ii_Expressions);
+				if (!IsA(n, FuncExpr))
+					continue;
 
-			func = (FuncExpr *) n;
-			if ((func->funcid != HASH_GROUP_OID && func->funcid != LS_HASH_GROUP_OID) ||
-					list_length(func->args) != state->ngroupatts)
-				continue;
+				func = (FuncExpr *) n;
+				if ((func->funcid != HASH_GROUP_OID && func->funcid != LS_HASH_GROUP_OID) ||
+						list_length(func->args) != state->ngroupatts)
+					continue;
 
-			state->hashfunc = copyObject(func);
-			break;
+				state->hashfunc = copyObject(func);
+				break;
+			}
+
+			Assert(state->hashfunc);
 		}
 
 		CQMatViewClose(ri);
