@@ -198,8 +198,8 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
  * impossible to do automatically in a smart way, but for some queries,
  * such as single-column GROUP BYs, it's straightforward.
  */
-static void
-create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
+static Oid
+create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
 		SelectStmt *workerstmt, SelectStmt *viewstmt)
 {
 	IndexStmt *index;
@@ -207,9 +207,10 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query
 	Node *expr = NULL;
 	bool sliding = IsSlidingWindowSelectStmt(workerstmt);
 	char *indexcolname = NULL;
+	Oid index_oid;
 
 	if (query->groupClause == NIL && !sliding)
-		return;
+		return InvalidOid;
 
 	if (query->groupClause == NIL && sliding)
 	{
@@ -260,8 +261,10 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query
 	index->initdeferred = false;
 	index->concurrent = false;
 
-	DefineIndex(matreloid, index, InvalidOid, false, false, false, false);
+	index_oid = DefineIndex(matreloid, index, InvalidOid, false, false, false, false);
 	CommandCounterIncrement();
+
+	return index_oid;
 }
 
 static char *
@@ -311,7 +314,7 @@ get_select_query_sql(RangeVar *view, const char *sql)
 }
 
 static void
-record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
+record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *from)
 {
 	ObjectAddress parent;
 	ObjectAddress child;
@@ -337,8 +340,8 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
 	recordDependencyOn(&child, &parent, DEPENDENCY_INTERNAL);
 
 	/*
-	 * Record a dependency between the matrel and a pipeline_query entry so that when
-	 * the matrel is dropped the pipeline_query metadata cleanup hook is invoked.
+	 * Record a dependency between the view its pipeline_query entry so that when
+	 * the view is dropped the pipeline_query metadata cleanup hook is invoked.
 	 */
 	child.classId = PipelineQueryRelationId;
 	child.objectId = cvoid;
@@ -349,6 +352,23 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, List *from)
 	parent.objectSubId = 0;
 
 	recordDependencyOn(&child, &parent, DEPENDENCY_INTERNAL);
+
+	/*
+	 * Record a dependency between the matrel and the group lookup index so that the
+	 * index can never be dropped.
+	 */
+	if (OidIsValid(indexoid))
+	{
+		child.classId = RelationRelationId;
+		child.objectId = indexoid;
+		child.objectSubId = 0;
+
+		parent.classId = RelationRelationId;
+		parent.objectId = matreloid;
+		parent.objectSubId = 0;
+
+		recordDependencyOn(&child, &parent, DEPENDENCY_INTERNAL);
+	}
 
 	collect_rels_and_streams((Node *) from, &cxt);
 
@@ -403,6 +423,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	Oid matreloid;
 	Oid viewoid;
 	Oid cvoid;
+	Oid indexoid;
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *workerselect;
@@ -523,18 +544,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 			mat_relation, IsSlidingWindowSelectStmt(viewselect), !SelectsFromStreamOnly(workerselect));
 	CommandCounterIncrement();
 
-	/*
-	 * Create a VIEW over the CQ materialization relation which exposes
-	 * only the columns that users expect. This is needed primarily for three
-	 * reasons:
-	 *
-	 * 1. Sliding window queries. For such queries, this VIEW filters events out
-	 *    of the window (that have not been GC'd).
-	 * 2. Some aggregate operators require storing some additional state along
-	 *    with partial results and this VIEW filters out such hidden
-	 *    columns.
-	 * 3. View also computes expressions on aggregates.
-	 */
+	/* Create the view on the matrel */
 	viewselect->fromClause = list_make1(mat_relation);
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
@@ -542,18 +552,12 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	viewoid = DefineView(view_stmt, querystring);
 	CommandCounterIncrement();
-	allowSystemTableMods = saveAllowSystemTableMods;
 
-	record_dependencies(cvoid, matreloid, viewoid, workerselect->fromClause);
+	/* Create group look up index and record dependencies */
+	indexoid = create_index_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);
+	record_dependencies(cvoid, matreloid, viewoid, indexoid, workerselect->fromClause);
 
-	/*
-	 * Record a dependency between the matrel and the view, so when we drop the view
-	 * the matrel is automatically dropped as well. The user will enter the view name
-	 * when dropping, so the alternative is to rewrite the drop target to the matrel.
-	 * This seems simpler.
-	 */
 	allowSystemTableMods = saveAllowSystemTableMods;
-	create_indices_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);
 }
 
 /*
