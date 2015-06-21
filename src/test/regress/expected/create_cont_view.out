@@ -457,8 +457,6 @@ DROP SCHEMA test_create_cont_view CASCADE;
 NOTICE:  drop cascades to view test_create_cont_view.legit
 CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM create_cont_stream1
 GROUP BY a, b, c, d, e;
---A user-specified fillfactor should override the default
-CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM stream;
 \d+ multigroupindex;
                  View "public.multigroupindex"
  Column |       Type       | Modifiers | Storage  | Description 
@@ -492,6 +490,15 @@ Indexes:
     "multigroupindex_mrel0_expr_idx" btree (hash_group(a, b, c, d, e))
 Options: fillfactor=50
 
+--A user-specified fillfactor should override the default
+CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM stream;
+\d+ withff_mrel0;
+                    Table "public.withff_mrel0"
+ Column |  Type  | Modifiers | Storage | Stats target | Description 
+--------+--------+-----------+---------+--------------+-------------
+ count  | bigint |           | plain   |              | 
+Options: fillfactor=42
+
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;
@@ -511,3 +518,4 @@ DROP CONTINUOUS VIEW cqaggexpr3;
 DROP CONTINUOUS VIEW cqaggexpr4;
 DROP CONTINUOUS VIEW cqgroupby;
 DROP CONTINUOUS VIEW multigroupindex;
+DROP CONTINUOUS VIEW withff;
