@@ -51,7 +51,7 @@ TupleBuffer *CombinerTupleBuffer = NULL;
 int tuple_buffer_blocks;
 
 /*
- * MakeTuple
+ * MakeStreamTuple
  */
 StreamTuple *
 MakeStreamTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, InsertBatchAck *acks)
@@ -60,7 +60,7 @@ MakeStreamTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, InsertBatchAck 
 	t->db_oid = MyDatabaseId;
 	t->heaptup = heaptup;
 	t->desc = PackTupleDesc(desc);
-	t->arrivaltime = GetCurrentTimestamp();
+	t->arrival_time = GetCurrentTimestamp();
 	t->num_acks = num_acks;
 	t->acks = acks;
 	return t;

@@ -82,18 +82,15 @@ CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM 
 \d+ cqgroupby
 \d+ cqgroupby_mrel0;
 
-CREATE SCHEMA test_create_cont_view;
-CREATE CONTINUOUS VIEW test_create_cont_view.legit AS SELECT k0::text FROM create_cont_stream1;
-DROP SCHEMA test_create_cont_view CASCADE;
-
 CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM create_cont_stream1
 GROUP BY a, b, c, d, e;
 
---A user-specified fillfactor should override the default
-CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM stream;
-
 \d+ multigroupindex;
 \d+ multigroupindex_mrel0;
+
+--A user-specified fillfactor should override the default
+CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM stream;
+\d+ withff;
 
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
@@ -114,3 +111,4 @@ DROP CONTINUOUS VIEW cqaggexpr3;
 DROP CONTINUOUS VIEW cqaggexpr4;
 DROP CONTINUOUS VIEW cqgroupby;
 DROP CONTINUOUS VIEW multigroupindex;
+DROP CONTINUOUS VIEW withff;

@@ -27,15 +27,11 @@ extern int tuple_buffer_blocks;
 typedef struct StreamTuple
 {
 	Oid db_oid;
-	bytea *desc;
-	/* append-time values */
+	bytea *desc; /* tuple descriptor */
 	HeapTuple heaptup;
-	/* arrival time of the event */
-	TimestampTz arrivaltime;
-	/* length of the acks array */
-	int num_acks;
-	/* the acks this tuple is responsible for */
-	InsertBatchAck *acks;
+	TimestampTz arrival_time; /* arrival time of the event */
+	int num_acks; /* length of the acks array */
+	InsertBatchAck *acks; /* the acks this tuple is responsible for */
 } StreamTuple;
 
 typedef struct TupleBufferSlot

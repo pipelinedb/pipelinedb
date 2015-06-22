@@ -151,10 +151,9 @@ streams_to_meta(Relation pipeline_query)
 
 	ctl.keysize = sizeof(Oid);
 	ctl.entrysize = sizeof(StreamTargetsEntry);
-	ctl.match = memcmp;
-	ctl.keycopy = memcpy;
+	ctl.hash = oid_hash;
 
-	targets = hash_create("streams_to_targets_and_desc", 32, &ctl, HASH_ELEM | HASH_COMPARE | HASH_KEYCOPY);
+	targets = hash_create("streams_to_targets_and_desc", 32, &ctl, HASH_ELEM | HASH_FUNCTION);
 	scandesc = heap_beginscan_catalog(pipeline_query, 0, NULL);
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
@@ -187,10 +186,11 @@ streams_to_meta(Relation pipeline_query)
 			Oid key;
 			bool is_inferred;
 
-			MemSet(&key, 0, sizeof(Oid));
+			/* TODO(usmanm) */
+			if (!rv->schemaname)
+				rv->schemaname = get_namespace_name(catrow->namespace);
 
-			key = RangeVarGetRelid(rv, AccessShareLock, false);
-
+			key = RangeVarGetRelid(rv, NoLock, false);
 			entry = (StreamTargetsEntry *) hash_search(targets, &key, HASH_ENTER, &found);
 
 			if (!found)
