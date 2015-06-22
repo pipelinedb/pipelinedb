@@ -177,7 +177,9 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
 	values[Anum_pipeline_query_needs_xact - 1] = BoolGetDatum(needs_xact);
 
-	hash = MurmurHash3_64(name->relname, strlen(name->relname), MURMUR_SEED) ^ MurmurHash3_64(query_string, strlen(query_string), MURMUR_SEED);
+	hash = (MurmurHash3_64(name->relname, strlen(name->relname), MURMUR_SEED) ^
+			MurmurHash3_64(query_string, strlen(query_string), MURMUR_SEED) ^
+			namespace);
 	values[Anum_pipeline_query_hash - 1] = Int32GetDatum(hash);
 
 	MemSet(nulls, 0, sizeof(nulls));

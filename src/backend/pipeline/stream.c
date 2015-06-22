@@ -264,7 +264,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
 	int count = 0;
 	List *colnames = NIL;
 	TupleDesc desc = NULL;
-	Oid relid = RangeVarGetRelid(ins->relation, AccessShareLock, false);
+	Oid relid = RangeVarGetRelid(ins->relation, NoLock, false);
 	Bitmapset *targets = GetLocalStreamReaders(relid);
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
