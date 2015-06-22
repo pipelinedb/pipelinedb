@@ -211,8 +211,6 @@ void TDigestMerge(TDigest *t1, TDigest *t2)
 		Centroid *c = &t2->centroids[i];
 		TDigestAdd(t1, c->mean, c->weight);
 	}
-
-	TDigestCompress(t1);
 }
 
 float8 TDigestCDF(TDigest *t, float8 x)

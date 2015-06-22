@@ -102,8 +102,7 @@ collect_rels_and_streams(Node *node, ContAnalyzeContext *context)
 
 	if (IsA(node, RangeVar))
 	{
-		Oid reloid = RangeVarGetRelid((RangeVar *) node, NoLock, true);
-		if (!OidIsValid(reloid) || RangeVarIsForStream((RangeVar *) node, NULL))
+		if (RangeVarIsForStream((RangeVar *) node, NULL))
 			context->streams = lappend(context->streams, node);
 		else
 			context->rels = lappend(context->rels, node);
@@ -588,7 +587,6 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 	ContAnalyzeContext *context;
 	ListCell *lc;
 	RangeVar *stream;
-	Oid stream_relid;
 	bool is_inferred;
 
 	if (!IsA(node, SelectStmt))
@@ -665,15 +663,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 				errhint("Remove \"%s\" from the FROM clause.", stream->relname),
 				parser_errposition(context->pstate, stream->location)));
 
-	/* Create an inferred stream if needed */
-	stream_relid = RangeVarGetRelid(stream, AccessShareLock, true);
-	if (!OidIsValid(stream_relid))
-	{
-		CreateInferredStream(stream);
-		is_inferred = true;
-	}
-	else
-		RangeVarIsForStream(stream, &is_inferred);
+	RangeVarIsForStream(stream, &is_inferred);
 
 	/* Ensure that each column being read from an inferred stream is type-casted */
 	if (is_inferred)
@@ -1007,4 +997,33 @@ transformCreateStreamStmt(CreateStreamStmt *stmt)
 
 		stmt->base.tableElts = lappend(stmt->base.tableElts, coldef);
 	}
+}
+
+static bool
+create_inferred_streams(Node *node, void *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, RangeVar))
+	{
+		RangeVar *rv = (RangeVar *) node;
+		Oid relid = RangeVarGetRelid(rv, NoLock, true);
+
+		if (!OidIsValid(relid))
+			CreateInferredStream(rv);
+
+		return false;
+	}
+
+	return raw_expression_tree_walker(node, create_inferred_streams, context);
+}
+
+/*
+ * CreateInferredStreams
+ */
+void
+CreateInferredStreams(SelectStmt *stmt)
+{
+	create_inferred_streams(copyObject(stmt->fromClause), NULL);
 }

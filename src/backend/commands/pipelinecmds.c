@@ -435,6 +435,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
 
+	CreateInferredStreams((SelectStmt *) stmt->query);
 	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
 
 	/*
