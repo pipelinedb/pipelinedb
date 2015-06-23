@@ -5,6 +5,8 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
+import threading
 import time
 
 from sqlalchemy import create_engine
@@ -85,12 +87,32 @@ class PipelineDB(object):
                                       '-p', str(self.port),
                                       '-c', 'synchronous_stream_insert=true',
                                       '-c', 'continuous_query_num_combiners=2',
-                                      '-c', 'continuous_query_num_workers=4'])
+                                      '-c', 'continuous_query_num_workers=4'],
+                                     stderr=subprocess.PIPE)
+
+        # Wait for PipelineDB to start up
+        while True:
+          line = self.proc.stderr.readline()
+          sys.stderr.write(line)
+          if 'database system is ready to accept connections' in line:
+            break
+          elif ('database system is shut down' in line or
+                (line == '' and self.proc.poll() != None)):
+            raise Exception('Failed to start up PipelineDB')
+
+        # Add log tailer
+        def run():
+          while True:
+            line = self.proc.stderr.readline()
+            if line == '' and self.proc.poll() != None:
+              return
+            sys.stderr.write(line)
+        threading.Thread(target=run).start()
 
         connstr = CONNSTR_TEMPLATE % (getpass.getuser(), self.port)
         self.engine = create_engine(connstr)
 
-        # Wait for PipelineDB to start up
+        # Wait to connect to PipelineDB
         for i in xrange(10):
           try:
             self.conn = self.engine.connect()
@@ -98,7 +120,7 @@ class PipelineDB(object):
           except OperationalError:
             time.sleep(0.1)
         else:
-          raise Exception('Failed to start up PipelineDB')
+          raise Exception('Failed to connect to PipelineDB')
 
     def stop(self):
       """
@@ -135,10 +157,8 @@ class PipelineDB(object):
 
     def drop_all_views(self):
         """
-        Drop a database within this PipelineDB instance
+        Drop all continuous views
         """
-        # We can't drop a DB in a transaction block
-        self.conn.execute('commit')
         views = self.execute('SELECT name FROM pipeline_query')
         for view in views:
           self.execute('DROP CONTINUOUS VIEW %s' % view['name'])
