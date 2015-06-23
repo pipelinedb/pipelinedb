@@ -3092,7 +3092,7 @@ static struct config_string ConfigureNamesString[] =
 			GUC_SUPERUSER_ONLY
 		},
 		&Log_directory,
-		"pg_log",
+		"log",
 		check_canonical_path, NULL, NULL
 	},
 	{
@@ -3102,7 +3102,7 @@ static struct config_string ConfigureNamesString[] =
 			GUC_SUPERUSER_ONLY
 		},
 		&Log_filename,
-		"postgresql-%Y-%m-%d_%H%M%S.log",
+		"pipeline-%Y-%m-%d_%H%M%S.log",
 		NULL, NULL, NULL
 	},
 
@@ -3113,7 +3113,7 @@ static struct config_string ConfigureNamesString[] =
 			NULL
 		},
 		&syslog_ident_str,
-		"postgres",
+		"pipeline",
 		NULL, assign_syslog_ident, NULL
 	},
 
@@ -3124,7 +3124,7 @@ static struct config_string ConfigureNamesString[] =
 			NULL
 		},
 		&event_source,
-		"PostgreSQL",
+		"PipelineDB",
 		NULL, NULL, NULL
 	},
 
@@ -9202,7 +9202,7 @@ static void
 assign_syslog_facility(int newval, void *extra)
 {
 #ifdef HAVE_SYSLOG
-	set_syslog_parameters(syslog_ident_str ? syslog_ident_str : "postgres",
+	set_syslog_parameters(syslog_ident_str ? syslog_ident_str : "pipeline",
 						  newval);
 #endif
 	/* Without syslog support, just ignore it */

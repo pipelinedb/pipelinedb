@@ -188,7 +188,7 @@ fi
 
 PGDATA=$BASE_PGDATA
 
-standard_initdb 'initdb'
+standard_initdb 'pipeline-init'
 
 pg_upgrade $PG_UPGRADE_OPTS -d "${PGDATA}.old" -D "${PGDATA}" -b "$oldbindir" -B "$bindir" -p "$PGPORT" -P "$PGPORT"
 

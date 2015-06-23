@@ -354,7 +354,7 @@ adjust_data_dir(ClusterInfo *cluster)
 			   *output;
 
 	/* If there is no postgresql.conf, it can't be a config-only dir */
-	snprintf(filename, sizeof(filename), "%s/postgresql.conf", cluster->pgconfig);
+	snprintf(filename, sizeof(filename), "%s/pipelinedb.conf", cluster->pgconfig);
 	if ((fp = fopen(filename, "r")) == NULL)
 		return;
 	fclose(fp);
