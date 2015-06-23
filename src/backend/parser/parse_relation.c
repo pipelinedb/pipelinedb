@@ -1010,6 +1010,8 @@ transformRelationRTEToStreamRTE(RangeTblEntry *rte, Relation rel)
 {
 	int i;
 
+	Assert(rte->rtekind == RTE_RELATION);
+
 	rte->rtekind = RTE_STREAM;
 
 	/*
