@@ -414,6 +414,12 @@ delete_nonexistent_streams(Relation pipeline_stream, List *keys)
 				bool nulls[Natts_pipeline_stream];
 				bool replaces[Natts_pipeline_stream];
 				HeapTuple newtup;
+				bool isnull;
+				Datum queries = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
+
+				/* If queries is already NULL, this is a noop */
+				if (isnull)
+					continue;
 
 				MemSet(nulls, false, Natts_pipeline_stream);
 				MemSet(replaces, false, sizeof(replaces));
