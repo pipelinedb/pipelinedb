@@ -54,6 +54,7 @@
 #include "catalog/pg_type.h"
 #include "catalog/pg_user_mapping.h"
 #include "catalog/pipeline_query.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/comment.h"
 #include "commands/defrem.h"
 #include "commands/event_trigger.h"
@@ -1254,6 +1255,10 @@ doDeletion(const ObjectAddress *object, int flags)
 			RemoveContinuousViewById(object->objectId);
 			break;
 
+		case OCLASS_STREAM:
+			RemovePipelineStreamById(object->objectId);
+			break;
+
 		default:
 			elog(ERROR, "unrecognized object class: %u",
 				 object->classId);
@@ -2362,6 +2367,9 @@ getObjectClass(const ObjectAddress *object)
 
 		case PipelineQueryRelationId:
 			return OCLASS_CONTINUOUS_VIEW;
+
+		case PipelineStreamRelationId:
+			return OCLASS_STREAM;
 	}
 
 	/* shouldn't get here */

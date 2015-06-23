@@ -21,11 +21,13 @@
 #include "catalog/objectaddress.h"
 #include "catalog/pg_class.h"
 #include "catalog/pg_proc.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/defrem.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_type.h"
 #include "utils/builtins.h"
+#include "utils/lsyscache.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
@@ -80,14 +82,6 @@ RemoveObjects(DropStmt *stmt)
 									 &relation,
 									 AccessExclusiveLock,
 									 stmt->missing_ok);
-
-		/*
-		 * PipelineDB TODO: support online dropping of columns
-		 */
-		if (relation && relation->rd_rel->relkind == RELKIND_STREAM)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 (errmsg("streams columns can not be dropped"))));
 
 		/*
 		 * Issue NOTICE if supplied object was not found.  Note this is only

@@ -242,7 +242,7 @@ ExecStreamProject(StreamTuple *event, StreamScanState *node)
 	{
 		if (pg_strcasecmp(NameStr(desc->attrs[i]->attname), ARRIVAL_TIMESTAMP) == 0)
 		{
-			values[i] = TimestampGetDatum(event->arrivaltime);
+			values[i] = TimestampGetDatum(event->arrival_time);
 			nulls[i] = false;
 			break;
 		}

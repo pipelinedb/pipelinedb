@@ -32,7 +32,7 @@ listPipelineQuery(void)
 	printQueryOpt myopt = pset.popt;
 
 	initPQExpBuffer(&buf);
-	printfPQExpBuffer(&buf,	SELECT_CONTINUOUS_VIEWS);
+	printfPQExpBuffer(&buf,	"SELECT * FROM pipeline_queries()");
 
 	res = PSQLexec(buf.data, false);
 	termPQExpBuffer(&buf);
