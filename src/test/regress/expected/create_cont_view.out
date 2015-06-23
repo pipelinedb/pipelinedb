@@ -89,7 +89,7 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate3';
                 View "public.cqcreate3"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
- key    | text    |           | extended | 
+ key    | text(0) |           | extended | 
  count  | bigint  |           | plain    | 
  sum    | numeric |           | main     | 
 View definition:
@@ -102,7 +102,7 @@ View definition:
                     Table "public.cqcreate3_mrel0"
  Column |  Type   | Modifiers | Storage  | Stats target | Description 
 --------+---------+-----------+----------+--------------+-------------
- key    | text    |           | extended |              | 
+ key    | text(0) |           | extended |              | 
  count  | bigint  |           | plain    |              | 
  sum    | numeric |           | main     |              | 
  _0     | bytea   |           | extended |              | 
@@ -135,7 +135,7 @@ View definition:
  count  | bigint  |           | plain    |              | 
  sum    | numeric |           | main     |              | 
  _1     | bytea   |           | extended |              | 
- _0     | text    |           | extended |              | 
+ _0     | text(0) |           | extended |              | 
 Indexes:
     "cqcreate4_mrel0_expr_idx" btree (hash_group(_0))
 Options: fillfactor=50
@@ -155,21 +155,21 @@ SELECT gc FROM pipeline_query WHERE name='cqcreate5';
 (1 row)
 
 \d+ cqcreate5;
-              View "public.cqcreate5"
- Column | Type | Modifiers | Storage  | Description 
---------+------+-----------+----------+-------------
- key    | text |           | extended | 
+                View "public.cqcreate5"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ key    | text(0) |           | extended | 
 View definition:
  SELECT cqcreate5_mrel0.key
    FROM cqcreate5_mrel0
   WHERE cqcreate5_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second);
 
 \d+ cqcreate5_mrel0;
-                            Table "public.cqcreate5_mrel0"
- Column |           Type           | Modifiers | Storage  | Stats target | Description 
---------+--------------------------+-----------+----------+--------------+-------------
- key    | text                     |           | extended |              | 
- _0     | timestamp with time zone |           | plain    |              | 
+                              Table "public.cqcreate5_mrel0"
+ Column |            Type             | Modifiers | Storage  | Stats target | Description 
+--------+-----------------------------+-----------+----------+--------------+-------------
+ key    | text(0)                     |           | extended |              | 
+ _0     | timestamp(0) with time zone |           | plain    |              | 
 Indexes:
     "cqcreate5_mrel0__0_idx" btree (_0)
 Options: fillfactor=50
@@ -203,7 +203,7 @@ View definition:
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
  count  | bigint                   |           | plain    |              | 
- _1     | text                     |           | extended |              | 
+ _1     | text(0)                  |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
     "cqcreate6_mrel0_expr_idx" btree (ls_hash_group(_1, _0))
@@ -215,7 +215,7 @@ CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, A
                          View "public.cvavg"
     Column    |       Type       | Modifiers | Storage  | Description 
 --------------+------------------+-----------+----------+-------------
- key          | text             |           | extended | 
+ key          | text(0)          |           | extended | 
  float_avg    | double precision |           | plain    | 
  int_avg      | numeric          |           | main     | 
  internal_avg | interval         |           | plain    | 
@@ -230,7 +230,7 @@ View definition:
                               Table "public.cvavg_mrel0"
     Column    |        Type        | Modifiers | Storage  | Stats target | Description 
 --------------+--------------------+-----------+----------+--------------+-------------
- key          | text               |           | extended |              | 
+ key          | text(0)            |           | extended |              | 
  float_avg    | double precision   |           | plain    |              | 
  _0           | double precision[] |           | extended |              | 
  int_avg      | numeric            |           | main     |              | 
@@ -314,23 +314,23 @@ Options: fillfactor=50
 
 CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text, 1, 2), ',') FROM cont_create_stream2 GROUP BY key;
 \d+ cvtext;
-                  View "public.cvtext"
-   Column   | Type | Modifiers | Storage  | Description 
-------------+------+-----------+----------+-------------
- key        | text |           | extended | 
- string_agg | text |           | extended | 
+                   View "public.cvtext"
+   Column   |  Type   | Modifiers | Storage  | Description 
+------------+---------+-----------+----------+-------------
+ key        | text(0) |           | extended | 
+ string_agg | text    |           | extended | 
 View definition:
  SELECT cvtext_mrel0.key,
     cvtext_mrel0.string_agg
    FROM cvtext_mrel0;
 
 \d+ cvtext_mrel0;
-                      Table "public.cvtext_mrel0"
-   Column   | Type  | Modifiers | Storage  | Stats target | Description 
-------------+-------+-----------+----------+--------------+-------------
- key        | text  |           | extended |              | 
- string_agg | text  |           | extended |              | 
- _0         | bytea |           | extended |              | 
+                       Table "public.cvtext_mrel0"
+   Column   |  Type   | Modifiers | Storage  | Stats target | Description 
+------------+---------+-----------+----------+--------------+-------------
+ key        | text(0) |           | extended |              | 
+ string_agg | text    |           | extended |              | 
+ _0         | bytea   |           | extended |              | 
 Indexes:
     "cvtext_mrel0_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
@@ -359,7 +359,7 @@ CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::in
                     View "public.cqaggexpr2"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
- key    | text             |           | extended | 
+ key    | text(0)          |           | extended | 
  value  | double precision |           | plain    | 
 View definition:
  SELECT cqaggexpr2_mrel0.key,
@@ -370,7 +370,7 @@ View definition:
                          Table "public.cqaggexpr2_mrel0"
  Column |        Type        | Modifiers | Storage  | Stats target | Description 
 --------+--------------------+-----------+----------+--------------+-------------
- key    | text               |           | extended |              | 
+ key    | text(0)            |           | extended |              | 
  _0     | double precision   |           | plain    |              | 
  _2     | double precision[] |           | extended |              | 
  _1     | integer            |           | plain    |              | 
@@ -381,10 +381,10 @@ Options: fillfactor=50
 CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
 \d+ cqaggexpr3;
                View "public.cqaggexpr3"
- Column |  Type  | Modifiers | Storage  | Description 
---------+--------+-----------+----------+-------------
- key    | text   |           | extended | 
- value  | bigint |           | plain    | 
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ key    | text(0) |           | extended | 
+ value  | bigint  |           | plain    | 
 View definition:
  SELECT cqaggexpr3_mrel0.key,
     combine(cqaggexpr3_mrel0.2) AS value
@@ -396,7 +396,7 @@ View definition:
                             Table "public.cqaggexpr3_mrel0"
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
- key    | text                     |           | extended |              | 
+ key    | text(0)                  |           | extended |              | 
  value  | bigint                   |           | plain    |              | 
  _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
@@ -408,7 +408,7 @@ CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS v
                     View "public.cqaggexpr4"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
- key    | text             |           | extended | 
+ key    | text(0)          |           | extended | 
  value  | double precision |           | plain    | 
 View definition:
  SELECT cqaggexpr4_mrel0.key,
@@ -419,7 +419,7 @@ View definition:
                          Table "public.cqaggexpr4_mrel0"
  Column |        Type        | Modifiers | Storage  | Stats target | Description 
 --------+--------------------+-----------+----------+--------------+-------------
- key    | text               |           | extended |              | 
+ key    | text(0)            |           | extended |              | 
  _0     | double precision   |           | plain    |              | 
  _1     | double precision[] |           | extended |              | 
 Indexes:
@@ -431,7 +431,7 @@ CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM 
                 View "public.cqgroupby"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
- k0     | text    |           | extended | 
+ k0     | text(0) |           | extended | 
  k1     | integer |           | plain    | 
  count  | bigint  |           | plain    | 
 View definition:
@@ -444,24 +444,20 @@ View definition:
                     Table "public.cqgroupby_mrel0"
  Column |  Type   | Modifiers | Storage  | Stats target | Description 
 --------+---------+-----------+----------+--------------+-------------
- k0     | text    |           | extended |              | 
+ k0     | text(0) |           | extended |              | 
  k1     | integer |           | plain    |              | 
  count  | bigint  |           | plain    |              | 
 Indexes:
     "cqgroupby_mrel0_expr_idx" btree (hash_group(k0, k1))
 Options: fillfactor=50
 
-CREATE SCHEMA test_create_cont_view;
-CREATE CONTINUOUS VIEW test_create_cont_view.legit AS SELECT k0::text FROM create_cont_stream1;
-DROP SCHEMA test_create_cont_view CASCADE;
-NOTICE:  drop cascades to view test_create_cont_view.legit
 CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM create_cont_stream1
 GROUP BY a, b, c, d, e;
 \d+ multigroupindex;
                  View "public.multigroupindex"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
- a      | text             |           | extended | 
+ a      | text(0)          |           | extended | 
  b      | bigint           |           | plain    | 
  c      | integer          |           | plain    | 
  d      | smallint         |           | plain    | 
@@ -480,7 +476,7 @@ View definition:
                      Table "public.multigroupindex_mrel0"
  Column |       Type       | Modifiers | Storage  | Stats target | Description 
 --------+------------------+-----------+----------+--------------+-------------
- a      | text             |           | extended |              | 
+ a      | text(0)          |           | extended |              | 
  b      | bigint           |           | plain    |              | 
  c      | integer          |           | plain    |              | 
  d      | smallint         |           | plain    |              | 

@@ -1,8 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * cqstatfuncs.h
+ * pipelinefuncs.h
 
- *	  Interface for CQ stats functions
+ *	  Interface for PipelineDB functions
+ *
+ * IDENTIFICATION
+ *	  src/backend/utils/pipelinefuncs.h
  *
  *-------------------------------------------------------------------------
  */
@@ -17,5 +20,11 @@ extern Datum cq_stat_get(PG_FUNCTION_ARGS);
 
 /* stream stats */
 extern Datum stream_stat_get(PG_FUNCTION_ARGS);
+
+/* pipeline queries */
+extern Datum pipeline_queries(PG_FUNCTION_ARGS);
+
+/* pipeline streams */
+extern Datum pipeline_streams(PG_FUNCTION_ARGS);
 
 #endif

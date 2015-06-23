@@ -249,7 +249,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 		DropOwnedStmt ReassignOwnedStmt
 		AlterTSConfigurationStmt AlterTSDictionaryStmt
 		CreateMatViewStmt RefreshMatViewStmt
-		CreateContViewStmt ExplainContViewStmt
+		CreateContViewStmt ExplainContViewStmt CreateStreamStmt
 
 %type <node>	select_no_parens select_with_parens select_clause
 				simple_select values_clause
@@ -763,6 +763,7 @@ stmt :
 			| CreateMatViewStmt
 			| CreateOpClassStmt
 			| CreateOpFamilyStmt
+			| CreateStreamStmt
 			| AlterOpFamilyStmt
 			| CreatePLangStmt
 			| CreateSchemaStmt
@@ -1738,7 +1739,7 @@ DiscardStmt:
 
 /*****************************************************************************
  *
- *	ALTER [ TABLE | INDEX | SEQUENCE | VIEW | MATERIALIZED VIEW ] variations
+ *	ALTER [ TABLE | INDEX | SEQUENCE | VIEW | MATERIALIZED VIEW | STREAM ] variations
  *
  * Note: we accept all subcommands for each of the five variants, and sort
  * out what's really legal at execution time.
@@ -1902,14 +1903,14 @@ AlterTableStmt:
 					$$ = (Node *)n;
 				}
 		| ALTER STREAM qualified_name alter_table_cmds
-		    {
-          AlterTableStmt *n = makeNode(AlterTableStmt);
-          n->relation = $3;
-          n->cmds = $4;
-          n->relkind = OBJECT_STREAM;
-          n->missing_ok = false;
-          $$ = (Node *)n;
-		    }
+				{
+					AlterTableStmt *n = makeNode(AlterTableStmt);
+					n->relation = $3;
+					n->cmds = $4;
+					n->relkind = OBJECT_STREAM;
+					n->missing_ok = false;
+					$$ = (Node *)n;
+				}
 		;
 
 alter_table_cmds:
@@ -2809,7 +2810,34 @@ DeactivateStmt: DEACTIVATE
 /*****************************************************************************
  *
  *		QUERY :
- *				CREATE [ TABLE | STREAM ] relname
+ *				CREATE STREAM relname
+ *
+ *****************************************************************************/
+
+CreateStreamStmt:	CREATE STREAM qualified_name '(' OptTableElementList ')'
+				{
+					CreateStreamStmt *n = makeNode(CreateStreamStmt);
+					n->base.relation = $3;
+					n->base.tableElts = $5;
+					n->base.if_not_exists = false;
+					n->is_inferred = false;
+					$$ = (Node *)n;
+				}
+		| CREATE STREAM IF_P NOT EXISTS qualified_name '(' OptTableElementList ')'
+				{
+					CreateStreamStmt *n = makeNode(CreateStreamStmt);
+					n->base.relation = $6;
+					n->base.tableElts = $8;
+					n->base.if_not_exists = true;
+					n->is_inferred = false;
+					$$ = (Node *)n;
+				}
+		;
+
+/*****************************************************************************
+ *
+ *		QUERY :
+ *				CREATE TABLE relname
  *
  *****************************************************************************/
 
@@ -2876,19 +2904,6 @@ CreateStmt:	CREATE OptTemp TABLE qualified_name '(' OptTableElementList ')'
 					n->if_not_exists = true;
 					$$ = (Node *)n;
 				}
-    | CREATE STREAM qualified_name '(' OptTableElementList ')'
-  		  {
-          CreateStmt *n = makeNode(CreateStmt);
-          $3->relpersistence = RELPERSISTENCE_PERMANENT;
-          n->relation = $3;
-          n->tableElts = $5;
-          n->constraints = NIL;
-          n->options = NIL;
-          n->tablespacename = NULL;
-          n->if_not_exists = false;
-          n->stream = true;
-          $$ = (Node *)n;
-  		  }
 		;
 
 /*
@@ -5386,7 +5401,7 @@ DropStmt:	DROP drop_type IF_P EXISTS any_name_list opt_drop_behavior
 
 drop_type:	TABLE									{ $$ = OBJECT_TABLE; }
 			| CONTINUOUS VIEW						{ $$ = OBJECT_CONTINUOUS_VIEW; }
-			| STREAM                  { $$ = OBJECT_STREAM; }
+			| STREAM                  				{ $$ = OBJECT_STREAM; }
 			| SEQUENCE								{ $$ = OBJECT_SEQUENCE; }
 			| VIEW									{ $$ = OBJECT_VIEW; }
 			| MATERIALIZED VIEW						{ $$ = OBJECT_MATVIEW; }
@@ -7603,27 +7618,6 @@ RenameStmt: ALTER AGGREGATE func_name aggr_args RENAME TO name
 					n->missing_ok = false;
 					$$ = (Node *)n;
 				}
-      | ALTER STREAM qualified_name RENAME TO name
-        {
-          RenameStmt *n = makeNode(RenameStmt);
-          n->renameType = OBJECT_STREAM;
-          n->relation = $3;
-          n->subname = NULL;
-          n->newname = $6;
-          n->missing_ok = false;
-          $$ = (Node *)n;
-        }
-      | ALTER STREAM qualified_name RENAME opt_column name TO name
-        {
-          RenameStmt *n = makeNode(RenameStmt);
-          n->renameType = OBJECT_COLUMN;
-          n->relationType = OBJECT_STREAM;
-          n->relation = $3;
-          n->subname = $6;
-          n->newname = $8;
-          n->missing_ok = false;
-          $$ = (Node *)n;
-        }
 		;
 
 opt_column: COLUMN									{ $$ = COLUMN; }

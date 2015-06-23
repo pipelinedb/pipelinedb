@@ -8323,7 +8323,7 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 			case RTE_STREAM:
 				/* Stream RTE */
 				{
-					Oid namespace = GetStreamNamespace(rte->relid);
+					Oid namespace = get_rel_namespace(rte->relid);
 					char *qualified_name;
 
 					if (namespace != InvalidOid)

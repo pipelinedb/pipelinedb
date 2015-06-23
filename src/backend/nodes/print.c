@@ -50,6 +50,7 @@ debug_segfault(SIGNAL_ARGS)
 	size = backtrace(array, 32);
 	fprintf(stderr, "segfault at:\n");
 	backtrace_symbols_fd(array, size, STDERR_FILENO);
+
 #ifdef DUMP_CORE
 	abort();
 #else

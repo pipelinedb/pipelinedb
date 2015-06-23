@@ -329,13 +329,6 @@ ExecRenameStmt(RenameStmt *stmt)
 
 		case OBJECT_COLUMN:
 		case OBJECT_ATTRIBUTE:
-			/*
-			 * PipelineDB TODO: support online renaming of columns
-			 */
-			if (stmt->relationType == OBJECT_STREAM)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 (errmsg("streams columns can not be renamed"))));
 			return renameatt(stmt);
 
 		case OBJECT_RULE:
@@ -383,15 +376,6 @@ ExecRenameStmt(RenameStmt *stmt)
 				return address.objectId;
 			}
 
-		case OBJECT_STREAM:
-			/*
-			 * PipelineDB TODO: support online dropping of columns
-			 */
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 (errmsg("streams cannot be renamed"))));
-			break;
-
 		default:
 			elog(ERROR, "unrecognized rename stmt type: %d",
 				 (int) stmt->renameType);
@@ -416,7 +400,6 @@ ExecAlterObjectSchemaStmt(AlterObjectSchemaStmt *stmt)
 		case OBJECT_TABLE:
 		case OBJECT_VIEW:
 		case OBJECT_MATVIEW:
-		case OBJECT_STREAM:
 			return AlterTableNamespace(stmt);
 
 		case OBJECT_DOMAIN:

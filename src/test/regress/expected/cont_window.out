@@ -3,7 +3,7 @@ CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PART
                             Table "public.cqwindow0_mrel0"
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
- key    | text                     |           | extended |              | 
+ key    | text(0)                  |           | extended |              | 
  sum    | numeric                  |           | main     |              | 
  _1     | bytea                    |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
@@ -15,7 +15,7 @@ Options: fillfactor=50
                 View "public.cqwindow0"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
- key    | text    |           | extended | 
+ key    | text(0) |           | extended | 
  sum    | numeric |           | main     | 
 View definition:
  SELECT cqwindow0_mrel0.key,
@@ -62,7 +62,7 @@ CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITIO
                             Table "public.cqwindow1_mrel0"
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
- key    | text                     |           | extended |              | 
+ key    | text(0)                  |           | extended |              | 
  avg    | numeric                  |           | main     |              | 
  _1     | bigint[]                 |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
@@ -74,7 +74,7 @@ Options: fillfactor=50
                 View "public.cqwindow1"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
- key    | text    |           | extended | 
+ key    | text(0) |           | extended | 
  avg    | numeric |           | main     | 
 View definition:
  SELECT cqwindow1_mrel0.key,

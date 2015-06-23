@@ -409,7 +409,7 @@ transformAssignedExpr(ParseState *pstate,
 	 * If it's an inferred stream and the attrno is outside our range, then just mask it as a TEXTOID. The attribute is
 	 * going to be ignore anyway.
 	 */
-	if (attrno >= RelationGetNumberOfAttributes(rd) && RelIdIsForInferredStream(RelationGetRelid(rd)))
+	if (attrno > RelationGetNumberOfAttributes(rd) && IsInferredStream(RelationGetRelid(rd)))
 	{
 		attrtype = TEXTOID;
 		attrtypmod = InvalidOid;
@@ -934,7 +934,7 @@ checkInsertTargets(ParseState *pstate, List *cols, List **attrnos)
 			if (attrno == InvalidAttrNumber)
 			{
 				/* If the stream is inferred, just add dummy attrnos beyond the limit of its TupleDesc */
-				if (RelIdIsForInferredStream(RelationGetRelid(pstate->p_target_relation)))
+				if (IsInferredStream(RelationGetRelid(pstate->p_target_relation)))
 					attrno = ++natts;
 				else
 					ereport(ERROR,

@@ -17,13 +17,13 @@ INSERT INTO infer_stream (s) VALUES ('4');
 INSERT INTO infer_stream (s) VALUES ('[0, 1]');
 INSERT INTO infer_stream (s) VALUES ('{"key": "1"}');
 
-SELECT * FROM infer_v0;
-SELECT * FROM infer_v1;
-SELECT * FROM infer_v2;
-SELECT * FROM infer_v3;
-SELECT * FROM infer_v4;
-SELECT * FROM infer_v5;
-SELECT * FROM infer_v6;
+SELECT * FROM infer_v0 ORDER BY x, y;
+SELECT * FROM infer_v1 ORDER BY x, y;
+SELECT * FROM infer_v2 ORDER BY x, y;
+SELECT * FROM infer_v3 ORDER BY x, y;
+SELECT * FROM infer_v4 ORDER BY x, y;
+SELECT * FROM infer_v5 ORDER BY x, y, s::text;
+SELECT * FROM infer_v6 ORDER BY x, y, s::text;
 
 DROP CONTINUOUS VIEW infer_v0;
 DROP CONTINUOUS VIEW infer_v1;
