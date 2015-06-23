@@ -2430,6 +2430,16 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 			exit(2);
 		}
 
+		/* make install GIS */
+		snprintf(buf, sizeof(buf),
+				"\"%s\" -C \"%s\" DESTDIR=\"%s/install\" install > \"%s/log/install.log\" 2>&1",
+				makeprog, gis_builddir, temp_install, outputdir);
+		if (system(buf))
+		{
+			fprintf(stderr, _("\n%s: gis installation failed\nExamine %s/log/install.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
+			exit(2);
+		}
+
 		for (sl = extra_install; sl != NULL; sl = sl->next)
 		{
 #ifndef WIN32_ONLY_COMPILER
