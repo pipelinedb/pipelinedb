@@ -1867,8 +1867,8 @@ expandRTE(RangeTblEntry *rte, int rtindex, int sublevels_up,
 		case RTE_RELATION:
 			/* Ordinary relation RTE */
 			expandRelation(rte->relid, rte->eref,
-					rtindex, sublevels_up, location,
-					include_dropped, colnames, colvars);
+						   rtindex, sublevels_up, location,
+						   include_dropped, colnames, colvars);
 			break;
 		case RTE_SUBQUERY:
 			{
@@ -2397,12 +2397,12 @@ get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 		case RTE_RELATION:
 			{
 				/* Plain relation RTE --- get the attribute's type info */
-				HeapTuple	tp = NULL;
+				HeapTuple	tp;
 				Form_pg_attribute att_tup;
 
 				tp = SearchSysCache2(ATTNUM,
-						ObjectIdGetDatum(rte->relid),
-						Int16GetDatum(attnum));
+									 ObjectIdGetDatum(rte->relid),
+									 Int16GetDatum(attnum));
 				if (!HeapTupleIsValid(tp))		/* shouldn't happen */
 					elog(ERROR, "cache lookup failed for attribute %d of relation %u",
 							attnum, rte->relid);
@@ -2421,19 +2421,13 @@ get_rte_attribute_type(RangeTblEntry *rte, AttrNumber attnum,
 				*vartype = att_tup->atttypid;
 				*vartypmod = att_tup->atttypmod;
 				*varcollid = att_tup->attcollation;
-
-				if (tp)
-					ReleaseSysCache(tp);
-			}
+				ReleaseSysCache(tp);			}
 			break;
 		case RTE_STREAM:
-			{
-				/* Stream RTE --- get the attribute's type info from the streamdesc */
-				Assert(attnum > 0 && attnum <= list_length(rte->ctecoltypes));
-				*vartype = list_nth_oid(rte->ctecoltypes, attnum - 1);
-				*vartypmod = list_nth_int(rte->ctecoltypmods, attnum - 1);
-				*varcollid = list_nth_oid(rte->ctecolcollations, attnum - 1);
-			}
+			Assert(attnum > 0 && attnum <= list_length(rte->ctecoltypes));
+			*vartype = list_nth_oid(rte->ctecoltypes, attnum - 1);
+			*vartypmod = list_nth_int(rte->ctecoltypmods, attnum - 1);
+			*varcollid = list_nth_oid(rte->ctecolcollations, attnum - 1);
 			break;
 		case RTE_SUBQUERY:
 			{

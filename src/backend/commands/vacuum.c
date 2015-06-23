@@ -104,6 +104,7 @@ vacuum(VacuumStmt *vacstmt, Oid relid, bool do_toast,
 	volatile bool in_outer_xact,
 				use_own_xacts;
 	List	   *relations;
+	static bool in_vacuum = false;
 
 	/* sanity checks on options */
 	Assert(vacstmt->options & (VACOPT_VACUUM | VACOPT_ANALYZE));
@@ -128,6 +129,14 @@ vacuum(VacuumStmt *vacstmt, Oid relid, bool do_toast,
 	}
 	else
 		in_outer_xact = IsInTransactionChain(isTopLevel);
+
+	/*
+	 * Due to static variables vac_context, anl_context and vac_strategy,
+	 * vacuum() is not reentrant.  This matters when VACUUM FULL or ANALYZE
+	 * calls a hostile index expression that itself calls ANALYZE.
+	 */
+	if (in_vacuum)
+		elog(ERROR, "%s cannot be executed from VACUUM or ANALYZE", stmttype);
 
 	/*
 	 * Send info about dead objects to the statistics collector, unless we are
@@ -221,6 +230,7 @@ vacuum(VacuumStmt *vacstmt, Oid relid, bool do_toast,
 	{
 		ListCell   *cur;
 
+		in_vacuum = true;
 		VacuumCostActive = (VacuumCostDelay > 0);
 		VacuumCostBalance = 0;
 		VacuumPageHit = 0;
@@ -265,13 +275,13 @@ vacuum(VacuumStmt *vacstmt, Oid relid, bool do_toast,
 	}
 	PG_CATCH();
 	{
-		/* Make sure cost accounting is turned off after error */
+		in_vacuum = false;
 		VacuumCostActive = false;
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
 
-	/* Turn off vacuum cost accounting */
+	in_vacuum = false;
 	VacuumCostActive = false;
 
 	/*
@@ -416,6 +426,7 @@ vacuum_set_xid_limits(Relation rel,
 {
 	int			freezemin;
 	int			mxid_freezemin;
+	int			effective_multixact_freeze_max_age;
 	TransactionId limit;
 	TransactionId safeLimit;
 	MultiXactId mxactLimit;
@@ -473,16 +484,23 @@ vacuum_set_xid_limits(Relation rel,
 	*freezeLimit = limit;
 
 	/*
+	 * Compute the multixact age for which freezing is urgent.  This is
+	 * normally autovacuum_multixact_freeze_max_age, but may be less if we
+	 * are short of multixact member space.
+	 */
+	effective_multixact_freeze_max_age = MultiXactMemberFreezeThreshold();
+
+	/*
 	 * Determine the minimum multixact freeze age to use: as specified by
 	 * caller, or vacuum_multixact_freeze_min_age, but in any case not more
-	 * than half autovacuum_multixact_freeze_max_age, so that autovacuums to
+	 * than half effective_multixact_freeze_max_age, so that autovacuums to
 	 * prevent MultiXact wraparound won't occur too frequently.
 	 */
 	mxid_freezemin = multixact_freeze_min_age;
 	if (mxid_freezemin < 0)
 		mxid_freezemin = vacuum_multixact_freeze_min_age;
 	mxid_freezemin = Min(mxid_freezemin,
-						 autovacuum_multixact_freeze_max_age / 2);
+						 effective_multixact_freeze_max_age / 2);
 	Assert(mxid_freezemin >= 0);
 
 	/* compute the cutoff multi, being careful to generate a valid value */
@@ -491,7 +509,7 @@ vacuum_set_xid_limits(Relation rel,
 		mxactLimit = FirstMultiXactId;
 
 	safeMxactLimit =
-		ReadNextMultiXactId() - autovacuum_multixact_freeze_max_age;
+		ReadNextMultiXactId() - effective_multixact_freeze_max_age;
 	if (safeMxactLimit < FirstMultiXactId)
 		safeMxactLimit = FirstMultiXactId;
 
@@ -546,7 +564,7 @@ vacuum_set_xid_limits(Relation rel,
 		if (freezetable < 0)
 			freezetable = vacuum_multixact_freeze_table_age;
 		freezetable = Min(freezetable,
-						  autovacuum_multixact_freeze_max_age * 0.95);
+						  effective_multixact_freeze_max_age * 0.95);
 		Assert(freezetable >= 0);
 
 		/*

@@ -1978,6 +1978,8 @@ pg_get_functiondef(PG_FUNCTION_ARGS)
 		appendStringInfoString(&buf, " STRICT");
 	if (proc->prosecdef)
 		appendStringInfoString(&buf, " SECURITY DEFINER");
+	if (proc->proleakproof)
+		appendStringInfoString(&buf, " LEAKPROOF");
 
 	/* This code for the default cost and rows should match functioncmds.c */
 	if (proc->prolang == INTERNALlanguageId ||
@@ -2524,6 +2526,42 @@ deparse_context_for(const char *aliasname, Oid relid)
 }
 
 /*
+ * deparse_context_for_plan_rtable - Build deparse context for a plan's rtable
+ *
+ * When deparsing an expression in a Plan tree, we use the plan's rangetable
+ * to resolve names of simple Vars.  The initialization of column names for
+ * this is rather expensive if the rangetable is large, and it'll be the same
+ * for every expression in the Plan tree; so we do it just once and re-use
+ * the result of this function for each expression.  (Note that the result
+ * is not usable until set_deparse_context_planstate() is applied to it.)
+ *
+ * In addition to the plan's rangetable list, pass the per-RTE alias names
+ * assigned by a previous call to select_rtable_names_for_explain.
+ */
+List *
+deparse_context_for_plan_rtable(List *rtable, List *rtable_names)
+{
+	deparse_namespace *dpns;
+
+	dpns = (deparse_namespace *) palloc0(sizeof(deparse_namespace));
+
+	/* Initialize fields that stay the same across the whole plan tree */
+	dpns->rtable = rtable;
+	dpns->rtable_names = rtable_names;
+	dpns->ctes = NIL;
+
+	/*
+	 * Set up column name aliases.  We will get rather bogus results for join
+	 * RTEs, but that doesn't matter because plan trees don't contain any join
+	 * alias Vars.
+	 */
+	set_simple_column_names(dpns);
+
+	/* Return a one-deep namespace stack */
+	return list_make1(dpns);
+}
+
+/*
  * deparse_context_for_planstate	- Build deparse context for a plan
  *
  * When deparsing an expression in a Plan tree, we might have to resolve
@@ -2543,37 +2581,28 @@ deparse_context_for(const char *aliasname, Oid relid)
  * most-closely-nested first.  This is needed to resolve PARAM_EXEC Params.
  * Note we assume that all the PlanStates share the same rtable.
  *
- * The plan's rangetable list must also be passed, along with the per-RTE
- * alias names assigned by a previous call to select_rtable_names_for_explain.
- * (We use the rangetable to resolve simple Vars, but the plan inputs are
- * necessary for Vars with special varnos.)
+ * Once this function has been called, deparse_expression() can be called on
+ * subsidiary expression(s) of the specified PlanState node.  To deparse
+ * expressions of a different Plan node in the same Plan tree, re-call this
+ * function to identify the new parent Plan node.
+ *
+ * The result is the same List passed in; this is a notational convenience.
  */
 List *
-deparse_context_for_planstate(Node *planstate, List *ancestors,
-							  List *rtable, List *rtable_names)
+set_deparse_context_planstate(List *dpcontext,
+							  Node *planstate, List *ancestors)
 {
 	deparse_namespace *dpns;
 
-	dpns = (deparse_namespace *) palloc0(sizeof(deparse_namespace));
-
-	/* Initialize fields that stay the same across the whole plan tree */
-	dpns->rtable = rtable;
-	dpns->rtable_names = rtable_names;
-	dpns->ctes = NIL;
-
-	/*
-	 * Set up column name aliases.  We will get rather bogus results for join
-	 * RTEs, but that doesn't matter because plan trees don't contain any join
-	 * alias Vars.
-	 */
-	set_simple_column_names(dpns);
+	/* Should always have one-entry namespace list for Plan deparsing */
+	Assert(list_length(dpcontext) == 1);
+	dpns = (deparse_namespace *) linitial(dpcontext);
 
 	/* Set our attention on the specific plan node passed in */
 	set_deparse_planstate(dpns, (PlanState *) planstate);
 	dpns->ancestors = ancestors;
 
-	/* Return a one-deep namespace stack */
-	return list_make1(dpns);
+	return dpcontext;
 }
 
 /*
@@ -4475,10 +4504,7 @@ get_simple_values_rte(Query *query)
 	/*
 	 * We want to return TRUE even if the Query also contains OLD or NEW rule
 	 * RTEs.  So the idea is to scan the rtable and see if there is only one
-	 * inFromCl RTE that is a VALUES RTE.  We don't look at the targetlist at
-	 * all.  This is okay because parser/analyze.c will never generate a
-	 * "bare" VALUES RTE --- they only appear inside auto-generated
-	 * sub-queries with very restricted structure.
+	 * inFromCl RTE that is a VALUES RTE.
 	 */
 	foreach(lc, query->rtable)
 	{
@@ -4495,6 +4521,33 @@ get_simple_values_rte(Query *query)
 		else
 			return NULL;		/* something else -> not simple VALUES */
 	}
+
+	/*
+	 * We don't need to check the targetlist in any great detail, because
+	 * parser/analyze.c will never generate a "bare" VALUES RTE --- they only
+	 * appear inside auto-generated sub-queries with very restricted
+	 * structure.  However, DefineView might have modified the tlist by
+	 * injecting new column aliases; so compare tlist resnames against the
+	 * RTE's names to detect that.
+	 */
+	if (result)
+	{
+		ListCell   *lcn;
+
+		if (list_length(query->targetList) != list_length(result->eref->colnames))
+			return NULL;		/* this probably cannot happen */
+		forboth(lc, query->targetList, lcn, result->eref->colnames)
+		{
+			TargetEntry *tle = (TargetEntry *) lfirst(lc);
+			char	   *cname = strVal(lfirst(lcn));
+
+			if (tle->resjunk)
+				return NULL;	/* this probably cannot happen */
+			if (tle->resname == NULL || strcmp(tle->resname, cname) != 0)
+				return NULL;	/* column name has been changed */
+		}
+	}
+
 	return result;
 }
 
@@ -8438,7 +8491,9 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 				break;
 			case RTE_VALUES:
 				/* Values list RTE */
+				appendStringInfoChar(buf, '(');
 				get_values_def(rte->values_lists, context);
+				appendStringInfoChar(buf, ')');
 				break;
 			case RTE_CTE:
 				appendStringInfoString(buf, quote_identifier(rte->ctename));
@@ -8478,6 +8533,11 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 			 * FigureColname rules for things that aren't simple functions.
 			 * Note we'd need to force it anyway for the columndef list case.
 			 */
+			printalias = true;
+		}
+		else if (rte->rtekind == RTE_VALUES)
+		{
+			/* Alias is syntactically required for VALUES */
 			printalias = true;
 		}
 		else if (rte->rtekind == RTE_CTE)

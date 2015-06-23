@@ -1014,7 +1014,15 @@ setup_connection(Archive *AH, const char *dumpencoding, char *use_role)
 	ExecuteSqlStatement(AH, "BEGIN");
 	if (AH->remoteVersion >= 90100)
 	{
-		if (serializable_deferrable)
+		/*
+		 * To support the combination of serializable_deferrable with the jobs
+		 * option we use REPEATABLE READ for the worker connections that are
+		 * passed a snapshot.  As long as the snapshot is acquired in a
+		 * SERIALIZABLE, READ ONLY, DEFERRABLE transaction, its use within a
+		 * REPEATABLE READ transaction provides the appropriate integrity
+		 * guarantees.  This is a kluge, but safe for back-patching.
+		 */
+		if (serializable_deferrable && AH->sync_snapshot_id == NULL)
 			ExecuteSqlStatement(AH,
 								"SET TRANSACTION ISOLATION LEVEL "
 								"SERIALIZABLE, READ ONLY, DEFERRABLE");
@@ -1332,6 +1340,24 @@ selectDumpableDefaultACL(DefaultACLInfo *dinfo)
 		dinfo->dobj.dump = dinfo->dobj.namespace->dobj.dump;
 	else
 		dinfo->dobj.dump = include_everything;
+}
+
+/*
+ * selectDumpableCast: policy-setting subroutine
+ *		Mark a cast as to be dumped or not
+ *
+ * Casts do not belong to any particular namespace (since they haven't got
+ * names), nor do they have identifiable owners.  To distinguish user-defined
+ * casts from built-in ones, we must resort to checking whether the cast's
+ * OID is in the range reserved for initdb.
+ */
+static void
+selectDumpableCast(CastInfo *cast)
+{
+	if (cast->dobj.catId.oid < (Oid) FirstNormalObjectId)
+		cast->dobj.dump = false;
+	else
+		cast->dobj.dump = include_everything;
 }
 
 /*
@@ -2465,24 +2491,28 @@ dumpDatabase(Archive *fout)
 					dbCatId, 0, dbDumpId);
 	}
 
-	PQclear(res);
-
 	/* Dump shared security label. */
 	if (!no_security_labels && fout->remoteVersion >= 90200)
 	{
-		PQExpBuffer seclabelQry = createPQExpBuffer();
+		PGresult   *shres;
+		PQExpBuffer seclabelQry;
+
+		seclabelQry = createPQExpBuffer();
 
 		buildShSecLabelQuery(conn, "pg_database", dbCatId.oid, seclabelQry);
-		res = ExecuteSqlQuery(fout, seclabelQry->data, PGRES_TUPLES_OK);
+		shres = ExecuteSqlQuery(fout, seclabelQry->data, PGRES_TUPLES_OK);
 		resetPQExpBuffer(seclabelQry);
-		emitShSecLabels(conn, res, seclabelQry, "DATABASE", datname);
+		emitShSecLabels(conn, shres, seclabelQry, "DATABASE", datname);
 		if (strlen(seclabelQry->data))
 			ArchiveEntry(fout, dbCatId, createDumpId(), datname, NULL, NULL,
 						 dba, false, "SECURITY LABEL", SECTION_NONE,
 						 seclabelQry->data, "", NULL,
 						 &dbDumpId, 1, NULL, NULL);
 		destroyPQExpBuffer(seclabelQry);
+		PQclear(shres);
 	}
+
+	PQclear(res);
 
 	destroyPQExpBuffer(dbQry);
 	destroyPQExpBuffer(delQry);
@@ -3921,7 +3951,6 @@ getAggregates(Archive *fout, int *numAggs)
 	int			i_proargtypes;
 	int			i_rolname;
 	int			i_aggacl;
-	int			i_proiargs;
 
 	/* Make sure we are in proper schema */
 	selectSourceSchema(fout, "pg_catalog");
@@ -3931,12 +3960,11 @@ getAggregates(Archive *fout, int *numAggs)
 	 * rationale behind the filtering logic.
 	 */
 
-	if (fout->remoteVersion >= 80400)
+	if (fout->remoteVersion >= 80200)
 	{
 		appendPQExpBuffer(query, "SELECT tableoid, oid, proname AS aggname, "
 						  "pronamespace AS aggnamespace, "
 						  "pronargs, proargtypes, "
-			"pg_catalog.pg_get_function_identity_arguments(oid) AS proiargs,"
 						  "(%s proowner) AS rolname, "
 						  "proacl AS aggacl "
 						  "FROM pg_proc p "
@@ -3954,28 +3982,12 @@ getAggregates(Archive *fout, int *numAggs)
 								 "deptype = 'e')");
 		appendPQExpBufferChar(query, ')');
 	}
-	else if (fout->remoteVersion >= 80200)
-	{
-		appendPQExpBuffer(query, "SELECT tableoid, oid, proname AS aggname, "
-						  "pronamespace AS aggnamespace, "
-						  "pronargs, proargtypes, "
-						  "NULL::text AS proiargs,"
-						  "(%s proowner) AS rolname, "
-						  "proacl AS aggacl "
-						  "FROM pg_proc p "
-						  "WHERE proisagg AND ("
-						  "pronamespace != "
-						  "(SELECT oid FROM pg_namespace "
-						  "WHERE nspname = 'pg_catalog'))",
-						  username_subquery);
-	}
 	else if (fout->remoteVersion >= 70300)
 	{
 		appendPQExpBuffer(query, "SELECT tableoid, oid, proname AS aggname, "
 						  "pronamespace AS aggnamespace, "
 						  "CASE WHEN proargtypes[0] = 'pg_catalog.\"any\"'::pg_catalog.regtype THEN 0 ELSE 1 END AS pronargs, "
 						  "proargtypes, "
-						  "NULL::text AS proiargs, "
 						  "(%s proowner) AS rolname, "
 						  "proacl AS aggacl "
 						  "FROM pg_proc "
@@ -3990,7 +4002,6 @@ getAggregates(Archive *fout, int *numAggs)
 						  "0::oid AS aggnamespace, "
 				  "CASE WHEN aggbasetype = 0 THEN 0 ELSE 1 END AS pronargs, "
 						  "aggbasetype AS proargtypes, "
-						  "NULL::text AS proiargs, "
 						  "(%s aggowner) AS rolname, "
 						  "'{=X}' AS aggacl "
 						  "FROM pg_aggregate "
@@ -4006,7 +4017,6 @@ getAggregates(Archive *fout, int *numAggs)
 						  "0::oid AS aggnamespace, "
 				  "CASE WHEN aggbasetype = 0 THEN 0 ELSE 1 END AS pronargs, "
 						  "aggbasetype AS proargtypes, "
-						  "NULL::text AS proiargs, "
 						  "(%s aggowner) AS rolname, "
 						  "'{=X}' AS aggacl "
 						  "FROM pg_aggregate "
@@ -4030,7 +4040,6 @@ getAggregates(Archive *fout, int *numAggs)
 	i_proargtypes = PQfnumber(res, "proargtypes");
 	i_rolname = PQfnumber(res, "rolname");
 	i_aggacl = PQfnumber(res, "aggacl");
-	i_proiargs = PQfnumber(res, "proiargs");
 
 	for (i = 0; i < ntups; i++)
 	{
@@ -4050,7 +4059,6 @@ getAggregates(Archive *fout, int *numAggs)
 		agginfo[i].aggfn.lang = InvalidOid;		/* not currently interesting */
 		agginfo[i].aggfn.prorettype = InvalidOid;		/* not saved */
 		agginfo[i].aggfn.proacl = pg_strdup(PQgetvalue(res, i, i_aggacl));
-		agginfo[i].aggfn.proiargs = pg_strdup(PQgetvalue(res, i, i_proiargs));
 		agginfo[i].aggfn.nargs = atoi(PQgetvalue(res, i, i_pronargs));
 		if (agginfo[i].aggfn.nargs == 0)
 			agginfo[i].aggfn.argtypes = NULL;
@@ -4102,7 +4110,6 @@ getFuncs(Archive *fout, int *numFuncs)
 	int			i_proargtypes;
 	int			i_prorettype;
 	int			i_proacl;
-	int			i_proiargs;
 
 	/* Make sure we are in proper schema */
 	selectSourceSchema(fout, "pg_catalog");
@@ -4123,13 +4130,12 @@ getFuncs(Archive *fout, int *numFuncs)
 	 * doesn't have; otherwise we might not get creation ordering correct.
 	 */
 
-	if (fout->remoteVersion >= 80400)
+	if (fout->remoteVersion >= 70300)
 	{
 		appendPQExpBuffer(query,
 						  "SELECT tableoid, oid, proname, prolang, "
 						  "pronargs, proargtypes, prorettype, proacl, "
 						  "pronamespace, "
-			"pg_catalog.pg_get_function_identity_arguments(oid) AS proiargs,"
 						  "(%s proowner) AS rolname "
 						  "FROM pg_proc p "
 						  "WHERE NOT proisagg AND ("
@@ -4151,21 +4157,6 @@ getFuncs(Archive *fout, int *numFuncs)
 								 "deptype = 'e')");
 		appendPQExpBufferChar(query, ')');
 	}
-	else if (fout->remoteVersion >= 70300)
-	{
-		appendPQExpBuffer(query,
-						  "SELECT tableoid, oid, proname, prolang, "
-						  "pronargs, proargtypes, prorettype, proacl, "
-						  "pronamespace, "
-						  "NULL::text AS proiargs,"
-						  "(%s proowner) AS rolname "
-						  "FROM pg_proc p "
-						  "WHERE NOT proisagg AND ("
-						  "pronamespace != "
-						  "(SELECT oid FROM pg_namespace "
-						  "WHERE nspname = 'pg_catalog'))",
-						  username_subquery);
-	}
 	else if (fout->remoteVersion >= 70100)
 	{
 		appendPQExpBuffer(query,
@@ -4173,7 +4164,6 @@ getFuncs(Archive *fout, int *numFuncs)
 						  "pronargs, proargtypes, prorettype, "
 						  "'{=X}' AS proacl, "
 						  "0::oid AS pronamespace, "
-						  "NULL::text AS proiargs,"
 						  "(%s proowner) AS rolname "
 						  "FROM pg_proc "
 						  "WHERE pg_proc.oid > '%u'::oid",
@@ -4190,7 +4180,6 @@ getFuncs(Archive *fout, int *numFuncs)
 						  "pronargs, proargtypes, prorettype, "
 						  "'{=X}' AS proacl, "
 						  "0::oid AS pronamespace, "
-						  "NULL::text AS proiargs,"
 						  "(%s proowner) AS rolname "
 						  "FROM pg_proc "
 						  "where pg_proc.oid > '%u'::oid",
@@ -4216,7 +4205,6 @@ getFuncs(Archive *fout, int *numFuncs)
 	i_proargtypes = PQfnumber(res, "proargtypes");
 	i_prorettype = PQfnumber(res, "prorettype");
 	i_proacl = PQfnumber(res, "proacl");
-	i_proiargs = PQfnumber(res, "proiargs");
 
 	for (i = 0; i < ntups; i++)
 	{
@@ -4232,7 +4220,6 @@ getFuncs(Archive *fout, int *numFuncs)
 		finfo[i].rolname = pg_strdup(PQgetvalue(res, i, i_rolname));
 		finfo[i].lang = atooid(PQgetvalue(res, i, i_prolang));
 		finfo[i].prorettype = atooid(PQgetvalue(res, i, i_prorettype));
-		finfo[i].proiargs = pg_strdup(PQgetvalue(res, i, i_proiargs));
 		finfo[i].proacl = pg_strdup(PQgetvalue(res, i, i_proacl));
 		finfo[i].nargs = atoi(PQgetvalue(res, i, i_pronargs));
 		if (finfo[i].nargs == 0)
@@ -6246,12 +6233,13 @@ getCasts(Archive *fout, int *numCasts)
 							  sTypeInfo->dobj.name, tTypeInfo->dobj.name);
 		castinfo[i].dobj.name = namebuf.data;
 
-		if (OidIsValid(castinfo[i].castfunc))
+		if (fout->remoteVersion < 70300 &&
+			OidIsValid(castinfo[i].castfunc))
 		{
 			/*
 			 * We need to make a dependency to ensure the function will be
 			 * dumped first.  (In 7.3 and later the regular dependency
-			 * mechanism will handle this for us.)
+			 * mechanism handles this for us.)
 			 */
 			FuncInfo   *funcInfo;
 
@@ -6260,6 +6248,9 @@ getCasts(Archive *fout, int *numCasts)
 				addObjectDependency(&castinfo[i].dobj,
 									funcInfo->dobj.dumpId);
 		}
+
+		/* Decide whether we want to dump it */
+		selectDumpableCast(&(castinfo[i]));
 	}
 
 	PQclear(res);
@@ -10142,55 +10133,9 @@ dumpCast(Archive *fout, CastInfo *cast)
 	}
 
 	/*
-	 * As per discussion we dump casts if one or more of the underlying
-	 * objects (the conversion function and the two data types) are not
-	 * builtin AND if all of the non-builtin objects are included in the dump.
-	 * Builtin meaning, the namespace name does not start with "pg_".
-	 *
-	 * However, for a cast that belongs to an extension, we must not use this
-	 * heuristic, but just dump the cast iff we're told to (via dobj.dump).
+	 * Make sure we are in proper schema (needed for getFormattedTypeName).
+	 * Casts don't have a schema of their own, so use pg_catalog.
 	 */
-	if (!cast->dobj.ext_member)
-	{
-		TypeInfo   *sourceInfo = findTypeByOid(cast->castsource);
-		TypeInfo   *targetInfo = findTypeByOid(cast->casttarget);
-
-		if (sourceInfo == NULL || targetInfo == NULL)
-			return;
-
-		/*
-		 * Skip this cast if all objects are from pg_
-		 */
-		if ((funcInfo == NULL ||
-			 strncmp(funcInfo->dobj.namespace->dobj.name, "pg_", 3) == 0) &&
-			strncmp(sourceInfo->dobj.namespace->dobj.name, "pg_", 3) == 0 &&
-			strncmp(targetInfo->dobj.namespace->dobj.name, "pg_", 3) == 0)
-			return;
-
-		/*
-		 * Skip cast if function isn't from pg_ and is not to be dumped.
-		 */
-		if (funcInfo &&
-			strncmp(funcInfo->dobj.namespace->dobj.name, "pg_", 3) != 0 &&
-			!funcInfo->dobj.dump)
-			return;
-
-		/*
-		 * Same for the source type
-		 */
-		if (strncmp(sourceInfo->dobj.namespace->dobj.name, "pg_", 3) != 0 &&
-			!sourceInfo->dobj.dump)
-			return;
-
-		/*
-		 * and the target type.
-		 */
-		if (strncmp(targetInfo->dobj.namespace->dobj.name, "pg_", 3) != 0 &&
-			!targetInfo->dobj.dump)
-			return;
-	}
-
-	/* Make sure we are in proper schema (needed for getFormattedTypeName) */
 	selectSourceSchema(fout, "pg_catalog");
 
 	defqry = createPQExpBuffer();
@@ -14769,7 +14714,7 @@ dumpEventTrigger(Archive *fout, EventTriggerInfo *evtinfo)
 		}
 		appendPQExpBufferStr(query, ";\n");
 	}
-	appendPQExpBuffer(labelq, "EVENT TRIGGER %s ",
+	appendPQExpBuffer(labelq, "EVENT TRIGGER %s",
 					  fmtId(evtinfo->dobj.name));
 
 	ArchiveEntry(fout, evtinfo->dobj.catId, evtinfo->dobj.dumpId,
@@ -14778,7 +14723,7 @@ dumpEventTrigger(Archive *fout, EventTriggerInfo *evtinfo)
 				 query->data, "", NULL, NULL, 0, NULL, NULL);
 
 	dumpComment(fout, labelq->data,
-				NULL, NULL,
+				NULL, evtinfo->evtowner,
 				evtinfo->dobj.catId, 0, evtinfo->dobj.dumpId);
 
 	destroyPQExpBuffer(query);
@@ -14920,6 +14865,33 @@ dumpRule(Archive *fout, RuleInfo *rinfo)
 
 /*
  * getExtensionMembership --- obtain extension membership data
+ *
+ * There are three main parts to this process:
+ *
+ * 1. Identify objects which are members of extensions
+ *
+ *    Generally speaking, this is to mark them as *not* being dumped, as most
+ *    extension objects are created by the single CREATE EXTENSION command.
+ *    The one exception is binary upgrades with pg_upgrade will still dump the
+ *    non-table objects.
+ *
+ * 2. Identify and create dump records for extension configuration tables.
+ *
+ *    Extensions can mark tables as "configuration", which means that the user
+ *    is able and expected to modify those tables after the extension has been
+ *    loaded.  For these tables, we dump out only the data- the structure is
+ *    expected to be handled at CREATE EXTENSION time, including any indexes or
+ *    foriegn keys, which brings us to-
+ *
+ * 3. Record FK dependencies between configuration tables.
+ *
+ *    Due to the FKs being created at CREATE EXTENSION time and therefore before
+ *    the data is loaded, we have to work out what the best order for reloading
+ *    the data is, to avoid FK violations when the tables are restored.  This is
+ *    not perfect- we can't handle circular dependencies and if any exist they
+ *    will cause an invalid dump to be produced (though at least all of the data
+ *    is included for a user to manually restore).  This is currently documented
+ *    but perhaps we can provide a better solution in the future.
  */
 void
 getExtensionMembership(Archive *fout, ExtensionInfo extinfo[],
@@ -14932,7 +14904,9 @@ getExtensionMembership(Archive *fout, ExtensionInfo extinfo[],
 	int			i_classid,
 				i_objid,
 				i_refclassid,
-				i_refobjid;
+				i_refobjid,
+				i_conrelid,
+				i_confrelid;
 	DumpableObject *dobj,
 			   *refdobj;
 
@@ -15113,6 +15087,53 @@ getExtensionMembership(Archive *fout, ExtensionInfo extinfo[],
 			free(extconditionarray);
 	}
 
+	/*
+	 * Now that all the TableInfoData objects have been created for all
+	 * the extensions, check their FK dependencies and register them to
+	 * try and dump the data out in an order which they can be restored
+	 * in.
+	 *
+	 * Note that this is not a problem for user tables as their FKs are
+	 * recreated after the data has been loaded.
+	 */
+	printfPQExpBuffer(query,
+			"SELECT conrelid, confrelid "
+			"FROM pg_constraint "
+				"JOIN pg_depend ON (objid = confrelid) "
+			"WHERE contype = 'f' "
+			"AND refclassid = 'pg_extension'::regclass "
+			"AND classid = 'pg_class'::regclass;");
+
+	res = ExecuteSqlQuery(fout, query->data, PGRES_TUPLES_OK);
+	ntups = PQntuples(res);
+
+	i_conrelid = PQfnumber(res, "conrelid");
+	i_confrelid = PQfnumber(res, "confrelid");
+
+	/* Now get the dependencies and register them */
+	for (i = 0; i < ntups; i++)
+	{
+		Oid			conrelid, confrelid;
+		TableInfo  *reftable, *contable;
+
+		conrelid = atooid(PQgetvalue(res, i, i_conrelid));
+		confrelid = atooid(PQgetvalue(res, i, i_confrelid));
+		contable = findTableByOid(conrelid);
+		reftable = findTableByOid(confrelid);
+
+		if (reftable == NULL ||
+			reftable->dataObj == NULL ||
+			contable == NULL ||
+			contable->dataObj == NULL)
+			continue;
+
+		/*
+		 * Make referencing TABLE_DATA object depend on the
+		 * referenced table's TABLE_DATA object.
+		 */
+		addObjectDependency(&contable->dataObj->dobj,
+							reftable->dataObj->dobj.dumpId);
+	}
 	destroyPQExpBuffer(query);
 }
 

@@ -32,7 +32,12 @@
 
 #include "c.h"
 
+#include <ctype.h>
+#ifdef _MSC_VER
+#include <float.h>				/* for _isnan */
+#endif
 #include <limits.h>
+#include <math.h>
 #ifndef WIN32
 #include <sys/ioctl.h>
 #endif
@@ -108,6 +113,7 @@ typedef struct
 	/* bufend == NULL is for sprintf, where we assume buf is big enough */
 	FILE	   *stream;			/* eventual output destination, or NULL */
 	int			nchars;			/* # chars already sent to stream */
+	bool		failed;			/* call is a failure; errno is set */
 } PrintfTarget;
 
 /*
@@ -137,7 +143,7 @@ typedef union
 
 
 static void flushbuffer(PrintfTarget *target);
-static int	dopr(PrintfTarget *target, const char *format, va_list args);
+static void dopr(PrintfTarget *target, const char *format, va_list args);
 
 
 int
@@ -151,14 +157,10 @@ pg_vsnprintf(char *str, size_t count, const char *fmt, va_list args)
 	target.bufend = str + count - 1;
 	target.stream = NULL;
 	/* target.nchars is unused in this case */
-	if (dopr(&target, fmt, args))
-	{
-		*(target.bufptr) = '\0';
-		errno = EINVAL;			/* bad format */
-		return -1;
-	}
+	target.failed = false;
+	dopr(&target, fmt, args);
 	*(target.bufptr) = '\0';
-	return target.bufptr - target.bufstart;
+	return target.failed ? -1 : (target.bufptr - target.bufstart);
 }
 
 int
@@ -184,14 +186,10 @@ pg_vsprintf(char *str, const char *fmt, va_list args)
 	target.bufend = NULL;
 	target.stream = NULL;
 	/* target.nchars is unused in this case */
-	if (dopr(&target, fmt, args))
-	{
-		*(target.bufptr) = '\0';
-		errno = EINVAL;			/* bad format */
-		return -1;
-	}
+	target.failed = false;
+	dopr(&target, fmt, args);
 	*(target.bufptr) = '\0';
-	return target.bufptr - target.bufstart;
+	return target.failed ? -1 : (target.bufptr - target.bufstart);
 }
 
 int
@@ -221,14 +219,11 @@ pg_vfprintf(FILE *stream, const char *fmt, va_list args)
 	target.bufend = buffer + sizeof(buffer) - 1;
 	target.stream = stream;
 	target.nchars = 0;
-	if (dopr(&target, fmt, args))
-	{
-		errno = EINVAL;			/* bad format */
-		return -1;
-	}
+	target.failed = false;
+	dopr(&target, fmt, args);
 	/* dump any remaining buffer contents */
 	flushbuffer(&target);
-	return target.nchars;
+	return target.failed ? -1 : target.nchars;
 }
 
 int
@@ -255,14 +250,24 @@ pg_printf(const char *fmt,...)
 	return len;
 }
 
-/* call this only when stream is defined */
+/*
+ * Attempt to write the entire buffer to target->stream; discard the entire
+ * buffer in any case.  Call this only when target->stream is defined.
+ */
 static void
 flushbuffer(PrintfTarget *target)
 {
 	size_t		nc = target->bufptr - target->bufstart;
 
-	if (nc > 0)
-		target->nchars += fwrite(target->bufstart, 1, nc, target->stream);
+	if (!target->failed && nc > 0)
+	{
+		size_t		written;
+
+		written = fwrite(target->bufstart, 1, nc, target->stream);
+		target->nchars += written;
+		if (written != nc)
+			target->failed = true;
+	}
 	target->bufptr = target->bufstart;
 }
 
@@ -289,7 +294,7 @@ static void trailing_pad(int *padlen, PrintfTarget *target);
 /*
  * dopr(): poor man's version of doprintf
  */
-static int
+static void
 dopr(PrintfTarget *target, const char *format, va_list args)
 {
 	const char *format_start = format;
@@ -366,12 +371,12 @@ nextch1:
 			case '$':
 				have_dollar = true;
 				if (accum <= 0 || accum > NL_ARGMAX)
-					return -1;
+					goto bad_format;
 				if (afterstar)
 				{
 					if (argtypes[accum] &&
 						argtypes[accum] != ATYPE_INT)
-						return -1;
+						goto bad_format;
 					argtypes[accum] = ATYPE_INT;
 					last_dollar = Max(last_dollar, accum);
 					afterstar = false;
@@ -421,7 +426,7 @@ nextch1:
 						atype = ATYPE_INT;
 					if (argtypes[fmtpos] &&
 						argtypes[fmtpos] != atype)
-						return -1;
+						goto bad_format;
 					argtypes[fmtpos] = atype;
 					last_dollar = Max(last_dollar, fmtpos);
 				}
@@ -433,7 +438,7 @@ nextch1:
 				{
 					if (argtypes[fmtpos] &&
 						argtypes[fmtpos] != ATYPE_INT)
-						return -1;
+						goto bad_format;
 					argtypes[fmtpos] = ATYPE_INT;
 					last_dollar = Max(last_dollar, fmtpos);
 				}
@@ -446,7 +451,7 @@ nextch1:
 				{
 					if (argtypes[fmtpos] &&
 						argtypes[fmtpos] != ATYPE_CHARPTR)
-						return -1;
+						goto bad_format;
 					argtypes[fmtpos] = ATYPE_CHARPTR;
 					last_dollar = Max(last_dollar, fmtpos);
 				}
@@ -462,7 +467,7 @@ nextch1:
 				{
 					if (argtypes[fmtpos] &&
 						argtypes[fmtpos] != ATYPE_DOUBLE)
-						return -1;
+						goto bad_format;
 					argtypes[fmtpos] = ATYPE_DOUBLE;
 					last_dollar = Max(last_dollar, fmtpos);
 				}
@@ -483,7 +488,7 @@ nextch1:
 
 	/* Per spec, you use either all dollar or all not. */
 	if (have_dollar && have_non_dollar)
-		return -1;
+		goto bad_format;
 
 	/*
 	 * In dollar mode, collect the arguments in physical order.
@@ -493,7 +498,7 @@ nextch1:
 		switch (argtypes[i])
 		{
 			case ATYPE_NONE:
-				return -1;		/* invalid format */
+				goto bad_format;
 			case ATYPE_INT:
 				argvalues[i].i = va_arg(args, int);
 				break;
@@ -518,6 +523,9 @@ nextch1:
 	format = format_start;
 	while ((ch = *format++) != '\0')
 	{
+		if (target->failed)
+			break;
+
 		if (ch != '%')
 		{
 			dopr_outch(ch, target);
@@ -775,7 +783,11 @@ nextch2:
 		}
 	}
 
-	return 0;
+	return;
+
+bad_format:
+	errno = EINVAL;
+	target->failed = true;
 }
 
 static size_t
@@ -825,8 +837,10 @@ fmtptr(void *value, PrintfTarget *target)
 
 	/* we rely on regular C library's sprintf to do the basic conversion */
 	vallen = sprintf(convert, "%p", value);
-
-	dostr(convert, vallen, target);
+	if (vallen < 0)
+		target->failed = true;
+	else
+		dostr(convert, vallen, target);
 }
 
 static void
@@ -932,29 +946,89 @@ fmtfloat(double value, char type, int forcesign, int leftjust,
 		 PrintfTarget *target)
 {
 	int			signvalue = 0;
+	int			prec;
 	int			vallen;
 	char		fmt[32];
-	char		convert[512];
-	int			padlen = 0;		/* amount to pad */
+	char		convert[1024];
+	int			zeropadlen = 0; /* amount to pad with zeroes */
+	int			padlen = 0;		/* amount to pad with spaces */
 
-	/* we rely on regular C library's sprintf to do the basic conversion */
+	/*
+	 * We rely on the regular C library's sprintf to do the basic conversion,
+	 * then handle padding considerations here.
+	 *
+	 * The dynamic range of "double" is about 1E+-308 for IEEE math, and not
+	 * too wildly more than that with other hardware.  In "f" format, sprintf
+	 * could therefore generate at most 308 characters to the left of the
+	 * decimal point; while we need to allow the precision to get as high as
+	 * 308+17 to ensure that we don't truncate significant digits from very
+	 * small values.  To handle both these extremes, we use a buffer of 1024
+	 * bytes and limit requested precision to 350 digits; this should prevent
+	 * buffer overrun even with non-IEEE math.  If the original precision
+	 * request was more than 350, separately pad with zeroes.
+	 */
+	if (precision < 0)			/* cover possible overflow of "accum" */
+		precision = 0;
+	prec = Min(precision, 350);
+
 	if (pointflag)
-		sprintf(fmt, "%%.%d%c", precision, type);
-	else
-		sprintf(fmt, "%%%c", type);
+	{
+		if (sprintf(fmt, "%%.%d%c", prec, type) < 0)
+			goto fail;
+		zeropadlen = precision - prec;
+	}
+	else if (sprintf(fmt, "%%%c", type) < 0)
+		goto fail;
 
-	if (adjust_sign((value < 0), forcesign, &signvalue))
+	if (!isnan(value) && adjust_sign((value < 0), forcesign, &signvalue))
 		value = -value;
 
 	vallen = sprintf(convert, fmt, value);
+	if (vallen < 0)
+		goto fail;
 
-	adjust_padlen(minlen, vallen, leftjust, &padlen);
+	/* If it's infinity or NaN, forget about doing any zero-padding */
+	if (zeropadlen > 0 && !isdigit((unsigned char) convert[vallen - 1]))
+		zeropadlen = 0;
+
+	adjust_padlen(minlen, vallen + zeropadlen, leftjust, &padlen);
 
 	leading_pad(zpad, &signvalue, &padlen, target);
 
-	dostr(convert, vallen, target);
+	if (zeropadlen > 0)
+	{
+		/* If 'e' or 'E' format, inject zeroes before the exponent */
+		char	   *epos = strrchr(convert, 'e');
+
+		if (!epos)
+			epos = strrchr(convert, 'E');
+		if (epos)
+		{
+			/* pad after exponent */
+			dostr(convert, epos - convert, target);
+			while (zeropadlen-- > 0)
+				dopr_outch('0', target);
+			dostr(epos, vallen - (epos - convert), target);
+		}
+		else
+		{
+			/* no exponent, pad after the digits */
+			dostr(convert, vallen, target);
+			while (zeropadlen-- > 0)
+				dopr_outch('0', target);
+		}
+	}
+	else
+	{
+		/* no zero padding, just emit the number as-is */
+		dostr(convert, vallen, target);
+	}
 
 	trailing_pad(&padlen, target);
+	return;
+
+fail:
+	target->failed = true;
 }
 
 static void

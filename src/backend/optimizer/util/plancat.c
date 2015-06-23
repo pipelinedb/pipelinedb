@@ -102,7 +102,7 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 	if (!RelationNeedsWAL(relation) && RecoveryInProgress())
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				errmsg("cannot access temporary or unlogged relations during recovery")));
+				 errmsg("cannot access temporary or unlogged relations during recovery")));
 
 	rel->min_attr = FirstLowInvalidHeapAttributeNumber + 1;
 	rel->max_attr = RelationGetNumberOfAttributes(relation);
@@ -869,19 +869,17 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 	int			attrno,
 				numattrs;
 	List	   *colvars;
-	TupleDesc desc;
 
 	switch (rte->rtekind)
 	{
 		case RTE_RELATION:
 			/* Assume we already have adequate lock */
 			relation = heap_open(rte->relid, NoLock);
-			desc = relation->rd_att;
 			numattrs = RelationGetNumberOfAttributes(relation);
 
 			for (attrno = 1; attrno <= numattrs; attrno++)
 			{
-				Form_pg_attribute att_tup = desc->attrs[attrno - 1];
+				Form_pg_attribute att_tup = relation->rd_att->attrs[attrno - 1];
 
 				if (att_tup->attisdropped)
 				{
@@ -904,8 +902,7 @@ build_physical_tlist(PlannerInfo *root, RelOptInfo *rel)
 												false));
 			}
 
-			if (relation)
-				heap_close(relation, NoLock);
+			heap_close(relation, NoLock);
 			break;
 
 		case RTE_SUBQUERY:
