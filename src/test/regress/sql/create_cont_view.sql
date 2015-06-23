@@ -90,7 +90,7 @@ GROUP BY a, b, c, d, e;
 
 --A user-specified fillfactor should override the default
 CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM stream;
-\d+ withff;
+\d+ withff_mrel0;
 
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;

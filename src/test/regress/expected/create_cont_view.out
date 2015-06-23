@@ -488,14 +488,12 @@ Options: fillfactor=50
 
 --A user-specified fillfactor should override the default
 CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM stream;
-\d+ withff;
-                View "public.withff"
- Column |  Type  | Modifiers | Storage | Description 
---------+--------+-----------+---------+-------------
- count  | bigint |           | plain   | 
-View definition:
- SELECT withff_mrel0.count
-   FROM withff_mrel0;
+\d+ withff_mrel0;
+                    Table "public.withff_mrel0"
+ Column |  Type  | Modifiers | Storage | Stats target | Description 
+--------+--------+-----------+---------+--------------+-------------
+ count  | bigint |           | plain   |              | 
+Options: fillfactor=42
 
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
