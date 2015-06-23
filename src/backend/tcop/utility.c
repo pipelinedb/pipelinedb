@@ -912,6 +912,12 @@ ProcessUtilitySlow(Node *parsetree,
 					ListCell   *l;
 					Oid			relOid;
 
+					if (IsA(parsetree, CreateStreamStmt))
+					{
+						CreateStmt *stmt = (CreateStmt *) parsetree;
+						stmt->stream = true;
+					}
+
 					/* Run parse analysis ... */
 					stmts = transformCreateStmt((CreateStmt *) parsetree,
 												queryString);
