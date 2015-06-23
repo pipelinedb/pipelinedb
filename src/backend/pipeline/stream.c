@@ -126,7 +126,6 @@ StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
 	result->inserts = NIL;
 	result->relid = RangeVarGetRelid(stream, AccessShareLock, false);
 	result->cols = cols;
-	result->desc = NULL;//GetStreamTupleDesc(result->namespace, stream->relname, cols);
 
 	return result;
 }
