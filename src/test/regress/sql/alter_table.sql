@@ -1276,7 +1276,6 @@ create type lockmodes as enum (
 ,'ShareLock'
 ,'ShareRowExclusiveLock'
 ,'ExclusiveLock'
-,'CQExclusiveLock'
 ,'AccessExclusiveLock'
 );
 

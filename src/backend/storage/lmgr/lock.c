@@ -98,6 +98,7 @@ static const LOCKMASK LockConflicts[] = {
 	(1 << RowExclusiveLock) | (1 << ShareUpdateExclusiveLock) |
 	(1 << ShareLock) | (1 << ShareRowExclusiveLock) |
 	(1 << ExclusiveLock) | (1 << AccessExclusiveLock)
+
 };
 
 /* Names of lock modes, for debug printouts */
@@ -2808,6 +2809,8 @@ GetLockConflicts(const LOCKTAG *locktag, LOCKMODE lockmode)
 		 * on this lockable object.
 		 */
 		LWLockRelease(partitionLock);
+		vxids[count].backendId = InvalidBackendId;
+		vxids[count].localTransactionId = InvalidLocalTransactionId;
 		return vxids;
 	}
 
@@ -2861,6 +2864,8 @@ GetLockConflicts(const LOCKTAG *locktag, LOCKMODE lockmode)
 	if (count > MaxBackends)	/* should never happen */
 		elog(PANIC, "too many conflicting locks found");
 
+	vxids[count].backendId = InvalidBackendId;
+	vxids[count].localTransactionId = InvalidLocalTransactionId;
 	return vxids;
 }
 

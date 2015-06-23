@@ -61,7 +61,7 @@ extern void get_man_path(const char *my_exec_path, char *ret_path);
 extern bool get_home_path(char *ret_path);
 extern void get_parent_directory(char *path);
 
-/* port/dirmod.c */
+/* common/pgfnames.c */
 extern char **pgfnames(const char *path);
 extern void pgfnames_cleanup(char **filenames);
 
@@ -431,7 +431,7 @@ extern void srandom(unsigned int seed);
 /* thread.h */
 extern char *pqStrerror(int errnum, char *strerrbuf, size_t buflen);
 
-#if !defined(WIN32) || defined(__CYGWIN__)
+#ifndef WIN32
 extern int pqGetpwuid(uid_t uid, struct passwd * resultbuf, char *buffer,
 		   size_t buflen, struct passwd ** result);
 #endif

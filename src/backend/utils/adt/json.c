@@ -34,6 +34,9 @@
 #include "utils/typcache.h"
 #include "utils/syscache.h"
 
+/* String to output for infinite dates and timestamps */
+#define DT_INFINITY "\"infinity\""
+
 /*
  * The context of the parser is maintained by the recursive descent
  * mechanism, but is passed explicitly to the error reporting routine
@@ -164,7 +167,7 @@ static inline void
 lex_expect(JsonParseContext ctx, JsonLexContext *lex, JsonTokenType token)
 {
 	if (!lex_accept(lex, token, NULL))
-		report_parse_error(ctx, lex);;
+		report_parse_error(ctx, lex);
 }
 
 /* chars to consider as part of an alphanumeric token */
@@ -808,14 +811,17 @@ json_lex_string(JsonLexContext *lex)
 					 * For UTF8, replace the escape sequence by the actual
 					 * utf8 character in lex->strval. Do this also for other
 					 * encodings if the escape designates an ASCII character,
-					 * otherwise raise an error. We don't ever unescape a
-					 * \u0000, since that would result in an impermissible nul
-					 * byte.
+					 * otherwise raise an error.
 					 */
 
 					if (ch == 0)
 					{
-						appendStringInfoString(lex->strval, "\\u0000");
+						/* We can't allow this, since our TEXT type doesn't */
+						ereport(ERROR,
+								(errcode(ERRCODE_UNTRANSLATABLE_CHARACTER),
+							   errmsg("unsupported Unicode escape sequence"),
+						   errdetail("\\u0000 cannot be converted to text."),
+								 report_json_context(lex)));
 					}
 					else if (GetDatabaseEncoding() == PG_UTF8)
 					{
@@ -1425,20 +1431,18 @@ datum_to_json(Datum val, bool is_null, StringInfo result,
 
 				date = DatumGetDateADT(val);
 
-				/* XSD doesn't support infinite values */
 				if (DATE_NOT_FINITE(date))
-					ereport(ERROR,
-							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-							 errmsg("date out of range"),
-							 errdetail("JSON does not support infinite date values.")));
+				{
+					/* we have to format infinity ourselves */
+					appendStringInfoString(result,DT_INFINITY);
+				}
 				else
 				{
 					j2date(date + POSTGRES_EPOCH_JDATE,
 						   &(tm.tm_year), &(tm.tm_mon), &(tm.tm_mday));
 					EncodeDateOnly(&tm, USE_XSD_DATES, buf);
+					appendStringInfo(result, "\"%s\"", buf);
 				}
-
-				appendStringInfo(result, "\"%s\"", buf);
 			}
 			break;
 		case JSONTYPE_TIMESTAMP:
@@ -1450,20 +1454,20 @@ datum_to_json(Datum val, bool is_null, StringInfo result,
 
 				timestamp = DatumGetTimestamp(val);
 
-				/* XSD doesn't support infinite values */
 				if (TIMESTAMP_NOT_FINITE(timestamp))
-					ereport(ERROR,
-							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-							 errmsg("timestamp out of range"),
-							 errdetail("JSON does not support infinite timestamp values.")));
+				{
+					/* we have to format infinity ourselves */
+					appendStringInfoString(result,DT_INFINITY);
+				}
 				else if (timestamp2tm(timestamp, NULL, &tm, &fsec, NULL, NULL) == 0)
+				{
 					EncodeDateTime(&tm, fsec, false, 0, NULL, USE_XSD_DATES, buf);
+					appendStringInfo(result, "\"%s\"", buf);
+				}
 				else
 					ereport(ERROR,
 							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
 							 errmsg("timestamp out of range")));
-
-				appendStringInfo(result, "\"%s\"", buf);
 			}
 			break;
 		case JSONTYPE_TIMESTAMPTZ:
@@ -1477,20 +1481,20 @@ datum_to_json(Datum val, bool is_null, StringInfo result,
 
 				timestamp = DatumGetTimestamp(val);
 
-				/* XSD doesn't support infinite values */
 				if (TIMESTAMP_NOT_FINITE(timestamp))
-					ereport(ERROR,
-							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
-							 errmsg("timestamp out of range"),
-							 errdetail("JSON does not support infinite timestamp values.")));
+				{
+					/* we have to format infinity ourselves */
+					appendStringInfoString(result,DT_INFINITY);
+				}
 				else if (timestamp2tm(timestamp, &tz, &tm, &fsec, &tzn, NULL) == 0)
+				{
 					EncodeDateTime(&tm, fsec, true, tz, tzn, USE_XSD_DATES, buf);
+					appendStringInfo(result, "\"%s\"", buf);
+				}
 				else
 					ereport(ERROR,
 							(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
 							 errmsg("timestamp out of range")));
-
-				appendStringInfo(result, "\"%s\"", buf);
 			}
 			break;
 		case JSONTYPE_JSON:
@@ -1801,6 +1805,8 @@ to_json(PG_FUNCTION_ARGS)
 
 /*
  * json_agg transition function
+ *
+ * aggregate input column as a json array value.
  */
 Datum
 json_agg_transfn(PG_FUNCTION_ARGS)
@@ -2460,30 +2466,7 @@ escape_json(StringInfo buf, const char *str)
 				appendStringInfoString(buf, "\\\"");
 				break;
 			case '\\':
-
-				/*
-				 * Unicode escapes are passed through as is. There is no
-				 * requirement that they denote a valid character in the
-				 * server encoding - indeed that is a big part of their
-				 * usefulness.
-				 *
-				 * All we require is that they consist of \uXXXX where the Xs
-				 * are hexadecimal digits. It is the responsibility of the
-				 * caller of, say, to_json() to make sure that the unicode
-				 * escape is valid.
-				 *
-				 * In the case of a jsonb string value being escaped, the only
-				 * unicode escape that should be present is \u0000, all the
-				 * other unicode escapes will have been resolved.
-				 */
-				if (p[1] == 'u' &&
-					isxdigit((unsigned char) p[2]) &&
-					isxdigit((unsigned char) p[3]) &&
-					isxdigit((unsigned char) p[4]) &&
-					isxdigit((unsigned char) p[5]))
-					appendStringInfoCharMacro(buf, *p);
-				else
-					appendStringInfoString(buf, "\\\\");
+				appendStringInfoString(buf, "\\\\");
 				break;
 			default:
 				if ((unsigned char) *p < ' ')

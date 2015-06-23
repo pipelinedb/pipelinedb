@@ -14,14 +14,9 @@
 #ifndef PRINTTUP_H
 #define PRINTTUP_H
 
-#include "lib/stringinfo.h"
 #include "utils/portal.h"
 
 extern DestReceiver *printtup_create_DR(CommandDest dest);
-
-extern DestReceiver *printtup_create_combiner_DR(CommandDest dest,
-		void (*bufHandler) (StringInfo buf),
-		void (*startup) (DestReceiver *self, int operation, TupleDesc typeinfo));
 
 extern void SetRemoteDestReceiverParams(DestReceiver *self, Portal portal);
 

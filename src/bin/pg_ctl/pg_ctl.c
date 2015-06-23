@@ -613,7 +613,7 @@ test_postmaster_connection(bool do_checkpoint)
 						 * timeout first.
 						 */
 						snprintf(connstr, sizeof(connstr),
-						"dbname=postgres port=%d host='%s' connect_timeout=5",
+						"dbname=pipeline port=%d host='%s' connect_timeout=5",
 								 portnum, host_str);
 					}
 				}
@@ -1350,11 +1350,11 @@ pgwin32_CommandLine(bool registration)
 	}
 	else
 	{
-		ret = find_other_exec(argv0, "postgres", PG_BACKEND_VERSIONSTR,
+		ret = find_other_exec(argv0, "pipeline-server", PG_BACKEND_VERSIONSTR,
 							  cmdPath);
 		if (ret != 0)
 		{
-			write_stderr(_("%s: could not find postgres program executable\n"), progname);
+			write_stderr(_("%s: could not find pipeline-server program executable\n"), progname);
 			exit(1);
 		}
 	}
@@ -1590,15 +1590,27 @@ pgwin32_ServiceMain(DWORD argc, LPTSTR *argv)
 	switch (ret)
 	{
 		case WAIT_OBJECT_0:		/* shutdown event */
-			kill(postmasterPID, SIGINT);
+			{
+				/*
+				 * status.dwCheckPoint can be incremented by
+				 * test_postmaster_connection(true), so it might not
+				 * start from 0.
+				 */
+				int maxShutdownCheckPoint = status.dwCheckPoint + 12;;
 
-			/*
-			 * Increment the checkpoint and try again Abort after 12
-			 * checkpoints as the postmaster has probably hung
-			 */
-			while (WaitForSingleObject(postmasterProcess, 5000) == WAIT_TIMEOUT && status.dwCheckPoint < 12)
-				status.dwCheckPoint++;
-			break;
+				kill(postmasterPID, SIGINT);
+
+				/*
+				 * Increment the checkpoint and try again. Abort after 12
+				 * checkpoints as the postmaster has probably hung.
+				 */
+				while (WaitForSingleObject(postmasterProcess, 5000) == WAIT_TIMEOUT && status.dwCheckPoint < maxShutdownCheckPoint)
+				{
+					status.dwCheckPoint++;
+					SetServiceStatus(hStatus, (LPSERVICE_STATUS) &status);
+				}
+				break;
+			}
 
 		case (WAIT_OBJECT_0 + 1):		/* postmaster went down */
 			break;
@@ -1919,7 +1931,7 @@ do_help(void)
 	printf(_("  demand     start service on demand\n"));
 #endif
 
-	printf(_("\nReport bugs to <pgsql-bugs@postgresql.org>.\n"));
+	printf(_("\nReport bugs to <eng@pipelinedb.com>.\n"));
 }
 
 
@@ -2035,7 +2047,7 @@ adjust_data_dir(void)
 
 	/* we use a private my_exec_path to avoid interfering with later uses */
 	if (exec_path == NULL)
-		my_exec_path = find_other_exec_or_die(argv0, "postgres", PG_BACKEND_VERSIONSTR);
+		my_exec_path = find_other_exec_or_die(argv0, "pipeline-server", PG_BACKEND_VERSIONSTR);
 	else
 		my_exec_path = pg_strdup(exec_path);
 

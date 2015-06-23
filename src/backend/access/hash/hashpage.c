@@ -39,7 +39,7 @@ static bool _hash_alloc_buckets(Relation rel, BlockNumber firstblock,
 static void _hash_splitbucket(Relation rel, Buffer metabuf,
 				  Bucket obucket, Bucket nbucket,
 				  BlockNumber start_oblkno,
-				  BlockNumber start_nblkno,
+				  Buffer nbuf,
 				  uint32 maxbucket,
 				  uint32 highmask, uint32 lowmask);
 
@@ -176,7 +176,9 @@ _hash_getinitbuf(Relation rel, BlockNumber blkno)
  *		EOF but before updating the metapage to reflect the added page.)
  *
  *		It is caller's responsibility to ensure that only one process can
- *		extend the index at a time.
+ *		extend the index at a time.  In practice, this function is called
+ *		only while holding write lock on the metapage, because adding a page
+ *		is always associated with an update of metapage data.
  */
 Buffer
 _hash_getnewbuf(Relation rel, BlockNumber blkno, ForkNumber forkNum)
@@ -503,6 +505,7 @@ _hash_expandtable(Relation rel, Buffer metabuf)
 	uint32		spare_ndx;
 	BlockNumber start_oblkno;
 	BlockNumber start_nblkno;
+	Buffer		buf_nblkno;
 	uint32		maxbucket;
 	uint32		highmask;
 	uint32		lowmask;
@@ -604,6 +607,13 @@ _hash_expandtable(Relation rel, Buffer metabuf)
 	}
 
 	/*
+	 * Physically allocate the new bucket's primary page.  We want to do this
+	 * before changing the metapage's mapping info, in case we can't get the
+	 * disk space.
+	 */
+	buf_nblkno = _hash_getnewbuf(rel, start_nblkno, MAIN_FORKNUM);
+
+	/*
 	 * Okay to proceed with split.  Update the metapage bucket mapping info.
 	 *
 	 * Since we are scribbling on the metapage data right in the shared
@@ -653,8 +663,9 @@ _hash_expandtable(Relation rel, Buffer metabuf)
 	_hash_chgbufaccess(rel, metabuf, HASH_WRITE, HASH_NOLOCK);
 
 	/* Relocate records to the new bucket */
-	_hash_splitbucket(rel, metabuf, old_bucket, new_bucket,
-					  start_oblkno, start_nblkno,
+	_hash_splitbucket(rel, metabuf,
+					  old_bucket, new_bucket,
+					  start_oblkno, buf_nblkno,
 					  maxbucket, highmask, lowmask);
 
 	/* Release bucket locks, allowing others to access them */
@@ -733,6 +744,12 @@ _hash_alloc_buckets(Relation rel, BlockNumber firstblock, uint32 nblocks)
  * The caller must hold a pin, but no lock, on the metapage buffer.
  * The buffer is returned in the same state.  (The metapage is only
  * touched if it becomes necessary to add or remove overflow pages.)
+ *
+ * In addition, the caller must have created the new bucket's base page,
+ * which is passed in buffer nbuf, pinned and write-locked.  That lock and
+ * pin are released here.  (The API is set up this way because we must do
+ * _hash_getnewbuf() before releasing the metapage write lock.  So instead of
+ * passing the new bucket's start block number, we pass an actual buffer.)
  */
 static void
 _hash_splitbucket(Relation rel,
@@ -740,15 +757,12 @@ _hash_splitbucket(Relation rel,
 				  Bucket obucket,
 				  Bucket nbucket,
 				  BlockNumber start_oblkno,
-				  BlockNumber start_nblkno,
+				  Buffer nbuf,
 				  uint32 maxbucket,
 				  uint32 highmask,
 				  uint32 lowmask)
 {
-	BlockNumber oblkno;
-	BlockNumber nblkno;
 	Buffer		obuf;
-	Buffer		nbuf;
 	Page		opage;
 	Page		npage;
 	HashPageOpaque oopaque;
@@ -759,13 +773,10 @@ _hash_splitbucket(Relation rel,
 	 * since no one else can be trying to acquire buffer lock on pages of
 	 * either bucket.
 	 */
-	oblkno = start_oblkno;
-	obuf = _hash_getbuf(rel, oblkno, HASH_WRITE, LH_BUCKET_PAGE);
+	obuf = _hash_getbuf(rel, start_oblkno, HASH_WRITE, LH_BUCKET_PAGE);
 	opage = BufferGetPage(obuf);
 	oopaque = (HashPageOpaque) PageGetSpecialPointer(opage);
 
-	nblkno = start_nblkno;
-	nbuf = _hash_getnewbuf(rel, nblkno, MAIN_FORKNUM);
 	npage = BufferGetPage(nbuf);
 
 	/* initialize the new bucket's primary page */
@@ -784,6 +795,7 @@ _hash_splitbucket(Relation rel,
 	 */
 	for (;;)
 	{
+		BlockNumber oblkno;
 		OffsetNumber ooffnum;
 		OffsetNumber omaxoffnum;
 		OffsetNumber deletable[MaxOffsetNumber];
@@ -814,6 +826,11 @@ _hash_splitbucket(Relation rel,
 				 * insert the tuple into the new bucket.  if it doesn't fit on
 				 * the current page in the new bucket, we must allocate a new
 				 * overflow page and place the tuple on that page instead.
+				 *
+				 * XXX we have a problem here if we fail to get space for a
+				 * new overflow page: we'll error out leaving the bucket split
+				 * only partially complete, meaning the index is corrupt,
+				 * since searches may fail to find entries they should find.
 				 */
 				itemsz = IndexTupleDSize(*itup);
 				itemsz = MAXALIGN(itemsz);
@@ -825,7 +842,7 @@ _hash_splitbucket(Relation rel,
 					/* chain to a new overflow page */
 					nbuf = _hash_addovflpage(rel, metabuf, nbuf);
 					npage = BufferGetPage(nbuf);
-					/* we don't need nblkno or nopaque within the loop */
+					/* we don't need nopaque within the loop */
 				}
 
 				/*
