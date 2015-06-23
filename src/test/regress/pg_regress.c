@@ -29,6 +29,7 @@
 #include <sys/resource.h>
 #endif
 
+#include "common/username.h"
 #include "getopt_long.h"
 #include "libpq/pqcomm.h"		/* needed for UNIXSOCK_PATH() */
 #include "pg_config_paths.h"
@@ -105,6 +106,7 @@ static char *dlpath = PKGLIBDIR;
 static char *user = NULL;
 static _stringlist *extraroles = NULL;
 static _stringlist *extra_install = NULL;
+static char *config_auth_datadir = NULL;
 
 /* internal variables */
 static const char *progname;
@@ -536,8 +538,8 @@ convert_sourcefiles_in(char *source_subdir, char *dest_dir, char *dest_subdir, c
 	if (directory_exists(testtablespace))
 		if (!rmtree(testtablespace, true))
 		{
-			fprintf(stderr, _("\n%s: could not remove test tablespace \"%s\": %s\n"),
-					progname, testtablespace, strerror(errno));
+			fprintf(stderr, _("\n%s: could not remove test tablespace \"%s\"\n"),
+					progname, testtablespace);
 			exit(2);
 		}
 	make_directory(testtablespace);
@@ -612,7 +614,7 @@ convert_sourcefiles_in(char *source_subdir, char *dest_dir, char *dest_subdir, c
 static void
 convert_sourcefiles(void)
 {
-	convert_sourcefiles_in("input", inputdir, "sql", "sql");
+	convert_sourcefiles_in("input", outputdir, "sql", "sql");
 	convert_sourcefiles_in("output", outputdir, "expected", "out");
 }
 
@@ -789,9 +791,17 @@ initialize_environment(void)
 		unsetenv("LC_NUMERIC");
 		unsetenv("LC_TIME");
 		unsetenv("LANG");
-		/* On Windows the default locale cannot be English, so force it */
-#if defined(WIN32) || defined(__CYGWIN__)
-		putenv("LANG=en");
+
+		/*
+		 * Most platforms have adopted the POSIX locale as their
+		 * implementation-defined default locale.  Exceptions include native
+		 * Windows, Darwin with --enable-nls, and Cygwin with --enable-nls.
+		 * (Use of --enable-nls matters because libintl replaces setlocale().)
+		 * Also, PostgreSQL does not support Darwin with locale environment
+		 * variables unset; see PostmasterMain().
+		 */
+#if defined(WIN32) || defined(__CYGWIN__) || defined(__darwin__)
+		putenv("LANG=C");
 #endif
 	}
 
@@ -965,6 +975,176 @@ initialize_environment(void)
 	convert_sourcefiles();
 	load_resultmap();
 }
+
+#ifdef ENABLE_SSPI
+/*
+ * Get account and domain/realm names for the current user.  This is based on
+ * pg_SSPI_recvauth().  The returned strings use static storage.
+ */
+static void
+current_windows_user(const char **acct, const char **dom)
+{
+	static char accountname[MAXPGPATH];
+	static char domainname[MAXPGPATH];
+	HANDLE		token;
+	TOKEN_USER *tokenuser;
+	DWORD		retlen;
+	DWORD		accountnamesize = sizeof(accountname);
+	DWORD		domainnamesize = sizeof(domainname);
+	SID_NAME_USE accountnameuse;
+
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_READ, &token))
+	{
+		fprintf(stderr,
+				_("%s: could not open process token: error code %lu\n"),
+				progname, GetLastError());
+		exit(2);
+	}
+
+	if (!GetTokenInformation(token, TokenUser, NULL, 0, &retlen) && GetLastError() != 122)
+	{
+		fprintf(stderr,
+				_("%s: could not get token user size: error code %lu\n"),
+				progname, GetLastError());
+		exit(2);
+	}
+	tokenuser = malloc(retlen);
+	if (!GetTokenInformation(token, TokenUser, tokenuser, retlen, &retlen))
+	{
+		fprintf(stderr,
+				_("%s: could not get token user: error code %lu\n"),
+				progname, GetLastError());
+		exit(2);
+	}
+
+	if (!LookupAccountSid(NULL, tokenuser->User.Sid, accountname, &accountnamesize,
+						  domainname, &domainnamesize, &accountnameuse))
+	{
+		fprintf(stderr,
+				_("%s: could not look up account SID: error code %lu\n"),
+				progname, GetLastError());
+		exit(2);
+	}
+
+	free(tokenuser);
+
+	*acct = accountname;
+	*dom = domainname;
+}
+
+/*
+ * Rewrite pg_hba.conf and pg_ident.conf to use SSPI authentication.  Permit
+ * the current OS user to authenticate as the bootstrap superuser and as any
+ * user named in a --create-role option.
+ */
+static void
+config_sspi_auth(const char *pgdata)
+{
+	const char *accountname,
+			   *domainname;
+	const char *username;
+	char	   *errstr;
+	bool		have_ipv6;
+	char		fname[MAXPGPATH];
+	int			res;
+	FILE	   *hba,
+			   *ident;
+	_stringlist *sl;
+
+	/*
+	 * "username", the initdb-chosen bootstrap superuser name, may always
+	 * match "accountname", the value SSPI authentication discovers.  The
+	 * underlying system functions do not clearly guarantee that.
+	 */
+	current_windows_user(&accountname, &domainname);
+	username = get_user_name(&errstr);
+	if (username == NULL)
+	{
+		fprintf(stderr, "%s: %s\n", progname, errstr);
+		exit(2);
+	}
+
+	/*
+	 * Like initdb.c:setup_config(), determine whether the platform recognizes
+	 * ::1 (IPv6 loopback) as a numeric host address string.
+	 */
+	{
+		struct addrinfo *gai_result;
+		struct addrinfo hints;
+		WSADATA		wsaData;
+
+		hints.ai_flags = AI_NUMERICHOST;
+		hints.ai_family = AF_UNSPEC;
+		hints.ai_socktype = 0;
+		hints.ai_protocol = 0;
+		hints.ai_addrlen = 0;
+		hints.ai_canonname = NULL;
+		hints.ai_addr = NULL;
+		hints.ai_next = NULL;
+
+		have_ipv6 = (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0 &&
+					 getaddrinfo("::1", NULL, &hints, &gai_result) == 0);
+	}
+
+	/* Check a Write outcome and report any error. */
+#define CW(cond)	\
+	do { \
+		if (!(cond)) \
+		{ \
+			fprintf(stderr, _("%s: could not write to file \"%s\": %s\n"), \
+					progname, fname, strerror(errno)); \
+			exit(2); \
+		} \
+	} while (0)
+
+	res = snprintf(fname, sizeof(fname), "%s/pg_hba.conf", pgdata);
+	if (res < 0 || res >= sizeof(fname) - 1)
+	{
+		/*
+		 * Truncating this name is a fatal error, because we must not fail to
+		 * overwrite an original trust-authentication pg_hba.conf.
+		 */
+		fprintf(stderr, _("%s: directory name too long\n"), progname);
+		exit(2);
+	}
+	hba = fopen(fname, "w");
+	if (hba == NULL)
+	{
+		fprintf(stderr, _("%s: could not open file \"%s\" for writing: %s\n"),
+				progname, fname, strerror(errno));
+		exit(2);
+	}
+	CW(fputs("# Configuration written by config_sspi_auth()\n", hba) >= 0);
+	CW(fputs("host all all 127.0.0.1/32  sspi include_realm=1 map=regress\n",
+			 hba) >= 0);
+	if (have_ipv6)
+		CW(fputs("host all all ::1/128  sspi include_realm=1 map=regress\n",
+				 hba) >= 0);
+	CW(fclose(hba) == 0);
+
+	snprintf(fname, sizeof(fname), "%s/pg_ident.conf", pgdata);
+	ident = fopen(fname, "w");
+	if (ident == NULL)
+	{
+		fprintf(stderr, _("%s: could not open file \"%s\" for writing: %s\n"),
+				progname, fname, strerror(errno));
+		exit(2);
+	}
+	CW(fputs("# Configuration written by config_sspi_auth()\n", ident) >= 0);
+
+	/*
+	 * Double-quote for the benefit of account names containing whitespace or
+	 * '#'.  Windows forbids the double-quote character itself, so don't
+	 * bother escaping embedded double-quote characters.
+	 */
+	CW(fprintf(ident, "regress  \"%s@%s\"  \"%s\"\n",
+			   accountname, domainname, username) >= 0);
+	for (sl = extraroles; sl; sl = sl->next)
+		CW(fprintf(ident, "regress  \"%s@%s\"  \"%s\"\n",
+				   accountname, domainname, sl->str) >= 0);
+	CW(fclose(ident) == 0);
+}
+#endif
 
 /*
  * Issue a command via psql, connecting to the specified database
@@ -1958,6 +2138,7 @@ help(void)
 	printf(_("Usage:\n  %s [OPTION]... [EXTRA-TEST]...\n"), progname);
 	printf(_("\n"));
 	printf(_("Options:\n"));
+	printf(_("  --config-auth=DATADIR     update authentication settings for DATADIR\n"));
 	printf(_("  --create-role=ROLE        create the specified role before testing\n"));
 	printf(_("  --dbname=DB               use database DB (default \"regression\")\n"));
 	printf(_("  --debug                   turn on debug mode in programs that are run\n"));
@@ -1994,7 +2175,7 @@ help(void)
 	printf(_("The exit status is 0 if all tests passed, 1 if some tests failed, and 2\n"));
 	printf(_("if the tests could not be run for some reason.\n"));
 	printf(_("\n"));
-	printf(_("Report bugs to <pgsql-bugs@postgresql.org>.\n"));
+	printf(_("Report bugs to <eng@pipelinedb.com>.\n"));
 }
 
 int
@@ -2025,7 +2206,8 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		{"launcher", required_argument, NULL, 21},
 		{"load-extension", required_argument, NULL, 22},
 		{"extra-install", required_argument, NULL, 23},
-		{"gis-builddir", required_argument, NULL, 24},
+		{"config-auth", required_argument, NULL, 24},
+		{"gis-builddir", required_argument, NULL, 25},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -2141,7 +2323,10 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				add_stringlist_item(&extra_install, optarg);
 				break;
 			case 24:
-				gis_builddir = strdup(optarg);
+				config_auth_datadir = pstrdup(optarg);
+				break;
+			case 25:
+				gis_builddir = pstrdup(optarg);
 				break;
 			default:
 				/* getopt_long already emitted a complaint */
@@ -2158,6 +2343,14 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 	{
 		add_stringlist_item(&extra_tests, argv[optind]);
 		optind++;
+	}
+
+	if (config_auth_datadir)
+	{
+#ifdef ENABLE_SSPI
+		config_sspi_auth(config_auth_datadir);
+#endif
+		exit(0);
 	}
 
 	if (temp_install && !port_specified_by_user)
@@ -2205,7 +2398,8 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 			header(_("removing existing temp installation"));
 			if (!rmtree(temp_install, true))
 			{
-				fprintf(stderr, _("\n%s: could not remove temp installation \"%s\": %s\n"), progname, temp_install, strerror(errno));
+				fprintf(stderr, _("\n%s: could not remove temp installation \"%s\"\n"),
+						progname, temp_install);
 				exit(2);
 			}
 		}
@@ -2233,16 +2427,6 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		if (system(buf))
 		{
 			fprintf(stderr, _("\n%s: installation failed\nExamine %s/log/install.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
-			exit(2);
-		}
-
-		/* make install GIS */
-		snprintf(buf, sizeof(buf),
-				 "\"%s\" -C \"%s\" DESTDIR=\"%s/install\" install > \"%s/log/install.log\" 2>&1",
-				 makeprog, gis_builddir, temp_install, outputdir);
-		if (system(buf))
-		{
-			fprintf(stderr, _("\n%s: gis installation failed\nExamine %s/log/install.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
 			exit(2);
 		}
 
@@ -2274,7 +2458,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				 outputdir);
 		if (system(buf))
 		{
-			fprintf(stderr, _("\n%s: pipeline-init failed\nExamine %s/log/initdb.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
+			fprintf(stderr, _("\n%s: initdb failed\nExamine %s/log/initdb.log for the reason.\nCommand was: %s\n"), progname, outputdir, buf);
 			exit(2);
 		}
 
@@ -2313,6 +2497,18 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		}
 
 		fclose(pg_conf);
+
+#ifdef ENABLE_SSPI
+
+		/*
+		 * Since we successfully used the same buffer for the much-longer
+		 * "initdb" command, this can't truncate.
+		 */
+		snprintf(buf, sizeof(buf), "%s/data", temp_install);
+		config_sspi_auth(buf);
+#elif !defined(HAVE_UNIX_SOCKETS)
+#error Platform has no means to secure the test installation.
+#endif
 
 		/*
 		 * Check if there is a postmaster running already.
@@ -2477,6 +2673,19 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 	{
 		header(_("shutting down postmaster"));
 		stop_postmaster();
+	}
+
+	/*
+	 * If there were no errors, remove the temp installation immediately to
+	 * conserve disk space.  (If there were errors, we leave the installation
+	 * in place for possible manual investigation.)
+	 */
+	if (temp_install && fail_count == 0 && fail_ignore_count == 0)
+	{
+		header(_("removing temporary installation"));
+		if (!rmtree(temp_install, true))
+			fprintf(stderr, _("\n%s: could not remove temp installation \"%s\"\n"),
+					progname, temp_install);
 	}
 
 	fclose(logfile);

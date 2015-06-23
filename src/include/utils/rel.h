@@ -371,12 +371,6 @@ typedef struct ViewOptions
 	((relation)->rd_rel->relnamespace)
 
 /*
- * RelationGetRelKind
- */
-#define RelationGetRelKind(relation) \
-	((relation)->rd_rel->relkind)
-
-/*
  * RelationIsMapped
  *		True if the relation uses the relfilenode map.
  *

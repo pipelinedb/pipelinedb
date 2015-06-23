@@ -154,6 +154,7 @@ typedef uint16 LOCKMETHODID;
 #define AccessExclusiveLock		8		/* ALTER TABLE, DROP TABLE, VACUUM
 										 * FULL, and unqualified LOCK TABLE */
 
+
 /*
  * LOCKTAG is the key information needed to look up a LOCK item in the
  * lock hashtable.  A LOCKTAG value uniquely identifies a lockable object.

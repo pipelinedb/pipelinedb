@@ -1522,9 +1522,9 @@ agg_fill_hash_table(AggState *aggstate)
 
 	if (count > 0)
 	{
-		ResetTupleHashIterator(aggstate->hashtable, &aggstate->hashiter);
 		aggstate->table_filled = true;
 		/* Initialize to walk the hash table */
+		ResetTupleHashIterator(aggstate->hashtable, &aggstate->hashiter);
 	}
 	else
 	{
@@ -2514,7 +2514,8 @@ AggCheckCallContext(FunctionCallInfo fcinfo, MemoryContext *aggcontext)
  * return the Aggref node for the aggregate call.  Otherwise, return NULL.
  *
  * Note that if an aggregate is being used as a window function, this will
- * return NULL. The analog for window functions is nodeWindowAgg.c:AggGetWindowFunc.
+ * return NULL.  We could provide a similar function to return the relevant
+ * WindowFunc node in such cases, but it's not needed yet.
  */
 Aggref *
 AggGetAggref(FunctionCallInfo fcinfo)
