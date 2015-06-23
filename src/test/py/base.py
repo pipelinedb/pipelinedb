@@ -157,10 +157,8 @@ class PipelineDB(object):
 
     def drop_all_views(self):
         """
-        Drop a database within this PipelineDB instance
+        Drop all continuous views
         """
-        # We can't drop a DB in a transaction block
-        self.conn.execute('commit')
         views = self.execute('SELECT name FROM pipeline_query')
         for view in views:
           self.execute('DROP CONTINUOUS VIEW %s' % view['name'])
