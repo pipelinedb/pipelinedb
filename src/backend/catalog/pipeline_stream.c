@@ -792,7 +792,7 @@ RemovePipelineStreamById(Oid oid)
 
 	CommandCounterIncrement();
 
-	heap_close(pipeline_stream, NoLock);
+	heap_close(pipeline_stream, RowExclusiveLock);
 }
 
 /*
