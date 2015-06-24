@@ -2164,7 +2164,7 @@ ExplainTargetRel(Plan *plan, Index rti, ExplainState *es)
 			Assert(rte->rtekind == RTE_STREAM);
 			objectname = rte->relname;
 			if (es->verbose)
-				namespace = get_namespace_name(GetStreamNamespace(rte->relid));
+				namespace = get_namespace_name(get_rel_namespace(rte->relid));
 			objecttag = "Stream Name";
 			break;
 		case T_FunctionScan:

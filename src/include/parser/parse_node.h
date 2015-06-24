@@ -167,9 +167,11 @@ struct ParseState
 	CoerceParamHook p_coerce_param_hook;
 	void	   *p_ref_hook_state;		/* common passthrough link for above */
 
-	bool		p_allow_streams; /* true if streams are allowed */
+	/* Pipeline DB */
+	bool		p_allow_streams; /* true if streams are allowed as RTEs */
 	ContAnalyzeContext *p_cont_view_context; /* context if this is a continuous view */
 	bool 		p_no_locking; /* don't hold on to locks till EOT? */
+	List 	    *p_ins_cols;
 };
 
 /*

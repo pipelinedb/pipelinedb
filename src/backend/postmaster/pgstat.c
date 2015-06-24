@@ -3524,13 +3524,11 @@ reset_dbentry_counters(PgStat_StatDBEntry *dbentry)
 	dbentry->cont_queries = hash_create("Per-CQ", 256, &hash_ctl,
 					   HASH_ELEM | HASH_FUNCTION);
 
-	hash_ctl.keysize = sizeof(Oid) + NAMEDATALEN;
+	hash_ctl.keysize = sizeof(Oid);
 	hash_ctl.entrysize = sizeof(StreamStatEntry);
-	hash_ctl.hash = tag_hash;
-	hash_ctl.match = memcmp;
-	hash_ctl.keycopy = memcpy;
+	hash_ctl.hash = oid_hash;
 	dbentry->streams = hash_create("Per-stream", 256, &hash_ctl,
-						   HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_KEYCOPY);
+						   HASH_ELEM | HASH_FUNCTION);
 }
 
 /*
@@ -4110,13 +4108,11 @@ pgstat_read_statsfiles(Oid onlydb, bool permanent, bool deep)
 				dbentry->cont_queries = hash_create("Per-CQ", 256, &hash_ctl,
 								   HASH_ELEM | HASH_FUNCTION | HASH_CONTEXT);
 
-				hash_ctl.keysize = sizeof(Oid) + NAMEDATALEN;
+				hash_ctl.keysize = sizeof(Oid);
 				hash_ctl.entrysize = sizeof(StreamStatEntry);
-				hash_ctl.hash = tag_hash;
-				hash_ctl.match = memcmp;
-				hash_ctl.keycopy = memcpy;
+				hash_ctl.hash = oid_hash;
 				dbentry->streams = hash_create("Per-stream", 256, &hash_ctl,
-									   HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_KEYCOPY);
+									   HASH_ELEM | HASH_FUNCTION);
 
 				/*
 				 * If requested, read the data from the database-specific
@@ -4346,7 +4342,7 @@ pgstat_read_db_statsfile(Oid databaseid, HTAB *tabhash, HTAB *funchash, HTAB *co
 					break;
 
 				streamentry = (StreamStatEntry *) hash_search(streams,
-												(void *) &streambuf.namespace, HASH_ENTER, &found);
+												(void *) &streambuf.relid, HASH_ENTER, &found);
 
 				if (found)
 				{
@@ -5610,12 +5606,11 @@ stream_stat_recv(StreamStatMsg *msg, int len)
 
 	db = pgstat_get_db_entry(msg->m_databaseid, true);
 
-	existing = (StreamStatEntry *) hash_search(db->streams, (void *) &stats.namespace, HASH_ENTER, &found);
+	existing = (StreamStatEntry *) hash_search(db->streams, (void *) &stats.relid, HASH_ENTER, &found);
 	if (!found)
 	{
-		MemSet(existing, 0, sizeof(CQStatEntry));
-		existing->namespace = stats.namespace;
-		namestrcpy(&existing->name, NameStr(stats.name));
+		MemSet(existing, 0, sizeof(StreamStatEntry));
+		existing->relid = stats.relid;
 	}
 
 	existing->input_rows += stats.input_rows;
@@ -5627,13 +5622,12 @@ stream_stat_recv(StreamStatMsg *msg, int len)
  * stream_stat_report
  */
 void
-stream_stat_report(Oid namespace, char *name, int ntups, int nbatches, Size nbytes)
+stream_stat_report(Oid relid, int ntups, int nbatches, Size nbytes)
 {
 	StreamStatMsg msg;
 
 	MemSet(&msg, 0, sizeof(StreamStatMsg));
-	msg.m_entry.namespace = namespace;
-	namestrcpy(&msg.m_entry.name, name);
+	msg.m_entry.relid = relid;
 	msg.m_entry.input_rows = ntups;
 	msg.m_entry.input_batches = nbatches;
 	msg.m_entry.input_bytes = nbytes;

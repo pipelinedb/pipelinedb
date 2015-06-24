@@ -37,8 +37,22 @@ tdigest_send(PG_FUNCTION_ARGS)
 	bytea *result;
 	int nbytes;
 	char *pos;
+	MemoryContext old;
+	MemoryContext context;
+	bool in_agg_cxt = fcinfo->context && (IsA(fcinfo->context, AggState) || IsA(fcinfo->context, WindowAggState));
+
+	if (in_agg_cxt)
+	{
+		if (!AggCheckCallContext(fcinfo, &context))
+			elog(ERROR, "tdigest_send called in non-aggregate context");
+
+		old = MemoryContextSwitchTo(context);
+	}
 
 	TDigestCompress(t);
+
+	if (in_agg_cxt)
+		MemoryContextSwitchTo(old);
 
 	nbytes = sizeof(TDigest) + sizeof(Centroid) * t->num_centroids;
 	result = (bytea *) palloc0(nbytes + VARHDRSZ);

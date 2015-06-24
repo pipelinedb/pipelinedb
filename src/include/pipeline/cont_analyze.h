@@ -30,9 +30,12 @@ extern bool collect_rels_and_streams(Node *node, ContAnalyzeContext *context);
 extern bool collect_types_and_cols(Node *node, ContAnalyzeContext *context);
 
 extern ContAnalyzeContext *MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select);
+extern void CreateInferredStreams(SelectStmt *stmt);
 extern void ValidateContQuery(RangeVar *name, Node *node, const char *sql);
 
 extern void transformContSelectStmt(ParseState *pstate, SelectStmt *select);
-extern TupleDesc parserGetStreamDescr(ParseState *pstate, RangeVar *rv, RangeTblEntry *rte);
+extern void transformCreateStreamStmt(CreateStreamStmt *stmt);
+
+extern TupleDesc parserGetStreamDescr(Oid relid, ContAnalyzeContext *context);
 
 #endif

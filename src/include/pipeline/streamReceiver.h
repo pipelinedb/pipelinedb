@@ -20,7 +20,7 @@ typedef struct StreamReceiver
 {
 	DestReceiver pub;
 	InsertBatchAck *acks;
-	int nbatches;
+	int nacks;
 	Bitmapset *targets;
 	long count;
 	TupleDesc desc;
