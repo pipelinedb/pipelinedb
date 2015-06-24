@@ -126,14 +126,14 @@ static void transformColumnType(CreateStmtContext *cxt, ColumnDef *column);
 static void setSchemaName(char *context_schema, char **stmt_schema_name);
 
 /*
- * validate_create_stream
+ * validate_stream_constraints
  *
  * We allow some stuff that is technically supported by the grammar
  * for CREATE STREAM, so we do some validation here so that we can generate more
  * informative errors than simply syntax errors.
  */
 static void
-validate_create_stream(CreateStmt *stmt, CreateStmtContext *cxt)
+validate_stream_constraints(CreateStmt *stmt, CreateStmtContext *cxt)
 {
 	ListCell *lc;
 	List *nodes = list_concat(stmt->tableElts, stmt->constraints);
@@ -325,7 +325,7 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	result = list_concat(result, save_alist);
 
 	if (stmt->stream)
-		validate_create_stream(stmt, &cxt);
+		validate_stream_constraints(stmt, &cxt);
 
 	return result;
 }

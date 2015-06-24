@@ -26,6 +26,7 @@
 #include "catalog/pipeline_combine_fn.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "catalog/toasting.h"
 #include "commands/alter.h"
 #include "commands/async.h"
@@ -59,6 +60,7 @@
 #include "commands/view.h"
 #include "miscadmin.h"
 #include "parser/parse_utilcmd.h"
+#include "pipeline/cont_analyze.h"
 #include "postmaster/bgwriter.h"
 #include "rewrite/rewriteDefine.h"
 #include "rewrite/rewriteRemove.h"
@@ -905,10 +907,17 @@ ProcessUtilitySlow(Node *parsetree,
 
 			case T_CreateStmt:
 			case T_CreateForeignTableStmt:
+			case T_CreateStreamStmt:
 				{
 					List	   *stmts;
 					ListCell   *l;
 					Oid			relOid;
+
+					if (IsA(parsetree, CreateStreamStmt))
+					{
+						CreateStmt *stmt = (CreateStmt *) parsetree;
+						stmt->stream = true;
+					}
 
 					/* Run parse analysis ... */
 					stmts = transformCreateStmt((CreateStmt *) parsetree,
@@ -928,9 +937,6 @@ ProcessUtilitySlow(Node *parsetree,
 							relOid = DefineRelation((CreateStmt *) stmt,
 													RELKIND_RELATION,
 													InvalidOid);
-
-							if (((CreateStmt *) stmt)->stream)
-								continue;
 
 							/*
 							 * Let NewRelationCreateToastTable decide if this
@@ -962,6 +968,15 @@ ProcessUtilitySlow(Node *parsetree,
 													InvalidOid);
 							CreateForeignTable((CreateForeignTableStmt *) stmt,
 											   relOid);
+						}
+						else if (IsA(stmt, CreateStreamStmt))
+						{
+							transformCreateStreamStmt((CreateStreamStmt *) stmt);
+							/* Create the table itself */
+							relOid = DefineRelation((CreateStmt *) stmt,
+													RELKIND_STREAM,
+													InvalidOid);
+							CreatePipelineStreamEntry((CreateStreamStmt *) stmt, relOid);
 						}
 						else
 						{
@@ -1841,7 +1856,7 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_CreateStmt:
-			tag = ((CreateStmt *) parsetree)->stream ? "CREATE STREAM" : "CREATE TABLE";
+			tag = "CREATE TABLE";
 			break;
 
 		case T_CreateTableSpaceStmt:
@@ -1858,6 +1873,10 @@ CreateCommandTag(Node *parsetree)
 
 		case T_CreateExtensionStmt:
 			tag = "CREATE EXTENSION";
+			break;
+
+		case T_CreateStreamStmt:
+			tag = "CREATE STREAM";
 			break;
 
 		case T_AlterExtensionStmt:
@@ -2026,8 +2045,6 @@ CreateCommandTag(Node *parsetree)
 
 		case T_RenameStmt:
 			tag = AlterObjectTypeCommandTag(((RenameStmt *) parsetree)->renameType);
-			if (((RenameStmt *) parsetree)->relationType == OBJECT_STREAM)
-				tag = "ALTER STREAM";
 			break;
 
 		case T_AlterObjectSchemaStmt:

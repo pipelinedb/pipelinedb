@@ -707,7 +707,6 @@ pfree(void *pointer)
 	 */
 	context = ((StandardChunkHeader *)
 			   ((char *) pointer - STANDARDCHUNKHEADERSIZE))->context;
-
 	AssertArg(MemoryContextIsValid(context));
 
 	(*context->methods->free_p) (context, pointer);

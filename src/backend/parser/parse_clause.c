@@ -19,6 +19,7 @@
 #include "access/heapam.h"
 #include "catalog/heap.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "commands/defrem.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"

@@ -509,6 +509,7 @@ combine(ContQueryCombinerState *state)
 	TupleHashTable existing = NULL;
 
 	state->matrel = heap_openrv_extended(state->view->matrel, RowExclusiveLock, true);
+
 	if (state->matrel == NULL)
 		return;
 
@@ -626,7 +627,14 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		state->groupops = agg->grpOperators;
 		state->isagg = true;
 
-		matrel = heap_openrv(state->view->matrel, AccessShareLock);
+		matrel = heap_openrv_extended(state->view->matrel, AccessShareLock, true);
+
+		if (matrel == NULL)
+		{
+			state->view = NULL;
+			return;
+		}
+
 		ri = CQMatViewOpen(matrel);
 
 		if (state->ngroupatts)

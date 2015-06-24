@@ -830,21 +830,25 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 
 		Assert(!stmt->query);
 
-		if (RangeVarIsForStream(stmt->relation))
+		/* Open and lock the relation, using the appropriate lock type. */
+		rel = heap_openrv(stmt->relation,
+							(is_from ? RowExclusiveLock : AccessShareLock));
+
+		if (is_inferred_stream_relation(rel))
 		{
+			ParseState *pstate;
+
 			if (!stmt->attlist)
 				ereport(ERROR,
 						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
 						errmsg("column names must be explicitly given when copying into a stream"),
 						errhint("For example, COPY %s (x, y, ...) FROM '%s'.", stmt->relation->relname, stmt->filename)));
 
-			rel = GetRelationForStream(stmt->relation, stmt->attlist);
-		}
-		else
-		{
-			/* Open and lock the relation, using the appropriate lock type. */
-			rel = heap_openrv(stmt->relation,
-								(is_from ? RowExclusiveLock : AccessShareLock));
+			pstate = make_parsestate(NULL);
+			pstate->p_allow_streams = true;
+			pstate->p_ins_cols = stmt->attlist;
+			rel = inferred_stream_open(pstate, rel);
+			free_parsestate(pstate);
 		}
 
 		relid = RelationGetRelid(rel);
@@ -860,7 +864,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		attnums = CopyGetAttnums(tupDesc, rel, stmt->attlist);
 
 		/* if it's an actual relation, we need to check permissions */
-		if (!RangeVarIsForStream(stmt->relation))
+		if (!RangeVarIsForStream(stmt->relation, NULL))
 		{
 			foreach(cur, attnums)
 			{
@@ -917,7 +921,12 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	 * ensure that updates will be committed before lock is released.
 	 */
 	if (rel != NULL && rel->rd_refcnt > 0)
-		heap_close(rel, (is_from ? NoLock : AccessShareLock));
+	{
+		if (is_inferred_stream_relation(rel))
+			inferred_stream_close(rel);
+		else
+			heap_close(rel, (is_from ? NoLock : AccessShareLock));
+	}
 
 	return relid;
 }

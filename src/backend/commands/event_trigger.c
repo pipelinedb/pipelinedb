@@ -919,7 +919,8 @@ EventTriggerSupportsObjectType(ObjectType obtype)
 			/* no support for event triggers on event triggers */
 			return false;
 		case OBJECT_CONTINUOUS_VIEW:
-			/* no support for continuous views (for now) */
+		case OBJECT_STREAM:
+			/* no support for continuous views & streams (for now) */
 			return false;
 		case OBJECT_AGGREGATE:
 		case OBJECT_ATTRIBUTE:
@@ -944,7 +945,6 @@ EventTriggerSupportsObjectType(ObjectType obtype)
 		case OBJECT_RULE:
 		case OBJECT_SCHEMA:
 		case OBJECT_SEQUENCE:
-		case OBJECT_STREAM:
 		case OBJECT_TABLE:
 		case OBJECT_TRIGGER:
 		case OBJECT_TSCONFIGURATION:
@@ -975,6 +975,7 @@ EventTriggerSupportsObjectClass(ObjectClass objclass)
 			/* no support for event triggers on event triggers */
 			return false;
 		case OCLASS_CONTINUOUS_VIEW:
+		case OCLASS_STREAM:
 			/* no support for continuous views (for now) */
 			return false;
 		case OCLASS_CLASS:

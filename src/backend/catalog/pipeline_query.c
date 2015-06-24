@@ -160,7 +160,7 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	 */
 	namespace = RangeVarGetCreationNamespace(name);
 
-	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
 
 	id = get_next_id(pipeline_query);
 
@@ -178,7 +178,9 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
 	values[Anum_pipeline_query_needs_xact - 1] = BoolGetDatum(needs_xact);
 
-	hash = MurmurHash3_64(name->relname, strlen(name->relname), MURMUR_SEED) ^ MurmurHash3_64(query_string, strlen(query_string), MURMUR_SEED);
+	hash = (MurmurHash3_64(name->relname, strlen(name->relname), MURMUR_SEED) ^
+			MurmurHash3_64(query_string, strlen(query_string), MURMUR_SEED) ^
+			namespace);
 	values[Anum_pipeline_query_hash - 1] = Int32GetDatum(hash);
 
 	MemSet(nulls, 0, sizeof(nulls));
@@ -193,7 +195,7 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 
 	heap_freetuple(tup);
 
-	UpdatePipelineStreamCatalog(pipeline_query);
+	UpdatePipelineStreamCatalog();
 
 	heap_close(pipeline_query, NoLock);
 
@@ -457,7 +459,7 @@ RemoveContinuousViewById(Oid oid)
 	HeapTuple tuple;
 	Form_pipeline_query row;
 
-	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	tuple = SearchSysCache1(PIPELINEQUERYOID, ObjectIdGetDatum(oid));
 	if (!HeapTupleIsValid(tuple))
@@ -473,7 +475,7 @@ RemoveContinuousViewById(Oid oid)
 	ReleaseSysCache(tuple);
 
 	CommandCounterIncrement();
-	UpdatePipelineStreamCatalog(pipeline_query);
+	UpdatePipelineStreamCatalog();
 
 	heap_close(pipeline_query, NoLock);
 }

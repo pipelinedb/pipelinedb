@@ -454,6 +454,7 @@ typedef enum NodeTag
 
 	T_ActivateStmt,
 	T_CreateContViewStmt,
+	T_CreateStreamStmt,
 	T_DeactivateStmt,
 	T_ExplainContViewStmt
 } NodeTag;
