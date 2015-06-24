@@ -373,6 +373,9 @@ select_existing_groups(ContQueryCombinerState *state, TupleHashTable existing)
 
 	plan = get_cached_groups_plan(state, values);
 
+	/* Rewind tuplestore */
+	tuplestore_rescan(state->batch);
+
 	/*
 	 * Now run the query that retrieves existing tuples to merge this merge request with.
 	 * This query outputs to the tuplestore currently holding the incoming merge tuples.

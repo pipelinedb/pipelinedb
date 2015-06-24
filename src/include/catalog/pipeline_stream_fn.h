@@ -20,7 +20,7 @@
 #include "parser/parse_node.h"
 #include "utils/relcache.h"
 
-#define needs_mock_relation(rel) ((rel)->rd_rel->relkind == RELKIND_STREAM && IsInferredStream((rel)->rd_id))
+#define is_inferred_stream_relation(rel) ((rel)->rd_rel->relkind == RELKIND_STREAM && IsInferredStream((rel)->rd_id))
 
 extern void UpdatePipelineStreamCatalog(void);
 
@@ -38,7 +38,7 @@ extern void CreateInferredStream(RangeVar *rv);
 extern void CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid);
 extern void RemovePipelineStreamById(Oid oid);
 
-extern Relation mock_relation_open(ParseState *pstate, Relation rel);
-extern void mock_relation_close(Relation rel);
+extern Relation inferred_stream_open(ParseState *pstate, Relation rel);
+extern void inferred_stream_close(Relation rel);
 
 #endif

@@ -998,8 +998,8 @@ parserOpenTable(ParseState *pstate, const RangeVar *relation, int lockmode)
 					 errmsg("\"%s\" is a stream", relation->relname),
 					 errhint("Streams can only be read by a continuous view's FROM clause.")));
 
-		if (needs_mock_relation(rel))
-			rel = mock_relation_open(pstate, rel);
+		if (is_inferred_stream_relation(rel))
+			rel = inferred_stream_open(pstate, rel);
 	}
 
 	return rel;
@@ -1089,8 +1089,8 @@ addRangeTableEntry(ParseState *pstate,
 	 * so that the table can't be deleted or have its schema modified
 	 * underneath us.
 	 */
-	if (needs_mock_relation(rel))
-		mock_relation_close(rel);
+	if (is_inferred_stream_relation(rel))
+		inferred_stream_close(rel);
 	else
 		heap_close(rel, NoLock);
 

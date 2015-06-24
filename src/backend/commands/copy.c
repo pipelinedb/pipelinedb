@@ -833,7 +833,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		rel = heap_openrv(stmt->relation,
 							(is_from ? RowExclusiveLock : AccessShareLock));
 
-		if (needs_mock_relation(rel))
+		if (is_inferred_stream_relation(rel))
 		{
 			ParseState *pstate;
 
@@ -846,7 +846,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 			pstate = make_parsestate(NULL);
 			pstate->p_allow_streams = true;
 			pstate->p_ins_cols = stmt->attlist;
-			rel = mock_relation_open(pstate, rel);
+			rel = inferred_stream_open(pstate, rel);
 			free_parsestate(pstate);
 		}
 
@@ -921,8 +921,8 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 	 */
 	if (rel != NULL && rel->rd_refcnt > 0)
 	{
-		if (needs_mock_relation(rel))
-			mock_relation_close(rel);
+		if (is_inferred_stream_relation(rel))
+			inferred_stream_close(rel);
 		else
 			heap_close(rel, (is_from ? NoLock : AccessShareLock));
 	}

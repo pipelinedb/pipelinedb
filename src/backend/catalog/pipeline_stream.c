@@ -415,7 +415,8 @@ delete_nonexistent_streams(Relation pipeline_stream, List *keys)
 				bool replaces[Natts_pipeline_stream];
 				HeapTuple newtup;
 				bool isnull;
-				Datum queries = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
+
+				SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
 
 				/* If queries is already NULL, this is a noop */
 				if (isnull)
@@ -795,16 +796,16 @@ RemovePipelineStreamById(Oid oid)
 }
 
 /*
- * mock_relation_open
+ * inferred_stream_open
  */
 Relation
-mock_relation_open(ParseState *pstate, Relation rel)
+inferred_stream_open(ParseState *pstate, Relation rel)
 {
 	TupleDesc desc;
 	Relation stream_rel;
 
 	Assert(pstate->p_allow_streams);
-	Assert(needs_mock_relation(rel));
+	Assert(is_inferred_stream_relation(rel));
 
 	if (pstate->p_cont_view_context)
 		desc = parserGetStreamDescr(rel->rd_id, pstate->p_cont_view_context);
@@ -830,12 +831,12 @@ mock_relation_open(ParseState *pstate, Relation rel)
 }
 
 /*
- * mock_relation_close
+ * inferred_stream_close
  */
 void
-mock_relation_close(Relation rel)
+inferred_stream_close(Relation rel)
 {
-	Assert(needs_mock_relation(rel));
+	Assert(is_inferred_stream_relation(rel));
 
 	pfree(rel->rd_rel);
 	pfree(rel);
