@@ -1516,8 +1516,8 @@ exec_command(const char *cmd,
 	else if (strcmp(cmd, "?") == 0)
 		slashUsage(pset.popt.topt.pager);
 
-	/* \! -- PipelineDB */
-	else if (strcmp(cmd, "!") == 0)
+	/* \zq -- PipelineDB */
+	else if (strcmp(cmd, "|") == 0)
 		success = listPipelineQuery();
 
 #if 0
