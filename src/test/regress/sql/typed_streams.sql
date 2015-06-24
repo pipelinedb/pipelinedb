@@ -16,9 +16,6 @@ CREATE STREAM l0 (x integer, y integer);
 CREATE STREAM l1 (LIKE l0);
 \d l1;
 
--- Stream renaming is currently not supported
-ALTER STREAM l1 RENAME TO l2;
-
 CREATE CONTINUOUS VIEW v0 AS
 SELECT x, COUNT(*) FROM test_typed_streams.s0 GROUP BY x;
 

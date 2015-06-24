@@ -469,36 +469,11 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId)
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	Oid			ofTypeId;
 
-	if (stmt->stream)
-		relkind = RELKIND_STREAM;
-
 	/*
 	 * Truncate relname to appropriate length (probably a waste of time, as
 	 * parser should have done this already).
 	 */
 	StrNCpy(relname, stmt->relation->relname, NAMEDATALEN);
-
-	if (RangeVarIsForStream(stmt->relation))
-	{
-
-		if (relkind == RELKIND_STREAM)
-		{
-			if (RangeVarIsForTypedStream(stmt->relation))
-				ereport(ERROR,
-						(errcode(ERRCODE_DUPLICATE_STREAM),
-						 errmsg("stream \"%s\" already exists", relname)));
-			else
-				ereport(ERROR,
-						(errcode(ERRCODE_DUPLICATE_STREAM),
-						 errmsg("\"%s\" is being used as a stream", relname),
-						 errhint("A stream cannot have the same name as an inferred stream.")));
-		}
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_DUPLICATE_STREAM),
-					 errmsg("\"%s\" is being used as a stream", relname),
-					 errhint("Streams and relations cannot have the same name.")));
-	}
 
 	/*
 	 * Check consistency of arguments
@@ -807,7 +782,7 @@ DropErrorMsgWrongType(const char *relname, char wrongkind, char rightkind)
 /*
  * RemoveRelations
  *		Implements DROP TABLE, DROP INDEX, DROP SEQUENCE, DROP VIEW,
- *		DROP MATERIALIZED VIEW, DROP FOREIGN TABLE
+ *		DROP MATERIALIZED VIEW, DROP FOREIGN TABLE, DROP STREAM
  */
 void
 RemoveRelations(DropStmt *drop)
@@ -921,8 +896,6 @@ RemoveRelations(DropStmt *drop)
 			char save = relkind;
 			if (drop->removeType == OBJECT_CONTINUOUS_VIEW)
 				relkind = RELKIND_CONTINUOUS_VIEW;
-			else if (drop->removeType == OBJECT_STREAM)
-				relkind = RELKIND_STREAM;
 			DropErrorMsgNonExistent(rel, relkind, drop->missing_ok);
 			relkind = save;
 			continue;
@@ -3086,6 +3059,11 @@ ATController(Relation rel, List *cmds, bool recurse, LOCKMODE lockmode)
 	foreach(lcmd, cmds)
 	{
 		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lcmd);
+
+		if (rel->rd_rel->relkind == RELKIND_STREAM && cmd->subtype != AT_AddColumn)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					(errmsg("streams only support ADD COLUMN commands"))));
 
 		ATPrepCmd(&wqueue, rel, cmd, recurse, false, lockmode);
 	}

@@ -25,6 +25,7 @@
 
 #include "postgres.h"
 
+#include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "catalog/namespace.h"
@@ -442,14 +443,17 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	ListCell   *icols;
 	ListCell   *attnos;
 	ListCell   *lc;
-	bool isStream = RangeVarIsForStream(stmt->relation);
-	RangeVar *cv = NULL;
+	RangeVar *cv;
 
 	if (IsAMatRel(stmt->relation, &cv))
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("cannot insert into materialization table \"%s\" of continuous view \"%s\"",
 						 stmt->relation->relname, cv->relname)));
+
+	/* Allow inserting into streams */
+	pstate->p_allow_streams = true;
+	pstate->p_ins_cols = stmt->cols;
 
 	/* There can't be any outer WITH to worry about */
 	Assert(pstate->p_ctenamespace == NIL);
@@ -509,16 +513,8 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 	 * mentioned in the SELECT part.  Note that the target table is not added
 	 * to the joinlist or namespace.
 	 */
-	if (isStream)
-	{
-		Relation rel = GetRelationForStream(stmt->relation, stmt->cols);
-		pstate->p_target_relation = rel;
-	}
-	else
-	{
-		qry->resultRelation = setTargetTable(pstate, stmt->relation,
+	qry->resultRelation = setTargetTable(pstate, stmt->relation,
 											 false, false, ACL_INSERT);
-	}
 
 	/* Validate stmt->cols list, or build default list if no list given */
 	icolumns = checkInsertTargets(pstate, stmt->cols, &attrnos);
@@ -772,9 +768,8 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 							  false);
 		qry->targetList = lappend(qry->targetList, tle);
 
-		if (!isStream)
-			rte->modifiedCols = bms_add_member(rte->modifiedCols,
-									attr_num - FirstLowInvalidHeapAttributeNumber);
+		rte->modifiedCols = bms_add_member(rte->modifiedCols,
+				attr_num - FirstLowInvalidHeapAttributeNumber);
 
 		icols = lnext(icols);
 		attnos = lnext(attnos);
@@ -803,10 +798,10 @@ transformInsertStmt(ParseState *pstate, InsertStmt *stmt)
 
 	assign_query_collations(pstate, qry);
 
-	if (isStream)
+	/* If it's a dummy relation, discard it eagerly */
+	if (is_inferred_stream_relation(pstate->p_target_relation))
 	{
-		pfree(pstate->p_target_relation->rd_rel);
-		pfree(pstate->p_target_relation);
+		inferred_stream_close(pstate->p_target_relation);
 		pstate->p_target_relation = NULL;
 	}
 

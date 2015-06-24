@@ -30,7 +30,7 @@ stream_receive(TupleTableSlot *slot, DestReceiver *self)
 	StreamReceiver *stream = (StreamReceiver *) self;
 	MemoryContext old = MemoryContextSwitchTo(stream->context);
 	HeapTuple tup = ExecMaterializeSlot(slot);
-	StreamTuple *tuple = MakeStreamTuple(tup, stream->desc, stream->nbatches, stream->acks);
+	StreamTuple *tuple = MakeStreamTuple(tup, stream->desc, stream->nacks, stream->acks);
 
 	if (TupleBufferInsert(WorkerTupleBuffer, tuple, stream->targets))
 	{
@@ -65,13 +65,13 @@ CreateStreamDestReceiver(void)
 
 void
 SetStreamDestReceiverParams(DestReceiver *self, Bitmapset *targets, TupleDesc desc,
-		int nbatches, InsertBatchAck *acks)
+		int nacks, InsertBatchAck *acks)
 {
 	StreamReceiver *stream = (StreamReceiver *) self;
 
 	stream->desc = desc;
 	stream->targets = targets;
-	stream->nbatches = nbatches;
+	stream->nacks = nacks;
 	stream->acks = acks;
 	stream->context = CurrentMemoryContext;
 }

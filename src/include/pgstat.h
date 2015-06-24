@@ -1093,8 +1093,7 @@ extern CQStatEntry *cq_stat_get_entry(PgStat_StatDBEntry *dbentry, Oid viewoid, 
 
 typedef struct StreamStatEntry
 {
-	Oid namespace; /* composite key of (namespace, name) */
-	NameData name;
+	Oid relid;
 	PgStat_Counter input_rows;
 	PgStat_Counter input_batches;
 	PgStat_Counter input_bytes;
@@ -1108,6 +1107,6 @@ typedef struct StreamStatMsg
 } StreamStatMsg;
 
 extern HTAB *stream_stat_fetch_all(void);
-extern void stream_stat_report(Oid namespace, char *name, int ntups, int nbatches, Size nbytes);
+extern void stream_stat_report(Oid relid, int ntups, int nbatches, Size nbytes);
 
 #endif   /* PGSTAT_H */

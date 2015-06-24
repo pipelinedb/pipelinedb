@@ -1,11 +1,11 @@
 /* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
- * cqstatfuncs.c
- *		Functions for retrieving CQ statistics
+ * pipelinefuncs.c
+ *		Functions for PipelineDB functions
  *
  * IDENTIFICATION
- *	  src/backend/utils/adt/cqstatfuncs.c
+ *	  src/backend/utils/adt/pipelinefuncs.c
  *
  *-------------------------------------------------------------------------
  */
@@ -15,9 +15,15 @@
 
 #include "access/htup_details.h"
 #include "catalog/pg_type.h"
+#include "catalog/pipeline_query.h"
+#include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_stream.h"
+#include "utils/array.h"
 #include "utils/builtins.h"
-#include "utils/cqstatfuncs.h"
+#include "utils/lsyscache.h"
+#include "utils/pipelinefuncs.h"
 #include "utils/rel.h"
+#include "utils/syscache.h"
 
 /*
  * cq_proc_stat_get
@@ -242,7 +248,7 @@ stream_stat_get(PG_FUNCTION_ARGS)
 
 		/* build tupdesc for result tuples */
 		tupdesc = CreateTemplateTupleDesc(5, false);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "namespace", OIDOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "schema", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "name", TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "input_rows", INT8OID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "input_batches", INT8OID, -1, 0);
@@ -271,12 +277,21 @@ stream_stat_get(PG_FUNCTION_ARGS)
 		bool nulls[5];
 		HeapTuple tup;
 		Datum result;
+		Relation rel = try_relation_open(entry->relid, NoLock);
+
+		if (rel == NULL || rel->rd_rel->relkind != RELKIND_STREAM)
+		{
+			/* TODO(usmanm): Purge the entry. */
+			if (rel)
+				relation_close(rel, NoLock);
+			continue;
+		}
 
 		MemSet(values, 0, sizeof(values));
 		MemSet(nulls, 0, sizeof(nulls));
 
-		values[0] = ObjectIdGetDatum(entry->namespace);
-		values[1] = CStringGetTextDatum(NameStr(entry->name));
+		values[0] = CStringGetTextDatum(get_namespace_name(get_rel_namespace(entry->relid)));
+		values[1] = CStringGetTextDatum(get_rel_name(entry->relid));
 		values[2] = Int64GetDatum(entry->input_rows);
 		values[3] = Int64GetDatum(entry->input_batches);
 		values[4] = Int64GetDatum(entry->input_bytes);
@@ -285,6 +300,234 @@ stream_stat_get(PG_FUNCTION_ARGS)
 		result = HeapTupleGetDatum(tup);
 		SRF_RETURN_NEXT(funcctx, result);
 	}
+
+	SRF_RETURN_DONE(funcctx);
+}
+
+typedef struct
+{
+	Relation rel;
+	HeapScanDesc scan;
+} RelationScanData;
+
+/*
+ * pipeline_queries
+ */
+Datum
+pipeline_queries(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	HeapTuple tup;
+	MemoryContext old;
+	RelationScanData *data;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+
+		TupleDesc	tupdesc;
+		MemoryContext oldcontext;
+
+		/* create a function context for cross-call persistence */
+		funcctx = SRF_FIRSTCALL_INIT();
+
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		/* build tupdesc for result tuples */
+		tupdesc = CreateTemplateTupleDesc(4, false);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "id", OIDOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "schema", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "name", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "query", TEXTOID, -1, 0);
+
+		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = (FuncCallContext *) fcinfo->flinfo->fn_extra;
+
+	if (funcctx->user_fctx == NULL)
+	{
+
+
+		old = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		data = palloc(sizeof(RelationScanData));
+		data->rel = heap_open(PipelineQueryRelationId, AccessShareLock);
+		data->scan = heap_beginscan_catalog(data->rel, 0, NULL);
+		funcctx->user_fctx = data;
+
+		MemoryContextSwitchTo(old);
+	}
+	else
+		data = (RelationScanData *) funcctx->user_fctx;
+
+	while ((tup = heap_getnext(data->scan, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
+		Datum values[4];
+		bool nulls[4];
+		HeapTuple rtup;
+		Datum result;
+		Datum tmp;
+		bool isnull;
+
+		MemSet(nulls, 0, sizeof(nulls));
+
+		values[0] = ObjectIdGetDatum(row->id);
+		values[1] = CStringGetTextDatum(get_namespace_name(row->namespace));
+		values[2] = CStringGetTextDatum(NameStr(row->name));
+
+		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
+
+		Assert(!isnull);
+
+		values[3] = CStringGetTextDatum(TextDatumGetCString(tmp));
+
+		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
+		result = HeapTupleGetDatum(rtup);
+		SRF_RETURN_NEXT(funcctx, result);
+	}
+
+	heap_endscan(data->scan);
+	heap_close(data->rel, AccessShareLock);
+
+	SRF_RETURN_DONE(funcctx);
+}
+
+/*
+ * pipeline_streams
+ */
+Datum
+pipeline_streams(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	HeapTuple tup;
+	MemoryContext old;
+	RelationScanData *data;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+
+		TupleDesc	tupdesc;
+		MemoryContext oldcontext;
+
+		/* create a function context for cross-call persistence */
+		funcctx = SRF_FIRSTCALL_INIT();
+
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		/* build tupdesc for result tuples */
+		tupdesc = CreateTemplateTupleDesc(5, false);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "schema", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "name", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "inferred", BOOLOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "queries", OIDARRAYOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "desc", BYTEAOID, -1, 0);
+
+		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = (FuncCallContext *) fcinfo->flinfo->fn_extra;
+
+	if (funcctx->user_fctx == NULL)
+	{
+
+
+		old = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		data = palloc(sizeof(RelationScanData));
+		data->rel = heap_open(PipelineStreamRelationId, AccessShareLock);
+		data->scan = heap_beginscan_catalog(data->rel, 0, NULL);
+		funcctx->user_fctx = data;
+
+		MemoryContextSwitchTo(old);
+	}
+	else
+		data = (RelationScanData *) funcctx->user_fctx;
+
+	while ((tup = heap_getnext(data->scan, ForwardScanDirection)) != NULL)
+	{
+		Form_pipeline_stream row = (Form_pipeline_stream) GETSTRUCT(tup);
+		Datum values[5];
+		bool nulls[5];
+		HeapTuple rtup;
+		Datum result;
+		Datum tmp;
+		bool isnull;
+		bytea *bytes;
+		int nbytes;
+		int nwords;
+		Bitmapset *bms;
+		int dims[1];
+		int lbs[] = { 1 };
+		Datum *queries;
+		bool *qnulls;
+		int x;
+		int i;
+		char *relname = get_rel_name(row->relid);
+		char *namespace;
+
+		if (!relname)
+			continue;
+
+		namespace = get_namespace_name(get_rel_namespace(row->relid));
+		if (!namespace)
+			continue;
+
+		MemSet(nulls, 0, sizeof(nulls));
+
+		values[0] = CStringGetTextDatum(namespace);
+		values[1] = CStringGetTextDatum(relname);
+		values[2] = BoolGetDatum(row->inferred);
+
+		tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
+
+		if (isnull)
+			nulls[3] = true;
+		else
+		{
+			bytes = (bytea *) DatumGetPointer(PG_DETOAST_DATUM(tmp));
+			nbytes = VARSIZE(bytes) - VARHDRSZ;
+			nwords = nbytes / sizeof(bitmapword);
+
+			bms = palloc0(BITMAPSET_SIZE(nwords));
+			bms->nwords = nwords;
+
+			memcpy(bms->words, VARDATA(bytes), nbytes);
+
+			dims[0] = bms_num_members(bms);
+			queries = palloc0(sizeof(Datum) * dims[0]);
+			qnulls = palloc0(sizeof(bool) * dims[0]);
+
+			MemSet(qnulls, 0, dims[0]);
+			i = 0;
+
+			while ((x = bms_first_member(bms)) >= 0)
+			{
+				queries[i] = ObjectIdGetDatum(x);
+				i++;
+			}
+
+			values[3] = PointerGetDatum(construct_md_array(queries, qnulls, 1, dims, lbs, OIDOID, 4, true, 'i'));
+		}
+
+		tmp = SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_desc, &isnull);
+
+		if (isnull)
+			nulls[4] = true;
+		else
+			values[4] = tmp;
+
+		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
+		result = HeapTupleGetDatum(rtup);
+		SRF_RETURN_NEXT(funcctx, result);
+	}
+
+	heap_endscan(data->scan);
+	heap_close(data->rel, AccessShareLock);
 
 	SRF_RETURN_DONE(funcctx);
 }

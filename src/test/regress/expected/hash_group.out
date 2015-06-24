@@ -166,12 +166,12 @@ Indexes:
 Options: fillfactor=50
 
 \d+ ls_hash_group_mrel0;
-                          Table "public.ls_hash_group_mrel0"
- Column |           Type           | Modifiers | Storage | Stats target | Description 
---------+--------------------------+-----------+---------+--------------+-------------
- x      | integer                  |           | plain   |              | 
- y      | timestamp with time zone |           | plain   |              | 
- count  | bigint                   |           | plain   |              | 
+                           Table "public.ls_hash_group_mrel0"
+ Column |            Type             | Modifiers | Storage | Stats target | Description 
+--------+-----------------------------+-----------+---------+--------------+-------------
+ x      | integer                     |           | plain   |              | 
+ y      | timestamp(0) with time zone |           | plain   |              | 
+ count  | bigint                      |           | plain   |              | 
 Indexes:
     "ls_hash_group_mrel0_expr_idx" btree (ls_hash_group(x, y))
 Options: fillfactor=50

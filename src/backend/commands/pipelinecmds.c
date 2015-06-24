@@ -373,32 +373,36 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 	collect_rels_and_streams((Node *) from, &cxt);
 
 	/*
-	 * Record a dependency between any typed streams and a pipeline_query object,
+	 * Record a dependency between any strongly typed streams and a pipeline_query object,
 	 * so that it is not possible to drop a stream that is being read by a CV.
 	 */
 	foreach(lc, cxt.streams)
 	{
 		RangeVar *rv;
+		Oid relid;
 
 		if (!IsA(lfirst(lc), RangeVar))
 			continue;
 
 		rv = (RangeVar *) lfirst(lc);
-		if (RangeVarIsForTypedStream(rv))
-		{
-			Relation rel = heap_openrv(rv, AccessShareLock);
+		relid = RangeVarGetRelid(rv, AccessShareLock, false);
 
+		/*
+		 * Only record a dependency if stream is not inferred. Inferred streams are dropped in the
+		 * DROP CONTINUOUS VIEW path and so this causes a cyclical delete cycle. Inferred streams
+		 * can't be dropped by users anyway, so this doesn't matter.
+		 */
+		if (!IsInferredStream(relid))
+		{
 			parent.classId = PipelineQueryRelationId;
 			parent.objectId = cvoid;
 			parent.objectSubId = 0;
 
 			child.classId = RelationRelationId;
-			child.objectId = rel->rd_id;
+			child.objectId = relid;
 			child.objectSubId = 0;
 
 			recordDependencyOn(&parent, &child, DEPENDENCY_NORMAL);
-
-			heap_close(rel, AccessShareLock);
 		}
 	}
 }
@@ -430,6 +434,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	SelectStmt *viewselect;
 	CQAnalyzeContext context;
 	bool saveAllowSystemTableMods;
+	Relation pipeline_query;
 
 	view = stmt->into->rel;
 	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
@@ -450,6 +455,9 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
 
+	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
+
+	CreateInferredStreams((SelectStmt *) stmt->query);
 	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
 
 	/*
@@ -558,6 +566,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	record_dependencies(cvoid, matreloid, viewoid, indexoid, workerselect->fromClause);
 
 	allowSystemTableMods = saveAllowSystemTableMods;
+
+	heap_close(pipeline_query, NoLock);
 }
 
 /*

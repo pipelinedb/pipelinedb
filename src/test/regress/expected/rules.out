@@ -2128,13 +2128,12 @@ pipeline_query_stats| SELECT cq_stat_get.name,
     cq_stat_get.updated_bytes,
     cq_stat_get.errors
    FROM cq_stat_get() cq_stat_get(name, type, input_rows, output_rows, updates, input_bytes, output_bytes, updated_bytes, errors);
-pipeline_stream_stats| SELECT pg_namespace.nspname AS schema,
-    stats.name,
-    stats.input_rows,
-    stats.input_batches,
-    stats.input_bytes
-   FROM (stream_stat_get() stats(namespace, name, input_rows, input_batches, input_bytes)
-     JOIN pg_namespace ON ((stats.namespace = pg_namespace.oid)));
+pipeline_stream_stats| SELECT stream_stat_get.schema,
+    stream_stat_get.name,
+    stream_stat_get.input_rows,
+    stream_stat_get.input_batches,
+    stream_stat_get.input_bytes
+   FROM stream_stat_get() stream_stat_get(schema, name, input_rows, input_batches, input_bytes);
 raster_columns| SELECT current_database() AS r_table_catalog,
     n.nspname AS r_table_schema,
     c.relname AS r_table_name,

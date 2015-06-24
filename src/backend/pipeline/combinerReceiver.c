@@ -95,7 +95,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 
 		if (num_acks)
 		{
-			acks = (InsertBatchAck *) palloc(sizeof(InsertBatchAck) * list_length(acks_list));
+			acks = (InsertBatchAck *) palloc(sizeof(InsertBatchAck) * num_acks);
 
 			foreach(lc_ack, acks_list)
 			{

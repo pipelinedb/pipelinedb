@@ -148,7 +148,8 @@ typedef enum ObjectClass
 	OCLASS_DEFACL,				/* pg_default_acl */
 	OCLASS_EXTENSION,			/* pg_extension */
 	OCLASS_EVENT_TRIGGER,		/* pg_event_trigger */
-	OCLASS_CONTINUOUS_VIEW, /* pipeline_query */
+	OCLASS_CONTINUOUS_VIEW, 	/* pipeline_query */
+	OCLASS_STREAM, 				/* pipeline_stream */
 	MAX_OCLASS					/* MUST BE LAST */
 } ObjectClass;
 

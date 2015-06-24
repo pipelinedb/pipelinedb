@@ -625,12 +625,12 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		2048
 	},
-	{PipelineStreamRelationId,	/* PIPELINESTREAMNAMESPACENAME */
-		PipelineStreamNamespaceNameIndexId,
-		2,
+	{PipelineStreamRelationId,	/* PIPELINESTREAMRELID */
+		PipelineStreamRelIdIndexId,
+		1,
 		{
-			Anum_pipeline_stream_namespace,
-			Anum_pipeline_stream_name,
+			Anum_pipeline_stream_relid,
+			0,
 			0,
 			0
 		},
