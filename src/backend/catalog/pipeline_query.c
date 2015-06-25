@@ -179,7 +179,7 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 
 	hash = (MurmurHash3_64(name->relname, strlen(name->relname), MURMUR_SEED) ^
 			MurmurHash3_64(query_string, strlen(query_string), MURMUR_SEED) ^
-			namespace);
+			namespace ^ RangeVarGetRelid(matrelname, NoLock, false));
 	values[Anum_pipeline_query_hash - 1] = Int32GetDatum(hash);
 
 	MemSet(nulls, 0, sizeof(nulls));
