@@ -2389,10 +2389,10 @@ CopyFrom(CopyState cstate)
 					 */
 					if (cstate->to_stream)
 					{
-						oldcontext = MemoryContextSwitchTo(cstate->to_stream_ctxt);
+						MemoryContext old_cxt = MemoryContextSwitchTo(cstate->to_stream_ctxt);
 						CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples);
 						MemoryContextReset(cstate->to_stream_ctxt);
-						MemoryContextSwitchTo(oldcontext);
+						MemoryContextSwitchTo(old_cxt);
 					}
 					else
 					{
@@ -2438,10 +2438,10 @@ CopyFrom(CopyState cstate)
 	{
 		if (cstate->to_stream)
 		{
-			oldcontext = MemoryContextSwitchTo(cstate->to_stream_ctxt);
+			MemoryContext old_cxt = MemoryContextSwitchTo(cstate->to_stream_ctxt);
 			CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples);
 			MemoryContextReset(cstate->to_stream_ctxt);
-			MemoryContextSwitchTo(oldcontext);
+			MemoryContextSwitchTo(old_cxt);
 		}
 		else
 		{
