@@ -740,8 +740,8 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 	Datum values[Natts_pipeline_stream];
 	bool nulls[Natts_pipeline_stream];
 	HeapTuple tup;
-	ObjectAddress parent;
-	ObjectAddress child;
+	ObjectAddress referenced;
+	ObjectAddress dependent;
 	Oid entry_oid;
 
 	values[Anum_pipeline_stream_relid - 1] = ObjectIdGetDatum(relid);
@@ -758,13 +758,13 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 	CommandCounterIncrement();
 
 	/* Record dependency between tuple in pipeline_stream and the relation */
-	child.classId = PipelineStreamRelationId;
-	child.objectId = entry_oid;
-	child.objectSubId = 0;
-	parent.classId = RelationRelationId;
-	parent.objectId = relid;
-	parent.objectSubId = 0;
-	recordDependencyOn(&child, &parent, DEPENDENCY_INTERNAL);
+	dependent.classId = PipelineStreamRelationId;
+	dependent.objectId = entry_oid;
+	dependent.objectSubId = 0;
+	referenced.classId = RelationRelationId;
+	referenced.objectId = relid;
+	referenced.objectSubId = 0;
+	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 
 	CommandCounterIncrement();
 
