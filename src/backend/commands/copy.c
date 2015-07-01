@@ -2952,7 +2952,7 @@ NextCopyFrom(CopyState cstate, ExprContext *econtext,
 
 			if (fieldno >= fldct)
 			{
-				if (!cstate->to_inferred_stream)
+				if (AttributeNumberIsValid(attnum))
 					ereport(ERROR,
 							(errcode(ERRCODE_BAD_COPY_FILE_FORMAT),
 							 errmsg("missing data for column \"%s\"",
