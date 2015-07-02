@@ -398,8 +398,8 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 
 			relation_close(rel, NoLock);
 
-			referenced.classId = PipelineQueryRelationId;
-			referenced.objectId = cvoid;
+			referenced.classId = RelationRelationId;
+			referenced.objectId = viewoid;
 			referenced.objectSubId = 0;
 
 			dependent.classId = TypeRelationId;
@@ -414,8 +414,8 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 			referenced.objectId = relid;
 			referenced.objectSubId = 0;
 
-			dependent.classId = PipelineQueryRelationId;
-			dependent.objectId = cvoid;
+			dependent.classId = RelationRelationId;
+			dependent.objectId = viewoid;
 			dependent.objectSubId = 0;
 
 			recordDependencyOn(&referenced, &dependent, DEPENDENCY_NORMAL);

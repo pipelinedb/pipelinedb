@@ -377,12 +377,11 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 /*
  * delete_nonexistent_streams
  */
-static int
-delete_nonexistent_streams(Relation pipeline_stream, List *keys)
+static void
+mark_nonexistent_streams(Relation pipeline_stream, List *keys)
 {
 	HeapScanDesc scandesc;
 	HeapTuple tup;
-	List *to_delete = NIL;
 
 	/* delete from the catalog any streams that aren't in the given list */
 	scandesc = heap_beginscan_catalog(pipeline_stream, 0, NULL);
@@ -405,63 +404,37 @@ delete_nonexistent_streams(Relation pipeline_stream, List *keys)
 
 		if (!found)
 		{
-			if (row->inferred)
-				to_delete = lappend_oid(to_delete, row->relid);
-			else
-			{
-				/* For inferred streams, set the queries to be NULL */
-				Datum values[Natts_pipeline_stream];
-				bool nulls[Natts_pipeline_stream];
-				bool replaces[Natts_pipeline_stream];
-				HeapTuple newtup;
-				bool isnull;
+			Datum values[Natts_pipeline_stream];
+			bool nulls[Natts_pipeline_stream];
+			bool replaces[Natts_pipeline_stream];
+			HeapTuple newtup;
+			bool isnull;
 
-				SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
+			SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
 
-				/* If queries is already NULL, this is a noop */
-				if (isnull)
-					continue;
+			/* If queries is already NULL, this is a noop */
+			if (isnull)
+				continue;
 
-				MemSet(nulls, false, Natts_pipeline_stream);
-				MemSet(replaces, false, sizeof(replaces));
+			MemSet(nulls, false, Natts_pipeline_stream);
+			MemSet(replaces, false, sizeof(replaces));
 
-				replaces[Anum_pipeline_stream_queries - 1] = true;
-				nulls[Anum_pipeline_stream_queries - 1] = true;
+			replaces[Anum_pipeline_stream_queries - 1] = true;
+			nulls[Anum_pipeline_stream_queries - 1] = true;
+			replaces[Anum_pipeline_stream_desc - 1] = true;
+			nulls[Anum_pipeline_stream_desc - 1] = true;
 
-				newtup = heap_modify_tuple(tup, pipeline_stream->rd_att,
-						values, nulls, replaces);
+			newtup = heap_modify_tuple(tup, pipeline_stream->rd_att,
+					values, nulls, replaces);
 
-				simple_heap_update(pipeline_stream, &newtup->t_self, newtup);
-				CatalogUpdateIndexes(pipeline_stream, newtup);
+			simple_heap_update(pipeline_stream, &newtup->t_self, newtup);
+			CatalogUpdateIndexes(pipeline_stream, newtup);
 
-				CommandCounterIncrement();
-			}
+			CommandCounterIncrement();
 		}
 	}
 
 	heap_endscan(scandesc);
-
-	if (list_length(to_delete))
-	{
-		DropStmt *stmt = makeNode(DropStmt);
-		ListCell *lc;
-
-		stmt->removeType = OBJECT_STREAM;
-		stmt->missing_ok = false;
-		stmt->behavior = DROP_RESTRICT;
-
-		foreach(lc, to_delete)
-		{
-			Oid relid = lfirst_oid(lc);
-			char *namespace = get_namespace_name(get_rel_namespace(relid));
-			char *relname = get_rel_name(relid);
-			stmt->objects = lappend(stmt->objects, list_make2(makeString(namespace), makeString(relname)));
-		}
-
-		RemoveObjects(stmt);
-	}
-
-	return list_length(to_delete);
 }
 
 /*
@@ -480,7 +453,7 @@ UpdatePipelineStreamCatalog(void)
 
 	hash = streams_to_meta(pipeline_query);
 	keys = update_pipeline_stream_catalog(pipeline_stream, hash);
-	delete_nonexistent_streams(pipeline_stream, keys);
+	mark_nonexistent_streams(pipeline_stream, keys);
 
 	heap_close(pipeline_stream, NoLock);
 	heap_close(pipeline_query, NoLock);
