@@ -15,7 +15,6 @@
 
 #include "postgres.h"
 
-#include "access/heapam.h"
 #include "access/subtrans.h"
 #include "access/transam.h"
 #include "access/xact.h"
@@ -837,14 +836,10 @@ DescribeLockTag(StringInfo buf, const LOCKTAG *tag)
 	switch ((LockTagType) tag->locktag_type)
 	{
 		case LOCKTAG_RELATION:
-		{
-			Relation rel = relation_open((Oid) tag->locktag_field2, NoLock);
 			appendStringInfo(buf,
-							 _("relation %s of database %u"),
-							 RelationGetRelationName(rel),
+							 _("relation %u of database %u"),
+							 tag->locktag_field2,
 							 tag->locktag_field1);
-			relation_close(rel, NoLock);
-		}
 			break;
 		case LOCKTAG_RELATION_EXTEND:
 			appendStringInfo(buf,
