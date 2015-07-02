@@ -49,6 +49,7 @@ typedef struct StreamTargetsEntry
 {
 	Oid relid; /* hash key --- MUST BE FIRST */
 	Bitmapset *queries;
+	bool inferred;
 	HTAB *colstotypes;
 	TupleDesc desc;
 } StreamTargetsEntry;
@@ -204,19 +205,17 @@ streams_to_meta(Relation pipeline_query)
 				entry->colstotypes = hash_create(rv->relname, 8, &colsctl, HASH_ELEM);
 				entry->queries = NULL;
 				entry->desc = NULL;
+				entry->inferred = false;
 			}
 
 			RangeVarIsForStream(rv, &is_inferred);
 
 			/* if it's a typed stream, we can just set the descriptor right away */
-			if (!is_inferred)
+			if (is_inferred)
 			{
-				Relation rel = heap_openrv(rv, AccessShareLock);
-				entry->desc = CreateTupleDescCopyConstr(RelationGetDescr(rel));
-				heap_close(rel, AccessShareLock);
-			}
-			else
+				entry->inferred = true;
 				add_coltypes(entry, context->types);
+			}
 
 			entry->queries = bms_add_member(entry->queries, catrow->id);
 		}
@@ -230,7 +229,7 @@ streams_to_meta(Relation pipeline_query)
 	hash_seq_init(&status, targets);
 	while ((entry = (StreamTargetsEntry *) hash_seq_search(&status)) != NULL)
 	{
-		if (!entry->desc)
+		if (entry->inferred)
 			infer_tupledesc(entry);
 	}
 
@@ -335,7 +334,6 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 		bool nulls[Natts_pipeline_stream];
 		bool replaces[Natts_pipeline_stream];
 		HeapTuple newtup;
-		Form_pipeline_stream row;
 
 		MemSet(nulls, false, Natts_pipeline_stream);
 		MemSet(replaces, false, sizeof(replaces));
@@ -349,10 +347,8 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 		tup = SearchSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(entry->relid));
 		Assert(HeapTupleIsValid(tup));
 
-		row = (Form_pipeline_stream) GETSTRUCT(tup);
-
 		/* Only update desc for inferred streams */
-		if (row->inferred)
+		if (entry->inferred)
 		{
 			values[Anum_pipeline_stream_desc - 1] = PointerGetDatum(PackTupleDesc(entry->desc));
 			replaces[Anum_pipeline_stream_desc - 1] = true;
@@ -632,7 +628,7 @@ GetInferredStreamTupleDesc(Oid relid, List *colnames)
 bool
 RangeVarIsForStream(RangeVar *rv, bool *is_inferred)
 {
-	Relation rel = heap_openrv_extended(rv, AccessShareLock, true);
+	Relation rel = heap_openrv_extended(rv, NoLock, true);
 	char relkind;
 	Oid relid;
 	HeapTuple tup;
@@ -643,7 +639,7 @@ RangeVarIsForStream(RangeVar *rv, bool *is_inferred)
 
 	relkind = rel->rd_rel->relkind;
 	relid = rel->rd_id;
-	heap_close(rel, AccessShareLock);
+	heap_close(rel, NoLock);
 
 	if (relkind != RELKIND_STREAM)
 		return false;
