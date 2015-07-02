@@ -386,11 +386,6 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 		rv = (RangeVar *) lfirst(lc);
 		relid = RangeVarGetRelid(rv, AccessShareLock, false);
 
-		/*
-		 * Only record a dependency if stream is not inferred. Inferred streams are dropped in the
-		 * DROP CONTINUOUS VIEW path and so this causes a cyclical delete cycle. Inferred streams
-		 * can't be dropped by users anyway, so this doesn't matter.
-		 */
 		if (IsInferredStream(relid))
 		{
 			Relation rel = relation_open(relid, NoLock);
@@ -406,7 +401,7 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 			dependent.objectId = typid;
 			dependent.objectSubId = 0;
 
-			recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
+			recordDependencyOn(&dependent, &referenced, DEPENDENCY_STREAM);
 		}
 		else
 		{
@@ -418,7 +413,7 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 			dependent.objectId = viewoid;
 			dependent.objectSubId = 0;
 
-			recordDependencyOn(&referenced, &dependent, DEPENDENCY_NORMAL);
+			recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
 		}
 	}
 }

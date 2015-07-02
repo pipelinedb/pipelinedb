@@ -132,7 +132,8 @@ extern PGDLLIMPORT LWLockPadded *MainLWLockArray;
 #define CombinerBufferHeadLock		(&MainLWLockArray[40].lock)
 #define CombinerBufferTailLock		(&MainLWLockArray[41].lock)
 #define ContinuousQuerySchedulerLock (&MainLWLockArray[42].lock)
-#define NUM_INDIVIDUAL_LWLOCKS		43
+#define PipelineMetadataLock		(&MainLWLockArray[43].lock)
+#define NUM_INDIVIDUAL_LWLOCKS		44
 
 /*
  * It's a bit odd to declare NUM_BUFFER_PARTITIONS and NUM_LOCK_PARTITIONS

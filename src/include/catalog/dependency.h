@@ -70,7 +70,8 @@ typedef enum DependencyType
 	DEPENDENCY_AUTO = 'a',
 	DEPENDENCY_INTERNAL = 'i',
 	DEPENDENCY_EXTENSION = 'e',
-	DEPENDENCY_PIN = 'p'
+	DEPENDENCY_PIN = 'p',
+	DEPENDENCY_STREAM = 's'
 } DependencyType;
 
 /*
