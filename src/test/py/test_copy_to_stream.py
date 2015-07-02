@@ -1,7 +1,6 @@
 from base import pipeline, clean_db
 import os
 import random
-import time
 
 
 def _generate_csv(path, rows, desc=None, delimiter=','):
@@ -110,13 +109,13 @@ def test_colums_subset(pipeline, clean_db):
     assert result[0] == expected[0]
     assert result[1] == expected[1]
     assert result[2] == expected[2]
-    
+
 def test_copy_to_typed_stream(pipeline, clean_db):
     """
     Verify that copying data from a file into a typed stream works.
     """
     pipeline.create_stream('stream', x='integer', y='float8', z='numeric')
-    
+
     q = 'SELECT sum(x) AS s0, sum(y) AS s1, avg(z) FROM stream'
     pipeline.create_cv('test_copy_to_typed_stream', q)
     pipeline.create_table('test_copy_to_typed_stream_t', x='integer', y='float8', z='numeric')
@@ -144,3 +143,14 @@ def test_copy_to_typed_stream(pipeline, clean_db):
     assert result[0] == expected[0]
     assert result[1] == expected[1]
     assert result[2] == expected[2]
+
+def test_regression(pipeline, clean_db):
+  path = os.path.abspath(os.path.join(pipeline.tmp_dir, 'test_copy.csv'))
+  _generate_csv(path, [['2015-06-01 00:00:00','De','Adam_Babareka','1','37433']], desc=('day', 'project', 'title', 'count', 'size'))
+
+  pipeline.create_cv('test_copy_regression', 'SELECT sum(count::integer) FROM copy_regression_stream')
+
+  try:
+    pipeline.execute("COPY copy_regression_stream (day, project, title, count, size) FROM '%s'" % path)
+  except Exception, e:
+    assert '(DataError) missing data for column "project"' in e.message

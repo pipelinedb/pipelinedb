@@ -21,7 +21,8 @@
 #include "parser/parse_node.h"
 #include "utils/relcache.h"
 
-#define is_inferred_stream_relation(rel) ((rel)->rd_rel->relkind == RELKIND_STREAM && IsInferredStream((rel)->rd_id))
+#define is_stream_relation(rel) ((rel)->rd_rel->relkind == RELKIND_STREAM)
+#define is_inferred_stream_relation(rel) (is_stream_relation(rel) && IsInferredStream((rel)->rd_id))
 
 extern void UpdatePipelineStreamCatalog(void);
 
