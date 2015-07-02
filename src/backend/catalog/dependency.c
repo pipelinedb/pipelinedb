@@ -827,6 +827,10 @@ findDependentObjects(const ObjectAddress *object,
 	 * We're trying to drop a continuous view which has an inferred stream dependent on it.
 	 * Depending on whether there are other continuous views dependent on the stream or not,
 	 * we may or may not have to delete the inferred stream object as well.
+	 *
+	 * XXX(usmanm): this right now assumes that there is only a continuous view can only have a single
+	 * DEPENDENCY_STREAM entry in pg_depend. Once stream-stream joins come into play, this will need to be
+	 * fixed.
 	 */
 	if (OidIsValid(stream_dep_oid))
 	{
