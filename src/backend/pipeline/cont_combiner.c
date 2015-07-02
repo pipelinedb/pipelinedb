@@ -22,6 +22,7 @@
 #include "executor/tupletableReceiver.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
+#include "optimizer/paths.h"
 #include "parser/parse_clause.h"
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
@@ -388,7 +389,7 @@ select_existing_groups(ContQueryCombinerState *state, TupleHashTable existing)
 			NULL);
 
 	dest = CreateDestReceiver(DestTupleTable);
-	SetTupleTableDestReceiverParams(dest, existing, CurrentMemoryContext, true);
+	SetTupleTableDestReceiverParams(dest, existing, state->tmp_cxt, true);
 
 	PortalStart(portal, NULL, EXEC_FLAG_COMBINE_LOOKUP, NULL);
 
@@ -939,6 +940,13 @@ ContinuousQueryCombinerMain(void)
 
 				if (!continuous_query_crash_recovery)
 					exit(1);
+
+				/*
+				 * In case the error was thrown inside `cont_plan.c:get_combiner_plan`, we might not have
+				 * reset the join_search_hook which would wrongly make the `get_cached_groups_plan` invoke the
+				 * hook.
+				 */
+				join_search_hook = NULL;
 			}
 			PG_END_TRY();
 

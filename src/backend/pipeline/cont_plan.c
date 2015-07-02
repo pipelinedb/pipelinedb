@@ -413,7 +413,6 @@ get_combiner_plan(ContinuousView *view)
 	List		*parsetree_list;
 	SelectStmt	*selectstmt;
 	PlannedStmt *result;
-	join_search_hook_type save = join_search_hook;
 
 	parsetree_list = pg_parse_query(view->query);
 	Assert(list_length(parsetree_list) == 1);
@@ -424,7 +423,7 @@ get_combiner_plan(ContinuousView *view)
 	selectstmt->forContinuousView = true;
 
 	result = get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, true);
-	join_search_hook = save;
+	join_search_hook = NULL;
 
 	return result;
 }
