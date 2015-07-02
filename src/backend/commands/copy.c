@@ -205,6 +205,8 @@ typedef struct CopyStateData
 	 * State for copying to a stream
 	 */
 	bool to_stream;
+	bool to_inferred_stream;
+	List *attnamelist;
 	MemoryContext to_stream_ctxt;
 
 } CopyStateData;
@@ -863,7 +865,7 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 		attnums = CopyGetAttnums(tupDesc, rel, stmt->attlist);
 
 		/* if it's an actual relation, we need to check permissions */
-		if (!RangeVarIsForStream(stmt->relation, NULL))
+		if (!is_stream_relation(rel))
 		{
 			foreach(cur, attnums)
 			{
@@ -1311,7 +1313,9 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
-	cstate->to_stream = rel && rel->rd_rel->relkind == RELKIND_STREAM;
+	cstate->to_stream = rel && is_stream_relation(rel);
+	cstate->to_inferred_stream = rel && is_inferred_stream_relation(rel);
+	cstate->attnamelist = attnamelist;
 
 	if (cstate->to_stream)
 	{
@@ -2905,7 +2909,7 @@ NextCopyFrom(CopyState cstate, ExprContext *econtext,
 			return false;
 
 		/* check for overflowing fields */
-		if (!cstate->to_stream && (nfields > 0 && fldct > nfields))
+		if (!cstate->to_inferred_stream && (nfields > 0 && fldct > nfields))
 			ereport(ERROR,
 					(errcode(ERRCODE_BAD_COPY_FILE_FORMAT),
 					 errmsg("extra data after last expected column")));
@@ -2947,10 +2951,18 @@ NextCopyFrom(CopyState cstate, ExprContext *econtext,
 			int			m = attnum - 1;
 
 			if (fieldno >= fldct)
-				ereport(ERROR,
-						(errcode(ERRCODE_BAD_COPY_FILE_FORMAT),
-						 errmsg("missing data for column \"%s\"",
-								NameStr(attr[m]->attname))));
+			{
+				if (AttributeNumberIsValid(attnum))
+					ereport(ERROR,
+							(errcode(ERRCODE_BAD_COPY_FILE_FORMAT),
+							 errmsg("missing data for column \"%s\"",
+									NameStr(attr[m]->attname))));
+				else
+					ereport(ERROR,
+							(errcode(ERRCODE_BAD_COPY_FILE_FORMAT),
+							 errmsg("missing data for column \"%s\"",
+									strVal(list_nth(cstate->attnamelist, fieldno)))));
+			}
 			string = field_strings[fieldno++];
 
 			/*
@@ -4333,6 +4345,7 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 			char	   *name = strVal(lfirst(l));
 			int			attnum;
 			int			i;
+			bool is_inferred_stream = rel && is_inferred_stream_relation(rel);
 
 			/* Lookup column name */
 			attnum = InvalidAttrNumber;
@@ -4347,13 +4360,13 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 				}
 			}
 
-			if (attnum == InvalidAttrNumber && rel->rd_rel->relkind != RELKIND_STREAM)
+			if (attnum == InvalidAttrNumber && !is_inferred_stream)
 			{
 				if (rel != NULL)
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),
-					errmsg("column \"%s\" of relation \"%s\" does not exist",
-						   name, RelationGetRelationName(rel))));
+					errmsg("column \"%s\" of %s \"%s\" does not exist",
+						   name, is_stream_relation(rel) ? "stream" : "relation", RelationGetRelationName(rel))));
 				else
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),
