@@ -6,12 +6,6 @@
 #include "c.h"
 #include "miscadmin.h"
 #include "postgres.h"
-#include "storage/ipc.h"
-#include "storage/lwlock.h"
-#include "storage/pg_sema.h"
-#include "storage/pg_shmem.h"
-#include "storage/shm_alloc.h"
-#include "storage/shmem.h"
 #include "unistd.h"
 #include "utils/guc.h"
 #include "utils/palloc.h"
@@ -19,30 +13,7 @@
 
 #include "suites.h"
 
-#define SHMEM_SIZE (512 * 1024 * 1024) /* 512mb */
-
 const char *progname;
-
-static void
-base_init(void)
-{
-	PGShmemHeader *seghdr;
-	PGShmemHeader *shim = NULL;
-	char *cwd = (char *) palloc(1024);
-
-	getcwd(cwd, 1024);
-	DataDir = cwd;
-
-	InitializeGUCOptions();
-	seghdr = PGSharedMemoryCreate(SHMEM_SIZE, true, 0, &shim);
-	PGReserveSemaphores(128, 0);
-	InitShmemAccess(seghdr);
-	InitShmemAllocation();
-	CreateLWLocks();
-	InitShmemIndex();
-
-	ShmemDynAllocShmemInit();
-}
 
 int main(void)
 {
@@ -55,13 +26,6 @@ int main(void)
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	/* TopMemoryContext must be initialized for shmem and LW locks to work */
-	TopMemoryContext = AllocSetContextCreate(NULL,
-			"TopMemoryContext",
-			ALLOCSET_DEFAULT_MINSIZE,
-			ALLOCSET_DEFAULT_INITSIZE,
-			ALLOCSET_DEFAULT_MAXSIZE);
-
 	/* ErrorContext must be initialized for logging to work */
 	ErrorContext = AllocSetContextCreate(NULL,
 			"ErrorContext",
@@ -70,8 +34,6 @@ int main(void)
 			ALLOCSET_DEFAULT_MAXSIZE);
 
 	MemoryContextSwitchTo(context);
-
-	base_init();
 
 	srand(time(NULL));
 
