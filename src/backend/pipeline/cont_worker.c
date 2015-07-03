@@ -42,7 +42,8 @@ typedef struct {
 	ContinuousView *view;
 	DestReceiver *dest;
 	QueryDesc *query_desc;
-	MemoryContext exec_cxt;
+	MemoryContext state_cxt;
+	MemoryContext tmp_cxt;
 	CQStatEntry stats;
 } ContQueryWorkerState;
 
@@ -77,21 +78,25 @@ static void
 init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, ResourceOwner owner, TupleBufferBatchReader *reader)
 {
 	PlannedStmt *pstmt;
-	MemoryContext exec_cxt;
+	MemoryContext state_cxt;
 	MemoryContext old_cxt;
 
 	MemSet(state, 0, sizeof(ContQueryWorkerState));
 
-	exec_cxt = AllocSetContextCreate(context, "WorkerQueryExecCxt",
+	state_cxt = AllocSetContextCreate(context, "WorkerQueryStateCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	old_cxt = MemoryContextSwitchTo(exec_cxt);
+	old_cxt = MemoryContextSwitchTo(state_cxt);
 
 	state->view_id = id;
-	state->exec_cxt = exec_cxt;
+	state->state_cxt = state_cxt;
 	state->view = GetContinuousView(id);
+	state->tmp_cxt = AllocSetContextCreate(state_cxt, "WorkerQueryTmpCxt",
+			ALLOCSET_DEFAULT_MINSIZE,
+			ALLOCSET_DEFAULT_INITSIZE,
+			ALLOCSET_DEFAULT_MAXSIZE);
 
 	if (state->view == NULL)
 		return;
@@ -127,6 +132,7 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 	 * the plan to be uninitialized
 	 */
 	ExecEndNode(state->query_desc->planstate);
+	FreeExecutorState(state->query_desc->estate);
 
 	MemoryContextSwitchTo(old_cxt);
 }
@@ -139,7 +145,7 @@ cleanup_query_state(ContQueryWorkerState **states, Oid id)
 	if (state == NULL)
 		return;
 
-	MemoryContextDelete(state->exec_cxt);
+	MemoryContextDelete(state->state_cxt);
 	pfree(state);
 	states[id] = NULL;
 }
@@ -245,6 +251,24 @@ has_queries_to_process(Bitmapset *queries)
 	return !bms_is_empty(queries);
 }
 
+static EState *
+create_estate(QueryDesc *query_desc)
+{
+	EState *result;
+
+	result = CreateExecutorState();
+	result->es_param_list_info = query_desc->params;
+	result->es_snapshot = RegisterSnapshot(query_desc->snapshot);
+	result->es_crosscheck_snapshot = RegisterSnapshot(query_desc->crosscheck_snapshot);
+	result->es_instrument = query_desc->instrument_options;
+	result->es_range_table = query_desc->plannedstmt->rtable;
+	result->es_continuous = query_desc->plannedstmt->is_continuous;
+	result->es_lastoid = InvalidOid;
+	result->es_processed = result->es_filtered = 0;
+
+	return result;
+}
+
 void
 ContinuousQueryWorkerMain(void)
 {
@@ -321,7 +345,6 @@ ContinuousQueryWorkerMain(void)
 		tmp = bms_copy(queries);
 		while ((id = bms_first_member(tmp)) >= 0)
 		{
-			QueryDesc *query_desc = NULL;
 			Plan *plan = NULL;
 			EState *estate = NULL;
 
@@ -336,22 +359,18 @@ ContinuousQueryWorkerMain(void)
 					goto next;
 				}
 
-				query_desc = state->query_desc;
-				estate = query_desc->estate;
-
 				/* No need to process queries which we don't have tuples for. */
 				if (!TupleBufferBatchReaderHasTuplesForCQId(reader, id))
 					goto next;
 
 				debug_query_string = NameStr(state->view->name);
-				MemoryContextSwitchTo(state->exec_cxt);
+				MemoryContextSwitchTo(state->tmp_cxt);
+				state->query_desc->estate = estate = create_estate(state->query_desc);
 
 				TupleBufferBatchReaderSetCQId(reader, id);
 
 				set_snapshot(estate, owner);
 				CurrentResourceOwner = owner;
-
-				estate->es_processed = estate->es_filtered = 0;
 
 				/* initialize the plan for execution within this xact */
 				plan = state->query_desc->plannedstmt->planTree;
@@ -371,9 +390,11 @@ ContinuousQueryWorkerMain(void)
 
 				num_processed += estate->es_processed + estate->es_filtered;
 
-				MemoryContextSwitchTo(state->exec_cxt);
+				MemoryContextResetAndDeleteChildren(state->tmp_cxt);
+				MemoryContextSwitchTo(state->state_cxt);
 
 				unset_snapshot(estate, owner);
+				state->query_desc->estate = estate = NULL;
 
 				IncrementCQExecutions(1);
 			}
