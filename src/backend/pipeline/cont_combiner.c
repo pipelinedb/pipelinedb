@@ -65,7 +65,7 @@ typedef struct {
 	PlannedStmt *groups_plan;
 	TimestampTz last_groups_plan;
 	TupleDesc desc;
-	MemoryContext exec_cxt;
+	MemoryContext state_cxt;
 	MemoryContext plan_cache_cxt;
 	MemoryContext tmp_cxt;
 	Tuplestorestate *batch;
@@ -574,31 +574,31 @@ static void
 init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 {
 	PlannedStmt *pstmt;
-	MemoryContext exec_cxt;
+	MemoryContext state_cxt;
 	MemoryContext old_cxt;
 	MemoryContext cache_tmp_cxt;
 
 	MemSet(state, 0, sizeof(ContQueryCombinerState));
 
-	exec_cxt = AllocSetContextCreate(context, "CombinerQueryExecCxt",
+	state_cxt = AllocSetContextCreate(context, "CombinerQueryStateCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	old_cxt = MemoryContextSwitchTo(exec_cxt);
+	old_cxt = MemoryContextSwitchTo(state_cxt);
 
 	state->view_id = id;
-	state->exec_cxt = exec_cxt;
-	state->tmp_cxt = AllocSetContextCreate(exec_cxt, "CombinerQueryTmpCxt",
+	state->state_cxt = state_cxt;
+	state->tmp_cxt = AllocSetContextCreate(state_cxt, "CombinerQueryTmpCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
-	state->plan_cache_cxt = AllocSetContextCreate(exec_cxt, "CombinerQueryPlanCacheCxt",
+	state->plan_cache_cxt = AllocSetContextCreate(state_cxt, "CombinerQueryPlanCacheCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
 
-	cache_tmp_cxt = AllocSetContextCreate(exec_cxt, "CombinerQueryTmpCxt",
+	cache_tmp_cxt = AllocSetContextCreate(state_cxt, "CombinerQueryTmpCxt",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
@@ -674,7 +674,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		heap_close(matrel, AccessShareLock);
 
 		state->cache = GroupCacheCreate(continuous_query_combiner_cache_mem * 1024, state->ngroupatts, state->groupatts,
-				state->groupops, state->slot, exec_cxt, cache_tmp_cxt);
+				state->groupops, state->slot, state_cxt, cache_tmp_cxt);
 	}
 
 	cq_stat_init(&state->stats, state->view->id, 0);
@@ -690,7 +690,7 @@ cleanup_query_state(ContQueryCombinerState **states, Oid id)
 	if (state == NULL)
 		return;
 
-	MemoryContextDelete(state->exec_cxt);
+	MemoryContextDelete(state->state_cxt);
 	pfree(state);
 	states[id] = NULL;
 }
