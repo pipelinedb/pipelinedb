@@ -50,6 +50,7 @@ typedef struct StreamTargetsEntry
 {
 	Oid relid; /* hash key --- MUST BE FIRST */
 	Bitmapset *queries;
+	bool inferred;
 	HTAB *colstotypes;
 	TupleDesc desc;
 } StreamTargetsEntry;
@@ -205,19 +206,17 @@ streams_to_meta(Relation pipeline_query)
 				entry->colstotypes = hash_create(rv->relname, 8, &colsctl, HASH_ELEM);
 				entry->queries = NULL;
 				entry->desc = NULL;
+				entry->inferred = false;
 			}
 
 			RangeVarIsForStream(rv, &is_inferred);
 
 			/* if it's a typed stream, we can just set the descriptor right away */
-			if (!is_inferred)
+			if (is_inferred)
 			{
-				Relation rel = heap_openrv(rv, AccessShareLock);
-				entry->desc = CreateTupleDescCopyConstr(RelationGetDescr(rel));
-				heap_close(rel, AccessShareLock);
-			}
-			else
+				entry->inferred = true;
 				add_coltypes(entry, context->types);
+			}
 
 			entry->queries = bms_add_member(entry->queries, catrow->id);
 		}
@@ -231,7 +230,7 @@ streams_to_meta(Relation pipeline_query)
 	hash_seq_init(&status, targets);
 	while ((entry = (StreamTargetsEntry *) hash_seq_search(&status)) != NULL)
 	{
-		if (!entry->desc)
+		if (entry->inferred)
 			infer_tupledesc(entry);
 	}
 
@@ -336,7 +335,6 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 		bool nulls[Natts_pipeline_stream];
 		bool replaces[Natts_pipeline_stream];
 		HeapTuple newtup;
-		Form_pipeline_stream row;
 
 		MemSet(nulls, false, Natts_pipeline_stream);
 		MemSet(replaces, false, sizeof(replaces));
@@ -350,10 +348,8 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 		tup = SearchSysCache1(PIPELINESTREAMRELID, ObjectIdGetDatum(entry->relid));
 		Assert(HeapTupleIsValid(tup));
 
-		row = (Form_pipeline_stream) GETSTRUCT(tup);
-
 		/* Only update desc for inferred streams */
-		if (row->inferred)
+		if (entry->inferred)
 		{
 			values[Anum_pipeline_stream_desc - 1] = PointerGetDatum(PackTupleDesc(entry->desc));
 			replaces[Anum_pipeline_stream_desc - 1] = true;
@@ -378,12 +374,11 @@ update_pipeline_stream_catalog(Relation pipeline_stream, HTAB *hash)
 /*
  * delete_nonexistent_streams
  */
-static int
-delete_nonexistent_streams(Relation pipeline_stream, List *keys)
+static void
+mark_nonexistent_streams(Relation pipeline_stream, List *keys)
 {
 	HeapScanDesc scandesc;
 	HeapTuple tup;
-	List *to_delete = NIL;
 
 	/* delete from the catalog any streams that aren't in the given list */
 	scandesc = heap_beginscan_catalog(pipeline_stream, 0, NULL);
@@ -406,63 +401,37 @@ delete_nonexistent_streams(Relation pipeline_stream, List *keys)
 
 		if (!found)
 		{
-			if (row->inferred)
-				to_delete = lappend_oid(to_delete, row->relid);
-			else
-			{
-				/* For inferred streams, set the queries to be NULL */
-				Datum values[Natts_pipeline_stream];
-				bool nulls[Natts_pipeline_stream];
-				bool replaces[Natts_pipeline_stream];
-				HeapTuple newtup;
-				bool isnull;
+			Datum values[Natts_pipeline_stream];
+			bool nulls[Natts_pipeline_stream];
+			bool replaces[Natts_pipeline_stream];
+			HeapTuple newtup;
+			bool isnull;
 
-				SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
+			SysCacheGetAttr(PIPELINESTREAMRELID, tup, Anum_pipeline_stream_queries, &isnull);
 
-				/* If queries is already NULL, this is a noop */
-				if (isnull)
-					continue;
+			/* If queries is already NULL, this is a noop */
+			if (isnull)
+				continue;
 
-				MemSet(nulls, false, Natts_pipeline_stream);
-				MemSet(replaces, false, sizeof(replaces));
+			MemSet(nulls, false, Natts_pipeline_stream);
+			MemSet(replaces, false, sizeof(replaces));
 
-				replaces[Anum_pipeline_stream_queries - 1] = true;
-				nulls[Anum_pipeline_stream_queries - 1] = true;
+			replaces[Anum_pipeline_stream_queries - 1] = true;
+			nulls[Anum_pipeline_stream_queries - 1] = true;
+			replaces[Anum_pipeline_stream_desc - 1] = true;
+			nulls[Anum_pipeline_stream_desc - 1] = true;
 
-				newtup = heap_modify_tuple(tup, pipeline_stream->rd_att,
-						values, nulls, replaces);
+			newtup = heap_modify_tuple(tup, pipeline_stream->rd_att,
+					values, nulls, replaces);
 
-				simple_heap_update(pipeline_stream, &newtup->t_self, newtup);
-				CatalogUpdateIndexes(pipeline_stream, newtup);
+			simple_heap_update(pipeline_stream, &newtup->t_self, newtup);
+			CatalogUpdateIndexes(pipeline_stream, newtup);
 
-				CommandCounterIncrement();
-			}
+			CommandCounterIncrement();
 		}
 	}
 
 	heap_endscan(scandesc);
-
-	if (list_length(to_delete))
-	{
-		DropStmt *stmt = makeNode(DropStmt);
-		ListCell *lc;
-
-		stmt->removeType = OBJECT_STREAM;
-		stmt->missing_ok = false;
-		stmt->behavior = DROP_RESTRICT;
-
-		foreach(lc, to_delete)
-		{
-			Oid relid = lfirst_oid(lc);
-			char *namespace = get_namespace_name(get_rel_namespace(relid));
-			char *relname = get_rel_name(relid);
-			stmt->objects = lappend(stmt->objects, list_make2(makeString(namespace), makeString(relname)));
-		}
-
-		RemoveObjects(stmt);
-	}
-
-	return list_length(to_delete);
 }
 
 /*
@@ -481,7 +450,7 @@ UpdatePipelineStreamCatalog(void)
 
 	hash = streams_to_meta(pipeline_query);
 	keys = update_pipeline_stream_catalog(pipeline_stream, hash);
-	delete_nonexistent_streams(pipeline_stream, keys);
+	mark_nonexistent_streams(pipeline_stream, keys);
 
 	heap_close(pipeline_stream, NoLock);
 	heap_close(pipeline_query, NoLock);
@@ -660,7 +629,7 @@ GetInferredStreamTupleDesc(Oid relid, List *colnames)
 bool
 RangeVarIsForStream(RangeVar *rv, bool *is_inferred)
 {
-	Relation rel = heap_openrv_extended(rv, AccessShareLock, true);
+	Relation rel = heap_openrv_extended(rv, NoLock, true);
 	char relkind;
 	Oid relid;
 	HeapTuple tup;
@@ -671,7 +640,7 @@ RangeVarIsForStream(RangeVar *rv, bool *is_inferred)
 
 	relkind = rel->rd_rel->relkind;
 	relid = rel->rd_id;
-	heap_close(rel, AccessShareLock);
+	heap_close(rel, NoLock);
 
 	if (relkind != RELKIND_STREAM)
 		return false;
@@ -741,8 +710,8 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 	Datum values[Natts_pipeline_stream];
 	bool nulls[Natts_pipeline_stream];
 	HeapTuple tup;
-	ObjectAddress parent;
-	ObjectAddress child;
+	ObjectAddress referenced;
+	ObjectAddress dependent;
 	Oid entry_oid;
 
 	values[Anum_pipeline_stream_relid - 1] = ObjectIdGetDatum(relid);
@@ -759,13 +728,13 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 	CommandCounterIncrement();
 
 	/* Record dependency between tuple in pipeline_stream and the relation */
-	child.classId = PipelineStreamRelationId;
-	child.objectId = entry_oid;
-	child.objectSubId = 0;
-	parent.classId = RelationRelationId;
-	parent.objectId = relid;
-	parent.objectSubId = 0;
-	recordDependencyOn(&child, &parent, DEPENDENCY_INTERNAL);
+	dependent.classId = PipelineStreamRelationId;
+	dependent.objectId = entry_oid;
+	dependent.objectSubId = 0;
+	referenced.classId = RelationRelationId;
+	referenced.objectId = relid;
+	referenced.objectSubId = 0;
+	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 
 	CommandCounterIncrement();
 
