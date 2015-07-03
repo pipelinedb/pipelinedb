@@ -266,6 +266,10 @@ create_estate(QueryDesc *query_desc)
 	result->es_lastoid = InvalidOid;
 	result->es_processed = result->es_filtered = 0;
 
+	if (query_desc->plannedstmt->nParamExec > 0)
+		result->es_param_exec_vals = (ParamExecData *)
+			palloc0(query_desc->plannedstmt->nParamExec * sizeof(ParamExecData));
+
 	return result;
 }
 
