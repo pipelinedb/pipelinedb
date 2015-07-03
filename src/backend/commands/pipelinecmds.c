@@ -316,8 +316,8 @@ get_select_query_sql(RangeVar *view, const char *sql)
 static void
 record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *from)
 {
-	ObjectAddress parent;
-	ObjectAddress child;
+	ObjectAddress referenced;
+	ObjectAddress dependent;
 	ListCell *lc;
 	ContAnalyzeContext cxt;
 
@@ -329,29 +329,29 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 	 * when dropping, so the alternative is to rewrite the drop target to the matrel.
 	 * This seems simpler.
 	 */
-	child.classId = RelationRelationId;
-	child.objectId = matreloid;
-	child.objectSubId = 0;
+	dependent.classId = RelationRelationId;
+	dependent.objectId = matreloid;
+	dependent.objectSubId = 0;
 
-	parent.classId = RelationRelationId;
-	parent.objectId = viewoid;
-	parent.objectSubId = 0;
+	referenced.classId = RelationRelationId;
+	referenced.objectId = viewoid;
+	referenced.objectSubId = 0;
 
-	recordDependencyOn(&child, &parent, DEPENDENCY_INTERNAL);
+	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 
 	/*
 	 * Record a dependency between the view its pipeline_query entry so that when
 	 * the view is dropped the pipeline_query metadata cleanup hook is invoked.
 	 */
-	child.classId = PipelineQueryRelationId;
-	child.objectId = cvoid;
-	child.objectSubId = 0;
+	dependent.classId = PipelineQueryRelationId;
+	dependent.objectId = cvoid;
+	dependent.objectSubId = 0;
 
-	parent.classId = RelationRelationId;
-	parent.objectId = viewoid;
-	parent.objectSubId = 0;
+	referenced.classId = RelationRelationId;
+	referenced.objectId = viewoid;
+	referenced.objectSubId = 0;
 
-	recordDependencyOn(&child, &parent, DEPENDENCY_INTERNAL);
+	recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 
 	/*
 	 * Record a dependency between the matrel and the group lookup index so that the
@@ -359,15 +359,15 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 	 */
 	if (OidIsValid(indexoid))
 	{
-		child.classId = RelationRelationId;
-		child.objectId = indexoid;
-		child.objectSubId = 0;
+		dependent.classId = RelationRelationId;
+		dependent.objectId = indexoid;
+		dependent.objectSubId = 0;
 
-		parent.classId = RelationRelationId;
-		parent.objectId = matreloid;
-		parent.objectSubId = 0;
+		referenced.classId = RelationRelationId;
+		referenced.objectId = matreloid;
+		referenced.objectSubId = 0;
 
-		recordDependencyOn(&child, &parent, DEPENDENCY_INTERNAL);
+		recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 	}
 
 	collect_rels_and_streams((Node *) from, &cxt);
@@ -387,22 +387,34 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 		rv = (RangeVar *) lfirst(lc);
 		relid = RangeVarGetRelid(rv, AccessShareLock, false);
 
-		/*
-		 * Only record a dependency if stream is not inferred. Inferred streams are dropped in the
-		 * DROP CONTINUOUS VIEW path and so this causes a cyclical delete cycle. Inferred streams
-		 * can't be dropped by users anyway, so this doesn't matter.
-		 */
-		if (!IsInferredStream(relid))
+		if (IsInferredStream(relid))
 		{
-			parent.classId = PipelineQueryRelationId;
-			parent.objectId = cvoid;
-			parent.objectSubId = 0;
+			Relation rel = relation_open(relid, NoLock);
+			Oid typid = rel->rd_att->tdtypeid;
 
-			child.classId = RelationRelationId;
-			child.objectId = relid;
-			child.objectSubId = 0;
+			relation_close(rel, NoLock);
 
-			recordDependencyOn(&parent, &child, DEPENDENCY_NORMAL);
+			referenced.classId = RelationRelationId;
+			referenced.objectId = viewoid;
+			referenced.objectSubId = 0;
+
+			dependent.classId = TypeRelationId;
+			dependent.objectId = typid;
+			dependent.objectSubId = 0;
+
+			recordDependencyOn(&dependent, &referenced, DEPENDENCY_STREAM);
+		}
+		else
+		{
+			referenced.classId = RelationRelationId;
+			referenced.objectId = relid;
+			referenced.objectSubId = 0;
+
+			dependent.classId = RelationRelationId;
+			dependent.objectId = viewoid;
+			dependent.objectSubId = 0;
+
+			recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
 		}
 	}
 }
@@ -455,7 +467,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
 
-	pipeline_query = heap_open(PipelineQueryRelationId, AccessExclusiveLock);
+	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	CreateInferredStreams((SelectStmt *) stmt->query);
 	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
