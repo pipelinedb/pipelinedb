@@ -41,3 +41,8 @@ src/test/regress/regression.out
 
 # Temp Emacs files
 *.*~
+
+# Eclipse project files
+.cproject
+.project
+.pydevproject
