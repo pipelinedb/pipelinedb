@@ -43,6 +43,7 @@ src/test/regress/regression.out
 *.*~
 
 # Eclipse project files
-.cproject
-.project
-.pydevproject
+/.cproject
+/.project
+/.pydevproject
+/.settings/
