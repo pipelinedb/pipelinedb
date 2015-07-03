@@ -20,9 +20,9 @@ override CPPFLAGS := -I$(libpq_srcdir) $(CPPFLAGS)
 
 OBJS=receivelog.o streamutil.o $(WIN32RES)
 
-all: pipeline-basebackup pg_receivexlog pg_recvlogical
+all: pg_basebackup pg_receivexlog pg_recvlogical
 
-pipeline-basebackup: pg_basebackup.o $(OBJS) | submake-libpq submake-libpgport
+pg_basebackup: pg_basebackup.o $(OBJS) | submake-libpq submake-libpgport
 	$(CC) $(CFLAGS) pg_basebackup.o $(OBJS) $(libpq_pgport) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
 
 pg_receivexlog: pg_receivexlog.o $(OBJS) | submake-libpq submake-libpgport
@@ -32,20 +32,20 @@ pg_recvlogical: pg_recvlogical.o $(OBJS) | submake-libpq submake-libpgport
 	$(CC) $(CFLAGS) pg_recvlogical.o $(OBJS) $(libpq_pgport) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
 
 install: all installdirs
-	$(INSTALL_PROGRAM) pipeline-basebackup$(X) '$(DESTDIR)$(bindir)/pipeline-basebackup$(X)'
-	$(INSTALL_PROGRAM) pg_receivexlog$(X) '$(DESTDIR)$(bindir)/pg_receivexlog$(X)'
-	$(INSTALL_PROGRAM) pg_recvlogical$(X) '$(DESTDIR)$(bindir)/pg_recvlogical$(X)'
+	$(INSTALL_PROGRAM) pg_basebackup$(X) '$(DESTDIR)$(bindir)/pipeline-basebackup$(X)'
+	$(INSTALL_PROGRAM) pg_receivexlog$(X) '$(DESTDIR)$(bindir)/pipeline-receivexlog$(X)'
+	$(INSTALL_PROGRAM) pg_recvlogical$(X) '$(DESTDIR)$(bindir)/pipeline-recvlogical$(X)'
 
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(bindir)'
 
 uninstall:
 	rm -f '$(DESTDIR)$(bindir)/pipeline-basebackup$(X)'
-	rm -f '$(DESTDIR)$(bindir)/pg_receivexlog$(X)'
-	rm -f '$(DESTDIR)$(bindir)/pg_recvlogical$(X)'
+	rm -f '$(DESTDIR)$(bindir)/pipeline-receivexlog$(X)'
+	rm -f '$(DESTDIR)$(bindir)/pipeline-recvlogical$(X)'
 
 clean distclean maintainer-clean:
-	rm -f pipeline-basebackup$(X) pg_receivexlog$(X) pg_recvlogical$(X) \
+	rm -f pg_basebackup$(X) pg_receivexlog$(X) pg_recvlogical$(X) \
 		pg_basebackup.o pg_receivexlog.o pg_recvlogical.o \
 		$(OBJS)
 	rm -rf tmp_check
