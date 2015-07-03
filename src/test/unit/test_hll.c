@@ -337,7 +337,7 @@ Suite *test_hll_suite(void)
 
 	s = suite_create("test_hll");
 	tc = tcase_create("test_hll");
-	tcase_set_timeout(tc, 5);
+	tcase_set_timeout(tc, 30);
 	tcase_add_test(tc, test_murmurhash64a);
 	tcase_add_test(tc, test_murmurhash64a_varlen);
 	tcase_add_test(tc, test_sparse);
