@@ -11,7 +11,7 @@ Submitting a Patch
 ------------------
 The rough flow for submitting a patch is:
 
-- Sign our [Contributor License Agreement](http://pipelinedb.com/cla), if you haven't done so already.
+- Sign our [Contributor License Agreement](http://pipelinedb.com/community/cla), if you haven't done so already.
 - Create a fork of the [PipelineDB repository](https://github.com/pipelinedb/pipelinedb).
 - Make code changes and push them to your fork. Make sure to include tests for your changes.
 - Submit a pull request against our `master` branch. Please rebase and squash all your commits before submitting the pull request. edx has a great [write-up](https://github.com/edx/edx-platform/wiki/How-to-Rebase-a-Pull-Request) on how to rebase a pull request.
