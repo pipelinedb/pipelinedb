@@ -1,3 +1,4 @@
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pg_recvlogical.c - receive data from a logical decoding slot in a streaming
@@ -62,7 +63,7 @@ static void disconnect_and_exit(int code);
 static void
 usage(void)
 {
-	printf(_("%s receives PostgreSQL logical change streams.\n\n"),
+	printf(_("%s receives PipelineDB logical change streams.\n\n"),
 		   progname);
 	printf(_("Usage:\n"));
 	printf(_("  %s [OPTION]...\n"), progname);
@@ -93,7 +94,7 @@ usage(void)
 	printf(_("  -U, --username=NAME    connect as specified database user\n"));
 	printf(_("  -w, --no-password      never prompt for password\n"));
 	printf(_("  -W, --password         force password prompt (should happen automatically)\n"));
-	printf(_("\nReport bugs to <pgsql-bugs@postgresql.org>.\n"));
+	printf(_("\nReport bugs to <eng@pipelinedb.com>.\n"));
 }
 
 /*

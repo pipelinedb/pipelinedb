@@ -57,7 +57,7 @@ static char *basedir = NULL;
 static TablespaceList tablespace_dirs = {NULL, NULL};
 static char *xlog_dir = "";
 static char format = 'p';		/* p(lain)/t(ar) */
-static char *label = "pipeline-basebackup base backup";
+static char *label = "pg_basebackup base backup";
 static bool showprogress = false;
 static int	verbose = 0;
 static int	compresslevel = 0;
@@ -226,7 +226,7 @@ get_gz_error(gzFile gzf)
 static void
 usage(void)
 {
-	printf(_("%s takes a base backup of a running PostgreSQL server.\n\n"),
+	printf(_("%s takes a base backup of a running PipelineDB server.\n\n"),
 		   progname);
 	printf(_("Usage:\n"));
 	printf(_("  %s [OPTION]...\n"), progname);
@@ -262,7 +262,7 @@ usage(void)
 	printf(_("  -U, --username=NAME    connect as specified database user\n"));
 	printf(_("  -w, --no-password      never prompt for password\n"));
 	printf(_("  -W, --password         force password prompt (should happen automatically)\n"));
-	printf(_("\nReport bugs to <pgsql-bugs@postgresql.org>.\n"));
+	printf(_("\nReport bugs to <eng@pipelinedb.com>.\n"));
 }
 
 
