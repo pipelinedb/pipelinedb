@@ -1,3 +1,4 @@
+# Portions Copyright (c) 2013-2015 PipelineDB
 #-------------------------------------------------------------------------
 #
 # Makefile for src/bin/pg_dump
@@ -39,15 +40,15 @@ pg_dumpall: pg_dumpall.o dumputils.o $(KEYWRDOBJS) | submake-libpq submake-libpg
 	$(CC) $(CFLAGS) pg_dumpall.o dumputils.o $(KEYWRDOBJS) $(WIN32RES) $(libpq_pgport) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
 
 install: all installdirs
-	$(INSTALL_PROGRAM) pg_dump$(X) '$(DESTDIR)$(bindir)'/pg_dump$(X)
-	$(INSTALL_PROGRAM) pg_restore$(X) '$(DESTDIR)$(bindir)'/pg_restore$(X)
-	$(INSTALL_PROGRAM) pg_dumpall$(X) '$(DESTDIR)$(bindir)'/pg_dumpall$(X)
+	$(INSTALL_PROGRAM) pg_dump$(X) '$(DESTDIR)$(bindir)'/pipeline-dump$(X)
+	$(INSTALL_PROGRAM) pg_restore$(X) '$(DESTDIR)$(bindir)'/pipeline-restore$(X)
+	$(INSTALL_PROGRAM) pg_dumpall$(X) '$(DESTDIR)$(bindir)'/pipeline-dumpall$(X)
 
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(bindir)'
 
 uninstall:
-	rm -f $(addprefix '$(DESTDIR)$(bindir)'/, pg_dump$(X) pg_restore$(X) pg_dumpall$(X))
+	rm -f $(addprefix '$(DESTDIR)$(bindir)'/, pipeline-dump$(X) pipeline-restore$(X) pipeline-dumpall$(X))
 
 clean distclean maintainer-clean:
 	rm -f pg_dump$(X) pg_restore$(X) pg_dumpall$(X) $(OBJS) pg_dump.o common.o pg_dump_sort.o pg_restore.o pg_dumpall.o kwlookup.c $(KEYWRDOBJS)
