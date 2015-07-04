@@ -9,7 +9,7 @@
 #
 #-------------------------------------------------------------------------
 
-PGFILEDESC = "pipeline-ctl - starts/stops/restarts the PipelineDB server"
+PGFILEDESC = "pg_ctl - starts/stops/restarts the PostgreSQL server"
 PGAPPICON=win32
 
 subdir = src/bin/pg_ctl
@@ -20,13 +20,13 @@ override CPPFLAGS := -I$(libpq_srcdir) $(CPPFLAGS)
 
 OBJS=	pg_ctl.o $(WIN32RES)
 
-all: pipeline-ctl
+all: pg_ctl
 
-pipeline-ctl: $(OBJS) | submake-libpq submake-libpgport
+pg_ctl: $(OBJS) | submake-libpq submake-libpgport
 	$(CC) $(CFLAGS) $(OBJS) $(libpq_pgport) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
 
 install: all installdirs
-	$(INSTALL_PROGRAM) pipeline-ctl$(X) '$(DESTDIR)$(bindir)/pipeline-ctl$(X)'
+	$(INSTALL_PROGRAM) pg_ctl$(X) '$(DESTDIR)$(bindir)/pipeline-ctl$(X)'
 
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(bindir)'
@@ -35,7 +35,7 @@ uninstall:
 	rm -f '$(DESTDIR)$(bindir)/pipeline-ctl$(X)'
 
 clean distclean maintainer-clean:
-	rm -f pipeline-ctl$(X) $(OBJS)
+	rm -f pg_ctl$(X) $(OBJS)
 	rm -rf tmp_check
 
 check: all

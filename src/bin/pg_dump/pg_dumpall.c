@@ -549,7 +549,7 @@ main(int argc, char *argv[])
 static void
 help(void)
 {
-	printf(_("%s extracts a PostgreSQL database cluster into an SQL script file.\n\n"), progname);
+	printf(_("%s extracts a PipelineDB database cluster into an SQL script file.\n\n"), progname);
 	printf(_("Usage:\n"));
 	printf(_("  %s [OPTION]...\n"), progname);
 
@@ -595,7 +595,7 @@ help(void)
 
 	printf(_("\nIf -f/--file is not used, then the SQL script will be written to the standard\n"
 			 "output.\n\n"));
-	printf(_("Report bugs to <pgsql-bugs@postgresql.org>.\n"));
+	printf(_("Report bugs to <eng@pipelinedb.com>.\n"));
 }
 
 

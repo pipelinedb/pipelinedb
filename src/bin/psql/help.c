@@ -64,7 +64,7 @@ usage(void)
 		}
 	}
 
-	printf(_("psql is the PostgreSQL interactive terminal.\n\n"));
+	printf(_("pipeline is the PipelineDB interactive terminal.\n\n"));
 	printf(_("Usage:\n"));
 	printf(_("  psql [OPTION]... [DBNAME [USERNAME]]\n\n"));
 
@@ -133,7 +133,7 @@ usage(void)
 	printf(_("\nFor more information, type \"\\?\" (for internal commands) or \"\\help\" (for SQL\n"
 			 "commands) from within psql, or consult the psql section in the PostgreSQL\n"
 			 "documentation.\n\n"));
-	printf(_("Report bugs to <pgsql-bugs@postgresql.org>.\n"));
+	printf(_("Report bugs to <eng@pipelinedb.com>.\n"));
 }
 
 
