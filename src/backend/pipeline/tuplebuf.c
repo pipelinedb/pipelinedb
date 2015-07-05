@@ -221,10 +221,12 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 	}
 
 	pos = start;
+	slot = (TupleBufferSlot *) pos;
+
+	Assert(slot->magic != MAGIC);
 
 	/* Initialize the newly allocated slot and copy data into it. */
 	MemSet(pos, 0, size);
-	slot = (TupleBufferSlot *) pos;
 	slot->id = buf->head_id + 1;
 	slot->db_oid = MyDatabaseId;
 	slot->unread = true;
@@ -748,6 +750,7 @@ TupleBufferBatchReaderNext(TupleBufferBatchReader *reader)
 
 yield:
 	Assert(slot);
+	Assert(slot->magic == MAGIC);
 
 	old_cxt = MemoryContextSwitchTo(ContQueryBatchContext);
 	reader->yielded = lappend(reader->yielded, slot);
