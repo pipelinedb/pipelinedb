@@ -1,0 +1,6 @@
+Makefile
+rtpostgis.sql
+rtpostgis_drop.sql
+rtpostgis_upgrade*.sql
+uninstall_rtpostgis.sql
+rtpostgis_legacy.sql

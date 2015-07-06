@@ -1,0 +1,25 @@
+geomfromgeojson_01|MULTIPOINT(1 1,1 1)
+geomfromgeojson_02|MULTIPOINT(1 1,1 1)
+geomfromgeojson_03|POINT(1 1)
+geomfromgeojson_04|LINESTRING(0 0,1 1)
+geomfromgeojson_05|POLYGON((0 0,1 1,1 0,0 0))
+geomfromgeojson_06|MULTIPOLYGON(((0 0,1 1,1 0,0 0)))
+#1434: Next two errors
+ERROR:  Unable to find 'coordinates' in GeoJSON string
+ERROR:  unexpected character (at offset 0)
+ERROR:  unexpected end of data (at offset 0)
+ERROR:  invalid GeoJSON representation
+ERROR:  Too few ordinates in GeoJSON
+ERROR:  Too few ordinates in GeoJSON
+ERROR:  Unable to find 'coordinates' in GeoJSON string
+ERROR:  Unable to find 'coordinates' in GeoJSON string
+#2130|50
+#2216|30
+#2619|POLYGON EMPTY
+#2619|MULTIPOLYGON Z (EMPTY)
+ERROR:  The 'coordinates' in GeoJSON ring are not an array
+ERROR:  The 'coordinates' in GeoJSON ring are not an array
+geomfromgeojson_z_01|POINT(1 2 3)
+geomfromgeojson_z_02|LINESTRING(1 2 3,2 3 4)
+geomfromgeojson_zm_01|POINT(1 2 3)
+geomfromgeojson_zm_02|LINESTRING(1 2 3,2 3 4)

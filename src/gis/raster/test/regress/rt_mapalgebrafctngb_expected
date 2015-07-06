@@ -1,0 +1,36 @@
+WARNING:  Raster is NULL. Returning NULL
+t
+NOTICE:  Raster is empty. Returning an empty raster
+t
+NOTICE:  Raster does not have the required band. Returning a raster without a band
+t
+t|
+NOTICE:  Neighborhood width is NULL or <= 0. Returning new raster with the original band
+t|
+NOTICE:  Neighborhood height is NULL or <= 0. Returning new raster with the original band
+t|
+t|t
+t|t
+NOTICE:  Neighborhood NODATA behavior defaulting to 'ignore'
+t|t
+t|t
+t|t
+t|t
+t|t
+t|t
+NOTICE:  Neighborhood NODATA mode is not recognized. Must be one of 'value', 'ignore', 'NULL', or a numeric value. Returning new raster with the original band
+t|t
+t|t
+t|t
+t|t
+t|t
+t|t
+t
+t|t
+t
+t
+t|t|t|t|t
+t|t|t
+t|t|t
+t|t
+t

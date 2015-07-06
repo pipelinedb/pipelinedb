@@ -1,0 +1,29 @@
+t
+ERROR:  relation "public.feature" does not exist
+ERROR:  Layer type must be one of POINT,LINE,POLYGON,COLLECTION
+ERROR:  Child layer 0 does not exist in topology "tt"
+T1|1
+T2|2
+T3|3
+T4|4
+T5|5
+T6|6
+T7|7
+T8|8
+T9|9
+T10|10
+T11|11
+T12|12
+1|public|feature|tg|1|0|
+2|public|feature|tg2|2|0|
+3|public|feature|tg3|3|0|
+4|public|feature|tg4|4|0|
+5|public|feature|tg5|1|0|
+6|public|feature|tg6|2|0|
+7|public|feature|tg7|3|0|
+8|public|feature|tg8|4|0|
+9|public|feature|tg9|1|0|
+10|public|feature|tg10|2|0|
+11|public|feature|tg11|3|0|
+12|public|feature|tg12|4|0|
+Topology 'tt' dropped

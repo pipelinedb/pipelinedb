@@ -1,0 +1,243 @@
+BEGIN
+t
+9
+22
+26
+COMMIT
+ERROR:  SQL/MM Spatial exception - null argument
+ERROR:  SQL/MM Spatial exception - null argument
+ERROR:  SQL/MM Spatial exception - invalid topology name
+ERROR:  SQL/MM Spatial exception - non-existent edge 0
+ERROR:  SQL/MM Spatial exception - non-existent edge 143
+RN(25)|
+RN(25)/nodes|+|21|1
+RN(25)/nodes|-|21|
+RN(25)/nodes|+|22|1
+RN(25)/nodes|-|22|
+RN(25)/edges|-|25|-25|25|1|1
+RN(4)|
+RN(4)/nodes|+|5|0
+RN(4)/nodes|-|5|
+RN(4)/edges|-|4|-5|4|0|0
+RN(4)/edges|+|5|-5|5|0|0
+RN(4)/edges|-|5|-4|5|0|0
+RN(26)|10
+RN(26)/nodes|+|20|10
+RN(26)/nodes|-|20|
+RN(26)/nodes|+|21|10
+RN(26)/nodes|-|21|1
+RN(26)/nodes|+|22|10
+RN(26)/nodes|-|22|1
+RN(26)/edges|+|1|1|-1|10|0
+RN(26)/edges|-|1|1|-1|1|0
+RN(26)/edges|-|26|26|-26|9|1
+RN(26)/faces|-|1|SRID=4326;POLYGON((3 30,3 38,16 38,16 30,3 30))
+RN(26)/faces|-|9|SRID=4326;POLYGON((4 31,4 34,7 34,7 31,4 31))
+RN(26)/faces|+|10|SRID=4326;POLYGON((3 30,3 38,16 38,16 30,3 30))
+RN(9)|11
+RN(9)/edges|+|6|7|-21|0|11
+RN(9)/edges|-|6|7|-21|0|3
+RN(9)/edges|-|9|19|-22|3|6
+RN(9)/edges|+|12|20|22|11|0
+RN(9)/edges|-|12|20|22|6|0
+RN(9)/edges|+|19|-6|-10|11|4
+RN(9)/edges|-|19|-6|-10|3|4
+RN(9)/edges|+|20|19|13|11|7
+RN(9)/edges|-|20|-9|13|6|7
+RN(9)/edges|+|21|6|-22|0|11
+RN(9)/edges|-|21|6|9|0|3
+RN(9)/edges|+|22|21|12|0|11
+RN(9)/edges|-|22|21|12|0|6
+RN(9)/faces|-|3|SRID=4326;POLYGON((9 14,9 22,21 22,21 14,9 14))
+RN(9)/faces|-|6|SRID=4326;POLYGON((9 6,9 14,21 14,21 6,9 6))
+RN(9)/faces|+|11|SRID=4326;POLYGON((9 6,9 22,21 22,21 6,9 6))
+RN(19)|12
+RN(19)/edges|+|6|7|-21|0|12
+RN(19)/edges|-|6|7|-21|0|11
+RN(19)/edges|+|7|8|-6|0|12
+RN(19)/edges|-|7|8|-19|0|4
+RN(19)/edges|+|10|-20|17|7|12
+RN(19)/edges|-|10|-20|17|7|4
+RN(19)/edges|+|12|20|22|12|0
+RN(19)/edges|-|12|20|22|11|0
+RN(19)/edges|+|17|-7|11|12|5
+RN(19)/edges|-|17|-7|11|4|5
+RN(19)/edges|-|19|-6|-10|11|4
+RN(19)/edges|+|20|-10|13|12|7
+RN(19)/edges|-|20|19|13|11|7
+RN(19)/edges|+|21|6|-22|0|12
+RN(19)/edges|-|21|6|-22|0|11
+RN(19)/edges|+|22|21|12|0|12
+RN(19)/edges|-|22|21|12|0|11
+RN(19)/faces|-|4|SRID=4326;POLYGON((21 14,21 22,35 22,35 14,21 14))
+RN(19)/faces|-|11|SRID=4326;POLYGON((9 6,9 22,21 22,21 6,9 6))
+RN(19)/faces|+|12|SRID=4326;POLYGON((9 6,9 22,35 22,35 6,9 6))
+RN(10)|13
+RN(10)/edges|+|6|7|-21|0|13
+RN(10)/edges|-|6|7|-21|0|12
+RN(10)/edges|+|7|8|-6|0|13
+RN(10)/edges|-|7|8|-6|0|12
+RN(10)/edges|-|10|-20|17|7|12
+RN(10)/edges|+|12|20|22|13|0
+RN(10)/edges|-|12|20|22|12|0
+RN(10)/edges|+|13|18|-12|13|0
+RN(10)/edges|-|13|18|-12|7|0
+RN(10)/edges|+|17|-7|11|13|5
+RN(10)/edges|-|17|-7|11|12|5
+RN(10)/edges|+|18|17|14|13|8
+RN(10)/edges|-|18|10|14|7|8
+RN(10)/edges|+|20|-20|13|13|13
+RN(10)/edges|-|20|-10|13|12|7
+RN(10)/edges|+|21|6|-22|0|13
+RN(10)/edges|-|21|6|-22|0|12
+RN(10)/edges|+|22|21|12|0|13
+RN(10)/edges|-|22|21|12|0|12
+RN(10)/faces|-|7|SRID=4326;POLYGON((21 6,21 14,35 14,35 6,21 6))
+RN(10)/faces|-|12|SRID=4326;POLYGON((9 6,9 22,35 22,35 6,9 6))
+RN(10)/faces|+|13|SRID=4326;POLYGON((9 6,9 22,35 22,35 6,9 6))
+RN(20)|
+RN(20)/nodes|+|14|13
+RN(20)/nodes|-|14|
+RN(20)/edges|+|12|13|22|13|0
+RN(20)/edges|-|12|20|22|13|0
+RN(20)/edges|-|20|-20|13|13|13
+RN(15)|
+RN(15)/edges|+|8|-8|-17|0|0
+RN(15)/edges|-|8|-15|-17|0|5
+RN(15)/edges|+|11|-16|-18|0|8
+RN(15)/edges|-|11|15|-18|5|8
+RN(15)/edges|-|15|-8|-16|5|0
+RN(15)/edges|+|17|-7|11|13|0
+RN(15)/edges|-|17|-7|11|13|5
+RN(15)/faces|-|5|SRID=4326;POLYGON((35 14,35 22,47 22,47 14,35 14))
+RN(2)|
+RN(2)/nodes|+|4|0
+RN(2)/nodes|-|4|2
+RN(2)/edges|-|2|3|-2|2|0
+RN(2)/edges|+|3|-3|3|0|0
+RN(2)/edges|-|3|-3|2|2|2
+RN(2)/faces|-|2|SRID=4326;POLYGON((17 30,17 40,31 40,31 30,17 30))
+NE(27)|27
+NE(27)/edges|+|3|-27|3|14|14
+NE(27)/edges|-|3|-3|3|0|0
+NE(27)/edges|+|27|27|-3|0|14
+NE(27)/faces|+|14|SRID=4326;POLYGON((20 27,20 35,30 35,30 27,20 27))
+RN(27)|
+RN(27)/edges|+|3|-3|3|0|0
+RN(27)/edges|-|3|-27|3|14|14
+RN(27)/edges|-|27|27|-3|0|14
+RN(27)/faces|-|14|SRID=4326;POLYGON((20 27,20 35,30 35,30 27,20 27))
+NE(28)|28
+NE(28)/edges|+|3|28|3|15|15
+NE(28)/edges|-|3|-3|3|0|0
+NE(28)/edges|+|28|-3|-28|15|0
+NE(28)/faces|+|15|SRID=4326;POLYGON((20 27,20 35,30 35,30 27,20 27))
+RN(28)|
+RN(28)/edges|+|3|-3|3|0|0
+RN(28)/edges|-|3|28|3|15|15
+RN(28)/edges|-|28|-3|-28|15|0
+RN(28)/faces|-|15|SRID=4326;POLYGON((20 27,20 35,30 35,30 27,20 27))
+NE(29)|29
+NE(29)/edges|+|3|-3|29|16|16
+NE(29)/edges|-|3|-3|3|0|0
+NE(29)/edges|+|29|3|-29|16|0
+NE(29)/faces|+|16|SRID=4326;POLYGON((22 30,22 37,28 37,28 30,22 30))
+RN(29)|
+RN(29)/edges|+|3|-3|3|0|0
+RN(29)/edges|-|3|-3|29|16|16
+RN(29)/edges|-|29|3|-29|16|0
+RN(29)/faces|-|16|SRID=4326;POLYGON((22 30,22 37,28 37,28 30,22 30))
+NE(30)|30
+NE(31)|31
+NE(30,31)/nodes|+|4|
+NE(30,31)/nodes|-|4|0
+NE(30,31)/edges|+|3|31|3|0|0
+NE(30,31)/edges|-|3|-3|3|0|0
+NE(30,31)/edges|+|30|-31|30|17|17
+NE(30,31)/edges|+|31|-3|-30|0|17
+NE(30,31)/faces|+|17|SRID=4326;POLYGON((18 35,18 40,25 40,25 35,18 35))
+RN(31)|
+RN(31)/edges|+|3|-30|3|0|0
+RN(31)/edges|-|3|31|3|0|0
+RN(31)/edges|+|30|-3|30|0|0
+RN(31)/edges|-|30|-31|30|17|17
+RN(31)/edges|-|31|-3|-30|0|17
+RN(31)/faces|-|17|SRID=4326;POLYGON((18 35,18 40,25 40,25 35,18 35))
+NE(32)|32
+NE(32)/edges|+|3|-32|3|18|18
+NE(32)/edges|-|3|-30|3|0|0
+NE(32)/edges|+|30|-3|30|18|18
+NE(32)/edges|-|30|-3|30|0|0
+NE(32)/edges|+|32|32|-30|0|18
+NE(32)/faces|+|18|SRID=4326;POLYGON((18 27,18 40,28 40,28 27,18 27))
+RN(32)|
+RN(32)/edges|+|3|-30|3|0|0
+RN(32)/edges|-|3|-32|3|18|18
+RN(32)/edges|+|30|-3|30|0|0
+RN(32)/edges|-|30|-3|30|18|18
+RN(32)/edges|-|32|32|-30|0|18
+RN(32)/faces|-|18|SRID=4326;POLYGON((18 27,18 40,28 40,28 27,18 27))
+NE(33)|33
+NE(33)/edges|+|3|33|3|19|19
+NE(33)/edges|-|3|-30|3|0|0
+NE(33)/edges|+|30|-3|30|19|19
+NE(33)/edges|-|30|-3|30|0|0
+NE(33)/edges|+|33|-30|-33|19|0
+NE(33)/faces|+|19|SRID=4326;POLYGON((18 27,18 40,28 40,28 27,18 27))
+RN(33)|
+RN(33)/edges|+|3|-30|3|0|0
+RN(33)/edges|-|3|33|3|19|19
+RN(33)/edges|+|30|-3|30|0|0
+RN(33)/edges|-|30|-3|30|19|19
+RN(33)/edges|-|33|-30|-33|19|0
+RN(33)/faces|-|19|SRID=4326;POLYGON((18 27,18 40,28 40,28 27,18 27))
+NE(34)|34
+NE(34)/edges|+|3|-30|34|0|0
+NE(34)/edges|-|3|-30|3|0|0
+NE(34)/edges|+|34|3|-34|0|20
+NE(34)/faces|+|20|SRID=4326;POLYGON((22 27,22 30,28 30,28 27,22 27))
+RN(34)|
+RN(34)/edges|+|3|-30|3|0|0
+RN(34)/edges|-|3|-30|34|0|0
+RN(34)/edges|-|34|3|-34|0|20
+RN(34)/faces|-|20|SRID=4326;POLYGON((22 27,22 30,28 30,28 27,22 27))
+NE(35)|35
+NE(35)/edges|+|3|-30|-35|0|0
+NE(35)/edges|-|3|-30|3|0|0
+NE(35)/edges|+|35|35|3|21|0
+NE(35)/faces|+|21|SRID=4326;POLYGON((22 27,22 30,28 30,28 27,22 27))
+RN(35)|
+RN(35)/edges|+|3|-30|3|0|0
+RN(35)/edges|-|3|-30|-35|0|0
+RN(35)/edges|-|35|35|3|21|0
+RN(35)/faces|-|21|SRID=4326;POLYGON((22 27,22 30,28 30,28 27,22 27))
+Topology 'city_data' dropped
+BEGIN
+t
+9
+22
+26
+COMMIT
+BEGIN
+1
+2
+3
+COMMIT
+features.land_parcels.the_geom SRID:0 TYPE:MULTIPOLYGON DIMS:2 
+features.city_streets.the_geom SRID:0 TYPE:MULTILINESTRING DIMS:2 
+features.traffic_signs.the_geom SRID:0 TYPE:MULTIPOINT DIMS:2 
+ERROR:  TopoGeom 4 in layer 3 (features.city_streets.feature) cannot be represented dropping edge 3
+ERROR:  TopoGeom 2 in layer 3 (features.city_streets.feature) cannot be represented dropping edge 4
+ERROR:  TopoGeom 2 in layer 3 (features.city_streets.feature) cannot be represented dropping edge 5
+ERROR:  TopoGeom 2 in layer 1 (features.land_parcels.feature) cannot be represented healing faces 5 and 4
+RN(11)|relations_before:|18
+RN(11)|10
+RN(11)|relations_after:|17
+ERROR:  TopoGeom 3 in layer 1 (features.land_parcels.feature) cannot be represented healing faces 10 and 0
+ERROR:  TopoGeom 3 in layer 1 (features.land_parcels.feature) cannot be represented healing faces 0 and 10
+RN(11)|P1|t
+RN(11)|P2|t
+RN(11)|P3|t
+RN(11)|P4|t
+RN(11)|P5|t
+Topology 'city_data' dropped

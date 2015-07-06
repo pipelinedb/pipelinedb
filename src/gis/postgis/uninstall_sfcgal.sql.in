@@ -1,0 +1,36 @@
+---------------------------------------------------------------------------
+--
+-- PostGIS - SFCGAL functions
+-- Copyright 2012-2013 Oslandia <infos@oslandia.com>
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence. See the COPYING file.
+--
+---------------------------------------------------------------------------
+
+
+--
+-- New SFCGAL functions (meaning prototype not already provided by GEOS)
+--
+
+BEGIN;
+
+DROP FUNCTION IF EXISTS postgis_sfcgal_version();
+
+DROP FUNCTION IF EXISTS ST_3DIntersection(geom1 geometry, geom2 geometry);
+
+DROP FUNCTION IF EXISTS ST_Tesselate(geometry);
+
+DROP FUNCTION IF EXISTS ST_3DArea(geometry);
+
+DROP FUNCTION IF EXISTS ST_Extrude(geometry, float8, float8, float8);
+
+DROP FUNCTION IF EXISTS ST_ForceLHR(geometry);
+
+DROP FUNCTION IF EXISTS ST_Orientation(geometry);
+
+DROP FUNCTION IF EXISTS ST_MinkowskiSum(geometry, geometry);
+
+DROP FUNCTION IF EXISTS ST_StraightSkeleton(geometry);
+
+COMMIT;

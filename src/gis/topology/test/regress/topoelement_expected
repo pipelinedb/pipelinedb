@@ -1,0 +1,6 @@
+1|{101,1}
+2|{101,2}
+3|{101,3}
+4|{1,104}
+ERROR:  value for domain topoelement violates check constraint "lower_dimension"
+ERROR:  value for domain topoelement violates check constraint "type_range"

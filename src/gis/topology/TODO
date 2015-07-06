@@ -1,0 +1,20 @@
+#
+# -  todo
+# +  being working on
+# *  done
+#
+#
+
+# 2.1.13.3 - Named Spatial Relationship predicates based on the DE-9IM
+
++ intersects -- support Hierarchical geometries
+* equals 
+- disjoint
+- touches
+- crosses
+- within
+- overlaps
+- contains
+- relate
+
+# Geomery editing

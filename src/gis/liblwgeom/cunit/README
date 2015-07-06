@@ -1,0 +1,191 @@
+TABLE OF CONTENTS
+	1. HOW TO RUN LIBLWGEOM UNIT TESTS
+	2. HOW TO ADD A SINGLE TEST
+	3. HOW TO ADD AN ENTIRE TEST SUITE
+	4. ABOUT TEST OUTPUT
+	5. HOW TO ASSERT A FAILURE
+
+
+1. HOW TO RUN LIBLWGEOM UNIT TESTS
+
+NOTE: We use the CUnit test framework, so you will need to have
+      this installed before you will be able to build and run the
+      unit tests.
+
+If you have already built the rest of the code, then from the
+postgis/liblwgeom/cunit directory, run:
+
+make
+./cu_tester
+
+This will run all the tests.  To run just one suite:
+
+./cu_tester <suite name>
+
+To run just one test:
+
+./cu_tester <test name>
+
+To run selected suites or tests (will be run in the order you specify):
+
+./cu_tester <test name> <suite name> <other suite name> <other test name> <etc>
+
+Unit tests for the entire system (including both these unit tests and others
+that require postgresql to be running) can be done by running the following
+command from the top of the directory tree (postgis directory):
+
+make check
+
+
+2. HOW TO ADD A SINGLE TEST
+
+To add a test to an existing suite, follow these steps:
+
+2.1 Create the test:
+
+Open the cu_<suite name>.c file, and add your
+new test function.  Test functions must have the following signature:
+
+static void <test_name>(void)
+
+<test_name> must be unique among all tests.  A useful naming convention is:
+
+static void test_<suite>_<specific name>(void)
+
+Although not all existing tests follow that convention.
+
+For information on the various ASSERT macros you can use, see the CUnit
+documentation:
+
+http://cunit.sourceforge.net/doc/writing_tests.html
+
+2.2 Add the test to the suite:
+
+At the bottom of the cu_<suite name>.c file, below all the test functions, you
+will find a block that looks like this (this example is from cu_print.c):
+
+/*
+** Used by the test harness to register the tests in this file.
+*/
+void print_suite_setup(void);
+void print_suite_setup(void)
+{
+      CU_pSuite suite = CU_add_suite("Print", init_print_suite, clean_print_suite);
+      PG_ADD_TEST(test_lwprint_default_format);
+      PG_ADD_TEST(test_lwprint_format_orders);
+      PG_ADD_TEST(test_lwprint_optional_format);
+};
+
+Add a new line for your test:
+
+	PG_ADD_TEST(<your test function name>);
+
+The tests will be run in the order they appear in the list. 
+CU_TEST_INFO_NULL must always be the last entry.
+
+2.3 Add any necessary init / cleanup code.
+
+If your test needs global data created or any other kind of init done
+before it runs, or cleanup done after it runs, add the appropriate code
+to the init_<suite name> or clean_<suite name> functions.  If the test
+suite does not seem to have these functions (they are optional), see
+below (3.3) for how to create them.
+
+Save your changes, run make, and run ./cu_tester, and your test
+should be executed.
+
+
+
+3. HOW TO ADD AN ENTIRE TEST SUITE
+
+Do the following steps to create a whole new test suite (new .c file).
+
+3.1 Create the file.
+
+Create the new file (remember to add to svn as well).  The naming convention
+is cu_<suite name>.c.
+
+Make sure to import:
+
+#include "CUnit/Basic.h"
+#include "cu_tester.h"
+
+Now add the file to Makefile.in.  Look for "ADD YOUR NEW TEST FILE HERE".
+Remember that you'll have to re-run "configure" (from the top directory)
+after modifying a .in file.
+
+3.2 Write the tests.
+
+Write the test functions as described in section 2.  Then at the bottom
+of the file, construct the array of tests (example taken from cu_print.c):
+
+/*
+** Used by the test harness to register the tests in this file.
+*/
+void print_suite_setup(void);
+void print_suite_setup(void)
+{
+      CU_pSuite suite = CU_add_suite("Print", init_print_suite, clean_print_suite);
+      PG_ADD_TEST(test_lwprint_default_format);
+      PG_ADD_TEST(test_lwprint_format_orders);
+      PG_ADD_TEST(test_lwprint_optional_format);
+};
+
+The naming convention is generally <suite name>_suite_setup.
+
+3.3 Construct the init / clean functions and the suite struct.
+
+Test suites can have initialization and cleanup functions to setup and
+dispose of any common or global data.  They must have the following
+signature:
+
+static int <function name>(void)
+
+The naming convention is generally:
+
+static int init_<suite name>(void)
+static int clean_<suite_name>(void)
+
+3.4 Add your suite to cu_tester.c.
+
+Edit cu_tester.c.  Search for "ADD YOUR SUITE HERE" and add new lines in
+the appropriate places, using the _suite_setup name you used in the last step.
+
+Now run make (remember to run configure first), then ./cu_tester and your
+new suite should run.
+
+
+
+4. ABOUT TEST OUTPUT
+
+CUnit does not print much about asserts that fail, just the line number
+within the appropriate file.  If you need any more detailed output, it
+is up to you to printf it.  If you discover that all the test suites
+are full of individual hacks to do this, please consolidate them into
+cu_tester.h / .c, and/or enter a trac issue suggesting an improvement.
+
+
+5. HOW TO ASSERT A FAILURE
+
+Often you may want to assert that lwerror was called, possibly verifying
+that a specific error message was generated.  There is now a way to do
+this.  The global char array "cu_error_msg" will always contain the most
+recent error from an lwerror call.  You can check it in your test function
+(either asserting its length is greater than zero, or looking for a
+specific string).  Then call cu_error_msg_reset() to clear it when you're
+done.  It is a good idea to call cu_error_msg_reset prior to your test,
+in case a previous test has generated an error that was not cleared.
+
+Example:
+
+cu_error_msg_reset();
+<do something here>
+if (strlen(cu_error_msg) > 0)
+{
+        printf("\nError: <whatever your test was> generated an error: %s\n", cu_error_msg);
+        CU_FAIL();
+        /* be nice and clean it up for the next test. */
+        cu_error_msg_reset();
+}
+
+

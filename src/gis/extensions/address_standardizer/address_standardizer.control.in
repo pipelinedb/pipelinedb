@@ -1,0 +1,4 @@
+# address_standardizer extension
+comment = 'Used to parse an address into constituent elements. Generally used to support geocoding address normalization step.'
+default_version = '@POSTGIS_LIB_VERSION@'
+relocatable = true

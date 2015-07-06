@@ -1,0 +1,15 @@
+point|f
+poly|f
+line|f
+empty multipoint|t
+multipoint|t
+multipoint+|t
+empty multiline|t
+multiline|t
+multiline+|t
+empty multipoly|t
+multipoly|t
+multipoly+|t
+empty collection|t
+collection|t
+collection+|t

@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project name="postgis-ejb2-poc" default="clean" basedir=".">
+  <description>Using PostGIS Geometry Types with EJB2 - Proof of Concept</description>
+
+  <!-- ENVIROMENT VARIABLES -->
+  <property environment="env"/>
+	
+  <!-- JBOSS PROPERTIES -->
+  <property name="jboss.home" value="${env.JBOSS_HOME}"/>
+  <property name="jboss.server.config" value="default"/>
+  <property name="jboss.server.lib" value="${jboss.home}/server/default/lib"/>
+  <property name="jboss.config.dir" value="${jboss.home}/server/default/conf"/>
+  <property name="jboss.deploy.dir" value="${jboss.home}/server/default/deploy"/>
+
+  <!-- REGULAR DIRECTORIES -->	
+  <property name="src.dir" value="src"/>
+  <property name="build.dir" value="build"/>
+  <property name="distro.dir" value="distro"/>
+  <property name="resources.dir" value="resources"/>
+  <property name="lib.dir" value="lib"/>
+  <property name="compiletime.lib.dir" value="${lib.dir}/compiletimelib"/>
+  <property name="common.jar.dir" value="common"/>
+  <property name="common.lib.dir" value="${lib.dir}/commonlib"/>
+  <property name="merge.dir" value="merge"/>
+  <property name="ejb.jar.dir" value="ejbjars"/>
+  <property name="javadoc.dir" value="javadoc"/>
+
+  <!-- GENERATED DIRECTORIES -->
+  <property name="gen.src.dir" value="gensrc"/>	
+  <property name="generated.dir" value="generated"/>
+  <property name="ejb.deployment.dir" value="${generated.dir}/ejbdeploy"/>
+	
+  <!-- WHERE TO DEPLOY THE FINISHED EAR FILE -->
+  <property name="deploy.path" value="${jboss.home}/server/${jboss.server.config}/deploy"/>
+
+  <!-- WHERE XDOCLET JARS ARE -->
+  <property name="xdoclet.lib.dir" value="${lib.dir}/xdocletlib"/>
+	  
+  <!-- PATH DEFINITION -->
+  <path id="classpath">   
+    <fileset dir="${lib.dir}" includes="*.jar"/>
+    <fileset dir="${compiletime.lib.dir}" includes="*.jar"/>
+    <fileset dir="${common.lib.dir}" includes="*.jar"/>
+    <fileset dir="${xdoclet.lib.dir}" includes="*.jar"/>
+    <fileset dir="${jboss.server.lib}" includes="*.jar"/>
+    <fileset dir="${jboss.home}/client" includes="**/*.jar"/>
+    <pathelement location="${resources.dir}/jndi"/>
+    <pathelement location="${build.dir}"/>
+  </path>
+	
+  <!-- LOAD USER DEFINED PROPERTIES -->
+  <!-- You can add your variables and/or properties in this file -->
+  <property file="${resources.dir}/build.properties" /> 
+
+  <!-- DATABASE RELATED PROPERTIES  -->
+  <property name="datasource.name" value="postgis-ejb2-ds"/>
+  <property name="datasource.file.name" value="postgis-ejb2-ds.xml"/>
+  <property name="database.connection.port" value="5432"/>
+  <property name="database.driver" value="org.postgresql.Driver"/>
+  <property name="database.connection.url" value="jdbc:postgresql://${database.host}:${database.connection.port}/${database.name}"/>
+
+  <!-- IMPORT RELATED BUILD FILES -->
+  <import file="${basedir}/prepare-jboss.xml" />
+	
+  
+  <target name="clean"  description="Delete all temporary directories and files created in the build.">
+    <echo message="Delete all temporary directories and files created in the build."/>
+
+    <delete dir="${gen.src.dir}"/>
+    <delete dir="${ejb.deployment.dir}"/>
+    <delete dir="${ejb.jar.dir}"/>
+    <delete dir="${common.jar.dir}"/>
+    <delete dir="${build.dir}"/>
+    <delete dir="${distro.dir}"/>
+    <delete dir="${generated.dir}"/>
+    <delete dir="${javadoc.dir}"/>
+
+    <delete>
+      <fileset dir="${basedir}" includes="**/*.bak"/>
+    </delete>		
+  </target>
+
+  
+  <target name="deploy" description="Deploy the application into JBOSS." depends="build-ear">
+    <echo message="Deploy EAR file."/>
+    <copy file="${distro.dir}/${ant.project.name}.ear"  todir="${deploy.path}"/>
+  </target>
+
+  
+  <target name="undeploy" description="Undeploy the Application." >
+    <echo message="Undeploy EAR file."/>
+    <delete file="${deploy.path}/${ant.project.name}.ear" />
+  </target>
+
+  
+  <target name="generate-ejb">
+    <echo message="Generate files with XDoclet."/>
+
+    <taskdef  name="ejbdoclet" 
+              classname="xdoclet.modules.ejb.EjbDocletTask"
+              classpathref="classpath"/>
+		
+    <!-- Generate EJB "stuff" -->
+    <ejbdoclet destdir="${gen.src.dir}" mergeDir="${merge.dir}" ejbSpec="2.1">
+      <packageSubstitution packages="ejb" substituteWith="interfaces"/>
+
+      <fileset dir="${src.dir}">
+        <include name="**/*Bean.java" />
+        <include name="**/*Service.java" />
+      </fileset>
+
+      <!-- Generate a deployment descriptor file, including all beans processed. -->
+      <deploymentdescriptor destdir="${ejb.deployment.dir}"/>
+
+      <!-- Generate JBOSS specific files  -->
+      <jboss destdir="${ejb.deployment.dir}" version="4.0" />
+
+      <!-- Generate all of the home and logical interfaces, unless told otherwise in the meta-information. -->
+      <homeinterface/>
+      <remoteinterface/>
+      <localinterface/>
+      <localhomeinterface/>
+
+      <!-- Generate a value object if the bean  has a @ejb.value-object tag.-->
+      <valueobject>
+        <packageSubstitution packages="ejb" 
+                             substituteWith="value"/>
+      </valueobject>
+
+      <!-- Generate a utility object for each EJB. -->
+      <utilobject includeGUID="true" 
+                  cacheHomes="true"
+                  kind="physical">
+        <packageSubstitution packages="ejb" 
+                             substituteWith="util"/>
+      </utilobject>
+
+      <!-- Generate complete entity and session classes (including ejbXXX() methods) based on the implementation class. -->
+      <entitybmp/>
+      <entitycmp/>
+      <session/>
+
+      <entitypk>
+        <packageSubstitution packages="ejb" 
+                             substituteWith="pk"/>
+      </entitypk>
+
+      <dao pattern="{0}Dao">
+        <packageSubstitution packages="ejb" 
+                             substituteWith="dao"/>
+      </dao>
+
+    </ejbdoclet>
+  </target>
+
+
+  <target name="build-common-jar" >
+    <mkdir dir="${common.jar.dir}"/>
+
+    <jar destfile="${common.jar.dir}/common.jar">
+      <fileset dir="${common.lib.dir}" includes="*.jar"/>
+    </jar>
+  </target>
+
+
+  <target name="build-ear" 
+          depends="build-ejb-jar,build-common-jar" 
+          description="Build .ear file and put it into distro dir.">
+    <mkdir dir="${distro.dir}"/>
+
+    <ear destfile="${distro.dir}/${ant.project.name}.ear" 
+         appxml="${resources.dir}/application.xml">
+      <fileset dir="${ejb.jar.dir}" includes="*.jar"/>
+      <fileset dir="${common.jar.dir}" includes="*.jar"/>
+    </ear>
+  </target>
+
+
+  <target name="build-ejb-jar" depends="compile" >
+    <mkdir dir="${ejb.jar.dir}"/>
+
+    <jar jarfile="${ejb.jar.dir}/ejb.jar">
+      <fileset dir="${build.dir}">
+        <include name="**/ejb/*.class"/>
+        <include name="**/exception/*.class"/>
+        <include name="**/util/*.class"/>
+        <include name="**/dao/*.class"/>
+        <include name="**/value/*.class"/>
+        <include name="**/interfaces/*.class"/>
+        <exclude name="**/client/*.class"/>
+      </fileset>  
+
+      <metainf dir="${ejb.deployment.dir}">
+        <include name="ejb-jar.xml"/>
+        <include name="jboss.xml"/>
+        <include name="jbosscmp-jdbc.xml"/> 
+      </metainf>
+    </jar>
+  </target> 
+
+
+  <target name="compile" depends="clean,generate-ejb" description="Compile EJB source code.">
+    <echo message="Compile source code."/>
+
+    <mkdir dir="${build.dir}"/>
+
+    <javac debug="on"
+           deprecation="on"
+           optimize="on"
+           encoding="iso-8859-1"
+           listfiles="no"
+           destdir="${build.dir}" 
+           classpathref="classpath">
+      <src path="${gen.src.dir};${src.dir}"/>
+      <exclude name="**/client/*.java"/>
+    </javac>
+  </target>
+
+
+  <target name="compile-client" depends="compile" description="Compile Client source code.">
+    <echo message="Compile Client source code."/>
+
+    <delete>
+      <fileset dir="${build.dir}" includes="**/client/*.*"/>
+    </delete>		
+
+    <mkdir dir="${build.dir}"/>
+
+    <javac debug="on"
+           deprecation="on"
+           optimize="on"
+           encoding="iso-8859-1"
+           listfiles="no"
+           destdir="${build.dir}" 
+           classpathref="classpath">
+      <src path="${gen.src.dir};${src.dir}"/>
+      <include name="**/client/*.java"/>
+    </javac>
+  </target>
+
+  
+  <target name="run-client"  description="Execute Client." depends="compile-client">
+    <java classname="com.geodetix.geo.client.Client" dir="." fork="true" classpathref="classpath" />
+  </target>
+
+
+  <target name="javadoc" 
+          depends="compile"
+          description="Create Project API documentation.">
+    <delete dir="${javadoc.dir}" />
+    <mkdir dir="${javadoc.dir}"/>
+    <javadoc destdir="${javadoc.dir}" sourcepath="${gen.src.dir};${src.dir}">
+      <classpath refid="classpath"/>
+      <packageset dir="${gen.src.dir}" defaultexcludes="yes">
+        <include name="**"/>   
+        <exclude name="**/ejb/**"/>   
+      </packageset>
+
+      <packageset dir="${src.dir}" defaultexcludes="yes">
+        <include name="**/exception/**"/> 
+        <include name="**/client/**"/> 
+        <include name="**/dao/**"/>     
+        <exclude name="**/ejb/**"/>
+      </packageset>
+
+      <doctitle><![CDATA[<h1>Using PostGIS Geometry Types with EJB2 <br> Proof of Concept</h1>]]></doctitle>
+      <bottom><![CDATA[<i>Copyright &#169; 2006 <a href="http://www.geodetix.it" target="_new">Geodetix S.r.l.</a> All Rights Reserved.</i>]]></bottom>
+    </javadoc>
+  </target>
+
+</project>

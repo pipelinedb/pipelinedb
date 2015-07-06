@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="744.09448819"
+   height="1052.3622047"
+   id="svg2"
+   sodipodi:version="0.32"
+   inkscape:version="0.46"
+   sodipodi:docname="icon_source.svg"
+   inkscape:output_extension="org.inkscape.output.svg.inkscape">
+  <defs
+     id="defs4">
+    <inkscape:perspective
+       sodipodi:type="inkscape:persp3d"
+       inkscape:vp_x="0 : 526.18109 : 1"
+       inkscape:vp_y="0 : 1000 : 0"
+       inkscape:vp_z="744.09448 : 526.18109 : 1"
+       inkscape:persp3d-origin="372.04724 : 350.78739 : 1"
+       id="perspective10" />
+    <filter
+       inkscape:collect="always"
+       id="filter3281">
+      <feGaussianBlur
+         inkscape:collect="always"
+         stdDeviation="0.21022492"
+         id="feGaussianBlur3283" />
+    </filter>
+  </defs>
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     gridtolerance="10000"
+     guidetolerance="10"
+     objecttolerance="10"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="1"
+     inkscape:cx="129.38312"
+     inkscape:cy="649.49455"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     showgrid="false"
+     inkscape:window-width="1030"
+     inkscape:window-height="870"
+     inkscape:window-x="77"
+     inkscape:window-y="15" />
+  <metadata
+     id="metadata7">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       sodipodi:type="arc"
+       style="fill:#e3dbdb;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-width:0.4662433;stroke-linecap:square;stroke-linejoin:bevel;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       id="path4791"
+       sodipodi:cx="100.40916"
+       sodipodi:cy="325.63318"
+       sodipodi:rx="18.738329"
+       sodipodi:ry="18.561554"
+       d="M 119.14749,325.63318 A 18.738329,18.561554 0 1 1 81.670828,325.63318 A 18.738329,18.561554 0 1 1 119.14749,325.63318 z"
+       transform="matrix(1.7130004,0,0,1.7293146,-24.388978,-160.06425)"
+       inkscape:export-filename="C:\src\postgis-working\loader\good.png"
+       inkscape:export-xdpi="20.721062"
+       inkscape:export-ydpi="20.721062" />
+    <rect
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:2;stroke-linecap:square;stroke-linejoin:miter;stroke-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
+       id="rect2383"
+       width="99.212372"
+       height="99.212379"
+       x="100.39381"
+       y="352.75598" />
+    <rect
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:2;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       id="rect3155"
+       width="99.212372"
+       height="99.212379"
+       x="201"
+       y="352.14981" />
+    <rect
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:2;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       id="rect3157"
+       width="99.212372"
+       height="99.212379"
+       x="301"
+       y="352.14981" />
+    <path
+       sodipodi:type="star"
+       style="fill:none;stroke-width:2;stroke-linecap:square;stroke-miterlimit:4;stroke-dasharray:none"
+       id="path3159"
+       sodipodi:sides="5"
+       sodipodi:cx="130.5"
+       sodipodi:cy="381.36218"
+       sodipodi:r1="65.103763"
+       sodipodi:r2="32.551882"
+       sodipodi:arg1="0.93804749"
+       sodipodi:arg2="1.566366"
+       inkscape:flatsided="false"
+       inkscape:rounded="0"
+       inkscape:randomized="0"
+       d="M 169,433.86218 L 130.64422,413.91375 L 92.466689,434.20125 L 99.586188,391.55833 L 68.494123,361.51852 L 111.25,355.11218 L 130.21157,316.25906 L 149.51666,354.94265 L 192.32762,360.9699 L 161.50294,391.28401 L 169,433.86218 z" />
+    <g
+       id="g3295"
+       inkscape:export-filename="C:\src\postgis-working\loader\warn.png"
+       inkscape:export-xdpi="20.249985"
+       inkscape:export-ydpi="20.249985">
+      <path
+         transform="matrix(2.0869716,0,0,2.0869716,-183.04661,-199.56007)"
+         d="M 207.5,304.18971 L 189.33347,303.35063 L 197.69007,287.19842 L 207.5,271.88528 L 217.30993,287.19842 L 225.66653,303.35063 L 207.5,304.18971 z"
+         inkscape:randomized="0"
+         inkscape:rounded="0"
+         inkscape:flatsided="false"
+         sodipodi:arg2="2.6179938"
+         sodipodi:arg1="1.5707963"
+         sodipodi:r2="20.9769"
+         sodipodi:r1="11.327526"
+         sodipodi:cy="292.86218"
+         sodipodi:cx="207.5"
+         sodipodi:sides="3"
+         id="path3161"
+         style="fill:#edf130;fill-opacity:1;stroke:#000000;stroke-width:2.00002722000000020;stroke-linecap:square;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;stroke-linejoin:bevel"
+         sodipodi:type="star" />
+      <path
+         transform="matrix(2.0869716,0,0,2.0869716,-183.04661,-199.7641)"
+         d="M 207.5,304.18971 L 189.33347,303.35063 L 197.69007,287.19842 L 207.5,271.88528 L 217.30993,287.19842 L 225.66653,303.35063 L 207.5,304.18971 z"
+         inkscape:randomized="0"
+         inkscape:rounded="0"
+         inkscape:flatsided="false"
+         sodipodi:arg2="2.6179938"
+         sodipodi:arg1="1.5707963"
+         sodipodi:r2="20.9769"
+         sodipodi:r1="11.327526"
+         sodipodi:cy="292.86218"
+         sodipodi:cx="207.5"
+         sodipodi:sides="3"
+         id="path3163"
+         style="fill:none;stroke:#edf130;stroke-width:0.71874481;stroke-linecap:square;stroke-linejoin:bevel;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;filter:url(#filter3281)"
+         sodipodi:type="star" />
+      <text
+         id="text3285"
+         y="425.36218"
+         x="242.13867"
+         style="font-size:40px;font-style:normal;font-weight:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;font-family:Bitstream Vera Sans"
+         xml:space="preserve"><tspan
+           style="font-size:56px"
+           y="425.36218"
+           x="242.13867"
+           id="tspan3287"
+           sodipodi:role="line">!</tspan></text>
+    </g>
+    <path
+       sodipodi:type="star"
+       style="fill:#ff0012;fill-opacity:1;stroke:#050505;stroke-width:0.40000001;stroke-linecap:square;stroke-linejoin:bevel;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       id="path3333"
+       sodipodi:sides="8"
+       sodipodi:cx="221"
+       sodipodi:cy="236.36218"
+       sodipodi:r1="6.7082038"
+       sodipodi:r2="3.6224301"
+       sodipodi:arg1="0.46364761"
+       sodipodi:arg2="0.85634669"
+       inkscape:flatsided="true"
+       inkscape:rounded="0"
+       inkscape:randomized="0"
+       d="M 227,239.36218 L 223.12132,242.72614 L 218,242.36218 L 214.63604,238.4835 L 215,233.36218 L 218.87868,229.99822 L 224,230.36218 L 227.36396,234.24086 L 227,239.36218 z"
+       transform="matrix(6.2343571,-0.4361074,0.4361074,6.2343571,-1130.8722,-974.82434)"
+       inkscape:export-filename="C:\src\postgis-working\loader\error.png"
+       inkscape:export-xdpi="18"
+       inkscape:export-ydpi="18" />
+    <path
+       sodipodi:type="star"
+       style="fill:none;fill-opacity:1;stroke:#ffffff;stroke-width:0.40000001;stroke-linecap:square;stroke-linejoin:bevel;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:0.4"
+       id="path3335"
+       sodipodi:sides="8"
+       sodipodi:cx="221"
+       sodipodi:cy="236.36218"
+       sodipodi:r1="6.7082038"
+       sodipodi:r2="3.6224301"
+       sodipodi:arg1="0.46364761"
+       sodipodi:arg2="0.85634669"
+       inkscape:flatsided="true"
+       inkscape:rounded="0"
+       inkscape:randomized="0"
+       d="M 227,239.36218 L 223.12132,242.72614 L 218,242.36218 L 214.63604,238.4835 L 215,233.36218 L 218.87868,229.99822 L 224,230.36218 L 227.36396,234.24086 L 227,239.36218 z"
+       transform="matrix(5.9226393,-0.414302,0.414302,5.9226393,-1056.8286,-905.96503)"
+       inkscape:export-filename="C:\src\postgis-working\loader\error.png"
+       inkscape:export-xdpi="18"
+       inkscape:export-ydpi="18" />
+    <path
+       style="fill:#280b0b;fill-opacity:1;stroke:#3f1b1b;stroke-width:1;stroke-linecap:square;stroke-linejoin:bevel;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       id="path3351"
+       d="M -334.29836,24.946084 C -330.50703,25.725974 -326.73602,26.514605 -322.88639,26.976402 C -319.49057,27.581046 -316.09898,28.311197 -313.61622,30.830574 C -311.893,32.498343 -310.70244,34.63655 -309.42275,36.648007 C -307.71906,38.969016 -306.84976,41.633032 -306.32158,44.42702 C -306.35172,45.768241 -303.50661,51.909626 -305.89192,46.742021 C -337.68773,66.746241 -332.3812,66.953537 -326.8578,56.605246 C -324.25788,51.734197 -321.46498,46.998947 -318.68168,42.229053 C -313.20389,32.940722 -307.90823,23.55739 -301.81471,14.656051 C -296.70775,7.6011666 -290.74148,1.284571 -284.68903,-4.9473821 C -281.28722,-8.4874295 -277.59469,-11.705444 -273.57395,-14.517804 C -264.33666,-21.138468 -254.93875,-29.404098 -243.45986,-30.516745 L -265.55476,-13.849707 C -266.61357,-13.556678 -266.91443,-13.522197 -267.91161,-13.051923 C -268.29584,-12.870717 -269.39878,-12.230164 -269.032,-12.444498 C -244.33751,-26.874916 -239.44054,-29.874513 -248.04598,-24.625701 C -252.13931,-21.544727 -256.61753,-18.947136 -260.13687,-15.126855 C -266.38231,-8.970826 -272.62486,-2.7879896 -277.88374,4.2669092 C -284.35122,13.088407 -289.89514,22.53082 -295.55544,31.881467 C -297.27881,35.185436 -299.16549,38.405343 -300.80039,41.753967 C -301.3662,42.912873 -301.84467,44.113945 -302.29861,45.321069 C -302.345,45.444439 -303.40249,49.033071 -303.59909,49.1651 C -311.50808,54.476488 -319.72774,59.309986 -327.79206,64.382428 C -328.32176,63.789068 -328.91035,63.243435 -329.38116,62.602347 C -330.10713,61.613812 -330.00629,58.518285 -330.74173,57.389631 C -331.10429,54.912737 -331.77611,52.602172 -333.38422,50.618017 C -334.54222,48.792749 -335.65575,46.893772 -337.23988,45.399193 C -339.41181,43.588309 -342.41416,43.219701 -345.09189,42.665944 C -349.16984,42.072653 -353.22505,41.340634 -357.31297,40.820653 L -334.29836,24.946084 z" />
+    <path
+       style="fill:#008000;fill-opacity:0.70196078;fill-rule:nonzero;stroke:none;stroke-width:0.69216907;stroke-linecap:square;stroke-linejoin:bevel;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       id="path3353"
+       d="M 135.79895,398.66751 C 137.81098,399.12597 139.81221,399.58957 141.85518,399.86103 C 143.65731,400.21648 145.4572,400.6457 146.77478,402.12672 C 147.68927,403.10713 148.32109,404.36408 149.00021,405.54652 C 149.90435,406.91093 150.36568,408.47698 150.64598,410.11944 C 150.62999,410.90788 152.13986,414.51811 150.874,411.48032 C 134.00024,423.23986 136.81637,423.36172 139.74759,417.27844 C 141.12735,414.41498 142.60951,411.63135 144.08658,408.82736 C 146.9936,403.36718 149.80396,397.85116 153.03773,392.61847 C 155.74795,388.47124 158.9142,384.75801 162.12618,381.09453 C 163.93149,379.01351 165.89108,377.12179 168.02485,375.46854 C 172.927,371.57655 177.91438,366.71758 184.00613,366.0635 L 172.28057,375.86128 C 171.71866,376.03353 171.559,376.05381 171.0298,376.33026 C 170.8259,376.43678 170.24058,376.81333 170.43522,376.68733 C 183.54037,368.20437 186.13915,366.44105 181.57232,369.52658 C 179.40002,371.33774 177.02347,372.86474 175.15579,375.1105 C 171.8414,378.72934 168.52853,382.36394 165.73768,386.51119 C 162.30545,391.69693 159.36334,397.24769 156.35947,402.7445 C 155.44489,404.68674 154.44365,406.57957 153.57602,408.54808 C 153.27576,409.22935 153.02184,409.9354 152.78093,410.645 C 152.75631,410.71753 152.19511,412.82711 152.09078,412.90473 C 147.89355,416.02705 143.53145,418.86844 139.25179,421.85029 C 138.97068,421.50148 138.65832,421.18073 138.40847,420.80386 C 138.0232,420.22274 138.07671,418.40303 137.68643,417.73955 C 137.49401,416.2835 137.13749,414.92522 136.28408,413.75884 C 135.66953,412.68584 135.07859,411.56953 134.23792,410.69093 C 133.08529,409.6264 131.49197,409.40971 130.07092,409.08419 C 127.90679,408.73542 125.75473,408.3051 123.5853,407.99943 L 135.79895,398.66751 z"
+       inkscape:export-filename="C:\src\postgis-working\loader\good.png"
+       inkscape:export-xdpi="20.721062"
+       inkscape:export-ydpi="20.721062" />
+  </g>
+</svg>

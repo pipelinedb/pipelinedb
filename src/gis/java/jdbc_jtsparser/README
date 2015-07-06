@@ -1,0 +1,2 @@
+#TODO Complete me
+As a first step build jdbc driver with 'mvn clean install' so that you have a local copy of latest postgis-jdbc.jar which this project has a dependency to.

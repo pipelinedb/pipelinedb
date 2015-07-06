@@ -1,0 +1,95 @@
+= HISTORY TRACKING =
+
+Suppose you have a table of data that represents the "current state" of a particular geographic feature. A parcels table, or a roads table, or a fruit trees table, whatever. Generally, GIS tools understand a table as a single entity into which they can update, insert and delete rows from. How you do allow common GIS tools to work against your data, while maintaining and audit trail of what changes have been made, by whom, and what the past state of the data is?
+
+This extra module provides some utility functions for creating and maintaining history. 
+
+If you have a table 'roads', this module will maintain a 'roads_history' side table, which contains all the columns of the parent table, and the following additional columns:
+
+ history_id      | integer                     | not null default 
+ date_added      | timestamp without time zone | not null default now()
+ date_deleted    | timestamp without time zone | 
+ last_operation  | character varying(30)       | not null
+ active_user     | character varying(90)       | not null default "current_user"()
+ current_version | text                        | not null
+
+When you insert a new record into 'roads' a record is automatically inserted into 'roads_history', with the 'date_added' filled in the 'date_deleted' set to NULL, a unique 'history_id', a 'last_operation' of 'INSERT' and 'active_user' set.
+
+When you delete a record in 'roads', the record in the history table is *not* deleted, but the 'date_deleted' is set to the current date.
+
+When you update a record in 'roads', the current record has 'date_deleted' filled in and a new record is created with the 'date_added' set and 'date_deleted' NULL.
+
+With this information maintained, it is possible to retrieve the history of any record in the roads table:
+
+  SELECT * FROM roads_history WHERE roads_pk = 111;
+
+Or, to retrieve a view of the roads table at any point in the past:
+
+  SELECT * FROM roads_history 
+    WHERE date_added < 'January 1, 2001' AND 
+          ( date_deleted >= 'January 1, 2001' OR date_deleted IS NULL );
+
+== USING THE CONVENIENCE FUNCTIONS ==
+
+To history-enable a table using this module
+
+ * Load the history_table.sql file.
+ * Run the initalization routine:
+   SELECT postgis_install_history();
+ * Enable history on a table:
+   SELECT postgis_enable_history('public', 'roads', 'the_geom');
+
+With the example above, you'll now have a 'roads_history' table, and a 'historic_information' metadata table.
+
+
+== USING YOUR OWN FUNCTIONS ==
+
+To enable history from scratch, you need to make the history table and update rules from scratch.
+
+Here's an example using a simple table of points.
+
+CREATE TABLE my_points (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(32)
+);
+SELECT AddGeometryColumn('my_points', 'geom', 4326, 'POINT', 2);
+
+CREATE TABLE my_points_history (
+  history_id SERIAL PRIMARY KEY,
+  id INTEGER,
+  name VARCHAR(32),
+  added TIMESTAMP NOT NULL DEFAULT now(),
+  deleted TIMESTAMP,
+  added_by VARCHAR(64) NOT NULL DEFAULT CURRENT_USER,
+  deleted_by VARCHAR(64)
+);
+SELECT AddGeometryColumn('my_points_history', 'geom', 4326, 'POINT', 2);
+CREATE INDEX my_points_history_deleted ON my_points_history (deleted);
+CREATE INDEX my_points_history_added ON my_points_history (added);
+CREATE INDEX my_points_history_id ON my_points_history (id);
+
+CREATE OR REPLACE RULE my_points_insert_rule AS 
+ON INSERT TO my_points DO (
+INSERT INTO my_points_history ( id, name, geom ) 
+  VALUES ( NEW.id, NEW.name, NEW.geom );
+);
+
+
+CREATE OR REPLACE RULE my_points_update AS
+ON UPDATE TO my_points DO (
+UPDATE my_points_history SET 
+  deleted = now(),
+  deleted_by = CURRENT_USER
+WHERE id = OLD.id AND OLD.deleted IS NULL;
+INSERT INTO my_points_history ( id, name, geom )
+VALUES ( NEW.id, NEW.name, NEW.geom );
+);
+
+CREATE OR REPLACE RULE my_points_delete AS
+ON DELETE TO my_points DO (
+UPDATE my_points_history SET
+  deleted = now(),
+  deleted_by = CURRENT_USER
+WHERE id = OLD.id AND deleted IS NULL;
+);
+
