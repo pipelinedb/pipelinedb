@@ -1,4 +1,6 @@
-tmp
-staging
+build
 *.deb
 *.rpm
+*.gz
+*.bz2
+*-*
