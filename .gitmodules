@@ -1,4 +1,0 @@
-[submodule "src/gis"]
-	path = src/gis
-	url = git@github.com:pipelinedb/pipeline-gis.git
-	branch = master
