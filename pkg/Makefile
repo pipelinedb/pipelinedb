@@ -103,6 +103,13 @@ rpm: all
 	(cd $(PREFIX) && fpm -s dir -t rpm -n pipelinedb -v $(VERSION) --epoch 0 --prefix=/opt/pipelinedb --after-install post-install --rpm-use-file-permissions --rpm-user root --rpm-group root .)
 	cp $(PREFIX)/*.rpm .
 
+osxpkg:
+	cp postinst-osxpkg $(PREFIX)
+	find $(PREFIX) -type d -exec chmod 775 {} +
+	find $(PREFIX)/share/pipelinedb/timezone -type f -exec chmod 644 {} +
+	(cd $(PREFIX) && fpm -s dir -t osxpkg -n pipelinedb -v $(VERSION) --epoch 0 --prefix=/opt/pipelinedb --after-install postinst-osxpkg .)
+	cp $(PREFIX)/*.pkg .
+
 clean:
 	rm -rf $(GEOS)* $(GDAL)* $(PROJ)* $(TMP_BUILD) $(PREFIX)
 	rm -rf *.deb *.rpm
