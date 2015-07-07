@@ -20,6 +20,7 @@
 #include "executor/instrument.h"
 #include "nodes/params.h"
 #include "nodes/plannodes.h"
+#include "pipeline/hll.h"
 #include "pipeline/streambuf.h"
 #include "pipeline/multiset_t.h"
 #include "utils/reltrigger.h"
@@ -1897,7 +1898,7 @@ typedef struct UniqueState
 typedef struct ContinuousUniqueState
 {
 	PlanState ps;
-	multiset_t *distinct_ms;
+	HyperLogLog *distinct;
 	NameData cvname;
 	uint64_t init_card;
 	uint64_t card;

@@ -53,7 +53,7 @@ SELECT * FROM test_distinct_count;
  Column |  Type  | Modifiers | Storage  | Stats target | Description 
 --------+--------+-----------+----------+--------------+-------------
  count  | bigint |           | plain    |              | 
- _0     | bytea  |           | extended |              | 
+ _0     | hll    |           | extended |              | 
 
 SELECT * FROM test_distinct_sw_count;
  count 
@@ -66,7 +66,7 @@ SELECT * FROM test_distinct_sw_count;
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
  count  | bigint                   |           | plain    |              | 
- _1     | bytea                    |           | extended |              | 
+ _1     | hll                      |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
     "test_distinct_sw_count_mrel0__0_idx" UNIQUE, btree (_0)

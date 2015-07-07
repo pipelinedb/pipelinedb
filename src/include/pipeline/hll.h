@@ -13,6 +13,11 @@
 #define PIPELINE_HLL_H
 
 #include "c.h"
+#include "postgres.h"
+
+#include "executor/tuptable.h"
+#include "lib/stringinfo.h"
+#include "utils/datum.h"
 
 #define HLL_MAX_SPARSE_BYTES 11000
 
@@ -22,6 +27,7 @@
 #define HLL_DENSE_CLEAN 'D'
 
 typedef struct HyperLogLog {
+	int32	vl_len_;
 	/* Dense or sparse, dirty or clean? See above */
   char encoding;
   /*
@@ -42,7 +48,9 @@ HyperLogLog *HLLCreateWithP(int p);
 HyperLogLog *HLLCreate(void);
 HyperLogLog *HLLCreateFromRaw(uint8 *M, int mlen, uint8 p, char encoding);
 HyperLogLog *HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result);
+HyperLogLog *HLLCopy(HyperLogLog *src);
 uint64 HLLSize(HyperLogLog *hll);
 HyperLogLog *HLLUnion(HyperLogLog *result, HyperLogLog *incoming);
+HyperLogLog *HLLAddSlot(HyperLogLog *hll, TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, int *result);
 
 #endif

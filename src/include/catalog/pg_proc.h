@@ -5053,6 +5053,22 @@ DESCR("rank of hypothetical row, using hyperloglog");
 DATA(insert OID = 5007 ( cq_cume_dist_final			PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_	cq_hypothetical_cume_dist_final _null_ _null_ _null_ ));
 DESCR("aggregate final function");
 
+DATA(insert OID = 5008 ( hll_hypothetical_set_transition_multi	PGNSP PGUID 12 1 0 2276 0 f f f f f f i 2 0 2281 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_ hll_hypothetical_set_transition_multi _null_ _null_ _null_ ));
+DESCR("aggregate transition function");
+
+DATA(insert OID = 5011 ( hll_dense_rank				PGNSP PGUID 12 1 0 2276 0 t f f f f f i 1 0 20 "2276" "{2276}" "{v}" _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("rank of hypothetical row, using hyperloglog");
+DATA(insert OID = 5013 ( hll_dense_rank_final			PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 20 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_	hll_hypothetical_dense_rank_final _null_ _null_ _null_ ));
+DESCR("aggregate final function");
+
+/* streaming count distinct using HyperLogLog */
+DATA(insert OID = 5014 ( hll_count_distinct				PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 20 "2276" _null_ _null_ _null_ _null_	aggregate_dummy _null_ _null_ _null_ ));
+DESCR("distinct count, using hyperloglog");
+DATA(insert OID = 5016 ( hll_count_distinct_transition	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2276" "{2281,2276}" "{i,v}" _null_ _null_ hll_count_distinct_transition _null_ _null_ _null_ ));
+DESCR("aggregate transition function");
+DATA(insert OID = 5019 ( hll_count_distinct_final			PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 20 "2281" _null_ _null_ _null_ _null_	hll_count_distinct_final _null_ _null_ _null_ ));
+DESCR("aggregate final function");
+
 /* PipelineDB streaming ordered-set aggregates */
 DATA(insert OID = 5020 (cqosastatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ cqosastatesend _null_ _null_ _null_ ));
 DESCR("serializer for streaming ordered-set aggregation transition states");
@@ -5071,6 +5087,11 @@ DATA(insert OID = 5026 ( cq_percentile_cont_float8_combine	PGNSP PGUID 12 1 0 0 
 DESCR("aggregate combination function");
 DATA(insert OID = 5027 ( cq_percentile_cont_float8_final	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "2281 701" _null_ _null_ _null_ _null_ cq_percentile_cont_float8_final _null_ _null_ _null_ ));
 DESCR("aggregate final function");
+
+DATA(insert OID = 5028 (hll_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "3998" _null_ _null_ _null_ _null_ hll_out _null_ _null_ _null_ ));
+DESCR("HyperLogLog out function");
+DATA(insert OID = 5029 (hll_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3998 "2275" _null_ _null_ _null_ _null_ hll_in  _null_ _null_ _null_ ));
+DESCR("HyperLogLog in function");
 
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
 DATA(insert OID = 4301 ( float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1022 "1022 1022" _null_ _null_ _null_ _null_ float8_combine _null_ _null_ _null_ ));
@@ -5120,6 +5141,34 @@ DESCR("serializer for string aggregation transition states");
 /* generic combine function */
 DATA(insert OID = 4300 ( combine	PGNSP PGUID 12 1 0 2283 0 t f f f t f i 1 0 2283 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("generic user combine function");
+
+/* HyperLogLog aggregate */
+DATA(insert OID = 4321 ( hll_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 3998 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("HyperLogLog aggregate");
+
+/* HyperLogLog aggregate with user-supplied p */
+DATA(insert OID = 4322 ( hll_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 3998 "2283 23" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("HyperLogLog aggregate");
+
+/* HyperLogLog aggregate transition function */
+DATA(insert OID = 4323 ( hll_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 3998 "3998 2283" _null_ _null_ _null_ _null_ hll_agg_trans _null_ _null_ _null_ ));
+DESCR("HyperLogLog union aggregate");
+
+/* HyperLogLog aggregate with p transition function */
+DATA(insert OID = 4324 ( hll_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 3998 "3998 2283" _null_ _null_ _null_ _null_ hll_agg_transp _null_ _null_ _null_ ));
+DESCR("HyperLogLog union aggregate");
+
+/* HyperLogLog union aggregate */
+DATA(insert OID = 4326 ( hll_union_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 3998 "3998" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("HyperLogLog union aggregate");
+
+/* HyperLogLog union aggregate transition function */
+DATA(insert OID = 4327 ( hll_union_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 3998 "3998 3998" _null_ _null_ _null_ _null_ hll_union_agg_trans _null_ _null_ _null_ ));
+DESCR("HyperLogLog union aggregate");
+
+/* HyperLogLog union aggregate transition function */
+DATA(insert OID = 4328 ( hll_cardinality	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 20 "3998" _null_ _null_ _null_ _null_ hll_cardinality _null_ _null_ _null_ ));
+DESCR("HyperLogLog cardinality");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result
