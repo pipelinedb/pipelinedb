@@ -4,6 +4,11 @@
 
 ## Getting started
 
+If you just want to get started with PipelineDB right away, head over to the [download page](http://pipelinedb.com/download) and follow the simple [installation instructions](http://docs.pipelinedb.com/installation.html).
+
+If you'd like to build PipelineDB from source, keep reading!
+
+## Building from source
 Install some dependencies first:
 ```
 sudo apt-get install libreadline6 libreadline6-dev check g++ flex bison python-pip zlib1g-dev python-dev libpq-dev libcurl4-openssl-dev
