@@ -40,7 +40,6 @@
 #include "storage/spin.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
-#include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "utils/portal.h"
@@ -383,74 +382,6 @@ SetCQWorkerDoneFlag(int32 id)
 	entry->worker_done = true;
 }
 
-static PlannedStmt *
-get_plan_from_stmt(char *cvname, Node *node, const char *sql, ContinuousViewState *state, bool is_combine)
-{
-	List		*querytree_list;
-	List		*plantree_list;
-	Query		*query;
-	PlannedStmt	*plan;
-
-	querytree_list = pg_analyze_and_rewrite(node, sql, NULL, 0);
-	Assert(list_length(querytree_list) == 1);
-
-	query = linitial(querytree_list);
-
-	query->is_continuous = IsA(node, SelectStmt);
-	query->is_combine = is_combine;
-	query->cq_target = makeRangeVar(NULL, cvname, -1);
-	query->cq_state = state;
-
-	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
-	Assert(list_length(plantree_list) == 1);
-	plan = (PlannedStmt *) linitial(plantree_list);
-
-	plan->is_continuous = true;
-	plan->cq_target = makeRangeVar(NULL, cvname, -1);
-	plan->cq_state = palloc(sizeof(ContinuousViewState));
-	memcpy(plan->cq_state, query->cq_state, sizeof(ContinuousViewState));
-
-	return plan;
-}
-
-static PlannedStmt*
-get_worker_plan(char *cvname, const char *sql, ContinuousViewState *state)
-{
-	List		*parsetree_list;
-	SelectStmt	*selectstmt;
-
-	parsetree_list = pg_parse_query(sql);
-	Assert(list_length(parsetree_list) == 1);
-
-	selectstmt = (SelectStmt *) linitial(parsetree_list);
-	selectstmt = GetSelectStmtForCQWorker(selectstmt, NULL);
-	selectstmt->forContinuousView = true;
-
-	return get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, false);
-}
-
-static PlannedStmt*
-get_combiner_plan(char *cvname, const char *sql, ContinuousViewState *state)
-{
-	List		*parsetree_list;
-	SelectStmt	*selectstmt;
-	PlannedStmt *result;
-	join_search_hook_type save = join_search_hook;
-
-	parsetree_list = pg_parse_query(sql);
-	Assert(list_length(parsetree_list) == 1);
-
-	join_search_hook = GetCombinerJoinRel;
-	selectstmt = (SelectStmt *) linitial(parsetree_list);
-	selectstmt = GetSelectStmtForCQCombiner(selectstmt);
-	selectstmt->forContinuousView = true;
-
-	result = get_plan_from_stmt(cvname, (Node *) selectstmt, sql, state, true);
-	join_search_hook = save;
-
-	return result;
-}
-
 /*
  * Run CQ combiner or worker in a background process with the postmaster as its parent
  */
@@ -503,20 +434,7 @@ run_cq(Datum d, char *additional, Size additionalsize)
 	matrelname = NameStr(state.matrelname);
 	sql = pstrdup(args.query);
 	spfree(args.query);
-
-	switch(state.ptype)
-	{
-		case CQCombiner:
-			plan = get_combiner_plan(cvname, sql, &state);
-			break;
-		case CQWorker:
-			plan = get_worker_plan(cvname, sql, &state);
-			break;
-		default:
-			elog(ERROR, "unrecognized CQ process type: %d", state.ptype);
-	}
-
-	SetCQPlanRefs(plan, matrelname);
+	plan = GetCQPlan(cvname, sql, &state, matrelname);
 
 	/*
 	 * 2. Set up the portal to run it in

@@ -712,6 +712,12 @@ typedef struct Unique
 	Oid		   *uniqOperators;	/* equality operators to compare with */
 } Unique;
 
+typedef struct ContinuousUnique
+{
+	Unique unique;
+	NameData cvName;
+} ContinuousUnique;
+
 /* ----------------
  *		hash build node
  *
