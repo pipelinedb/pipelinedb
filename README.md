@@ -118,22 +118,3 @@ What were the 10 most common randomly generated keys?
     7   |  2327
 
     (10 rows)
-
-Finally, note that most of the time taken to execute
-
-    bin/generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
-
-is actually due to the `generate-inserts` script (Python) doing a large number of string operations. To get a better feel for the speed at which PipelineDB can process data, run the `INSERTS` independently of Python:
-
-    bin/generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 > inserts.sql
-    pipeline -f inserts.sql
-
-## Distributing PipelineDB
-
-To build the PipelineDB Debian package, run:
-
-    make deb
-
-Similarly, to build the RPM package:
-
-    make rpm
