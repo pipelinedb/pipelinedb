@@ -1,18 +1,18 @@
 /* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
- * spalloc.c
+ * dsm_alloc.c
  *	  shared memory allocator
  *
  * IDENTIFICATION
- *	  src/backend/storage/ipc/spalloc.c
+ *	  src/backend/storage/ipc/dsm_alloc.c
  *
  *-------------------------------------------------------------------------
  */
 #include "c.h"
 #include "miscadmin.h"
 #include "storage/lwlock.h"
-#include "storage/spalloc.h"
+#include "storage/dsm_alloc.h"
 #include "storage/shmem.h"
 #include "storage/spin.h"
 #include "utils/elog.h"
@@ -377,25 +377,25 @@ test_allocator()
 	void *b;
 
 	print_allocator();
-	a = spalloc(23);
-	b = spalloc(500);
-	spfree(a);
-	spfree(b);
-	a = spalloc(250);
-	b = spalloc(120);
-	spfree(a);
-	spfree(b);
-	a = spalloc(sizeof(void *) * 10);
-	b = spalloc(sizeof(Header));
-	spfree(a);
-	spfree(b);
+	a = dsm_alloc(23);
+	b = dsm_alloc(500);
+	dsm_free(a);
+	dsm_free(b);
+	a = dsm_alloc(250);
+	b = dsm_alloc(120);
+	dsm_free(a);
+	dsm_free(b);
+	a = dsm_alloc(sizeof(void *) * 10);
+	b = dsm_alloc(sizeof(Header));
+	dsm_free(a);
+	dsm_free(b);
 }
 
 /*
  * InitSPallocState
  */
 void
-InitSPalloc(void)
+InitDSMAlloc(void)
 {
 	bool found;
 
@@ -418,10 +418,10 @@ InitSPalloc(void)
 }
 
 /*
- * spalloc
+ * dsm_alloc
  */
 void *
-spalloc(Size size)
+dsm_alloc(Size size)
 {
 	void *block;
 	Size padded_size;
@@ -455,7 +455,7 @@ spalloc(Size size)
 		SpinLockAcquire(&GlobalSPallocState->mutex);
 
 		GlobalSPallocState->total_alloc += size;
-		printf("> spalloc %zu\n", size);
+		printf("> dsm_alloc %zu\n", size);
 		print_allocator();
 
 		SpinLockRelease(&GlobalSPallocState->mutex);
@@ -467,10 +467,10 @@ spalloc(Size size)
 }
 
 void *
-spalloc0(Size size)
+dsm_alloc0(Size size)
 {
-	char *addr = spalloc(size);
-	memset(addr, 0, get_size(addr));
+	char *addr = dsm_alloc(size);
+	MemSet(addr, 0, get_size(addr));
 	return addr;
 }
 
@@ -478,7 +478,7 @@ spalloc0(Size size)
  * spfree
  */
 void
-spfree(void *addr)
+dsm_free(void *addr)
 {
 	Size size;
 
@@ -501,7 +501,7 @@ spfree(void *addr)
 }
 
 bool
-IsValidSPallocMemory(void *addr)
+dsm_valid_ptr(void *addr)
 {
 	return is_allocated(addr);
 }
