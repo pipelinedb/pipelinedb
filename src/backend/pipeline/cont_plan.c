@@ -1,11 +1,11 @@
 /* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
- * cqplan.h
+ * cont_plan.c
  * 		Functionality for generating/modifying CQ plans
  *
  * IDENTIFICATION
- *	  src/backend/pipeline/cqplan.c
+ *	  src/backend/pipeline/cont_plan.c
  */
 #include "postgres.h"
 
@@ -22,8 +22,8 @@
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
 #include "parser/parse_oper.h"
+#include "pipeline/cont_plan.h"
 #include "pipeline/cqanalyze.h"
-#include "pipeline/cqplan.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
@@ -155,7 +155,7 @@ set_plan_refs(PlannedStmt *pstmt, ContinuousView *view)
 	 * 1. If we're a worker process, we need to set any Aggref output types
 	 *    to the type of their transition out function, if the agg has one.
 	 *
-	 * 2. If we're a combiner process, we need to set the A	ggref's input
+	 * 2. If we're a combiner process, we need to set the Aggref's input
 	 *    type to the output type of worker processes.
 	 */
 	foreach(lc, plan->targetlist)
@@ -312,42 +312,37 @@ set_plan_refs(PlannedStmt *pstmt, ContinuousView *view)
 static PlannedStmt *
 get_plan_from_stmt(Oid id, Node *node, const char *sql, bool is_combine)
 {
-	List		*querytree_list;
-	List		*plantree_list;
-	Query		*query;
+	Query *query;
 	PlannedStmt	*plan;
 
-	querytree_list = pg_analyze_and_rewrite(node, sql, NULL, 0);
-	Assert(list_length(querytree_list) == 1);
-
-	query = linitial(querytree_list);
-
-	query->is_continuous = IsA(node, SelectStmt);
-	query->is_combine = is_combine;
+	query = linitial(pg_analyze_and_rewrite(node, sql, NULL, 0));
+	query->isContinuous = true;
+	query->isCombine = is_combine;
 	query->cq_id = id;
 
-	plantree_list = pg_plan_queries(querytree_list, 0, NULL);
-	Assert(list_length(plantree_list) == 1);
-	plan = (PlannedStmt *) linitial(plantree_list);
+	plan = pg_plan_query(query, 0, NULL);
 	plan->is_continuous = true;
-	plan->cq_id = id;
 	plan->is_combine = is_combine;
+	plan->cq_id = id;
 
 	/*
 	 * Unique plans get transformed into ContinuousUnique plans for
-	 * combiner processes. This combiner does the necessary unique-fying by
-	 * looking at the distinct HLL stored in pipeline_query.
+	 * continuous query processes.
 	 */
 	if (IsA(plan->planTree, Unique))
 	{
 		ContinuousUnique *cunique = makeNode(ContinuousUnique);
 		Unique *unique = (Unique *) plan->planTree;
+
 		memcpy((char *) &cunique->unique, (char *) unique, sizeof(Unique));
+
 		cunique->cq_id = id;
 		cunique->unique.plan.type = T_ContinuousUnique;
+
 		plan->planTree = (Plan *) cunique;
 
 		Assert(IsA(plan->planTree->lefttree, Sort));
+
 		/* Strip out the sort since its not needed */
 		plan->planTree->lefttree = plan->planTree->lefttree->lefttree;
 	}
@@ -394,7 +389,7 @@ get_combiner_plan(ContinuousView *view)
 }
 
 PlannedStmt *
-GetCQPlan(ContinuousView *view)
+GetContPlan(ContinuousView *view)
 {
 	PlannedStmt *plan;
 
