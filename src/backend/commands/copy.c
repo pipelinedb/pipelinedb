@@ -823,12 +823,6 @@ DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed)
 
 		if (IsStream(stmt->relation->relname))
 		{
-			if (!IsWritableStream(stmt->relation->relname))
-				ereport(ERROR,
-						(errcode(ERRCODE_INACTIVE_STREAM),
-						errmsg("stream \"%s\" is currently not being read", stmt->relation->relname),
-						errhint("Activate some continuous view reading from \"%s\".", stmt->relation->relname)));
-
 			if (!stmt->attlist)
 				ereport(ERROR,
 						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
@@ -1304,7 +1298,7 @@ BeginCopy(bool is_from,
 												ALLOCSET_DEFAULT_INITSIZE,
 												ALLOCSET_DEFAULT_MAXSIZE);
 
-	cstate->to_stream = rel ? IsWritableStream(RelationGetRelationName(rel)) : false;
+	cstate->to_stream = rel ? IsStream(RelationGetRelationName(rel)) : false;
 
 	if (cstate->to_stream)
 	{
@@ -4333,7 +4327,7 @@ CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 					break;
 				}
 			}
-			if (attnum == InvalidAttrNumber && !IsWritableStream(NameStr(rel->rd_rel->relname)))
+			if (attnum == InvalidAttrNumber && !IsStream(NameStr(rel->rd_rel->relname)))
 			{
 				if (rel != NULL)
 					ereport(ERROR,

@@ -24,11 +24,7 @@ def test_user_low_and_high_card(pipeline, clean_db):
         rows.append((2, n))
         rows.append((3, n))
 
-    pipeline.activate()
-
     pipeline.insert('test_bloom_stream', desc, rows)
-
-    pipeline.deactivate()
 
     result = pipeline.execute('SELECT bloom_cardinality(combine(bloom_agg)) FROM test_bloom_agg WHERE k in (0, 1)').first()
     assert result[0] == 4
@@ -57,11 +53,7 @@ def test_bloom_agg_hashing(pipeline, clean_db):
         rows.append((n, '%d' % n, float(n)))
         rows.append((n, '%05d' % n, float(n)))
 
-    pipeline.activate()
-
     pipeline.insert('test_bloom_stream', desc, rows)
-
-    pipeline.deactivate()
 
     cvq = """
     SELECT bloom_cardinality(i),
@@ -94,11 +86,7 @@ def test_bloom_intersection(pipeline, clean_db):
     rows.append((0, 2 * i))
     rows.append((1, i))
 
-  pipeline.activate()
-
   pipeline.insert('test_bloom_stream', desc, rows)
-
-  pipeline.deactivate()
 
   cvq = """
   SELECT bloom_cardinality(bloom_intersection_agg(bloom_agg))
@@ -128,11 +116,7 @@ def test_bloom_contains(pipeline, clean_db):
   for i in range(10000):
     rows.append((2 * i, ))
 
-  pipeline.activate()
-
   pipeline.insert('test_bloom_stream', desc, rows)
-
-  pipeline.deactivate()
 
   cvq = """
   SELECT bloom_contains(bloom_agg, 0), bloom_contains(bloom_agg, 5000),

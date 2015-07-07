@@ -57,8 +57,6 @@
 #include "miscadmin.h"
 #include "optimizer/clauses.h"
 #include "parser/parsetree.h"
-#include "pipeline/combiner.h"
-#include "pipeline/worker.h"
 #include "postmaster/fork_process.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
@@ -221,39 +219,6 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
 		AfterTriggerBeginQuery();
 
 	MemoryContextSwitchTo(oldcontext);
-}
-
-/*
- * ExecutorRunContinuous
- *
- * Runs a query continuously on microbatches of newly materialized data, until
- * a deactivate message is received
- */
-void
-ExecutorRunContinuous(Portal portal, QueryDesc *queryDesc, ResourceOwner owner)
-{
-	PlannedStmt *plan = queryDesc->plannedstmt;
-
-	/* sanity checks */
-	Assert(queryDesc != NULL);
-
-	/* Finish the transaction started in PostgresMain() */
-	CommitTransactionCommand();
-
-	switch(plan->cq_state->ptype)
-	{
-		case CQCombiner:
-			ContinuousQueryCombinerRun(portal, plan->cq_state, queryDesc, owner);
-			break;
-		case CQWorker:
-			ContinuousQueryWorkerRun(portal, plan->cq_state, queryDesc, owner);
-			break;
-		default:
-			elog(ERROR, "unrecognized CQ process type: %d", plan->cq_state->ptype);
-	}
-
-	/* Start a new transaction before committing in PostgresMain */
-	StartTransactionCommand();
 }
 
 /* ----------------------------------------------------------------
@@ -889,10 +854,7 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	estate->es_epqTupleSet = NULL;
 	estate->es_epqScanDone = NULL;
 
-	if (plannedstmt->cq_state)
-		estate->cq_batch_size = plannedstmt->cq_state->batchsize;
-	else
-		estate->cq_batch_size = 0;
+	estate->es_continuous = plannedstmt->is_continuous;
 
 	/*
 	 * Initialize private state information for each SubPlan.  We must do this

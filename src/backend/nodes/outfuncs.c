@@ -799,8 +799,8 @@ _outContinuousUnique(StringInfo str, const ContinuousUnique *node)
 {
 	WRITE_NODE_TYPE("CONTINUOUSUNIQUE");
 	_out_base_unique(str, (Unique *) node);
-	appendStringInfoString(str, " :cvName");
-	appendStringInfo(str, " %s", NameStr(node->cvName));
+	appendStringInfoString(str, " :CQId");
+	appendStringInfo(str, " %d", node->cq_id);
 }
 
 static void

@@ -16,11 +16,11 @@
 #include "pipeline/bloom.h"
 #include "catalog/pipeline_tstate.h"
 
-extern void CreateTStateEntry(char *cvname);
-extern void RemoveTStateEntry(char *cvname);
-extern void ResetTStateEntry(char *cvname);
+extern void CreateTStateEntry(Oid id);
+extern void RemoveTStateEntry(Oid id);
+extern void ResetTStateEntry(Oid id);
 
-extern void UpdateDistinctBloomFilter(char *cvname, BloomFilter *distinct);
-extern BloomFilter *GetDistinctBloomFilter(char *cvname);
+extern void UpdateDistinctBloomFilter(Oid id, BloomFilter *distinct);
+extern BloomFilter *GetDistinctBloomFilter(Oid id);
 
 #endif

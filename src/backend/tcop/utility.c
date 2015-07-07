@@ -839,17 +839,17 @@ standard_ProcessUtility(Node *parsetree,
 			}
 			break;
 
-		case T_ActivateContinuousViewStmt:
+		case T_ActivateStmt:
 			{
-				int count = ExecActivateContinuousViewStmt((ActivateContinuousViewStmt *) parsetree, false);
-				sprintf(completionTag, "ACTIVATE %d", count);
+				ExecActivateStmt((ActivateStmt *) parsetree);
+				completionTag = "ACTIVATE";
 			}
 			break;
 
-		case T_DeactivateContinuousViewStmt:
+		case T_DeactivateStmt:
 			{
-				int count = ExecDeactivateContinuousViewStmt((DeactivateContinuousViewStmt *) parsetree);
-				sprintf(completionTag, "DEACTIVATE %d", count);
+				ExecDeactivateStmt((DeactivateStmt *) parsetree);
+				completionTag = "DEACTIVATE";
 			}
 			break;
 
@@ -2470,10 +2470,10 @@ CreateCommandTag(Node *parsetree)
 			}
 			break;
 
-		case T_ActivateContinuousViewStmt:
+		case T_ActivateStmt:
 			tag = "ACTIVATE";
 			break;
-		case T_DeactivateContinuousViewStmt:
+		case T_DeactivateStmt:
 			tag = "DEACTIVATE";
 			break;
 

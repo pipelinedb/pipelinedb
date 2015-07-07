@@ -9,7 +9,6 @@ def test_distinct(pipeline, clean_db):
   """
   q = 'SELECT DISTINCT ON (x::int, y::int - z::int) x::int, y::int FROM stream'
   pipeline.create_cv('test_distinct', q)
-  pipeline.activate()
 
   uniques = defaultdict(set)
   values = []
@@ -19,7 +18,6 @@ def test_distinct(pipeline, clean_db):
     uniques[(x, y - z)].add(y)
 
   pipeline.insert('stream', ['x', 'y', 'z'], values)
-  pipeline.deactivate()
 
   expected = len(uniques)
   result = pipeline.execute('SELECT COUNT(*) FROM test_distinct').first()

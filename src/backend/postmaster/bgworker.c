@@ -18,6 +18,7 @@
 
 #include "miscadmin.h"
 #include "libpq/pqsignal.h"
+#include "pipeline/cont_scheduler.h"
 #include "postmaster/bgworker_internals.h"
 #include "postmaster/postmaster.h"
 #include "storage/barrier.h"
@@ -293,15 +294,8 @@ BackgroundWorkerStateChange(void)
 		rw->rw_worker.bgw_start_time = slot->worker.bgw_start_time;
 		rw->rw_worker.bgw_restart_time = slot->worker.bgw_restart_time;
 		rw->rw_worker.bgw_main = slot->worker.bgw_main;
-		rw->rw_worker.bgw_main_arg = slot->worker.bgw_main_arg;
-		rw->rw_worker.bgw_additional_size = slot->worker.bgw_additional_size;
+		rw->rw_worker.bgw_main_arg = slot->worker.bgw_main_arg;\
 		rw->rw_worker.bgw_let_crash = slot->worker.bgw_let_crash;
-
-		if (slot->worker.bgw_additional_size)
-		{
-			memcpy(rw->rw_worker.bgw_additional_arg,
-					slot->worker.bgw_additional_arg, slot->worker.bgw_additional_size);
-		}
 
 		/*
 		 * Copy the PID to be notified about state changes, but only if the
@@ -489,16 +483,6 @@ SanityCheckBackgroundWorker(BackgroundWorker *worker, int elevel)
 		return false;
 	}
 
-	if (worker->bgw_additional_size > BGW_ADDITIONAL_LEN)
-	{
-		ereport(elevel,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("additional argument size of %d for worker \"%s\" exceeds the maximum of %d",
-						 (int) worker->bgw_additional_size, worker->bgw_name, BGW_ADDITIONAL_LEN)));
-
-		return false;
-	}
-
 	return true;
 }
 
@@ -535,20 +519,6 @@ bgworker_quickdie(SIGNAL_ARGS)
 static void
 bgworker_die(SIGNAL_ARGS)
 {
-#ifdef PIPELINE_PY_TEST
-	/*
-	 * XXX(usmanm): This is a hack which disables the SIGTERM handler
-	 * for CQ background workers if they're in a critical section.
-	 * This ensures that we'll never experience a full system reset
-	 * while trying to test for recovery.
-	 */
-	if (IsCQBackgroundProcess && CritSectionCount && getenv(PIPELINE_PY_TEST))
-	{
-		elog(LOG, "ignoring SIGTERM signal");
-		return;
-	}
-#endif
-
 	PG_SETMASK(&BlockSig);
 
 	ereport(FATAL,
@@ -743,8 +713,7 @@ StartBackgroundWorker(void)
 	/*
 	 * Now invoke the user-defined worker code
 	 */
-	entrypt(worker->bgw_main_arg,
-			worker->bgw_additional_arg, worker->bgw_additional_size);
+	entrypt(worker->bgw_main_arg);
 
 	/* ... and if it returns, we're done */
 	proc_exit(0);

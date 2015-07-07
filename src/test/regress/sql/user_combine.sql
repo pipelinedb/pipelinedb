@@ -47,8 +47,6 @@ CREATE VIEW test_uc2_view AS
 SELECT minute, combine(load_avg) OVER (ORDER BY minute DESC ROWS 4 PRECEDING) AS load_avg
   FROM test_uc2;
 
-ACTIVATE test_uc0, test_uc1, test_uc2;
-
 INSERT INTO test_uc_stream (x, y, s) VALUES (0, 0, '0');
 INSERT INTO test_uc_stream (x, y, s) VALUES (1, 100, '1');
 INSERT INTO test_uc_stream (x, y, s) VALUES (2, 200, '2');
@@ -159,8 +157,6 @@ INSERT INTO test_uc_systat_stream (t, queue_length) VALUES ('2015-03-25T07:52:52
 ('2015-03-25T07:56:54Z', 3),
 ('2015-03-25T07:57:54Z', 4);
 
-DEACTIVATE test_uc0, test_uc1, test_uc2;
-
 CREATE TABLE test_uc_table1 (x integer, y integer, s text);
 
 INSERT INTO test_uc_table1 (x, y, s) VALUES (100, 1000, '0'), (101, 1010, '1'), (102, 1020, '2'), (103, 1030, '3'), (104, 1040, '4'), (105, 1050, '5'), (106, 1060, '6'), (107, 1070, '7'), (108, 1080, '8'), (109, 1090, '9'), (110, 1100, '10'), (111, 1110, '11'), (112, 1120, '12'), (113, 1130, '13'), (114, 1140, '14'), (115, 1150, '15'), (116, 1160, '16'), (117, 1170, '17'), (118, 1180, '18'), (119, 1190, '19'), (120, 1200, '20'), (121, 1210, '21'), (122, 1220, '22'), (123, 1230, '23'), (124, 1240, '24'), (125, 1250, '25'), (126, 1260, '26'), (127, 1270, '27'), (128, 1280, '28'), (129, 1290, '29'), (130, 1300, '30'), (131, 1310, '31'), (132, 1320, '32'), (133, 1330, '33'), (134, 1340, '34'), (135, 1350, '35'), (136, 1360, '36'), (137, 1370, '37'), (138, 1380, '38'), (139, 1390, '39'), (140, 1400, '40'), (141, 1410, '41'), (142, 1420, '42'), (143, 1430, '43'), (144, 1440, '44'), (145, 1450, '45'), (146, 1460, '46'), (147, 1470, '47'), (148, 1480, '48'), (149, 1490, '49');
@@ -183,7 +179,7 @@ SELECT s, combine(max) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
 SELECT s, combine(min) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
 
 -- Verify the lengths for these since the ordering is nondeterministic and they're really long
-SELECT s, json_object_keys(combine(json_object_agg)) AS k FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
+SELECT s, json_object_keys(combine(json_object_agg)) AS k FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s, k;
 SELECT array_length(combine(array_agg), 1) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
 SELECT length(combine(string_agg)) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
 

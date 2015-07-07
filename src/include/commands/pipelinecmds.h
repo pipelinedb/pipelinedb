@@ -14,13 +14,14 @@
 
 #include "nodes/parsenodes.h"
 
-/* GUC parameter */
+/* guc parameter */
 extern int continuous_view_fillfactor;
 
-void ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring);
-void ExecDropContinuousViewStmt(DropStmt *stmt);
-int ExecActivateContinuousViewStmt(ActivateContinuousViewStmt *stmt, bool recovery);
-int ExecDeactivateContinuousViewStmt(DeactivateContinuousViewStmt *stmt);
-void ExecTruncateContinuousViewStmt(TruncateStmt *stmt);
+extern void ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring);
+extern void ExecDropContinuousViewStmt(DropStmt *stmt);
+extern void ExecTruncateContinuousViewStmt(TruncateStmt *stmt);
+
+extern void ExecActivateStmt(ActivateStmt *stmt);
+extern void ExecDeactivateStmt(DeactivateStmt *stmt);
 
 #endif   /* PIPELINECMDS_H */

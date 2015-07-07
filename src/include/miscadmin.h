@@ -160,12 +160,6 @@ extern char pkglib_path[];
 extern char postgres_exec_path[];
 #endif
 
-/* PipelineDB globals */
-extern int MyCQId;
-extern bool IsCombiner;
-extern bool IsWorker;
-extern int MyWorkerId;
-
 #define IsCQBackgroundProcess (IsCombiner || IsWorker)
 #define PIPELINE_PY_TEST "PIPELINE_PY_TESTS"
 
@@ -403,7 +397,7 @@ extern void InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 extern void BaseInit(void);
 
 /* in utils/pipelineinit.c */
-extern void InitPipeline(void);
+extern void PipelineShmemInit(void);
 
 /* in utils/init/miscinit.c */
 extern bool IgnoreSystemIndexes;

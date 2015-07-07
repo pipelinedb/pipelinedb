@@ -343,7 +343,7 @@ avlauncher_forkexec(void)
 	char	   *av[10];
 	int			ac = 0;
 
-	av[ac++] = "postgres";
+	av[ac++] = "pipeline-server";
 	av[ac++] = "--forkavlauncher";
 	av[ac++] = NULL;			/* filled in by postmaster_forkexec */
 	av[ac] = NULL;
@@ -593,35 +593,6 @@ AutoVacLauncherMain(int argc, char *argv[])
 	 * entry, and time always increases).
 	 */
 	rebuild_database_list(InvalidOid);
-
-	{
-		Relation rel;
-		HeapScanDesc scan;
-		HeapTuple tup;
-		List *databases = NIL;
-
-		StartTransactionCommand();
-		(void) GetTransactionSnapshot();
-
-		rel = heap_open(DatabaseRelationId, AccessShareLock);
-		scan = heap_beginscan_catalog(rel, 0, NULL);
-
-		while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
-		{
-			Form_pg_database pgdatabase = (Form_pg_database) GETSTRUCT(tup);
-			if (pgdatabase->datistemplate)
-				continue;
-			databases = lappend_int(databases, HeapTupleGetOid(tup));
-		}
-
-		heap_endscan(scan);
-		heap_close(rel, AccessShareLock);
-
-		/* activate all continuous views marked as active */
-		RestartContinuousQueryProcs(databases);
-
-		CommitTransactionCommand();
-	}
 
 	for (;;)
 	{

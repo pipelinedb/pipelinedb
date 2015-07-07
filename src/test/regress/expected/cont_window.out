@@ -22,7 +22,6 @@ View definition:
     combine(naggstaterecv(cqwindow0_mrel0.3)) OVER (PARTITION BY cqwindow0_mrel0.1 ORDER BY cqwindow0_mrel0.4 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
    FROM cqwindow0_mrel0;
 
-ACTIVATE cqwindow0;
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2);
 SELECT pg_sleep(1);
  pg_sleep 
@@ -45,7 +44,6 @@ SELECT pg_sleep(1);
 (1 row)
 
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 7), ('b', 8);
-DEACTIVATE cqwindow0;
 SELECT * FROM cqwindow0 ORDER BY key;
  key | sum 
 -----+-----
@@ -83,7 +81,6 @@ View definition:
     combine(cqwindow1_mrel0.3) OVER (PARTITION BY cqwindow1_mrel0.1 ORDER BY cqwindow1_mrel0.4 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
    FROM cqwindow1_mrel0;
 
-ACTIVATE cqwindow1;
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);
 SELECT pg_sleep(1);
  pg_sleep 
@@ -106,7 +103,6 @@ SELECT pg_sleep(1);
 (1 row)
 
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 10), ('b', 11), ('b', 12);
-DEACTIVATE cqwindow1;
 SELECT * FROM cqwindow1 ORDER BY key;
  key |        avg         
 -----+--------------------

@@ -19,7 +19,6 @@
 #include "catalog/pipeline_query_fn.h"
 #include "nodes/bitmapset.h"
 #include "nodes/primnodes.h"
-#include "pipeline/cqproc.h"
 #include "utils/tuplestore.h"
 
 
@@ -75,11 +74,9 @@ typedef struct PlannedStmt
 	/*
 	 * Continuous query fields
 	 */
-	bool		is_continuous; /* should this be executed continuously? */
-
-	ContinuousViewState	*cq_state;
-
-	RangeVar 	*cq_target; /* target output table of this CQ, if any */
+	bool is_continuous; /* should this be executed continuously? */
+	Oid	cq_id; /* continuous query id, valid only if is_continuous is true */
+	bool is_combine;
 } PlannedStmt;
 
 /* macro for fetching the Plan associated with a SubPlan node */
@@ -293,7 +290,6 @@ typedef Scan SeqScan;
 typedef struct StreamScan
 {
 	Scan scan;
-	int32 cqid;
 	TupleDesc desc;
 } StreamScan;
 
@@ -725,7 +721,7 @@ typedef struct Unique
 typedef struct ContinuousUnique
 {
 	Unique unique;
-	NameData cvName;
+	Oid cq_id;
 } ContinuousUnique;
 
 /* ----------------

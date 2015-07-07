@@ -46,6 +46,7 @@
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "pg_trace.h"
+#include "pipeline/cont_scheduler.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
@@ -128,7 +129,8 @@ PgStat_MsgBgWriter BgWriterStats;
 /*
  * If we're a CQ process, this tracks our various runtime stats
  */
-CQStatEntry MyCQStats;
+CQStatEntry MyProcCQStats;
+CQStatEntry *MyCQStats = NULL;
 
 /* ----------
  * Local data
@@ -177,8 +179,6 @@ static HTAB *pgStatFunctions = NULL;
  * sent to the collector.
  */
 static bool have_function_stats = false;
-
-CQStatEntry MyCQStats;
 
 /*
  * Tuple insertion/deletion counts for an open transaction can't be propagated
@@ -5299,6 +5299,21 @@ pgstat_db_requested(Oid databaseid)
 }
 
 /*
+ * cq_stat_init
+ */
+void cq_stat_init(CQStatEntry *entry, Oid viewid, pid_t pid)
+{
+	MemSet(entry, 0, sizeof(CQStatEntry));
+
+	entry->start_ts = GetCurrentTimestamp();
+	entry->last_report = GetCurrentTimestamp();
+
+	SetCQStatView(entry->key, viewid);
+	SetCQStatProcPid(entry->key, pid);
+	SetCQStatProcType(entry->key, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+}
+
+/*
  * cq_stat_fetch_all
  *
  * Get all stats, which includes proc-level CQ-level stats
@@ -5320,22 +5335,30 @@ cq_stat_fetch_all(void)
 	return dbentry->cont_queries;
 }
 
-
-/*
- * cq_stat_initialize
- *
- * Create a new stats instance for the given CQ proc
- */
-void
-cq_stat_initialize(Oid viewid, int32 pid)
+static void cq_stat_report_entry(CQStatEntry *entry)
 {
-	MemSet(&MyCQStats, 0, sizeof(CQStatEntry));
+	CQStatMsg msg;
 
-	MyCQStats.start_ts = GetCurrentTimestamp();
+	/* If we consumed no tuples and saw no errors, no need to send a msg to the stats collector. */
+	if (entry->input_rows == 0 && entry->errors == 0)
+		return;
 
-	SetCQStatView(MyCQStats.key, viewid);
-	SetCQStatProcPid(MyCQStats.key, pid);
-	SetCQStatProcType(MyCQStats.key, IsWorker ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+	MemSet(&msg, 0, sizeof(CQStatMsg));
+	msg.m_entry = *entry;
+	msg.m_databaseid = MyDatabaseId;
+
+	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_CQ);
+	pgstat_send(&msg, sizeof(msg));
+
+	entry->last_report = GetCurrentTimestamp();
+	entry->input_rows = 0;
+	entry->output_rows = 0;
+	entry->updates = 0;
+	entry->input_bytes = 0;
+	entry->output_bytes = 0;
+	entry->updated_bytes = 0;
+	entry->executions = 0;
+	entry->errors = 0;
 }
 
 /*
@@ -5346,35 +5369,16 @@ cq_stat_initialize(Oid viewid, int32 pid)
 void
 cq_stat_report(bool force)
 {
-	static TimestampTz last_report = 0;
-	TimestampTz now;
-	CQStatMsg msg;
-
 	/*
 	 * Don't send a message unless it's been at least PGSTAT_STAT_INTERVAL
 	 * msec since we last sent one, or the caller wants to force stats out.
 	 */
-	now = GetCurrentTimestamp();
-	if (!force &&
-		!TimestampDifferenceExceeds(last_report, now, PGSTAT_STAT_INTERVAL))
+	if (!force && !TimestampDifferenceExceeds(MyCQStats->last_report, GetCurrentTimestamp(), PGSTAT_STAT_INTERVAL))
 		return;
-	last_report = now;
 
-	MemSet(&msg, 0, sizeof(CQStatMsg));
-	msg.m_entry = MyCQStats;
-	msg.m_databaseid = MyDatabaseId;
-
-	pgstat_setheader(&msg.m_hdr, PGSTAT_MTYPE_CQ);
-	pgstat_send(&msg, sizeof(msg));
-
-	MyCQStats.input_rows = 0;
-	MyCQStats.output_rows = 0;
-	MyCQStats.updates = 0;
-	MyCQStats.input_bytes = 0;
-	MyCQStats.output_bytes = 0;
-	MyCQStats.updated_bytes = 0;
-	MyCQStats.executions = 0;
-	MyCQStats.errors = 0;
+	cq_stat_report_entry(&MyProcCQStats);
+	if (MyCQStats)
+		cq_stat_report_entry(MyCQStats);
 }
 
 /*
@@ -5415,38 +5419,43 @@ cq_stat_recv(CQStatMsg *msg, int len)
 	CQStatEntry *existing;
 	PgStat_StatDBEntry *db;
 	Oid viewid = GetCQStatView(stats.key);
-	int pid = GetCQStatProcPid(stats.key);
+	pid_t pid = GetCQStatProcPid(stats.key);
 	int ptype = GetCQStatProcType(stats.key);
 
-	db = pgstat_get_db_entry(msg->m_databaseid, false);
+	db = pgstat_get_db_entry(msg->m_databaseid, true);
 
-	/*
-	 * Aggregate the process-level stats
-	 */
-	existing = cq_stat_get_entry(db, viewid, pid, ptype);
-	if (!existing->start_ts)
-		existing->start_ts = stats.start_ts;
+	if (pid)
+	{
+		/*
+		 * Aggregate the process-level stats
+		 */
+		existing = cq_stat_get_entry(db, 0, pid, ptype);
+		if (!existing->start_ts)
+			existing->start_ts = stats.start_ts;
 
-	existing->input_rows += stats.input_rows;
-	existing->output_rows += stats.output_rows;
-	existing->input_bytes += stats.input_bytes;
-	existing->output_bytes += stats.output_bytes;
-	existing->updates += stats.updates;
-	existing->updated_bytes += stats.updated_bytes;
-	existing->executions += stats.executions;
-	existing->errors += stats.errors;
-
-	/*
-	 * Now aggregate the CQ-level stats across all procs of this type
-	 */
-	existing = cq_stat_get_entry(db, viewid, 0, ptype);
-	existing->input_rows += stats.input_rows;
-	existing->output_rows += stats.output_rows;
-	existing->input_bytes += stats.input_bytes;
-	existing->output_bytes += stats.output_bytes;
-	existing->updates += stats.updates;
-	existing->updated_bytes += stats.updated_bytes;
-	existing->errors += stats.errors;
+		existing->input_rows += stats.input_rows;
+		existing->output_rows += stats.output_rows;
+		existing->input_bytes += stats.input_bytes;
+		existing->output_bytes += stats.output_bytes;
+		existing->updates += stats.updates;
+		existing->updated_bytes += stats.updated_bytes;
+		existing->executions += stats.executions;
+		existing->errors += stats.errors;
+	}
+	else if (viewid)
+	{
+		/*
+		 * Now aggregate the CQ-level stats across all procs of this type
+		 */
+		existing = cq_stat_get_entry(db, viewid, 0, ptype);
+		existing->input_rows += stats.input_rows;
+		existing->output_rows += stats.output_rows;
+		existing->input_bytes += stats.input_bytes;
+		existing->output_bytes += stats.output_bytes;
+		existing->updates += stats.updates;
+		existing->updated_bytes += stats.updated_bytes;
+		existing->errors += stats.errors;
+	}
 }
 
 /*
@@ -5464,7 +5473,7 @@ cq_stat_send_purge(Oid viewid, int pid, int64 ptype)
 
 	SetCQStatView(msg.m_key, viewid);
 	SetCQStatProcPid(msg.m_key, pid);
-	SetCQStatProcType(msg.m_key, IsWorker ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
+	SetCQStatProcType(msg.m_key, IsContQueryWorkerProcess() ? CQ_STAT_WORKER : CQ_STAT_COMBINER);
 
 	msg.m_databaseid = MyDatabaseId;
 

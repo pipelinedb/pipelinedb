@@ -13,7 +13,7 @@
 
 #include "postgres.h"
 #include "nodes/bitmapset.h"
-#include "pipeline/cont_xact.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/stream.h"
 #include "storage/shm_array.h"
 #include "storage/s_lock.h"
@@ -24,92 +24,117 @@
 /* GUC parameters */
 extern int tuple_buffer_blocks;
 
-typedef struct Tuple
+typedef struct StreamTuple
 {
+	Oid db_oid;
 	bytea *desc;
 	/* append-time values */
 	HeapTuple heaptup;
 	/* arrival time of the event */
 	TimestampTz arrivaltime;
-	/* length of the batches array */
+	/* length of the acks array */
 	int num_acks;
-	/* the batches and number of tuples this single tuple represents */
-	StreamBatchAck *acks;
-} Tuple;
+	/* the acks this tuple is responsible for */
+	InsertBatchAck *acks;
+} StreamTuple;
 
-/* Wraps a physical event and the queries that still need to read it */
 typedef struct TupleBufferSlot
 {
 	uint32_t magic;
+	Oid db_oid;
 	uint64_t id;
 	sig_atomic_t unread;
 	struct TupleBufferSlot *next;
 	struct TupleBuffer *buf;
 	Size size;
-	Tuple *tuple;
-	Bitmapset *readers;
-	slock_t mutex;
+	StreamTuple *tuple;
+	Bitmapset *queries;
 } TupleBufferSlot;
 
-/* Circular buffer containing physical events to be read by continuous queries */
+typedef struct TupleBufferReader TupleBufferReader;
+
 typedef struct TupleBuffer
 {
-	char *name;
-	LWLock *head_lock;
-	LWLock *tail_lock;
-	uint8_t max_readers;
 	Size size;
 	char *start;
+	LWLock *head_lock;
+	LWLock *tail_lock;
 	TupleBufferSlot *head;
 	TupleBufferSlot *tail;
 	uint64_t head_id;
 	uint64_t tail_id;
 	slock_t mutex;
+	Latch *writer_latch;
 	Bitmapset *waiters;
-	ShmemArray *latches;
-	Latch writer_latch;
+	TupleBufferReader *readers[1]; /* readers[i] points to reader for continuous query proc with id i */
 } TupleBuffer;
 
+
+typedef bool (*TupleBufferShouldReadFunc) (TupleBufferReader *rdr, TupleBufferSlot *slot);
+
 /* Pointer into a stream buffer from the perspective of a continuous query */
-typedef struct TupleBufferReader
+struct TupleBufferReader
 {
 	TupleBuffer *buf;
-	uint32_t cq_id;
-	uint8_t reader_id;
-	uint8_t num_readers;
+	ContQueryProc *proc;
+	TupleBufferShouldReadFunc should_read_fn;
 	uint64_t slot_id;
 	TupleBufferSlot *slot;
-} TupleBufferReader;
+	List *pinned;
+	List *acks;
+};
+
+typedef struct TupleBufferBatchReader
+{
+	TupleBufferReader *rdr;
+	Oid cq_id;
+	TimestampTz start_time;
+	bool started;
+	bool depleted;
+	bool batch_done;
+	ListCell *current;
+	List *acks;
+	ContQueryRunParams *params;
+	Bitmapset *queries_seen;
+	List *yielded;
+} TupleBufferBatchReader;
 
 extern TupleBuffer *WorkerTupleBuffer;
 extern TupleBuffer *CombinerTupleBuffer;
 
-extern Tuple *MakeTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, StreamBatchAck *acks);
+extern StreamTuple *MakeStreamTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, InsertBatchAck *acks);
 
-extern void TupleBuffersInit(void);
+extern void TupleBuffersShmemInit(void);
 
-extern TupleBuffer *TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock, uint8_t max_readers);
+extern TupleBuffer *TupleBufferInit(char *name, Size size, LWLock *head_lock, LWLock *tail_lock);
 extern Size TupleBuffersShmemSize(void);
-extern TupleBufferSlot *TupleBufferInsert(TupleBuffer *buf, Tuple *event, Bitmapset *readers);
+extern TupleBufferSlot *TupleBufferInsert(TupleBuffer *buf, StreamTuple *event, Bitmapset *queries);
 extern bool TupleBufferIsEmpty(TupleBuffer *buf);
 
 extern void TupleBufferInitLatch(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, Latch *proclatch);
-extern void TupleBufferWait(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id);
+extern void TupleBufferTryWait(TupleBufferReader *reader);
 extern void TupleBufferNotifyAndClearWaiters(TupleBuffer *buf);
-extern void TupleBufferResetNotify(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id);
-extern void TupleBufferNotify(TupleBuffer *buf, uint32_t cq_id);
 
-extern TupleBufferReader *TupleBufferOpenReader(TupleBuffer *buf, uint32_t cq_id, uint8_t reader_id, uint8_t num_readers);
+/* low level API for reading/writing to a TupleBuffer */
+extern TupleBufferReader *TupleBufferOpenReader(TupleBuffer *buf, TupleBufferShouldReadFunc read_func);
 extern void TupleBufferCloseReader(TupleBufferReader *reader);
 extern TupleBufferSlot *TupleBufferPinNextSlot(TupleBufferReader *reader);
-extern void TupleBufferUnpinSlot(TupleBufferReader *reader, TupleBufferSlot *slot);
+extern void TupleBufferUnpinSlot(TupleBufferSlot *slot);
 extern void TupleBufferWaitOnSlot(TupleBuffer *buf, TupleBufferSlot *slot);
-extern void TupleBufferDrain(TupleBuffer *buf, uint32_t cq_id);
+extern void TupleBufferUnpinAllPinnedSlots(TupleBufferReader *reader);
+extern bool TupleBufferHasUnreadSlots(TupleBufferReader *reader);
 
-extern void TupleBufferUnpinAllPinnedSlots(void);
-extern void TupleBufferClearPinnedSlots(void);
-extern bool TupleBufferHasUnreadSlots(void);
-extern void TupleBufferClearReaders(void);
+/* high level API for reading/writing to a TupleBuffer */
+extern TupleBufferBatchReader *TupleBufferOpenBatchReader(TupleBuffer *buf, TupleBufferShouldReadFunc read_func);
+extern void TupleBufferCloseBatchReader(TupleBufferBatchReader *reader);
+extern void TupleBufferBatchReaderSetCQId(TupleBufferBatchReader *reader, Oid cq_id);
+extern bool TupleBufferBatchReaderHasTuplesForCQId(TupleBufferBatchReader *reader, Oid cq_id);
+extern TupleBufferSlot *TupleBufferBatchReaderNext(TupleBufferBatchReader *reader);
+extern void TupleBufferBatchReaderRewind(TupleBufferBatchReader *reader);
+extern void TupleBufferBatchReaderReset(TupleBufferBatchReader *reader);
+extern void TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_processed);
+
+extern void TupleBufferDrain(TupleBuffer *buf, Oid db_oid);
 
 extern TupleDesc TupleHeaderUnpack(char *raw);
 extern char *TupleHeaderPack(TupleDesc desc);

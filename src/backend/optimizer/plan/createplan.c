@@ -106,7 +106,7 @@ static List *order_qual_clauses(PlannerInfo *root, List *clauses);
 static void copy_path_costsize(Plan *dest, Path *src);
 static void copy_plan_costsize(Plan *dest, Plan *src);
 static SeqScan *make_seqscan(List *qptlist, List *qpqual, Index scanrelid);
-static StreamScan *make_streamscan(List *qptlist, List *qpqual, int32 cqid);
+static StreamScan *make_streamscan(List *qptlist, List *qpqual);
 static IndexScan *make_indexscan(List *qptlist, List *qpqual, Index scanrelid,
 			   Oid indexid, List *indexqual, List *indexqualorig,
 			   List *indexorderby, List *indexorderbyorig,
@@ -1213,8 +1213,7 @@ create_streamscan_plan(PlannerInfo *root, Path *best_path,
 	}
 
 	scan_plan = make_streamscan(tlist,
-							 scan_clauses,
-							 root->parse->cq_state->id);
+							 scan_clauses);
 	scan_plan->desc = rte->streamdesc->desc;
 
 	copy_path_costsize(&scan_plan->scan.plan, best_path);
@@ -3444,8 +3443,7 @@ make_seqscan(List *qptlist,
 
 static StreamScan *
 make_streamscan(List *qptlist,
-			 List *qpqual,
-			 int32 cqid)
+			 List *qpqual)
 {
 	StreamScan *node = makeNode(StreamScan);
 	Plan *plan = &node->scan.plan;
@@ -3455,7 +3453,6 @@ make_streamscan(List *qptlist,
 	plan->qual = qpqual;
 	plan->lefttree = NULL;
 	plan->righttree = NULL;
-	node->cqid = cqid;
 
 	return node;
 }

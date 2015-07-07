@@ -49,50 +49,9 @@ get_rescan_nodes(PlanState *root)
 	return result;
 }
 
-/*
- * unpin_stream_events
- *
- * We don't unpin events until they're actually done being joined
- * against the outer node. This prevents races and guarantees that
- * our events are always valid.
- */
-static void
-unpin_stream_events(StreamTableJoinState *node)
-{
-	HashState *hashstate = (HashState *) innerPlanState(node);
-	StreamScanState *scan = (StreamScanState *) outerPlanState(hashstate);
-	ListCell *lc;
-	foreach(lc, scan->pinned)
-	{
-		TupleBufferSlot *sbs = (TupleBufferSlot *) lfirst(lc);
-		TupleBufferUnpinSlot(scan->reader, sbs);
-	}
-	list_free(scan->pinned);
-	scan->pinned = NIL;
-}
-
-/*
- * disable_batching
- *
- * We disable batching semantics on the outer node of stream-table joins
- * because it doesn't make sense for tables.
- */
-static void
-disable_batching(PlanState *root)
-{
-	if (root == NULL)
-		return;
-
-	DisableBatching(root);
-
-	disable_batching(root->lefttree);
-	disable_batching(root->righttree);
-}
-
 StreamTableJoinState *
 ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 {
-	StreamScanState *sscan;
 	ListCell *lc;
 	StreamTableJoinState *state;
 	List *lclauses = NIL;
@@ -227,12 +186,6 @@ ExecInitStreamTableJoin(StreamTableJoin *node, EState *estate, int eflags)
 	state->hj_JoinState = HJ_FILL_HASHTABLE;
 	state->hj_MatchedOuter = false;
 	state->hj_OuterNotEmpty = false;
-
-	sscan = (StreamScanState *) outerPlanState(hashstate);
-	sscan->unpin = false;
-
-	/* the table side of the join shouldn't use batching semantics */
-	disable_batching(outerPlanState(state));
 
 	state->hj_HashTable = ExecHashTableCreate(hashnode, state->hj_HashOperators, HJ_FILL_INNER(state));
 
@@ -421,7 +374,6 @@ ExecStreamTableJoin(StreamTableJoinState *node)
 					}
 					else
 					{
-						unpin_stream_events(node);
 						ExecReScan((PlanState *) node);
 
 						return NULL;

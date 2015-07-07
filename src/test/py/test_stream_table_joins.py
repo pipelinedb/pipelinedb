@@ -53,13 +53,9 @@ def test_join_with_aggs(pipeline, clean_db):
     a1 = _generate_rows(num_cols, 64)
     s = _generate_rows(num_cols, 64)
 
-    pipeline.activate()
-
     _insert(pipeline, 'a0', a0, 0.1)
     _insert(pipeline, 'a1', a1, 0.1)
     _insert(pipeline, 'stream', s)
-
-    pipeline.deactivate()
 
     expected = _join(a1, _join(a0, s, join_cols), join_cols)
     result = pipeline.execute('SELECT * FROM test_agg_join').first()
@@ -94,13 +90,9 @@ def test_join_with_where(pipeline, clean_db):
     wt = _generate_rows(num_cols, 64)
     s = _generate_rows(num_cols, 64)
 
-    pipeline.activate()
-
     _insert(pipeline, 'wt', wt, 0.1)
     _insert(pipeline, 'wt_s', s, 0.1)
     _insert(pipeline, 'stream', s)
-
-    pipeline.deactivate()
 
     expected = pipeline.execute('SELECT COUNT(*) FROM wt_s s, wt WHERE s.col0 = 1 AND wt.col0 = 1').first()
     result = pipeline.execute('SELECT COUNT(*) FROM test_join_where').first()
@@ -150,12 +142,8 @@ def test_join_ordering(pipeline, clean_db):
 
     _insert(pipeline, 'ordering0', ordering0, 0.1)
     _insert(pipeline, 'ordering1', ordering1, 0.1)
-    
-    pipeline.activate()
 
     _insert(pipeline, 'stream', s)
-
-    pipeline.deactivate()
 
     expected = _join(ordering0, _join(ordering1, s, join_cols), join_cols)
 
@@ -181,15 +169,12 @@ def test_join_across_batches(pipeline, clean_db):
     SELECT s.col0::integer FROM batch JOIN stream s ON batch.col0 = s.col0
     """
     pipeline.create_cv('test_batched_join', q)
-    pipeline.activate(batchsize=1)
 
     t = _generate_rows(num_cols, 64)
     _insert(pipeline, 'batch', t, 0.1)
 
     s = _generate_rows(num_cols, 64)
     _insert(pipeline, 'stream', s)
-
-    pipeline.deactivate()
 
     expected = _join(t, s, join_cols)
     result = pipeline.execute('SELECT COUNT(*) FROM test_batched_join').first()
@@ -214,14 +199,11 @@ def test_incremental_join(pipeline, clean_db):
     t = _generate_rows(num_cols, 64)
     _insert(pipeline, 'inc', t)
 
-    pipeline.activate()
     s = []
     for n in range(2):
         row = _generate_row(num_cols)
         _insert(pipeline, 'stream', [row])
         s.append(row)
-
-    pipeline.deactivate()
 
     expected = _join(t, s, join_cols)
     result = pipeline.execute('SELECT COUNT(*) FROM test_join').first()
@@ -250,13 +232,10 @@ def test_join_multiple_tables(pipeline, clean_db):
     s = _generate_rows(num_cols, 64)
 
     _insert(pipeline, 't1', t1)
-    pipeline.activate()
 
     # Now insert some table rows after activation
     _insert(pipeline, 't0', t0, 0.1)
     _insert(pipeline, 'stream', s)
-
-    pipeline.deactivate()
 
     expected = _join(t0, _join(s, t1, join_cols), join_cols)
     result = pipeline.execute('SELECT COUNT(*) FROM test_join_multi').first()
@@ -280,11 +259,7 @@ def test_indexed(pipeline, clean_db):
 
     pipeline.insert('test_indexed_t', ('x', 'y'), t)
 
-    pipeline.activate()
-
     pipeline.insert('stream', ('x', 'y'), s)
-
-    pipeline.deactivate()
 
     expected = _join(s, t, [0])
     result = pipeline.execute('SELECT sum(count) FROM test_indexed').first()
