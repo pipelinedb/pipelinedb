@@ -47,6 +47,7 @@
 #include "miscadmin.h"
 #include "pg_trace.h"
 #include "pipeline/cont_scheduler.h"
+#include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/postmaster.h"
@@ -3426,6 +3427,19 @@ PgstatCollectorMain(int argc, char *argv[])
 							   pgStatSock,
 							   2 * 1000L /* msec */ );
 #endif
+
+		if (anonymous_update_checks)
+		{
+			/* only check at startup and a maximum of once per hour */
+			static bool first = true;
+			static TimestampTz last_check = 0;
+			if (first || TimestampDifferenceExceeds(last_check, GetCurrentTimestamp(), 1000 * 60 * 60))
+			{
+				UpdateCheck(pgStatDBHash, first);
+				last_check = GetCurrentTimestamp();
+				first = false;
+			}
+		}
 
 		/*
 		 * Emergency bailout if postmaster has died.  This is to avoid the
