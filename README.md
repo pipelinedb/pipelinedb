@@ -6,7 +6,7 @@
 
 Install some dependencies first:
 ```
-sudo apt-get install libreadline6 libreadline6-dev check g++ flex bison python-pip zlib1g-dev python-dev libpq-dev
+sudo apt-get install libreadline6 libreadline6-dev check g++ flex bison python-pip zlib1g-dev python-dev libpq-dev libcurl4-openssl-dev
 sudo pip install -r src/test/py/requirements.txt
 ```
 
