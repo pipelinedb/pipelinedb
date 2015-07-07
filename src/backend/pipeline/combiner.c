@@ -32,10 +32,13 @@
 #include "parser/parse_collate.h"
 #include "parser/parse_expr.h"
 #include "parser/parse_type.h"
+#include "pgstat.h"
 #include "pipeline/combiner.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/cqplan.h"
 #include "pipeline/cqproc.h"
+#include "pipeline/tuplebuf.h"
+#include "storage/proc.h"
 #include "tcop/tcopprot.h"
 #include "tcop/pquery.h"
 #include "utils/memutils.h"
@@ -43,273 +46,26 @@
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 
-#define WORKER_BACKLOG 16
-#define RECV_TIMEOUT 10 /* ms */
-#define RECV_LOOP_TIMEOUT 10 * 1000 /* ms */
-
-typedef struct
-{
-	int sock;
-	pid_t pid;
-} WorkerEntry;
-
-typedef struct
-{
-	int sock;
-	int num_workers;
-	WorkerEntry *workers;
-	fd_set readset;
-	int max_fd;
-	struct timeval timeout;
-} ServerState;
-
-static ServerState *serv = NULL;
-
-static void
-ipc_init(CQProcEntry *entry, int recvtimeoutms)
-{
-	struct sockaddr_un local;
-	int len;
-
-	/* 0 means a blocking recv(), which we don't want, so use a reasonable default */
-	if (recvtimeoutms == 0)
-		recvtimeoutms = RECV_TIMEOUT;
-
-	serv = palloc0(sizeof(ServerState));
-	serv->num_workers = entry->pg_size - 1;
-	serv->workers = palloc0(serv->num_workers * sizeof(WorkerEntry));
-	serv->timeout.tv_sec = (recvtimeoutms / 1000);
-	serv->timeout.tv_usec = (recvtimeoutms - (serv->timeout.tv_sec * 1000)) * 1000;
-
-	FD_ZERO(&serv->readset);
-
-	local.sun_family = AF_UNIX;
-	strcpy(local.sun_path, entry->sock_name);
-	unlink(local.sun_path);
-
-	if ((serv->sock = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0)) == -1)
-		elog(ERROR, "combiner could not create socket \"%s\": %m",
-				entry->sock_name);
-
-	len = strlen(local.sun_path) + sizeof(local.sun_family);
-	if (bind(serv->sock, (struct sockaddr *) &local, len) == -1)
-		elog(ERROR, "could not bind to combiner \"%s\": %m", entry->sock_name);
-
-	if (listen(serv->sock, WORKER_BACKLOG) == -1)
-		elog(ERROR, "could not listen on socket %d: %m", serv->sock);
-
-	FD_SET(serv->sock, &serv->readset);
-	serv->max_fd = serv->sock;
-}
-
-static void
-close_ipc()
-{
-	int i;
-
-	if (serv->sock)
-		close(serv->sock);
-
-	for (i = 0; i < serv->num_workers; i++)
-		if (serv->workers[i].sock)
-			close(serv->workers[i].sock);
-
-	pfree(serv);
-}
-
-static pid_t
-do_handshake(int sock)
-{
-	pid_t pid;
-
-	if (send(sock, &MyProcPid, sizeof(pid_t), 0) < sizeof(pid_t))
-		return -1;
-
-	if (recv(sock, &pid, sizeof(pid_t), MSG_WAITALL) != sizeof(pid_t))
-		return -1;
-
-	return pid;
-}
-
-static void
-accept_worker()
-{
-	struct sockaddr_un remote;
-	socklen_t addrlen;
-	int worker_sock;
-	pid_t worker_pid;
-	int i;
-	bool found;
-	WorkerEntry *entry;
-	pid_t *worker_pids = GetWorkerPids(MyCQId);
-
-	for (i = 0; i < serv->num_workers; i++)
-	{
-		int j;
-		found = false;
-
-		for (j = 0; j < serv->num_workers; j++)
-		{
-			entry = &serv->workers[i];
-			if (entry->pid == worker_pids[j])
-			{
-				found = true;
-				break;
-			}
-		}
-
-		if (found)
-			continue;
-
-		break;
-	}
-
-	pfree(worker_pids);
-
-	if (found)
-		return;
-
-	if ((worker_sock = accept(serv->sock, (struct sockaddr *) &remote, &addrlen)) == -1)
-		return;
-
-	if (setsockopt(worker_sock, SOL_SOCKET, SO_RCVTIMEO, (char *) &serv->timeout,
-			sizeof(struct timeval)) == -1 ||
-		setsockopt(worker_sock, SOL_SOCKET, SO_SNDTIMEO, (char *) &serv->timeout,
-			sizeof(struct timeval)) == -1)
-	{
-		close(worker_sock);
-		return;
-	}
-
-	worker_pid = do_handshake(worker_sock);
-
-	if (worker_pid <= 0)
-	{
-		close(worker_sock);
-		return;
-	}
-
-	FD_CLR(entry->sock, &serv->readset);
-	entry->pid = worker_pid;
-	entry->sock = worker_sock;
-	FD_SET(worker_sock, &serv->readset);
-	serv->max_fd = Max(serv->max_fd, worker_sock);
-
-	elog(LOG, "accepted new worker");
-}
+static TupleBufferReader *reader = NULL;
 
 /*
  * receive_tuple
  */
 static bool
-receive_tuple(TupleTableSlot *slot, bool need_merge)
+receive_tuple(TupleTableSlot *slot)
 {
-	HeapTuple tup;
-	int32 len;
-	ssize_t read;
-	fd_set readset;
-	int num_ready;
-	int i;
-	int sock;
-	int32 remaining;
-	int32 offset = 0;
-	TimestampTz start;
+	TupleBufferSlot *tbs;
 
 	if (!TupIsNull(slot))
 		ExecClearTuple(slot);
 
-	memcpy(&readset, &serv->readset, sizeof(fd_set));
+	tbs = TupleBufferPinNextSlot(reader);
 
-	if (need_merge || serv->max_fd == serv->sock)
-	{
-		struct timeval timeout;
-		memcpy(&timeout, &serv->timeout, sizeof(struct timeval));
-		num_ready = select(serv->max_fd + 1, &readset, NULL, NULL, &timeout);
-	}
-	else
-		num_ready = select(serv->max_fd + 1, &readset, NULL, NULL, NULL);
-
-	if (num_ready == 0)
+	if (tbs == NULL)
 		return false;
 
-	if (FD_ISSET(serv->sock, &readset))
-	{
-		num_ready--;
-		accept_worker();
-		FD_CLR(serv->sock, &readset);
-	}
-
-	if (num_ready < 0)
-	{
-		/* One of the readset fds is invalid? Probably means a worker crash */
-		if (errno == EBADF)
-		{
-			accept_worker();
-			return false;
-		}
-
-		if (errno == EINTR)
-			return false;
-
-		elog(ERROR, "combiner select() error: %m.");
-	}
-
-	for (i = 0; i < serv->num_workers; i++)
-	{
-		sock = serv->workers[i].sock;
-		if (FD_ISSET(sock, &readset))
-			break;
-	}
-
-	read = recv(sock, &len, sizeof(int32), MSG_WAITALL);
-
-	if (read < 0)
-	{
-		/*
-		 * TODO(usmanm): This should eventually be removed. Only here
-		 * because it makes attaching the debugger to the combiner proc
-		 * easy.
-		 */
-		if (errno != EINTR)
-			accept_worker();
-
-		if (errno != EAGAIN)
-			elog(LOG, "combiner failed to receive tuple length: %m");
-
-		return false;
-	}
-	else if (read < sizeof(int32))
-		return false;
-
-	len = ntohl(len);
-	remaining = len;
-
-	tup = (HeapTuple) palloc0(HEAPTUPLESIZE + len);
-	tup->t_len = len;
-	tup->t_data = (HeapTupleHeader) ((char *) tup + HEAPTUPLESIZE);
-	start = GetCurrentTimestamp();
-
-	while (remaining > 0 && !TimestampDifferenceExceeds(start, GetCurrentTimestamp(), RECV_LOOP_TIMEOUT))
-	{
-		read = recv(sock, (char *) tup->t_data + offset, remaining, 0);
-		if (read < 0)
-		{
-			if (errno == EAGAIN || errno == EINTR)
-				continue;
-			elog(LOG, "combiner failed to receive tuple data: %m");
-		}
-		remaining -= read;
-		offset += read;
-	}
-
-	/* This could happen if the worker crashed while writing to the socket */
-	if (remaining > 0)
-	{
-		elog(LOG, "combiner only received %d/%d bytes of tuple data", len - remaining, len);
-		return false;
-	}
-
-	ExecStoreTuple(tup, slot, InvalidBuffer, false);
+	ExecStoreTuple(heap_copytuple(tbs->tuple->heaptup), slot, InvalidBuffer, false);
+	TupleBufferUnpinSlot(reader, tbs);
 	return true;
 }
 
@@ -679,9 +435,7 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 	int timeout = queryDesc->plannedstmt->cq_state->maxwaitms;
 	char *cvname = rv->relname;
 	PlannedStmt *combineplan;
-	TimestampTz lastCombineTime = GetCurrentTimestamp();
-	int32 cq_id = state->id;
-	CQProcEntry *entry = GetCQProcEntry(cq_id);
+	CQProcEntry *entry = GetCQProcEntry(MyCQId);
 
 	MemoryContext runctx = AllocSetContextCreate(TopMemoryContext,
 			"CombinerRunContext",
@@ -709,9 +463,10 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 
 	oldcontext = MemoryContextSwitchTo(runctx);
 
-	ipc_init(entry, queryDesc->plannedstmt->cq_state->maxwaitms);
-
 	MarkCombinerAsRunning(MyCQId);
+
+	TupleBufferInitLatch(CombinerTupleBuffer, MyCQId, 0, &MyProc->procLatch);
+	reader = TupleBufferOpenReader(CombinerTupleBuffer, MyCQId, 0, 1);
 
 	/*
 	 * Create tuple store and slot outside of combinectx and tmpctx,
@@ -731,35 +486,50 @@ ContinuousQueryCombinerRun(Portal portal, ContinuousViewState *state, QueryDesc 
 retry:
 	PG_TRY();
 	{
-		bool is_worker_done = false;
+		bool workers_done = false;
+		TimestampTz last_combine = GetCurrentTimestamp();
+		TimestampTz last_receive = GetCurrentTimestamp();
 
 		for (;;)
 		{
-
 			bool force = false;
 			bool found_tuple;
 
+			TupleBufferResetNotify(CombinerTupleBuffer, MyCQId, 0);
+
+			if (count == 0 && entry->active && TupleBufferIsEmpty(CombinerTupleBuffer))
+			{
+				if (TimestampDifferenceExceeds(last_receive, GetCurrentTimestamp(), EmptyTupleBufferWaitTime * 1000))
+				{
+					pgstat_report_activity(STATE_IDLE, queryDesc->sourceText);
+					TupleBufferWait(CombinerTupleBuffer, MyCQId, 0);
+					pgstat_report_activity(STATE_RUNNING, queryDesc->sourceText);
+				}
+				else
+					pg_usleep(CQ_DEFAULT_SLEEP_MS * 1000);
+			}
 
 			CurrentResourceOwner = owner;
 
-			found_tuple = receive_tuple(slot, count > 0);
+			found_tuple = receive_tuple(slot);
 
 			/*
 			 * If we get a null tuple, we either want to combine the current batch
 			 * or wait a little while longer for more tuples before forcing the batch
 			 */
-			if (TupIsNull(slot))
+			if (!found_tuple)
 			{
 				if (timeout > 0)
 				{
-					/* We need a goto here because PG_TRY() macros are defined as do while loops. */
-					if (!TimestampDifferenceExceeds(lastCombineTime, GetCurrentTimestamp(), timeout))
+					if (!TimestampDifferenceExceeds(last_combine, GetCurrentTimestamp(), timeout))
 						continue; /* timeout not reached yet, keep scanning for new tuples to arrive */
 				}
+
 				force = true;
 			}
 			else
 			{
+				last_receive = GetCurrentTimestamp();
 				tuplestore_puttupleslot(store, slot);
 				count++;
 			}
@@ -771,16 +541,17 @@ retry:
 				CommitTransactionCommand();
 
 				tuplestore_clear(store);
+				TupleBufferClearPinnedSlots();
 				MemoryContextResetAndDeleteChildren(combinectx);
 				MemoryContextResetAndDeleteChildren(tmpctx);
 
-				lastCombineTime = GetCurrentTimestamp();
+				last_combine = GetCurrentTimestamp();
 				count = 0;
 			}
 
 
 			/*
-			 * If we received a tuple in this iteration, poll the socket again.
+			 * If we received a tuple in this iteration, poll the buffer again.
 			 */
 			if (found_tuple)
 				continue;
@@ -789,18 +560,18 @@ retry:
 			if (!entry->active)
 			{
 				/*
-				 * Ensure that the worker has terminated. There is a continue here
-				 * because we wanna poll the socket one last time after the worker has
+				 * Ensure that all workers have terminated. There is a continue here
+				 * because we wanna poll the buffer one last time after the workers have
 				 * terminated.
 				 */
-				if (!is_worker_done)
+				if (!workers_done)
 				{
-					is_worker_done = AreCQWorkersStopped(cq_id);
+					workers_done = AreCQWorkersStopped(MyCQId);
 					continue;
 				}
 
 				/*
-				 * By this point the worker process has terminated and
+				 * By this point the worker processes have terminated and
 				 * we received no new tuples in the previous iteration.
 				 * If there are some unmerged tuples, force merge them.
 				 */
@@ -831,6 +602,8 @@ retry:
 			count = 0;
 		}
 
+		TupleBufferUnpinAllPinnedSlots();
+
 		MemoryContextResetAndDeleteChildren(combinectx);
 		MemoryContextResetAndDeleteChildren(tmpctx);
 
@@ -839,7 +612,7 @@ retry:
 	}
 	PG_END_TRY();
 
-	close_ipc();
+	TupleBufferCloseReader(reader);
 
 	MemoryContextDelete(runctx);
 	MemoryContextSwitchTo(oldcontext);

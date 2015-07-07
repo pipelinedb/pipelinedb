@@ -97,7 +97,7 @@ InsertIntoStream(InsertStmt *ins)
 {
 	SelectStmt *sel = (SelectStmt *) ins->selectStmt;
 	ListCell *lc;
-	StreamBufferSlot* sbs = NULL;
+	TupleBufferSlot* tbs = NULL;
 	int numcols = list_length(ins->cols);
 	int i;
 	int count = 0;
@@ -183,7 +183,6 @@ InsertIntoStream(InsertStmt *ins)
 	/* append each VALUES tuple to the stream buffer */
 	foreach (lc, exprlists)
 	{
-		StreamEvent *ev = (StreamEvent *) palloc0(sizeof(StreamEvent));
 		List *exprlist = (List *) lfirst(lc);
 		List *exprstatelist;
 		ListCell *l;
@@ -223,8 +222,6 @@ InsertIntoStream(InsertStmt *ins)
 			desc->tdrefcount = -list_length(exprlists);
 		}
 
-		ev->desc = desc;
-
 		values = palloc0(desc->natts * sizeof(Datum));
 		nulls = palloc0(desc->natts * sizeof(bool));
 
@@ -237,12 +234,9 @@ InsertIntoStream(InsertStmt *ins)
 			col++;
 		}
 
-		ev->tuple = heap_form_tuple(desc, values, nulls);
-		ev->arrivaltime = GetCurrentTimestamp();
+		tbs = TupleBufferInsert(WorkerTupleBuffer, MakeTuple(heap_form_tuple(desc, values, nulls), desc), GetTargetsFor(ins->relation->relname));
 
-		sbs = StreamBufferInsert(ins->relation->relname, ev);
-
-		Assert(sbs);
+		Assert(tbs);
 		count++;
 	}
 
@@ -250,7 +244,7 @@ InsertIntoStream(InsertStmt *ins)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (DebugSyncStreamInsert)
-		StreamBufferWaitOnSlot(sbs, 5);
+		TupleBufferWaitOnSlot(tbs, 5);
 
 	return count;
 }

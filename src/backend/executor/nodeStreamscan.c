@@ -18,7 +18,7 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "parser/parse_coerce.h"
-#include "pipeline/streambuf.h"
+#include "pipeline/tuplebuf.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 
@@ -66,7 +66,7 @@ init_proj_info_for_desc(StreamProjectionInfo *pi, TupleDesc evdesc)
 static TupleTableSlot *
 StreamScanNext(StreamScanState *node)
 {
-	StreamBufferSlot *sbs = StreamBufferPinNextSlot(node->reader);
+	TupleBufferSlot *sbs = TupleBufferPinNextSlot(node->reader);
 	TupleTableSlot *slot = node->ss.ss_ScanTupleSlot;
 	HeapTuple tup;
 
@@ -74,10 +74,10 @@ StreamScanNext(StreamScanState *node)
 		return NULL;
 
 	/* update the projection info if the event descriptor has changed */
-	if (node->pi->eventdesc != sbs->event->desc)
-		init_proj_info_for_desc(node->pi, sbs->event->desc);
+	if (node->pi->eventdesc != sbs->tuple->desc)
+		init_proj_info_for_desc(node->pi, sbs->tuple->desc);
 
-	tup = ExecStreamProject(sbs->event, node);
+	tup = ExecStreamProject(sbs->tuple, node);
 	ExecStoreTuple(tup, slot, InvalidBuffer, false);
 
 	/*
@@ -85,7 +85,7 @@ StreamScanNext(StreamScanState *node)
 	 * event, so only unpin it if we're configured to do so.
 	 */
 	if (node->unpin)
-		StreamBufferUnpinSlot(node->reader, sbs);
+		TupleBufferUnpinSlot(node->reader, sbs);
 	else
 		node->pinned = lappend(node->pinned, sbs);
 
@@ -121,7 +121,7 @@ coerce_raw_input(Datum value, Oid intype, Oid outtype)
  * Project a stream event onto a physical tuple
  */
 HeapTuple
-ExecStreamProject(StreamEvent *event, StreamScanState *node)
+ExecStreamProject(Tuple *event, StreamScanState *node)
 {
 	HeapTuple decoded;
 	MemoryContext oldcontext;
@@ -139,7 +139,7 @@ ExecStreamProject(StreamEvent *event, StreamScanState *node)
 	/* assume every element in the output tuple is null until we actually see values */
 	MemSet(nulls, true, desc->natts);
 
-	ExecStoreTuple(event->tuple, pi->curslot, InvalidBuffer, false);
+	ExecStoreTuple(event->heaptup, pi->curslot, InvalidBuffer, false);
 
 	/*
 	 * For each field in the event, place it in the corresponding field in the
@@ -267,7 +267,7 @@ ExecInitStreamScan(StreamScan *node, EState *estate, int eflags)
 	ExecAssignResultTypeFromTL(&state->ss.ps);
 	ExecAssignScanProjectionInfo(&state->ss);
 
-	state->reader = StreamBufferOpenReader(node->cqid, MyWorkerId);
+	state->reader = TupleBufferOpenReader(WorkerTupleBuffer, node->cqid, MyWorkerId, NUM_WORKERS(GetCQProcEntry(node->cqid)));
 
 	return state;
 }
@@ -284,7 +284,7 @@ ExecStreamScan(StreamScanState *node)
 void
 ExecEndStreamScan(StreamScanState *node)
 {
-	StreamBufferCloseReader(node->reader);
+	TupleBufferCloseReader(node->reader);
 }
 
 void

@@ -17,6 +17,6 @@
 #include "tcop/dest.h"
 
 extern DestReceiver *CreateCombinerDestReceiver(void);
-extern void SetCombinerDestReceiverParams(DestReceiver *self, char *sock_name);
+extern void SetCombinerDestReceiverParams(DestReceiver *self, int32_t cq_id);
 
 #endif
