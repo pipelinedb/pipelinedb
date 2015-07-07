@@ -2561,6 +2561,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				 "-c \"synchronous_stream_insert=true\" "
 				 "-c \"continuous_query_num_combiners=2\" "
 				 "-c \"continuous_query_num_workers=4\" "
+				 "-c \"anonymous_update_checks=false\" "
 				 "-k \"%s\" "
 				 "> \"%s/log/postmaster.log\" 2>&1",
 				 bindir, temp_install, debug ? " -d 5" : "",

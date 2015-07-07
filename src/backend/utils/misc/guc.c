@@ -52,6 +52,7 @@
 #include "parser/parser.h"
 #include "parser/scansup.h"
 #include "pgstat.h"
+#include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
 #include "postmaster/bgwriter.h"
@@ -1528,6 +1529,16 @@ static struct config_bool ConfigureNamesBool[] =
 		 NULL,
 		},
 		&continuous_query_crash_recovery,
+		true,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"anonymous_update_checks", PGC_BACKEND, DEVELOPER_OPTIONS,
+		 gettext_noop("Anonymously check for available updates."),
+		 NULL,
+		},
+		&anonymous_update_checks,
 		true,
 		NULL, NULL, NULL
 	},
