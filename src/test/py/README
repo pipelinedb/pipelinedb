@@ -1,0 +1,20 @@
+To install the dependencies necessary to run this test suite, run:
+
+sudo pip install -r ./requirements.txt
+
+If you'd prefer to not install these packages system wide, you can
+use virtualenv or install them in a specific directory:
+
+pip install -r ./requirements.txt -t /local/path
+
+Just make sure they're somewhere on your PYTHONPATH. To run the test
+suite after the dependencies have been installed properly, run:
+
+make check
+
+or,
+
+py.test
+
+See http://pytest.org/latest/usage.html for more information on
+how to use py.test for more selective and fancy test running.
