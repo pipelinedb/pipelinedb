@@ -692,6 +692,9 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
+/* Define to the PipelineDB version. */
+#undef PIPELINE_VERSION
+
 /* Define to the name of a signed 64-bit integer type. */
 #undef PG_INT64_TYPE
 

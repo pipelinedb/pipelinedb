@@ -25,7 +25,7 @@ install: all # comments-install
 
 uninstall: docs-uninstall comments-uninstall
 
-clean: docs-clean clean-local
+clean: clean-local
 
 clean-local:
 	rm -f postgis.sql postgis_upgrade.sql
