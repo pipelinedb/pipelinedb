@@ -583,14 +583,21 @@ advance_transition_function(AggState *aggstate,
 	if (!peraggstate->transtypeByVal &&
 		DatumGetPointer(newVal) != DatumGetPointer(pergroupstate->transValue))
 	{
-		if (!fcinfo->isnull)
+		/*
+		 * The transition function may have created the trans value within the aggcontext.
+		 * We only need to copy the trans value into aggcontext if it's not already there.
+		 */
+		if (!fcinfo->isnull &&
+				!MemoryContextContains(aggstate->aggcontext, (void *) DatumGetPointer(newVal)))
 		{
 			MemoryContextSwitchTo(aggstate->aggcontext);
 			newVal = datumCopy(newVal,
 							   peraggstate->transtypeByVal,
 							   peraggstate->transtypeLen);
 		}
-		if (!pergroupstate->transValueIsNull)
+		/* free the old pointer if it's still around */
+		if (!pergroupstate->transValueIsNull &&
+				MemoryContextContains(CurrentMemoryContext, (void *) DatumGetPointer(pergroupstate->transValue)))
 			pfree(DatumGetPointer(pergroupstate->transValue));
 	}
 

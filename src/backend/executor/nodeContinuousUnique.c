@@ -35,6 +35,7 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 	TupleTableSlot *resultTupleSlot;
 	TupleTableSlot *slot;
 	PlanState  *outerPlan;
+	int unique;
 
 	/*
 	 * get information from the node
@@ -62,8 +63,8 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 		}
 
 		/* Did the tuple increase the distinct multiset size? */
-		multiset_add(node->distinct_ms, hash_tuple(slot, plannode->numCols, plannode->uniqColIdx));
-		if (multiset_card(node->distinct_ms) > node->card)
+		node->distinct = HLLAddSlot(node->distinct, slot, plannode->numCols, plannode->uniqColIdx, &unique);
+		if (unique)
 		{
 			node->card++;
 			break;
@@ -91,10 +92,8 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 {
 	ContinuousUniqueState *state;
 
-
 	state = makeNode(ContinuousUniqueState);
 	namecpy(&state->cvname, &node->cvName);
-	state->distinct_ms = palloc0(sizeof(multiset_t));
 
 	state->ps.plan = (Plan *) node;
 	state->ps.state = estate;
@@ -119,8 +118,8 @@ ExecInitContinuousUnique(ContinuousUnique *node, EState *estate, int eflags)
 	/*
 	 * Load the multiset from pipeline_query.
 	 */
-	state->distinct_ms = GetDistinctMultiset(NameStr(state->cvname));
-	state->init_card = state->card = (uint64_t) multiset_card(state->distinct_ms);
+	state->distinct = GetDistinctHLL(NameStr(state->cvname));
+	state->init_card = state->card = HLLSize(state->distinct);
 
 	return state;
 }
@@ -138,12 +137,12 @@ ExecEndContinuousUnique(ContinuousUniqueState *node)
 	/* Only update the distinct column if the cardinality has changed */
 	if (node->card > node->init_card)
 	{
-		UpdateDistinctMultiset(NameStr(node->cvname), node->distinct_ms);
+		UpdateDistinctHLL(NameStr(node->cvname), node->distinct);
 		node->init_card = node->card;
 	}
 
 	ExecClearTuple(node->ps.ps_ResultTupleSlot);
-	pfree(node->distinct_ms);
+	pfree(node->distinct);
 	ExecEndNode(outerPlanState(node));
 }
 
@@ -156,9 +155,9 @@ ExecReScanContinuousUnique(ContinuousUniqueState *node)
 	if (node->ps.lefttree->chgParam == NULL)
 		ExecReScan(node->ps.lefttree);
 
-	if (node->distinct_ms)
+	if (node->distinct)
 	{
-		pfree(node->distinct_ms);
-		node->distinct_ms = GetDistinctMultiset(NameStr(node->cvname));
+		pfree(node->distinct);
+		node->distinct = GetDistinctHLL(NameStr(node->cvname));
 	}
 }

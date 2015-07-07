@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 PipelineDB */
+/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * hll.c
@@ -938,6 +938,17 @@ HLLCreateFromRaw(uint8 *M, int mlen, uint8 p, char encoding)
 }
 
 /*
+ * HLLCopy
+ *
+ * Creates a copy of the given HLL
+ */
+HyperLogLog *
+HLLCopy(HyperLogLog *src)
+{
+	return HLLCreateFromRaw(src->M, src->mlen, src->p, src->encoding);
+}
+
+/*
  * HLLAdd
  *
  * Adds an element to the given HLL
@@ -1129,4 +1140,46 @@ HLLUnion(HyperLogLog *result, HyperLogLog *incoming)
   result->encoding = HLL_DENSE_DIRTY;
 
   return result;
+}
+
+/*
+ * HLLAddSlot
+ *
+ * Adds a TupleTableSlot to an HLL, using the given slot's
+ * raw values in order as the element key
+ */
+HyperLogLog *
+HLLAddSlot(HyperLogLog *hll, TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, int *result)
+{
+	TupleDesc desc = slot->tts_tupleDescriptor;
+	StringInfo buf = makeStringInfo();
+	Size len = 0;
+	int i;
+
+	num_attrs = num_attrs == -1 ? desc->natts : num_attrs;
+
+	for (i=0; i<num_attrs; i++)
+	{
+		bool isnull;
+		AttrNumber attno = attrs == NULL ? i + 1 : attrs[i];
+		Form_pg_attribute att = slot->tts_tupleDescriptor->attrs[attno - 1];
+		Datum d = slot_getattr(slot, attno, &isnull);
+		Size size;
+
+		if (isnull)
+			continue;
+
+		size = datumGetSize(d, att->attbyval, att->attlen);
+
+		if (att->attbyval)
+			appendBinaryStringInfo(buf, (char *) &d, size);
+		else
+			appendBinaryStringInfo(buf, DatumGetPointer(d), size);
+
+		len += size;
+	}
+
+	hll = HLLAdd(hll, buf->data, len, result);
+
+	return hll;
 }
