@@ -1,0 +1,165 @@
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- 
+-- PostGIS - Spatial Types for PostgreSQL
+-- http://postgis.net
+--
+-- Copyright (C) 2012 Sandro Santilli <strk@keybit.net>
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence. See the COPYING file.
+--
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+-- {
+--  Get a simplified geometry version from a TopoGeometry
+--
+--  Performs Douglas Peucker algorithm on each edge composing
+--  the given TopoGeometry
+--
+-- }{
+CREATE OR REPLACE FUNCTION topology.ST_Simplify(tg topology.TopoGeometry, tolerance float8)
+  RETURNS geometry
+AS
+$$
+DECLARE
+  topology_info RECORD;
+  layer_info RECORD;
+  child_layer_info RECORD;
+  geom geometry;
+  sql TEXT;
+BEGIN
+
+  -- Get topology information
+  SELECT id, name FROM topology.topology
+    INTO topology_info
+    WHERE id = tg.topology_id;
+  IF NOT FOUND THEN
+      RAISE EXCEPTION 'No topology with id "%" in topology.topology', tg.topology_id;
+  END IF;
+
+  -- Get layer info
+  SELECT * FROM topology.layer
+    WHERE topology_id = tg.topology_id
+    AND layer_id = tg.layer_id
+    INTO layer_info;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Could not find TopoGeometry layer % in topology %', tg.layer_id, tg.topology_id;
+  END IF;
+
+  --
+  -- If this feature layer is on any level > 0 we will
+  -- compute the topological union of all simplified child
+  -- features in fact recursing.
+  --
+  IF layer_info.level > 0 THEN -- {
+
+    -- Get child layer info
+    SELECT * FROM topology.layer WHERE layer_id = layer_info.child_id
+      AND topology_id = tg.topology_id
+      INTO child_layer_info;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Invalid layer % in topology % (unexistent child layer %)', tg.layer_id, tg.topology_id, layer_info.child_id;
+    END IF;
+
+    sql := 'SELECT st_multi(st_union(topology.ST_Simplify('
+      || quote_ident(child_layer_info.feature_column)
+      || ',' || tolerance || '))) as geom FROM '
+      || quote_ident(child_layer_info.schema_name) || '.'
+      || quote_ident(child_layer_info.table_name)
+      || ', ' || quote_ident(topology_info.name) || '.relation pr'
+      || ' WHERE '
+      || ' pr.topogeo_id = ' || tg.id
+      || ' AND '
+      || ' pr.layer_id = ' || tg.layer_id
+      || ' AND '
+      || ' id('||quote_ident(child_layer_info.feature_column)
+      || ') = pr.element_id '
+      || ' AND '
+      || 'layer_id('||quote_ident(child_layer_info.feature_column)
+      || ') = pr.element_type ';
+    RAISE DEBUG '%', sql;
+    EXECUTE sql INTO geom;
+
+  ELSIF tg.type = 3 THEN -- [multi]polygon -- }{
+
+    -- TODO: use ST_GetFaceEdges
+    -- TODO: is st_unaryunion needed?
+    sql := 'SELECT st_multi(st_unaryunion(ST_BuildArea(ST_Node(ST_Collect(ST_Simplify(geom, '
+      || tolerance || ')))))) as geom FROM '
+      || quote_ident(topology_info.name)
+      || '.edge_data e, '
+      || quote_ident(topology_info.name)
+      || '.relation r WHERE ( e.left_face = r.element_id'
+      || ' OR e.right_face = r.element_id )'
+      || ' AND r.topogeo_id = ' || tg.id
+      || ' AND r.layer_id = ' || tg.layer_id
+      || ' AND element_type = 3 ';
+    RAISE DEBUG '%', sql;
+    EXECUTE sql INTO geom;
+
+
+  ELSIF tg.type = 2 THEN -- [multi]line -- }{
+
+    sql := 
+      'SELECT st_multi(ST_LineMerge(ST_Node(ST_Collect(ST_Simplify(e.geom,'
+      || tolerance || '))))) as g FROM '
+      || quote_ident(topology_info.name) || '.edge e, '
+      || quote_ident(topology_info.name) || '.relation r '
+      || ' WHERE r.topogeo_id = ' || tg.id
+      || ' AND r.layer_id = ' || tg.layer_id
+      || ' AND r.element_type = 2 '
+      || ' AND abs(r.element_id) = e.edge_id';
+    EXECUTE sql INTO geom;
+  
+  ELSIF tg.type = 1 THEN -- [multi]point -- }{
+
+    -- Can't simplify points... 
+    geom := topology.Geometry(tg);
+
+  ELSIF tg.type = 4 THEN -- mixed collection -- }{
+
+   sql := 'WITH areas AS ( '
+      || 'SELECT st_multi(st_union(ST_BuildArea(ST_Node(ST_Collect(ST_Simplify(geom, '
+      || tolerance || ')))) as geom FROM '
+      || quote_ident(topology_info.name)
+      || '.edge_data e, '
+      || quote_ident(topology_info.name)
+      || '.relation r WHERE ( e.left_face = r.element_id'
+      || ' OR e.right_face = r.element_id )'
+      || ' AND r.topogeo_id = ' || tg.id
+      || ' AND r.layer_id = ' || tg.layer_id
+      || ' AND element_type = 3 ), '
+      || 'lines AS ( '
+      || 'SELECT st_multi(ST_LineMerge(ST_Collect(ST_Simplify(e.geom,'
+      || tolerance || ')))) as g FROM '
+      || quote_ident(topology_info.name) || '.edge e, '
+      || quote_ident(topology_info.name) || '.relation r '
+      || ' WHERE r.topogeo_id = ' || tg.id
+      || ' AND r.layer_id = ' || tg.layer_id
+      || ' AND r.element_type = 2 '
+      || ' AND abs(r.element_id) = e.edge_id ), '
+      || ' points as ( SELECT st_union(n.geom) as g FROM '
+      || quote_ident(topology_info.name) || '.node n, '
+      || quote_ident(topology_info.name) || '.relation r '
+      || ' WHERE r.topogeo_id = ' || tg.id
+      || ' AND r.layer_id = ' || tg.layer_id
+      || ' AND r.element_type = 1 '
+      || ' AND r.element_id = n.node_id ), '
+      || ' un as ( SELECT g FROM areas UNION ALL SELECT g FROM lines '
+      || '          UNION ALL SELECT g FROM points ) '
+      || 'SELECT ST_Multi(ST_Collect(g)) FROM un';
+    EXECUTE sql INTO geom;
+
+  ELSE -- }{
+
+    RAISE EXCEPTION 'Invalid TopoGeometries (unknown type %)', tg.type;
+
+  END IF; -- }
+
+  RETURN geom;
+
+END
+$$
+LANGUAGE 'plpgsql' VOLATILE STRICT;
+-- }
+

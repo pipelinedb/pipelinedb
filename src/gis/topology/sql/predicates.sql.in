@@ -1,0 +1,516 @@
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+--
+-- PostGIS - Spatial Types for PostgreSQL
+-- http://postgis.net
+--
+-- Copyright (C) 2011-2012 Sandro Santilli <strk@keybit.net>
+-- Copyright (C) 2005 Refractions Research Inc.
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence. See the COPYING file.
+--
+-- Author: Sandro Santilli <strk@keybit.net>
+--  
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+--
+--  Overloaded spatial predicates for TopoGeometry inputs
+--
+--   FUNCTION intersects(TopoGeometry, TopoGeometry)
+--   FUNCTION equals(TopoGeometry, TopoGeometry)
+--
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+--{
+-- intersects(TopoGeometry, TopoGeometry)
+--
+CREATE OR REPLACE FUNCTION topology.intersects(tg1 topology.TopoGeometry, tg2 topology.TopoGeometry)
+  RETURNS bool
+AS
+$$
+DECLARE
+  tgbuf topology.TopoGeometry;
+  rec RECORD;
+  toponame varchar;
+  query text;
+BEGIN
+  IF tg1.topology_id != tg2.topology_id THEN
+    -- TODO: revert to ::geometry instead ?
+    RAISE EXCEPTION 'Cannot compute intersection between TopoGeometries from different topologies';
+  END IF;
+
+  -- Order TopoGeometries so that tg1 has less-or-same
+  -- dimensionality of tg1 (point,line,polygon,collection)
+  IF tg1.type > tg2.type THEN
+    tgbuf := tg2;
+    tg2 := tg1;
+    tg1 := tgbuf;
+  END IF;
+
+  --RAISE NOTICE 'tg1.id:% tg2.id:%', tg1.id, tg2.id;
+  -- Geometry collection are not currently supported
+  IF tg2.type = 4 THEN
+    RAISE EXCEPTION 'GeometryCollection are not supported by intersects()';
+  END IF;
+
+        -- Get topology name
+        SELECT name FROM topology.topology into toponame
+                WHERE id = tg1.topology_id;
+
+  -- Hierarchical TopoGeometries are not currently supported
+  query = 'SELECT level FROM topology.layer'
+    || ' WHERE '
+    || ' topology_id = ' || tg1.topology_id
+    || ' AND '
+    || '( layer_id = ' || tg1.layer_id
+    || ' OR layer_id = ' || tg2.layer_id
+    || ' ) '
+    || ' AND level > 0 ';
+
+  --RAISE NOTICE '%', query;
+
+  FOR rec IN EXECUTE query
+  LOOP
+    -- TODO: revert to ::geometry instead ?
+    RAISE EXCEPTION 'Hierarchical TopoGeometries are not currently supported by intersects()';
+  END LOOP;
+
+  IF tg1.type = 1 THEN -- [multi]point
+
+
+    IF tg2.type = 1 THEN -- point/point
+  ---------------------------------------------------------
+  -- 
+  --  Two [multi]point features intersect if they share
+  --  any Node 
+  --
+  --
+  --
+      query =
+        'SELECT a.topogeo_id FROM '
+        || quote_ident(toponame) ||
+        '.relation a, '
+        || quote_ident(toponame) ||
+        '.relation b '
+        || 'WHERE a.layer_id = ' || tg1.layer_id
+        || ' AND b.layer_id = ' || tg2.layer_id
+        || ' AND a.topogeo_id = ' || tg1.id
+        || ' AND b.topogeo_id = ' || tg2.id
+        || ' AND a.element_id = b.element_id '
+        || ' LIMIT 1';
+      --RAISE NOTICE '%', query;
+      FOR rec IN EXECUTE query
+      LOOP
+        RETURN TRUE; -- they share an element
+      END LOOP;
+      RETURN FALSE; -- no elements shared
+  --
+  ---------------------------------------------------------
+      
+
+    ELSIF tg2.type = 2 THEN -- point/line
+  ---------------------------------------------------------
+  -- 
+  --  A [multi]point intersects a [multi]line if they share
+  --  any Node. 
+  --
+  --
+  --
+      query =
+        'SELECT a.topogeo_id FROM '
+        || quote_ident(toponame) ||
+        '.relation a, '
+        || quote_ident(toponame) ||
+        '.relation b, '
+        || quote_ident(toponame) ||
+        '.edge_data e '
+        || 'WHERE a.layer_id = ' || tg1.layer_id
+        || ' AND b.layer_id = ' || tg2.layer_id
+        || ' AND a.topogeo_id = ' || tg1.id
+        || ' AND b.topogeo_id = ' || tg2.id
+        || ' AND abs(b.element_id) = e.edge_id '
+        || ' AND ( '
+          || ' e.start_node = a.element_id '
+          || ' OR '
+          || ' e.end_node = a.element_id '
+        || ' )'
+        || ' LIMIT 1';
+      --RAISE NOTICE '%', query;
+      FOR rec IN EXECUTE query
+      LOOP
+        RETURN TRUE; -- they share an element
+      END LOOP;
+      RETURN FALSE; -- no elements shared
+  --
+  ---------------------------------------------------------
+
+    ELSIF tg2.type = 3 THEN -- point/polygon
+  ---------------------------------------------------------
+  -- 
+  --  A [multi]point intersects a [multi]polygon if any
+  --  Node of the point is contained in any face of the
+  --  polygon OR ( is end_node or start_node of any edge
+  --  of any polygon face ).
+  --
+  --  We assume the Node-in-Face check is faster becasue
+  --  there will be less Faces then Edges in any polygon.
+  --
+  --
+  --
+  --
+      -- Check if any node is contained in a face
+      query =
+        'SELECT n.node_id as id FROM '
+        || quote_ident(toponame) ||
+        '.relation r1, '
+        || quote_ident(toponame) ||
+        '.relation r2, '
+        || quote_ident(toponame) ||
+        '.node n '
+        || 'WHERE r1.layer_id = ' || tg1.layer_id
+        || ' AND r2.layer_id = ' || tg2.layer_id
+        || ' AND r1.topogeo_id = ' || tg1.id
+        || ' AND r2.topogeo_id = ' || tg2.id
+        || ' AND n.node_id = r1.element_id '
+        || ' AND r2.element_id = n.containing_face '
+        || ' LIMIT 1';
+      --RAISE NOTICE '%', query;
+      FOR rec IN EXECUTE query
+      LOOP
+        --RAISE NOTICE 'Node % in polygon face', rec.id;
+        RETURN TRUE; -- one (or more) nodes are
+                     -- contained in a polygon face
+      END LOOP;
+
+      -- Check if any node is start or end of any polygon
+      -- face edge
+      query =
+        'SELECT n.node_id as nid, e.edge_id as eid '
+        || ' FROM '
+        || quote_ident(toponame) ||
+        '.relation r1, '
+        || quote_ident(toponame) ||
+        '.relation r2, '
+        || quote_ident(toponame) ||
+        '.edge_data e, '
+        || quote_ident(toponame) ||
+        '.node n '
+        || 'WHERE r1.layer_id = ' || tg1.layer_id
+        || ' AND r2.layer_id = ' || tg2.layer_id
+        || ' AND r1.topogeo_id = ' || tg1.id
+        || ' AND r2.topogeo_id = ' || tg2.id
+        || ' AND n.node_id = r1.element_id '
+        || ' AND ( '
+        || ' e.left_face = r2.element_id '
+        || ' OR '
+        || ' e.right_face = r2.element_id '
+        || ' ) '
+        || ' AND ( '
+        || ' e.start_node = r1.element_id '
+        || ' OR '
+        || ' e.end_node = r1.element_id '
+        || ' ) '
+        || ' LIMIT 1';
+      --RAISE NOTICE '%', query;
+      FOR rec IN EXECUTE query
+      LOOP
+        --RAISE NOTICE 'Node % on edge % bound', rec.nid, rec.eid;
+        RETURN TRUE; -- one node is start or end
+                     -- of a face edge
+      END LOOP;
+
+      RETURN FALSE; -- no intersection
+  --
+  ---------------------------------------------------------
+
+    ELSIF tg2.type = 4 THEN -- point/collection
+      RAISE EXCEPTION 'Intersection point/collection not implemented yet';
+
+    ELSE
+      RAISE EXCEPTION 'Invalid TopoGeometry type %', tg2.type;
+    END IF;
+
+  ELSIF tg1.type = 2 THEN -- [multi]line
+    IF tg2.type = 2 THEN -- line/line
+  ---------------------------------------------------------
+  -- 
+  --  A [multi]line intersects a [multi]line if they share
+  --  any Node. 
+  --
+  --
+  --
+      query =
+        'SELECT e1.start_node FROM '
+        || quote_ident(toponame) ||
+        '.relation r1, '
+        || quote_ident(toponame) ||
+        '.relation r2, '
+        || quote_ident(toponame) ||
+        '.edge_data e1, '
+        || quote_ident(toponame) ||
+        '.edge_data e2 '
+        || 'WHERE r1.layer_id = ' || tg1.layer_id
+        || ' AND r2.layer_id = ' || tg2.layer_id
+        || ' AND r1.topogeo_id = ' || tg1.id
+        || ' AND r2.topogeo_id = ' || tg2.id
+        || ' AND abs(r1.element_id) = e1.edge_id '
+        || ' AND abs(r2.element_id) = e2.edge_id '
+        || ' AND ( '
+        || ' e1.start_node = e2.start_node '
+        || ' OR '
+        || ' e1.start_node = e2.end_node '
+        || ' OR '
+        || ' e1.end_node = e2.start_node '
+        || ' OR '
+        || ' e1.end_node = e2.end_node '
+        || ' )'
+        || ' LIMIT 1';
+      --RAISE NOTICE '%', query;
+      FOR rec IN EXECUTE query
+      LOOP
+        RETURN TRUE; -- they share an element
+      END LOOP;
+      RETURN FALSE; -- no elements shared
+  --
+  ---------------------------------------------------------
+
+    ELSIF tg2.type = 3 THEN -- line/polygon
+  ---------------------------------------------------------
+  -- 
+  -- A [multi]line intersects a [multi]polygon if they share
+  -- any Node (touch-only case), or if any line edge has any
+  -- polygon face on the left or right (full-containment case
+  -- + edge crossing case).
+  --
+  --
+      -- E1 are line edges, E2 are polygon edges
+      -- R1 are line relations.
+      -- R2 are polygon relations.
+      -- R2.element_id are FACE ids
+      query =
+        'SELECT e1.edge_id'
+        || ' FROM '
+        || quote_ident(toponame) ||
+        '.relation r1, '
+        || quote_ident(toponame) ||
+        '.relation r2, '
+        || quote_ident(toponame) ||
+        '.edge_data e1, '
+        || quote_ident(toponame) ||
+        '.edge_data e2 '
+        || 'WHERE r1.layer_id = ' || tg1.layer_id
+        || ' AND r2.layer_id = ' || tg2.layer_id
+        || ' AND r1.topogeo_id = ' || tg1.id
+        || ' AND r2.topogeo_id = ' || tg2.id
+
+        -- E1 are line edges
+        || ' AND e1.edge_id = abs(r1.element_id) '
+
+        -- E2 are face edges
+        || ' AND ( e2.left_face = r2.element_id '
+        || '   OR e2.right_face = r2.element_id ) '
+
+        || ' AND ( '
+
+        -- Check if E1 have left-or-right face 
+        -- being part of R2.element_id
+        || ' e1.left_face = r2.element_id '
+        || ' OR '
+        || ' e1.right_face = r2.element_id '
+
+        -- Check if E1 share start-or-end node
+        -- with any E2.
+        || ' OR '
+        || ' e1.start_node = e2.start_node '
+        || ' OR '
+        || ' e1.start_node = e2.end_node '
+        || ' OR '
+        || ' e1.end_node = e2.start_node '
+        || ' OR '
+        || ' e1.end_node = e2.end_node '
+
+        || ' ) '
+
+        || ' LIMIT 1';
+      --RAISE NOTICE '%', query;
+      FOR rec IN EXECUTE query
+      LOOP
+        RETURN TRUE; -- either common node
+                     -- or edge-in-face
+      END LOOP;
+
+      RETURN FALSE; -- no intersection
+  --
+  ---------------------------------------------------------
+
+    ELSIF tg2.type = 4 THEN -- line/collection
+      RAISE EXCEPTION 'Intersection line/collection not implemented yet';
+
+    ELSE
+      RAISE EXCEPTION 'Invalid TopoGeometry type %', tg2.type;
+    END IF;
+
+
+  ELSIF tg1.type = 3 THEN -- [multi]polygon
+
+    IF tg2.type = 3 THEN -- polygon/polygon
+  ---------------------------------------------------------
+  -- 
+  -- A [multi]polygon intersects a [multi]polygon if they share
+  -- any Node (touch-only case), or if any face edge has any of the
+  -- other polygon face on the left or right (full-containment case
+  -- + edge crossing case).
+  --
+  --
+      -- E1 are poly1 edges.
+      -- E2 are poly2 edges
+      -- R1 are poly1 relations.
+      -- R2 are poly2 relations.
+      -- R1.element_id are poly1 FACE ids
+      -- R2.element_id are poly2 FACE ids
+      query =
+        'SELECT e1.edge_id'
+        || ' FROM '
+        || quote_ident(toponame) ||
+        '.relation r1, '
+        || quote_ident(toponame) ||
+        '.relation r2, '
+        || quote_ident(toponame) ||
+        '.edge_data e1, '
+        || quote_ident(toponame) ||
+        '.edge_data e2 '
+        || 'WHERE r1.layer_id = ' || tg1.layer_id
+        || ' AND r2.layer_id = ' || tg2.layer_id
+        || ' AND r1.topogeo_id = ' || tg1.id
+        || ' AND r2.topogeo_id = ' || tg2.id
+
+        -- E1 are poly1 edges
+        || ' AND ( e1.left_face = r1.element_id '
+        || '   OR e1.right_face = r1.element_id ) '
+
+        -- E2 are poly2 edges
+        || ' AND ( e2.left_face = r2.element_id '
+        || '   OR e2.right_face = r2.element_id ) '
+
+        || ' AND ( '
+
+        -- Check if any edge from a polygon face
+        -- has any of the other polygon face
+        -- on the left or right 
+        || ' e1.left_face = r2.element_id '
+        || ' OR '
+        || ' e1.right_face = r2.element_id '
+        || ' OR '
+        || ' e2.left_face = r1.element_id '
+        || ' OR '
+        || ' e2.right_face = r1.element_id '
+
+        -- Check if E1 share start-or-end node
+        -- with any E2.
+        || ' OR '
+        || ' e1.start_node = e2.start_node '
+        || ' OR '
+        || ' e1.start_node = e2.end_node '
+        || ' OR '
+        || ' e1.end_node = e2.start_node '
+        || ' OR '
+        || ' e1.end_node = e2.end_node '
+
+        || ' ) '
+
+        || ' LIMIT 1';
+      --RAISE NOTICE '%', query;
+      FOR rec IN EXECUTE query
+      LOOP
+        RETURN TRUE; -- either common node
+                     -- or edge-in-face
+      END LOOP;
+
+      RETURN FALSE; -- no intersection
+  --
+  ---------------------------------------------------------
+
+    ELSIF tg2.type = 4 THEN -- polygon/collection
+      RAISE EXCEPTION 'Intersection poly/collection not implemented yet';
+
+    ELSE
+      RAISE EXCEPTION 'Invalid TopoGeometry type %', tg2.type;
+    END IF;
+
+  ELSIF tg1.type = 4 THEN -- collection
+    IF tg2.type = 4 THEN -- collection/collection
+      RAISE EXCEPTION 'Intersection collection/collection not implemented yet';
+    ELSE
+      RAISE EXCEPTION 'Invalid TopoGeometry type %', tg2.type;
+    END IF;
+
+  ELSE
+    RAISE EXCEPTION 'Invalid TopoGeometry type %', tg1.type;
+  END IF;
+END
+$$
+LANGUAGE 'plpgsql' STABLE STRICT;
+--} intersects(TopoGeometry, TopoGeometry)
+
+--{
+--  equals(TopoGeometry, TopoGeometry)
+--
+CREATE OR REPLACE FUNCTION topology.equals(tg1 topology.TopoGeometry, tg2 topology.TopoGeometry)
+  RETURNS bool
+AS
+$$
+DECLARE
+  rec RECORD;
+  toponame varchar;
+  query text;
+BEGIN
+
+  IF tg1.topology_id != tg2.topology_id THEN
+    -- TODO: revert to ::geometry instead ?
+    RAISE EXCEPTION 'Cannot compare TopoGeometries from different topologies';
+  END IF;
+
+  -- Not the same type, not equal
+  IF tg1.type != tg2.type THEN
+    RETURN FALSE;
+  END IF;
+
+  -- Geometry collection are not currently supported
+  IF tg2.type = 4 THEN
+    RAISE EXCEPTION 'GeometryCollection are not supported by equals()';
+  END IF;
+
+        -- Get topology name
+        SELECT name FROM topology.topology into toponame
+                WHERE id = tg1.topology_id;
+
+  -- Two geometries are equal if they are composed by 
+  -- the same TopoElements
+  FOR rec IN EXECUTE 'SELECT * FROM '
+    || ' topology.GetTopoGeomElements('
+    || quote_literal(toponame) || ', '
+    || tg1.layer_id || ',' || tg1.id || ') '
+    || ' EXCEPT SELECT * FROM '
+    || ' topology.GetTopogeomElements('
+    || quote_literal(toponame) || ', '
+    || tg2.layer_id || ',' || tg2.id || ');'
+  LOOP
+    RETURN FALSE;
+  END LOOP;
+
+  FOR rec IN EXECUTE 'SELECT * FROM '
+    || ' topology.GetTopoGeomElements('
+    || quote_literal(toponame) || ', '
+    || tg2.layer_id || ',' || tg2.id || ')'
+    || ' EXCEPT SELECT * FROM '
+    || ' topology.GetTopogeomElements('
+    || quote_literal(toponame) || ', '
+    || tg1.layer_id || ',' || tg1.id || '); '
+  LOOP
+    RETURN FALSE;
+  END LOOP;
+  RETURN TRUE;
+END
+$$
+LANGUAGE 'plpgsql' STABLE STRICT;
+--} equals(TopoGeometry, TopoGeometry)
+

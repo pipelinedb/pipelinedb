@@ -1,0 +1,33 @@
+# **********************************************************************
+# *
+# * PostGIS - Spatial Types for PostgreSQL
+# * http://postgis.net
+# *
+# * Copyright (C) 2012 Sandro Santilli <strk@keybit.net>
+# *
+# * This is free software; you can redistribute and/or modify it under
+# * the terms of the GNU General Public Licence. See the COPYING file.
+# *
+# **********************************************************************
+
+ANT=@ANT@
+POSTGIS_LIB_VERSION=@POSTGIS_LIB_VERSION@
+
+all: build
+
+pom.xml: pom.xml.in
+	sed 's,%VERSION%,$(POSTGIS_LIB_VERSION),g' $< >$@
+
+distclean:
+	rm -f pom.xml
+
+build: pom.xml
+
+build clean distclean check:
+	$(ANT) $@
+
+maintainer-clean: distclean
+	: nothing to do
+
+install uninstall:
+	: TODO !

@@ -1,0 +1,57 @@
+{
+	"name": "postgis",
+	"abstract": "PostGIS 2.0 OGC/SQL-MM compliant spatial extender for PostgreSQL",
+	"description": "This module provides GIS geometry, geography, raster types, functions, and tables",
+	"version": "2.0.0a1",
+	"release_status": "unstable",
+	"maintainer": "PostGIS Steering Committee",
+	"license": "gpl_2",
+	"provides": {
+		"postgis": {
+			"abstract": "PostGIS GIS types, indexes and functions",
+			"version": "2.0.0",
+			"file": "sql/postgis.sql",
+			"docfile": "doc/postgis.md"
+		},
+         "spatial_ref_sys": {
+           "file": "sql/spatial_ref_sys.sql",
+           "version": "2.0.0",
+           "abstract": "Directory of spatial reference systems needed for geometry transformation between different spatial reference systems"
+         },
+        "raster": {
+           "file": "sql/rtpostgis.sql",
+           "version": "2.0.0",
+           "abstract": "Raster functions and types"
+         }
+	},
+	"prereqs": {
+      "runtime": {
+         "requires": {
+            "plpgsql": 0,
+            "PostgreSQL": "8.4.0"
+         }
+      }
+    },
+    "generated_by": "Regina O. Obe",
+	"resources": {
+		"bugtracker": {
+			"web": "http://trac.osgeo.org/postgis"
+		},
+		"repository": {
+			"url": "svn://svn.osgeo.org/postgis/",
+			"web": "http://postgis.net",
+			"type": "svn"
+		}
+	},
+	"meta-spec": {
+		"version": "1.0.0",
+		"url": "http://pgxn.org/meta/spec.txt"
+	},
+	"tags": [
+		"gis",
+		"spatial",
+		"geometry","raster",
+		"geography",
+		"location"
+	]
+}

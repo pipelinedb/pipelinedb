@@ -1,0 +1,33 @@
+t
+N1
+N2
+N3
+N4
+N5
+N6
+N7
+ERROR:  SQL/MM Spatial exception - null argument
+ERROR:  SQL/MM Spatial exception - null argument
+ERROR:  SQL/MM Spatial exception - null argument
+ERROR:  SQL/MM Spatial exception - null argument
+ERROR:  SQL/MM Spatial exception - invalid curve
+ERROR:  SQL/MM Spatial exception - curve not simple
+ERROR:  SQL/MM Spatial exception - non-existent node
+ERROR:  SQL/MM Spatial exception - end node not geometry end point.
+ERROR:  SQL/MM Spatial exception - start node not geometry start point.
+ERROR:  SQL/MM Spatial exception - geometry crosses a node
+E1
+E2
+N1|
+N2|
+N3|0
+N4|
+N5|
+N6|0
+N7|
+ERROR:  SQL/MM Spatial exception - not isolated node
+ERROR:  SQL/MM Spatial exception - not isolated node
+ERROR:  Closed edges would not be isolated, try ST_AddEdgeNewFaces
+ERROR:  SQL/MM Spatial exception - not isolated node
+ERROR:  SQL/MM Spatial exception - geometry intersects an edge
+Topology 'tt' dropped

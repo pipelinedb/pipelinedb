@@ -1,0 +1,434 @@
+empty_geom|
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+point_1|POINT(1 2)
+ERROR:  invalid GML representation
+point_3|POINT EMPTY
+point_4|SRID=4326;POINT(1 2)
+linestring_1|LINESTRING(1 2,3 4)
+ERROR:  invalid GML representation
+linestring_3|SRID=4326;LINESTRING(1 2,3 4)
+ERROR:  invalid GML representation
+linestring_5|LINESTRING EMPTY
+linestring_6|LINESTRING(1 2,3 4)
+curve_1|LINESTRING(1 2,3 4)
+ERROR:  invalid GML representation
+curve_3|SRID=4326;LINESTRING(1 2,3 4)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+curve_8|LINESTRING(1 2,3 4)
+ERROR:  invalid GML representation
+curve_10|LINESTRING(1 2,3 4)
+curve_11|LINESTRING(1 2,3 4,5 6)
+curve_12|LINESTRING(1 2 3,4 5 6,7 8 9)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+curve_15|LINESTRING(1 2,4 5,7 8)
+curve_16|LINESTRING(1 2,3 4,6 7)
+polygon_1|POLYGON((1 2,3 4,5 6,1 2))
+polygon_2|SRID=4326;POLYGON((1 2,3 4,5 6,1 2))
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+polygon_9|POLYGON EMPTY
+polygon_10|POLYGON((1 2,3 4,5 6,1 2),(7 8,9 10,11 12,7 8))
+polygon_11|POLYGON((1 2,3 4,5 6,1 2),(7 8,9 10,11 12,7 8))
+polygon_12|POLYGON((1 2,3 4,5 6,1 2))
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+polygon_16|POLYGON((1 2,3 4,5 6,1 2),(7 8,9 10,11 12,7 8),(13 14,15 16,17 18,13 14))
+polygon_17|POLYGON((1 2,3 4,5 6,1 2),(7 8,9 10,11 12,7 8))
+polygon_18|POLYGON((1 2,4 5,7 8,1 2),(10 11,12 13,14 15,10 11))
+polygon_19|POLYGON((1 2,3 4,5 6,1 2),(7 8,10 11,13 14,7 8))
+linearring_1|POLYGON((1 2,3 4,5 6,1 2))
+linearring_2|SRID=4326;POLYGON((1 2,3 4,5 6,1 2))
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+linearring_8|POLYGON((1 2,3 4,5 6,1 2))
+triangle_1|TRIANGLE((1 2,3 4,5 6,1 2))
+triangle_2|SRID=4326;TRIANGLE((1 2,3 4,5 6,1 2))
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+triangle_8|TRIANGLE EMPTY
+triangle_9|TRIANGLE((1 2,3 4,5 6,1 2))
+triangle_10|TRIANGLE((1 2,3 4,5 6,1 2))
+ERROR:  invalid GML representation
+surface_1|POLYGON((1 2,3 4,5 6,1 2))
+surface_2|SRID=4326;POLYGON((1 2,3 4,5 6,1 2))
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+surface_11|POLYGON((1 2,3 4,5 6,1 2),(7 8,9 10,11 12,7 8))
+surface_12|POLYGON((1 2,3 4,5 6,1 2),(7 8,9 10,11 12,7 8))
+surface_13|POLYGON((1 2,3 4,5 6,1 2))
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+surface_17|POLYGON((1 2,3 4,5 6,1 2),(7 8,9 10,11 12,7 8),(13 14,15 16,17 18,13 14))
+surface_18|POLYGON((1 2,4 5,7 8,1 2),(10 11,12 13,14 15,10 11))
+surface_19|POLYGON((1 2,3 4,5 6,1 2),(7 8,10 11,13 14,7 8))
+ERROR:  invalid GML representation
+surface_21|POLYGON((1 2,3 4,5 6,1 2))
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+mpoint_1|MULTIPOINT(1 2)
+mpoint_2|MULTIPOINT(1 2,3 4)
+mpoint_3|SRID=4326;MULTIPOINT(1 2)
+mpoint_4|MULTIPOINT EMPTY
+mpoint_5|MULTIPOINT EMPTY
+mpoint_6|MULTIPOINT(1 2,3 4)
+mpoint_7|SRID=27582;MULTIPOINT(1 2,400000 7000000)
+mpoint_8|MULTIPOINT(1 2)
+mpoint_9|MULTIPOINT(1 2,3 4)
+mpoint_10|MULTIPOINT EMPTY
+mline_1|MULTILINESTRING((1 2,3 4))
+mline_2|MULTILINESTRING((1 2,3 4),(5 6,7 8))
+mline_3|SRID=4326;MULTILINESTRING((1 2,3 4))
+mline_4|MULTILINESTRING EMPTY
+mline_5|MULTILINESTRING EMPTY
+mline_6|MULTILINESTRING((1 2,3 4),(5 6,7 8))
+mline_7|MULTILINESTRING((1 2,4 5),(7 8,9 10))
+mline_8|MULTILINESTRING((1 2,3 4),(5 6,8 9))
+mline_9|SRID=27582;MULTILINESTRING((1 2,3 4),(400000 7000000,400010 7000010))
+mcurve_1|MULTILINESTRING((1 2,3 4))
+mcurve_2|MULTILINESTRING((1 2,3 4),(5 6,7 8))
+mcurve_3|SRID=4326;MULTILINESTRING((1 2,3 4))
+mcurve_4|MULTILINESTRING EMPTY
+mcurve_5|MULTILINESTRING EMPTY
+mcurve_6|MULTILINESTRING((1 2,3 4),(5 6,7 8))
+mcurve_7|MULTILINESTRING((1 2,4 5),(7 8,9 10))
+mcurve_8|MULTILINESTRING((1 2,3 4),(5 6,8 9))
+mcurve_9|SRID=27582;MULTILINESTRING((1 2,3 4),(400000 7000000,400010 7000010))
+mcurve_10|MULTILINESTRING((1 2,3 4))
+mcurve_11|MULTILINESTRING((1 2,3 4),(5 6,7 8))
+mcurve_12|MULTILINESTRING EMPTY
+mpoly_1|MULTIPOLYGON(((1 2,3 4,5 6,1 2)))
+mpoly_2|MULTIPOLYGON(((1 2,3 4,5 6,1 2)),((7 8,9 10,11 12,7 8)))
+mpoly_3|SRID=4326;MULTIPOLYGON(((1 2,3 4,5 6,1 2)))
+mpoly_4|MULTIPOLYGON EMPTY
+mpoly_5|MULTIPOLYGON EMPTY
+mpoly_6|MULTIPOLYGON(((1 2,3 4,5 6,1 2)),((7 8,9 10,11 12,7 8)))
+mpoly_7|MULTIPOLYGON(((1 2,4 5,7 8,1 2)),((10 11,12 13,14 15,10 11)))
+mpoly_8|MULTIPOLYGON(((1 2,3 4,5 6,1 2)),((7 8,10 11,13 14,7 8)))
+mpoly_9|SRID=27582;MULTIPOLYGON(((1 2,3 4,5 6,1 2)),((400000 7000000,400010 7000010,400020 7000020,400000 7000000),(400100 7000100,400110 7000110,400120 7000120,400100 7000100)))
+msurface_1|MULTIPOLYGON(((1 2,3 4,5 6,1 2)))
+msurface_2|MULTIPOLYGON(((1 2,3 4,5 6,1 2)),((7 8,9 10,11 12,7 8)))
+msurface_3|SRID=4326;MULTIPOLYGON(((1 2,3 4,5 6,1 2)))
+msurface_4|MULTIPOLYGON EMPTY
+msurface_5|MULTIPOLYGON EMPTY
+msurface_6|MULTIPOLYGON(((1 2,3 4,5 6,1 2)),((7 8,9 10,11 12,7 8)))
+msurface_7|MULTIPOLYGON(((1 2,4 5,7 8,1 2)),((10 11,12 13,14 15,10 11)))
+msurface_8|MULTIPOLYGON(((1 2,3 4,5 6,1 2)),((7 8,10 11,13 14,7 8)))
+msurface_9|SRID=27582;MULTIPOLYGON(((1 2,3 4,5 6,1 2)),((400000 7000000,400010 7000010,400020 7000020,400000 7000000),(400100 7000100,400110 7000110,400120 7000120,400100 7000100)))
+msurface_10|MULTIPOLYGON(((1 2,3 4,5 6,1 2)))
+msurface_11|MULTIPOLYGON(((1 2,3 4,5 6,1 2)),((7 8,9 10,11 12,7 8)))
+msurface_12|MULTIPOLYGON EMPTY
+polyhedralsurface_1|POLYHEDRALSURFACE(((1 2 3,4 5 6,7 8 9,1 2 3)))
+polyhedralsurface_2|SRID=4326;POLYHEDRALSURFACE(((1 2 3,4 5 6,7 8 9,1 2 3)))
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+polyhedralsurface_9|POLYHEDRALSURFACE EMPTY
+polyhedralsurface_10|POLYHEDRALSURFACE EMPTY
+polyhedralsurface_11|POLYHEDRALSURFACE(((1 2 3,4 5 6,7 8 9,1 2 3),(10 11 12,13 14 15,16 17 18,10 11 12)))
+polyhedralsurface_12|POLYHEDRALSURFACE(((1 2 3,4 5 6,7 8 9,1 2 3)),((10 11 12,13 14 15,16 17 18,10 11 12)))
+polyhedralsurface_13|POLYHEDRALSURFACE(((1 2 3,4 5 6,7 8 9,1 2 3)),((10 11 12,13 14 15,16 17 18,10 11 12),(19 20 21,22 23 24,25 26 27,19 20 21)))
+polyhedralsurface_14|POLYHEDRALSURFACE(((1 2 3,4 5 6,7 8 9,1 2 3)),((10 11 12,13 14 15,16 17 18,10 11 12),(19 20 21,22 23 24,25 26 27,19 20 21)))
+polyhedralsurface_15|POLYHEDRALSURFACE(((1 2 3,4 5 6,7 8 9,1 2 3)))
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+polyhedralsurface_19|POLYHEDRALSURFACE(((1 2 3,4 5 6,7 8 9,1 2 3),(10 11 12,13 14 15,16 17 18,10 11 12),(19 20 21,22 23 24,25 26 27,19 20 21)))
+polyhedralsurface_20|POLYHEDRALSURFACE(((1 2,4 5,7 8,1 2),(10 11,12 13,14 15,10 11)))
+polyhedralsurface_21|POLYHEDRALSURFACE(((1 2,3 4,5 6,1 2),(7 8,10 11,13 14,7 8)))
+polyhedralsurface_22|POLYHEDRALSURFACE(((1 2,4 5,7 8,1 2)),((10 11,12 13,14 15,10 11)))
+polyhedralsurface_23|POLYHEDRALSURFACE(((1 2,3 4,5 6,1 2)),((7 8,10 11,13 14,7 8)))
+polyhedralsurface_24|POLYHEDRALSURFACE(((1 2 3,4 5 6,7 8 9,1 2 3)))
+ERROR:  invalid GML representation
+tin_1|TIN(((1 2 3,4 5 6,7 8 9,1 2 3)))
+tin_2|SRID=4326;TIN(((1 2 3,4 5 6,7 8 9,1 2 3)))
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+tin_8|TIN EMPTY
+tin_9|TIN EMPTY
+tin_10|TIN EMPTY
+tin_11|TIN(((1 2 3,4 5 6,7 8 9,1 2 3)),((10 11 12,13 14 15,16 17 18,10 11 12)))
+tin_12|TIN(((1 2 3,4 5 6,7 8 9,1 2 3)),((10 11 12,13 14 15,16 17 18,10 11 12)))
+tin_13|TIN(((1 2 3,4 5 6,7 8 9,1 2 3)),((10 11 12,13 14 15,16 17 18,10 11 12)),((19 20 21,22 23 24,25 26 27,19 20 21)))
+tin_14|TIN(((1 2,4 5,7 8,1 2)),((10 11,12 13,14 15,10 11)))
+tin_15|TIN(((1 2,3 4,5 6,1 2)),((7 8,10 11,13 14,7 8)))
+tin_16|TIN(((1 2 3,4 5 6,7 8 9,1 2 3)))
+tin_17|TIN(((1 2 3,4 5 6,7 8 9,1 2 3)))
+tin_18|TIN(((1 2 3,4 5 6,7 8 9,1 2 3)))
+collection_1|GEOMETRYCOLLECTION(POINT(1 2))
+collection_2|GEOMETRYCOLLECTION(POINT(1 2),LINESTRING(3 4,5 6))
+collection_3|GEOMETRYCOLLECTION(MULTIPOINT(1 2,3 4))
+collection_4|GEOMETRYCOLLECTION(MULTIPOINT(1 2,3 4),MULTILINESTRING((5 6,7 8),(9 10,11 12)))
+collection_5|GEOMETRYCOLLECTION(MULTIPOINT(1 2,3 4),POINT(5 6),MULTILINESTRING((7 8,9 10),(11 12,13 14)),POLYGON((15 16,17 18,19 20,15 16)))
+collection_6|GEOMETRYCOLLECTION EMPTY
+collection_7|GEOMETRYCOLLECTION EMPTY
+collection_8|GEOMETRYCOLLECTION(POINT(1 2),GEOMETRYCOLLECTION(POINT(3 4)))
+collection_9|GEOMETRYCOLLECTION(POINT(1 2),GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(3 4))))
+collection_10|SRID=4326;GEOMETRYCOLLECTION(POINT(1 2))
+collection_11|GEOMETRYCOLLECTION(POINT(1 2),GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(3 4))))
+collection_12|GEOMETRYCOLLECTION(POINT(1 2),GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(4 5))))
+collection_13|GEOMETRYCOLLECTION(POINT(1 2),GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(3 4))))
+collection_14|SRID=27582;GEOMETRYCOLLECTION(POINT(1 2),GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(400000 7000000))))
+srs_1|SRID=4326;POINT(1 2)
+srs_2|SRID=4326;POINT(2 1)
+srs_3|SRID=4326;POINT(2 1)
+srs_4|SRID=4326;POINT(2 1)
+srs_5|SRID=4326;POINT(2 1)
+srs_6|SRID=4326;POINT(2 1)
+srs_7|SRID=4326;POINT(1 2)
+srs_8|SRID=4326;POINT(1 2)
+ERROR:  unknown spatial reference system
+ERROR:  unknown spatial reference system
+ERROR:  unknown spatial reference system
+ERROR:  unknown spatial reference system
+ERROR:  unknown spatial reference system
+ERROR:  unknown spatial reference system
+ERROR:  unknown spatial reference system
+ERROR:  unknown spatial reference system
+srs_17|SRID=4326;GEOMETRYCOLLECTION(POINT(2 1),LINESTRING(4 3,6 5),LINESTRING(8 7,10 9),POLYGON((12 11,14 13,16 15,12 11),(18 17,20 19,22 21,18 17)),POLYGON((24 23,26 25,28 27,24 23),(26 25,28 27,30 29,26 25)))
+ns_1|POINT(1 2)
+ns_2|POINT(1 2)
+ns_3|POINT(1 2)
+ERROR:  invalid GML representation
+ns_5|POINT(1 2)
+ns_6|POINT(1 2)
+ns_7|SRID=4326;POINT(1 2)
+ns_8|SRID=4326;POINT(1 2)
+ns_9|SRID=4326;POINT(1 2)
+ns_10|SRID=4326;POINT(1 2)
+ns_11|POINT(1 2)
+ERROR:  invalid GML representation
+ns_13|SRID=4326;POINT(1 2)
+coordinates_1|POINT(1 2)
+ERROR:  invalid GML representation
+coordinates_3|POINT(1 2 3)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+coordinates_12|LINESTRING(1 2,3 4)
+coordinates_13|LINESTRING(1 2,3 4)
+coordinates_14|LINESTRING(1 2,4 5)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+coordinates_cs_1|POINT(1 2)
+ERROR:  invalid GML representation
+coordinates_cs_3|POINT(1 2)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+coordinates_cs_6|LINESTRING(1 2,3 4)
+ERROR:  invalid GML representation
+coordinates_cs_8|LINESTRING(1 2,3 4)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+coordinates_cs_11|LINESTRING(1.1 2.2,3.3 4.4)
+coordinates_cs_12|LINESTRING(1.1 2.2,3.3 4.4)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+coordinates_cs_15|LINESTRING(1.1 2.2,3.3 4.4)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+coordinates_cs_19|LINESTRING(1 2,3 4)
+pos_1|POINT(1 2)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+pos_8|POINT(1 2)
+pos_9|POINT(1 2)
+pos_10|POINT(1 2)
+pos_11|POINT(1 2)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+pos_14|POINT(1 2)
+ERROR:  invalid GML representation
+pos_16|POINT(1 2 3)
+ERROR:  invalid GML representation
+poslist_1|LINESTRING(1 2,3 4)
+poslist_2|LINESTRING(1 2,3 4)
+poslist_3|LINESTRING(1 2,3 4)
+poslist_4|LINESTRING(1 2,3 4)
+poslist_5|LINESTRING(1 2,3 4)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+poslist_8|LINESTRING(1 2 3,4 5 6)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+poslist_16|LINESTRING(1 2,3 4)
+poslist_17|LINESTRING(1 2,3 4)
+ERROR:  invalid GML representation
+data_1|LINESTRING(1 2,3 4,5 6,7 8,9 10,11 12)
+data_2|LINESTRING(1 2,3 4,5 6,7 8,9 10)
+xlink_1|LINESTRING(1 2,1 2,3 4)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+xlink_11|LINESTRING(1 2,1 2,3 4)
+xlink_12|GEOMETRYCOLLECTION(POINT(1 2),POINT(1 2))
+xlink_13|GEOMETRYCOLLECTION(LINESTRING(1 2,3 4),LINESTRING(1 2,3 4))
+xlink_14|GEOMETRYCOLLECTION(LINESTRING(1 2,3 4),LINESTRING(1 2,3 4))
+xlink_15|GEOMETRYCOLLECTION(POLYGON((1 2,3 4,5 6,1 2)),POLYGON((1 2,3 4,5 6,1 2)))
+xlink_16|GEOMETRYCOLLECTION(POLYGON((1 2,3 4,5 6,1 2)),POLYGON((1 2,3 4,5 6,1 2)))
+xlink_17|GEOMETRYCOLLECTION(MULTIPOINT(1 2),MULTIPOINT(1 2))
+xlink_18|GEOMETRYCOLLECTION(MULTILINESTRING((1 2,3 4)),MULTILINESTRING((1 2,3 4)))
+xlink_19|GEOMETRYCOLLECTION(MULTILINESTRING((1 2,3 4)),MULTILINESTRING((1 2,3 4)))
+xlink_20|GEOMETRYCOLLECTION(MULTIPOLYGON(((1 2,3 4,5 6,1 2))),MULTIPOLYGON(((1 2,3 4,5 6,1 2))))
+xlink_21|GEOMETRYCOLLECTION(MULTIPOLYGON(((1 2,3 4,5 6,1 2))),MULTIPOLYGON(((1 2,3 4,5 6,1 2))))
+xlink_22|GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(1 2)),GEOMETRYCOLLECTION(POINT(1 2)))
+ERROR:  invalid GML representation
+gml_1|POINT(1 2)
+gml_2|POINT(1 2 3)
+gml_3|SRID=27582;POINT(1 2)
+gml_4|POINT(1 2)
+gml_5|SRID=4326;POINT(1 2)
+gml_6|POINT(1 2 3)
+gml_7|SRID=4326;POINT(1 2 3)
+gml_8|LINESTRING(1 2,3 4)
+gml_9|LINESTRING(1 2 3,4 5 6)
+gml_10|SRID=27582;LINESTRING(1 2,3 4)
+gml_11|LINESTRING(1 2,3 4)
+gml_12|SRID=4326;LINESTRING(1 2,3 4)
+gml_13|LINESTRING(1 2 3,4 5 6)
+gml_14|SRID=4326;LINESTRING(1 2 3,4 5 6)
+gml_15|POLYGON((1 2,3 4,5 6,1 2))
+gml_16|POLYGON((1 2 3,4 5 6,7 8 9,1 2 3))
+gml_17|SRID=27582;POLYGON((1 2,3 4,5 6,1 2))
+gml_18|POLYGON((1 2,3 4,5 6,1 2))
+gml_19|SRID=4326;POLYGON((1 2,3 4,5 6,1 2))
+gml_20|POLYGON((1 2 3,4 5 6,7 8 9,1 2 3))
+gml_21|SRID=4326;POLYGON((1 2 3,4 5 6,7 8 9,1 2 3))
+gml_22|TRIANGLE((1 2,3 4,5 6,1 2))
+gml_23|SRID=4326;TRIANGLE((1 2,3 4,5 6,1 2))
+gml_24|SRID=27582;TRIANGLE((1 2,3 4,5 6,1 2))
+gml_25|TRIANGLE((1 2 3,4 5 6,7 8 9,1 2 3))
+gml_26|SRID=4326;TRIANGLE((1 2 3,4 5 6,7 8 9,1 2 3))
+gml_27|MULTIPOINT(1 2)
+gml_28|MULTIPOINT(1 2 3)
+gml_29|SRID=27582;MULTIPOINT(1 2)
+gml_30|MULTIPOINT(1 2)
+gml_31|SRID=4326;MULTIPOINT(1 2)
+gml_32|MULTIPOINT(1 2 3)
+gml_33|SRID=4326;MULTIPOINT(1 2 3)
+gml_34|MULTILINESTRING((1 2,3 4))
+gml_35|MULTILINESTRING((1 2 3,4 5 6))
+gml_36|SRID=27582;MULTILINESTRING((1 2,3 4))
+gml_37|MULTILINESTRING((1 2,3 4))
+gml_38|SRID=4326;MULTILINESTRING((1 2,3 4))
+gml_39|MULTILINESTRING((1 2 3,4 5 6))
+gml_40|SRID=4326;MULTILINESTRING((1 2 3,4 5 6))
+gml_41|MULTIPOLYGON(((1 2,3 4,5 6,1 2)))
+gml_42|MULTIPOLYGON(((1 2 3,4 5 6,7 8 9,1 2 3)))
+gml_43|SRID=27582;MULTIPOLYGON(((1 2,3 4,5 6,1 2)))
+gml_44|MULTIPOLYGON(((1 2,3 4,5 6,1 2)))
+gml_45|SRID=4326;MULTIPOLYGON(((1 2,3 4,5 6,1 2)))
+gml_46|MULTIPOLYGON(((1 2 3,4 5 6,7 8 9,1 2 3)))
+gml_47|SRID=27582;MULTIPOLYGON(((1 2 3,4 5 6,7 8 9,1 2 3)))
+gml_48|SRID=4326;MULTIPOLYGON(((1 2 3,4 5 6,7 8 9,1 2 3)))
+gml_49|TIN(((1 2,3 4,5 6,1 2)))
+gml_50|SRID=27582;TIN(((1 2,3 4,5 6,1 2)))
+gml_51|SRID=4326;TIN(((1 2,3 4,5 6,1 2)))
+gml_52|TIN(((1 2 3,4 5 6,7 8 9,1 2 3)))
+gml_53|SRID=27582;TIN(((1 2 3,4 5 6,7 8 9,1 2 3)))
+gml_54|SRID=4326;TIN(((1 2 3,4 5 6,7 8 9,1 2 3)))
+gml_55|GEOMETRYCOLLECTION(POINT(1 2))
+gml_56|GEOMETRYCOLLECTION(POINT(1 2 3))
+gml_57|SRID=27582;GEOMETRYCOLLECTION(POINT(1 2))
+gml_58|GEOMETRYCOLLECTION(POINT(1 2))
+gml_59|SRID=4326;GEOMETRYCOLLECTION(POINT(1 2))
+gml_60|GEOMETRYCOLLECTION(POINT(1 2 3))
+gml_61|SRID=4326;GEOMETRYCOLLECTION(POINT(1 2 3))
+coord_1|POINT(1 2)
+coord_2|POINT(1 2 3)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+coord_10|POINT(1 2)
+coord_11|POINT(1 2)
+coord_12|POINT(1 2)
+coord_13|LINESTRING(1 2,3 4)
+coord_14|LINESTRING(1 2,4 5)
+coord_15|LINESTRING(1 2,3 4)
+coord_16|LINESTRING(1 2,3 4)
+double_1|POINT(1 1234567890)
+double_2|POINT(1 -1)
+double_3|POINT(1 1)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+double_6|POINT(1 1.2)
+double_7|POINT(1 1.23)
+double_8|POINT(1 1)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+double_15|POINT(1 100)
+double_16|POINT(1 100)
+double_17|POINT(1 0.01)
+double_18|POINT(1 0.01)
+double_19|POINT(1 123)
+double_20|POINT(1 123)
+double_21|POINT(1 -123)
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation
+ERROR:  invalid GML representation

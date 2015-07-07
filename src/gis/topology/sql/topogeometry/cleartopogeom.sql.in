@@ -1,0 +1,52 @@
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- 
+-- PostGIS - Spatial Types for PostgreSQL
+-- http://postgis.net
+--
+-- Copyright (C) 2012 Sandro Santilli <strk@keybit.net>
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence. See the COPYING file.
+--
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+-- {
+--  Clear the contents of a TopoGeometry 
+--
+-- }{
+CREATE OR REPLACE FUNCTION topology.clearTopoGeom(tg topology.TopoGeometry)
+  RETURNS topology.TopoGeometry
+AS
+$$
+DECLARE
+  topology_info RECORD;
+  sql TEXT;
+BEGIN
+
+  -- Get topology information
+  SELECT id, name FROM topology.topology
+    INTO topology_info
+    WHERE id = topology_id(tg);
+  IF NOT FOUND THEN
+      RAISE EXCEPTION 'No topology with id "%" in topology.topology', topology_id(tg);
+  END IF;
+
+  -- Clear the TopoGeometry contents
+  sql := 'DELETE FROM ' || quote_ident(topology_info.name)
+        || '.relation WHERE layer_id = '
+        || layer_id(tg)
+        || ' AND topogeo_id = '
+        || id(tg);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG '%', sql;
+#endif
+  EXECUTE sql;
+
+
+  RETURN tg;
+
+END
+$$
+LANGUAGE 'plpgsql' VOLATILE STRICT;
+-- }
+

@@ -1,0 +1,179 @@
+#############################################################################
+#
+# Copyright (c) 2009 Sandro Santilli <strk@keybit.net>, Pierre Racine <pierre.racine@sbf.ulaval.ca>
+# Copyright (c) 2011 Jorge Arevalo <jorge.arevalo@deimos-space.com>
+# Copyright (c) 2011-2013 Regents of the University of California
+#   <bkpark@ucdavis.edu>
+#
+# This is free software; you can redistribute and/or modify it under
+# the terms of the GNU General Public Licence. See the COPYING file.
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software Foundation,
+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+#
+#############################################################################
+
+POSTGIS_SRC=../../..
+PERL=@PERL@
+
+# MingW hack: rather than use PGSQL_BINDIR directly, we change
+# to the directory and then use "pwd" to return the path. This
+# ensures that the returned path is in MSYS format, otherwise
+# colons in drive letters will break PATH.
+PGSQL_BINDIR=$(shell cd "@PGSQL_BINDIR@" && pwd)
+
+# Where we put our regression installation
+REGRESS_INSTALLDIR=$(POSTGIS_SRC)/regress/00-regress-install
+
+#
+# Put path from pg_config into front of search path
+#
+PATH := $(PGSQL_BINDIR):$(PATH)
+export PATH
+
+TEST_FIRST = \
+	check_gdal \
+	load_outdb
+
+TEST_LAST = \
+	clean
+
+TEST_METADATA = \
+	check_raster_columns \
+	check_raster_overviews
+
+TEST_IO = \
+	rt_io
+
+TEST_BASIC_FUNC = \
+	rt_bytea \
+	box3d \
+	rt_addband \
+	rt_band \
+	rt_tile
+
+TEST_PROPS = \
+	rt_dimensions \
+	rt_scale \
+	rt_pixelsize \
+	rt_upperleft \
+	rt_rotation \
+	rt_georeference \
+	rt_set_properties \
+	rt_isempty \
+	rt_hasnoband \
+	rt_metadata \
+	rt_rastertoworldcoord \
+	rt_worldtorastercoord \
+	rt_convexhull \
+	rt_envelope
+
+TEST_BANDPROPS = \
+	rt_band_properties \
+	rt_set_band_properties \
+	rt_pixelaspolygons \
+	rt_pixelaspoints \
+	rt_pixelascentroids \
+	rt_setvalues_array \
+	rt_summarystats \
+	rt_count \
+	rt_histogram \
+	rt_quantile \
+	rt_valuecount \
+	rt_valuepercent \
+	rt_bandmetadata \
+	rt_pixelvalue \
+	rt_neighborhood \
+	rt_nearestvalue \
+	rt_pixelofvalue \
+	rt_polygon
+
+TEST_UTILITY = \
+	rt_utility \
+	rt_fromgdalraster \
+	rt_asgdalraster \
+	rt_astiff \
+	rt_asjpeg \
+	rt_aspng \
+	rt_reclass \
+	rt_gdalwarp \
+	rt_asraster \
+	rt_dumpvalues \
+	rt_createoverview
+
+TEST_MAPALGEBRA = \
+	rt_mapalgebraexpr \
+	rt_mapalgebrafct \
+	rt_mapalgebraexpr_2raster \
+	rt_mapalgebrafct_2raster \
+	rt_mapalgebrafctngb \
+	rt_mapalgebrafctngb_userfunc \
+	rt_intersection \
+	rt_clip \
+	rt_mapalgebra \
+	rt_mapalgebra_expr \
+	rt_mapalgebra_mask \
+	rt_union \
+	rt_invdistweight4ma \
+	rt_4ma \
+	rt_setvalues_geomval \
+	rt_elevation_functions \
+	rt_colormap
+
+TEST_SREL = \
+	rt_gist_relationships \
+	rt_intersects \
+	rt_samealignment \
+	rt_geos_relationships \
+	rt_iscoveragetile
+	
+TEST_BUGS = \
+	bug_test_car5 \
+	permitted_gdal_drivers \
+	tickets
+
+TEST_LOADER = \
+	loader/Basic \
+	loader/Projected \
+	loader/BasicCopy \
+	loader/BasicFilename \
+	loader/BasicOutDB \
+	loader/Tiled10x10 \
+	loader/Tiled10x10Copy \
+	loader/Tiled8x8
+
+TESTS = $(TEST_FIRST) \
+	$(TEST_METADATA) $(TEST_IO) $(TEST_BASIC_FUNC) \
+	$(TEST_PROPS) $(TEST_BANDPROPS) \
+	$(TEST_UTILITY) $(TEST_MAPALGEBRA) $(TEST_SREL) \
+	$(TEST_BUGS) \
+	$(TEST_LOADER) \
+	$(TEST_LAST)
+
+all:
+	@echo "Use 'make check' to run all tests"
+
+distclean: clean
+	rm -f Makefile
+
+clean:
+	$(RM) -f rtpostgis.sql
+
+rtpostgis.sql: ../../rt_pg/rtpostgis.sql
+	$(PERL) -lpe "s'\\\$$libdir'$(REGRESS_INSTALLDIR)/lib'g" $< > $@
+
+
+check: 
+	$(MAKE) -C ../../../regress staged-install
+	$(PERL) ../../../regress/run_test.pl --raster $(RUNTESTFLAGS) $(TESTS)
+	$(PERL) ../../../regress/run_test.pl --upgrade --raster $(RUNTESTFLAGS) $(TESTS)

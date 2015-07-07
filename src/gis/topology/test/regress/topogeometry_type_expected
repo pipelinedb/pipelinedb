@@ -1,0 +1,29 @@
+BEGIN
+t
+9
+22
+26
+COMMIT
+BEGIN
+1
+2
+3
+COMMIT
+4
+features.big_parcels.the_geom SRID:0 TYPE:MULTIPOLYGON DIMS:2 
+5
+6
+features.big_signs.the_geom SRID:0 TYPE:MULTIPOINT DIMS:2 
+GeometryType(traffic_signs)|MULTIPOINT
+ST_GeometryType(traffic_signs)|ST_MultiPoint
+GeometryType(city_streets)|MULTILINESTRING
+ST_GeometryType(city_streets)|ST_MultiLinestring
+GeometryType(land_parcels)|MULTIPOLYGON
+ST_GeometryType(land_parcels)|ST_MultiPolygon
+GeometryType(big_signs)|MULTIPOINT
+ST_GeometryType(big_signs)|ST_MultiPoint
+GeometryType(big_streets)|MULTILINESTRING
+ST_GeometryType(big_streets)|ST_MultiLinestring
+GeometryType(big_parcels)|MULTIPOLYGON
+ST_GeometryType(big_parcels)|ST_MultiPolygon
+Topology 'city_data' dropped

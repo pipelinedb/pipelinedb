@@ -1,0 +1,77 @@
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- 
+--
+-- PostGIS - Spatial Types for PostgreSQL
+-- http://postgis.net
+-- Copyright 2001-2003 Refractions Research Inc.
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence. See the COPYING file.
+--  
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+-------------------------------------------------------------------------------
+-- SQL/MM (ArcSDE subset) - SQL Functions for constructing an ST_Geometry
+--     value given its WTK representation
+-- (http://edndoc.esri.com/arcsde/9.1/general_topics/storing_geo_in_rdbms.html)
+-------------------------------------------------------------------------------
+
+DROP FUNCTION ST_WKTToSQL(text);
+
+-------------------------------------------------------------------------------
+-- SQL/MM (ArcSDE subset) - SQL Functions for constructing an ST_Geometry
+--     value given its WKB representation
+-------------------------------------------------------------------------------
+
+DROP FUNCTION ST_WKBToSQL(bytea);
+
+-------------------------------------------------------------------------------
+-- SQL/MM (ArcSDE subset) - SQL Functions on type ST_Geometry
+-------------------------------------------------------------------------------
+
+DROP FUNCTION ST_CoordDim(geometry);
+DROP FUNCTION ST_OrderingEquals(geometry, geometry);
+DROP FUNCTION SE_Is3D(geometry);
+DROP FUNCTION SE_IsMeasured(geometry);
+
+-------------------------------------------------------------------------------
+-- SQL/MM (ArcSDE subset) - SQL Functions on type ST_Point
+-------------------------------------------------------------------------------
+
+-- PostGIS equivalent function: makePoint(float8,float8)
+DROP FUNCTION ST_Point(float8, float8);
+DROP FUNCTION SE_Z(geometry);
+DROP FUNCTION SE_M(geometry);
+
+-------------------------------------------------------------------------------
+-- SQL/MM (ArcSDE subset) - SQL Functions on type ST_Polygon
+-------------------------------------------------------------------------------
+
+DROP FUNCTION ST_Polygon(geometry, int);
+
+-------------------------------------------------------------------------------
+-- SQL/MM (ArcSDE subset) - SQL Functions that test spatial relationships
+-------------------------------------------------------------------------------
+
+DROP FUNCTION SE_EnvelopesIntersect(geometry,geometry);
+
+-------------------------------------------------------------------------------
+-- SQL/MM (ArcSDE subset) - SQL Functions that implement spatial operators
+-------------------------------------------------------------------------------
+
+DROP FUNCTION SE_LocateAlong(geometry, float8);
+DROP FUNCTION SE_LocateBetween(geometry, float8, float8);
+
+-------------------------------------------------------------------------------
+-- SQL/MM LRS functions
+-------------------------------------------------------------------------------
+
+DROP FUNCTION ST_LocateBetween(geometry, float8, float8);
+DROP FUNCTION ST_LocateAlong(geometry, float8);
+DROP FUNCTION ST_LocateBetween(geometry, float8, float8, float8);
+DROP FUNCTION ST_LocateAlong(geometry, float8, float8);
+
+-------------------------------------------------------------------------------
+-- END
+-------------------------------------------------------------------------------
+

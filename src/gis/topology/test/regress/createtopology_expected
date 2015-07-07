@@ -1,0 +1,16 @@
+t
+t
+t
+ERROR:  schema "3d" already exists
+2d|0|0|f
+2dAgain|-1|0|f
+3d|-1|0|t
+ERROR:  Column has Z dimension but geometry does not
+ERROR:  Column has Z dimension but geometry does not
+3
+ERROR:  Geometry has M dimension but column does not
+ERROR:  Geometry has Z dimension but column does not
+3
+Topology '2d' dropped
+Topology '2dAgain' dropped
+Topology '3d' dropped

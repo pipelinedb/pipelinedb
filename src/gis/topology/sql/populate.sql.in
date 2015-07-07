@@ -1,0 +1,1064 @@
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- 
+-- PostGIS - Spatial Types for PostgreSQL
+-- http://postgis.net
+--
+-- Copyright (C) 2010-2012 Sandro Santilli <strk@keybit.net>
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence. See the COPYING file.
+--
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+--
+-- Functions used to populate a topology
+--
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+/* #define POSTGIS_TOPOLOGY_DEBUG 1 */
+
+-- {
+--  Compute the max size of the double-precision floating point grid
+--  cell required to cover the given geometry
+--
+--
+-- A pragmatic test conducted using algoritm shown here:
+-- http://stackoverflow.com/questions/7408407/generate-next-largest-or-smallest-representable-floating-point-number-without-bi
+-- showed the "tolerance" growing by an order of magnitude proportionally
+-- with the order of magnitude of the input, starting with something like
+-- 3.5527136788005009294e-15 for the starting value of 9.0
+--
+-- }{
+CREATE OR REPLACE FUNCTION topology._st_mintolerance(ageom Geometry)
+  RETURNS float8
+AS $$
+    SELECT 3.6 * power(10,  - ( 15 - log(coalesce(
+      nullif(
+        greatest(abs(ST_xmin($1)), abs(ST_ymin($1)),
+                 abs(ST_xmax($1)), abs(ST_ymax($1))),
+        0),
+      1)) ));
+$$ LANGUAGE 'sql' IMMUTABLE STRICT;
+-- }
+
+-- {
+-- Get tolerance for a given topology
+-- and if zero the minimum for the given geometry
+--
+-- }{
+CREATE OR REPLACE FUNCTION topology._st_mintolerance(atopology varchar, ageom Geometry)
+  RETURNS float8
+AS $$
+DECLARE
+  ret FLOAT8;
+BEGIN
+  SELECT COALESCE(
+    NULLIF(precision, 0),
+    topology._st_mintolerance($2))
+  FROM topology.topology
+  WHERE name = $1 INTO ret;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'No topology with name "%" in topology.topology', atopology;
+  END IF;
+  return ret;
+END;
+$$ LANGUAGE 'plpgsql' STABLE STRICT;
+-- }
+
+--{
+--
+-- AddNode(atopology, point, allowEdgeSplitting, setContainingFace)
+--
+-- Add a node primitive to a topology and get its identifier.
+-- Returns an existing node at the same location, if any.
+--
+-- When adding a _new_ node it checks for the existance of any
+-- edge crossing the given point, raising an exception if found.
+--
+-- The newly added nodes have no containing face.
+--
+-- Developed by Sandro Santilli <strk@keybit.net>
+-- for Faunalia (http://www.faunalia.it) with funding from
+-- Regione Toscana - Sistema Informativo per la Gestione del Territorio
+-- e dell' Ambiente [RT-SIGTA].
+-- For the project: "Sviluppo strumenti software per il trattamento di dati
+-- geografici basati su QuantumGIS e Postgis (CIG 0494241492)"
+--
+-- }{
+CREATE OR REPLACE FUNCTION topology.AddNode(atopology varchar, apoint geometry, allowEdgeSplitting boolean, setContainingFace boolean DEFAULT false)
+	RETURNS int
+AS
+$$
+DECLARE
+	nodeid int;
+	rec RECORD;
+  containing_face int;
+BEGIN
+	--
+	-- Atopology and apoint are required
+	-- 
+	IF atopology IS NULL OR apoint IS NULL THEN
+		RAISE EXCEPTION 'Invalid null argument';
+	END IF;
+
+	--
+	-- Apoint must be a point
+	--
+	IF substring(geometrytype(apoint), 1, 5) != 'POINT'
+	THEN
+		RAISE EXCEPTION 'Node geometry must be a point';
+	END IF;
+
+	--
+	-- Check if a coincident node already exists
+	-- 
+	-- We use index AND x/y equality
+	--
+	FOR rec IN EXECUTE 'SELECT node_id FROM '
+		|| quote_ident(atopology) || '.node ' ||
+		'WHERE geom && $1 AND ST_X(geom) = ST_X($1) AND ST_Y(geom) = ST_Y($1)'
+    USING apoint
+	LOOP
+		RETURN  rec.node_id;
+	END LOOP;
+
+	--
+	-- Check if any edge crosses this node
+	-- (endpoints are fine)
+	--
+	FOR rec IN EXECUTE 'SELECT edge_id FROM '
+		|| quote_ident(atopology) || '.edge ' 
+		|| 'WHERE ST_DWithin($1, geom, 0) AND '
+    || 'NOT ST_Equals($1, ST_StartPoint(geom)) AND '
+    || 'NOT ST_Equals($1, ST_EndPoint(geom))'
+    USING apoint
+	LOOP
+    IF allowEdgeSplitting THEN
+      RETURN topology.ST_ModEdgeSplit(atopology, rec.edge_id, apoint);
+    ELSE
+		  RAISE EXCEPTION 'An edge crosses the given node.';
+    END IF;
+	END LOOP;
+
+  IF setContainingFace THEN
+    containing_face := topology.GetFaceByPoint(atopology, apoint, 0);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'containing face: %', containing_face;
+#endif
+  ELSE
+    containing_face := NULL;
+  END IF;
+
+	--
+	-- Get new node id from sequence
+	--
+	FOR rec IN EXECUTE 'SELECT nextval(' ||
+		quote_literal(
+			quote_ident(atopology) || '.node_node_id_seq'
+		) || ')'
+	LOOP
+		nodeid = rec.nextval;
+	END LOOP;
+
+	--
+	-- Insert the new row
+	--
+	EXECUTE 'INSERT INTO ' || quote_ident(atopology)
+		|| '.node(node_id, containing_face, geom) 
+		VALUES(' || nodeid || ',' || coalesce(containing_face::text, 'NULL')
+    || ',$1)' USING apoint;
+
+	RETURN nodeid;
+	
+END
+$$
+LANGUAGE 'plpgsql' VOLATILE;
+--} AddNode
+
+--{
+--
+-- AddNode(atopology, point)
+--
+CREATE OR REPLACE FUNCTION topology.AddNode(atopology varchar, apoint geometry)
+	RETURNS int
+AS
+$$
+  SELECT topology.AddNode($1, $2, false, false);
+$$
+LANGUAGE 'sql' VOLATILE;
+--} AddNode
+
+--{
+--
+-- AddEdge(atopology, line)
+--
+-- Add an edge primitive to a topology and get its identifier.
+-- Edge endpoints will be added as nodes if missing.
+-- Returns an existing edge at the same location, if any.
+--
+-- An exception is raised if the given line crosses an existing
+-- node or interects with an existing edge on anything but endnodes.
+--
+-- The newly added edge has "universe" face on both sides
+-- and links to itself as per next left/right edge.
+-- Calling code is expected to do further linking.
+--
+-- Developed by Sandro Santilli <strk@keybit.net>
+-- for Faunalia (http://www.faunalia.it) with funding from
+-- Regione Toscana - Sistema Informativo per la Gestione del Territorio
+-- e dell' Ambiente [RT-SIGTA].
+-- For the project: "Sviluppo strumenti software per il trattamento di dati
+-- geografici basati su QuantumGIS e Postgis (CIG 0494241492)"
+-- 
+CREATE OR REPLACE FUNCTION topology.AddEdge(atopology varchar, aline geometry)
+	RETURNS int
+AS
+$$
+DECLARE
+	edgeid int;
+	rec RECORD;
+  ix geometry; 
+BEGIN
+	--
+	-- Atopology and apoint are required
+	-- 
+	IF atopology IS NULL OR aline IS NULL THEN
+		RAISE EXCEPTION 'Invalid null argument';
+	END IF;
+
+	--
+	-- Aline must be a linestring
+	--
+	IF substring(geometrytype(aline), 1, 4) != 'LINE'
+	THEN
+		RAISE EXCEPTION 'Edge geometry must be a linestring';
+	END IF;
+
+	--
+	-- Check there's no face registered in the topology
+	--
+	FOR rec IN EXECUTE 'SELECT count(face_id) FROM '
+		|| quote_ident(atopology) || '.face '
+		|| ' WHERE face_id != 0 LIMIT 1'
+	LOOP
+		IF rec.count > 0 THEN
+			RAISE EXCEPTION 'AddEdge can only be used against topologies with no faces defined';
+		END IF;
+	END LOOP;
+
+	--
+	-- Check if the edge crosses an existing node
+	--
+	FOR rec IN EXECUTE 'SELECT node_id FROM '
+		|| quote_ident(atopology) || '.node '
+		|| 'WHERE ST_Crosses($1, geom)'
+    USING aline
+	LOOP
+		RAISE EXCEPTION 'Edge crosses node %', rec.node_id;
+	END LOOP;
+
+	--
+	-- Check if the edge intersects an existing edge
+	-- on anything but endpoints
+	--
+	-- Following DE-9 Intersection Matrix represent
+	-- the only relation we accept. 
+	--
+	--    F F 1
+	--    F * *
+	--    1 * 2
+	--
+	-- Example1: linestrings touching at one endpoint
+	--    FF1 F00 102
+	--    FF1 F** 1*2 <-- our match
+	--
+	-- Example2: linestrings touching at both endpoints
+	--    FF1 F0F 1F2
+	--    FF1 F** 1*2 <-- our match
+	--
+	FOR rec IN EXECUTE 'SELECT edge_id, geom, ST_Relate($1, geom, 2) as im FROM '
+		|| quote_ident(atopology) || '.edge WHERE $1 && geom'
+    USING aline
+	LOOP
+
+	  IF ST_RelateMatch(rec.im, 'FF1F**1*2') THEN
+	    CONTINUE; -- no interior intersection
+	  END IF;
+
+	  -- Reuse an EQUAL edge (be it closed or not)
+	  IF ST_RelateMatch(rec.im, '1FFF*FFF2') THEN
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+	      RAISE DEBUG 'Edge already known as %', rec.edge_id;
+#endif
+	      RETURN rec.edge_id;
+	  END IF;
+
+	  -- WARNING: the constructive operation might throw an exception
+	  BEGIN
+	    ix = ST_Intersection(rec.geom, aline);
+	  EXCEPTION
+	  WHEN OTHERS THEN
+	    RAISE NOTICE 'Could not compute intersection between input edge (%) and edge % (%)', aline::text, rec.edge_id, rec.geom::text;
+	  END;
+
+	  RAISE EXCEPTION 'Edge intersects (not on endpoints) with existing edge % at or near point %', rec.edge_id, ST_AsText(ST_PointOnSurface(ix));
+
+	END LOOP;
+
+	--
+	-- Get new edge id from sequence
+	--
+	FOR rec IN EXECUTE 'SELECT nextval(' ||
+		quote_literal(
+			quote_ident(atopology) || '.edge_data_edge_id_seq'
+		) || ')'
+	LOOP
+		edgeid = rec.nextval;
+	END LOOP;
+
+	--
+	-- Insert the new row
+	--
+	EXECUTE 'INSERT INTO '
+		|| quote_ident(atopology)
+		|| '.edge(edge_id, start_node, end_node, '
+		|| 'next_left_edge, next_right_edge, '
+		|| 'left_face, right_face, '
+		|| 'geom) '
+		|| ' VALUES('
+
+		-- edge_id
+		|| edgeid ||','
+
+		-- start_node
+		|| 'topology.addNode('
+		|| quote_literal(atopology)
+		|| ', ST_StartPoint($1)), '
+
+		-- end_node
+		|| 'topology.addNode('
+		|| quote_literal(atopology)
+		|| ', ST_EndPoint($1)), '
+
+		-- next_left_edge
+		|| -edgeid ||','
+
+		-- next_right_edge
+		|| edgeid ||','
+
+		-- left_face
+		|| '0,'
+
+		-- right_face
+		|| '0,'
+
+		-- geom
+		|| '$1)'
+    USING aline;
+
+	RETURN edgeid;
+	
+END
+$$
+LANGUAGE 'plpgsql' VOLATILE;
+--} AddEdge
+
+--{
+--
+-- AddFace(atopology, poly, [<force_new>=true])
+--
+-- Add a face primitive to a topology and get its identifier.
+-- Returns an existing face at the same location, if any, unless
+-- true is passed as the force_new argument
+--
+-- For a newly added face, its edges will be appropriately
+-- linked (marked as left-face or right-face), and any contained
+-- edges and nodes would also be marked as such.
+--
+-- When forcing re-registration of an existing face, no action will be
+-- taken to deal with the face being substituted. Which means
+-- a record about the old face and any record in the relation table
+-- referencing the existing face will remain untouched, effectively
+-- leaving the topology in a possibly invalid state.
+-- It is up to the caller to deal with that.
+--
+-- The target topology is assumed to be valid (containing no
+-- self-intersecting edges).
+--
+-- An exception is raised if:
+--  o The polygon boundary is not fully defined by existing edges.
+--  o The polygon overlaps an existing face.
+--
+-- Developed by Sandro Santilli <strk@keybit.net>
+-- for Faunalia (http://www.faunalia.it) with funding from
+-- Regione Toscana - Sistema Informativo per la Gestione del Territorio
+-- e dell' Ambiente [RT-SIGTA].
+-- For the project: "Sviluppo strumenti software per il trattamento di dati
+-- geografici basati su QuantumGIS e Postgis (CIG 0494241492)"
+-- 
+CREATE OR REPLACE FUNCTION topology.AddFace(atopology varchar, apoly geometry, force_new boolean DEFAULT FALSE)
+	RETURNS int
+AS
+$$
+DECLARE
+  bounds geometry;
+  symdif geometry;
+  faceid int;
+  rec RECORD;
+  rrec RECORD;
+  relate text;
+  right_edges int[];
+  left_edges int[];
+  all_edges geometry;
+  old_faceid int;
+  old_edgeid int;
+  sql text;
+  right_side bool;
+  edgeseg geometry;
+  p1 geometry;
+  p2 geometry;
+  p3 geometry;
+  loc float8;
+  segnum int;
+  numsegs int;
+BEGIN
+  --
+  -- Atopology and apoly are required
+  -- 
+  IF atopology IS NULL OR apoly IS NULL THEN
+    RAISE EXCEPTION 'Invalid null argument';
+  END IF;
+
+  --
+  -- Aline must be a polygon
+  --
+  IF substring(geometrytype(apoly), 1, 4) != 'POLY'
+  THEN
+    RAISE EXCEPTION 'Face geometry must be a polygon';
+  END IF;
+
+  for rrec IN SELECT (ST_DumpRings(ST_ForceRHR(apoly))).geom
+  LOOP -- {
+    --
+    -- Find all bounds edges, forcing right-hand-rule
+    -- to know what's left and what's right...
+    --
+    bounds = ST_Boundary(rrec.geom);
+
+    sql := 'SELECT e.geom, e.edge_id, e.left_face, e.right_face FROM '
+      || quote_ident(atopology)
+      || '.edge e, (SELECT $1 as geom) r WHERE r.geom && e.geom'
+    ;
+    -- RAISE DEBUG 'SQL: %', sql;
+    FOR rec IN EXECUTE sql USING bounds
+    LOOP -- {
+      --RAISE DEBUG 'Edge % has bounding box intersection', rec.edge_id;
+
+      -- Find first non-empty segment of the edge
+      numsegs = ST_NumPoints(rec.geom);
+      segnum = 1;
+      WHILE segnum < numsegs LOOP
+        p1 = ST_PointN(rec.geom, segnum);
+        p2 = ST_PointN(rec.geom, segnum+1);
+        IF ST_Distance(p1, p2) > 0 THEN
+          EXIT;
+        END IF;
+        segnum = segnum + 1;
+      END LOOP;
+
+      IF segnum = numsegs THEN
+        RAISE WARNING 'Edge % is collapsed', rec.edge_id;
+        CONTINUE; -- we don't want to spend time on it
+      END IF;
+
+      edgeseg = ST_MakeLine(p1, p2);
+
+      -- Skip non-covered edges
+      IF NOT ST_Equals(p2, ST_EndPoint(rec.geom)) THEN
+        IF NOT ( _ST_Intersects(bounds, p1) AND _ST_Intersects(bounds, p2) )
+        THEN
+          --RAISE DEBUG 'Edge % has points % and % not intersecting with ring bounds', rec.edge_id, st_astext(p1), st_astext(p2);
+          CONTINUE;
+        END IF;
+      ELSE
+        -- must be a 2-points only edge, let's use Covers (more expensive)
+        IF NOT _ST_Covers(bounds, edgeseg) THEN
+          --RAISE DEBUG 'Edge % is not covered by ring', rec.edge_id;
+          CONTINUE;
+        END IF;
+      END IF;
+
+      p3 = ST_StartPoint(bounds);
+      IF ST_DWithin(edgeseg, p3, 0) THEN
+        -- Edge segment covers ring endpoint, See bug #874
+        loc = ST_LineLocatePoint(edgeseg, p3);
+        -- WARNING: this is as robust as length of edgeseg allows...
+        IF loc > 0.9 THEN
+          -- shift last point down 
+          p2 = ST_LineInterpolatePoint(edgeseg, loc - 0.1);
+        ELSIF loc < 0.1 THEN
+          -- shift first point up
+          p1 = ST_LineInterpolatePoint(edgeseg, loc + 0.1); 
+        ELSE
+          -- when ring start point is in between, we swap the points
+          p3 = p1; p1 = p2; p2 = p3;
+        END IF;
+      END IF;
+
+      right_side = ST_LineLocatePoint(bounds, p1) < 
+                   ST_LineLocatePoint(bounds, p2);
+  
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+      RAISE DEBUG 'Edge % (left:%, right:%) - ring : % - right_side : %',
+        rec.edge_id, rec.left_face, rec.right_face, rrec.path, right_side;
+#endif
+
+      IF right_side THEN
+        right_edges := array_append(right_edges, rec.edge_id);
+        old_faceid = rec.right_face;
+      ELSE
+        left_edges := array_append(left_edges, rec.edge_id);
+        old_faceid = rec.left_face;
+      END IF;
+
+      IF faceid IS NULL OR faceid = 0 THEN
+        faceid = old_faceid;
+        old_edgeid = rec.edge_id;
+      ELSIF faceid != old_faceid THEN
+        RAISE EXCEPTION 'Edge % has face % registered on the side of this face, while edge % has face % on the same side', rec.edge_id, old_faceid, old_edgeid, faceid;
+      END IF;
+
+      -- Collect all edges for final full coverage check
+      all_edges = ST_Collect(all_edges, rec.geom);
+
+    END LOOP; -- }
+  END LOOP; -- }
+
+  IF all_edges IS NULL THEN
+    RAISE EXCEPTION 'Found no edges on the polygon boundary';
+  END IF;
+
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG 'Left edges: %', left_edges;
+#endif
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG 'Right edges: %', right_edges;
+#endif
+
+  --
+  -- Check that all edges found, taken togheter,
+  -- fully match the ring boundary and nothing more
+  --
+  -- If the test fail either we need to add more edges
+  -- from the polygon ring or we need to split
+  -- some of the existing ones.
+  -- 
+  bounds = ST_Boundary(apoly);
+  IF NOT ST_isEmpty(ST_SymDifference(bounds, all_edges)) THEN
+    IF NOT ST_isEmpty(ST_Difference(bounds, all_edges)) THEN
+      RAISE EXCEPTION 'Polygon boundary is not fully defined by existing edges at or near point %', ST_AsText(ST_PointOnSurface(ST_Difference(bounds, all_edges)));
+    ELSE
+      RAISE EXCEPTION 'Existing edges cover polygon boundary and more at or near point % (invalid topology?)', ST_AsText(ST_PointOnSurface(ST_Difference(all_edges, bounds)));
+    END IF;
+  END IF;
+
+  IF faceid IS NOT NULL AND faceid != 0 THEN
+    IF NOT force_new THEN
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+      RAISE DEBUG 'Face already known as %, not forcing a new face', faceid;
+#endif
+      RETURN faceid;
+    ELSE
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+      RAISE DEBUG 'Face already known as %, forcing a new face', faceid;
+#endif
+    END IF;
+  END IF;
+
+  --
+  -- Get new face id from sequence
+  --
+  FOR rec IN EXECUTE 'SELECT nextval(' ||
+    quote_literal(
+      quote_ident(atopology) || '.face_face_id_seq'
+    ) || ')'
+  LOOP
+    faceid = rec.nextval;
+  END LOOP;
+
+  --
+  -- Insert new face 
+  --
+  EXECUTE 'INSERT INTO '
+    || quote_ident(atopology)
+    || '.face(face_id, mbr) VALUES('
+    -- face_id
+    || faceid || ','
+    -- minimum bounding rectangle
+    || '$1)'
+    USING ST_Envelope(apoly);
+
+  --
+  -- Update all edges having this face on the left
+  --
+  IF left_edges IS NOT NULL THEN
+    EXECUTE 'UPDATE '
+    || quote_ident(atopology)
+    || '.edge_data SET left_face = '
+    || quote_literal(faceid)
+    || ' WHERE edge_id = ANY('
+    || quote_literal(left_edges)
+    || ') ';
+  END IF;
+
+  --
+  -- Update all edges having this face on the right
+  --
+  IF right_edges IS NOT NULL THEN
+    EXECUTE 'UPDATE '
+    || quote_ident(atopology)
+    || '.edge_data SET right_face = '
+    || quote_literal(faceid)
+    || ' WHERE edge_id = ANY('
+    || quote_literal(right_edges)
+    || ') ';
+  END IF;
+
+
+  --
+  -- Set left_face/right_face of any contained edge 
+  --
+  EXECUTE 'UPDATE '
+    || quote_ident(atopology)
+    || '.edge_data SET right_face = '
+    || quote_literal(faceid)
+    || ', left_face = '
+    || quote_literal(faceid)
+    || ' WHERE ST_Contains($1, geom)'
+    USING apoly;
+
+  -- 
+  -- Set containing_face of any contained node 
+  -- 
+  EXECUTE 'UPDATE '
+    || quote_ident(atopology)
+    || '.node SET containing_face = '
+    || quote_literal(faceid)
+    || ' WHERE containing_face IS NOT NULL AND ST_Contains($1, geom)'
+    USING apoly;
+
+  RETURN faceid;
+	
+END
+$$
+LANGUAGE 'plpgsql' VOLATILE;
+--} AddFace
+
+-- ----------------------------------------------------------------------------
+-- 
+-- Functions to incrementally populate a topology
+-- 
+-- ----------------------------------------------------------------------------
+
+--{
+--  TopoGeo_AddPoint(toponame, pointgeom, tolerance)
+--
+--  Add a Point into a topology, with an optional tolerance 
+--
+CREATE OR REPLACE FUNCTION topology.TopoGeo_AddPoint(atopology varchar, apoint geometry, tolerance float8 DEFAULT 0)
+	RETURNS int AS
+$$
+DECLARE
+  id integer;
+  rec RECORD;
+  sql text;
+  prj GEOMETRY;
+  snapedge GEOMETRY;
+  snaptol FLOAT8;
+  tol FLOAT8;
+  z FLOAT8;
+BEGIN
+
+  -- 0. Check arguments
+  IF geometrytype(apoint) != 'POINT' THEN
+    RAISE EXCEPTION 'Invalid geometry type (%) passed to TopoGeo_AddPoint, expected POINT', geometrytype(apoint);
+  END IF;
+
+  -- Get tolerance, if 0 was given
+  tol := COALESCE( NULLIF(tolerance, 0), topology._st_mintolerance(atopology, apoint) );
+
+  -- 1. Check if any existing node is closer than the given precision
+  --    and if so pick the closest
+  sql := 'SELECT a.node_id FROM ' 
+    || quote_ident(atopology) 
+    || '.node as a WHERE ST_DWithin(a.geom,$1,'
+    || tol || ') AND ST_Distance($1, a.geom) < ' || tol
+    || ' ORDER BY ST_Distance($1, a.geom) LIMIT 1';
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG '%', sql;
+#endif
+  EXECUTE sql INTO id USING apoint;
+  IF id IS NOT NULL THEN
+    RETURN id;
+  END IF;
+
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG 'No existing node within tolerance distance';
+#endif
+
+  -- 2. Check if any existing edge falls within tolerance
+  --    and if so split it by a point projected on it
+  sql := 'SELECT a.edge_id, a.geom FROM ' 
+    || quote_ident(atopology) 
+    || '.edge as a WHERE ST_DWithin(a.geom,$1,'
+    || tol || ') ORDER BY ST_Distance($1, a.geom) LIMIT 1';
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG '%', sql;
+#endif
+  EXECUTE sql INTO rec USING apoint;
+  IF rec IS NOT NULL THEN
+    -- project point to line, split edge by point
+    prj := ST_ClosestPoint(rec.geom, apoint);
+    -- This is a workaround for ClosestPoint lack of Z support:
+    -- http://trac.osgeo.org/postgis/ticket/2033
+    z := ST_Z(apoint);
+    IF z IS NOT NULL THEN
+      prj := ST_Translate(ST_Force_3DZ(prj), 0, 0, z); -- no ST_SetZ ...
+    END IF;
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Splitting edge % with closest point %', rec.edge_id, ST_AsText(prj);
+#endif
+    IF NOT ST_Contains(rec.geom, prj) THEN
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+      RAISE DEBUG ' Snapping edge to contain closest point';
+#endif
+      -- The tolerance must be big enough for snapping to happen
+      -- and small enough to snap only to the projected point.
+      -- Unfortunately ST_Distance returns 0 because it also uses
+      -- a projected point internally, so we need another way.
+      snaptol := topology._st_mintolerance(prj);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+      RAISE DEBUG 'Tolerance for snapping to point % = %', ST_AsText(prj), snaptol;
+#endif
+      snapedge := ST_Snap(rec.geom, prj, snaptol);
+
+      -- Snapping currently snaps the first point below tolerance
+      -- so may possibly move first point. See ticket #1631
+      IF NOT ST_Equals(ST_StartPoint(rec.geom), ST_StartPoint(snapedge))
+      THEN
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+        RAISE WARNING 'Snapping moved first edge vertex, fixing';
+#endif
+        snapedge := ST_MakeLine(ST_StartPoint(rec.geom), snapedge);
+      END IF;
+
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+      IF NOT ST_Contains(snapedge, prj) THEN -- or if equal ?
+        RAISE WARNING 'Edge within % distance from node still does not contain the node after snapping to it with tolerance %', tol, snaptol;
+      END IF;
+#endif
+      PERFORM topology.ST_ChangeEdgeGeom(atopology, rec.edge_id, snapedge);
+    END IF;
+    id := topology.ST_ModEdgeSplit(atopology, rec.edge_id, prj);
+  ELSE
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'No existing edge within tolerance distance';
+#endif
+    id := topology.ST_AddIsoNode(atopology, NULL, apoint);
+  END IF;
+
+  RETURN id;
+END
+$$
+LANGUAGE 'plpgsql' VOLATILE;
+--} TopoGeo_AddPoint
+
+--{
+--  TopoGeo_addLinestring(toponame, linegeom, tolerance)
+--
+--  Add a LineString into a topology 
+--
+-- }{
+CREATE OR REPLACE FUNCTION topology.TopoGeo_addLinestring(atopology varchar, aline geometry, tolerance float8 DEFAULT 0)
+	RETURNS SETOF int AS
+$$
+DECLARE
+  rec RECORD;
+  rec2 RECORD;
+  sql TEXT;
+  set1 GEOMETRY;
+  set2 GEOMETRY;
+  snapped GEOMETRY;
+  noded GEOMETRY;
+  start_node INTEGER;
+  end_node INTEGER;
+  id INTEGER; 
+  inodes GEOMETRY;
+  iedges GEOMETRY;
+  tol float8;
+BEGIN
+
+  -- 0. Check arguments
+  IF geometrytype(aline) != 'LINESTRING' THEN
+    RAISE EXCEPTION 'Invalid geometry type (%) passed to TopoGeo_AddLinestring, expected LINESTRING', geometrytype(aline);
+  END IF;
+
+  -- Get tolerance, if 0 was given
+  tol := COALESCE( NULLIF(tolerance, 0), topology._st_mintolerance(atopology, aline) );
+
+  -- 1. Self-node
+  noded := ST_UnaryUnion(aline);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG 'Self-noded: %', ST_AsText(noded);
+#endif
+
+  -- 2. Node to edges falling within tol distance
+  sql := 'WITH nearby AS ( SELECT e.geom FROM '
+    || quote_ident(atopology) 
+    || '.edge e WHERE ST_DWithin(e.geom, $1,'
+    || tol || ') ) SELECT st_collect(geom) FROM nearby';
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG '%', sql;
+#endif
+  EXECUTE sql INTO iedges USING noded;
+  IF iedges IS NOT NULL THEN
+
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Intersecting edges: %', ST_AsText(iedges);
+#endif
+
+    snapped := ST_Snap(noded, iedges, tol);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Snapped to edges: %', ST_AsText(snapped);
+#endif
+
+    noded := ST_Difference(snapped, iedges);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Difference: %', ST_AsText(noded);
+#endif
+
+    set1 := ST_Intersection(snapped, iedges);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Intersection: %', ST_AsText(set1);
+#endif
+
+    set2 := ST_LineMerge(set1);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'LineMerged intersection: %', ST_AsText(set2);
+#endif
+
+    noded := ST_Union(noded, set2);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Unioned: %', ST_AsText(noded);
+#endif
+
+  END IF;
+
+  -- 2.1. Node with existing nodes within tol
+  -- TODO: check if we should be only considering _isolated_ nodes!
+  sql := 'WITH nearby AS ( SELECT n.geom FROM '
+    || quote_ident(atopology) 
+    || '.node n WHERE ST_DWithin(n.geom, $1, '
+    || tol || ') ) SELECT st_collect(geom) FROM nearby;';
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG '%', sql;
+#endif
+  EXECUTE sql INTO inodes USING noded;
+
+  IF inodes IS NOT NULL THEN -- {
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Intersecting nodes: %', ST_AsText(inodes);
+#endif
+
+    -- TODO: consider snapping once against all elements
+    ---      (rather than once with edges and once with nodes)
+    noded := ST_Snap(noded, inodes, tol);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Snapped to nodes: %', ST_AsText(noded);
+#endif
+
+    FOR rec IN SELECT (ST_Dump(inodes)).geom
+    LOOP
+        -- Use the node to split edges
+        SELECT ST_Collect(geom) 
+        FROM ST_Dump(ST_Split(noded, rec.geom))
+        INTO STRICT noded;
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+        RAISE DEBUG 'Split by %: %', ST_AsText(rec.geom), ST_AsText(noded);
+#endif
+    END LOOP;
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Split: %', ST_AsText(noded);
+#endif
+
+    -- re-node to account for ST_Snap introduced self-intersections
+    -- See http://trac.osgeo.org/postgis/ticket/1714
+    -- TODO: consider running UnaryUnion once after all noding 
+    noded := ST_UnaryUnion(noded);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Self-unioned again: %', ST_AsText(noded);
+#endif
+  END IF; -- }
+
+  -- 3. For each (now-noded) segment, insert an edge
+  FOR rec IN SELECT (ST_Dump(noded)).geom LOOP
+
+    -- TODO: skip point elements ?
+
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Adding edge %', ST_AsText(rec.geom);
+#endif
+
+    start_node := topology.TopoGeo_AddPoint(atopology,
+                                          ST_StartPoint(rec.geom),
+                                          tol);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG ' Start Node: %', start_node;
+#endif
+
+    end_node := topology.TopoGeo_AddPoint(atopology,
+                                        ST_EndPoint(rec.geom),
+                                        tol);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG ' End Node: %', end_node;
+#endif
+
+    -- Added endpoints may have drifted due to tolerance, so
+    -- we need to re-snap the edge to the new nodes before adding it
+    sql := 'SELECT n1.geom as sn, n2.geom as en FROM ' || quote_ident(atopology)
+      || '.node n1, ' || quote_ident(atopology)
+      || '.node n2 WHERE n1.node_id = '
+      || start_node || ' AND n2.node_id = ' || end_node;
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG '%', sql;
+#endif
+
+    EXECUTE sql INTO STRICT rec2;
+
+    snapped := ST_SetPoint(
+                 ST_SetPoint(rec.geom, ST_NPoints(rec.geom)-1, rec2.en),
+                 0, rec2.sn);
+
+    /* We might have introduced an invalidity (TODO: check this out) */
+    snapped := ST_CollectionExtract(ST_MakeValid(snapped), 2);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Cleaned edge: %', ST_AsText(snapped);
+#endif
+
+
+    -- Check if the so-snapped edge collapsed (see #1650)
+    IF ST_IsEmpty(snapped) THEN
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+      RAISE DEBUG 'Edge collapsed';
+#endif
+      CONTINUE;
+    END IF;
+
+    -- Check if the so-snapped edge _now_ exists
+    sql := 'SELECT edge_id FROM ' || quote_ident(atopology)
+      || '.edge_data WHERE ST_Equals(geom, $1)';
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG '%', sql;
+#endif
+    EXECUTE sql INTO id USING snapped;
+    IF id IS NULL THEN
+      id := topology.ST_AddEdgeModFace(atopology, start_node, end_node,
+                                       snapped);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+      RAISE DEBUG 'New edge id: %', id;
+#endif
+    ELSE
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+      RAISE DEBUG 'Old edge id: %', id;
+#endif
+    END IF;
+
+    RETURN NEXT id;
+
+  END LOOP;
+
+  RETURN;
+END
+$$
+LANGUAGE 'plpgsql';
+--} TopoGeo_addLinestring
+
+--{
+--  TopoGeo_AddPolygon(toponame, polygeom, tolerance)
+--
+--  Add a Polygon into a topology 
+--
+-- }{
+CREATE OR REPLACE FUNCTION topology.TopoGeo_AddPolygon(atopology varchar, apoly geometry, tolerance float8 DEFAULT 0)
+	RETURNS SETOF int AS
+$$
+DECLARE
+  boundary GEOMETRY;
+  fgeom GEOMETRY;
+  rec RECORD;
+  edges INTEGER[];
+  sql TEXT;
+  tol FLOAT8;
+BEGIN
+
+  -- 0. Check arguments
+  IF geometrytype(apoly) != 'POLYGON' THEN
+    RAISE EXCEPTION 'Invalid geometry type (%) passed to TopoGeo_AddPolygon, expected POLYGON', geometrytype(apoly);
+  END IF;
+
+  -- Get tolerance, if 0 was given
+  tol := COALESCE( NULLIF(tolerance, 0), topology._st_mintolerance(atopology, apoly) );
+
+  -- 1. Extract boundary
+  boundary := ST_Boundary(apoly);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG 'Boundary: %', ST_AsText(boundary);
+#endif
+
+  -- 2. Add boundaries as edges
+  FOR rec IN SELECT (ST_Dump(boundary)).geom LOOP
+    edges := array_cat(edges, array_agg(x)) FROM ( select topology.TopoGeo_addLinestring(atopology, rec.geom, tol) as x ) as foo;
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'New edges: %', edges;
+#endif
+  END LOOP;
+
+  -- 3. Find faces covered by input polygon
+  --    NOTE: potential snapping changed polygon edges
+  sql := 'SELECT f.face_id FROM ' || quote_ident(atopology)
+    || '.face f WHERE f.mbr && $1';
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG '%', sql;
+#endif
+  FOR rec IN EXECUTE sql USING apoly LOOP
+    -- check for actual containment
+    fgeom := ST_PointOnSurface(topology.ST_GetFaceGeometry(atopology, rec.face_id));
+    IF NOT ST_Covers(apoly, fgeom) THEN
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+      RAISE DEBUG 'Face % not covered by input polygon', rec.face_id;
+#endif
+      CONTINUE;
+    END IF;
+    RETURN NEXT rec.face_id;
+  END LOOP;
+
+END
+$$
+LANGUAGE 'plpgsql';
+--} TopoGeo_AddPolygon
+
+--{
+--  TopoGeo_AddGeometry(toponame, geom, tolerance)
+--
+--  Add a Geometry into a topology 
+--
+CREATE OR REPLACE FUNCTION topology.TopoGeo_AddGeometry(atopology varchar, ageom geometry, tolerance float8 DEFAULT 0)
+	RETURNS void AS
+$$
+DECLARE
+BEGIN
+	RAISE EXCEPTION 'TopoGeo_AddGeometry not implemented yet';
+END
+$$
+LANGUAGE 'plpgsql';
+--} TopoGeo_AddGeometry

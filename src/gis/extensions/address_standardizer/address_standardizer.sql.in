@@ -1,0 +1,61 @@
+-- complain if script is sourced in psql, rather than via CREATE EXTENSION
+\echo Use "CREATE EXTENSION address_standardizer" to load this file. \quit
+
+---------------------------------------------------------------------
+-- Core function to access the PAGC address standardizer
+-- Author: Stephen Woodbridge <woodbri@imaptools.com>
+---------------------------------------------------------------------
+
+DROP TYPE IF EXISTS stdaddr;
+CREATE TYPE stdaddr AS (
+    building text,
+    house_num text,
+    predir text,
+    qual text,
+    pretype text,
+    name text,
+    suftype text,
+    sufdir text,
+    ruralroute text,
+    extra text,
+    city text,
+    state text,
+    country text,
+    postcode text,
+    box text,
+    unit text
+);
+
+CREATE OR REPLACE FUNCTION standardize_address(
+        lextab text,
+        gaztab text,
+        rultab text,
+        micro text,
+        macro text )
+    RETURNS SETOF stdaddr
+    AS  'MODULE_PATHNAME', 'standardize_address'
+    LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION standardize_address(
+        lextab text,
+        gaztab text,
+        rultab text,
+        address text )
+    RETURNS SETOF stdaddr
+    AS  'MODULE_PATHNAME', 'standardize_address1'
+    LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION parse_address(IN text,
+        OUT num text,
+        OUT street text,
+        OUT street2 text,
+        OUT address1 text,
+        OUT city text,
+        OUT state text,
+        OUT zip text,
+        OUT zipplus text,
+        OUT country text)
+    RETURNS record
+    AS  'MODULE_PATHNAME', 'parse_address'
+    LANGUAGE 'c' IMMUTABLE STRICT;
+

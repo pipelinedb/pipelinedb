@@ -1,0 +1,1 @@
+SELECT null::geometry as g UNION ALL SELECT 'SRID=1;POINT(0 0 0 0)'::geometry;

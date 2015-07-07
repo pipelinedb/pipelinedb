@@ -1,0 +1,14 @@
+test_estimation.pl
+	test selectivity estimator for the && (overlap) operator
+
+postgis_restore.pl
+	restore a spatial database dump to a (possibly updated)
+	new spatial database.
+
+postgis_proc_upgrade.pl
+	Create a postgis procedures upgrade script. Will warn
+	if operations is not cleanly possible due to nature
+	of changes in postgis procedures.
+
+profile_intersects.pl
+	compares distance()=0 and intersects() timings.

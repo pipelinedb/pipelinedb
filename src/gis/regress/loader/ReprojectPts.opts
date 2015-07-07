@@ -1,0 +1,3 @@
+# This happens to be a multipoint shapefile that has only single points, so use -S.
+# It is in NJ State Plane NAD83, so reproject to 4326.
+-S -s 2260:4326

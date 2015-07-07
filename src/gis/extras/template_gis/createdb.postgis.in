@@ -1,0 +1,31 @@
+#!/bin/sh
+
+# create a database using the given template
+# other parameters are passed to createdb, 
+# but the specified owner will not have 
+# extra privileges on objects in the template. see createdb.postgis(1)
+
+source @bindir@/postgis_env.sh
+
+for ARGVN in $1 $2 ; do
+    if [ `expr substr $ARGVN 1 11` = "--template=" ]; then
+	 	TDB=`echo $ARGVN | sed -e s/^--template=//`
+    elif [ `expr substr $ARGVN 1 6` = "--help" ]; then
+        echo "Usage of `basename $0`"
+        echo "Supply arguments as follows"
+        echo "--template=templatename of the template to use"
+		echo "Other arguments will be passed verbatim to createdb,"
+		echo "and it may return additional messages."
+		echo "You must usually have createdb privileges"
+		echo "in order to use `basename $0`"
+        exit 1
+    fi
+done
+
+PWD1=`pwd`
+
+cd /tmp
+
+exec createdb -T $TDB "$@"
+
+cd $PWD1

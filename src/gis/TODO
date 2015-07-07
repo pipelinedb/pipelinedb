@@ -1,0 +1,56 @@
+
+== Simple Projects ==
+
+* ST_AverageDistance(g1 geometry, g2 geometry, nsamples integer) returns double
+  Sum of minimum distances at regular intervals up two geometries, 
+  divided by the number of samples.  
+* ST_LatitudeFromText(string) returns float, 
+  LongitudeFromText(string) returns float 
+  for things like 132W 23' 23", or 45N 23.41232', or 123.14123W, etc, etc, etc.
+* Port ST_DumpPoints(geometry) to C
+
+== Larger projects ==
+
+-- Complete Curve support --
+
+The LWGEOM construct does not have quite enough space to hold all the 
+typology variants of curves. And it certainly doesn't have enough space
+for encoding the line interpolation type.
+
+Complete curve support would require re-working all the way back into
+GEOS to support non-linear interpolations in all GEOS calculations,
+and may never get done.
+
+Intermediate curve support requires handling all curve types and stroking
+them into linear interpolations for hand-off to GEOS functions. Inexact
+but providing some utility.
+
+Current curve support does include indexing and in/out functions but needs
+much better documentation, particularly about the valid WKT and WKB forms.
+
+-- Data Mangling for Performance --
+
+Often geofeatures will be very large, 1000s of vertices, but the use case
+for the features will only be using a few vertices at a time. For example,
+an ocean polygon could be huge, but if a map is only zoomed into the coastline,
+a small portion will be needed. Nonetheless, the database will have to 
+retrieve the whole feature. Similarly, when carrying out spatial joins,
+retrieving very large features and matching against small features is a bad
+performance bargain, particularly since large features tend to reside in 
+the TOAST tables, for yet more performance pain.
+
+The solution is to cut up the large features into smaller features. 
+Some standard utilities for doing so are required.
+
+-- Estimated Extent --
+
+Fast extent estimation based on reading the head of the R-Tree.
+
+-- Heat Map / Clustering --
+
+Given a set of points, generate a heat map output. Or, given a set of points, generate a clustering and set of representative points. In general, extract a trend from a collection.
+
+-- LIDAR / Point Clouds --
+
+A new object type to hold point cloud information in chunks < page size, filter functions to extract subsets of points from those types based on LIDAR-specific requests ("only return type 1"), and union functions to build complete sets from subsets.  Index bindings (likely 3d) for searching.  Potentially processing functions to extract surfaces or derived products like contours.
+

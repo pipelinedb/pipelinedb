@@ -1,0 +1,142 @@
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- 
+--
+-- PostGIS - Spatial Types for PostgreSQL
+-- http://postgis.org/
+-- Copyright 2009 Paul Ramsey <pramsey@cleverelephant.ca>
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence. See the COPYING file.
+--  
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+-- metadata table
+DROP VIEW geography_columns; 
+
+-- indexes
+DROP OPERATOR FAMILY gist_geography_ops USING gist CASCADE;
+DROP OPERATOR FAMILY btree_geography_ops USING btree CASCADE;
+
+-- r-tree operator
+DROP OPERATOR && (geography,geography);
+
+-- b-tree operators
+DROP OPERATOR < (geography,geography);
+DROP OPERATOR <= (geography,geography);
+DROP OPERATOR = (geography,geography);
+DROP OPERATOR >= (geography,geography);
+DROP OPERATOR > (geography,geography);
+
+-- casts
+DROP CAST IF EXISTS (geography AS geometry);
+DROP CAST IF EXISTS (geography AS geography);
+DROP CAST IF EXISTS (geometry AS geography);
+
+--
+-- Text hacks to over-ride implicit casting issues with GEOMETRY
+-- TODO Remove for 2.0	
+--
+DROP FUNCTION IF EXISTS ST_AsText(text);
+DROP FUNCTION IF EXISTS ST_AsBinary(text);
+DROP FUNCTION IF EXISTS ST_AsSVG(text);
+DROP FUNCTION IF EXISTS ST_AsGML(text);
+DROP FUNCTION IF EXISTS ST_AsKML(text);
+DROP FUNCTION IF EXISTS ST_AsGeoJson(text);
+DROP FUNCTION IF EXISTS ST_Distance(text, text);
+DROP FUNCTION IF EXISTS ST_DWithin(text, text, float8);
+DROP FUNCTION IF EXISTS ST_Area(text);
+DROP FUNCTION IF EXISTS ST_Length(text);
+DROP FUNCTION IF EXISTS ST_Covers(text, text);
+DROP FUNCTION IF EXISTS ST_CoveredBy(text, text);
+DROP FUNCTION IF EXISTS ST_Intersects(text, text);
+DROP FUNCTION IF EXISTS ST_Buffer(text, float8);
+DROP FUNCTION IF EXISTS ST_Intersection(text, text);
+
+-- functions
+DROP FUNCTION IF EXISTS ST_AsText(geography);
+DROP FUNCTION IF EXISTS ST_GeographyFromText(text);
+DROP FUNCTION IF EXISTS ST_AsBinary(geography);
+DROP FUNCTION IF EXISTS ST_GeographyFromBinary(bytea);
+DROP FUNCTION IF EXISTS geography_typmod_dims(integer);
+DROP FUNCTION IF EXISTS geography_typmod_srid(integer);
+DROP FUNCTION IF EXISTS geography_typmod_type(integer);
+DROP FUNCTION IF EXISTS geography(geometry);
+DROP FUNCTION IF EXISTS geometry(geography);
+
+DROP FUNCTION IF EXISTS geography_gist_consistent(internal,geometry,int4); 
+DROP FUNCTION IF EXISTS geography_gist_compress(internal); 
+DROP FUNCTION IF EXISTS geography_gist_penalty(internal,internal,internal); 
+DROP FUNCTION IF EXISTS geography_gist_picksplit(internal, internal); 
+DROP FUNCTION IF EXISTS geography_gist_union(bytea, internal); 
+DROP FUNCTION IF EXISTS geography_gist_same(box2d, box2d, internal); 
+DROP FUNCTION IF EXISTS geography_gist_decompress(internal); 
+DROP FUNCTION IF EXISTS geography_gist_selectivity (internal, oid, internal, int4);
+DROP FUNCTION IF EXISTS geography_gist_join_selectivity(internal, oid, internal, smallint);
+DROP FUNCTION IF EXISTS geography_overlaps(geography, geography); 
+
+DROP FUNCTION IF EXISTS geography_lt(geography, geography);
+DROP FUNCTION IF EXISTS geography_le(geography, geography);
+DROP FUNCTION IF EXISTS geography_gt(geography, geography);
+DROP FUNCTION IF EXISTS geography_ge(geography, geography);
+DROP FUNCTION IF EXISTS geography_eq(geography, geography);
+DROP FUNCTION IF EXISTS geography_cmp(geography, geography);
+
+DROP FUNCTION IF EXISTS ST_AsSVG(geography,int4,int4);
+DROP FUNCTION IF EXISTS ST_AsSVG(geography,int4);
+DROP FUNCTION IF EXISTS ST_AsSVG(geography);
+
+DROP FUNCTION IF EXISTS _ST_AsGML(int4, geography, int4, int4);
+DROP FUNCTION IF EXISTS ST_AsGML(geography, int4);
+DROP FUNCTION IF EXISTS ST_AsGML(geography);
+DROP FUNCTION IF EXISTS ST_AsGML(int4, geography);
+DROP FUNCTION IF EXISTS ST_AsGML(int4, geography, int4);
+DROP FUNCTION IF EXISTS ST_AsGML(geography, int4, int4);
+DROP FUNCTION IF EXISTS ST_AsGML(int4, geography, int4, int4);
+
+DROP FUNCTION IF EXISTS _ST_AsKML(int4, geography, int4);
+DROP FUNCTION IF EXISTS ST_AsKML(geography, int4);
+DROP FUNCTION IF EXISTS ST_AsKML(geography);
+DROP FUNCTION IF EXISTS ST_AsKML(int4, geography);
+DROP FUNCTION IF EXISTS ST_AsKML(int4, geography, int4);
+
+DROP FUNCTION IF EXISTS _ST_AsGeoJson(int4, geography, int4, int4);
+DROP FUNCTION IF EXISTS ST_AsGeoJson(geography, int4);
+DROP FUNCTION IF EXISTS ST_AsGeoJson(geography);
+DROP FUNCTION IF EXISTS ST_AsGeoJson(int4, geography);
+DROP FUNCTION IF EXISTS ST_AsGeoJson(int4, geography, int4);
+DROP FUNCTION IF EXISTS ST_AsGeoJson(geography, int4, int4);
+DROP FUNCTION IF EXISTS ST_AsGeoJson(int4, geography, int4, int4);
+
+DROP FUNCTION IF EXISTS _ST_Distance(geography, geography, float8, boolean);
+DROP FUNCTION IF EXISTS _ST_DWithin(geography, geography, float8, boolean);
+DROP FUNCTION IF EXISTS ST_Distance(geography, geography, boolean);
+DROP FUNCTION IF EXISTS ST_Distance(geography, geography);
+DROP FUNCTION IF EXISTS _ST_Expand(geography, float8);
+DROP FUNCTION IF EXISTS ST_DWithin(geography, geography, float8, boolean);
+DROP FUNCTION IF EXISTS ST_DWithin(geography, geography, float8);
+DROP FUNCTION IF EXISTS ST_Area(geography, boolean);
+DROP FUNCTION IF EXISTS ST_Area(geography);
+DROP FUNCTION IF EXISTS ST_Length(geography, boolean);
+DROP FUNCTION IF EXISTS ST_Length(geography);
+DROP FUNCTION IF EXISTS _ST_PointOutside(geography);
+DROP FUNCTION IF EXISTS _ST_Covers(geography, geography);
+DROP FUNCTION IF EXISTS ST_Covers(geography, geography);
+DROP FUNCTION IF EXISTS ST_CoveredBy(geography, geography);
+DROP FUNCTION IF EXISTS ST_Intersects(geography, geography);
+DROP FUNCTION IF EXISTS _ST_BestSRID(geography, geography);
+DROP FUNCTION IF EXISTS _ST_BestSRID(geography);
+DROP FUNCTION IF EXISTS ST_Buffer(geography, float8);
+DROP FUNCTION IF EXISTS ST_Intersection(geography, geography);
+DROP FUNCTION IF EXISTS geography(geography, integer, boolean);
+
+--DROP FUNCTION IF EXISTS geography_in(cstring, oid, integer);
+--DROP FUNCTION IF EXISTS geography_out(geography);
+DROP TYPE geography CASCADE;
+DROP FUNCTION IF EXISTS geography_typmod_in(cstring[]);
+DROP FUNCTION IF EXISTS geography_typmod_out(integer);
+DROP FUNCTION IF EXISTS geography_analyze(internal);
+
+-- DROP FUNCTION IF EXISTS gidx_in(cstring);
+-- DROP FUNCTION IF EXISTS gidx_out(gidx);
+DROP TYPE gidx CASCADE;
+

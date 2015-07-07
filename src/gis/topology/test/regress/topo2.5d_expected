@@ -1,0 +1,6 @@
+t
+1
+2
+f1|MULTIPOLYGON(((0 0 30,0 10 25,10 10 20,10 0 18,0 0 30)))
+l1|MULTILINESTRING((0 0 30,0 10 25,10 10 20,10 0 18,0 0 30))
+Topology 'tt3d' dropped

@@ -1,0 +1,4 @@
+SELECT pg_catalog.pg_extension_config_dump('geocode_settings', '');
+SELECT pg_catalog.pg_extension_config_dump('pagc_gaz', 'WHERE is_custom=true');
+SELECT pg_catalog.pg_extension_config_dump('pagc_lex', 'WHERE is_custom=true');
+SELECT pg_catalog.pg_extension_config_dump('pagc_rules', 'WHERE is_custom=true');
