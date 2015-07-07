@@ -1,0 +1,9 @@
+Sun Sep 26 23:10:45 CEST 2010
+
+Extension added to PostGIS SVN version.
+
+
+Mon Jan 26 18:58:35 CET 2009
+
+First in-memory raster management api implemented,
+initial work on postgresql interface.

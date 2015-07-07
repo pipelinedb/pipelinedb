@@ -1,0 +1,67 @@
+#!/bin/sh
+
+#create a template database, named template_gis by default,
+#and grant ownership or full privileges to the postgis tables to a user, postgres by default
+
+source @bindir@/postgis_env.sh
+
+for ARGVN in $1 $2 $3 $4 $5 $6 ; do
+    if [ `expr substr $ARGVN 1 7` = "--user=" ]; then
+		GRUSER=`echo $ARGVN | sed -e s/^--user=//`
+    elif [ `expr substr $ARGVN 1 11` = "--template=" ]; then
+	 	TDB=`echo $ARGVN | sed -e s/^--template=//`
+	elif [ `expr substr $ARGVN 1 6` = "--dba=" ]; then
+		DBAUSER=`echo $ARGVN | sed -e s/^--dba=//`
+	elif [ `expr substr $ARGVN 1 9` = "--script=" ]; then
+		PGISSCRIPT=`echo $ARGVN | sed -e s/^--script=//`
+	elif [ "$ARGVN" = "--no-srs" ]; then
+		NO_SRS="true"
+	elif [ "$ARGVN" = "--no-topo" ]; then
+		NO_TOPO="true"
+    elif [ -n $ARGVN ]; then
+        echo "Usage of `basename $0`"
+        echo "Supply arguments as follows"
+        echo "--user=username to own or be grant privileges on databases"
+		echo "      created from template"
+        echo "--template=templatename of the template to create"
+		echo "--dba=dbaname of the dba to run administrational programs as"
+		echo "--script=script to load postgis functions in the database"
+		echo "      if no directory given, default is @datadir@/"
+		echo "--no-srs: use this option to not load the huge spatial_ref_sys.sql"
+		echo "--no-topo: use this option to not load the topology functionality"
+		echo "You must usually be either root, or a postgresql dba or the"
+		echo "cluster owner in order to use `basename $0`"
+        exit 1
+    fi
+done
+
+if [ -z "`echo $PGISSCRIPT | grep /`" ]; then
+	PGISSCRIPT="@datadir@/${PGISSCRIPT}"
+fi
+
+GRTABLES="geometry_columns"
+GRSCHEMAS=""
+SCRIPTS=$PGISSCRIPT
+
+if [ ! "$NO_SRS" = "true" ]; then
+	GRTABLES="${GRTABLES} spatial_ref_sys"
+	SCRIPTS="${SCRIPTS} @datadir@/spatial_ref_sys.sql"
+fi
+if [ ! "$NO_TOPO" = "true" ]; then
+	GRTABLES="${GRTABLES} topology.topology topology.layer topology.topology_id_seq"
+	GRSCHEMAS="${GRSCHEMAS} topology"
+    TMPTOPO=/tmp/topology_$$.sql
+	cat @datadir@/topology.sql | awk -v GRUSER=$GRUSER \
+	'{ \
+		if (tolower($1)=="create" && tolower($2)=="schema" && match(tolower($3),"topology;?")) \
+		{print "create schema topology authorization "GRUSER";"}else print; \
+    }' > ${TMPTOPO}
+    SCRIPTS="${SCRIPTS} ${TMPTOPO}"
+fi
+
+source @bindir@/postgres_lib.sh
+
+sudo_dba DBAUSER
+
+export SCRIPTS GRTABLES GRSCHEMAS GRUSER DBAUSER TDB
+$SUDO -c "@bindir@/mktemplate_gis.sh"

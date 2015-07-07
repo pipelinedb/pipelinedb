@@ -1,0 +1,11 @@
+150|2||255
+0|0|0|1|150|2||255
+1|1|1|255|150|2||255
+100|200|
+59|59|0
+141|141|0
+NOTICE:  Invalid argument for reclassargset. Invalid expression of reclassexpr for reclassarg of index 0 . Returning original raster
+3.1415901184082|2.71828007698059|0
+NOTICE:  Invalid argument for reclassargset. Invalid band index (must use 1-based) for reclassarg of index 0 . Returning original raster
+3.1415901184082|2.71828007698059|0
+900|-900|900

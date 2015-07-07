@@ -1,0 +1,29 @@
+123.4567
+1234.567
+1234.567
+1234.5678
+987.654321
+9876.54321
+1234.5678
+987.654321
+9876.54321
+1234.5678
+1234.5678
+9876.54321
+987.654321
+1234.5678
+1234.5678
+1234.5678
+1234.5678
+4
+3
+2
+1
+1
+1
+NOTICE:  Invalid band index (must use 1-based). Returning original raster
+3
+NOTICE:  Invalid band index (must use 1-based). Returning original raster
+3
+1234.5678
+987.654321

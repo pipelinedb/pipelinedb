@@ -1,0 +1,1 @@
+SELECT 1 as id, 'SRID=1;POINT(0 0)'::geometry as g;

@@ -1,0 +1,26 @@
+This is a very simple example of using binary cursors to move binary data from 
+the server to the client.
+
+We convert the GEOMETRY to the OpenGIS Well Known Binary (WKB) format before 
+sending it to the client.
+
+The WKB format contains information about the endian of the data, so it can be
+used for transfer between servers and clients that are not the same endian 
+(ie. between i386 and sparc)
+
+See http://www.opengis.org/techno/specs/99-049.rtf page 3-24 for the WKB 
+specification.
+
+Z and M coordinates presence is encoded by or'ing WKBZOFFSET (0x80000000)
+and WKBMOFFSET (0x40000000) to the type.
+Points can then be 24 bytes (XYZ,XYM) or 32 bytes (XYZM)
+
+You can force geometries to be returned as 2d using the force_2d()
+function. For example:
+
+  select asBinary(force_2d(geom)) from mytable;
+
+If the client is running on a i386, you should use asBinary(geom, 'NDR')
+and on a sparc you should use asBinary(geom, 'XDR') so you do not causes
+an endian shift on both the server and client.
+

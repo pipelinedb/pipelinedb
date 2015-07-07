@@ -1,0 +1,30 @@
+Translating these Applications
+------------------------------
+
+You will need the gettext utilities to work with the translation files.
+Ensure you have the following utilities available:
+
+  xgettext
+  msgfmt
+
+First, update the translation template ("pot") file
+
+  make pot
+
+This will create fresh template files in "po/", "shp2pgsql.pot" and 
+"pgsql2shp.pot"
+
+Second, copy a template to a translation file, using the filename 
+pattern shp2pgsql_LANG.po. For example, for a French translation:
+
+  cp shp2pgsql.pot shp2pgsql_fr.po
+  cp pgsql2shp.pot pgsql2shp_fr.po
+
+Finally, prepare your translations. There is header information in the 
+translation file to identify yourself as the translator -- fill it in.
+
+Important, set the CHARSET value in the header to the text character set 
+you are using for your text file. We'd prefer you use UTF-8, if you can.
+
+When your translation file is complete, commit your changes, or 
+mail it to the postgis-devel list, and we'll commit it for you.

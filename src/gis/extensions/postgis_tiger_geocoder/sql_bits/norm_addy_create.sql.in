@@ -1,0 +1,11 @@
+CREATE TYPE norm_addy AS (
+    address INTEGER,
+    preDirAbbrev VARCHAR,
+    streetName VARCHAR,
+    streetTypeAbbrev VARCHAR,
+    postDirAbbrev VARCHAR,
+    internal VARCHAR,
+    location VARCHAR,
+    stateAbbrev VARCHAR,
+    zip VARCHAR,
+    parsed BOOLEAN);

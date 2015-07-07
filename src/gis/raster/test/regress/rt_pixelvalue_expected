@@ -1,0 +1,10 @@
+NOTICE:  Attempting to get pixel value with out of range raster coordinates: (-2, -2)
+NOTICE:  Attempting to get pixel value with out of range raster coordinates: (-2, -2)
+NOTICE:  Attempting to get pixel value with out of range raster coordinates: (-2, -2)
+NOTICE:  Attempting to get pixel value with out of range raster coordinates: (-2, -2)
+ERROR:  Raster and geometry do not have the same SRID
+ERROR:  Raster and geometry do not have the same SRID
+NOTICE:  Raster do not have a nodata value defined. Set band nodata value first. Nodata value not set. Returning original raster
+NOTICE:  Raster do not have a nodata value defined. Set band nodata value first. Nodata value not set. Returning original raster
+NOTICE:  Raster do not have a nodata value defined. Set band nodata value first. Nodata value not set. Returning original raster
+NOTICE:  Raster do not have a nodata value defined. Set band nodata value first. Nodata value not set. Returning original raster

@@ -1,0 +1,23 @@
+BEGIN
+t
+coincident nodes|1|23
+edge crosses node|1|23
+edge crosses node|27|14
+edge not simple|28|
+invalid edge|33|
+edge crosses edge|2|28
+edge crosses edge|2|29
+edge crosses edge|2|32
+edge crosses edge|9|27
+edge crosses edge|10|27
+edge crosses edge|19|27
+edge crosses edge|20|27
+edge crosses edge|30|32
+edge start node geometry mis-match|30|4
+edge end node geometry mis-match|30|3
+face without edges|10|
+face has no rings|10|
+face within face|11|2
+face overlaps face|2|12
+COMMIT
+Topology 'invalid_topology' dropped

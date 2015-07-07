@@ -1,0 +1,30 @@
+t
+ERROR:  SQL/MM Spatial exception - null argument
+ERROR:  SQL/MM Spatial exception - null argument
+ERROR:  SQL/MM Spatial exception - null argument
+ERROR:  SQL/MM Spatial exception - invalid topology name
+ERROR:  SQL/MM Spatial exception - invalid topology name
+E1
+E2
+E3
+E4
+E5
+E6
+E7
+F1
+F2
+F1|1|-4
+F1|2|5
+F1|3|7
+F1|4|-6
+F1|5|1
+F1|6|2
+F1|7|3
+F2|1|-1
+F2|2|-3
+F2|3|-2
+F0|1|4
+F0|2|6
+F0|3|-7
+F0|4|-5
+Topology 'tt' dropped

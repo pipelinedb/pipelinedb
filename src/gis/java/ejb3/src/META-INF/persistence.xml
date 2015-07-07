@@ -1,0 +1,5 @@
+<persistence>
+	<persistence-unit name="People">
+		<jta-data-source>java:/GeoDataDS</jta-data-source>
+	</persistence-unit>
+</persistence>

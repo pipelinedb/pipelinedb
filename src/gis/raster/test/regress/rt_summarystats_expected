@@ -1,0 +1,82 @@
+2|-6.858|-3.429|6.571|-10.000|3.142
+100|-6.858|-0.069|1.046|-10.000|3.142
+2
+100
+-3.429|6.571
+-0.069|1.046
+NOTICE:  Invalid band index (must use 1-based). Returning NULL
+|
+NOTICE:  All pixels of band have the NODATA value
+(0,,,,,)
+NOTICE:  Band is empty as width and/or height is 0
+(0,,,,,)
+BEGIN
+20|-68.584|-3.429|6.571|-10.000|3.142
+1000|-68.584|-0.069|1.046|-10.000|3.142
+20|-68.584|-3.429|6.571|-10.000|3.142
+20|-68.584|-3.429|6.571|-10.000|3.142
+SAVEPOINT
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+0|||||
+COMMIT
+RELEASE
+SAVEPOINT
+ERROR:  relation "test1" does not exist at character 82
+COMMIT
+RELEASE
+SAVEPOINT
+ERROR:  column "rast1" does not exist at character 50
+COMMIT
+RELEASE
+SAVEPOINT
+20|-68.584|-3.429|6.571|-10.000|3.142
+COMMIT
+RELEASE
+SAVEPOINT
+20|-68.584|-3.429|6.571|-10.000|3.142
+COMMIT
+RELEASE
+SAVEPOINT
+20|-68.584|-3.429|6.571|-10.000|3.142
+COMMIT
+RELEASE
+SAVEPOINT
+1000|-68.584|-0.069|1.046|-10.000|3.142
+COMMIT
+RELEASE
+SAVEPOINT
+1000|-68.584|-0.069|1.046|-10.000|3.142
+COMMIT
+RELEASE
+SAVEPOINT
+1000|-68.584|-0.069|1.046|-10.000|3.142
+COMMIT
+RELEASE
+SAVEPOINT
+ERROR:  Invalid sample percentage (must be between 0 and 1). Returning NULL
+COMMIT
+RELEASE
+SAVEPOINT
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+NOTICE:  Raster does not have band at index 2. Skipping raster
+0|||||
+COMMIT
+RELEASE
+COMMIT

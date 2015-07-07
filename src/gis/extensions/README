@@ -1,0 +1,64 @@
+PostGIS Extension for PostgreSQL
+================================
+
+PostgreSQL 9.1 (and up) supports PostGIS extensions. A database can easily be
+extended to use PostGIS using the syntax::
+
+  CREATE EXTENSION postgis;           -- Includes raster
+  CREATE EXTENSION postgis_topology;  -- Depends on postgis
+
+Requirements
+------------
+ * PostgreSQL 9.1 or later
+ * PostGIS must be configured and built ``--with-raster``
+
+Building and installing
+-----------------------
+First, make sure you follow the regular configuration and installation steps,
+completing these steps::
+
+  make
+  make install
+
+If you are building from the source SVN repository, it is also recommended to
+make the comments, since the function descriptions will be included::
+
+  make comments
+
+Making the comments is not necessary if you are building from the tar.gz source
+distributions, since these include pre-built ``postgis_comments.sql``,
+``topology_comments.sql``, and ``raster_comments.sql`` files.
+
+Then, to build and install the extensions::
+
+  cd extensions
+  make
+  make install
+
+The extensions are installed in `SHAREDIR/extension`. (If you're uncertain
+where `SHAREDIR` is, run ``pg_config --sharedir``.)
+
+Then in your PostgreSQL database run::
+
+  CREATE EXTENSION postgis;
+  CREATE EXTENSION postgis_topology;
+
+The dependency logic should warn if you try to install ``postgis_topology``
+without ``postgis`` or try to drop ``postgis`` without first dropping
+``postgis_topology``.
+
+You will also not be able to drop any PostGIS functions installed by the
+extension.
+
+Manual extension installation
+-----------------------------
+If you want to manually install the extensions from one server to another,
+just copy over the following files to the `SHAREDIR/extension` directory:
+
+ * PostGIS (including raster); from ``extensions/postgis``:
+    ``postgis.control``
+    ``sql/*``
+
+ * Topology extension; from ``extensions/postgis_topolology``:
+     ``postgis_topology.control``
+     ``sql/*``

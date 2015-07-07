@@ -1,0 +1,46 @@
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- 
+-- PostGIS - Spatial Types for PostgreSQL
+-- http://www.postgis.net
+--
+-- Copyright (C) 2011 Regina Obe <lr@pcorp.us>
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence. See the COPYING file.
+--
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+--{
+--  AddToSearchPath(schema_name)
+--
+-- Adds the specified schema to the database search path
+-- if it is not already in the database search path
+-- This is a helper function for upgrade/install
+-- We may want to move this function as a generic helper
+CREATE OR REPLACE FUNCTION topology.AddToSearchPath(a_schema_name varchar)
+RETURNS text
+AS
+$$
+DECLARE
+	var_result text;
+	var_cur_search_path text;
+BEGIN
+	SELECT reset_val INTO var_cur_search_path FROM pg_settings WHERE name = 'search_path';
+	IF var_cur_search_path LIKE '%' || quote_ident(a_schema_name) || '%' THEN
+		var_result := a_schema_name || ' already in database search_path';
+	ELSE
+		var_cur_search_path := var_cur_search_path || ', '
+                        || quote_ident(a_schema_name); 
+		EXECUTE 'ALTER DATABASE ' || quote_ident(current_database())
+                              || ' SET search_path = ' || var_cur_search_path;
+		var_result := a_schema_name || ' has been added to end of database search_path ';
+	END IF;
+
+	EXECUTE 'SET search_path = ' || var_cur_search_path;
+  
+  RETURN var_result;
+END
+$$
+LANGUAGE 'plpgsql' VOLATILE STRICT;
+
+--} AddToSearchPath

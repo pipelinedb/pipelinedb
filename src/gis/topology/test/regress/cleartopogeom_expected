@@ -1,0 +1,17 @@
+BEGIN
+t
+9
+22
+26
+COMMIT
+BEGIN
+1
+2
+3
+COMMIT
+relation before|5
+feature before|P1|f
+feature during|P1|t
+feature after|P1|t
+relation after|4
+Topology 'city_data' dropped

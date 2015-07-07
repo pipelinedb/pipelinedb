@@ -1,0 +1,36 @@
+env:
+  global:
+    - RUNTESTFLAGS=-v
+
+addons:
+  postgresql: "9.4"
+
+before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install -y
+      postgresql-9.4 postgresql-server-dev-9.4
+      build-essential autoconf libtool libcunit1-dev
+      xsltproc docbook-xsl docbook-mathml dblatex
+      libproj-dev libgdal-dev libgeos-dev libjson0-dev
+  - dpkg -l | grep postgresql
+  - ./autogen.sh
+
+language: c
+
+compiler: gcc
+
+script:
+  - ./configure
+  - make
+  - make check
+  - sudo make install
+  - make installcheck
+
+notifications:
+  email: false
+  irc:
+    channels:
+      - "irc.freenode.org#postgis"
+    on_success: change
+    on_failure: always
+    use_notice: false

@@ -1,0 +1,125 @@
+#!/bin/sh
+
+SUDO_OTHERUSER="su $DBAUSER"
+SUDO_SAMEUSER="$SHELL"
+
+function sudo_dba()
+{
+	if [ "$USER" != "$DBAUSER" ]; then
+		ISDBASYSUSER=`cat /etc/passwd | awk -F : '{print $1}' | grep ^$DBAUSER$`
+		if [ ! "$ISDBASYSUSER" = "$DBAUSER" ]; then
+			echo "$DBAUSER is not a system user on `hostname`."
+			echo "support for remote servers not implemented yet."
+			exit 1
+		fi
+		SUDO=$SUDO_OTHERUSER
+		if [ ! "$USER" = "root" ]; then
+			echo "you will be prompted for the system password for $DBAUSER,"
+			echo "even more than once."
+		fi
+	else
+		SUDO=$SUDO_SAMEUSER
+	fi
+}
+
+function wrong_cluster()
+{
+	if [ -n "`dpkg-query -W postgresql-common`" ]; then
+		echo "in case you meant another cluster, please specify it explicitly."
+		echo "see pwrapper(1)."
+	fi
+}
+
+#for the following functions, $USER is expected to be $DBAUSER, as set before
+function check_dba()
+{
+	DBAUSER=$1
+	if [ ! "$DBAUSER" = "$USER" ]; then
+		echo "you are not working as $DBAUSER".
+		echo "you may be not allowed to do so (maybe wrong password)."
+		exit 1
+	fi
+	ISDBAPGUSER=`psql -At -d template1 -c "select usename from pg_user where usesuper = true and usename = '$DBAUSER';" 2>&1`
+	if [ ! "$ISDBAPGUSER" = "$DBAUSER" ]; then
+		MAYPOSTGRES=`psql -l`
+		if [ -z "$MAYPOSTGRES" ]; then
+			echo "either postgresql $PGCLUSTER is not running,"
+			echo "or $DBAUSER doesn't have privileges on cluster $PGCLUSTER."
+			wrong_cluster
+			exit 1
+		fi
+		echo "dba or cluster $PGCLUSTER owner privileges are needed for this operation."
+		echo "$DBAUSER doesn't have dba or cluster $PGCLUSTER owner privileges."
+		echo "you may specify a dba that you are allowed to use his/her name (try --help)."
+		wrong_cluster
+		exit 1
+	fi
+}
+
+function template_rm()
+{
+	TDB=$1
+	db_update=`psql -d template1 -c "UPDATE pg_database SET datistemplate = FALSE WHERE datname = '$TDB';" 2>&1`
+	if [ "$db_update" = "UPDATE 1" ]; then
+		dropdb $TDB 2>&1 | cat > /dev/null
+	else
+		echo "$TDB could not be accessed. it may not exist"
+	fi
+}
+
+#environment variables used:
+#$SCRIPTS=spaces separated list of sql scripts to load into new template db
+#$GRTABLES=spaces separated list of tables to be granted access to $GRUSER
+function template_mk()
+{
+	TDB=$1
+	GRUSER=$2
+	#of course it could be better to create as the $GRUSER where system user
+	db_create=`createdb $TDB 2>&1`
+	if [ "$db_create" = "CREATE DATABASE" ]; then
+		GRID=`psql -d template1 -At -c "select usesysid from pg_user where usename='$GRUSER';"`
+	    if [ -n "$GRID" ]; then
+			psql -d $TDB -c "UPDATE pg_database SET datdba = $GRID WHERE datname = '$TDB';" 2>&1 | cat > /dev/null
+	    fi
+		if [ -x @bindir@/createlang ]; then
+			@bindir@/createlang plpgsql $TDB 2>&1 | cat > /dev/null
+		fi
+		for script in $SCRIPTS ; do
+			psql -d $TDB -f $script 2>&1 | cat > /dev/null
+		done
+		#pseudo tables for postgresql 7.2 and 7.4. feel free to add more, for other postgresql versions
+		PSEUDO_TABLES="'pg_xactlock', 'sql_features', 'sql_implementation_info', 'sql_languages', 
+					   'sql_packages', 'sql_sizing', 'sql_sizing_profiles'"
+		TABLES=`psql -d $TDB -At -c "select tablename from pg_tables where tablename not in ($PSEUDO_TABLES);"`
+	    if [ -n "$GRID" ]; then
+			for table in $TABLES ; do
+		        psql -d $TDB -c "alter table $table owner to $GRUSER;" 2>&1 | cat > /dev/null
+			done
+			psql -d $TDB -c "update pg_class set relowner=$GRID where relkind = 'S';" 2>&1 | cat > /dev/null
+	    else #maybe public, or group
+			for grtable in $GRTABLES ; do
+		        psql -d $TDB -c "grant all privileges on table $grtable to $GRUSER;" 2>&1 | cat > /dev/null
+			done
+	    fi
+		for grschema in $GRSCHEMAS ; do
+	        psql -d $TDB -c "alter schema $grschema owner to $GRUSER;" 2>&1 | cat > /dev/null
+	        psql -d $TDB -c "grant all privileges on schema $grschema to $GRUSER;" 2>&1 | cat > /dev/null
+			STABLES=`psql -d $TDB -At -c "select tablename from pg_tables where schemaname = '$grschema';"`
+		    if [ -n "$GRID" ]; then
+				for table in $STABLES ; do
+			        psql -d $TDB -c "alter table $grschema.$table owner to $GRUSER;" 2>&1 | cat > /dev/null
+				done
+	  		else #maybe public, or group
+				for grtable in $GRTABLES ; do #contain specific schema
+		      		psql -d $TDB -c "grant all privileges on table $grtable to $GRUSER;" 2>&1 | cat > /dev/null
+				done
+	  		fi
+		done
+		psql -d $TDB -c "VACUUM FULL;" 2>&1 | cat > /dev/null
+		psql -d $TDB -c "VACUUM FREEZE;" 2>&1 | cat > /dev/null
+		psql -d $TDB -c "UPDATE pg_database SET datistemplate = TRUE WHERE datname = '$TDB';" 2>&1 | cat > /dev/null
+		psql -d $TDB -c "UPDATE pg_database SET datallowconn = FALSE WHERE datname = '$TDB';" 2>&1 | cat > /dev/null
+	else
+		echo "$db_create"
+	fi
+}

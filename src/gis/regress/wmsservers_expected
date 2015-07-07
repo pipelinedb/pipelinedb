@@ -1,0 +1,17 @@
+Starting up MapServer/Geoserver tests...
+Setting up the data table...
+Running Geoserver 2.0 NG tests...
+Geoserver1|POLYGON
+Geoserver2|4326
+Geoserver3|-500|AAAAAAMAAAABAAA
+Geoserver4|1
+Geoserver5|25|AAAAAAMAAAABAAA
+Geoserver6|25|AAAAAAMAAAABAAA
+MapServer1|id
+MapServer2|-9465|AQcAAAABAAAAAQM|-9465
+MapServer2|-9460|AQcAAAABAAAAAQM|-9460
+MapServer3|id
+MapServer4|-9465|010700000001000|-9465
+MapServer4|-9460|010700000001000|-9460
+Removing the data table...
+Done.
