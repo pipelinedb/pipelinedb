@@ -21,7 +21,7 @@
 #include "nodes/params.h"
 #include "nodes/plannodes.h"
 #include "pipeline/bloom.h"
-#include "pipeline/streambuf.h"
+#include "pipeline/tuplebuf.h"
 #include "utils/reltrigger.h"
 #include "utils/sortsupport.h"
 #include "utils/tuplestore.h"
@@ -1869,7 +1869,7 @@ typedef struct WindowAggState
 typedef struct StreamScanState
 {
 	ScanState	ss;
-	StreamBufferReader *reader;
+	TupleBufferReader *reader;
 	TupleDesc desc;
 	StreamProjectionInfo *pi;
 	bool unpin;
