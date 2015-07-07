@@ -73,9 +73,6 @@ def remove_docs():
 
   for doc in docs:
     shutil.rmtree(doc)
-
-  # Weird shit in PostGIS where files in .gitignore are needed by make.
-  os.remove(os.path.join(GIS_DIR, '.gitignore'))
     
     
 def main(args):
