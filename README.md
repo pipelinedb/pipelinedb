@@ -10,13 +10,6 @@ sudo apt-get install libreadline6 libreadline6-dev check g++ flex bison python-p
 sudo pip install -r src/test/py/requirements.txt
 ```
 
-#### Sync all submodules
-This only needs to be done once for fresh checkouts.
-```
-git submodule sync
-git submodule update --init
-```
-
 #### Build the PipelineDB core (with debug symbols)
 ```
 ./configure CFLAGS="-g -O0" --enable-cassert --prefix=</path/to/dev/installation>
