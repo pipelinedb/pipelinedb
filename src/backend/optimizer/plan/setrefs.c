@@ -586,7 +586,8 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 		case T_StreamTableJoin:
 			set_join_references(root, (Join *) plan, rtoffset);
 			break;
-
+		case T_PhysicalGroupLookup:
+			break;
 		case T_Hash:
 		case T_Material:
 		case T_Sort:

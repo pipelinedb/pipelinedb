@@ -197,9 +197,9 @@
 
 # - Checkpoints -
 
-#checkpoint_segments = 3		# in logfile segments, min 1, 16MB each
+#checkpoint_segments = 100		# in logfile segments, min 1, 16MB each
 #checkpoint_timeout = 5min		# range 30s-1h
-#checkpoint_completion_target = 0.5	# checkpoint target duration, 0.0 - 1.0
+#checkpoint_completion_target = 1.0	# checkpoint target duration, 0.0 - 1.0
 #checkpoint_warning = 30s		# 0 disables
 
 # - Archiving -

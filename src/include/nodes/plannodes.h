@@ -613,6 +613,16 @@ typedef struct HashJoin
  */
 typedef struct HashJoin StreamTableJoin;
 
+/* -----------------------------------------------------------
+ * node for extracting physical tuples given a list of groups
+ * -----------------------------------------------------------
+ */
+
+typedef struct PhysicalGroupLookup
+{
+	Plan plan;
+} PhysicalGroupLookup;
+
 /* ----------------
  *		materialization node
  * ----------------

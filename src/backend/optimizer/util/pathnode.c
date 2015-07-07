@@ -2162,3 +2162,4 @@ create_stream_table_join_path(PlannerInfo *root,
 
 	return pathnode;
 }
+

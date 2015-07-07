@@ -1049,6 +1049,8 @@ typedef struct HashPath
 
 typedef HashPath StreamTableJoinPath;
 
+typedef NestPath PhysicalGroupLookupPath;
+
 /*
  * Restriction clause info.
  *

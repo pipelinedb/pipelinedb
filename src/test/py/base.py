@@ -175,6 +175,7 @@ class PipelineDB(object):
         Activate a continuous view, or all of them if no name is given
         """
         args = ''
+        kw.setdefault('batchsize', 1000)
         if kw:
             args = ','.join('%s = %s' % (k, (str(v))) for k, v in kw.iteritems())
             args = ' WITH (%s)' % args

@@ -116,158 +116,129 @@ prepare_combine_plan(PlannedStmt *plan, Tuplestorestate *store, TupleDesc *desc)
 }
 
 /*
- * get_retrieval_where_clause
+ * get_groups
  *
  * Given a tuplestore containing incoming tuples to combine with
- * on-disk tuples, generates a WHERE clause that can be used to
- * retrieve all corresponding on-disk tuples with a single query.
+ * on-disk tuples, generates a VALUES list that can be joined
+ * against with on-disk tuples.
  */
 static Node*
-get_retrieval_where_clause(Tuplestorestate *incoming, TupleDesc desc,
+get_groups(Tuplestorestate *incoming, TupleDesc desc,
 		AttrNumber *merge_attrs, int num_merge_attrs, ParseState *ps)
 {
-	List *name = list_make1(makeString("="));
 	Node *where;
-	Expr *dnf = NULL;
-	List *args = NIL;
 	TupleTableSlot *slot = MakeSingleTupleTableSlot(desc);
+	List *values = NIL;
+	SubLink *sub = makeNode(SubLink);
+	SelectStmt *sel = makeNode(SelectStmt);
+	RowExpr *row = makeNode(RowExpr);
+	int i;
+
+	/*
+	 * Generate a VALUES list of the incoming groups
+	 */
+	sel->valuesLists = NIL;
 
 	foreach_tuple(slot, incoming)
 	{
-		List *cnfExprs = NIL;
-		Node *arg;
-		int i;
+		List *tup = NIL;
 
 		for (i = 0; i < num_merge_attrs; i++)
 		{
 			AttrNumber merge_attr = merge_attrs[i];
 			Form_pg_attribute attr = desc->attrs[merge_attr - 1];
-			ColumnRef *cref;
 			Type typeinfo;
-			int length;
-			Expr *expr;
 			bool isnull;
 			Datum d;
 			Const *c;
-			NullTest *null = makeNode(NullTest);
-
-			null->argisrow = false;
-			null->nulltesttype = IS_NULL;
+			int length;
 
 			typeinfo = typeidType(attr->atttypid);
 			length = typeLen(typeinfo);
 			ReleaseSysCache((HeapTuple) typeinfo);
 
 			d = slot_getattr(slot, merge_attr, &isnull);
+			c = makeConst(attr->atttypid, attr->atttypmod,
+					attr->attcollation, length, d, isnull, attr->attbyval);
 
-			cref = makeNode(ColumnRef);
-			cref->fields = list_make1(makeString(NameStr(attr->attname)));
-			cref->location = -1;
-
-			if (isnull)
-			{
-				null->arg = (Expr *) cref;
-				expr = (Expr *) copyObject(null);
-			}
-			else
-			{
-				c = makeConst(attr->atttypid, attr->atttypmod,
-						attr->attcollation, length, d, isnull, attr->attbyval);
-
-				expr = (Expr *) makeA_Expr(AEXPR_OP, name, (Node *) cref, (Node *) c, -1);
-			}
-			/*
-			 * If we're grouping on multiple columns, the WHERE predicate must
-			 * include a conjunction of all GROUP BY column values for each incoming
-			 * tuple. For example, consider the query:
-			 *
-			 *   SELECT col0, col1, COUNT(*) FROM stream GROUP BY col0, col1
-			 *
-			 * If we have incoming tuples,
-			 *
-			 *   (0, 1, 10), (4, 3, 200)
-			 *
-			 * then we need to look for any tuples on disk for which the following
-			 * predicate evaluates to true:
-			 *
-			 *   (col0 = 0 AND col1 = 1) OR (col0 = 4 AND col1 = 3)
-			 *
-			 * Her we're creating the conjunction clauses, and we pass them all in
-			 * as a list of arguments to an OR expression at the end.
-			 */
-			cnfExprs = lappend(cnfExprs, transformExpr(ps, (Node *) expr, AEXPR_OP));
+			tup = lappend(tup, c);
 		}
 
-		if (list_length(cnfExprs) == 1)
-			arg = (Node *) linitial(cnfExprs);
-		else
-			arg = transformExpr(ps, (Node *) makeBoolExpr(AND_EXPR, cnfExprs, -1), AEXPR_OP);
-
-		args = lappend(args, arg);
+		sel->valuesLists = lappend(sel->valuesLists, tup);
 	}
 
-	/* this is one big disjunction of conjunctions that match GROUP BY criteria */
-	dnf = makeBoolExpr(OR_EXPR, args, -1);
-	assign_expr_collations(ps, (Node *) dnf);
+	/*
+	 * Now create a subquery to join the matrel against, which
+	 * will result in a retrieval of existing groups to update.
+	 */
+	row->args = NIL;
 
-	where = transformExpr(ps, (Node *) dnf, EXPR_KIND_WHERE);
+	for (i = 0; i < num_merge_attrs; i++)
+	{
+		AttrNumber merge_attr = merge_attrs[i];
+		Form_pg_attribute attr = desc->attrs[merge_attr - 1];
+		ColumnRef *cref = makeNode(ColumnRef);
+
+		cref->fields = list_make1(makeString(NameStr(attr->attname)));
+		cref->location = -1;
+		row->args = lappend(row->args, cref);
+	}
+
+	sub->subLinkType = ANY_SUBLINK;
+	sub->testexpr = (Node *) row;
+	sub->operName = list_make1(makeString("="));
+	sub->subselect = (Node *) sel;
+
+	assign_expr_collations(ps, (Node *) values);
+	where = transformExpr(ps, (Node *) sub, EXPR_KIND_WHERE);
 
 	return (Node *) where;
 }
 
 /*
- * get_tuples_to_combine_with
+ * select_existing_groups
  *
- * Gets the plan for retrieving all of the existing tuples that are going
- * to be combined with the incoming tuples
+ * Adds all existing groups in the matrel to the combine input set
  */
 static void
-get_tuples_to_combine_with(char *cvname, TupleDesc desc,
+select_existing_groups(char *cvname, TupleDesc desc,
 		Tuplestorestate *incoming_merges, AttrNumber *merge_attrs,
 		int num_merge_attrs, TupleHashTable merge_targets)
 {
-	Node *raw_parse_tree;
-	List *parsetree_list;
 	List *query_list;
 	PlannedStmt *plan;
 	Query *query;
-	SelectStmt *stmt;
 	Portal portal;
 	ParseState *ps;
 	DestReceiver *dest;
-	char base_select[14 + strlen(cvname) + 1];
 	HASH_SEQ_STATUS status;
 	HeapTupleEntry entry;
 	TupleTableSlot *slot = MakeSingleTupleTableSlot(desc);
 	List *tups = NIL;
 	ListCell *lc;
+	SelectStmt *sel = makeNode(SelectStmt);
+	ResTarget *res = makeNode(ResTarget);
+	A_Star *star = makeNode(A_Star);
+	ColumnRef *cref = makeNode(ColumnRef);
 
-	sprintf(base_select, "SELECT * FROM %s", cvname);
+	cref->fields = list_make1(star);
+	res->val = (Node *) cref;
+	sel->targetList = list_make1(res);
+	sel->fromClause = list_make1(makeRangeVar(NULL, cvname, -1));
 
+	/* populate the ParseState's p_varnamespace member */
 	ps = make_parsestate(NULL);
+	transformFromClause(ps, sel->fromClause);
 
-	dest = CreateDestReceiver(DestTupleTable);
-
-	parsetree_list = pg_parse_query(base_select);
-	Assert(parsetree_list->length == 1);
-
-	/*
-	 * We need to do this to populate the ParseState's p_varnamespace member
-	 */
-	stmt = (SelectStmt *) linitial(parsetree_list);
-	transformFromClause(ps, stmt->fromClause);
-
-	raw_parse_tree = (Node *) linitial(parsetree_list);
-	query_list = pg_analyze_and_rewrite(raw_parse_tree, base_select, NULL, 0);
-
-	Assert(query_list->length == 1);
+	query_list = pg_analyze_and_rewrite((Node *) sel, NULL, NULL, 0);
 	query = (Query *) linitial(query_list);
 
 	if (num_merge_attrs > 0)
 	{
-		Node *where = get_retrieval_where_clause(incoming_merges, desc, merge_attrs,
+		Node *groups = get_groups(incoming_merges, desc, merge_attrs,
 				num_merge_attrs, ps);
-		query->jointree = makeFromExpr(query->jointree->fromlist, where);
+		query->jointree = makeFromExpr(query->jointree->fromlist, groups);
+		query->hasSubLinks = true;
 	}
 
 	plan = pg_plan_query(query, 0, NULL);
@@ -276,7 +247,7 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
 	 * Now run the query that retrieves existing tuples to merge this merge request with.
 	 * This query outputs to the tuplestore currently holding the incoming merge tuples.
 	 */
-	portal = CreatePortal("__merge_retrieval__", true, true);
+	portal = CreatePortal("", true, true);
 	portal->visible = false;
 
 	PortalDefineQuery(portal,
@@ -286,6 +257,7 @@ get_tuples_to_combine_with(char *cvname, TupleDesc desc,
 					  list_make1(plan),
 					  NULL);
 
+	dest = CreateDestReceiver(DestTupleTable);
 	SetTupleTableDestReceiverParams(dest, merge_targets, CurrentMemoryContext, true);
 
 	PortalStart(portal, NULL, 0, GetActiveSnapshot());
@@ -409,10 +381,10 @@ combine(PlannedStmt *plan, TupleDesc cvdesc,
 		execTuplesHashPrepare(num_merge_attrs, merge_attr_ops, &eq_funcs, &hash_funcs);
 		merge_targets = BuildTupleHashTable(num_merge_attrs, merge_attrs, eq_funcs, hash_funcs, 1000,
 				sizeof(HeapTupleEntryData), CurrentMemoryContext, tmpctx);
-		get_tuples_to_combine_with(matrelname, cvdesc, store, merge_attrs, num_merge_attrs, merge_targets);
+		select_existing_groups(matrelname, cvdesc, store, merge_attrs, num_merge_attrs, merge_targets);
 	}
 
-	portal = CreatePortal("__merge__", true, true);
+	portal = CreatePortal("", true, true);
 	portal->visible = false;
 
 	PortalDefineQuery(portal,
