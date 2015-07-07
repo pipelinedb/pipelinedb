@@ -17,6 +17,7 @@
 #include "catalog/indexing.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
+#include "catalog/pipeline_tstate_fn.h"
 #include "libpq/libpq.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -196,6 +197,9 @@ RegisterContinuousView(RangeVar *name, const char *query_string, RangeVar* matre
 	simple_heap_insert(pipeline_query, tup);
 	CatalogUpdateIndexes(pipeline_query, tup);
 	CommandCounterIncrement();
+
+	/* Create transition state entry */
+	CreateTStateEntry(name->relname);
 
 	heap_freetuple(tup);
 	heap_close(pipeline_query, NoLock);
@@ -449,13 +453,11 @@ char *
 GetQueryStringOrNull(const char *cvname, bool select_only)
 {
 	HeapTuple tuple;
-	NameData name;
 	Datum tmp;
 	bool isnull;
 	char *result;
 
-	namestrcpy(&name, cvname);
-	tuple = SearchSysCache1(PIPELINEQUERYNAME, NameGetDatum(&name));
+	tuple = SearchSysCache1(PIPELINEQUERYNAME, CStringGetDatum(cvname));
 
 	if (!HeapTupleIsValid(tuple))
 		return NULL;

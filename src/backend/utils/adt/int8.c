@@ -20,7 +20,6 @@
 
 #include "funcapi.h"
 #include "libpq/pqformat.h"
-#include "pipeline/hll.h"
 #include "utils/datum.h"
 #include "utils/int8.h"
 #include "utils/builtins.h"

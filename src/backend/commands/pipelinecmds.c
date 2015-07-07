@@ -19,11 +19,13 @@
 #include "commands/pipelinecmds.h"
 #include "commands/tablecmds.h"
 #include "commands/view.h"
+#include "catalog/indexing.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_class.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "catalog/pipeline_tstate_fn.h"
 #include "catalog/toasting.h"
 #include "executor/execdesc.h"
 #include "executor/tstoreReceiver.h"
@@ -180,6 +182,7 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, SelectStmt *
 	index->concurrent = false;
 
 	DefineIndex(matreloid, index, InvalidOid, false, false, false, false);
+	CommandCounterIncrement();
 }
 
 /*
@@ -325,6 +328,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	view_stmt->query = (Node *) viewselect;
 
 	DefineView(view_stmt, querystring);
+	CommandCounterIncrement();
 	allowSystemTableMods = saveAllowSystemTableMods;
 
 	/*
@@ -398,6 +402,9 @@ ExecDropContinuousViewStmt(DropStmt *stmt)
 		 * see the changes already made.
 		 */
 		CommandCounterIncrement();
+
+		/* Remove transition state entry */
+		RemoveTStateEntry(rv->relname);
 	}
 
 	/*
@@ -677,6 +684,10 @@ void
 ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 {
 	ListCell *lc;
+	Relation pipeline_query;
+	List *views = NIL;
+
+	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
 
 	/* Ensure that all *relations* are CQs. */
 	foreach(lc, stmt->relations)
@@ -685,10 +696,17 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 		if (!IsAContinuousView(rv))
 			elog(ERROR, "continuous view \"%s\" does not exist", rv->relname);
 
+		views = lappend(views, rv->relname);
 		rv->relname = GetMatRelationName(rv->relname);
 	}
+
+	/* Reset all CQ level transition state */
+	foreach(lc, views)
+		ResetTStateEntry((char *) lfirst(lc));
 
 	/* Call TRUNCATE on the backing view table(s). */
 	stmt->objType = OBJECT_TABLE;
 	ExecuteTruncate(stmt);
+
+	heap_close(pipeline_query, NoLock);
 }

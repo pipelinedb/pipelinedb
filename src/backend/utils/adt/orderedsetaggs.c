@@ -26,7 +26,6 @@
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/tlist.h"
-#include "pipeline/hll.h"
 #include "pipeline/tdigest.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
@@ -1819,7 +1818,6 @@ cq_percentile_cont_float8_startup(PG_FUNCTION_ARGS, bool is_multiple)
 				&aggstate->num_percentiles);
 
 		aggstate->percentiles = (float8 *) palloc(sizeof(float8) * aggstate->num_percentiles);
-		aggstate->nulls = (bool *) palloc(sizeof(bool) * aggstate->num_percentiles);
 
 		for (i = 0; i < aggstate->num_percentiles; i++)
 			aggstate->percentiles[i] = DatumGetFloat8(percentiles_datum[i]);

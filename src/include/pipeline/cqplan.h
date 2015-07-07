@@ -14,7 +14,11 @@
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
 
-void SetCQPlanRefs(PlannedStmt *plan, char *matrelname);
-RelOptInfo *GetCombinerJoinRel(PlannerInfo *root, int levels_needed, List *initial_rels);
+#define IS_STREAM_RTE(relid, root) ((planner_rt_fetch(relid, root)) && \
+	((planner_rt_fetch(relid, root))->streamdesc))
+#define IS_STREAM_TREE(plan) (IsA((plan), StreamScan) || \
+		IsA((plan), StreamTableJoin))
+
+PlannedStmt *GetCQPlan(char *cvname, const char *sql, ContinuousViewState *state, char *matrelname);
 
 #endif

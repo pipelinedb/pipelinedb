@@ -17,6 +17,7 @@ SUBDIRS = \
 	common \
 	port \
 	timezone \
+	hll \
 	backend \
 	backend/utils/mb/conversion_procs \
 	backend/snowball \
@@ -25,7 +26,6 @@ SUBDIRS = \
 	backend/replication/libpqwalreceiver \
 	bin \
 	pl \
-	hll \
 	makefiles \
 	test/regress \
 	test/unit

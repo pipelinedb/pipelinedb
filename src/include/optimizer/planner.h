@@ -18,9 +18,7 @@
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
 #include "parser/parsetree.h"
-
-#define IS_STREAM_RTE(relid, root) ((planner_rt_fetch(relid, root)) && \
-	((planner_rt_fetch(relid, root))->streamdesc))
+#include "pipeline/cqplan.h"
 
 /* Hook for plugins to get control in planner() */
 typedef PlannedStmt *(*planner_hook_type) (Query *parse,
