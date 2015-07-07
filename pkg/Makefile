@@ -24,4 +24,4 @@ clean:
 	$(MAKE) -C rpm clean
 	$(MAKE) -C osx clean
 
-.PHONY: deb rpm
+.PHONY: deb rpm osx
