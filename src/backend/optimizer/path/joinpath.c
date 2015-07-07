@@ -18,10 +18,13 @@
 #include <math.h>
 
 #include "executor/executor.h"
+#include "miscadmin.h"
+#include "nodes/makefuncs.h"
 #include "optimizer/cost.h"
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
 #include "optimizer/planner.h"
+#include "utils/rel.h"
 
 
 #define PATH_PARAM_BY_REL(path, rel)  \
@@ -54,6 +57,83 @@ static List *select_mergejoin_clauses(PlannerInfo *root,
 static inline bool
 clause_sides_match_join(RestrictInfo *rinfo, RelOptInfo *outerrel,
 						RelOptInfo *innerrel);
+
+static void
+try_physical_group_lookup_path(PlannerInfo *root,
+				  RelOptInfo *joinrel,
+				  JoinType jointype,
+				  SpecialJoinInfo *sjinfo,
+				  SemiAntiJoinFactors *semifactors,
+				  Relids param_source_rels,
+				  Relids extra_lateral_rels,
+				  Path *outer_path,
+				  Path *inner_path,
+				  List *restrict_clauses,
+				  List *pathkeys);
+
+static void
+physical_group_lookup(PlannerInfo *root,
+					RelOptInfo *joinrel,
+					RelOptInfo *outerrel,
+					RelOptInfo *innerrel,
+					Relids param_source_rels,
+					Relids extra_lateral_rels,
+					JoinType jointype,
+					SpecialJoinInfo *sjinfo,
+					List *restrictlist)
+{
+	SemiAntiJoinFactors semifactors;
+	List *merge_pathkeys;
+	ListCell   *outerlc;
+	RangeTblEntry *inner = planner_rt_fetch(innerrel->relid, root);
+
+	/* only consider plans for which the VALUES scan is the outer */
+	if (inner->rtekind == RTE_VALUES)
+		return;
+
+	merge_pathkeys = build_join_pathkeys(root, joinrel, jointype,
+			outerrel->cheapest_total_path->pathkeys);
+
+	foreach (outerlc, outerrel->pathlist)
+	{
+		ListCell *innerlc;
+		Path *outerpath = (Path *) lfirst(outerlc);
+
+		foreach(innerlc, innerrel->pathlist)
+		{
+			Path *innerpath = (Path *) lfirst(innerlc);
+
+			try_physical_group_lookup_path(root,
+								joinrel,
+								jointype,
+								sjinfo,
+								&semifactors,
+								param_source_rels,
+								extra_lateral_rels,
+								outerpath,
+								innerpath,
+								restrictlist,
+								merge_pathkeys);
+		}
+
+		foreach(innerlc, innerrel->cheapest_parameterized_paths)
+		{
+			Path *innerpath = (Path *) lfirst(innerlc);
+
+			try_physical_group_lookup_path(root,
+								joinrel,
+								jointype,
+								sjinfo,
+								&semifactors,
+								param_source_rels,
+								extra_lateral_rels,
+								outerpath,
+								innerpath,
+								restrictlist,
+								merge_pathkeys);
+		}
+	}
+}
 
 /*
  * add_paths_to_joinrel
@@ -93,6 +173,9 @@ add_paths_to_joinrel(PlannerInfo *root,
 	Relids		param_source_rels = NULL;
 	Relids		extra_lateral_rels = NULL;
 	ListCell   *lc;
+	RangeTblEntry *outer = planner_rt_fetch(outerrel->relid, root);
+	RangeTblEntry *inner = planner_rt_fetch(innerrel->relid, root);
+	bool group_lookup = false;
 
 	/*
 	 * If this is a stream-table join, then there is only one
@@ -257,6 +340,42 @@ add_paths_to_joinrel(PlannerInfo *root,
 		extra_lateral_rels = NULL;
 
 	/*
+	 * If 1) we're a combiner, 2) the outer is a matrel, and 3) we're joining on
+	 * a VALUES list, then we're doing a combiner lookup of groups to update and
+	 * we need to return updatable physical tuples. We have a specific plan for
+	 * this so that we can predictably control performance and take advantage of
+	 * certain assumptions we can make about matrels and their indices.
+	 */
+	if (IsCombiner && (outer && inner) &&
+			((outer->rtekind == RTE_VALUES && inner->rtekind == RTE_RELATION) ||
+			(inner->rtekind == RTE_VALUES && outer->rtekind == RTE_RELATION)))
+	{
+		RangeVar *matrelrv;
+		Relation rel;
+		Oid relid = outer->rtekind == RTE_RELATION ? outer->relid : inner->relid;
+
+		rel = heap_open(relid, NoLock);
+		matrelrv = makeRangeVar(NULL, RelationGetRelationName(rel), -1);
+		relation_close(rel, NoLock);
+
+		if (IsAMatRel(matrelrv, NULL))
+			group_lookup = true;
+	}
+
+	/*
+	 * If we're doing a lookup of physical matrel tuples, there's only
+	 * one plan to consider.
+	 */
+	if (group_lookup)
+	{
+		physical_group_lookup(root, joinrel, outerrel, innerrel,
+							param_source_rels, extra_lateral_rels,
+							jointype, sjinfo, restrictlist);
+
+		return;
+	}
+
+	/*
 	 * 1. Consider mergejoin paths where both relations must be explicitly
 	 * sorted.  Skip this if we can't mergejoin.
 	 */
@@ -387,6 +506,37 @@ try_nestloop_path(PlannerInfo *root,
 		/* Waste no memory when we reject a path here */
 		bms_free(required_outer);
 	}
+}
+
+/*
+ * try_physical_group_lookup_path
+ *	  Consider a nestloop join path that returns physical tuples of the inner plan.
+ */
+static void
+try_physical_group_lookup_path(PlannerInfo *root,
+				  RelOptInfo *joinrel,
+				  JoinType jointype,
+				  SpecialJoinInfo *sjinfo,
+				  SemiAntiJoinFactors *semifactors,
+				  Relids param_source_rels,
+				  Relids extra_lateral_rels,
+				  Path *outer_path,
+				  Path *inner_path,
+				  List *restrict_clauses,
+				  List *pathkeys)
+{
+	Path *path;
+
+	try_nestloop_path(root, joinrel, jointype, sjinfo, semifactors,
+					  param_source_rels, extra_lateral_rels, outer_path,
+					  inner_path, restrict_clauses, pathkeys);
+
+	if (list_length(joinrel->pathlist) != 1)
+		elog(ERROR, "could not create physical group lookup path");
+
+	path = (Path *) linitial(joinrel->pathlist);
+	path->type = T_PhysicalGroupLookupPath;
+	path->pathtype = T_PhysicalGroupLookup;
 }
 
 /*
