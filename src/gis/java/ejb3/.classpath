@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="con" path="org.jboss.ide.eclipse.jdt.aop.core.classpath.AOP_15_CONTAINER"/>
+	<classpathentry kind="con" path="org.jboss.ide.eclipse.jdt.ejb3.wizards.core.classpath.EJB3_CONTAINER/JBoss-4.0.4.GA"/>
+	<classpathentry kind="lib" path="C:/jboss-4.0.4.GA/server/default/lib/postgis_1.1.0.jar"/>
+	<classpathentry kind="lib" path="C:/jboss-4.0.4.GA/client/jbossws-client.jar"/>
+	<classpathentry kind="lib" path="C:/jboss-4.0.4.GA/client/jboss-jaxrpc.jar"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>

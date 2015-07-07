@@ -1,0 +1,99 @@
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- 
+-- PostGIS - Spatial Types for PostgreSQL
+-- http://postgis.net
+--
+-- Copyright (C) 2011 Sandro Santilli <strk@keybit.net>
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence. See the COPYING file.
+--
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+--{
+-- CopyTopology(name_source, name_target)
+--
+-- Makes a copy of a topology (primitives + topogeometry collections) .
+-- Returns the new topology id.
+--
+CREATE OR REPLACE FUNCTION topology.CopyTopology(atopology varchar, newtopo varchar)
+RETURNS int
+AS
+$$
+DECLARE
+  rec RECORD;
+  rec2 RECORD;
+  oldtopo_id integer;
+  newtopo_id integer;
+  n int4;
+  ret text;
+BEGIN
+
+  SELECT * FROM topology.topology where name = atopology
+  INTO strict rec;
+  oldtopo_id = rec.id;
+  -- TODO: more gracefully handle unexistent topology
+
+  SELECT topology.CreateTopology(newtopo, rec.SRID, rec.precision, rec.hasZ)
+  INTO strict newtopo_id;
+
+  -- Copy faces
+  EXECUTE 'INSERT INTO ' || quote_ident(newtopo)
+    || '.face SELECT * FROM ' || quote_ident(atopology)
+    || '.face WHERE face_id != 0';
+  -- Update faces sequence
+  EXECUTE 'SELECT setval(' || quote_literal(
+      quote_ident(newtopo) || '.face_face_id_seq'
+    ) || ', (SELECT last_value FROM ' 
+    || quote_ident(atopology) || '.face_face_id_seq))';
+
+  -- Copy nodes
+  EXECUTE 'INSERT INTO ' || quote_ident(newtopo)
+    || '.node SELECT * FROM ' || quote_ident(atopology)
+    || '.node';
+  -- Update node sequence
+  EXECUTE 'SELECT setval(' || quote_literal(
+      quote_ident(newtopo) || '.node_node_id_seq'
+    ) || ', (SELECT last_value FROM ' 
+    || quote_ident(atopology) || '.node_node_id_seq))';
+
+  -- Copy edges
+  EXECUTE 'INSERT INTO ' || quote_ident(newtopo)
+    || '.edge_data SELECT * FROM ' || quote_ident(atopology)
+    || '.edge_data';
+  -- Update edge sequence
+  EXECUTE 'SELECT setval(' || quote_literal(
+      quote_ident(newtopo) || '.edge_data_edge_id_seq'
+    ) || ', (SELECT last_value FROM ' 
+    || quote_ident(atopology) || '.edge_data_edge_id_seq))';
+
+  -- Copy layers and their TopoGeometry sequences 
+  FOR rec IN SELECT * FROM topology.layer WHERE topology_id = oldtopo_id
+  LOOP
+    INSERT INTO topology.layer (topology_id, layer_id, feature_type,
+      level, child_id, schema_name, table_name, feature_column) 
+      VALUES (newtopo_id, rec.layer_id, rec.feature_type,
+              rec.level, rec.child_id, newtopo,
+              'LAYER' ||  rec.layer_id, '');
+    -- Create layer's TopoGeometry sequences
+    EXECUTE 'SELECT last_value FROM ' 
+      || quote_ident(atopology) || '.topogeo_s_' || rec.layer_id 
+      INTO STRICT n;
+    EXECUTE 'CREATE SEQUENCE ' || quote_ident(newtopo)
+      || '.topogeo_s_' || rec.layer_id;
+    EXECUTE 'SELECT setval(' || quote_literal(
+      quote_ident(newtopo) || '.topogeo_s_' || rec.layer_id
+      ) || ', ' || n || ')';
+  END LOOP;
+
+  -- Copy TopoGeometry definitions
+  EXECUTE 'INSERT INTO ' || quote_ident(newtopo)
+    || '.relation SELECT * FROM ' || quote_ident(atopology)
+    || '.relation';
+
+  RETURN newtopo_id;
+END
+$$
+LANGUAGE 'plpgsql' VOLATILE STRICT;
+
+--} TopologySummary

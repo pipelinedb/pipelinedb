@@ -1,0 +1,32 @@
+t
+ERROR:  No layer with id 1 is registered with topology MiX
+l1|1
+ERROR:  A Layer of type 1 cannot contain a TopoGeometry of type 2
+ERROR:  A Layer of type 1 cannot contain a TopoGeometry of type 3
+ERROR:  A Layer of type 1 cannot contain a TopoGeometry of type 4
+ERROR:  Node 78 does not exist in topology MiX
+n1|1
+1|2|1
+ERROR:  Invalid TopoGeometry type 5 (must be in the range 1..4)
+ERROR:  Invalid TopoGeometry type 0 (must be in the range 1..4)
+l2|2
+n2|2
+e1|1
+ERROR:  A TopoGeometry of type 2 cannot contain topology elements of type 1
+L1|MULTILINESTRING((0 0,10 0))
+l3|3
+e2|2
+f1|1
+ERROR:  A Layer of type 3 cannot contain a TopoGeometry of type 2
+ERROR:  A TopoGeometry of type 3 cannot contain topology elements of type 2
+A1|MULTIPOLYGON(((10 0,0 0,5 5,10 0)))
+l4|4
+MP|MULTIPOINT(0 0)
+ML|MULTILINESTRING((0 0,10 0))
+MA|MULTIPOLYGON(((10 0,0 0,5 5,10 0)))
+MM|GEOMETRYCOLLECTION(POLYGON((10 0,0 0,5 5,10 0)),LINESTRING(0 0,10 0),POINT(0 0))
+POINT EMPTY|MULTIPOINT EMPTY
+LINESTRING EMPTY|MULTILINESTRING EMPTY
+POLYGON EMPTY|MULTIPOLYGON EMPTY
+GEOMETRYCOLLECTION EMPTY|GEOMETRYCOLLECTION EMPTY
+Topology 'MiX' dropped

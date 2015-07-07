@@ -1,0 +1,71 @@
+#!/usr/bin/perl -w
+use strict;
+
+sub Usage {
+    die "Usage: pagc-data-psql [lex|gaz|rules] file\n";
+}
+
+my $mode = shift @ARGV || Usage();
+my $file = shift @ARGV || Usage();
+my $x;
+
+open(IN, $file) || die "Failed to open '$file' : $!\n";
+
+if ($mode eq 'lex') {
+    print <<EOF;
+drop table if exists lex cascade;
+create table lex (
+    id serial not null primary key,
+    seq integer,
+    word text,
+    stdword text,
+    token integer
+);
+copy lex (seq, word, token, stdword) from stdin;
+EOF
+
+    while ($x = <IN>) {
+        $x =~ s/["\r\n]//g;
+        $x =~ s/,/\t/g;
+        print "$x\n";
+    }
+    print "\\.\n";
+}
+elsif ($mode eq 'gaz') {
+    print <<EOF;
+drop table if exists gaz cascade;
+create table gaz (
+    id serial not null primary key,
+    seq integer,
+    word text,
+    stdword text,
+    token integer
+);
+copy gaz (seq, word, token, stdword) from stdin;
+EOF
+
+    while ($x = <IN>) {
+        $x =~ s/["\r\n]//g;
+        $x =~ s/,/\t/g;
+        print "$x\n";
+    }
+    print "\\.\n";
+}
+elsif ($mode eq 'rules') {
+    print <<EOF;
+drop table if exists rules cascade;
+create table rules (
+    id serial not null primary key,
+    rule text
+);
+copy rules (rule) from stdin;
+EOF
+    while ($x = <IN>) {
+        $x =~ s/["\r\n]//g;
+        print "$x\n";
+    }
+    print "\\.\n";
+}
+else {
+    Usage();
+}

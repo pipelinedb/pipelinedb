@@ -1,0 +1,89 @@
+buffer|POLYGON((1 0,0.707107 -0.707107,0 -1,-0.707107 -0.707107,-1 0,-0.707107 0.707107,0 1,0.707107 0.707107,1 0))
+geomunion|MULTIPOINT(0 0,1 1)
+convexhull|POLYGON((0 0,0 10,10 10,10 0,0 0))
+relate|F0FFFF102
+relate|t
+relate|f
+disjoint|f
+touches|t
+intersects|t
+crosses|f
+crosses|t
+within100|t
+within101|f
+within102|f
+within103|f
+within104|f
+within105|t
+within106|t
+disjoint100|f
+disjoint101|f
+disjoint102|t
+disjoint103|f
+disjoint104|t
+disjoint105|f
+disjoint106|t
+disjoint150|f
+disjoint151|f
+disjoint152|t
+disjoint153|f
+disjoint154|t
+disjoint155|f
+disjoint156|t
+intersects100|t
+intersects101|t
+intersects102|f
+intersects103|t
+intersects104|f
+intersects105|t
+intersects106|f
+intersects150|t
+intersects151|t
+intersects152|f
+intersects153|t
+intersects154|f
+intersects155|t
+intersects156|f
+contains100|t
+contains101|f
+contains102|f
+contains103|f
+contains104|f
+contains105|t
+contains106|t
+within119|f
+within120|f
+contains110|t
+contains111|f
+within130|t
+within131|f
+overlaps|f
+isvalid|t
+NOTICE:  Self-intersection
+isvalid|f
+isvalid|t
+intersection|POINT(-0 -0)
+difference|MULTILINESTRING((0 10,0 2),(0 -2,0 -10))
+boundary|MULTILINESTRING((0 0,0 10,10 10,10 0,0 0),(2 2,2 4,4 4,4 2,2 2))
+symdifference|GEOMETRYCOLLECTION(LINESTRING(2 2,4 4),LINESTRING(10 10,20 20),POLYGON((0 0,0 10,10 10,10 0,0 0),(4 4,2 4,2 2,4 2,4 4)))
+issimple|t
+equals|t
+pointonsurface|t
+centroid|POINT(5.08333333333333 5.08333333333333)
+exteriorring|LINESTRING(52 18,66 23,73 9,48 6,52 18)
+polygonize_garray|GEOMETRYCOLLECTION EMPTY
+polygonize_garray|POLYGON((10 0,0 0,0 10,10 10,10 0))
+linemerge149|LINESTRING(-5 -5,0 0,1 1,4 4)
+intersects|f
+ST_GeometryN|LINESTRING(0 0,1 1)
+ST_NumGeometries|1
+ST_Union1|POLYGON((0 0,0 1,0.5 1,0.5 1.5,1.5 1.5,1.5 0.5,1 0.5,1 0,0 0))
+ST_StartPoint1|POINT(0 0)
+ST_EndPoint1|POINT(2 2)
+ST_PointN1|POINT(1 1)
+ST_PointN2|POINT(2 2)
+ST_PointN3|
+ST_PointN4|
+ST_PointN5|POINT(0 0)
+ST_PointN6|
+ST_Buffer(empty)|POLYGON EMPTY

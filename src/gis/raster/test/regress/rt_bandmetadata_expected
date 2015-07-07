@@ -1,0 +1,15 @@
+8BUI||f|
+8BUI|1.000|f|
+8BUI|2.000|f|
+8BUI|3.000|f|
+8BUI|4.000|f|
+NOTICE:  Invalid band index: 6. Indices must be 1-based. Returning NULL
+|||
+1|1.000|f|
+2|2.000|f|
+5|5.000|f|
+1|1.000|f|
+2|2.000|f|
+3|3.000|f|
+4|4.000|f|
+5|5.000|f|

@@ -1,0 +1,75 @@
+These regress/sfcgal directory contains several tests closely based on 
+current regress one. 
+
+Usually they should behave really the same (i.e with both backends)
+however some slightly differences beetween GEOS and SFCGAL backends 
+are listed below:
+
+
+==
+sfcgal/ticket
+==
+
+2.OBT: #11|1.31708901596544e-9
+2.EXP: #11|0
+
+=> Numerical precision issue
+   (We slightly modify the unit test to use SQL round)
+
+
+18.OBT: ERROR:  LWGEOM2SFCGAL: Unknown geometry type !
+18.EXP: #85|0
+
+=> Curves are not (yet) handled by SFCGAL
+   (To be done in future SFCGAL release)
+
+
+
+132.OBT: #834|GEOMETRYCOLLECTION(POINT(0 0),LINESTRING(10 0,10 10))
+132.EXP: #834|GEOMETRYCOLLECTION(POINT(0 0 5),LINESTRING(10 10 5,10 0 5))
+
+=> For SFCGAL a 2D Intersection even with both 2D and 3D input data
+   is assumed as 2D and so set output Z to 0
+
+
+
+228.OBT: #1957|inf
+228.EXP: #1957|1
+
+=> Initial line is OGC invalid (single point),
+   so SFCGAL return infinite distance,
+   which .. also make sense
+
+
+
+==
+sfcgal/regress_ogc
+==
+
+65.OBT: intersection|POINT(-0 -0)
+65.EXP: intersection|POINT(0 0)
+
+=> No comment, except that the test itself could be sligthly rewrited
+
+
+
+==
+sfcgal/empty
+==
+
+29.OBT: ST_Intersection(geometry, empty) == geometry|010700000000000000
+29.EXP: ST_Intersection(geometry, empty) == geometry|010300000000000000
+
+30.OBT: ST_Intersection(empty, empty) == empty|010700000000000000
+30.EXP: ST_Intersection(empty, empty) == empty|010300000000000000
+
+=> SFCGAL don't consider keeping initial geometry type when intersection is null
+   so a GEOMETRYCOLLECTION(EMPTY) is returned (for both tests)
+   (maybe could be improved in SFCGAL)
+
+
+33.OBT: ST_Distance(geometry, empty) == NULL|inf
+33.EXP: ST_Distance(geometry, empty) == NULL|
+
+=> SFCGAL returns an infinite distance to an empty geometry instead of null,
+   which .. also make sense

@@ -1,0 +1,63 @@
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- 
+-- PostGIS - Spatial Types for PostgreSQL
+-- http://postgis.net
+--
+-- Copyright (C) 2012 Sandro Santilli <strk@keybit.net>
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence. See the COPYING file.
+--
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+--{
+--
+-- Return a list of edges (sequence, id) incident to the given node.
+--
+-- Edge ids are signed, they are negative if the node is their endpoint.
+-- Sequence numbers start with 1 ordering edges by azimuth (clockwise).
+--
+-- GetNodeEdges(atopology, anode)
+--
+CREATE OR REPLACE FUNCTION topology.GetNodeEdges(atopology varchar, anode int)
+	RETURNS SETOF topology.GetFaceEdges_ReturnType
+AS
+$$
+DECLARE
+  curedge int;
+  nextedge int;
+  rec RECORD;
+  retrec topology.GetFaceEdges_ReturnType;
+  n int;
+  sql text;
+BEGIN
+
+  n := 0;
+  sql :=
+    'WITH incident_edges AS ( SELECT edge_id, start_node, end_node, ST_RemoveRepeatedPoints(geom) as geom FROM '
+    || quote_ident(atopology)
+    || '.edge_data WHERE start_node = ' || anode
+    || ' or end_node = ' || anode
+    || ') SELECT edge_id, ST_Azimuth(ST_StartPoint(geom), ST_PointN(geom, 2)) as az FROM  incident_edges WHERE start_node = ' || anode
+    || ' UNION ALL SELECT -edge_id, ST_Azimuth(ST_EndPoint(geom), ST_PointN(geom, ST_NumPoints(geom)-1)) FROM incident_edges WHERE end_node = ' || anode
+    || ' ORDER BY az';
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG 'sql: %', sql;
+#endif
+
+  FOR rec IN EXECUTE sql
+  LOOP -- incident edges {
+
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Edge:% az:%', rec.edge_id, rec.az;
+#endif
+    n := n + 1;
+    retrec.sequence := n;
+    retrec.edge := rec.edge_id;
+    RETURN NEXT retrec;
+  END LOOP; -- incident edges }
+
+END
+$$
+LANGUAGE 'plpgsql' STABLE;
+--} GetRingEdges
