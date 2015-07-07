@@ -436,6 +436,8 @@ advance_combine_function(TupleTableSlot *slot, AggState *aggstate,
 	bool isnull = slot->tts_isnull[0];
 	MemoryContext oldcontext = MemoryContextSwitchTo(aggstate->aggcontext);
 
+	aggstate->curperagg = peraggstate;
+
 	/*
 	 * 0. Decode the transition value into something the combine function expects.
 	 */
