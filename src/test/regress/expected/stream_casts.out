@@ -1,0 +1,2737 @@
+SET debug_sync_stream_insert = 'on';
+CREATE CONTINUOUS VIEW test_stream_casts0 AS SELECT k::text, SUM(v::float8) AS fsum, SUM(i::int8) AS isum, COUNT(*) FROM stream_casts_stream GROUP BY k;
+CREATE CONTINUOUS VIEW test_stream_casts1 AS SELECT k::integer, SUM(v::float4) AS fsum, SUM(i::int4) AS isum, COUNT(*) FROM stream_casts_stream GROUP BY k;
+ACTIVATE test_stream_casts0, test_stream_casts1;
+INSERT INTO stream_casts_stream (k, v, i) VALUES ('001', 1.224, 1002);
+INSERT INTO stream_casts_stream (k, v, i) VALUES ('102', 1e15, -100);
+INSERT INTO stream_casts_stream (k, v, i) VALUES ('144', -1e-3, 1);
+INSERT INTO stream_casts_stream (k, v, i) VALUES ('042', 42.42, 0), ('42', '42.42', 1), ('144', 1, 2);
+DEACTIVATE test_stream_casts0, test_stream_casts1;
+SELECT * FROM test_stream_casts0 ORDER BY k;
+  k  | fsum  | isum | count 
+-----+-------+------+-------
+ 001 | 1.224 | 1002 |     1
+ 042 | 42.42 |    0 |     1
+ 102 | 1e+15 | -100 |     1
+ 144 | 0.999 |    3 |     2
+ 42  | 42.42 |    1 |     1
+(5 rows)
+
+SELECT * FROM test_stream_casts1 ORDER BY k;
+  k  | fsum  | isum | count 
+-----+-------+------+-------
+   1 | 1.224 | 1002 |     1
+  42 | 84.84 |    1 |     2
+ 102 | 1e+15 | -100 |     1
+ 144 | 0.999 |    3 |     2
+(4 rows)
+
+-- Now just test every possible cast for each base type
+CREATE CONTINUOUS VIEW test_int8_to_int2 AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int8_to_int4 AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int8_to_float4 AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int8_to_float8 AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int8_to_numeric AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int2_to_int8 AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int2_to_int4 AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int2_to_float4 AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int2_to_float8 AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int2_to_numeric AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int4_to_int8 AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_int4_to_int2 AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_int4_to_float4 AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_int4_to_float8 AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_int4_to_numeric AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_float4_to_int8 AS SELECT x::float4 FROM float4_stream;
+CREATE CONTINUOUS VIEW test_float4_to_int2 AS SELECT x::float4 FROM float4_stream;
+CREATE CONTINUOUS VIEW test_float4_to_int4 AS SELECT x::float4 FROM float4_stream;
+CREATE CONTINUOUS VIEW test_float4_to_float8 AS SELECT x::float4 FROM float4_stream;
+CREATE CONTINUOUS VIEW test_float4_to_numeric AS SELECT x::float4 FROM float4_stream;
+CREATE CONTINUOUS VIEW test_float8_to_int8 AS SELECT x::float8 FROM float8_stream;
+CREATE CONTINUOUS VIEW test_float8_to_int2 AS SELECT x::float8 FROM float8_stream;
+CREATE CONTINUOUS VIEW test_float8_to_int4 AS SELECT x::float8 FROM float8_stream;
+CREATE CONTINUOUS VIEW test_float8_to_float4 AS SELECT x::float8 FROM float8_stream;
+CREATE CONTINUOUS VIEW test_float8_to_numeric AS SELECT x::float8 FROM float8_stream;
+CREATE CONTINUOUS VIEW test_numeric_to_int8 AS SELECT x::numeric FROM numeric_stream;
+CREATE CONTINUOUS VIEW test_numeric_to_int2 AS SELECT x::numeric FROM numeric_stream;
+CREATE CONTINUOUS VIEW test_numeric_to_int4 AS SELECT x::numeric FROM numeric_stream;
+CREATE CONTINUOUS VIEW test_numeric_to_float4 AS SELECT x::numeric FROM numeric_stream;
+CREATE CONTINUOUS VIEW test_numeric_to_float8 AS SELECT x::numeric FROM numeric_stream;
+CREATE CONTINUOUS VIEW test_money_to_numeric AS SELECT x::money FROM money_stream;
+CREATE CONTINUOUS VIEW test_numeric_to_money AS SELECT x::numeric FROM numeric_stream;
+CREATE CONTINUOUS VIEW test_int4_to_money AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_int8_to_money AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int4_to_bool AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_bool_to_int4 AS SELECT x::bool FROM bool_stream;
+CREATE CONTINUOUS VIEW test_int8_to_oid AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int2_to_oid AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int4_to_oid AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_oid_to_int8 AS SELECT x::oid FROM oid_stream;
+CREATE CONTINUOUS VIEW test_oid_to_int4 AS SELECT x::oid FROM oid_stream;
+CREATE CONTINUOUS VIEW test_oid_to_regproc AS SELECT x::oid FROM oid_stream;
+CREATE CONTINUOUS VIEW test_int8_to_regproc AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int2_to_regproc AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int4_to_regproc AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_oid_to_regprocedure AS SELECT x::oid FROM oid_stream;
+CREATE CONTINUOUS VIEW test_int8_to_regprocedure AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int2_to_regprocedure AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int4_to_regprocedure AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_oid_to_regoper AS SELECT x::oid FROM oid_stream;
+CREATE CONTINUOUS VIEW test_int8_to_regoper AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int2_to_regoper AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int4_to_regoper AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_oid_to_regoperator AS SELECT x::oid FROM oid_stream;
+CREATE CONTINUOUS VIEW test_int8_to_regoperator AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int2_to_regoperator AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int4_to_regoperator AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_oid_to_regclass AS SELECT x::oid FROM oid_stream;
+CREATE CONTINUOUS VIEW test_int8_to_regclass AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int2_to_regclass AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int4_to_regclass AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_oid_to_regtype AS SELECT x::oid FROM oid_stream;
+CREATE CONTINUOUS VIEW test_int8_to_regtype AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int2_to_regtype AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int4_to_regtype AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_oid_to_regconfig AS SELECT x::oid FROM oid_stream;
+CREATE CONTINUOUS VIEW test_int8_to_regconfig AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int2_to_regconfig AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int4_to_regconfig AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_oid_to_regdictionary AS SELECT x::oid FROM oid_stream;
+CREATE CONTINUOUS VIEW test_int8_to_regdictionary AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int2_to_regdictionary AS SELECT x::int2 FROM int2_stream;
+CREATE CONTINUOUS VIEW test_int4_to_regdictionary AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_text_to_regclass AS SELECT x::text FROM text_stream;
+CREATE CONTINUOUS VIEW test_varchar_to_regclass AS SELECT x::varchar FROM varchar_stream;
+CREATE CONTINUOUS VIEW test_text_to_bpchar AS SELECT x::text FROM text_stream;
+CREATE CONTINUOUS VIEW test_text_to_varchar AS SELECT x::text FROM text_stream;
+CREATE CONTINUOUS VIEW test_varchar_to_text AS SELECT x::varchar FROM varchar_stream;
+CREATE CONTINUOUS VIEW test_varchar_to_bpchar AS SELECT x::varchar FROM varchar_stream;
+CREATE CONTINUOUS VIEW test_char_to_text AS SELECT x::char FROM char_stream;
+CREATE CONTINUOUS VIEW test_char_to_bpchar AS SELECT x::char FROM char_stream;
+CREATE CONTINUOUS VIEW test_char_to_varchar AS SELECT x::char FROM char_stream;
+CREATE CONTINUOUS VIEW test_name_to_text AS SELECT x::name FROM name_stream;
+CREATE CONTINUOUS VIEW test_name_to_bpchar AS SELECT x::name FROM name_stream;
+CREATE CONTINUOUS VIEW test_name_to_varchar AS SELECT x::name FROM name_stream;
+CREATE CONTINUOUS VIEW test_text_to_char AS SELECT x::text FROM text_stream;
+CREATE CONTINUOUS VIEW test_varchar_to_char AS SELECT x::varchar FROM varchar_stream;
+CREATE CONTINUOUS VIEW test_text_to_name AS SELECT x::text FROM text_stream;
+CREATE CONTINUOUS VIEW test_varchar_to_name AS SELECT x::varchar FROM varchar_stream;
+CREATE CONTINUOUS VIEW test_char_to_int4 AS SELECT x::char FROM char_stream;
+CREATE CONTINUOUS VIEW test_int4_to_char AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_date_to_timestamp AS SELECT x::date FROM date_stream;
+CREATE CONTINUOUS VIEW test_date_to_timestamptz AS SELECT x::date FROM date_stream;
+CREATE CONTINUOUS VIEW test_time_to_interval AS SELECT x::time FROM time_stream;
+CREATE CONTINUOUS VIEW test_time_to_timetz AS SELECT x::time FROM time_stream;
+CREATE CONTINUOUS VIEW test_timestamp_to_abstime AS SELECT x::timestamp FROM timestamp_stream;
+CREATE CONTINUOUS VIEW test_timestamp_to_date AS SELECT x::timestamp FROM timestamp_stream;
+CREATE CONTINUOUS VIEW test_timestamp_to_time AS SELECT x::timestamp FROM timestamp_stream;
+CREATE CONTINUOUS VIEW test_timestamp_to_timestamptz AS SELECT x::timestamp FROM timestamp_stream;
+CREATE CONTINUOUS VIEW test_timestamptz_to_abstime AS SELECT x::timestamptz FROM timestamptz_stream;
+CREATE CONTINUOUS VIEW test_timestamptz_to_date AS SELECT x::timestamptz FROM timestamptz_stream;
+CREATE CONTINUOUS VIEW test_timestamptz_to_time AS SELECT x::timestamptz FROM timestamptz_stream;
+CREATE CONTINUOUS VIEW test_timestamptz_to_timestamp AS SELECT x::timestamptz FROM timestamptz_stream;
+CREATE CONTINUOUS VIEW test_timestamptz_to_timetz AS SELECT x::timestamptz FROM timestamptz_stream;
+CREATE CONTINUOUS VIEW test_interval_to_reltime AS SELECT x::interval FROM interval_stream;
+CREATE CONTINUOUS VIEW test_interval_to_time AS SELECT x::interval FROM interval_stream;
+CREATE CONTINUOUS VIEW test_timetz_to_time AS SELECT x::timetz FROM timetz_stream;
+CREATE CONTINUOUS VIEW test_int4_to_abstime AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_int4_to_reltime AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_lseg_to_point AS SELECT x::lseg FROM lseg_stream;
+CREATE CONTINUOUS VIEW test_path_to_point AS SELECT x::path FROM path_stream;
+CREATE CONTINUOUS VIEW test_path_to_polygon AS SELECT x::path FROM path_stream;
+CREATE CONTINUOUS VIEW test_box_to_point AS SELECT x::box FROM box_stream;
+CREATE CONTINUOUS VIEW test_box_to_lseg AS SELECT x::box FROM box_stream;
+CREATE CONTINUOUS VIEW test_box_to_polygon AS SELECT x::box FROM box_stream;
+CREATE CONTINUOUS VIEW test_box_to_circle AS SELECT x::box FROM box_stream;
+CREATE CONTINUOUS VIEW test_polygon_to_point AS SELECT x::polygon FROM polygon_stream;
+CREATE CONTINUOUS VIEW test_polygon_to_path AS SELECT x::polygon FROM polygon_stream;
+CREATE CONTINUOUS VIEW test_polygon_to_box AS SELECT x::polygon FROM polygon_stream;
+CREATE CONTINUOUS VIEW test_polygon_to_circle AS SELECT x::polygon FROM polygon_stream;
+CREATE CONTINUOUS VIEW test_circle_to_point AS SELECT x::circle FROM circle_stream;
+CREATE CONTINUOUS VIEW test_circle_to_box AS SELECT x::circle FROM circle_stream;
+CREATE CONTINUOUS VIEW test_circle_to_polygon AS SELECT x::circle FROM circle_stream;
+CREATE CONTINUOUS VIEW test_cidr_to_inet AS SELECT x::cidr FROM cidr_stream;
+CREATE CONTINUOUS VIEW test_inet_to_cidr AS SELECT x::inet FROM inet_stream;
+CREATE CONTINUOUS VIEW test_bit_to_varbit AS SELECT x::bit FROM bit_stream;
+CREATE CONTINUOUS VIEW test_varbit_to_bit AS SELECT x::varbit FROM varbit_stream;
+CREATE CONTINUOUS VIEW test_int8_to_bit AS SELECT x::int8 FROM int8_stream;
+CREATE CONTINUOUS VIEW test_int4_to_bit AS SELECT x::int4 FROM int4_stream;
+CREATE CONTINUOUS VIEW test_bit_to_int8 AS SELECT x::bit FROM bit_stream;
+CREATE CONTINUOUS VIEW test_bit_to_int4 AS SELECT x::bit FROM bit_stream;
+CREATE CONTINUOUS VIEW test_cidr_to_text AS SELECT x::cidr FROM cidr_stream;
+CREATE CONTINUOUS VIEW test_inet_to_text AS SELECT x::inet FROM inet_stream;
+CREATE CONTINUOUS VIEW test_bool_to_text AS SELECT x::bool FROM bool_stream;
+CREATE CONTINUOUS VIEW test_cidr_to_varchar AS SELECT x::cidr FROM cidr_stream;
+CREATE CONTINUOUS VIEW test_inet_to_varchar AS SELECT x::inet FROM inet_stream;
+CREATE CONTINUOUS VIEW test_bool_to_varchar AS SELECT x::bool FROM bool_stream;
+CREATE CONTINUOUS VIEW test_cidr_to_bpchar AS SELECT x::cidr FROM cidr_stream;
+CREATE CONTINUOUS VIEW test_inet_to_bpchar AS SELECT x::inet FROM inet_stream;
+CREATE CONTINUOUS VIEW test_bool_to_bpchar AS SELECT x::bool FROM bool_stream;
+CREATE CONTINUOUS VIEW test_json_to_jsonb AS SELECT x::json FROM json_stream;
+CREATE CONTINUOUS VIEW test_jsonb_to_json AS SELECT x::jsonb FROM jsonb_stream;
+ACTIVATE test_int8_to_int2;
+ACTIVATE test_int8_to_int4;
+ACTIVATE test_int8_to_float4;
+ACTIVATE test_int8_to_float8;
+ACTIVATE test_int8_to_numeric;
+ACTIVATE test_int2_to_int8;
+ACTIVATE test_int2_to_int4;
+ACTIVATE test_int2_to_float4;
+ACTIVATE test_int2_to_float8;
+ACTIVATE test_int2_to_numeric;
+ACTIVATE test_int4_to_int8;
+ACTIVATE test_int4_to_int2;
+ACTIVATE test_int4_to_float4;
+ACTIVATE test_int4_to_float8;
+ACTIVATE test_int4_to_numeric;
+ACTIVATE test_float4_to_int8;
+ACTIVATE test_float4_to_int2;
+ACTIVATE test_float4_to_int4;
+ACTIVATE test_float4_to_float8;
+ACTIVATE test_float4_to_numeric;
+ACTIVATE test_float8_to_int8;
+ACTIVATE test_float8_to_int2;
+ACTIVATE test_float8_to_int4;
+ACTIVATE test_float8_to_float4;
+ACTIVATE test_float8_to_numeric;
+ACTIVATE test_numeric_to_int8;
+ACTIVATE test_numeric_to_int2;
+ACTIVATE test_numeric_to_int4;
+ACTIVATE test_numeric_to_float4;
+ACTIVATE test_numeric_to_float8;
+ACTIVATE test_money_to_numeric;
+ACTIVATE test_numeric_to_money;
+ACTIVATE test_int4_to_money;
+ACTIVATE test_int8_to_money;
+ACTIVATE test_int4_to_bool;
+ACTIVATE test_bool_to_int4;
+ACTIVATE test_int8_to_oid;
+ACTIVATE test_int2_to_oid;
+ACTIVATE test_int4_to_oid;
+ACTIVATE test_oid_to_int8;
+ACTIVATE test_oid_to_int4;
+ACTIVATE test_oid_to_regproc;
+ACTIVATE test_int8_to_regproc;
+ACTIVATE test_int2_to_regproc;
+ACTIVATE test_int4_to_regproc;
+ACTIVATE test_oid_to_regprocedure;
+ACTIVATE test_int8_to_regprocedure;
+ACTIVATE test_int2_to_regprocedure;
+ACTIVATE test_int4_to_regprocedure;
+ACTIVATE test_oid_to_regoper;
+ACTIVATE test_int8_to_regoper;
+ACTIVATE test_int2_to_regoper;
+ACTIVATE test_int4_to_regoper;
+ACTIVATE test_oid_to_regoperator;
+ACTIVATE test_int8_to_regoperator;
+ACTIVATE test_int2_to_regoperator;
+ACTIVATE test_int4_to_regoperator;
+ACTIVATE test_oid_to_regclass;
+ACTIVATE test_int8_to_regclass;
+ACTIVATE test_int2_to_regclass;
+ACTIVATE test_int4_to_regclass;
+ACTIVATE test_oid_to_regtype;
+ACTIVATE test_int8_to_regtype;
+ACTIVATE test_int2_to_regtype;
+ACTIVATE test_int4_to_regtype;
+ACTIVATE test_oid_to_regconfig;
+ACTIVATE test_int8_to_regconfig;
+ACTIVATE test_int2_to_regconfig;
+ACTIVATE test_int4_to_regconfig;
+ACTIVATE test_oid_to_regdictionary;
+ACTIVATE test_int8_to_regdictionary;
+ACTIVATE test_int2_to_regdictionary;
+ACTIVATE test_int4_to_regdictionary;
+ACTIVATE test_text_to_regclass;
+ACTIVATE test_varchar_to_regclass;
+ACTIVATE test_text_to_bpchar;
+ACTIVATE test_text_to_varchar;
+ACTIVATE test_varchar_to_text;
+ACTIVATE test_varchar_to_bpchar;
+ACTIVATE test_char_to_text;
+ACTIVATE test_char_to_bpchar;
+ACTIVATE test_char_to_varchar;
+ACTIVATE test_name_to_text;
+ACTIVATE test_name_to_bpchar;
+ACTIVATE test_name_to_varchar;
+ACTIVATE test_text_to_char;
+ACTIVATE test_varchar_to_char;
+ACTIVATE test_text_to_name;
+ACTIVATE test_varchar_to_name;
+ACTIVATE test_char_to_int4;
+ACTIVATE test_int4_to_char;
+ACTIVATE test_date_to_timestamp;
+ACTIVATE test_date_to_timestamptz;
+ACTIVATE test_time_to_interval;
+ACTIVATE test_time_to_timetz;
+ACTIVATE test_timestamp_to_abstime;
+ACTIVATE test_timestamp_to_date;
+ACTIVATE test_timestamp_to_time;
+ACTIVATE test_timestamp_to_timestamptz;
+ACTIVATE test_timestamptz_to_abstime;
+ACTIVATE test_timestamptz_to_date;
+ACTIVATE test_timestamptz_to_time;
+ACTIVATE test_timestamptz_to_timestamp;
+ACTIVATE test_timestamptz_to_timetz;
+ACTIVATE test_interval_to_reltime;
+ACTIVATE test_interval_to_time;
+ACTIVATE test_timetz_to_time;
+ACTIVATE test_int4_to_abstime;
+ACTIVATE test_int4_to_reltime;
+ACTIVATE test_lseg_to_point;
+ACTIVATE test_path_to_point;
+ACTIVATE test_path_to_polygon;
+ACTIVATE test_box_to_point;
+ACTIVATE test_box_to_lseg;
+ACTIVATE test_box_to_polygon;
+ACTIVATE test_box_to_circle;
+ACTIVATE test_polygon_to_point;
+ACTIVATE test_polygon_to_path;
+ACTIVATE test_polygon_to_box;
+ACTIVATE test_polygon_to_circle;
+ACTIVATE test_circle_to_point;
+ACTIVATE test_circle_to_box;
+ACTIVATE test_circle_to_polygon;
+ACTIVATE test_cidr_to_inet;
+ACTIVATE test_inet_to_cidr;
+ACTIVATE test_bit_to_varbit;
+ACTIVATE test_varbit_to_bit;
+ACTIVATE test_int8_to_bit;
+ACTIVATE test_int4_to_bit;
+ACTIVATE test_bit_to_int8;
+ACTIVATE test_bit_to_int4;
+ACTIVATE test_cidr_to_text;
+ACTIVATE test_inet_to_text;
+ACTIVATE test_bool_to_text;
+ACTIVATE test_cidr_to_varchar;
+ACTIVATE test_inet_to_varchar;
+ACTIVATE test_bool_to_varchar;
+ACTIVATE test_cidr_to_bpchar;
+ACTIVATE test_inet_to_bpchar;
+ACTIVATE test_bool_to_bpchar;
+ACTIVATE test_json_to_jsonb;
+ACTIVATE test_jsonb_to_json;
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO float4_stream (x) VALUES ('1.4');
+INSERT INTO float4_stream (x) VALUES ('1.4');
+INSERT INTO float4_stream (x) VALUES ('1.4');
+INSERT INTO float4_stream (x) VALUES ('1.4');
+INSERT INTO float4_stream (x) VALUES ('1.4');
+INSERT INTO float8_stream (x) VALUES ('1.8');
+INSERT INTO float8_stream (x) VALUES ('1.8');
+INSERT INTO float8_stream (x) VALUES ('1.8');
+INSERT INTO float8_stream (x) VALUES ('1.8');
+INSERT INTO float8_stream (x) VALUES ('1.8');
+INSERT INTO numeric_stream (x) VALUES (1.00000001);
+INSERT INTO numeric_stream (x) VALUES (1.00000001);
+INSERT INTO numeric_stream (x) VALUES (1.00000001);
+INSERT INTO numeric_stream (x) VALUES (1.00000001);
+INSERT INTO numeric_stream (x) VALUES (1.00000001);
+INSERT INTO money_stream (x) VALUES ('42.42');
+INSERT INTO numeric_stream (x) VALUES (1.00000001);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO bool_stream (x) VALUES ('true');
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO oid_stream (x) VALUES (104);
+INSERT INTO oid_stream (x) VALUES (104);
+INSERT INTO oid_stream (x) VALUES (104);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO oid_stream (x) VALUES (104);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO oid_stream (x) VALUES (104);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO oid_stream (x) VALUES (104);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO oid_stream (x) VALUES (104);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO oid_stream (x) VALUES (104);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO oid_stream (x) VALUES (104);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO oid_stream (x) VALUES (104);
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int2_stream (x) VALUES (2);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO text_stream (x) VALUES ('text text text!');
+INSERT INTO varchar_stream (x) VALUES ('varchaaaaaaaar');
+INSERT INTO text_stream (x) VALUES ('text text text!');
+INSERT INTO text_stream (x) VALUES ('text text text!');
+INSERT INTO varchar_stream (x) VALUES ('varchaaaaaaaar');
+INSERT INTO varchar_stream (x) VALUES ('varchaaaaaaaar');
+INSERT INTO char_stream (x) VALUES ('c');
+INSERT INTO char_stream (x) VALUES ('c');
+INSERT INTO char_stream (x) VALUES ('c');
+INSERT INTO name_stream (x) VALUES ('nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn');
+INSERT INTO name_stream (x) VALUES ('nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn');
+INSERT INTO name_stream (x) VALUES ('nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn');
+INSERT INTO text_stream (x) VALUES ('text text text!');
+INSERT INTO varchar_stream (x) VALUES ('varchaaaaaaaar');
+INSERT INTO text_stream (x) VALUES ('text text text!');
+INSERT INTO varchar_stream (x) VALUES ('varchaaaaaaaar');
+INSERT INTO char_stream (x) VALUES ('c');
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO date_stream (x) VALUES ('2014-01-01');
+INSERT INTO date_stream (x) VALUES ('2014-01-01');
+INSERT INTO time_stream (x) VALUES ('00:01:02');
+INSERT INTO time_stream (x) VALUES ('00:01:02');
+INSERT INTO timestamp_stream (x) VALUES ('2014-01-01 00:11:22');
+INSERT INTO timestamp_stream (x) VALUES ('2014-01-01 00:11:22');
+INSERT INTO timestamp_stream (x) VALUES ('2014-01-01 00:11:22');
+INSERT INTO timestamp_stream (x) VALUES ('2014-01-01 00:11:22');
+INSERT INTO timestamptz_stream (x) VALUES ('2014-01-01 00:11:22-08');
+INSERT INTO timestamptz_stream (x) VALUES ('2014-01-01 00:11:22-08');
+INSERT INTO timestamptz_stream (x) VALUES ('2014-01-01 00:11:22-08');
+INSERT INTO timestamptz_stream (x) VALUES ('2014-01-01 00:11:22-08');
+INSERT INTO timestamptz_stream (x) VALUES ('2014-01-01 00:11:22-08');
+INSERT INTO interval_stream (x) VALUES ('@ 1 minute');
+INSERT INTO interval_stream (x) VALUES ('@ 1 minute');
+INSERT INTO timetz_stream (x) VALUES ('00:11:22-08');
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO lseg_stream (x) VALUES ('[(1,2),(3,4)]');
+INSERT INTO path_stream (x) VALUES ('(11,12,13,14)');
+INSERT INTO path_stream (x) VALUES ('(11,12,13,14)');
+INSERT INTO box_stream (x) VALUES ('(2.0,2.0,0.0,0.0)');
+INSERT INTO box_stream (x) VALUES ('(2.0,2.0,0.0,0.0)');
+INSERT INTO box_stream (x) VALUES ('(2.0,2.0,0.0,0.0)');
+INSERT INTO box_stream (x) VALUES ('(2.0,2.0,0.0,0.0)');
+INSERT INTO polygon_stream (x) VALUES ('(2.0,0.0),(2.0,4.0),(0.0,0.0)');
+INSERT INTO polygon_stream (x) VALUES ('(2.0,0.0),(2.0,4.0),(0.0,0.0)');
+INSERT INTO polygon_stream (x) VALUES ('(2.0,0.0),(2.0,4.0),(0.0,0.0)');
+INSERT INTO polygon_stream (x) VALUES ('(2.0,0.0),(2.0,4.0),(0.0,0.0)');
+INSERT INTO circle_stream (x) VALUES ('<(5,1),3>');
+INSERT INTO circle_stream (x) VALUES ('<(5,1),3>');
+INSERT INTO circle_stream (x) VALUES ('<(5,1),3>');
+INSERT INTO cidr_stream (x) VALUES ('1.2.6.4');
+INSERT INTO inet_stream (x) VALUES ('192.168.1.226/24');
+INSERT INTO bit_stream (x) VALUES (1);
+INSERT INTO varbit_stream (x) VALUES ('01010101');
+INSERT INTO int8_stream (x) VALUES (8);
+INSERT INTO int4_stream (x) VALUES (4);
+INSERT INTO bit_stream (x) VALUES (1);
+INSERT INTO bit_stream (x) VALUES (1);
+INSERT INTO cidr_stream (x) VALUES ('1.2.6.4');
+INSERT INTO inet_stream (x) VALUES ('192.168.1.226/24');
+INSERT INTO bool_stream (x) VALUES ('true');
+INSERT INTO text_stream (x) VALUES ('text text text!');
+INSERT INTO cidr_stream (x) VALUES ('1.2.6.4');
+INSERT INTO inet_stream (x) VALUES ('192.168.1.226/24');
+INSERT INTO bool_stream (x) VALUES ('true');
+INSERT INTO varchar_stream (x) VALUES ('varchaaaaaaaar');
+INSERT INTO cidr_stream (x) VALUES ('1.2.6.4');
+INSERT INTO inet_stream (x) VALUES ('192.168.1.226/24');
+INSERT INTO bool_stream (x) VALUES ('true');
+INSERT INTO json_stream (x) VALUES ('[2, 1, 0]');
+INSERT INTO jsonb_stream (x) VALUES ('[0, 1, 2]');
+DEACTIVATE test_int8_to_int2;
+DEACTIVATE test_int8_to_int4;
+DEACTIVATE test_int8_to_float4;
+DEACTIVATE test_int8_to_float8;
+DEACTIVATE test_int8_to_numeric;
+DEACTIVATE test_int2_to_int8;
+DEACTIVATE test_int2_to_int4;
+DEACTIVATE test_int2_to_float4;
+DEACTIVATE test_int2_to_float8;
+DEACTIVATE test_int2_to_numeric;
+DEACTIVATE test_int4_to_int8;
+DEACTIVATE test_int4_to_int2;
+DEACTIVATE test_int4_to_float4;
+DEACTIVATE test_int4_to_float8;
+DEACTIVATE test_int4_to_numeric;
+DEACTIVATE test_float4_to_int8;
+DEACTIVATE test_float4_to_int2;
+DEACTIVATE test_float4_to_int4;
+DEACTIVATE test_float4_to_float8;
+DEACTIVATE test_float4_to_numeric;
+DEACTIVATE test_float8_to_int8;
+DEACTIVATE test_float8_to_int2;
+DEACTIVATE test_float8_to_int4;
+DEACTIVATE test_float8_to_float4;
+DEACTIVATE test_float8_to_numeric;
+DEACTIVATE test_numeric_to_int8;
+DEACTIVATE test_numeric_to_int2;
+DEACTIVATE test_numeric_to_int4;
+DEACTIVATE test_numeric_to_float4;
+DEACTIVATE test_numeric_to_float8;
+DEACTIVATE test_money_to_numeric;
+DEACTIVATE test_numeric_to_money;
+DEACTIVATE test_int4_to_money;
+DEACTIVATE test_int8_to_money;
+DEACTIVATE test_int4_to_bool;
+DEACTIVATE test_bool_to_int4;
+DEACTIVATE test_int8_to_oid;
+DEACTIVATE test_int2_to_oid;
+DEACTIVATE test_int4_to_oid;
+DEACTIVATE test_oid_to_int8;
+DEACTIVATE test_oid_to_int4;
+DEACTIVATE test_oid_to_regproc;
+DEACTIVATE test_int8_to_regproc;
+DEACTIVATE test_int2_to_regproc;
+DEACTIVATE test_int4_to_regproc;
+DEACTIVATE test_oid_to_regprocedure;
+DEACTIVATE test_int8_to_regprocedure;
+DEACTIVATE test_int2_to_regprocedure;
+DEACTIVATE test_int4_to_regprocedure;
+DEACTIVATE test_oid_to_regoper;
+DEACTIVATE test_int8_to_regoper;
+DEACTIVATE test_int2_to_regoper;
+DEACTIVATE test_int4_to_regoper;
+DEACTIVATE test_oid_to_regoperator;
+DEACTIVATE test_int8_to_regoperator;
+DEACTIVATE test_int2_to_regoperator;
+DEACTIVATE test_int4_to_regoperator;
+DEACTIVATE test_oid_to_regclass;
+DEACTIVATE test_int8_to_regclass;
+DEACTIVATE test_int2_to_regclass;
+DEACTIVATE test_int4_to_regclass;
+DEACTIVATE test_oid_to_regtype;
+DEACTIVATE test_int8_to_regtype;
+DEACTIVATE test_int2_to_regtype;
+DEACTIVATE test_int4_to_regtype;
+DEACTIVATE test_oid_to_regconfig;
+DEACTIVATE test_int8_to_regconfig;
+DEACTIVATE test_int2_to_regconfig;
+DEACTIVATE test_int4_to_regconfig;
+DEACTIVATE test_oid_to_regdictionary;
+DEACTIVATE test_int8_to_regdictionary;
+DEACTIVATE test_int2_to_regdictionary;
+DEACTIVATE test_int4_to_regdictionary;
+DEACTIVATE test_text_to_regclass;
+DEACTIVATE test_varchar_to_regclass;
+DEACTIVATE test_text_to_bpchar;
+DEACTIVATE test_text_to_varchar;
+DEACTIVATE test_varchar_to_text;
+DEACTIVATE test_varchar_to_bpchar;
+DEACTIVATE test_char_to_text;
+DEACTIVATE test_char_to_bpchar;
+DEACTIVATE test_char_to_varchar;
+DEACTIVATE test_name_to_text;
+DEACTIVATE test_name_to_bpchar;
+DEACTIVATE test_name_to_varchar;
+DEACTIVATE test_text_to_char;
+DEACTIVATE test_varchar_to_char;
+DEACTIVATE test_text_to_name;
+DEACTIVATE test_varchar_to_name;
+DEACTIVATE test_char_to_int4;
+DEACTIVATE test_int4_to_char;
+DEACTIVATE test_date_to_timestamp;
+DEACTIVATE test_date_to_timestamptz;
+DEACTIVATE test_time_to_interval;
+DEACTIVATE test_time_to_timetz;
+DEACTIVATE test_timestamp_to_abstime;
+DEACTIVATE test_timestamp_to_date;
+DEACTIVATE test_timestamp_to_time;
+DEACTIVATE test_timestamp_to_timestamptz;
+DEACTIVATE test_timestamptz_to_abstime;
+DEACTIVATE test_timestamptz_to_date;
+DEACTIVATE test_timestamptz_to_time;
+DEACTIVATE test_timestamptz_to_timestamp;
+DEACTIVATE test_timestamptz_to_timetz;
+DEACTIVATE test_interval_to_reltime;
+DEACTIVATE test_interval_to_time;
+DEACTIVATE test_timetz_to_time;
+DEACTIVATE test_int4_to_abstime;
+DEACTIVATE test_int4_to_reltime;
+DEACTIVATE test_lseg_to_point;
+DEACTIVATE test_path_to_point;
+DEACTIVATE test_path_to_polygon;
+DEACTIVATE test_box_to_point;
+DEACTIVATE test_box_to_lseg;
+DEACTIVATE test_box_to_polygon;
+DEACTIVATE test_box_to_circle;
+DEACTIVATE test_polygon_to_point;
+DEACTIVATE test_polygon_to_path;
+DEACTIVATE test_polygon_to_box;
+DEACTIVATE test_polygon_to_circle;
+DEACTIVATE test_circle_to_point;
+DEACTIVATE test_circle_to_box;
+DEACTIVATE test_circle_to_polygon;
+DEACTIVATE test_cidr_to_inet;
+DEACTIVATE test_inet_to_cidr;
+DEACTIVATE test_bit_to_varbit;
+DEACTIVATE test_varbit_to_bit;
+DEACTIVATE test_int8_to_bit;
+DEACTIVATE test_int4_to_bit;
+DEACTIVATE test_bit_to_int8;
+DEACTIVATE test_bit_to_int4;
+DEACTIVATE test_cidr_to_text;
+DEACTIVATE test_inet_to_text;
+DEACTIVATE test_bool_to_text;
+DEACTIVATE test_cidr_to_varchar;
+DEACTIVATE test_inet_to_varchar;
+DEACTIVATE test_bool_to_varchar;
+DEACTIVATE test_cidr_to_bpchar;
+DEACTIVATE test_inet_to_bpchar;
+DEACTIVATE test_bool_to_bpchar;
+DEACTIVATE test_json_to_jsonb;
+DEACTIVATE test_jsonb_to_json;
+SELECT x FROM test_int8_to_int2;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int8_to_int4;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int8_to_float4;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int8_to_float8;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int8_to_numeric;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int2_to_int8;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int2_to_int4;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int2_to_float4;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int2_to_float8;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int2_to_numeric;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int4_to_int8;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_int4_to_int2;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_int4_to_float4;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_int4_to_float8;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_int4_to_numeric;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_float4_to_int8;
+  x  
+-----
+ 1.4
+ 1.4
+ 1.4
+ 1.4
+ 1.4
+(5 rows)
+
+SELECT x FROM test_float4_to_int2;
+  x  
+-----
+ 1.4
+ 1.4
+ 1.4
+ 1.4
+ 1.4
+(5 rows)
+
+SELECT x FROM test_float4_to_int4;
+  x  
+-----
+ 1.4
+ 1.4
+ 1.4
+ 1.4
+ 1.4
+(5 rows)
+
+SELECT x FROM test_float4_to_float8;
+  x  
+-----
+ 1.4
+ 1.4
+ 1.4
+ 1.4
+ 1.4
+(5 rows)
+
+SELECT x FROM test_float4_to_numeric;
+  x  
+-----
+ 1.4
+ 1.4
+ 1.4
+ 1.4
+ 1.4
+(5 rows)
+
+SELECT x FROM test_float8_to_int8;
+  x  
+-----
+ 1.8
+ 1.8
+ 1.8
+ 1.8
+ 1.8
+(5 rows)
+
+SELECT x FROM test_float8_to_int2;
+  x  
+-----
+ 1.8
+ 1.8
+ 1.8
+ 1.8
+ 1.8
+(5 rows)
+
+SELECT x FROM test_float8_to_int4;
+  x  
+-----
+ 1.8
+ 1.8
+ 1.8
+ 1.8
+ 1.8
+(5 rows)
+
+SELECT x FROM test_float8_to_float4;
+  x  
+-----
+ 1.8
+ 1.8
+ 1.8
+ 1.8
+ 1.8
+(5 rows)
+
+SELECT x FROM test_float8_to_numeric;
+  x  
+-----
+ 1.8
+ 1.8
+ 1.8
+ 1.8
+ 1.8
+(5 rows)
+
+SELECT x FROM test_numeric_to_int8;
+     x      
+------------
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+(6 rows)
+
+SELECT x FROM test_numeric_to_int2;
+     x      
+------------
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+(6 rows)
+
+SELECT x FROM test_numeric_to_int4;
+     x      
+------------
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+(6 rows)
+
+SELECT x FROM test_numeric_to_float4;
+     x      
+------------
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+(6 rows)
+
+SELECT x FROM test_numeric_to_float8;
+     x      
+------------
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+(6 rows)
+
+SELECT x FROM test_money_to_numeric;
+   x    
+--------
+ $42.42
+(1 row)
+
+SELECT x FROM test_numeric_to_money;
+     x      
+------------
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+ 1.00000001
+(6 rows)
+
+SELECT x FROM test_int4_to_money;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_int8_to_money;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int4_to_bool;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_bool_to_int4;
+ x 
+---
+ t
+ t
+ t
+ t
+(4 rows)
+
+SELECT x FROM test_int8_to_oid;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int2_to_oid;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int4_to_oid;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_oid_to_int8;
+  x  
+-----
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+(10 rows)
+
+SELECT x FROM test_oid_to_int4;
+  x  
+-----
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+(10 rows)
+
+SELECT x FROM test_oid_to_regproc;
+  x  
+-----
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+(10 rows)
+
+SELECT x FROM test_int8_to_regproc;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int2_to_regproc;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int4_to_regproc;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_oid_to_regprocedure;
+  x  
+-----
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+(10 rows)
+
+SELECT x FROM test_int8_to_regprocedure;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int2_to_regprocedure;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int4_to_regprocedure;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_oid_to_regoper;
+  x  
+-----
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+(10 rows)
+
+SELECT x FROM test_int8_to_regoper;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int2_to_regoper;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int4_to_regoper;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_oid_to_regoperator;
+  x  
+-----
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+(10 rows)
+
+SELECT x FROM test_int8_to_regoperator;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int2_to_regoperator;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int4_to_regoperator;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_oid_to_regclass;
+  x  
+-----
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+(10 rows)
+
+SELECT x FROM test_int8_to_regclass;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int2_to_regclass;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int4_to_regclass;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_oid_to_regtype;
+  x  
+-----
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+(10 rows)
+
+SELECT x FROM test_int8_to_regtype;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int2_to_regtype;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int4_to_regtype;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_oid_to_regconfig;
+  x  
+-----
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+(10 rows)
+
+SELECT x FROM test_int8_to_regconfig;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int2_to_regconfig;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int4_to_regconfig;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_oid_to_regdictionary;
+  x  
+-----
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+ 104
+(10 rows)
+
+SELECT x FROM test_int8_to_regdictionary;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int2_to_regdictionary;
+ x 
+---
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+ 2
+(14 rows)
+
+SELECT x FROM test_int4_to_regdictionary;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_text_to_regclass;
+        x        
+-----------------
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+(6 rows)
+
+SELECT x FROM test_varchar_to_regclass;
+       x        
+----------------
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+(6 rows)
+
+SELECT x FROM test_text_to_bpchar;
+        x        
+-----------------
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+(6 rows)
+
+SELECT x FROM test_text_to_varchar;
+        x        
+-----------------
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+(6 rows)
+
+SELECT x FROM test_varchar_to_text;
+       x        
+----------------
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+(6 rows)
+
+SELECT x FROM test_varchar_to_bpchar;
+       x        
+----------------
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+(6 rows)
+
+SELECT x FROM test_char_to_text;
+ x 
+---
+ c
+ c
+ c
+ c
+(4 rows)
+
+SELECT x FROM test_char_to_bpchar;
+ x 
+---
+ c
+ c
+ c
+ c
+(4 rows)
+
+SELECT x FROM test_char_to_varchar;
+ x 
+---
+ c
+ c
+ c
+ c
+(4 rows)
+
+SELECT x FROM test_name_to_text;
+                                x                                
+-----------------------------------------------------------------
+ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+(3 rows)
+
+SELECT x FROM test_name_to_bpchar;
+                                x                                
+-----------------------------------------------------------------
+ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+(3 rows)
+
+SELECT x FROM test_name_to_varchar;
+                                x                                
+-----------------------------------------------------------------
+ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+(3 rows)
+
+SELECT x FROM test_text_to_char;
+        x        
+-----------------
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+(6 rows)
+
+SELECT x FROM test_varchar_to_char;
+       x        
+----------------
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+(6 rows)
+
+SELECT x FROM test_text_to_name;
+        x        
+-----------------
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+ text text text!
+(6 rows)
+
+SELECT x FROM test_varchar_to_name;
+       x        
+----------------
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+ varchaaaaaaaar
+(6 rows)
+
+SELECT x FROM test_char_to_int4;
+ x 
+---
+ c
+ c
+ c
+ c
+(4 rows)
+
+SELECT x FROM test_int4_to_char;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_date_to_timestamp;
+     x      
+------------
+ 01-01-2014
+ 01-01-2014
+(2 rows)
+
+SELECT x FROM test_date_to_timestamptz;
+     x      
+------------
+ 01-01-2014
+ 01-01-2014
+(2 rows)
+
+SELECT x FROM test_time_to_interval;
+    x     
+----------
+ 00:01:02
+ 00:01:02
+(2 rows)
+
+SELECT x FROM test_time_to_timetz;
+    x     
+----------
+ 00:01:02
+ 00:01:02
+(2 rows)
+
+SELECT x FROM test_timestamp_to_abstime;
+            x             
+--------------------------
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+(4 rows)
+
+SELECT x FROM test_timestamp_to_date;
+            x             
+--------------------------
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+(4 rows)
+
+SELECT x FROM test_timestamp_to_time;
+            x             
+--------------------------
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+(4 rows)
+
+SELECT x FROM test_timestamp_to_timestamptz;
+            x             
+--------------------------
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+ Wed Jan 01 00:11:22 2014
+(4 rows)
+
+SELECT x FROM test_timestamptz_to_abstime;
+              x               
+------------------------------
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+(5 rows)
+
+SELECT x FROM test_timestamptz_to_date;
+              x               
+------------------------------
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+(5 rows)
+
+SELECT x FROM test_timestamptz_to_time;
+              x               
+------------------------------
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+(5 rows)
+
+SELECT x FROM test_timestamptz_to_timestamp;
+              x               
+------------------------------
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+(5 rows)
+
+SELECT x FROM test_timestamptz_to_timetz;
+              x               
+------------------------------
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+ Wed Jan 01 00:11:22 2014 PST
+(5 rows)
+
+SELECT x FROM test_interval_to_reltime;
+    x    
+---------
+ @ 1 min
+ @ 1 min
+(2 rows)
+
+SELECT x FROM test_interval_to_time;
+    x    
+---------
+ @ 1 min
+ @ 1 min
+(2 rows)
+
+SELECT x FROM test_timetz_to_time;
+      x      
+-------------
+ 00:11:22-08
+(1 row)
+
+SELECT x FROM test_int4_to_abstime;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_int4_to_reltime;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_lseg_to_point;
+       x       
+---------------
+ [(1,2),(3,4)]
+(1 row)
+
+SELECT x FROM test_path_to_point;
+         x         
+-------------------
+ ((11,12),(13,14))
+ ((11,12),(13,14))
+(2 rows)
+
+SELECT x FROM test_path_to_polygon;
+         x         
+-------------------
+ ((11,12),(13,14))
+ ((11,12),(13,14))
+(2 rows)
+
+SELECT x FROM test_box_to_point;
+      x      
+-------------
+ (2,2),(0,0)
+ (2,2),(0,0)
+ (2,2),(0,0)
+ (2,2),(0,0)
+(4 rows)
+
+SELECT x FROM test_box_to_lseg;
+      x      
+-------------
+ (2,2),(0,0)
+ (2,2),(0,0)
+ (2,2),(0,0)
+ (2,2),(0,0)
+(4 rows)
+
+SELECT x FROM test_box_to_polygon;
+      x      
+-------------
+ (2,2),(0,0)
+ (2,2),(0,0)
+ (2,2),(0,0)
+ (2,2),(0,0)
+(4 rows)
+
+SELECT x FROM test_box_to_circle;
+      x      
+-------------
+ (2,2),(0,0)
+ (2,2),(0,0)
+ (2,2),(0,0)
+ (2,2),(0,0)
+(4 rows)
+
+SELECT x FROM test_polygon_to_point;
+          x          
+---------------------
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+(4 rows)
+
+SELECT x FROM test_polygon_to_path;
+          x          
+---------------------
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+(4 rows)
+
+SELECT x FROM test_polygon_to_box;
+          x          
+---------------------
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+(4 rows)
+
+SELECT x FROM test_polygon_to_circle;
+          x          
+---------------------
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+ ((2,0),(2,4),(0,0))
+(4 rows)
+
+SELECT x FROM test_circle_to_point;
+     x     
+-----------
+ <(5,1),3>
+ <(5,1),3>
+ <(5,1),3>
+(3 rows)
+
+SELECT x FROM test_circle_to_box;
+     x     
+-----------
+ <(5,1),3>
+ <(5,1),3>
+ <(5,1),3>
+(3 rows)
+
+SELECT x FROM test_circle_to_polygon;
+     x     
+-----------
+ <(5,1),3>
+ <(5,1),3>
+ <(5,1),3>
+(3 rows)
+
+SELECT x FROM test_cidr_to_inet;
+     x      
+------------
+ 1.2.6.4/32
+ 1.2.6.4/32
+ 1.2.6.4/32
+ 1.2.6.4/32
+(4 rows)
+
+SELECT x FROM test_inet_to_cidr;
+        x         
+------------------
+ 192.168.1.226/24
+ 192.168.1.226/24
+ 192.168.1.226/24
+ 192.168.1.226/24
+(4 rows)
+
+SELECT x FROM test_bit_to_varbit;
+ x 
+---
+ 1
+ 1
+ 1
+(3 rows)
+
+SELECT x FROM test_varbit_to_bit;
+    x     
+----------
+ 01010101
+(1 row)
+
+SELECT x FROM test_int8_to_bit;
+ x 
+---
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+ 8
+(16 rows)
+
+SELECT x FROM test_int4_to_bit;
+ x 
+---
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+ 4
+(20 rows)
+
+SELECT x FROM test_bit_to_int8;
+ x 
+---
+ 1
+ 1
+ 1
+(3 rows)
+
+SELECT x FROM test_bit_to_int4;
+ x 
+---
+ 1
+ 1
+ 1
+(3 rows)
+
+SELECT x FROM test_cidr_to_text;
+     x      
+------------
+ 1.2.6.4/32
+ 1.2.6.4/32
+ 1.2.6.4/32
+ 1.2.6.4/32
+(4 rows)
+
+SELECT x FROM test_inet_to_text;
+        x         
+------------------
+ 192.168.1.226/24
+ 192.168.1.226/24
+ 192.168.1.226/24
+ 192.168.1.226/24
+(4 rows)
+
+SELECT x FROM test_bool_to_text;
+ x 
+---
+ t
+ t
+ t
+ t
+(4 rows)
+
+SELECT x FROM test_cidr_to_varchar;
+     x      
+------------
+ 1.2.6.4/32
+ 1.2.6.4/32
+ 1.2.6.4/32
+ 1.2.6.4/32
+(4 rows)
+
+SELECT x FROM test_inet_to_varchar;
+        x         
+------------------
+ 192.168.1.226/24
+ 192.168.1.226/24
+ 192.168.1.226/24
+ 192.168.1.226/24
+(4 rows)
+
+SELECT x FROM test_bool_to_varchar;
+ x 
+---
+ t
+ t
+ t
+ t
+(4 rows)
+
+SELECT x FROM test_cidr_to_bpchar;
+     x      
+------------
+ 1.2.6.4/32
+ 1.2.6.4/32
+ 1.2.6.4/32
+ 1.2.6.4/32
+(4 rows)
+
+SELECT x FROM test_inet_to_bpchar;
+        x         
+------------------
+ 192.168.1.226/24
+ 192.168.1.226/24
+ 192.168.1.226/24
+ 192.168.1.226/24
+(4 rows)
+
+SELECT x FROM test_bool_to_bpchar;
+ x 
+---
+ t
+ t
+ t
+ t
+(4 rows)
+
+SELECT x FROM test_json_to_jsonb;
+     x     
+-----------
+ [2, 1, 0]
+(1 row)
+
+SELECT x FROM test_jsonb_to_json;
+     x     
+-----------
+ [0, 1, 2]
+(1 row)
+
+DROP CONTINUOUS VIEW test_stream_casts0;
+DROP CONTINUOUS VIEW test_stream_casts1;
+DROP CONTINUOUS VIEW test_int8_to_int2;
+DROP CONTINUOUS VIEW test_int8_to_int4;
+DROP CONTINUOUS VIEW test_int8_to_float4;
+DROP CONTINUOUS VIEW test_int8_to_float8;
+DROP CONTINUOUS VIEW test_int8_to_numeric;
+DROP CONTINUOUS VIEW test_int2_to_int8;
+DROP CONTINUOUS VIEW test_int2_to_int4;
+DROP CONTINUOUS VIEW test_int2_to_float4;
+DROP CONTINUOUS VIEW test_int2_to_float8;
+DROP CONTINUOUS VIEW test_int2_to_numeric;
+DROP CONTINUOUS VIEW test_int4_to_int8;
+DROP CONTINUOUS VIEW test_int4_to_int2;
+DROP CONTINUOUS VIEW test_int4_to_float4;
+DROP CONTINUOUS VIEW test_int4_to_float8;
+DROP CONTINUOUS VIEW test_int4_to_numeric;
+DROP CONTINUOUS VIEW test_float4_to_int8;
+DROP CONTINUOUS VIEW test_float4_to_int2;
+DROP CONTINUOUS VIEW test_float4_to_int4;
+DROP CONTINUOUS VIEW test_float4_to_float8;
+DROP CONTINUOUS VIEW test_float4_to_numeric;
+DROP CONTINUOUS VIEW test_float8_to_int8;
+DROP CONTINUOUS VIEW test_float8_to_int2;
+DROP CONTINUOUS VIEW test_float8_to_int4;
+DROP CONTINUOUS VIEW test_float8_to_float4;
+DROP CONTINUOUS VIEW test_float8_to_numeric;
+DROP CONTINUOUS VIEW test_numeric_to_int8;
+DROP CONTINUOUS VIEW test_numeric_to_int2;
+DROP CONTINUOUS VIEW test_numeric_to_int4;
+DROP CONTINUOUS VIEW test_numeric_to_float4;
+DROP CONTINUOUS VIEW test_numeric_to_float8;
+DROP CONTINUOUS VIEW test_money_to_numeric;
+DROP CONTINUOUS VIEW test_numeric_to_money;
+DROP CONTINUOUS VIEW test_int4_to_money;
+DROP CONTINUOUS VIEW test_int8_to_money;
+DROP CONTINUOUS VIEW test_int4_to_bool;
+DROP CONTINUOUS VIEW test_bool_to_int4;
+DROP CONTINUOUS VIEW test_int8_to_oid;
+DROP CONTINUOUS VIEW test_int2_to_oid;
+DROP CONTINUOUS VIEW test_int4_to_oid;
+DROP CONTINUOUS VIEW test_oid_to_int8;
+DROP CONTINUOUS VIEW test_oid_to_int4;
+DROP CONTINUOUS VIEW test_oid_to_regproc;
+DROP CONTINUOUS VIEW test_int8_to_regproc;
+DROP CONTINUOUS VIEW test_int2_to_regproc;
+DROP CONTINUOUS VIEW test_int4_to_regproc;
+DROP CONTINUOUS VIEW test_oid_to_regprocedure;
+DROP CONTINUOUS VIEW test_int8_to_regprocedure;
+DROP CONTINUOUS VIEW test_int2_to_regprocedure;
+DROP CONTINUOUS VIEW test_int4_to_regprocedure;
+DROP CONTINUOUS VIEW test_oid_to_regoper;
+DROP CONTINUOUS VIEW test_int8_to_regoper;
+DROP CONTINUOUS VIEW test_int2_to_regoper;
+DROP CONTINUOUS VIEW test_int4_to_regoper;
+DROP CONTINUOUS VIEW test_oid_to_regoperator;
+DROP CONTINUOUS VIEW test_int8_to_regoperator;
+DROP CONTINUOUS VIEW test_int2_to_regoperator;
+DROP CONTINUOUS VIEW test_int4_to_regoperator;
+DROP CONTINUOUS VIEW test_oid_to_regclass;
+DROP CONTINUOUS VIEW test_int8_to_regclass;
+DROP CONTINUOUS VIEW test_int2_to_regclass;
+DROP CONTINUOUS VIEW test_int4_to_regclass;
+DROP CONTINUOUS VIEW test_oid_to_regtype;
+DROP CONTINUOUS VIEW test_int8_to_regtype;
+DROP CONTINUOUS VIEW test_int2_to_regtype;
+DROP CONTINUOUS VIEW test_int4_to_regtype;
+DROP CONTINUOUS VIEW test_oid_to_regconfig;
+DROP CONTINUOUS VIEW test_int8_to_regconfig;
+DROP CONTINUOUS VIEW test_int2_to_regconfig;
+DROP CONTINUOUS VIEW test_int4_to_regconfig;
+DROP CONTINUOUS VIEW test_oid_to_regdictionary;
+DROP CONTINUOUS VIEW test_int8_to_regdictionary;
+DROP CONTINUOUS VIEW test_int2_to_regdictionary;
+DROP CONTINUOUS VIEW test_int4_to_regdictionary;
+DROP CONTINUOUS VIEW test_text_to_regclass;
+DROP CONTINUOUS VIEW test_varchar_to_regclass;
+DROP CONTINUOUS VIEW test_text_to_bpchar;
+DROP CONTINUOUS VIEW test_text_to_varchar;
+DROP CONTINUOUS VIEW test_varchar_to_text;
+DROP CONTINUOUS VIEW test_varchar_to_bpchar;
+DROP CONTINUOUS VIEW test_char_to_text;
+DROP CONTINUOUS VIEW test_char_to_bpchar;
+DROP CONTINUOUS VIEW test_char_to_varchar;
+DROP CONTINUOUS VIEW test_name_to_text;
+DROP CONTINUOUS VIEW test_name_to_bpchar;
+DROP CONTINUOUS VIEW test_name_to_varchar;
+DROP CONTINUOUS VIEW test_text_to_char;
+DROP CONTINUOUS VIEW test_varchar_to_char;
+DROP CONTINUOUS VIEW test_text_to_name;
+DROP CONTINUOUS VIEW test_varchar_to_name;
+DROP CONTINUOUS VIEW test_char_to_int4;
+DROP CONTINUOUS VIEW test_int4_to_char;
+DROP CONTINUOUS VIEW test_date_to_timestamp;
+DROP CONTINUOUS VIEW test_date_to_timestamptz;
+DROP CONTINUOUS VIEW test_time_to_interval;
+DROP CONTINUOUS VIEW test_time_to_timetz;
+DROP CONTINUOUS VIEW test_timestamp_to_abstime;
+DROP CONTINUOUS VIEW test_timestamp_to_date;
+DROP CONTINUOUS VIEW test_timestamp_to_time;
+DROP CONTINUOUS VIEW test_timestamp_to_timestamptz;
+DROP CONTINUOUS VIEW test_timestamptz_to_abstime;
+DROP CONTINUOUS VIEW test_timestamptz_to_date;
+DROP CONTINUOUS VIEW test_timestamptz_to_time;
+DROP CONTINUOUS VIEW test_timestamptz_to_timestamp;
+DROP CONTINUOUS VIEW test_timestamptz_to_timetz;
+DROP CONTINUOUS VIEW test_interval_to_reltime;
+DROP CONTINUOUS VIEW test_interval_to_time;
+DROP CONTINUOUS VIEW test_timetz_to_time;
+DROP CONTINUOUS VIEW test_int4_to_abstime;
+DROP CONTINUOUS VIEW test_int4_to_reltime;
+DROP CONTINUOUS VIEW test_lseg_to_point;
+DROP CONTINUOUS VIEW test_path_to_point;
+DROP CONTINUOUS VIEW test_path_to_polygon;
+DROP CONTINUOUS VIEW test_box_to_point;
+DROP CONTINUOUS VIEW test_box_to_lseg;
+DROP CONTINUOUS VIEW test_box_to_polygon;
+DROP CONTINUOUS VIEW test_box_to_circle;
+DROP CONTINUOUS VIEW test_polygon_to_point;
+DROP CONTINUOUS VIEW test_polygon_to_path;
+DROP CONTINUOUS VIEW test_polygon_to_box;
+DROP CONTINUOUS VIEW test_polygon_to_circle;
+DROP CONTINUOUS VIEW test_circle_to_point;
+DROP CONTINUOUS VIEW test_circle_to_box;
+DROP CONTINUOUS VIEW test_circle_to_polygon;
+DROP CONTINUOUS VIEW test_cidr_to_inet;
+DROP CONTINUOUS VIEW test_inet_to_cidr;
+DROP CONTINUOUS VIEW test_bit_to_varbit;
+DROP CONTINUOUS VIEW test_varbit_to_bit;
+DROP CONTINUOUS VIEW test_int8_to_bit;
+DROP CONTINUOUS VIEW test_int4_to_bit;
+DROP CONTINUOUS VIEW test_bit_to_int8;
+DROP CONTINUOUS VIEW test_bit_to_int4;
+DROP CONTINUOUS VIEW test_cidr_to_text;
+DROP CONTINUOUS VIEW test_inet_to_text;
+DROP CONTINUOUS VIEW test_bool_to_text;
+DROP CONTINUOUS VIEW test_cidr_to_varchar;
+DROP CONTINUOUS VIEW test_inet_to_varchar;
+DROP CONTINUOUS VIEW test_bool_to_varchar;
+DROP CONTINUOUS VIEW test_cidr_to_bpchar;
+DROP CONTINUOUS VIEW test_inet_to_bpchar;
+DROP CONTINUOUS VIEW test_bool_to_bpchar;
+DROP CONTINUOUS VIEW test_json_to_jsonb;
+DROP CONTINUOUS VIEW test_jsonb_to_json;

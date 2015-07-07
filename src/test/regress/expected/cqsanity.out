@@ -1,0 +1,124 @@
+SET debug_sync_stream_insert = 'on';
+CREATE CONTINUOUS VIEW test_avg AS SELECT key::text, avg(value::float8) FROM sanity_stream GROUP BY key;
+ACTIVATE test_avg;
+INSERT INTO sanity_stream (key, value) VALUES ('x', 1), ('x', 2), ('y', 100);
+DEACTIVATE test_avg;
+SELECT * FROM test_avg ORDER BY key;
+ key | avg 
+-----+-----
+ x   | 1.5
+ y   | 100
+(2 rows)
+
+SELECT * FROM test_avg_mrel0 ORDER BY key;
+ key | avg |      _0       
+-----+-----+---------------
+ x   | 1.5 | {2,3,5}
+ y   | 100 | {1,100,10000}
+(2 rows)
+
+ACTIVATE test_avg;
+INSERT INTO sanity_stream (key, value) VALUES ('x', 10), ('x', 20), ('y', 200);
+DEACTIVATE test_avg;
+SELECT * FROM test_avg ORDER BY key;
+ key | avg  
+-----+------
+ x   | 8.25
+ y   |  150
+(2 rows)
+
+SELECT * FROM test_avg_mrel0 ORDER BY key;
+ key | avg  |      _0       
+-----+------+---------------
+ x   | 8.25 | {4,33,505}
+ y   |  150 | {2,300,50000}
+(2 rows)
+
+CREATE CONTINUOUS VIEW cv AS SELECT key::text, COUNT(*), MAX(x::integer + y::integer) FROM sanity_stream GROUP BY key;
+ACTIVATE cv;
+INSERT INTO sanity_stream (key, x, y) VALUES ('x', -1000, 1000), ('x', 0, 1), ('x', 1, 0);
+INSERT INTO sanity_stream (key, x, y) VALUES ('y', 10, 20), ('y', 20, 30), ('y', 1, 200), ('y', 1, 200), ('y', 1, 200);
+INSERT INTO sanity_stream (key, x, y) VALUES ('z', -1000, 1001);
+DEACTIVATE cv;
+SELECT * FROM cv ORDER BY key;
+ key | count | max 
+-----+-------+-----
+ x   |     3 |   1
+ y   |     5 | 201
+ z   |     1 |   1
+(3 rows)
+
+CREATE CONTINUOUS VIEW cv_weird_tl AS SELECT COUNT(*), key::text, SUM(value::integer) FROM sanity_stream GROUP BY key;
+ACTIVATE cv_weird_tl;
+INSERT INTO sanity_stream (key, value) VALUES ('x', 10), ('x', 20), ('y', 200);
+DEACTIVATE cv_weird_tl;
+SELECT * FROM cv_weird_tl ORDER BY key;
+ count | key | sum 
+-------+-----+-----
+     2 | x   |  30
+     1 | y   | 200
+(2 rows)
+
+CREATE CONTINUOUS VIEW cv_no_grp AS SELECT COUNT(*), SUM(value::integer) FROM sanity_stream;
+ACTIVATE cv_no_grp;
+INSERT INTO sanity_stream (key, value) VALUES ('x', 10), ('x', 20), ('y', 200);
+DEACTIVATE cv_no_grp;
+SELECT * FROM cv_no_grp;
+ count | sum 
+-------+-----
+     3 | 230
+(1 row)
+
+CREATE CONTINUOUS VIEW cv_grp_expr AS SELECT COUNT(*), substring(key::text, 1, 2) AS s FROM sanity_stream GROUP BY s;
+ACTIVATE cv_grp_expr;
+INSERT INTO sanity_stream (key) VALUES ('aab'), ('aba'), ('aaa'), ('cab');
+DEACTIVATE cv_grp_expr;
+SELECT * FROM cv_grp_expr ORDER BY s;
+ count | s  
+-------+----
+     2 | aa
+     1 | ab
+     1 | ca
+(3 rows)
+
+CREATE CONTINUOUS VIEW cv_multi_grp AS SELECT a, b, COUNT(*) FROM sanity_stream GROUP BY a::integer, b::integer;
+ACTIVATE cv_multi_grp;
+INSERT INTO sanity_stream (a, b) VALUES (1, 1), (1, 1), (1, 2), (2, 2), (2, 1);
+DEACTIVATE cv_multi_grp;
+SELECT * FROM cv_multi_grp ORDER BY a, b;
+ a | b | count 
+---+---+-------
+ 1 | 1 |     2
+ 1 | 2 |     1
+ 2 | 1 |     1
+ 2 | 2 |     1
+(4 rows)
+
+CREATE CONTINUOUS VIEW cv_agg_expr AS SELECT k::text, COUNT(*) + SUM(v::int) FROM sanity_stream GROUP BY k;
+ACTIVATE cv_agg_expr;
+INSERT INTO sanity_stream (k, v) VALUES ('a', 1), ('a', 2), ('a', 3), ('b', 4), ('b', 5);
+DEACTIVATE cv_agg_expr;
+SELECT * FROM cv_agg_expr ORDER BY k;
+ k | ?column? 
+---+----------
+ a |        9
+ b |       11
+(2 rows)
+
+ACTIVATE cv_agg_expr;
+INSERT INTO sanity_stream (k, v) VALUES ('a', 1), ('a', 2), ('b', 3);
+DEACTIVATE cv_agg_expr;
+SELECT * FROM cv_agg_expr ORDER BY k;
+ k | ?column? 
+---+----------
+ a |       14
+ b |       15
+(2 rows)
+
+DROP CONTINUOUS VIEW test_avg;
+DROP CONTINUOUS VIEW cv;
+DROP CONTINUOUS VIEW cv_weird_tl;
+DROP CONTINUOUS VIEW cv_no_grp;
+DROP CONTINUOUS VIEW cv_grp_expr;
+DROP CONTINUOUS VIEW cv_multi_grp;
+DROP CONTINUOUS VIEW cv_agg_expr;

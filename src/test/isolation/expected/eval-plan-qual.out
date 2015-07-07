@@ -1,0 +1,74 @@
+Parsed test spec with 3 sessions
+
+starting permutation: wx1 wx2 c1 c2 read
+step wx1: UPDATE accounts SET balance = balance - 200 WHERE accountid = 'checking';
+step wx2: UPDATE accounts SET balance = balance + 450 WHERE accountid = 'checking'; <waiting ...>
+step c1: COMMIT;
+step wx2: <... completed>
+step c2: COMMIT;
+step read: SELECT * FROM accounts ORDER BY accountid;
+accountid      balance        
+
+checking       850            
+savings        600            
+
+starting permutation: wy1 wy2 c1 c2 read
+step wy1: UPDATE accounts SET balance = balance + 500 WHERE accountid = 'checking';
+step wy2: UPDATE accounts SET balance = balance + 1000 WHERE accountid = 'checking' AND balance < 1000; <waiting ...>
+step c1: COMMIT;
+step wy2: <... completed>
+step c2: COMMIT;
+step read: SELECT * FROM accounts ORDER BY accountid;
+accountid      balance        
+
+checking       1100           
+savings        600            
+
+starting permutation: upsert1 upsert2 c1 c2 read
+step upsert1: 
+	WITH upsert AS
+	  (UPDATE accounts SET balance = balance + 500
+	   WHERE accountid = 'savings'
+	   RETURNING accountid)
+	INSERT INTO accounts SELECT 'savings', 500
+	  WHERE NOT EXISTS (SELECT 1 FROM upsert);
+
+step upsert2: 
+	WITH upsert AS
+	  (UPDATE accounts SET balance = balance + 1234
+	   WHERE accountid = 'savings'
+	   RETURNING accountid)
+	INSERT INTO accounts SELECT 'savings', 1234
+	  WHERE NOT EXISTS (SELECT 1 FROM upsert);
+ <waiting ...>
+step c1: COMMIT;
+step upsert2: <... completed>
+step c2: COMMIT;
+step read: SELECT * FROM accounts ORDER BY accountid;
+accountid      balance        
+
+checking       600            
+savings        2334           
+
+starting permutation: readp1 writep1 readp2 c1 c2
+step readp1: SELECT tableoid::regclass, ctid, * FROM p WHERE b IN (0, 1) AND c = 0 FOR UPDATE;
+tableoid       ctid           a              b              c              
+
+c1             (0,1)          0              0              0              
+c1             (0,4)          0              1              0              
+c2             (0,1)          1              0              0              
+c2             (0,4)          1              1              0              
+c3             (0,1)          2              0              0              
+c3             (0,4)          2              1              0              
+step writep1: UPDATE p SET b = -1 WHERE a = 1 AND b = 1 AND c = 0;
+step readp2: SELECT tableoid::regclass, ctid, * FROM p WHERE b IN (0, 1) AND c = 0 FOR UPDATE; <waiting ...>
+step c1: COMMIT;
+step readp2: <... completed>
+tableoid       ctid           a              b              c              
+
+c1             (0,1)          0              0              0              
+c1             (0,4)          0              1              0              
+c2             (0,1)          1              0              0              
+c3             (0,1)          2              0              0              
+c3             (0,4)          2              1              0              
+step c2: COMMIT;

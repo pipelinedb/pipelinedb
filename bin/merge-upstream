@@ -1,0 +1,160 @@
+#! /usr/bin/python
+
+import argparse
+import datetime
+import difflib
+import os
+import shutil
+import tarfile
+import tempfile
+import urlparse
+import urllib
+
+try:
+    from git import *
+except ImportError:
+    print 'gitpython not installed -- see https://github.com/gitpython-developers/GitPython'
+
+
+URL_TEMPLATE = 'https://ftp.postgresql.org/pub/source/v%(version)s/postgresql-%(version)s.tar.gz'
+
+def _mkdirs(path):
+    try:
+        os.makedirs(path)
+    except OSError:
+        # Directory already exists
+        pass
+
+def main(args):
+    """
+    This script works as follows:
+
+    1) Download the upstream source tarball for the given version of Postgres
+
+    2) Determine all files that we've modified since the given commit hash
+
+    3) Overwrite all files that we haven't modified with the newer version
+       from the upstream source tarball
+
+    4) For every file that we've modified, generate a diff against the
+       corresponding upstream file in the downloaded source tarball.
+       Save this file to ./diffs. We also put a copy of the upstream
+       source file in ./diffs because it's useful to have when manually
+       merging.
+    """
+    tmp_dir = args.tmp_dir or tempfile.mkdtemp()
+    filename = 'postgresql-%s.tar.gz' % args.version
+    tmp_path = os.path.join(tmp_dir, filename)
+    url = URL_TEMPLATE % {'version': args.version}
+
+    print 'Downloading %s to %s...' % (url, tmp_path)
+    urllib.urlretrieve(url, tmp_path)
+    print 'Download complete'
+
+    our_repo = Repo('.')
+    commit = our_repo.commit(args.after_commit)
+    since_ts = str(datetime.datetime.utcfromtimestamp(commit.committed_date)) + ' UTC'
+
+    rev = '%s..HEAD' % (args.after_commit)
+    commits = our_repo.iter_commits(rev)
+    modified_by_us = set()
+
+    # Get each file we've modified since the given commit
+    # along with its earliest modification time
+    print 'Determining which files we modified since %s (%s)...' % (args.after_commit[:8], since_ts)
+    for c in commits:
+        for f in c.stats.files:
+            modified_by_us.add(f)
+
+    tmp_dir = '/tmp/tmpcTLkgW'
+    upstream_root = os.path.join(tmp_dir, 'postgresql-%s' % (args.version))
+    diff_dir = os.path.join('diffs')
+
+    need_merge = set()
+    tar = tarfile.open(tmp_path)
+    tar.extractall(path=tmp_dir)
+    tar.close()
+
+    # Before overwriting our files with the upstream versions,
+    # figure out which files we'll need to manually merge
+    print 'Generating diffs against upstream files for files we modified...'
+    for our_path in sorted(modified_by_us):
+
+        upstream_path = os.path.join(upstream_root, our_path)
+        if not os.path.exists(upstream_path): continue
+
+        lf = open(our_path)
+        rf = open(upstream_path)
+
+        # We both potentially modified this file
+        left = [l.strip('\n') for l in lf.readlines()]
+        right = [l.strip('\n') for l in rf.readlines()]
+
+        lf.close()
+        rf.close()
+
+        diff_path = os.path.join(diff_dir, our_path) + '.diff'
+        subdir, _ = os.path.split(diff_path)
+
+        _mkdirs(subdir)
+
+        lines = 0
+        diff_lines = list(difflib.unified_diff(left, right, upstream_path, our_path))
+        
+        if not diff_lines:
+            continue
+        
+        diff = open(diff_path, 'wa')
+        for line in diff_lines:
+            diff.write(line + '\n')
+            lines += 1
+        diff.close()
+    
+        need_merge.add(our_path)
+        print 'Created %s' % diff_path
+
+        # It's also useful when merging to have the original copy
+        # of upstream file, so save it as well
+        upstream_copy_path = os.path.join(diff_dir, our_path)
+        upstream_copy = open(upstream_copy_path, 'wa')
+        for line in right:
+            upstream_copy.write(line + '\n')
+        upstream_copy.close()
+
+    # It's useful to have a list of all files written to diffs/
+    # so we can check off files as we merge them
+    diff_list = open(os.path.join(diff_dir, 'files.txt'), 'wa')
+    for f in sorted(need_merge):
+        diff_list.write(f + '\n')
+    diff_list.close()
+
+    print 'Overwriting our files with upstream versions...'
+    for root, subdirs, files in os.walk(upstream_root):
+        for file in files:
+            upstream_path = os.path.join(root, file)
+            our_path = upstream_path.replace(upstream_root, '')[1:]
+
+            # Don't overwrite files that need a manual merge
+            if our_path in need_merge: continue
+
+            # Overwrite our version with the upstream version
+            if not args.dry_run:
+                _mkdirs(os.path.split(our_path)[0])
+                shutil.copy(upstream_path, our_path)
+            print upstream_path, '->', our_path
+
+    shutil.rmtree(tmp_dir)
+    print 'Cleaned up %s' % tmp_dir
+    print 'Diffs for manual merging saved to directory ./diffs'
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--after-commit', action='store', dest='after_commit', required=True,
+                    help='Consider all commits after this commit when comparing against the upstream tree')
+    parser.add_argument('--upstream-version', action='store', dest='version', required=True,
+                    help='Upstream version to diff against')
+    parser.add_argument('--tmp-dir', action='store', dest='tmp_dir', required=False,
+                    help='Temporary directory to store upstream source tree in')
+    parser.add_argument('--dry-run', action='store_true', dest='dry_run', required=False)
+    args = parser.parse_args()
+    main(args)
