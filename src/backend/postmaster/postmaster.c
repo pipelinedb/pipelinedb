@@ -105,7 +105,6 @@
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker_internals.h"
 #include "postmaster/fork_process.h"
-#include "postmaster/license.h"
 #include "postmaster/pgarch.h"
 #include "postmaster/postmaster.h"
 #include "postmaster/syslogger.h"
@@ -536,10 +535,6 @@ splash(void)
 	printf(" / ____/ / /_/ /  __/ / / / / /  __/ /_/ / /_/ /\n");
 	printf("/_/   /_/ .___/\\___/_/_/_/ /_/\\___/_____/_____/\n");
 	printf("       /_/\n\n");
-
-#ifdef REQUIRE_LICENSE
-			CheckLicense(false);
-#endif
 }
 
 /*
