@@ -614,11 +614,11 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		2048
 	},
-	{PipelineTStateRelationId,	/* PIPELINETSTATENAME */
-		PipelineTStateNameIndexId,
+	{PipelineTStateRelationId,	/* PIPELINETSTATEID */
+		PipelineTStateIdIndexId,
 		1,
 		{
-			Anum_pipeline_tstate_name,
+			Anum_pipeline_tstate_id,
 			0,
 			0,
 			0

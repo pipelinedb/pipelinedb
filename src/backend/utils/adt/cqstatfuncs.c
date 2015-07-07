@@ -45,19 +45,18 @@ cq_stat_proc_get(PG_FUNCTION_ARGS)
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		/* build tupdesc for result tuples */
-		tupdesc = CreateTemplateTupleDesc(12, false);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "name", TEXTOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "type", TEXTOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "pid", INT4OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "start_time", TIMESTAMPTZOID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "input_rows", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 6, "output_rows", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 7, "updated_rows", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 8, "input_bytes", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 9, "output_bytes", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 10, "updated_bytes", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 11, "executions", INT8OID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 12, "errors", INT8OID, -1, 0);
+		tupdesc = CreateTemplateTupleDesc(11, false);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "type", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "pid", INT4OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "start_time", TIMESTAMPTZOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "input_rows", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "output_rows", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 6, "updated_rows", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 7, "input_bytes", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 8, "output_bytes", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 9, "updated_bytes", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 10, "executions", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 11, "errors", INT8OID, -1, 0);
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
@@ -78,29 +77,15 @@ cq_stat_proc_get(PG_FUNCTION_ARGS)
 
 	while ((entry = (CQStatEntry *) hash_seq_search(iter)) != NULL)
 	{
-		Datum values[12];
-		bool nulls[12];
+		Datum values[11];
+		bool nulls[11];
 		HeapTuple tup;
 		Datum result;
-		int pid = GetCQStatProcPid(entry->key);
-		Oid viewoid = GetCQStatView(entry->key);
-		Relation rel;
-		char *viewname;
+		pid_t pid = GetCQStatProcPid(entry->key);
 
 		/* keep scanning if it's a CQ-level stats entry */
 		if (!pid)
 			continue;
-
-		/* ignore and purge stale stats entries */
-		rel = try_relation_open(viewoid, NoLock);
-		if (!rel)
-		{
-			cq_stat_send_purge(viewoid, pid, GetCQStatProcType(entry->key));
-			continue;
-		}
-
-		viewname = RelationGetRelationName(rel);
-		heap_close(rel, NoLock);
 
 		/*
 		 * If a pid doesn't exist, kill() with signal 0 will fail and set
@@ -109,25 +94,24 @@ cq_stat_proc_get(PG_FUNCTION_ARGS)
 		if (kill(pid, 0) == -1 && errno == ESRCH)
 		{
 			/* stale proc, purge it */
-			cq_stat_send_purge(viewoid, pid, GetCQStatProcType(entry->key));
+			cq_stat_send_purge(0, pid, GetCQStatProcType(entry->key));
 			continue;
 		}
 
 		MemSet(values, 0, sizeof(values));
 		MemSet(nulls, 0, sizeof(nulls));
 
-		values[0] = CStringGetTextDatum(viewname);
-		values[1] = CStringGetTextDatum((GetCQStatProcType(entry->key) == CQ_STAT_WORKER ? "worker" : "combiner"));
-		values[2] = Int32GetDatum(pid);
-		values[3] = TimestampTzGetDatum(entry->start_ts);
-		values[4] = Int64GetDatum(entry->input_rows);
-		values[5] = Int64GetDatum(entry->output_rows);
-		values[6] = Int64GetDatum(entry->updates);
-		values[7] = Int64GetDatum(entry->input_bytes);
-		values[8] = Int64GetDatum(entry->output_bytes);
-		values[9] = Int64GetDatum(entry->updated_bytes);
-		values[10] = Int64GetDatum(entry->executions);
-		values[11] = Int64GetDatum(entry->errors);
+		values[0] = CStringGetTextDatum((GetCQStatProcType(entry->key) == CQ_STAT_WORKER ? "worker" : "combiner"));
+		values[1] = Int32GetDatum(pid);
+		values[2] = TimestampTzGetDatum(entry->start_ts);
+		values[3] = Int64GetDatum(entry->input_rows);
+		values[4] = Int64GetDatum(entry->output_rows);
+		values[5] = Int64GetDatum(entry->updates);
+		values[6] = Int64GetDatum(entry->input_bytes);
+		values[7] = Int64GetDatum(entry->output_bytes);
+		values[8] = Int64GetDatum(entry->updated_bytes);
+		values[9] = Int64GetDatum(entry->executions);
+		values[10] = Int64GetDatum(entry->errors);
 
 		tup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(tup);
@@ -198,22 +182,20 @@ cq_stat_get(PG_FUNCTION_ARGS)
 		bool nulls[9];
 		HeapTuple tup;
 		Datum result;
-		int pid = GetCQStatProcPid(entry->key);
-		Oid viewoid = GetCQStatView(entry->key);
-		Relation rel;
+		Oid viewid = GetCQStatView(entry->key);
+		ContinuousView *cv;
 		char *viewname;
 
 		/* keep scanning if it's a proc-level stats entry */
-		if (pid)
+		if (!viewid)
 			continue;
 
 		/* just ignore stale stats entries */
-		rel = try_relation_open(viewoid, NoLock);
-		if (!rel)
+		cv = GetContinuousView(viewid);
+		if (!cv)
 			continue;
 
-		viewname = RelationGetRelationName(rel);
-		heap_close(rel, NoLock);
+		viewname = NameStr(cv->name);
 
 		MemSet(values, 0, sizeof(values));
 		MemSet(nulls, 0, sizeof(nulls));

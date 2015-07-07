@@ -19,12 +19,12 @@
 #include "funcapi.h"
 #include "libpq/libpq.h"
 #include "libpq/pqformat.h"
+#include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/analyze.h"
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
 #include "parser/parse_target.h"
-#include "pipeline/cont_xact.h"
 #include "pipeline/stream.h"
 #include "storage/shm_alloc.h"
 #include "storage/ipc.h"
@@ -36,7 +36,11 @@
 #include "utils/typcache.h"
 #include "utils/guc.h"
 
-/* Whether or not to block till the events are consumed by a cv*/
+#define SLEEP_MS 2
+
+#define StreamBatchAllAcked(batch) ((batch)->num_wacks >= (batch)->num_wtups && (batch)->num_cacks >= (batch)->num_ctups)
+
+/* guc parameters */
 bool synchronous_stream_insert;
 char *stream_targets = NULL;
 
@@ -142,15 +146,14 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	ListCell *lc;
 	int count = 0;
 	Bitmapset *targets = GetLocalStreamReaders(pstmt->stream);
-	TupleBufferSlot* tbs = NULL;
 	TupleDesc desc = GetStreamTupleDesc(pstmt->stream, pstmt->cols);
-	StreamBatchAck acks[1];
-	StreamBatch *batch = NULL;
+	InsertBatchAck acks[1];
+	InsertBatch *batch = NULL;
 	int num_batches = 0;
 
 	if (synchronous_stream_insert)
 	{
-		batch = StreamBatchCreate(targets, list_length(pstmt->inserts));
+		batch = InsertBatchCreate(targets, list_length(pstmt->inserts));
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -164,7 +167,7 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 		ParamListInfoData *params = (ParamListInfoData *) lfirst(lc);
 		Datum *values = palloc0(params->numParams * sizeof(Datum));
 		bool *nulls = palloc0(params->numParams * sizeof(bool));
-		Tuple *tuple;
+		StreamTuple *tuple;
 
 		for (i=0; i<params->numParams; i++)
 		{
@@ -183,17 +186,14 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 			nulls[i] = params->params[i].isnull;
 		}
 
-		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, acks);
-		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+		tuple = MakeStreamTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, acks);
+		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
 	}
 
 	if (synchronous_stream_insert)
-	{
-		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
-		StreamBatchWaitAndRemove(batch);
-	}
+		InsertBatchWaitAndRemove(batch);
 
 	pstmt->inserts = NIL;
 
@@ -209,7 +209,6 @@ int
 InsertIntoStream(InsertStmt *ins, List *values)
 {
 	ListCell *lc;
-	TupleBufferSlot* tbs = NULL;
 	int numcols = list_length(ins->cols);
 	int i;
 	int count = 0;
@@ -218,13 +217,13 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	TupleDesc desc = NULL;
 	ExprContext *econtext = CreateStandaloneExprContext();
 	Bitmapset *targets = GetLocalStreamReaders(ins->relation->relname);
-	StreamBatchAck acks[1];
-	StreamBatch *batch = NULL;
+	InsertBatchAck acks[1];
+	InsertBatch *batch = NULL;
 	int num_batches = 0;
 
 	if (synchronous_stream_insert)
 	{
-		batch = StreamBatchCreate(targets, list_length(values));
+		batch = InsertBatchCreate(targets, list_length(values));
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -275,7 +274,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		int evindex = 0;
 		List *filteredvals = NIL;
 		List *filteredcols = NIL;
-		Tuple *tuple;
+		StreamTuple *tuple;
 
 		assign_expr_collations(NULL, (Node *) exprlist);
 
@@ -331,10 +330,9 @@ InsertIntoStream(InsertStmt *ins, List *values)
 		/*
 		 * Now write the tuple of constants to the TupleBuffer
 		 */
-		tuple = MakeTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, acks);
-		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+		tuple = MakeStreamTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, acks);
+		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
-		Assert(tbs);
 		count++;
 	}
 
@@ -344,10 +342,7 @@ InsertIntoStream(InsertStmt *ins, List *values)
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
-	{
-		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
-		StreamBatchWaitAndRemove(batch);
-	}
+		InsertBatchWaitAndRemove(batch);
 
 	return count;
 }
@@ -361,16 +356,15 @@ uint64
 CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
 	Bitmapset *targets = GetLocalStreamReaders(stream);
-	TupleBufferSlot* tbs = NULL;
 	uint64 count = 0;
 	int i;
-	StreamBatchAck acks[1];
-	StreamBatch *batch = NULL;
+	InsertBatchAck acks[1];
+	InsertBatch *batch = NULL;
 	int num_batches = 0;
 
 	if (synchronous_stream_insert)
 	{
-		batch = StreamBatchCreate(targets, ntuples);
+		batch = InsertBatchCreate(targets, ntuples);
 		num_batches = 1;
 
 		acks[0].batch_id = batch->id;
@@ -381,10 +375,10 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	for (i=0; i<ntuples; i++)
 	{
 		HeapTuple htup = tuples[i];
-		Tuple *tuple;
+		StreamTuple *tuple;
 
-		tuple = MakeTuple(htup, desc, num_batches, acks);
-		tbs = TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
+		tuple = MakeStreamTuple(htup, desc, num_batches, acks);
+		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
 	}
@@ -393,10 +387,60 @@ CopyIntoStream(const char *stream, TupleDesc desc, HeapTuple *tuples, int ntuple
 	 * Wait till the last event has been consumed by a CV before returning.
 	 */
 	if (synchronous_stream_insert)
-	{
-		TupleBufferWaitOnSlot(WorkerTupleBuffer, tbs);
-		StreamBatchWaitAndRemove(batch);
-	}
+		InsertBatchWaitAndRemove(batch);
 
 	return count;
+}
+
+
+InsertBatch *
+InsertBatchCreate(Bitmapset *readers, int num_tuples)
+{
+	char *ptr = ShmemDynAlloc0(sizeof(InsertBatch) + BITMAPSET_SIZE(readers->nwords));
+	InsertBatch *batch = (InsertBatch *) ptr;
+
+	batch->id = rand() ^ (int) MyProcPid;
+	batch->num_tups = num_tuples;
+	batch->num_wtups = bms_num_members(readers) * num_tuples;
+	SpinLockInit(&batch->mutex);
+
+	ptr += sizeof(InsertBatch);
+	batch->readers = (Bitmapset *) ptr;
+	memcpy(batch->readers, readers, BITMAPSET_SIZE(readers->nwords));
+
+	return batch;
+}
+
+void
+InsertBatchWaitAndRemove(InsertBatch *batch)
+{
+	while (!StreamBatchAllAcked(batch))
+	{
+		pg_usleep(SLEEP_MS * 1000);
+		CHECK_FOR_INTERRUPTS();
+	}
+
+	ShmemDynFree(batch);
+}
+
+void
+InsertBatchIncrementNumCTuples(InsertBatch *batch)
+{
+	SpinLockAcquire(&batch->mutex);
+	batch->num_ctups++;
+	SpinLockRelease(&batch->mutex);
+}
+
+void
+InsertBatchMarkAcked(InsertBatchAck *ack)
+{
+	if (ack->batch_id != ack->batch->id)
+		return;
+
+	SpinLockAcquire(&ack->batch->mutex);
+	if (IsContQueryWorkerProcess())
+		ack->batch->num_wacks += ack->count;
+	else if (IsContQueryCombinerProcess())
+		ack->batch->num_cacks += ack->count;
+	SpinLockRelease(&ack->batch->mutex);
 }

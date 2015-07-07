@@ -621,6 +621,10 @@ InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 	if (IsAutoVacuumLauncherProcess())
 		return;
 
+	/* The continuous query scheduler is done here */
+	if (IsContQuerySchedulerProcess())
+		return;
+
 	/*
 	 * Start a new transaction here before first access to db, and get a
 	 * snapshot.  We don't have a use for the snapshot itself, but we're
@@ -945,7 +949,7 @@ InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 
 	/* initialize all PipelineDB stuff */
 	if (!bootstrap)
-		InitPipeline();
+		PipelineShmemInit();
 
 	/* close the transaction we started above */
 	if (!bootstrap)

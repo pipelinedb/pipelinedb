@@ -24,20 +24,18 @@
 #include "utils/syscache.h"
 
 void
-CreateTStateEntry(char *cvname)
+CreateTStateEntry(Oid id)
 {
 	Relation pipeline_tstate;
 	HeapTuple tup;
 	bool nulls[Natts_pipeline_tstate];
 	Datum values[Natts_pipeline_tstate];
-	NameData name_data;
 
 	MemSet(nulls, 0, sizeof(nulls));
 
 	pipeline_tstate = heap_open(PipelineTStateRelationId, RowExclusiveLock);
 
-	namestrcpy(&name_data, cvname);
-	values[Anum_pipeline_tstate_name - 1] = NameGetDatum(&name_data);
+	values[Anum_pipeline_tstate_id - 1] = Int32GetDatum(id);
 
 	/* distinct Bloom filter should be NULL */
 	nulls[Anum_pipeline_tstate_distinct - 1] = true;
@@ -52,10 +50,10 @@ CreateTStateEntry(char *cvname)
 }
 
 void
-RemoveTStateEntry(char *cvname)
+RemoveTStateEntry(Oid id)
 {
 	Relation pipeline_tstate = heap_open(PipelineTStateRelationId, RowExclusiveLock);
-	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
+	HeapTuple tuple = SearchSysCache1(PIPELINETSTATEID, Int32GetDatum(id));
 
 	simple_heap_delete(pipeline_tstate, &tuple->t_self);
 	ReleaseSysCache(tuple);
@@ -65,10 +63,10 @@ RemoveTStateEntry(char *cvname)
 }
 
 void
-ResetTStateEntry(char *cvname)
+ResetTStateEntry(Oid id)
 {
 	Relation pipeline_tstate = heap_open(PipelineTStateRelationId, RowExclusiveLock);
-	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
+	HeapTuple tuple = SearchSysCache1(PIPELINETSTATEID, Int32GetDatum(id));
 	bool nulls[Natts_pipeline_tstate];
 	bool replaces[Natts_pipeline_tstate];
 	Datum values[Natts_pipeline_tstate];
@@ -77,7 +75,7 @@ ResetTStateEntry(char *cvname)
 	/* Set everything to NULL */
 	MemSet(nulls, true, sizeof(nulls));
 	MemSet(replaces, true, sizeof(replaces));
-	replaces[Anum_pipeline_tstate_name - 1] = false;
+	replaces[Anum_pipeline_tstate_id - 1] = false;
 
 	newtuple = heap_modify_tuple(tuple, pipeline_tstate->rd_att,
 			values, nulls, replaces);
@@ -89,10 +87,10 @@ ResetTStateEntry(char *cvname)
 }
 
 void
-UpdateDistinctBloomFilter(char *cvname, BloomFilter *distinct)
+UpdateDistinctBloomFilter(Oid id, BloomFilter *distinct)
 {
 	Relation pipeline_tstate = heap_open(PipelineTStateRelationId, RowExclusiveLock);
-	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
+	HeapTuple tuple = SearchSysCache1(PIPELINETSTATEID, Int32GetDatum(id));
 	bool nulls[Natts_pipeline_tstate];
 	bool replaces[Natts_pipeline_tstate];
 	Datum values[Natts_pipeline_tstate];
@@ -117,19 +115,23 @@ UpdateDistinctBloomFilter(char *cvname, BloomFilter *distinct)
 }
 
 BloomFilter *
-GetDistinctBloomFilter(char *cvname)
+GetDistinctBloomFilter(Oid id)
 {
 	BloomFilter *bloom;
-	bool isnull;
-	HeapTuple tuple = SearchSysCache1(PIPELINETSTATENAME, CStringGetDatum(cvname));
-	Datum datum = SysCacheGetAttr(PIPELINETSTATENAME, tuple, Anum_pipeline_tstate_distinct, &isnull);
+	bool isnull = true;
+	HeapTuple tuple = SearchSysCache1(PIPELINETSTATEID, Int32GetDatum(id));
+	Datum datum;
+
+	if (HeapTupleIsValid(tuple))
+		datum = SysCacheGetAttr(PIPELINETSTATEID, tuple, Anum_pipeline_tstate_distinct, &isnull);
 
 	if (isnull)
 		bloom = BloomFilterCreate();
 	else
 		bloom = BloomFilterCopy((BloomFilter *) PG_DETOAST_DATUM(datum));
 
-	ReleaseSysCache(tuple);
+	if (HeapTupleIsValid(tuple))
+		ReleaseSysCache(tuple);
 
 	return bloom;
 }

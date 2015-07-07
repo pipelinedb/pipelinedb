@@ -22,7 +22,6 @@ CATALOG(pipeline_stream,4249) BKI_WITHOUT_OIDS
 {
 	NameData name;
 #ifdef CATALOG_VARLEN
-	bytea readers;
 	bytea queries;
 	bytea desc;
 #endif
@@ -30,10 +29,9 @@ CATALOG(pipeline_stream,4249) BKI_WITHOUT_OIDS
 
 typedef FormData_pipeline_stream *Form_pipeline_stream;
 
-#define Natts_pipeline_stream						4
+#define Natts_pipeline_stream						3
 #define Anum_pipeline_stream_name					1
-#define Anum_pipeline_stream_readers 				2
-#define Anum_pipeline_stream_queries 				3
-#define Anum_pipeline_stream_desc					4
+#define Anum_pipeline_stream_queries 				2
+#define Anum_pipeline_stream_desc					3
 
 #endif

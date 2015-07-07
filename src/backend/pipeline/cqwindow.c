@@ -254,7 +254,7 @@ IsSlidingWindowSelectStmt(SelectStmt *stmt)
 bool
 IsSlidingWindowContinuousView(RangeVar *cvname)
 {
-	char *sql = GetQueryString(cvname->relname, true);
+	char *sql = GetQueryString(cvname->relname);
 	List *parsetree_list = pg_parse_query(sql);
 	SelectStmt	*select_stmt;
 
@@ -724,7 +724,7 @@ GetCQVacuumExpr(char *cvname)
 	CQAnalyzeContext context;
 	Node *expr;
 
-	parsetree_list = pg_parse_query(GetQueryString(cvname, true));
+	parsetree_list = pg_parse_query(GetQueryString(cvname));
 	Assert(list_length(parsetree_list) == 1);
 	stmt = (SelectStmt *) linitial(parsetree_list);
 

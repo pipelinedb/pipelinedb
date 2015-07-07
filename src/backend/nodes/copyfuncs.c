@@ -85,11 +85,6 @@ _copyPlannedStmt(const PlannedStmt *from)
 	COPY_SCALAR_FIELD(hasModifyingCTE);
 	COPY_SCALAR_FIELD(canSetTag);
 	COPY_SCALAR_FIELD(transientPlan);
-	/* cq_state will be null in case the PannedStmt is not for
-	 * an ACTIVATE query.
-	 */
-	if (from->is_continuous)
-		COPY_POINTER_FIELD(cq_state, sizeof(ContinuousViewState));
 	COPY_NODE_FIELD(planTree);
 	COPY_NODE_FIELD(rtable);
 	COPY_NODE_FIELD(resultRelations);
@@ -2525,10 +2520,6 @@ _copyQuery(const Query *from)
 	COPY_NODE_FIELD(rowMarks);
 	COPY_NODE_FIELD(setOperations);
 	COPY_NODE_FIELD(constraintDeps);
-	if (from->cq_state)
-		COPY_POINTER_FIELD(cq_state, sizeof(ContinuousViewState));
-	else
-		COPY_SCALAR_FIELD(cq_state);
 	COPY_SCALAR_FIELD(is_continuous);
 	COPY_SCALAR_FIELD(is_combine);
 
@@ -3873,26 +3864,17 @@ _copyCreateContinuousViewStmt(const CreateContinuousViewStmt *from)
 	return newnode;
 }
 
-static ActivateContinuousViewStmt *
-_copyActivateContinuousViewStmt(const ActivateContinuousViewStmt *from)
+static ActivateStmt *
+_copyActivateStmt(const ActivateStmt *from)
 {
-	ActivateContinuousViewStmt *newnode = makeNode(ActivateContinuousViewStmt);
-
-	COPY_NODE_FIELD(views);
-	COPY_NODE_FIELD(whereClause);
-	COPY_NODE_FIELD(withParameters);
-
+	ActivateStmt *newnode = makeNode(ActivateStmt);
 	return newnode;
 }
 
-static DeactivateContinuousViewStmt *
-_copyDeactivateContinuousViewStmt(const DeactivateContinuousViewStmt *from)
+static DeactivateStmt *
+_copyDeactivateStmt(const DeactivateStmt *from)
 {
-	DeactivateContinuousViewStmt *newnode = makeNode(DeactivateContinuousViewStmt);
-
-	COPY_NODE_FIELD(views);
-	COPY_NODE_FIELD(whereClause);
-
+	DeactivateStmt *newnode = makeNode(DeactivateStmt);
 	return newnode;
 }
 
@@ -4618,11 +4600,11 @@ copyObject(const void *from)
 		case T_CreateContinuousViewStmt:
 			retval = _copyCreateContinuousViewStmt(from);
 			break;
-		case T_ActivateContinuousViewStmt:
-			retval = _copyActivateContinuousViewStmt(from);
+		case T_ActivateStmt:
+			retval = _copyActivateStmt(from);
 			break;
-		case T_DeactivateContinuousViewStmt:
-			retval = _copyDeactivateContinuousViewStmt(from);
+		case T_DeactivateStmt:
+			retval = _copyDeactivateStmt(from);
 			break;
 
 		case T_A_Expr:

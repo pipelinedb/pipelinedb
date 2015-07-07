@@ -23,20 +23,16 @@ def test_user_low_and_high_card(pipeline, clean_db):
         rows.append((2, n))
         rows.append((3, n))
 
-    pipeline.activate()
-
     pipeline.insert('test_hll_stream', desc, rows)
-
-    pipeline.deactivate()
 
     result = pipeline.execute('SELECT hll_cardinality(combine(hll_agg)) FROM test_hll_agg WHERE k in (0, 1)').first()
     assert result[0] == 4
 
     result = pipeline.execute('SELECT hll_cardinality(combine(hll_agg)) FROM test_hll_agg WHERE k in (2, 3)').first()
-    assert result[0] == 9994
+    assert result[0] == 9976
 
     result = pipeline.execute('SELECT hll_cardinality(combine(hll_agg)) FROM test_hll_agg').first()
-    assert result[0] == 9996
+    assert result[0] == 9983
 
 
 def test_hll_agg_hashing(pipeline, clean_db):
@@ -56,11 +52,7 @@ def test_hll_agg_hashing(pipeline, clean_db):
         rows.append((n, '%d' % n, float(n)))
         rows.append((n, '%05d' % n, float(n)))
 
-    pipeline.activate()
-
     pipeline.insert('test_hll_stream', desc, rows)
-
-    pipeline.deactivate()
 
     cvq = """
     SELECT hll_cardinality(i),
@@ -72,6 +64,6 @@ def test_hll_agg_hashing(pipeline, clean_db):
 
     result = result[0]
 
-    assert result[0] == 9994
+    assert result[0] == 9976
     assert result[1] == 19981
-    assert result[2] == 10046
+    assert result[2] == 10062

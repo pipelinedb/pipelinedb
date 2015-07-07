@@ -14,8 +14,6 @@ def test_prepared_inserts(pipeline, clean_db):
   db.execute('CREATE CONTINUOUS VIEW test_prepared0 AS SELECT x::integer, COUNT(*), sum(y::integer) FROM stream GROUP BY x')
   db.execute('CREATE CONTINUOUS VIEW test_prepared1 AS SELECT x::integer, COUNT(*), sum(y::float8) FROM stream GROUP BY x')
   conn.commit()
-  
-  db.execute('ACTIVATE')
 
   db.execute('PREPARE ins AS INSERT INTO stream (x, y) VALUES ($1, $2)')
 
@@ -25,7 +23,6 @@ def test_prepared_inserts(pipeline, clean_db):
 
   time.sleep(0.1)
 
-  db.execute('DEACTIVATE')
   conn.commit()
 
   result = list(pipeline.execute('SELECT * FROM test_prepared0 ORDER BY x'))

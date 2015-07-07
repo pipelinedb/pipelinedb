@@ -17,12 +17,10 @@ def test_cmsketch_type(pipeline, clean_db):
         rows.append((0, n % 20))
         rows.append((1, n % 50))
 
-    pipeline.activate()
     pipeline.insert('test_cmsketch_stream', desc, rows)
-    pipeline.deactivate()
 
     result = list(pipeline.execute(
-      'SELECT cmsketch_count(c, 10) AS x, cmsketch_count(c, 40) AS y, cmsketch_count(c, 60) FROM test_cmsketch_agg').fetchall())
+      'SELECT cmsketch_count(c, 10) AS x, cmsketch_count(c, 40) AS y, cmsketch_count(c, 60) FROM test_cmsketch_agg ORDER BY k').fetchall())
     assert len(result) == 2
     assert tuple(result[0]) == (50, 0, 0)
     assert tuple(result[1]) == (20, 20, 0)

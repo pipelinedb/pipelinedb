@@ -17,7 +17,6 @@ min(txt::text) AS txtmin, max(txt) AS txtmax,
 min(n::numeric) AS nmin, max(n) AS nmax,
 min(a::int[]) AS amin, max(a) AS amax
 FROM stream_cqminmax GROUP BY key;
-ACTIVATE test_min_max;
 INSERT INTO stream_cqminmax
 (key, i8, i4, i2, o, f8, f4, d, t, tz, m, ts, tstz, ts1, ts0, txt, n, a) VALUES
 ('x', 0, 1, 2, 443, 42.33, 80003.00001, '2014-12-31', '2014-02-28 00:00:00', '2014-02-28 00:00:00-08', 999023.39, '2014-01-01 00:00:00', '2014-01-01 00:00:01-08', '2014-01-01 00:00:00', '2014-01-02 00:00:00', 'first row', -0.00000000042, '{-1, 0, 1}');
@@ -30,7 +29,6 @@ INSERT INTO stream_cqminmax
 INSERT INTO stream_cqminmax
 (key, i8, i4, i2, o, f8, f4, d, t, tz, m, ts, tstz, ts1, ts0, txt, n, a) VALUES
 ('y', 0, 1, 2, 443, 442.33, 80003.00001, '2014-12-31', '2014-02-28 00:00:00', '2014-02-28 00:00:00-08', 999023.399, '2014-01-01 00:00:00', '2014-01-01 00:00:01-08', '2014-01-01 00:00:00', '2015-01-02 00:00:00', 'fourth row', 1.00000000042, '{-1, 0, 1}');
-DEACTIVATE test_min_max ;
 -- It's hard to read all of the columns of this thing at once, so SELECT a few subsets
 SELECT key, i8min, i8max, i4min, i4max, i2min, i2max FROM test_min_max ORDER BY key;
  key | i8min | i8max | i4min | i4max | i2min | i2max 

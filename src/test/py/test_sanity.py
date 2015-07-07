@@ -27,12 +27,11 @@ def test_simple_insert(pipeline, clean_db):
     """
     Verify that we can insert some rows and count some stuff
     """
-    pipeline.create_cv('cv', 'SELECT key::integer, COUNT(*) FROM stream GROUP BY key', activate=True)
+    pipeline.create_cv('cv', 'SELECT key::integer, COUNT(*) FROM stream GROUP BY key')
 
     rows = [(n % 10,) for n in range(1000)]
 
     pipeline.insert('stream', ('key',), rows)
-    pipeline.deactivate('cv')
 
     result = list(pipeline.execute('SELECT * FROM cv ORDER BY key'))
 
@@ -47,15 +46,12 @@ def test_multiple(pipeline, clean_db):
     """
     pipeline.create_cv('cv0', 'SELECT n::numeric FROM stream WHERE n > 10.00001')
     pipeline.create_cv('cv1', 'SELECT s::text FROM stream WHERE s LIKE \'%%this%%\'')
-    pipeline.activate()
 
     rows = [(float(n + 10), 'this', 100) for n in range(1000)]
     for n in range(10):
         rows.append((float(n), 'not a match', -n))
 
     pipeline.insert('stream', ('n', 's', 'unused'), rows)
-
-    pipeline.deactivate()
 
     result = list(pipeline.execute('SELECT * FROM cv0'))
     assert len(result) == 999
@@ -68,7 +64,6 @@ def test_combine(pipeline, clean_db):
     Verify that partial tuples are combined with on-disk tuples
     """
     pipeline.create_cv('combine', 'SELECT key::text, COUNT(*) FROM stream GROUP BY key')
-    pipeline.activate()
 
     rows = []
     for n in range(100):
@@ -78,8 +73,6 @@ def test_combine(pipeline, clean_db):
             rows.append((key, 0))
 
     pipeline.insert('stream', ('key', 'unused'), rows)
-
-    pipeline.deactivate()
 
     total = 0
     result = pipeline.execute('SELECT * FROM combine')

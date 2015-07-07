@@ -152,10 +152,7 @@ typedef uint16 LOCKMETHODID;
 										 * SHARE */
 #define ExclusiveLock			7		/* blocks ROW SHARE/SELECT...FOR
 										 * UPDATE */
-#define CQExclusiveLock			8		/* Used by ACTIVATE. Behaves identically to ExclusiveLock,
-										 * except that it will ensure that CQ child processes being
-										 * waited on are never blocked when acquiring AccessShareLock */
-#define AccessExclusiveLock		9		/* ALTER TABLE, DROP TABLE, VACUUM
+#define AccessExclusiveLock		8		/* ALTER TABLE, DROP TABLE, VACUUM
 										 * FULL, and unqualified LOCK TABLE */
 
 /*

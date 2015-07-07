@@ -9,8 +9,6 @@
 #include "port.h"
 #include "utils/datum.h"
 
-#define MURMUR_SEED 0xadc83b19ULL
-
 void
 append_suffix(char *str, char *suffix, int max_len)
 {
@@ -18,7 +16,7 @@ append_suffix(char *str, char *suffix, int max_len)
 }
 
 int
-skip_substring(char *str, char* substr, int start)
+skip_substring(const char *str, char* substr, int start)
 {
 	while(pg_strncasecmp(substr, &str[start++], strlen(substr)) != 0 &&
 			start < strlen(str) - strlen(substr));
@@ -152,7 +150,7 @@ uint64_t
 MurmurHash3_64(const void *key, const Size len, const uint64_t seed)
 {
 	uint64_t hash[2];
-	MurmurHash3_128(key, len, MURMUR_SEED, &hash);
+	MurmurHash3_128(key, len, seed, &hash);
 	return hash[0];
 }
 

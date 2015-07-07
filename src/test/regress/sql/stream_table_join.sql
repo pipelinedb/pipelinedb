@@ -14,8 +14,6 @@ INSERT INTO test_stj_t0 (tid, data, val) VALUES (2, '5', 5.6);
 INSERT INTO test_stj_t0 (tid, data, val) VALUES (3, '6', 6.7);
 INSERT INTO test_stj_t0 (tid, data, val) VALUES (4, '0', 4.0);
 
-ACTIVATE test_stj0, test_stj1, test_stj2, test_stj3;
-
 -- Verify that we see rows that were inserted after activation
 INSERT INTO test_stj_t0 (tid, data, val) VALUES (0, '7', -2.3);
 INSERT INTO test_stj_t0 (tid, data, val) VALUES (0, '8', -3.4);
@@ -35,8 +33,6 @@ INSERT INTO test_stj_stream (id, data) VALUES (2, '{ "key": [0, 1] }');
 INSERT INTO test_stj_stream (id, data) VALUES (3, '42');
 INSERT INTO test_stj_stream (id, data) VALUES (4, '"matched"');
 
-DEACTIVATE test_stj0, test_stj1, test_stj2, test_stj3;
-
 SELECT * FROM test_stj0 ORDER BY id;
 SELECT * FROM test_stj1 ORDER BY id;
 SELECT * FROM test_stj2 ORDER BY val;
@@ -55,8 +51,6 @@ INSERT INTO test_stj_t1 (jid, data) VALUES ('3', '["four", 5, "six"]');
 INSERT INTO test_stj_t1 (jid, data) VALUES ('4', '{"k0": {"k1": "v"}}');
 INSERT INTO test_stj_t1 (jid, data) VALUES ('{}', '0');
 
-ACTIVATE test_stj4;
-
 INSERT INTO test_stj_t1 (jid, data) VALUES ('[0, 1]', '["strrrr", "iiing"]');
 INSERT INTO test_stj_t1 (jid, data) VALUES ('[]', '[{}, {}]');
 INSERT INTO test_stj_t1 (jid, data) VALUES ('"0"', '[[]]');
@@ -72,8 +66,6 @@ INSERT INTO test_stj_stream (id, data) VALUES (2, '{ "key": [0, 1] }');
 INSERT INTO test_stj_stream (id, data) VALUES (3, '42');
 INSERT INTO test_stj_stream (id, data) VALUES (4, '"not here"');
 
-DEACTIVATE test_stj4;
-
 SELECT * FROM test_stj4 ORDER BY jid;
 
 -- Stream-table joins with GROUP BYs and aggregates
@@ -85,8 +77,6 @@ INSERT INTO test_stj_t2 (id, str, val) VALUES (1, 'str1', 202.2);
 INSERT INTO test_stj_t2 (id, str, val) VALUES (2, 'str2', 42.42);
 INSERT INTO test_stj_t2 (id, str, val) VALUES (3, 'not here', 1000.1);
 
-ACTIVATE test_stj5;
-
 INSERT INTO test_stj_stream (id, val) VALUES (0, -101.1);
 INSERT INTO test_stj_stream (id, val) VALUES (1, -202.2);
 INSERT INTO test_stj_stream (id, val) VALUES (4, 2000.201);
@@ -96,14 +86,10 @@ SELECT pg_sleep(0.5);
 
 INSERT INTO test_stj_stream (id, val) VALUES (5, 0.52);
 
-DEACTIVATE test_stj5;
-
 SELECT * FROM test_stj5 ORDER BY id;
 
 CREATE TABLE test_stj_t3 (col0 integer, col1 integer, col2 integer, col3 integer);
 CREATE CONTINUOUS VIEW test_stj6 AS SELECT t.col2, sum(s.col0::integer + t.col3) FROM test_stj_stream s JOIN test_stj_t3 t ON s.col1::integer = t.col1 GROUP BY t.col2;
-
-ACTIVATE test_stj6;
 
 INSERT INTO test_stj_t3 (col0, col1, col2, col3) VALUES (0, 0, 0, 42);
 INSERT INTO test_stj_t3 (col0, col1, col2, col3) VALUES (0, 1, 1, 1000);
@@ -114,19 +100,13 @@ INSERT INTO test_stj_stream (col0, col1, col2) VALUES (400, 1, 0);
 INSERT INTO test_stj_stream (col0, col1, col2) VALUES (0, 0, 0);
 INSERT INTO test_stj_stream (col0, col1, col2) VALUES (-1200, 1, 0);
 
-DEACTIVATE test_stj6;
-
 SELECT * FROM test_stj6 ORDER BY col2;
 
 CREATE CONTINUOUS VIEW stj_no_tl AS SELECT COUNT(*)
 FROM test_stj_stream JOIN test_stj_t0 ON test_stj_stream.id::integer = test_stj_t0.tid;
 
-ACTIVATE stj_no_tl;
-
 INSERT INTO test_stj_stream (id) VALUES (0);
 SELECT * FROM stj_no_tl;
-
-DEACTIVATE stj_no_tl;
 
 CREATE TABLE test_stj_location (locid integer);
 CREATE TABLE test_stj_blocks (locid integer, ip inet);
@@ -141,16 +121,12 @@ FROM test_stj_stream, test_stj_blocks JOIN test_stj_location USING(locid)
 WHERE test_stj_blocks.ip = (test_stj_stream.data::jsonb->>'ip')::inet
 GROUP BY  (test_stj_stream.data::jsonb->>'key')::text, test_stj_location.locid;
 
-ACTIVATE test_stj7;
-
 INSERT INTO test_stj_stream (data) VALUES ('{"key": "1", "value": 42.42, "ip": "0.0.0.0"}');
 INSERT INTO test_stj_stream (data) VALUES ('{"key": "1", "value": 420.42, "ip": "0.0.0.0"}');
 INSERT INTO test_stj_stream (data) VALUES ('{"key": "2", "value": 4200.42, "ip": "0.0.0.0"}');
 INSERT INTO test_stj_stream (data) VALUES ('{"key": "2", "value": 42020.42, "ip": "0.0.0.0"}');
 
 SELECT pg_sleep(0.1);
-
-DEACTIVATE test_stj7;
 
 SELECT * FROM test_stj7;
 
@@ -165,15 +141,11 @@ FROM test_stj_stream, test_stj_blocks JOIN test_stj_location USING(locid)
 WHERE test_stj_blocks.ip = (test_stj_stream.data::jsonb#>>'{body,clientIP}')::inet
 GROUP BY game, peripheryID, created_at, test_stj_location.locid;
 
-ACTIVATE test_stj8;
-
 INSERT INTO test_stj_stream (data) VALUES ('{"header": {"ver": 1, "op_type": 402, "op_asset": null, "spa_id": 6333813, "game": "wot", "creation_time": 1427713483, "reserved1": null, "reserved2": null}, "body": {"peripheryID": 101, "arenaID": 2128201, "arenaGeometryID": 24, "arenaGameplayID": 1, "time": 1427712977, "clientIP": "0.0.0.0", "packetsReceived": 6264, "packetsSent": 5059, "packetsResent": 4, "minRoundTripTime": 0.043896623, "maxRoundTripTime": 0.68855155, "avgRoundTripTime": 10}}');
 INSERT INTO test_stj_stream (data) VALUES ('{"header": {"ver": 1, "op_type": 402, "op_asset": null, "spa_id": 6333813, "game": "wot", "creation_time": 1427713483, "reserved1": null, "reserved2": null}, "body": {"peripheryID": 101, "arenaID": 2128201, "arenaGeometryID": 24, "arenaGameplayID": 1, "time": 1427712977, "clientIP": "0.0.0.0", "packetsReceived": 6264, "packetsSent": 5059, "packetsResent": 4, "minRoundTripTime": 0.043896623, "maxRoundTripTime": 0.68855155, "avgRoundTripTime": 20}}');
 INSERT INTO test_stj_stream (data) VALUES ('{"header": {"ver": 1, "op_type": 402, "op_asset": null, "spa_id": 6333813, "game": "wot", "creation_time": 1427713483, "reserved1": null, "reserved2": null}, "body": {"peripheryID": 101, "arenaID": 2128201, "arenaGeometryID": 24, "arenaGameplayID": 1, "time": 1427712977, "clientIP": "0.0.0.0", "packetsReceived": 6264, "packetsSent": 5059, "packetsResent": 4, "minRoundTripTime": 0.043896623, "maxRoundTripTime": 0.68855155, "avgRoundTripTime": 30}}');
 
 SELECT pg_sleep(0.1);
-
-DEACTIVATE test_stj8;
 
 SELECT * FROM test_stj8;
 

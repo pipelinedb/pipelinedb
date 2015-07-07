@@ -1,6 +1,5 @@
 from base import pipeline, clean_db
 import random
-import json
 
 
 def test_simple_aggs(pipeline, clean_db):
@@ -20,12 +19,8 @@ def test_simple_aggs(pipeline, clean_db):
         row = (random.randint(0, 1000), random.random())
         rows.append(row)
 
-    pipeline.activate()
-
     pipeline.insert('stream', desc, rows)
     pipeline.insert('test_simple_aggs_t', desc, rows)
-
-    pipeline.deactivate()
 
     table_result = list(pipeline.execute('SELECT avg(x), sum(y::float8), count(*) FROM test_simple_aggs_t'))
     cv_result = list(pipeline.execute('SELECT combine(avg), combine(sum), combine(count) FROM test_simple_aggs'))
@@ -54,12 +49,8 @@ def test_object_aggs(pipeline, clean_db):
         row = (random.randint(0, 1000), random.random(), str(n) * random.randint(1, 8))
         rows.append(row)
 
-    pipeline.activate()
-
     pipeline.insert('stream', desc, rows)
     pipeline.insert('test_object_aggs_t', desc, rows)
-
-    pipeline.deactivate()
 
     tq = """
     SELECT json_agg(x), json_object_agg(x, y::float8), string_agg(s::text, \' :: \') FROM test_object_aggs_t
@@ -95,12 +86,8 @@ def test_stats_aggs(pipeline, clean_db):
         row = (random.randint(0, 1000), random.random())
         rows.append(row)
 
-    pipeline.activate()
-
     pipeline.insert('stream', desc, rows)
     pipeline.insert('test_stats_aggs_t', desc, rows)
-
-    pipeline.deactivate()
 
     tq = """
     SELECT regr_sxx(x, y::float8), stddev(x) FROM test_stats_aggs_t
@@ -137,12 +124,8 @@ def test_hypothetical_set_aggs(pipeline, clean_db):
         row = (random.randint(0, 1000), random.random())
         rows.append(row)
 
-    pipeline.activate()
-
     pipeline.insert('stream', desc, rows)
     pipeline.insert('test_hs_aggs_t', desc, rows)
-
-    pipeline.deactivate()
 
     # Note that the CQ will use the HLL variant of dense_rank,
     # so use hll_dense_rank on the table too
@@ -181,12 +164,8 @@ def test_nested_expressions(pipeline, clean_db):
         row = (random.randint(0, 1000), random.random())
         rows.append(row)
 
-    pipeline.activate()
-
     pipeline.insert('stream', desc, rows)
     pipeline.insert('test_nested_t', desc, rows)
-
-    pipeline.deactivate()
 
     # Note that the CQ will use the HLL variant of dense_rank,
     # so use hll_dense_rank on the table too
@@ -224,12 +203,8 @@ def test_hll_distinct(pipeline, clean_db):
         row = (random.randint(0, 1000), random.random())
         rows.append(row)
 
-    pipeline.activate()
-
     pipeline.insert('stream', desc, rows)
     pipeline.insert('test_hll_distinct_t', desc, rows)
-
-    pipeline.deactivate()
 
     # Note that the CQ will use the HLL variant of COUNT DISTINCT,
     # so use hll_count_distinct on the table too
@@ -264,12 +239,8 @@ def test_windowed_combine(pipeline, clean_db):
         row = (n, n)
         rows.append(row)
 
-    pipeline.activate()
-
     pipeline.insert('stream', desc, rows)
     pipeline.insert('test_windowed_combine_t', desc, rows)
-
-    pipeline.deactivate()
 
     table = """
     SELECT first_value(x) OVER w, avg(y) OVER w
@@ -304,9 +275,7 @@ def test_combine_in_view(pipeline, clean_db):
     for n in range(10000):
         rows.append((random.randint(1, 256), random.randint(1, 1024)))
 
-    pipeline.activate()
     pipeline.insert('stream', desc, rows)
-    pipeline.deactivate()
 
     view = list(pipeline.execute('SELECT * FROM v'))
 
@@ -315,3 +284,5 @@ def test_combine_in_view(pipeline, clean_db):
     expected = sum(r[1] for r in rows) / float(len(rows))
 
     assert abs(float(view[0][0]) - expected) < 0.00001
+
+    pipeline.execute('DROP VIEW v')
