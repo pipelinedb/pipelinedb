@@ -9,12 +9,12 @@ TOP_BUILDDIR = ../../
 DESTDIR = $(CURDIR)/build
 INSTALL_DIR = $(DESTDIR)$(PREFIX)
 
-all: #conf geos gdal proj pipeline gis
-	#cp $(CURDIR)/postinst $(DESTDIR)
-	#find $(INSTALL_DIR) -type d -exec chmod 775 {} +
-	#find $(INSTALL_DIR)/share/pipelinedb/timezone -type f -exec chmod 644 {} +
-	#(cd $(DESTDIR) && fpm -s dir -t osxpkg -n $(PACKAGE) -v $(VERSION) --epoch 0 --prefix=$(PREFIX) --after-install postinst .)
-	 cp $(DESTDIR)/*.pkg ..
+all: conf geos gdal proj pipeline gis
+	cp $(CURDIR)/postinst $(DESTDIR)
+	find $(INSTALL_DIR) -type d -exec chmod 775 {} +
+	find $(INSTALL_DIR)/share/pipelinedb/timezone -type f -exec chmod 644 {} +
+	(cd $(DESTDIR) && fpm -s dir -t osxpkg -n $(PACKAGE) -v $(VERSION) --epoch 0 --prefix=$(PREFIX) --after-install postinst .)
+	cp $(DESTDIR)/*.pkg ..
 
 conf:
 	(cd $(TOP_BUILDDIR) && ./configure)
