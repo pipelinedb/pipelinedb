@@ -96,8 +96,7 @@ The 1 in the "INSERT 0 1" response means that 1 event was emitted into a stream 
 
 The `generate-inserts` script is useful for generating and streaming larger amounts of test data. The following invocation of `generate-inserts` will build a SQL multi `INSERT` with 100,000 tuples having random strings assigned to the `key` field, and random `ints` assigned to the `value` field. All of these events will be emitted to `test_stream`, and subsequently read by the `test_view` continuous view. And since our script is just generating SQL, we can pipe its output directly into the `pipeline` client:
 
-    cd pipeline/emit
-    ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
+    bin/generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
 
 Try running `generate-inserts` without piping it into `pipeline` to get an idea of what's actually happening (reduce the `batchsize` first!).
 
@@ -129,11 +128,11 @@ What were the 10 most common randomly generated keys?
 
 Finally, note that most of the time taken to execute
 
-    ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
+    bin/generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 | pipeline
 
 is actually due to the `generate-inserts` script (Python) doing a large number of string operations. To get a better feel for the speed at which PipelineDB can process data, run the `INSERTS` independently of Python:
 
-    ./generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 > inserts.sql
+    bin/generate-inserts --stream test_stream --key=str --value=int --batchsize=100000 --n=1 > inserts.sql
     pipeline -f inserts.sql
 
 ## Distributing PipelineDB
