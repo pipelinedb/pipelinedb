@@ -1,0 +1,80 @@
+PostGIS debugging information 
+=============================
+
+Written by Jorge Arevalo
+2010-10-26
+
+Based on the ../postgis/DEBUG document, written by Mark Cave-Ayland
+
+Description
+===========
+
+The philosophy of the PostGIS Raster debug system is the same used in PostGIS.
+Review the ../postgis/DEBUG document for further understanding on this
+philosophy.
+
+Debugging is accomplished using four new macros:
+
+	RASTER_DEBUG(level, "message")
+		- If the current debug level >= level, emit message
+
+	RASTER_DEBUGF(level, "format message", ...)
+		- If the current debug level >= level, emit formatted message
+		(this allows placeholders and extra arguments in exactly the
+		same way as vasprintf())
+
+	POSTGIS_RASTER_DEBUG(level, "message")
+		- If the current debug level >= level, emit message
+
+	POSTGIS_RASTER_DEBUGF(level, "format message", ...)
+		- If the current debug level >= level, emit formatted message
+		(this allows placeholders and extra arguments in exactly the
+		same way as vasprintf())
+
+The two RASTER_DEBUG macros are designed for use within librtcore; i.e. raster
+core routines that may not necessarily be used from PostgreSQL, and make use of the 
+default_info_handler() call.
+Similarly, the POSTGIS_RASTER_DEBUG macros are designed for code that can *only* be called
+from within PostgreSQL, i.e. it calls ereport() directly. The trick is, of course,
+to distinguish between the two. Generally anything within a function declared as
+returning type Datum should use the POSTGIS_RASTER_DEBUG macros, as well as code that can
+only be called from these functions. Similarly, any functions that do not take
+PostgreSQL-specific datatypes should use the RASTER_DEBUG functions.
+
+Note that the debugging macros automatically prefix the current filename, function name
+and line number to any debugging messages. As well as allowing debug messages to be
+shorter, it also makes following program flow much easier.
+
+ 
+Usage
+=====
+
+The current debug level is set by the POSTGIS_DEBUG_LEVEL #define in postgis_config.h. 
+By default, configure sets POSTGIS_DEBUG_LEVEL to 0 which disables all debugging output.
+If debugging output is required, it is necessary to either redefine POSTGIS_DEBUG_LEVEL
+to the required level (and rebuild the shared library), or re-run configure with the
+--enable-debug option and then rebuild the shared library (currently configure defaults
+to level 4).
+
+A rebuild of the library is required since the output of the debug macros is conditional;
+if POSTGIS_DEBUG_LEVEL is set to 0 then instead of providing debug output, the macros
+simply evaluate to (void)0 which can be optimised away by the compiler. Hence adding
+debugging statements during development will have negligible performance impact during
+execution when debugging is disabled.
+
+
+Verbosity levels
+================
+
+The following verbosity levels have been defined in the initial implementation; obviously
+these may need to change as experience dictates. By specifying a debug level, output for
+all levels up to and including the current debug level is generated. It should also be
+obvious that as the debug level is increased, more complex output is generated.
+
+0 - All debugging output is disable
+1 - Reserved
+2 - Function entry; for simply announcing when a function has been entered
+3 - Normal function debug; output any information of interest to the developer
+4 - Verbose function debug; output lots of useful detail
+5 - Memory allocation; output all uses of alloc/free within the code
+

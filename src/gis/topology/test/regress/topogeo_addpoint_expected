@@ -1,0 +1,32 @@
+BEGIN
+t
+9
+22
+26
+COMMIT
+ERROR:  Invalid geometry type (LINESTRING) passed to TopoGeo_AddPoint, expected POINT
+ERROR:  Invalid geometry type (MULTIPOINT) passed to TopoGeo_AddPoint, expected POINT
+ERROR:  No topology with name "invalid" in topology.topology
+iso_uni|23
+iso_f3|24
+iso_ex|23
+iso_ex_tol|23
+noniso_ex|2
+noniso_ex_tol|2
+split|25
+N|23|0|POINT(38 26)
+N|24|3|POINT(16 18)
+N|25||POINT(26 30)
+E|2|2|25
+E|27|25|2
+prec1|N23
+prec2|N26
+prec3|N27
+Topology 'city_data' dropped
+tt2033.start|t
+tt2033|E1
+tt2033|N3
+tt2033|NC|1|POINT Z (0 0 0)
+tt2033|NC|2|POINT Z (0 2 1)
+tt2033|NC|3|POINT Z (0 1 1)
+tt2033.endTopology 't' dropped

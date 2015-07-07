@@ -1,0 +1,3 @@
+ST_ConcaveHull MultiPolygon 0.95|t|t
+ST_ConcaveHull Lines 0.80|t|t
+ST_ConcaveHull Lines 0.80 holes|t|t

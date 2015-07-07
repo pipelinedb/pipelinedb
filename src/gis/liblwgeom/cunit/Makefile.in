@@ -1,0 +1,107 @@
+# **********************************************************************
+# *
+# * PostGIS - Spatial Types for PostgreSQL
+# * http://postgis.net
+# * Copyright 2008 Paul Ramsey, Mark Cave-Ayland
+# *
+# * This is free software; you can redistribute and/or modify it under
+# * the terms of the GNU General Public Licence. See the COPYING file.
+# *
+# **********************************************************************
+
+CC=@CC@
+top_builddir = @top_builddir@
+SHELL = @SHELL@
+LIBTOOL = @LIBTOOL@
+
+CUNIT_LDFLAGS=@CUNIT_LDFLAGS@
+CUNIT_CPPFLAGS=@CUNIT_CPPFLAGS@ -I..
+
+CFLAGS=@CFLAGS@ @WARNFLAGS@ @GEOS_CPPFLAGS@ @PROJ_CPPFLAGS@ $(CUNIT_CPPFLAGS)
+LDFLAGS = @GEOS_LDFLAGS@ -lgeos_c $(CUNIT_LDFLAGS) -lm
+
+# ADD YOUR NEW TEST FILE HERE (1/1)
+OBJS=	\
+	cu_algorithm.o \
+	cu_bytebuffer.o \
+	cu_buildarea.o \
+	cu_clean.o \
+	cu_print.o \
+	cu_misc.o \
+	cu_ptarray.o \
+	cu_geodetic.o \
+	cu_geos.o \
+	cu_tree.o \
+	cu_measures.o \
+	cu_effectivearea.o \
+	cu_node.o \
+	cu_clip_by_rect.o \
+	cu_libgeom.o \
+	cu_split.o \
+	cu_stringbuffer.o \
+	cu_triangulate.o \
+	cu_homogenize.o \
+	cu_force_sfs.o \
+	cu_out_twkb.o \
+	cu_out_wkt.o \
+	cu_out_wkb.o \
+	cu_out_gml.o \
+	cu_out_kml.o \
+	cu_out_geojson.o \
+	cu_out_svg.o \
+	cu_out_encoded_polyline.o \
+	cu_surface.o \
+	cu_out_x3d.o \
+	cu_in_geojson.o \
+	cu_in_twkb.o \
+	cu_in_wkb.o \
+	cu_in_wkt.o \
+	cu_in_encoded_polyline.o \
+	cu_varint.o \
+	cu_tester.o
+
+ifeq (@SFCGAL@,sfcgal)
+CFLAGS += @SFCGAL_CPPFLAGS@
+LDFLAGS += @SFCGAL_LDFLAGS@
+OBJS += cu_sfcgal.o
+endif
+
+# If we couldn't find the cunit library then display a helpful message
+ifeq ($(CUNIT_LDFLAGS),)
+all: requirements_not_met_cunit
+check: requirements_not_met_cunit
+else
+
+# Build the unit tester
+all: cu_tester
+
+# Build and run the unit tester
+check: cu_tester
+	@./cu_tester
+
+endif
+
+# Build the main unit test executable
+cu_tester: ../liblwgeom.la $(OBJS)
+	$(LIBTOOL) --mode=link $(CC) $(CFLAGS) -o $@ $(OBJS) ../liblwgeom.la $(LDFLAGS)
+
+# Command to build each of the .o files
+$(OBJS): %.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Clean target
+clean:
+	rm -f $(OBJS)
+	rm -f cu_tester
+
+distclean: clean
+	rm -f Makefile
+
+# Requirements message
+requirements_not_met_cunit:
+	@echo
+	@echo "WARNING:"
+	@echo
+	@echo "configure was unable to find CUnit which is required for unit testing."
+	@echo "In order to enable unit testing, you must install CUnit and then re-run configure."
+	@echo

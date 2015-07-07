@@ -1,0 +1,10 @@
+32749
+ERROR:  Operation on mixed SRID geometries
+SRID=3;LINESTRING(0 0,1 1)
+ERROR:  Operation on mixed SRID geometries
+ST_MakeLine1|LINESTRING(0 0,1 1,10 0)
+ST_MakeLine_agg1|LINESTRING(0 0,1 1,10 0,20 20,40 4)
+BOX(0 0,1 1)
+ERROR:  Operation on mixed SRID geometries
+BOX3D(0 0 0,1 1 0)
+ERROR:  Operation on mixed SRID geometries

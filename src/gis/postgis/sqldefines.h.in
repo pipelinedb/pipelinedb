@@ -1,0 +1,33 @@
+#ifndef _LWPGIS_DEFINES
+#define _LWPGIS_DEFINES
+
+#include "../postgis_svn_revision.h"
+
+/*
+ * Define just the version numbers; otherwise we get some strange substitutions in postgis.sql.in
+ */
+#define POSTGIS_PGSQL_VERSION @POSTGIS_PGSQL_VERSION@
+#define POSTGIS_GEOS_VERSION @POSTGIS_GEOS_VERSION@
+#define POSTGIS_PROJ_VERSION @POSTGIS_PROJ_VERSION@
+#define POSTGIS_LIB_VERSION '@POSTGIS_LIB_VERSION@'
+#define POSTGIS_LIBXML2_VERSION @POSTGIS_LIBXML2_VERSION@
+
+/*
+ * Define the build date and the version number
+ * (these substitiutions are done with extra quotes sinces CPP
+ * won't substitute within apostrophes)
+ */
+#define _POSTGIS_SQL_SELECT_POSTGIS_VERSION 'SELECT ''@POSTGIS_VERSION@''::text AS version'
+#define _POSTGIS_SQL_SELECT_POSTGIS_BUILD_DATE 'SELECT ''@POSTGIS_BUILD_DATE@''::text AS version'
+
+#if POSTGIS_SVN_REVISION
+#define _POSTGIS_SQL_SELECT_POSTGIS_SCRIPTS_VERSION $$ SELECT '@POSTGIS_SCRIPTS_VERSION@'::text || ' r' || POSTGIS_SVN_REVISION::text AS version $$
+#else
+#define _POSTGIS_SQL_SELECT_POSTGIS_SCRIPTS_VERSION $$ SELECT '@POSTGIS_SCRIPTS_VERSION@'::text AS version $$
+#endif
+
+#define SRID_USR_MAX @SRID_USR_MAX@
+
+#endif /* _LWPGIS_DEFINES */
+
+

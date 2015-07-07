@@ -1,0 +1,102 @@
+#
+# PostGIS PGXS override file for PostgreSQL <= 8.5
+# (updates relevant targets for MODULEDIR as per the
+# PostgreSQL 8.5 PGXS Makefile)
+#
+
+ifdef MODULEDIR
+datamoduledir = $(MODULEDIR)
+docmoduledir = $(MODULEDIR)
+else
+datamoduledir = contrib
+docmoduledir = contrib
+endif
+
+install: all installdirs
+ifneq (,$(DATA)$(DATA_built))
+	@for file in $(addprefix $(srcdir)/, $(DATA)) $(DATA_built); do \
+	  echo "$(INSTALL_DATA) $$file '$(DESTDIR)$(datadir)/$(datamoduledir)'"; \
+	  $(INSTALL_DATA) $$file '$(DESTDIR)$(datadir)/$(datamoduledir)'; \
+	done
+endif # DATA
+ifneq (,$(DATA_TSEARCH))
+	@for file in $(addprefix $(srcdir)/, $(DATA_TSEARCH)); do \
+	  echo "$(INSTALL_DATA) $$file '$(DESTDIR)$(datadir)/tsearch_data'"; \
+	  $(INSTALL_DATA) $$file '$(DESTDIR)$(datadir)/tsearch_data'; \
+	done
+endif # DATA_TSEARCH
+ifdef MODULES
+	@for file in $(addsuffix $(DLSUFFIX), $(MODULES)); do \
+	  echo "$(INSTALL_SHLIB) $$file '$(DESTDIR)$(pkglibdir)'"; \
+	  $(INSTALL_SHLIB) $$file '$(DESTDIR)$(pkglibdir)'; \
+	done
+endif # MODULES
+ifdef DOCS
+ifdef docdir
+	@for file in $(addprefix $(srcdir)/, $(DOCS)); do \
+	  echo "$(INSTALL_DATA) $$file '$(DESTDIR)$(docdir)/$(docmoduledir)'"; \
+	  $(INSTALL_DATA) $$file '$(DESTDIR)$(docdir)/$(docmoduledir)'; \
+	done
+endif # docdir
+endif # DOCS
+ifdef PROGRAM
+	$(INSTALL_PROGRAM) $(PROGRAM)$(X) '$(DESTDIR)$(bindir)'
+endif # PROGRAM
+ifdef SCRIPTS
+	@for file in $(addprefix $(srcdir)/, $(SCRIPTS)); do \
+	  echo "$(INSTALL_SCRIPT) $$file '$(DESTDIR)$(bindir)'"; \
+	  $(INSTALL_SCRIPT) $$file '$(DESTDIR)$(bindir)'; \
+	done
+endif # SCRIPTS
+ifdef SCRIPTS_built
+	@for file in $(SCRIPTS_built); do \
+	  echo "$(INSTALL_SCRIPT) $$file '$(DESTDIR)$(bindir)'"; \
+	  $(INSTALL_SCRIPT) $$file '$(DESTDIR)$(bindir)'; \
+	done
+endif # SCRIPTS_built
+ifdef MODULE_big
+	$(INSTALL_SHLIB) $(shlib) '$(DESTDIR)$(pkglibdir)/$(MODULE_big)$(DLSUFFIX)'
+endif # MODULE_big
+
+installdirs:
+ifneq (,$(DATA)$(DATA_built))
+	$(mkinstalldirs) '$(DESTDIR)$(datadir)/$(datamoduledir)'
+endif
+ifneq (,$(DATA_TSEARCH))
+	$(mkinstalldirs) '$(DESTDIR)$(datadir)/tsearch_data'
+endif
+ifneq (,$(MODULES))
+	$(mkinstalldirs) '$(DESTDIR)$(pkglibdir)'
+endif
+ifdef DOCS
+ifdef docdir
+	$(mkinstalldirs) '$(DESTDIR)$(docdir)/$(docmoduledir)'
+endif # docdir
+endif # DOCS
+ifneq (,$(PROGRAM)$(SCRIPTS)$(SCRIPTS_built))
+	$(mkinstalldirs) '$(DESTDIR)$(bindir)'
+endif
+
+uninstall:
+ifneq (,$(DATA)$(DATA_built))
+	rm -f $(addprefix '$(DESTDIR)$(datadir)/$(datamoduledir)'/, $(notdir $(DATA) $(DATA_built)))
+endif
+ifneq (,$(DATA_TSEARCH))
+	rm -f $(addprefix '$(DESTDIR)$(datadir)/tsearch_data'/, $(notdir $(DATA_TSEARCH)))
+endif
+ifdef MODULES
+	rm -f $(addprefix '$(DESTDIR)$(pkglibdir)'/, $(addsuffix $(DLSUFFIX), $(MODULES)))
+endif
+ifdef DOCS
+	rm -f $(addprefix '$(DESTDIR)$(docdir)/$(docmoduledir)'/, $(DOCS))
+endif
+ifdef PROGRAM
+	rm -f '$(DESTDIR)$(bindir)/$(PROGRAM)$(X)'
+endif
+ifdef SCRIPTS
+	rm -f $(addprefix '$(DESTDIR)$(bindir)'/, $(SCRIPTS))
+endif
+ifdef SCRIPTS_built
+	rm -f $(addprefix '$(DESTDIR)$(bindir)'/, $(SCRIPTS_built))
+endif
+

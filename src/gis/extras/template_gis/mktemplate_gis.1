@@ -1,0 +1,133 @@
+.TH "mktemplate_gis" "1" "" "Roberto Boati" "Postgis utilities"
+.SH "NAME"
+.LP 
+mktemplate_gis \- Create Postgis template in a PostgreSQL server.
+.SH "SYNTAX"
+.LP 
+mktemplate_gis [\fIoptions\fP]
+.SH "DESCRIPTION"
+.LP 
+This program create a template database for working with Postgis geometries.
+.br 
+It requires to be run by root, or by PostgreSQL superuser (DBA), or by the 
+cluster owner, but once the template created, any user with createdb permissions 
+can create a spatial enabled database with \fBcreatedb.postgis\fR.
+The privileges on the initial objects in the created databases will be granted 
+to the user defined here (see \fIGRUSER\fR below).
+.br 
+PostgreSQL should be running.
+.SH "OPTIONS"
+.LP 
+.TP
+For default values see below.
+.TP 
+\fB\-\-user=\fR<\fIdbowner\fP>
+Creates a database template owned by <\fIdbowner\fP>.
+If normal user, \fIdbowner\fR will own the template database, 
+else if it's a group or public, 
+\fIdbowner\fR will have full rights to the objects in the template database.
+The rights granted here will also hols for new databases created from this 
+template, even by non-dba and non-cluster owning users.
+.TP
+Environment variable: \fIGRUSER\fR.
+.TP 
+\fB\-\-template=\fR<\fItemplatedb\fP>
+Set template name to be <\fItemplatedb\fP>
+.TP
+Environment variable: \fITEMPLATEDB\fR.
+.TP 
+\fB\-\-dba=\fR<\fIdba_name\fP>
+DBA is required to perform template database building.
+.TP
+Environment variable: \fIDBAUSER\fR.
+.TP 
+\fB\-\-script=\fR<\fIpgis_script\fP>
+pgis_script is the sql script containing the postgis functions for the template database.
+If no directory name will be given, the script will be taken from /usr/share/postgresql/\fI$CLUSTERVER\fP/contrib.
+.TP
+Environment variable: \fIPGISSCRIPT\fR.
+.TP 
+\fB\-\-no\-srs\fP
+this argument will suppress loading of the huge spatial_ref_sys in the database template.
+the table will be created anyway.
+.TP
+Environment variable: \fINO_SRS=true\fR.
+.TP 
+\fB\-\-no\-topo\fP
+this argument will suppress loading of the topology functionality in the database template.
+.TP
+Environment variable: \fINO_TOPO=true\fR.
+.TP 
+\fB\-\-help\fR
+Output help information and exit.
+.SH "ENVIRONMENT"
+.TP 
+.B TEMPLATEDB
+If
+.RB $ TEMPLATEDB
+is set, its value is used as the default template name.
+.TP 
+.B GRUSER
+If
+.RB $ GRUSER
+is set, its value is used as the default user to own the template. This user 
+will naturally have default rights to databases created with this template.
+.TP 
+.B DBAUSER
+If
+.RB $ DBAUSER
+is set, its value is used as the default DBA for building the template. Else, 
+the cluster owner and postgres are the next candidates.
+.TP 
+.B PGISSCRIPT
+If
+.RB $ PGISSCRIPT
+is set, its value is used as the default postgis sql script for the template. 
+If a directory will not be specified, the file will be taken from the default 
+scripts/contrib directory for this postgresql version.
+.SH "FILES"
+.LP
+The environment variables for template_gis creation, removal and usage may be stored in files, as follows:
+.TP
+.B /etc/default/postgis
+will designate default values for the whole system.
+.TP
+.B $HOME/.postgis/profile
+will designate the values used by the current user by default.
+Beware, this is the current SYSTEM user, not the dba or the database owner to 
+become. As those values are more user specific, they supersede the ones in the 
+system default file for the current user.
+.SH "NOTES"
+.LP
+The order of precedence of the variables definition:
+.TP
+.B 1.
+Command line options.
+.TP
+.B 2.
+Environment variables.
+.TP
+.B 3.
+The user specific profile file.
+.TP
+.B 4.
+The system wide default file.
+.TP
+.B The builtin (hardwired) values are not a good choice.
+.SH "EXAMPLES"
+.LP 
+To run this program the standard way, you can simply type:
+.LP 
+# \fBmktemplate\_gis\fR
+.LP 
+Alternatively you can specify also a template name to create and the database superuser:
+.LP 
+# \fBmktemplate\_gis \-\-user=postgres \-\-template=template\_postgis\fR
+.SH "AUTHORS"
+.LP 
+Alex Bodnaru <alexbodn@012.net.il>
+.br 
+Roberto Boati <roberto.boati@gmail.com>
+.SH "SEE ALSO"
+.LP 
+createdb.postgis(1), rmtemplate_gis(1)

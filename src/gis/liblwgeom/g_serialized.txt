@@ -1,0 +1,103 @@
+
+GSERIALIZED FORM
+=================
+
+The new serialized form, used by GEOGRAPHY, attempts to learn from the
+lessons of the SERIALIZED_LWGEOM, making slightly different trade-offs
+between alignment and overall compactness.
+
+* It is understood that GSERIALIZED is be used primarily (only)
+  by PostGIS. Other users of the geometry library (for example, the
+  loaders and dumpers) will serialize to WKB or EWKB or various text
+  representations. Therefore, GSERIALIZED includes the uint32 "size"
+  field at the top used by PostgreSQL for varlena types.
+* Like SERIALIZED_LWGEOM, GSERIALIZED is built to be read and written
+  recursively, so that nested collections of collections (of ...) are
+  possible without restrictions on depth.
+* GSERIALIZED preserves double alignment of ordinate arrays. This will
+  allow coordinate access without memcpy.
+* GSERIALIZED includes a mandatory SRID, in recognition of the fact
+  that most production use of PostGIS does actually use an SRID. In
+  SERIALIZED_LWGEOM the SRID is optional.
+* GSERIALIZED places the dimensionality information, the SRID
+  information and the bounding boxes at the front of the structure,
+  and all sub-components inherit from those parent values.
+* GSERIALIZED retains the idea of optional bounding boxes, so that small
+  features do not carry the extra storage overhead of a largely redundant
+  bounding box.
+
+STRUCTURE
+---------
+
+Most of the internals of GSERIALIZED are anonymous. One thing that
+differs from SERIALIZED_LWGEOM is that the geometry type is no longer
+directly accessible from the structure (it was inside the one byte "type"
+at the top of the SERIALIZED_LWGEOM). To access the type in GSERIALIZED,
+you first have to figure out whether there is a an bounding box, how many
+dimensions that bounding box has, and move the data pointer appropriately
+before dereferencing. The gserialized_get_type(GSERIALIZED *s) function
+carries out this operation.
+
+typedef struct
+{
+	uint32 size; /* For PgSQL use, use VAR* macros to manipulate. */
+	uchar srid[3]; /* 21 bits of SRID (and 3 spare bits) */
+	uchar flags; /* HasZ, HasM, HasBBox, IsGeodetic */
+	uchar data[1]; /* See gserialized.txt */
+} GSERIALIZED;
+
+The standard header is as follows (using <> to denote 4-byte fields and
+[] to denote 8-byte fields):
+
+<size> size  /* Used by PgSQL */
+<srid        /* 3 bytes */
+ flags>      /* 1 byte */
+<bbox-xmin>  /* bounding box is optional */
+<bbox-xmax>  /* number of dimensions is variable and indicated in the flags */
+<bbox-ymin>
+<bbox-ymax>
+
+After the header comes the recursively searchable geometry
+representations. Each type is double aligned, so any combination is
+double aligned, and we start after a double aligned standard header,
+so we are golden:
+
+<pointype>
+<npoints>       /* 0 if empty, 1 otherwise */
+[double]
+[double]
+[double]
+
+<linestringtype>
+<npoints>      /* 0 if empty, N otherwise */
+[double]
+...
+[double]
+
+<polygontype>
+<nrings>        /* 0 if empty, N otherwise */
+<npointsring1>
+<npointsring2>
+<?pad?>         /* pad if nrings % 2 > 0 */
+[double]
+...
+[double]
+
+<collectiontype>
+<ngeoms>        /* 0 if empty, N otherwise */
+[geom]
+...
+[geom]
+
+<circularstringtype>
+<npoints>       /* 0 if empty, N otherwise */
+[double]
+...
+[double]
+
+<compoundstringtype>
+<ngeoms>        /* 0 if empty, N otherwise */
+[geom]
+...
+[geom]
+

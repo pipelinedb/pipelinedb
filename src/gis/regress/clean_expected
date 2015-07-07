@@ -1,0 +1,31 @@
+RT|1|t|t|f
+RT|2|t|t|f
+RT|3|t|t|f
+RT|4|t|t|f
+RT|5|t|t|f
+RT|6|t|t|f
+RT|7|t|t|f
+RT|7.1|t|t|f
+RT|8|t|t|f
+RT|9|t|t|f
+RT|9.1|t|t|f
+RT|10|t|t|t
+RT|11|t|t|f
+RT|12|t|t|f
+RT|13.1|t|t|t
+RT|13.2|t|t|f
+RT|14|t|t|f
+RT|15|t|t|f
+RT|16.1|t|t|f
+RT|16.2|t|t|f
+RT|16.3|t|t|f
+RT|16.4|t|t|f
+RT|17.1|t|t|f
+PG|1|t|t|f
+PG|2|t|t|f
+PG|3|t|t|f
+PG|4|t|t|f
+PG|5|t|t|f
+#1719.1|POINT(0 0)
+#1719.2|GEOMETRYCOLLECTION(POINT(0 0),MULTIPOINT(3 4,5 2),POINT(4 4),MULTIPOLYGON(((0 0,5 5,10 0,0 0)),((5 5,0 10,10 10,5 5))))
+#1719.3|MULTIPOINT(3 4,5 2)

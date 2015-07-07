@@ -1,0 +1,47 @@
+{
+	"name": "postgis_tiger_geocoder",
+	"abstract": "PostGIS Tiger Geocoder",
+	"description": "This module provides loader, geocoder, and reverse geocoder utilizing US Census Tiger data",
+	"version": "2.1.0",
+	"release_status": "unstable",
+	"maintainer": "Leo Hsu and Regina Obe",
+	"license": "gpl_2",
+	"provides": {
+		"postgis_tiger_geocoder": {
+			"abstract": "PostGIS Geocoder functions",
+			"version": "2.1.0",
+			"file": "sql/postgis_tiger_geocoder.sql",
+			"docfile": "doc/postgis_tiger_geocoder.md"
+		}
+	}
+	"prereqs": {
+      "runtime": {
+         "requires": {
+            "plpgsql": 0,
+            "PostgreSQL": "8.4.0",
+            "postgis": "2.0.0", "fuzzystrmatch": 0
+         }
+      }
+    },
+    "generated_by": "Regina O. Obe",
+	"resources": {
+		"bugtracker": {
+			"web": "http://trac.osgeo.org/postgis"
+		},
+		"repository": {
+			"url": "svn://svn.osgeo.org/postgis/",
+			"web": "http://postgis.net",
+			"type": "svn"
+		}
+	},
+	"meta-spec": {
+		"version": "1.0.0",
+		"url": "http://pgxn.org/meta/spec.txt"
+	},
+	"tags": [
+		"gis",
+		"spatial",
+		"geometry",
+		"location", "tiger", "geocoder", "reverse geocoder"
+	]
+}

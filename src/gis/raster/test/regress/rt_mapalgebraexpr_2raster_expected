@@ -1,0 +1,260 @@
+NOTICE:  table "raster_mapalgebra" does not exist, skipping
+NOTICE:  table "raster_mapalgebra_out" does not exist, skipping
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided have no intersection.  Returning no band raster
+NOTICE:  The two rasters provided are NULL.  Returning NULL
+NOTICE:  The two rasters provided are NULL.  Returning NULL
+NOTICE:  The FIRST raster is NULL.  Returning NULL
+NOTICE:  The FIRST raster is NULL.  Returning NULL
+NOTICE:  The FIRST raster is NULL.  Returning NULL
+NOTICE:  The FIRST raster is NULL.  Returning NULL
+NOTICE:  The FIRST raster is NULL.  Returning NULL
+NOTICE:  The FIRST raster is NULL.  Returning NULL
+NOTICE:  The FIRST raster is NULL.  Returning NULL
+NOTICE:  The FIRST raster is NULL.  Returning NULL
+NOTICE:  The FIRST raster is NULL.  Returning NULL
+NOTICE:  The FIRST raster is NULL.  Returning NULL
+NOTICE:  The two rasters provided are NULL.  Returning NULL
+NOTICE:  The SECOND raster is NULL.  Returning NULL
+NOTICE:  The SECOND raster is NULL.  Returning NULL
+NOTICE:  The SECOND raster is NULL.  Returning NULL
+NOTICE:  The SECOND raster is NULL.  Returning NULL
+NOTICE:  The SECOND raster is NULL.  Returning NULL
+NOTICE:  The SECOND raster is NULL.  Returning NULL
+NOTICE:  The SECOND raster is NULL.  Returning NULL
+NOTICE:  The SECOND raster is NULL.  Returning NULL
+NOTICE:  The SECOND raster is NULL.  Returning NULL
+NOTICE:  The SECOND raster is NULL.  Returning NULL
+NOTICE:  The two rasters provided are NULL.  Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Raster provided has no bands
+NOTICE:  Raster provided has no bands
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+NOTICE:  Could not find raster band of index 1 when getting pixel value. Returning NULL
+0|1|INTERSECTION|0.000|0.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|1.000
+0|2|INTERSECTION|1.000|-1.000|1|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|1.000
+0|3|INTERSECTION|1.000|1.000|1|1|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|1.000
+0|4|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+10|11|INTERSECTION|0.000|0.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+10|12|INTERSECTION|1.000|-1.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+10|13|INTERSECTION|1.000|1.000|2|1|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+10|14|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+|0|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+|1|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+|2|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+|3|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+|4|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+|10|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+|11|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+|12|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+|13|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+|14|INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+0||INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+1||INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+2||INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+3||INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+4||INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+10||INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+11||INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+12||INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+13||INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+14||INTERSECTION|0.000|0.000|0|0|0.000|0.000|0.000|0.000|0|0||||
+||INTERSECTION||||||||||||||
+0|1|UNION|-2.000|-2.000|4|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|1.500
+0|2|UNION|-2.000|-2.000|5|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|
+0|3|UNION|-2.000|-2.000|5|5|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|4.000
+0|4|UNION|-2.000|-2.000|6|6|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|5.000
+10|11|UNION|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+10|12|UNION|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+10|13|UNION|-2.000|-2.000|4|5|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|
+10|14|UNION|-2.000|-2.000|4|6|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|
+0|1|UNION|-2.000|-2.000|4|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|200.000|1.500
+0|2|UNION|-2.000|-2.000|5|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|200.000|
+0|3|UNION|-2.000|-2.000|5|5|1.000|1.000|0.000|0.000|0|1|32BF|0.000|200.000|100.000
+0|4|UNION|-2.000|-2.000|6|6|1.000|1.000|0.000|0.000|0|1|32BF|0.000|200.000|100.000
+10|11|UNION|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|200.000|200.000
+10|12|UNION|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|200.000|200.000
+10|13|UNION|-2.000|-2.000|4|5|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|200.000|
+10|14|UNION|-2.000|-2.000|4|6|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|200.000|
+|0|UNION|-2.000|-2.000|4|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|1.000
+|1|UNION|0.000|0.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|2.000|2.000
+|2|UNION|1.000|-1.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|3.000|3.000
+|3|UNION|1.000|1.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|4.000|4.000
+|4|UNION|2.000|2.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|5.000|5.000
+|10|UNION|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+|11|UNION|0.000|0.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|2.000|2.000
+|12|UNION|1.000|-1.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|3.000|3.000
+|13|UNION|1.000|1.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|4.000|4.000
+|14|UNION|2.000|2.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|5.000|5.000
+0||UNION|-2.000|-2.000|4|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|1.000
+1||UNION|0.000|0.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|2.000|2.000
+2||UNION|1.000|-1.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|3.000|3.000
+3||UNION|1.000|1.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|4.000|4.000
+4||UNION|2.000|2.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|5.000|5.000
+10||UNION|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+11||UNION|0.000|0.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|2.000|2.000
+12||UNION|1.000|-1.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|3.000|3.000
+13||UNION|1.000|1.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|4.000|4.000
+14||UNION|2.000|2.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|5.000|5.000
+||UNION||||||||||||||
+0|1|FIRST|-2.000|-2.000|4|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|
+0|2|FIRST|-2.000|-2.000|4|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|1.000
+0|3|FIRST|-2.000|-2.000|4|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|
+0|4|FIRST|-2.000|-2.000|4|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|1.000
+10|11|FIRST|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+10|12|FIRST|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+10|13|FIRST|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+10|14|FIRST|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+|0|FIRST||||||||||||||
+|1|FIRST||||||||||||||
+|2|FIRST||||||||||||||
+|3|FIRST||||||||||||||
+|4|FIRST||||||||||||||
+|10|FIRST||||||||||||||
+|11|FIRST||||||||||||||
+|12|FIRST||||||||||||||
+|13|FIRST||||||||||||||
+|14|FIRST||||||||||||||
+0||FIRST|-2.000|-2.000|4|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|1.000
+1||FIRST|0.000|0.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|2.000|2.000
+2||FIRST|1.000|-1.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|3.000|3.000
+3||FIRST|1.000|1.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|4.000|4.000
+4||FIRST|2.000|2.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|5.000|5.000
+10||FIRST|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+11||FIRST|0.000|0.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|2.000|2.000
+12||FIRST|1.000|-1.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|3.000|3.000
+13||FIRST|1.000|1.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|4.000|4.000
+14||FIRST|2.000|2.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|5.000|5.000
+||FIRST||||||||||||||
+0|1|SECOND|0.000|0.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000||
+0|2|SECOND|1.000|-1.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000||3.000
+0|3|SECOND|1.000|1.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000||4.000
+0|4|SECOND|2.000|2.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|5.000|5.000
+10|11|SECOND|0.000|0.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000||
+10|12|SECOND|1.000|-1.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000||
+10|13|SECOND|1.000|1.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000||4.000
+10|14|SECOND|2.000|2.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|5.000|5.000
+|0|SECOND|-2.000|-2.000|4|4|1.000|1.000|0.000|0.000|0|1|32BF|0.000|1.000|1.000
+|1|SECOND|0.000|0.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|2.000|2.000
+|2|SECOND|1.000|-1.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|3.000|3.000
+|3|SECOND|1.000|1.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|4.000|4.000
+|4|SECOND|2.000|2.000|2|2|1.000|1.000|0.000|0.000|0|1|32BF|0.000|5.000|5.000
+|10|SECOND|-2.000|-2.000|4|4|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|1.000|1.000
+|11|SECOND|0.000|0.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|2.000|2.000
+|12|SECOND|1.000|-1.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|3.000|3.000
+|13|SECOND|1.000|1.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|4.000|4.000
+|14|SECOND|2.000|2.000|2|2|1.000|1.000|1.000|-1.000|0|1|32BF|0.000|5.000|5.000
+0||SECOND||||||||||||||
+1||SECOND||||||||||||||
+2||SECOND||||||||||||||
+3||SECOND||||||||||||||
+4||SECOND||||||||||||||
+10||SECOND||||||||||||||
+11||SECOND||||||||||||||
+12||SECOND||||||||||||||
+13||SECOND||||||||||||||
+14||SECOND||||||||||||||
+||SECOND||||||||||||||

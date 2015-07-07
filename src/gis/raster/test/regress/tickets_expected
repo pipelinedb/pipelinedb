@@ -1,0 +1,14 @@
+#1485|0
+#2532.1|
+#2532.2|
+NOTICE:  Raster has default geotransform. Adjusting metadata for use of GDAL Warp API
+#2911|0|0|5|5|2|-2|0|0|0|1
+t
+test_raster_scale_regular|rast||1
+ERROR:  new row for relation "test_raster_scale_regular" violates check constraint "enforce_scaley_rast"
+t
+test_raster_scale_big|rast|-1.23456789012346e+18|1
+ERROR:  new row for relation "test_raster_scale_big" violates check constraint "enforce_scalex_rast"
+t
+test_raster_scale_small|rast||1
+ERROR:  new row for relation "test_raster_scale_small" violates check constraint "enforce_scaley_rast"

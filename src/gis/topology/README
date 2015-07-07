@@ -1,0 +1,237 @@
+=Introduction
+
+This module contains support for topological geometry modelling.
+Functions exist to satisfy the ISO/SQLMM topology-geometry model
+and more are provided to add an additional abstraction level for
+topological features and layers, both simple and hierarchical.
+
+You can see an ER diagram of the full conceptual model in the ER dir.
+You need xfig (http://epb.lbl.gov/xfig/).
+
+All routines, types and other management objects are stored in the
+"topology" SCHEMA.
+
+Comments welcome --strk(2012-03-13);
+
+=Requirements
+
+  Many ISO/SQLMM functions use GEOS-3.3.0+ signatures.
+  The script is still buildable with previous GEOS versions
+  but you'll need 3.3.0+ at runtime for most uses.
+
+=Building
+
+  To build the topology support:
+ 
+  $ make
+
+=Testing
+
+  To run regression tests:
+
+  $ make check
+
+=Install, upgrade, uninstall
+
+To enable topology support:
+
+	$ psql -f topology.sql <your_postgis_enabled_db>
+
+	It will create a 'topology' schema in <your_postgis_enabled_db>
+	hosting all the topology functions. To be run with db-owner perms.
+	Remember to grant execute to users.
+	
+To uninstall:
+
+	$ psql -c 'drop schema topology cascade'
+
+To upgrade between minor releases:
+
+	$ psql -f topology_upgrade_<version>_minor.sql <your_postgis_enabled_db>
+
+Major releases upgrades should follow the "HARD UPGRADE" procedure
+described in main postgis manual.
+
+=Usage
+
+Topology data are stored in named SCHEMAs, where the topology
+name is the name of the SCHEMA containing its data.
+
+A catalogue of avalable topologies is kept under the
+"topology"."topology" table.
+
+==Creating a topology
+
+To create a topology:
+
+	SELECT topology.CreateTopology(<name>, [srid], [tolerance]);
+
+Example:
+
+	SELECT topology.CreateTopology('test_schema', 4326 , 0.0001);
+	or
+	-- unknown srid, 0 tolerance
+	SELECT topology.CreateTopology('test_schema');
+
+	NOTE: the new schema ('test_schema' in example) will be create
+	      so it must not exist before.
+
+==Destroying a topology
+
+To destroy a topology:
+		
+	SELECT topology.DropTopology(<name>);
+
+==Loading topology data
+
+To load topology data in a topology you can use INSERT
+statements filling up the Edge, Node and Face relations
+under you topology schema:
+
+
+	* Edge
+	 * edge_id integer PRIMARY KEY
+	 * start_node integer REFERENCES Node.node_id)
+	 * end_node integer REFERENCES Node.node_id)
+	 * next_left_edge integer REFERENCES abs(Edge.edge_id)
+	 * next_right_edge integer REFERENCES abs(Edge.edge_id)
+	 * left_face integer REFERENCES Face.face_id
+	 * right_face integer REFERENCES Face.face_id
+	 * geom geometry ( a linestring )
+	
+
+	* Node
+	 * node_id integer PRIMARY KEY
+	 * containing_face integer REFERENCES Face.face_id
+	 * geom geometry ( a point )
+
+	* Face
+	 * face_id integer PRIMARY KEY
+	 * mbr box2d ( can be NULL )
+
+The next_*_edge of an edge is the edge you encounter next while going
+around the specified face (right or left) in counterclockwise order
+(so that the face is on your left). Note that due to this definition
+the edge being considered is traversed in reverse order when traversing
+its "right" face. The values are signed to indicate wheter the next edge
+will be traversed in its original or reversed orientation.
+
+More details on semantic are contained in the SQL/MM specification, which
+this implementation follows as for these views structure.
+
+==Validating topology data
+
+To verify validity of a topology:
+
+	SELECT * FROM topology.ValidateTopology(name);
+
+==Defining TopoGeometry objects
+
+Currently, TopoGeometry objects can only be defined by specifying their
+component topology elements. We do support both basic TopoGeometry
+and hierarchical TopoGeometry. Basic TopoGeometry objects are those
+composed by base topolocal elements (faces, edges, nodes). Hierarchical
+TopoGeometry objects are composed by other TopoGeometry objects.
+
+Each TopoGeometry object belongs to a specific Layer of a specific
+Topology. Before creating a TopoGeometry object you need to create
+its Layer in the Topology. A Topology Layer is an association of
+a feature-table with the topology. It also contain type and hierarchy
+information. We create a layer using the AddTopoGeometryColumn() function:
+
+	topology.AddTopoGeometryColumn(topology_name,
+		schema_name, table_name, column_name, feature_type,
+		[child_layer])
+
+The function will both add the requested column to the table and add
+a record to the topology.layer table with all the given info.
+
+If you don't specify [child_layer] (or set it to NULL) this layer
+would contain Basic TopoGeometries (composed by primitive topology
+elements). Otherwise this layer will contain hierarchical TopoGeometries
+(composed by TopoGeometries from the child_layer).
+
+Once the layer is created (it's id is returned by the AddTopoGeometryColumn
+function) you're ready to construct TopoGeometry objects in it: 
+
+  	topology.CreateTopoGeom(
+
+    		topology_name,
+
+    		feature_type,	-- 1:[multi]point, 2:[multi]line,
+		             	-- 3:[multi]poly, 4:collection
+
+    		layer_id,    	-- as returned by AddTopoGeometryColumn
+
+		TopoElementArray);
+
+The TopoElementArray type is a bidimensional array of integers.
+Value semantics depend on the type of the layer associated with
+the TopoGeometry object. For Basic TopoGeometry objects this would
+be:
+	{{element_type, element_id}, ...}
+
+For Hierarchical TopoGeometry objects this would be:
+
+	{{child_layer_id, topogeoemtry_id}, ...}
+
+==Converting Geometry to TopoGeometry while populating the topology
+
+You can import a Geometry into an existing topology and at the same
+time get its topological definition (its TopoGeometry equivalent)
+using the toTopoGeom function:
+
+    topology.toTopoGeom(
+
+        geometry, -- the simple geometry
+
+        topology_name,
+
+        layer_id -- as returned by AddTopoGeometryColumn
+    );
+
+==Getting simple Geometry values from TopoGeometry objects
+
+TopoGeometry to Geometry casting is implicit, so any function accepting
+a Geometry would transparently also accept a TopoGeometry. Some functions
+may be optimized for TopoGeometry.
+
+=Issues
+
+==Topology tolerance
+
+GEOS (and JTS) often fail due to input precision.
+The CreateTopogeo() function currently accept a precision
+specification, we might use this to enforce a precision
+to the topology element geometries, by mean of SnapToGrid
+calls, or alternatively, force use of a specific PrecisionModel
+when using GEOS function. The former seems cleaner, but would
+require a trigger to run on all inserts, even when the geometry
+being input has already been snapped by caller.
+
+==ST_GetFaceGeometry() implementation
+
+The ST_GetFaceGeometry() function is currently implemented 
+as a call to polygonize() receiving all edges with the
+given Face on the left or right side. This reduces the number
+of SQL queries to 1, but makes it hard to detect any
+inconsistency in the underlying topology.
+Also, the polygonize() function does not use *any* of the
+metadata informations in the Edge table, so replacing it
+with a more topology-aware function could speed it up.
+
+==ValidateTopology() performance
+
+The ValidateTopology() function, as for SQL/MM specification
+uses ST_GetFaceGeometry() to check for Within() and Overlap()
+conditions. This is an expensive task, and might be replaced
+by topology-aware replacement of the two predicates. The
+Face geometries might also be cached, but that might still
+be slower then overloading the predicates.
+
+==Topology table constraints 
+
+In addition to the constraints defined in SQL/MM specification,
+this implementation adds constraints to enforce Node and Edge
+geometry types to be 'POINT' and 'LINESTRING' respectively.
+

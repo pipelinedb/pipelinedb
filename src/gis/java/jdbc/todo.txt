@@ -1,0 +1,27 @@
+Todo for PostGIS 1.0 compatible JDBC classes
+
+- even more Testing, especialy against different postgis, 
+  pgjdbc and postgresql releases.
+  
+- Use JUnit for testing (maven)
+
+- Unify the build of app java projects -> maven
+
+- Handling of length() - esp. with modifying the geometries
+
+- Handling of hashCode() - esp. with modifying the geometries
+
+- Test correctness of toString() and getValue() for compatibility reasons
+
+- See where the code can be cleaned and leaned.
+
+- Finish JTS support
+
+- Creating a sane extension interface for pgjdbc that allows binary
+  transfers and convince upstream to use it, then create support for it.
+
+- Possibly adding server side code to support plJava
+  http://gborg.postgresql.org/project/pljava/projdisplay.php
+
+- Rework the BinaryParser/BinaryWriter to work on SQLInput/SQLOutput 
+  instances, as well as reworking ValueGetter/ValueSetter to implment those interfaces.

@@ -1,0 +1,6 @@
+# postgis topology extension
+comment = 'PostGIS topology spatial types and functions'
+default_version = '@POSTGIS_LIB_VERSION@'
+relocatable = false
+schema = topology
+requires = postgis

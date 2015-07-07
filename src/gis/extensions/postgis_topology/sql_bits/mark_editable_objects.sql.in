@@ -1,0 +1,2 @@
+SELECT pg_catalog.pg_extension_config_dump('topology', '');
+SELECT pg_catalog.pg_extension_config_dump('layer', '');

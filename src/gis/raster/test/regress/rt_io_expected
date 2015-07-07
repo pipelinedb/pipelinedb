@@ -1,0 +1,16 @@
+1x1 no bands, no transform|t|t
+1x1 single band (1BB) no transform|t|t
+1x1 single band (2BUI) no transform|t|t
+1x1 single band (4BUI) no transform|t|t
+1x1 single band (8BSI) no transform|t|t
+1x1 single band (8BUI) no transform|t|t
+1x1 single band (16BSI) no transform|t|t
+1x1 single band (16BUI) no transform|t|t
+1x1 single band (32BSI) no transform|t|t
+1x1 single band (32BUI) no transform|t|t
+1x1 single band (32BF) no transform|t|t
+1x1 single band (64BF) no transform|t|t
+1x1 single band (64BF external) no transform|t|t
+ERROR:  rt_band_from_wkb: Invalid value 2 for pixel of type 1BB
+ERROR:  rt_band_from_wkb: Invalid value 4 for pixel of type 2BUI
+ERROR:  rt_band_from_wkb: Invalid value 16 for pixel of type 4BUI

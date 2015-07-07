@@ -1,0 +1,102 @@
+pgsql2shp(1)                        PostGIS                       pgsql2shp(1)
+
+
+
+NAME
+       pgsql2shp - postgis to shapefile dumper
+
+
+SYNTAX
+       pgsql2shp [options] database [schema.]table
+       pgsql2shp [options] database query
+
+
+DESCRIPTION
+       The  pgsql2shp  table dumper connects directly to the database and con-
+       verts a table (possibly created by user query) into a shape file. It is
+       compatible with all versions of PostGIS.
+
+       Version: 1.1.5 (2006/10/06)
+
+
+USAGE
+       The <database> is the name of the database to connect to.
+
+       The  <table> is the (optionally schema-qualified) table to read spatial
+       data from. Alternatively, you can specify a QUERY whose result will  be
+       written into the shapefile.
+
+
+OPTIONS
+       The commandline options are:
+
+       -f <filename>
+              Write the output to a particular filename.
+
+       -h <host>
+              The database host to connect to.
+
+       -p <port>
+              The port to connect to on the database host.
+
+       -P <password>
+              The password to use when connecting to the database.
+
+       -u <user>
+              The username to use when connecting to the database.
+
+       -g <geometry column>
+              In the case of tables with multiple geometry columns, the geome-
+              try column to use when writing the shape file.
+
+       -b     Use a binary cursor. When used  on  pre-1.0.0  PostGIS  versions
+              this  will reduce the likelihood of coordinate drift due to con-
+              version to and from WKT format. Coordinate drifts will not occur
+              with  PostGIS  1.0.0  and  newer  versions.  It will be slightly
+              faster, but might fail if any NON-gemetry column lacks a cast to
+              text.
+
+       -r     Raw mode. Do not drop the gid field, or escape column names.
+
+       -d     For  backward  compatibility:  write  a 3-dimensional shape file
+              when dumping from old (pre-1.0.0) postgis databases (the default
+              is  to  write a 2-dimensional shape file in that case). Starting
+              from postgis-1.0.0+, dimensions are fully encoded.
+
+       -k     Keep idendifiers case (don't uppercase field names).
+
+       -?     Display version and usage information.
+
+
+INSTALLATION
+       To compile the program from source, simply run  "make"  in  the  source
+       directory.  Then copy the binary in your shell search path (or wherever
+       you like). This text is also available as a man page in the ../doc/man/
+       directory,  ready for copying it into the manual search path on unixoid
+       systems.
+
+
+EXAMPLES
+       An example session using  the  dumper  to  create  shape  file  from  a
+       database might look like this:
+
+       # pgsql2shp -f myfile -p 5555 my_db roads_table
+
+
+AUTHORS
+       Originally   written   by  Jeff  Lounsbury  <jeffloun@refractions.net>.
+       Improved and  maintained  by  Sandro  Santilli  <strk@keybit.net>.
+       Includes small contributions and improvements by others.
+
+       This  application  uses  functionality  from  shapelib  1.2.9  by Frank
+       Warmerdam <warmerda@gdal.velocet.ca> to write to ESRI Shape files.
+
+
+SEE ALSO
+       shp2pgsql(1)
+
+       More information is available at http://postgis.net
+
+
+
+                                                                  pgsql2shp(1)
