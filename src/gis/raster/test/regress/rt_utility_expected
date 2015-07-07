@@ -1,0 +1,60 @@
+NOTICE:  Latitude and longitude required for computing pixel row and column of a rotated raster
+NOTICE:  Latitude and longitude required for computing pixel row and column of a rotated raster
+test 2.4|2|1217x1156, ip:782325.5,26744042.5 scale:5,-5 skew:3,3 srid:9102707 width:1217 height:1156
+test 2.4|4|6000x6000, ip:-75.5533328537098,49.2824585505576 scale:0.000805965234044584,-0.00080596523404458 skew:0.000211812383858707,0.000211812383858704 srid:4326 width:6000 height:6000
+ERROR:  Raster and geometry do not have the same SRID
+ERROR:  Raster and geometry do not have the same SRID
+ERROR:  Raster and geometry do not have the same SRID
+NOTICE:  Latitude and longitude required for computing pixel row and column of a rotated raster
+NOTICE:  Latitude and longitude required for computing pixel row and column of a rotated raster
+test 5.4|2|1217x1156, ip:782325.5,26744042.5 scale:5,-5 skew:3,3 srid:9102707 width:1217 height:1156
+test 5.4|4|6000x6000, ip:-75.5533328537098,49.2824585505576 scale:0.000805965234044584,-0.00080596523404458 skew:0.000211812383858707,0.000211812383858704 srid:4326 width:6000 height:6000
+ERROR:  Raster and geometry do not have the same SRID
+ERROR:  Raster and geometry do not have the same SRID
+ERROR:  Raster and geometry do not have the same SRID
+NOTICE:  Pixel row and column required for computing longitude and latitude of a rotated raster
+NOTICE:  Pixel row and column required for computing longitude and latitude of a rotated raster
+test 8.3|2|1217x1156, ip:782325.5,26744042.5 scale:5,-5 skew:3,3 srid:9102707 width:1217 height:1156
+test 8.3|4|6000x6000, ip:-75.5533328537098,49.2824585505576 scale:0.000805965234044584,-0.00080596523404458 skew:0.000211812383858707,0.000211812383858704 srid:4326 width:6000 height:6000
+NOTICE:  Pixel row and column required for computing longitude and latitude of a rotated raster
+NOTICE:  Pixel row and column required for computing longitude and latitude of a rotated raster
+test 10.3|2|1217x1156, ip:782325.5,26744042.5 scale:5,-5 skew:3,3 srid:9102707 width:1217 height:1156
+test 10.3|4|6000x6000, ip:-75.5533328537098,49.2824585505576 scale:0.000805965234044584,-0.00080596523404458 skew:0.000211812383858707,0.000211812383858704 srid:4326 width:6000 height:6000
+test 11.1|t
+test 11.2|t
+test 11.3|t
+test 11.4|t
+test 11.5|t
+test 11.6|t
+test 11.7|t
+test 11.8|t
+test 11.9|t
+test 11.10|t
+test 11.11|t
+Raster of 10x10 pixels has 3 bands and extent of BOX(0 -10,10 0)
+    band 1 of pixtype 8BUI is in-db with NODATA value of 0
+    band 2 of pixtype 32BF is in-db with NODATA value of -9999
+    band 3 of pixtype 16BSI is in-db with no NODATA value
+Skewed raster of 10x10 pixels has 1 band and extent of BOX(0 -10,10 0.0001)
+    band 1 of pixtype 8BUI is in-db with NODATA value of 0
+1|Raster of 90x50 pixels has 3 bands and extent of BOX(0 -50,90 0)
+    band 1 of pixtype 8BUI is out-db with no NODATA value
+    band 2 of pixtype 8BUI is out-db with no NODATA value
+    band 3 of pixtype 8BUI is out-db with no NODATA value
+2|Raster of 90x50 pixels has 3 bands and extent of BOX(0 -50,90 0)
+    band 1 of pixtype 8BUI is out-db with no NODATA value
+    band 2 of pixtype 8BUI is out-db with no NODATA value
+    band 3 of pixtype 8BUI is out-db with no NODATA value
+3|Raster of 90x50 pixels has 2 bands and extent of BOX(0 -50,90 0)
+    band 1 of pixtype 8BUI is in-db with NODATA value of 0
+    band 2 of pixtype 8BUI is out-db with no NODATA value
+4|Raster of 90x50 pixels has 2 bands and extent of BOX(0 -50,90 0)
+    band 1 of pixtype 8BUI is out-db with NODATA value of 255
+    band 2 of pixtype 8BUI is in-db with NODATA value of 0
+ms1|64
+NOTICE:  Could not find raster band of index 1 when getting band path. Returning NULL
+bandpath1|
+bandpath2|testraster.tif
+bandpath2|testraster.tif
+bandpath2|
+bandpath2|testraster.tif

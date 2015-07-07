@@ -1,0 +1,11 @@
+--- java/jdbc/Makefile.old	2006-12-25 15:25:19.000000000 +0200
++++ java/jdbc/Makefile	2006-12-25 15:25:26.000000000 +0200
+@@ -27,7 +27,7 @@
+ 
+ # Configure the helper executables used during build.
+ 
+-JAVAC?=javac -target 1.2 -source 1.2
++JAVAC?=javac -target 1.5 -source 1.5
+ JAVA?=java
+ JAR?=jar
+ MKDIR?=mkdir -p

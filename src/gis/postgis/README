@@ -1,0 +1,73 @@
+Welcome to the Initial version of LWGEOM.
+
+More information is available on the PostGIS user's mailing list and 
+the PostGIS developer's mailing list.  
+
+Differences
+-----------
+
+The LWGEOM is very much like the original PostGIS GEOMETRY type.  The 
+main differences are:
+
+a) LWGEOMs are much smaller than the PostGIS GEOMETRY
+b) LWGEOMs natively support 2d, 3d, and 4d points
+c) LWGEOMs are indexed using single-precision bounding boxes.  This
+   make the indexes significantly smaller than PostGIS GEOMETRY
+   indexes.
+d) LWGEOMs are internally very similar to OGC WKB   
+e) The "normal" view of LWGEOMs is OGC WKB - PostGIS GEOMETRY is OGC WKT
+f) PostGIS geometries have a built-in BOX3D.  LWGEOMs have an *optional*
+   BOX2D (see below).
+
+
+Also included with the LWGEOMs is a type called 'box2d'.  This is
+very similar to PostGIS BOX3D type:
+
+a) BOX2Ds are 2D - BOX3D is 3D
+b) BOX2Ds are represented by single-precision floating point numbers,
+   while BOX3Ds are double-precision floating point numbers.
+c) BOX2Ds will sometimes be slightly larger than you might expect.
+   This is because the conversion from double-precision to 
+   single-precision is inexact.  When this happens, the BOX2D will
+   automatically expand itself.
+   
+
+Bounding Boxes
+--------------
+
+<this section for advanced users.  Ignore it if you don't understand
+ what its saying.>
+
+Bounding boxes are optional in LWGEOMs.  By not having one, you are
+saving a small amount of space per LWGEOM geometry (16 bytes).
+
+Bounding boxes are attached to any non-POINT geometry by default.
+
+You can disable this automatic addition setting AUTOCACHE_BBOX to 0
+in the top-builddir Makefile.config and read BBOXCACHE_BEHAVIOURS
+for function-by-function behaviour explanation.
+
+Manual control of bbox cache is available using DropBBOX() and AddBBOX().
+
+UPDATE <table> SET <geomcol> = DropBBOX(<geomcol>);
+UPDATE <table> SET <geomcol> = AddBBOX(<geomcol>);
+
+Note that if you don't cache a BBOX spatial operators will be much slower,
+as they'll need to compute all the boxes at every invokation.
+If you use GiST indexes you will still note a slow down as a RECHECK
+clause is specified for GiST operators. Also, GiST index updating
+will be slower w/out a BBOX cache.
+
+
+Space Saving
+------------
+
+LWGEOM indexes are approximately 40% smaller than PostGIS indexes.
+
+A LWGEOM 'POINT(0 0)' takes up 21 bytes, a POSTGIS 'POINT(0 0)' takes
+up 140 bytes.  This shows that LWGEOMs have a much smaller overhead.
+
+LWGEOMs will store 2D points as 2 double precision numbers (16 bytes) -
+PostGIS will store 2D points with 3 numbers (24 bytes).   This can be 
+another big savings.
+

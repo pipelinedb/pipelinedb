@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- ================================================== -->
+<!--  Datasource config for Postgres                    -->
+<!--  DO NOT EDIT, it is a template configuration file! -->
+<!-- ================================================== -->
+
+
+<datasources>
+  <local-tx-datasource>
+    <jndi-name>@datasource.name@</jndi-name>
+    <connection-url>@database.connection.url@</connection-url>
+    <driver-class>@database.driver@</driver-class>
+    <user-name>@database.login@</user-name>
+    <password>@database.password@</password>
+  </local-tx-datasource>
+</datasources>

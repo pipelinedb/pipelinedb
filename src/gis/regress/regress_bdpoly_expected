@@ -1,0 +1,11 @@
+BuildArea|t
+BuildArea|t
+BuildArea|t
+BuildArea|t
+BuildArea|t
+BdMPolyFromText|t
+BdPolyFromText|t
+ERROR:  Input is not a MultiLinestring
+ERROR:  Input is not a MultiLinestring
+ERROR:  Input returns more then a single polygon, try using BdMPolyFromText instead
+BdMPolyFromText|SRID=3;MULTIPOLYGON(((0 0,0 10,10 10,10 0,0 0),(2 2,4 2,4 4,2 4,2 2),(5 5,7 5,7 7,5 7,5 5)))

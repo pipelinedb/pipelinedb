@@ -1,0 +1,66 @@
+#!/bin/sh
+
+# environment variables for postgis
+
+#read optional configuration files. last prevails
+for file in "/etc/default/postgis" "$HOME/.postgis/profile" ; do
+	if [ -f "$file" ]; then
+		tmpval=`grep "^TEMPLATEDB=" $file | cut -d= -f2`
+		if [ -n "$tmpval" ]; then
+			TEMPLATEDB1=$tmpval
+		fi
+		tmpval=`grep "^GRUSER=" $file | cut -d= -f2`
+		if [ -n "$tmpval" ]; then
+			GRUSER1=$tmpval
+		fi
+		tmpval=`grep "^DBAUSER=" $file | cut -d= -f2`
+		if [ -n "$tmpval" ]; then
+			DBAUSER1=$tmpval
+		fi
+		tmpval=`grep "^PGISSCRIPT=" $file | cut -d= -f2`
+		if [ -n "$tmpval" ]; then
+			PGISSCRIPT1=$tmpval
+		fi
+	fi
+done
+
+#cluster information should be set separately
+if [ -x @prefix@/bin/pg_lsclusters ]; then
+#	PGCLUSTER=`pg_lsclusters | awk '{if ($3 == ENVIRON["PGPORT"]) {print $1"/"$2;}}'`
+#	export PGCLUSTER
+#
+	if [ -z $DBAUSER ]; then
+		DBAUSER=`pg_lsclusters | awk '{if ($3 == ENVIRON["PGPORT"]) {print $5;}}'`
+	fi
+fi
+
+if [ -z "$TEMPLATEDB" ]; then
+	if [ -n "$TEMPLATEDB1" ]; then
+		TEMPLATEDB="$TEMPLATEDB1"
+	else
+	    TEMPLATEDB="template_gis"
+	fi
+fi
+if [ -z "$GRUSER" ]; then
+	if [ -n "$GRUSER1" ]; then
+		GRUSER="$GRUSER1"
+	else
+	    GRUSER="postgres"
+	fi
+fi
+if [ -z "$DBAUSER" ]; then
+	if [ -n "$DBAUSER1" ]; then
+		DBAUSER="$DBAUSER1"
+	else
+	    DBAUSER="postgres"
+	fi
+fi
+if [ -z "$PGISSCRIPT" ]; then
+	if [ -n "$PGISSCRIPT1" ]; then
+		PGISSCRIPT="$PGISSCRIPT1"
+	else
+		PGISSCRIPT="postgis.sql"
+	fi
+fi
+
+TDB=$TEMPLATEDB

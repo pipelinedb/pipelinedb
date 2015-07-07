@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<datasources>
+  <local-tx-datasource>
+    <jndi-name>GeoDataDS</jndi-name>
+    <connection-url>jdbc:postgresql://127.0.0.1:5432/geotest</connection-url>
+    <driver-class>org.postgis.DriverWrapper</driver-class>
+    <user-name>geo</user-name>
+    <password>geo</password>
+      <metadata>
+         <type-mapping>PostgreSQL 8.1</type-mapping>
+      </metadata>
+  </local-tx-datasource>
+</datasources>

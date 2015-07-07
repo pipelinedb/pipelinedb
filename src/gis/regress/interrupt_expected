@@ -1,0 +1,4 @@
+NOTICE:  liblwgeom code interrupted
+ERROR:  canceling statement due to statement timeout
+segmentize interrupted on time
+1|LINESTRING(0 0,2 0,4 0)

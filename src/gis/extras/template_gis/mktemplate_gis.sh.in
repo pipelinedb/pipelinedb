@@ -1,0 +1,15 @@
+#!/bin/sh
+
+#this script should be run as $DBAUSER
+
+PWD1=`pwd`
+
+cd /tmp
+
+source @bindir@/postgres_lib.sh
+
+check_dba $DBAUSER
+template_rm $TDB
+template_mk $TDB $GRUSER
+
+cd $PWD1

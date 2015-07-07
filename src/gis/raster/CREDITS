@@ -1,0 +1,19 @@
+- The BAM project, University Laval, sponsored project management kick-start.
+
+- CadCorp (http://www.cadcorp.com/) sponsored WKB and datum format design
+  and implementation.
+
+- The Michigan Tech Research Institute sponsored spatial operators
+  implementation.
+
+- Refractions Research Inc. provided svn repository 
+
+- Pierre Racine designed the functionality
+
+- Sandro Santilli wrote the in-memory api, build scripts and
+  postgresql connectors
+  
+- Deimos Space (http://www.deimos-space.com/UK/index.asp?lang=UK), under
+  "España Virtual" project (http://www.espanavirtual.org/?q=en) 
+  sponsored the creation of several core and import/export functions
+

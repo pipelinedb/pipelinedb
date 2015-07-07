@@ -1,0 +1,16 @@
+dimension_01|2
+dimension_02|2
+dimension_03|3
+dimension_04|3
+dimension_05|3
+dimension_06|3
+dimension_07|2
+dimension_08|2
+numpatches_01|0
+numpatches_02|1
+numpatches_03|4
+patchN_01|
+patchN_02|POLYGON((0 0,0 0,0 1,0 0))
+patchN_03|
+patchN_04|
+patchN_05|POLYGON((0 0 0,0 1 0,1 0 0,0 0 0))

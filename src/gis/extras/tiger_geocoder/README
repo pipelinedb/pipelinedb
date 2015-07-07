@@ -1,0 +1,61 @@
+TIGER Geocoder
+
+  2013/07/09
+
+  A plpgsql based geocoder written for TIGER census data.
+
+Design:
+
+There are two components to the geocoder, the address normalizer and the
+address geocoder.  These two components are described separately.
+
+The goal of this project is to build a fully functional geocoder that can 
+process an arbitrary address string and, using normalized TIGER census data,
+produce a point geometry reflecting the location of the given address.
+
+- The geocoder should be simple for anyone familiar with PostGIS to install
+  and use.
+- It should be robust enough to function properly despite formatting and 
+  spelling errors.
+- It should be extensible enough to be used with future data updates, or
+  alternate data sources with a minimum of coding changes.
+
+Installation:
+
+	Refer to the README in the respective year tiger folder for installation and example usage.  The latest scripts as of this writing are for tiger_2012.
+	
+
+Usage:
+
+	SELECT g.rating, g.geomout, (addy).* FROM geocode('address string') As g;
+	
+e.g: SELECT g.rating, 
+	ST_X(geomout) As lon, 
+	ST_Y(geomout) As lat, (addy).*  FROM geocode('1731 New Hampshire Avenue Northwest, Washington, DC 20010') As g;
+
+Notes:
+
+- The assumed format for the address is the US Postal Service standard:
+  () indicates a field required by the geocoder, [] indicates an optional field.
+
+	(address) [dirPrefix] (streetName) [streetType] [dirSuffix]
+	[internalAddress] [location] [state] [zipCode]
+
+
+
+Address Normalizer:
+
+The goal of the address normalizer is to provide a robust function to break a
+given address string down into the components of an address.  While the
+normalizer is built specifically for the normalized US TIGER Census data,  it
+has been designed to be reasonably extensible to other data sets and localities.
+
+Usage:
+
+	normalize_address('address string');
+	
+	e.g.: SELECT naddy.* FROM normalize_address('29645 7th Street SW Federal Way 98023') AS naddy;
+	
+	 address | predirabbrev |      streetname       | streettypeabbrev | postdirabbrev | internal | location | stateabbrev |  zip  | parsed
+	 ---------+-------------+-----------------------+------------------+---------------+----------+----------+-------------+-------+--------
+     29645 |               | 7th Street SW Federal  | Way            |               |          |          |             | 98023 | 

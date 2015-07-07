@@ -1,0 +1,375 @@
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-- 
+--
+-- PostGIS - Spatial Types for PostgreSQL
+-- http://postgis.net
+-- Copyright 2001-2003 Refractions Research Inc.
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence. See the COPYING file.
+--  
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+#define CREATEFUNCTION CREATE OR REPLACE FUNCTION
+
+#if USE_VERSION > 72
+# define _IMMUTABLE_STRICT IMMUTABLE STRICT
+# define _IMMUTABLE IMMUTABLE
+# define _STABLE_STRICT STABLE STRICT
+# define _STABLE STABLE
+# define _VOLATILE_STRICT VOLATILE STRICT
+# define _VOLATILE VOLATILE
+# define _STRICT STRICT
+#else 
+# define _IMMUTABLE_STRICT  with(iscachable,isstrict)
+# define _IMMUTABLE with(iscachable)
+# define _STABLE_STRICT with(isstrict)
+# define _STABLE 
+# define _VOLATILE_STRICT with(isstrict)
+# define _VOLATILE 
+# define _STRICT with(isstrict)
+#endif 
+
+#if USE_VERSION >= 73
+# define HAS_SCHEMAS 1
+#endif
+
+
+-----------------------------------------------------------------------
+-- LONG TERM LOCKING
+-----------------------------------------------------------------------
+
+-- UnlockRows(authid)
+-- removes all locks held by the given auth
+-- returns the number of locks released
+CREATEFUNCTION UnlockRows(text)
+	RETURNS int
+	AS '
+DECLARE
+	ret int;
+BEGIN
+
+	IF NOT LongTransactionsEnabled() THEN
+		RAISE EXCEPTION ''Long transaction support disabled, use EnableLongTransaction() to enable.'';
+	END IF;
+
+	EXECUTE ''DELETE FROM authorization_table where authid = '' ||
+		quote_literal($1);
+
+	GET DIAGNOSTICS ret = ROW_COUNT;
+
+	RETURN ret;
+END;
+'
+LANGUAGE 'plpgsql' _VOLATILE_STRICT;
+
+-- LockRow([schema], table, rowid, auth, [expires]) 
+-- Returns 1 if successfully obtained the lock, 0 otherwise
+CREATEFUNCTION LockRow(text, text, text, text, timestamp)
+	RETURNS int
+	AS '
+DECLARE
+	myschema alias for $1;
+	mytable alias for $2;
+	myrid   alias for $3;
+	authid alias for $4;
+	expires alias for $5;
+	ret int;
+	mytoid oid;
+	myrec RECORD;
+	
+BEGIN
+
+	IF NOT LongTransactionsEnabled() THEN
+		RAISE EXCEPTION ''Long transaction support disabled, use EnableLongTransaction() to enable.'';
+	END IF;
+
+	EXECUTE ''DELETE FROM authorization_table WHERE expires < now()''; 
+
+#ifdef HAS_SCHEMAS
+	SELECT c.oid INTO mytoid FROM pg_class c, pg_namespace n
+		WHERE c.relname = mytable
+		AND c.relnamespace = n.oid
+		AND n.nspname = myschema;
+#else
+	SELECT c.oid INTO mytoid FROM pg_class c
+		WHERE c.relname = mytable;
+#endif
+
+	-- RAISE NOTICE ''toid: %'', mytoid;
+
+	FOR myrec IN SELECT * FROM authorization_table WHERE 
+		toid = mytoid AND rid = myrid
+	LOOP
+		IF myrec.authid != authid THEN
+			RETURN 0;
+		ELSE
+			RETURN 1;
+		END IF;
+	END LOOP;
+
+	EXECUTE ''INSERT INTO authorization_table VALUES (''||
+		quote_literal(mytoid)||'',''||quote_literal(myrid)||
+		'',''||quote_literal(expires)||
+		'',''||quote_literal(authid) ||'')'';
+
+	GET DIAGNOSTICS ret = ROW_COUNT;
+
+	RETURN ret;
+END;'
+LANGUAGE 'plpgsql' _VOLATILE_STRICT;
+
+-- LockRow(schema, table, rid, authid);
+CREATEFUNCTION LockRow(text, text, text, text)
+	RETURNS int
+	AS
+'SELECT LockRow($1, $2, $3, $4, now()::timestamp+''1:00'');'
+	LANGUAGE 'sql' _VOLATILE_STRICT;
+
+-- LockRow(table, rid, authid);
+CREATEFUNCTION LockRow(text, text, text)
+	RETURNS int
+	AS
+#ifdef HAS_SCHEMAS
+'SELECT LockRow(current_schema(), $1, $2, $3, now()::timestamp+''1:00'');'
+#else
+'SELECT LockRow('''', $1, $2, $3, now()::timestamp+''1:00'');'
+#endif
+	LANGUAGE 'sql' _VOLATILE_STRICT;
+
+-- LockRow(schema, table, rid, expires);
+CREATEFUNCTION LockRow(text, text, text, timestamp)
+	RETURNS int
+	AS
+#ifdef HAS_SCHEMAS
+'SELECT LockRow(current_schema(), $1, $2, $3, $4);'
+#else
+'SELECT LockRow('''', $1, $2, $3, $4);'
+#endif
+	LANGUAGE 'sql' _VOLATILE_STRICT;
+
+
+CREATEFUNCTION AddAuth(text)
+	RETURNS BOOLEAN
+	AS '
+DECLARE
+	lockid alias for $1;
+	okay boolean;
+	myrec record;
+BEGIN
+	-- check to see if table exists
+	--  if not, CREATE TEMP TABLE mylock (transid xid, lockcode text)
+	okay := ''f'';
+	FOR myrec IN SELECT * FROM pg_class WHERE relname = ''temp_lock_have_table'' LOOP
+		okay := ''t'';
+	END LOOP; 
+	IF (okay <> ''t'') THEN 
+		CREATE TEMP TABLE temp_lock_have_table (transid xid, lockcode text);
+			-- this will only work from pgsql7.4 up
+			-- ON COMMIT DELETE ROWS;
+	END IF;
+
+	--  INSERT INTO mylock VALUES ( $1)
+--	EXECUTE ''INSERT INTO temp_lock_have_table VALUES ( ''||
+--		quote_literal(getTransactionID()) || '','' ||
+--		quote_literal(lockid) ||'')'';
+
+	INSERT INTO temp_lock_have_table VALUES (getTransactionID(), lockid);
+
+	RETURN true::boolean;
+END;
+'
+LANGUAGE PLPGSQL;
+ 
+
+-- CheckAuth( <schema>, <table>, <ridcolumn> )
+--
+-- Returns 0
+--
+CREATEFUNCTION CheckAuth(text, text, text)
+	RETURNS INT
+	AS '
+DECLARE
+#ifdef HAS_SCHEMAS
+	schema text;
+#endif
+BEGIN
+	IF NOT LongTransactionsEnabled() THEN
+		RAISE EXCEPTION ''Long transaction support disabled, use EnableLongTransaction() to enable.'';
+	END IF;
+
+#ifdef HAS_SCHEMAS
+	if ( $1 != '''' ) THEN
+		schema = $1;
+	ELSE
+		SELECT current_schema() into schema;
+	END IF;
+#endif
+
+	-- TODO: check for an already existing trigger ?
+
+	EXECUTE ''CREATE TRIGGER check_auth BEFORE UPDATE OR DELETE ON '' 
+#ifdef HAS_SCHEMAS
+		|| quote_ident(schema) || ''.'' || quote_ident($2)
+#else
+		|| quote_ident($2)
+#endif
+		||'' FOR EACH ROW EXECUTE PROCEDURE CheckAuthTrigger(''
+		|| quote_literal($3) || '')'';
+
+	RETURN 0;
+END;
+'
+LANGUAGE 'plpgsql';
+
+-- CheckAuth(<table>, <ridcolumn>)
+CREATEFUNCTION CheckAuth(text, text)
+	RETURNS INT
+	AS
+	'SELECT CheckAuth('''', $1, $2)'
+	LANGUAGE 'SQL';
+
+CREATEFUNCTION CheckAuthTrigger()
+	RETURNS trigger AS 
+	'@MODULE_FILENAME@', 'check_authorization'
+	LANGUAGE C;
+
+CREATEFUNCTION GetTransactionID()
+	RETURNS xid AS 
+	'@MODULE_FILENAME@', 'getTransactionID'
+	LANGUAGE C;
+
+
+--
+-- Enable Long transactions support
+--
+--  Creates the authorization_table if not already existing
+--
+CREATEFUNCTION EnableLongTransactions()
+	RETURNS TEXT
+	AS '
+DECLARE
+	query text;
+	exists bool;
+	rec RECORD;
+
+BEGIN
+
+	exists = ''f'';
+	FOR rec IN SELECT * FROM pg_class WHERE relname = ''authorization_table''
+	LOOP
+		exists = ''t'';
+	END LOOP;
+
+	IF NOT exists
+	THEN
+		query = ''CREATE TABLE authorization_table (
+			toid oid, -- table oid
+			rid text, -- row id
+			expires timestamp,
+			authid text
+		)'';
+		EXECUTE query;
+	END IF;
+
+	exists = ''f'';
+	FOR rec IN SELECT * FROM pg_class WHERE relname = ''authorized_tables''
+	LOOP
+		exists = ''t'';
+	END LOOP;
+
+	IF NOT exists THEN
+		query = ''CREATE VIEW authorized_tables AS '' ||
+			''SELECT '' ||
+#ifdef HAS_SCHEMAS
+			''n.nspname as schema, '' ||
+#endif
+			''c.relname as table, trim('' ||
+			quote_literal(''\\\\000'') ||
+			'' from t.tgargs) as id_column '' ||
+			''FROM pg_trigger t, pg_class c, pg_proc p '' ||
+#ifdef HAS_SCHEMAS
+			'', pg_namespace n '' ||
+#endif
+			''WHERE p.proname = '' || quote_literal(''checkauthtrigger'') ||
+#ifdef HAS_SCHEMAS
+			'' AND c.relnamespace = n.oid'' ||
+#endif
+			'' AND t.tgfoid = p.oid and t.tgrelid = c.oid'';
+		EXECUTE query;
+	END IF;
+
+	RETURN ''Long transactions support enabled'';
+END;
+'
+LANGUAGE 'plpgsql';
+
+--
+-- Check if Long transactions support is enabled
+--
+CREATEFUNCTION LongTransactionsEnabled()
+	RETURNS bool
+AS '
+DECLARE
+	rec RECORD;
+BEGIN
+	FOR rec IN SELECT oid FROM pg_class WHERE relname = ''authorized_tables''
+	LOOP
+		return ''t'';
+	END LOOP;
+	return ''f'';
+END;
+'
+LANGUAGE 'plpgsql';
+
+--
+-- Disable Long transactions support
+--
+--  (1) Drop any long_xact trigger 
+--  (2) Drop the authorization_table
+--  (3) KEEP the authorized_tables view
+--
+CREATEFUNCTION DisableLongTransactions()
+	RETURNS TEXT
+	AS '
+DECLARE
+	query text;
+	exists bool;
+	rec RECORD;
+
+BEGIN
+
+	--
+	-- Drop all triggers applied by CheckAuth()
+	--
+	FOR rec IN
+		SELECT c.relname, t.tgname, t.tgargs FROM pg_trigger t, pg_class c, pg_proc p
+		WHERE p.proname = ''checkauthtrigger'' and t.tgfoid = p.oid and t.tgrelid = c.oid
+	LOOP
+		EXECUTE ''DROP TRIGGER '' || quote_ident(rec.tgname) ||
+			'' ON '' || quote_ident(rec.relname);
+	END LOOP;
+
+	--
+	-- Drop the authorization_table table
+	--
+	FOR rec IN SELECT * FROM pg_class WHERE relname = ''authorization_table'' LOOP
+		DROP TABLE authorization_table;
+	END LOOP;
+
+	--
+	-- Drop the authorized_tables view
+	--
+	FOR rec IN SELECT * FROM pg_class WHERE relname = ''authorized_tables'' LOOP
+		DROP VIEW authorized_tables;
+	END LOOP;
+
+	RETURN ''Long transactions support disabled'';
+END;
+'
+LANGUAGE 'plpgsql';
+
+---------------------------------------------------------------
+-- END
+---------------------------------------------------------------
+
