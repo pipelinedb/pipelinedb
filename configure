@@ -581,15 +581,15 @@ MFLAGS=
 MAKEFLAGS=
 
 # Identity of this package.
-PACKAGE_NAME='PostgreSQL'
+PACKAGE_NAME='PipelineDB'
 PACKAGE_TARNAME='pipelinedb'
 PACKAGE_VERSION='9.4.4'
 PACKAGE_STRING='PostgreSQL 9.4.4'
-PACKAGE_BUGREPORT='eng@pipelinedb.com'
+PACKAGE_BUGREPORT='packaging@pipelinedb.com'
 PACKAGE_URL=''
 
 ac_unique_file="src/backend/access/common/heaptuple.c"
-ac_default_prefix=/usr/local/pgsql
+ac_default_prefix=/usr/local/pipelinedb
 # Factoring default headers for most tests.
 ac_includes_default="\
 #include <stdio.h>

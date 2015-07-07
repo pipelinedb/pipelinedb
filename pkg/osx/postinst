@@ -1,8 +1,6 @@
 #! /bin/bash
 
-INSTALL_PREFIX=/opt/pipelinedb
-echo "$INSTALL_PREFIX/lib" > /etc/ld.so.conf.d/pipelinedb.conf
-ldconfig
+INSTALL_PREFIX=/usr/lib/pipelinedb
 
 ln -s $INSTALL_PREFIX/bin/pipeline-server /usr/bin/pipeline-server
 ln -s $INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pipeline-ctl

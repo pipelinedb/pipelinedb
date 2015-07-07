@@ -46,7 +46,7 @@ $(call recurse,distprep,doc src config contrib)
 
 # clean, distclean, etc should apply to contrib too, even though
 # it's not built by default
-$(call recurse,clean,doc contrib src config pkg)
+$(call recurse,clean,doc contrib src config)
 clean:
 # Garbage from autoconf:
 	@rm -rf autom4te.cache/
@@ -142,5 +142,9 @@ distcheck: dist
 deb rpm:
 	$(MAKE) -C pkg $@
 	mv pkg/*.$@ .
+
+osx:
+	$(MAKE) -C pkg $@
+	mv pkg/*.pkg .
 
 .PHONY: dist distdir distcheck docs install-docs world check-world install-world installcheck-world
