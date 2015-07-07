@@ -180,7 +180,7 @@ SELECT * FROM test_sw_dense_rank1;
 SELECT * FROM test_sw_dense_rank2;
  dense_rank | rank 
 ------------+------
-         30 |   51
+         31 |   51
 (1 row)
 
 -- Now use a small windoww to verify that sliding window results change over time

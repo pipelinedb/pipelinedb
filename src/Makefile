@@ -25,6 +25,7 @@ SUBDIRS = \
 	backend/replication/libpqwalreceiver \
 	bin \
 	pl \
+	hll \
 	makefiles \
 	test/regress \
 	test/unit

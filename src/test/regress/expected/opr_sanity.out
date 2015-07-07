@@ -773,7 +773,8 @@ WHERE c.castmethod = 'b' AND
  xml               | text              |        0 | a
  xml               | character varying |        0 | a
  xml               | character         |        0 | a
-(7 rows)
+ bytea             | hll               |        0 | e
+(8 rows)
 
 -- **************** pg_operator ****************
 -- Look for illegal values in pg_operator fields.
