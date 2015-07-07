@@ -1,0 +1,34 @@
+/* raster_config.h.in.  Generated from configure.ac by autoheader.  */
+
+/* PostGIS Raster build date */
+#undef POSTGIS_RASTER_BUILD_DATE
+
+/* PostGIS Raster library version */
+#undef POSTGIS_RASTER_LIB_VERSION
+
+/* PostGIS Raster major version */
+#undef POSTGIS_RASTER_MAJOR_VERSION
+
+/* PostGIS Raster micro version */
+#undef POSTGIS_RASTER_MICRO_VERSION
+
+/* PostGIS Raster minor version */
+#undef POSTGIS_RASTER_MINOR_VERSION
+
+/* PostGIS Raster scripts version */
+#undef POSTGIS_RASTER_SCRIPTS_VERSION
+
+/* PostGIS Raster version */
+#undef POSTGIS_RASTER_VERSION
+
+/* GDAL library version */
+#undef POSTGIS_GDAL_VERSION
+
+/* Define to 1 if GDAL has GDALFPolygonize function. */
+#undef GDALFPOLYGONIZE
+
+/* Enable development variable */
+#undef ENABLE_DEVELOPMENT
+
+/* Define to 1 if a warning is outputted every time a double is truncated */
+#undef POSTGIS_RASTER_WARN_ON_TRUNCATION

@@ -1,0 +1,12 @@
+t
+t
+1
+1
+1
+1
+NOTICE:  The TIFF format only permits one NODATA value for all bands.  The value used will be the last band with a NODATA value.
+1
+NOTICE:  The TIFF format only permits one NODATA value for all bands.  The value used will be the last band with a NODATA value.
+NOTICE:  The TIFF format only permits one NODATA value for all bands.  The value used will be the last band with a NODATA value.
+1
+ERROR:  The pixel type of band 1 in the raster is not 8BUI.  JPEG compression can only be used with the 8BUI pixel type.

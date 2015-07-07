@@ -1,0 +1,52 @@
+--missing--
+Topology test (unregistered)
+missing schema
+--empty--
+Topology test (unregistered)
+missing nodes, missing edges, missing faces, missing relations
+--node--
+Topology test (unregistered)
+0 nodes, missing edges, missing faces, missing relations
+--node+edge--
+Topology test (unregistered)
+0 nodes, 0 edges, missing faces, missing relations
+--node+edge+face--
+Topology test (unregistered)
+0 nodes, 0 edges, 0 faces, missing relations
+--node+edge+face+corrupted_relation--
+Topology test (unregistered)
+0 nodes, 0 edges, 0 faces, corrupted relations
+--node+edge+face+relation--
+Topology test (unregistered)
+0 nodes, 0 edges, 0 faces, 0 topogeoms in 0 layers
+--node+edge+face+relation+topogeom--
+Topology test (unregistered)
+0 nodes, 0 edges, 0 faces, 1 topogeoms in 1 layers
+Layer 1, UNREGISTERED, 1 topogeoms
+--registered_topo--
+Topology test (id 1, SRID 10, precision 20)
+0 nodes, 0 edges, 0 faces, 1 topogeoms in 1 layers
+Layer 1, UNREGISTERED, 1 topogeoms
+--registered_missing_layer_table--
+Topology test (id 1, SRID 10, precision 20)
+0 nodes, 0 edges, 0 faces, 1 topogeoms in 1 layers
+Layer 1, type Puntal (1), 1 topogeoms
+ Deploy: test.t.c ( unexistent table )
+--registered_missing_layer_column--
+Topology test (id 1, SRID 10, precision 20)
+0 nodes, 0 edges, 0 faces, 1 topogeoms in 1 layers
+Layer 1, type Puntal (1), 1 topogeoms
+ Deploy: test.t.c ( unexistent column )
+--registered_layer_missing_topogeom--
+Topology test (id 1, SRID 10, precision 20)
+0 nodes, 0 edges, 0 faces, 1 topogeoms in 1 layers
+Layer 1, type Puntal (1), 1 topogeoms
+ Deploy: test.t.c (1 missing topogeoms)
+--registered_layer--
+Topology test (id 1, SRID 10, precision 20)
+0 nodes, 0 edges, 0 faces, 1 topogeoms in 1 layers
+Layer 1, type Puntal (1), 1 topogeoms
+ Deploy: test.t.c
+--registered+missing--
+Topology test (id 1, SRID 10, precision 20)
+missing schema

@@ -1,0 +1,11 @@
+*.log
+aclocal.m4
+autom4te.cache
+configure
+config.status
+ID
+libtool
+ltmain.sh
+tags
+raster_config.h
+Makefile

@@ -1,0 +1,22 @@
+Long transactions support enabled
+0
+1
+1
+ERROR:  UPDATE where "id" = '1' requires authorization 'auth1'
+BEGIN
+t
+COMMIT
+ERROR:  UPDATE where "id" = '1' requires authorization 'auth1'
+BEGIN
+t
+COMMIT
+BEGIN
+t
+ERROR:  UPDATE where "id" = '1' requires authorization 'auth1'
+COMMIT
+ERROR:  UPDATE where "id" = '2' requires authorization 'auth2'
+ERROR:  UPDATE where "id" = '1' requires authorization 'auth1'
+3|nolocks
+1|authorized
+2|authorized
+Long transactions support disabled

@@ -1,0 +1,595 @@
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask dimenstions must be odd.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask dimenstions must be odd.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask dimenstions must be odd.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask Must be a 2D array.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask Must be a 2D array.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,1,1},{NULL,1,1}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{1,1,NULL},{1,1,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,1,1},{NULL,1,1},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1,1,NULL},{1,1,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,2,2},{NULL,2,2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{2,2,NULL},{2,2,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,2,2},{NULL,2,2},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2,2,NULL},{2,2,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,2,2},{NULL,2,2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{2,2,NULL},{2,2,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,2,2},{NULL,2,2},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2,2,NULL},{2,2,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask dimenstions must be odd.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask dimenstions must be odd.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask Must be a 2D array.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask Must be a 2D array.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,1,1},{NULL,1,1}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{1,1,NULL},{1,1,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,1,1},{NULL,1,1},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1,1,NULL},{1,1,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,2,2},{NULL,2,2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{2,2,NULL},{2,2,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,2,2},{NULL,2,2},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2,2,NULL},{2,2,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,2,2},{NULL,2,2}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{2,2,NULL},{2,2,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,2,2},{NULL,2,2},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2,2,NULL},{2,2,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,0,0},{NULL,0,0}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{0,0,NULL},{0,0,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,0,0},{NULL,0,0},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1,0,NULL},{0,0,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,0,0},{NULL,0,0}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{0,0,NULL},{0,0,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,0,0},{NULL,0,0},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2,0,NULL},{0,0,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,0,0},{NULL,0,0}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{0,0,NULL},{0,0,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,0,0},{NULL,0,0},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{2,0,NULL},{0,0,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask dimenstions must be odd.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask dimenstions must be odd.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+ERROR:  RASTER_nMapAlgerbra: Mask Must be a 2D array.
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{0.5}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{0.5}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{0.5}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{0.5}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,0.5,0.5},{NULL,0.5,0.5}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{0.5,0.5,NULL},{0.5,0.5,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,0.5,0.5},{NULL,0.5,0.5},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{0.5,0.5,NULL},{0.5,0.5,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,1,1},{NULL,1,1}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{1,1,NULL},{1,1,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,1,1},{NULL,1,1},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1,1,NULL},{1,1,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,1,1},{NULL,1,1}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{1,1,NULL},{1,1,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,1,1},{NULL,1,1},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1,1,NULL},{1,1,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+NOTICE:  First argument (nband) of rastbandarg at index 0 is NULL. Assuming NULL raster
+NOTICE:  All input rasters are NULL. Returning NULL
+NOTICE:  All input rasters do not have bands at indicated indexes. Returning empty raster
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,0,0},{NULL,0,0}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{0,0,NULL},{0,0,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,0,0},{NULL,0,0},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{0.5,0,NULL},{0,0,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,0,0},{NULL,0,0}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{0,0,NULL},{0,0,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,0,0},{NULL,0,0},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1,0,NULL},{0,0,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{NULL,0,0},{NULL,0,0}}}
+NOTICE:  pos = [0:1][1:2]={{1,1},{1,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,NULL,NULL},{0,0,NULL},{0,0,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,1},{2,1}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{NULL,0,0},{NULL,0,0},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{1,2},{1,2}}
+NOTICE:  userargs = <NULL>
+NOTICE:  value = {{{1,0,NULL},{0,0,NULL},{NULL,NULL,NULL}}}
+NOTICE:  pos = [0:1][1:2]={{2,2},{2,2}}
+NOTICE:  userargs = <NULL>
+0100000000000000000000F03F000000000000F0BF00000000000000000000000000000000000000000000000000000000000000000000000000000000
+0100000100000000000000F03F000000000000F0BF000000000000000000000000000000000000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF
+0100000100000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000000000000000000000000000020002004400FFFFFFFF

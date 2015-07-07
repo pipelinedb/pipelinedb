@@ -1,0 +1,241 @@
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+--
+--
+-- PostGIS - Support for PipelineDB
+-- http://postgis.net
+-- Copyright 2013-2015 PipelineDB
+--
+-- This is free software; you can redistribute and/or modify it under
+-- the terms of the GNU General Public Licence v3.
+--
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+-------------------------------------------------------------------------------
+-- ST_SummaryStatsAgg combiner
+-------------------------------------------------------------------------------
+
+CREATE FUNCTION summarystatssend(internal)
+	RETURNS bytea
+	AS '$libdir/rtpostgis-2.2'
+	LANGUAGE c;
+
+CREATE FUNCTION summarystatsrecv(bytea)
+	RETURNS bytea
+	AS '$libdir/rtpostgis-2.2'
+	LANGUAGE c;
+
+CREATE FUNCTION _st_summarystats_combinefn(internal, internal)
+  RETURNS internal
+	AS '$libdir/rtpostgis-2.2', 'RASTER_summaryStats_combinefn'
+  LANGUAGE c;
+
+-- The transition functions for each transition function's signature all have the same name,
+-- so we need to select each one individually in order to properly construct pipeline_combine entries
+INSERT INTO pipeline_combine VALUES (
+'_st_summarystats_finalfn',
+(SELECT oid FROM pg_proc WHERE proname = '_st_summarystats_transfn' AND pronargs = 5),
+'summarystatssend', 'summarystatsrecv', '_st_summarystats_combinefn', 17);
+
+INSERT INTO pipeline_combine VALUES (
+'_st_summarystats_finalfn',
+(SELECT oid FROM pg_proc WHERE proname = '_st_summarystats_transfn' AND pronargs = 4 AND proargtypes[3] = 16),
+'summarystatssend', 'summarystatsrecv', '_st_summarystats_combinefn', 17);
+
+INSERT INTO pipeline_combine VALUES (
+'_st_summarystats_finalfn',
+(SELECT oid FROM pg_proc WHERE proname = '_st_summarystats_transfn' AND pronargs = 4 AND proargtypes[3] = 701),
+'summarystatssend', 'summarystatsrecv', '_st_summarystats_combinefn', 17);
+
+-------------------------------------------------------------------------------
+-- ST_Union(raster) combiner
+-------------------------------------------------------------------------------
+
+CREATE FUNCTION unionargsend(internal)
+	RETURNS bytea
+	AS '$libdir/rtpostgis-2.2'
+	LANGUAGE c;
+
+CREATE FUNCTION unionargrecv(bytea)
+	RETURNS bytea
+	AS '$libdir/rtpostgis-2.2'
+	LANGUAGE c;
+
+CREATE FUNCTION _st_union_combinefn(internal)
+	RETURNS internal
+	AS '$libdir/rtpostgis-2.2', 'RASTER_union_combinefn'
+  LANGUAGE c;
+
+-- The transition functions for each transition function's signature all have the same name,
+-- so we need to select each one individually in order to properly construct pipeline_combine entries
+INSERT INTO pipeline_combine VALUES (
+'_st_union_finalfn',
+(SELECT oid FROM pg_proc WHERE proname = '_st_union_transfn' AND pronargs = 2),
+'unionargsend', 'unionargrecv', '_st_union_combinefn', 17);
+
+INSERT INTO pipeline_combine VALUES (
+'_st_union_finalfn',
+(SELECT oid FROM pg_proc WHERE proname = '_st_union_transfn' AND pronargs = 4),
+'unionargsend', 'unionargrecv', '_st_union_combinefn', 17);
+
+INSERT INTO pipeline_combine VALUES (
+'_st_union_finalfn',
+(SELECT oid FROM pg_proc WHERE proname = '_st_union_transfn' AND pronargs = 3 AND proargtypes[2] = 23),
+'unionargsend', 'unionargrecv', '_st_union_combinefn', 17);
+
+INSERT INTO pipeline_combine VALUES (
+'_st_union_finalfn',
+(SELECT oid FROM pg_proc WHERE proname = '_st_union_transfn' AND pronargs = 3 AND proargtypes[2] = 25),
+'unionargsend', 'unionargrecv', '_st_union_combinefn', 17);
+
+INSERT INTO pipeline_combine VALUES (
+'_st_union_finalfn',
+(SELECT oid FROM pg_proc WHERE proname = '_st_union_transfn' AND pronargs = 3 AND proargtypes[2] NOT IN (23, 25)),
+'unionargsend', 'unionargrecv', '_st_union_combinefn', 17);
+
+-------------------------------------------------------------------------------
+-- ST_Extent combiner
+-------------------------------------------------------------------------------
+
+CREATE FUNCTION combine_box3d(internal)
+	RETURNS box3d
+	AS 'MODULE_PATHNAME', 'BOX3D_combine_3d'
+	LANGUAGE c;
+
+INSERT INTO pipeline_combine VALUES (
+(SELECT oid FROM pg_proc WHERE proname = 'box2d' AND proargtypes[0] =
+	(SELECT oid FROM pg_type WHERE typname = 'box3d')),
+(SELECT oid FROM pg_proc WHERE proname = 'st_combine_bbox' AND prorettype =
+	(SELECT oid FROM pg_type WHERE typname = 'box3d')),
+0, 0, 'combine_box3d',
+(SELECT oid FROM pg_type WHERE typname = 'box3d'));
+
+-------------------------------------------------------------------------------
+-- ST_3DExtent combiner
+-------------------------------------------------------------------------------
+
+INSERT INTO pipeline_combine VALUES (0,
+(SELECT oid FROM pg_proc WHERE proname = 'st_combine_bbox' AND prorettype =
+	(SELECT oid FROM pg_type WHERE typname = 'box3d')),
+0, 0, 'combine_box3d',
+(SELECT oid FROM pg_type WHERE typname = 'box3d'));
+
+-------------------------------------------------------------------------------
+-- ST_Accum combiner
+-------------------------------------------------------------------------------
+
+CREATE FUNCTION pgis_geometry_accum_combinefn(pgis_abs, pgis_abs)
+  RETURNS pgis_abs
+	AS 'MODULE_PATHNAME'
+  LANGUAGE c;
+
+CREATE FUNCTION pgis_abs_send(anyelement)
+  RETURNS anyarray
+	AS 'MODULE_PATHNAME'
+  LANGUAGE c;
+
+CREATE FUNCTION pgis_abs_recv(anyarray)
+  RETURNS pgis_abs
+	AS 'MODULE_PATHNAME'
+  LANGUAGE c;
+
+INSERT INTO pipeline_combine VALUES (
+'pgis_geometry_accum_finalfn',
+'pgis_geometry_accum_transfn',
+'pgis_abs_send', 'pgis_abs_recv', 'pgis_geometry_accum_combinefn', 2277);
+
+-------------------------------------------------------------------------------
+-- ST_Union(geometry) combiner
+-------------------------------------------------------------------------------
+
+INSERT INTO pipeline_combine VALUES (
+'pgis_geometry_union_finalfn',
+'pgis_geometry_accum_transfn',
+'pgis_abs_send', 'pgis_abs_recv', 'pgis_geometry_accum_combinefn', 2277);
+
+-------------------------------------------------------------------------------
+-- ST_Collect combiner
+-------------------------------------------------------------------------------
+
+INSERT INTO pipeline_combine VALUES (
+'pgis_geometry_collect_finalfn',
+'pgis_geometry_accum_transfn',
+'pgis_abs_send', 'pgis_abs_recv', 'pgis_geometry_accum_combinefn', 2277);
+
+-------------------------------------------------------------------------------
+-- ST_Polygonize combiner
+-------------------------------------------------------------------------------
+
+INSERT INTO pipeline_combine VALUES (
+'pgis_geometry_polygonize_finalfn',
+'pgis_geometry_accum_transfn',
+'pgis_abs_send', 'pgis_abs_recv', 'pgis_geometry_accum_combinefn', 2277);
+
+-------------------------------------------------------------------------------
+-- ST_MakeLine combiner
+-------------------------------------------------------------------------------
+
+INSERT INTO pipeline_combine VALUES (
+'pgis_geometry_makeline_finalfn',
+'pgis_geometry_accum_transfn',
+'pgis_abs_send', 'pgis_abs_recv', 'pgis_geometry_accum_combinefn', 2277);
+
+-------------------------------------------------------------------------------
+-- ST_CountAgg combiner
+-------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION _st_countagg_combinefn(state agg_count, incoming agg_count)
+	RETURNS agg_count
+	AS $$
+	BEGIN
+		IF state IS NULL THEN
+			RETURN incoming;
+		END IF;
+
+		state.count := state.count + incoming.count;
+		RETURN state;
+	END
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+-- The transition functions for each transition function's signature all have the same name,
+-- so we need to select each one individually in order to properly construct pipeline_combine entries
+INSERT INTO pipeline_combine VALUES (
+'_st_countagg_finalfn',
+(SELECT oid FROM pg_proc WHERE proname = '_st_countagg_transfn' AND pronargs = 5),
+0, 0, '_st_countagg_combinefn',
+(SELECT oid FROM pg_type WHERE typname = 'agg_count'));
+
+INSERT INTO pipeline_combine VALUES (
+'_st_countagg_finalfn',
+(SELECT oid FROM pg_proc WHERE proname = '_st_countagg_transfn' AND pronargs = 4),
+0, 0, '_st_countagg_combinefn',
+(SELECT oid FROM pg_type WHERE typname = 'agg_count'));
+
+INSERT INTO pipeline_combine VALUES (
+'_st_countagg_finalfn',
+(SELECT oid FROM pg_proc WHERE proname = '_st_countagg_transfn' AND pronargs = 3),
+0, 0, '_st_countagg_combinefn',
+(SELECT oid FROM pg_type WHERE typname = 'agg_count'));
+
+-------------------------------------------------------------------------------
+-- ST_SameAlignment combiner
+-------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION _st_samealignment_combinefn(state agg_samealignment, incoming agg_samealignment)
+	RETURNS agg_samealignment
+	AS $$
+	BEGIN
+		IF state IS NULL THEN
+			RETURN incoming;
+		END IF;
+
+		state.aligned := ST_SameAlignment(state.refraster, incoming.refraster);
+
+		RETURN state;
+	END
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+INSERT INTO pipeline_combine VALUES (
+'_st_samealignment_finalfn',
+'_st_samealignment_transfn',
+0, 0, '_st_samealignment_combinefn',
+(SELECT oid FROM pg_type WHERE typname = 'agg_samealignment'));

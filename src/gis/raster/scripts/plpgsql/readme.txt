@@ -1,0 +1,1 @@
+This folder contain experimental pl/pgSQL functions which might be implemented later as C functions. To be used with caution.

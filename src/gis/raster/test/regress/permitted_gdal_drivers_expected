@@ -1,0 +1,9 @@
+4326
+ERROR:  RASTER_fromGDALRaster: Could not open bytea with GDAL. Check that the bytea is of a GDAL supported format
+ERROR:  rt_band_load_offline_data: Cannot open offline raster: <VRTDataset rasterXSize="1000" rasterYSize="1"><VRTRasterBand band="1" subClass="VRTRawRasterBand"><SourceFilename>/etc/passwd</SourceFilename></VRTRasterBand></VRTDataset>
+ERROR:  rt_band_load_offline_data: Cannot open offline raster: <VRTDataset rasterXSize="1000" rasterYSize="1"><VRTRasterBand band="1" subClass="VRTRawRasterBand"><SourceFilename>/etc/passwd</SourceFilename></VRTRasterBand></VRTDataset>
+4326
+4326
+ERROR:  rt_band_load_offline_data: Cannot open offline raster: <VRTDataset rasterXSize="1000" rasterYSize="1"><VRTRasterBand band="1" subClass="VRTRawRasterBand"><SourceFilename>/etc/passwd</SourceFilename></VRTRasterBand></VRTDataset>
+ERROR:  rt_band_load_offline_data: Cannot open offline raster: <VRTDataset rasterXSize="1000" rasterYSize="1"><VRTRasterBand band="1" subClass="VRTRawRasterBand"><SourceFilename>/etc/passwd</SourceFilename></VRTRasterBand></VRTDataset>
+4326

@@ -1,0 +1,52 @@
+BEGIN
+t
+9
+22
+26
+COMMIT
+BEGIN
+1
+2
+3
+COMMIT
+4
+features.big_parcels.the_geom SRID:0 TYPE:MULTIPOLYGON DIMS:2 
+5
+6
+features.big_signs.the_geom SRID:0 TYPE:MULTIPOINT DIMS:2 
+E27
+E28
+E29
+E30
+L1-vanilla|R1|{ "type": "MultiLineString", "arcs": [[9,-11]]}
+L1-vanilla|R2|{ "type": "MultiLineString", "arcs": [[4,-6]]}
+L1-vanilla|R3|{ "type": "MultiLineString", "arcs": [[25]]}
+L1-vanilla|R4|{ "type": "MultiLineString", "arcs": [[3]]}
+L2-vanilla|R1R2|{ "type": "MultiLineString", "arcs": [[9,-11],[4,-6]]}
+L2-vanilla|R4|{ "type": "MultiLineString", "arcs": [[3]]}
+A1-vanilla|P1|{ "type": "MultiPolygon", "arcs": [[[20,5,-19,-20,-12,21]]]}
+A1-vanilla|P2|{ "type": "MultiPolygon", "arcs": [[[18,6,-17,-18,-13,19]]]}
+A1-vanilla|P3|{ "type": "MultiPolygon", "arcs": [[[16,7,-15,-16,-14,17]]]}
+A1-vanilla|P4|{ "type": "MultiPolygon", "arcs": [[[-2]]]}
+A1-vanilla|P5|{ "type": "MultiPolygon", "arcs": [[[-1],[25]]]}
+A2-vanilla|P1P2|{ "type": "MultiPolygon", "arcs": [[[20,5,6,-17,-18,-13,-12,21]]]}
+A2-vanilla|P3P4|{ "type": "MultiPolygon", "arcs": [[[-2]],[[16,7,-15,-16,-14,17]]]}
+L1-edgemap|R1|{ "type": "MultiLineString", "arcs": [[0,-2]]}
+L1-edgemap|R2|{ "type": "MultiLineString", "arcs": [[2,-4]]}
+L1-edgemap|R3|{ "type": "MultiLineString", "arcs": [[4]]}
+L1-edgemap|R4|{ "type": "MultiLineString", "arcs": [[5]]}
+L2-edgemap|R1R2|{ "type": "MultiLineString", "arcs": [[0,-2],[2,-4]]}
+L2-edgemap|R4|{ "type": "MultiLineString", "arcs": [[4]]}
+A1-edgemap|P1|{ "type": "MultiPolygon", "arcs": [[[5,4,-4,-3,-2,0]]]}
+A1-edgemap|P2|{ "type": "MultiPolygon", "arcs": [[[3,9,-9,-8,-7,2]]]}
+A1-edgemap|P3|{ "type": "MultiPolygon", "arcs": [[[8,13,-13,-12,-11,7]]]}
+A1-edgemap|P4|{ "type": "MultiPolygon", "arcs": [[[-15]]]}
+A1-edgemap|P5|{ "type": "MultiPolygon", "arcs": [[[-16],[16]]]}
+A2-edgemap|P1P2|{ "type": "MultiPolygon", "arcs": [[[7,6,5,-5,-4,-3,-2,0]]]}
+A2-edgemap|P3P4|{ "type": "MultiPolygon", "arcs": [[[-9]],[[4,12,-12,-11,-10,3]]]}
+E32
+E33
+E34
+E35
+A3-vanilla|P6|{ "type": "MultiPolygon", "arcs": [[[-33],[30,25],[1]],[[-34],[34]]]}
+Topology 'city_data' dropped

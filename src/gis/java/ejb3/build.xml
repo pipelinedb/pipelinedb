@@ -1,0 +1,70 @@
+<!--
+ * build file
+ * 
+ * PostGIS extension for PostgreSQL JDBC driver - EJB3 Support
+ * 
+ * (C) 2006  Norman Barker <norman.barker@gmail.com>
+ * 
+ * This library is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU Lesser General Public License as published by the Free
+ * Software Foundation, either version 2.1 of the License.
+ * 
+ * This library is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
+ * details.
+ * 
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation, Inc.,
+ * 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA or visit the web at
+ * http://www.gnu.org.
+ * 
+ -->
+<project name="PostGIS EJB3 Tutorial" default="compile" basedir=".">
+    <property name="build.dir" value="bin"/>
+    <property name="lib.dir" value="lib"/>
+    <property name="src.dir" value="src"/>
+    <property name="dist.dir" value="dist"/>
+    <property name="jboss.home" value="C:/jboss-4.0.4.GA"/>
+    <property name="jbossconf" value="jboss"/>
+
+    <path id="class.path">
+        <pathelement location="${build.dir}"/>
+        <fileset dir="${lib.dir}" includes="*.jar"/>
+        <fileset dir="${jboss.home}/client">
+            <include name="*.jar"/>
+        </fileset>
+        <fileset dir="${jboss.home}/server/default/lib" includes="hibernate3.jar"/>
+    </path>
+
+    <target name="clean" description="Removes all generated files">
+        <delete dir="${build.dir}"/>
+        <delete dir="${dist.dir}"/>
+    </target>
+
+    <target name="compile">
+        <mkdir dir="${build.dir}"/>
+        <javac destdir="${build.dir}" fork="true" classpathref="class.path" source="1.5" target="1.5">
+            <src path="${src.dir}"/>
+        </javac>
+        <copy todir="${build.dir}">
+            <fileset dir="${src.dir}"
+                includes="**/images/*,**/*.properties" excludes="**/.svn/*"/>  
+        </copy>
+    </target>
+    
+    <target name="dist" depends="clean, compile">
+        <mkdir dir="${dist.dir}"/>
+        <jar jarfile="${dist.dir}/ingest.jar" basedir="${build.dir}" includes="**/ejb/*, **/mdb/*, **/UserBean/*, **/hibernate/*">
+            <metainf dir="${src.dir}/META-INF" includes="*.xml"/>
+        </jar>
+    </target>
+
+    <target name="deploy" description="deploys the service to JBoss" depends="dist">
+      <copy todir="${jboss.home}/server/default/deploy">
+        <fileset dir="${dist.dir}" includes="ingest.jar, people.war"/>
+        <fileset dir="${jbossconf}" includes="*.xml"/>
+      </copy>
+    </target>
+    
+</project>

@@ -1,0 +1,26 @@
+NOTICE:  Raster is NULL. Returning NULL
+t
+NOTICE:  Raster is empty. Returning an empty raster
+T1|t
+NOTICE:  Raster does not have the required band. Returning a raster without a band
+T2|t
+T3||19
+T4||2
+T5||2
+T6||-1
+T7|100|15
+T8|100|120
+T9|101|3
+T10.6.2|10|40
+T10.6.3|10|30
+T10.6.4|10|25
+T10.7.2|10|45
+T10.7.3|10|34
+T10.7.4|10|28
+T10.8.2|10|50
+T10.8.3|10|37
+T10.8.4|10|30
+ERROR:  division by zero
+T11.1|10|2
+T11.2|10|2
+T12|t|t|t|t
