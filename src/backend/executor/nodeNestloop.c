@@ -270,7 +270,6 @@ ExecNestLoop(NestLoopState *node)
 				{
 					node->js.ps.ps_TupFromTlist =
 						(isDone == ExprMultipleResult);
-
 					return result;
 				}
 			}

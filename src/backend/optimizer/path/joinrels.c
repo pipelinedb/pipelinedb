@@ -19,6 +19,7 @@
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
 #include "optimizer/planner.h"
+#include "pipeline/cont_plan.h"
 #include "utils/memutils.h"
 
 

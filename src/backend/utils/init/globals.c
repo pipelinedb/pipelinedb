@@ -33,6 +33,7 @@ volatile bool ProcDiePending = false;
 volatile bool ClientConnectionLost = false;
 volatile bool ImmediateInterruptOK = false;
 volatile uint32 InterruptHoldoffCount = 0;
+volatile uint32 QueryCancelHoldoffCount = 0;
 volatile uint32 CritSectionCount = 0;
 
 int			MyProcPid;
@@ -109,7 +110,7 @@ int			maintenance_work_mem = 16384;
  */
 int			NBuffers = 1000;
 int			MaxConnections = 90;
-int			max_worker_processes = 128;
+int			max_worker_processes = 8;
 int			MaxBackends = 0;
 
 int			VacuumCostPageHit = 1;		/* GUC parameters for vacuum */

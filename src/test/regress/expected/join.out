@@ -2278,6 +2278,48 @@ WHERE d.f1 IS NULL;
 (3 rows)
 
 --
+-- regression test for proper handling of outer joins within antijoins
+--
+create temp table tt4x(c1 int, c2 int, c3 int);
+explain (costs off)
+select * from tt4x t1
+where not exists (
+  select 1 from tt4x t2
+    left join tt4x t3 on t2.c3 = t3.c1
+    left join ( select t5.c1 as c1
+                from tt4x t4 left join tt4x t5 on t4.c2 = t5.c1
+              ) a1 on t3.c2 = a1.c1
+  where t1.c1 = t2.c2
+);
+                       QUERY PLAN                        
+---------------------------------------------------------
+ Hash Anti Join
+   Hash Cond: (t1.c1 = t2.c2)
+   ->  Seq Scan on tt4x t1
+   ->  Hash
+         ->  Merge Right Join
+               Merge Cond: (t5.c1 = t3.c2)
+               ->  Merge Join
+                     Merge Cond: (t4.c2 = t5.c1)
+                     ->  Sort
+                           Sort Key: t4.c2
+                           ->  Seq Scan on tt4x t4
+                     ->  Sort
+                           Sort Key: t5.c1
+                           ->  Seq Scan on tt4x t5
+               ->  Sort
+                     Sort Key: t3.c2
+                     ->  Merge Left Join
+                           Merge Cond: (t2.c3 = t3.c1)
+                           ->  Sort
+                                 Sort Key: t2.c3
+                                 ->  Seq Scan on tt4x t2
+                           ->  Sort
+                                 Sort Key: t3.c1
+                                 ->  Seq Scan on tt4x t3
+(24 rows)
+
+--
 -- regression test for problems of the sort depicted in bug #3494
 --
 create temp table tt5(f1 int, f2 int);
@@ -2781,6 +2823,25 @@ where thousand = (q1 + q2);
 (12 rows)
 
 --
+-- test ability to generate a suitable plan for a star-schema query
+--
+explain (costs off)
+select * from
+  tenk1, int8_tbl a, int8_tbl b
+where thousand = a.q1 and tenthous = b.q1 and a.q2 = 1 and b.q2 = 2;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Nested Loop
+   ->  Seq Scan on int8_tbl b
+         Filter: (q2 = 2)
+   ->  Nested Loop
+         ->  Seq Scan on int8_tbl a
+               Filter: (q2 = 1)
+         ->  Index Scan using tenk1_thous_tenthous on tenk1
+               Index Cond: ((thousand = a.q1) AND (tenthous = b.q1))
+(8 rows)
+
+--
 -- test extraction of restriction OR clauses from join OR clause
 -- (we used to only do this for indexable clauses)
 --
@@ -3151,6 +3212,54 @@ explain (costs off)
          Index Cond: (unique2 = 42)
 (6 rows)
 
+--
+-- test that quals attached to an outer join have correct semantics,
+-- specifically that they don't re-use expressions computed below the join;
+-- we force a mergejoin so that coalesce(b.q1, 1) appears as a join input
+--
+set enable_hashjoin to off;
+set enable_nestloop to off;
+explain (verbose, costs off)
+  select a.q2, b.q1
+    from int8_tbl a left join int8_tbl b on a.q2 = coalesce(b.q1, 1)
+    where coalesce(b.q1, 1) > 0;
+                      QUERY PLAN                       
+-------------------------------------------------------
+ Merge Left Join
+   Output: a.q2, b.q1
+   Merge Cond: (a.q2 = (COALESCE(b.q1, 1::bigint)))
+   Filter: (COALESCE(b.q1, 1::bigint) > 0)
+   ->  Sort
+         Output: a.q2
+         Sort Key: a.q2
+         ->  Seq Scan on public.int8_tbl a
+               Output: a.q2
+   ->  Sort
+         Output: b.q1, (COALESCE(b.q1, 1::bigint))
+         Sort Key: (COALESCE(b.q1, 1::bigint))
+         ->  Seq Scan on public.int8_tbl b
+               Output: b.q1, COALESCE(b.q1, 1::bigint)
+(14 rows)
+
+select a.q2, b.q1
+  from int8_tbl a left join int8_tbl b on a.q2 = coalesce(b.q1, 1)
+  where coalesce(b.q1, 1) > 0;
+        q2         |        q1        
+-------------------+------------------
+ -4567890123456789 |                 
+               123 |              123
+               123 |              123
+               456 |                 
+  4567890123456789 | 4567890123456789
+  4567890123456789 | 4567890123456789
+  4567890123456789 | 4567890123456789
+  4567890123456789 | 4567890123456789
+  4567890123456789 | 4567890123456789
+  4567890123456789 | 4567890123456789
+(10 rows)
+
+reset enable_hashjoin;
+reset enable_nestloop;
 --
 -- test join removal
 --

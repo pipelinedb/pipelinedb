@@ -625,6 +625,7 @@ recv_password_packet(Port *port)
 {
 	StringInfoData buf;
 
+	pq_startmsgread();
 	if (PG_PROTOCOL_MAJOR(port->proto) >= 3)
 	{
 		/* Expect 'p' message type */
@@ -816,15 +817,16 @@ pg_GSS_recvauth(Port *port)
 			size_t		kt_len = strlen(pg_krb_server_keyfile) + 14;
 			char	   *kt_path = malloc(kt_len);
 
-			if (!kt_path)
+			if (!kt_path ||
+				snprintf(kt_path, kt_len, "KRB5_KTNAME=%s",
+						 pg_krb_server_keyfile) != kt_len - 2 ||
+				putenv(kt_path) != 0)
 			{
 				ereport(LOG,
 						(errcode(ERRCODE_OUT_OF_MEMORY),
 						 errmsg("out of memory")));
 				return STATUS_ERROR;
 			}
-			snprintf(kt_path, kt_len, "KRB5_KTNAME=%s", pg_krb_server_keyfile);
-			putenv(kt_path);
 		}
 	}
 
@@ -849,6 +851,7 @@ pg_GSS_recvauth(Port *port)
 	 */
 	do
 	{
+		pq_startmsgread();
 		mtype = pq_getbyte();
 		if (mtype != 'p')
 		{
@@ -1083,6 +1086,7 @@ pg_SSPI_recvauth(Port *port)
 	 */
 	do
 	{
+		pq_startmsgread();
 		mtype = pq_getbyte();
 		if (mtype != 'p')
 		{
@@ -1400,8 +1404,7 @@ ident_inet(hbaPort *port)
 	const SockAddr remote_addr = port->raddr;
 	const SockAddr local_addr = port->laddr;
 	char		ident_user[IDENT_USERNAME_MAX + 1];
-	pgsocket	sock_fd;		/* File descriptor for socket on which we talk
-								 * to Ident */
+	pgsocket	sock_fd = PGINVALID_SOCKET;		/* for talking to Ident server */
 	int			rc;				/* Return code from a locally called function */
 	bool		ident_return;
 	char		remote_addr_s[NI_MAXHOST];
@@ -1440,9 +1443,9 @@ ident_inet(hbaPort *port)
 	rc = pg_getaddrinfo_all(remote_addr_s, ident_port, &hints, &ident_serv);
 	if (rc || !ident_serv)
 	{
-		if (ident_serv)
-			pg_freeaddrinfo_all(hints.ai_family, ident_serv);
-		return STATUS_ERROR;	/* we don't expect this to happen */
+		/* we don't expect this to happen */
+		ident_return = false;
+		goto ident_inet_done;
 	}
 
 	hints.ai_flags = AI_NUMERICHOST;
@@ -1456,9 +1459,9 @@ ident_inet(hbaPort *port)
 	rc = pg_getaddrinfo_all(local_addr_s, NULL, &hints, &la);
 	if (rc || !la)
 	{
-		if (la)
-			pg_freeaddrinfo_all(hints.ai_family, la);
-		return STATUS_ERROR;	/* we don't expect this to happen */
+		/* we don't expect this to happen */
+		ident_return = false;
+		goto ident_inet_done;
 	}
 
 	sock_fd = socket(ident_serv->ai_family, ident_serv->ai_socktype,
@@ -1545,8 +1548,10 @@ ident_inet(hbaPort *port)
 ident_inet_done:
 	if (sock_fd != PGINVALID_SOCKET)
 		closesocket(sock_fd);
-	pg_freeaddrinfo_all(remote_addr.addr.ss_family, ident_serv);
-	pg_freeaddrinfo_all(local_addr.addr.ss_family, la);
+	if (ident_serv)
+		pg_freeaddrinfo_all(remote_addr.addr.ss_family, ident_serv);
+	if (la)
+		pg_freeaddrinfo_all(local_addr.addr.ss_family, la);
 
 	if (ident_return)
 		/* Success! Check the usermap */
@@ -1590,8 +1595,9 @@ auth_peer(hbaPort *port)
 	if (!pw)
 	{
 		ereport(LOG,
-				(errmsg("could not to look up local user ID %ld: %s",
-		   (long) uid, errno ? strerror(errno) : _("user does not exist"))));
+				(errmsg("could not look up local user ID %ld: %s",
+						(long) uid,
+						errno ? strerror(errno) : _("user does not exist"))));
 		return STATUS_ERROR;
 	}
 

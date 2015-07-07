@@ -19,7 +19,6 @@
 #include "access/tupdesc.h"
 #include "postgres.h"
 #include "storage/buf.h"
-#include "utils/palloc.h"
 
 /*----------
  * The executor stores tuples in a "tuple table" which is a List of

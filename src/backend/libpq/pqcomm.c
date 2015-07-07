@@ -129,8 +129,9 @@ static int	PqRecvLength;		/* End of data available in PqRecvBuffer */
 /*
  * Message status
  */
-static bool PqCommBusy;
-static bool DoingCopyOut;
+static bool PqCommBusy;			/* busy sending data to the client */
+static bool PqCommReadingMsg;	/* in the middle of reading a message */
+static bool DoingCopyOut;		/* in old-protocol COPY OUT processing */
 
 
 /* Internal functions */
@@ -156,6 +157,7 @@ pq_init(void)
 	PqSendBuffer = MemoryContextAlloc(TopMemoryContext, PqSendBufferSize);
 	PqSendPointer = PqSendStart = PqRecvPointer = PqRecvLength = 0;
 	PqCommBusy = false;
+	PqCommReadingMsg = false;
 	DoingCopyOut = false;
 	on_proc_exit(pq_close, 0);
 }
@@ -180,32 +182,45 @@ pq_comm_reset(void)
 /* --------------------------------
  *		pq_close - shutdown libpq at backend exit
  *
- * Note: in a standalone backend MyProcPort will be null,
- * don't crash during exit...
+ * This is the one pg_on_exit_callback in place during BackendInitialize().
+ * That function's unusual signal handling constrains that this callback be
+ * safe to run at any instant.
  * --------------------------------
  */
 static void
 pq_close(int code, Datum arg)
 {
+	/* Nothing to do in a standalone backend, where MyProcPort is NULL. */
 	if (MyProcPort != NULL)
 	{
 #if defined(ENABLE_GSS) || defined(ENABLE_SSPI)
 #ifdef ENABLE_GSS
 		OM_uint32	min_s;
 
-		/* Shutdown GSSAPI layer */
+		/*
+		 * Shutdown GSSAPI layer.  This section does nothing when interrupting
+		 * BackendInitialize(), because pg_GSS_recvauth() makes first use of
+		 * "ctx" and "cred".
+		 */
 		if (MyProcPort->gss->ctx != GSS_C_NO_CONTEXT)
 			gss_delete_sec_context(&min_s, &MyProcPort->gss->ctx, NULL);
 
 		if (MyProcPort->gss->cred != GSS_C_NO_CREDENTIAL)
 			gss_release_cred(&min_s, &MyProcPort->gss->cred);
 #endif   /* ENABLE_GSS */
-		/* GSS and SSPI share the port->gss struct */
 
+		/*
+		 * GSS and SSPI share the port->gss struct.  Since nowhere else does a
+		 * postmaster child free this, doing so is safe when interrupting
+		 * BackendInitialize().
+		 */
 		free(MyProcPort->gss);
 #endif   /* ENABLE_GSS || ENABLE_SSPI */
 
-		/* Cleanly shut down SSL layer */
+		/*
+		 * Cleanly shut down SSL layer.  Nowhere else does a postmaster child
+		 * call this, so this is safe when interrupting BackendInitialize().
+		 */
 		secure_close(MyProcPort);
 
 		/*
@@ -890,6 +905,8 @@ pq_recvbuf(void)
 int
 pq_getbyte(void)
 {
+	Assert(PqCommReadingMsg);
+
 	while (PqRecvPointer >= PqRecvLength)
 	{
 		if (pq_recvbuf())		/* If nothing in buffer, then recv some */
@@ -927,6 +944,8 @@ int
 pq_getbyte_if_available(unsigned char *c)
 {
 	int			r;
+
+	Assert(PqCommReadingMsg);
 
 	if (PqRecvPointer < PqRecvLength)
 	{
@@ -980,6 +999,8 @@ pq_getbytes(char *s, size_t len)
 {
 	size_t		amount;
 
+	Assert(PqCommReadingMsg);
+
 	while (len > 0)
 	{
 		while (PqRecvPointer >= PqRecvLength)
@@ -1011,6 +1032,8 @@ static int
 pq_discardbytes(size_t len)
 {
 	size_t		amount;
+
+	Assert(PqCommReadingMsg);
 
 	while (len > 0)
 	{
@@ -1048,6 +1071,8 @@ pq_getstring(StringInfo s)
 {
 	int			i;
 
+	Assert(PqCommReadingMsg);
+
 	resetStringInfo(s);
 
 	/* Read until we get the terminating '\0' */
@@ -1080,6 +1105,58 @@ pq_getstring(StringInfo s)
 
 
 /* --------------------------------
+ *		pq_startmsgread	- begin reading a message from the client.
+ *
+ *		This must be called before any of the pq_get* functions.
+ * --------------------------------
+ */
+void
+pq_startmsgread(void)
+{
+	/*
+	 * There shouldn't be a read active already, but let's check just to be
+	 * sure.
+	 */
+	if (PqCommReadingMsg)
+		ereport(FATAL,
+				(errcode(ERRCODE_PROTOCOL_VIOLATION),
+				 errmsg("terminating connection because protocol sync was lost")));
+
+	PqCommReadingMsg = true;
+}
+
+
+/* --------------------------------
+ *		pq_endmsgread	- finish reading message.
+ *
+ *		This must be called after reading a V2 protocol message with
+ *		pq_getstring() and friends, to indicate that we have read the whole
+ *		message. In V3 protocol, pq_getmessage() does this implicitly.
+ * --------------------------------
+ */
+void
+pq_endmsgread(void)
+{
+	Assert(PqCommReadingMsg);
+
+	PqCommReadingMsg = false;
+}
+
+/* --------------------------------
+ *		pq_is_reading_msg - are we currently reading a message?
+ *
+ * This is used in error recovery at the outer idle loop to detect if we have
+ * lost protocol sync, and need to terminate the connection. pq_startmsgread()
+ * will check for that too, but it's nicer to detect it earlier.
+ * --------------------------------
+ */
+bool
+pq_is_reading_msg(void)
+{
+	return PqCommReadingMsg;
+}
+
+/* --------------------------------
  *		pq_getmessage	- get a message with length word from connection
  *
  *		The return value is placed in an expansible StringInfo, which has
@@ -1099,6 +1176,8 @@ int
 pq_getmessage(StringInfo s, int maxlen)
 {
 	int32		len;
+
+	Assert(PqCommReadingMsg);
 
 	resetStringInfo(s);
 
@@ -1141,6 +1220,9 @@ pq_getmessage(StringInfo s, int maxlen)
 				ereport(COMMERROR,
 						(errcode(ERRCODE_PROTOCOL_VIOLATION),
 						 errmsg("incomplete message from client")));
+
+			/* we discarded the rest of the message so we're back in sync. */
+			PqCommReadingMsg = false;
 			PG_RE_THROW();
 		}
 		PG_END_TRY();
@@ -1157,6 +1239,9 @@ pq_getmessage(StringInfo s, int maxlen)
 		/* Place a trailing null per StringInfo convention */
 		s->data[len] = '\0';
 	}
+
+	/* finished reading the message. */
+	PqCommReadingMsg = false;
 
 	return 0;
 }

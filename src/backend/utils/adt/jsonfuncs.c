@@ -2099,6 +2099,7 @@ populate_record_worker(FunctionCallInfo fcinfo, const char *funcname,
 		if (hash_get_num_entries(json_hash) == 0 && rec)
 		{
 			hash_destroy(json_hash);
+			ReleaseTupleDesc(tupdesc);
 			PG_RETURN_POINTER(rec);
 		}
 	}
@@ -2107,8 +2108,11 @@ populate_record_worker(FunctionCallInfo fcinfo, const char *funcname,
 		jb = PG_GETARG_JSONB(json_arg_num);
 
 		/* same logic as for json */
-		if (!have_record_arg && rec)
+		if (JB_ROOT_COUNT(jb) == 0 && rec)
+		{
+			ReleaseTupleDesc(tupdesc);
 			PG_RETURN_POINTER(rec);
+		}
 	}
 
 	ncolumns = tupdesc->natts;
@@ -2659,7 +2663,7 @@ populate_recordset_worker(FunctionCallInfo fcinfo, const char *funcname,
 
 	/* make these in a sufficiently long-lived memory context */
 	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
-	state->ret_tdesc = CreateTupleDescCopy(tupdesc);;
+	state->ret_tdesc = CreateTupleDescCopy(tupdesc);
 	BlessTupleDesc(state->ret_tdesc);
 	state->tuple_store = tuplestore_begin_heap(rsi->allowedModes &
 											   SFRM_Materialize_Random,

@@ -540,19 +540,30 @@ startScan(IndexScanDesc scan)
 		 * supposition isn't true), that total result will not more than
 		 * minimal predictNumberResult.
 		 */
+		bool		reduce = true;
 
 		for (i = 0; i < so->totalentries; i++)
+		{
 			if (so->entries[i]->predictNumberResult <= so->totalentries * GinFuzzySearchLimit)
-				return;
-
-		for (i = 0; i < so->totalentries; i++)
-			if (so->entries[i]->predictNumberResult > so->totalentries * GinFuzzySearchLimit)
+			{
+				reduce = false;
+				break;
+			}
+		}
+		if (reduce)
+		{
+			for (i = 0; i < so->totalentries; i++)
 			{
 				so->entries[i]->predictNumberResult /= so->totalentries;
 				so->entries[i]->reduceResult = TRUE;
 			}
+		}
 	}
 
+	/*
+	 * Now that we have the estimates for the entry frequencies, finish
+	 * initializing the scan keys.
+	 */
 	for (i = 0; i < so->nkeys; i++)
 		startScanKey(ginstate, so, so->keys + i);
 }
@@ -1756,7 +1767,6 @@ scanPendingInsert(IndexScanDesc scan, TIDBitmap *tbm, int64 *ntids)
 }
 
 
-#define GinIsNewKey(s)		( ((GinScanOpaque) scan->opaque)->keys == NULL )
 #define GinIsVoidRes(s)		( ((GinScanOpaque) scan->opaque)->isVoidRes )
 
 Datum
@@ -1764,6 +1774,7 @@ gingetbitmap(PG_FUNCTION_ARGS)
 {
 	IndexScanDesc scan = (IndexScanDesc) PG_GETARG_POINTER(0);
 	TIDBitmap  *tbm = (TIDBitmap *) PG_GETARG_POINTER(1);
+	GinScanOpaque so = (GinScanOpaque) scan->opaque;
 	int64		ntids;
 	ItemPointerData iptr;
 	bool		recheck;
@@ -1771,8 +1782,8 @@ gingetbitmap(PG_FUNCTION_ARGS)
 	/*
 	 * Set up the scan keys, and check for unsatisfiable query.
 	 */
-	if (GinIsNewKey(scan))
-		ginNewScanKey(scan);
+	ginFreeScanKeys(so); /* there should be no keys yet, but just to be sure */
+	ginNewScanKey(scan);
 
 	if (GinIsVoidRes(scan))
 		PG_RETURN_INT64(0);
