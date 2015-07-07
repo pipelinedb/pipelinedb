@@ -56,13 +56,14 @@ install: all installdirs
 	$(INSTALL_PROGRAM) psql$(X) '$(DESTDIR)$(bindir)/psql$(X)'
 	$(INSTALL_DATA) $(srcdir)/psqlrc.sample '$(DESTDIR)$(datadir)/psqlrc.sample'
 	@rm -f '$(DESTDIR)$(bindir)/pipeline$(X)'
-	ln -s $(DESTDIR)$(bindir)/psql $(DESTDIR)$(bindir)/pipeline
-	
+	$(LN_S) psql $(DESTDIR)$(bindir)/pipeline
+
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(bindir)' '$(DESTDIR)$(datadir)'
 
 uninstall:
 	rm -f '$(DESTDIR)$(bindir)/psql$(X)' '$(DESTDIR)$(datadir)/psqlrc.sample'
+	rm -f '$(DESTDIR)$(bindir)/pipeline$(X)'
 
 # psqlscan.c is in the distribution tarball, so is not cleaned here
 clean distclean:

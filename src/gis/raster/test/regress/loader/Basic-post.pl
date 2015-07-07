@@ -1,1 +1,0 @@
-unlink "loader/Basic.tif";

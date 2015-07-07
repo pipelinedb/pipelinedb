@@ -79,8 +79,6 @@ typedef Node *(*CoerceParamHook) (ParseState *pstate, Param *param,
 									   Oid targetTypeId, int32 targetTypeMod,
 											  int location);
 
-typedef struct ContAnalyzeContext ContAnalyzeContext;
-
 /*
  * State information used during parse analysis
  *
@@ -169,7 +167,7 @@ struct ParseState
 
 	/* Pipeline DB */
 	bool		p_allow_streams; /* true if streams are allowed as RTEs */
-	ContAnalyzeContext *p_cont_view_context; /* context if this is a continuous view */
+	struct ContAnalyzeContext *p_cont_view_context; /* context if this is a continuous view */
 	bool 		p_no_locking; /* don't hold on to locks till EOT? */
 	List 	    *p_ins_cols;
 };

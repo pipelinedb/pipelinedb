@@ -8,7 +8,7 @@
 #
 #-------------------------------------------------------------------------
 
-PGFILEDESC = "pipeline-config - report configuration information"
+PGFILEDESC = "pg_config - report configuration information"
 PGAPPICON=win32
 
 subdir = src/bin/pg_config
@@ -31,22 +31,25 @@ override CPPFLAGS += -DVAL_LDFLAGS_EX="\"$(LDFLAGS_EX)\""
 override CPPFLAGS += -DVAL_LDFLAGS_SL="\"$(LDFLAGS_SL)\""
 override CPPFLAGS += -DVAL_LIBS="\"$(LIBS)\""
 
-all: pipeline-config
+all: pg_config
 
-pipeline-config: $(OBJS) | submake-libpgport
+pg_config: $(OBJS) | submake-libpgport
 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
 
 install: all installdirs
-	$(INSTALL_SCRIPT) pipeline-config$(X) '$(DESTDIR)$(bindir)/pipeline-config$(X)'
+	$(INSTALL_SCRIPT) pg_config$(X) '$(DESTDIR)$(bindir)/pg_config$(X)'
+	@rm -f '$(DESTDIR)$(bindir)/pipeline-config$(X)'
+	$(LN_S) pg_config $(DESTDIR)$(bindir)/pipeline-config
 
 installdirs:
 	$(MKDIR_P) '$(DESTDIR)$(bindir)'
 
 uninstall:
+	rm -f '$(DESTDIR)$(bindir)/pg_config$(X)'
 	rm -f '$(DESTDIR)$(bindir)/pipeline-config$(X)'
 
 clean distclean maintainer-clean:
-	rm -f pipeline-config$(X) $(OBJS)
+	rm -f pg_config$(X) $(OBJS)
 	rm -rf tmp_check
 
 check: all

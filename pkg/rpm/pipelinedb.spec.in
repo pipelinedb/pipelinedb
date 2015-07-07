@@ -1,0 +1,64 @@
+Name: pipelinedb
+Version: __VERSION__
+Release: 1
+Summary: PipelineDB
+License: GPLv3
+Group: Applications/Databases
+Vendor: PipelineDB
+Packager: <packaging@pipelinedb.com>
+URL: http://pipelinedb.com
+
+BuildArch: x86_64
+AutoReqProv: no
+Prefix: __PREFIX__
+
+%description
+PipelineDB is a streaming SQL database that runs SQL queries continuously
+on streams, incrementally storing the results in tables.
+
+%files
+%defattr(-,root,root,-)
+__PREFIX__/*
+
+%post
+echo "$RPM_INSTALL_PREFIX/lib" > /etc/ld.so.conf.d/pipelinedb.conf
+/sbin/ldconfig
+
+ln -s $RPM_INSTALL_PREFIX/bin/pipeline-server /usr/bin/pipeline-server
+ln -s $RPM_INSTALL_PREFIX/bin/pipeline-ctl /usr/bin/pipeline-ctl
+ln -s $RPM_INSTALL_PREFIX/bin/pipeline-init /usr/bin/pipeline-init
+ln -s $RPM_INSTALL_PREFIX/bin/psql /usr/bin/psql
+ln -s /usr/bin/psql /usr/bin/pipeline
+
+echo "
+    ____  _            ___            ____  ____
+   / __ \(_)___  ___  / (_)___  ___  / __ \/ __ )
+  / /_/ / / __ \/ _ \/ / / __ \/ _ \/ / / / __  |
+ / ____/ / /_/ /  __/ / / / / /  __/ /_/ / /_/ /
+/_/   /_/ .___/\___/_/_/_/ /_/\___/_____/_____/
+       /_/
+
+PipelineDB successfully installed. To get started, initialize a
+database directory:
+
+pipeline-init -D <data directory>
+
+where <data directory> is a nonexistent directory where you'd
+like all of your database files to live. 
+
+You can find the PipelineDB documentation at:
+
+http://docs.pipelinedb.com
+"
+
+%postun
+rm /etc/ld.so.conf.d/pipelinedb.conf
+/sbin/ldconfig
+
+rm -f /usr/bin/pipeline-server
+rm -f /usr/bin/pipeline-ctl
+rm -f /usr/bin/pipeline-init
+rm -f /usr/bin/psql
+rm -f /usr/bin/pipeline
+
+%clean

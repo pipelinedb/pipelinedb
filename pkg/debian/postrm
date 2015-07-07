@@ -1,0 +1,13 @@
+#! /bin/sh
+
+set -e
+
+INSTALL_PREFIX=/usr/lib/pipelinedb
+rm /etc/ld.so.conf.d/pipelinedb.conf
+ldconfig
+
+rm -f /usr/bin/pipeline-server
+rm -f /usr/bin/pipeline-ctl
+rm -f /usr/bin/pipeline-init
+rm -f /usr/bin/psql
+rm -f /usr/bin/pipeline

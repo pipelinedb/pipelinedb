@@ -1,7 +1,0 @@
-Run 'make check' to run the postgresql-wrappers regression testing.
-
-You must be allowed to create databases and install C-language
-function in it.
-
-You must also have installed the wrappers with 'make install'
-from top-level dir.

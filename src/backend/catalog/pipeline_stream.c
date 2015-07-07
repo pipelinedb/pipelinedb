@@ -713,6 +713,8 @@ CreatePipelineStreamEntry(CreateStreamStmt *stmt, Oid relid)
 	ObjectAddress dependent;
 	Oid entry_oid;
 
+	MemSet(nulls, 0, sizeof(nulls));
+
 	values[Anum_pipeline_stream_relid - 1] = ObjectIdGetDatum(relid);
 	values[Anum_pipeline_stream_inferred - 1] = BoolGetDatum(stmt->is_inferred);
 	nulls[Anum_pipeline_stream_queries - 1] = true;

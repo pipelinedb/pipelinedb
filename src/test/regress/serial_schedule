@@ -151,7 +151,6 @@ test: pipeline_stream
 test: sw_vacuum
 test: analyze_cont_view
 test: create_cont_view
-test: activate_cont_view
 test: cont_view_sanity
 test: cont_window
 test: cont_sum
@@ -171,7 +170,7 @@ test: cont_sw_regr
 test: cont_sw_stats
 test: cont_hs_agg
 test: cont_sw_hs_agg
-test: cont_count_distinct
+test: cont_distinct
 test: cont_hll_agg
 test: cont_os_agg
 test: cont_sw_os_agg
@@ -180,6 +179,9 @@ test: stream_table_join
 test: user_combine
 test: cont_limit
 test: cont_alter
+test: stream_targets
+test: hash_group
+test: stream_insert_subselect
 test: stream_exprs
 test: stream_targets
 test: schema_inference
@@ -195,3 +197,4 @@ test: stream_casts4
 test: cont_gis_geom
 test: cont_gis_raster
 test: cont_activate
+test: create_combinable_agg
