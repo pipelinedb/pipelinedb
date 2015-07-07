@@ -587,9 +587,16 @@ refresh_by_match_merge(Oid matviewOid, Oid tempOid, Oid relowner,
 		elog(ERROR, "SPI_exec failed: %s", querybuf.data);
 	if (SPI_processed > 0)
 	{
+		/*
+		 * Note that this ereport() is returning data to the user.  Generally,
+		 * we would want to make sure that the user has been granted access to
+		 * this data.  However, REFRESH MAT VIEW is only able to be run by the
+		 * owner of the mat view (or a superuser) and therefore there is no
+		 * need to check for access to data in the mat view.
+		 */
 		ereport(ERROR,
 				(errcode(ERRCODE_CARDINALITY_VIOLATION),
-						errmsg("new data for \"%s\" contains duplicate rows without any null columns",
+				 errmsg("new data for \"%s\" contains duplicate rows without any null columns",
 						RelationGetRelationName(matviewRel)),
 				 errdetail("Row: %s",
 			SPI_getvalue(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1))));

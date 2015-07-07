@@ -1,4 +1,4 @@
 [submodule "src/gis"]
 	path = src/gis
 	url = git@github.com:pipelinedb/pipeline-gis.git
-	branch = svn-trunk
+	branch = master

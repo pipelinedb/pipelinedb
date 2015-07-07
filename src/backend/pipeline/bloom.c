@@ -8,6 +8,8 @@
  *
  *-------------------------------------------------------------------------
  */
+#include "postgres.h"
+
 #include <math.h>
 #include "pipeline/bloom.h"
 #include "pipeline/miscutils.h"

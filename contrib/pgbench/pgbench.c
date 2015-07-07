@@ -863,6 +863,7 @@ runShellCommand(CState *st, char *variable, char **argv, int argc)
 	{
 		if (!timer_exceeded)
 			fprintf(stderr, "%s: cannot read the result\n", argv[0]);
+		(void) pclose(fp);
 		return false;
 	}
 	if (pclose(fp) < 0)
@@ -1928,6 +1929,7 @@ parseQuery(Command *cmd, const char *raw_sql)
 		if (cmd->argc >= MAX_ARGS)
 		{
 			fprintf(stderr, "statement has too many arguments (maximum is %d): %s\n", MAX_ARGS - 1, raw_sql);
+			pg_free(name);
 			return false;
 		}
 
@@ -2168,6 +2170,7 @@ process_file(char *filename)
 	else if ((fd = fopen(filename, "r")) == NULL)
 	{
 		fprintf(stderr, "%s: %s\n", filename, strerror(errno));
+		pg_free(my_commands);
 		return false;
 	}
 
@@ -2297,6 +2300,10 @@ printResults(int ttype, int64 normal_xacts, int nclients,
 		printf("number of transactions actually processed: " INT64_FORMAT "\n",
 			   normal_xacts);
 	}
+
+	/* Remaining stats are nonsensical if we failed to execute any xacts */
+	if (normal_xacts <= 0)
+		return;
 
 	if (throttle_delay || progress)
 	{

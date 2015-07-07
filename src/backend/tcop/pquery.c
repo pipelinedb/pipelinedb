@@ -19,14 +19,13 @@
 #include "access/xact.h"
 #include "commands/prepare.h"
 #include "executor/tstoreReceiver.h"
-#include "funcapi.h"
 #include "miscadmin.h"
 #include "pg_trace.h"
 #include "tcop/pquery.h"
 #include "tcop/utility.h"
 #include "utils/memutils.h"
-#include "utils/rel.h"
 #include "utils/snapmgr.h"
+
 
 /*
  * ActivePortal is the currently executing Portal (the most closely nested,
@@ -258,6 +257,7 @@ ChoosePortalStrategy(List *stmts)
 		if (IsA(stmt, Query))
 		{
 			Query	   *query = (Query *) stmt;
+
 			if (query->canSetTag)
 			{
 				if (query->commandType == CMD_SELECT &&
@@ -281,6 +281,7 @@ ChoosePortalStrategy(List *stmts)
 		else if (IsA(stmt, PlannedStmt))
 		{
 			PlannedStmt *pstmt = (PlannedStmt *) stmt;
+
 			if (pstmt->canSetTag)
 			{
 				if (pstmt->commandType == CMD_SELECT &&
@@ -316,6 +317,7 @@ ChoosePortalStrategy(List *stmts)
 		if (IsA(stmt, Query))
 		{
 			Query	   *query = (Query *) stmt;
+
 			if (query->canSetTag)
 			{
 				if (++nSetTag > 1)

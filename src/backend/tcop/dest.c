@@ -131,11 +131,11 @@ CreateDestReceiver(CommandDest dest)
 		case DestSQLFunction:
 			return CreateSQLFunctionDestReceiver();
 
-		case DestTupleTable:
-			return CreateTupleTableDestReceiver();
-
 		case DestTransientRel:
 			return CreateTransientRelDestReceiver(InvalidOid);
+
+		case DestTupleTable:
+			return CreateTupleTableDestReceiver();
 
 		case DestCombiner:
 			return CreateCombinerDestReceiver();
@@ -174,8 +174,8 @@ EndCommand(const char *commandTag, CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
-		case DestTupleTable:
 		case DestTransientRel:
+		case DestTupleTable:
 		case DestCombiner:
 		case DestStream:
 			break;
@@ -266,8 +266,8 @@ ReadyForQuery(CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
-		case DestTupleTable:
 		case DestTransientRel:
+		case DestTupleTable:
 		case DestCombiner:
 		case DestStream:
 			break;

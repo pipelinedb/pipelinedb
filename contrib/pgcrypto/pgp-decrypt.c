@@ -236,6 +236,8 @@ pgp_create_pkt_reader(PullFilter **pf_p, PullFilter *src, int len,
 
 /*
  * Prefix check filter
+ * https://tools.ietf.org/html/rfc4880#section-5.7
+ * https://tools.ietf.org/html/rfc4880#section-5.13
  */
 
 static int
@@ -264,20 +266,7 @@ prefix_init(void **priv_p, void *arg, PullFilter *src)
 	if (buf[len - 2] != buf[len] || buf[len - 1] != buf[len + 1])
 	{
 		px_debug("prefix_init: corrupt prefix");
-
-		/*
-		 * The original purpose of the 2-byte check was to show user a
-		 * friendly "wrong key" message. This made following possible:
-		 *
-		 * "An Attack on CFB Mode Encryption As Used By OpenPGP" by Serge
-		 * Mister and Robert Zuccherato
-		 *
-		 * To avoid being 'oracle', we delay reporting, which basically means
-		 * we prefer to run into corrupt packet header.
-		 *
-		 * We _could_ throw PXE_PGP_CORRUPT_DATA here, but there is
-		 * possibility of attack via timing, so we don't.
-		 */
+		/* report error in pgp_decrypt() */
 		ctx->corrupt_prefix = 1;
 	}
 	px_memset(tmpbuf, 0, sizeof(tmpbuf));
@@ -351,37 +340,33 @@ mdc_free(void *priv)
 }
 
 static int
-mdc_finish(PGP_Context *ctx, PullFilter *src,
-		   int len, uint8 **data_p)
+mdc_finish(PGP_Context *ctx, PullFilter *src, int len)
 {
 	int			res;
 	uint8		hash[20];
-	uint8		tmpbuf[22];
+	uint8		tmpbuf[20];
+	uint8	   *data;
 
-	if (len + 1 > sizeof(tmpbuf))
+	/* should not happen */
+	if (ctx->use_mdcbuf_filter)
 		return PXE_BUG;
 
+	/* It's SHA1 */
+	if (len != 20)
+		return PXE_PGP_CORRUPT_DATA;
+
+	/* mdc_read should not call md_update */
+	ctx->in_mdc_pkt = 1;
+
 	/* read data */
-	res = pullf_read_max(src, len + 1, data_p, tmpbuf);
+	res = pullf_read_max(src, len, &data, tmpbuf);
 	if (res < 0)
 		return res;
 	if (res == 0)
 	{
-		if (ctx->mdc_checked == 0)
-		{
-			px_debug("no mdc");
-			return PXE_PGP_CORRUPT_DATA;
-		}
-		return 0;
-	}
-
-	/* safety check */
-	if (ctx->in_mdc_pkt > 1)
-	{
-		px_debug("mdc_finish: several times here?");
+		px_debug("no mdc");
 		return PXE_PGP_CORRUPT_DATA;
 	}
-	ctx->in_mdc_pkt++;
 
 	/* is the packet sane? */
 	if (res != 20)
@@ -394,7 +379,7 @@ mdc_finish(PGP_Context *ctx, PullFilter *src,
 	 * ok, we got the hash, now check
 	 */
 	px_md_finish(ctx->mdc_ctx, hash);
-	res = memcmp(hash, *data_p, 20);
+	res = memcmp(hash, data, 20);
 	px_memset(hash, 0, 20);
 	px_memset(tmpbuf, 0, sizeof(tmpbuf));
 	if (res != 0)
@@ -403,7 +388,7 @@ mdc_finish(PGP_Context *ctx, PullFilter *src,
 		return PXE_PGP_CORRUPT_DATA;
 	}
 	ctx->mdc_checked = 1;
-	return len;
+	return 0;
 }
 
 static int
@@ -414,11 +399,8 @@ mdc_read(void *priv, PullFilter *src, int len,
 	PGP_Context *ctx = priv;
 
 	/* skip this filter? */
-	if (ctx->use_mdcbuf_filter)
+	if (ctx->use_mdcbuf_filter || ctx->in_mdc_pkt)
 		return pullf_read(src, len, data_p);
-
-	if (ctx->in_mdc_pkt)
-		return mdc_finish(ctx, src, len, data_p);
 
 	res = pullf_read(src, len, data_p);
 	if (res < 0)
@@ -795,12 +777,15 @@ parse_literal_data(PGP_Context *ctx, MBuf *dst, PullFilter *pkt)
 	}
 	px_memset(tmpbuf, 0, 4);
 
-	/* check if text */
+	/*
+	 * If called from an SQL function that returns text, pgp_decrypt() rejects
+	 * inputs not self-identifying as text.
+	 */
 	if (ctx->text_mode)
 		if (type != 't' && type != 'u')
 		{
 			px_debug("parse_literal_data: data type=%c", type);
-			return PXE_PGP_NOT_TEXT;
+			ctx->unexpected_binary = true;
 		}
 
 	ctx->unicode_mode = (type == 'u') ? 1 : 0;
@@ -834,6 +819,7 @@ parse_compressed_data(PGP_Context *ctx, MBuf *dst, PullFilter *pkt)
 	int			res;
 	uint8		type;
 	PullFilter *pf_decompr;
+	uint8	   *discard_buf;
 
 	GETBYTE(pkt, type);
 
@@ -857,7 +843,20 @@ parse_compressed_data(PGP_Context *ctx, MBuf *dst, PullFilter *pkt)
 
 		case PGP_COMPR_BZIP2:
 			px_debug("parse_compressed_data: bzip2 unsupported");
-			res = PXE_PGP_UNSUPPORTED_COMPR;
+			/* report error in pgp_decrypt() */
+			ctx->unsupported_compr = 1;
+
+			/*
+			 * Discard the compressed data, allowing it to first affect any
+			 * MDC digest computation.
+			 */
+			while (1)
+			{
+				res = pullf_read(pkt, 32 * 1024, &discard_buf);
+				if (res <= 0)
+					break;
+			}
+
 			break;
 
 		default:
@@ -878,7 +877,6 @@ process_data_packets(PGP_Context *ctx, MBuf *dst, PullFilter *src,
 	int			got_data = 0;
 	int			got_mdc = 0;
 	PullFilter *pkt = NULL;
-	uint8	   *tmp;
 
 	while (1)
 	{
@@ -937,11 +935,8 @@ process_data_packets(PGP_Context *ctx, MBuf *dst, PullFilter *src,
 					break;
 				}
 
-				/* notify mdc_filter */
-				ctx->in_mdc_pkt = 1;
-
-				res = pullf_read(pkt, 8192, &tmp);
-				if (res > 0)
+				res = mdc_finish(ctx, pkt, len);
+				if (res >= 0)
 					got_mdc = 1;
 				break;
 			default:
@@ -1182,8 +1177,36 @@ pgp_decrypt(PGP_Context *ctx, MBuf *msrc, MBuf *mdst)
 	if (res < 0)
 		return res;
 
+	/*
+	 * Report a failure of the prefix_init() "quick check" now, rather than
+	 * upon detection, to hinder timing attacks.  pgcrypto is not generally
+	 * secure against timing attacks, but this helps.
+	 */
 	if (!got_data || ctx->corrupt_prefix)
-		res = PXE_PGP_CORRUPT_DATA;
+		return PXE_PGP_CORRUPT_DATA;
+
+	/*
+	 * Code interpreting purportedly-decrypted data prior to this stage shall
+	 * report no error other than PXE_PGP_CORRUPT_DATA.  (PXE_BUG is okay so
+	 * long as it remains unreachable.)  This ensures that an attacker able to
+	 * choose a ciphertext and receive a corresponding decryption error
+	 * message cannot use that oracle to gather clues about the decryption
+	 * key.  See "An Attack on CFB Mode Encryption As Used By OpenPGP" by
+	 * Serge Mister and Robert Zuccherato.
+	 *
+	 * A problematic value in the first octet of a Literal Data or Compressed
+	 * Data packet may indicate a simple user error, such as the need to call
+	 * pgp_sym_decrypt_bytea instead of pgp_sym_decrypt.  Occasionally,
+	 * though, it is the first symptom of the encryption key not matching the
+	 * decryption key.  When this was the only problem encountered, report a
+	 * specific error to guide the user; otherwise, we will have reported
+	 * PXE_PGP_CORRUPT_DATA before now.  A key mismatch makes the other errors
+	 * into red herrings, and this avoids leaking clues to attackers.
+	 */
+	if (ctx->unsupported_compr)
+		return PXE_PGP_UNSUPPORTED_COMPR;
+	if (ctx->unexpected_binary)
+		return PXE_PGP_NOT_TEXT;
 
 	return res;
 }
