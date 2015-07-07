@@ -1,15 +1,15 @@
 /* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
- * cqplan.h
+ * cont_plan.h
  * 		Interface for generating/modifying CQ plans
  *
  * IDENTIFICATION
- *	  src/include/pipeline/cqplan.h
+ *	  src/include/pipeline/cont_plan.h
  *
  */
-#ifndef CQPLAN_H
-#define CQPLAN_H
+#ifndef CONT_PLAN_H
+#define CONT_PLAN_H
 
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
@@ -19,6 +19,6 @@
 #define IS_STREAM_TREE(plan) (IsA((plan), StreamScan) || \
 		IsA((plan), StreamTableJoin))
 
-PlannedStmt *GetCQPlan(ContinuousView *view);
+PlannedStmt *GetContPlan(ContinuousView *view);
 
 #endif

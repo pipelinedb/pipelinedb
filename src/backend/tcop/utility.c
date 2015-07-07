@@ -499,8 +499,8 @@ standard_ProcessUtility(Node *parsetree,
 			CreateTableSpace((CreateTableSpaceStmt *) parsetree);
 			break;
 
-		case T_CreateContinuousViewStmt:
-			ExecCreateContinuousViewStmt((CreateContinuousViewStmt *) parsetree, queryString);
+		case T_CreateContViewStmt:
+			ExecCreateContViewStmt((CreateContViewStmt *) parsetree, queryString);
 			break;
 
 		case T_DropTableSpaceStmt:
@@ -651,6 +651,10 @@ standard_ProcessUtility(Node *parsetree,
 
 		case T_ExplainStmt:
 			ExplainQuery((ExplainStmt *) parsetree, queryString, params, dest);
+			break;
+
+		case T_ExplainContViewStmt:
+			ExecExplainContViewStmt((ExplainContViewStmt *) parsetree, queryString, params, dest);
 			break;
 
 		case T_AlterSystemStmt:
@@ -1430,6 +1434,7 @@ UtilityReturnsTuples(Node *parsetree)
 			}
 
 		case T_ExplainStmt:
+		case T_ExplainContViewStmt:
 			return true;
 
 		case T_VariableShowStmt:
@@ -1479,6 +1484,20 @@ UtilityTupleDescriptor(Node *parsetree)
 
 		case T_ExplainStmt:
 			return ExplainResultDesc((ExplainStmt *) parsetree);
+
+		case T_ExplainContViewStmt:
+			{
+				/* Create a dummy ExplainStmt and use that to get the descriptor */
+				ExplainContViewStmt *stmt = (ExplainContViewStmt *) parsetree;
+				ExplainStmt *explain = makeNode(ExplainStmt);
+				TupleDesc desc;
+
+				explain->options = stmt->options;
+				desc = ExplainResultDesc(explain);
+				pfree(explain);
+
+				return desc;
+			}
 
 		case T_VariableShowStmt:
 			{
@@ -2163,7 +2182,11 @@ CreateCommandTag(Node *parsetree)
 			tag = "EXPLAIN";
 			break;
 
-		case T_CreateContinuousViewStmt:
+		case T_ExplainContViewStmt:
+			tag = "EXPLAIN CONTINUOUS VIEW";
+			break;
+
+		case T_CreateContViewStmt:
 			tag = "CREATE CONTINUOUS VIEW";
 			break;
 

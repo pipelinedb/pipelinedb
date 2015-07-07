@@ -12,15 +12,20 @@
 #ifndef PIPELINECMDS_H
 #define PIPELINECMDS_H
 
+#include "nodes/params.h"
 #include "nodes/parsenodes.h"
+#include "tcop/dest.h"
 
 /* guc parameter */
 extern int continuous_view_fillfactor;
 
-extern void ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring);
-extern void ExecTruncateContinuousViewStmt(TruncateStmt *stmt);
+extern void ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring);
+extern void ExecTruncateContViewStmt(TruncateStmt *stmt);
 
 extern void ExecActivateStmt(ActivateStmt *stmt);
 extern void ExecDeactivateStmt(DeactivateStmt *stmt);
+
+extern void ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
+			 ParamListInfo params, DestReceiver *dest);
 
 #endif   /* PIPELINECMDS_H */

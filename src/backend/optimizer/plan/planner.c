@@ -140,7 +140,7 @@ planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	else
 		result = standard_planner(parse, cursorOptions, boundParams);
 
-	if (parse->is_continuous)
+	if (parse->isContinuous)
 	{
 		result->is_continuous = true;
 		result->cq_id = parse->cq_id;
@@ -263,7 +263,7 @@ standard_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	result->relationOids = glob->relationOids;
 	result->invalItems = glob->invalItems;
 	result->nParamExec = glob->nParamExec;
-	result->is_continuous = parse->is_continuous;
+	result->is_continuous = parse->isContinuous;
 
 	return result;
 }
@@ -2715,7 +2715,7 @@ choose_hashed_grouping(PlannerInfo *root,
 	 * sorted grouping plans. Combine queries run on relatively small input sets
 	 * anyways, so using the optimal plan isn't much of a concern.
 	 */
-	if (parse->is_combine)
+	if (parse->isCombine)
 		return true;
 
 	/*

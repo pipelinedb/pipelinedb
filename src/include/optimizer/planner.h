@@ -18,7 +18,7 @@
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
 #include "parser/parsetree.h"
-#include "pipeline/cqplan.h"
+#include "pipeline/cont_plan.h"
 
 /* Hook for plugins to get control in planner() */
 typedef PlannedStmt *(*planner_hook_type) (Query *parse,

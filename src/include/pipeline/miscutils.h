@@ -12,7 +12,7 @@
 #include "lib/stringinfo.h"
 
 extern void append_suffix(char *str, char *suffix, int max_len);
-extern int skip_substring(const char *str, char* substr, int start);
+extern int skip_token(const char *str, char* substr, int start);
 extern char *random_hex(int len);
 
 /* hash functions */

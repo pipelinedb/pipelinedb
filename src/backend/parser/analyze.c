@@ -111,7 +111,7 @@ parse_analyze(Node *parseTree, const char *sourceText,
 	if (IsA(parseTree, SelectStmt))
 	{
 		SelectStmt *stmt = (SelectStmt *) parseTree;
-		query->is_continuous = stmt->forContinuousView;
+		query->isContinuous = stmt->forContinuousView;
 	}
 
 	if (post_parse_analyze_hook)
@@ -970,7 +970,7 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 	pstate->p_windowdefs = stmt->windowClause;
 
 	if (stmt->forContinuousView)
-		transformContinuousSelectStmt(pstate, stmt);
+		transformContSelectStmt(pstate, stmt);
 
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);

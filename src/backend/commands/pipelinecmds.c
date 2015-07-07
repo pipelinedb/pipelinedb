@@ -17,6 +17,7 @@
 #include "access/reloptions.h"
 #include "access/xact.h"
 #include "commands/defrem.h"
+#include "commands/explain.h"
 #include "commands/pipelinecmds.h"
 #include "commands/tablecmds.h"
 #include "commands/view.h"
@@ -63,10 +64,9 @@
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
 
-#define DEFAULT_FILLFACTOR 50
 #define OPTION_FILLFACTOR "fillfactor"
 
-int continuous_view_fillfactor = DEFAULT_FILLFACTOR;
+int continuous_view_fillfactor = 50;
 
 static ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)
@@ -264,8 +264,27 @@ create_indices_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query
 }
 
 static char *
-get_query_string(char *cvname, const char *sql)
+get_select_query_sql(RangeVar *view, const char *sql)
 {
+	int trimmedlen;
+	char *trimmed;
+	int pos;
+	StringInfo str = makeStringInfo();
+
+	if (view->catalogname)
+	{
+		appendStringInfoString(str, view->catalogname);
+		appendStringInfoChar(str, '.');
+	}
+
+	if (view->schemaname)
+	{
+		appendStringInfoString(str, view->schemaname);
+		appendStringInfoChar(str, '.');
+	}
+
+	appendStringInfoString(str, view->relname);
+
 	/*
 	 * Technically the CV could be named "create" or "continuous",
 	 * so it's not enough to simply advance to the CV name. We need
@@ -273,30 +292,31 @@ get_query_string(char *cvname, const char *sql)
 	 * should never return -1 for this string since it's already been
 	 * validated.
 	 */
-	int trimmedlen;
-	char *trimmed;
-	int pos = skip_substring(sql, "CREATE", 0);
-	pos = skip_substring(sql, "CONTINUOUS", pos);
-	pos = skip_substring(sql, "VIEW", pos);
-	pos = skip_substring(sql, cvname, pos);
-	pos = skip_substring(sql, "AS", pos);
+	pos = skip_token(sql, "CREATE", 0);
+	pos = skip_token(sql, "CONTINUOUS", pos);
+	pos = skip_token(sql, "VIEW", pos);
+	pos = skip_token(sql, str->data, pos);
+	pos = skip_token(sql, "AS", pos);
 
 	trimmedlen = strlen(sql) - pos + 1;
 	trimmed = palloc(trimmedlen);
 
 	memcpy(trimmed, &sql[pos], trimmedlen);
 
+	pfree(str->data);
+	pfree(str);
+
 	return trimmed;
 }
 
 /*
- * CreateContinuousView
+ * ExecCreateContViewStmt
  *
  * Creates a table for backing the result of the continuous query,
  * and stores the query in a catalog table.
  */
 void
-ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *querystring)
+ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 {
 	CreateStmt *create_stmt;
 	ViewStmt *view_stmt;
@@ -337,7 +357,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	saveAllowSystemTableMods = allowSystemTableMods;
 	allowSystemTableMods = true;
 
-	ValidateContinuousQuery(stmt, querystring);
+	ValidateContQuery(stmt, querystring);
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
@@ -421,7 +441,7 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
 	 */
-	cvoid = DefineContinuousView(view, get_query_string(view->relname, querystring),
+	cvoid = DefineContinuousView(view, get_select_query_sql(view, querystring),
 			mat_relation, IsSlidingWindowSelectStmt(viewselect), !SelectsFromStreamOnly(workerselect));
 	CommandCounterIncrement();
 
@@ -483,8 +503,11 @@ ExecCreateContinuousViewStmt(CreateContinuousViewStmt *stmt, const char *queryst
 	create_indices_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);
 }
 
+/*
+ * ExecTruncateContViewStmt
+ */
 void
-ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
+ExecTruncateContViewStmt(TruncateStmt *stmt)
 {
 	ListCell *lc;
 	Relation pipeline_query;
@@ -529,11 +552,18 @@ ExecTruncateContinuousViewStmt(TruncateStmt *stmt)
 void
 ExecActivateStmt(ActivateStmt *stmt)
 {
-
+	/* TODO */
 }
 
 void
 ExecDeactivateStmt(DeactivateStmt *stmt)
 {
+	/* TODO */
+}
 
+void
+ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
+			 ParamListInfo params, DestReceiver *dest)
+{
+	/* TODO */
 }

@@ -8,8 +8,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef CQPARSE_H
-#define CQPARSE_H
+#ifndef CONT_ANALYZE_H
+#define CONT_ANALYZE_H
 
 typedef struct ContAnalyzeContext
 {
@@ -31,9 +31,9 @@ extern bool collect_rels_and_streams(Node *node, ContAnalyzeContext *context);
 extern bool collect_types_and_cols(Node *node, ContAnalyzeContext *context);
 
 extern ContAnalyzeContext *MakeContAnalyzeContext(ParseState *pstate, SelectStmt *select);
-extern void ValidateContinuousQuery(CreateContinuousViewStmt *stmt, const char *sql);
+extern void ValidateContQuery(CreateContViewStmt *stmt, const char *sql);
 
-extern void transformContinuousSelectStmt(ParseState *pstate, SelectStmt *select);
+extern void transformContSelectStmt(ParseState *pstate, SelectStmt *select);
 extern RangeTblEntry *transformStreamDesc(ParseState *pstate, StreamDesc *stream);
 
 #endif

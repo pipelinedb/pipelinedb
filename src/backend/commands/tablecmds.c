@@ -1008,7 +1008,7 @@ ExecuteTruncate(TruncateStmt *stmt)
 	ListCell   *cell;
 
 	if (stmt->objType == OBJECT_CONTINUOUS_VIEW)
-		return ExecTruncateContinuousViewStmt(stmt);
+		return ExecTruncateContViewStmt(stmt);
 
 	if (stmt->objType != OBJECT_TABLE)
 		elog(ERROR, "unknown object type %d", stmt->objType);

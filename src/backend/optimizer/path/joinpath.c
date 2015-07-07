@@ -370,7 +370,7 @@ add_paths_to_joinrel(PlannerInfo *root,
 	 * this so that we can predictably control performance and take advantage of
 	 * certain assumptions we can make about matrels and their indices.
 	 */
-	if (root->parse->is_combine_lookup)
+	if (root->parse->isCombineLookup)
 	{
 		physical_group_lookup(root, joinrel, outerrel, innerrel,
 							param_source_rels, extra_lateral_rels,
