@@ -19,6 +19,13 @@ rpm:
 osx:
 	$(MAKE) -C $@
 
+osxpkg:
+	cp postinst-osxpkg $(PREFIX)
+	find $(PREFIX) -type d -exec chmod 775 {} +
+	find $(PREFIX)/share/pipelinedb/timezone -type f -exec chmod 644 {} +
+	(cd $(PREFIX) && fpm -s dir -t osxpkg -n pipelinedb -v $(VERSION) --epoch 0 --prefix=/opt/pipelinedb --after-install postinst-osxpkg .)
+	cp $(PREFIX)/*.pkg .
+
 clean:
 	$(MAKE) -f debian/rules clean
 	$(MAKE) -C rpm clean
