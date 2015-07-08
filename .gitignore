@@ -33,6 +33,7 @@ lib*.pc
 /GNUmakefile
 /config.log
 /config.status
+/configure.lineno
 /pgsql.sln
 /pgsql.sln.cache
 /Debug/

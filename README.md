@@ -123,3 +123,7 @@ What were the 10 most common randomly generated keys?
     7   |  2327
 
     (10 rows)
+
+## License
+
+See the [LICENSE](https://github.com/pipelinedb/pipelinedb/blob/master/LICENSE) file for licensing and copyright terms.

@@ -2,6 +2,8 @@
  *
  * cont_worker.c
  *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
  * IDENTIFICATION
  *    src/include/pipeline/cont_worker.c
  *

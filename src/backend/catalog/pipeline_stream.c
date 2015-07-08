@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pipeline_stream.c
  *	  routines to support manipulation of the pipeline_stream relation
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/catalog/pipeline_stream.c

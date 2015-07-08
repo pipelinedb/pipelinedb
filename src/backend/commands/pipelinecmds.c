@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pipelinecmds.c
  *	  commands specific to PipelineDB
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/commands/pipelinecmds.c

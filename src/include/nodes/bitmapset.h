@@ -1,4 +1,3 @@
-/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * bitmapset.h
@@ -12,7 +11,8 @@
  * bms_is_empty() in preference to testing for NULL.)
  *
  *
- * Copyright (c) 2003-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2003-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/nodes/bitmapset.h
  *

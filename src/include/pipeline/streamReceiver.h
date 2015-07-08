@@ -1,9 +1,10 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * streamReceiver.h
  *	  An implementation of DestReceiver that that allows sends output
  *	  tuples to a tuple buffer
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *	  src/include/pipeline/streamReceiver.h

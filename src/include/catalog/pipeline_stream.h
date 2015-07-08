@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pipeline_stream.h
  *		Definition of the pipeline_stream catalog table
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/catalog/pipeline_stream.h
  *

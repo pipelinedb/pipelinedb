@@ -1,9 +1,10 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * cqanalyze.c
  *	  Support for analyzing continuous view statements, mainly to support
  *	  schema inference
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/pipeline/cqanalyze.c

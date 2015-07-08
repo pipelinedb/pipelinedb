@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * bloom.c
  *	  Bloom Filter implementation.
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/backend/pipeline/bloom.c
  *

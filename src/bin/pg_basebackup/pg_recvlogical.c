@@ -1,10 +1,10 @@
-/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pg_recvlogical.c - receive data from a logical decoding slot in a streaming
  *					  fashion and write it to a local file.
  *
  * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *		  src/bin/pg_basebackup/pg_recvlogical.c

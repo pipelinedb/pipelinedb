@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * bloomfuncs.c
  *		Bloom Filter functions
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/utils/adt/bloomfuncs.c

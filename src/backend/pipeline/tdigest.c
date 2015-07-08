@@ -1,4 +1,3 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * tdigest.c
@@ -6,6 +5,8 @@
  *	  t-digest implementation based on: https://github.com/tdunning/t-digest
  *
  * Implementation is based on: https://github.com/tdunning/t-digest/blob/master/src/main/java/com/tdunning/math/stats/MergingDigest.java
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/backend/pipeline/tdigest.h
  *

@@ -1,4 +1,3 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /* src/include/port/linux.h */
 
 /*

@@ -1,4 +1,3 @@
-/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * hll.c
@@ -18,7 +17,7 @@
  *
  *--
  *
- * Copyright (c) 2014, Salvatore Sanfilippo <antirez at gmail dot com>
+ * Portions Copyright (c) 2014, Salvatore Sanfilippo <antirez at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +44,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *-------------------------------------------------------------------------
+ *
+ * Portions Copyright (c) 2013-2015, PipelineDB
+ *
  */
 #include <math.h>
 

@@ -1,9 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * tdigest.h
  *	  Interface for t-digest support
  *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/pipeline/tdigest.h
  *

@@ -1,9 +1,10 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * stream.c
  *
  *	  Functions for handling event streams
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/backend/pipeline/stream.c
  *

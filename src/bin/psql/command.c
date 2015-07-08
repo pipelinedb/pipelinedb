@@ -1,8 +1,8 @@
-/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2000-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * src/bin/psql/command.c
  */

@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * groupcache.h
  *	  Interface for aggregate group cache used by the combiner
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/pipeline/groupcache.h
  *

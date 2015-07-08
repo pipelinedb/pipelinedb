@@ -1,4 +1,3 @@
-/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*--------------------------------------------------------------------
  * ps_status.c
  *
@@ -8,8 +7,9 @@
  *
  * src/backend/utils/misc/ps_status.c
  *
- * Copyright (c) 2000-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2000-2014, PostgreSQL Global Development Group
  * various details abducted from various places
+ * Portions Copyright (c) 2013-2015, PipelineDB
  *--------------------------------------------------------------------
  */
 

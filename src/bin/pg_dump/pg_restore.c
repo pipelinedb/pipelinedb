@@ -1,4 +1,3 @@
-/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pg_restore.c
@@ -26,9 +25,10 @@
  *	Generate script to stdout
  *	Exit
  *
- * Copyright (c) 2000, Philip Warner
+ * Portions Copyright (c) 2000, Philip Warner
  *		Rights are granted to use this software in any way so long
  *		as this notice is not removed.
+ * Portions Copyright (c) 2013-2015, PipelineDB
  *
  *	The author is not responsible for loss or damages that may
  *	result from its use.

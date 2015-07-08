@@ -1,9 +1,10 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pipelinefuncs.h
-
+ *
  *	  Interface for PipelineDB functions
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/utils/pipelinefuncs.h

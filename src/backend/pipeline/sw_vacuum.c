@@ -1,10 +1,11 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * sw_vacuum.c
  *
  *   Support for vacuuming discarded tuples for sliding window
  *   continuous views.
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/backend/pipeline/sw_vacuum.c
  *

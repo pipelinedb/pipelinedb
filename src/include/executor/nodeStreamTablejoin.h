@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * nodeStreamTableJoin.h
  *	Interface for stream-table join support
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/executor/nodeStreamTableJoin.h
  *

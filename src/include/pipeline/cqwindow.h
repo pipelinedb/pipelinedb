@@ -1,9 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * cqwindow.h
  *	  Interface for analyzing window queries
  *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/catalog/pipeline/cqwindow.h
  *

@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * nodeTuplestoreScan.h
  *		Support routines for sequential scans of tuple stores.
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/executor/nodeTuplestoreScan.h
  *

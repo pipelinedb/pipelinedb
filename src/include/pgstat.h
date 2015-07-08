@@ -1,10 +1,10 @@
-/* Portions Copyright (c) 2013-2015 PipelineDB */
 /* ----------
  *	pgstat.h
  *
  *	Definitions for the PostgreSQL statistics collector daemon.
  *
- *	Copyright (c) 2001-2014, PostgreSQL Global Development Group
+ *	Portions Copyright (c) 2001-2014, PostgreSQL Global Development Group
+ *  Portions Copyright (c) 2013-2015, PipelineDB
  *
  *	src/include/pgstat.h
  * ----------

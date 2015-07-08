@@ -1,4 +1,3 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*
  * This file is in the public domain, so clarified as of
  * 1996-06-05 by Arthur David Olson.

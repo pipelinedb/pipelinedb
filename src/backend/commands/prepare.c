@@ -1,4 +1,3 @@
-/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * prepare.c
@@ -8,7 +7,8 @@
  * accessed via the extended FE/BE query protocol.
  *
  *
- * Copyright (c) 2002-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2002-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/commands/prepare.c

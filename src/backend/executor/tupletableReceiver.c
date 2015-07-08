@@ -1,10 +1,10 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * tupletableReceiver.c
  *	  An implementation of DestReceiver that stores the result HeapTuples in
  *	  a TupleHashTable.
  *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/executor/tupletableReceiver.c

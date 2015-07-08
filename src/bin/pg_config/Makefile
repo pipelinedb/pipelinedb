@@ -1,9 +1,9 @@
-# Portions Copyright (c) 2013-2015 PipelineDB
 #-------------------------------------------------------------------------
 #
 # Makefile for src/bin/pg_config
 #
-# Copyright (c) 1998-2014, PostgreSQL Global Development Group
+# Portions Copyright (c) 1998-2014, PostgreSQL Global Development Group
+# Portions Copyright (c) 2013-2015, PipelineDB
 #
 # src/bin/pg_config/Makefile
 #

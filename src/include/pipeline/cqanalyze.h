@@ -1,10 +1,10 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * cqanalyze.h
  *	  Interface for analyzing continuous view statements, mainly to support
  *	  schema inference
  *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/catalog/pipeline/cqanalyze.h
  *

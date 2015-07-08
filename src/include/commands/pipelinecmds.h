@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pipelinecmds.h
  *	  prototypes for pipelinecmds.c.
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/commands/pipelinecmds.h
  *

@@ -1,6 +1,7 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*
  * Miscellaneous utilities
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/pipeline/miscutils.h
  */

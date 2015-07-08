@@ -1,10 +1,10 @@
-/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * array_userfuncs.c
  *	  Misc user-visible array support functions
  *
- * Copyright (c) 2003-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2003-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/utils/adt/array_userfuncs.c

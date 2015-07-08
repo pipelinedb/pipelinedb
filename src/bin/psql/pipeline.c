@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*
  * psql - the PostgreSQL interactive terminal
  *
  * Support for PipelineDB commands
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/bin/psql/pipeline.c
  */

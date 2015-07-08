@@ -1,9 +1,10 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * stream.h
  *
  * Functions for handling event streams
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/pipeline/stream.h
  *

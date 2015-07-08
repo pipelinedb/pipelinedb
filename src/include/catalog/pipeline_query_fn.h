@@ -1,9 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pipeline_query_fn.h
  *	 prototypes for functions in catalog/pipeline_query.c
  *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/catalog/pipeline_query_fn.h
  *

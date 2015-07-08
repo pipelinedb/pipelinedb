@@ -1,4 +1,3 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*
  * conversion functions between pg_wchar and multibyte streams.
  * Tatsuo Ishii

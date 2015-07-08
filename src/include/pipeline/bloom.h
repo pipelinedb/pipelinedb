@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * bloom.h
  *	  Interface for Bloom Filter support
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/pipeline/bloom.h
  *

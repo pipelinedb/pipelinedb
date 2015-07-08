@@ -1,8 +1,9 @@
-# Copyright (c) 2013-2015 PipelineDB
 #-------------------------------------------------------------------------
 #
 # Makefile--
 #    Makefile for events package
+#
+# Copyright (c) 2013-2015, PipelineDB
 #
 # IDENTIFICATION
 #    src/backend/pipeline/Makefile

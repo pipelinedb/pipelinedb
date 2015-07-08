@@ -1,4 +1,3 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*
  * Encoding names and routines for work with it. All
  * in this file is shared bedween FE and BE.

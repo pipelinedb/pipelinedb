@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * cmsketch.h
  *	  Interface for Count-Min Sketch support
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/pipeline/cmsketch.h
  *

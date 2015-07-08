@@ -1,9 +1,9 @@
-/* Portions Copyright (c) 2013-2015 PipelineDB */
 /*--------------------------------------------------------------------
  * bgworker.c
  *		POSTGRES pluggable background workers implementation
  *
  * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/postmaster/bgworker.c

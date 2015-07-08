@@ -1,4 +1,3 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*
  * psql - the PostgreSQL interactive terminal
  *

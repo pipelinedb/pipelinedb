@@ -1,9 +1,9 @@
-# Portions Copyright (c) 2013-2015 PipelineDB
 #
 # errcodes.txt
 #      PostgreSQL error codes
 #
-# Copyright (c) 2003-2014, PostgreSQL Global Development Group
+# Portions Copyright (c) 2003-2014, PostgreSQL Global Development Group
+# Portions Copyright (c) 2013-2015, PipelineDB
 #
 # This list serves as the basis for generating source files containing error
 # codes. It is kept in a common format to make sure all these source files have

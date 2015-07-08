@@ -1,9 +1,10 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * groupcache.c
  *	  Cache used by the combiner to cache aggregate groups. This avoids
  *	  on-disk lookups for groups to update.
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/backend/pipeline/groupcache.c
  *

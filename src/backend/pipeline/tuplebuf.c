@@ -4,6 +4,8 @@
  *
  *	  Interface for interacting with the tuple buffers
  *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
  * src/backend/pipeline/tuplebuf.c
  *
  *-------------------------------------------------------------------------

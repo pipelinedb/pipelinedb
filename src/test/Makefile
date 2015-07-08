@@ -1,9 +1,9 @@
-# Portions Copyright (c) 2013-2015 PipelineDB
 #-------------------------------------------------------------------------
 #
 # Makefile for src/test
 #
-# Copyright (c) 1994, Regents of the University of California
+# Portions Copyright (c) 1994, Regents of the University of California
+# Portions Copyright (c) 2013-2015, PipelineDB
 #
 # src/test/Makefile
 #

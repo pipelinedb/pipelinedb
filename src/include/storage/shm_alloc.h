@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * shm_alloc.h
  *	  shared memory allocator
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/storage/shm_alloc.h
  *

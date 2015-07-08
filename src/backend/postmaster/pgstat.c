@@ -1,4 +1,3 @@
-/* Portions Copyright (c) 2013-2015 PipelineDB */
 /* ----------
  * pgstat.c
  *
@@ -12,7 +11,8 @@
  *			- Add a pgstat config column to pg_database, so this
  *			  entire thing can be enabled/disabled on a per db basis.
  *
- *	Copyright (c) 2001-2014, PostgreSQL Global Development Group
+ *	Portions Copyright (c) 2001-2014, PostgreSQL Global Development Group
+ *  Portions Copyright (c) 2013-2015, PipelineDB
  *
  *	src/backend/postmaster/pgstat.c
  * ----------

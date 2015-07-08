@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * cont_combiner.c
  *
+ * Copyright (c) 2013-2015, PipelineDB
+ * 
  * IDENTIFICATION
  *    src/include/pipeline/cont_combiner.c
  *

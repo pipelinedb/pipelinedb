@@ -1,9 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pipeline_query.h
  *	  definition of continuous queries that have been registered
  *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/catalog/pipeline_query.h
  *

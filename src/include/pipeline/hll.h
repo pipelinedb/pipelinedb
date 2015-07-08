@@ -1,9 +1,10 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * hll.h
  *	  Interface for HyperLogLog support
  *
+ * Portions Copyright (c) 2014, Salvatore Sanfilippo <antirez at gmail dot com>
+ * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/pipeline/hll.h
  *

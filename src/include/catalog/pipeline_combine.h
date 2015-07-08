@@ -1,4 +1,3 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * pipeline_combine.h
@@ -8,6 +7,8 @@
  *		Note: combine information for aggregates defined in extensions is
  *		not known at compile time and thus must be determined at bootstrap
  *		time. See src/gis/postgis/pipeline_gis.sql.in for examples.
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/catalog/pipeline_combine.h
  *

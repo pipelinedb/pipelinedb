@@ -1,8 +1,9 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * cont_analyze.h
  *	  Interface for for parsing and analyzing continuous queries
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/include/catalog/pipeline/cont_analyze.h
  *

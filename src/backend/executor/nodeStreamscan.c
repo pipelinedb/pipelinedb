@@ -1,9 +1,10 @@
-/* Copyright (c) 2013-2015 PipelineDB */
 /*-------------------------------------------------------------------------
  *
  * nodeSeqscan.h
  *
  * Support for scanning the stream buffer
+ *
+ * Copyright (c) 2013-2015, PipelineDB
  *
  * src/backend/executor/nodeStreamscan.c
  *
