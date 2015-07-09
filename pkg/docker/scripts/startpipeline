@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -e
+
+# check if the data directory already exists
+# if not, create it
+if [ ! -d "/mnt/pipelinedb/data" ]; then
+    mkdir -p /mnt/pipelinedb
+    chmod 777 /mnt/pipelinedb
+    su - pipeline -c "pipeline-init -D /mnt/pipelinedb/data"
+    su - pipeline -c "pipeline-ctl -D /mnt/pipelinedb/data start"
+    sleep 3
+    psql -U pipeline -c "ALTER USER pipeline PASSWORD 'pipeline'"
+    su - pipeline -c "pipeline-ctl -D /mnt/pipelinedb/data stop"
+    cp /scripts/conf/*.conf /mnt/pipelinedb/data/
+fi
+
+su - pipeline -c "pipeline-server -D /mnt/pipelinedb/data"
+
+
