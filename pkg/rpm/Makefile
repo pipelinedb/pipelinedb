@@ -109,11 +109,11 @@ clean-libs:
 	chrpath -d $(BINDIR)/cs2cs
 	chrpath -d $(BINDIR)/nad2bin
 	chrpath -d $(BINDIR)/proj
-	chrpath -d $LIBDIR/libgeos_c.so.1.8.2
-	chrpath -d $LIBDIR/liblwgeom-2.2.0dev.so
-	rm -rf $PREFIX/share/gdal
-	rm -rf $PREFIX/share/proj
-	find $LIBDIR -name "*.la" -exec rm {} \;
+	chrpath -d $(LIBDIR)/libgeos_c.so.1.8.2
+	chrpath -d $(LIBDIR)/liblwgeom-2.2.0dev.so
+	rm -rf $(PREFIX)/share/gdal
+	rm -rf $(PREFIX)/share/proj
+	find $(LIBDIR) -name "*.la" -exec rm {} \;
 	
 clean:
 	rm -rf $(GEOS)* $(GDAL)* $(PROJ)* $(DESTDIR) rpmbuild tmp pipelinedb.spec
