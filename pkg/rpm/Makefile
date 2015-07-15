@@ -6,16 +6,17 @@ PACKAGE = pipelinedb
 PREFIX = /usr/lib/$(PACKAGE)
 
 TOP_BUILDDIR = ../../
-DESTDIR = $(CURDIR)/build
-INSTALL_DIR = $(DESTDIR)$(PREFIX)
 BINDIR = $(PREFIX)/bin
 LIBDIR = $(PREFIX)/lib
+BUILDROOT = $(CURDIR)/build
 
 all: spec conf geos gdal proj pipeline gis clean-libs set-perms
+	mkdir $(CURDIR)/build
+	cp -r --parents $(PREFIX) $(BUILDROOT)
 	rpmbuild -bb -vv \
 		--define "_topdir $(CURDIR)/rpmbuild" \
 		--define "_tmppath $(CURDIR)/tmp" \
-		 --buildroot $(PREFIX) pipelinedb.spec
+		 --buildroot $(BUILDROOT) pipelinedb.spec
 	mv $(CURDIR)/rpmbuild/RPMS/x86_64/*.rpm .
 
 spec:
@@ -116,4 +117,4 @@ clean-libs:
 	find $(LIBDIR) -name "*.la" -exec rm {} \;
 	
 clean:
-	rm -rf $(GEOS)* $(GDAL)* $(PROJ)* $(DESTDIR) rpmbuild tmp pipelinedb.spec
+	rm -rf $(GEOS)* $(GDAL)* $(PROJ)* rpmbuild tmp pipelinedb.spec

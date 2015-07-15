@@ -19,7 +19,7 @@ on streams, incrementally storing the results in tables.
 
 %files
 %defattr(-,root,root,-)
-/*
+__PREFIX__/*
 
 %post
 echo "$RPM_INSTALL_PREFIX/lib" > /etc/ld.so.conf.d/pipelinedb.conf
