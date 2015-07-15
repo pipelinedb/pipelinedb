@@ -712,7 +712,7 @@ lookup_rowtype_tupdesc_internal(Oid type_id, int32 typmod, bool noError)
 		/*
 		 * It's a transient record type, so look in our record-type table.
 		 */
-		if (typmod < 0 || typmod >= NextRecordTypmod)
+		if (typmod < 0 || typmod >= NextRecordTypmod || (IsContQueryWorkerProcess() && RecordCacheArray[typmod] == NULL))
 		{
 			if (!noError)
 				ereport(ERROR,
@@ -1266,5 +1266,7 @@ void
 reset_record_type_cache(void)
 {
 	Assert(IsContQueryWorkerProcess());
+	RecordCacheHash = NULL;
 	RecordCacheArray = NULL;
+	NextRecordTypmod = 0;
 }
