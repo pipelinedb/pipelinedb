@@ -12,6 +12,8 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
+#include "catalog/pg_type.h"
 #include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
@@ -84,6 +86,20 @@ bloom_add_datum(FunctionCallInfo fcinfo, BloomFilter *bloom, Datum elem)
 
 	if (!typ->typbyval && !elem)
 		return bloom;
+
+	if (typ->type_id == RECORDOID)
+	{
+		HeapTupleHeader rec = DatumGetHeapTupleHeader(elem);
+
+		Assert(HeapTupleHeaderGetTypeId(rec) == RECORDOID);
+
+		/*
+		 * We reset the typmod because for RECORDOID types, it is used to
+		 * look up the cache'd tuple descriptor entry and it's value is
+		 * non-deterministic.
+		 */
+		HeapTupleHeaderGetTypMod(rec) = -1;
+	}
 
 	size = datumGetSize(elem, typ->typbyval, typ->typlen);
 
@@ -259,6 +275,21 @@ bloom_contains(PG_FUNCTION_ARGS)
 
 	bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 	typ = lookup_type_cache(val_type, 0);
+
+	if (typ->type_id == RECORDOID)
+	{
+		HeapTupleHeader rec = DatumGetHeapTupleHeader(elem);
+
+		Assert(HeapTupleHeaderGetTypeId(rec) == RECORDOID);
+
+		/*
+		 * We reset the typmod because for RECORDOID types, it is used to
+		 * look up the cache'd tuple descriptor entry and it's value is
+		 * non-deterministic.
+		 */
+		HeapTupleHeaderGetTypMod(rec) = -1;
+	}
+
 	size = datumGetSize(elem, typ->typbyval, typ->typlen);
 
 	if (typ->typbyval)

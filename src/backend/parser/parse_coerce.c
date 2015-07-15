@@ -946,10 +946,11 @@ coerce_record_to_complex(ParseState *pstate, Node *node,
 		/* Extract type info from the tuple itself */
 		rec = DatumGetHeapTupleHeader(c->constvalue);
 		tupType = HeapTupleHeaderGetTypeId(rec);
+		tupTypmod = HeapTupleHeaderGetTypMod(rec);
 
 		Assert(tupType == RECORDOID);
 
-		tupdesc = lookup_rowtype_tupdesc(RECORDOID, -1);
+		tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
 
 		/* Build a temporary HeapTuple control structure */
 		tuple.t_len = HeapTupleHeaderGetDatumLength(rec);

@@ -35,6 +35,7 @@
  *
  * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
+ * Portions Copyright (c) 2013-2015, PipelineDB
  *
  * IDENTIFICATION
  *	  src/backend/utils/cache/typcache.c
@@ -55,6 +56,7 @@
 #include "catalog/pg_range.h"
 #include "catalog/pg_type.h"
 #include "commands/defrem.h"
+#include "pipeline/cont_scheduler.h"
 #include "utils/builtins.h"
 #include "utils/catcache.h"
 #include "utils/fmgroids.h"
@@ -1231,4 +1233,38 @@ enum_oid_cmp(const void *left, const void *right)
 		return 1;
 	else
 		return 0;
+}
+
+void
+set_record_type_typemod(int32 typmod, TupleDesc desc)
+{
+	Assert(typmod > -1);
+	Assert(desc);
+	Assert(IsContQueryWorkerProcess());
+
+	if (RecordCacheArray == NULL)
+	{
+		RecordCacheArray = (TupleDesc *) palloc(64 * sizeof(TupleDesc));
+		RecordCacheArrayLen = 64;
+	}
+
+	while (typmod >= RecordCacheArrayLen)
+	{
+		int32 newlen = RecordCacheArrayLen * 2;
+
+		RecordCacheArray = (TupleDesc *) repalloc(RecordCacheArray,
+												  newlen * sizeof(TupleDesc));
+		RecordCacheArrayLen = newlen;
+	}
+
+	RecordCacheArray[typmod] = desc;
+	NextRecordTypmod = Max(typmod + 1, NextRecordTypmod);
+	desc->tdrefcount = Max(desc->tdrefcount, 0);
+}
+
+void
+reset_record_type_cache(void)
+{
+	Assert(IsContQueryWorkerProcess());
+	RecordCacheArray = NULL;
 }

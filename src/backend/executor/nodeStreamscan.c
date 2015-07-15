@@ -25,7 +25,7 @@
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
-
+#include "utils/typcache.h"
 
 /*
  * Maps the positions of attribute names in the first TupleDesc to the corresponding
@@ -73,6 +73,20 @@ init_proj_info(StreamProjectionInfo *pi, StreamTuple *tuple)
 
 	pi->raweventdesc = palloc0(VARSIZE(tuple->desc) + VARHDRSZ);
 	memcpy(pi->raweventdesc, tuple->desc, VARSIZE(tuple->desc) + VARHDRSZ);
+
+	/*
+	 * Load RECORDOID tuple descriptors in the cache.
+	 */
+	if (tuple->num_record_descs)
+	{
+		int i;
+
+		for (i = 0; i < tuple->num_record_descs; i++)
+		{
+			RecordTupleDesc *rdesc = &tuple->record_descs[i];
+			set_record_type_typemod(rdesc->typmod, UnpackTupleDesc(rdesc->desc));
+		}
+	}
 
 	MemoryContextSwitchTo(old);
 }
@@ -338,6 +352,8 @@ ExecEndBatchStreamScan(StreamScanState *node)
 
 	/* the next event's descriptor will be used if this is NULL */
 	node->pi->raweventdesc = NULL;
+
+	reset_record_type_cache();
 }
 
 void
