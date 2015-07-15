@@ -73,8 +73,7 @@ MakeStreamTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, InsertBatchAck 
 
 	if (desc)
 	{
-
-		Assert(IsContQueryWorkerProcess());
+		Assert(!IsContQueryProcess());
 
 		for (i = 0; i < desc->natts; i++)
 		{
@@ -315,7 +314,7 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 	{
 		Size len;
 
-		Assert(IsContQueryWorkerProcess());
+		Assert(!IsContQueryProcess());
 
 		len = sizeof(RecordTupleDesc) * tuple->num_record_descs;
 		slot->tuple->record_descs = (RecordTupleDesc *) pos;
