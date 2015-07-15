@@ -488,10 +488,19 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashT
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 
-		if (state->cache)
-			GroupCachePut(state->cache, slot);
-
 		ResetPerTupleExprContext(estate);
+	}
+
+	/*
+	 * We need to wait until we've completed all updates/inserts before caching everything, otherwise
+	 * we may free a cached tuple before trying to read it
+	 */
+	if (state->cache)
+	{
+		foreach_tuple(slot, results)
+		{
+			GroupCachePut(state->cache, slot);
+		}
 	}
 
 	FreeExecutorState(estate);
