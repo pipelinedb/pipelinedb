@@ -6,9 +6,12 @@
  * src/backend/pipeline/miscutils.c
  */
 #include "postgres.h"
+#include "access/htup_details.h"
+#include "catalog/pg_type.h"
 #include "pipeline/miscutils.h"
 #include "port.h"
 #include "utils/datum.h"
+#include "utils/typcache.h"
 
 void
 append_suffix(char *str, char *suffix, int max_len)
@@ -240,5 +243,23 @@ GetBytesToHash(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInf
 			appendBinaryStringInfo(buf, (char *) &d, size);
 		else
 			appendBinaryStringInfo(buf, DatumGetPointer(d), size);
+	}
+}
+
+void
+make_datum_hashable(Datum d, TypeCacheEntry *typ)
+{
+	if (typ->type_id == RECORDOID)
+	{
+		HeapTupleHeader rec = DatumGetHeapTupleHeader(d);
+
+		Assert(HeapTupleHeaderGetTypeId(rec) == RECORDOID);
+
+		/*
+		 * We reset the typmod because for RECORDOID types, it is used to
+		 * look up the cache'd tuple descriptor entry and it's value is
+		 * non-deterministic.
+		 */
+		HeapTupleHeaderGetTypMod(rec) = -1;
 	}
 }

@@ -78,6 +78,7 @@ hll_add_datum(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
 	if (!typ->typbyval && !elem)
 		return hll;
 
+	make_datum_hashable(elem, typ);
 	size = datumGetSize(elem, typ->typbyval, typ->typlen);
 
 	if (typ->typbyval)

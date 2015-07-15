@@ -18,6 +18,7 @@
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
 #include "pipeline/bloom.h"
+#include "pipeline/miscutils.h"
 #include "utils/datum.h"
 #include "utils/bloomfuncs.h"
 #include "utils/typcache.h"
@@ -87,20 +88,7 @@ bloom_add_datum(FunctionCallInfo fcinfo, BloomFilter *bloom, Datum elem)
 	if (!typ->typbyval && !elem)
 		return bloom;
 
-	if (typ->type_id == RECORDOID)
-	{
-		HeapTupleHeader rec = DatumGetHeapTupleHeader(elem);
-
-		Assert(HeapTupleHeaderGetTypeId(rec) == RECORDOID);
-
-		/*
-		 * We reset the typmod because for RECORDOID types, it is used to
-		 * look up the cache'd tuple descriptor entry and it's value is
-		 * non-deterministic.
-		 */
-		HeapTupleHeaderGetTypMod(rec) = -1;
-	}
-
+	make_datum_hashable(elem, typ);
 	size = datumGetSize(elem, typ->typbyval, typ->typlen);
 
 	if (typ->typbyval)
@@ -276,20 +264,7 @@ bloom_contains(PG_FUNCTION_ARGS)
 	bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 	typ = lookup_type_cache(val_type, 0);
 
-	if (typ->type_id == RECORDOID)
-	{
-		HeapTupleHeader rec = DatumGetHeapTupleHeader(elem);
-
-		Assert(HeapTupleHeaderGetTypeId(rec) == RECORDOID);
-
-		/*
-		 * We reset the typmod because for RECORDOID types, it is used to
-		 * look up the cache'd tuple descriptor entry and it's value is
-		 * non-deterministic.
-		 */
-		HeapTupleHeaderGetTypMod(rec) = -1;
-	}
-
+	make_datum_hashable(elem, typ);
 	size = datumGetSize(elem, typ->typbyval, typ->typlen);
 
 	if (typ->typbyval)

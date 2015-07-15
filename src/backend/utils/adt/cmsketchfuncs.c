@@ -83,6 +83,7 @@ cmsketch_add_datum(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem)
 	if (!typ->typbyval && !elem)
 		return cms;
 
+	make_datum_hashable(elem, typ);
 	size = datumGetSize(elem, typ->typbyval, typ->typlen);
 
 	if (typ->typbyval)
@@ -209,6 +210,7 @@ cmsketch_count(PG_FUNCTION_ARGS)
 
 	cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 	typ = lookup_type_cache(val_type, 0);
+	make_datum_hashable(elem, typ);
 	size = datumGetSize(elem, typ->typbyval, typ->typlen);
 
 	if (typ->typbyval)
