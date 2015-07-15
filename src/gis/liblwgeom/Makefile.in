@@ -125,7 +125,7 @@ uninstall: uninstall-liblwgeom
 
 install-liblwgeom: liblwgeom.la
 	$(LIBTOOL) --mode=install $(INSTALL) liblwgeom.la "$(LIB_INSTALL_PATH)/liblwgeom.la"
-	$(INSTALL) liblwgeom.h "$(LIB_INCLUDE_PATH)/liblwgeom.h"
+	$(INSTALL) -m 0644 liblwgeom.h "$(LIB_INCLUDE_PATH)/liblwgeom.h"
 
 uninstall-liblwgeom:
 	$(LIBTOOL) --mode=uninstall rm -f "$(DESTDIR)$(libdir)/liblwgeom.la"
