@@ -15,7 +15,7 @@ all: conf geos gdal proj pipeline gis
 	cp $(CURDIR)/postinst $(DESTDIR)
 	find $(PREFIX) -type d -exec chmod 775 {} +
 	find $(PREFIX)/share/pipelinedb/timezone -type f -exec chmod 644 {} +
-	fpm -s dir -t osxpkg -n $(PACKAGE) -v $(VERSION) --epoch 0 --after-install postinst --prefix $(PREFIX) $(PREFIX)
+	fpm -s dir -t osxpkg -n $(PACKAGE) -v $(VERSION) --epoch 0 --after-install postinst --after-remove postrm --prefix $(PREFIX) $(PREFIX)
 	cp $(CURDIR)/*.pkg ..
 
 conf:

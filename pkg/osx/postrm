@@ -1,0 +1,8 @@
+#! /bin/sh
+
+set -e
+
+rm -f /usr/bin/pipeline-server
+rm -f /usr/bin/pipeline-ctl
+rm -f /usr/bin/pipeline-init
+rm -f /usr/bin/pipeline
