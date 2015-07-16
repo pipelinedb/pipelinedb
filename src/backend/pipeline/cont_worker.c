@@ -256,23 +256,25 @@ has_queries_to_process(Bitmapset *queries)
 static EState *
 create_estate(QueryDesc *query_desc)
 {
-	EState *result;
+	EState *estate;
 
-	result = CreateExecutorState();
-	result->es_param_list_info = query_desc->params;
-	result->es_snapshot = RegisterSnapshot(query_desc->snapshot);
-	result->es_crosscheck_snapshot = RegisterSnapshot(query_desc->crosscheck_snapshot);
-	result->es_instrument = query_desc->instrument_options;
-	result->es_range_table = query_desc->plannedstmt->rtable;
-	result->es_continuous = query_desc->plannedstmt->is_continuous;
-	result->es_lastoid = InvalidOid;
-	result->es_processed = result->es_filtered = 0;
+	estate = CreateExecutorState();
+	estate->es_param_list_info = query_desc->params;
+	estate->es_snapshot = RegisterSnapshot(query_desc->snapshot);
+	estate->es_crosscheck_snapshot = RegisterSnapshot(query_desc->crosscheck_snapshot);
+	estate->es_instrument = query_desc->instrument_options;
+	estate->es_range_table = query_desc->plannedstmt->rtable;
+	estate->es_continuous = query_desc->plannedstmt->is_continuous;
+	estate->es_lastoid = InvalidOid;
+	estate->es_processed = estate->es_filtered = 0;
 
 	if (query_desc->plannedstmt->nParamExec > 0)
-		result->es_param_exec_vals = (ParamExecData *)
+		estate->es_param_exec_vals = (ParamExecData *)
 			palloc0(query_desc->plannedstmt->nParamExec * sizeof(ParamExecData));
 
-	return result;
+	estate->es_top_eflags |= EXEC_FLAG_SKIP_TRIGGERS;
+
+	return estate;
 }
 
 void
@@ -486,6 +488,9 @@ next:
 			estate = query_desc->estate;
 
 			(*state->dest->rShutdown) (state->dest);
+
+			if (estate == NULL)
+				query_desc->estate = estate = create_estate(state->query_desc);
 
 			/* The cleanup functions below expect these things to be registered. */
 			RegisterSnapshotOnOwner(estate->es_snapshot, owner);
