@@ -82,7 +82,7 @@ hll_add_datum(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
 	buf = makeStringInfo();
 
 	DatumToBytes(elem, typ, buf);
-	HLLAdd(hll, buf->data, buf->len, &result);
+	hll = HLLAdd(hll, buf->data, buf->len, &result);
 
 	pfree(buf->data);
 	pfree(buf);

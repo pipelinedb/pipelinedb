@@ -195,7 +195,7 @@ cmsketch_count(PG_FUNCTION_ARGS)
 {
 	CountMinSketch *cms;
 	Datum elem = PG_GETARG_DATUM(1);
-	uint32_t count = false;
+	uint32_t count = 0;
 	Oid	val_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	TypeCacheEntry *typ;
 	StringInfo buf;
@@ -214,7 +214,7 @@ cmsketch_count(PG_FUNCTION_ARGS)
 	buf = makeStringInfo();
 	DatumToBytes(elem, typ, buf);
 
-	CountMinSketchEstimateCount(cms, buf->data, buf->len);
+	count = CountMinSketchEstimateCount(cms, buf->data, buf->len);
 
 	pfree(buf->data);
 	pfree(buf);
