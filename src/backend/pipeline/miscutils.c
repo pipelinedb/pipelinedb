@@ -211,6 +211,50 @@ JumpConsistentHash(uint64_t key, int32_t num_buckets)
 }
 
 /*
+ * DatumToBytes
+ */
+void
+DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf)
+{
+	if (typ->type_id != RECORDOID && typ->typtype != TYPTYPE_COMPOSITE)
+	{
+		Size size = datumGetSize(d, typ->typbyval, typ->typlen);
+
+		if (typ->typbyval)
+			appendBinaryStringInfo(buf, (char *) &d, size);
+		else
+			appendBinaryStringInfo(buf, DatumGetPointer(d), size);
+	}
+	else
+	{
+		/* For composite/RECORD types, we need to serialize all attrs */
+		HeapTupleHeader rec = DatumGetHeapTupleHeader(d);
+		TupleDesc desc = lookup_rowtype_tupdesc_copy(HeapTupleHeaderGetTypeId(rec), HeapTupleHeaderGetTypMod(rec));
+		HeapTupleData tmptup;
+		int i;
+
+		tmptup.t_len = HeapTupleHeaderGetDatumLength(rec);
+		tmptup.t_data = rec;
+
+		for (i = 0; i < desc->natts; i++)
+		{
+			Form_pg_attribute att = desc->attrs[i];
+			bool isnull;
+			Datum tmp = heap_getattr(&tmptup, i + 1, desc, &isnull);
+
+			if (isnull)
+			{
+				appendStringInfoChar(buf, '0');
+				continue;
+			}
+
+			appendStringInfoChar(buf, '1');
+			DatumToBytes(tmp, lookup_type_cache(att->atttypid, 0), buf);
+		}
+	}
+}
+
+/*
  * GetBytesToHash
  */
 void
@@ -227,7 +271,7 @@ GetBytesToHash(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInf
 		AttrNumber attno = attrs == NULL ? i + 1 : attrs[i];
 		Form_pg_attribute att = slot->tts_tupleDescriptor->attrs[attno - 1];
 		Datum d = slot_getattr(slot, attno, &isnull);
-		Size size;
+		TypeCacheEntry *typ = lookup_type_cache(att->atttypid, 0);
 
 		if (isnull)
 		{
@@ -236,30 +280,6 @@ GetBytesToHash(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInf
 		}
 
 		appendStringInfoChar(buf, '1');
-
-		size = datumGetSize(d, att->attbyval, att->attlen);
-
-		if (att->attbyval)
-			appendBinaryStringInfo(buf, (char *) &d, size);
-		else
-			appendBinaryStringInfo(buf, DatumGetPointer(d), size);
-	}
-}
-
-void
-make_datum_hashable(Datum d, TypeCacheEntry *typ)
-{
-	if (typ->type_id == RECORDOID)
-	{
-		HeapTupleHeader rec = DatumGetHeapTupleHeader(d);
-
-		Assert(HeapTupleHeaderGetTypeId(rec) == RECORDOID);
-
-		/*
-		 * We reset the typmod because for RECORDOID types, it is used to
-		 * look up the cache'd tuple descriptor entry and it's value is
-		 * non-deterministic.
-		 */
-		HeapTupleHeaderGetTypMod(rec) = -1;
+		DatumToBytes(d, typ, buf);
 	}
 }

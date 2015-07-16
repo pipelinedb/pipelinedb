@@ -14,6 +14,7 @@
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
 #include "pipeline/hll.h"
+#include "pipeline/miscutils.h"
 #include "utils/datum.h"
 #include "utils/hllfuncs.h"
 #include "utils/typcache.h"
@@ -72,19 +73,19 @@ static HyperLogLog *
 hll_add_datum(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
 {
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
-	Size size;
+	StringInfo buf;
 	int result;
 
 	if (!typ->typbyval && !elem)
 		return hll;
 
-	make_datum_hashable(elem, typ);
-	size = datumGetSize(elem, typ->typbyval, typ->typlen);
+	buf = makeStringInfo();
 
-	if (typ->typbyval)
-		hll = HLLAdd(hll, (char *) &elem, size, &result);
-	else
-		hll = HLLAdd(hll, DatumGetPointer(elem), size, &result);
+	DatumToBytes(elem, typ, buf);
+	HLLAdd(hll, buf->data, buf->len, &result);
+
+	pfree(buf->data);
+	pfree(buf);
 
 	SET_VARSIZE(hll, HLLSize(hll));
 

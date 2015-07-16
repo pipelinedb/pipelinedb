@@ -482,7 +482,6 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashT
 		}
 		else
 		{
-
 			/* No existing tuple found, so it's an INSERT */
 			ExecCQMatRelInsert(state->ri, slot, estate);
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
