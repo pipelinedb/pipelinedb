@@ -218,12 +218,17 @@ DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf)
 {
 	if (typ->type_id != RECORDOID && typ->typtype != TYPTYPE_COMPOSITE)
 	{
-		Size size = datumGetSize(d, typ->typbyval, typ->typlen);
+		Size size;
+
+		if (typ->typlen == -1)
+			size = VARSIZE_ANY_EXHDR(DatumGetPointer(d));
+		else
+			size = datumGetSize(d, typ->typbyval, typ->typlen);
 
 		if (typ->typbyval)
 			appendBinaryStringInfo(buf, (char *) &d, size);
 		else
-			appendBinaryStringInfo(buf, DatumGetPointer(d), size);
+			appendBinaryStringInfo(buf, VARDATA_ANY(d), size);
 	}
 	else
 	{
