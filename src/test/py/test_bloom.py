@@ -69,7 +69,7 @@ def test_bloom_agg_hashing(pipeline, clean_db):
     result = result[0]
 
     assert result[0] == 8879
-    assert result[1] == 15640
+    assert result[1] == 15614
     assert result[2] == 8855
 
 

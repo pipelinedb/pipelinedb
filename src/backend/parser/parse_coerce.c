@@ -929,6 +929,53 @@ coerce_record_to_complex(ParseState *pstate, Node *node,
 		expandRTE(rte, rtindex, sublevels_up, vlocation, false,
 				  NULL, &args);
 	}
+	else if (IsA(node, Const))
+	{
+		Const *c = (Const *) node;
+		HeapTupleHeader rec;
+		Oid tupType;
+		int32 tupTypmod;
+		TupleDesc tupdesc;
+		HeapTupleData tuple;
+		Datum *values;
+		bool *nulls;
+		int i;
+
+		Assert(c->consttype == RECORDOID);
+
+		/* Extract type info from the tuple itself */
+		rec = DatumGetHeapTupleHeader(c->constvalue);
+		tupType = HeapTupleHeaderGetTypeId(rec);
+		tupTypmod = HeapTupleHeaderGetTypMod(rec);
+
+		Assert(tupType == RECORDOID);
+
+		tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
+
+		/* Build a temporary HeapTuple control structure */
+		tuple.t_len = HeapTupleHeaderGetDatumLength(rec);
+		ItemPointerSetInvalid(&(tuple.t_self));
+		tuple.t_tableOid = InvalidOid;
+		tuple.t_data = rec;
+
+		/* Break down the tuple into fields */
+		values = (Datum *) palloc(tupdesc->natts * sizeof(Datum));
+		nulls = (bool *) palloc(tupdesc->natts * sizeof(bool));
+		heap_deform_tuple(&tuple, tupdesc, values, nulls);
+
+		for (i = 0; i < tupdesc->natts; i++)
+		{
+			Form_pg_attribute attr = tupdesc->attrs[i];
+			Const *arg = makeConst(attr->atttypid,
+					attr->atttypmod,
+					attr->attcollation,
+					attr->attlen,
+					values[i],
+					nulls[i],
+					attr->attbyval);
+			args = lappend(args, arg);
+		}
+	}
 	else
 		ereport(ERROR,
 				(errcode(ERRCODE_CANNOT_COERCE),

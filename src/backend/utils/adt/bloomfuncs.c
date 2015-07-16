@@ -12,10 +12,13 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
+#include "catalog/pg_type.h"
 #include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
 #include "pipeline/bloom.h"
+#include "pipeline/miscutils.h"
 #include "utils/datum.h"
 #include "utils/bloomfuncs.h"
 #include "utils/typcache.h"
@@ -80,17 +83,18 @@ static BloomFilter *
 bloom_add_datum(FunctionCallInfo fcinfo, BloomFilter *bloom, Datum elem)
 {
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
-	Size size;
+	StringInfo buf;
 
 	if (!typ->typbyval && !elem)
 		return bloom;
 
-	size = datumGetSize(elem, typ->typbyval, typ->typlen);
+	buf = makeStringInfo();
 
-	if (typ->typbyval)
-		BloomFilterAdd(bloom, (char *) &elem, size);
-	else
-		BloomFilterAdd(bloom, DatumGetPointer(elem), size);
+	DatumToBytes(elem, typ, buf);
+	BloomFilterAdd(bloom, buf->data, buf->len);
+
+	pfree(buf->data);
+	pfree(buf);
 
 	return bloom;
 }
@@ -247,7 +251,7 @@ bloom_contains(PG_FUNCTION_ARGS)
 	bool contains = false;
 	Oid	val_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	TypeCacheEntry *typ;
-	Size size;
+	StringInfo buf;
 
 	if (val_type == InvalidOid)
 		ereport(ERROR,
@@ -259,12 +263,14 @@ bloom_contains(PG_FUNCTION_ARGS)
 
 	bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 	typ = lookup_type_cache(val_type, 0);
-	size = datumGetSize(elem, typ->typbyval, typ->typlen);
 
-	if (typ->typbyval)
-		contains = BloomFilterContains(bloom, (char *) &elem, size);
-	else
-		contains = BloomFilterContains(bloom, DatumGetPointer(elem), size);
+	buf = makeStringInfo();
+	DatumToBytes(elem, typ, buf);
+
+	contains = BloomFilterContains(bloom, buf->data, buf->len);
+
+	pfree(buf->data);
+	pfree(buf);
 
 	PG_RETURN_BOOL(contains);
 }

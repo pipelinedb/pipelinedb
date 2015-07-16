@@ -24,6 +24,12 @@
 /* GUC parameters */
 extern int tuple_buffer_blocks;
 
+typedef struct RecordTupleDesc
+{
+	int32 typmod;
+	bytea *desc;
+} RecordTupleDesc;
+
 typedef struct StreamTuple
 {
 	Oid db_oid;
@@ -32,6 +38,8 @@ typedef struct StreamTuple
 	TimestampTz arrival_time; /* arrival time of the event */
 	int num_acks; /* length of the acks array */
 	InsertBatchAck *acks; /* the acks this tuple is responsible for */
+	int num_record_descs; /* number of tuple descriptors for RECORD types */
+	RecordTupleDesc *record_descs; /* RECORD type cached tuple descriptors */
 } StreamTuple;
 
 typedef struct TupleBufferSlot
@@ -131,8 +139,5 @@ extern void TupleBufferBatchReaderReset(TupleBufferBatchReader *reader);
 extern void TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_processed);
 
 extern void TupleBufferDrain(TupleBuffer *buf, Oid db_oid);
-
-extern TupleDesc TupleHeaderUnpack(char *raw);
-extern char *TupleHeaderPack(TupleDesc desc);
 
 #endif

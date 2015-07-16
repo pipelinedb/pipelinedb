@@ -1551,7 +1551,7 @@ hll_hypothetical_set_transition_multi(PG_FUNCTION_ARGS)
 		int unique;
 		StringInfo buf = makeStringInfo();
 
-		GetBytesToHash(qstate->curslot, -1, NULL, buf);
+		SlotAttrsToBytes(qstate->curslot, -1, NULL, buf);
 
 		/*
 		 * dense rank is only increased once for each lower-ranking tuple we see,

@@ -71,7 +71,7 @@ ExecContinuousUnique(ContinuousUniqueState *node)
 		}
 
 		oldcontext = MemoryContextSwitchTo(node->tmpContext);
-		GetBytesToHash(slot, plannode->numCols, plannode->uniqColIdx, &buf);
+		SlotAttrsToBytes(slot, plannode->numCols, plannode->uniqColIdx, &buf);
 		MemoryContextSwitchTo(oldcontext);
 
 		missing = !BloomFilterContains(node->distinct, buf.data, buf.len);

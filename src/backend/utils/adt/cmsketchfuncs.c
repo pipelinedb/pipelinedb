@@ -16,6 +16,7 @@
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
 #include "pipeline/cmsketch.h"
+#include "pipeline/miscutils.h"
 #include "utils/datum.h"
 #include "utils/cmsketchfuncs.h"
 #include "utils/typcache.h"
@@ -78,17 +79,17 @@ static CountMinSketch *
 cmsketch_add_datum(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem)
 {
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
-	Size size;
+	StringInfo buf;
 
 	if (!typ->typbyval && !elem)
 		return cms;
 
-	size = datumGetSize(elem, typ->typbyval, typ->typlen);
+	buf = makeStringInfo();
+	DatumToBytes(elem, typ, buf);
+	CountMinSketchAdd(cms, buf->data, buf->len, 1);
 
-	if (typ->typbyval)
-		CountMinSketchAdd(cms, (char *) &elem, size, 1);
-	else
-		CountMinSketchAdd(cms, DatumGetPointer(elem), size, 1);
+	pfree(buf->data);
+	pfree(buf);
 
 	return cms;
 }
@@ -194,10 +195,10 @@ cmsketch_count(PG_FUNCTION_ARGS)
 {
 	CountMinSketch *cms;
 	Datum elem = PG_GETARG_DATUM(1);
-	uint32_t count = false;
+	uint32_t count = 0;
 	Oid	val_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	TypeCacheEntry *typ;
-	Size size;
+	StringInfo buf;
 
 	if (val_type == InvalidOid)
 		ereport(ERROR,
@@ -209,12 +210,14 @@ cmsketch_count(PG_FUNCTION_ARGS)
 
 	cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 	typ = lookup_type_cache(val_type, 0);
-	size = datumGetSize(elem, typ->typbyval, typ->typlen);
 
-	if (typ->typbyval)
-		count = CountMinSketchEstimateCount(cms, (char *) &elem, size);
-	else
-		count = CountMinSketchEstimateCount(cms, DatumGetPointer(elem), size);
+	buf = makeStringInfo();
+	DatumToBytes(elem, typ, buf);
+
+	count = CountMinSketchEstimateCount(cms, buf->data, buf->len);
+
+	pfree(buf->data);
+	pfree(buf);
 
 	PG_RETURN_INT32(count);
 }

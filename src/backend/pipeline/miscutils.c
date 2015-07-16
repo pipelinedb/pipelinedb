@@ -6,9 +6,12 @@
  * src/backend/pipeline/miscutils.c
  */
 #include "postgres.h"
+#include "access/htup_details.h"
+#include "catalog/pg_type.h"
 #include "pipeline/miscutils.h"
 #include "port.h"
 #include "utils/datum.h"
+#include "utils/typcache.h"
 
 void
 append_suffix(char *str, char *suffix, int max_len)
@@ -208,10 +211,59 @@ JumpConsistentHash(uint64_t key, int32_t num_buckets)
 }
 
 /*
- * GetBytesToHash
+ * DatumToBytes
  */
 void
-GetBytesToHash(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf)
+DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf)
+{
+	if (typ->type_id != RECORDOID && typ->typtype != TYPTYPE_COMPOSITE)
+	{
+		Size size;
+
+		if (typ->typlen == -1) /* varlena */
+			size = VARSIZE_ANY_EXHDR(DatumGetPointer(d));
+		else
+			size = datumGetSize(d, typ->typbyval, typ->typlen);
+
+		if (typ->typbyval)
+			appendBinaryStringInfo(buf, (char *) &d, size);
+		else
+			appendBinaryStringInfo(buf, VARDATA_ANY(d), size);
+	}
+	else
+	{
+		/* For composite/RECORD types, we need to serialize all attrs */
+		HeapTupleHeader rec = DatumGetHeapTupleHeader(d);
+		TupleDesc desc = lookup_rowtype_tupdesc_copy(HeapTupleHeaderGetTypeId(rec), HeapTupleHeaderGetTypMod(rec));
+		HeapTupleData tmptup;
+		int i;
+
+		tmptup.t_len = HeapTupleHeaderGetDatumLength(rec);
+		tmptup.t_data = rec;
+
+		for (i = 0; i < desc->natts; i++)
+		{
+			Form_pg_attribute att = desc->attrs[i];
+			bool isnull;
+			Datum tmp = heap_getattr(&tmptup, i + 1, desc, &isnull);
+
+			if (isnull)
+			{
+				appendStringInfoChar(buf, '0');
+				continue;
+			}
+
+			appendStringInfoChar(buf, '1');
+			DatumToBytes(tmp, lookup_type_cache(att->atttypid, 0), buf);
+		}
+	}
+}
+
+/*
+ * SlotAttrsToBytes
+ */
+void
+SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf)
 {
 	TupleDesc desc = slot->tts_tupleDescriptor;
 	int i;
@@ -224,7 +276,7 @@ GetBytesToHash(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInf
 		AttrNumber attno = attrs == NULL ? i + 1 : attrs[i];
 		Form_pg_attribute att = slot->tts_tupleDescriptor->attrs[attno - 1];
 		Datum d = slot_getattr(slot, attno, &isnull);
-		Size size;
+		TypeCacheEntry *typ = lookup_type_cache(att->atttypid, 0);
 
 		if (isnull)
 		{
@@ -233,12 +285,6 @@ GetBytesToHash(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInf
 		}
 
 		appendStringInfoChar(buf, '1');
-
-		size = datumGetSize(d, att->attbyval, att->attlen);
-
-		if (att->attbyval)
-			appendBinaryStringInfo(buf, (char *) &d, size);
-		else
-			appendBinaryStringInfo(buf, DatumGetPointer(d), size);
+		DatumToBytes(d, typ, buf);
 	}
 }

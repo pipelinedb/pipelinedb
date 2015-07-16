@@ -12,7 +12,9 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/xact.h"
+#include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "libpq/pqformat.h"
@@ -29,6 +31,7 @@
 #include "storage/spin.h"
 #include "storage/proc.h"
 #include "utils/memutils.h"
+#include "utils/typcache.h"
 #include "miscadmin.h"
 
 #define MAGIC 0xDEADBABE /* x_x */
@@ -59,12 +62,52 @@ StreamTuple *
 MakeStreamTuple(HeapTuple heaptup, TupleDesc desc, int num_acks, InsertBatchAck *acks)
 {
 	StreamTuple *t = palloc0(sizeof(StreamTuple));
+	int i;
+
 	t->db_oid = MyDatabaseId;
 	t->heaptup = heaptup;
 	t->desc = PackTupleDesc(desc);
 	t->arrival_time = GetCurrentTimestamp();
 	t->num_acks = num_acks;
 	t->acks = acks;
+
+	if (desc)
+	{
+		Assert(!IsContQueryProcess());
+
+		for (i = 0; i < desc->natts; i++)
+		{
+			Form_pg_attribute attr = desc->attrs[i];
+			RecordTupleDesc *rdesc;
+			Datum v;
+			bool isnull;
+			HeapTupleHeader rec;
+			int32 tupTypmod;
+			TupleDesc attdesc;
+
+			if (attr->atttypid != RECORDOID)
+				continue;
+
+			v = heap_getattr(heaptup, i + 1, desc, &isnull);
+
+			if (isnull)
+				continue;
+
+			if (t->record_descs == NULL)
+				t->record_descs = palloc0(sizeof(RecordTupleDesc) * desc->natts);
+
+			rec = DatumGetHeapTupleHeader(v);
+			Assert(HeapTupleHeaderGetTypeId(rec) == RECORDOID);
+			tupTypmod = HeapTupleHeaderGetTypMod(rec);
+
+			rdesc = &t->record_descs[t->num_record_descs++];
+			rdesc->typmod = tupTypmod;
+			attdesc = lookup_rowtype_tupdesc(RECORDOID, tupTypmod);
+			rdesc->desc = PackTupleDesc(attdesc);
+			ReleaseTupleDesc(attdesc);
+		}
+	}
+
 	return t;
 }
 
@@ -142,6 +185,7 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 	Size tupsize;
 	Size acks_size;
 	int desclen = tuple->desc ? VARSIZE(tuple->desc) : 0;
+	int i;
 
 	/* no one is going to read this tuple, so it's a noop */
 	if (bms_is_empty(queries))
@@ -150,6 +194,9 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 	tupsize = tuple->heaptup->t_len + HEAPTUPLESIZE;
 	acks_size = sizeof(InsertBatchAck) * tuple->num_acks;
 	size = sizeof(TupleBufferSlot) + sizeof(StreamTuple) + tupsize + BITMAPSET_SIZE(queries->nwords) + desclen + acks_size;
+
+	for (i = 0; i < tuple->num_record_descs; i++)
+		size += sizeof(RecordTupleDesc) + VARSIZE(tuple->record_descs[i].desc);
 
 	if (size > buf->size)
 		elog(ERROR, "event of size %zu too big for stream buffer of size %zu", size, WorkerTupleBuffer->size);
@@ -261,6 +308,27 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 		slot->tuple->acks = (InsertBatchAck *) pos;
 		memcpy(slot->tuple->acks, tuple->acks, acks_size);
 		pos += acks_size;
+	}
+
+	if (tuple->num_record_descs)
+	{
+		Size len;
+
+		Assert(!IsContQueryProcess());
+
+		len = sizeof(RecordTupleDesc) * tuple->num_record_descs;
+		slot->tuple->record_descs = (RecordTupleDesc *) pos;
+		memcpy(slot->tuple->record_descs, tuple->record_descs, len);
+		pos += len;
+
+		for (i = 0; i < tuple->num_record_descs; i++)
+		{
+			RecordTupleDesc *rdesc = &slot->tuple->record_descs[i];
+			len = VARSIZE(tuple->record_descs[i].desc);
+			rdesc->desc = (bytea *) pos;
+			memcpy(pos, tuple->record_descs[i].desc, len);
+			pos += len;
+		}
 	}
 
 	slot->queries = (Bitmapset *) pos;
