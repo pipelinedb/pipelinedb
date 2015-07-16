@@ -93,11 +93,6 @@ bloom_add_datum(FunctionCallInfo fcinfo, BloomFilter *bloom, Datum elem)
 	DatumToBytes(elem, typ, buf);
 	BloomFilterAdd(bloom, buf->data, buf->len);
 
-	elog(LOG, "%d", buf->len);
-	int i;
-	for (i = 0; i < buf->len; i++)
-		elog(LOG, "c %d", buf->data[i]);
-
 	pfree(buf->data);
 	pfree(buf);
 
@@ -271,11 +266,6 @@ bloom_contains(PG_FUNCTION_ARGS)
 
 	buf = makeStringInfo();
 	DatumToBytes(elem, typ, buf);
-
-	elog(LOG, "%d", buf->len);
-	int i;
-	for (i = 0; i < buf->len; i++)
-		elog(LOG, "c %d", buf->data[i]);
 
 	contains = BloomFilterContains(bloom, buf->data, buf->len);
 
