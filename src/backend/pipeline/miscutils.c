@@ -220,7 +220,7 @@ DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf)
 	{
 		Size size;
 
-		if (typ->typlen == -1)
+		if (typ->typlen == -1) /* varlena */
 			size = VARSIZE_ANY_EXHDR(DatumGetPointer(d));
 		else
 			size = datumGetSize(d, typ->typbyval, typ->typlen);
@@ -260,10 +260,10 @@ DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf)
 }
 
 /*
- * GetBytesToHash
+ * SlotAttrsToBytes
  */
 void
-GetBytesToHash(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf)
+SlotAttrsToBytes(TupleTableSlot *slot, int num_attrs, AttrNumber *attrs, StringInfo buf)
 {
 	TupleDesc desc = slot->tts_tupleDescriptor;
 	int i;

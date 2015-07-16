@@ -68,7 +68,7 @@ def test_hll_agg_hashing(pipeline, clean_db):
     result = result[0]
 
     assert result[0] == 9976
-    assert result[1] == 19981
+    assert result[1] == 19951
     assert result[2] == 10062
 
 def test_hll_type(pipeline, clean_db):
