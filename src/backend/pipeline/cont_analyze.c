@@ -490,7 +490,7 @@ warn_unindexed_join(SelectStmt *stmt, ContAnalyzeContext *context)
 			char *aliased = rv->alias ? rv->alias->aliasname : rv->relname;
 
 			DeconstructQualifiedName(col->fields, &table, &colname);
-			if (pg_strcasecmp(table, aliased) != 0)
+			if (table == NULL || pg_strcasecmp(table, aliased) != 0)
 				continue;
 
 			/* log the notice if the column doesn't have an index */
