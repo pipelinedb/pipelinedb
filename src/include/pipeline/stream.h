@@ -34,8 +34,8 @@ typedef struct PreparedStreamInsertStmt
 {
 	char name[NAMEDATALEN];
 	Oid relid; /* stream relid */
-	List *cols; /* column names for INSERTs */
 	List *inserts; /* list of ParamListInfoData for the INSERT */
+	TupleDesc desc; /* parameters descriptor */
 } PreparedStreamInsertStmt;
 
 /* Whether or not to wait on the inserted event to be consumed by the CV*/
