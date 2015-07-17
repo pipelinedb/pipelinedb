@@ -1279,7 +1279,21 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 
 		workerGroups = lappend(workerGroups, node);
 		if(doesViewAggregate)
+		{
+			/*
+			 * In the view over the matrel, we need to make sure we use matrel column names and not
+			 * the column names in the target list. A cref may be qualified here, whereas the corresponding
+			 * matrel column name will not be, so a qualified cref will not refer to a valid matrel column.
+			 */
+			if (IsA(node, ColumnRef))
+			{
+				ColumnRef *cref = (ColumnRef *) copyObject(node);
+				char *name = FigureColname(node);
+				cref->fields = list_make1(makeString(name));
+				node = (Node *) cref;
+			}
 			viewstmt->groupClause = lappend(viewstmt->groupClause, node);
+		}
 	}
 
 	for (; i < list_length(workerstmt->groupClause); i++)
@@ -1311,7 +1325,7 @@ GetSelectStmtForCQWorker(SelectStmt *stmt, SelectStmt **viewstmtptr)
 		ListCell *lc;
 
 		/*
-		 * Any ResTarget with a ResTarget as a val should be ignore for the worker
+		 * Any ResTarget with a ResTarget as a val should be ignored for the worker
 		 * stmt and the val should be taken for the view stmt.
 		 */
 		if (IsA(res->val, ResTarget))

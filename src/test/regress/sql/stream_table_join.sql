@@ -161,6 +161,30 @@ INSERT INTO test_stj_empty_stream (x) VALUES (0);
 
 SELECT * FROM test_stj_empty_join;
 
+-- STJ involving sliding windows
+CREATE STREAM test_stj_sw0_s (x integer, y integer);
+CREATE TABLE test_stj_sw0_t AS SELECT x, x AS y FROM generate_series(0, 99) AS x;
+
+CREATE CONTINUOUS VIEW test_stj_sw0 AS SELECT s.x, s.y, t.x AS t_x, count(*)
+FROM test_stj_sw0_s s JOIN test_stj_sw0_t t
+USING (x)
+WHERE (s.arrival_timestamp > clock_timestamp() - interval '4 seconds')
+GROUP by s.x, s.y, t_x;
+
+INSERT INTO test_stj_sw0_s (x, y) SELECT x, x AS y FROM generate_series(0, 9) AS x;
+INSERT INTO test_stj_sw0_s (x, y) SELECT x, x AS y FROM generate_series(0, 9) AS x;
+INSERT INTO test_stj_sw0_s (x, y) SELECT x, x AS y FROM generate_series(0, 9) AS x;
+
+SELECT * FROM test_stj_sw0;
+
+SELECT pg_sleep(5);
+
+SELECT * FROM test_stj_sw0;
+
+DROP CONTINUOUS VIEW test_stj_sw0;
+DROP STREAM test_stj_sw0_s;
+DROP TABLE test_stj_sw0_t;
+
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;
