@@ -1940,7 +1940,9 @@ exec_bind_message(StringInfo input_message)
 
 	if (stream_insert_stmt)
 	{
+		oldContext = MemoryContextSwitchTo(param_context);
 		AddPreparedStreamInsert(stream_insert_stmt, params);
+		MemoryContextSwitchTo(oldContext);
 
 		return;
 	}

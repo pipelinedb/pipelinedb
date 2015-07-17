@@ -109,6 +109,8 @@ StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
 {
 	PreparedStreamInsertStmt *result;
 	bool found;
+	ListCell *lc;
+	int i = 0;
 
 	if (prepared_stream_inserts == NULL)
 	{
@@ -127,7 +129,18 @@ StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
 
 	result->inserts = NIL;
 	result->relid = RangeVarGetRelid(stream, AccessShareLock, false);
-	result->cols = cols;
+	result->desc = CreateTemplateTupleDesc(list_length(cols), false);
+
+	foreach(lc, cols)
+	{
+		ResTarget *rt;
+
+		Assert(IsA(lfirst(lc), ResTarget));
+		rt = (ResTarget *) lfirst(lc);
+
+		Assert(rt->name);
+		namestrcpy(&(result->desc->attrs[i++]->attname), rt->name);
+	}
 
 	return result;
 }
@@ -181,7 +194,6 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 	ListCell *lc;
 	int count = 0;
 	Bitmapset *targets = GetLocalStreamReaders(pstmt->relid);
-	TupleDesc desc = NULL;//GetStreamTupleDesc(pstmt->namespace, pstmt->stream, pstmt->cols);
 	InsertBatchAck acks[1];
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
@@ -210,6 +222,8 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 		acks[0].count = 1;
 	}
 
+	Assert(pstmt->desc);
+
 	foreach(lc, pstmt->inserts)
 	{
 		int i;
@@ -217,6 +231,9 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 		Datum *values = palloc0(params->numParams * sizeof(Datum));
 		bool *nulls = palloc0(params->numParams * sizeof(bool));
 		StreamTuple *tuple;
+
+		if (pstmt->desc->natts != params->numParams)
+			elog(ERROR, "expected %d prepared parameters but received %d", pstmt->desc->natts, params->numParams);
 
 		for (i=0; i<params->numParams; i++)
 		{
@@ -226,16 +243,16 @@ InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt)
 			 * the target, so we change the TupleDesc before it gets physically packed
 			 * in with the event. Eventually it will be casted to the correct type.
 			 */
-			desc->attrs[i]->atttypid = params->params[i].ptype;
-			desc->attrs[i]->attbyval = type->typbyval;
-			desc->attrs[i]->attalign = type->typalign;
-			desc->attrs[i]->attlen = type->typlen;
+			pstmt->desc->attrs[i]->atttypid = params->params[i].ptype;
+			pstmt->desc->attrs[i]->attbyval = type->typbyval;
+			pstmt->desc->attrs[i]->attalign = type->typalign;
+			pstmt->desc->attrs[i]->attlen = type->typlen;
 
 			values[i] = params->params[i].value;
 			nulls[i] = params->params[i].isnull;
 		}
 
-		tuple = MakeStreamTuple(heap_form_tuple(desc, values, nulls), desc, num_batches, acks);
+		tuple = MakeStreamTuple(heap_form_tuple(pstmt->desc, values, nulls), pstmt->desc, num_batches, acks);
 		TupleBufferInsert(WorkerTupleBuffer, tuple, targets);
 
 		count++;
