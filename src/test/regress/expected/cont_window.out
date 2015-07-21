@@ -116,5 +116,35 @@ SELECT * FROM cqwindow1 ORDER BY key;
  b   | 8.4000000000000000
 (8 rows)
 
+CREATE CONTINUOUS VIEW cqwindow2 AS SELECT COUNT(*) FROM cqwindow_stream WHERE (hour(arrival_timestamp) > clock_timestamp() - interval '1 hour');
+CREATE CONTINUOUS VIEW cqwindow3 AS SELECT COUNT(*) FROM cqwindow_stream WHERE (year(arrival_timestamp) > clock_timestamp() - interval '10 years');
+INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);
+SELECT pg_sleep(1);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT COUNT(*) FROM cqwindow2_mrel0;
+ count 
+-------
+     1
+(1 row)
+
+SELECT COUNT(*) FROM cqwindow3_mrel0;
+ count 
+-------
+     1
+(1 row)
+
 DROP CONTINUOUS VIEW cqwindow0;
 DROP CONTINUOUS VIEW cqwindow1;
+DROP CONTINUOUS VIEW cqwindow2;
+DROP CONTINUOUS VIEW cqwindow3;

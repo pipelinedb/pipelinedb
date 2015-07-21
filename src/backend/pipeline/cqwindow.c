@@ -39,6 +39,14 @@
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
 #define DATE_TRUNC "date_trunc"
+
+#define DATE_TRUNC_YEAR "year"
+#define DATE_TRUNC_MONTH "month"
+#define DATE_TRUNC_DAY "day"
+#define DATE_TRUNC_HOUR "hour"
+#define DATE_TRUNC_MINUTE "minute"
+#define DATE_TRUNC_SECOND "second"
+
 #define DEFAULT_WINDOW_GRANULARITY "second"
 
 /*
@@ -307,8 +315,23 @@ get_time_bucket_size(Node *node, CQAnalyzeContext *context)
 	{
 		FuncCall *fcall = (FuncCall *) node;
 		Node *truncArg;
+		char *fname = strVal(linitial(fcall->funcname));
 
-		if (pg_strcasecmp(strVal(linitial(fcall->funcname)), DATE_TRUNC) != 0)
+		if (pg_strcasecmp(fname, DATE_TRUNC_YEAR) ||
+			pg_strcasecmp(fname, DATE_TRUNC_MONTH) ||
+			pg_strcasecmp(fname, DATE_TRUNC_DAY) ||
+			pg_strcasecmp(fname, DATE_TRUNC_HOUR) ||
+			pg_strcasecmp(fname, DATE_TRUNC_MINUTE) ||
+			pg_strcasecmp(fname, DATE_TRUNC_SECOND))
+		{
+			context->stepNode = node;
+			context->stepSize = fname;
+
+			return true;
+		}
+
+
+		if (pg_strcasecmp(fname, DATE_TRUNC) != 0)
 			return false;
 
 		truncArg = linitial(fcall->args);
