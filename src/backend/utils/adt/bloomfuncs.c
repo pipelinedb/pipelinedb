@@ -19,29 +19,26 @@
 #include "nodes/nodeFuncs.h"
 #include "pipeline/bloom.h"
 #include "pipeline/miscutils.h"
+#include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/bloomfuncs.h"
 #include "utils/typcache.h"
 
 Datum
-bloom_in(PG_FUNCTION_ARGS)
-{
-	ereport(ERROR,
-			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-			errmsg("user-specified bloom filters are not supported")));
-	PG_RETURN_NULL();
-}
-
-Datum
-bloom_out(PG_FUNCTION_ARGS)
+bloom_print(PG_FUNCTION_ARGS)
 {
 	StringInfoData buf;
-	BloomFilter *bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
+	BloomFilter *bloom;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
 
 	initStringInfo(&buf);
 	appendStringInfo(&buf, "{ k = %d, m = %d, fill = %f, card = %ld, size = %ldkB }", bloom->k, bloom->m, BloomFilterFillRatio(bloom), BloomFilterCardinality(bloom), BloomFilterSize(bloom) / 1024);
 
-	PG_RETURN_CSTRING(buf.data);
+	PG_RETURN_TEXT_P(CStringGetTextDatum(buf.data));
 }
 
 static BloomFilter *
@@ -73,8 +70,6 @@ bloom_startup(FunctionCallInfo fcinfo, float8 p, uint64_t n)
 	}
 	else
 		bloom = BloomFilterCreate();
-
-	SET_VARSIZE(bloom, BloomFilterSize(bloom));
 
 	return bloom;
 }
@@ -279,7 +274,6 @@ Datum
 bloom_empty(PG_FUNCTION_ARGS)
 {
 	BloomFilter *bloom = BloomFilterCreate();
-	SET_VARSIZE(bloom, BloomFilterSize(bloom));
 	PG_RETURN_POINTER(bloom);
 }
 
@@ -289,14 +283,19 @@ bloom_emptyp(PG_FUNCTION_ARGS)
 	float8 p = PG_GETARG_FLOAT8(0);
 	uint64_t n = PG_GETARG_INT64(1);
 	BloomFilter *bloom = bloom_create(p, n);
-	SET_VARSIZE(bloom, BloomFilterSize(bloom));
 	PG_RETURN_POINTER(bloom);
 }
 
 Datum
 bloom_add(PG_FUNCTION_ARGS)
 {
-	BloomFilter *bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
+	BloomFilter *bloom;
+
+	if (PG_ARGISNULL(0))
+		bloom = BloomFilterCreate();
+	else
+		bloom = (BloomFilter *) PG_GETARG_VARLENA_P(0);
+
 	fcinfo->flinfo->fn_extra = lookup_type_cache(get_fn_expr_argtype(fcinfo->flinfo, 1), 0);
 	bloom = bloom_add_datum(fcinfo, bloom, PG_GETARG_DATUM(1));
 	PG_RETURN_POINTER(bloom);

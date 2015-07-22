@@ -15,6 +15,7 @@
 #include <math.h>
 #include <stdlib.h>
 
+#include "postgres.h"
 #include "pipeline/tdigest.h"
 #include "utils/elog.h"
 #include "utils/palloc.h"
@@ -27,38 +28,45 @@
 #define integrated_location(compression, q) ((compression) * (asin(2 * (q) - 1) + M_PI / 2) / M_PI)
 #define float_eq(f1, f2) (fabs((f1) - (f2)) <= FLT_EPSILON)
 
-static uint32 estimate_compression_threshold(int compression)
+static uint32
+estimate_compression_threshold(int compression)
 {
 	compression = Min(1000, Max(20, compression));
 	return (uint32) (7.5 + 0.37 * compression - 2e-4 * compression * compression);
 }
 
-TDigest *TDigestCreate(void)
+TDigest *
+TDigestCreate(void)
 {
 	return TDigestCreateWithCompression(DEFAULT_COMPRESSION);
 }
 
-TDigest *TDigestCreateWithCompression(int compression)
+TDigest *
+TDigestCreateWithCompression(int compression)
 {
-	TDigest *t = palloc0(sizeof(TDigest));
+	uint32 size = ceil(compression * M_PI / 2) + 1;
+	TDigest *t = palloc0(sizeof(TDigest) + size * sizeof(Centroid));
 
 	t->compression = 1.0 * compression;
 	t->threshold = estimate_compression_threshold(compression);
-	t->size = ceil(compression * M_PI / 2) + 1;
-	t->centroids = palloc0(sizeof(Centroid) * t->size);
+	t->size = size;
 	t->min = INFINITY;
+
+	SET_VARSIZE(t, TDigestSize(t));
 
 	return t;
 }
 
-void TDigestDestroy(TDigest *t)
+void
+TDigestDestroy(TDigest *t)
 {
 	list_free_deep(t->unmerged_centroids);
 	pfree(t->centroids);
 	pfree(t);
 }
 
-void TDigestAdd(TDigest *t, float8 x, int64 w)
+void
+TDigestAdd(TDigest *t, float8 x, int64 w)
 {
 	Centroid *c;
 
@@ -72,7 +80,8 @@ void TDigestAdd(TDigest *t, float8 x, int64 w)
 	t->unmerged_centroids = lappend(t->unmerged_centroids, c);
 }
 
-static int centroid_cmp(const void *a, const void *b)
+static int
+centroid_cmp(const void *a, const void *b)
 {
 	Centroid *c1 = (Centroid *) a;
 	Centroid *c2 = (Centroid *) b;
@@ -94,7 +103,8 @@ typedef struct mergeArgs
 	float8 max;
 } mergeArgs;
 
-static void merge_centroid(mergeArgs *args, Centroid *merge)
+static void
+merge_centroid(mergeArgs *args, Centroid *merge)
 {
 	float8 k2;
 	Centroid *c = &args->centroids[args->idx];
@@ -121,7 +131,8 @@ static void merge_centroid(mergeArgs *args, Centroid *merge)
 	}
 }
 
-void TDigestCompress(TDigest *t)
+void
+TDigestCompress(TDigest *t)
 {
 	int num_unmerged = list_length(t->unmerged_centroids);
 	Centroid *unmerged_centroids;
@@ -197,12 +208,13 @@ void TDigestCompress(TDigest *t)
 		t->max = Max(t->max, args->max);
 	}
 
-	pfree(t->centroids);
-	t->centroids = args->centroids;
+	memcpy(t->centroids, args->centroids, sizeof(Centroid) * t->size);
+	pfree(args->centroids);
 	pfree(args);
 }
 
-void TDigestMerge(TDigest *t1, TDigest *t2)
+void
+TDigestMerge(TDigest *t1, TDigest *t2)
 {
 	int i;
 
@@ -215,7 +227,8 @@ void TDigestMerge(TDigest *t1, TDigest *t2)
 	}
 }
 
-float8 TDigestCDF(TDigest *t, float8 x)
+float8
+TDigestCDF(TDigest *t, float8 x)
 {
 	int i;
 	float8 left, right;
@@ -270,7 +283,8 @@ float8 TDigestCDF(TDigest *t, float8 x)
 	return 1;
 }
 
-float8 TDigestQuantile(TDigest *t, float8 q)
+float8
+TDigestQuantile(TDigest *t, float8 q)
 {
 	int i;
 	float8 left, right, idx;
@@ -333,15 +347,17 @@ float8 TDigestQuantile(TDigest *t, float8 q)
 	return t->max;
 }
 
-TDigest *TDigestCopy(TDigest *t)
+TDigest *
+TDigestCopy(TDigest *t)
 {
-	TDigest *cpy = palloc(sizeof(TDigest));
+	Size size = TDigestSize(t);
+	char *new = palloc(size);
+	memcpy(new, (char *) t, size);
+	return (TDigest *) new;
+}
 
-	TDigestCompress(t);
-
-	memcpy(cpy, t, sizeof(TDigest));
-	cpy->centroids = palloc0(sizeof(Centroid) * t->size);
-	memcpy(cpy->centroids, t->centroids, sizeof(Centroid) * t->num_centroids);
-
-	return cpy;
+Size
+TDigestSize(TDigest *t)
+{
+	return sizeof(TDigest) + (sizeof(Centroid) * t->size);
 }

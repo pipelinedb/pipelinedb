@@ -43,6 +43,8 @@ BloomFilterCreateWithMAndK(uint32_t m, uint16_t k)
 	bf->k = k;
 	bf->blen = blen;
 
+	SET_VARSIZE(bf, BloomFilterSize(bf));
+
 	return bf;
 }
 

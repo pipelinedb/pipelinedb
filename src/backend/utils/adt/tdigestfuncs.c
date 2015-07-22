@@ -16,29 +16,16 @@
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
 #include "pipeline/tdigest.h"
+#include "utils/builtins.h"
+#include "utils/bytea.h"
 #include "utils/datum.h"
 #include "utils/tdigestfuncs.h"
 #include "utils/typcache.h"
 
-static TDigest *
-tdigest_unpack(bytea *bytes)
-{
-	char *pos = VARDATA(bytes);
-	TDigest *t = palloc(sizeof(TDigest));
-	memcpy(t, pos, sizeof(TDigest));
-	pos += sizeof(TDigest);
-	t->centroids = palloc0(sizeof(Centroid) * t->size);
-	memcpy(t->centroids, pos, sizeof(Centroid) * t->num_centroids);
-	return t;
-}
-
 Datum
-tdigest_send(PG_FUNCTION_ARGS)
+tdigest_compress(PG_FUNCTION_ARGS)
 {
-	TDigest *t = (TDigest *) PG_GETARG_POINTER(0);
-	bytea *result;
-	int nbytes;
-	char *pos;
+	TDigest *t = (TDigest *) PG_GETARG_VARLENA_P(0);
 	MemoryContext old;
 	MemoryContext context;
 	bool in_agg_cxt = fcinfo->context && (IsA(fcinfo->context, AggState) || IsA(fcinfo->context, WindowAggState));
@@ -46,7 +33,7 @@ tdigest_send(PG_FUNCTION_ARGS)
 	if (in_agg_cxt)
 	{
 		if (!AggCheckCallContext(fcinfo, &context))
-			elog(ERROR, "tdigest_send called in non-aggregate context");
+			elog(ERROR, "tdigest_compress called in non-aggregate context");
 
 		old = MemoryContextSwitchTo(context);
 	}
@@ -56,37 +43,24 @@ tdigest_send(PG_FUNCTION_ARGS)
 	if (in_agg_cxt)
 		MemoryContextSwitchTo(old);
 
-	nbytes = sizeof(TDigest) + sizeof(Centroid) * t->num_centroids;
-	result = (bytea *) palloc0(nbytes + VARHDRSZ);
-	SET_VARSIZE(result, nbytes + VARHDRSZ);
-
-	pos = VARDATA(result);
-	memcpy(pos, t, sizeof(TDigest));
-	pos += sizeof(TDigest);
-	memcpy(pos, t->centroids, sizeof(Centroid) * t->num_centroids);
-
-	PG_RETURN_POINTER(result);
+	PG_RETURN_POINTER(t);
 }
 
 Datum
-tdigest_in(PG_FUNCTION_ARGS)
-{
-	ereport(ERROR,
-			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-			errmsg("user-specified t-digests are not supported")));
-	PG_RETURN_NULL();
-}
-
-Datum
-tdigest_out(PG_FUNCTION_ARGS)
+tdigest_print(PG_FUNCTION_ARGS)
 {
 	StringInfoData buf;
-	TDigest *t = tdigest_unpack(PG_GETARG_BYTEA_P(0));
+	TDigest *t;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	t = (TDigest *) PG_GETARG_VARLENA_P(0);
 
 	initStringInfo(&buf);
 	appendStringInfo(&buf, "{ count = %ld, k = %d, centroids: %d }", t->total_weight, (int) t->compression, t->num_centroids);
 
-	PG_RETURN_CSTRING(buf.data);
+	PG_RETURN_TEXT_P(CStringGetTextDatum(buf.data));
 }
 
 static TDigest *
@@ -132,7 +106,7 @@ tdigest_agg_trans(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		state = tdigest_startup(fcinfo, 0);
 	else
-		state = (TDigest *) PG_GETARG_POINTER(0);
+		state = (TDigest *) PG_GETARG_VARLENA_P(0);
 
 	TDigestAdd(state, incoming, 1);
 
@@ -163,7 +137,7 @@ tdigest_agg_transp(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		state = tdigest_startup(fcinfo, k);
 	else
-		state = (TDigest *) PG_GETARG_POINTER(0);
+		state = (TDigest *) PG_GETARG_VARLENA_P(0);
 
 	TDigestAdd(state, incoming, 1);
 
@@ -183,7 +157,7 @@ tdigest_merge_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	TDigest *state;
-	TDigest *incoming = tdigest_unpack(PG_GETARG_BYTEA_P(1));
+	TDigest *incoming = (TDigest *) PG_GETARG_VARLENA_P(1);
 
 	if (!AggCheckCallContext(fcinfo, &context))
 		elog(ERROR, "tdigest_merge_agg_trans called in non-aggregate context");
@@ -191,10 +165,12 @@ tdigest_merge_agg_trans(PG_FUNCTION_ARGS)
 	old = MemoryContextSwitchTo(context);
 
 	if (PG_ARGISNULL(0))
-		state = TDigestCreateWithCompression(incoming->compression);
-	else
-		state = (TDigest *) PG_GETARG_POINTER(0);
+	{
+		state = TDigestCopy(incoming);
+		PG_RETURN_POINTER(state);
+	}
 
+	state = (TDigest *) PG_GETARG_VARLENA_P(0);
 	TDigestMerge(state, incoming);
 
 	MemoryContextSwitchTo(old);
@@ -214,7 +190,7 @@ tdigest_quantile(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	t = tdigest_unpack(PG_GETARG_BYTEA_P(0));
+	t = (TDigest *) PG_GETARG_VARLENA_P(0);
 	q = PG_GETARG_FLOAT8(1);
 
 	PG_RETURN_FLOAT8(TDigestQuantile(t, q));
@@ -232,7 +208,7 @@ tdigest_cdf(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	t = tdigest_unpack(PG_GETARG_BYTEA_P(0));
+	t = (TDigest *) PG_GETARG_VARLENA_P(0);
 	x = PG_GETARG_FLOAT8(1);
 
 	PG_RETURN_FLOAT8(TDigestCDF(t, x));
@@ -242,9 +218,7 @@ Datum
 tdigest_empty(PG_FUNCTION_ARGS)
 {
 	TDigest *t = TDigestCreate();
-	fcinfo->nargs = 1;
-	fcinfo->arg[0] = PointerGetDatum(t);
-	return tdigest_send(fcinfo);
+	PG_RETURN_POINTER(t);
 }
 
 Datum
@@ -252,18 +226,45 @@ tdigest_emptyp(PG_FUNCTION_ARGS)
 {
 	uint64_t k = PG_GETARG_INT32(0);
 	TDigest *t = tdigest_create(k);
-	fcinfo->nargs = 1;
-	fcinfo->arg[0] = PointerGetDatum(t);
-	return tdigest_send(fcinfo);
+	PG_RETURN_POINTER(t);
 }
 
 Datum
 tdigest_add(PG_FUNCTION_ARGS)
 {
-	TDigest *t = tdigest_unpack(PG_GETARG_BYTEA_P(0));
-	float8 incoming = PG_GETARG_FLOAT8(1);
-	TDigestAdd(t, incoming, 1);
-	fcinfo->nargs = 1;
-	fcinfo->arg[0] = PointerGetDatum(t);
-	return tdigest_send(fcinfo);
+	TDigest *t;
+
+	if (PG_ARGISNULL(0))
+		t = TDigestCreate();
+	else
+		t = (TDigest *) PG_GETARG_VARLENA_P(0);
+
+	TDigestAdd(t, PG_GETARG_FLOAT8(1), 1);
+	TDigestCompress(t);
+	PG_RETURN_POINTER(t);
+}
+
+Datum
+tdigest_addn(PG_FUNCTION_ARGS)
+{
+	TDigest *t;
+	int32 n = PG_GETARG_INT32(2);
+
+	if (n < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("n must be non-negative")));
+
+	if (PG_ARGISNULL(0))
+		t = TDigestCreate();
+	else
+		t = (TDigest *) PG_GETARG_VARLENA_P(0);
+
+	if (n)
+	{
+		TDigestAdd(t, PG_GETARG_FLOAT8(1), n);
+		TDigestCompress(t);
+	}
+
+	PG_RETURN_POINTER(t);
 }

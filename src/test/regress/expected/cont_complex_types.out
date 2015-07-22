@@ -123,13 +123,13 @@ SELECT bloom_cardinality(bloom_agg) FROM test_cont_complex4;
                  2
 (1 row)
 
-SELECT bloom_contains(bloom_agg, 'hello'::text) FROM test_cont_complex4;
+SELECT bloom_contains(bloom_agg, 'hello') FROM test_cont_complex4;
  bloom_contains 
 ----------------
  t
 (1 row)
 
-SELECT bloom_contains(bloom_agg, 'world'::text) FROM test_cont_complex4;
+SELECT bloom_contains(bloom_agg, 'world') FROM test_cont_complex4;
  bloom_contains 
 ----------------
  t

@@ -69,12 +69,13 @@ def tdigest_check(pdb):
     return int(s.split('=')[1].strip().split(',')[0])
 
   q = """
-  SELECT g, tdigest_agg(x) OVER (PARTITION BY g ORDER BY ts)
-  FROM test_tdigest_agg_t ORDER BY g
+  SELECT g, tdigest_print(tdigest_agg) FROM
+    (SELECT g, tdigest_agg(x) OVER (PARTITION BY g ORDER BY ts) FROM test_tdigest_agg_t) _
+  ORDER BY g
   """
   expected = list(pdb.execute(q))
   q = """
-  SELECT g, tdigest_agg FROM test_tdigest_agg ORDER BY g
+  SELECT g, tdigest_print(tdigest_agg) FROM test_tdigest_agg ORDER BY g
   """
   result = list(pdb.execute(q))
 
@@ -82,7 +83,41 @@ def tdigest_check(pdb):
 
   for e, r in zip(expected, result):
     assert e['g'] == r['g']
-    assert get_count(e['tdigest_agg']) == get_count(r['tdigest_agg'])
+    assert get_count(e['tdigest_print']) == get_count(r['tdigest_print'])
+
+def cmsketch_check(pdb):
+  q = """
+  SELECT g, cmsketch_print(cmsketch_agg) FROM
+    (SELECT g, cmsketch_agg(x) OVER (PARTITION BY g ORDER BY ts) FROM test_cmsketch_agg_t) _
+  ORDER BY g
+  """
+  expected = list(pdb.execute(q))
+  q = """
+  SELECT g, cmsketch_print(cmsketch_agg) FROM test_cmsketch_agg ORDER BY g
+  """
+  result = list(pdb.execute(q))
+
+  assert len(expected) == len(result)
+
+  for e, r in zip(expected, result):
+    assert e == r
+
+def bloom_check(pdb):
+  q = """
+  SELECT g, bloom_print(bloom_agg) FROM
+    (SELECT g, bloom_agg(x) OVER (PARTITION BY g ORDER BY ts) FROM test_bloom_agg_t) _
+  ORDER BY g
+  """
+  expected = list(pdb.execute(q))
+  q = """
+  SELECT g, bloom_print(bloom_agg) FROM test_bloom_agg ORDER BY g
+  """
+  result = list(pdb.execute(q))
+
+  assert len(expected) == len(result)
+
+  for e, r in zip(expected, result):
+    assert e == r
 
 def test_aggs(pipeline, clean_db):
     """
@@ -106,7 +141,7 @@ def test_aggs(pipeline, clean_db):
     _test_agg(pipeline, 'stddev_pop(x::integer)')
     _test_agg(pipeline, 'variance(x::integer)')
     _test_agg(pipeline, 'var_pop(x::integer)')
-    _test_agg(pipeline, 'bloom_agg(x::integer)')
-    _test_agg(pipeline, 'cmsketch_agg(x::integer)')
+    _test_agg(pipeline, 'bloom_agg(x::integer)', check_fn=bloom_check)
+    _test_agg(pipeline, 'cmsketch_agg(x::integer)', check_fn=cmsketch_check)
     _test_agg(pipeline, 'hll_agg(x::integer)', check_fn=hll_check)
     _test_agg(pipeline, 'tdigest_agg(x::integer)', check_fn=tdigest_check)

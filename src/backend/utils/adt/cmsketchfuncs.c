@@ -17,29 +17,26 @@
 #include "nodes/nodeFuncs.h"
 #include "pipeline/cmsketch.h"
 #include "pipeline/miscutils.h"
+#include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/cmsketchfuncs.h"
 #include "utils/typcache.h"
 
 Datum
-cmsketch_in(PG_FUNCTION_ARGS)
-{
-	ereport(ERROR,
-			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-			errmsg("user-specified count-min sketches are not supported")));
-	PG_RETURN_NULL();
-}
-
-Datum
-cmsketch_out(PG_FUNCTION_ARGS)
+cmsketch_print(PG_FUNCTION_ARGS)
 {
 	StringInfoData buf;
-	CountMinSketch *cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
+	CountMinSketch *cms;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 
 	initStringInfo(&buf);
 	appendStringInfo(&buf, "{ d = %d, w = %d, count = %d, size = %ldkB }", cms->d, cms->w, cms->count, CountMinSketchSize(cms) / 1024);
 
-	PG_RETURN_CSTRING(buf.data);
+	PG_RETURN_TEXT_P(CStringGetTextDatum(buf.data));
 }
 
 static CountMinSketch *
@@ -70,13 +67,11 @@ cmsketch_startup(FunctionCallInfo fcinfo, float8 eps, float8 p)
 	else
 		cms = CountMinSketchCreate();
 
-	SET_VARSIZE(cms, CountMinSketchSize(cms));
-
 	return cms;
 }
 
 static CountMinSketch *
-cmsketch_add_datum(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem)
+cmsketch_add_datum(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem, int32 n)
 {
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 	StringInfo buf;
@@ -86,7 +81,7 @@ cmsketch_add_datum(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem)
 
 	buf = makeStringInfo();
 	DatumToBytes(elem, typ, buf);
-	CountMinSketchAdd(cms, buf->data, buf->len, 1);
+	CountMinSketchAdd(cms, buf->data, buf->len, n);
 
 	pfree(buf->data);
 	pfree(buf);
@@ -116,7 +111,7 @@ cmsketch_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 
-	state = cmsketch_add_datum(fcinfo, state, incoming);
+	state = cmsketch_add_datum(fcinfo, state, incoming, 1);
 
 	MemoryContextSwitchTo(old);
 
@@ -148,7 +143,7 @@ cmsketch_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 
-	state = cmsketch_add_datum(fcinfo, state, incoming);
+	state = cmsketch_add_datum(fcinfo, state, incoming, 1);
 
 	MemoryContextSwitchTo(old);
 
@@ -226,7 +221,6 @@ Datum
 cmsketch_empty(PG_FUNCTION_ARGS)
 {
 	CountMinSketch *cms = CountMinSketchCreate();
-	SET_VARSIZE(cms, CountMinSketchSize(cms));
 	PG_RETURN_POINTER(cms);
 }
 
@@ -236,15 +230,45 @@ cmsketch_emptyp(PG_FUNCTION_ARGS)
 	float8 eps = PG_GETARG_FLOAT8(0);
 	float8 p = PG_GETARG_FLOAT8(1);
 	CountMinSketch *cms = cmsketch_create(eps, p);
-	SET_VARSIZE(cms, CountMinSketchSize(cms));
 	PG_RETURN_POINTER(cms);
 }
 
 Datum
 cmsketch_add(PG_FUNCTION_ARGS)
 {
-	CountMinSketch *cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
+	CountMinSketch *cms;
+
+	if (PG_ARGISNULL(0))
+		cms = CountMinSketchCreate();
+	else
+		cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
+
 	fcinfo->flinfo->fn_extra = lookup_type_cache(get_fn_expr_argtype(fcinfo->flinfo, 1), 0);
-	cms = cmsketch_add_datum(fcinfo, cms, PG_GETARG_DATUM(1));
+	cms = cmsketch_add_datum(fcinfo, cms, PG_GETARG_DATUM(1), 1);
+	PG_RETURN_POINTER(cms);
+}
+
+Datum
+cmsketch_addn(PG_FUNCTION_ARGS)
+{
+	CountMinSketch *cms;
+	int32 n = PG_GETARG_INT32(2);
+
+	if (PG_ARGISNULL(0))
+		cms = CountMinSketchCreate();
+	else
+		cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
+
+	if (n < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("cmsketch type doesn't support negative increments")));
+
+	if (n)
+	{
+		fcinfo->flinfo->fn_extra = lookup_type_cache(get_fn_expr_argtype(fcinfo->flinfo, 1), 0);
+		cms = cmsketch_add_datum(fcinfo, cms, PG_GETARG_DATUM(1), n);
+	}
+
 	PG_RETURN_POINTER(cms);
 }

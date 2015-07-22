@@ -30,6 +30,9 @@ CountMinSketchCreateWithDAndW(uint32_t d, uint32_t w)
 	CountMinSketch *cms = palloc0(sizeof(CountMinSketch) + (sizeof(uint32_t) * d * w));
 	cms->d = d;
 	cms->w = w;
+
+	SET_VARSIZE(cms, CountMinSketchSize(cms));
+
 	return cms;
 }
 

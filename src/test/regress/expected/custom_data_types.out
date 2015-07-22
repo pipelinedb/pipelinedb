@@ -1,0 +1,132 @@
+CREATE TABLE custom_dt_hll (x text, y hll);
+INSERT INTO custom_dt_hll VALUES ('a', hll_empty()), ('b', hll_empty(5)), ('c', NULL);
+SELECT hll_print(y) FROM custom_dt_hll;
+                hll_print                
+-----------------------------------------
+ { p = 14, cardinality = 0, size = 0kB }
+ { p = 5, cardinality = 0, size = 0kB }
+ 
+(3 rows)
+
+UPDATE custom_dt_hll SET y = hll_add(y, 'hello');
+UPDATE custom_dt_hll SET y = hll_add(y, 'world');
+SELECT hll_print(y) FROM custom_dt_hll;
+                hll_print                
+-----------------------------------------
+ { p = 14, cardinality = 2, size = 0kB }
+ { p = 5, cardinality = 2, size = 0kB }
+ { p = 14, cardinality = 2, size = 0kB }
+(3 rows)
+
+SELECT hll_print(hll_agg(x)) FROM custom_dt_hll;
+                hll_print                
+-----------------------------------------
+ { p = 14, cardinality = 3, size = 0kB }
+(1 row)
+
+SELECT hll_print(hll_agg(x, 10)) FROM custom_dt_hll;
+                hll_print                
+-----------------------------------------
+ { p = 10, cardinality = 3, size = 0kB }
+(1 row)
+
+DROP TABLE custom_dt_hll;
+CREATE TABLE custom_dt_bloom (x text, y bloom);
+INSERT INTO custom_dt_bloom VALUES ('a', bloom_empty()), ('b', bloom_empty(0.05, 1000)), ('c', NULL);
+SELECT bloom_print(y) FROM custom_dt_bloom;
+                          bloom_print                          
+---------------------------------------------------------------
+ { k = 6, m = 266808, fill = 0.000000, card = 0, size = 32kB }
+ { k = 4, m = 6235, fill = 0.000000, card = 0, size = 0kB }
+ 
+(3 rows)
+
+UPDATE custom_dt_bloom SET y = bloom_add(y, 'hello');
+UPDATE custom_dt_bloom SET y = bloom_add(y, 'world');
+SELECT bloom_print(y) FROM custom_dt_bloom;
+                          bloom_print                          
+---------------------------------------------------------------
+ { k = 6, m = 266808, fill = 0.000360, card = 2, size = 32kB }
+ { k = 4, m = 6235, fill = 0.010204, card = 2, size = 0kB }
+ { k = 6, m = 266808, fill = 0.000360, card = 2, size = 32kB }
+(3 rows)
+
+SELECT bloom_print(bloom_agg(x)) FROM custom_dt_bloom;
+                          bloom_print                          
+---------------------------------------------------------------
+ { k = 6, m = 266808, fill = 0.000540, card = 3, size = 32kB }
+(1 row)
+
+SELECT bloom_print(bloom_agg(x, 0.05, 1000)) FROM custom_dt_bloom;
+                        bloom_print                         
+------------------------------------------------------------
+ { k = 4, m = 6235, fill = 0.015306, card = 3, size = 0kB }
+(1 row)
+
+DROP TABLE custom_dt_bloom;
+CREATE TABLE custom_dt_cmsketch (x text, y cmsketch);
+INSERT INTO custom_dt_cmsketch VALUES ('a', cmsketch_empty()), ('b', cmsketch_empty(0.05, 0.80)), ('c', NULL);
+SELECT cmsketch_print(y) FROM custom_dt_cmsketch;
+               cmsketch_print                
+---------------------------------------------
+ { d = 6, w = 1360, count = 0, size = 31kB }
+ { d = 2, w = 55, count = 0, size = 0kB }
+ 
+(3 rows)
+
+UPDATE custom_dt_cmsketch SET y = cmsketch_add(y, 'hello');
+UPDATE custom_dt_cmsketch SET y = cmsketch_add(y, 'world', 5);
+SELECT cmsketch_print(y) FROM custom_dt_cmsketch;
+               cmsketch_print                
+---------------------------------------------
+ { d = 6, w = 1360, count = 6, size = 31kB }
+ { d = 2, w = 55, count = 6, size = 0kB }
+ { d = 6, w = 1360, count = 6, size = 31kB }
+(3 rows)
+
+SELECT cmsketch_print(cmsketch_agg(x)) FROM custom_dt_cmsketch;
+               cmsketch_print                
+---------------------------------------------
+ { d = 6, w = 1360, count = 3, size = 31kB }
+(1 row)
+
+SELECT cmsketch_print(cmsketch_agg(x, 0.05, 0.80)) FROM custom_dt_cmsketch;
+              cmsketch_print              
+------------------------------------------
+ { d = 2, w = 55, count = 3, size = 0kB }
+(1 row)
+
+DROP TABLE custom_dt_cmsketch;
+CREATE TABLE custom_dt_tdigest (x text, y tdigest);
+INSERT INTO custom_dt_tdigest VALUES ('a', tdigest_empty()), ('b', tdigest_empty(25)), ('c', NULL);
+SELECT tdigest_print(y) FROM custom_dt_tdigest;
+            tdigest_print             
+--------------------------------------
+ { count = 0, k = 200, centroids: 0 }
+ { count = 0, k = 25, centroids: 0 }
+ 
+(3 rows)
+
+UPDATE custom_dt_tdigest SET y = tdigest_add(y, 10);
+UPDATE custom_dt_tdigest SET y = tdigest_add(y, 20, 2);
+SELECT tdigest_print(y) FROM custom_dt_tdigest;
+            tdigest_print             
+--------------------------------------
+ { count = 3, k = 200, centroids: 2 }
+ { count = 3, k = 25, centroids: 2 }
+ { count = 3, k = 200, centroids: 2 }
+(3 rows)
+
+SELECT tdigest_print(tdigest_agg(x)) FROM custom_dt_tdigest;
+            tdigest_print             
+--------------------------------------
+ { count = 3, k = 200, centroids: 3 }
+(1 row)
+
+SELECT tdigest_print(tdigest_agg(x, 25)) FROM custom_dt_tdigest;
+            tdigest_print            
+-------------------------------------
+ { count = 3, k = 25, centroids: 3 }
+(1 row)
+
+DROP TABLE custom_dt_tdigest;

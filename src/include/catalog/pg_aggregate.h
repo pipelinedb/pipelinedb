@@ -333,9 +333,9 @@ DATA(insert ( 4333	n 0 bloom_union_agg_trans	-	-				-				-				f f 0	5030	0	0		0	
 DATA(insert ( 4335	n 0 bloom_intersection_agg_trans	-	-		-				-				f f 0	5030	0	0		0	_null_ _null_ ));
 
 /* t-digest aggregates */
-DATA(insert ( 4339	n 0 tdigest_agg_trans		tdigest_send	-				-				-				f f 0	5034	0	0		0	_null_ _null_ ));
-DATA(insert ( 4340	n 0 tdigest_agg_transp		tdigest_send	-				-				-				f f 0	5034	0	0		0	_null_ _null_ ));
-DATA(insert ( 4343	n 0 tdigest_merge_agg_trans	tdigest_send	-				-				-				f f 0	5034	0	0		0	_null_ _null_ ));
+DATA(insert ( 4339	n 0 tdigest_agg_trans		tdigest_compress	-				-				-				f f 0	5034	0	0		0	_null_ _null_ ));
+DATA(insert ( 4340	n 0 tdigest_agg_transp		tdigest_compress	-				-				-				f f 0	5034	0	0		0	_null_ _null_ ));
+DATA(insert ( 4343	n 0 tdigest_merge_agg_trans	tdigest_compress	-				-				-				f f 0	5034	0	0		0	_null_ _null_ ));
 
 /* count-min sketch aggregates */
 DATA(insert ( 4348	n 0 cmsketch_agg_trans			-	-				-				-				f f 0	5038	0	0		0	_null_ _null_ ));

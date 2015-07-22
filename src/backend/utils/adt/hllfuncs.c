@@ -15,29 +15,27 @@
 #include "nodes/nodeFuncs.h"
 #include "pipeline/hll.h"
 #include "pipeline/miscutils.h"
+#include "utils/array.h"
+#include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/hllfuncs.h"
 #include "utils/typcache.h"
 
 Datum
-hll_in(PG_FUNCTION_ARGS)
-{
-	ereport(ERROR,
-			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-			errmsg("user-specified hyperloglogs are not supported")));
-	PG_RETURN_NULL();
-}
-
-Datum
-hll_out(PG_FUNCTION_ARGS)
+hll_print(PG_FUNCTION_ARGS)
 {
 	StringInfoData buf;
-	HyperLogLog *hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
+	HyperLogLog *hll;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
 	initStringInfo(&buf);
 	appendStringInfo(&buf, "{ p = %d, cardinality = %ld, size = %dkB }", hll->p, HLLCardinality(hll), hll->mlen / 1024);
 
-	PG_RETURN_CSTRING(buf.data);
+	PG_RETURN_TEXT_P(CStringGetTextDatum(buf.data));
 }
 
 static HyperLogLog *
@@ -218,11 +216,15 @@ hll_emptyp(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(hll);
 }
 
-
 Datum
 hll_add(PG_FUNCTION_ARGS)
 {
-	HyperLogLog *hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
+	HyperLogLog *hll;
+
+	if (PG_ARGISNULL(0))
+		hll = HLLCreate();
+	else
+		hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
 	/* Sparse representation can be repalloc'd so create a copy */
 	if (HLL_IS_SPARSE(hll))

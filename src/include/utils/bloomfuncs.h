@@ -14,8 +14,7 @@
 #include "postgres.h"
 #include "fmgr.h"
 
-extern Datum bloom_in(PG_FUNCTION_ARGS);
-extern Datum bloom_out(PG_FUNCTION_ARGS);
+extern Datum bloom_print(PG_FUNCTION_ARGS);
 extern Datum bloom_agg_trans(PG_FUNCTION_ARGS);
 extern Datum bloom_agg_transp(PG_FUNCTION_ARGS);
 extern Datum bloom_union_agg_trans(PG_FUNCTION_ARGS);

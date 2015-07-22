@@ -22,18 +22,19 @@ typedef struct Centroid
 } Centroid;
 
 typedef struct TDigest {
+	uint32	vl_len_;
+
 	float8 compression;
 	uint32 threshold;
 	uint32 size;
-
-	uint32 num_centroids;
-	Centroid *centroids;
 
 	uint64 total_weight;
 	float8 min;
 	float8 max;
 
 	List *unmerged_centroids;
+	uint32 num_centroids;
+	Centroid centroids[1];
 } TDigest;
 
 extern TDigest *TDigestCreate(void);
@@ -47,5 +48,7 @@ extern void TDigestMerge(TDigest *t1, TDigest *t2);
 
 extern float8 TDigestCDF(TDigest *t, float8 x);
 extern float8 TDigestQuantile(TDigest *t, float8 q);
+
+extern Size TDigestSize(TDigest *t);
 
 #endif

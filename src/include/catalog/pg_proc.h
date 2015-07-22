@@ -5088,25 +5088,17 @@ DESCR("aggregate combination function");
 DATA(insert OID = 5027 ( cq_percentile_cont_float8_final	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "2281 701" _null_ _null_ _null_ _null_ cq_percentile_cont_float8_final _null_ _null_ _null_ ));
 DESCR("aggregate final function");
 
-DATA(insert OID = 5028 (hll_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "3998" _null_ _null_ _null_ _null_ hll_out _null_ _null_ _null_ ));
-DESCR("hyperloglog out function");
-DATA(insert OID = 5029 (hll_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 3998 "2275" _null_ _null_ _null_ _null_ hll_in  _null_ _null_ _null_ ));
-DESCR("hyperloglog in function");
+DATA(insert OID = 5028 (hll_print PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 25 "3998" _null_ _null_ _null_ _null_ hll_print _null_ _null_ _null_ ));
+DESCR("hyperloglog print function");
 
-DATA(insert OID = 5032 (bloom_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5030" _null_ _null_ _null_ _null_ bloom_out _null_ _null_ _null_ ));
-DESCR("bloom filter out function");
-DATA(insert OID = 5033 (bloom_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5030 "2275" _null_ _null_ _null_ _null_ bloom_in  _null_ _null_ _null_ ));
-DESCR("bloom filter in function");
+DATA(insert OID = 5032 (bloom_print PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 25 "5030" _null_ _null_ _null_ _null_ bloom_print _null_ _null_ _null_ ));
+DESCR("bloom filter print function");
 
-DATA(insert OID = 5036 (tdigest_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5034" _null_ _null_ _null_ _null_ tdigest_out _null_ _null_ _null_ ));
-DESCR("t-digest out function");
-DATA(insert OID = 5037 (tdigest_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5034 "2275" _null_ _null_ _null_ _null_ tdigest_in  _null_ _null_ _null_ ));
-DESCR("t-digest in function");
+DATA(insert OID = 5036 (tdigest_print PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 25 "5034" _null_ _null_ _null_ _null_ tdigest_print _null_ _null_ _null_ ));
+DESCR("t-digest print function");
 
-DATA(insert OID = 5040 (cmsketch_out PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2275 "5038" _null_ _null_ _null_ _null_ cmsketch_out _null_ _null_ _null_ ));
-DESCR("count-min sketch out function");
-DATA(insert OID = 5041 (cmsketch_in  PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5038 "2275" _null_ _null_ _null_ _null_ cmsketch_in  _null_ _null_ _null_ ));
-DESCR("count-min sketch in function");
+DATA(insert OID = 5040 (cmsketch_print PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 25 "5038" _null_ _null_ _null_ _null_ cmsketch_print _null_ _null_ _null_ ));
+DESCR("count-min sketch print function");
 
 /* PipelineDB combiner stuff, heavily inspired by Postgres-XC coordinator aggregation */
 DATA(insert OID = 4301 ( float8_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 1022 "1022 1022" _null_ _null_ _null_ _null_ float8_combine _null_ _null_ _null_ ));
@@ -5190,7 +5182,7 @@ DATA(insert OID = 4329 ( bloom_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5030
 DESCR("bloom filter aggregate");
 
 /* bloom filter aggregate with user-supplied p and n */
-DATA(insert OID = 4330 ( bloom_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5030 "2283 701 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4330 ( bloom_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 5030 "2283 701 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("bloom filter aggregate");
 
 /* bloom filter aggregate transition function */
@@ -5198,7 +5190,7 @@ DATA(insert OID = 4331 ( bloom_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 
 DESCR("bloom filter aggregate");
 
 /* bloom filter aggregate with p and n transition function */
-DATA(insert OID = 4332 ( bloom_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "5030 2283 701 20" _null_ _null_ _null_ _null_ bloom_agg_transp _null_ _null_ _null_ ));
+DATA(insert OID = 4332 ( bloom_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 4 0 5030 "5030 2283 701 20" _null_ _null_ _null_ _null_ bloom_agg_transp _null_ _null_ _null_ ));
 DESCR("bloom filter aggregate");
 
 /* bloom filter union aggregate */
@@ -5223,6 +5215,8 @@ DESCR("bloom filter cardinality");
 
 /* bloom filter contains function */
 DATA(insert OID = 4338 ( bloom_contains	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 16 "5030 2283" _null_ _null_ _null_ _null_ bloom_contains _null_ _null_ _null_ ));
+DESCR("bloom filter contains item?");
+DATA(insert OID = 4385 ( bloom_contains	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 16 "5030 25" _null_ _null_ _null_ _null_ bloom_contains _null_ _null_ _null_ ));
 DESCR("bloom filter contains item?");
 
 /* t-digest aggregate */
@@ -5257,16 +5251,16 @@ DESCR("t-digest cdf");
 DATA(insert OID = 4346 ( tdigest_quantile	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "5034 701" _null_ _null_ _null_ _null_ tdigest_quantile _null_ _null_ _null_ ));
 DESCR("t-digest quantile");
 
-/* t-digest serialize */
-DATA(insert OID = 4347 (tdigest_send PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "5034" _null_ _null_ _null_ _null_ tdigest_send _null_ _null_ _null_ ));
-DESCR("t-digest serialize");
+/* t-digest compress */
+DATA(insert OID = 4347 (tdigest_compress PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 5034 "5034" _null_ _null_ _null_ _null_ tdigest_compress _null_ _null_ _null_ ));
+DESCR("t-digest compress");
 
 /* count-min sketch aggregate */
 DATA(insert OID = 4348 ( cmsketch_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5038 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("count-min sketch aggregate");
 
 /* count-min sketch aggregate with user-supplied eps and p */
-DATA(insert OID = 4349 ( cmsketch_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5038 "2283 701 701" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4349 ( cmsketch_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 3 0 5038 "2283 701 701" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("count-min sketch aggregate");
 
 /* count-min sketch aggregate transition function */
@@ -5274,7 +5268,7 @@ DATA(insert OID = 4350 ( cmsketch_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i
 DESCR("count-min sketch aggregate");
 
 /* count-min sketch aggregate with eps and p transition function */
-DATA(insert OID = 4351 ( cmsketch_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 2283 701 701" _null_ _null_ _null_ _null_ cmsketch_agg_transp _null_ _null_ _null_ ));
+DATA(insert OID = 4351 ( cmsketch_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 4 0 5038 "5038 2283 701 701" _null_ _null_ _null_ _null_ cmsketch_agg_transp _null_ _null_ _null_ ));
 DESCR("count-min sketch aggregate");
 
 /* count-min sketch merge aggregate */
@@ -5287,6 +5281,8 @@ DESCR("count-min sketch merge aggregate");
 
 /* count-min sketch count function */
 DATA(insert OID = 4354 ( cmsketch_count	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_count _null_ _null_ _null_ ));
+DESCR("count-min sketch estimate count");
+DATA(insert OID = 4386 ( cmsketch_count	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 25" _null_ _null_ _null_ _null_ cmsketch_count _null_ _null_ _null_ ));
 DESCR("count-min sketch estimate count");
 
 DATA(insert OID = 4355 ( cq_proc_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,23,1184,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o}" "{type,pid,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors}" _null_ cq_proc_stat_get _null_ _null_ _null_ ));
@@ -5306,6 +5302,8 @@ DESCR("hyperloglog empty");
 /* hyperloglog add */
 DATA(insert OID = 4359 ( hll_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 3998 "3998 2283" _null_ _null_ _null_ _null_ hll_add _null_ _null_ _null_ ));
 DESCR("hyperloglog add");
+DATA(insert OID = 4384 ( hll_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 3998 "3998 25" _null_ _null_ _null_ _null_ hll_add _null_ _null_ _null_ ));
+DESCR("hyperloglog add");
 
 /* bloom filter empty */
 DATA(insert OID = 4360 ( bloom_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 0 0 5030 "" _null_ _null_ _null_ _null_ bloom_empty _null_ _null_ _null_ ));
@@ -5317,6 +5315,8 @@ DESCR("bloom filter empty");
 
 /* bloom filter add */
 DATA(insert OID = 4362 ( bloom_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "5030 2283" _null_ _null_ _null_ _null_ bloom_add _null_ _null_ _null_ ));
+DESCR("bloom filter add");
+DATA(insert OID = 4382 ( bloom_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5030 "5030 25" _null_ _null_ _null_ _null_ bloom_add _null_ _null_ _null_ ));
 DESCR("bloom filter add");
 
 /* t-digest empty */
@@ -5341,6 +5341,8 @@ DESCR("count-min sketch empty");
 
 /* count-min sketch add */
 DATA(insert OID = 4377 ( cmsketch_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_add _null_ _null_ _null_ ));
+DESCR("count-min sketch add");
+DATA(insert OID = 4383 ( cmsketch_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5038 "5038 25" _null_ _null_ _null_ _null_ cmsketch_add _null_ _null_ _null_ ));
 DESCR("count-min sketch add");
 
 /* date truncation convenience functions */
@@ -5378,6 +5380,16 @@ DESCR("get continuous queries");
 
 DATA(insert OID = 4379 ( pipeline_streams PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,25,16,1028,17}" "{o,o,o,o,o}" "{schema,name,inferred,queries,desc}" _null_ pipeline_streams _null_ _null_ _null_ ));
 DESCR("get streams");
+
+/* t-digest add n */
+DATA(insert OID = 4380 ( tdigest_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 5034 "5034 701 23" _null_ _null_ _null_ _null_ tdigest_addn _null_ _null_ _null_ ));
+DESCR("t-digest add");
+
+/* count-min sketch add n */
+DATA(insert OID = 4381 ( cmsketch_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 5038 "5038 2283 23" _null_ _null_ _null_ _null_ cmsketch_addn _null_ _null_ _null_ ));
+DESCR("count-min sketch add");
+DATA(insert OID = 4387 ( cmsketch_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 5038 "5038 25 23" _null_ _null_ _null_ _null_ cmsketch_addn _null_ _null_ _null_ ));
+DESCR("count-min sketch add");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result

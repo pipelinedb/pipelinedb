@@ -59,8 +59,8 @@ INSERT INTO cont_complex_stream (z) VALUES ('hello'), ('world');
 
 SELECT bloom_cardinality(bloom_agg) FROM test_cont_complex4;
 
-SELECT bloom_contains(bloom_agg, 'hello'::text) FROM test_cont_complex4;
-SELECT bloom_contains(bloom_agg, 'world'::text) FROM test_cont_complex4;
+SELECT bloom_contains(bloom_agg, 'hello') FROM test_cont_complex4;
+SELECT bloom_contains(bloom_agg, 'world') FROM test_cont_complex4;
 
 DROP CONTINUOUS VIEW test_cont_complex1;
 DROP CONTINUOUS VIEW test_cont_complex2;
