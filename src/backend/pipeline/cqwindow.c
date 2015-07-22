@@ -410,7 +410,7 @@ create_group_by_for_time_bucket_field(SelectStmt *workerstmt, SelectStmt *viewst
 		Node *timeNode, bool doesViewAggregate, CQAnalyzeContext *context, AttrNumber *timeAttr)
 {
 	Node *timeCRefWithTC;
-	ResTarget *timeRes;
+	ResTarget *timeRes = NULL;
 
 	context->cols = NIL;
 	FindColumnRefsWithTypeCasts(timeNode, context);
@@ -559,6 +559,7 @@ create_group_by_for_time_bucket_field(SelectStmt *workerstmt, SelectStmt *viewst
 		memcpy(timeCRefWithTC, CreateColumnRefFromResTarget(res), sizeof(ColumnRef));
 	}
 
+	Assert(timeRes != NULL);
 	return timeRes;
 }
 
