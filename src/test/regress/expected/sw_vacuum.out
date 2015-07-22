@@ -76,7 +76,7 @@ SELECT DISTINCT key FROM cqvacuum_mrel0 ORDER BY key;
  c
 (3 rows)
 
-VACUUM cqvacuum_mrel0;
+VACUUM cqvacuum;
 SELECT * FROM cqvacuum ORDER BY key;
  key | count 
 -----+-------
@@ -112,7 +112,7 @@ SELECT key, SUM(count) FROM cqvacuum_mrel0 GROUP BY key ORDER BY key;
  c   |   2
 (3 rows)
 
-VACUUM FULL cqvacuum_mrel0;
+VACUUM FULL cqvacuum;
 SELECT * FROM cqvacuum ORDER BY key;
  key | count 
 -----+-------

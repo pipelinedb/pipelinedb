@@ -27,7 +27,7 @@ SELECT * FROM cqvacuum ORDER BY key;
 SELECT (SELECT COUNT(*) FROM cqvacuum) < (SELECT COUNT(*) FROM cqvacuum_mrel0);
 SELECT DISTINCT key FROM cqvacuum_mrel0 ORDER BY key;
 
-VACUUM cqvacuum_mrel0;
+VACUUM cqvacuum;
 SELECT * FROM cqvacuum ORDER BY key;
 SELECT key, SUM(count) FROM cqvacuum_mrel0 GROUP BY key ORDER BY key;
 
@@ -36,7 +36,7 @@ SELECT pg_sleep(3);
 SELECT * FROM cqvacuum ORDER BY key;
 SELECT key, SUM(count) FROM cqvacuum_mrel0 GROUP BY key ORDER BY key;
 
-VACUUM FULL cqvacuum_mrel0;
+VACUUM FULL cqvacuum;
 SELECT * FROM cqvacuum ORDER BY key;
 SELECT key, SUM(count) FROM cqvacuum_mrel0 GROUP BY key ORDER BY key;
 
