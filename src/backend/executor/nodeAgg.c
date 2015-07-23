@@ -101,10 +101,12 @@
 #include "catalog/objectaccess.h"
 #include "catalog/pg_aggregate.h"
 #include "catalog/pg_proc.h"
+#include "catalog/pg_type.h"
 #include "catalog/pipeline_combine.h"
 #include "executor/executor.h"
 #include "executor/nodeAgg.h"
 #include "miscadmin.h"
+#include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/clauses.h"
 #include "optimizer/tlist.h"
@@ -263,6 +265,8 @@ typedef struct AggStatePerAggData
 	FunctionCallInfoData transoutfn_fcinfo;
 	FunctionCallInfoData combineinfn_fcinfo;
 	FunctionCallInfoData combinefn_fcinfo;
+
+	Oid transtypeId;
 }	AggStatePerAggData;
 
 /*
@@ -459,6 +463,17 @@ advance_combine_function(TupleTableSlot *slot, AggState *aggstate,
 	if (OidIsValid(peraggstate->combinefn_oid))
 	{
 		FunctionCallInfo fcinfo = &peraggstate->combinefn_fcinfo;
+		FuncExpr *expr = makeNode(FuncExpr);
+		Const *c = makeConst(peraggstate->transtypeId,
+				  -1,
+				  InvalidOid,
+				  peraggstate->transtypeLen,
+				  pergroupstate->transValue,
+				  false,
+				  peraggstate->transtypeByVal);
+
+		expr->args = list_make2(c, c);
+		expr->funcresulttype = peraggstate->transtypeId;
 
 		fcinfo->isnull = false;
 		fcinfo->arg[0] = pergroupstate->transValue;
@@ -466,6 +481,8 @@ advance_combine_function(TupleTableSlot *slot, AggState *aggstate,
 		fcinfo->arg[1] = combineinput;
 		fcinfo->argnull[1] = isnull;
 		fcinfo->nargs = 2;
+
+		fcinfo->flinfo->fn_expr = (fmNodePtr) expr;
 
 		combineoutput = FunctionCallInvoke(fcinfo);
 		isnull = fcinfo->isnull;
@@ -2062,11 +2079,22 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		else
 			peraggstate->numFinalArgs = numDirectArgs + 1;
 
-		/* resolve actual type of transition state, if polymorphic */
-		aggtranstype = resolve_aggregate_transtype(aggref->aggfnoid,
-												   aggform->aggtranstype,
-												   inputTypes,
-												   numArguments);
+		/*
+		 * XXX(usmanm): Is this totally kosher?
+		 */
+		if (aggref->aggresultstate == AGG_COMBINE && IsPolymorphicType(aggform->aggtranstype))
+		{
+			Assert(numArguments == 1);
+			aggtranstype = inputTypes[0];
+		}
+		else
+		{
+			/* resolve actual type of transition state, if polymorphic */
+			aggtranstype = resolve_aggregate_transtype(aggref->aggfnoid,
+													   aggform->aggtranstype,
+													   inputTypes,
+													   numArguments);
+		}
 
 		/* build expression trees using actual argument & result types */
 		build_aggregate_fnexprs(inputTypes,
@@ -2109,6 +2137,8 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		get_typlenbyval(aggtranstype,
 						&peraggstate->transtypeLen,
 						&peraggstate->transtypeByVal);
+
+		peraggstate->transtypeId = aggtranstype;
 
 		/*
 		 * initval is potentially null, so don't try to access it as a struct

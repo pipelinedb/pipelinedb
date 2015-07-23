@@ -46,9 +46,7 @@ void
 debug_segfault(SIGNAL_ARGS)
 {
 	void *array[32];
-	size_t size;
-
-	size = backtrace(array, 32);
+	size_t size = backtrace(array, 32);
 	fprintf(stderr, "segfault at:\n");
 	backtrace_symbols_fd(array, size, STDERR_FILENO);
 

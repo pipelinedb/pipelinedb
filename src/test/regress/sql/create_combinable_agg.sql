@@ -102,3 +102,85 @@ DROP FUNCTION combinable_avg_combinein(json) CASCADE;
 
 DROP CONTINUOUS VIEW test_combinable_aggs_v0;
 
+-- Test polymorphic types
+CREATE FUNCTION set_add (
+  anyarray,
+  anyelement
+) RETURNS anyarray AS
+$$
+BEGIN
+  IF $1 IS NULL THEN
+    RETURN ARRAY[$2];
+  END IF;
+
+  IF ARRAY[$2] && $1 THEN
+    RETURN $1;
+  END IF;
+
+  RETURN array_append($1, $2);
+END;
+$$
+LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE FUNCTION set_merge (
+  anyarray,
+  anyarray
+) RETURNS anyarray AS
+$$
+DECLARE
+  i integer;
+BEGIN
+  IF $1 IS NULL THEN
+    IF $2 IS NULL THEN
+      RETURN NULL;
+    END IF;
+    RETURN $2;
+  END IF;
+
+  IF $2 IS NULL THEN
+    RETURN $1;
+  END IF;
+
+  FOR i IN 1 .. array_length($2, 1) LOOP
+    IF NOT ARRAY[$2[i]] && $1 THEN
+      $1 := array_append($1, $2[i]);
+    END IF;
+  END LOOP;
+
+  RETURN $1;
+END;
+$$
+LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE AGGREGATE set_agg (anyelement) (
+  stype = anyarray,
+  sfunc = set_add,
+  combinefunc = set_merge
+);
+
+CREATE TABLE cont_plpgsql_t (x text);
+
+INSERT INTO cont_plpgsql_t VALUES ('a'), ('b'), ('c');
+INSERT INTO cont_plpgsql_t VALUES ('a'), ('b'), ('c');
+INSERT INTO cont_plpgsql_t VALUES ('d'), ('e'), ('f');
+
+SELECT set_agg(x) FROM cont_plpgsql_t;
+
+SELECT set_merge(set_agg(x), set_add(NULL::text[], 'z')) FROM cont_plpgsql_t;
+
+CREATE CONTINUOUS VIEW cont_plpgsql_cv AS SELECT set_agg(x::text) FROM cont_plpgsql_s;
+
+INSERT INTO cont_plpgsql_s (x) VALUES ('a'), ('b'), ('c');
+SELECT pg_sleep(0.2);
+INSERT INTO cont_plpgsql_s (x) VALUES ('a'), ('b'), ('c');
+SELECT pg_sleep(0.2);
+INSERT INTO cont_plpgsql_s (x) VALUES ('d'), ('e'), ('f');
+
+SELECT unnest(set_agg) FROM cont_plpgsql_cv ORDER BY unnest;
+
+DROP TABLE cont_plpgsql_t;
+DROP CONTINUOUS VIEW cont_plpgsql_cv;
+
+DROP AGGREGATE set_agg (anyelement);
+DROP FUNCTION set_add (anyarray, anyelement);
+DROP FUNCTION set_merge (anyarray, anyarray);

@@ -12,6 +12,7 @@
 
 #include "access/htup_details.h"
 #include "catalog/pg_aggregate.h"
+#include "catalog/pg_type.h"
 #include "catalog/pipeline_combine.h"
 #include "catalog/pipeline_query_fn.h"
 #include "commands/pipelinecmds.h"
@@ -22,6 +23,8 @@
 #include "optimizer/pathnode.h"
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
+#include "parser/parse_agg.h"
+#include "parser/parse_coerce.h"
 #include "parser/parse_oper.h"
 #include "pipeline/cont_plan.h"
 #include "pipeline/cqanalyze.h"
@@ -204,6 +207,17 @@ set_plan_refs(PlannedStmt *pstmt, ContinuousView *view)
 
 			aggref->aggresultstate = AGG_TRANSITION;
 			transtype = get_trans_type(aggref);
+
+			/*
+			 * If the transition state is polymorphic, resolve it eagerly for combine plans. Because once we override
+			 * the args to the agg function, resolution might break.
+			 */
+			if (pstmt->is_combine && IsPolymorphicType(transtype))
+			{
+				Oid	inputtypes[FUNC_MAX_ARGS];
+				int nargs = get_aggregate_argtypes(aggref, inputtypes);
+				transtype = resolve_aggregate_transtype(aggref->aggfnoid, transtype, inputtypes, nargs);
+			}
 
 			/*
 			 * If this Aggref has hidden state associated with it, we create an Aggref
