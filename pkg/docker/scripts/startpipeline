@@ -7,11 +7,10 @@ set -e
 if [ ! -d "/mnt/pipelinedb/data" ]; then
     mkdir -p /mnt/pipelinedb
     chmod 777 /mnt/pipelinedb
-    su - pipeline -c "pipeline-init -D /mnt/pipelinedb/data"
-    su - pipeline -c "pipeline-ctl -D /mnt/pipelinedb/data start"
-    sleep 3
+    su - pipeline -c "pipeline-init --encoding=UTF8 -D /mnt/pipelinedb/data"
+    su - pipeline -c "pipeline-ctl -D /mnt/pipelinedb/data -w start"
     psql -U pipeline -c "ALTER USER pipeline PASSWORD 'pipeline'"
-    su - pipeline -c "pipeline-ctl -D /mnt/pipelinedb/data stop"
+    su - pipeline -c "pipeline-ctl -D /mnt/pipelinedb/data -w stop"
     cp /scripts/conf/*.conf /mnt/pipelinedb/data/
 fi
 
