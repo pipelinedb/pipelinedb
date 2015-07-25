@@ -187,7 +187,7 @@ streams_to_meta(Relation pipeline_query)
 			RangeVar *rv = (RangeVar *) lfirst(lc);
 			bool found;
 			Oid key;
-			bool is_inferred;
+			bool is_inferred = false;
 
 			/* TODO(usmanm) */
 			if (!rv->schemaname)
