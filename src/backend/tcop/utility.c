@@ -1124,7 +1124,7 @@ ProcessUtilitySlow(Node *parsetree,
 									if (pg_strcasecmp(defel->defname, "combinefunc") == 0)
 									{
 										DefineCombiner(oid, stmt->defnames, stmt->args,
-												stmt->oldstyle, stmt->definition, queryString);
+												stmt->oldstyle, stmt->definition);
 										break;
 									}
 								}

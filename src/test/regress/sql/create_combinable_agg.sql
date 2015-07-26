@@ -63,6 +63,10 @@ CREATE AGGREGATE combinable_avg(integer)
 	combineinfunc=combinable_avg_combinein
 );
 
+-- Verify that pipeline_combine entry created
+SELECT count(*) FROM pipeline_combine WHERE combinefn IN
+  (SELECT oid FROM pg_proc WHERE proname='combinable_avg_combine');
+
 -- Verify that the matrel looks ok
 CREATE CONTINUOUS VIEW test_combinable_aggs_v0 AS
 	SELECT x::integer, combinable_avg(y::integer) FROM cca_stream GROUP BY x;
@@ -92,6 +96,12 @@ SELECT combine(combinable_avg) FROM test_combinable_aggs_v0;
 DROP FUNCTION combinable_avg_combine(integer[], integer[]);
 DROP FUNCTION combinable_avg_transout(integer[]);
 DROP FUNCTION combinable_avg_combinein(json);
+
+DROP AGGREGATE combinable_avg (integer);
+
+-- pipeline_combine entry should be removed
+SELECT count(*) FROM pipeline_combine WHERE combinefn IN
+  (SELECT oid FROM pg_proc WHERE proname='combinable_avg_combine');
 
 -- Dropping the aggregate shouldn't affect any of the functions in pipeline_combine
 DROP FUNCTION combinable_avg_trans(integer[], integer) CASCADE;

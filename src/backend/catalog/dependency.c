@@ -54,6 +54,7 @@
 #include "catalog/pg_ts_template.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_user_mapping.h"
+#include "catalog/pipeline_combine.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream_fn.h"
 #include "commands/comment.h"
@@ -1391,6 +1392,10 @@ doDeletion(const ObjectAddress *object, int flags)
 			RemovePipelineStreamById(object->objectId);
 			break;
 
+		case OCLASS_COMBINE:
+			RemovePipelineCombineById(object->objectId);
+			break;
+
 		default:
 			elog(ERROR, "unrecognized object class: %u",
 				 object->classId);
@@ -2502,6 +2507,9 @@ getObjectClass(const ObjectAddress *object)
 
 		case PipelineStreamRelationId:
 			return OCLASS_STREAM;
+
+		case PipelineCombineRelationId:
+			return OCLASS_COMBINE;
 	}
 
 	/* shouldn't get here */

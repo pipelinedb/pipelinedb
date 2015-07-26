@@ -14,9 +14,9 @@
 
 #include "catalog/pipeline_combine.h"
 
-Oid GetCombineStateType(Oid aggfnoid);
-void GetCombineInfo(Oid aggfnoid, Oid *combinefn, Oid *combineinfn, Oid *statetype);
-Oid DefineCombiner(Oid aggoid, List *name, List *args, bool oldstyle, List *parameters,
-		const char *queryString);
+extern Oid GetCombineStateType(Oid aggfnoid);
+extern void GetCombineInfo(Oid aggfnoid, Oid *combinefn, Oid *combineinfn, Oid *statetype);
+extern Oid DefineCombiner(Oid aggoid, List *name, List *args, bool oldstyle, List *parameters);
+extern void RemovePipelineCombineById(Oid oid);
 
 #endif
