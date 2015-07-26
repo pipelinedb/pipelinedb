@@ -88,9 +88,18 @@ GROUP BY a, b, c, d, e;
 \d+ multigroupindex;
 \d+ multigroupindex_mrel0;
 
---A user-specified fillfactor should override the default
+-- A user-specified fillfactor should override the default
 CREATE CONTINUOUS VIEW withff WITH (fillfactor = 42) AS SELECT COUNT(*) FROM stream;
 \d+ withff_mrel0;
+
+-- It shouldn't be possible to DROP a continuous view with DROP VIEW, and vice-versa
+CREATE VIEW ccvv AS SELECT * FROM generate_series(1, 10);
+DROP CONTINUOUS VIEW ccvv;
+DROP VIEW ccvv;
+
+CREATE CONTINUOUS VIEW ccvv AS SELECT COUNT(*) FROM stream;
+DROP VIEW ccvv;
+DROP CONTINUOUS VIEW ccvv;
 
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;

@@ -862,6 +862,7 @@ RemoveRelations(DropStmt *drop)
 		Oid			relOid;
 		ObjectAddress obj;
 		struct DropRelationCallbackState state;
+		char save;
 
 		/*
 		 * These next few steps are a great deal like relation_openrv, but we
@@ -874,6 +875,10 @@ RemoveRelations(DropStmt *drop)
 		 * then we'll latch onto that entry and suffer an error later.
 		 */
 		AcceptInvalidationMessages();
+
+		save = relkind;
+		if (drop->removeType == OBJECT_CONTINUOUS_VIEW)
+			relkind = RELKIND_CONTINUOUS_VIEW;
 
 		/* Look up the appropriate relation using namespace search. */
 		state.relkind = relkind;
@@ -893,13 +898,12 @@ RemoveRelations(DropStmt *drop)
 			 * want a specific error message if this is a continuous view. This is also
 			 * the case for streams.
 			 */
-			char save = relkind;
-			if (drop->removeType == OBJECT_CONTINUOUS_VIEW)
-				relkind = RELKIND_CONTINUOUS_VIEW;
 			DropErrorMsgNonExistent(rel, relkind, drop->missing_ok);
 			relkind = save;
 			continue;
 		}
+
+		relkind = save;
 
 		/* OK, we're ready to delete this one */
 		obj.classId = RelationRelationId;
@@ -927,6 +931,7 @@ RangeVarCallbackForDropRelation(const RangeVar *rel, Oid relOid, Oid oldRelOid,
 	char		relkind;
 	Form_pg_class classform;
 	LOCKMODE	heap_lockmode;
+	char		expected_relkind;
 
 	state = (struct DropRelationCallbackState *) arg;
 	relkind = state->relkind;
@@ -952,9 +957,19 @@ RangeVarCallbackForDropRelation(const RangeVar *rel, Oid relOid, Oid oldRelOid,
 	if (!HeapTupleIsValid(tuple))
 		return;					/* concurrently dropped, so nothing to do */
 	classform = (Form_pg_class) GETSTRUCT(tuple);
+	expected_relkind = classform->relkind;
 
-	if (classform->relkind != relkind)
-		DropErrorMsgWrongType(rel->relname, classform->relkind, relkind);
+	/*
+	 * We use a regular relkind of 'v' for continuous views' virtual relations
+	 * because that's what they are, which keeps things simple. However, we do
+	 * want a specific error message if the drop target is continuous view and
+	 * the given target is not.
+	 */
+	if (IsAContinuousView((RangeVar *) rel))
+		expected_relkind = RELKIND_CONTINUOUS_VIEW;
+
+	if (expected_relkind != relkind)
+		DropErrorMsgWrongType(rel->relname, expected_relkind, relkind);
 
 	/* Allow DROP to either table owner or schema owner */
 	if (!pg_class_ownercheck(relOid, GetUserId()) &&
