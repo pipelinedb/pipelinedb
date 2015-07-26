@@ -68,7 +68,7 @@
  *
  * ----------------------------------------------------------------
  */
-CATALOG(pipeline_combine,4247) BKI_WITHOUT_OIDS
+CATALOG(pipeline_combine,4247)
 {
 	regproc aggfinalfn;
 	regproc transfn;

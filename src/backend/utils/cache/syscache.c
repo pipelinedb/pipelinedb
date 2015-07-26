@@ -570,6 +570,17 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		8
 	},
+	{PipelineCombineRelationId,	/* PIPELINECOMBINEOID */
+		PipelineCombineOidIndexId,
+		1,
+		{
+			ObjectIdAttributeNumber,
+			0,
+			0,
+			0
+		},
+		2048
+	},
 	{PipelineCombineRelationId,	/* PIPELINECOMBINETRANSFNOID */
 		PipelineCombineTransIdIndexId,
 		2,

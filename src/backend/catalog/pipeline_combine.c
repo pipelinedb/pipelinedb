@@ -134,8 +134,7 @@ GetCombineStateType(Oid aggfnoid)
  * Define a combiner that can be used to combine aggregate transition states for continuous views
  */
 Oid
-DefineCombiner(Oid aggoid, List *name, List *args, bool oldstyle, List *parameters,
-		const char *queryString)
+DefineCombiner(Oid aggoid, List *name, List *args, bool oldstyle, List *parameters)
 {
 	char *aggname;
 	Oid namespace;
@@ -157,8 +156,9 @@ DefineCombiner(Oid aggoid, List *name, List *args, bool oldstyle, List *paramete
 	Oid combinefn = InvalidOid;
 	Oid transouttype = InvalidOid;
 	Oid result = InvalidOid;
-	ObjectAddress parent;
-	ObjectAddress child;
+	ObjectAddress referenced;
+	ObjectAddress agg_objaddress;
+	Oid combinetup_oid = InvalidOid;
 
 	/* Convert list of names to a name and namespace */
 	namespace = QualifiedNameGetCreationNamespace(name, &aggname);
@@ -254,49 +254,77 @@ DefineCombiner(Oid aggoid, List *name, List *args, bool oldstyle, List *paramete
 	result = simple_heap_insert(pipeline_combine, combinetup);
 	CatalogUpdateIndexes(pipeline_combine, combinetup);
 
+	combinetup_oid = HeapTupleGetOid(combinetup);
+
 	heap_freetuple(combinetup);
 	heap_close(pipeline_combine, NoLock);
 
 	/*
 	 * Record a dependency between the combine function and its corresponding aggregate
 	 */
-	child.classId = ProcedureRelationId;
-	child.objectId = aggoid;
-	child.objectSubId = 0;
+	agg_objaddress.classId = ProcedureRelationId;
+	agg_objaddress.objectId = aggoid;
+	agg_objaddress.objectSubId = 0;
 
-	parent.classId = ProcedureRelationId;
-	parent.objectId = combinefn;
-	parent.objectSubId = 0;
+	referenced.classId = ProcedureRelationId;
+	referenced.objectId = combinefn;
+	referenced.objectSubId = 0;
 
-	recordDependencyOn(&child, &parent, DEPENDENCY_NORMAL);
+	recordDependencyOn(&agg_objaddress, &referenced, DEPENDENCY_NORMAL);
 
 	/*
 	 * Do the same for the transout and combinein functions if they exist
 	 */
 	if (OidIsValid(combineinfn))
 	{
-		child.classId = ProcedureRelationId;
-		child.objectId = aggoid;
-		child.objectSubId = 0;
+		referenced.classId = ProcedureRelationId;
+		referenced.objectId = combineinfn;
+		referenced.objectSubId = 0;
 
-		parent.classId = ProcedureRelationId;
-		parent.objectId = combineinfn;
-		parent.objectSubId = 0;
-
-		recordDependencyOn(&child, &parent, DEPENDENCY_NORMAL);
+		recordDependencyOn(&agg_objaddress, &referenced, DEPENDENCY_NORMAL);
 	}
+
 	if (OidIsValid(transoutfn))
 	{
-		child.classId = ProcedureRelationId;
-		child.objectId = aggoid;
-		child.objectSubId = 0;
+		referenced.classId = ProcedureRelationId;
+		referenced.objectId = transoutfn;
+		referenced.objectSubId = 0;
 
-		parent.classId = ProcedureRelationId;
-		parent.objectId = transoutfn;
-		parent.objectSubId = 0;
-
-		recordDependencyOn(&child, &parent, DEPENDENCY_NORMAL);
+		recordDependencyOn(&agg_objaddress, &referenced, DEPENDENCY_NORMAL);
 	}
 
+	/*
+	 * Record a dependency between pipeline_combine entry and the aggregate
+	 */
+	referenced.classId = PipelineCombineRelationId;
+	referenced.objectId = combinetup_oid;
+	referenced.objectSubId = 0;
+
+	recordDependencyOn(&referenced, &agg_objaddress, DEPENDENCY_INTERNAL);
+
 	return result;
+}
+
+/*
+ * RemovePipelineCombineById
+ */
+void
+RemovePipelineCombineById(Oid oid)
+{
+	Relation pipeline_combine;
+	HeapTuple tuple;
+
+	pipeline_combine = heap_open(PipelineCombineRelationId, RowExclusiveLock);
+
+	tuple = SearchSysCache1(PIPELINECOMBINEOID, ObjectIdGetDatum(oid));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for pipeline_combine tuple with OID %u", oid);
+
+	simple_heap_delete(pipeline_combine, &tuple->t_self);
+
+	ReleaseSysCache(tuple);
+
+	CommandCounterIncrement();
+
+	heap_close(pipeline_combine, RowExclusiveLock);
 }

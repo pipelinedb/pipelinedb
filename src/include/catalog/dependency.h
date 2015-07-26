@@ -151,6 +151,7 @@ typedef enum ObjectClass
 	OCLASS_EVENT_TRIGGER,		/* pg_event_trigger */
 	OCLASS_CONTINUOUS_VIEW, 	/* pipeline_query */
 	OCLASS_STREAM, 				/* pipeline_stream */
+	OCLASS_COMBINE,				/* pipeline_combine */
 	MAX_OCLASS					/* MUST BE LAST */
 } ObjectClass;
 
