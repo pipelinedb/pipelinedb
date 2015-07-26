@@ -317,19 +317,18 @@ get_time_bucket_size(Node *node, CQAnalyzeContext *context)
 		Node *truncArg;
 		char *fname = strVal(linitial(fcall->funcname));
 
-		if (pg_strcasecmp(fname, DATE_TRUNC_YEAR) ||
-			pg_strcasecmp(fname, DATE_TRUNC_MONTH) ||
-			pg_strcasecmp(fname, DATE_TRUNC_DAY) ||
-			pg_strcasecmp(fname, DATE_TRUNC_HOUR) ||
-			pg_strcasecmp(fname, DATE_TRUNC_MINUTE) ||
-			pg_strcasecmp(fname, DATE_TRUNC_SECOND))
+		if (pg_strcasecmp(fname, DATE_TRUNC_YEAR) == 0 ||
+			pg_strcasecmp(fname, DATE_TRUNC_MONTH) == 0 ||
+			pg_strcasecmp(fname, DATE_TRUNC_DAY) == 0 ||
+			pg_strcasecmp(fname, DATE_TRUNC_HOUR) == 0 ||
+			pg_strcasecmp(fname, DATE_TRUNC_MINUTE) == 0 ||
+			pg_strcasecmp(fname, DATE_TRUNC_SECOND) == 0)
 		{
 			context->stepNode = node;
 			context->stepSize = fname;
 
-			return true;
+			return false;
 		}
-
 
 		if (pg_strcasecmp(fname, DATE_TRUNC) != 0)
 			return false;
