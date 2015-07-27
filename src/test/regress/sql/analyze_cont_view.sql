@@ -99,6 +99,8 @@ CREATE CONTINUOUS VIEW cqanalyze31 AS SELECT key::text, arrival_timestamp::times
 -- Verify that we can't do wildcard selections in continuous queries
 CREATE CONTINUOUS VIEW cqanalyze32 AS SELECT * from stream;
 CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from stream, t0;
+CREATE STREAM cqanalyze_wc_stream (x integer);
+CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from cqanalyze_wc_stream;
 CREATE CONTINUOUS VIEW cqanalyze34 AS SELECT t0.* from stream, t0;
 CREATE CONTINUOUS VIEW cqanalyze35 AS SELECT stream.* from stream, t0;
 

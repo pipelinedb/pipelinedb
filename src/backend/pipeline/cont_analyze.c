@@ -665,6 +665,32 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 				errhint("Remove \"%s\" from the FROM clause.", stream->relname),
 				parser_errposition(context->pstate, stream->location)));
 
+	/*
+	 * Ensure that we have no `*` in the target list.
+	 *
+	 * We can't SELECT * from streams because we don't know the schema of
+	 * streams ahead of time.
+	 *
+	 * The decision to disallow wildcards for relations & static streams was taken
+	 * because they can be ALTERed in the future which would require us to
+	 * ALTER the CQ's underlying materialization table and the VIEW. This can probably
+	 * be accomplished by triggers, but lets just punt on this for now.
+	 */
+	foreach(lc, context->cols)
+	{
+		ColumnRef *cref = lfirst(lc);
+		char *qualname = NameListToString(cref->fields);
+
+		if (IsA(lfirst(cref->fields->tail), A_Star))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_AMBIGUOUS_COLUMN),
+					 errmsg("can't select \"%s\" in continuous queries", qualname),
+					 errhint("Explicitly state the columns you want to SELECT."),
+					 parser_errposition(context->pstate, cref->location)));
+		}
+	}
+
 	RangeVarIsForStream(stream, &is_inferred);
 
 	/* Ensure that each column being read from an inferred stream is type-casted */
@@ -687,26 +713,6 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 			 */
 			if (pg_strcasecmp(colname, ARRIVAL_TIMESTAMP) == 0)
 				continue;
-
-			/*
-			 * Ensure that we have no `*` in the target list.
-			 *
-			 * We can't SELECT * from streams because we don't know the schema of
-			 * streams ahead of time.
-			 *
-			 * XXX(usmanm): The decision to disallow wildcards for relations was taken
-			 * because relations can be ALTERed in the future which would require us to
-			 * ALTER the CQ's underlying materialization table and the VIEW. This can probably
-			 * be accomplished by triggers, but lets just punt on this for now.
-			 */
-			if (IsA(lfirst(cref->fields->tail), A_Star))
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_AMBIGUOUS_COLUMN),
-						 errmsg("can't select \"%s\" in continuous queries", qualname),
-						 errhint("Explicitly state the columns you want to SELECT."),
-						 parser_errposition(context->pstate, cref->location)));
-			}
 
 			/*
 			 * If the column is for a relation, we don't need any explicit type case.

@@ -122,6 +122,12 @@ ERROR:  can't select "*" in continuous queries
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from stream, ...
                                                      ^
 HINT:  Explicitly state the columns you want to SELECT.
+CREATE STREAM cqanalyze_wc_stream (x integer);
+CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from cqanalyze_wc_stream;
+ERROR:  can't select "*" in continuous queries
+LINE 1: CREATE CONTINUOUS VIEW cqanalyze33 AS SELECT * from cqanalyz...
+                                                     ^
+HINT:  Explicitly state the columns you want to SELECT.
 CREATE CONTINUOUS VIEW cqanalyze34 AS SELECT t0.* from stream, t0;
 ERROR:  can't select "t0.*" in continuous queries
 LINE 1: CREATE CONTINUOUS VIEW cqanalyze34 AS SELECT t0.* from strea...
