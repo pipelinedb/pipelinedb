@@ -25,6 +25,7 @@ typedef struct SWVacuumContext
 	TupleTableSlot *slot;
 	ExprContext *econtext;
 	List *predicate;
+	List *expired;
 } SWVacuumContext;
 
 extern uint64_t NumSWVacuumTuples(Oid relid);

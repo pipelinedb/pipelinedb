@@ -28,6 +28,7 @@ typedef struct StreamReceiver
 	TupleDesc desc;
 	MemoryContext context;
 	Size bytes;
+	TimestampTz lastcommit;
 } StreamReceiver;
 
 extern DestReceiver *CreateStreamDestReceiver(void);

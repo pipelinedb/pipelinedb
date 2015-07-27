@@ -13,7 +13,6 @@
 #ifndef STREAM_H
 #define STREAM_H
 
-#include "postgres.h"
 #include "nodes/bitmapset.h"
 #include "nodes/params.h"
 #include "nodes/parsenodes.h"
@@ -21,6 +20,8 @@
 #include "utils/hsearch.h"
 #include "utils/relcache.h"
 #include "utils/timestamp.h"
+
+extern int stream_insertion_commit_interval;
 
 #define QueryIsStreaming(query) ((query)->isContinuous)
 #define QueryIsCombine(query) ((query)->isCombine)
@@ -48,7 +49,7 @@ extern PreparedStreamInsertStmt *FetchPreparedStreamInsert(const char *name);
 extern void DropPreparedStreamInsert(const char *name);
 extern int InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt);
 extern int InsertIntoStream(InsertStmt *ins, List *params);
-extern uint64 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
+extern uint64 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, TimestampTz *timer);
 
 /* Represents a single batch of inserts made into a stream. */
 typedef struct InsertBatch {

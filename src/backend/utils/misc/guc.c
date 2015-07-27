@@ -53,6 +53,7 @@
 #include "parser/parser.h"
 #include "parser/scansup.h"
 #include "pgstat.h"
+#include "pipeline/stream.h"
 #include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker.h"
@@ -2397,7 +2398,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_S
 		},
 		&autovacuum_naptime,
-		60, 1, INT_MAX / 1000,
+		15, 1, INT_MAX / 1000,
 		NULL, NULL, NULL
 	},
 	{
@@ -2665,6 +2666,17 @@ static struct config_int ConfigureNamesInt[] =
 		},
 		&continuous_view_fillfactor,
 		50, 1, 100,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"stream_insertion_commit_interval", PGC_BACKEND, QUERY_TUNING_OTHER,
+		 gettext_noop("Sets the default amount of time to periodically commit from a stream insertion process."),
+		 gettext_noop("A lower number will minimize the amount of time the autovacuumer can be blocked from freeing unused space by long-running stream insertion processes. Additionally, continuous views created during the insertion process will begin accepting writes by the inserter sooner."),
+		 GUC_UNIT_S
+		},
+		&stream_insertion_commit_interval,
+		1, -1, INT_MAX,
 		NULL, NULL, NULL
 	},
 

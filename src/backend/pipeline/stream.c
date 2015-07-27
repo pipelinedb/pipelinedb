@@ -13,6 +13,7 @@
 #include "postgres.h"
 
 #include "access/htup_details.h"
+#include "access/xact.h"
 #include "catalog/namespace.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
@@ -43,6 +44,9 @@
 #include "utils/syscache.h"
 #include "utils/tqual.h"
 #include "utils/typcache.h"
+
+/* guc param */
+int stream_insertion_commit_interval;
 
 #define SLEEP_MS 2
 
@@ -412,7 +416,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
  * COPY events to a stream from an input source
  */
 uint64
-CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
+CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, TimestampTz *timer)
 {
 	Bitmapset *targets;
 	uint64 count = 0;
@@ -421,6 +425,9 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	InsertBatch *batch = NULL;
 	int num_batches = 0;
 	Size size = 0;
+	bool snap = ActiveSnapshotSet();
+
+	Assert(timer != NULL);
 
 	targets = GetLocalStreamReaders(RelationGetRelid(stream));
 
@@ -445,6 +452,9 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 		acks[0].count = 1;
 	}
 
+	if (snap)
+		PopActiveSnapshot();
+
 	for (i=0; i<ntuples; i++)
 	{
 		HeapTuple htup = tuples[i];
@@ -455,6 +465,15 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 
 		count++;
 		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
+
+		if (stream_insertion_commit_interval > 0 &&
+				TimestampDifferenceExceeds(*timer, GetCurrentTimestamp(), stream_insertion_commit_interval * 1000))
+		{
+			 CommitTransactionCommand();
+			 *timer = GetCurrentTimestamp();
+
+			 StartTransactionCommand();
+		}
 	}
 
 	stream_stat_report(RelationGetRelid(stream), count, 1, size);
@@ -464,6 +483,9 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 	 */
 	if (synchronous_stream_insert)
 		InsertBatchWaitAndRemove(batch, count);
+
+	if (snap)
+		PushActiveSnapshot(GetTransactionSnapshot());
 
 	return count;
 }
