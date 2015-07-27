@@ -882,7 +882,7 @@ TupleBufferBatchReaderReset(TupleBufferBatchReader *reader)
 
 	MemoryContextSwitchTo(old_ctx);
 
-	/* we need to restart scanning from the underlyng reader */
+	/* we need to restart scanning from the underlying reader */
 	reader->started = false;
 	reader->batch_done = false;
 }
@@ -904,7 +904,7 @@ void
 TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_processed)
 {
 	if (!TupleBufferHasUnreadSlots(reader->rdr) &&
-			TimestampDifferenceExceeds(last_processed, GetCurrentTimestamp(), reader->params->empty_sleep))
+			TimestampDifferenceExceeds(last_processed, GetCurrentTimestamp(), reader->params->max_wait))
 	{
 		cq_stat_report(true);
 

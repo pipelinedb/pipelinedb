@@ -68,7 +68,6 @@ int continuous_query_num_combiners;
 int continuous_query_num_workers;
 int continuous_query_batch_size;
 int continuous_query_max_wait;
-int continuous_query_empty_sleep;
 int continuous_query_combiner_work_mem;
 int continuous_query_combiner_cache_mem;
 int continuous_query_combiner_synchronous_commit;
@@ -105,7 +104,6 @@ static void
 update_tuning_params(void)
 {
 	ContQuerySchedulerShmem->params.batch_size = continuous_query_batch_size;
-	ContQuerySchedulerShmem->params.empty_sleep = continuous_query_empty_sleep;
 	ContQuerySchedulerShmem->params.max_wait = continuous_query_max_wait;
 }
 
