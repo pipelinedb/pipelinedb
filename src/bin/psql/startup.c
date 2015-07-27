@@ -589,6 +589,9 @@ parse_psql_options(int argc, char *argv[], struct adhoc_opts * options)
 
 		optind++;
 	}
+	
+	if (!options->port)
+		options->port = DEF_PGPORT_STR;
 }
 
 
