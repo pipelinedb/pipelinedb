@@ -44,6 +44,7 @@
 #include "access/htup_details.h"
 #include "access/multixact.h"
 #include "access/transam.h"
+#include "access/tuptoaster.h"
 #include "access/visibilitymap.h"
 #include "catalog/catalog.h"
 #include "catalog/storage.h"
@@ -891,8 +892,15 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 
 			if (!tupgone && ShouldVacuumSWTuple(cqvcontext, &tuple))
 			{
-				tupgone = true;
-				all_visible = false;
+				ItemPointer item = (ItemPointer) palloc0(sizeof(ItemPointerData));
+
+				/*
+				 * We need our own copy of this, because tuple.t_self is reset after each
+				 * iteration of the loop, but we need to process all of these after the
+				 * loop terminates.
+				 */
+				ItemPointerSet(item, blkno, offnum);
+				cqvcontext->expired = lappend(cqvcontext->expired, item);
 			}
 
 			if (tupgone)
@@ -1043,6 +1051,18 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 		}
 
 		UnlockReleaseBuffer(buf);
+
+		if (cqvcontext && cqvcontext->expired)
+		{
+			ListCell *lc;
+			foreach(lc, cqvcontext->expired)
+			{
+				ItemPointer item = (ItemPointer) lfirst(lc);
+				simple_heap_delete(onerel, item);
+			}
+			list_free_deep(cqvcontext->expired);
+			cqvcontext->expired = NIL;
+		}
 
 		/* Remember the location of the last page with nonremovable tuples */
 		if (hastup)

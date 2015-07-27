@@ -2136,6 +2136,7 @@ CopyFrom(CopyState cstate)
 	HeapTuple  *bufferedTuples = NULL;	/* initialize to silence warning */
 	Size		bufferedTuplesSize = 0;
 	int			firstBufferedLineNo = 0;
+	TimestampTz timer = GetCurrentTimestamp();
 
 	Assert(cstate->rel);
 
@@ -2285,7 +2286,8 @@ CopyFrom(CopyState cstate)
 	}
 
 	/* Prepare to catch AFTER triggers. */
-	AfterTriggerBeginQuery();
+	if (!cstate->to_stream)
+		AfterTriggerBeginQuery();
 
 	/*
 	 * Check BEFORE STATEMENT insertion triggers. It's debatable whether we
@@ -2293,7 +2295,8 @@ CopyFrom(CopyState cstate)
 	 * such. However, executing these triggers maintains consistency with the
 	 * EACH ROW triggers that we already fire on COPY.
 	 */
-	ExecBSInsertTriggers(estate, resultRelInfo);
+	if (!cstate->to_stream)
+		ExecBSInsertTriggers(estate, resultRelInfo);
 
 	values = (Datum *) palloc(tupDesc->natts * sizeof(Datum));
 	nulls = (bool *) palloc(tupDesc->natts * sizeof(bool));
@@ -2394,7 +2397,7 @@ CopyFrom(CopyState cstate)
 					if (cstate->to_stream)
 					{
 						MemoryContext old_cxt = MemoryContextSwitchTo(cstate->to_stream_ctxt);
-						CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples);
+						CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples, &timer);
 						MemoryContextReset(cstate->to_stream_ctxt);
 						MemoryContextSwitchTo(old_cxt);
 					}
@@ -2443,7 +2446,7 @@ CopyFrom(CopyState cstate)
 		if (cstate->to_stream)
 		{
 			MemoryContext old_cxt = MemoryContextSwitchTo(cstate->to_stream_ctxt);
-			CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples);
+			CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples, &timer);
 			MemoryContextReset(cstate->to_stream_ctxt);
 			MemoryContextSwitchTo(old_cxt);
 		}
@@ -2471,10 +2474,12 @@ CopyFrom(CopyState cstate)
 		pq_endmsgread();
 
 	/* Execute AFTER STATEMENT insertion triggers */
-	ExecASInsertTriggers(estate, resultRelInfo);
+	if (!cstate->to_stream)
+		ExecASInsertTriggers(estate, resultRelInfo);
 
 	/* Handle queued AFTER triggers */
-	AfterTriggerEndQuery(estate);
+	if (!cstate->to_stream)
+		AfterTriggerEndQuery(estate);
 
 	pfree(values);
 	pfree(nulls);

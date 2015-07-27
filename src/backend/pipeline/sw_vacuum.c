@@ -205,6 +205,7 @@ CreateSWVacuumContext(Relation rel)
 	context->slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
 	context->econtext->ecxt_scantuple = context->slot;
 	context->predicate = list_make1(ExecInitExpr(expression_planner(expr), NULL));
+	context->expired = NIL;
 
 	return context;
 }

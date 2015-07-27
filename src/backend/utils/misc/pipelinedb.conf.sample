@@ -473,7 +473,7 @@
 					# of milliseconds.
 #autovacuum_max_workers = 3		# max number of autovacuum subprocesses
 					# (change requires restart)
-#autovacuum_naptime = 1min		# time between autovacuum runs
+#autovacuum_naptime = 15s		  # time between autovacuum runs
 #autovacuum_vacuum_threshold = 50	# min number of row updates before
 					# vacuum
 #autovacuum_analyze_threshold = 50	# min number of row updates before
@@ -630,6 +630,10 @@
 # the number of parallel continuous query worker processes to use for
 # each database
 #continuous_query_num_workers = 2
+
+# the default amount of time to periodically commit from a stream insertion
+# process
+#stream_insertion_commit_interval = 1s
 
 #------------------------------------------------------------------------------
 # CONFIG FILE INCLUDES

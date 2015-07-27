@@ -995,6 +995,7 @@ next:
 		}
 
 		CommitTransactionCommand();
+		pgstat_report_stat(false);
 
 		if (num_processed)
 			last_processed = GetCurrentTimestamp();
