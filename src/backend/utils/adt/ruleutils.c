@@ -7736,6 +7736,7 @@ get_agg_expr(Aggref *aggref, deparse_context *context)
 	{
 		funcname = USER_COMBINE;
 		context->iscombine = true;
+		use_variadic = false;
 	}
 	else
 	{
