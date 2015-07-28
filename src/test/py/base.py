@@ -88,7 +88,8 @@ class PipelineDB(object):
                                       '-c', 'synchronous_stream_insert=true',
                                       '-c', 'continuous_query_num_combiners=2',
                                       '-c', 'continuous_query_num_workers=4',
-                                      '-c', 'anonymous_update_checks=false'],
+                                      '-c', 'anonymous_update_checks=false',
+                                      '-c', 'continuous_query_max_wait=5'],
                                      stderr=subprocess.PIPE)
 
         # Wait for PipelineDB to start up

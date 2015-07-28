@@ -598,10 +598,6 @@
 # size of the buffer for storing unread stream tuples
 #tuple_buffer_blocks = 128MB
 
-# time in milliseconds that a continuous query process will wait for new data
-# to arrive before going to sleep
-#continuous_query_empty_sleep = 250
-
 # synchronization level for combiner commits; off, local, remote_write, or on
 #continuous_query_combiner_synchronous_commit = off
 
@@ -617,7 +613,7 @@
 
 # the time in milliseconds a continuous query process will wait for a batch
 # to accumulate
-# continuous_query_max_wait = 5
+# continuous_query_max_wait = 10
 
 # the maximum number of events to accumulate before executing a continuous query
 # plan on them

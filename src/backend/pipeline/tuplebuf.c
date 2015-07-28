@@ -687,7 +687,6 @@ TupleBufferOpenBatchReader(TupleBuffer *buf, TupleBufferShouldReadFunc read_func
 	reader->depleted = false;
 	reader->batch_done = false;
 	reader->current = NULL;
-	reader->acks = NIL;
 	reader->params = GetContQueryRunParams();
 	reader->queries_seen = NULL;
 	reader->yielded = NIL;
@@ -793,8 +792,8 @@ TupleBufferBatchReaderNext(TupleBufferBatchReader *reader)
 		 * We've waited long enough to read a full batch? Don't try to read more tuples from the underlying reader. We also
 		 * break early here in case continuous queries were deactivated.
 		 */
-		if (!reader->rdr->proc->group->active ||
-				TimestampDifferenceExceeds(reader->start_time, GetCurrentTimestamp(), reader->params->max_wait))
+		if (TimestampDifferenceExceeds(reader->start_time, GetCurrentTimestamp(), reader->params->max_wait) ||
+				!reader->rdr->proc->group->active || reader->rdr->proc->group->terminate)
 		{
 			reader->batch_done = true;
 			reader->depleted = true;
@@ -882,7 +881,7 @@ TupleBufferBatchReaderReset(TupleBufferBatchReader *reader)
 
 	MemoryContextSwitchTo(old_ctx);
 
-	/* we need to restart scanning from the underlyng reader */
+	/* we need to restart scanning from the underlying reader */
 	reader->started = false;
 	reader->batch_done = false;
 }
@@ -904,7 +903,8 @@ void
 TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_processed)
 {
 	if (!TupleBufferHasUnreadSlots(reader->rdr) &&
-			TimestampDifferenceExceeds(last_processed, GetCurrentTimestamp(), reader->params->empty_sleep))
+			TimestampDifferenceExceeds(last_processed, GetCurrentTimestamp(), reader->params->max_wait) &&
+			!(!reader->rdr->proc->group->active || reader->rdr->proc->group->terminate))
 	{
 		cq_stat_report(true);
 

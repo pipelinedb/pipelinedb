@@ -225,7 +225,7 @@ FROM test_uc0 v0 JOIN test_uc1 v1 ON v0.s = v1.s JOIN test_uc_table1 t0 ON v0.s 
 -- Verify that combines work on subsets of CV-table joins
 SELECT v0.s, combine(expr0), combine(avg_sum) FROM test_uc0 v0
 JOIN test_uc1 v1 ON v0.s = v1.s JOIN test_uc_table1 t0 ON v0.s = t0.s
-WHERE v0.s > '25' GROUP BY v0.s;
+WHERE v0.s > '25' GROUP BY v0.s ORDER BY v0.s;
 
 -- Verify that views containing combines can be created on top of continuous views
 SELECT * FROM test_uc2 ORDER BY minute;

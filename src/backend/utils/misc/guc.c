@@ -2594,18 +2594,6 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"continuous_query_empty_sleep", PGC_SIGHUP, QUERY_TUNING,
-		 gettext_noop("Sets the time a continuous query process will wait for new data to arrive before going to sleep."),
-		 gettext_noop("A higher value may cause a continuous query worker process to waste CPU cycles but it will sleep "
-					  "less often."),
-		 GUC_UNIT_MS
-		},
-		&continuous_query_empty_sleep,
-		5, 1, 60000,
-		NULL, NULL, NULL
-	},
-
-	{
 		{"continuous_query_combiner_cache_mem", PGC_BACKEND, RESOURCES_MEM,
 		 gettext_noop("Sets the maximum memory to be used by the combiner for caching. This is independent of combiner_work_mem."),
 		 NULL,
@@ -2624,7 +2612,7 @@ static struct config_int ConfigureNamesInt[] =
 		 GUC_UNIT_MS
 		},
 		&continuous_query_max_wait,
-		5, 1, 60000,
+		10, 1, 60000,
 		NULL, NULL, NULL
 	},
 

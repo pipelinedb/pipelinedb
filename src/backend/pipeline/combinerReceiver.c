@@ -104,7 +104,7 @@ combiner_receive(TupleTableSlot *slot, DestReceiver *self)
 
 				InsertBatchIncrementNumCTuples(ack->batch);
 
-				acks[i].batch_id = ack->batch->id;
+				acks[i].batch_id = ack->batch_id;
 				acks[i].batch = ack->batch;
 				acks[i].count = 1;
 				i++;

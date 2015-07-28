@@ -51,7 +51,6 @@ typedef struct
 {
 	int batch_size;
 	int max_wait;
-	int empty_sleep;
 } ContQueryRunParams;
 
 /* per proc structures */
@@ -65,7 +64,6 @@ extern int continuous_query_num_combiners;
 extern int continuous_query_num_workers;
 extern int continuous_query_batch_size;
 extern int continuous_query_max_wait;
-extern int continuous_query_empty_sleep;
 extern int continuous_query_combiner_work_mem;
 extern int continuous_query_combiner_cache_mem;
 extern int continuous_query_combiner_synchronous_commit;

@@ -97,7 +97,6 @@ typedef struct TupleBufferBatchReader
 	bool depleted;
 	bool batch_done;
 	ListCell *current;
-	List *acks;
 	ContQueryRunParams *params;
 	Bitmapset *queries_seen;
 	List *yielded;

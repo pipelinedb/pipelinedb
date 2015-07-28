@@ -508,11 +508,14 @@ InsertBatchWaitAndRemove(InsertBatch *batch, int num_tuples)
 	if (cont_queries_active ==  NULL)
 		cont_queries_active = ContQueryGetActiveFlag();
 
-	batch->num_wtups = num_tuples;
-	while (!StreamBatchAllAcked(batch) && *cont_queries_active)
+	if (num_tuples)
 	{
-		pg_usleep(SLEEP_MS * 1000);
-		CHECK_FOR_INTERRUPTS();
+		batch->num_wtups = num_tuples;
+		while (!StreamBatchAllAcked(batch) && *cont_queries_active)
+		{
+			pg_usleep(SLEEP_MS * 1000);
+			CHECK_FOR_INTERRUPTS();
+		}
 	}
 
 	ShmemDynFree(batch);

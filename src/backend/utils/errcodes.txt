@@ -471,3 +471,4 @@ PD001    E    ERRCODE_INVALID_CONTINUOUS_VIEW_STATE                          inv
 PD002    E    ERRCODE_DUPLICATE_CONTINUOUS_VIEW                              duplicate_continuous_view
 PD003    E    ERRCODE_INACTIVE_STREAM                                        inactive_stream
 PD004    E    ERRCODE_DUPLICATE_STREAM                                       duplicate_stream
+PD005    E    ERRCODE_TOO_MANY_CONTINUOUS_VIEWS                              too_many_continuous_views

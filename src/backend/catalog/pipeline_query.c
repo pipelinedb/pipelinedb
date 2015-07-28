@@ -10,6 +10,7 @@
  *
  *-------------------------------------------------------------------------
  */
+#include <math.h>
 #include "postgres.h"
 
 #include "access/heapam.h"
@@ -26,6 +27,7 @@
 #include "nodes/makefuncs.h"
 #include "parser/analyze.h"
 #include "pipeline/cqanalyze.h"
+#include "pipeline/cont_scheduler.h"
 #include "pipeline/miscutils.h"
 #include "postmaster/bgworker.h"
 #include "storage/pmsignal.h"
@@ -43,13 +45,13 @@
 #define MURMUR_SEED 0xadc83b19ULL
 
 /*
- * compare_int32s
+ * compare_oid
  */
 static int
-compare_int32(const void *a, const void *b)
+compare_oid(const void *a, const void *b)
 {
-  const int32 *ia = (const int32 *) a;
-  const int32 *ib = (const int32 *) b;
+  const Oid *ia = (const Oid *) a;
+  const Oid *ib = (const Oid *) b;
 
   return (*ia > *ib) - (*ia < *ib);
 }
@@ -61,47 +63,119 @@ compare_int32(const void *a, const void *b)
  * We keep this minimal so that we can minimize the size of bitmaps used
  * to tag stream buffer events with.
  */
-static int32
+static Oid
 get_next_id(Relation rel)
 {
-	HeapScanDesc	scandesc;
-	HeapTuple		tup;
-	int32			id = 1;
-	List			*idsList = NIL;
-	ListCell		*lc;
+	HeapScanDesc scandesc;
+	HeapTuple tup;
+	List *ids_list = NIL;
+	int num_ids;
+
+	Assert(MAX_CQS % 32 == 0);
 
 	scandesc = heap_beginscan_catalog(rel, 0, NULL);
 
 	while ((tup = heap_getnext(scandesc, ForwardScanDirection)) != NULL)
 	{
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		idsList = lappend_int(idsList, row->id);
+		ids_list = lappend_oid(ids_list, row->id);
 	}
 
 	heap_endscan(scandesc);
 
-	if (idsList != NIL)
+	num_ids = list_length(ids_list);
+
+	if (num_ids)
 	{
-		int32 ids[idsList->length];
+		Oid ids[num_ids];
+		int counts_per_combiner[continuous_query_num_combiners];
 		int i = 0;
-		foreach(lc, idsList)
+		Oid max;
+		ListCell *lc;
+		int j;
+		int target_combiner;
+		List *potential_ids;
+
+		MemSet(counts_per_combiner, 0, sizeof(counts_per_combiner));
+
+		foreach(lc, ids_list)
 		{
-			ids[i] = lfirst_int(lc);
+			ids[i] = lfirst_oid(lc);
+			counts_per_combiner[ids[i] % continuous_query_num_combiners] += 1;
 			i++;
 		}
 
-		qsort(ids, idsList->length, sizeof(Oid), &compare_int32);
+		qsort(ids, num_ids, sizeof(Oid), &compare_oid);
 
-		for (id = 0; id < idsList->length; id++)
+		if (num_ids == MAX_CQS - 1) /* -1 because 0 is an invalid id */
+			ereport(ERROR,
+					(errcode(ERRCODE_TOO_MANY_CONTINUOUS_VIEWS),
+					errmsg("maximum number of continuous views exceeded"),
+					errhint("Please drop a existing continuous view before trying to create a new one.")));
+
+		max = ids[num_ids - 1];
+		Assert(max >= num_ids);
+
+		/*
+		 * FIXME(usmanm): We do some randomization of ID generation here to make sure that CQs that
+		 * are created and dropped in quick succession don't read an event that was not for them.
+		 */
+
+		/*
+		 * Collect any unused ids in [1, max].
+		 */
+		list_free(ids_list);
+		ids_list = NIL;
+
+		for (i = 1, j = 0; j < num_ids; i++)
 		{
-			if (ids[id] > id + 1)
-				break;
+			if (ids[j] > i)
+				ids_list = lappend_oid(ids_list, (Oid) i);
+			else
+				j++;
 		}
 
-		id++;
+		/*
+		 * Add all IDs between max and the next multiple of 32.
+		 */
+		j = Min((max / 32 + 1) * 32, MAX_CQS);
+		for (i = max + 1; i < j; i++)
+			ids_list = lappend_oid(ids_list, (Oid) i);
+
+		/*
+		 * Less than 16 options? Throw in some more.
+		 */
+		if (list_length(ids_list) < 16 && j < MAX_CQS)
+			for (i = j; i < j + 32; i++)
+				ids_list = lappend_oid(ids_list, (Oid) i);
+
+		/*
+		 * Figure out the target combiner (one with least IDs allocated) and try to allocate
+		 * an ID that belongs to it.
+		 */
+		target_combiner = 0;
+		for (i = 0; i < continuous_query_num_combiners; i++)
+			if (counts_per_combiner[i] < counts_per_combiner[target_combiner])
+				target_combiner = i;
+
+		potential_ids = NIL;
+		foreach(lc, ids_list)
+		{
+			Oid id = lfirst_oid(lc);
+			if (id % continuous_query_num_combiners == target_combiner)
+				potential_ids = lappend_oid(potential_ids, id);
+		}
+
+		if (list_length(potential_ids))
+			return list_nth_oid(potential_ids, rand() % list_length(potential_ids));
+
+		return list_nth_oid(ids_list, rand() % list_length(ids_list));
 	}
 
-	return id;
+	/*
+	 * No CVs exist, give any id in [1, 16).
+	 */
+	return (rand() % 15) + 1;
 }
 
 
@@ -164,6 +238,8 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	pipeline_query = heap_open(PipelineQueryRelationId, RowExclusiveLock);
 
 	id = get_next_id(pipeline_query);
+
+	Assert(OidIsValid(id));
 
 	namestrcpy(&name_data, name->relname);
 	values[Anum_pipeline_query_id - 1] = Int32GetDatum(id);

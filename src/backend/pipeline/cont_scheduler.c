@@ -46,7 +46,7 @@
 #define MAX_PROC_TABLE_SZ 16 /* an entry exists per database */
 #define INIT_PROC_TABLE_SZ 4
 #define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners)
-#define MAX_WAIT_TERMINATE_MS 250
+#define MIN_WAIT_TERMINATE_MS 250
 
 typedef struct
 {
@@ -68,7 +68,6 @@ int continuous_query_num_combiners;
 int continuous_query_num_workers;
 int continuous_query_batch_size;
 int continuous_query_max_wait;
-int continuous_query_empty_sleep;
 int continuous_query_combiner_work_mem;
 int continuous_query_combiner_cache_mem;
 int continuous_query_combiner_synchronous_commit;
@@ -105,7 +104,6 @@ static void
 update_tuning_params(void)
 {
 	ContQuerySchedulerShmem->params.batch_size = continuous_query_batch_size;
-	ContQuerySchedulerShmem->params.empty_sleep = continuous_query_empty_sleep;
 	ContQuerySchedulerShmem->params.max_wait = continuous_query_max_wait;
 }
 
@@ -500,7 +498,7 @@ terminate_group(ContQueryProcGroup *grp)
 	}
 
 	/* Wait for a bit and then force terminate any processes that are still alive. */
-	pg_usleep(MAX_WAIT_TERMINATE_MS * 1000);
+	pg_usleep(Max(ContQuerySchedulerShmem->params.max_wait, MIN_WAIT_TERMINATE_MS) * 1000);
 
 	for (i = 0; i < TOTAL_SLOTS; i++)
 	{
