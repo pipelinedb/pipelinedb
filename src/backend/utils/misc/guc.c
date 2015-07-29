@@ -2809,6 +2809,16 @@ static struct config_real ConfigureNamesReal[] =
 		NULL, NULL, NULL
 	},
 
+	{
+		{"continuous_query_proc_priority", PGC_BACKEND, RESOURCES_ASYNCHRONOUS,
+			gettext_noop("Priority of continuous query background processes set in the kernel scheduler (nice)."),
+			NULL
+		},
+		&continuous_query_proc_priority,
+		0.75, 0.0, 1.0,
+		NULL, NULL, NULL
+	},
+
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, 0.0, 0.0, 0.0, NULL, NULL, NULL

@@ -9,11 +9,12 @@
  *
  *-------------------------------------------------------------------------
  */
-
-#include "postgres.h"
-
+#include <math.h>
+#include <sys/resource.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "postgres.h"
 
 #include "access/heapam.h"
 #include "access/htup_details.h"
@@ -47,6 +48,7 @@
 #define INIT_PROC_TABLE_SZ 4
 #define TOTAL_SLOTS (continuous_query_num_workers + continuous_query_num_combiners)
 #define MIN_WAIT_TERMINATE_MS 250
+#define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
 typedef struct
 {
@@ -71,6 +73,7 @@ int continuous_query_max_wait;
 int continuous_query_combiner_work_mem;
 int continuous_query_combiner_cache_mem;
 int continuous_query_combiner_synchronous_commit;
+double continuous_query_proc_priority;
 
 /* memory context for long-lived data */
 static MemoryContext ContQuerySchedulerMemCxt;
@@ -366,6 +369,9 @@ static void
 cq_bgproc_main(Datum arg)
 {
 	void (*run) (void);
+	int default_priority = getpriority(PRIO_PROCESS, MyProcPid);
+	int priority;
+
 	MyContQueryProc = (ContQueryProc *) DatumGetPointer(arg);
 
 	BackgroundWorkerUnblockSignals();
@@ -386,6 +392,14 @@ cq_bgproc_main(Datum arg)
 	 * waiters Bitmapset.
 	 */
 	MyContQueryProc->id = MyContQueryProc->handle.slot;
+
+	/*
+	 * Be nice!
+	 *
+	 * More is less here. A higher number indicates a lower scheduling priority.
+	 */
+	priority = Max(default_priority, MAX_PRIORITY - ceil(continuous_query_proc_priority * (MAX_PRIORITY - default_priority)));
+	nice(priority);
 
 	switch (MyContQueryProc->type)
 	{
