@@ -29,7 +29,6 @@
 #include "settings.h"
 
 
-
 /*
  * Global psql options
  */

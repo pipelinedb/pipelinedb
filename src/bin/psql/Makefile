@@ -27,11 +27,15 @@ OBJS=	command.o common.o help.o input.o stringutils.o mainloop.o copy.o \
 	sql_help.o pipeline.o \
 	$(WIN32RES)
 
+AOBJS= adhoc.o rbtree.o adhoc_compat.o
 
-all: psql
+all: psql padhoc
 
 psql: $(OBJS) | submake-libpq submake-libpgport
 	$(CC) $(CFLAGS) $(OBJS) $(libpq_pgport) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
+
+padhoc: $(AOBJS) | submake-libpq submake-libpgport
+	$(CC) $(CFLAGS) $(AOBJS) $(libpq_pgport) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
 
 help.o: sql_help.h
 
@@ -55,6 +59,7 @@ distprep: sql_help.h psqlscan.c
 
 install: all installdirs
 	$(INSTALL_PROGRAM) psql$(X) '$(DESTDIR)$(bindir)/psql$(X)'
+	$(INSTALL_PROGRAM) padhoc$(X) '$(DESTDIR)$(bindir)/padhoc$(X)'
 	$(INSTALL_DATA) $(srcdir)/psqlrc.sample '$(DESTDIR)$(datadir)/psqlrc.sample'
 	@rm -f '$(DESTDIR)$(bindir)/pipeline$(X)'
 	$(LN_S) psql $(DESTDIR)$(bindir)/pipeline
