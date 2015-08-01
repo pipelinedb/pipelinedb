@@ -983,6 +983,7 @@ EventTriggerSupportsObjectClass(ObjectClass objclass)
 		case OCLASS_TYPE:
 		case OCLASS_CAST:
 		case OCLASS_COLLATION:
+		case OCLASS_COMBINE:
 		case OCLASS_CONSTRAINT:
 		case OCLASS_CONVERSION:
 		case OCLASS_DEFAULT:
