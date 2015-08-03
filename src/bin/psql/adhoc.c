@@ -18,7 +18,6 @@ void die(const char* s) {
 	exit(1);
 }
 
-RBTree* tree = 0;
 
 typedef struct Field {
 
@@ -41,6 +40,8 @@ typedef struct Node {
 
 } Node;
 
+typedef void (*row_processor) (void* ctx, Row row);
+
 typedef struct RowStream
 {
 	int fd;
@@ -50,6 +51,9 @@ typedef struct RowStream
 	size_t flex_cap;
 	size_t flex_n;
 
+	row_processor process_row;
+	void* pr_ctx;
+
 } RowStream;
 
 void test_read(void);
@@ -57,17 +61,17 @@ int nodeCompare(const RBNode* ra, const RBNode *rb, void *arg);
 void nodeCombine(RBNode* ra, const RBNode *rb, void *arg);
 RBNode* nodeAlloc(void* arg);
 void nodeFree(RBNode *x, void* arg);
-void cleanup_row(Row* row);
+void cleanup_row(Row *row);
 
-void process_row(const char* row_buf);
+//void process_row(const char* row_buf);
 
 int nodeCompare(const RBNode* ra, const RBNode *rb, void *arg)
 {
 	Node* a = (Node*) (ra);
 	Node* b = (Node*) (rb);
 
-	return strcmp(a->row.fields[0].data, 
-				  b->row.fields[0].data);
+	return strcmp(a->row.fields[1].data, 
+				  b->row.fields[1].data);
 }
 
 RBNode* nodeAlloc(void *arg)
@@ -150,13 +154,16 @@ void destroy_screen(Screen* s)
 }
 
 
-RowStream* init_row_stream()
+RowStream* init_row_stream(row_processor proc, void *pctx)
 {
 	RowStream *stream = malloc(sizeof(RowStream));
 	memset(stream, 0, sizeof(RowStream));
 
 	stream->fd = STDIN_FILENO;
 	fcntl(stream->fd, F_SETFL, O_NONBLOCK);
+
+	stream->process_row = proc;
+	stream->pr_ctx = pctx;
 
 	return stream;
 }
@@ -205,18 +212,6 @@ Row parse_text_row(const char* line)
 	return row;
 }
 
-void print_row(Row row)
-{
-	size_t i = 0;
-
-	for (i = 0; i < row.num_fields; ++i) {
-
-		printf("%d:%s ", i, row.fields[i].data);
-	}
-
-	printf("\n");
-}
-
 void append_data(RowStream *stream, const char* buf, size_t nr)
 {
 	size_t ns = stream->flex_n + nr;
@@ -237,9 +232,7 @@ void append_data(RowStream *stream, const char* buf, size_t nr)
 			stream->flex_buf[stream->flex_n-1] = '\0';
 
 			Row row = parse_text_row(stream->flex_buf);
-			print_row(row);
-
-			cleanup_row(&row);
+			stream->process_row(stream->pr_ctx, row);
 
 			// reset
 			stream->flex_n = 0;
@@ -271,16 +264,97 @@ bool handle_row_stream(RowStream *stream)
 }
 
 void destroy_row_stream(RowStream *stream);
+
 void destroy_row_stream(RowStream *stream)
 {
+}
 
+typedef struct AppCtx {
+
+	// tree.
+	// top key
+	
+	int foo;
+	RBTree* tree;
+
+
+} AppCtx;
+
+AppCtx* init_app_ctx()
+{
+	void *aux = 0;
+	AppCtx *ctx = malloc(sizeof(AppCtx));
+
+	ctx->tree = rb_create(sizeof(Node), nodeCompare, nodeCombine,
+				 	 	  nodeAlloc, nodeFree, aux);
+
+	return ctx;
+}
+
+char* getvalue(Row row, int fieldnum)
+{
+	assert(fieldnum < row.num_fields);
+	return row.fields[fieldnum].data;
+}
+
+void update_row(AppCtx* ctx, Row row);
+
+void update_row(AppCtx* ctx, Row row)
+{
+	Node data = {0};
+	bool is_new = false;
+
+	data.row = row;
+	rb_insert(ctx->tree, &data, &is_new);
+}
+
+void delete_row(AppCtx* ctx, Row key)
+{
+	Node data = {0};
+	data.row = key;
+
+	RBNode* node = rb_find(ctx->tree, &data);
+
+	if (!node)
+		return;
+
+	// stash a copy before it gets trashed.
+	Row row = ((Node*)node)->row;
+	rb_delete(ctx->tree, node);
+
+	cleanup_row(&row);
+}
+
+void print_row(AppCtx* ctx, Row row)
+{
+	size_t i = 0;
+
+	char* event_field = getvalue(row, 0);
+	char event_code = event_field[0];
+
+	switch (event_code) 
+	{
+		case 'h':
+			break;
+		case 'i':
+			update_row(ctx, row);
+			break;
+		case 'u':
+			update_row(ctx, row);
+			break;
+		case 'd':
+			delete_row(ctx, row);
+			break;
+
+		default:
+			die("unknown");
+	}
 }
 
 void test_screen()
 {
-//	Screen* screen = init_screen();
-	RowStream* stream = init_row_stream();
-//	FILE* debug = fopen("/tmp/debug.txt", "w");
+	AppCtx *app_ctx = init_app_ctx();
+	RowStream* stream = init_row_stream(print_row, app_ctx);
 
 	// main event loop, handles screen and row updates.
 
@@ -299,14 +373,11 @@ void test_screen()
 			die("poll error");
 		}
 
-		printf("rc %d\n", pfd[0].revents);
-
 		if (pfd[0].revents & POLLIN)
 		{
 			bool fin = handle_row_stream(stream);
 
 			if (fin) {
-
 				break;
 			}
 		}
