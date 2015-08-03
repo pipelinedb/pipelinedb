@@ -1,6 +1,7 @@
 #include "postgres_fe.h"
 #include "adhoc_compat.h"
 
+#include <curses.h>
 #include <utils/rbtree.h>
 
 #include <unistd.h>
@@ -10,6 +11,12 @@
 /*
  * pipeline adhoc query client
  */
+
+void die(const char* s) {
+
+	fprintf(stderr, s);
+	exit(1);
+}
 
 RBTree* tree = 0;
 
@@ -85,8 +92,8 @@ int seen = 0;
 char *row_buf = 0;
 int row_state = 0;
 
-void process_row(const char* row_buf) {
-
+void process_row(const char* row_buf)
+{
 	Row row = {0,0,0};
 	int nf = 0;
 	int i = 0;
@@ -166,6 +173,94 @@ void append_data(const char* buf, size_t n) {
 	}
 }
 
+typedef struct Screen
+{
+	FILE* term_in;
+	SCREEN* main_screen;
+	int fd;
+} Screen;
+
+Screen* init_screen() 
+{
+	Screen* screen = malloc(sizeof(Screen));
+	const char* term_type = 0;
+
+	memset(screen, 0, sizeof(screen));
+
+	term_type = getenv("TERM");
+
+	if (term_type == NULL || *term_type == '\0') {
+		term_type = "unknown";
+	}
+
+	screen->term_in = 0;
+	screen->term_in = fopen("/dev/tty", "r");
+
+	if (screen->term_in == NULL) {
+		die("could not open /dev/tty");
+	}
+
+	screen->main_screen = newterm(term_type, stdout, screen->term_in);
+	set_term(screen->main_screen);
+	screen->fd = fileno(screen->term_in);
+
+	timeout(0);
+	clear();
+	noecho();
+	cbreak();	/* Line buffering disabled. pass on everything */
+	curs_set(0);
+
+	keypad(stdscr, TRUE);
+	refresh();
+
+	return screen;
+}
+
+void destroy_screen(Screen* s)
+{
+	endwin();
+	memset(s, 0, sizeof(s));
+	free(s);
+}
+
+typedef struct ScreenView 
+{
+	// essentially our position in the data stream.
+	// key etc goes here
+
+} ScreenView;
+
+void test_screen()
+{
+	Screen* screen = init_screen();
+	FILE* debug = fopen("/tmp/debug.txt", "w");
+
+	// main event loop, handles screen and row updates.
+
+	while (true)
+	{
+		struct pollfd pfd;
+
+		pfd.fd = screen->fd;
+		pfd.events = POLLIN;
+		pfd.revents = 0;
+
+		int rc = poll(&pfd, 1, -1);
+		int c = getch();
+
+		mvprintw(0,0,"got %d\n", c);
+		refresh();
+
+//		fprintf(debug, "got %d\n");
+//		fflush(debug);
+
+//		int fd = screen->fd;
+//		int c = getch();
+	}
+
+	destroy_screen(screen);
+}
+
 void test_read()
 {
 	char buf[4096];
@@ -218,22 +313,48 @@ void test_read()
 int
 main(int argc, char *argv[])
 {
-	void* aux = 0;
+	test_screen();
 
-	tree = rb_create(sizeof(Node), nodeCompare, nodeCombine, nodeAlloc, nodeFree, aux);
+//	const char* term_type = 0;
+//	FILE* term_in = 0;
+//	SCREEN* main_screen = 0;
+//
+//	term_type = getenv("TERM");
+//
+//	if (term_type == NULL || *term_type == '\0') {
+//		term_type = "unknown";
+//	}
+//
+//	term_in = fopen("/dev/tty", "r");
+//
+//	if (term_in == NULL) {
+//
+//		perror("fopen");
+//		return 1;
+//	}
+//
+//	main_screen = newterm(term_type, stdout, term_in);
+//	set_term(main_screen);
 
-	test_read();
-
-	rb_begin_iterate(tree, LeftRightWalk);
-
-	{
-		Node* node;
-
-		while ((node = (Node*) rb_iterate(tree))) {
-
-			printf("got node %s\n", node->row.fields[0].data);
-		}
-	}
-
-	return 0;
+//	SCREEN* main_screen = newterm(term_type, stdout, term_in);
+//	set_term(main_screen);
+//
+//	void* aux = 0;
+//	int foo = 0;
+//	tree = rb_create(sizeof(Node), nodeCompare, nodeCombine, nodeAlloc, nodeFree, aux);
+//
+//	test_read();
+//
+//	rb_begin_iterate(tree, LeftRightWalk);
+//
+//	{
+//		Node* node;
+//
+//		while ((node = (Node*) rb_iterate(tree))) {
+//
+//			printf("got node %s\n", node->row.fields[0].data);
+//		}
+//	}
+//
+//	return 0;
 }
