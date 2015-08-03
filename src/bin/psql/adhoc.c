@@ -12,9 +12,11 @@
  * pipeline adhoc query client
  */
 
+void die(const char* s);
+
 void die(const char* s) {
 
-	fprintf(stderr, s);
+	fprintf(stderr, "%s\n", s);
 	exit(1);
 }
 
@@ -22,12 +24,12 @@ void die(const char* s) {
 typedef struct Field {
 
 	int len;
-	const char* data;
+	char* data;
 } Field;
 
 typedef struct Row {
 
-	const char* ptr; // points to original malloced chunk.
+	char* ptr; // points to original malloced chunk.
 	int num_fields;
 
 	Field* fields; // array of fields
@@ -108,14 +110,20 @@ typedef struct Screen
 	FILE* term_in;
 	SCREEN* main_screen;
 	int fd;
+
+	RBTree* tree;
+
 } Screen;
 
-Screen* init_screen() 
+Screen* init_screen(RBTree* tree);
+
+Screen* init_screen(RBTree* tree)
 {
 	Screen* screen = malloc(sizeof(Screen));
 	const char* term_type = 0;
 
-	memset(screen, 0, sizeof(screen));
+	memset(screen, 0, sizeof(Screen));
+
 
 	term_type = getenv("TERM");
 
@@ -133,6 +141,7 @@ Screen* init_screen()
 	screen->main_screen = newterm(term_type, stdout, screen->term_in);
 	set_term(screen->main_screen);
 	screen->fd = fileno(screen->term_in);
+	screen->tree = tree;
 
 	timeout(0);
 	clear();
@@ -146,13 +155,16 @@ Screen* init_screen()
 	return screen;
 }
 
+void destroy_screen(Screen* s);
 void destroy_screen(Screen* s)
 {
 	endwin();
-	memset(s, 0, sizeof(s));
+	memset(s, 0, sizeof(Screen));
 	free(s);
 }
 
+
+RowStream* init_row_stream(row_processor proc, void *pctx);
 
 RowStream* init_row_stream(row_processor proc, void *pctx)
 {
@@ -168,6 +180,8 @@ RowStream* init_row_stream(row_processor proc, void *pctx)
 	return stream;
 }
 
+int num_fields(const char* line);
+
 int num_fields(const char* line)
 {
 	const char* s = line;
@@ -182,22 +196,23 @@ int num_fields(const char* line)
 	return cnt + 1;
 }
 
+Row parse_text_row(const char* line);
+
 Row parse_text_row(const char* line)
 {
 	Row row = {0,0,0};
-	int nf = 0;
 	int i = 0;
-	const char* sptr = 0;
+	char* sptr = 0;
 
 	row.ptr = strdup(line);
 	row.num_fields = num_fields(line);
 	row.fields = malloc(sizeof(Field) * row.num_fields);
 
-	sptr = row.ptr;
+	sptr = (char*) row.ptr;
 
-	while (true) {
-
-		const char* tok = strtok(sptr, " ");
+	while (true)
+	{
+		char* tok = strtok(sptr, " ");
 
 		if (!tok) 
 			break;
@@ -229,9 +244,11 @@ void append_data(RowStream *stream, const char* buf, size_t nr)
 
 		if (buf[i] == '\n') {
 
+			Row row = {0};
+
 			stream->flex_buf[stream->flex_n-1] = '\0';
 
-			Row row = parse_text_row(stream->flex_buf);
+			row = parse_text_row(stream->flex_buf);
 			stream->process_row(stream->pr_ctx, row);
 
 			// reset
@@ -242,6 +259,8 @@ void append_data(RowStream *stream, const char* buf, size_t nr)
 }
 
 // returns true if finished
+
+bool handle_row_stream(RowStream *stream);
 
 bool handle_row_stream(RowStream *stream)
 {
@@ -274,11 +293,13 @@ typedef struct AppCtx {
 	// tree.
 	// top key
 	
-	int foo;
 	RBTree* tree;
 
+	Screen* screen;
 
 } AppCtx;
+
+AppCtx* init_app_ctx(void);
 
 AppCtx* init_app_ctx()
 {
@@ -288,8 +309,12 @@ AppCtx* init_app_ctx()
 	ctx->tree = rb_create(sizeof(Node), nodeCompare, nodeCombine,
 				 	 	  nodeAlloc, nodeFree, aux);
 
+	ctx->screen = 0;
+
 	return ctx;
 }
+
+char* getvalue(Row row, int fieldnum);
 
 char* getvalue(Row row, int fieldnum)
 {
@@ -301,34 +326,42 @@ void update_row(AppCtx* ctx, Row row);
 
 void update_row(AppCtx* ctx, Row row)
 {
-	Node data = {0};
+	Node data;
 	bool is_new = false;
 
 	data.row = row;
-	rb_insert(ctx->tree, &data, &is_new);
+	rb_insert(ctx->tree, (const RBNode*) &data, &is_new);
 }
+
+void delete_row(AppCtx* ctx, Row key);
 
 void delete_row(AppCtx* ctx, Row key)
 {
-	Node data = {0};
-	data.row = key;
+	Node data;
+	RBNode* node;
+	Row row;
 
-	RBNode* node = rb_find(ctx->tree, &data);
+	data.row = key;
+	
+	node = rb_find(ctx->tree, (const RBNode*) &data);
 
 	if (!node)
 		return;
 
 	// stash a copy before it gets trashed.
-	Row row = ((Node*)node)->row;
+	row = ((Node*)node)->row;
 	rb_delete(ctx->tree, node);
 
 	cleanup_row(&row);
 }
 
-void print_row(AppCtx* ctx, Row row)
-{
-	size_t i = 0;
+void print_row(void* v, Row row);
+void app_refresh_screen(AppCtx* ctx);
+void refresh_screen(Screen *screen);
 
+void print_row(void* v, Row row)
+{
+	AppCtx *ctx = (AppCtx*) v;
 	char* event_field = getvalue(row, 0);
 	char event_code = event_field[0];
 
@@ -349,25 +382,122 @@ void print_row(AppCtx* ctx, Row row)
 		default:
 			die("unknown");
 	}
+
+	app_refresh_screen(ctx);
 }
+
+void app_refresh_screen(AppCtx* ctx)
+{
+	if (!ctx->screen)
+		return;
+
+	refresh_screen(ctx->screen);
+}
+
+void handle_screen(Screen* screen);
+
+void refresh_screen(Screen* screen)
+{
+	Node *node = (Node*) rb_leftmost(screen->tree);
+
+	if (node)
+	{
+		mvprintw(0,0,"%s\n", node->row.fields[1].data);
+	}
+
+	refresh();
+}
+
+void handle_screen(Screen* screen)
+{
+	int c = getch();
+
+	switch(c)
+	{	
+		case KEY_UP:
+//			scroll_up();
+			break;
+		case KEY_DOWN:
+//			scroll_down();
+			break;
+		case KEY_LEFT:
+//			scroll_left();
+			break;
+		case KEY_RIGHT:
+//			scroll_right();
+			break;
+		case KEY_NPAGE:
+//			page_down();
+			break;
+
+		case KEY_HOME:
+//			home();
+			break;
+		case KEY_END:
+//			end();
+			break;
+
+		case KEY_PPAGE:
+//			page_up();
+			break;
+
+		case KEY_RESIZE:
+//			clear();
+//			collect();
+//			refresh();
+			break;
+
+		case 9: // TAB
+//			next_col();
+			break;
+
+		case 353: // SHIFT+TAB
+//			prev_col();
+			break;
+
+		case 'p':
+//			toggle_pause();
+			break;
+
+		case ERR:
+
+			die("wtf");
+			break;
+
+		default:
+			break;
+	}
+
+	refresh_screen(screen);
+}
+
+void test_screen(void);
 
 void test_screen()
 {
 	AppCtx *app_ctx = init_app_ctx();
 	RowStream* stream = init_row_stream(print_row, app_ctx);
 
+	Screen* screen = init_screen(app_ctx->tree);
+	app_ctx->screen = screen;
+
 	// main event loop, handles screen and row updates.
 
 	while (true)
 	{
 		struct pollfd pfd[2];
+		int rc = 0;
 		memset(pfd, 0, sizeof(pfd));
 
 		pfd[0].fd = stream->fd;
 		pfd[0].events = POLLIN;
 		pfd[0].revents = 0;
 
-		int rc = poll(&pfd, 1, -1);
+		pfd[1].fd = screen->fd;
+		pfd[1].events = POLLIN;
+		pfd[1].revents = 0;
+
+		rc = poll(pfd, 1, -1);
 
 		if (rc < 0) {
 			die("poll error");
@@ -382,24 +512,12 @@ void test_screen()
 			}
 		}
 		
-//		if (pfd[1].revents & POLLIN) {
-//			handleP
-//		}
-
-//		int rc = poll(&pfd, 1, -1);
-//		int c = getch();
-//
-//		mvprintw(0,0,"got %d\n", c);
-//		refresh();
-
-//		fprintf(debug, "got %d\n");
-//		fflush(debug);
-
-//		int fd = screen->fd;
-//		int c = getch();
+		if (pfd[1].revents & POLLIN) {
+			handle_screen(screen);
+		}
 	}
 
-//	destroy_screen(screen);
+	destroy_screen(screen);
 	destroy_row_stream(stream);
 }
 
@@ -498,5 +616,6 @@ main(int argc, char *argv[])
 //		}
 //	}
 //
-//	return 0;
+	return 0;
+
 }
