@@ -30,6 +30,7 @@ typedef struct Row {
 
 	const char* ptr; // points to original malloced chunk.
 	int num_fields;
+
 	Field* fields; // array of fields
 } Row;
 
@@ -40,13 +41,24 @@ typedef struct Node {
 
 } Node;
 
+typedef struct RowStream
+{
+	int fd;
+	char buf[4096];
+
+	char* flex_buf;
+	size_t flex_cap;
+	size_t flex_n;
+
+} RowStream;
+
 void test_read(void);
 int nodeCompare(const RBNode* ra, const RBNode *rb, void *arg);
 void nodeCombine(RBNode* ra, const RBNode *rb, void *arg);
 RBNode* nodeAlloc(void* arg);
 void nodeFree(RBNode *x, void* arg);
-
 void cleanup_row(Row* row);
+
 void process_row(const char* row_buf);
 
 int nodeCompare(const RBNode* ra, const RBNode *rb, void *arg)
@@ -56,7 +68,6 @@ int nodeCompare(const RBNode* ra, const RBNode *rb, void *arg)
 
 	return strcmp(a->row.fields[0].data, 
 				  b->row.fields[0].data);
-
 }
 
 RBNode* nodeAlloc(void *arg)
@@ -86,92 +97,7 @@ void nodeCombine(RBNode* ra, const RBNode *rb, void *arg)
 	a->row = b->row;
 }
 
-char row_hdr[4];
-int row_n = 0;
-int seen = 0;
-char *row_buf = 0;
-int row_state = 0;
-
-void process_row(const char* row_buf)
-{
-	Row row = {0,0,0};
-	int nf = 0;
-	int i = 0;
-
-	const char* iter = row_buf;
-	memcpy(&nf, iter, 4); iter += 4;
-
-
-	row.ptr = row_buf;
-	row.num_fields = nf-1;
-	row.fields = malloc(sizeof(Field) * row.num_fields);
-
-	for (i = 0; i < nf; ++i) {
-
-		int fn = 0;
-		memcpy(&fn, iter, 4); iter += 4;
-
-		if (i > 0) {
-			row.fields[i-1].len = fn;
-			row.fields[i-1].data = iter;
-		}
-
-		iter += fn;
-		iter += 1; // nul term
-	}
-
-	{
-		Node data;
-		bool is_new;
-
-		data.row = row;
-		rb_insert(tree, (const RBNode*) &data, &is_new);
-	}
-}
-
-void append_data(const char* buf, size_t n);
-
-void append_data(const char* buf, size_t n) {
-
-	size_t i = 0;
-
-	for (i = 0; i < n; ++i) {
-
-		switch (row_state) 
-		{
-			case 0:
-				row_hdr[seen++] = buf[i];
-
-				if (seen == 4) {
-
-					memcpy(&row_n, row_hdr, 4);
-
-					assert(row_n != 0);
-					row_buf = malloc(row_n);
-					row_state = 1;
-					seen = 0;
-				}
-
-				break;
-
-			case 1:
-				row_buf[seen++] = buf[i];
-				
-				if (seen == row_n)
-				{
-					process_row(row_buf);
-
-					memset(row_hdr, 0, 4);
-					row_n = 0;
-					seen = 0;
-					row_buf = 0;
-					row_state = 0;
-				}
-
-				break;
-		}
-	}
-}
+void append_data(RowStream *stream, const char* buf, size_t n);
 
 typedef struct Screen
 {
@@ -223,33 +149,177 @@ void destroy_screen(Screen* s)
 	free(s);
 }
 
-typedef struct ScreenView 
-{
-	// essentially our position in the data stream.
-	// key etc goes here
 
-} ScreenView;
+RowStream* init_row_stream()
+{
+	RowStream *stream = malloc(sizeof(RowStream));
+	memset(stream, 0, sizeof(RowStream));
+
+	stream->fd = STDIN_FILENO;
+	fcntl(stream->fd, F_SETFL, O_NONBLOCK);
+
+	return stream;
+}
+
+int num_fields(const char* line)
+{
+	const char* s = line;
+	int cnt = 0;
+
+	while (*s)
+	{
+		if (*s == ' ') cnt++;
+		s++;
+	}
+
+	return cnt + 1;
+}
+
+Row parse_text_row(const char* line)
+{
+	Row row = {0,0,0};
+	int nf = 0;
+	int i = 0;
+	const char* sptr = 0;
+
+	row.ptr = strdup(line);
+	row.num_fields = num_fields(line);
+	row.fields = malloc(sizeof(Field) * row.num_fields);
+
+	sptr = row.ptr;
+
+	while (true) {
+
+		const char* tok = strtok(sptr, " ");
+
+		if (!tok) 
+			break;
+
+		row.fields[i].len = strlen(tok);
+		row.fields[i].data = tok;
+		i++;
+
+		sptr = 0;
+	}
+
+	return row;
+}
+
+void print_row(Row row)
+{
+	size_t i = 0;
+
+	for (i = 0; i < row.num_fields; ++i) {
+
+		printf("%d:%s ", i, row.fields[i].data);
+	}
+
+	printf("\n");
+}
+
+void append_data(RowStream *stream, const char* buf, size_t nr)
+{
+	size_t ns = stream->flex_n + nr;
+	size_t i = 0;
+
+	if (ns > stream->flex_cap) {
+
+		stream->flex_buf = realloc(stream->flex_buf, ns + 1);
+		stream->flex_cap = ns;
+	}
+
+	for (i = 0; i < nr; ++i) {
+
+		stream->flex_buf[stream->flex_n++] = buf[i];
+
+		if (buf[i] == '\n') {
+
+			stream->flex_buf[stream->flex_n-1] = '\0';
+
+			Row row = parse_text_row(stream->flex_buf);
+			print_row(row);
+
+			cleanup_row(&row);
+
+			// reset
+			stream->flex_n = 0;
+			stream->flex_buf[stream->flex_n] = '\0';
+		}
+	}
+}
+
+// returns true if finished
+
+bool handle_row_stream(RowStream *stream)
+{
+	while (true)
+	{
+		ssize_t nr = read(stream->fd, stream->buf, 4096);
+
+		if (nr == 0) {
+			return true;
+		}
+
+		if (nr == -1) {
+			return false;
+		}
+
+		append_data(stream, stream->buf, nr);
+	}
+
+	return false;
+}
+
+void destroy_row_stream(RowStream *stream);
+void destroy_row_stream(RowStream *stream)
+{
+
+}
 
 void test_screen()
 {
-	Screen* screen = init_screen();
-	FILE* debug = fopen("/tmp/debug.txt", "w");
+//	Screen* screen = init_screen();
+	RowStream* stream = init_row_stream();
+//	FILE* debug = fopen("/tmp/debug.txt", "w");
 
 	// main event loop, handles screen and row updates.
 
 	while (true)
 	{
-		struct pollfd pfd;
+		struct pollfd pfd[2];
+		memset(pfd, 0, sizeof(pfd));
 
-		pfd.fd = screen->fd;
-		pfd.events = POLLIN;
-		pfd.revents = 0;
+		pfd[0].fd = stream->fd;
+		pfd[0].events = POLLIN;
+		pfd[0].revents = 0;
 
 		int rc = poll(&pfd, 1, -1);
-		int c = getch();
 
-		mvprintw(0,0,"got %d\n", c);
-		refresh();
+		if (rc < 0) {
+			die("poll error");
+		}
+
+		printf("rc %d\n", pfd[0].revents);
+
+		if (pfd[0].revents & POLLIN)
+		{
+			bool fin = handle_row_stream(stream);
+
+			if (fin) {
+
+				break;
+			}
+		}
+		
+//		if (pfd[1].revents & POLLIN) {
+//			handleP
+//		}
+
+//		int rc = poll(&pfd, 1, -1);
+//		int c = getch();
+//
+//		mvprintw(0,0,"got %d\n", c);
+//		refresh();
 
 //		fprintf(debug, "got %d\n");
 //		fflush(debug);
@@ -258,7 +328,8 @@ void test_screen()
 //		int c = getch();
 	}
 
-	destroy_screen(screen);
+//	destroy_screen(screen);
+	destroy_row_stream(stream);
 }
 
 void test_read()
@@ -304,7 +375,7 @@ void test_read()
 					break;
 				}
 
-				append_data(buf, nr);
+				append_data(0, buf, nr);
 			}
 		}
 	}
