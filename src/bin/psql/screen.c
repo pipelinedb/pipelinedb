@@ -56,6 +56,8 @@ Screen* ScreenInit(Model *model)
 	self->x_pos = 0;
 	self->x_col = 0;
 
+	self->pause = 0;
+
 	return self;
 }
 
@@ -306,9 +308,22 @@ void ScreenPrevCol(Screen *s)
 	}
 }
 
-void ScreenHome(Screen *s) {} 
-void ScreenEnd(Screen *s) {} 
-void ScreenTogglePause(Screen *s) {} 
+void ScreenHome(Screen *s) 
+{
+	s->x_col = 0;
+	s->x_pos = 0;
+} 
+
+void ScreenEnd(Screen *s)
+{
+	s->x_col = rightmost(s);
+	s->x_pos = 0;
+} 
+
+void ScreenTogglePause(Screen *s)
+{
+	s->pause = !s->pause;
+} 
 
 void ScreenHandleInput(Screen *s)
 {
@@ -364,4 +379,9 @@ void ScreenHandleInput(Screen *s)
 	}
 
 	ScreenUpdate(s);
+}
+
+bool ScreenIsPaused(Screen *s)
+{
+	return s->pause;
 }

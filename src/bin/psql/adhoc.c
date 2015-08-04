@@ -73,10 +73,18 @@ main(int argc, char *argv[])
 
 		if (pfd[0].revents & POLLIN)
 		{
-			bool fin = RowStreamHandleInput(stream);
+			// TODO - take a snapshot instead
+			if (ScreenIsPaused(screen))
+			{
+				usleep(1000);
+			}
+			else
+			{
+				bool fin = RowStreamHandleInput(stream);
 
-			if (fin)
-				break;
+				if (fin)
+					break;
+			}
 		}
 
 		if (pfd[1].revents & POLLIN)

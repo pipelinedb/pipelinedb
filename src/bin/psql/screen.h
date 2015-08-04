@@ -20,6 +20,8 @@ typedef struct Screen
 	int x_pos;
 	int x_col;
 
+	int pause;
+
 } Screen;
 
 Screen* ScreenInit(Model *m);
@@ -29,5 +31,6 @@ int ScreenFd(Screen *s);
 void ScreenHandleInput(Screen* s);
 
 void ScreenUpdate(Screen *s);
+bool ScreenIsPaused(Screen *s);
 
 #endif
