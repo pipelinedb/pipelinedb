@@ -2,6 +2,8 @@
 
 # generates data to test the adhoc query client
 
+require 'pp'
+
 Signal.trap("SIGPIPE", "SYSTEM_DEFAULT") 
 Signal.trap("SIGINT", "SYSTEM_DEFAULT") 
 
@@ -9,7 +11,19 @@ i = 0
 srand(0)
 
 home=ENV['HOME']
-$w = File.read("#{home}/tmp/words").split("\n")[0..100]
+
+$w = ["cupped", "bebotch", "retroactive", "unveiler", "inkwriter", "cocksureism", "dualistic", "pyramidion", "stipula",
+ "preliquidate", "semifashion", "previous", "amgarn", "snell", "bootlessness", "supplicate", "carboxylase",
+ "seerpaw", "stipe", "starboard", "scleroparei", "milvus", "itacolumite", "agile", "reavoid", "hyperurbanism",
+ "cancerism", "vesiculopustular", "perchloroethane", "spasmolytic", "cytozoon", "thymelical", "trustify",
+ "resumption", "electromyographic", "unreversed", "bibliogenesis", "caresser", "kukulcan", "percussiveness",
+ "sonancy", "bedur", "repetitionary", "nondiscordant", "bradypus", "patristic", "untruck", "cloakmaking",
+ "longobardian", "anthela", "triphony", "flandan", "phylloxera", "remissively", "canting", "sensatorial",
+ "enstatolite", "abietene", "mesmerian", "maidservant", "valedictorian", "indris", "sickle", "legislative",
+ "squirt", "gait", "hemiamb", "flustrum", "eaglet", "cypress", "reddy", "spheniscus", "spina", "brehon", "foundery",
+ "constance", "alencon", "ungingled", "lungflower", "vedika", "dialogize", "counterenergy", "discanonize", "axoidean",
+ "uncomplicated", "overvehement", "creekside", "rimy", "enlightened", "gaspy", "frigidarium", "inconspicuousness", "mactation",
+ "ployment", "ropeway", "abed", "femorocele", "clithral", "rollichie", "skite", "delegate"]
 
 def randword
 	$w.sample
