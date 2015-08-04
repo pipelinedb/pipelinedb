@@ -20,7 +20,6 @@ void die(const char* s) {
 	exit(1);
 }
 
-
 typedef struct Field {
 
 	int len;
@@ -49,9 +48,7 @@ typedef struct RowStream
 	int fd;
 	char buf[4096];
 
-	char* flex_buf;
-	size_t flex_cap;
-	size_t flex_n;
+	FlexString flex;
 
 	row_processor process_row;
 	void* pr_ctx;
@@ -113,7 +110,65 @@ typedef struct Screen
 
 	RBTree* tree;
 
+	FlexString key;
+
 } Screen;
+
+void collect(Screen* screen);
+
+void collect(Screen* screen)
+{
+	int ctr = 0;
+	RBTree* tree = screen->tree;
+
+	move(ctr, 0);
+
+	rb_begin_iterate(tree, LeftRightWalk);
+
+	{
+		Node* node = (Node*) rb_iterate(tree);
+
+		for (; node && ctr < LINES; node = (Node*)rb_iterate(tree), ++ctr)
+		{
+			move(ctr, 0);
+			printw("%s", node->row.fields[1].data);
+			clrtoeol();
+		}
+	}
+
+	{
+		int i = 0;
+
+		for (i = ctr; i < LINES; ++i) {
+
+			mvprintw(i, 0, "");
+			clrtoeol();
+		}
+	}
+}
+
+//	attron(A_REVERSE);
+//	draw_row(header_row, '|');
+//	attroff(A_REVERSE);
+//	ctr++;
+//	for (; iter != drows.end() && ctr < LINES; ++iter, ++ctr)
+//	{
+//		move(ctr, 0);
+//		const Row &row = iter->second;
+//		draw_row(row, ' ');
+//	}
+//
+//	// kill off any remainder
+//
+//	for (int i = ctr; i < LINES; ++i) {
+//
+//		mvprintw(i, 0, "");
+//		clrtoeol();
+//	}
+//
+//	const char* fkey = drows.empty() ? "" : drows.begin()->first.c_str();
+//	const char* lkey = drows.empty() ? "" : drows.rbegin()->first.c_str();
+//	clrtoeol();
 
 Screen* init_screen(RBTree* tree);
 
@@ -152,6 +207,8 @@ Screen* init_screen(RBTree* tree)
 	keypad(stdscr, TRUE);
 	refresh();
 
+	init_flex(&screen->key);
+
 	return screen;
 }
 
@@ -176,6 +233,8 @@ RowStream* init_row_stream(row_processor proc, void *pctx)
 
 	stream->process_row = proc;
 	stream->pr_ctx = pctx;
+
+	init_flex(&stream->flex);
 
 	return stream;
 }
@@ -229,31 +288,21 @@ Row parse_text_row(const char* line)
 
 void append_data(RowStream *stream, const char* buf, size_t nr)
 {
-	size_t ns = stream->flex_n + nr;
 	size_t i = 0;
-
-	if (ns > stream->flex_cap) {
-
-		stream->flex_buf = realloc(stream->flex_buf, ns + 1);
-		stream->flex_cap = ns;
-	}
 
 	for (i = 0; i < nr; ++i) {
 
-		stream->flex_buf[stream->flex_n++] = buf[i];
+		append_flex(&(stream->flex), buf + i, 1);
 
 		if (buf[i] == '\n') {
 
 			Row row = {0};
 
-			stream->flex_buf[stream->flex_n-1] = '\0';
+			stream->flex.buf[stream->flex.n-1] = '\0';
+			row = parse_text_row(stream->flex.buf);
 
-			row = parse_text_row(stream->flex_buf);
 			stream->process_row(stream->pr_ctx, row);
-
-			// reset
-			stream->flex_n = 0;
-			stream->flex_buf[stream->flex_n] = '\0';
+			reset_flex(&stream->flex);
 		}
 	}
 }
@@ -398,13 +447,7 @@ void handle_screen(Screen* screen);
 
 void refresh_screen(Screen* screen)
 {
-	Node *node = (Node*) rb_leftmost(screen->tree);
-
-	if (node)
-	{
-		mvprintw(0,0,"%s\n", node->row.fields[1].data);
-	}
-
+	collect(screen);
 	refresh();
 }
 
@@ -497,7 +540,7 @@ void test_screen()
 		pfd[1].events = POLLIN;
 		pfd[1].revents = 0;
 
-		rc = poll(pfd, 1, -1);
+		rc = poll(pfd, 2, -1);
 
 		if (rc < 0) {
 			die("poll error");
