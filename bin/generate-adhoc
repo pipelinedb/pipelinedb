@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+
+Signal.trap("SIGPIPE", "SYSTEM_DEFAULT") 
+Signal.trap("SIGINT", "SYSTEM_DEFAULT") 
+
+i = 0
+srand(0)
+
+home=ENV['HOME']
+$w = File.read("#{home}/tmp/words").split("\n")[0..100]
+
+def randword
+	$w.sample
+end
+
+$u = File.open("/dev/urandom")
+
+def randstring
+	$u.read(8).unpack('H*')
+end
+
+keys = {}
+
+puts "h name value volume foo ts"
+STDOUT.flush
+
+while (true) do
+
+	(1..500).each {|i|
+
+		k = randword
+
+		puts "i #{k} #{rand(100000)} #{"x" * (rand(10) + 1)} #{rand(100)} #{Time.now.to_i}"
+
+		keys[k] = 1
+		STDOUT.flush
+
+		sleep(0.01)
+	}
+
+	(1..500).each {|i|
+
+		if (keys.empty?)
+			break
+		end
+
+		k = keys.keys.sample
+		keys.delete(k)
+
+		puts "d #{k}"
+		STDOUT.flush
+		sleep(0.01)
+	}
+end
