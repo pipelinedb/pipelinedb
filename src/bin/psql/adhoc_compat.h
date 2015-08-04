@@ -3,6 +3,8 @@
 
 #include <unistd.h>
 
+void die(const char* s);
+
 void
 ExceptionalCondition(const char *conditionName,
 					 const char *errorType,

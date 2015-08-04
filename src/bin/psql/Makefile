@@ -27,7 +27,7 @@ OBJS=	command.o common.o help.o input.o stringutils.o mainloop.o copy.o \
 	sql_help.o pipeline.o \
 	$(WIN32RES)
 
-AOBJS= adhoc.o rbtree.o adhoc_compat.o
+AOBJS= adhoc.o screen.o rowstream.o rbtree.o rowmap.o adhoc_compat.o model.o
 
 all: psql padhoc
 

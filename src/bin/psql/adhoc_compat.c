@@ -8,6 +8,12 @@
 	
 int assert_enabled = 0;
 
+void die(const char* s) {
+
+	fprintf(stderr, "%s\n", s);
+	exit(1);
+}
+
 void
 ExceptionalCondition(const char *conditionName,
 					 const char *errorType,
