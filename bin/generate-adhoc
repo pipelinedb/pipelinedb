@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+# generates data to test the adhoc query client
+
 Signal.trap("SIGPIPE", "SYSTEM_DEFAULT") 
 Signal.trap("SIGINT", "SYSTEM_DEFAULT") 
 
@@ -21,6 +23,13 @@ end
 
 keys = {}
 
+# msg types
+#
+# h = header row
+# i = insert
+# u = update
+# d = delete
+
 puts "h name value volume foo ts"
 STDOUT.flush
 
@@ -29,8 +38,9 @@ while (true) do
 	(1..500).each {|i|
 
 		k = randword
+		t = keys.include?(k) ? 'u' : 'i'
 
-		puts "i #{k} #{rand(100000)} #{"x" * (rand(10) + 1)} #{rand(100)} #{Time.now.to_i}"
+		puts "#{t} #{k} #{rand(100000)} #{"x" * (rand(10) + 1)} #{rand(100)} #{Time.now.to_i}"
 
 		keys[k] = 1
 		STDOUT.flush
