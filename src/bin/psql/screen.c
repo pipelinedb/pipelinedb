@@ -10,12 +10,12 @@ void ScreenScrollUp(Screen *s);
 void ScreenScrollDown(Screen *s);
 void ScreenScrollLeft(Screen *s);
 void ScreenScrollRight(Screen *s);
-void ScreenPageDown(Screen *s);
 void ScreenHome(Screen *s);
 void ScreenEnd(Screen *s);
 void ScreenPageUp(Screen *s);
-void ScreenNextCol(Screen *s);
+void ScreenPageDown(Screen *s);
 void ScreenPrevCol(Screen *s);
+void ScreenNextCol(Screen *s);
 void ScreenTogglePause(Screen *s);
 
 Screen* ScreenInit(Model *model)
@@ -92,6 +92,17 @@ static inline size_t maxlen(Screen *s, size_t i)
 	return s->model->maxlens[i];
 }
 
+static inline size_t numfields(Screen *s)
+{
+	// Model
+	return s->model->nfields;
+}
+
+static inline size_t rightmost(Screen *s)
+{
+	return s->model->nfields - 1;
+}
+
 static inline void printwpad(int n)
 {
 	int i = 0;
@@ -147,6 +158,11 @@ void ScreenRender(Screen *s)
 	int i = 0;
 	int ctr = 0;
 	move(ctr, 0);
+	
+	attron(A_REVERSE);
+	draw_row(s, &s->model->header, '|');
+	attroff(A_REVERSE);
+	ctr++;
 
 	for (; iter != end && ctr < lines(s); iter++, ++ctr)
 	{
@@ -200,14 +216,89 @@ void ScreenScrollDown(Screen *s)
 	}
 }
 
-void ScreenScrollLeft(Screen *s) {} 
-void ScreenScrollRight(Screen *s) {} 
-void ScreenPageDown(Screen *s) {} 
+void ScreenScrollLeft(Screen *s) 
+{
+	s->x_pos--;
+
+	if (s->x_pos < 0) {
+
+		s->x_col--;
+
+		if (s->x_col < 0) {
+			s->x_col = 0;
+			s->x_pos = 0;
+		}
+		else
+		{
+			s->x_pos = maxlen(s, s->x_col);
+		}
+	}
+}
+
+void ScreenScrollRight(Screen *s) 
+{
+	s->x_pos++;
+
+	if (s->x_pos > maxlen(s,s->x_col)) {
+
+		s->x_pos = 0;
+		s->x_col++;
+
+		if (s->x_col >= numfields(s)) {
+
+			s->x_col = rightmost(s);
+			s->x_pos = maxlen(s,s->x_col);
+		}
+	}
+}
+
+void ScreenPageUp(Screen *s)
+{
+	int i = 0;
+
+	for (i = 0; i < lines(s); ++i) {
+		ScreenScrollUp(s);
+	}
+}
+
+void ScreenPageDown(Screen *s)
+{
+	int i = 0;
+
+	for (i = 0; i < lines(s); ++i) {
+		ScreenScrollDown(s);
+	}
+}
+
+void ScreenNextCol(Screen *s)
+{
+	s->x_pos = 0;
+	s->x_col++;
+
+	if (s->x_col >= numfields(s)) {
+		s->x_col = rightmost(s);
+	}
+}
+
+void ScreenPrevCol(Screen *s)
+{
+	if (s->x_pos != 0)
+	{
+		s->x_pos = 0;
+	}
+	else
+	{
+		s->x_pos = 0;
+		s->x_col--;
+
+		if (s->x_col < 0) {
+			s->x_col = 0;
+		}
+	}
+}
+
 void ScreenHome(Screen *s) {} 
 void ScreenEnd(Screen *s) {} 
-void ScreenPageUp(Screen *s) {} 
-void ScreenNextCol(Screen *s) {} 
-void ScreenPrevCol(Screen *s) {} 
 void ScreenTogglePause(Screen *s) {} 
 
 void ScreenHandleInput(Screen *s)

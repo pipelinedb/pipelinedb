@@ -27,10 +27,22 @@ void ModelUpdateLens(Model *m, Row* r)
 
 void ModelAddRow(Model *m, Row* r)
 {
-	printf("%p %p\n", m, r);
-
 	ModelUpdateLens(m, r);
 	RowMapUpdate(m->rowmap, r);
+}
+
+void ModelDeleteRow(Model *m, Row* r)
+{
+	RowMapErase(m->rowmap, RowGetKey(r));
+}
+
+void ModelSetHeader(Model *m, Row* r)
+{
+	ModelUpdateLens(m, r);
+
+	RowCleanup(&m->header);
+	m->header = *r;
+
 }
 
 void ModelDump(Model *m)

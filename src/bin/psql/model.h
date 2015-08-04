@@ -9,6 +9,8 @@ typedef struct Model
 	size_t* maxlens;
 	size_t nfields;
 
+	Row header;
+
 } Model;
 
 #define MIN(a, b)  (((a) < (b)) ? (a) : (b))
@@ -16,6 +18,10 @@ typedef struct Model
 
 void ModelUpdateLens(Model *m, Row* r);
 void ModelAddRow(Model *m, Row* r);
+void ModelDeleteRow(Model *m, Row* r);
+
+void ModelSetHeader(Model *m, Row* r);
+
 void ModelDump(Model *m);
 
 void add_row(Model *m, const char* s);

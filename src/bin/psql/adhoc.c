@@ -299,141 +299,110 @@
 // maxlens
 // header
 
+typedef struct App
+{
+	Model* model;
+	Screen* screen;
+} App;
+
+void row_callback(void* ctx, int type, Row* row);
+
+void row_callback(void* ctx, int type, Row* row)
+{
+	App *app = (App*)(ctx);
+
+	switch (type) {
+
+		case 'i': case 'u':
+			ModelAddRow(app->model, row);
+			ScreenUpdate(app->screen);
+			break;
+		case 'd':
+			ModelDeleteRow(app->model, row);
+			ScreenUpdate(app->screen);
+			break;
+		case 'h':
+			ModelSetHeader(app->model, row);
+			ScreenUpdate(app->screen);
+			break;
+	}
+}
+
 int
 main(int argc, char *argv[])
 {
+	App app = {0,0};
+
 	RowMap *m = RowMapInit();
-	Model model = {m, 0, 0};
+	Model model = {m, 0, 0, {0,0,0}};
 
-	add_row(&model, "sensatorial 42613 x 67 1438662000");
-	add_row(&model, "creekside 97639 xxxxxxxxxx 83 1438662000");
-	add_row(&model, "gait 80471 xxxxxxx 88 1438662000");
-	add_row(&model, "clithral 80186 xx 39 1438662000");
-	add_row(&model, "remissively 89688 xx 37 1438662000");
-	add_row(&model, "uncomplicated 6921 xxxxx 80 1438662000");
-	add_row(&model, "uncomplicated 83966 x 82 1438662000");
-	add_row(&model, "cloakmaking 31921 xxxx 29 1438662000");
-	add_row(&model, "lungflower 80782 xxxxxxxx 32 1438662000");
-	add_row(&model, "mesmerian 84665 x 31 1438662000");
-	add_row(&model, "semifashion 96766 xxx 55 1438662001");
-	add_row(&model, "milvus 92288 xxxxx 53 1438662001");
-	add_row(&model, "supplicate 3560 xxxxx 17 1438662001");
-	add_row(&model, "abed 46522 xxxxxxxxx 1 1438662001");
-	add_row(&model, "reddy 61353 xxxxxxxxxx 35 1438662001");
-	add_row(&model, "gait 47883 xxx 91 1438662001");
-	add_row(&model, "constance 51811 xxxxxx 12 1438662001");
-	add_row(&model, "abietene 12372 xxxxx 6 1438662001");
-	add_row(&model, "semifashion 62079 xxxxx 3 1438662001");
-	add_row(&model, "delegate 9396 xxxxxxxxx 78 1438662001");
-	add_row(&model, "cloakmaking 44259 xxxxxxxx 79 1438662001");
-	add_row(&model, "previous 79701 x 49 1438662001");
-	add_row(&model, "lungflower 71331 x 95 1438662001");
-	add_row(&model, "discanonize 55153 xxx 36 1438662001");
-	add_row(&model, "preliquidate 81757 xxxx 98 1438662001");
-	add_row(&model, "flandan 86384 xxxxxxxx 21 1438662001");
-	add_row(&model, "foundery 13824 xxx 43 1438662001");
-	add_row(&model, "amgarn 61570 xxxxxxxxxx 98 1438662001");
-	add_row(&model, "enlightened 96990 xxxx 82 1438662001");
-	add_row(&model, "abietene 89236 xx 50 1438662001");
-	add_row(&model, "phylloxera 31785 xx 36 1438662001");
-	add_row(&model, "ployment 78696 xxx 51 1438662001");
-	add_row(&model, "gait 70838 x 38 1438662001");
-	add_row(&model, "stipe 92648 xxxxxxxxx 2 1438662001");
-	add_row(&model, "vesiculopustular 18728 xxxxxxxxx 19 1438662001");
-	add_row(&model, "sonancy 50586 xxx 52 1438662001");
-	add_row(&model, "frigidarium 7997 x 4 1438662001");
-	add_row(&model, "rollichie 92299 xxxxxxx 77 1438662001");
-	add_row(&model, "bedur 42512 xxxxxxxxx 29 1438662001");
-	add_row(&model, "gaspy 17340 xxxxxxxxxx 61 1438662001");
-	add_row(&model, "agile 10088 x 70 1438662001");
-	add_row(&model, "cytozoon 74253 xxxxxxxx 56 1438662001");
-	add_row(&model, "kukulcan 15912 xxxxxxx 79 1438662001");
-	add_row(&model, "cytozoon 79983 xxxxxxxxxx 1 1438662001");
-	add_row(&model, "mesmerian 11052 xxxxxxxxx 24 1438662001");
-	add_row(&model, "nondiscordant 5103 xxxx 76 1438662001");
-	add_row(&model, "bradypus 71382 xxxxxx 87 1438662001");
-	add_row(&model, "patristic 89099 xxxxxxxxx 84 1438662001");
-	add_row(&model, "spina 28651 xxxxxx 28 1438662001");
-	add_row(&model, "rimy 74498 xxxx 89 1438662001");
-	add_row(&model, "amgarn 69939 xxxxx 53 1438662001");
-	add_row(&model, "abietene 76323 xxxxxxxx 9 1438662001");
-	add_row(&model, "skite 89987 xxx 3 1438662001");
-	add_row(&model, "rollichie 82119 xxxxxxxx 61 1438662001");
-	add_row(&model, "brehon 76578 xxx 88 1438662001");
-	add_row(&model, "cocksureism 63720 xxxxx 0 1438662001");
-	add_row(&model, "dialogize 73925 xxxxxx 80 1438662001");
-	add_row(&model, "indris 26813 xx 81 1438662001");
-	add_row(&model, "carboxylase 79224 xxxxxxxxx 36 1438662001");
-	add_row(&model, "delegate 86339 xxxxxxxx 35 1438662001");
-	add_row(&model, "rimy 87069 xx 33 1438662001");
-	add_row(&model, "thymelical 80212 xxx 69 1438662001");
-	add_row(&model, "itacolumite 78709 xxx 91 1438662001");
-	add_row(&model, "eaglet 65483 xxxxxxx 30 1438662001");
-	add_row(&model, "anthela 99271 xxx 92 1438662001");
-	add_row(&model, "kukulcan 33201 xxxxxxxxxx 93 1438662001");
-	add_row(&model, "creekside 44889 xxx 96 1438662001");
-	add_row(&model, "eaglet 85532 xx 58 1438662001");
-	add_row(&model, "milvus 97855 x 36 1438662001");
-	add_row(&model, "retroactive 72308 xxxx 51 1438662001");
-	add_row(&model, "kukulcan 27741 xxxxxxxx 32 1438662001");
-	add_row(&model, "enlightened 55751 xxxxxxxx 13 1438662001");
-	add_row(&model, "gaspy 38008 xxxxx 55 1438662001");
-	add_row(&model, "cypress 99036 xxxxx 25 1438662001");
-	add_row(&model, "agile 77582 xxxxxxx 28 1438662001");
-	add_row(&model, "milvus 52548 xxxxxxx 99 1438662001");
-	add_row(&model, "spheniscus 33415 xxxxxxxxx 61 1438662001");
-	add_row(&model, "caresser 57600 xxxxxxxxx 79 1438662001");
-	add_row(&model, "stipe 39335 xxxxx 49 1438662001");
-	add_row(&model, "spheniscus 66275 xxxxxxxxxx 18 1438662001");
-	add_row(&model, "stipe 48691 xxxxxx 58 1438662001");
-	add_row(&model, "unreversed 9724 xxx 45 1438662001");
-	add_row(&model, "constance 11590 xxxxxx 48 1438662001");
-	add_row(&model, "sensatorial 14672 xxxx 58 1438662001");
-	add_row(&model, "perchloroethane 73929 xxxxxxxxxx 70 1438662001");
-	add_row(&model, "ployment 66439 x 22 1438662001");
-	add_row(&model, "stipe 14297 xxxxxxxxx 99 1438662001");
-	add_row(&model, "rollichie 42439 xxxxx 89 1438662001");
-	add_row(&model, "itacolumite 52280 xxx 23 1438662001");
-	add_row(&model, "abed 35428 xx 87 1438662001");
-	add_row(&model, "enlightened 90265 xxxxx 97 1438662001");
-	add_row(&model, "starboard 45463 xx 53 1438662001");
-	add_row(&model, "lungflower 70486 xxxxxxx 7 1438662001");
-	add_row(&model, "triphony 30857 xxxxxxx 0 1438662001");
-	add_row(&model, "bedur 5028 xx 20 1438662001");
-	add_row(&model, "starboard 90238 xx 20 1438662001");
-	add_row(&model, "bedur 82032 xxxxxxxxx 94 1438662001");
-	add_row(&model, "lungflower 65599 xxxxx 70 1438662001");
-	add_row(&model, "bedur 19055 xxxx 83 1438662001");
+	Screen *screen = ScreenInit(&model);
 
-//	RowMapDump(m);
-//	ModelDump(&model);
+	app.model = &model;
+	app.screen = screen;
 
 	{
-		Screen *screen = ScreenInit(&model);
-		ScreenUpdate(screen);
+		RowStream *stream = RowStreamInit(row_callback, &app);
 
 		while (true)
 		{
-			struct pollfd pfd;
+			struct pollfd pfd[2];
 			int rc = 0;
 
 			memset(&pfd, 0, sizeof(pfd));
 
-			pfd.fd = ScreenFd(screen);
-			pfd.events = POLLIN;
-			pfd.revents = 0;
+			pfd[0].fd = RowStreamFd(stream);
+			pfd[0].events = POLLIN;
+			pfd[0].revents = 0;
 
-			rc = poll(&pfd, 1, -1);
+			pfd[1].fd = ScreenFd(screen);
+			pfd[1].events = POLLIN;
+			pfd[1].revents = 0;
+
+			rc = poll(pfd, 2, -1);
 
 			if (rc < 0)
 				die("poll error");
 
-			if (pfd.revents & POLLIN)
+			if (pfd[0].revents & POLLIN)
+			{
+				bool fin = RowStreamHandleInput(stream);
+
+				if (fin)
+					break;
+			}
+
+			if (pfd[1].revents & POLLIN)
 			{
 				ScreenHandleInput(screen);
 			}
 		}
 	}
+
+//	{
+//
+//		while (true)
+//		{
+//			struct pollfd pfd;
+//			int rc = 0;
+//
+//			memset(&pfd, 0, sizeof(pfd));
+//
+//			pfd.fd = ScreenFd(screen);
+//			pfd.events = POLLIN;
+//			pfd.revents = 0;
+//
+//			rc = poll(&pfd, 1, -1);
+//
+//			if (rc < 0)
+//				die("poll error");
+//
+//			if (pfd.revents & POLLIN)
+//			{
+//				ScreenHandleInput(screen);
+//			}
+//		}
+//	}
 
 	return 0;
 }
