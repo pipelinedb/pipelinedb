@@ -25,6 +25,27 @@ void ModelUpdateLens(Model *m, Row* r)
 	}
 }
 
+Model* ModelInit()
+{
+	Model* m = malloc(sizeof(Model));
+	memset(m, 0, sizeof(Model));
+
+	m->rowmap = RowMapInit();
+
+	return m;
+}
+
+void ModelDestroy(Model *m)
+{
+	RowMapDestroy(m->rowmap);
+	RowCleanup(&m->header);
+
+	free(m->maxlens);
+	memset(m, 0, sizeof(Model));
+
+	free(m);
+}
+
 void ModelAddRow(Model *m, Row* r)
 {
 	ModelUpdateLens(m, r);

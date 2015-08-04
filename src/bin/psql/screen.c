@@ -41,7 +41,8 @@ Screen* ScreenInit(Model *model)
 	}
 
 	self->fd = fileno(self->term_in);
-	set_term(newterm(term_type, stdout, self->term_in));
+	self->nterm = newterm(term_type, stdout, self->term_in);
+	set_term(self->nterm);
 
 	timeout(0);
 	clear();
@@ -58,13 +59,21 @@ Screen* ScreenInit(Model *model)
 	return self;
 }
 
+void ScreenDestroy(Screen* s)
+{
+	endwin();
+	delscreen(s->nterm);
+
+	fclose(s->term_in);
+	cleanup_flex(&s->key);
+
+	memset(s, 0, sizeof(Screen));
+	free(s);
+}
+
 int ScreenFd(Screen *s)
 {
 	return s->fd;
-}
-
-void ScreenDestroy(Screen* s)
-{
 }
 
 void ScreenSync(Screen *s)

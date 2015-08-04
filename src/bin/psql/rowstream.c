@@ -22,6 +22,14 @@ RowStream* RowStreamInit(RowFunc cb, void *ctx)
 	return self;
 }
 
+void RowStreamDestroy(RowStream *s)
+{
+	cleanup_flex(&s->flex);
+	memset(s, 0, sizeof(RowStream));
+
+	free(s);
+}
+
 int RowStreamFd(RowStream *s)
 {
 	return s->fd;
@@ -121,77 +129,3 @@ bool RowStreamHandleInput(RowStream *s)
 
 	return false;
 }
-//RowStream* init_row_stream(row_processor proc, void *pctx);
-//
-//RowStream* init_row_stream(row_processor proc, void *pctx)
-//{
-//	RowStream *stream = malloc(sizeof(RowStream));
-//	memset(stream, 0, sizeof(RowStream));
-//
-//	stream->fd = STDIN_FILENO;
-//	fcntl(stream->fd, F_SETFL, O_NONBLOCK);
-//
-//	stream->process_row = proc;
-//	stream->pr_ctx = pctx;
-//
-//	init_flex(&stream->flex);
-//
-//	return stream;
-//}
-//
-//int num_fields(const char* line);
-//
-//int num_fields(const char* line)
-//{
-//	const char* s = line;
-//	int cnt = 0;
-//
-//	while (*s)
-//	{
-//		if (*s == ' ') cnt++;
-//		s++;
-//	}
-//
-//	return cnt + 1;
-//}
-//
-//
-//
-//void destroy_row_stream(RowStream *stream)
-//{
-//}
-//
-//OldRow parse_text_row(const char* line);
-//
-//
-//
-//OldRow parse_text_row(const char* line)
-//{
-//	OldRow row = {0,0,0};
-//	int i = 0;
-//	char* sptr = 0;
-//
-//	row.ptr = strdup(line);
-//	row.num_fields = num_fields(line);
-//	row.fields = malloc(sizeof(Field) * row.num_fields);
-//
-//	sptr = (char*) row.ptr;
-//
-//	while (true)
-//	{
-//		char* tok = strtok(sptr, " ");
-//
-//		if (!tok) 
-//			break;
-//
-//		row.fields[i].len = strlen(tok);
-//		row.fields[i].data = tok;
-//		i++;
-//
-//		sptr = 0;
-//	}
-//
-//	return row;
-//}
-//
-//

@@ -26,6 +26,7 @@ typedef struct RowStream
 } RowStream;
 
 RowStream* RowStreamInit(RowFunc fn, void *ctx);
+void RowStreamDestroy(RowStream *);
 
 int RowStreamFd(RowStream *s);
 bool RowStreamHandleInput(RowStream *s);

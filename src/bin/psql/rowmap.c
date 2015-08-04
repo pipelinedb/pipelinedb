@@ -6,6 +6,7 @@
 
 void RowCleanup(Row *row)
 {
+	free(row->fields);
 	free(row->ptr);
 	memset(row, 0, sizeof(Row));
 }
@@ -76,6 +77,21 @@ RowMap* RowMapInit()
 	return m;
 }
 
+void RowMapDestroy(RowMap *m)
+{
+	size_t i = 0;
+
+	for (i = 0; i < m->n; ++i)
+	{
+		RowCleanup(&m->rows[i]);
+	}
+
+	free(m->rows);
+
+	memset(m, 0, sizeof(RowMap));
+	free(m);
+}
+
 void RowMapDump(RowMap* m)
 {
 	size_t i = 0;
@@ -86,10 +102,6 @@ void RowMapDump(RowMap* m)
 	}
 }
 
-void RowMapDestroy(RowMap *m)
-{
-	free(m);
-}
 
 void RowMapErase(RowMap *m, const char* key)
 {

@@ -15,6 +15,8 @@ typedef struct Screen
 	FILE* term_in;
 	int fd;
 
+	SCREEN* nterm;
+
 	int x_pos;
 	int x_col;
 

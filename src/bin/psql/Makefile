@@ -73,7 +73,7 @@ uninstall:
 
 # psqlscan.c is in the distribution tarball, so is not cleaned here
 clean distclean:
-	rm -f psql$(X) $(OBJS) dumputils.c keywords.c kwlookup.c lex.backup
+	rm -f psql$(X) padhoc $(OBJS) $(AOBJS) dumputils.c keywords.c kwlookup.c lex.backup
 
 maintainer-clean: distclean
 	rm -f sql_help.h sql_help.c psqlscan.c
