@@ -15,8 +15,8 @@
 
 typedef struct App
 {
-	Model* model;
-	Screen* screen;
+	Model   *model;
+	Screen  *screen;
 } App;
 
 volatile int keep_running = 1;
@@ -27,7 +27,7 @@ void sighandle(int x)
 	keep_running = 0;
 }
 
-void row_callback(void* ctx, int type, Row* row);
+void row_callback(void *ctx, int type, Row *row);
 
 int
 main(int argc, char *argv[])
@@ -107,9 +107,9 @@ main(int argc, char *argv[])
 	return 0;
 }
 
-void row_callback(void* ctx, int type, Row* row)
+void row_callback(void *ctx, int type, Row *row)
 {
-	App *app = (App*)(ctx);
+	App *app = (App *)(ctx);
 
 	switch (type) {
 

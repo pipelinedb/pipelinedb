@@ -16,11 +16,11 @@ void ScreenPrevCol(Screen *s);
 void ScreenNextCol(Screen *s);
 void ScreenTogglePause(Screen *s);
 
-Screen* ScreenInit(Model *model)
+Screen *ScreenInit(Model *model)
 {
-	const char* tty = "/dev/tty";
-	const char* term_type = 0;
-	Screen* self = pg_malloc(sizeof(Screen));
+	const char *tty = "/dev/tty";
+	const char *term_type = 0;
+	Screen *self = pg_malloc(sizeof(Screen));
 	memset(self, 0, sizeof(Screen));
 
 	self->model = model;
@@ -59,7 +59,7 @@ Screen* ScreenInit(Model *model)
 	return self;
 }
 
-void ScreenDestroy(Screen* s)
+void ScreenDestroy(Screen *s)
 {
 	endwin();
 	delscreen(s->nterm);
@@ -81,12 +81,12 @@ void ScreenSync(Screen *s)
 	refresh();
 }
 
-static inline RowMap* rowmap(Screen *s)
+static inline RowMap *rowmap(Screen *s)
 {
 	return s->model->rowmap;
 }
 
-static inline Row* key(Screen *s)
+static inline Row *key(Screen *s)
 {
 	return &s->key;
 }
@@ -129,7 +129,7 @@ static inline void draw_row(Screen *s, Row *row, char sep)
 	{
 		size_t padlen = maxlen(s, i);
 
-		char* fv = RowFieldValue(row, i);
+		char *fv = RowFieldValue(row, i);
 		size_t fn = RowFieldLength(row, i);
 
 		if (i == s->x_col) {

@@ -4,7 +4,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 
-RowStream* RowStreamInit(RowFunc cb, void *ctx)
+RowStream *RowStreamInit(RowFunc cb, void *ctx)
 {
 	RowStream *self = pg_malloc(sizeof(RowStream));
 	memset(self, 0, sizeof(RowStream));
@@ -35,7 +35,7 @@ int RowStreamFd(RowStream *s)
 	return s->fd;
 }
 
-static inline size_t spaces(const char* s)
+static inline size_t spaces(const char *s)
 {
 	size_t cnt = 0;
 
@@ -52,14 +52,14 @@ static inline size_t spaces(const char* s)
 	return cnt;
 }
 
-RowMessage parse_text_row(const char* line);
+RowMessage parse_text_row(const char *line);
 
-RowMessage parse_text_row(const char* line)
+RowMessage parse_text_row(const char *line)
 {
 	RowMessage msg;
 	int i = 0;
-	char* sptr = 0;
-	char* tok = 0;
+	char *sptr = 0;
+	char *tok = 0;
 
 	memset(&msg, 0, sizeof(RowMessage));
 
@@ -67,7 +67,7 @@ RowMessage parse_text_row(const char* line)
 	msg.row.n = spaces(line);
 	msg.row.fields = pg_malloc(sizeof(Field) * msg.row.n);
 
-	sptr = (char*) msg.row.ptr;
+	sptr = (char *) msg.row.ptr;
 	tok = strtok(sptr, " ");
 	sptr = 0;
 
@@ -90,7 +90,7 @@ RowMessage parse_text_row(const char* line)
 	return msg;
 }
 
-static void inline append_data(RowStream *stream, const char* buf, size_t nr)
+static void inline append_data(RowStream *stream, const char *buf, size_t nr)
 {
 	size_t i = 0;
 	RowMessage msg;

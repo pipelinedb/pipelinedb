@@ -8,12 +8,12 @@ void RowCleanup(Row *row)
 	memset(row, 0, sizeof(Row));
 }
 
-size_t RowSize(Row* r)
+size_t RowSize(Row *r)
 {
 	return r->n;
 }
 
-static size_t* g_row_key = 0;
+static size_t *g_row_key = 0;
 static size_t g_row_key_n = 0;
 
 void RowKeyReset()
@@ -30,12 +30,12 @@ void RowKeyAdd(size_t i)
 	g_row_key_n++;
 }
 
-size_t RowFieldLength(Row* r, size_t i)
+size_t RowFieldLength(Row *r, size_t i)
 {
 	return r->fields[i].n;
 }
 
-Field* RowGetField(Row* r, size_t i)
+Field *RowGetField(Row *r, size_t i)
 {
 	return r->fields + i;
 }
@@ -50,9 +50,9 @@ static inline int ncmp(size_t a, size_t b)
 	return (a == b) ? 0 : 1;
 }
 
-int FieldCmp(Field* f1, Field* f2);
+int FieldCmp(Field *f1, Field *f2);
 
-int FieldCmp(Field* f1, Field* f2)
+int FieldCmp(Field *f1, Field *f2)
 {
 	size_t n = Min(f1->n, f2->n);
 	int c1 = memcmp(f1->data, f2->data, n);
@@ -65,7 +65,7 @@ int FieldCmp(Field* f1, Field* f2)
 	return c1;
 }
 
-char* RowFieldValue(Row* r, size_t i)
+char *RowFieldValue(Row *r, size_t i)
 {
 	return r->fields[i].data;
 }
@@ -84,7 +84,7 @@ static inline size_t key_length(Row *r)
 	return n;
 }
 
-Row RowGetKey(Row* r)
+Row RowGetKey(Row *r)
 {
 	Row row = {0,0,0};
 	size_t nb = key_length(r);
@@ -93,7 +93,7 @@ Row RowGetKey(Row* r)
 	char *d = pg_malloc(nb);
 
 	size_t i = 0;
-	char* out_iter = d;
+	char *out_iter = d;
 
 	row.ptr = d;
 	row.fields = pg_malloc(n * sizeof(Field));
@@ -104,7 +104,7 @@ Row RowGetKey(Row* r)
 	for (i = 0; i < n; ++i)
 	{
 		size_t col = g_row_key[i];
-		char* tok = out_iter;
+		char *tok = out_iter;
 
 		memcpy(out_iter, r->fields[col].data, r->fields[col].n);
 		out_iter += r->fields[col].n;
@@ -117,9 +117,9 @@ Row RowGetKey(Row* r)
 	return row;
 }
 
-void RowMapAppend(RowMap *, Row* row);
+void RowMapAppend(RowMap *, Row *row);
 
-void RowMapAppend(RowMap *m, Row* row)
+void RowMapAppend(RowMap *m, Row *row)
 {
 	size_t ns = m->n + 1;
 
@@ -141,13 +141,13 @@ void RowMapAppend(RowMap *m, Row* row)
 
 void RowMapSort(RowMap *m);
 
-int row_cmp_row_row(const void* p1, const void* p2);
-int row_cmp_row_key(const void* p1, const void* p2);
+int row_cmp_row_row(const void *p1, const void *p2);
+int row_cmp_row_key(const void *p1, const void *p2);
 
-int row_cmp_row_row(const void* p1, const void* p2)
+int row_cmp_row_row(const void *p1, const void *p2)
 {
-	Row* r1 = (Row*) p1;
-	Row* r2 = (Row*) p2;
+	Row *r1 = (Row *) p1;
+	Row *r2 = (Row *) p2;
 
 	// composite key support
 
@@ -169,10 +169,10 @@ int row_cmp_row_row(const void* p1, const void* p2)
 	return 0;
 }
 
-int row_cmp_row_key(const void* p1, const void* p2)
+int row_cmp_row_key(const void *p1, const void *p2)
 {
-	Row* r1 = (Row*) p1;
-	Row* r2 = (Row*) p2;
+	Row *r1 = (Row *) p1;
+	Row *r2 = (Row *) p2;
 
 	size_t i = 0;
 
@@ -212,9 +212,9 @@ void RowMapSort(RowMap *m)
 	qsort(m->rows, m->n, sizeof(Row), row_cmp_row_row);
 }
 
-RowMap* RowMapInit()
+RowMap *RowMapInit()
 {
-	RowMap* m = pg_malloc(sizeof(RowMap));
+	RowMap *m = pg_malloc(sizeof(RowMap));
 	memset(m, 0, sizeof(RowMap));
 
 	return m;
@@ -247,7 +247,7 @@ void RowDump(Row *row)
 	printf("\n");
 }
 
-void RowMapDump(RowMap* m)
+void RowMapDump(RowMap *m)
 {
 	size_t i = 0;
 
@@ -257,7 +257,7 @@ void RowMapDump(RowMap* m)
 	}
 }
 
-void RowMapErase(RowMap *m, Row* key)
+void RowMapErase(RowMap *m, Row *key)
 {
 	RowIterator iter = RowMapFindWithKey(m, key);
 	size_t rem = 0;
@@ -273,7 +273,7 @@ void RowMapErase(RowMap *m, Row* key)
 	m->n--;
 }
 
-void RowMapUpdate(RowMap *m, Row* row)
+void RowMapUpdate(RowMap *m, Row *row)
 {
 	RowIterator iter = RowMapFindWithRow(m, row);
 
@@ -289,7 +289,7 @@ void RowMapUpdate(RowMap *m, Row* row)
 	}
 }
 
-size_t RowMapSize(RowMap* m)
+size_t RowMapSize(RowMap *m)
 {
 	return m->n;
 }
@@ -304,7 +304,7 @@ RowIterator RowMapEnd(RowMap *m)
 	return m->rows + m->n;
 }
 
-RowIterator RowMapFindWithRow(RowMap *m, Row* row)
+RowIterator RowMapFindWithRow(RowMap *m, Row *row)
 {
 	size_t i = 0;
 
@@ -319,7 +319,7 @@ RowIterator RowMapFindWithRow(RowMap *m, Row* row)
 	return m->rows + i;
 }
 
-RowIterator RowMapFindWithKey(RowMap *m, Row* key)
+RowIterator RowMapFindWithKey(RowMap *m, Row *key)
 {
 	size_t i = 0;
 
@@ -334,7 +334,7 @@ RowIterator RowMapFindWithKey(RowMap *m, Row* key)
 	return m->rows + i;
 }
 
-RowIterator RowMapLowerBound(RowMap *m, Row* key)
+RowIterator RowMapLowerBound(RowMap *m, Row *key)
 {
 	size_t i = 0;
 

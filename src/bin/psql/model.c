@@ -1,7 +1,7 @@
 #include "postgres_fe.h"
 #include "model.h"
 
-void ModelUpdateLens(Model *m, Row* r)
+void ModelUpdateLens(Model *m, Row *r)
 {
 	size_t i = 0;
 
@@ -23,9 +23,9 @@ void ModelUpdateLens(Model *m, Row* r)
 	}
 }
 
-Model* ModelInit()
+Model *ModelInit()
 {
-	Model* m = pg_malloc(sizeof(Model));
+	Model *m = pg_malloc(sizeof(Model));
 	memset(m, 0, sizeof(Model));
 
 	m->rowmap = RowMapInit();
@@ -46,19 +46,19 @@ void ModelDestroy(Model *m)
 	RowKeyReset();
 }
 
-void ModelAddRow(Model *m, Row* r)
+void ModelAddRow(Model *m, Row *r)
 {
 	ModelUpdateLens(m, r);
 	RowMapUpdate(m->rowmap, r);
 }
 
-void ModelDeleteRow(Model *m, Row* r)
+void ModelDeleteRow(Model *m, Row *r)
 {
 	RowMapErase(m->rowmap, r);
 	RowCleanup(r);
 }
 
-static size_t FindInRow(Row *r, const char* s)
+static size_t FindInRow(Row *r, const char *s)
 {
 	size_t i = 0;
 
@@ -73,7 +73,7 @@ static size_t FindInRow(Row *r, const char* s)
 	return i;
 }
 
-void ModelSetKey(Model *m, Row* r)
+void ModelSetKey(Model *m, Row *r)
 {
 	// key names must exist in the header.
 	
@@ -96,7 +96,7 @@ void ModelSetKey(Model *m, Row* r)
 	RowCleanup(r);
 }
 
-void ModelSetHeader(Model *m, Row* r)
+void ModelSetHeader(Model *m, Row *r)
 {
 	ModelUpdateLens(m, r);
 
@@ -116,9 +116,9 @@ void ModelDump(Model *m)
 	}
 }
 
-size_t spaces(const char* s);
+size_t spaces(const char *s);
 
-size_t spaces(const char* s)
+size_t spaces(const char *s)
 {
 	size_t cnt = 0;
 
@@ -135,9 +135,9 @@ size_t spaces(const char* s)
 	return cnt;
 }
 
-Row make_row(const char* s);
+Row make_row(const char *s);
 
-Row make_row(const char* s)
+Row make_row(const char *s)
 {
 	// fields, n;
 	
@@ -154,7 +154,7 @@ Row make_row(const char* s)
 
 	for (i = 0; i < n; ++i)
 	{
-		char* tok = strtok(sptr, " ");
+		char *tok = strtok(sptr, " ");
 		sptr = 0;
 
 		row.fields[i].data = tok;
@@ -164,7 +164,7 @@ Row make_row(const char* s)
 	return row;
 }
 
-void add_row(Model *m, const char* s)
+void add_row(Model *m, const char *s)
 {
 	Row row = make_row(s);
 	ModelAddRow(m, &row);

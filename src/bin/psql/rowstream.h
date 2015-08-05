@@ -10,26 +10,23 @@
 
 typedef struct RowMessage
 {
-	int type; // i, u, d, k
+	int type; /*  i, u, d, k */
 	Row row;
 } RowMessage;
 
-typedef void (*RowFunc) (void* ctx, int type, Row *row);
+typedef void (*RowFunc) (void *ctx, int type, Row *row);
 
 typedef struct RowStream
 {
-	int fd;
-	char buf[4096];
-
-	PQExpBufferData flex;
-
-	RowFunc callback;
-	void* cb_ctx;
-
+	int              fd;
+	char             buf[4096];
+	PQExpBufferData  flex;
+	RowFunc          callback;
+	void             *cb_ctx;
 } RowStream;
 
-RowStream* RowStreamInit(RowFunc fn, void *ctx);
-void RowStreamDestroy(RowStream *);
+RowStream *RowStreamInit(RowFunc fn, void *ctx);
+void RowStreamDestroy(RowStream *s);
 
 int RowStreamFd(RowStream *s);
 bool RowStreamHandleInput(RowStream *s);

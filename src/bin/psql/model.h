@@ -6,25 +6,23 @@
 
 typedef struct Model
 {
-	RowMap *rowmap;
-	size_t* maxlens;
-	size_t nfields;
-
-	Row header;
-
+	RowMap  *rowmap;
+	size_t  *maxlens;
+	size_t  nfields;
+	Row     header;
 } Model;
 
-Model* ModelInit(void);
-void ModelDestroy(Model* m);
+Model *ModelInit(void);
+void ModelDestroy(Model *m);
 
-void ModelUpdateLens(Model *m, Row* r);
-void ModelAddRow(Model *m, Row* r);
-void ModelDeleteRow(Model *m, Row* r);
+void ModelUpdateLens(Model *m, Row *r);
+void ModelAddRow(Model *m, Row *r);
+void ModelDeleteRow(Model *m, Row *r);
 
-void ModelSetHeader(Model *m, Row* r);
-void ModelSetKey(Model *m, Row* r);
+void ModelSetHeader(Model *m, Row *r);
+void ModelSetKey(Model *m, Row *r);
 
 void ModelDump(Model *m);
-void add_row(Model *m, const char* s);
+void add_row(Model *m, const char *s);
 
 #endif
