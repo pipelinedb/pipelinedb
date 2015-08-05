@@ -59,7 +59,8 @@ Screen *ScreenInit(Model *model)
 	return self;
 }
 
-void ScreenDestroy(Screen *s)
+void
+ScreenDestroy(Screen *s)
 {
 	endwin();
 	delscreen(s->nterm);
@@ -71,48 +72,57 @@ void ScreenDestroy(Screen *s)
 	pg_free(s);
 }
 
-int ScreenFd(Screen *s)
+int
+ScreenFd(Screen *s)
 {
 	return s->fd;
 }
 
-void ScreenSync(Screen *s)
+void
+ScreenSync(Screen *s)
 {
 	refresh();
 }
 
-static inline RowMap *rowmap(Screen *s)
+static inline RowMap *
+rowmap(Screen *s)
 {
 	return s->model->rowmap;
 }
 
-static inline Row *key(Screen *s)
+static inline Row *
+key(Screen *s)
 {
 	return &s->key;
 }
 
-static inline int lines(Screen *s)
+static inline int
+lines(Screen *s)
 {
 	return LINES;
 }
 
-static inline size_t maxlen(Screen *s, size_t i)
+static inline size_t
+maxlen(Screen *s, size_t i)
 {
 	return s->model->maxlens[i];
 }
 
-static inline size_t numfields(Screen *s)
+static inline size_t
+numfields(Screen *s)
 {
 	// Model
 	return s->model->nfields;
 }
 
-static inline size_t rightmost(Screen *s)
+static inline size_t
+rightmost(Screen *s)
 {
 	return s->model->nfields - 1;
 }
 
-static inline void printwpad(int n)
+static inline void
+printwpad(int n)
 {
 	int i = 0;
 
@@ -121,7 +131,8 @@ static inline void printwpad(int n)
 	}
 }
 
-static inline void draw_row(Screen *s, Row *row, char sep)
+static inline void
+draw_row(Screen *s, Row *row, char sep)
 {
 	size_t i = 0;
 
@@ -159,7 +170,8 @@ static inline void draw_row(Screen *s, Row *row, char sep)
 	clrtoeol();
 }
 
-void ScreenRender(Screen *s)
+void
+ScreenRender(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
 	RowIterator end = RowMapEnd(rowmap(s));
@@ -167,7 +179,7 @@ void ScreenRender(Screen *s)
 	int i = 0;
 	int ctr = 0;
 	move(ctr, 0);
-	
+
 	attron(A_REVERSE);
 	draw_row(s, &s->model->header, '|');
 	attroff(A_REVERSE);
@@ -185,24 +197,28 @@ void ScreenRender(Screen *s)
 	}
 }
 
-void ScreenUpdate(Screen *s)
+void
+ScreenUpdate(Screen *s)
 {
 	ScreenRender(s);
 	ScreenSync(s);
 }
 
-static void inline set_key(Screen *s, Row r)
+static void inline
+set_key(Screen *s, Row r)
 {
 	RowCleanup(&s->key);
 	s->key = r;
 }
 
-static void inline clear_key(Screen *s)
+static void inline
+clear_key(Screen *s)
 {
 	RowCleanup(&s->key);
 }
 
-void ScreenScrollUp(Screen *s)
+void
+ScreenScrollUp(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
 
@@ -215,7 +231,8 @@ void ScreenScrollUp(Screen *s)
 	}
 }
 
-void ScreenScrollDown(Screen *s)
+void
+ScreenScrollDown(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
 
@@ -230,7 +247,8 @@ void ScreenScrollDown(Screen *s)
 	}
 }
 
-void ScreenScrollLeft(Screen *s) 
+void
+ScreenScrollLeft(Screen *s)
 {
 	s->x_pos--;
 
@@ -249,7 +267,8 @@ void ScreenScrollLeft(Screen *s)
 	}
 }
 
-void ScreenScrollRight(Screen *s) 
+void
+ScreenScrollRight(Screen *s)
 {
 	s->x_pos++;
 
@@ -266,7 +285,8 @@ void ScreenScrollRight(Screen *s)
 	}
 }
 
-void ScreenPageUp(Screen *s)
+void
+ScreenPageUp(Screen *s)
 {
 	int i = 0;
 
@@ -275,7 +295,8 @@ void ScreenPageUp(Screen *s)
 	}
 }
 
-void ScreenPageDown(Screen *s)
+void
+ScreenPageDown(Screen *s)
 {
 	int i = 0;
 
@@ -284,7 +305,8 @@ void ScreenPageDown(Screen *s)
 	}
 }
 
-void ScreenNextCol(Screen *s)
+void
+ScreenNextCol(Screen *s)
 {
 	s->x_pos = 0;
 	s->x_col++;
@@ -294,7 +316,8 @@ void ScreenNextCol(Screen *s)
 	}
 }
 
-void ScreenPrevCol(Screen *s)
+void
+ScreenPrevCol(Screen *s)
 {
 	if (s->x_pos != 0)
 	{
@@ -311,29 +334,33 @@ void ScreenPrevCol(Screen *s)
 	}
 }
 
-void ScreenHome(Screen *s) 
+void
+ScreenHome(Screen *s)
 {
 	s->x_col = 0;
 	s->x_pos = 0;
-} 
+}
 
-void ScreenEnd(Screen *s)
+void
+ScreenEnd(Screen *s)
 {
 	s->x_col = rightmost(s);
 	s->x_pos = 0;
-} 
+}
 
-void ScreenTogglePause(Screen *s)
+void
+ScreenTogglePause(Screen *s)
 {
 	s->pause = !s->pause;
-} 
+}
 
-void ScreenHandleInput(Screen *s)
+void
+ScreenHandleInput(Screen *s)
 {
 	int c = getch();
 
 	switch(c)
-	{	
+	{
 		case KEY_UP:
 			ScreenScrollUp(s);
 			break;
@@ -384,7 +411,8 @@ void ScreenHandleInput(Screen *s)
 	ScreenUpdate(s);
 }
 
-bool ScreenIsPaused(Screen *s)
+bool
+ScreenIsPaused(Screen *s)
 {
 	return s->pause;
 }

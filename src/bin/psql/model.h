@@ -23,6 +23,6 @@ void ModelSetHeader(Model *m, Row *r);
 void ModelSetKey(Model *m, Row *r);
 
 void ModelDump(Model *m);
-void add_row(Model *m, const char *s);
+void ModelAddRowFromString(Model *m, const char *s);
 
 #endif

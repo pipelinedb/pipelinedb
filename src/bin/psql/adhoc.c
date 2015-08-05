@@ -20,9 +20,9 @@ typedef struct App
 } App;
 
 volatile int keep_running = 1;
-void sighandle(int);
 
-void sighandle(int x)
+static void
+sighandle(int x)
 {
 	keep_running = 0;
 }
@@ -107,7 +107,8 @@ main(int argc, char *argv[])
 	return 0;
 }
 
-void row_callback(void *ctx, int type, Row *row)
+void
+row_callback(void *ctx, int type, Row *row)
 {
 	App *app = (App *)(ctx);
 

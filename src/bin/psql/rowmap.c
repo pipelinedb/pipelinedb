@@ -1,46 +1,53 @@
 #include "postgres_fe.h"
 #include "rowmap.h"
 
-void RowCleanup(Row *row)
+static size_t *g_row_key = 0;
+static size_t g_row_key_n = 0;
+
+void
+RowCleanup(Row *row)
 {
 	pg_free(row->fields);
 	pg_free(row->ptr);
 	memset(row, 0, sizeof(Row));
 }
 
-size_t RowSize(Row *r)
+size_t
+RowSize(Row *r)
 {
 	return r->n;
 }
 
-static size_t *g_row_key = 0;
-static size_t g_row_key_n = 0;
-
-void RowKeyReset()
+void
+RowKeyReset()
 {
 	pg_free(g_row_key);
 	g_row_key_n = 0;
 	g_row_key = 0;
 }
 
-void RowKeyAdd(size_t i)
+void
+RowKeyAdd(size_t i)
 {
 	g_row_key = pg_realloc(g_row_key, (g_row_key_n + 1) * sizeof(size_t));
 	g_row_key[g_row_key_n] = i;
 	g_row_key_n++;
 }
 
-size_t RowFieldLength(Row *r, size_t i)
+size_t
+RowFieldLength(Row *r, size_t i)
 {
 	return r->fields[i].n;
 }
 
-Field *RowGetField(Row *r, size_t i)
+Field
+*RowGetField(Row *r, size_t i)
 {
 	return r->fields + i;
 }
 
-static inline int ncmp(size_t a, size_t b)
+static inline int
+ncmp(size_t a, size_t b)
 {
 	if (a < b)
 	{
@@ -50,9 +57,8 @@ static inline int ncmp(size_t a, size_t b)
 	return (a == b) ? 0 : 1;
 }
 
-int FieldCmp(Field *f1, Field *f2);
-
-int FieldCmp(Field *f1, Field *f2)
+static int
+FieldCmp(Field *f1, Field *f2)
 {
 	size_t n = Min(f1->n, f2->n);
 	int c1 = memcmp(f1->data, f2->data, n);
@@ -65,12 +71,14 @@ int FieldCmp(Field *f1, Field *f2)
 	return c1;
 }
 
-char *RowFieldValue(Row *r, size_t i)
+char *
+RowFieldValue(Row *r, size_t i)
 {
 	return r->fields[i].data;
 }
 
-static inline size_t key_length(Row *r)
+static inline size_t
+key_length(Row *r)
 {
 	size_t n = 0;
 	size_t i = 0;
@@ -84,7 +92,8 @@ static inline size_t key_length(Row *r)
 	return n;
 }
 
-Row RowGetKey(Row *r)
+Row
+RowGetKey(Row *r)
 {
 	Row row = {0,0,0};
 	size_t nb = key_length(r);
@@ -110,16 +119,18 @@ Row RowGetKey(Row *r)
 		out_iter += r->fields[col].n;
 		*out_iter++ = '\0';
 
-		row.fields[i].data = tok; 
-		row.fields[i].n = r->fields[col].n; 
+		row.fields[i].data = tok;
+		row.fields[i].n = r->fields[col].n;
 	}
 
 	return row;
 }
 
-void RowMapAppend(RowMap *, Row *row);
+void
+RowMapAppend(RowMap *, Row *row);
 
-void RowMapAppend(RowMap *m, Row *row)
+void
+RowMapAppend(RowMap *m, Row *row)
 {
 	size_t ns = m->n + 1;
 
@@ -139,12 +150,11 @@ void RowMapAppend(RowMap *m, Row *row)
 	m->rows[m->n++] = *row;
 }
 
-void RowMapSort(RowMap *m);
+void
+RowMapSort(RowMap *m);
 
-int row_cmp_row_row(const void *p1, const void *p2);
-int row_cmp_row_key(const void *p1, const void *p2);
-
-int row_cmp_row_row(const void *p1, const void *p2)
+static int
+row_cmp_row_row(const void *p1, const void *p2)
 {
 	Row *r1 = (Row *) p1;
 	Row *r2 = (Row *) p2;
@@ -169,7 +179,8 @@ int row_cmp_row_row(const void *p1, const void *p2)
 	return 0;
 }
 
-int row_cmp_row_key(const void *p1, const void *p2)
+static int
+row_cmp_row_key(const void *p1, const void *p2)
 {
 	Row *r1 = (Row *) p1;
 	Row *r2 = (Row *) p2;
@@ -207,12 +218,14 @@ int row_cmp_row_key(const void *p1, const void *p2)
 	return 0;
 }
 
-void RowMapSort(RowMap *m)
+void
+RowMapSort(RowMap *m)
 {
 	qsort(m->rows, m->n, sizeof(Row), row_cmp_row_row);
 }
 
-RowMap *RowMapInit()
+RowMap *
+RowMapInit()
 {
 	RowMap *m = pg_malloc(sizeof(RowMap));
 	memset(m, 0, sizeof(RowMap));
@@ -220,7 +233,8 @@ RowMap *RowMapInit()
 	return m;
 }
 
-void RowMapDestroy(RowMap *m)
+void
+RowMapDestroy(RowMap *m)
 {
 	size_t i = 0;
 
@@ -235,7 +249,8 @@ void RowMapDestroy(RowMap *m)
 	pg_free(m);
 }
 
-void RowDump(Row *row)
+void
+RowDump(Row *row)
 {
 	size_t i = 0;
 
@@ -247,7 +262,8 @@ void RowDump(Row *row)
 	printf("\n");
 }
 
-void RowMapDump(RowMap *m)
+void
+RowMapDump(RowMap *m)
 {
 	size_t i = 0;
 
@@ -257,7 +273,8 @@ void RowMapDump(RowMap *m)
 	}
 }
 
-void RowMapErase(RowMap *m, Row *key)
+void
+RowMapErase(RowMap *m, Row *key)
 {
 	RowIterator iter = RowMapFindWithKey(m, key);
 	size_t rem = 0;
@@ -273,7 +290,8 @@ void RowMapErase(RowMap *m, Row *key)
 	m->n--;
 }
 
-void RowMapUpdate(RowMap *m, Row *row)
+void
+RowMapUpdate(RowMap *m, Row *row)
 {
 	RowIterator iter = RowMapFindWithRow(m, row);
 
@@ -289,22 +307,26 @@ void RowMapUpdate(RowMap *m, Row *row)
 	}
 }
 
-size_t RowMapSize(RowMap *m)
+size_t
+RowMapSize(RowMap *m)
 {
 	return m->n;
 }
 
-RowIterator RowMapBegin(RowMap *m)
+RowIterator
+RowMapBegin(RowMap *m)
 {
 	return m->rows;
 }
 
-RowIterator RowMapEnd(RowMap *m)
+RowIterator
+RowMapEnd(RowMap *m)
 {
 	return m->rows + m->n;
 }
 
-RowIterator RowMapFindWithRow(RowMap *m, Row *row)
+RowIterator
+RowMapFindWithRow(RowMap *m, Row *row)
 {
 	size_t i = 0;
 
@@ -319,7 +341,8 @@ RowIterator RowMapFindWithRow(RowMap *m, Row *row)
 	return m->rows + i;
 }
 
-RowIterator RowMapFindWithKey(RowMap *m, Row *key)
+RowIterator
+RowMapFindWithKey(RowMap *m, Row *key)
 {
 	size_t i = 0;
 
@@ -334,7 +357,8 @@ RowIterator RowMapFindWithKey(RowMap *m, Row *key)
 	return m->rows + i;
 }
 
-RowIterator RowMapLowerBound(RowMap *m, Row *key)
+RowIterator
+RowMapLowerBound(RowMap *m, Row *key)
 {
 	size_t i = 0;
 

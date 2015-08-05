@@ -22,7 +22,8 @@ RowStream *RowStreamInit(RowFunc cb, void *ctx)
 	return self;
 }
 
-void RowStreamDestroy(RowStream *s)
+void
+RowStreamDestroy(RowStream *s)
 {
 	termPQExpBuffer(&s->flex);
 	memset(s, 0, sizeof(RowStream));
@@ -30,21 +31,21 @@ void RowStreamDestroy(RowStream *s)
 	pg_free(s);
 }
 
-int RowStreamFd(RowStream *s)
+int
+RowStreamFd(RowStream *s)
 {
 	return s->fd;
 }
 
-static inline size_t spaces(const char *s)
+static size_t
+spaces(const char *s)
 {
 	size_t cnt = 0;
 
 	while (*s)
 	{
 		if (*s == ' ')
-		{
 			cnt++;
-		}
 
 		s++;
 	}
@@ -52,9 +53,8 @@ static inline size_t spaces(const char *s)
 	return cnt;
 }
 
-RowMessage parse_text_row(const char *line);
-
-RowMessage parse_text_row(const char *line)
+static RowMessage
+parse_text_row(const char *line)
 {
 	RowMessage msg;
 	int i = 0;
@@ -77,7 +77,7 @@ RowMessage parse_text_row(const char *line)
 	{
 		tok = strtok(sptr, " ");
 
-		if (!tok) 
+		if (!tok)
 			break;
 
 		msg.row.fields[i].n = strlen(tok);
@@ -90,7 +90,8 @@ RowMessage parse_text_row(const char *line)
 	return msg;
 }
 
-static void inline append_data(RowStream *stream, const char *buf, size_t nr)
+static void
+append_data(RowStream *stream, const char *buf, size_t nr)
 {
 	size_t i = 0;
 	RowMessage msg;
@@ -110,7 +111,8 @@ static void inline append_data(RowStream *stream, const char *buf, size_t nr)
 	}
 }
 
-bool RowStreamHandleInput(RowStream *s)
+bool
+RowStreamHandleInput(RowStream *s)
 {
 	while (true)
 	{
