@@ -10,7 +10,7 @@
 typedef struct Screen
 {
 	Model* model;
-	FlexString key;
+	Row key;
 
 	FILE* term_in;
 	int fd;

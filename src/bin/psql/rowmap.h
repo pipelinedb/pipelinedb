@@ -21,9 +21,14 @@ typedef struct Row {
 void RowCleanup(Row *row);
 size_t RowSize(Row* r);
 
+void RowKeyReset(void);
+void RowKeyAdd(size_t i);
+
 size_t RowFieldLength(Row* r, size_t i);
 char* RowFieldValue(Row* r, size_t i);
-char* RowGetKey(Row* r);
+Field* RowGetField(Row* r, size_t i);
+
+Row RowGetKey(Row* r);
 
 typedef struct RowMap {
 
@@ -39,15 +44,19 @@ typedef Row* RowIterator;
 RowMap* RowMapInit(void);
 void RowMapDestroy(RowMap* m);
 
-void RowMapErase(RowMap *m, const char* key);
+void RowMapErase(RowMap *m, Row* key);
 void RowMapUpdate(RowMap *m, Row* row);
 size_t RowMapSize(RowMap *m);
 void RowMapDump(RowMap *m);
 
+void RowDump(Row* row);
+
 RowIterator RowMapBegin(RowMap *m);
 RowIterator RowMapEnd(RowMap *m);
-RowIterator RowMapFind(RowMap *m, const char* key);
 
-RowIterator RowMapLowerBound(RowMap *m, const char* key);
+RowIterator RowMapFindWithRow(RowMap *m, Row* row);
+RowIterator RowMapFindWithKey(RowMap *m, Row* key);
+
+RowIterator RowMapLowerBound(RowMap *m, Row* key);
 
 #endif

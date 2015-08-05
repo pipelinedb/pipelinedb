@@ -7,7 +7,7 @@
 
 typedef struct RowMessage
 {
-	int type; // i, u, d
+	int type; // i, u, d, k
 	Row row;
 } RowMessage;
 

@@ -26,7 +26,7 @@ Screen* ScreenInit(Model *model)
 	memset(self, 0, sizeof(Screen));
 
 	self->model = model;
-	init_flex(&self->key);
+	memset(&self->key, 0, sizeof(Row));
 
 	term_type = getenv("TERM");
 
@@ -67,7 +67,7 @@ void ScreenDestroy(Screen* s)
 	delscreen(s->nterm);
 
 	fclose(s->term_in);
-	cleanup_flex(&s->key);
+	RowCleanup(&s->key);
 
 	memset(s, 0, sizeof(Screen));
 	free(s);
@@ -88,9 +88,9 @@ static inline RowMap* rowmap(Screen *s)
 	return s->model->rowmap;
 }
 
-static inline const char* key(Screen *s)
+static inline Row* key(Screen *s)
 {
-	return s->key.buf;
+	return &s->key;
 }
 
 static inline int lines(Screen *s)
@@ -193,10 +193,15 @@ void ScreenUpdate(Screen *s)
 	ScreenSync(s);
 }
 
-static void inline set_key(Screen *s, const char* str)
+static void inline set_key(Screen *s, Row r)
 {
-	reset_flex(&s->key);
-	append_flex(&s->key, str, strlen(str));
+	RowCleanup(&s->key);
+	s->key = r;
+}
+
+static void inline clear_key(Screen *s)
+{
+	RowCleanup(&s->key);
 }
 
 void ScreenScrollUp(Screen *s)
@@ -208,7 +213,7 @@ void ScreenScrollUp(Screen *s)
 
 		set_key(s, RowGetKey(iter));
 	} else {
-		set_key(s, "");
+		clear_key(s);
 	}
 }
 

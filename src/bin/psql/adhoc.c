@@ -60,11 +60,14 @@ main(int argc, char *argv[])
 		pfd[0].events = POLLIN;
 		pfd[0].revents = 0;
 
-		pfd[1].fd = ScreenFd(screen);
-		pfd[1].events = POLLIN;
-		pfd[1].revents = 0;
+		if (screen)
+		{
+			pfd[1].fd = ScreenFd(screen);
+			pfd[1].events = POLLIN;
+			pfd[1].revents = 0;
+		}
 
-		rc = poll(pfd, 2, -1);
+		rc = poll(pfd, screen ? 2 : 1, -1);
 
 		if (rc < 0)
 		{
@@ -74,7 +77,7 @@ main(int argc, char *argv[])
 		if (pfd[0].revents & POLLIN)
 		{
 			// TODO - take a snapshot instead
-			if (ScreenIsPaused(screen))
+			if (screen && ScreenIsPaused(screen))
 			{
 				usleep(1000);
 			}
@@ -87,13 +90,20 @@ main(int argc, char *argv[])
 			}
 		}
 
-		if (pfd[1].revents & POLLIN)
+		if (screen)
 		{
-			ScreenHandleInput(screen);
+			if (pfd[1].revents & POLLIN)
+			{
+				ScreenHandleInput(screen);
+			}
 		}
 	}
 
-	ScreenDestroy(screen);
+	if (screen)
+	{
+		ScreenDestroy(screen);
+	}
+
 	RowStreamDestroy(stream);
 	ModelDestroy(model);
 
@@ -106,17 +116,20 @@ void row_callback(void* ctx, int type, Row* row)
 
 	switch (type) {
 
-		case 'i': case 'u':
-			ModelAddRow(app->model, row);
-			ScreenUpdate(app->screen);
-			break;
-		case 'd':
-			ModelDeleteRow(app->model, row);
-			ScreenUpdate(app->screen);
+		case 'k':
+			ModelSetKey(app->model, row);
 			break;
 		case 'h':
 			ModelSetHeader(app->model, row);
-			ScreenUpdate(app->screen);
+			if (app->screen) ScreenUpdate(app->screen);
+			break;
+		case 'i': case 'u':
+			ModelAddRow(app->model, row);
+			if (app->screen) ScreenUpdate(app->screen);
+			break;
+		case 'd':
+			ModelDeleteRow(app->model, row);
+			if (app->screen) ScreenUpdate(app->screen);
 			break;
 	}
 }

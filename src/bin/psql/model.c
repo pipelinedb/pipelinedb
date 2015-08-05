@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "adhoc_compat.h"
 
 void ModelUpdateLens(Model *m, Row* r)
 {
@@ -44,6 +45,8 @@ void ModelDestroy(Model *m)
 	memset(m, 0, sizeof(Model));
 
 	free(m);
+
+	RowKeyReset();
 }
 
 void ModelAddRow(Model *m, Row* r)
@@ -54,7 +57,46 @@ void ModelAddRow(Model *m, Row* r)
 
 void ModelDeleteRow(Model *m, Row* r)
 {
-	RowMapErase(m->rowmap, RowGetKey(r));
+	RowMapErase(m->rowmap, r);
+	RowCleanup(r);
+}
+
+static size_t FindInRow(Row *r, const char* s)
+{
+	size_t i = 0;
+
+	for (i = 0; i < RowSize(r); ++i)
+	{
+		if (strcmp(RowFieldValue(r,i), s) == 0)
+		{
+			break;
+		}
+	}
+
+	return i;
+}
+
+void ModelSetKey(Model *m, Row* r)
+{
+	// key names must exist in the header.
+	
+	size_t i = 0;
+
+	RowKeyReset();
+
+	for (i = 0; i < RowSize(r); ++i)
+	{
+		size_t ki = FindInRow(&m->header, RowFieldValue(r, i));
+
+		if (ki == RowSize(&m->header))
+		{
+			die("could not find val");
+		}
+
+		RowKeyAdd(ki);
+	}
+
+	RowCleanup(r);
 }
 
 void ModelSetHeader(Model *m, Row* r)
@@ -63,7 +105,6 @@ void ModelSetHeader(Model *m, Row* r)
 
 	RowCleanup(&m->header);
 	m->header = *r;
-
 }
 
 void ModelDump(Model *m)
@@ -125,7 +166,6 @@ Row make_row(const char* s)
 
 	return row;
 }
-
 
 void add_row(Model *m, const char* s)
 {

@@ -43,18 +43,25 @@ keys = {}
 # i = insert
 # u = update
 # d = delete
+#
+# k = key
 
 puts "h name value volume foo ts"
+puts "k name value"
+
 STDOUT.flush
 
 while (true) do
 
 	(1..500).each {|i|
 
-		k = randword
+		k1 = randword
+		k2 = sprintf("%04d", rand(10))
+
+		k = [k1,k2];
 		t = keys.include?(k) ? 'u' : 'i'
 
-		puts "#{t} #{k} #{rand(100000)} #{"x" * (rand(10) + 1)} #{rand(100)} #{Time.now.to_i}"
+		puts "#{t} #{k1} #{k2} #{"x" * (rand(10) + 1)} #{rand(100)} #{Time.now.to_i}"
 
 		keys[k] = 1
 		STDOUT.flush
@@ -69,10 +76,12 @@ while (true) do
 		end
 
 		k = keys.keys.sample
+
 		keys.delete(k)
 
-		puts "d #{k}"
+		puts "d #{k.join(' ')}"
 		STDOUT.flush
 		sleep(0.01)
 	}
+
 end

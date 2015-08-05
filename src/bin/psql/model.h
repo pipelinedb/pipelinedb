@@ -24,6 +24,7 @@ void ModelAddRow(Model *m, Row* r);
 void ModelDeleteRow(Model *m, Row* r);
 
 void ModelSetHeader(Model *m, Row* r);
+void ModelSetKey(Model *m, Row* r);
 
 void ModelDump(Model *m);
 void add_row(Model *m, const char* s);
