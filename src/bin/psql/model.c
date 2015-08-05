@@ -19,7 +19,7 @@ void ModelUpdateLens(Model *m, Row* r)
 
 	for (i = 0; i < m->nfields; ++i)
 	{
-		m->maxlens[i] = MAX(m->maxlens[i], RowFieldLength(r, i)); 
+		m->maxlens[i] = Max(m->maxlens[i], RowFieldLength(r, i)); 
 	}
 }
 

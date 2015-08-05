@@ -14,9 +14,6 @@ typedef struct Model
 
 } Model;
 
-#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
-#define MAX(a, b)  (((a) > (b)) ? (a) : (b))
-
 Model* ModelInit(void);
 void ModelDestroy(Model* m);
 

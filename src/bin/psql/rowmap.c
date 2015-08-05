@@ -40,8 +40,6 @@ Field* RowGetField(Row* r, size_t i)
 	return r->fields + i;
 }
 
-#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
-
 static inline int ncmp(size_t a, size_t b)
 {
 	if (a < b)
@@ -56,7 +54,7 @@ int FieldCmp(Field* f1, Field* f2);
 
 int FieldCmp(Field* f1, Field* f2)
 {
-	size_t n = MIN(f1->n, f2->n);
+	size_t n = Min(f1->n, f2->n);
 	int c1 = memcmp(f1->data, f2->data, n);
 
 	if (c1 == 0)
