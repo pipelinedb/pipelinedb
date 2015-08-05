@@ -1,7 +1,5 @@
+#include "postgres_fe.h"
 #include "screen.h"
-
-#include <stdlib.h>
-#include <string.h>
 
 void ScreenSync(Screen *s);
 void ScreenRender(Screen *s);
@@ -20,9 +18,9 @@ void ScreenTogglePause(Screen *s);
 
 Screen* ScreenInit(Model *model)
 {
+	const char* tty = "/dev/tty";
 	const char* term_type = 0;
-	Screen* self = malloc(sizeof(Screen));
-
+	Screen* self = pg_malloc(sizeof(Screen));
 	memset(self, 0, sizeof(Screen));
 
 	self->model = model;
@@ -34,10 +32,10 @@ Screen* ScreenInit(Model *model)
 		term_type = "unknown";
 	}
 
-	self->term_in = fopen("/dev/tty", "r");
+	self->term_in = fopen(tty, "r");
 
 	if (self->term_in == NULL) {
-		die("fopen");
+		FATAL_ERROR("could not open %s", tty);
 	}
 
 	self->fd = fileno(self->term_in);
@@ -70,7 +68,7 @@ void ScreenDestroy(Screen* s)
 	RowCleanup(&s->key);
 
 	memset(s, 0, sizeof(Screen));
-	free(s);
+	pg_free(s);
 }
 
 int ScreenFd(Screen *s)

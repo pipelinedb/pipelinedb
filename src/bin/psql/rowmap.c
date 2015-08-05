@@ -1,15 +1,10 @@
+#include "postgres_fe.h"
 #include "rowmap.h"
-
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdbool.h>
-#include <assert.h>
 
 void RowCleanup(Row *row)
 {
-	free(row->fields);
-	free(row->ptr);
+	pg_free(row->fields);
+	pg_free(row->ptr);
 	memset(row, 0, sizeof(Row));
 }
 
@@ -23,14 +18,14 @@ static size_t g_row_key_n = 0;
 
 void RowKeyReset()
 {
-	free(g_row_key);
+	pg_free(g_row_key);
 	g_row_key_n = 0;
 	g_row_key = 0;
 }
 
 void RowKeyAdd(size_t i)
 {
-	g_row_key = realloc(g_row_key, (g_row_key_n + 1) * sizeof(size_t));
+	g_row_key = pg_realloc(g_row_key, (g_row_key_n + 1) * sizeof(size_t));
 	g_row_key[g_row_key_n] = i;
 	g_row_key_n++;
 }
@@ -97,13 +92,13 @@ Row RowGetKey(Row* r)
 	size_t nb = key_length(r);
 	size_t n = g_row_key_n;
 
-	char *d = malloc(nb);
+	char *d = pg_malloc(nb);
 
 	size_t i = 0;
 	char* out_iter = d;
 
 	row.ptr = d;
-	row.fields = malloc(n * sizeof(Field));
+	row.fields = pg_malloc(n * sizeof(Field));
 	row.n = n;
 
 	assert(RowSize(r) > g_row_key_n);
@@ -139,7 +134,7 @@ void RowMapAppend(RowMap *m, Row* row)
 			nc *= 2;
 		}
 
-		m->rows = realloc(m->rows, nc * sizeof(Row));
+		m->rows = pg_realloc(m->rows, nc * sizeof(Row));
 		m->cap = nc;
 	}
 
@@ -221,7 +216,7 @@ void RowMapSort(RowMap *m)
 
 RowMap* RowMapInit()
 {
-	RowMap* m = malloc(sizeof(RowMap));
+	RowMap* m = pg_malloc(sizeof(RowMap));
 	memset(m, 0, sizeof(RowMap));
 
 	return m;
@@ -236,10 +231,10 @@ void RowMapDestroy(RowMap *m)
 		RowCleanup(&m->rows[i]);
 	}
 
-	free(m->rows);
+	pg_free(m->rows);
 
 	memset(m, 0, sizeof(RowMap));
-	free(m);
+	pg_free(m);
 }
 
 void RowDump(Row *row)

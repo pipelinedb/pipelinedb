@@ -1,8 +1,5 @@
+#include "postgres_fe.h"
 #include "model.h"
-
-#include <stdio.h>
-#include <string.h>
-#include "adhoc_compat.h"
 
 void ModelUpdateLens(Model *m, Row* r)
 {
@@ -10,7 +7,7 @@ void ModelUpdateLens(Model *m, Row* r)
 
 	if (m->nfields < RowSize(r))
 	{
-		m->maxlens = realloc(m->maxlens, RowSize(r) * sizeof(size_t));
+		m->maxlens = pg_realloc(m->maxlens, RowSize(r) * sizeof(size_t));
 
 		for (i = m->nfields; i < RowSize(r); ++i)
 		{
@@ -28,7 +25,7 @@ void ModelUpdateLens(Model *m, Row* r)
 
 Model* ModelInit()
 {
-	Model* m = malloc(sizeof(Model));
+	Model* m = pg_malloc(sizeof(Model));
 	memset(m, 0, sizeof(Model));
 
 	m->rowmap = RowMapInit();
@@ -41,10 +38,10 @@ void ModelDestroy(Model *m)
 	RowMapDestroy(m->rowmap);
 	RowCleanup(&m->header);
 
-	free(m->maxlens);
+	pg_free(m->maxlens);
 	memset(m, 0, sizeof(Model));
 
-	free(m);
+	pg_free(m);
 
 	RowKeyReset();
 }
@@ -90,7 +87,7 @@ void ModelSetKey(Model *m, Row* r)
 
 		if (ki == RowSize(&m->header))
 		{
-			die("could not find val");
+			FATAL_ERROR("key %s does not exist in header", RowFieldValue(r,i));
 		}
 
 		RowKeyAdd(ki);
@@ -152,7 +149,7 @@ Row make_row(const char* s)
 	size_t i = 0;
 
 	row.ptr = d;
-	row.fields = malloc(n * sizeof(Field));
+	row.fields = pg_malloc(n * sizeof(Field));
 	row.n = n;
 
 	for (i = 0; i < n; ++i)

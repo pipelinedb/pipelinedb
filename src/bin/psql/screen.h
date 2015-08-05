@@ -1,7 +1,6 @@
 #ifndef SCREEN_H_BFB9AC05
 #define SCREEN_H_BFB9AC05
 
-#include "adhoc_compat.h"
 #include "model.h"
 
 #include <stdio.h>

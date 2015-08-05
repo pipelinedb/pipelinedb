@@ -6,7 +6,7 @@
 
 RowStream* RowStreamInit(RowFunc cb, void *ctx)
 {
-	RowStream *self = malloc(sizeof(RowStream));
+	RowStream *self = pg_malloc(sizeof(RowStream));
 	memset(self, 0, sizeof(RowStream));
 
 	self->fd = STDIN_FILENO;
@@ -14,7 +14,7 @@ RowStream* RowStreamInit(RowFunc cb, void *ctx)
 
 	memset(self->buf, 0, sizeof(self->buf));
 
-	init_flex(&self->flex);
+	initPQExpBuffer(&self->flex);
 
 	self->callback = cb;
 	self->cb_ctx = ctx;
@@ -24,10 +24,10 @@ RowStream* RowStreamInit(RowFunc cb, void *ctx)
 
 void RowStreamDestroy(RowStream *s)
 {
-	cleanup_flex(&s->flex);
+	termPQExpBuffer(&s->flex);
 	memset(s, 0, sizeof(RowStream));
 
-	free(s);
+	pg_free(s);
 }
 
 int RowStreamFd(RowStream *s)
@@ -65,7 +65,7 @@ RowMessage parse_text_row(const char* line)
 
 	msg.row.ptr = strdup(line);
 	msg.row.n = spaces(line);
-	msg.row.fields = malloc(sizeof(Field) * msg.row.n);
+	msg.row.fields = pg_malloc(sizeof(Field) * msg.row.n);
 
 	sptr = (char*) msg.row.ptr;
 	tok = strtok(sptr, " ");
@@ -95,17 +95,17 @@ static void inline append_data(RowStream *stream, const char* buf, size_t nr)
 	size_t i = 0;
 	RowMessage msg;
 
-	for (i = 0; i < nr; ++i) {
+	for (i = 0; i < nr; ++i)
+	{
+		appendBinaryPQExpBuffer(&stream->flex, buf + i, 1);
 
-		append_flex(&(stream->flex), buf + i, 1);
-
-		if (buf[i] == '\n') {
-
-			stream->flex.buf[stream->flex.n-1] = '\0';
-			msg = parse_text_row(stream->flex.buf);
+		if (buf[i] == '\n')
+		{
+			stream->flex.data[stream->flex.len-1] = '\0';
+			msg = parse_text_row(stream->flex.data);
 
 			stream->callback(stream->cb_ctx, msg.type, &msg.row);
-			reset_flex(&stream->flex);
+			resetPQExpBuffer(&stream->flex);
 		}
 	}
 }

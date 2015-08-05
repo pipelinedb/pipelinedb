@@ -1,13 +1,10 @@
 #include "postgres_fe.h"
-#include "adhoc_compat.h"
 #include "rowmap.h"
 #include "rowstream.h"
 #include "screen.h"
 #include "model.h"
 
 #include <curses.h>
-#include <utils/rbtree.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>

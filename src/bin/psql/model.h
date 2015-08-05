@@ -1,6 +1,7 @@
 #ifndef MODEL_H_4D955674
 #define MODEL_H_4D955674
 
+#include "adhoc_util.h"
 #include "rowmap.h"
 
 typedef struct Model

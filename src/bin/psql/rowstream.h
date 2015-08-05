@@ -1,9 +1,12 @@
 #ifndef ROWSTREAM_H_E3E391A9
 #define ROWSTREAM_H_E3E391A9
 
-#include "rowmap.h"
-#include "adhoc_compat.h"
 #include <stdbool.h>
+
+#include "rowmap.h"
+
+#include "postgres_fe.h"
+#include "pqexpbuffer.h"
 
 typedef struct RowMessage
 {
@@ -18,7 +21,7 @@ typedef struct RowStream
 	int fd;
 	char buf[4096];
 
-	FlexString flex;
+	PQExpBufferData flex;
 
 	RowFunc callback;
 	void* cb_ctx;
