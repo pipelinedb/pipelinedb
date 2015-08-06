@@ -1,28 +1,12 @@
 #include "postgres_fe.h"
 #include "model.h"
 
-static size_t
-spaces(const char *s)
-{
-	size_t cnt = 0;
-
-	while (*s != '\0')
-	{
-		if (*s == ' ')
-			cnt++;
-
-		s++;
-	}
-
-	return cnt;
-}
-
 static Row
 make_row(const char *s)
 {
 	Row row = {0,0,0};
 	size_t n = spaces(s) + 1;
-	char *d = strdup(s);
+	char *d = pg_strdup(s);
 	char *sptr = d;
 
 	size_t i = 0;
@@ -53,17 +37,13 @@ ModelUpdateLens(Model *m, Row *r)
 		m->maxlens = pg_realloc(m->maxlens, RowSize(r) * sizeof(size_t));
 
 		for (i = m->nfields; i < RowSize(r); ++i)
-		{
 			m->maxlens[i] = 0;
-		}
 
 		m->nfields = RowSize(r);
 	}
 
 	for (i = 0; i < m->nfields; ++i)
-	{
 		m->maxlens[i] = Max(m->maxlens[i], RowFieldLength(r, i));
-	}
 }
 
 Model *ModelInit()
@@ -92,6 +72,13 @@ ModelDestroy(Model *m)
 
 void
 ModelAddRow(Model *m, Row *r)
+{
+	ModelUpdateLens(m, r);
+	RowMapUpdate(m->rowmap, r);
+}
+
+void
+ModelInsertRow(Model *m, Row *r)
 {
 	ModelUpdateLens(m, r);
 	RowMapUpdate(m->rowmap, r);
@@ -156,9 +143,7 @@ ModelDump(Model *m)
 	printf("nfield %zu\n", m->nfields);
 
 	for (i = 0; i < m->nfields; ++i)
-	{
 		printf("field %zu %zu\n", i, m->maxlens[i]);
-	}
 }
 
 void

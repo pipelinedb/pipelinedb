@@ -27,12 +27,12 @@ OBJS=	command.o common.o help.o input.o stringutils.o mainloop.o copy.o \
 	sql_help.o pipeline.o \
 	$(WIN32RES)
 
-AOBJS= adhoc.o screen.o rowstream.o rowmap.o adhoc_util.o model.o
-
 all: psql padhoc
 
 psql: $(OBJS) | submake-libpq submake-libpgport
 	$(CC) $(CFLAGS) $(OBJS) $(libpq_pgport) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
+
+AOBJS = adhoc.o screen.o rowstream.o rowmap.o adhoc_util.o model.o
 
 padhoc: $(AOBJS) | submake-libpq submake-libpgport
 	$(CC) $(CFLAGS) $(AOBJS) $(libpq_pgport) -lncurses $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)

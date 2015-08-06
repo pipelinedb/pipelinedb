@@ -19,15 +19,15 @@ typedef struct App
 	Screen  *screen;
 } App;
 
-volatile int keep_running = 1;
+volatile bool keep_running = true;
 
 static void
 sighandle(int x)
 {
-	keep_running = 0;
+	keep_running = false;
 }
 
-void row_callback(void *ctx, int type, Row *row);
+static void row_callback(void *ctx, int type, Row *row);
 
 int
 main(int argc, char *argv[])
@@ -39,6 +39,7 @@ main(int argc, char *argv[])
 	RowStream *stream = 0;
 
 	signal(SIGINT, sighandle);
+
 	screen = ScreenInit(model);
 
 	app.model = model;
@@ -67,13 +68,11 @@ main(int argc, char *argv[])
 		rc = poll(pfd, screen ? 2 : 1, -1);
 
 		if (rc < 0)
-		{
 			break;
-		}
 
 		if (pfd[0].revents & POLLIN)
 		{
-			// TODO - take a snapshot instead
+			/* TODO - take a snapshot instead */
 			if (screen && ScreenIsPaused(screen))
 			{
 				usleep(1000);
@@ -90,16 +89,12 @@ main(int argc, char *argv[])
 		if (screen)
 		{
 			if (pfd[1].revents & POLLIN)
-			{
 				ScreenHandleInput(screen);
-			}
 		}
 	}
 
 	if (screen)
-	{
 		ScreenDestroy(screen);
-	}
 
 	RowStreamDestroy(stream);
 	ModelDestroy(model);
@@ -107,27 +102,36 @@ main(int argc, char *argv[])
 	return 0;
 }
 
-void
+static void
 row_callback(void *ctx, int type, Row *row)
 {
 	App *app = (App *)(ctx);
+	
+	bool dirty = false;
 
-	switch (type) {
-
+	switch (type)
+	{
 		case 'k':
 			ModelSetKey(app->model, row);
 			break;
 		case 'h':
 			ModelSetHeader(app->model, row);
-			if (app->screen) ScreenUpdate(app->screen);
+			dirty = true;
 			break;
-		case 'i': case 'u':
+		case 'i':
+			ModelInsertRow(app->model, row);
+			dirty = true;
+			break;
+		case 'u':
 			ModelAddRow(app->model, row);
-			if (app->screen) ScreenUpdate(app->screen);
+			dirty = true;
 			break;
 		case 'd':
 			ModelDeleteRow(app->model, row);
-			if (app->screen) ScreenUpdate(app->screen);
+			dirty = true;
 			break;
 	}
+
+	if (app->screen && dirty)
+		ScreenUpdate(app->screen);
 }

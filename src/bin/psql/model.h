@@ -12,17 +12,18 @@ typedef struct Model
 	Row     header;
 } Model;
 
-Model *ModelInit(void);
-void ModelDestroy(Model *m);
+extern Model *ModelInit(void);
+extern void ModelDestroy(Model *m);
 
-void ModelUpdateLens(Model *m, Row *r);
-void ModelAddRow(Model *m, Row *r);
-void ModelDeleteRow(Model *m, Row *r);
+extern void ModelUpdateLens(Model *m, Row *r);
+extern void ModelAddRow(Model *m, Row *r);
+extern void ModelInsertRow(Model *m, Row *r);
+extern void ModelDeleteRow(Model *m, Row *r);
 
-void ModelSetHeader(Model *m, Row *r);
-void ModelSetKey(Model *m, Row *r);
+extern void ModelSetHeader(Model *m, Row *r);
+extern void ModelSetKey(Model *m, Row *r);
 
-void ModelDump(Model *m);
-void ModelAddRowFromString(Model *m, const char *s);
+extern void ModelDump(Model *m);
+extern void ModelAddRowFromString(Model *m, const char *s);
 
 #endif

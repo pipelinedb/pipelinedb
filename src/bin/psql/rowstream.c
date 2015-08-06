@@ -1,4 +1,6 @@
 #include "rowstream.h"
+#include "adhoc_util.h"
+
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -35,22 +37,6 @@ int
 RowStreamFd(RowStream *s)
 {
 	return s->fd;
-}
-
-static size_t
-spaces(const char *s)
-{
-	size_t cnt = 0;
-
-	while (*s)
-	{
-		if (*s == ' ')
-			cnt++;
-
-		s++;
-	}
-
-	return cnt;
 }
 
 static RowMessage

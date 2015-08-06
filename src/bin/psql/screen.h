@@ -18,13 +18,13 @@ typedef struct Screen
 	int     pause;
 } Screen;
 
-Screen *ScreenInit(Model *m);
-void ScreenDestroy(Screen *s);
+extern Screen *ScreenInit(Model *m);
+extern void ScreenDestroy(Screen *s);
 
-int ScreenFd(Screen *s);
-void ScreenHandleInput(Screen *s);
+extern int ScreenFd(Screen *s);
+extern void ScreenHandleInput(Screen *s);
 
-void ScreenUpdate(Screen *s);
-bool ScreenIsPaused(Screen *s);
+extern void ScreenUpdate(Screen *s);
+extern bool ScreenIsPaused(Screen *s);
 
 #endif

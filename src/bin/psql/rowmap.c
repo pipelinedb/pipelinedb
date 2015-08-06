@@ -1,5 +1,6 @@
 #include "postgres_fe.h"
 #include "rowmap.h"
+#include "adhoc_util.h"
 
 static size_t *g_row_key = 0;
 static size_t g_row_key_n = 0;
@@ -50,9 +51,7 @@ static inline int
 ncmp(size_t a, size_t b)
 {
 	if (a < b)
-	{
 		return -1;
-	}
 
 	return (a == b) ? 0 : 1;
 }
@@ -64,9 +63,7 @@ FieldCmp(Field *f1, Field *f2)
 	int c1 = memcmp(f1->data, f2->data, n);
 
 	if (c1 == 0)
-	{
 		return ncmp(f1->n, f2->n);
-	}
 
 	return c1;
 }
@@ -108,7 +105,7 @@ RowGetKey(Row *r)
 	row.fields = pg_malloc(n * sizeof(Field));
 	row.n = n;
 
-	assert(RowSize(r) > g_row_key_n);
+	TermAssert(RowSize(r) > g_row_key_n);
 
 	for (i = 0; i < n; ++i)
 	{
@@ -126,10 +123,7 @@ RowGetKey(Row *r)
 	return row;
 }
 
-void
-RowMapAppend(RowMap *, Row *row);
-
-void
+static void
 RowMapAppend(RowMap *m, Row *row)
 {
 	size_t ns = m->n + 1;
@@ -139,9 +133,7 @@ RowMapAppend(RowMap *m, Row *row)
 		size_t nc = m->cap ? m->cap : 1;
 
 		while (nc < ns)
-		{
 			nc *= 2;
-		}
 
 		m->rows = pg_realloc(m->rows, nc * sizeof(Row));
 		m->cap = nc;
@@ -150,16 +142,11 @@ RowMapAppend(RowMap *m, Row *row)
 	m->rows[m->n++] = *row;
 }
 
-void
-RowMapSort(RowMap *m);
-
 static int
 row_cmp_row_row(const void *p1, const void *p2)
 {
 	Row *r1 = (Row *) p1;
 	Row *r2 = (Row *) p2;
-
-	// composite key support
 
 	size_t i = 0;
 
@@ -171,9 +158,7 @@ row_cmp_row_row(const void *p1, const void *p2)
 						 RowGetField(r2, col));
 
 		if (c != 0)
-		{
 			return c;
-		}
 	}
 
 	return 0;
@@ -188,19 +173,9 @@ row_cmp_row_key(const void *p1, const void *p2)
 	size_t i = 0;
 
 	if (RowSize(r2) == 0)
-	{
 		return 1;
-	}
 
-	if (RowSize(r2) != g_row_key_n)
-	{
-		RowDump(r1);
-		RowDump(r2);
-	}
-
-	assert(RowSize(r2) == g_row_key_n);
-
-	// composite key support
+	TermAssert(RowSize(r2) == g_row_key_n);
 
 	for (i = 0; i < g_row_key_n; ++i)
 	{
@@ -210,15 +185,13 @@ row_cmp_row_key(const void *p1, const void *p2)
 						 RowGetField(r2, i));
 
 		if (c != 0)
-		{
 			return c;
-		}
 	}
 
 	return 0;
 }
 
-void
+static void
 RowMapSort(RowMap *m)
 {
 	qsort(m->rows, m->n, sizeof(Row), row_cmp_row_row);
@@ -239,9 +212,7 @@ RowMapDestroy(RowMap *m)
 	size_t i = 0;
 
 	for (i = 0; i < m->n; ++i)
-	{
 		RowCleanup(&m->rows[i]);
-	}
 
 	pg_free(m->rows);
 
@@ -255,11 +226,22 @@ RowDump(Row *row)
 	size_t i = 0;
 
 	for (i = 0; i < RowSize(row); ++i)
-	{
 		printf("%.*s ", (int) RowFieldLength(row, i), RowFieldValue(row, i));
-	}
 
 	printf("\n");
+}
+
+void
+RowDumpToString(Row *row, PQExpBuffer buf)
+{
+	size_t i = 0;
+
+	for (i = 0; i < RowSize(row); ++i)
+	{
+		Field *f = RowGetField(row, i);
+		appendBinaryPQExpBuffer(buf, f->data, f->n);
+		appendPQExpBuffer(buf, " ");
+	}
 }
 
 void
@@ -268,9 +250,7 @@ RowMapDump(RowMap *m)
 	size_t i = 0;
 
 	for (; i < m->n; ++i)
-	{
 		RowDump(m->rows + i);
-	}
 }
 
 void
@@ -333,9 +313,7 @@ RowMapFindWithRow(RowMap *m, Row *row)
 	for (; i < m->n; ++i)
 	{
 		if (row_cmp_row_row(&m->rows[i], row) == 0)
-		{
 			break;
-		}
 	}
 
 	return m->rows + i;
@@ -349,9 +327,7 @@ RowMapFindWithKey(RowMap *m, Row *key)
 	for (; i < m->n; ++i)
 	{
 		if (row_cmp_row_key(&m->rows[i], key) == 0)
-		{
 			break;
-		}
 	}
 
 	return m->rows + i;
@@ -365,9 +341,7 @@ RowMapLowerBound(RowMap *m, Row *key)
 	for (; i < m->n; ++i)
 	{
 		if (row_cmp_row_key(&m->rows[i], key) >= 0)
-		{
 			break;
-		}
 	}
 
 	return m->rows + i;

@@ -1,21 +1,6 @@
 #include "postgres_fe.h"
 #include "screen.h"
 
-void ScreenSync(Screen *s);
-void ScreenRender(Screen *s);
-
-void ScreenScrollUp(Screen *s);
-void ScreenScrollDown(Screen *s);
-void ScreenScrollLeft(Screen *s);
-void ScreenScrollRight(Screen *s);
-void ScreenHome(Screen *s);
-void ScreenEnd(Screen *s);
-void ScreenPageUp(Screen *s);
-void ScreenPageDown(Screen *s);
-void ScreenPrevCol(Screen *s);
-void ScreenNextCol(Screen *s);
-void ScreenTogglePause(Screen *s);
-
 Screen *ScreenInit(Model *model)
 {
 	const char *tty = "/dev/tty";
@@ -78,7 +63,7 @@ ScreenFd(Screen *s)
 	return s->fd;
 }
 
-void
+static void
 ScreenSync(Screen *s)
 {
 	refresh();
@@ -111,7 +96,6 @@ maxlen(Screen *s, size_t i)
 static inline size_t
 numfields(Screen *s)
 {
-	// Model
 	return s->model->nfields;
 }
 
@@ -161,16 +145,14 @@ draw_row(Screen *s, Row *row, char sep)
 		}
 
 		if (i != (RowSize(row) - 1))
-		{
 			printw("%c", sep);
-		}
 	}
 
 	printw("\n");
 	clrtoeol();
 }
 
-void
+static void
 ScreenRender(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
@@ -217,7 +199,7 @@ clear_key(Screen *s)
 	RowCleanup(&s->key);
 }
 
-void
+static void
 ScreenScrollUp(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
@@ -231,7 +213,7 @@ ScreenScrollUp(Screen *s)
 	}
 }
 
-void
+static void
 ScreenScrollDown(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
@@ -240,14 +222,12 @@ ScreenScrollDown(Screen *s)
 	{
 		iter++;
 
-		if (iter != RowMapEnd(rowmap(s))) {
-
+		if (iter != RowMapEnd(rowmap(s)))
 			set_key(s, RowGetKey(iter));
-		}
 	}
 }
 
-void
+static void
 ScreenScrollLeft(Screen *s)
 {
 	s->x_pos--;
@@ -267,7 +247,7 @@ ScreenScrollLeft(Screen *s)
 	}
 }
 
-void
+static void
 ScreenScrollRight(Screen *s)
 {
 	s->x_pos++;
@@ -285,7 +265,7 @@ ScreenScrollRight(Screen *s)
 	}
 }
 
-void
+static void
 ScreenPageUp(Screen *s)
 {
 	int i = 0;
@@ -295,7 +275,7 @@ ScreenPageUp(Screen *s)
 	}
 }
 
-void
+static void
 ScreenPageDown(Screen *s)
 {
 	int i = 0;
@@ -305,7 +285,7 @@ ScreenPageDown(Screen *s)
 	}
 }
 
-void
+static void
 ScreenNextCol(Screen *s)
 {
 	s->x_pos = 0;
@@ -316,7 +296,7 @@ ScreenNextCol(Screen *s)
 	}
 }
 
-void
+static void
 ScreenPrevCol(Screen *s)
 {
 	if (s->x_pos != 0)
@@ -328,27 +308,26 @@ ScreenPrevCol(Screen *s)
 		s->x_pos = 0;
 		s->x_col--;
 
-		if (s->x_col < 0) {
+		if (s->x_col < 0)
 			s->x_col = 0;
-		}
 	}
 }
 
-void
+static void
 ScreenHome(Screen *s)
 {
 	s->x_col = 0;
 	s->x_pos = 0;
 }
 
-void
+static void
 ScreenEnd(Screen *s)
 {
 	s->x_col = rightmost(s);
 	s->x_pos = 0;
 }
 
-void
+static void
 ScreenTogglePause(Screen *s)
 {
 	s->pause = !s->pause;
@@ -385,25 +364,19 @@ ScreenHandleInput(Screen *s)
 		case KEY_PPAGE:
 			ScreenPageUp(s);
 			break;
-
 		case KEY_RESIZE:
 			break;
-
-		case 9: // TAB
+		case 9: /* TAB */
 			ScreenNextCol(s);
 			break;
-
-		case 353: // SHIFT+TAB
+		case 353: /* SHIFT+TAB */
 			ScreenPrevCol(s);
 			break;
-
 		case 'p':
 			ScreenTogglePause(s);
 			break;
-
 		case ERR:
 			break;
-
 		default:
 			break;
 	}

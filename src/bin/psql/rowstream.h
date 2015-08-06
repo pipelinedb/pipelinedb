@@ -25,10 +25,10 @@ typedef struct RowStream
 	void             *cb_ctx;
 } RowStream;
 
-RowStream *RowStreamInit(RowFunc fn, void *ctx);
-void RowStreamDestroy(RowStream *s);
+extern RowStream *RowStreamInit(RowFunc fn, void *ctx);
+extern void RowStreamDestroy(RowStream *s);
 
-int RowStreamFd(RowStream *s);
-bool RowStreamHandleInput(RowStream *s);
+extern int RowStreamFd(RowStream *s);
+extern bool RowStreamHandleInput(RowStream *s);
 
 #endif
