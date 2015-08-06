@@ -166,7 +166,7 @@ test: stream_casts4
 # ----------
 # Another group of parallel tests
 # ----------
-test: cont_gis_geom cont_gis_raster cont_complex_types
+test: cont_gis_geom cont_gis_raster cont_complex_types cont_explain
 
 # ----------
 # Another group of parallel tests

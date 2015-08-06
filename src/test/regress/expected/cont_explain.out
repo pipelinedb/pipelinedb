@@ -2,12 +2,12 @@ CREATE CONTINUOUS VIEW test_cont_explain1 AS SELECT COUNT(*) FROM test_cont_expl
 CREATE CONTINUOUS VIEW test_cont_explain2 AS SELECT x::int, COUNT(*) FROM test_cont_explain_stream GROUP BY x;
 CREATE CONTINUOUS VIEW test_cont_explain3 AS SELECT x::int, y::text, SUM(x) FROM test_cont_explain_stream GROUP BY x, y;
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
-               CONTINUOUS QUERY PLANS                
------------------------------------------------------
+                   CONTINUOUS QUERY PLANS                   
+------------------------------------------------------------
  Worker Plan:
    ->  Aggregate
          Output: count(*)
-         ->  Stream Scan on test_cont_explain_stream
+         ->  Stream Scan on public.test_cont_explain_stream
                Output: arrival_timestamp
  Combiner Plan:
    ->  Aggregate
@@ -20,13 +20,13 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
 (13 rows)
 
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
-               CONTINUOUS QUERY PLANS                
------------------------------------------------------
+                   CONTINUOUS QUERY PLANS                   
+------------------------------------------------------------
  Worker Plan:
    ->  HashAggregate
          Output: x, count(*)
          Group Key: test_cont_explain_stream.x
-         ->  Stream Scan on test_cont_explain_stream
+         ->  Stream Scan on public.test_cont_explain_stream
                Output: x, arrival_timestamp
  Combiner Plan:
    ->  HashAggregate
@@ -46,7 +46,7 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
    ->  HashAggregate
          Output: x, y, sum(x)
          Group Key: test_cont_explain_stream.x, test_cont_explain_stream.y
-         ->  Stream Scan on test_cont_explain_stream
+         ->  Stream Scan on public.test_cont_explain_stream
                Output: x, y, arrival_timestamp
  Combiner Plan:
    ->  HashAggregate
@@ -61,12 +61,12 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
 
 INSERT INTO test_cont_explain_stream (x, y) VALUES (1, 'hello');
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
-               CONTINUOUS QUERY PLANS                
------------------------------------------------------
+                   CONTINUOUS QUERY PLANS                   
+------------------------------------------------------------
  Worker Plan:
    ->  Aggregate
          Output: count(*)
-         ->  Stream Scan on test_cont_explain_stream
+         ->  Stream Scan on public.test_cont_explain_stream
                Output: arrival_timestamp
  Combiner Plan:
    ->  Aggregate
@@ -85,7 +85,7 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
    ->  HashAggregate
          Output: x, count(*)
          Group Key: test_cont_explain_stream.x
-         ->  Stream Scan on test_cont_explain_stream
+         ->  Stream Scan on public.test_cont_explain_stream
                Output: x, arrival_timestamp
  Combiner Plan:
    ->  HashAggregate
@@ -118,7 +118,7 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
    ->  HashAggregate
          Output: x, y, sum(x)
          Group Key: test_cont_explain_stream.x, test_cont_explain_stream.y
-         ->  Stream Scan on test_cont_explain_stream
+         ->  Stream Scan on public.test_cont_explain_stream
                Output: x, y, arrival_timestamp
  Combiner Plan:
    ->  HashAggregate

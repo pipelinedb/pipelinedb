@@ -2163,7 +2163,7 @@ ExplainTargetRel(Plan *plan, Index rti, ExplainState *es)
 		case T_StreamScan:
 			/* Assert it's on a stream */
 			Assert(rte->rtekind == RTE_STREAM);
-			objectname = rte->relname;
+			objectname = get_rel_name(rte->relid);
 			if (es->verbose)
 				namespace = get_namespace_name(get_rel_namespace(rte->relid));
 			objecttag = "Stream Name";

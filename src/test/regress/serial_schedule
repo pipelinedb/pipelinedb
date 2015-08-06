@@ -197,5 +197,6 @@ test: stream_casts4
 test: cont_gis_geom
 test: cont_gis_raster
 test: cont_complex_types
+test: cont_explain
 test: cont_activate
 test: create_combinable_agg
