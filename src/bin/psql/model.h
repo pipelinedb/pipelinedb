@@ -9,8 +9,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef MODEL_H_4D955674
-#define MODEL_H_4D955674
+#ifndef MODEL_H
+#define MODEL_H
 
 #include "adhoc_util.h"
 #include "rowmap.h"

@@ -9,8 +9,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef SCREEN_H_BFB9AC05
-#define SCREEN_H_BFB9AC05
+#ifndef SCREEN_H
+#define SCREEN_H
 
 #include "model.h"
 

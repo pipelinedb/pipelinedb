@@ -9,8 +9,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef MODEL_H_EE43F6F4
-#define MODEL_H_EE43F6F4
+#ifndef ROWMAP_H_46D31946
+#define ROWMAP_H_46D31946
 
 #include <unistd.h>
 #include <stdint.h>

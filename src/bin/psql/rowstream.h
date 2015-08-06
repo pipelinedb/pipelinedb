@@ -9,8 +9,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef ROWSTREAM_H_E3E391A9
-#define ROWSTREAM_H_E3E391A9
+#ifndef ROWSTREAM_H
+#define ROWSTREAM_H
 
 #include <stdbool.h>
 
