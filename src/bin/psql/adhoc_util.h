@@ -31,6 +31,10 @@ void fatal_error(const char *file, unsigned line, const char *fmt, ...)
 #define TermAssert(x) { if (!(x)) { endwin(); Assert((x)); } }
 #endif
 
+/*
+ * Utilised by row parsers
+ */
+
 static inline size_t
 spaces(const char *s)
 {

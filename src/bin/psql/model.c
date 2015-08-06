@@ -27,7 +27,7 @@ make_row(const char *s)
 	return row;
 }
 
-void
+static void
 ModelUpdateLens(Model *m, Row *r)
 {
 	size_t i = 0;

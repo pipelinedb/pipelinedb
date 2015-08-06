@@ -19,12 +19,17 @@
 #include "postgres_fe.h"
 #include "pqexpbuffer.h"
 
-typedef struct RowMessage
-{
-	int type; /*  i, u, d, k */
-	Row row;
-} RowMessage;
+/*
+ * This module is responsible for row i/o and parsing.
+ *
+ * When a row has been received and parsed, a callback will be fired, 
+ * supplying the row type and contents.
+ *
+ * Row data is allocated here, but expected to be freed elsewhere.
+ * Currently the RowMap is responsible for that.
+ */
 
+/* row callback - valid types are h,k,i,u,d */
 typedef void (*RowFunc) (void *ctx, int type, Row *row);
 
 typedef struct RowStream
@@ -38,7 +43,11 @@ typedef struct RowStream
 
 extern RowStream *RowStreamInit(RowFunc fn, void *ctx);
 extern void RowStreamDestroy(RowStream *s);
+
+/* to be used with select/poll */
 extern int RowStreamFd(RowStream *s);
+
+/* to be called when the fd is ready */
 extern bool RowStreamHandleInput(RowStream *s);
 
 #endif

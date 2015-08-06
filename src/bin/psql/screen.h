@@ -17,6 +17,10 @@
 #include <stdio.h>
 #include <ncurses.h>
 
+/*
+ * Stores the view related information, and ncurses state.
+ */
+
 typedef struct Screen
 {
 	Model   *model;
@@ -32,10 +36,15 @@ typedef struct Screen
 extern Screen *ScreenInit(Model *m);
 extern void ScreenDestroy(Screen *s);
 
+/* required for poll/select */
 extern int ScreenFd(Screen *s);
+
+/* to be called when the fd is ready */
 extern void ScreenHandleInput(Screen *s);
 
+/* used for model update notifications */
 extern void ScreenUpdate(Screen *s);
+
 extern bool ScreenIsPaused(Screen *s);
 
 #endif
