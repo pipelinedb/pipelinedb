@@ -153,7 +153,7 @@ row_event_dispatcher(void *ctx, int type, Row *row)
 			dirty = true;
 			break;
 		case 'u':
-			ModelAddRow(app->model, row);
+			ModelUpdateRow(app->model, row);
 			dirty = true;
 			break;
 		case 'd':

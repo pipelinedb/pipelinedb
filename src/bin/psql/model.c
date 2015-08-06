@@ -1,6 +1,7 @@
 #include "postgres_fe.h"
 #include "model.h"
 
+/* utility function for creating a row from a string */
 static Row
 make_row(const char *s)
 {
@@ -27,6 +28,7 @@ make_row(const char *s)
 	return row;
 }
 
+/* tracks the maximum length of each column. */
 static void
 model_update_lens(Model *m, Row *r)
 {
@@ -46,51 +48,7 @@ model_update_lens(Model *m, Row *r)
 		m->maxlens[i] = Max(m->maxlens[i], RowFieldLength(r, i));
 }
 
-Model *ModelInit()
-{
-	Model *m = pg_malloc(sizeof(Model));
-	memset(m, 0, sizeof(Model));
-
-	m->rowmap = RowMapInit();
-
-	return m;
-}
-
-void
-ModelDestroy(Model *m)
-{
-	RowMapDestroy(m->rowmap);
-	RowCleanup(&m->header);
-
-	pg_free(m->maxlens);
-	memset(m, 0, sizeof(Model));
-
-	pg_free(m);
-
-	RowKeyReset();
-}
-
-void
-ModelAddRow(Model *m, Row *r)
-{
-	model_update_lens(m, r);
-	RowMapUpdate(m->rowmap, r);
-}
-
-void
-ModelInsertRow(Model *m, Row *r)
-{
-	model_update_lens(m, r);
-	RowMapUpdate(m->rowmap, r);
-}
-
-void
-ModelDeleteRow(Model *m, Row *r)
-{
-	RowMapErase(m->rowmap, r);
-	RowCleanup(r);
-}
-
+/* scans each column in the row to look for s */
 static size_t
 find_in_row(Row *r, const char *s)
 {
@@ -105,6 +63,42 @@ find_in_row(Row *r, const char *s)
 	return i;
 }
 
+/* allocates and initializes the model. */
+Model *ModelInit()
+{
+	Model *m = pg_malloc(sizeof(Model));
+	memset(m, 0, sizeof(Model));
+
+	m->rowmap = RowMapInit();
+
+	return m;
+}
+
+/* cleans up resources and calls pg_free on m */
+void
+ModelDestroy(Model *m)
+{
+	RowMapDestroy(m->rowmap);
+	RowCleanup(&m->header);
+
+	pg_free(m->maxlens);
+	memset(m, 0, sizeof(Model));
+
+	pg_free(m);
+	RowKeyReset();
+}
+
+/* Set the column names  */
+void
+ModelHeaderRow(Model *m, Row *r)
+{
+	model_update_lens(m, r);
+
+	RowCleanup(&m->header);
+	m->header = *r;
+}
+
+/* Set the columns used in the key */
 void
 ModelKeyRow(Model *m, Row *r)
 {
@@ -126,15 +120,31 @@ ModelKeyRow(Model *m, Row *r)
 	RowCleanup(r);
 }
 
+/* Insert a new row into the row map */
 void
-ModelHeaderRow(Model *m, Row *r)
+ModelInsertRow(Model *m, Row *r)
 {
 	model_update_lens(m, r);
-
-	RowCleanup(&m->header);
-	m->header = *r;
+	RowMapUpdate(m->rowmap, r);
 }
 
+/* Update a row in the row map */
+void
+ModelUpdateRow(Model *m, Row *r)
+{
+	model_update_lens(m, r);
+	RowMapUpdate(m->rowmap, r);
+}
+
+/* Delete a row from the map */
+void
+ModelDeleteRow(Model *m, Row *r)
+{
+	RowMapErase(m->rowmap, r);
+	RowCleanup(r);
+}
+
+/* Debugging utilities */
 void
 ModelDump(Model *m)
 {
@@ -147,8 +157,8 @@ ModelDump(Model *m)
 }
 
 void
-ModelAddRowFromString(Model *m, const char *s)
+ModelInsertRowFromString(Model *m, const char *s)
 {
 	Row row = make_row(s);
-	ModelAddRow(m, &row);
+	ModelInsertRow(m, &row);
 }
