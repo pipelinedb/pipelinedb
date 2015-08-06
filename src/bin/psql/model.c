@@ -28,7 +28,7 @@ make_row(const char *s)
 }
 
 static void
-ModelUpdateLens(Model *m, Row *r)
+model_update_lens(Model *m, Row *r)
 {
 	size_t i = 0;
 
@@ -73,14 +73,14 @@ ModelDestroy(Model *m)
 void
 ModelAddRow(Model *m, Row *r)
 {
-	ModelUpdateLens(m, r);
+	model_update_lens(m, r);
 	RowMapUpdate(m->rowmap, r);
 }
 
 void
 ModelInsertRow(Model *m, Row *r)
 {
-	ModelUpdateLens(m, r);
+	model_update_lens(m, r);
 	RowMapUpdate(m->rowmap, r);
 }
 
@@ -92,7 +92,7 @@ ModelDeleteRow(Model *m, Row *r)
 }
 
 static size_t
-FindInRow(Row *r, const char *s)
+find_in_row(Row *r, const char *s)
 {
 	size_t i = 0;
 
@@ -106,7 +106,7 @@ FindInRow(Row *r, const char *s)
 }
 
 void
-ModelSetKey(Model *m, Row *r)
+ModelKeyRow(Model *m, Row *r)
 {
 	/* key names must exist in the header */
 	size_t i = 0;
@@ -115,7 +115,7 @@ ModelSetKey(Model *m, Row *r)
 
 	for (i = 0; i < RowSize(r); ++i)
 	{
-		size_t ki = FindInRow(&m->header, RowFieldValue(r, i));
+		size_t ki = find_in_row(&m->header, RowFieldValue(r, i));
 
 		if (ki == RowSize(&m->header))
 			FATAL_ERROR("key %s does not exist in header", RowFieldValue(r,i));
@@ -127,9 +127,9 @@ ModelSetKey(Model *m, Row *r)
 }
 
 void
-ModelSetHeader(Model *m, Row *r)
+ModelHeaderRow(Model *m, Row *r)
 {
-	ModelUpdateLens(m, r);
+	model_update_lens(m, r);
 
 	RowCleanup(&m->header);
 	m->header = *r;

@@ -18,13 +18,14 @@
 #include <ncurses.h>
 
 /*
- * Stores the view related information, and ncurses state.
+ * This module is responsible for handling key presses, and displaying
+ * row data to the terminal. It uses ncurses.
  */
 
 typedef struct Screen
 {
 	Model   *model;
-	Row     key;
+	Row     key;  /* key refers to the top visible row on the screen */
 	FILE    *term_in;
 	int     fd;
 	SCREEN  *nterm;
@@ -42,7 +43,7 @@ extern int ScreenFd(Screen *s);
 /* to be called when the fd is ready */
 extern void ScreenHandleInput(Screen *s);
 
-/* used for model update notifications */
+/* redraws the screen and updates the terminal */
 extern void ScreenUpdate(Screen *s);
 
 extern bool ScreenIsPaused(Screen *s);

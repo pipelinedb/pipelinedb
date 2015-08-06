@@ -36,7 +36,7 @@ typedef struct RowStream
 {
 	int              fd;
 	char             buf[4096];
-	PQExpBufferData  flex;
+	PQExpBufferData  buffer;
 	RowFunc          callback;
 	void             *cb_ctx;
 } RowStream;
@@ -47,7 +47,9 @@ extern void RowStreamDestroy(RowStream *s);
 /* to be used with select/poll */
 extern int RowStreamFd(RowStream *s);
 
-/* to be called when the fd is ready */
+/* 
+ * To be called when the fd is ready. Returns true if the stream has hit EOF
+ */
 extern bool RowStreamHandleInput(RowStream *s);
 
 #endif

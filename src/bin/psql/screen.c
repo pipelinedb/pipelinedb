@@ -1,15 +1,24 @@
 #include "postgres_fe.h"
 #include "screen.h"
 
+/*
+ * Allocates and initializes a new Screen.
+ */
 Screen *ScreenInit(Model *model)
 {
 	const char *tty = "/dev/tty";
 	const char *term_type = 0;
+
 	Screen *self = pg_malloc(sizeof(Screen));
 	memset(self, 0, sizeof(Screen));
 
 	self->model = model;
 	memset(&self->key, 0, sizeof(Row));
+
+	/* 
+	 * Open /dev/tty and set that up as the ncurses terminal. We use newterm
+	 * instead of initscr so that we can read row events from stdin.
+	 */
 
 	term_type = getenv("TERM");
 
@@ -27,27 +36,44 @@ Screen *ScreenInit(Model *model)
 	self->nterm = newterm(term_type, stdout, self->term_in);
 	set_term(self->nterm);
 
+	/* make ncurses non blocking */
 	timeout(0);
+
+	/* clear the tty internal state */
 	clear();
+
+	/* disable character echo */
 	noecho();
+
+	/* disable input line buffering */
 	cbreak();
+
+	/* hide cursor */
 	curs_set(0);
 
+	/* enable extra keys */
 	keypad(stdscr, TRUE);
+
+	/* updates the screen (should be blank now) */
 	refresh();
 
 	self->x_pos = 0;
 	self->x_col = 0;
-
 	self->pause = 0;
 
 	return self;
 }
 
+/*
+ * Cleans up resources and calls pg_free on s
+ */
 void
 ScreenDestroy(Screen *s)
 {
+	/* resets the tty to original state */
 	endwin();
+
+	/* ncurses resource cleanup */
 	delscreen(s->nterm);
 
 	fclose(s->term_in);
@@ -64,7 +90,7 @@ ScreenFd(Screen *s)
 }
 
 static void
-ScreenSync(Screen *s)
+screen_sync(Screen *s)
 {
 	refresh();
 }
@@ -115,8 +141,14 @@ printwpad(int n)
 	}
 }
 
+/* 
+ * Render a row, taking column, x_pos and padding into account.
+ *
+ * Note - render in this context means send the data to ncurses, the tty
+ * 		  won't be updated until refresh() is called
+ */
 static inline void
-draw_row(Screen *s, Row *row, char sep)
+render_row(Screen *s, Row *row, char sep)
 {
 	size_t i = 0;
 
@@ -148,42 +180,50 @@ draw_row(Screen *s, Row *row, char sep)
 			printw("%c", sep);
 	}
 
-	printw("\n");
 	clrtoeol();
+	printw("\n");
 }
 
+/* 
+ * Render the whole screen by querying the model.
+ */
 static void
-ScreenRender(Screen *s)
+screen_render(Screen *s)
 {
+	/* determine the visible set of rows using key */
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
 	RowIterator end = RowMapEnd(rowmap(s));
 
+	/* reposition the cursor to the origin */
 	int i = 0;
 	int ctr = 0;
 	move(ctr, 0);
 
+	/* display the header row in reverse video at the top of screen */
 	attron(A_REVERSE);
-	draw_row(s, &s->model->header, '|');
+	render_row(s, &s->model->header, '|');
 	attroff(A_REVERSE);
 	ctr++;
 
+	/* render visible set */
 	for (; iter != end && ctr < lines(s); iter++, ++ctr)
 	{
-		draw_row(s, iter, ' ');
-		clrtoeol();
+		render_row(s, iter, ' ');
 	}
 
+	/* blank out any remaining rows below the last row */
 	for (i = ctr; i < lines(s); ++i) {
 		printw("\n");
 		clrtoeol();
 	}
 }
 
+/* Send data to ncurses and make it update the terminal */ 
 void
 ScreenUpdate(Screen *s)
 {
-	ScreenRender(s);
-	ScreenSync(s);
+	screen_render(s);
+	screen_sync(s);
 }
 
 static void inline
@@ -199,8 +239,11 @@ clear_key(Screen *s)
 	RowCleanup(&s->key);
 }
 
+/* 
+ * Scroll up/down by figuring out the pred/succ key in the model
+ */
 static void
-ScreenScrollUp(Screen *s)
+screen_scroll_up(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
 
@@ -214,7 +257,7 @@ ScreenScrollUp(Screen *s)
 }
 
 static void
-ScreenScrollDown(Screen *s)
+screen_scroll_down(Screen *s)
 {
 	RowIterator iter = RowMapLowerBound(rowmap(s), key(s));
 
@@ -227,8 +270,12 @@ ScreenScrollDown(Screen *s)
 	}
 }
 
+
+/* 
+ * Scroll left/right by adjusting both the current column and column offset
+ */
 static void
-ScreenScrollLeft(Screen *s)
+screen_scroll_left(Screen *s)
 {
 	s->x_pos--;
 
@@ -248,7 +295,7 @@ ScreenScrollLeft(Screen *s)
 }
 
 static void
-ScreenScrollRight(Screen *s)
+screen_scroll_right(Screen *s)
 {
 	s->x_pos++;
 
@@ -266,27 +313,27 @@ ScreenScrollRight(Screen *s)
 }
 
 static void
-ScreenPageUp(Screen *s)
+screen_page_up(Screen *s)
 {
 	int i = 0;
 
 	for (i = 0; i < lines(s); ++i) {
-		ScreenScrollUp(s);
+		screen_scroll_up(s);
 	}
 }
 
 static void
-ScreenPageDown(Screen *s)
+screen_page_down(Screen *s)
 {
 	int i = 0;
 
 	for (i = 0; i < lines(s); ++i) {
-		ScreenScrollDown(s);
+		screen_scroll_down(s);
 	}
 }
 
 static void
-ScreenNextCol(Screen *s)
+screen_next_col(Screen *s)
 {
 	s->x_pos = 0;
 	s->x_col++;
@@ -297,7 +344,7 @@ ScreenNextCol(Screen *s)
 }
 
 static void
-ScreenPrevCol(Screen *s)
+screen_prev_col(Screen *s)
 {
 	if (s->x_pos != 0)
 	{
@@ -314,66 +361,68 @@ ScreenPrevCol(Screen *s)
 }
 
 static void
-ScreenHome(Screen *s)
+screen_home(Screen *s)
 {
 	s->x_col = 0;
 	s->x_pos = 0;
 }
 
 static void
-ScreenEnd(Screen *s)
+screen_end(Screen *s)
 {
 	s->x_col = rightmost(s);
 	s->x_pos = 0;
 }
 
 static void
-ScreenTogglePause(Screen *s)
+screen_toggle_pause(Screen *s)
 {
 	s->pause = !s->pause;
 }
 
+/* Read the key press using ncurses, and perform the requested action */
 void
 ScreenHandleInput(Screen *s)
 {
+	/* this is non-blocking */
 	int c = getch();
 
 	switch(c)
 	{
 		case KEY_UP:
-			ScreenScrollUp(s);
+			screen_scroll_up(s);
 			break;
 		case KEY_DOWN:
-			ScreenScrollDown(s);
+			screen_scroll_down(s);
 			break;
 		case KEY_LEFT:
-			ScreenScrollLeft(s);
+			screen_scroll_left(s);
 			break;
 		case KEY_RIGHT:
-			ScreenScrollRight(s);
+			screen_scroll_right(s);
 			break;
 		case KEY_NPAGE:
-			ScreenPageDown(s);
+			screen_page_down(s);
 			break;
 		case KEY_HOME:
-			ScreenHome(s);
+			screen_home(s);
 			break;
 		case KEY_END:
-			ScreenEnd(s);
+			screen_end(s);
 			break;
 		case KEY_PPAGE:
-			ScreenPageUp(s);
+			screen_page_up(s);
 			break;
 		case KEY_RESIZE:
 			break;
 		case 9: /* TAB */
-			ScreenNextCol(s);
+			screen_next_col(s);
 			break;
 		case 353: /* SHIFT+TAB */
-			ScreenPrevCol(s);
+			screen_prev_col(s);
 			break;
 		case 'p':
-			ScreenTogglePause(s);
+			screen_toggle_pause(s);
 			break;
 		case ERR:
 			break;

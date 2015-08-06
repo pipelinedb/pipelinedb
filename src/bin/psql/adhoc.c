@@ -1,3 +1,11 @@
+/*
+ * padhoc - PipelineDB ncurses app for adhoc continuous queries
+ *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
+ * src/bin/psql/adhoc.c
+ */
+
 #include "postgres_fe.h"
 #include "rowmap.h"
 #include "rowstream.h"
@@ -8,10 +16,6 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
-
-/*
- * pipeline adhoc query client
- */
 
 typedef struct App
 {
@@ -27,7 +31,18 @@ sighandle(int x)
 	keep_running = false;
 }
 
-static void row_callback(void *ctx, int type, Row *row);
+static void row_event_dispatcher(void *ctx, int type, Row *row);
+
+/*
+ * Initializes the padhoc app, and runs the main event loop.
+ *
+ * The event loop is written in non blocking style, and deals with two fds
+ *
+ * pfd[0] - row input stream (currently stdin)
+ * pfd[1] - screen tty fd (setup with ncurses)
+ *
+ * To ease debugging, the screen can be disabled (by leaving as NULL).
+ */
 
 int
 main(int argc, char *argv[])
@@ -38,14 +53,21 @@ main(int argc, char *argv[])
 	Screen *screen = 0;
 	RowStream *stream = 0;
 
+	/* 
+	 * Setup a signal handler to break out of the loop upon ctrl-c. We must
+	 * do this so the app will clean up the terminal properly when it is 
+	 * shutdown.
+	 */
 	signal(SIGINT, sighandle);
 
+	/* Comment the next line out to ease debugging */
 	screen = ScreenInit(model);
 
 	app.model = model;
 	app.screen = screen;
 
-	stream = RowStreamInit(row_callback, &app);
+	/* Setup the row_stream to callback to us when it has new rows */
+	stream = RowStreamInit(row_event_dispatcher, &app);
 
 	while (keep_running)
 	{
@@ -56,25 +78,30 @@ main(int argc, char *argv[])
 
 		pfd[0].fd = RowStreamFd(stream);
 		pfd[0].events = POLLIN;
-		pfd[0].revents = 0;
 
 		if (screen)
 		{
 			pfd[1].fd = ScreenFd(screen);
 			pfd[1].events = POLLIN;
-			pfd[1].revents = 0;
 		}
 
 		rc = poll(pfd, screen ? 2 : 1, -1);
 
 		if (rc < 0)
+		{
+			keep_running = false;
 			break;
+		}
 
+		/* Handle the row stream fd */
 		if (pfd[0].revents & POLLIN)
 		{
-			/* TODO - take a snapshot instead */
 			if (screen && ScreenIsPaused(screen))
 			{
+				/* 
+				 * If we are paused, don't read any new rows. This will block
+				 * the upstream writer.
+				 */
 				usleep(1000);
 			}
 			else
@@ -86,6 +113,7 @@ main(int argc, char *argv[])
 			}
 		}
 
+		/* Handle the screen fd if we have one */
 		if (screen)
 		{
 			if (pfd[1].revents & POLLIN)
@@ -102,21 +130,23 @@ main(int argc, char *argv[])
 	return 0;
 }
 
+/* 
+ * Callback fired from RowStream
+ */
 static void
-row_callback(void *ctx, int type, Row *row)
+row_event_dispatcher(void *ctx, int type, Row *row)
 {
 	App *app = (App *)(ctx);
-	
 	bool dirty = false;
 
 	switch (type)
 	{
-		case 'k':
-			ModelSetKey(app->model, row);
-			break;
 		case 'h':
-			ModelSetHeader(app->model, row);
+			ModelHeaderRow(app->model, row);
 			dirty = true;
+			break;
+		case 'k':
+			ModelKeyRow(app->model, row);
 			break;
 		case 'i':
 			ModelInsertRow(app->model, row);

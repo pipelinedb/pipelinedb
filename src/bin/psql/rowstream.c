@@ -6,6 +6,14 @@
 #include <fcntl.h>
 #include <stdio.h>
 
+/*
+ * Create a default initialized RowStream and returns a pointer to it.
+ *
+ * cb and ctx refer to the callback that will be fired when a row 
+ * has been parsed.
+ *
+ * self->fd will be set to stdin, and set to non blocking
+ */
 RowStream *RowStreamInit(RowFunc cb, void *ctx)
 {
 	RowStream *self = pg_malloc(sizeof(RowStream));
@@ -16,7 +24,7 @@ RowStream *RowStreamInit(RowFunc cb, void *ctx)
 
 	memset(self->buf, 0, sizeof(self->buf));
 
-	initPQExpBuffer(&self->flex);
+	initPQExpBuffer(&self->buffer);
 
 	self->callback = cb;
 	self->cb_ctx = ctx;
@@ -24,12 +32,15 @@ RowStream *RowStreamInit(RowFunc cb, void *ctx)
 	return self;
 }
 
+/*
+ * Clean up the rowstream resources and pg_free s
+ */
 void
 RowStreamDestroy(RowStream *s)
 {
-	termPQExpBuffer(&s->flex);
-	memset(s, 0, sizeof(RowStream));
+	termPQExpBuffer(&s->buffer);
 
+	memset(s, 0, sizeof(RowStream));
 	pg_free(s);
 }
 
@@ -52,8 +63,7 @@ typedef struct RowMessage
 } RowMessage;
 
 /* 
- * Parses the simple text format into row data.
- *
+ * Parse the simple text format into row data.
  *
  * Space delimited text, with row type in the first column, e.g.
  *
@@ -103,6 +113,11 @@ parse_text_row(const char *line)
 	return msg;
 }
 
+/* 
+ * Append data to an internal buffer, and check for newlines.
+ * Complete lines are handed to parse_text_row, and then stream->callback is
+ * fired with the result.
+ */
 static void
 append_data(RowStream *stream, const char *buf, size_t nr)
 {
@@ -111,19 +126,25 @@ append_data(RowStream *stream, const char *buf, size_t nr)
 
 	for (i = 0; i < nr; ++i)
 	{
-		appendBinaryPQExpBuffer(&stream->flex, buf + i, 1);
+		appendBinaryPQExpBuffer(&stream->buffer, buf + i, 1);
 
 		if (buf[i] == '\n')
 		{
-			stream->flex.data[stream->flex.len-1] = '\0';
-			msg = parse_text_row(stream->flex.data);
+			stream->buffer.data[stream->buffer.len-1] = '\0';
+			msg = parse_text_row(stream->buffer.data);
 
 			stream->callback(stream->cb_ctx, msg.type, &msg.row);
-			resetPQExpBuffer(&stream->flex);
+			resetPQExpBuffer(&stream->buffer);
 		}
 	}
 }
 
+
+
+/* 
+ * Loop over the input stream appending data until we hit EOF, or would block.
+ * Returns true if stream is finished. 
+ */
 bool
 RowStreamHandleInput(RowStream *s)
 {
@@ -131,12 +152,17 @@ RowStreamHandleInput(RowStream *s)
 	{
 		ssize_t nr = read(s->fd, s->buf, 4096);
 
-		if (nr == 0) {
-			return true;
-		}
+		if (nr == 0)
+			return true; /* EOF */
 
-		if (nr == -1) {
-			return false;
+		if (nr == -1)
+		{
+			/* we have read all the data */
+			if (errno == EAGAIN)
+				return false;
+
+			/* error */
+			return true;
 		}
 
 		append_data(s, s->buf, nr);

@@ -16,7 +16,6 @@
 
 #include "mb/pg_wchar.h"
 
-
 /*
  * Main processing loop for reading lines of input
  *	and sending them to the backend.

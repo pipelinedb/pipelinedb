@@ -57,7 +57,7 @@ ncmp(size_t a, size_t b)
 }
 
 static int
-FieldCmp(Field *f1, Field *f2)
+field_cmp(Field *f1, Field *f2)
 {
 	size_t n = Min(f1->n, f2->n);
 	int c1 = memcmp(f1->data, f2->data, n);
@@ -124,7 +124,7 @@ RowGetKey(Row *r)
 }
 
 static void
-RowMapAppend(RowMap *m, Row *row)
+row_map_append(RowMap *m, Row *row)
 {
 	size_t ns = m->n + 1;
 
@@ -154,7 +154,7 @@ row_cmp_row_row(const void *p1, const void *p2)
 	{
 		size_t col = g_row_key[i];
 
-		int c = FieldCmp(RowGetField(r1, col),
+		int c = field_cmp(RowGetField(r1, col),
 						 RowGetField(r2, col));
 
 		if (c != 0)
@@ -181,7 +181,7 @@ row_cmp_row_key(const void *p1, const void *p2)
 	{
 		size_t col = g_row_key[i];
 
-		int c = FieldCmp(RowGetField(r1, col),
+		int c = field_cmp(RowGetField(r1, col),
 						 RowGetField(r2, i));
 
 		if (c != 0)
@@ -192,7 +192,7 @@ row_cmp_row_key(const void *p1, const void *p2)
 }
 
 static void
-RowMapSort(RowMap *m)
+row_map_sort(RowMap *m)
 {
 	qsort(m->rows, m->n, sizeof(Row), row_cmp_row_row);
 }
@@ -277,8 +277,8 @@ RowMapUpdate(RowMap *m, Row *row)
 
 	if (iter == RowMapEnd(m))
 	{
-		RowMapAppend(m, row);
-		RowMapSort(m);
+		row_map_append(m, row);
+		row_map_sort(m);
 	}
 	else
 	{

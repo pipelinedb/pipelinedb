@@ -43,10 +43,10 @@ extern void ModelInsertRow(Model *m, Row *r);
 extern void ModelDeleteRow(Model *m, Row *r);
 
 /* column names */
-extern void ModelSetHeader(Model *m, Row *r);
+extern void ModelHeaderRow(Model *m, Row *r);
 
 /* set the columns that make up the key */
-extern void ModelSetKey(Model *m, Row *r);
+extern void ModelKeyRow(Model *m, Row *r);
 
 /* debug funcs */
 extern void ModelDump(Model *m);
