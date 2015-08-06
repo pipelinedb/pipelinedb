@@ -1,4 +1,14 @@
-// interface for the adhoc client ncurses ui 
+/*-------------------------------------------------------------------------
+ *
+ * screen.h
+ *    Interface for the adhoc client ncurses ui
+ *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
+ * src/bin/psql/screen.h
+ *
+ *-------------------------------------------------------------------------
+ */
 #ifndef SCREEN_H_BFB9AC05
 #define SCREEN_H_BFB9AC05
 

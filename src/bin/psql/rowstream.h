@@ -1,4 +1,14 @@
-// interface for streaming rows into the adhoc client
+/*-------------------------------------------------------------------------
+ *
+ * rowstream.h
+ *    Interface for streaming rows into the adhoc client
+ *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
+ * src/bin/psql/rowstream.h
+ *
+ *-------------------------------------------------------------------------
+ */
 #ifndef ROWSTREAM_H_E3E391A9
 #define ROWSTREAM_H_E3E391A9
 

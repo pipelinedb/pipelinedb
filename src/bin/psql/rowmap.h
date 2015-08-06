@@ -1,4 +1,14 @@
-// interface for the adhoc client row map
+/*-------------------------------------------------------------------------
+ *
+ * rowmap.h
+ *    Interface for the adhoc client row map
+ *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
+ * src/bin/psql/rowmap.h
+ *
+ *-------------------------------------------------------------------------
+ */
 #ifndef MODEL_H_EE43F6F4
 #define MODEL_H_EE43F6F4
 

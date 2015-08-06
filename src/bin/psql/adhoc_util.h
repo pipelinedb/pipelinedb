@@ -1,4 +1,14 @@
-// misc utils for the adhoc client
+/*-------------------------------------------------------------------------
+ *
+ * adhoc_util.h
+ *    Misc utils for the adhoc client
+ *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
+ * src/bin/psql/adhoc_util.h
+ *
+ *-------------------------------------------------------------------------
+ */
 #ifndef ADHOC_UTIL_H
 #define ADHOC_UTIL_H
 

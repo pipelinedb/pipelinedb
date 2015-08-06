@@ -1,4 +1,14 @@
-// interface for the adhoc client data model
+/*-------------------------------------------------------------------------
+ *
+ * model.h
+ *    Interface for the adhoc client data model
+ *
+ * Copyright (c) 2013-2015, PipelineDB
+ *
+ * src/bin/psql/model.h
+ *
+ *-------------------------------------------------------------------------
+ */
 #ifndef MODEL_H_4D955674
 #define MODEL_H_4D955674
 
