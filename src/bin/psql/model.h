@@ -42,7 +42,7 @@ extern void ModelHeaderRow(Model *m, Row *r);
 extern void ModelKeyRow(Model *m, Row *r);
 extern void ModelInsertRow(Model *m, Row *r);
 extern void ModelUpdateRow(Model *m, Row *r);
-extern void ModelDeleteRow(Model *m, Row *r);
+extern void ModelDeleteRow(Model *m, Row *key);
 
 /* debug funcs */
 extern void ModelDump(Model *m);

@@ -89,6 +89,7 @@ key_length(Row *r)
 	return n;
 }
 
+/* make a new row by copying the key fields from r */
 Row
 RowGetKey(Row *r)
 {
@@ -206,6 +207,7 @@ RowMapInit()
 	return m;
 }
 
+/* clean up all the rows, and row storage and call pg_free on m */
 void
 RowMapDestroy(RowMap *m)
 {
@@ -218,39 +220,6 @@ RowMapDestroy(RowMap *m)
 
 	memset(m, 0, sizeof(RowMap));
 	pg_free(m);
-}
-
-void
-RowDump(Row *row)
-{
-	size_t i = 0;
-
-	for (i = 0; i < RowSize(row); ++i)
-		printf("%.*s ", (int) RowFieldLength(row, i), RowFieldValue(row, i));
-
-	printf("\n");
-}
-
-void
-RowDumpToString(Row *row, PQExpBuffer buf)
-{
-	size_t i = 0;
-
-	for (i = 0; i < RowSize(row); ++i)
-	{
-		Field *f = RowGetField(row, i);
-		appendBinaryPQExpBuffer(buf, f->data, f->n);
-		appendPQExpBuffer(buf, " ");
-	}
-}
-
-void
-RowMapDump(RowMap *m)
-{
-	size_t i = 0;
-
-	for (; i < m->n; ++i)
-		RowDump(m->rows + i);
 }
 
 void
@@ -345,4 +314,38 @@ RowMapLowerBound(RowMap *m, Row *key)
 	}
 
 	return m->rows + i;
+}
+
+/* debugging funcs */
+void
+RowDump(Row *row)
+{
+	size_t i = 0;
+
+	for (i = 0; i < RowSize(row); ++i)
+		printf("%.*s ", (int) RowFieldLength(row, i), RowFieldValue(row, i));
+
+	printf("\n");
+}
+
+void
+RowDumpToString(Row *row, PQExpBuffer buf)
+{
+	size_t i = 0;
+
+	for (i = 0; i < RowSize(row); ++i)
+	{
+		Field *f = RowGetField(row, i);
+		appendBinaryPQExpBuffer(buf, f->data, f->n);
+		appendPQExpBuffer(buf, " ");
+	}
+}
+
+void
+RowMapDump(RowMap *m)
+{
+	size_t i = 0;
+
+	for (; i < m->n; ++i)
+		RowDump(m->rows + i);
 }

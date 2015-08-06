@@ -120,7 +120,6 @@ ModelKeyRow(Model *m, Row *r)
 	RowCleanup(r);
 }
 
-/* Insert a new row into the row map */
 void
 ModelInsertRow(Model *m, Row *r)
 {
@@ -128,7 +127,6 @@ ModelInsertRow(Model *m, Row *r)
 	RowMapUpdate(m->rowmap, r);
 }
 
-/* Update a row in the row map */
 void
 ModelUpdateRow(Model *m, Row *r)
 {
@@ -136,12 +134,11 @@ ModelUpdateRow(Model *m, Row *r)
 	RowMapUpdate(m->rowmap, r);
 }
 
-/* Delete a row from the map */
 void
-ModelDeleteRow(Model *m, Row *r)
+ModelDeleteRow(Model *m, Row *key)
 {
-	RowMapErase(m->rowmap, r);
-	RowCleanup(r);
+	RowMapErase(m->rowmap, key);
+	RowCleanup(key);
 }
 
 /* Debugging utilities */

@@ -22,6 +22,8 @@
  * Basic data reprentation for the adhoc client.
  *
  * These structs act as simple containers for the row data.
+ *
+ * Note - a row can be either a complete row or just key fields
  */
 
 typedef struct Field
@@ -53,7 +55,7 @@ extern Row RowGetKey(Row *r);
  * Row data is allocated outside here, but it is cleaned up here on
  * update/delete.
  *
- * TODO - replace with rbtree.
+ * TODO - replace sorted array with rbtree.
  */
 
 typedef struct RowMap

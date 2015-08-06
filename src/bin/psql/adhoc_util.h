@@ -32,23 +32,23 @@ void fatal_error(const char *file, unsigned line, const char *fmt, ...)
 #endif
 
 /*
- * Utilised by row parsers
+ * Count the number of spaces in a nul terminated string.
+ * Utilised by row parsers.
  */
-
 static inline size_t
 spaces(const char *s)
 {
-	size_t cnt = 0;
+	size_t n = 0;
 
 	while (*s != '\0')
 	{
 		if (*s == ' ')
-			cnt++;
+			n++;
 
 		s++;
 	}
 
-	return cnt;
+	return n;
 }
 
 #endif
