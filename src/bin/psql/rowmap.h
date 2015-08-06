@@ -1,3 +1,4 @@
+// interface for the adhoc client row map
 #ifndef MODEL_H_EE43F6F4
 #define MODEL_H_EE43F6F4
 

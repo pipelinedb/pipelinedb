@@ -1,3 +1,4 @@
+// interface for streaming rows into the adhoc client
 #ifndef ROWSTREAM_H_E3E391A9
 #define ROWSTREAM_H_E3E391A9
 
@@ -27,7 +28,6 @@ typedef struct RowStream
 
 extern RowStream *RowStreamInit(RowFunc fn, void *ctx);
 extern void RowStreamDestroy(RowStream *s);
-
 extern int RowStreamFd(RowStream *s);
 extern bool RowStreamHandleInput(RowStream *s);
 

@@ -1,3 +1,4 @@
+// interface for the adhoc client data model
 #ifndef MODEL_H_4D955674
 #define MODEL_H_4D955674
 

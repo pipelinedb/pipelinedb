@@ -1,3 +1,4 @@
+// misc utils for the adhoc client
 #ifndef ADHOC_UTIL_H
 #define ADHOC_UTIL_H
 
