@@ -15,7 +15,7 @@ Screen *ScreenInit(Model *model)
 	self->model = model;
 	memset(&self->key, 0, sizeof(Row));
 
-	/* 
+	/*
 	 * Open /dev/tty and set that up as the ncurses terminal. We use newterm
 	 * instead of initscr so that we can read row events from stdin.
 	 */
@@ -141,7 +141,7 @@ printwpad(int n)
 	}
 }
 
-/* 
+/*
  * Render a row, taking column, x_pos and padding into account.
  *
  * Note - render in this context means send the data to ncurses, the tty
@@ -184,7 +184,7 @@ render_row(Screen *s, Row *row, char sep)
 	printw("\n");
 }
 
-/* 
+/*
  * Render the whole screen by querying the model.
  */
 static void
@@ -218,7 +218,7 @@ screen_render(Screen *s)
 	}
 }
 
-/* Send data to ncurses and make it update the terminal */ 
+/* Send data to ncurses and make it update the terminal */
 void
 ScreenUpdate(Screen *s)
 {
@@ -239,7 +239,7 @@ clear_key(Screen *s)
 	RowCleanup(&s->key);
 }
 
-/* 
+/*
  * Scroll up/down by figuring out the pred/succ key in the model
  */
 static void
@@ -271,7 +271,7 @@ screen_scroll_down(Screen *s)
 }
 
 
-/* 
+/*
  * Scroll left/right by adjusting both the current column and column offset
  */
 static void

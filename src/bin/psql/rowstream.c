@@ -62,7 +62,7 @@ typedef struct RowMessage
 	Row row;
 } RowMessage;
 
-/* 
+/*
  * Parse the simple text format into row data.
  *
  * Space delimited text, with row type in the first column, e.g.
@@ -113,7 +113,7 @@ parse_text_row(const char *line)
 	return msg;
 }
 
-/* 
+/*
  * Append data to an internal buffer, and check for newlines.
  * Complete lines are handed to parse_text_row, and then stream->callback is
  * fired with the result.
@@ -141,9 +141,9 @@ append_data(RowStream *stream, const char *buf, size_t nr)
 
 
 
-/* 
+/*
  * Loop over the input stream appending data until we hit EOF, or would block.
- * Returns true if stream is finished. 
+ * Returns true if stream is finished.
  */
 bool
 RowStreamHandleInput(RowStream *s)

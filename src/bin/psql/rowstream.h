@@ -22,7 +22,7 @@
 /*
  * This module is responsible for row i/o and parsing.
  *
- * When a row has been received and parsed, a callback will be fired, 
+ * When a row has been received and parsed, a callback will be fired,
  * supplying the row type and contents.
  *
  * Row data is allocated here, but expected to be freed elsewhere.
@@ -47,7 +47,7 @@ extern void RowStreamDestroy(RowStream *s);
 /* to be used with select/poll */
 extern int RowStreamFd(RowStream *s);
 
-/* 
+/*
  * To be called when the fd is ready. Returns true if the stream has hit EOF
  */
 extern bool RowStreamHandleInput(RowStream *s);
