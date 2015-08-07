@@ -26,7 +26,7 @@ void fatal_error(const char *file, unsigned line, const char *fmt, ...)
  */
 
 #ifndef USE_ASSERT_CHECKING
-#define TermAssert(x) 
+#define TermAssert(x)
 #else
 #define TermAssert(x) { if (!(x)) { endwin(); Assert((x)); } }
 #endif

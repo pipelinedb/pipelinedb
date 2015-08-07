@@ -9,7 +9,7 @@
 /*
  * Create a default initialized RowStream and returns a pointer to it.
  *
- * cb and ctx refer to the callback that will be fired when a row 
+ * cb and ctx refer to the callback that will be fired when a row
  * has been parsed.
  *
  * self->fd will be set to stdin, and set to non blocking

@@ -4,8 +4,8 @@
 
 require 'pp'
 
-Signal.trap("SIGPIPE", "SYSTEM_DEFAULT") 
-Signal.trap("SIGINT", "SYSTEM_DEFAULT") 
+Signal.trap("SIGPIPE", "SYSTEM_DEFAULT")
+Signal.trap("SIGINT", "SYSTEM_DEFAULT")
 
 i = 0
 srand(0)

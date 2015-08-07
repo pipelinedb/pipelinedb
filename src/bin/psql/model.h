@@ -15,7 +15,7 @@
 #include "adhoc_util.h"
 #include "rowmap.h"
 
-/* 
+/*
  * The model part of the adhoc client MVC.
  *
  * All row operations pass through here, and this module is mainly responsible

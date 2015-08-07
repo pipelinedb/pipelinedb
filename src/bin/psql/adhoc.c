@@ -53,9 +53,9 @@ main(int argc, char *argv[])
 	Screen *screen = 0;
 	RowStream *stream = 0;
 
-	/* 
+	/*
 	 * Setup a signal handler to break out of the loop upon ctrl-c. We must
-	 * do this so the app will clean up the terminal properly when it is 
+	 * do this so the app will clean up the terminal properly when it is
 	 * shutdown.
 	 */
 	signal(SIGINT, sighandle);
@@ -98,7 +98,7 @@ main(int argc, char *argv[])
 		{
 			if (screen && ScreenIsPaused(screen))
 			{
-				/* 
+				/*
 				 * If we are paused, don't read any new rows. This will block
 				 * the upstream writer.
 				 */
@@ -130,7 +130,7 @@ main(int argc, char *argv[])
 	return 0;
 }
 
-/* 
+/*
  * Callback fired from RowStream
  */
 static void

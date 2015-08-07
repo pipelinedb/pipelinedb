@@ -7,18 +7,18 @@
 void
 fatal_error(const char *file, unsigned line, const char *fmt, ...)
 {
-    va_list ap;
+	va_list ap;
 
 	/* clean up after ncurses to make error readable */
 	endwin();
 
-    fprintf(stderr, "padhoc: %s:%d: error: ", file, line);
+	fprintf(stderr, "padhoc: %s:%d: error: ", file, line);
 
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
 
-    fprintf(stderr, "\n");
+	fprintf(stderr, "\n");
 
-    exit(1);
+	exit(1);
 }
