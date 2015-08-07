@@ -32,11 +32,6 @@ all: psql padhoc
 psql: $(OBJS) | submake-libpq submake-libpgport
 	$(CC) $(CFLAGS) $(OBJS) $(libpq_pgport) $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
 
-AOBJS = adhoc.o screen.o rowstream.o rowmap.o adhoc_util.o model.o
-
-#padhoc: $(AOBJS) | submake-libpq submake-libpgport
-#	$(CC) $(CFLAGS) $(AOBJS) $(libpq_pgport) -lncurses $(LDFLAGS) $(LDFLAGS_EX) $(LIBS) -o $@$(X)
-
 help.o: sql_help.h
 
 dumputils.c keywords.c: % : $(top_srcdir)/src/bin/pg_dump/%
@@ -59,7 +54,6 @@ distprep: sql_help.h psqlscan.c
 
 install: all installdirs
 	$(INSTALL_PROGRAM) psql$(X) '$(DESTDIR)$(bindir)/psql$(X)'
-#	$(INSTALL_PROGRAM) padhoc$(X) '$(DESTDIR)$(bindir)/padhoc$(X)'
 	$(INSTALL_DATA) $(srcdir)/psqlrc.sample '$(DESTDIR)$(datadir)/psqlrc.sample'
 	@rm -f '$(DESTDIR)$(bindir)/pipeline$(X)'
 	$(LN_S) psql $(DESTDIR)$(bindir)/pipeline
