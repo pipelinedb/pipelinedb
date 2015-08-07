@@ -27,6 +27,7 @@ OBJS=	command.o common.o help.o input.o stringutils.o mainloop.o copy.o \
 	sql_help.o pipeline.o \
 	$(WIN32RES)
 
+
 all: psql
 
 psql: $(OBJS) | submake-libpq submake-libpgport
