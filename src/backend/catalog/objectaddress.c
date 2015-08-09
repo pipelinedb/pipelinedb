@@ -2279,8 +2279,18 @@ getRelationDescription(StringInfo buffer, Oid relid)
 							 relname);
 			break;
 		case RELKIND_VIEW:
-			appendStringInfo(buffer, _("view %s"),
-							 relname);
+			{
+				/*
+				 * Continuous views use RELKIND_VIEW, but we want to make sure
+				 * the error message distinguishes between a regular view and
+				 * a continuous view.
+				 */
+				RangeVar *rv = makeRangeVar(get_namespace_name(relForm->relnamespace),
+						NameStr(relForm->relname), -1);
+				char *fmt = IsAContinuousView(rv) ? "continuous view %s" : "view %s";
+				appendStringInfo(buffer, _(fmt),
+								 relname);
+			}
 			break;
 		case RELKIND_MATVIEW:
 			appendStringInfo(buffer, _("materialized view %s"),
