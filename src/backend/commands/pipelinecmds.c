@@ -315,7 +315,8 @@ get_select_query_sql(RangeVar *view, const char *sql)
 }
 
 static void
-record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *from)
+record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid,
+		Oid indexoid, SelectStmt *stmt, Query *query)
 {
 	ObjectAddress referenced;
 	ObjectAddress dependent;
@@ -371,7 +372,7 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 		recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 	}
 
-	collect_rels_and_streams((Node *) from, &cxt);
+	collect_rels_and_streams((Node *) stmt->fromClause, &cxt);
 
 	/*
 	 * Record a dependency between any strongly typed streams and a pipeline_query object,
@@ -418,6 +419,8 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 			recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
 		}
 	}
+
+	recordDependencyOnExpr(&dependent, (Node *) query, NIL, DEPENDENCY_NORMAL);
 }
 
 /*
@@ -576,7 +579,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	/* Create group look up index and record dependencies */
 	indexoid = create_index_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);
-	record_dependencies(cvoid, matreloid, viewoid, indexoid, workerselect->fromClause);
+	record_dependencies(cvoid, matreloid, viewoid, indexoid, workerselect, query);
 
 	allowSystemTableMods = saveAllowSystemTableMods;
 

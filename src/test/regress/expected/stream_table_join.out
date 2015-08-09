@@ -315,6 +315,32 @@ SELECT * FROM test_stj_sw0;
 DROP CONTINUOUS VIEW test_stj_sw0;
 DROP STREAM test_stj_sw0_s;
 DROP TABLE test_stj_sw0_t;
+CREATE TABLE test_stj_t4 (x integer, y integer, z integer);
+CREATE FUNCTION test_stj_foo(integer) RETURNS integer AS $$
+BEGIN
+  RETURN 0;
+END
+$$
+LANGUAGE plpgsql;
+CREATE CONTINUOUS VIEW stj_deps AS SELECT test_stj_foo(s.x::integer), t.x FROM stj_deps_stream s JOIN test_stj_t4 t ON s.x = t.x;
+NOTICE:  consider creating an index on t.x for improved stream-table join performance
+-- Table columns being joined on can't be dropped
+ALTER TABLE test_stj_t4 DROP COLUMN x;
+ERROR:  cannot drop table test_stj_t4 column x because other objects depend on it
+DETAIL:  continuous view stj_deps depends on table test_stj_t4 column x
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+-- But unused columns can be
+ALTER TABLE test_stj_t4 DROP COLUMN y;
+-- Functions used by CVs can't be dropped
+DROP FUNCTION test_stj_foo(integer);
+ERROR:  cannot drop function test_stj_foo(integer) because other objects depend on it
+DETAIL:  continuous view stj_deps depends on function test_stj_foo(integer)
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+DROP CONTINUOUS VIEW stj_deps;
+-- Now we can drop everything
+ALTER TABLE test_stj_t4 DROP COLUMN x;
+DROP TABLE test_stj_t4;
+DROP FUNCTION test_stj_foo(integer);
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;

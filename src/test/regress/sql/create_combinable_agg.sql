@@ -97,6 +97,8 @@ DROP FUNCTION combinable_avg_combine(integer[], integer[]);
 DROP FUNCTION combinable_avg_transout(integer[]);
 DROP FUNCTION combinable_avg_combinein(json);
 
+DROP CONTINUOUS VIEW test_combinable_aggs_v0;
+
 DROP AGGREGATE combinable_avg (integer);
 
 -- pipeline_combine entry should be removed
@@ -109,8 +111,6 @@ DROP FUNCTION combinable_avg_final(integer[]) CASCADE;
 DROP FUNCTION combinable_avg_combine(integer[], integer[]) CASCADE;
 DROP FUNCTION combinable_avg_transout(integer[]) CASCADE;
 DROP FUNCTION combinable_avg_combinein(json) CASCADE;
-
-DROP CONTINUOUS VIEW test_combinable_aggs_v0;
 
 -- Test polymorphic types
 CREATE FUNCTION set_add (

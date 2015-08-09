@@ -122,15 +122,19 @@ SELECT combine(combinable_avg) FROM test_combinable_aggs_v0;
 DROP FUNCTION combinable_avg_combine(integer[], integer[]);
 ERROR:  cannot drop function combinable_avg_combine(integer[],integer[]) because other objects depend on it
 DETAIL:  function combinable_avg(integer) depends on function combinable_avg_combine(integer[],integer[])
+continuous view test_combinable_aggs_v0 depends on function combinable_avg(integer)
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP FUNCTION combinable_avg_transout(integer[]);
 ERROR:  cannot drop function combinable_avg_transout(integer[]) because other objects depend on it
 DETAIL:  function combinable_avg(integer) depends on function combinable_avg_transout(integer[])
+continuous view test_combinable_aggs_v0 depends on function combinable_avg(integer)
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP FUNCTION combinable_avg_combinein(json);
 ERROR:  cannot drop function combinable_avg_combinein(json) because other objects depend on it
 DETAIL:  function combinable_avg(integer) depends on function combinable_avg_combinein(json)
+continuous view test_combinable_aggs_v0 depends on function combinable_avg(integer)
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+DROP CONTINUOUS VIEW test_combinable_aggs_v0;
 DROP AGGREGATE combinable_avg (integer);
 -- pipeline_combine entry should be removed
 SELECT count(*) FROM pipeline_combine WHERE combinefn IN
@@ -146,7 +150,6 @@ DROP FUNCTION combinable_avg_final(integer[]) CASCADE;
 DROP FUNCTION combinable_avg_combine(integer[], integer[]) CASCADE;
 DROP FUNCTION combinable_avg_transout(integer[]) CASCADE;
 DROP FUNCTION combinable_avg_combinein(json) CASCADE;
-DROP CONTINUOUS VIEW test_combinable_aggs_v0;
 -- Test polymorphic types
 CREATE FUNCTION set_add (
   anyarray,
