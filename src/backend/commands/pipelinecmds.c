@@ -581,6 +581,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	allowSystemTableMods = saveAllowSystemTableMods;
 
 	heap_close(pipeline_query, NoLock);
+
+	cq_stat_report_create_drop_cv(true);
 }
 
 /*

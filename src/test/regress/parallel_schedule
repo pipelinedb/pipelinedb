@@ -177,3 +177,8 @@ test: cont_activate
 # Another group of parallel tests
 # ----------
 test: create_combinable_agg
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: pipeline_stats

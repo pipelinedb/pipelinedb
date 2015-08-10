@@ -1,0 +1,81 @@
+CREATE DATABASE pipeline_stats_db;
+\c pipeline_stats_db
+CREATE CONTINUOUS VIEW test_pipeline_stats0 AS SELECT COUNT(*) FROM test_pipeline_stats_stream;
+SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 'combiner';
+ output_rows | errors | cv_create | cv_drop 
+-------------+--------+-----------+---------
+           0 |      0 |         1 |       0
+(1 row)
+
+SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
+ input_rows | input_bytes | errors 
+------------+-------------+--------
+(0 rows)
+
+DROP CONTINUOUS VIEW test_pipeline_stats0;
+SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 'combiner';
+ output_rows | errors | cv_create | cv_drop 
+-------------+--------+-----------+---------
+           0 |      0 |         1 |       1
+(1 row)
+
+SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
+ input_rows | input_bytes | errors 
+------------+-------------+--------
+(0 rows)
+
+CREATE CONTINUOUS VIEW test_pipeline_stats0 AS SELECT COUNT(*) FROM test_pipeline_stats_stream;
+CREATE CONTINUOUS VIEW test_pipeline_stats1 AS SELECT COUNT(*) FROM test_pipeline_stats_stream;
+INSERT INTO test_pipeline_stats_stream (x) SELECT generate_series(1, 1000) AS x;
+SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 'combiner';
+ output_rows | errors | cv_create | cv_drop 
+-------------+--------+-----------+---------
+           2 |      0 |         3 |       1
+(1 row)
+
+SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
+ input_rows | input_bytes | errors 
+------------+-------------+--------
+       2000 |      468000 |      0
+(1 row)
+
+DROP CONTINUOUS VIEW test_pipeline_stats0;
+DROP CONTINUOUS VIEW test_pipeline_stats1;
+SELECT pg_sleep(2);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT output_rows, errors, cv_create, cv_drop FROM pipeline_stats WHERE type = 'combiner';
+ output_rows | errors | cv_create | cv_drop 
+-------------+--------+-----------+---------
+           2 |      0 |         3 |       3
+(1 row)
+
+SELECT input_rows, input_bytes, errors FROM pipeline_stats WHERE type = 'worker';
+ input_rows | input_bytes | errors 
+------------+-------------+--------
+       2000 |      468000 |      0
+(1 row)
+
+\c regression
+DROP DATABASE pipeline_stats_db;

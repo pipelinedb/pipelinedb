@@ -29,4 +29,7 @@ extern Datum pipeline_queries(PG_FUNCTION_ARGS);
 /* pipeline streams */
 extern Datum pipeline_streams(PG_FUNCTION_ARGS);
 
+/* global pipeline stats */
+extern Datum pipeline_stat_get(PG_FUNCTION_ARGS);
+
 #endif

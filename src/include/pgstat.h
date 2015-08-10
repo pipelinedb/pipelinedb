@@ -1004,6 +1004,8 @@ typedef struct CQStatEntry
 	PgStat_Counter updated_bytes;
 	PgStat_Counter executions;
 	PgStat_Counter errors;
+	PgStat_Counter cv_create;
+	PgStat_Counter cv_drop;
 	TimestampTz last_report;
 } CQStatEntry;
 
@@ -1085,11 +1087,14 @@ extern CQStatEntry *MyCQStats;
 			MyCQStats->errors += (n); \
 	} while(0)
 
+#define cq_stat_get_global(cont_queries, ptype) (cq_stat_get_entry(cont_queries, 0, 0, ptype))
+
 extern void cq_stat_init(CQStatEntry *entry, Oid viewid, pid_t pid);
 extern HTAB *cq_stat_fetch_all(void);
 extern void cq_stat_report(bool force);
+extern void cq_stat_report_create_drop_cv(bool create);
 extern void cq_stat_send_purge(Oid viewid, int pid, int64 ptype);
-extern CQStatEntry *cq_stat_get_entry(PgStat_StatDBEntry *dbentry, Oid viewoid, int pid, int ptype);
+extern CQStatEntry *cq_stat_get_entry(HTAB *cont_queries, Oid viewoid, int pid, int ptype);
 
 typedef struct StreamStatEntry
 {

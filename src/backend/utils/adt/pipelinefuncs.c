@@ -19,6 +19,7 @@
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream.h"
+#include "miscadmin.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
@@ -303,6 +304,84 @@ stream_stat_get(PG_FUNCTION_ARGS)
 	}
 
 	SRF_RETURN_DONE(funcctx);
+}
+
+/*
+ * pipeline_stat_get
+ *
+ * Global PipelineDB stats. These don't go away when CVs are dropped.
+ */
+Datum
+pipeline_stat_get(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	HTAB *stats;
+	CQStatEntry *global;
+	TupleDesc	tupdesc;
+	MemoryContext oldcontext;
+	Datum values[12];
+	bool nulls[12];
+	Datum result;
+	HeapTuple tup;
+	CQStatsType ptype;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		/* build tupdesc for result tuples */
+		tupdesc = CreateTemplateTupleDesc(12, false);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "type", TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "start_time", TIMESTAMPTZOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "input_rows", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "output_rows", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "updated_rows", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 6, "input_bytes", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 7, "output_bytes", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 8, "updated_bytes", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 9, "executions", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 10, "errors", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 11, "cv_create", INT8OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 12, "cv_drop", INT8OID, -1, 0);
+
+		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = (FuncCallContext *) fcinfo->flinfo->fn_extra;
+
+	/* there are only two rows: one for combiner stats and one for worker stats */
+	if (funcctx->call_cntr > 1)
+		SRF_RETURN_DONE(funcctx);
+
+	stats = cq_stat_fetch_all();
+	ptype = funcctx->call_cntr == 0 ? CQ_STAT_COMBINER : CQ_STAT_WORKER;
+	global = cq_stat_get_global(stats, ptype);
+
+	if (!global->start_ts)
+		SRF_RETURN_DONE(funcctx);
+
+	MemSet(values, 0, sizeof(values));
+	MemSet(nulls, 0, sizeof(nulls));
+
+	values[0] = CStringGetTextDatum(ptype == CQ_STAT_COMBINER ? "combiner" : "worker");
+	values[1] = TimestampTzGetDatum(global->start_ts);
+	values[2] = Int64GetDatum(global->input_rows);
+	values[3] = Int64GetDatum(global->output_rows);
+	values[4] = Int64GetDatum(global->updates);
+	values[5] = Int64GetDatum(global->input_bytes);
+	values[6] = Int64GetDatum(global->output_bytes);
+	values[7] = Int64GetDatum(global->updated_bytes);
+	values[8] = Int64GetDatum(global->executions);
+	values[9] = Int64GetDatum(global->errors);
+	values[10] = Int64GetDatum(global->cv_create);
+	values[11] = Int64GetDatum(global->cv_drop);
+
+	tup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
+	result = HeapTupleGetDatum(tup);
+	SRF_RETURN_NEXT(funcctx, result);
 }
 
 typedef struct

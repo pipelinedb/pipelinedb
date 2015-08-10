@@ -9,11 +9,10 @@
  *
  *-------------------------------------------------------------------------
  */
-#include <curl/curl.h>
+#include <unistd.h>
 #include <sys/utsname.h>
 
 #include "postgres.h"
-
 #include "pgstat.h"
 #include "funcapi.h"
 
@@ -31,20 +30,189 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
+#define ANON_ENDPOINT		"anonymous.pipelinedb.com"
+
 #define PDB_VERSION "0.7.7"
 #define UPDATE_AVAILABLE 201
 #define NO_UPDATES 200
 
-static const char *update_url = "http://anonymous.pipelinedb.com/check";
-static const char *payload_format = "data={ \"e\": \"%s\", \"v\": \"%s\", \"s\": \"%s\", \"sr\": \"%s\", \"sv\": \"%s\", \"n\": %u, \"ri\": %ld, \"bi\": %ld, \"ro\": %ld, \"bo\": %ld }";
+#define REQUEST_FMT "POST /check HTTP/1.0\nContent-Length: %d\n\n%s"
+#define PROC_PAYLOAD_FMT 	"{ \"t\": \"%c\", \"e\": \"%s\", \"v\": \"%s\", \"s\": \"%s\", \"sr\": \"%s\", \"sv\": \"%s\", \"ri\": %ld, \"bi\": %ld, \"ro\": %ld, \"bo\": %ld, \"er\": %ld, \"cc\": %ld, \"cd\": %ld}"
+#define PAYLOAD_FMT "[%s,%s]"
+
+#define FAIL(sock) \
+	do { \
+		close(sock); \
+		return -1; \
+	} while (0);
 
 /* guc */
 bool anonymous_update_checks;
 
-static size_t
-silent(void *buffer, size_t size, size_t nmemb, void *userp)
+/*
+ * parse_response_code
+ *
+ * Parse the response code out of a raw HTTP response
+ */
+static int
+parse_response_code(char *resp)
 {
-   return size * nmemb;
+	int offset = 0;
+	int max = strlen(resp);
+	char *start;
+	int len;
+	char parsed[8];
+
+	/* move to first SP */
+	while (offset < max)
+	{
+		if (resp[offset] == ' ')
+			break;
+		if (offset++ == max)
+			return -1;
+	}
+
+	offset++;
+	start = resp + offset;
+
+	/* move to second SP */
+	while (offset < max)
+	{
+		if (resp[offset] == ' ')
+			break;
+		if (offset++ == max)
+			return -1;
+	}
+
+	/* read everything in between */
+	len = (resp + offset - start + 1);
+	memcpy(parsed, start, len);
+	parsed[strlen(parsed) - 1] = '\0';
+
+	return atoi(parsed);
+}
+
+/*
+ * POST the HTTP request
+ */
+static int
+post(char *payload)
+{
+	struct hostent *server;
+	struct sockaddr_in serv_addr;
+	int sock;
+	int bytes;
+	int sent;
+	int received;
+	int total;
+	char response[4096];
+	StringInfo buf = makeStringInfo();
+
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (sock < 0)
+		return -1;
+
+	server = gethostbyname(ANON_ENDPOINT);
+	if (server == NULL)
+		return -1;
+
+	MemSet(&serv_addr, 0, sizeof(serv_addr));
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_port = htons(5000);
+	memcpy(&serv_addr.sin_addr.s_addr, server->h_addr, server->h_length);
+
+	if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+		FAIL(sock);
+
+	appendStringInfo(buf, REQUEST_FMT, (int) strlen(payload), payload);
+
+	/* send request */
+	sent = 0;
+	do
+	{
+		bytes = write(sock, buf->data + sent, buf->len - sent);
+		if (bytes < 0)
+			FAIL(sock);
+		if (bytes == 0)
+			break;
+		sent += bytes;
+	} while (sent < buf->len);
+
+	/* receive response */
+	MemSet(response, 0, sizeof(response));
+	total = sizeof(response) - 1;
+	received = 0;
+
+	do
+	{
+		bytes = read(sock, response + received, total - received);
+		if (bytes < 0)
+			FAIL(sock);
+		if (bytes == 0)
+			break;
+		received += bytes;
+	} while (received < total);
+
+	close(sock);
+
+	return parse_response_code(response);
+}
+
+/*
+ * get_stats
+ *
+ * Aggregate all database-level stats
+ */
+static char *
+get_stats(HTAB *all_dbs, bool startup, CQStatsType ptype)
+{
+	HASH_SEQ_STATUS db_iter;
+	PgStat_StatDBEntry *db_entry;
+	HTAB *stats;
+	CQStatEntry *g;
+	StringInfoData payload;
+	struct utsname mname;
+	char name[64];
+	char proc = ptype == CQ_STAT_COMBINER ? 'c' : 'w';
+	char *etype = startup ? "s" : "h";
+	long rows_in = 0;
+	long bytes_in = 0;
+	long rows_out = 0;
+	long bytes_out = 0;
+	long cv_create = 0;
+	long cv_drop = 0;
+	long errors = 0;
+
+	uname(&mname);
+	strncpy(name, mname.sysname, 64);
+
+	stats = cq_stat_fetch_all();
+	if (stats == NULL)
+		return NULL;
+
+	hash_seq_init(&db_iter, all_dbs);
+	while ((db_entry = (PgStat_StatDBEntry *) hash_seq_search(&db_iter)) != NULL)
+	{
+		g = cq_stat_get_global(db_entry->cont_queries, ptype);
+		if (g == NULL || g->start_ts == 0)
+			continue;
+
+		rows_in += g->input_rows;
+		bytes_in += g->input_bytes;
+		rows_out += g->output_rows;
+		bytes_out += g->output_bytes;
+		cv_create += g->cv_create;
+		cv_drop += g->cv_drop;
+		errors += g->errors;
+	}
+
+	initStringInfo(&payload);
+	appendStringInfo(&payload, PROC_PAYLOAD_FMT, proc, etype,
+	PDB_VERSION, name, mname.release, mname.version, g->input_rows,
+			g->input_bytes, g->output_rows, g->output_bytes, g->errors, g->cv_create,
+			g->cv_drop);
+
+	return payload.data;
 }
 
 /*
@@ -59,86 +227,19 @@ silent(void *buffer, size_t size, size_t nmemb, void *userp)
 void
 UpdateCheck(HTAB *all_dbs, bool startup)
 {
-	PgStat_StatDBEntry *db_entry;
-	CQStatEntry *cq_entry;
-	HASH_SEQ_STATUS db_iter;
-	HASH_SEQ_STATUS cq_iter;
 	StringInfoData payload;
-  CURL *curl;
-  CURLcode res;
-	int cvs = 0;
-	long rows_in = 0;
-	long bytes_in = 0;
-	long rows_out = 0;
-	long bytes_out = 0;
-	static bool initialized = false;
-	struct utsname mname;
-	char name[64];
+	char *combiner = get_stats(all_dbs, startup, CQ_STAT_COMBINER);
+	char *worker = get_stats(all_dbs, startup, CQ_STAT_WORKER);
 
-	uname(&mname);
-	strncpy(name, mname.sysname, 64);
-
-	hash_seq_init(&db_iter, all_dbs);
-	while ((db_entry = (PgStat_StatDBEntry *) hash_seq_search(&db_iter)) != NULL)
-	{
-		hash_seq_init(&cq_iter, db_entry->cont_queries);
-		while ((cq_entry = (CQStatEntry *) hash_seq_search(&cq_iter)) != NULL)
-		{
-			Oid viewid = GetCQStatView(cq_entry->key);
-
-			/* keep scanning if it's a proc-level stats entry */
-			if (!viewid)
-				continue;
-
-			if ((GetCQStatProcType(cq_entry->key) == CQ_STAT_WORKER))
-			{
-				cvs++;
-				rows_in += cq_entry->input_rows;
-				bytes_in += cq_entry->input_bytes;
-			}
-			else
-			{
-				rows_out += cq_entry->output_rows;
-				bytes_out += cq_entry->output_bytes;
-			}
-		}
-	}
-
-	if (cvs == 0)
+	if (combiner == NULL)
 		return;
 
+	if (worker == NULL)
+		worker = "{}";
+
 	initStringInfo(&payload);
-	appendStringInfo(&payload, payload_format, startup ? "startup" : "hourly",
-			PDB_VERSION, name, mname.release, mname.version,
-			cvs, rows_in, bytes_in, rows_out, bytes_out);
+	appendStringInfo(&payload, PAYLOAD_FMT, combiner, worker);
 
-	/* now check if there's a newer version available */
-  if (!initialized)
-  {
-		curl_global_init(CURL_GLOBAL_ALL);
-		initialized = true;
-  }
-
-  curl = curl_easy_init();
-  if(curl)
-  {
-    curl_easy_setopt(curl, CURLOPT_URL, update_url);
-    curl_easy_setopt(curl, CURLOPT_POST, 1);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.data);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, silent);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
-    res = curl_easy_perform(curl);
-    if(res == CURLE_OK)
-    {
-    	long code = 0;
-    	curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &code);
-    	if (code == UPDATE_AVAILABLE)
-    		elog(NOTICE, "a newer version of PipelineDB is available");
-    }
-    else
-    {
-			/* don't be noisy about errors */
-    }
-    curl_easy_cleanup(curl);
-  }
+	if (post(payload.data) == UPDATE_AVAILABLE)
+		elog(NOTICE, "a newer version of PipelineDB is available");
 }

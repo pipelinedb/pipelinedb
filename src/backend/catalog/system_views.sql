@@ -889,3 +889,9 @@ CREATE VIEW pipeline_stream_stats AS
 	SELECT schema, name, input_rows, input_batches, input_bytes
 		FROM stream_stat_get();
 
+-- global pipeline stats
+CREATE VIEW pipeline_stats AS
+	SELECT type, start_time, input_rows, output_rows,
+		updates, input_bytes, output_bytes, updated_bytes, executions,
+		errors, cv_create, cv_drop FROM pipeline_stat_get();
+

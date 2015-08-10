@@ -2093,7 +2093,3 @@ AC_OUTPUT
 # check
 AC_HAVE_LIBRARY(check, [],
                [AC_MSG_ERROR([check library not found (http://check.sourceforge.net/web/install.html)])])
-
-# curl
-AC_HAVE_LIBRARY(curl, [],
-               [AC_MSG_ERROR([curl library not found (http://curl.haxx.se/docs/install.html)])])
