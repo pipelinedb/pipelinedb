@@ -15,11 +15,20 @@ subdir = src/test/py
 top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
+LIBPQ = ../../../src/interfaces/libpq
+PG = ../../../src/include
+
 .PHONY: check
-	
+
+all: extended
+
+extended:
+	$(CC) extended.c -I$(LIBPQ) -I$(PG) -L$(LIBPQ) $^ -lpq -o $@
+
 check: all
 	py.test -v
 	
 clean:
 	rm -rf ./.pdb*
 	rm -rf ./__pycache__
+	rm extended

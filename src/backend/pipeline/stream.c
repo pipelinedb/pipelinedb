@@ -59,6 +59,8 @@ char *stream_targets = NULL;
 static HTAB *prepared_stream_inserts = NULL;
 static bool *cont_queries_active = NULL;
 
+static InsertStmt *extended_stream_insert = NULL;
+
 /*
  * get_desc
  *
@@ -109,7 +111,7 @@ get_desc(List *colnames, Query *q)
  * Create a PreparedStreamInsertStmt with the given column names
  */
 PreparedStreamInsertStmt *
-StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
+StorePreparedStreamInsert(const char *name, InsertStmt *insert)
 {
 	PreparedStreamInsertStmt *result;
 	bool found;
@@ -125,17 +127,17 @@ StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
 		ctl.keysize = NAMEDATALEN;
 		ctl.entrysize = sizeof(PreparedStreamInsertStmt);
 
-		prepared_stream_inserts = hash_create("prepared_stream_inserts", 2, &ctl, HASH_ELEM);
+		prepared_stream_inserts = hash_create("Prepared Stream Inserts", 2, &ctl, HASH_ELEM);
 	}
 
 	result = (PreparedStreamInsertStmt *)
 			hash_search(prepared_stream_inserts, (void *) name, HASH_ENTER, &found);
 
 	result->inserts = NIL;
-	result->relid = RangeVarGetRelid(stream, AccessShareLock, false);
-	result->desc = CreateTemplateTupleDesc(list_length(cols), false);
+	result->relid = RangeVarGetRelid(insert->relation, AccessShareLock, false);
+	result->desc = CreateTemplateTupleDesc(list_length(insert->cols), false);
 
-	foreach(lc, cols)
+	foreach(lc, insert->cols)
 	{
 		ResTarget *rt;
 
@@ -147,6 +149,41 @@ StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
 	}
 
 	return result;
+}
+
+/*
+ * SetExtendedStreamInsert
+ *
+ * Set a stream insert that was added via PARSE for later reading by BIND/EXECUTE
+ */
+void
+SetExtendedStreamInsert(Node *ins)
+{
+	Assert(IsA(ins, InsertStmt));
+
+	extended_stream_insert = (InsertStmt *) ins;
+}
+
+/*
+ * GetExtendedStreamInsert
+ *
+ * Retrieve the stream insert that was added via PARSE
+ */
+InsertStmt *
+GetExtendedStreamInsert(void)
+{
+	Assert(IsA(extended_stream_insert, InsertStmt));
+
+	return (InsertStmt *) extended_stream_insert;
+}
+
+/*
+ * HaveExtendedStreamInserts
+ */
+bool
+HaveExtendedStreamInsert(void)
+{
+	return (extended_stream_insert != NULL);
 }
 
 /*
