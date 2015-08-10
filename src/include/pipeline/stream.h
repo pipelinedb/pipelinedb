@@ -43,8 +43,11 @@ typedef struct PreparedStreamInsertStmt
 extern bool synchronous_stream_insert;
 extern char *stream_targets;
 
-extern PreparedStreamInsertStmt *StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols);
+extern PreparedStreamInsertStmt *StorePreparedStreamInsert(const char *name, InsertStmt *insert);
 extern void AddPreparedStreamInsert(PreparedStreamInsertStmt *stmt, ParamListInfoData *params);
+extern void SetExtendedStreamInsert(Node *ins);
+extern InsertStmt *GetExtendedStreamInsert(void);
+extern bool HaveExtendedStreamInsert(void);
 extern PreparedStreamInsertStmt *FetchPreparedStreamInsert(const char *name);
 extern void DropPreparedStreamInsert(const char *name);
 extern int InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt);

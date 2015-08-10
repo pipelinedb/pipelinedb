@@ -31,6 +31,7 @@
 #include "utils/syscache.h"
 
 #define ANON_ENDPOINT		"anonymous.pipelinedb.com"
+#define ANON_PORT 80
 
 #define PDB_VERSION "0.7.7"
 #define UPDATE_AVAILABLE 201
@@ -118,7 +119,7 @@ post(char *payload)
 
 	MemSet(&serv_addr, 0, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(5000);
+	serv_addr.sin_port = htons(ANON_PORT);
 	memcpy(&serv_addr.sin_addr.s_addr, server->h_addr, server->h_length);
 
 	if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)

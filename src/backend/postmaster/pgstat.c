@@ -5544,8 +5544,8 @@ cq_stat_recv_global(HTAB *cont_queries, CQStatEntry *stats, CQStatsType ptype)
 	 * We want a unique global identifier for each database, so
 	 * use the timestamp of the first time the stats for this DB
 	 * were seen. Note that it's harmless if this is somehow a
-	 * duplicate timestamp of another database, so we don't with
-	 * guaranteeing uniqueness.
+	 * duplicate timestamp of another database, so we don't go to
+	 * great lengths to guarantee uniqueness.
 	 */
 	if (!global->start_ts)
 		global->start_ts = GetCurrentTimestamp();

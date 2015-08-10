@@ -41,9 +41,6 @@ ExecInitPhysicalGroupLookup(PhysicalGroupLookup *node, EState *estate, int eflag
 	resultdesc = ExecTypeFromTL(innerPlan(outer)->targetlist, false);
 	ExecAssignResultType(&state->ps, resultdesc);
 
-	if (IsA(innerPlan(nl), SeqScan))
-		elog(WARNING, "sequential scan being used in combiner group lookup");
-
 	return state;
 }
 
