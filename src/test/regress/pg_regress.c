@@ -2564,6 +2564,7 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 				 "-c \"continuous_query_num_workers=4\" "
 				 "-c \"anonymous_update_checks=false\" "
 				 "-c \"continuous_query_max_wait=5\" "
+				 "-c \"anonymous_update_checks=false\" "
 				 "-k \"%s\" "
 				 "> \"%s/log/postmaster.log\" 2>&1",
 				 bindir, temp_install, debug ? " -d 5" : "",

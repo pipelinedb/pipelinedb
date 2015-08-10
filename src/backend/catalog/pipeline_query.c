@@ -12,6 +12,7 @@
  */
 #include <math.h>
 #include "postgres.h"
+#include "pgstat.h"
 
 #include "access/heapam.h"
 #include "access/htup_details.h"
@@ -553,6 +554,8 @@ RemoveContinuousViewById(Oid oid)
 
 	CommandCounterIncrement();
 	UpdatePipelineStreamCatalog();
+
+	cq_stat_report_create_drop_cv(false);
 
 	heap_close(pipeline_query, NoLock);
 }

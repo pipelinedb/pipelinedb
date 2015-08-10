@@ -34,7 +34,7 @@ def test_cq_stats(pipeline, clean_db):
     proc_rows = len(list(proc_result))
     cq_rows = len(list(cq_result))
 
-    assert proc_rows == num_combiners + num_workers
+    assert proc_rows == 1 + num_combiners + num_workers
     assert cq_rows == 4
 
     # When sleeping, we only force the stats collection for the first CQ, so we're not guaranteed to have seen

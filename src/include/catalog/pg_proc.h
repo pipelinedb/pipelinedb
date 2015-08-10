@@ -5391,6 +5391,10 @@ DESCR("count-min sketch add");
 DATA(insert OID = 4387 ( cmsketch_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 5038 "5038 25 23" _null_ _null_ _null_ _null_ cmsketch_addn _null_ _null_ _null_ ));
 DESCR("count-min sketch add");
 
+/* global PipelineDB stats */
+DATA(insert OID = 4388 ( pipeline_stat_get PGNSP PGUID 12 1 1 0 0 f f f f t t s 0 0 2249 "" "{25,1184,20,20,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o,o}" "{type,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors,cv_create,cv_drop}" _null_ pipeline_stat_get _null_ _null_ _null_ ));
+DESCR("global pipelinedb status");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
