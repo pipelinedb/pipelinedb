@@ -1495,7 +1495,7 @@ Optional Packages:
   --with-includes=DIRS    look for additional header files in DIRS
   --with-libraries=DIRS   look for additional libraries in DIRS
   --with-libs=DIRS        alternative spelling of --with-libraries
-  --with-pgport=PORTNUM   set default port number [6543]
+  --with-pgport=PORTNUM   set default port number [5432]
   --with-blocksize=BLOCKSIZE
                           set table block size in kB [8]
   --with-segsize=SEGSIZE  set table segment size in GB [1]
@@ -3054,7 +3054,7 @@ $as_echo "$enable_nls" >&6; }
 
 
 #
-# Default port number (--with-pgport), default 6543
+# Default port number (--with-pgport), default 5432
 #
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for default port number" >&5
 $as_echo_n "checking for default port number... " >&6; }
@@ -3077,7 +3077,7 @@ if test "${with_pgport+set}" = set; then :
   esac
 
 else
-  default_port=6543
+  default_port=5432
 fi
 
 
