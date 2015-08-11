@@ -149,12 +149,12 @@ AC_SUBST(enable_nls)
 AC_SUBST(WANTED_LANGUAGES)
 
 #
-# Default port number (--with-pgport), default 6543
+# Default port number (--with-pgport), default 5432
 #
 AC_MSG_CHECKING([for default port number])
-PGAC_ARG_REQ(with, pgport, [PORTNUM], [set default port number [6543]],
+PGAC_ARG_REQ(with, pgport, [PORTNUM], [set default port number [5432]],
              [default_port=$withval],
-             [default_port=6543])
+             [default_port=5432])
 AC_MSG_RESULT([$default_port])
 # Need both of these because some places want an integer and some a string
 AC_DEFINE_UNQUOTED(DEF_PGPORT, ${default_port},
