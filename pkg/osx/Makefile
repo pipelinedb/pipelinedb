@@ -18,7 +18,7 @@ all: conf geos gdal proj pipeline gis
 	mkdir $(SCRIPTS)
 	cp postinstall $(SCRIPTS)
 	pkgbuild --identifier $(PACKAGE) --version $(VERSION) \
-		--ownership recommended --root $(PREFIX) \ --install-location $(PREFIX)
+		--ownership recommended --root $(PREFIX) --install-location $(PREFIX) \
 		--scripts $(SCRIPTS) pipelinedb-$(VERSION).pkg
 	cp $(CURDIR)/*.pkg ..
 
