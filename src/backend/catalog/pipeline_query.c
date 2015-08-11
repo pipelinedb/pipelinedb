@@ -218,6 +218,7 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	uint64_t hash;
 	Oid namespace;
 	Oid result;
+	Oid matrelid = InvalidOid;
 
 	if (!name)
 		ereport(ERROR,
@@ -248,8 +249,18 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 	values[Anum_pipeline_query_namespace - 1] = ObjectIdGetDatum(namespace);
 
 	/* Copy matrelname */
-	namestrcpy(&matrelname_data, matrelname->relname);
-	values[Anum_pipeline_query_matrelname - 1] = NameGetDatum(&matrelname_data);
+
+	if (matrelname)
+	{
+		namestrcpy(&matrelname_data, matrelname->relname);
+		values[Anum_pipeline_query_matrelname - 1] = NameGetDatum(&matrelname_data);
+		matrelid = RangeVarGetRelid(matrelname, NoLock, false);
+	}
+	else
+	{
+		MemSet(&matrelname_data, 0, sizeof(NameData));
+		values[Anum_pipeline_query_matrelname - 1] = NameGetDatum(&matrelname_data);
+	}
 
 	/* Copy flags */
 	values[Anum_pipeline_query_gc - 1] = BoolGetDatum(gc);
@@ -257,7 +268,8 @@ DefineContinuousView(RangeVar *name, const char *query_string, RangeVar* matreln
 
 	hash = (MurmurHash3_64(name->relname, strlen(name->relname), MURMUR_SEED) ^
 			MurmurHash3_64(query_string, strlen(query_string), MURMUR_SEED) ^
-			namespace ^ RangeVarGetRelid(matrelname, NoLock, false));
+			namespace ^ matrelid);
+
 	values[Anum_pipeline_query_hash - 1] = Int32GetDatum(hash);
 
 	MemSet(nulls, 0, sizeof(nulls));
@@ -513,8 +525,18 @@ GetAllContinuousViewIds(void)
 
 	while ((tup = heap_getnext(scan_desc, ForwardScanDirection)) != NULL)
 	{
+		Oid id = 0;
 		Form_pipeline_query row = (Form_pipeline_query) GETSTRUCT(tup);
-		Oid id = row->id;
+
+		/* filter out adhoc queries, since they run in their own backend */
+
+		if (strlen(row->matrelname.data) == 0)
+		{
+			elog(LOG, "skipped adhoc cq id %d\n", row->id);
+			continue;
+		}
+
+		id = row->id;
 		result = bms_add_member(result, id);
 	}
 

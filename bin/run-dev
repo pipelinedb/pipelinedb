@@ -7,7 +7,7 @@ import signal
 import socket
 import sys
 import time
-
+import pprint
 
 DATA_DIR = 'data'
 SERVER = 'src/backend/pipeline-server'
@@ -87,6 +87,8 @@ def main(args):
 
   cmd = [SERVER, '-D' , os.path.join(root, DATA_DIR), '-p', args.port,
          '-c', 'synchronous_stream_insert=true']
+
+  pprint.pprint(cmd)
 
   for guc in args.gucs:
     if len(guc.split('=')) != 2:

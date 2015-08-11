@@ -68,6 +68,7 @@
 #include "parser/parse_type.h"
 #include "pipeline/cqanalyze.h"
 #include "pipeline/stream.h"
+#include "pipeline/cont_adhoc.h"
 #include "pipeline/tuplebuf.h"
 #include "pg_getopt.h"
 #include "postmaster/autovacuum.h"
@@ -878,6 +879,17 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 }
 
 void
+exec_adhoc_query(SelectStmt* stmt, const char* s)
+{
+	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
+
+	ExecAdhocQuery(stmt, s);
+
+	MemoryContextSwitchTo(oldcontext);
+	MemoryContextReset(EventContext);
+}
+
+void
 exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *params)
 {
 	CommandDest dest = whereToSendOutput;
@@ -907,6 +919,12 @@ exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *para
 	MemoryContextReset(EventContext);
 
 	stream_inserts = NULL;
+}
+
+static bool is_adhoc(const char* s)
+{
+	/* TODO - add some new syntax - continuous select? */
+	return strstr(s, "stream") != 0;
 }
 
 /*
@@ -995,6 +1013,14 @@ exec_simple_query(const char *query_string)
 		{
 			tmp_list = parsetree_list;
 			break;
+		}
+
+		if (IsA(parsetree, SelectStmt) && is_adhoc(query_string))
+		{
+			SelectStmt *select = (SelectStmt*) parsetree;
+
+			exec_adhoc_query(select, query_string);
+			continue;
 		}
 
 		if (IsA(parsetree, InsertStmt))

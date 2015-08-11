@@ -536,8 +536,10 @@ InsertBatchMarkAcked(InsertBatchAck *ack)
 		return;
 
 	SpinLockAcquire(&ack->batch->mutex);
-	if (IsContQueryWorkerProcess())
+	if (IsContQueryWorkerProcess() || !IsContQueryCombinerProcess() )
+	{
 		ack->batch->num_wacks += ack->count;
+	}
 	else if (IsContQueryCombinerProcess())
 		ack->batch->num_cacks += ack->count;
 	SpinLockRelease(&ack->batch->mutex);

@@ -304,6 +304,7 @@ ContinuousQueryWorkerMain(void)
 	/* Bootstrap the query ids we should process. */
 	StartTransactionCommand();
 	MemoryContextSwitchTo(run_cxt);
+
 	queries = GetAllContinuousViewIds();
 	CommitTransactionCommand();
 

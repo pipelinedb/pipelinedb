@@ -1265,7 +1265,11 @@ set_record_type_typemod(int32 typmod, TupleDesc desc)
 void
 reset_record_type_cache(void)
 {
-	Assert(IsContQueryWorkerProcess());
+	/*
+	 * Commented out to support adhoc - TODO - make check better
+	 * Assert(IsContQueryWorkerProcess());
+	*/
+
 	RecordCacheHash = NULL;
 	RecordCacheArray = NULL;
 	NextRecordTypmod = 0;

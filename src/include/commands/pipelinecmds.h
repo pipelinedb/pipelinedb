@@ -31,4 +31,10 @@ extern TupleDesc ExplainContViewResultDesc(ExplainContViewStmt *stmt);
 extern void ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 			 ParamListInfo params, DestReceiver *dest);
 
+extern char*
+get_select_query_sql(RangeVar *view, const char *sql);
+
+extern ColumnDef *
+make_cv_columndef(char *name, Oid type, Oid typemod);
+
 #endif   /* PIPELINECMDS_H */

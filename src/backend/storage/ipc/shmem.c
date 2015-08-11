@@ -72,6 +72,7 @@
 #include "storage/shmem.h"
 #include "storage/spin.h"
 
+#include <signal.h>
 
 /* shared memory global variables */
 

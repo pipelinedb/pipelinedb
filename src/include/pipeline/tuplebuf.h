@@ -81,6 +81,7 @@ struct TupleBufferReader
 {
 	TupleBuffer *buf;
 	ContQueryProc *proc;
+
 	TupleBufferShouldReadFunc should_read_fn;
 	uint64_t slot_id;
 	TupleBufferSlot *slot;

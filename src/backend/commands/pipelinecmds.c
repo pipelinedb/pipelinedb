@@ -70,7 +70,7 @@
 
 int continuous_view_fillfactor;
 
-static ColumnDef *
+ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)
 {
 	ColumnDef *result;
@@ -268,7 +268,7 @@ create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
 	return index_oid;
 }
 
-static char *
+char *
 get_select_query_sql(RangeVar *view, const char *sql)
 {
 	int trimmedlen;
@@ -494,6 +494,9 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * Build a list of columns from the SELECT statement that we
 	 * can use to create a table with
 	 */
+
+	/* TODO - refactor with cont_adhoc.c:build_view_details */
+
 	foreach(col, tlist)
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(col);

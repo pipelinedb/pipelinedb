@@ -60,6 +60,7 @@ extern PlannedStmt *pg_plan_query(Query *querytree, int cursorOptions,
 extern List *pg_plan_queries(List *querytrees, int cursorOptions,
 				ParamListInfo boundParams);
 extern void exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *values);
+extern void exec_adhoc_query(SelectStmt *sel, const char* s);
 
 extern bool check_max_stack_depth(int *newval, void **extra, GucSource source);
 extern void assign_max_stack_depth(int newval, void *extra);

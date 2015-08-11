@@ -146,19 +146,14 @@ get_combiner_join_rel(PlannerInfo *root, int levels_needed, List *initial_rels)
 	return rel;
 }
 
-/*
- * CQ combiners expect transition values from worker processes, so we need
- * to modify the combiner's Aggrefs accordingly.
- */
 static void
-set_plan_refs(PlannedStmt *pstmt, ContinuousView *view)
+set_plan_refs_stmt(PlannedStmt *pstmt, TupleDesc matdesc,
+				   char* relname, Alias* alias)
 {
 	Plan *plan = pstmt->planTree;
 	ListCell *lc;
 	AttrNumber attno = 1;
 	List *targetlist = NIL;
-	TupleDesc matdesc;
-	Relation matrel;
 	int i;
 	Agg *agg;
 
@@ -166,10 +161,6 @@ set_plan_refs(PlannedStmt *pstmt, ContinuousView *view)
 		return;
 
 	agg = (Agg *) plan;
-
-	matrel = heap_openrv(view->matrel, NoLock);
-	matdesc = CreateTupleDescCopyConstr(RelationGetDescr(matrel));
-	heap_close(matrel, NoLock);
 
 	/*
 	 * There are two cases we need to handle here:
@@ -339,16 +330,15 @@ set_plan_refs(PlannedStmt *pstmt, ContinuousView *view)
 		RangeTblEntry *rte;
 		char *refname;
 
-
 		/* Make the TuplestoreScan's target list mimic the TupleDesc of the materialization table */
 		if (IsA(plan->lefttree, TuplestoreScan))
 			plan->lefttree->targetlist = make_tupstore_tlist(matdesc);
 
 		/* The materialization table's RTE is used as a pseudo RTE for the TuplestoreScan */
 		rte = makeNode(RangeTblEntry);
-		refname = view->matrel->relname;
+		refname = relname;
 		rte->rtekind = RTE_RELATION;
-		rte->alias = view->matrel->alias;
+		rte->alias = alias;
 		rte->inFromCl = true;
 		rte->requiredPerms = ACL_SELECT;
 		rte->checkAsUser = InvalidOid;
@@ -364,6 +354,24 @@ set_plan_refs(PlannedStmt *pstmt, ContinuousView *view)
 		list_free_deep(pstmt->rtable);
 		pstmt->rtable = list_make1(rte);
 	}
+}
+
+/*
+ * CQ combiners expect transition values from worker processes, so we need
+ * to modify the combiner's Aggrefs accordingly.
+ */
+static void
+set_plan_refs(PlannedStmt *pstmt, ContinuousView *view)
+{
+	TupleDesc matdesc;
+	Relation matrel;
+
+	matrel = heap_openrv(view->matrel, NoLock);
+	matdesc = CreateTupleDescCopyConstr(RelationGetDescr(matrel));
+	heap_close(matrel, NoLock);
+
+	set_plan_refs_stmt(pstmt, matdesc,
+					   view->matrel->relname, view->matrel->alias);
 }
 
 static PlannedStmt *
@@ -468,7 +476,28 @@ GetContPlan(ContinuousView *view)
 	}
 
 	set_plan_refs(plan, view);
+	return plan;
+}
 
+/* used by adhoc backend, because it does not have a matrel */
+PlannedStmt *
+GetContPlanType(ContinuousView *view, ContQueryProcType type, TupleDesc matdesc)
+{
+	PlannedStmt *plan;
+
+	switch (type)
+	{
+	case Combiner:
+		plan = get_combiner_plan(view);
+		break;
+	case Worker:
+		plan = get_worker_plan(view);
+		break;
+	default:
+		ereport(ERROR, (errmsg("only continuous query processes can generate continuous query plans")));
+	}
+
+	set_plan_refs_stmt(plan, matdesc, "", 0);
 	return plan;
 }
 
