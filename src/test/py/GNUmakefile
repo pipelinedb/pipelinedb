@@ -31,4 +31,4 @@ check: all
 clean:
 	rm -rf ./.pdb*
 	rm -rf ./__pycache__
-	rm extended
+	rm -f extended
