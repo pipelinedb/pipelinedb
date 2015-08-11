@@ -10,12 +10,16 @@ DESTDIR = $(CURDIR)/build
 INSTALL_DIR = $(DESTDIR)$(PREFIX)
 BINDIR = $(PREFIX)/bin
 LIBDIR = $(PREFIX)/lib
+SCRIPTS = $(CURDIR)/scripts
 
 all: conf geos gdal proj pipeline gis
-	cp $(CURDIR)/postinst $(DESTDIR)
 	find $(PREFIX) -type d -exec chmod 775 {} +
 	find $(PREFIX)/share/pipelinedb/timezone -type f -exec chmod 644 {} +
-	fpm -s dir -t osxpkg -n $(PACKAGE) -v $(VERSION) --epoch 0 --after-install postinst --after-remove postrm --prefix $(PREFIX) $(PREFIX)
+	mkdir $(SCRIPTS)
+	cp postinstall $(SCRIPTS)
+	pkgbuild --identifier $(PACKAGE) --version $(VERSION) \
+		--ownership recommended --root $(PREFIX) \ --install-location $(PREFIX)
+		--scripts $(SCRIPTS) pipelinedb-$(VERSION).pkg
 	cp $(CURDIR)/*.pkg ..
 
 conf:
@@ -39,7 +43,6 @@ gdal:
             --with-threads \
             --with-ogr \
             --with-geos \
-            --without-libtool \
             --with-libz=no \
             --without-gif \
             --without-pg \
@@ -109,4 +112,4 @@ clean-libs:
 	find $(LIBDIR) -name "*.la" -exec rm {} \;
 	
 clean:
-	rm -rf $(GEOS)* $(GDAL)* $(PROJ)* $(DESTDIR)
+	rm -rf $(GEOS)* $(GDAL)* $(PROJ)* $(DESTDIR) $(SCRIPTS)
