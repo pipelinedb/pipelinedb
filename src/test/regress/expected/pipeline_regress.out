@@ -13,7 +13,6 @@ CREATE CONTINUOUS VIEW test_view AS
     secondstamp,
     foobar;
 INSERT INTO test_stream (foobar, ts) VALUES ('foo', clock_timestamp()), ('foo', clock_timestamp());
-INSERT INTO test_stream (foobar, ts) VALUES ('foo', clock_timestamp()), ('bar', clock_timestamp());
 SELECT pg_sleep(1);
  pg_sleep 
 ----------
@@ -24,11 +23,10 @@ INSERT INTO test_stream (foobar, ts) VALUES ('foo', clock_timestamp()), ('bar', 
 SELECT foobar, count FROM test_view ORDER BY secondstamp, foobar;
  foobar | count 
 --------+-------
- bar    |     1
- foo    |     3
+ foo    |     2
  bar    |     1
  foo    |     1
-(4 rows)
+(3 rows)
 
 DROP CONTINUOUS VIEW test_view;
 DROP STREAM test_stream;

@@ -15,7 +15,6 @@ CREATE CONTINUOUS VIEW test_view AS
     foobar;
 
 INSERT INTO test_stream (foobar, ts) VALUES ('foo', clock_timestamp()), ('foo', clock_timestamp());
-INSERT INTO test_stream (foobar, ts) VALUES ('foo', clock_timestamp()), ('bar', clock_timestamp());
 SELECT pg_sleep(1);
 INSERT INTO test_stream (foobar, ts) VALUES ('foo', clock_timestamp()), ('bar', clock_timestamp());
 
