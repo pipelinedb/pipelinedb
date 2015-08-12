@@ -24,20 +24,18 @@ typedef struct {
 	NameData name;
 	RangeVar *matrel;
 	char *query;
-	bool needs_xact;
 	int32 hash;
 } ContinuousView;
 
-Oid DefineContinuousView(RangeVar *name, const char *query_string, RangeVar *matrelname, bool gc, bool long_xact);
-HeapTuple GetPipelineQueryTuple(RangeVar *name);
-char *GetQueryString(RangeVar *name);
-bool IsAContinuousView(RangeVar *name);
-bool IsAMatRel(RangeVar *name, RangeVar **cvname);
-bool GetGCFlag(RangeVar *name);
-RangeVar *GetMatRelationName(RangeVar *cv);
-RangeVar *GetCVNameFromMatRelName(RangeVar *matrel);
-Query *GetContinuousQuery(RangeVar *rv);
-void RemoveContinuousViewById(Oid oid);
+extern Oid DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelname, bool gc);
+extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
+extern char *GetQueryString(RangeVar *name);
+extern bool IsAContinuousView(RangeVar *name);
+extern bool IsAMatRel(RangeVar *name, RangeVar **cvname);
+extern bool GetGCFlag(RangeVar *name);
+extern RangeVar *GetMatRelationName(RangeVar *cv);
+extern RangeVar *GetCVNameFromMatRelName(RangeVar *matrel);
+extern void RemoveContinuousViewById(Oid oid);
 
 extern ContinuousView *GetContinuousView(Oid id);
 extern Bitmapset *GetAllContinuousViewIds(void);

@@ -493,6 +493,13 @@ count_agg_clauses_walker(Node *node, count_agg_clauses_context *context)
 		costs->numAggs++;
 
 		/*
+		 * Combine aggregates have already set up their arguments in a way that
+		 * won't make sense to the remaining validation, so bail.
+		 */
+		if (AGGKIND_IS_COMBINE(aggref->aggkind))
+			return false;
+
+		/*
 		 * Continuous queries don't actually do any sorting for ordered-set
 		 * aggs, so only count it if it's not a CQ.
 		 */
@@ -2412,7 +2419,7 @@ eval_const_expressions_mutator(Node *node,
 				 * combine arguments will always be a single column
 				 * so there's nothing else to do for them here.
 				 */
-				if (AGGKIND_IS_USER_COMBINE(expr->winaggkind))
+				if (AGGKIND_IS_COMBINE(expr->winaggkind))
 					return (Node *) expr;
 
 				/*

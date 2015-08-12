@@ -227,12 +227,6 @@ pgis_accum_finalfn(pgis_abs *p, MemoryContext mctx, FunctionCallInfo fcinfo)
 	ArrayBuildState *state;
 	Datum result;
 
-	/* cannot be called directly because of internal-type argument */
-	Assert(fcinfo->context &&
-	       (IsA(fcinfo->context, AggState) ||
-	        IsA(fcinfo->context, WindowAggState))
-	       );
-
 	state = p->a;
 	dims[0] = state->nelems;
 	lbs[0] = 1;

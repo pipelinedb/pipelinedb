@@ -172,13 +172,13 @@ streams_to_meta(Relation pipeline_query)
 		ContAnalyzeContext *context;
 
 		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
-		querystring = TextDatumGetCString(tmp);
+		querystring = deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 		parsetree_list = pg_parse_query(querystring);
 		parsetree = (Node *) lfirst(parsetree_list->head);
 		sel = (SelectStmt *) parsetree;
 
-		context = MakeContAnalyzeContext(make_parsestate(NULL), sel);
+		context = MakeContAnalyzeContext(make_parsestate(NULL), sel, Worker);
 		collect_rels_and_streams((Node *) sel->fromClause, context);
 		collect_types_and_cols((Node *) sel, context);
 
@@ -188,10 +188,6 @@ streams_to_meta(Relation pipeline_query)
 			bool found;
 			Oid key;
 			bool is_inferred = false;
-
-			/* TODO(usmanm) */
-			if (!rv->schemaname)
-				rv->schemaname = get_namespace_name(catrow->namespace);
 
 			key = RangeVarGetRelid(rv, NoLock, false);
 			entry = (StreamTargetsEntry *) hash_search(targets, &key, HASH_ENTER, &found);

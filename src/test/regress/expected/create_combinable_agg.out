@@ -68,12 +68,11 @@ SELECT count(*) FROM pipeline_combine WHERE combinefn IN
 CREATE CONTINUOUS VIEW test_combinable_aggs_v0 AS
 	SELECT x::integer, combinable_avg(y::integer) FROM cca_stream GROUP BY x;
 \d+ test_combinable_aggs_v0_mrel0;
-                     Table "public.test_combinable_aggs_v0_mrel0"
-     Column     |       Type       | Modifiers | Storage  | Stats target | Description 
-----------------+------------------+-----------+----------+--------------+-------------
- x              | integer          |           | plain    |              | 
- combinable_avg | double precision |           | plain    |              | 
- _0             | json             |           | extended |              | 
+                 Table "public.test_combinable_aggs_v0_mrel0"
+     Column     |  Type   | Modifiers | Storage  | Stats target | Description 
+----------------+---------+-----------+----------+--------------+-------------
+ x              | integer |           | plain    |              | 
+ combinable_avg | json    |           | extended |              | 
 Indexes:
     "test_combinable_aggs_v0_mrel0_expr_idx" btree (hash_group(x))
 Options: fillfactor=50
@@ -102,8 +101,8 @@ SELECT round(combinable_avg) FROM test_combinable_aggs_v0 ORDER BY x;
      6
 (4 rows)
 
-SELECT x, _0 FROM test_combinable_aggs_v0_mrel0 ORDER BY x;
- x |            _0             
+SELECT x, combinable_avg FROM test_combinable_aggs_v0_mrel0 ORDER BY x;
+ x |      combinable_avg       
 ---+---------------------------
  0 | { "sum": 1, "count": 2 }
  1 | { "sum": 5, "count": 2 }
@@ -132,7 +131,7 @@ HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP FUNCTION combinable_avg_combinein(json);
 ERROR:  cannot drop function combinable_avg_combinein(json) because other objects depend on it
 DETAIL:  function combinable_avg(integer) depends on function combinable_avg_combinein(json)
-continuous view test_combinable_aggs_v0 depends on function combinable_avg(integer)
+continuous view test_combinable_aggs_v0 depends on function combinable_avg_combinein(json)
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP CONTINUOUS VIEW test_combinable_aggs_v0;
 DROP AGGREGATE combinable_avg (integer);

@@ -123,14 +123,12 @@ typedef FormData_pg_aggregate *Form_pg_aggregate;
  * well as the finalized result without having to duplicate the
  * aggregation overhead.
  */
-#define AGGKIND_STORE 's'
-#define AGGKIND_USER_COMBINE 'c'
+#define AGGKIND_COMBINE 'c'
 
-#define AGGKIND_IS_STORE(kind) ((kind) == AGGKIND_STORE)
-#define AGGKIND_IS_USER_COMBINE(kind) ((kind) == AGGKIND_USER_COMBINE)
+#define AGGKIND_IS_COMBINE(kind) ((kind) == AGGKIND_COMBINE)
 
 /* Use this macro to test for "ordered-set agg including hypothetical case" */
-#define AGGKIND_IS_ORDERED_SET(kind)  ((kind) != AGGKIND_NORMAL && (kind) != AGGKIND_USER_COMBINE)
+#define AGGKIND_IS_ORDERED_SET(kind)  ((kind) != AGGKIND_NORMAL && (kind) != AGGKIND_COMBINE)
 
 
 /* ----------------

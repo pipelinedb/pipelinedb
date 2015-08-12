@@ -1002,12 +1002,6 @@ Datum RASTER_summaryStats_finalfn(PG_FUNCTION_ARGS)
 
 	POSTGIS_RT_DEBUG(3, "Starting...");
 
-	/* cannot be called directly as this is exclusive aggregate function */
-	if (!AggCheckCallContext(fcinfo, NULL)) {
-		elog(ERROR, "RASTER_summaryStats_finalfn: Cannot be called in a non-aggregate context");
-		PG_RETURN_NULL();
-	}
-
 	/* NULL, return null */
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();

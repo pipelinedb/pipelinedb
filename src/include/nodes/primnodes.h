@@ -224,14 +224,6 @@ typedef struct Param
 	int			location;		/* token location, or -1 if unknown */
 } Param;
 
-typedef enum AggResultState
-{
-	AGG_DEFAULT,
-	AGG_TRANSITION,
-	AGG_COMBINE,
-	AGG_FINALIZE_COMBINE
-} AggResultState;
-
 /*
  * Aggref
  *
@@ -273,7 +265,8 @@ typedef struct Aggref
 	Index		agglevelsup;	/* > 0 if agg belongs to outer query */
 	int			location;		/* token location, or -1 if unknown */
 
-	AggResultState aggresultstate; /* what aggregation state the output of this Agg should be */
+	Oid aggfinaltype; /* if this is a CV's aggregate, this is the final type */
+
 } Aggref;
 
 /*
@@ -293,6 +286,8 @@ typedef struct WindowFunc
 	bool		winagg;			/* is function a simple aggregate? */
 	int			location;		/* token location, or -1 if unknown */
 	char 		winaggkind; /* aggregate kind (see pg_aggregate.h) */
+
+	Oid winfinaltype; /* if this is a CV's aggregate, this is the final type */
 } WindowFunc;
 
 /* ----------------

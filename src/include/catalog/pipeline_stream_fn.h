@@ -22,7 +22,9 @@
 #include "utils/relcache.h"
 
 #define is_stream_relation(rel) ((rel)->rd_rel->relkind == RELKIND_STREAM)
+#define is_stream_rte(rte) ((rte)->rtekind == RTE_STREAM)
 #define is_inferred_stream_relation(rel) (is_stream_relation(rel) && IsInferredStream((rel)->rd_id))
+#define is_inferred_stream_rte(rte) (is_stream_rte(rte) && IsInferredStream((rte)->relid))
 
 extern void UpdatePipelineStreamCatalog(void);
 

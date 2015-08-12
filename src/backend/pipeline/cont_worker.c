@@ -107,7 +107,7 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 
 	SetCombinerDestReceiverParams(state->dest, reader, id);
 
-	pstmt = GetContPlan(state->view);
+	pstmt = GetContPlan(state->view, Worker);
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot, InvalidSnapshot, state->dest, NULL, 0);
 	state->query_desc->snapshot = GetTransactionSnapshot();
 	state->query_desc->snapshot->copied = true;

@@ -40,7 +40,8 @@ typedef enum
 	FUNCDETAIL_AGGREGATE,		/* found a matching aggregate function */
 	FUNCDETAIL_WINDOWFUNC,		/* found a matching window function */
 	FUNCDETAIL_COERCION,			/* it's a type coercion request */
-	FUNCDETAIL_COMBINE			/* the function is a combine request */
+	FUNCDETAIL_MATREL_COMBINE, /* the function is a combine request against a matrel */
+	FUNCDETAIL_MATREL_FINALIZE, /* the function is a finalize request against a matrel */
 } FuncDetailCode;
 
 

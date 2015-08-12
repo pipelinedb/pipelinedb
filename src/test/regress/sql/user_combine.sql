@@ -236,3 +236,19 @@ DROP CONTINUOUS VIEW test_uc1;
 DROP TABLE test_uc_table1;
 DROP VIEW test_uc2_view;
 DROP CONTINUOUS VIEW test_uc2;
+
+CREATE CONTINUOUS VIEW over_1m AS
+SELECT date_trunc('minute', t::timestamptz) AS minute, avg(queue_length::float) AS load_avg
+FROM sysstat
+WHERE arrival_timestamp > clock_timestamp() - interval '1 hour'
+GROUP BY minute;
+
+CREATE over_5m AS
+SELECT first_value(minute) OVER w AS minute, combine(load_avg) OVER w AS load_avg
+FROM over_1m
+WINDOW w AS (ORDER BY minute DESC ROWS 4 PRECEDING);
+
+\d+ over_5m;
+
+DROP CONTINUOUS VIEW over_1m;
+DROP VIEW over_5m;

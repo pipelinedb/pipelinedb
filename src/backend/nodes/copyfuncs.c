@@ -1169,7 +1169,7 @@ _copyAggref(const Aggref *from)
 	COPY_SCALAR_FIELD(aggkind);
 	COPY_SCALAR_FIELD(agglevelsup);
 	COPY_LOCATION_FIELD(location);
-	COPY_SCALAR_FIELD(aggresultstate);
+	COPY_SCALAR_FIELD(aggfinaltype);
 
 	return newnode;
 }
@@ -1192,6 +1192,7 @@ _copyWindowFunc(const WindowFunc *from)
 	COPY_SCALAR_FIELD(winstar);
 	COPY_SCALAR_FIELD(winagg);
 	COPY_SCALAR_FIELD(winaggkind);
+	COPY_SCALAR_FIELD(winfinaltype);
 	COPY_LOCATION_FIELD(location);
 
 	return newnode;

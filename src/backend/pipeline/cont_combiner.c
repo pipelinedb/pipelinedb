@@ -98,12 +98,17 @@ prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 	 * see anything after the first batch was consumed.
 	 *
 	 */
+	Relation rel = heap_openrv(state->view->matrel, AccessShareLock);
+
 	plan->is_continuous = false;
 
 	scan = SetCombinerPlanTuplestorestate(plan, state->batch);
+	scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));
 
-	state->desc = ExecTypeFromTL(((Plan *) scan)->targetlist, false);
 	state->combine_plan = plan;
+	state->desc = scan->desc;
+
+	heap_close(rel, AccessShareLock);
 }
 
 /*
@@ -617,7 +622,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 	if (state->view == NULL)
 		return;
 
-	pstmt = GetContPlan(state->view);
+	pstmt = GetContPlan(state->view, Combiner);
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
 	/* this also sets the state's desc field */

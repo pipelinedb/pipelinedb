@@ -2171,7 +2171,7 @@ initialize_peragg(WindowAggState *winstate, WindowFunc *wfunc,
 		initvalAttNo = Anum_pg_aggregate_agginitval;
 	}
 
-	if (AGGKIND_IS_USER_COMBINE(wfunc->winaggkind))
+	if (AGGKIND_IS_COMBINE(wfunc->winaggkind))
 	{
 		HeapTuple combTuple = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
 				ObjectIdGetDatum(finalfn_oid),

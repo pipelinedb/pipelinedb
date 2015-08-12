@@ -5220,11 +5220,11 @@ DATA(insert OID = 4385 ( bloom_contains	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0
 DESCR("bloom filter contains item?");
 
 /* t-digest aggregate */
-DATA(insert OID = 4339 ( tdigest_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5034 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4339 ( tdigest_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5034 "701" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("t-digest aggregate");
 
 /* t-digest aggregate with user-supplied compression */
-DATA(insert OID = 4340 ( tdigest_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5034 "2283 23" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4340 ( tdigest_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5034 "701 23" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("t-digest aggregate");
 
 /* t-digest aggregate transition function */
@@ -5391,8 +5391,12 @@ DESCR("count-min sketch add");
 DATA(insert OID = 4387 ( cmsketch_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 5038 "5038 25 23" _null_ _null_ _null_ _null_ cmsketch_addn _null_ _null_ _null_ ));
 DESCR("count-min sketch add");
 
+/* generic finalize function */
+DATA(insert OID = 4388 ( finalize	PGNSP PGUID 12 1 0 2283 0 t f f f t f i 1 0 2283 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("generic user finalize function");
+
 /* global PipelineDB stats */
-DATA(insert OID = 4388 ( pipeline_stat_get PGNSP PGUID 12 1 1 0 0 f f f f t t s 0 0 2249 "" "{25,1184,20,20,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o,o}" "{type,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors,cv_create,cv_drop}" _null_ pipeline_stat_get _null_ _null_ _null_ ));
+DATA(insert OID = 4389 ( pipeline_stat_get PGNSP PGUID 12 1 1 0 0 f f f f t t s 0 0 2249 "" "{25,1184,20,20,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o,o}" "{type,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors,cv_create,cv_drop}" _null_ pipeline_stat_get _null_ _null_ _null_ ));
 DESCR("global pipelinedb status");
 
 /*

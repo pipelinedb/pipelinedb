@@ -3,12 +3,11 @@ CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PART
                             Table "public.cqwindow0_mrel0"
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
- key    | text(0)                  |           | extended |              | 
- sum    | numeric                  |           | main     |              | 
- _1     | bytea                    |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
+ key    | text(0)                  |           | extended |              | 
+ sum    | bytea                    |           | extended |              | 
 Indexes:
-    "cqwindow0_mrel0_expr_idx" btree (ls_hash_group(_0, key))
+    "cqwindow0_mrel0_expr_idx" btree (ls_hash_group(key, _0))
 Options: fillfactor=50
 
 \d+ cqwindow0;
@@ -19,7 +18,7 @@ Options: fillfactor=50
  sum    | numeric |           | main     | 
 View definition:
  SELECT cqwindow0_mrel0.key,
-    combine(naggstaterecv(cqwindow0_mrel0.3)) OVER (PARTITION BY cqwindow0_mrel0.1 ORDER BY cqwindow0_mrel0.4 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
+    combine(naggstaterecv(cqwindow0_mrel0.sum)) OVER (PARTITION BY cqwindow0_mrel0.key ORDER BY cqwindow0_mrel0._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
    FROM cqwindow0_mrel0;
 
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2);
@@ -62,12 +61,11 @@ CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITIO
                             Table "public.cqwindow1_mrel0"
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
- key    | text(0)                  |           | extended |              | 
- avg    | numeric                  |           | main     |              | 
- _1     | bigint[]                 |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
+ key    | text(0)                  |           | extended |              | 
+ avg    | bigint[]                 |           | extended |              | 
 Indexes:
-    "cqwindow1_mrel0_expr_idx" btree (ls_hash_group(_0, key))
+    "cqwindow1_mrel0_expr_idx" btree (ls_hash_group(key, _0))
 Options: fillfactor=50
 
 \d+ cqwindow1;
@@ -78,7 +76,7 @@ Options: fillfactor=50
  avg    | numeric |           | main     | 
 View definition:
  SELECT cqwindow1_mrel0.key,
-    combine(cqwindow1_mrel0.3) OVER (PARTITION BY cqwindow1_mrel0.1 ORDER BY cqwindow1_mrel0.4 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
+    combine(cqwindow1_mrel0.avg) OVER (PARTITION BY cqwindow1_mrel0.key ORDER BY cqwindow1_mrel0._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
    FROM cqwindow1_mrel0;
 
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);

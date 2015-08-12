@@ -36,7 +36,6 @@ ExecInitTuplestoreScan(TuplestoreScan *node, EState *estate, int eflags)
 	ExecInitResultTupleSlot(estate, &tss->ss.ps);
 	ExecInitScanTupleSlot(estate, &tss->ss);
 
-	node->desc = ExecTypeFromTL(((Plan *) node)->targetlist, false);
 	ExecSetSlotDescriptor(tss->ss.ss_ScanTupleSlot, node->desc);
 	ExecSetSlotDescriptor(tss->ss.ps.ps_ResultTupleSlot, node->desc);
 

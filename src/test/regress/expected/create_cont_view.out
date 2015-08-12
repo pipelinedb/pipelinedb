@@ -95,7 +95,7 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate3';
 View definition:
  SELECT cqcreate3_mrel0.key,
     cqcreate3_mrel0.count,
-    cqcreate3_mrel0.sum
+    numeric_sum(naggstaterecv(cqcreate3_mrel0.sum)) AS sum
    FROM cqcreate3_mrel0;
 
 \d+ cqcreate3_mrel0;
@@ -104,8 +104,7 @@ View definition:
 --------+---------+-----------+----------+--------------+-------------
  key    | text(0) |           | extended |              | 
  count  | bigint  |           | plain    |              | 
- sum    | numeric |           | main     |              | 
- _0     | bytea   |           | extended |              | 
+ sum    | bytea   |           | extended |              | 
 Indexes:
     "cqcreate3_mrel0_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
@@ -125,17 +124,16 @@ SELECT COUNT(*) FROM pipeline_query WHERE name='cqcreate4';
  sum    | numeric |           | main    | 
 View definition:
  SELECT cqcreate4_mrel0.count,
-    cqcreate4_mrel0.sum
+    numeric_sum(naggstaterecv(cqcreate4_mrel0.sum)) AS sum
    FROM cqcreate4_mrel0;
 
 \d+ cqcreate4_mrel0;
                     Table "public.cqcreate4_mrel0"
  Column |  Type   | Modifiers | Storage  | Stats target | Description 
 --------+---------+-----------+----------+--------------+-------------
- count  | bigint  |           | plain    |              | 
- sum    | numeric |           | main     |              | 
- _1     | bytea   |           | extended |              | 
  _0     | text(0) |           | extended |              | 
+ count  | bigint  |           | plain    |              | 
+ sum    | bytea   |           | extended |              | 
 Indexes:
     "cqcreate4_mrel0_expr_idx" btree (hash_group(_0))
 Options: fillfactor=50
@@ -168,8 +166,8 @@ View definition:
                               Table "public.cqcreate5_mrel0"
  Column |            Type             | Modifiers | Storage  | Stats target | Description 
 --------+-----------------------------+-----------+----------+--------------+-------------
- key    | text(0)                     |           | extended |              | 
  _0     | timestamp(0) with time zone |           | plain    |              | 
+ key    | text(0)                     |           | extended |              | 
 Indexes:
     "cqcreate5_mrel0__0_idx" btree (_0)
 Options: fillfactor=50
@@ -193,7 +191,7 @@ SELECT gc FROM pipeline_query WHERE name='cqcreate5';
 --------+--------+-----------+---------+-------------
  count  | bigint |           | plain   | 
 View definition:
- SELECT combine(cqcreate6_mrel0.1) AS count
+ SELECT combine(cqcreate6_mrel0.count) AS count
    FROM cqcreate6_mrel0
   WHERE cqcreate6_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second)
   GROUP BY cqcreate6_mrel0._1;
@@ -202,9 +200,9 @@ View definition:
                             Table "public.cqcreate6_mrel0"
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
- count  | bigint                   |           | plain    |              | 
- _1     | text(0)                  |           | extended |              | 
  _0     | timestamp with time zone |           | plain    |              | 
+ _1     | text(0)                  |           | extended |              | 
+ count  | bigint                   |           | plain    |              | 
 Indexes:
     "cqcreate6_mrel0_expr_idx" btree (ls_hash_group(_1, _0))
 Options: fillfactor=50
@@ -221,9 +219,9 @@ CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, A
  internal_avg | interval         |           | plain    | 
 View definition:
  SELECT cvavg_mrel0.key,
-    cvavg_mrel0.float_avg,
-    cvavg_mrel0.int_avg,
-    cvavg_mrel0.internal_avg
+    float8_avg(cvavg_mrel0.float_avg) AS float_avg,
+    int8_avg(cvavg_mrel0.int_avg) AS int_avg,
+    interval_avg(cvavg_mrel0.internal_avg) AS internal_avg
    FROM cvavg_mrel0;
 
 \d+ cvavg_mrel0;
@@ -231,12 +229,9 @@ View definition:
     Column    |        Type        | Modifiers | Storage  | Stats target | Description 
 --------------+--------------------+-----------+----------+--------------+-------------
  key          | text(0)            |           | extended |              | 
- float_avg    | double precision   |           | plain    |              | 
- _0           | double precision[] |           | extended |              | 
- int_avg      | numeric            |           | main     |              | 
- _1           | bigint[]           |           | extended |              | 
- internal_avg | interval           |           | plain    |              | 
- _2           | interval[]         |           | extended |              | 
+ float_avg    | double precision[] |           | extended |              | 
+ int_avg      | bigint[]           |           | extended |              | 
+ internal_avg | interval[]         |           | extended |              | 
 Indexes:
     "cvavg_mrel0_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
@@ -248,15 +243,14 @@ CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM crea
 -----------+------+-----------+----------+-------------
  count_col | json |           | extended | 
 View definition:
- SELECT cvjson_mrel0.count_col
+ SELECT json_agg_finalfn(byteatostringinfo(cvjson_mrel0.count_col)) AS count_col
    FROM cvjson_mrel0;
 
 \d+ cvjson_mrel0;
                       Table "public.cvjson_mrel0"
   Column   | Type  | Modifiers | Storage  | Stats target | Description 
 -----------+-------+-----------+----------+--------------+-------------
- count_col | json  |           | extended |              | 
- _0        | bytea |           | extended |              | 
+ count_col | bytea |           | extended |              | 
 Options: fillfactor=50
 
 CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM cont_create_stream2;
@@ -266,15 +260,14 @@ CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::int
 -----------------+------+-----------+----------+-------------
  json_object_agg | json |           | extended | 
 View definition:
- SELECT cvjsonobj_mrel0.json_object_agg
+ SELECT json_object_agg_finalfn(byteatostringinfo(cvjsonobj_mrel0.json_object_agg)) AS json_object_agg
    FROM cvjsonobj_mrel0;
 
 \d+ cvjsonobj_mrel0;
                        Table "public.cvjsonobj_mrel0"
      Column      | Type  | Modifiers | Storage  | Stats target | Description 
 -----------------+-------+-----------+----------+--------------+-------------
- json_object_agg | json  |           | extended |              | 
- _0              | bytea |           | extended |              | 
+ json_object_agg | bytea |           | extended |              | 
 Options: fillfactor=50
 
 -- But these aggregates don't
@@ -321,7 +314,7 @@ CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text,
  string_agg | text    |           | extended | 
 View definition:
  SELECT cvtext_mrel0.key,
-    cvtext_mrel0.string_agg
+    string_agg_finalfn(stringaggstaterecv(cvtext_mrel0.string_agg)) AS string_agg
    FROM cvtext_mrel0;
 
 \d+ cvtext_mrel0;
@@ -329,8 +322,7 @@ View definition:
    Column   |  Type   | Modifiers | Storage  | Stats target | Description 
 ------------+---------+-----------+----------+--------------+-------------
  key        | text(0) |           | extended |              | 
- string_agg | text    |           | extended |              | 
- _0         | bytea   |           | extended |              | 
+ string_agg | bytea   |           | extended |              | 
 Indexes:
     "cvtext_mrel0_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
@@ -363,7 +355,7 @@ CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::in
  value  | double precision |           | plain    | 
 View definition:
  SELECT cqaggexpr2_mrel0.key,
-    cqaggexpr2_mrel0._0 + cqaggexpr2_mrel0._1::double precision AS value
+    float8_avg(cqaggexpr2_mrel0._0) + cqaggexpr2_mrel0._1::double precision AS value
    FROM cqaggexpr2_mrel0;
 
 \d+ cqaggexpr2_mrel0;
@@ -371,8 +363,7 @@ View definition:
  Column |        Type        | Modifiers | Storage  | Stats target | Description 
 --------+--------------------+-----------+----------+--------------+-------------
  key    | text(0)            |           | extended |              | 
- _0     | double precision   |           | plain    |              | 
- _2     | double precision[] |           | extended |              | 
+ _0     | double precision[] |           | extended |              | 
  _1     | integer            |           | plain    |              | 
 Indexes:
     "cqaggexpr2_mrel0_expr_idx" btree (hash_group(key))
@@ -387,7 +378,7 @@ CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM co
  value  | bigint  |           | plain    | 
 View definition:
  SELECT cqaggexpr3_mrel0.key,
-    combine(cqaggexpr3_mrel0.2) AS value
+    combine(cqaggexpr3_mrel0.value) AS value
    FROM cqaggexpr3_mrel0
   WHERE cqaggexpr3_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second)
   GROUP BY cqaggexpr3_mrel0.key;
@@ -396,9 +387,9 @@ View definition:
                             Table "public.cqaggexpr3_mrel0"
  Column |           Type           | Modifiers | Storage  | Stats target | Description 
 --------+--------------------------+-----------+----------+--------------+-------------
+ _0     | timestamp with time zone |           | plain    |              | 
  key    | text(0)                  |           | extended |              | 
  value  | bigint                   |           | plain    |              | 
- _0     | timestamp with time zone |           | plain    |              | 
 Indexes:
     "cqaggexpr3_mrel0_expr_idx" btree (ls_hash_group(key, _0))
 Options: fillfactor=50
@@ -412,7 +403,7 @@ CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS v
  value  | double precision |           | plain    | 
 View definition:
  SELECT cqaggexpr4_mrel0.key,
-    floor(cqaggexpr4_mrel0._0) AS value
+    floor(float8_avg(cqaggexpr4_mrel0._0)) AS value
    FROM cqaggexpr4_mrel0;
 
 \d+ cqaggexpr4_mrel0;
@@ -420,8 +411,7 @@ View definition:
  Column |        Type        | Modifiers | Storage  | Stats target | Description 
 --------+--------------------+-----------+----------+--------------+-------------
  key    | text(0)            |           | extended |              | 
- _0     | double precision   |           | plain    |              | 
- _1     | double precision[] |           | extended |              | 
+ _0     | double precision[] |           | extended |              | 
 Indexes:
     "cqaggexpr4_mrel0_expr_idx" btree (hash_group(key))
 Options: fillfactor=50
