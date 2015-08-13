@@ -7,7 +7,7 @@ CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PART
  key    | text(0)                  |           | extended |              | 
  sum    | bytea                    |           | extended |              | 
 Indexes:
-    "cqwindow0_mrel0_expr_idx" btree (ls_hash_group(key, _0))
+    "cqwindow0_mrel0_expr_idx" btree (ls_hash_group(_0, key))
 Options: fillfactor=50
 
 \d+ cqwindow0;
@@ -73,7 +73,7 @@ CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITIO
  key    | text(0)                  |           | extended |              | 
  avg    | bigint[]                 |           | extended |              | 
 Indexes:
-    "cqwindow1_mrel0_expr_idx" btree (ls_hash_group(key, _0))
+    "cqwindow1_mrel0_expr_idx" btree (ls_hash_group(_0, key))
 Options: fillfactor=50
 
 \d+ cqwindow1;

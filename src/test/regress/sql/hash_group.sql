@@ -13,7 +13,7 @@ FROM generate_series(1, 100) AS i ORDER BY key;
 
 -- Ensure that hash index is created and cannot be dropped
 CREATE CONTINUOUS VIEW hash_group AS SELECT x::int, COUNT(*) FROM hash_group_stream GROUP BY x;
-CREATE CONTINUOUS VIEW ls_hash_group AS SELECT x::int, y::timestamptz, COUNT(*) FROM hash_group_stream GROUP BY x, y;
+CREATE CONTINUOUS VIEW ls_hash_group AS SELECT x::int, minute(y::timestamptz), COUNT(*) FROM hash_group_stream WHERE ( y > clock_timestamp() - interval '5 hour' ) GROUP BY x, minute;
 
 \d+ hash_group_mrel0;
 \d+ ls_hash_group_mrel0;
