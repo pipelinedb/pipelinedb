@@ -57,8 +57,6 @@
 #define DATE_TRUNC_HOUR "hour"
 #define DATE_TRUNC_MINUTE "minute"
 #define DATE_TRUNC_SECOND "second"
-#define DEFAULT_WINDOW_GRANULARITY "second"
-#define SLIDING_WINDOW_FAN_OUT 30
 #define SECOND_USEC ((TimeOffset) 1000 * 1000)
 #define MIN_USEC (60 * SECOND_USEC)
 #define HOUR_USEC (60 * MIN_USEC)
