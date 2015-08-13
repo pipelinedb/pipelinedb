@@ -1841,15 +1841,23 @@ hoist_node(List **target_list, Node *node, ContAnalyzeContext *context)
 static Node *
 create_agg_node_for_view_overlay(ColumnRef *cref, FuncCall *workeragg, ContAnalyzeContext *context)
 {
-	char *name = context->view_combines ? MATREL_COMBINE : MATREL_FINALIZE;
-	FuncCall *agg = makeNode(FuncCall);
-	agg->funcname = list_make1(makeString(name));
-	agg->args = list_make1(cref);
+	FuncCall *finalize = makeNode(FuncCall);
+	finalize->funcname = list_make1(makeString(MATREL_FINALIZE));
 
-	/* Copy over any OVER clause from the worker. */
-	agg->over = workeragg->over;
+	if (context->view_combines)
+	{
+		FuncCall *combine = makeNode(FuncCall);
+		combine->funcname = list_make1(makeString(MATREL_COMBINE));
+		combine->args = list_make1(cref);
+		/* Copy over any OVER clause from the worker. */
+		combine->over = workeragg->over;
 
-	return (Node *) agg;
+		finalize->args = list_make1(combine);
+	}
+	else
+		finalize->args = list_make1(cref);
+
+	return (Node *) finalize;
 }
 
 /*
@@ -2613,6 +2621,7 @@ make_combine_agg_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var,
 	Oid type;
 	Oid finaltype;
 	Oid statetype;
+	Oid aggtype;
 	Query *q = GetContWorkerQuery(cvrv);
 
 	Assert(!IsContQueryWorkerProcess());
@@ -2620,6 +2629,9 @@ make_combine_agg_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var,
 	result = attr_to_aggs(var->varattno, q->targetList);
 
 	extract_agg_final_info(result, &fnoid, &type, &finaltype);
+	GetCombineInfo(fnoid, &combinefn, &transoutfn, &combineinfn, &statetype);
+
+	aggtype = OidIsValid(statetype) ? statetype : finaltype;
 
 	if (IsA(result, Aggref))
 	{
@@ -2635,7 +2647,7 @@ make_combine_agg_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var,
 
 			win->winfnoid = agg->aggfnoid;
 			win->winaggkind = AGGKIND_COMBINE;
-			win->wintype = finaltype;
+			win->wintype = aggtype;
 			win->winagg = true;
 			win->winstar = false;
 
@@ -2645,12 +2657,10 @@ make_combine_agg_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var,
 		{
 			agg->aggkind = AGGKIND_COMBINE;
 			agg->aggfilter = NULL;
-			agg->aggtype = finaltype;
+			agg->aggtype = aggtype;
 			agg->aggstar = false;
 		}
 	}
-
-	GetCombineInfo(fnoid, &combinefn, &transoutfn, &combineinfn, &statetype);
 
 	if (OidIsValid(statetype))
 		var->vartype = statetype;
@@ -2715,24 +2725,26 @@ coerce_to_finalize(ParseState *pstate, Oid aggfn, Oid type,
 	 */
 	func->funcresulttype = OidIsValid(finaltype) ? finaltype : type;
 	func->funcid = final;
-	func->args = make_combine_args(pstate, combineinfn, arg);
+
+	if (IsA(arg, Var))
+		func->args = make_combine_args(pstate, combineinfn, arg);
+	else
+		func->args = list_make1(arg);
 
 	/* final functions may take null dummy arguments for signature resolution */
 	for (i=1; i<procform->pronargs; i++)
-	{
 		func->args = lappend(func->args, makeNullConst(procform->proargtypes.values[i], -1, InvalidOid));
-	}
 
 	ReleaseSysCache(tup);
 }
 
 /*
- * make_combine_agg_for_viewdef
+ * make_finalize_for_viewdef
  *
  * Creates a combine aggregate for a view definition against a matrel
  */
 static Node *
-make_finalize_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var)
+make_finalize_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var, Node *arg)
 {
 	Node *result;
 	Oid fnoid;
@@ -2753,9 +2765,9 @@ make_finalize_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var)
 	GetCombineInfo(fnoid, &combinefn, &transoutfn, &combineinfn, &statetype);
 
 	if (!OidIsValid(statetype))
-		return (Node *) var;
+		return (Node *) arg;
 
-	coerce_to_finalize(pstate, fnoid, type, finaltype, result, (Node *) var, combineinfn);
+	coerce_to_finalize(pstate, fnoid, type, finaltype, result, arg, combineinfn);
 
 	return (Node *) result;
 }
@@ -3108,26 +3120,55 @@ ParseFinalizeFuncCall(ParseState *pstate, List *fargs, int location)
 	RangeTblEntry *rte;
 	RangeVar *matrelrv;
 	Relation rel;
+	List *vars;
 
 	if (list_length(fargs) != 1)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 				 errmsg("finalize called with %d arguments", list_length(fargs)),
-				 errhint("finalize must be called with a single column reference as its argument.")));
+				 errhint("finalize must be called with a single expression as its argument.")));
 	}
 
 	arg = linitial(fargs);
 
-	if (!IsA(arg, Var))
+	if (IsA(arg, Aggref))
+	{
+		Aggref *agg = (Aggref *) arg;
+
+		if (!AGGKIND_IS_COMBINE(agg->aggkind))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					errmsg("finalize called with an invalid expression"),
+					errhint("finalize must be called with a single column reference or a combine(...) as its argument.")));
+
+		arg = linitial(agg->args);
+	}
+	else if (IsA(arg, WindowFunc))
+	{
+		WindowFunc *win = (WindowFunc *) arg;
+
+		if (!AGGKIND_IS_COMBINE(win->winaggkind))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					errmsg("finalize called with an invalid expression"),
+					errhint("finalize must be called with a single column reference or a combine(...) as its argument.")));
+
+		arg = linitial(win->args);
+	}
+
+	/* The argument could be wrapped in a transout function */
+	vars = pull_var_and_aggs(arg);
+
+	if (list_length(vars) != 1)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 				 errmsg("finalize called with an invalid expression"),
-				 errhint("finalize must be called with a single column reference as its argument.")));
+				 errhint("finalize must be called with a single column reference or a combine(...) as its argument.")));
 	}
 
-	var = (Var *) arg;
+	var = (Var *) linitial(vars);
 	rte = list_nth(pstate->p_rtable, var->varno - 1);
 
 	rel = heap_open(rte->relid, NoLock);
@@ -3143,8 +3184,7 @@ ParseFinalizeFuncCall(ParseState *pstate, List *fargs, int location)
 				 errhint("Only aggregate continuous view columns can be finalized.")));
 	}
 
-	return make_finalize_for_viewdef(pstate, rv, var);
-
+	return make_finalize_for_viewdef(pstate, rv, var, linitial(fargs));
 }
 
 /*
