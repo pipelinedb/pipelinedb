@@ -58,6 +58,10 @@
 #define DATE_TRUNC_MINUTE "minute"
 #define DATE_TRUNC_SECOND "second"
 #define DEFAULT_WINDOW_GRANULARITY "second"
+#define SLIDING_WINDOW_FAN_OUT 30
+#define SECOND_USEC ((TimeOffset) 1000 * 1000)
+#define MIN_USEC (60 * SECOND_USEC)
+#define HOUR_USEC (60 * MIN_USEC)
 #define INTERNAL_COLNAME_PREFIX "_"
 
 /*
@@ -500,11 +504,36 @@ find_clock_timestamp_expr(Node *node, ContAnalyzeContext *context)
 	return raw_expression_tree_walker(node, find_clock_timestamp_expr, (void *) context);
 }
 
+static char *
+get_truncation_from_interval_expr(Node *node)
+{
+	Expr *expr = (Expr *) transformExpr(make_parsestate(NULL), node, EXPR_KIND_WHERE);
+	Const *c;
+	Interval *i;
+
+	Assert(IsA(expr, Const));
+	c = (Const *) expr;
+	Assert(c->consttype == INTERVALOID);
+
+	i = (Interval *) c->constvalue;
+
+	/* We make the step size one unit smaller than the granularity of the window size unit */
+	if (i->month)
+		return DATE_TRUNC_DAY;
+	else if (i->day)
+		return DATE_TRUNC_HOUR;
+	else if (i->time > HOUR_USEC)
+		return DATE_TRUNC_MINUTE;
+
+	return DATE_TRUNC_SECOND;
+}
+
 static ColumnRef *
 validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext *context)
 {
 	Node *col = node;
 	bool saw_expr = false;
+	bool saw_trunc = false;
 
 	context->cols = NIL;
 	collect_types_and_cols(node, context);
@@ -531,13 +560,15 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 			FuncCall *fc = (FuncCall *) col;
 			char *name = NameListToString(fc->funcname);
 
-			if (!(pg_strcasecmp(name, DATE_TRUNC) == 0 ||
+			if (pg_strcasecmp(name, DATE_TRUNC) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_DAY) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_HOUR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MINUTE) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0))
+					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0)
+				saw_trunc = true;
+			else
 				return NULL;
 
 			/* Date truncation should happen at the top level */
@@ -570,6 +601,23 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 		}
 
 		return NULL;
+	}
+
+	if (context->is_sw && !saw_trunc)
+	{
+		A_Expr *ct_expr = (A_Expr *) context->expr;
+		TypeCast *c;
+		char *fname;
+
+		Assert(ct_expr && IsA(ct_expr, A_Expr));
+
+		c = (TypeCast *) ct_expr->rexpr;
+		Assert(IsA(c, TypeCast) && IsA(c->arg, A_Const));
+		fname = get_truncation_from_interval_expr((Node *) c);
+
+		ereport(NOTICE,
+				(errmsg("window width is \"%s\" with a step size of \"1 %s\"", strVal(&((A_Const *) c->arg)->val), fname),
+				errhint("Use a datetime truncation function to explicitly set the step size.")));
 	}
 
 	return (ColumnRef *) col;
@@ -637,6 +685,7 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, ContAnalyzeContext *
 	if (pg_strcasecmp(NameListToString(fc->funcname), CLOCK_TIMESTAMP) != 0)
 		goto error;
 
+	context->expr = ct_expr;
 	if (validate_window_timestamp_expr(stmt, col_expr, context) == NULL)
 		goto error;
 
@@ -1857,13 +1906,13 @@ make_distincts_explicit(SelectStmt *stmt, ContAnalyzeContext *context)
 }
 
 static bool
-truncate_timestamp_field(Node *expr, ContAnalyzeContext *context)
+truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
 {
 	ListCell *lc;
 	bool truncated = false;
 
 	context->funcs = NIL;
-	collect_funcs(expr, context);
+	collect_funcs(time, context);
 
 	foreach(lc, context->funcs)
 	{
@@ -1886,20 +1935,37 @@ truncate_timestamp_field(Node *expr, ContAnalyzeContext *context)
 	if (!truncated)
 	{
 		FuncCall *func = makeNode(FuncCall);
-		func->funcname = list_make1(makeString(DATE_TRUNC_SECOND));
-		func->args = list_make1(copyObject(expr));
-		expr = (Node *) func;
+		func->args = list_make1(copyObject(time));
+
+		/* For sliding windows we try to keep around a certain "fan in" threshold */
+		if (sw_expr)
+		{
+			A_Expr *ct_expr;
+			char *fname;
+
+			if (equal(sw_expr->lexpr, time))
+				ct_expr = (A_Expr *) sw_expr->rexpr;
+			else
+				ct_expr = (A_Expr *) sw_expr->lexpr;
+
+			fname = get_truncation_from_interval_expr(ct_expr->rexpr);
+			func->funcname = list_make1(makeString(fname));
+		}
+		else
+			func->funcname = list_make1(makeString(DATE_TRUNC_SECOND));
+
+		time = (Node *) func;
 	}
 
-	context->expr = expr;
+	context->expr = time;
 
 	return !truncated;
 }
 
 static ColumnRef *
-hoist_time_node(SelectStmt *proc, Node *time, ContAnalyzeContext *context)
+hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
 {
-	bool replace = truncate_timestamp_field(time, context);
+	bool replace = truncate_timestamp_field(time, sw_expr, context);
 	ListCell *lc;
 	bool found = false;
 	ColumnRef *cref;
@@ -1956,7 +2022,7 @@ static void
 proj_and_group_for_windows(SelectStmt *proc, SelectStmt *view, ContAnalyzeContext *context)
 {
 	Node *time;
-	A_Expr *sw_expr;
+	A_Expr *sw_expr = NULL;
 	ListCell *lc;
 	ColumnRef *cref;
 
@@ -2049,7 +2115,7 @@ proj_and_group_for_windows(SelectStmt *proc, SelectStmt *view, ContAnalyzeContex
 
 	/* Create and truncate projection and grouping on temporal expression */
 	if (context->view_combines)
-		cref = hoist_time_node(proc, time, context);
+		cref = hoist_time_node(proc, time, sw_expr, context);
 	else
 		cref = hoist_node(&proc->targetList, time, context);
 

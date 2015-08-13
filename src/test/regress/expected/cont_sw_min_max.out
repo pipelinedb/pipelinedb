@@ -17,6 +17,8 @@ min(txt::text) AS txtmin, max(txt) AS txtmax,
 min(n::numeric) AS nmin, max(n) AS nmax,
 min(a::int[]) AS amin, max(a) AS amax
 FROM sw_minmax_stream WHERE arrival_timestamp > clock_timestamp() - interval '60 second' GROUP BY key;
+NOTICE:  window width is "60 second" with a step size of "1 second"
+HINT:  Use a datetime truncation function to explicitly set the step size.
 INSERT INTO sw_minmax_stream
 (key, i8, i4, i2, o, f8, f4, d, t, tz, m, ts, tstz, ts1, ts0, txt, n, a) VALUES
 ('x', 0, 1, 2, 443, 42.33, 80003.00001, '2014-12-31', '2014-02-28 00:00:00', '2014-02-28 00:00:00-08', 999023.39, '2014-01-01 00:00:00', '2014-01-01 00:00:01-08', '2014-01-01 00:00:00', '2014-01-02 00:00:00', 'first row', -0.00000000042, '{-1, 0, 1}');
