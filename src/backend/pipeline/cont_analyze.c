@@ -58,6 +58,10 @@
 #define DATE_TRUNC_MINUTE "minute"
 #define DATE_TRUNC_SECOND "second"
 #define DEFAULT_WINDOW_GRANULARITY "second"
+#define SLIDING_WINDOW_FAN_OUT 30
+#define SECOND_USEC ((TimeOffset) 1000 * 1000)
+#define MIN_USEC (60 * SECOND_USEC)
+#define HOUR_USEC (60 * MIN_USEC)
 #define INTERNAL_COLNAME_PREFIX "_"
 
 /*
@@ -1857,13 +1861,13 @@ make_distincts_explicit(SelectStmt *stmt, ContAnalyzeContext *context)
 }
 
 static bool
-truncate_timestamp_field(Node *expr, ContAnalyzeContext *context)
+truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
 {
 	ListCell *lc;
 	bool truncated = false;
 
 	context->funcs = NIL;
-	collect_funcs(expr, context);
+	collect_funcs(time, context);
 
 	foreach(lc, context->funcs)
 	{
@@ -1886,20 +1890,58 @@ truncate_timestamp_field(Node *expr, ContAnalyzeContext *context)
 	if (!truncated)
 	{
 		FuncCall *func = makeNode(FuncCall);
-		func->funcname = list_make1(makeString(DATE_TRUNC_SECOND));
-		func->args = list_make1(copyObject(expr));
-		expr = (Node *) func;
+		func->args = list_make1(copyObject(time));
+
+		/* For sliding windows we try to keep around a certain "fan in" threshold */
+		if (sw_expr)
+		{
+			A_Expr *ct_expr;
+			Expr *expr;
+			Const *c;
+			Interval *i;
+			char *fname;
+
+			if (equal(sw_expr->lexpr, time))
+				ct_expr = (A_Expr *) sw_expr->rexpr;
+			else
+				ct_expr = (A_Expr *) sw_expr->lexpr;
+
+			expr = (Expr *) transformExpr(make_parsestate(NULL), ct_expr->rexpr, EXPR_KIND_WHERE);
+			Assert(IsA(expr, Const));
+			c = (Const *) expr;
+			Assert(c->consttype == INTERVALOID);
+
+			i = (Interval *) c->constvalue;
+
+			/* We make the step size one unit smaller than the granularity of the window size unit */
+			if (i->month >= 12)
+				fname = DATE_TRUNC_MONTH;
+			else if (i->month)
+				fname = DATE_TRUNC_DAY;
+			else if (i->day)
+				fname = DATE_TRUNC_HOUR;
+			else if (i->time > HOUR_USEC)
+				fname = DATE_TRUNC_MINUTE;
+			else
+				fname = DATE_TRUNC_SECOND;
+
+			func->funcname = list_make1(makeString(fname));
+		}
+		else
+			func->funcname = list_make1(makeString(DATE_TRUNC_SECOND));
+
+		time = (Node *) func;
 	}
 
-	context->expr = expr;
+	context->expr = time;
 
 	return !truncated;
 }
 
 static ColumnRef *
-hoist_time_node(SelectStmt *proc, Node *time, ContAnalyzeContext *context)
+hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContext *context)
 {
-	bool replace = truncate_timestamp_field(time, context);
+	bool replace = truncate_timestamp_field(time, sw_expr, context);
 	ListCell *lc;
 	bool found = false;
 	ColumnRef *cref;
@@ -1956,7 +1998,7 @@ static void
 proj_and_group_for_windows(SelectStmt *proc, SelectStmt *view, ContAnalyzeContext *context)
 {
 	Node *time;
-	A_Expr *sw_expr;
+	A_Expr *sw_expr = NULL;
 	ListCell *lc;
 	ColumnRef *cref;
 
@@ -2049,7 +2091,7 @@ proj_and_group_for_windows(SelectStmt *proc, SelectStmt *view, ContAnalyzeContex
 
 	/* Create and truncate projection and grouping on temporal expression */
 	if (context->view_combines)
-		cref = hoist_time_node(proc, time, context);
+		cref = hoist_time_node(proc, time, sw_expr, context);
 	else
 		cref = hoist_node(&proc->targetList, time, context);
 
