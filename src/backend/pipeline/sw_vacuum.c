@@ -36,7 +36,9 @@
 static Node *
 get_cq_vacuum_expr(RangeVar *rv)
 {
-	return (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, GetSWExpr(rv), -1);
+	Node *expr = GetSWExpr(rv);
+	Assert(expr);
+	return (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, expr, -1);
 }
 
 /*

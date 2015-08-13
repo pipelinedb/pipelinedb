@@ -3288,8 +3288,6 @@ GetSWExpr(RangeVar *cv)
 	parsetree_list = pg_parse_query(sql);
 	TransformSelectStmtForContProcess(cv, linitial(parsetree_list), &view, Worker);
 
-	Assert(view->whereClause);
-
 	return view->whereClause;
 }
 
@@ -3299,6 +3297,9 @@ GetSWTimeColumn(RangeVar *rv)
 	Node *expr = GetSWExpr(rv);
 	ContAnalyzeContext context;
 
+	if (expr == NULL)
+		return NULL;
+
 	context.cols = NIL;
 	context.types = NIL;
 
@@ -3307,4 +3308,44 @@ GetSWTimeColumn(RangeVar *rv)
 	Assert(list_length(context.cols) == 1);
 
 	return linitial(context.cols);
+}
+
+ColumnRef *
+GetWindowTimeColumn(RangeVar *cv)
+{
+	char *sql;
+	List *parsetree_list;
+	SelectStmt *view;
+	ContAnalyzeContext context;
+
+	sql = GetQueryString(cv);
+	parsetree_list = pg_parse_query(sql);
+	TransformSelectStmtForContProcess(cv, linitial(parsetree_list), &view, Worker);
+
+	if (view->whereClause)
+	{
+		context.cols = NIL;
+		context.types = NIL;
+
+		collect_types_and_cols(view->whereClause, &context);
+
+		Assert(list_length(context.cols) == 1);
+
+		return linitial(context.cols);
+	}
+
+	context.windows = NIL;
+	collect_windows(view, &context);
+
+	if (list_length(context.windows))
+	{
+		WindowDef *win = linitial(context.windows);
+		SortBy *sort = linitial(win->orderClause);
+
+		Assert(IsA(sort->node, ColumnRef));
+
+		return (ColumnRef *) sort->node;
+	}
+
+	return NULL;
 }

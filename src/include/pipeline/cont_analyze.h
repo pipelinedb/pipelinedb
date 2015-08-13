@@ -67,6 +67,7 @@ extern Query *GetContWorkerQuery(RangeVar *rv);
 
 extern Node *GetSWExpr(RangeVar *rv);
 extern ColumnRef *GetSWTimeColumn(RangeVar *rv);
+extern ColumnRef *GetWindowTimeColumn(RangeVar *cv);
 
 /* Deparsing */
 extern char *deparse_cont_query_def(Query *query);
