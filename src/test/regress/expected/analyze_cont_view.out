@@ -149,7 +149,11 @@ CREATE CONTINUOUS VIEW cqanalyze37 AS SELECT key::text from stream ORDER BY arri
 ERROR:  continuous queries don't support ORDER BY
 -- Sliding window queries
 CREATE CONTINUOUS VIEW cqanalyze38 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE arrival_timestamp > clock_timestamp() - interval '1 hour';
+NOTICE:  window width is "1 hour" with a step size of "1 second"
+HINT:  Use a datetime truncation function to explicitly set the step size.
 CREATE CONTINUOUS VIEW cqanalyze39 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE arrival_timestamp > clock_timestamp() - interval '1 hour' AND key::text='pipelinedb';
+NOTICE:  window width is "1 hour" with a step size of "1 second"
+HINT:  Use a datetime truncation function to explicitly set the step size.
 CREATE CONTINUOUS VIEW cqanalyze40 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE NOT arrival_timestamp > clock_timestamp() - interval '1 hour';
 ERROR:  clock_timestamp() may only appear as a top-level conjunction predicate
 LINE 1: ...analyze_cont_stream WHERE NOT arrival_timestamp > clock_time...
@@ -179,7 +183,11 @@ LINE 1: ...ot_created AS SELECT g::integer, dense_rank(2, 3, 4) WITHIN ...
 CREATE CONTINUOUS VIEW cqanalyze47 AS SELECT g::integer, rank(2, 3, 4) WITHIN GROUP (ORDER BY x::integer, y::integer, z::integer), sum(x + y + z) FROM analyze_cont_stream4 GROUP BY g;
 -- Sliding windows
 CREATE CONTINUOUS VIEW cqanalyze48 AS SELECT cume_dist(2) WITHIN GROUP (ORDER BY x::integer DESC) FROM analyze_cont_stream3 WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
+NOTICE:  window width is "5 minutes" with a step size of "1 second"
+HINT:  Use a datetime truncation function to explicitly set the step size.
 CREATE CONTINUOUS VIEW cqanalyze49 AS SELECT percent_rank(2) WITHIN GROUP (ORDER BY x::integer DESC), rank(2) WITHIN GROUP (ORDER BY x) FROM analyze_cont_stream3 WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
+NOTICE:  window width is "5 minutes" with a step size of "1 second"
+HINT:  Use a datetime truncation function to explicitly set the step size.
 -- Verify that we get an error if we try to create a CV that only selects from tables
 CREATE TABLE cqanalyze_table (id integer);
 CREATE CONTINUOUS VIEW error_not_created AS SELECT cqanalyze_table.id::integer FROM cqanalyze_table;
@@ -210,7 +218,11 @@ LINE 1: ...REATE CONTINUOUS VIEW error_not_created AS SELECT percentile...
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 -- Sliding windows
 CREATE CONTINUOUS VIEW cqanalyze52 AS SELECT g::integer, percentile_cont(ARRAY[0.2, 0.8]) WITHIN GROUP (ORDER BY x::float), percentile_cont(0.9) WITHIN GROUP (ORDER BY y::integer) + percentile_cont(0.1) WITHIN GROUP (ORDER BY z::numeric) AS col FROM analyze_cont_stream6 WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes') GROUP BY g;
+NOTICE:  window width is "5 minutes" with a step size of "1 second"
+HINT:  Use a datetime truncation function to explicitly set the step size.
 CREATE CONTINUOUS VIEW cqanalyze53 AS SELECT percentile_cont(0.1) WITHIN GROUP (ORDER BY x::float + y::integer) FROM analyze_cont_stream3 WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
+NOTICE:  window width is "5 minutes" with a step size of "1 second"
+HINT:  Use a datetime truncation function to explicitly set the step size.
 CREATE CONTINUOUS VIEW funcs AS SELECT floor(x::float8), date_trunc('day', arrival_timestamp), COUNT(*) FROM stream GROUP BY floor, date_trunc;
 DROP CONTINUOUS VIEW cqanalyze0;
 DROP CONTINUOUS VIEW cqanalyze1;

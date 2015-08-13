@@ -504,11 +504,36 @@ find_clock_timestamp_expr(Node *node, ContAnalyzeContext *context)
 	return raw_expression_tree_walker(node, find_clock_timestamp_expr, (void *) context);
 }
 
+static char *
+get_truncation_from_interval_expr(Node *node)
+{
+	Expr *expr = (Expr *) transformExpr(make_parsestate(NULL), node, EXPR_KIND_WHERE);
+	Const *c;
+	Interval *i;
+
+	Assert(IsA(expr, Const));
+	c = (Const *) expr;
+	Assert(c->consttype == INTERVALOID);
+
+	i = (Interval *) c->constvalue;
+
+	/* We make the step size one unit smaller than the granularity of the window size unit */
+	if (i->month)
+		return DATE_TRUNC_DAY;
+	else if (i->day)
+		return DATE_TRUNC_HOUR;
+	else if (i->time > HOUR_USEC)
+		return DATE_TRUNC_MINUTE;
+
+	return DATE_TRUNC_SECOND;
+}
+
 static ColumnRef *
 validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext *context)
 {
 	Node *col = node;
 	bool saw_expr = false;
+	bool saw_trunc = false;
 
 	context->cols = NIL;
 	collect_types_and_cols(node, context);
@@ -535,13 +560,15 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 			FuncCall *fc = (FuncCall *) col;
 			char *name = NameListToString(fc->funcname);
 
-			if (!(pg_strcasecmp(name, DATE_TRUNC) == 0 ||
+			if (pg_strcasecmp(name, DATE_TRUNC) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_DAY) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_HOUR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MINUTE) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0))
+					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0)
+				saw_trunc = true;
+			else
 				return NULL;
 
 			/* Date truncation should happen at the top level */
@@ -574,6 +601,23 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 		}
 
 		return NULL;
+	}
+
+	if (context->is_sw && !saw_trunc)
+	{
+		A_Expr *ct_expr = (A_Expr *) context->expr;
+		TypeCast *c;
+		char *fname;
+
+		Assert(ct_expr && IsA(ct_expr, A_Expr));
+
+		c = (TypeCast *) ct_expr->rexpr;
+		Assert(IsA(c, TypeCast) && IsA(c->arg, A_Const));
+		fname = get_truncation_from_interval_expr((Node *) c);
+
+		ereport(NOTICE,
+				(errmsg("window width is \"%s\" with a step size of \"1 %s\"", strVal(&((A_Const *) c->arg)->val), fname),
+				errhint("Use a datetime truncation function to explicitly set the step size.")));
 	}
 
 	return (ColumnRef *) col;
@@ -641,6 +685,7 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, ContAnalyzeContext *
 	if (pg_strcasecmp(NameListToString(fc->funcname), CLOCK_TIMESTAMP) != 0)
 		goto error;
 
+	context->expr = ct_expr;
 	if (validate_window_timestamp_expr(stmt, col_expr, context) == NULL)
 		goto error;
 
@@ -1896,9 +1941,6 @@ truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *contex
 		if (sw_expr)
 		{
 			A_Expr *ct_expr;
-			Expr *expr;
-			Const *c;
-			Interval *i;
 			char *fname;
 
 			if (equal(sw_expr->lexpr, time))
@@ -1906,25 +1948,7 @@ truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *contex
 			else
 				ct_expr = (A_Expr *) sw_expr->lexpr;
 
-			expr = (Expr *) transformExpr(make_parsestate(NULL), ct_expr->rexpr, EXPR_KIND_WHERE);
-			Assert(IsA(expr, Const));
-			c = (Const *) expr;
-			Assert(c->consttype == INTERVALOID);
-
-			i = (Interval *) c->constvalue;
-
-			/* We make the step size one unit smaller than the granularity of the window size unit */
-			if (i->month >= 12)
-				fname = DATE_TRUNC_MONTH;
-			else if (i->month)
-				fname = DATE_TRUNC_DAY;
-			else if (i->day)
-				fname = DATE_TRUNC_HOUR;
-			else if (i->time > HOUR_USEC)
-				fname = DATE_TRUNC_MINUTE;
-			else
-				fname = DATE_TRUNC_SECOND;
-
+			fname = get_truncation_from_interval_expr(ct_expr->rexpr);
 			func->funcname = list_make1(makeString(fname));
 		}
 		else
