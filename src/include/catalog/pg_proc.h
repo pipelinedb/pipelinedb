@@ -5399,6 +5399,9 @@ DESCR("generic user finalize function");
 DATA(insert OID = 4389 ( pipeline_stat_get PGNSP PGUID 12 1 1 0 0 f f f f t t s 0 0 2249 "" "{25,1184,20,20,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o,o}" "{type,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors,cv_create,cv_drop}" _null_ pipeline_stat_get _null_ _null_ _null_ ));
 DESCR("global pipelinedb status");
 
+DATA(insert OID = 4390 ( pipeline_get_overlay_viewdef	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ pipeline_get_overlay_viewdef _null_ _null_ _null_ ));
+DESCR("gets a materialization table overlay view");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

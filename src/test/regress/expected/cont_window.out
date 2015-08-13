@@ -17,9 +17,17 @@ Options: fillfactor=50
  key    | text(0) |           | extended | 
  sum    | numeric |           | main     | 
 View definition:
- SELECT cqwindow0_mrel0.key,
-    combine(naggstaterecv(cqwindow0_mrel0.sum)) OVER (PARTITION BY cqwindow0_mrel0.key ORDER BY cqwindow0_mrel0._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
-   FROM cqwindow0_mrel0;
+ SELECT key::text,
+    sum(x::numeric) OVER (PARTITION BY key::text ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum
+   FROM ONLY cqwindow_stream;
+
+SELECT pipeline_get_overlay_viewdef('cqwindow0');
+                                                                    pipeline_get_overlay_viewdef                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT cqwindow0_mrel0.key,                                                                                                                                       +
+     combine(naggstaterecv(cqwindow0_mrel0.sum)) OVER (PARTITION BY cqwindow0_mrel0.key ORDER BY cqwindow0_mrel0._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum+
+    FROM cqwindow0_mrel0;
+(1 row)
 
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2);
 SELECT pg_sleep(1);
@@ -75,9 +83,17 @@ Options: fillfactor=50
  key    | text(0) |           | extended | 
  avg    | numeric |           | main     | 
 View definition:
- SELECT cqwindow1_mrel0.key,
-    combine(cqwindow1_mrel0.avg) OVER (PARTITION BY cqwindow1_mrel0.key ORDER BY cqwindow1_mrel0._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
-   FROM cqwindow1_mrel0;
+ SELECT key::text,
+    avg(x::integer) OVER (PARTITION BY key::text ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg
+   FROM ONLY cqwindow_stream;
+
+SELECT pipeline_get_overlay_viewdef('cqwindow1');
+                                                             pipeline_get_overlay_viewdef                                                             
+------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT cqwindow1_mrel0.key,                                                                                                                        +
+     combine(cqwindow1_mrel0.avg) OVER (PARTITION BY cqwindow1_mrel0.key ORDER BY cqwindow1_mrel0._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg+
+    FROM cqwindow1_mrel0;
+(1 row)
 
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);
 SELECT pg_sleep(1);
