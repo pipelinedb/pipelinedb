@@ -122,7 +122,6 @@ get_values(ContQueryCombinerState *state, TupleHashTable existing)
 {
 	TupleTableSlot *slot = state->slot;
 	List *values = NIL;
-	int i;
 
 	/*
 	 * Generate a VALUES list of the incoming groups
@@ -136,7 +135,7 @@ get_values(ContQueryCombinerState *state, TupleHashTable existing)
 	{
 		FuncExpr *hash;
 		List *args = NIL;
-		Oid hashoid = HASH_GROUP_OID;
+		ListCell *lc;
 
 		/*
 		 * If we already have the physical tuple cached from a previous combine
@@ -156,10 +155,10 @@ get_values(ContQueryCombinerState *state, TupleHashTable existing)
 			}
 		}
 
-		for (i = 0; i < state->ngroupatts; i++)
+		foreach(lc, state->hashfunc->args)
 		{
-			AttrNumber groupattr = state->groupatts[i];
-			Form_pg_attribute attr = state->desc->attrs[groupattr - 1];
+			AttrNumber attno = ((Var *) lfirst(lc))->varattno;
+			Form_pg_attribute attr = state->desc->attrs[attno - 1];
 			Type typeinfo;
 			bool isnull;
 			Datum d;
@@ -170,17 +169,14 @@ get_values(ContQueryCombinerState *state, TupleHashTable existing)
 			length = typeLen(typeinfo);
 			ReleaseSysCache((HeapTuple) typeinfo);
 
-			if (TypeCategory(attr->atttypid) == TYPCATEGORY_DATETIME)
-				hashoid = LS_HASH_GROUP_OID;
-
-			d = slot_getattr(slot, groupattr, &isnull);
+			d = slot_getattr(slot, attno, &isnull);
 			c = makeConst(attr->atttypid, attr->atttypmod,
 					attr->attcollation, length, d, isnull, attr->attbyval);
 
 			args = lappend(args, c);
 		}
 
-		hash = makeFuncExpr(hashoid, get_func_rettype(hashoid), args, 0, 0, COERCE_EXPLICIT_CALL);
+		hash = makeFuncExpr(state->hashfunc->funcid, state->hashfunc->funcresulttype, args, 0, 0, COERCE_EXPLICIT_CALL);
 		values = lappend(values, list_make1(hash));
 	}
 

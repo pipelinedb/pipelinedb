@@ -138,12 +138,17 @@ add_default_fillfactor(List *options)
  * 32-bit value
  */
 static Node *
-make_hashed_index_expr(Query *query, TupleDesc desc)
+make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
 {
 	ListCell *lc;
 	List *args = NIL;
 	FuncExpr *hash;
+	ColumnRef *t_col = GetWindowTimeColumn(cv);
 	Oid hashoid = HASH_GROUP_OID;
+	char *t_colname = NULL;
+
+	if (t_col)
+		t_colname = NameListToString(t_col->fields);
 
 	foreach(lc, query->groupClause)
 	{
@@ -180,7 +185,14 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
 		var = makeVar(1, attr->attnum, attr->atttypid, attr->atttypmod,
 				attr->attcollation, 0);
 
-		args = lappend(args, var);
+		/*
+		 * Always insert time column in the beginning so it is correctly picked for locality-sensitive
+		 * hashing by ls_hash_group.
+		 */
+		if (t_colname && pg_strcasecmp(t_colname, te->resname) == 0)
+			args = list_concat(list_make1(var), args);
+		else
+			args = lappend(args, var);
 	}
 
 	/*
@@ -232,7 +244,7 @@ create_index_on_mat_relation(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query
 	else
 	{
 		Relation rel = heap_open(matrelid, NoLock);
-		expr = make_hashed_index_expr(query, RelationGetDescr(rel));
+		expr = make_hashed_index_expr(cv, query, RelationGetDescr(rel));
 		heap_close(rel, NoLock);
 	}
 
