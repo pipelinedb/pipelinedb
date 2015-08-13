@@ -18,6 +18,7 @@
 #include "catalog/pg_type.h"
 #include "catalog/pipeline_query.h"
 #include "catalog/pipeline_stream.h"
+#include "catalog/pipeline_stream_fn.h"
 #include "pipeline/cont_analyze.h"
 #include "miscadmin.h"
 #include "utils/array.h"
@@ -239,7 +240,6 @@ stream_stat_get(PG_FUNCTION_ARGS)
 
 	if (SRF_IS_FIRSTCALL())
 	{
-
 		TupleDesc	tupdesc;
 		MemoryContext oldcontext;
 
@@ -279,13 +279,10 @@ stream_stat_get(PG_FUNCTION_ARGS)
 		bool nulls[5];
 		HeapTuple tup;
 		Datum result;
-		Relation rel = try_relation_open(entry->relid, NoLock);
 
-		if (rel == NULL || rel->rd_rel->relkind != RELKIND_STREAM)
+		if (!IsStream(entry->relid))
 		{
 			/* TODO(usmanm): Purge the entry. */
-			if (rel)
-				relation_close(rel, NoLock);
 			continue;
 		}
 
@@ -488,7 +485,6 @@ pipeline_streams(PG_FUNCTION_ARGS)
 
 	if (SRF_IS_FIRSTCALL())
 	{
-
 		TupleDesc	tupdesc;
 		MemoryContext oldcontext;
 
@@ -514,8 +510,6 @@ pipeline_streams(PG_FUNCTION_ARGS)
 
 	if (funcctx->user_fctx == NULL)
 	{
-
-
 		old = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		data = palloc(sizeof(RelationScanData));
