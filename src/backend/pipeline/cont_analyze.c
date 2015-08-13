@@ -1624,6 +1624,27 @@ is_res_target_for_node(Node *rt, Node *node)
 	return false;
 }
 
+static bool
+node_for_cref(Node *node)
+{
+	while (node)
+	{
+		if (IsA(node, ColumnRef))
+			return true;
+
+		if (IsA(node, TypeCast))
+		{
+			TypeCast *tc = (TypeCast *) node;
+			node = tc->arg;
+			continue;
+		}
+
+		return false;
+	}
+
+	return false;
+}
+
 static ResTarget *
 find_node_in_target_list(List *tlist, Node *node)
 {
@@ -1641,7 +1662,7 @@ find_node_in_target_list(List *tlist, Node *node)
 	{
 		ResTarget *res = lfirst(lc);
 
-		if (res->name != NULL && pg_strcasecmp(res->name, FigureColname((Node *) node)) == 0)
+		if (res->name != NULL && node_for_cref(node) && pg_strcasecmp(res->name, FigureColname((Node *) node)) == 0)
 		{
 			/*
 			 * Is this ResTarget overriding a node it references?

@@ -144,7 +144,7 @@ make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
 	List *args = NIL;
 	FuncExpr *hash;
 	ColumnRef *t_col = GetWindowTimeColumn(cv);
-	Oid hashoid = t_col == NULL ? HASH_GROUP_OID : LS_HASH_GROUP_OID;
+	Oid hashoid = HASH_GROUP_OID;
 	char *t_colname = NULL;
 
 	if (t_col)
@@ -178,6 +178,9 @@ make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
 
 		if (!found)
 			elog(ERROR, "could not find index attribute in tuple descriptor");
+
+		if (TypeCategory(attr->atttypid) == TYPCATEGORY_DATETIME)
+			hashoid = LS_HASH_GROUP_OID;
 
 		var = makeVar(1, attr->attnum, attr->atttypid, attr->atttypmod,
 				attr->attcollation, 0);
