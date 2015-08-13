@@ -675,6 +675,23 @@ IsInferredStream(Oid relid)
 }
 
 /*
+ * IsStream
+ */
+bool IsStream(Oid relid)
+{
+	Relation rel = try_relation_open(relid, NoLock);
+	char relkind;
+
+	if (rel == NULL)
+		return false;
+
+	relkind = rel->rd_rel->relkind;
+	heap_close(rel, NoLock);
+
+	return relkind == RELKIND_STREAM;
+}
+
+/*
  * CreateInferredStream
  */
 void
