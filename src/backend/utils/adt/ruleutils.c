@@ -58,6 +58,7 @@
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
+#include "utils/pipelinefuncs.h"
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
@@ -703,12 +704,34 @@ pg_get_viewdef_worker(Oid viewoid, int prettyFlags, int wrapColumn)
 		appendStringInfoString(&buf, "Not a view");
 	else
 	{
-		/*
-		 * Get the rule's definition and put it into executor's memory
-		 */
-		ruletup = SPI_tuptable->vals[0];
-		rulettc = SPI_tuptable->tupdesc;
-		make_viewdef(&buf, ruletup, rulettc, prettyFlags, wrapColumn);
+		Relation rel = heap_open(viewoid, NoLock);
+		Oid nsp = RelationGetNamespace(rel);
+		RangeVar *rv = makeRangeVar(get_namespace_name(nsp), RelationGetRelationName(rel), -1);
+
+		heap_close(rel, NoLock);
+		if (IsAContinuousView(rv) && wrapColumn != DISPLAY_OVERLAY_VIEW) /* hack to signal this function call to return regular viewdef */
+		{
+			/*
+			 * When a user is describing a continuous view, we show them the continuous
+			 * view's definition rather than the overlay view because it's more intuitive.
+			 */
+			Query *q = GetContQuery(rv);
+
+			get_query_def(q, &buf, NIL, NULL, prettyFlags, wrapColumn, 0);
+			appendStringInfoChar(&buf, ';');
+		}
+		else
+		{
+			if (wrapColumn == DISPLAY_OVERLAY_VIEW)
+				wrapColumn = 0;
+
+			/*
+			 * Get the rule's definition and put it into executor's memory
+			 */
+			ruletup = SPI_tuptable->vals[0];
+			rulettc = SPI_tuptable->tupdesc;
+			make_viewdef(&buf, ruletup, rulettc, prettyFlags, wrapColumn);
+		}
 	}
 
 	/*
@@ -9364,4 +9387,26 @@ flatten_reloptions(Oid relid)
 	ReleaseSysCache(tuple);
 
 	return result;
+}
+
+/*
+ * pipeline_get_overlay_viewdef
+ *
+ * Returns all view definitions for all continuous views
+ */
+Datum
+pipeline_get_overlay_viewdef(PG_FUNCTION_ARGS)
+{
+	/* qualified name continuous view name */
+	text *name = PG_GETARG_TEXT_P(0);
+	RangeVar *rv;
+	Oid	 viewoid;
+
+	rv = makeRangeVarFromNameList(textToQualifiedNameList(name));
+	if (!IsAContinuousView(rv))
+		elog(ERROR, "%s is not a continuous view", TextDatumGetCString(name));
+
+	viewoid = RangeVarGetRelid(rv, NoLock, false);
+
+	PG_RETURN_TEXT_P(CStringGetTextDatum(pg_get_viewdef_worker(viewoid, PRETTYFLAG_INDENT, DISPLAY_OVERLAY_VIEW)));
 }

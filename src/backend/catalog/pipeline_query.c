@@ -466,6 +466,7 @@ GetContinuousView(Oid id)
 	view->id = id;
 
 	namespace = get_namespace_name(row->namespace);
+	view->namespace = row->namespace;
 	view->matrel = makeRangeVar(namespace, pstrdup(NameStr(row->matrelname)), -1);
 
 	namestrcpy(&view->name, NameStr(row->name));
