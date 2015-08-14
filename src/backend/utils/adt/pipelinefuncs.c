@@ -605,3 +605,14 @@ pipeline_streams(PG_FUNCTION_ARGS)
 
 	SRF_RETURN_DONE(funcctx);
 }
+
+/*
+ * pipeline_version
+ *
+ * Returns the PipelineDB version string
+ */
+Datum
+pipeline_version(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_TEXT_P(cstring_to_text( PIPELINE_VERSION_STR));
+}

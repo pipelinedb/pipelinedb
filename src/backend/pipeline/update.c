@@ -33,7 +33,6 @@
 #define ANON_ENDPOINT		"anonymous.pipelinedb.com"
 #define ANON_PORT 80
 
-#define PDB_VERSION "0.7.7"
 #define UPDATE_AVAILABLE 201
 #define NO_UPDATES 200
 
@@ -209,7 +208,7 @@ get_stats(HTAB *all_dbs, bool startup, CQStatsType ptype)
 
 	initStringInfo(&payload);
 	appendStringInfo(&payload, PROC_PAYLOAD_FMT, proc, etype,
-	PDB_VERSION, name, mname.release, mname.version, g->input_rows,
+			PIPELINE_VERSION, name, mname.release, mname.version, g->input_rows,
 			g->input_bytes, g->output_rows, g->output_bytes, g->errors, g->cv_create,
 			g->cv_drop);
 

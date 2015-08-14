@@ -37,4 +37,7 @@ extern Datum pipeline_stat_get(PG_FUNCTION_ARGS);
 /* matrel overlay view definition */
 extern Datum pipeline_get_overlay_viewdef(PG_FUNCTION_ARGS);
 
+/* PipelineDB version string */
+extern Datum pipeline_version(PG_FUNCTION_ARGS);
+
 #endif
