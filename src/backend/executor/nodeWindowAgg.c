@@ -2166,7 +2166,8 @@ initialize_peragg(WindowAggState *winstate, WindowFunc *wfunc,
 	 */
 	if (OidIsValid(aggform->aggminvtransfn) &&
 		!(winstate->frameOptions & FRAMEOPTION_START_UNBOUNDED_PRECEDING) &&
-		!contain_volatile_functions((Node *) wfunc))
+		!contain_volatile_functions((Node *) wfunc) &&
+		!AGGKIND_IS_COMBINE(wfunc->winaggkind))
 	{
 		peraggstate->transfn_oid = transfn_oid = aggform->aggmtransfn;
 		peraggstate->invtransfn_oid = invtransfn_oid = aggform->aggminvtransfn;
