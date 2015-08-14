@@ -3239,6 +3239,8 @@ sanitize_fmt_string(const char *fmt)
 	sanitized = DirectFunctionCall3(replace_text,
 			sanitized, CStringGetTextDatum("Postgres"), CStringGetTextDatum("Pipeline"));
 
+	sanitized = DirectFunctionCall3(replace_text,
+			sanitized, CStringGetTextDatum("initdb"), CStringGetTextDatum("pipeline-init"));
 
 	return TextDatumGetCString(sanitized);
 }
