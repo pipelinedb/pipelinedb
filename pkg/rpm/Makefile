@@ -20,7 +20,7 @@ all: spec conf geos gdal proj pipeline gis clean-libs set-perms
 	mv $(CURDIR)/rpmbuild/RPMS/x86_64/*.rpm .
 
 spec:
-	sed -e 's/__VERSION__/$(VERSION)/g' \
+	sed -e 's/__VERSION__/$(PIPELINE_VERSION)/g' \
 		-e 's:__PREFIX__:$(PREFIX):g' $(CURDIR)/pipelinedb.spec.in > pipelinedb.spec
 
 set-perms:
@@ -30,9 +30,9 @@ conf:
 	(cd $(TOP_BUILDDIR) && ./configure)
 
 pipeline:
-	(cd $(TOP_BUILDDIR) && ./configure --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo CFLAGS="$(PIPELINE_CFLAGS)" --disable-rpath)
-	(cd $(TOP_BUILDDIR) && $(MAKE) VERSION=$(VERSION))
-	(cd $(TOP_BUILDDIR) && $(MAKE) VERSION=$(VERSION) install)
+	(cd $(TOP_BUILDDIR) && ./configure PIPELINE_VERSION=$(PIPELINE_VERSION) --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo CFLAGS="$(PIPELINE_CFLAGS)" --disable-rpath)
+	(cd $(TOP_BUILDDIR) && $(MAKE))
+	(cd $(TOP_BUILDDIR) && $(MAKE) install)
 
 geos:
 	wget http://download.pipelinedb.com/dep/$(GEOS).tar.bz2

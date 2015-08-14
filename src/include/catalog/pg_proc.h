@@ -5402,6 +5402,9 @@ DESCR("global pipelinedb status");
 DATA(insert OID = 4390 ( pipeline_get_overlay_viewdef	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ pipeline_get_overlay_viewdef _null_ _null_ _null_ ));
 DESCR("gets a materialization table overlay view");
 
+DATA(insert OID = 4391 ( pipeline_version		   PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 25 "" _null_ _null_ _null_ _null_ pipeline_version _null_ _null_ _null_ ));
+DESCR("PipelineDB version string");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

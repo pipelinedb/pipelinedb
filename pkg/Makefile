@@ -2,9 +2,9 @@
 changelog = $(CURDIR)/debian/changelog
 
 changelog:
-	echo "pipelinedb ($(VERSION)-1) UNRELEASED; urgency=low" > $(changelog)
+	echo "pipelinedb ($(PIPELINE_VERSION)-1) UNRELEASED; urgency=low" > $(changelog)
 	echo "" >> $(changelog)
-	echo "`git log --oneline $(PREV_VERSION)..$(VERSION) | sed -e 's/^/  * /'`" >> $(changelog)
+	echo "`git log --oneline $(PREV_PIPELINE_VERSION)..$(PIPELINE_VERSION) | sed -e 's/^/  * /'`" >> $(changelog)
 	echo "" >> $(changelog)
 	echo " -- PipelineDB Packaging <packaging@pipelinedb.com>  `date +"%a, %d %b %Y %T %z"`" >> $(changelog)
 
