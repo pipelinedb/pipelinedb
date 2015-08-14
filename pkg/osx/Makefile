@@ -26,7 +26,7 @@ conf:
 	(cd $(TOP_BUILDDIR) && ./configure)
 
 pipeline:
-	(cd $(TOP_BUILDDIR) && ./configure PIPELINE_VERSION=$(PIPELINE_VERSION) --prefix=$(PREFIX) CFLAGS="$(PIPELINE_CFLAGS)")
+	(cd $(TOP_BUILDDIR) && ./configure PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) CFLAGS="$(PIPELINE_CFLAGS)")
 	(cd $(TOP_BUILDDIR) && $(MAKE))
 	(cd $(TOP_BUILDDIR) && $(MAKE) install)
 
