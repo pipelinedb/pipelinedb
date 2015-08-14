@@ -1385,12 +1385,6 @@ pull_var_and_aggs(Node *node)
 	return varlist;
 }
 
-static List *
-flatten_tlist_with_aggs(Node *node)
-{
-	return add_to_flat_tlist(NIL, pull_var_and_aggs(node));
-}
-
 static Oid
 get_combine_state_type(Expr *expr)
 {
@@ -2502,30 +2496,6 @@ GetContWorkerQuery(RangeVar *rv)
 }
 
 /*
- * agg_to_attr
- *
- * Given an aggregate node, returns the matrel attribute that the node belongs to
- */
-static AttrNumber
-node_to_attr(Node *agg, List *flattened)
-{
-	ListCell *lc;
-	AttrNumber attr = 1;
-
-	foreach(lc, flattened)
-	{
-		TargetEntry *te = (TargetEntry *) lfirst(lc);
-		if (equal(te->expr, agg))
-			return attr;
-		attr++;
-	}
-
-	elog(ERROR, "aggregate attribute not found for node of type %d", nodeTag(agg));
-
-	return InvalidAttrNumber;
-}
-
-/*
  * attr_to_agg
  *
  * Given a matrel attribute, returns the aggregate node that it corresponds to
@@ -2683,9 +2653,9 @@ make_combine_agg_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var,
  *
  * Given an aggregate node, converts it to a finalize function call
  */
-static void
+static Node *
 coerce_to_finalize(ParseState *pstate, Oid aggfn, Oid type,
-		Oid finaltype, Node *node, Node *arg, Oid combineinfn)
+		Oid finaltype, Node *arg, Oid combineinfn)
 {
 	HeapTuple tup;
 	Form_pg_aggregate aggform;
@@ -2693,11 +2663,6 @@ coerce_to_finalize(ParseState *pstate, Oid aggfn, Oid type,
 	Oid final;
 	FuncExpr *func;
 	int i;
-
-	Assert(sizeof(FuncExpr) < sizeof(Aggref));
-	Assert(sizeof(FuncExpr) < sizeof(WindowFunc));
-	Assert(sizeof(Var) < sizeof(Aggref));
-	Assert(sizeof(Var) < sizeof(WindowFunc));
 
 	tup = SearchSysCache1(AGGFNOID, ObjectIdGetDatum(aggfn));
 	if (!HeapTupleIsValid(tup))
@@ -2707,17 +2672,14 @@ coerce_to_finalize(ParseState *pstate, Oid aggfn, Oid type,
 
 	ReleaseSysCache(tup);
 	if (!OidIsValid(final))
-		return;
+		return arg;
 
 	tup = SearchSysCache1(PROCOID, ObjectIdGetDatum(final));
 	if (!HeapTupleIsValid(tup))
 		elog(ERROR, "cache lookup failed for function %u", final);
 	procform = (Form_pg_proc) GETSTRUCT(tup);
 
-	func = (FuncExpr *) node;
-	MemSet(func, 0, sizeof(FuncExpr));
-
-	func->xpr.type = T_FuncExpr;
+	func = (FuncExpr *) makeNode(FuncExpr);
 
 	/*
 	 * A final function may have a polymorphic type, but we know the exact output
@@ -2736,6 +2698,8 @@ coerce_to_finalize(ParseState *pstate, Oid aggfn, Oid type,
 		func->args = lappend(func->args, makeNullConst(procform->proargtypes.values[i], -1, InvalidOid));
 
 	ReleaseSysCache(tup);
+
+	return (Node *) func;
 }
 
 /*
@@ -2759,17 +2723,13 @@ make_finalize_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var, Node *ar
 	Assert(!IsContQueryProcess());
 
 	result = attr_to_aggs(var->varattno, q->targetList);
-
 	extract_agg_final_info(result, &fnoid, &type, &finaltype);
-
 	GetCombineInfo(fnoid, &combinefn, &transoutfn, &combineinfn, &statetype);
 
 	if (!OidIsValid(statetype))
 		return (Node *) arg;
 
-	coerce_to_finalize(pstate, fnoid, type, finaltype, result, arg, combineinfn);
-
-	return (Node *) result;
+	return coerce_to_finalize(pstate, fnoid, type, finaltype, arg, combineinfn);
 }
 
 /*
@@ -2896,7 +2856,6 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 		List *order, Expr *filter, WindowDef *over, int location)
 {
 	Node *arg;
-	ListCell *lc;
 	Var *var;
 	List *args;
 	Oid combinefn;
@@ -2906,32 +2865,23 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	RangeVar *rv;
 	bool ismatrel;
 	Query *cont_qry;
-	Query *view_qry;
-	Relation rel;
 	TargetEntry *target;
-	List *nodes;
 	RangeTblEntry *rte;
 	AttrNumber cvatt = InvalidAttrNumber;
-	List *flat_cont_qry_tlist;
-	List *flat_view_qry_tlist;
 
 	if (list_length(fargs) != 1)
-	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 				 errmsg("combine called with %d arguments", list_length(fargs)),
-				 errhint("combine must be called with a single column reference as its argument.")));
-	}
+				 errhint("combine must be called with a single aggregate continuous view column reference.")));
 
 	arg = linitial(fargs);
 
 	if (!IsA(arg, Var))
-	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 				 errmsg("combine called with an invalid expression"),
-				 errhint("combine must be called with a single column reference as its argument.")));
-	}
+				 errhint("combine must be called with a single aggregate continuous view column reference.")));
 
 	var = (Var *) arg;
 
@@ -2953,12 +2903,10 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 		 */
 		ismatrel = IsAMatRel(matrelrv, &cvrv);
 		if (!ismatrel)
-		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 					 errmsg("\"%s\" is not a continuous view", matrelrv->relname),
 					 errhint("Only aggregate continuous view columns can be combined.")));
-		}
 
 		return make_combine_agg_for_viewdef(pstate, cvrv, var, order, over);
 	}
@@ -2968,10 +2916,6 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 
 	rte = (RangeTblEntry *) list_nth(pstate->p_rtable, var->varno - 1);
 	cvatt = var->varattno;
-
-	rel = heap_open(RangeVarGetRelid(rv, NoLock, false), NoLock);
-	view_qry = get_view_query(rel);
-	heap_close(rel, NoLock);
 
 	/*
 	 * If this is a join, our varattno will point to the position of the target
@@ -2984,127 +2928,67 @@ ParseCombineFuncCall(ParseState *pstate, List *fargs,
 	/*
 	 * Find the aggregate node in the CQ that corresponds
 	 * to the target combine column
-	 *
-	 * FIXME(usmanm): All of this is a little hairy. We need a more robust way to
-	 * map aggregates to their matrel columns.
 	 */
 	target = (TargetEntry *) list_nth(cont_qry->targetList, cvatt - 1);
-	flat_cont_qry_tlist = flatten_tlist_with_aggs((Node *) cont_qry->targetList);
-	flat_view_qry_tlist = flatten_tlist_with_aggs((Node *) view_qry->targetList);
-	nodes = pull_var_and_aggs((Node *) target->expr);
 
-	Assert(list_length(flat_cont_qry_tlist) == list_length(flat_view_qry_tlist));
-
-	foreach(lc, nodes)
+	if (IsA(target->expr, Aggref) || IsA(target->expr, WindowFunc))
 	{
-		Node *cont_node = (Node *) lfirst(lc);
-		Var *v;
-		AttrNumber att;
 		Oid fnoid;
 		Oid type;
 		Oid finaltype;
-		Expr *view_node;
+		Oid aggtype;
+		Var *v;
+		Node *result;
 
-		att = node_to_attr(cont_node, flat_cont_qry_tlist);
-		view_node = ((TargetEntry *) list_nth(flat_view_qry_tlist, att - 1))->expr;
-
-		if (IsA(cont_node, Var))
-		{
-			Var *cont_var = (Var *) cont_node;
-			Var *view_var = (Var *) view_node;
-
-			Assert(IsA(view_var, Var));
-
-			cont_var->varattno = view_var->varattno;
-			continue;
-		}
-
-		if (!IsA(cont_node, Aggref) && !IsA(cont_node, WindowFunc))
-			continue;
-
-		extract_agg_final_info(cont_node, &fnoid, &type, &finaltype);
+		extract_agg_final_info((Node *) target->expr, &fnoid, &type, &finaltype);
 		GetCombineInfo(fnoid, &combinefn, &transoutfn, &combineinfn, &statetype);
 
-		if (IsA(view_node, Var))
+		aggtype = OidIsValid(statetype) ? statetype : finaltype;
+
+		v = makeVar(var->varno, cvatt, aggtype, InvalidOid, InvalidOid, InvalidOid);
+		args = make_combine_args(pstate, combineinfn, (Node *) v);
+
+		if (over)
 		{
-			att = ((Var *) view_node)->varattno;
+			WindowFunc *wfunc = makeNode(WindowFunc);
+
+			wfunc->winfnoid = fnoid;
+			wfunc->wintype = aggtype;
+			wfunc->args = args;
+			wfunc->winstar = false;
+			wfunc->winagg = true;
+			wfunc->aggfilter = filter;
+			wfunc->winaggkind = AGGKIND_COMBINE;
+
+			transformWindowFuncCall(pstate, wfunc, over);
+
+			result = (Node *) wfunc;
 		}
 		else
 		{
-			List *args;
-			TargetEntry *arg;
+			Aggref *agg = makeNode(Aggref);
 
-			Assert(IsA(view_node, Aggref) || IsA(view_node, WindowFunc));
-
-			if (IsA(view_node, Aggref))
-				args = ((Aggref *) view_node)->args;
-			else
-				args = ((WindowFunc *) view_node)->args;
-
-			Assert(list_length(args) == 1);
-			arg = linitial(args);
-			Assert(IsA(arg->expr, Var));
-
-			att = ((Var *) arg->expr)->varattno;
-		}
-
-		v = makeVar(var->varno, att, statetype, InvalidOid, InvalidOid, InvalidOid);
-		args = make_combine_args(pstate, combineinfn, (Node *) v);
-
-		if (IsA(cont_node, Aggref))
-		{
-			Aggref *agg = (Aggref *) cont_node;
-
-			/*
-			 * User combines will just use the combine function as a regular aggregate transition
-			 * function, so we can use the default aggregation behavior.
-			 */
-			agg->aggtype = finaltype;
+			agg->aggfnoid = fnoid;
+			agg->aggtype = aggtype;
+			agg->args = args;
 			agg->aggstar = false;
+			agg->aggfilter = filter;
+			agg->aggkind = AGGKIND_COMBINE;
 
-			if (over)
-			{
-				/*
-				 * We're doing a windowed combine over a non-windowed aggregate, so
-				 * we need to transform the regular agg into a windowed agg.
-				 */
-				WindowFunc *wfunc = makeNode(WindowFunc);
-				ReplaceNodeContext context;
+			transformAggregateCall(pstate, agg, args, order, false);
 
-				wfunc->winfnoid = agg->aggfnoid;
-				wfunc->wintype = agg->aggtype;
-				wfunc->args = args;
-				wfunc->winstar = agg->aggstar;
-				wfunc->winagg = true;
-				wfunc->aggfilter = agg->aggfilter;
-				wfunc->winaggkind = AGGKIND_COMBINE;
-
-				transformWindowFuncCall(pstate, wfunc, over);
-
-				context.old = (Node *) agg;
-				context.new = (Node *) wfunc;
-				context.size = sizeof(WindowFunc);
-
-				replace_node((Node *) agg, &context);
-			}
-			else
-			{
-				agg->aggkind = AGGKIND_COMBINE;
-				transformAggregateCall(pstate, agg, args, order, false);
-			}
+			result = (Node *) agg;
 		}
-		else if (IsA(cont_node, WindowFunc))
-		{
-			WindowFunc *w = (WindowFunc *) cont_node;
-			w->args = args;
-			w->winaggkind = AGGKIND_COMBINE;
-			w->wintype = finaltype;
-			w->winstar = false;
-			transformWindowFuncCall(pstate, w, over);
-		}
+
+		/* combines on continuous views should always finalize */
+		return coerce_to_finalize(pstate, fnoid, type, finaltype, result, combineinfn);
 	}
 
-	return copyObject((Node *) target->expr);
+	/* TODO(usmanm): Eventually we should support nested aggregates and aggregates in expressions */
+	ereport(ERROR,
+			(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+			errmsg("combine called with an invalid expression"),
+			errhint("combine must be called with a single aggregate continuous view column reference.")));
 }
 
 /*
@@ -3212,94 +3096,131 @@ collect_combines_aggs(Node *node, List **combines)
 	return expression_tree_walker(node, collect_combines_aggs, combines);
 }
 
+static bool
+pull_vars(Node *node, List **varlist)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, Var))
+	{
+		*varlist = lappend(*varlist, node);
+		return false;
+	}
+
+	return expression_tree_walker(node, pull_var_and_aggs_walker,
+								  (void *) varlist);
+}
+
 /*
  * RewriteContinuousViewSelect
  *
- * Possibly modify a continuous view's SELECT rule before it's applied.
- * This is mainly used for including hidden columns in the view's subselect
- * query when they are needed by functions in the target list.
+ * Possibly modify an overlay view SELECT rule before it's applied.
+ * This is mainly used for user_combines where we strip away the finalize function
+ * and put it on the *outer* SELECT.
  */
 Query *
 RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 {
 	RangeVar *rv = makeRangeVar(get_namespace_name(RelationGetNamespace(cv)), RelationGetRelationName(cv), -1);
-	ListCell *lc;
-	List *targets = NIL;
-	List *targetlist = NIL;
-	AttrNumber matrelvarno = InvalidAttrNumber;
-	TupleDesc matreldesc;
-	RangeVar *matrelname;
-	Relation matrel;
-	int i;
-	RangeTblEntry *rte;
-	List *colnames = NIL;
 	List *combines = NIL;
+	ListCell *lc;
+	RangeTblEntry *rte;
+
+	/* RTE is not a view? */
+	rte = rt_fetch(rtindex, query->rtable);
+	if (rte->relkind != RELKIND_VIEW)
+		return rule;
 
 	/* try to bail early because this gets called from a hot path */
 	if (!IsAContinuousView(rv))
 		return rule;
 
-	matrelname = GetMatRelationName(rv);
-	matrel = heap_openrv(matrelname, NoLock);
-	matreldesc = CreateTupleDescCopyConstr(RelationGetDescr(matrel));
-	heap_close(matrel, NoLock);
-
-	targets = pull_var_clause((Node *) rule->targetList,
-			PVC_RECURSE_AGGREGATES, PVC_INCLUDE_PLACEHOLDERS);
-
-	foreach(lc, targets)
-	{
-		Node *n = (Node *) lfirst(lc);
-		if (IsA(n, Var))
-		{
-			matrelvarno = ((Var *) n)->varno;
-			break;
-		}
-	}
-
-	/* is there anything to do? */
-	if (!AttributeNumberIsValid(matrelvarno))
-		return rule;
-
+	/* We only need to rewrite the overlay view definition if there are some user defines */
 	collect_combines_aggs((Node *) query->targetList, &combines);
-
 	if (list_length(combines) == 0)
 		return rule;
 
-	/* we're scanning a matrel, so include hidden columns */
-	for (i=0; i<matreldesc->natts; i++)
+	/* Remove finalize from any aggregate targets that are in combines */
+	foreach(lc, combines)
 	{
-		Var *tev;
+		List *l = NIL;
+		Var *v;
+		Node *agg;
 		TargetEntry *te;
-		Form_pg_attribute attr = matreldesc->attrs[i];
-		ListCell *tlc;
+		Oid fnoid;
+		Oid type;
+		Oid finaltype;
+		Oid finalfn;
+		HeapTuple tup;
+		Form_pg_aggregate aggform;
+		FuncExpr *fexpr;
+		Expr *expr;
+		Oid combinefn;
+		Oid transoutfn;
+		Oid combineinfn;
+		Oid statetype;
 
-		tev = makeVar(matrelvarno, attr->attnum, attr->atttypid,
-				attr->atttypmod, attr->attcollation, 0);
+		pull_vars(lfirst(lc), &l);
+		Assert(list_length(l) == 1);
+		v = (Var *) linitial(l);
 
-		te = makeTargetEntry((Expr *) tev, tev->varattno, NULL, false);
-		te->resname = NameStr(attr->attname);
-		colnames = lappend(colnames, makeString(te->resname));
+		/* Not reading from us? */
+		if (v->varno != rtindex)
+			continue;
 
-		/*
-		 * Preserve the sortgrouprefs. Note that nonzero sortgrouprefs
-		 * don't correspond to anything in the target list. They just
-		 * need to be unique so we can just copy the old one into the
-		 * new target entry.
-		 */
-		foreach(tlc, rule->targetList)
+		l = pull_var_and_aggs(lfirst(lc));
+		Assert(list_length(l) == 1);
+		agg = (Node *) linitial(l);
+
+		if (!IsA(agg, Aggref) && !IsA(agg, WindowFunc))
 		{
-			TargetEntry *rte = (TargetEntry *) lfirst(tlc);
-			if (pg_strcasecmp(rte->resname, te->resname) == 0)
-				te->ressortgroupref = rte->ressortgroupref;
+			/* WTF? */
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					errmsg("combine called with an invalid expression"),
+					errhint("combine must be called with a single aggregate continuous view column reference.")));
 		}
 
-		targetlist = lappend(targetlist, te);
-	}
+		extract_agg_final_info(agg, &fnoid, &type, &finaltype);
 
-	rte = rt_fetch(rtindex, query->rtable);
-	rte->eref->colnames = colnames;
-	rule->targetList = targetlist;
+		tup = SearchSysCache1(AGGFNOID, ObjectIdGetDatum(fnoid));
+		if (!HeapTupleIsValid(tup))
+			elog(ERROR, "cache lookup failed for aggregate %u", fnoid);
+		aggform = (Form_pg_aggregate) GETSTRUCT(tup);
+		finalfn = aggform->aggfinalfn;
+		ReleaseSysCache(tup);
+
+		/* No finalize func? */
+		if (!OidIsValid(finalfn))
+			continue;
+
+		te = list_nth(rule->targetList, v->varattno - 1);
+
+		Assert(IsA(te->expr, FuncExpr));
+
+		/* Strip away the finalize func */
+		fexpr = (FuncExpr *) te->expr;
+
+		if (finalfn != fexpr->funcid)
+		{
+			elog(ERROR, "fuck %d %d", finalfn, fexpr->funcid);
+		}
+
+		Assert(fexpr->funcid == finalfn);
+		expr = linitial(fexpr->args);
+
+		GetCombineInfo(fnoid, &combinefn, &transoutfn, &combineinfn, &statetype);
+
+		/* XXX(usmanm): We can probably avoid this extra serialize/deserialize step */
+		if (OidIsValid(transoutfn))
+		{
+			fexpr->funcid = transoutfn;
+			fexpr->funcresulttype = statetype;
+		}
+		else
+			te->expr = expr;
+	}
 
 	return rule;
 }

@@ -524,7 +524,7 @@ combine(ContQueryCombinerState *state)
 	if (state->matrel == NULL)
 		return;
 
-	state->ri = CQMatViewOpen(state->matrel);
+	state->ri = CQMatRelOpen(state->matrel);
 
 	if (state->isagg)
 	{
@@ -576,7 +576,7 @@ combine(ContQueryCombinerState *state)
 
 	PortalDrop(portal, false);
 
-	CQMatViewClose(state->ri);
+	CQMatRelClose(state->ri);
 	heap_close(state->matrel, RowExclusiveLock);
 }
 
@@ -646,7 +646,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 			return;
 		}
 
-		ri = CQMatViewOpen(matrel);
+		ri = CQMatRelOpen(matrel);
 
 		if (state->ngroupatts)
 		{
@@ -680,7 +680,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 			Assert(state->hashfunc);
 		}
 
-		CQMatViewClose(ri);
+		CQMatRelClose(ri);
 		heap_close(matrel, AccessShareLock);
 
 		state->cache = GroupCacheCreate(continuous_query_combiner_cache_mem * 1024, state->ngroupatts, state->groupatts,
