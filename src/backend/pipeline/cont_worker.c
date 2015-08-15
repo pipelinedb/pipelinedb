@@ -316,6 +316,7 @@ ContinuousQueryWorkerMain(void)
 		uint32 num_processed = 0;
 		Bitmapset *tmp;
 		bool updated_queries = false;
+		bool all_throttled = true;
 
 		sleep_if_deactivated();
 
@@ -355,6 +356,11 @@ ContinuousQueryWorkerMain(void)
 		{
 			Plan *plan = NULL;
 			EState *estate = NULL;
+
+			if (ThrottlerShouldSkip(id))
+				continue;
+
+			all_throttled = false;
 
 			PG_TRY();
 			{
@@ -404,7 +410,7 @@ ContinuousQueryWorkerMain(void)
 				unset_snapshot(estate, owner);
 				state->query_desc->estate = estate = NULL;
 
-				IncrementCQExecutions(1);
+				ThrottlerRecordSuccess(id);
 			}
 			PG_CATCH();
 			{
@@ -417,7 +423,7 @@ ContinuousQueryWorkerMain(void)
 				if (state)
 					cleanup_query_state(states, id);
 
-				IncrementCQErrors(1);
+				ThrottlerRecordError(id);
 
 				if (!continuous_query_crash_recovery)
 					exit(1);
@@ -462,6 +468,9 @@ next:
 
 		if (num_processed)
 			last_processed = GetCurrentTimestamp();
+
+		if (all_throttled)
+			TupleBufferSkipBatch(reader);
 
 		TupleBufferBatchReaderReset(reader);
 		MemoryContextResetAndDeleteChildren(ContQueryBatchContext);

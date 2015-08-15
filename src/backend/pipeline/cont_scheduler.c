@@ -50,6 +50,8 @@
 #define MIN_WAIT_TERMINATE_MS 250
 #define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
+static Throttler throttlers[MAX_CQS];
+
 typedef struct
 {
 	Oid oid;
@@ -381,6 +383,7 @@ cq_bgproc_main(Datum arg)
 	CHECK_FOR_INTERRUPTS();
 
 	MyContQueryProc->latch = &MyProc->procLatch;
+	MemSet(throttlers, 0, sizeof(throttlers));
 
 	ereport(LOG, (errmsg("continuous query process \"%s\" running with pid %d", GetContQueryProcName(MyContQueryProc), MyProcPid)));
 	pgstat_report_activity(STATE_RUNNING, GetContQueryProcName(MyContQueryProc));
@@ -929,4 +932,53 @@ void
 SignalContQuerySchedulerRefresh(void)
 {
 	signal_cont_query_scheduler(SIGINT);
+}
+
+/*
+ * ThrottlerRecordError
+ */
+void
+ThrottlerRecordError(Oid cq_id)
+{
+	Throttler *t = &throttlers[cq_id];
+
+	if (t->err_delay == 0)
+		t->err_delay = MIN_ERR_DELAY;
+	else
+		t->err_delay = Min(MAX_ERR_DELAY, t->err_delay * 4);
+
+	t->last_run = GetCurrentTimestamp();
+
+	IncrementCQErrors();
+}
+
+/*
+ * ThrottlerRecordSuccess
+ */
+void
+ThrottlerRecordSuccess(Oid cq_id)
+{
+	Throttler *t = &throttlers[cq_id];
+
+	t->err_delay = 0;
+	t->last_run = GetCurrentTimestamp();
+
+	IncrementCQExecutions();
+}
+
+/*
+ * ThrottlerShouldSkip
+ */
+bool
+ThrottlerShouldSkip(Oid cq_id)
+{
+	Throttler *t = &throttlers[cq_id];
+
+	if (t->err_delay == 0)
+		return false;
+
+	if (TimestampDifferenceExceeds(t->last_run, GetCurrentTimestamp(), t->err_delay))
+		return false;
+
+	return true;
 }

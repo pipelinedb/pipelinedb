@@ -11,8 +11,9 @@
 #ifndef CONT_SCHEDULER_H
 #define CONT_SCHEDULER_H
 
-#include "storage/latch.h"
+#include "datatype/timestamp.h"
 #include "postmaster/bgworker.h"
+#include "storage/latch.h"
 #include "storage/spin.h"
 
 #define MAX_CQS 1024
@@ -98,5 +99,19 @@ extern bool *ContQueryGetActiveFlag(void);
 
 extern void SignalContQuerySchedulerTerminate(Oid db_oid);
 extern void SignalContQuerySchedulerRefresh(void);
+
+/* Throttler */
+#define MAX_ERR_DELAY 5000 /* 5s */
+#define MIN_ERR_DELAY 2 /* 2ms */
+
+typedef struct Throttler
+{
+	TimestampTz last_run;
+	long err_delay;
+} Throttler;
+
+extern void ThrottlerRecordError(Oid cq_id);
+extern void ThrottlerRecordSuccess(Oid cq_id);
+extern bool ThrottlerShouldSkip(Oid cq_id);
 
 #endif   /* CONT_SCHEDULER_H */

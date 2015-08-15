@@ -915,3 +915,15 @@ TupleBufferBatchReaderTrySleep(TupleBufferBatchReader *reader, TimestampTz last_
 		ResetLatch(reader->rdr->proc->latch);
 	}
 }
+
+/*
+ * TupleBufferSkipBatch
+ */
+void
+TupleBufferSkipBatch(TupleBufferBatchReader *reader)
+{
+	TupleBufferSlot *tbs;
+
+	while ((tbs = TupleBufferBatchReaderNext(reader)) != NULL)
+		IncrementCQRead(1, tbs->size);
+}

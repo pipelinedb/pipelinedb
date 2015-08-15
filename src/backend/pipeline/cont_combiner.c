@@ -860,6 +860,7 @@ ContinuousQueryCombinerMain(void)
 		Bitmapset *tmp;
 		int id;
 		bool updated_queries = false;
+		bool all_throttled = true;
 
 		sleep_if_deactivated();
 
@@ -900,6 +901,11 @@ ContinuousQueryCombinerMain(void)
 			if (id % continuous_query_num_combiners != MyContQueryProc->group_id)
 				continue;
 
+			if (ThrottlerShouldSkip(id))
+				continue;
+
+			all_throttled = false;
+
 			PG_TRY();
 			{
 				int count = 0;
@@ -932,7 +938,7 @@ ContinuousQueryCombinerMain(void)
 
 				MemoryContextResetAndDeleteChildren(state->tmp_cxt);
 
-				IncrementCQExecutions(1);
+				ThrottlerRecordSuccess(id);
 			}
 			PG_CATCH();
 			{
@@ -947,7 +953,7 @@ ContinuousQueryCombinerMain(void)
 				if (state)
 					cleanup_query_state(states, id);
 
-				IncrementCQErrors(1);
+				ThrottlerRecordError(id);
 
 				if (!continuous_query_crash_recovery)
 					exit(1);
@@ -1000,6 +1006,9 @@ next:
 
 		if (num_processed)
 			last_processed = GetCurrentTimestamp();
+
+		if (all_throttled)
+			TupleBufferSkipBatch(reader);
 
 		TupleBufferBatchReaderReset(reader);
 		MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
