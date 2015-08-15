@@ -780,7 +780,12 @@ ContQuerySchedulerMain(int argc, char *argv[])
 void
 sleep_if_deactivated(void)
 {
-	char *name = GetContQueryProcName(MyContQueryProc);
+	char *name;
+
+	if (MyContQueryProc->group->active)
+		return;
+
+	name = GetContQueryProcName(MyContQueryProc);
 	pgstat_report_activity(STATE_DISABLED, name);
 
 	while (!MyContQueryProc->group->active)
