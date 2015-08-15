@@ -945,7 +945,7 @@ ThrottlerRecordError(Oid cq_id)
 	if (t->err_delay == 0)
 		t->err_delay = MIN_ERR_DELAY;
 	else
-		t->err_delay = Min(MAX_ERR_DELAY, t->err_delay * 4);
+		t->err_delay = Min(MAX_ERR_DELAY, t->err_delay * 2);
 
 	t->last_run = GetCurrentTimestamp();
 
