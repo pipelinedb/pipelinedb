@@ -65,7 +65,7 @@ GetUniqueMatRelName(char *cvname, char* nspname)
  * Open any indexes associated with the given materialization table
  */
 ResultRelInfo *
-CQMatViewOpen(Relation matrel)
+CQMatRelOpen(Relation matrel)
 {
 	ResultRelInfo *resultRelInfo;
 
@@ -85,7 +85,7 @@ CQMatViewOpen(Relation matrel)
  * Release any resources associated with the given indexes
  */
 void
-CQMatViewClose(ResultRelInfo *rinfo)
+CQMatRelClose(ResultRelInfo *rinfo)
 {
 	ExecCloseIndices(rinfo);
 	pfree(rinfo);

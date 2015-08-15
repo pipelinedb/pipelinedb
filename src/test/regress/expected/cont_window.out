@@ -22,10 +22,10 @@ View definition:
    FROM ONLY cqwindow_stream;
 
 SELECT pipeline_get_overlay_viewdef('cqwindow0');
-                                                                    pipeline_get_overlay_viewdef                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT cqwindow0_mrel0.key,                                                                                                                                       +
-     combine(naggstaterecv(cqwindow0_mrel0.sum)) OVER (PARTITION BY cqwindow0_mrel0.key ORDER BY cqwindow0_mrel0._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS sum+
+                                                                                pipeline_get_overlay_viewdef                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT cqwindow0_mrel0.key,                                                                                                                                                               +
+     pg_catalog.numeric_sum(combine(naggstaterecv(cqwindow0_mrel0.sum)) OVER (PARTITION BY cqwindow0_mrel0.key ORDER BY cqwindow0_mrel0._0 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)) AS sum+
     FROM cqwindow0_mrel0;
 (1 row)
 
@@ -88,10 +88,10 @@ View definition:
    FROM ONLY cqwindow_stream;
 
 SELECT pipeline_get_overlay_viewdef('cqwindow1');
-                                                             pipeline_get_overlay_viewdef                                                             
-------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT cqwindow1_mrel0.key,                                                                                                                        +
-     combine(cqwindow1_mrel0.avg) OVER (PARTITION BY cqwindow1_mrel0.key ORDER BY cqwindow1_mrel0._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS avg+
+                                                                  pipeline_get_overlay_viewdef                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT cqwindow1_mrel0.key,                                                                                                                                  +
+     int8_avg(combine(cqwindow1_mrel0.avg) OVER (PARTITION BY cqwindow1_mrel0.key ORDER BY cqwindow1_mrel0._0 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)) AS avg+
     FROM cqwindow1_mrel0;
 (1 row)
 

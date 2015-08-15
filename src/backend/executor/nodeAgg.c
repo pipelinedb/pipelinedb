@@ -265,6 +265,8 @@ typedef struct AggStatePerAggData
 	FunctionCallInfoData transoutfn_fcinfo;
 	FunctionCallInfoData combineinfn_fcinfo;
 	FunctionCallInfoData combinefn_fcinfo;
+
+	bool finalize;
 }	AggStatePerAggData;
 
 /*
@@ -841,7 +843,7 @@ finalize_aggregate(AggState *aggstate,
 		i++;
 	}
 
-	if (IsContQueryProcess())
+	if (!peraggstate->finalize)
 	{
 		*resultVal = pergroupstate->transValue;
 		*resultIsNull = pergroupstate->transValueIsNull;
@@ -1811,6 +1813,8 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 
 		peraggstate->transfn_oid = transfn_oid = aggform->aggtransfn;
 		peraggstate->finalfn_oid = finalfn_oid = aggform->aggfinalfn;
+
+		peraggstate->finalize = !(AGGKIND_IS_COMBINE(aggref->aggkind) || IsContQueryProcess());
 
 		/*
 		 * If it's a combine, we dynamically load the transition function
