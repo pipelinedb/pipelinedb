@@ -2378,7 +2378,7 @@ AggGetAggref(FunctionCallInfo fcinfo)
  */
 Oid AggGetInitialArgType(FunctionCallInfo fcinfo)
 {
-	List *args;
+	List *args = NIL;
 	Oid type;
 	Node *node;
 
@@ -2389,6 +2389,8 @@ Oid AggGetInitialArgType(FunctionCallInfo fcinfo)
 		args = AggGetAggref(fcinfo)->args;
 	else if (AggGetWindowFunc(fcinfo))
 		args = AggGetWindowFunc(fcinfo)->args;
+	else
+		elog(ERROR, "fcinfo must be an aggregate function call");
 
 	node = linitial(args);
 	if (IsA(node, TargetEntry))
