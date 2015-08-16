@@ -629,13 +629,14 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 static void
 validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, ContAnalyzeContext *context)
 {
-	A_Expr *aexpr;
+	A_Expr *aexpr = NULL;
 	Node *ct_expr;
 	Node *col_expr;
 	FuncCall *fc;
 	char *name;
 	char *err = "";
 	char *hint = NULL;
+	int location;
 
 	if (expr == NULL)
 		return;
@@ -690,17 +691,22 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, ContAnalyzeContext *
 	return;
 
 error:
+	if (aexpr)
+		location = parser_errposition(context->pstate, aexpr->location);
+	else
+		location = 0;
+
 	if (hint)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				errmsg(strlen(err) ? "%s" : "sliding window expressions must look like <timestamp column> > clock_timestamp() - <interval>%s", err),
 				errhint("%s", hint),
-				parser_errposition(context->pstate, aexpr->location)));
+				location));
 
 	ereport(ERROR,
 			(errcode(ERRCODE_SYNTAX_ERROR),
 			errmsg(strlen(err) ? "%s" : "sliding window expressions must look like <timestamp column> > clock_timestamp() - <interval>%s", err),
-			parser_errposition(context->pstate, aexpr->location)));
+			location));
 }
 
 /*
@@ -2584,12 +2590,12 @@ make_combine_agg_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var,
 {
 	List *args;
 	Node *result;
-	Oid fnoid;
+	Oid fnoid = InvalidOid;
 	Oid combinefn;
 	Oid transoutfn;
 	Oid combineinfn;
-	Oid type;
-	Oid finaltype;
+	Oid type = InvalidOid;
+	Oid finaltype = InvalidOid;
 	Oid statetype;
 	Oid aggtype;
 	Query *q = GetContWorkerQuery(cvrv);
@@ -2711,13 +2717,13 @@ static Node *
 make_finalize_for_viewdef(ParseState *pstate, RangeVar *cvrv, Var *var, Node *arg)
 {
 	Node *result;
-	Oid fnoid;
+	Oid fnoid = InvalidOid;
 	Oid combinefn;
 	Oid transoutfn;
 	Oid combineinfn;
 	Oid statetype;
-	Oid type;
-	Oid finaltype;
+	Oid type = InvalidOid;
+	Oid finaltype = InvalidOid;
 	Query *q = GetContWorkerQuery(cvrv);
 
 	Assert(!IsContQueryProcess());
@@ -2814,7 +2820,7 @@ combine_target_belongs_to_cv(Var *target, List *rangetable, RangeVar **cv)
 static AttrNumber
 find_attr_from_joinlist(ParseState *pstate, RangeVar *cvrv, RangeTblEntry *joinrte, Var *var)
 {
-	RangeTblEntry *cvrte;
+	RangeTblEntry *cvrte = NULL;
 	ListCell *lc;
 	Value *colname = (Value *) list_nth(joinrte->eref->colnames, var->varattno - 1);
 	Oid relid = RangeVarGetRelid(cvrv, NoLock, false);
@@ -2828,6 +2834,9 @@ find_attr_from_joinlist(ParseState *pstate, RangeVar *cvrv, RangeTblEntry *joinr
 		if (cvrte->relid == relid)
 			break;
 	}
+
+	if (!cvrte || cvrte->relid != relid)
+		elog(ERROR, "could not find continuous view range table entry");
 
 	foreach(lc, cvrte->eref->colnames)
 	{
