@@ -399,7 +399,7 @@ cq_bgproc_main(Datum arg)
 	 * More is less here. A higher number indicates a lower scheduling priority.
 	 */
 	priority = Max(default_priority, MAX_PRIORITY - ceil(continuous_query_proc_priority * (MAX_PRIORITY - default_priority)));
-	nice(priority);
+	priority = nice(priority);
 
 	switch (MyContQueryProc->type)
 	{

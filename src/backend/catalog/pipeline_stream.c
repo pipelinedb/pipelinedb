@@ -787,7 +787,7 @@ RemovePipelineStreamById(Oid oid)
 Relation
 inferred_stream_open(ParseState *pstate, Relation rel)
 {
-	TupleDesc desc;
+	TupleDesc desc = NULL;
 	Relation stream_rel;
 
 	Assert(pstate->p_allow_streams);
@@ -798,7 +798,7 @@ inferred_stream_open(ParseState *pstate, Relation rel)
 	else if (pstate->p_ins_cols)
 		desc = GetInferredStreamTupleDesc(rel->rd_id, pstate->p_ins_cols);
 	else
-		Assert(false); /* x_x */
+		elog(ERROR, "inferred_stream_open called in an invalid context");
 
 	/* Create a dummy Relation for the inferred stream */
 	stream_rel = (Relation) palloc0(sizeof(RelationData));

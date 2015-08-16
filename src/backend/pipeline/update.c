@@ -208,9 +208,9 @@ get_stats(HTAB *all_dbs, bool startup, CQStatsType ptype)
 
 	initStringInfo(&payload);
 	appendStringInfo(&payload, PROC_PAYLOAD_FMT, proc, etype,
-			PIPELINE_VERSION, name, mname.release, mname.version, g->input_rows,
-			g->input_bytes, g->output_rows, g->output_bytes, g->errors, g->cv_create,
-			g->cv_drop);
+			PIPELINE_VERSION, name, mname.release, mname.version, rows_in,
+			bytes_in, rows_out, bytes_out, errors, cv_create,
+			cv_drop);
 
 	return payload.data;
 }
