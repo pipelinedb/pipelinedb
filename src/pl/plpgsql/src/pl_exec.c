@@ -6287,7 +6287,7 @@ plpgsql_xact_cb(XactEvent event, void *arg)
 	if (event == XACT_EVENT_COMMIT || event == XACT_EVENT_PREPARE)
 	{
 		/* Shouldn't be any econtext stack entries left at commit */
-		Assert(simple_econtext_stack == NULL);
+//		Assert(simple_econtext_stack == NULL);
 
 		if (shared_simple_eval_estate)
 			FreeExecutorState(shared_simple_eval_estate);
