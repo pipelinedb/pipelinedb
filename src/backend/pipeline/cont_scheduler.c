@@ -787,7 +787,7 @@ ContQuerySchedulerMain(int argc, char *argv[])
  * sleep_if_cqs_deactivated
  */
 void
-sleep_if_deactivated(void)
+SleepIfContQueriesDeactivated(void)
 {
 	char *name;
 

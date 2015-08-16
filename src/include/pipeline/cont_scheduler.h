@@ -93,7 +93,7 @@ extern void ContQuerySchedulerMain(int argc, char *argv[]) __attribute__((noretu
 extern void ContinuousQueryCombinerMain(void);
 extern void ContinuousQueryWorkerMain(void);
 
-extern void sleep_if_deactivated(void);
+extern void SleepIfContQueriesDeactivated(void);
 extern bool ContQuerySetStateAndWait(bool state, int waitms);
 extern bool *ContQueryGetActiveFlag(void);
 

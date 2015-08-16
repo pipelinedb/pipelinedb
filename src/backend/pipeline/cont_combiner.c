@@ -862,7 +862,7 @@ ContinuousQueryCombinerMain(void)
 		bool updated_queries = false;
 		bool all_throttled = true;
 
-		sleep_if_deactivated();
+		SleepIfContQueriesDeactivated();
 
 		TupleBufferBatchReaderTrySleep(reader, last_processed);
 
