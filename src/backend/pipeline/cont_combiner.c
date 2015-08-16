@@ -702,7 +702,7 @@ cleanup_query_state(ContQueryCombinerState **states, Oid id)
 		return;
 
 	if (state->matrel)
-		relation_close(state->matrel, RowExclusiveLock);
+		heap_close(state->matrel, RowExclusiveLock);
 
 	MemoryContextDelete(state->state_cxt);
 	pfree(state);
