@@ -692,9 +692,9 @@ validate_clock_timestamp_expr(SelectStmt *stmt, Node *expr, ContAnalyzeContext *
 
 error:
 	if (aexpr)
-		location = aexpr->location;
+		location = parser_errposition(context->pstate, aexpr->location);
 	else
-		location = -1;
+		location = 0;
 
 	if (hint)
 		ereport(ERROR,
