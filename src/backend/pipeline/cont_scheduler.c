@@ -50,6 +50,15 @@
 #define MIN_WAIT_TERMINATE_MS 250
 #define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
+#define MAX_ERR_DELAY 5000 /* 5s */
+#define MIN_ERR_DELAY 2 /* 2ms */
+
+typedef struct Throttler
+{
+	TimestampTz last_run;
+	long err_delay;
+} Throttler;
+
 static Throttler throttlers[MAX_CQS];
 
 typedef struct
