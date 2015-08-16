@@ -50,7 +50,6 @@
 #define MIN_WAIT_TERMINATE_MS 250
 #define MAX_PRIORITY 20 /* XXX(usmanm): can we get this from some sys header? */
 
-#define MAX_ERR_DELAY 5000 /* 5s */
 #define MIN_ERR_DELAY 2 /* 2ms */
 
 typedef struct Throttler
@@ -81,6 +80,7 @@ int continuous_query_num_combiners;
 int continuous_query_num_workers;
 int continuous_query_batch_size;
 int continuous_query_max_wait;
+int continuous_query_error_throttle;
 int continuous_query_combiner_work_mem;
 int continuous_query_combiner_cache_mem;
 int continuous_query_combiner_synchronous_commit;
@@ -959,7 +959,7 @@ ThrottlerRecordError(Oid cq_id)
 	if (t->err_delay == 0)
 		t->err_delay = MIN_ERR_DELAY;
 	else
-		t->err_delay = Min(MAX_ERR_DELAY, t->err_delay * 2);
+		t->err_delay = Min(continuous_query_error_throttle, t->err_delay * 2);
 
 	t->last_run = GetCurrentTimestamp();
 
