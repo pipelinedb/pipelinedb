@@ -31,7 +31,7 @@ START_TEST(test_basic)
 
 	for (i = 0; i < num_keys; i++)
 	{
-		float diff = CountMinSketchEstimateCount(cms, &keys[i], sizeof(int)) - counts[i];
+		float diff = CountMinSketchEstimateFrequency(cms, &keys[i], sizeof(int)) - counts[i];
 		ck_assert(diff / cms->count < EPS);
 	}
 
@@ -66,7 +66,7 @@ START_TEST(test_union)
 
 	for (i = 0; i < num_keys * 2; i++)
 	{
-		float diff = CountMinSketchEstimateCount(cms, &keys[i], sizeof(int)) - counts[i];
+		float diff = CountMinSketchEstimateFrequency(cms, &keys[i], sizeof(int)) - counts[i];
 		ck_assert(diff / cms->count < EPS);
 	}
 }
@@ -94,7 +94,7 @@ START_TEST(test_false_positives)
 
 	for (i = 0; i < range; i++)
 	{
-		float diff = 1.0 * abs(CountMinSketchEstimateCount(cms, &i, sizeof(int)) - counts[i]);
+		float diff = 1.0 * abs(CountMinSketchEstimateFrequency(cms, &i, sizeof(int)) - counts[i]);
 		if (diff / cms->count > EPS)
 			num_errors++;
 	}

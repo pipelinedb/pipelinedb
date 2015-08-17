@@ -5280,10 +5280,10 @@ DATA(insert OID = 4353 ( cmsketch_merge_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f
 DESCR("count-min sketch merge aggregate");
 
 /* count-min sketch count function */
-DATA(insert OID = 4354 ( cmsketch_count	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_count _null_ _null_ _null_ ));
-DESCR("count-min sketch estimate count");
-DATA(insert OID = 4386 ( cmsketch_count	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 25" _null_ _null_ _null_ _null_ cmsketch_count _null_ _null_ _null_ ));
-DESCR("count-min sketch estimate count");
+DATA(insert OID = 4354 ( cmsketch_frequency	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_frequency _null_ _null_ _null_ ));
+DESCR("count-min sketch estimate frequency");
+DATA(insert OID = 4386 ( cmsketch_frequency	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 25" _null_ _null_ _null_ _null_ cmsketch_frequency _null_ _null_ _null_ ));
+DESCR("count-min sketch estimate frequency");
 
 DATA(insert OID = 4355 ( cq_proc_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,23,1184,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o}" "{type,pid,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors}" _null_ cq_proc_stat_get _null_ _null_ _null_ ));
 DESCR("get continuous query process stats");
@@ -5404,6 +5404,14 @@ DESCR("gets a materialization table overlay view");
 
 DATA(insert OID = 4391 ( pipeline_version		   PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 25 "" _null_ _null_ _null_ _null_ pipeline_version _null_ _null_ _null_ ));
 DESCR("PipelineDB version string");
+
+/* count-min sketch total and normalized frequency */
+DATA(insert OID = 4392 ( cmsketch_norm_frequency	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_norm_frequency _null_ _null_ _null_ ));
+DESCR("count-min sketch estimate norm frequency");
+DATA(insert OID = 4393 ( cmsketch_norm_frequency	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "5038 25" _null_ _null_ _null_ _null_ cmsketch_norm_frequency _null_ _null_ _null_ ));
+DESCR("count-min sketch estimate norm frequency");
+DATA(insert OID = 4394 ( cmsketch_total	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 20 "5038" _null_ _null_ _null_ _null_ cmsketch_total _null_ _null_ _null_ ));
+DESCR("count-min sketch total");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result

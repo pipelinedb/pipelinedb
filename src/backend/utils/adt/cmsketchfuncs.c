@@ -34,7 +34,7 @@ cmsketch_print(PG_FUNCTION_ARGS)
 	cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
 
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "{ d = %d, w = %d, count = %d, size = %ldkB }", cms->d, cms->w, cms->count, CountMinSketchSize(cms) / 1024);
+	appendStringInfo(&buf, "{ d = %d, w = %d, count = %ld, size = %ldkB }", cms->d, cms->w, cms->count, CountMinSketchSize(cms) / 1024);
 
 	PG_RETURN_TEXT_P(CStringGetTextDatum(buf.data));
 }
@@ -183,10 +183,10 @@ cmsketch_merge_agg_trans(PG_FUNCTION_ARGS)
 }
 
 /*
- * Returns the estimate count of the item
+ * Returns the estimate frequency of the item
  */
 Datum
-cmsketch_count(PG_FUNCTION_ARGS)
+cmsketch_frequency(PG_FUNCTION_ARGS)
 {
 	CountMinSketch *cms;
 	Datum elem = PG_GETARG_DATUM(1);
@@ -209,12 +209,63 @@ cmsketch_count(PG_FUNCTION_ARGS)
 	buf = makeStringInfo();
 	DatumToBytes(elem, typ, buf);
 
-	count = CountMinSketchEstimateCount(cms, buf->data, buf->len);
+	count = CountMinSketchEstimateFrequency(cms, buf->data, buf->len);
 
 	pfree(buf->data);
 	pfree(buf);
 
 	PG_RETURN_INT32(count);
+}
+
+/*
+ * Returns the estimate frequency of the item
+ */
+Datum
+cmsketch_total(PG_FUNCTION_ARGS)
+{
+	CountMinSketch *cms;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_INT64(0);
+
+	cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
+
+	PG_RETURN_INT64(cms->count);
+}
+
+/*
+ * Returns the estimate normalized frequency of the item
+ */
+Datum
+cmsketch_norm_frequency(PG_FUNCTION_ARGS)
+{
+	CountMinSketch *cms;
+	Datum elem = PG_GETARG_DATUM(1);
+	float8 freq = 0;
+	Oid	val_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	TypeCacheEntry *typ;
+	StringInfo buf;
+
+	if (val_type == InvalidOid)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("could not determine input data type")));
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_FLOAT8(freq);
+
+	cms = (CountMinSketch *) PG_GETARG_VARLENA_P(0);
+	typ = lookup_type_cache(val_type, 0);
+
+	buf = makeStringInfo();
+	DatumToBytes(elem, typ, buf);
+
+	freq = CountMinSketchEstimateNormFrequency(cms, buf->data, buf->len);
+
+	pfree(buf->data);
+	pfree(buf);
+
+	PG_RETURN_FLOAT8(freq);
 }
 
 Datum
