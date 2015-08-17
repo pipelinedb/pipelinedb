@@ -2621,10 +2621,10 @@ static struct config_int ConfigureNamesInt[] =
 		 gettext_noop("Sets the maximum time to skip execution of a continuous query if a lot of errors are seen."),
 		 gettext_noop("A higher value here means that tuples will not be seen by a continuous query for longer even if there "
 					  "are no errors."),
-		 GUC_UNIT_MS
+		 GUC_UNIT_S
 		},
 		&continuous_query_error_throttle,
-		5000, 2, 60000,
+		5, 0, 60,
 		NULL, NULL, NULL
 	},
 
