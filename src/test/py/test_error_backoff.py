@@ -65,7 +65,7 @@ CREATE AGGREGATE error_agg (int) (
       for _ in xrange(100):
         pipeline.insert('error_stream', ('x', ), [(1, )])
       n += 100
-      if time.time() - start >= throttle_time:
+      if time.time() - start >= throttle_time + 1:
         break
     # These should get throttled
     for _ in xrange(100):
