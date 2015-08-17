@@ -11,7 +11,6 @@
 #ifndef CONT_SCHEDULER_H
 #define CONT_SCHEDULER_H
 
-#include "datatype/timestamp.h"
 #include "postmaster/bgworker.h"
 #include "storage/latch.h"
 #include "storage/spin.h"
