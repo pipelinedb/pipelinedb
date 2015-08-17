@@ -959,7 +959,7 @@ ThrottlerRecordError(Oid cq_id)
 	if (t->err_delay == 0)
 		t->err_delay = MIN_ERR_DELAY;
 	else
-		t->err_delay = Min(continuous_query_error_throttle * 1000, t->err_delay * 2);
+		t->err_delay = Min(continuous_query_error_throttle, t->err_delay * 2);
 
 	t->last_run = GetCurrentTimestamp();
 
