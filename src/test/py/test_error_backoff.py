@@ -18,7 +18,7 @@ def test_backoff(pipeline, clean_db):
       for _ in xrange(100):
         pipeline.insert('error_stream', ('x', ), [(0, )])
       n += 100
-      if time.time() - start >= throttle_time + 1:
+      if time.time() - start >= throttle_time * 2:
         break
     # These should get throttled
     for _ in xrange(100):
