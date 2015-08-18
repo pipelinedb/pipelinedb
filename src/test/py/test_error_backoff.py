@@ -29,9 +29,9 @@ def test_backoff(pipeline, clean_db):
         break
 
     # These should get throttled
-    for _ in xrange(10):
+    for _ in xrange(100):
       pipeline.insert('error_stream', ('x', ), [(10, )])
-    n += 10
+    n += 100
 
     time.sleep(throttle_time)
     # These should work
@@ -43,10 +43,12 @@ def test_backoff(pipeline, clean_db):
   pipeline.create_cv('error_cv', 'SELECT 100/x::int FROM error_stream')
   insert_events()
 
-  assert pipeline.execute('SELECT count(*) FROM error_cv').first()['count'] == 200
+  assert pipeline.execute('SELECT count(*) FROM error_cv').first()['count'] >= 200
+  assert pipeline.execute('SELECT count(*) FROM error_cv').first()['count'] < 300
 
   pipeline.create_cv('no_error_cv', 'SELECT x::int FROM error_stream')
 
   n = insert_events()
-  assert pipeline.execute('SELECT count(*) FROM error_cv').first()['count'] == 400
+  assert pipeline.execute('SELECT count(*) FROM error_cv').first()['count'] >= 400
+  assert pipeline.execute('SELECT count(*) FROM error_cv').first()['count'] < 500
   assert pipeline.execute('SELECT count(*) FROM no_error_cv').first()['count'] == n

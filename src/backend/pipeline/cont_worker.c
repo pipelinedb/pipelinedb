@@ -459,7 +459,10 @@ next:
 			if (state)
 				cq_stat_report(false);
 			else
+			{
 				cq_stat_send_purge(id, 0, CQ_STAT_WORKER);
+				ThrottlerClear(id);
+			}
 
 			debug_query_string = NULL;
 		}

@@ -103,5 +103,6 @@ extern void SignalContQuerySchedulerRefresh(void);
 extern void ThrottlerRecordError(Oid cq_id);
 extern void ThrottlerRecordSuccess(Oid cq_id);
 extern bool ThrottlerShouldSkip(Oid cq_id);
+extern void ThrottlerClear(Oid cq_id);
 
 #endif   /* CONT_SCHEDULER_H */

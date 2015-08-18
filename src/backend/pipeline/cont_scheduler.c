@@ -996,3 +996,12 @@ ThrottlerShouldSkip(Oid cq_id)
 
 	return true;
 }
+
+/*
+ * ThrottlerClear
+ */
+void
+ThrottlerClear(Oid cq_id)
+{
+	MemSet(&throttlers[cq_id], 0, sizeof(Throttler));
+}
