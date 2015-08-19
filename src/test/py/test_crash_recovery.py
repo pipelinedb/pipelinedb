@@ -26,10 +26,10 @@ def _kill(pid):
   return True
 
 def kill_worker():
-  return _kill(_get_pid('worker \[pipeline\]'))
+  return _kill(_get_pid('worker[0-9] \[pipeline\]'))
 
 def kill_combiner():
-  return _kill(_get_pid('combiner \[pipeline\]'))
+  return _kill(_get_pid('combiner[0-9] \[pipeline\]'))
 
 def test_simple_crash(pipeline, clean_db):
   """

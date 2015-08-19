@@ -15,13 +15,13 @@ SELECT pg_sleep(0.2);
 SELECT state, query FROM pg_stat_activity WHERE query LIKE '%regression%' ORDER BY query;
  state  |                                           query                                           
 --------+-------------------------------------------------------------------------------------------
- idle   | combiner [regression]
- idle   | combiner [regression]
+ idle   | combiner0 [regression]
+ idle   | combiner1 [regression]
  active | SELECT state, query FROM pg_stat_activity WHERE query LIKE '%regression%' ORDER BY query;
- idle   | worker [regression]
- idle   | worker [regression]
- idle   | worker [regression]
- idle   | worker [regression]
+ idle   | worker0 [regression]
+ idle   | worker1 [regression]
+ idle   | worker2 [regression]
+ idle   | worker3 [regression]
 (7 rows)
 
 ACTIVATE;
@@ -41,13 +41,13 @@ SELECT pg_sleep(0.2);
 SELECT state, query FROM pg_stat_activity WHERE query LIKE '%regression%' ORDER BY query;
  state  |                                           query                                           
 --------+-------------------------------------------------------------------------------------------
- idle   | combiner [regression]
- idle   | combiner [regression]
+ idle   | combiner0 [regression]
+ idle   | combiner1 [regression]
  active | SELECT state, query FROM pg_stat_activity WHERE query LIKE '%regression%' ORDER BY query;
- idle   | worker [regression]
- idle   | worker [regression]
- idle   | worker [regression]
- idle   | worker [regression]
+ idle   | worker0 [regression]
+ idle   | worker1 [regression]
+ idle   | worker2 [regression]
+ idle   | worker3 [regression]
 (7 rows)
 
 DEACTIVATE;
@@ -67,13 +67,13 @@ SELECT pg_sleep(0.2);
 SELECT state, query FROM pg_stat_activity WHERE query LIKE '%regression%' ORDER BY query;
   state   |                                           query                                           
 ----------+-------------------------------------------------------------------------------------------
- disabled | combiner [regression]
- disabled | combiner [regression]
+ disabled | combiner0 [regression]
+ disabled | combiner1 [regression]
  active   | SELECT state, query FROM pg_stat_activity WHERE query LIKE '%regression%' ORDER BY query;
- disabled | worker [regression]
- disabled | worker [regression]
- disabled | worker [regression]
- disabled | worker [regression]
+ disabled | worker0 [regression]
+ disabled | worker1 [regression]
+ disabled | worker2 [regression]
+ disabled | worker3 [regression]
 (7 rows)
 
 DEACTIVATE;
@@ -93,13 +93,13 @@ SELECT pg_sleep(0.2);
 SELECT state, query FROM pg_stat_activity WHERE query LIKE '%regression%' ORDER BY query;
   state   |                                           query                                           
 ----------+-------------------------------------------------------------------------------------------
- disabled | combiner [regression]
- disabled | combiner [regression]
+ disabled | combiner0 [regression]
+ disabled | combiner1 [regression]
  active   | SELECT state, query FROM pg_stat_activity WHERE query LIKE '%regression%' ORDER BY query;
- disabled | worker [regression]
- disabled | worker [regression]
- disabled | worker [regression]
- disabled | worker [regression]
+ disabled | worker0 [regression]
+ disabled | worker1 [regression]
+ disabled | worker2 [regression]
+ disabled | worker3 [regression]
 (7 rows)
 
 ACTIVATE;
@@ -119,12 +119,12 @@ SELECT pg_sleep(0.2);
 SELECT state, query FROM pg_stat_activity WHERE query LIKE '%regression%' ORDER BY query;
  state  |                                           query                                           
 --------+-------------------------------------------------------------------------------------------
- idle   | combiner [regression]
- idle   | combiner [regression]
+ idle   | combiner0 [regression]
+ idle   | combiner1 [regression]
  active | SELECT state, query FROM pg_stat_activity WHERE query LIKE '%regression%' ORDER BY query;
- idle   | worker [regression]
- idle   | worker [regression]
- idle   | worker [regression]
- idle   | worker [regression]
+ idle   | worker0 [regression]
+ idle   | worker1 [regression]
+ idle   | worker2 [regression]
+ idle   | worker3 [regression]
 (7 rows)
 
