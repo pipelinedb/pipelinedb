@@ -5413,6 +5413,10 @@ DESCR("count-min sketch estimate norm frequency");
 DATA(insert OID = 4394 ( cmsketch_total	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 20 "5038" _null_ _null_ _null_ _null_ cmsketch_total _null_ _null_ _null_ ));
 DESCR("count-min sketch total");
 
+/* date_floor */
+DATA(insert OID = 4395 (  date_floor	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 2 0 1184 "25 1184" _null_ _null_ _null_ _null_ timestamptz_floor _null_ _null_ _null_ ));
+DESCR("floor timestamp with time zone to specified interval");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

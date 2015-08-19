@@ -50,6 +50,7 @@
 #include "utils/syscache.h"
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
+#define DATE_FLOOR "date_floor"
 #define DATE_TRUNC "date_trunc"
 #define DATE_TRUNC_YEAR "year"
 #define DATE_TRUNC_MONTH "month"

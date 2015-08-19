@@ -4122,7 +4122,8 @@ timestamptz_year(PG_FUNCTION_ARGS)
 /*
  * Truncate to month
  */
-Datum timestamptz_month(PG_FUNCTION_ARGS)
+Datum
+timestamptz_month(PG_FUNCTION_ARGS)
 {
 	return timestamptz_truncate_by("month", fcinfo);
 }
@@ -4130,7 +4131,8 @@ Datum timestamptz_month(PG_FUNCTION_ARGS)
 /*
  * Truncate to day
  */
-Datum timestamptz_day(PG_FUNCTION_ARGS)
+Datum
+timestamptz_day(PG_FUNCTION_ARGS)
 {
 	return timestamptz_truncate_by("day", fcinfo);
 }
@@ -4138,7 +4140,8 @@ Datum timestamptz_day(PG_FUNCTION_ARGS)
 /*
  * Truncate to hour
  */
-Datum timestamptz_hour(PG_FUNCTION_ARGS)
+Datum
+timestamptz_hour(PG_FUNCTION_ARGS)
 {
 	return timestamptz_truncate_by("hour", fcinfo);
 }
@@ -4146,7 +4149,8 @@ Datum timestamptz_hour(PG_FUNCTION_ARGS)
 /*
  * Truncate to minute
  */
-Datum timestamptz_minute(PG_FUNCTION_ARGS)
+Datum
+timestamptz_minute(PG_FUNCTION_ARGS)
 {
 	return timestamptz_truncate_by("minute", fcinfo);
 }
@@ -4154,9 +4158,16 @@ Datum timestamptz_minute(PG_FUNCTION_ARGS)
 /*
  * Truncate to second
  */
-Datum timestamptz_second(PG_FUNCTION_ARGS)
+Datum
+timestamptz_second(PG_FUNCTION_ARGS)
 {
 	return timestamptz_truncate_by("second", fcinfo);
+}
+
+Datum
+timestamptz_floor(PG_FUNCTION_ARGS)
+{
+	return NULL;
 }
 
 /* interval_trunc()
