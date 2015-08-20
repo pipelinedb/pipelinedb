@@ -66,7 +66,7 @@
 #include "parser/parse_clause.h"
 #include "parser/parse_expr.h"
 #include "parser/parse_type.h"
-#include "pipeline/cqanalyze.h"
+#include "pipeline/cont_analyze.h"
 #include "pipeline/stream.h"
 #include "pipeline/tuplebuf.h"
 #include "pg_getopt.h"

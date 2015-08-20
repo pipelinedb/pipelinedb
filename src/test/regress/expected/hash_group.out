@@ -154,7 +154,10 @@ FROM generate_series(1, 100) AS i ORDER BY key;
 
 -- Ensure that hash index is created and cannot be dropped
 CREATE CONTINUOUS VIEW hash_group AS SELECT x::int, COUNT(*) FROM hash_group_stream GROUP BY x;
-CREATE CONTINUOUS VIEW ls_hash_group AS SELECT x::int, y::timestamptz, COUNT(*) FROM hash_group_stream GROUP BY x, y;
+CREATE CONTINUOUS VIEW ls_hash_group1 AS SELECT x::int, minute(y::timestamptz), COUNT(*) FROM hash_group_stream WHERE ( arrival_timestamp > clock_timestamp() - interval '5 hour' ) GROUP BY x, minute;
+NOTICE:  window width is "5 hour" with a step size of "1 minute"
+HINT:  Use a datetime truncation function to explicitly set the step size.
+CREATE CONTINUOUS VIEW ls_hash_group2 AS SELECT x::int, y::timestamptz, COUNT(*) FROM hash_group_stream GROUP BY x, y;
 \d+ hash_group_mrel0;
                    Table "public.hash_group_mrel0"
  Column |  Type   | Modifiers | Storage | Stats target | Description 
@@ -165,22 +168,38 @@ Indexes:
     "hash_group_mrel0_expr_idx" btree (hash_group(x))
 Options: fillfactor=50
 
-\d+ ls_hash_group_mrel0;
-                           Table "public.ls_hash_group_mrel0"
+\d+ ls_hash_group1_mrel0;
+                         Table "public.ls_hash_group1_mrel0"
+ Column |           Type           | Modifiers | Storage | Stats target | Description 
+--------+--------------------------+-----------+---------+--------------+-------------
+ _0     | timestamp with time zone |           | plain   |              | 
+ x      | integer                  |           | plain   |              | 
+ minute | timestamp with time zone |           | plain   |              | 
+ count  | bigint                   |           | plain   |              | 
+Indexes:
+    "ls_hash_group1_mrel0_expr_idx" btree (ls_hash_group(_0, x, minute))
+Options: fillfactor=50
+
+\d+ ls_hash_group2_mrel0;
+                           Table "public.ls_hash_group2_mrel0"
  Column |            Type             | Modifiers | Storage | Stats target | Description 
 --------+-----------------------------+-----------+---------+--------------+-------------
  x      | integer                     |           | plain   |              | 
  y      | timestamp(0) with time zone |           | plain   |              | 
  count  | bigint                      |           | plain   |              | 
 Indexes:
-    "ls_hash_group_mrel0_expr_idx" btree (ls_hash_group(x, y))
+    "ls_hash_group2_mrel0_expr_idx" btree (ls_hash_group(x, y))
 Options: fillfactor=50
 
 DROP INDEX hash_group_mrel0_expr_idx;
 ERROR:  cannot drop index hash_group_mrel0_expr_idx because table hash_group_mrel0 requires it
 HINT:  You can drop table hash_group_mrel0 instead.
-DROP INDEX ls_hash_group_mrel0_expr_idx;
-ERROR:  cannot drop index ls_hash_group_mrel0_expr_idx because table ls_hash_group_mrel0 requires it
-HINT:  You can drop table ls_hash_group_mrel0 instead.
+DROP INDEX ls_hash_group1_mrel0_expr_idx;
+ERROR:  cannot drop index ls_hash_group1_mrel0_expr_idx because table ls_hash_group1_mrel0 requires it
+HINT:  You can drop table ls_hash_group1_mrel0 instead.
+DROP INDEX ls_hash_group2_mrel0_expr_idx;
+ERROR:  cannot drop index ls_hash_group2_mrel0_expr_idx because table ls_hash_group2_mrel0 requires it
+HINT:  You can drop table ls_hash_group2_mrel0 instead.
 DROP CONTINUOUS VIEW hash_group;
-DROP CONTINUOUS VIEW ls_hash_group;
+DROP CONTINUOUS VIEW ls_hash_group1;
+DROP CONTINUOUS VIEW ls_hash_group2;

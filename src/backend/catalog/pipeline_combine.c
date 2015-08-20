@@ -75,7 +75,7 @@ get_single_func_oid(List *name)
  * Get all the pipeline_combine information associated with the given aggregate function
  */
 void
-GetCombineInfo(Oid aggfnoid, Oid *combinefn, Oid *combineinfn, Oid *statetype)
+GetCombineInfo(Oid aggfnoid, Oid *combinefn, Oid *transoutfn, Oid *combineinfn, Oid *statetype)
 {
 	HeapTuple	aggtup;
 	HeapTuple combtup;
@@ -102,6 +102,7 @@ GetCombineInfo(Oid aggfnoid, Oid *combinefn, Oid *combineinfn, Oid *statetype)
 	combform = (Form_pipeline_combine) GETSTRUCT(combtup);
 
 	*combinefn = combform->combinefn;
+	*transoutfn = combform->transoutfn;
 	*combineinfn = combform->combineinfn;
 
 	/* we only have a state type if we're actually storing state in tables */
@@ -120,10 +121,11 @@ Oid
 GetCombineStateType(Oid aggfnoid)
 {
 	Oid combinefn;
+	Oid transoutfn;
 	Oid combineinfn;
 	Oid result;
 
-	GetCombineInfo(aggfnoid, &combinefn, &combineinfn, &result);
+	GetCombineInfo(aggfnoid, &combinefn, &transoutfn, &combineinfn, &result);
 
 	return result;
 }

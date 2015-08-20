@@ -109,11 +109,11 @@ CREATE CONTINUOUS VIEW cqanalyze36 AS SELECT key::text from stream ORDER BY key;
 CREATE CONTINUOUS VIEW cqanalyze37 AS SELECT key::text from stream ORDER BY arrival_time;
 
 -- Sliding window queries
-CREATE CONTINUOUS VIEW cqanalyze38 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour';
-CREATE CONTINUOUS VIEW cqanalyze39 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour' AND key::text='pipelinedb';
-CREATE CONTINUOUS VIEW cqanalyze40 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE NOT arrival_timestamp < clock_timestamp() - interval '1 hour';
-CREATE CONTINUOUS VIEW cqanalyze41 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour' OR key::text='pipelinedb';
-CREATE CONTINUOUS VIEW cqanalyze42 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE arrival_timestamp < clock_timestamp() - interval '1 hour' AND arrival_timestamp > clock_timestamp() - interval '5 hour';
+CREATE CONTINUOUS VIEW cqanalyze38 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE arrival_timestamp > clock_timestamp() - interval '1 hour';
+CREATE CONTINUOUS VIEW cqanalyze39 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE arrival_timestamp > clock_timestamp() - interval '1 hour' AND key::text='pipelinedb';
+CREATE CONTINUOUS VIEW cqanalyze40 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE NOT arrival_timestamp > clock_timestamp() - interval '1 hour';
+CREATE CONTINUOUS VIEW cqanalyze41 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE arrival_timestamp > clock_timestamp() - interval '1 hour' OR key::text='pipelinedb';
+CREATE CONTINUOUS VIEW cqanalyze42 AS SELECT COUNT(*) FROM analyze_cont_stream WHERE arrival_timestamp > clock_timestamp() - interval '1 hour' AND arrival_timestamp > clock_timestamp() - interval '5 hour';
 
 -- Hypothetical-set aggregates
 CREATE CONTINUOUS VIEW cqanalyze45 AS SELECT g::integer, percent_rank(1 + 3, 2, substring('xxx', 1, 2)) WITHIN GROUP (ORDER BY x::integer, y::integer, z::text) + rank(4, 5, 'x') WITHIN GROUP (ORDER BY x, y, substring(z, 1, 2))  FROM analyze_cont_stream3 GROUP BY g;
@@ -150,19 +150,6 @@ CREATE CONTINUOUS VIEW error_not_created AS SELECT percentile_cont(0.1) WITHIN G
 -- Sliding windows
 CREATE CONTINUOUS VIEW cqanalyze52 AS SELECT g::integer, percentile_cont(ARRAY[0.2, 0.8]) WITHIN GROUP (ORDER BY x::float), percentile_cont(0.9) WITHIN GROUP (ORDER BY y::integer) + percentile_cont(0.1) WITHIN GROUP (ORDER BY z::numeric) AS col FROM analyze_cont_stream6 WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes') GROUP BY g;
 CREATE CONTINUOUS VIEW cqanalyze53 AS SELECT percentile_cont(0.1) WITHIN GROUP (ORDER BY x::float + y::integer) FROM analyze_cont_stream3 WHERE (arrival_timestamp > clock_timestamp() - interval '5 minutes');
-
-CREATE CONTINUOUS VIEW over_1m AS
-SELECT date_trunc('minute', t::timestamptz) AS minute, avg(queue_length::float) AS load_avg
-FROM sysstat
-WHERE arrival_timestamp > clock_timestamp() - interval '1 hour'
-GROUP BY minute;
-
-CREATE OR REPLACE VIEW over_5m AS
-SELECT first_value(minute) OVER w AS minute, combine(load_avg) OVER w AS load_avg
-FROM over_1m
-WINDOW w AS (ORDER BY minute DESC ROWS 4 PRECEDING);
-
-\d+ over_5m;
 
 CREATE CONTINUOUS VIEW funcs AS SELECT floor(x::float8), date_trunc('day', arrival_timestamp), COUNT(*) FROM stream GROUP BY floor, date_trunc;
 
@@ -216,7 +203,6 @@ DROP CONTINUOUS VIEW cvnotice1;
 DROP CONTINUOUS VIEW cvnotice2;
 DROP CONTINUOUS VIEW cvnotice3;
 DROP CONTINUOUS VIEW funcs;
-DROP CONTINUOUS VIEW over_1m CASCADE;
 DROP TABLE t0;
 
 -- Regression

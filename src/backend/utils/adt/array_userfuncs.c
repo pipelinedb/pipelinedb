@@ -559,9 +559,6 @@ array_agg_finalfn(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();		/* returns null iff no input values */
 
-	/* cannot be called directly because of internal-type argument */
-	Assert(AggCheckCallContext(fcinfo, NULL));
-
 	state = (ArrayBuildState *) PG_GETARG_POINTER(0);
 
 	dims[0] = state->nelems;

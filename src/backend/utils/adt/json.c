@@ -1889,9 +1889,6 @@ json_agg_finalfn(PG_FUNCTION_ARGS)
 {
 	StringInfo	state;
 
-	/* cannot be called directly because of internal-type argument */
-	Assert(AggCheckCallContext(fcinfo, NULL));
-
 	state = PG_ARGISNULL(0) ? NULL : (StringInfo) PG_GETARG_POINTER(0);
 
 	/* NULL result for no rows in, as is standard with aggregates */
@@ -1992,9 +1989,6 @@ Datum
 json_object_agg_finalfn(PG_FUNCTION_ARGS)
 {
 	StringInfo	state;
-
-	/* cannot be called directly because of internal-type argument */
-	Assert(AggCheckCallContext(fcinfo, NULL));
 
 	state = PG_ARGISNULL(0) ? NULL : (StringInfo) PG_GETARG_POINTER(0);
 

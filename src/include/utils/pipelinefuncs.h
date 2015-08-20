@@ -14,6 +14,8 @@
 #ifndef CQSTATFUNCS_H
 #define CQSTATFUNCS_H
 
+#define DISPLAY_OVERLAY_VIEW -2
+
 /* continuous query process stats */
 extern Datum cq_proc_stat_get(PG_FUNCTION_ARGS);
 
@@ -31,5 +33,11 @@ extern Datum pipeline_streams(PG_FUNCTION_ARGS);
 
 /* global pipeline stats */
 extern Datum pipeline_stat_get(PG_FUNCTION_ARGS);
+
+/* matrel overlay view definition */
+extern Datum pipeline_get_overlay_viewdef(PG_FUNCTION_ARGS);
+
+/* PipelineDB version string */
+extern Datum pipeline_version(PG_FUNCTION_ARGS);
 
 #endif

@@ -13,6 +13,6 @@ RUN /scripts/install_pipeline.sh
 
 RUN /scripts/install_extras.sh
 
-EXPOSE 5432
+EXPOSE 6543
 
 CMD ["/scripts/startpipeline"]

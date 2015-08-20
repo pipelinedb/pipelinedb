@@ -5,20 +5,18 @@ INSERT INTO test_uc_table (v) VALUES (0), (1), (2);
 -- combine only accepts a single colref as an argument
 SELECT combine(avg + 1) FROM test_uc_validation;
 ERROR:  combine called with an invalid expression
-HINT:  combine must be called with a single column reference as its argument.
+HINT:  combine must be called with a single aggregate continuous view column reference.
 SELECT combine(avg, avg) FROM test_uc_validation;
 ERROR:  combine called with 2 arguments
-HINT:  combine must be called with a single column reference as its argument.
+HINT:  combine must be called with a single aggregate continuous view column reference.
 -- combine isn't allowed on tables
 SELECT combine(v) FROM test_uc_table;
 ERROR:  "test_uc_table" is not a continuous view
-HINT:  only aggregate continuous view columns can be combined.
+HINT:  Only aggregate continuous view columns can be combined.
 -- combine is only allowed on aggregate columns
 SELECT combine(k) FROM test_uc_validation;
- combine 
----------
-(0 rows)
-
+ERROR:  combine called with an invalid expression
+HINT:  combine must be called with a single aggregate continuous view column reference.
 -- Column doesn't exist
 SELECT combine(nothere) FROM test_uc_validation;
 ERROR:  column "nothere" does not exist
@@ -28,8 +26,8 @@ DROP TABLE test_uc_table;
 DROP CONTINUOUS VIEW test_uc_validation;
 CREATE CONTINUOUS VIEW test_uc0 AS SELECT
 s::text,
-avg(x::integer) + avg(y::integer) AS avg_sum,
-sum(x) + (count(*) + (avg(x) * sum(y))) AS expr,
+avg(x::numeric),
+sum(y::int),
 json_object_agg(x, y),
 array_agg(x),
 max(x),
@@ -38,8 +36,8 @@ string_agg(substring(s, 1, 1), ' :: ')
 FROM test_uc_stream GROUP BY s;
 CREATE CONTINUOUS VIEW test_uc1 AS SELECT
 s::text,
-dense_rank('20') WITHIN GROUP (ORDER BY s) + rank('20') WITHIN GROUP (ORDER BY s) AS expr0,
-stddev(x::integer) + (regr_r2(x, y::integer) * rank(10) WITHIN GROUP (ORDER BY y)) AS expr1
+dense_rank('20') WITHIN GROUP (ORDER BY s) AS expr0,
+regr_r2(x::integer, y::integer) AS expr1
 FROM test_uc_stream GROUP BY s;
 CREATE CONTINUOUS VIEW test_uc2 AS
 SELECT date_trunc('minute', t::timestamptz) AS minute,
@@ -47,6 +45,8 @@ SELECT date_trunc('minute', t::timestamptz) AS minute,
     FROM test_uc_systat_stream
 WHERE arrival_timestamp > (clock_timestamp() - interval '1 hour')
 GROUP BY minute;
+NOTICE:  window width is "1 hour" with a step size of "1 second"
+HINT:  Use a datetime truncation function to explicitly set the step size.
 CREATE VIEW test_uc2_view AS
 SELECT minute, combine(load_avg) OVER (ORDER BY minute DESC ROWS 4 PRECEDING) AS load_avg
   FROM test_uc2;
@@ -158,16 +158,16 @@ INSERT INTO test_uc_systat_stream (t, queue_length) VALUES ('2015-03-25T07:52:52
 ('2015-03-25T07:56:54Z', 3),
 ('2015-03-25T07:57:54Z', 4);
 -- Verify that table-wide combines work
-SELECT combine(avg_sum) FROM test_uc0;
-        combine        
------------------------
- 3322.0000000000000000
+SELECT combine(avg) FROM test_uc0;
+       combine       
+---------------------
+ 99.5000000000000000
 (1 row)
 
-SELECT combine(expr) FROM test_uc0;
-          combine          
----------------------------
- 64147850.0000000000000000
+SELECT combine(sum) FROM test_uc0;
+ combine 
+---------
+  644500
 (1 row)
 
 SELECT combine(max) FROM test_uc0;
@@ -401,76 +401,76 @@ SELECT length(combine(string_agg)) FROM test_uc0;
 (1 row)
 
 -- Verify that subsets of rows are combined properly
-SELECT s, combine(avg_sum) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
- s  |        combine        
-----+-----------------------
- 26 | 3406.0000000000000000
- 27 | 3462.0000000000000000
- 28 | 3518.0000000000000000
- 29 | 3574.0000000000000000
- 3  | 2118.0000000000000000
- 30 | 3630.0000000000000000
- 31 | 3686.0000000000000000
- 32 | 3742.0000000000000000
- 33 | 3798.0000000000000000
- 34 | 3854.0000000000000000
- 35 | 3910.0000000000000000
- 36 | 3966.0000000000000000
- 37 | 4022.0000000000000000
- 38 | 4078.0000000000000000
- 39 | 4134.0000000000000000
- 4  | 2174.0000000000000000
- 40 | 4190.0000000000000000
- 41 | 4246.0000000000000000
- 42 | 4302.0000000000000000
- 43 | 4358.0000000000000000
- 44 | 4414.0000000000000000
- 45 | 4470.0000000000000000
- 46 | 4526.0000000000000000
- 47 | 4582.0000000000000000
- 48 | 4638.0000000000000000
- 49 | 4694.0000000000000000
- 5  | 2230.0000000000000000
- 6  | 2286.0000000000000000
- 7  | 2342.0000000000000000
- 8  | 2398.0000000000000000
- 9  | 2454.0000000000000000
+SELECT s, combine(avg) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
+ s  |       combine        
+----+----------------------
+ 26 | 101.0000000000000000
+ 27 | 102.0000000000000000
+ 28 | 103.0000000000000000
+ 29 | 104.0000000000000000
+ 3  |  78.0000000000000000
+ 30 | 105.0000000000000000
+ 31 | 106.0000000000000000
+ 32 | 107.0000000000000000
+ 33 | 108.0000000000000000
+ 34 | 109.0000000000000000
+ 35 | 110.0000000000000000
+ 36 | 111.0000000000000000
+ 37 | 112.0000000000000000
+ 38 | 113.0000000000000000
+ 39 | 114.0000000000000000
+ 4  |  79.0000000000000000
+ 40 | 115.0000000000000000
+ 41 | 116.0000000000000000
+ 42 | 117.0000000000000000
+ 43 | 118.0000000000000000
+ 44 | 119.0000000000000000
+ 45 | 120.0000000000000000
+ 46 | 121.0000000000000000
+ 47 | 122.0000000000000000
+ 48 | 123.0000000000000000
+ 49 | 124.0000000000000000
+ 5  |  80.0000000000000000
+ 6  |  81.0000000000000000
+ 7  |  82.0000000000000000
+ 8  |  83.0000000000000000
+ 9  |  84.0000000000000000
 (31 rows)
 
-SELECT s, combine(expr) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
- s  |         combine          
-----+--------------------------
- 26 | 1335628.0000000000000000
- 27 | 1371292.0000000000000000
- 28 | 1407396.0000000000000000
- 29 | 1443940.0000000000000000
- 3  |  636796.0000000000000000
- 30 | 1480924.0000000000000000
- 31 | 1518348.0000000000000000
- 32 | 1556212.0000000000000000
- 33 | 1594516.0000000000000000
- 34 | 1633260.0000000000000000
- 35 | 1672444.0000000000000000
- 36 | 1712068.0000000000000000
- 37 | 1752132.0000000000000000
- 38 | 1792636.0000000000000000
- 39 | 1833580.0000000000000000
- 4  |  662340.0000000000000000
- 40 | 1874964.0000000000000000
- 41 | 1916788.0000000000000000
- 42 | 1959052.0000000000000000
- 43 | 2001756.0000000000000000
- 44 | 2044900.0000000000000000
- 45 | 2088484.0000000000000000
- 46 | 2132508.0000000000000000
- 47 | 2176972.0000000000000000
- 48 | 2221876.0000000000000000
- 49 | 2267220.0000000000000000
- 5  |  688324.0000000000000000
- 6  |  714748.0000000000000000
- 7  |  741612.0000000000000000
- 8  |  768916.0000000000000000
- 9  |  796660.0000000000000000
+SELECT s, combine(sum) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
+ s  | combine 
+----+---------
+ 26 |   13220
+ 27 |   13440
+ 28 |   13660
+ 29 |   13880
+ 3  |    8160
+ 30 |   14100
+ 31 |   14320
+ 32 |   14540
+ 33 |   14760
+ 34 |   14980
+ 35 |   15200
+ 36 |   15420
+ 37 |   15640
+ 38 |   15860
+ 39 |   16080
+ 4  |    8380
+ 40 |   16300
+ 41 |   16520
+ 42 |   16740
+ 43 |   16960
+ 44 |   17180
+ 45 |   17400
+ 46 |   17620
+ 47 |   17840
+ 48 |   18060
+ 49 |   18280
+ 5  |    8600
+ 6  |    8820
+ 7  |    9040
+ 8  |    9260
+ 9  |    9480
 (31 rows)
 
 SELECT s, combine(max) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER BY s;
@@ -751,97 +751,97 @@ SELECT length(combine(string_agg)) FROM test_uc0 WHERE s > '25' GROUP BY s ORDER
 SELECT combine(expr0) FROM test_uc1;
  combine 
 ---------
-      67
+      14
 (1 row)
 
 SELECT combine(expr1) FROM test_uc1;
-     combine      
-------------------
- 58.0163369819087
+      combine       
+--------------------
+ 0.0685762339787877
 (1 row)
 
 -- Verify that subsets of rows are combined properly
 SELECT s, combine(expr0) FROM test_uc1 WHERE s < '25' GROUP BY s ORDER BY s;
  s  | combine 
 ----+---------
- 0  |       7
- 1  |       7
- 10 |       7
- 11 |       7
- 12 |       7
- 13 |       7
- 14 |       7
- 15 |       7
- 16 |       7
- 17 |       7
- 18 |       7
- 19 |       7
- 2  |       7
- 20 |       2
- 21 |       2
- 22 |       2
- 23 |       2
- 24 |       2
+ 0  |       2
+ 1  |       2
+ 10 |       2
+ 11 |       2
+ 12 |       2
+ 13 |       2
+ 14 |       2
+ 15 |       2
+ 16 |       2
+ 17 |       2
+ 18 |       2
+ 19 |       2
+ 2  |       2
+ 20 |       1
+ 21 |       1
+ 22 |       1
+ 23 |       1
+ 24 |       1
 (18 rows)
 
 SELECT s, combine(expr1) FROM test_uc1 WHERE s < '25' GROUP BY s ORDER BY s;
- s  |     combine      
-----+------------------
- 0  | 64.5514845513277
- 1  | 64.5497903951277
- 10 | 64.5775815468062
- 11 |  64.583650542625
- 12 | 64.5901358654677
- 13 | 64.5969926652362
- 14 | 64.6041781596134
- 15 | 64.6116517635894
- 16 | 64.6193751750575
- 17 | 64.6273124217559
- 18 | 64.6354298747513
- 19 | 64.6436962334667
- 2  | 64.5498874004233
- 20 | 64.6520824869556
- 21 | 64.6605618557704
- 22 | 64.6691097183727
- 23 | 64.6777035256203
- 24 | 64.6863227064465
+ s  |       combine        
+----+----------------------
+ 0  | 0.000881057268722467
+ 1  | 6.79583373784725e-05
+ 10 |   0.0278591100159443
+ 11 |   0.0339281058347409
+ 12 |   0.0404134286774603
+ 13 |    0.047270228445897
+ 14 |   0.0544557228231291
+ 15 |   0.0619293267990714
+ 16 |   0.0696527382672662
+ 17 |   0.0775899849656568
+ 18 |   0.0857074379610678
+ 19 |   0.0939737966764236
+ 2  | 0.000164963633017267
+ 20 |    0.102360050165318
+ 21 |    0.110839418980102
+ 22 |    0.119387281582451
+ 23 |    0.127981088830062
+ 24 |     0.13660026965625
 (18 rows)
 
 -- Verify that combines work with CV-CV joins
-SELECT combine(avg_sum),
-combine(expr),
+SELECT combine(avg),
+combine(sum),
 combine(max),
 combine(min),
 combine(expr0),
 combine(expr1)
 FROM test_uc0 v0 JOIN test_uc1 v1 ON v0.s = v1.s;
-        combine        |          combine          | combine | combine | combine |     combine      
------------------------+---------------------------+---------+---------+---------+------------------
- 3322.0000000000000000 | 64147850.0000000000000000 |     199 |       0 |      67 | 58.0163369819087
+       combine       | combine | combine | combine | combine |      combine       
+---------------------+---------+---------+---------+---------+--------------------
+ 99.5000000000000000 |  644500 |     199 |       0 |      14 | 0.0685762339787877
 (1 row)
 
 -- Verify that combines work with subsets of CV-CV joins
 SELECT v0.s,
-combine(avg_sum),
-combine(expr),
+combine(avg),
+combine(sum),
 combine(max),
 combine(min),
 combine(expr0),
 combine(expr1)
 FROM test_uc0 v0 JOIN test_uc1 v1 ON v0.s = v1.s WHERE v0.s IN ('0', '1', '2') AND v1.s IN ('0', '1', '2')
 GROUP BY v0.s;
- s |        combine        |         combine         | combine | combine | combine |     combine      
----+-----------------------+-------------------------+---------+---------+---------+------------------
- 0 | 1950.0000000000000000 | 562804.0000000000000000 |     150 |       0 |       7 | 64.5514845513277
- 1 | 2006.0000000000000000 | 587028.0000000000000000 |     151 |     100 |       7 | 64.5497903951277
- 2 | 2062.0000000000000000 | 611692.0000000000000000 |     152 |     200 |       7 | 64.5498874004233
+ s |       combine       | combine | combine | combine | combine |       combine        
+---+---------------------+---------+---------+---------+---------+----------------------
+ 0 | 75.0000000000000000 |    7500 |     150 |       0 |       2 | 0.000881057268722467
+ 1 | 76.0000000000000000 |    7720 |     151 |     100 |       2 | 6.79583373784725e-05
+ 2 | 77.0000000000000000 |    7940 |     152 |     200 |       2 | 0.000164963633017267
 (3 rows)
 
 CREATE TABLE test_uc_table1 (x integer, y integer, s text);
 INSERT INTO test_uc_table1 (x, y, s) VALUES (100, 1000, '0'), (101, 1010, '1'), (102, 1020, '2'), (103, 1030, '3'), (104, 1040, '4'), (105, 1050, '5'), (106, 1060, '6'), (107, 1070, '7'), (108, 1080, '8'), (109, 1090, '9'), (110, 1100, '10'), (111, 1110, '11'), (112, 1120, '12'), (113, 1130, '13'), (114, 1140, '14'), (115, 1150, '15'), (116, 1160, '16'), (117, 1170, '17'), (118, 1180, '18'), (119, 1190, '19'), (120, 1200, '20'), (121, 1210, '21'), (122, 1220, '22'), (123, 1230, '23'), (124, 1240, '24'), (125, 1250, '25'), (126, 1260, '26'), (127, 1270, '27'), (128, 1280, '28'), (129, 1290, '29'), (130, 1300, '30'), (131, 1310, '31'), (132, 1320, '32'), (133, 1330, '33'), (134, 1340, '34'), (135, 1350, '35'), (136, 1360, '36'), (137, 1370, '37'), (138, 1380, '38'), (139, 1390, '39'), (140, 1400, '40'), (141, 1410, '41'), (142, 1420, '42'), (143, 1430, '43'), (144, 1440, '44'), (145, 1450, '45'), (146, 1460, '46'), (147, 1470, '47'), (148, 1480, '48'), (149, 1490, '49');
 -- Verify that combines work on CV-table joins
-SELECT combine(avg_sum),
-combine(expr),
+SELECT combine(avg),
+combine(sum),
 combine(max),
 combine(min),
 combine(expr0),
@@ -849,48 +849,48 @@ combine(expr1),
 sum(x),
 sum(y)
 FROM test_uc0 v0 JOIN test_uc1 v1 ON v0.s = v1.s JOIN test_uc_table1 t0 ON v0.s = t0.s;
-        combine        |          combine          | combine | combine | combine |     combine      | sum  |  sum  
------------------------+---------------------------+---------+---------+---------+------------------+------+-------
- 3322.0000000000000000 | 64147850.0000000000000000 |     199 |       0 |      67 | 58.0163369819087 | 6225 | 62250
+       combine       | combine | combine | combine | combine |      combine       | sum  |  sum  
+---------------------+---------+---------+---------+---------+--------------------+------+-------
+ 99.5000000000000000 |  644500 |     199 |       0 |      14 | 0.0685762339787877 | 6225 | 62250
 (1 row)
 
 -- Verify that combines work on subsets of CV-table joins
-SELECT v0.s, combine(expr0), combine(avg_sum) FROM test_uc0 v0
+SELECT v0.s, combine(expr0), combine(avg) FROM test_uc0 v0
 JOIN test_uc1 v1 ON v0.s = v1.s JOIN test_uc_table1 t0 ON v0.s = t0.s
 WHERE v0.s > '25' GROUP BY v0.s ORDER BY v0.s;
- s  | combine |        combine        
-----+---------+-----------------------
- 26 |       2 | 3406.0000000000000000
- 27 |       2 | 3462.0000000000000000
- 28 |       2 | 3518.0000000000000000
- 29 |       2 | 3574.0000000000000000
- 3  |       2 | 2118.0000000000000000
- 30 |       2 | 3630.0000000000000000
- 31 |       2 | 3686.0000000000000000
- 32 |       2 | 3742.0000000000000000
- 33 |       2 | 3798.0000000000000000
- 34 |       2 | 3854.0000000000000000
- 35 |       2 | 3910.0000000000000000
- 36 |       2 | 3966.0000000000000000
- 37 |       2 | 4022.0000000000000000
- 38 |       2 | 4078.0000000000000000
- 39 |       2 | 4134.0000000000000000
- 4  |       2 | 2174.0000000000000000
- 40 |       2 | 4190.0000000000000000
- 41 |       2 | 4246.0000000000000000
- 42 |       2 | 4302.0000000000000000
- 43 |       2 | 4358.0000000000000000
- 44 |       2 | 4414.0000000000000000
- 45 |       2 | 4470.0000000000000000
- 46 |       2 | 4526.0000000000000000
- 47 |       2 | 4582.0000000000000000
- 48 |       2 | 4638.0000000000000000
- 49 |       2 | 4694.0000000000000000
- 5  |       2 | 2230.0000000000000000
- 6  |       2 | 2286.0000000000000000
- 7  |       2 | 2342.0000000000000000
- 8  |       2 | 2398.0000000000000000
- 9  |       2 | 2454.0000000000000000
+ s  | combine |       combine        
+----+---------+----------------------
+ 26 |       1 | 101.0000000000000000
+ 27 |       1 | 102.0000000000000000
+ 28 |       1 | 103.0000000000000000
+ 29 |       1 | 104.0000000000000000
+ 3  |       1 |  78.0000000000000000
+ 30 |       1 | 105.0000000000000000
+ 31 |       1 | 106.0000000000000000
+ 32 |       1 | 107.0000000000000000
+ 33 |       1 | 108.0000000000000000
+ 34 |       1 | 109.0000000000000000
+ 35 |       1 | 110.0000000000000000
+ 36 |       1 | 111.0000000000000000
+ 37 |       1 | 112.0000000000000000
+ 38 |       1 | 113.0000000000000000
+ 39 |       1 | 114.0000000000000000
+ 4  |       1 |  79.0000000000000000
+ 40 |       1 | 115.0000000000000000
+ 41 |       1 | 116.0000000000000000
+ 42 |       1 | 117.0000000000000000
+ 43 |       1 | 118.0000000000000000
+ 44 |       1 | 119.0000000000000000
+ 45 |       1 | 120.0000000000000000
+ 46 |       1 | 121.0000000000000000
+ 47 |       1 | 122.0000000000000000
+ 48 |       1 | 123.0000000000000000
+ 49 |       1 | 124.0000000000000000
+ 5  |       1 |  80.0000000000000000
+ 6  |       1 |  81.0000000000000000
+ 7  |       1 |  82.0000000000000000
+ 8  |       1 |  83.0000000000000000
+ 9  |       1 |  84.0000000000000000
 (31 rows)
 
 -- Verify that views containing combines can be created on top of continuous views
@@ -921,3 +921,28 @@ DROP CONTINUOUS VIEW test_uc1;
 DROP TABLE test_uc_table1;
 DROP VIEW test_uc2_view;
 DROP CONTINUOUS VIEW test_uc2;
+CREATE CONTINUOUS VIEW over_1m AS
+SELECT date_trunc('minute', t::timestamptz) AS minute, avg(queue_length::float) AS load_avg
+FROM sysstat
+WHERE arrival_timestamp > clock_timestamp() - interval '1 hour'
+GROUP BY minute;
+NOTICE:  window width is "1 hour" with a step size of "1 second"
+HINT:  Use a datetime truncation function to explicitly set the step size.
+CREATE VIEW over_5m AS
+SELECT first_value(minute) OVER w AS minute, combine(load_avg) OVER w AS load_avg
+FROM over_1m
+WINDOW w AS (ORDER BY minute DESC ROWS 4 PRECEDING);
+\d+ over_5m;
+                          View "public.over_5m"
+  Column  |           Type           | Modifiers | Storage | Description 
+----------+--------------------------+-----------+---------+-------------
+ minute   | timestamp with time zone |           | plain   | 
+ load_avg | double precision         |           | plain   | 
+View definition:
+ SELECT first_value(over_1m.minute) OVER w AS minute,
+    float8_avg(combine(over_1m.load_avg) OVER w) AS load_avg
+   FROM over_1m
+  WINDOW w AS (ORDER BY over_1m.minute DESC ROWS 4 PRECEDING);
+
+DROP VIEW over_5m;
+DROP CONTINUOUS VIEW over_1m;

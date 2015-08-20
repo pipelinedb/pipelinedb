@@ -1217,9 +1217,15 @@ _readRangeTblEntry(void)
 	switch (local_node->rtekind)
 	{
 		case RTE_RELATION:
+			READ_OID_FIELD(relid);
+			READ_CHAR_FIELD(relkind);
+			break;
 		case RTE_STREAM:
 			READ_OID_FIELD(relid);
 			READ_CHAR_FIELD(relkind);
+			READ_NODE_FIELD(ctecoltypes);
+			READ_NODE_FIELD(ctecoltypmods);
+			READ_NODE_FIELD(ctecolcollations);
 			break;
 		case RTE_SUBQUERY:
 			READ_NODE_FIELD(subquery);

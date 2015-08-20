@@ -22,8 +22,7 @@
 #include "nodes/makefuncs.h"
 #include "optimizer/planner.h"
 #include "parser/parse_expr.h"
-#include "pipeline/cqanalyze.h"
-#include "pipeline/cqwindow.h"
+#include "pipeline/cont_analyze.h"
 #include "pipeline/sw_vacuum.h"
 #include "storage/lmgr.h"
 #include "tcop/pquery.h"
@@ -33,6 +32,14 @@
 #include "utils/memutils.h"
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
+
+static Node *
+get_cq_vacuum_expr(RangeVar *rv)
+{
+	Node *expr = GetSWExpr(rv);
+	Assert(expr);
+	return (Node *) makeA_Expr(AEXPR_NOT, NIL, NULL, expr, -1);
+}
 
 /*
  * NumSWVacuumTuples
@@ -87,14 +94,14 @@ NumSWVacuumTuples(Oid relid)
 	oldcontext = MemoryContextSwitchTo(runctx);
 
 	initStringInfo(&sql);
-	appendStringInfo(&sql, "SELECT COUNT(*) FROM %s", relname);
+	appendStringInfo(&sql, "SELECT COUNT(*) FROM %s.%s", namespace, relname);
 
 	parsetree_list = pg_parse_query(sql.data);
 	Assert(parsetree_list->length == 1);
 	resetStringInfo(&sql);
 
 	stmt = (SelectStmt *) linitial(parsetree_list);
-	stmt->whereClause = GetCQVacuumExpr(cvname);
+	stmt->whereClause = get_cq_vacuum_expr(cvname);
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
@@ -197,7 +204,7 @@ CreateSWVacuumContext(Relation rel)
 	ps->p_namespace = list_make1(nsitem);
 	ps->p_rtable = list_make1(rte);
 
-	expr = (Expr *) transformExpr(ps, GetCQVacuumExpr(cvname), EXPR_KIND_WHERE);
+	expr = (Expr *) transformExpr(ps, get_cq_vacuum_expr(cvname), EXPR_KIND_WHERE);
 
 	context = (SWVacuumContext *) palloc(sizeof(SWVacuumContext));
 

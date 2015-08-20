@@ -98,12 +98,17 @@ prepare_combine_plan(ContQueryCombinerState *state, PlannedStmt *plan)
 	 * see anything after the first batch was consumed.
 	 *
 	 */
+	Relation rel = heap_openrv(state->view->matrel, AccessShareLock);
+
 	plan->is_continuous = false;
 
 	scan = SetCombinerPlanTuplestorestate(plan, state->batch);
+	scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));
 
-	state->desc = ExecTypeFromTL(((Plan *) scan)->targetlist, false);
 	state->combine_plan = plan;
+	state->desc = scan->desc;
+
+	heap_close(rel, AccessShareLock);
 }
 
 /*
@@ -117,7 +122,6 @@ get_values(ContQueryCombinerState *state, TupleHashTable existing)
 {
 	TupleTableSlot *slot = state->slot;
 	List *values = NIL;
-	int i;
 
 	/*
 	 * Generate a VALUES list of the incoming groups
@@ -131,7 +135,7 @@ get_values(ContQueryCombinerState *state, TupleHashTable existing)
 	{
 		FuncExpr *hash;
 		List *args = NIL;
-		Oid hashoid = HASH_GROUP_OID;
+		ListCell *lc;
 
 		/*
 		 * If we already have the physical tuple cached from a previous combine
@@ -151,10 +155,10 @@ get_values(ContQueryCombinerState *state, TupleHashTable existing)
 			}
 		}
 
-		for (i = 0; i < state->ngroupatts; i++)
+		foreach(lc, state->hashfunc->args)
 		{
-			AttrNumber groupattr = state->groupatts[i];
-			Form_pg_attribute attr = state->desc->attrs[groupattr - 1];
+			AttrNumber attno = ((Var *) lfirst(lc))->varattno;
+			Form_pg_attribute attr = state->desc->attrs[attno - 1];
 			Type typeinfo;
 			bool isnull;
 			Datum d;
@@ -165,17 +169,14 @@ get_values(ContQueryCombinerState *state, TupleHashTable existing)
 			length = typeLen(typeinfo);
 			ReleaseSysCache((HeapTuple) typeinfo);
 
-			if (TypeCategory(attr->atttypid) == TYPCATEGORY_DATETIME)
-				hashoid = LS_HASH_GROUP_OID;
-
-			d = slot_getattr(slot, groupattr, &isnull);
+			d = slot_getattr(slot, attno, &isnull);
 			c = makeConst(attr->atttypid, attr->atttypmod,
 					attr->attcollation, length, d, isnull, attr->attbyval);
 
 			args = lappend(args, c);
 		}
 
-		hash = makeFuncExpr(hashoid, get_func_rettype(hashoid), args, 0, 0, COERCE_EXPLICIT_CALL);
+		hash = makeFuncExpr(state->hashfunc->funcid, state->hashfunc->funcresulttype, args, 0, 0, COERCE_EXPLICIT_CALL);
 		values = lappend(values, list_make1(hash));
 	}
 
@@ -523,7 +524,7 @@ combine(ContQueryCombinerState *state)
 	if (state->matrel == NULL)
 		return;
 
-	state->ri = CQMatViewOpen(state->matrel);
+	state->ri = CQMatRelOpen(state->matrel);
 
 	if (state->isagg)
 	{
@@ -575,8 +576,9 @@ combine(ContQueryCombinerState *state)
 
 	PortalDrop(portal, false);
 
-	CQMatViewClose(state->ri);
+	CQMatRelClose(state->ri);
 	heap_close(state->matrel, RowExclusiveLock);
+	state->matrel = NULL;
 }
 
 static void
@@ -617,7 +619,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 	if (state->view == NULL)
 		return;
 
-	pstmt = GetContPlan(state->view);
+	pstmt = GetContPlan(state->view, Combiner);
 
 	state->batch = tuplestore_begin_heap(true, true, continuous_query_combiner_work_mem);
 	/* this also sets the state's desc field */
@@ -645,7 +647,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 			return;
 		}
 
-		ri = CQMatViewOpen(matrel);
+		ri = CQMatRelOpen(matrel);
 
 		if (state->ngroupatts)
 		{
@@ -679,7 +681,7 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 			Assert(state->hashfunc);
 		}
 
-		CQMatViewClose(ri);
+		CQMatRelClose(ri);
 		heap_close(matrel, AccessShareLock);
 
 		state->cache = GroupCacheCreate(continuous_query_combiner_cache_mem * 1024, state->ngroupatts, state->groupatts,
@@ -698,6 +700,9 @@ cleanup_query_state(ContQueryCombinerState **states, Oid id)
 
 	if (state == NULL)
 		return;
+
+	if (state->matrel)
+		heap_close(state->matrel, RowExclusiveLock);
 
 	MemoryContextDelete(state->state_cxt);
 	pfree(state);

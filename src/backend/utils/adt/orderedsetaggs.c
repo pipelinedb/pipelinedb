@@ -426,8 +426,6 @@ percentile_disc_final(PG_FUNCTION_ARGS)
 	bool		isnull;
 	int64		rownum;
 
-	Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
-
 	/* Get and check the percentile argument */
 	if (PG_ARGISNULL(1))
 		PG_RETURN_NULL();
@@ -736,8 +734,6 @@ percentile_disc_multi_final(PG_FUNCTION_ARGS)
 	bool		isnull = true;
 	int			i;
 
-	Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
-
 	/* If there were no regular rows, the result is NULL */
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
@@ -856,8 +852,6 @@ percentile_cont_multi_final_common(FunctionCallInfo fcinfo,
 	Datum		second_val = (Datum) 0;
 	bool		isnull;
 	int			i;
-
-	Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
 
 	/* If there were no regular rows, the result is NULL */
 	if (PG_ARGISNULL(0))
@@ -1032,8 +1026,6 @@ mode_final(PG_FUNCTION_ARGS)
 	bool		last_val_is_mode = false;
 	FmgrInfo   *equalfn;
 	bool		shouldfree;
-
-	Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
 
 	/* If there were no regular rows, the result is NULL */
 	if (PG_ARGISNULL(0))
@@ -1287,8 +1279,6 @@ hypothetical_dense_rank_final(PG_FUNCTION_ARGS)
 	TupleTableSlot *slot2;
 	MemoryContext tmpcontext;
 	int			i;
-
-	Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
 
 	/* If there were no regular rows, the rank is always 1 */
 	if (PG_ARGISNULL(0))
@@ -1688,9 +1678,8 @@ cq_hypothetical_rank_final(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_INT64(1);
 
-	state = (ArrayType *) PG_GETARG_POINTER(0);
+	state = (ArrayType *) PG_GETARG_ARRAYTYPE_P(0);
 	values = (uint64 *) ARR_DATA_PTR(state);
-
 
 	/* minimum rank is always 1 */
 	PG_RETURN_INT64(values[1] + 1);
@@ -1711,7 +1700,7 @@ cq_hypothetical_percent_rank_final(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_FLOAT8(0);
 
-	state = (ArrayType *) PG_GETARG_POINTER(0);
+	state = (ArrayType *) PG_GETARG_ARRAYTYPE_P(0);
 	values = (uint64 *) ARR_DATA_PTR(state);
 	rowcount = values[0];
 	rank = values[1] + 1;
@@ -1740,7 +1729,7 @@ cq_hypothetical_cume_dist_final(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_FLOAT8(0);
 
-	state = (ArrayType *) PG_GETARG_POINTER(0);
+	state = (ArrayType *) PG_GETARG_ARRAYTYPE_P(0);
 	values = (uint64 *) ARR_DATA_PTR(state);
 	rowcount = values[0];
 	rank = values[1] + 1;
@@ -1767,7 +1756,7 @@ hll_hypothetical_dense_rank_final(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_INT64(1);
 
-	hll = (HyperLogLog *) PG_GETARG_POINTER(0);
+	hll = (HyperLogLog *) PG_GETARG_VARLENA_P(0);
 
 	PG_RETURN_INT64(HLLCardinality(hll) + 1);
 }
@@ -2001,8 +1990,6 @@ cq_percentile_cont_float8_final(PG_FUNCTION_ARGS)
 	float8 percentile;
 	int i;
 	Datum *result_datum;
-
-	Assert(AggCheckCallContext(fcinfo, NULL) == AGG_CONTEXT_AGGREGATE);
 
 	/* If there were no regular rows, the result is NULL */
 	if (PG_ARGISNULL(0))

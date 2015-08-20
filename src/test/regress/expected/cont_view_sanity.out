@@ -8,10 +8,10 @@ SELECT * FROM test_avg ORDER BY key;
 (2 rows)
 
 SELECT * FROM test_avg_mrel0 ORDER BY key;
- key | avg |      _0       
------+-----+---------------
- x   | 1.5 | {2,3,5}
- y   | 100 | {1,100,10000}
+ key |      avg      
+-----+---------------
+ x   | {2,3,5}
+ y   | {1,100,10000}
 (2 rows)
 
 INSERT INTO sanity_stream (key, value) VALUES ('x', 10), ('x', 20), ('y', 200);
@@ -23,10 +23,10 @@ SELECT * FROM test_avg ORDER BY key;
 (2 rows)
 
 SELECT * FROM test_avg_mrel0 ORDER BY key;
- key | avg  |      _0       
------+------+---------------
- x   | 8.25 | {4,33,505}
- y   |  150 | {2,300,50000}
+ key |      avg      
+-----+---------------
+ x   | {4,33,505}
+ y   | {2,300,50000}
 (2 rows)
 
 CREATE CONTINUOUS VIEW cv AS SELECT key::text, COUNT(*), MAX(x::integer + y::integer) FROM sanity_stream GROUP BY key;

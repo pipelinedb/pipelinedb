@@ -149,10 +149,10 @@ GetContQueryProcName(ContQueryProc *proc)
 	switch (proc->type)
 	{
 	case Combiner:
-		sprintf(buf, "%s [%s]", "combiner", NameStr(proc->group->db_name));
+		sprintf(buf, "%s%d [%s]", "combiner", proc->group_id, NameStr(proc->group->db_name));
 		break;
 	case Worker:
-		sprintf(buf, "%s [%s]", "worker", NameStr(proc->group->db_name));
+		sprintf(buf, "%s%d [%s]", "worker", proc->group_id, NameStr(proc->group->db_name));
 		break;
 	case Scheduler:
 		return "scheduler";
@@ -399,7 +399,7 @@ cq_bgproc_main(Datum arg)
 	 * More is less here. A higher number indicates a lower scheduling priority.
 	 */
 	priority = Max(default_priority, MAX_PRIORITY - ceil(continuous_query_proc_priority * (MAX_PRIORITY - default_priority)));
-	nice(priority);
+	priority = nice(priority);
 
 	switch (MyContQueryProc->type)
 	{

@@ -87,7 +87,7 @@ INSERT INTO cca_stream (x, y) VALUES (3, 6);
 INSERT INTO cca_stream (x, y) VALUES (3, 7);
 
 SELECT round(combinable_avg) FROM test_combinable_aggs_v0 ORDER BY x;
-SELECT x, _0 FROM test_combinable_aggs_v0_mrel0 ORDER BY x;
+SELECT x, combinable_avg FROM test_combinable_aggs_v0_mrel0 ORDER BY x;
 
 -- We should also be able to run user combines on it
 SELECT combine(combinable_avg) FROM test_combinable_aggs_v0;

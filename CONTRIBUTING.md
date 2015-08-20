@@ -20,15 +20,3 @@ The rough flow for submitting a patch is:
 Coding Style
 ------------
 We try to follow PostgreSQL's [coding style guide](http://www.postgresql.org/docs/devel/static/source.html)—we're not too pedantic about it though. Just make sure your code is clean and well commented.
-
-We've shamelessly copied etcd's [commit message format](https://github.com/coreos/etcd/blob/master/CONTRIBUTING.md#format-of-the-commit-message):
-
-```
-<subsystem>: <what changed>
-<BLANK LINE>
-<why this change was made>
-<BLANK LINE>
-<issue number, if applicable>
-```
-
-Wrap all lines in the commit message at 80 characters.

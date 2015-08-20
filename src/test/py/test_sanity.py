@@ -1,4 +1,6 @@
 from base import pipeline, clean_db
+import getpass
+import psycopg2
 
 
 def test_create_drop_continuous_view(pipeline, clean_db):
@@ -80,3 +82,16 @@ def test_combine(pipeline, clean_db):
         total += row['count']
 
     assert total == 10000
+
+def test_multiple_stmts(pipeline, clean_db):
+  conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' % (getpass.getuser(), pipeline.port))
+  db = conn.cursor()
+  db.execute('CREATE CONTINUOUS VIEW test_multiple AS SELECT COUNT(*) FROM stream; SELECT 1;')
+  conn.commit()
+  conn.close()
+
+  pipeline.insert('stream', ('unused', ), [(1, )] * 100)
+
+  result = list(pipeline.execute('SELECT * FROM test_multiple'))
+  assert len(result) == 1
+  assert result[0]['count'] == 100

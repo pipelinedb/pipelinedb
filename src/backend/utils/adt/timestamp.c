@@ -52,6 +52,8 @@
 #define INT64_MIN	(-INT64CONST(0x7FFFFFFFFFFFFFFF) - 1)
 #endif
 
+#define round_down(value, base) ((value) - ((value) % (base)))
+
 /* Set at postmaster start */
 TimestampTz PgStartTime;
 
@@ -4122,7 +4124,8 @@ timestamptz_year(PG_FUNCTION_ARGS)
 /*
  * Truncate to month
  */
-Datum timestamptz_month(PG_FUNCTION_ARGS)
+Datum
+timestamptz_month(PG_FUNCTION_ARGS)
 {
 	return timestamptz_truncate_by("month", fcinfo);
 }
@@ -4130,7 +4133,8 @@ Datum timestamptz_month(PG_FUNCTION_ARGS)
 /*
  * Truncate to day
  */
-Datum timestamptz_day(PG_FUNCTION_ARGS)
+Datum
+timestamptz_day(PG_FUNCTION_ARGS)
 {
 	return timestamptz_truncate_by("day", fcinfo);
 }
@@ -4138,7 +4142,8 @@ Datum timestamptz_day(PG_FUNCTION_ARGS)
 /*
  * Truncate to hour
  */
-Datum timestamptz_hour(PG_FUNCTION_ARGS)
+Datum
+timestamptz_hour(PG_FUNCTION_ARGS)
 {
 	return timestamptz_truncate_by("hour", fcinfo);
 }
@@ -4146,7 +4151,8 @@ Datum timestamptz_hour(PG_FUNCTION_ARGS)
 /*
  * Truncate to minute
  */
-Datum timestamptz_minute(PG_FUNCTION_ARGS)
+Datum
+timestamptz_minute(PG_FUNCTION_ARGS)
 {
 	return timestamptz_truncate_by("minute", fcinfo);
 }
@@ -4154,9 +4160,105 @@ Datum timestamptz_minute(PG_FUNCTION_ARGS)
 /*
  * Truncate to second
  */
-Datum timestamptz_second(PG_FUNCTION_ARGS)
+Datum
+timestamptz_second(PG_FUNCTION_ARGS)
 {
 	return timestamptz_truncate_by("second", fcinfo);
+}
+
+Datum
+timestamptz_floor(PG_FUNCTION_ARGS)
+{
+	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
+	Interval *span = PG_GETARG_INTERVAL_P(1);
+	fsec_t fsec;
+	struct pg_tm i_tm;
+	struct pg_tm ts_tm;
+	int tz;
+	int nset;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	if (TIMESTAMP_NOT_FINITE(timestamp) || PG_ARGISNULL(1))
+		PG_RETURN_TIMESTAMPTZ(timestamp);
+
+	if (interval2tm(*span, &i_tm, &fsec) != 0)
+		elog(ERROR, "could not convert interval to interval_tm");
+
+	if (timestamp2tm(timestamp, &tz, &ts_tm, &fsec, NULL, NULL) != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("timestamp out of range")));
+
+	/* Only allow intervals that have a single unit */
+	nset = ((i_tm.tm_sec > 0) + (i_tm.tm_min > 0) + (i_tm.tm_hour > 0) +
+			(i_tm.tm_mday > 0) + (i_tm.tm_mon > 0) + (i_tm.tm_year > 0));
+	if (nset == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("floor interval must be in second, minute, hour, day, month or year units")));
+
+	else if (nset > 1 ||
+			i_tm.tm_hour > HOURS_PER_DAY ||
+			i_tm.tm_mday > DAYS_PER_MONTH ||
+			i_tm.tm_mon > MONTHS_PER_YEAR)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("floor interval must span only a single unit")));
+
+	fsec = 0;
+
+	if (i_tm.tm_sec)
+	{
+		ts_tm.tm_sec = round_down(ts_tm.tm_sec, i_tm.tm_sec);
+		goto done;
+	}
+
+	ts_tm.tm_sec = 0;
+
+	if (i_tm.tm_min)
+	{
+		ts_tm.tm_min = round_down(ts_tm.tm_min, i_tm.tm_min);
+		goto done;
+	}
+
+	ts_tm.tm_min = 0;
+
+	if (i_tm.tm_hour)
+	{
+		ts_tm.tm_hour = round_down(ts_tm.tm_hour, i_tm.tm_hour);
+		goto done;
+	}
+
+	ts_tm.tm_hour = 0;
+
+	if (i_tm.tm_mday)
+	{
+		ts_tm.tm_mday = round_down(ts_tm.tm_mday - 1, i_tm.tm_mday) + 1;
+		goto done;
+	}
+
+	ts_tm.tm_mday = 1;
+
+	if (i_tm.tm_mon)
+	{
+		ts_tm.tm_mon = round_down(ts_tm.tm_mon - 1, i_tm.tm_mon) + 1;
+		goto done;
+	}
+
+	ts_tm.tm_mon = 1;
+
+	if (i_tm.tm_year)
+		ts_tm.tm_year = round_down(ts_tm.tm_year, i_tm.tm_year);
+
+done:
+	if (tm2timestamp(&ts_tm, fsec, &tz, &timestamp) != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				errmsg("timestamp out of range")));
+
+	PG_RETURN_TIMESTAMPTZ(timestamp);
 }
 
 /* interval_trunc()

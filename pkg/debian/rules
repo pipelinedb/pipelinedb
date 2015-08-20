@@ -25,9 +25,9 @@ conf:
 	(cd $(TOP_BUILDDIR) && ./configure)
 
 pipeline:
-	(cd $(TOP_BUILDDIR) && ./configure --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo CFLAGS="$(PIPELINE_CFLAGS)" --disable-rpath)
-	(cd $(TOP_BUILDDIR) && $(MAKE) VERSION=$(VERSION))
-	(cd $(TOP_BUILDDIR) && $(MAKE) VERSION=$(VERSION) install)
+	(cd $(TOP_BUILDDIR) && ./configure PIPELINE_VERSION=$(PIPELINE_VERSION) PIPELINE_REVISION=$(PIPELINE_REVISION) --prefix=$(PREFIX) --with-system-tzdata=/usr/share/zoneinfo CFLAGS="$(PIPELINE_CFLAGS)" --disable-rpath)
+	(cd $(TOP_BUILDDIR) && $(MAKE))
+	(cd $(TOP_BUILDDIR) && $(MAKE) install)
 
 geos:
 	wget http://download.pipelinedb.com/dep/$(GEOS).tar.bz2

@@ -5125,7 +5125,7 @@ DESCR("deserializer for array aggregation transition states");
 DATA(insert OID = 4311 (arrayaggstatesend PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 17 "2281" _null_ _null_ _null_ _null_ arrayaggstatesend _null_ _null_ _null_ ));
 DESCR("serializer for array aggregation transition states");
 
-DATA(insert OID = 4312 (array_agg_combine	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ array_agg_combine _null_ _null_ _null_ ));
+DATA(insert OID = 4312 (array_agg_combine	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2281" _null_ _null_ _null_ _null_ array_agg_combine _null_ _null_ _null_ ));
 DESCR("array aggregation combination function");
 
 DATA(insert OID = 4313 (byteatostringinfo PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2281 "17" _null_ _null_ _null_ _null_ byteatostringinfo _null_ _null_ _null_ ));
@@ -5220,11 +5220,11 @@ DATA(insert OID = 4385 ( bloom_contains	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0
 DESCR("bloom filter contains item?");
 
 /* t-digest aggregate */
-DATA(insert OID = 4339 ( tdigest_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5034 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4339 ( tdigest_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5034 "701" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("t-digest aggregate");
 
 /* t-digest aggregate with user-supplied compression */
-DATA(insert OID = 4340 ( tdigest_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5034 "2283 23" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DATA(insert OID = 4340 ( tdigest_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5034 "701 23" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
 DESCR("t-digest aggregate");
 
 /* t-digest aggregate transition function */
@@ -5280,10 +5280,10 @@ DATA(insert OID = 4353 ( cmsketch_merge_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f
 DESCR("count-min sketch merge aggregate");
 
 /* count-min sketch count function */
-DATA(insert OID = 4354 ( cmsketch_count	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_count _null_ _null_ _null_ ));
-DESCR("count-min sketch estimate count");
-DATA(insert OID = 4386 ( cmsketch_count	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 25" _null_ _null_ _null_ _null_ cmsketch_count _null_ _null_ _null_ ));
-DESCR("count-min sketch estimate count");
+DATA(insert OID = 4354 ( cmsketch_frequency	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_frequency _null_ _null_ _null_ ));
+DESCR("count-min sketch estimate frequency");
+DATA(insert OID = 4386 ( cmsketch_frequency	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 23 "5038 25" _null_ _null_ _null_ _null_ cmsketch_frequency _null_ _null_ _null_ ));
+DESCR("count-min sketch estimate frequency");
 
 DATA(insert OID = 4355 ( cq_proc_stat_get PGNSP PGUID 12 1 1000 0 0 f f f f t t s 0 0 2249 "" "{25,23,1184,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o}" "{type,pid,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors}" _null_ cq_proc_stat_get _null_ _null_ _null_ ));
 DESCR("get continuous query process stats");
@@ -5391,9 +5391,31 @@ DESCR("count-min sketch add");
 DATA(insert OID = 4387 ( cmsketch_add	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 5038 "5038 25 23" _null_ _null_ _null_ _null_ cmsketch_addn _null_ _null_ _null_ ));
 DESCR("count-min sketch add");
 
+/* generic finalize function */
+DATA(insert OID = 4388 ( finalize	PGNSP PGUID 12 1 0 2283 0 t f f f t f i 1 0 2283 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("generic user finalize function");
+
 /* global PipelineDB stats */
-DATA(insert OID = 4388 ( pipeline_stat_get PGNSP PGUID 12 1 1 0 0 f f f f t t s 0 0 2249 "" "{25,1184,20,20,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o,o}" "{type,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors,cv_create,cv_drop}" _null_ pipeline_stat_get _null_ _null_ _null_ ));
+DATA(insert OID = 4389 ( pipeline_stat_get PGNSP PGUID 12 1 1 0 0 f f f f t t s 0 0 2249 "" "{25,1184,20,20,20,20,20,20,20,20,20,20}" "{o,o,o,o,o,o,o,o,o,o,o,o}" "{type,start_time,input_rows,output_rows,updates,input_bytes,output_bytes,updated_bytes,executions,errors,cv_create,cv_drop}" _null_ pipeline_stat_get _null_ _null_ _null_ ));
 DESCR("global pipelinedb status");
+
+DATA(insert OID = 4390 ( pipeline_get_overlay_viewdef	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ pipeline_get_overlay_viewdef _null_ _null_ _null_ ));
+DESCR("gets a materialization table overlay view");
+
+DATA(insert OID = 4391 ( pipeline_version		   PGNSP PGUID 12 1 0 0 0 f f f f t f s 0 0 25 "" _null_ _null_ _null_ _null_ pipeline_version _null_ _null_ _null_ ));
+DESCR("PipelineDB version string");
+
+/* count-min sketch total and normalized frequency */
+DATA(insert OID = 4392 ( cmsketch_norm_frequency	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "5038 2283" _null_ _null_ _null_ _null_ cmsketch_norm_frequency _null_ _null_ _null_ ));
+DESCR("count-min sketch estimate norm frequency");
+DATA(insert OID = 4393 ( cmsketch_norm_frequency	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 701 "5038 25" _null_ _null_ _null_ _null_ cmsketch_norm_frequency _null_ _null_ _null_ ));
+DESCR("count-min sketch estimate norm frequency");
+DATA(insert OID = 4394 ( cmsketch_total	PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 20 "5038" _null_ _null_ _null_ _null_ cmsketch_total _null_ _null_ _null_ ));
+DESCR("count-min sketch total");
+
+/* date_floor */
+DATA(insert OID = 4395 (  date_floor	   PGNSP PGUID 12 1 0 0 0 f f f f f f s 2 0 1184 "1184 1186" _null_ _null_ _null_ _null_ timestamptz_floor _null_ _null_ _null_ ));
+DESCR("floor timestamp with time zone to specified interval");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result

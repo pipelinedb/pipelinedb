@@ -151,6 +151,16 @@ SELECT k, array_sort(array_agg) FROM test_array_agg ORDER BY k;
 
 DROP CONTINUOUS VIEW test_array_agg;
 
+CREATE CONTINUOUS VIEW test_array_agg AS SELECT array_agg(k::text) FROM cqobjectagg_stream;
+
+INSERT INTO cqobjectagg_stream (k) VALUES ('hello'), ('world');
+SELECT pg_sleep(0.1);
+INSERT INTO cqobjectagg_stream (k) VALUES ('lol'), ('cat');
+
+SELECT array_sort(array_agg) FROM test_array_agg;
+
+DROP CONTINUOUS VIEW test_array_agg;
+
 DROP FUNCTION array_sort(anyarray);
 DROP FUNCTION json_to_array(json);
 DROP FUNCTION json_keys_array(json);

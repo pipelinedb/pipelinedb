@@ -23,7 +23,7 @@
 #include "parser/analyze.h"
 #include "parser/parse_coerce.h"
 #include "parser/parsetree.h"
-#include "pipeline/cqanalyze.h"
+#include "pipeline/cont_analyze.h"
 #include "pipeline/stream.h"
 #include "rewrite/rewriteDefine.h"
 #include "rewrite/rewriteHandler.h"

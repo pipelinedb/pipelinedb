@@ -1,6 +1,5 @@
 from base import pipeline, clean_db
 import getpass
-import os
 import psycopg2
 import random
 import subprocess

@@ -98,7 +98,7 @@ CountMinSketchAdd(CountMinSketch *cms, void *key, Size size, uint32_t count)
 }
 
 uint32_t
-CountMinSketchEstimateCount(CountMinSketch *cms, void *key, Size size)
+CountMinSketchEstimateFrequency(CountMinSketch *cms, void *key, Size size)
 {
 	uint32_t count = UINT_MAX;
 	uint32_t i;
@@ -114,6 +114,18 @@ CountMinSketchEstimateCount(CountMinSketch *cms, void *key, Size size)
 	}
 
 	return count;
+}
+
+uint64_t
+CountMinSketchTotal(CountMinSketch *cms)
+{
+	return cms->count;
+}
+
+float8
+CountMinSketchEstimateNormFrequency(CountMinSketch *cms, void *key, Size size)
+{
+	return 1.0 * CountMinSketchEstimateFrequency(cms, key, size) / cms->count;
 }
 
 CountMinSketch *

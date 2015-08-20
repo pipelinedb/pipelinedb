@@ -1145,7 +1145,8 @@ typedef struct SelectStmt
 
 	/* PipelineDB */
 	bool 		forContinuousView; /* does this SELECT statement for a CREATE CONTINUOUS VIEW statement? */
-	bool		forCombineLookup; /* Is this SELECT stmt for looking up groups in the combiner? */
+	bool		forCombiner; /* is this the combine query? */
+	bool		forCombineLookup; /* is this SELECT stmt for looking up groups in the combiner? */
 } SelectStmt;
 
 
