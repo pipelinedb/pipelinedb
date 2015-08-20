@@ -3,7 +3,6 @@
 
 CSTOREVER=1.2.0
 PGVER=9.4.4
-HLLVER=2.10.0
 
 # install some build tools, we'll remove these later
 apt-get install -y unzip gcc make g++
@@ -14,9 +13,7 @@ cd /usr/local/src/
 # get packages
 wget -q http://api.pgxn.org/dist/cstore_fdw/${CSTOREVER}/cstore_fdw-${CSTOREVER}.zip
 wget -q  https://ftp.postgresql.org/pub/source/v${PGVER}/postgresql-${PGVER}.tar.gz
-wget -q http://api.pgxn.org/dist/hll/${HLLVER}/hll-${HLLVER}.zip
 unzip cstore_fdw-${CSTOREVER}.zip
-unzip hll-${HLLVER}.zip
 tar -xzf postgresql-${PGVER}.tar.gz 
 
 # build cstore
@@ -48,7 +45,7 @@ cd ../hstore
 make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config install
 
 # clean up
-apt-get remove gcc make unzip
+apt-get remove gcc make unzip g++
 apt-get autoremove
 cd /
 rm -rf /usr/local/src/*
