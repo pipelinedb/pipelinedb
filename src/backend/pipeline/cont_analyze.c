@@ -617,7 +617,7 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 
 		ereport(NOTICE,
 				(errmsg("window width is \"%s\" with a step size of \"1 %s\"", strVal(&((A_Const *) c->arg)->val), fname),
-				errhint("Use a datetime truncation function to explicitly set the step size.")));
+				errhint("Use a datetime truncation function if you want to explicitly set the step size.")));
 	}
 
 	return (ColumnRef *) col;

@@ -6,13 +6,13 @@ CREATE CONTINUOUS VIEW test_st_stats_agg2 AS SELECT ST_SummaryStatsAgg(r::raster
 CREATE CONTINUOUS VIEW test_st_stats_agg0 AS SELECT ST_SummaryStatsAgg(r::raster, 1, true, 1.0) FROM test_gis_raster_stream ;
 CREATE CONTINUOUS VIEW test_sw_st_stats_agg1 AS SELECT ST_SummaryStatsAgg(r::raster, 1, true) FROM test_gis_raster_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE CONTINUOUS VIEW test_sw_st_stats_agg2 AS SELECT ST_SummaryStatsAgg(r::raster, true, 1.0) FROM test_gis_raster_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE CONTINUOUS VIEW test_sw_st_stats_agg0 AS SELECT ST_SummaryStatsAgg(r::raster, 1, true, 1.0) FROM test_gis_raster_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- ST_CountAgg(raster, boolean)
 -- ST_CountAgg(raster, integer, boolean)
 -- ST_CountAgg(raster, integer, boolean, double)
@@ -21,18 +21,18 @@ CREATE CONTINUOUS VIEW test_st_countagg1 AS SELECT ST_CountAgg(r::raster, 1, tru
 CREATE CONTINUOUS VIEW test_st_countagg2 AS SELECT ST_CountAgg(r::raster, 1, true, 0.0) FROM test_gis_raster_stream;
 CREATE CONTINUOUS VIEW test_sw_st_countagg0 AS SELECT ST_CountAgg(r::raster, true) FROM test_gis_raster_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE CONTINUOUS VIEW test_sw_st_countagg1 AS SELECT ST_CountAgg(r::raster, 1, true) FROM test_gis_raster_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE CONTINUOUS VIEW test_sw_st_countagg2 AS SELECT ST_CountAgg(r::raster, 1, true, 0.0) FROM test_gis_raster_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- ST_SameAlignment(raster)
 CREATE CONTINUOUS VIEW test_st_samealignment AS SELECT ST_SameAlignment(r::raster) FROM test_gis_raster_stream;
 CREATE CONTINUOUS VIEW test_sw_st_samealignment AS SELECT ST_SameAlignment(r::raster) FROM test_gis_raster_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- ST_Union(raster)
 -- ST_Union(raster, integer)
 -- ST_Union(raster, text)
@@ -43,16 +43,16 @@ CREATE CONTINUOUS VIEW test_st_union_raster2 AS SELECT Box3D(ST_Union(r::raster,
 CREATE CONTINUOUS VIEW test_st_union_raster3 AS SELECT Box3D(ST_Union(r::raster, 1, 'SUM')) FROM test_gis_raster_stream;
 CREATE CONTINUOUS VIEW test_sw_st_union_raster0 AS SELECT Box3D(ST_Union(r::raster)) FROM test_gis_raster_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE CONTINUOUS VIEW test_sw_st_union_raster1 AS SELECT Box3D(ST_Union(r::raster, 1)) FROM test_gis_raster_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE CONTINUOUS VIEW test_sw_st_union_raster2 AS SELECT Box3D(ST_Union(r::raster, 'COUNT')) FROM test_gis_raster_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE CONTINUOUS VIEW test_sw_st_union_raster3 AS SELECT Box3D(ST_Union(r::raster, 1, 'SUM')) FROM test_gis_raster_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 INSERT INTO test_gis_raster_stream (id, r) VALUES (0, ST_SetValue(ST_AddBand(ST_MakeEmptyRaster(21, 75, 0.000, 0.000, 0.1), '64BF', 0.0, 0.0), 1, 1, 0.502));
 INSERT INTO test_gis_raster_stream (id, r) VALUES (1, ST_SetValue(ST_AddBand(ST_MakeEmptyRaster(93, 58, 0.000, 0.000, 0.1), '64BF', 0.0, 0.0), 1, 1, 0.153));
 INSERT INTO test_gis_raster_stream (id, r) VALUES (2, ST_SetValue(ST_AddBand(ST_MakeEmptyRaster(48, 62, 0.000, 0.000, 0.1), '64BF', 0.0, 0.0), 1, 1, 0.196));

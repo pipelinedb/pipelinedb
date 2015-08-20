@@ -284,7 +284,7 @@ USING (x)
 WHERE (s.arrival_timestamp > clock_timestamp() - interval '4 seconds')
 GROUP by s.x, s.y, t_x;
 NOTICE:  window width is "4 seconds" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 INSERT INTO test_stj_sw0_s (x, y) SELECT x, x AS y FROM generate_series(0, 9) AS x;
 INSERT INTO test_stj_sw0_s (x, y) SELECT x, x AS y FROM generate_series(0, 9) AS x;
 INSERT INTO test_stj_sw0_s (x, y) SELECT x, x AS y FROM generate_series(0, 9) AS x;
