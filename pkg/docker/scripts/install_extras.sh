@@ -44,6 +44,15 @@ make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config install
 cd ../hstore
 make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config install
 
+cd ../pg_trgm
+make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config install
+
+cd ../file_fdw
+make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config install
+
+cd ../tablefunc
+make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config install
+
 # clean up
 apt-get remove gcc make unzip g++
 apt-get autoremove
