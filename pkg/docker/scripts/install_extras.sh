@@ -3,23 +3,33 @@
 
 CSTOREVER=1.2.0
 PGVER=9.4.4
+HLLVER=2.10.0
 
 # install some build tools, we'll remove these later
-apt-get install -y unzip gcc make
+apt-get install -y unzip gcc make g++
 apt-get install -y protobuf-c-compiler libprotobuf-c0-dev
 
 cd /usr/local/src/
 
 # get packages
-wget http://api.pgxn.org/dist/cstore_fdw/1.2.0/cstore_fdw-${CSTOREVER}.zip
-wget https://ftp.postgresql.org/pub/source/v${PGVER}/postgresql-${PGVER}.tar.gz
+wget -q http://api.pgxn.org/dist/cstore_fdw/${CSTOREVER}/cstore_fdw-${CSTOREVER}.zip
+wget -q  https://ftp.postgresql.org/pub/source/v${PGVER}/postgresql-${PGVER}.tar.gz
+wget -q http://api.pgxn.org/dist/hll/${HLLVER}/hll-${HLLVER}.zip
 unzip cstore_fdw-${CSTOREVER}.zip
+unzip hll-${HLLVER}.zip
 tar -xzf postgresql-${PGVER}.tar.gz 
 
 # build cstore
 cd cstore_fdw-${CSTOREVER}
 make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config
 make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config install
+cd ..
+
+# build hll
+cd hll-${HLLVER}
+make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config
+make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config install
+cd ..
 
 # build contrib modules
 cd /usr/local/src/postgresql-${PGVER}/contrib
