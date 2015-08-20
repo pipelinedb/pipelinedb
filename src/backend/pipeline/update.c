@@ -36,7 +36,7 @@
 #define UPDATE_AVAILABLE 201
 #define NO_UPDATES 200
 
-#define REQUEST_FMT "POST /check HTTP/1.0\nContent-Length: %d\n\n%s"
+#define REQUEST_FMT "POST /check HTTP/1.1\r\nHost: anonymous.pipelinedb.com\r\nConnection: close\r\nContent-Length: %d\r\n\r\n%s"
 #define PROC_PAYLOAD_FMT 	"{ \"t\": \"%c\", \"e\": \"%s\", \"v\": \"%s\", \"s\": \"%s\", \"sr\": \"%s\", \"sv\": \"%s\", \"ri\": %ld, \"bi\": %ld, \"ro\": %ld, \"bo\": %ld, \"er\": %ld, \"cc\": %ld, \"cd\": %ld}"
 #define PAYLOAD_FMT "[%s,%s]"
 
