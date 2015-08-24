@@ -8,8 +8,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef fssFUNCS_H
-#define fssFUNCS_H
+#ifndef FSSFUNCS_H
+#define FSSFUNCS_H
 
 #include "postgres.h"
 #include "fmgr.h"
