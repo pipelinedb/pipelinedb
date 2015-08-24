@@ -662,6 +662,12 @@ DESCR("count-min sketch");
 DATA(insert OID = 5039 ( _cmsketch	PGNSP PGUID -1 f b A f t \054 0  5038 0 array_in	array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
 DESCR("count-min sketch array");
 
+/* filtered space saving */
+DATA(insert OID = 5041 ( fss	PGNSP PGUID	-1 f b U f t \054 0	 0 5042 byteain	byteaout   bytearecv byteasend - - - i x f 0 -1 0 0 _null_ _null_ _null_ ));
+DESCR("filtered space saving");
+DATA(insert OID = 5042 ( _fss	PGNSP PGUID -1 f b A f t \054 0  5041 0 array_in	array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
+DESCR("filtered space saving array");
+
 /*
  * pseudo-types
  *

@@ -60,8 +60,8 @@ TDigestCreateWithCompression(int compression)
 void
 TDigestDestroy(TDigest *t)
 {
-	list_free_deep(t->unmerged_centroids);
-	pfree(t->centroids);
+	if (t->unmerged_centroids != NIL)
+		list_free_deep(t->unmerged_centroids);
 	pfree(t);
 }
 
@@ -70,14 +70,14 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 {
 	Centroid *c;
 
-	if (list_length(t->unmerged_centroids) > t->threshold)
-		TDigestCompress(t);
-
 	c = palloc0(sizeof(Centroid));
 	c->weight = w;
 	c->mean = x;
 
 	t->unmerged_centroids = lappend(t->unmerged_centroids, c);
+
+	if (list_length(t->unmerged_centroids) > t->threshold)
+		TDigestCompress(t);
 }
 
 static int
