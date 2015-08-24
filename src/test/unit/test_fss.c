@@ -74,7 +74,6 @@ START_TEST(test_basic)
 	TypeCacheEntry *typ = get_int8_type();
 	FSS *fss = FSSCreate(K, typ);
 	int i;
-	int *items = palloc0(sizeof(int) * NUM_ITEMS);
 	int *counts = palloc0(sizeof(int) * 1000);
 	Datum *values;
 	uint32_t *freqs;
@@ -84,7 +83,6 @@ START_TEST(test_basic)
 	{
 		int value = 10 * gaussian();
 		value %= 500;
-		items[i] = value;
 		FSSIncrement(fss, value);
 		counts[value + 500]++;
 		assert_sorted(fss);
@@ -112,7 +110,6 @@ START_TEST(test_merge)
 	FSS *fss1 = FSSCreate(K, typ);
 	FSS *fss2 = FSSCreate(K, typ);
 	int i, j;
-	int *items = palloc0(sizeof(int) * 2 * NUM_ITEMS);
 	Datum *values1, *values2;
 	uint32_t *freqs1, *freqs2;
 	int soft_errors;
@@ -125,7 +122,6 @@ START_TEST(test_merge)
 		{
 			int value = 10 * gaussian();
 			value %= 500;
-			items[i] = value;
 			FSSIncrement(fss1, value);
 			FSSIncrement(tmp, value);
 			assert_sorted(fss1);
@@ -157,6 +153,47 @@ START_TEST(test_merge)
 }
 END_TEST
 
+START_TEST(test_error)
+{
+	TypeCacheEntry *typ = get_int8_type();
+	FSS *fss = FSSCreate(K, typ);
+	int i;
+	int *counts = palloc0(sizeof(int) * 1000);
+	Datum *values;
+	uint32_t *freqs;
+	int min_freq = NUM_ITEMS / fss->m;
+
+	for (i = 0; i <= min_freq; i++)
+	{
+		FSSIncrement(fss, 1);
+		FSSIncrement(fss, 2);
+		FSSIncrement(fss, 3);
+		counts[1]++;
+		counts[2]++;
+		counts[3]++;
+		assert_sorted(fss);
+	}
+
+	for (i = 0; i < NUM_ITEMS - (2 * min_freq); i++)
+	{
+		int value = (int) uniform() % 500 + 4;
+		FSSIncrement(fss, value);
+		counts[value]++;
+		assert_sorted(fss);
+	}
+
+	values = FSSTopK(fss, K, NULL);
+	freqs = FSSTopKCounts(fss, K, NULL);
+
+	for (i = 0; i < 3; i++)
+	{
+		int value = values[i];
+		ck_assert(value == 1 || value == 2 || value == 3);
+		ck_assert(abs(freqs[i] - counts[value]) == 0);
+	}
+}
+END_TEST
+
 Suite *
 test_fss_suite(void)
 {
@@ -168,6 +205,7 @@ test_fss_suite(void)
 	tcase_set_timeout(tc, 3000);
 	tcase_add_test(tc, test_basic);
 	tcase_add_test(tc, test_merge);
+	tcase_add_test(tc, test_error);
 	suite_add_tcase(s, tc);
 
 	return s;
