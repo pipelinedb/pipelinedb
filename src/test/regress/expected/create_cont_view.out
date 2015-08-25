@@ -182,7 +182,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate4');
 -- Sliding window queries
 CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
 NOTICE:  window width is "5" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate5';
  count 
 -------
@@ -225,7 +225,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate5');
 
 CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key::text;
 NOTICE:  window width is "5" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate6';
  count 
 -------
@@ -497,7 +497,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
 
 CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
 NOTICE:  window width is "5" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 \d+ cqaggexpr3;
                View "public.cqaggexpr3"
  Column |  Type   | Modifiers | Storage  | Description 

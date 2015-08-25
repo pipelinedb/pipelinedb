@@ -340,6 +340,11 @@ DATA(insert ( 4348	n 0 cmsketch_agg_trans			-	-				-				-				f f 0	5038	0	0		0	_
 DATA(insert ( 4349	n 0 cmsketch_agg_transp			-	-				-				-				f f 0	5038	0	0		0	_null_ _null_ ));
 DATA(insert ( 4352	n 0 cmsketch_merge_agg_trans	-	-				-				-				f f 0	5038	0	0		0	_null_ _null_ ));
 
+/* filtered space saving aggregates */
+DATA(insert ( 4396	n 0 fss_agg_trans			-	-				-				-				f f 0	5041	0	0		0	_null_ _null_ ));
+DATA(insert ( 4397	n 0 fss_agg_transp			-	-				-				-				f f 0	5041	0	0		0	_null_ _null_ ));
+DATA(insert ( 4400	n 0 fss_merge_agg_trans		-	-				-				-				f f 0	5041	0	0		0	_null_ _null_ ));
+
 /*
  * prototypes for functions in pg_aggregate.c
  */

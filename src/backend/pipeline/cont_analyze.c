@@ -48,8 +48,10 @@
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
+#include "utils/typcache.h"
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
+#define DATE_FLOOR "date_floor"
 #define DATE_TRUNC "date_trunc"
 #define DATE_TRUNC_YEAR "year"
 #define DATE_TRUNC_MONTH "month"
@@ -350,27 +352,7 @@ collect_agg_funcs(Node *node, ContAnalyzeContext *context)
 		}
 
 		if (is_agg)
-		{
-			char *name = NameListToString(func->funcname);
-
-			/* mode and xmlagg are not supported */
-			if (pg_strcasecmp(name, "mode") == 0 ||
-					pg_strcasecmp(name, "xmlagg") == 0 ||
-					pg_strcasecmp(name, "percentile_disc") == 0)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						errmsg("continuous queries don't support \"%s\" aggregate", name),
-						parser_errposition(context->pstate, func->location)));
-
-			/* only count(DISTINCT) is supported */
-			if (func->agg_distinct && pg_strcasecmp(name, "count") != 0)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						errmsg("continuous queries don't support DISTINCT expressions for \"%s\" aggregate", name),
-						parser_errposition(context->pstate, func->location)));
-
 			context->funcs = lappend(context->funcs, func);
-		}
 	}
 
 	return raw_expression_tree_walker(node, collect_agg_funcs, context);
@@ -558,7 +540,8 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 			FuncCall *fc = (FuncCall *) col;
 			char *name = NameListToString(fc->funcname);
 
-			if (pg_strcasecmp(name, DATE_TRUNC) == 0 ||
+			if (pg_strcasecmp(name, DATE_FLOOR) == 0 ||
+					pg_strcasecmp(name, DATE_TRUNC) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_DAY) == 0 ||
@@ -615,7 +598,7 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 
 		ereport(NOTICE,
 				(errmsg("window width is \"%s\" with a step size of \"1 %s\"", strVal(&((A_Const *) c->arg)->val), fname),
-				errhint("Use a datetime truncation function to explicitly set the step size.")));
+				errhint("Use a datetime truncation function if you want to explicitly set the step size.")));
 	}
 
 	return (ColumnRef *) col;
@@ -1122,13 +1105,50 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 		}
 	}
 
+	/* Transform the fromClause because we do a little bit of expression type inference below */
+	transformFromClause(context->pstate, copyObject(select->fromClause));
+
+	/* Validate aggregate functions */
+	foreach(lc, context->funcs)
+	{
+		FuncCall *func = (FuncCall *) lfirst(lc);
+		char *name = NameListToString(func->funcname);
+
+
+		/* mode and xmlagg are not supported */
+		if (pg_strcasecmp(name, "mode") == 0 ||
+				pg_strcasecmp(name, "xmlagg") == 0 ||
+				pg_strcasecmp(name, "percentile_disc") == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("continuous queries don't support \"%s\" aggregate", name),
+					parser_errposition(context->pstate, func->location)));
+
+		/* only count(DISTINCT) is supported */
+		if (func->agg_distinct && pg_strcasecmp(name, "count") != 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("continuous queries don't support DISTINCT expressions for \"%s\" aggregate", name),
+					parser_errposition(context->pstate, func->location)));
+
+		if (pg_strcasecmp(name, "fss_agg") == 0 && list_length(func->args))
+		{
+			Oid type = exprType(transformExpr(context->pstate, linitial(func->args), EXPR_KIND_WHERE));
+			TypeCacheEntry *typ = lookup_type_cache(type, 0);
+
+			if (!typ->typbyval)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						errmsg("fss_agg does not support reference types"),
+						parser_errposition(context->pstate, func->location)));
+		}
+	}
+
 	/* Ensure that any WINDOWs are legal */
 	collect_windows(select, context);
 	if (list_length(context->windows))
 	{
 		WindowDef *window = (WindowDef *) linitial(context->windows);
-
-		transformFromClause(context->pstate, select->fromClause);
 
 		/*
 		 * All WINDOW definitions must be *equivalent*. We allow different framing, but ordering and
@@ -1149,7 +1169,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 				if (!equal(window->orderClause, window2->orderClause))
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-									errmsg("all WINDOWs in a continuous query must have identical ORDER BY clauses"),
+							errmsg("all WINDOWs in a continuous query must have identical ORDER BY clauses"),
 							parser_errposition(context->pstate, window2->location)));
 			}
 		}
@@ -1946,7 +1966,8 @@ truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *contex
 		FuncCall *fc = lfirst(lc);
 		char *name = NameListToString(fc->funcname);
 
-		if (pg_strcasecmp(name, DATE_TRUNC) ||
+		if (pg_strcasecmp(name, DATE_FLOOR) == 0 ||
+				pg_strcasecmp(name, DATE_TRUNC) ||
 				pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
 				pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
 				pg_strcasecmp(name, DATE_TRUNC_DAY) == 0 ||

@@ -2,52 +2,52 @@
 CREATE CONTINUOUS VIEW test_st_extent AS SELECT id::integer, ST_Extent(g::geometry) FROM test_gis_geom_stream GROUP BY id;
 CREATE CONTINUOUS VIEW test_sw_st_extent AS SELECT id::integer, ST_Extent(g::geometry) FROM test_gis_geom_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour') GROUP BY id;
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- ST_3DExtent(geometry)
 CREATE CONTINUOUS VIEW test_st_3dextent AS SELECT id::integer, ST_3DExtent(g::geometry) FROM test_gis_geom_stream GROUP BY id;
 CREATE CONTINUOUS VIEW test_sw_st_3dextent AS SELECT id::integer, ST_3DExtent(g::geometry) FROM test_gis_geom_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour') GROUP BY id;
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- ST_Collect(geometry)
 CREATE CONTINUOUS VIEW test_st_collect AS SELECT ST_Collect(g::geometry) FROM test_gis_geom_stream;
 CREATE CONTINUOUS VIEW test_sw_st_collect AS SELECT ST_Collect(g::geometry) FROM test_gis_geom_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- ST_MemCollect(geometry)
 CREATE CONTINUOUS VIEW test_st_memcollect AS SELECT ST_MemCollect(g::geometry) FROM test_gis_geom_stream;
 CREATE CONTINUOUS VIEW test_sw_st_memcollect AS SELECT ST_MemCollect(g::geometry) FROM test_gis_geom_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- ST_Union(geometry)
 CREATE CONTINUOUS VIEW test_st_union AS SELECT ST_Union(g::geometry) FROM test_gis_geom_stream;
 CREATE CONTINUOUS VIEW test_sw_st_union AS SELECT ST_Union(g::geometry) FROM test_gis_geom_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- ST_MemUnion(geometry)
 CREATE CONTINUOUS VIEW test_st_memunion AS SELECT ST_MemUnion(g::geometry) FROM test_gis_geom_stream;
 CREATE CONTINUOUS VIEW test_sw_st_memunion AS SELECT ST_MemUnion(g::geometry) FROM test_gis_geom_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- ST_Accum(geometry)
 CREATE CONTINUOUS VIEW test_st_accum AS SELECT ST_Accum(g::geometry) FROM test_gis_geom_stream;
 CREATE CONTINUOUS VIEW test_sw_st_accum AS SELECT ST_Accum(g::geometry) FROM test_gis_geom_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- ST_Polygonize(geometry)
 CREATE CONTINUOUS VIEW test_st_polygonize AS SELECT ST_Polygonize(g::geometry) FROM test_gis_geom_stream;
 CREATE CONTINUOUS VIEW test_sw_st_polygonize AS SELECT ST_Polygonize(g::geometry) FROM test_gis_geom_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- ST_MakeLine(geometry)
 CREATE CONTINUOUS VIEW test_st_makeline AS SELECT ST_MakeLine(g::geometry) FROM test_gis_geom_stream;
 CREATE CONTINUOUS VIEW test_sw_st_makeline AS SELECT ST_MakeLine(g::geometry) FROM test_gis_geom_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour');
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 -- topology.TopoElementArray_agg(topology.TopoElement)
 CREATE CONTINUOUS VIEW test_topo_agg AS SELECT id::integer, topology.TopoElementArray_agg(a::topology.TopoElement) FROM test_gis_topo_stream GROUP BY id;
 CREATE CONTINUOUS VIEW test_sw_topo_agg AS SELECT id::integer, topology.TopoElementArray_agg(a::topology.TopoElement) FROM test_gis_topo_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour')  GROUP BY id;
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 INSERT INTO test_gis_geom_stream (id, g) VALUES (0, ST_MakePoint(32.38565653, 38.34148459, 1.58807849));
 INSERT INTO test_gis_geom_stream (id, g) VALUES (1, ST_MakePoint(60.13235956, 18.85041258, 7.95839553));
 INSERT INTO test_gis_geom_stream (id, g) VALUES (2, ST_MakePoint(34.28629657, 16.78774138, 2.91220975));

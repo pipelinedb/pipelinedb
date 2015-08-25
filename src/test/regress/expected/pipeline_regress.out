@@ -38,7 +38,7 @@ CREATE CONTINUOUS VIEW test_view AS
   FROM test_stream
   WHERE arrival_timestamp >= ( clock_timestamp() - interval '90 minutes' );
 NOTICE:  window width is "90 minutes" with a step size of "1 minute"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 INSERT INTO test_stream (user_id, page_id) VALUES (1, 1);
 SELECT pg_sleep(1);
  pg_sleep 
@@ -67,7 +67,7 @@ CREATE CONTINUOUS VIEW test_view AS
   SELECT arrival_timestamp FROM test_stream
   WHERE arrival_timestamp > clock_timestamp() - interval '1 hour';
 NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function to explicitly set the step size.
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 INSERT INTO test_stream (x) VALUES (NULL);
 INSERT INTO test_stream (x) VALUES (NULL);
 SELECT COUNT(*) FROM test_view;

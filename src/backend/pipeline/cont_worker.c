@@ -487,15 +487,15 @@ next:
 		QueryDesc *query_desc;
 		EState *estate;
 
+		if (state == NULL)
+			continue;
+
 		/*
 		 * We wrap this in a separate try/catch block because ExecInitNode call can potentially throw
 		 * an error if the state was for a stream-table join and the table has been dropped.
 		 */
 		PG_TRY();
 		{
-			if (state == NULL)
-				continue;
-
 			query_desc = state->query_desc;
 			estate = query_desc->estate;
 

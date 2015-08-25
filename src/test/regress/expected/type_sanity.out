@@ -143,7 +143,8 @@ ORDER BY 1;
  5030 | bloom     | 1244 | byteain
  5034 | tdigest   | 1244 | byteain
  5038 | cmsketch  | 1244 | byteain
-(5 rows)
+ 5041 | fss       | 1244 | byteain
+(6 rows)
 
 -- Varlena array types will point to array_in
 -- Exception as of 8.1: int2vector and oidvector have their own I/O routines
@@ -190,7 +191,8 @@ ORDER BY 1;
  5030 | bloom     |  31 | byteaout
  5034 | tdigest   |  31 | byteaout
  5038 | cmsketch  |  31 | byteaout
-(5 rows)
+ 5041 | fss       |  31 | byteaout
+(6 rows)
 
 SELECT p1.oid, p1.typname, p2.oid, p2.proname
 FROM pg_type AS p1, pg_proc AS p2
@@ -249,7 +251,8 @@ ORDER BY 1;
  5030 | bloom     | 2412 | bytearecv
  5034 | tdigest   | 2412 | bytearecv
  5038 | cmsketch  | 2412 | bytearecv
-(5 rows)
+ 5041 | fss       | 2412 | bytearecv
+(6 rows)
 
 -- Varlena array types will point to array_recv
 -- Exception as of 8.1: int2vector and oidvector have their own I/O routines
@@ -305,7 +308,8 @@ ORDER BY 1;
  5030 | bloom     | 2413 | byteasend
  5034 | tdigest   | 2413 | byteasend
  5038 | cmsketch  | 2413 | byteasend
-(5 rows)
+ 5041 | fss       | 2413 | byteasend
+(6 rows)
 
 SELECT p1.oid, p1.typname, p2.oid, p2.proname
 FROM pg_type AS p1, pg_proc AS p2
