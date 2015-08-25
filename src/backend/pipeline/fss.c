@@ -39,7 +39,7 @@ FSSCreateWithMAndH(uint64_t k, TypeCacheEntry *typ, uint64_t m, uint64_t h)
 
 	/* TODO(usmanm): Add support for ref types */
 	if (!typ->typbyval)
-		elog(ERROR, "fss doesn't support types by reference");
+		elog(ERROR, "fss does not support reference types");
 
 	/* We only store datums if they're passed by value. */
 	if (typ->typbyval)

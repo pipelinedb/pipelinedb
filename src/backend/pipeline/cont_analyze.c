@@ -48,6 +48,7 @@
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
+#include "utils/typcache.h"
 
 #define CLOCK_TIMESTAMP "clock_timestamp"
 #define DATE_FLOOR "date_floor"
@@ -351,27 +352,7 @@ collect_agg_funcs(Node *node, ContAnalyzeContext *context)
 		}
 
 		if (is_agg)
-		{
-			char *name = NameListToString(func->funcname);
-
-			/* mode and xmlagg are not supported */
-			if (pg_strcasecmp(name, "mode") == 0 ||
-					pg_strcasecmp(name, "xmlagg") == 0 ||
-					pg_strcasecmp(name, "percentile_disc") == 0)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						errmsg("continuous queries don't support \"%s\" aggregate", name),
-						parser_errposition(context->pstate, func->location)));
-
-			/* only count(DISTINCT) is supported */
-			if (func->agg_distinct && pg_strcasecmp(name, "count") != 0)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						errmsg("continuous queries don't support DISTINCT expressions for \"%s\" aggregate", name),
-						parser_errposition(context->pstate, func->location)));
-
 			context->funcs = lappend(context->funcs, func);
-		}
 	}
 
 	return raw_expression_tree_walker(node, collect_agg_funcs, context);
@@ -1124,13 +1105,50 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 		}
 	}
 
+	/* Transform the fromClause because we do a little bit of expression type inference below */
+	transformFromClause(context->pstate, copyObject(select->fromClause));
+
+	/* Validate aggregate functions */
+	foreach(lc, context->funcs)
+	{
+		FuncCall *func = (FuncCall *) lfirst(lc);
+		char *name = NameListToString(func->funcname);
+
+
+		/* mode and xmlagg are not supported */
+		if (pg_strcasecmp(name, "mode") == 0 ||
+				pg_strcasecmp(name, "xmlagg") == 0 ||
+				pg_strcasecmp(name, "percentile_disc") == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("continuous queries don't support \"%s\" aggregate", name),
+					parser_errposition(context->pstate, func->location)));
+
+		/* only count(DISTINCT) is supported */
+		if (func->agg_distinct && pg_strcasecmp(name, "count") != 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("continuous queries don't support DISTINCT expressions for \"%s\" aggregate", name),
+					parser_errposition(context->pstate, func->location)));
+
+		if (pg_strcasecmp(name, "fss_agg") == 0 && list_length(func->args))
+		{
+			Oid type = exprType(transformExpr(context->pstate, linitial(func->args), EXPR_KIND_WHERE));
+			TypeCacheEntry *typ = lookup_type_cache(type, 0);
+
+			if (!typ->typbyval)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						errmsg("fss_agg does not support reference types"),
+						parser_errposition(context->pstate, func->location)));
+		}
+	}
+
 	/* Ensure that any WINDOWs are legal */
 	collect_windows(select, context);
 	if (list_length(context->windows))
 	{
 		WindowDef *window = (WindowDef *) linitial(context->windows);
-
-		transformFromClause(context->pstate, select->fromClause);
 
 		/*
 		 * All WINDOW definitions must be *equivalent*. We allow different framing, but ordering and
@@ -1151,7 +1169,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 				if (!equal(window->orderClause, window2->orderClause))
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-									errmsg("all WINDOWs in a continuous query must have identical ORDER BY clauses"),
+							errmsg("all WINDOWs in a continuous query must have identical ORDER BY clauses"),
 							parser_errposition(context->pstate, window2->location)));
 			}
 		}

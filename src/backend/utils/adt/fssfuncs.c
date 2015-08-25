@@ -28,7 +28,7 @@
 #define DEFAULT_K 5
 
 static FSS *
-fss_recv(struct varlena *bytes)
+fss_fix_ptrs(struct varlena *bytes)
 {
 	char *pos;
 	FSS *fss = (FSS *) bytes;
@@ -60,7 +60,7 @@ fss_print(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	fss = fss_recv(PG_GETARG_VARLENA_P(0));
+	fss = fss_fix_ptrs(PG_GETARG_VARLENA_P(0));
 
 	initStringInfo(&buf);
 	appendStringInfo(&buf, "{ m = %d, h = %d, count = %ld, size = %ldkB }", fss->m, fss->h, fss->count, FSSSize(fss) / 1024);
@@ -90,7 +90,7 @@ fss_agg_trans(PG_FUNCTION_ARGS)
 		state = FSSCreate(k, typ);
 	}
 	else
-		state = fss_recv(PG_GETARG_VARLENA_P(0));
+		state = fss_fix_ptrs(PG_GETARG_VARLENA_P(0));
 
 	FSSIncrement(state, incoming);
 
@@ -123,7 +123,7 @@ fss_agg_transp(PG_FUNCTION_ARGS)
 		state = FSSCreateWithMAndH(k, typ, m, h);
 	}
 	else
-		state = fss_recv(PG_GETARG_VARLENA_P(0));
+		state = fss_fix_ptrs(PG_GETARG_VARLENA_P(0));
 
 	FSSIncrement(state, incoming);
 
@@ -138,10 +138,10 @@ fss_merge_agg_trans(PG_FUNCTION_ARGS)
 	MemoryContext old;
 	MemoryContext context;
 	FSS *state;
-	FSS *incoming = fss_recv(PG_GETARG_VARLENA_P(1));
+	FSS *incoming = fss_fix_ptrs(PG_GETARG_VARLENA_P(1));
 
 	if (!AggCheckCallContext(fcinfo, &context))
-		elog(ERROR, "fss_union_agg_trans called in non-aggregate context");
+		elog(ERROR, "fss_merge_agg_trans called in non-aggregate context");
 
 	old = MemoryContextSwitchTo(context);
 
@@ -151,7 +151,7 @@ fss_merge_agg_trans(PG_FUNCTION_ARGS)
 		PG_RETURN_POINTER(state);
 	}
 
-	state = fss_recv(PG_GETARG_VARLENA_P(0));
+	state = fss_fix_ptrs(PG_GETARG_VARLENA_P(0));
 	state = FSSMerge(state, incoming);
 
 	MemoryContextSwitchTo(old);
@@ -171,7 +171,7 @@ fss_topk(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	fss = fss_recv(PG_GETARG_VARLENA_P(0));
+	fss = fss_fix_ptrs(PG_GETARG_VARLENA_P(0));
 
 	datums = FSSTopK(fss, fss->k, &found);
 	typ = lookup_type_cache(fss->typ.typoid, 0);
@@ -210,7 +210,7 @@ fss_increment(PG_FUNCTION_ARGS)
 		fss = FSSCreate(DEFAULT_K, typ);
 	else
 	{
-		fss = fss_recv(PG_GETARG_VARLENA_P(0));
+		fss = fss_fix_ptrs(PG_GETARG_VARLENA_P(0));
 
 		if (fss->typ.typoid != typ->type_id)
 			elog(ERROR, "type mismatch for incoming value");

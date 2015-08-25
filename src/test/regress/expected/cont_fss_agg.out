@@ -1,6 +1,9 @@
 CREATE CONTINUOUS VIEW test_fss_agg0 AS SELECT k::text, fss_agg(x::int, 3) FROM test_fss_agg_stream GROUP BY k;
 CREATE CONTINUOUS VIEW test_fss_agg1 AS SELECT k::text, fss_agg(x::float8, 3) FROM test_fss_agg_stream GROUP BY k;
 CREATE CONTINUOUS VIEW test_fss_agg2 AS SELECT k::text, fss_agg(k::text, 3) FROM test_fss_agg_stream GROUP BY k;
+ERROR:  fss_agg does not support reference types
+LINE 1: ... CONTINUOUS VIEW test_fss_agg2 AS SELECT k::text, fss_agg(k:...
+                                                             ^
 INSERT INTO test_fss_agg_stream (k, x) VALUES ('a', 1);
 INSERT INTO test_fss_agg_stream (k, x) VALUES ('a', 2);
 INSERT INTO test_fss_agg_stream (k, x) VALUES ('a', 3);
