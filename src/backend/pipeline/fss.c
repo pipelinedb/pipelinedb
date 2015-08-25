@@ -19,7 +19,7 @@
 #include "utils/elog.h"
 #include "utils/palloc.h"
 
-#define DEFAULT_SS_M_FACTOR 5.0
+#define DEFAULT_SS_M_FACTOR 10.0
 #define DEFAULT_M_FACTOR (DEFAULT_SS_M_FACTOR / 2)
 #define DEFAULT_H_FACTOR (DEFAULT_M_FACTOR * 6)
 #define HASH_SIZE (sizeof(uint64_t))
@@ -271,6 +271,12 @@ done:
 	fss->count++;
 }
 
+/*
+ * FSSMerge
+ *
+ * SpaceSaving summaries are mergeable:
+ *   http://www.cs.utah.edu/~jeffp/papers/merge-summ.pdf
+ */
 FSS *
 FSSMerge(FSS *fss, FSS *incoming)
 {
