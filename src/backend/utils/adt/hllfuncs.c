@@ -74,11 +74,7 @@ hll_add_datum(FunctionCallInfo fcinfo, HyperLogLog *hll, Datum elem)
 	StringInfo buf;
 	int result;
 
-	if (!typ->typbyval && !elem)
-		return hll;
-
 	buf = makeStringInfo();
-
 	DatumToBytes(elem, typ, buf);
 	hll = HLLAdd(hll, buf->data, buf->len, &result);
 

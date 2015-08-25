@@ -29,7 +29,7 @@ INSERT INTO cont_complex_stream (r) VALUES (NULL);
 SELECT bloom_cardinality(bloom_agg) FROM test_cont_complex1;
  bloom_cardinality 
 -------------------
-                 2
+                 3
 (1 row)
 
 -- These should be true

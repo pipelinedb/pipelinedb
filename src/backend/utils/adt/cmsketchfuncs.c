@@ -76,9 +76,6 @@ cmsketch_add_datum(FunctionCallInfo fcinfo, CountMinSketch *cms, Datum elem, int
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 	StringInfo buf;
 
-	if (!typ->typbyval && !elem)
-		return cms;
-
 	buf = makeStringInfo();
 	DatumToBytes(elem, typ, buf);
 	CountMinSketchAdd(cms, buf->data, buf->len, n);

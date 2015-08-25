@@ -80,11 +80,7 @@ bloom_add_datum(FunctionCallInfo fcinfo, BloomFilter *bloom, Datum elem)
 	TypeCacheEntry *typ = (TypeCacheEntry *) fcinfo->flinfo->fn_extra;
 	StringInfo buf;
 
-	if (!typ->typbyval && !elem)
-		return bloom;
-
 	buf = makeStringInfo();
-
 	DatumToBytes(elem, typ, buf);
 	BloomFilterAdd(bloom, buf->data, buf->len);
 

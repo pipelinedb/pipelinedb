@@ -216,6 +216,9 @@ JumpConsistentHash(uint64_t key, int32_t num_buckets)
 void
 DatumToBytes(Datum d, TypeCacheEntry *typ, StringInfo buf)
 {
+	if (!typ->typbyval && !d)
+		return;
+
 	if (typ->type_id != RECORDOID && typ->typtype != TYPTYPE_COMPOSITE)
 	{
 		Size size;
