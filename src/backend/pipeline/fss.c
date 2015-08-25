@@ -19,12 +19,11 @@
 #include "utils/elog.h"
 #include "utils/palloc.h"
 
-#define DEFAULT_SS_M_FACTOR 10.0
+#define DEFAULT_SS_M_FACTOR 6.0
 #define DEFAULT_M_FACTOR (DEFAULT_SS_M_FACTOR / 2)
 #define DEFAULT_H_FACTOR (DEFAULT_M_FACTOR * 6)
-#define HASH_SIZE (sizeof(uint64_t))
 
-#define MURMUR_SEED 0x99496f1ddc863e6fL
+#define MURMUR_SEED 0x02cd1b4c451c1fb8L
 
 FSS *
 FSSCreateWithMAndH(uint64_t k, TypeCacheEntry *typ, uint64_t m, uint64_t h)
@@ -41,9 +40,6 @@ FSSCreateWithMAndH(uint64_t k, TypeCacheEntry *typ, uint64_t m, uint64_t h)
 	/* TODO(usmanm): Add support for ref types */
 	if (!typ->typbyval)
 		elog(ERROR, "fss doesn't support types by reference");
-
-	/* XXX(usmanm): This will fail for 32-bit machines, but who cares? */
-	Assert(sizeof(Datum) == HASH_SIZE);
 
 	/* We only store datums if they're passed by value. */
 	if (typ->typbyval)
