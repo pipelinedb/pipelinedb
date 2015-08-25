@@ -106,7 +106,8 @@ START_TEST(test_false_positives)
 }
 END_TEST
 
-Suite *test_cmsketch_suite(void)
+Suite *
+test_cmsketch_suite(void)
 {
 	Suite *s;
 	TCase *tc;

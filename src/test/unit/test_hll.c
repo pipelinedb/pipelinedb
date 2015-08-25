@@ -330,7 +330,8 @@ START_TEST(test_create_from_raw)
 }
 END_TEST
 
-Suite *test_hll_suite(void)
+Suite *
+test_hll_suite(void)
 {
 	Suite *s;
 	TCase *tc;

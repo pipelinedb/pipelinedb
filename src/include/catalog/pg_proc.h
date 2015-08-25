@@ -5417,6 +5417,37 @@ DESCR("count-min sketch total");
 DATA(insert OID = 4395 (  date_floor	   PGNSP PGUID 12 1 0 0 0 f f f f f f s 2 0 1184 "1184 1186" _null_ _null_ _null_ _null_ timestamptz_floor _null_ _null_ _null_ ));
 DESCR("floor timestamp with time zone to specified interval");
 
+/* filtered space saving */
+DATA(insert OID = 4396 ( fss_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 5041 "2283 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("filtered space saving aggregate");
+/* filtered space saving aggregate with user-supplied m and h */
+DATA(insert OID = 4397 ( fss_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 4 0 5041 "2283 20 20 20" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("filtered space saving aggregate");
+/* filtered space saving aggregate transition function */
+DATA(insert OID = 4398 ( fss_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 5041 "5041 2283 20" _null_ _null_ _null_ _null_ fss_agg_trans _null_ _null_ _null_ ));
+DESCR("filtered space saving aggregate");
+/* filtered space saving aggregate with p and n transition function */
+DATA(insert OID = 4399 ( fss_agg_transp	PGNSP PGUID 12 1 0 0 0 f f f f f f i 5 0 5041 "5041 2283 20 20 20" _null_ _null_ _null_ _null_ fss_agg_transp _null_ _null_ _null_ ));
+DESCR("filtered space saving aggregate");
+/* filtered space saving union aggregate */
+DATA(insert OID = 4400 ( fss_merge_agg	PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 5041 "5041" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("filtered space saving merge aggregate");
+/* filtered space saving union aggregate transition function */
+DATA(insert OID = 4401 ( fss_merge_agg_trans	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5041 "5041 5041" _null_ _null_ _null_ _null_ fss_merge_agg_trans _null_ _null_ _null_ ));
+DESCR("filtered space saving merge aggregate");
+DATA(insert OID = 4403 ( fss_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5041 "2206 20" _null_ _null_ _null_ _null_ fss_empty _null_ _null_ _null_ ));
+DESCR("filtered space saving empty");
+/* filtered space saving empty with user-supplied m and h */
+DATA(insert OID = 4404 ( fss_empty	PGNSP PGUID 12 1 0 0 0 f f f f f f i 4 0 5041 "2206 20 20 20" _null_ _null_ _null_ _null_ fss_emptyp _null_ _null_ _null_ ));
+DESCR("filtered space saving empty");
+/* filtered space saving add */
+DATA(insert OID = 4405 ( fss_increment	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5041 "5041 2283" _null_ _null_ _null_ _null_ fss_increment _null_ _null_ _null_ ));
+DESCR("filtered space saving increment");
+DATA(insert OID = 4407 (fss_print PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 25 "5041" _null_ _null_ _null_ _null_ fss_print _null_ _null_ _null_ ));
+DESCR("filtered space saving print function");
+DATA(insert OID = 4408 (fss_topk PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2277 "5041" _null_ _null_ _null_ _null_ fss_topk _null_ _null_ _null_ ));
+DESCR("filtered space saving top-k function");
+
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,
