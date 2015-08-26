@@ -9408,7 +9408,7 @@ pipeline_get_overlay_viewdef(PG_FUNCTION_ARGS)
 
 	viewoid = RangeVarGetRelid(rv, NoLock, false);
 
-	PG_RETURN_TEXT_P(CStringGetTextDatum(pg_get_viewdef_worker(viewoid, PRETTYFLAG_INDENT, WRAP_COLUMN_DEFAULT)));
+	PG_RETURN_TEXT_P(CStringGetTextDatum(pg_get_viewdef_worker(viewoid, PRETTYFLAG_INDENT, DISPLAY_OVERLAY_VIEW)));
 }
 
 /*
