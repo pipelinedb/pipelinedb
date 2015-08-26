@@ -709,7 +709,7 @@ pg_get_viewdef_worker(Oid viewoid, int prettyFlags, int wrapColumn)
 		RangeVar *rv = makeRangeVar(get_namespace_name(nsp), RelationGetRelationName(rel), -1);
 
 		heap_close(rel, NoLock);
-		if (IsAContinuousView(rv)) /* hack to signal this function call to return regular viewdef */
+		if (IsAContinuousView(rv) && wrapColumn != DISPLAY_OVERLAY_VIEW) /* hack to signal this function call to return regular viewdef */
 		{
 			/*
 			 * When a user is describing a continuous view, we show them the continuous
@@ -722,6 +722,9 @@ pg_get_viewdef_worker(Oid viewoid, int prettyFlags, int wrapColumn)
 		}
 		else
 		{
+			if (wrapColumn == DISPLAY_OVERLAY_VIEW)
+				wrapColumn = 0;
+
 			/*
 			 * Get the rule's definition and put it into executor's memory
 			 */
