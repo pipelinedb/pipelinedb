@@ -362,7 +362,7 @@ GetQueryString(RangeVar *cvname)
 				errmsg("continuous view \"%s\" does not exist", cvname->relname)));
 
 	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
-	result = deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
+	result = deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 	ReleaseSysCache(tuple);
 
@@ -473,7 +473,7 @@ GetContinuousView(Oid id)
 	view->hash = row->hash;
 
 	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
-	view->query = deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
+	view->query = deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 	ReleaseSysCache(tuple);
 

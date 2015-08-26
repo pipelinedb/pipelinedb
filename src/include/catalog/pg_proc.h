@@ -5443,10 +5443,17 @@ DESCR("filtered space saving empty");
 /* filtered space saving add */
 DATA(insert OID = 4405 ( fss_increment	PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 5041 "5041 2283" _null_ _null_ _null_ _null_ fss_increment _null_ _null_ _null_ ));
 DESCR("filtered space saving increment");
+/* filtered space saving print */
 DATA(insert OID = 4407 (fss_print PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 25 "5041" _null_ _null_ _null_ _null_ fss_print _null_ _null_ _null_ ));
 DESCR("filtered space saving print function");
+/* filtered space saving topk */
 DATA(insert OID = 4408 (fss_topk PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 2277 "5041" _null_ _null_ _null_ _null_ fss_topk _null_ _null_ _null_ ));
 DESCR("filtered space saving top-k function");
+
+DATA(insert OID = 4409 ( pipeline_get_worker_querydef	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ pipeline_get_worker_querydef _null_ _null_ _null_ ));
+DESCR("gets query run by continuous query worker");
+DATA(insert OID = 4410 ( pipeline_get_combiner_querydef	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "25" _null_ _null_ _null_ _null_ pipeline_get_combiner_querydef _null_ _null_ _null_ ));
+DESCR("gets query run by continuous query combiner");
 
 /*
  * Symbolic values for provolatile column: these indicate whether the result

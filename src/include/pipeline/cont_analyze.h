@@ -64,12 +64,13 @@ extern List *pipeline_rewrite(List *raw_parsetree_list);
 
 extern Query *GetContQuery(RangeVar *rv);
 extern Query *GetContWorkerQuery(RangeVar *rv);
+extern Query *GetContCombinerQuery(RangeVar *rv);
 
 extern Node *GetSWExpr(RangeVar *rv);
 extern ColumnRef *GetSWTimeColumn(RangeVar *rv);
 extern ColumnRef *GetWindowTimeColumn(RangeVar *cv);
 
 /* Deparsing */
-extern char *deparse_cont_query_def(Query *query);
+extern char *deparse_query_def(Query *query);
 
 #endif

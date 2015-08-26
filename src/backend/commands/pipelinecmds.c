@@ -447,7 +447,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	/* Deparse query so that analyzer always see the same canonicalized SelectStmt */
 	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
-	cont_select_sql = deparse_cont_query_def(cont_query);
+	cont_select_sql = deparse_query_def(cont_query);
 	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
 	context = MakeContAnalyzeContext(NULL, cont_select, Worker);
 
@@ -528,7 +528,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
-	viewselect->fromClause = list_make1(matrel);
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;

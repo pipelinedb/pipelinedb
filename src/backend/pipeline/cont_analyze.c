@@ -2460,10 +2460,10 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	proc->limitCount = NULL;
 	proc->limitOffset = NULL;
 
-	if (viewptr)
-		*viewptr = view;
+	/* Overlay view reads from matrel */
+	view->fromClause = list_make1(mat_relation);
 
-	if (IsContQueryCombinerProcess())
+	if (proc_type == Combiner)
 	{
 		/*
 		 * Combiner shouldn't have to re-do the filtering work of the WHERE clause.
@@ -2476,6 +2476,9 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 		foreach(lc, context->funcs)
 			((FuncCall *) lfirst(lc))->agg_filter = NULL;
 	}
+
+	if (viewptr)
+		*viewptr = view;
 
 	return proc;
 }
@@ -2514,11 +2517,31 @@ GetContWorkerQuery(RangeVar *rv)
 	char *sql;
 	List *parsetree_list;
 	SelectStmt *sel;
+	RangeVar *matrel;
 
 	sql = GetQueryString(rv);
 	parsetree_list = pg_parse_query(sql);
-	sel = TransformSelectStmtForContProcess(rv, linitial(parsetree_list), NULL, Worker);
+	matrel = GetMatRelationName(rv);
+	sel = TransformSelectStmtForContProcess(matrel, linitial(parsetree_list), NULL, Worker);
 
+	return parse_analyze((Node *) sel, sql, 0, 0);
+}
+
+/*
+ * GetContCombinerQuery
+ */
+Query *
+GetContCombinerQuery(RangeVar *rv)
+{
+	char *sql;
+	List *parsetree_list;
+	SelectStmt *sel;
+	RangeVar *matrel;
+
+	sql = GetQueryString(rv);
+	parsetree_list = pg_parse_query(sql);
+	matrel = GetMatRelationName(rv);
+	sel = TransformSelectStmtForContProcess(matrel, linitial(parsetree_list), NULL, Combiner);
 	return parse_analyze((Node *) sel, sql, 0, 0);
 }
 

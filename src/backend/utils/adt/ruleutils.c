@@ -428,7 +428,7 @@ static char *flatten_reloptions(Oid relid);
  * deparse_cont_query_def
  */
 char *
-deparse_cont_query_def(Query *query)
+deparse_query_def(Query *query)
 {
 	StringInfo buf = makeStringInfo();
 	deparse_context context;
@@ -455,8 +455,8 @@ deparse_cont_query_def(Query *query)
 	context.windowClause = NIL;
 	context.windowTList = NIL;
 	context.varprefix = list_length(query->rtable) != 1;
-	context.prettyFlags = 0;
-	context.wrapColumn = 0;
+	context.prettyFlags = PRETTYFLAG_INDENT;
+	context.wrapColumn = WRAP_COLUMN_DEFAULT;
 	context.indentLevel = 0;
 
 	set_deparse_for_query(&dpns, query, NIL);
@@ -709,7 +709,7 @@ pg_get_viewdef_worker(Oid viewoid, int prettyFlags, int wrapColumn)
 		RangeVar *rv = makeRangeVar(get_namespace_name(nsp), RelationGetRelationName(rel), -1);
 
 		heap_close(rel, NoLock);
-		if (IsAContinuousView(rv) && wrapColumn != DISPLAY_OVERLAY_VIEW) /* hack to signal this function call to return regular viewdef */
+		if (IsAContinuousView(rv)) /* hack to signal this function call to return regular viewdef */
 		{
 			/*
 			 * When a user is describing a continuous view, we show them the continuous
@@ -722,9 +722,6 @@ pg_get_viewdef_worker(Oid viewoid, int prettyFlags, int wrapColumn)
 		}
 		else
 		{
-			if (wrapColumn == DISPLAY_OVERLAY_VIEW)
-				wrapColumn = 0;
-
 			/*
 			 * Get the rule's definition and put it into executor's memory
 			 */
@@ -9408,5 +9405,49 @@ pipeline_get_overlay_viewdef(PG_FUNCTION_ARGS)
 
 	viewoid = RangeVarGetRelid(rv, NoLock, false);
 
-	PG_RETURN_TEXT_P(CStringGetTextDatum(pg_get_viewdef_worker(viewoid, PRETTYFLAG_INDENT, DISPLAY_OVERLAY_VIEW)));
+	PG_RETURN_TEXT_P(CStringGetTextDatum(pg_get_viewdef_worker(viewoid, PRETTYFLAG_INDENT, WRAP_COLUMN_DEFAULT)));
+}
+
+/*
+ * pipeline_get_worker_querydef
+ */
+Datum
+pipeline_get_worker_querydef(PG_FUNCTION_ARGS)
+{
+	/* qualified name continuous view name */
+	text *name = PG_GETARG_TEXT_P(0);
+	RangeVar *rv;
+	Query *query;
+	char *sql;
+
+	rv = makeRangeVarFromNameList(textToQualifiedNameList(name));
+	if (!IsAContinuousView(rv))
+		elog(ERROR, "%s is not a continuous view", TextDatumGetCString(name));
+
+	query = GetContWorkerQuery(rv);
+	sql = deparse_query_def(query);
+
+	PG_RETURN_TEXT_P(CStringGetTextDatum(sql));
+}
+
+/*
+ * pipeline_get_combiner_querydef
+ */
+Datum
+pipeline_get_combiner_querydef(PG_FUNCTION_ARGS)
+{
+	/* qualified name continuous view name */
+	text *name = PG_GETARG_TEXT_P(0);
+	RangeVar *rv;
+	Query *query;
+	char *sql;
+
+	rv = makeRangeVarFromNameList(textToQualifiedNameList(name));
+	if (!IsAContinuousView(rv))
+		elog(ERROR, "%s is not a continuous view", TextDatumGetCString(name));
+
+	query = GetContCombinerQuery(rv);
+	sql = deparse_query_def(query);
+
+	PG_RETURN_TEXT_P(CStringGetTextDatum(sql));
 }
