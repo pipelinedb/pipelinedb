@@ -30,7 +30,7 @@ ExecInitPhysicalGroupLookup(PhysicalGroupLookup *node, EState *estate, int eflag
 		elog(ERROR, "unexpected join node found in physical group lookup: %d", nodeTag(outer));
 
 	nl = (NestLoop *) outer;
-	nl->join.jointype = JOIN_SEMI;
+	nl->join.jointype = JOIN_INNER;
 
 	state = makeNode(PhysicalGroupLookupState);
 	state->ps.plan = (Plan *) node;
