@@ -17,6 +17,8 @@ CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITIO
 \d+ cqwindow1_mrel0;
 \d+ cqwindow1;
 SELECT pipeline_get_overlay_viewdef('cqwindow1');
+SELECT pipeline_get_worker_querydef('cqwindow1');
+SELECT pipeline_get_combiner_querydef('cqwindow1');
 
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);
 SELECT pg_sleep(1);
