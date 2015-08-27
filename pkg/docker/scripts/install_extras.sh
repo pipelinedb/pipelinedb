@@ -22,12 +22,6 @@ make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config
 make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config install
 cd ..
 
-# build hll
-cd hll-${HLLVER}
-make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config
-make PG_CONFIG=/usr/lib/pipelinedb/bin/pg_config install
-cd ..
-
 # build contrib modules
 cd /usr/local/src/postgresql-${PGVER}/contrib
 export USE_PGXS=1
