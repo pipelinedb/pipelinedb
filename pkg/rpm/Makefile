@@ -12,7 +12,7 @@ BUILDROOT = $(CURDIR)/build
 
 all: spec conf geos gdal proj pipeline gis clean-libs set-perms
 	mkdir $(CURDIR)/build
-	cp -r --parents $(PREFIX) $(BUILDROOT)
+	cp -p -r --parents $(PREFIX) $(BUILDROOT)
 	rpmbuild -bb -vv \
 		--define "_topdir $(CURDIR)/rpmbuild" \
 		--define "_tmppath $(CURDIR)/tmp" \
