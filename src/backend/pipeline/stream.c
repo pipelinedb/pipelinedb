@@ -453,7 +453,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
  * COPY events to a stream from an input source
  */
 uint64
-CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, TimestampTz *timer)
+CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
 	Bitmapset *targets;
 	uint64 count = 0;
@@ -463,8 +463,6 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, 
 	int num_batches = 0;
 	Size size = 0;
 	bool snap = ActiveSnapshotSet();
-
-	Assert(timer != NULL);
 
 	targets = GetLocalStreamReaders(RelationGetRelid(stream));
 
@@ -502,15 +500,6 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, 
 
 		count++;
 		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
-
-		if (stream_insertion_commit_interval > 0 &&
-				TimestampDifferenceExceeds(*timer, GetCurrentTimestamp(), stream_insertion_commit_interval * 1000))
-		{
-			 CommitTransactionCommand();
-			 *timer = GetCurrentTimestamp();
-
-			 StartTransactionCommand();
-		}
 	}
 
 	stream_stat_report(RelationGetRelid(stream), count, 1, size);
