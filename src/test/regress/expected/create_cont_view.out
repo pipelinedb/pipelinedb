@@ -666,6 +666,12 @@ DROP VIEW ccvv;
 ERROR:  "ccvv" is not a view
 HINT:  Use DROP CONTINUOUS VIEW to remove a continuous view.
 DROP CONTINUOUS VIEW ccvv;
+-- Subselects aren't allowed in a CV's target list
+CREATE TABLE ccvt (x integer);
+CREATE CONTINUOUS VIEW noss AS SELECT y::integer, (SELECT x FROM ccvt WHERE x = 1) FROM stream;
+ERROR:  subqueries are not allowed in a continuous view's target list
+HINT:  Stream-table joins are the preferred method for combining other relations with continuous views.
+DROP TABLE ccvt;
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;

@@ -124,6 +124,11 @@ CREATE CONTINUOUS VIEW ccvv AS SELECT COUNT(*) FROM stream;
 DROP VIEW ccvv;
 DROP CONTINUOUS VIEW ccvv;
 
+-- Subselects aren't allowed in a CV's target list
+CREATE TABLE ccvt (x integer);
+CREATE CONTINUOUS VIEW noss AS SELECT y::integer, (SELECT x FROM ccvt WHERE x = 1) FROM stream;
+DROP TABLE ccvt;
+
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;

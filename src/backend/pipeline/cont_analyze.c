@@ -882,6 +882,26 @@ is_allowed_subquery(Node *subquery)
 }
 
 /*
+ * validate_target_list
+ */
+static void
+validate_target_list(SelectStmt *stmt)
+{
+	ListCell *lc;
+	foreach(lc, stmt->targetList)
+	{
+		ResTarget *res = (ResTarget *) lfirst(lc);
+		if (IsA(res->val, SubLink))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("subqueries are not allowed in a continuous view's target list"),
+					errhint("Stream-table joins are the preferred method for combining other relations with continuous views.")));
+		}
+	}
+}
+
+/*
  * ValidateContQuery
  */
 void
@@ -899,6 +919,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 				errmsg("continuous views can only be defined using SELECT queries")));
 
 	select = (SelectStmt *) copyObject(node);
+	validate_target_list(select);
 
 	context = MakeContAnalyzeContext(make_parsestate(NULL), select, Worker);
 	context->pstate->p_sourcetext = sql;
