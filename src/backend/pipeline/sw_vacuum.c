@@ -132,7 +132,7 @@ NumSWVacuumTuples(Oid relid)
 
 	queryDesc = PortalGetQueryDesc(portal);
 	slot = MakeSingleTupleTableSlot(queryDesc->tupDesc);
-	tuplestore_gettupleslot(store, false, false, slot);
+	tuplestore_gettupleslot(store, true, false, slot);
 
 	if (TupIsNull(slot))
 		count = 0;

@@ -442,6 +442,14 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 	xl_heap_freeze_tuple *frozen;
 	SWVacuumContext *cqvcontext = CreateSWVacuumContext(onerel);
 
+	/*
+	 * We need to do a full scan if it's a sliding-window continuous view,
+	 * as we need to check for out-of-window tuples that may exist within
+	 * all-visible pages.
+	 */
+	if (cqvcontext != NULL)
+		scan_all = true;
+
 	pg_rusage_init(&ru0);
 
 	relname = RelationGetRelationName(onerel);
@@ -901,6 +909,8 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 				 */
 				ItemPointerSet(item, blkno, offnum);
 				cqvcontext->expired = lappend(cqvcontext->expired, item);
+				tupgone = true;
+				all_visible = false;
 			}
 
 			if (tupgone)
