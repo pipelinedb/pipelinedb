@@ -127,6 +127,7 @@ test_tdigest_suite(void)
 
 	s = suite_create("test_tdigest");
 	tc = tcase_create("test_tdigest");
+	tcase_set_timeout(tc, 30);
 	tcase_add_test(tc, test_tdigest);
 	tcase_add_test(tc, test_tdigest_merge);
 	suite_add_tcase(s, tc);
