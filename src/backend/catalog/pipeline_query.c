@@ -207,7 +207,7 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(RangeVar *name, Query *query, RangeVar* matrelname, bool gc)
+DefineContinuousView(RangeVar *name, Query *query, RangeVar* matrelname, bool gc, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -278,6 +278,8 @@ DefineContinuousView(RangeVar *name, Query *query, RangeVar* matrelname, bool gc
 	UpdatePipelineStreamCatalog();
 
 	heap_close(pipeline_query, NoLock);
+
+	*pq_id = id;
 
 	return result;
 }

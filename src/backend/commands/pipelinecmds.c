@@ -404,7 +404,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ListCell *col;
 	Oid matreloid;
 	Oid viewoid;
-	Oid cvoid;
+	Oid pqoid;
 	Oid indexoid;
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
@@ -416,6 +416,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	bool saveAllowSystemTableMods;
 	Relation pipeline_query;
 	ContAnalyzeContext *context;
+	ContinuousView *cv;
+	Oid cvid;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -523,8 +525,11 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/*
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
+	 *
+	 * pqoid is the oid of the row in pipeline_query,
+	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	cvoid = DefineContinuousView(view, cont_query, matrel, context->is_sw);
+	pqoid = DefineContinuousView(view, cont_query, matrel, context->is_sw, &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
@@ -537,7 +542,15 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	/* Create group look up index and record dependencies */
 	indexoid = create_index_on_mat_relation(view, matreloid, matrel, query, context->is_sw);
-	record_dependencies(cvoid, matreloid, viewoid, indexoid, workerselect, query);
+	record_dependencies(pqoid, matreloid, viewoid, indexoid, workerselect, query);
+
+	/*
+	 * Run the combiner queries through the planner, so that if something goes wrong we know now
+	 * rather than finding out when the CV actually activates.
+	 */
+	cv = GetContinuousView(cvid);
+	GetContPlan(cv, Combiner);
+	GetCombinerLookupPlan(cv);
 
 	allowSystemTableMods = saveAllowSystemTableMods;
 
