@@ -169,15 +169,15 @@ Indexes:
 Options: fillfactor=50
 
 \d+ ls_hash_group1_mrel0;
-                         Table "public.ls_hash_group1_mrel0"
- Column |           Type           | Modifiers | Storage | Stats target | Description 
---------+--------------------------+-----------+---------+--------------+-------------
- _0     | timestamp with time zone |           | plain   |              | 
- x      | integer                  |           | plain   |              | 
- minute | timestamp with time zone |           | plain   |              | 
- count  | bigint                   |           | plain   |              | 
+                               Table "public.ls_hash_group1_mrel0"
+      Column       |           Type           | Modifiers | Storage | Stats target | Description 
+-------------------+--------------------------+-----------+---------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           | plain   |              | 
+ x                 | integer                  |           | plain   |              | 
+ minute            | timestamp with time zone |           | plain   |              | 
+ count             | bigint                   |           | plain   |              | 
 Indexes:
-    "ls_hash_group1_mrel0_expr_idx" btree (ls_hash_group(_0, x, minute))
+    "ls_hash_group1_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, x, minute))
 Options: fillfactor=50
 
 \d+ ls_hash_group2_mrel0;

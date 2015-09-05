@@ -1873,6 +1873,8 @@ hoist_node(List **target_list, Node *node, ContAnalyzeContext *context)
 	if (rt == NULL)
 	{
 		rt = create_unique_res_target(node, context);
+		if (context->hoisted_name)
+			rt->name = context->hoisted_name;
 		*target_list = lappend(*target_list, rt);
 	}
 
@@ -2064,7 +2066,9 @@ hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContex
 	}
 
 	time = context->expr;
+	context->hoisted_name = ARRIVAL_TIMESTAMP;
 	cref = hoist_node(&proc->targetList, time, context);
+	context->hoisted_name = NULL;
 
 	foreach(lc, proc->groupClause)
 	{
