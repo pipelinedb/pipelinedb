@@ -22,6 +22,7 @@
 #include "catalog/pipeline_combine_fn.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "commands/pipelinecmds.h"
 #include "lib/stringinfo.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -484,28 +485,44 @@ find_clock_timestamp_expr(Node *node, ContAnalyzeContext *context)
 	return raw_expression_tree_walker(node, find_clock_timestamp_expr, (void *) context);
 }
 
-static char *
-get_truncation_from_interval_expr(Node *node)
+/*
+ * get_step_size_interval_expr
+ *
+ * Returns a constant representing the step size to use for the given window.
+ */
+static A_Const *
+get_step_size_interval_expr(Node *node)
 {
 	Expr *expr = (Expr *) transformExpr(make_parsestate(NULL), node, EXPR_KIND_WHERE);
-	Const *c;
-	Interval *i;
+	Const *window;
+	Interval *step;
+	Interval min_step;
+	float8 factor = (float8) sliding_window_step_factor / (float8) 100.0;
+	A_Const *result = makeNode(A_Const);
+	Value *v;
+	char *str;
+	Datum cmp;
+
+	MemSet(&min_step, 0, sizeof(Interval));
+	min_step.time = 1000 * 1000;
 
 	Assert(IsA(expr, Const));
-	c = (Const *) expr;
-	Assert(c->consttype == INTERVALOID);
+	window = (Const *) expr;
+	Assert(window->consttype == INTERVALOID);
 
-	i = (Interval *) c->constvalue;
+	/* We make the step size some percentage of the total window width */
+	step = (Interval *) DirectFunctionCall2(interval_mul, window->constvalue, Float8GetDatum(factor));
 
-	/* We make the step size one unit smaller than the granularity of the window size unit */
-	if (i->month)
-		return DATE_TRUNC_DAY;
-	else if (i->day)
-		return DATE_TRUNC_HOUR;
-	else if (i->time > HOUR_USEC)
-		return DATE_TRUNC_MINUTE;
+	cmp = (Datum) DirectFunctionCall2(interval_cmp, (Datum) step, (Datum) &min_step);
+	if (DatumGetInt32(cmp) < 0)
+		step = &min_step;
 
-	return DATE_TRUNC_SECOND;
+	str = (char *) DirectFunctionCall1(interval_out, (Datum) step);
+
+	v = makeString(str);
+	result->val = *v;
+
+	return result;
 }
 
 static ColumnRef *
@@ -513,7 +530,6 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 {
 	Node *col = node;
 	bool saw_expr = false;
-	bool saw_trunc = false;
 
 	context->cols = NIL;
 	collect_types_and_cols(node, context);
@@ -540,16 +556,14 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 			FuncCall *fc = (FuncCall *) col;
 			char *name = NameListToString(fc->funcname);
 
-			if (pg_strcasecmp(name, DATE_FLOOR) == 0 ||
+			if (!(pg_strcasecmp(name, DATE_FLOOR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_DAY) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_HOUR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MINUTE) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0)
-				saw_trunc = true;
-			else
+					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0))
 				return NULL;
 
 			/* Date truncation should happen at the top level */
@@ -582,23 +596,6 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 		}
 
 		return NULL;
-	}
-
-	if (context->is_sw && !saw_trunc)
-	{
-		A_Expr *ct_expr = (A_Expr *) context->expr;
-		TypeCast *c;
-		char *fname;
-
-		Assert(ct_expr && IsA(ct_expr, A_Expr));
-
-		c = (TypeCast *) ct_expr->rexpr;
-		Assert(IsA(c, TypeCast) && IsA(c->arg, A_Const));
-		fname = get_truncation_from_interval_expr((Node *) c);
-
-		ereport(NOTICE,
-				(errmsg("window width is \"%s\" with a step size of \"1 %s\"", strVal(&((A_Const *) c->arg)->val), fname),
-				errhint("Use a datetime truncation function if you want to explicitly set the step size.")));
 	}
 
 	return (ColumnRef *) col;
@@ -1873,6 +1870,8 @@ hoist_node(List **target_list, Node *node, ContAnalyzeContext *context)
 	if (rt == NULL)
 	{
 		rt = create_unique_res_target(node, context);
+		if (context->hoisted_name)
+			rt->name = context->hoisted_name;
 		*target_list = lappend(*target_list, rt);
 	}
 
@@ -2010,15 +2009,16 @@ truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *contex
 		if (sw_expr)
 		{
 			A_Expr *ct_expr;
-			char *fname;
+			A_Const *step;
 
 			if (equal(sw_expr->lexpr, time))
 				ct_expr = (A_Expr *) sw_expr->rexpr;
 			else
 				ct_expr = (A_Expr *) sw_expr->lexpr;
 
-			fname = get_truncation_from_interval_expr(ct_expr->rexpr);
-			func->funcname = list_make1(makeString(fname));
+			step = get_step_size_interval_expr(ct_expr->rexpr);
+			func->funcname = list_make1(makeString(DATE_FLOOR));
+			func->args = lappend(func->args, (Node *) step);
 		}
 		else
 			func->funcname = list_make1(makeString(DATE_TRUNC_SECOND));
@@ -2064,7 +2064,9 @@ hoist_time_node(SelectStmt *proc, Node *time, A_Expr *sw_expr, ContAnalyzeContex
 	}
 
 	time = context->expr;
+	context->hoisted_name = ARRIVAL_TIMESTAMP;
 	cref = hoist_node(&proc->targetList, time, context);
+	context->hoisted_name = NULL;
 
 	foreach(lc, proc->groupClause)
 	{

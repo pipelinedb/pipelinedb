@@ -181,8 +181,6 @@ SELECT pipeline_get_overlay_viewdef('cqcreate4');
 
 -- Sliding window queries
 CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
-NOTICE:  window width is "5" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate5';
  count 
 -------
@@ -203,7 +201,7 @@ SELECT gc FROM pipeline_query WHERE name = 'cqcreate5';
 View definition:
  SELECT key::text
    FROM ONLY cont_create_stream2
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '@ 5 secs'::interval second);
+  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '00:00:05'::interval second);
 
 \d+ cqcreate5_mrel0;
                               Table "public.cqcreate5_mrel0"
@@ -220,12 +218,10 @@ SELECT pipeline_get_overlay_viewdef('cqcreate5');
 -----------------------------------------------------------------------------------
   SELECT cqcreate5_mrel0.key                                                      +
     FROM cqcreate5_mrel0                                                          +
-   WHERE (cqcreate5_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second));
+   WHERE (cqcreate5_mrel0._0 > (clock_timestamp() - '00:00:05'::interval second));
 (1 row)
 
 CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key::text;
-NOTICE:  window width is "5" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate6';
  count 
 -------
@@ -246,26 +242,26 @@ SELECT gc FROM pipeline_query WHERE name = 'cqcreate6';
 View definition:
  SELECT count(*) AS count
    FROM ONLY cont_create_stream2
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '@ 5 secs'::interval second)
+  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '00:00:05'::interval second)
   GROUP BY key::text;
 
 \d+ cqcreate6_mrel0;
-                            Table "public.cqcreate6_mrel0"
- Column |           Type           | Modifiers | Storage  | Stats target | Description 
---------+--------------------------+-----------+----------+--------------+-------------
- _0     | timestamp with time zone |           | plain    |              | 
- _1     | text(0)                  |           | extended |              | 
- count  | bigint                   |           | plain    |              | 
+                                  Table "public.cqcreate6_mrel0"
+      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           | plain    |              | 
+ _1                | text(0)                  |           | extended |              | 
+ count             | bigint                   |           | plain    |              | 
 Indexes:
-    "cqcreate6_mrel0_expr_idx" btree (ls_hash_group(_0, _1))
+    "cqcreate6_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, _1))
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqcreate6');
-                           pipeline_get_overlay_viewdef                           
-----------------------------------------------------------------------------------
-  SELECT combine(cqcreate6_mrel0.count) AS count                                 +
-    FROM cqcreate6_mrel0                                                         +
-   WHERE (cqcreate6_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second))+
+                                  pipeline_get_overlay_viewdef                                   
+-------------------------------------------------------------------------------------------------
+  SELECT combine(cqcreate6_mrel0.count) AS count                                                +
+    FROM cqcreate6_mrel0                                                                        +
+   WHERE (cqcreate6_mrel0.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval second))+
    GROUP BY cqcreate6_mrel0._1;
 (1 row)
 
@@ -496,8 +492,6 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
 (1 row)
 
 CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
-NOTICE:  window width is "5" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 \d+ cqaggexpr3;
                View "public.cqaggexpr3"
  Column |  Type   | Modifiers | Storage  | Description 
@@ -508,27 +502,27 @@ View definition:
  SELECT key::text,
     count(*) AS value
    FROM ONLY cont_create_stream2
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '@ 5 secs'::interval second)
+  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '00:00:05'::interval second)
   GROUP BY key::text;
 
 \d+ cqaggexpr3_mrel0;
-                            Table "public.cqaggexpr3_mrel0"
- Column |           Type           | Modifiers | Storage  | Stats target | Description 
---------+--------------------------+-----------+----------+--------------+-------------
- _0     | timestamp with time zone |           | plain    |              | 
- key    | text(0)                  |           | extended |              | 
- value  | bigint                   |           | plain    |              | 
+                                 Table "public.cqaggexpr3_mrel0"
+      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           | plain    |              | 
+ key               | text(0)                  |           | extended |              | 
+ value             | bigint                   |           | plain    |              | 
 Indexes:
-    "cqaggexpr3_mrel0_expr_idx" btree (ls_hash_group(_0, key))
+    "cqaggexpr3_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, key))
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
-                           pipeline_get_overlay_viewdef                            
------------------------------------------------------------------------------------
-  SELECT cqaggexpr3_mrel0.key,                                                    +
-     combine(cqaggexpr3_mrel0.value) AS value                                     +
-    FROM cqaggexpr3_mrel0                                                         +
-   WHERE (cqaggexpr3_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second))+
+                                   pipeline_get_overlay_viewdef                                   
+--------------------------------------------------------------------------------------------------
+  SELECT cqaggexpr3_mrel0.key,                                                                   +
+     combine(cqaggexpr3_mrel0.value) AS value                                                    +
+    FROM cqaggexpr3_mrel0                                                                        +
+   WHERE (cqaggexpr3_mrel0.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval second))+
    GROUP BY cqaggexpr3_mrel0.key;
 (1 row)
 
@@ -672,6 +666,38 @@ CREATE CONTINUOUS VIEW noss AS SELECT y::integer, (SELECT x FROM ccvt WHERE x = 
 ERROR:  subqueries are not allowed in a continuous view's target list
 HINT:  Stream-table joins are the preferred method for combining other relations with continuous views.
 DROP TABLE ccvt;
+-- Verify that step sizes are properly computed from step factors
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=0.1) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+ERROR:  sliding-window stepfactor must be an integer
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=102) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+ERROR:  sliding-window stepfactor must be an integer between 1 and 100
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=0) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+ERROR:  sliding-window stepfactor must be an integer between 1 and 100
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=50) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+SELECT pipeline_get_worker_querydef('ccvsf');
+                                        pipeline_get_worker_querydef                                         
+-------------------------------------------------------------------------------------------------------------
+  SELECT date_floor(arrival_timestamp::timestamp with time zone, '00:00:05'::interval) AS arrival_timestamp,+
+     count(*) AS count                                                                                      +
+    FROM ONLY stream                                                                                        +
+   WHERE (arrival_timestamp::timestamp with time zone > (clock_timestamp() - '00:00:10'::interval))         +
+   GROUP BY date_floor(arrival_timestamp::timestamp with time zone, '00:00:05'::interval)
+(1 row)
+
+DROP CONTINUOUS VIEW ccvsf;
+-- Verify that explicity truncation overrides the step factor
+CREATE CONTINUOUS VIEW ccvsf AS SELECT COUNT(*) FROM stream WHERE minute(arrival_timestamp) > clock_timestamp() - interval '10 seconds';
+SELECT pipeline_get_worker_querydef('ccvsf');
+                                        pipeline_get_worker_querydef                                        
+------------------------------------------------------------------------------------------------------------
+  SELECT minute(arrival_timestamp::timestamp with time zone) AS arrival_timestamp,                         +
+     count(*) AS count                                                                                     +
+    FROM ONLY stream                                                                                       +
+   WHERE (minute(arrival_timestamp::timestamp with time zone) > (clock_timestamp() - '00:00:10'::interval))+
+   GROUP BY minute(arrival_timestamp::timestamp with time zone)
+(1 row)
+
+DROP CONTINUOUS VIEW ccvsf;
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;

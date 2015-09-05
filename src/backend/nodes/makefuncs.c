@@ -552,5 +552,6 @@ makeFuncCall(List *name, List *args, int location)
 	n->func_variadic = false;
 	n->over = NULL;
 	n->location = location;
+
 	return n;
 }

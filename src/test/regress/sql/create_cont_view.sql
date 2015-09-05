@@ -129,6 +129,24 @@ CREATE TABLE ccvt (x integer);
 CREATE CONTINUOUS VIEW noss AS SELECT y::integer, (SELECT x FROM ccvt WHERE x = 1) FROM stream;
 DROP TABLE ccvt;
 
+-- Verify that step sizes are properly computed from step factors
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=0.1) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=102) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=0) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=50) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+SELECT pipeline_get_worker_querydef('ccvsf');
+
+DROP CONTINUOUS VIEW ccvsf;
+
+-- Verify that explicity truncation overrides the step factor
+CREATE CONTINUOUS VIEW ccvsf AS SELECT COUNT(*) FROM stream WHERE minute(arrival_timestamp) > clock_timestamp() - interval '10 seconds';
+SELECT pipeline_get_worker_querydef('ccvsf');
+
+DROP CONTINUOUS VIEW ccvsf;
+
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;
