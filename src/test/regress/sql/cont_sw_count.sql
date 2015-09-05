@@ -13,3 +13,17 @@ INSERT INTO cqswcount_stream (k) VALUES ('x'), ('x'), ('x'), ('x'), ('x'), ('x')
 SELECT * FROM test_count ORDER BY k;
 
 DROP CONTINUOUS VIEW test_count;
+
+CREATE CONTINUOUS VIEW sw_count0 AS SELECT COUNT(*) FROM cqswcount_stream WHERE arrival_timestamp > clock_timestamp() - interval '60 second';
+
+CREATE VIEW sw_count1 AS SELECT combine(count) FROM sw_count0_mrel0 WHERE arrival_timestamp > clock_timestamp() - interval '2 second';
+
+INSERT INTO cqswcount_stream (k) VALUES ('x'), ('x');
+
+SELECT * FROM sw_count0;
+SELECT * FROM sw_count1;
+
+SELECT pg_sleep(2.2);
+
+SELECT * FROM sw_count0;
+SELECT * FROM sw_count1;

@@ -250,22 +250,22 @@ View definition:
   GROUP BY key::text;
 
 \d+ cqcreate6_mrel0;
-                            Table "public.cqcreate6_mrel0"
- Column |           Type           | Modifiers | Storage  | Stats target | Description 
---------+--------------------------+-----------+----------+--------------+-------------
- _0     | timestamp with time zone |           | plain    |              | 
- _1     | text(0)                  |           | extended |              | 
- count  | bigint                   |           | plain    |              | 
+                                  Table "public.cqcreate6_mrel0"
+      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           | plain    |              | 
+ _1                | text(0)                  |           | extended |              | 
+ count             | bigint                   |           | plain    |              | 
 Indexes:
-    "cqcreate6_mrel0_expr_idx" btree (ls_hash_group(_0, _1))
+    "cqcreate6_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, _1))
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqcreate6');
-                           pipeline_get_overlay_viewdef                           
-----------------------------------------------------------------------------------
-  SELECT combine(cqcreate6_mrel0.count) AS count                                 +
-    FROM cqcreate6_mrel0                                                         +
-   WHERE (cqcreate6_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second))+
+                                  pipeline_get_overlay_viewdef                                   
+-------------------------------------------------------------------------------------------------
+  SELECT combine(cqcreate6_mrel0.count) AS count                                                +
+    FROM cqcreate6_mrel0                                                                        +
+   WHERE (cqcreate6_mrel0.arrival_timestamp > (clock_timestamp() - '@ 5 secs'::interval second))+
    GROUP BY cqcreate6_mrel0._1;
 (1 row)
 
@@ -512,23 +512,23 @@ View definition:
   GROUP BY key::text;
 
 \d+ cqaggexpr3_mrel0;
-                            Table "public.cqaggexpr3_mrel0"
- Column |           Type           | Modifiers | Storage  | Stats target | Description 
---------+--------------------------+-----------+----------+--------------+-------------
- _0     | timestamp with time zone |           | plain    |              | 
- key    | text(0)                  |           | extended |              | 
- value  | bigint                   |           | plain    |              | 
+                                 Table "public.cqaggexpr3_mrel0"
+      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           | plain    |              | 
+ key               | text(0)                  |           | extended |              | 
+ value             | bigint                   |           | plain    |              | 
 Indexes:
-    "cqaggexpr3_mrel0_expr_idx" btree (ls_hash_group(_0, key))
+    "cqaggexpr3_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, key))
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
-                           pipeline_get_overlay_viewdef                            
------------------------------------------------------------------------------------
-  SELECT cqaggexpr3_mrel0.key,                                                    +
-     combine(cqaggexpr3_mrel0.value) AS value                                     +
-    FROM cqaggexpr3_mrel0                                                         +
-   WHERE (cqaggexpr3_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second))+
+                                   pipeline_get_overlay_viewdef                                   
+--------------------------------------------------------------------------------------------------
+  SELECT cqaggexpr3_mrel0.key,                                                                   +
+     combine(cqaggexpr3_mrel0.value) AS value                                                    +
+    FROM cqaggexpr3_mrel0                                                                        +
+   WHERE (cqaggexpr3_mrel0.arrival_timestamp > (clock_timestamp() - '@ 5 secs'::interval second))+
    GROUP BY cqaggexpr3_mrel0.key;
 (1 row)
 

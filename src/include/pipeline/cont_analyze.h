@@ -33,6 +33,7 @@ typedef struct ContAnalyzeContext
 	bool is_sw;
 	bool stream_only;
 	bool view_combines;
+	char *hoisted_name;
 	ContQueryProcType proc_type;
 } ContAnalyzeContext;
 
