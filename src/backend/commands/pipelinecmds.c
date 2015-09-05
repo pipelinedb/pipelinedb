@@ -65,8 +65,11 @@
 #define DEFAULT_TYPEMOD -1
 
 #define OPTION_FILLFACTOR "fillfactor"
+#define OPTION_STEPFACTOR "stepfactor"
 
+/* guc params */
 int continuous_view_fillfactor;
+int sliding_window_step_factor;
 
 static ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)
@@ -92,12 +95,12 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 }
 
 /*
- * has_fillfactor
+ * get_option
  *
- * Returns true if a fillfactor option is included in the given WITH options
+ * Returns the given option or NULL if it wasn't supplied
  */
-static bool
-has_fillfactor(List *options)
+static DefElem *
+get_option(List *options, char *name)
 {
 	ListCell *lc;
 
@@ -109,11 +112,11 @@ has_fillfactor(List *options)
 			continue;
 
 		de = (DefElem *) lfirst(lc);
-		if (de->defname && pg_strcasecmp(de->defname, OPTION_FILLFACTOR) == 0)
-			return true;
+		if (de->defname && pg_strcasecmp(de->defname, name) == 0)
+			return de;
 	}
 
-	return false;
+	return NULL;
 }
 
 /*
@@ -418,10 +421,35 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ContAnalyzeContext *context;
 	ContinuousView *cv;
 	Oid cvid;
+	DefElem *step;
+	int savestep = sliding_window_step_factor;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
 	view = stmt->into->rel;
+
+	/*
+	 * If the user supplied a step factor, override the global default with it
+	 */
+	step = get_option(stmt->into->options, OPTION_STEPFACTOR);
+	if (step)
+	{
+		if (!IsA(step->arg, Integer))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					errmsg("sliding-window stepfactor must be an integer")));
+
+		sliding_window_step_factor = intVal(step->arg);
+		if (sliding_window_step_factor < 1 || sliding_window_step_factor > 100)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					errmsg("sliding-window stepfactor must be an integer between 1 and 100")));
+
+		savestep = sliding_window_step_factor;
+
+		/* remove the option now because it won't be recognized later on */
+		stmt->into->options = list_delete(stmt->into->options, step);
+	}
 
 	/*
 	 * Check if CV already exists?
@@ -459,6 +487,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * that need to be created in the underlying matrel.
 	 */
 	workerselect = TransformSelectStmtForContProcess(matrel, cont_select, &viewselect, Worker);
+	sliding_window_step_factor = savestep;
 
 	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
 	tlist = query->targetList;
@@ -498,11 +527,11 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		tableElts = lappend(tableElts, coldef);
 	}
 
-	if (!has_fillfactor(stmt->into->options))
+	if (!get_option(stmt->into->options, OPTION_FILLFACTOR))
 		stmt->into->options = add_default_fillfactor(stmt->into->options);
 
 	/*
-	 * Create the actual underlying materialzation relation.
+	 * Create the actual underlying materialization relation.
 	 */
 	create_stmt = makeNode(CreateStmt);
 	create_stmt->relation = matrel;
