@@ -425,8 +425,6 @@ pipeline_queries(PG_FUNCTION_ARGS)
 
 	if (funcctx->user_fctx == NULL)
 	{
-
-
 		old = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		data = palloc(sizeof(RelationScanData));

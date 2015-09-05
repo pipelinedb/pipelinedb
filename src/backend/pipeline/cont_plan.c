@@ -129,11 +129,25 @@ get_combiner_plan(ContinuousView *view)
 
 	selectstmt = (SelectStmt *) linitial(parsetree_list);
 	selectstmt = TransformSelectStmtForContProcess(view->matrel, selectstmt, NULL, Combiner);
-
 	join_search_hook = get_combiner_join_rel;
-	result = get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, true);
-	join_search_hook = NULL;
-	post_parse_analyze_hook = NULL;
+
+	PG_TRY();
+	{
+		result = get_plan_from_stmt(view->id, (Node *) selectstmt, view->query, true);
+		join_search_hook = NULL;
+		post_parse_analyze_hook = NULL;
+	}
+	PG_CATCH();
+	{
+		/*
+		 * These hooks won't be reset if there's an error, so we need to make
+		 * sure that they're not set for whatever query is run next in this xact.
+		 */
+		join_search_hook = NULL;
+		post_parse_analyze_hook = NULL;
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
 	return result;
 }

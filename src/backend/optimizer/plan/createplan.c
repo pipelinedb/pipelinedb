@@ -303,7 +303,6 @@ create_tuplestorescan_plan(PlannerInfo *root, Path *best_path)
 	TupleDesc desc = RelationGetDescr(matrel);
 	AttrNumber attrno;
 
-
 	for (attrno = 1; attrno <= desc->natts; attrno++)
 	{
 		Form_pg_attribute att_tup = desc->attrs[attrno - 1];
