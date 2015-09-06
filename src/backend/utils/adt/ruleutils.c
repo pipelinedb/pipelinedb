@@ -5646,6 +5646,12 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 
 		return NULL;
 	}
+	else if (IS_ARRIVAL_TIMESTAMP_REF(var))
+	{
+		appendStringInfoString(buf, ARRIVAL_TIMESTAMP);
+
+		return NULL;
+	}
 	else
 	{
 		elog(ERROR, "bogus varno: %d", var->varno);

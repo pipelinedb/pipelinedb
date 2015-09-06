@@ -1,6 +1,4 @@
 CREATE CONTINUOUS VIEW test_count AS SELECT k::text, COUNT(*) FROM cqswcount_stream WHERE arrival_timestamp > clock_timestamp() - interval '60 second' GROUP BY k;
-NOTICE:  window width is "60 second" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 INSERT INTO cqswcount_stream (k) VALUES ('x'), ('x'), ('x'), ('x'), ('x'), ('x');
 INSERT INTO cqswcount_stream (k) VALUES ('x'), ('x'), ('x'), ('x'), ('x'), ('x'), ('y'), ('y'), ('y'), ('y'), ('y'), ('y');
 SELECT * FROM test_count ORDER BY k;
@@ -27,9 +25,7 @@ SELECT * FROM test_count ORDER BY k;
 
 DROP CONTINUOUS VIEW test_count;
 CREATE CONTINUOUS VIEW sw_count0 AS SELECT COUNT(*) FROM cqswcount_stream WHERE arrival_timestamp > clock_timestamp() - interval '60 second';
-NOTICE:  window width is "60 second" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
-CREATE VIEW sw_count1 AS SELECT combine(count) FROM sw_count0_mrel0 WHERE arrival_timestamp > clock_timestamp() - interval '2 second';
+CREATE VIEW sw_count1 AS SELECT combine(count) FROM sw_count0_mrel0 WHERE arrival_timestamp > clock_timestamp() - interval '5 second';
 INSERT INTO cqswcount_stream (k) VALUES ('x'), ('x');
 SELECT * FROM sw_count0;
  count 
@@ -43,7 +39,7 @@ SELECT * FROM sw_count1;
        2
 (1 row)
 
-SELECT pg_sleep(2.2);
+SELECT pg_sleep(6);
  pg_sleep 
 ----------
  

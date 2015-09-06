@@ -45,8 +45,6 @@ SELECT date_trunc('minute', t::timestamptz) AS minute,
     FROM test_uc_systat_stream
 WHERE arrival_timestamp > (clock_timestamp() - interval '1 hour')
 GROUP BY minute;
-NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE VIEW test_uc2_view AS
 SELECT minute, combine(load_avg) OVER (ORDER BY minute DESC ROWS 4 PRECEDING) AS load_avg
   FROM test_uc2;
@@ -926,8 +924,6 @@ SELECT date_trunc('minute', t::timestamptz) AS minute, avg(queue_length::float) 
 FROM sysstat
 WHERE arrival_timestamp > clock_timestamp() - interval '1 hour'
 GROUP BY minute;
-NOTICE:  window width is "1 hour" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE VIEW over_5m AS
 SELECT first_value(minute) OVER w AS minute, combine(load_avg) OVER w AS load_avg
 FROM over_1m
