@@ -68,6 +68,7 @@
 #include "commands/typecmds.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/parsetree.h"
+#include "pipeline/cont_analyze.h"
 #include "rewrite/rewriteRemove.h"
 #include "storage/lmgr.h"
 #include "utils/fmgroids.h"
@@ -1606,6 +1607,9 @@ find_expr_references_walker(Node *node,
 		Var		   *var = (Var *) node;
 		List	   *rtable;
 		RangeTblEntry *rte;
+
+		if (IS_ARRIVAL_TIMESTAMP_REF(var->varno))
+			return false;
 
 		/* Find matching rtable entry, or complain if not found */
 		if (var->varlevelsup >= list_length(context->rtables))

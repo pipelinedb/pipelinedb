@@ -1,3 +1,5 @@
+SET IntervalStyle to postgres;
+
 -- Simple ones
 CREATE CONTINUOUS VIEW cqcreate0 AS SELECT key::integer FROM create_cont_stream1;
 SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate0';
@@ -32,14 +34,14 @@ SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate4';
 SELECT pipeline_get_overlay_viewdef('cqcreate4');
 
 -- Sliding window queries
-CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
+CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds');
 SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate5';
 SELECT gc FROM pipeline_query WHERE name = 'cqcreate5';
 \d+ cqcreate5;
 \d+ cqcreate5_mrel0;
 SELECT pipeline_get_overlay_viewdef('cqcreate5');
 
-CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key::text;
+CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate6';
 SELECT gc FROM pipeline_query WHERE name = 'cqcreate6';
 \d+ cqcreate6;
@@ -89,7 +91,7 @@ CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::in
 \d+ cqaggexpr2_mrel0;
 SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
 
-CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
+CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key;
 \d+ cqaggexpr3;
 \d+ cqaggexpr3_mrel0;
 SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
@@ -128,6 +130,24 @@ DROP CONTINUOUS VIEW ccvv;
 CREATE TABLE ccvt (x integer);
 CREATE CONTINUOUS VIEW noss AS SELECT y::integer, (SELECT x FROM ccvt WHERE x = 1) FROM stream;
 DROP TABLE ccvt;
+
+-- Verify that step sizes are properly computed from step factors
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=0.1) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=102) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=0) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+
+CREATE CONTINUOUS VIEW ccvsf WITH (stepfactor=50) AS SELECT COUNT(*) FROM stream WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds';
+SELECT pipeline_get_worker_querydef('ccvsf');
+
+DROP CONTINUOUS VIEW ccvsf;
+
+-- Verify that explicity truncation overrides the step factor
+CREATE CONTINUOUS VIEW ccvsf AS SELECT COUNT(*) FROM stream WHERE minute(arrival_timestamp) > clock_timestamp() - interval '10 seconds';
+SELECT pipeline_get_worker_querydef('ccvsf');
+
+DROP CONTINUOUS VIEW ccvsf;
 
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;

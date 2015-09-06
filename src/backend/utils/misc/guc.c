@@ -2658,6 +2658,17 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
+		{"sliding_window_step_factor", PGC_BACKEND, QUERY_TUNING_OTHER,
+		 gettext_noop("Sets the fraction of a sliding window's width to wait before updating a sliding-window continuous view."),
+		 gettext_noop("A larger fraction will increase sliding-window query performance at the expense of the continuous view updating less frequently."),
+		 GUC_UNIT_S
+		},
+		&sliding_window_step_factor,
+		5, 1, 100,
+		NULL, NULL, NULL
+	},
+
+	{
 		{"stream_insertion_commit_interval", PGC_BACKEND, QUERY_TUNING_OTHER,
 		 gettext_noop("Sets the default amount of time to periodically commit from a stream insertion process."),
 		 gettext_noop("A lower number will minimize the amount of time the autovacuumer can be blocked from freeing unused space by long-running stream insertion processes. Additionally, continuous views created during the insertion process will begin accepting writes by the inserter sooner."),

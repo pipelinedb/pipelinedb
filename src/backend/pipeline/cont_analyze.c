@@ -22,6 +22,7 @@
 #include "catalog/pipeline_combine_fn.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "commands/pipelinecmds.h"
 #include "lib/stringinfo.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -484,28 +485,44 @@ find_clock_timestamp_expr(Node *node, ContAnalyzeContext *context)
 	return raw_expression_tree_walker(node, find_clock_timestamp_expr, (void *) context);
 }
 
-static char *
-get_truncation_from_interval_expr(Node *node)
+/*
+ * get_step_size_interval_expr
+ *
+ * Returns a constant representing the step size to use for the given window.
+ */
+static A_Const *
+get_step_size_interval_expr(Node *node)
 {
 	Expr *expr = (Expr *) transformExpr(make_parsestate(NULL), node, EXPR_KIND_WHERE);
-	Const *c;
-	Interval *i;
+	Const *window;
+	Interval *step;
+	Interval min_step;
+	float8 factor = (float8) sliding_window_step_factor / (float8) 100.0;
+	A_Const *result = makeNode(A_Const);
+	Value *v;
+	char *str;
+	Datum cmp;
+
+	MemSet(&min_step, 0, sizeof(Interval));
+	min_step.time = 1000 * 1000;
 
 	Assert(IsA(expr, Const));
-	c = (Const *) expr;
-	Assert(c->consttype == INTERVALOID);
+	window = (Const *) expr;
+	Assert(window->consttype == INTERVALOID);
 
-	i = (Interval *) c->constvalue;
+	/* We make the step size some percentage of the total window width */
+	step = (Interval *) DirectFunctionCall2(interval_mul, window->constvalue, Float8GetDatum(factor));
 
-	/* We make the step size one unit smaller than the granularity of the window size unit */
-	if (i->month)
-		return DATE_TRUNC_DAY;
-	else if (i->day)
-		return DATE_TRUNC_HOUR;
-	else if (i->time > HOUR_USEC)
-		return DATE_TRUNC_MINUTE;
+	cmp = (Datum) DirectFunctionCall2(interval_cmp, (Datum) step, (Datum) &min_step);
+	if (DatumGetInt32(cmp) < 0)
+		step = &min_step;
 
-	return DATE_TRUNC_SECOND;
+	str = (char *) DirectFunctionCall1(interval_out, (Datum) step);
+
+	v = makeString(str);
+	result->val = *v;
+
+	return result;
 }
 
 static ColumnRef *
@@ -513,7 +530,6 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 {
 	Node *col = node;
 	bool saw_expr = false;
-	bool saw_trunc = false;
 
 	context->cols = NIL;
 	collect_types_and_cols(node, context);
@@ -540,16 +556,14 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 			FuncCall *fc = (FuncCall *) col;
 			char *name = NameListToString(fc->funcname);
 
-			if (pg_strcasecmp(name, DATE_FLOOR) == 0 ||
+			if (!(pg_strcasecmp(name, DATE_FLOOR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_DAY) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_HOUR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MINUTE) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0)
-				saw_trunc = true;
-			else
+					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0))
 				return NULL;
 
 			/* Date truncation should happen at the top level */
@@ -582,23 +596,6 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 		}
 
 		return NULL;
-	}
-
-	if (context->is_sw && !saw_trunc)
-	{
-		A_Expr *ct_expr = (A_Expr *) context->expr;
-		TypeCast *c;
-		char *fname;
-
-		Assert(ct_expr && IsA(ct_expr, A_Expr));
-
-		c = (TypeCast *) ct_expr->rexpr;
-		Assert(IsA(c, TypeCast) && IsA(c->arg, A_Const));
-		fname = get_truncation_from_interval_expr((Node *) c);
-
-		ereport(NOTICE,
-				(errmsg("window width is \"%s\" with a step size of \"1 %s\"", strVal(&((A_Const *) c->arg)->val), fname),
-				errhint("Use a datetime truncation function if you want to explicitly set the step size.")));
 	}
 
 	return (ColumnRef *) col;
@@ -2012,15 +2009,16 @@ truncate_timestamp_field(Node *time, A_Expr *sw_expr, ContAnalyzeContext *contex
 		if (sw_expr)
 		{
 			A_Expr *ct_expr;
-			char *fname;
+			A_Const *step;
 
 			if (equal(sw_expr->lexpr, time))
 				ct_expr = (A_Expr *) sw_expr->rexpr;
 			else
 				ct_expr = (A_Expr *) sw_expr->lexpr;
 
-			fname = get_truncation_from_interval_expr(ct_expr->rexpr);
-			func->funcname = list_make1(makeString(fname));
+			step = get_step_size_interval_expr(ct_expr->rexpr);
+			func->funcname = list_make1(makeString(DATE_FLOOR));
+			func->args = lappend(func->args, (Node *) step);
 		}
 		else
 			func->funcname = list_make1(makeString(DATE_TRUNC_SECOND));
@@ -3191,6 +3189,66 @@ pull_vars(Node *node, List **varlist)
 }
 
 /*
+ * push_down_sw_predicate
+ *
+ * Push down any upper sliding-window predicates to the matrel SELECT.
+ * This makes it possible to create multiple sliding windows over the same
+ * continuous view.
+ */
+static void
+push_down_sw_predicate(Var *dummy, Query *upper, Query *lower)
+{
+	List *vars = NIL;
+	Var *real;
+	RangeTblEntry *rte;
+	Value *colname;
+
+	pull_vars(lower->jointree->quals, &vars);
+
+	if (list_length(vars) != 1)
+		elog(ERROR, "column \"arrival_timestamp\" does not exist");
+
+	/* sliding window predicates should only have a single qual */
+	if (!IsA(lower->jointree->quals, OpExpr))
+		elog(ERROR, "column \"arrival_timestamp\" does not exist");
+
+	real = (Var *) linitial(vars);
+	rte = list_nth(lower->rtable, real->varno - 1);
+	colname = list_nth(rte->eref->colnames, real->varattno - 1);
+
+	if (pg_strcasecmp(ARRIVAL_TIMESTAMP, strVal(colname)) != 0)
+		elog(ERROR, "column \"arrival_timestamp\" does not exist");
+
+	memcpy(dummy, real, sizeof(Var));
+	lower->jointree->quals = upper->jointree->quals;
+	upper->jointree->quals = (Node *) NIL;
+}
+
+/*
+ * get_dummy_sw_predicate
+ *
+ * Returns a placeholder sliding-window predicate that should be pushed down,
+ * or NULL if one doesn't exist.
+ */
+static Var *
+get_dummy_sw_predicate(Node *where)
+{
+	List *vars = NIL;
+	Var *var;
+
+	pull_vars(where, &vars);
+
+	if (list_length(vars) != 1)
+		return NULL;
+
+	var = (Var *) linitial(vars);
+	if (IS_ARRIVAL_TIMESTAMP_REF(var))
+		return var;
+
+	return NULL;
+}
+
+/*
  * RewriteContinuousViewSelect
  *
  * Possibly modify an overlay view SELECT rule before it's applied.
@@ -3204,6 +3262,7 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 	List *combines = NIL;
 	ListCell *lc;
 	RangeTblEntry *rte;
+	Var *dummy;
 
 	/* RTE is not a view? */
 	rte = rt_fetch(rtindex, query->rtable);
@@ -3213,6 +3272,14 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 	/* try to bail early because this gets called from a hot path */
 	if (!IsAContinuousView(rv))
 		return rule;
+
+	/*
+	 * If there is an upper reference to arrival_timestamp, push it down
+	 * to the matrel select.
+	 */
+	dummy = get_dummy_sw_predicate(query->jointree->quals);
+	if (dummy)
+		push_down_sw_predicate(dummy, query, rule);
 
 	/* We only need to rewrite the overlay view definition if there are some user defines */
 	collect_combines_aggs((Node *) query->targetList, &combines);
@@ -3408,4 +3475,33 @@ GetWindowTimeColumn(RangeVar *cv)
 	}
 
 	return NULL;
+}
+
+/*
+ * CreateOuterArrivalTimestampRef
+ *
+ * If arrival_timestamp isn't found in an RTE, this hook is invoked by the parser.
+ * It ultimately allows us to try to push any references to arrival_timestamp down.
+ * This makes it easy to create sliding-window views on top of other sliding-window
+ * views because we can just push down the arrival_timestamp predicate down to the
+ * matrel SELECT.
+ */
+Node *
+CreateOuterArrivalTimestampRef(ParseState *pstate, ColumnRef *cref, Node *var)
+{
+	char *name;
+	Var *result;
+
+	if (var != NULL)
+		return NULL;
+
+	name = FigureColname((Node *) cref);
+
+	if (pg_strcasecmp(name, ARRIVAL_TIMESTAMP) != 0)
+		return NULL;
+
+	/* we only need to do something if the column couldn't be resolved at this level */
+	result = makeVar(ARRIVAL_TIMESTAMP_REF, 1, TIMESTAMPTZOID, -1, InvalidOid, 0);
+
+	return (Node *) result;
 }

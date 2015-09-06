@@ -20,6 +20,7 @@
 
 /* guc parameter */
 extern int continuous_view_fillfactor;
+extern int sliding_window_step_factor;
 
 extern void ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring);
 extern void ExecTruncateContViewStmt(TruncateStmt *stmt);
