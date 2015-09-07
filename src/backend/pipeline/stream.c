@@ -45,9 +45,6 @@
 #include "utils/tqual.h"
 #include "utils/typcache.h"
 
-/* guc param */
-int stream_insertion_commit_interval;
-
 #define SLEEP_MS 2
 
 #define StreamBatchAllAcked(batch) ((batch)->num_wacks >= (batch)->num_wtups && (batch)->num_cacks >= (batch)->num_ctups)

@@ -21,8 +21,6 @@
 #include "utils/relcache.h"
 #include "utils/timestamp.h"
 
-extern int stream_insertion_commit_interval;
-
 #define QueryIsStreaming(query) ((query)->isContinuous)
 #define QueryIsCombine(query) ((query)->isCombine)
 #define PlanIsStreaming(stmt) ((stmt)->is_continuous)
