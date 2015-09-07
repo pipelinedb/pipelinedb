@@ -955,13 +955,6 @@ ContinuousQueryCombinerMain(void)
 
 				if (!continuous_query_crash_recovery)
 					exit(1);
-
-				/*
-				 * In case the error was thrown inside `cont_plan.c:get_combiner_plan`, we might not have
-				 * reset the join_search_hook which would wrongly make the `get_cached_groups_plan` invoke the
-				 * hook.
-				 */
-				join_search_hook = NULL;
 			}
 			PG_END_TRY();
 
