@@ -179,5 +179,5 @@ GroupCacheDelete(GroupCache *cache, TupleTableSlot *slot)
 		return;
 
 	dlist_delete(&(entry->lru->node));
-	RemoveTupleHashEntry(cache->htab, cache->slot);
+	RemoveTupleHashEntry(cache->htab, slot);
 }

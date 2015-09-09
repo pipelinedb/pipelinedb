@@ -2497,6 +2497,8 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 		foreach(lc, context->funcs)
 			((FuncCall *) lfirst(lc))->agg_filter = NULL;
 	}
+	else
+		proc->whereClause = NULL;
 
 	if (viewptr)
 		*viewptr = view;

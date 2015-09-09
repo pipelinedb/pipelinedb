@@ -80,7 +80,6 @@ typedef struct {
 	GroupCache *cache;
 	Relation matrel;
 	ResultRelInfo *ri;
-	SWVacuumContext *vacuum_cxt;
 	CQStatEntry stats;
 } ContQueryCombinerState;
 
@@ -471,7 +470,7 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashT
 	{
 		HeapTupleEntry update = NULL;
 		HeapTuple tup = NULL;
-		bool tuple_dead = false;
+		bool should_cache = true;
 
 		slot_getallattrs(slot);
 
@@ -480,29 +479,18 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashT
 
 		if (update)
 		{
-			if (ShouldVacuumSWTuple(state->vacuum_cxt, slot->tts_tuple))
+			/*
+			 * The slot has the updated values, so store them in the updatable physical tuple
+			 */
+			tup = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
+					slot->tts_values, slot->tts_isnull, replace_all);
+			ExecStoreTuple(tup, slot, InvalidBuffer, false);
+			if (ExecCQMatRelUpdate(state->ri, slot, estate))
+				IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
+			else if (state->cache)
 			{
-				matrel_heap_delete(state->matrel, &update->tuple->t_self);
-				tuple_dead = true;
-				if (state->cache)
-					GroupCacheDelete(state->cache, slot);
-			}
-			else
-			{
-				/*
-				 * The slot has the updated values, so store them in the updatable physical tuple
-				 */
-				tup = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
-						slot->tts_values, slot->tts_isnull, replace_all);
-				ExecStoreTuple(tup, slot, InvalidBuffer, false);
-				if (ExecCQMatRelUpdate(state->ri, slot, estate))
-					IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
-				else
-				{
-					tuple_dead = true;
-					if (state->cache)
-						GroupCacheDelete(state->cache, slot);
-				}
+				should_cache = false;
+				GroupCacheDelete(state->cache, slot);
 			}
 		}
 		else
@@ -512,7 +500,7 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashT
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 
-		if (state->cache && !tuple_dead)
+		if (state->cache && should_cache)
 			tuples_to_cache = lappend(tuples_to_cache, ExecCopySlotTuple(slot));
 
 		ResetPerTupleExprContext(estate);
@@ -526,7 +514,7 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashT
 	{
 		HeapTuple tup = (HeapTuple) lfirst(lc);
 		ExecStoreTuple(tup, slot, InvalidBuffer, false);
-		GroupCachePut(state->cache, slot);
+		//GroupCachePut(state->cache, slot);
 		ExecClearTuple(slot);
 		heap_freetuple(tup);
 	}
@@ -618,7 +606,6 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 	MemoryContext state_cxt;
 	MemoryContext old_cxt;
 	MemoryContext cache_tmp_cxt;
-	Relation matrel;
 
 	MemSet(state, 0, sizeof(ContQueryCombinerState));
 
@@ -658,24 +645,25 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 	state->slot = MakeSingleTupleTableSlot(state->desc);
 	state->groups_plan = NULL;
 
-	matrel = heap_openrv_extended(state->view->matrel, AccessShareLock, true);
-
-	if (matrel == NULL)
-	{
-		state->view = NULL;
-		return;
-	}
-
 	if (IsA(state->combine_plan->planTree, Agg))
 	{
 		Agg *agg = (Agg *) state->combine_plan->planTree;
 		int i;
+		Relation matrel;
 		ResultRelInfo *ri;
 
 		state->groupatts = agg->grpColIdx;
 		state->ngroupatts = agg->numCols;
 		state->groupops = agg->grpOperators;
 		state->isagg = true;
+
+		matrel = heap_openrv_extended(state->view->matrel, AccessShareLock, true);
+
+		if (matrel == NULL)
+		{
+			state->view = NULL;
+			return;
+		}
 
 		ri = CQMatRelOpen(matrel);
 
@@ -712,15 +700,11 @@ init_query_state(ContQueryCombinerState *state, Oid id, MemoryContext context)
 		}
 
 		CQMatRelClose(ri);
+		heap_close(matrel, AccessShareLock);
 
 		state->cache = GroupCacheCreate(continuous_query_combiner_cache_mem * 1024, state->ngroupatts, state->groupatts,
 				state->groupops, state->slot, state_cxt, cache_tmp_cxt);
 	}
-
-	if (state->view->gc)
-		state->vacuum_cxt = CreateSWVacuumContext(matrel);
-
-	heap_close(matrel, AccessShareLock);
 
 	cq_stat_init(&state->stats, state->view->id, 0);
 
@@ -737,10 +721,6 @@ cleanup_query_state(ContQueryCombinerState **states, Oid id)
 
 	if (state->matrel)
 		heap_close(state->matrel, RowExclusiveLock);
-
-	if (state->vacuum_cxt)
-		FreeSWVacuumContext(state->vacuum_cxt);
-
 	MemoryContextDelete(state->state_cxt);
 	pfree(state);
 	states[id] = NULL;
