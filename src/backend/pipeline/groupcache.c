@@ -166,3 +166,18 @@ GroupCacheGet(GroupCache *cache, TupleTableSlot *slot)
 
 	return entry->tuple;
 }
+
+/*
+ * GroupCacheDelete
+ */
+void
+GroupCacheDelete(GroupCache *cache, TupleTableSlot *slot)
+{
+	GroupCacheEntry *entry = (GroupCacheEntry *) LookupTupleHashEntry(cache->htab, slot, NULL);
+
+	if (entry == NULL)
+		return;
+
+	dlist_delete(&(entry->lru->node));
+	RemoveTupleHashEntry(cache->htab, cache->slot);
+}

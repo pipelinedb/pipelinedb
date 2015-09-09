@@ -36,6 +36,6 @@ extern GroupCache *GroupCacheCreate(Size size, int ngroupatts, AttrNumber *group
 		Oid *groupops, TupleTableSlot *slot, MemoryContext context, MemoryContext tmpcontext);
 extern bool GroupCachePut(GroupCache *cache, TupleTableSlot *slot);
 extern HeapTuple GroupCacheGet(GroupCache *cache, TupleTableSlot *slot);
-extern void test_groupcache(void);
+extern void GroupCacheDelete(GroupCache *cache, TupleTableSlot *slot);
 
 #endif
