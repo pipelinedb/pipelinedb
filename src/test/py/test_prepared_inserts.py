@@ -1,7 +1,8 @@
 from base import pipeline, clean_db
 import getpass
-import random
 import psycopg2
+import random
+import subprocess
 import time
 
 
@@ -40,3 +41,31 @@ def test_prepared_inserts(pipeline, clean_db):
     assert result[n]['count'] == 100
 
   conn.close()
+
+
+def test_prepared_extended(pipeline, clean_db):
+  """
+  Verify that we can write to streams using the extended protocol. This test
+  shells out to a binary because psycopg2 doesn't use the extended protocol.
+  """
+  q = """
+  SELECT COUNT(x::integer) AS x, COUNT(y::integer) AS y, COUNT(z::integer) AS z FROM extended_stream
+  """
+  pipeline.create_cv('test_prepared_extended', q)
+
+  # This will insert 1000 via a paramaterized insert, and 1000 via unparamaterized insert
+  cmd = ['./extended', 'pipeline', str(pipeline.port), 'extended_stream', '1000']
+
+  stdout, stderr = subprocess.Popen(cmd).communicate()
+
+  assert stdout is None
+  assert stderr is None
+
+  rows = list(pipeline.execute('SELECT x, y, z FROM test_prepared_extended'))
+  assert len(rows) == 1
+
+  result = rows[0]
+
+  assert result['x'] == 2000
+  assert result['y'] == 2000
+  assert result['z'] == 2000

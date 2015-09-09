@@ -627,10 +627,6 @@
 # each database
 #continuous_query_num_workers = 2
 
-# the default amount of time to periodically commit from a stream insertion
-# process
-#stream_insertion_commit_interval = 1s
-
 #------------------------------------------------------------------------------
 # CONFIG FILE INCLUDES
 #------------------------------------------------------------------------------

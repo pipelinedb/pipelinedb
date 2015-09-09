@@ -1,6 +1,7 @@
 CREATE CONTINUOUS VIEW cqwindow0 AS SELECT key::text, SUM(x::numeric) OVER (PARTITION BY key ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM cqwindow_stream;
 \d+ cqwindow0_mrel0;
 \d+ cqwindow0;
+SELECT pipeline_get_overlay_viewdef('cqwindow0');
 
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2);
 SELECT pg_sleep(1);
@@ -15,6 +16,9 @@ SELECT * FROM cqwindow0 ORDER BY key;
 CREATE CONTINUOUS VIEW cqwindow1 AS SELECT key::text, AVG(x::int) OVER (PARTITION BY key ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM cqwindow_stream;
 \d+ cqwindow1_mrel0;
 \d+ cqwindow1;
+SELECT pipeline_get_overlay_viewdef('cqwindow1');
+SELECT pipeline_get_worker_querydef('cqwindow1');
+SELECT pipeline_get_combiner_querydef('cqwindow1');
 
 INSERT INTO cqwindow_stream (key, x) VALUES ('a', 1), ('b', 2), ('a', 3);
 SELECT pg_sleep(1);

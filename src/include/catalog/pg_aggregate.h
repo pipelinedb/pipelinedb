@@ -123,14 +123,12 @@ typedef FormData_pg_aggregate *Form_pg_aggregate;
  * well as the finalized result without having to duplicate the
  * aggregation overhead.
  */
-#define AGGKIND_STORE 's'
-#define AGGKIND_USER_COMBINE 'c'
+#define AGGKIND_COMBINE 'c'
 
-#define AGGKIND_IS_STORE(kind) ((kind) == AGGKIND_STORE)
-#define AGGKIND_IS_USER_COMBINE(kind) ((kind) == AGGKIND_USER_COMBINE)
+#define AGGKIND_IS_COMBINE(kind) ((kind) == AGGKIND_COMBINE)
 
 /* Use this macro to test for "ordered-set agg including hypothetical case" */
-#define AGGKIND_IS_ORDERED_SET(kind)  ((kind) != AGGKIND_NORMAL && (kind) != AGGKIND_USER_COMBINE)
+#define AGGKIND_IS_ORDERED_SET(kind)  ((kind) != AGGKIND_NORMAL && (kind) != AGGKIND_COMBINE)
 
 
 /* ----------------
@@ -341,6 +339,11 @@ DATA(insert ( 4343	n 0 tdigest_merge_agg_trans	tdigest_compress	-				-				-				f
 DATA(insert ( 4348	n 0 cmsketch_agg_trans			-	-				-				-				f f 0	5038	0	0		0	_null_ _null_ ));
 DATA(insert ( 4349	n 0 cmsketch_agg_transp			-	-				-				-				f f 0	5038	0	0		0	_null_ _null_ ));
 DATA(insert ( 4352	n 0 cmsketch_merge_agg_trans	-	-				-				-				f f 0	5038	0	0		0	_null_ _null_ ));
+
+/* filtered space saving aggregates */
+DATA(insert ( 4396	n 0 fss_agg_trans			-	-				-				-				f f 0	5041	0	0		0	_null_ _null_ ));
+DATA(insert ( 4397	n 0 fss_agg_transp			-	-				-				-				f f 0	5041	0	0		0	_null_ _null_ ));
+DATA(insert ( 4400	n 0 fss_merge_agg_trans		-	-				-				-				f f 0	5041	0	0		0	_null_ _null_ ));
 
 /*
  * prototypes for functions in pg_aggregate.c

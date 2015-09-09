@@ -5385,7 +5385,8 @@ pgstat_db_requested(Oid databaseid)
 /*
  * cq_stat_init
  */
-void cq_stat_init(CQStatEntry *entry, Oid viewid, pid_t pid)
+void
+cq_stat_init(CQStatEntry *entry, Oid viewid, pid_t pid)
 {
 	MemSet(entry, 0, sizeof(CQStatEntry));
 
@@ -5419,12 +5420,17 @@ cq_stat_fetch_all(void)
 	return dbentry->cont_queries;
 }
 
-static void cq_stat_report_entry(CQStatEntry *entry)
+static void
+cq_stat_report_entry(CQStatEntry *entry)
 {
 	CQStatMsg msg;
 
-	/* If we consumed no tuples and saw no errors, no need to send a msg to the stats collector. */
-	if (entry->input_rows == 0 && entry->errors == 0)
+	/*
+	 * If we consumed no tuples, saw no errors, and dind't create/drop any CVs,
+	 * there's no need to send a msg to the stats collector.
+	 */
+	if (entry->input_rows == 0 && entry->errors == 0 &&
+			entry->cv_create == 0 && entry->cv_drop == 0)
 		return;
 
 	MemSet(&msg, 0, sizeof(CQStatMsg));
@@ -5443,6 +5449,29 @@ static void cq_stat_report_entry(CQStatEntry *entry)
 	entry->updated_bytes = 0;
 	entry->executions = 0;
 	entry->errors = 0;
+}
+
+/*
+ * cq_stat_report_create_drop_cv
+ *
+ * Report a continuous view creation or drop.
+ */
+void
+cq_stat_report_create_drop_cv(bool create)
+{
+	CQStatEntry stats;
+
+	MemSet(&stats, 0, sizeof(CQStatEntry));
+
+	if (create)
+		stats.cv_create += 1;
+	else
+		stats.cv_drop += 1;
+
+	/* we arbitrarily choose to report create/drop stats under the combiner */
+	SetCQStatProcType(stats.key, CQ_STAT_COMBINER);
+	SetCQStatProcPid(stats.key, MyProcPid);
+	cq_stat_report_entry(&stats);
 }
 
 /*
@@ -5471,7 +5500,7 @@ cq_stat_report(bool force)
  * Retrieve a CQ stats entry matching the given parameters
  */
 CQStatEntry *
-cq_stat_get_entry(PgStat_StatDBEntry *dbentry, Oid viewoid, int pid, int ptype)
+cq_stat_get_entry(HTAB *cont_queries, Oid viewoid, int pid, int ptype)
 {
 	CQStatEntry *result;
 	bool found;
@@ -5481,7 +5510,7 @@ cq_stat_get_entry(PgStat_StatDBEntry *dbentry, Oid viewoid, int pid, int ptype)
 	SetCQStatProcPid(key, pid);
 	SetCQStatProcType(key, ptype);
 
-	result = (CQStatEntry *) hash_search(dbentry->cont_queries, (void *) &key, HASH_ENTER, &found);
+	result = (CQStatEntry *) hash_search(cont_queries, (void *) &key, HASH_ENTER, &found);
 	if (!found)
 	{
 		MemSet(result, 0, sizeof(CQStatEntry));
@@ -5489,6 +5518,39 @@ cq_stat_get_entry(PgStat_StatDBEntry *dbentry, Oid viewoid, int pid, int ptype)
 	}
 
 	return result;
+}
+
+static void
+cq_stat_aggregate(CQStatEntry *result, CQStatEntry *incoming)
+{
+	result->input_rows += incoming->input_rows;
+	result->output_rows += incoming->output_rows;
+	result->input_bytes += incoming->input_bytes;
+	result->output_bytes += incoming->output_bytes;
+	result->updates += incoming->updates;
+	result->updated_bytes += incoming->updated_bytes;
+	result->executions += incoming->executions;
+	result->errors += incoming->errors;
+	result->cv_create += incoming->cv_create;
+	result->cv_drop += incoming->cv_drop;
+}
+
+static void
+cq_stat_recv_global(HTAB *cont_queries, CQStatEntry *stats, CQStatsType ptype)
+{
+	CQStatEntry *global = cq_stat_get_global(cont_queries, ptype);
+
+	/*
+	 * We want a unique global identifier for each database, so
+	 * use the timestamp of the first time the stats for this DB
+	 * were seen. Note that it's harmless if this is somehow a
+	 * duplicate timestamp of another database, so we don't go to
+	 * great lengths to guarantee uniqueness.
+	 */
+	if (!global->start_ts)
+		global->start_ts = GetCurrentTimestamp();
+
+	cq_stat_aggregate(global, stats);
 }
 
 /*
@@ -5510,35 +5572,23 @@ cq_stat_recv(CQStatMsg *msg, int len)
 
 	if (pid)
 	{
+		cq_stat_recv_global(db->cont_queries, &stats, ptype);
 		/*
 		 * Aggregate the process-level stats
 		 */
-		existing = cq_stat_get_entry(db, 0, pid, ptype);
+		existing = cq_stat_get_entry(db->cont_queries, 0, pid, ptype);
 		if (!existing->start_ts)
 			existing->start_ts = stats.start_ts;
 
-		existing->input_rows += stats.input_rows;
-		existing->output_rows += stats.output_rows;
-		existing->input_bytes += stats.input_bytes;
-		existing->output_bytes += stats.output_bytes;
-		existing->updates += stats.updates;
-		existing->updated_bytes += stats.updated_bytes;
-		existing->executions += stats.executions;
-		existing->errors += stats.errors;
+		cq_stat_aggregate(existing, &stats);
 	}
 	else if (viewid)
 	{
 		/*
 		 * Now aggregate the CQ-level stats across all procs of this type
 		 */
-		existing = cq_stat_get_entry(db, viewid, 0, ptype);
-		existing->input_rows += stats.input_rows;
-		existing->output_rows += stats.output_rows;
-		existing->input_bytes += stats.input_bytes;
-		existing->output_bytes += stats.output_bytes;
-		existing->updates += stats.updates;
-		existing->updated_bytes += stats.updated_bytes;
-		existing->errors += stats.errors;
+		existing = cq_stat_get_entry(db->cont_queries, viewid, 0, ptype);
+		cq_stat_aggregate(existing, &stats);
 	}
 }
 

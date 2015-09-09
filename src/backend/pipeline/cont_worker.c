@@ -107,7 +107,7 @@ init_query_state(ContQueryWorkerState *state, Oid id, MemoryContext context, Res
 
 	SetCombinerDestReceiverParams(state->dest, reader, id);
 
-	pstmt = GetContPlan(state->view);
+	pstmt = GetContPlan(state->view, Worker);
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot, InvalidSnapshot, state->dest, NULL, 0);
 	state->query_desc->snapshot = GetTransactionSnapshot();
 	state->query_desc->snapshot->copied = true;
@@ -475,15 +475,15 @@ next:
 		QueryDesc *query_desc;
 		EState *estate;
 
+		if (state == NULL)
+			continue;
+
 		/*
 		 * We wrap this in a separate try/catch block because ExecInitNode call can potentially throw
 		 * an error if the state was for a stream-table join and the table has been dropped.
 		 */
 		PG_TRY();
 		{
-			if (state == NULL)
-				continue;
-
 			query_desc = state->query_desc;
 			estate = query_desc->estate;
 

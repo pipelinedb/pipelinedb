@@ -172,13 +172,13 @@ streams_to_meta(Relation pipeline_query)
 		ContAnalyzeContext *context;
 
 		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
-		querystring = TextDatumGetCString(tmp);
+		querystring = deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 		parsetree_list = pg_parse_query(querystring);
 		parsetree = (Node *) lfirst(parsetree_list->head);
 		sel = (SelectStmt *) parsetree;
 
-		context = MakeContAnalyzeContext(make_parsestate(NULL), sel);
+		context = MakeContAnalyzeContext(make_parsestate(NULL), sel, Worker);
 		collect_rels_and_streams((Node *) sel->fromClause, context);
 		collect_types_and_cols((Node *) sel, context);
 
@@ -188,10 +188,6 @@ streams_to_meta(Relation pipeline_query)
 			bool found;
 			Oid key;
 			bool is_inferred = false;
-
-			/* TODO(usmanm) */
-			if (!rv->schemaname)
-				rv->schemaname = get_namespace_name(catrow->namespace);
 
 			key = RangeVarGetRelid(rv, NoLock, false);
 			entry = (StreamTargetsEntry *) hash_search(targets, &key, HASH_ENTER, &found);
@@ -679,6 +675,23 @@ IsInferredStream(Oid relid)
 }
 
 /*
+ * IsStream
+ */
+bool IsStream(Oid relid)
+{
+	Relation rel = try_relation_open(relid, NoLock);
+	char relkind;
+
+	if (rel == NULL)
+		return false;
+
+	relkind = rel->rd_rel->relkind;
+	heap_close(rel, NoLock);
+
+	return relkind == RELKIND_STREAM;
+}
+
+/*
  * CreateInferredStream
  */
 void
@@ -774,7 +787,7 @@ RemovePipelineStreamById(Oid oid)
 Relation
 inferred_stream_open(ParseState *pstate, Relation rel)
 {
-	TupleDesc desc;
+	TupleDesc desc = NULL;
 	Relation stream_rel;
 
 	Assert(pstate->p_allow_streams);
@@ -785,7 +798,7 @@ inferred_stream_open(ParseState *pstate, Relation rel)
 	else if (pstate->p_ins_cols)
 		desc = GetInferredStreamTupleDesc(rel->rd_id, pstate->p_ins_cols);
 	else
-		Assert(false); /* x_x */
+		elog(ERROR, "inferred_stream_open called in an invalid context");
 
 	/* Create a dummy Relation for the inferred stream */
 	stream_rel = (Relation) palloc0(sizeof(RelationData));

@@ -148,7 +148,7 @@ test: cont_hs_agg cont_sw_hs_agg cont_distinct cont_hll_agg cont_os_agg cont_sw_
 # ----------
 # Another group of parallel tests
 # ----------
-test: stream_table_join user_combine cont_limit cont_alter stream_targets hash_group stream_insert_subselect
+test: stream_table_join user_combine cont_limit cont_alter stream_targets hash_group date_floor stream_insert_subselect
 
 # ----------
 # Another group of parallel tests
@@ -166,7 +166,7 @@ test: stream_casts4
 # ----------
 # Another group of parallel tests
 # ----------
-test: cont_gis_geom cont_gis_raster cont_complex_types cont_explain
+test: cont_gis_geom cont_gis_raster cont_view_namespace cont_complex_types cont_explain
 
 # ----------
 # Another group of parallel tests
@@ -176,4 +176,9 @@ test: cont_activate
 # ----------
 # Another group of parallel tests
 # ----------
-test: create_combinable_agg
+test: create_combinable_agg pipeline_regress cont_fss_agg
+
+# ----------
+# Another group of parallel tests
+# ----------
+test: pipeline_stats

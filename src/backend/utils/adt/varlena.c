@@ -469,9 +469,6 @@ bytea_string_agg_finalfn(PG_FUNCTION_ARGS)
 {
 	StringAggState *state;
 
-	/* cannot be called directly because of internal-type argument */
-	Assert(AggCheckCallContext(fcinfo, NULL));
-
 	state = PG_ARGISNULL(0) ? NULL : (StringAggState *) PG_GETARG_POINTER(0);
 
 	if (state != NULL)
@@ -3893,9 +3890,6 @@ Datum
 string_agg_finalfn(PG_FUNCTION_ARGS)
 {
 	StringAggState *state;
-
-	/* cannot be called directly because of internal-type argument */
-	Assert(AggCheckCallContext(fcinfo, NULL));
 
 	state = PG_ARGISNULL(0) ? NULL : (StringAggState *) PG_GETARG_POINTER(0);
 

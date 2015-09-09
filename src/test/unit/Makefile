@@ -60,7 +60,7 @@ LOCALOBJS += utils/probes.o
 endif
 endif
 
-TEST_OBJS = test_tdigest.o test_hll.o test_bloom.o test_cmsketch.o runner.o
+TEST_OBJS = utils.o test_tdigest.o test_hll.o test_bloom.o test_cmsketch.o test_fss.o runner.o
 
 OBJS = $(SUBDIROBJS) $(LOCALOBJS) $(top_builddir)/src/port/libpgport_srv.a \
        $(top_builddir)/src/common/libpgcommon_srv.a \
@@ -68,7 +68,7 @@ OBJS = $(SUBDIROBJS) $(LOCALOBJS) $(top_builddir)/src/port/libpgport_srv.a \
 
 # We put libpgport and libpgcommon into OBJS, so remove it from LIBS; also add
 # libldap
-LIBS := $(filter-out -lpgport -lpgcommon, $(LIBS)) $(LDAP_LIBS_BE) -lcheck -lpthread -lcurl
+LIBS := $(filter-out -lpgport -lpgcommon, $(LIBS)) $(LDAP_LIBS_BE) -lcheck -lpthread
 
 # The backend doesn't need everything that's in LIBS, however
 LIBS := $(filter-out -lz -lreadline -ledit -ltermcap -lncurses -lcurses, $(LIBS))

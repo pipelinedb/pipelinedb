@@ -692,9 +692,6 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
-/* Define to the PipelineDB version. */
-#undef PIPELINE_VERSION
-
 /* Define to the name of a signed 64-bit integer type. */
 #undef PG_INT64_TYPE
 
@@ -717,6 +714,15 @@
 
 /* A string containing the version number, platform, and C compiler */
 #undef PG_VERSION_STR
+
+/* PipelineDB source revision of this build */
+#undef PIPELINE_REVISION
+
+/* PipelineDB version as a string */
+#undef PIPELINE_VERSION
+
+/* A string containing the version number, platform, and C compiler */
+#undef PIPELINE_VERSION_STR
 
 /* Define to 1 to allow profiling output to be saved separately for each
    process. */

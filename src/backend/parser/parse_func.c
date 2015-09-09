@@ -30,7 +30,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
-#include "pipeline/cqanalyze.h"
+#include "pipeline/cont_analyze.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
@@ -244,8 +244,10 @@ ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 							   &nvargs, &vatype,
 							   &declared_arg_types, &argdefaults);
 
-	if (fdresult == FUNCDETAIL_COMBINE)
+	if (fdresult == FUNCDETAIL_MATREL_COMBINE)
 		return ParseCombineFuncCall(pstate, fargs, agg_order, agg_filter, over, location);
+	else if (fdresult == FUNCDETAIL_MATREL_FINALIZE)
+		return ParseFinalizeFuncCall(pstate, fargs, location);
 
 	if (fdresult == FUNCDETAIL_COERCION)
 	{
@@ -656,7 +658,6 @@ ParseFuncOrColumn(ParseState *pstate, List *funcname, List *fargs,
 		aggref->aggkind = aggkind;
 		/* agglevelsup will be set by transformAggregateCall */
 		aggref->location = location;
-		aggref->aggresultstate = AGG_DEFAULT;
 
 		/*
 		 * Reject attempt to call a parameterless aggregate without (*)
@@ -1491,10 +1492,15 @@ func_get_detail(List *funcname,
 		*retset = pform->proretset;
 		*vatype = pform->provariadic;
 
-		if (IsUserCombine(pform->proname))
+		if (IsMatRelCombine(pform->proname))
 		{
 			ReleaseSysCache(ftup);
-			return FUNCDETAIL_COMBINE;
+			return FUNCDETAIL_MATREL_COMBINE;
+		}
+		else if (IsMatRelFinalize(pform->proname))
+		{
+			ReleaseSysCache(ftup);
+			return FUNCDETAIL_MATREL_FINALIZE;
 		}
 
 		/* fetch default args if caller wants 'em */

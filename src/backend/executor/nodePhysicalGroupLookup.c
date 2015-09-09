@@ -30,7 +30,7 @@ ExecInitPhysicalGroupLookup(PhysicalGroupLookup *node, EState *estate, int eflag
 		elog(ERROR, "unexpected join node found in physical group lookup: %d", nodeTag(outer));
 
 	nl = (NestLoop *) outer;
-	nl->join.jointype = JOIN_SEMI;
+	nl->join.jointype = JOIN_INNER;
 
 	state = makeNode(PhysicalGroupLookupState);
 	state->ps.plan = (Plan *) node;
@@ -40,9 +40,6 @@ ExecInitPhysicalGroupLookup(PhysicalGroupLookup *node, EState *estate, int eflag
 	ExecInitResultTupleSlot(estate, &state->ps);
 	resultdesc = ExecTypeFromTL(innerPlan(outer)->targetlist, false);
 	ExecAssignResultType(&state->ps, resultdesc);
-
-	if (IsA(innerPlan(nl), SeqScan))
-		elog(WARNING, "sequential scan being used in combiner group lookup");
 
 	return state;
 }

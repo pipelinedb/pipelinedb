@@ -24,7 +24,7 @@
 typedef struct CountMinSketch
 {
 	uint32	vl_len_;
-	uint32_t count;
+	uint64_t count;
 	uint32_t d;
 	uint32_t w;
 	uint32_t table[1];
@@ -37,7 +37,9 @@ extern void CountMinSketchDestroy(CountMinSketch *cms);
 
 extern CountMinSketch *CountMinSketchCopy(CountMinSketch *cms);
 extern void CountMinSketchAdd(CountMinSketch *cms, void *key, Size size, uint32_t count);
-extern uint32_t CountMinSketchEstimateCount(CountMinSketch *cms, void *key, Size size);
+extern uint32_t CountMinSketchEstimateFrequency(CountMinSketch *cms, void *key, Size size);
+extern float8 CountMinSketchEstimateNormFrequency(CountMinSketch *cms, void *key, Size size);
+extern uint64_t CountMinSketchTotal(CountMinSketch *cms);
 extern CountMinSketch *CountMinSketchMerge(CountMinSketch *result, CountMinSketch* incoming);
 extern Size CountMinSketchSize(CountMinSketch *cms);
 

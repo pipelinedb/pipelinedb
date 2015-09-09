@@ -66,7 +66,7 @@
 #include "parser/parse_clause.h"
 #include "parser/parse_expr.h"
 #include "parser/parse_type.h"
-#include "pipeline/cqanalyze.h"
+#include "pipeline/cont_analyze.h"
 #include "pipeline/stream.h"
 #include "pipeline/tuplebuf.h"
 #include "pg_getopt.h"
@@ -176,13 +176,6 @@ static bool ignore_till_sync = false;
  * in order to reduce overhead for short-lived queries.
  */
 static CachedPlanSource *unnamed_stmt_psrc = NULL;
-
-/*
- * Used for passing stream insertions between the BIND and EXECUTE
- * stages of the extended query protocol, since they bypass all of
- * the regular portal creation and caching.
- */
-static List *stream_inserts = NULL;
 
 /* assorted command-line switches */
 static const char *userDoption = NULL;	/* -D switch */
@@ -905,8 +898,6 @@ exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *para
 
 	MemoryContextSwitchTo(oldcontext);
 	MemoryContextReset(EventContext);
-
-	stream_inserts = NULL;
 }
 
 /*
@@ -1302,7 +1293,7 @@ exec_parse_message(const char *query_string,	/* string to execute */
 	bool		is_named;
 	bool		save_log_statement_stats = log_statement_stats;
 	char		msec_str[32];
-	bool stream_insert = false;
+	bool is_stream_insert = false;
 
 	/*
 	 * Report query to various monitoring facilities.
@@ -1377,39 +1368,10 @@ exec_parse_message(const char *query_string,	/* string to execute */
 				(errcode(ERRCODE_SYNTAX_ERROR),
 		errmsg("cannot insert multiple commands into a prepared statement")));
 
-
 	if (parsetree_list != NIL)
 	{
 		raw_parse_tree = (Node *) linitial(parsetree_list);
-		stream_insert = IsA(raw_parse_tree, InsertStmt) && RangeVarIsForStream(((InsertStmt *) raw_parse_tree)->relation, NULL);
-
-		if (stream_insert)
-		{
-			InsertStmt *ins = (InsertStmt *) raw_parse_tree;
-			/*
-			 * If there aren't any parameters then we can bail early and insert into the stream now.
-			 * When we have params, a little more work is required for stream insertions.
-			 */
-			MemoryContextSwitchTo(oldcontext);
-
-			/* cache these so the following BIND and EXECUTE stages have access to them */
-			oldcontext = MemoryContextSwitchTo(CacheMemoryContext);
-			stream_inserts = copyObject(parsetree_list);
-
-			if (numParams == 0)
-			{
-				parsetree_list = NIL;
-			}
-			else
-			{
-				/*
-				 * We'll add the Eval'd params to this during BIND
-				 */
-				StorePreparedStreamInsert(stmt_name, ins->relation, ins->cols);
-			}
-
-			MemoryContextSwitchTo(oldcontext);
-		}
+		is_stream_insert = IsA(raw_parse_tree, InsertStmt) && RangeVarIsForStream(((InsertStmt *) raw_parse_tree)->relation, NULL);
 	}
 
 	if (parsetree_list != NIL)
@@ -1486,7 +1448,7 @@ exec_parse_message(const char *query_string,	/* string to execute */
 		if (log_parser_stats)
 			ShowUsage("PARSE ANALYSIS STATISTICS");
 
-		if (!stream_insert)
+		if (!is_stream_insert)
 			querytree_list = pg_rewrite_query(query);
 		else
 			querytree_list = NIL;
@@ -1502,6 +1464,15 @@ exec_parse_message(const char *query_string,	/* string to execute */
 		commandTag = NULL;
 		psrc = CreateCachedPlan(raw_parse_tree, query_string, commandTag);
 		querytree_list = NIL;
+	}
+
+	/* it's just a regular, literal insert using the extended protocol */
+	if (is_stream_insert && numParams == 0)
+	{
+		MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+
+		SetExtendedStreamInsert(copyObject(raw_parse_tree));
+		MemoryContextSwitchTo(old);
 	}
 
 	/*
@@ -1541,6 +1512,15 @@ exec_parse_message(const char *query_string,	/* string to execute */
 		 */
 		SaveCachedPlan(psrc);
 		unnamed_stmt_psrc = psrc;
+	}
+
+	if (is_stream_insert && numParams > 0)
+	{
+		InsertStmt *ins = (InsertStmt *) raw_parse_tree;
+		MemoryContext old = MemoryContextSwitchTo(CacheMemoryContext);
+
+		StorePreparedStreamInsert(stmt_name, ins);
+		MemoryContextSwitchTo(old);
 	}
 
 	MemoryContextSwitchTo(oldcontext);
@@ -1612,6 +1592,13 @@ exec_bind_message(StringInfo input_message)
 	MemoryContext param_context;
 	PreparedStreamInsertStmt *stream_insert_stmt = NULL;
 
+	if (HaveExtendedStreamInsert())
+	{
+		if (whereToSendOutput == DestRemote)
+			pq_putemptymessage('2');
+		return;
+	}
+
 	/* Get the fixed part of the message */
 	portal_name = pq_getmsgstring(input_message);
 	stmt_name = pq_getmsgstring(input_message);
@@ -1640,15 +1627,7 @@ exec_bind_message(StringInfo input_message)
 	}
 
 	if (psrc && psrc->raw_parse_tree && IsA(psrc->raw_parse_tree, InsertStmt))
-		stream_insert_stmt = FetchPreparedStreamInsert(portal_name);
-
-	if (!stream_insert_stmt && stream_inserts != NULL)
-	{
-		/*
-		 * It's a stream PREPARE/EXECUTE stream INSERT without a prepared statement
-		 */
-		return;
-	}
+		stream_insert_stmt = FetchPreparedStreamInsert(stmt_name);
 
 	/*
 	 * Report query to various monitoring facilities.
@@ -1943,8 +1922,6 @@ exec_bind_message(StringInfo input_message)
 		oldContext = MemoryContextSwitchTo(param_context);
 		AddPreparedStreamInsert(stream_insert_stmt, params);
 		MemoryContextSwitchTo(oldContext);
-
-		return;
 	}
 
 	/*
@@ -2020,35 +1997,15 @@ exec_execute_message(const char *portal_name, long max_rows)
 	if (dest == DestRemote)
 		dest = DestRemoteExecute;
 
-	stream_insert_stmt = FetchPreparedStreamInsert(portal_name);
 	/*
 	 * If we're INSERTing into a stream, short circuit everything
 	 */
-	if (HasPendingInserts(stream_insert_stmt) || stream_inserts)
+	if (HaveExtendedStreamInsert())
 	{
-		ListCell *lc;
-		/*
-		 * PARSE should have already put us in a transaction, but this is a noop in that case
-		 * so we might as well make sure
-		 */
+		InsertStmt *insert = GetExtendedStreamInsert();
+
 		start_xact_command();
-
-		if (stream_insert_stmt)
-		{
-			/* we already have the eval'd values */
-			exec_stream_inserts(NULL, stream_insert_stmt, NIL);
-		}
-		else
-		{
-			/* we have parsed expressions and they still need to be eval'd */
-			foreach(lc, stream_inserts)
-			{
-				InsertStmt *ins = (InsertStmt *) lfirst(lc);
-				exec_stream_inserts(ins, NULL, NIL);
-			}
-			stream_inserts = NULL;
-		}
-
+		exec_stream_inserts(insert, NULL, NIL);
 		finish_xact_command();
 
 		return;
@@ -2059,6 +2016,20 @@ exec_execute_message(const char *portal_name, long max_rows)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_CURSOR),
 				 errmsg("portal \"%s\" does not exist", portal_name)));
+
+	stream_insert_stmt = FetchPreparedStreamInsert(portal->prepStmtName ? portal->prepStmtName : "");
+
+	if (HasPendingInserts(stream_insert_stmt))
+	{
+		start_xact_command();
+
+		/* we already have the eval'd values */
+		exec_stream_inserts(NULL, stream_insert_stmt, NIL);
+
+		finish_xact_command();
+
+		return;
+	}
 
 	/*
 	 * If the original query was a null string, just return
@@ -2579,8 +2550,9 @@ exec_describe_portal_message(const char *portal_name)
 {
 	Portal		portal;
 
-	if (stream_inserts || HasPendingInserts(FetchPreparedStreamInsert(portal_name)))
+	if (HaveExtendedStreamInsert() || HasPendingInserts(FetchPreparedStreamInsert(portal_name)))
 	{
+		portal = GetPortalByName(portal_name);
 		pq_putemptymessage('n');	/* NoData */
 		return;
 	}

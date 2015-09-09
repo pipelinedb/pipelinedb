@@ -2136,7 +2136,6 @@ CopyFrom(CopyState cstate)
 	HeapTuple  *bufferedTuples = NULL;	/* initialize to silence warning */
 	Size		bufferedTuplesSize = 0;
 	int			firstBufferedLineNo = 0;
-	TimestampTz timer = GetCurrentTimestamp();
 
 	Assert(cstate->rel);
 
@@ -2397,7 +2396,7 @@ CopyFrom(CopyState cstate)
 					if (cstate->to_stream)
 					{
 						MemoryContext old_cxt = MemoryContextSwitchTo(cstate->to_stream_ctxt);
-						CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples, &timer);
+						CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples);
 						MemoryContextReset(cstate->to_stream_ctxt);
 						MemoryContextSwitchTo(old_cxt);
 					}
@@ -2446,7 +2445,7 @@ CopyFrom(CopyState cstate)
 		if (cstate->to_stream)
 		{
 			MemoryContext old_cxt = MemoryContextSwitchTo(cstate->to_stream_ctxt);
-			CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples, &timer);
+			CopyIntoStream(cstate->rel, tupDesc, bufferedTuples, nBufferedTuples);
 			MemoryContextReset(cstate->to_stream_ctxt);
 			MemoryContextSwitchTo(old_cxt);
 		}

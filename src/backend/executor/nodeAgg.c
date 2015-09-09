@@ -78,7 +78,7 @@
  *	  but direct examination of the node is needed to use it before 9.0.
  *
  *	  As of 9.4, aggregate transition functions can also use AggGetAggref()
- *	  to get hold of the Aggref expression node for their aggregate call.
+ *	  to get hold of the Aggref expression node for their aggregate adcall.
  *	  This is mainly intended for ordered-set aggregates, which are not
  *	  supported as window functions.  (A regular aggregate function would
  *	  need some fallback logic to use this, since there's no Aggref node
@@ -266,7 +266,7 @@ typedef struct AggStatePerAggData
 	FunctionCallInfoData combineinfn_fcinfo;
 	FunctionCallInfoData combinefn_fcinfo;
 
-	Oid transtypeId;
+	bool finalize;
 }	AggStatePerAggData;
 
 /*
@@ -426,95 +426,6 @@ initialize_aggregates(AggState *aggstate,
 }
 
 /*
- * Given a current transition state and another one, combine them both into
- * a new transition state. This is used for aggregating partial aggregation
- * results into a final result.
- */
-static void
-advance_combine_function(TupleTableSlot *slot, AggState *aggstate,
-		AggStatePerAgg peraggstate,
-		AggStatePerGroup pergroupstate)
-{
-	Datum combineinput = slot->tts_values[0];
-	Datum combineoutput;
-	bool isnull = slot->tts_isnull[0];
-	MemoryContext oldcontext = MemoryContextSwitchTo(aggstate->aggcontext);
-
-	aggstate->curperagg = peraggstate;
-
-	/*
-	 * 0. Decode the transition value into something the combine function expects.
-	 */
-	if (OidIsValid(peraggstate->combineinfn_oid))
-	{
-		FunctionCallInfo fcinfo = &peraggstate->combineinfn_fcinfo;
-
-		fcinfo->arg[0] = slot->tts_values[0];
-		fcinfo->argnull[0] = slot->tts_isnull[0];
-
-		combineinput = FunctionCallInvoke(fcinfo);
-		combineoutput = combineinput;
-		isnull = fcinfo->isnull;
-	}
-
-	/*
-	 * 1. Combine two transition states into one.
-	 */
-	if (OidIsValid(peraggstate->combinefn_oid))
-	{
-		FunctionCallInfo fcinfo = &peraggstate->combinefn_fcinfo;
-		FuncExpr *expr = makeNode(FuncExpr);
-		Const *c = makeConst(peraggstate->transtypeId,
-				  -1,
-				  InvalidOid,
-				  peraggstate->transtypeLen,
-				  pergroupstate->transValue,
-				  false,
-				  peraggstate->transtypeByVal);
-
-		expr->args = list_make2(c, c);
-		expr->funcresulttype = peraggstate->transtypeId;
-
-		fcinfo->isnull = false;
-		fcinfo->arg[0] = pergroupstate->transValue;
-		fcinfo->argnull[0] = pergroupstate->transValueIsNull;
-		fcinfo->arg[1] = combineinput;
-		fcinfo->argnull[1] = isnull;
-		fcinfo->nargs = 2;
-
-		fcinfo->flinfo->fn_expr = (fmNodePtr) expr;
-
-		combineoutput = FunctionCallInvoke(fcinfo);
-		isnull = fcinfo->isnull;
-	}
-
-	/*
-	 * 2. Copy the result of the combine function if its type is by reference
-	 */
-	if (!peraggstate->transtypeByVal &&
-		DatumGetPointer(combineoutput) != DatumGetPointer(pergroupstate->transValue))
-	{
-		if (!isnull)
-		{
-			if (!MemoryContextContains(aggstate->aggcontext, (void *) DatumGetPointer(combineoutput)))
-			{
-				MemoryContextSwitchTo(aggstate->aggcontext);
-				combineoutput = datumCopy(combineoutput,
-						peraggstate->transtypeByVal,
-						peraggstate->transtypeLen);
-			}
-		}
-		if (!pergroupstate->transValueIsNull)
-			pfree(DatumGetPointer(pergroupstate->transValue));
-	}
-
-	pergroupstate->transValue = combineoutput;
-	pergroupstate->transValueIsNull = isnull;
-
-	MemoryContextSwitchTo(oldcontext);
-}
-
-/*
  * Given new input value(s), advance the transition function of an aggregate.
  *
  * The new values (and null flags) have been preloaded into argument positions
@@ -650,9 +561,6 @@ advance_aggregates(AggState *aggstate, AggStatePerGroup pergroup)
 		int			i;
 		TupleTableSlot *slot;
 
-		if (AGGKIND_IS_STORE(peraggstate->aggref->aggkind))
-			continue;
-
 		/* Skip anything FILTERed out */
 		if (filter)
 		{
@@ -701,27 +609,19 @@ advance_aggregates(AggState *aggstate, AggStatePerGroup pergroup)
 		}
 		else
 		{
-			if ((OidIsValid(peraggstate->combineinfn_oid) || OidIsValid(peraggstate->combinefn_oid)) &&
-					peraggstate->aggref->aggresultstate == AGG_COMBINE)
-			{
-				advance_combine_function(slot, aggstate, peraggstate, pergroupstate);
-			}
-			else
-			{
-				/* We can apply the transition function immediately */
-				FunctionCallInfo fcinfo = &peraggstate->transfn_fcinfo;
+			/* We can apply the transition function immediately */
+			FunctionCallInfo fcinfo = &peraggstate->transfn_fcinfo;
 
-				/* Load values into fcinfo */
-				/* Start from 1, since the 0th arg will be the transition value */
-				Assert(slot->tts_nvalid >= numTransInputs);
-				for (i = 0; i < numTransInputs; i++)
-				{
-					fcinfo->arg[i + 1] = slot->tts_values[i];
-					fcinfo->argnull[i + 1] = slot->tts_isnull[i];
-				}
-
-				advance_transition_function(aggstate, peraggstate, pergroupstate);
+			/* Load values into fcinfo */
+			/* Start from 1, since the 0th arg will be the transition value */
+			Assert(slot->tts_nvalid >= numTransInputs);
+			for (i = 0; i < numTransInputs; i++)
+			{
+				fcinfo->arg[i + 1] = slot->tts_values[i];
+				fcinfo->argnull[i + 1] = slot->tts_isnull[i];
 			}
+
+			advance_transition_function(aggstate, peraggstate, pergroupstate);
 		}
 	}
 }
@@ -943,12 +843,20 @@ finalize_aggregate(AggState *aggstate,
 		i++;
 	}
 
+	if (!peraggstate->finalize)
+	{
+		*resultVal = pergroupstate->transValue;
+		*resultIsNull = pergroupstate->transValueIsNull;
+
+		MemoryContextSwitchTo(oldContext);
+
+		return;
+	}
+
 	/*
 	 * Apply the agg's finalfn if one is provided, else return transValue.
 	 */
-	if (peraggstate->aggref->aggresultstate != AGG_TRANSITION &&
-			peraggstate->aggref->aggresultstate != AGG_COMBINE &&
-			OidIsValid(peraggstate->finalfn_oid))
+	if (OidIsValid(peraggstate->finalfn_oid))
 	{
 		int			numFinalArgs = peraggstate->numFinalArgs;
 
@@ -988,22 +896,8 @@ finalize_aggregate(AggState *aggstate,
 	}
 	else
 	{
-		if ((peraggstate->aggref->aggresultstate == AGG_TRANSITION || peraggstate->aggref->aggresultstate == AGG_COMBINE) &&
-				OidIsValid(peraggstate->transoutfn_oid))
-		{
-			FunctionCallInfo outinfo = &peraggstate->transoutfn_fcinfo;
-			outinfo->arg[0] = pergroupstate->transValue;
-			outinfo->argnull[0] = pergroupstate->transValueIsNull;
-			outinfo->isnull = false;
-
-			*resultVal = FunctionCallInvoke(outinfo);
-			*resultIsNull = outinfo->isnull;
-		}
-		else
-		{
-			*resultVal = pergroupstate->transValue;
-			*resultIsNull = pergroupstate->transValueIsNull;
-		}
+		*resultVal = pergroupstate->transValue;
+		*resultIsNull = pergroupstate->transValueIsNull;
 	}
 
 	/*
@@ -1252,33 +1146,6 @@ ExecAgg(AggState *node)
 		return agg_retrieve_direct(node);
 }
 
-static void
-store_and_finalize_aggregate(AggState *aggstate, AggStatePerAgg peragg,
-		AggStatePerGroup pergroup, int aggno)
-{
-	AggStatePerAgg peraggstate = &peragg[aggno];
-	AggStatePerGroup sourcestate;
-	AggStatePerGroup deststate;
-	Datum *aggvalues;
-	bool *aggnulls;
-	ExprContext *econtext;
-	TargetEntry *te = (TargetEntry *) linitial(peraggstate->aggref->args);
-	Var *v = (Var *) te->expr;
-	int sourceaggno = aggstate->resno_to_aggno[v->varoattno - 1];
-
-	econtext = aggstate->ss.ps.ps_ExprContext;
-	aggvalues = econtext->ecxt_aggvalues;
-	aggnulls = econtext->ecxt_aggnulls;
-
-	sourcestate = &pergroup[sourceaggno];
-	deststate = &pergroup[aggno];
-
-	deststate->transValue = sourcestate->transValue;
-	deststate->transValueIsNull = sourcestate->transValueIsNull;
-
-	finalize_aggregate(aggstate, peraggstate, deststate, &aggvalues[aggno], &aggnulls[aggno]);
-}
-
 /*
  * ExecAgg for non-hashed case
  */
@@ -1455,11 +1322,8 @@ agg_retrieve_direct(AggState *aggstate)
 													pergroupstate);
 			}
 
-			if (AGGKIND_IS_STORE(peraggstate->aggref->aggkind))
-				store_and_finalize_aggregate(aggstate, peragg, pergroup, aggno);
-			else
-				finalize_aggregate(aggstate, peraggstate, pergroupstate,
-									 &aggvalues[aggno], &aggnulls[aggno]);
+			finalize_aggregate(aggstate, peraggstate, pergroupstate,
+								 &aggvalues[aggno], &aggnulls[aggno]);
 		}
 
 		/*
@@ -1623,11 +1487,8 @@ agg_retrieve_hash_table(AggState *aggstate)
 
 			Assert(peraggstate->numSortCols == 0);
 
-			if (AGGKIND_IS_STORE(peraggstate->aggref->aggkind))
-				store_and_finalize_aggregate(aggstate, peragg, pergroup, aggno);
-			else
-				finalize_aggregate(aggstate, peraggstate, pergroupstate,
-									 &aggvalues[aggno], &aggnulls[aggno]);
+			finalize_aggregate(aggstate, peraggstate, pergroupstate,
+								 &aggvalues[aggno], &aggnulls[aggno]);
 		}
 
 		/*
@@ -1888,7 +1749,7 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		HeapTuple	aggTuple;
 		Form_pg_aggregate aggform;
 		HeapTuple combTuple;
-		Form_pipeline_combine combform;
+		Form_pipeline_combine combform = NULL;
 		Oid			aggtranstype;
 		AclResult	aclresult;
 		Oid			transfn_oid,
@@ -1898,9 +1759,6 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		Datum		textInitVal;
 		int			i;
 		ListCell   *lc;
-		Oid			transoutfn_oid = InvalidOid;
-		Oid			combineinfn_oid = InvalidOid;
-		Oid			combinefn_oid = InvalidOid;
 		AttrNumber resno;
 
 		/* Planner should have assigned aggregate to correct level */
@@ -1956,11 +1814,13 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		peraggstate->transfn_oid = transfn_oid = aggform->aggtransfn;
 		peraggstate->finalfn_oid = finalfn_oid = aggform->aggfinalfn;
 
+		peraggstate->finalize = !(AGGKIND_IS_COMBINE(aggref->aggkind) || IsContQueryProcess());
+
 		/*
-		 * If it's a user combine, we dynamically load the transition function
+		 * If it's a combine, we dynamically load the transition function
 		 * based on what's in pipeline_combine
 		 */
-		if (AGGKIND_IS_USER_COMBINE(aggref->aggkind))
+		if (AGGKIND_IS_COMBINE(aggref->aggkind))
 		{
 			combTuple = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
 					ObjectIdGetDatum(finalfn_oid),
@@ -1973,54 +1833,6 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 				ReleaseSysCache(combTuple);
 			}
 		}
-
-		/*
-		 * If we are only computing transition results, we may need to
-		 * apply a function that finalizes the transition state
-		 */
-		if (aggref->aggresultstate == AGG_TRANSITION || aggref->aggresultstate == AGG_COMBINE || aggref->aggresultstate == AGG_FINALIZE_COMBINE)
-		{
-			combTuple = SearchSysCache2(PIPELINECOMBINETRANSFNOID,
-					ObjectIdGetDatum(finalfn_oid),
-					ObjectIdGetDatum(transfn_oid));
-
-			if (HeapTupleIsValid(combTuple))
-			{
-				combform = (Form_pipeline_combine) GETSTRUCT(combTuple);
-				transoutfn_oid = combform->transoutfn;
-				combineinfn_oid = combform->combineinfn;
-				combinefn_oid = combform->combinefn;
-				ReleaseSysCache(combTuple);
-			}
-
-			if (OidIsValid(transoutfn_oid))
-			{
-				fmgr_info(transoutfn_oid, &peraggstate->transoutfn);
-				InitFunctionCallInfoData(peraggstate->transoutfn_fcinfo,
-										 &peraggstate->transoutfn,
-										 1, InvalidOid, (void *) aggstate, NULL);
-			}
-
-			if (OidIsValid(combineinfn_oid))
-			{
-				fmgr_info(combineinfn_oid, &peraggstate->combineinfn);
-				InitFunctionCallInfoData(peraggstate->combineinfn_fcinfo,
-										 &peraggstate->combineinfn,
-										 1, InvalidOid, (void *) aggstate, NULL);
-			}
-
-			if (OidIsValid(combinefn_oid))
-			{
-				fmgr_info(combinefn_oid, &peraggstate->combinefn);
-				InitFunctionCallInfoData(peraggstate->combinefn_fcinfo,
-										 &peraggstate->combinefn,
-										 1, InvalidOid, (void *) aggstate, NULL);
-			}
-		}
-
-		peraggstate->transoutfn_oid = transoutfn_oid;
-		peraggstate->combineinfn_oid = combineinfn_oid;
-		peraggstate->combinefn_oid = combinefn_oid;
 
 		/* Check that aggregate owner has permission to call component fns */
 		{
@@ -2079,11 +1891,12 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		else
 			peraggstate->numFinalArgs = numDirectArgs + 1;
 
-		/*
-		 * XXX(usmanm): Is this totally kosher?
-		 */
-		if (aggref->aggresultstate == AGG_COMBINE && IsPolymorphicType(aggform->aggtranstype))
+		if (AGGKIND_IS_COMBINE(aggref->aggkind) && IsPolymorphicType(aggform->aggtranstype))
 		{
+			/*
+			 * combine aggregates already have their transition types set up properly based on
+			 * the pipeline_combine catalog.
+			 */
 			Assert(numArguments == 1);
 			aggtranstype = inputTypes[0];
 		}
@@ -2137,8 +1950,6 @@ ExecInitAgg(Agg *node, EState *estate, int eflags)
 		get_typlenbyval(aggtranstype,
 						&peraggstate->transtypeLen,
 						&peraggstate->transtypeByVal);
-
-		peraggstate->transtypeId = aggtranstype;
 
 		/*
 		 * initval is potentially null, so don't try to access it as a struct
@@ -2567,7 +2378,7 @@ AggGetAggref(FunctionCallInfo fcinfo)
  */
 Oid AggGetInitialArgType(FunctionCallInfo fcinfo)
 {
-	List *args;
+	List *args = NIL;
 	Oid type;
 	Node *node;
 
@@ -2578,6 +2389,8 @@ Oid AggGetInitialArgType(FunctionCallInfo fcinfo)
 		args = AggGetAggref(fcinfo)->args;
 	else if (AggGetWindowFunc(fcinfo))
 		args = AggGetWindowFunc(fcinfo)->args;
+	else
+		elog(ERROR, "fcinfo must be an aggregate function call");
 
 	node = linitial(args);
 	if (IsA(node, TargetEntry))

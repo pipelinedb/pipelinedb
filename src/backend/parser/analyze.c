@@ -983,6 +983,9 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 	qry->targetList = transformTargetList(pstate, stmt->targetList,
 										  EXPR_KIND_SELECT_TARGET);
 
+	if (stmt->forContinuousView)
+		qry->targetList = transformContSelectTargetList(pstate, qry->targetList);
+
 	/* mark column origins */
 	markTargetListOrigins(pstate, qry->targetList);
 

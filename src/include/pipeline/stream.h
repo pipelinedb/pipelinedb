@@ -21,8 +21,6 @@
 #include "utils/relcache.h"
 #include "utils/timestamp.h"
 
-extern int stream_insertion_commit_interval;
-
 #define QueryIsStreaming(query) ((query)->isContinuous)
 #define QueryIsCombine(query) ((query)->isCombine)
 #define PlanIsStreaming(stmt) ((stmt)->is_continuous)
@@ -43,13 +41,16 @@ typedef struct PreparedStreamInsertStmt
 extern bool synchronous_stream_insert;
 extern char *stream_targets;
 
-extern PreparedStreamInsertStmt *StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols);
+extern PreparedStreamInsertStmt *StorePreparedStreamInsert(const char *name, InsertStmt *insert);
 extern void AddPreparedStreamInsert(PreparedStreamInsertStmt *stmt, ParamListInfoData *params);
+extern void SetExtendedStreamInsert(Node *ins);
+extern InsertStmt *GetExtendedStreamInsert(void);
+extern bool HaveExtendedStreamInsert(void);
 extern PreparedStreamInsertStmt *FetchPreparedStreamInsert(const char *name);
 extern void DropPreparedStreamInsert(const char *name);
 extern int InsertIntoStreamPrepared(PreparedStreamInsertStmt *pstmt);
 extern int InsertIntoStream(InsertStmt *ins, List *params);
-extern uint64 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, TimestampTz *timer);
+extern uint64 CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples);
 
 /* Represents a single batch of inserts made into a stream. */
 typedef struct InsertBatch {

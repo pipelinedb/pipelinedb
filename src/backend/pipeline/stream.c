@@ -45,9 +45,6 @@
 #include "utils/tqual.h"
 #include "utils/typcache.h"
 
-/* guc param */
-int stream_insertion_commit_interval;
-
 #define SLEEP_MS 2
 
 #define StreamBatchAllAcked(batch) ((batch)->num_wacks >= (batch)->num_wtups && (batch)->num_cacks >= (batch)->num_ctups)
@@ -58,6 +55,8 @@ char *stream_targets = NULL;
 
 static HTAB *prepared_stream_inserts = NULL;
 static bool *cont_queries_active = NULL;
+
+static InsertStmt *extended_stream_insert = NULL;
 
 /*
  * get_desc
@@ -109,7 +108,7 @@ get_desc(List *colnames, Query *q)
  * Create a PreparedStreamInsertStmt with the given column names
  */
 PreparedStreamInsertStmt *
-StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
+StorePreparedStreamInsert(const char *name, InsertStmt *insert)
 {
 	PreparedStreamInsertStmt *result;
 	bool found;
@@ -125,17 +124,17 @@ StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
 		ctl.keysize = NAMEDATALEN;
 		ctl.entrysize = sizeof(PreparedStreamInsertStmt);
 
-		prepared_stream_inserts = hash_create("prepared_stream_inserts", 2, &ctl, HASH_ELEM);
+		prepared_stream_inserts = hash_create("Prepared Stream Inserts", 2, &ctl, HASH_ELEM);
 	}
 
 	result = (PreparedStreamInsertStmt *)
 			hash_search(prepared_stream_inserts, (void *) name, HASH_ENTER, &found);
 
 	result->inserts = NIL;
-	result->relid = RangeVarGetRelid(stream, AccessShareLock, false);
-	result->desc = CreateTemplateTupleDesc(list_length(cols), false);
+	result->relid = RangeVarGetRelid(insert->relation, AccessShareLock, false);
+	result->desc = CreateTemplateTupleDesc(list_length(insert->cols), false);
 
-	foreach(lc, cols)
+	foreach(lc, insert->cols)
 	{
 		ResTarget *rt;
 
@@ -147,6 +146,41 @@ StorePreparedStreamInsert(const char *name, RangeVar *stream, List *cols)
 	}
 
 	return result;
+}
+
+/*
+ * SetExtendedStreamInsert
+ *
+ * Set a stream insert that was added via PARSE for later reading by BIND/EXECUTE
+ */
+void
+SetExtendedStreamInsert(Node *ins)
+{
+	Assert(IsA(ins, InsertStmt));
+
+	extended_stream_insert = (InsertStmt *) ins;
+}
+
+/*
+ * GetExtendedStreamInsert
+ *
+ * Retrieve the stream insert that was added via PARSE
+ */
+InsertStmt *
+GetExtendedStreamInsert(void)
+{
+	Assert(IsA(extended_stream_insert, InsertStmt));
+
+	return (InsertStmt *) extended_stream_insert;
+}
+
+/*
+ * HaveExtendedStreamInserts
+ */
+bool
+HaveExtendedStreamInsert(void)
+{
+	return (extended_stream_insert != NULL);
 }
 
 /*
@@ -416,7 +450,7 @@ InsertIntoStream(InsertStmt *ins, List *params)
  * COPY events to a stream from an input source
  */
 uint64
-CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, TimestampTz *timer)
+CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples)
 {
 	Bitmapset *targets;
 	uint64 count = 0;
@@ -426,8 +460,6 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, 
 	int num_batches = 0;
 	Size size = 0;
 	bool snap = ActiveSnapshotSet();
-
-	Assert(timer != NULL);
 
 	targets = GetLocalStreamReaders(RelationGetRelid(stream));
 
@@ -465,15 +497,6 @@ CopyIntoStream(Relation stream, TupleDesc desc, HeapTuple *tuples, int ntuples, 
 
 		count++;
 		size += tuple->heaptup->t_len + HEAPTUPLESIZE;
-
-		if (stream_insertion_commit_interval > 0 &&
-				TimestampDifferenceExceeds(*timer, GetCurrentTimestamp(), stream_insertion_commit_interval * 1000))
-		{
-			 CommitTransactionCommand();
-			 *timer = GetCurrentTimestamp();
-
-			 StartTransactionCommand();
-		}
 	}
 
 	stream_stat_report(RelationGetRelid(stream), count, 1, size);

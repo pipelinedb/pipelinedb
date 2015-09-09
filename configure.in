@@ -37,6 +37,8 @@ PGAC_ARG_REQ(with, extra-version, [STRING], [append STRING to version],
              [PG_VERSION="$PACKAGE_VERSION$withval"],
              [PG_VERSION="$PACKAGE_VERSION"])
 AC_DEFINE_UNQUOTED(PG_VERSION, "$PG_VERSION", [PostgreSQL version as a string])
+AC_DEFINE_UNQUOTED(PIPELINE_VERSION, "$PIPELINE_VERSION", [PipelineDB version as a string])
+AC_DEFINE_UNQUOTED(PIPELINE_REVISION, "$PIPELINE_REVISION", [PipelineDB source revision of this build])
 
 AC_CANONICAL_HOST
 
@@ -149,12 +151,12 @@ AC_SUBST(enable_nls)
 AC_SUBST(WANTED_LANGUAGES)
 
 #
-# Default port number (--with-pgport), default 6543
+# Default port number (--with-pgport), default 5432
 #
 AC_MSG_CHECKING([for default port number])
-PGAC_ARG_REQ(with, pgport, [PORTNUM], [set default port number [6543]],
+PGAC_ARG_REQ(with, pgport, [PORTNUM], [set default port number [5432]],
              [default_port=$withval],
-             [default_port=6543])
+             [default_port=5432])
 AC_MSG_RESULT([$default_port])
 # Need both of these because some places want an integer and some a string
 AC_DEFINE_UNQUOTED(DEF_PGPORT, ${default_port},
@@ -2014,6 +2016,9 @@ fi
 AC_DEFINE_UNQUOTED(PG_VERSION_STR,
                    ["PostgreSQL $PG_VERSION on $host, compiled by $cc_string, `expr $ac_cv_sizeof_void_p \* 8`-bit"],
                    [A string containing the version number, platform, and C compiler])
+AC_DEFINE_UNQUOTED(PIPELINE_VERSION_STR,
+                   ["PipelineDB $PIPELINE_VERSION at revision $PIPELINE_REVISION on $host, compiled by $cc_string, `expr $ac_cv_sizeof_void_p \* 8`-bit"],
+                   [A string containing the version number, platform, and C compiler])
 
 # Supply a numeric version string for use by 3rd party add-ons
 # awk -F is a regex on some platforms, and not on others, so make "." a tab
@@ -2093,7 +2098,3 @@ AC_OUTPUT
 # check
 AC_HAVE_LIBRARY(check, [],
                [AC_MSG_ERROR([check library not found (http://check.sourceforge.net/web/install.html)])])
-
-# curl
-AC_HAVE_LIBRARY(curl, [],
-               [AC_MSG_ERROR([curl library not found (http://curl.haxx.se/docs/install.html)])])

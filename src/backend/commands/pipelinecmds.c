@@ -42,11 +42,9 @@
 #include "optimizer/tlist.h"
 #include "parser/analyze.h"
 #include "parser/parse_coerce.h"
-#include "pipeline/cqanalyze.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/cont_analyze.h"
 #include "pipeline/cont_plan.h"
-#include "pipeline/cqwindow.h"
 #include "pipeline/miscutils.h"
 #include "pipeline/stream.h"
 #include "pipeline/tuplebuf.h"
@@ -140,12 +138,17 @@ add_default_fillfactor(List *options)
  * 32-bit value
  */
 static Node *
-make_hashed_index_expr(Query *query, TupleDesc desc)
+make_hashed_index_expr(RangeVar *cv, Query *query, TupleDesc desc)
 {
 	ListCell *lc;
 	List *args = NIL;
 	FuncExpr *hash;
+	ColumnRef *t_col = GetWindowTimeColumn(cv);
 	Oid hashoid = HASH_GROUP_OID;
+	char *t_colname = NULL;
+
+	if (t_col)
+		t_colname = NameListToString(t_col->fields);
 
 	foreach(lc, query->groupClause)
 	{
@@ -155,6 +158,9 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
 		Var *var;
 		bool found = false;
 		int i;
+
+		/* We must have a non-junk target entry */
+		Assert(!te->resjunk);
 
 		/*
 		 * Instead of using the expression itself as an argument, we use a variable that
@@ -179,7 +185,14 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
 		var = makeVar(1, attr->attnum, attr->atttypid, attr->atttypmod,
 				attr->attcollation, 0);
 
-		args = lappend(args, var);
+		/*
+		 * Always insert time column in the beginning so it is correctly picked for locality-sensitive
+		 * hashing by ls_hash_group.
+		 */
+		if (t_colname && pg_strcasecmp(t_colname, te->resname) == 0)
+			args = list_concat(list_make1(var), args);
+		else
+			args = lappend(args, var);
 	}
 
 	/*
@@ -192,7 +205,7 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
 }
 
 /*
- * create_indices_on_mat_relation
+ * create_index_on_mat_relation
  *
  * If feasible, create an index on the new materialization table to make
  * combine retrievals on it as efficient as possible. Sometimes this may be
@@ -200,20 +213,18 @@ make_hashed_index_expr(Query *query, TupleDesc desc)
  * such as single-column GROUP BYs, it's straightforward.
  */
 static Oid
-create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
-		SelectStmt *workerstmt, SelectStmt *viewstmt)
+create_index_on_mat_relation(RangeVar *cv, Oid matrelid, RangeVar *matrel, Query *query, bool is_sw)
 {
 	IndexStmt *index;
 	IndexElem *indexcol;
 	Node *expr = NULL;
-	bool sliding = IsSlidingWindowSelectStmt(workerstmt);
 	char *indexcolname = NULL;
 	Oid index_oid;
 
-	if (query->groupClause == NIL && !sliding)
+	if (query->groupClause == NIL && !is_sw)
 		return InvalidOid;
 
-	if (query->groupClause == NIL && sliding)
+	if (query->groupClause == NIL && is_sw)
 	{
 		/*
 		 * We still want an index on the timestamp column for sliding window
@@ -221,23 +232,20 @@ create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
 		 * used in queries against sliding window CVs.
 		 */
 		ColumnRef *col;
-		Node *node = NULL;
 		char *namespace;
 
-		node = (Node *) GetColumnRefInSlidingWindowExpr(viewstmt);
+		col = GetSWTimeColumn(cv);
 
-		if (!IsA(node, ColumnRef))
-			elog(ERROR, "unexpected sliding window expression type found: %d", nodeTag(node));
+		if (!IsA(col, ColumnRef))
+			elog(ERROR, "unexpected sliding window expression type found: %d", nodeTag(col));
 
-		col = (ColumnRef *) node;
 		DeconstructQualifiedName(col->fields, &namespace, &indexcolname);
 	}
 	else
 	{
-		Relation matrel = heap_open(matreloid, NoLock);
-
-		expr = make_hashed_index_expr(query, RelationGetDescr(matrel));
-		heap_close(matrel, NoLock);
+		Relation rel = heap_open(matrelid, NoLock);
+		expr = make_hashed_index_expr(cv, query, RelationGetDescr(rel));
+		heap_close(rel, NoLock);
 	}
 
 	indexcol = makeNode(IndexElem);
@@ -251,7 +259,7 @@ create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
 
 	index = makeNode(IndexStmt);
 	index->idxname = NULL;
-	index->relation = matrelname;
+	index->relation = matrel;
 	index->accessMethod = CQ_MATREL_INDEX_TYPE;
 	index->tableSpace = NULL;
 	index->indexParams = list_make1(indexcol);
@@ -262,60 +270,15 @@ create_index_on_mat_relation(Oid matreloid, RangeVar *matrelname, Query *query,
 	index->initdeferred = false;
 	index->concurrent = false;
 
-	index_oid = DefineIndex(matreloid, index, InvalidOid, false, false, false, false);
+	index_oid = DefineIndex(matrelid, index, InvalidOid, false, false, false, false);
 	CommandCounterIncrement();
 
 	return index_oid;
 }
 
-static char *
-get_select_query_sql(RangeVar *view, const char *sql)
-{
-	int trimmedlen;
-	char *trimmed;
-	int pos;
-	StringInfo str = makeStringInfo();
-
-	if (view->catalogname)
-	{
-		appendStringInfoString(str, view->catalogname);
-		appendStringInfoChar(str, '.');
-	}
-
-	if (view->schemaname)
-	{
-		appendStringInfoString(str, view->schemaname);
-		appendStringInfoChar(str, '.');
-	}
-
-	appendStringInfoString(str, view->relname);
-
-	/*
-	 * Technically the CV could be named "create" or "continuous",
-	 * so it's not enough to simply advance to the CV name. We need
-	 * to skip past the keywords first. Note that these find() calls
-	 * should never return -1 for this string since it's already been
-	 * validated.
-	 */
-	pos = skip_token(sql, "CREATE", 0);
-	pos = skip_token(sql, "CONTINUOUS", pos);
-	pos = skip_token(sql, "VIEW", pos);
-	pos = skip_token(sql, str->data, pos);
-	pos = skip_token(sql, "AS", pos);
-
-	trimmedlen = strlen(sql) - pos + 1;
-	trimmed = palloc(trimmedlen);
-
-	memcpy(trimmed, &sql[pos], trimmedlen);
-
-	pfree(str->data);
-	pfree(str);
-
-	return trimmed;
-}
-
 static void
-record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *from)
+record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid,
+		Oid indexoid, SelectStmt *stmt, Query *query)
 {
 	ObjectAddress referenced;
 	ObjectAddress dependent;
@@ -371,7 +334,7 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 		recordDependencyOn(&dependent, &referenced, DEPENDENCY_INTERNAL);
 	}
 
-	collect_rels_and_streams((Node *) from, &cxt);
+	collect_rels_and_streams((Node *) stmt->fromClause, &cxt);
 
 	/*
 	 * Record a dependency between any strongly typed streams and a pipeline_query object,
@@ -418,6 +381,8 @@ record_dependencies(Oid cvoid, Oid matreloid, Oid viewoid, Oid indexoid, List *f
 			recordDependencyOn(&dependent, &referenced, DEPENDENCY_NORMAL);
 		}
 	}
+
+	recordDependencyOnExpr(&dependent, (Node *) query, NIL, DEPENDENCY_NORMAL);
 }
 
 /*
@@ -432,25 +397,31 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	CreateStmt *create_stmt;
 	ViewStmt *view_stmt;
 	Query *query;
-	RangeVar *mat_relation;
+	RangeVar *matrel;
 	RangeVar *view;
 	List *tableElts = NIL;
 	List *tlist;
 	ListCell *col;
 	Oid matreloid;
 	Oid viewoid;
-	Oid cvoid;
+	Oid pqoid;
 	Oid indexoid;
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	SelectStmt *workerselect;
 	SelectStmt *viewselect;
-	CQAnalyzeContext context;
+	SelectStmt *cont_select;
+	char *cont_select_sql;
+	Query *cont_query;
 	bool saveAllowSystemTableMods;
 	Relation pipeline_query;
+	ContAnalyzeContext *context;
+	ContinuousView *cv;
+	Oid cvid;
+
+	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
 	view = stmt->into->rel;
-	mat_relation = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
 
 	/*
 	 * Check if CV already exists?
@@ -459,6 +430,8 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_CONTINUOUS_VIEW),
 				errmsg("continuous view \"%s\" already exists", view->relname)));
+
+	matrel = makeRangeVar(view->schemaname, GetUniqueMatRelName(view->relname, view->schemaname), -1);
 
 	/*
 	 * allowSystemTableMods is a global flag that, when true, allows certain column types
@@ -471,17 +444,23 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
 
 	CreateInferredStreams((SelectStmt *) stmt->query);
+	MakeSelectsContinuous((SelectStmt *) stmt->query);
 	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
+
+	/* Deparse query so that analyzer always see the same canonicalized SelectStmt */
+	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
+	cont_select_sql = deparse_query_def(cont_query);
+	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
+	context = MakeContAnalyzeContext(NULL, cont_select, Worker);
 
 	/*
 	 * Get the transformed SelectStmt used by CQ workers. We do this
 	 * because the targetList of this SelectStmt contains all columns
-	 * that need to be created in the underlying materialization table.
+	 * that need to be created in the underlying matrel.
 	 */
-	workerselect = GetSelectStmtForCQWorker(copyObject(stmt->query), &viewselect);
-	InitializeCQAnalyzeContext(workerselect, NULL, &context);
+	workerselect = TransformSelectStmtForContProcess(matrel, cont_select, &viewselect, Worker);
 
-	query = parse_analyze(copyObject(workerselect), querystring, 0, 0);
+	query = parse_analyze(copyObject(workerselect), cont_select_sql, 0, 0);
 	tlist = query->targetList;
 
 	/*
@@ -499,7 +478,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		TargetEntry *tle = (TargetEntry *) lfirst(col);
 		ColumnDef   *coldef;
 		char		*colname;
-		Oid			hiddentype;
 		Oid type;
 
 		/* Ignore junk columns from the targetlist */
@@ -518,19 +496,6 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 			type = BOOLOID;
 		coldef = make_cv_columndef(colname, type, exprTypmod((Node *) tle->expr));
 		tableElts = lappend(tableElts, coldef);
-
-		/*
-		 * If this column requires state to support incremental transitions, create it. Note: since this
-		 * column isn't in the target list, it won't be visible when selecting from this CV,
-		 * which will have an overlay view that only exposes target list columns.
-		 */
-		hiddentype = GetCombineStateColumnType(tle->expr);
-		if (OidIsValid(hiddentype))
-		{
-			char *hiddenname = GetUniqueInternalColname(&context);
-			ColumnDef *hidden = make_cv_columndef(hiddenname, hiddentype, DEFAULT_TYPEMOD);
-			tableElts = lappend(tableElts, hidden);
-		}
 	}
 
 	if (!has_fillfactor(stmt->into->options))
@@ -540,7 +505,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * Create the actual underlying materialzation relation.
 	 */
 	create_stmt = makeNode(CreateStmt);
-	create_stmt->relation = mat_relation;
+	create_stmt->relation = matrel;
 	create_stmt->tableElts = tableElts;
 	create_stmt->tablespacename = stmt->into->tableSpaceName;
 	create_stmt->oncommit = stmt->into->onCommit;
@@ -560,27 +525,38 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/*
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
+	 *
+	 * pqoid is the oid of the row in pipeline_query,
+	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	cvoid = DefineContinuousView(view, get_select_query_sql(view, querystring),
-			mat_relation, IsSlidingWindowSelectStmt(viewselect), !SelectsFromStreamOnly(workerselect));
+	pqoid = DefineContinuousView(view, cont_query, matrel, context->is_sw, &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
-	viewselect->fromClause = list_make1(mat_relation);
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
 
-	viewoid = DefineView(view_stmt, querystring);
+	viewoid = DefineView(view_stmt, cont_select_sql);
 	CommandCounterIncrement();
 
 	/* Create group look up index and record dependencies */
-	indexoid = create_index_on_mat_relation(matreloid, mat_relation, query, workerselect, viewselect);
-	record_dependencies(cvoid, matreloid, viewoid, indexoid, workerselect->fromClause);
+	indexoid = create_index_on_mat_relation(view, matreloid, matrel, query, context->is_sw);
+	record_dependencies(pqoid, matreloid, viewoid, indexoid, workerselect, query);
+
+	/*
+	 * Run the combiner queries through the planner, so that if something goes wrong we know now
+	 * rather than finding out when the CV actually activates.
+	 */
+	cv = GetContinuousView(cvid);
+	GetContPlan(cv, Combiner);
+	GetCombinerLookupPlan(cv);
 
 	allowSystemTableMods = saveAllowSystemTableMods;
 
 	heap_close(pipeline_query, NoLock);
+
+	cq_stat_report_create_drop_cv(true);
 }
 
 /*
@@ -716,13 +692,14 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 	ExplainState es;
 	ListCell *lc;
 	TupleDesc desc;
-	ContQueryProc cq_proc;
 	ContinuousView *view;
 	HeapTuple tuple = GetPipelineQueryTuple(stmt->view);
 	Oid cq_id;
 	Form_pipeline_query row;
 	PlannedStmt *plan;
 	Tuplestorestate *tupstore;
+	TuplestoreScan *scan;
+	Relation rel;
 
 	if (!HeapTupleIsValid(tuple))
 		ereport(ERROR,
@@ -768,19 +745,16 @@ ExecExplainContViewStmt(ExplainContViewStmt *stmt, const char *queryString,
 
 	view = GetContinuousView(cq_id);
 
-	MyContQueryProc = &cq_proc;
-	MyContQueryProc->type = Worker;
-	explain_cont_plan("Worker Plan", GetContPlan(view), &es, desc, dest);
+	explain_cont_plan("Worker Plan", GetContPlan(view, Worker), &es, desc, dest);
 
-	MyContQueryProc = &cq_proc;
-	MyContQueryProc->type = Combiner;
-
-	plan = GetContPlan(view);
+	plan = GetContPlan(view, Combiner);
 	tupstore = tuplestore_begin_heap(false, false, work_mem);
-	SetCombinerPlanTuplestorestate(plan, tupstore);
+	scan = SetCombinerPlanTuplestorestate(plan, tupstore);
+	rel = relation_openrv(view->matrel, NoLock);
+	scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));
+	relation_close(rel, NoLock);
 	explain_cont_plan("Combiner Plan", plan, &es, desc, dest);
 	tuplestore_end(tupstore);
 
 	explain_cont_plan("Combiner Lookup Plan", GetCombinerLookupPlan(view), &es, desc, dest);
-	MyContQueryProc = NULL;
 }

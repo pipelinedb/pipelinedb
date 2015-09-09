@@ -2,8 +2,14 @@ CREATE CONTINUOUS VIEW test_hll_agg0 AS SELECT k::text, hll_agg(x::integer) FROM
 CREATE CONTINUOUS VIEW test_hll_agg1 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(y::text)) FROM test_hll_agg_stream GROUP BY k;
 CREATE CONTINUOUS VIEW test_hll_agg2 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(substring(y::text, 1, 1))) FROM test_hll_agg_stream GROUP BY k;
 CREATE CONTINUOUS VIEW test_sw_hll_agg0 AS SELECT k::text, hll_print(hll_agg(x::integer)) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour') GROUP BY k;
+NOTICE:  window width is "1 hour" with a step size of "1 second"
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE CONTINUOUS VIEW test_sw_hll_agg1 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(y::text)) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour')  GROUP BY k;
+NOTICE:  window width is "1 hour" with a step size of "1 second"
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE CONTINUOUS VIEW test_sw_hll_agg2 AS SELECT k::text, hll_cardinality(hll_agg(x::integer)) + hll_cardinality(hll_agg(substring(y::text, 1, 1))) FROM test_hll_agg_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 hour')  GROUP BY k;
+NOTICE:  window width is "1 hour" with a step size of "1 second"
+HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('0', 0, '0');
 INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('1', 1, '100');
 INSERT INTO test_hll_agg_stream (k, x, y) VALUES ('2', 2, '200');

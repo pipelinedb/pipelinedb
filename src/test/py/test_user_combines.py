@@ -145,48 +145,6 @@ def test_hypothetical_set_aggs(pipeline, clean_db):
     for tr, cr in zip(table_result, cv_result):
         assert tr == cr
 
-def test_nested_expressions(pipeline, clean_db):
-    """
-    Verify that combines work properly on arbitrarily nested expressions
-    """
-    q = """
-    SELECT x::integer %% 10 AS k,
-    (rank(256) WITHIN GROUP (ORDER BY x) + dense_rank(256) WITHIN GROUP (ORDER BY x)) *
-        (avg(x + y::float8) - (sum(x) * avg(y))) AS whoa
-    FROM stream GROUP BY k
-    """
-    desc = ('x', 'y')
-    pipeline.create_cv('test_nested', q)
-    pipeline.create_table('test_nested_t', x='integer', y='float8')
-
-    rows = []
-    for n in range(10000):
-        row = (random.randint(0, 1000), random.random())
-        rows.append(row)
-
-    pipeline.insert('stream', desc, rows)
-    pipeline.insert('test_nested_t', desc, rows)
-
-    # Note that the CQ will use the HLL variant of dense_rank,
-    # so use hll_dense_rank on the table too
-    tq = """
-    SELECT
-    (rank(256) WITHIN GROUP (ORDER BY x) + hll_dense_rank(256) WITHIN GROUP (ORDER BY x)) *
-        (avg(x + y::float8) - (sum(x) * avg(y))) AS whoa
-    FROM test_nested_t
-    """
-    table_result = list(pipeline.execute(tq))
-
-    cq = """
-    SELECT combine(whoa) FROM test_nested
-    """
-    cv_result = list(pipeline.execute(cq))
-
-    assert len(table_result) == len(cv_result)
-
-    for tr, cr in zip(table_result, cv_result):
-        assert abs(tr[0] - cr[0]) < 0.0001
-
 def test_hll_distinct(pipeline, clean_db):
     """
     Verify that combines work on HLL COUNT DISTINCT queries

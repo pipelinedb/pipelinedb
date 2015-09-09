@@ -11,6 +11,8 @@ COPY scripts /scripts/
 
 RUN /scripts/install_pipeline.sh
 
-EXPOSE 6543
+RUN /scripts/install_extras.sh
+
+EXPOSE 5432
 
 CMD ["/scripts/startpipeline"]

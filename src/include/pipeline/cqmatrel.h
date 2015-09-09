@@ -12,12 +12,12 @@
 #ifndef CQMATVIEW_H
 #define CQMATVIEW_H
 
-char *GetUniqueMatRelName(char *cvname, char* nspname);
+extern char *GetUniqueMatRelName(char *cvname, char* nspname);
 
-ResultRelInfo *CQMatViewOpen(Relation matrel);
-void CQMatViewClose(ResultRelInfo *rinfo);
-void ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot, EState *estate);
-void ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
-void ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
+extern ResultRelInfo *CQMatRelOpen(Relation matrel);
+extern void CQMatRelClose(ResultRelInfo *rinfo);
+extern void ExecInsertCQMatRelIndexTuples(ResultRelInfo *indstate, TupleTableSlot *slot, EState *estate);
+extern void ExecCQMatRelUpdate(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
+extern void ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate);
 
 #endif

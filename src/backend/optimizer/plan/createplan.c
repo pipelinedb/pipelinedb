@@ -43,6 +43,7 @@
 #include "parser/parse_clause.h"
 #include "parser/parsetree.h"
 #include "utils/lsyscache.h"
+#include "utils/rel.h"
 
 
 static Plan *create_plan_recurse(PlannerInfo *root, Path *best_path);
@@ -295,19 +296,23 @@ static Plan *
 create_tuplestorescan_plan(PlannerInfo *root, Path *best_path)
 {
 	TuplestoreScan *scan = makeNode(TuplestoreScan);
-	RelOptInfo *rel = best_path->parent;
-	List	   *tlist;
+	List	   *tlist = NIL;
 	Plan	   *plan = &scan->scan.plan;
+	ContinuousView *cv = GetContinuousView(root->parse->cq_id);
+	Relation matrel = heap_openrv(cv->matrel, NoLock);
+	TupleDesc desc = RelationGetDescr(matrel);
+	AttrNumber attrno;
 
-	if (use_physical_tlist(root, rel))
+	for (attrno = 1; attrno <= desc->natts; attrno++)
 	{
-		tlist = build_physical_tlist(root, rel);
-		/* if fail because of dropped cols, use regular method */
-		if (tlist == NIL)
-			tlist = build_path_tlist(root, best_path);
+		Form_pg_attribute att_tup = desc->attrs[attrno - 1];
+		Var *var = makeVar(1, attrno, att_tup->atttypid, att_tup->atttypmod, att_tup->attcollation, 0);
+
+		tlist = lappend(tlist,
+						makeTargetEntry((Expr *) var, attrno, NULL, false));
 	}
-	else
-		tlist = build_path_tlist(root, best_path);
+
+	heap_close(matrel, NoLock);
 
 	plan->targetlist = tlist;
 

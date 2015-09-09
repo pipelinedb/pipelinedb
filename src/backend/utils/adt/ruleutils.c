@@ -43,13 +43,14 @@
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/tlist.h"
+#include "parser/analyze.h"
 #include "parser/keywords.h"
 #include "parser/parse_agg.h"
 #include "parser/parse_func.h"
 #include "parser/parse_oper.h"
 #include "parser/parser.h"
 #include "parser/parsetree.h"
-#include "pipeline/cqanalyze.h"
+#include "pipeline/cont_analyze.h"
 #include "rewrite/rewriteHandler.h"
 #include "rewrite/rewriteManip.h"
 #include "rewrite/rewriteSupport.h"
@@ -57,6 +58,7 @@
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
+#include "utils/pipelinefuncs.h"
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
@@ -105,7 +107,6 @@ typedef struct
 	int			wrapColumn;		/* max line length, or -1 for no limit */
 	int			indentLevel;	/* current indent level for prettyprint */
 	bool		varprefix;		/* TRUE to print prefixes on Vars */
-	bool		iscombine; 		/* TRUE if a combine aggregate is currently being processed */
 } deparse_context;
 
 /*
@@ -423,6 +424,51 @@ static char *flatten_reloptions(Oid relid);
 #define only_marker(rte)  ((rte)->inh ? "" : "ONLY ")
 
 
+/*
+ * deparse_cont_query_def
+ */
+char *
+deparse_query_def(Query *query)
+{
+	StringInfo buf = makeStringInfo();
+	deparse_context context;
+	deparse_namespace dpns;
+	char *sql;
+
+	/* Guard against excessively long or deeply-nested queries */
+	CHECK_FOR_INTERRUPTS();
+	check_stack_depth();
+
+	/*
+	 * Before we begin to examine the query, acquire locks on referenced
+	 * relations, and fix up deleted columns in JOIN RTEs.  This ensures
+	 * consistent results.  Note we assume it's OK to scribble on the passed
+	 * querytree!
+	 *
+	 * We are only deparsing the query (we are not about to execute it), so we
+	 * only need AccessShareLock on the relations it mentions.
+	 */
+	AcquireRewriteLocks(query, false, false);
+
+	context.buf = buf;
+	context.namespaces = list_make1(&dpns);
+	context.windowClause = NIL;
+	context.windowTList = NIL;
+	context.varprefix = list_length(query->rtable) != 1;
+	context.prettyFlags = PRETTYFLAG_INDENT;
+	context.wrapColumn = WRAP_COLUMN_DEFAULT;
+	context.indentLevel = 0;
+
+	set_deparse_for_query(&dpns, query, NIL);
+	get_select_query_def(query, &context, NULL);
+
+	sql = buf->data;
+
+	pfree(buf);
+
+	return sql;
+}
+
 /* ----------
  * get_ruledef			- Do it all and return a text
  *				  that could be used as a statement
@@ -658,12 +704,34 @@ pg_get_viewdef_worker(Oid viewoid, int prettyFlags, int wrapColumn)
 		appendStringInfoString(&buf, "Not a view");
 	else
 	{
-		/*
-		 * Get the rule's definition and put it into executor's memory
-		 */
-		ruletup = SPI_tuptable->vals[0];
-		rulettc = SPI_tuptable->tupdesc;
-		make_viewdef(&buf, ruletup, rulettc, prettyFlags, wrapColumn);
+		Relation rel = heap_open(viewoid, NoLock);
+		Oid nsp = RelationGetNamespace(rel);
+		RangeVar *rv = makeRangeVar(get_namespace_name(nsp), RelationGetRelationName(rel), -1);
+
+		heap_close(rel, NoLock);
+		if (IsAContinuousView(rv) && wrapColumn != DISPLAY_OVERLAY_VIEW) /* hack to signal this function call to return regular viewdef */
+		{
+			/*
+			 * When a user is describing a continuous view, we show them the continuous
+			 * view's definition rather than the overlay view because it's more intuitive.
+			 */
+			Query *q = GetContQuery(rv);
+
+			get_query_def(q, &buf, NIL, NULL, prettyFlags, wrapColumn, 0);
+			appendStringInfoChar(&buf, ';');
+		}
+		else
+		{
+			if (wrapColumn == DISPLAY_OVERLAY_VIEW)
+				wrapColumn = 0;
+
+			/*
+			 * Get the rule's definition and put it into executor's memory
+			 */
+			ruletup = SPI_tuptable->vals[0];
+			rulettc = SPI_tuptable->tupdesc;
+			make_viewdef(&buf, ruletup, rulettc, prettyFlags, wrapColumn);
+		}
 	}
 
 	/*
@@ -873,7 +941,6 @@ pg_get_triggerdef_worker(Oid trigid, bool pretty)
 		context.prettyFlags = pretty ? PRETTYFLAG_PAREN | PRETTYFLAG_INDENT : PRETTYFLAG_INDENT;
 		context.wrapColumn = WRAP_COLUMN_DEFAULT;
 		context.indentLevel = PRETTYINDENT_STD;
-		context.iscombine = false;
 
 		get_rule_expr(qual, &context, false);
 
@@ -2482,7 +2549,6 @@ deparse_expression_pretty(Node *expr, List *dpcontext,
 	context.prettyFlags = prettyFlags;
 	context.wrapColumn = WRAP_COLUMN_DEFAULT;
 	context.indentLevel = startIndent;
-	context.iscombine = false;
 
 	get_rule_expr(expr, &context, showimplicit);
 
@@ -4080,7 +4146,6 @@ make_ruledef(StringInfo buf, HeapTuple ruletup, TupleDesc rulettc,
 		context.prettyFlags = prettyFlags;
 		context.wrapColumn = WRAP_COLUMN_DEFAULT;
 		context.indentLevel = PRETTYINDENT_STD;
-		context.iscombine = false;
 
 		set_deparse_for_query(&dpns, query, NIL);
 
@@ -4232,7 +4297,6 @@ get_query_def(Query *query, StringInfo buf, List *parentnamespace,
 	context.prettyFlags = prettyFlags;
 	context.wrapColumn = wrapColumn;
 	context.indentLevel = startIndent;
-	context.iscombine = false;
 
 	set_deparse_for_query(&dpns, query, parentnamespace);
 
@@ -5664,7 +5728,7 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 		Assert(refname == NULL);
 	}
 
-	if (attnum == InvalidAttrNumber || context->iscombine)
+	if (attnum == InvalidAttrNumber)
 		attname = NULL;
 	else if (attnum > 0)
 	{
@@ -5684,10 +5748,16 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 		appendStringInfoString(buf, quote_identifier(refname));
 		appendStringInfoChar(buf, '.');
 	}
-	if (context->iscombine)
-		appendStringInfo(buf, "%d", attnum);
-	else if (attname)
+	if (attname)
+	{
 		appendStringInfoString(buf, quote_identifier(attname));
+		/* Always print explicit type cast for inferred stream columns */
+		if (is_inferred_stream_rte(rte))
+			appendStringInfo(buf, "::%s",
+					format_type_with_typemod(var->vartype,
+							var->vartypmod == InvalidOid ? -1 : var->vartypmod));
+
+	}
 	else
 	{
 		appendStringInfoChar(buf, '*');
@@ -7732,10 +7802,9 @@ get_agg_expr(Aggref *aggref, deparse_context *context)
 	/* Extract the argument types as seen by the parser */
 	nargs = get_aggregate_argtypes(aggref, argtypes);
 
-	if (AGGKIND_IS_USER_COMBINE(aggref->aggkind))
+	if (AGGKIND_IS_COMBINE(aggref->aggkind))
 	{
-		funcname = USER_COMBINE;
-		context->iscombine = true;
+		funcname = MATREL_COMBINE;
 		use_variadic = false;
 	}
 	else
@@ -7764,7 +7833,7 @@ get_agg_expr(Aggref *aggref, deparse_context *context)
 	else
 	{
 		/* aggstar can be set only in zero-argument aggregates */
-		if (!context->iscombine && aggref->aggstar)
+		if (aggref->aggstar)
 			appendStringInfoChar(buf, '*');
 		else
 		{
@@ -7801,7 +7870,6 @@ get_agg_expr(Aggref *aggref, deparse_context *context)
 		get_rule_expr((Node *) aggref->aggfilter, context, false);
 	}
 
-	context->iscombine = false;
 	appendStringInfoChar(buf, ')');
 }
 
@@ -7835,10 +7903,9 @@ get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context)
 		nargs++;
 	}
 
-	if (AGGKIND_IS_USER_COMBINE(wfunc->winaggkind))
+	if (AGGKIND_IS_COMBINE(wfunc->winaggkind))
 	{
-		funcname = USER_COMBINE;
-		context->iscombine = true;
+		funcname = MATREL_COMBINE;
 	}
 	else
 	{
@@ -7850,7 +7917,7 @@ get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context)
 	appendStringInfo(buf, "%s(", funcname);
 
 	/* winstar can be set only in zero-argument aggregates */
-	if (!context->iscombine && wfunc->winstar)
+	if (wfunc->winstar)
 		appendStringInfoChar(buf, '*');
 	else
 		get_rule_expr((Node *) wfunc->args, context, true);
@@ -7888,8 +7955,6 @@ get_windowfunc_expr(WindowFunc *wfunc, deparse_context *context)
 		 */
 		appendStringInfoString(buf, "(?)");
 	}
-
-	context->iscombine = false;
 }
 
 /* ----------
@@ -8369,24 +8434,12 @@ get_from_clause_item(Node *jtnode, Query *query, deparse_context *context)
 		switch (rte->rtekind)
 		{
 			case RTE_RELATION:
+			case RTE_STREAM:
 				/* Normal relation RTE */
 				appendStringInfo(buf, "%s%s",
 								 only_marker(rte),
 								 generate_relation_name(rte->relid,
 														context->namespaces));
-				break;
-			case RTE_STREAM:
-				/* Stream RTE */
-				{
-					Oid namespace = get_rel_namespace(rte->relid);
-					char *qualified_name;
-
-					if (namespace != InvalidOid)
-						qualified_name = quote_qualified_identifier(get_namespace_name(namespace), rte->relname);
-					else
-						qualified_name = rte->relname;
-					appendStringInfo(buf, "%s", qualified_name);
-				}
 				break;
 			case RTE_SUBQUERY:
 				/* Subquery RTE */
@@ -9334,4 +9387,70 @@ flatten_reloptions(Oid relid)
 	ReleaseSysCache(tuple);
 
 	return result;
+}
+
+/*
+ * pipeline_get_overlay_viewdef
+ *
+ * Returns all view definitions for all continuous views
+ */
+Datum
+pipeline_get_overlay_viewdef(PG_FUNCTION_ARGS)
+{
+	/* qualified name continuous view name */
+	text *name = PG_GETARG_TEXT_P(0);
+	RangeVar *rv;
+	Oid	 viewoid;
+
+	rv = makeRangeVarFromNameList(textToQualifiedNameList(name));
+	if (!IsAContinuousView(rv))
+		elog(ERROR, "%s is not a continuous view", TextDatumGetCString(name));
+
+	viewoid = RangeVarGetRelid(rv, NoLock, false);
+
+	PG_RETURN_TEXT_P(CStringGetTextDatum(pg_get_viewdef_worker(viewoid, PRETTYFLAG_INDENT, DISPLAY_OVERLAY_VIEW)));
+}
+
+/*
+ * pipeline_get_worker_querydef
+ */
+Datum
+pipeline_get_worker_querydef(PG_FUNCTION_ARGS)
+{
+	/* qualified name continuous view name */
+	text *name = PG_GETARG_TEXT_P(0);
+	RangeVar *rv;
+	Query *query;
+	char *sql;
+
+	rv = makeRangeVarFromNameList(textToQualifiedNameList(name));
+	if (!IsAContinuousView(rv))
+		elog(ERROR, "%s is not a continuous view", TextDatumGetCString(name));
+
+	query = GetContWorkerQuery(rv);
+	sql = deparse_query_def(query);
+
+	PG_RETURN_TEXT_P(CStringGetTextDatum(sql));
+}
+
+/*
+ * pipeline_get_combiner_querydef
+ */
+Datum
+pipeline_get_combiner_querydef(PG_FUNCTION_ARGS)
+{
+	/* qualified name continuous view name */
+	text *name = PG_GETARG_TEXT_P(0);
+	RangeVar *rv;
+	Query *query;
+	char *sql;
+
+	rv = makeRangeVarFromNameList(textToQualifiedNameList(name));
+	if (!IsAContinuousView(rv))
+		elog(ERROR, "%s is not a continuous view", TextDatumGetCString(name));
+
+	query = GetContCombinerQuery(rv);
+	sql = deparse_query_def(query);
+
+	PG_RETURN_TEXT_P(CStringGetTextDatum(sql));
 }

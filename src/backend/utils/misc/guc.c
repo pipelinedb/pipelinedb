@@ -2657,17 +2657,6 @@ static struct config_int ConfigureNamesInt[] =
 		NULL, NULL, NULL
 	},
 
-	{
-		{"stream_insertion_commit_interval", PGC_BACKEND, QUERY_TUNING_OTHER,
-		 gettext_noop("Sets the default amount of time to periodically commit from a stream insertion process."),
-		 gettext_noop("A lower number will minimize the amount of time the autovacuumer can be blocked from freeing unused space by long-running stream insertion processes. Additionally, continuous views created during the insertion process will begin accepting writes by the inserter sooner."),
-		 GUC_UNIT_S
-		},
-		&stream_insertion_commit_interval,
-		1, -1, INT_MAX,
-		NULL, NULL, NULL
-	},
-
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, 0, 0, 0, NULL, NULL, NULL

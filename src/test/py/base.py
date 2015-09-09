@@ -106,7 +106,7 @@ class PipelineDB(object):
         def run():
           while True:
             line = self.proc.stderr.readline()
-            if line == '' and self.proc.poll() != None:
+            if line == '' and self.proc and self.proc.poll() != None:
               return
             sys.stderr.write(line)
         threading.Thread(target=run).start()

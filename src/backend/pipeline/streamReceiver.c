@@ -42,22 +42,6 @@ stream_receive(TupleTableSlot *slot, DestReceiver *self)
 		stream->bytes += tuple->heaptup->t_len + HEAPTUPLESIZE;
 	}
 
-	/*
-	 * Writing to streams from a long-running process is presumably a common case,
-	 * so we periodically commit to avoid a long-running transaction. Long-running xacts
-	 * blocks the autovac from freeing up space, because tuples that have long since been
-	 * deleted would technically still be visible from the point of view of a long-running
-	 * xact.
-	 */
-	if (stream_insertion_commit_interval > 0 &&
-			TimestampDifferenceExceeds(stream->lastcommit, GetCurrentTimestamp(), stream_insertion_commit_interval * 1000))
-	{
-		 CommitTransactionCommand();
-		 stream->lastcommit = GetCurrentTimestamp();
-
-		 StartTransactionCommand();
-	}
-
 	MemoryContextSwitchTo(old);
 }
 

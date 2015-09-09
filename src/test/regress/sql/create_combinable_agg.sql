@@ -87,7 +87,7 @@ INSERT INTO cca_stream (x, y) VALUES (3, 6);
 INSERT INTO cca_stream (x, y) VALUES (3, 7);
 
 SELECT round(combinable_avg) FROM test_combinable_aggs_v0 ORDER BY x;
-SELECT x, _0 FROM test_combinable_aggs_v0_mrel0 ORDER BY x;
+SELECT x, combinable_avg FROM test_combinable_aggs_v0_mrel0 ORDER BY x;
 
 -- We should also be able to run user combines on it
 SELECT combine(combinable_avg) FROM test_combinable_aggs_v0;
@@ -96,6 +96,8 @@ SELECT combine(combinable_avg) FROM test_combinable_aggs_v0;
 DROP FUNCTION combinable_avg_combine(integer[], integer[]);
 DROP FUNCTION combinable_avg_transout(integer[]);
 DROP FUNCTION combinable_avg_combinein(json);
+
+DROP CONTINUOUS VIEW test_combinable_aggs_v0;
 
 DROP AGGREGATE combinable_avg (integer);
 
@@ -109,8 +111,6 @@ DROP FUNCTION combinable_avg_final(integer[]) CASCADE;
 DROP FUNCTION combinable_avg_combine(integer[], integer[]) CASCADE;
 DROP FUNCTION combinable_avg_transout(integer[]) CASCADE;
 DROP FUNCTION combinable_avg_combinein(json) CASCADE;
-
-DROP CONTINUOUS VIEW test_combinable_aggs_v0;
 
 -- Test polymorphic types
 CREATE FUNCTION set_add (

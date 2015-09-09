@@ -185,6 +185,31 @@ DROP CONTINUOUS VIEW test_stj_sw0;
 DROP STREAM test_stj_sw0_s;
 DROP TABLE test_stj_sw0_t;
 
+CREATE TABLE test_stj_t4 (x integer, y integer, z integer);
+CREATE FUNCTION test_stj_foo(integer) RETURNS integer AS $$
+BEGIN
+  RETURN 0;
+END
+$$
+LANGUAGE plpgsql;
+CREATE CONTINUOUS VIEW stj_deps AS SELECT test_stj_foo(s.x::integer), t.x FROM stj_deps_stream s JOIN test_stj_t4 t ON s.x = t.x;
+
+-- Table columns being joined on can't be dropped
+ALTER TABLE test_stj_t4 DROP COLUMN x;
+
+-- But unused columns can be
+ALTER TABLE test_stj_t4 DROP COLUMN y;
+
+-- Functions used by CVs can't be dropped
+DROP FUNCTION test_stj_foo(integer);
+
+DROP CONTINUOUS VIEW stj_deps;
+
+-- Now we can drop everything
+ALTER TABLE test_stj_t4 DROP COLUMN x;
+DROP TABLE test_stj_t4;
+DROP FUNCTION test_stj_foo(integer);
+
 DROP CONTINUOUS VIEW test_stj0;
 DROP CONTINUOUS VIEW test_stj1;
 DROP CONTINUOUS VIEW test_stj2;
@@ -203,4 +228,3 @@ DROP TABLE test_stj_t3;
 DROP TABLE test_stj_location;
 DROP TABLE test_stj_blocks;
 DROP TABLE test_stj_empty;
-

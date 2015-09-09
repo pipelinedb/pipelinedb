@@ -83,13 +83,13 @@ typedef FormData_pipeline_combine *Form_pipeline_combine;
 #define COMBINE_OID 4300
 #define IS_COMBINE_AGG(oid) (oid == COMBINE_OID)
 
-#define Natts_pipeline_combine							6
+#define Natts_pipeline_combine					6
 #define Anum_pipeline_combine_aggfinalfn		1
 #define Anum_pipeline_combine_transfn 			2
 #define Anum_pipeline_combine_transoutfn 		3
-#define Anum_pipeline_combine_combineinfn 	4
+#define Anum_pipeline_combine_combineinfn 		4
 #define Anum_pipeline_combine_combinefn 		5
-#define Anum_pipeline_combine_transouttype 	6
+#define Anum_pipeline_combine_transouttype 		6
 
 /* avg */
 DATA(insert (numeric_avg numeric_avg_accum naggstatesend naggstaterecv numeric_combine 17));
@@ -103,6 +103,8 @@ DATA(insert (interval_avg interval_accum 0 0 interval_combine 1187));
 /* sum */
 DATA(insert (numeric_sum int8_avg_accum naggstatesend naggstaterecv numeric_combine 17));
 DATA(insert (numeric_sum numeric_avg_accum naggstatesend naggstaterecv numeric_combine 17));
+DATA(insert (0 int4_sum 0 0 int8_sum_to_int8 20));
+DATA(insert (0 int2_sum 0 0 int8_sum_to_int8 20));
 
 /* count */
 DATA(insert (0 int8inc 0 0 int8_sum_to_int8 20));
@@ -193,5 +195,9 @@ DATA(insert (tdigest_compress tdigest_agg_transp tdigest_compress 0 tdigest_merg
 /* cmsketch_agg */
 DATA(insert (0 cmsketch_agg_trans  0 0 cmsketch_merge_agg_trans 5038));
 DATA(insert (0 cmsketch_agg_transp 0 0 cmsketch_merge_agg_trans 5038));
+
+/* fss_agg */
+DATA(insert (0 fss_agg_trans  0 0 fss_merge_agg_trans 5041));
+DATA(insert (0 fss_agg_transp 0 0 fss_merge_agg_trans 5041));
 
 #endif
