@@ -99,6 +99,4 @@ extern bool *ContQueryGetActiveFlag(void);
 extern void SignalContQuerySchedulerTerminate(Oid db_oid);
 extern void SignalContQuerySchedulerRefresh(void);
 
-extern ContQueryProc* ContQueryGetAdhoc(Oid db_oid);
-
 #endif   /* CONT_SCHEDULER_H */

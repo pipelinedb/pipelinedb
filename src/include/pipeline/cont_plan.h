@@ -15,7 +15,6 @@
 #include "nodes/plannodes.h"
 #include "nodes/relation.h"
 #include "utils/tuplestore.h"
-#include "pipeline/cont_scheduler.h"
 
 #define IS_STREAM_RTE(relid, root) ((planner_rt_fetch(relid, root)) && \
 	((planner_rt_fetch(relid, root))->rtekind == RTE_STREAM))
@@ -25,7 +24,5 @@
 extern PlannedStmt *GetContPlan(ContinuousView *view);
 extern TuplestoreScan *SetCombinerPlanTuplestorestate(PlannedStmt *plan, Tuplestorestate *tupstore);
 extern PlannedStmt *GetCombinerLookupPlan(ContinuousView *view);
-
-extern PlannedStmt *GetContPlanType(ContinuousView *view, ContQueryProcType type, TupleDesc matdesc);
 
 #endif

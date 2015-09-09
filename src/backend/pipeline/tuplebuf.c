@@ -276,9 +276,7 @@ TupleBufferInsert(TupleBuffer *buf, StreamTuple *tuple, Bitmapset *queries)
 
 	/* Initialize the newly allocated slot and copy data into it. */
 	MemSet(pos, 0, size);
-
 	slot->id = buf->head_id + 1;
-
 	slot->db_oid = MyDatabaseId;
 	slot->unread = true;
 	slot->next = NULL;
@@ -734,9 +732,7 @@ TupleBufferBatchReaderNext(TupleBufferBatchReader *reader)
 	MemoryContext old_cxt;
 
 	if (reader->cq_id == InvalidOid)
-	{
 		ereport(ERROR, (errmsg("continuous query id must be set before trying to read tuples")));
-	}
 
 	/*
 	 * If we've read a full batch, mark the reader as timed out so that we don't read more tuples from the

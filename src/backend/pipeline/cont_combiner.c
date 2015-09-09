@@ -427,9 +427,7 @@ finish:
 		 */
 		ExecStoreTuple(entry->tuple, slot, InvalidBuffer, false);
 		if (LookupTupleHashEntry(batchgroups, slot, NULL))
-		{
 			tuplestore_puttuple(state->batch, entry->tuple);
-		}
 	}
 
 	foreach(lc, tups)
@@ -439,6 +437,7 @@ finish:
 	}
 
 	list_free(tups);
+
 	hash_destroy(batchgroups->hashtab);
 }
 
@@ -862,6 +861,7 @@ ContinuousQueryCombinerMain(void)
 		bool updated_queries = false;
 
 		sleep_if_deactivated();
+
 		TupleBufferBatchReaderTrySleep(reader, last_processed);
 
 		if (MyContQueryProc->group->terminate)
