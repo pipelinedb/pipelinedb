@@ -127,9 +127,7 @@ GroupCachePut(GroupCache *cache, TupleTableSlot *slot)
 		dlist_delete(&(entry->lru->node));
 	}
 	else
-	{
 		entry->lru = palloc0(sizeof(LRUEntry));
-	}
 
 	/* evict enough entries to make room for it */
 	if (needed > cache->available)
