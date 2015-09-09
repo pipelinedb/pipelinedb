@@ -453,11 +453,17 @@ static void
 sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashTable existing)
 {
 	TupleTableSlot *slot = state->slot;
-	int size = sizeof(bool) * slot->tts_tupleDescriptor->natts;
+	Size size = sizeof(bool) * slot->tts_tupleDescriptor->natts;
 	bool *replace_all = palloc0(size);
 	EState *estate = CreateExecutorState();
+	List *cache_tuples = NIL;
+	ListCell *lc;
+	int i;
 
+	/* Only replace values for non-group attributes */
 	MemSet(replace_all, true, size);
+	for (i = 0; i < state->ngroupatts; i++)
+		replace_all[state->groupatts[i] - 1] = false;
 
 	foreach_tuple(slot, results)
 	{
@@ -488,20 +494,26 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashT
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 
+		if (state->cache)
+			cache_tuples = lappend(cache_tuples, ExecCopySlotTuple(slot));
+
 		ResetPerTupleExprContext(estate);
 	}
 
 	/*
 	 * We need to wait until we've completed all updates/inserts before caching everything, otherwise
-	 * we may free a cached tuple before trying to read it
+	 * we may free a cached tuple before trying to read it.
 	 */
-	if (state->cache)
+	foreach(lc, cache_tuples)
 	{
-		foreach_tuple(slot, results)
-		{
-			GroupCachePut(state->cache, slot);
-		}
+		HeapTuple tup = (HeapTuple) lfirst(lc);
+		ExecStoreTuple(tup, slot, InvalidBuffer, false);
+		GroupCachePut(state->cache, slot);
+		ExecClearTuple(slot);
+		heap_freetuple(tup);
 	}
+
+	list_free(cache_tuples);
 
 	FreeExecutorState(estate);
 }
