@@ -2403,8 +2403,9 @@ relation_is_updatable(Oid reloid,
 		}
 	}
 
-	if (rel->rd_rel->relkind == RELKIND_CONTVIEW)
-		elog(ERROR, "fuck");
+	/* No update events allowed for continuous views or streams */
+	if (rel->rd_rel->relkind == RELKIND_CONTVIEW || rel->rd_rel->relkind == RELKIND_STREAM)
+		return 0;
 
 	/* If we reach here, the relation may support some update commands */
 	relation_close(rel, AccessShareLock);
