@@ -13,7 +13,7 @@ SELECT gc FROM pipeline_query WHERE name = 'cqcreate0';
 (1 row)
 
 \d+ cqcreate0;
-               View "public.cqcreate0"
+          Continuous view "public.cqcreate0"
  Column |  Type   | Modifiers | Storage | Description 
 --------+---------+-----------+---------+-------------
  key    | integer |           | plain   | 
@@ -43,7 +43,7 @@ SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate1';
 (1 row)
 
 \d+ cqcreate1;
-                View "public.cqcreate1"
+          Continuous view "public.cqcreate1"
   Column   | Type | Modifiers | Storage  | Description 
 -----------+------+-----------+----------+-------------
  substring | text |           | extended | 
@@ -73,7 +73,7 @@ SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate2';
 (1 row)
 
 \d+ cqcreate2;
-                View "public.cqcreate2"
+          Continuous view "public.cqcreate2"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | integer |           | plain    | 
@@ -108,7 +108,7 @@ SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate3';
 (1 row)
 
 \d+ cqcreate3;
-                View "public.cqcreate3"
+          Continuous view "public.cqcreate3"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | text(0) |           | extended | 
@@ -149,7 +149,7 @@ SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate4';
 (1 row)
 
 \d+ cqcreate4;
-               View "public.cqcreate4"
+          Continuous view "public.cqcreate4"
  Column |  Type   | Modifiers | Storage | Description 
 --------+---------+-----------+---------+-------------
  count  | bigint  |           | plain   | 
@@ -196,7 +196,7 @@ SELECT gc FROM pipeline_query WHERE name = 'cqcreate5';
 (1 row)
 
 \d+ cqcreate5;
-                View "public.cqcreate5"
+          Continuous view "public.cqcreate5"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | text(0) |           | extended | 
@@ -239,7 +239,7 @@ SELECT gc FROM pipeline_query WHERE name = 'cqcreate6';
 (1 row)
 
 \d+ cqcreate6;
-               View "public.cqcreate6"
+         Continuous view "public.cqcreate6"
  Column |  Type  | Modifiers | Storage | Description 
 --------+--------+-----------+---------+-------------
  count  | bigint |           | plain   | 
@@ -272,7 +272,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate6');
 -- These use a combine state column
 CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, AVG(y::integer) AS int_avg, AVG(ts0::timestamp - ts1::timestamp) AS internal_avg FROM cont_create_stream2 GROUP BY key;
 \d+ cvavg;
-                         View "public.cvavg"
+                    Continuous view "public.cvavg"
     Column    |       Type       | Modifiers | Storage  | Description 
 --------------+------------------+-----------+----------+-------------
  key          | text(0)          |           | extended | 
@@ -311,7 +311,7 @@ SELECT pipeline_get_overlay_viewdef('cvavg');
 
 CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM create_cont_stream1;
 \d+ cvjson;
-                 View "public.cvjson"
+            Continuous view "public.cvjson"
   Column   | Type | Modifiers | Storage  | Description 
 -----------+------+-----------+----------+-------------
  count_col | json |           | extended | 
@@ -335,7 +335,7 @@ SELECT pipeline_get_overlay_viewdef('cvjson');
 
 CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM cont_create_stream2;
 \d+ cvjsonobj;
-                   View "public.cvjsonobj"
+             Continuous view "public.cvjsonobj"
      Column      | Type | Modifiers | Storage  | Description 
 -----------------+------+-----------+----------+-------------
  json_object_agg | json |           | extended | 
@@ -360,7 +360,7 @@ SELECT pipeline_get_overlay_viewdef('cvjsonobj');
 -- But these aggregates don't
 CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(x::integer + y::float8) AS sum_col FROM cont_create_stream2;
 \d+ cvcount;
-                     View "public.cvcount"
+                Continuous view "public.cvcount"
  Column  |       Type       | Modifiers | Storage | Description 
 ---------+------------------+-----------+---------+-------------
  sum_col | double precision |           | plain   | 
@@ -384,7 +384,7 @@ SELECT pipeline_get_overlay_viewdef('cvcount');
 
 CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_stream1;
 \d+ cvarray;
-                 View "public.cvarray"
+            Continuous view "public.cvarray"
   Column   |  Type  | Modifiers | Storage | Description 
 -----------+--------+-----------+---------+-------------
  count_col | bigint |           | plain   | 
@@ -408,7 +408,7 @@ SELECT pipeline_get_overlay_viewdef('cvarray');
 
 CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text, 1, 2), ',') FROM cont_create_stream2 GROUP BY key;
 \d+ cvtext;
-                   View "public.cvtext"
+              Continuous view "public.cvtext"
    Column   |  Type   | Modifiers | Storage  | Description 
 ------------+---------+-----------+----------+-------------
  key        | text(0) |           | extended | 
@@ -440,7 +440,7 @@ SELECT pipeline_get_overlay_viewdef('cvtext');
 -- Check for expressions containing aggregates
 CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM cont_create_stream2;
 \d+ cqaggexpr1;
-               View "public.cqaggexpr1"
+          Continuous view "public.cqaggexpr1"
   Column  |  Type  | Modifiers | Storage | Description 
 ----------+--------+-----------+---------+-------------
  ?column? | bigint |           | plain   | 
@@ -465,7 +465,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr1');
 
 CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::integer) AS value FROM cont_create_stream2 GROUP BY key;
 \d+ cqaggexpr2;
-                    View "public.cqaggexpr2"
+              Continuous view "public.cqaggexpr2"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
  key    | text(0)          |           | extended | 
@@ -499,7 +499,7 @@ CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM co
 NOTICE:  window width is "5" with a step size of "1 second"
 HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 \d+ cqaggexpr3;
-               View "public.cqaggexpr3"
+          Continuous view "public.cqaggexpr3"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | text(0) |           | extended | 
@@ -534,7 +534,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
 
 CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM cont_create_stream2 GROUP BY key;
 \d+ cqaggexpr4;
-                    View "public.cqaggexpr4"
+              Continuous view "public.cqaggexpr4"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
  key    | text(0)          |           | extended | 
@@ -565,7 +565,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr4');
 
 CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM create_cont_stream1 GROUP BY k0, k1;
 \d+ cqgroupby
-                View "public.cqgroupby"
+          Continuous view "public.cqgroupby"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  k0     | text(0) |           | extended | 
@@ -601,7 +601,7 @@ SELECT pipeline_get_overlay_viewdef('cqgroupby');
 CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM create_cont_stream1
 GROUP BY a, b, c, d, e;
 \d+ multigroupindex;
-                 View "public.multigroupindex"
+            Continuous view "public.multigroupindex"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
  a      | text(0)          |           | extended | 

@@ -1924,7 +1924,7 @@ get_view_query(Relation view)
 {
 	int			i;
 
-	Assert(view->rd_rel->relkind == RELKIND_VIEW);
+	Assert(view->rd_rel->relkind == RELKIND_VIEW || view->rd_rel->relkind == RELKIND_CONTVIEW);
 
 	for (i = 0; i < view->rd_rules->numLocks; i++)
 	{
@@ -2121,7 +2121,8 @@ view_query_is_auto_updatable(Query *viewquery, bool check_cols)
 	if (base_rte->rtekind != RTE_RELATION ||
 		(base_rte->relkind != RELKIND_RELATION &&
 		 base_rte->relkind != RELKIND_FOREIGN_TABLE &&
-		 base_rte->relkind != RELKIND_VIEW))
+		 base_rte->relkind != RELKIND_VIEW &&
+		 base_rte->relkind != RELKIND_CONTVIEW))
 		return gettext_noop("Views that do not select from a single table or view are not automatically updatable.");
 
 	/*
@@ -2401,6 +2402,9 @@ relation_is_updatable(Oid reloid,
 			events |= auto_events;
 		}
 	}
+
+	if (rel->rd_rel->relkind == RELKIND_CONTVIEW)
+		elog(ERROR, "fuck");
 
 	/* If we reach here, the relation may support some update commands */
 	relation_close(rel, AccessShareLock);

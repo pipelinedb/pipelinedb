@@ -874,12 +874,7 @@ get_relation_by_qualified_name(ObjectType objtype, List *objname,
 								RelationGetRelationName(relation))));
 			break;
 		case OBJECT_CONTINUOUS_VIEW:
-			/*
-			 * Each continuous view is backed by a TABLE and
-			 * a VIEW.
-			 */
-			if (relation->rd_rel->relkind != RELKIND_RELATION &&
-					relation->rd_rel->relkind != RELKIND_VIEW)
+			if (relation->rd_rel->relkind != RELKIND_CONTVIEW)
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("\"%s\" is not a continuous view",
@@ -2279,18 +2274,8 @@ getRelationDescription(StringInfo buffer, Oid relid)
 							 relname);
 			break;
 		case RELKIND_VIEW:
-			{
-				/*
-				 * Continuous views use RELKIND_VIEW, but we want to make sure
-				 * the error message distinguishes between a regular view and
-				 * a continuous view.
-				 */
-				RangeVar *rv = makeRangeVar(get_namespace_name(relForm->relnamespace),
-						NameStr(relForm->relname), -1);
-				char *fmt = IsAContinuousView(rv) ? "continuous view %s" : "view %s";
-				appendStringInfo(buffer, _(fmt),
-								 relname);
-			}
+			appendStringInfo(buffer, _("view %s"),
+							 relname);
 			break;
 		case RELKIND_MATVIEW:
 			appendStringInfo(buffer, _("materialized view %s"),
@@ -2302,6 +2287,14 @@ getRelationDescription(StringInfo buffer, Oid relid)
 			break;
 		case RELKIND_FOREIGN_TABLE:
 			appendStringInfo(buffer, _("foreign table %s"),
+							 relname);
+			break;
+		case RELKIND_CONTVIEW:
+			appendStringInfo(buffer, _("continuous view %s"),
+							 relname);
+			break;
+		case RELKIND_STREAM:
+			appendStringInfo(buffer, _("stream %s"),
 							 relname);
 			break;
 		default:
@@ -2682,6 +2675,12 @@ getRelationTypeDescription(StringInfo buffer, Oid relid, int32 objectSubId)
 			break;
 		case RELKIND_FOREIGN_TABLE:
 			appendStringInfoString(buffer, "foreign table");
+			break;
+		case RELKIND_CONTVIEW:
+			appendStringInfoString(buffer, "continuous view");
+			break;
+		case RELKIND_STREAM:
+			appendStringInfoString(buffer, "stream");
 			break;
 		default:
 			/* shouldn't get here */
