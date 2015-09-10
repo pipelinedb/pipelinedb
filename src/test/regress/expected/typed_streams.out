@@ -17,7 +17,7 @@ HINT:  Streams can only be read by a continuous view's FROM clause.
 CREATE STREAM l0 (x integer, y integer);
 CREATE STREAM l1 (LIKE l0);
 \d l1;
-    Special relation "test_typed_streams.l1"
+         Stream "test_typed_streams.l1"
       Column       |            Type             
 -------------------+-----------------------------
  x                 | integer
