@@ -514,7 +514,7 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashT
 	{
 		HeapTuple tup = (HeapTuple) lfirst(lc);
 		ExecStoreTuple(tup, slot, InvalidBuffer, false);
-		//GroupCachePut(state->cache, slot);
+		GroupCachePut(state->cache, slot);
 		ExecClearTuple(slot);
 		heap_freetuple(tup);
 	}
