@@ -12,42 +12,27 @@
 
 #include "postgres.h"
 #include "pipeline/cont_adhoc.h"
-
+#include "pipeline/tuplebuf.h"
 #include "catalog/pipeline_query_fn.h"
+#include "tcop/dest.h"
 #include "executor/execdesc.h"
 #include "pgstat.h"
-#include "tcop/dest.h"
-#include "utils/palloc.h"
-#include "utils/resowner.h"
-#include "utils/memutils.h"
-#include "pipeline/cont_plan.h"
-#include "utils/snapmgr.h"
 #include "executor/executor.h"
-#include <unistd.h>
+#include "utils/memutils.h"
+#include "executor/tupletableReceiver.h"
+#include "utils/snapmgr.h"
 #include "catalog/pipeline_query.h"
 #include "access/htup_details.h"
-#include "pipeline/cont_scheduler.h"
-
 #include "storage/ipc.h"
 #include "storage/proc.h"
 #include "miscadmin.h"
+#include "commands/pipelinecmds.h"
+#include "nodes/makefuncs.h"
+#include "access/xact.h"
+#include "pipeline/cont_plan.h"
+#include "utils/rel.h"
 #include "executor/tstoreReceiver.h"
 #include "nodes/print.h"
-#include "executor/tupletableReceiver.h"
-#include "lib/stringinfo.h"
-#include "utils/syscache.h"
-#include "pipeline/miscutils.h"
-
-#include "parser/parse_node.h"
-#include "pipeline/cont_analyze.h"
-#include "access/xact.h"
-#include "pipeline/cqanalyze.h"
-#include "pipeline/cqanalyze.h"
-#include "parser/analyze.h"
-#include "nodes/nodeFuncs.h"
-#include "catalog/pg_type.h"
-#include "commands/pipelinecmds.h"
-#include "pipeline/cqwindow.h"
 
 typedef struct {
 	TupleBufferBatchReader  *reader;
@@ -55,8 +40,6 @@ typedef struct {
 	ContinuousView          *view;
 	DestReceiver            *dest;
 	QueryDesc               *query_desc;
-	TupleDesc               tup_desc;
-	TupleTableSlot          *slot;
 	CQStatEntry             stats;
 
 	TimestampTz 			last_processed;
@@ -183,10 +166,9 @@ unset_snapshot(EState *estate, ResourceOwner owner)
 }
 
 static Oid
-get_cont_view_id(const char* name)
+get_cont_view_id(RangeVar *name)
 {
-	RangeVar var = {T_RangeVar,0x0,0x0,(char*) name,INH_DEFAULT,'p', 0x0, 0x0};
-	HeapTuple tuple = GetPipelineQueryTuple(&var);
+	HeapTuple tuple = GetPipelineQueryTuple(name);
 	Form_pipeline_query row;
 
 	Assert(HeapTupleIsValid(tuple));
@@ -215,29 +197,79 @@ get_cont_query_proc()
 	return proc;
 }
 
-void
-dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot);
-
-void
-dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot)
+static char*
+get_unique_adhoc_view_name()
 {
-	size_t ctr = 0;
-	elog(LOG, "******************************");
+	char *relname = palloc0(NAMEDATALEN);
+	RangeVar var = {T_RangeVar,0x0,0x0,relname,INH_DEFAULT,'p', 0x0, 0x0};
 
-	tuplestore_rescan(batch);
+	int i = 0;
 
-	foreach_tuple(slot, batch)
+	while (true)
 	{
-		elog(LOG, "dump store %zu", ctr++);
-		print_slot(slot);
+		sprintf(relname, "adhoc%d", i++);
+
+		if (!IsAContinuousView(&var))
+		{
+			break;
+		}
 	}
+
+	return relname;
 }
 
 typedef struct{
 	Oid view_id;
 	ContinuousView *view;
-	TupleDesc desc;
 } ContinuousViewData;
+
+static ContinuousViewData
+init_cont_view(SelectStmt *stmt, const char* querystring)
+{
+	ContinuousViewData view_data;
+	RangeVar* view_name = makeRangeVar(0, get_unique_adhoc_view_name(), -1);
+
+	CreateContViewStmt *create_stmt	= makeNode(CreateContViewStmt);
+
+	create_stmt->into = makeNode(IntoClause);
+	create_stmt->into->rel = view_name;
+	create_stmt->query = (Node*) stmt;
+
+	stmt->forContinuousView = true;
+
+	// know we are an adhoc from am_adhoc
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+	ExecCreateContViewStmt(create_stmt, querystring);
+	PopActiveSnapshot();
+
+	view_data.view_id = get_cont_view_id(view_name);
+	view_data.view = GetContinuousView(view_data.view_id);
+
+	CommitTransactionCommand();
+	StartTransactionCommand();
+
+	return view_data;
+}
+
+//void
+//dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot);
+//
+//void
+//dump_tuplestore(Tuplestorestate *batch, TupleTableSlot *slot)
+//{
+//	size_t ctr = 0;
+//	elog(LOG, "******************************");
+//
+//	tuplestore_rescan(batch);
+//
+//	foreach_tuple(slot, batch)
+//	{
+//		elog(LOG, "dump store %zu", ctr++);
+//		print_slot(slot);
+//	}
+//}
+//
 
 static AdhocWorkerState*
 init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
@@ -259,9 +291,12 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	(void) (owner);
 	state->dest = receiver;
 
+	// GetContPlan
 	PushActiveSnapshot(GetTransactionSnapshot());
-	pstmt = GetContPlanType(state->view, Worker, data.desc);
+	pstmt = GetContPlan(state->view, Worker);
 	PopActiveSnapshot();
+
+	// contq
 
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot,
 										InvalidSnapshot, state->dest, NULL, 0);
@@ -277,8 +312,8 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	/* not really used by the worker, but this is a convenient place to 
 	   create them. */
 	
-	state->tup_desc = CreateTupleDescCopyConstr(state->query_desc->tupDesc);
-	state->slot = MakeSingleTupleTableSlot(state->tup_desc);
+//	state->tup_desc = CreateTupleDescCopyConstr(state->query_desc->tupDesc);
+//	state->slot = MakeSingleTupleTableSlot(state->tup_desc);
 
 /*	state->query_desc->snapshot->active_count++;
 	UnregisterSnapshotFromOwner(state->query_desc->snapshot, owner);
@@ -306,33 +341,44 @@ init_adhoc_worker(ContinuousViewData data, DestReceiver *receiver)
 	return state;
 }
 
+static TupleDesc
+prepare_combine_plan(RangeVar *matrel, PlannedStmt *plan,
+					 Tuplestorestate *batch)
+{
+	TuplestoreScan *scan;
+
+	Relation rel = heap_openrv(matrel, AccessShareLock);
+
+	plan->is_continuous = false;
+
+	scan = SetCombinerPlanTuplestorestate(plan, batch);
+	scan->desc = CreateTupleDescCopy(RelationGetDescr(rel));
+
+	heap_close(rel, AccessShareLock);
+
+	return scan->desc;
+
+}
+
 static AdhocCombinerState*
 init_adhoc_combiner(ContinuousViewData data,
-					TupleDesc tup_desc,
-					TupleTableSlot *slot,
 					Tuplestorestate *batch)
 {
-
 	AdhocCombinerState *state = palloc0(sizeof(AdhocWorkerState));
 	PlannedStmt *pstmt = 0;
+	TupleDesc tup_desc;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
-	pstmt = GetContPlanType(data.view, Combiner, data.desc);
+	pstmt = GetContPlan(data.view, Combiner);
 	PopActiveSnapshot();
 
+	tup_desc = prepare_combine_plan(data.view->matrel, pstmt, batch);
+	 
 	state->query_desc = CreateQueryDesc(pstmt, NULL, InvalidSnapshot,
 										InvalidSnapshot, state->dest,
 										NULL, 0);
 
-	state->tup_desc = tup_desc;
-	state->slot = slot;
-
-	{
-		TuplestoreScan *scan;
-
-		(void) (scan);
-		scan = SetCombinerPlanTuplestorestate(pstmt, batch);
-	}
+	state->slot = MakeSingleTupleTableSlot(tup_desc);
 
 	state->batch = batch;
 
@@ -343,6 +389,8 @@ init_adhoc_combiner(ContinuousViewData data,
 
 	SetTuplestoreDestReceiverParams(state->dest, state->result,
 									CurrentMemoryContext, true);
+
+	// required by combiner group stuff.
 
 	if (IsA(pstmt->planTree, Agg))
 	{
@@ -359,10 +407,6 @@ init_adhoc_combiner(ContinuousViewData data,
 static void
 exec_adhoc_worker(AdhocWorkerState* state)
 {
-	/* TODO - fix up memory context usage
-	 * 		- handle transactions correctly
-	 */
-
 	ResourceOwner owner = CurrentResourceOwner;
 	struct Plan *plan = 0;
 	bool has_tup = false;
@@ -399,12 +443,12 @@ exec_adhoc_worker(AdhocWorkerState* state)
 
 	ExecEndNode(state->query_desc->planstate);
 	state->query_desc->planstate = NULL;
-
 	state->num_processed = estate->es_processed + estate->es_filtered;
 
 	if (state->num_processed)
 	{
 		state->last_processed = GetCurrentTimestamp();
+//		fflush(stdout);
 	}
 
 	unset_snapshot(estate, owner);
@@ -416,6 +460,8 @@ exec_adhoc_worker(AdhocWorkerState* state)
 	TupleBufferBatchReaderReset(state->reader);
 	MemoryContextResetAndDeleteChildren(ContQueryBatchContext);
 }
+
+// cq_bgproc_main
 
 static void
 exec_adhoc_combiner(AdhocCombinerState* state)
@@ -496,6 +542,7 @@ adhoc_sync_combine(AdhocCombinerState* state)
 			{
 				elog(LOG, "update existing in adhoc_sync_combine");
 				print_slot(state->slot);
+				fflush(stdout);
 
 				heap_freetuple(entry->tuple);
 				entry->tuple = ExecCopySlotTuple(state->slot);
@@ -504,150 +551,13 @@ adhoc_sync_combine(AdhocCombinerState* state)
 			{
 				elog(LOG, "insert new in adhoc_sync_combine");
 				print_slot(state->slot);
+				fflush(stdout);
 				entry->tuple = ExecCopySlotTuple(state->slot);
 			}
 		}
 	}
 
 	tuplestore_clear(state->result);
-}
-
-static RangeVar
-get_unique_adhoc_view_name()
-{
-	char *relname = palloc0(NAMEDATALEN);
-	RangeVar var = {T_RangeVar,0x0,0x0,relname,INH_DEFAULT,'p', 0x0, 0x0};
-
-	int i = 0;
-
-	while (true)
-	{
-		sprintf(relname, "adhoc%d", i++);
-
-		if (!IsAContinuousView(&var))
-		{
-			break;
-		}
-	}
-
-	return var;
-}
-
-#define DEFAULT_TYPEMOD -1
-
-typedef struct
-{
-	SelectStmt *workerselect;
-	SelectStmt *viewselect;
-	TupleDesc desc;
-} ViewDetails;
-
-/* TODO - refactor with ExecCreateContViewStmt */
-
-static ViewDetails
-build_view_details(SelectStmt *stmt, const char* querystring)
-{
-	ViewDetails details;
-
-	SelectStmt *workerselect;
-	SelectStmt *viewselect;
-
-	Query *query;
-	List *tableElts = NIL;
-	List *tlist;
-	ListCell *col;
-	CQAnalyzeContext context;
-
-	workerselect =
-		GetSelectStmtForCQWorker(copyObject(stmt), &viewselect);
-	InitializeCQAnalyzeContext(workerselect, NULL, &context);
-
-	query = parse_analyze(copyObject(workerselect), querystring, 0, 0);
-	tlist = query->targetList;
-
-	foreach(col, tlist)
-	{
-		TargetEntry *tle = (TargetEntry *) lfirst(col);
-		ColumnDef   *coldef;
-		char		*colname;
-		Oid			hiddentype;
-		Oid type;
-
-		if (tle->resjunk)
-			continue;
-
-		colname = pstrdup(tle->resname);
-
-		type = exprType((Node *) tle->expr);
-
-		if (type == VOIDOID)
-			type = BOOLOID;
-		coldef = make_cv_columndef(colname, type,
-					exprTypmod((Node *) tle->expr));
-		tableElts = lappend(tableElts, coldef);
-
-		hiddentype = GetCombineStateColumnType(tle->expr);
-
-		if (OidIsValid(hiddentype))
-		{
-			char *hiddenname = GetUniqueInternalColname(&context);
-			ColumnDef *hidden = 
-				make_cv_columndef(hiddenname, hiddentype, DEFAULT_TYPEMOD);
-			tableElts = lappend(tableElts, hidden);
-		}
-	}
-
-	details.workerselect = workerselect;
-	details.viewselect = viewselect;
-	details.desc = BuildDescForRelation(tableElts);
-
-	return details;
-}
-
-static ContinuousViewData
-init_cont_view(SelectStmt *stmt, const char* querystring)
-{
-	ViewDetails details;
-	ContinuousViewData data;
-	Relation pipeline_query;
-	RangeVar var;
-	RangeVar *view = &var;
-	bool saveAllowSystemTableMods;
-	Oid cvoid = 0;
-
-	pipeline_query = heap_open(PipelineQueryRelationId, ExclusiveLock);
-
-	saveAllowSystemTableMods = allowSystemTableMods;
-	allowSystemTableMods = true;
-
-	var = get_unique_adhoc_view_name();
-	view = &var;
-
-	CreateInferredStreams(stmt);
-	ValidateContQuery(view, (Node*) stmt, querystring);
-
-	details = build_view_details(stmt, querystring);
-
-	cvoid = DefineContinuousView(view, 
-			querystring,
-			0,
-			IsSlidingWindowSelectStmt(details.viewselect),
-			!SelectsFromStreamOnly(details.workerselect));
-
-	(void) (cvoid);
-
-	CommandCounterIncrement();
-	allowSystemTableMods = saveAllowSystemTableMods;
-	heap_close(pipeline_query, NoLock);
-
-	data.view_id = get_cont_view_id(var.relname);
-	data.view = GetContinuousView(data.view_id);
-	data.desc = details.desc;
-
-	CommitTransactionCommand();
-	StartTransactionCommand();
-
-	return data;
 }
 
 void
@@ -668,21 +578,12 @@ ExecAdhocQuery(SelectStmt* stmt, const char *s)
 	MyContQueryProc = get_cont_query_proc();
 
 	worker_state = init_adhoc_worker(data, worker_receiver);
-
-	combiner_state = init_adhoc_combiner(data,
-										 worker_state->tup_desc,
-										 worker_state->slot,
-										 batch);
+	combiner_state = init_adhoc_combiner(data, batch);
 
 	while (true)
 	{
-		/* TODO - create a mem context here */
-
 		exec_adhoc_worker(worker_state);
 		exec_adhoc_combiner(combiner_state);
-
 		adhoc_sync_combine(combiner_state);
-
-		/* TODO - and tear it down here */
 	}
 }

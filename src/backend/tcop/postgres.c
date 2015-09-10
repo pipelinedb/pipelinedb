@@ -96,7 +96,7 @@
 #include "utils/tqual.h"
 #include "utils/tuplestore.h"
 #include "mb/pg_wchar.h"
-
+#include "pipeline/cont_adhoc.h"
 
 /* ----------------
  *		global variables
@@ -871,6 +871,20 @@ pg_plan_queries(List *querytrees, int cursorOptions, ParamListInfo boundParams)
 }
 
 void
+exec_adhoc_query(SelectStmt* stmt, const char* s)
+{
+	MemoryContext oldcontext = MemoryContextSwitchTo(EventContext);
+
+	SetAmContQueryAdhoc(true);
+
+	ExecAdhocQuery(stmt, s);
+	SetAmContQueryAdhoc(false);
+
+	MemoryContextSwitchTo(oldcontext);
+	MemoryContextReset(EventContext);
+}
+
+void
 exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *params)
 {
 	CommandDest dest = whereToSendOutput;
@@ -898,6 +912,11 @@ exec_stream_inserts(InsertStmt *ins, PreparedStreamInsertStmt *pstmt, List *para
 
 	MemoryContextSwitchTo(oldcontext);
 	MemoryContextReset(EventContext);
+}
+
+static bool is_adhoc(const char* s)
+{
+	return strstr(s, "stream") != 0;
 }
 
 /*
@@ -986,6 +1005,12 @@ exec_simple_query(const char *query_string)
 		{
 			tmp_list = parsetree_list;
 			break;
+		}
+
+		if (IsA(parsetree, SelectStmt) && is_adhoc(query_string))
+		{
+			exec_adhoc_query((SelectStmt*) parsetree, query_string);
+			continue;
 		}
 
 		if (IsA(parsetree, InsertStmt))

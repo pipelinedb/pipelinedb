@@ -68,7 +68,7 @@
 
 int continuous_view_fillfactor;
 
-static ColumnDef *
+ColumnDef *
 make_cv_columndef(char *name, Oid type, Oid typemod)
 {
 	ColumnDef *result;
@@ -529,7 +529,9 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	 * pqoid is the oid of the row in pipeline_query,
 	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	pqoid = DefineContinuousView(view, cont_query, matrel, context->is_sw, &cvid);
+	pqoid = DefineContinuousView(view, cont_query, matrel, context->is_sw,  
+								 IsContQueryAdhocProcess(),
+								 &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */

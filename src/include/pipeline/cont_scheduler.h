@@ -79,6 +79,8 @@ extern bool IsContQuerySchedulerProcess(void);
 extern bool IsContQueryWorkerProcess(void);
 extern bool IsContQueryCombinerProcess(void);
 
+extern bool IsContQueryAdhocProcess(void);
+
 #define IsContQueryProcess() \
 	(IsContQueryWorkerProcess() || IsContQueryCombinerProcess())
 
@@ -98,5 +100,9 @@ extern bool *ContQueryGetActiveFlag(void);
 
 extern void SignalContQuerySchedulerTerminate(Oid db_oid);
 extern void SignalContQuerySchedulerRefresh(void);
+
+extern ContQueryProc* ContQueryGetAdhoc(Oid db_oid);
+
+extern void SetAmContQueryAdhoc(bool s);
 
 #endif   /* CONT_SCHEDULER_H */

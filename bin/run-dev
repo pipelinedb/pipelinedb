@@ -8,6 +8,7 @@ import socket
 import sys
 import time
 import pprint
+import string
 
 DATA_DIR = 'data'
 SERVER = 'src/backend/pipeline-server'
@@ -96,7 +97,10 @@ def main(args):
       sys.exit(1)
     cmd.extend(['-c', guc])
 
+  print string.join(cmd)
+#  stmt.upper()
   POSTMASTER = subprocess.Popen(cmd)
+
   if args.stmts:
     time.sleep(0.5)
     for stmt in args.stmts:

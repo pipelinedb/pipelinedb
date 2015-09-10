@@ -2832,14 +2832,14 @@ send_message_to_server_log(ErrorData *edata)
 			if (edata->funcname && edata->filename)
 			{
 				log_line_prefix(&buf, edata);
-				appendStringInfo(&buf, _("LOCATION:  %s, %s:%d\n"),
+				appendStringInfo(&buf, _("LOCATION:  %d %s, %s:%d\n"), getpid(),
 								 edata->funcname, edata->filename,
 								 edata->lineno);
 			}
 			else if (edata->filename)
 			{
 				log_line_prefix(&buf, edata);
-				appendStringInfo(&buf, _("LOCATION:  %s:%d\n"),
+				appendStringInfo(&buf, _("LOCATION:  %d %s:%d\n"), getpid(),
 								 edata->filename, edata->lineno);
 			}
 		}
