@@ -25,6 +25,7 @@ typedef struct {
 	RangeVar *matrel;
 	char *query;
 	int32 hash;
+	bool gc;
 } ContinuousView;
 
 extern Oid DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelname, bool gc, Oid *pq_id);
