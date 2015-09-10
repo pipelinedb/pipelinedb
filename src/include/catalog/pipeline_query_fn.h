@@ -31,6 +31,7 @@ extern Oid DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelna
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern char *GetQueryString(RangeVar *name);
 extern bool IsAContinuousView(RangeVar *name);
+extern bool ContainsSlidingWindowContinuousView(List *nodes);
 extern bool IsAMatRel(RangeVar *name, RangeVar **cvname);
 extern bool GetGCFlag(RangeVar *name);
 extern RangeVar *GetMatRelationName(RangeVar *cv);

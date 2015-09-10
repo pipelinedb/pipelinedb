@@ -1,11 +1,7 @@
 -- COUNT(DISTINCT ...)
 CREATE CONTINUOUS VIEW test_distinct_count AS SELECT COUNT(DISTINCT x::integer) FROM test_distinct_count_stream;
 CREATE CONTINUOUS VIEW test_distinct_sw_count AS SELECT COUNT(DISTINCT x::integer) FROM test_distinct_count_stream WHERE (arrival_timestamp > clock_timestamp() - interval '10 seconds');
-NOTICE:  window width is "10 seconds" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 CREATE CONTINUOUS VIEW test_distinct_sw_count_small AS SELECT COUNT(DISTINCT x::integer) FROM test_distinct_count_stream WHERE (arrival_timestamp > clock_timestamp() - interval '1 second');;
-NOTICE:  window width is "1 second" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
 INSERT INTO test_distinct_count_stream (x, y, z) VALUES (1, 1, '1'), (1, 1, '1'), (4, 4, '4'), (7, 7, '7'), (0, 0, '0'), (2, 2, '2'), (4, 4, '4'), (8, 8, '8'), (8, 8, '8'), (7, 7, '7'), (9, 9, '9'), (6, 6, '6'), (2, 2, '2'), (6, 6, '6'), (5, 5, '5'), (3, 3, '3'), (9, 9, '9'), (0, 0, '0'), (5, 5, '5'), (3, 3, '3');
 INSERT INTO test_distinct_count_stream (z, y, x) VALUES ('1', 1, 1);
 INSERT INTO test_distinct_count_stream (z, y, x) VALUES ('9', 9, 9);
@@ -63,13 +59,13 @@ SELECT * FROM test_distinct_sw_count;
 (1 row)
 
 \d+ test_distinct_sw_count_mrel0;
-                      Table "public.test_distinct_sw_count_mrel0"
- Column |           Type           | Modifiers | Storage  | Stats target | Description 
---------+--------------------------+-----------+----------+--------------+-------------
- _0     | timestamp with time zone |           | plain    |              | 
- count  | hll                      |           | extended |              | 
+                           Table "public.test_distinct_sw_count_mrel0"
+      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           | plain    |              | 
+ count             | hll                      |           | extended |              | 
 Indexes:
-    "test_distinct_sw_count_mrel0_expr_idx" btree (ls_hash_group(_0))
+    "test_distinct_sw_count_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp))
 Options: fillfactor=50
 
 SELECT pg_sleep(1);
