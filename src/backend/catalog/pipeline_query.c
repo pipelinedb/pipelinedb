@@ -388,6 +388,27 @@ IsAContinuousView(RangeVar *name)
 }
 
 /*
+ * ContainsSlidingWindowContinuousView
+ *
+ * Returns true if any of the given nodes represents a
+ * sliding window continuous view
+ */
+bool
+ContainsSlidingWindowContinuousView(List *nodes)
+{
+	ListCell *lc;
+	foreach(lc, nodes)
+	{
+		if (IsA(lfirst(lc), RangeVar))
+		{
+			if (IsAContinuousView((RangeVar *) lfirst(lc)) && GetGCFlag((RangeVar *) lfirst(lc)))
+				return true;
+		}
+	}
+	return false;
+}
+
+/*
  * IsAMatRel
  *
  * Returns true if the RangeVar represents a materialization table,

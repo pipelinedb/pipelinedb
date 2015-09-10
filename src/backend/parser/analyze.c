@@ -979,6 +979,9 @@ transformSelectStmt(ParseState *pstate, SelectStmt *stmt)
 	/* process the FROM clause */
 	transformFromClause(pstate, stmt->fromClause);
 
+	if (ContainsSlidingWindowContinuousView(stmt->fromClause))
+		pstate->p_post_columnref_hook = CreateOuterArrivalTimestampRef;
+
 	/* transform targetlist */
 	qry->targetList = transformTargetList(pstate, stmt->targetList,
 										  EXPR_KIND_SELECT_TARGET);
