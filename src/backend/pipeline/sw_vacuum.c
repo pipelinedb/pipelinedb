@@ -34,7 +34,7 @@
 #include "utils/snapmgr.h"
 
 static Node *
-get_cq_vacuum_expr(RangeVar *rv)
+get_sw_vacuum_expr(RangeVar *rv)
 {
 	Node *expr = GetSWExpr(rv);
 	Assert(expr);
@@ -86,7 +86,7 @@ NumSWVacuumTuples(Oid relid)
 		return 0;
 
 	runctx = AllocSetContextCreate(CurrentMemoryContext,
-			"CQAutoVacuumContext",
+			"SWAutoVacuumContext",
 			ALLOCSET_DEFAULT_MINSIZE,
 			ALLOCSET_DEFAULT_INITSIZE,
 			ALLOCSET_DEFAULT_MAXSIZE);
@@ -101,7 +101,7 @@ NumSWVacuumTuples(Oid relid)
 	resetStringInfo(&sql);
 
 	stmt = (SelectStmt *) linitial(parsetree_list);
-	stmt->whereClause = get_cq_vacuum_expr(cvname);
+	stmt->whereClause = get_sw_vacuum_expr(cvname);
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
@@ -109,7 +109,7 @@ NumSWVacuumTuples(Oid relid)
 			NULL, 0);
 	plan = pg_plan_query((Query *) linitial(querytree_list), 0, NULL);
 
-	portal = CreatePortal("__cq_auto_vacuum__", true, true);
+	portal = CreatePortal("__sw_auto_vacuum__", true, true);
 	portal->visible = false;
 	PortalDefineQuery(portal,
 			NULL,
@@ -172,6 +172,7 @@ CreateSWVacuumContext(Relation rel)
 	List *colnames = NIL;
 	int i;
 	SWVacuumContext *context;
+	TupleDesc desc = CreateTupleDescCopy(RelationGetDescr(rel));
 
 	cvname = GetCVNameFromMatRelName(matrel);
 	if (!cvname)
@@ -181,8 +182,8 @@ CreateSWVacuumContext(Relation rel)
 		return NULL;
 
 	/* Copy colnames from the relation's TupleDesc */
-	for (i = 0; i < RelationGetDescr(rel)->natts; i++)
-		colnames = lappend(colnames, makeString(NameStr(RelationGetDescr(rel)->attrs[i]->attname)));
+	for (i = 0; i < desc->natts; i++)
+		colnames = lappend(colnames, makeString(NameStr(desc->attrs[i]->attname)));
 
 	nsitem = (ParseNamespaceItem *) palloc(sizeof(ParseNamespaceItem));
 	nsitem->p_cols_visible = true;
@@ -204,12 +205,12 @@ CreateSWVacuumContext(Relation rel)
 	ps->p_namespace = list_make1(nsitem);
 	ps->p_rtable = list_make1(rte);
 
-	expr = (Expr *) transformExpr(ps, get_cq_vacuum_expr(cvname), EXPR_KIND_WHERE);
+	expr = (Expr *) transformExpr(ps, get_sw_vacuum_expr(cvname), EXPR_KIND_WHERE);
 
 	context = (SWVacuumContext *) palloc(sizeof(SWVacuumContext));
 
 	context->econtext = CreateStandaloneExprContext();
-	context->slot = MakeSingleTupleTableSlot(RelationGetDescr(rel));
+	context->slot = MakeSingleTupleTableSlot(desc);
 	context->econtext->ecxt_scantuple = context->slot;
 	context->predicate = list_make1(ExecInitExpr(expression_planner(expr), NULL));
 	context->expired = NIL;
@@ -235,7 +236,7 @@ FreeSWVacuumContext(SWVacuumContext *context)
  * ShouldVacuumSWTuple
  */
 bool
-ShouldVacuumSWTuple(SWVacuumContext *context, HeapTupleData *tuple)
+ShouldVacuumSWTuple(SWVacuumContext *context, HeapTuple tuple)
 {
 	bool vacuum;
 

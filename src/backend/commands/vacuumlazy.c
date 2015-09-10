@@ -52,6 +52,7 @@
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "pipeline/cqmatrel.h"
 #include "pipeline/sw_vacuum.h"
 #include "portability/instr_time.h"
 #include "postmaster/autovacuum.h"
@@ -1062,13 +1063,14 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 
 		UnlockReleaseBuffer(buf);
 
+		/* Delete all tuples that have expired from the SW */
 		if (cqvcontext && cqvcontext->expired)
 		{
 			ListCell *lc;
 			foreach(lc, cqvcontext->expired)
 			{
 				ItemPointer item = (ItemPointer) lfirst(lc);
-				simple_heap_delete(onerel, item);
+				matrel_heap_delete(onerel, item);
 			}
 			list_free_deep(cqvcontext->expired);
 			cqvcontext->expired = NIL;
