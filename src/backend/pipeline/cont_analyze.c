@@ -2838,7 +2838,7 @@ combine_target_belongs_to_cv(Var *target, List *rangetable, RangeVar **cv)
 		ListCell *clc;
 		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
 
-		if (rte->relkind != RELKIND_VIEW)
+		if (rte->relkind != RELKIND_CONTVIEW)
 			continue;
 
 		foreach(clc, rte->eref->colnames)
@@ -3203,7 +3203,7 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 
 	/* RTE is not a view? */
 	rte = rt_fetch(rtindex, query->rtable);
-	if (rte->relkind != RELKIND_VIEW)
+	if (rte->relkind != RELKIND_CONTVIEW)
 		return rule;
 
 	/* try to bail early because this gets called from a hot path */

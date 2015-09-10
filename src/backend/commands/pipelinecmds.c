@@ -536,6 +536,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
+	viewselect->forContinuousView = true;
 
 	viewoid = DefineView(view_stmt, cont_select_sql);
 	CommandCounterIncrement();

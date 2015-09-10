@@ -838,6 +838,7 @@ extractRelOptions(HeapTuple tuple, TupleDesc tupdesc, Oid amoptions)
 			options = heap_reloptions(classForm->relkind, datum, false);
 			break;
 		case RELKIND_VIEW:
+		case RELKIND_CONTVIEW:
 			options = view_reloptions(datum, false);
 			break;
 		case RELKIND_INDEX:

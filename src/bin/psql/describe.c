@@ -1378,7 +1378,8 @@ describeOneTableDetails(const char *schemaname,
 		 */
 		if (tableinfo.relkind == 'r' || tableinfo.relkind == 'v' ||
 			tableinfo.relkind == 'm' ||
-			tableinfo.relkind == 'f' || tableinfo.relkind == 'c')
+			tableinfo.relkind == 'f' || tableinfo.relkind == 'c' ||
+			tableinfo.relkind == 'C')
 			appendPQExpBufferStr(&buf, ", pg_catalog.col_description(a.attrelid, a.attnum)");
 	}
 
@@ -1443,6 +1444,14 @@ describeOneTableDetails(const char *schemaname,
 			printfPQExpBuffer(&title, _("Foreign table \"%s.%s\""),
 							  schemaname, relationname);
 			break;
+		case 'C':
+			printfPQExpBuffer(&title, _("Continuous view \"%s.%s\""),
+							  schemaname, relationname);
+			break;
+		case '$':
+			printfPQExpBuffer(&title, _("Stream \"%s.%s\""),
+							  schemaname, relationname);
+			break;
 		default:
 			/* untranslated unknown relkind */
 			printfPQExpBuffer(&title, "?%c? \"%s.%s\"",
@@ -1457,7 +1466,8 @@ describeOneTableDetails(const char *schemaname,
 
 	if (tableinfo.relkind == 'r' || tableinfo.relkind == 'v' ||
 		tableinfo.relkind == 'm' ||
-		tableinfo.relkind == 'f' || tableinfo.relkind == 'c')
+		tableinfo.relkind == 'f' || tableinfo.relkind == 'c' ||
+		tableinfo.relkind == 'C')
 	{
 		show_modifiers = true;
 		headers[cols++] = gettext_noop("Modifiers");
@@ -1482,7 +1492,8 @@ describeOneTableDetails(const char *schemaname,
 		/* Column comments, if the relkind supports this feature. */
 		if (tableinfo.relkind == 'r' || tableinfo.relkind == 'v' ||
 			tableinfo.relkind == 'm' ||
-			tableinfo.relkind == 'c' || tableinfo.relkind == 'f')
+			tableinfo.relkind == 'c' || tableinfo.relkind == 'f' ||
+			tableinfo.relkind == 'C')
 			headers[cols++] = gettext_noop("Description");
 	}
 
@@ -1493,7 +1504,7 @@ describeOneTableDetails(const char *schemaname,
 		printTableAddHeader(&cont, headers[i], true, 'l');
 
 	/* Check if table is a view or materialized view */
-	if ((tableinfo.relkind == 'v' || tableinfo.relkind == 'm') && verbose)
+	if ((tableinfo.relkind == 'v' || tableinfo.relkind == 'm' || tableinfo.relkind == 'C') && verbose)
 	{
 		PGresult   *result;
 
@@ -1591,7 +1602,8 @@ describeOneTableDetails(const char *schemaname,
 			/* Column comments, if the relkind supports this feature. */
 			if (tableinfo.relkind == 'r' || tableinfo.relkind == 'v' ||
 				tableinfo.relkind == 'm' ||
-				tableinfo.relkind == 'c' || tableinfo.relkind == 'f')
+				tableinfo.relkind == 'c' || tableinfo.relkind == 'f' ||
+				tableinfo.relkind == 'C')
 				printTableAddCell(&cont, PQgetvalue(res, i, firstvcol + 2),
 								  false, false);
 		}

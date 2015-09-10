@@ -247,7 +247,7 @@ static const struct dropmsgstrings dropmsgstringarray[] = {
 		gettext_noop("foreign table \"%s\" does not exist, skipping"),
 		gettext_noop("\"%s\" is not a foreign table"),
 	gettext_noop("Use DROP FOREIGN TABLE to remove a foreign table.")},
-	{RELKIND_CONTINUOUS_VIEW,
+	{RELKIND_CONTVIEW,
 		ERRCODE_UNDEFINED_OBJECT,
 		gettext_noop("continuous view \"%s\" does not exist"),
 		gettext_noop("continuous view  \"%s\" does not exist, skipping"),
@@ -550,7 +550,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId)
 	reloptions = transformRelOptions((Datum) 0, stmt->options, NULL, validnsps,
 									 true, false);
 
-	if (relkind == RELKIND_VIEW)
+	if (relkind == RELKIND_VIEW || relkind == RELKIND_CONTVIEW)
 		(void) view_reloptions(reloptions, true);
 	else
 		(void) heap_reloptions(relkind, reloptions, true);
@@ -843,7 +843,7 @@ RemoveRelations(DropStmt *drop)
 			break;
 
 		case OBJECT_CONTINUOUS_VIEW:
-			relkind = RELKIND_VIEW;
+			relkind = RELKIND_CONTVIEW;
 			break;
 
 		default:
@@ -878,7 +878,7 @@ RemoveRelations(DropStmt *drop)
 
 		save = relkind;
 		if (drop->removeType == OBJECT_CONTINUOUS_VIEW)
-			relkind = RELKIND_CONTINUOUS_VIEW;
+			relkind = RELKIND_CONTVIEW;
 
 		/* Look up the appropriate relation using namespace search. */
 		state.relkind = relkind;
@@ -958,15 +958,6 @@ RangeVarCallbackForDropRelation(const RangeVar *rel, Oid relOid, Oid oldRelOid,
 		return;					/* concurrently dropped, so nothing to do */
 	classform = (Form_pg_class) GETSTRUCT(tuple);
 	expected_relkind = classform->relkind;
-
-	/*
-	 * We use a regular relkind of 'v' for continuous views' virtual relations
-	 * because that's what they are, which keeps things simple. However, we do
-	 * want a specific error message if the drop target is continuous view and
-	 * the given target is not.
-	 */
-	if (IsAContinuousView((RangeVar *) rel))
-		expected_relkind = RELKIND_CONTINUOUS_VIEW;
 
 	if (expected_relkind != relkind)
 		DropErrorMsgWrongType(rel->relname, expected_relkind, relkind);
@@ -2167,7 +2158,8 @@ renameatt_check(Oid myrelid, Form_pg_class classform, bool recursing)
 		relkind != RELKIND_COMPOSITE_TYPE &&
 		relkind != RELKIND_INDEX &&
 		relkind != RELKIND_FOREIGN_TABLE &&
-		relkind != RELKIND_STREAM)
+		relkind != RELKIND_STREAM &&
+		relkind != RELKIND_CONTVIEW)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not a table, view, materialized view, composite type, index, or foreign table",
@@ -2538,7 +2530,7 @@ RenameRelation(RenameStmt *stmt)
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("cannot rename materialization table \"%s\" for continuous view \"%s\"",
 						stmt->relation->relname, cv->relname)));
-	else if (stmt->renameType == OBJECT_VIEW && IsAContinuousView(stmt->relation))
+	else if (stmt->renameType == OBJECT_CONTINUOUS_VIEW)
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("cannot rename continuous view \"%s\"",
@@ -4174,6 +4166,9 @@ ATSimplePermissions(Relation rel, int allowed_targets)
 		case RELKIND_FOREIGN_TABLE:
 			actual_target = ATT_FOREIGN_TABLE;
 			break;
+		case RELKIND_CONTVIEW:
+			actual_target = ATT_VIEW;
+			break;
 		default:
 			actual_target = 0;
 			break;
@@ -4782,7 +4777,7 @@ ATExecAddColumn(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	 * have no storage.
 	 */
 	if (relkind != RELKIND_VIEW && relkind != RELKIND_COMPOSITE_TYPE
-		&& relkind != RELKIND_FOREIGN_TABLE && attribute.attnum > 0)
+		&& relkind != RELKIND_FOREIGN_TABLE && relkind != RELKIND_CONTVIEW && attribute.attnum > 0)
 	{
 		defval = (Expr *) build_column_default(rel, attribute.attnum);
 
@@ -8546,6 +8541,7 @@ ATExecChangeOwner(Oid relationOid, Oid newOwnerId, bool recursing, LOCKMODE lock
 		case RELKIND_VIEW:
 		case RELKIND_MATVIEW:
 		case RELKIND_FOREIGN_TABLE:
+		case RELKIND_CONTVIEW:
 			/* ok to change owner */
 			break;
 		case RELKIND_INDEX:
@@ -9003,6 +8999,7 @@ ATExecSetRelOptions(Relation rel, List *defList, AlterTableType operation,
 			(void) heap_reloptions(rel->rd_rel->relkind, newOptions, true);
 			break;
 		case RELKIND_VIEW:
+		case RELKIND_CONTVIEW:
 			(void) view_reloptions(newOptions, true);
 			break;
 		case RELKIND_INDEX:
@@ -9017,7 +9014,7 @@ ATExecSetRelOptions(Relation rel, List *defList, AlterTableType operation,
 	}
 
 	/* Special-case validation of view options */
-	if (rel->rd_rel->relkind == RELKIND_VIEW)
+	if (rel->rd_rel->relkind == RELKIND_VIEW || rel->rd_rel->relkind == RELKIND_CONTVIEW)
 	{
 		Query	   *view_query = get_view_query(rel);
 		List	   *view_options = untransformRelOptions(newOptions);
@@ -11367,6 +11364,11 @@ RangeVarCallbackForAlterRelation(const RangeVar *rv, Oid relid, Oid oldrelid,
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not an index", rv->relname)));
+
+	if (relkind == RELKIND_CONTVIEW)
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("\"%s\" is a continuous view and cannot be renamed", rv->relname)));
 
 	/*
 	 * Don't allow ALTER TABLE on composite types. We want people to use ALTER
