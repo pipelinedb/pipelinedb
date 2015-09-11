@@ -66,6 +66,7 @@
 
 #define OPTION_FILLFACTOR "fillfactor"
 
+/* guc params */
 int continuous_view_fillfactor;
 
 ColumnDef *
@@ -92,12 +93,12 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 }
 
 /*
- * has_fillfactor
+ * get_option
  *
- * Returns true if a fillfactor option is included in the given WITH options
+ * Returns the given option or NULL if it wasn't supplied
  */
-static bool
-has_fillfactor(List *options)
+static DefElem *
+get_option(List *options, char *name)
 {
 	ListCell *lc;
 
@@ -109,11 +110,11 @@ has_fillfactor(List *options)
 			continue;
 
 		de = (DefElem *) lfirst(lc);
-		if (de->defname && pg_strcasecmp(de->defname, OPTION_FILLFACTOR) == 0)
-			return true;
+		if (de->defname && pg_strcasecmp(de->defname, name) == 0)
+			return de;
 	}
 
-	return false;
+	return NULL;
 }
 
 /*
@@ -498,11 +499,11 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		tableElts = lappend(tableElts, coldef);
 	}
 
-	if (!has_fillfactor(stmt->into->options))
+	if (!get_option(stmt->into->options, OPTION_FILLFACTOR))
 		stmt->into->options = add_default_fillfactor(stmt->into->options);
 
 	/*
-	 * Create the actual underlying materialzation relation.
+	 * Create the actual underlying materialization relation.
 	 */
 	create_stmt = makeNode(CreateStmt);
 	create_stmt->relation = matrel;
@@ -538,6 +539,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
+	viewselect->forContinuousView = true;
 
 	viewoid = DefineView(view_stmt, cont_select_sql);
 	CommandCounterIncrement();

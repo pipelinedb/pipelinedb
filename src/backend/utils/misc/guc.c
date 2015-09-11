@@ -53,6 +53,7 @@
 #include "parser/parser.h"
 #include "parser/scansup.h"
 #include "pgstat.h"
+#include "pipeline/cqmatrel.h"
 #include "pipeline/stream.h"
 #include "pipeline/update.h"
 #include "postmaster/autovacuum.h"
@@ -1542,6 +1543,16 @@ static struct config_bool ConfigureNamesBool[] =
 		},
 		&anonymous_update_checks,
 		true,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"continuous_query_materialization_table_updatable", PGC_USERSET, DEVELOPER_OPTIONS,
+		 gettext_noop("Allow changes to be directly made to materialization tables."),
+		 NULL,
+		},
+		&continuous_query_materialization_table_updatable,
+		false,
 		NULL, NULL, NULL
 	},
 

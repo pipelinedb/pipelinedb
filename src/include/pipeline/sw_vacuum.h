@@ -11,8 +11,8 @@
  *
  *-------------------------------------------------------------------------
  */
-#ifndef CQVACUUM_H
-#define CQVACUUM_H
+#ifndef SW_VACUUM_H
+#define SW_VACUUM_H
 
 #include "postgres.h"
 #include "catalog/pg_class.h"
@@ -31,6 +31,6 @@ typedef struct SWVacuumContext
 extern uint64_t NumSWVacuumTuples(Oid relid);
 extern SWVacuumContext *CreateSWVacuumContext(Relation relation);
 extern void FreeSWVacuumContext(SWVacuumContext *context);
-extern bool ShouldVacuumSWTuple(SWVacuumContext *context, HeapTupleData *tuple);
+extern bool ShouldVacuumSWTuple(SWVacuumContext *context, HeapTuple tuple);
 
-#endif /* CQVACUUM_H */
+#endif /* SW_VACUUM_H */

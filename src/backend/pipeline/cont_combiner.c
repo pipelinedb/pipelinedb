@@ -36,6 +36,7 @@
 #include "pipeline/cont_scheduler.h"
 #include "pipeline/cqmatrel.h"
 #include "pipeline/groupcache.h"
+#include "pipeline/sw_vacuum.h"
 #include "pipeline/tuplebuf.h"
 #include "tcop/dest.h"
 #include "tcop/pquery.h"
@@ -455,16 +456,23 @@ static void
 sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashTable existing)
 {
 	TupleTableSlot *slot = state->slot;
-	int size = sizeof(bool) * slot->tts_tupleDescriptor->natts;
+	Size size = sizeof(bool) * slot->tts_tupleDescriptor->natts;
 	bool *replace_all = palloc0(size);
 	EState *estate = CreateExecutorState();
+	List *tuples_to_cache = NIL;
+	ListCell *lc;
+	int i;
 
+	/* Only replace values for non-group attributes */
 	MemSet(replace_all, true, size);
+	for (i = 0; i < state->ngroupatts; i++)
+		replace_all[state->groupatts[i] - 1] = false;
 
 	foreach_tuple(slot, results)
 	{
 		HeapTupleEntry update = NULL;
 		HeapTuple tup = NULL;
+		bool should_cache = true;
 
 		slot_getallattrs(slot);
 
@@ -478,10 +486,14 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashT
 			 */
 			tup = heap_modify_tuple(update->tuple, slot->tts_tupleDescriptor,
 					slot->tts_values, slot->tts_isnull, replace_all);
-
 			ExecStoreTuple(tup, slot, InvalidBuffer, false);
-			ExecCQMatRelUpdate(state->ri, slot, estate);
-			IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
+			if (ExecCQMatRelUpdate(state->ri, slot, estate))
+				IncrementCQUpdate(1, HEAPTUPLESIZE + tup->t_len);
+			else if (state->cache)
+			{
+				should_cache = false;
+				GroupCacheDelete(state->cache, slot);
+			}
 		}
 		else
 		{
@@ -490,20 +502,26 @@ sync_combine(ContQueryCombinerState *state, Tuplestorestate *results, TupleHashT
 			IncrementCQWrite(1, HEAPTUPLESIZE + slot->tts_tuple->t_len);
 		}
 
+		if (state->cache && should_cache)
+			tuples_to_cache = lappend(tuples_to_cache, ExecCopySlotTuple(slot));
+
 		ResetPerTupleExprContext(estate);
 	}
 
 	/*
 	 * We need to wait until we've completed all updates/inserts before caching everything, otherwise
-	 * we may free a cached tuple before trying to read it
+	 * we may free a cached tuple before trying to read it.
 	 */
-	if (state->cache)
+	foreach(lc, tuples_to_cache)
 	{
-		foreach_tuple(slot, results)
-		{
-			GroupCachePut(state->cache, slot);
-		}
+		HeapTuple tup = (HeapTuple) lfirst(lc);
+		ExecStoreTuple(tup, slot, InvalidBuffer, false);
+		GroupCachePut(state->cache, slot);
+		ExecClearTuple(slot);
+		heap_freetuple(tup);
 	}
+
+	list_free(tuples_to_cache);
 
 	FreeExecutorState(estate);
 }
@@ -705,7 +723,6 @@ cleanup_query_state(ContQueryCombinerState **states, Oid id)
 
 	if (state->matrel)
 		heap_close(state->matrel, RowExclusiveLock);
-
 	MemoryContextDelete(state->state_cxt);
 	pfree(state);
 	states[id] = NULL;
