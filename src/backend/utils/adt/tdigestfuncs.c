@@ -241,7 +241,7 @@ tdigest_add(PG_FUNCTION_ARGS)
 		t = (TDigest *) PG_GETARG_VARLENA_P(0);
 
 	t = TDigestAdd(t, PG_GETARG_FLOAT8(1), 1);
-	TDigestCompress(t);
+	t = TDigestCompress(t);
 	PG_RETURN_POINTER(t);
 }
 
@@ -264,7 +264,7 @@ tdigest_addn(PG_FUNCTION_ARGS)
 	if (n)
 	{
 		t = TDigestAdd(t, PG_GETARG_FLOAT8(1), n);
-		TDigestCompress(t);
+		t = TDigestCompress(t);
 	}
 
 	PG_RETURN_POINTER(t);

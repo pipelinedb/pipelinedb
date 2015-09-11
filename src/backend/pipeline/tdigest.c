@@ -212,7 +212,11 @@ TDigestCompress(TDigest *t)
 	}
 
 	if (t->num_centroids > num_centroids)
-		t = repalloc(t, TDigestSize(t));
+	{
+		TDigest *new = (TDigest *) palloc(TDigestSize(t));
+		memcpy(new, t, sizeof(TDigest));
+		t = new;
+	}
 
 	Assert(t->num_centroids <= t->size);
 
