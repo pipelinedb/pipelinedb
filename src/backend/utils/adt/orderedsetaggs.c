@@ -1996,6 +1996,7 @@ cq_percentile_cont_float8_final(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 
 	state = (CQOSAAggState *) PG_GETARG_POINTER(0);
+	state->tdigest = TDigestCompress(state->tdigest);
 
 	/* number_of_rows could be zero if we only saw NULL input values */
 	if (state->tdigest->total_weight == 0)
