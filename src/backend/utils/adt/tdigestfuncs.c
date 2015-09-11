@@ -38,7 +38,7 @@ tdigest_compress(PG_FUNCTION_ARGS)
 		old = MemoryContextSwitchTo(context);
 	}
 
-	TDigestCompress(t);
+	t = TDigestCompress(t);
 
 	if (in_agg_cxt)
 		MemoryContextSwitchTo(old);
@@ -58,7 +58,8 @@ tdigest_print(PG_FUNCTION_ARGS)
 	t = (TDigest *) PG_GETARG_VARLENA_P(0);
 
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "{ count = %ld, k = %d, centroids: %d }", t->total_weight, (int) t->compression, t->num_centroids);
+	appendStringInfo(&buf, "{ count = %ld, k = %d, centroids: %d, size = %dkB }",
+			t->total_weight, (int) t->compression, t->num_centroids, (int) TDigestSize(t) / 1024);
 
 	PG_RETURN_TEXT_P(CStringGetTextDatum(buf.data));
 }
@@ -108,7 +109,7 @@ tdigest_agg_trans(PG_FUNCTION_ARGS)
 	else
 		state = (TDigest *) PG_GETARG_VARLENA_P(0);
 
-	TDigestAdd(state, incoming, 1);
+	state = TDigestAdd(state, incoming, 1);
 
 	MemoryContextSwitchTo(old);
 
@@ -139,7 +140,7 @@ tdigest_agg_transp(PG_FUNCTION_ARGS)
 	else
 		state = (TDigest *) PG_GETARG_VARLENA_P(0);
 
-	TDigestAdd(state, incoming, 1);
+	state = TDigestAdd(state, incoming, 1);
 
 	MemoryContextSwitchTo(old);
 
@@ -171,7 +172,7 @@ tdigest_merge_agg_trans(PG_FUNCTION_ARGS)
 	}
 
 	state = (TDigest *) PG_GETARG_VARLENA_P(0);
-	TDigestMerge(state, incoming);
+	state = TDigestMerge(state, incoming);
 
 	MemoryContextSwitchTo(old);
 
@@ -239,8 +240,8 @@ tdigest_add(PG_FUNCTION_ARGS)
 	else
 		t = (TDigest *) PG_GETARG_VARLENA_P(0);
 
-	TDigestAdd(t, PG_GETARG_FLOAT8(1), 1);
-	TDigestCompress(t);
+	t = TDigestAdd(t, PG_GETARG_FLOAT8(1), 1);
+	t = TDigestCompress(t);
 	PG_RETURN_POINTER(t);
 }
 
@@ -262,8 +263,8 @@ tdigest_addn(PG_FUNCTION_ARGS)
 
 	if (n)
 	{
-		TDigestAdd(t, PG_GETARG_FLOAT8(1), n);
-		TDigestCompress(t);
+		t = TDigestAdd(t, PG_GETARG_FLOAT8(1), n);
+		t = TDigestCompress(t);
 	}
 
 	PG_RETURN_POINTER(t);
