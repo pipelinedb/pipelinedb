@@ -26,6 +26,8 @@
 
 #define CQ_TABLE_SUFFIX "_mrel"
 
+bool continuous_query_materialization_table_updatable;
+
 /*
  * GetUniqueMatRelName
  *
@@ -218,6 +220,9 @@ ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 	ExecInsertCQMatRelIndexTuples(ri, slot, estate);
 }
 
+/*
+ * matrel_heap_delete
+ */
 void
 matrel_heap_delete(Relation relation, ItemPointer tid)
 {

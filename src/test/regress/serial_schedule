@@ -204,4 +204,5 @@ test: cont_activate
 test: create_combinable_agg
 test: pipeline_regress
 test: cont_fss_agg
+test: cont_matrel
 test: pipeline_stats

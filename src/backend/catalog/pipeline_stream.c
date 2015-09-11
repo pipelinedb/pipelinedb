@@ -497,7 +497,7 @@ GetLocalStreamReaders(Oid relid)
 {
 	Bitmapset *readers = GetAllStreamReaders(relid);
 
-	if (stream_targets && readers)
+	if (stream_targets && strlen(stream_targets) && readers)
 	{
 		Bitmapset *local_readers = NULL;
 		HeapTuple tuple;

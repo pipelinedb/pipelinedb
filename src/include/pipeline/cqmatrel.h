@@ -14,6 +14,10 @@
 
 #include "nodes/execnodes.h"
 
+extern bool continuous_query_materialization_table_updatable;
+
+#define MatRelUpdatesEnabled() (continuous_query_materialization_table_updatable)
+
 extern char *GetUniqueMatRelName(char *cvname, char* nspname);
 
 extern ResultRelInfo *CQMatRelOpen(Relation matrel);

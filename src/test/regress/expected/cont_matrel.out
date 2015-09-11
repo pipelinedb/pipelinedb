@@ -1,0 +1,60 @@
+CREATE CONTINUOUS VIEW cont_matrel AS SELECT COUNT(*) FROM cont_matrel_stream;
+INSERT INTO cont_matrel_stream (x) VALUES (1);
+SELECT * FROM cont_matrel;
+ count 
+-------
+     1
+(1 row)
+
+INSERT INTO cont_matrel_mrel0 (count) VALUES (1);
+ERROR:  cannot change materialization table "cont_matrel_mrel0" of continuous view "cont_matrel"
+HINT:  Toggle the "continuous_query_materialization_table_updatable" parameter to change this behavior.
+UPDATE cont_matrel_mrel0 SET count = 2;
+ERROR:  cannot change materialization table "cont_matrel_mrel0" of continuous view "cont_matrel"
+HINT:  Toggle the "continuous_query_materialization_table_updatable" parameter to change this behavior.
+DELETE FROM cont_matrel_mrel0;
+ERROR:  cannot change materialization table "cont_matrel_mrel0" of continuous view "cont_matrel"
+HINT:  Toggle the "continuous_query_materialization_table_updatable" parameter to change this behavior.
+SET continuous_query_materialization_table_updatable TO ON;
+UPDATE cont_matrel_mrel0 SET count = 2;
+SELECT * FROM cont_matrel;
+ count 
+-------
+     2
+(1 row)
+
+INSERT INTO cont_matrel_stream (x) VALUES (1);
+SELECT * FROM cont_matrel;
+ count 
+-------
+     3
+(1 row)
+
+DELETE FROM cont_matrel_mrel0;
+SELECT * FROM cont_matrel;
+ count 
+-------
+(0 rows)
+
+INSERT INTO cont_matrel_stream (x) VALUES (1);
+SELECT * FROM cont_matrel;
+ count 
+-------
+     1
+(1 row)
+
+TRUNCATE CONTINUOUS VIEW cont_matrel;
+INSERT INTO cont_matrel_mrel0 (count) VALUES (5);
+SELECT * FROM cont_matrel;
+ count 
+-------
+     5
+(1 row)
+
+INSERT INTO cont_matrel_stream (x) VALUES (1);
+SELECT * FROM cont_matrel;
+ count 
+-------
+     6
+(1 row)
+

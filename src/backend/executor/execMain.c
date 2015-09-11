@@ -55,8 +55,10 @@
 #include "libpq/libpq.h"
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
+#include "nodes/makefuncs.h"
 #include "optimizer/clauses.h"
 #include "parser/parsetree.h"
+#include "pipeline/cqmatrel.h"
 #include "postmaster/fork_process.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
@@ -968,6 +970,20 @@ CheckValidResultRel(Relation resultRel, CmdType operation)
 	switch (resultRel->rd_rel->relkind)
 	{
 		case RELKIND_RELATION:
+			if (!MatRelUpdatesEnabled())
+			{
+				Relation rel = heap_open(resultRel->rd_id, NoLock);
+				RangeVar *matrel = makeRangeVar(get_namespace_name(RelationGetNamespace(rel)), RelationGetRelationName(rel), -1);
+				RangeVar *cv;
+				relation_close(rel, NoLock);
+
+				if (IsAMatRel(matrel, &cv))
+					ereport(ERROR,
+							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+							 errmsg("cannot change materialization table \"%s\" of continuous view \"%s\"",
+									 matrel->relname, cv->relname),
+							 errhint("Toggle the \"continuous_query_materialization_table_updatable\" parameter to change this behavior.")));
+			}
 			/* OK */
 			break;
 		case RELKIND_SEQUENCE:
