@@ -94,6 +94,8 @@ def test_disk_spill(pipeline, clean_db):
   disk_pages = map(lambda s: s.disk_pages, stats)
   assert sorted(disk_pages) != disk_pages
 
+  before = get_stat()
+
   # Now vacuum while we're not inserting at all and see if it does a major
   # clean up
   conn = psycopg2.connect('dbname=pipeline user=%s host=localhost port=%s' %
@@ -103,7 +105,7 @@ def test_disk_spill(pipeline, clean_db):
   db.execute('VACUUM test_vacuum')
   conn.close()
 
-  stat = get_stat()
+  after = get_stat()
 
-  assert stat.matrel_rows < stats[-1].matrel_rows
-  assert stat.disk_pages <= stats[-1].disk_pages
+  assert after.matrel_rows < before.matrel_rows
+  assert after.disk_pages <= before.disk_pages
