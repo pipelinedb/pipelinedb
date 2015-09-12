@@ -106,4 +106,4 @@ def test_disk_spill(pipeline, clean_db):
   stat = get_stat()
 
   assert stat.matrel_rows < stats[-1].matrel_rows
-  assert stat.disk_pages < stats[-1].disk_pages
+  assert stat.disk_pages <= stats[-1].disk_pages
