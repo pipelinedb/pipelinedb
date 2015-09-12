@@ -222,6 +222,10 @@ ExecCQMatRelInsert(ResultRelInfo *ri, TupleTableSlot *slot, EState *estate)
 
 /*
  * matrel_heap_delete
+ *
+ * Like simple_heap_delete except that it ignores the error in case the tuple was concurrently
+ * updated. This is used by the auto-vacuumer so it doesn't choke in case the combiner updated
+ * the expired tuple while the auto-vacuumer tried to delete it.
  */
 void
 matrel_heap_delete(Relation relation, ItemPointer tid)
