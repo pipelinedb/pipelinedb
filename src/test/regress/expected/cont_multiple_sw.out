@@ -1,3 +1,4 @@
+SET IntervalStyle to postgres;
 -- We can't reference arrival_timestamp if the underlying CV isn't a SW
 CREATE CONTINUOUS VIEW msw0 AS SELECT x::integer, COUNT(*) FROM msw_stream
 WHERE x > 10 GROUP BY x;
@@ -11,6 +12,20 @@ CREATE CONTINUOUS VIEW msw0 AS SELECT x::integer, COUNT(*), avg(x) FROM msw_stre
 WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds' GROUP BY x;
 CREATE VIEW msw1 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0
 WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds';
+-- Verify that we can use max_age on views that read from SW CVs
+CREATE VIEW msw1_ma WITH (max_age = '2 seconds') AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0;
+\d+ msw1_ma;
+                View "public.msw1_ma"
+ Column |  Type   | Modifiers | Storage | Description 
+--------+---------+-----------+---------+-------------
+ count  | bigint  |           | plain   | 
+ avg    | numeric |           | main    | 
+View definition:
+ SELECT combine(msw0.count) AS count,
+    int8_avg(combine(msw0.avg)) AS avg
+   FROM msw0
+  WHERE arrival_timestamp > (clock_timestamp() - '00:00:02'::interval);
+
 CREATE VIEW msw2 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0
 WHERE arrival_timestamp > clock_timestamp() - interval '5 seconds';
 INSERT INTO msw_stream (x) SELECT generate_series(1, 100) AS x;
@@ -120,6 +135,12 @@ SELECT * FROM msw0 ORDER BY x;
 (100 rows)
 
 SELECT * FROM msw1;
+ count |         avg         
+-------+---------------------
+   100 | 50.5000000000000000
+(1 row)
+
+SELECT * FROM msw1_ma;
  count |         avg         
 -------+---------------------
    100 | 50.5000000000000000
@@ -248,6 +269,12 @@ SELECT * FROM msw1;
      0 |    
 (1 row)
 
+SELECT * FROM msw1_ma;
+ count | avg 
+-------+-----
+     0 |    
+(1 row)
+
 SELECT * FROM msw2;
  count |         avg         
 -------+---------------------
@@ -371,6 +398,12 @@ SELECT * FROM msw1;
      0 |    
 (1 row)
 
+SELECT * FROM msw1_ma;
+ count | avg 
+-------+-----
+     0 |    
+(1 row)
+
 SELECT * FROM msw2;
  count | avg 
 -------+-----
@@ -381,11 +414,13 @@ SELECT * FROM msw2;
 DROP CONTINUOUS VIEW msw0;
 ERROR:  cannot drop continuous view msw0 because other objects depend on it
 DETAIL:  view msw1 depends on continuous view msw0
+view msw1_ma depends on continuous view msw0
 view msw2 depends on continuous view msw0
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP CONTINUOUS VIEW msw0 CASCADE;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 3 other objects
 DETAIL:  drop cascades to view msw1
+drop cascades to view msw1_ma
 drop cascades to view msw2
 CREATE CONTINUOUS VIEW msw3 AS SELECT
 	x::integer + 10 AS a,

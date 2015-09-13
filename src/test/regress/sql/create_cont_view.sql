@@ -136,6 +136,32 @@ CREATE CONTINUOUS VIEW arrts AS SELECT x::integer AS arrival_timestamp FROM stre
 CREATE CONTINUOUS VIEW arrts AS SELECT arrival_timestamp AS arrival_timestamp FROM stream;
 DROP CONTINUOUS VIEW arrts;
 
+-- WITH max_age
+CREATE CONTINUOUS VIEW ma0 WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream;
+\d+ ma0;
+CREATE VIEW ma1 WITH (max_age = '1 hour') AS SELECT COUNT(*) FROM ma0;
+\d+ ma1;
+
+-- max_age must be a valid interval string
+CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42) AS SELECT COUNT(*) FROM stream;
+CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42.1) AS SELECT COUNT(*) FROM stream;
+CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 'not an interval') AS SELECT COUNT(*) FROM stream;
+
+CREATE CONTINUOUS VIEW mawhere WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream
+WHERE x::integer = 1;
+\d+ mawhere;
+
+DROP CONTINUOUS VIEW mawhere;
+
+-- max_age can't be used on non-sliding window continuous views
+CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM withff;
+
+-- or in conjunction with another sliding-window predicate
+CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream
+WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
+
+DROP CONTINUOUS VIEW ma0 CASCADE;
+
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;

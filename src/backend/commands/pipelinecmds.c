@@ -64,8 +64,6 @@
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
 
-#define OPTION_FILLFACTOR "fillfactor"
-
 /* guc params */
 int continuous_view_fillfactor;
 
@@ -90,31 +88,6 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 	result->typeName = typename;
 
 	return result;
-}
-
-/*
- * get_option
- *
- * Returns the given option or NULL if it wasn't supplied
- */
-static DefElem *
-get_option(List *options, char *name)
-{
-	ListCell *lc;
-
-	foreach(lc, options)
-	{
-		DefElem *de;
-
-		if (!IsA(lfirst(lc), DefElem))
-			continue;
-
-		de = (DefElem *) lfirst(lc);
-		if (de->defname && pg_strcasecmp(de->defname, name) == 0)
-			return de;
-	}
-
-	return NULL;
 }
 
 /*
@@ -419,6 +392,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ContAnalyzeContext *context;
 	ContinuousView *cv;
 	Oid cvid;
+	DefElem *max_age;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -446,6 +420,15 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	CreateInferredStreams((SelectStmt *) stmt->query);
 	MakeSelectsContinuous((SelectStmt *) stmt->query);
+
+	/* if we have a WITH (max_age = ...), transform it into a WHERE arrival_timestamp ... predicate */
+	max_age = GetContinuousViewOption(stmt->into->options, OPTION_MAX_AGE);
+	if (max_age)
+	{
+		ApplyMaxAge((SelectStmt *) stmt->query, max_age);
+		stmt->into->options = list_delete(stmt->into->options, max_age);
+	}
+
 	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
 
 	/* Deparse query so that analyzer always see the same canonicalized SelectStmt */
@@ -499,7 +482,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		tableElts = lappend(tableElts, coldef);
 	}
 
-	if (!get_option(stmt->into->options, OPTION_FILLFACTOR))
+	if (!GetContinuousViewOption(stmt->into->options, OPTION_FILLFACTOR))
 		stmt->into->options = add_default_fillfactor(stmt->into->options);
 
 	/*
