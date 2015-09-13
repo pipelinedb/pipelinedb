@@ -1,3 +1,5 @@
+SET IntervalStyle to postgres;
+
 -- We can't reference arrival_timestamp if the underlying CV isn't a SW
 CREATE CONTINUOUS VIEW msw0 AS SELECT x::integer, COUNT(*) FROM msw_stream
 WHERE x > 10 GROUP BY x;
@@ -13,6 +15,10 @@ WHERE arrival_timestamp > clock_timestamp() - interval '10 seconds' GROUP BY x;
 CREATE VIEW msw1 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0
 WHERE arrival_timestamp > clock_timestamp() - interval '2 seconds';
 
+-- Verify that we can use max_age on views that read from SW CVs
+CREATE VIEW msw1_ma WITH (max_age = '2 seconds') AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0;
+\d+ msw1_ma;
+
 CREATE VIEW msw2 AS SELECT combine(count) AS count, combine(avg) AS avg FROM msw0
 WHERE arrival_timestamp > clock_timestamp() - interval '5 seconds';
 
@@ -20,18 +26,21 @@ INSERT INTO msw_stream (x) SELECT generate_series(1, 100) AS x;
 
 SELECT * FROM msw0 ORDER BY x;
 SELECT * FROM msw1;
+SELECT * FROM msw1_ma;
 SELECT * FROM msw2;
 
 SELECT pg_sleep(2.1);
 
 SELECT * FROM msw0  ORDER BY x;
 SELECT * FROM msw1;
+SELECT * FROM msw1_ma;
 SELECT * FROM msw2;
 
 SELECT pg_sleep(3);
 
 SELECT * FROM msw0  ORDER BY x;
 SELECT * FROM msw1;
+SELECT * FROM msw1_ma;
 SELECT * FROM msw2;
 
 -- View depends on CV

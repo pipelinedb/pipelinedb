@@ -30,6 +30,7 @@
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
 #include "parser/analyze.h"
+#include "parser/parser.h"
 #include "parser/parsetree.h"
 #include "parser/parse_agg.h"
 #include "parser/parse_clause.h"
@@ -3497,4 +3498,76 @@ CreateOuterArrivalTimestampRef(ParseState *pstate, ColumnRef *cref, Node *var)
 	result = makeVar(ARRIVAL_TIMESTAMP_REF, 1, TIMESTAMPTZOID, -1, InvalidOid, 0);
 
 	return (Node *) result;
+}
+
+/*
+ * GetContinuousViewOption
+ *
+ * Returns the given option or NULL if it wasn't supplied
+ */
+DefElem *
+GetContinuousViewOption(List *options, char *name)
+{
+	ListCell *lc;
+
+	foreach(lc, options)
+	{
+		DefElem *de;
+
+		if (!IsA(lfirst(lc), DefElem))
+			continue;
+
+		de = (DefElem *) lfirst(lc);
+		if (de->defname && pg_strcasecmp(de->defname, name) == 0)
+			return de;
+	}
+
+	return NULL;
+}
+
+/*
+ * ApplyMaxAge
+ *
+ * Transforms a max_age WITH parameter into a sliding-window WHERE predicate
+ */
+void
+ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
+{
+	A_Expr *where;
+	FuncCall *clock_ts;
+	TypeCast *interval;
+	A_Const *arg;
+	A_Expr *rexpr;
+	ColumnRef *arrival_ts;
+
+	if (!ContainsSlidingWindowContinuousView(stmt->fromClause) && stmt->forContinuousView == false)
+		elog(ERROR, "max_age can only be specified when reading from a stream or continuous view");
+
+	/* conjunctions involving a sliding window aren't currently supported */
+	if (stmt->whereClause != NULL)
+		elog(ERROR, "WHERE clauses cannot be specified in conjunction with max_age");
+
+	if (!IsA(max_age->arg, String))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("max_age must be a valid interval string"),
+				 errhint("For example, ... WITH (max_age = '1 hour') ...")));
+
+	arrival_ts = makeNode(ColumnRef);
+	arrival_ts->fields = list_make1(makeString(ARRIVAL_TIMESTAMP));
+
+	clock_ts = makeNode(FuncCall);
+	clock_ts->funcname = list_make1(makeString(CLOCK_TIMESTAMP));
+
+	arg = makeNode(A_Const);
+	arg->val = *((Value *) max_age->arg);
+
+	interval = makeNode(TypeCast);
+	interval->arg = (Node *) arg;
+	interval->typeName = SystemTypeName("interval");
+
+	rexpr = makeA_Expr(AEXPR_OP, list_make1(makeString("-")), (Node *) clock_ts, (Node *) interval, -1);
+	where = makeA_Expr(AEXPR_OP, list_make1(makeString(">")), (Node *) arrival_ts, (Node *) rexpr, -1);
+
+	stmt->whereClause = (Node *) where;
 }
