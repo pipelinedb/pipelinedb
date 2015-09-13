@@ -151,8 +151,14 @@ CREATE CONTINUOUS VIEW mawhere WITH (max_age = '1 day') AS SELECT COUNT(*) FROM 
 WHERE x::integer = 1;
 \d+ mawhere;
 
--- or on non-sliding window continuous views
+DROP CONTINUOUS VIEW mawhere;
+
+-- max_age can't be used on non-sliding window continuous views
 CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM withff;
+
+-- or in conjunction with another sliding-window predicate
+CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream
+WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
 
 DROP CONTINUOUS VIEW ma0 CASCADE;
 

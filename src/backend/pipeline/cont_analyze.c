@@ -3540,13 +3540,16 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	A_Expr *rexpr;
 	ColumnRef *arrival_ts;
 
+	if (has_clock_timestamp(stmt->whereClause, NULL))
+	  elog(ERROR, "cannot specify both \"max_age\" and a sliding window expression in the WHERE clause");
+
 	if (!ContainsSlidingWindowContinuousView(stmt->fromClause) && stmt->forContinuousView == false)
-		elog(ERROR, "max_age can only be specified when reading from a stream or continuous view");
+		elog(ERROR, "\"max_age\" can only be specified when reading from a stream or continuous view");
 
 	if (!IsA(max_age->arg, String))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("max_age must be a valid interval string"),
+				 errmsg("\"max_age\" must be a valid interval string"),
 				 errhint("For example, ... WITH (max_age = '1 hour') ...")));
 
 	arrival_ts = makeNode(ColumnRef);
@@ -3566,7 +3569,7 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	where = makeA_Expr(AEXPR_OP, list_make1(makeString(">")), (Node *) arrival_ts, (Node *) rexpr, -1);
 
 	if (stmt->whereClause)
-	  stmt->whereClause = (Node *) makeA_Expr(AEXPR_AND, NULL, where, stmt->whereClause, -1);
+	  stmt->whereClause = (Node *) makeA_Expr(AEXPR_AND, NULL, (Node *) where, stmt->whereClause, -1);
 	else
 	  stmt->whereClause = (Node *) where;
 }
