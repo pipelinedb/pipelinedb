@@ -706,16 +706,21 @@ CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 'not an interval') AS SELECT CO
 ERROR:  invalid input syntax for type interval: "not an interval"
 LINE 1: CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 'not an int...
         ^
--- max_age not allowed with a WHERE clause
 CREATE CONTINUOUS VIEW mawhere WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream
-WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
-ERROR:  WHERE clauses cannot be specified in conjunction with max_age
+WHERE x::integer = 1;
+\d+ mawhere;
+          Continuous view "public.mawhere"
+ Column |  Type  | Modifiers | Storage | Description 
+--------+--------+-----------+---------+-------------
+ count  | bigint |           | plain   | 
+View definition:
+ SELECT count(*) AS count
+   FROM ONLY stream
+  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '1 day'::interval) AND x::integer = 1;
+
 -- or on non-sliding window continuous views
 CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM withff;
 ERROR:  max_age can only be specified when reading from a stream or continuous view
-CREATE VIEW manowhere WITH (max_age = '1 hour') AS SELECT COUNT(*) FROM ma0
-WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
-ERROR:  WHERE clauses cannot be specified in conjunction with max_age
 DROP CONTINUOUS VIEW ma0 CASCADE;
 NOTICE:  drop cascades to view ma1
 DROP CONTINUOUS VIEW cqcreate0;

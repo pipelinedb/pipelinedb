@@ -3543,10 +3543,6 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	if (!ContainsSlidingWindowContinuousView(stmt->fromClause) && stmt->forContinuousView == false)
 		elog(ERROR, "max_age can only be specified when reading from a stream or continuous view");
 
-	/* conjunctions involving a sliding window aren't currently supported */
-	if (stmt->whereClause != NULL)
-		elog(ERROR, "WHERE clauses cannot be specified in conjunction with max_age");
-
 	if (!IsA(max_age->arg, String))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -3569,5 +3565,8 @@ ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
 	rexpr = makeA_Expr(AEXPR_OP, list_make1(makeString("-")), (Node *) clock_ts, (Node *) interval, -1);
 	where = makeA_Expr(AEXPR_OP, list_make1(makeString(">")), (Node *) arrival_ts, (Node *) rexpr, -1);
 
-	stmt->whereClause = (Node *) where;
+	if (stmt->whereClause)
+	  stmt->whereClause = (Node *) makeA_Expr(AEXPR_AND, NULL, where, stmt->whereClause, -1);
+	else
+	  stmt->whereClause = (Node *) where;
 }

@@ -147,14 +147,12 @@ CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42) AS SELECT COUNT(*) FROM str
 CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42.1) AS SELECT COUNT(*) FROM stream;
 CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 'not an interval') AS SELECT COUNT(*) FROM stream;
 
--- max_age not allowed with a WHERE clause
 CREATE CONTINUOUS VIEW mawhere WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream
-WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
+WHERE x::integer = 1;
+\d+ mawhere;
 
 -- or on non-sliding window continuous views
 CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM withff;
-CREATE VIEW manowhere WITH (max_age = '1 hour') AS SELECT COUNT(*) FROM ma0
-WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
 
 DROP CONTINUOUS VIEW ma0 CASCADE;
 
