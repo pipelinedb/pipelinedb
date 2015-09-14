@@ -27,10 +27,11 @@ typedef struct {
 	int32 hash;
 } ContinuousView;
 
-extern Oid DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelname, bool gc);
+extern Oid DefineContinuousView(RangeVar *name, Query *query, RangeVar *matrelname, bool gc, Oid *pq_id);
 extern HeapTuple GetPipelineQueryTuple(RangeVar *name);
 extern char *GetQueryString(RangeVar *name);
 extern bool IsAContinuousView(RangeVar *name);
+extern bool ContainsSlidingWindowContinuousView(List *nodes);
 extern bool IsAMatRel(RangeVar *name, RangeVar **cvname);
 extern bool GetGCFlag(RangeVar *name);
 extern RangeVar *GetMatRelationName(RangeVar *cv);

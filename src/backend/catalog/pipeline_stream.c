@@ -172,7 +172,7 @@ streams_to_meta(Relation pipeline_query)
 		ContAnalyzeContext *context;
 
 		tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tup, Anum_pipeline_query_query, &isnull);
-		querystring = deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
+		querystring = deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 		parsetree_list = pg_parse_query(querystring);
 		parsetree = (Node *) lfirst(parsetree_list->head);
@@ -497,7 +497,7 @@ GetLocalStreamReaders(Oid relid)
 {
 	Bitmapset *readers = GetAllStreamReaders(relid);
 
-	if (stream_targets && readers)
+	if (stream_targets && strlen(stream_targets) && readers)
 	{
 		Bitmapset *local_readers = NULL;
 		HeapTuple tuple;

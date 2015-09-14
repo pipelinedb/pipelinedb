@@ -207,7 +207,7 @@ GetPipelineQueryTuple(RangeVar *name)
  * Adds a CV to the `pipeline_query` catalog table.
  */
 Oid
-DefineContinuousView(RangeVar *name, Query *query, RangeVar* matrelname, bool gc)
+DefineContinuousView(RangeVar *name, Query *query, RangeVar* matrelname, bool gc, Oid *pq_id)
 {
 	Relation pipeline_query;
 	HeapTuple tup;
@@ -278,6 +278,8 @@ DefineContinuousView(RangeVar *name, Query *query, RangeVar* matrelname, bool gc
 	UpdatePipelineStreamCatalog();
 
 	heap_close(pipeline_query, NoLock);
+
+	*pq_id = id;
 
 	return result;
 }
@@ -362,7 +364,7 @@ GetQueryString(RangeVar *cvname)
 				errmsg("continuous view \"%s\" does not exist", cvname->relname)));
 
 	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
-	result = deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
+	result = deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 	ReleaseSysCache(tuple);
 
@@ -383,6 +385,27 @@ IsAContinuousView(RangeVar *name)
 		return false;
 	ReleaseSysCache(tuple);
 	return true;
+}
+
+/*
+ * ContainsSlidingWindowContinuousView
+ *
+ * Returns true if any of the given nodes represents a
+ * sliding window continuous view
+ */
+bool
+ContainsSlidingWindowContinuousView(List *nodes)
+{
+	ListCell *lc;
+	foreach(lc, nodes)
+	{
+		if (IsA(lfirst(lc), RangeVar))
+		{
+			if (IsAContinuousView((RangeVar *) lfirst(lc)) && GetGCFlag((RangeVar *) lfirst(lc)))
+				return true;
+		}
+	}
+	return false;
 }
 
 /*
@@ -473,7 +496,7 @@ GetContinuousView(Oid id)
 	view->hash = row->hash;
 
 	tmp = SysCacheGetAttr(PIPELINEQUERYNAMESPACENAME, tuple, Anum_pipeline_query_query, &isnull);
-	view->query = deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
+	view->query = deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp)));
 
 	ReleaseSysCache(tuple);
 

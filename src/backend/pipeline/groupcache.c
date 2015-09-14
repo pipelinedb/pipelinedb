@@ -127,9 +127,7 @@ GroupCachePut(GroupCache *cache, TupleTableSlot *slot)
 		dlist_delete(&(entry->lru->node));
 	}
 	else
-	{
 		entry->lru = palloc0(sizeof(LRUEntry));
-	}
 
 	/* evict enough entries to make room for it */
 	if (needed > cache->available)
@@ -167,4 +165,19 @@ GroupCacheGet(GroupCache *cache, TupleTableSlot *slot)
 	dlist_push_head(&(cache->lru), &(entry->lru->node));
 
 	return entry->tuple;
+}
+
+/*
+ * GroupCacheDelete
+ */
+void
+GroupCacheDelete(GroupCache *cache, TupleTableSlot *slot)
+{
+	GroupCacheEntry *entry = (GroupCacheEntry *) LookupTupleHashEntry(cache->htab, slot, NULL);
+
+	if (entry == NULL)
+		return;
+
+	dlist_delete(&(entry->lru->node));
+	RemoveTupleHashEntry(cache->htab, slot);
 }

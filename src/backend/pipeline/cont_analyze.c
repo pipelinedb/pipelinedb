@@ -22,6 +22,7 @@
 #include "catalog/pipeline_combine_fn.h"
 #include "catalog/pipeline_query_fn.h"
 #include "catalog/pipeline_stream_fn.h"
+#include "commands/pipelinecmds.h"
 #include "lib/stringinfo.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
@@ -29,6 +30,7 @@
 #include "optimizer/tlist.h"
 #include "optimizer/var.h"
 #include "parser/analyze.h"
+#include "parser/parser.h"
 #include "parser/parsetree.h"
 #include "parser/parse_agg.h"
 #include "parser/parse_clause.h"
@@ -513,7 +515,6 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 {
 	Node *col = node;
 	bool saw_expr = false;
-	bool saw_trunc = false;
 
 	context->cols = NIL;
 	collect_types_and_cols(node, context);
@@ -540,16 +541,14 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 			FuncCall *fc = (FuncCall *) col;
 			char *name = NameListToString(fc->funcname);
 
-			if (pg_strcasecmp(name, DATE_FLOOR) == 0 ||
+			if (!(pg_strcasecmp(name, DATE_FLOOR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_YEAR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MONTH) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_DAY) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_HOUR) == 0 ||
 					pg_strcasecmp(name, DATE_TRUNC_MINUTE) == 0 ||
-					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0)
-				saw_trunc = true;
-			else
+					pg_strcasecmp(name, DATE_TRUNC_SECOND) == 0))
 				return NULL;
 
 			/* Date truncation should happen at the top level */
@@ -582,23 +581,6 @@ validate_window_timestamp_expr(SelectStmt *stmt, Node *node, ContAnalyzeContext 
 		}
 
 		return NULL;
-	}
-
-	if (context->is_sw && !saw_trunc)
-	{
-		A_Expr *ct_expr = (A_Expr *) context->expr;
-		TypeCast *c;
-		char *fname;
-
-		Assert(ct_expr && IsA(ct_expr, A_Expr));
-
-		c = (TypeCast *) ct_expr->rexpr;
-		Assert(IsA(c, TypeCast) && IsA(c->arg, A_Const));
-		fname = get_truncation_from_interval_expr((Node *) c);
-
-		ereport(NOTICE,
-				(errmsg("window width is \"%s\" with a step size of \"1 %s\"", strVal(&((A_Const *) c->arg)->val), fname),
-				errhint("Use a datetime truncation function if you want to explicitly set the step size.")));
 	}
 
 	return (ColumnRef *) col;
@@ -882,6 +864,35 @@ is_allowed_subquery(Node *subquery)
 }
 
 /*
+ * validate_target_list
+ */
+static void
+validate_target_list(SelectStmt *stmt)
+{
+	ListCell *lc;
+	foreach(lc, stmt->targetList)
+	{
+		ResTarget *res = (ResTarget *) lfirst(lc);
+
+		if (IsA(res->val, SubLink))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("subqueries are not allowed in a continuous view's target list"),
+					errhint("Stream-table joins are the preferred method for combining other relations with continuous views.")));
+		}
+		else if (res->name && pg_strcasecmp(res->name, ARRIVAL_TIMESTAMP) == 0)
+		{
+			/* we don't allow aliasing other columns as arrival_timestamp */
+			Node *n = (Node *) res->val;
+			if (!IsA(n, ColumnRef) || pg_strcasecmp(FigureColname(n), ARRIVAL_TIMESTAMP) != 0)
+				elog(ERROR, "arrival_timestamp is a reserved column name");
+		}
+
+	}
+}
+
+/*
  * ValidateContQuery
  */
 void
@@ -899,6 +910,7 @@ ValidateContQuery(RangeVar *name, Node *node, const char *sql)
 				errmsg("continuous views can only be defined using SELECT queries")));
 
 	select = (SelectStmt *) copyObject(node);
+	validate_target_list(select);
 
 	context = MakeContAnalyzeContext(make_parsestate(NULL), select, Worker);
 	context->pstate->p_sourcetext = sql;
@@ -1852,6 +1864,8 @@ hoist_node(List **target_list, Node *node, ContAnalyzeContext *context)
 	if (rt == NULL)
 	{
 		rt = create_unique_res_target(node, context);
+		if (context->hoisted_name)
+			rt->name = context->hoisted_name;
 		*target_list = lappend(*target_list, rt);
 	}
 
@@ -2162,10 +2176,13 @@ proj_and_group_for_windows(SelectStmt *proc, SelectStmt *view, ContAnalyzeContex
 	}
 
 	/* Create and truncate projection and grouping on temporal expression */
+	context->hoisted_name = ARRIVAL_TIMESTAMP;
 	if (context->view_combines)
 		cref = hoist_time_node(proc, time, sw_expr, context);
 	else
 		cref = hoist_node(&proc->targetList, time, context);
+
+	context->hoisted_name = NULL;
 
 	if (context->is_sw)
 	{
@@ -2460,10 +2477,10 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 	proc->limitCount = NULL;
 	proc->limitOffset = NULL;
 
-	if (viewptr)
-		*viewptr = view;
+	/* Overlay view reads from matrel */
+	view->fromClause = list_make1(mat_relation);
 
-	if (IsContQueryCombinerProcess())
+	if (proc_type == Combiner)
 	{
 		/*
 		 * Combiner shouldn't have to re-do the filtering work of the WHERE clause.
@@ -2476,6 +2493,9 @@ TransformSelectStmtForContProcess(RangeVar *mat_relation, SelectStmt *stmt, Sele
 		foreach(lc, context->funcs)
 			((FuncCall *) lfirst(lc))->agg_filter = NULL;
 	}
+
+	if (viewptr)
+		*viewptr = view;
 
 	return proc;
 }
@@ -2514,11 +2534,31 @@ GetContWorkerQuery(RangeVar *rv)
 	char *sql;
 	List *parsetree_list;
 	SelectStmt *sel;
+	RangeVar *matrel;
 
 	sql = GetQueryString(rv);
 	parsetree_list = pg_parse_query(sql);
-	sel = TransformSelectStmtForContProcess(rv, linitial(parsetree_list), NULL, Worker);
+	matrel = GetMatRelationName(rv);
+	sel = TransformSelectStmtForContProcess(matrel, linitial(parsetree_list), NULL, Worker);
 
+	return parse_analyze((Node *) sel, sql, 0, 0);
+}
+
+/*
+ * GetContCombinerQuery
+ */
+Query *
+GetContCombinerQuery(RangeVar *rv)
+{
+	char *sql;
+	List *parsetree_list;
+	SelectStmt *sel;
+	RangeVar *matrel;
+
+	sql = GetQueryString(rv);
+	parsetree_list = pg_parse_query(sql);
+	matrel = GetMatRelationName(rv);
+	sel = TransformSelectStmtForContProcess(matrel, linitial(parsetree_list), NULL, Combiner);
 	return parse_analyze((Node *) sel, sql, 0, 0);
 }
 
@@ -2794,7 +2834,7 @@ combine_target_belongs_to_cv(Var *target, List *rangetable, RangeVar **cv)
 		ListCell *clc;
 		RangeTblEntry *rte = (RangeTblEntry *) lfirst(lc);
 
-		if (rte->relkind != RELKIND_VIEW)
+		if (rte->relkind != RELKIND_CONTVIEW)
 			continue;
 
 		foreach(clc, rte->eref->colnames)
@@ -3143,6 +3183,66 @@ pull_vars(Node *node, List **varlist)
 }
 
 /*
+ * push_down_sw_predicate
+ *
+ * Push down any upper sliding-window predicates to the matrel SELECT.
+ * This makes it possible to create multiple sliding windows over the same
+ * continuous view.
+ */
+static void
+push_down_sw_predicate(Var *dummy, Query *upper, Query *lower)
+{
+	List *vars = NIL;
+	Var *real;
+	RangeTblEntry *rte;
+	Value *colname;
+
+	pull_vars(lower->jointree->quals, &vars);
+
+	if (list_length(vars) != 1)
+		elog(ERROR, "column \"arrival_timestamp\" does not exist");
+
+	/* sliding window predicates should only have a single qual */
+	if (!IsA(lower->jointree->quals, OpExpr))
+		elog(ERROR, "column \"arrival_timestamp\" does not exist");
+
+	real = (Var *) linitial(vars);
+	rte = list_nth(lower->rtable, real->varno - 1);
+	colname = list_nth(rte->eref->colnames, real->varattno - 1);
+
+	if (pg_strcasecmp(ARRIVAL_TIMESTAMP, strVal(colname)) != 0)
+		elog(ERROR, "column \"arrival_timestamp\" does not exist");
+
+	memcpy(dummy, real, sizeof(Var));
+	lower->jointree->quals = upper->jointree->quals;
+	upper->jointree->quals = (Node *) NIL;
+}
+
+/*
+ * get_dummy_sw_predicate
+ *
+ * Returns a placeholder sliding-window predicate that should be pushed down,
+ * or NULL if one doesn't exist.
+ */
+static Var *
+get_dummy_sw_predicate(Node *where)
+{
+	List *vars = NIL;
+	Var *var;
+
+	pull_vars(where, &vars);
+
+	if (list_length(vars) != 1)
+		return NULL;
+
+	var = (Var *) linitial(vars);
+	if (IS_ARRIVAL_TIMESTAMP_REF(var))
+		return var;
+
+	return NULL;
+}
+
+/*
  * RewriteContinuousViewSelect
  *
  * Possibly modify an overlay view SELECT rule before it's applied.
@@ -3156,15 +3256,24 @@ RewriteContinuousViewSelect(Query *query, Query *rule, Relation cv, int rtindex)
 	List *combines = NIL;
 	ListCell *lc;
 	RangeTblEntry *rte;
+	Var *dummy;
 
 	/* RTE is not a view? */
 	rte = rt_fetch(rtindex, query->rtable);
-	if (rte->relkind != RELKIND_VIEW)
+	if (rte->relkind != RELKIND_CONTVIEW)
 		return rule;
 
 	/* try to bail early because this gets called from a hot path */
 	if (!IsAContinuousView(rv))
 		return rule;
+
+	/*
+	 * If there is an upper reference to arrival_timestamp, push it down
+	 * to the matrel select.
+	 */
+	dummy = get_dummy_sw_predicate(query->jointree->quals);
+	if (dummy)
+		push_down_sw_predicate(dummy, query, rule);
 
 	/* We only need to rewrite the overlay view definition if there are some user defines */
 	collect_combines_aggs((Node *) query->targetList, &combines);
@@ -3360,4 +3469,107 @@ GetWindowTimeColumn(RangeVar *cv)
 	}
 
 	return NULL;
+}
+
+/*
+ * CreateOuterArrivalTimestampRef
+ *
+ * If arrival_timestamp isn't found in an RTE, this hook is invoked by the parser.
+ * It ultimately allows us to try to push any references to arrival_timestamp down.
+ * This makes it easy to create sliding-window views on top of other sliding-window
+ * views because we can just push down the arrival_timestamp predicate down to the
+ * matrel SELECT.
+ */
+Node *
+CreateOuterArrivalTimestampRef(ParseState *pstate, ColumnRef *cref, Node *var)
+{
+	char *name;
+	Var *result;
+
+	if (var != NULL)
+		return NULL;
+
+	name = FigureColname((Node *) cref);
+
+	if (pg_strcasecmp(name, ARRIVAL_TIMESTAMP) != 0)
+		return NULL;
+
+	/* we only need to do something if the column couldn't be resolved at this level */
+	result = makeVar(ARRIVAL_TIMESTAMP_REF, 1, TIMESTAMPTZOID, -1, InvalidOid, 0);
+
+	return (Node *) result;
+}
+
+/*
+ * GetContinuousViewOption
+ *
+ * Returns the given option or NULL if it wasn't supplied
+ */
+DefElem *
+GetContinuousViewOption(List *options, char *name)
+{
+	ListCell *lc;
+
+	foreach(lc, options)
+	{
+		DefElem *de;
+
+		if (!IsA(lfirst(lc), DefElem))
+			continue;
+
+		de = (DefElem *) lfirst(lc);
+		if (de->defname && pg_strcasecmp(de->defname, name) == 0)
+			return de;
+	}
+
+	return NULL;
+}
+
+/*
+ * ApplyMaxAge
+ *
+ * Transforms a max_age WITH parameter into a sliding-window WHERE predicate
+ */
+void
+ApplyMaxAge(SelectStmt *stmt, DefElem *max_age)
+{
+	A_Expr *where;
+	FuncCall *clock_ts;
+	TypeCast *interval;
+	A_Const *arg;
+	A_Expr *rexpr;
+	ColumnRef *arrival_ts;
+
+	if (has_clock_timestamp(stmt->whereClause, NULL))
+	  elog(ERROR, "cannot specify both \"max_age\" and a sliding window expression in the WHERE clause");
+
+	if (!ContainsSlidingWindowContinuousView(stmt->fromClause) && stmt->forContinuousView == false)
+		elog(ERROR, "\"max_age\" can only be specified when reading from a stream or continuous view");
+
+	if (!IsA(max_age->arg, String))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("\"max_age\" must be a valid interval string"),
+				 errhint("For example, ... WITH (max_age = '1 hour') ...")));
+
+	arrival_ts = makeNode(ColumnRef);
+	arrival_ts->fields = list_make1(makeString(ARRIVAL_TIMESTAMP));
+
+	clock_ts = makeNode(FuncCall);
+	clock_ts->funcname = list_make1(makeString(CLOCK_TIMESTAMP));
+
+	arg = makeNode(A_Const);
+	arg->val = *((Value *) max_age->arg);
+
+	interval = makeNode(TypeCast);
+	interval->arg = (Node *) arg;
+	interval->typeName = SystemTypeName("interval");
+
+	rexpr = makeA_Expr(AEXPR_OP, list_make1(makeString("-")), (Node *) clock_ts, (Node *) interval, -1);
+	where = makeA_Expr(AEXPR_OP, list_make1(makeString(">")), (Node *) arrival_ts, (Node *) rexpr, -1);
+
+	if (stmt->whereClause)
+	  stmt->whereClause = (Node *) makeA_Expr(AEXPR_AND, NULL, (Node *) where, stmt->whereClause, -1);
+	else
+	  stmt->whereClause = (Node *) where;
 }

@@ -64,8 +64,7 @@
 #define CQ_MATREL_INDEX_TYPE "btree"
 #define DEFAULT_TYPEMOD -1
 
-#define OPTION_FILLFACTOR "fillfactor"
-
+/* guc params */
 int continuous_view_fillfactor;
 
 static ColumnDef *
@@ -89,31 +88,6 @@ make_cv_columndef(char *name, Oid type, Oid typemod)
 	result->typeName = typename;
 
 	return result;
-}
-
-/*
- * has_fillfactor
- *
- * Returns true if a fillfactor option is included in the given WITH options
- */
-static bool
-has_fillfactor(List *options)
-{
-	ListCell *lc;
-
-	foreach(lc, options)
-	{
-		DefElem *de;
-
-		if (!IsA(lfirst(lc), DefElem))
-			continue;
-
-		de = (DefElem *) lfirst(lc);
-		if (de->defname && pg_strcasecmp(de->defname, OPTION_FILLFACTOR) == 0)
-			return true;
-	}
-
-	return false;
 }
 
 /*
@@ -404,7 +378,7 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	ListCell *col;
 	Oid matreloid;
 	Oid viewoid;
-	Oid cvoid;
+	Oid pqoid;
 	Oid indexoid;
 	Datum toast_options;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
@@ -416,6 +390,9 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	bool saveAllowSystemTableMods;
 	Relation pipeline_query;
 	ContAnalyzeContext *context;
+	ContinuousView *cv;
+	Oid cvid;
+	DefElem *max_age;
 
 	Assert(((SelectStmt *) stmt->query)->forContinuousView);
 
@@ -443,11 +420,20 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 
 	CreateInferredStreams((SelectStmt *) stmt->query);
 	MakeSelectsContinuous((SelectStmt *) stmt->query);
+
+	/* if we have a WITH (max_age = ...), transform it into a WHERE arrival_timestamp ... predicate */
+	max_age = GetContinuousViewOption(stmt->into->options, OPTION_MAX_AGE);
+	if (max_age)
+	{
+		ApplyMaxAge((SelectStmt *) stmt->query, max_age);
+		stmt->into->options = list_delete(stmt->into->options, max_age);
+	}
+
 	ValidateContQuery(stmt->into->rel, stmt->query, querystring);
 
 	/* Deparse query so that analyzer always see the same canonicalized SelectStmt */
 	cont_query = parse_analyze(copyObject(stmt->query), querystring, NULL, 0);
-	cont_select_sql = deparse_cont_query_def(cont_query);
+	cont_select_sql = deparse_query_def(cont_query);
 	cont_select = (SelectStmt *) linitial(pg_parse_query(cont_select_sql));
 	context = MakeContAnalyzeContext(NULL, cont_select, Worker);
 
@@ -496,11 +482,11 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 		tableElts = lappend(tableElts, coldef);
 	}
 
-	if (!has_fillfactor(stmt->into->options))
+	if (!GetContinuousViewOption(stmt->into->options, OPTION_FILLFACTOR))
 		stmt->into->options = add_default_fillfactor(stmt->into->options);
 
 	/*
-	 * Create the actual underlying materialzation relation.
+	 * Create the actual underlying materialization relation.
 	 */
 	create_stmt = makeNode(CreateStmt);
 	create_stmt->relation = matrel;
@@ -523,22 +509,33 @@ ExecCreateContViewStmt(CreateContViewStmt *stmt, const char *querystring)
 	/*
 	 * Now save the underlying query in the `pipeline_query` catalog
 	 * relation.
+	 *
+	 * pqoid is the oid of the row in pipeline_query,
+	 * cvid is the id of the continuous view (used in reader bitmaps)
 	 */
-	cvoid = DefineContinuousView(view, cont_query, matrel, context->is_sw);
+	pqoid = DefineContinuousView(view, cont_query, matrel, context->is_sw, &cvid);
 	CommandCounterIncrement();
 
 	/* Create the view on the matrel */
-	viewselect->fromClause = list_make1(matrel);
 	view_stmt = makeNode(ViewStmt);
 	view_stmt->view = view;
 	view_stmt->query = (Node *) viewselect;
+	viewselect->forContinuousView = true;
 
 	viewoid = DefineView(view_stmt, cont_select_sql);
 	CommandCounterIncrement();
 
 	/* Create group look up index and record dependencies */
 	indexoid = create_index_on_mat_relation(view, matreloid, matrel, query, context->is_sw);
-	record_dependencies(cvoid, matreloid, viewoid, indexoid, workerselect, query);
+	record_dependencies(pqoid, matreloid, viewoid, indexoid, workerselect, query);
+
+	/*
+	 * Run the combiner queries through the planner, so that if something goes wrong we know now
+	 * rather than finding out when the CV actually activates.
+	 */
+	cv = GetContinuousView(cvid);
+	GetContPlan(cv, Combiner);
+	GetCombinerLookupPlan(cv);
 
 	allowSystemTableMods = saveAllowSystemTableMods;
 

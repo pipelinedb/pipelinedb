@@ -1783,7 +1783,7 @@ cqosastatesend(PG_FUNCTION_ARGS)
 	int nbytes;
 	char *pos;
 
-	TDigestCompress(t);
+	t = TDigestCompress(t);
 
 	nbytes = (sizeof(CQOSAAggState) + sizeof(float8) * state->num_percentiles + sizeof(bool) * state->num_percentiles +
 			TDigestSize(t));
@@ -1923,7 +1923,7 @@ cq_percentile_cont_float8_transition_common(PG_FUNCTION_ARGS, bool is_multiple)
 	if (!PG_ARGISNULL(1))
 	{
 		Datum d = PG_GETARG_DATUM(1);
-		TDigestAdd(state->tdigest, DatumGetFloat8(d), 1);
+		state->tdigest = TDigestAdd(state->tdigest, DatumGetFloat8(d), 1);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -1972,7 +1972,7 @@ cq_percentile_cont_float8_combine(PG_FUNCTION_ARGS)
 	else
 	{
 		state = (CQOSAAggState *) PG_GETARG_POINTER(0);
-		TDigestMerge(state->tdigest, incoming->tdigest);
+		state->tdigest = TDigestMerge(state->tdigest, incoming->tdigest);
 	}
 
 	MemoryContextSwitchTo(old);
@@ -1996,6 +1996,7 @@ cq_percentile_cont_float8_final(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 
 	state = (CQOSAAggState *) PG_GETARG_POINTER(0);
+	state->tdigest = TDigestCompress(state->tdigest);
 
 	/* number_of_rows could be zero if we only saw NULL input values */
 	if (state->tdigest->total_weight == 0)

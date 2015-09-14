@@ -42,9 +42,9 @@ extern TDigest *TDigestCreateWithCompression(int compression);
 extern void TDigestDestroy(TDigest *t);
 extern TDigest *TDigestCopy(TDigest *t);
 
-extern void TDigestAdd(TDigest *t, float8 x, int64 w);
-extern void TDigestCompress(TDigest *t);
-extern void TDigestMerge(TDigest *t1, TDigest *t2);
+extern TDigest *TDigestAdd(TDigest *t, float8 x, int64 w);
+extern TDigest *TDigestCompress(TDigest *t);
+extern TDigest *TDigestMerge(TDigest *t1, TDigest *t2);
 
 extern float8 TDigestCDF(TDigest *t, float8 x);
 extern float8 TDigestQuantile(TDigest *t, float8 q);

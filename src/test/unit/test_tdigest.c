@@ -45,7 +45,7 @@ run_tdigest_test_on_distribution(float8 (*dist)(void))
 	for (i = 0; i < 100000; i++)
 	{
 		data[i] = dist();
-		TDigestAdd(t, data[i], 1);
+		t = TDigestAdd(t, data[i], 1);
 	}
 
 	TDigestCompress(t);
@@ -98,18 +98,18 @@ START_TEST(test_tdigest_merge)
 	for (i = 0; i < 50000; i++)
 	{
 		x = rand();
-		TDigestAdd(t0, x, 1);
-		TDigestAdd(t1, x, 1);
+		t0 = TDigestAdd(t0, x, 1);
+		t1 = TDigestAdd(t1, x, 1);
 	}
 
 	for (i = 0; i < 50000; i++)
 	{
 		x = rand();
-		TDigestAdd(t0, x, 1);
-		TDigestAdd(t2, x, 1);
+		t0 = TDigestAdd(t0, x, 1);
+		t2 = TDigestAdd(t2, x, 1);
 	}
 
-	TDigestMerge(t1, t2);
+	t1 = TDigestMerge(t1, t2);
 
 	for (i = 0; i < 100; i++)
 	{
@@ -127,6 +127,7 @@ test_tdigest_suite(void)
 
 	s = suite_create("test_tdigest");
 	tc = tcase_create("test_tdigest");
+	tcase_set_timeout(tc, 30);
 	tcase_add_test(tc, test_tdigest);
 	tcase_add_test(tc, test_tdigest_merge);
 	suite_add_tcase(s, tc);

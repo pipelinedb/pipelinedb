@@ -425,8 +425,6 @@ pipeline_queries(PG_FUNCTION_ARGS)
 
 	if (funcctx->user_fctx == NULL)
 	{
-
-
 		old = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		data = palloc(sizeof(RelationScanData));
@@ -459,7 +457,7 @@ pipeline_queries(PG_FUNCTION_ARGS)
 
 		Assert(!isnull);
 
-		values[3] = CStringGetTextDatum(deparse_cont_query_def((Query *) stringToNode(TextDatumGetCString(tmp))));
+		values[3] = CStringGetTextDatum(deparse_query_def((Query *) stringToNode(TextDatumGetCString(tmp))));
 
 		rtup = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 		result = HeapTupleGetDatum(rtup);

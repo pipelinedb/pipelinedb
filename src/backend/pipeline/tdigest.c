@@ -65,7 +65,7 @@ TDigestDestroy(TDigest *t)
 	pfree(t);
 }
 
-void
+TDigest *
 TDigestAdd(TDigest *t, float8 x, int64 w)
 {
 	Centroid *c;
@@ -77,7 +77,9 @@ TDigestAdd(TDigest *t, float8 x, int64 w)
 	t->unmerged_centroids = lappend(t->unmerged_centroids, c);
 
 	if (list_length(t->unmerged_centroids) > t->threshold)
-		TDigestCompress(t);
+		t = TDigestCompress(t);
+
+	return t;
 }
 
 static int
@@ -131,7 +133,7 @@ merge_centroid(mergeArgs *args, Centroid *merge)
 	}
 }
 
-void
+TDigest *
 TDigestCompress(TDigest *t)
 {
 	int num_unmerged = list_length(t->unmerged_centroids);
@@ -140,9 +142,10 @@ TDigestCompress(TDigest *t)
 	ListCell *lc;
 	int i, j;
 	mergeArgs *args;
+	uint32_t num_centroids = t->num_centroids;
 
 	if (!num_unmerged)
-		return;
+		return t;
 
 	unmerged_centroids = palloc(sizeof(Centroid) * num_unmerged);
 
@@ -159,7 +162,7 @@ TDigestCompress(TDigest *t)
 	t->unmerged_centroids = NIL;
 
 	if (unmerged_weight == 0)
-		return;
+		return t;
 
 	t->total_weight += unmerged_weight;
 
@@ -208,23 +211,38 @@ TDigestCompress(TDigest *t)
 		t->max = Max(t->max, args->max);
 	}
 
-	memcpy(t->centroids, args->centroids, sizeof(Centroid) * t->size);
+	if (t->num_centroids > num_centroids)
+	{
+		TDigest *new = (TDigest *) palloc(TDigestSize(t));
+		memcpy(new, t, sizeof(TDigest));
+		t = new;
+	}
+
+	Assert(t->num_centroids <= t->size);
+
+	memcpy(t->centroids, args->centroids, sizeof(Centroid) * t->num_centroids);
 	pfree(args->centroids);
 	pfree(args);
+
+	SET_VARSIZE(t, TDigestSize(t));
+
+	return t;
 }
 
-void
+TDigest *
 TDigestMerge(TDigest *t1, TDigest *t2)
 {
 	int i;
 
-	TDigestCompress(t2);
+	t2 = TDigestCompress(t2);
 
 	for (i = 0; i < t2->num_centroids; i++)
 	{
 		Centroid *c = &t2->centroids[i];
-		TDigestAdd(t1, c->mean, c->weight);
+		t1 = TDigestAdd(t1, c->mean, c->weight);
 	}
+
+	return t1;
 }
 
 float8
@@ -235,7 +253,7 @@ TDigestCDF(TDigest *t, float8 x)
 	uint64 weight_so_far;
 	Centroid *a, *b, tmp;
 
-	TDigestCompress(t);
+	t = TDigestCompress(t);
 
 	if (t->num_centroids == 0)
 		return NAN;
@@ -291,7 +309,7 @@ TDigestQuantile(TDigest *t, float8 q)
 	uint64 weight_so_far;
 	Centroid *a, *b, tmp;
 
-	TDigestCompress(t);
+	t = TDigestCompress(t);
 
 	if (q < 0 || q > 1)
 		elog(ERROR, "q should be in [0, 1], got %f", q);
@@ -359,5 +377,5 @@ TDigestCopy(TDigest *t)
 Size
 TDigestSize(TDigest *t)
 {
-	return sizeof(TDigest) + (sizeof(Centroid) * t->size);
+	return sizeof(TDigest) + (sizeof(Centroid) * t->num_centroids);
 }

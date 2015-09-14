@@ -102,3 +102,27 @@ SELECT count FROM test_view_mrel0;
 SELECT count FROM test_view;
 
 DROP CONTINUOUS VIEW test_view;
+
+CREATE CONTINUOUS VIEW test_view AS
+  SELECT uid::bigint, COUNT(*)
+FROM
+  stream
+GROUP BY uid;
+
+-- Ensure that hashes colide.
+SELECT hash_group(13362), hash_group(41950);
+
+INSERT INTO stream (uid) VALUES (13362);
+INSERT INTO stream (uid) VALUES (13362);
+INSERT INTO stream (uid) VALUES (13362);
+INSERT INTO stream (uid) VALUES (41950);
+INSERT INTO stream (uid) VALUES (41950);
+INSERT INTO stream (uid) VALUES (41950);
+INSERT INTO stream (uid) VALUES (13362);
+INSERT INTO stream (uid) VALUES (13362);
+INSERT INTO stream (uid) VALUES (13362);
+INSERT INTO stream (uid) VALUES (41950);
+INSERT INTO stream (uid) VALUES (41950);
+INSERT INTO stream (uid) VALUES (41950);
+
+SELECT * FROM test_view ORDER BY uid;

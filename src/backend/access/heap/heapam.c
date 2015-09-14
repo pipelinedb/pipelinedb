@@ -56,6 +56,7 @@
 #include "catalog/namespace.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "pipeline/cont_scheduler.h"
 #include "storage/bufmgr.h"
 #include "storage/freespace.h"
 #include "storage/lmgr.h"
@@ -3148,6 +3149,23 @@ heap_update(Relation relation, ItemPointer otid, HeapTuple newtup,
 	LockBuffer(buffer, BUFFER_LOCK_EXCLUSIVE);
 
 	lp = PageGetItemId(page, ItemPointerGetOffsetNumber(otid));
+
+	/*
+	 * Combiner processes cache physical tuples which might have expired by the time we re-use them
+	 * (in case they were garbage collected by the auto-vacuumer). Let's not die in that case.
+	 */
+	if (IsContQueryCombinerProcess())
+	{
+		if (!ItemIdIsNormal(lp))
+		{
+			UnlockReleaseBuffer(buffer);
+			if (vmbuffer != InvalidBuffer)
+				ReleaseBuffer(vmbuffer);
+			hufd->ctid = *otid;
+			return HeapTupleUpdated;
+		}
+	}
+
 	Assert(ItemIdIsNormal(lp));
 
 	/*

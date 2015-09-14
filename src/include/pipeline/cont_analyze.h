@@ -33,11 +33,18 @@ typedef struct ContAnalyzeContext
 	bool is_sw;
 	bool stream_only;
 	bool view_combines;
+	char *hoisted_name;
 	ContQueryProcType proc_type;
 } ContAnalyzeContext;
 
 #define MATREL_COMBINE "combine"
 #define MATREL_FINALIZE "finalize"
+
+#define OPTION_FILLFACTOR "fillfactor"
+#define OPTION_MAX_AGE "max_age"
+
+#define ARRIVAL_TIMESTAMP_REF 65100
+#define IS_ARRIVAL_TIMESTAMP_REF(var) (IsA((var), Var) && ((Var *) (var))->varno >= ARRIVAL_TIMESTAMP_REF)
 
 #define IsMatRelCombine(proname) (pg_strcasecmp(NameStr(proname), MATREL_COMBINE) == 0)
 #define IsMatRelFinalize(proname) (pg_strcasecmp(NameStr(proname), MATREL_FINALIZE) == 0)
@@ -64,12 +71,16 @@ extern List *pipeline_rewrite(List *raw_parsetree_list);
 
 extern Query *GetContQuery(RangeVar *rv);
 extern Query *GetContWorkerQuery(RangeVar *rv);
+extern Query *GetContCombinerQuery(RangeVar *rv);
 
 extern Node *GetSWExpr(RangeVar *rv);
 extern ColumnRef *GetSWTimeColumn(RangeVar *rv);
 extern ColumnRef *GetWindowTimeColumn(RangeVar *cv);
+extern Node *CreateOuterArrivalTimestampRef(ParseState *pstate, ColumnRef *cref, Node *var);
+extern DefElem *GetContinuousViewOption(List *options, char *name);
+extern void ApplyMaxAge(SelectStmt *stmt, DefElem *max_age);
 
 /* Deparsing */
-extern char *deparse_cont_query_def(Query *query);
+extern char *deparse_query_def(Query *query);
 
 #endif

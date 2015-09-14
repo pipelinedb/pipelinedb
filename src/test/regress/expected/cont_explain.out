@@ -79,8 +79,8 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain1;
 (13 rows)
 
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
-                                                                               CONTINUOUS QUERY PLANS                                                                               
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                       CONTINUOUS QUERY PLANS                                        
+-----------------------------------------------------------------------------------------------------
  Worker Plan:
    ->  HashAggregate
          Output: x::integer, count(*)
@@ -96,24 +96,20 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain2;
  Combiner Lookup Plan:
    ->  Physical Group Lookup
          Output: test_cont_explain2_mrel0.x, test_cont_explain2_mrel0.count
-         ->  Nested Loop Semi Join
+         ->  Nested Loop
                Output: test_cont_explain2_mrel0.x, test_cont_explain2_mrel0.count
                ->  Values Scan on "*VALUES*"
                      Output: "*VALUES*".column1
                ->  Bitmap Heap Scan on public.test_cont_explain2_mrel0
                      Output: test_cont_explain2_mrel0.x, test_cont_explain2_mrel0.count
-                     Recheck Cond: ((hash_group(test_cont_explain2_mrel0.x) = "*VALUES*".column1) OR (hash_group(test_cont_explain2_mrel0.x) IS NULL))
-                     Filter: ((hash_group(test_cont_explain2_mrel0.x) = "*VALUES*".column1) OR ((hash_group(test_cont_explain2_mrel0.x) IS NULL) AND ("*VALUES*".column1 IS NULL)))
-                     ->  BitmapOr
-                           ->  Bitmap Index Scan on test_cont_explain2_mrel0_expr_idx
-                                 Index Cond: (hash_group(test_cont_explain2_mrel0.x) = "*VALUES*".column1)
-                           ->  Bitmap Index Scan on test_cont_explain2_mrel0_expr_idx
-                                 Index Cond: (hash_group(test_cont_explain2_mrel0.x) IS NULL)
-(28 rows)
+                     Recheck Cond: (hash_group(test_cont_explain2_mrel0.x) = "*VALUES*".column1)
+                     ->  Bitmap Index Scan on test_cont_explain2_mrel0_expr_idx
+                           Index Cond: (hash_group(test_cont_explain2_mrel0.x) = "*VALUES*".column1)
+(24 rows)
 
 EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
-                                                                                                           CONTINUOUS QUERY PLANS                                                                                                           
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                     CONTINUOUS QUERY PLANS                                                      
+---------------------------------------------------------------------------------------------------------------------------------
  Worker Plan:
    ->  HashAggregate
          Output: x::integer, y::text, sum(x::integer)
@@ -129,18 +125,14 @@ EXPLAIN CONTINUOUS VIEW (COSTS off, VERBOSE on) test_cont_explain3;
  Combiner Lookup Plan:
    ->  Physical Group Lookup
          Output: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y, test_cont_explain3_mrel0.sum
-         ->  Nested Loop Semi Join
+         ->  Nested Loop
                Output: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y, test_cont_explain3_mrel0.sum
                ->  Values Scan on "*VALUES*"
                      Output: "*VALUES*".column1
                ->  Bitmap Heap Scan on public.test_cont_explain3_mrel0
                      Output: test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y, test_cont_explain3_mrel0.sum
-                     Recheck Cond: ((hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) = "*VALUES*".column1) OR (hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) IS NULL))
-                     Filter: ((hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) = "*VALUES*".column1) OR ((hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) IS NULL) AND ("*VALUES*".column1 IS NULL)))
-                     ->  BitmapOr
-                           ->  Bitmap Index Scan on test_cont_explain3_mrel0_expr_idx
-                                 Index Cond: (hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) = "*VALUES*".column1)
-                           ->  Bitmap Index Scan on test_cont_explain3_mrel0_expr_idx
-                                 Index Cond: (hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) IS NULL)
-(28 rows)
+                     Recheck Cond: (hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) = "*VALUES*".column1)
+                     ->  Bitmap Index Scan on test_cont_explain3_mrel0_expr_idx
+                           Index Cond: (hash_group(test_cont_explain3_mrel0.x, test_cont_explain3_mrel0.y) = "*VALUES*".column1)
+(24 rows)
 

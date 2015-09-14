@@ -52,6 +52,7 @@
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "pgstat.h"
+#include "pipeline/cqmatrel.h"
 #include "pipeline/sw_vacuum.h"
 #include "portability/instr_time.h"
 #include "postmaster/autovacuum.h"
@@ -441,6 +442,14 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 	bool		skipping_all_visible_blocks;
 	xl_heap_freeze_tuple *frozen;
 	SWVacuumContext *cqvcontext = CreateSWVacuumContext(onerel);
+
+	/*
+	 * We need to do a full scan if it's a sliding-window continuous view,
+	 * as we need to check for out-of-window tuples that may exist within
+	 * all-visible pages.
+	 */
+	if (cqvcontext != NULL)
+		scan_all = true;
 
 	pg_rusage_init(&ru0);
 
@@ -890,6 +899,10 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 					break;
 			}
 
+			/*
+			 * Collect all expired SW tuples and mark them as deleted once the scan over the page is over.
+			 * They will be vacuumed in the next cycle.
+			 */
 			if (!tupgone && ShouldVacuumSWTuple(cqvcontext, &tuple))
 			{
 				ItemPointer item = (ItemPointer) palloc0(sizeof(ItemPointerData));
@@ -1036,15 +1049,8 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 		 */
 		else if (PageIsAllVisible(page) && has_dead_tuples)
 		{
-			/*
-			 * XXX(usmanm): If this relation requires a CQ vacuum and we have turned
-			 * the all_visible bit off then don't spit out the warning.
-			 * This happens because the disqualified tuples aren't really *dead* tuples
-			 * and so Postgres never marks the page as containing dead tuples.
-			 */
-			if (!cqvcontext || (cqvcontext && all_visible))
-				elog(WARNING, "page containing dead tuples is marked as all-visible in relation \"%s\" page %u",
-						relname, blkno);
+			elog(WARNING, "page containing dead tuples is marked as all-visible in relation \"%s\" page %u",
+				 relname, blkno);
 			PageClearAllVisible(page);
 			MarkBufferDirty(buf);
 			visibilitymap_clear(onerel, blkno, vmbuffer);
@@ -1052,13 +1058,14 @@ lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
 
 		UnlockReleaseBuffer(buf);
 
+		/* Delete all tuples that have expired from the SW */
 		if (cqvcontext && cqvcontext->expired)
 		{
 			ListCell *lc;
 			foreach(lc, cqvcontext->expired)
 			{
 				ItemPointer item = (ItemPointer) lfirst(lc);
-				simple_heap_delete(onerel, item);
+				matrel_heap_delete(onerel, item);
 			}
 			list_free_deep(cqvcontext->expired);
 			cqvcontext->expired = NIL;

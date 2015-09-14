@@ -1,3 +1,4 @@
+SET IntervalStyle to postgres;
 -- Simple ones
 CREATE CONTINUOUS VIEW cqcreate0 AS SELECT key::integer FROM create_cont_stream1;
 SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate0';
@@ -13,7 +14,7 @@ SELECT gc FROM pipeline_query WHERE name = 'cqcreate0';
 (1 row)
 
 \d+ cqcreate0;
-               View "public.cqcreate0"
+          Continuous view "public.cqcreate0"
  Column |  Type   | Modifiers | Storage | Description 
 --------+---------+-----------+---------+-------------
  key    | integer |           | plain   | 
@@ -43,7 +44,7 @@ SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate1';
 (1 row)
 
 \d+ cqcreate1;
-                View "public.cqcreate1"
+          Continuous view "public.cqcreate1"
   Column   | Type | Modifiers | Storage  | Description 
 -----------+------+-----------+----------+-------------
  substring | text |           | extended | 
@@ -73,7 +74,7 @@ SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate2';
 (1 row)
 
 \d+ cqcreate2;
-                View "public.cqcreate2"
+          Continuous view "public.cqcreate2"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | integer |           | plain    | 
@@ -108,7 +109,7 @@ SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate3';
 (1 row)
 
 \d+ cqcreate3;
-                View "public.cqcreate3"
+          Continuous view "public.cqcreate3"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | text(0) |           | extended | 
@@ -149,7 +150,7 @@ SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate4';
 (1 row)
 
 \d+ cqcreate4;
-               View "public.cqcreate4"
+          Continuous view "public.cqcreate4"
  Column |  Type   | Modifiers | Storage | Description 
 --------+---------+-----------+---------+-------------
  count  | bigint  |           | plain   | 
@@ -180,9 +181,7 @@ SELECT pipeline_get_overlay_viewdef('cqcreate4');
 (1 row)
 
 -- Sliding window queries
-CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second);
-NOTICE:  window width is "5" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
+CREATE CONTINUOUS VIEW cqcreate5 AS SELECT key::text FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds');
 SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate5';
  count 
 -------
@@ -196,36 +195,34 @@ SELECT gc FROM pipeline_query WHERE name = 'cqcreate5';
 (1 row)
 
 \d+ cqcreate5;
-                View "public.cqcreate5"
+          Continuous view "public.cqcreate5"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | text(0) |           | extended | 
 View definition:
  SELECT key::text
    FROM ONLY cont_create_stream2
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '@ 5 secs'::interval second);
+  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '00:00:05'::interval);
 
 \d+ cqcreate5_mrel0;
-                              Table "public.cqcreate5_mrel0"
- Column |            Type             | Modifiers | Storage  | Stats target | Description 
---------+-----------------------------+-----------+----------+--------------+-------------
- _0     | timestamp(0) with time zone |           | plain    |              | 
- key    | text(0)                     |           | extended |              | 
+                                   Table "public.cqcreate5_mrel0"
+      Column       |            Type             | Modifiers | Storage  | Stats target | Description 
+-------------------+-----------------------------+-----------+----------+--------------+-------------
+ arrival_timestamp | timestamp(0) with time zone |           | plain    |              | 
+ key               | text(0)                     |           | extended |              | 
 Indexes:
-    "cqcreate5_mrel0__0_idx" btree (_0)
+    "cqcreate5_mrel0_arrival_timestamp_idx" btree (arrival_timestamp)
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqcreate5');
-                           pipeline_get_overlay_viewdef                            
------------------------------------------------------------------------------------
-  SELECT cqcreate5_mrel0.key                                                      +
-    FROM cqcreate5_mrel0                                                          +
-   WHERE (cqcreate5_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second));
+                               pipeline_get_overlay_viewdef                                
+-------------------------------------------------------------------------------------------
+  SELECT cqcreate5_mrel0.key                                                              +
+    FROM cqcreate5_mrel0                                                                  +
+   WHERE (cqcreate5_mrel0.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval));
 (1 row)
 
-CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key::text;
-NOTICE:  window width is "5" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
+CREATE CONTINUOUS VIEW cqcreate6 AS SELECT COUNT(*) FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key::text;
 SELECT COUNT(*) FROM pipeline_query WHERE name = 'cqcreate6';
  count 
 -------
@@ -239,40 +236,40 @@ SELECT gc FROM pipeline_query WHERE name = 'cqcreate6';
 (1 row)
 
 \d+ cqcreate6;
-               View "public.cqcreate6"
+         Continuous view "public.cqcreate6"
  Column |  Type  | Modifiers | Storage | Description 
 --------+--------+-----------+---------+-------------
  count  | bigint |           | plain   | 
 View definition:
  SELECT count(*) AS count
    FROM ONLY cont_create_stream2
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '@ 5 secs'::interval second)
+  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '00:00:05'::interval)
   GROUP BY key::text;
 
 \d+ cqcreate6_mrel0;
-                            Table "public.cqcreate6_mrel0"
- Column |           Type           | Modifiers | Storage  | Stats target | Description 
---------+--------------------------+-----------+----------+--------------+-------------
- _0     | timestamp with time zone |           | plain    |              | 
- _1     | text(0)                  |           | extended |              | 
- count  | bigint                   |           | plain    |              | 
+                                  Table "public.cqcreate6_mrel0"
+      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           | plain    |              | 
+ _1                | text(0)                  |           | extended |              | 
+ count             | bigint                   |           | plain    |              | 
 Indexes:
-    "cqcreate6_mrel0_expr_idx" btree (ls_hash_group(_0, _1))
+    "cqcreate6_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, _1))
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqcreate6');
-                           pipeline_get_overlay_viewdef                           
-----------------------------------------------------------------------------------
-  SELECT combine(cqcreate6_mrel0.count) AS count                                 +
-    FROM cqcreate6_mrel0                                                         +
-   WHERE (cqcreate6_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second))+
+                               pipeline_get_overlay_viewdef                               
+------------------------------------------------------------------------------------------
+  SELECT combine(cqcreate6_mrel0.count) AS count                                         +
+    FROM cqcreate6_mrel0                                                                 +
+   WHERE (cqcreate6_mrel0.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval))+
    GROUP BY cqcreate6_mrel0._1;
 (1 row)
 
 -- These use a combine state column
 CREATE CONTINUOUS VIEW cvavg AS SELECT key::text, AVG(x::float8) AS float_avg, AVG(y::integer) AS int_avg, AVG(ts0::timestamp - ts1::timestamp) AS internal_avg FROM cont_create_stream2 GROUP BY key;
 \d+ cvavg;
-                         View "public.cvavg"
+                    Continuous view "public.cvavg"
     Column    |       Type       | Modifiers | Storage  | Description 
 --------------+------------------+-----------+----------+-------------
  key          | text(0)          |           | extended | 
@@ -311,7 +308,7 @@ SELECT pipeline_get_overlay_viewdef('cvavg');
 
 CREATE CONTINUOUS VIEW cvjson AS SELECT json_agg(x::text) AS count_col FROM create_cont_stream1;
 \d+ cvjson;
-                 View "public.cvjson"
+            Continuous view "public.cvjson"
   Column   | Type | Modifiers | Storage  | Description 
 -----------+------+-----------+----------+-------------
  count_col | json |           | extended | 
@@ -335,7 +332,7 @@ SELECT pipeline_get_overlay_viewdef('cvjson');
 
 CREATE CONTINUOUS VIEW cvjsonobj AS SELECT json_object_agg(key::text, value::integer) FROM cont_create_stream2;
 \d+ cvjsonobj;
-                   View "public.cvjsonobj"
+             Continuous view "public.cvjsonobj"
      Column      | Type | Modifiers | Storage  | Description 
 -----------------+------+-----------+----------+-------------
  json_object_agg | json |           | extended | 
@@ -360,7 +357,7 @@ SELECT pipeline_get_overlay_viewdef('cvjsonobj');
 -- But these aggregates don't
 CREATE CONTINUOUS VIEW cvcount AS SELECT SUM(x::integer + y::float8) AS sum_col FROM cont_create_stream2;
 \d+ cvcount;
-                     View "public.cvcount"
+                Continuous view "public.cvcount"
  Column  |       Type       | Modifiers | Storage | Description 
 ---------+------------------+-----------+---------+-------------
  sum_col | double precision |           | plain   | 
@@ -384,7 +381,7 @@ SELECT pipeline_get_overlay_viewdef('cvcount');
 
 CREATE CONTINUOUS VIEW cvarray AS SELECT COUNT(*) as count_col FROM create_cont_stream1;
 \d+ cvarray;
-                 View "public.cvarray"
+            Continuous view "public.cvarray"
   Column   |  Type  | Modifiers | Storage | Description 
 -----------+--------+-----------+---------+-------------
  count_col | bigint |           | plain   | 
@@ -408,7 +405,7 @@ SELECT pipeline_get_overlay_viewdef('cvarray');
 
 CREATE CONTINUOUS VIEW cvtext AS SELECT key::text, string_agg(substring(s::text, 1, 2), ',') FROM cont_create_stream2 GROUP BY key;
 \d+ cvtext;
-                   View "public.cvtext"
+              Continuous view "public.cvtext"
    Column   |  Type   | Modifiers | Storage  | Description 
 ------------+---------+-----------+----------+-------------
  key        | text(0) |           | extended | 
@@ -440,7 +437,7 @@ SELECT pipeline_get_overlay_viewdef('cvtext');
 -- Check for expressions containing aggregates
 CREATE CONTINUOUS VIEW cqaggexpr1 AS SELECT COUNT(*) + SUM(x::int) FROM cont_create_stream2;
 \d+ cqaggexpr1;
-               View "public.cqaggexpr1"
+          Continuous view "public.cqaggexpr1"
   Column  |  Type  | Modifiers | Storage | Description 
 ----------+--------+-----------+---------+-------------
  ?column? | bigint |           | plain   | 
@@ -465,7 +462,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr1');
 
 CREATE CONTINUOUS VIEW cqaggexpr2 AS SELECT key::text, AVG(x::float) + MAX(y::integer) AS value FROM cont_create_stream2 GROUP BY key;
 \d+ cqaggexpr2;
-                    View "public.cqaggexpr2"
+              Continuous view "public.cqaggexpr2"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
  key    | text(0)          |           | extended | 
@@ -495,11 +492,9 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr2');
     FROM cqaggexpr2_mrel0;
 (1 row)
 
-CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5' second) GROUP BY key;
-NOTICE:  window width is "5" with a step size of "1 second"
-HINT:  Use a datetime truncation function if you want to explicitly set the step size.
+CREATE CONTINUOUS VIEW cqaggexpr3 AS SELECT key::text, COUNT(*) AS value FROM cont_create_stream2 WHERE arrival_timestamp > (clock_timestamp() - interval '5 seconds') GROUP BY key;
 \d+ cqaggexpr3;
-               View "public.cqaggexpr3"
+          Continuous view "public.cqaggexpr3"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  key    | text(0) |           | extended | 
@@ -508,33 +503,33 @@ View definition:
  SELECT key::text,
     count(*) AS value
    FROM ONLY cont_create_stream2
-  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '@ 5 secs'::interval second)
+  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '00:00:05'::interval)
   GROUP BY key::text;
 
 \d+ cqaggexpr3_mrel0;
-                            Table "public.cqaggexpr3_mrel0"
- Column |           Type           | Modifiers | Storage  | Stats target | Description 
---------+--------------------------+-----------+----------+--------------+-------------
- _0     | timestamp with time zone |           | plain    |              | 
- key    | text(0)                  |           | extended |              | 
- value  | bigint                   |           | plain    |              | 
+                                 Table "public.cqaggexpr3_mrel0"
+      Column       |           Type           | Modifiers | Storage  | Stats target | Description 
+-------------------+--------------------------+-----------+----------+--------------+-------------
+ arrival_timestamp | timestamp with time zone |           | plain    |              | 
+ key               | text(0)                  |           | extended |              | 
+ value             | bigint                   |           | plain    |              | 
 Indexes:
-    "cqaggexpr3_mrel0_expr_idx" btree (ls_hash_group(_0, key))
+    "cqaggexpr3_mrel0_expr_idx" btree (ls_hash_group(arrival_timestamp, key))
 Options: fillfactor=50
 
 SELECT pipeline_get_overlay_viewdef('cqaggexpr3');
-                           pipeline_get_overlay_viewdef                            
------------------------------------------------------------------------------------
-  SELECT cqaggexpr3_mrel0.key,                                                    +
-     combine(cqaggexpr3_mrel0.value) AS value                                     +
-    FROM cqaggexpr3_mrel0                                                         +
-   WHERE (cqaggexpr3_mrel0._0 > (clock_timestamp() - '@ 5 secs'::interval second))+
+                               pipeline_get_overlay_viewdef                                
+-------------------------------------------------------------------------------------------
+  SELECT cqaggexpr3_mrel0.key,                                                            +
+     combine(cqaggexpr3_mrel0.value) AS value                                             +
+    FROM cqaggexpr3_mrel0                                                                 +
+   WHERE (cqaggexpr3_mrel0.arrival_timestamp > (clock_timestamp() - '00:00:05'::interval))+
    GROUP BY cqaggexpr3_mrel0.key;
 (1 row)
 
 CREATE CONTINUOUS VIEW cqaggexpr4 AS SELECT key::text, floor(AVG(x::float)) AS value FROM cont_create_stream2 GROUP BY key;
 \d+ cqaggexpr4;
-                    View "public.cqaggexpr4"
+              Continuous view "public.cqaggexpr4"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
  key    | text(0)          |           | extended | 
@@ -565,7 +560,7 @@ SELECT pipeline_get_overlay_viewdef('cqaggexpr4');
 
 CREATE CONTINUOUS VIEW cqgroupby AS SELECT k0::text, k1::integer, COUNT(*) FROM create_cont_stream1 GROUP BY k0, k1;
 \d+ cqgroupby
-                View "public.cqgroupby"
+          Continuous view "public.cqgroupby"
  Column |  Type   | Modifiers | Storage  | Description 
 --------+---------+-----------+----------+-------------
  k0     | text(0) |           | extended | 
@@ -601,7 +596,7 @@ SELECT pipeline_get_overlay_viewdef('cqgroupby');
 CREATE CONTINUOUS VIEW multigroupindex AS SELECT a::text, b::int8, c::int4, d::int2, e::float8, COUNT(*) FROM create_cont_stream1
 GROUP BY a, b, c, d, e;
 \d+ multigroupindex;
-                 View "public.multigroupindex"
+            Continuous view "public.multigroupindex"
  Column |       Type       | Modifiers | Storage  | Description 
 --------+------------------+-----------+----------+-------------
  a      | text(0)          |           | extended | 
@@ -666,6 +661,73 @@ DROP VIEW ccvv;
 ERROR:  "ccvv" is not a view
 HINT:  Use DROP CONTINUOUS VIEW to remove a continuous view.
 DROP CONTINUOUS VIEW ccvv;
+-- Subselects aren't allowed in a CV's target list
+CREATE TABLE ccvt (x integer);
+CREATE CONTINUOUS VIEW noss AS SELECT y::integer, (SELECT x FROM ccvt WHERE x = 1) FROM stream;
+ERROR:  subqueries are not allowed in a continuous view's target list
+HINT:  Stream-table joins are the preferred method for combining other relations with continuous views.
+DROP TABLE ccvt;
+-- arrival_timestamp is reserved
+CREATE CONTINUOUS VIEW arrts AS SELECT x::integer AS arrival_timestamp FROM stream;
+ERROR:  arrival_timestamp is a reserved column name
+CREATE CONTINUOUS VIEW arrts AS SELECT arrival_timestamp AS arrival_timestamp FROM stream;
+DROP CONTINUOUS VIEW arrts;
+-- WITH max_age
+CREATE CONTINUOUS VIEW ma0 WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream;
+\d+ ma0;
+            Continuous view "public.ma0"
+ Column |  Type  | Modifiers | Storage | Description 
+--------+--------+-----------+---------+-------------
+ count  | bigint |           | plain   | 
+View definition:
+ SELECT count(*) AS count
+   FROM ONLY stream
+  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '1 day'::interval);
+
+CREATE VIEW ma1 WITH (max_age = '1 hour') AS SELECT COUNT(*) FROM ma0;
+\d+ ma1;
+                  View "public.ma1"
+ Column |  Type  | Modifiers | Storage | Description 
+--------+--------+-----------+---------+-------------
+ count  | bigint |           | plain   | 
+View definition:
+ SELECT count(*) AS count
+   FROM ma0
+  WHERE arrival_timestamp > (clock_timestamp() - '01:00:00'::interval);
+
+-- max_age must be a valid interval string
+CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42) AS SELECT COUNT(*) FROM stream;
+ERROR:  "max_age" must be a valid interval string
+HINT:  For example, ... WITH (max_age = '1 hour') ...
+CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 42.1) AS SELECT COUNT(*) FROM stream;
+ERROR:  "max_age" must be a valid interval string
+HINT:  For example, ... WITH (max_age = '1 hour') ...
+CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 'not an interval') AS SELECT COUNT(*) FROM stream;
+ERROR:  invalid input syntax for type interval: "not an interval"
+LINE 1: CREATE CONTINUOUS VIEW mainvalid WITH (max_age = 'not an int...
+        ^
+CREATE CONTINUOUS VIEW mawhere WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream
+WHERE x::integer = 1;
+\d+ mawhere;
+          Continuous view "public.mawhere"
+ Column |  Type  | Modifiers | Storage | Description 
+--------+--------+-----------+---------+-------------
+ count  | bigint |           | plain   | 
+View definition:
+ SELECT count(*) AS count
+   FROM ONLY stream
+  WHERE arrival_timestamp::timestamp with time zone > (clock_timestamp() - '1 day'::interval) AND x::integer = 1;
+
+DROP CONTINUOUS VIEW mawhere;
+-- max_age can't be used on non-sliding window continuous views
+CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM withff;
+ERROR:  "max_age" can only be specified when reading from a stream or continuous view
+-- or in conjunction with another sliding-window predicate
+CREATE VIEW manosw WITH (max_age = '1 day') AS SELECT COUNT(*) FROM stream
+WHERE arrival_timestamp > clock_timestamp() - interval '1 day';
+ERROR:  cannot specify both "max_age" and a sliding window expression in the WHERE clause
+DROP CONTINUOUS VIEW ma0 CASCADE;
+NOTICE:  drop cascades to view ma1
 DROP CONTINUOUS VIEW cqcreate0;
 DROP CONTINUOUS VIEW cqcreate1;
 DROP CONTINUOUS VIEW cqcreate2;
