@@ -299,7 +299,7 @@ START_TEST(test_union_sparse_and_dense)
 }
 END_TEST
 
-START_TEST(test_create_from_raw)
+START_TEST(test_copy)
 {
 	/*
 	 * Verify that we can create an HLL with raw input params
@@ -312,9 +312,9 @@ START_TEST(test_create_from_raw)
 
 	ck_assert_int_eq(hll->encoding, HLL_DENSE_CLEAN);
 
-	copy = HLLCreateFromRaw(hll->M, hll->mlen, hll->p, hll->encoding);
+	copy = HLLCopy(hll);
 
-	ck_assert_int_eq(copy->encoding, HLL_DENSE_DIRTY);
+	ck_assert_int_eq(copy->encoding, HLL_DENSE_CLEAN);
 	ck_assert_int_eq(9956, HLLCardinality(copy));
 
 	hll = HLLCreate();
@@ -323,9 +323,9 @@ START_TEST(test_create_from_raw)
 
 	ck_assert_int_eq(hll->encoding, HLL_SPARSE_CLEAN);
 
-	copy = HLLCreateFromRaw(hll->M, hll->mlen, hll->p, hll->encoding);
+	copy = HLLCopy(hll);
 
-	ck_assert_int_eq(copy->encoding, HLL_SPARSE_DIRTY);
+	ck_assert_int_eq(copy->encoding, HLL_SPARSE_CLEAN);
 	ck_assert_int_eq(10, HLLCardinality(copy));
 }
 END_TEST
@@ -347,7 +347,7 @@ test_hll_suite(void)
 	tcase_add_test(tc, test_union);
 	tcase_add_test(tc, test_union_sparse_and_dense);
 	tcase_add_test(tc, test_card_caching);
-	tcase_add_test(tc, test_create_from_raw);
+	tcase_add_test(tc, test_copy);
 	suite_add_tcase(s, tc);
 
 	return s;

@@ -60,6 +60,7 @@
 #define HLL_DEFAULT_P 14
 #define HLL_BITS_PER_REGISTER 6
 #define HLL_REGISTER_MAX ((1 << HLL_BITS_PER_REGISTER) - 1)
+#define HLL_SPARSE_VAL_MAX_LEN 4
 
 /* Sparse representation
  * ===
@@ -300,8 +301,17 @@
 	*(p) = (((val) - 1) << 2 | ((len) - 1)) | HLL_SPARSE_VAL_BIT; \
 } while(0)
 
+/*
+ * Explicit representation
+ * ===
+ * Explicit stores 32 bit ints in the substream registers array where the first 24 bits represent the
+ * register and the last 8 bits represent the number of leading zeros.
+ */
+#define HLL_EXPLICIT_NUM_LEADING(p) (*((uint32 *) pos) & 0x0000000f)
+#define HLL_EXPLICIT_REG(p) (*((uint32 *) pos) >> 8)
+
 #define HLL_IS_DENSE(hll) ((hll)->encoding == HLL_DENSE_DIRTY || (hll)->encoding == HLL_DENSE_CLEAN)
-#define HLL_IS_CLEAN(hll) ((hll)->encoding == HLL_DENSE_CLEAN || (hll)->encoding == HLL_SPARSE_CLEAN)
+#define HLL_IS_CLEAN(hll) ((hll)->encoding == HLL_DENSE_CLEAN || (hll)->encoding == HLL_SPARSE_CLEAN || (hll)->encoding == HLL_EXPLICIT_CLEAN)
 
 #define MURMUR_SEED 0xbee5bf4112801383L
 
@@ -400,45 +410,39 @@ num_leading_zeroes(HyperLogLog *hll, void *elem, Size size, int *m)
 }
 
 static HyperLogLog *
-hll_dense_add(HyperLogLog *hll, void *elem, Size size, int *result)
+hll_dense_add_internal(HyperLogLog *hll, int m, uint8 leading, int *result)
 {
   uint8 oldleading;
-  uint8 leading;
-  int index;
 
-  /* update the register if this element produced a longer run of zeroes */
-  leading = num_leading_zeroes(hll, elem, size, &index);
-
-  HLL_DENSE_GET_REGISTER(oldleading, hll->M, index);
+  HLL_DENSE_GET_REGISTER(oldleading, hll->M, m);
   if (leading > oldleading)
   {
-		HLL_DENSE_SET_REGISTER(hll->M, index, leading);
-
+		HLL_DENSE_SET_REGISTER(hll->M, m, leading);
 		*result = 1;
   }
   else
-  {
 		*result = 0;
-  }
 
   return hll;
 }
 
-/*
- * sparse_add
- *
- * Adds an element to the given HLL using the sparse representation
- */
 static HyperLogLog *
-hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
+hll_dense_add(HyperLogLog *hll, void *elem, Size size, int *result)
 {
 	int m;
-	int leading;
+	uint8 leading = num_leading_zeroes(hll, elem, size, &m);
+	return hll_dense_add_internal(hll, m, leading, result);
+}
+
+static HyperLogLog *
+hll_sparse_add_internal(HyperLogLog *hll, int m, uint8 leading, int *result)
+{
 	uint8 oldleading;
 	uint8 *sparse;
 	uint8 *end;
 	uint8 *pos;
 	uint8 *next;
+	uint8 *prev;
 	long first;
 	long span;
 	bool iszero = false;
@@ -452,15 +456,13 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
   int seqlen;
   int oldlen;
   int deltalen;
-
-	leading = num_leading_zeroes(hll, elem, size, &m);
+  int scanlen;
 
 	if (leading > 32)
 	{
 		/* the sparse representation can only represent 32-bit cardinalities */
 		hll = hll_sparse_to_dense(hll);
-
-		return hll_dense_add(hll, elem, size, result);
+		return hll_dense_add_internal(hll, m, leading, result);
 	}
 
   /*
@@ -480,6 +482,7 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 	end = sparse + hll->mlen;
 
   first = 0;
+  prev = NULL; /* points to previous opcode at the end of the loop. */
   next = NULL; /* points to the next opcode at the end of the loop. */
   span = 0;
 
@@ -508,6 +511,7 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 		if (m <= first + span - 1)
 			break;
 
+		prev = pos;
 		pos += oplen;
 		first += span;
   }
@@ -567,7 +571,6 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 		if (oldleading >= leading)
 		{
 			*result = 0;
-
 			return hll;
 		}
 
@@ -575,12 +578,8 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 		if (runlen == 1)
 		{
 			HLL_SPARSE_VAL_SET(pos, leading, 1);
-			hll->encoding = HLL_SPARSE_DIRTY;
+			goto updated;
 		}
-
-		*result = 1;
-
-		return hll;
   }
 
   /*
@@ -590,11 +589,7 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
   if (iszero && runlen == 1)
   {
 		HLL_SPARSE_VAL_SET(pos, leading, 1);
-		hll->encoding = HLL_SPARSE_DIRTY;
-
-		*result = 1;
-
-		return hll;
+		goto updated;
   }
 
   /*
@@ -685,22 +680,113 @@ hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
 	if (deltalen > 0 && hll->mlen + deltalen > HLL_MAX_SPARSE_BYTES)
 	{
 		hll = hll_sparse_to_dense(hll);
-
-		return hll_dense_add(hll, elem, size, result);
+		return hll_dense_add_internal(hll, m, leading, result);
 	}
 
   /* we already repalloc'd enough space to do this */
 	if (deltalen && next)
 	 memmove(next + deltalen, next, end - next);
 
-	hll = repalloc(hll, HLLSize(hll) + deltalen);
-
 	memcpy(pos, seq, seqlen);
+	hll->mlen += deltalen;
+	end += deltalen;
+
+updated:
+	/*
+	 * Step 4: Merge adjacent values if possible.
+	 *
+	 * The representation was updated, however the resulting representation
+	 * may not be optimal: adjacent VAL opcodes can sometimes be merged into
+	 * a single one.
+	 */
+	pos = prev ? prev : sparse;
+	scanlen = 5; /* Scan up to 5 upcodes starting from prev. */
+	while (pos < end && scanlen--)
+	{
+		if (HLL_SPARSE_IS_XZERO(pos))
+		{
+			pos += 2;
+			continue;
+		}
+		else if (HLL_SPARSE_IS_ZERO(pos))
+		{
+			pos++;
+			continue;
+		}
+
+		/*
+		 * We need two adjacent VAL opcodes to try a merge, having
+		 * the same value, and a len that fits the VAL opcode max len.
+		 */
+		if (pos + 1 < end && HLL_SPARSE_IS_VAL(pos + 1))
+		{
+			int v1 = HLL_SPARSE_VAL_VALUE(pos);
+			int v2 = HLL_SPARSE_VAL_VALUE(pos + 1);
+
+			if (v1 == v2)
+			{
+				int len = HLL_SPARSE_VAL_LEN(pos) + HLL_SPARSE_VAL_LEN(pos + 1);
+
+				if (len <= HLL_SPARSE_VAL_MAX_LEN)
+				{
+					HLL_SPARSE_VAL_SET(pos + 1, v1, len);
+					memmove(pos, pos + 1, end - pos);
+					hll->mlen--;
+					end--;
+
+					/*
+					 * After a merge we reiterate without incrementing 'p'
+					 * in order to try to merge the just merged value with
+					 * a value on its right.
+					 */
+					continue;
+				}
+			}
+		}
+
+		pos++;
+	}
 
 	hll->encoding = HLL_SPARSE_DIRTY;
-	hll->mlen += deltalen;
-
 	*result = 1;
+	return hll;
+}
+
+/*
+ * hll_sparse_add
+ *
+ * Adds an element to the given HLL using the sparse representation
+ */
+static HyperLogLog *
+hll_sparse_add(HyperLogLog *hll, void *elem, Size size, int *result)
+{
+	int m;
+	uint8 leading = num_leading_zeroes(hll, elem, size, &m);
+	return hll_sparse_add_internal(hll, m, leading, result);
+}
+
+static HyperLogLog *
+hll_explicit_add(HyperLogLog *hll, void *elem, Size size, int *result)
+{
+	int m;
+	uint8 leading = num_leading_zeroes(hll, elem, size, &m);
+	uint32 *pos = hll->M;
+	uint8 *end = hll->M + hll->mlen;
+	bool found = false;
+
+	while (pos < end)
+	{
+		int current_m = HLL_EXPLICIT_REG(pos);
+
+		if (current_m < m)
+			continue;
+
+		if (current_m == m)
+		{
+
+		}
+	}
+
 
 	return hll;
 }
@@ -848,7 +934,7 @@ HLLCreateWithP(int p)
 
 	while (remaining)
 	{
-		int xzero = Min(m, remaining);
+		int xzero = Min(HLL_SPARSE_XZERO_MAX_LEN, remaining);
 		HLL_SPARSE_XZERO_SET(pos, xzero);
 		pos += 2;
 		remaining -= xzero;
@@ -869,31 +955,6 @@ HLLCreate(void)
 }
 
 /*
- * HLLCreateFromRaw
- *
- * Creates a HyperLogLog with the given raw data
- */
-HyperLogLog *
-HLLCreateFromRaw(uint8 *M, int mlen, uint8 p, char encoding)
-{
-	Size size;
-	HyperLogLog *hll;
-
-	size = sizeof(HyperLogLog) + mlen;
-
-	hll = palloc0(size);
-	hll->p = p;
-	hll->encoding = encoding;
-	hll->mlen = mlen;
-
-	memcpy(hll->M, M, mlen);
-
-	hll->encoding = HLL_IS_SPARSE(hll) ? HLL_SPARSE_DIRTY : HLL_DENSE_DIRTY;
-
-	return hll;
-}
-
-/*
  * HLLCopy
  *
  * Creates a copy of the given HLL
@@ -901,7 +962,10 @@ HLLCreateFromRaw(uint8 *M, int mlen, uint8 p, char encoding)
 HyperLogLog *
 HLLCopy(HyperLogLog *src)
 {
-	return HLLCreateFromRaw(src->M, src->mlen, src->p, src->encoding);
+	Size size = HLLSize(src);
+	HyperLogLog *new = palloc(size);
+	memcpy((char *) new, (char *) src, size);
+	return new;
 }
 
 /*
@@ -913,6 +977,8 @@ HyperLogLog *
 HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result)
 {
 	HyperLogLog *ret;
+	if (HLL_IS_EXPLICIT(hll))
+		ret = hll_explicit_add(hll, elem, len, result);
 	if (HLL_IS_SPARSE(hll))
 		ret = hll_sparse_add(hll, elem, len, result);
 	else

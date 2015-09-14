@@ -21,12 +21,16 @@
 #include "utils/datum.h"
 
 #define HLL_MAX_SPARSE_BYTES 11000
+#define HLL_MAX_EXPLICIT_ITEMS 1024 /* 2048 * 4 = 8192 bytes */
 
 #define HLL_SPARSE_DIRTY 's'
 #define HLL_SPARSE_CLEAN 'S'
 #define HLL_DENSE_DIRTY 'd'
 #define HLL_DENSE_CLEAN 'D'
+#define HLL_EXPLICIT_DIRTY 'e'
+#define HLL_EXPLICIT_CLEAN 'E'
 #define HLL_IS_SPARSE(hll) ((hll)->encoding == HLL_SPARSE_DIRTY || (hll)->encoding == HLL_SPARSE_CLEAN)
+#define HLL_IS_EXPLICIT(hll) ((hll)->encoding == HLL_EXPLICIT_DIRTY || (hll)->encoding == HLL_EXPLICIT_CLEAN)
 #define HLLSize(hll) (sizeof(HyperLogLog) + (hll)->mlen)
 
 typedef struct HyperLogLog
@@ -49,7 +53,6 @@ typedef struct HyperLogLog
 
 HyperLogLog *HLLCreateWithP(int p);
 HyperLogLog *HLLCreate(void);
-HyperLogLog *HLLCreateFromRaw(uint8 *M, int mlen, uint8 p, char encoding);
 HyperLogLog *HLLAdd(HyperLogLog *hll, void *elem, Size len, int *result);
 HyperLogLog *HLLCopy(HyperLogLog *src);
 uint64 HLLCardinality(HyperLogLog *hll);
