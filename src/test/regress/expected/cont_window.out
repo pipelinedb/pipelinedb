@@ -178,7 +178,19 @@ SELECT COUNT(*) FROM cqwindow3_mrel0;
      1
 (1 row)
 
+CREATE CONTINUOUS VIEW cqwindow4 AS SELECT COUNT(*) FROM cqwindow_stream WHERE arrival_timestamp > clock_timestamp() - interval '1 hour';
+SELECT pipeline_get_worker_querydef('cqwindow4');
+                                    pipeline_get_worker_querydef                                    
+----------------------------------------------------------------------------------------------------
+  SELECT minute(arrival_timestamp::timestamp with time zone) AS arrival_timestamp,                 +
+     count(*) AS count                                                                             +
+    FROM ONLY cqwindow_stream                                                                      +
+   WHERE (arrival_timestamp::timestamp with time zone > (clock_timestamp() - '@ 1 hour'::interval))+
+   GROUP BY minute(arrival_timestamp::timestamp with time zone)
+(1 row)
+
 DROP CONTINUOUS VIEW cqwindow0;
 DROP CONTINUOUS VIEW cqwindow1;
 DROP CONTINUOUS VIEW cqwindow2;
 DROP CONTINUOUS VIEW cqwindow3;
+DROP CONTINUOUS VIEW cqwindow4;

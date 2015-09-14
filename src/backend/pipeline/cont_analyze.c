@@ -504,7 +504,7 @@ get_truncation_from_interval_expr(Node *node)
 		return DATE_TRUNC_DAY;
 	else if (i->day)
 		return DATE_TRUNC_HOUR;
-	else if (i->time > HOUR_USEC)
+	else if (i->time >= HOUR_USEC)
 		return DATE_TRUNC_MINUTE;
 
 	return DATE_TRUNC_SECOND;
